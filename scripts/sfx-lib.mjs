@@ -57,7 +57,7 @@ export function importFile(source, id, cue, level) {
   const gain = Math.min(level - loudness, PEAK_DB + MAX_LIMIT_DB - peak);
   const limiter = `alimiter=limit=${dbToLinear(PEAK_DB)}:attack=1:release=50:level=false:latency=true`;
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', src, '-af', `${shaped},volume=${gain.toFixed(2)}dB,${limiter}`, '-ar', '48000', '-c:a', 'libopus', '-b:a', `${OPUS_KBPS}k`, '-metadata', `comment=${source}`, out]);
-  const short = gain < level - loudness ? `, ${(level - loudness - gain).toFixed(1)} dB under target` : '';
+  const short = level - loudness - gain > 0.05 ? `, ${(level - loudness - gain).toFixed(1)} dB under target` : '';
   console.log(`${source} -> ${out}  ${loudness.toFixed(1)} LUFS, gain ${gain.toFixed(1)} dB${short}`);
   return name;
 }

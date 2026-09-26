@@ -35,7 +35,7 @@ const DEFS = {
 
   // Turn results.
   "money": { bus: "ui", volume: 0.8, pitchJitter: 0.03, maxVoices: 1, loop: false, prompt: "A few old metal coins and bottle caps dropped into a tin box.", seconds: 1 },
-  "level-up": { bus: "ui", volume: 1, pitchJitter: 0, maxVoices: 1, loop: false, prompt: "Short rising twang of a dusty slide guitar, triumphant, two seconds.", seconds: 2 },
+  "level-up": { bus: "ui", volume: 1, pitchJitter: 0, maxVoices: 1, loop: false, prompt: "Heavy steel lever slams and locks into place with a deep satisfying clunk, then a short bright ring of struck metal.", seconds: 2 },
   "discover": { bus: "ui", volume: 0.9, pitchJitter: 0, maxVoices: 1, loop: false, prompt: "Short low mysterious metallic swell with distant wind, a place revealed.", seconds: 2 },
   "arrive": { bus: "sfx", volume: 0.5, pitchJitter: 0.03, maxVoices: 1, loop: false, prompt: "Heavy truck air brakes hiss as it stops on gravel.", seconds: 1.5 },
   "defeat": { bus: "ui", volume: 1, pitchJitter: 0, maxVoices: 1, loop: false, prompt: "Low ominous boom fading into a dying engine and silence.", seconds: 3 },
@@ -47,7 +47,7 @@ const DEFS = {
   "miss": { bus: "sfx", volume: 0.4, pitchJitter: 0.1, maxVoices: 6, loop: false, prompt: "Bullet ricochet whizzing off rocks and kicking up dirt.", seconds: 0.8 },
   "part-broken": { bus: "sfx", volume: 0.7, pitchJitter: 0.05, maxVoices: 2, loop: false, prompt: "Truck part breaks apart, snapping metal, sparks and a short hiss of steam.", seconds: 1.2 },
   "explosion": { bus: "sfx", volume: 1, pitchJitter: 0.04, maxVoices: 2, loop: false, prompt: "Truck fuel tank explodes, big fiery blast with falling metal debris.", seconds: 3 },
-  "crash": { bus: "sfx", volume: 0.9, pitchJitter: 0.06, maxVoices: 2, loop: false, prompt: "Two heavy trucks collide, crunching steel and breaking glass.", seconds: 1.5 },
+  "crash": { bus: "sfx", volume: 0.9, pitchJitter: 0.06, maxVoices: 2, loop: false, prompt: "Two heavy steel trucks ram each other at speed: one hard, deep crunch of thick metal, a short scrape, then debris settling. Single impact.", seconds: 1.5 },
 
   // Loops.
   "engine": { bus: "sfx", volume: 0.4, pitchJitter: 0, maxVoices: 1, loop: true, prompt: "Soft low rumble of a big diesel truck engine heard from a distance, smooth and steady, no rattles or whine, seamless loop.", seconds: 5 },
