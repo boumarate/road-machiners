@@ -1,7 +1,33 @@
 // Scavenging search: a parked job that moves salvage stock into the grid a little each turn.
 
+import { SALVAGE } from '../data/salvage';
+import { playerVehicle } from './damage';
+import { freeCells } from './grid';
+import { startJob } from './jobs';
+import { collectSalvage, hasSalvage, salvageUnits } from './salvage';
 import type { Job, Vehicle, World } from './types';
+import { update } from './world';
 
-export function searchTurn(_world: World, _v: Vehicle, _job: Extract<Job, { kind: 'search' }>): boolean {
-  throw new Error('Scavenging search is not built yet');
+// Turns a search should need, moving unitsPerTurn each turn until the stock runs out.
+function estimateTurns(units: number): number {
+  return Math.max(1, Math.ceil(units / SALVAGE.unitsPerTurn));
+}
+
+// Mutates a draft world: starts a search job at the given stock. Shared by the player command and NPCs.
+export function beginSearch(world: World, v: Vehicle, stockId: string): void {
+  const stock = world.salvage.find((entry) => entry.id === stockId);
+  if (!stock) throw new Error(`Unknown salvage ${stockId}`);
+  startJob(world, v, { kind: 'search', stockId, turnsLeft: estimateTurns(salvageUnits(stock)) });
+}
+
+export function startSearch(world: World, stockId: string): World {
+  return update(world, (w) => beginSearch(w, playerVehicle(w), stockId));
+}
+
+export function searchTurn(world: World, v: Vehicle, job: Extract<Job, { kind: 'search' }>): boolean {
+  const stock = world.salvage.find((entry) => entry.id === job.stockId);
+  if (!stock) throw new Error(`Unknown salvage ${job.stockId}`);
+  collectSalvage(world, v, job.stockId, SALVAGE.unitsPerTurn);
+  job.turnsLeft = Math.max(0, job.turnsLeft - 1);
+  return !hasSalvage(stock) || freeCells(v) === 0;
 }

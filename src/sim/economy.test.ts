@@ -146,13 +146,11 @@ describe('locations', () => {
     expect(w.player.supplies).toBe(RULES.suppliesCap);
   });
 
-  it('convoy can be scavenged once', () => {
+  it('convoy starts a timed search, and a second search cannot start while it runs', () => {
     const convoy = REGION.locations.find((l) => l.kind === 'convoy')!;
     const w = emptyWorld({ x: convoy.pos.x + 2, y: convoy.pos.y });
     const after = scavenge(w);
-    expect(spareParts(after.vehicles[0]).map((p) => p.defId)).toEqual([ECONOMY.scavenge.part]);
-    expect(freeCells(after.vehicles[0])).toBeLessThan(freeCells(w.vehicles[0]));
-    expect(canScavenge(after)).toBe(false);
+    expect(after.vehicles[0].job).toEqual(expect.objectContaining({ kind: 'search', stockId: convoy.id }));
     expect(() => scavenge(after)).toThrow();
   });
 

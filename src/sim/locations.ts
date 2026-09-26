@@ -1,10 +1,11 @@
-// Discovery, the oasis and the convoy wreck.
+// Discovery, the oasis and scavenging.
 
-import { ECONOMY } from '../data/goods';
+import { SALVAGE } from '../data/salvage';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
-import { canReachSalvage, collectSalvage, hasSalvage } from './salvage';
+import { canReachSalvage, hasSalvage } from './salvage';
+import { beginSearch } from './search';
 import { gainXp } from './progress';
 import { locationAt } from './sites';
 import type { World } from './types';
@@ -40,20 +41,17 @@ export function canScavenge(world: World): boolean {
   return world.salvage.some((stock) => hasSalvage(stock) && canReachSalvage(me, stock));
 }
 
-// Loot that does not fit the grid stays behind.
+// Starts a timed search of the nearest reachable stock. It moves loot into the grid a little each turn.
 export function scavenge(world: World): World {
   return update(world, (w) => {
     const me = playerVehicle(w);
     const stock = w.salvage.find((entry) => hasSalvage(entry) && canReachSalvage(me, entry));
     if (!stock) throw new Error('Nothing to scavenge here');
-    if (!collectSalvage(w, me, stock.id)) {
-      w.events.push({ t: 'info', text: 'No room for salvage. It remains here.' });
-      return;
-    }
-    w.events.push({ t: 'info', text: 'Collected salvage into cargo.' });
-    if (!w.player.scavenged.includes(stock.id)) {
+    const firstSearch = !w.player.scavenged.includes(stock.id);
+    beginSearch(w, me, stock.id);
+    if (firstSearch) {
       w.player.scavenged.push(stock.id);
-      gainXp(w, ECONOMY.scavenge.xp, 'searched salvage');
+      gainXp(w, SALVAGE.xp, 'searched salvage');
     }
   });
 }

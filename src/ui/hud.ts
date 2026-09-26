@@ -112,7 +112,7 @@ export class Hud {
       item("Speed", `${me.speed.toFixed(1)}/${s.maxSpeed}`),
       item("Lvl", `${p.level} (${p.xp}/${xpForLevel(p.level + 1)} XP)`),
     );
-    if (me.job) this.top.append(item("Job", `${me.job.kind} ${me.job.turnsLeft}t left`));
+    if (me.job) this.top.append(item(me.job.kind === "search" ? "Search" : "Repair", `${me.job.turnsLeft} turns left`));
     if (me.direct) this.top.append(item("Manual", "[R]"));
     if (p.skillPoints > 0)
       this.top.append(
