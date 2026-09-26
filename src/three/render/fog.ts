@@ -1,6 +1,6 @@
-// Fog of war draped over the terrain surface: dark where never explored, dimmed where explored
-// but not visible now, clear where visible now. depthTest is off and renderOrder is high, so it
-// darkens vehicles and the plan overlay too, cheaply, without shading each object separately.
+// Fog of war draped over the terrain surface: a thick pale haze where never explored, a thin haze where
+// explored but not visible now, clear where visible now. Haze, not darkness, so shade stays the only dark ground. depthTest is off and renderOrder is high, so it
+// covers vehicles and the plan overlay too, cheaply, without shading each object separately.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
@@ -29,30 +29,14 @@ export class FogView {
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    geo.setAttribute('alpha', new THREE.BufferAttribute(new Float32Array((n + 1) * (n + 1)), 1));
+    const c = new THREE.Color(PAL.haze);
+    const rgba = new Float32Array((n + 1) * (n + 1) * 4);
+    for (let k = 0; k < rgba.length; k += 4) rgba.set([c.r, c.g, c.b, 0], k);
+    geo.setAttribute('color', new THREE.BufferAttribute(rgba, 4));
     geo.setIndex(new THREE.BufferAttribute(terrainIndices(n), 1));
-    const c = new THREE.Color(PAL.bg);
-    const mat = new THREE.ShaderMaterial({
-      uniforms: { color: { value: new THREE.Vector3(c.r, c.g, c.b) } },
-      vertexShader: `
-        attribute float alpha;
-        varying float vAlpha;
-        void main() {
-          vAlpha = alpha;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 color;
-        varying float vAlpha;
-        void main() {
-          gl_FragColor = vec4(color, vAlpha);
-        }
-      `,
-      transparent: true,
-      depthTest: false,
-      depthWrite: false,
-    });
+    geo.computeVertexNormals();
+    // Lit like the ground, so the haze dims at night with everything else. Per-corner alpha rides in the vertex color.
+    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, depthTest: false, depthWrite: false });
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.renderOrder = 900; // above ground, obstacles, zones and path; below HTML labels
     this.update(world);
@@ -61,7 +45,7 @@ export class FogView {
   update(world: World): void {
     const n = this.n;
     const visible = new Set(world.player.visible);
-    const alpha = this.mesh.geometry.getAttribute('alpha') as THREE.BufferAttribute;
+    const color = this.mesh.geometry.getAttribute('color') as THREE.BufferAttribute;
     // Per corner: average the fog alpha of the (up to) four surrounding tiles, so type borders blend.
     for (let j = 0; j <= n; j++) {
       for (let i = 0; i <= n; i++) {
@@ -75,12 +59,12 @@ export class FogView {
         ]) {
           if (x < 0 || y < 0 || x >= n || y >= n) continue;
           const idx = y * n + x;
-          sum += visible.has(idx) ? 0 : world.player.explored[idx] ? TERRAIN.fog.dimAlpha : TERRAIN.fog.darkAlpha;
+          sum += visible.has(idx) ? 0 : world.player.explored[idx] ? TERRAIN.fog.seenAlpha : TERRAIN.fog.unseenAlpha;
           count++;
         }
-        alpha.setX(j * (n + 1) + i, sum / count);
+        color.setW(j * (n + 1) + i, sum / count);
       }
     }
-    alpha.needsUpdate = true;
+    color.needsUpdate = true;
   }
 }

@@ -111,7 +111,7 @@ export const TERRAIN = {
     samplesPerTile: 3, // height samples per tile along a sight line
   },
   fog: {
-    darkAlpha: 0.94, // tiles never seen
-    dimAlpha: 0.55, // explored but not currently visible
+    unseenAlpha: 0.88, // haze over tiles never seen
+    seenAlpha: 0.6, // haze over tiles explored but not currently visible
   },
 } as const;
