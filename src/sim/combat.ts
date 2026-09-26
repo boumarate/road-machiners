@@ -4,11 +4,11 @@
 import { NPCS, SPAWN } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { skillBonus } from '../data/skills';
-import { damageHull, damagePart, findPart } from './damage';
-import { mountedParts } from './grid';
+import { laneCount, partLane, sideToward, walkLane } from './armor';
+import { corePart, mountedParts } from './grid';
 import { gainXp } from './progress';
 import { playerSees } from './vision';
-import { chance } from './rng';
+import { chance, randInt } from './rng';
 import { vehicleStats, type MountedWeapon } from './stats';
 import type { Aim, Vehicle, World } from './types';
 import { angleDiff, bearing, clamp, dist, DEG } from './vec';
@@ -40,7 +40,7 @@ export function fireBlock(world: World, shooter: Vehicle, mw: MountedWeapon, tar
 export function hitChance(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle, aim: Aim): number {
   const d = dist(shooter.pos, target.pos);
   const gunnery = shooter.faction === 'player' ? skillBonus('gunnery', world.player.skills.gunnery) : 0;
-  const aimed = aim === 'hull' ? 0 : RULES.aimedPenalty;
+  const aimed = aim === 'body' ? 0 : RULES.aimedPenalty;
   const p = mw.def.accuracy - RULES.rangeFalloff * (d / mw.def.range) - RULES.speedEvasion * target.speed - aimed + gunnery;
   return clamp(p, RULES.minHit, RULES.maxHit);
 }
@@ -70,10 +70,11 @@ function applyShot(world: World, s: Shot): void {
   let dealt = 0;
   if (s.hit) {
     s.target.lastHitBy = s.shooter.id;
-    const part = s.aim === 'hull' ? null : findPart(s.target, s.aim);
-    const ts = vehicleStats(world, s.target);
-    if (part && part.hp > 0) dealt = damagePart(world, s.target, part, s.mw.def.damage * (1 - ts.partShield));
-    else dealt = damageHull(s.target, Math.max(1, s.mw.def.damage - ts.reduction));
+    // The round enters the side facing the shooter. A body shot lands on a random lane, an aimed one on the part's lane.
+    const side = sideToward(s.target, s.shooter.pos);
+    const lane = s.aim === 'body' ? randInt(world, 0, laneCount(s.target, side) - 1) : partLane(s.target, s.aim, side);
+    const hits = walkLane(world, s.target, side, lane, { damage: s.mw.def.damage, pen: s.mw.def.pen });
+    dealt = hits.reduce((a, h) => a + h.damage, 0);
   }
   world.events.push({
     t: 'shot', shooter: s.shooter.id, weapon: s.mw.part.id, target: s.target.id, aim: s.aim, hit: s.hit, damage: dealt, chance: s.chance,
@@ -92,9 +93,9 @@ function provoke(world: World, shooter: Vehicle, target: Vehicle): void {
   }
 }
 
-// NPCs at zero hull turn into wreck obstacles. The player's zero hull is handled by defeat.
+// NPCs with a broken cab turn into wreck obstacles. The player's broken cab is handled by defeat.
 export function resolveDestroyed(world: World): void {
-  const dead = world.vehicles.filter((v) => v.hull <= 0 && v.faction !== 'player');
+  const dead = world.vehicles.filter((v) => v.faction !== 'player' && corePart(v, 'cab').hp <= 0);
   for (const v of dead) {
     world.vehicles = world.vehicles.filter((x) => x.id !== v.id);
     world.removed.push(v);
@@ -127,7 +128,7 @@ function rewardKill(world: World, v: Vehicle): void {
   gainXp(world, tpl.xp, `destroyed ${v.name}`);
 }
 
-// Auto mode: every weapon gets a hull shot at the nearest hostile it can hit. The player's auto fire
+// Auto mode: every weapon gets a body shot at the nearest hostile it can hit. The player's auto fire
 // only picks targets the player sees.
 export function autoOrders(world: World, v: Vehicle): void {
   v.weaponOrders = {};
@@ -135,7 +136,7 @@ export function autoOrders(world: World, v: Vehicle): void {
   const hostiles = world.vehicles.filter((x) => isHostile(v, x) && seen(x)).sort((a, b) => dist(v.pos, a.pos) - dist(v.pos, b.pos));
   for (const mw of vehicleStats(world, v).weapons) {
     const target = hostiles.find((h) => dist(v.pos, h.pos) <= mw.def.range && inArc(v, mw, h)) ?? hostiles[0];
-    if (target) v.weaponOrders[mw.part.id] = { targetId: target.id, aim: 'hull' };
+    if (target) v.weaponOrders[mw.part.id] = { targetId: target.id, aim: 'body' };
   }
 }
 

@@ -5,8 +5,8 @@ import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { checkDefeat } from './defeat';
-import { buyChassis, buyGood, buyPart, buyPrice, buySupply, repairAll, sellGood, sellPrice } from './economy';
-import { freeCells, goodsCount, mountedParts } from './grid';
+import { buyChassis, buyGood, buyPart, buyPrice, buySupply, chassisTradeIn, repairAll, sellGood, sellPrice } from './economy';
+import { corePart, coreParts, freeCells, goodsCount, mountedParts } from './grid';
 import { spareParts } from './inventory';
 import { canScavenge, scavenge, useOasis } from './locations';
 import { gainXp, spendSkillPoint, xpForLevel } from './progress';
@@ -69,12 +69,12 @@ describe('garage', () => {
     expect(() => buySupply(w, 'supplies', 1)).toThrow();
   });
 
-  it('repairs hull and parts for money', () => {
+  it('repairs parts for money', () => {
     const w = inTin();
-    w.vehicles[0].hull = 10;
+    corePart(w.vehicles[0], 'cab').hp = 10;
     mountedParts(w.vehicles[0])[0].hp = 0;
     const r = repairAll(w);
-    expect(r.vehicles[0].hull).toBe(vehicleStats(r, r.vehicles[0]).hullMax);
+    expect(corePart(r.vehicles[0], 'cab').hp).toBe(partDef('cab').hp);
     expect(mountedParts(r.vehicles[0])[0].hp).toBeGreaterThan(0);
     expect(r.player.money).toBeLessThan(1500);
   });
@@ -86,11 +86,17 @@ describe('garage', () => {
     const me = w.vehicles[0];
     expect(me.chassisId).toBe('hauler');
     expect(mountedParts(me).map((p) => p.defId).filter((id) => partDef(id).kind !== 'core').sort()).toEqual(['cage', 'mg', 'rack', 'stockEngine']);
-    expect(me.hull).toBe(vehicleStats(w, me).hullMax);
     expect(goodsCount(me)).toEqual({ scrap: 2 });
     expect(w.player.money).toBe(2000 - (CHASSIS.hauler.price - Math.floor(CHASSIS.scout.price * ECONOMY.chassisSellFactor)));
     w = buyChassis(w, 'scout');
     expect(w.player.storage.length).toBe(0);
+  });
+
+  it('trade-in drops with built-in part damage', () => {
+    const w = inTin();
+    const whole = chassisTradeIn(w);
+    coreParts(w.vehicles[0], 'wheel')[0].hp = 0;
+    expect(chassisTradeIn(w)).toBeLessThan(whole);
   });
 });
 
@@ -183,12 +189,12 @@ describe('defeat', () => {
     const w = emptyWorld({ x: 20, y: 40 });
     w.obstacles = newWorld(1).obstacles;
     const me = w.vehicles[0];
-    me.hull = 0;
+    corePart(me, 'cab').hp = 0;
     w.player.skills.gunnery = 2;
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: tin.pos.x + 4, y: tin.pos.y - 4 });
     checkDefeat(w);
     expect(me.pos).toEqual({ x: 20, y: 40 });
-    expect(me.hull).toBe(Math.max(1, Math.round(vehicleStats(w, me).hullMax * RULES.defeatHull)));
+    expect(corePart(me, 'cab').hp).toBe(Math.max(1, Math.round(partDef('cab').hp * RULES.defeatPatch)));
     expect(w.player.fuel).toBe(0);
     expect(goodsCount(me)).toEqual({});
     expect(w.player.money).toBe(750);
@@ -203,28 +209,28 @@ describe('defeat', () => {
     for (let i = 0; i < 20; i++) w = endTurn(w);
     expect(w.player.knockouts).toBe(1);
     expect(w.player.fuel).toBe(0);
-    expect(w.vehicles[0].hull).toBeGreaterThan(0);
+    expect(corePart(w.vehicles[0], 'cab').hp).toBeGreaterThan(0);
   });
 
   it('can crawl toward town after losing a battle', () => {
     let w = emptyWorld({ x: 20, y: 40 });
-    w.vehicles[0].hull = 0;
+    corePart(w.vehicles[0], 'cab').hp = 0;
     w = endTurn(w);
     const from = { ...w.vehicles[0].pos };
     w.vehicles[0].order = { kind: 'stopAt', dest: { x: 16, y: 43 } };
     w = endTurn(w);
     expect(dist(w.vehicles[0].pos, tin.pos)).toBeLessThan(dist(from, tin.pos));
     expect(w.player.fuel).toBe(0);
-    expect(w.vehicles[0].hull).toBeGreaterThan(0);
+    expect(corePart(w.vehicles[0], 'cab').hp).toBeGreaterThan(0);
   });
 
   it('the game keeps running after a defeat', () => {
     let w = emptyWorld({ x: 20, y: 40 });
-    w.vehicles[0].hull = 0;
+    corePart(w.vehicles[0], 'cab').hp = 0;
     w = endTurn(w);
     expect(w.events.some((e) => e.t === 'defeat')).toBe(true);
     w.vehicles[0].order = { kind: 'stopAt', dest: { x: 20, y: 40 } };
     for (let i = 0; i < 5; i++) w = endTurn(w);
-    expect(w.vehicles[0].hull).toBeGreaterThan(0);
+    expect(corePart(w.vehicles[0], 'cab').hp).toBeGreaterThan(0);
   });
 });

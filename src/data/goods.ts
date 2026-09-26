@@ -19,10 +19,9 @@ export const TOWN_PRICES: Record<string, Record<string, number>> = {
 export const ECONOMY = {
   spread: 0.2, // fraction added to buy and cut from sell prices, before Trade skill
   supplyPrice: { fuel: 3, supplies: 5 } as Record<'fuel' | 'supplies', number>,
-  hullRepairPerHp: 2,
   partRepairPerHp: 3,
   partSellFactor: 0.5, // of the part price, scaled by remaining hp
-  chassisSellFactor: 0.5, // of the chassis price, scaled by remaining hull
+  chassisSellFactor: 0.5, // of the chassis price, scaled by mean built-in part health
   scavenge: { cargo: { meds: 3, scrap: 5 } as Record<string, number>, part: 'tunedEngine', xp: 50 },
   useRange: 1.5, // extra tiles past a site radius where its services work
   interactionScale: 1.5, // multiplier for the total interaction radius

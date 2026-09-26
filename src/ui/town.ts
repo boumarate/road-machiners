@@ -8,10 +8,9 @@ import {
   buyChassis, buyGood, buyPart, buyPrice, buySupply, chassisTradeIn, partSellPrice, repairAll, repairCost, sellGood, sellPart,
   sellPrice, supplyRoom, type Supply,
 } from '../sim/economy';
-import { baseGrid, cellCount, freeCells, goodsCount } from '../sim/grid';
+import { baseGrid, cellCount, corePart, freeCells, goodsCount, mountedParts } from '../sim/grid';
 import { townAt } from '../sim/sites';
-import { vehicleStats } from '../sim/stats';
-import type { PartInstance, World } from '../sim/types';
+import type { PartInstance, Vehicle, World } from '../sim/types';
 import { el, panel } from './dom';
 import { InventoryView } from './inventory';
 import type { UiHost } from './host';
@@ -128,7 +127,7 @@ export class TownScreen {
         el('td', {}, el('button', { disabled: w.player.money < d.price, onclick: () => this.run((x) => buyPart(x, d.id)) }, `Buy ${d.price}`))),
     );
     return el('div', {},
-      el('div', {}, `Hull ${me.hull}/${vehicleStats(w, me).hullMax}. `,
+      el('div', {}, `${cabLine(me)}. `,
         el('button', { disabled: cost === 0, onclick: () => this.run(repairAll) }, `Repair all: ${cost}`)),
       el('h3', {}, 'Truck'), this.inventory.render(),
       el('h3', {}, 'Sell stored parts'), stored.length ? el('table', {}, ...stored) : el('div', { class: 'dim' }, 'Storage is empty'),
@@ -145,12 +144,18 @@ export class TownScreen {
       const cost = Math.max(0, c.price - tradeIn);
       return el('tr', {},
         el('td', {}, c.name),
-        el('td', { class: 'dim' }, `speed ${c.maxSpeed}, turn ${c.turnFast}-${c.turnSlow}, hull ${c.hull}, ${cellCount(baseGrid(id))} cells`),
+        el('td', { class: 'dim' }, `speed ${c.maxSpeed}, turn ${c.turnFast}-${c.turnSlow}, ${cellCount(baseGrid(id))} cells`),
         el('td', {}, mine ? 'yours' : el('button', { disabled: w.player.money < cost, onclick: () => this.run((x) => buyChassis(x, id)) }, `Swap for ${cost}`)),
       );
     });
     return el('div', {}, el('div', { class: 'dim' }, `Your truck trades in for ${tradeIn}. Parts and goods move over. Parts that do not fit go to storage.`), el('table', {}, ...rows));
   }
+}
+
+function cabLine(v: Vehicle): string {
+  const cab = corePart(v, 'cab');
+  const broken = mountedParts(v).filter((p) => p.hp === 0).length;
+  return `Cab ${cab.hp}/${partDef(cab.defId).hp}, ${broken} broken ${broken === 1 ? 'part' : 'parts'}`;
 }
 
 function partLabel(p: PartInstance): string {
@@ -164,9 +169,9 @@ function partStats(d: PartDef): string {
 
 function kindStats(d: PartDef): string {
   switch (d.kind) {
-    case 'weapon': return `dmg ${d.damage}, range ${d.range}, reload ${d.reload}, arc ${d.arc}`;
+    case 'weapon': return `dmg ${d.damage}, pen ${d.pen}, range ${d.range}, reload ${d.reload}, arc ${d.arc}`;
     case 'engine': return `speed +${d.speedBonus}, accel +${d.accelBonus}, fuel x${d.fuelMult}`;
-    case 'armor': return `hull +${d.hullBonus}, block ${d.reduction}, part shield ${d.partShield * 100}%${d.ramMult > 1 ? `, ram x${d.ramMult}` : ''}`;
+    case 'armor': return d.ramMult > 1 ? `ram x${d.ramMult}` : 'side armor';
     case 'cargo': return `+${d.extraRows} grid rows`;
     case 'core': return `built-in ${d.role}`;
   }

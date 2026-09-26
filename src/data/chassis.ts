@@ -19,7 +19,6 @@ export type ChassisDef = {
   turnSlow: number; // turn limit at crawl speed
   turnFast: number; // turn limit at max speed
   reverseTurn: number; // turn limit for one turn of backing up
-  hull: number;
   mass: number; // bare frame, without core parts, other parts or goods
   ratedMass: number; // loaded mass the speed and handling numbers assume
   radius: number; // collision radius in tiles
@@ -41,7 +40,6 @@ export const CHASSIS: Record<string, ChassisDef> = {
     turnSlow: 110,
     turnFast: 40,
     reverseTurn: 60,
-    hull: 60,
     mass: 680,
     ratedMass: 2100,
     radius: 0.6,
@@ -78,7 +76,6 @@ export const CHASSIS: Record<string, ChassisDef> = {
     turnSlow: 80,
     turnFast: 25,
     reverseTurn: 45,
-    hull: 120,
     mass: 2730,
     ratedMass: 5800,
     radius: 0.8,
@@ -116,7 +113,6 @@ export const CHASSIS: Record<string, ChassisDef> = {
     turnSlow: 120,
     turnFast: 45,
     reverseTurn: 90,
-    hull: 35,
     mass: 230,
     ratedMass: 900,
     radius: 0.5,
@@ -151,7 +147,6 @@ export const CHASSIS: Record<string, ChassisDef> = {
     turnSlow: 70,
     turnFast: 25,
     reverseTurn: 45,
-    hull: 110,
     mass: 2130,
     ratedMass: 3700,
     radius: 0.8,

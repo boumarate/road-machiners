@@ -1,7 +1,7 @@
 // Inventory grid queries. The grid comes from the chassis layout plus rows added by mounted cargo parts.
 
 import { chassisDef } from '../data/chassis';
-import { partDef, type PartKind } from '../data/parts';
+import { partDef, type CoreDef, type PartKind } from '../data/parts';
 import type { GridItem, PartInstance, Vehicle } from './types';
 
 export type SideLetter = 'F' | 'B' | 'L' | 'R';
@@ -87,6 +87,18 @@ export function mountedItems(v: Vehicle, kind?: PartKind): PartItem[] {
 
 export function mountedParts(v: Vehicle, kind?: PartKind): PartInstance[] {
   return mountedItems(v, kind).map((it) => it.part);
+}
+
+// Built-in parts of one role, such as the four wheels.
+export function coreParts(v: Vehicle, role: CoreDef['role']): PartInstance[] {
+  return mountedParts(v, 'core').filter((p) => (partDef(p.defId) as CoreDef).role === role);
+}
+
+// The one built-in part of a role, such as the cab. Throws if the truck has none or several.
+export function corePart(v: Vehicle, role: CoreDef['role']): PartInstance {
+  const parts = coreParts(v, role);
+  if (parts.length !== 1) throw new Error(`${v.id} has ${parts.length} mounted ${role} parts, expected 1`);
+  return parts[0];
 }
 
 export function goodsCount(v: Vehicle): Record<string, number> {

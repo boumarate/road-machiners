@@ -27,13 +27,16 @@ export const RULES = {
   disabledEngineSpeed: 1,
   minSpeedCap: 1, // a heavy load never pushes max speed below this
   collisionMinImpact: 1.5, // slower bumps deal no damage
-  collisionDamage: 4, // hull damage per tile/turn of impact speed, scaled by mass ratio
-  collisionPartChance: 0.3, // chance a collision also damages a random part
+  collisionDamage: 4, // part damage per tile/turn of impact speed, scaled by mass ratio, spread over the struck side's lanes
+  crashPen: 4, // penetration of crash damage in each lane
+  wheelLoss: 0.15, // share of speed and turning lost per broken wheel
+  tankLeak: 1, // fuel lost per turn with a broken tank
 
   // Combat
   rangeFalloff: 0.3, // hit chance lost at max range
   speedEvasion: 0.03, // hit chance lost per tile/turn of target speed
   aimedPenalty: 0.25,
+  cabHealthShare: 0.5, // share of cab damage the player's character takes as health loss
   minHit: 0.05,
   maxHit: 0.95,
   killXp: 40,
@@ -55,7 +58,7 @@ export const RULES = {
 
   // Defeat
   defeatMoneyLoss: 0.5,
-  defeatHull: 0.05,
+  defeatPatch: 0.25, // share of max hp broken core parts and the engine get back after defeat
   defeatHealth: 50,
   defeatClearRadius: 15, // robbers leave the truck after the fight
   defeatSupplies: 4, // enough to survive the walk back after patching up

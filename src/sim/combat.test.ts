@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
 import { fireWeapons, hitChance, resolveDestroyed } from './combat';
-import { mountedParts } from './grid';
+import { corePart, mountedParts } from './grid';
 import { isDriveObstacle } from './mapgen';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
@@ -19,7 +19,7 @@ function duel(targetPos = { x: 33, y: 30 }) {
   return { w, me, buggy, mg };
 }
 
-function order(me: Vehicle, weaponId: string, targetId: string, aim = 'hull') {
+function order(me: Vehicle, weaponId: string, targetId: string, aim = 'body') {
   me.weaponOrders[weaponId] = { targetId, aim };
 }
 
@@ -72,9 +72,9 @@ describe('combat', () => {
 
   it('aimed shots have lower hit chance', () => {
     const { w, me, buggy, mg } = duel();
-    const hull = hitChance(w, me, mg, buggy, 'hull');
+    const body = hitChance(w, me, mg, buggy, 'body');
     const aimed = hitChance(w, me, mg, buggy, mountedParts(buggy, 'weapon')[0].id);
-    expect(hull - aimed).toBeCloseTo(RULES.aimedPenalty, 5);
+    expect(body - aimed).toBeCloseTo(RULES.aimedPenalty, 5);
   });
 
   it('aimed hits damage the part and a part at zero is disabled', () => {
@@ -107,7 +107,7 @@ describe('combat', () => {
 
   it('a kill leaves a wreck obstacle and pays the player', () => {
     const { w, me, buggy } = duel();
-    buggy.hull = 0;
+    corePart(buggy, 'cab').hp = 0;
     buggy.lastHitBy = me.id;
     const money = w.player.money;
     resolveDestroyed(w);
@@ -122,7 +122,7 @@ describe('combat', () => {
     for (let i = 0; i < RULES.maxKillWrecks + 3; i++) {
       const b = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 10 + i * 2, y: 10 });
       b.brain = { templateId: 'buggy', goal: null, home: b.pos, stepIndex: 0 };
-      b.hull = 0;
+      corePart(b, 'cab').hp = 0;
       b.lastHitBy = me.id;
       resolveDestroyed(w);
     }
@@ -161,7 +161,7 @@ describe('player vision', () => {
     autoOrders(w, me);
     expect(me.weaponOrders).toEqual({});
     const far = w.vehicles.find((v) => v.faction === 'raiders')!;
-    expect(() => setWeaponOrder(w, vehicleStats(w, me).weapons[0].part.id, { targetId: far.id, aim: 'hull' })).toThrow(/cannot see/);
+    expect(() => setWeaponOrder(w, vehicleStats(w, me).weapons[0].part.id, { targetId: far.id, aim: 'body' })).toThrow(/cannot see/);
   });
 
   it('a rock between you and a raider blocks the shot', () => {
@@ -188,7 +188,6 @@ describe('invariants under AI traffic', () => {
         const r = vehicleStats(w, v).radius;
         for (const o of w.obstacles.filter(isDriveObstacle)) expect(dist(v.pos, o.pos)).toBeGreaterThanOrEqual(o.r + r - 0.02);
         for (const x of w.vehicles) if (x.id < v.id) expect(dist(v.pos, x.pos)).toBeGreaterThanOrEqual(r + chassisDef(x.chassisId).radius - 0.02);
-        expect(v.hull).toBeGreaterThanOrEqual(0);
         for (const p of mountedParts(v)) expect(p.hp).toBeGreaterThanOrEqual(0);
         const b = before.get(v.id);
         if (!b || crashed.has(v.id) || v.trail.length === 0) continue;

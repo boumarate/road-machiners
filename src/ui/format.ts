@@ -33,7 +33,7 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
     }
     case 'shot': {
       if (e.shooter !== me && e.target !== me) return null;
-      const aim = e.aim === 'hull' ? '' : ` at ${partName(world, e.target, e.aim)}`;
+      const aim = e.aim === 'body' ? '' : ` at ${partName(world, e.target, e.aim)}`;
       const what = e.hit ? `hit for ${e.damage}` : 'missed';
       return { text: `${n(e.shooter)} shot ${n(e.target)}${aim}: ${what} (${Math.round(e.chance * 100)}%)`, cls: e.target === me && e.hit ? 'bad' : '' };
     }

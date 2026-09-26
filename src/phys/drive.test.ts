@@ -3,7 +3,7 @@ import { RULES } from '../data/rules';
 import { makeVehicle } from '../sim/factory';
 import { addGoods, removeAllGoods } from '../sim/inventory';
 import { loadFactor, vehicleMass } from '../sim/mass';
-import { addVehicle, emptyWorld } from '../sim/testkit';
+import { addVehicle, emptyWorld, partHp } from '../sim/testkit';
 import type { MoveOrder, World } from '../sim/types';
 import { angleDiff, dist } from '../sim/vec';
 import { endTurn, setMoveOrder } from '../sim/world';
@@ -103,13 +103,13 @@ describe('physics turns', () => {
     expect(a.frames[me(w).id].at(-1)).toEqual(b.frames[me(w).id].at(-1));
   });
 
-  it('ramming a rock is a crash that damages the hull', () => {
+  it('ramming a rock is a crash that damages parts', () => {
     let w = emptyWorld();
     w.obstacles = [{ id: 'rock1', pos: { x: 36, y: 30 }, r: 0.8, kind: 'rock' }];
     w.vehicles[0].speed = 5;
     w.vehicles[0].direct = true; // a careless driver skips the route planner
     w = setMoveOrder(w, { kind: 'through', dest: { x: 45, y: 30 } });
-    const hull = me(w).hull;
+    const hp = partHp(me(w));
     let crashes = 0;
     let d = buildDrive(w);
     for (let i = 0; i < 3; i++) {
@@ -120,7 +120,7 @@ describe('physics turns', () => {
       d = next!;
     }
     expect(crashes).toBeGreaterThan(0);
-    expect(me(w).hull).toBeLessThan(hull);
+    expect(partHp(me(w))).toBeLessThan(hp);
   });
 
   it('a careful driver follows the route around a rock wall', () => {

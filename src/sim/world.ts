@@ -13,7 +13,7 @@ import { assignAutoOrders, fireWeapons, isHostile, resolveDestroyed } from './co
 import { checkDefeat } from './defeat';
 import { discoverSites, useOasis } from './locations';
 import { resolveMovement } from './movement';
-import { consumeSupplies } from './supplies';
+import { consumeSupplies, leakFuel } from './supplies';
 import { spawnInitial, spawnNpcs } from './spawn';
 import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
 import { vehicleStats } from './stats';
@@ -102,6 +102,7 @@ export function endTurn(world: World, move: (w: World) => void = resolveMovement
     fireWeapons(w);
     resolveDestroyed(w);
     consumeSupplies(w);
+    leakFuel(w);
     discoverSites(w);
     useOasis(w);
     checkDefeat(w);
@@ -121,7 +122,7 @@ export function setWeaponOrder(world: World, weaponId: string, order: WeaponOrde
     const target = w.vehicles.find((v) => v.id === order.targetId);
     if (!target || target.id === me.id) throw new Error(`Bad target ${order.targetId}`);
     if (!playerSees(w, target.pos)) throw new Error('You cannot see that target');
-    if (order.aim !== 'hull' && !findPart(target, order.aim)) throw new Error(`Target has no part ${order.aim}`);
+    if (order.aim !== 'body' && !findPart(target, order.aim)) throw new Error(`Target has no part ${order.aim}`);
     me.weaponOrders[weaponId] = order;
   });
 }

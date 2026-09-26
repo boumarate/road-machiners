@@ -12,7 +12,6 @@ import { gainXp } from './progress';
 import { requireTown } from './sites';
 import { goodsCount, mountedParts } from './grid';
 import { addGoods, mountPart, removeGoods, stowPart } from './inventory';
-import { vehicleStats } from './stats';
 import type { PartInstance, Vehicle, World } from './types';
 import { update } from './world';
 
@@ -87,11 +86,6 @@ export function buySupply(world: World, kind: Supply, n: number): World {
   });
 }
 
-export function hullRepairCost(world: World): number {
-  const me = playerVehicle(world);
-  return Math.ceil((vehicleStats(world, me).hullMax - me.hull) * ECONOMY.hullRepairPerHp * repairMult(world));
-}
-
 export function partRepairCost(world: World, part: PartInstance): number {
   return Math.ceil((partDef(part.defId).hp - part.hp) * ECONOMY.partRepairPerHp * repairMult(world));
 }
@@ -101,9 +95,8 @@ export function repairAll(world: World): World {
     requireTown(w);
     const me = playerVehicle(w);
     const parts = allParts(me);
-    const cost = hullRepairCost(w) + parts.reduce((a, p) => a + partRepairCost(w, p), 0);
+    const cost = parts.reduce((a, p) => a + partRepairCost(w, p), 0);
     pay(w, cost, 'repairs');
-    me.hull = vehicleStats(w, me).hullMax;
     for (const p of parts) p.hp = partDef(p.defId).hp;
   });
 }
@@ -132,14 +125,16 @@ export function sellPart(world: World, partId: string): World {
   });
 }
 
+// The trade-in scales by the mean health of the built-in parts.
 export function chassisTradeIn(world: World): number {
   const me = playerVehicle(world);
-  const ch = chassisDef(me.chassisId);
-  return Math.floor(ch.price * ECONOMY.chassisSellFactor * (me.hull / vehicleStats(world, me).hullMax));
+  const core = mountedParts(me, 'core');
+  const health = core.reduce((a, p) => a + p.hp / partDef(p.defId).hp, 0) / core.length;
+  return Math.floor(chassisDef(me.chassisId).price * ECONOMY.chassisSellFactor * health);
 }
 
 export function repairCost(world: World): number {
-  return hullRepairCost(world) + allParts(playerVehicle(world)).reduce((a, p) => a + partRepairCost(world, p), 0);
+  return allParts(playerVehicle(world)).reduce((a, p) => a + partRepairCost(world, p), 0);
 }
 
 function allParts(v: Vehicle): PartInstance[] {
@@ -173,7 +168,6 @@ export function buyChassis(world: World, chassisId: string): World {
     for (const [good, n] of Object.entries(goods)) {
       if (addGoods(w, me, good, n) < n) throw new Error('Cargo would not fit the new chassis. Sell some first.');
     }
-    me.hull = vehicleStats(w, me).hullMax;
     me.weaponOrders = {};
     w.player.fuel = Math.min(w.player.fuel, chassisDef(chassisId).fuelCap);
   });

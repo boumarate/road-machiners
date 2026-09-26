@@ -1,6 +1,7 @@
 // Helpers for sim tests.
 
 import { makeVehicle } from './factory';
+import { mountedParts } from './grid';
 import type { Terrain } from './terrain';
 import type { Faction, Vehicle, World } from './types';
 import type { Vec } from './vec';
@@ -29,4 +30,9 @@ export function addVehicle(w: World, faction: Faction, chassisId: string, parts:
   const v = makeVehicle(w, { name: chassisId, faction, chassisId, parts, cargo: {}, pos, heading, brain: null });
   w.vehicles.push(v);
   return v;
+}
+
+// Total hit points of the mounted parts, for checking that damage landed.
+export function partHp(v: Vehicle): number {
+  return mountedParts(v).reduce((a, p) => a + p.hp, 0);
 }

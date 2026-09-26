@@ -4,7 +4,7 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { resolveMovement } from './movement';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, partHp } from './testkit';
 import { dist } from './vec';
 import { endTurn, newWorld, setMoveOrder } from './world';
 
@@ -22,10 +22,10 @@ describe('movement', () => {
     v.direct = true; // drive straight at the rock instead of routing around it
     v.order = { kind: 'through', dest: { x: 40, y: 30 } };
     w.obstacles = [{ id: 'r', pos: { x: 33, y: 30 }, r: 1, kind: 'rock' }];
-    const hull = v.hull;
+    const hp = partHp(v);
     resolveMovement(w);
     expect(v.speed).toBe(0);
-    expect(v.hull).toBeLessThan(hull);
+    expect(partHp(v)).toBeLessThan(hp);
     expect(dist(v.pos, { x: 33, y: 30 })).toBeGreaterThanOrEqual(1 + 0.6);
     expect(w.events.some((e) => e.t === 'collision')).toBe(true);
   });
@@ -37,9 +37,9 @@ describe('movement', () => {
     hauler.speed = 4;
     hauler.order = { kind: 'through', dest: { x: 40, y: 30 } };
     hauler.direct = true;
-    const before = { p: p.hull, h: hauler.hull };
+    const before = { p: partHp(p), h: partHp(hauler) };
     resolveMovement(w);
-    expect(before.p - p.hull).toBeGreaterThan(before.h - hauler.hull);
+    expect(before.p - partHp(p)).toBeGreaterThan(before.h - partHp(hauler));
     expect(dist(p.pos, hauler.pos)).toBeGreaterThanOrEqual(0.6 + 0.8 - 0.01);
   });
 

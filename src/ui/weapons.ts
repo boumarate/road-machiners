@@ -184,7 +184,7 @@ export class WeaponPanel {
     aim: string,
   ): HTMLElement {
     const options = [
-      el("option", { value: "hull", selected: aim === "hull" }, "Hull"),
+      el("option", { value: "body", selected: aim === "body" }, "Body"),
     ];
     for (const p of mountedParts(target)) {
       options.push(

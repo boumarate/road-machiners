@@ -14,8 +14,8 @@ export type GridItem =
   | { id: string; x: number; y: number; rot: 0 | 1; kind: 'part'; part: PartInstance }
   | { id: string; x: number; y: number; rot: 0 | 1; kind: 'good'; good: string };
 
-// 'hull' or the id of a part on the target.
-export type Aim = 'hull' | string;
+// 'body' aims at the truck as a whole. Otherwise it is the id of a part on the target.
+export type Aim = 'body' | string;
 export type WeaponOrder = { targetId: string; aim: Aim };
 
 export type Pose = { x: number; y: number; heading: number };
@@ -43,7 +43,6 @@ export type Vehicle = {
   faction: Faction;
   chassisId: string;
   items: GridItem[]; // inventory grid contents: parts, mounted or spare, and goods
-  hull: number;
   pos: Vec;
   heading: number; // radians, 0 = +x
   speed: number; // tiles per turn at the end of the last turn

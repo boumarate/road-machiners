@@ -4,7 +4,6 @@ import { chassisDef } from '../data/chassis';
 import { partDef } from '../data/parts';
 import { gridOf, isMounted, placementError } from './grid';
 import { addGoods, mountPart } from './inventory';
-import { vehicleStats } from './stats';
 import type { Faction, GridItem, NpcBrain, PartInstance, Vehicle, World } from './types';
 import type { Vec } from './vec';
 
@@ -50,7 +49,6 @@ export function makeVehicle(world: World, spec: VehicleSpec): Vehicle {
     faction: spec.faction,
     chassisId: spec.chassisId,
     items: [],
-    hull: 0,
     pos: { ...spec.pos },
     heading: spec.heading,
     speed: 0,
@@ -69,6 +67,5 @@ export function makeVehicle(world: World, spec: VehicleSpec): Vehicle {
   for (const [good, n] of Object.entries(spec.cargo)) {
     if (addGoods(world, v, good, n) < n) throw new Error(`No room for ${n} ${good} on ${spec.chassisId}`);
   }
-  v.hull = vehicleStats(world, v).hullMax;
   return v;
 }

@@ -10,6 +10,7 @@ export type WeaponDef = PartBase & {
   kind: 'weapon';
   range: number; // tiles
   damage: number;
+  pen: number; // penetration of each round: the armor it gets through
   reload: number; // turns between shots, 1 = every turn
   accuracy: number; // base hit chance at point blank
   arc: number; // total firing arc in degrees, centered forward
@@ -25,9 +26,6 @@ export type EngineDef = PartBase & {
 
 export type ArmorDef = PartBase & {
   kind: 'armor';
-  hullBonus: number;
-  reduction: number; // flat damage cut per hull hit
-  partShield: number; // fraction cut from aimed part damage
   ramMult: number; // multiplies ram damage dealt from the side it is mounted on
   look: 'plates' | 'cage' | 'ram';
 };
@@ -49,11 +47,11 @@ export type PartDef = WeaponDef | EngineDef | ArmorDef | CargoDef | CoreDef;
 export const PARTS: Record<string, PartDef> = {
   mg: {
     id: 'mg', kind: 'weapon', name: 'MG turret', hp: 20, price: 180, w: 1, h: 1, mass: 80, armor: 3,
-    range: 6, damage: 5, reload: 1, accuracy: 0.8, arc: 360, look: 'mg',
+    range: 6, damage: 5, pen: 6, reload: 1, accuracy: 0.8, arc: 360, look: 'mg',
   },
   cannon: {
     id: 'cannon', kind: 'weapon', name: 'Forward cannon', hp: 30, price: 320, w: 3, h: 1, mass: 400, armor: 3,
-    range: 9, damage: 20, reload: 3, accuracy: 0.7, arc: 60, look: 'cannon',
+    range: 9, damage: 20, pen: 20, reload: 3, accuracy: 0.7, arc: 60, look: 'cannon',
   },
   stockEngine: {
     id: 'stockEngine', kind: 'engine', name: 'Stock engine', hp: 25, price: 120, w: 2, h: 2, mass: 300, armor: 4,
@@ -65,15 +63,15 @@ export const PARTS: Record<string, PartDef> = {
   },
   plates: {
     id: 'plates', kind: 'armor', name: 'Steel plates', hp: 40, price: 260, w: 1, h: 3, mass: 350, armor: 12,
-    hullBonus: 30, reduction: 2, partShield: 0, ramMult: 1, look: 'plates',
+    ramMult: 1, look: 'plates',
   },
   cage: {
     id: 'cage', kind: 'armor', name: 'Rebar cage', hp: 30, price: 200, w: 1, h: 2, mass: 150, armor: 6,
-    hullBonus: 10, reduction: 1, partShield: 0.5, ramMult: 1, look: 'cage',
+    ramMult: 1, look: 'cage',
   },
   ram: {
     id: 'ram', kind: 'armor', name: 'Ram bar', hp: 50, price: 300, w: 3, h: 1, mass: 300, armor: 20,
-    hullBonus: 10, reduction: 1, partShield: 0, ramMult: 2, look: 'ram',
+    ramMult: 2, look: 'ram',
   },
   rack: {
     id: 'rack', kind: 'cargo', name: 'Roof rack', hp: 15, price: 80, w: 2, h: 1, mass: 40, armor: 1,

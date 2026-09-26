@@ -124,7 +124,7 @@ function requireRefit(w: World): void {
   if (!townAt(w)) throw new Error('Mounting and unmounting parts needs a town garage');
 }
 
-// A refit can remove grid rows, lower hull max, or drop a weapon. Items left outside the grid block it.
+// A refit can remove grid rows or drop a weapon. Items left outside the grid block it.
 export function afterRefit(w: World): void {
   const me = playerVehicle(w);
   const g = gridOf(me);
@@ -132,6 +132,5 @@ export function afterRefit(w: World): void {
     if (placementError(g, me.items, it, it.id)) throw new Error('Items would fall off the grid. Move them off the extra rows first.');
   }
   const s = vehicleStats(w, me);
-  me.hull = Math.min(me.hull, s.hullMax);
   for (const id of Object.keys(me.weaponOrders)) if (!s.weapons.some((m) => m.part.id === id)) delete me.weaponOrders[id];
 }

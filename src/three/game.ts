@@ -9,7 +9,7 @@ import { buildDrive, freeDrive, restFrame, simulateTurn, syncDrive, TURN_STEPS, 
 import { groundPoint, toMap, type TurnFrames, type V3, type VehicleFrame } from '../phys/frames';
 import { applyTurn, physicsMove } from '../phys/turn';
 import { playerVehicle } from '../sim/damage';
-import { mountedParts } from '../sim/grid';
+import { corePart, mountedParts } from '../sim/grid';
 import { canScavenge, scavenge } from '../sim/locations';
 import { locationAt, townAt } from '../sim/sites';
 import { maxTurn, vehicleStats } from '../sim/stats';
@@ -44,7 +44,7 @@ const PICK_PX = 30; // click radius around a vehicle's screen position
 const MIN_ZONE_HALF_ANGLE = Math.PI / 12; // zones stay visible for trucks that barely turn
 const DUST_CHANCE = 0.3; // per moving vehicle per frame while a turn plays
 const SMOKE_CHANCE = 0.05; // per hurt vehicle per frame
-const HURT_HULL = 0.35; // hull share under which a vehicle smokes
+const HURT_CAB = 0.35; // cab hp share under which a vehicle smokes
 const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is recomputed during a turn
 const SUN_DISTANCE = 100; // meters from the focus to the sun, sideways
 const SUN_HEIGHT = 120; // meters above the focus
@@ -328,7 +328,7 @@ export class Game {
   private targetVehicle(target: Vehicle): void {
     let w = this.world;
     if (w.player.autoFire) w = setAutoFire(w, false);
-    for (const mw of weaponsForClick(w, this.selected)) w = setWeaponOrder(w, mw.part.id, { targetId: target.id, aim: 'hull' });
+    for (const mw of weaponsForClick(w, this.selected)) w = setWeaponOrder(w, mw.part.id, { targetId: target.id, aim: 'body' });
     this.apply(w);
   }
 
@@ -398,7 +398,7 @@ export class Game {
     this.weapons.render();
   }
 
-  // Shots land: explosions, new wrecks, the log and the new hull values.
+  // Shots land: explosions, new wrecks, the log and the new part values.
   private landImpacts(a: Playback): void {
     a.impacts = true;
     this.phase = 'Results';
@@ -546,7 +546,7 @@ export class Game {
       this.frames[v.id] = f;
       if (!(landed ? this.isVehicleVisible(v) : this.canShowCombatVehicle(v))) continue;
       const before = !landed && this.anim!.before.vehicles.find((x) => x.id === v.id);
-      const display = before ? { ...v, hull: before.hull, items: before.items } : v;
+      const display = before ? { ...v, items: before.items } : v;
       ids.add(v.id);
       let view = this.views.get(v.id);
       if (!view) {
@@ -570,7 +570,8 @@ export class Game {
 
   private vehicleParticles(v: Vehicle, f: VehicleFrame, moving: boolean): void {
     if (moving && v.speed > 0.5 && Math.random() < DUST_CHANCE) this.fx.dust(f.pos);
-    const hurt = v.hull < vehicleStats(this.world, v).hullMax * HURT_HULL || mountedParts(v).some((p) => p.hp === 0);
+    const cab = corePart(v, 'cab');
+    const hurt = cab.hp < partDef(cab.defId).hp * HURT_CAB || mountedParts(v).some((p) => p.hp === 0);
     if (hurt && Math.random() < SMOKE_CHANCE) this.fx.smoke(f.pos);
   }
 
