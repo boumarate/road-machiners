@@ -13,6 +13,7 @@ import { canScavenge, scavenge, useOasis } from './locations';
 import { gainXp, spendSkillPoint, xpForLevel } from './progress';
 import { vehicleStats } from './stats';
 import { consumeSupplies } from './supplies';
+import { heatAt } from './sun';
 import { locationAt, townAt } from './sites';
 import { addVehicle, emptyWorld } from './testkit';
 import { dist } from './vec';
@@ -110,17 +111,19 @@ describe('supplies', () => {
     expect(w.player.health).toBe(RULES.maxHealth - RULES.starveDamage);
   });
 
-  it('supplies drain a quarter unit over ten turns', () => {
+  it('drains suppliesPerTurn times heat over ten turns', () => {
     const w = emptyWorld();
+    const heat = heatAt(w, w.vehicles[0].pos);
     for (let i = 0; i < 10; i++) consumeSupplies(w);
-    expect(w.player.supplies).toBeCloseTo(12 - 0.25);
+    expect(w.player.supplies).toBeCloseTo(12 - 10 * RULES.suppliesPerTurn * heat);
   });
 
   it('survival cuts use', () => {
     const w = emptyWorld();
+    const heat = heatAt(w, w.vehicles[0].pos);
     w.player.skills.survival = 2;
     consumeSupplies(w);
-    expect(12 - w.player.supplies).toBeLessThan(RULES.suppliesPerTurn);
+    expect(12 - w.player.supplies).toBeLessThan(RULES.suppliesPerTurn * heat);
   });
 });
 

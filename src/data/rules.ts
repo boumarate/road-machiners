@@ -6,7 +6,7 @@ export const RULES = {
   crawlSpeed: 1, // speed used for sharp turns and moving without fuel
   lowFuelThreshold: 0.2, // share of tank remaining when speed is limited
   lowFuelSpeedFactor: 0.5, // share of normal top speed below the threshold
-  fuelUseFactor: 0.1, // fuel burns at a tenth of the chassis rate
+  fuelUseFactor: 0.3, // fuel burns at three tenths of the chassis rate; tuned so a map crossing costs a real share of the tank
   npcStuckTurns: 2, // failed drive attempts before backing out
   npcRecoveryTurns: 2, // turns spent backing out before resuming the route
   // At or below `below` speed, a truck more than `angle` degrees off its destination backs up
@@ -54,7 +54,7 @@ export const RULES = {
   maxKillWrecks: 12, // oldest wrecks from kills are cleared past this, so obstacles do not pile up
 
   // Supplies, per turn
-  suppliesPerTurn: 0.025,
+  suppliesPerTurn: 0.12, // tuned so a map crossing costs a real share of supplies
   suppliesCap: 20,
   starveDamage: 5, // character health lost per turn without supplies
   maxHealth: 100,
