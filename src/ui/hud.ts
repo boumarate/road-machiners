@@ -44,7 +44,7 @@ export class Hud {
         "Space: end turn. A: auto fire. C: character. I: inventory.",
       ),
       el("div", {}, "R: manual driving, straight through anything."),
-      el("div", {}, "Right-drag: pan. F: follow. Wheel: zoom."),
+      el("div", {}, "Right-drag: pan. F: follow. Wheel: zoom. M: mute."),
     );
   }
 

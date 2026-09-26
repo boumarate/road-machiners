@@ -87,3 +87,7 @@ html, body { margin: 0; height: 100%; background: #1a1410; overflow: hidden; }
 .inv-ghost { position: fixed; pointer-events: none; z-index: 1000; box-sizing: border-box; border: 2px solid #f0e0b8; background: rgba(240, 224, 184, 0.2); color: #f0e0b8; font: 11px ui-monospace, Menlo, monospace; padding: 3px; border-radius: 4px; }
 .inv-ghost.ok { border-color: #a8e078; background: rgba(120, 200, 90, 0.3); }
 .inv-ghost.no { border-color: #e07050; background: rgba(220, 80, 60, 0.3); }
+
+.sound { right: 8px; top: 8px; font-size: 12px; }
+.sound .row { display: flex; gap: 6px; }
+.sound .sound-sliders label { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; }

@@ -65,8 +65,19 @@ import { WeaponRangeView } from "./render/weaponRange";
 import { WeatherView } from "./render/weather";
 import { ZonesView } from "./render/zones";
 import { loadWorld, saveWorld } from "./save";
+import { SoundDirector, SoundLoops, stingOf } from "./sound";
+import type { SoundPlayer } from "../audio/player";
+import { uiRoot } from "../ui/dom";
 
 const PLAN_TURNS = 3; // turns of path preview
+
+// Ground speed in m/s at one physics step of a vehicle's turn frames.
+function stepSpeed(frames: VehicleFrame[] | undefined, step: number): number {
+  if (!frames || step < 1 || step >= frames.length) return 0;
+  const a = frames[step - 1].pos;
+  const b = frames[step].pos;
+  return Math.hypot(b.x - a.x, b.z - a.z) * PHYSICS.stepsPerSecond;
+}
 const PICK_PX = 30; // click radius around a vehicle's screen position
 const MIN_ZONE_HALF_ANGLE = Math.PI / 12; // zones stay visible for trucks that barely turn
 const DUST_CHANCE = 0.3; // per moving vehicle per frame while a turn plays
@@ -126,6 +137,9 @@ export class Game {
   private readonly zones = new ZonesView();
   private readonly path = new PathView();
   private readonly fx: Fx3D;
+  private readonly sound: SoundDirector;
+  private panelOpen = false; // last frame's panel state, for open and close sounds
+  private readonly loops: SoundLoops;
   private readonly views = new Map<string, VehicleView>();
   private frames: Record<string, VehicleFrame> = {}; // last shown pose per vehicle
   // A played turn: physics movement, then shots in flight when there was combat, then time to read results.
@@ -150,7 +164,7 @@ export class Game {
   private readonly character: CharacterScreen;
   private readonly inventory: InventoryScreen;
 
-  constructor(container: HTMLElement, overlay: HTMLElement) {
+  constructor(container: HTMLElement, overlay: HTMLElement, player: SoundPlayer, private toggleMute: () => void) {
     this.world =
       loadWorld(window.localStorage) ??
       newWorld(CONFIG.seed, startKit(CONFIG.startKit));
@@ -192,6 +206,11 @@ export class Game {
     this.overlay = overlay;
     this.labels = new Labels(overlay);
     this.fx = new Fx3D(this.scene, overlay, this.rig);
+    this.sound = new SoundDirector(player, this.rig);
+    this.loops = new SoundLoops(player);
+    uiRoot().addEventListener("click", (e) => {
+      if ((e.target as HTMLElement).closest("button")) this.sound.ui("ui-click");
+    });
 
     const host = this.uiHost();
     this.weapons = new WeaponPanel(host);
@@ -403,6 +422,7 @@ export class Game {
         if (!e.repeat && !modal) this.endTurn();
       }
       if (e.code === "KeyF") this.following = true;
+      if (e.code === "KeyM") this.toggleMute();
       if (e.code === "KeyA" && !modal) this.weapons.toggleAuto();
       if (e.code === "KeyW" && !modal) this.weapons.toggleVisible();
       if (e.code === "Digit0" && !modal) this.weapons.selectWeapon(null);
@@ -517,6 +537,7 @@ export class Game {
     if (this.anim || this.modalOpen()) return;
     const before = this.world;
     let result: TurnResult | null = null;
+    this.sound.ui("end-turn");
     this.world = endTurn(
       this.world,
       physicsMove(this.drive, (r) => (result = r)),
@@ -570,6 +591,7 @@ export class Game {
       const p = this.eventPoint(e.vehicle);
       if (p) this.fx.explode(p);
     }
+    this.playImpactSounds();
     this.hud.pushEvents(this.world);
     this.refreshUi();
   }
@@ -579,6 +601,35 @@ export class Game {
     this.phase = null;
     saveWorld(window.localStorage, this.world, CONFIG.saveTurns);
     this.refreshUi();
+  }
+
+  // Explosions and broken parts where they happen, then one result sting for the turn.
+  private playImpactSounds(): void {
+    for (const e of this.world.events) {
+      const id = e.t === "destroyed" || e.t === "partDisabled" ? e.vehicle : null;
+      const p = id && this.eventPoint(id);
+      if (p) this.sound.at(e.t === "destroyed" ? "explosion" : "part-broken", p, 0);
+    }
+    const sting = stingOf(this.world.events, playerVehicle(this.world).id);
+    if (sting) this.sound.ui(sting);
+  }
+
+  // step is the physics step shown while a turn's movement plays, else null.
+  private updateLoops(step: number | null): void {
+    const me = playerVehicle(this.world);
+    const f = this.frames[me.id];
+    const at = f ? toMap(f.pos) : me.pos;
+    this.loops.update({
+      engineSpeed: step === null || !this.anim ? null : stepSpeed(this.anim.result.frames[me.id], step),
+      stormTiles: this.weather.stormTilesFrom(at.x, at.y),
+      danger: this.world.vehicles.some((v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v)),
+    });
+  }
+
+  private playPanelSounds(): void {
+    const open = this.modalOpen();
+    if (open !== this.panelOpen) this.sound.ui(open ? "ui-open" : "ui-close");
+    this.panelOpen = open;
   }
 
   // The fog while shots fly also shows the tiles of vehicles the volley involves.
@@ -639,14 +690,11 @@ export class Game {
                 CONFIG.combatShotMs *
                 ROUND_STAGGER
               : 0;
-          this.fx.shot(
-            a,
-            besideTarget(a, b, r.offset),
-            r.hit || r.hits.length > 0,
-            heavy,
-            delay,
-            flight,
-          );
+          const land = besideTarget(a, b, r.offset);
+          const struck = r.hit || r.hits.length > 0;
+          this.fx.shot(a, land, struck, heavy, delay, flight);
+          this.sound.at(heavy ? "cannon-fire" : "mg-fire", a, delay);
+          this.sound.at(struck ? "hit-metal" : "miss", land, delay + flight);
         });
         this.fx.label(
           b,
@@ -660,6 +708,7 @@ export class Game {
       if (e.t === "collision") {
         const p = this.eventPoint(e.a);
         if (p) this.fx.crash(p);
+        if (p) this.sound.at("crash", p, 0);
       }
     }
   }
@@ -723,6 +772,8 @@ export class Game {
         ),
       );
     this.fx.tick(dt);
+    this.playPanelSounds();
+    this.updateLoops(step);
     this.weather.advance(dt);
     this.labels.update(this.world, this.rig);
     this.renderer.render(this.scene, this.rig.camera);

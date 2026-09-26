@@ -81,6 +81,11 @@ export class CameraRig {
     return hit ? { x: hit.point.x / S, y: hit.point.z / S } : null;
   }
 
+  // Ground point at the middle of the view.
+  focus(): V3 {
+    return { x: this.center.x, y: this.center.y, z: this.center.z };
+  }
+
   // CSS pixel position (viewport-relative, like clientX/clientY) of a world point.
   screenOf(p: V3): { x: number; y: number } {
     const v = new THREE.Vector3(p.x, p.y, p.z).project(this.camera);
