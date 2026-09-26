@@ -39,6 +39,7 @@ import { Fx3D } from './render/fx';
 import { Labels } from './render/labels';
 import { ContactsView } from './render/contacts';
 import { DustCloudsView } from './render/dust';
+import { SoundRingView } from './render/soundRing';
 import { ObstacleViews } from './render/obstacles';
 import { PathView } from './render/path';
 import { ShadeView } from './render/shade';
@@ -122,6 +123,7 @@ export class Game {
   private readonly zones = new ZonesView();
   private readonly contacts = new ContactsView();
   private readonly dust = new DustCloudsView();
+  private readonly soundRing = new SoundRingView();
   private readonly path = new PathView();
   private readonly fx: Fx3D;
   private readonly views = new Map<string, VehicleView>();
@@ -183,7 +185,7 @@ export class Game {
     this.fog = new FogView(this.world);
     this.shade = new ShadeView(this.world);
     this.weather = new WeatherView(this.world);
-    this.scene.add(this.fog.mesh, this.shade.mesh, this.weather.root, this.zones.root, this.path.root, this.weaponRange.root, this.contacts.root, this.dust.root);
+    this.scene.add(this.fog.mesh, this.shade.mesh, this.weather.root, this.zones.root, this.path.root, this.weaponRange.root, this.contacts.root, this.dust.root, this.soundRing.root);
     this.overlay = overlay;
     overlay.append(this.stormTint);
     this.labels = new Labels(overlay);
@@ -877,6 +879,8 @@ export class Game {
     this.placeHitCard();
     this.contacts.update(this.world.terrain, this.world.player.contacts, playerVehicle(this.world).pos, this.world.turn, performance.now());
     this.dust.update(this.world, this.world.terrain, performance.now());
+    const meFrame = this.frames[playerVehicle(this.world).id];
+    this.soundRing.update(this.world.terrain, this.world.player.contacts, meFrame ? toMap(meFrame.pos) : playerVehicle(this.world).pos, this.world.turn, performance.now());
     this.placeContactTip();
     if (hide) return;
     const me = playerVehicle(this.world);
