@@ -41,4 +41,6 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 
 ## Art
 
-Low-poly models built from Three.js boxes and shapes. The ground is a per-tile painted canvas texture. No asset files yet.
+Low-poly models built from Three.js boxes and shapes. The ground is a per-tile painted canvas texture.
+
+Some models come from Blender scripts in `tools/blender/`. Each script writes a `.glb` into `public/models/`, which is committed. Rebuild one with `blender --background --python tools/blender/<name>.py -- public/models/<name>.glb tmp/<name>.png`. The second path is an optional preview render. `src/three/render/models.ts` loads every model at boot and swaps its materials for flat Lambert. Scripts take colors from `src/render/palette.ts` by hand, so keep them in sync. Blender is installed with `brew install --cask blender`.

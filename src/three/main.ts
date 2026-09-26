@@ -3,6 +3,7 @@
 import { initPhysics } from '../phys/drive';
 import { installCrashScreen } from './crash';
 import { Game } from './game';
+import { loadModels } from './render/models';
 
 function element(id: string): HTMLElement {
   const el = document.getElementById(id);
@@ -11,6 +12,6 @@ function element(id: string): HTMLElement {
 }
 
 installCrashScreen();
-await initPhysics();
+await Promise.all([initPhysics(), loadModels()]);
 const game = new Game(element('game'), element('overlay'));
 if (import.meta.env.DEV) (window as any).__KOROVAN__ = game;
