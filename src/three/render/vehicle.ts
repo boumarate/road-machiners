@@ -36,6 +36,11 @@ const SHAPES: Record<Look, Shape> = {
   hauler: { cabFrom: 0.1, cabTo: 0.75, cabHeight: 1.1, turretX: 0.5, cargoFrom: -0.9, cargoTo: 0.15, cageX: 0.9 },
   buggy: { cabFrom: -0.5, cabTo: 0.35, cabHeight: 0.8, turretX: -0.1, cargoFrom: -0.85, cargoTo: -0.4, cageX: 0.8 },
   wagon: { cabFrom: 0.55, cabTo: 0.9, cabHeight: 0.7, turretX: 0.15, cargoFrom: -0.85, cargoTo: -0.2, cageX: 0.9 },
+  courier: { cabFrom: -0.15, cabTo: 0.6, cabHeight: 0.75, turretX: 0.1, cargoFrom: -0.9, cargoTo: -0.25, cageX: 0.8 },
+  van: { cabFrom: -0.7, cabTo: 0.8, cabHeight: 1.5, turretX: 0.45, cargoFrom: -0.8, cargoTo: -0.1, cageX: 0.85 },
+  longbed: { cabFrom: 0.45, cabTo: 0.9, cabHeight: 1.2, turretX: 0.6, cargoFrom: -0.95, cargoTo: 0.35, cageX: 0.9 },
+  carrier: { cabFrom: -0.6, cabTo: 0.8, cabHeight: 0.65, turretX: 0.25, cargoFrom: -0.85, cargoTo: -0.4, cageX: 0.9 },
+  tractor: { cabFrom: -0.15, cabTo: 0.55, cabHeight: 1.4, turretX: 0.2, cargoFrom: -0.9, cargoTo: -0.25, cageX: 0.95 },
 };
 
 const PLATE_THICK = 0.12; // plate thickness as a fraction of the chassis half-width

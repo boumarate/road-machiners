@@ -27,7 +27,7 @@ export type ChassisDef = {
   fuelCap: number;
   fuelPerTile: number;
   price: number;
-  look: 'pickup' | 'hauler' | 'buggy' | 'wagon';
+  look: 'pickup' | 'hauler' | 'buggy' | 'wagon' | 'courier' | 'van' | 'longbed' | 'carrier' | 'tractor';
 };
 
 export const CHASSIS: Record<string, ChassisDef> = {
@@ -173,10 +173,65 @@ export const CHASSIS: Record<string, ChassisDef> = {
     price: 700,
     look: 'wagon',
   },
+  courier: {
+    id: 'courier', name: 'Courier', maxSpeed: 8, accel: 3, brake: 3, turnSlow: 125, turnFast: 42, reverseTurn: 80,
+    mass: 280, ratedMass: 1100, radius: 0.45,
+    layout: ['XFFX', 'LEER', 'LEER', 'LXWR', 'LXXR', 'LCCR', 'XBBX'],
+    core: [
+      { defId: 'cab', x: 1, y: 3 }, { defId: 'transmission', x: 1, y: 4 }, { defId: 'tank', x: 2, y: 4 },
+      { defId: 'wheel', x: 0, y: 0 }, { defId: 'wheel', x: 3, y: 0 },
+      { defId: 'wheel', x: 0, y: 6 }, { defId: 'wheel', x: 3, y: 6 },
+    ],
+    fuelCap: 24, fuelPerTile: 0.18, price: 550, look: 'courier',
+  },
+  van: {
+    id: 'van', name: 'Utility van', maxSpeed: 5, accel: 1.5, brake: 3, turnSlow: 100, turnFast: 35, reverseTurn: 65,
+    mass: 1100, ratedMass: 3000, radius: 0.7,
+    layout: ['XFFFX', 'LEE.R', 'LEEXR', 'L.W.R', 'L.X.R', 'LCC.R', 'LCCXR', 'L...R', 'XBBBX'],
+    core: [
+      { defId: 'cab', x: 3, y: 2 }, { defId: 'transmission', x: 2, y: 4 }, { defId: 'tank', x: 3, y: 6 },
+      { defId: 'wheel', x: 0, y: 0 }, { defId: 'wheel', x: 4, y: 0 },
+      { defId: 'wheel', x: 0, y: 8 }, { defId: 'wheel', x: 4, y: 8 },
+    ],
+    fuelCap: 55, fuelPerTile: 0.24, price: 650, look: 'van',
+  },
+  longbed: {
+    id: 'longbed', name: 'Longbed truck', maxSpeed: 3.5, accel: 0.8, brake: 1.8, turnSlow: 70, turnFast: 20, reverseTurn: 40,
+    mass: 2900, ratedMass: 7200, radius: 0.95,
+    layout: ['XFFFFFX', 'L.EE..R', 'L.EEX.R', 'LWWW..R', 'L..X..R', 'LCC.CCR', 'LCC.CCR', 'L.....R', 'L..X..R', 'L.....R', 'XBBBBBX'],
+    core: [
+      { defId: 'cab', x: 4, y: 2 }, { defId: 'transmission', x: 3, y: 4 }, { defId: 'tank', x: 3, y: 8 },
+      { defId: 'wheel', x: 0, y: 0 }, { defId: 'wheel', x: 6, y: 0 },
+      { defId: 'wheel', x: 0, y: 10 }, { defId: 'wheel', x: 6, y: 10 },
+    ],
+    fuelCap: 100, fuelPerTile: 0.48, price: 1300, look: 'longbed',
+  },
+  carrier: {
+    id: 'carrier', name: 'Armored carrier', maxSpeed: 4, accel: 1, brake: 2.5, turnSlow: 75, turnFast: 28, reverseTurn: 50,
+    mass: 3200, ratedMass: 5200, radius: 0.85,
+    layout: ['XFFFFX', 'LWWW.R', 'LWWWXR', 'LEE..R', 'LEEX.R', 'L.CC.R', 'L.CCXR', 'L....R', 'XBBBBX'],
+    core: [
+      { defId: 'cab', x: 4, y: 2 }, { defId: 'transmission', x: 3, y: 4 }, { defId: 'tank', x: 4, y: 6 },
+      { defId: 'wheel', x: 0, y: 0 }, { defId: 'wheel', x: 5, y: 0 },
+      { defId: 'wheel', x: 0, y: 8 }, { defId: 'wheel', x: 5, y: 8 },
+    ],
+    fuelCap: 70, fuelPerTile: 0.5, price: 1600, look: 'carrier',
+  },
+  tractor: {
+    id: 'tractor', name: 'Heavy tractor', maxSpeed: 3, accel: 1.8, brake: 2, turnSlow: 65, turnFast: 22, reverseTurn: 55,
+    mass: 3600, ratedMass: 6500, radius: 0.9,
+    layout: ['XFFFFFX', 'L.EEX.R', 'L.EE..R', 'LWWW..R', 'L..X..R', 'L.CC..R', 'L.CC..R', 'L..X..R', 'XBBBBBX'],
+    core: [
+      { defId: 'cab', x: 4, y: 1 }, { defId: 'transmission', x: 3, y: 4 }, { defId: 'tank', x: 3, y: 7 },
+      { defId: 'wheel', x: 0, y: 0 }, { defId: 'wheel', x: 6, y: 0 },
+      { defId: 'wheel', x: 0, y: 8 }, { defId: 'wheel', x: 6, y: 8 },
+    ],
+    fuelCap: 120, fuelPerTile: 0.6, price: 1400, look: 'tractor',
+  },
 };
 
 // Chassis the player can buy in towns.
-export const PLAYER_CHASSIS = ['scout', 'hauler'];
+export const PLAYER_CHASSIS = ['scout', 'hauler', 'courier', 'van', 'longbed', 'carrier', 'tractor'];
 
 export function chassisDef(id: string): ChassisDef {
   const def = CHASSIS[id];
