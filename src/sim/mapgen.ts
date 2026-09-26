@@ -4,7 +4,8 @@ import { REGION } from '../data/region';
 import { isCliff, tileAt } from './terrain';
 import { randInt, randRange } from './rng';
 import type { Obstacle, World } from './types';
-import { angleDiff, bearing, dist, polylineDist, type Vec } from './vec';
+import { angleDiff, bearing, dist, type Vec } from './vec';
+import { ROAD_INDEX } from './road-index';
 
 const O = REGION.obstacles;
 
@@ -84,7 +85,7 @@ function placeRoadWrecks(world: World, out: Obstacle[]): void {
 function fitsOffRoad(world: World, out: Obstacle[], pos: Vec, r: number): boolean {
   if (pos.x < O.edgeMargin || pos.y < O.edgeMargin || pos.x > world.size - O.edgeMargin || pos.y > world.size - O.edgeMargin) return false;
   const roadGap = REGION.roadWidth / 2 + O.roadClearance + r;
-  if (REGION.roads.some((road) => polylineDist(pos, road) < roadGap)) return false;
+  if (ROAD_INDEX.nearestWithin(pos.x, pos.y, roadGap) < roadGap) return false;
   if (isCliff(world.terrain, tileAt(world.terrain, pos))) return false;
   return clearOfSites(pos, r) && !overlapsAny(out, pos, r);
 }

@@ -4,7 +4,10 @@
 import { REGION } from "../data/region";
 import { TERRAIN, TERRAIN_TYPES } from "../data/terrain";
 import { tileAt, tileSlope, type Terrain } from "../sim/terrain";
-import { polylineDist, type Vec } from "../sim/vec";
+import { ROAD_INDEX } from "../sim/road-index";
+import { type Vec } from "../sim/vec";
+
+const ROAD_SCATTER_GAP = REGION.roadWidth / 2 + 0.3; // tiles from a road center line kept free of pebbles and scrub
 import { hash2, valueNoise } from "./noise";
 import { PAL, mix, shade } from "./palette";
 
@@ -206,10 +209,7 @@ function paintScatter(c: PaintCanvas, size: number): void {
     for (let y = 0; y < size; y++) {
       const h = hash2(x * 7 + 3, y * 13 + 5);
       const p = { x: x + hash2(x, y * 3), y: y + hash2(x * 5, y) };
-      const onRoad = REGION.roads.some(
-        (r) => polylineDist(p, r) < REGION.roadWidth / 2 + 0.3,
-      );
-      if (onRoad) continue;
+      if (ROAD_INDEX.nearestWithin(p.x, p.y, ROAD_SCATTER_GAP) < ROAD_SCATTER_GAP) continue;
       if (h < 0.18) blob(c, p, 0.05 + h * 0.3, css(PAL.pebble, 0.7));
       else if (h > 0.93) scrub(c, p, h);
     }
