@@ -69,9 +69,9 @@ export const SOUNDS: Record<CueId, Cue> = Object.fromEntries(
 
 
 export const MIX = {
-  busVolume: { ui: 0.8, sfx: 1, ambient: 0.6, music: 0.5 } satisfies Record<Bus, number>,
+  busVolume: { ui: 0.8, sfx: 1, ambient: 0.6, music: 0.8 } satisfies Record<Bus, number>,
   // Import RMS level in dBFS per bus. Effects sit loudest; beds sit under them.
-  level: { ui: -20, sfx: -16, ambient: -26, music: -22 } satisfies Record<Bus, number>,
+  level: { ui: -20, sfx: -16, ambient: -26, music: -18 } satisfies Record<Bus, number>,
   compressor: { threshold: -18, knee: 12, ratio: 4, attack: 0.003, release: 0.25 },
   // Short open-air tail on the effects bus, generated as decaying noise.
   reverb: { seconds: 1.2, decay: 3, wet: 0.12 },

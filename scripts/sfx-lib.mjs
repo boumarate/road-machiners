@@ -11,6 +11,8 @@ const KEEP_S = 0.02; // silence kept at each trimmed end, so soft attacks and ta
 const FADE_IN_S = 0.005; // de-click only; keeps the attack
 const FADE_OUT_S = 0.03;
 const OPUS_KBPS = 96;
+const MUSIC_EDGE_DB = 15; // music quieter than its loudest moment by this much counts as intro or outro
+const MUSIC_XFADE_S = 2; // loop seam crossfade for music
 const SILENT_PEAK_DB = -40; // a source this quiet is a failed generation, not a sound
 
 // Catalog cue by id, or a loud stop naming the id.
@@ -29,8 +31,9 @@ export function nextName(id) {
   }
 }
 
-export function importFile(src, id, cue, level) {
+export function importFile(source, id, cue, level) {
   const name = nextName(id);
+  const src = cue.bus === 'music' ? musicLoop(source, name) : source;
   const out = `${SFX_DIR}/${name}`;
   if (existsSync(out)) throw new Error(`${out} exists`);
   const trim = `silenceremove=start_periods=1:start_threshold=${SILENCE_DB}dB:start_silence=${KEEP_S}`;
@@ -56,4 +59,34 @@ function statValue(log, key) {
   const m = log.match(new RegExp(`${key}: (-?[\\d.]+|-inf)`));
   if (!m || m[1] === '-inf') throw new Error(`Could not measure ${key}; the file may be silent`);
   return Number(m[1]);
+}
+
+// Generated music starts with a quiet intro and ends with a fade. Cut both, then crossfade the end into the
+// start, so the track loops without a gap. Writes a wav next to the raw file and returns its path.
+function musicLoop(src, name) {
+  const { start, end } = loudSpan(src);
+  const len = end - start;
+  const x = MUSIC_XFADE_S;
+  if (len < 4 * x) throw new Error(`${src} has only ${len.toFixed(1)} s of music`);
+  const out = `tmp/sfx-raw/${name.replace('.ogg', '')}.loop.wav`;
+  const graph = [
+    `[0]atrim=start=${start}:end=${end},asetpts=N/SR/TB,asplit=2[a][b]`,
+    `[a]atrim=0:${x},afade=t=in:d=${x},adelay=${Math.round((len - 2 * x) * 1000)}:all=1[head]`,
+    `[b]atrim=start=${x},asetpts=N/SR/TB,afade=t=out:st=${len - 2 * x}:d=${x}[body]`,
+    `[body][head]amix=inputs=2:normalize=0:duration=first`,
+  ].join(';');
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', src, '-filter_complex', graph, out]);
+  console.log(`${src}: music kept ${start.toFixed(1)}-${end.toFixed(1)} s, looped with a ${x} s crossfade`);
+  return out;
+}
+
+// First and last moment the short-term loudness is within MUSIC_EDGE_DB of the loudest moment.
+function loudSpan(src) {
+  const r = spawnSync('ffmpeg', ['-hide_banner', '-nostats', '-i', src, '-af', 'ebur128', '-f', 'null', '-'], { encoding: 'utf8' });
+  if (r.status !== 0) throw new Error(`ffmpeg could not meter ${src}`);
+  const points = [...r.stderr.matchAll(/t: *([\d.]+).*? S: *(-?[\d.]+|-inf)/g)].map((m) => ({ t: Number(m[1]), s: m[2] === '-inf' ? -Infinity : Number(m[2]) }));
+  const loudest = Math.max(...points.map((p) => p.s));
+  const loud = points.filter((p) => p.s >= loudest - MUSIC_EDGE_DB);
+  if (loud.length === 0) throw new Error(`${src} has no loud part`);
+  return { start: loud[0].t, end: loud[loud.length - 1].t };
 }

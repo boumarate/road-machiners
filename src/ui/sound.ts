@@ -44,6 +44,7 @@ export class SoundSettings {
   toggleMute(): void {
     this.settings.muted = !this.settings.muted;
     this.apply();
+    this.save();
   }
 
   private slider(bus: Bus): HTMLElement {
@@ -51,6 +52,7 @@ export class SoundSettings {
     input.addEventListener("input", () => {
       this.settings.volume[bus] = Number(input.value);
       this.apply();
+      this.save();
     });
     return el("label", {}, LABEL[bus], input);
   }
@@ -59,6 +61,10 @@ export class SoundSettings {
     for (const b of BUSES) this.mixer.setBusVolume(b, this.settings.volume[b]);
     this.mixer.setMuted(this.settings.muted);
     this.muteButton.textContent = this.settings.muted ? "Unmute [M]" : "Mute [M]";
+  }
+
+  // Only the player's own changes are stored, so untouched groups follow new mix defaults.
+  private save(): void {
     this.storage.setItem(KEY, JSON.stringify(this.settings));
   }
 }
