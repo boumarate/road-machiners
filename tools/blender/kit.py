@@ -62,6 +62,7 @@ class Kit:
         bpy.ops.wm.read_factory_settings(use_empty=True)
         self.rng = random.Random(seed)
         self._parts: list[bpy.types.Object] = []
+        self._sockets: list[bpy.types.Object] = []
         self._materials = {name: _material(name, hex_color) for name, hex_color in colors.items()}
 
     def dent(self, obj: bpy.types.Object, amount: float) -> None:
@@ -92,8 +93,18 @@ class Kit:
         bpy.ops.mesh.primitive_cylinder_add(vertices=vertices, radius=radius, depth=depth, location=loc, rotation=rot)
         return self._add(bpy.context.object, name, mat, dent_by)
 
+    def socket(self, name: str, loc: Vec3) -> None:
+        """Adds an empty named socket_<name> at loc, where another model attaches. models.ts reads and removes it."""
+        full = f"socket_{name}"
+        if any(s.name == full for s in self._sockets):
+            raise ValueError(f"socket {full} is already defined")
+        empty = bpy.data.objects.new(full, None)
+        empty.location = loc
+        bpy.context.scene.collection.objects.link(empty)
+        self._sockets.append(empty)
+
     def export(self, name: str, args: Args, view_size: float) -> None:
-        """Joins all parts into one flat-shaded mesh, writes the .glb, and renders the preview if asked.
+        """Joins all parts into one flat-shaded mesh, writes the .glb with the sockets, and renders the preview if asked.
 
         The origin stays at the world origin, which is the model's ground point.
         view_size is the preview's width in meters.
@@ -110,6 +121,8 @@ class Kit:
         bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
         for poly in model.data.polygons:
             poly.use_smooth = False
+        for empty in self._sockets:
+            empty.select_set(True)
         args.out.parent.mkdir(parents=True, exist_ok=True)
         bpy.ops.export_scene.gltf(filepath=str(args.out), export_format="GLB", use_selection=True, export_apply=True, export_yup=True)
         print(f"wrote {args.out}: {len(model.data.polygons)} faces")
