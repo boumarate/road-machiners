@@ -1,6 +1,6 @@
 # Survival loop
 
-**Status:** reviewing
+**Status:** validating
 **Branch:** survival-loop
 **Worktree:** .worktrees/survival-loop
 **Goal:** On the Icarus map with the standard start kit, a town-to-town trade run makes the player manage fuel, supplies and breakdowns, choose shaded stops, spot raiders before they close in, and find worthwhile scavenging on the way. Combat is avoidable and dangerous. The user confirms this by playing.
@@ -306,3 +306,48 @@ Merge D.
 - IF2 — `heatAt(world, pos)` from PH4. `burnFuel`, `consumeVehicleSupplies` and the HUD read it.
 - IF3 — `weatherAt(world, pos)` from PH5. Vision, combat, stats, wear, heat and detection read it.
 - IF4 — `contactsOf(world, observer)` from PH7. PH8 and PH9 read it.
+
+## Verify
+
+- `npm test` passes 289 tests, and `npm run typecheck` is clean.
+- Browser scripts from each system pass. A field patch raised HP. A raider behind a hill showed as a contact circle. A search filled the grid turn by turn.
+- Trip run `tmp/trips-road.ts` drives Bowl to Nose along the north road with obstacles, over 8 seeds. 6 of 8 arrived in 104 to 147 turns. The median trip used about half of the 30 fuel. Supplies stayed above a third after the Dustwell oasis. Breakdowns averaged 0.5 before the breakdown rate was doubled. Two seeds did not arrive, because the auto driver stalled on terrain.
+- The playtest FPS gate fails in headless swiftshader on both the foundation build and the merged build, at 12 to 24 fps. The idle frame rate is about the same on both builds, near 6 fps. The merged build still needs an FPS check in a real browser.
+
+## Conclusion
+
+Outcome: all four systems are built and reviewed at 401ac4c plus the doc fix. The goal still needs the user to play a crossing.
+
+Invariants:
+- IV1 — Wear, weather and loot roll through `rng.ts`. Contacts use the pure `hashRandom`. Seed replay tests pass in wear.test.ts and weather.test.ts.
+- IV2 — Wear, heat, weather, detection and jobs run for every vehicle. NPC tests cover wear, jobs, contacts and search.
+- IV3 — `advanceJobs` cancels a job before any work when the truck ends above parked speed. Tested in jobs.test.ts and search.test.ts.
+- IV4 — `collectSalvage` only moves stock out. A test checks that stock never grows.
+- IV5 — The shade layer calls the sim's `inShade`.
+- IV6 — A test over many seeds checks that the contact circle holds the true position.
+- IV7 — Numbers live in data/wear.ts, time.ts, weather.ts, detect.ts, salvage.ts and rules.ts.
+
+### Assumptions check
+- AS1 — held. Work started from main at 8671df3 with the Icarus map.
+- AS2 — held. Profiling shows route planning dominates turn time, and `heatAt` for all vehicles costs well under 1 ms per turn.
+- AS3 — unverifiable here. Headless FPS is too noisy, so this needs a real browser.
+
+### Unknowns outcome
+- UK1 — resolved. A day is 200 turns, because a road crossing takes 100 to 150 turns.
+- UK2 — resolved. Jobs are not slowed by heat.
+- UK3 — resolved. Raiders drive to the contact center, and the fight rule takes over on sight.
+- UK4 — resolved. Every mounted part wears at the same rate.
+
+Plan adherence:
+- Four branches were built in parallel from a shared foundation commit, cf9c831. The plan had them built in sequence.
+- Wear and repair numbers live in `src/data/wear.ts`, not in rules.ts.
+- The gunwagon swapped its cannon for an MG to free a mount for its scanner.
+- `baseGrid` in grid.ts is memoized to keep the combat stress test within budget.
+- The sun branch tuned drain on a trip script that stopped when any vehicle arrived. The drain was retuned after the merge in f0ad208.
+
+Review findings:
+- Important: DESIGN.md kept the old drain rates. Fixed.
+
+Future work:
+- Storm dust looks faint over the player. This needs the user's visual check.
+- The auto driver stalls on some seeds when given far waypoints. This was seen in trip runs and was already in main.

@@ -106,7 +106,7 @@ Town markets have fixed prices and unlimited stock and money. Initial NPC resour
 
 Each town produces and needs fixed goods. Profit comes from knowing routes, as in Dustland Delivery.
 
-Fuel and supplies limit range. Fuel burns at three tenths of the chassis fuel-per-tile rate, times heat. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn at 0.12 per turn, times heat. Without supplies the character loses health. Oases refill supplies.
+Fuel and supplies limit range. Fuel burns at one fifth of the chassis fuel-per-tile rate, times heat. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn at 0.06 per turn, times heat. Without supplies the character loses health. Oases refill supplies.
 
 ## Prototype v0.001 content
 
