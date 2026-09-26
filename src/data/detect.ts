@@ -9,17 +9,17 @@ export const DETECT = {
     ownPenalty: 10, // tiles of hearing lost per tile/turn of the listener's own speed
   },
   dust: {
-    base: 20, // tiles at a crawl, before the terrain's dust multiplier
-    perSpeed: 25, // extra tiles per tile/turn of the source's speed
+    base: 40, // tiles at a crawl, before the terrain's dust multiplier
+    perSpeed: 50, // extra tiles per tile/turn of the source's speed
     eyeHeight: 0.6, // dust rises above the truck, so it clears hills a plain sight line would not
     samplesPerTile: 1, // height samples along a dust sight line; a tall plume needs less care than sight
     spawnBack: 0.5, // share of the turn's trail behind the truck where its new cloud rises
     lifetime: 8, // turns a cloud hangs in the air before it is gone
-    riseTurns: 2, // turns before a cloud has risen high enough to be seen beyond sight range
-    riseHeight: 0.25, // height units a cloud climbs per turn, so older clouds clear taller hills
-    backDrift: 0.6, // tiles per turn a cloud drifts back the way its truck came
-    windDrift: 0.4, // tiles per turn a cloud drifts with the wind, per unit of wind
-    wander: 0.35, // tiles per turn of random push each cloud gets, fresh every turn
+    riseTurns: 1, // turns before a cloud has risen high enough to be seen beyond sight range
+    riseHeight: 0.5, // height units a cloud climbs per turn, so older clouds clear taller hills
+    backDrift: 1.2, // tiles per turn a cloud drifts back the way its truck came
+    windDrift: 0.8, // tiles per turn a cloud drifts with the wind, per unit of wind
+    wander: 0.6, // tiles per turn of random push each cloud gets, fresh every turn
   },
   // Scanner range lives on the part itself (src/data/parts.ts, PARTS.scanner.range), so towns and
   // the grid read one number.

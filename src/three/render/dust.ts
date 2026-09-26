@@ -27,8 +27,8 @@ const LOOK = {
   opacity: 0.22, // per puff at its thickest; it fades in, then out toward the end of its life
   fadeIn: 0.5, // turns to fade in
   wobble: 0.8, // tiles each puff wanders from its place in the swarm
-  wobbleSeconds: 7, // time scale of that wandering
-  glideSeconds: 2.5, // time a cloud takes to glide to its next-turn position after a turn
+  wobbleSeconds: 3.5, // time scale of that wandering
+  glideSeconds: 1.2, // time a cloud takes to glide to its next-turn position after a turn
 };
 
 type View = { group: THREE.Group; puffs: THREE.Sprite[] };
