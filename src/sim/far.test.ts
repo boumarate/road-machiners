@@ -2,7 +2,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { PERF } from '../data/perf';
 import { RULES } from '../data/rules';
 import { TERRAIN } from '../data/terrain';
-import { buildDrive, bodyState, freeDrive, initPhysics, syncDrive, type Drive, type TurnResult } from '../phys/drive';
+import { buildDrive, bodyState, freeDrive, initPhysics, syncDrive, TURN_STEPS, type Drive, type TurnResult } from '../phys/drive';
+import { PHYSICS } from '../data/physics';
 import { physicsMove } from '../phys/turn';
 import { advanceFar, isNear } from './far';
 import { getResources } from './resources';
@@ -81,7 +82,7 @@ describe('far NPC travel', () => {
 
   it('simulates only near vehicles in physics', () => {
     const { w, d, last } = play(mixedWorld(), 1);
-    expect(Object.keys(last.frames).sort()).toEqual([w.vehicles[0].id, w.vehicles[1].id].sort());
+    expect(Object.keys(d.bodies).sort()).toEqual([w.vehicles[0].id, w.vehicles[1].id].sort());
     expect(w.vehicles[2].trail).toHaveLength(RULES.substeps + 1);
     freeDrive(d);
   });
@@ -195,5 +196,19 @@ describe('far NPC travel', () => {
     expect(dist(body.pos, v.pos)).toBeLessThan(1e-3);
     expect(Math.abs(body.heading - v.heading)).toBeLessThan(1e-3);
     freeDrive(d);
+  });
+  it('gives far vehicles frames along their trail, so the view never jumps', () => {
+    const { w, last } = play(mixedWorld(), 1);
+    const far = w.vehicles[2];
+    const frames = last.frames[far.id];
+    expect(frames).toHaveLength(TURN_STEPS);
+    const S = PHYSICS.metersPerTile;
+    const end = frames[frames.length - 1].pos;
+    expect(Math.hypot(end.x / S - far.pos.x, end.z / S - far.pos.y)).toBeLessThan(1e-6);
+    for (let i = 1; i < frames.length; i++) {
+      const step = Math.hypot(frames[i].pos.x - frames[i - 1].pos.x, frames[i].pos.z - frames[i - 1].pos.z) / S;
+      expect(step).toBeLessThanOrEqual(pathLength(far.trail) / RULES.substeps + 1e-6);
+    }
+    for (const v of w.vehicles) expect(last.frames[v.id]).toHaveLength(TURN_STEPS);
   });
 });

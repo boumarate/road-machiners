@@ -1,6 +1,6 @@
 # Performance core
 
-**Status:** validating
+**Status:** done
 **Branch:** icarus-exploration
 **Worktree:** .worktrees/icarus-exploration
 **Goal:** `npm run perf` passes every budget on the M3 Pro, and the user confirms the game feels smooth in play.
@@ -50,12 +50,13 @@ In dev, a small corner panel shows frame ms, last turn ms, last preview ms and r
 
 ### Far NPC travel
 
-A vehicle is far when it is more than `live radius` tiles from the player. The live radius sits in `src/data/perf.ts`. Its default is sight radius plus 20 tiles.
+A vehicle is far when it is more than `live radius` tiles from the player. The live radius sits in `src/data/perf.ts`. It is 40, so the physics bubble reaches 50 tiles from the player.
 
 - Far vehicles have no Rapier body. Each turn they move along their stored route at their planned speed. They burn fuel by distance, like physics turns do.
 - The route is stored on the vehicle as plain state. It is recomputed when the order changes or a dynamic blocker crosses it.
 - Far vehicles never crash or ram. Combat, trade and salvage still run through the sim rules.
 - A far vehicle that becomes near gets a body at its sim pose. `syncDrive` already places bodies for that case.
+- Far vehicles get rest-pose frames along their trail, so the view moves them smoothly and never jumps.
 - The path preview simulates near vehicles only.
 
 ### Physics terrain
@@ -223,6 +224,13 @@ The first turn and the first preview still miss by a small margin. On the first 
 
 ## Code smells
 - `src/render/groundPaint.ts:133` and `src/sim/mapgen.ts:87` check every road per point and could use `ROAD_INDEX`.
-- `src/three/game.ts` `syncVehicles` shows a far vehicle at its last frame until it drifts past `MOVED_BY_RULES`, then it jumps.
 
 ## Conclusion
+
+The user confirmed in play that the game runs smoothly. The review found no correctness bugs.
+
+- Review: the Design still said a 30-tile bubble after it grew to 50. Fixed above.
+- Review: `staticSet` in `src/sim/nav/layer.ts` detects a changed obstacles array only by its length. Today this is safe for two reasons. Each turn clones the world into a new array, and wreck removal in `src/sim/combat.ts` builds a new array. A future in-place splice plus push in one turn would slip past it.
+- Far NPCs still fight, trade and salvage by the sim rules. They cannot ram, crash or block.
+- Far NPCs ignore corner, slope and ground slowdowns, so they may cross the map faster than trucks under physics. This is not measured yet.
+- The first turn takes 121-131 ms against a 100 ms budget. The user accepted this after play.

@@ -324,6 +324,24 @@ export function restFrame(w: World, v: Vehicle): VehicleFrame {
   return { pos: { x: v.pos.x * S, y: rideHeight(w, v), z: v.pos.y * S }, rot: q, wheels };
 }
 
+// Frames for a vehicle that moved without physics: rest poses along its trail, one per physics step,
+// ending on its sim pose. Far vehicles get these so the view moves them smoothly, like driven ones.
+export function trailFrames(w: World, v: Vehicle): VehicleFrame[] {
+  const last = v.trail.length - 1;
+  if (last < 1) throw new Error(`Vehicle ${v.id} has no trail to frame`);
+  const frames: VehicleFrame[] = [];
+  for (let i = 1; i <= TURN_STEPS; i++) {
+    const t = (i / TURN_STEPS) * last;
+    const k = Math.min(Math.floor(t), last - 1);
+    const f = t - k;
+    const a = v.trail[k];
+    const b = v.trail[k + 1];
+    const heading = a.heading + angleDiff(a.heading, b.heading) * f;
+    frames.push(restFrame(w, { ...v, pos: { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }, heading }));
+  }
+  return frames;
+}
+
 // Height of the body center for a truck standing at its sim position with springs at rest.
 function rideHeight(w: World, v: Vehicle): number {
   const b = bodyOf(v.chassisId);

@@ -11,7 +11,7 @@ import { vehicleStats } from '../sim/stats';
 import type { Pose, Vehicle, World } from '../sim/types';
 import { dist, type Vec } from '../sim/vec';
 import { visibleTiles } from '../sim/vision';
-import { bodyState, EDGE, simulateTurn, syncDrive, toTilesPerTurn, TURN_STEPS, type Drive, type TurnResult } from './drive';
+import { bodyState, EDGE, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type TurnResult } from './drive';
 import { headingOf, toMap } from './frames';
 
 const EXPLORE_EVERY = 4; // trail poses between sight checks while exploring along a turn
@@ -24,7 +24,10 @@ export function physicsMove(d: Drive, done: (r: TurnResult) => void): (w: World)
     const r = simulateTurn(d, w);
     const far = w.vehicles.filter((v) => !r.frames[v.id]);
     applyTurn(w, r);
-    for (const v of far) advanceFar(w, v);
+    for (const v of far) {
+      advanceFar(w, v);
+      r.frames[v.id] = trailFrames(w, v);
+    }
     exploreAlong(w);
     done(r);
   };
