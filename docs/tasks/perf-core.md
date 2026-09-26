@@ -221,4 +221,8 @@ The first `npm run perf` after wave 1 missed only `turnMs`: 481 ms on the first 
 
 The first turn and the first preview still miss by a small margin. On the first turn, physics takes 57 ms and vision takes 40 ms.
 
+## Code smells
+- `src/render/groundPaint.ts:133` and `src/sim/mapgen.ts:87` check every road per point and could use `ROAD_INDEX`.
+- `src/three/game.ts` `syncVehicles` shows a far vehicle at its last frame until it drifts past `MOVED_BY_RULES`, then it jumps.
+
 ## Conclusion
