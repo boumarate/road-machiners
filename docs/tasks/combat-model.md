@@ -1,6 +1,6 @@
 # Combat model
 
-**Status:** planning
+**Status:** executing
 **Branch:** combat-model
 **Worktree:** .worktrees/combat-model
 **Goal:** In a real game, the player can switch off the route planner and drive straight into an enemy. Hovering an enemy shows both sides' hit chances with their causes. Machine guns fire bursts of separately rolled rounds. Every hit or ram breaks named parts, and armor on the struck side matters. Garage loadout mass visibly changes speed, handling and ram damage. The user confirms the fights feel decent by playing.
