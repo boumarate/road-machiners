@@ -12,7 +12,7 @@
 - `src/three/game.ts` plays these events as visual effects in `finishMovement`, `playShotFx` and `landImpacts`, with fixed shot and read delays from `.env`.
 - Effects for vehicles the player may not see are skipped through `eventPoint`, so fog of war already applies.
 - The agent cannot hear, so only the user can judge how a sound sounds.
-- Sounds come from two sources: ElevenLabs generation for trucks, guns, wind and music, and Kenney CC0 packs for UI.
+- Sounds come from ElevenLabs generation. Kenney CC0 UI sounds were tried and rejected: digital beeps read as an arcade game.
 
 ## Design
 Sound is a render-side layer. The sim stays silent and unchanged.
@@ -83,7 +83,6 @@ Approach: build the audio core and the file pipeline first, fill the catalog wit
 
 ### Checkpoint — first sound batch, needs the user
 - User adds the API key and cap to `.env`.
-- Agent downloads Kenney UI CC0 pack after a size check and imports UI cues.
 - Agent fills prompts for combat, driving, ambience and music cues and runs `sfx:gen` within the cap.
 - User auditions on the board; agent deletes rejected files and adjusts `MIX`. Resolves UK2.
 

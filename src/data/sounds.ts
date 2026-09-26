@@ -21,12 +21,12 @@ export const SOUND_STYLE =
   "Post-apocalyptic desert, worn diesel machinery and old steel, dry open air, close microphone, no music, no voices.";
 
 const DEFS = {
-  // UI, from the Kenney Interface Sounds pack (CC0).
-  "ui-click": { bus: "ui", volume: 1, pitchJitter: 0.04, maxVoices: 2, loop: false },
-  "ui-open": { bus: "ui", volume: 1, pitchJitter: 0, maxVoices: 1, loop: false },
-  "ui-close": { bus: "ui", volume: 1, pitchJitter: 0, maxVoices: 1, loop: false },
-  "ui-confirm": { bus: "ui", volume: 1, pitchJitter: 0, maxVoices: 1, loop: false },
-  "ui-error": { bus: "ui", volume: 1, pitchJitter: 0, maxVoices: 1, loop: false },
+  // UI: physical truck cab controls, never digital beeps.
+  "ui-click": { bus: "ui", pitchJitter: 0.04, maxVoices: 2, volume: 1, loop: false, prompt: "Single click of an old metal toggle switch on a truck dashboard.", seconds: 0.5 },
+  "ui-open": { bus: "ui", pitchJitter: 0, maxVoices: 1, volume: 1, loop: false, prompt: "Rusty metal glovebox latch opening with a short creak.", seconds: 0.8 },
+  "ui-close": { bus: "ui", pitchJitter: 0, maxVoices: 1, volume: 1, loop: false, prompt: "Heavy metal lid shutting with a dull latch clack.", seconds: 0.6 },
+  "ui-confirm": { bus: "ui", pitchJitter: 0, maxVoices: 1, volume: 1, loop: false, prompt: "Heavy steel ratchet clicking tight, a deal sealed.", seconds: 0.6 },
+  "ui-error": { bus: "ui", pitchJitter: 0, maxVoices: 1, volume: 1, loop: false, prompt: "Dull thud of a jammed metal lever that will not move.", seconds: 0.5 },
   "end-turn": { bus: "ui", volume: 1, pitchJitter: 0.03, maxVoices: 1, loop: false, prompt: "Heavy truck gear lever clunks into gear, short mechanical thunk.", seconds: 1 },
 
   // Turn results.
