@@ -1,6 +1,13 @@
 import type { World } from '../sim/types';
 
 const SAVE_KEY = 'korovan.save';
+
+// A stored save the game cannot load. The crash screen offers to delete it and start over.
+export class SaveError extends Error {}
+
+export function clearSave(storage: Storage): void {
+  storage.removeItem(SAVE_KEY);
+}
 const SAVE_VERSION = 3; // 2 added weather, jobs and contacts; 3 adds job totals and dust clouds
 
 export function loadWorld(storage: Storage): World | null {
@@ -8,9 +15,9 @@ export function loadWorld(storage: Storage): World | null {
   if (raw === null) return null;
   const save: unknown = JSON.parse(raw);
   if (!save || typeof save !== 'object' || !('version' in save) || save.version !== SAVE_VERSION) {
-    throw new Error('Incompatible game save version');
+    throw new SaveError('Incompatible game save version');
   }
-  if (!('world' in save) || !isWorld(save.world)) throw new Error('Invalid saved world');
+  if (!('world' in save) || !isWorld(save.world)) throw new SaveError('Invalid saved world');
   return save.world;
 }
 
