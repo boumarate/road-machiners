@@ -2,15 +2,33 @@
 // A job is cancelled on any turn its truck ends above parked speed, and its finished turns are lost.
 
 import { RULES } from '../data/rules';
-import { repairTurn } from './repair';
+import { playerVehicle } from './damage';
+import { goodsCount } from './grid';
+import { repairPlan, repairTurn } from './repair';
 import { searchTurn } from './search';
 import type { Job, Vehicle, World } from './types';
+import { update } from './world';
+
+export { repairPlan };
 
 export function startJob(world: World, v: Vehicle, job: Job): void {
   if (v.job) throw new Error(`${v.name} is already busy with a ${v.job.kind} job`);
   if (v.speed > RULES.parkedSpeed) throw new Error('Stop the truck first');
   v.job = job;
   world.events.push({ t: 'job', vehicle: v.id, job: { ...job }, outcome: 'started' });
+}
+
+// The player command that starts a field repair. Throws when the truck is not parked, the part is
+// already at the field cap, or the grid lacks the parts the job would spend.
+export function startRepair(world: World, partId: string): World {
+  return update(world, (w) => {
+    const v = playerVehicle(w);
+    const plan = repairPlan(w, v, partId);
+    if (plan.hp <= 0) throw new Error('Already at the field repair cap');
+    const held = goodsCount(v).parts ?? 0;
+    if (held < plan.parts) throw new Error('Not enough parts to start this repair');
+    startJob(w, v, { kind: 'repair', partId, turnsLeft: plan.turns });
+  });
 }
 
 export function advanceJobs(world: World): void {

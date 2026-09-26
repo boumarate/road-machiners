@@ -26,6 +26,7 @@ export function discoverSites(world: World): void {
 export function useOasis(world: World): void {
   const loc = locationAt(world);
   if (loc?.kind !== 'oasis' || world.player.supplies >= RULES.suppliesCap) return;
+  if (playerVehicle(world).speed > RULES.parkedSpeed) return;
   world.player.supplies = RULES.suppliesCap;
   world.events.push({ t: 'info', text: `Filled supplies at ${loc.name}` });
 }
