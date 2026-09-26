@@ -3,8 +3,9 @@
 // nothing is cleared between calls.
 
 import { REGION } from '../../data/region';
+import { count } from '../../perf';
 import type { Blocker } from './buckets';
-import { stampCircles, type NavLayer } from './layer';
+import { COARSE, componentOf, stampCircles, type NavLayer } from './layer';
 
 // Cells blocked by kill wrecks and parked vehicles: stamp[c] === gen. Valid until the next stampOverlay.
 export type Overlay = { stamp: Uint32Array; gen: number };
@@ -128,15 +129,146 @@ function heuristic(x: number, y: number, gx: number, gy: number): number {
   return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
 }
 
+// Searches whose ends lie farther apart than this many cells first find a coarse corridor. Shorter
+// searches keep the exact full search.
+const LONG_CELLS = 32;
+
 // Cells from start to goal, both included. The start cell may be blocked when a vehicle hugs an
-// obstacle; it is allowed as a start.
+// obstacle; it is allowed as a start. Long searches stay inside the corridor of a coarse path plus
+// one ring of blocks. Kill wrecks and parked vehicles are not in the coarse grid, so when they cut
+// the corridor the full search runs.
 export function findCells(layer: NavLayer, ov: Overlay, start: number, goal: number): Int32Array | null {
+  if (start === goal) return Int32Array.of(start);
+  // The overlay only blocks more cells, so separate static components can never join.
+  if (!connected(layer, start, goal)) return null;
+  const n = layer.n;
+  if (heuristic(start % n, Math.floor(start / n), goal % n, Math.floor(goal / n)) > LONG_CELLS) {
+    if (markCorridor(layer, start, goal)) {
+      const cells = fineSearch(layer, ov, start, goal, true);
+      if (cells) return cells;
+    }
+    count('route-corridor-miss');
+  }
+  return fineSearch(layer, ov, start, goal, false);
+}
+
+// Whether a free goal shares a component with the start, or with a free neighbour of a blocked start.
+function connected(layer: NavLayer, start: number, goal: number): boolean {
+  const target = componentOf(layer, goal);
+  if (target === 0) return false;
+  const own = componentOf(layer, start);
+  if (own !== 0) return own === target;
+  const n = layer.n;
+  const x = start % n;
+  const y = Math.floor(start / n);
+  for (let dy = -1; dy <= 1; dy++)
+    for (let dx = -1; dx <= 1; dx++) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
+      if (componentOf(layer, ny * n + nx) === target) return true;
+    }
+  return false;
+}
+
+// Coarse search scratch, sized to the last region count. inCorridor[b] === corridorGen marks the
+// blocks the fine search may enter.
+let coarseCost = new Float64Array(0);
+let coarseFrom = new Int32Array(0);
+let coarseSeen = new Uint32Array(0);
+let coarseClosed = new Uint32Array(0);
+let coarseGen = 0;
+let inCorridor = new Uint32Array(0);
+let corridorGen = 0;
+
+// A* over coarse regions from the start's region to the goal's. Marks the blocks of the path's
+// regions and one ring of blocks around them. False when no coarse path exists.
+function markCorridor(layer: NavLayer, start: number, goal: number): boolean {
+  const { n: bn, region, block, x: rx, y: ry, slow, edgeStart, edges } = layer.coarse;
+  const regions = block.length;
+  if (coarseSeen.length !== regions || coarseGen === 0xffffffff) {
+    coarseCost = new Float64Array(regions);
+    coarseFrom = new Int32Array(regions);
+    coarseSeen = new Uint32Array(regions);
+    coarseClosed = new Uint32Array(regions);
+    coarseGen = 0;
+  }
+  if (inCorridor.length !== bn * bn || corridorGen === 0xffffffff) {
+    inCorridor = new Uint32Array(bn * bn);
+    corridorGen = 0;
+  }
+  const g = ++coarseGen;
+  const from = startRegion(layer, start, goal);
+  const to = region[goal];
+  const w = REGION.navigation.heuristicWeight;
+  const gx = rx[to];
+  const gy = ry[to];
+  heapSize = 0;
+  coarseCost[from] = 0;
+  coarseFrom[from] = -1;
+  coarseSeen[from] = g;
+  heapPush(from, heuristic(rx[from], ry[from], gx, gy) * w);
+  while (heapSize > 0) {
+    const cur = heapPop();
+    if (cur === to) {
+      const cg = ++corridorGen;
+      for (let r = to; r !== -1; r = coarseFrom[r]) {
+        const x = block[r] % bn;
+        const y = Math.floor(block[r] / bn);
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx >= 0 && ny >= 0 && nx < bn && ny < bn) inCorridor[ny * bn + nx] = cg;
+          }
+      }
+      return true;
+    }
+    if (coarseClosed[cur] === g) continue;
+    coarseClosed[cur] = g;
+    const base = coarseCost[cur];
+    for (let e = edgeStart[cur]; e < edgeStart[cur + 1]; e++) {
+      const next = edges[e];
+      if (coarseClosed[next] === g) continue;
+      const c = base + Math.hypot(rx[next] - rx[cur], ry[next] - ry[cur]) * ((slow[cur] + slow[next]) / 2);
+      if (coarseSeen[next] === g && c >= coarseCost[next]) continue;
+      coarseSeen[next] = g;
+      coarseCost[next] = c;
+      coarseFrom[next] = cur;
+      heapPush(next, c + heuristic(rx[next], ry[next], gx, gy) * w);
+    }
+  }
+  return false;
+}
+
+// The start's region, or for a blocked start the region of a free neighbour in the goal's component.
+function startRegion(layer: NavLayer, start: number, goal: number): number {
+  const region = layer.coarse.region;
+  if (region[start] !== 0) return region[start];
+  const n = layer.n;
+  const x = start % n;
+  const y = Math.floor(start / n);
+  for (let dy = -1; dy <= 1; dy++)
+    for (let dx = -1; dx <= 1; dx++) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
+      const c = ny * n + nx;
+      if (componentOf(layer, c) === componentOf(layer, goal)) return region[c];
+    }
+  throw new Error(`start cell ${start} has no free neighbour joined to goal ${goal}`);
+}
+
+// Weighted A* over the fine cells. With `corridor` set it enters only blocks the last markCorridor marked.
+function fineSearch(layer: NavLayer, ov: Overlay, start: number, goal: number, corridor: boolean): Int32Array | null {
   const n = layer.n;
   const g = begin(n * n);
   const blocked = layer.blocked;
   const slow = layer.slow;
   const stamp = ov.stamp;
   const og = ov.gen;
+  const bn = layer.coarse.n;
+  const cg = corridorGen;
   const w = REGION.navigation.heuristicWeight;
   const gx = goal % n;
   const gy = Math.floor(goal / n);
@@ -161,6 +293,7 @@ export function findCells(layer: NavLayer, ov: Overlay, start: number, goal: num
         if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
         const next = ny * n + nx;
         if (blocked[next] || stamp[next] === og || closed[next] === g) continue;
+        if (corridor && inCorridor[Math.floor(ny / COARSE) * bn + Math.floor(nx / COARSE)] !== cg) continue;
         const c = base + (dx !== 0 && dy !== 0 ? Math.SQRT2 : 1) * slow[next];
         if (seen[next] === g && c >= cost[next]) continue;
         seen[next] = g;

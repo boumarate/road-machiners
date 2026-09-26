@@ -6,8 +6,8 @@ import { TERRAIN_TYPES } from '../data/terrain';
 import { resetPerf, perfSnapshot } from '../perf';
 import { isDriveObstacle } from './mapgen';
 import { findCells, nearestFreeCell, stampOverlay } from './nav/astar';
-import { dynamicBlockers, navLayer } from './nav/layer';
-import { route, straightClear, type Blocker } from './path';
+import { COARSE, componentOf, dynamicBlockers, navLayer } from './nav/layer';
+import { route, routeLength, straightClear, type Blocker } from './path';
 import { nextRandom } from './rng';
 import { isCliff, tileAt, type Terrain } from './terrain';
 import type { World } from './types';
@@ -304,6 +304,15 @@ namespace Ref {
   }
 }
 
+// Searches whose ends lie farther apart than this many cells go through the coarse corridor.
+const LONG_CELLS = 32;
+
+function cellSpan(n: number, a: number, b: number): number {
+  const dx = Math.abs((a % n) - (b % n));
+  const dy = Math.abs(Math.floor(a / n) - Math.floor(b / n));
+  return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
+}
+
 function mulberry(seed: number): () => number {
   const r = { rngState: seed };
   return () => nextRandom(r);
@@ -349,7 +358,10 @@ describe('nav layers match the old grid rules', () => {
       expect(got[0]).toBe(start);
       expect(got[got.length - 1]).toBe(goal);
       for (let i = 1; i < got.length; i++) expect(g.blocked[got[i]]).toBe(0);
-      expect(Math.abs(Ref.pathCost(g, got) - Ref.pathCost(g, ref))).toBeLessThanOrEqual(0.01 * Ref.pathCost(g, ref));
+      // Long searches run inside a coarse corridor and may cost up to 5% more; short ones stay within 1%.
+      const tolerance = cellSpan(g.n, start, goal) > LONG_CELLS ? 0.05 : 0.01;
+      expect(Ref.pathCost(g, got) - Ref.pathCost(g, ref)).toBeLessThanOrEqual(tolerance * Ref.pathCost(g, ref));
+      if (tolerance === 0.01) expect(Ref.pathCost(g, ref) - Ref.pathCost(g, got)).toBeLessThanOrEqual(0.01 * Ref.pathCost(g, ref));
     }
     // Random points often land in closed cliff basins; half the pairs still need a real search.
     expect(searched).toBeGreaterThanOrEqual(12);
@@ -376,7 +388,16 @@ describe('nav layers match the old grid rules', () => {
       expect(again).toEqual(first);
       first[0] = { x: -1, y: -1 };
       expect(route(w, from, to, radius, extra)).toEqual(again);
-      expect(again).toEqual(Ref.route(w, refLayer(radius), from, to, radius, extra));
+      const ref = Ref.route(w, refLayer(radius), from, to, radius, extra);
+      const n = refLayer(radius).n;
+      const cell = (p: Vec) => Math.min(n - 1, Math.floor(p.y / Ref.CELL)) * n + Math.min(n - 1, Math.floor(p.x / Ref.CELL));
+      if (cellSpan(n, cell(from), cell(to)) <= LONG_CELLS) {
+        expect(again).toEqual(ref);
+        continue;
+      }
+      // Corridor routes may take other bends; they end at the same point and stay near the reference length.
+      expect(again[again.length - 1]).toEqual(ref[ref.length - 1]);
+      expect(routeLength(from, again)).toBeLessThanOrEqual(1.05 * routeLength(from, ref));
     }
     expect(perfSnapshot()['route-cache-hit'].calls).toBeGreaterThan(0);
   }, 60_000);
@@ -392,4 +413,139 @@ describe('nav layers match the old grid rules', () => {
     expect(around.length).toBeGreaterThan(1);
     expect(navLayer(flat.terrain, flat.obstacles, 0.6)).toBe(layer);
   });
+});
+
+describe('long routes search a coarse corridor', () => {
+  it('coarse regions are the connected pieces of each block, linked where their cells touch', () => {
+    const w = newWorld(1, START_KITS.standard);
+    const layer = navLayer(w.terrain, w.obstacles, 0.6);
+    const n = layer.n;
+    const { n: bn, region, block, slow, edgeStart, edges } = layer.coarse;
+    expect(bn).toBe(Math.ceil(n / COARSE));
+    const blockOfCell = (x: number, y: number) => Math.floor(y / COARSE) * bn + Math.floor(x / COARSE);
+    const linked = (a: number, b: number) => edges.subarray(edgeStart[a], edgeStart[a + 1]).includes(b);
+    const slowSum = new Float64Array(block.length);
+    const size = new Uint32Array(block.length);
+    // Counted, not asserted per cell: a million expect calls take half a minute.
+    let wrong = 0;
+    for (let y = 0; y < n; y++)
+      for (let x = 0; x < n; x++) {
+        const c = y * n + x;
+        const r = region[c];
+        if ((r === 0) !== (layer.blocked[c] === 1)) wrong++;
+        if (r === 0) continue;
+        if (block[r] !== blockOfCell(x, y)) wrong++;
+        slowSum[r] += layer.slow[c];
+        size[r]++;
+        for (const [dx, dy] of [[1, 0], [-1, 1], [0, 1], [1, 1]]) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || nx >= n || ny >= n) continue;
+          const o = region[ny * n + nx];
+          if (o === 0) continue;
+          // Touching free cells share a region inside a block and are linked across block edges.
+          if (blockOfCell(nx, ny) === blockOfCell(x, y)) {
+            if (o !== r) wrong++;
+          } else if (o !== r && !(linked(r, o) && linked(o, r))) wrong++;
+        }
+      }
+    expect(wrong).toBe(0);
+    for (let r = 1; r < block.length; r++) expect(slow[r]).toBeCloseTo(slowSum[r] / size[r], 5);
+    // Cliff ridges split some blocks into several regions.
+    expect(block.length - 1).toBeGreaterThan(new Set(block.subarray(1)).size);
+  });
+
+  it('free cells share a component exactly when a step path joins them', () => {
+    const w = emptyWorld();
+    // A closed ring of rocks splits the flat map into inside and outside.
+    const center = { x: 100, y: 100 };
+    for (let i = 0; i < 64; i++) {
+      const a = (i / 64) * 2 * Math.PI;
+      w.obstacles.push({ id: `ring-${i}`, pos: { x: center.x + 10 * Math.cos(a), y: center.y + 10 * Math.sin(a) }, r: 1, kind: 'rock' });
+    }
+    const layer = navLayer(w.terrain, w.obstacles, 0.6);
+    const n = layer.n;
+    const cell = (p: Vec) => Math.floor(p.y / 0.5) * n + Math.floor(p.x / 0.5);
+    const inside = cell(center);
+    const outside = cell({ x: 30, y: 30 });
+    const far = cell({ x: 500, y: 400 });
+    expect(layer.blocked[inside]).toBe(0);
+    expect(componentOf(layer, inside)).not.toBe(componentOf(layer, outside));
+    expect(componentOf(layer, outside)).toBe(componentOf(layer, far));
+    let blockedWithComponent = 0;
+    for (let c = 0; c < n * n; c++) if (layer.blocked[c] && componentOf(layer, c) !== 0) blockedWithComponent++;
+    expect(blockedWithComponent).toBe(0);
+  });
+
+  it('unreachable goals return null in under 5 ms, like the full search', () => {
+    const w = newWorld(1, START_KITS.standard);
+    // A spot with no cliff tile near it, so the ring alone decides reachability.
+    const flatAround = (p: Vec) => {
+      for (let y = p.y - 14; y <= p.y + 14; y++) for (let x = p.x - 14; x <= p.x + 14; x++) if (isCliff(w.terrain, tileAt(w.terrain, { x, y }))) return false;
+      return true;
+    };
+    const center = Array.from({ length: 25 * 25 }, (_, i) => ({ x: 60 + (i % 25) * 20, y: 60 + Math.floor(i / 25) * 20 })).find(flatAround)!;
+    expect(center).toBeDefined();
+    const obstacles = w.obstacles.filter((o) => dist(o.pos, center) > 14);
+    for (let i = 0; i < 64; i++) {
+      const a = (i / 64) * 2 * Math.PI;
+      obstacles.push({ id: `ring-${i}`, pos: { x: center.x + 10 * Math.cos(a), y: center.y + 10 * Math.sin(a) }, r: 1, kind: 'rock' });
+    }
+    w.obstacles = obstacles;
+    const radius = 0.6;
+    const layer = navLayer(w.terrain, w.obstacles, radius);
+    const overlay = stampOverlay(layer, dynamicBlockers(w.obstacles, []), radius);
+    const g = Ref.grid(Ref.terrainLayer(w.terrain, radius), Ref.blockers(w, []), radius);
+    const goal = Ref.cellOf(g, center);
+    const from = { x: 40, y: 40 };
+    const start = nearestFreeCell(layer, overlay, Ref.cellOf(g, from))!;
+    expect(g.blocked[goal]).toBe(0);
+    expect(Ref.astar(g, start, goal)).toBeNull();
+    const t = performance.now();
+    const got = findCells(layer, overlay, start, goal);
+    const ms = performance.now() - t;
+    expect(got).toBeNull();
+    expect(ms).toBeLessThan(5);
+  }, 60_000);
+
+  it('a corridor cut by a kill wreck wall falls back to the full search', () => {
+    const w = emptyWorld();
+    // Wrecks are not in the static layer, so the coarse path runs straight through the wall.
+    for (let y = 16; y < w.size; y += 1.5) w.obstacles.push({ id: `wreck-w${y}`, pos: { x: 80, y }, r: 1, kind: 'wreck' });
+    const radius = 0.6;
+    const layer = navLayer(w.terrain, w.obstacles, radius);
+    const overlay = stampOverlay(layer, dynamicBlockers(w.obstacles, []), radius);
+    const n = layer.n;
+    const start = 200 * n + 60;
+    const goal = 200 * n + 260;
+    resetPerf();
+    const got = findCells(layer, overlay, start, goal);
+    expect(perfSnapshot()['route-corridor-miss']?.calls).toBe(1);
+    expect(got).not.toBeNull();
+    expect(got![got!.length - 1]).toBe(goal);
+    for (const c of got!) expect(layer.blocked[c] === 0 && overlay.stamp[c] !== overlay.gen).toBe(true);
+    // The only way round is the gap under the wall.
+    expect(Math.min(...Array.from(got!, (c) => Math.floor(c / n)))).toBeLessThan(32);
+  });
+
+  it('long routes with no dynamic blockers never miss the corridor', () => {
+    const w = newWorld(1, START_KITS.standard);
+    const rand = mulberry(11);
+    const radius = 0.8;
+    const layer = navLayer(w.terrain, w.obstacles, radius);
+    const overlay = stampOverlay(layer, [], radius);
+    const n = layer.n;
+    resetPerf();
+    let found = 0;
+    for (let i = 0; i < 20; i++) {
+      const a = nearestFreeCell(layer, overlay, Math.floor(rand() * n * n))!;
+      const b = nearestFreeCell(layer, overlay, Math.floor(rand() * n * n))!;
+      if (componentOf(layer, a) !== componentOf(layer, b) || cellSpan(n, a, b) <= LONG_CELLS) continue;
+      expect(findCells(layer, overlay, a, b)).not.toBeNull();
+      found++;
+    }
+    expect(found).toBeGreaterThanOrEqual(5);
+    // Without kill wrecks or parked vehicles a chain of linked regions always holds a fine path.
+    expect(perfSnapshot()['route-corridor-miss']).toBeUndefined();
+  }, 60_000);
 });

@@ -21,10 +21,28 @@ export type TerrainNav = {
   slow: Float32Array; // step cost multiplier per cell, 1 / terrain speed
 };
 
+export const COARSE = 8; // cells per coarse block side
+
+// Coarse graph for the corridor search of long routes. A region is a connected piece of free cells
+// inside one COARSE x COARSE block. Two regions are linked when a cell of one touches a cell of the
+// other, so a chain of linked regions always holds a fine path.
+export type CoarseGrid = {
+  n: number; // blocks per side
+  region: Int32Array; // per cell: its region, from 1; 0 on blocked cells
+  block: Int32Array; // per region: its block, row-major over n x n blocks
+  x: Float32Array; // per region: centroid in cells
+  y: Float32Array;
+  slow: Float32Array; // per region: mean slow of its cells
+  comp: Int32Array; // per region: its connected component over 8-neighbour steps, from 1
+  edgeStart: Int32Array; // per region: first index into edges; edgeStart[r + 1] ends the list
+  edges: Int32Array; // linked regions
+};
+
 export type NavLayer = TerrainNav & {
   id: number; // identity for route cache keys
   radius: number;
   blocked: Uint8Array; // cliffs within reach and static drive obstacles, per cell
+  coarse: CoarseGrid;
 };
 
 // The static drive obstacles of one obstacles array and a bucket index over them.
@@ -118,7 +136,7 @@ export function navLayer(terrain: Terrain, obstacles: Obstacle[], radius: number
   }
   const blocked = cliff.slice();
   stampCircles(n, obstacles.filter((o) => isDriveObstacle(o) && !isKillWreck(o)), radius, (c) => (blocked[c] = 1));
-  const layer: NavLayer = { ...nav, id: nextLayerId++, radius, blocked };
+  const layer: NavLayer = { ...nav, id: nextLayerId++, radius, blocked, coarse: coarseGrid(n, blocked, nav.slow) };
   e.layers.set(key, layer);
   return layer;
 }
@@ -133,4 +151,155 @@ export function stampCircles(n: number, blockers: Blocker[], radius: number, mar
     const y1 = Math.min(n - 1, Math.floor((o.pos.y + reach) / CELL));
     for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) if (dist({ x: (x + 0.5) * CELL, y: (y + 0.5) * CELL }, o.pos) < reach) mark(y * n + x);
   }
+}
+
+// The connected component of a cell over the 8-neighbour steps A* takes, from 1; 0 on blocked cells.
+export function componentOf(layer: NavLayer, cell: number): number {
+  const r = layer.coarse.region[cell];
+  return r === 0 ? 0 : layer.coarse.comp[r];
+}
+
+function coarseGrid(n: number, blocked: Uint8Array, slow: Float32Array): CoarseGrid {
+  const bn = Math.ceil(n / COARSE);
+  const region = new Int32Array(n * n);
+  // Queue entries are block-local: ly * COARSE + lx.
+  const queue = new Int32Array(COARSE * COARSE);
+  const blockOf: number[] = [0];
+  const sumX: number[] = [0];
+  const sumY: number[] = [0];
+  const sumSlow: number[] = [0];
+  const size: number[] = [0];
+  for (let by = 0; by < bn; by++)
+    for (let bx = 0; bx < bn; bx++) {
+      const x0 = bx * COARSE;
+      const y0 = by * COARSE;
+      const w = Math.min(n, x0 + COARSE) - x0;
+      const h = Math.min(n, y0 + COARSE) - y0;
+      // Most blocks are open ground: one region of all cells, no flood fill needed.
+      if (allFree(blocked, n, x0, y0, w, h)) {
+        const id = blockOf.length;
+        blockOf.push(by * bn + bx);
+        let ts = 0;
+        for (let ly = 0; ly < h; ly++)
+          for (let lx = 0; lx < w; lx++) {
+            const c = (y0 + ly) * n + x0 + lx;
+            region[c] = id;
+            ts += slow[c];
+          }
+        sumX.push((x0 + (w - 1) / 2) * w * h);
+        sumY.push((y0 + (h - 1) / 2) * w * h);
+        sumSlow.push(ts);
+        size.push(w * h);
+        continue;
+      }
+      for (let sy = 0; sy < h; sy++)
+        for (let sx = 0; sx < w; sx++) {
+          const seed = (y0 + sy) * n + x0 + sx;
+          if (blocked[seed] || region[seed]) continue;
+          const id = blockOf.length;
+          blockOf.push(by * bn + bx);
+          let tx = 0;
+          let ty = 0;
+          let ts = 0;
+          region[seed] = id;
+          let tail = 0;
+          queue[tail++] = sy * COARSE + sx;
+          for (let i = 0; i < tail; i++) {
+            const lx = queue[i] % COARSE;
+            const ly = (queue[i] - lx) / COARSE;
+            tx += x0 + lx;
+            ty += y0 + ly;
+            ts += slow[(y0 + ly) * n + x0 + lx];
+            const ya = ly > 0 ? ly - 1 : 0;
+            const yb = ly < h - 1 ? ly + 1 : ly;
+            const xa = lx > 0 ? lx - 1 : 0;
+            const xb = lx < w - 1 ? lx + 1 : lx;
+            for (let ny = ya; ny <= yb; ny++)
+              for (let nx = xa; nx <= xb; nx++) {
+                const c = (y0 + ny) * n + x0 + nx;
+                if (blocked[c] || region[c]) continue;
+                region[c] = id;
+                queue[tail++] = ny * COARSE + nx;
+              }
+          }
+          sumX.push(tx);
+          sumY.push(ty);
+          sumSlow.push(ts);
+          size.push(tail);
+        }
+    }
+  const count = blockOf.length;
+  const links: number[][] = Array.from({ length: count }, () => []);
+  // Touching cells in different regions sit on either side of a block edge, so only those rows and
+  // columns are scanned. Each pair of lines is checked straight across and along both diagonals.
+  // Along one edge the same pair repeats cell after cell, so a repeat of the last pair is skipped.
+  let lastA = 0;
+  let lastB = 0;
+  const link = (a: number, b: number) => {
+    if (a === 0 || b === 0 || a === b || (a === lastA && b === lastB)) return;
+    lastA = a;
+    lastB = b;
+    if (links[a].includes(b)) return;
+    links[a].push(b);
+    links[b].push(a);
+  };
+  for (let k = COARSE; k < n; k += COARSE) {
+    for (let i = 0; i < n; i++) {
+      const left = region[i * n + k - 1];
+      if (left === 0) continue;
+      if (i > 0) link(left, region[(i - 1) * n + k]);
+      link(left, region[i * n + k]);
+      if (i < n - 1) link(left, region[(i + 1) * n + k]);
+    }
+    for (let i = 0; i < n; i++) {
+      const top = region[(k - 1) * n + i];
+      if (top === 0) continue;
+      if (i > 0) link(top, region[k * n + i - 1]);
+      link(top, region[k * n + i]);
+      if (i < n - 1) link(top, region[k * n + i + 1]);
+    }
+  }
+  const edgeStart = new Int32Array(count + 1);
+  for (let r = 0; r < count; r++) edgeStart[r + 1] = edgeStart[r] + links[r].length;
+  const edges = new Int32Array(edgeStart[count]);
+  for (let r = 0; r < count; r++) edges.set(links[r], edgeStart[r]);
+  const cx = new Float32Array(count);
+  const cy = new Float32Array(count);
+  const mean = new Float32Array(count);
+  for (let r = 1; r < count; r++) {
+    cx[r] = sumX[r] / size[r];
+    cy[r] = sumY[r] / size[r];
+    mean[r] = sumSlow[r] / size[r];
+  }
+  return { n: bn, region, block: Int32Array.from(blockOf), x: cx, y: cy, slow: mean, comp: components(count, edgeStart, edges), edgeStart, edges };
+}
+
+function allFree(blocked: Uint8Array, n: number, x0: number, y0: number, w: number, h: number): boolean {
+  for (let ly = 0; ly < h; ly++)
+    for (let lx = 0; lx < w; lx++) if (blocked[(y0 + ly) * n + x0 + lx]) return false;
+  return true;
+}
+
+// Flood fills the region graph. Regions are internally connected, so this equals a flood fill of the cells.
+function components(count: number, edgeStart: Int32Array, edges: Int32Array): Int32Array {
+  const comp = new Int32Array(count);
+  const queue = new Int32Array(count);
+  let next = 0;
+  for (let seed = 1; seed < count; seed++) {
+    if (comp[seed]) continue;
+    const id = ++next;
+    comp[seed] = id;
+    let tail = 0;
+    queue[tail++] = seed;
+    for (let i = 0; i < tail; i++) {
+      const cur = queue[i];
+      for (let e = edgeStart[cur]; e < edgeStart[cur + 1]; e++) {
+        const r = edges[e];
+        if (comp[r]) continue;
+        comp[r] = id;
+        queue[tail++] = r;
+      }
+    }
+  }
+  return comp;
 }
