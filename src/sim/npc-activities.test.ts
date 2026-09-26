@@ -16,6 +16,26 @@ function createScavenger() {
 }
 
 describe('NPC activities', () => {
+  it.each(['sell', 'resupply', 'raid'] as const)('records completion of %s once', (kind) => {
+    const { w, npc } = createScavenger();
+    npc.pos = { ...REGION.towns[0].pos };
+    npc.brain!.activity = { kind, targetId: REGION.towns[0].id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' };
+    w.events = [];
+    resolveNpcActivities(w);
+    resolveNpcActivities(w);
+    expect(w.events.filter((event) => event.t === 'activity')).toEqual([
+      expect.objectContaining({ previous: kind, activity: null }),
+    ]);
+  });
+
+  it('records failure when a salvage target disappears', () => {
+    const { w, npc } = createScavenger();
+    npc.brain!.activity = { kind: 'scavenge', targetId: 'retired-wreck', destination: { ...npc.pos }, phase: 'travel', reason: 'collect visible salvage' };
+    w.events = [];
+    resolveNpcActivities(w);
+    expect(w.events).toEqual([expect.objectContaining({ previous: 'scavenge', activity: null, reason: 'salvage no longer available' })]);
+  });
+
   it('completes a collect-sell-upkeep loop through actual turns', () => {
     let { w, npc } = createScavenger();
     const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;

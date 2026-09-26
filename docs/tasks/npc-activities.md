@@ -1,6 +1,6 @@
 # NPC activities
 
-Status: reviewing
+Status: done
 Branch: npc-activities
 Worktree: /Users/boris/Documents/Korovan/.worktrees/npc-activities
 Mode: hands-off
@@ -160,7 +160,7 @@ Approach: implement sequentially in this worktree, preserving shared game rules 
 
 ## Verify
 
-Result: passed. Local dependencies installed with `npm ci`. Baseline: 136 tests and typecheck passed. Current: 159 tests, typecheck, and production build passed. Build reports a large-bundle warning. Logs are in worktree-local `tmp/`.
+Result: passed. Local dependencies installed with `npm ci`. Baseline: 136 tests and typecheck passed. Current after review repair: 163 tests, typecheck, and production build passed. Build reports a large-bundle warning. Logs are in worktree-local `tmp/`.
 
 - CK1 (IV2, IV3) — simultaneous collectors, overflow, duplicate collection, remote trading, and unaffordable buying preserve stock and money: held in focused tests.
 - CK2 (IV1) — hidden vehicles, occluding rocks, distant salvage contents, and hidden inspection targets do not leak into decisions or display: held in focused tests.
@@ -168,12 +168,21 @@ Result: passed. Local dependencies installed with `npm ci`. Baseline: 136 tests 
 - CK4 (IV6, IF1) — NPC fuel limits and payment work in both movement engines: held in sim and Rapier tests.
 - CK5 (IF2, IF3, AS1) — browser economic loop collected, sold, then paid for fuel in 26 Rapier turns on the actual map. Browser raid loop killed an NPC, collected its cargo, and sold it in 11 Rapier turns. No page errors. Scripts use the production turn pipeline and apply the resulting state to the running game.
 - CK6 — real mouse hover displays `scavenge — search a known salvage site`. Screenshot `tmp/npc-inspection.png` inspected. Small visual details remain for user confirmation.
-- Smoke: `npm run playtest -- --url http://127.0.0.1:5187` passed 12 turns at 28 fps without browser errors.
+- Smoke: `npm run playtest -- --url http://127.0.0.1:5187` passed 12 turns at 25.5 fps without browser errors after the review repair.
 - Goal: mechanical loops demonstrated. Fun and long-session economic sustainability require player feedback, not an automated assertion.
 
 The raid test exposed wrecks hiding themselves when NPC sight snapped their centers to tile centers. Observer sight now evaluates the requested point using the same occlusion rules. A regression verifies a wreck is visible while objects behind it are not. The buggy carries only one loose good with its equipment installed, so the loot test verifies capacity-limited transfer and conservation instead of assuming three cells.
 
 ## Conclusion
+
+Outcome: the observable NPC economic and raid loops run in the browser with Rapier movement, and visible inspection explains the current activity. All four phases and the review repair are complete. No merge or push performed.
+
+- IV1-IV6: covered by the perception, transaction, salvage, activity, deterministic world, and dual-movement tests listed in Verify. Completion and failure transitions are now covered explicitly.
+- AS1: sufficient resources exist for the demonstrated loops. Long-session sustainability and subjective fun remain playtest questions.
+- UK1-UK2: approved boundaries retained, including unchanged player defeat and unlimited town markets.
+- UK3: survival thresholds reuse the existing low-fuel fraction and hull warning range, with recovery at half hull. Trade reserves one full fuel and supply load. These are class/data settings for later tuning.
+- UK4: constructors and fixtures were updated. No saved-game consumer or migration layer was introduced.
+- Review: one medium finding fixed and reverified. No unresolved critical or important finding was reported.
 
 ### Deviations from plan
 
@@ -181,7 +190,15 @@ The raid test exposed wrecks hiding themselves when NPC sight snapped their cent
 - Activity event formatting moved from PH4 into PH3 to keep the event formatter's exhaustive switch type-safe.
 - Observer sight correction landed in PH3 after full-loop evidence exposed wreck self-occlusion. Existing NPC driving tests now resolve activities between movement steps so traders can buy before departing.
 
+### Review
+
+Independent read-only review on GPT-6 Sol found one medium issue: completed activities bypassed transition events. Verified both the direct `activity = null` assignments and the absence of another completion logger. Completion and failure now use `setNpcActivity()`, with four failing-first regression cases. Fresh tests, typecheck, build, browser smoke, economic loop, and raid loop all passed. Evidence is in `tmp/review-fix-*.log`.
+
+The first review failed before any tool call because the account rejected GPT-5.4. Worktree was clean at `f98bc7b`. The same read-only protocol was retried on explicitly selected GPT-6 Sol and completed. No Astra subagent was used.
+
 ### Hands-off decisions
+
+- ureview: repair missing activity completion events through the existing transition owner. No gameplay rule changes or new activity system.
 
 - uexecute: use the existing isolated worktree and execute phases sequentially because they share the turn pipeline. User approved the plan and hands-off execution.
 - uexecute: copy `.env.example` into the worktree for local verification. Do not share mutable dependencies or build outputs with other checkouts.

@@ -38,7 +38,7 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
   switch (e.t) {
     case 'activity': {
       const vehicle = world.vehicles.find((v) => v.id === e.vehicle);
-      return vehicle && playerSees(world, vehicle.pos) ? { text: `${vehicle.name}: ${e.activity} — ${e.reason}`, cls: 'dim' } : null;
+      return vehicle && playerSees(world, vehicle.pos) ? { text: `${vehicle.name}: ${e.activity ?? 'idle'} — ${e.reason}`, cls: 'dim' } : null;
     }
     case 'collision': {
       const b = e.b === 'edge' ? 'the map edge' : e.b.startsWith('v') ? n(e.b) : 'an obstacle';

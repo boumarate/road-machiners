@@ -94,7 +94,7 @@ export type Player = {
 };
 
 export type GameEvent =
-  | { t: 'activity'; vehicle: string; previous: NpcActivity['kind'] | null; activity: NpcActivity['kind']; reason: string }
+  | { t: 'activity'; vehicle: string; previous: NpcActivity['kind'] | null; activity: NpcActivity['kind'] | null; reason: string }
   | { t: 'collision'; a: string; b: string; damageA: number; damageB: number }
   | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; hit: boolean; damage: number; chance: number }
   | { t: 'partDisabled'; vehicle: string; part: string }

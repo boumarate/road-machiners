@@ -153,10 +153,10 @@ export function chooseNpcActivity(world: World, vehicle: Vehicle): NpcActivity {
   return createActivity('wait', null, null, 'no salvage here');
 }
 
-export function setNpcActivity(world: World, vehicle: Vehicle, activity: NpcActivity): void {
+export function setNpcActivity(world: World, vehicle: Vehicle, activity: NpcActivity | null, reason: string): void {
   const previous = vehicle.brain!.activity;
-  if (!previous || previous.kind !== activity.kind || previous.targetId !== activity.targetId || previous.reason !== activity.reason) {
-    world.events.push({ t: 'activity', vehicle: vehicle.id, previous: previous?.kind ?? null, activity: activity.kind, reason: activity.reason });
+  if (previous?.kind !== activity?.kind || previous?.targetId !== activity?.targetId || previous?.reason !== activity?.reason) {
+    world.events.push({ t: 'activity', vehicle: vehicle.id, previous: previous?.kind ?? null, activity: activity?.kind ?? null, reason });
   }
   vehicle.brain!.activity = activity;
 }
@@ -177,15 +177,15 @@ export function getActivityDestination(world: World, vehicle: Vehicle): Vec | nu
 function resolveActivity(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   if (activity.kind === 'scavenge') {
     const stock = world.salvage.find((entry) => entry.id === activity.targetId);
-    if (!stock) { vehicle.brain!.activity = null; return; }
+    if (!stock) { setNpcActivity(world, vehicle, null, 'salvage no longer available'); return; }
     if (!canReachSalvage(vehicle, stock)) return;
     activity.phase = 'act';
-    collectSalvage(world, vehicle, stock.id);
-    vehicle.brain!.activity = null;
+    const collected = collectSalvage(world, vehicle, stock.id);
+    setNpcActivity(world, vehicle, null, collected ? 'collected salvage' : hasSalvage(stock) ? 'cargo cannot hold salvage' : 'salvage exhausted');
     return;
   }
   if (activity.kind === 'raid') {
-    if (activity.destination && dist(vehicle.pos, activity.destination) <= RULES.arriveRadius * 2) vehicle.brain!.activity = null;
+    if (activity.destination && dist(vehicle.pos, activity.destination) <= RULES.arriveRadius * 2) setNpcActivity(world, vehicle, null, 'reached hunting ground');
     return;
   }
   if (!['sell', 'trade', 'resupply'].includes(activity.kind)) return;
@@ -202,11 +202,11 @@ function resolveActivity(world: World, vehicle: Vehicle, activity: NpcActivity):
     const count = Math.min(freeCells(vehicle), Math.floor((getResources(world, vehicle).money - getUpkeepReserve(vehicle)) / price));
     if (count > 0) {
       tradeGoods(world, vehicle, site.id, activity.purchase.good, count, 'buy');
-      setNpcActivity(world, vehicle, createSiteActivity('sell', activity.purchase.sellTown, 'deliver purchased cargo'));
+      setNpcActivity(world, vehicle, createSiteActivity('sell', activity.purchase.sellTown, 'deliver purchased cargo'), 'deliver purchased cargo');
       return;
     }
   }
-  vehicle.brain!.activity = null;
+  setNpcActivity(world, vehicle, null, activity.kind === 'trade' ? 'cannot afford trade cargo' : activity.kind === 'sell' ? 'sold cargo' : 'finished service');
 }
 
 export function resolveNpcActivities(world: World): void {

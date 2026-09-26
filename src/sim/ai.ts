@@ -15,7 +15,7 @@ export function planNpcOrders(world: World): void {
     if (!tpl) throw new Error(`Unknown NPC template ${v.brain.templateId}`);
     const b = v.brain;
     const activity = chooseNpcActivity(world, v);
-    setNpcActivity(world, v, activity);
+    setNpcActivity(world, v, activity, activity.reason);
     const yielding = activity.kind !== 'fight' && activity.kind !== 'flee' && vehicleAhead(world, v);
     if (b.lastPos && !yielding && dist(v.pos, b.lastPos) < RULES.arriveRadius / 2 && v.order && v.order.kind !== 'brake') b.stalled = (b.stalled ?? 0) + 1;
     else b.stalled = 0;
