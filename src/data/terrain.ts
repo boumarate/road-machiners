@@ -5,14 +5,15 @@ import type { Vec } from '../sim/vec';
 
 export type TerrainTypeId = 'road' | 'hardpan' | 'sand' | 'scrub' | 'scree';
 
-export type TerrainType = { id: TerrainTypeId; name: string; speed: number; color: number };
+// wear multiplies part wear per tile driven. dust multiplies the range a moving truck's dust trail is seen from.
+export type TerrainType = { id: TerrainTypeId; name: string; speed: number; wear: number; dust: number; color: number };
 
 export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
-  road: { id: 'road', name: 'Road', speed: 1, color: 0xa8865a },
-  hardpan: { id: 'hardpan', name: 'Hardpan', speed: 0.9, color: 0xc8a676 },
-  sand: { id: 'sand', name: 'Loose sand', speed: 0.7, color: 0xdcc08c },
-  scrub: { id: 'scrub', name: 'Scrub', speed: 0.8, color: 0xa89a66 },
-  scree: { id: 'scree', name: 'Scree', speed: 0.55, color: 0x9a8a78 },
+  road: { id: 'road', name: 'Road', speed: 1, wear: 0.5, dust: 0.3, color: 0xa8865a },
+  hardpan: { id: 'hardpan', name: 'Hardpan', speed: 0.9, wear: 1, dust: 1, color: 0xc8a676 },
+  sand: { id: 'sand', name: 'Loose sand', speed: 0.7, wear: 1.2, dust: 1.3, color: 0xdcc08c },
+  scrub: { id: 'scrub', name: 'Scrub', speed: 0.8, wear: 1.3, dust: 0.7, color: 0xa89a66 },
+  scree: { id: 'scree', name: 'Scree', speed: 0.55, wear: 2, dust: 0.5, color: 0x9a8a78 },
 };
 
 export const TERRAIN = {

@@ -20,6 +20,9 @@ import { resolveNpcActivities } from './npc-activities';
 import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
 import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
+import { advanceWeather } from './weather';
+import { applyWear } from './wear';
+import { advanceJobs } from './jobs';
 import { clamp, dist, type Vec } from './vec';
 
 export function newWorld(seed: number, kit: StartKit): World {
@@ -53,10 +56,12 @@ export function newWorld(seed: number, kit: StartKit): World {
       knockouts: 0,
       explored: new Array(REGION.size * REGION.size).fill(false),
       visible: [],
+      contacts: [],
     },
     events: [],
     removed: [],
     spawnTimer: {},
+    weather: [],
   };
   world.obstacles = generateObstacles(world);
   const town = REGION.towns.find((t) => t.id === REGION.playerStart.town)!;
@@ -121,8 +126,11 @@ export function endTurn(
 ): World {
   return update(world, (w) => {
     w.turn++;
+    advanceWeather(w);
     planNpcOrders(w);
     move(w);
+    applyWear(w);
+    advanceJobs(w);
     refreshVision(w);
     assignAutoOrders(w);
     fireWeapons(w);

@@ -49,6 +49,19 @@ export type MoveOrder =
 
 export type SalvageStock = { id: string; pos: Vec; radius: number; goods: Record<string, number>; parts: PartInstance[] };
 
+// Work that needs the truck parked. Moving above parked speed cancels it, and finished turns are lost.
+export type Job =
+  | { kind: 'repair'; partId: string; turnsLeft: number }
+  | { kind: 'search'; stockId: string; turnsLeft: number };
+
+// A vehicle detected beyond sight. The circle always holds the true position, which it never reveals.
+export type Contact = { vehicleId: string; center: Vec; radius: number; sources: ('sound' | 'dust' | 'radio')[] };
+
+// Weather that changes the rules. Storms are moving areas; heat waves and overcast cover the region.
+export type WeatherEvent =
+  | { id: string; kind: 'storm'; pos: Vec; radius: number; vel: Vec; turnsLeft: number }
+  | { id: string; kind: 'heatwave' | 'overcast'; turnsLeft: number };
+
 export type DriverResources = { money: number; fuel: number; supplies: number; health: number };
 
 export type NpcActivity = {
@@ -89,6 +102,7 @@ export type Vehicle = {
   brain: NpcBrain | null;
   resources: DriverResources | null;
   lastHitBy: string | null; // vehicle id of the last damage source, for kill credit
+  job: Job | null;
 };
 
 export type Obstacle = {
@@ -116,6 +130,7 @@ export type Player = {
   knockouts: number;
   explored: boolean[]; // fog of war: tile y * world.size + x, true once seen
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision
+  contacts: Contact[]; // vehicles detected beyond sight; refreshed by refreshVision
 };
 
 // One round of a shot. offset is where it crossed the target in meters from its center, across the line
@@ -143,6 +158,9 @@ export type GameEvent =
   | { t: 'discover'; location: string }
   | { t: 'supply'; what: string; text: string }
   | { t: 'defeat' }
+  | { t: 'job'; vehicle: string; job: Job; outcome: 'started' | 'done' | 'cancelled' }
+  | { t: 'breakdown'; vehicle: string; part: string }
+  | { t: 'weather'; event: WeatherEvent; outcome: 'started' | 'ended' }
   | { t: 'info'; text: string };
 
 export type World = {
@@ -159,4 +177,5 @@ export type World = {
   events: GameEvent[]; // events of the last resolved turn or action
   removed: Vehicle[]; // vehicles destroyed or gone this turn, kept for the render
   spawnTimer: Record<string, number>; // template id -> turns until next spawn check
+  weather: WeatherEvent[];
 };

@@ -6,6 +6,7 @@ import { TERRAIN } from '../data/terrain';
 import type { Obstacle, Vehicle, World } from './types';
 import { heightAt, type Terrain } from './terrain';
 import { dist, segmentDist, type Vec } from './vec';
+import { contactsOf } from './detect';
 
 const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building'];
 
@@ -66,6 +67,8 @@ export function refreshVision(world: World): void {
   const seen = playerVisible(world);
   world.player.visible = [...seen].sort((a, b) => a - b);
   for (const idx of seen) world.player.explored[idx] = true;
+  const me = world.vehicles.find((x) => x.id === world.player.vehicleId);
+  world.player.contacts = me ? contactsOf(world, me) : [];
 }
 
 export function tileCenter(world: World, idx: number): Vec {
