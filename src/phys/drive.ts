@@ -113,9 +113,7 @@ function addVehicle(world: RAPIER.World, w: World, v: Vehicle): number {
 }
 
 function placeBody(body: RAPIER.RigidBody, w: World, v: Vehicle): void {
-  const b = bodyOf(v.chassisId);
-  const ground = heightAt(w.terrain, v.pos.x, v.pos.y) * S;
-  body.setTranslation({ x: v.pos.x * S, y: ground + b.wheelRadius + T.suspensionRest - b.wheelY, z: v.pos.y * S }, true);
+  body.setTranslation({ x: v.pos.x * S, y: rideHeight(w, v), z: v.pos.y * S }, true);
   body.setRotation(headingQuat(v.heading), true);
   const fwd = toMps(v.speed);
   body.setLinvel({ x: Math.cos(v.heading) * fwd, y: 0, z: Math.sin(v.heading) * fwd }, true);
@@ -281,15 +279,19 @@ function frameOf(car: RAPIER.DynamicRayCastVehicleController, body: RAPIER.Rigid
   return { pos: { x: t.x, y: t.y, z: t.z }, rot: { x: r.x, y: r.y, z: r.z, w: r.w }, wheels };
 }
 
-// The current pose of a vehicle's body, with wheels at rest. For vehicles that have not driven a turn yet.
-export function restFrame(d: Drive, v: Vehicle): VehicleFrame {
-  const handle = d.bodies[v.id];
-  if (handle === undefined) throw new Error(`No physics body for ${v.id}`);
-  const body = d.world.getRigidBody(handle);
-  const t = body.translation();
-  const r = body.rotation();
-  const wheels = wheelMounts(bodyOf(v.chassisId)).map(() => ({ steer: 0, spin: 0, suspension: T.suspensionRest }));
-  return { pos: { x: t.x, y: t.y, z: t.z }, rot: { x: r.x, y: r.y, z: r.z, w: r.w }, wheels };
+// A vehicle standing on the ground at its sim pose, wheels at rest. For vehicles that have not
+// driven a turn yet, such as ones that spawned at the end of the last turn.
+export function restFrame(w: World, v: Vehicle): VehicleFrame {
+  const b = bodyOf(v.chassisId);
+  const q = headingQuat(v.heading);
+  const wheels = wheelMounts(b).map(() => ({ steer: 0, spin: 0, suspension: T.suspensionRest }));
+  return { pos: { x: v.pos.x * S, y: rideHeight(w, v), z: v.pos.y * S }, rot: q, wheels };
+}
+
+// Height of the body center for a truck standing at its sim position with springs at rest.
+function rideHeight(w: World, v: Vehicle): number {
+  const b = bodyOf(v.chassisId);
+  return heightAt(w.terrain, v.pos.x, v.pos.y) * S + b.wheelRadius + T.suspensionRest - b.wheelY;
 }
 
 // Map pose and speed of a vehicle's body.

@@ -394,7 +394,7 @@ export class Game {
     const shown = [...this.world.vehicles, ...(frames ? this.world.removed : [])];
     const ids = new Set<string>();
     for (const v of shown) {
-      const f = frames?.[v.id]?.[step!] ?? this.frames[v.id] ?? restFrame(this.drive, v);
+      const f = frames?.[v.id]?.[step!] ?? this.frames[v.id] ?? restFrame(this.world, v);
       this.frames[v.id] = f;
       if (!this.isVehicleVisible(v)) continue;
       ids.add(v.id);
