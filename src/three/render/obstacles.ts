@@ -3,10 +3,11 @@
 
 import * as THREE from 'three';
 import { hashStr } from '../../render/noise';
-import { PAL, shade } from '../../render/palette';
+import { PAL } from '../../render/palette';
 import { PHYSICS } from '../../data/physics';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import type { Obstacle } from '../../sim/types';
+import { model } from './models';
 
 const S = PHYSICS.metersPerTile;
 
@@ -60,63 +61,31 @@ function seat(t: Terrain, o: Obstacle): THREE.Group {
   return g;
 }
 
-// A jagged low-poly boulder: two stacked dodecahedra shrinking toward a peak, like the 2D rock prism.
+// A boulder from tools/blender/rock.py, modeled at a 1 m radius. Each rock gets its own yaw and tint.
 function buildRock(t: Terrain, o: Obstacle): THREE.Object3D {
   const seed = hashStr(o.id);
-  const r = o.r * S;
-  const tint = 0.9 + seed * 0.2;
   const g = seat(t, o);
-  const base = new THREE.Mesh(
-    new THREE.DodecahedronGeometry(r, 0),
-    new THREE.MeshLambertMaterial({ color: shade(PAL.rock.top, tint), flatShading: true }),
-  );
-  base.scale.set(1, 0.55, 1);
-  base.position.y = r * 0.3;
-  base.rotation.y = seed * Math.PI * 2;
-  const peak = new THREE.Mesh(
-    new THREE.DodecahedronGeometry(r * 0.6, 0),
-    new THREE.MeshLambertMaterial({ color: shade(PAL.rock.side, tint), flatShading: true }),
-  );
-  peak.scale.set(1, 0.6, 1);
-  peak.position.y = r * 0.75;
-  peak.rotation.y = seed * Math.PI * 3;
-  g.add(base, peak);
-  for (const m of g.children) {
-    m.castShadow = true;
-    m.receiveShadow = true;
-  }
+  g.rotation.y = seed * Math.PI * 2;
+  g.scale.setScalar(o.r * S);
+  const rock = model('rock');
+  const tint = 0.9 + seed * 0.2;
+  eachMaterial(rock, (m) => m.color.multiplyScalar(tint));
+  g.add(rock);
   return g;
 }
 
-// A burnt truck: scorched frame, crushed cab, one loose wheel, like the 2D wreck.
+// A burnt pickup from tools/blender/wreck.py, modeled at the 0.7-tile reference size.
 function buildWreck(t: Terrain, o: Obstacle): THREE.Object3D {
   const seed = hashStr(o.id);
-  const k = o.r / 0.7; // scale relative to the 0.7-tile reference wreck the shape was drawn for
-  const heading = seed * Math.PI * 2;
   const g = seat(t, o);
-  g.rotation.y = -heading;
-  const rust = new THREE.MeshLambertMaterial({ color: PAL.rust.top, flatShading: true });
-  const rustDark = new THREE.MeshLambertMaterial({ color: PAL.rust.dark, flatShading: true });
-  const bed = new THREE.Mesh(new THREE.BoxGeometry(1.1 * k * S, 0.5 * S, 0.8 * k * S), rust);
-  bed.position.set(-0.3 * k * S, 0.3 * S, 0);
-  const cab = new THREE.Mesh(new THREE.BoxGeometry(0.5 * k * S, 0.3 * S, 0.6 * k * S), rustDark);
-  cab.position.set(-0.45 * k * S, 0.55 * S, 0);
-  cab.rotation.z = 0.15;
-  const wheel = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.16 * S, 0.16 * S, 0.12 * S, 12).rotateX(Math.PI / 2),
-    new THREE.MeshLambertMaterial({ color: PAL.wheel }),
-  );
-  wheel.position.set(0.3 * k * S, 0.16 * S, 0.75 * k * S);
-  wheel.rotation.z = 0.6;
-  g.add(bed, cab, wheel);
-  for (const m of g.children) {
-    m.castShadow = true;
-    m.receiveShadow = true;
-  }
+  g.rotation.y = -seed * Math.PI * 2;
+  g.scale.setScalar(o.r / 0.7);
+  g.add(model('wreck'));
   return g;
 }
 
-// A blocky building with a peaked roof cap. Random roof color per id, like the 2D version.
+// A building from tools/blender/building.py, modeled with a 1 by 0.85 m footprint and 1 m walls, stretched to
+// each footprint and height. Random roof color per id.
 function buildBuilding(t: Terrain, o: Obstacle): THREE.Object3D {
   const seed = hashStr(o.id);
   const size = o.r * 0.78 * 2 * S; // full footprint, in meters
@@ -124,16 +93,21 @@ function buildBuilding(t: Terrain, o: Obstacle): THREE.Object3D {
   const roof = PAL.roof[Math.floor(seed * 97) % PAL.roof.length];
   const g = seat(t, o);
   g.rotation.y = -seed * Math.PI;
-  const wall = new THREE.Mesh(new THREE.BoxGeometry(size, height, size * 0.85), new THREE.MeshLambertMaterial({ color: PAL.wall.top, flatShading: true }));
-  wall.position.y = height / 2;
-  const cap = new THREE.Mesh(new THREE.BoxGeometry(size * 1.08, height * 0.12, size * 0.95), new THREE.MeshLambertMaterial({ color: roof, flatShading: true }));
-  cap.position.y = height + (height * 0.12) / 2;
-  g.add(wall, cap);
-  for (const m of g.children) {
-    m.castShadow = true;
-    m.receiveShadow = true;
-  }
+  g.scale.set(size, height, size);
+  const house = model('building');
+  eachMaterial(house, (m) => {
+    if (m.name === 'roof') m.color.setHex(roof);
+  });
+  g.add(house);
   return g;
+}
+
+function eachMaterial(obj: THREE.Object3D, fn: (m: THREE.MeshLambertMaterial) => void): void {
+  obj.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) fn(m as THREE.MeshLambertMaterial);
+  });
 }
 
 function buildWater(t: Terrain, o: Obstacle): THREE.Object3D {

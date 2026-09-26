@@ -80,7 +80,7 @@ NPCs detect the player and each other with the same rules. Raiders drive toward 
 
 ## World
 
-The map is a grid of tiles with a height on every tile corner, so the ground is smooth hills and valleys. Each tile has a terrain type: road, hardpan, loose sand, scrub or scree. Each type has its own driving speed. Uphill slows a truck, downhill speeds it up a little. Tiles too steep to climb are cliffs: driving into one is a crash. Hills and obstacles block sight, and the fog of war shows only what the truck sees.
+The map is a grid of tiles with a height on every tile corner, so the ground is smooth hills and valleys. Each tile has a terrain type: road, hardpan, loose sand, scrub, scree, mud, gravel, salt crust, cracked asphalt or ash. Each type has its own driving speed. Uphill slows a truck, downhill speeds it up a little. Tiles too steep to climb are cliffs: driving into one is a crash. Hills and obstacles block sight, and the fog of war shows only what the truck sees.
 
 Danger is set by region, not by player level.
 
@@ -96,6 +96,8 @@ Weather events come from the world's own randomness, so a seed replays the same 
 
 NPCs follow Space Rangers-style ordered rules: react to visible danger, address urgent upkeep, continue an unfinished activity, then choose class work. Classes share fixed knowledge of towns, salvage sites, and hunting grounds. They have no individual memory or live shared intelligence.
 
+NPCs spawn with equipment sampled from weighted tables for their role. The generator chooses a chassis, a fitting engine and weapon, then optional cargo parts, armor and goods. It respects mount space, rated mass and a chassis-plus-parts budget separate from the driver's wallet. Rare equipment has a lower weight among eligible choices. The same world seed and actions produce the same equipment. There is no separate loot roll on death.
+
 Scavengers collect finite salvage, sell cargo, and fight manageable hostiles or flee. Traders buy profitable cargo while reserving upkeep money and flee from threats. Raiders search hunting grounds, fight, collect wreck cargo, and sell it. Each NPC pays for fuel, supplies, and repairs from its own wallet. Inspection shows its activity and reason.
 
 Scavenging is a timed search: the truck parks at a stock and each turn moves some of it into the grid, over several turns. Moving the truck cancels the search and keeps whatever already moved. Landmark and convoy sites hold finite stock rolled at world creation: goods, parts and sometimes a spare mountable part. Destroyed NPCs leave a wreck with the same kind of stock. Their mounted parts join it at the HP they had; their built-in parts turn into the parts good instead. Collection takes only what fits and leaves the rest. Old wreck retirement removes their remaining stock. Empty sites do not regenerate.
@@ -110,11 +112,12 @@ Fuel and supplies limit range. Fuel burns at one fifth of the chassis fuel-per-t
 
 ## Prototype v0.001 content
 
-- Chassis: Scout pickup and Hauler.
-- Parts: MG turret and forward cannon, stock engine and tuned V8, steel plates and rebar cage, roof rack and cargo box.
+- Buyable chassis: Scout pickup, Hauler, Courier, Utility van, Longbed truck, Armored carrier and Heavy tractor. Raiders can also use the buggy and gunwagon chassis.
+- Parts: seven weapons, seven engines, eight armor parts and seven cargo parts. Cheap, light, durable, fuel-efficient and high-output variants have different costs and footprints. Cargo frames extend the inventory grid, without articulated trailer physics.
+- Goods: scrap metal, salt, meds, grain, textiles, machine tools, batteries and electronics. Bowl and Nose price every good.
 - Defeat takes all goods and spare parts from the grid. Mounted parts stay.
 - Region: Icarus, a 120-tile basin with Bowl and Nose as hubs, 13 other destinations, two canyon crossings, and the Fallen Sun.
-- Enemies: raider buggy and raider gunwagon.
+- Enemies: raider outriders and gunwagons with sampled chassis and equipment.
 - Neutrals: trader caravans and scavengers. Shooting one makes it and its nearby mates hostile.
 - Skills: Driving, Gunnery, Mechanics, Trade, Survival.
 

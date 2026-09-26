@@ -16,9 +16,13 @@ import { update } from './world';
 // A site is discovered once the player sees any tile inside it. Buildings and wrecks can hide the center.
 export function discoverSites(world: World): void {
   for (const s of [...REGION.towns, ...REGION.locations]) {
-    if (world.player.discovered.includes(s.id) || !seesArea(world, s.pos, s.radius)) continue;
+    if (
+      world.player.discovered.includes(s.id) ||
+      !seesArea(world, s.pos, s.radius)
+    )
+      continue;
     world.player.discovered.push(s.id);
-    world.events.push({ t: 'discover', location: s.id });
+    world.events.push({ t: "discover", location: s.id });
     gainXp(world, RULES.discoverXp, `found ${s.name}`);
   }
 }
@@ -29,16 +33,20 @@ export function useOasis(world: World): void {
   if (loc?.kind !== 'oasis' || world.player.supplies >= RULES.suppliesCap) return;
   if (playerVehicle(world).speed > RULES.parkedSpeed) return;
   world.player.supplies = RULES.suppliesCap;
-  world.events.push({ t: 'info', text: `Filled supplies at ${loc.name}` });
+  world.events.push({ t: "info", text: `Filled supplies at ${loc.name}` });
 }
 
 function seesArea(world: World, center: Vec, radius: number): boolean {
-  return world.player.visible.some((idx) => dist(tileCenter(world, idx), center) <= radius);
+  return world.player.visible.some(
+    (idx) => dist(tileCenter(world, idx), center) <= radius,
+  );
 }
 
 export function canScavenge(world: World): boolean {
   const me = playerVehicle(world);
-  return world.salvage.some((stock) => hasSalvage(stock) && canReachSalvage(me, stock));
+  return world.salvage.some(
+    (stock) => hasSalvage(stock) && canReachSalvage(me, stock),
+  );
 }
 
 // Starts a timed search of the nearest reachable stock. It moves loot into the grid a little each turn.

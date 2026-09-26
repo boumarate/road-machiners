@@ -12,7 +12,6 @@ export const RULES = {
   // At or below `below` speed, a truck more than `angle` degrees off its destination backs up
   // `distance` tiles in a turn, swinging its nose by up to the chassis reverseTurn. It stops after.
   reverse: { below: 1, angle: 45, distance: 1 },
-  stopClickSpeed: 1, // above this speed a click in the brake zone brakes to a full stop
   arriveRadius: 0.5, // a stop order clears inside this distance
   // Throttle zones ahead of the truck. They span `reach` of the vision radius, split into brake, hold
   // and accelerate shares in that order. A click's distance picks the zone.

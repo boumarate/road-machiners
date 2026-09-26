@@ -1,19 +1,30 @@
 // Terrain: corner heights, tile types, driving costs and fog of war.
 // Heights are in height units; one unit rises reliefPx screen pixels. Slopes are height units per tile.
 
-import type { Vec } from '../sim/vec';
+import type { Vec } from "../sim/vec";
 
-export type TerrainTypeId = 'road' | 'hardpan' | 'sand' | 'scrub' | 'scree';
+export type TerrainTypeId = "road" | "hardpan" | "sand" | "scrub" | "scree" | "mud" | "gravel" | "saltCrust" | "asphalt" | "ash";
 
-// wear multiplies part wear per tile driven. dust multiplies the range a moving truck's dust trail is seen from.
-export type TerrainType = { id: TerrainTypeId; name: string; speed: number; wear: number; dust: number; color: number };
+export type TerrainType = {
+  id: TerrainTypeId;
+  name: string;
+  speed: number;
+  wear: number; // multiplies part wear per tile driven
+  dust: number; // multiplies the range a moving truck's dust trail is seen from
+  color: number;
+};
 
 export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
-  road: { id: 'road', name: 'Road', speed: 1, wear: 0.5, dust: 0.3, color: 0xa8865a },
-  hardpan: { id: 'hardpan', name: 'Hardpan', speed: 0.9, wear: 1, dust: 1, color: 0xc8a676 },
-  sand: { id: 'sand', name: 'Loose sand', speed: 0.7, wear: 1.2, dust: 1.3, color: 0xdcc08c },
-  scrub: { id: 'scrub', name: 'Scrub', speed: 0.8, wear: 1.3, dust: 0.7, color: 0xa89a66 },
-  scree: { id: 'scree', name: 'Scree', speed: 0.55, wear: 2, dust: 0.5, color: 0x9a8a78 },
+  road: { id: "road", name: "Road", speed: 1, wear: 0.5, dust: 0.3, color: 0xa8865a },
+  hardpan: { id: "hardpan", name: "Hardpan", speed: 0.9, wear: 1, dust: 1, color: 0xc8a676 },
+  sand: { id: "sand", name: "Loose sand", speed: 0.7, wear: 1.2, dust: 1.3, color: 0xdcc08c },
+  scrub: { id: "scrub", name: "Scrub", speed: 0.8, wear: 1.3, dust: 0.7, color: 0xa89a66 },
+  scree: { id: "scree", name: "Scree", speed: 0.55, wear: 2, dust: 0.5, color: 0x9a8a78 },
+  mud: { id: "mud", name: "Mud", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x665044 },
+  gravel: { id: "gravel", name: "Gravel", speed: 0.85, wear: 1.4, dust: 0.8, color: 0x9e9489 },
+  saltCrust: { id: "saltCrust", name: "Salt crust", speed: 0.95, wear: 0.8, dust: 1.2, color: 0xe0d8ba },
+  asphalt: { id: "asphalt", name: "Cracked asphalt", speed: 0.98, wear: 0.6, dust: 0.3, color: 0x55565b },
+  ash: { id: "ash", name: "Ash", speed: 0.6, wear: 1, dust: 1.6, color: 0x77737a },
 };
 
 export const TERRAIN = {
@@ -32,8 +43,31 @@ export const TERRAIN = {
   height: { hill: 1.5, mountainFrom: 0.4, mountain: 8 },
   // Fixed landforms shared by elevation and ground paint. Width is the flat channel half-width.
   features: {
-    canyon: { path: [{ x: 88, y: 5 }, { x: 85, y: 28 }, { x: 92, y: 49 }, { x: 98, y: 69 }, { x: 103, y: 99 }] as Vec[], width: 2.5, bank: 3, depth: 2.8 },
-    dryRiver: { path: [{ x: 7, y: 75 }, { x: 28, y: 80 }, { x: 48, y: 87 }, { x: 58, y: 91 }, { x: 70, y: 98 }, { x: 80, y: 111 }] as Vec[], width: 2, bank: 5, depth: 1.2 },
+    canyon: {
+      path: [
+        { x: 88, y: 5 },
+        { x: 85, y: 28 },
+        { x: 92, y: 49 },
+        { x: 98, y: 69 },
+        { x: 103, y: 99 },
+      ] as Vec[],
+      width: 2.5,
+      bank: 3,
+      depth: 2.8,
+    },
+    dryRiver: {
+      path: [
+        { x: 7, y: 75 },
+        { x: 28, y: 80 },
+        { x: 48, y: 87 },
+        { x: 58, y: 91 },
+        { x: 70, y: 98 },
+        { x: 80, y: 111 },
+      ] as Vec[],
+      width: 2,
+      bank: 5,
+      depth: 1.2,
+    },
     craters: [
       { center: { x: 16, y: 94 }, radius: 5, bank: 6, depth: 1.4 },
       { center: { x: 64, y: 54 }, radius: 5, bank: 5, depth: 1.8 },
@@ -47,6 +81,19 @@ export const TERRAIN = {
     scrubFreq: 1 / 5, // scrub patch noise frequency, cycles per tile
     scrubAbove: 0.62, // patch noise above which ground is scrub
     siteMargin: 1, // tiles around towns and locations that count as hardpan
+    patches: {
+      frequency: 1 / 12, // broad surface patches, independent of terrain heights
+      coverageSeedOffset: 1013,
+      kindSeedOffset: 2027,
+      coverageAbove: 0.57,
+      bands: [
+        { through: 0.3, kind: 'mud' },
+        { through: 0.45, kind: 'gravel' },
+        { through: 0.6, kind: 'saltCrust' },
+        { through: 0.75, kind: 'asphalt' },
+        { through: 1, kind: 'ash' },
+      ] as { through: number; kind: TerrainTypeId }[],
+    },
   },
   // Driving: grade is the slope along the driving direction.
   drive: {

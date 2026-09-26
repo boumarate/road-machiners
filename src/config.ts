@@ -32,4 +32,5 @@ export const CONFIG = {
     "VITE_COMBAT_READ_MS",
     import.meta.env.VITE_COMBAT_READ_MS,
   ),
+  saveTurns: requirePositiveInt("VITE_SAVE_TURNS", import.meta.env.VITE_SAVE_TURNS),
 };

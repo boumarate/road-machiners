@@ -78,6 +78,15 @@ describe('physics turns', () => {
     expect(Math.abs(me(mid).speed - 3)).toBeLessThan(0.5);
   });
 
+  it('steers toward a side click that starts behind a moving truck', () => {
+    const dest = { x: 29, y: 34 };
+    const initial = ordered({ kind: 'through', dest }, 4);
+    const result = play(initial, 1);
+    expect(me(result.w).order).toEqual({ kind: 'through', dest });
+    expect(me(result.w).heading).toBeGreaterThan(initial.vehicles[0].heading);
+    freeDrive(result.d);
+  });
+
   it('a stop order stops on the point', () => {
     const { w } = play(ordered({ kind: 'stopAt', dest: { x: 38, y: 31 } }), 8);
     expect(dist(me(w).pos, { x: 38, y: 31 })).toBeLessThan(RULES.arriveRadius + 0.3);

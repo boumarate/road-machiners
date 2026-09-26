@@ -2,6 +2,7 @@ import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { REGION } from '../data/region';
+import { PARTS } from '../data/parts';
 import { RULES } from '../data/rules';
 import { resolveMovement } from './movement';
 import { heatAt } from './sun';
@@ -12,7 +13,8 @@ import { endTurn, newWorld, setMoveOrder } from './world';
 
 describe('movement', () => {
   it('substeps are shorter than the smallest collision radius', () => {
-    const fastest = Math.max(...Object.values(CHASSIS).map((c) => c.maxSpeed + 1));
+    const engineBonus = Math.max(...Object.values(PARTS).flatMap((p) => p.kind === 'engine' ? [p.speedBonus] : []));
+    const fastest = Math.max(...Object.values(CHASSIS).map((c) => c.maxSpeed + engineBonus));
     const smallest = Math.min(REGION.obstacles.radius[0], ...Object.values(CHASSIS).map((c) => c.radius));
     expect(fastest / RULES.substeps).toBeLessThan(smallest);
   });

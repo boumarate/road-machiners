@@ -8,6 +8,7 @@ import { playerSees } from "../sim/vision";
 import { setAutoFire, setWeaponOrder } from "../sim/world";
 import { el, panel } from "./dom";
 import type { UiHost } from "./host";
+import { createIcon } from './icons';
 
 export const BLOCK_TEXT: Record<FireBlock, string> = {
   disabled: "disabled",
@@ -46,6 +47,7 @@ export function getWeaponReadout(w: World, mw: MountedWeapon) {
 
 export class WeaponPanel {
   private root = panel("weapons");
+  private turn = panel('turn-control');
   private expanded = true;
 
   constructor(private host: UiHost) {}
@@ -87,54 +89,28 @@ export class WeaponPanel {
       ),
     );
     const chosen = weapons.find((mw) => mw.part.id === selected);
+    if (weapons.length === 0)
+      controls.append(el("div", { class: "dim" }, "No weapons installed"));
     if (chosen) {
       const readout = getWeaponReadout(w, chosen);
       const order = playerVehicle(w).weaponOrders[chosen.part.id];
-      if (readout.target && order)
-        controls.append(
-          this.createAimSelect(readout.target, chosen.part.id, order.aim),
-        );
+      controls.append(el('div', { class: 'weapon-detail' },
+        el('strong', {}, chosen.def.name),
+        el('span', {}, readout.target?.name ?? 'No visible target'),
+        el('span', {}, readout.status),
+        readout.target && order ? this.createAimSelect(readout.target, chosen.part.id, order.aim) : null,
+        el('small', {}, 'Estimates use current positions. Movement happens first.'),
+        el('button', { class: 'weapon-hold', onclick: () => this.holdWeapon(chosen.part.id) }, 'Hold fire'),
+      ));
     }
-    if (weapons.length === 0)
-      controls.append(el("div", { class: "dim" }, "No weapons installed"));
-    const hint = w.player.autoFire
-      ? "Auto picks after movement. Markers show last assignments."
-      : "Click a vehicle to assign. Ground clicks still drive.";
     this.root.replaceChildren(
-      el(
-        "div",
-        { class: "head" },
-        el("h3", {}, "Weapons"),
-        el(
-          "button",
-          {
-            "aria-expanded": String(this.expanded),
-            onclick: () => this.toggleVisible(),
-          },
-          `${this.expanded ? "Hide" : "Show"} [W]`,
-        ),
-      ),
-      ...(this.expanded
-        ? [
-            controls,
-            el("div", { class: "hint" }, hint),
-            el(
-              "div",
-              { class: "hint" },
-              "Range, arc and hit chance use current positions.",
-            ),
-          ]
-        : []),
-      el(
-        "button",
-        {
-          class: "end-turn",
-          disabled: phase !== null,
-          onclick: () => this.host.endTurn(),
-        },
-        phase ? `${phase}…` : "End turn [Space]",
-      ),
+      el('button', { class: 'weapon-toggle', 'aria-expanded': String(this.expanded), onclick: () => this.toggleVisible(), title: 'Show or hide weapons [W]' }, this.expanded ? '− [W]' : 'Weapons [W]'),
+      ...(this.expanded ? [controls] : []),
     );
+    this.turn.replaceChildren(el('button', {
+      class: 'end-turn', disabled: phase !== null, title: 'End turn [Space]',
+      'aria-label': phase ? `${phase} in progress` : 'End turn', onclick: () => this.host.endTurn(),
+    }, createIcon('turn'), el('span', {}, phase ? `${phase}…` : 'Space')));
   }
 
   private renderSlot(w: World, mw: MountedWeapon, i: number): HTMLElement {
@@ -155,10 +131,13 @@ export class WeaponPanel {
         {
           class: `weapon-pick ${selected ? "on" : ""}`,
           "aria-pressed": String(selected),
+          'aria-label': `${mw.def.name}: ${readout.status}, ${target}`,
           title: `${mw.def.name}: ${mw.def.rounds} × ${mw.def.round.damage} damage, pen ${mw.def.round.pen}, range ${mw.def.range}, arc ${mw.def.arc}°, fires every ${mw.def.reload} turn(s)`,
           onclick: () => this.selectWeapon(selected ? null : mw.part.id),
         },
-        el("span", { class: "weapon-name" }, `[${i + 1}] ${mw.def.name}`),
+        el('span', { class: 'weapon-number' }, `${i + 1}`),
+        createIcon(mw.def.look === 'cannon' ? 'cannon' : 'mg'),
+        el("span", { class: "sr-only weapon-name" }, mw.def.name),
         el(
           "span",
           { class: readout.canFire ? "good" : "dim", "data-status": "" },
@@ -166,15 +145,7 @@ export class WeaponPanel {
         ),
         el("span", { class: "weapon-target" }, target),
       ),
-      el(
-        "button",
-        {
-          class: "weapon-hold",
-          title: `Hold fire: ${mw.def.name}`,
-          onclick: () => this.holdWeapon(mw.part.id),
-        },
-        "Hold",
-      ),
+
     );
   }
 

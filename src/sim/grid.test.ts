@@ -7,6 +7,7 @@ import { buyChassis, buyPart } from './economy';
 import { makePart, makeVehicle } from './factory';
 import { baseGrid, isMounted, itemCells, mountedItems, mountedParts, sideOf, type Cell } from './grid';
 import { moveItem, storePart } from './inventory';
+import { generateNpcLoadout } from './npc-loadout';
 import { addVehicle, emptyWorld } from './testkit';
 import type { GridItem, Vehicle, World } from './types';
 
@@ -48,9 +49,10 @@ describe('built-in parts', () => {
   it('every NPC template mounts all its parts', () => {
     for (const tpl of Object.values(NPCS)) {
       const w = emptyWorld();
-      const v = makeVehicle(w, { name: tpl.name, faction: tpl.faction, chassisId: tpl.chassisId, parts: tpl.parts, cargo: tpl.cargo, pos: { x: 40, y: 40 }, heading: 0, brain: null });
+      const loadout = generateNpcLoadout(w, tpl);
+      const v = makeVehicle(w, { name: tpl.name, faction: tpl.faction, ...loadout, pos: { x: 40, y: 40 }, heading: 0, brain: null });
       const mounted = mountedParts(v).map((p) => p.defId).filter((id) => PARTS[id].kind !== 'core');
-      expect(mounted.sort()).toEqual([...tpl.parts].sort());
+      expect(mounted.sort()).toEqual([...loadout.parts].sort());
     }
   });
 

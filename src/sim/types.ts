@@ -6,34 +6,38 @@ import type { Vec } from "./vec";
 
 export type Faction = "player" | "raiders" | "traders" | "scavengers";
 export type SkillId =
-  "driving" | "gunnery" | "mechanics" | "trade" | "survival";
+    | "driving"
+    | "gunnery"
+    | "mechanics"
+    | "trade"
+    | "survival";
 
 export type PartInstance = {
-  id: string;
-  defId: string;
-  hp: number;
-  reload: number;
+    id: string;
+    defId: string;
+    hp: number;
+    reload: number;
 };
 
 // An item in a vehicle's inventory grid. x and y are the top-left cell. rot 1 swaps width and height.
 // A part works only while it lies fully on mount cells of its kind. Each good unit takes one cell.
 export type GridItem =
-  | {
-      id: string;
-      x: number;
-      y: number;
-      rot: 0 | 1;
-      kind: "part";
-      part: PartInstance;
-    }
-  | {
-      id: string;
-      x: number;
-      y: number;
-      rot: 0 | 1;
-      kind: "good";
-      good: string;
-    };
+    | {
+          id: string;
+          x: number;
+          y: number;
+          rot: 0 | 1;
+          kind: "part";
+          part: PartInstance;
+      }
+    | {
+          id: string;
+          x: number;
+          y: number;
+          rot: 0 | 1;
+          kind: "good";
+          good: string;
+      };
 
 // 'body' aims at the truck as a whole. Otherwise it is the id of a part on the target.
 export type Aim = "body" | string;
@@ -43,11 +47,17 @@ export type Pose = { x: number; y: number; heading: number };
 
 // Momentum carries over between turns. A vehicle without an order coasts.
 export type MoveOrder =
-  | { kind: "through"; dest: Vec } // drive through the point at pace, then coast on
-  | { kind: "stopAt"; dest: Vec } // brake in time to stop on the point
-  | { kind: "brake" }; // slow to a halt where you are
+    | { kind: "through"; dest: Vec } // drive through the point at pace, then coast on
+    | { kind: "stopAt"; dest: Vec } // brake in time to stop on the point
+    | { kind: "brake" }; // slow to a halt where you are
 
-export type SalvageStock = { id: string; pos: Vec; radius: number; goods: Record<string, number>; parts: PartInstance[] };
+export type SalvageStock = {
+    id: string;
+    pos: Vec;
+    radius: number;
+    goods: Record<string, number>;
+    parts: PartInstance[];
+};
 
 // Work that needs the truck parked. Moving above parked speed cancels it, and finished turns are lost.
 export type Job =
@@ -74,15 +84,15 @@ export type NpcActivity = {
 };
 
 export type NpcBrain = {
-  templateId: string;
-  activity: NpcActivity | null;
-  goal: Vec | null;
-  home: Vec;
-  stepIndex: number; // route progress for traders and scavengers
-  lastPos?: Vec; // position before the last drive attempt
-  stalled?: number; // consecutive turns without forward progress
-  recovery?: number; // turns left backing away from a blockage
-  recoveryGoal?: Vec;
+    templateId: string;
+    activity: NpcActivity | null;
+    goal: Vec | null;
+    home: Vec;
+    stepIndex: number; // route progress for traders and scavengers
+    lastPos?: Vec; // position before the last drive attempt
+    stalled?: number; // consecutive turns without forward progress
+    recovery?: number; // turns left backing away from a blockage
+    recoveryGoal?: Vec;
 };
 
 export type Vehicle = {
@@ -106,10 +116,10 @@ export type Vehicle = {
 };
 
 export type Obstacle = {
-  id: string;
-  pos: Vec;
-  r: number;
-  kind: "rock" | "wreck" | "building" | "water" | "site";
+    id: string;
+    pos: Vec;
+    r: number;
+    kind: "rock" | "wreck" | "building" | "water" | "site";
 };
 
 export type Player = {
@@ -136,10 +146,10 @@ export type Player = {
 // One round of a shot. offset is where it crossed the target in meters from its center, across the line
 // of fire, positive to the shooter's right. hits lists the parts it damaged, by direct hit or splash.
 export type ShotRound = {
-  hit: boolean;
-  crit: boolean;
-  offset: number;
-  hits: PartHit[];
+    hit: boolean;
+    crit: boolean;
+    offset: number;
+    hits: PartHit[];
 };
 
 export type GameEvent =
