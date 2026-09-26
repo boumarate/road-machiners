@@ -235,6 +235,7 @@ Approach: build bottom-up in six phases. Mass comes first, since stats and physi
   - A missed bolt lands at `offset` beside the target.
 - 6.3 `src/three/render/fx.ts` (modify): `shot` takes a landing point instead of a hit flag.
 - 6.4 `src/three/render/vehicle.ts:185-200` (modify): plates are drawn on their side, and a ram is a wedge on its side.
+- 6.5 `src/ui/inventory.ts` (modify): each part in the garage grid shows its condition as a bar, from hp over max hp. A broken part is marked red.
 - Verify: the playtest passes. Screenshots of the hover card, the garage and a burst go to the user.
 - Commit: Hover card with hit odds and causes; per-round bolts; side armor visuals
 
