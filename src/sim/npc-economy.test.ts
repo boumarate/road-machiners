@@ -1,0 +1,54 @@
+import { describe, expect, it } from 'vitest';
+import * as economy from './economy';
+import { addVehicle, emptyWorld } from './testkit';
+import { REGION } from '../data/region';
+import { ECONOMY } from '../data/goods';
+import { goodsCount } from './grid';
+
+describe('NPC transactions', () => {
+  it('rejects an unaffordable purchase without partial effects', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'traders', 'hauler', [], REGION.towns[0].pos);
+    npc.resources!.money = 1;
+    const before = structuredClone(npc);
+    expect(() => economy.tradeGoods(w, npc, 'tin', 'scrap', 2, 'buy')).toThrow('money');
+    expect(npc).toEqual(before);
+  });
+
+  it('buys and sells real cargo without spending player money', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine'], REGION.towns[0].pos);
+    const money = npc.resources!.money;
+    const playerMoney = w.player.money;
+    expect(economy.tradeGoods).toBeTypeOf('function');
+    economy.tradeGoods(w, npc, 'tin', 'scrap', 2, 'buy');
+    expect(goodsCount(npc).scrap).toBe(2);
+    expect(npc.resources!.money).toBe(money - 24);
+    economy.tradeGoods(w, npc, 'tin', 'scrap', 2, 'sell');
+    expect(goodsCount(npc).scrap ?? 0).toBe(0);
+    expect(npc.resources!.money).toBe(money - 8);
+    expect(w.player.money).toBe(playerMoney);
+  });
+
+  it('rejects remote transactions without changing inventory or money', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'traders', 'hauler', [], { x: 30, y: 30 });
+    expect(economy.tradeGoods).toBeTypeOf('function');
+    const before = structuredClone(npc);
+    expect(() => economy.tradeGoods(w, npc, 'tin', 'scrap', 1, 'buy')).toThrow('town');
+    expect(npc).toEqual(before);
+  });
+
+  it('buys only affordable fuel before other service', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'scavengers', 'scout', [], REGION.towns[0].pos);
+    npc.resources!.fuel = 0;
+    npc.resources!.supplies = 0;
+    npc.resources!.money = ECONOMY.supplyPrice.fuel * 2;
+    expect(economy.serviceVehicle).toBeTypeOf('function');
+    economy.serviceVehicle(w, npc, 'tin');
+    expect(npc.resources!.fuel).toBe(2);
+    expect(npc.resources!.money).toBe(0);
+    expect(npc.resources!.supplies).toBe(0);
+  });
+});

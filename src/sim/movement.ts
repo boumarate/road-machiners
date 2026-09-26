@@ -3,11 +3,12 @@
 import { RULES } from '../data/rules';
 import { skillBonus } from '../data/skills';
 import { chance, randInt } from './rng';
+import { getResources } from './resources';
 import { damageHull, damagePart } from './damage';
 import { mountedParts } from './grid';
 import { isDriveObstacle } from './mapgen';
 import { vehicleStats, type VehicleStats } from './stats';
-import { advanceOn, nextOrder, reached, steerTo, steerWithFuel, type Steer } from './steering';
+import { advanceOn, nextOrder, reached, steerWithFuel, type Steer } from './steering';
 import { isCliff, tileAt } from './terrain';
 import type { Pose, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
@@ -35,7 +36,7 @@ export function resolveMovement(world: World): void {
 }
 
 function moveSteer(world: World, v: Vehicle, s: VehicleStats): Steer {
-  return v.faction === 'player' ? steerWithFuel(world, s, v, v.order, v.direct, world.player.fuel) : steerTo(world, s, v, v.order, v.direct);
+  return steerWithFuel(world, s, v, v.order, v.direct, getResources(world, v).fuel);
 }
 
 function stepMover(world: World, m: Mover): void {
@@ -236,7 +237,8 @@ export function overlaps(world: World, movers: { v: Vehicle; s: VehicleStats }[]
 function finishMove(world: World, m: Mover): void {
   const moved = pathLength(m.v.trail);
   m.v.speed = m.stopped ? 0 : Math.max(0, m.steer.speed); // backing up ends at rest
-  if (m.v.faction === 'player') world.player.fuel = Math.max(0, world.player.fuel - moved * m.s.fuelPerTile);
+  const resources = getResources(world, m.v);
+  resources.fuel = Math.max(0, resources.fuel - moved * m.s.fuelPerTile);
   if (reached(m.v.order, m.v.trail, m.v.speed)) world.events.push({ t: 'arrived', vehicle: m.v.id });
   m.v.order = nextOrder(m.v.order, m.v.trail, m.v.speed);
 }

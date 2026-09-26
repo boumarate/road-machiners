@@ -4,6 +4,7 @@
 import { RULES } from '../data/rules';
 import { playerVehicle } from '../sim/damage';
 import { applyCrash } from '../sim/movement';
+import { getResources } from '../sim/resources';
 import { vehicleStats } from '../sim/stats';
 import type { Pose, World } from '../sim/types';
 import { dist } from '../sim/vec';
@@ -35,7 +36,8 @@ export function applyTurn(w: World, r: TurnResult): void {
     v.heading = s.heading;
     v.speed = Math.max(0, toTilesPerTurn(s.speed));
     v.trail = trailOf(start, frames);
-    if (v.faction === 'player') w.player.fuel = Math.max(0, w.player.fuel - pathLength(v.trail) * vehicleStats(w, v).fuelPerTile);
+    const resources = getResources(w, v);
+    resources.fuel = Math.max(0, resources.fuel - pathLength(v.trail) * vehicleStats(w, v).fuelPerTile);
     const res = r.results[v.id];
     const done = (v.order?.kind === 'through' && res.passed) || (v.order?.kind === 'stopAt' && res.arrived);
     if (done) w.events.push({ t: 'arrived', vehicle: v.id });

@@ -2,6 +2,10 @@
 
 import type { Faction } from '../sim/types';
 import type { Vec } from '../sim/vec';
+import { START } from './start';
+
+// NPCs begin with the player's upkeep budget. Their fuel is capped by their chassis.
+export const NPC_RESOURCES = { money: START.money, fuel: START.fuel, supplies: START.supplies };
 
 export type Brain = 'raider' | 'trader' | 'scavenger';
 

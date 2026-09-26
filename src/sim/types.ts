@@ -26,6 +26,8 @@ export type MoveOrder =
   | { kind: 'stopAt'; dest: Vec } // brake in time to stop on the point
   | { kind: 'brake' }; // slow to a halt where you are
 
+export type DriverResources = { money: number; fuel: number; supplies: number; health: number };
+
 export type NpcBrain = {
   templateId: string;
   goal: Vec | null;
@@ -53,6 +55,7 @@ export type Vehicle = {
   grudges: string[]; // vehicle ids this vehicle treats as hostile
   trail: Pose[]; // poses through the last turn, for animation
   brain: NpcBrain | null;
+  resources: DriverResources | null;
   lastHitBy: string | null; // vehicle id of the last damage source, for kill credit
 };
 

@@ -2,6 +2,8 @@
 
 import { chassisDef } from '../data/chassis';
 import { partDef } from '../data/parts';
+import { NPC_RESOURCES } from '../data/npcs';
+import { RULES } from '../data/rules';
 import { addGoods, mountPart } from './inventory';
 import { vehicleStats } from './stats';
 import type { Faction, NpcBrain, PartInstance, Vehicle, World } from './types';
@@ -46,6 +48,7 @@ export function makeVehicle(world: World, spec: VehicleSpec): Vehicle {
     grudges: [],
     trail: [],
     brain: spec.brain,
+    resources: spec.faction === 'player' ? null : { ...NPC_RESOURCES, fuel: Math.min(NPC_RESOURCES.fuel, chassisDef(spec.chassisId).fuelCap), health: RULES.maxHealth },
     lastHitBy: null,
   };
   for (const defId of spec.parts) {

@@ -8,6 +8,7 @@ import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
 import { RULES } from '../data/rules';
 import { isDriveObstacle } from '../sim/mapgen';
+import { getResources } from '../sim/resources';
 import { vehicleStats, type VehicleStats } from '../sim/stats';
 import { route, straightClear } from '../sim/path';
 import { aimPoint, parkedVehicles, zoneSpeed } from '../sim/steering';
@@ -208,7 +209,7 @@ type Plan = { dest: Vec | null; route: Vec[] | null; target: number; stopAt: boo
 function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBody, order: MoveOrder | null): Plan {
   const b = bodyOf(v.chassisId);
   const speed = Math.max(0, toTilesPerTurn(forwardSpeed(body)));
-  const s = v.faction === 'player' ? fuelLimited(w, v, full, speed, order) : full;
+  const s = fuelLimited(w, v, full, speed, order);
   const engine = s.maxSpeed > 0;
   const base = {
     engine,
@@ -226,10 +227,10 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   return { ...base, dest: order.dest, route: path, target: toMps(next), stopAt: false };
 }
 
-// The player's fuel limits the engine like the 2D rules: under the low-fuel share of the tank the top
+// Fuel limits the engine like the 2D rules: under the low-fuel share of the tank the top
 // speed halves, and a tank that cannot cover this turn's drive still lets the truck crawl.
 function fuelLimited(w: World, v: Vehicle, s: VehicleStats, speed: number, order: MoveOrder | null): VehicleStats {
-  const fuel = w.player.fuel;
+  const fuel = getResources(w, v).fuel;
   const low = fuel > 0 && fuel < chassisDef(v.chassisId).fuelCap * RULES.lowFuelThreshold;
   const limit = low ? Math.max(s.maxSpeed * RULES.lowFuelSpeedFactor, speed - s.brake) : s.maxSpeed;
   const capped = low ? { ...s, maxSpeed: limit } : s;
