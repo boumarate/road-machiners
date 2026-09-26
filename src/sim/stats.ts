@@ -61,7 +61,7 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     hullMax: ch.hull + sum(armors.map((a) => a.hullBonus)),
     reduction: sum(armors.map((a) => a.reduction)),
     partShield: Math.min(0.9, sum(armors.map((a) => a.partShield))),
-    fuelPerTile: ch.fuelPerTile * fuelMult,
+    fuelPerTile: ch.fuelPerTile * fuelMult * RULES.fuelUseFactor,
     mass: ch.mass,
     radius: ch.radius,
     weapons: mountedParts(v, 'weapon').map((part) => ({ part, def: partDef(part.defId) as WeaponDef })),

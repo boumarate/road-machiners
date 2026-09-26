@@ -3,6 +3,7 @@ import { CHASSIS } from '../data/chassis';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { resolveMovement } from './movement';
+import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld } from './testkit';
 import { dist } from './vec';
 import { endTurn, newWorld, setMoveOrder } from './world';
@@ -41,12 +42,42 @@ describe('movement', () => {
     expect(dist(p.pos, hauler.pos)).toBeGreaterThanOrEqual(0.6 + 0.8 - 0.01);
   });
 
-  it('cannot move without fuel', () => {
+  it('crawls without fuel, including after stopping', () => {
     const w = emptyWorld();
     w.player.fuel = 0;
+    w.vehicles[0].order = { kind: 'stopAt', dest: { x: 40, y: 30 } };
+    resolveMovement(w);
+    expect(w.vehicles[0].pos.x).toBeGreaterThan(30);
+    expect(w.vehicles[0].pos.x).toBeLessThanOrEqual(30 + RULES.crawlSpeed);
+    expect(w.player.fuel).toBe(0);
+  });
+
+  it('never burns more fuel than available on a short tank', () => {
+    const w = emptyWorld();
+    w.player.fuel = 0.01;
     w.vehicles[0].order = { kind: 'through', dest: { x: 40, y: 30 } };
     resolveMovement(w);
-    expect(w.vehicles[0].pos).toEqual({ x: 30, y: 30 });
+    expect(w.player.fuel).toBe(0);
+    expect(w.vehicles[0].pos.x).toBeGreaterThan(30);
+  });
+
+  it('limits speed below 20% fuel but keeps driving', () => {
+    const full = emptyWorld();
+    const low = emptyWorld();
+    const edge = emptyWorld();
+    low.player.fuel = CHASSIS.scout.fuelCap * 0.19;
+    edge.player.fuel = CHASSIS.scout.fuelCap * 0.2;
+    for (const w of [full, low]) {
+      w.vehicles[0].order = { kind: 'stopAt', dest: { x: 55, y: 30 } };
+      for (let i = 0; i < 4; i++) resolveMovement(w);
+    }
+    expect(low.vehicles[0].speed).toBeLessThanOrEqual(vehicleStats(low, low.vehicles[0]).maxSpeed / 2);
+    expect(full.vehicles[0].speed).toBeGreaterThan(low.vehicles[0].speed);
+    expect(low.player.fuel).toBeGreaterThan(0);
+    edge.vehicles[0].speed = 4;
+    edge.vehicles[0].order = { kind: 'stopAt', dest: { x: 55, y: 30 } };
+    resolveMovement(edge);
+    expect(edge.vehicles[0].speed).toBeGreaterThan(vehicleStats(edge, edge.vehicles[0]).maxSpeed / 2);
   });
 
   it('burns fuel per tile driven', () => {
@@ -54,11 +85,15 @@ describe('movement', () => {
     w.vehicles[0].order = { kind: 'through', dest: { x: 40, y: 30 } };
     const fuel = w.player.fuel;
     resolveMovement(w);
-    expect(w.player.fuel).toBeCloseTo(fuel - 2 * CHASSIS.scout.fuelPerTile, 5);
+    expect(w.player.fuel).toBeCloseTo(fuel - 2 * CHASSIS.scout.fuelPerTile / 10, 5);
   });
 });
 
 describe('world', () => {
+  it('starts the player with 1500 money', () => {
+    expect(newWorld(1).player.money).toBe(1500);
+  });
+
   it('is deterministic for the same seed and orders', () => {
     const run = () => {
       let w = setMoveOrder(newWorld(7), { kind: 'through', dest: { x: 40, y: 20 } });

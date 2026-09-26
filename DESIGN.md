@@ -1,6 +1,6 @@
 # Korovan design
 
-A post-apocalyptic wasteland RPG where you drive a truck. Isometric view. Turn-based, like Space Rangers 2. Inspired by Ex Machina, Space Rangers 2, Kenshi, Dustland Delivery, Caravaneer 2, Convoy.
+A post-apocalyptic wasteland RPG where you drive a truck. 3D world seen from an isometric camera. Turn-based, like Space Rangers 2. Inspired by Ex Machina, Space Rangers 2, Kenshi, Dustland Delivery, Caravaneer 2, Convoy.
 
 ## Character
 
@@ -32,13 +32,13 @@ Movement and combat happen on the same map, in Space Rangers 2 style. Travel and
 
 Each turn the player sets a destination. The player also assigns each weapon a target, or tells it to hold fire. Then the player ends the turn. All vehicles move at the same time, then all weapons fire at the same time.
 
-Each chassis has max speed, acceleration, braking and turn rates. Momentum carries over: the speed you have is a committed distance for next turn. Faster trucks turn less per turn.
+Each chassis has max speed, acceleration, braking and turn rates. Momentum carries over: the speed you have is a committed distance for next turn. Faster trucks turn less per turn. Vehicles are physics bodies with suspension. Time only runs while a turn plays: each turn simulates one second of driving, then everything pauses. Slopes, bumps and collisions come from the physics.
 
 A click is a waypoint to drive through. While moving, a close click brakes, a click about one turn of travel away holds speed, and a far click accelerates. From rest, a nearby click starts the truck slowly, and a click behind it backs toward that point. At rest the colored zones show one third red and two thirds green. Steering bends the path as far as the turn limit allows, without slowing down. After the waypoint, or with no order, the truck coasts on. Clicking your own truck brakes it. Shift-click stops on the point, driving carefully around corners.
 
 The truck plans a route around rocks, wrecks, parked vehicles and cliffs, preferring roads. The screen shows the planned path for the next turns.
 
-Crashes stop a vehicle and deal damage scaled by impact speed and mass. Heavy trucks win rams. NPC drivers sometimes skip route planning and drive straight, so they can be lured into rocks.
+Crashes stop a vehicle and deal damage scaled by impact speed and mass. Heavy trucks win rams. NPC drivers use the same steering and obstacle routing as the player. A stuck driver backs away before trying the route again.
 
 Weapons have range, damage, reload time, accuracy and a firing arc. A turret covers all sides. A forward gun needs the truck to face the target.
 
@@ -50,7 +50,7 @@ An auto mode assigns every weapon a hull shot at the nearest hostile.
 
 Losing a fight does not end the game, in Kenshi style.
 
-The character is knocked out. Enemies loot the cargo and half the money. The character wakes up in the nearest town and keeps stats, skills and parts. The truck is left at low hull. Townsfolk top up fuel, water and food to a small amount, so a broke player can still move on.
+The character is knocked out. Enemies loot the cargo and half the money. The character stays with the truck and keeps stats, skills and mounted parts. The robbers leave. The character patches the hull to barely moving condition and must crawl back with no fuel.
 
 Later the enemies may also take or wreck the truck.
 
@@ -62,13 +62,13 @@ The map is a grid of tiles with a height on every tile corner, so the ground is 
 
 Danger is set by region, not by player level.
 
-Faction squads roam the map. Places are discovered by exploring.
+Faction squads roam the map. Places are discovered by exploring. Towns and locations block driving. Their interaction radius is 1.5 times the site's base service reach, so the player uses services without driving into buildings.
 
 ## Trade
 
 Each town produces and needs fixed goods. Profit comes from knowing routes, as in Dustland Delivery.
 
-Fuel and water limit range, as in Caravaneer 2. Fuel burns per tile driven. Water and food burn per turn. With no water or food the character loses health.
+Fuel and supplies limit range. Fuel burns at one tenth of the chassis fuel-per-tile rate. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn at 0.025 per turn. Without supplies the character loses health. The oasis refills supplies.
 
 ## Prototype v0.001 content
 

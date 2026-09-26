@@ -99,7 +99,7 @@ export class TownScreen {
   }
 
   private supplies(w: World): HTMLElement {
-    const rows = (['fuel', 'water', 'food'] as Supply[]).map((k) => {
+    const rows = (['fuel', 'supplies'] as Supply[]).map((k) => {
       const room = supplyRoom(w, k);
       const price = ECONOMY.supplyPrice[k];
       const afford = Math.min(room, Math.floor(w.player.money / price));

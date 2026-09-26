@@ -31,6 +31,10 @@ export type NpcBrain = {
   goal: Vec | null;
   home: Vec;
   stepIndex: number; // route progress for traders and scavengers
+  lastPos?: Vec; // position before the last drive attempt
+  stalled?: number; // consecutive turns without forward progress
+  recovery?: number; // turns left backing away from a blockage
+  recoveryGoal?: Vec;
 };
 
 export type Vehicle = {
@@ -52,7 +56,7 @@ export type Vehicle = {
   lastHitBy: string | null; // vehicle id of the last damage source, for kill credit
 };
 
-export type Obstacle = { id: string; pos: Vec; r: number; kind: 'rock' | 'wreck' | 'building' | 'water' };
+export type Obstacle = { id: string; pos: Vec; r: number; kind: 'rock' | 'wreck' | 'building' | 'water' | 'site' };
 
 export type Player = {
   vehicleId: string;
@@ -63,8 +67,7 @@ export type Player = {
   skills: Record<SkillId, number>;
   health: number;
   fuel: number;
-  water: number;
-  food: number;
+  supplies: number;
   autoFire: boolean;
   discovered: string[];
   scavenged: string[];
@@ -89,7 +92,7 @@ export type GameEvent =
   | { t: 'money'; amount: number; reason: string }
   | { t: 'discover'; location: string }
   | { t: 'supply'; what: string; text: string }
-  | { t: 'defeat'; wokeAt: string }
+  | { t: 'defeat' }
   | { t: 'info'; text: string };
 
 export type World = {

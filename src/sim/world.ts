@@ -1,4 +1,4 @@
-// World creation and the turn pipeline. No Phaser imports: this runs in Node tests.
+// World creation and the turn pipeline. No rendering or physics imports: this runs in Node tests.
 // Public functions take a world and return a new one. Inside, a cloned draft is mutated.
 
 import { REGION } from '../data/region';
@@ -40,8 +40,7 @@ export function newWorld(seed: number): World {
       skills: { driving: 0, gunnery: 0, mechanics: 0, trade: 0, survival: 0 },
       health: RULES.maxHealth,
       fuel: START.fuel,
-      water: START.water,
-      food: START.food,
+      supplies: START.supplies,
       autoFire: false,
       discovered: [REGION.playerStart.town],
       scavenged: [],
@@ -92,11 +91,12 @@ export function setMoveOrder(world: World, order: MoveOrder | null): World {
   });
 }
 
-export function endTurn(world: World): World {
+// move resolves this turn's driving on the draft: the 2D rules, or the physics engine.
+export function endTurn(world: World, move: (w: World) => void = resolveMovement): World {
   return update(world, (w) => {
     w.turn++;
     planNpcOrders(w);
-    resolveMovement(w);
+    move(w);
     refreshVision(w);
     assignAutoOrders(w);
     fireWeapons(w);
