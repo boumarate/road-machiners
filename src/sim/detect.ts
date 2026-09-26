@@ -84,7 +84,7 @@ export function contactsOf(world: World, observer: Vehicle, within: number): Con
     if (dusted > 0 && d <= dusted && dustVisible(world, observer.pos, v.pos)) sources.push('dust');
     if (scanned > 0 && d <= scanned) sources.push('radio');
     if (sources.length === 0) continue;
-    const radius = DETECT.fuzz.base + DETECT.fuzz.perTile * d;
+    const radius = DETECT.fuzz.base + (sources.includes('radio') ? DETECT.fuzz.radioPerTile : DETECT.fuzz.perTile) * d;
     const key = idKey(v.id);
     const angle = hashRandom(world.seed, world.turn, key, 1) * Math.PI * 2;
     const frac = hashRandom(world.seed, world.turn, key, 2); // in [0, 1), so the offset always stays inside radius

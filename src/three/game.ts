@@ -854,7 +854,7 @@ export class Game {
     this.weaponRange.root.visible = false;
     this.placeTargetMarkers();
     this.placeHitCard();
-    this.contacts.update(this.world.terrain, this.world.player.contacts, performance.now());
+    this.contacts.update(this.world.terrain, this.world.player.contacts, playerVehicle(this.world).pos, performance.now());
     this.placeContactTip();
     if (hide) return;
     const me = playerVehicle(this.world);

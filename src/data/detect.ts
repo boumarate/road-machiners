@@ -16,8 +16,11 @@ export const DETECT = {
   },
   // Scanner range lives on the part itself (src/data/parts.ts, PARTS.scanner.range), so towns and
   // the grid read one number.
+  // A contact circle's radius. Sound and dust give only a vague area, about a third of the distance.
+  // A scanner fixes the position far better, which is what its weapon mount buys.
   fuzz: {
-    base: 1, // tiles: the smallest contact circle, even at close range
-    perTile: 0.15, // tiles of extra circle radius per tile of true distance
+    base: 2, // tiles: the smallest contact circle, even at close range
+    perTile: 0.35, // tiles of extra circle radius per tile of true distance, by sound or dust
+    radioPerTile: 0.03, // the same, once a scanner has the vehicle
   },
 } as const;

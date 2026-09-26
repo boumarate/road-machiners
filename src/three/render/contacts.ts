@@ -1,61 +1,241 @@
-// Ground markers for vehicles detected beyond sight: faint white rings that ripple out from the contact
-// center like sound waves, fading as they reach the contact radius. Drawn above the fog, over explored and
-// unexplored ground alike: a contact is sensed, not seen, so it does not depend on the fog of war.
+// Markers for vehicles detected beyond sight, one look per source. All are drawn above the fog: a contact
+// is sensed, not seen, so it does not depend on the fog of war.
+// - Sound: faint white wavefronts. Each starts somewhere inside the vague contact circle and travels out,
+//   past the listener. Every point of a front moves on its own: it slows while climbing, fades in the
+//   shadow behind a ridge, runs faster downwind, and wobbles a little. So fronts bend around hills.
+// - Dust: a hazy plume standing over the contact circle.
+// - Radio: a small crisp blip, since a scanner fixes the position.
+// Everything here is render-only. The sim's contact circle is the only claim about where the vehicle is.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
+import { WEATHER } from '../../data/weather';
 import { PAL } from '../../render/palette';
+import { hash2, valueNoise } from '../../render/noise';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import type { Contact } from '../../sim/types';
+import { dist, type Vec } from '../../sim/vec';
 
 const S = PHYSICS.metersPerTile;
-const LIFT = 0.05; // meters above the ground, avoids z-fighting with the fog and ground mesh
-const SEGMENTS = 48;
 const RENDER_ORDER = 905; // above the fog (900) and shade (901) layers
-const WAVES = 3; // rings in flight at once, evenly staggered
-const WAVE_MS = 2400; // time for one ring to travel from the center to the contact radius
-const WAVE_OPACITY = 0.55; // at the center; a ring fades to zero at the edge
-const RING_INNER = 0.93; // inner radius of the unit ring, so the stroke is 7% of the current radius
+const LIFT = 0.08; // meters above the ground
 
-type Marker = { group: THREE.Group; waves: THREE.Mesh[]; radius: number };
+const WAVE = {
+  points: 64, // vertices around one front
+  fronts: 3, // fronts in flight per contact, staggered in time
+  speed: 14, // tiles per second on flat ground with no wind
+  reachPast: 1.3, // a front travels this share of the contact's distance, so it passes the listener
+  brightness: 0.7, // peak intensity of a fresh front; it holds most of it until late, then fades out at full reach
+  climbDrag: 3, // slowdown per unit of uphill grade (height units per tile)
+  shadowFade: 2.5, // intensity lost per height unit a point sits below the highest ground it has crossed
+  wind: 0.35, // share of speed gained downwind and lost upwind
+  wobble: 0.06, // share of radius the front ripples by
+  wobbleScale: 3, // noise cycles around a front
+  originSpread: 0.7, // share of the contact radius a front may start away from the circle center
+  stagger: 0.9, // seconds between the fronts of one contact
+};
+
+const PLUME = { puffs: 5, width: 3, height: 4, opacity: 0.22, riseMs: 5000 }; // tiles and ms
+const BLIP = { radius: 0.7, dot: 0.25, opacity: 0.9 }; // tiles
+
+type Front = {
+  line: THREE.Line;
+  origin: Vec;
+  r: Float32Array; // current radius of each point, tiles
+  peak: Float32Array; // highest ground each point has crossed, height units
+  amp: Float32Array; // current intensity of each point
+  delay: number; // seconds before this front first starts, so a contact's fronts are staggered
+  active: boolean; // false between finishing and restarting
+  spawn: number; // how many times this front has restarted, for its start point
+};
+
+type Marker = { id: string; fronts: Front[]; plume: THREE.Group; blip: THREE.Group; root: THREE.Group };
+
+const WIND = (() => {
+  const l = Math.hypot(WEATHER.wind.x, WEATHER.wind.y);
+  return { x: WEATHER.wind.x / l, y: WEATHER.wind.y / l };
+})();
 
 export class ContactsView {
   readonly root = new THREE.Group();
-  private readonly ringGeometry = new THREE.RingGeometry(RING_INNER, 1, SEGMENTS).rotateX(-Math.PI / 2);
-  private markers: Marker[] = [];
+  private readonly markers = new Map<string, Marker>();
+  private readonly plumeTexture = createPuffTexture();
+  private lastMs: number | null = null;
 
-  // One marker per current contact. Extra pooled markers from a busier turn are hidden, not freed.
-  update(terrain: Terrain, contacts: Contact[], nowMs: number): void {
-    while (this.markers.length < contacts.length) this.markers.push(this.makeMarker());
-    for (let i = 0; i < this.markers.length; i++) {
-      const m = this.markers[i];
-      const c = contacts[i];
-      m.group.visible = !!c;
-      if (!c) continue;
-      m.group.position.set(c.center.x * S, heightAt(terrain, c.center.x, c.center.y) * S + LIFT, c.center.y * S);
-      m.radius = c.radius * S;
-      // Each contact gets its own phase offset, so nearby markers do not pulse in lockstep.
-      const offset = i * 0.37;
-      m.waves.forEach((wave, k) => {
-        const t = (nowMs / WAVE_MS + offset + k / WAVES) % 1;
-        wave.scale.setScalar(Math.max(0.01, t * m.radius));
-        (wave.material as THREE.MeshBasicMaterial).opacity = WAVE_OPACITY * (1 - t);
-      });
+  update(terrain: Terrain, contacts: Contact[], listener: Vec, nowMs: number): void {
+    const dt = this.lastMs === null ? 0 : Math.min(0.1, (nowMs - this.lastMs) / 1000);
+    this.lastMs = nowMs;
+    const live = new Set(contacts.map((c) => c.vehicleId));
+    for (const [id, m] of this.markers) {
+      if (live.has(id)) continue;
+      this.root.remove(m.root);
+      disposeMarker(m);
+      this.markers.delete(id);
+    }
+    for (const c of contacts) {
+      let m = this.markers.get(c.vehicleId);
+      if (!m) {
+        m = this.makeMarker(c.vehicleId);
+        this.markers.set(c.vehicleId, m);
+      }
+      const hearsSound = c.sources.includes('sound');
+      m.fronts.forEach((f) => (f.line.visible = hearsSound));
+      if (hearsSound) for (const f of m.fronts) this.advanceFront(terrain, c, listener, f, dt);
+      m.plume.visible = c.sources.includes('dust');
+      if (m.plume.visible) placePlume(terrain, m.plume, c, nowMs);
+      m.blip.visible = c.sources.includes('radio');
+      if (m.blip.visible) m.blip.position.set(c.center.x * S, heightAt(terrain, c.center.x, c.center.y) * S + LIFT, c.center.y * S);
     }
   }
 
-  private makeMarker(): Marker {
-    const group = new THREE.Group();
-    const waves = Array.from({ length: WAVES }, () => {
-      const mesh = new THREE.Mesh(
-        this.ringGeometry,
-        new THREE.MeshBasicMaterial({ color: PAL.contact, transparent: true, opacity: 0, depthTest: false, depthWrite: false, side: THREE.DoubleSide }),
-      );
-      mesh.renderOrder = RENDER_ORDER;
-      return mesh;
-    });
-    group.add(...waves);
-    this.root.add(group);
-    return { group, waves, radius: 0 };
+  private makeMarker(id: string): Marker {
+    const root = new THREE.Group();
+    const seed = hashId(id);
+    const fronts = Array.from({ length: WAVE.fronts }, (_, k) => makeFront(k, seed));
+    const plume = makePlume(this.plumeTexture);
+    const blip = makeBlip();
+    root.add(...fronts.map((f) => f.line), plume, blip);
+    this.root.add(root);
+    fronts.forEach((f, k) => (f.delay = k * WAVE.stagger));
+    return { id, fronts, plume, blip, root };
   }
+
+  // Moves every point of a front outward by its own local speed, then rewrites the line.
+  private advanceFront(terrain: Terrain, c: Contact, listener: Vec, f: Front, dt: number): void {
+    if (f.delay > 0) {
+      f.delay -= dt;
+      f.line.visible = false;
+      return;
+    }
+    if (!f.active) {
+      this.restartFront(terrain, c, f);
+      f.active = true;
+    }
+    const reach = Math.max(c.radius * 2, dist(c.center, listener) * WAVE.reachPast);
+    const n = WAVE.points;
+    const pos = f.line.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const col = f.line.geometry.getAttribute('color') as THREE.BufferAttribute;
+    const base = heightAt(terrain, f.origin.x, f.origin.y);
+    let mean = 0;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const dir = { x: Math.cos(a), y: Math.sin(a) };
+      const here = { x: f.origin.x + dir.x * f.r[i], y: f.origin.y + dir.y * f.r[i] };
+      const h = heightAt(terrain, here.x, here.y);
+      const step = 0.5; // tiles ahead to read the grade
+      const grade = (heightAt(terrain, here.x + dir.x * step, here.y + dir.y * step) - h) / step;
+      const wind = 1 + WAVE.wind * (dir.x * WIND.x + dir.y * WIND.y);
+      const speed = (WAVE.speed * wind) / (1 + WAVE.climbDrag * Math.max(0, grade));
+      f.r[i] += speed * dt;
+      f.peak[i] = Math.max(f.peak[i], h, base);
+      f.amp[i] = Math.exp(-WAVE.shadowFade * (f.peak[i] - h));
+      mean += f.r[i];
+    }
+    mean /= n;
+    const fade = WAVE.brightness * Math.max(0, 1 - (mean / reach) ** 3);
+    for (let i = 0; i <= n; i++) {
+      const k = i % n;
+      const a = (k / n) * Math.PI * 2;
+      const wob = 1 + WAVE.wobble * (valueNoise(Math.cos(a) * WAVE.wobbleScale + f.spawn * 7.3, Math.sin(a) * WAVE.wobbleScale + mean * 0.2) * 2 - 1);
+      const x = f.origin.x + Math.cos(a) * f.r[k] * wob;
+      const y = f.origin.y + Math.sin(a) * f.r[k] * wob;
+      pos.setXYZ(i, x * S, heightAt(terrain, x, y) * S + LIFT, y * S);
+      const v = fade * f.amp[k];
+      col.setXYZ(i, v, v, v);
+    }
+    pos.needsUpdate = true;
+    col.needsUpdate = true;
+    f.line.visible = true;
+    if (mean >= reach) f.active = false; // done: restart from a new point next frame
+  }
+
+  // A new front starts from a fresh point inside the contact circle, so the true source stays vague.
+  private restartFront(terrain: Terrain, c: Contact, f: Front): void {
+    f.spawn++;
+    const seed = hashId(f.line.name) + f.spawn;
+    const a = hash2(seed, 11) * Math.PI * 2;
+    const r = Math.sqrt(hash2(seed, 23)) * c.radius * WAVE.originSpread;
+    f.origin = { x: c.center.x + Math.cos(a) * r, y: c.center.y + Math.sin(a) * r };
+    const base = heightAt(terrain, f.origin.x, f.origin.y);
+    f.r.fill(0);
+    f.peak.fill(base);
+    f.amp.fill(1);
+  }
+}
+
+function makeFront(k: number, seed: number): Front {
+  const n = WAVE.points;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((n + 1) * 3), 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array((n + 1) * 3), 3));
+  // Additive white: a dim vertex color reads as a faint, fading line over the dark map.
+  const mat = new THREE.LineBasicMaterial({ color: PAL.contact, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false });
+  const line = new THREE.Line(geo, mat);
+  line.name = `front-${seed}-${k}`;
+  line.renderOrder = RENDER_ORDER;
+  line.frustumCulled = false;
+  line.visible = false;
+  return { line, origin: { x: 0, y: 0 }, r: new Float32Array(n), peak: new Float32Array(n), amp: new Float32Array(n).fill(1), delay: 0, active: false, spawn: seed % 1000 };
+}
+
+function makePlume(texture: THREE.Texture): THREE.Group {
+  const group = new THREE.Group();
+  for (let i = 0; i < PLUME.puffs; i++) {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, color: PAL.dustPlume, transparent: true, opacity: PLUME.opacity, depthTest: false, depthWrite: false }));
+    sprite.renderOrder = RENDER_ORDER;
+    group.add(sprite);
+  }
+  return group;
+}
+
+// Puffs rise through the plume's height and loop, so the column seems to boil upward.
+function placePlume(terrain: Terrain, plume: THREE.Group, c: Contact, nowMs: number): void {
+  plume.position.set(c.center.x * S, heightAt(terrain, c.center.x, c.center.y) * S, c.center.y * S);
+  plume.children.forEach((child, i) => {
+    const t = (nowMs / PLUME.riseMs + i / PLUME.puffs) % 1;
+    const sprite = child as THREE.Sprite;
+    sprite.position.set((hash2(i, 5) - 0.5) * PLUME.width * S * 0.5, t * PLUME.height * S, (hash2(i, 9) - 0.5) * PLUME.width * S * 0.5);
+    sprite.scale.setScalar(PLUME.width * S * (0.6 + t * 0.8));
+    (sprite.material as THREE.SpriteMaterial).opacity = PLUME.opacity * Math.sin(Math.PI * t);
+  });
+}
+
+function makeBlip(): THREE.Group {
+  const mat = () => new THREE.MeshBasicMaterial({ color: PAL.radio, transparent: true, opacity: BLIP.opacity, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(BLIP.radius * S * 0.8, BLIP.radius * S, 32).rotateX(-Math.PI / 2), mat());
+  const dot = new THREE.Mesh(new THREE.CircleGeometry(BLIP.dot * S, 16).rotateX(-Math.PI / 2), mat());
+  ring.renderOrder = dot.renderOrder = RENDER_ORDER;
+  const group = new THREE.Group();
+  group.add(ring, dot);
+  return group;
+}
+
+function createPuffTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Could not create plume texture');
+  const g = ctx.createRadialGradient(32, 32, 4, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,0.8)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(canvas);
+}
+
+function disposeMarker(m: Marker): void {
+  for (const f of m.fronts) {
+    f.line.geometry.dispose();
+    (f.line.material as THREE.Material).dispose();
+  }
+  m.root.traverse((o) => {
+    if (o instanceof THREE.Sprite || o instanceof THREE.Mesh) (o.material as THREE.Material).dispose();
+    if (o instanceof THREE.Mesh) o.geometry.dispose();
+  });
+}
+
+function hashId(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (Math.imul(h, 31) + id.charCodeAt(i)) | 0;
+  return Math.abs(h);
 }
