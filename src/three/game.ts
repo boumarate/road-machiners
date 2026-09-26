@@ -454,7 +454,7 @@ export class Game {
   private finishPlayback(): void {
     this.anim = null;
     this.phase = null;
-    if ((this.world.turn - 1) % CONFIG.saveTurns === 0) saveWorld(window.localStorage, this.world);
+    saveWorld(window.localStorage, this.world, CONFIG.saveTurns);
     this.refreshUi();
   }
 

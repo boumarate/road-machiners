@@ -24,8 +24,8 @@ describe('local game save', () => {
     const storage = makeStorage();
     const world = newWorld(1337, startKit('standard'));
     const expanded = { ...world, futureFeature: { progress: 7 } };
-    saveWorld(storage, expanded);
-    expect(loadWorld(storage)).toEqual(expanded);
+    saveWorld(storage, { ...expanded, turn: 21 }, 20);
+    expect(loadWorld(storage)).toEqual({ ...expanded, turn: 21 });
   });
 
   it('rejects malformed JSON without replacing the saved data', () => {
@@ -43,13 +43,43 @@ describe('local game save', () => {
     expect(() => loadWorld(storage)).toThrow(/world/);
   });
 
+  it('rejects a save missing a field required for future turns', () => {
+    const storage = makeStorage();
+    const world = newWorld(1337, startKit('standard'));
+    for (const field of ['nextId', 'rngState', 'spawnTimer'] as const) {
+      const incomplete = { ...world };
+      delete (incomplete as Partial<typeof world>)[field];
+      storage.setItem('korovan.save', JSON.stringify({ version: 1, world: incomplete }));
+      expect(() => loadWorld(storage)).toThrow(/world/);
+    }
+  });
+
+  it('saves only after each twentieth completed turn', () => {
+    const storage = makeStorage();
+    const world = newWorld(1337, startKit('standard'));
+    saveWorld(storage, { ...world, turn: 20 }, 20);
+    expect(loadWorld(storage)).toBeNull();
+    saveWorld(storage, { ...world, turn: 21 }, 20);
+    expect(loadWorld(storage)?.turn).toBe(21);
+    saveWorld(storage, { ...world, turn: 22 }, 20);
+    expect(loadWorld(storage)?.turn).toBe(21);
+    saveWorld(storage, { ...world, turn: 41 }, 20);
+    expect(loadWorld(storage)?.turn).toBe(41);
+  });
+
+  it('rejects an invalid interval instead of skipping saves', () => {
+    const storage = makeStorage();
+    const world = newWorld(1337, startKit('standard'));
+    expect(() => saveWorld(storage, world, 0)).toThrow(/interval/);
+  });
+
   it('leaves the last save intact when storage rejects a write', () => {
     const storage = makeStorage();
     const world = newWorld(1337, startKit('standard'));
-    saveWorld(storage, world);
+    saveWorld(storage, { ...world, turn: 21 }, 20);
     const previous = storage.getItem('korovan.save');
     storage.setItem = () => { throw new Error('Quota exceeded'); };
-    expect(() => saveWorld(storage, { ...world, turn: 21 })).toThrow(/Quota exceeded/);
+    expect(() => saveWorld(storage, { ...world, turn: 41 }, 20)).toThrow(/Quota exceeded/);
     expect(storage.getItem('korovan.save')).toBe(previous);
   });
 });
