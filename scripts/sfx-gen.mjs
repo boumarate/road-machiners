@@ -8,7 +8,7 @@ import { cueOf, importFile } from './sfx-lib.mjs';
 const API = 'https://api.elevenlabs.io/v1';
 const RAW_DIR = 'tmp/sfx-raw';
 const SFX_CREDITS_PER_SECOND = 40; // ElevenLabs price for sound effects with a set duration
-const PROMPT_INFLUENCE = 0.5; // above the API default of 0.3, so named details like a sharp crack survive
+const PROMPT_INFLUENCE = 0.7; // well above the API default of 0.3, so the shared recording setup is followed
 
 process.loadEnvFile('.env');
 const key = process.env.ELEVENLABS_API_KEY;
@@ -24,8 +24,7 @@ const cue = cueOf(SOUNDS, id);
 if (!cue.prompt || !cue.seconds) throw new Error(`Cue ${id} needs prompt and seconds to generate`);
 
 const music = cue.bus === 'music';
-// Music gets its own prompt only: the shared style asks for no music.
-const text = music ? cue.prompt : `${SOUND_STYLE} ${cue.prompt}`;
+const text = music ? cue.prompt : `${SOUND_STYLE[cue.bus]} ${cue.prompt}`;
 console.log(`${id}: ${count} x ${cue.seconds}s ${music ? 'music' : `sound, about ${count * cue.seconds * SFX_CREDITS_PER_SECOND} credits`}`);
 console.log(`prompt: ${text}`);
 

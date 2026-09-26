@@ -9,7 +9,8 @@
     "playtest": "node scripts/playtest.mjs",
     "sfx:gen": "vite-node scripts/sfx-gen.mjs",
     "sfx:import": "vite-node scripts/sfx-import.mjs",
-    "sfx:board": "vite --open /sound.html"
+    "sfx:board": "vite --open /sound.html",
+    "sfx:reimport": "vite-node scripts/sfx-reimport.mjs"
   },
   "license": "ISC",
   "description": "",

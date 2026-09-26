@@ -118,7 +118,12 @@ Greenfield: nothing existing consumes audio, so there is no compatibility risk.
 ### Deviations from plan
 - Cue files come from disk by name, `<cue>-<n>.ogg`, through `filesOf` in `src/data/sounds.ts`. Hand-kept file lists broke on every import; rejecting a variant is now one file delete. IV3 becomes: every file in `public/sfx/` belongs to a cue.
 - The import script does not check loop seams. The user hears seams on the board, where loops play looped.
-- Silence trim keeps 20 ms at each end at -60 dB. At -50 dB it cut the Kenney click tails.
+- Silence trim keeps 20 ms at each end at -60 dB. At -50 dB it cut click tails.
+- Loudness is the loudest 400 ms momentary reading with a limiter capped at 6 dB. The EBU integrated meter read clips under 400 ms as silence, and single-pass loudnorm flattened shot transients.
+- Import adds a shared EQ and matches each variant's low and high bands to the cue's first file. The user heard loudness, tone, style and version mismatch across the first batch.
+- Prompts use a per-bus recording setup in `SOUND_STYLE`; cue `volume` sets the mix order.
+- Music import cuts the quiet intro and outro and crossfades the loop seam. The first tracks had 5 to 10 s intros and read as silent.
+- Each file carries its raw source in a comment tag, and `npm run sfx:reimport` rebuilds all files after an import change.
 
 ## Verify
 

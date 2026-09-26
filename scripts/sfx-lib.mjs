@@ -1,15 +1,25 @@
 // Shared sound import: every file, whatever its source, gets the same treatment before the game uses it.
-// RMS level to the bus target by plain gain, so transients keep their punch, capped so peaks stay under the
-// ceiling. Then 48 kHz Ogg Opus. One-shots also get a silence trim and short fades.
+// 1. Music loses its quiet intro and outro and loops through a crossfade.
+// 2. One-shots lose silence at both ends and get short fades.
+// 3. One EQ for all: rumble and harsh top cut.
+// 4. Tone matched to the cue's first file, so variants sound like one sound.
+// 5. Loudness set by the ear-weighted meter, with a gentle limiter on peaks.
+// Output is 48 kHz Ogg Opus with the source path in its comment tag.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 
 export const SFX_DIR = 'public/sfx';
-const PEAK_DB = -1.5; // headroom so encoded peaks do not clip
+const PEAK_DB = -1; // limiter ceiling
+const MAX_LIMIT_DB = 6; // most gain reduction the limiter may do; beyond it the clip is left quieter
 const SILENCE_DB = -60; // quieter than this at either end counts as silence
 const KEEP_S = 0.02; // silence kept at each trimmed end, so soft attacks and tails survive
 const FADE_IN_S = 0.005; // de-click only; keeps the attack
 const FADE_OUT_S = 0.03;
+const EQ = 'highpass=f=40,lowpass=f=14000'; // shared tone curtain
+const BANDS = { low: 'lowpass=f=250', high: 'highpass=f=4000' }; // compared against the mid band
+const MID = 'highpass=f=250,lowpass=f=4000';
+const MAX_MATCH_DB = 6; // largest tone correction toward the reference variant
+const METER_S = 0.4; // the loudness meter's window; shorter clips are padded to it
 const OPUS_KBPS = 96;
 const MUSIC_EDGE_DB = 15; // music quieter than its loudest moment by this much counts as intro or outro
 const MUSIC_XFADE_S = 2; // loop seam crossfade for music
@@ -33,30 +43,66 @@ export function nextName(id) {
 
 export function importFile(source, id, cue, level) {
   const name = nextName(id);
-  const src = cue.bus === 'music' ? musicLoop(source, name) : source;
   const out = `${SFX_DIR}/${name}`;
   if (existsSync(out)) throw new Error(`${out} exists`);
+  const src = cue.bus === 'music' ? musicLoop(source, name) : source;
   const trim = `silenceremove=start_periods=1:start_threshold=${SILENCE_DB}dB:start_silence=${KEEP_S}`;
   const shape = cue.loop ? [] : [trim, 'areverse', trim, `afade=t=in:d=${FADE_OUT_S}`, 'areverse', `afade=t=in:d=${FADE_IN_S}`];
-  const shaped = shape.length ? shape.join(',') : 'anull';
-  const { rms, peak } = measure(src, shaped);
+  const shaped = [...shape, EQ, ...toneMatch(src, [...shape, EQ].join(','), id)].join(',');
+  const { loudness, peak } = measure(src, shaped);
   if (peak < SILENT_PEAK_DB) throw new Error(`${src} peaks at ${peak} dB; it is near silence. Skip it.`);
-  const gain = Math.min(level - rms, PEAK_DB - peak);
-  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', src, '-af', `${shaped},volume=${gain.toFixed(2)}dB`, '-ar', '48000', '-c:a', 'libopus', '-b:a', `${OPUS_KBPS}k`, out]);
-  console.log(`${src} -> ${out}  RMS ${rms.toFixed(1)} dB, gain ${gain.toFixed(1)} dB${gain < level - rms ? ' (peak-capped)' : ''}`);
+  const gain = Math.min(level - loudness, PEAK_DB + MAX_LIMIT_DB - peak);
+  const limiter = `alimiter=limit=${dbToLinear(PEAK_DB)}:attack=1:release=50:level=false:latency=true`;
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', src, '-af', `${shaped},volume=${gain.toFixed(2)}dB,${limiter}`, '-ar', '48000', '-c:a', 'libopus', '-b:a', `${OPUS_KBPS}k`, '-metadata', `comment=${source}`, out]);
+  const short = gain < level - loudness ? `, ${(level - loudness - gain).toFixed(1)} dB under target` : '';
+  console.log(`${source} -> ${out}  ${loudness.toFixed(1)} LUFS, gain ${gain.toFixed(1)} dB${short}`);
   return name;
 }
 
-// RMS and sample peak of the shaped sound. The EBU integrated meter needs 400 ms blocks, so it reads short
-// clicks as silence; RMS over the trimmed clip works at any length.
+function dbToLinear(db) {
+  return Math.pow(10, db / 20);
+}
+
+// Shelf EQ that moves this file's low and high bands, relative to its mids, toward the cue's first file.
+function toneMatch(src, shaped, id) {
+  const ref = readdirSync(SFX_DIR).filter((f) => new RegExp(`^${id}-\\d+\\.ogg$`).test(f)).sort((a, b) => variantNumber(a) - variantNumber(b))[0];
+  if (!ref) return [];
+  const want = bandBalance(`${SFX_DIR}/${ref}`, 'anull');
+  const have = bandBalance(src, shaped);
+  const clamp = (db) => Math.max(-MAX_MATCH_DB, Math.min(MAX_MATCH_DB, db));
+  const low = clamp(want.low - have.low);
+  const high = clamp(want.high - have.high);
+  console.log(`  tone toward ${ref}: low ${low.toFixed(1)} dB, high ${high.toFixed(1)} dB`);
+  return [`bass=g=${low.toFixed(2)}:f=250`, `treble=g=${high.toFixed(2)}:f=4000`];
+}
+
+function variantNumber(file) {
+  return Number(file.match(/-(\d+)\.ogg$/)[1]);
+}
+
+// Low and high band RMS relative to the mid band, in dB.
+function bandBalance(src, shaped) {
+  const rms = (band) => statValue(ffmpegLog(src, `${shaped},${band},astats=measure_perchannel=0:measure_overall=RMS_level`), 'RMS level dB');
+  const mid = rms(MID);
+  return { low: rms(BANDS.low) - mid, high: rms(BANDS.high) - mid };
+}
+
+// Loudest 400 ms momentary loudness, which tracks how loud a sound feels, and sample peak.
 function measure(src, shaped) {
-  const r = spawnSync('ffmpeg', ['-hide_banner', '-nostats', '-i', src, '-af', `${shaped},astats=measure_perchannel=0:measure_overall=RMS_level+Peak_level`, '-f', 'null', '-'], { encoding: 'utf8' });
-  if (r.status !== 0) throw new Error(`ffmpeg could not measure ${src}: ${r.stderr.slice(-400)}`);
-  return { rms: statValue(r.stderr, 'RMS level dB'), peak: statValue(r.stderr, 'Peak level dB') }; // astats prints to stderr
+  const log = ffmpegLog(src, `${shaped},apad=whole_dur=${METER_S},ebur128=peak=sample`);
+  const momentary = [...log.matchAll(/ M: *(-?[\d.]+)/g)].map((m) => Number(m[1]));
+  if (momentary.length === 0) throw new Error(`Could not meter ${src}`);
+  return { loudness: Math.max(...momentary), peak: statValue(log.slice(log.lastIndexOf('Summary:')), 'Peak') };
+}
+
+function ffmpegLog(src, filters) {
+  const r = spawnSync('ffmpeg', ['-hide_banner', '-nostats', '-i', src, '-af', filters, '-f', 'null', '-'], { encoding: 'utf8' });
+  if (r.status !== 0) throw new Error(`ffmpeg failed on ${src}: ${r.stderr.slice(-400)}`);
+  return r.stderr; // meters print to stderr
 }
 
 function statValue(log, key) {
-  const m = log.match(new RegExp(`${key}: (-?[\\d.]+|-inf)`));
+  const m = log.match(new RegExp(`${key}: *(-?[\\d.]+|-inf)`));
   if (!m || m[1] === '-inf') throw new Error(`Could not measure ${key}; the file may be silent`);
   return Number(m[1]);
 }
