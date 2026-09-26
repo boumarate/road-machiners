@@ -77,10 +77,7 @@ export function refreshVision(world: World): void {
   world.player.visible = [...seen].sort((a, b) => a - b);
   for (const idx of seen) world.player.explored[idx] = true;
   const me = world.vehicles.find((x) => x.id === world.player.vehicleId);
-  const before = new Set(world.player.contacts.map((c) => c.vehicleId));
-  const next = me ? contactsOf(world, me, Infinity) : [];
-  for (const c of next) if (!before.has(c.vehicleId)) world.events.push({ t: 'contact', vehicle: c.vehicleId, sources: c.sources });
-  world.player.contacts = next;
+  world.player.contacts = me ? contactsOf(world, me, Infinity) : [];
   world.player.clouds = me ? cloudsSeenBy(world, me).map((c) => c.id) : [];
 }
 

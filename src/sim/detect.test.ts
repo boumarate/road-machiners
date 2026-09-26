@@ -2,7 +2,7 @@ import { DETECT } from '../data/detect';
 import { sunAt } from './sun';
 import { TIME } from '../data/time';
 import { describe, expect, it } from 'vitest';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, editableTerrain, emptyWorld } from './testkit';
 import { advanceDust, cloudsSeenBy, contactsOf, dustRange, scannerRange, soundRange } from './detect';
 import { makePart } from './factory';
 import { mountPart } from './inventory';
@@ -13,6 +13,7 @@ import { refreshVision } from './vision';
 // Raises a small hill between x=32 and x=36 at y=30, tall enough to block a plain sight line
 // but not the wider systems (sound, radio) that ignore hills.
 function raiseHill(w: ReturnType<typeof emptyWorld>): void {
+  editableTerrain(w);
   const size = w.terrain.size;
   for (let i = 32; i <= 36; i++) for (let j = 28; j <= 32; j++) w.terrain.heights[j * (size + 1) + i] = 3;
 }
@@ -30,6 +31,7 @@ describe('soundRange and dustRange', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
     v.speed = 4;
+    editableTerrain(w);
     const idx = Math.floor(v.pos.y) * w.terrain.size + Math.floor(v.pos.x);
     w.terrain.types[idx] = 'road';
     const onRoad = dustRange(w, v);
@@ -124,7 +126,7 @@ describe('dust clouds', () => {
     v.speed = 4;
     v.heading = 0;
     v.trail = [0, 1, 2, 3, 4].map((i) => ({ x: 36 + i, y: 30, heading: 0 })); // drove east into x=40 this turn
-    w.terrain.types.fill('sand'); // test ground is road, which raises little dust
+    editableTerrain(w).types.fill('sand'); // test ground is road, which raises little dust
     expect(dustRange(w, v)).toBeGreaterThan(40);
     return { w, v, observer: w.vehicles[0] };
   }

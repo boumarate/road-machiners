@@ -106,6 +106,7 @@ export type NpcBrain = {
     stalled?: number; // consecutive turns without forward progress
     recovery?: number; // turns left backing away from a blockage
     recoveryGoal?: Vec;
+    farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
 };
 
 export type Vehicle = {
@@ -185,7 +186,6 @@ export type GameEvent =
   | { t: 'job'; vehicle: string; job: Job; outcome: 'started' | 'done' | 'cancelled' }
   | { t: 'breakdown'; vehicle: string; part: string }
   | { t: 'searched'; stock: string } // the player finished searching a stock; its loot can now be taken
-  | { t: 'contact'; vehicle: string; sources: Contact['sources'] }
   | { t: 'weather'; event: WeatherEvent; outcome: 'started' | 'ended' }
   | { t: 'info'; text: string };
 

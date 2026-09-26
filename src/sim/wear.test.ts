@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TerrainTypeId } from '../data/terrain';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, editableTerrain } from './testkit';
 import { mountedParts } from './grid';
 import { tileAt } from './terrain';
 import type { Vehicle, World } from './types';
@@ -21,7 +21,7 @@ function totalHp(v: Vehicle): number {
 
 function setTerrainUnder(w: World, v: Vehicle, len: number, type: TerrainTypeId): void {
   const tile = tileAt(w.terrain, { x: v.pos.x + len / 2, y: v.pos.y });
-  w.terrain.types[tile] = type;
+  editableTerrain(w).types[tile] = type;
 }
 
 describe('wear', () => {

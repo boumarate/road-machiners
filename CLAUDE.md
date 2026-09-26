@@ -12,10 +12,15 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 - `npm test` runs the sim unit tests.
 - `npm run typecheck` runs tsc.
 - `npm run playtest -- --url <dev server>` boots the game in headless Chromium, plays turns, and fails on page errors, the crash screen or low FPS. It needs the dev server running. Screenshots go to `.playtest/`.
+- `npm run perf -- --url <dev server>` boots the game in Chromium with the Metal GPU and times boot, turns, move previews and frames. It fails on any miss against `scripts/perf-budgets.json`.
+- `npm run sfx:board` opens the dev sound board for auditioning every cue.
+- `npm run sfx:import -- <cue> <file...>` imports files as variants of a cue in `src/data/sounds.ts`.
+- `npm run sfx:gen -- <cue> <count>` generates variants with ElevenLabs. It costs credits, so ask before running it.
+- `npm run sfx:reimport` rebuilds every sound file from its raw source in `tmp/sfx-raw/` after an import change.
 
 ## Config
 
-`.env` holds `VITE_SEED`, the world seed, `VITE_START_KIT`, the player start kit from `src/data/start.ts`, `VITE_COMBAT_SHOT_MS` and `VITE_COMBAT_READ_MS` for projectile travel and result-reading time, and `VITE_SAVE_TURNS` for the number of completed turns between local saves. Durations and the save interval must be positive integers. Copy `.env.example` to `.env` on a fresh checkout. Existing checkouts must add any values missing from `.env.example`. Missing or invalid values stop the boot.
+`.env` holds `VITE_SEED`, the world seed, `VITE_START_KIT`, the player start kit from `src/data/start.ts`, `VITE_COMBAT_SHOT_MS` and `VITE_COMBAT_READ_MS` for projectile travel and result-reading time, and `VITE_SAVE_TURNS` for the number of completed turns between local saves. `ELEVENLABS_API_KEY` and `SFX_MAX_GENERATIONS` are read only by the sound generation script. Durations and the save interval must be positive integers. Copy `.env.example` to `.env` on a fresh checkout. Existing checkouts must add any values missing from `.env.example`. Missing or invalid values stop the boot.
 
 ## Architecture
 
@@ -27,7 +32,12 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 - `src/sim/resources.ts` accesses driver resources. NPC fuel and supplies use the player base rules. `src/sim/economy.ts` owns paid transactions, and `src/sim/salvage.ts` owns finite site and wreck stock shared by all collectors. Town markets remain unlimited. Player defeat remains a separate recovery rule.
 - `src/phys/` runs vehicle movement in Rapier. `endTurn(world, physicsMove(...))` plugs it into the turn pipeline in place of the sim's 2D movement. A turn restores the physics world from a snapshot and simulates one second, so the path preview runs the same physics as the turn. Physics numbers live in `src/data/physics.ts`.
 - `src/three/` holds the 3D game: `game.ts` wires input to sim, sim and physics to the view, and the HTML UI. `src/three/render/` holds the 3D views. `src/render/` holds the palette and the ground painter. `src/ui/` holds the HTML overlay panels.
-- `src/three/save.ts` stores the whole world in browser local storage after each configured number of completed turns and restores it on boot. Later unsaved changes are lost on reload. Invalid or incompatible saves stop boot with the crash screen. New world fields enter new saves automatically, but old saves can need migration.
+- `src/sim/nav/` holds route planning data. Grids are built once per terrain and vehicle radius, and `warmRoutes` builds them at boot. Wrecks and parked vehicles are stamped per query. Long routes search a coarse corridor first.
+- NPCs farther than sight radius plus `PERF.liveMargin` from the player have no physics body. `src/sim/far.ts` moves them along stored routes, and they never crash or ram.
+- `src/three/render/scope.ts` detaches map chunks outside the camera view. Static views register with a scope instead of adding to the scene.
+- `src/perf.ts` holds named timers for seams, never hot loops. In dev, a panel in the top left shows them.
+- `src/three/save.ts` stores the whole world except the terrain in browser local storage after each configured number of completed turns and restores it on boot. The terrain is rebuilt from the seed on load. Later unsaved changes are lost on reload. Invalid or incompatible saves stop boot with the crash screen. New world fields enter new saves automatically, but old saves can need migration.
+- `src/audio/` plays sound through Web Audio. `src/data/sounds.ts` lists every cue and its files in `public/sfx/`, and a test keeps both in sync. Every file goes through `scripts/sfx-lib.mjs`, which sets loudness per sound group and one format. Generated prompts start with the shared `SOUND_STYLE`, so sounds stay consistent.
 - Any uncaught error shows a fullscreen crash screen with the message.
 - All randomness goes through `src/sim/rng.ts` with state in the world. Render-only noise lives in `src/render/noise.ts`.
 - Map coordinates are in tiles. Physics and 3D space are in meters: map x is 3D x, map y is 3D z, height is 3D y. `src/phys/frames.ts` converts.
@@ -41,7 +51,7 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 
 ## Art
 
-Static props, obstacles and landmarks are low-poly Blender models. Vehicles, the town pads and water are built from Three.js shapes in code. The ground is a per-tile painted canvas texture.
+Static props, obstacles and landmarks are low-poly Blender models. Vehicles, settlement houses, ruins and water are built from Three.js shapes in code. Models placed many times, like rocks and orchard trees, are drawn as instanced meshes. The ground is a per-tile painted canvas texture.
 
 Some models come from Blender scripts in `tools/blender/`. Blender is installed with `brew install --cask blender`. Each script writes a `.glb` into `public/models/`, and both are committed. Rebuild one with `blender --background --python tools/blender/<name>.py -- public/models/<name>.glb tmp/<name>.png`. The second path is an optional preview render from the game camera angle.
 
@@ -55,7 +65,7 @@ To add a model:
 6. Keep the low-poly style: few vertices per cylinder, flat shading, and small seeded `dent_by` values for worn metal.
 7. Fix the seed, so a rebuild gives the same file.
 8. Render the preview and look at it before wiring the model into the game.
-9. Add the name to `NAMES` in `src/three/render/models.ts`. Use `model('<name>')` in a view. Boot fails if the file is missing.
+9. Add the name to `NAMES` in `src/three/render/models.ts`. Use `model('<name>')` in a view, or `instancedModel()` for many copies. Boot fails if the file is missing.
 10. Take an in-game screenshot with a Playwright script in `tmp/`, and run `npm run playtest`. The user confirms small visual details.
 
 `models.ts` loads every model at boot. It swaps the glTF materials for flat Lambert, so models match the procedural meshes. Models that need to change with game state, such as vehicles with mounted parts, need a plan before they replace procedural code.

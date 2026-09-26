@@ -7,8 +7,8 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
 import { RULES } from '../data/rules';
+import { fuelLimited, isNear } from '../sim/far';
 import { isDriveObstacle } from '../sim/mapgen';
-import { getResources } from '../sim/resources';
 import { vehicleMass } from '../sim/mass';
 import { vehicleStats, type VehicleStats } from '../sim/stats';
 import { route, straightClear } from '../sim/path';
@@ -66,15 +66,18 @@ export function freeDrive(d: Drive): void {
 
 // Brings the physics world in line with the sim: new and removed vehicles and obstacles, vehicle
 // masses after loadout changes, and vehicles the rules moved, such as a defeated player waking up in town.
+// Only near vehicles keep a body. A far vehicle loses its body and driver memory, and gets a new body
+// at its sim pose once it comes near again.
 export function syncDrive(d: Drive, w: World): void {
-  const ids = new Set(w.vehicles.map((v) => v.id));
+  const near = w.vehicles.filter((v) => isNear(w, v));
+  const ids = new Set(near.map((v) => v.id));
   for (const [id, handle] of Object.entries(d.bodies)) {
     if (ids.has(id)) continue;
     d.world.removeRigidBody(d.world.getRigidBody(handle));
     delete d.bodies[id];
     delete d.memory[id];
   }
-  for (const v of w.vehicles) {
+  for (const v of near) {
     const handle = d.bodies[v.id];
     if (handle === undefined) {
       d.bodies[v.id] = addVehicle(d.world, w, v);
@@ -99,6 +102,9 @@ export function syncDrive(d: Drive, w: World): void {
     const half = PHYSICS.rockHeight / 2;
     const desc = RAPIER.ColliderDesc.cylinder(half, o.r * S).setTranslation(o.pos.x * S, ground + half - PHYSICS.rockSink, o.pos.y * S);
     d.obstacles[o.id] = d.world.createCollider(desc).handle;
+  }
+  for (const v of w.vehicles) {
+    if (isNear(w, v) !== (d.bodies[v.id] !== undefined)) throw new Error(`Vehicle ${v.id} is ${isNear(w, v) ? 'near without' : 'far with'} a physics body`);
   }
 }
 
@@ -131,7 +137,8 @@ function placeBody(body: RAPIER.RigidBody, w: World, v: Vehicle): void {
 }
 
 // Runs one turn of the sim's orders from a copy of the physics world. The input drive stays untouched.
-// Call syncDrive first so the physics world matches the sim.
+// Call syncDrive first so the physics world matches the sim. Only vehicles with a body drive and get
+// frames; far vehicles travel through advanceFar instead.
 export function simulateTurn(d: Drive, w: World): TurnResult {
   return run(d, w, TURN_STEPS);
 }
@@ -143,10 +150,8 @@ function run(d: Drive, w: World, steps: number): TurnResult {
   world.timestep = DT;
   const events = new RAPIER.EventQueue(true);
   const memory: Record<string, Memory> = structuredClone(d.memory);
-  const cars: Car[] = w.vehicles.map((v) => {
-    const handle = d.bodies[v.id];
-    if (handle === undefined) throw new Error(`Vehicle ${v.id} has no physics body; call syncDrive first`);
-    const body = world.getRigidBody(handle);
+  const cars: Car[] = w.vehicles.filter((v) => d.bodies[v.id] !== undefined).map((v) => {
+    const body = world.getRigidBody(d.bodies[v.id]);
     const s = vehicleStats(w, v);
     const b = bodyOf(v.chassisId);
     const mem = memory[v.id];
@@ -237,19 +242,6 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   return { ...base, dest: order.dest, route: path, target: toMps(next), stopAt: false };
 }
 
-// Fuel limits the engine like the 2D rules: under the low-fuel share of the tank the top
-// speed halves, and a tank that cannot cover this turn's drive still lets the truck crawl.
-function fuelLimited(w: World, v: Vehicle, s: VehicleStats, speed: number, order: MoveOrder | null): VehicleStats {
-  const fuel = getResources(w, v).fuel;
-  const low = fuel > 0 && fuel < chassisDef(v.chassisId).fuelCap * RULES.lowFuelThreshold;
-  const limit = low ? Math.max(s.maxSpeed * RULES.lowFuelSpeedFactor, speed - s.brake) : s.maxSpeed;
-  const capped = low ? { ...s, maxSpeed: limit } : s;
-  const wanted = order?.kind === 'through' ? zoneSpeed(capped, speed, dist(v.pos, order.dest)) : Math.min(capped.maxSpeed, speed + capped.accel);
-  if (wanted * s.fuelPerTile <= fuel) return capped;
-  const cap = Math.max(RULES.crawlSpeed, speed - s.brake);
-  return { ...s, maxSpeed: cap, accel: Math.min(s.accel, RULES.crawlSpeed) };
-}
-
 // One physics step of driving. Steer at the destination and hold the turn's speed. A stop order slows
 // to arrive. A slow truck with the destination far behind backs up, wheels turned the other way.
 // A drive-through point counts as passed only once close; a side click behind the truck still steers.
@@ -331,6 +323,24 @@ export function restFrame(w: World, v: Vehicle): VehicleFrame {
   return { pos: { x: v.pos.x * S, y: rideHeight(w, v), z: v.pos.y * S }, rot: q, wheels };
 }
 
+// Frames for a vehicle that moved without physics: rest poses along its trail, one per physics step,
+// ending on its sim pose. Far vehicles get these so the view moves them smoothly, like driven ones.
+export function trailFrames(w: World, v: Vehicle): VehicleFrame[] {
+  const last = v.trail.length - 1;
+  if (last < 1) throw new Error(`Vehicle ${v.id} has no trail to frame`);
+  const frames: VehicleFrame[] = [];
+  for (let i = 1; i <= TURN_STEPS; i++) {
+    const t = (i / TURN_STEPS) * last;
+    const k = Math.min(Math.floor(t), last - 1);
+    const f = t - k;
+    const a = v.trail[k];
+    const b = v.trail[k + 1];
+    const heading = a.heading + angleDiff(a.heading, b.heading) * f;
+    frames.push(restFrame(w, { ...v, pos: { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }, heading }));
+  }
+  return frames;
+}
+
 // Height of the body center for a truck standing at its sim position with springs at rest.
 function rideHeight(w: World, v: Vehicle): number {
   const b = bodyOf(v.chassisId);
@@ -346,38 +356,19 @@ export function bodyState(d: Drive, id: string): { pos: Vec; heading: number; sp
   return { pos: { x: t.x / S, y: t.z / S }, heading: headingOf(body.rotation()), speed: forwardSpeed(body) };
 }
 
+// A heightfield over the (n + 1) x (n + 1) corner grid. Rapier rows run along z and columns along x,
+// stored column-major, and the field is centered on its collider, so it moves by half the map size.
 function addTerrain(world: RAPIER.World, w: World): number {
   const n = w.terrain.size;
-  const vertices = new Float32Array((n + 1) * (n + 1) * 3);
-  for (let j = 0; j <= n; j++) {
-    for (let i = 0; i <= n; i++) {
-      const k = (j * (n + 1) + i) * 3;
-      vertices[k] = i * S;
-      vertices[k + 1] = w.terrain.heights[j * (n + 1) + i] * S;
-      vertices[k + 2] = j * S;
-    }
+  const heights = new Float32Array((n + 1) * (n + 1));
+  for (let i = 0; i <= n; i++) {
+    for (let j = 0; j <= n; j++) heights[i * (n + 1) + j] = w.terrain.heights[j * (n + 1) + i];
   }
-  const terrain = world.createCollider(RAPIER.ColliderDesc.trimesh(vertices, terrainIndices(n))).handle;
   const size = n * S;
+  const field = RAPIER.ColliderDesc.heightfield(n, n, heights, { x: size, y: S, z: size }).setTranslation(size / 2, 0, size / 2);
+  const terrain = world.createCollider(field).handle;
   for (const [x, z, hx, hz] of [[-WALL, size / 2, WALL, size], [size + WALL, size / 2, WALL, size], [size / 2, -WALL, size, WALL], [size / 2, size + WALL, size, WALL]]) {
     world.createCollider(RAPIER.ColliderDesc.cuboid(hx, PHYSICS.wallHeight, hz).setTranslation(x, 0, z));
   }
   return terrain;
-}
-
-// Two upward-facing triangles per tile over the (n + 1) x (n + 1) corner grid.
-export function terrainIndices(n: number): Uint32Array {
-  const idx = new Uint32Array(n * n * 6);
-  let k = 0;
-  for (let j = 0; j < n; j++) {
-    for (let i = 0; i < n; i++) {
-      const a = j * (n + 1) + i;
-      const b = a + 1;
-      const c = a + n + 1;
-      const d = c + 1;
-      idx.set([a, c, b, b, c, d], k);
-      k += 6;
-    }
-  }
-  return idx;
 }

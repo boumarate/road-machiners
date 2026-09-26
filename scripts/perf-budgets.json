@@ -1,0 +1,6 @@
+{
+  "bootMs": 2000,
+  "turnMs": 100,
+  "previewMs": 50,
+  "frameP95Ms": 17
+}

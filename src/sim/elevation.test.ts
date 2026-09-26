@@ -1,7 +1,6 @@
 import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
-import { TERRAIN } from '../data/terrain';
 import { elevationAt } from './elevation';
 import { newWorld } from './world';
 
@@ -21,18 +20,16 @@ describe('elevationAt', () => {
     expect(w.rngState).toBe(before);
   });
 
-  it('keeps town centers level, with Bowl recessed inside its crater', () => {
+  it('levels town floors at their local terrain height', () => {
     for (const town of REGION.towns) {
-      const crater = TERRAIN.features.craters.find((feature) => feature.center.x === town.pos.x && feature.center.y === town.pos.y);
-      const expectedHeight = -(crater?.depth ?? 0);
-      expect(elevationAt(5, town.pos.x, town.pos.y)).toBeCloseTo(expectedHeight);
-      expect(elevationAt(5, town.pos.x + 1, town.pos.y)).toBeCloseTo(expectedHeight);
+      const floor = elevationAt(5, town.pos.x, town.pos.y);
+      expect(elevationAt(5, town.pos.x + 1, town.pos.y)).toBeCloseTo(floor);
+      expect(elevationAt(5, town.pos.x, town.pos.y + 1)).toBeCloseTo(floor);
     }
   });
 
-  it('is flattened along road centerlines', () => {
-    const road = REGION.roads[0];
-    const mid = { x: (road[0].x + road[1].x) / 2, y: (road[0].y + road[1].y) / 2 };
-    expect(Math.abs(elevationAt(5, mid.x, mid.y))).toBeLessThan(0.01);
+  it('retains broad rises and falls along roads', () => {
+    const samples = REGION.roads[0].map((p) => elevationAt(5, p.x, p.y));
+    expect(Math.max(...samples) - Math.min(...samples)).toBeGreaterThan(0.5);
   });
 });

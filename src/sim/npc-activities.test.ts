@@ -1,6 +1,6 @@
 import { TERRAIN } from '../data/terrain';
 import { describe, expect, it } from 'vitest';
-import { emptyWorld, addVehicle } from './testkit';
+import { emptyWorld, addVehicle, editableTerrain } from './testkit';
 import { planNpcOrders } from './ai';
 import { getResources } from './resources';
 import { REGION } from '../data/region';
@@ -187,6 +187,7 @@ describe('NPC activities', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const player = w.vehicles[0];
     player.speed = 0; // parked: no sound, no dust
+    editableTerrain(w);
     const size = w.terrain.size;
     for (let i = 33; i <= 37; i++) for (let j = 28; j <= 32; j++) w.terrain.heights[j * (size + 1) + i] = 3;
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 }); // beyond the hill

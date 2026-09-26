@@ -1,5 +1,9 @@
+import RAPIER from '@dimforge/rapier3d-compat';
+import { PHYSICS } from '../data/physics';
 import { START_KITS } from '../data/start';
 import { beforeAll, expect, it } from 'vitest';
+import { randRange } from '../sim/rng';
+import { heightAt } from '../sim/terrain';
 import { dist, type Vec } from '../sim/vec';
 import { endTurn, newWorld, setMoveOrder } from '../sim/world';
 import { buildDrive, freeDrive, initPhysics, type Drive, type TurnResult } from './drive';
@@ -16,7 +20,7 @@ function driveRoute(start: Vec, target: Vec): { maxTilt: number; remaining: numb
   w.player.fuel = 999;
   let drive: Drive = buildDrive(w);
   let maxTilt = 0;
-  for (let i = 0; i < 14 && dist(w.vehicles[0].pos, target) > 1; i++) {
+  for (let i = 0; i < 30 && dist(w.vehicles[0].pos, target) > 1; i++) {
     w = setMoveOrder(w, { kind: 'stopAt', dest: target });
     let result: TurnResult | null = null;
     w = endTurn(w, physicsMove(drive, (next) => (result = next)));
@@ -34,19 +38,55 @@ function driveRoute(start: Vec, target: Vec): { maxTilt: number; remaining: numb
 
 it('a truck stays under 20 degrees of tilt at both canyon road crossings', () => {
   for (const [start, target] of [
-    [{ x: 80, y: 25 }, { x: 94, y: 31 }],
-    [{ x: 90, y: 82 }, { x: 100, y: 73 }],
+    [{ x: 417, y: 125.33 }, { x: 443, y: 129.67 }],
+    [{ x: 490, y: 375 }, { x: 507, y: 358 }],
   ] as [Vec, Vec][]) {
     const result = driveRoute(start, target);
     expect(result.remaining).toBeLessThan(3);
     expect(result.maxTilt).toBeLessThan(20);
   }
-});
+}, 60_000);
 
 it('the Bowl crater exit leans the truck without rolling it onto its side', () => {
   const start = newWorld(1337, START_KITS.standard).vehicles[0].pos;
-  const result = driveRoute(start, { x: 25, y: 73 });
+  const result = driveRoute(start, { x: 101, y: 432 });
   expect(result.remaining).toBeLessThan(3);
   // 45 degrees is halfway to a sideways rollover; the crater is rougher than a road crossing.
   expect(result.maxTilt).toBeLessThan(45);
+}, 60_000);
+
+it('the terrain collider is a heightfield whose surface matches the corner grid', () => {
+  const S = PHYSICS.metersPerTile;
+  const w = newWorld(1, START_KITS.standard);
+  const t = w.terrain;
+  const drive = buildDrive(w);
+  const ground = drive.world.getCollider(drive.terrain);
+  expect(ground.shapeType()).toBe(RAPIER.ShapeType.HeightField);
+  const corner = (i: number, j: number) => t.heights[j * (t.size + 1) + i] * S;
+  const rng = { rngState: 7 };
+  let flat = 0;
+  for (let k = 0; k < 200; k++) {
+    const x = randRange(rng, 0, t.size);
+    const y = randRange(rng, 0, t.size);
+    const top = 1000;
+    const toi = ground.castRay(new RAPIER.Ray({ x: x * S, y: top, z: y * S }, { x: 0, y: -1, z: 0 }), 2 * top, true);
+    expect(toi).toBeGreaterThanOrEqual(0);
+    const hit = top - toi;
+    const i = Math.floor(x);
+    const j = Math.floor(y);
+    const fx = x - i;
+    const fy = y - j;
+    const [a, b, c, d] = [corner(i, j), corner(i + 1, j), corner(i, j + 1), corner(i + 1, j + 1)];
+    // Both triangles share the b-c diagonal: a, b, c below it and b, c, d above it.
+    const split = fx + fy <= 1 ? a + (b - a) * fx + (c - a) * fy : d + (c - d) * (1 - fx) + (b - d) * (1 - fy);
+    expect(Math.abs(hit - split)).toBeLessThan(0.05);
+    expect(hit).toBeGreaterThanOrEqual(Math.min(a, b, c, d) - 0.05);
+    expect(hit).toBeLessThanOrEqual(Math.max(a, b, c, d) + 0.05);
+    if (Math.max(a, b, c, d) - Math.min(a, b, c, d) < 1e-6) {
+      flat++;
+      expect(Math.abs(hit - heightAt(t, x, y) * S)).toBeLessThan(0.05);
+    }
+  }
+  expect(flat).toBeGreaterThan(0);
+  freeDrive(drive);
 });

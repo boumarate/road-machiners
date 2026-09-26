@@ -116,23 +116,9 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       if (ev.kind === 'storm' && dist(playerVehicle(world).pos, ev.pos) - ev.radius > TERRAIN.vision.radius) return null;
       return { text: `${ev.kind === 'storm' ? 'Dust storm' : ev.kind === 'heatwave' ? 'Heat wave' : 'Overcast'} ${e.outcome}`, cls: 'dim' };
     }
-    case 'contact': {
-      // A contact never names the vehicle; the log gives only a rough bearing and what gave it away.
-      const c = world.player.contacts.find((x) => x.vehicleId === e.vehicle);
-      if (!c) return null;
-      return { text: `Contact to the ${compass(playerVehicle(world).pos, c.center)}: ${e.sources.join(', ')}`, cls: 'bad' };
-    }
     case 'spawn':
     case 'despawn':
     case 'arrived':
       return null;
   }
-}
-
-const COMPASS = ['east', 'southeast', 'south', 'southwest', 'west', 'northwest', 'north', 'northeast'];
-
-// Map y grows south, so bearing 0 is east and a quarter turn is south.
-function compass(from: Vec, to: Vec): string {
-  const turn = Math.atan2(to.y - from.y, to.x - from.x) / (Math.PI * 2);
-  return COMPASS[((Math.round(turn * 8) % 8) + 8) % 8];
 }

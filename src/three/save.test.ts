@@ -37,9 +37,9 @@ describe('local game save', () => {
 
   it('rejects incompatible versions and incomplete worlds', () => {
     const storage = makeStorage();
-    storage.setItem('korovan.save', JSON.stringify({ version: 2, world: { turn: 21 } }));
-    expect(() => loadWorld(storage)).toThrow(/version/);
     storage.setItem('korovan.save', JSON.stringify({ version: 3, world: { turn: 21 } }));
+    expect(() => loadWorld(storage)).toThrow(/version/);
+    storage.setItem('korovan.save', JSON.stringify({ version: 4, world: { turn: 21 } }));
     expect(() => loadWorld(storage)).toThrow(/world/);
   });
 
@@ -49,7 +49,8 @@ describe('local game save', () => {
     for (const field of ['nextId', 'rngState', 'spawnTimer', 'weather'] as const) {
       const incomplete = { ...world };
       delete (incomplete as Partial<typeof world>)[field];
-      storage.setItem('korovan.save', JSON.stringify({ version: 3, world: incomplete }));
+      const { terrain: _terrain, ...saved } = incomplete;
+      storage.setItem('korovan.save', JSON.stringify({ version: 4, world: saved }));
       expect(() => loadWorld(storage)).toThrow(/world/);
     }
   });
@@ -81,5 +82,21 @@ describe('local game save', () => {
     storage.setItem = () => { throw new Error('Quota exceeded'); };
     expect(() => saveWorld(storage, { ...world, turn: 41 }, 20)).toThrow(/Quota exceeded/);
     expect(storage.getItem('korovan.save')).toBe(previous);
+  });
+
+  it('stores no terrain, fits the local storage quota and restores far routes', () => {
+    const storage = makeStorage();
+    const world = newWorld(1337, startKit('standard'));
+    const npc = world.vehicles.find((v) => v.brain);
+    if (!npc?.brain) throw new Error('The start world needs an NPC');
+    npc.brain.farRoute = { dest: { x: 300, y: 200 }, points: [{ x: 290, y: 205 }, { x: 300, y: 200 }] };
+    saveWorld(storage, { ...world, turn: 21 }, 20);
+    const raw = storage.getItem('korovan.save')!;
+    expect(JSON.parse(raw).world).not.toHaveProperty('terrain');
+    // Browsers allow about 5 MB of local storage per origin.
+    expect(raw.length).toBeLessThan(5_000_000);
+    const loaded = loadWorld(storage)!;
+    expect(loaded).toEqual({ ...world, turn: 21 });
+    expect(loaded.terrain).toBe(world.terrain);
   });
 });

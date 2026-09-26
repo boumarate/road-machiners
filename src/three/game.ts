@@ -2,56 +2,99 @@ import { startKit } from "../data/start";
 // The 3D game: wires input to the sim, the sim and physics to the Three.js view, and the HTML UI.
 // Sim time only moves while a turn plays. The path preview runs the same physics the turn will run.
 
-import * as THREE from 'three';
-import { CONFIG } from '../config';
-import { partDef } from '../data/parts';
-import { PHYSICS } from '../data/physics';
+import * as THREE from "three";
+import { CONFIG } from "../config";
+import { partDef } from "../data/parts";
+import { PHYSICS } from "../data/physics";
+import {
+  buildDrive,
+  freeDrive,
+  restFrame,
+  simulateTurn,
+  syncDrive,
+  TURN_STEPS,
+  type Drive,
+  type TurnResult,
+} from "../phys/drive";
+import {
+  groundPoint,
+  toMap,
+  type TurnFrames,
+  type V3,
+  type VehicleFrame,
+} from "../phys/frames";
+import { applyTurn, physicsMove } from "../phys/turn";
+import { playerVehicle } from "../sim/damage";
+import { corePart, mountedParts } from "../sim/grid";
+import { canScavenge, scavenge } from "../sim/locations";
+import { locationAt, townAt } from "../sim/sites";
+import { maxTurn, vehicleStats } from "../sim/stats";
+import { clickOrder, throttleFor } from "../sim/steering";
+import { warmRoutes } from "../sim/path";
+import { CHASSIS } from "../data/chassis";
+import type { Vehicle, World } from "../sim/types";
+import type { Vec } from "../sim/vec";
+import { playerSees, tileOf, visibleTiles } from "../sim/vision";
+import { dist, DEG } from "../sim/vec";
+import { TERRAIN } from "../data/terrain";
+import {
+  cloneWorld,
+  endTurn,
+  hostileToPlayer,
+  newWorld,
+  setAutoFire,
+  setDirect,
+  setMoveOrder,
+  setWeaponOrder,
+} from "../sim/world";
+import { PAL } from "../render/palette";
+import { timed } from "../perf";
+import { CharacterScreen } from "../ui/character";
+import { HitCard } from "../ui/hitCard";
+import type { UiHost } from "../ui/host";
+import { Hud } from "../ui/hud";
+import { InventoryScreen } from "../ui/inventory";
+import { TownScreen } from "../ui/town";
+import { getWeaponReadout, WeaponPanel, weaponsForClick } from "../ui/weapons";
+import { CameraRig } from "./render/camera";
+import { FogView } from "./render/fog";
+import { Fx3D } from "./render/fx";
+import { Labels } from "./render/labels";
+import { ObstacleViews } from "./render/obstacles";
+import { PathView } from "./render/path";
+import { RenderScope } from "./render/scope";
+import { addSites } from "./render/sites";
+import { terrainMesh } from "./render/terrain";
+import { VehicleView, type Ring3 } from "./render/vehicle";
+import { WeaponRangeView } from "./render/weaponRange";
+import { WeatherView } from "./render/weather";
+import { ZonesView } from "./render/zones";
 import { REGION } from '../data/region';
-import { buildDrive, freeDrive, restFrame, simulateTurn, syncDrive, TURN_STEPS, type Drive, type TurnResult } from '../phys/drive';
-import { groundPoint, headingOf, toMap, type TurnFrames, type V3, type VehicleFrame } from '../phys/frames';
-import { applyTurn, physicsMove } from '../phys/turn';
+import { TERRAIN_TYPES } from '../data/terrain';
 import { bodyOf } from '../phys/body';
-import { playerVehicle } from '../sim/damage';
-import { corePart, mountedParts } from '../sim/grid';
-import { canLoot, canScavenge, salvageHere, scavenge } from '../sim/locations';
-import { locationAt, townAt } from '../sim/sites';
-import { maxTurn, vehicleStats } from '../sim/stats';
-import { clickOrder, throttleFor } from '../sim/steering';
-import type { Contact, Vehicle, World } from '../sim/types';
-import type { Vec } from '../sim/vec';
+import { headingOf } from '../phys/frames';
+import { canLoot, salvageHere } from '../sim/locations';
 import { sunAt } from '../sim/sun';
 import { tileAt } from '../sim/terrain';
-import { playerSees, tileOf, visibleTiles } from '../sim/vision';
-import { dist, DEG } from '../sim/vec';
-import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
-import { endTurn, hostileToPlayer, newWorld, setAutoFire, setDirect, setMoveOrder, setWeaponOrder } from '../sim/world';
-import { PAL } from '../render/palette';
-import { CharacterScreen } from '../ui/character';
-import { HitCard } from '../ui/hitCard';
-import type { UiHost } from '../ui/host';
-import { Hud } from '../ui/hud';
-import { InventoryScreen } from '../ui/inventory';
-import { TownScreen } from '../ui/town';
-import { getWeaponReadout, WeaponPanel, weaponsForClick } from '../ui/weapons';
-import { CameraRig } from './render/camera';
-import { FogView } from './render/fog';
-import { Fx3D } from './render/fx';
-import { Labels } from './render/labels';
 import { ContactsView } from './render/contacts';
 import { DustCloudsView } from './render/dust';
-import { SoundRingView } from './render/soundRing';
-import { ObstacleViews } from './render/obstacles';
-import { PathView } from './render/path';
 import { ShadeView } from './render/shade';
-import { buildSites } from './render/sites';
-import { terrainMesh } from './render/terrain';
-import { VehicleView, type Ring3 } from './render/vehicle';
-import { WeaponRangeView } from './render/weaponRange';
-import { WeatherView } from './render/weather';
-import { ZonesView } from './render/zones';
+import { SoundRingView } from './render/soundRing';
 import { loadWorld, saveWorld } from "./save";
+import { MIX } from "../data/sounds";
+import { engineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
+import type { SoundPlayer } from "../audio/player";
+import { uiRoot } from "../ui/dom";
 
 const PLAN_TURNS = 3; // turns of path preview
+
+// Ground speed in m/s at one physics step of a vehicle's turn frames.
+function stepSpeed(frames: VehicleFrame[] | undefined, step: number): number {
+  if (!frames || step < 1 || step >= frames.length) return 0;
+  const a = frames[step - 1].pos;
+  const b = frames[step].pos;
+  return Math.hypot(b.x - a.x, b.z - a.z) * PHYSICS.stepsPerSecond;
+}
 const PICK_PX = 30; // click radius around a vehicle's screen position
 const MIN_ZONE_HALF_ANGLE = Math.PI / 12; // zones stay visible for trucks that barely turn
 const DUST_CHANCE = 0.3; // per moving vehicle per frame while a turn plays, times the ground's dust value
@@ -114,7 +157,10 @@ export class Game {
   private readonly sky = new THREE.HemisphereLight(SKY_DAY, GROUND_DAY, SKY_DAY_INTENSITY);
   private readonly stormTint = Object.assign(document.createElement('div'), { className: 'storm-tint' }); // dust haze while inside a storm
   private readonly rig: CameraRig;
-  private readonly ground: THREE.Mesh;
+  private readonly ground = new THREE.Group(); // terrain chunks near the view, for ground picking
+  private readonly props = new THREE.Group(); // sites and obstacles near the view
+  private readonly fogRoot = new THREE.Group();
+  private readonly scopes: RenderScope[];
   private readonly obstacles: ObstacleViews;
   private readonly fog: FogView;
   private readonly shade: ShadeView;
@@ -126,6 +172,9 @@ export class Game {
   private readonly soundRing = new SoundRingView();
   private readonly path: PathView;
   private readonly fx: Fx3D;
+  readonly sound: SoundDirector;
+  private panelOpen = false; // last frame's panel state, for open and close sounds
+  private readonly loops: SoundLoops;
   private readonly views = new Map<string, VehicleView>();
   private frames: Record<string, VehicleFrame> = {}; // last shown pose per vehicle
   // A played turn: physics movement, then shots in flight when there was combat, then time to read results.
@@ -150,11 +199,12 @@ export class Game {
   private readonly character: CharacterScreen;
   private readonly inventory: InventoryScreen;
 
-  constructor(container: HTMLElement, overlay: HTMLElement) {
+  constructor(container: HTMLElement, overlay: HTMLElement, player: SoundPlayer, private toggleMute: () => void) {
     this.world =
       loadWorld(window.localStorage) ??
       newWorld(CONFIG.seed, startKit(CONFIG.startKit));
     this.drive = buildDrive(this.world);
+    warmRoutes(this.world, [...new Set(Object.values(CHASSIS).map((c) => c.radius))]);
 
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.shadowMap.enabled = true;
@@ -176,19 +226,29 @@ export class Game {
     });
     this.scene.add(this.sun, this.sun.target);
 
-    this.ground = terrainMesh(this.world);
-    this.scene.add(this.ground, buildSites(this.world.terrain));
-    this.obstacles = new ObstacleViews(this.scene, this.world.terrain);
+    // Ground, props and fog cull separately, so ground picking only hits terrain.
+    const groundScope = new RenderScope(this.ground, this.world.size);
+    const propScope = new RenderScope(this.props, this.world.size);
+    const fogScope = new RenderScope(this.fogRoot, this.world.size);
+    this.scopes = [groundScope, propScope, fogScope];
+    terrainMesh(this.world, groundScope);
+    addSites(this.world.terrain, propScope);
+    this.obstacles = new ObstacleViews(propScope, this.world.terrain);
     this.obstacles.sync(this.world.obstacles);
-    this.fog = new FogView(this.world);
+    this.fog = new FogView(this.world, fogScope);
     this.path = new PathView(this.world.terrain);
     this.shade = new ShadeView(this.world);
     this.weather = new WeatherView(this.world);
-    this.scene.add(this.fog.mesh, this.shade.mesh, this.weather.root, this.zones.root, this.path.root, this.weaponRange.root, this.contacts.root, this.dust.root, this.soundRing.root);
+    this.scene.add(this.ground, this.props, this.fogRoot, this.shade.mesh, this.weather.root, this.zones.root, this.path.root, this.weaponRange.root, this.contacts.root, this.dust.root, this.soundRing.root);
     this.overlay = overlay;
     overlay.append(this.stormTint);
     this.labels = new Labels(overlay);
     this.fx = new Fx3D(this.scene, overlay, this.rig);
+    this.sound = new SoundDirector(player, this.rig);
+    this.loops = new SoundLoops(player);
+    uiRoot().addEventListener("click", (e) => {
+      if ((e.target as HTMLElement).closest("button")) this.sound.ui("ui-click");
+    });
 
     const host = this.uiHost();
     this.weapons = new WeaponPanel(host);
@@ -198,7 +258,9 @@ export class Game {
     this.hud = new Hud({
       openInventory: () => this.toggleInventory(),
       openCharacter: () => this.toggleCharacter(),
-      toggleManual: () => { if (!this.anim && !this.modalOpen()) this.toggleManual(); },
+      toggleManual: () => {
+        if (!this.anim && !this.modalOpen()) this.toggleManual();
+      },
       isBusy: () => this.anim !== null,
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
@@ -230,6 +292,16 @@ export class Game {
     return this.rig.screenOf(groundPoint(this.world.terrain, { x, y }));
   }
 
+  // Centers the camera on map point x, y at the given zoom and stops following, for browser scripts.
+  debugView(x: number, y: number, zoom: number): void {
+    this.following = false;
+    this.rig.setZoom(zoom);
+    // An infinite step moves the smoothed follow all the way in one tick.
+    this.rig.follow(groundPoint(this.world.terrain, { x, y }));
+    this.rig.tick(Number.POSITIVE_INFINITY);
+    this.rig.follow(null);
+  }
+
   get state(): World {
     return this.world;
   }
@@ -259,7 +331,10 @@ export class Game {
   private refreshUi(): void {
     const me = playerVehicle(this.world);
     if (this.selected && !vehicleStats(this.world, me).weapons.some((mw) => mw.part.id === this.selected)) this.selected = null;
-    if (!this.anim) { this.fog.update(this.world); this.shade.update(this.world); }
+    if (!this.anim) {
+      timed('fog', () => this.fog.update(this.world));
+      this.shade.update(this.world);
+    }
     if (!this.anim || this.anim.impacts) this.obstacles.sync(this.world.obstacles);
     this.hud.renderTop(this.displayWorld());
     this.weapons.render();
@@ -307,7 +382,8 @@ export class Game {
   // Combat details stay in the fixed inspection panel and hide during playback.
   private placeHitCard(): void {
     const f = this.hovered ? this.frames[this.hovered] : undefined;
-    if (this.anim !== null || this.modalOpen() || !f) return this.hitCard.hide();
+    if (this.anim !== null || this.modalOpen() || !f)
+      return this.hitCard.hide();
     this.hitCard.show();
   }
 
@@ -386,6 +462,7 @@ export class Game {
         if (!e.repeat && !modal) this.endTurn();
       }
       if (e.code === "KeyF") this.following = true;
+      if (e.code === "KeyM") this.toggleMute();
       if (e.code === "KeyA" && !modal) this.weapons.toggleAuto();
       if (e.code === "KeyW" && !modal) this.weapons.toggleVisible();
       if (e.code === "Digit0" && !modal) this.weapons.selectWeapon(null);
@@ -438,7 +515,11 @@ export class Game {
     const me = playerVehicle(this.world);
     if (picked && picked.id !== me.id) return this.targetVehicle(picked);
     const myView = this.views.get(me.id);
-    if (picked && myView && this.rig.hitsObject(e.clientX, e.clientY, myView.root))
+    if (
+      picked &&
+      myView &&
+      this.rig.hitsObject(e.clientX, e.clientY, myView.root)
+    )
       return this.apply(setMoveOrder(this.world, { kind: "brake" }));
     const p = this.rig.groundUnder(e.clientX, e.clientY, this.ground);
     if (p) this.apply(setMoveOrder(this.world, clickOrder(p, e.shiftKey)));
@@ -527,6 +608,7 @@ export class Game {
       impacts: false,
       combat,
     };
+    this.playDriveSound(result);
     this.phase = "Moving";
     this.path.clear();
     this.refreshUi();
@@ -541,8 +623,8 @@ export class Game {
     for (const [id, fs] of Object.entries(a.result.frames))
       this.frames[id] = fs[fs.length - 1];
     this.live = null;
-    this.phase = a.combat ? "Firing" : "Results";
-    this.fog.update(this.combatFogWorld());
+    this.phase = a.combat ? 'Firing' : 'Results';
+    timed('fog', () => this.fog.update(this.combatFogWorld()));
     this.playShotFx();
     this.weapons.render();
   }
@@ -556,6 +638,7 @@ export class Game {
       const p = this.eventPoint(e.vehicle);
       if (p) this.fx.explode(p);
     }
+    this.playImpactSounds();
     this.hud.pushEvents(this.world);
     // A finished search opens the loot beside the truck's grid.
     const searched = this.world.events.find((e) => e.t === 'searched');
@@ -568,6 +651,41 @@ export class Game {
     this.phase = null;
     saveWorld(window.localStorage, this.world, CONFIG.saveTurns);
     this.refreshUi();
+  }
+
+  // Explosions and broken parts where they happen, then one result sting for the turn.
+  private playImpactSounds(): void {
+    for (const e of this.world.events) {
+      const id = e.t === "destroyed" || e.t === "partDisabled" ? e.vehicle : null;
+      const p = id && this.eventPoint(id);
+      if (p) this.sound.at(e.t === "destroyed" ? "explosion" : "part-broken", p, 0);
+    }
+    const sting = stingOf(this.world.events, playerVehicle(this.world).id);
+    if (sting) this.sound.ui(sting);
+  }
+
+  private playDriveSound(result: TurnResult): void {
+    const frames = result.frames[playerVehicle(this.world).id];
+    const g = engineGlide(stepSpeed(frames, 1), stepSpeed(frames, frames.length - 1), MOVE_MS / 1000, MIX);
+    if (!g) return;
+    this.loops.drive(g);
+    if (g.brake) this.sound.at("air-brake", frames[0].pos, 0);
+  }
+
+  private updateLoops(): void {
+    const me = playerVehicle(this.world);
+    const f = this.frames[me.id];
+    const at = f ? toMap(f.pos) : me.pos;
+    this.loops.update({
+      stormTiles: this.weather.stormTilesFrom(at.x, at.y),
+      danger: this.world.vehicles.some((v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v)),
+    });
+  }
+
+  private playPanelSounds(): void {
+    const open = this.modalOpen();
+    if (open !== this.panelOpen) this.sound.ui(open ? "ui-open" : "ui-close");
+    this.panelOpen = open;
   }
 
   // The fog while shots fly also shows the tiles of vehicles the volley involves.
@@ -628,14 +746,11 @@ export class Game {
                 CONFIG.combatShotMs *
                 ROUND_STAGGER
               : 0;
-          this.fx.shot(
-            a,
-            besideTarget(a, b, r.offset),
-            r.hit || r.hits.length > 0,
-            heavy,
-            delay,
-            flight,
-          );
+          const land = besideTarget(a, b, r.offset);
+          const struck = r.hit || r.hits.length > 0;
+          this.fx.shot(a, land, struck, heavy, delay, flight);
+          this.sound.at(heavy ? "cannon-fire" : "mg-fire", a, delay);
+          this.sound.at(struck ? "hit-metal" : "miss", land, delay + flight);
         });
         this.fx.label(
           b,
@@ -649,6 +764,7 @@ export class Game {
       if (e.t === "collision") {
         const p = this.eventPoint(e.a);
         if (p) this.fx.crash(p);
+        if (p) this.sound.at("crash", p, 0);
       }
     }
   }
@@ -659,8 +775,12 @@ export class Game {
     this.planFor = this.world;
     const me = playerVehicle(this.world);
     if (!me.order && me.speed === 0) return this.path.clear();
+    timed('preview', () => this.planPath(me));
+  }
+
+  private planPath(me: Vehicle): void {
     const turns: VehicleFrame[][] = [];
-    const w = structuredClone(this.world);
+    let w = cloneWorld(this.world);
     let d = this.drive;
     for (let i = 0; i < PLAN_TURNS; i++) {
       const r = simulateTurn(d, w);
@@ -712,9 +832,12 @@ export class Game {
     const at = playerVehicle(this.world).pos;
     this.stormTint.style.display = this.world.weather.some((e) => e.kind === 'storm' && dist(at, e.pos) <= e.radius) ? '' : 'none';
     this.fx.tick(dt);
+    this.playPanelSounds();
+    this.updateLoops();
     this.weather.advance(dt);
     this.weather.sync(this.world);
     this.labels.update(this.world, this.rig);
+    for (const scope of this.scopes) scope.update(this.rig.camera);
     this.renderer.render(this.scene, this.rig.camera);
     // The preview runs after the frame is drawn, so a click shows at once.
     this.refreshPlan();
@@ -731,12 +854,8 @@ export class Game {
     live.from = at;
     live.visible = visibleTiles(this.world, at);
     for (const t of live.visible) live.explored[t] = true;
-    const player = {
-      ...this.world.player,
-      visible: [...live.visible].sort((a, b) => a - b),
-      explored: live.explored,
-    };
-    this.fog.update({ ...this.world, player });
+    const player = { ...this.world.player, visible: [...live.visible].sort((a, b) => a - b), explored: live.explored };
+    timed('fog', () => this.fog.update({ ...this.world, player }));
   }
 
   // Physics step shown now while the movement plays, or null otherwise. Advances the playback phases.

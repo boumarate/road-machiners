@@ -98,6 +98,11 @@ export class WeatherView {
     bank.group.position.set(bank.x * S, (heightAt(this.terrain, bank.x, bank.y) + bank.height) * S, bank.y * S);
   }
 
+  // Map tiles from a point to the nearest dust storm's center; Infinity with no storm.
+  stormTilesFrom(x: number, y: number): number {
+    return Math.min(...[...this.storms.values()].map((b) => Math.hypot(b.x - x, b.y - y)));
+  }
+
   // Only the decorative clouds drift on their own; storms are repositioned by sync from sim state.
   advance(dtMs: number): void {
     const span = this.terrain.size + WRAP_MARGIN * 2;

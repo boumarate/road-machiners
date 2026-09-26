@@ -63,6 +63,12 @@ export class CameraRig {
     this.resize();
   }
 
+  setZoom(zoom: number): void {
+    if (!(zoom >= ZOOM.min && zoom <= ZOOM.max)) throw new Error(`Zoom ${zoom} is outside ${ZOOM.min}..${ZOOM.max}`);
+    this.zoom = zoom;
+    this.resize();
+  }
+
   private aimRay(clientX: number, clientY: number): void {
     const rect = this.container.getBoundingClientRect();
     const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
@@ -79,6 +85,11 @@ export class CameraRig {
     this.aimRay(clientX, clientY);
     const hit = this.ray.intersectObject(ground, true)[0];
     return hit ? { x: hit.point.x / S, y: hit.point.z / S } : null;
+  }
+
+  // Ground point at the middle of the view.
+  focus(): V3 {
+    return { x: this.center.x, y: this.center.y, z: this.center.z };
   }
 
   // CSS pixel position (viewport-relative, like clientX/clientY) of a world point.

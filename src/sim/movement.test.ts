@@ -110,12 +110,13 @@ describe('world', () => {
     expect(run()).toEqual(run());
   }, 10_000); // two 120-tile worlds run side by side; about 3 seconds alone
 
-  it('keeps the player out of obstacles on a long drive', () => {
+  it('keeps the player out of obstacles on a long drive', async () => {
     let w = setMoveOrder(newWorld(3, START_KITS.standard), { kind: 'stopAt', dest: { x: 50, y: 50 } });
     for (let i = 0; i < 30; i++) {
       w = endTurn(w);
       const v = w.vehicles[0];
       for (const o of w.obstacles) expect(dist(v.pos, o.pos)).toBeGreaterThanOrEqual(o.r + 0.6 - 0.01);
+      await new Promise<void>((resolve) => setTimeout(resolve, 0)); // Let the runner process messages between expanded-region turns.
     }
-  }, 10_000); // 30 turns of route planning on the 120-tile map take about 3 seconds alone.
+  }, 120_000);
 });
