@@ -8,6 +8,7 @@ export const TIME = {
   noonElevation: 70, // degrees of sun height at midday
   sunHeat: 2.5, // heat multiplier in full sun at noon; 1 at the horizon, in shade or at night
   nightSight: 0.5, // sight radius multiplier at night
+  shadeAlpha: 0.35, // opacity of the darken overlay on shaded, explored ground
   shadeReach: 25, // tiles a shade check steps toward the sun looking for a blocker
   shadeSamples: 20, // height samples per shade check, about one per AS2
   // Obstacle heights that can block the sun, in the same height units as terrain. Sites and water cast no shade.

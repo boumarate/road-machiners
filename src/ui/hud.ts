@@ -5,6 +5,7 @@ import { partDef } from "../data/parts";
 import { playerVehicle } from "../sim/damage";
 import { xpForLevel } from "../sim/progress";
 import { corePart, coreParts, freeCells, mountedParts } from "../sim/grid";
+import { clockOf, heatAt } from "../sim/sun";
 import { vehicleStats } from "../sim/stats";
 import type { Vehicle, World } from "../sim/types";
 import { el, panel } from "./dom";
@@ -12,6 +13,17 @@ import { eventText, formatNpcActivity } from "./format";
 
 const LOG_LINES = 14;
 const TOAST_MS = 3500;
+
+const WEATHER_NAMES: Record<World["weather"][number]["kind"], string> = {
+  storm: "Storm",
+  heatwave: "Heat wave",
+  overcast: "Overcast",
+};
+
+function weatherLabel(w: World): string {
+  if (w.weather.length === 0) return "Clear";
+  return [...new Set(w.weather.map((e) => WEATHER_NAMES[e.kind]))].join(", ");
+}
 
 export class Hud {
   private top = panel("topbar");
@@ -77,8 +89,15 @@ export class Hud {
     const warn = (v: number, low: number) => (v <= low ? "bad" : "");
     const item = (label: string, value: string, cls = "") =>
       el("span", { class: cls }, el("b", {}, label), " ", value);
+    const clock = clockOf(w.turn);
+    const hh = Math.floor(clock.hour);
+    const mm = Math.round((clock.hour - hh) * 60);
     this.top.replaceChildren(
       item("Turn", `${w.turn}`),
+      item("Day", `${clock.day}`),
+      item("Time", `${hh}:${String(mm).padStart(2, "0")}`),
+      item("Heat", `${heatAt(w, me.pos).toFixed(1)}x`, heatAt(w, me.pos) >= 2 ? "bad" : ""),
+      item("Weather", weatherLabel(w)),
       item("Money", `${p.money}`),
       item("Cab", `${cab.hp}/${cabMax}`, warn(cab.hp, cabMax * 0.3)),
       item("Broken", `${broken}`, broken > 0 ? "bad" : ""),
