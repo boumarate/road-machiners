@@ -1,18 +1,19 @@
-import * as THREE from 'three';
-import { PHYSICS } from '../../data/physics';
-import { TERRAIN } from '../../data/terrain';
-import { PAL } from '../../render/palette';
-import type { World } from '../../sim/types';
-import type { RenderScope } from './scope';
-import { TERRAIN_CHUNK } from './terrain';
+// Fog of war greys out the ground itself: the ground shader drains the color from tiles out of sight, and
+// darkens tiles never seen. Grey, not a dark or pale layer on top, so shade stays the only dark ground and
+// hidden ground does not read as smoke. Per corner, the attribute holds how grey and how bright the ground is.
 
-const S = PHYSICS.metersPerTile;
+import * as THREE from 'three';
+import { TERRAIN } from '../../data/terrain';
+import type { World } from '../../sim/types';
+import { TERRAIN_CHUNK, type TerrainChunk } from './terrain';
+
 const VISIBLE = 0;
 const EXPLORED = 1;
 const DARK = 2;
 const UNSET = 255; // before the first update, so it writes every chunk
 
-type FogChunk = { x: number; y: number; width: number; depth: number; alpha: THREE.BufferAttribute };
+type Look = { grey: number; bright: number };
+type FogChunk = { x: number; y: number; width: number; depth: number; look: THREE.BufferAttribute };
 
 // Fog chunks keep the per-tile fog state they last drew. An update rewrites only the chunks whose
 // vertices touch a tile with a changed state.
@@ -21,38 +22,21 @@ export class FogView {
   private readonly perSide: number;
   private readonly state: Uint8Array;
   private readonly dirty: Uint8Array;
-  private readonly alphaOf = [0, TERRAIN.fog.dimAlpha, TERRAIN.fog.darkAlpha];
+  private readonly lookOf: Look[] = [{ grey: 0, bright: 1 }, TERRAIN.fog.seen, TERRAIN.fog.unseen];
 
-  constructor(world: World, scope: RenderScope) {
+  constructor(world: World, ground: TerrainChunk[]) {
     const n = world.size;
     this.perSide = Math.ceil(n / TERRAIN_CHUNK);
     this.state = new Uint8Array(n * n).fill(UNSET);
     this.dirty = new Uint8Array(this.perSide * this.perSide);
-    const c = new THREE.Color(PAL.bg);
-    const material = new THREE.ShaderMaterial({
-      uniforms: { color: { value: new THREE.Vector3(c.r, c.g, c.b) } },
-      vertexShader: 'attribute float alpha; varying float vAlpha; void main() { vAlpha = alpha; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: 'uniform vec3 color; varying float vAlpha; void main() { gl_FragColor = vec4(color, vAlpha); }',
-      transparent: true, depthTest: false, depthWrite: false,
-    });
-    for (let y = 0; y < n; y += TERRAIN_CHUNK) for (let x = 0; x < n; x += TERRAIN_CHUNK) {
-      const width = Math.min(TERRAIN_CHUNK, n - x);
-      const depth = Math.min(TERRAIN_CHUNK, n - y);
-      const geo = new THREE.PlaneGeometry(width * S, depth * S, width, depth).rotateX(-Math.PI / 2);
-      const pos = geo.getAttribute('position');
-      for (let j = 0; j <= depth; j++) for (let i = 0; i <= width; i++) {
-        pos.setXYZ(j * (width + 1) + i, (x + i) * S, world.terrain.heights[(y + j) * (n + 1) + x + i] * S + 0.03, (y + j) * S);
-      }
-      const alpha = new THREE.BufferAttribute(new Float32Array((width + 1) * (depth + 1)), 1);
-      geo.setAttribute('alpha', alpha);
-      geo.computeBoundingSphere();
-      const chunk = new THREE.Mesh(geo, material);
-      chunk.renderOrder = 900;
-      chunk.matrixAutoUpdate = false;
-      chunk.updateMatrix();
-      scope.add(chunk, { x: x + width / 2, y: y + depth / 2 }, Math.hypot(width, depth) / 2);
-      this.chunks.push({ x, y, width, depth, alpha });
+    const materials = new Set<THREE.MeshLambertMaterial>();
+    for (const g of ground) {
+      const look = new THREE.BufferAttribute(new Float32Array((g.width + 1) * (g.depth + 1) * 2), 2);
+      g.mesh.geometry.setAttribute('fogLook', look);
+      materials.add(g.mesh.material as THREE.MeshLambertMaterial);
+      this.chunks[(g.y / TERRAIN_CHUNK) * this.perSide + g.x / TERRAIN_CHUNK] = { x: g.x, y: g.y, width: g.width, depth: g.depth, look };
     }
+    for (const mat of materials) greyOut(mat);
     this.update(world);
   }
 
@@ -82,21 +66,44 @@ export class FogView {
     }
   }
 
-  // Each vertex averages the fog of the up to four tiles around it.
+  // Each vertex averages the look of the up to four tiles around it, so edges blend.
   private writeChunk(chunk: FogChunk, n: number): void {
-    const array = chunk.alpha.array as Float32Array;
+    const array = chunk.look.array as Float32Array;
     for (let j = 0; j <= chunk.depth; j++) for (let i = 0; i <= chunk.width; i++) {
-      let sum = 0;
+      let grey = 0;
+      let bright = 0;
       let count = 0;
       for (let dy = -1; dy <= 0; dy++) for (let dx = -1; dx <= 0; dx++) {
         const x = chunk.x + i + dx;
         const y = chunk.y + j + dy;
         if (x < 0 || y < 0 || x >= n || y >= n) continue;
-        sum += this.alphaOf[this.state[y * n + x]];
+        const look = this.lookOf[this.state[y * n + x]];
+        grey += look.grey;
+        bright += look.bright;
         count++;
       }
-      array[j * (chunk.width + 1) + i] = sum / count;
+      const k = (j * (chunk.width + 1) + i) * 2;
+      array[k] = grey / count;
+      array[k + 1] = bright / count;
     }
-    chunk.alpha.needsUpdate = true;
+    chunk.look.needsUpdate = true;
   }
+}
+
+// Mixes the lit ground color toward its own grey, then scales its brightness, by the fogLook attribute.
+function greyOut(mat: THREE.MeshLambertMaterial): void {
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec2 fogLook;\nvarying vec2 vFogLook;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFogLook = fogLook;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vFogLook;')
+      .replace(
+        '#include <opaque_fragment>',
+        `float fogLuma = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
+        outgoingLight = mix(outgoingLight, vec3(fogLuma), vFogLook.x) * vFogLook.y;
+        #include <opaque_fragment>`,
+      );
+  };
+  mat.needsUpdate = true;
 }

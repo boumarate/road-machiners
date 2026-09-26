@@ -17,6 +17,7 @@ export const BLOCK_TEXT: Record<FireBlock, string> = {
   arc: "out of arc",
   noTarget: "hold fire",
   unseen: "not in sight",
+  covered: "behind cover",
 };
 
 // Current-position feedback shared by the weapon buttons and map markers.
