@@ -179,13 +179,20 @@ function astar(g: Grid, start: number, goal: number): number[] | null {
     if (cur === goal) return unwind(from, goal);
     if (closed[cur]) continue;
     closed[cur] = 1;
-    for (const nb of neighbors(g, cur)) {
-      if (g.blocked[nb.c] || closed[nb.c]) continue;
-      const c = cost[cur] + nb.cost * g.slow[nb.c];
-      if (c >= cost[nb.c]) continue;
-      cost[nb.c] = c;
-      from[nb.c] = cur;
-      open.push(nb.c, c + heuristic(g, nb.c, goal) * REGION.navigation.heuristicWeight);
+    const x = cur % g.n;
+    const y = Math.floor(cur / g.n);
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+      if (dx === 0 && dy === 0) continue;
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= g.n || ny >= g.n) continue;
+      const next = ny * g.n + nx;
+      if (g.blocked[next] || closed[next]) continue;
+      const c = cost[cur] + (dx !== 0 && dy !== 0 ? Math.SQRT2 : 1) * g.slow[next];
+      if (c >= cost[next]) continue;
+      cost[next] = c;
+      from[next] = cur;
+      open.push(next, c + heuristic(g, next, goal) * REGION.navigation.heuristicWeight);
     }
   }
   return null;
@@ -264,10 +271,13 @@ class MinHeap {
     let i = this.items.length - 1;
     while (i > 0) {
       const p = (i - 1) >> 1;
-      if (this.keys[p] <= this.keys[i]) break;
-      this.swap(i, p);
+      if (this.keys[p] <= key) break;
+      this.items[i] = this.items[p];
+      this.keys[i] = this.keys[p];
       i = p;
     }
+    this.items[i] = item;
+    this.keys[i] = key;
   }
 
   pop(): number {
@@ -275,25 +285,21 @@ class MinHeap {
     const lastItem = this.items.pop()!;
     const lastKey = this.keys.pop()!;
     if (this.items.length > 0) {
-      this.items[0] = lastItem;
-      this.keys[0] = lastKey;
       let i = 0;
       for (;;) {
-        const l = 2 * i + 1;
-        const r = l + 1;
-        let m = i;
-        if (l < this.items.length && this.keys[l] < this.keys[m]) m = l;
-        if (r < this.items.length && this.keys[r] < this.keys[m]) m = r;
-        if (m === i) break;
-        this.swap(i, m);
-        i = m;
+        const left = 2 * i + 1;
+        if (left >= this.items.length) break;
+        const right = left + 1;
+        const child = right < this.items.length && this.keys[right] < this.keys[left] ? right : left;
+        if (this.keys[child] >= lastKey) break;
+        this.items[i] = this.items[child];
+        this.keys[i] = this.keys[child];
+        i = child;
       }
+      this.items[i] = lastItem;
+      this.keys[i] = lastKey;
     }
     return top;
   }
 
-  private swap(a: number, b: number): void {
-    [this.items[a], this.items[b]] = [this.items[b], this.items[a]];
-    [this.keys[a], this.keys[b]] = [this.keys[b], this.keys[a]];
-  }
 }

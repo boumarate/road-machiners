@@ -69,7 +69,8 @@ export class VehicleView {
   private sig = '';
   private wheels: Wheel[] = [];
   private turrets: THREE.Group[] = [];
-  private ringMeshes: THREE.Mesh[] = [];
+  private ringMeshes: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>[] = [];
+  private ringSizes: { r: number; width: number }[] = [];
   private heading = 0;
   private groundOffset = 0;
 
@@ -106,22 +107,29 @@ export class VehicleView {
   }
 
   rings(rs: Ring3[]): void {
-    for (const m of this.ringMeshes) {
-      this.ground.remove(m);
-      m.geometry.dispose();
-      (m.material as THREE.Material).dispose();
-    }
-    this.ringMeshes = rs.map((r) => {
-      const inner = Math.max(0.01, r.r - r.width / 2) * S;
-      const outer = (r.r + r.width / 2) * S;
-      const mesh = new THREE.Mesh(
-        new THREE.RingGeometry(inner, outer, 48).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({ color: r.color, transparent: true, opacity: r.alpha, depthWrite: false, side: THREE.DoubleSide }),
-      );
-      mesh.position.y = 0.02; // clears z-fighting with the ground mesh
-      mesh.renderOrder = 5;
-      this.ground.add(mesh);
-      return mesh;
+    for (let i = 0; i < this.ringMeshes.length; i++) this.ringMeshes[i].visible = i < rs.length;
+    rs.forEach((r, i) => {
+      let mesh = this.ringMeshes[i];
+      const size = this.ringSizes[i];
+      if (!size || size.r !== r.r || size.width !== r.width) {
+        const inner = Math.max(0.01, r.r - r.width / 2) * S;
+        const outer = (r.r + r.width / 2) * S;
+        const geometry = new THREE.RingGeometry(inner, outer, 48).rotateX(-Math.PI / 2);
+        if (mesh) {
+          mesh.geometry.dispose();
+          mesh.geometry = geometry;
+        } else {
+          mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+          mesh.position.y = 0.02;
+          mesh.renderOrder = 5;
+          this.ground.add(mesh);
+          this.ringMeshes.push(mesh);
+        }
+        this.ringSizes[i] = { r: r.r, width: r.width };
+      }
+      mesh.visible = true;
+      mesh.material.color.setHex(r.color);
+      mesh.material.opacity = r.alpha;
     });
   }
 
