@@ -20,6 +20,9 @@ const S = PHYSICS.metersPerTile;
 const RENDER_ORDER = 905; // above the fog (900) and shade (901) layers
 const LIFT = 0.08; // meters above the ground
 
+// Sound waves are switched off while other ways of showing sound are tried. Sound contacts still exist.
+const SHOW_SOUND_WAVES = false;
+
 const WAVE = {
   points: 64, // vertices around one front
   fronts: 3, // fronts in flight per contact, staggered in time
@@ -84,7 +87,7 @@ export class ContactsView {
         startBurst(m, nowMs);
       }
       if (nowMs - m.burstMs >= WAVE.repeat * 1000) startBurst(m, nowMs);
-      const hearsSound = c.sources.includes('sound');
+      const hearsSound = SHOW_SOUND_WAVES && c.sources.includes('sound');
       m.fronts.forEach((f) => (f.line.visible = hearsSound));
       if (hearsSound) m.fronts.forEach((f, k) => this.advanceFront(terrain, c, listener, f, dt, (nowMs - m.burstMs) / 1000 >= k * WAVE.stagger));
       m.blip.visible = c.sources.includes('radio');

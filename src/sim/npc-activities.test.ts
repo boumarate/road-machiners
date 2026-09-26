@@ -1,3 +1,4 @@
+import { TERRAIN } from '../data/terrain';
 import { describe, expect, it } from 'vitest';
 import { emptyWorld, addVehicle } from './testkit';
 import { planNpcOrders } from './ai';
@@ -163,8 +164,8 @@ describe('NPC activities', () => {
   it('a raider heads toward a heard player', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const player = w.vehicles[0];
-    player.speed = 4; // heard: soundRange 6 + 3*4 = 18 tiles, well past the 10-tile sight radius
-    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 45, y: 30 }); // 15 tiles off
+    player.speed = 4; // loud enough to be heard far past sight range
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 }); // just past sight
     raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0 };
     planNpcOrders(w);
     expect(raider.brain!.activity?.kind).toBe('investigate');

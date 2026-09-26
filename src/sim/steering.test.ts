@@ -164,9 +164,9 @@ describe("momentum", () => {
 });
 
 describe("throttle by click distance", () => {
-  it("zones span all of vision: brake 25%, hold 50%, accelerate 25%", () => {
+  it("zones span their reach: brake 25%, hold 50%, accelerate 25%", () => {
     const z = zoneEdges();
-    expect(z.reach).toBeCloseTo(TERRAIN.vision.radius);
+    expect(z.reach).toBeCloseTo(RULES.throttleZones.reach);
     expect(z.brakeEnd).toBeCloseTo(z.reach * 0.25);
     expect(z.holdEnd - z.brakeEnd).toBeCloseTo(z.reach * 0.5);
   });

@@ -8,6 +8,7 @@ import { makePart } from './factory';
 import { mountPart } from './inventory';
 import { TERRAIN } from '../data/terrain';
 import { dist } from './vec';
+import { refreshVision } from './vision';
 
 // Raises a small hill between x=32 and x=36 at y=30, tall enough to block a plain sight line
 // but not the wider systems (sound, radio) that ignore hills.
@@ -67,6 +68,7 @@ describe('hills and the scanner', () => {
   it('a hill blocks sight but not sound', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     raiseHill(w);
+    refreshVision(w); // the stored view was taken before the hill rose
     const observer = w.vehicles[0];
     const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
     target.speed = 4;
@@ -79,6 +81,7 @@ describe('hills and the scanner', () => {
   it('the scanner works through hills', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     raiseHill(w);
+    refreshVision(w); // the stored view was taken before the hill rose
     const observer = w.vehicles[0];
     const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
     target.speed = 0.2; // below the parked threshold used by sound, so only the scanner should trigger
@@ -109,12 +112,6 @@ describe('contact fuzz', () => {
         expect(dist(contact.center, target.pos)).toBeLessThanOrEqual(contact.radius);
       }
     }
-  });
-});
-
-describe('sight radius stays 10 tiles', () => {
-  it('matches TERRAIN.vision.radius', () => {
-    expect(TERRAIN.vision.radius).toBe(10);
   });
 });
 

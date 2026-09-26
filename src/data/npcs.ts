@@ -124,9 +124,9 @@ export type NpcClass = {
 
 // Cab warnings begin at 30%. Recovery to half cab health prevents fight/flee oscillation.
 export const NPC_CLASSES: Record<Brain, NpcClass> = {
-  scavenger: { towns: ['bowl', 'nose'], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: 8 },
-  trader: { towns: ['bowl', 'nose'], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: true, contactReactRadius: 8 },
-  raider: { towns: ['bowl', 'nose'], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: 9 },
+  scavenger: { towns: ['bowl', 'nose'], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: 12 },
+  trader: { towns: ['bowl', 'nose'], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: true, contactReactRadius: 12 },
+  raider: { towns: ['bowl', 'nose'], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: 14 },
 };
 
 export const NPC_UPKEEP = {

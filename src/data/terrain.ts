@@ -106,7 +106,7 @@ export const TERRAIN = {
   light: { x: -0.6, y: -0.8 },
   slopeShade: 0.9, // how strongly slope alignment with the light brightens or darkens ground
   vision: {
-    radius: 10, // tiles of sight from the player vehicle
+    radius: 20, // tiles of sight from any vehicle, before weather and night
     eyeHeight: 0.12, // height units above the ground for the viewer and targets; hills taller than this block sight
     samplesPerTile: 3, // height samples per tile along a sight line
   },

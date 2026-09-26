@@ -13,9 +13,9 @@ export const RULES = {
   // `distance` tiles in a turn, swinging its nose by up to the chassis reverseTurn. It stops after.
   reverse: { below: 1, angle: 45, distance: 1 },
   arriveRadius: 0.5, // a stop order clears inside this distance
-  // Throttle zones ahead of the truck. They span `reach` of the vision radius, split into brake, hold
-  // and accelerate shares in that order. A click's distance picks the zone.
-  throttleZones: { reach: 1, brake: 0.25, hold: 0.5, accelerate: 0.25 },
+  // Throttle zones ahead of the truck. They span `reach` tiles, split into brake, hold and accelerate
+  // shares in that order. A click's distance picks the zone.
+  throttleZones: { reach: 10, brake: 0.25, hold: 0.5, accelerate: 0.25 },
   passRadius: 1, // a drive-through order clears once the trail passes this close to its point
   passSpeedShare: 0.5, // ...or once its point is nearer than this share of the current speed
   minAimDistance: 1.5, // tiles; steering ignores route points closer than this

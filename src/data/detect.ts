@@ -1,5 +1,5 @@
 // Detection beyond sight: engine sound, dust trails and radio scanners.
-// Sight is 10 tiles (TERRAIN.vision.radius). These ranges are several times longer, so a moving truck is
+// Sight is TERRAIN.vision.radius. These ranges are several times longer, so a moving truck is
 // usually heard or seen by its dust from across much of the map, as a rough circle that shrinks as it nears.
 
 export const DETECT = {

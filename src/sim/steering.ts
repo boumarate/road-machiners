@@ -2,7 +2,6 @@
 // within the vehicle's acceleration, braking and turn limits.
 
 import { RULES } from "../data/rules";
-import { TERRAIN } from "../data/terrain";
 import { maxTurn, type VehicleStats } from "./stats";
 import { chassisDef } from "../data/chassis";
 import { route, routeLength, straightClear, type Blocker } from "./path";
@@ -307,7 +306,7 @@ export function zoneEdges(): ZoneEdges {
   const Z = RULES.throttleZones;
   if (Math.abs(Z.brake + Z.hold + Z.accelerate - 1) > 1e-9)
     throw new Error("Throttle zone shares must add up to 1");
-  const reach = TERRAIN.vision.radius * Z.reach;
+  const reach = Z.reach;
   return {
     brakeEnd: reach * Z.brake,
     holdEnd: reach * (Z.brake + Z.hold),
