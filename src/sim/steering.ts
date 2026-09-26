@@ -343,20 +343,9 @@ export function zoneSpeed(s: VehicleStats, speed: number, d: number): number {
   );
 }
 
-// The order for a map click. Shift stops at the point. Above a small speed, a click in the brake zone
-// means stop: the truck brakes hard until it stands.
-export function clickOrder(
-  v: Pick<Vehicle, "pos" | "speed">,
-  dest: Vec,
-  shift: boolean,
-): MoveOrder {
-  if (shift) return { kind: "stopAt", dest };
-  if (
-    v.speed > RULES.stopClickSpeed &&
-    throttleFor(dist(v.pos, dest), v.speed) === "brake"
-  )
-    return { kind: "brake" };
-  return { kind: "through", dest };
+// A ground click always orders a course. Shift stops at the point.
+export function clickOrder(dest: Vec, shift: boolean): MoveOrder {
+  return shift ? { kind: "stopAt", dest } : { kind: "through", dest };
 }
 
 // Momentum driving. The click's distance picks the throttle zone; see zoneSpeed.

@@ -448,9 +448,11 @@ export class Game {
     const picked = this.pickVehicle(e.clientX, e.clientY);
     const me = playerVehicle(this.world);
     if (picked && picked.id !== me.id) return this.targetVehicle(picked);
-    if (picked) return this.apply(setMoveOrder(this.world, { kind: "brake" }));
+    const myView = this.views.get(me.id);
+    if (picked && myView && this.rig.hitsObject(e.clientX, e.clientY, myView.root))
+      return this.apply(setMoveOrder(this.world, { kind: "brake" }));
     const p = this.rig.groundUnder(e.clientX, e.clientY, this.ground);
-    if (p) this.apply(setMoveOrder(this.world, clickOrder(me, p, e.shiftKey)));
+    if (p) this.apply(setMoveOrder(this.world, clickOrder(p, e.shiftKey)));
   }
 
   private targetVehicle(target: Vehicle): void {
