@@ -63,6 +63,12 @@ export class CameraRig {
     this.resize();
   }
 
+  setZoom(zoom: number): void {
+    if (!(zoom >= ZOOM.min && zoom <= ZOOM.max)) throw new Error(`Zoom ${zoom} is outside ${ZOOM.min}..${ZOOM.max}`);
+    this.zoom = zoom;
+    this.resize();
+  }
+
   // Map point under the cursor, or null off the ground mesh.
   groundUnder(clientX: number, clientY: number, ground: THREE.Object3D): Vec | null {
     const rect = this.container.getBoundingClientRect();

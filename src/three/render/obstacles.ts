@@ -1,5 +1,6 @@
-// Static map obstacles: rocks, wrecks, buildings, water. Synced by id, so wrecks that appear
-// mid-game (a vehicle dying) get added without touching the rest.
+// Static map obstacles: rocks, wrecks, buildings, water. Map rocks are drawn once as instanced meshes
+// per terrain chunk. Other obstacles are synced by id, so wrecks that appear mid-game (a vehicle dying)
+// get added without touching the rest.
 
 import * as THREE from 'three';
 import { hashStr } from '../../render/noise';
@@ -7,32 +8,90 @@ import { PAL, shade } from '../../render/palette';
 import { PHYSICS } from '../../data/physics';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import type { Obstacle } from '../../sim/types';
+import { dist } from '../../sim/vec';
+import type { RenderScope } from './scope';
+import { TERRAIN_CHUNK } from './terrain';
 
 const S = PHYSICS.metersPerTile;
 
 export class ObstacleViews {
   private readonly byId = new Map<string, THREE.Object3D>();
+  private rockIds: Set<string> | null = null; // map rocks, fixed at the first sync
 
-  constructor(private readonly parent: THREE.Object3D, private readonly terrain: Terrain) {}
+  constructor(private readonly scope: RenderScope, private readonly terrain: Terrain) {}
 
   sync(obstacles: Obstacle[]): void {
+    if (!this.rockIds) this.rockIds = this.addRocks(obstacles.filter((o) => o.kind === 'rock'));
     const seen = new Set<string>();
+    let rocks = 0;
     for (const o of obstacles) {
+      if (o.kind === 'rock') {
+        if (!this.rockIds.has(o.id)) throw new Error(`Rock ${o.id} appeared after map generation; rocks are drawn as fixed instances`);
+        rocks++;
+        continue;
+      }
       seen.add(o.id);
       if (!this.byId.has(o.id)) {
-        const mesh = buildObstacle(this.terrain, o);
-        this.parent.add(mesh);
-        this.byId.set(o.id, mesh);
+        const obj = buildObstacle(this.terrain, o);
+        obj.traverse((m) => {
+          m.updateMatrix();
+          m.matrixAutoUpdate = false;
+        });
+        this.scope.add(obj, o.pos, o.r);
+        this.byId.set(o.id, obj);
       }
     }
+    if (rocks !== this.rockIds.size) throw new Error('A map rock was removed; rocks are drawn as fixed instances');
     for (const [id, obj] of this.byId) {
       if (seen.has(id)) continue;
-      this.parent.remove(obj);
+      this.scope.remove(obj);
       disposeTree(obj);
       this.byId.delete(id);
     }
   }
+
+  // Two instanced meshes per chunk, base and peak, with the shapes and tints of rockParts.
+  private addRocks(rocks: Obstacle[]): Set<string> {
+    const byChunk = new Map<string, Obstacle[]>();
+    for (const o of rocks) {
+      const key = `${Math.floor(o.pos.x / TERRAIN_CHUNK)},${Math.floor(o.pos.y / TERRAIN_CHUNK)}`;
+      const list = byChunk.get(key);
+      if (list) list.push(o);
+      else byChunk.set(key, [o]);
+    }
+    const geometry = new THREE.DodecahedronGeometry(1, 0);
+    const material = new THREE.MeshLambertMaterial({ flatShading: true });
+    const matrix = new THREE.Matrix4();
+    const rotation = new THREE.Quaternion();
+    const color = new THREE.Color();
+    for (const list of byChunk.values()) {
+      const base = new THREE.InstancedMesh(geometry, material, list.length);
+      const peak = new THREE.InstancedMesh(geometry, material, list.length);
+      list.forEach((o, i) => {
+        const parts = rockParts(this.terrain, o);
+        for (const [mesh, part] of [[base, parts.base], [peak, parts.peak]] as const) {
+          rotation.setFromAxisAngle(UP, part.yaw);
+          mesh.setMatrixAt(i, matrix.compose(part.pos, rotation, part.scale));
+          mesh.setColorAt(i, color.setHex(part.color));
+        }
+      });
+      const center = list.reduce((c, o) => ({ x: c.x + o.pos.x / list.length, y: c.y + o.pos.y / list.length }), { x: 0, y: 0 });
+      const reach = Math.max(...list.map((o) => dist(center, o.pos) + o.r));
+      for (const mesh of [base, peak]) {
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.matrixAutoUpdate = false;
+        mesh.updateMatrix();
+        mesh.computeBoundingBox();
+        mesh.computeBoundingSphere();
+        this.scope.add(mesh, center, reach);
+      }
+    }
+    return new Set(rocks.map((o) => o.id));
+  }
 }
+
+const UP = new THREE.Vector3(0, 1, 0);
 
 function disposeTree(obj: THREE.Object3D): void {
   obj.traverse((o) => {
@@ -45,7 +104,6 @@ function disposeTree(obj: THREE.Object3D): void {
 }
 
 function buildObstacle(t: Terrain, o: Obstacle): THREE.Object3D {
-  if (o.kind === 'rock') return buildRock(t, o);
   if (o.kind === 'wreck') return buildWreck(t, o);
   if (o.kind === 'building') return buildBuilding(t, o);
   if (o.kind === 'water') return buildWater(t, o);
@@ -60,32 +118,28 @@ function seat(t: Terrain, o: Obstacle): THREE.Group {
   return g;
 }
 
-// A jagged low-poly boulder: two stacked dodecahedra shrinking toward a peak, like the 2D rock prism.
-function buildRock(t: Terrain, o: Obstacle): THREE.Object3D {
+type RockPart = { pos: THREE.Vector3; yaw: number; scale: THREE.Vector3; color: number };
+
+// A jagged low-poly boulder: two stacked unit dodecahedra shrinking toward a peak, like the 2D rock prism.
+function rockParts(t: Terrain, o: Obstacle): { base: RockPart; peak: RockPart } {
   const seed = hashStr(o.id);
   const r = o.r * S;
   const tint = 0.9 + seed * 0.2;
-  const g = seat(t, o);
-  const base = new THREE.Mesh(
-    new THREE.DodecahedronGeometry(r, 0),
-    new THREE.MeshLambertMaterial({ color: shade(PAL.rock.top, tint), flatShading: true }),
-  );
-  base.scale.set(1, 0.55, 1);
-  base.position.y = r * 0.3;
-  base.rotation.y = seed * Math.PI * 2;
-  const peak = new THREE.Mesh(
-    new THREE.DodecahedronGeometry(r * 0.6, 0),
-    new THREE.MeshLambertMaterial({ color: shade(PAL.rock.side, tint), flatShading: true }),
-  );
-  peak.scale.set(1, 0.6, 1);
-  peak.position.y = r * 0.75;
-  peak.rotation.y = seed * Math.PI * 3;
-  g.add(base, peak);
-  for (const m of g.children) {
-    m.castShadow = true;
-    m.receiveShadow = true;
-  }
-  return g;
+  const ground = heightAt(t, o.pos.x, o.pos.y) * S;
+  return {
+    base: {
+      pos: new THREE.Vector3(o.pos.x * S, ground + r * 0.3, o.pos.y * S),
+      yaw: seed * Math.PI * 2,
+      scale: new THREE.Vector3(r, r * 0.55, r),
+      color: shade(PAL.rock.top, tint),
+    },
+    peak: {
+      pos: new THREE.Vector3(o.pos.x * S, ground + r * 0.75, o.pos.y * S),
+      yaw: seed * Math.PI * 3,
+      scale: new THREE.Vector3(r * 0.6, r * 0.6 * 0.6, r * 0.6),
+      color: shade(PAL.rock.side, tint),
+    },
+  };
 }
 
 // A burnt truck: scorched frame, crushed cab, one loose wheel, like the 2D wreck.

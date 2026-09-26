@@ -5,6 +5,7 @@ import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import { segmentDist } from '../../sim/vec';
+import type { RenderScope } from './scope';
 
 const S = PHYSICS.metersPerTile;
 type Site = TownDef | LocationDef;
@@ -241,11 +242,22 @@ function buildSite(t: Terrain, site: Site): THREE.Group {
     case 'burnt-convoy': case 'podfield': case 'ridge-wrecks': case 'salvage-yard': buildWrecks(b, site.id); break;
     default: throw new Error(`Missing landmark model for ${site.id}`);
   }
+  // Site models never move after they are built.
+  b.root.traverse((o) => {
+    o.updateMatrix();
+    o.matrixAutoUpdate = false;
+  });
   return b.root;
 }
 
+// Every site model under one group, for inspection.
 export function buildSites(t: Terrain): THREE.Group {
   const group = new THREE.Group();
   for (const site of [...REGION.towns, ...REGION.locations]) group.add(buildSite(t, site));
   return group;
+}
+
+// Registers every site model with the scope at its site.
+export function addSites(t: Terrain, scope: RenderScope): void {
+  for (const site of [...REGION.towns, ...REGION.locations]) scope.add(buildSite(t, site), site.pos, site.radius);
 }

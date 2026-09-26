@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
 import { paintGroundCanvas, TERRAIN_MARGIN, type PaintCanvas } from '../../render/groundPaint';
 import type { World } from '../../sim/types';
+import type { RenderScope } from './scope';
 
 const S = PHYSICS.metersPerTile;
 const TEXTURE_SIDE = 2048; // 16 MiB RGBA before mipmaps, independent of region area.
@@ -22,8 +23,8 @@ function paintTexture(w: World): THREE.CanvasTexture {
   return texture;
 }
 
-export function terrainMesh(w: World): THREE.Group {
-  const root = new THREE.Group();
+// Terrain chunks register with the scope, so only chunks near the view are drawn.
+export function terrainMesh(w: World, scope: RenderScope): void {
   const material = new THREE.MeshLambertMaterial({ map: paintTexture(w) });
   for (let y = 0; y < w.size; y += TERRAIN_CHUNK) for (let x = 0; x < w.size; x += TERRAIN_CHUNK) {
     const width = Math.min(TERRAIN_CHUNK, w.size - x);
@@ -40,7 +41,8 @@ export function terrainMesh(w: World): THREE.Group {
     geo.computeBoundingSphere();
     const mesh = new THREE.Mesh(geo, material);
     mesh.receiveShadow = true;
-    root.add(mesh);
+    mesh.matrixAutoUpdate = false;
+    mesh.updateMatrix();
+    scope.add(mesh, { x: x + width / 2, y: y + depth / 2 }, Math.hypot(width, depth) / 2);
   }
-  return root;
 }
