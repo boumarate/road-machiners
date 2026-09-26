@@ -1,12 +1,13 @@
 import { START_KITS } from "../data/start";
 import { describe, expect, it } from "vitest";
 import { REGION } from "../data/region";
-import { TERRAIN } from "../data/terrain";
+import { TERRAIN, TERRAIN_TYPES } from "../data/terrain";
 import { resolveMovement } from "./movement";
 import { route } from "./path";
 import { planPath } from "./steering";
 import { vehicleStats } from "./stats";
 import {
+  buildTerrain,
   driveFactor,
   heightAt,
   isCliff,
@@ -15,7 +16,8 @@ import {
   type Terrain,
 } from "./terrain";
 import { emptyWorld } from "./testkit";
-import { dist, segmentDist } from "./vec";
+import { ROAD_INDEX } from "./road-index";
+import { dist, polylineDist, segmentDist } from "./vec";
 import { newWorld } from "./world";
 
 // Flat terrain with a raised block of cliff tiles over x in [cx0, cx1).
@@ -28,6 +30,37 @@ function flatWith(
     for (let i = 0; i <= size; i++) heights.push(lift(i, j));
   return { size, heights, types: new Array(size * size).fill("hardpan") };
 }
+
+// FNV-1a over the exact float bits of every corner height, then the type of every tile.
+function terrainHash(t: Terrain): string {
+  const bits = new Uint32Array(new Float64Array(t.heights).buffer);
+  let h = 0x811c9dc5;
+  const mix = (v: number) => {
+    h = Math.imul(h ^ v, 0x01000193);
+  };
+  for (const v of bits) mix(v);
+  const typeIds = Object.keys(TERRAIN_TYPES);
+  for (const type of t.types) mix(typeIds.indexOf(type));
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+describe("terrain generation", () => {
+  it("keeps the exact heights and types of known seeds", () => {
+    expect(terrainHash(buildTerrain(1, REGION.size))).toBe("003f1b36");
+    expect(terrainHash(buildTerrain(7, REGION.size))).toBe("95782f7a");
+  }, 30_000);
+
+  it("finds the same road distance through the road index as over every road", () => {
+    for (const reach of [REGION.roadWidth / 2, REGION.roadWidth / 2 + TERRAIN.flattenMargin]) {
+      for (let y = -20.25; y < REGION.size + 20; y += 3.7) {
+        for (let x = -20.25; x < REGION.size + 20; x += 3.7) {
+          const exact = Math.min(...REGION.roads.map((road) => polylineDist({ x, y }, road)));
+          expect(ROAD_INDEX.nearestWithin(x, y, reach)).toBe(exact < reach ? exact : Infinity);
+        }
+      }
+    }
+  });
+});
 
 describe("terrain grid", () => {
   it('has fifteen distinct Icarus destinations with road access', () => {

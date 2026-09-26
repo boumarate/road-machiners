@@ -5,7 +5,10 @@
 import { REGION } from '../data/region';
 import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from '../data/terrain';
 import { elevationAt, noiseAt } from './elevation';
-import { clamp, dist, polylineDist, type Vec } from './vec';
+import { clamp, type Vec } from './vec';
+import { ROAD_INDEX } from './road-index';
+
+const SITES = [...REGION.towns, ...REGION.locations];
 
 export type Terrain = {
   size: number;
@@ -36,8 +39,14 @@ export function buildTerrain(seed: number, size: number): Terrain {
 
 function pickType(seed: number, t: Terrain, x: number, y: number): TerrainTypeId {
   const c = { x: x + 0.5, y: y + 0.5 };
-  if (REGION.roads.some((r) => polylineDist(c, r) < REGION.roadWidth / 2)) return 'road';
-  if ([...REGION.towns, ...REGION.locations].some((s) => dist(c, s.pos) < s.radius + T.types.siteMargin)) return 'hardpan';
+  if (ROAD_INDEX.nearestWithin(c.x, c.y, REGION.roadWidth / 2) < REGION.roadWidth / 2) return 'road';
+  for (const s of SITES) {
+    const dx = s.pos.x - c.x;
+    const dy = s.pos.y - c.y;
+    // One tile past the margin keeps this cheap skip clear of rounding.
+    if (dx * dx + dy * dy > (s.radius + T.types.siteMargin + 1) ** 2) continue;
+    if (Math.hypot(dx, dy) < s.radius + T.types.siteMargin) return 'hardpan';
+  }
   const s = tileSlope(t, y * t.size + x);
   if (Math.hypot(s.x, s.y) >= T.types.screeSlope) return 'scree';
   if (elevationAt(seed, c.x, c.y) < T.types.sandBelow) return 'sand';

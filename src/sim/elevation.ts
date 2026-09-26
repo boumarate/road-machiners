@@ -4,7 +4,19 @@
 
 import { TERRAIN } from '../data/terrain';
 import { REGION } from '../data/region';
-import { dist, polylineDist } from './vec';
+import { INDEX_CELL, ROAD_INDEX, RoadIndex } from './road-index';
+
+const SITES = [...REGION.towns, ...REGION.locations];
+// Squared distance past which a site is sure to lie beyond flattenMargin. The extra tile keeps
+// the cheap test clear of rounding, so the exact test decides every near case.
+const SITE_SKIP2 = SITES.map((site) => (site.radius + TERRAIN.flattenMargin + 1) ** 2);
+const FEATURES = [TERRAIN.features.canyon, TERRAIN.features.dryRiver].map((feature) => ({
+  feature,
+  index: new RoadIndex([feature.path], INDEX_CELL),
+  reach: feature.width + feature.bank,
+}));
+// Road distances beyond this flatten nothing.
+const FLATTEN_REACH = REGION.roadWidth / 2 + TERRAIN.flattenMargin;
 
 // Own hash, independent of render/noise.ts (render-only) and sim/rng.ts (consumes world.rngState).
 function hash(x: number, y: number, seed: number): number {
@@ -53,37 +65,60 @@ function rawElevation(seed: number, x: number, y: number): number {
 
 // 0 = untouched terrain, 1 = fully flattened, based on distance to the nearest road, town or location.
 export function flattenFactor(x: number, y: number): number {
-  const p = { x, y };
-  let best = Infinity;
-  for (const road of REGION.roads) best = Math.min(best, polylineDist(p, road) - REGION.roadWidth / 2);
-  for (const site of [...REGION.towns, ...REGION.locations]) best = Math.min(best, dist(p, site.pos) - site.radius);
+  let best = ROAD_INDEX.nearestWithin(x, y, FLATTEN_REACH) - REGION.roadWidth / 2;
+  for (let k = 0; k < SITES.length; k++) {
+    const site = SITES[k];
+    const dx = site.pos.x - x;
+    const dy = site.pos.y - y;
+    if (dx * dx + dy * dy > SITE_SKIP2[k]) continue;
+    best = Math.min(best, Math.hypot(dx, dy) - site.radius);
+  }
   if (best <= 0) return 1;
   if (best >= TERRAIN.flattenMargin) return 0;
   return 1 - smooth(best / TERRAIN.flattenMargin);
 }
 
+// Broad rolling height at each site center. Holds one seed, the one terrain generation is using.
+let levels: { seed: number; values: number[] } | undefined;
+
+function siteLevels(seed: number): number[] {
+  if (levels?.seed !== seed) {
+    const relief = TERRAIN.relief;
+    const values = SITES.map((site) => (noise2(site.pos.x * relief.broadFrequency, site.pos.y * relief.broadFrequency, seed + 4000) - 0.5) * relief.broadAmplitude);
+    levels = { seed, values };
+  }
+  return levels.values;
+}
+
 export function elevationAt(seed: number, x: number, y: number): number {
-  const p = { x, y };
   const relief = TERRAIN.relief;
   let rolling = (noise2(x * relief.broadFrequency, y * relief.broadFrequency, seed + 4000) - 0.5) * relief.broadAmplitude;
-  for (const site of [...REGION.towns, ...REGION.locations]) {
-    const gap = dist(p, site.pos) - site.radius;
+  for (let k = 0; k < SITES.length; k++) {
+    const site = SITES[k];
+    const dx = site.pos.x - x;
+    const dy = site.pos.y - y;
+    if (dx * dx + dy * dy > SITE_SKIP2[k]) continue;
+    const gap = Math.hypot(dx, dy) - site.radius;
     if (gap >= TERRAIN.flattenMargin) continue;
-    const level = (noise2(site.pos.x * relief.broadFrequency, site.pos.y * relief.broadFrequency, seed + 4000) - 0.5) * relief.broadAmplitude;
+    const level = siteLevels(seed)[k];
     const blend = gap <= 0 ? 1 : 1 - smooth(gap / TERRAIN.flattenMargin);
     rolling += (level - rolling) * blend;
   }
   const ridges = Math.abs(noise2(x * relief.ridgeFrequency, y * relief.ridgeFrequency, seed + 5000) - 0.5) * relief.ridgeAmplitude;
   let height = rawElevation(seed, x, y) + ridges;
-  for (const feature of [TERRAIN.features.canyon, TERRAIN.features.dryRiver]) {
-    const gap = polylineDist(p, feature.path) - feature.width;
+  for (const { feature, index, reach } of FEATURES) {
+    const gap = index.nearestWithin(x, y, reach) - feature.width;
     if (gap < feature.bank) height -= feature.depth * (gap <= 0 ? 1 : 1 - smooth(gap / feature.bank));
   }
   height *= 1 - flattenFactor(x, y);
   // Roads retain broad grades; only their small bumps and channel crossings are smoothed.
   height += rolling;
   for (const crater of TERRAIN.features.craters) {
-    const gap = dist(p, crater.center) - crater.radius;
+    const dx = crater.center.x - x;
+    const dy = crater.center.y - y;
+    // One tile past the bank keeps this cheap skip clear of rounding.
+    if (dx * dx + dy * dy > (crater.radius + crater.bank + 1) ** 2) continue;
+    const gap = Math.hypot(dx, dy) - crater.radius;
     if (gap < crater.bank) height -= crater.depth * (gap <= 0 ? 1 : 1 - smooth(gap / crater.bank));
   }
   return height;
