@@ -3,9 +3,26 @@ import * as economy from './economy';
 import { addVehicle, emptyWorld } from './testkit';
 import { REGION } from '../data/region';
 import { ECONOMY } from '../data/goods';
-import { goodsCount } from './grid';
+import { corePart, goodsCount } from './grid';
+import { partDef } from '../data/parts';
+import { chassisDef } from '../data/chassis';
+import { RULES } from '../data/rules';
 
 describe('NPC transactions', () => {
+  it('pays to repair the built-in cab without selling it', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'scavengers', 'scout', [], REGION.towns[0].pos);
+    const cab = corePart(npc, 'cab');
+    cab.hp -= 2;
+    npc.resources!.money = ECONOMY.partRepairPerHp * 2;
+    npc.resources!.fuel = chassisDef(npc.chassisId).fuelCap;
+    npc.resources!.supplies = RULES.suppliesCap;
+    economy.serviceVehicle(w, npc, 'tin');
+    expect(corePart(npc, 'cab').id).toBe(cab.id);
+    expect(cab.hp).toBe(partDef(cab.defId).hp);
+    expect(npc.resources!.money).toBe(0);
+  });
+
   it('rejects an unaffordable purchase without partial effects', () => {
     const w = emptyWorld();
     const npc = addVehicle(w, 'traders', 'hauler', [], REGION.towns[0].pos);

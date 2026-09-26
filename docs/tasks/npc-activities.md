@@ -1,6 +1,6 @@
 # NPC activities
 
-Status: integrating main
+Status: reviewing integrated branch
 Branch: npc-activities
 Worktree: /Users/boris/Documents/Korovan/.worktrees/npc-activities
 Mode: hands-off
@@ -195,6 +195,14 @@ Outcome: the observable NPC economic and raid loops run in the browser with Rapi
 The user reported frequent rear-first driving. Flat-ground regressions reproduced it in both movement engines: an NPC aimed its rear at a destination behind it, and the physics truck still faced exactly away after six turns. Normal NPC reversing now steers the nose toward the route. Player reverse controls and straight-back blockage recovery retain their behavior. Recovery counters expire at the next planning step so both movement engines see the active recovery mode for the whole move. Fresh verification passed: 166 tests, typecheck, browser smoke at 26 fps, and 180 simulated turns in Chromium. The economic loop completed in 11 turns and the raid loop in 7. NPC decisions averaged 0.86 ms per turn over the normal 120-turn run, so no speculative caching or throttling was added.
 
 The long-run browser harness previously reused the pre-turn physics snapshot. It now adopts each returned snapshot, matching `Game.finishMovement()`. Earlier long-run stalls and timings from that harness are superseded by `tmp/npc-corrected-*.log` and the corrected trace. One smoke run measured 11 fps during concurrent system load. The corrected rerun passed at 26 fps, with no threshold changes. The user authorized finishing and merging into main. Integration preserves main's part-based combat and weather.
+
+### Main integration
+
+Merged committed main `dd0c4eb` into the isolated NPC branch. Preserve part-based combat, load-dependent physics, start kits, and weather. NPC survival now reads cab condition instead of removed hull state, threat estimates use visible weapon rounds, repairs operate on parts, and destroyed NPC fuel tanks leak under the same rule as the player's. Built-in parts remain mounted and cannot be sold as cargo. Class resources retain the standard start budget independently of the chosen player kit.
+
+Integrated verification passed: 236 tests, typecheck, production build, browser smoke at 32.5 fps, corrected economic loop in 12 turns, corrected raid loop in 5 turns, and visible activity inspection. Logs: `tmp/integrated-*.log`. The language-server session retains pre-merge imported types despite explicit refresh requests. Fresh worktree-local TypeScript compilation and build pass against the actual merged files.
+
+Main still has unrelated uncommitted changes in combat, damage, defeat, economy, supplies, terrain tests, types, and world. Do not stash, discard, or commit those changes. The user authorized the final merge, but it must preserve this work. The original untracked root task draft also needs preserving if it blocks checkout of the committed task file.
 
 ### Review
 

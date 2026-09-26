@@ -4,7 +4,7 @@ import { ECONOMY } from '../data/goods';
 import { addVehicle, emptyWorld } from './testkit';
 import { resolveDestroyed } from './combat';
 import { addGoods } from './inventory';
-import { goodsCount } from './grid';
+import { corePart, goodsCount } from './grid';
 import { canScavenge, scavenge } from './locations';
 import { collectSalvage } from './salvage';
 import { freeCells } from './grid';
@@ -37,7 +37,7 @@ describe('finite salvage', () => {
     const w = emptyWorld();
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });
     addGoods(w, npc, 'scrap', 3);
-    npc.hull = 0;
+    corePart(npc, 'cab').hp = 0;
     resolveDestroyed(w);
     expect(w.salvage).toBeDefined();
     const stock = w.salvage.find((s) => s.id === `wreck-${npc.id}`)!;

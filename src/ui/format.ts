@@ -4,6 +4,7 @@ import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { mountedParts } from '../sim/grid';
 import { playerSees } from '../sim/vision';
+import type { PartHit } from '../sim/armor';
 import type { GameEvent, Vehicle, World } from '../sim/types';
 
 export function vehicleName(world: World, id: string): string {
@@ -31,6 +32,20 @@ export function formatNpcActivity(world: World, vehicle: Vehicle): string | null
   return `${activity.kind}${label ? `: ${label}` : ''} — ${activity.reason}`;
 }
 
+// Damage summed per part, parts with no damage left out.
+function partDamage(hits: PartHit[]): Map<string, number> {
+  const dealt = new Map<string, number>();
+  for (const h of hits) if (h.damage > 0) dealt.set(h.part, (dealt.get(h.part) ?? 0) + h.damage);
+  return dealt;
+}
+
+// "; Buggy: Engine −12, Wheel −5" for the parts one vehicle lost in a crash, or empty.
+function damageList(world: World, vehicleId: string, hits: PartHit[]): string {
+  const dealt = partDamage(hits);
+  if (dealt.size === 0) return '';
+  return `; ${vehicleName(world, vehicleId)}: ${[...dealt].map(([id, d]) => `${partName(world, vehicleId, id)} −${d}`).join(', ')}`;
+}
+
 // Returns null for events not worth a log line.
 export function eventText(world: World, e: GameEvent): { text: string; cls: string } | null {
   const n = (id: string) => vehicleName(world, id);
@@ -42,14 +57,19 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
     }
     case 'collision': {
       const b = e.b === 'edge' ? 'the map edge' : e.b.startsWith('v') ? n(e.b) : 'an obstacle';
-      if (e.a !== me && e.b !== me && e.damageA + e.damageB < 1) return null;
-      return { text: `${n(e.a)} crashed into ${b}: ${e.damageA} / ${e.damageB} damage`, cls: e.a === me || e.b === me ? 'bad' : 'dim' };
+      const dealt = [...e.hitsA, ...e.hitsB].reduce((sum, h) => sum + h.damage, 0);
+      if (e.a !== me && e.b !== me && dealt < 1) return null;
+      const text = `${n(e.a)} crashed into ${b}${damageList(world, e.a, e.hitsA)}${damageList(world, e.b, e.hitsB)}`;
+      return { text, cls: e.a === me || e.b === me ? 'bad' : 'dim' };
     }
     case 'shot': {
       if (e.shooter !== me && e.target !== me) return null;
-      const aim = e.aim === 'hull' ? '' : ` at ${partName(world, e.target, e.aim)}`;
-      const what = e.hit ? `hit for ${e.damage}` : 'missed';
-      return { text: `${n(e.shooter)} shot ${n(e.target)}${aim}: ${what} (${Math.round(e.chance * 100)}%)`, cls: e.target === me && e.hit ? 'bad' : '' };
+      const aim = e.aim === 'body' ? '' : ` at ${partName(world, e.target, e.aim)}`;
+      const hits = e.rounds.filter((r) => r.hit).length;
+      const dealt = partDamage(e.rounds.flatMap((r) => r.hits));
+      const parts = [...dealt].map(([id, d]) => `, ${partName(world, e.target, id)} −${d}`).join('');
+      const text = `${partName(world, e.shooter, e.weapon)} → ${n(e.target)}${aim}: ${hits}/${e.rounds.length} hits${parts} (${Math.round(e.chance * 100)}%)`;
+      return { text, cls: e.target === me && dealt.size > 0 ? 'bad' : '' };
     }
     case 'partDisabled':
       return { text: `${n(e.vehicle)}: ${partName(world, e.vehicle, e.part)} disabled`, cls: e.vehicle === me ? 'bad' : 'good' };

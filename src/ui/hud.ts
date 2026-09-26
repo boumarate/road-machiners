@@ -4,7 +4,7 @@ import { chassisDef } from "../data/chassis";
 import { partDef } from "../data/parts";
 import { playerVehicle } from "../sim/damage";
 import { xpForLevel } from "../sim/progress";
-import { freeCells, mountedParts } from "../sim/grid";
+import { corePart, coreParts, freeCells, mountedParts } from "../sim/grid";
 import { vehicleStats } from "../sim/stats";
 import type { Vehicle, World } from "../sim/types";
 import { el, panel } from "./dom";
@@ -43,6 +43,7 @@ export class Hud {
         {},
         "Space: end turn. A: auto fire. C: character. I: inventory.",
       ),
+      el("div", {}, "R: manual driving, straight through anything."),
       el("div", {}, "Right-drag: pan. F: follow. Wheel: zoom."),
     );
   }
@@ -70,13 +71,17 @@ export class Hud {
     const me = playerVehicle(w);
     const s = vehicleStats(w, me);
     const p = w.player;
+    const cab = corePart(me, "cab");
+    const cabMax = partDef(cab.defId).hp;
+    const broken = mountedParts(me).filter((x) => x.hp === 0).length;
     const warn = (v: number, low: number) => (v <= low ? "bad" : "");
     const item = (label: string, value: string, cls = "") =>
       el("span", { class: cls }, el("b", {}, label), " ", value);
     this.top.replaceChildren(
       item("Turn", `${w.turn}`),
       item("Money", `${p.money}`),
-      item("Hull", `${me.hull}/${s.hullMax}`, warn(me.hull, s.hullMax * 0.3)),
+      item("Cab", `${cab.hp}/${cabMax}`, warn(cab.hp, cabMax * 0.3)),
+      item("Broken", `${broken}`, broken > 0 ? "bad" : ""),
       item("Health", `${p.health}`, warn(p.health, 40)),
       item(
         "Fuel",
@@ -88,6 +93,7 @@ export class Hud {
       item("Speed", `${me.speed.toFixed(1)}/${s.maxSpeed}`),
       item("Lvl", `${p.level} (${p.xp}/${xpForLevel(p.level + 1)} XP)`),
     );
+    if (me.direct) this.top.append(item("Manual", "[R]"));
     if (p.skillPoints > 0)
       this.top.append(
         el("span", { class: "good" }, `${p.skillPoints} skill pt [C]`),
@@ -115,16 +121,28 @@ export class Hud {
       this.info.style.display = "none";
       return;
     }
-    const s = vehicleStats(w, v);
-    const pct = Math.round((v.hull / s.hullMax) * 100);
-    const parts = mountedParts(v).map((p) => {
-      const def = partDef(p.defId);
-      return el(
+    const cab = corePart(v, "cab");
+    const pct = Math.round((cab.hp / partDef(cab.defId).hp) * 100);
+    // The four wheels read as one line.
+    const wheels = coreParts(v, "wheel");
+    const working = wheels.filter((p) => p.hp > 0).length;
+    const parts = mountedParts(v)
+      .filter((p) => !wheels.includes(p))
+      .map((p) => {
+        const def = partDef(p.defId);
+        return el(
+          "div",
+          { class: p.hp > 0 ? "" : "bad" },
+          `${def.name}: ${p.hp}/${def.hp}`,
+        );
+      });
+    parts.push(
+      el(
         "div",
-        { class: p.hp > 0 ? "" : "bad" },
-        `${def.name}: ${p.hp}/${def.hp}`,
-      );
-    });
+        { class: working === wheels.length ? "" : "bad" },
+        `Wheels ${working}/${wheels.length} working`,
+      ),
+    );
     const activity = formatNpcActivity(w, v);
     const stance =
       v.faction === "player" ? "" : hostile ? "hostile" : "neutral";
@@ -139,7 +157,7 @@ export class Hud {
       el(
         "div",
         {},
-        `Hull ${v.hull}/${s.hullMax}   Speed ${v.speed.toFixed(1)}`,
+        `Cab ${pct}%   Speed ${v.speed.toFixed(1)}`,
       ),
       el("div", { class: "bar" }, el("div", { style: `width:${pct}%` })),
       ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),

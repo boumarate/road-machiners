@@ -1,5 +1,5 @@
 import { partDef } from "../data/parts";
-import { fireBlock, hitChance } from "../sim/combat";
+import { fireBlock, hitOdds, type FireBlock } from "../sim/combat";
 import { playerVehicle } from "../sim/damage";
 import { mountedParts } from "../sim/grid";
 import { vehicleStats, type MountedWeapon } from "../sim/stats";
@@ -9,7 +9,7 @@ import { setAutoFire, setWeaponOrder } from "../sim/world";
 import { el, panel } from "./dom";
 import type { UiHost } from "./host";
 
-const BLOCK_TEXT = {
+export const BLOCK_TEXT: Record<FireBlock, string> = {
   disabled: "disabled",
   reloading: "reloading",
   range: "out of range",
@@ -38,7 +38,7 @@ export function getWeaponReadout(w: World, mw: MountedWeapon) {
     status,
     chance:
       block === null && target && order
-        ? hitChance(w, me, mw, target, order.aim)
+        ? hitOdds(w, me, mw, target, order.aim).chance
         : null,
     canFire: block === null,
   };
@@ -155,7 +155,7 @@ export class WeaponPanel {
         {
           class: `weapon-pick ${selected ? "on" : ""}`,
           "aria-pressed": String(selected),
-          title: `${mw.def.name}: damage ${mw.def.damage}, range ${mw.def.range}, arc ${mw.def.arc}°, fires every ${mw.def.reload} turn(s)`,
+          title: `${mw.def.name}: ${mw.def.rounds} × ${mw.def.round.damage} damage, pen ${mw.def.round.pen}, range ${mw.def.range}, arc ${mw.def.arc}°, fires every ${mw.def.reload} turn(s)`,
           onclick: () => this.selectWeapon(selected ? null : mw.part.id),
         },
         el("span", { class: "weapon-name" }, `[${i + 1}] ${mw.def.name}`),
@@ -184,7 +184,7 @@ export class WeaponPanel {
     aim: string,
   ): HTMLElement {
     const options = [
-      el("option", { value: "hull", selected: aim === "hull" }, "Hull"),
+      el("option", { value: "body", selected: aim === "body" }, "Body"),
     ];
     for (const p of mountedParts(target)) {
       options.push(

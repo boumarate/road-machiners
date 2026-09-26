@@ -10,12 +10,11 @@ import { dist } from './vec';
 import { getResources } from './resources';
 import { skillBonus } from '../data/skills';
 import { playerVehicle } from './damage';
-import { makePart } from './factory';
+import { addCoreParts, makePart } from './factory';
 import { gainXp } from './progress';
 import { requireTown } from './sites';
 import { freeCells, goodsCount, mountedParts } from './grid';
 import { addGoods, mountPart, removeGoods, stowPart } from './inventory';
-import { vehicleStats } from './stats';
 import type { PartInstance, Vehicle, World } from './types';
 import { update } from './world';
 
@@ -76,10 +75,6 @@ export function serviceVehicle(world: World, vehicle: Vehicle, townId: string): 
     resources.money -= count * ECONOMY.supplyPrice[kind];
   }
   const multiplier = vehicle.id === world.player.vehicleId ? repairMult(world) : 1;
-  const hullCost = ECONOMY.hullRepairPerHp * multiplier;
-  const hull = Math.min(vehicleStats(world, vehicle).hullMax - vehicle.hull, Math.floor(resources.money / hullCost));
-  vehicle.hull += hull;
-  resources.money -= Math.ceil(hull * hullCost);
   for (const part of allParts(vehicle)) {
     const unitCost = ECONOMY.partRepairPerHp * multiplier;
     const hp = Math.min(partDef(part.defId).hp - part.hp, Math.floor(resources.money / unitCost));
@@ -146,11 +141,6 @@ export function buySupply(world: World, kind: Supply, n: number): World {
   });
 }
 
-export function hullRepairCost(world: World): number {
-  const me = playerVehicle(world);
-  return Math.ceil((vehicleStats(world, me).hullMax - me.hull) * ECONOMY.hullRepairPerHp * repairMult(world));
-}
-
 export function partRepairCost(world: World, part: PartInstance): number {
   return Math.ceil((partDef(part.defId).hp - part.hp) * ECONOMY.partRepairPerHp * repairMult(world));
 }
@@ -160,9 +150,8 @@ export function repairAll(world: World): World {
     requireTown(w);
     const me = playerVehicle(w);
     const parts = allParts(me);
-    const cost = hullRepairCost(w) + parts.reduce((a, p) => a + partRepairCost(w, p), 0);
+    const cost = parts.reduce((a, p) => a + partRepairCost(w, p), 0);
     pay(w, cost, 'repairs');
-    me.hull = vehicleStats(w, me).hullMax;
     for (const p of parts) p.hp = partDef(p.defId).hp;
   });
 }
@@ -175,6 +164,7 @@ export function partSellPrice(part: PartInstance): number {
 export function buyPart(world: World, defId: string): World {
   return update(world, (w) => {
     requireTown(w);
+    if (partDef(defId).kind === 'core') throw new Error(`${partDef(defId).name} is built in. It is not for sale.`);
     pay(w, partDef(defId).price, partDef(defId).name);
     w.player.storage.push(makePart(w, defId));
   });
@@ -190,22 +180,25 @@ export function sellPart(world: World, partId: string): World {
   });
 }
 
+// The trade-in scales by the mean health of the built-in parts.
 export function chassisTradeIn(world: World): number {
   const me = playerVehicle(world);
-  const ch = chassisDef(me.chassisId);
-  return Math.floor(ch.price * ECONOMY.chassisSellFactor * (me.hull / vehicleStats(world, me).hullMax));
+  const core = mountedParts(me, 'core');
+  const health = core.reduce((a, p) => a + p.hp / partDef(p.defId).hp, 0) / core.length;
+  return Math.floor(chassisDef(me.chassisId).price * ECONOMY.chassisSellFactor * health);
 }
 
 export function repairCost(world: World): number {
-  return hullRepairCost(world) + allParts(playerVehicle(world)).reduce((a, p) => a + partRepairCost(world, p), 0);
+  return allParts(playerVehicle(world)).reduce((a, p) => a + partRepairCost(world, p), 0);
 }
 
 function allParts(v: Vehicle): PartInstance[] {
   return v.items.flatMap((it) => (it.kind === 'part' ? [it.part] : []));
 }
 
-// Swap chassis: mounted parts move to free mounts, spares and goods to free cells, and parts that
-// do not fit go to garage storage. Goods that do not fit block the swap. The old chassis is traded in.
+// Swap chassis: the old built-in parts go with the old chassis and the new one brings its own.
+// Mounted parts move to free mounts, spares and goods to free cells, and parts that do not fit go to
+// garage storage. Goods that do not fit block the swap. The old chassis is traded in.
 export function buyChassis(world: World, chassisId: string): World {
   return update(world, (w) => {
     requireTown(w);
@@ -219,8 +212,9 @@ export function buyChassis(world: World, chassisId: string): World {
     const old = me.items;
     me.chassisId = chassisId;
     me.items = [];
+    addCoreParts(w, me);
     // Cargo parts first: their extra rows make room for the rest.
-    const parts = old.flatMap((it) => (it.kind === 'part' ? [it.part] : []));
+    const parts = old.flatMap((it) => (it.kind === 'part' && partDef(it.part.defId).kind !== 'core' ? [it.part] : []));
     parts.sort((a, b) => Number(partDef(b.defId).kind === 'cargo') - Number(partDef(a.defId).kind === 'cargo'));
     for (const part of parts) {
       const placed = mounted.has(part.id) ? mountPart(w, me, part) || stowPart(w, me, part) : stowPart(w, me, part);
@@ -229,7 +223,6 @@ export function buyChassis(world: World, chassisId: string): World {
     for (const [good, n] of Object.entries(goods)) {
       if (addGoods(w, me, good, n) < n) throw new Error('Cargo would not fit the new chassis. Sell some first.');
     }
-    me.hull = vehicleStats(w, me).hullMax;
     me.weaponOrders = {};
     w.player.fuel = Math.min(w.player.fuel, chassisDef(chassisId).fuelCap);
   });

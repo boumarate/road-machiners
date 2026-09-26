@@ -6,7 +6,7 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { isHostile } from './combat';
 import { getTradePrice, sellVehicleCargo, serviceVehicle, tradeGoods } from './economy';
-import { freeCells, goodsCount, mountedParts } from './grid';
+import { corePart, freeCells, goodsCount, mountedParts } from './grid';
 import { getResources } from './resources';
 import { randInt } from './rng';
 import { canReachSalvage, collectSalvage, hasSalvage } from './salvage';
@@ -48,12 +48,17 @@ function hasSaleCargo(vehicle: Vehicle): boolean {
   return vehicle.items.some((item) => item.kind === 'good' || !mounted.has(item.part.id));
 }
 
+function getCabCondition(vehicle: Vehicle): number {
+  const cab = corePart(vehicle, 'cab');
+  return cab.hp / partDef(cab.defId).hp;
+}
+
 function computeVisibleStrength(vehicle: Vehicle): number {
   // Weapon definitions are public shapes. Enemy reload and part HP are not observations.
   return mountedParts(vehicle, 'weapon').reduce((sum, part) => {
     const def = partDef(part.defId);
     if (def.kind !== 'weapon') throw new Error('Non-weapon in weapon mounts');
-    return sum + def.damage;
+    return sum + def.round.damage * def.rounds;
   }, 0);
 }
 
@@ -62,9 +67,9 @@ function chooseDangerActivity(world: World, vehicle: Vehicle, profile: NpcClass)
   enemies.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   const enemy = enemies[0];
   if (!enemy) return null;
-  const ownStrength = vehicleStats(world, vehicle).weapons.filter((weapon) => weapon.part.hp > 0).reduce((sum, weapon) => sum + weapon.def.damage, 0);
-  const hullThreshold = vehicle.brain!.activity?.kind === 'flee' ? profile.recoverHull : profile.fleeHull;
-  const weak = vehicle.hull / vehicleStats(world, vehicle).hullMax <= hullThreshold || getResources(world, vehicle).health / RULES.maxHealth <= hullThreshold;
+  const ownStrength = vehicleStats(world, vehicle).weapons.filter((weapon) => weapon.part.hp > 0).reduce((sum, weapon) => sum + weapon.def.round.damage * weapon.def.rounds, 0);
+  const conditionThreshold = vehicle.brain!.activity?.kind === 'flee' ? profile.recoverCondition : profile.fleeCondition;
+  const weak = getCabCondition(vehicle) <= conditionThreshold || getResources(world, vehicle).health / RULES.maxHealth <= conditionThreshold;
   if (profile.defensive || weak || ownStrength === 0 || computeVisibleStrength(enemy) > ownStrength * profile.threatRatio) {
     const safe = profile.towns.map(getKnownSite).filter((site) => dist(site.pos, enemy.pos) > dist(vehicle.pos, enemy.pos));
     safe.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
@@ -79,13 +84,13 @@ function chooseServiceActivity(world: World, vehicle: Vehicle, profile: NpcClass
   const resources = getResources(world, vehicle);
   const lowFuel = resources.fuel <= chassisDef(vehicle.chassisId).fuelCap * NPC_UPKEEP.lowFuel;
   const lowSupplies = resources.supplies <= RULES.suppliesCap * NPC_UPKEEP.lowSupplies;
-  const damaged = vehicle.hull / vehicleStats(world, vehicle).hullMax <= profile.fleeHull || mountedParts(vehicle).some((part) => part.hp === 0);
+  const damaged = getCabCondition(vehicle) <= profile.fleeCondition || mountedParts(vehicle).some((part) => part.hp === 0);
   if (!lowFuel && !lowSupplies && !damaged) return null;
   if (lowSupplies && !lowFuel && !damaged) {
     const oasis = chooseNearestSite(vehicle, profile.supplySites);
     if (oasis) return createSiteActivity('resupply', oasis.id, 'low supplies');
   }
-  if (resources.money < Math.min(ECONOMY.supplyPrice.fuel, ECONOMY.supplyPrice.supplies, ECONOMY.hullRepairPerHp) && !hasSaleCargo(vehicle)) {
+  if (resources.money < Math.min(ECONOMY.supplyPrice.fuel, ECONOMY.supplyPrice.supplies, ECONOMY.partRepairPerHp) && !hasSaleCargo(vehicle)) {
     return createActivity('wait', null, null, 'cannot afford upkeep');
   }
   const town = chooseNearestSite(vehicle, profile.towns);
@@ -211,7 +216,7 @@ function resolveActivity(world: World, vehicle: Vehicle, activity: NpcActivity):
 
 export function resolveNpcActivities(world: World): void {
   for (const vehicle of world.vehicles) {
-    if (!vehicle.brain?.activity || vehicle.hull <= 0 || getResources(world, vehicle).health <= 0 || vehicle.speed > RULES.parkedSpeed) continue;
+    if (!vehicle.brain?.activity || corePart(vehicle, 'cab').hp <= 0 || getResources(world, vehicle).health <= 0 || vehicle.speed > RULES.parkedSpeed) continue;
     resolveActivity(world, vehicle, vehicle.brain.activity);
   }
 }

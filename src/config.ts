@@ -15,7 +15,14 @@ function requirePositiveInt(name: string, raw: string | undefined): number {
   return value;
 }
 
+function requireString(name: string, raw: string | undefined): string {
+  if (raw === undefined || raw.trim() === "")
+    throw new Error(`${name} is missing. Copy .env.example to .env.`);
+  return raw.trim();
+}
+
 export const CONFIG = {
+  startKit: requireString("VITE_START_KIT", import.meta.env.VITE_START_KIT),
   seed: requireInt("VITE_SEED", import.meta.env.VITE_SEED),
   combatShotMs: requirePositiveInt(
     "VITE_COMBAT_SHOT_MS",

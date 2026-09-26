@@ -4,7 +4,7 @@ import { planNpcOrders } from './ai';
 import { getResources } from './resources';
 import { REGION } from '../data/region';
 import { endTurn } from './world';
-import { goodsCount } from './grid';
+import { corePart, goodsCount } from './grid';
 import { addGoods } from './inventory';
 import { resolveNpcActivities, chooseNpcActivity } from './npc-activities';
 
@@ -95,7 +95,7 @@ describe('NPC activities', () => {
     const raider = addVehicle(w0, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 14, y: 12 });
     raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0 };
     const victim = addVehicle(w0, 'scavengers', 'scout', [], { x: 16, y: 12 });
-    victim.hull = 1;
+    corePart(victim, 'cab').hp = 1;
     addGoods(w0, victim, 'scrap', 3);
     for (const key of ['buggy', 'gunwagon', 'trader', 'scavenger']) w0.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
     const money = raider.resources!.money;
@@ -142,7 +142,7 @@ describe('NPC activities', () => {
   it('flees when damaged, and stops tracking a target behind cover', () => {
     const { w, npc } = createScavenger();
     addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 14, y: 10 });
-    npc.hull = 1;
+    corePart(npc, 'cab').hp = 1;
     planNpcOrders(w);
     expect(npc.brain!.activity?.kind).toBe('flee');
     w.obstacles.push({ id: 'cover', kind: 'rock', pos: { x: 12, y: 10 }, r: 1 });

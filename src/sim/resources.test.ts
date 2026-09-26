@@ -1,10 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
 import { addVehicle, emptyWorld } from './testkit';
-import { consumeSupplies } from './supplies';
+import { consumeSupplies, leakFuel } from './supplies';
+import { corePart } from './grid';
 import { resolveMovement } from './movement';
 
 describe('NPC upkeep', () => {
+  it('leaks NPC fuel from a destroyed tank without draining player fuel', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 10, y: 10 });
+    corePart(npc, 'tank').hp = 0;
+    const fuel = npc.resources!.fuel;
+    const playerFuel = w.player.fuel;
+    leakFuel(w);
+    expect(npc.resources!.fuel).toBe(fuel - RULES.tankLeak);
+    expect(w.player.fuel).toBe(playerFuel);
+  });
+
   it('starves an NPC without supplies without changing player health', () => {
     const w = emptyWorld();
     const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 10, y: 10 });

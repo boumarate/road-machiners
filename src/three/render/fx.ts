@@ -11,9 +11,7 @@ const MAX_PUFFS = 200; // pool size; effects beyond this are dropped rather than
 const MAX_TEXTS = 24;
 const GRAVITY = 2; // m/s^2 pulling sparks and dust down; a soft fraction of real gravity, for looks
 const RISE_METERS = 1.5; // how far a floating number drifts up over its life
-const MISS_METERS = 2; // a miss lands this far beside the target
 const CANNON_COLOR = 0xffad50;
-const BURST_GAP = 0.08; // share of the flight between machine-gun bolts
 const MG_BOLT = 0.04; // bolt length as a share of the flight
 const CANNON_BOLT = 0.06;
 const LABEL_ROW_PX = 22; // screen spacing between stacked shot labels
@@ -35,13 +33,15 @@ function dotMap(): THREE.Texture {
 
 type Puff = { sprite: THREE.Sprite; vel: THREE.Vector3; age: number; life: number; fromScale: number; toScale: number; used: boolean };
 type FloatText = { el: HTMLDivElement; pos: V3; rowPx: number; age: number; life: number; used: boolean };
-// A shot in flight: bolts run from muzzle to impact over its life, then the impact plays.
-type Tracer = { line: THREE.LineSegments; from: THREE.Vector3; to: THREE.Vector3; heavy: boolean; age: number; life: number; land: () => void };
+// A round in flight: after its delay a bolt runs from muzzle to landing point over its life, then the impact plays.
+type Tracer = { line: THREE.LineSegments; from: THREE.Vector3; to: THREE.Vector3; heavy: boolean; age: number; life: number; fire: () => void; land: () => void };
+type Pending = { left: number; run: () => void }; // seconds until run
 
 export class Fx3D {
   private puffs: Puff[] = [];
   private texts: FloatText[] = [];
   private tracers: Tracer[] = [];
+  private pending: Pending[] = [];
 
   constructor(private scene: THREE.Scene, private overlay: HTMLElement, private rig: CameraRig) {
     for (let i = 0; i < MAX_PUFFS; i++) {
@@ -86,21 +86,28 @@ export class Fx3D {
     }
   }
 
-  // A shot travels for flightMs, then sparks on a hit or kicks dust on a miss, and shows its label for readMs.
-  // row stacks labels of several shots at the same target.
-  shot(from: V3, to: V3, hit: boolean, heavy: boolean, label: string, row: number, flightMs: number, readMs: number): void {
-    const side = Math.random() < 0.5 ? -1 : 1;
-    const b: V3 = hit ? to : { x: to.x + side * MISS_METERS, y: to.y, z: to.z - side * MISS_METERS };
+  // One round leaves `from` after delayMs and reaches its landing point after flightMs more. It lands with sparks
+  // when it struck something, else with dust.
+  shot(from: V3, land: V3, sparks: boolean, heavy: boolean, delayMs: number, flightMs: number): void {
     const color = heavy ? CANNON_COLOR : PAL.flash;
     const line = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 1 }));
+    line.visible = false;
     this.scene.add(line);
-    this.puff(from, PAL.flash, 1, { speed: 0, life: flightMs / 2000, scale: heavy ? 0.9 : 0.5, grow: 1.6, additive: true });
-    const land = () => {
-      if (hit) this.puff(b, 0xffa040, heavy ? 14 : 6, { speed: 4, life: 0.35, scale: 0.35, grow: 0.3, additive: true });
-      else this.puff(b, 0xd8c098, 4, { speed: 1.5, life: 0.9, scale: 0.5, grow: 1.4 });
-      this.floatText(to, label, hit ? '#ffb070' : '#c8b898', readMs, row * LABEL_ROW_PX);
+    const fire = () => {
+      line.visible = true;
+      this.puff(from, PAL.flash, 1, { speed: 0, life: flightMs / 2000, scale: heavy ? 0.9 : 0.5, grow: 1.6, additive: true });
     };
-    this.tracers.push({ line, from: new THREE.Vector3(from.x, from.y, from.z), to: new THREE.Vector3(b.x, b.y, b.z), heavy, age: 0, life: flightMs / 1000, land });
+    const impact = () => {
+      if (sparks) this.puff(land, 0xffa040, heavy ? 14 : 6, { speed: 4, life: 0.35, scale: 0.35, grow: 0.3, additive: true });
+      else this.puff(land, 0xd8c098, 4, { speed: 1.5, life: 0.9, scale: 0.5, grow: 1.4 });
+    };
+    const tracer: Tracer = { line, from: new THREE.Vector3(from.x, from.y, from.z), to: new THREE.Vector3(land.x, land.y, land.z), heavy, age: -delayMs / 1000, life: flightMs / 1000, fire, land: impact };
+    this.tracers.push(tracer);
+  }
+
+  // A floating label that appears at p after delayMs and reads for readMs. row stacks labels at the same point.
+  label(p: V3, text: string, color: string, row: number, delayMs: number, readMs: number): void {
+    this.pending.push({ left: delayMs / 1000, run: () => this.floatText(p, text, color, readMs, row * LABEL_ROW_PX) });
   }
 
   explode(p: V3): void {
@@ -151,9 +158,19 @@ export class Fx3D {
       slot.sprite.scale.setScalar(slot.fromScale + (slot.toScale - slot.fromScale) * t);
       (slot.sprite.material as THREE.SpriteMaterial).opacity = 1 - t;
     }
+    for (let i = this.pending.length - 1; i >= 0; i--) {
+      const job = this.pending[i];
+      job.left -= dt;
+      if (job.left > 0) continue;
+      this.pending.splice(i, 1);
+      job.run();
+    }
     for (let i = this.tracers.length - 1; i >= 0; i--) {
       const tr = this.tracers[i];
+      const before = tr.age;
       tr.age += dt;
+      if (tr.age < 0) continue;
+      if (before <= 0) tr.fire(); // the delay ran out this frame
       if (tr.age >= tr.life) {
         this.scene.remove(tr.line);
         tr.line.geometry.dispose();
@@ -162,14 +179,9 @@ export class Fx3D {
         tr.land();
         continue;
       }
-      // A cannon fires one long bolt, a machine gun a short burst of three.
-      const progress = tr.age / tr.life;
-      const points: THREE.Vector3[] = [];
-      for (let k = 0; k < (tr.heavy ? 1 : 3); k++) {
-        const head = Math.max(0, progress - k * BURST_GAP);
-        const tail = Math.max(0, head - (tr.heavy ? CANNON_BOLT : MG_BOLT));
-        points.push(tr.from.clone().lerp(tr.to, tail), tr.from.clone().lerp(tr.to, head));
-      }
+      const head = tr.age / tr.life;
+      const tail = Math.max(0, head - (tr.heavy ? CANNON_BOLT : MG_BOLT));
+      const points = [tr.from.clone().lerp(tr.to, tail), tr.from.clone().lerp(tr.to, head)];
       tr.line.geometry.dispose();
       tr.line.geometry = new THREE.BufferGeometry().setFromPoints(points);
     }

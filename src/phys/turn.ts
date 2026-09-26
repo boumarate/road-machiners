@@ -3,13 +3,13 @@
 
 import { RULES } from '../data/rules';
 import { playerVehicle } from '../sim/damage';
-import { applyCrash } from '../sim/movement';
+import { applyCrash, nearestEdge } from '../sim/movement';
 import { getResources } from '../sim/resources';
 import { vehicleStats } from '../sim/stats';
-import type { Pose, World } from '../sim/types';
-import { dist } from '../sim/vec';
+import type { Pose, Vehicle, World } from '../sim/types';
+import { dist, type Vec } from '../sim/vec';
 import { visibleTiles } from '../sim/vision';
-import { bodyState, simulateTurn, syncDrive, toTilesPerTurn, TURN_STEPS, type Drive, type TurnResult } from './drive';
+import { bodyState, EDGE, simulateTurn, syncDrive, toTilesPerTurn, TURN_STEPS, type Drive, type TurnResult } from './drive';
 import { headingOf, toMap } from './frames';
 
 const EXPLORE_EVERY = 4; // trail poses between sight checks while exploring along a turn
@@ -47,8 +47,17 @@ export function applyTurn(w: World, r: TurnResult): void {
     const a = w.vehicles.find((v) => v.id === c.a);
     if (!a) throw new Error(`Crash with unknown vehicle ${c.a}`);
     const b = w.vehicles.find((v) => v.id === c.b) ?? null;
-    applyCrash(w, a, b, c.b, toTilesPerTurn(c.impact));
+    applyCrash(w, a, b, c.b, crashPoint(w, a, b, c.b), toTilesPerTurn(c.impact));
   }
+}
+
+// Where the blow on a comes from: the other vehicle's center, the obstacle's center or the nearest map edge point.
+function crashPoint(w: World, a: Vehicle, b: Vehicle | null, what: string): Vec {
+  if (b) return b.pos;
+  if (what === EDGE) return nearestEdge(w, a.pos);
+  const o = w.obstacles.find((x) => x.id === what);
+  if (!o) throw new Error(`Crash with unknown obstacle ${what}`);
+  return o.pos;
 }
 
 // Tiles the player saw while driving count as explored, not only those seen at the turn's end.

@@ -1,0 +1,69 @@
+import { describe, expect, it } from 'vitest';
+import { hitOdds } from '../sim/combat';
+import { vehicleStats } from '../sim/stats';
+import { addVehicle, emptyWorld } from '../sim/testkit';
+import { DEG } from '../sim/vec';
+import { refreshVision } from '../sim/vision';
+import { hitCardRows } from './hitCard';
+
+function createDuel() {
+  const world = emptyWorld();
+  const me = world.vehicles[0];
+  const them = addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 30 }, Math.PI / 2);
+  them.speed = 2;
+  refreshVision(world);
+  return { world, me, them, mine: vehicleStats(world, me).weapons[0], theirs: vehicleStats(world, them).weapons[0] };
+}
+
+describe('hover card rows', () => {
+  it('shows my weapon odds from hitOdds with every cause', () => {
+    const { world, me, them, mine } = createDuel();
+    const o = hitOdds(world, me, mine, them, 'body');
+    const card = hitCardRows(world, them.id)!;
+    expect(card.name).toBe(them.name);
+    expect(card.mine[0]).toMatchObject({ odds: o, text: `${Math.round(o.chance * 100)}%` });
+    const deg = (r: number) => (r / DEG).toFixed(1);
+    expect(o.causes.crossing).toBeGreaterThan(0);
+    expect(card.mine[0].cause).toBe(`${Math.round(o.distance)} m · shows ${o.width.toFixed(1)} m wide · scatter ${deg(o.causes.weapon)}° weapon +${deg(o.causes.crossing)}° crossing`);
+  });
+
+  it('shows its weapons against me with the aim of its order at me', () => {
+    const { world, me, them, theirs } = createDuel();
+    const cab = me.items.find((it) => it.kind === 'part' && it.part.defId === 'cab')!;
+    if (cab.kind !== 'part') throw new Error('cab is not a part');
+    them.weaponOrders[theirs.part.id] = { targetId: me.id, aim: cab.part.id };
+    const card = hitCardRows(world, them.id)!;
+    expect(card.theirs[0].odds).toEqual(hitOdds(world, them, theirs, me, cab.part.id));
+  });
+
+  it('uses a body shot for its weapons ordered at someone else', () => {
+    const { world, me, them, theirs } = createDuel();
+    const other = addVehicle(world, 'traders', 'buggy', [], { x: 30, y: 34 });
+    them.weaponOrders[theirs.part.id] = { targetId: other.id, aim: 'body' };
+    expect(hitCardRows(world, them.id)!.theirs[0].odds).toEqual(hitOdds(world, them, theirs, me, 'body'));
+  });
+
+  it('shows the block reason instead of a chance', () => {
+    const { world, them, mine } = createDuel();
+    mine.part.hp = 0;
+    expect(hitCardRows(world, them.id)!.mine[0]).toMatchObject({ odds: null, text: 'disabled', cause: null });
+  });
+
+  it('shows gunnery as a negative scatter cause', () => {
+    const { world, me, them, mine } = createDuel();
+    world.player.skills.gunnery = 3;
+    const o = hitOdds(world, me, mine, them, 'body');
+    expect(o.causes.skill).toBeLessThan(0);
+    expect(hitCardRows(world, them.id)!.mine[0].cause).toContain(` −${(-o.causes.skill / DEG).toFixed(1)}° gunnery`);
+  });
+
+  it('shows no card for my own truck', () => {
+    const { world, me } = createDuel();
+    expect(hitCardRows(world, me.id)).toBeNull();
+  });
+
+  it('throws for an unknown truck', () => {
+    const { world } = createDuel();
+    expect(() => hitCardRows(world, 'nobody')).toThrow();
+  });
+});

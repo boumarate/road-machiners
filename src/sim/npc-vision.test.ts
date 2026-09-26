@@ -19,7 +19,7 @@ it('NPCs cannot target or fire through an occluding rock', () => {
   expect(npc.weaponOrders).toEqual({});
   const weapon = npc.items.find((item) => item.kind === 'part' && item.part.defId === 'mg')!;
   if (weapon.kind !== 'part') throw new Error('Missing test weapon');
-  npc.weaponOrders[weapon.part.id] = { targetId: w.player.vehicleId, aim: 'hull' };
+  npc.weaponOrders[weapon.part.id] = { targetId: w.player.vehicleId, aim: 'body' };
   fireWeapons(w);
   expect(w.events.filter((event) => event.t === 'shot')).toEqual([]);
 });

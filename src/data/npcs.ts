@@ -2,11 +2,11 @@
 
 import type { Faction } from '../sim/types';
 import type { Vec } from '../sim/vec';
-import { START } from './start';
+import { START_KITS } from './start';
 import { RULES } from './rules';
 
 // NPCs begin with the player's upkeep budget. Their fuel is capped by their chassis.
-export const NPC_RESOURCES = { money: START.money, fuel: START.fuel, supplies: START.supplies };
+export const NPC_RESOURCES = { money: START_KITS.standard.money, fuel: START_KITS.standard.fuel, supplies: START_KITS.standard.supplies };
 
 export type Brain = 'raider' | 'trader' | 'scavenger';
 
@@ -64,17 +64,17 @@ export type NpcClass = {
   towns: string[];
   salvageSites: string[];
   supplySites: string[];
-  fleeHull: number;
-  recoverHull: number;
+  fleeCondition: number;
+  recoverCondition: number;
   threatRatio: number;
   defensive: boolean;
 };
 
-// Hull warnings begin at 30%. Recovery to half hull prevents fight/flee oscillation.
+// Cab warnings begin at 30%. Recovery to half cab health prevents fight/flee oscillation.
 export const NPC_CLASSES: Record<Brain, NpcClass> = {
-  scavenger: { towns: ['tin', 'salt'], salvageSites: ['convoy'], supplySites: ['oasis'], fleeHull: 0.3, recoverHull: 0.5, threatRatio: 1, defensive: false },
-  trader: { towns: ['tin', 'salt'], salvageSites: [], supplySites: ['oasis'], fleeHull: 0.3, recoverHull: 0.5, threatRatio: 1, defensive: true },
-  raider: { towns: ['tin', 'salt'], salvageSites: [], supplySites: ['oasis'], fleeHull: 0.3, recoverHull: 0.5, threatRatio: 1, defensive: false },
+  scavenger: { towns: ['tin', 'salt'], salvageSites: ['convoy'], supplySites: ['oasis'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false },
+  trader: { towns: ['tin', 'salt'], salvageSites: [], supplySites: ['oasis'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: true },
+  raider: { towns: ['tin', 'salt'], salvageSites: [], supplySites: ['oasis'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false },
 };
 
 export const NPC_UPKEEP = {
