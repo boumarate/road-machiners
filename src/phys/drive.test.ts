@@ -103,6 +103,7 @@ describe('physics turns', () => {
     let w = emptyWorld();
     w.obstacles = [{ id: 'rock1', pos: { x: 36, y: 30 }, r: 0.8, kind: 'rock' }];
     w.vehicles[0].speed = 5;
+    w.vehicles[0].direct = true; // a careless driver skips the route planner
     w = setMoveOrder(w, { kind: 'through', dest: { x: 45, y: 30 } });
     const hull = me(w).hull;
     let crashes = 0;
@@ -118,12 +119,29 @@ describe('physics turns', () => {
     expect(me(w).hull).toBeLessThan(hull);
   });
 
+  it('a careful driver follows the route around a rock wall', () => {
+    let w = ordered({ kind: 'stopAt', dest: { x: 40, y: 30 } });
+    w.obstacles = [0, 1, 2, 3].map((i) => ({ id: `r${i}`, pos: { x: 34, y: 28 + i * 1.5 }, r: 0.8, kind: 'rock' as const }));
+    let d = buildDrive(w);
+    let crashes = 0;
+    for (let i = 0; i < 12 && me(w).order; i++) {
+      let r: TurnResult | null = null;
+      w = endTurn(w, physicsMove(d, (x) => (r = x)));
+      crashes += w.events.filter((e) => e.t === 'collision').length;
+      freeDrive(d);
+      d = r!.next;
+    }
+    expect(crashes).toBe(0);
+    expect(dist(me(w).pos, { x: 40, y: 30 })).toBeLessThan(RULES.arriveRadius + 0.3);
+  });
+
   it('a site stops the truck at its edge; its buildings are scenery', () => {
     let w = ordered({ kind: 'through', dest: { x: 45, y: 30 } }, 4);
     w.obstacles = [
       { id: 'site-test', pos: { x: 40, y: 30 }, r: 3, kind: 'site' },
       { id: 'bld-test-0', pos: { x: 35.5, y: 30 }, r: 0.6, kind: 'building' },
     ];
+    w.vehicles[0].direct = true; // drive straight at the site instead of around it
     let d = buildDrive(w);
     expect(d.obstacles['bld-test-0']).toBeUndefined();
     const hits: string[] = [];

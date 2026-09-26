@@ -9,7 +9,8 @@ import { PHYSICS } from '../data/physics';
 import { RULES } from '../data/rules';
 import { isDriveObstacle } from '../sim/mapgen';
 import { vehicleStats, type VehicleStats } from '../sim/stats';
-import { zoneSpeed } from '../sim/steering';
+import { route, straightClear } from '../sim/path';
+import { aimPoint, parkedVehicles, zoneSpeed } from '../sim/steering';
 import { heightAt } from '../sim/terrain';
 import type { MoveOrder, Vehicle, World } from '../sim/types';
 import { angleDiff, clamp, DEG, dist, type Vec } from '../sim/vec';
@@ -201,7 +202,8 @@ function makeCar(world: RAPIER.World, body: RAPIER.RigidBody, b: Body): RAPIER.D
 
 // What a driver wants this turn, fixed at the start of the turn like the 2D rules: a destination to
 // steer at, and a speed from the throttle zone of the click. Without fuel the engine gives nothing.
-type Plan = { dest: Vec | null; target: number; stopAt: boolean; engine: boolean; maxSteer: number; engineForce: number; brakeForce: number };
+// route holds waypoints around obstacles when the straight line to dest is blocked, else null.
+type Plan = { dest: Vec | null; route: Vec[] | null; target: number; stopAt: boolean; engine: boolean; maxSteer: number; engineForce: number; brakeForce: number };
 
 function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBody, order: MoveOrder | null): Plan {
   const b = bodyOf(v.chassisId);
@@ -214,11 +216,14 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
     engineForce: (b.mass * T.engineAccel * (s.accel / chassisDef(v.chassisId).accel)) / 2,
     brakeForce: T.brakeForce * (b.mass / 1000),
   };
-  if (!order) return { ...base, dest: null, target: toMps(speed), stopAt: false };
-  if (order.kind === 'brake') return { ...base, dest: null, target: 0, stopAt: false };
-  if (order.kind === 'stopAt') return { ...base, dest: order.dest, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
+  if (!order) return { ...base, dest: null, route: null, target: toMps(speed), stopAt: false };
+  if (order.kind === 'brake') return { ...base, dest: null, route: null, target: 0, stopAt: false };
+  // Careful drivers follow the route planner around obstacles; careless ones drive straight.
+  const parked = parkedVehicles(w, v.id);
+  const path = v.direct || straightClear(w, v.pos, order.dest, s.radius, parked) ? null : route(w, v.pos, order.dest, s.radius, parked);
+  if (order.kind === 'stopAt') return { ...base, dest: order.dest, route: path, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
   const next = zoneSpeed(s, speed, dist(v.pos, order.dest));
-  return { ...base, dest: order.dest, target: toMps(next), stopAt: false };
+  return { ...base, dest: order.dest, route: path, target: toMps(next), stopAt: false };
 }
 
 // The player's fuel limits the engine like the 2D rules: under the low-fuel share of the tank the top
@@ -244,14 +249,18 @@ function driveStep(c: Car): void {
   let steerTo = 0;
   if (plan.dest && !c.result.passed && !c.result.arrived) {
     const p = body.translation();
-    const dx = plan.dest.x * S - p.x;
-    const dz = plan.dest.y * S - p.z;
-    const far = Math.hypot(dx, dz);
-    const ang = angleDiff(headingOf(body.rotation()), Math.atan2(dz, dx));
+    const far = Math.hypot(plan.dest.x * S - p.x, plan.dest.y * S - p.z);
+    // Steer at the next route point far enough ahead, or at the destination.
+    const aim = plan.route ? aimPoint({ x: p.x / S, y: p.z / S }, plan.route) : plan.dest;
+    const dx = aim.x * S - p.x;
+    const dz = aim.y * S - p.z;
+    const heading = headingOf(body.rotation());
+    const ang = angleDiff(heading, Math.atan2(dz, dx));
+    const destAng = angleDiff(heading, Math.atan2(plan.dest.y * S - p.z, plan.dest.x * S - p.x));
     if (plan.stopAt) {
       target = Math.min(target, Math.sqrt(2 * D.stopDecel * Math.max(0, far - RULES.arriveRadius * S)));
       if (far < RULES.arriveRadius * S) c.result.arrived = true;
-    } else if (far < RULES.passRadius * S || (Math.abs(ang) > Math.PI / 2 && speed > D.reverseBelow)) {
+    } else if (far < RULES.passRadius * S || (Math.abs(destAng) > Math.PI / 2 && speed > D.reverseBelow)) {
       c.result.passed = true;
     }
     if (!c.result.passed && !c.result.arrived) {

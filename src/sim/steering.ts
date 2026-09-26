@@ -282,7 +282,7 @@ function arcClear(
 
 // The first route point far enough ahead to steer by. Grid waypoints right beside the truck
 // can sit off to the side and would turn it the wrong way.
-function aimPoint(from: Vec, points: Vec[]): Vec {
+export function aimPoint(from: Vec, points: Vec[]): Vec {
   return (
     points.find((p) => dist(from, p) >= RULES.minAimDistance) ??
     points[points.length - 1]
@@ -404,7 +404,7 @@ export function nextOrder(
   return order.kind === "stopAt" && speed > 0 ? { kind: "brake" } : null;
 }
 
-function parkedVehicles(world: World, selfId: string): Blocker[] {
+export function parkedVehicles(world: World, selfId: string): Blocker[] {
   return world.vehicles
     .filter((x) => x.id !== selfId && x.speed < RULES.parkedSpeed)
     .map((x) => ({ pos: x.pos, r: chassisDef(x.chassisId).radius }));

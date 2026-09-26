@@ -1,6 +1,5 @@
-// Shared map-space ground painter: tile type colors, hillshade, roads, pebbles and scrub.
-// Canvas-only (no Phaser) so the 2D path (isoCanvas.ts) and the 3D path (three/render/terrain.ts)
-// can both paint the same blocky, per-tile look onto their own canvas.
+// Map-space ground painter: tile type colors, hillshade, roads, pebbles and scrub, in a blocky
+// per-tile look. The 3D terrain (three/render/terrain.ts) uses it as its texture.
 
 import { REGION } from '../data/region';
 import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
@@ -30,8 +29,7 @@ export type PaintOptions = {
 
 const DEFAULT_OPTIONS: PaintOptions = { hillshade: 1 };
 
-// Paints ground, oasis/convoy discs, roads and scatter onto the canvas. Caller owns
-// texture upload (Phaser's texture.refresh() or a THREE.CanvasTexture.needsUpdate).
+// Paints ground, oasis/convoy discs, roads and scatter onto the canvas. The caller uploads the texture.
 export function paintGroundCanvas(c: PaintCanvas, t: Terrain, opts: PaintOptions = DEFAULT_OPTIONS): void {
   paintGround(c, t, opts.hillshade);
   for (const l of REGION.locations) {

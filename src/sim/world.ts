@@ -1,4 +1,4 @@
-// World creation and the turn pipeline. No Phaser imports: this runs in Node tests.
+// World creation and the turn pipeline. No rendering or physics imports: this runs in Node tests.
 // Public functions take a world and return a new one. Inside, a cloned draft is mutated.
 
 import { REGION } from '../data/region';

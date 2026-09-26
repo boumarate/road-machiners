@@ -1,17 +1,17 @@
 # Korovan
 
-Isometric turn-based wasteland truck RPG. Design lives in DESIGN.md.
+Turn-based wasteland truck RPG in 3D with an isometric camera. Design lives in DESIGN.md.
 
 ## Stack
 
-Phaser 4, TypeScript, Vite, Vitest. Playwright for browser checks.
+Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Playwright for browser checks.
 
 ## Commands
 
 - `npm run dev` starts the game at http://localhost:5173.
 - `npm test` runs the sim unit tests.
 - `npm run typecheck` runs tsc.
-- `npm run playtest` boots the game in headless Chromium and checks for black screens, errors, FPS and failed assets. Output goes to `.playtest/`.
+- `npm run playtest -- --url <dev server>` boots the game in headless Chromium, plays turns, and fails on page errors, the crash screen or low FPS. It needs the dev server running. Screenshots go to `.playtest/`.
 
 ## Config
 
@@ -19,25 +19,23 @@ Phaser 4, TypeScript, Vite, Vitest. Playwright for browser checks.
 
 ## Architecture
 
-- `src/sim/` holds all game state and rules as plain TypeScript. It never imports Phaser, so it runs in Node tests.
+- `src/sim/` holds all game state and rules as plain TypeScript. It never imports Three.js or Rapier, so it runs in Node tests.
 - Sim functions take state and return new state. Rendering reads state and never changes rules.
 - `src/sim/world.ts` runs the turn pipeline. Commands go through `update()`, which clones the world and mutates the draft.
 - `src/data/` holds all balance numbers and content. Sim code reads numbers from there, never inline.
-- `src/render/` holds drawing helpers. `src/ui/` holds the HTML overlay panels. `src/scenes/` holds the Phaser scene that wires input to sim and sim to render and UI.
+- `src/phys/` runs vehicle movement in Rapier. `endTurn(world, physicsMove(...))` plugs it into the turn pipeline in place of the sim's 2D movement. A turn restores the physics world from a snapshot and simulates one second, so the path preview runs the same physics as the turn. Physics numbers live in `src/data/physics.ts`.
+- `src/three/` holds the 3D game: `game.ts` wires input to sim, sim and physics to the view, and the HTML UI. `src/three/render/` holds the 3D views. `src/render/` holds the palette and the ground painter. `src/ui/` holds the HTML overlay panels.
+- Any uncaught error shows a fullscreen crash screen with the message.
 - All randomness goes through `src/sim/rng.ts` with state in the world. Render-only noise lives in `src/render/noise.ts`.
-- Map coordinates are in tiles. `src/render/iso.ts` converts between tiles and screen pixels.
+- Map coordinates are in tiles. Physics and 3D space are in meters: map x is 3D x, map y is 3D z, height is 3D y. `src/phys/frames.ts` converts.
 
 ## Verification
 
 - Every sim rule change gets a Vitest test.
-- After render or scene changes, run `npm run playtest`.
-- For behavior checks, drive the game with a Playwright script in `tmp/`. The game is on `window.__PHASER_GAME__` in dev. Scene state is at `__PHASER_GAME__.scene.getScene('World').world`. To set up a situation, clone that world, edit it, and pass it to the scene's `apply()`. The scene's `debugScreenOf(x, y)` gives the screen point of a map point on the ground, for clicks.
+- After render or game changes, run `npm run playtest`.
+- For behavior checks, drive the game with a Playwright script in `tmp/`. Launch Chromium with `--use-gl=angle --use-angle=swiftshader`. The game is on `window.__KOROVAN__` in dev. Its world is `__KOROVAN__.state`. To set up a situation, clone that world, edit it, and pass it to `apply()`. `debugScreenOf(x, y)` gives the screen point of a map point on the ground, for clicks.
 - Look at screenshots after visual changes. The user confirms small visual details.
-
-## Skills
-
-The phaser4-gamedev skill pack is in `.claude/skills/`. Its docs reference `${CLAUDE_PLUGIN_ROOT}/skills/...`. In this repo that path is `.claude/skills/...`.
 
 ## Art
 
-Placeholder shapes drawn with Phaser Graphics. No asset files yet.
+Low-poly models built from Three.js boxes and shapes. The ground is a per-tile painted canvas texture. No asset files yet.
