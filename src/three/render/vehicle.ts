@@ -10,7 +10,7 @@ import { PHYSICS } from '../../data/physics';
 import { wheelMounts } from '../../phys/body';
 import { bodyOf, cellCenter, type Body } from '../../sim/body';
 import { headingOf, headingQuat, type VehicleFrame } from '../../phys/frames';
-import { FACTION_COLORS, PAL } from '../../render/palette';
+import { FACTION_COLORS, PAL, shade } from '../../render/palette';
 import { partModel, weaponLook } from '../../render/partLooks';
 import { baseGrid, isMounted, itemCells, itemSize, sideOf, type SideLetter } from '../../sim/grid';
 import type { GridItem, Vehicle } from '../../sim/types';
@@ -36,9 +36,12 @@ const ROT_YAW = Math.PI / 2;
 // Yaw that turns an armor model's outer face, local +x, to its side. Local +z is the truck's right.
 const SIDE_YAW: Record<SideLetter, number> = { F: 0, B: Math.PI, R: -Math.PI / 2, L: Math.PI / 2 };
 
-// The frame is an upper and a lower steel rail on each outer deck edge, joined by one post per edge.
-const RAIL = 0.06; // rail and post thickness in meters
-const RAIL_H = 0.12; // rail height in meters
+// Body edge pieces are authored 1 m tall with their top on the deck top. They stretch to the chassis box height.
+const EDGE_H = 1;
+// The dark inner box stands this far behind the outer faces, inside the edge pieces' skins.
+const CORE_INSET = 0.03;
+// The inner box shows inside the wheel wells.
+const CORE_COLOR = shade(PAL.metal, 0.8);
 
 type Wheel = { mount: THREE.Group; spin: THREE.Object3D; restY: number };
 
@@ -153,40 +156,87 @@ export class VehicleView {
     this.root.add(mergeStatic(still));
   }
 
-  // Rails along every deck edge that faces outside the grid or a wheel cell, under one deck tile per cell (IV5).
-  // The rails reach the collider's outer faces, so the frame footprint is the collider footprint.
+  // A solid body under one deck tile per grid cell, built from edge pieces on the cells' open faces (IV5).
+  // Side faces get body_side, front faces the nose and back faces the tail. Faces next to a hole in the grid get body_side.
+  // A dark inner box fills every body cell, so no gap shows through. Wheel cells get a fender, and a painted box fills the cell above it.
+  // Only bumpers, fender lips and wheels reach past the collider footprint.
   private buildFrame(v: Vehicle, body: Body, into: THREE.Group, paint: number): void {
     const grid = baseGrid(v.chassisId);
     const wheels = wheelCells(v.chassisId);
-    const solid = (x: number, y: number): boolean =>
-      x >= 0 && y >= 0 && x < grid.w && y < grid.h && grid.cells[y][x] !== null && !wheels.has(`${x},${y}`);
-    const top = body.half.y + socket('deck_tile', 'underside').y; // the socket sits below the deck top
+    const inGrid = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < grid.w && y < grid.h;
+    const isCell = (x: number, y: number): boolean => inGrid(x, y) && grid.cells[y][x] !== null;
+    const top = body.half.y;
+    const underside = top + socket('deck_tile', 'underside').y; // the socket sits below the deck top
     const bottom = -body.half.y;
-    const steel = new THREE.MeshLambertMaterial({ color: PAL.metal, flatShading: true });
-    const box = (sx: number, sy: number, sz: number, x: number, y: number, z: number): void => {
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), steel);
-      mesh.position.set(x, y, z);
+    const stretch = (top - bottom) / EDGE_H;
+    const coreMat = new THREE.MeshLambertMaterial({ color: CORE_COLOR, flatShading: true });
+    const paintMat = new THREE.MeshLambertMaterial({ color: paint, flatShading: true });
+    const box = (mat: THREE.Material, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number): void => {
+      if (x1 <= x0 || y1 <= y0 || z1 <= z0) throw new Error(`${v.chassisId} body box is empty: x ${x0}..${x1}, y ${y0}..${y1}, z ${z0}..${z1}`);
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), mat);
+      mesh.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
       into.add(mesh);
     };
-    const rail = (sx: number, sz: number, x: number, z: number): void => {
-      box(sx, RAIL_H, sz, x, top - RAIL_H / 2, z);
-      box(sx, RAIL_H, sz, x, bottom + RAIL_H / 2, z);
-      box(RAIL, top - bottom, RAIL, x, (top + bottom) / 2, z);
+    // along stretches the piece's local x, for a 0.65 m side panel on a 0.4 m face.
+    const edge = (name: 'body_side' | 'nose' | 'tail', c: { x: number; z: number }, yaw: number, along = 1): void => {
+      const obj = model(name);
+      place(obj, { pos: new THREE.Vector3(c.x, top, c.z), yaw, scale: new THREE.Vector3(along, stretch, 1) });
+      tint(obj, paint, 1);
+      into.add(obj);
     };
+    const shortSide = CELL.across / CELL.along;
     for (let y = 0; y < grid.h; y++) {
       for (let x = 0; x < grid.w; x++) {
-        if (!solid(x, y)) continue;
+        if (!isCell(x, y)) continue;
         const c = cellCenter(v.chassisId, x, y);
-        if (!solid(x, y - 1)) rail(RAIL, CELL.across, c.x + CELL.along / 2 - RAIL / 2, c.z);
-        if (!solid(x, y + 1)) rail(RAIL, CELL.across, c.x - CELL.along / 2 + RAIL / 2, c.z);
-        if (!solid(x - 1, y)) rail(CELL.along, RAIL, c.x, c.z - CELL.across / 2 + RAIL / 2);
-        if (!solid(x + 1, y)) rail(CELL.along, RAIL, c.x, c.z + CELL.across / 2 - RAIL / 2);
         const tile = model('deck_tile');
-        tile.position.set(c.x, body.half.y, c.z);
+        tile.position.set(c.x, top, c.z);
         tint(tile, paint, 1);
         into.add(tile);
+        const x0 = c.x - CELL.along / 2;
+        const x1 = c.x + CELL.along / 2;
+        const z0 = c.z - CELL.across / 2;
+        const z1 = c.z + CELL.across / 2;
+        if (wheels.has(`${x},${y}`)) {
+          const fender = this.fender(body, c, paint);
+          into.add(fender.obj);
+          if (fender.fillBottom >= underside) throw new Error(`${v.chassisId} fender reaches above the deck underside`);
+          box(paintMat, x0, x1, fender.fillBottom, underside, z0, z1);
+          continue;
+        }
+        const front = !isCell(x, y - 1);
+        const back = !isCell(x, y + 1);
+        const left = !isCell(x - 1, y);
+        const right = !isCell(x + 1, y);
+        if (front) {
+          if (inGrid(x, y - 1)) edge('body_side', c, -Math.PI / 2, shortSide);
+          else edge('nose', c, 0);
+        }
+        if (back) {
+          if (inGrid(x, y + 1)) edge('body_side', c, Math.PI / 2, shortSide);
+          else edge('tail', c, Math.PI);
+        }
+        if (left) edge('body_side', c, 0);
+        if (right) edge('body_side', c, Math.PI);
+        const i = CORE_INSET;
+        box(coreMat, x0 + (back ? i : 0), x1 - (front ? i : 0), bottom + i, underside, z0 + (left ? i : 0), z1 - (right ? i : 0));
       }
     }
+  }
+
+  // The arch hangs at the wheel's rest hub, scaled from the 1 m model to the look's wheel radius and width.
+  // Its outer side faces the truck side the cell lies on. fillBottom is where the painted box above it starts.
+  private fender(body: Body, c: { x: number; z: number }, paint: number): { obj: THREE.Object3D; fillBottom: number } {
+    if (c.z === 0) throw new Error('A wheel cell sits on the center line, so its fender has no outer side');
+    const hubY = body.wheelY - T.suspensionRest;
+    const obj = model('fender');
+    place(obj, {
+      pos: new THREE.Vector3(c.x, hubY, c.z),
+      yaw: c.z < 0 ? 0 : Math.PI,
+      scale: new THREE.Vector3(body.wheelRadius, body.wheelRadius, body.wheelHalfWidth * 2),
+    });
+    tint(obj, paint, 1);
+    return { obj, fillBottom: hubY + body.wheelRadius * socket('fender', 'top').y };
   }
 
   // A part or good model on its cells' center, turned for rotation 1 and stretched to the turned footprint (PC1).

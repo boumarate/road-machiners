@@ -23,6 +23,10 @@ const NAMES = [
   'glass_flats',
 
   'deck_tile',
+  'body_side',
+  'nose',
+  'tail',
+  'fender',
   'wheel',
   'cockpit',
   'transmission',
