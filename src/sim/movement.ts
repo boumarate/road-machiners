@@ -119,6 +119,24 @@ function relativeSpeed(a: Mover, b: Mover): number {
   return Math.hypot(dx, dy);
 }
 
+// A crash found by the physics engine. b is the other vehicle, or null for obstacles and walls;
+// what names the thing hit. impact is the closing speed in tiles per turn.
+export function applyCrash(world: World, a: Vehicle, b: Vehicle | null, what: string, impact: number): void {
+  const massA = vehicleStats(world, a).mass;
+  const massB = b ? vehicleStats(world, b).mass : massA;
+  const dmgA = crashDamage(world, a, impact, massB / massA);
+  const dmgB = b ? crashDamage(world, b, impact, massA / massB) : 0;
+  const dealtA = damageHull(a, dmgA);
+  const dealtB = b ? damageHull(b, dmgB) : 0;
+  maybeDamagePart(world, a, dmgA);
+  if (b) {
+    maybeDamagePart(world, b, dmgB);
+    a.lastHitBy = b.id;
+    b.lastHitBy = a.id;
+  }
+  world.events.push({ t: 'collision', a: a.id, b: what, damageA: dealtA, damageB: dealtB });
+}
+
 // massRatio is the other body's mass over this vehicle's mass; 1 for obstacles.
 function crashDamage(world: World, v: Vehicle, impact: number, massRatio: number): number {
   const mech = v.faction === 'player' ? skillBonus('mechanics', world.player.skills.mechanics) : 0;

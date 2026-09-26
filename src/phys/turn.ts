@@ -1,0 +1,63 @@
+// Physics as the sim's movement step. The turn pipeline hands the draft world to physicsMove, which
+// runs the turn in the physics engine and writes poses, speeds, trails, fuel, crashes and orders back.
+
+import { RULES } from '../data/rules';
+import { applyCrash } from '../sim/movement';
+import { vehicleStats } from '../sim/stats';
+import type { Pose, World } from '../sim/types';
+import { dist } from '../sim/vec';
+import { bodyState, simulateTurn, syncDrive, toTilesPerTurn, TURN_STEPS, type Drive, type TurnResult } from './drive';
+import { headingOf, toMap } from './frames';
+
+const STOPPED = 0.05; // tiles per turn; slower than this a braking truck counts as stopped
+
+// Returns the movement step for endTurn. It keeps the turn's result for the caller through done.
+export function physicsMove(d: Drive, done: (r: TurnResult) => void): (w: World) => void {
+  return (w) => {
+    syncDrive(d, w);
+    const r = simulateTurn(d, w);
+    applyTurn(w, r);
+    done(r);
+  };
+}
+
+export function applyTurn(w: World, r: TurnResult): void {
+  for (const v of w.vehicles) {
+    const frames = r.frames[v.id];
+    if (!frames) throw new Error(`No frames for ${v.id}`);
+    const s = bodyState(r.next, v.id);
+    const start: Pose = { x: v.pos.x, y: v.pos.y, heading: v.heading };
+    v.pos = s.pos;
+    v.heading = s.heading;
+    v.speed = Math.max(0, toTilesPerTurn(s.speed));
+    v.trail = trailOf(start, frames);
+    if (v.faction === 'player') w.player.fuel = Math.max(0, w.player.fuel - pathLength(v.trail) * vehicleStats(w, v).fuelPerTile);
+    const res = r.results[v.id];
+    const done = (v.order?.kind === 'through' && res.passed) || (v.order?.kind === 'stopAt' && res.arrived);
+    if (done) w.events.push({ t: 'arrived', vehicle: v.id });
+    if (done || (v.order?.kind === 'brake' && v.speed < STOPPED)) v.order = null;
+  }
+  for (const c of r.crashes) {
+    const a = w.vehicles.find((v) => v.id === c.a);
+    if (!a) throw new Error(`Crash with unknown vehicle ${c.a}`);
+    const b = w.vehicles.find((v) => v.id === c.b) ?? null;
+    applyCrash(w, a, b, c.b, toTilesPerTurn(c.impact));
+  }
+}
+
+// The sim keeps RULES.substeps + 1 poses per turn, from the start pose, for fuel and the log.
+function trailOf(start: Pose, frames: TurnResult['frames'][string]): Pose[] {
+  const trail: Pose[] = [start];
+  for (let i = 1; i <= RULES.substeps; i++) {
+    const f = frames[Math.round((i * TURN_STEPS) / RULES.substeps) - 1];
+    const p = toMap(f.pos);
+    trail.push({ x: p.x, y: p.y, heading: headingOf(f.rot) });
+  }
+  return trail;
+}
+
+function pathLength(trail: Pose[]): number {
+  let total = 0;
+  for (let i = 1; i < trail.length; i++) total += dist(trail[i - 1], trail[i]);
+  return total;
+}

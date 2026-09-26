@@ -92,11 +92,12 @@ export function setMoveOrder(world: World, order: MoveOrder | null): World {
   });
 }
 
-export function endTurn(world: World): World {
+// move resolves this turn's driving on the draft: the 2D rules, or the physics engine.
+export function endTurn(world: World, move: (w: World) => void = resolveMovement): World {
   return update(world, (w) => {
     w.turn++;
     planNpcOrders(w);
-    resolveMovement(w);
+    move(w);
     refreshVision(w);
     assignAutoOrders(w);
     fireWeapons(w);

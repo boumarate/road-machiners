@@ -2,14 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Korovan 3D</title>
+    <title>Korovan</title>
+    <link rel="stylesheet" href="/src/ui/style.css" />
     <style>
-      html, body { margin: 0; height: 100%; background: #1a1410; overflow: hidden; }
-      #hud { position: fixed; left: 12px; top: 10px; color: #f0e0b8; font: 14px monospace; text-shadow: 0 1px 2px #000; pointer-events: none; white-space: pre; }
+      #overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
     </style>
   </head>
   <body>
-    <div id="hud"></div>
+    <div id="game"></div>
+    <div id="overlay"></div>
+    <div id="ui"></div>
     <script type="module" src="/src/three/main.ts"></script>
   </body>
 </html>

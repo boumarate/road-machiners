@@ -1,134 +1,279 @@
-// Physics driving. The map's terrain and obstacles become Rapier colliders; the player truck is a
-// ray-cast vehicle. Time only moves inside simulateTurn. A turn restores the world from a snapshot
-// and runs it forward, so the same state and order always give the same result: the preview is
-// the turn itself.
+// Physics driving for every vehicle. The map's terrain and obstacles become Rapier colliders; each
+// vehicle is a ray-cast car. Time only moves inside simulateTurn. A turn restores the world from a
+// snapshot and runs it forward, so the same state and orders always give the same result: the
+// preview is the turn itself.
 
 import RAPIER from '@dimforge/rapier3d-compat';
+import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
+import { RULES } from '../data/rules';
+import { vehicleStats, type VehicleStats } from '../sim/stats';
+import { zoneSpeed } from '../sim/steering';
 import { heightAt } from '../sim/terrain';
-import type { World } from '../sim/types';
-import { angleDiff, clamp, DEG, type Vec } from '../sim/vec';
+import type { MoveOrder, Vehicle, World } from '../sim/types';
+import { angleDiff, clamp, DEG, dist, type Vec } from '../sim/vec';
+import { bodyOf, wheelMounts, type Body } from './body';
+import { headingOf, headingQuat, type TurnFrames, type VehicleFrame } from './frames';
 
 const S = PHYSICS.metersPerTile;
 const T = PHYSICS.truck;
 const D = PHYSICS.driver;
 const DT = 1 / PHYSICS.stepsPerSecond;
-const STEPS = Math.round(PHYSICS.turnSeconds * PHYSICS.stepsPerSecond);
-const SETTLE_STEPS = PHYSICS.stepsPerSecond; // one second at rest so the truck sits on its springs
+export const TURN_STEPS = Math.round(PHYSICS.turnSeconds * PHYSICS.stepsPerSecond);
+const TELEPORT_TILES = 0.5; // a sim position this far from its body was moved by the rules, not by driving
+const WALL = 50; // meters of wall thickness at the map edge
+const EDGE = 'edge';
 
-export type V3 = { x: number; y: number; z: number };
-export type Quat = { x: number; y: number; z: number; w: number };
-export type WheelFrame = { steer: number; spin: number; suspension: number };
-export type Frame = { pos: V3; rot: Quat; wheels: WheelFrame[] };
+// Tiles per turn to meters per second, and back.
+export const toMps = (tilesPerTurn: number) => (tilesPerTurn * S) / PHYSICS.turnSeconds;
+export const toTilesPerTurn = (mps: number) => (mps * PHYSICS.turnSeconds) / S;
 
-// Everything a turn needs to start: the physics world and the driver's memory.
-// reverse is 0 when driving forward, or the side the nose swings to while backing up: 1 or -1.
-export type Drive = { world: RAPIER.World; body: number; steer: number; reverse: number };
+// The driver's memory between turns. reverse is 0 when driving forward, or the side the nose swings
+// to while backing up: 1 or -1.
+type Memory = { steer: number; reverse: number };
+
+// Everything a turn needs to start: the physics world, which body and collider belongs to which
+// vehicle or obstacle, and each driver's memory.
+export type Drive = {
+  world: RAPIER.World;
+  bodies: Record<string, number>; // vehicle id to rigid body handle
+  obstacles: Record<string, number>; // obstacle id to collider handle
+  memory: Record<string, Memory>;
+  terrain: number; // terrain collider handle
+};
+
+export type Crash = { a: string; b: string; impact: number }; // b is a vehicle id, an obstacle id or 'edge'; impact in m/s
+export type VehicleResult = { passed: boolean; arrived: boolean };
+export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; results: Record<string, VehicleResult> };
 
 export async function initPhysics(): Promise<void> {
   await RAPIER.init();
 }
 
-// Map point to physics point. Map x is physics x, map y is physics z, height is physics y.
-export function toPhys(p: Vec, height: number): V3 {
-  return { x: p.x * S, y: height * S, z: p.y * S };
-}
-
-export function buildDrive(w: World, start: Vec, heading: number): Drive {
+export function buildDrive(w: World): Drive {
   const world = new RAPIER.World({ x: 0, y: -PHYSICS.gravity, z: 0 });
-  addTerrain(world, w);
-  addObstacles(world, w);
-  const ground = heightAt(w.terrain, start.x, start.y) * S;
-  const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
-    .setTranslation(start.x * S, ground + T.wheelRadius + T.suspensionRest + T.halfSize.y, start.y * S)
-    .setRotation(headingQuat(heading))
-    .setCanSleep(false);
-  const body = world.createRigidBody(bodyDesc);
-  world.createCollider(RAPIER.ColliderDesc.cuboid(T.halfSize.x, T.halfSize.y, T.halfSize.z).setMass(T.mass), body);
-  const drive: Drive = { world, body: body.handle, steer: 0, reverse: 0 };
-  const settled = run(drive, null, SETTLE_STEPS);
-  world.free();
-  return settled.next;
+  const d: Drive = { world, bodies: {}, obstacles: {}, memory: {}, terrain: addTerrain(world, w) };
+  syncDrive(d, w);
+  return d;
 }
 
 export function freeDrive(d: Drive): void {
   d.world.free();
 }
 
-// Runs one turn toward dest from a copy of the world. The input drive stays untouched.
-export function simulateTurn(d: Drive, dest: Vec | null): { next: Drive; frames: Frame[] } {
-  return run(d, dest, STEPS);
+// Brings the physics world in line with the sim: new and removed vehicles and obstacles, and
+// vehicles the rules moved, such as a defeated player waking up in town.
+export function syncDrive(d: Drive, w: World): void {
+  const ids = new Set(w.vehicles.map((v) => v.id));
+  for (const [id, handle] of Object.entries(d.bodies)) {
+    if (ids.has(id)) continue;
+    d.world.removeRigidBody(d.world.getRigidBody(handle));
+    delete d.bodies[id];
+    delete d.memory[id];
+  }
+  for (const v of w.vehicles) {
+    const handle = d.bodies[v.id];
+    if (handle === undefined) {
+      d.bodies[v.id] = addVehicle(d.world, w, v);
+      d.memory[v.id] = { steer: 0, reverse: 0 };
+      continue;
+    }
+    const body = d.world.getRigidBody(handle);
+    const t = body.translation();
+    if (dist({ x: t.x / S, y: t.z / S }, v.pos) > TELEPORT_TILES) placeBody(body, w, v);
+  }
+  const obstacleIds = new Set(w.obstacles.map((o) => o.id));
+  for (const [id, handle] of Object.entries(d.obstacles)) {
+    if (obstacleIds.has(id)) continue;
+    d.world.removeCollider(d.world.getCollider(handle), false);
+    delete d.obstacles[id];
+  }
+  for (const o of w.obstacles) {
+    if (d.obstacles[o.id] !== undefined) continue;
+    const ground = heightAt(w.terrain, o.pos.x, o.pos.y) * S;
+    const half = PHYSICS.rockHeight / 2;
+    const desc = RAPIER.ColliderDesc.cylinder(half, o.r * S).setTranslation(o.pos.x * S, ground + half - PHYSICS.rockSink, o.pos.y * S);
+    d.obstacles[o.id] = d.world.createCollider(desc).handle;
+  }
 }
 
-function run(d: Drive, dest: Vec | null, steps: number): { next: Drive; frames: Frame[] } {
+function addVehicle(world: RAPIER.World, w: World, v: Vehicle): number {
+  const b = bodyOf(v.chassisId);
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setCanSleep(false).setGravityScale(T.gravityScale));
+  // Box inertia per axis, scaled up, around a center of mass lowered toward the axles.
+  const h = b.half;
+  const k = (b.mass / 3) * T.inertiaScale; // m/12 * (2a)^2 = m/3 * a^2
+  const inertia = { x: k * (h.y * h.y + h.z * h.z), y: k * (h.x * h.x + h.z * h.z), z: k * (h.x * h.x + h.y * h.y) };
+  const collider = RAPIER.ColliderDesc.cuboid(h.x, h.y, h.z)
+    .setMassProperties(b.mass, { x: 0, y: -T.comBelow, z: 0 }, inertia, { x: 0, y: 0, z: 0, w: 1 })
+    .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
+  world.createCollider(collider, body);
+  placeBody(body, w, v);
+  return body.handle;
+}
+
+function placeBody(body: RAPIER.RigidBody, w: World, v: Vehicle): void {
+  const b = bodyOf(v.chassisId);
+  const ground = heightAt(w.terrain, v.pos.x, v.pos.y) * S;
+  body.setTranslation({ x: v.pos.x * S, y: ground + b.wheelRadius + T.suspensionRest - b.wheelY, z: v.pos.y * S }, true);
+  body.setRotation(headingQuat(v.heading), true);
+  const fwd = toMps(v.speed);
+  body.setLinvel({ x: Math.cos(v.heading) * fwd, y: 0, z: Math.sin(v.heading) * fwd }, true);
+  body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+}
+
+// Runs one turn of the sim's orders from a copy of the physics world. The input drive stays untouched.
+// Call syncDrive first so the physics world matches the sim.
+export function simulateTurn(d: Drive, w: World): TurnResult {
+  return run(d, w, TURN_STEPS);
+}
+
+type Car = { v: Vehicle; s: VehicleStats; b: Body; body: RAPIER.RigidBody; ctl: RAPIER.DynamicRayCastVehicleController; mem: Memory; plan: Plan; result: VehicleResult };
+
+function run(d: Drive, w: World, steps: number): TurnResult {
   const world = RAPIER.World.restoreSnapshot(d.world.takeSnapshot());
   world.timestep = DT;
-  const body = world.getRigidBody(d.body);
-  const car = makeCar(world, body);
-  const state = { steer: d.steer, reverse: d.reverse };
-  const frames: Frame[] = [];
+  const events = new RAPIER.EventQueue(true);
+  const memory: Record<string, Memory> = structuredClone(d.memory);
+  const cars: Car[] = w.vehicles.map((v) => {
+    const handle = d.bodies[v.id];
+    if (handle === undefined) throw new Error(`Vehicle ${v.id} has no physics body; call syncDrive first`);
+    const body = world.getRigidBody(handle);
+    const s = vehicleStats(w, v);
+    const b = bodyOf(v.chassisId);
+    const mem = memory[v.id];
+    return { v, s, b, body, ctl: makeCar(world, body, b), mem, plan: planTurn(w, v, s, body, v.order), result: { passed: false, arrived: false } };
+  });
+  const owner = new Map<number, string>(); // collider handle to vehicle id
+  for (const c of cars) owner.set(c.body.collider(0).handle, c.v.id);
+  const obstacleOf = new Map(Object.entries(d.obstacles).map(([id, h]) => [h, id]));
+
+  const frames: TurnFrames = Object.fromEntries(cars.map((c) => [c.v.id, [] as VehicleFrame[]]));
+  const crashes: Crash[] = [];
+  const crashed = new Set<string>(); // one crash per pair per turn
   for (let i = 0; i < steps; i++) {
-    drive(car, body, state, dest);
-    car.updateVehicle(DT);
-    world.step();
-    frames.push(frameOf(car, body));
+    const before = new Map(cars.map((c) => [c.v.id, c.body.linvel()]));
+    for (const c of cars) driveStep(c);
+    for (const c of cars) c.ctl.updateVehicle(DT);
+    world.step(events);
+    events.drainCollisionEvents((h1, h2, started) => {
+      if (!started) return;
+      const crash = crashOf(h1, h2, owner, obstacleOf, d.terrain, before);
+      if (!crash) return;
+      const key = [crash.a, crash.b].sort().join('|');
+      if (crashed.has(key)) return;
+      crashed.add(key);
+      crashes.push(crash);
+    });
+    for (const c of cars) frames[c.v.id].push(frameOf(c.ctl, c.body));
   }
-  world.removeVehicleController(car);
-  return { next: { world, body: d.body, steer: state.steer, reverse: state.reverse }, frames };
+  for (const c of cars) world.removeVehicleController(c.ctl);
+  events.free();
+  const results = Object.fromEntries(cars.map((c) => [c.v.id, c.result]));
+  return { next: { world, bodies: { ...d.bodies }, obstacles: { ...d.obstacles }, memory, terrain: d.terrain }, frames, crashes, results };
 }
 
-// Wheels 0 and 1 are front and steer. Wheels 2 and 3 are rear and driven.
-function makeCar(world: RAPIER.World, body: RAPIER.RigidBody): RAPIER.DynamicRayCastVehicleController {
+function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf: Map<number, string>, terrain: number, before: Map<string, RAPIER.Vector>): Crash | null {
+  const a = owner.get(h1) ?? owner.get(h2);
+  if (a === undefined) return null;
+  const other = owner.get(h1) === a ? h2 : h1;
+  if (other === terrain) return null;
+  const va = before.get(a)!;
+  const b = owner.get(other) ?? obstacleOf.get(other) ?? EDGE;
+  const vb = owner.has(other) ? before.get(b)! : { x: 0, y: 0, z: 0 };
+  return { a, b, impact: Math.hypot(va.x - vb.x, va.z - vb.z) };
+}
+
+function makeCar(world: RAPIER.World, body: RAPIER.RigidBody, b: Body): RAPIER.DynamicRayCastVehicleController {
   const car = world.createVehicleController(body);
-  for (const [x, z] of [[T.wheelX, -T.wheelZ], [T.wheelX, T.wheelZ], [-T.wheelX, -T.wheelZ], [-T.wheelX, T.wheelZ]]) {
+  for (const m of wheelMounts(b)) {
     const i = car.numWheels();
-    car.addWheel({ x, y: T.wheelY, z }, { x: 0, y: -1, z: 0 }, { x: 0, y: 0, z: 1 }, T.suspensionRest, T.wheelRadius);
+    car.addWheel(m, { x: 0, y: -1, z: 0 }, { x: 0, y: 0, z: 1 }, T.suspensionRest, b.wheelRadius);
     car.setWheelMaxSuspensionTravel(i, T.suspensionTravel);
     car.setWheelSuspensionStiffness(i, T.suspensionStiffness);
     car.setWheelSuspensionCompression(i, T.suspensionCompression);
     car.setWheelSuspensionRelaxation(i, T.suspensionRelaxation);
-    car.setWheelMaxSuspensionForce(i, T.maxSuspensionForce);
+    car.setWheelMaxSuspensionForce(i, T.maxSuspensionForce * (b.mass / 1000));
     car.setWheelFrictionSlip(i, T.frictionSlip);
     car.setWheelSideFrictionStiffness(i, T.sideFrictionStiffness);
   }
   return car;
 }
 
-// The driver: steer at the destination, pick a speed that gets there by the end of the turn,
-// and back up with the wheels turned the other way when the destination is far behind.
-function drive(car: RAPIER.DynamicRayCastVehicleController, body: RAPIER.RigidBody, st: { steer: number; reverse: number }, dest: Vec | null): void {
-  const speed = car.currentVehicleSpeed();
-  let target = 0;
-  let steerTo = 0;
-  if (dest) {
-    const p = body.translation();
-    const dx = dest.x * S - p.x;
-    const dz = dest.y * S - p.z;
-    const ang = angleDiff(headingOf(body.rotation()), Math.atan2(dz, dx));
-    if (st.reverse === 0 && Math.abs(ang) > D.reverseAbove * DEG && Math.abs(speed) < D.reverseBelow) st.reverse = Math.sign(ang) || 1;
-    if (st.reverse !== 0 && Math.abs(ang) < D.reverseUntil * DEG) st.reverse = 0;
-    const far = Math.hypot(dx, dz);
-    if (far > D.arriveDistance) {
-      target = st.reverse !== 0 ? -D.reverseSpeed : Math.min(T.maxSpeed, far / PHYSICS.turnSeconds);
-      // Backing up turns the truck the opposite way from the wheels.
-      steerTo = st.reverse !== 0 ? -st.reverse * T.maxSteer : clamp(ang * D.steerGain, -T.maxSteer, T.maxSteer);
-    }
-  }
-  const step = T.steerRate * DT;
-  st.steer = clamp(steerTo, st.steer - step, st.steer + step);
-  // Positive wheel steering turns toward -z; map headings grow toward +z.
-  car.setWheelSteering(0, -st.steer);
-  car.setWheelSteering(1, -st.steer);
+// What a driver wants this turn, fixed at the start of the turn like the 2D rules: a destination to
+// steer at, and a speed from the throttle zone of the click. Without fuel the engine gives nothing.
+type Plan = { dest: Vec | null; target: number; stopAt: boolean; engine: boolean; maxSteer: number; engineForce: number; brakeForce: number };
 
-  const u = clamp((target - speed) * D.throttleGain, -1, 1);
-  const pushing = target > 0 ? u > 0 : target < 0 ? u < 0 : false;
-  for (let i = 0; i < 4; i++) car.setWheelBrake(i, pushing ? 0 : Math.abs(u) * T.brakeForce + (target === 0 ? T.brakeForce : 0));
-  for (const i of [2, 3]) car.setWheelEngineForce(i, pushing ? u * T.engineForce : 0);
+function planTurn(w: World, v: Vehicle, s: VehicleStats, body: RAPIER.RigidBody, order: MoveOrder | null): Plan {
+  const b = bodyOf(v.chassisId);
+  const speed = Math.max(0, toTilesPerTurn(forwardSpeed(body)));
+  const engine = s.maxSpeed > 0 && (v.faction !== 'player' || w.player.fuel > 0);
+  const base = {
+    engine,
+    maxSteer: T.maxSteer * (s.turnSlow / (chassisDef(v.chassisId).turnSlow * DEG)),
+    engineForce: (b.mass * T.engineAccel * (s.accel / chassisDef(v.chassisId).accel)) / 2,
+    brakeForce: T.brakeForce * (b.mass / 1000),
+  };
+  if (!order) return { ...base, dest: null, target: toMps(speed), stopAt: false };
+  if (order.kind === 'brake') return { ...base, dest: null, target: 0, stopAt: false };
+  if (order.kind === 'stopAt') return { ...base, dest: order.dest, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
+  const next = zoneSpeed(s, speed, dist(v.pos, order.dest));
+  return { ...base, dest: order.dest, target: toMps(next), stopAt: false };
 }
 
-function frameOf(car: RAPIER.DynamicRayCastVehicleController, body: RAPIER.RigidBody): Frame {
-  const wheels: WheelFrame[] = [];
-  for (let i = 0; i < 4; i++) {
+// One physics step of driving. Steer at the destination and hold the turn's speed. A stop order slows
+// to arrive. A slow truck with the destination far behind backs up, wheels turned the other way.
+// A drive-through point counts as passed once close, or once behind a moving truck; then it drives straight.
+function driveStep(c: Car): void {
+  const { plan, mem, body, ctl } = c;
+  const speed = forwardSpeed(body);
+  let target = plan.target;
+  let steerTo = 0;
+  if (plan.dest && !c.result.passed && !c.result.arrived) {
+    const p = body.translation();
+    const dx = plan.dest.x * S - p.x;
+    const dz = plan.dest.y * S - p.z;
+    const far = Math.hypot(dx, dz);
+    const ang = angleDiff(headingOf(body.rotation()), Math.atan2(dz, dx));
+    if (plan.stopAt) {
+      target = Math.min(target, Math.sqrt(2 * D.stopDecel * Math.max(0, far - RULES.arriveRadius * S)));
+      if (far < RULES.arriveRadius * S) c.result.arrived = true;
+    } else if (far < RULES.passRadius * S || (Math.abs(ang) > Math.PI / 2 && speed > D.reverseBelow)) {
+      c.result.passed = true;
+    }
+    if (!c.result.passed && !c.result.arrived) {
+      if (mem.reverse === 0 && target > 0 && Math.abs(ang) > D.reverseAbove * DEG && Math.abs(speed) < D.reverseBelow) mem.reverse = Math.sign(ang) || 1;
+      if (mem.reverse !== 0 && Math.abs(ang) < D.reverseUntil * DEG) mem.reverse = 0;
+      if (mem.reverse !== 0) target = -D.reverseSpeed;
+      // Backing up turns the truck the opposite way from the wheels.
+      steerTo = mem.reverse !== 0 ? -mem.reverse * plan.maxSteer : clamp(ang * D.steerGain, -plan.maxSteer, plan.maxSteer);
+    }
+  }
+  if (c.result.arrived) target = 0;
+  if (!plan.dest && mem.reverse !== 0) mem.reverse = 0;
+  const step = T.steerRate * DT;
+  mem.steer = clamp(steerTo, mem.steer - step, mem.steer + step);
+  // Positive wheel steering turns toward -z; map headings grow toward +z.
+  ctl.setWheelSteering(0, -mem.steer);
+  ctl.setWheelSteering(1, -mem.steer);
+
+  const u = clamp((target - speed) * D.throttleGain, -1, 1);
+  const pushing = plan.engine && (target > 0 ? u > 0 : target < 0 ? u < 0 : false);
+  const brake = pushing ? 0 : Math.abs(u) * plan.brakeForce + (target === 0 ? plan.brakeForce : 0);
+  for (let i = 0; i < 4; i++) ctl.setWheelBrake(i, brake);
+  for (const i of [2, 3]) ctl.setWheelEngineForce(i, pushing ? u * plan.engineForce : 0);
+}
+
+// Speed along the truck's nose, m/s; negative when backing up.
+export function forwardSpeed(body: RAPIER.RigidBody): number {
+  const v = body.linvel();
+  const h = headingOf(body.rotation());
+  return v.x * Math.cos(h) + v.z * Math.sin(h);
+}
+
+function frameOf(car: RAPIER.DynamicRayCastVehicleController, body: RAPIER.RigidBody): VehicleFrame {
+  const wheels = [];
+  for (let i = 0; i < car.numWheels(); i++) {
     wheels.push({ steer: car.wheelSteering(i) ?? 0, spin: car.wheelRotation(i) ?? 0, suspension: car.wheelSuspensionLength(i) ?? T.suspensionRest });
   }
   const t = body.translation();
@@ -136,26 +281,27 @@ function frameOf(car: RAPIER.DynamicRayCastVehicleController, body: RAPIER.Rigid
   return { pos: { x: t.x, y: t.y, z: t.z }, rot: { x: r.x, y: r.y, z: r.z, w: r.w }, wheels };
 }
 
-// Map heading grows from +x toward +z. A rotation about y by -heading turns +x onto it.
-export function headingQuat(heading: number): Quat {
-  return { x: 0, y: Math.sin(-heading / 2), z: 0, w: Math.cos(-heading / 2) };
-}
-
-export function headingOf(q: Quat): number {
-  // The chassis forward axis +x, rotated by q, projected on the ground.
-  const fx = 1 - 2 * (q.y * q.y + q.z * q.z);
-  const fz = 2 * (q.x * q.z - q.w * q.y);
-  return Math.atan2(fz, fx);
-}
-
-export function truckState(d: Drive): { pos: Vec; heading: number; speed: number } {
-  const body = d.world.getRigidBody(d.body);
+// The current pose of a vehicle's body, with wheels at rest. For vehicles that have not driven a turn yet.
+export function restFrame(d: Drive, v: Vehicle): VehicleFrame {
+  const handle = d.bodies[v.id];
+  if (handle === undefined) throw new Error(`No physics body for ${v.id}`);
+  const body = d.world.getRigidBody(handle);
   const t = body.translation();
-  const v = body.linvel();
-  return { pos: { x: t.x / S, y: t.z / S }, heading: headingOf(body.rotation()), speed: Math.hypot(v.x, v.z) };
+  const r = body.rotation();
+  const wheels = wheelMounts(bodyOf(v.chassisId)).map(() => ({ steer: 0, spin: 0, suspension: T.suspensionRest }));
+  return { pos: { x: t.x, y: t.y, z: t.z }, rot: { x: r.x, y: r.y, z: r.z, w: r.w }, wheels };
 }
 
-function addTerrain(world: RAPIER.World, w: World): void {
+// Map pose and speed of a vehicle's body.
+export function bodyState(d: Drive, id: string): { pos: Vec; heading: number; speed: number } {
+  const handle = d.bodies[id];
+  if (handle === undefined) throw new Error(`No physics body for ${id}`);
+  const body = d.world.getRigidBody(handle);
+  const t = body.translation();
+  return { pos: { x: t.x / S, y: t.z / S }, heading: headingOf(body.rotation()), speed: forwardSpeed(body) };
+}
+
+function addTerrain(world: RAPIER.World, w: World): number {
   const n = w.terrain.size;
   const vertices = new Float32Array((n + 1) * (n + 1) * 3);
   for (let j = 0; j <= n; j++) {
@@ -166,13 +312,12 @@ function addTerrain(world: RAPIER.World, w: World): void {
       vertices[k + 2] = j * S;
     }
   }
-  world.createCollider(RAPIER.ColliderDesc.trimesh(vertices, terrainIndices(n)));
-  // Walls at the map edge.
+  const terrain = world.createCollider(RAPIER.ColliderDesc.trimesh(vertices, terrainIndices(n))).handle;
   const size = n * S;
-  const wall = 50;
-  for (const [x, z, hx, hz] of [[-wall, size / 2, wall, size], [size + wall, size / 2, wall, size], [size / 2, -wall, size, wall], [size / 2, size + wall, size, wall]]) {
-    world.createCollider(RAPIER.ColliderDesc.cuboid(hx, 200, hz).setTranslation(x, 0, z));
+  for (const [x, z, hx, hz] of [[-WALL, size / 2, WALL, size], [size + WALL, size / 2, WALL, size], [size / 2, -WALL, size, WALL], [size / 2, size + WALL, size, WALL]]) {
+    world.createCollider(RAPIER.ColliderDesc.cuboid(hx, PHYSICS.wallHeight, hz).setTranslation(x, 0, z));
   }
+  return terrain;
 }
 
 // Two upward-facing triangles per tile over the (n + 1) x (n + 1) corner grid.
@@ -190,12 +335,4 @@ export function terrainIndices(n: number): Uint32Array {
     }
   }
   return idx;
-}
-
-function addObstacles(world: RAPIER.World, w: World): void {
-  for (const o of w.obstacles) {
-    const ground = heightAt(w.terrain, o.pos.x, o.pos.y) * S;
-    const half = PHYSICS.rockHeight / 2;
-    world.createCollider(RAPIER.ColliderDesc.cylinder(half, o.r * S).setTranslation(o.pos.x * S, ground + half - 0.5, o.pos.y * S));
-  }
 }
