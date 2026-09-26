@@ -1,6 +1,6 @@
 # Sound design base
 
-**Status:** executing
+**Status:** planning
 **Branch:** sound-design
 **Worktree:** .worktrees/sound-design
 **Goal:** The game plays sound for turn play, combat, driving, UI, ambience and music through one audio module, with volume sliders and mute, and the user confirms by ear that the cues sound consistent and fire at the right moments.
