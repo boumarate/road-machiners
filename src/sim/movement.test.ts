@@ -4,6 +4,7 @@ import { CHASSIS } from '../data/chassis';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { resolveMovement } from './movement';
+import { heatAt } from './sun';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, partHp } from './testkit';
 import { dist } from './vec';
@@ -87,8 +88,9 @@ describe('movement', () => {
     w.vehicles[0].order = { kind: 'through', dest: { x: 40, y: 30 } };
     const fuel = w.player.fuel;
     const s = vehicleStats(w, w.vehicles[0]); // from rest, one turn covers accel tiles
+    const heat = heatAt(w, w.vehicles[0].pos);
     resolveMovement(w);
-    expect(w.player.fuel).toBeCloseTo(fuel - s.accel * s.fuelPerTile, 5);
+    expect(w.player.fuel).toBeCloseTo(fuel - s.accel * s.fuelPerTile * heat, 5);
   });
 });
 

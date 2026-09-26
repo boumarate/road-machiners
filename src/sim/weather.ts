@@ -1,13 +1,82 @@
 // Weather events that change the rules. weatherAt is the single query every effect reads.
 
-import type { World } from './types';
-import type { Vec } from './vec';
+import { WEATHER } from '../data/weather';
+import { newId } from './factory';
+import { chance, randInt, randRange } from './rng';
+import type { World, WeatherEvent } from './types';
+import { dist, type Vec } from './vec';
 
 // Multipliers on sight radius, top speed, wear and heat, and extra scatter in radians.
 export type WeatherEffects = { sight: number; spread: number; speed: number; wear: number; heat: number };
 
-export function advanceWeather(_world: World): void {}
+const SIM = WEATHER.sim;
 
-export function weatherAt(_world: World, _pos: Vec): WeatherEffects {
-  return { sight: 1, spread: 0, speed: 1, wear: 1, heat: 1 };
+export function advanceWeather(world: World): void {
+  for (const e of world.weather) {
+    e.turnsLeft--;
+    if (e.kind === 'storm') moveStorm(world, e);
+  }
+  const ended = world.weather.filter((e) => e.turnsLeft <= 0);
+  for (const e of ended) world.events.push({ t: 'weather', event: e, outcome: 'ended' });
+  world.weather = world.weather.filter((e) => e.turnsLeft > 0);
+  spawnIfClear(world, 'storm');
+  spawnIfClear(world, 'heatwave');
+  spawnIfClear(world, 'overcast');
+}
+
+function moveStorm(world: World, e: Extract<WeatherEvent, { kind: 'storm' }>): void {
+  let nx = e.pos.x + e.vel.x;
+  let ny = e.pos.y + e.vel.y;
+  if (nx < 0 || nx > world.size) { e.vel.x = -e.vel.x; nx = e.pos.x + e.vel.x; }
+  if (ny < 0 || ny > world.size) { e.vel.y = -e.vel.y; ny = e.pos.y + e.vel.y; }
+  e.pos = { x: nx, y: ny };
+}
+
+function spawnIfClear(world: World, kind: WeatherEvent['kind']): void {
+  if (world.weather.some((e) => e.kind === kind)) return;
+  if (!chance(world, SIM.spawnChance[kind])) return;
+  const [lo, hi] = SIM.duration[kind];
+  const turnsLeft = randInt(world, lo, hi);
+  const id = newId(world, 'wx');
+  const event: WeatherEvent =
+    kind === 'storm'
+      ? {
+          id,
+          kind: 'storm',
+          pos: { x: randRange(world, 0, world.size), y: randRange(world, 0, world.size) },
+          radius: randRange(world, SIM.stormRadius[0], SIM.stormRadius[1]),
+          vel: angledVel(world, randRange(world, SIM.stormSpeed[0], SIM.stormSpeed[1])),
+          turnsLeft,
+        }
+      : { id, kind, turnsLeft };
+  world.weather.push(event);
+  world.events.push({ t: 'weather', event, outcome: 'started' });
+}
+
+function angledVel(world: World, speed: number): Vec {
+  const a = randRange(world, -Math.PI, Math.PI);
+  return { x: Math.cos(a) * speed, y: Math.sin(a) * speed };
+}
+
+export function weatherAt(world: World, pos: Vec): WeatherEffects {
+  let sight = 1;
+  let spread = 0;
+  let speed = 1;
+  let wear = 1;
+  let heat = 1;
+  for (const e of world.weather) {
+    if (e.kind === 'storm') {
+      if (dist(pos, e.pos) > e.radius) continue;
+      const fx = SIM.effects.storm;
+      sight *= fx.sight;
+      spread += fx.spread;
+      speed *= fx.speed;
+      wear *= fx.wear;
+    } else if (e.kind === 'heatwave') {
+      heat *= SIM.effects.heatwave;
+    } else if (e.kind === 'overcast') {
+      heat *= SIM.effects.overcast;
+    }
+  }
+  return { sight, spread, speed, wear, heat };
 }

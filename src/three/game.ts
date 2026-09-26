@@ -17,8 +17,9 @@ import { maxTurn, vehicleStats } from '../sim/stats';
 import { clickOrder, throttleFor } from '../sim/steering';
 import type { Vehicle, World } from '../sim/types';
 import type { Vec } from '../sim/vec';
+import { sunAt } from '../sim/sun';
 import { playerSees, tileOf, visibleTiles } from '../sim/vision';
-import { dist } from '../sim/vec';
+import { dist, DEG } from '../sim/vec';
 import { TERRAIN } from '../data/terrain';
 import { endTurn, hostileToPlayer, newWorld, setAutoFire, setDirect, setMoveOrder, setWeaponOrder } from '../sim/world';
 import { PAL } from '../render/palette';
@@ -35,6 +36,7 @@ import { Fx3D } from './render/fx';
 import { Labels } from './render/labels';
 import { ObstacleViews } from './render/obstacles';
 import { PathView } from './render/path';
+import { ShadeView } from './render/shade';
 import { buildSites } from './render/sites';
 import { terrainMesh } from './render/terrain';
 import { VehicleView, type Ring3 } from './render/vehicle';
@@ -49,8 +51,10 @@ const DUST_CHANCE = 0.3; // per moving vehicle per frame while a turn plays
 const SMOKE_CHANCE = 0.05; // per hurt vehicle per frame
 const HURT_CAB = 0.35; // cab hp share under which a vehicle smokes
 const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is recomputed during a turn
-const SUN_DISTANCE = 100; // meters from the focus to the sun, sideways
-const SUN_HEIGHT = 120; // meters above the focus
+const SUN_RADIUS = 150; // meters from the focus to the sun light
+const SUN_INTENSITY = 2.2; // in full daylight
+const NIGHT_INTENSITY = 0.3; // dimmed light after sunset, before sunrise
+const NIGHT_ELEVATION = 25 * DEG; // shadow angle used at night, since sunAt is null then
 
 type LiveVision = { visible: Set<number>; explored: boolean[]; from: Vec | null };
 type TurnPhase = ReturnType<UiHost['getTurnPhase']>;
@@ -86,6 +90,7 @@ export class Game {
   private readonly ground: THREE.Mesh;
   private readonly obstacles: ObstacleViews;
   private readonly fog: FogView;
+  private readonly shade: ShadeView;
   private readonly weather: WeatherView;
   private readonly labels: Labels;
   private readonly zones = new ZonesView();
@@ -137,8 +142,9 @@ export class Game {
     this.obstacles = new ObstacleViews(this.scene, this.world.terrain);
     this.obstacles.sync(this.world.obstacles);
     this.fog = new FogView(this.world);
+    this.shade = new ShadeView(this.world);
     this.weather = new WeatherView(this.world);
-    this.scene.add(this.fog.mesh, this.weather.root, this.zones.root, this.path.root, this.weaponRange.root);
+    this.scene.add(this.fog.mesh, this.shade.mesh, this.weather.root, this.zones.root, this.path.root, this.weaponRange.root);
     this.overlay = overlay;
     this.labels = new Labels(overlay);
     this.fx = new Fx3D(this.scene, overlay, this.rig);
@@ -203,7 +209,7 @@ export class Game {
   private refreshUi(): void {
     const me = playerVehicle(this.world);
     if (this.selected && !vehicleStats(this.world, me).weapons.some((mw) => mw.part.id === this.selected)) this.selected = null;
-    if (!this.anim) this.fog.update(this.world);
+    if (!this.anim) { this.fog.update(this.world); this.shade.update(this.world); }
     if (!this.anim || this.anim.impacts) this.obstacles.sync(this.world.obstacles);
     this.hud.renderTop(this.displayWorld());
     this.weapons.render();
@@ -543,9 +549,15 @@ export class Game {
     this.rig.tick(dt);
     const focus = this.rig.camera.position.clone();
     this.sun.target.position.copy(me ? new THREE.Vector3(me.pos.x, me.pos.y, me.pos.z) : focus);
-    this.sun.position.copy(this.sun.target.position).add(new THREE.Vector3(TERRAIN.light.x * SUN_DISTANCE, SUN_HEIGHT, TERRAIN.light.y * SUN_DISTANCE));
+    const sun = sunAt(this.world.turn);
+    const dir = sun ? sun.dir : TERRAIN.light;
+    const elevation = sun ? sun.elevation : NIGHT_ELEVATION;
+    const horiz = Math.cos(elevation) * SUN_RADIUS;
+    this.sun.position.copy(this.sun.target.position).add(new THREE.Vector3(dir.x * horiz, Math.sin(elevation) * SUN_RADIUS, dir.y * horiz));
+    this.sun.intensity = sun ? SUN_INTENSITY : NIGHT_INTENSITY;
     this.fx.tick(dt);
     this.weather.advance(dt);
+    this.weather.sync(this.world);
     this.labels.update(this.world, this.rig);
     this.renderer.render(this.scene, this.rig.camera);
     // The preview runs after the frame is drawn, so a click shows at once.

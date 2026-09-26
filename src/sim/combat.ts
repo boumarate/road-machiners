@@ -15,6 +15,7 @@ import { getResources } from './resources';
 import { chance, gauss, randRange } from './rng';
 import { vehicleStats, type MountedWeapon } from './stats';
 import type { Aim, ShotRound, Vehicle, World } from './types';
+import { weatherAt } from './weather';
 import { angleDiff, bearing, clamp, dist, DEG, type Vec } from './vec';
 
 export type FireBlock =
@@ -56,7 +57,7 @@ export type HitOdds = {
   width: number; // meters the target, or the aimed part, shows across the line of fire
   halfAngle: number; // radians
   spread: number; // radians; standard deviation of a round's angular error, the sum of the causes
-  causes: { weapon: number; crossing: number; own: number; skill: number }; // radians
+  causes: { weapon: number; crossing: number; own: number; skill: number; weather: number }; // radians
 };
 
 const M = PHYSICS.metersPerTile;
@@ -223,8 +224,9 @@ export function hitOdds(
       (RULES.leadError * Math.abs(rel.x * n.x + rel.y * n.y)) /
       mw.def.round.speed,
     own: RULES.shake * mps(Math.abs(shooter.speed)),
+    weather: weatherAt(world, shooter.pos).spread,
   };
-  const spread = causes.weapon + causes.skill + causes.crossing + causes.own;
+  const spread = causes.weapon + causes.skill + causes.crossing + causes.own + causes.weather;
   if (!(spread > 0))
     throw new Error(`Spread ${spread} of ${mw.def.id} is not positive`);
   const chance = clamp(

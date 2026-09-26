@@ -2,7 +2,7 @@
 
 import { RULES } from '../data/rules';
 import { skillBonus } from '../data/skills';
-import { getResources } from './resources';
+import { burnFuel, getResources } from './resources';
 import { laneCount, ramMult, sideToward, walkLane, type PartHit } from './armor';
 import { vehicleMass } from './mass';
 import { isDriveObstacle } from './mapgen';
@@ -236,8 +236,7 @@ export function overlaps(world: World, movers: { v: Vehicle; s: VehicleStats }[]
 function finishMove(world: World, m: Mover): void {
   const moved = pathLength(m.v.trail);
   m.v.speed = m.stopped ? 0 : Math.max(0, m.steer.speed); // backing up ends at rest
-  const resources = getResources(world, m.v);
-  resources.fuel = Math.max(0, resources.fuel - moved * m.s.fuelPerTile);
+  burnFuel(world, m.v, moved);
   if (reached(m.v.order, m.v.trail, m.v.speed)) world.events.push({ t: 'arrived', vehicle: m.v.id });
   m.v.order = nextOrder(m.v.order, m.v.trail, m.v.speed);
 }

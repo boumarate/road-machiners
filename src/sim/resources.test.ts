@@ -4,6 +4,7 @@ import { addVehicle, emptyWorld } from './testkit';
 import { consumeSupplies, leakFuel } from './supplies';
 import { corePart } from './grid';
 import { resolveMovement } from './movement';
+import { heatAt } from './sun';
 
 describe('NPC upkeep', () => {
   it('leaks NPC fuel from a destroyed tank without draining player fuel', () => {
@@ -32,8 +33,9 @@ describe('NPC upkeep', () => {
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });
     const resources = npc.resources!;
     const before = resources.supplies;
+    const heat = heatAt(w, npc.pos);
     consumeSupplies(w);
-    expect(resources.supplies).toBeCloseTo(before - RULES.suppliesPerTurn);
+    expect(resources.supplies).toBeCloseTo(before - RULES.suppliesPerTurn * heat);
   });
 
   it('charges fuel for NPC movement', () => {

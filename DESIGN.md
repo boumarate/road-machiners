@@ -72,6 +72,12 @@ Danger is set by region, not by player level.
 
 Faction squads roam the map. Places are discovered by exploring. Towns and locations block driving. Their interaction radius is 1.5 times the site's base service reach, so the player uses services without driving into buildings.
 
+## Sun, time and weather
+
+A day is a fixed number of turns, and the clock starts in the morning. The sun rises in the east, crosses south at noon and sets in the west; there is no sun at night. A point is in shade when a ray toward the sun is blocked by a hill or by a rock, wreck or building. Heat is at its base rate in shade and at night, and rises toward its peak in full sun; heat multiplies fuel and supply drain, so the wrong time and route cost more of the tank and the larder. The ground darkens over shaded tiles once they are explored, using the same rule the sim drains by. The sun's light follows the clock, and the scene dims after dark. Sight also shrinks at night.
+
+Weather events come from the world's own randomness, so a seed replays the same weather. A dust storm is a moving area: inside it, sight and aim both suffer, top speed drops, and wear climbs faster. A heat wave covers the whole region and raises heat further. Overcast also covers the region, and cancels the sun's heat instead. The HUD shows the day, time, current heat and the region's weather.
+
 ## NPC activities
 
 NPCs follow Space Rangers-style ordered rules: react to visible danger, address urgent upkeep, continue an unfinished activity, then choose class work. Classes share fixed knowledge of towns, salvage sites, and hunting grounds. They have no individual memory or live shared intelligence.
@@ -86,7 +92,7 @@ Town markets have fixed prices and unlimited stock and money. Initial NPC resour
 
 Each town produces and needs fixed goods. Profit comes from knowing routes, as in Dustland Delivery.
 
-Fuel and supplies limit range. Fuel burns at one tenth of the chassis fuel-per-tile rate. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn at 0.025 per turn. Without supplies the character loses health. Oases refill supplies.
+Fuel and supplies limit range. Fuel burns at three tenths of the chassis fuel-per-tile rate, times heat. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn at 0.12 per turn, times heat. Without supplies the character loses health. Oases refill supplies.
 
 ## Prototype v0.001 content
 
