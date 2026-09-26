@@ -6,8 +6,9 @@ import { REGION, type LocationDef, type TownDef } from '../../data/region';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
+import { roadExits } from '../../sim/mapgen';
 import { heightAt, type Terrain } from '../../sim/terrain';
-import { segmentDist } from '../../sim/vec';
+import { angleDiff, segmentDist } from '../../sim/vec';
 import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
 
@@ -169,6 +170,7 @@ function buildSettlement(b: SiteBuilder, site: Site): void {
     }
   }
   b.root.userData.homes = homes;
+  addTownWall(b, site);
   // The water tower stands in the open center, clear of the pond, the hull and the roads.
   const tower = site.id === 'bowl' ? { x: -6, z: -6 } : { x: -18, z: 6 };
   b.offRoad(tower.x, tower.z, 1);
@@ -180,6 +182,36 @@ function buildSettlement(b: SiteBuilder, site: Site): void {
     b.addHull(-3, -1, 22, 10, 0);
     b.addModel('ship_nose', 12, -1, 0, NOSE_SCALE);
   }
+}
+
+// A wall on the town's blocked edge, open where roads enter. Towers stand at intervals and beside each gate.
+// Each section sinks into the ground, so slopes leave no gap under it.
+function addTownWall(b: SiteBuilder, site: Site): void {
+  const { wallHeight: h, wallThickness: t, wallSegment, wallTowerEvery, gateWidth } = REGION.settlement;
+  const r = site.radius - t / 2;
+  const exits = roadExits(site.pos);
+  if (exits.length === 0) throw new Error(`Town ${site.id} has no road into it`);
+  const count = Math.ceil((2 * Math.PI * r) / wallSegment);
+  const step = (2 * Math.PI) / count;
+  const gateHalf = gateWidth / 2 / r;
+  const open = Array.from({ length: count }, (_, i) => exits.some((e) => Math.abs(angleDiff((i + 0.5) * step, e)) < gateHalf + step / 2));
+  const length = 2 * r * Math.sin(step / 2) + t;
+  const sink = 0.3;
+  let sections = 0;
+  for (let i = 0; i < count; i++) {
+    if (open[i]) continue;
+    const a = (i + 0.5) * step;
+    // Box depth runs along the wall, so the yaw turns it onto the tangent.
+    b.addBox(Math.cos(a) * r, Math.sin(a) * r, t, h + sink, length, PAL.wall.side, -sink, -a);
+    const gateNext = open[(i + 1) % count];
+    const gatePrev = open[(i + count - 1) % count];
+    for (const [side, tower] of [[i * step, gatePrev || i % wallTowerEvery === 0], [(i + 1) * step, gateNext]] as const) {
+      if (tower) b.addBox(Math.cos(side) * r, Math.sin(side) * r, t * 2, h * 1.4 + sink, t * 2, PAL.wall.top, -sink, -side);
+    }
+    sections++;
+  }
+  b.root.userData.wallSections = sections;
+  b.root.userData.gates = open.filter((o, i) => o && !open[(i + count - 1) % count]).length;
 }
 
 function buildGranary(b: SiteBuilder): void {

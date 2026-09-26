@@ -239,6 +239,11 @@ export const REGION = {
     houseWidth: 2.7, // 10.8 m, against the pickup's 4.4 m length
     houseDepth: 2.1,
     houseHeights: [1.1, 1.8],
+    wallHeight: 0.9, // 3.6 m, taller than a truck
+    wallThickness: 0.5,
+    wallSegment: 3, // tiles per straight wall section around the curve
+    wallTowerEvery: 5, // wall sections between towers
+    gateWidth: 7, // tiles of open wall where a road enters, over twice the road width
     orchardRows: 11,
     orchardSpacing: 2,
   },

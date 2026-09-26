@@ -28,6 +28,14 @@ describe('landmark scale', () => {
     }
   });
 
+  it('walls each town with a gate per road', () => {
+    for (const id of ['bowl', 'nose']) {
+      const town = sites.getObjectByName(`landmark-${id}`)!;
+      expect(town.userData.wallSections).toBeGreaterThan(40);
+      expect(town.userData.gates).toBe(2);
+    }
+  });
+
   it('gives the orchard a field-sized footprint and the ship a larger hull', () => {
     const orchard = measureSite('orchard');
     expect(orchard.x).toBeGreaterThan(80);
