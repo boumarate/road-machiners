@@ -3,7 +3,7 @@
 
 import { MIX, type CueId } from "../data/sounds";
 import { spatial } from "../audio/pick";
-import type { LoopHandle, Placement, SoundPlayer } from "../audio/player";
+import type { Glide, LoopHandle, Placement, SoundPlayer } from "../audio/player";
 import type { V3 } from "../phys/frames";
 import type { GameEvent } from "../sim/types";
 import type { CameraRig } from "./render/camera";
@@ -17,7 +17,7 @@ const STINGS: { cue: CueId; match: (e: GameEvent, playerId: string) => boolean }
   { cue: "level-up", match: (e) => e.t === "levelUp" },
   { cue: "discover", match: (e) => e.t === "discover" },
   { cue: "money", match: (e) => e.t === "money" && e.amount > 0 },
-  { cue: "arrive", match: (e, id) => e.t === "arrived" && e.vehicle === id },
+  { cue: "air-brake", match: (e, id) => e.t === "arrived" && e.vehicle === id },
 ];
 
 export function stingOf(events: GameEvent[], playerId: string): CueId | null {
@@ -66,19 +66,28 @@ export function loopLevels(s: LoopState, mix: typeof MIX): LoopLevels {
   };
 }
 
-// Driving sound for a turn from the player's speed at its start and end, in m/s, or null when standing still.
-export function driveCue(from: number, to: number, mix: typeof MIX): CueId | null {
-  const d = mix.drive;
-  const change = to - from;
-  if (Math.max(from, to) < d.movingMs) return null;
-  if (change <= -d.brakeMs) return "drive-brake";
-  if (change <= -d.decelMs) return "drive-decel";
-  if (change >= d.accelMs) return "drive-accel";
-  return "drive-cruise";
+// Engine over one turn from the player's speed at its start and end, in m/s, or null when standing still.
+export function engineGlide(from: number, to: number, seconds: number, mix: typeof MIX): (Glide & { brake: boolean }) | null {
+  const e = mix.engine;
+  if (Math.max(from, to) < e.movingMs) return null;
+  const share = (v: number) => Math.min(1, v / e.topSpeedMs);
+  const rate = (v: number) => e.idleRate + (e.topRate - e.idleRate) * share(v);
+  const gain = (v: number) => e.idleGain + (1 - e.idleGain) * share(v);
+  return {
+    rateFrom: rate(from),
+    rateTo: rate(to),
+    gainFrom: gain(from),
+    gainTo: gain(to),
+    seconds,
+    fadeSeconds: e.fadeSeconds,
+    brake: from - to >= e.brakeMs,
+  };
 }
 
-// Wind and music run for the whole session; only their gain changes.
+// Engine, wind and music run for the whole session. Wind and music change gain; the engine sounds only
+// while a turn plays.
 export class SoundLoops {
+  private engine: LoopHandle;
   private wind: LoopHandle;
   private calm: LoopHandle;
   private combat: LoopHandle;
@@ -86,9 +95,14 @@ export class SoundLoops {
 
   constructor(player: SoundPlayer) {
     const silent = { pan: 0, gain: 0 };
+    this.engine = player.loop("engine", silent);
     this.wind = player.loop("wind", silent);
     this.calm = player.loop("music-calm", silent);
     this.combat = player.loop("music-combat", silent);
+  }
+
+  drive(g: Glide): void {
+    this.engine.glide(g);
   }
 
   // Sends only changed targets, so ramps are not restarted every frame.

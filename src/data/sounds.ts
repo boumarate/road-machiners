@@ -51,7 +51,7 @@ const DEFS = {
   "money": { bus: "ui", setup: "cab", volume: 0.8, pitchJitter: 0.03, maxVoices: 1, loop: false, prompts: ["A few old metal coins and bottle caps dropped into a tin box."], seconds: 1 },
   "level-up": { bus: "ui", setup: "cab", volume: 1, pitchJitter: 0, maxVoices: 1, loop: false, prompts: ["Heavy steel lever slams and locks into place with a deep satisfying clunk, then a short bright ring of struck metal."], seconds: 2 },
   "discover": { bus: "ui", setup: "cab", volume: 0.9, pitchJitter: 0, maxVoices: 1, loop: false, prompts: ["Short low mysterious metallic swell with distant wind, a place revealed."], seconds: 2 },
-  "arrive": { bus: "sfx", setup: "field", volume: 0.5, pitchJitter: 0.03, maxVoices: 1, loop: false, prompts: ["Heavy truck air brakes hiss as it stops on gravel."], seconds: 1.5 },
+  "air-brake": { bus: "sfx", setup: "field", volume: 0.5, pitchJitter: 0.03, maxVoices: 1, loop: false, prompts: ["Heavy truck air brakes hiss as it stops on gravel."], seconds: 1.5 },
   "defeat": { bus: "ui", setup: "cab", volume: 1, pitchJitter: 0, maxVoices: 1, loop: false, prompts: ["Low ominous boom fading into a dying engine and silence."], seconds: 3 },
 
   // Combat.
@@ -64,11 +64,8 @@ const DEFS = {
   "crash": { bus: "sfx", setup: "field", volume: 0.9, pitchJitter: 0.06, maxVoices: 2, loop: false, prompts: ["Two heavy steel trucks ram each other at speed: one hard, deep crunch of thick metal, a short scrape, then debris settling. Single impact."], seconds: 1.5 },
 
   // Loops.
-  // Driving: one per turn, by how the player's speed changes over the turn.
-  "drive-accel": { bus: "sfx", setup: "field", volume: 0.5, pitchJitter: 0.04, maxVoices: 1, loop: false, prompts: ["Heavy diesel truck accelerating hard from low speed, engine revs rising, gravel under the tires."], seconds: 1.5 },
-  "drive-cruise": { bus: "sfx", setup: "field", volume: 0.4, pitchJitter: 0.04, maxVoices: 1, loop: false, prompts: ["Real recording of an old heavy diesel truck driving at a steady speed, microphone riding alongside the truck. Constant engine note for the whole clip, no rise, no fall, no pass-by. No sound design, no movie effects."], seconds: 1.2 },
-  "drive-decel": { bus: "sfx", setup: "field", volume: 0.4, pitchJitter: 0.04, maxVoices: 1, loop: false, prompts: ["Real recording of an old heavy diesel truck lifting off the throttle, microphone riding alongside the truck. Engine revs fall steadily from start to end as it coasts. No sound design, no movie effects."], seconds: 1.2 },
-  "drive-brake": { bus: "sfx", setup: "field", volume: 0.55, pitchJitter: 0.04, maxVoices: 1, loop: false, prompts: ["Real recording of an old heavy diesel truck braking firmly, microphone riding alongside the truck. The brakes bite at once, a short low brake groan and air hiss, engine revs drop. No sound design, no movie effects."], seconds: 1.2 },
+  // One engine whose pitch and level the game bends each turn from the truck's speed.
+  "engine": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Soft low rumble of a big diesel truck engine heard from a distance, smooth and steady, no rattles or whine, seamless loop."], seconds: 5 },
   "wind": { bus: "ambient", setup: "field", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Dry desert wind blowing over open sand and rocks, steady, seamless loop."], seconds: 12 },
   "music-calm": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Slow sparse post-apocalyptic desert road music, lonely twangy baritone guitar and low drone, 80 bpm, instrumental, seamless loop."], seconds: 90 },
   "music-combat": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Tense driving desert combat music, distorted baritone guitar riff, pounding tom drums, 120 bpm, instrumental, seamless loop."], seconds: 60 },
@@ -105,8 +102,9 @@ export const MIX = {
   // Gain halves at this many meters from the camera focus; pan reaches this share at the screen edge.
   halfGainMeters: 40,
   panWidth: 0.7,
-  // Speed change in m/s over one turn that picks the driving sound. Under movingMs at both ends, the truck is still.
-  drive: { accelMs: 1.5, decelMs: 1.5, brakeMs: 4, movingMs: 2 },
+  // Engine over a turn: playback rate and level follow speed in m/s. Under movingMs at both ends it stays
+  // silent; a speed drop of brakeMs or more adds the air brake. 24 m/s is the fastest chassis.
+  engine: { idleRate: 0.8, topRate: 1.4, topSpeedMs: 24, idleGain: 0.5, movingMs: 0.5, brakeMs: 4, fadeSeconds: 0.12 },
   // Wind bed: a base level, rising near dust storms.
   wind: { baseGain: 0.4, stormGain: 1, stormReachTiles: 12, fadeSeconds: 1 },
   // Music crossfades to combat while a hostile is in sight, and back after the last one leaves.

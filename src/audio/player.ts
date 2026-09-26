@@ -8,12 +8,14 @@ import { pickVariant, VoiceLimiter } from "./pick";
 export type Placement = { pan: number; gain: number };
 
 export type LoopHandle = {
-  setRate(rate: number): void;
   setGain(gain: number, rampSeconds: number): void;
+  // Fades in, moves rate and gain in a straight line over the span, and fades out at its end.
+  glide(g: Glide): void;
   stop(fadeMs: number): void;
 };
 
-const RAMP_S = 0.05; // smoothing for live rate changes, to avoid clicks
+export type Glide = { rateFrom: number; rateTo: number; gainFrom: number; gainTo: number; seconds: number; fadeSeconds: number };
+
 
 export class SoundPlayer {
   private last = new Map<string, number>();
@@ -46,8 +48,20 @@ export class SoundPlayer {
     const gain = this.chain(src, cue, at);
     src.start();
     return {
-      setRate: (r) => src.playbackRate.setTargetAtTime(r, ctx.currentTime, RAMP_S),
       setGain: (g, ramp) => gain.gain.setTargetAtTime(cue.volume * g, ctx.currentTime, ramp / 3),
+      glide: (g) => {
+        const t = ctx.currentTime;
+        const rate = src.playbackRate;
+        rate.cancelScheduledValues(t);
+        rate.setValueAtTime(g.rateFrom, t);
+        rate.linearRampToValueAtTime(g.rateTo, t + g.seconds);
+        const level = gain.gain;
+        level.cancelScheduledValues(t);
+        level.setValueAtTime(level.value, t);
+        level.linearRampToValueAtTime(cue.volume * g.gainFrom, t + g.fadeSeconds);
+        level.linearRampToValueAtTime(cue.volume * g.gainTo, t + g.seconds - g.fadeSeconds);
+        level.linearRampToValueAtTime(0, t + g.seconds);
+      },
       stop: (fadeMs) => {
         gain.gain.setTargetAtTime(0, ctx.currentTime, fadeMs / 1000 / 3);
         src.stop(ctx.currentTime + fadeMs / 1000);

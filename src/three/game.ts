@@ -66,7 +66,7 @@ import { WeatherView } from "./render/weather";
 import { ZonesView } from "./render/zones";
 import { loadWorld, saveWorld } from "./save";
 import { MIX } from "../data/sounds";
-import { driveCue, SoundDirector, SoundLoops, stingOf } from "./sound";
+import { engineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
 import type { SoundPlayer } from "../audio/player";
 import { uiRoot } from "../ui/dom";
 
@@ -617,11 +617,11 @@ export class Game {
   }
 
   private playDriveSound(result: TurnResult): void {
-    const id = playerVehicle(this.world).id;
-    const frames = result.frames[id];
-    const cue = driveCue(stepSpeed(frames, 1), stepSpeed(frames, frames.length - 1), MIX);
-    const f = frames[0];
-    if (cue && f) this.sound.at(cue, f.pos, 0);
+    const frames = result.frames[playerVehicle(this.world).id];
+    const g = engineGlide(stepSpeed(frames, 1), stepSpeed(frames, frames.length - 1), MOVE_MS / 1000, MIX);
+    if (!g) return;
+    this.loops.drive(g);
+    if (g.brake) this.sound.at("air-brake", frames[0].pos, 0);
   }
 
   private updateLoops(): void {

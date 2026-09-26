@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GameEvent } from "../sim/types";
 import { MIX } from "../data/sounds";
-import { driveCue, loopLevels, stingOf } from "./sound";
+import { engineGlide, loopLevels, stingOf } from "./sound";
 
 describe("stingOf", () => {
   it("plays the most important result only", () => {
@@ -18,7 +18,7 @@ describe("stingOf", () => {
       { t: "arrived", vehicle: "npc1" },
     ];
     expect(stingOf(events, "p")).toBeNull();
-    expect(stingOf([{ t: "arrived", vehicle: "p" }], "p")).toBe("arrive");
+    expect(stingOf([{ t: "arrived", vehicle: "p" }], "p")).toBe("air-brake");
   });
 });
 
@@ -34,16 +34,19 @@ describe("loopLevels", () => {
   });
 });
 
-describe("driveCue", () => {
-  const d = MIX.drive;
+describe("engineGlide", () => {
+  const e = MIX.engine;
   it("stays silent while standing still", () => {
-    expect(driveCue(0, 0, MIX)).toBeNull();
-    expect(driveCue(d.movingMs / 2, d.movingMs / 2, MIX)).toBeNull();
+    expect(engineGlide(0, 0, 1, MIX)).toBeNull();
   });
-  it("picks the sound by speed change", () => {
-    expect(driveCue(0, d.accelMs + d.movingMs, MIX)).toBe("drive-accel");
-    expect(driveCue(10, 10, MIX)).toBe("drive-cruise");
-    expect(driveCue(10, 10 - d.decelMs, MIX)).toBe("drive-decel");
-    expect(driveCue(10, 10 - d.brakeMs, MIX)).toBe("drive-brake");
+  it("follows speed from the start to the end of the turn", () => {
+    const g = engineGlide(0, e.topSpeedMs * 2, 1, MIX)!;
+    expect([g.rateFrom, g.rateTo]).toEqual([e.idleRate, e.topRate]);
+    expect([g.gainFrom, g.gainTo]).toEqual([e.idleGain, 1]);
+    expect(g.brake).toBe(false);
+  });
+  it("adds the air brake on a hard slowdown only", () => {
+    expect(engineGlide(10, 10 - e.brakeMs, 1, MIX)!.brake).toBe(true);
+    expect(engineGlide(10, 10 - e.brakeMs / 2, 1, MIX)!.brake).toBe(false);
   });
 });
