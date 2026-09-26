@@ -39,7 +39,7 @@ function spawnOne(world: World, tpl: NpcTemplate): boolean {
       cargo: tpl.cargo,
       pos,
       heading: randRange(world, -Math.PI, Math.PI),
-      brain: { templateId: tpl.id, goal: null, home: { ...pos }, stepIndex: 0 },
+      brain: { templateId: tpl.id, activity: null, goal: null, home: { ...pos }, stepIndex: 0 },
     });
     world.vehicles.push(v);
     world.events.push({ t: 'spawn', vehicle: v.id });

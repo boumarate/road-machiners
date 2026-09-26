@@ -3,6 +3,7 @@ import { RULES } from '../data/rules';
 import { REGION } from '../data/region';
 import { planNpcOrders } from './ai';
 import { resolveMovement } from './movement';
+import { resolveNpcActivities } from './npc-activities';
 import { addVehicle, emptyWorld } from './testkit';
 import { dist } from './vec';
 import { newWorld } from './world';
@@ -10,7 +11,7 @@ import { newWorld } from './world';
 function buildChase() {
   const w = emptyWorld({ x: 40, y: 30 });
   const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
-  npc.brain = { templateId: 'buggy', goal: null, home: { ...npc.pos }, stepIndex: 0 };
+  npc.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0 };
   return { w, npc };
 }
 
@@ -27,11 +28,12 @@ describe('NPC driving', () => {
     const tin = REGION.towns[0];
     const salt = REGION.towns[1];
     const npc = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: tin.pos.x + tin.radius + 2, y: tin.pos.y });
-    npc.brain = { templateId: 'trader', goal: null, home: { ...npc.pos }, stepIndex: 0 };
+    npc.brain = { templateId: 'trader', activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0 };
     let closest = Infinity;
     for (let i = 0; i < 80; i++) {
       planNpcOrders(w);
       resolveMovement(w);
+      resolveNpcActivities(w);
       closest = Math.min(closest, dist(npc.pos, salt.pos));
       expect(dist(npc.pos, salt.pos)).toBeGreaterThanOrEqual(salt.radius + 0.8 - 0.02);
     }

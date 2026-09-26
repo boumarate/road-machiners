@@ -16,6 +16,7 @@ import { resolveMovement } from './movement';
 import { consumeSupplies } from './supplies';
 import { spawnInitial, spawnNpcs } from './spawn';
 import { initializeSalvage } from './salvage';
+import { resolveNpcActivities } from './npc-activities';
 import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
 import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
@@ -103,8 +104,9 @@ export function endTurn(world: World, move: (w: World) => void = resolveMovement
     refreshVision(w);
     assignAutoOrders(w);
     fireWeapons(w);
-    resolveDestroyed(w);
     consumeSupplies(w);
+    resolveDestroyed(w);
+    resolveNpcActivities(w);
     discoverSites(w);
     useOasis(w);
     checkDefeat(w);

@@ -29,7 +29,7 @@ export function visibleTiles(world: World, from: Vec): Set<number> {
 
 export function canVehicleSee(world: World, observer: Vehicle, position: Vec): boolean {
   if (observer.id === world.player.vehicleId) return playerSees(world, position);
-  const target = tileCenter(world, tileOf(world, position));
+  const target = position;
   return dist(observer.pos, target) <= TERRAIN.vision.radius &&
     hasLineOfSight(observer.pos, target, world.obstacles.filter((o) => BLOCKING.includes(o.kind))) &&
     clearOverTerrain(world.terrain, observer.pos, target);

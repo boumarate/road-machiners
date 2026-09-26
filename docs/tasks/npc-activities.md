@@ -160,9 +160,17 @@ Approach: implement sequentially in this worktree, preserving shared game rules 
 
 ## Verify
 
-Worktree identity verified at the base revision above. Environment installation and baseline checks have not run yet. Design and plan approved. PH1 in progress. PH2-PH4 pending.
+Local dependencies installed with `npm ci`. Baseline tests and typecheck passed. PH1 and PH2 committed. PH3 tests and typecheck pass: 157 tests, including collect-sell-upkeep and raid-loot-sell through actual sim turns. PH4 pending. Logs are in worktree-local `tmp/`.
+
+The raid test exposed wrecks hiding themselves when NPC sight snapped their centers to tile centers. Observer sight now evaluates the requested point using the same occlusion rules. A regression verifies a wreck is visible while objects behind it are not. The buggy carries only one loose good with its equipment installed, so the loot test verifies capacity-limited transfer and conservation instead of assuming three cells.
 
 ## Conclusion
+
+### Deviations from plan
+
+- Resource initialization belongs in `factory.ts` so non-brained NPC fixtures also own resources. Activity and salvage shapes were added with their consuming phases instead of unused declarations in PH1.
+- Activity event formatting moved from PH4 into PH3 to keep the event formatter's exhaustive switch type-safe.
+- Observer sight correction landed in PH3 after full-loop evidence exposed wreck self-occlusion. Existing NPC driving tests now resolve activities between movement steps so traders can buy before departing.
 
 ### Hands-off decisions
 

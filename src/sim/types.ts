@@ -30,8 +30,18 @@ export type SalvageStock = { id: string; pos: Vec; radius: number; goods: Record
 
 export type DriverResources = { money: number; fuel: number; supplies: number; health: number };
 
+export type NpcActivity = {
+  kind: 'scavenge' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait';
+  targetId: string | null;
+  destination: Vec | null;
+  phase: 'travel' | 'act';
+  reason: string;
+  purchase?: { good: string; sellTown: string };
+};
+
 export type NpcBrain = {
   templateId: string;
+  activity: NpcActivity | null;
   goal: Vec | null;
   home: Vec;
   stepIndex: number; // route progress for traders and scavengers
@@ -84,6 +94,7 @@ export type Player = {
 };
 
 export type GameEvent =
+  | { t: 'activity'; vehicle: string; previous: NpcActivity['kind'] | null; activity: NpcActivity['kind']; reason: string }
   | { t: 'collision'; a: string; b: string; damageA: number; damageB: number }
   | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; hit: boolean; damage: number; chance: number }
   | { t: 'partDisabled'; vehicle: string; part: string }

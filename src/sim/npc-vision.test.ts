@@ -1,6 +1,15 @@
 import { expect, it } from 'vitest';
 import { addVehicle, emptyWorld } from './testkit';
 import { autoOrders, fireWeapons } from './combat';
+import { canVehicleSee } from './vision';
+
+it('can see a wreck itself without seeing through it', () => {
+  const w = emptyWorld();
+  const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 13, y: 12 });
+  w.obstacles.push({ id: 'wreck', pos: { x: 16, y: 12 }, r: 0.6, kind: 'wreck' });
+  expect(canVehicleSee(w, npc, { x: 16, y: 12 })).toBe(true);
+  expect(canVehicleSee(w, npc, { x: 18, y: 12 })).toBe(false);
+});
 
 it('NPCs cannot target or fire through an occluding rock', () => {
   const w = emptyWorld({ x: 10, y: 10 });

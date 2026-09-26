@@ -3,6 +3,7 @@
 import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { mountedParts } from '../sim/grid';
+import { playerSees } from '../sim/vision';
 import type { GameEvent, Vehicle, World } from '../sim/types';
 
 export function vehicleName(world: World, id: string): string {
@@ -26,6 +27,10 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
   const n = (id: string) => vehicleName(world, id);
   const me = world.player.vehicleId;
   switch (e.t) {
+    case 'activity': {
+      const vehicle = world.vehicles.find((v) => v.id === e.vehicle);
+      return vehicle && playerSees(world, vehicle.pos) ? { text: `${vehicle.name}: ${e.activity} — ${e.reason}`, cls: 'dim' } : null;
+    }
     case 'collision': {
       const b = e.b === 'edge' ? 'the map edge' : e.b.startsWith('v') ? n(e.b) : 'an obstacle';
       if (e.a !== me && e.b !== me && e.damageA + e.damageB < 1) return null;

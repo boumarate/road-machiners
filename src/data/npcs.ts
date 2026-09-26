@@ -3,6 +3,7 @@
 import type { Faction } from '../sim/types';
 import type { Vec } from '../sim/vec';
 import { START } from './start';
+import { RULES } from './rules';
 
 // NPCs begin with the player's upkeep budget. Their fuel is capped by their chassis.
 export const NPC_RESOURCES = { money: START.money, fuel: START.fuel, supplies: START.supplies };
@@ -57,6 +58,30 @@ export const SPAWN = {
   townSpread: 1, // distance beyond the site boundary for neutral spawns
   tries: 40,
   neighborHelp: 10, // same-faction vehicles in this range join a grudge
+};
+
+export type NpcClass = {
+  towns: string[];
+  salvageSites: string[];
+  supplySites: string[];
+  fleeHull: number;
+  recoverHull: number;
+  threatRatio: number;
+  defensive: boolean;
+};
+
+// Hull warnings begin at 30%. Recovery to half hull prevents fight/flee oscillation.
+export const NPC_CLASSES: Record<Brain, NpcClass> = {
+  scavenger: { towns: ['tin', 'salt'], salvageSites: ['convoy'], supplySites: ['oasis'], fleeHull: 0.3, recoverHull: 0.5, threatRatio: 1, defensive: false },
+  trader: { towns: ['tin', 'salt'], salvageSites: [], supplySites: ['oasis'], fleeHull: 0.3, recoverHull: 0.5, threatRatio: 1, defensive: true },
+  raider: { towns: ['tin', 'salt'], salvageSites: [], supplySites: ['oasis'], fleeHull: 0.3, recoverHull: 0.5, threatRatio: 1, defensive: false },
+};
+
+export const NPC_UPKEEP = {
+  lowFuel: RULES.lowFuelThreshold,
+  lowSupplies: RULES.lowFuelThreshold,
+  // Reserve one full tank and supply load before buying trade cargo.
+  reserveLoads: 1,
 };
 
 export const WILD_SPAWNS: Vec[] = [
