@@ -75,6 +75,14 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       const text = `${partName(world, e.shooter, e.weapon)} → ${n(e.target)}${aim}: ${hits}/${e.rounds.length} hits${crits ? `, ${crits} crit` : ''}${parts} (${Math.round(e.chance * 100)}%)`;
       return { text, cls: e.target === me && dealt.size > 0 ? 'bad' : '' };
     }
+    case 'guardShot': {
+      const target = findAny(world, e.target);
+      if (!target || !playerSees(world, target.pos)) return null;
+      const town = REGION.towns.find((t) => t.id === e.town)!;
+      const hits = e.rounds.filter((r) => r.hit).length;
+      const parts = [...partDamage(e.rounds.flatMap((r) => r.hits))].map(([id, d]) => `, ${partName(world, e.target, id)} −${d}`).join('');
+      return { text: `${town.name} guards → ${n(e.target)}: ${hits}/${e.rounds.length} hits${parts}`, cls: 'dim' };
+    }
     case 'partDisabled':
       return { text: `${n(e.vehicle)}: ${partName(world, e.vehicle, e.part)} disabled`, cls: e.vehicle === me ? 'bad' : 'good' };
     case 'destroyed':

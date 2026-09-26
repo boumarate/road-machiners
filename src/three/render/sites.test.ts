@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Box3, Vector3 } from 'three';
 import { loadModels } from './models';
 import { buildSites } from './sites';
+import { REGION } from '../../data/region';
 
 // The model files as base64 data URLs, since tests run without a server.
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
@@ -25,6 +26,22 @@ describe('landmark scale', () => {
       expect(size.x).toBeGreaterThan(180);
       expect(size.z).toBeGreaterThan(180);
       expect(sites.getObjectByName(`landmark-${id}`)!.userData.homes).toBeGreaterThan(30);
+    }
+  });
+
+  it('walls each town with a gate per road', () => {
+    for (const id of ['bowl', 'nose']) {
+      const town = sites.getObjectByName(`landmark-${id}`)!;
+      expect(town.userData.wallSections).toBeGreaterThan(40);
+      expect(town.userData.gates).toBe(2);
+    }
+  });
+
+  it('closes palisaded sites with a gate per road', () => {
+    for (const site of REGION.locations.filter((l) => l.walled)) {
+      const group = sites.getObjectByName(`landmark-${site.id}`)!;
+      expect(group.userData.wallSections).toBeGreaterThan(5);
+      expect(group.userData.gates).toBeGreaterThan(0);
     }
   });
 

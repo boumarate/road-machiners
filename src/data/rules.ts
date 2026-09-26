@@ -34,6 +34,10 @@ export const RULES = {
   wheelLoss: 0.15, // share of speed and turning lost per broken wheel
   tankLeak: 1, // fuel lost per turn with a broken tank
 
+  // Town guards. Each town gate has one gun. Every turn it shoots the nearest vehicle within range that fired.
+  // Each round hits with a flat chance and enters a random lane of the side facing the gate.
+  guards: { range: 8, rounds: 4, hitChance: 0.5, missOffset: 1.5, round: { damage: 6, pen: 10 } },
+
   // Combat
   // A round that lands on the truck is a crit with this chance. A crit multiplies its damage and pen, so a few
   // lucky rounds can swing a fight that many small rolls would otherwise average out.

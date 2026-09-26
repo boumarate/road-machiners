@@ -51,7 +51,7 @@ function placeSites(world: World): Obstacle[] {
 }
 
 // Directions of roads leaving a point that lies on a road end or vertex.
-function roadExits(p: Vec): number[] {
+export function roadExits(p: Vec): number[] {
   const exits: number[] = [];
   for (const road of REGION.roads) {
     road.forEach((q, i) => {

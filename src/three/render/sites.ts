@@ -6,8 +6,9 @@ import { REGION, type LocationDef, type TownDef } from '../../data/region';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
+import { siteGates } from '../../sim/sites';
 import { heightAt, type Terrain } from '../../sim/terrain';
-import { segmentDist } from '../../sim/vec';
+import { angleDiff, segmentDist } from '../../sim/vec';
 import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
 
@@ -169,6 +170,7 @@ function buildSettlement(b: SiteBuilder, site: Site): void {
     }
   }
   b.root.userData.homes = homes;
+  addWall(b, site, townWall());
   // The water tower stands in the open center, clear of the pond, the hull and the roads.
   const tower = site.id === 'bowl' ? { x: -6, z: -6 } : { x: -18, z: 6 };
   b.offRoad(tower.x, tower.z, 1);
@@ -180,6 +182,87 @@ function buildSettlement(b: SiteBuilder, site: Site): void {
     b.addHull(-3, -1, 22, 10, 0);
     b.addModel('ship_nose', 12, -1, 0, NOSE_SCALE);
   }
+}
+
+type WallStyle = {
+  height: number;
+  thickness: number;
+  segment: number; // tiles per straight section around the curve
+  gateWidth: number;
+  towerEvery: number | null; // sections between wall towers
+  ragged: boolean; // sections vary in height, like scrap and posts
+  color: number;
+  postColor: number;
+  guarded: boolean; // a guard tower on each gate side and a banner pole at each gate
+};
+
+function townWall(): WallStyle {
+  const s = REGION.settlement;
+  return { height: s.wallHeight, thickness: s.wallThickness, segment: s.wallSegment, gateWidth: s.gateWidth, towerEvery: s.wallTowerEvery, ragged: false, color: PAL.wall.side, postColor: PAL.wall.top, guarded: true };
+}
+
+function palisade(): WallStyle {
+  const s = REGION.settlement;
+  return { height: s.palisadeHeight, thickness: s.palisadeThickness, segment: s.palisadeSegment, gateWidth: s.palisadeGateWidth, towerEvery: null, ragged: true, color: PAL.trunk, postColor: PAL.rust.side, guarded: false };
+}
+
+// A wall on the site's blocked edge, open at each gate. Each section sinks into the ground, so slopes leave
+// no gap under it. Box depth runs along the wall, so a yaw of -a turns it onto the tangent at angle a, and
+// box width then runs outward.
+function addWall(b: SiteBuilder, site: Site, style: WallStyle): void {
+  const { height: h, thickness: t, segment } = style;
+  const S2 = REGION.settlement;
+  const r = site.radius - t / 2;
+  const gates = siteGates(site).map((g) => Math.atan2(g.y - site.pos.y, g.x - site.pos.x));
+  const count = Math.ceil((2 * Math.PI * r) / segment);
+  const step = (2 * Math.PI) / count;
+  const gateHalf = style.gateWidth / 2 / r;
+  const open = Array.from({ length: count }, (_, i) => gates.some((e) => Math.abs(angleDiff((i + 0.5) * step, e)) < gateHalf + step / 2));
+  const length = 2 * r * Math.sin(step / 2) + t;
+  const sink = 0.3;
+  const at = (a: number, out = 0) => ({ x: Math.cos(a) * (r + out), z: Math.sin(a) * (r + out) });
+  let sections = 0;
+  for (let i = 0; i < count; i++) {
+    if (open[i]) continue;
+    const a = (i + 0.5) * step;
+    const height = style.ragged ? h * (0.8 + 0.4 * hash2(i, site.pos.x)) : h;
+    const p = at(a);
+    b.addBox(p.x, p.z, t, height + sink, length, style.color, -sink, -a);
+    if (style.towerEvery !== null && i % style.towerEvery === 0 && !open[(i + count - 1) % count]) {
+      const q = at(i * step);
+      b.addBox(q.x, q.z, t * 2, h * 1.4 + sink, t * 2, style.postColor, -sink, -i * step);
+    }
+    sections++;
+  }
+  let gateCount = 0;
+  for (let i = 0; i < count; i++) {
+    const starts = open[i] && !open[(i + count - 1) % count];
+    const ends = open[i] && !open[(i + 1) % count];
+    for (const a of [...(starts ? [i * step] : []), ...(ends ? [(i + 1) * step] : [])]) {
+      const q = at(a);
+      if (!style.guarded) {
+        b.addBox(q.x, q.z, t * 1.6, h * 1.4 + sink, t * 1.6, style.postColor, -sink, -a);
+        continue;
+      }
+      const tower = S2.guardTowerHeight;
+      b.addBox(q.x, q.z, t * 2.4, tower + sink, t * 2.4, style.postColor, -sink, -a);
+      b.addBox(q.x, q.z, t * 3.2, 0.12, t * 3.2, PAL.wall.dark, tower, -a);
+      const gun = at(a, t * 1.4);
+      b.addBox(gun.x, gun.z, 0.9, 0.12, 0.12, PAL.metal, tower + 0.2, -a);
+    }
+    if (!starts) continue;
+    gateCount++;
+    if (!style.guarded) continue;
+    // The pole rises from the gate's first tower. Its banner hangs across the tangent, so it faces the road.
+    const a = i * step;
+    const q = at(a);
+    const tower = S2.guardTowerHeight;
+    b.addBox(q.x, q.z, 0.12, S2.gatePoleHeight - tower, 0.12, PAL.trunk, tower);
+    const flag = { x: q.x - Math.sin(a) * 0.45, z: q.z + Math.cos(a) * 0.45 };
+    b.addBox(flag.x, flag.z, 0.05, 1, 0.8, PAL.rust.top, S2.gatePoleHeight - 1.1, -a);
+  }
+  b.root.userData.wallSections = sections;
+  b.root.userData.gates = gateCount;
 }
 
 function buildGranary(b: SiteBuilder): void {
@@ -280,6 +363,7 @@ function buildSite(t: Terrain, site: Site): THREE.Group {
     case 'burnt-convoy': case 'podfield': case 'ridge-wrecks': case 'salvage-yard': buildWrecks(b, site.id); break;
     default: throw new Error(`Missing landmark model for ${site.id}`);
   }
+  if ('kind' in site && site.walled) addWall(b, site, palisade());
   // Site models never move after they are built.
   b.root.traverse((o) => {
     o.updateMatrix();
