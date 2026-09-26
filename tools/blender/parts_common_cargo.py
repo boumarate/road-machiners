@@ -1,6 +1,6 @@
 """Shared colors and helpers for the cargo part and good models.
 
-Every cargo and good model sits on the deck cell grid. One cell is CELL_W meters across (Blender Y) and CELL_L meters
+Every cargo and good model sits on the deck cell grid. One cell is CELL_ACROSS meters across (Blender Y) and CELL_ALONG meters
 along (Blender X, nose at +X). A model is authored for its rotation-0 footprint, centered on the origin, with its base on
 the deck top at Z=0. The view stretches the base to the placed footprint.
 """
@@ -14,11 +14,9 @@ from pathlib import Path
 import bpy
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from kit import Kit, Vec3, parse_args  # noqa: E402
+from kit import CELL_ACROSS, CELL_ALONG, Kit, Vec3, parse_args  # noqa: E402
 from shapes import strut  # noqa: E402
 
-CELL_W = 0.4  # meters across the truck per cell, from the cell size in src/data/physics.ts
-CELL_L = 0.65  # meters along the truck per cell
 CARGO_MAX_H = 1.1  # tallest cargo part, so it stays below the cockpit roll cage
 GOOD_MAX_H = 0.5  # tallest good, from the model names list in docs/tasks/modular-vehicle-parts.md
 DENT_SLACK = 0.03  # largest overshoot fit_footprint() pulls back in. Seeded dents stay below it.
@@ -52,7 +50,7 @@ COLORS = {
 
 def footprint(w: int, h: int) -> tuple[float, float]:
     """Returns the (length along X, width along Y) in meters of a w-across by h-along footprint."""
-    return h * CELL_L, w * CELL_W
+    return h * CELL_ALONG, w * CELL_ACROSS
 
 
 def frame_box(kit: Kit, name: str, length: float, width: float, height: float, thick: float, mat: str, z0: float = 0.0) -> None:

@@ -26,6 +26,8 @@ def build(kit: Kit) -> None:
     # Two raised tread strips so the plate reads as a walkable deck.
     for y in (-0.08, 0.08):
         kit.box("tread", (CELL_ALONG - SEAM * 4, 0.035, 0.012), (0, y, -0.003), "metal")
+    # The truck frame's rails start below this point, read by src/three/render/vehicle.ts.
+    kit.socket("underside", (0, 0, -FRAME))
 
 
 def main() -> None:

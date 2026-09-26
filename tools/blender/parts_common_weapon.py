@@ -16,10 +16,8 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 
-from kit import Kit, Vec3, parse_args
+from kit import CELL_ACROSS, CELL_ALONG, Kit, Vec3, parse_args
 
-CELL_ACROSS = 0.4  # CELL_W in the sim, meters per cell in Blender Y.
-CELL_ALONG = 0.65  # CELL_L in the sim, meters per cell in Blender X.
 ALONG_X: Vec3 = (0, math.radians(90), 0)  # Turns a Kit cylinder so its axis runs along +X, local +Z to the front.
 
 # Colors from src/render/palette.ts. The view swaps `paint` for the faction color.

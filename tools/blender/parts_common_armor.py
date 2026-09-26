@@ -13,11 +13,9 @@ from collections.abc import Callable
 
 import bpy
 
-from kit import Kit, parse_args
+from kit import CELL_ACROSS, CELL_ALONG, Kit, parse_args
 
-CELL_ACROSS = 0.4  # CELL_W in the sim, meters per cell in Blender Y.
-DEPTH = 0.65  # CELL_L in the sim, meters per cell in Blender X.
-OUTER_X = DEPTH / 2  # The outer edge of the row.
+OUTER_X = CELL_ALONG / 2  # The outer edge of the row.
 PREVIEW_M = 2.6  # Default preview width, wide enough for a 4-cell row.
 FIT_TOLERANCE = 0.01  # Seeded dents may push a vertex this far past the footprint.
 

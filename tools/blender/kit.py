@@ -24,6 +24,10 @@ Vec3 = tuple[float, float, float]
 GAME_VIEW = Vector((1.0, -1.0, 0.816)).normalized()
 PREVIEW_PX = (900, 700)
 
+# One truck deck cell in meters, matching PHYSICS.cell in src/data/physics.ts.
+CELL_ACROSS = 0.4  # Blender Y
+CELL_ALONG = 0.65  # Blender X
+
 
 @dataclass(frozen=True)
 class Args:

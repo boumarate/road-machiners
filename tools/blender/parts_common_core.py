@@ -9,10 +9,8 @@ from __future__ import annotations
 import bpy
 from mathutils import Vector
 
-from kit import Kit
+from kit import CELL_ACROSS, CELL_ALONG, Kit
 
-CELL_ALONG = 0.65  # Blender X, from the cell size in src/data/physics.ts
-CELL_ACROSS = 0.4  # Blender Y
 FIT_SLACK = 1e-4  # float noise allowed at the footprint edge
 
 # Colors from src/render/palette.ts. The paint color is a stand-in: the game swaps it for the faction color.

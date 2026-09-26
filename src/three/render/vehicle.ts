@@ -39,7 +39,6 @@ const SIDE_YAW: Record<SideLetter, number> = { F: 0, B: Math.PI, R: -Math.PI / 2
 // The frame is an upper and a lower steel rail on each outer deck edge, joined by one post per edge.
 const RAIL = 0.06; // rail and post thickness in meters
 const RAIL_H = 0.12; // rail height in meters
-const DECK_DEPTH = 0.08; // deck tile depth below the deck top, from tools/blender/deck_tile.py FRAME
 
 type Wheel = { mount: THREE.Group; spin: THREE.Object3D; restY: number };
 
@@ -161,7 +160,7 @@ export class VehicleView {
     const wheels = wheelCells(v.chassisId);
     const solid = (x: number, y: number): boolean =>
       x >= 0 && y >= 0 && x < grid.w && y < grid.h && grid.cells[y][x] !== null && !wheels.has(`${x},${y}`);
-    const top = body.half.y - DECK_DEPTH;
+    const top = body.half.y + socket('deck_tile', 'underside').y; // the socket sits below the deck top
     const bottom = -body.half.y;
     const steel = new THREE.MeshLambertMaterial({ color: PAL.metal, flatShading: true });
     const box = (sx: number, sy: number, sz: number, x: number, y: number, z: number): void => {
