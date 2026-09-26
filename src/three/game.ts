@@ -1,6 +1,6 @@
 import { startKit } from '../data/start';
 // The 3D game: wires input to the sim, the sim and physics to the Three.js view, and the HTML UI.
-// Time only moves while a turn plays. The path preview runs the same physics the turn will run.
+// Sim time only moves while a turn plays. The path preview runs the same physics the turn will run.
 
 import * as THREE from 'three';
 import { CONFIG } from '../config';
@@ -39,6 +39,7 @@ import { buildSites } from './render/sites';
 import { terrainMesh } from './render/terrain';
 import { VehicleView, type Ring3 } from './render/vehicle';
 import { WeaponRangeView } from './render/weaponRange';
+import { WeatherView } from './render/weather';
 import { ZonesView } from './render/zones';
 
 const PLAN_TURNS = 3; // turns of path preview
@@ -85,6 +86,7 @@ export class Game {
   private readonly ground: THREE.Mesh;
   private readonly obstacles: ObstacleViews;
   private readonly fog: FogView;
+  private readonly weather: WeatherView;
   private readonly labels: Labels;
   private readonly zones = new ZonesView();
   private readonly path = new PathView();
@@ -135,7 +137,8 @@ export class Game {
     this.obstacles = new ObstacleViews(this.scene, this.world.terrain);
     this.obstacles.sync(this.world.obstacles);
     this.fog = new FogView(this.world);
-    this.scene.add(this.fog.mesh, this.zones.root, this.path.root, this.weaponRange.root);
+    this.weather = new WeatherView(this.world);
+    this.scene.add(this.fog.mesh, this.weather.root, this.zones.root, this.path.root, this.weaponRange.root);
     this.overlay = overlay;
     this.labels = new Labels(overlay);
     this.fx = new Fx3D(this.scene, overlay, this.rig);
@@ -542,6 +545,7 @@ export class Game {
     this.sun.target.position.copy(me ? new THREE.Vector3(me.pos.x, me.pos.y, me.pos.z) : focus);
     this.sun.position.copy(this.sun.target.position).add(new THREE.Vector3(TERRAIN.light.x * SUN_DISTANCE, SUN_HEIGHT, TERRAIN.light.y * SUN_DISTANCE));
     this.fx.tick(dt);
+    this.weather.advance(dt);
     this.labels.update(this.world, this.rig);
     this.renderer.render(this.scene, this.rig.camera);
     // The preview runs after the frame is drawn, so a click shows at once.
