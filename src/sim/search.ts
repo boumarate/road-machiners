@@ -2,7 +2,7 @@
 
 import { SALVAGE } from '../data/salvage';
 import { playerVehicle } from './damage';
-import { freeCells } from './grid';
+import { freeCells, goodsCount } from './grid';
 import { startJob } from './jobs';
 import { collectSalvage, hasSalvage, salvageUnits } from './salvage';
 import type { Job, Vehicle, World } from './types';
@@ -27,7 +27,13 @@ export function startSearch(world: World, stockId: string): World {
 export function searchTurn(world: World, v: Vehicle, job: Extract<Job, { kind: 'search' }>): boolean {
   const stock = world.salvage.find((entry) => entry.id === job.stockId);
   if (!stock) throw new Error(`Unknown salvage ${job.stockId}`);
+  const goodsBefore = goodsCount(v);
+  const partsBefore = new Set(v.items.map((it) => it.id));
   collectSalvage(world, v, job.stockId, SALVAGE.unitsPerTurn);
+  const goods: Record<string, number> = {};
+  for (const [good, n] of Object.entries(goodsCount(v))) if (n > (goodsBefore[good] ?? 0)) goods[good] = n - (goodsBefore[good] ?? 0);
+  const parts = v.items.flatMap((it) => (it.kind === 'part' && !partsBefore.has(it.id) ? [it.part.defId] : []));
+  world.events.push({ t: 'found', vehicle: v.id, goods, parts });
   job.turnsLeft = Math.max(0, job.turnsLeft - 1);
   return !hasSalvage(stock) || freeCells(v) === 0;
 }

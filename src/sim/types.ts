@@ -170,6 +170,7 @@ export type GameEvent =
   | { t: 'defeat' }
   | { t: 'job'; vehicle: string; job: Job; outcome: 'started' | 'done' | 'cancelled' }
   | { t: 'breakdown'; vehicle: string; part: string }
+  | { t: 'found'; vehicle: string; goods: Record<string, number>; parts: string[] } // one search turn's haul; parts are def ids
   | { t: 'contact'; vehicle: string; sources: Contact['sources'] }
   | { t: 'weather'; event: WeatherEvent; outcome: 'started' | 'ended' }
   | { t: 'info'; text: string };

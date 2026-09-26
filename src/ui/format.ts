@@ -1,6 +1,7 @@
 // Event log lines.
 
 import { partDef } from '../data/parts';
+import { GOODS } from '../data/goods';
 import { TERRAIN } from '../data/terrain';
 import { playerVehicle } from '../sim/damage';
 import { dist, type Vec } from '../sim/vec';
@@ -100,7 +101,14 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
     case 'job': {
       if (e.vehicle !== me) return null;
       const what = e.job.kind === 'repair' ? `Repair (${partName(world, e.vehicle, e.job.partId)})` : 'Search';
-      return { text: `${what} ${e.outcome}`, cls: e.outcome === 'cancelled' ? 'bad' : 'dim' };
+      const text = e.outcome === 'started' ? `${what} started: stay parked about ${e.job.turnsLeft} turns. End turns with Space.`
+        : e.outcome === 'cancelled' ? `${what} cancelled: the truck moved` : `${what} done`;
+      return { text, cls: e.outcome === 'cancelled' ? 'bad' : e.outcome === 'done' ? 'good' : '' };
+    }
+    case 'found': {
+      if (e.vehicle !== me) return null;
+      const items = [...Object.entries(e.goods).map(([g, k]) => `${k} ${GOODS[g].name}`), ...e.parts.map((id) => partDef(id).name)];
+      return { text: items.length ? `Found ${items.join(', ')}` : 'Found nothing this turn', cls: items.length ? 'good' : 'dim' };
     }
     case 'breakdown':
       return e.vehicle === me ? { text: `${partName(world, e.vehicle, e.part)} broke down`, cls: 'bad' } : null;

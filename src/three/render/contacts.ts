@@ -1,7 +1,8 @@
 // Markers for vehicles detected beyond sight, one look per source. All are drawn above the fog: a contact
 // is sensed, not seen, so it does not depend on the fog of war.
-// - Sound: faint white wavefronts. Each starts somewhere inside the vague contact circle and travels out,
-//   past the listener. Every point of a front moves on its own: it slows while climbing, fades in the
+// - Sound: faint white wavefronts, in bursts. Each turn opens with a burst of quick ripples, then a long
+//   quiet pause, and the burst repeats while the turn waits. Each front starts somewhere inside the vague
+//   contact circle and travels out, past the listener. Every point of a front moves on its own: it slows while climbing, fades in the
 //   shadow behind a ridge, runs faster downwind, and wobbles a little. So fronts bend around hills.
 // - Dust: a hazy plume standing over the contact circle.
 // - Radio: a small crisp blip, since a scanner fixes the position.
@@ -23,7 +24,7 @@ const LIFT = 0.08; // meters above the ground
 const WAVE = {
   points: 64, // vertices around one front
   fronts: 3, // fronts in flight per contact, staggered in time
-  speed: 14, // tiles per second on flat ground with no wind
+  speed: 24, // tiles per second on flat ground with no wind
   reachPast: 1.3, // a front travels this share of the contact's distance, so it passes the listener
   brightness: 0.7, // peak intensity of a fresh front; it holds most of it until late, then fades out at full reach
   climbDrag: 3, // slowdown per unit of uphill grade (height units per tile)
@@ -32,7 +33,8 @@ const WAVE = {
   wobble: 0.06, // share of radius the front ripples by
   wobbleScale: 3, // noise cycles around a front
   originSpread: 0.7, // share of the contact radius a front may start away from the circle center
-  stagger: 0.9, // seconds between the fronts of one contact
+  stagger: 0.25, // seconds between the fronts of one burst
+  repeat: 14, // seconds from one burst to the next while the turn waits
 };
 
 const PLUME = { puffs: 5, width: 3, height: 4, opacity: 0.22, riseMs: 5000 }; // tiles and ms
@@ -44,12 +46,12 @@ type Front = {
   r: Float32Array; // current radius of each point, tiles
   peak: Float32Array; // highest ground each point has crossed, height units
   amp: Float32Array; // current intensity of each point
-  delay: number; // seconds before this front first starts, so a contact's fronts are staggered
-  active: boolean; // false between finishing and restarting
+  active: boolean; // travelling now
+  ran: boolean; // already travelled in the current burst
   spawn: number; // how many times this front has restarted, for its start point
 };
 
-type Marker = { id: string; fronts: Front[]; plume: THREE.Group; blip: THREE.Group; root: THREE.Group };
+type Marker = { id: string; fronts: Front[]; plume: THREE.Group; blip: THREE.Group; root: THREE.Group; burstMs: number };
 
 const WIND = (() => {
   const l = Math.hypot(WEATHER.wind.x, WEATHER.wind.y);
@@ -61,10 +63,15 @@ export class ContactsView {
   private readonly markers = new Map<string, Marker>();
   private readonly plumeTexture = createPuffTexture();
   private lastMs: number | null = null;
+  private lastTurn = -1;
 
-  update(terrain: Terrain, contacts: Contact[], listener: Vec, nowMs: number): void {
+  update(terrain: Terrain, contacts: Contact[], listener: Vec, turn: number, nowMs: number): void {
     const dt = this.lastMs === null ? 0 : Math.min(0.1, (nowMs - this.lastMs) / 1000);
     this.lastMs = nowMs;
+    // A new turn restarts every burst, so the ripples open the turn.
+    const newTurn = turn !== this.lastTurn;
+    this.lastTurn = turn;
+    if (newTurn) for (const m of this.markers.values()) startBurst(m, nowMs);
     const live = new Set(contacts.map((c) => c.vehicleId));
     for (const [id, m] of this.markers) {
       if (live.has(id)) continue;
@@ -77,10 +84,12 @@ export class ContactsView {
       if (!m) {
         m = this.makeMarker(c.vehicleId);
         this.markers.set(c.vehicleId, m);
+        startBurst(m, nowMs);
       }
+      if (nowMs - m.burstMs >= WAVE.repeat * 1000) startBurst(m, nowMs);
       const hearsSound = c.sources.includes('sound');
       m.fronts.forEach((f) => (f.line.visible = hearsSound));
-      if (hearsSound) for (const f of m.fronts) this.advanceFront(terrain, c, listener, f, dt);
+      if (hearsSound) m.fronts.forEach((f, k) => this.advanceFront(terrain, c, listener, f, dt, (nowMs - m.burstMs) / 1000 >= k * WAVE.stagger));
       m.plume.visible = c.sources.includes('dust');
       if (m.plume.visible) placePlume(terrain, m.plume, c, nowMs);
       m.blip.visible = c.sources.includes('radio');
@@ -96,20 +105,20 @@ export class ContactsView {
     const blip = makeBlip();
     root.add(...fronts.map((f) => f.line), plume, blip);
     this.root.add(root);
-    fronts.forEach((f, k) => (f.delay = k * WAVE.stagger));
-    return { id, fronts, plume, blip, root };
+    return { id, fronts, plume, blip, root, burstMs: 0 };
   }
 
   // Moves every point of a front outward by its own local speed, then rewrites the line.
-  private advanceFront(terrain: Terrain, c: Contact, listener: Vec, f: Front, dt: number): void {
-    if (f.delay > 0) {
-      f.delay -= dt;
+  // due: this front's slot in the current burst has come. Each front runs once per burst.
+  private advanceFront(terrain: Terrain, c: Contact, listener: Vec, f: Front, dt: number, due: boolean): void {
+    if (!f.active && (f.ran || !due)) {
       f.line.visible = false;
       return;
     }
     if (!f.active) {
       this.restartFront(terrain, c, f);
       f.active = true;
+      f.ran = true;
     }
     const reach = Math.max(c.radius * 2, dist(c.center, listener) * WAVE.reachPast);
     const n = WAVE.points;
@@ -146,7 +155,7 @@ export class ContactsView {
     pos.needsUpdate = true;
     col.needsUpdate = true;
     f.line.visible = true;
-    if (mean >= reach) f.active = false; // done: restart from a new point next frame
+    if (mean >= reach) f.active = false; // done until the next burst
   }
 
   // A new front starts from a fresh point inside the contact circle, so the true source stays vague.
@@ -163,6 +172,14 @@ export class ContactsView {
   }
 }
 
+function startBurst(m: Marker, nowMs: number): void {
+  m.burstMs = nowMs;
+  for (const f of m.fronts) {
+    f.active = false;
+    f.ran = false;
+  }
+}
+
 function makeFront(k: number, seed: number): Front {
   const n = WAVE.points;
   const geo = new THREE.BufferGeometry();
@@ -175,7 +192,7 @@ function makeFront(k: number, seed: number): Front {
   line.renderOrder = RENDER_ORDER;
   line.frustumCulled = false;
   line.visible = false;
-  return { line, origin: { x: 0, y: 0 }, r: new Float32Array(n), peak: new Float32Array(n), amp: new Float32Array(n).fill(1), delay: 0, active: false, spawn: seed % 1000 };
+  return { line, origin: { x: 0, y: 0 }, r: new Float32Array(n), peak: new Float32Array(n), amp: new Float32Array(n).fill(1), active: false, ran: false, spawn: seed % 1000 };
 }
 
 function makePlume(texture: THREE.Texture): THREE.Group {
