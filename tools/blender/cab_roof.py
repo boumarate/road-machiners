@@ -3,7 +3,7 @@
 Footprint is one cell: 0.65 m along (Blender X) by 0.4 m across (Blender Y). The origin is the cell center on the deck top.
 The plate spans WALL_H to CAB_H and fills the cell, so neighbours join into one roof. It overhangs the leaning sides a little.
 cab_roof_front.py builds the front row, which stops just past the windshield top.
-socket_surface marks the roof top, where items in the cab zone stand.
+socket_surface marks the roof top, where items in the cab zone stand. socket_front_edge marks the plate's front edge.
 Run: blender --background --python tools/blender/cab_roof.py -- public/models/cab_roof.glb [tmp/cab_roof.png]
 """
 
@@ -26,6 +26,8 @@ def build(kit: Kit, front: bool) -> None:
     kit.box("plate", (length, CELL_ACROSS, ROOF_T), ((x1 - HALF_X) / 2, 0, WALL_H + ROOF_T / 2), "paint")
     kit.box("edge", (length, CELL_ACROSS, 0.015), ((x1 - HALF_X) / 2, 0, WALL_H + 0.0075), "metal_dark")
     kit.socket("surface", (0, 0, CAB_H))
+    # The roof's front edge. Items on the roof stay behind it, so they never hang over the windshield.
+    kit.socket("front_edge", (x1, 0, CAB_H))
 
 
 def main() -> None:

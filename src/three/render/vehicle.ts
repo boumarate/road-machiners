@@ -44,6 +44,7 @@ const CORE_INSET = 0.03;
 // Behind a mounted plate the inner box steps back further, behind the plate's back face.
 const ARMOR_INSET = 0.12;
 // A bed's inner wall stops this far from each cell end, inside the side skin next to it.
+const WELL_CLEARANCE = 0.08; // meters between a bed wheel's rest top and its hump
 const INNER_WALL_GAP = 0.02;
 // The inner box shows inside the wheel wells.
 const CORE_COLOR = shade(PAL.metal, 0.8);
@@ -187,6 +188,8 @@ export class VehicleView {
     const underside = top + socket('deck_tile', 'underside').y; // the socket sits below the deck top
     const floors: Record<Zone, number> = { hood: underside, cab: underside, bed: top + socket('bed_floor', 'underside').y };
     const bay = top + socket('hood_panel', 'bay').y;
+    // A bed wheel cell rises only as a hump over its wheel, from the bed floor up to just above the wheel top.
+    const wellTop = Math.min(underside, Math.max(floors.bed, body.wheelY - T.suspensionRest + body.wheelRadius + WELL_CLEARANCE));
     const coreMat = new THREE.MeshLambertMaterial({ color: CORE_COLOR, flatShading: true });
     const paintMat = new THREE.MeshLambertMaterial({ color: paint, flatShading: true });
     const box = (mat: THREE.Material, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number): void => {
@@ -239,9 +242,8 @@ export class VehicleView {
           if (left) cab(side, 0);
           if (right) cab(side, Math.PI);
         } else if (zone === 'bed') {
-          // A wheel cell's fill box rises to the beltline inside the bed, like a wheel well.
-          if (wheel) piece('deck_tile', c, 0);
-          else piece('bed_floor', c, 0);
+          // A wheel cell under the bed floor keeps the floor. A taller wheel gets the hump from the fill box below.
+          if (!wheel || wellTop === floors.bed) piece('bed_floor', c, 0);
           // Painted inner walls where the bed meets another zone. They stop short of the side skins, so their ends never show outside.
           const inner = (CELL.across - 2 * INNER_WALL_GAP) / CELL.along;
           if (!wheel && openFront && !front) piece('body_side', c, -Math.PI / 2, stretch, inner);
@@ -257,7 +259,15 @@ export class VehicleView {
           const fender = this.fender(body, c, paint);
           into.add(fender.obj);
           if (fender.fillBottom >= underside) throw new Error(`${v.chassisId} fender reaches above the deck underside`);
-          box(paintMat, x0, x1, fender.fillBottom, underside, z0, z1);
+          box(paintMat, x0, x1, fender.fillBottom, zone === 'bed' ? wellTop : underside, z0, z1);
+          // Above a bed wheel's hump, short body sides keep the bed walls closed on the cell's open faces.
+          if (zone === 'bed' && wellTop < top) {
+            const wall = (top - wellTop) / EDGE_H;
+            if (left) piece('body_side', c, 0, wall);
+            if (right) piece('body_side', c, Math.PI, wall);
+            if (front) piece('body_side', c, -Math.PI / 2, wall, shortSide);
+            if (back) piece('body_side', c, Math.PI / 2, wall, shortSide);
+          }
           continue;
         }
         if (front && !plated('F')) {
@@ -477,6 +487,12 @@ function surfaceOf(v: Vehicle, body: Body, item: GridItem): number {
   return body.half.y + Math.max(...itemCells(item).map((c) => zoneTop(zones[c.y])));
 }
 
+// Body x of the cab roof's front edge.
+function roofFrontEdge(v: Vehicle): number {
+  const frontRow = rowZones(v.chassisId).indexOf('cab');
+  return cellCenter(v.chassisId, 0, frontRow).x + socket('cab_roof_front', 'front_edge').x;
+}
+
 function wheelCells(chassisId: string): Set<string> {
   return new Set(chassisDef(chassisId).core.filter((c) => c.defId === 'wheel').map((c) => `${c.x},${c.y}`));
 }
@@ -491,11 +507,13 @@ function toneOf(item: GridItem): number {
 }
 
 // Center of an item's cells at height y, with the turn and base stretch for its rotation.
+// An item standing on the cab roof moves back until its front edge is on the roof, behind the raked windshield.
 function footprint(v: Vehicle, item: GridItem, y: number): Placement {
   const cells = itemCells(item);
   const first = cellCenter(v.chassisId, cells[0].x, cells[0].y);
   const last = cellCenter(v.chassisId, cells[cells.length - 1].x, cells[cells.length - 1].y);
   const pos = new THREE.Vector3((first.x + last.x) / 2, y, (first.z + last.z) / 2);
+  if (y === bodyOf(v.chassisId).half.y + zoneTop('cab')) pos.x -= Math.max(0, pos.x + (itemSize(item).h * CELL.along) / 2 - roofFrontEdge(v));
   if (item.rot === 0) return { pos, yaw: 0, scale: new THREE.Vector3(1, 1, 1) };
   return { pos, yaw: ROT_YAW, scale: new THREE.Vector3(CELL.across / CELL.along, 1, CELL.along / CELL.across) };
 }
