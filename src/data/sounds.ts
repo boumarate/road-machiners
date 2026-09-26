@@ -34,7 +34,7 @@ const DEFS = {
   "ui-confirm": { bus: "ui", setup: "cab", pitchJitter: 0, maxVoices: 1, volume: 0.8, loop: false, prompts: ["Heavy steel ratchet clicking tight, a deal sealed."], seconds: 0.6 },
   "ui-error": { bus: "ui", setup: "cab", pitchJitter: 0, maxVoices: 1, volume: 0.8, loop: false, prompts: ["Dull thud of a jammed metal lever that will not move."], seconds: 0.5 },
   // Quiet in-cab moments as a turn starts: a family of different sounds, never the same twice in a row.
-  "end-turn": { bus: "ambient", setup: "cab", volume: 0.35, pitchJitter: 0.03, maxVoices: 1, loop: false, seconds: 2.5, prompts: [
+  "end-turn": { bus: "ambient", setup: "cab", volume: 1, pitchJitter: 0.03, maxVoices: 1, loop: false, seconds: 2.5, prompts: [
     "Steering wheel turned slowly by hand, leather creak and a soft mechanical tick.",
     "Manual gearbox shifted up, soft clutch press and a metal gear lever clunk.",
     "Old diesel truck speeding up gently on a dirt road, heard from inside the cab, muffled.",
