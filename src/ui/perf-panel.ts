@@ -11,7 +11,7 @@ const TIMERS = ["turn", "preview", "route", "fog"];
 const STYLE = [
   "position: absolute",
   "right: 8px",
-  "bottom: 8px",
+  "top: 8px",
   "background: rgba(30, 22, 16, 0.88)",
   "border: 1px solid #6a5238",
   "border-radius: 4px",
