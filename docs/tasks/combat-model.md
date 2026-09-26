@@ -3,7 +3,7 @@
 **Status:** planning
 **Branch:** combat-model
 **Worktree:** .worktrees/combat-model
-**Goal:** In a real game, the player can set a ram course on an enemy and hit it. Hovering an enemy shows both sides' hit chances with their causes. Machine guns fire bursts of separately rolled rounds. Every hit or ram breaks named parts, and armor on the struck side matters. Garage loadout mass visibly changes speed, handling and ram damage. The user confirms the fights feel decent by playing.
+**Goal:** In a real game, the player can switch off the route planner and drive straight into an enemy. Hovering an enemy shows both sides' hit chances with their causes. Machine guns fire bursts of separately rolled rounds. Every hit or ram breaks named parts, and armor on the struck side matters. Garage loadout mass visibly changes speed, handling and ram damage. The user confirms the fights feel decent by playing.
 **Mode:** interactive
 
 ## Context
@@ -12,7 +12,7 @@
 - Vehicles have an abstract `hull` pool. It appears in 24 files, including defeat, repair prices and the HUD.
 - Armor parts add hull, a flat reduction and a part shield. The garage grid has one `A` mount letter, so a plate has no side.
 - Mass exists twice. `CHASSIS[].mass` is a unitless ratio used by crash damage. `PHYSICS.bodies[].mass` is kilograms used by Rapier. Parts and goods weigh nothing. Cargo slows the truck through `speedPenalty`.
-- The driver routes around other trucks, and click orders only name ground points, so the player cannot aim a ram.
+- The driver routes around rocks and slow trucks. `Vehicle.direct` skips the route planner, but only the AI and tests set it, so the player cannot aim a ram.
 - Crash damage in `src/sim/movement.ts:137` is `impact × massRatio × collisionDamage`, on hull, with a random part hit. Rapier gives the contact point, so the struck side can be known.
 - Body sizes in meters already exist per chassis look in `src/data/physics.ts`.
 - There are no save files, so data shapes can change freely.
@@ -43,7 +43,7 @@ F3 penetration. A round enters the grid from the struck side: front, rear, left 
 
 F4 ram. On contact, closing speed u along the contact line gives each vehicle raw energy K × u × other mass / both masses. The light truck takes the bigger share. The energy enters the struck side like a wide round: it hits every lane on that side at low penetration. A ram part on the striking side is the first thing in those lanes, with high armor. It also multiplies the energy dealt to the other truck.
 
-Ram order. Ramming is a move order, like driving to a point. Press R, then click a truck. The driver aims at where the target will be, from its current position and velocity, and re-aims every physics step. It drives straight, at full speed, and does not route around the target or avoid it. The order clears after contact with the target, when the target is gone, or on a new order. The path preview shows the ram course, since it runs the same physics.
+Manual mode. R toggles manual mode for the player's truck. In manual mode the driver skips the route planner and drives straight at the clicked point, through rocks and trucks alike. The mode stays on until R is pressed again. To ram, the player clicks the ground in a truck's path. The path preview shows the straight course, since it runs the same physics.
 
 Projectiles. A weapon shot fires `rounds` rounds, each with damage, penetration, speed and splash radius. Each round rolls F2 separately and shows as its own bolt. MG: many light rounds, low penetration. Cannon: one heavy round with splash. A round that misses lands beside the target by its sampled error. Splash damages parts in cells near the landing point, on any vehicle within its radius.
 
@@ -213,17 +213,15 @@ Approach: build bottom-up in six phases. Mass comes first, since stats and physi
   - The old 2D `resolveMovement` path calls the same function.
 - 5.2 `src/phys/turn.ts:43-49` (modify): passes `from` for a vehicle, an obstacle or the nearest map edge point.
 - 5.3 The collision event gets `hitsA: PartHit[]` and `hitsB: PartHit[]` instead of damage numbers. `format.ts` updates to match.
-- 5.4 `src/sim/types.ts:MoveOrder` (modify): adds `{ kind: 'ram'; targetId: string }`. `setMoveOrder` in `src/sim/world.ts` throws on an unknown or own target.
-- 5.5 `src/phys/drive.ts:planTurn,driveStep` (modify): a ram plan has no route and full target speed. Each step aims at the target body's position plus its velocity times the time to close. `results` marks `rammed` when a crash pairs the car with its target.
-- 5.6 `src/phys/turn.ts:applyTurn` (modify): clears a ram order on `rammed` or a missing target.
-- 5.7 `src/three/game.ts:onLeftClick` and key handler (modify): R arms ram mode, and a click on a truck sets the ram order. Esc or a ground click disarms. The HUD shows "Ram: click a truck" while armed. `src/three/render/path.ts` draws the ram course in the hostile color.
+- 5.4 `src/sim/world.ts` (modify): new command `setDirect(world, on: boolean): World` sets the player's `direct`.
+- 5.5 `src/three/game.ts` key handler (modify): R toggles `setDirect` and refreshes the preview. The HUD in `src/ui/hud.ts` shows "Manual [R]" while on.
 - Tests
-  - A ram order drives into a moving target within two turns and clears.
+  - With `direct` on, the player's truck drives into a truck parked on its path; with it off, it routes around.
   - A light truck takes more damage than a heavy one in a head-on crash.
   - A front ram takes the hit before the cab.
   - A ram raises damage to the other truck.
   - A rear hit lands on rear lanes.
-- Commit: Rams split damage by mass and hit the struck side's parts; ram order aims at a moving truck
+- Commit: Rams split damage by mass and hit the struck side's parts; R toggles manual driving
 
 ### PH6 — Hover card and visuals
 - 6.1 `src/ui/hitCard.ts` (create)
