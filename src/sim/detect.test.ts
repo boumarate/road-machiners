@@ -1,3 +1,5 @@
+import { sunAt } from './sun';
+import { TIME } from '../data/time';
 import { describe, expect, it } from 'vitest';
 import { addVehicle, emptyWorld } from './testkit';
 import { contactsOf, dustRange, scannerRange, soundRange } from './detect';
@@ -51,7 +53,7 @@ describe('soundRange and dustRange', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
     v.speed = 4;
-    w.turn = 76; // hour 22: night, per TIME in src/data/time.ts
+    w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
     expect(dustRange(w, v)).toBe(0);
   });
 });

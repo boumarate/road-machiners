@@ -4,7 +4,7 @@ export const WEAR = {
   chancePerTile: 0.0015, // per mounted part, per tile driven, at terrain wear 1 and zero speed
   hpLoss: 2, // HP lost on a plain wear hit
   speedWeight: 0.03, // extra chance per tile of speed, as a multiplier on the base chance
-  breakdownChancePerTile: 0.0055, // per vehicle, per tile driven
+  breakdownChancePerTile: 0.01, // per vehicle, per tile driven
   breakdownHpShare: 0.15, // share of max HP a breakdown takes off the chosen part
 };
 
