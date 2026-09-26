@@ -107,6 +107,11 @@ function contactCircle(world: World, v: Vehicle, sources: Contact['sources'], d:
 export function advanceDust(world: World): void {
   const D = DETECT.dust;
   for (const c of world.dustClouds) {
+    // Gusts push each cloud a little off its course every turn, so a line of dust never stays exact.
+    const key = idKey(c.id);
+    const a = hashRandom(world.seed, world.turn, key, 4) * Math.PI * 2;
+    const push = hashRandom(world.seed, world.turn, key, 5) * D.wander;
+    c.vel = { x: c.vel.x + Math.cos(a) * push, y: c.vel.y + Math.sin(a) * push };
     c.pos = { x: c.pos.x + c.vel.x, y: c.pos.y + c.vel.y };
     c.age++;
   }

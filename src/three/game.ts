@@ -8,8 +8,9 @@ import { partDef } from '../data/parts';
 import { PHYSICS } from '../data/physics';
 import { REGION } from '../data/region';
 import { buildDrive, freeDrive, restFrame, simulateTurn, syncDrive, TURN_STEPS, type Drive, type TurnResult } from '../phys/drive';
-import { groundPoint, toMap, type TurnFrames, type V3, type VehicleFrame } from '../phys/frames';
+import { groundPoint, headingOf, toMap, type TurnFrames, type V3, type VehicleFrame } from '../phys/frames';
 import { applyTurn, physicsMove } from '../phys/turn';
+import { bodyOf } from '../phys/body';
 import { playerVehicle } from '../sim/damage';
 import { corePart, mountedParts } from '../sim/grid';
 import { canLoot, canScavenge, salvageHere, scavenge } from '../sim/locations';
@@ -53,6 +54,7 @@ const PLAN_TURNS = 3; // turns of path preview
 const PICK_PX = 30; // click radius around a vehicle's screen position
 const MIN_ZONE_HALF_ANGLE = Math.PI / 12; // zones stay visible for trucks that barely turn
 const DUST_CHANCE = 0.3; // per moving vehicle per frame while a turn plays, times the ground's dust value
+const DUST_BEHIND_M = 0.4; // meters behind the body's rear where wheel dust rises
 const SMOKE_CHANCE = 0.05; // per hurt vehicle per frame
 const HURT_CAB = 0.35; // cab hp share under which a vehicle smokes
 const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is recomputed during a turn
@@ -821,10 +823,18 @@ export class Game {
     }
   }
 
+  // Wheel dust rises from the ground just behind the rear wheels, so it never reads as exhaust.
+  private dustPoint(v: Vehicle, f: VehicleFrame): V3 {
+    const at = toMap(f.pos);
+    const h = headingOf(f.rot);
+    const back = (bodyOf(v.chassisId).half.x + DUST_BEHIND_M) / PHYSICS.metersPerTile;
+    return groundPoint(this.world.terrain, { x: at.x - Math.cos(h) * back, y: at.y - Math.sin(h) * back });
+  }
+
   private vehicleParticles(v: Vehicle, f: VehicleFrame, moving: boolean): void {
     const ground = TERRAIN_TYPES[this.world.terrain.types[tileAt(this.world.terrain, v.pos)]];
     if (moving && v.speed > 0.5 && Math.random() < DUST_CHANCE * ground.dust)
-      this.fx.dust(f.pos);
+      this.fx.dust(this.dustPoint(v, f));
     const cab = corePart(v, "cab");
     const hurt =
       cab.hp < partDef(cab.defId).hp * HURT_CAB ||

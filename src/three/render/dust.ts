@@ -9,18 +9,25 @@ import * as THREE from 'three';
 import { DETECT } from '../../data/detect';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
-import { hash2 } from '../../render/noise';
+import { hash2, valueNoise } from '../../render/noise';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import type { DustCloud, World } from '../../sim/types';
 
 const S = PHYSICS.metersPerTile;
 const RENDER_ORDER = 904; // above the fog (900) and shade (901), below contact markers
+// A cloud is a loose swarm of faint puffs. The swarm spreads wide as it ages and each puff wanders on
+// slow noise, so the cloud keeps changing shape. Puffs are faint on their own, so overlapping clouds
+// blend into one haze instead of stacking as blobs.
 const LOOK = {
-  puffs: 3, // sprites per cloud
-  spread: 0.6, // tiles the puffs of one cloud sit apart
-  size: 1.6, // tiles across a fresh puff; it doubles by the end of its life
-  opacity: 0.55, // at its thickest; it fades in, then out toward the end of its life
+  puffs: 7, // sprites per cloud
+  spread: 0.5, // tiles a fresh swarm spans around its center
+  spreadGrowth: 3, // extra tiles of span by the end of its life
+  size: 1.8, // tiles across a fresh puff
+  sizeGrowth: 2.5, // times larger by the end of its life
+  opacity: 0.22, // per puff at its thickest; it fades in, then out toward the end of its life
   fadeIn: 0.5, // turns to fade in
+  wobble: 0.8, // tiles each puff wanders from its place in the swarm
+  wobbleSeconds: 7, // time scale of that wandering
   glideSeconds: 2.5, // time a cloud takes to glide to its next-turn position after a turn
 };
 
@@ -54,7 +61,7 @@ export class DustCloudsView {
         view = this.makeView(c.id);
         this.views.set(c.id, view);
       }
-      place(terrain, view, c, glide);
+      place(terrain, view, c, glide, nowMs / 1000);
     }
   }
 
@@ -73,18 +80,25 @@ export class DustCloudsView {
 }
 
 // age runs on smoothly between turns: whole turns from the sim, plus the glide share of the next one.
-function place(terrain: Terrain, view: View, c: DustCloud, glide: number): void {
+function place(terrain: Terrain, view: View, c: DustCloud, glide: number, seconds: number): void {
   const age = c.age + glide;
   const x = c.pos.x + c.vel.x * glide;
   const y = c.pos.y + c.vel.y * glide;
-  const life = age / DETECT.dust.lifetime;
-  const opacity = LOOK.opacity * Math.min(1, age / LOOK.fadeIn) * Math.max(0, 1 - life);
+  const life = Math.min(1, age / DETECT.dust.lifetime);
+  const fade = Math.min(1, age / LOOK.fadeIn) * (1 - life);
   view.group.position.set(x * S, (heightAt(terrain, x, y) + age * DETECT.dust.riseHeight) * S, y * S);
   const seed = hashId(view.group.name);
+  const span = LOOK.spread + LOOK.spreadGrowth * life;
+  const t = seconds / LOOK.wobbleSeconds;
   view.puffs.forEach((p, i) => {
-    p.position.set((hash2(seed + i, 3) - 0.5) * LOOK.spread * S * (1 + life), hash2(seed + i, 7) * LOOK.spread * S, (hash2(seed + i, 11) - 0.5) * LOOK.spread * S * (1 + life));
-    p.scale.setScalar(LOOK.size * S * (1 + life));
-    p.material.opacity = opacity;
+    const k = seed + i * 17;
+    const wx = (valueNoise(k * 0.13 + t, 1.7) - 0.5) * 2 * LOOK.wobble;
+    const wz = (valueNoise(4.3, k * 0.13 + t) - 0.5) * 2 * LOOK.wobble;
+    p.position.set(((hash2(k, 3) - 0.5) * span + wx) * S, hash2(k, 7) * span * 0.4 * S, ((hash2(k, 11) - 0.5) * span + wz) * S);
+    // Each puff swells and thins on its own, so the outline keeps changing.
+    const breathe = 0.75 + 0.5 * valueNoise(k * 0.29 + t * 1.3, 8.1);
+    p.scale.setScalar(LOOK.size * (1 + (LOOK.sizeGrowth - 1) * life) * breathe * S);
+    p.material.opacity = LOOK.opacity * fade * (0.6 + 0.8 * hash2(k, 13));
   });
 }
 
@@ -93,8 +107,10 @@ function createPuffTexture(): THREE.CanvasTexture {
   canvas.width = canvas.height = 64;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Could not create dust texture');
-  const g = ctx.createRadialGradient(32, 32, 4, 32, 32, 32);
-  g.addColorStop(0, 'rgba(255,255,255,0.8)');
+  // A soft falloff with no bright core, so puffs read as haze rather than balls.
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,0.55)');
+  g.addColorStop(0.5, 'rgba(255,255,255,0.3)');
   g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 64, 64);
