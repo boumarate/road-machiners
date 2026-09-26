@@ -18,9 +18,10 @@ import { clickOrder, throttleFor } from '../sim/steering';
 import type { Contact, Vehicle, World } from '../sim/types';
 import type { Vec } from '../sim/vec';
 import { sunAt } from '../sim/sun';
+import { tileAt } from '../sim/terrain';
 import { playerSees, tileOf, visibleTiles } from '../sim/vision';
 import { dist, DEG } from '../sim/vec';
-import { TERRAIN } from '../data/terrain';
+import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
 import { endTurn, hostileToPlayer, newWorld, setAutoFire, setDirect, setMoveOrder, setWeaponOrder } from '../sim/world';
 import { PAL } from '../render/palette';
 import { CharacterScreen } from '../ui/character';
@@ -49,7 +50,7 @@ import { loadWorld, saveWorld } from "./save";
 const PLAN_TURNS = 3; // turns of path preview
 const PICK_PX = 30; // click radius around a vehicle's screen position
 const MIN_ZONE_HALF_ANGLE = Math.PI / 12; // zones stay visible for trucks that barely turn
-const DUST_CHANCE = 0.3; // per moving vehicle per frame while a turn plays
+const DUST_CHANCE = 0.3; // per moving vehicle per frame while a turn plays, times the ground's dust value
 const SMOKE_CHANCE = 0.05; // per hurt vehicle per frame
 const HURT_CAB = 0.35; // cab hp share under which a vehicle smokes
 const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is recomputed during a turn
@@ -810,7 +811,8 @@ export class Game {
   }
 
   private vehicleParticles(v: Vehicle, f: VehicleFrame, moving: boolean): void {
-    if (moving && v.speed > 0.5 && Math.random() < DUST_CHANCE)
+    const ground = TERRAIN_TYPES[this.world.terrain.types[tileAt(this.world.terrain, v.pos)]];
+    if (moving && v.speed > 0.5 && Math.random() < DUST_CHANCE * ground.dust)
       this.fx.dust(f.pos);
     const cab = corePart(v, "cab");
     const hurt =
@@ -852,7 +854,7 @@ export class Game {
     this.weaponRange.root.visible = false;
     this.placeTargetMarkers();
     this.placeHitCard();
-    this.contacts.update(this.world.terrain, this.world.player.contacts);
+    this.contacts.update(this.world.terrain, this.world.player.contacts, performance.now());
     this.placeContactTip();
     if (hide) return;
     const me = playerVehicle(this.world);

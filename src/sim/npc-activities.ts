@@ -16,6 +16,7 @@ import { vehicleStats } from './stats';
 import type { NpcActivity, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
+import { DETECT } from '../data/detect';
 
 function getNpcClass(vehicle: Vehicle): NpcClass {
   const template = vehicle.brain && NPCS[vehicle.brain.templateId];
@@ -89,8 +90,8 @@ function chooseDangerActivity(world: World, vehicle: Vehicle, profile: NpcClass)
   }
   // No visible enemy: react to a hostile heard, dusted or scanned beyond sight, while its contact
   // circle stays tight enough to trust. Raiders close in on it; everyone else steers away from it.
-  const contacts = contactsOf(world, vehicle)
-    .filter((c) => c.radius <= profile.contactReactRadius)
+  const trusted = (profile.contactReactRadius - DETECT.fuzz.base) / DETECT.fuzz.perTile; // farther circles are too loose
+  const contacts = contactsOf(world, vehicle, trusted)
     .filter((c) => world.vehicles.some((other) => other.id === c.vehicleId && isHostile(vehicle, other)));
   contacts.sort((a, b) => dist(vehicle.pos, a.center) - dist(vehicle.pos, b.center));
   const contact = contacts[0];

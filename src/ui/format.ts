@@ -1,6 +1,9 @@
 // Event log lines.
 
 import { partDef } from '../data/parts';
+import { TERRAIN } from '../data/terrain';
+import { playerVehicle } from '../sim/damage';
+import { dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
 import { mountedParts } from '../sim/grid';
 import { playerSees } from '../sim/vision';
@@ -101,13 +104,29 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
     }
     case 'breakdown':
       return e.vehicle === me ? { text: `${partName(world, e.vehicle, e.part)} broke down`, cls: 'bad' } : null;
-    case 'weather':
-      return { text: `${e.event.kind === 'storm' ? 'Dust storm' : e.event.kind === 'heatwave' ? 'Heat wave' : 'Overcast'} ${e.outcome}`, cls: 'dim' };
-    case 'contact':
-      return { text: `Contact: ${n(e.vehicle)} (${e.sources.join(', ')})`, cls: 'bad' };
+    case 'weather': {
+      // A storm is local news: log it only when it starts or ends within sight of the player.
+      const ev = e.event;
+      if (ev.kind === 'storm' && dist(playerVehicle(world).pos, ev.pos) - ev.radius > TERRAIN.vision.radius) return null;
+      return { text: `${ev.kind === 'storm' ? 'Dust storm' : ev.kind === 'heatwave' ? 'Heat wave' : 'Overcast'} ${e.outcome}`, cls: 'dim' };
+    }
+    case 'contact': {
+      // A contact never names the vehicle; the log gives only a rough bearing and what gave it away.
+      const c = world.player.contacts.find((x) => x.vehicleId === e.vehicle);
+      if (!c) return null;
+      return { text: `Contact to the ${compass(playerVehicle(world).pos, c.center)}: ${e.sources.join(', ')}`, cls: 'bad' };
+    }
     case 'spawn':
     case 'despawn':
     case 'arrived':
       return null;
   }
+}
+
+const COMPASS = ['east', 'southeast', 'south', 'southwest', 'west', 'northwest', 'north', 'northeast'];
+
+// Map y grows south, so bearing 0 is east and a quarter turn is south.
+function compass(from: Vec, to: Vec): string {
+  const turn = Math.atan2(to.y - from.y, to.x - from.x) / (Math.PI * 2);
+  return COMPASS[((Math.round(turn * 8) % 8) + 8) % 8];
 }

@@ -1,20 +1,23 @@
-// Darkens shaded, explored ground. Uses the same inShade the sim reads for heat, so the paint never
-// disagrees with the drain (IV5). Recomputes only when the game hour changes (AS3), not every frame.
+// Darkens shaded, explored ground near the player. Uses the same inShade the sim reads for heat, so the
+// paint never disagrees with the drain. The sun moves every turn, so the layer recomputes every turn, and
+// only within REACH tiles of the player to keep that cheap. A full map pass takes about a third of a second.
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
 import { TIME } from '../../data/time';
 import { terrainIndices } from '../../phys/drive';
 import { PAL } from '../../render/palette';
-import { clockOf, inShade, sunAt } from '../../sim/sun';
+import { playerVehicle } from '../../sim/damage';
+import { inShade, sunAt } from '../../sim/sun';
 import type { World } from '../../sim/types';
 
 const S = PHYSICS.metersPerTile;
 const LIFT = 0.04; // meters above the terrain surface, above the fog layer's lift
+const REACH = 20; // tiles around the player where shade is shown, twice the base sight radius
 
 export class ShadeView {
   readonly mesh: THREE.Mesh;
   private readonly n: number;
-  private lastHour = -1;
+  private lastTurn = -1;
 
   constructor(world: World) {
     const t = world.terrain;
@@ -59,17 +62,17 @@ export class ShadeView {
   }
 
   update(world: World): void {
-    const hour = Math.floor(clockOf(world.turn).hour);
-    if (hour === this.lastHour) return;
-    this.lastHour = hour;
+    if (world.turn === this.lastTurn) return;
+    this.lastTurn = world.turn;
     const n = this.n;
     const sun = sunAt(world.turn);
+    const me = playerVehicle(world).pos;
     const alpha = this.mesh.geometry.getAttribute('alpha') as THREE.BufferAttribute;
     for (let j = 0; j <= n; j++) {
       for (let i = 0; i <= n; i++) {
         const idx = j * (n + 1) + i;
-        const explored = cornerExplored(world, n, i, j);
-        alpha.setX(idx, explored && sun && inShade(world, { x: i, y: j }, sun) ? TIME.shadeAlpha : 0);
+        const near = Math.hypot(i - me.x, j - me.y) <= REACH;
+        alpha.setX(idx, near && sun && cornerExplored(world, n, i, j) && inShade(world, { x: i, y: j }, sun) ? TIME.shadeAlpha : 0);
       }
     }
     alpha.needsUpdate = true;

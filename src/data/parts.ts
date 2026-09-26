@@ -198,7 +198,7 @@ export const PARTS: Record<string, PartDef> = {
   },
   scanner: {
     id: 'scanner', kind: 'scanner', name: 'Radio scanner', hp: 15, price: 280, w: 1, h: 1, mass: 30, armor: 2,
-    range: 16, // tiles; beats sight (10) and most sound and dust ranges
+    range: 160, // tiles; covers the whole map, through hills
   },
 };
 

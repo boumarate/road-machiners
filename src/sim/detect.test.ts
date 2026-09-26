@@ -1,3 +1,4 @@
+import { DETECT } from '../data/detect';
 import { sunAt } from './sun';
 import { TIME } from '../data/time';
 import { describe, expect, it } from 'vitest';
@@ -37,16 +38,20 @@ describe('soundRange and dustRange', () => {
   });
 
   it('own speed shortens hearing', () => {
-    const w = emptyWorld({ x: 20, y: 30 });
+    const w = emptyWorld({ x: 2, y: 30 });
+    w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!; // night: no dust
     const observer = w.vehicles[0];
-    const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 31, y: 30 });
+    const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 2, y: 30 });
     target.speed = 2;
-    observer.speed = 0;
-    const parkedContacts = contactsOf(w, observer);
-    expect(parkedContacts.find((c) => c.vehicleId === target.id)?.sources).toContain('sound');
     observer.speed = 2;
-    const movingContacts = contactsOf(w, observer);
+    // Just inside plain hearing range, but past what a listener moving at speed 2 can hear.
+    target.pos = { x: 2 + soundRange(w, target) - DETECT.sound.ownPenalty, y: 30 };
+    expect(target.pos.x).toBeLessThan(w.size);
+    const movingContacts = contactsOf(w, observer, Infinity);
     expect(movingContacts.find((c) => c.vehicleId === target.id)).toBeUndefined();
+    observer.speed = 0;
+    const parkedContacts = contactsOf(w, observer, Infinity);
+    expect(parkedContacts.find((c) => c.vehicleId === target.id)?.sources).toContain('sound');
   });
 
   it('night hides dust', () => {
@@ -65,7 +70,7 @@ describe('hills and the scanner', () => {
     const observer = w.vehicles[0];
     const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
     target.speed = 4;
-    const contacts = contactsOf(w, observer);
+    const contacts = contactsOf(w, observer, Infinity);
     const contact = contacts.find((c) => c.vehicleId === target.id);
     expect(contact?.sources).toContain('sound');
     expect(contact?.sources).not.toContain('dust'); // taller terrain than the dust eye height blocks it too
@@ -78,12 +83,12 @@ describe('hills and the scanner', () => {
     const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
     target.speed = 0.2; // below the parked threshold used by sound, so only the scanner should trigger
     expect(scannerRange(observer)).toBe(0);
-    const before = contactsOf(w, observer);
+    const before = contactsOf(w, observer, Infinity);
     expect(before.find((c) => c.vehicleId === target.id)).toBeUndefined();
     if (!mountPart(w, observer, makePart(w, 'scanner'))) throw new Error('No free mount for the test scanner');
     target.speed = 4;
     expect(scannerRange(observer)).toBeGreaterThan(0);
-    const after = contactsOf(w, observer);
+    const after = contactsOf(w, observer, Infinity);
     expect(after.find((c) => c.vehicleId === target.id)?.sources).toContain('radio');
   });
 });
@@ -98,7 +103,7 @@ describe('contact fuzz', () => {
       for (let turn = 1; turn <= 5; turn++) {
         w.seed = seed;
         w.turn = turn;
-        const contacts = contactsOf(w, observer);
+        const contacts = contactsOf(w, observer, Infinity);
         const contact = contacts.find((c) => c.vehicleId === target.id);
         if (!contact) continue; // some combinations of seed/turn do not change detection, only the fuzz
         expect(dist(contact.center, target.pos)).toBeLessThanOrEqual(contact.radius);

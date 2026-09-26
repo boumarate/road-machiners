@@ -13,7 +13,7 @@ import { sunAt } from './sun';
 import type { Contact, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { weatherAt } from './weather';
-import { canVehicleSee } from './vision';
+import { canVehicleSee, sightRadius } from './vision';
 
 // Range a moving vehicle's engine is heard from, ignoring hills. Zero while parked.
 export function soundRange(world: World, v: Vehicle): number {
@@ -42,7 +42,7 @@ export function dustRange(world: World, v: Vehicle): number {
 function dustVisible(world: World, a: Vec, b: Vec): boolean {
   const eyeA = heightAt(world.terrain, a.x, a.y) + DETECT.dust.eyeHeight;
   const eyeB = heightAt(world.terrain, b.x, b.y) + DETECT.dust.eyeHeight;
-  const n = Math.ceil(dist(a, b) * TERRAIN.vision.samplesPerTile);
+  const n = Math.ceil(dist(a, b) * DETECT.dust.samplesPerTile);
   for (let i = 1; i < n; i++) {
     const t = i / n;
     const ground = heightAt(world.terrain, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
@@ -65,21 +65,24 @@ function idKey(id: string): number {
   return h;
 }
 
-export function contactsOf(world: World, observer: Vehicle): Contact[] {
+// Contacts within `within` tiles of the observer. Cheap range checks run before any sight line is traced.
+export function contactsOf(world: World, observer: Vehicle, within: number): Contact[] {
   const out: Contact[] = [];
   const scanned = scannerRange(observer); // the observer's own scanner, the same for every target below
   const ownPenalty = ownHearingPenalty(observer);
+  const sight = sightRadius(world, observer.pos);
   for (const v of world.vehicles) {
     if (v.id === observer.id) continue;
-    if (v.speed <= RULES.parkedSpeed && scanned === 0) continue; // parked gives off nothing to catch
-    if (canVehicleSee(world, observer, v.pos)) continue;
+    if (v.speed <= RULES.parkedSpeed) continue; // parked gives off no sound, no dust and no radio signal
     const d = dist(observer.pos, v.pos);
+    if (d > within) continue;
+    if (d <= sight && canVehicleSee(world, observer, v.pos)) continue;
     const sources: Contact['sources'] = [];
     const heard = Math.max(0, soundRange(world, v) - ownPenalty);
     if (heard > 0 && d <= heard) sources.push('sound');
     const dusted = dustRange(world, v);
     if (dusted > 0 && d <= dusted && dustVisible(world, observer.pos, v.pos)) sources.push('dust');
-    if (v.speed > RULES.parkedSpeed && scanned > 0 && d <= scanned) sources.push('radio');
+    if (scanned > 0 && d <= scanned) sources.push('radio');
     if (sources.length === 0) continue;
     const radius = DETECT.fuzz.base + DETECT.fuzz.perTile * d;
     const key = idKey(v.id);
