@@ -6,7 +6,8 @@
     "build": "tsc && vite build",
     "typecheck": "tsc",
     "test": "vitest run",
-    "playtest": "node scripts/playtest.mjs"
+    "playtest": "node scripts/playtest.mjs",
+    "perf": "node scripts/perf.mjs"
   },
   "license": "ISC",
   "description": "",

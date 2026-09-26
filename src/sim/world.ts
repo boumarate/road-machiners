@@ -16,6 +16,7 @@ import { resolveMovement } from './movement';
 import { consumeSupplies, leakFuel } from './supplies';
 import { spawnInitial, spawnNpcs } from './spawn';
 import { initializeSalvage } from './salvage';
+import { timed } from '../perf';
 import { resolveNpcActivities } from './npc-activities';
 import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
 import { vehicleStats } from './stats';
@@ -125,7 +126,7 @@ export function endTurn(
   world: World,
   move: (w: World) => void = resolveMovement,
 ): World {
-  return update(world, (w) => {
+  return timed('turn', () => update(world, (w) => {
     w.turn++;
     planNpcOrders(w);
     move(w);
@@ -141,7 +142,7 @@ export function endTurn(
     checkDefeat(w);
     spawnNpcs(w);
     refreshVision(w);
-  });
+  }));
 }
 
 export function setWeaponOrder(
