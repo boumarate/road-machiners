@@ -3,7 +3,7 @@
 // 2. One-shots lose silence at both ends and get short fades.
 // 3. One-shots and the engine become mono, since the game pans them; beds keep stereo with even sides.
 //    Then one EQ for all: rumble and harsh top cut.
-// 4. Tone matched to the cue's first file, so variants sound like one sound.
+// 4. Tone matched to the cue's first file, so variants sound like one sound. Families of different sounds skip it.
 // 5. Loudness set by the ear-weighted meter, with a gentle limiter on peaks.
 // Output is 48 kHz Ogg Opus with the source path in its comment tag.
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -50,7 +50,8 @@ export function importFile(source, id, cue, level) {
   const trim = `silenceremove=start_periods=1:start_threshold=${SILENCE_DB}dB:start_silence=${KEEP_S}`;
   const shape = cue.loop ? [] : [trim, 'areverse', trim, `afade=t=in:d=${FADE_OUT_S}`, 'areverse', `afade=t=in:d=${FADE_IN_S}`];
   const base = [...shape, channels(src, cue), EQ];
-  const shaped = [...base, ...toneMatch(src, base.join(','), id)].join(',');
+  const family = (cue.prompts?.length ?? 0) > 1;
+  const shaped = [...base, ...(family ? [] : toneMatch(src, base.join(','), id))].join(',');
   const rawPeak = measure(src, 'anull').peak;
   if (rawPeak < SILENT_PEAK_DB) throw new Error(`${src} peaks at ${rawPeak} dB; it is near silence. Skip it.`);
   const { loudness, peak } = measure(src, shaped);

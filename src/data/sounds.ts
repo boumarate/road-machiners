@@ -1,6 +1,7 @@
 // Sound catalog and mix numbers. A cue's files are public/sfx/<cue>-<n>.ogg, written by scripts/sfx-import.mjs.
 // Deleting a file drops that variant.
-// Generated cues carry their prompt subject; scripts/sfx-gen.mjs puts the bus SOUND_STYLE in front of it.
+// Generated cues carry prompt subjects; scripts/sfx-gen.mjs puts the SOUND_STYLE of the cue's setup in front.
+// A cue with several prompts is a family of different sounds, one prompt per variant.
 
 export type Bus = "ui" | "sfx" | "ambient" | "music";
 
@@ -10,50 +11,67 @@ export type CueDef = {
   pitchJitter: number; // playback rate varies by up to this share either way
   maxVoices: number; // plays of this cue sounding at once
   loop: boolean;
-  prompt?: string; // generation subject, for cues made with ElevenLabs
+  setup?: Setup; // recording setup for generation; music has none
+  prompts?: readonly string[]; // generation subjects, for cues made with ElevenLabs
   seconds?: number; // generated length
 };
 
 export type Cue = CueDef & { files: string[] }; // variants; one is picked per play
 
-// Shared prompt start per bus, so generated sounds share one recording setup. Music takes its prompt alone.
-export const SOUND_STYLE: Record<Bus, string> = {
-  sfx: "Realistic sound effect, one field microphone about 10 meters away, outdoors in a dry desert, natural and unprocessed, full frequency range, no cinematic whoosh, no sub-bass boom, no music, no voices.",
-  ambient: "Realistic ambience, one field microphone, outdoors in a dry desert, natural and unprocessed, no music, no voices.",
-  ui: "Realistic foley, one close microphone inside an old truck cab, natural and unprocessed, dry, no reverb, no electronic sounds, no music, no voices.",
-  music: "",
+export type Setup = "field" | "cab";
+
+// Shared prompt start per recording setup, so generated sounds share one microphone and place.
+export const SOUND_STYLE: Record<Setup, string> = {
+  field: "Realistic sound effect, one field microphone about 10 meters away, outdoors in a dry desert, natural and unprocessed, full frequency range, no cinematic whoosh, no sub-bass boom, no music, no voices.",
+  cab: "Realistic foley, one close microphone inside an old truck cab, natural and unprocessed, dry, no reverb, no electronic sounds, no music, no voices.",
 };
 
 const DEFS = {
   // UI: physical truck cab controls, never digital beeps.
-  "ui-click": { bus: "ui", pitchJitter: 0.04, maxVoices: 2, volume: 0.6, loop: false, prompt: "Single click of an old metal toggle switch on a truck dashboard.", seconds: 0.5 },
-  "ui-open": { bus: "ui", pitchJitter: 0, maxVoices: 1, volume: 0.7, loop: false, prompt: "Rusty metal glovebox latch opening with a short creak.", seconds: 0.8 },
-  "ui-close": { bus: "ui", pitchJitter: 0, maxVoices: 1, volume: 0.7, loop: false, prompt: "Heavy metal lid shutting with a dull latch clack.", seconds: 0.6 },
-  "ui-confirm": { bus: "ui", pitchJitter: 0, maxVoices: 1, volume: 0.8, loop: false, prompt: "Heavy steel ratchet clicking tight, a deal sealed.", seconds: 0.6 },
-  "ui-error": { bus: "ui", pitchJitter: 0, maxVoices: 1, volume: 0.8, loop: false, prompt: "Dull thud of a jammed metal lever that will not move.", seconds: 0.5 },
-  "end-turn": { bus: "ui", volume: 0.7, pitchJitter: 0.03, maxVoices: 1, loop: false, prompt: "Heavy truck gear lever clunks into gear, short mechanical thunk.", seconds: 1 },
+  "ui-click": { bus: "ui", setup: "cab", pitchJitter: 0.04, maxVoices: 2, volume: 0.6, loop: false, prompts: ["Single click of an old metal toggle switch on a truck dashboard."], seconds: 0.5 },
+  "ui-open": { bus: "ui", setup: "cab", pitchJitter: 0, maxVoices: 1, volume: 0.7, loop: false, prompts: ["Rusty metal glovebox latch opening with a short creak."], seconds: 0.8 },
+  "ui-close": { bus: "ui", setup: "cab", pitchJitter: 0, maxVoices: 1, volume: 0.7, loop: false, prompts: ["Heavy metal lid shutting with a dull latch clack."], seconds: 0.6 },
+  "ui-confirm": { bus: "ui", setup: "cab", pitchJitter: 0, maxVoices: 1, volume: 0.8, loop: false, prompts: ["Heavy steel ratchet clicking tight, a deal sealed."], seconds: 0.6 },
+  "ui-error": { bus: "ui", setup: "cab", pitchJitter: 0, maxVoices: 1, volume: 0.8, loop: false, prompts: ["Dull thud of a jammed metal lever that will not move."], seconds: 0.5 },
+  // Quiet in-cab moments as a turn starts: a family of different sounds, never the same twice in a row.
+  "end-turn": { bus: "ambient", setup: "cab", volume: 0.35, pitchJitter: 0.03, maxVoices: 1, loop: false, seconds: 2.5, prompts: [
+    "Steering wheel turned slowly by hand, leather creak and a soft mechanical tick.",
+    "Manual gearbox shifted up, soft clutch press and a metal gear lever clunk.",
+    "Old diesel truck speeding up gently on a dirt road, heard from inside the cab, muffled.",
+    "Cab rattling softly over small bumps on a gravel road, loose tools jingling.",
+    "Turn signal lever clicked on, a few ticks of an old relay.",
+    "Tires rolling slowly over gravel and small stones under a heavy truck, heard from inside.",
+    "Cab creaking as the truck chassis flexes over a dip, soft metal groan.",
+    "Hands shifting on a worn steering wheel, soft rub and a seat spring creak.",
+    "Heavy truck downshifting, clutch and a short engine rev, from inside the cab.",
+    "Dust and small pebbles pinging softly against the underside of a moving truck.",
+  ] },
 
   // Turn results.
-  "money": { bus: "ui", volume: 0.8, pitchJitter: 0.03, maxVoices: 1, loop: false, prompt: "A few old metal coins and bottle caps dropped into a tin box.", seconds: 1 },
-  "level-up": { bus: "ui", volume: 1, pitchJitter: 0, maxVoices: 1, loop: false, prompt: "Heavy steel lever slams and locks into place with a deep satisfying clunk, then a short bright ring of struck metal.", seconds: 2 },
-  "discover": { bus: "ui", volume: 0.9, pitchJitter: 0, maxVoices: 1, loop: false, prompt: "Short low mysterious metallic swell with distant wind, a place revealed.", seconds: 2 },
-  "arrive": { bus: "sfx", volume: 0.5, pitchJitter: 0.03, maxVoices: 1, loop: false, prompt: "Heavy truck air brakes hiss as it stops on gravel.", seconds: 1.5 },
-  "defeat": { bus: "ui", volume: 1, pitchJitter: 0, maxVoices: 1, loop: false, prompt: "Low ominous boom fading into a dying engine and silence.", seconds: 3 },
+  "money": { bus: "ui", setup: "cab", volume: 0.8, pitchJitter: 0.03, maxVoices: 1, loop: false, prompts: ["A few old metal coins and bottle caps dropped into a tin box."], seconds: 1 },
+  "level-up": { bus: "ui", setup: "cab", volume: 1, pitchJitter: 0, maxVoices: 1, loop: false, prompts: ["Heavy steel lever slams and locks into place with a deep satisfying clunk, then a short bright ring of struck metal."], seconds: 2 },
+  "discover": { bus: "ui", setup: "cab", volume: 0.9, pitchJitter: 0, maxVoices: 1, loop: false, prompts: ["Short low mysterious metallic swell with distant wind, a place revealed."], seconds: 2 },
+  "arrive": { bus: "sfx", setup: "field", volume: 0.5, pitchJitter: 0.03, maxVoices: 1, loop: false, prompts: ["Heavy truck air brakes hiss as it stops on gravel."], seconds: 1.5 },
+  "defeat": { bus: "ui", setup: "cab", volume: 1, pitchJitter: 0, maxVoices: 1, loop: false, prompts: ["Low ominous boom fading into a dying engine and silence."], seconds: 3 },
 
   // Combat.
-  "mg-fire": { bus: "sfx", volume: 0.6, pitchJitter: 0.06, maxVoices: 6, loop: false, prompt: "Single heavy machine gun shot outdoors, sharp crack with a short echo.", seconds: 0.6 },
-  "cannon-fire": { bus: "sfx", volume: 0.9, pitchJitter: 0.04, maxVoices: 3, loop: false, prompt: "One loud 30mm autocannon shot fired close by, sharp supersonic crack, powerful punchy boom, metallic breech clank, short echo off rocks.", seconds: 1.5 },
-  "hit-metal": { bus: "sfx", volume: 0.55, pitchJitter: 0.08, maxVoices: 6, loop: false, prompt: "Bullet slams into a thick steel truck plate, hard metallic clang.", seconds: 0.6 },
-  "miss": { bus: "sfx", volume: 0.4, pitchJitter: 0.1, maxVoices: 6, loop: false, prompt: "Bullet ricochet whizzing off rocks and kicking up dirt.", seconds: 0.8 },
-  "part-broken": { bus: "sfx", volume: 0.7, pitchJitter: 0.05, maxVoices: 2, loop: false, prompt: "Truck part breaks apart, snapping metal, sparks and a short hiss of steam.", seconds: 1.2 },
-  "explosion": { bus: "sfx", volume: 1, pitchJitter: 0.04, maxVoices: 2, loop: false, prompt: "Truck fuel tank explodes, big fiery blast with falling metal debris.", seconds: 3 },
-  "crash": { bus: "sfx", volume: 0.9, pitchJitter: 0.06, maxVoices: 2, loop: false, prompt: "Two heavy steel trucks ram each other at speed: one hard, deep crunch of thick metal, a short scrape, then debris settling. Single impact.", seconds: 1.5 },
+  "mg-fire": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0.06, maxVoices: 6, loop: false, prompts: ["Single heavy machine gun shot outdoors, sharp crack with a short echo."], seconds: 0.6 },
+  "cannon-fire": { bus: "sfx", setup: "field", volume: 0.9, pitchJitter: 0.04, maxVoices: 3, loop: false, prompts: ["One loud 30mm autocannon shot fired close by, sharp supersonic crack, powerful punchy boom, metallic breech clank, short echo off rocks."], seconds: 1.5 },
+  "hit-metal": { bus: "sfx", setup: "field", volume: 0.55, pitchJitter: 0.08, maxVoices: 6, loop: false, prompts: ["Bullet slams into a thick steel truck plate, hard metallic clang."], seconds: 0.6 },
+  "miss": { bus: "sfx", setup: "field", volume: 0.4, pitchJitter: 0.1, maxVoices: 6, loop: false, prompts: ["Bullet ricochet whizzing off rocks and kicking up dirt."], seconds: 0.8 },
+  "part-broken": { bus: "sfx", setup: "field", volume: 0.7, pitchJitter: 0.05, maxVoices: 2, loop: false, prompts: ["Truck part breaks apart, snapping metal, sparks and a short hiss of steam."], seconds: 1.2 },
+  "explosion": { bus: "sfx", setup: "field", volume: 1, pitchJitter: 0.04, maxVoices: 2, loop: false, prompts: ["Truck fuel tank explodes, big fiery blast with falling metal debris."], seconds: 3 },
+  "crash": { bus: "sfx", setup: "field", volume: 0.9, pitchJitter: 0.06, maxVoices: 2, loop: false, prompts: ["Two heavy steel trucks ram each other at speed: one hard, deep crunch of thick metal, a short scrape, then debris settling. Single impact."], seconds: 1.5 },
 
   // Loops.
-  "engine": { bus: "sfx", volume: 0.4, pitchJitter: 0, maxVoices: 1, loop: true, prompt: "Soft low rumble of a big diesel truck engine heard from a distance, smooth and steady, no rattles or whine, seamless loop.", seconds: 5 },
-  "wind": { bus: "ambient", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompt: "Dry desert wind blowing over open sand and rocks, steady, seamless loop.", seconds: 12 },
-  "music-calm": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompt: "Slow sparse post-apocalyptic desert road music, lonely twangy baritone guitar and low drone, 80 bpm, instrumental, seamless loop.", seconds: 90 },
-  "music-combat": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompt: "Tense driving desert combat music, distorted baritone guitar riff, pounding tom drums, 120 bpm, instrumental, seamless loop.", seconds: 60 },
+  // Driving: one per turn, by how the player's speed changes over the turn.
+  "drive-accel": { bus: "sfx", setup: "field", volume: 0.5, pitchJitter: 0.04, maxVoices: 1, loop: false, prompts: ["Heavy diesel truck accelerating hard from low speed, engine revs rising, gravel under the tires."], seconds: 1.5 },
+  "drive-cruise": { bus: "sfx", setup: "field", volume: 0.4, pitchJitter: 0.04, maxVoices: 1, loop: false, prompts: ["Heavy diesel truck driving at steady medium speed on a dirt road, even engine note, tires on gravel."], seconds: 1.5 },
+  "drive-decel": { bus: "sfx", setup: "field", volume: 0.4, pitchJitter: 0.04, maxVoices: 1, loop: false, prompts: ["Heavy diesel truck easing off the throttle, engine revs falling, coasting on gravel."], seconds: 1.5 },
+  "drive-brake": { bus: "sfx", setup: "field", volume: 0.55, pitchJitter: 0.04, maxVoices: 1, loop: false, prompts: ["Heavy truck braking hard on gravel, short brake squeal, air brake hiss, tires skidding on stones."], seconds: 1.5 },
+  "wind": { bus: "ambient", setup: "field", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Dry desert wind blowing over open sand and rocks, steady, seamless loop."], seconds: 12 },
+  "music-calm": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Slow sparse post-apocalyptic desert road music, lonely twangy baritone guitar and low drone, 80 bpm, instrumental, seamless loop."], seconds: 90 },
+  "music-combat": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Tense driving desert combat music, distorted baritone guitar riff, pounding tom drums, 120 bpm, instrumental, seamless loop."], seconds: 60 },
 } as const satisfies Record<string, CueDef>;
 
 export type CueId = keyof typeof DEFS;
@@ -68,9 +86,13 @@ function variantNumber(file: string): number {
   return Number(file.match(/-(\d+)\.ogg$/)![1]);
 }
 
-export const SOUNDS: Record<CueId, Cue> = Object.fromEntries(
-  Object.entries(DEFS).map(([id, def]) => [id, { ...def, files: filesOf(id, ON_DISK) }]),
-) as Record<CueId, Cue>;
+function withFiles(): Record<CueId, Cue> {
+  const out = {} as Record<CueId, Cue>;
+  for (const id of Object.keys(DEFS) as CueId[]) out[id] = { ...DEFS[id], files: filesOf(id, ON_DISK) };
+  return out;
+}
+
+export const SOUNDS = withFiles();
 
 
 export const MIX = {
@@ -83,8 +105,8 @@ export const MIX = {
   // Gain halves at this many meters from the camera focus; pan reaches this share at the screen edge.
   halfGainMeters: 40,
   panWidth: 0.7,
-  // Engine loop: playback rate rises with speed. Silent between turns, so it never drones.
-  engine: { idleRate: 0.8, topRate: 1.4, topSpeedMs: 24, idleGain: 0.5, fadeSeconds: 0.4 }, // 24 m/s is the fastest chassis
+  // Speed change in m/s over one turn that picks the driving sound. Under movingMs at both ends, the truck is still.
+  drive: { accelMs: 1.5, decelMs: 1.5, brakeMs: 4, movingMs: 2 },
   // Wind bed: a base level, rising near dust storms.
   wind: { baseGain: 0.4, stormGain: 1, stormReachTiles: 12, fadeSeconds: 1 },
   // Music crossfades to combat while a hostile is in sight, and back after the last one leaves.

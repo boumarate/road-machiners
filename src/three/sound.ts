@@ -41,28 +41,34 @@ export class SoundDirector {
   }
 }
 
-// What the loops respond to each frame. engineSpeed is null between turns.
-export type LoopState = { engineSpeed: number | null; stormTiles: number; danger: boolean };
+// What the loops respond to each frame.
+export type LoopState = { stormTiles: number; danger: boolean };
 
-export type LoopLevels = { engineGain: number; engineRate: number; windGain: number; calmGain: number; combatGain: number };
+export type LoopLevels = { windGain: number; calmGain: number; combatGain: number };
 
 export function loopLevels(s: LoopState, mix: typeof MIX): LoopLevels {
-  const e = mix.engine;
   const w = mix.wind;
-  const speedShare = Math.min(1, (s.engineSpeed ?? 0) / e.topSpeedMs);
   const near = Math.max(0, 1 - s.stormTiles / w.stormReachTiles);
   return {
-    engineGain: s.engineSpeed === null ? 0 : e.idleGain + (1 - e.idleGain) * speedShare,
-    engineRate: e.idleRate + (e.topRate - e.idleRate) * speedShare,
     windGain: w.baseGain + (w.stormGain - w.baseGain) * near,
     calmGain: s.danger ? 0 : 1,
     combatGain: s.danger ? 1 : 0,
   };
 }
 
-// Engine, wind and music run for the whole session; only their gain and rate change.
+// Driving sound for a turn from the player's speed at its start and end, in m/s, or null when standing still.
+export function driveCue(from: number, to: number, mix: typeof MIX): CueId | null {
+  const d = mix.drive;
+  const change = to - from;
+  if (Math.max(from, to) < d.movingMs) return null;
+  if (change <= -d.brakeMs) return "drive-brake";
+  if (change <= -d.decelMs) return "drive-decel";
+  if (change >= d.accelMs) return "drive-accel";
+  return "drive-cruise";
+}
+
+// Wind and music run for the whole session; only their gain changes.
 export class SoundLoops {
-  private engine: LoopHandle;
   private wind: LoopHandle;
   private calm: LoopHandle;
   private combat: LoopHandle;
@@ -70,7 +76,6 @@ export class SoundLoops {
 
   constructor(player: SoundPlayer) {
     const silent = { pan: 0, gain: 0 };
-    this.engine = player.loop("engine", silent);
     this.wind = player.loop("wind", silent);
     this.calm = player.loop("music-calm", silent);
     this.combat = player.loop("music-combat", silent);
@@ -81,8 +86,6 @@ export class SoundLoops {
     const l = loopLevels(s, MIX);
     const was = this.last;
     this.last = l;
-    if (was?.engineGain !== l.engineGain) this.engine.setGain(l.engineGain, MIX.engine.fadeSeconds);
-    if (was?.engineRate !== l.engineRate) this.engine.setRate(l.engineRate);
     if (was?.windGain !== l.windGain) this.wind.setGain(l.windGain, MIX.wind.fadeSeconds);
     if (was?.calmGain !== l.calmGain) this.calm.setGain(l.calmGain, MIX.music.fadeSeconds);
     if (was?.combatGain !== l.combatGain) this.combat.setGain(l.combatGain, MIX.music.fadeSeconds);

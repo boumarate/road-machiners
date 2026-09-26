@@ -21,22 +21,28 @@ const count = Number(countArg);
 if (!id || !Number.isInteger(count) || count <= 0) throw new Error('Usage: npm run sfx:gen -- <cue> <count>');
 if (count > cap) throw new Error(`${count} generations exceed SFX_MAX_GENERATIONS=${cap}`);
 const cue = cueOf(SOUNDS, id);
-if (!cue.prompt || !cue.seconds) throw new Error(`Cue ${id} needs prompt and seconds to generate`);
-
+if (!cue.prompts || !cue.seconds) throw new Error(`Cue ${id} needs prompts and seconds to generate`);
 const music = cue.bus === 'music';
-const text = music ? cue.prompt : `${SOUND_STYLE[cue.bus]} ${cue.prompt}`;
+if (!music && !cue.setup) throw new Error(`Cue ${id} needs a setup to generate`);
+
+// Families take the next prompts in order; single-prompt cues repeat theirs.
+const textFor = (i) => {
+  const subject = cue.prompts[(cue.files.length + i) % cue.prompts.length];
+  return music ? subject : `${SOUND_STYLE[cue.setup]} ${subject}`;
+};
 console.log(`${id}: ${count} x ${cue.seconds}s ${music ? 'music' : `sound, about ${count * cue.seconds * SFX_CREDITS_PER_SECOND} credits`}`);
-console.log(`prompt: ${text}`);
 
 mkdirSync(RAW_DIR, { recursive: true });
 for (let i = 0; i < count; i++) {
-  const audio = await generate();
+  const text = textFor(i);
+  console.log(`prompt: ${text}`);
+  const audio = await generate(text);
   const raw = `${RAW_DIR}/${id}-${Date.now()}.mp3`;
   writeFileSync(raw, audio);
   importFile(raw, id, cue, MIX.level[cue.bus]);
 }
 
-async function generate() {
+async function generate(text) {
   const [path, body] = music
     ? ['/music?output_format=mp3_44100_192', { prompt: text, music_length_ms: cue.seconds * 1000, force_instrumental: true }]
     : ['/sound-generation?output_format=mp3_44100_192', { text, duration_seconds: cue.seconds, loop: cue.loop, prompt_influence: PROMPT_INFLUENCE, model_id: 'eleven_text_to_sound_v2' }];

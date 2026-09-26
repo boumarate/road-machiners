@@ -48,7 +48,7 @@ function cueRow(id: string, anchor: string | undefined): HTMLElement {
     "div",
     { class: "cue" },
     el("div", { class: "row" }, el("b", {}, id), cue.loop ? "loop" : "one-shot", anchorButton),
-    cue.prompt ? el("div", { class: "prompt" }, cue.prompt) : null,
+    cue.prompts ? el("div", { class: "prompt" }, cue.prompts.join(" | ")) : null,
     ...(variants.length ? variants : [el("div", { class: "missing" }, "no files yet")]),
   );
 }

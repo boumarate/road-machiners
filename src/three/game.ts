@@ -65,7 +65,8 @@ import { WeaponRangeView } from "./render/weaponRange";
 import { WeatherView } from "./render/weather";
 import { ZonesView } from "./render/zones";
 import { loadWorld, saveWorld } from "./save";
-import { SoundDirector, SoundLoops, stingOf } from "./sound";
+import { MIX } from "../data/sounds";
+import { driveCue, SoundDirector, SoundLoops, stingOf } from "./sound";
 import type { SoundPlayer } from "../audio/player";
 import { uiRoot } from "../ui/dom";
 
@@ -562,6 +563,7 @@ export class Game {
       impacts: false,
       combat,
     };
+    this.playDriveSound(result);
     this.phase = "Moving";
     this.path.clear();
     this.refreshUi();
@@ -614,13 +616,19 @@ export class Game {
     if (sting) this.sound.ui(sting);
   }
 
-  // step is the physics step shown while a turn's movement plays, else null.
-  private updateLoops(step: number | null): void {
+  private playDriveSound(result: TurnResult): void {
+    const id = playerVehicle(this.world).id;
+    const frames = result.frames[id];
+    const cue = driveCue(stepSpeed(frames, 1), stepSpeed(frames, frames.length - 1), MIX);
+    const f = frames[0];
+    if (cue && f) this.sound.at(cue, f.pos, 0);
+  }
+
+  private updateLoops(): void {
     const me = playerVehicle(this.world);
     const f = this.frames[me.id];
     const at = f ? toMap(f.pos) : me.pos;
     this.loops.update({
-      engineSpeed: step === null || !this.anim ? null : stepSpeed(this.anim.result.frames[me.id], step),
       stormTiles: this.weather.stormTilesFrom(at.x, at.y),
       danger: this.world.vehicles.some((v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v)),
     });
@@ -773,7 +781,7 @@ export class Game {
       );
     this.fx.tick(dt);
     this.playPanelSounds();
-    this.updateLoops(step);
+    this.updateLoops();
     this.weather.advance(dt);
     this.labels.update(this.world, this.rig);
     this.renderer.render(this.scene, this.rig.camera);
