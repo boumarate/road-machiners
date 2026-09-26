@@ -65,7 +65,7 @@ export type WeatherEvent =
 export type DriverResources = { money: number; fuel: number; supplies: number; health: number };
 
 export type NpcActivity = {
-  kind: 'scavenge' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait';
+  kind: 'scavenge' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate';
   targetId: string | null;
   destination: Vec | null;
   phase: 'travel' | 'act';
@@ -160,6 +160,7 @@ export type GameEvent =
   | { t: 'defeat' }
   | { t: 'job'; vehicle: string; job: Job; outcome: 'started' | 'done' | 'cancelled' }
   | { t: 'breakdown'; vehicle: string; part: string }
+  | { t: 'contact'; vehicle: string; sources: Contact['sources'] }
   | { t: 'weather'; event: WeatherEvent; outcome: 'started' | 'ended' }
   | { t: 'info'; text: string };
 

@@ -16,15 +16,24 @@ export const MOUNT_CELLS: Record<PartKind, Cell[]> = {
   armor: ['F', 'B', 'L', 'R'],
   cargo: ['C'],
   core: ['X'],
+  scanner: ['W'],
 };
 const SIDES: readonly Cell[] = ['F', 'B', 'L', 'R'];
 const CELL_CHARS: readonly string[] = ['W', 'E', 'C', 'F', 'B', 'L', 'R', 'X', '.'];
 
+// A chassis's layout is fixed data, so its grid is cached: this runs on every mounted-part lookup,
+// for every vehicle, every turn.
+const baseGridCache = new Map<string, Grid>();
+
 export function baseGrid(chassisId: string): Grid {
+  const cached = baseGridCache.get(chassisId);
+  if (cached) return cached;
   const rows = chassisDef(chassisId).layout;
   const w = Math.max(...rows.map((r) => r.length));
   const cells = rows.map((r) => Array.from({ length: w }, (_, x) => toCell(r[x] ?? ' ')));
-  return { w, h: rows.length, cells };
+  const grid = { w, h: rows.length, cells };
+  baseGridCache.set(chassisId, grid);
+  return grid;
 }
 
 function toCell(ch: string): Cell | null {

@@ -34,8 +34,9 @@ export const NPCS: Record<string, NpcTemplate> = {
     aggroRange: 11, preferredRange: 3, bounty: 60, xp: 40, cap: 3, interval: 12, spawn: 'wild',
   },
   gunwagon: {
+    // Trades the cannon for an mg so a scanner fits the wagon's one row of W cells; it hunts by radar instead.
     id: 'gunwagon', name: 'Raider gunwagon', faction: 'raiders', brain: 'raider',
-    chassisId: 'wagon', parts: ['cannon', 'stockEngine', 'plates'], cargo: {},
+    chassisId: 'wagon', parts: ['mg', 'scanner', 'stockEngine', 'plates'], cargo: {},
     aggroRange: 12, preferredRange: 6, bounty: 150, xp: 90, cap: 1, interval: 25, spawn: 'wild',
   },
   trader: {
@@ -68,13 +69,16 @@ export type NpcClass = {
   recoverCondition: number;
   threatRatio: number;
   defensive: boolean;
+  // A hostile contact reacts only while its circle is at most this many tiles wide. Beyond it the
+  // noise is too vague to act on. Raiders press further than traders and scavengers will flee from.
+  contactReactRadius: number;
 };
 
 // Cab warnings begin at 30%. Recovery to half cab health prevents fight/flee oscillation.
 export const NPC_CLASSES: Record<Brain, NpcClass> = {
-  scavenger: { towns: ['bowl', 'nose'], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false },
-  trader: { towns: ['bowl', 'nose'], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: true },
-  raider: { towns: ['bowl', 'nose'], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false },
+  scavenger: { towns: ['bowl', 'nose'], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: 3.5 },
+  trader: { towns: ['bowl', 'nose'], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: true, contactReactRadius: 3.5 },
+  raider: { towns: ['bowl', 'nose'], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: 4.5 },
 };
 
 export const NPC_UPKEEP = {

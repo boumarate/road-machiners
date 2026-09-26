@@ -15,7 +15,7 @@ import { canScavenge, scavenge } from '../sim/locations';
 import { locationAt, townAt } from '../sim/sites';
 import { maxTurn, vehicleStats } from '../sim/stats';
 import { clickOrder, throttleFor } from '../sim/steering';
-import type { Vehicle, World } from '../sim/types';
+import type { Contact, Vehicle, World } from '../sim/types';
 import type { Vec } from '../sim/vec';
 import { playerSees, tileOf, visibleTiles } from '../sim/vision';
 import { dist } from '../sim/vec';
@@ -23,7 +23,7 @@ import { TERRAIN } from '../data/terrain';
 import { endTurn, hostileToPlayer, newWorld, setAutoFire, setDirect, setMoveOrder, setWeaponOrder } from '../sim/world';
 import { PAL } from '../render/palette';
 import { CharacterScreen } from '../ui/character';
-import { HitCard } from '../ui/hitCard';
+import { ContactTip, HitCard } from '../ui/hitCard';
 import type { UiHost } from '../ui/host';
 import { Hud } from '../ui/hud';
 import { InventoryScreen } from '../ui/inventory';
@@ -33,6 +33,7 @@ import { CameraRig } from './render/camera';
 import { FogView } from './render/fog';
 import { Fx3D } from './render/fx';
 import { Labels } from './render/labels';
+import { ContactsView } from './render/contacts';
 import { ObstacleViews } from './render/obstacles';
 import { PathView } from './render/path';
 import { buildSites } from './render/sites';
@@ -89,6 +90,7 @@ export class Game {
   private readonly weather: WeatherView;
   private readonly labels: Labels;
   private readonly zones = new ZonesView();
+  private readonly contacts = new ContactsView();
   private readonly path = new PathView();
   private readonly fx: Fx3D;
   private readonly views = new Map<string, VehicleView>();
@@ -102,6 +104,7 @@ export class Game {
   private live: LiveVision | null = null; // the player's view while a turn plays
   private hoverGround: Vec | null = null;
   private hovered: string | null = null;
+  private hoveredContact: Contact | null = null;
   private selected: string | null = null;
   private following = true;
   private panFrom: { x: number; y: number } | null = null;
@@ -110,6 +113,7 @@ export class Game {
 
   private readonly hud = new Hud();
   private readonly hitCard = new HitCard();
+  private readonly contactTip = new ContactTip();
   private readonly weapons: WeaponPanel;
   private readonly town: TownScreen;
   private readonly character: CharacterScreen;
@@ -138,7 +142,7 @@ export class Game {
     this.obstacles.sync(this.world.obstacles);
     this.fog = new FogView(this.world);
     this.weather = new WeatherView(this.world);
-    this.scene.add(this.fog.mesh, this.weather.root, this.zones.root, this.path.root, this.weaponRange.root);
+    this.scene.add(this.fog.mesh, this.weather.root, this.zones.root, this.path.root, this.weaponRange.root, this.contacts.root);
     this.overlay = overlay;
     this.labels = new Labels(overlay);
     this.fx = new Fx3D(this.scene, overlay, this.rig);
@@ -249,6 +253,16 @@ export class Game {
     const reach = Array.from({ length: CARD_RIM_POINTS }, (_, i) => (i / CARD_RIM_POINTS) * Math.PI * 2)
       .map((a) => Math.abs(this.rig.screenOf({ x: f.pos.x + r * Math.cos(a), y: f.pos.y, z: f.pos.z + r * Math.sin(a) }).x - c.x));
     this.hitCard.place(c, Math.max(...reach));
+  }
+
+  // Names the sources of the hovered contact circle, beside the cursor.
+  private placeContactTip(): void {
+    if (this.anim !== null || this.modalOpen() || !this.hoveredContact) {
+      this.contactTip.render(null);
+      return;
+    }
+    this.contactTip.render(this.hoveredContact.sources);
+    this.contactTip.place(this.rig.screenOf(groundPoint(this.world.terrain, this.hoveredContact.center)));
   }
 
   // Numbered labels above each target listing the weapons aimed at it and whether they can fire now.
@@ -404,9 +418,24 @@ export class Game {
   private onHover(e: MouseEvent): void {
     const id = this.pickVehicle(e.clientX, e.clientY)?.id ?? null;
     this.hoverGround = id || this.modalOpen() ? null : this.rig.groundUnder(e.clientX, e.clientY, this.ground);
+    this.hoveredContact = id || !this.hoverGround ? null : this.pickContact(this.hoverGround);
     if (id === this.hovered) return;
     this.hovered = id;
     this.refreshInfo();
+  }
+
+  // The nearest contact whose circle contains the ground point under the cursor, or null.
+  private pickContact(ground: Vec): Contact | null {
+    let best: Contact | null = null;
+    let bestD = Infinity;
+    for (const c of this.world.player.contacts) {
+      const d = dist(ground, c.center);
+      if (d <= c.radius && d < bestD) {
+        best = c;
+        bestD = d;
+      }
+    }
+    return best;
   }
 
   endTurn(): void {
@@ -650,6 +679,8 @@ export class Game {
     this.weaponRange.root.visible = false;
     this.placeTargetMarkers();
     this.placeHitCard();
+    this.contacts.update(this.world.terrain, this.world.player.contacts);
+    this.placeContactTip();
     if (hide) return;
     const me = playerVehicle(this.world);
     const s = vehicleStats(this.world, me);

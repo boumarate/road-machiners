@@ -24,7 +24,7 @@ const CELL_TITLE: Record<Cell, string> = {
   X: 'built-in part',
   '.': '',
 };
-const KIND_CLASS: Record<PartKind, string> = { weapon: 'k-weapon', engine: 'k-engine', armor: 'k-armor', cargo: 'k-cargo', core: 'k-core' };
+const KIND_CLASS: Record<PartKind, string> = { weapon: 'k-weapon', engine: 'k-engine', armor: 'k-armor', cargo: 'k-cargo', core: 'k-core', scanner: 'k-weapon' };
 
 type Drag = {
   source: 'grid' | 'storage';

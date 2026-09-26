@@ -68,7 +68,10 @@ export function refreshVision(world: World): void {
   world.player.visible = [...seen].sort((a, b) => a - b);
   for (const idx of seen) world.player.explored[idx] = true;
   const me = world.vehicles.find((x) => x.id === world.player.vehicleId);
-  world.player.contacts = me ? contactsOf(world, me) : [];
+  const before = new Set(world.player.contacts.map((c) => c.vehicleId));
+  const next = me ? contactsOf(world, me) : [];
+  for (const c of next) if (!before.has(c.vehicleId)) world.events.push({ t: 'contact', vehicle: c.vehicleId, sources: c.sources });
+  world.player.contacts = next;
 }
 
 export function tileCenter(world: World, idx: number): Vec {
