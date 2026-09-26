@@ -11,7 +11,7 @@ import { inShade, sunAt } from '../../sim/sun';
 import type { World } from '../../sim/types';
 
 const S = PHYSICS.metersPerTile;
-const LIFT = 0.04; // meters above the terrain surface, above the fog layer's lift
+const LIFT = 0.04; // meters above the terrain surface, avoids z-fighting
 const REACH = 20; // tiles around the player where shade is shown, twice the base sight radius
 
 export class ShadeView {
@@ -57,7 +57,7 @@ export class ShadeView {
       depthWrite: false,
     });
     this.mesh = new THREE.Mesh(geo, mat);
-    this.mesh.renderOrder = 901; // above the fog layer, below HTML labels
+    this.mesh.renderOrder = 901; // above ground, obstacles, zones and path; below HTML labels
     this.update(world);
   }
 
@@ -79,7 +79,7 @@ export class ShadeView {
   }
 }
 
-// A corner reads as explored if any of its up to four surrounding tiles is, matching the fog layer.
+// A corner reads as explored if any of its up to four surrounding tiles is, matching the fog.
 function cornerExplored(world: World, n: number, i: number, j: number): boolean {
   for (const [x, y] of [
     [i - 1, j - 1],

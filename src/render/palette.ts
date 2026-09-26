@@ -19,7 +19,6 @@ export const PAL = {
   palm: 0x4a6a2a,
   trunk: 0x6a4a2a,
   shadow: 0x2a1a10,
-  haze: 0xd6d0c4, // fog of war: pale dust, so hidden ground reads as out of sight, not as shade
   outline: 0x1a1410,
   wheel: 0x2a2420,
   metal: 0x5a5a58,

@@ -1,55 +1,51 @@
-// Fog of war draped over the terrain surface: a thick pale haze where never explored, a thin haze where
-// explored but not visible now, clear where visible now. Haze, not darkness, so shade stays the only dark ground. depthTest is off and renderOrder is high, so it
-// covers vehicles and the plan overlay too, cheaply, without shading each object separately.
+// Fog of war greys out the ground itself: the ground shader drains the color from tiles out of sight, and
+// darkens tiles never seen. Grey, not a dark or pale layer on top, so shade stays the only dark ground and
+// hidden ground does not read as smoke. Per corner, the attribute holds how grey and how bright the ground is.
 
 import * as THREE from 'three';
-import { PHYSICS } from '../../data/physics';
 import { TERRAIN } from '../../data/terrain';
-import { terrainIndices } from '../../phys/drive';
-import { PAL } from '../../render/palette';
 import type { World } from '../../sim/types';
 
-const S = PHYSICS.metersPerTile;
-const LIFT = 0.03; // meters above the terrain surface, avoids z-fighting
+type Look = { grey: number; bright: number };
+
+const CLEAR: Look = { grey: 0, bright: 1 };
 
 export class FogView {
-  readonly mesh: THREE.Mesh;
-  private n: number;
+  private readonly n: number;
+  private readonly look: THREE.BufferAttribute;
 
-  constructor(world: World) {
-    const t = world.terrain;
-    const n = t.size;
+  constructor(world: World, ground: THREE.Mesh) {
+    const n = world.terrain.size;
     this.n = n;
-    const pos = new Float32Array((n + 1) * (n + 1) * 3);
-    for (let j = 0; j <= n; j++) {
-      for (let i = 0; i <= n; i++) {
-        const k = (j * (n + 1) + i) * 3;
-        pos.set([i * S, t.heights[j * (n + 1) + i] * S + LIFT, j * S], k);
-      }
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    const c = new THREE.Color(PAL.haze);
-    const rgba = new Float32Array((n + 1) * (n + 1) * 4);
-    for (let k = 0; k < rgba.length; k += 4) rgba.set([c.r, c.g, c.b, 0], k);
-    geo.setAttribute('color', new THREE.BufferAttribute(rgba, 4));
-    geo.setIndex(new THREE.BufferAttribute(terrainIndices(n), 1));
-    geo.computeVertexNormals();
-    // Lit like the ground, so the haze dims at night with everything else. Per-corner alpha rides in the vertex color.
-    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, depthTest: false, depthWrite: false });
-    this.mesh = new THREE.Mesh(geo, mat);
-    this.mesh.renderOrder = 900; // above ground, obstacles, zones and path; below HTML labels
+    this.look = new THREE.BufferAttribute(new Float32Array((n + 1) * (n + 1) * 2), 2);
+    ground.geometry.setAttribute('fogLook', this.look);
+    const mat = ground.material as THREE.MeshLambertMaterial;
+    mat.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute vec2 fogLook;\nvarying vec2 vFogLook;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFogLook = fogLook;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec2 vFogLook;')
+        .replace(
+          '#include <opaque_fragment>',
+          `float fogLuma = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
+          outgoingLight = mix(outgoingLight, vec3(fogLuma), vFogLook.x) * vFogLook.y;
+          #include <opaque_fragment>`,
+        );
+    };
+    mat.needsUpdate = true;
     this.update(world);
   }
 
   update(world: World): void {
     const n = this.n;
+    const F = TERRAIN.fog;
     const visible = new Set(world.player.visible);
-    const color = this.mesh.geometry.getAttribute('color') as THREE.BufferAttribute;
-    // Per corner: average the fog alpha of the (up to) four surrounding tiles, so type borders blend.
+    // Per corner: average the look of the (up to) four surrounding tiles, so edges blend.
     for (let j = 0; j <= n; j++) {
       for (let i = 0; i <= n; i++) {
-        let sum = 0;
+        let grey = 0;
+        let bright = 0;
         let count = 0;
         for (const [x, y] of [
           [i - 1, j - 1],
@@ -59,12 +55,14 @@ export class FogView {
         ]) {
           if (x < 0 || y < 0 || x >= n || y >= n) continue;
           const idx = y * n + x;
-          sum += visible.has(idx) ? 0 : world.player.explored[idx] ? TERRAIN.fog.seenAlpha : TERRAIN.fog.unseenAlpha;
+          const look = visible.has(idx) ? CLEAR : world.player.explored[idx] ? F.seen : F.unseen;
+          grey += look.grey;
+          bright += look.bright;
           count++;
         }
-        color.setW(j * (n + 1) + i, sum / count);
+        this.look.setXY(j * (n + 1) + i, grey / count, bright / count);
       }
     }
-    color.needsUpdate = true;
+    this.look.needsUpdate = true;
   }
 }

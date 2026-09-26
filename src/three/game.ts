@@ -180,10 +180,10 @@ export class Game {
     this.scene.add(this.ground, buildSites(this.world.terrain));
     this.obstacles = new ObstacleViews(this.scene, this.world.terrain);
     this.obstacles.sync(this.world.obstacles);
-    this.fog = new FogView(this.world);
+    this.fog = new FogView(this.world, this.ground);
     this.shade = new ShadeView(this.world);
     this.weather = new WeatherView(this.world);
-    this.scene.add(this.fog.mesh, this.shade.mesh, this.weather.root, this.zones.root, this.path.root, this.weaponRange.root, this.contacts.root, this.dust.root);
+    this.scene.add(this.shade.mesh, this.weather.root, this.zones.root, this.path.root, this.weaponRange.root, this.contacts.root, this.dust.root);
     this.overlay = overlay;
     overlay.append(this.stormTint);
     this.labels = new Labels(overlay);
