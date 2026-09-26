@@ -16,6 +16,7 @@ const mixer = new Mixer(MIX);
 mixer.unlockOn(window);
 const bank = await loadBank(mixer.ctx, sounds);
 let playing: AudioBufferSourceNode | null = null;
+const rejected = new Set<string>(); // files marked on this page; copied out as a list for the agent
 
 function play(id: string, file: string): void {
   playing?.stop();
@@ -40,7 +41,7 @@ function stats(buf: AudioBuffer): string {
 function cueRow(id: string, anchor: string | undefined): HTMLElement {
   const cue = sounds[id];
   const variants = cue.files.map((f) =>
-    el("div", { class: "row" }, el("button", { onclick: () => play(id, f) }, "play"), `${f}  ${stats(bank.get(f)!)}`),
+    el("div", { class: "row" }, el("button", { onclick: () => play(id, f) }, "play"), rejectButton(f), `${f}  ${stats(bank.get(f)!)}`),
   );
   const anchorButton = anchor && anchor !== id ? el("button", { onclick: () => play(anchor, sounds[anchor].files[0]) }, `anchor ${anchor}`) : null;
   return el(
@@ -52,7 +53,19 @@ function cueRow(id: string, anchor: string | undefined): HTMLElement {
   );
 }
 
-root.append(el("button", { onclick: () => playing?.stop() }, "stop"));
+function rejectButton(file: string): HTMLElement {
+  const b = el("button", {}, "reject");
+  b.addEventListener("click", () => {
+    if (rejected.has(file)) rejected.delete(file);
+    else rejected.add(file);
+    b.classList.toggle("on", rejected.has(file));
+    copyButton.textContent = `copy ${rejected.size} rejects`;
+  });
+  return b;
+}
+
+const copyButton = el("button", { onclick: () => void navigator.clipboard.writeText([...rejected].sort().join(" ")) }, "copy 0 rejects");
+root.append(el("div", { class: "row" }, el("button", { onclick: () => playing?.stop() }, "stop"), copyButton));
 for (const bus of BUSES) {
   const ids = Object.keys(sounds).filter((id) => sounds[id].bus === bus);
   root.append(el("h2", {}, `${bus}  bus volume ${MIX.busVolume[bus]}  target ${MIX.level[bus]} dB RMS`));

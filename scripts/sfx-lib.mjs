@@ -1,7 +1,8 @@
 // Shared sound import: every file, whatever its source, gets the same treatment before the game uses it.
 // 1. Music loses its quiet intro and outro and loops through a crossfade.
 // 2. One-shots lose silence at both ends and get short fades.
-// 3. One EQ for all: rumble and harsh top cut.
+// 3. One-shots and the engine become mono, since the game pans them; beds keep stereo with even sides.
+//    Then one EQ for all: rumble and harsh top cut.
 // 4. Tone matched to the cue's first file, so variants sound like one sound.
 // 5. Loudness set by the ear-weighted meter, with a gentle limiter on peaks.
 // Output is 48 kHz Ogg Opus with the source path in its comment tag.
@@ -48,15 +49,27 @@ export function importFile(source, id, cue, level) {
   const src = cue.bus === 'music' ? musicLoop(source, name) : source;
   const trim = `silenceremove=start_periods=1:start_threshold=${SILENCE_DB}dB:start_silence=${KEEP_S}`;
   const shape = cue.loop ? [] : [trim, 'areverse', trim, `afade=t=in:d=${FADE_OUT_S}`, 'areverse', `afade=t=in:d=${FADE_IN_S}`];
-  const shaped = [...shape, EQ, ...toneMatch(src, [...shape, EQ].join(','), id)].join(',');
+  const base = [...shape, channels(src, cue), EQ];
+  const shaped = [...base, ...toneMatch(src, base.join(','), id)].join(',');
+  const rawPeak = measure(src, 'anull').peak;
+  if (rawPeak < SILENT_PEAK_DB) throw new Error(`${src} peaks at ${rawPeak} dB; it is near silence. Skip it.`);
   const { loudness, peak } = measure(src, shaped);
-  if (peak < SILENT_PEAK_DB) throw new Error(`${src} peaks at ${peak} dB; it is near silence. Skip it.`);
   const gain = Math.min(level - loudness, PEAK_DB + MAX_LIMIT_DB - peak);
   const limiter = `alimiter=limit=${dbToLinear(PEAK_DB)}:attack=1:release=50:level=false:latency=true`;
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', src, '-af', `${shaped},volume=${gain.toFixed(2)}dB,${limiter}`, '-ar', '48000', '-c:a', 'libopus', '-b:a', `${OPUS_KBPS}k`, '-metadata', `comment=${source}`, out]);
   const short = gain < level - loudness ? `, ${(level - loudness - gain).toFixed(1)} dB under target` : '';
   console.log(`${source} -> ${out}  ${loudness.toFixed(1)} LUFS, gain ${gain.toFixed(1)} dB${short}`);
   return name;
+}
+
+// Generated clips often sit far to one side. Beds keep stereo with both sides at the same level.
+function channels(src, cue) {
+  if (cue.bus !== 'ambient' && cue.bus !== 'music') return 'pan=mono|c0=0.5*c0+0.5*c1';
+  const log = ffmpegLog(src, `${EQ},astats=measure_overall=none:measure_perchannel=RMS_level`);
+  const [l, r] = [...log.matchAll(/RMS level dB: (-?[\d.]+)/g)].map((m) => Number(m[1]));
+  if (l === undefined || r === undefined) throw new Error(`${src} is not stereo`);
+  const mid = (l + r) / 2;
+  return `pan=stereo|c0=${dbToLinear(mid - l).toFixed(4)}*c0|c1=${dbToLinear(mid - r).toFixed(4)}*c1`;
 }
 
 function dbToLinear(db) {
