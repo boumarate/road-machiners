@@ -13,6 +13,7 @@ export const DETECT = {
     perSpeed: 25, // extra tiles per tile/turn of the source's speed
     eyeHeight: 0.6, // dust rises above the truck, so it clears hills a plain sight line would not
     samplesPerTile: 1, // height samples along a dust sight line; a tall plume needs less care than sight
+    spawnBack: 0.5, // share of the turn's trail behind the truck where its new cloud rises
     lifetime: 8, // turns a cloud hangs in the air before it is gone
     riseTurns: 2, // turns before a cloud has risen high enough to be seen beyond sight range
     riseHeight: 0.25, // height units a cloud climbs per turn, so older clouds clear taller hills

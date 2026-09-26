@@ -116,7 +116,7 @@ export function advanceDust(world: World): void {
     if (range <= 0) continue;
     const back = { x: -Math.cos(v.heading) * D.backDrift, y: -Math.sin(v.heading) * D.backDrift };
     world.dustClouds.push({
-      id: `dust-${v.id}-${world.turn}`, source: v.id, pos: { ...v.pos },
+      id: `dust-${v.id}-${world.turn}`, source: v.id, pos: dustSpawn(v),
       vel: { x: back.x + WEATHER.wind.x * D.windDrift, y: back.y + WEATHER.wind.y * D.windDrift }, age: 0, range,
     });
   }
@@ -137,4 +137,11 @@ function newestCloud(clouds: DustCloud[], vehicleId: string): DustCloud | null {
   let best: DustCloud | null = null;
   for (const c of clouds) if (c.source === vehicleId && (!best || c.age < best.age)) best = c;
   return best;
+}
+
+// Dust rises from ground the truck already crossed: partway back along this turn's trail, never at the truck.
+function dustSpawn(v: Vehicle): Vec {
+  if (v.trail.length < 2) throw new Error(`${v.id} moved without a trail`);
+  const p = v.trail[Math.floor((v.trail.length - 1) * (1 - DETECT.dust.spawnBack))];
+  return { x: p.x, y: p.y };
 }

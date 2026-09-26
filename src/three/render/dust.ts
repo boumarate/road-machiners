@@ -2,7 +2,8 @@
 // with clouds as trucks drive, and they rise, drift and fade instead of being redrawn each turn.
 // Shown: clouds the player sees (world.player.clouds) and the player's own clouds in sight. Between turns a
 // cloud glides toward where it will be next turn, so the drift looks continuous.
-// Drawn above the fog: a risen cloud is seen over ground the player cannot see.
+// Drawn after the fog, so a risen cloud shows over ground the player cannot see. Depth-tested, so trucks
+// and hills in front hide it.
 
 import * as THREE from 'three';
 import { DETECT } from '../../data/detect';
@@ -60,7 +61,7 @@ export class DustCloudsView {
   private makeView(id: string): View {
     const group = new THREE.Group();
     const puffs = Array.from({ length: LOOK.puffs }, () => {
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.texture, color: PAL.dustTrail, transparent: true, opacity: 0, depthTest: false, depthWrite: false }));
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.texture, color: PAL.dustTrail, transparent: true, opacity: 0, depthWrite: false }));
       sprite.renderOrder = RENDER_ORDER;
       return sprite;
     });

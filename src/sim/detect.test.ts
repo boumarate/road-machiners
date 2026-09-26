@@ -126,15 +126,17 @@ describe('dust clouds', () => {
     const v = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
     v.speed = 4;
     v.heading = 0;
+    v.trail = [0, 1, 2, 3, 4].map((i) => ({ x: 36 + i, y: 30, heading: 0 })); // drove east into x=40 this turn
     w.terrain.types.fill('sand'); // test ground is road, which raises little dust
     expect(dustRange(w, v)).toBeGreaterThan(40);
     return { w, v, observer: w.vehicles[0] };
   }
 
-  it('a moving dusty truck raises a cloud, and a parked one does not', () => {
+  it('a moving dusty truck raises a cloud behind it, and a parked one does not', () => {
     const { w, v } = dustyWorld();
     advanceDust(w);
     expect(w.dustClouds.filter((c) => c.source === v.id)).toHaveLength(1);
+    expect(w.dustClouds[0].pos.x).toBeLessThan(v.pos.x);
     v.speed = 0;
     advanceDust(w);
     expect(w.dustClouds.filter((c) => c.source === v.id)).toHaveLength(1);
