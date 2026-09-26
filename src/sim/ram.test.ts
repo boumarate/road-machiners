@@ -1,3 +1,4 @@
+import { partDef } from '../data/parts';
 import { describe, expect, it } from 'vitest';
 import { corePart, mountedItems, mountedParts } from './grid';
 import { applyCrash } from './movement';
@@ -40,13 +41,13 @@ describe('rams', () => {
     const plain = addVehicle(bare, 'raiders', 'scout', [], { x: 40, y: 40 }, 0);
     const h1 = addVehicle(bare, 'traders', 'hauler', [], { x: 41.5, y: 40 }, Math.PI);
     applyCrash(bare, h1, plain, plain.id, plain.pos, FULL_SPEED);
-    expect(corePart(plain, 'cab').hp).toBeLessThan(30);
+    expect(corePart(plain, 'cab').hp).toBeLessThan(partDef('cab').hp);
 
     const w = emptyWorld();
     const rammed = addVehicle(w, 'raiders', 'scout', ['ram'], { x: 40, y: 40 }, 0);
     const h2 = addVehicle(w, 'traders', 'hauler', [], { x: 41.5, y: 40 }, Math.PI);
     applyCrash(w, h2, rammed, rammed.id, rammed.pos, FULL_SPEED);
-    expect(corePart(rammed, 'cab').hp).toBe(30);
+    expect(corePart(rammed, 'cab').hp).toBe(partDef('cab').hp);
     expect(partOf(rammed, 'ram').hp).toBeLessThan(50);
   });
 

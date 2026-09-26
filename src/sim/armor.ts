@@ -64,7 +64,7 @@ function laneCells(g: Grid, side: Side, lane: number): { x: number; y: number }[
 }
 
 // The only way damage reaches parts. A working mounted part takes damage × min(1, pen / armor), then lowers pen
-// by its armor. The walk stops at zero pen. Holes, empty cells, goods, spares and broken parts let the round pass.
+// by its armor, and damage drops in the same proportion as pen. The walk stops at zero pen. Holes, empty cells, goods, spares and broken parts let the round pass.
 // A part covering several cells of the lane is hit once.
 export function walkLane(world: World, v: Vehicle, side: Side, lane: number, round: Round): PartHit[] {
   if (!(round.damage >= 0 && round.pen >= 0)) throw new Error(`Bad round ${JSON.stringify(round)}`);
@@ -74,6 +74,7 @@ export function walkLane(world: World, v: Vehicle, side: Side, lane: number, rou
   const hits: PartHit[] = [];
   const struck = new Set<string>();
   let pen = round.pen;
+  let damage = round.damage;
   for (const c of laneCells(g, side, lane)) {
     if (pen <= 0) break;
     if (g.cells[c.y][c.x] === null) continue;
@@ -82,7 +83,8 @@ export function walkLane(world: World, v: Vehicle, side: Side, lane: number, rou
     if (pen <= 0 || !part || part.hp <= 0 || struck.has(part.id)) continue;
     struck.add(part.id);
     const armor = partDef(part.defId).armor;
-    hits.push({ part: part.id, damage: damagePart(world, v, part, round.damage * Math.min(1, pen / armor)) });
+    hits.push({ part: part.id, damage: damagePart(world, v, part, damage * Math.min(1, pen / armor)) });
+    damage *= Math.max(0, pen - armor) / pen;
     pen -= armor;
   }
   return hits;

@@ -52,12 +52,12 @@ export type PartDef = WeaponDef | EngineDef | ArmorDef | CargoDef | CoreDef;
 export const PARTS: Record<string, PartDef> = {
   mg: {
     id: 'mg', kind: 'weapon', name: 'MG turret', hp: 20, price: 180, w: 1, h: 1, mass: 80, armor: 3,
-    range: 6, reload: 1, arc: 360, look: 'mg', spread: 1.5, rounds: 6,
+    range: 6, reload: 1, arc: 360, look: 'mg', spread: 5, rounds: 6,
     round: { damage: 3, pen: 6, speed: 600, splashRadius: 0, splashDamage: 0, splashPen: 0 },
   },
   cannon: {
     id: 'cannon', kind: 'weapon', name: 'Forward cannon', hp: 30, price: 320, w: 3, h: 1, mass: 400, armor: 3,
-    range: 9, reload: 3, arc: 60, look: 'cannon', spread: 0.8, rounds: 1,
+    range: 9, reload: 3, arc: 60, look: 'cannon', spread: 2.5, rounds: 1,
     round: { damage: 30, pen: 20, speed: 250, splashRadius: 2.5, splashDamage: 12, splashPen: 6 },
   },
   stockEngine: {
@@ -89,7 +89,7 @@ export const PARTS: Record<string, PartDef> = {
     extraRows: 3, look: 'box',
   },
   cab: {
-    id: 'cab', kind: 'core', name: 'Cab', hp: 30, price: 200, w: 1, h: 1, mass: 80, armor: 3,
+    id: 'cab', kind: 'core', name: 'Cab', hp: 60, price: 200, w: 1, h: 1, mass: 80, armor: 3,
     role: 'cab',
   },
   transmission: {

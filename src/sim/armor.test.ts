@@ -1,3 +1,4 @@
+import { partDef } from '../data/parts';
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
 import { laneCount, sideToward, walkLane } from './armor';
@@ -69,6 +70,13 @@ describe('walkLane', () => {
     expect(engine.hp).toBeLessThan(25);
   });
 
+  it('a round loses damage with the pen each part takes from it', () => {
+    const { w, v } = plated();
+    const hits = walkLane(w, v, 'front', 1, { damage: 20, pen: 40 });
+    expect(hits.length).toBeGreaterThan(1);
+    expect(hits[1].damage).toBeLessThan(hits[0].damage);
+  });
+
   it('armor scales damage down when pen is below it', () => {
     const { w, v, plate } = plated();
     const weak = walkLane(w, v, 'front', 1, { damage: 12, pen: 6 })[0].damage;
@@ -136,7 +144,7 @@ describe('knockout', () => {
     engine.hp = 0;
     checkDefeat(w);
     expect(w.events.some((e) => e.t === 'defeat')).toBe(true);
-    expect(cab.hp).toBe(Math.max(1, Math.round(30 * RULES.defeatPatch)));
+    expect(cab.hp).toBe(Math.max(1, Math.round(partDef('cab').hp * RULES.defeatPatch)));
     expect(wheel.hp).toBeGreaterThan(0);
     expect(engine.hp).toBeGreaterThan(0);
   });
