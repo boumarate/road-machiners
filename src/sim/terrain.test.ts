@@ -48,8 +48,8 @@ function terrainHash(t: Terrain): string {
 
 describe("terrain generation", () => {
   it("keeps the exact heights and types of known seeds", () => {
-    expect(terrainHash(buildTerrain(1, REGION.size))).toBe("40e8055b");
-    expect(terrainHash(buildTerrain(7, REGION.size))).toBe("3f6821fa");
+    expect(terrainHash(buildTerrain(1, REGION.size))).toBe("4b41fe45");
+    expect(terrainHash(buildTerrain(7, REGION.size))).toBe("3497f518");
   }, 30_000);
 
   it("finds the same road distance through the road index as over every road", () => {

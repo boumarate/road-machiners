@@ -15,7 +15,7 @@ describe('repairPlan', () => {
     const me = w.vehicles[0];
     const cage = armorPart(me);
     cage.hp = Math.floor(partDef(cage.defId).hp * REPAIR.fieldCapShare);
-    expect(repairPlan(w, me, cage.id)).toEqual({ turns: 0, parts: 0, hp: 0 });
+    expect(repairPlan(w, me, cage.id)).toEqual({ turns: 0, parts: 0, hp: 0, needed: 0 });
   });
 
   it('never plans above the field cap even when the part is undamaged', () => {
@@ -36,6 +36,17 @@ describe('repairPlan', () => {
     expect(plan.hp).toBeCloseTo(cap - 1, 5);
     expect(plan.parts).toBeGreaterThan(0);
     expect(plan.turns).toBeGreaterThan(0);
+  });
+
+  it('costs the same parts for a broken small part and a broken large part', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const wheel = mountedParts(me).find((p) => p.defId === 'wheel')!;
+    const cab = mountedParts(me).find((p) => p.defId === 'cab')!;
+    wheel.hp = 0;
+    cab.hp = 0;
+    expect(repairPlan(w, me, wheel.id).parts).toBe(2);
+    expect(repairPlan(w, me, cab.id).parts).toBe(2);
   });
 
   it('mechanics shortens the job and cuts parts use for the player', () => {

@@ -114,7 +114,7 @@ describe('far NPC travel', () => {
     far.resources!.fuel = 0;
     far.order = { kind: 'through', dest: { x: 200, y: 120 } };
     advanceFar(w, far);
-    expect(far.speed).toBeLessThanOrEqual(RULES.crawlSpeed);
+    expect(far.speed).toBeLessThanOrEqual(RULES.limpSpeed);
     expect(far.resources!.fuel).toBe(0);
   });
 

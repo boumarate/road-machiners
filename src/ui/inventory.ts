@@ -229,17 +229,15 @@ export class InventoryView {
   // A damaged mounted part shows a Patch button, hidden once it is already at the field cap.
   private patchButton(w: World, me: Vehicle, part: PartInstance): HTMLElement | null {
     const plan = repairPlan(w, me, part.id);
-    if (plan.hp <= 0) return null;
+    if (plan.needed === 0) return null;
     const moving = me.speed > RULES.parkedSpeed;
-    const held = goodsCount(me).parts ?? 0;
-    const short = held < plan.parts;
-    const reason = moving ? 'Stop to patch' : short ? `Need ${plan.parts} parts, have ${held}` : null;
+    const reason = moving ? 'Stop to patch' : plan.parts === 0 ? 'No parts' : null;
     return el(
       'button',
       {
         class: 'inv-patch',
         disabled: reason !== null,
-        title: reason ?? `Patch: ${plan.turns} turns, ${plan.parts} parts, +${plan.hp} HP`,
+        title: reason ?? `Patch: ${plan.turns} turns, ${plan.parts} of ${plan.needed} parts, +${Math.round(plan.hp)} HP`,
         onpointerdown: (e: Event) => e.stopPropagation(),
         onclick: (e: Event) => {
           e.stopPropagation();

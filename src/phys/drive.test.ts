@@ -228,7 +228,7 @@ describe('physics turns', () => {
     w0.player.fuel = 0;
     const { w } = play(w0, 2);
     expect(me(w).pos.x).toBeGreaterThan(30.5);
-    expect(me(w).speed).toBeLessThanOrEqual(RULES.crawlSpeed + 0.3);
+    expect(me(w).speed).toBeLessThanOrEqual(RULES.limpSpeed + 0.3);
   });
 
   it('low fuel halves the top speed', () => {

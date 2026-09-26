@@ -4,13 +4,12 @@
 
 export const DETECT = {
   sound: {
-    base: 60, // tiles heard at a crawl, ignoring terrain and hills
-    perSpeed: 30, // extra tiles per tile/turn of the source's speed
+    limp: 30, // tiles heard at limp speed or below, a little past sight
+    perSpeed: 52, // extra tiles per tile/turn of the source's speed above limp speed, ignoring terrain and hills
     ownPenalty: 10, // tiles of hearing lost per tile/turn of the listener's own speed
   },
   dust: {
-    base: 40, // tiles at a crawl, before the terrain's dust multiplier
-    perSpeed: 50, // extra tiles per tile/turn of the source's speed
+    perSpeed: 57, // tiles per tile/turn of the source's speed, before the terrain's dust multiplier; none at limp speed or below
     eyeHeight: 0.6, // dust rises above the truck, so it clears hills a plain sight line would not
     samplesPerTile: 1, // height samples along a dust sight line; a tall plume needs less care than sight
     spawnBack: 0.5, // share of the turn's trail behind the truck where its new cloud rises

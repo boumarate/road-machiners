@@ -39,7 +39,7 @@ export const REGION = {
       name: "Old Orchard",
       kind: "landmark",
       pos: scalePoint({ x: 28, y: 64 }),
-      radius: 18,
+      radius: 16, // the ruin on the far edge reaches 16 tiles; the trees stop at 10
     },
     {
       id: "dustwell",

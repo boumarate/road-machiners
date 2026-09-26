@@ -35,7 +35,7 @@ import { CHASSIS } from "../data/chassis";
 import type { Vehicle, World } from "../sim/types";
 import type { Vec } from "../sim/vec";
 import { playerSees, tileOf, visibleTiles } from "../sim/vision";
-import { dist, DEG } from "../sim/vec";
+import { dist } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
 import {
   cloneWorld,
@@ -74,7 +74,7 @@ import { TERRAIN_TYPES } from '../data/terrain';
 import { bodyOf } from '../phys/body';
 import { headingOf } from '../phys/frames';
 import { canLoot, salvageHere } from '../sim/locations';
-import { sunAt } from '../sim/sun';
+import { daylightAt } from './render/daylight';
 import { tileAt } from '../sim/terrain';
 import { ContactsView } from './render/contacts';
 import { DustCloudsView } from './render/dust';
@@ -103,16 +103,6 @@ const SMOKE_CHANCE = 0.05; // per hurt vehicle per frame
 const HURT_CAB = 0.35; // cab hp share under which a vehicle smokes
 const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is recomputed during a turn
 const SUN_RADIUS = 150; // meters from the focus to the sun light
-const SUN_INTENSITY = 2.2; // in full daylight
-const NIGHT_INTENSITY = 0.3; // dimmed light after sunset, before sunrise
-const NIGHT_ELEVATION = 25 * DEG; // shadow angle used at night, since sunAt is null then
-// Sky fill light. Night turns it dim and blue, so the time of day reads at a glance.
-const SKY_DAY = 0xfff0d8;
-const GROUND_DAY = 0x6a5038;
-const SKY_DAY_INTENSITY = 1.4;
-const SKY_NIGHT = 0x5a6c9c;
-const GROUND_NIGHT = 0x1c1e2a;
-const SKY_NIGHT_INTENSITY = 0.45;
 
 type LiveVision = {
   visible: Set<number>;
@@ -153,8 +143,8 @@ export class Game {
   private drive: Drive;
   private readonly renderer = new THREE.WebGLRenderer({ antialias: true });
   private readonly scene = new THREE.Scene();
-  private readonly sun = new THREE.DirectionalLight(0xfff0d0, 2.2);
-  private readonly sky = new THREE.HemisphereLight(SKY_DAY, GROUND_DAY, SKY_DAY_INTENSITY);
+  private readonly sun = new THREE.DirectionalLight();
+  private readonly sky = new THREE.HemisphereLight();
   private readonly stormTint = Object.assign(document.createElement('div'), { className: 'storm-tint' }); // dust haze while inside a storm
   private readonly rig: CameraRig;
   private readonly ground = new THREE.Group(); // terrain chunks near the view, for ground picking
@@ -826,15 +816,14 @@ export class Game {
     this.rig.tick(dt);
     const focus = this.rig.camera.position.clone();
     this.sun.target.position.copy(me ? new THREE.Vector3(me.pos.x, me.pos.y, me.pos.z) : focus);
-    const sun = sunAt(this.world.turn);
-    const dir = sun ? sun.dir : TERRAIN.light;
-    const elevation = sun ? sun.elevation : NIGHT_ELEVATION;
-    const horiz = Math.cos(elevation) * SUN_RADIUS;
-    this.sun.position.copy(this.sun.target.position).add(new THREE.Vector3(dir.x * horiz, Math.sin(elevation) * SUN_RADIUS, dir.y * horiz));
-    this.sun.intensity = sun ? SUN_INTENSITY : NIGHT_INTENSITY;
-    this.sky.color.set(sun ? SKY_DAY : SKY_NIGHT);
-    this.sky.groundColor.set(sun ? GROUND_DAY : GROUND_NIGHT);
-    this.sky.intensity = sun ? SKY_DAY_INTENSITY : SKY_NIGHT_INTENSITY;
+    const light = daylightAt(this.world.turn);
+    const horiz = Math.cos(light.elevation) * SUN_RADIUS;
+    this.sun.position.copy(this.sun.target.position).add(new THREE.Vector3(light.dir.x * horiz, Math.sin(light.elevation) * SUN_RADIUS, light.dir.y * horiz));
+    this.sun.color.copy(light.sun);
+    this.sun.intensity = light.sunIntensity;
+    this.sky.color.copy(light.sky);
+    this.sky.groundColor.copy(light.ground);
+    this.sky.intensity = light.skyIntensity;
     const at = playerVehicle(this.world).pos;
     this.stormTint.style.display = this.world.weather.some((e) => e.kind === 'storm' && dist(at, e.pos) <= e.radius) ? '' : 'none';
     this.fx.tick(dt);

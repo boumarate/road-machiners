@@ -1,4 +1,5 @@
 import { DETECT } from '../data/detect';
+import { RULES } from '../data/rules';
 import { sunAt } from './sun';
 import { TIME } from '../data/time';
 import { describe, expect, it } from 'vitest';
@@ -25,6 +26,16 @@ describe('soundRange and dustRange', () => {
     v.speed = 0;
     expect(soundRange(w, v)).toBe(0);
     expect(dustRange(w, v)).toBe(0);
+  });
+
+  it('a limping truck raises no dust and is heard only a little past sight', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    v.speed = RULES.limpSpeed;
+    expect(dustRange(w, v)).toBe(0);
+    const crawl = soundRange(w, v);
+    v.speed = 6;
+    expect(crawl).toBeLessThan(soundRange(w, v) / 4);
   });
 
   it('a road raises less dust than sand', () => {

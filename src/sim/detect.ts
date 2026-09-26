@@ -21,7 +21,7 @@ export function soundRange(world: World, v: Vehicle): number {
   if (v.speed <= RULES.parkedSpeed) return 0;
   const engines = mountedParts(v, 'engine');
   const noise = engines.length > 0 ? (partDef(engines[0].defId) as EngineDef).noise : 1;
-  return (DETECT.sound.base + DETECT.sound.perSpeed * v.speed) * noise;
+  return (DETECT.sound.limp + DETECT.sound.perSpeed * Math.max(0, v.speed - RULES.limpSpeed)) * noise;
 }
 
 // A moving observer's own engine drowns out fainter sounds. Parked, it loses nothing.
@@ -29,14 +29,14 @@ function ownHearingPenalty(observer: Vehicle): number {
   return observer.speed <= RULES.parkedSpeed ? 0 : DETECT.sound.ownPenalty * observer.speed;
 }
 
-// Range a moving vehicle's dust trail is seen from. Zero while parked, at night, or fully hidden
+// Range a moving vehicle's dust trail is seen from. Zero at limp speed or below, at night, or fully hidden
 // by weather (storms shrink it through weatherAt's sight multiplier).
 export function dustRange(world: World, v: Vehicle): number {
-  if (v.speed <= RULES.parkedSpeed) return 0;
+  if (v.speed <= RULES.limpSpeed) return 0;
   if (!sunAt(world.turn)) return 0;
   const terrainType = TERRAIN_TYPES[world.terrain.types[tileAt(world.terrain, v.pos)]];
   const weather = weatherAt(world, v.pos);
-  return (DETECT.dust.base + DETECT.dust.perSpeed * v.speed) * terrainType.dust * weather.sight;
+  return DETECT.dust.perSpeed * v.speed * terrainType.dust * weather.sight;
 }
 
 // Whether an observer at a sees the top of a cloud at b. A cloud rises as it ages, so older clouds clear

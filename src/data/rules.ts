@@ -3,10 +3,10 @@
 export const RULES = {
   // Movement
   substeps: 20, // per turn; step length must stay below the smallest collision radius
-  crawlSpeed: 1, // speed used for sharp turns and moving without fuel
+  crawlSpeed: 1, // below this speed turning slows toward a standstill
   lowFuelThreshold: 0.2, // share of tank remaining when speed is limited
   lowFuelSpeedFactor: 0.5, // share of normal top speed below the threshold
-  fuelUseFactor: 0.06, // share of the chassis fuel rate burned per tile; a Bowl to Nose road trip on the 600-tile map uses about half the standard tank
+  fuelUseFactor: 0.075, // share of the chassis fuel rate burned per tile; a daytime Bowl to Nose road trip uses under 60% of the starting fuel, leaving room for detours and fights
   npcStuckTurns: 2, // failed drive attempts before backing out
   npcRecoveryTurns: 2, // turns spent backing out before resuming the route
   // At or below `below` speed, a truck more than `angle` degrees off its destination backs up
@@ -23,7 +23,7 @@ export const RULES = {
   parkedSpeed: 0.5, // vehicles slower than this are routed around like obstacles
   yieldDistance: 1.5, // neutral drivers brake when another vehicle is this close past both radii ahead
   maxBulge: 0.25, // tiles a steering arc may stray from the straight route line
-  disabledEngineSpeed: 1,
+  limpSpeed: 2, // top speed with an empty tank or a dead engine or transmission; a truck this slow raises no dust
   minSpeedCap: 1, // a heavy load never pushes max speed below this
   collisionMinImpact: 1.5, // slower bumps deal no damage
   // A crash gives each truck ramDamage × impact in tiles per turn × the other body's share of both masses,
@@ -53,7 +53,7 @@ export const RULES = {
   maxKillWrecks: 12, // oldest wrecks from kills are cleared past this, so obstacles do not pile up
 
   // Supplies, per turn
-  suppliesPerTurn: 0.025, // at base heat; a daylight crossing of about 200 turns uses most of the starting supplies without an oasis stop
+  suppliesPerTurn: 0.03, // at base heat; a daytime Bowl to Nose crossing uses under 60% of the starting supplies, leaving room for stops
   suppliesCap: 20,
   starveDamage: 5, // character health lost per turn without supplies
   maxHealth: 100,

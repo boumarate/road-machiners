@@ -12,6 +12,6 @@ export const WEAR = {
 
 export const REPAIR = {
   fieldCapShare: 0.7, // field repair never lifts a part above this share of its max HP
-  hpPerPart: 5, // HP restored per unit of the parts good spent
+  sharePerPart: 0.35, // share of a part's max HP restored per unit of the parts good spent, so a broken part patches to the field cap with 2
   turnsPerPart: 2, // turns the job takes per unit of parts spent
 };

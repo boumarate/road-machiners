@@ -3,7 +3,7 @@ import { partDef } from '../data/parts';
 import { REPAIR } from '../data/wear';
 import { addVehicle, emptyWorld } from './testkit';
 import { corePart, goodsCount, mountedParts } from './grid';
-import { addGoods } from './inventory';
+import { addGoods, removeGoods } from './inventory';
 import { advanceJobs, startJob, startRepair } from './jobs';
 import { repairPlan } from './repair';
 
@@ -75,12 +75,31 @@ describe('field repair job', () => {
     expect(() => startRepair(w, cage.id)).toThrow();
   });
 
-  it('refuses to start without enough parts', () => {
+  it('patches partway with the parts held when the full patch needs more', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const cage = armorPart(me);
+    cage.hp = 0;
+    removeGoods(me, 'parts', goodsCount(me).parts ?? 0);
+    addGoods(w, me, 'parts', 1);
+    const plan = repairPlan(w, me, cage.id);
+    expect(plan.needed).toBeGreaterThan(1);
+    expect(plan.parts).toBe(1);
+    expect(plan.hp).toBeCloseTo(partDef(cage.defId).hp * REPAIR.sharePerPart, 5);
+    let next = startRepair(w, cage.id);
+    for (let i = 0; i < plan.turns; i++) advanceJobs(next);
+    const after = next.vehicles[0];
+    expect(goodsCount(after).parts ?? 0).toBe(0);
+    expect(mountedParts(after).find((p) => p.id === cage.id)!.hp).toBeCloseTo(plan.hp, 5);
+  });
+
+  it('refuses to start with no parts', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
     const cage = armorPart(me);
     cage.hp = 1;
-    expect(() => startRepair(w, cage.id)).toThrow('Not enough parts');
+    removeGoods(me, 'parts', goodsCount(me).parts ?? 0);
+    expect(() => startRepair(w, cage.id)).toThrow('No parts');
   });
 
   it('runs the same repair code for an NPC', () => {

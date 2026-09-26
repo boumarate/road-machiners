@@ -19,14 +19,13 @@ export function startJob(world: World, v: Vehicle, job: Job): void {
 }
 
 // The player command that starts a field repair. Throws when the truck is not parked, the part is
-// already at the field cap, or the grid lacks the parts the job would spend.
+// already at the field cap, or the grid holds no parts.
 export function startRepair(world: World, partId: string): World {
   return update(world, (w) => {
     const v = playerVehicle(w);
     const plan = repairPlan(w, v, partId);
-    if (plan.hp <= 0) throw new Error('Already at the field repair cap');
-    const held = goodsCount(v).parts ?? 0;
-    if (held < plan.parts) throw new Error('Not enough parts to start this repair');
+    if (plan.needed === 0) throw new Error('Already at the field repair cap');
+    if (plan.parts === 0) throw new Error('No parts to patch with');
     startJob(w, v, { kind: 'repair', partId, turnsLeft: plan.turns, total: plan.turns });
   });
 }

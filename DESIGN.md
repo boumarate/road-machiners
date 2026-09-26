@@ -30,7 +30,7 @@ Parts is a trade good, bought and sold in towns like scrap or salt. It is the re
 
 A job is work that needs the truck parked for a number of turns: field repair or scavenging. The player has at most one job at a time. Driving before it ends cancels it and the turns already spent are lost. The HUD shows the current job and its turns left.
 
-Field repair fixes one damaged mounted part. It spends parts and restores HP up to a field cap below full, only when the job finishes. Mechanics shortens the job and cuts the parts it needs. A full repair to 100% still needs a town. The inventory panel shows a Patch button on a damaged part, with its turns and parts cost, disabled with the reason when the truck is moving or the grid lacks parts. NPCs keep their town upkeep and do not field repair.
+Field repair fixes one damaged mounted part. It spends parts and restores HP up to a field cap below full, only when the job finishes. Each unit of parts restores the same share of any part's max HP, so a broken wheel and a broken cab cost the same. Mechanics shortens the job and cuts the parts it needs. A full repair to 100% still needs a town. The inventory panel shows a Patch button on a damaged part, with its turns and parts cost, disabled with the reason when the truck is moving or the grid lacks parts. NPCs keep their town upkeep and do not field repair.
 
 The truck stays critical to progression, like the ship in Space Rangers 2.
 
@@ -70,9 +70,9 @@ Sight reaches 20 tiles with line of sight, halved at night and cut in dust storm
 
 A contact is a vehicle detected this way. It is a rough circle that always holds the true position. For sound the circle is about a third of the distance wide, so a far sound gives little more than a direction. A scanner fixes a position much more tightly.
 
-Engine sound reaches far, by the engine and the vehicle's speed. A parked truck makes no sound. Hills do not block it. The listener's own speed shortens its hearing, so a parked observer hears furthest. Sound shows as faint arcs around the player's truck, pointing toward each heard truck: a wide arc for a vague bearing, a thick one for a loud engine, a bright one for a near sound. The arcs hum and ripple outward.
+Engine sound reaches far, by the engine and the vehicle's speed. A crawling truck is heard only a little past sight, and a parked truck makes no sound. Hills do not block it. The listener's own speed shortens its hearing, so a parked observer hears furthest. Sound shows as faint arcs around the player's truck, pointing toward each heard truck: a wide arc for a vague bearing, a thick one for a loud engine, a bright one for a near sound. The arcs hum and ripple outward.
 
-Dust clouds are objects in the world. Every turn a moving truck on dusty ground leaves a cloud behind it. Roads raise little dust, sand and hardpan raise more, and none rises at night. A cloud rises, drifts back along its truck's route and with the wind, wanders a little, and fades after a few turns. Once risen it is seen from far beyond sight and over hills. So a line of clouds shows where a truck passed, a little late.
+Dust clouds are objects in the world. Every turn a truck moving faster than a crawl on dusty ground leaves a cloud behind it. Roads raise little dust, sand and hardpan raise more, and none rises at night. A cloud rises, drifts back along its truck's route and with the wind, wanders a little, and fades after a few turns. Once risen it is seen from far beyond sight and over hills. So a line of clouds shows where a truck passed, a little late.
 
 A radio scanner is a part that mounts on a weapon cell, so it competes with a gun. It detects every moving vehicle across the map, through hills, and shows it as a steady blip. It is sold in towns.
 
@@ -108,7 +108,7 @@ Town markets have fixed prices and unlimited stock and money. Initial NPC resour
 
 Each town produces and needs fixed goods. Profit comes from knowing routes, as in Dustland Delivery.
 
-Fuel and supplies limit range. Fuel burns at 0.06 of the chassis fuel-per-tile rate, times heat. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn at 0.025 per turn, times heat. Without supplies the character loses health. Oases refill supplies.
+Fuel and supplies limit range. Fuel burns at 0.075 of the chassis fuel-per-tile rate, times heat. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn at 0.03 per turn, times heat. Without supplies the character loses health. Oases refill supplies.
 
 ## Prototype v0.001 content
 

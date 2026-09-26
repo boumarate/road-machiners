@@ -53,7 +53,7 @@ describe('movement', () => {
     w.vehicles[0].order = { kind: 'stopAt', dest: { x: 40, y: 30 } };
     resolveMovement(w);
     expect(w.vehicles[0].pos.x).toBeGreaterThan(30);
-    expect(w.vehicles[0].pos.x).toBeLessThanOrEqual(30 + RULES.crawlSpeed);
+    expect(w.vehicles[0].pos.x).toBeLessThanOrEqual(30 + RULES.limpSpeed);
     expect(w.player.fuel).toBe(0);
   });
 
