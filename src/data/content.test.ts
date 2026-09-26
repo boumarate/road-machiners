@@ -10,9 +10,10 @@ import { goodsCount, gridOf, isMounted, placementError } from '../sim/grid';
 import { mountPart } from '../sim/inventory';
 import { emptyWorld } from '../sim/testkit';
 import type { World } from '../sim/types';
+import { siteGates } from '../sim/sites';
 
 let world: World;
-beforeAll(() => { world = emptyWorld(REGION.towns[0].pos); world.player.money = 100000; });
+beforeAll(() => { world = emptyWorld(siteGates(REGION.towns[0])[0]); world.player.money = 100000; });
 
 const addedParts: Record<Exclude<PartKind, 'core' | 'scanner'>, string[]> = {
   weapon: ['shotgun', 'autocannon', 'tankGun', 'rocketRack', 'sniperCannon'],
@@ -66,10 +67,10 @@ describe('equipment variety', () => {
       const [cheap, dear] = [...REGION.towns].sort((a, b) => TOWN_PRICES[a.id][id] - TOWN_PRICES[b.id][id]);
       expect(sellPrice(world, dear.id, id)).toBeGreaterThan(buyPrice(world, cheap.id, id));
       const start = structuredClone(world);
-      start.vehicles[0].pos = { ...cheap.pos };
+      start.vehicles[0].pos = { ...siteGates(cheap)[0] };
       let w = buyGood(start, id, 1);
       expect(goodsCount(w.vehicles[0])[id]).toBe(1);
-      w.vehicles[0].pos = { ...dear.pos };
+      w.vehicles[0].pos = { ...siteGates(dear)[0] };
       w = sellGood(w, id, 1);
       expect(goodsCount(w.vehicles[0])[id]).toBeUndefined();
       expect(w.player.money).toBeGreaterThan(start.player.money);

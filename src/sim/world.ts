@@ -11,6 +11,7 @@ import { buildTerrain } from './terrain';
 import { planNpcOrders } from './ai';
 import { assignAutoOrders, fireWeapons, isHostile, resolveDestroyed } from './combat';
 import { checkDefeat } from './defeat';
+import { fireGuards } from './guards';
 import { discoverSites, useOasis } from './locations';
 import { resolveMovement } from './movement';
 import { consumeSupplies, leakFuel } from './supplies';
@@ -145,6 +146,7 @@ export function endTurn(
     refreshVision(w);
     assignAutoOrders(w);
     fireWeapons(w);
+    fireGuards(w);
     consumeSupplies(w);
     leakFuel(w);
     resolveDestroyed(w);

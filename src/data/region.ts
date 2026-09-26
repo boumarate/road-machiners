@@ -9,6 +9,7 @@ export type LocationDef = {
   kind: "oasis" | "convoy" | "landmark";
   pos: Vec;
   radius: number;
+  walled?: boolean; // a palisade closes the site, so it is used only from a gate
 };
 
 export const MAP_SCALE = 5;
@@ -54,6 +55,7 @@ export const REGION = {
       kind: "landmark",
       pos: scalePoint({ x: 50, y: 36 }),
       radius: 6,
+      walled: true,
     },
     {
       id: "burnt-convoy",
@@ -124,6 +126,7 @@ export const REGION = {
       kind: "convoy",
       pos: scalePoint({ x: 82, y: 49 }),
       radius: 6,
+      walled: true,
     },
   ] as LocationDef[],
   roads: [
@@ -244,6 +247,13 @@ export const REGION = {
     wallSegment: 3, // tiles per straight wall section around the curve
     wallTowerEvery: 5, // wall sections between towers
     gateWidth: 7, // tiles of open wall where a road enters, over twice the road width
+    gateReach: 5, // tiles from a gate on the wall line where a walled site's services work
+    palisadeHeight: 0.55, // 2.2 m of scrap and posts, below a truck roof
+    palisadeThickness: 0.25,
+    palisadeSegment: 1.5,
+    palisadeGateWidth: 4, // a road width plus half a tile each side
+    guardTowerHeight: 1.8, // gate towers stand twice the wall height
+    gatePoleHeight: 4.5, // 18 m, so a gate shows from across the fog edge
     orchardRows: 11,
     orchardSpacing: 2,
   },

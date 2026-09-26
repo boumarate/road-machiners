@@ -12,7 +12,7 @@ import { skillBonus } from "../data/skills";
 import { playerVehicle } from "./damage";
 import { addCoreParts, makePart } from "./factory";
 import { gainXp } from "./progress";
-import { requireTown } from "./sites";
+import { canUseSite, requireTown } from "./sites";
 import { freeCells, goodsCount, mountedParts } from "./grid";
 import { addGoods, mountPart, removeGoods, stowPart } from "./inventory";
 import type { PartInstance, Vehicle, World } from "./types";
@@ -26,12 +26,8 @@ export function requireVehicleTown(
   townId: string,
 ): void {
   const town = REGION.towns.find((t) => t.id === townId);
-  if (
-    !town ||
-    dist(vehicle.pos, town.pos) >
-      (town.radius + ECONOMY.useRange) * ECONOMY.interactionScale
-  )
-    throw new Error("Not in the requested town");
+  if (!town || !canUseSite(vehicle.pos, town))
+    throw new Error("Not at a gate of the requested town");
   if (
     vehicle.id !== world.player.vehicleId &&
     vehicle.speed > RULES.parkedSpeed

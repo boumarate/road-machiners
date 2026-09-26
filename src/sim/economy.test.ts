@@ -14,14 +14,14 @@ import { gainXp, spendSkillPoint, xpForLevel } from './progress';
 import { vehicleStats } from './stats';
 import { consumeSupplies } from './supplies';
 import { heatAt } from './sun';
-import { locationAt, townAt } from './sites';
+import { locationAt, siteGates, townAt } from './sites';
 import { addVehicle, emptyWorld } from './testkit';
 import { dist } from './vec';
 import { endTurn, newWorld } from './world';
 
 const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
 const nose = REGION.towns.find((t) => t.id === 'nose')!;
-const startAtBowl = () => emptyWorld(bowl.pos);
+const startAtBowl = () => emptyWorld(siteGates(bowl)[0]);
 
 describe('trade', () => {
   it('buying moves money into cargo', () => {
@@ -40,7 +40,7 @@ describe('trade', () => {
 
   it('the scrap route pays and gives XP', () => {
     let w = buyGood(startAtBowl(), 'scrap', 8);
-    w.vehicles[0].pos = { ...nose.pos };
+    w.vehicles[0].pos = { ...siteGates(nose)[0] };
     const money = w.player.money;
     w = sellGood(w, 'scrap', 10);
     expect(w.player.money - money).toBe(10 * sellPrice(w, 'nose', 'scrap'));
@@ -128,12 +128,16 @@ describe('supplies', () => {
 });
 
 describe('locations', () => {
-  it('towns and locations use a 1.5x interaction radius', () => {
-    const townReach = (bowl.radius + ECONOMY.useRange) * 1.5;
+  it('towns work only near a gate, and open locations use a 1.5x interaction radius', () => {
+    const gate = siteGates(bowl)[0];
+    const out = { x: gate.x - bowl.pos.x, y: gate.y - bowl.pos.y };
+    const reach = REGION.settlement.gateReach;
+    expect(townAt(emptyWorld({ x: gate.x + (out.x / bowl.radius) * (reach - 0.01), y: gate.y + (out.y / bowl.radius) * (reach - 0.01) }))?.id).toBe(bowl.id);
+    expect(townAt(emptyWorld({ x: gate.x + (out.x / bowl.radius) * (reach + 0.01), y: gate.y + (out.y / bowl.radius) * (reach + 0.01) }))).toBeNull();
+    // The far side of the wall is out of reach, though it is as close to the center as the gate.
+    expect(townAt(emptyWorld({ x: bowl.pos.x - out.x * 1.1, y: bowl.pos.y - out.y * 1.1 }))).toBeNull();
     const oasis = REGION.locations.find((l) => l.kind === 'oasis')!;
     const locationReach = (oasis.radius + ECONOMY.useRange) * 1.5;
-    expect(townAt(emptyWorld({ x: bowl.pos.x + townReach - 0.01, y: bowl.pos.y }))?.id).toBe(bowl.id);
-    expect(townAt(emptyWorld({ x: bowl.pos.x + townReach + 0.01, y: bowl.pos.y }))).toBeNull();
     expect(locationAt(emptyWorld({ x: oasis.pos.x + locationReach - 0.01, y: oasis.pos.y }))?.id).toBe(oasis.id);
     expect(locationAt(emptyWorld({ x: oasis.pos.x + locationReach + 0.01, y: oasis.pos.y }))).toBeNull();
   });

@@ -9,6 +9,7 @@ import { addGoods, stowPart } from './inventory';
 import { chance, randInt } from './rng';
 import { vehicleStats } from './stats';
 import type { PartInstance, SalvageStock, Vehicle, World } from './types';
+import { canUseSite } from './sites';
 import { dist } from './vec';
 
 // Landmark and convoy sites get finite stock at world creation, drawn from their loot table.
@@ -35,8 +36,11 @@ export function salvageUnits(stock: SalvageStock): number {
   return stock.parts.length + Object.values(stock.goods).reduce((sum, count) => sum + count, 0);
 }
 
+// Site stock follows its site's reach, so a walled site is searched from a gate. Wreck stock has no site.
 export function canReachSalvage(vehicle: Vehicle, stock: SalvageStock): boolean {
-  return vehicle.speed <= RULES.parkedSpeed && dist(vehicle.pos, stock.pos) <= (stock.radius + ECONOMY.useRange) * ECONOMY.interactionScale;
+  if (vehicle.speed > RULES.parkedSpeed) return false;
+  const site = REGION.locations.find((l) => l.id === stock.id);
+  return site ? canUseSite(vehicle.pos, site) : dist(vehicle.pos, stock.pos) <= (stock.radius + ECONOMY.useRange) * ECONOMY.interactionScale;
 }
 
 // Moves at most `units` from the stock into the vehicle's grid. The stock never grows: whatever

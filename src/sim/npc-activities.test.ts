@@ -8,7 +8,8 @@ import { NPC_CLASSES } from '../data/npcs';
 import { endTurn } from './world';
 import { corePart, goodsCount } from './grid';
 import { addGoods } from './inventory';
-import { resolveNpcActivities, chooseNpcActivity } from './npc-activities';
+import { resolveNpcActivities, chooseNpcActivity, getActivityDestination } from './npc-activities';
+import { canUseSite, siteGates } from './sites';
 
 function createScavenger() {
   const w = emptyWorld({ x: 50, y: 50 });
@@ -27,9 +28,20 @@ describe('NPC activities', () => {
     }
   });
 
+  it('stops at the town gate nearest to it, even from the far side of the wall', () => {
+    const { w, npc } = createScavenger();
+    const town = REGION.towns[0];
+    const gate = siteGates(town)[0];
+    npc.pos = { x: town.pos.x - (gate.x - town.pos.x) * 1.3, y: town.pos.y - (gate.y - town.pos.y) * 1.3 };
+    npc.brain!.activity = { kind: 'sell', targetId: town.id, destination: { ...town.pos }, phase: 'travel', reason: 'test activity' };
+    const stop = getActivityDestination(w, npc)!;
+    expect(canUseSite(stop, town)).toBe(true);
+    expect(Math.hypot(stop.x - town.pos.x, stop.y - town.pos.y)).toBeGreaterThan(town.radius);
+  });
+
   it.each(['sell', 'resupply', 'raid'] as const)('records completion of %s once', (kind) => {
     const { w, npc } = createScavenger();
-    npc.pos = { ...REGION.towns[0].pos };
+    npc.pos = { ...siteGates(REGION.towns[0])[0] };
     npc.brain!.activity = { kind, targetId: REGION.towns[0].id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' };
     w.events = [];
     resolveNpcActivities(w);
@@ -93,7 +105,7 @@ describe('NPC activities', () => {
   it('keeps upkeep money when buying trade cargo', () => {
     const { w, npc } = createScavenger();
     npc.brain!.templateId = 'trader';
-    npc.pos = { ...REGION.towns[0].pos };
+    npc.pos = { ...siteGates(REGION.towns[0])[0] };
     planNpcOrders(w);
     resolveNpcActivities(w);
     expect(npc.resources!.money).toBeGreaterThan(0);

@@ -14,6 +14,7 @@ import { canReachSalvage, hasSalvage } from './salvage';
 import { beginSearch } from './search';
 import { vehicleStats } from './stats';
 import type { NpcActivity, Vehicle, World } from './types';
+import { canUseSite, isWalled, siteGates } from './sites';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 import { DETECT } from '../data/detect';
@@ -174,7 +175,7 @@ export function chooseNpcActivity(world: World, vehicle: Vehicle): NpcActivity {
     const destination = places[randInt(world, 0, places.length - 1)];
     return createActivity('raid', null, { ...destination }, 'look for prey at known hunting grounds');
   }
-  const sites = profile.salvageSites.map(getKnownSite).filter((site) => dist(vehicle.pos, site.pos) > (site.radius + ECONOMY.useRange) * ECONOMY.interactionScale);
+  const sites = profile.salvageSites.map(getKnownSite).filter((site) => !canUseSite(vehicle.pos, site));
   if (sites.length > 0) return createSiteActivity('scavenge', sites[randInt(world, 0, sites.length - 1)].id, 'search a known salvage site');
   return createActivity('wait', null, null, 'no salvage here');
 }
@@ -195,8 +196,10 @@ export function getActivityDestination(world: World, vehicle: Vehicle): Vec | nu
   const stock = activity.kind === 'scavenge' ? world.salvage.find((entry) => entry.id === activity.targetId) : undefined;
   const radius = site?.radius ?? stock?.radius;
   if (radius === undefined) throw new Error(`Missing activity destination ${activity.targetId}`);
-  const angle = Math.atan2(vehicle.pos.y - activity.destination.y, vehicle.pos.x - activity.destination.x);
   const stopRadius = radius + vehicleStats(world, vehicle).radius + RULES.arriveRadius;
+  // A walled site is used from its gate nearest the vehicle, so the stop lies just outside that gate.
+  const gate = site && isWalled(site) ? siteGates(site).reduce((a, b) => (dist(vehicle.pos, a) <= dist(vehicle.pos, b) ? a : b)) : null;
+  const angle = gate ? Math.atan2(gate.y - site!.pos.y, gate.x - site!.pos.x) : Math.atan2(vehicle.pos.y - activity.destination.y, vehicle.pos.x - activity.destination.x);
   return { x: activity.destination.x + Math.cos(angle) * stopRadius, y: activity.destination.y + Math.sin(angle) * stopRadius };
 }
 
@@ -225,7 +228,7 @@ function resolveActivity(world: World, vehicle: Vehicle, activity: NpcActivity):
   }
   if (!['sell', 'trade', 'resupply'].includes(activity.kind)) return;
   const site = getKnownSite(activity.targetId!);
-  if (dist(vehicle.pos, site.pos) > (site.radius + ECONOMY.useRange) * ECONOMY.interactionScale) return;
+  if (!canUseSite(vehicle.pos, site)) return;
   activity.phase = 'act';
   if (activity.kind === 'resupply') {
     if ('kind' in site && site.kind === 'oasis') getResources(world, vehicle).supplies = RULES.suppliesCap;
