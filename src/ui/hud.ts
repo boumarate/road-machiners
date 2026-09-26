@@ -30,7 +30,7 @@ export class Hud {
     this.help.append(
       el('div', {}, 'Click: drive through. Shift-click: stop there.'),
       el('div', {}, 'Click your truck: brake. No order: coast on.'),
-      el('div', {}, 'Click a vehicle: target it. 1-4: pick weapon.'),
+      el('div', {}, 'Click a vehicle: target it. 1-4: weapon. 0: all. W: weapons.'),
       el('div', {}, 'Space: end turn. A: auto fire. C: character. I: inventory.'),
       el('div', {}, 'Right-drag: pan. F: follow. Wheel: zoom.'),
     );

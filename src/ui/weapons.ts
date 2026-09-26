@@ -1,83 +1,124 @@
-// Weapon panel: per-weapon target, aim point, status and hit chance. Auto fire toggle.
-
 import { partDef } from '../data/parts';
 import { fireBlock, hitChance } from '../sim/combat';
 import { playerVehicle } from '../sim/damage';
 import { mountedParts } from '../sim/grid';
 import { vehicleStats, type MountedWeapon } from '../sim/stats';
 import type { Vehicle, World } from '../sim/types';
+import { playerSees } from '../sim/vision';
 import { setAutoFire, setWeaponOrder } from '../sim/world';
 import { el, panel } from './dom';
 import type { UiHost } from './host';
 
-const BLOCK_TEXT = { disabled: 'disabled', reloading: 'reloading', range: 'out of range', arc: 'out of arc', noTarget: 'hold', unseen: 'not in sight' };
+const BLOCK_TEXT = { disabled: 'disabled', reloading: 'reloading', range: 'out of range', arc: 'out of arc', noTarget: 'hold fire', unseen: 'not in sight' };
+
+// Current-position feedback shared by the weapon buttons and map markers.
+export function getWeaponReadout(w: World, mw: MountedWeapon) {
+  const me = playerVehicle(w);
+  const order = me.weaponOrders[mw.part.id];
+  const assigned = order ? w.vehicles.find((v) => v.id === order.targetId) ?? null : null;
+  const target = assigned && playerSees(w, assigned.pos) ? assigned : null;
+  const block = fireBlock(w, me, mw, assigned);
+  const status = block === 'reloading'
+    ? `reload ${mw.part.reload} ${mw.part.reload === 1 ? 'turn' : 'turns'}`
+    : block ? BLOCK_TEXT[block] : 'ready';
+  return {
+    target,
+    status,
+    chance: block === null && target && order ? hitChance(w, me, mw, target, order.aim) : null,
+    canFire: block === null,
+  };
+}
 
 export class WeaponPanel {
   private root = panel('weapons');
+  private expanded = true;
 
   constructor(private host: UiHost) {}
 
   render(): void {
     const w = this.host.world();
-    const me = playerVehicle(w);
-    const weapons = vehicleStats(w, me).weapons;
-    const auto = el('button', { class: w.player.autoFire ? 'on' : '', onclick: () => this.toggleAuto() }, `Auto fire: ${w.player.autoFire ? 'on' : 'off'} [A]`);
-    const rows = weapons.map((mw, i) => this.row(w, me, mw, i));
-    const hint = w.player.autoFire
-      ? 'Auto fire picks the nearest hostile for every weapon.'
-      : 'Select a weapon, then click a vehicle to target it. No weapon selected: click targets with all.';
-    this.root.replaceChildren(
-      el('div', { class: 'head' }, el('h3', {}, 'Weapons'), auto),
-      ...(rows.length ? rows : [el('div', { class: 'dim' }, 'No weapons installed')]),
-      el('div', { class: 'hint' }, hint),
+    const weapons = vehicleStats(w, playerVehicle(w)).weapons;
+    const phase = this.host.getTurnPhase();
+    const selected = this.host.selectedWeapon();
+    const controls = el('fieldset', { disabled: phase !== null },
+      el('div', { class: 'weapon-tools' },
+        el('button', { class: selected === null ? 'on' : '', 'aria-pressed': String(selected === null), onclick: () => this.selectWeapon(null) }, 'All [0]'),
+        el('button', { class: w.player.autoFire ? 'on' : '', 'aria-pressed': String(w.player.autoFire), onclick: () => this.toggleAuto() }, `Auto: ${w.player.autoFire ? 'on' : 'off'} [A]`),
+      ),
+      el('div', { class: 'weapon-slots' }, ...weapons.map((mw, i) => this.renderSlot(w, mw, i))),
     );
-  }
-
-  private row(w: World, me: Vehicle, mw: MountedWeapon, i: number): HTMLElement {
-    const order = me.weaponOrders[mw.part.id];
-    const target = order ? w.vehicles.find((v) => v.id === order.targetId) ?? null : null;
-    const block = fireBlock(w, me, mw, target);
-    const status = mw.part.reload > 0 && mw.part.hp > 0 ? `reload ${mw.part.reload}` : block ? BLOCK_TEXT[block] : 'ready';
-    const chance = target && order ? `${Math.round(hitChance(w, me, mw, target, order.aim) * 100)}%` : '';
-    const sel = this.host.selectedWeapon() === mw.part.id;
-    const targetCell = target && order ? this.aimSelect(target, mw.part.id, order.aim) : el('span', { class: 'dim' }, 'no target');
-    const clear = el('button', { title: 'Hold fire', onclick: (e: Event) => { e.stopPropagation(); this.hold(mw.part.id); } }, 'x');
-    return el(
-      'div',
-      { class: `row ${sel ? 'sel' : ''}`, onclick: () => this.host.selectWeapon(sel ? null : mw.part.id) },
-      el('span', { class: 'dim' }, `${i + 1}`),
-      el('span', { class: mw.part.hp > 0 ? '' : 'bad' }, mw.def.name),
-      el('span', { class: block && block !== 'reloading' ? 'dim' : 'good' }, status),
-      el('span', {}, targetCell, ' ', chance),
-      clear,
-    );
-  }
-
-  private aimSelect(target: Vehicle, weaponId: string, aim: string): HTMLElement {
-    const options = [el('option', { value: 'hull', selected: aim === 'hull' }, `${target.name}: hull`)];
-    for (const p of mountedParts(target)) {
-      const label = `${target.name}: ${partDef(p.defId).name}${p.hp > 0 ? '' : ' (dead)'}`;
-      options.push(el('option', { value: p.id, selected: aim === p.id }, label));
+    const chosen = weapons.find((mw) => mw.part.id === selected);
+    if (chosen) {
+      const readout = getWeaponReadout(w, chosen);
+      const order = playerVehicle(w).weaponOrders[chosen.part.id];
+      if (readout.target && order) controls.append(this.createAimSelect(readout.target, chosen.part.id, order.aim));
     }
-    const select = el('select', {}, ...options) as HTMLSelectElement;
-    select.addEventListener('click', (e) => e.stopPropagation());
-    select.addEventListener('change', () => {
-      this.host.apply(setWeaponOrder(this.host.world(), weaponId, { targetId: target.id, aim: select.value }));
-    });
-    return select;
+    if (weapons.length === 0) controls.append(el('div', { class: 'dim' }, 'No weapons installed'));
+    const hint = w.player.autoFire
+      ? 'Auto picks after movement. Markers show last assignments.'
+      : 'Click a vehicle to assign. Ground clicks still drive.';
+    this.root.replaceChildren(
+      el('div', { class: 'head' }, el('h3', {}, 'Weapons'),
+        el('button', { 'aria-expanded': String(this.expanded), onclick: () => this.toggleVisible() }, `${this.expanded ? 'Hide' : 'Show'} [W]`)),
+      ...(this.expanded ? [controls, el('div', { class: 'hint' }, hint), el('div', { class: 'hint' }, 'Range, arc and hit chance use current positions.')] : []),
+      el('button', { class: 'end-turn', disabled: phase !== null, onclick: () => this.host.endTurn() }, phase ? `${phase}…` : 'End turn [Space]'),
+    );
   }
 
-  private hold(weaponId: string): void {
-    this.host.apply(setWeaponOrder(this.host.world(), weaponId, null));
+  private renderSlot(w: World, mw: MountedWeapon, i: number): HTMLElement {
+    const readout = getWeaponReadout(w, mw);
+    const selected = this.host.selectedWeapon() === mw.part.id;
+    const chance = readout.chance === null ? '' : ` · ${Math.round(readout.chance * 100)}%`;
+    const target = readout.target?.name ?? (playerVehicle(w).weaponOrders[mw.part.id] ? 'target unavailable' : 'no target');
+    return el('div', { class: 'weapon-slot', 'data-weapon': mw.part.id },
+      el('button', {
+        class: `weapon-pick ${selected ? 'on' : ''}`, 'aria-pressed': String(selected),
+        title: `${mw.def.name}: damage ${mw.def.damage}, range ${mw.def.range}, arc ${mw.def.arc}°, fires every ${mw.def.reload} turn(s)`,
+        onclick: () => this.selectWeapon(selected ? null : mw.part.id),
+      },
+      el('span', { class: 'weapon-name' }, `[${i + 1}] ${mw.def.name}`),
+      el('span', { class: readout.canFire ? 'good' : 'dim', 'data-status': '' }, readout.status + chance),
+      el('span', { class: 'weapon-target' }, target)),
+      el('button', { class: 'weapon-hold', title: `Hold fire: ${mw.def.name}`, onclick: () => this.holdWeapon(mw.part.id) }, 'Hold'),
+    );
+  }
+
+  private createAimSelect(target: Vehicle, weaponId: string, aim: string): HTMLElement {
+    const options = [el('option', { value: 'hull', selected: aim === 'hull' }, 'Hull')];
+    for (const p of mountedParts(target)) {
+      options.push(el('option', { value: p.id, selected: aim === p.id }, `${partDef(p.defId).name}${p.hp > 0 ? '' : ' (disabled)'}`));
+    }
+    const select = el('select', { 'aria-label': 'Aim point' }, ...options) as HTMLSelectElement;
+    select.addEventListener('change', () => {
+      if (this.host.getTurnPhase() !== null) return;
+      const w = setAutoFire(this.host.world(), false);
+      this.host.apply(setWeaponOrder(w, weaponId, { targetId: target.id, aim: select.value }));
+    });
+    return el('label', { class: 'weapon-aim' }, 'Aim at ', select);
+  }
+
+  private holdWeapon(weaponId: string): void {
+    if (this.host.getTurnPhase() !== null) return;
+    this.host.apply(setWeaponOrder(setAutoFire(this.host.world(), false), weaponId, null));
+  }
+
+  selectWeapon(id: string | null): void {
+    if (this.host.getTurnPhase() !== null) return;
+    this.host.selectWeapon(id);
+  }
+
+  toggleVisible(): void {
+    this.expanded = !this.expanded;
+    this.render();
   }
 
   toggleAuto(): void {
+    if (this.host.getTurnPhase() !== null) return;
     const w = this.host.world();
     this.host.apply(setAutoFire(w, !w.player.autoFire));
   }
 }
 
-// Weapons that a click on `target` should aim at: the selected one, or all of them.
 export function weaponsForClick(world: World, selected: string | null): MountedWeapon[] {
   const all = vehicleStats(world, playerVehicle(world)).weapons;
   return selected ? all.filter((m) => m.part.id === selected) : all;

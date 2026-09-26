@@ -15,11 +15,20 @@ html, body { margin: 0; height: 100%; background: #1a1410; overflow: hidden; }
 .topbar { top: 8px; left: 50%; transform: translateX(-50%); display: flex; gap: 16px; white-space: nowrap; }
 .topbar b { font-weight: normal; color: #d8b878; }
 
-.weapons { left: 8px; bottom: 8px; min-width: 420px; }
-.weapons .row { display: grid; grid-template-columns: 22px 120px 80px 1fr auto; gap: 6px; align-items: center; padding: 3px 4px; border-radius: 3px; cursor: pointer; }
-.weapons .row.sel { background: rgba(216, 184, 120, 0.18); outline: 1px solid #d8b878; }
-.weapons .hint { margin-top: 6px; color: #b8a888; font-size: 12px; }
-.weapons .head { display: flex; justify-content: space-between; align-items: center; }
+.weapons { left: 8px; bottom: 8px; max-width: min(600px, calc(100vw - 400px)); }
+.weapons fieldset { border: 0; margin: 6px 0 0; padding: 0; min-width: 0; }
+.weapons .weapon-tools, .weapons .weapon-slots { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.weapons .weapon-slot { display: flex; flex-direction: column; flex: 1 1 150px; min-width: 0; }
+#ui .weapons .weapon-pick { display: flex; flex-direction: column; gap: 3px; padding: 6px 8px; text-align: left; }
+.weapons .weapon-name, .weapons .weapon-target { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.weapons .weapon-target { font-size: 11px; }
+#ui .weapons .weapon-hold { font-size: 11px; padding: 1px 8px; }
+.weapons .weapon-aim { display: block; margin: 6px 0; }
+.weapons .hint { margin-top: 4px; color: #b8a888; font-size: 11px; }
+.weapons .head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.weapons .head h3 { margin: 0; }
+#ui .weapons .end-turn { margin-top: 6px; width: 100%; }
+@media (max-width: 800px) { .weapons { max-width: calc(100vw - 40px); } .log { display: none; } }
 
 .log { right: 8px; bottom: 8px; width: 330px; max-height: 240px; overflow: hidden; font-size: 12px; }
 .log div { padding: 1px 0; }

@@ -31,30 +31,42 @@ export class Fx {
     this.dust.emitParticleAt(at.x, at.y, 1);
   }
 
-  shot(from: Pt, to: Pt, hit: boolean, damage: number, heavy: boolean): void {
+  shot(from: Pt, to: Pt, hit: boolean, heavy: boolean, label: string, row: number, flightMs: number, readMs: number): void {
     const a = { x: from.x, y: from.y - GUN_HEIGHT };
-    const miss = hit ? { x: 0, y: 0 } : { x: Phaser.Math.Between(-30, 30), y: Phaser.Math.Between(-20, 20) };
-    const b = { x: to.x + miss.x, y: to.y - GUN_HEIGHT * 0.6 + miss.y };
-    const g = this.scene.add.graphics().setDepth(2e6);
-    g.lineStyle(heavy ? 3 : 1.5, PAL.flash, 0.9);
-    g.lineBetween(a.x, a.y, b.x, b.y);
-    g.fillStyle(PAL.flash, 1);
-    g.fillCircle(a.x, a.y, heavy ? 7 : 4);
-    this.scene.tweens.add({ targets: g, alpha: 0, duration: heavy ? 350 : 200, onComplete: () => g.destroy() });
-    if (hit) {
-      this.sparks.emitParticleAt(b.x, b.y, heavy ? 14 : 6);
-      this.floatText(b, `-${damage}`, '#ffb070');
-    } else {
-      this.floatText(b, 'miss', '#c8b898');
-    }
+    const miss = hit ? 0 : (Phaser.Math.Between(0, 1) === 0 ? -1 : 1) * 36;
+    const b = { x: to.x + miss, y: to.y - GUN_HEIGHT * 0.6 };
+    const flash = this.scene.add.graphics().setDepth(2e6);
+    flash.fillStyle(PAL.flash, 1).fillCircle(a.x, a.y, heavy ? 7 : 4);
+    this.scene.tweens.add({ targets: flash, alpha: 0, duration: flightMs / 2, onComplete: () => flash.destroy() });
+    const g = this.scene.add.graphics().setDepth(2e6).setName('combat-shot');
+    const travel = { progress: 0 };
+    this.scene.tweens.add({
+      targets: travel, progress: 1, duration: flightMs,
+      onUpdate: () => {
+        g.clear();
+        g.lineStyle(heavy ? 4 : 2, heavy ? 0xffad50 : PAL.flash, 1);
+        const bolts = heavy ? 1 : 3;
+        for (let i = 0; i < bolts; i++) {
+          const head = Math.max(0, travel.progress - i * 0.08);
+          const tail = Math.max(0, head - (heavy ? 0.06 : 0.04));
+          g.lineBetween(a.x + (b.x - a.x) * tail, a.y + (b.y - a.y) * tail, a.x + (b.x - a.x) * head, a.y + (b.y - a.y) * head);
+        }
+      },
+      onComplete: () => {
+        g.destroy();
+        if (hit) this.sparks.emitParticleAt(b.x, b.y, heavy ? 14 : 6);
+        else this.dust.emitParticleAt(b.x, b.y, 4);
+        this.floatText({ x: to.x, y: to.y - 28 - row * 22 }, label, hit ? '#ffb070' : '#c8b898', readMs);
+      },
+    });
   }
 
   explode(at: Pt): void {
     this.sparks.emitParticleAt(at.x, at.y - 10, 30);
     this.smoke.emitParticleAt(at.x, at.y - 10, 16);
-    const g = this.scene.add.graphics().setDepth(2e6);
+    const g = this.scene.add.graphics().setPosition(at.x, at.y - 10).setDepth(2e6).setName('combat-explosion');
     g.fillStyle(0xffc060, 0.9);
-    g.fillCircle(at.x, at.y - 10, 26);
+    g.fillCircle(0, 0, 26);
     this.scene.tweens.add({ targets: g, alpha: 0, scale: 1.6, duration: 400, onComplete: () => g.destroy() });
   }
 
@@ -67,12 +79,13 @@ export class Fx {
     this.smoke.emitParticleAt(at.x, at.y - 18, 1);
   }
 
-  floatText(at: Pt, text: string, color: string): void {
+  floatText(at: Pt, text: string, color: string, duration: number): void {
     const t = this.scene.add
       .text(at.x, at.y - 10, text, { fontFamily: 'monospace', fontSize: '15px', color, stroke: '#1a1410', strokeThickness: 3 })
       .setOrigin(0.5)
-      .setDepth(3e6);
-    this.scene.tweens.add({ targets: t, y: at.y - 50, alpha: 0, duration: 1100, onComplete: () => t.destroy() });
+      .setDepth(3e6)
+      .setName('combat-result');
+    this.scene.tweens.add({ targets: t, y: at.y - 50, alpha: 0, duration, onComplete: () => t.destroy() });
   }
 }
 
