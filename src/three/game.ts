@@ -107,7 +107,6 @@ type Playback = {
 const MOVE_MS = (TURN_STEPS / PHYSICS.stepsPerSecond) * 1000; // real time the movement plays over
 const MOVED_BY_RULES = 0.5; // tiles between a vehicle's drawn spot and its sim spot that mean the rules moved it
 const MARKER_LIFT = 3.5; // meters above a target where its weapon marker sits
-const CARD_RIM_POINTS = 16; // points around a truck's radius that measure how wide it shows on screen
 
 const GUN_HEIGHT = 1.6; // meters above the body center where shots start and land
 const ROUND_STAGGER = 0.4; // share of the shot time over which a burst's rounds leave the gun
@@ -158,8 +157,8 @@ export class Game {
   private planFor: World | null = null;
   private last = performance.now();
 
-  private readonly hud = new Hud();
-  private readonly hitCard = new HitCard();
+  private readonly hud: Hud;
+  private readonly hitCard: HitCard;
   private readonly weapons: WeaponPanel;
   private readonly town: TownScreen;
   private readonly character: CharacterScreen;
@@ -218,6 +217,13 @@ export class Game {
     this.town = new TownScreen(host);
     this.character = new CharacterScreen(host);
     this.inventory = new InventoryScreen(host);
+    this.hud = new Hud({
+      openInventory: () => this.toggleInventory(),
+      openCharacter: () => this.toggleCharacter(),
+      toggleManual: () => { if (!this.anim && !this.modalOpen()) this.toggleManual(); },
+      isBusy: () => this.anim !== null,
+    });
+    this.hitCard = new HitCard(this.hud.getInspectionRoot());
 
     this.bindInput();
     window.addEventListener("resize", () => this.resize());
@@ -323,29 +329,11 @@ export class Game {
     this.hitCard.render(w, v ? v.id : null);
   }
 
-  // The hover card sits beside the hovered truck, clear of it on screen. It hides during playback and in modals.
+  // Combat details stay in the fixed inspection panel and hide during playback.
   private placeHitCard(): void {
     const f = this.hovered ? this.frames[this.hovered] : undefined;
-    const v = this.hovered
-      ? this.world.vehicles.find((x) => x.id === this.hovered)
-      : undefined;
-    if (this.anim !== null || this.modalOpen() || !f || !v)
-      return this.hitCard.hide();
-    const r = vehicleStats(this.world, v).radius * PHYSICS.metersPerTile;
-    const c = this.rig.screenOf(f.pos);
-    const reach = Array.from(
-      { length: CARD_RIM_POINTS },
-      (_, i) => (i / CARD_RIM_POINTS) * Math.PI * 2,
-    ).map((a) =>
-      Math.abs(
-        this.rig.screenOf({
-          x: f.pos.x + r * Math.cos(a),
-          y: f.pos.y,
-          z: f.pos.z + r * Math.sin(a),
-        }).x - c.x,
-      ),
-    );
-    this.hitCard.place(c, Math.max(...reach));
+    if (this.anim !== null || this.modalOpen() || !f) return this.hitCard.hide();
+    this.hitCard.show();
   }
 
   // Numbered labels above each target listing the weapons aimed at it and whether they can fire now.
@@ -429,16 +417,8 @@ export class Game {
       if (e.code === "Digit0" && !modal) this.weapons.selectWeapon(null);
       if (e.code === "KeyE" && !modal) this.useContext();
       if (e.code === "KeyR" && !modal && !playing) this.toggleManual();
-      if (e.code === "KeyC" && !playing) {
-        this.town.close();
-        this.inventory.close();
-        this.character.toggle();
-      }
-      if (e.code === "KeyI" && !playing) {
-        this.town.close();
-        this.character.close();
-        this.inventory.toggle();
-      }
+      if (e.code === "KeyC" && !playing) this.toggleCharacter();
+      if (e.code === "KeyI" && !playing) this.toggleInventory();
       if (e.code === "Escape") {
         this.town.close();
         this.character.close();
@@ -447,6 +427,20 @@ export class Game {
       const digit = ["Digit1", "Digit2", "Digit3", "Digit4"].indexOf(e.code);
       if (digit >= 0) this.selectWeaponIndex(digit);
     });
+  }
+
+  private toggleInventory(): void {
+    if (this.anim) return;
+    this.town.close();
+    this.character.close();
+    this.inventory.toggle();
+  }
+
+  private toggleCharacter(): void {
+    if (this.anim) return;
+    this.town.close();
+    this.inventory.close();
+    this.character.toggle();
   }
 
   // Manual mode drives straight at the click, so the preview must rerun with the new driver.

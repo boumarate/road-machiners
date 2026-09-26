@@ -8,6 +8,7 @@ import { initPhysics } from '../phys/drive';
 import { SoundSettings } from '../ui/sound';
 import { installCrashScreen } from './crash';
 import { Game } from './game';
+import { loadModels } from './render/models';
 
 function element(id: string): HTMLElement {
   const el = document.getElementById(id);
@@ -16,7 +17,7 @@ function element(id: string): HTMLElement {
 }
 
 installCrashScreen();
-await initPhysics();
+await Promise.all([initPhysics(), loadModels()]);
 const mixer = new Mixer(MIX);
 mixer.unlockOn(window);
 const bank = await loadBank(mixer.ctx, SOUNDS);
