@@ -32,7 +32,7 @@ import { maxTurn, vehicleStats } from "../sim/stats";
 import { clickOrder, throttleFor } from "../sim/steering";
 import { warmRoutes } from "../sim/path";
 import { CHASSIS } from "../data/chassis";
-import type { Vehicle, World } from "../sim/types";
+import type { ShotRound, Vehicle, World } from "../sim/types";
 import type { Vec } from "../sim/vec";
 import { playerSees, tileOf, visibleTiles } from "../sim/vision";
 import { dist, DEG } from "../sim/vec";
@@ -596,9 +596,8 @@ export class Game {
     };
     const combat = this.world.events.some(
       (e) =>
-        e.t === "shot" &&
-        this.eventPoint(e.shooter) !== null &&
-        this.eventPoint(e.target) !== null,
+        (e.t === "shot" && this.eventPoint(e.shooter) !== null && this.eventPoint(e.target) !== null) ||
+        (e.t === "guardShot" && this.eventPoint(e.target) !== null),
     );
     this.anim = {
       result,
@@ -735,31 +734,16 @@ export class Game {
           .flatMap((r) => r.hits)
           .reduce((sum, h) => sum + h.damage, 0);
         const label = `${slot >= 0 ? `[${slot + 1}] ` : ""}${heavy ? "Cannon" : "MG"} ${hits}/${e.rounds.length}${e.rounds.some((r) => r.crit) ? " crit" : ""}${dealt > 0 ? ` −${dealt}` : ""}`;
-        const row = rows.get(e.target) ?? 0;
-        rows.set(e.target, row + 1);
-        // Round starts spread over the first part of the shot time, so every bolt lands before the results show.
-        const flight = CONFIG.combatShotMs * (1 - ROUND_STAGGER);
-        e.rounds.forEach((r, k) => {
-          const delay =
-            e.rounds.length > 1
-              ? (k / (e.rounds.length - 1)) *
-                CONFIG.combatShotMs *
-                ROUND_STAGGER
-              : 0;
-          const land = besideTarget(a, b, r.offset);
-          const struck = r.hit || r.hits.length > 0;
-          this.fx.shot(a, land, struck, heavy, delay, flight);
-          this.sound.at(heavy ? "cannon-fire" : "mg-fire", a, delay);
-          this.sound.at(struck ? "hit-metal" : "miss", land, delay + flight);
-        });
-        this.fx.label(
-          b,
-          label,
-          hits > 0 ? "#ffb070" : "#c8b898",
-          row,
-          CONFIG.combatShotMs,
-          CONFIG.combatReadMs,
-        );
+        this.playVolley(a, b, e.rounds, heavy, label, e.target, rows);
+      }
+      if (e.t === "guardShot") {
+        const b = this.eventPoint(e.target);
+        if (!b) continue;
+        const g = groundPoint(this.world.terrain, e.from);
+        const a = { x: g.x, y: g.y + (REGION.settlement.guardTowerHeight + 0.2) * PHYSICS.metersPerTile, z: g.z };
+        const hits = e.rounds.filter((r) => r.hit).length;
+        const dealt = e.rounds.flatMap((r) => r.hits).reduce((sum, h) => sum + h.damage, 0);
+        this.playVolley(a, b, e.rounds, false, `Guards ${hits}/${e.rounds.length}${dealt > 0 ? ` −${dealt}` : ""}`, e.target, rows);
       }
       if (e.t === "collision") {
         const p = this.eventPoint(e.a);
@@ -767,6 +751,36 @@ export class Game {
         if (p) this.sound.at("crash", p, 0);
       }
     }
+  }
+
+  // Plays one volley's bolts and sounds from a to b, then its result label over the target.
+  private playVolley(a: V3, b: V3, rounds: ShotRound[], heavy: boolean, label: string, targetId: string, rows: Map<string, number>): void {
+    const hits = rounds.filter((r) => r.hit).length;
+    const row = rows.get(targetId) ?? 0;
+    rows.set(targetId, row + 1);
+    // Round starts spread over the first part of the shot time, so every bolt lands before the results show.
+    const flight = CONFIG.combatShotMs * (1 - ROUND_STAGGER);
+    rounds.forEach((r, k) => {
+      const delay =
+        rounds.length > 1
+          ? (k / (rounds.length - 1)) *
+            CONFIG.combatShotMs *
+            ROUND_STAGGER
+          : 0;
+      const land = besideTarget(a, b, r.offset);
+      const struck = r.hit || r.hits.length > 0;
+      this.fx.shot(a, land, struck, heavy, delay, flight);
+      this.sound.at(heavy ? "cannon-fire" : "mg-fire", a, delay);
+      this.sound.at(struck ? "hit-metal" : "miss", land, delay + flight);
+    });
+    this.fx.label(
+      b,
+      label,
+      hits > 0 ? "#ffb070" : "#c8b898",
+      row,
+      CONFIG.combatShotMs,
+      CONFIG.combatReadMs,
+    );
   }
 
   // The path preview chains physics turns from the current state, so it shows what will happen.
