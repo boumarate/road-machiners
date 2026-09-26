@@ -6,6 +6,7 @@ import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
 import { makeVehicle } from './factory';
 import { isDriveObstacle } from './mapgen';
+import { generateNpcLoadout } from './npc-loadout';
 import { randInt, randRange } from './rng';
 import type { World } from './types';
 import { dist, type Vec } from './vec';
@@ -27,16 +28,15 @@ export function spawnInitial(world: World): void {
 
 // Returns false when no free spot was found this time; the next interval tries again.
 function spawnOne(world: World, tpl: NpcTemplate): boolean {
-  const radius = chassisDef(tpl.chassisId).radius;
+  const loadout = generateNpcLoadout(world, tpl);
+  const radius = chassisDef(loadout.chassisId).radius;
   for (let i = 0; i < SPAWN.tries; i++) {
     const pos = tpl.spawn === 'wild' ? wildSpot(world) : townSpot(world, radius);
     if (!pos || !isFree(world, pos, radius)) continue;
     const v = makeVehicle(world, {
       name: tpl.name,
       faction: tpl.faction,
-      chassisId: tpl.chassisId,
-      parts: tpl.parts,
-      cargo: tpl.cargo,
+      ...loadout,
       pos,
       heading: randRange(world, -Math.PI, Math.PI),
       brain: { templateId: tpl.id, activity: null, goal: null, home: { ...pos }, stepIndex: 0 },

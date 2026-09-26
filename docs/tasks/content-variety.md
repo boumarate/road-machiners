@@ -33,7 +33,7 @@ TDD: yes for deterministic catalog, generation, spawn, and terrain behavior. Bro
 - IV1 — Add exactly five entries to each of the seven approved catalog categories. Preserve old IDs and existing content.
 - IV2 — No changes to salvage/wreck stock rules, skills, places, map size, road network, terrain heights, core component variants, or NPC class behavior.
 - IV3 — All generated equipment fits, required components are mounted, goods fit, and configured equipment budgets are respected. Each table reference and weight is valid.
-- IV4 — All gameplay randomness goes through src/sim/rng.ts and is reproducible from world state. No render or physics imports enter src/sim.
+- IV4 — NPC sampling goes through src/sim/rng.ts and is reproducible from world state. Terrain patches use the existing seed-derived noise without consuming world RNG. No render or physics imports enter src/sim.
 - IV5 — All new goods/parts/chassis are usable through existing shops and inventory. New terrain occurs on Icarus and uses the same driving factor in previews and turns.
 - IV6 — Existing NPC population limits and wallet/upkeep behavior remain intact. Loot remains the existing inventory-derived behavior with no death-time roll.
 
@@ -78,6 +78,8 @@ Approach: extend the catalog owners, add one focused NPC generation component, a
 
 - Baseline npm test: 242 passed, one pre-existing timeout in combat.test.ts, the 80-turn traffic invariant at its 10-second deadline. Full output: tmp/baseline-npm-test.log. Recheck this test separately during final verification without changing its assertion or timeout.
 - PH1: six new catalog tests failed on missing content, then all 20 catalog/grid tests and npm run typecheck passed. Logs: tmp/content-red.log, tmp/content-green.log, tmp/content-typecheck.log.
+
+- PH2: seeded variation test failed with only two raider combinations, then 89 generation/grid/activity/economy/salvage/combat tests passed with two test workers. This includes the baseline 80-turn traffic test, unchanged, in 7.2 seconds. Typecheck passed. Logs: tmp/npc-red.log, tmp/npc-contracts.log, tmp/npc-regressions.log, tmp/npc-typecheck.log.
 
 ## Conclusion
 
