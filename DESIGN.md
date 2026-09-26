@@ -84,7 +84,7 @@ The map is a grid of tiles with a height on every tile corner, so the ground is 
 
 Danger is set by region, not by player level.
 
-Faction squads roam the map. Places are discovered by exploring. Towns and locations block driving. Their interaction radius is 1.5 times the site's base service reach, so the player uses services without driving into buildings.
+Faction squads roam the map. Places are discovered by exploring. Towns and locations block driving. Open locations have an interaction radius of 1.5 times the site's base service reach, so the player uses services without driving into buildings. Towns have a wall, and the Granary and the Salvage Yard have a palisade. Walled sites are used only near a gate, where a road enters. Each town gate has a guard gun. It shoots the nearest vehicle that fired within its range that turn, whatever its faction. Raiders also trade in towns, so guards judge by action. A town gate is therefore a safe place to run to.
 
 ## Sun, time and weather
 
