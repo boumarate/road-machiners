@@ -8,7 +8,7 @@ import { freeCells, mountedParts } from "../sim/grid";
 import { vehicleStats } from "../sim/stats";
 import type { Vehicle, World } from "../sim/types";
 import { el, panel } from "./dom";
-import { eventText } from "./format";
+import { eventText, formatNpcActivity } from "./format";
 
 const LOG_LINES = 14;
 const TOAST_MS = 3500;
@@ -125,6 +125,7 @@ export class Hud {
         `${def.name}: ${p.hp}/${def.hp}`,
       );
     });
+    const activity = formatNpcActivity(w, v);
     const stance =
       v.faction === "player" ? "" : hostile ? "hostile" : "neutral";
     this.info.style.display = "";
@@ -141,6 +142,7 @@ export class Hud {
         `Hull ${v.hull}/${s.hullMax}   Speed ${v.speed.toFixed(1)}`,
       ),
       el("div", { class: "bar" }, el("div", { style: `width:${pct}%` })),
+      ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),
       ...parts,
     );
   }

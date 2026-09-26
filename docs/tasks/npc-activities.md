@@ -1,6 +1,6 @@
 # NPC activities
 
-Status: executing
+Status: reviewing
 Branch: npc-activities
 Worktree: /Users/boris/Documents/Korovan/.worktrees/npc-activities
 Mode: hands-off
@@ -160,7 +160,16 @@ Approach: implement sequentially in this worktree, preserving shared game rules 
 
 ## Verify
 
-Local dependencies installed with `npm ci`. Baseline tests and typecheck passed. PH1 and PH2 committed. PH3 tests and typecheck pass: 157 tests, including collect-sell-upkeep and raid-loot-sell through actual sim turns. PH4 pending. Logs are in worktree-local `tmp/`.
+Result: passed. Local dependencies installed with `npm ci`. Baseline: 136 tests and typecheck passed. Current: 159 tests, typecheck, and production build passed. Build reports a large-bundle warning. Logs are in worktree-local `tmp/`.
+
+- CK1 (IV2, IV3) — simultaneous collectors, overflow, duplicate collection, remote trading, and unaffordable buying preserve stock and money: held in focused tests.
+- CK2 (IV1) — hidden vehicles, occluding rocks, distant salvage contents, and hidden inspection targets do not leak into decisions or display: held in focused tests.
+- CK3 (IV4, IV5) — work persists, danger and shortages interrupt it, and seeded turn runs remain deterministic: held in decision and existing world tests.
+- CK4 (IV6, IF1) — NPC fuel limits and payment work in both movement engines: held in sim and Rapier tests.
+- CK5 (IF2, IF3, AS1) — browser economic loop collected, sold, then paid for fuel in 26 Rapier turns on the actual map. Browser raid loop killed an NPC, collected its cargo, and sold it in 11 Rapier turns. No page errors. Scripts use the production turn pipeline and apply the resulting state to the running game.
+- CK6 — real mouse hover displays `scavenge — search a known salvage site`. Screenshot `tmp/npc-inspection.png` inspected. Small visual details remain for user confirmation.
+- Smoke: `npm run playtest -- --url http://127.0.0.1:5187` passed 12 turns at 28 fps without browser errors.
+- Goal: mechanical loops demonstrated. Fun and long-session economic sustainability require player feedback, not an automated assertion.
 
 The raid test exposed wrecks hiding themselves when NPC sight snapped their centers to tile centers. Observer sight now evaluates the requested point using the same occlusion rules. A regression verifies a wreck is visible while objects behind it are not. The buggy carries only one loose good with its equipment installed, so the loot test verifies capacity-limited transfer and conservation instead of assuming three cells.
 

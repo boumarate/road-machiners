@@ -23,6 +23,8 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 - Sim functions take state and return new state. Rendering reads state and never changes rules.
 - `src/sim/world.ts` runs the turn pipeline. Commands go through `update()`, which clones the world and mutates the draft.
 - `src/data/` holds all balance numbers and content. Sim code reads numbers from there, never inline.
+- `src/sim/npc-activities.ts` owns ordered NPC decisions and persistent activities. `src/data/npcs.ts` supplies shared class knowledge and thresholds. NPCs know fixed places but only perceive current vehicles through their own sight.
+- `src/sim/resources.ts` accesses driver resources. NPC fuel and supplies use the player base rules. `src/sim/economy.ts` owns paid transactions, and `src/sim/salvage.ts` owns finite site and wreck stock shared by all collectors. Town markets remain unlimited. Player defeat remains a separate recovery rule.
 - `src/phys/` runs vehicle movement in Rapier. `endTurn(world, physicsMove(...))` plugs it into the turn pipeline in place of the sim's 2D movement. A turn restores the physics world from a snapshot and simulates one second, so the path preview runs the same physics as the turn. Physics numbers live in `src/data/physics.ts`.
 - `src/three/` holds the 3D game: `game.ts` wires input to sim, sim and physics to the view, and the HTML UI. `src/three/render/` holds the 3D views. `src/render/` holds the palette and the ground painter. `src/ui/` holds the HTML overlay panels.
 - Any uncaught error shows a fullscreen crash screen with the message.

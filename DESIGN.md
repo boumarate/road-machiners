@@ -64,6 +64,16 @@ Danger is set by region, not by player level.
 
 Faction squads roam the map. Places are discovered by exploring. Towns and locations block driving. Their interaction radius is 1.5 times the site's base service reach, so the player uses services without driving into buildings.
 
+## NPC activities
+
+NPCs follow Space Rangers-style ordered rules: react to visible danger, address urgent upkeep, continue an unfinished activity, then choose class work. Classes share fixed knowledge of towns, salvage sites, and hunting grounds. They have no individual memory or live shared intelligence.
+
+Scavengers collect finite salvage, sell cargo, and fight manageable hostiles or flee. Traders buy profitable cargo while reserving upkeep money and flee from threats. Raiders search hunting grounds, fight, collect wreck cargo, and sell it. Each NPC pays for fuel, supplies, and repairs from its own wallet. Inspection shows its activity and reason.
+
+Convoy stock is shared with the player. Destroyed NPCs leave their actual goods and spare parts in wrecks. Collection takes only what fits and leaves the rest. Mounted equipment is not salvage. Old wreck retirement removes their remaining stock. Empty sites do not regenerate.
+
+Town markets have fixed prices and unlimited stock and money. Initial NPC resources and the oasis are explicit sources. No offscreen catch-up grants are used. Player defeat retains its separate cargo-loss and enemy-despawn rules.
+
 ## Trade
 
 Each town produces and needs fixed goods. Profit comes from knowing routes, as in Dustland Delivery.

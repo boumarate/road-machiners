@@ -22,6 +22,15 @@ function partName(world: World, vehicleId: string, partId: string): string {
   return p ? partDef(p.defId).name : 'part';
 }
 
+export function formatNpcActivity(world: World, vehicle: Vehicle): string | null {
+  const activity = vehicle.brain?.activity;
+  if (!activity || !playerSees(world, vehicle.pos)) return null;
+  const target = world.vehicles.find((v) => v.id === activity.targetId);
+  const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === activity.targetId);
+  const label = target && playerSees(world, target.pos) ? target.name : site && world.player.discovered.includes(site.id) ? site.name : null;
+  return `${activity.kind}${label ? `: ${label}` : ''} — ${activity.reason}`;
+}
+
 // Returns null for events not worth a log line.
 export function eventText(world: World, e: GameEvent): { text: string; cls: string } | null {
   const n = (id: string) => vehicleName(world, id);

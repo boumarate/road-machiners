@@ -34,6 +34,21 @@ function ordered(order: MoveOrder, speed = 0, heading = 0): World {
 const me = (w: World) => w.vehicles[0];
 
 describe('physics turns', () => {
+  it('limits and charges NPC fuel through the physics turn pipeline', () => {
+    const initial = emptyWorld();
+    const npc = addVehicle(initial, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });
+    npc.order = { kind: 'through', dest: { x: 25, y: 10 } };
+    const dry = structuredClone(initial);
+    dry.vehicles[1].resources!.fuel = 0;
+    const fueled = play(initial, 2);
+    const empty = play(dry, 2);
+    expect(fueled.w.vehicles[1].resources!.fuel).toBeLessThan(npc.resources!.fuel);
+    expect(fueled.w.vehicles[1].pos.x).toBeGreaterThan(empty.w.vehicles[1].pos.x);
+    expect(empty.w.vehicles[1].resources!.fuel).toBe(0);
+    freeDrive(fueled.d);
+    freeDrive(empty.d);
+  });
+
   it('a new truck sits still on flat ground', () => {
     const { w } = play(emptyWorld(), 2);
     expect(dist(me(w).pos, { x: 30, y: 30 })).toBeLessThan(0.1);
