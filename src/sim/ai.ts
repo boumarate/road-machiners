@@ -5,7 +5,7 @@ import { NPCS, SPAWN, type NpcTemplate } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { isHostile } from './combat';
-import { chance, randRange } from './rng';
+import { randRange } from './rng';
 import { vehicleStats } from './stats';
 import type { Vehicle, World } from './types';
 import { angleDiff, bearing, dist, type Vec } from './vec';
@@ -17,11 +17,21 @@ export function planNpcOrders(world: World): void {
     if (!v.brain) continue;
     const tpl = NPCS[v.brain.templateId];
     if (!tpl) throw new Error(`Unknown NPC template ${v.brain.templateId}`);
+    const b = v.brain;
+    const yielding = tpl.brain !== 'raider' && vehicleAhead(world, v);
+    if (b.lastPos && !yielding && dist(v.pos, b.lastPos) < RULES.arriveRadius / 2 && v.order && v.order.kind !== 'brake') b.stalled = (b.stalled ?? 0) + 1;
+    else b.stalled = 0;
+    b.lastPos = { ...v.pos };
+    if (b.stalled >= RULES.npcStuckTurns) {
+      b.recovery = RULES.npcRecoveryTurns;
+      b.recoveryGoal = { x: v.pos.x - Math.cos(v.heading) * (RULES.reverse.distance + RULES.minAimDistance), y: v.pos.y - Math.sin(v.heading) * (RULES.reverse.distance + RULES.minAimDistance) };
+      b.stalled = 0;
+    }
     const chasing = tpl.brain === 'raider' ? nearestHostile(world, v, tpl.aggroRange) : null;
     const goal = chasing ? fightGoal(world, v, tpl, chasing) : tpl.brain === 'raider' ? patrolGoal(world, v) : travelGoal(world, v, tpl);
-    v.order = tpl.brain !== 'raider' && vehicleAhead(world, v) ? { kind: 'brake' } : { kind: 'through', dest: goal };
-    // A careless driver skips route planning this turn and drives straight, maybe into a rock.
-    v.direct = !chance(world, tpl.avoidChance);
+    v.order = yielding ? { kind: 'brake' } : b.recovery ? { kind: 'stopAt', dest: b.recoveryGoal! } : { kind: tpl.brain === 'raider' ? 'through' : 'stopAt', dest: goal };
+    if (b.recovery) b.recovery--;
+    v.direct = false;
   }
 }
 
@@ -68,8 +78,15 @@ function travelGoal(world: World, v: Vehicle, tpl: NpcTemplate): Vec {
   const route = tpl.brain === 'trader' ? traderRoute() : scavengerRoute();
   const b = v.brain!;
   const wp = route[b.stepIndex % route.length];
-  if (dist(v.pos, wp) < RULES.arriveRadius * 4) b.stepIndex = (b.stepIndex + 1) % route.length;
-  return route[b.stepIndex % route.length];
+  const site = [...REGION.towns, ...REGION.locations].find((s) => dist(s.pos, wp) < RULES.arriveRadius);
+  const reach = site ? site.radius + vehicleStats(world, v).radius + RULES.arriveRadius * 2 : RULES.arriveRadius * 4;
+  if (dist(v.pos, wp) < reach) b.stepIndex = (b.stepIndex + 1) % route.length;
+  const next = route[b.stepIndex % route.length];
+  const destination = [...REGION.towns, ...REGION.locations].find((s) => dist(s.pos, next) < RULES.arriveRadius);
+  if (!destination) return next;
+  const r = destination.radius + vehicleStats(world, v).radius + RULES.arriveRadius / 2;
+  const a = bearing(destination.pos, v.pos);
+  return { x: destination.pos.x + Math.cos(a) * r, y: destination.pos.y + Math.sin(a) * r };
 }
 
 function traderRoute(): Vec[] {

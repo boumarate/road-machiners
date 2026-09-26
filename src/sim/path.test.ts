@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { REGION } from "../data/region";
-import { resolveMovement } from "./movement";
-import { route } from "./path";
-import { emptyWorld } from "./testkit";
-import { dist, segmentDist } from "./vec";
-import { endTurn, newWorld, setMoveOrder } from "./world";
+import { describe, expect, it } from 'vitest';
+import { REGION } from '../data/region';
+import { resolveMovement } from './movement';
+import { route } from './path';
+import { locationAt } from './sites';
+import { emptyWorld } from './testkit';
+import { dist, segmentDist } from './vec';
+import { endTurn, newWorld, setMoveOrder } from './world';
 
 describe("route", () => {
   it("goes straight when nothing is in the way", () => {
@@ -45,10 +46,35 @@ describe("route", () => {
     expect(dist(w.vehicles[0].pos, { x: 40, y: 30 })).toBeLessThan(0.5);
   });
 
-  it("the player drives from Tin Hollow to Saltmarch without hitting static obstacles", () => {
-    const salt = REGION.towns.find((t) => t.id === "salt")!;
-    let w = setMoveOrder(newWorld(1337), { kind: "stopAt", dest: salt.pos });
-    w.vehicles = w.vehicles.filter((v) => v.faction === "player");
+  it('town buildings fit inside the blocked site instead of the road', () => {
+    const w = newWorld(1337);
+    for (const town of REGION.towns) {
+      const buildings = w.obstacles.filter((o) => o.kind === 'building' && o.id.startsWith(`bld-${town.id}-`));
+      expect(buildings.length).toBeGreaterThan(0);
+      for (const building of buildings) expect(dist(building.pos, town.pos) + building.r).toBeLessThanOrEqual(town.radius);
+    }
+  });
+
+  it('sites block driving but permit interaction from their edge', () => {
+    const w = newWorld(1337);
+    w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
+    const site = REGION.locations.find((l) => l.kind === 'oasis')!;
+    const v = w.vehicles[0];
+    v.pos = { x: site.pos.x + site.radius + 2, y: site.pos.y };
+    v.heading = Math.PI;
+    v.speed = 3;
+    v.order = { kind: 'through', dest: site.pos };
+    v.direct = true;
+    resolveMovement(w);
+    expect(dist(v.pos, site.pos)).toBeGreaterThanOrEqual(site.radius + 0.6 - 0.02);
+    expect(w.events.some((e) => e.t === 'collision' && e.b === `site-${site.id}`)).toBe(true);
+    expect(locationAt(w)?.id).toBe(site.id);
+  });
+
+  it('the player drives from Tin Hollow to Saltmarch without hitting static obstacles', () => {
+    const salt = REGION.towns.find((t) => t.id === 'salt')!;
+    let w = setMoveOrder(newWorld(1337), { kind: 'stopAt', dest: salt.pos });
+    w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
     w.player.fuel = 100;
     const me = w.player.vehicleId;
     for (let i = 0; i < 40 && w.vehicles[0].order; i++) {
@@ -59,6 +85,7 @@ describe("route", () => {
       );
       expect(staticHits).toEqual([]);
     }
-    expect(dist(w.vehicles[0].pos, salt.pos)).toBeLessThan(salt.radius);
+    expect(dist(w.vehicles[0].pos, salt.pos)).toBeGreaterThanOrEqual(salt.radius + 0.6 - 0.02);
+    expect(dist(w.vehicles[0].pos, salt.pos)).toBeLessThanOrEqual(salt.radius + 1.5);
   });
 });

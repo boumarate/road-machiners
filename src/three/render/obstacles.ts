@@ -48,7 +48,10 @@ function buildObstacle(t: Terrain, o: Obstacle): THREE.Object3D {
   if (o.kind === 'rock') return buildRock(t, o);
   if (o.kind === 'wreck') return buildWreck(t, o);
   if (o.kind === 'building') return buildBuilding(t, o);
-  return buildWater(t, o);
+  if (o.kind === 'water') return buildWater(t, o);
+  // A site's boundary blocks traffic but has no model of its own; buildSites draws the site.
+  if (o.kind === 'site') return new THREE.Group();
+  throw new Error(`No model for obstacle kind ${(o as Obstacle).kind}`);
 }
 
 function seat(t: Terrain, o: Obstacle): THREE.Group {

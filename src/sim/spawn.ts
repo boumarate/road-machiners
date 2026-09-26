@@ -5,6 +5,7 @@ import { chassisDef } from '../data/chassis';
 import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
 import { makeVehicle } from './factory';
+import { isDriveObstacle } from './mapgen';
 import { randInt, randRange } from './rng';
 import type { World } from './types';
 import { dist, type Vec } from './vec';
@@ -28,7 +29,7 @@ export function spawnInitial(world: World): void {
 function spawnOne(world: World, tpl: NpcTemplate): boolean {
   const radius = chassisDef(tpl.chassisId).radius;
   for (let i = 0; i < SPAWN.tries; i++) {
-    const pos = tpl.spawn === 'wild' ? wildSpot(world) : townSpot(world);
+    const pos = tpl.spawn === 'wild' ? wildSpot(world) : townSpot(world, radius);
     if (!pos || !isFree(world, pos, radius)) continue;
     const v = makeVehicle(world, {
       name: tpl.name,
@@ -56,16 +57,16 @@ function wildSpot(world: World): Vec | null {
   return pos;
 }
 
-function townSpot(world: World): Vec {
+function townSpot(world: World, radius: number): Vec {
   const town = REGION.towns[randInt(world, 0, REGION.towns.length - 1)];
   const a = randRange(world, -Math.PI, Math.PI);
-  const d = randRange(world, 0, town.radius * 0.7);
+  const d = town.radius + radius + 0.3 + randRange(world, 0, SPAWN.townSpread);
   return { x: town.pos.x + Math.cos(a) * d, y: town.pos.y + Math.sin(a) * d };
 }
 
 function isFree(world: World, pos: Vec, radius: number): boolean {
   if (pos.x < radius || pos.y < radius || pos.x > world.size - radius || pos.y > world.size - radius) return false;
   const margin = 0.3;
-  if (world.obstacles.some((o) => dist(o.pos, pos) < o.r + radius + margin)) return false;
+  if (world.obstacles.filter(isDriveObstacle).some((o) => dist(o.pos, pos) < o.r + radius + margin)) return false;
   return world.vehicles.every((v) => dist(v.pos, pos) >= chassisDef(v.chassisId).radius + radius + margin);
 }

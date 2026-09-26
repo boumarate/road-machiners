@@ -25,12 +25,12 @@ export function discoverSites(world: World): void {
   }
 }
 
-// Passive effect: stopping at the oasis refills water for free.
+// Passive effect: stopping at the oasis refills supplies for free.
 export function useOasis(world: World): void {
   const loc = locationAt(world);
-  if (loc?.kind !== 'oasis' || world.player.water >= RULES.waterCap) return;
-  world.player.water = RULES.waterCap;
-  world.events.push({ t: 'info', text: `Filled water at ${loc.name}` });
+  if (loc?.kind !== 'oasis' || world.player.supplies >= RULES.suppliesCap) return;
+  world.player.supplies = RULES.suppliesCap;
+  world.events.push({ t: 'info', text: `Filled supplies at ${loc.name}` });
 }
 
 function seesArea(world: World, center: Vec, radius: number): boolean {

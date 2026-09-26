@@ -5,8 +5,9 @@ import { skillBonus } from '../data/skills';
 import { chance, randInt } from './rng';
 import { damageHull, damagePart } from './damage';
 import { mountedParts } from './grid';
+import { isDriveObstacle } from './mapgen';
 import { vehicleStats, type VehicleStats } from './stats';
-import { advanceOn, nextOrder, reached, steerTo, type Steer } from './steering';
+import { advanceOn, nextOrder, reached, steerTo, steerWithFuel, type Steer } from './steering';
 import { isCliff, tileAt } from './terrain';
 import type { Pose, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
@@ -33,13 +34,8 @@ export function resolveMovement(world: World): void {
   for (const m of movers) finishMove(world, m);
 }
 
-// Steering for this turn. A player without fuel for the planned distance gets no engine push:
-// the truck rolls on, slowing at its brake rate, and cannot back up. Fuel clamps at zero.
 function moveSteer(world: World, v: Vehicle, s: VehicleStats): Steer {
-  const steer = steerTo(world, s, v, v.order, v.direct);
-  if (v.faction !== 'player' || Math.abs(steer.speed) * s.fuelPerTile <= world.player.fuel) return steer;
-  const roll = Math.max(0, v.speed - s.brake);
-  return steer.speed < 0 ? { speed: roll, turn: 0 } : { speed: Math.min(steer.speed, roll), turn: steer.turn };
+  return v.faction === 'player' ? steerWithFuel(world, s, v, v.order, v.direct, world.player.fuel) : steerTo(world, s, v, v.order, v.direct);
 }
 
 function stepMover(world: World, m: Mover): void {
@@ -62,7 +58,7 @@ function collideStatic(world: World, m: Mover): void {
     crash(world, m, 'cliff');
     return;
   }
-  for (const o of world.obstacles) {
+  for (const o of world.obstacles.filter(isDriveObstacle)) {
     const d = dist(m.v.pos, o.pos);
     if (d >= o.r + m.s.radius) continue;
     pushOut(m.v.pos, o.pos, o.r + m.s.radius, m.v.heading);
@@ -200,7 +196,7 @@ export function separateAll(world: World, movers: { v: Vehicle; s: VehicleStats 
   for (let round = 0; round < SEPARATE_ROUNDS; round++) {
     let moved = false;
     for (const m of movers) {
-      for (const o of world.obstacles) {
+      for (const o of world.obstacles.filter(isDriveObstacle)) {
         if (dist(m.v.pos, o.pos) < o.r + m.s.radius) {
           pushOut(m.v.pos, o.pos, o.r + m.s.radius, m.v.heading);
           moved = true;
@@ -226,7 +222,7 @@ export function separateAll(world: World, movers: { v: Vehicle; s: VehicleStats 
 export function overlaps(world: World, movers: { v: Vehicle; s: VehicleStats }[]): string[] {
   const bad: string[] = [];
   for (const m of movers) {
-    for (const o of world.obstacles) if (dist(m.v.pos, o.pos) < o.r + m.s.radius - EPS) bad.push(`${m.v.id}/${o.id}`);
+    for (const o of world.obstacles.filter(isDriveObstacle)) if (dist(m.v.pos, o.pos) < o.r + m.s.radius - EPS) bad.push(`${m.v.id}/${o.id}`);
   }
   for (let i = 0; i < movers.length; i++) {
     for (let j = i + 1; j < movers.length; j++) {

@@ -118,6 +118,42 @@ describe('physics turns', () => {
     expect(me(w).hull).toBeLessThan(hull);
   });
 
+  it('a site stops the truck at its edge; its buildings are scenery', () => {
+    let w = ordered({ kind: 'through', dest: { x: 45, y: 30 } }, 4);
+    w.obstacles = [
+      { id: 'site-test', pos: { x: 40, y: 30 }, r: 3, kind: 'site' },
+      { id: 'bld-test-0', pos: { x: 35.5, y: 30 }, r: 0.6, kind: 'building' },
+    ];
+    let d = buildDrive(w);
+    expect(d.obstacles['bld-test-0']).toBeUndefined();
+    const hits: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      let r: TurnResult | null = null;
+      w = endTurn(w, physicsMove(d, (x) => (r = x)));
+      hits.push(...w.events.flatMap((e) => (e.t === 'collision' ? [e.b] : [])));
+      freeDrive(d);
+      d = r!.next;
+    }
+    expect(hits).toContain('site-test');
+    expect(hits).not.toContain('bld-test-0');
+    expect(dist(me(w).pos, { x: 40, y: 30 })).toBeGreaterThan(3);
+  });
+
+  it('an empty tank still crawls toward the click', () => {
+    const w0 = ordered({ kind: 'through', dest: { x: 45, y: 30 } });
+    w0.player.fuel = 0;
+    const { w } = play(w0, 2);
+    expect(me(w).pos.x).toBeGreaterThan(30.5);
+    expect(me(w).speed).toBeLessThanOrEqual(RULES.crawlSpeed + 0.3);
+  });
+
+  it('low fuel halves the top speed', () => {
+    const w0 = ordered({ kind: 'through', dest: { x: 59, y: 30 } }, 5);
+    w0.player.fuel = 2; // under the low-fuel share of the tank, enough to drive
+    const { w } = play(w0, 2);
+    expect(me(w).speed).toBeLessThan(5);
+  });
+
   it('new vehicles and obstacles join the physics world', () => {
     const w = emptyWorld();
     const d = buildDrive(w);

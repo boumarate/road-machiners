@@ -3,7 +3,12 @@
 export const RULES = {
   // Movement
   substeps: 20, // per turn; step length must stay below the smallest collision radius
-  crawlSpeed: 1, // speed used for sharp turns
+  crawlSpeed: 1, // speed used for sharp turns and moving without fuel
+  lowFuelThreshold: 0.2, // share of tank remaining when speed is limited
+  lowFuelSpeedFactor: 0.5, // share of normal top speed below the threshold
+  fuelUseFactor: 0.1, // fuel burns at a tenth of the chassis rate
+  npcStuckTurns: 2, // failed drive attempts before backing out
+  npcRecoveryTurns: 2, // turns spent backing out before resuming the route
   // At or below `below` speed, a truck more than `angle` degrees off its destination backs up
   // `distance` tiles in a turn, swinging its nose by up to the chassis reverseTurn. It stops after.
   reverse: { below: 1, angle: 45, distance: 1 },
@@ -36,11 +41,9 @@ export const RULES = {
   maxKillWrecks: 12, // oldest wrecks from kills are cleared past this, so obstacles do not pile up
 
   // Supplies, per turn
-  waterPerTurn: 0.25,
-  foodPerTurn: 0.25,
-  waterCap: 20,
-  foodCap: 20,
-  starveDamage: 5, // character health lost per turn per empty supply
+  suppliesPerTurn: 0.025,
+  suppliesCap: 20,
+  starveDamage: 5, // character health lost per turn without supplies
   maxHealth: 100,
 
   // Progress
@@ -52,8 +55,8 @@ export const RULES = {
 
   // Defeat
   defeatMoneyLoss: 0.5,
-  defeatHull: 0.25,
+  defeatHull: 0.05,
   defeatHealth: 50,
-  defeatClearRadius: 15, // hostiles within this range of the wake town leave
-  defeatSupplies: { fuel: 8, water: 4, food: 4 }, // townsfolk top you up to at least this, so a broke player can move on
+  defeatClearRadius: 15, // robbers leave the truck after the fight
+  defeatSupplies: 4, // enough to survive the walk back after patching up
 };

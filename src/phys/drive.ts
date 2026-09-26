@@ -7,6 +7,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
 import { RULES } from '../data/rules';
+import { isDriveObstacle } from '../sim/mapgen';
 import { vehicleStats, type VehicleStats } from '../sim/stats';
 import { zoneSpeed } from '../sim/steering';
 import { heightAt } from '../sim/terrain';
@@ -81,13 +82,14 @@ export function syncDrive(d: Drive, w: World): void {
     const t = body.translation();
     if (dist({ x: t.x / S, y: t.z / S }, v.pos) > TELEPORT_TILES) placeBody(body, w, v);
   }
-  const obstacleIds = new Set(w.obstacles.map((o) => o.id));
+  const obstacleIds = new Set(w.obstacles.filter(isDriveObstacle).map((o) => o.id));
   for (const [id, handle] of Object.entries(d.obstacles)) {
     if (obstacleIds.has(id)) continue;
     d.world.removeCollider(d.world.getCollider(handle), false);
     delete d.obstacles[id];
   }
-  for (const o of w.obstacles) {
+  // Only obstacles that block driving get colliders. Site props are scenery; the site boundary blocks instead.
+  for (const o of w.obstacles.filter(isDriveObstacle)) {
     if (d.obstacles[o.id] !== undefined) continue;
     const ground = heightAt(w.terrain, o.pos.x, o.pos.y) * S;
     const half = PHYSICS.rockHeight / 2;
@@ -201,10 +203,11 @@ function makeCar(world: RAPIER.World, body: RAPIER.RigidBody, b: Body): RAPIER.D
 // steer at, and a speed from the throttle zone of the click. Without fuel the engine gives nothing.
 type Plan = { dest: Vec | null; target: number; stopAt: boolean; engine: boolean; maxSteer: number; engineForce: number; brakeForce: number };
 
-function planTurn(w: World, v: Vehicle, s: VehicleStats, body: RAPIER.RigidBody, order: MoveOrder | null): Plan {
+function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBody, order: MoveOrder | null): Plan {
   const b = bodyOf(v.chassisId);
   const speed = Math.max(0, toTilesPerTurn(forwardSpeed(body)));
-  const engine = s.maxSpeed > 0 && (v.faction !== 'player' || w.player.fuel > 0);
+  const s = v.faction === 'player' ? fuelLimited(w, v, full, speed, order) : full;
+  const engine = s.maxSpeed > 0;
   const base = {
     engine,
     maxSteer: T.maxSteer * (s.turnSlow / (chassisDef(v.chassisId).turnSlow * DEG)),
@@ -216,6 +219,19 @@ function planTurn(w: World, v: Vehicle, s: VehicleStats, body: RAPIER.RigidBody,
   if (order.kind === 'stopAt') return { ...base, dest: order.dest, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
   const next = zoneSpeed(s, speed, dist(v.pos, order.dest));
   return { ...base, dest: order.dest, target: toMps(next), stopAt: false };
+}
+
+// The player's fuel limits the engine like the 2D rules: under the low-fuel share of the tank the top
+// speed halves, and a tank that cannot cover this turn's drive still lets the truck crawl.
+function fuelLimited(w: World, v: Vehicle, s: VehicleStats, speed: number, order: MoveOrder | null): VehicleStats {
+  const fuel = w.player.fuel;
+  const low = fuel > 0 && fuel < chassisDef(v.chassisId).fuelCap * RULES.lowFuelThreshold;
+  const limit = low ? Math.max(s.maxSpeed * RULES.lowFuelSpeedFactor, speed - s.brake) : s.maxSpeed;
+  const capped = low ? { ...s, maxSpeed: limit } : s;
+  const wanted = order?.kind === 'through' ? zoneSpeed(capped, speed, dist(v.pos, order.dest)) : Math.min(capped.maxSpeed, speed + capped.accel);
+  if (wanted * s.fuelPerTile <= fuel) return capped;
+  const cap = Math.max(RULES.crawlSpeed, speed - s.brake);
+  return { ...s, maxSpeed: cap, accel: Math.min(s.accel, RULES.crawlSpeed) };
 }
 
 // One physics step of driving. Steer at the destination and hold the turn's speed. A stop order slows

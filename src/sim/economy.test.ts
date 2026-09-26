@@ -11,6 +11,7 @@ import { canScavenge, scavenge, useOasis } from './locations';
 import { gainXp, spendSkillPoint, xpForLevel } from './progress';
 import { vehicleStats } from './stats';
 import { consumeSupplies } from './supplies';
+import { locationAt, townAt } from './sites';
 import { addVehicle, emptyWorld } from './testkit';
 import { dist } from './vec';
 import { endTurn, newWorld } from './world';
@@ -23,7 +24,7 @@ describe('trade', () => {
   it('buying moves money into cargo', () => {
     const w = buyGood(inTin(), 'scrap', 3);
     expect(goodsCount(w.vehicles[0]).scrap).toBe(2 + 3);
-    expect(w.player.money).toBe(300 - 3 * buyPrice(w, 'tin', 'scrap'));
+    expect(w.player.money).toBe(1500 - 3 * buyPrice(w, 'tin', 'scrap'));
   });
 
   it('enforces cargo capacity and money', () => {
@@ -62,9 +63,9 @@ describe('trade', () => {
 
 describe('garage', () => {
   it('buys supplies up to the cap', () => {
-    const w = buySupply(inTin(), 'water', RULES.waterCap - 12);
-    expect(w.player.water).toBe(RULES.waterCap);
-    expect(() => buySupply(w, 'water', 1)).toThrow();
+    const w = buySupply(inTin(), 'supplies', RULES.suppliesCap - 12);
+    expect(w.player.supplies).toBe(RULES.suppliesCap);
+    expect(() => buySupply(w, 'supplies', 1)).toThrow();
   });
 
   it('repairs hull and parts for money', () => {
@@ -74,7 +75,7 @@ describe('garage', () => {
     const r = repairAll(w);
     expect(r.vehicles[0].hull).toBe(vehicleStats(r, r.vehicles[0]).hullMax);
     expect(mountedParts(r.vehicles[0])[0].hp).toBeGreaterThan(0);
-    expect(r.player.money).toBeLessThan(300);
+    expect(r.player.money).toBeLessThan(1500);
   });
 
   it('chassis swap keeps fitting parts and stores the rest', () => {
@@ -93,30 +94,45 @@ describe('garage', () => {
 });
 
 describe('supplies', () => {
-  it('water and food drain each turn, empty hurts health', () => {
+  it('supplies drain each turn and running out hurts health', () => {
     const w = emptyWorld();
-    w.player.water = 0.1;
+    w.player.supplies = 0.01;
     consumeSupplies(w);
-    expect(w.player.water).toBe(0);
-    expect(w.player.food).toBeCloseTo(12 - RULES.foodPerTurn);
+    expect(w.player.supplies).toBe(0);
     expect(w.player.health).toBe(RULES.maxHealth - RULES.starveDamage);
+  });
+
+  it('supplies drain a quarter unit over ten turns', () => {
+    const w = emptyWorld();
+    for (let i = 0; i < 10; i++) consumeSupplies(w);
+    expect(w.player.supplies).toBeCloseTo(12 - 0.25);
   });
 
   it('survival cuts use', () => {
     const w = emptyWorld();
     w.player.skills.survival = 2;
     consumeSupplies(w);
-    expect(12 - w.player.water).toBeLessThan(RULES.waterPerTurn);
+    expect(12 - w.player.supplies).toBeLessThan(RULES.suppliesPerTurn);
   });
 });
 
 describe('locations', () => {
-  it('oasis refills water', () => {
+  it('towns and locations use a 1.5x interaction radius', () => {
+    const townReach = (tin.radius + ECONOMY.useRange) * 1.5;
+    const oasis = REGION.locations.find((l) => l.kind === 'oasis')!;
+    const locationReach = (oasis.radius + ECONOMY.useRange) * 1.5;
+    expect(townAt(emptyWorld({ x: tin.pos.x + townReach - 0.01, y: tin.pos.y }))?.id).toBe(tin.id);
+    expect(townAt(emptyWorld({ x: tin.pos.x + townReach + 0.01, y: tin.pos.y }))).toBeNull();
+    expect(locationAt(emptyWorld({ x: oasis.pos.x + locationReach - 0.01, y: oasis.pos.y }))?.id).toBe(oasis.id);
+    expect(locationAt(emptyWorld({ x: oasis.pos.x + locationReach + 0.01, y: oasis.pos.y }))).toBeNull();
+  });
+
+  it('oasis refills supplies', () => {
     const oasis = REGION.locations.find((l) => l.kind === 'oasis')!;
     const w = emptyWorld({ x: oasis.pos.x + 2, y: oasis.pos.y });
-    w.player.water = 1;
+    w.player.supplies = 1;
     useOasis(w);
-    expect(w.player.water).toBe(RULES.waterCap);
+    expect(w.player.supplies).toBe(RULES.suppliesCap);
   });
 
   it('convoy can be scavenged once', () => {
@@ -162,7 +178,7 @@ describe('progress', () => {
 });
 
 describe('defeat', () => {
-  it('knocks out, robs, and wakes the player in the nearest town', () => {
+  it('robs the player and patches the truck where it fell', () => {
     const w = emptyWorld({ x: 20, y: 40 });
     w.obstacles = newWorld(1).obstacles;
     const me = w.vehicles[0];
@@ -170,21 +186,35 @@ describe('defeat', () => {
     w.player.skills.gunnery = 2;
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: tin.pos.x + 4, y: tin.pos.y - 4 });
     checkDefeat(w);
-    expect(dist(me.pos, tin.pos)).toBeLessThan(tin.radius);
-    expect(me.hull).toBeGreaterThan(0);
+    expect(me.pos).toEqual({ x: 20, y: 40 });
+    expect(me.hull).toBe(Math.max(1, Math.round(vehicleStats(w, me).hullMax * RULES.defeatHull)));
+    expect(w.player.fuel).toBe(0);
     expect(goodsCount(me)).toEqual({});
-    expect(w.player.money).toBe(150);
+    expect(w.player.money).toBe(750);
     expect(w.player.skills.gunnery).toBe(2);
     expect(w.vehicles.find((v) => v.id === raider.id)).toBeUndefined();
     expect(w.events.some((e) => e.t === 'defeat')).toBe(true);
   });
 
-  it('a broke, starving player wakes with enough supplies to move on', () => {
+  it('a broke, starving player can recover without fuel', () => {
     let w = emptyWorld({ x: 30, y: 30 });
-    Object.assign(w.player, { fuel: 0, water: 0, food: 0, money: 0 });
+    Object.assign(w.player, { fuel: 0, supplies: 0, money: 0 });
     for (let i = 0; i < 20; i++) w = endTurn(w);
     expect(w.player.knockouts).toBe(1);
-    expect(w.player.fuel).toBeGreaterThan(0);
+    expect(w.player.fuel).toBe(0);
+    expect(w.vehicles[0].hull).toBeGreaterThan(0);
+  });
+
+  it('can crawl toward town after losing a battle', () => {
+    let w = emptyWorld({ x: 20, y: 40 });
+    w.vehicles[0].hull = 0;
+    w = endTurn(w);
+    const from = { ...w.vehicles[0].pos };
+    w.vehicles[0].order = { kind: 'stopAt', dest: { x: 16, y: 43 } };
+    w = endTurn(w);
+    expect(dist(w.vehicles[0].pos, tin.pos)).toBeLessThan(dist(from, tin.pos));
+    expect(w.player.fuel).toBe(0);
+    expect(w.vehicles[0].hull).toBeGreaterThan(0);
   });
 
   it('the game keeps running after a defeat', () => {

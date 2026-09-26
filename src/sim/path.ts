@@ -4,6 +4,7 @@
 
 import { TERRAIN_TYPES } from '../data/terrain';
 import { isCliff, tileAt, type Terrain } from './terrain';
+import { isDriveObstacle } from './mapgen';
 import type { World } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 
@@ -21,7 +22,7 @@ const GRID_CACHE_MAX = 16;
 export type Blocker = { pos: Vec; r: number };
 
 export function route(world: World, from: Vec, to: Vec, radius: number, extra: Blocker[]): Vec[] {
-  const blockers: Blocker[] = [...world.obstacles, ...extra];
+  const blockers: Blocker[] = [...world.obstacles.filter(isDriveObstacle), ...extra];
   const grid = gridFor(world.terrain, blockers, radius);
   const start = cellOf(grid, from);
   const goal = nearestFree(grid, cellOf(grid, to));
@@ -35,7 +36,7 @@ export function route(world: World, from: Vec, to: Vec, radius: number, extra: B
 
 // Whether a vehicle can drive straight from a to b without touching an obstacle or a cliff.
 export function straightClear(world: World, a: Vec, b: Vec, radius: number, extra: Blocker[]): boolean {
-  return clearLine(world.terrain, [...world.obstacles, ...extra], a, b, radius + CLEARANCE, 0);
+  return clearLine(world.terrain, [...world.obstacles.filter(isDriveObstacle), ...extra], a, b, radius + CLEARANCE, 0);
 }
 
 export function routeLength(from: Vec, points: Vec[]): number {

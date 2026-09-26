@@ -16,7 +16,7 @@ import { vehicleStats } from './stats';
 import type { PartInstance, Vehicle, World } from './types';
 import { update } from './world';
 
-export type Supply = 'fuel' | 'water' | 'food';
+export type Supply = 'fuel' | 'supplies';
 
 function spread(world: World): number {
   return Math.max(0, ECONOMY.spread - skillBonus('trade', world.player.skills.trade));
@@ -74,7 +74,7 @@ export function sellGood(world: World, good: string, n: number): World {
 
 export function supplyRoom(world: World, kind: Supply): number {
   const p = world.player;
-  const cap = kind === 'fuel' ? chassisDef(playerVehicle(world).chassisId).fuelCap : kind === 'water' ? RULES.waterCap : RULES.foodCap;
+  const cap = kind === 'fuel' ? chassisDef(playerVehicle(world).chassisId).fuelCap : RULES.suppliesCap;
   return Math.max(0, Math.floor(cap - p[kind]));
 }
 
