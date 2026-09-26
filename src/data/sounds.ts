@@ -34,7 +34,7 @@ const DEFS = {
   "ui-confirm": { bus: "ui", setup: "cab", pitchJitter: 0, maxVoices: 1, volume: 0.8, loop: false, prompts: ["Heavy steel ratchet clicking tight, a deal sealed."], seconds: 0.6 },
   "ui-error": { bus: "ui", setup: "cab", pitchJitter: 0, maxVoices: 1, volume: 0.8, loop: false, prompts: ["Dull thud of a jammed metal lever that will not move."], seconds: 0.5 },
   // Quiet in-cab moments as a turn starts: a family of different sounds, never the same twice in a row.
-  "end-turn": { bus: "ambient", setup: "cab", volume: 1, pitchJitter: 0.03, maxVoices: 1, loop: false, seconds: 2.5, prompts: [
+  "end-turn": { bus: "ui", setup: "cab", volume: 1, pitchJitter: 0.03, maxVoices: 1, loop: false, seconds: 2.5, prompts: [
     "Steering wheel turned slowly by hand, leather creak and a soft mechanical tick.",
     "Manual gearbox shifted up, soft clutch press and a metal gear lever clunk.",
     "Old diesel truck speeding up gently on a dirt road, heard from inside the cab, muffled.",
@@ -66,9 +66,9 @@ const DEFS = {
   // Loops.
   // Driving: one per turn, by how the player's speed changes over the turn.
   "drive-accel": { bus: "sfx", setup: "field", volume: 0.5, pitchJitter: 0.04, maxVoices: 1, loop: false, prompts: ["Heavy diesel truck accelerating hard from low speed, engine revs rising, gravel under the tires."], seconds: 1.5 },
-  "drive-cruise": { bus: "sfx", setup: "field", volume: 0.4, pitchJitter: 0.04, maxVoices: 1, loop: false, prompts: ["Heavy diesel truck driving at steady medium speed on a dirt road, even engine note, tires on gravel."], seconds: 1.5 },
-  "drive-decel": { bus: "sfx", setup: "field", volume: 0.4, pitchJitter: 0.04, maxVoices: 1, loop: false, prompts: ["Heavy diesel truck easing off the throttle, engine revs falling, coasting on gravel."], seconds: 1.5 },
-  "drive-brake": { bus: "sfx", setup: "field", volume: 0.55, pitchJitter: 0.04, maxVoices: 1, loop: false, prompts: ["Heavy truck braking hard on gravel, short brake squeal, air brake hiss, tires skidding on stones."], seconds: 1.5 },
+  "drive-cruise": { bus: "sfx", setup: "field", volume: 0.4, pitchJitter: 0.04, maxVoices: 1, loop: false, prompts: ["Real recording of an old heavy diesel truck driving at a steady speed, microphone riding alongside the truck. Constant engine note for the whole clip, no rise, no fall, no pass-by. No sound design, no movie effects."], seconds: 1.2 },
+  "drive-decel": { bus: "sfx", setup: "field", volume: 0.4, pitchJitter: 0.04, maxVoices: 1, loop: false, prompts: ["Real recording of an old heavy diesel truck lifting off the throttle, microphone riding alongside the truck. Engine revs fall steadily from start to end as it coasts. No sound design, no movie effects."], seconds: 1.2 },
+  "drive-brake": { bus: "sfx", setup: "field", volume: 0.55, pitchJitter: 0.04, maxVoices: 1, loop: false, prompts: ["Real recording of an old heavy diesel truck braking firmly, microphone riding alongside the truck. The brakes bite at once, a short low brake groan and air hiss, engine revs drop. No sound design, no movie effects."], seconds: 1.2 },
   "wind": { bus: "ambient", setup: "field", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Dry desert wind blowing over open sand and rocks, steady, seamless loop."], seconds: 12 },
   "music-calm": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Slow sparse post-apocalyptic desert road music, lonely twangy baritone guitar and low drone, 80 bpm, instrumental, seamless loop."], seconds: 90 },
   "music-combat": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Tense driving desert combat music, distorted baritone guitar riff, pounding tom drums, 120 bpm, instrumental, seamless loop."], seconds: 60 },
