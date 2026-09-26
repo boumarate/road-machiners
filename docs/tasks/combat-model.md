@@ -1,6 +1,6 @@
 # Combat model
 
-**Status:** reviewing
+**Status:** validating
 **Branch:** combat-model
 **Worktree:** .worktrees/combat-model
 **Goal:** In a real game, the player can switch off the route planner and drive straight into an enemy. Hovering an enemy shows both sides' hit chances with their causes. Machine guns fire bursts of separately rolled rounds. Every hit or ram breaks named parts, and armor on the struck side matters. Garage loadout mass visibly changes speed, handling and ram damage. The user confirms the fights feel decent by playing.
@@ -41,7 +41,7 @@ Distance, size, relative speed, facing, weapon quality and skill all come out of
 
 F3 penetration. A round enters the grid from the struck side: front, rear, left or right. The side is the one facing the shooter. Its lane across the grid comes from where the round landed across the target's width. The round walks the lane cell by cell. Each part it meets takes damage and subtracts its armor from the round's penetration. The round stops when penetration runs out. Armor plates have high armor and many hit points, so they soak rounds until they break. Front and rear lanes are long and pass the engine and cab; side lanes are short. Chassis layouts put plates' natural spots on the nose and tail.
 
-F4 ram. On contact, closing speed u along the contact line gives each vehicle raw energy K × u × other mass / both masses. The light truck takes the bigger share. The energy enters the struck side like a wide round: it hits every lane on that side at low penetration. A ram part on the striking side is the first thing in those lanes, with high armor. It also multiplies the energy dealt to the other truck.
+F4 ram. On contact, closing speed u along the contact line gives each vehicle raw energy K × u × other mass / both masses. The light truck takes the bigger share. The energy enters the struck side like a wide round: it hits every lane on that side at low penetration. A ram part on the striking side is the first thing in those lanes, with high armor. It also multiplies the energy dealt to the other truck and the crash penetration, so a ram punches through armor.
 
 Manual mode. R toggles manual mode for the player's truck. In manual mode the driver skips the route planner and drives straight at the clicked point, through rocks and trucks alike. The mode stays on until R is pressed again. To ram, the player clicks the ground in a truck's path. The path preview shows the straight course, since it runs the same physics.
 
@@ -273,3 +273,30 @@ Approach: build bottom-up in six phases. Mass comes first, since stats and physi
 - `src/three/game.ts` shot labels and target markers name weapons by look, such as "MG", not by the weapon's name.
 - `src/ui/inventory.ts` garage storage chips have no condition bar.
 - `DESIGN.md:43` still describes weapons by "accuracy".
+
+## Conclusion
+All six phases landed through 61f4e80, and review found no defects in code. Its two findings were missing notes, now recorded.
+
+### Deviations from plan
+- Start kits `standard` and `combat`, picked by `VITE_START_KIT`, were added at the user's request to test fights. This is permanent config, documented in CLAUDE.md and `.env.example`.
+- A ram part multiplies crash penetration as well as energy. The Design F4 line now says so.
+- Grid depth costs penetration through `RULES.cellPen`. Without it, a nose crash broke the rear wheels. `src/sim/armor.test.ts` covers this.
+- Planned stops brake at `stopDecel × ratedMass / mass`, so heavy trucks do not overshoot.
+- Four narrowings stand as planned.
+  - A broken engine or transmission lets the truck crawl.
+  - A broken cargo part does not destroy goods.
+  - Splash damages the target only.
+  - The hover card shows causes in degrees.
+
+### Invariants
+- IV1 to IV6 hold. `vehicleMass` is the only mass source. Body sizes come from `PHYSICS.bodies`. `walkLane` is the only way damage reaches parts. `hitCardRows` tests equal `hitOdds`. Rounds draw from `gauss` in rng.ts. No `hull` field remains.
+
+### Assumptions and unknowns
+- AS1 held. `syncDrive` resets body mass each turn, and a drive test checks it.
+- UK1 is open. The numbers are a first pass, and tuning comes from play.
+- UK2 is deferred. The AI does not use facing yet.
+
+### Future work
+- Rounds that hit only empty cells count as hits with no damage.
+- A cannon hitting a fast crossing target drops to about 7%, which may feel harsh.
+- A broken fuel tank logs a line every turn.
