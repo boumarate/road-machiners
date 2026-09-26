@@ -1,6 +1,6 @@
 # UI and HUD
 
-Status: validating
+Status: done
 Branch: ui-hud
 Worktree: .worktrees/ui-hud
 Goal: The player can drive, assign weapons, read critical resources and the event log, and use inventory and town screens through the approved compact vehicle-instrument interface in a running browser.
@@ -44,13 +44,13 @@ One implementation phase, approved by the user's instruction to make the accepte
 - `npm ci` installed worktree-local dependencies. `npm run typecheck` passed after the popup changes.
 - `npm test -- --maxWorkers=1` passed all 255 tests. The initial parallel run timed out in seven simulation/physics tests, so the suite was rerun with one worker rather than changing test limits. `npm test -- --maxWorkers=1 src/ui` passed after the popup changes.
 - The initial `tmp/check-ui.mjs` browser probe passed resource visibility, event log, inventory inspection, character navigation, town purchases, garage, weapon selection/hold/hiding, turn playback locking, and viewport bounds at 1440, 1280, 1024, and 700 pixels. Screenshots are in `tmp/ui-*.png`. The revised probe passed names, absence of gradients, equal modal frames, stable weapon popup bounds, and fresh inspection values after damage.
-- `npm run playtest -- --url http://127.0.0.1:5188` failed when run alongside the parallel test suite: one completed turn and 6 FPS. Rerunning without the unit suite completed 12 turns, but still failed the 20 FPS gate at 14 FPS. Performance remains unverified, and no simulation or renderer changes were made to hide this failure.
+- `npm run playtest -- --url http://127.0.0.1:5188` failed when run alongside the parallel test suite: one completed turn and 6 FPS. Rerunning without the unit suite completed 12 turns, but still failed the 20 FPS gate at 14 FPS. A controlled sequential comparison then ran the unchanged 12-turn playtest against pre-change `82c5ca7` and UI commit `35c0c18`, using identical `.env`, lockfile, dependency versions, viewport, and software-rendered Chromium settings. Baseline: 15 FPS. UI: 18 FPS. Both completed 12 turns and failed the 20 FPS gate. The gate failure predates the UI change. One comparison does not establish a performance improvement. Logs are `tmp/comparison-playtest.log` in `.worktrees/ui-hud-baseline` and `.worktrees/ui-hud`. The temporary baseline server was stopped after comparison.
 - Review server: `http://127.0.0.1:5188`, launched from this worktree with `npm run dev -- --host 127.0.0.1 --port 5188 --strictPort`, log `tmp/dev-server.log`.
 - The first independent reviewer could not start because the Codex account rejected `gpt-5.4`. A same-protocol retry uses the explicitly selected non-Astra `gpt-6-sol` model. The retry completed and identified two issues. A direct browser probe reproduced both: resource/log visibility was false while inventory was open, and clicking the cannon left the inspection empty. The existing modal content only repeated money, and focus/click handlers did not inspect before pointerdown started dragging. Repairs reserve room below the shared modal frame for persistent readouts/log and inspect movable items before drag begins. The same probe then passed all four checks, including no overlap with the modal. The full interaction probe and all 20 UI unit tests passed after these repairs.
 
 ## Conclusion
 
-Implementation is available on the worktree review server. Typecheck, the 255-test suite, and targeted browser interaction checks passed. The standard browser performance gate remains failed at 14 FPS and needs investigation before claiming complete verification. Visual acceptance remains with the user. No merge or push is authorized.
+Goal achieved in `35c0c18`, with user visual approval. Typecheck, the 255-test suite, and targeted browser interaction checks passed. The committed browser regression also passed persistent resources/log, fixed frames, hover names, flat surfaces, and movable-item inspection. The headless performance gate remains a pre-existing failure: baseline 15 FPS versus UI 18 FPS under matched settings. The UI review server remains available. No merge or push is authorized.
 
 ## Constraints
 
