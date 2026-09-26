@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
 import { fireWeapons, hitOdds, laneOfOffset, resolveDestroyed } from './combat';
-import { corePart, mountedParts } from './grid';
+import { corePart, mountedItems, mountedParts } from './grid';
 import { isDriveObstacle } from './mapgen';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
@@ -266,6 +266,39 @@ describe('rounds', () => {
       }
     }
     expect(Math.abs(hits / rounds - p)).toBeLessThan(0.05);
+  });
+
+  it('an aimed miss that lands on the truck hits the lane where it landed', () => {
+    const { w, me, buggy, mg } = range(4, Math.PI);
+    for (const p of mountedParts(buggy)) p.hp = 1e9; // keep the target whole, so every round sees the same truck
+    const wheel = mountedItems(buggy).find((it) => it.x === 0 && it.y === 0)!.part; // front left, lane 0 from the front
+    order(me, mg.part.id, buggy.id, wheel.id);
+    const odds = hitOdds(w, me, mg, buggy, wheel.id);
+    expect(odds.bodyChance).toBeGreaterThan(odds.chance);
+    expect(odds.bodyChance).toBeLessThanOrEqual(1);
+    let hits = 0;
+    let rounds = 0;
+    const struck = new Set<string>();
+    for (let i = 0; i < 300; i++) {
+      w.events = [];
+      mg.part.reload = 0;
+      fireWeapons(w);
+      for (const r of shotsBy(w.events, me.id)[0].rounds) {
+        rounds++;
+        if (!r.hit) continue;
+        hits++;
+        expect(r.hits.length).toBeGreaterThan(0);
+        struck.add(r.hits[0].part);
+      }
+    }
+    expect([...struck].some((id) => id !== wheel.id)).toBe(true);
+    expect(Math.abs(hits / rounds - odds.bodyChance)).toBeLessThan(0.05);
+  });
+
+  it('a body shot hits the truck as often as it hits anything', () => {
+    const { w, me, buggy, mg } = range(5, Math.PI / 2, 5);
+    const o = hitOdds(w, me, mg, buggy, 'body');
+    expect(o.bodyChance).toBe(o.chance);
   });
 
   it('the same seed gives the same rounds', () => {

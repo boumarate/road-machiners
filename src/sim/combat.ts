@@ -40,7 +40,8 @@ export function fireBlock(world: World, shooter: Vehicle, mw: MountedWeapon, tar
 }
 
 export type HitOdds = {
-  chance: number; // per round, clamped to RULES.minHit and RULES.maxHit
+  chance: number; // per round, to hit the aimed part or, for a body shot, the truck; clamped to RULES.minHit and RULES.maxHit
+  bodyChance: number; // per round, to hit the truck anywhere; an aimed miss that lands on the truck hits where it lands
   distance: number; // meters
   width: number; // meters the target, or the aimed part, shows across the line of fire
   halfAngle: number; // radians
@@ -111,11 +112,30 @@ function rawChance(o: Pick<HitOdds, 'halfAngle' | 'spread'>): number {
   return erf(o.halfAngle / (o.spread * Math.SQRT2));
 }
 
+// Chance a round aimed at center, with offset error sd in meters, lands between lo and hi.
+function landChance(center: number, sd: number, lo: number, hi: number): number {
+  if (hi <= lo) return 0;
+  return (erf((hi - center) / (sd * Math.SQRT2)) - erf((lo - center) / (sd * Math.SQRT2))) / 2;
+}
+
+// Chance to hit the truck anywhere. A round that misses the part by the Gaussian draw still hits when it lands on
+// the body, unless the clamp roll turned that miss into a part hit. Rounds the clamp turns into misses land off the truck.
+function bodyChanceOf(a: Aiming, o: Pick<HitOdds, 'chance' | 'halfAngle' | 'spread' | 'distance'>): number {
+  const sd = o.spread * o.distance;
+  const half = o.halfAngle * o.distance;
+  const onBody = landChance(a.center, sd, -a.body / 2, a.body / 2);
+  const onBoth = landChance(a.center, sd, Math.max(-a.body / 2, a.center - half), Math.min(a.body / 2, a.center + half));
+  const raw = rawChance(o);
+  const promoted = raw < o.chance ? (o.chance - raw) / (1 - raw) : 0;
+  return o.chance + (1 - promoted) * (onBody - onBoth);
+}
+
 // F2. A round hits when its angular error is smaller than the target's half-angle as seen from the gun.
 export function hitOdds(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle, aim: Aim): HitOdds {
   const distance = dist(shooter.pos, target.pos) * M;
   if (!(distance > 0)) throw new Error(`${shooter.id} and ${target.id} share a point`);
-  const width = aiming(shooter, target, aim).width;
+  const a = aiming(shooter, target, aim);
+  const width = a.width;
   const halfAngle = width / (2 * distance);
   const gunnery = shooter.faction === 'player' ? skillBonus('gunnery', world.player.skills.gunnery) : 0;
   const weapon = mw.def.spread * DEG;
@@ -131,17 +151,21 @@ export function hitOdds(world: World, shooter: Vehicle, mw: MountedWeapon, targe
   const spread = causes.weapon + causes.skill + causes.crossing + causes.own;
   if (!(spread > 0)) throw new Error(`Spread ${spread} of ${mw.def.id} is not positive`);
   const chance = clamp(rawChance({ halfAngle, spread }), RULES.minHit, RULES.maxHit);
-  return { chance, distance, width, halfAngle, spread, causes };
+  const bodyChance = bodyChanceOf(a, { chance, halfAngle, spread, distance });
+  return { chance, bodyChance, distance, width, halfAngle, spread, causes };
 }
 
-// One round's angular error in radians and whether it hit. The Gaussian draw decides, so a miss lands where it
-// strayed. When the clamp moved the chance, an extra roll turns some hits into misses or some misses into hits,
-// so rounds hit exactly as often as hitOdds says.
-function rollRound(world: World, o: HitOdds): { hit: boolean; error: number } {
+// One round's angular error in radians and whether it hit the aimed part or, for a body shot, the truck. The
+// Gaussian draw decides, so a miss lands where it strayed. When the clamp moved the chance, an extra roll turns some
+// hits into misses that land off the truck, or some misses into hits, so rounds hit exactly as often as hitOdds says.
+function rollRound(world: World, o: HitOdds, a: Aiming): { hit: boolean; error: number } {
   const raw = rawChance(o);
   const error = gauss(world) * o.spread;
   const hit = Math.abs(error) < o.halfAngle;
-  if (raw > o.chance && hit && !chance(world, o.chance / raw)) return { hit: false, error: (error < 0 ? -1 : 1) * (o.halfAngle + Math.abs(error)) };
+  if (raw > o.chance && hit && !chance(world, o.chance / raw)) {
+    const sign = error < 0 ? -1 : 1;
+    return { hit: false, error: sign * (Math.abs(error) + (a.body / 2 - sign * a.center) / o.distance) };
+  }
   if (raw < o.chance && !hit && chance(world, (o.chance - raw) / (1 - raw))) return { hit: true, error: randRange(world, -o.halfAngle, o.halfAngle) };
   return { hit, error };
 }
@@ -158,8 +182,9 @@ export function fireWeapons(world: World): void {
       const target = world.vehicles.find((x) => x.id === order.targetId) ?? null;
       if (fireBlock(world, shooter, mw, target) !== null) continue;
       const odds = hitOdds(world, shooter, mw, target!, order.aim);
-      const rolls = Array.from({ length: mw.def.rounds }, () => rollRound(world, odds));
-      shots.push({ shooter, mw, target: target!, aim: order.aim, odds, aiming: aiming(shooter, target!, order.aim), rolls });
+      const a = aiming(shooter, target!, order.aim);
+      const rolls = Array.from({ length: mw.def.rounds }, () => rollRound(world, odds, a));
+      shots.push({ shooter, mw, target: target!, aim: order.aim, odds, aiming: a, rolls });
     }
   }
   for (const s of shots) applyShot(world, s);
@@ -167,8 +192,9 @@ export function fireWeapons(world: World): void {
   for (const v of world.vehicles) for (const p of mountedParts(v, 'weapon')) if (p.reload > 0) p.reload--;
 }
 
-// A hit enters the lane under its offset, or the aimed part's lane. A miss with splash hits every lane of the
-// struck side whose center lies within the splash radius of where it landed.
+// A hit enters the lane under its offset, or the aimed part's lane. An aimed miss that lands on the truck enters
+// the lane under its offset. A miss off the truck with splash hits every lane of the struck side whose center
+// lies within the splash radius of where it landed.
 function applyShot(world: World, s: Shot): void {
   s.mw.part.reload = s.mw.def.reload;
   provoke(world, s.shooter, s.target);
@@ -176,8 +202,8 @@ function applyShot(world: World, s: Shot): void {
   const { side, lanes, body } = s.aiming;
   const rounds: ShotRound[] = s.rolls.map((roll) => {
     const offset = s.aiming.center + roll.error * s.odds.distance;
-    if (roll.hit) {
-      const lane = s.aiming.lane ?? laneOfOffset(side, body, lanes, offset);
+    if (roll.hit || Math.abs(offset) < body / 2) {
+      const lane = roll.hit && s.aiming.lane !== null ? s.aiming.lane : laneOfOffset(side, body, lanes, offset);
       return { hit: true, offset, hits: walkLane(world, s.target, side, lane, { damage: r.damage, pen: r.pen }) };
     }
     const hits: PartHit[] = [];
