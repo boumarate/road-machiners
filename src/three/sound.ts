@@ -73,11 +73,12 @@ export function engineGlide(from: number, to: number, seconds: number, mix: type
   const share = (v: number) => Math.min(1, v / e.topSpeedMs);
   const rate = (v: number) => e.idleRate + (e.topRate - e.idleRate) * share(v);
   const gain = (v: number) => e.idleGain + (1 - e.idleGain) * share(v);
+  const load = Math.max(-1, Math.min(1, (to - from) / e.loadMs));
   return {
     rateFrom: rate(from),
-    rateTo: rate(to),
+    rateTo: rate(to) + load * (load > 0 ? e.revUp : e.revDown),
     gainFrom: gain(from),
-    gainTo: gain(to),
+    gainTo: gain(to) + load * e.loadGain,
     seconds,
     fadeSeconds: e.fadeSeconds,
     brake: from - to >= e.brakeMs,

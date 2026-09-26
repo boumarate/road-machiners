@@ -538,7 +538,6 @@ export class Game {
     if (this.anim || this.modalOpen()) return;
     const before = this.world;
     let result: TurnResult | null = null;
-    this.sound.ui("end-turn");
     this.world = endTurn(
       this.world,
       physicsMove(this.drive, (r) => (result = r)),

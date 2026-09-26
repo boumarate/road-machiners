@@ -39,11 +39,17 @@ describe("engineGlide", () => {
   it("stays silent while standing still", () => {
     expect(engineGlide(0, 0, 1, MIX)).toBeNull();
   });
-  it("follows speed from the start to the end of the turn", () => {
-    const g = engineGlide(0, e.topSpeedMs * 2, 1, MIX)!;
-    expect([g.rateFrom, g.rateTo]).toEqual([e.idleRate, e.topRate]);
-    expect([g.gainFrom, g.gainTo]).toEqual([e.idleGain, 1]);
-    expect(g.brake).toBe(false);
+  it("revs up while speeding up and holds while cruising", () => {
+    const up = engineGlide(0, e.topSpeedMs * 2, 1, MIX)!;
+    expect([up.rateFrom, up.rateTo]).toEqual([e.idleRate, e.topRate + e.revUp]);
+    expect([up.gainFrom, up.gainTo]).toEqual([e.idleGain, 1 + e.loadGain]);
+    expect(up.brake).toBe(false);
+    const cruise = engineGlide(10, 10, 1, MIX)!;
+    expect(cruise.rateTo).toBe(cruise.rateFrom);
+  });
+  it("drops revs while slowing", () => {
+    const g = engineGlide(10, 10 - e.loadMs, 1, MIX)!;
+    expect(g.rateFrom - g.rateTo).toBeGreaterThan(e.revDown);
   });
   it("adds the air brake on a hard slowdown only", () => {
     expect(engineGlide(10, 10 - e.brakeMs, 1, MIX)!.brake).toBe(true);

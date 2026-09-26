@@ -33,19 +33,6 @@ const DEFS = {
   "ui-close": { bus: "ui", setup: "cab", pitchJitter: 0, maxVoices: 1, volume: 0.7, loop: false, prompts: ["Heavy metal lid shutting with a dull latch clack."], seconds: 0.6 },
   "ui-confirm": { bus: "ui", setup: "cab", pitchJitter: 0, maxVoices: 1, volume: 0.8, loop: false, prompts: ["Heavy steel ratchet clicking tight, a deal sealed."], seconds: 0.6 },
   "ui-error": { bus: "ui", setup: "cab", pitchJitter: 0, maxVoices: 1, volume: 0.8, loop: false, prompts: ["Dull thud of a jammed metal lever that will not move."], seconds: 0.5 },
-  // Quiet in-cab moments as a turn starts: a family of different sounds, never the same twice in a row.
-  "end-turn": { bus: "ui", setup: "cab", volume: 1, pitchJitter: 0.03, maxVoices: 1, loop: false, seconds: 2.5, prompts: [
-    "Steering wheel turned slowly by hand, leather creak and a soft mechanical tick.",
-    "Manual gearbox shifted up, soft clutch press and a metal gear lever clunk.",
-    "Old diesel truck speeding up gently on a dirt road, heard from inside the cab, muffled.",
-    "Cab rattling softly over small bumps on a gravel road, loose tools jingling.",
-    "Turn signal lever clicked on, a few ticks of an old relay.",
-    "Tires rolling slowly over gravel and small stones under a heavy truck, heard from inside.",
-    "Cab creaking as the truck chassis flexes over a dip, soft metal groan.",
-    "Hands shifting on a worn steering wheel, soft rub and a seat spring creak.",
-    "Heavy truck downshifting, clutch and a short engine rev, from inside the cab.",
-    "Dust and small pebbles pinging softly against the underside of a moving truck.",
-  ] },
 
   // Turn results.
   "money": { bus: "ui", setup: "cab", volume: 0.8, pitchJitter: 0.03, maxVoices: 1, loop: false, prompts: ["A few old metal coins and bottle caps dropped into a tin box."], seconds: 1 },
@@ -65,7 +52,7 @@ const DEFS = {
 
   // Loops.
   // One engine whose pitch and level the game bends each turn from the truck's speed.
-  "engine": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Soft low rumble of a big diesel truck engine heard from a distance, smooth and steady, no rattles or whine, seamless loop."], seconds: 5 },
+  "engine": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Old heavy diesel truck engine running at steady medium revs, recorded close to the engine bay: clear exhaust note, mechanical clatter and valve tick, full and present, not muffled, seamless loop."], seconds: 4 },
   "wind": { bus: "ambient", setup: "field", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Dry desert wind blowing over open sand and rocks, steady, seamless loop."], seconds: 12 },
   "music-calm": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Slow sparse post-apocalyptic desert road music, lonely twangy baritone guitar and low drone, 80 bpm, instrumental, seamless loop."], seconds: 90 },
   "music-combat": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Tense driving desert combat music, distorted baritone guitar riff, pounding tom drums, 120 bpm, instrumental, seamless loop."], seconds: 60 },
@@ -102,9 +89,10 @@ export const MIX = {
   // Gain halves at this many meters from the camera focus; pan reaches this share at the screen edge.
   halfGainMeters: 40,
   panWidth: 0.7,
-  // Engine over a turn: playback rate and level follow speed in m/s. Under movingMs at both ends it stays
-  // silent; a speed drop of brakeMs or more adds the air brake. 24 m/s is the fastest chassis.
-  engine: { idleRate: 0.8, topRate: 1.4, topSpeedMs: 24, idleGain: 0.5, movingMs: 0.5, brakeMs: 4, fadeSeconds: 0.12 },
+  // Engine over a turn: playback rate and level follow speed in m/s, plus a load term from the speed change,
+  // so speeding up revs and slowing drops audibly. Load is full at loadMs of change in one turn. Under movingMs
+  // at both ends it stays silent; a speed drop of brakeMs or more adds the air brake. 24 m/s is the fastest chassis.
+  engine: { idleRate: 0.8, topRate: 1.3, topSpeedMs: 24, idleGain: 0.5, loadMs: 3, revUp: 0.3, revDown: 0.2, loadGain: 0.3, movingMs: 0.5, brakeMs: 4, fadeSeconds: 0.12 },
   // Wind bed: a base level, rising near dust storms.
   wind: { baseGain: 0.4, stormGain: 1, stormReachTiles: 12, fadeSeconds: 1 },
   // Music crossfades to combat while a hostile is in sight, and back after the last one leaves.
