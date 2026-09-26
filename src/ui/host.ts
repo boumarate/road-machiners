@@ -1,6 +1,6 @@
 // What the HTML overlay needs from the game scene.
 
-import type { World } from '../sim/types';
+import type { World } from "../sim/types";
 
 export type UiHost = {
   world(): World;
@@ -8,5 +8,5 @@ export type UiHost = {
   selectedWeapon(): string | null;
   selectWeapon(id: string | null): void;
   endTurn(): void;
-  getTurnPhase(): 'Moving' | 'Firing' | 'Results' | null;
+  getTurnPhase(): "Moving" | "Firing" | "Results" | null;
 };
