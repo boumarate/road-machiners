@@ -1,7 +1,7 @@
 import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
-import { ECONOMY, TOWN_PRICES } from '../data/goods';
+import { ECONOMY, GOOD_IDS, TOWN_PRICES } from '../data/goods';
 import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
@@ -59,7 +59,7 @@ describe('trade', () => {
   });
 
   it('prices exist for every good in every town', () => {
-    for (const t of REGION.towns) expect(Object.keys(TOWN_PRICES[t.id]).sort()).toEqual(['meds', 'salt', 'scrap']);
+    for (const t of REGION.towns) expect(Object.keys(TOWN_PRICES[t.id]).sort()).toEqual([...GOOD_IDS].sort());
   });
 });
 

@@ -1,6 +1,6 @@
 # Content variety
 
-Status: executing
+Status: verifying
 Branch: content-variety
 Worktree: /Users/boris/Documents/Korovan/.worktrees/content-variety
 Goal: Players can buy and use five additional weapons, engines, armor parts, cargo parts, goods, and chassis, drive over five additional terrain varieties on Icarus, and encounter NPCs with varied equipment sampled from weighted tables.
@@ -81,10 +81,18 @@ Approach: extend the catalog owners, add one focused NPC generation component, a
 
 - PH2: seeded variation test failed with only two raider combinations, then 89 generation/grid/activity/economy/salvage/combat tests passed with two test workers. This includes the baseline 80-turn traffic test, unchanged, in 7.2 seconds. Typecheck passed. Logs: tmp/npc-red.log, tmp/npc-contracts.log, tmp/npc-regressions.log, tmp/npc-typecheck.log.
 
+- PH3: four terrain tests failed before implementation. All 15 terrain tests then passed, covering ten generated surface types, unchanged heights and road/site priority, and matching movement/preview results.
+- Full-suite attacks caught a stale three-good expectation and a courier collision-step violation. The price test now follows GOOD_IDS. Courier speed is 7.5 and radius 0.5, so its maximum speed with any engine remains below the substep bound. The movement test derives the maximum engine bonus from all engine definitions. All 61 combat/movement/economy tests passed with one test worker and unchanged timeouts (tmp/regression-recheck.log).
+- Browser checks bought the new goods and all five chassis. A subsequent check caught `+-1` for negative engine bonuses. Fixed the garage sign display and reran the same scenario. Final checks are pending.
+- Initial browser playtest completed 12 turns with no reported gameplay errors but failed its 20 FPS threshold at 9.5 FPS (tmp/playtest.log). Host load was later observed at 46.62 with multiple unrelated test processes. Do not stop other sessions' work or lower the threshold. Recheck after this task's overlapping checks finish.
+- The next full suite passed 276 tests but timed out in two movement tests at their unchanged five-second deadlines, while browser checks and unrelated jobs were active (tmp/full-tests-final.log). Both tests had passed in the focused 61-test run. An uncontended rerun remains pending.
+- Five real-physics chassis checks, typecheck and production build passed (tmp/chassis-physics.log, tmp/typecheck-final.log, tmp/build-final.log). Build reports the existing large-bundle warning.
+
 ## Conclusion
 
 ### Deviations from plan
 
 - Use a four-wheel Longbed truck instead of the proposed six-wheel truck. src/phys/body.ts defines four physical wheel mounts and current chassis tests require four core wheels. This preserves the requested fifth chassis variety without adding a wheel/physics system.
-- Added physical body dimensions in src/data/physics.ts for distinct new chassis silhouettes, consumed by the existing bodyOf and render paths.
+- Added physical body dimensions in src/data/physics.ts for distinct new chassis silhouettes, consumed by the existing bodyOf and render paths. src/phys/content.test.ts adds real driving and upright/reproducible physics checks for all five frames.
+- Updated src/sim/movement.test.ts, src/sim/economy.test.ts and src/ui/town.ts after verification exposed assumptions that the new content made invalid.
 - The single-worker workflow was stopped at the user's request. Only dependency setup and baseline tests had run. The parent owns implementation. Independent review can run in parallel with final checks.

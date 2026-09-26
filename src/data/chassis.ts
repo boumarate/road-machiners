@@ -174,8 +174,8 @@ export const CHASSIS: Record<string, ChassisDef> = {
     look: 'wagon',
   },
   courier: {
-    id: 'courier', name: 'Courier', maxSpeed: 8, accel: 3, brake: 3, turnSlow: 125, turnFast: 42, reverseTurn: 80,
-    mass: 280, ratedMass: 1100, radius: 0.45,
+    id: 'courier', name: 'Courier', maxSpeed: 7.5, accel: 3, brake: 3, turnSlow: 125, turnFast: 42, reverseTurn: 80,
+    mass: 280, ratedMass: 1100, radius: 0.5,
     layout: ['XFFX', 'LEER', 'LEER', 'LXWR', 'LXXR', 'LCCR', 'XBBX'],
     core: [
       { defId: 'cab', x: 1, y: 3 }, { defId: 'transmission', x: 1, y: 4 }, { defId: 'tank', x: 2, y: 4 },

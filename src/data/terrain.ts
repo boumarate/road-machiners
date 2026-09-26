@@ -3,7 +3,7 @@
 
 import type { Vec } from '../sim/vec';
 
-export type TerrainTypeId = 'road' | 'hardpan' | 'sand' | 'scrub' | 'scree';
+export type TerrainTypeId = 'road' | 'hardpan' | 'sand' | 'scrub' | 'scree' | 'mud' | 'gravel' | 'saltCrust' | 'asphalt' | 'ash';
 
 export type TerrainType = { id: TerrainTypeId; name: string; speed: number; color: number };
 
@@ -13,6 +13,11 @@ export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
   sand: { id: 'sand', name: 'Loose sand', speed: 0.7, color: 0xdcc08c },
   scrub: { id: 'scrub', name: 'Scrub', speed: 0.8, color: 0xa89a66 },
   scree: { id: 'scree', name: 'Scree', speed: 0.55, color: 0x9a8a78 },
+  mud: { id: 'mud', name: 'Mud', speed: 0.45, color: 0x665044 },
+  gravel: { id: 'gravel', name: 'Gravel', speed: 0.85, color: 0x9e9489 },
+  saltCrust: { id: 'saltCrust', name: 'Salt crust', speed: 0.95, color: 0xe0d8ba },
+  asphalt: { id: 'asphalt', name: 'Cracked asphalt', speed: 0.98, color: 0x55565b },
+  ash: { id: 'ash', name: 'Ash', speed: 0.6, color: 0x77737a },
 };
 
 export const TERRAIN = {
@@ -46,6 +51,19 @@ export const TERRAIN = {
     scrubFreq: 1 / 5, // scrub patch noise frequency, cycles per tile
     scrubAbove: 0.62, // patch noise above which ground is scrub
     siteMargin: 1, // tiles around towns and locations that count as hardpan
+    patches: {
+      frequency: 1 / 12, // broad surface patches, independent of terrain heights
+      coverageSeedOffset: 1013,
+      kindSeedOffset: 2027,
+      coverageAbove: 0.57,
+      bands: [
+        { through: 0.3, kind: 'mud' },
+        { through: 0.45, kind: 'gravel' },
+        { through: 0.6, kind: 'saltCrust' },
+        { through: 0.75, kind: 'asphalt' },
+        { through: 1, kind: 'ash' },
+      ] as { through: number; kind: TerrainTypeId }[],
+    },
   },
   // Driving: grade is the slope along the driving direction.
   drive: {
