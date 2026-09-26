@@ -1,6 +1,6 @@
 # Modular Vehicle Parts
 
-**Status:** executing
+**Status:** reviewing
 **Branch:** modular-parts
 **Worktree:** .worktrees/modular-parts
 **Goal:** Every truck is drawn as an open rig of Blender part models that snap to one shared cell size, so any part fits any chassis and the drawn truck matches its physics collider. Weapons are assembled from sub-part models, so two weapons of the same kind can look different. The user confirms the look in game.
@@ -68,6 +68,33 @@ TDD: yes for the grid-to-body derivation and the weapon pick, because both are p
 - UK1 — Whether sim collision radius should derive from the new body, given its effect on routing and wreck size.
 - UK2 — How many physics and combat tests assume current body sizes, and whether their expected values need updating or indicate a real behavior change.
 - UK3 — Pool sizes per weapon slot. Start with two or three per slot.
+
+## Verify
+
+Result: passed
+
+Happy-path:
+- CK1 (IV1) — any chassis body differs from rows x 0.65 / 2 by columns x 0.4 / 2 — held for all 9 chassis (`tmp/verify-body.ts`).
+- CK2 (IV2) — wheel mounts differ from the wheel core cell centers — held for all 9 chassis.
+- CK3 — the view crashes on real NPC loadouts — held: boot, 12-turn playtest and all probes ran with no page errors.
+
+Negative:
+- CK4 — an unknown chassis or an out-of-grid cell passes silently — held: both throw with a message naming the chassis or cell.
+- CK5 (IV3) — an unknown part id gets a model anyway — held: `partModel()` throws (unit test, fresh run 10/10).
+
+Invariants / assumptions:
+- CK6 (IV5) — the drawn frame is larger or smaller than the collider — held: static bounds without wheels are exactly ±2.925 x ±1.4 m on a carrier, equal to its body half sizes. Wheels stick out past the frame, as before.
+- CK7 (IV3) — a part or good model leaves its rotation-0 footprint — held for all 33 part and good models, with rams allowed past the outer edge (`tmp/verify-fit.mjs`). The rotation-1 stretch in `footprint()` maps h x 0.65 to h x 0.4 across and w x 0.4 to w x 0.65 along.
+- CK8 (IV4) — the same part id gives different weapon looks — held (unit test).
+- CK9 (IV6, IF3) — a missing socket returns a value — held: `socket('wbar_cannon', 'muzzle')` throws. `socket('wmount_cradle', 'head')` returns (0, 0.36, 0).
+- CK10 (PC2) — factions share paint colors or broken parts keep their colors — held: raiders and traders differ only in their faction color, and a broken cab adds darkened colors.
+- CK11 — an inventory change does not rebuild the truck — held: a changed item hp rebuilt the root.
+- CK12 — `aim()` leaves weapon heads still — held: both heads of an armed NPC turned to the aim yaw.
+- CK13 (AS2) — the rig costs more frame time than main — held. At the same camera points, idle FPS matches main within noise: town 5 to 7.5 against 4 to 5.5, desert 22 to 26.5 against 23 to 25. Render time at boot is 39 to 40 ms on both. Draw calls at boot are 179 against 290.
+
+Smoke: `npm run playtest` on the branch played 12 turns with no page errors or crash, and failed only its FPS floor: 13.5 and 19.5 against main's 20.5 and 24 in the same order.
+Goal: proxy only. The user must still confirm the look in game.
+Notes: the playtest FPS gap is a measurement artifact. The playtest measures FPS wherever the player ends after 12 turns. New body sizes change the driven path, so the two runs end looking at different parts of the map. Rebuilds are rare: one in six turns, 8 ms each.
 
 ## Plan
 
