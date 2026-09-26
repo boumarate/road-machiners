@@ -78,14 +78,14 @@ Town markets have fixed prices and unlimited stock and money. Initial NPC resour
 
 Each town produces and needs fixed goods. Profit comes from knowing routes, as in Dustland Delivery.
 
-Fuel and supplies limit range. Fuel burns at one tenth of the chassis fuel-per-tile rate. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn at 0.025 per turn. Without supplies the character loses health. The oasis refills supplies.
+Fuel and supplies limit range. Fuel burns at one tenth of the chassis fuel-per-tile rate. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn at 0.025 per turn. Without supplies the character loses health. Oases refill supplies.
 
 ## Prototype v0.001 content
 
 - Chassis: Scout pickup and Hauler.
 - Parts: MG turret and forward cannon, stock engine and tuned V8, steel plates and rebar cage, roof rack and cargo box.
 - Defeat takes all goods and spare parts from the grid. Mounted parts stay.
-- Region: Dry Basin, with the towns Tin Hollow and Saltmarch, the Green Pit oasis and the Burnt convoy.
+- Region: Icarus, a 120-tile basin with Bowl and Nose as hubs, 13 other destinations, two canyon crossings, and the Fallen Sun.
 - Enemies: raider buggy and raider gunwagon.
 - Neutrals: trader caravans and scavengers. Shooting one makes it and its nearby mates hostile.
 - Skills: Driving, Gunnery, Mechanics, Trade, Survival.
