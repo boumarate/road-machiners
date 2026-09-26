@@ -316,7 +316,7 @@ Merge D.
 
 ## Conclusion
 
-Outcome: all four systems are built and reviewed at 401ac4c plus the doc fix. The goal still needs the user to play a crossing.
+Outcome: all four systems are built, reviewed and reworked in play. The user confirmed stealth and scavenging in play. Drain on the 600-tile map still needs a played crossing.
 
 Invariants:
 - IV1 — Wear, weather and loot roll through `rng.ts`. Contacts use the pure `hashRandom`. Seed replay tests pass in wear.test.ts and weather.test.ts.
@@ -348,6 +348,14 @@ Plan adherence:
 Review findings:
 - Important: DESIGN.md kept the old drain rates. Fixed.
 
+Changes from play after review, each asked for by the user:
+- Storms: the HUD names only a storm the truck is in or near, banks fill the storm area, and a haze covers the view inside one.
+- Stealth: sight is 20 tiles. Sound shows as faint humming arcs around the player's truck instead of markers on the map. Dust is a world object: clouds rise behind moving trucks, drift, wander and fade, and risen clouds are seen from far away. Contacts never name the vehicle, and they are not logged.
+- Scavenging: a finished search opens the loot beside the grid to drag in, with a progress bar while searching.
+- Wear: about one breakdown and 3 HP per part per off-road crossing. The first tuning gave about 11 breakdowns per crossing.
+- Shade updates every turn in a patch around the player. Route lines lie on the ground. A save that cannot load offers a new game.
+- Main moved to a 600-tile map during this task. Fuel and supply drain were cut to 0.06 and 0.025 to fit it, by estimate: the scripted trips crawl at about a fifth of real speed and cannot measure a crossing.
+
 Future work:
-- Storm dust looks faint over the player. This needs the user's visual check.
-- The auto driver stalls on some seeds when given far waypoints. This was seen in trip runs and was already in main.
+- Confirm fuel and supply drain on the 600-tile map by playing a Bowl to Nose crossing.
+- The scripted physics trip drives at about 1.2 tiles per turn, well under the truck's top speed, so it cannot tune crossing costs.

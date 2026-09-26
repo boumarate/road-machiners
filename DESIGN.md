@@ -66,15 +66,15 @@ Losing a truck is one natural way to change trucks.
 
 ## Stealth
 
-Sight reaches 10 tiles with line of sight. Beyond it, a moving vehicle still gives itself away: engine sound, a dust trail, or a mounted radio scanner.
+Sight reaches 20 tiles with line of sight, halved at night and cut in dust storms. Beyond it, a moving vehicle still gives itself away: engine sound, dust clouds, or a mounted radio scanner.
 
-A contact is a vehicle detected this way. It shows as a rough circle around the true position, not the position itself. The circle grows with distance, so a close contact pins a truck down and a far one only says roughly where it is.
+A contact is a vehicle detected this way. It is a rough circle that always holds the true position. For sound the circle is about a third of the distance wide, so a far sound gives little more than a direction. A scanner fixes a position much more tightly.
 
-Engine sound reaches a range set by the engine and the vehicle's speed. A parked truck makes no sound. Hills do not block it. The listener's own speed shortens its hearing, so a parked observer hears furthest.
+Engine sound reaches far, by the engine and the vehicle's speed. A parked truck makes no sound. Hills do not block it. The listener's own speed shortens its hearing, so a parked observer hears furthest. Sound shows as faint arcs around the player's truck, pointing toward each heard truck: a wide arc for a vague bearing, a thick one for a loud engine, a bright one for a near sound. The arcs hum and ripple outward.
 
-A dust trail reaches a range set by speed and the ground driven on: roads raise little dust, sand and hardpan raise more. Dust rises above the truck, so it is seen over low hills that would block a plain sight line. Night and dust storms hide it.
+Dust clouds are objects in the world. Every turn a moving truck on dusty ground leaves a cloud behind it. Roads raise little dust, sand and hardpan raise more, and none rises at night. A cloud rises, drifts back along its truck's route and with the wind, wanders a little, and fades after a few turns. Once risen it is seen from far beyond sight and over hills. So a line of clouds shows where a truck passed, a little late.
 
-A radio scanner is a part that mounts on a weapon cell, so it competes with a gun. It detects every moving vehicle in its range, through hills, and reaches further than sight or a hurried listen. It is sold in towns.
+A radio scanner is a part that mounts on a weapon cell, so it competes with a gun. It detects every moving vehicle across the map, through hills, and shows it as a steady blip. It is sold in towns.
 
 NPCs detect the player and each other with the same rules. Raiders drive toward a contact to find it, and give up on arrival or once they see the target, at which point the ordinary fight rule takes over. Traders and scavengers steer away from a hostile contact the same way they flee a visible one. A very faint, far contact is too vague to act on.
 
@@ -100,7 +100,7 @@ NPCs spawn with equipment sampled from weighted tables for their role. The gener
 
 Scavengers collect finite salvage, sell cargo, and fight manageable hostiles or flee. Traders buy profitable cargo while reserving upkeep money and flee from threats. Raiders search hunting grounds, fight, collect wreck cargo, and sell it. Each NPC pays for fuel, supplies, and repairs from its own wallet. Inspection shows its activity and reason.
 
-Scavenging is a timed search: the truck parks at a stock and each turn moves some of it into the grid, over several turns. Moving the truck cancels the search and keeps whatever already moved. Landmark and convoy sites hold finite stock rolled at world creation: goods, parts and sometimes a spare mountable part. Destroyed NPCs leave a wreck with the same kind of stock. Their mounted parts join it at the HP they had; their built-in parts turn into the parts good instead. Collection takes only what fits and leaves the rest. Old wreck retirement removes their remaining stock. Empty sites do not regenerate.
+Scavenging is a timed search: the truck parks at a stock and searches for turns in proportion to what the stock holds, with a progress bar. Moving the truck cancels the search. A finished search opens the stock beside the truck's grid, and the player drags in what they want. What they leave stays at the site for later. NPC scavengers take everything that fits. Landmark and convoy sites hold finite stock rolled at world creation: goods, parts and sometimes a spare mountable part. Destroyed NPCs leave a wreck with the same kind of stock. Their mounted parts join it at the HP they had; their built-in parts turn into the parts good instead. Collection takes only what fits and leaves the rest. Old wreck retirement removes their remaining stock. Empty sites do not regenerate.
 
 Town markets have fixed prices and unlimited stock and money. Initial NPC resources and the oasis are explicit sources. No offscreen catch-up grants are used. Player defeat retains its separate cargo-loss and enemy-despawn rules.
 
@@ -108,7 +108,7 @@ Town markets have fixed prices and unlimited stock and money. Initial NPC resour
 
 Each town produces and needs fixed goods. Profit comes from knowing routes, as in Dustland Delivery.
 
-Fuel and supplies limit range. Fuel burns at one fifth of the chassis fuel-per-tile rate, times heat. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn at 0.06 per turn, times heat. Without supplies the character loses health. Oases refill supplies.
+Fuel and supplies limit range. Fuel burns at 0.06 of the chassis fuel-per-tile rate, times heat. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn at 0.025 per turn, times heat. Without supplies the character loses health. Oases refill supplies.
 
 ## Prototype v0.001 content
 
@@ -116,7 +116,7 @@ Fuel and supplies limit range. Fuel burns at one fifth of the chassis fuel-per-t
 - Parts: seven weapons, seven engines, eight armor parts and seven cargo parts. Cheap, light, durable, fuel-efficient and high-output variants have different costs and footprints. Cargo frames extend the inventory grid, without articulated trailer physics.
 - Goods: scrap metal, salt, meds, grain, textiles, machine tools, batteries and electronics. Bowl and Nose price every good.
 - Defeat takes all goods and spare parts from the grid. Mounted parts stay.
-- Region: Icarus, a 600-tile basin with Bowl and Nose as hubs, 13 other destinations, two canyon crossings, and the Fallen Sun. Winding roads cross rolling grades between distinct landmarks. Sight remains ten tiles. See [landmark visuals](VISUAL_DESIGN.md).
+- Region: Icarus, a 600-tile basin with Bowl and Nose as hubs, 13 other destinations, two canyon crossings, and the Fallen Sun. Winding roads cross rolling grades between distinct landmarks. Sight is twenty tiles. See [landmark visuals](VISUAL_DESIGN.md).
 - Enemies: raider outriders and gunwagons with sampled chassis and equipment.
 - Neutrals: trader caravans and scavengers. Shooting one makes it and its nearby mates hostile.
 - Skills: Driving, Gunnery, Mechanics, Trade, Survival.
