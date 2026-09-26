@@ -72,9 +72,9 @@ export type NpcClass = {
 
 // Cab warnings begin at 30%. Recovery to half cab health prevents fight/flee oscillation.
 export const NPC_CLASSES: Record<Brain, NpcClass> = {
-  scavenger: { towns: ['tin', 'salt'], salvageSites: ['convoy'], supplySites: ['oasis'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false },
-  trader: { towns: ['tin', 'salt'], salvageSites: [], supplySites: ['oasis'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: true },
-  raider: { towns: ['tin', 'salt'], salvageSites: [], supplySites: ['oasis'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false },
+  scavenger: { towns: ['bowl', 'nose'], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false },
+  trader: { towns: ['bowl', 'nose'], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: true },
+  raider: { towns: ['bowl', 'nose'], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false },
 };
 
 export const NPC_UPKEEP = {
@@ -85,5 +85,5 @@ export const NPC_UPKEEP = {
 };
 
 export const WILD_SPAWNS: Vec[] = [
-  { x: 30, y: 8 }, { x: 52, y: 30 }, { x: 8, y: 28 }, { x: 34, y: 52 }, { x: 25, y: 20 },
+  { x: 30, y: 8 }, { x: 110, y: 13 }, { x: 8, y: 28 }, { x: 111, y: 105 }, { x: 62, y: 73 },
 ];

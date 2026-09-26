@@ -72,13 +72,13 @@ describe("route", () => {
     expect(locationAt(w)?.id).toBe(site.id);
   });
 
-  it('the player drives from Tin Hollow to Saltmarch without hitting static obstacles', () => {
-    const salt = REGION.towns.find((t) => t.id === 'salt')!;
-    let w = setMoveOrder(newWorld(1337, START_KITS.standard), { kind: 'stopAt', dest: salt.pos });
+  it('the player drives from Bowl to Nose without hitting static obstacles', () => {
+    const nose = REGION.towns.find((t) => t.id === 'nose')!;
+    let w = setMoveOrder(newWorld(1337, START_KITS.standard), { kind: 'stopAt', dest: nose.pos });
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
     w.player.fuel = 100;
     const me = w.player.vehicleId;
-    for (let i = 0; i < 40 && w.vehicles[0].order; i++) {
+    for (let i = 0; i < 80 && dist(w.vehicles[0].pos, nose.pos) > nose.radius + 1.5; i++) {
       w = endTurn(w);
       w.vehicles = w.vehicles.filter((v) => v.faction === "player");
       const staticHits = w.events.filter(
@@ -86,7 +86,7 @@ describe("route", () => {
       );
       expect(staticHits).toEqual([]);
     }
-    expect(dist(w.vehicles[0].pos, salt.pos)).toBeGreaterThanOrEqual(salt.radius + 0.6 - 0.02);
-    expect(dist(w.vehicles[0].pos, salt.pos)).toBeLessThanOrEqual(salt.radius + 1.5);
+    expect(dist(w.vehicles[0].pos, nose.pos)).toBeGreaterThanOrEqual(nose.radius + 0.6 - 0.02);
+    expect(dist(w.vehicles[0].pos, nose.pos)).toBeLessThanOrEqual(nose.radius + 1.5);
   });
 });

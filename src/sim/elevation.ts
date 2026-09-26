@@ -63,5 +63,16 @@ export function flattenFactor(x: number, y: number): number {
 }
 
 export function elevationAt(seed: number, x: number, y: number): number {
-  return rawElevation(seed, x, y) * (1 - flattenFactor(x, y));
+  const p = { x, y };
+  let height = rawElevation(seed, x, y);
+  for (const feature of [TERRAIN.features.canyon, TERRAIN.features.dryRiver]) {
+    const gap = polylineDist(p, feature.path) - feature.width;
+    if (gap < feature.bank) height -= feature.depth * (gap <= 0 ? 1 : 1 - smooth(gap / feature.bank));
+  }
+  height *= 1 - flattenFactor(x, y);
+  for (const crater of TERRAIN.features.craters) {
+    const gap = dist(p, crater.center) - crater.radius;
+    if (gap < crater.bank) height -= crater.depth * (gap <= 0 ? 1 : 1 - smooth(gap / crater.bank));
+  }
+  return height;
 }

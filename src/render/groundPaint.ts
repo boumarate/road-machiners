@@ -33,7 +33,18 @@ const DEFAULT_OPTIONS: PaintOptions = { hillshade: 1 };
 export function paintGroundCanvas(c: PaintCanvas, t: Terrain, opts: PaintOptions = DEFAULT_OPTIONS): void {
   paintGround(c, t, opts.hillshade);
   for (const l of REGION.locations) {
-    disc(c, l.pos, l.radius + 0.5, css(l.kind === 'oasis' ? shade(PAL.scrub[0], 1.1) : shade(PAL.rust.dark, 1.6), 0.45));
+    const farm = l.id === 'orchard' || l.id === 'granary';
+    if (farm) disc(c, l.pos, l.radius + 3, css(PAL.scrub[0], 0.2));
+    disc(c, l.pos, l.radius + 0.5, css(l.kind === 'oasis' || farm ? shade(PAL.scrub[0], 1.1) : shade(PAL.rust.dark, 1.6), 0.45));
+  }
+  const { canyon, dryRiver } = TERRAIN.features;
+  stroke(c, canyon.path, (canyon.width + canyon.bank) * 2, css(PAL.rust.dark, 0.35), 0);
+  stroke(c, canyon.path, canyon.width * 2, css(PAL.sand[3], 0.7), 0);
+  stroke(c, dryRiver.path, (dryRiver.width + dryRiver.bank) * 2, css(PAL.sand[3], 0.35), 0);
+  stroke(c, dryRiver.path, dryRiver.width * 2, css(PAL.road, 0.65), 0);
+  for (const crater of TERRAIN.features.craters) {
+    disc(c, crater.center, crater.radius + crater.bank, css(PAL.rust.side, 0.18));
+    disc(c, crater.center, crater.radius, css(PAL.rust.dark, 0.25));
   }
   for (const road of REGION.roads) paintRoad(c, road);
   paintScatter(c, t.size);

@@ -3,6 +3,7 @@ import { emptyWorld, addVehicle } from './testkit';
 import { planNpcOrders } from './ai';
 import { getResources } from './resources';
 import { REGION } from '../data/region';
+import { NPC_CLASSES } from '../data/npcs';
 import { endTurn } from './world';
 import { corePart, goodsCount } from './grid';
 import { addGoods } from './inventory';
@@ -16,6 +17,15 @@ function createScavenger() {
 }
 
 describe('NPC activities', () => {
+  it('uses Icarus sites for every class destination', () => {
+    const sites = [...REGION.towns, ...REGION.locations];
+    for (const profile of Object.values(NPC_CLASSES)) {
+      for (const id of [...profile.towns, ...profile.salvageSites, ...profile.supplySites]) {
+        expect(sites.find((site) => site.id === id), `missing site ${id}`).toBeDefined();
+      }
+    }
+  });
+
   it.each(['sell', 'resupply', 'raid'] as const)('records completion of %s once', (kind) => {
     const { w, npc } = createScavenger();
     npc.pos = { ...REGION.towns[0].pos };
@@ -121,7 +131,7 @@ describe('NPC activities', () => {
     const { w, npc } = createScavenger();
     planNpcOrders(w);
     expect(npc.brain!.activity?.kind).toBe('scavenge');
-    expect(npc.brain!.activity?.targetId).toBe(REGION.locations.find((site) => site.kind === 'convoy')!.id);
+    expect(NPC_CLASSES.scavenger.salvageSites).toContain(npc.brain!.activity?.targetId);
   });
 
   it('interrupts work for low fuel', () => {

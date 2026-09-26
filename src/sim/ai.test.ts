@@ -44,19 +44,19 @@ describe('NPC driving', () => {
   it('travels between towns without entering either site', () => {
     const w = newWorld(1337, START_KITS.standard);
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
-    const tin = REGION.towns[0];
-    const salt = REGION.towns[1];
-    const npc = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: tin.pos.x + tin.radius + 2, y: tin.pos.y });
+    const bowl = REGION.towns[0];
+    const nose = REGION.towns[1];
+    const npc = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: bowl.pos.x + bowl.radius + 2, y: bowl.pos.y });
     npc.brain = { templateId: 'trader', activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0 };
     let closest = Infinity;
-    for (let i = 0; i < 80; i++) {
+    for (let i = 0; i < 150; i++) {
       planNpcOrders(w);
       resolveMovement(w);
       resolveNpcActivities(w);
-      closest = Math.min(closest, dist(npc.pos, salt.pos));
-      expect(dist(npc.pos, salt.pos)).toBeGreaterThanOrEqual(salt.radius + 0.8 - 0.02);
+      closest = Math.min(closest, dist(npc.pos, nose.pos));
+      expect(dist(npc.pos, nose.pos)).toBeGreaterThanOrEqual(nose.radius + 0.8 - 0.02);
     }
-    expect(closest).toBeLessThan(salt.radius + 2);
+    expect(closest).toBeLessThan(nose.radius + 2);
   });
 
   it('backs out after repeated failed drive attempts', () => {

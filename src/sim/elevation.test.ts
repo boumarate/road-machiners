@@ -1,6 +1,7 @@
 import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
+import { TERRAIN } from '../data/terrain';
 import { elevationAt } from './elevation';
 import { newWorld } from './world';
 
@@ -20,9 +21,12 @@ describe('elevationAt', () => {
     expect(w.rngState).toBe(before);
   });
 
-  it('is flattened at town centers', () => {
+  it('keeps town centers level, with Bowl recessed inside its crater', () => {
     for (const town of REGION.towns) {
-      expect(Math.abs(elevationAt(5, town.pos.x, town.pos.y))).toBeLessThan(0.01);
+      const crater = TERRAIN.features.craters.find((feature) => feature.center.x === town.pos.x && feature.center.y === town.pos.y);
+      const expectedHeight = -(crater?.depth ?? 0);
+      expect(elevationAt(5, town.pos.x, town.pos.y)).toBeCloseTo(expectedHeight);
+      expect(elevationAt(5, town.pos.x + 1, town.pos.y)).toBeCloseTo(expectedHeight);
     }
   });
 

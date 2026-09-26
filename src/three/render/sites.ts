@@ -1,4 +1,4 @@
-// Ground-level town and location decoration: pads, a water tower, palms, a crate stack.
+// Ground-level town and location decoration: pads, ship wreckage, palms, and landmarks.
 // Buildings that block movement are obstacles already (see obstacles.ts), so nothing here blocks.
 
 import * as THREE from 'three';
@@ -14,7 +14,7 @@ const TOWER_HEIGHT = 9 * S / 4; // roughly matches the 2D water tower's screen h
 export function buildSites(t: Terrain): THREE.Group {
   const group = new THREE.Group();
   for (const town of REGION.towns) group.add(buildTown(t, town));
-  for (const loc of REGION.locations) group.add(loc.kind === 'oasis' ? buildOasis(t, loc) : buildConvoy(t, loc));
+  for (const loc of REGION.locations) group.add(loc.kind === 'oasis' ? buildOasis(t, loc) : loc.kind === 'convoy' ? buildConvoy(t, loc) : buildLandmark(t, loc));
   return group;
 }
 
@@ -31,6 +31,15 @@ function buildTown(t: Terrain, town: TownDef): THREE.Group {
   pad.position.set(town.pos.x * S, groundAt(t, town.pos.x, town.pos.y) + PAD_LIFT, town.pos.y * S);
   pad.receiveShadow = true;
   g.add(pad, buildWaterTower(t, { x: town.pos.x - town.radius * 0.4, y: town.pos.y + town.radius * 0.3 }));
+  if (town.id === 'nose') {
+    const nose = new THREE.Mesh(
+      new THREE.ConeGeometry(1.1 * S, 3 * S, 4).rotateZ(-Math.PI / 2),
+      new THREE.MeshLambertMaterial({ color: PAL.metalLight, flatShading: true }),
+    );
+    nose.position.set(town.pos.x * S, groundAt(t, town.pos.x, town.pos.y) + 0.9 * S, town.pos.y * S);
+    nose.castShadow = true;
+    g.add(nose);
+  }
   return g;
 }
 
@@ -89,6 +98,41 @@ function buildPalm(t: Terrain, pos: { x: number; y: number }, i: number): THREE.
     frond.rotation.z = a;
     frond.castShadow = true;
     g.add(frond);
+  }
+  return g;
+}
+
+function buildLandmark(t: Terrain, loc: LocationDef): THREE.Group {
+  const g = new THREE.Group();
+  g.position.set(loc.pos.x * S, groundAt(t, loc.pos.x, loc.pos.y), loc.pos.y * S);
+  const metal = new THREE.MeshLambertMaterial({ color: PAL.metal, flatShading: true });
+  if (loc.id === 'fallen-sun') {
+    const hull = new THREE.Mesh(new THREE.BoxGeometry(6 * S, 1.5 * S, 2.5 * S), metal);
+    hull.position.y = 0.9 * S;
+    hull.rotation.y = -0.25;
+    hull.castShadow = true;
+    g.add(hull);
+  } else if (loc.id === 'canyon-bridge') {
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(8 * S, 0.2 * S, 1.8 * S), metal);
+    deck.position.set(-3 * S, 0.2 * S, 3 * S);
+    deck.rotation.y = 0.75;
+    deck.receiveShadow = true;
+    g.add(deck);
+  } else if (loc.id === 'orchard') {
+    for (let i = -1; i <= 1; i++) {
+      const tree = new THREE.Mesh(new THREE.ConeGeometry(0.6 * S, 1.8 * S, 5), new THREE.MeshLambertMaterial({ color: PAL.scrub[0] }));
+      tree.position.set(i * S, 0.9 * S, 0.5 * S);
+      tree.castShadow = true;
+      g.add(tree);
+    }
+  } else {
+    const structure = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.55 * S, 0.7 * S, 1.8 * S, loc.id === 'granary' ? 10 : 5),
+      metal,
+    );
+    structure.position.y = 0.9 * S;
+    structure.castShadow = true;
+    g.add(structure);
   }
   return g;
 }

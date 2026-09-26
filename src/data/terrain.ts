@@ -1,6 +1,8 @@
 // Terrain: corner heights, tile types, driving costs and fog of war.
 // Heights are in height units; one unit rises reliefPx screen pixels. Slopes are height units per tile.
 
+import type { Vec } from '../sim/vec';
+
 export type TerrainTypeId = 'road' | 'hardpan' | 'sand' | 'scrub' | 'scree';
 
 export type TerrainType = { id: TerrainTypeId; name: string; speed: number; color: number };
@@ -22,11 +24,20 @@ export const TERRAIN = {
     { freq: 1 / 4, amp: 0.22, seedOffset: 2000 },
   ],
   // Tiles of falloff from a road edge, town edge or location edge down to zero elevation.
-  // Sized to cover the player start offset from its town (about 4.2 tiles) with margin.
-  flattenMargin: 6,
+  // Keeps bends and junction approaches drivable without flattening remote landforms.
+  flattenMargin: 10,
   // Noise elevation e (about -1..1) becomes height: e * hill, plus (e - mountainFrom) * mountain above
   // mountainFrom. The steep extra term makes mountain faces too steep to drive.
   height: { hill: 1.5, mountainFrom: 0.4, mountain: 8 },
+  // Fixed landforms shared by elevation and ground paint. Width is the flat channel half-width.
+  features: {
+    canyon: { path: [{ x: 88, y: 5 }, { x: 85, y: 28 }, { x: 92, y: 49 }, { x: 98, y: 69 }, { x: 103, y: 99 }] as Vec[], width: 2.5, bank: 3, depth: 2.8 },
+    dryRiver: { path: [{ x: 7, y: 75 }, { x: 28, y: 80 }, { x: 48, y: 87 }, { x: 58, y: 91 }, { x: 70, y: 98 }, { x: 80, y: 111 }] as Vec[], width: 2, bank: 5, depth: 1.2 },
+    craters: [
+      { center: { x: 16, y: 94 }, radius: 5, bank: 6, depth: 1.4 },
+      { center: { x: 64, y: 54 }, radius: 5, bank: 5, depth: 1.8 },
+    ] as { center: Vec; radius: number; bank: number; depth: number }[],
+  },
   reliefPx: 45, // screen pixels per height unit
   // Tile types. Roads and sites first, then steep ground, low ground, and scrub patches.
   types: {

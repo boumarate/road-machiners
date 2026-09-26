@@ -12,8 +12,8 @@ export const GOOD_IDS = ['scrap', 'salt', 'meds'];
 
 // Base unit prices. Buy adds the spread, sell subtracts it.
 export const TOWN_PRICES: Record<string, Record<string, number>> = {
-  tin: { scrap: 10, salt: 38, meds: 55 },
-  salt: { scrap: 28, salt: 14, meds: 85 },
+  bowl: { scrap: 10, salt: 38, meds: 55 },
+  nose: { scrap: 28, salt: 14, meds: 85 },
 };
 
 export const ECONOMY = {

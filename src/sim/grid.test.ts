@@ -10,7 +10,7 @@ import { moveItem, storePart } from './inventory';
 import { addVehicle, emptyWorld } from './testkit';
 import type { GridItem, Vehicle, World } from './types';
 
-const tin = REGION.towns.find((t) => t.id === 'tin')!;
+const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
 
 const coreIds = (v: Vehicle) => mountedParts(v, 'core').map((p) => p.defId).sort();
 const coreItem = (w: World, defId: string) => w.vehicles[0].items.find((it) => it.kind === 'part' && it.part.defId === defId)!;
@@ -55,19 +55,19 @@ describe('built-in parts', () => {
   });
 
   it('moving or storing a core part throws', () => {
-    const w = emptyWorld(tin.pos);
+    const w = emptyWorld(bowl.pos);
     const cab = coreItem(w, 'cab');
     expect(() => moveItem(w, cab.id, { x: cab.x, y: cab.y, rot: 1 })).toThrow(/built in/);
     expect(() => storePart(w, cab.id)).toThrow(/built in/);
   });
 
   it('core parts are not for sale', () => {
-    const w = emptyWorld(tin.pos);
+    const w = emptyWorld(bowl.pos);
     expect(() => buyPart(w, 'cab')).toThrow(/built in/);
   });
 
   it('a chassis swap replaces the core parts with the new chassis ones', () => {
-    let w = emptyWorld(tin.pos);
+    let w = emptyWorld(bowl.pos);
     w.player.money = 2000;
     w.vehicles[0].items.forEach((it) => { if (it.kind === 'part' && it.part.defId === 'cab') it.part.hp = 1; });
     w = buyChassis(w, 'hauler');

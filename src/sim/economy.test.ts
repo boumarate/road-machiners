@@ -18,19 +18,19 @@ import { addVehicle, emptyWorld } from './testkit';
 import { dist } from './vec';
 import { endTurn, newWorld } from './world';
 
-const tin = REGION.towns.find((t) => t.id === 'tin')!;
-const salt = REGION.towns.find((t) => t.id === 'salt')!;
-const inTin = () => emptyWorld(tin.pos);
+const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
+const nose = REGION.towns.find((t) => t.id === 'nose')!;
+const startAtBowl = () => emptyWorld(bowl.pos);
 
 describe('trade', () => {
   it('buying moves money into cargo', () => {
-    const w = buyGood(inTin(), 'scrap', 3);
+    const w = buyGood(startAtBowl(), 'scrap', 3);
     expect(goodsCount(w.vehicles[0]).scrap).toBe(2 + 3);
-    expect(w.player.money).toBe(1500 - 3 * buyPrice(w, 'tin', 'scrap'));
+    expect(w.player.money).toBe(1500 - 3 * buyPrice(w, 'bowl', 'scrap'));
   });
 
   it('enforces cargo capacity and money', () => {
-    const w = inTin();
+    const w = startAtBowl();
     w.player.money = 10000;
     expect(() => buyGood(w, 'scrap', freeCells(w.vehicles[0]) + 1)).toThrow(/cargo space/);
     w.player.money = 300;
@@ -38,20 +38,20 @@ describe('trade', () => {
   });
 
   it('the scrap route pays and gives XP', () => {
-    let w = buyGood(inTin(), 'scrap', 8);
-    w.vehicles[0].pos = { ...salt.pos };
+    let w = buyGood(startAtBowl(), 'scrap', 8);
+    w.vehicles[0].pos = { ...nose.pos };
     const money = w.player.money;
     w = sellGood(w, 'scrap', 10);
-    expect(w.player.money - money).toBe(10 * sellPrice(w, 'salt', 'scrap'));
-    expect(sellPrice(w, 'salt', 'scrap')).toBeGreaterThan(buyPrice(w, 'tin', 'scrap'));
+    expect(w.player.money - money).toBe(10 * sellPrice(w, 'nose', 'scrap'));
+    expect(sellPrice(w, 'nose', 'scrap')).toBeGreaterThan(buyPrice(w, 'bowl', 'scrap'));
     expect(w.player.xp).toBeGreaterThan(0);
   });
 
   it('trade skill narrows the spread', () => {
-    const w = inTin();
-    const before = buyPrice(w, 'tin', 'salt') - sellPrice(w, 'tin', 'salt');
+    const w = startAtBowl();
+    const before = buyPrice(w, 'bowl', 'salt') - sellPrice(w, 'bowl', 'salt');
     w.player.skills.trade = 3;
-    expect(buyPrice(w, 'tin', 'salt') - sellPrice(w, 'tin', 'salt')).toBeLessThan(before);
+    expect(buyPrice(w, 'bowl', 'salt') - sellPrice(w, 'bowl', 'salt')).toBeLessThan(before);
   });
 
   it('town services need a town', () => {
@@ -65,13 +65,13 @@ describe('trade', () => {
 
 describe('garage', () => {
   it('buys supplies up to the cap', () => {
-    const w = buySupply(inTin(), 'supplies', RULES.suppliesCap - 12);
+    const w = buySupply(startAtBowl(), 'supplies', RULES.suppliesCap - 12);
     expect(w.player.supplies).toBe(RULES.suppliesCap);
     expect(() => buySupply(w, 'supplies', 1)).toThrow();
   });
 
   it('repairs parts for money', () => {
-    const w = inTin();
+    const w = startAtBowl();
     corePart(w.vehicles[0], 'cab').hp = 10;
     mountedParts(w.vehicles[0])[0].hp = 0;
     const r = repairAll(w);
@@ -81,7 +81,7 @@ describe('garage', () => {
   });
 
   it('chassis swap keeps fitting parts and stores the rest', () => {
-    let w = inTin();
+    let w = startAtBowl();
     w.player.money = 2000;
     w = buyChassis(w, 'hauler');
     const me = w.vehicles[0];
@@ -94,7 +94,7 @@ describe('garage', () => {
   });
 
   it('trade-in drops with built-in part damage', () => {
-    const w = inTin();
+    const w = startAtBowl();
     const whole = chassisTradeIn(w);
     coreParts(w.vehicles[0], 'wheel')[0].hp = 0;
     expect(chassisTradeIn(w)).toBeLessThan(whole);
@@ -126,11 +126,11 @@ describe('supplies', () => {
 
 describe('locations', () => {
   it('towns and locations use a 1.5x interaction radius', () => {
-    const townReach = (tin.radius + ECONOMY.useRange) * 1.5;
+    const townReach = (bowl.radius + ECONOMY.useRange) * 1.5;
     const oasis = REGION.locations.find((l) => l.kind === 'oasis')!;
     const locationReach = (oasis.radius + ECONOMY.useRange) * 1.5;
-    expect(townAt(emptyWorld({ x: tin.pos.x + townReach - 0.01, y: tin.pos.y }))?.id).toBe(tin.id);
-    expect(townAt(emptyWorld({ x: tin.pos.x + townReach + 0.01, y: tin.pos.y }))).toBeNull();
+    expect(townAt(emptyWorld({ x: bowl.pos.x + townReach - 0.01, y: bowl.pos.y }))?.id).toBe(bowl.id);
+    expect(townAt(emptyWorld({ x: bowl.pos.x + townReach + 0.01, y: bowl.pos.y }))).toBeNull();
     expect(locationAt(emptyWorld({ x: oasis.pos.x + locationReach - 0.01, y: oasis.pos.y }))?.id).toBe(oasis.id);
     expect(locationAt(emptyWorld({ x: oasis.pos.x + locationReach + 0.01, y: oasis.pos.y }))).toBeNull();
   });
@@ -158,10 +158,10 @@ describe('locations', () => {
     const convoy = REGION.locations.find((l) => l.kind === 'convoy')!;
     w.vehicles.find((v) => v.faction === 'player')!.pos = { x: convoy.pos.x + 3.5, y: convoy.pos.y + 3.5 };
     w = endTurn(w);
-    expect(w.player.discovered).toContain('convoy');
-    expect(w.events.filter((e) => e.t === 'discover')).toHaveLength(1);
+    expect(w.player.discovered).toContain('burnt-convoy');
+    expect(w.events.filter((e) => e.t === 'discover' && e.location === convoy.id)).toHaveLength(1);
     w = endTurn(w);
-    expect(w.events.filter((e) => e.t === 'discover')).toHaveLength(0);
+    expect(w.events.filter((e) => e.t === 'discover' && e.location === convoy.id)).toHaveLength(0);
   });
 });
 
@@ -192,7 +192,7 @@ describe('defeat', () => {
     const me = w.vehicles[0];
     corePart(me, 'cab').hp = 0;
     w.player.skills.gunnery = 2;
-    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: tin.pos.x + 4, y: tin.pos.y - 4 });
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: me.pos.x + 4, y: me.pos.y - 4 });
     checkDefeat(w);
     expect(me.pos).toEqual({ x: 20, y: 40 });
     expect(corePart(me, 'cab').hp).toBe(Math.max(1, Math.round(partDef('cab').hp * RULES.defeatPatch)));
@@ -220,7 +220,7 @@ describe('defeat', () => {
     const from = { ...w.vehicles[0].pos };
     w.vehicles[0].order = { kind: 'stopAt', dest: { x: 16, y: 43 } };
     w = endTurn(w);
-    expect(dist(w.vehicles[0].pos, tin.pos)).toBeLessThan(dist(from, tin.pos));
+    expect(dist(w.vehicles[0].pos, bowl.pos)).toBeLessThan(dist(from, bowl.pos));
     expect(w.player.fuel).toBe(0);
     expect(corePart(w.vehicles[0], 'cab').hp).toBeGreaterThan(0);
   });

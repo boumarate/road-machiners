@@ -9,7 +9,7 @@ import { vehicleStats } from './stats';
 import { emptyWorld } from './testkit';
 import type { World } from './types';
 
-const tin = REGION.towns.find((t) => t.id === 'tin')!;
+const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
 const item = (w: World, defId: string) => w.vehicles[0].items.find((it) => it.kind === 'part' && it.part.defId === defId)!;
 const good = (w: World) => w.vehicles[0].items.find((it) => it.kind === 'good')!;
 // The roof rack's row, just below the scout's own layout.
@@ -45,14 +45,14 @@ describe('inventory grid', () => {
     const w = emptyWorld();
     const mg = item(w, 'mg');
     expect(() => moveItem(w, mg.id, { x: 1, y: rackRow, rot: 0 })).toThrow(/town/);
-    const inTown = emptyWorld(tin.pos);
+    const inTown = emptyWorld(bowl.pos);
     const off = moveItem(inTown, item(inTown, 'mg').id, { x: 1, y: rackRow, rot: 0 });
     expect(vehicleStats(off, off.vehicles[0]).weapons).toHaveLength(0);
     expect(spareParts(off.vehicles[0]).map((p) => p.defId)).toEqual(['mg']);
   });
 
   it('a cannon works only lying along the weapon mount', () => {
-    let w = emptyWorld(tin.pos);
+    let w = emptyWorld(bowl.pos);
     w.player.money = 2000;
     const mg = item(w, 'mg');
     w = storePart(w, mg.id);
@@ -66,13 +66,13 @@ describe('inventory grid', () => {
   });
 
   it('removing the rack is blocked while its row holds items', () => {
-    let w = emptyWorld(tin.pos);
+    let w = emptyWorld(bowl.pos);
     w = moveItem(w, good(w).id, { x: 0, y: rackRow, rot: 0 });
     expect(() => storePart(w, item(w, 'rack').id)).toThrow(/fall off/);
   });
 
   it('more parts mean less cargo room', () => {
-    let w = emptyWorld(tin.pos);
+    let w = emptyWorld(bowl.pos);
     w.player.money = 2000;
     const free = freeCells(w.vehicles[0]);
     const mg = item(w, 'mg');

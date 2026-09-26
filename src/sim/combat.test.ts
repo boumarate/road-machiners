@@ -414,5 +414,5 @@ describe('invariants under AI traffic', () => {
       }
       for (const k of ['fuel', 'supplies', 'health', 'money'] as const) expect(w.player[k]).toBeGreaterThanOrEqual(0);
     }
-  });
+  }, 10_000); // 120-tile terrain and 80 turns take about 5 seconds even without parallel tests.
 });

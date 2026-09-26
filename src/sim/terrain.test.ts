@@ -1,6 +1,7 @@
 import { START_KITS } from "../data/start";
 import { describe, expect, it } from "vitest";
 import { REGION } from "../data/region";
+import { TERRAIN } from "../data/terrain";
 import { resolveMovement } from "./movement";
 import { route } from "./path";
 import { planPath } from "./steering";
@@ -14,7 +15,7 @@ import {
   type Terrain,
 } from "./terrain";
 import { emptyWorld } from "./testkit";
-import { dist } from "./vec";
+import { dist, segmentDist } from "./vec";
 import { newWorld } from "./world";
 
 // Flat terrain with a raised block of cliff tiles over x in [cx0, cx1).
@@ -29,6 +30,68 @@ function flatWith(
 }
 
 describe("terrain grid", () => {
+  it('has fifteen distinct Icarus destinations with road access', () => {
+    const w = newWorld(1337, START_KITS.standard);
+    expect(w.size).toBe(120);
+    expect(w.terrain.heights).toHaveLength(121 * 121);
+    expect(REGION.name).toBe('Icarus');
+    expect(REGION.towns.map((town) => town.name)).toEqual(['Bowl', 'Nose']);
+    expect(REGION.locations.map((site) => site.name)).toEqual([
+      'Old Orchard', 'Dustwell', 'The Granary', 'Burnt Convoy', 'Podfield',
+      'Canyon Bridge', 'Glass Flats', 'Green Pit', 'South Lock', 'Ridge Wrecks',
+      'Pump Station', 'Fallen Sun', 'Salvage Yard',
+    ]);
+    const sites = [...REGION.towns, ...REGION.locations];
+    expect(new Set(sites.map((site) => site.id)).size).toBe(15);
+    for (const site of sites) {
+      expect(site.pos.x).toBeGreaterThan(site.radius);
+      expect(site.pos.y).toBeGreaterThan(site.radius);
+      expect(site.pos.x).toBeLessThan(w.size - site.radius);
+      expect(site.pos.y).toBeLessThan(w.size - site.radius);
+      expect(REGION.roads.some((road) => road.some((p) => dist(p, site.pos) <= (site.id === 'fallen-sun' ? site.radius : 0.01)))).toBe(true);
+    }
+    for (let i = 0; i < sites.length; i++) for (let j = i + 1; j < sites.length; j++) expect(dist(sites[i].pos, sites[j].pos)).toBeGreaterThan(12);
+  });
+
+  it('links both towns by northern and southern canyon crossings', () => {
+    const connects = (a: string, b: string) => {
+      const sites = [...REGION.towns, ...REGION.locations];
+      const p = sites.find((site) => site.id === a)!.pos;
+      const q = sites.find((site) => site.id === b)!.pos;
+      return REGION.roads.some((road) => road.some((point) => dist(point, p) < 0.01) && road.some((point) => dist(point, q) < 0.01));
+    };
+    for (const [a, b] of [
+      ['bowl', 'orchard'], ['orchard', 'dustwell'], ['dustwell', 'granary'], ['granary', 'burnt-convoy'],
+      ['burnt-convoy', 'podfield'], ['podfield', 'nose'], ['bowl', 'ridge-wrecks'], ['ridge-wrecks', 'south-lock'],
+      ['south-lock', 'green-pit'], ['green-pit', 'glass-flats'], ['glass-flats', 'canyon-bridge'], ['canyon-bridge', 'nose'],
+      ['orchard', 'pump-station'], ['pump-station', 'salvage-yard'], ['salvage-yard', 'podfield'],
+      ['granary', 'pump-station'], ['south-lock', 'pump-station'], ['salvage-yard', 'glass-flats'],
+    ]) expect(connects(a, b), `${a} to ${b}`).toBe(true);
+  });
+
+  it('puts two dead-end approaches at the Fallen Sun without a road through its hull', () => {
+    const wreck = REGION.locations.find((site) => site.id === 'fallen-sun')!;
+    const approaches = REGION.roads.filter((road) => dist(road.at(-1)!, wreck.pos) <= wreck.radius);
+    expect(approaches).toHaveLength(2);
+    for (const road of REGION.roads) for (let i = 1; i < road.length; i++) {
+      expect(segmentDist(wreck.pos, road[i - 1], road[i])).toBeGreaterThanOrEqual(wreck.radius);
+    }
+  });
+
+  it('carves a canyon and a dry river below the surrounding hills', () => {
+    const t = newWorld(1337, START_KITS.standard).terrain;
+    const canyon = TERRAIN.features.canyon;
+    const river = TERRAIN.features.dryRiver;
+    const pickMiddle = (line: { x: number; y: number }[]) => line[Math.floor(line.length / 2)];
+    const c = pickMiddle(canyon.path);
+    const r = { x: (river.path[0].x + river.path[1].x) / 2, y: (river.path[0].y + river.path[1].y) / 2 };
+    expect(heightAt(t, c.x, c.y)).toBeLessThan(heightAt(t, c.x + canyon.width + 3, c.y) - 1);
+    expect(heightAt(t, r.x, r.y)).toBeLessThan(heightAt(t, r.x, r.y + river.width + 3) - 0.3);
+    for (const crater of TERRAIN.features.craters) {
+      expect(heightAt(t, crater.center.x, crater.center.y)).toBeLessThan(heightAt(t, crater.center.x + crater.radius + crater.bank, crater.center.y) - 0.5);
+    }
+  });
+
   it("neighboring tiles share corners, so height is continuous across edges", () => {
     const t = newWorld(1337, START_KITS.standard).terrain;
     for (const x of [10, 23, 41])
