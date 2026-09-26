@@ -65,7 +65,9 @@ export class InventoryView {
     window.addEventListener("pointermove", (e) => this.onMove(e));
     window.addEventListener("pointerup", (e) => this.onDrop(e));
     window.addEventListener("keydown", (e) => {
-      if (this.drag && e.key.toLowerCase() === "r") this.rotate();
+      if (e.key.toLowerCase() !== "r" || e.repeat) return;
+      if (this.drag) this.rotate();
+      else this.rotateSelected();
     });
     window.addEventListener("contextmenu", (e) => {
       if (!this.drag) return;
@@ -164,7 +166,7 @@ export class InventoryView {
         {},
         "A part works only when it lies fully on one of its letters. Built-in parts are fixed and can only be repaired.",
       ),
-      el("div", {}, "Drag to move, R or right click to rotate."),
+      el("div", {}, "Drag to move. R turns the selected part, or the dragged item. Right click also turns it while dragging."),
     );
   }
 
@@ -328,6 +330,15 @@ export class InventoryView {
     };
     this.drag.grab = { x: 0, y: 0 };
     if (this.lastPointer) this.onMove(this.lastPointer);
+  }
+
+  // R on a selected grid item turns it in place, keeping its top left cell.
+  private rotateSelected(): void {
+    if (!this.gridEl?.isConnected || this.selectedItem === null) return;
+    const item = playerVehicle(this.host.world()).items.find((it) => it.id === this.selectedItem);
+    if (!item || item.kind !== "part") return;
+    const id = item.id;
+    this.run((w) => moveItem(w, id, { x: item.x, y: item.y, rot: item.rot === 0 ? 1 : 0 }));
   }
 
   private onMove(e: PointerEvent): void {
