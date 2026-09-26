@@ -1,83 +1,146 @@
 // Town services: trade, supplies, repairs, parts and chassis. All need the player in a town.
 // Invalid requests throw: the UI only offers valid ones.
 
-import { chassisDef, PLAYER_CHASSIS } from '../data/chassis';
-import { ECONOMY, GOODS, TOWN_PRICES } from '../data/goods';
-import { partDef } from '../data/parts';
-import { RULES } from '../data/rules';
-import { REGION } from '../data/region';
-import { dist } from './vec';
-import { getResources } from './resources';
-import { skillBonus } from '../data/skills';
-import { playerVehicle } from './damage';
-import { addCoreParts, makePart } from './factory';
-import { gainXp } from './progress';
-import { requireTown } from './sites';
-import { freeCells, goodsCount, mountedParts } from './grid';
-import { addGoods, mountPart, removeGoods, stowPart } from './inventory';
-import type { PartInstance, Vehicle, World } from './types';
-import { update } from './world';
+import { chassisDef, PLAYER_CHASSIS } from "../data/chassis";
+import { ECONOMY, GOODS, TOWN_PRICES } from "../data/goods";
+import { partDef } from "../data/parts";
+import { RULES } from "../data/rules";
+import { REGION } from "../data/region";
+import { dist } from "./vec";
+import { getResources } from "./resources";
+import { skillBonus } from "../data/skills";
+import { playerVehicle } from "./damage";
+import { addCoreParts, makePart } from "./factory";
+import { gainXp } from "./progress";
+import { requireTown } from "./sites";
+import { freeCells, goodsCount, mountedParts } from "./grid";
+import { addGoods, mountPart, removeGoods, stowPart } from "./inventory";
+import type { PartInstance, Vehicle, World } from "./types";
+import { update } from "./world";
 
 export type Supply = "fuel" | "supplies";
 
-export function requireVehicleTown(world: World, vehicle: Vehicle, townId: string): void {
+export function requireVehicleTown(
+  world: World,
+  vehicle: Vehicle,
+  townId: string,
+): void {
   const town = REGION.towns.find((t) => t.id === townId);
-  if (!town || dist(vehicle.pos, town.pos) > (town.radius + ECONOMY.useRange) * ECONOMY.interactionScale) throw new Error('Not in the requested town');
-  if (vehicle.id !== world.player.vehicleId && vehicle.speed > RULES.parkedSpeed) throw new Error('Stop before using town services');
+  if (
+    !town ||
+    dist(vehicle.pos, town.pos) >
+      (town.radius + ECONOMY.useRange) * ECONOMY.interactionScale
+  )
+    throw new Error("Not in the requested town");
+  if (
+    vehicle.id !== world.player.vehicleId &&
+    vehicle.speed > RULES.parkedSpeed
+  )
+    throw new Error("Stop before using town services");
 }
 
-export function getTradePrice(world: World, vehicle: Vehicle, townId: string, good: string, direction: 'buy' | 'sell'): number {
-  const margin = vehicle.id === world.player.vehicleId ? spread(world) : ECONOMY.spread;
-  return Math.round(basePrice(townId, good) * (1 + (direction === 'buy' ? margin : -margin)));
+export function getTradePrice(
+  world: World,
+  vehicle: Vehicle,
+  townId: string,
+  good: string,
+  direction: "buy" | "sell",
+): number {
+  const margin =
+    vehicle.id === world.player.vehicleId ? spread(world) : ECONOMY.spread;
+  return Math.round(
+    basePrice(townId, good) * (1 + (direction === "buy" ? margin : -margin)),
+  );
 }
 
-export function tradeGoods(world: World, vehicle: Vehicle, townId: string, good: string, count: number, direction: 'buy' | 'sell'): void {
+export function tradeGoods(
+  world: World,
+  vehicle: Vehicle,
+  townId: string,
+  good: string,
+  count: number,
+  direction: "buy" | "sell",
+): void {
   requireVehicleTown(world, vehicle, townId);
-  if (!GOODS[good] || !Number.isInteger(count) || count <= 0) throw new Error(`Bad trade ${count} ${good}`);
+  if (!GOODS[good] || !Number.isInteger(count) || count <= 0)
+    throw new Error(`Bad trade ${count} ${good}`);
   const resources = getResources(world, vehicle);
   const price = getTradePrice(world, vehicle, townId, good, direction);
   const held = goodsCount(vehicle)[good] ?? 0;
-  if (direction === 'buy') {
-    if (resources.money < price * count) throw new Error('Not enough money');
-    if (freeCells(vehicle) < count) throw new Error('Not enough cargo space');
+  if (direction === "buy") {
+    if (resources.money < price * count) throw new Error("Not enough money");
+    if (freeCells(vehicle) < count) throw new Error("Not enough cargo space");
     const added = addGoods(world, vehicle, good, count);
-    if (added !== count) throw new Error('Cargo capacity invariant failed');
+    if (added !== count) throw new Error("Cargo capacity invariant failed");
     resources.money -= price * count;
-    if (vehicle.id === world.player.vehicleId) world.player.costBasis[good] = ((world.player.costBasis[good] ?? 0) * held + price * count) / (held + count);
+    if (vehicle.id === world.player.vehicleId)
+      world.player.costBasis[good] =
+        ((world.player.costBasis[good] ?? 0) * held + price * count) /
+        (held + count);
   } else {
-    if (count > held) throw new Error(`Cannot sell ${count} ${good}, holding ${held}`);
+    if (count > held)
+      throw new Error(`Cannot sell ${count} ${good}, holding ${held}`);
     removeGoods(vehicle, good, count);
     resources.money += price * count;
-    if (vehicle.id === world.player.vehicleId) gainXp(world, (price - (world.player.costBasis[good] ?? 0)) * count * RULES.tradeXpPerProfit, `sold ${count} ${GOODS[good].name}`);
+    if (vehicle.id === world.player.vehicleId)
+      gainXp(
+        world,
+        (price - (world.player.costBasis[good] ?? 0)) *
+          count *
+          RULES.tradeXpPerProfit,
+        `sold ${count} ${GOODS[good].name}`,
+      );
   }
 }
 
-export function sellVehicleCargo(world: World, vehicle: Vehicle, townId: string): void {
+export function sellVehicleCargo(
+  world: World,
+  vehicle: Vehicle,
+  townId: string,
+): void {
   requireVehicleTown(world, vehicle, townId);
-  for (const [good, count] of Object.entries(goodsCount(vehicle))) tradeGoods(world, vehicle, townId, good, count, 'sell');
+  for (const [good, count] of Object.entries(goodsCount(vehicle)))
+    tradeGoods(world, vehicle, townId, good, count, "sell");
   const mounted = new Set(mountedParts(vehicle).map((part) => part.id));
   const resources = getResources(world, vehicle);
   vehicle.items = vehicle.items.filter((item) => {
-    if (item.kind !== 'part' || mounted.has(item.part.id)) return true;
+    if (item.kind !== "part" || mounted.has(item.part.id)) return true;
     resources.money += partSellPrice(item.part);
     return false;
   });
 }
 
-export function serviceVehicle(world: World, vehicle: Vehicle, townId: string): void {
+export function serviceVehicle(
+  world: World,
+  vehicle: Vehicle,
+  townId: string,
+): void {
   requireVehicleTown(world, vehicle, townId);
   sellVehicleCargo(world, vehicle, townId);
   const resources = getResources(world, vehicle);
-  for (const kind of ['fuel', 'supplies'] as const) {
-    const cap = kind === 'fuel' ? chassisDef(vehicle.chassisId).fuelCap : RULES.suppliesCap;
-    const count = Math.max(0, Math.min(Math.floor(cap - resources[kind]), Math.floor(resources.money / ECONOMY.supplyPrice[kind])));
+  for (const kind of ["fuel", "supplies"] as const) {
+    const cap =
+      kind === "fuel"
+        ? chassisDef(vehicle.chassisId).fuelCap
+        : RULES.suppliesCap;
+    const count = Math.max(
+      0,
+      Math.min(
+        Math.floor(cap - resources[kind]),
+        Math.floor(resources.money / ECONOMY.supplyPrice[kind]),
+      ),
+    );
     resources[kind] += count;
     resources.money -= count * ECONOMY.supplyPrice[kind];
   }
-  const multiplier = vehicle.id === world.player.vehicleId ? repairMult(world) : 1;
+  const multiplier =
+    vehicle.id === world.player.vehicleId ? repairMult(world) : 1;
   for (const part of allParts(vehicle)) {
     const unitCost = ECONOMY.partRepairPerHp * multiplier;
-    const hp = Math.min(partDef(part.defId).hp - part.hp, Math.floor(resources.money / unitCost));
+    const hp = Math.min(
+      partDef(part.defId).hp - part.hp,
+      Math.floor(resources.money / unitCost),
+    );
     part.hp += hp;
     resources.money -= Math.ceil(hp * unitCost);
   }
@@ -91,11 +154,11 @@ function spread(world: World): number {
 }
 
 export function buyPrice(world: World, townId: string, good: string): number {
-  return getTradePrice(world, playerVehicle(world), townId, good, 'buy');
+  return getTradePrice(world, playerVehicle(world), townId, good, "buy");
 }
 
 export function sellPrice(world: World, townId: string, good: string): number {
-  return getTradePrice(world, playerVehicle(world), townId, good, 'sell');
+  return getTradePrice(world, playerVehicle(world), townId, good, "sell");
 }
 
 function basePrice(townId: string, good: string): number {
@@ -121,7 +184,7 @@ export function buyGood(world: World, good: string, n: number): World {
   return update(world, (w) => {
     const town = requireTown(w);
     const me = playerVehicle(w);
-    tradeGoods(w, me, town.id, good, n, 'buy');
+    tradeGoods(w, me, town.id, good, n, "buy");
   });
 }
 
@@ -129,7 +192,7 @@ export function sellGood(world: World, good: string, n: number): World {
   return update(world, (w) => {
     const town = requireTown(w);
     const me = playerVehicle(w);
-    tradeGoods(w, me, town.id, good, n, 'sell');
+    tradeGoods(w, me, town.id, good, n, "sell");
   });
 }
 

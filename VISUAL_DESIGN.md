@@ -22,4 +22,4 @@ Recognizable destinations interrupt long stretches of damaged farmland and rough
 - The player truck and its selection ring stay the moving focal point. Dense detail belongs inside destination footprints, away from road approaches.
 - Sites use separate silhouettes: planted rows, silos, hull sections, gates, wells, and pod clusters. Labels identify places but do not supply their entire identity.
 - Distant terrain is split into chunks so offscreen geometry can be culled. The ground texture is bounded to 2048 pixels per side. Discovery range remains ten tiles despite the expanded map.
-- These are procedural low-poly models. No external asset files are required.
+- Ship pieces, machinery, trees, rocks and wrecks are low-poly Blender models from `tools/blender/`. Houses, ruins and water are built from Three.js shapes in code.

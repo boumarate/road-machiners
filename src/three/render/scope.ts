@@ -9,8 +9,9 @@ import { TERRAIN_CHUNK } from './terrain';
 
 const S = PHYSICS.metersPerTile;
 // Meters added around each chunk's bounds, so shadows cast into view from outside it still draw.
-// The tallest model, the fallen-sun hull, is about 40 m high. The sun sits 120 m up and 100 m to the
-// side, so its shadow reaches about 33 m.
+// The sun sits 120 m up and 100 m to the side. Models up to 38 m high, like the Nose hull, cast
+// shadows under 32 m long. The 71 m Fallen Sun hull casts about 59 m, but its 176 m site radius plus
+// this margin still covers the shadow.
 const MARGIN = 8 * S;
 const IDENTITY = new THREE.Matrix4();
 

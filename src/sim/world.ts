@@ -1,27 +1,32 @@
 // World creation and the turn pipeline. No rendering or physics imports: this runs in Node tests.
 // Public functions take a world and return a new one. Inside, a cloned draft is mutated.
 
-import { REGION } from '../data/region';
-import { RULES } from '../data/rules';
-import type { StartKit } from '../data/start';
-import { findPart, playerVehicle } from './damage';
-import { makePart, makeVehicle } from './factory';
-import { generateObstacles } from './mapgen';
-import { buildTerrain } from './terrain';
-import { planNpcOrders } from './ai';
-import { assignAutoOrders, fireWeapons, isHostile, resolveDestroyed } from './combat';
-import { checkDefeat } from './defeat';
-import { discoverSites, useOasis } from './locations';
-import { resolveMovement } from './movement';
-import { consumeSupplies, leakFuel } from './supplies';
-import { spawnInitial, spawnNpcs } from './spawn';
-import { initializeSalvage } from './salvage';
-import { timed } from '../perf';
-import { resolveNpcActivities } from './npc-activities';
-import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
-import { vehicleStats } from './stats';
-import { playerSees, refreshVision } from './vision';
-import { clamp, dist, type Vec } from './vec';
+import { REGION } from "../data/region";
+import { RULES } from "../data/rules";
+import type { StartKit } from "../data/start";
+import { findPart, playerVehicle } from "./damage";
+import { makePart, makeVehicle } from "./factory";
+import { generateObstacles } from "./mapgen";
+import { buildTerrain } from "./terrain";
+import { planNpcOrders } from "./ai";
+import {
+  assignAutoOrders,
+  fireWeapons,
+  isHostile,
+  resolveDestroyed,
+} from "./combat";
+import { checkDefeat } from "./defeat";
+import { discoverSites, useOasis } from "./locations";
+import { resolveMovement } from "./movement";
+import { consumeSupplies, leakFuel } from "./supplies";
+import { spawnInitial, spawnNpcs } from "./spawn";
+import { initializeSalvage } from "./salvage";
+import { timed } from "../perf";
+import { resolveNpcActivities } from "./npc-activities";
+import type { MoveOrder, Vehicle, WeaponOrder, World } from "./types";
+import { vehicleStats } from "./stats";
+import { playerSees, refreshVision } from "./vision";
+import { clamp, dist, type Vec } from "./vec";
 
 export function newWorld(seed: number, kit: StartKit): World {
   if (!Number.isInteger(seed))

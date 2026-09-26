@@ -60,6 +60,31 @@ export const PARTS: Record<string, PartDef> = {
     range: 9, reload: 3, arc: 60, look: 'cannon', spread: 2.5, rounds: 1,
     round: { damage: 30, pen: 20, speed: 250, splashRadius: 2.5, splashDamage: 12, splashPen: 6 },
   },
+  shotgun: {
+    id: 'shotgun', kind: 'weapon', name: 'Shotgun turret', hp: 18, price: 140, w: 1, h: 1, mass: 65, armor: 2,
+    range: 3, reload: 2, arc: 360, look: 'mg', spread: 12, rounds: 12,
+    round: { damage: 4, pen: 4, speed: 350, splashRadius: 0, splashDamage: 0, splashPen: 0 },
+  },
+  autocannon: {
+    id: 'autocannon', kind: 'weapon', name: 'Autocannon', hp: 28, price: 420, w: 2, h: 1, mass: 220, armor: 4,
+    range: 7, reload: 2, arc: 180, look: 'mg', spread: 4, rounds: 3,
+    round: { damage: 10, pen: 12, speed: 700, splashRadius: 0, splashDamage: 0, splashPen: 0 },
+  },
+  tankGun: {
+    id: 'tankGun', kind: 'weapon', name: 'Tank gun', hp: 45, price: 680, w: 3, h: 1, mass: 650, armor: 8,
+    range: 8, reload: 4, arc: 45, look: 'cannon', spread: 3, rounds: 1,
+    round: { damage: 48, pen: 35, speed: 500, splashRadius: 1.5, splashDamage: 10, splashPen: 5 },
+  },
+  rocketRack: {
+    id: 'rocketRack', kind: 'weapon', name: 'Rocket rack', hp: 16, price: 500, w: 2, h: 1, mass: 170, armor: 1,
+    range: 10, reload: 5, arc: 90, look: 'cannon', spread: 8, rounds: 4,
+    round: { damage: 18, pen: 14, speed: 90, splashRadius: 3, splashDamage: 8, splashPen: 4 },
+  },
+  sniperCannon: {
+    id: 'sniperCannon', kind: 'weapon', name: 'Sniper cannon', hp: 20, price: 600, w: 3, h: 1, mass: 280, armor: 2,
+    range: 12, reload: 3, arc: 30, look: 'cannon', spread: 0.8, rounds: 1,
+    round: { damage: 22, pen: 28, speed: 950, splashRadius: 0, splashDamage: 0, splashPen: 0 },
+  },
   stockEngine: {
     id: 'stockEngine', kind: 'engine', name: 'Stock engine', hp: 25, price: 120, w: 2, h: 2, mass: 300, armor: 4,
     speedBonus: 0, accelBonus: 0, fuelMult: 1,
@@ -67,6 +92,26 @@ export const PARTS: Record<string, PartDef> = {
   tunedEngine: {
     id: 'tunedEngine', kind: 'engine', name: 'Tuned V8', hp: 20, price: 380, w: 2, h: 2, mass: 380, armor: 4,
     speedBonus: 1, accelBonus: 1, fuelMult: 1.4,
+  },
+  flatFour: {
+    id: 'flatFour', kind: 'engine', name: 'Light flat-four', hp: 18, price: 100, w: 2, h: 1, mass: 150, armor: 2,
+    speedBonus: -1, accelBonus: 0, fuelMult: 0.75,
+  },
+  workhorseDiesel: {
+    id: 'workhorseDiesel', kind: 'engine', name: 'Workhorse diesel', hp: 40, price: 290, w: 2, h: 2, mass: 420, armor: 6,
+    speedBonus: -0.5, accelBonus: 0.5, fuelMult: 0.7,
+  },
+  racingV6: {
+    id: 'racingV6', kind: 'engine', name: 'Racing V6', hp: 16, price: 460, w: 2, h: 2, mass: 240, armor: 2,
+    speedBonus: 1.5, accelBonus: 0.5, fuelMult: 1.25,
+  },
+  heavyDiesel: {
+    id: 'heavyDiesel', kind: 'engine', name: 'Heavy diesel', hp: 55, price: 520, w: 2, h: 2, mass: 600, armor: 8,
+    speedBonus: -1, accelBonus: 1.5, fuelMult: 1.1,
+  },
+  turbine: {
+    id: 'turbine', kind: 'engine', name: 'Turbine', hp: 22, price: 850, w: 2, h: 2, mass: 310, armor: 3,
+    speedBonus: 2, accelBonus: 2, fuelMult: 2.2,
   },
   plates: {
     id: 'plates', kind: 'armor', name: 'Steel plates', hp: 40, price: 260, w: 1, h: 3, mass: 350, armor: 12,
@@ -80,6 +125,26 @@ export const PARTS: Record<string, PartDef> = {
     id: 'ram', kind: 'armor', name: 'Ram bar', hp: 50, price: 300, w: 3, h: 1, mass: 300, armor: 20,
     ramMult: 2, look: 'ram',
   },
+  scrapPanels: {
+    id: 'scrapPanels', kind: 'armor', name: 'Scrap panels', hp: 22, price: 75, w: 1, h: 2, mass: 180, armor: 5,
+    ramMult: 1, look: 'plates',
+  },
+  ceramicPlates: {
+    id: 'ceramicPlates', kind: 'armor', name: 'Ceramic plates', hp: 18, price: 440, w: 1, h: 2, mass: 100, armor: 22,
+    ramMult: 1, look: 'plates',
+  },
+  spacedArmor: {
+    id: 'spacedArmor', kind: 'armor', name: 'Spaced armor', hp: 55, price: 380, w: 1, h: 4, mass: 290, armor: 15,
+    ramMult: 1, look: 'plates',
+  },
+  reinforcedCage: {
+    id: 'reinforcedCage', kind: 'armor', name: 'Reinforced cage', hp: 65, price: 320, w: 1, h: 3, mass: 230, armor: 8,
+    ramMult: 1.2, look: 'cage',
+  },
+  plowRam: {
+    id: 'plowRam', kind: 'armor', name: 'Plow ram', hp: 85, price: 550, w: 3, h: 1, mass: 650, armor: 25,
+    ramMult: 2.8, look: 'ram',
+  },
   rack: {
     id: 'rack', kind: 'cargo', name: 'Roof rack', hp: 15, price: 80, w: 2, h: 1, mass: 40, armor: 1,
     extraRows: 1, look: 'rack',
@@ -87,6 +152,26 @@ export const PARTS: Record<string, PartDef> = {
   trailerBox: {
     id: 'trailerBox', kind: 'cargo', name: 'Cargo box', hp: 30, price: 260, w: 2, h: 2, mass: 250, armor: 1,
     extraRows: 3, look: 'box',
+  },
+  panniers: {
+    id: 'panniers', kind: 'cargo', name: 'Panniers', hp: 10, price: 65, w: 1, h: 1, mass: 55, armor: 1,
+    extraRows: 1, look: 'box',
+  },
+  flatbed: {
+    id: 'flatbed', kind: 'cargo', name: 'Flatbed extension', hp: 25, price: 150, w: 2, h: 1, mass: 180, armor: 1,
+    extraRows: 2, look: 'rack',
+  },
+  lightFrame: {
+    id: 'lightFrame', kind: 'cargo', name: 'Light cargo frame', hp: 12, price: 340, w: 2, h: 2, mass: 90, armor: 1,
+    extraRows: 3, look: 'rack',
+  },
+  enclosedFrame: {
+    id: 'enclosedFrame', kind: 'cargo', name: 'Enclosed cargo frame', hp: 55, price: 420, w: 2, h: 2, mass: 400, armor: 8,
+    extraRows: 3, look: 'box',
+  },
+  heavyFrame: {
+    id: 'heavyFrame', kind: 'cargo', name: 'Heavy cargo frame', hp: 45, price: 560, w: 2, h: 2, mass: 550, armor: 3,
+    extraRows: 5, look: 'box',
   },
   cab: {
     id: 'cab', kind: 'core', name: 'Cab', hp: 60, price: 200, w: 1, h: 1, mass: 80, armor: 3,

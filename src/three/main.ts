@@ -1,10 +1,16 @@
 // Boots the 3D game.
 
+import { loadBank } from '../audio/bank';
+import { Mixer } from '../audio/mixer';
+import { SoundPlayer } from '../audio/player';
+import { MIX, SOUNDS } from '../data/sounds';
 import { initPhysics } from '../phys/drive';
 import { perfSnapshot, resetPerf } from '../perf';
 import { mountPerfPanel } from '../ui/perf-panel';
+import { SoundSettings } from '../ui/sound';
 import { installCrashScreen } from './crash';
 import { Game } from './game';
+import { loadModels } from './render/models';
 
 function element(id: string): HTMLElement {
   const el = document.getElementById(id);
@@ -13,9 +19,13 @@ function element(id: string): HTMLElement {
 }
 
 installCrashScreen();
-await initPhysics();
+await Promise.all([initPhysics(), loadModels()]);
+const mixer = new Mixer(MIX);
+mixer.unlockOn(window);
+const bank = await loadBank(mixer.ctx, SOUNDS);
+const soundSettings = new SoundSettings(mixer, window.localStorage);
 const overlay = element('overlay');
-const game = new Game(element('game'), overlay);
+const game = new Game(element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute());
 performance.mark('korovan:ready');
 if (import.meta.env.DEV) {
   (window as any).__KOROVAN__ = game;

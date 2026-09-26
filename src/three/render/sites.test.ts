@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { Box3, Vector3 } from 'three';
+import { loadModels } from './models';
 import { buildSites } from './sites';
 
+// The model files as base64 data URLs, since tests run without a server.
+const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
+await loadModels(async (name) => {
+  const url = FILES[`/public/models/${name}.glb`];
+  if (!url) throw new Error(`Missing model file for ${name}`);
+  return Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0)).buffer;
+});
 const sites = buildSites({ size: 1, heights: [0, 0, 0, 0], types: ['hardpan'] });
 
 function measureSite(id: string): Vector3 {

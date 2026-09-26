@@ -10,7 +10,7 @@ import type { World } from '../../sim/types';
 const S = PHYSICS.metersPerTile;
 const WRAP_MARGIN = WEATHER.storm.spread + WEATHER.storm.diameter;
 
-type Bank = { group: THREE.Group; x: number; y: number; speed: number; height: number };
+type Bank = { group: THREE.Group; x: number; y: number; speed: number; height: number; storm: boolean };
 type Shape = typeof WEATHER.cloud | typeof WEATHER.storm;
 
 function createDustTexture(): THREE.CanvasTexture {
@@ -63,13 +63,18 @@ export class WeatherView {
       group.add(sprite);
     }
     this.root.add(group);
-    const bank = { group, x, y, speed: storm ? 0.65 : 1, height: shape.height };
+    const bank = { group, x, y, speed: storm ? 0.65 : 1, height: shape.height, storm };
     this.placeBank(bank);
     return bank;
   }
 
   private placeBank(bank: Bank): void {
     bank.group.position.set(bank.x * S, (heightAt(this.terrain, bank.x, bank.y) + bank.height) * S, bank.y * S);
+  }
+
+  // Map tiles from a point to the nearest dust storm's center.
+  stormTilesFrom(x: number, y: number): number {
+    return Math.min(...this.banks.filter((b) => b.storm).map((b) => Math.hypot(b.x - x, b.y - y)));
   }
 
   advance(dtMs: number): void {

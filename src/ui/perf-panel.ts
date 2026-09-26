@@ -8,9 +8,10 @@ const WINDOW_FRAMES = 120; // about 2 s at 60 FPS, long enough for a stable p95
 const TIMERS = ["turn", "preview", "route", "fog"];
 
 // Matches the #ui .panel look. The overlay sits outside #ui, so the style is inline.
+// It sits top left, beside the help button, because the sound controls hold the top right.
 const STYLE = [
   "position: absolute",
-  "right: 8px",
+  "left: 56px",
   "top: 8px",
   "background: rgba(30, 22, 16, 0.88)",
   "border: 1px solid #6a5238",

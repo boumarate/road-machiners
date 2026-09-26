@@ -1,14 +1,15 @@
-// Static map obstacles: rocks, wrecks, buildings, water. Map rocks are drawn once as instanced meshes
+// Static map obstacles: rocks, wrecks, buildings, water. Map rocks are drawn once as an instanced model
 // per terrain chunk. Other obstacles are synced by id, so wrecks that appear mid-game (a vehicle dying)
 // get added without touching the rest.
 
 import * as THREE from 'three';
 import { hashStr } from '../../render/noise';
-import { PAL, shade } from '../../render/palette';
+import { PAL } from '../../render/palette';
 import { PHYSICS } from '../../data/physics';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import type { Obstacle } from '../../sim/types';
 import { dist } from '../../sim/vec';
+import { instancedModel, model } from './models';
 import type { RenderScope } from './scope';
 import { TERRAIN_CHUNK } from './terrain';
 
@@ -50,7 +51,7 @@ export class ObstacleViews {
     }
   }
 
-  // Two instanced meshes per chunk, base and peak, with the shapes and tints of rockParts.
+  // One instanced rock model per chunk, with the placement and tint of rockPlacement.
   private addRocks(rocks: Obstacle[]): Set<string> {
     const byChunk = new Map<string, Obstacle[]>();
     for (const o of rocks) {
@@ -59,39 +60,16 @@ export class ObstacleViews {
       if (list) list.push(o);
       else byChunk.set(key, [o]);
     }
-    const geometry = new THREE.DodecahedronGeometry(1, 0);
-    const material = new THREE.MeshLambertMaterial({ flatShading: true });
-    const matrix = new THREE.Matrix4();
-    const rotation = new THREE.Quaternion();
-    const color = new THREE.Color();
     for (const list of byChunk.values()) {
-      const base = new THREE.InstancedMesh(geometry, material, list.length);
-      const peak = new THREE.InstancedMesh(geometry, material, list.length);
-      list.forEach((o, i) => {
-        const parts = rockParts(this.terrain, o);
-        for (const [mesh, part] of [[base, parts.base], [peak, parts.peak]] as const) {
-          rotation.setFromAxisAngle(UP, part.yaw);
-          mesh.setMatrixAt(i, matrix.compose(part.pos, rotation, part.scale));
-          mesh.setColorAt(i, color.setHex(part.color));
-        }
-      });
+      const placed = list.map((o) => rockPlacement(this.terrain, o));
+      const group = instancedModel('rock', placed.map((p) => p.matrix), placed.map((p) => p.tint));
       const center = list.reduce((c, o) => ({ x: c.x + o.pos.x / list.length, y: c.y + o.pos.y / list.length }), { x: 0, y: 0 });
       const reach = Math.max(...list.map((o) => dist(center, o.pos) + o.r));
-      for (const mesh of [base, peak]) {
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        mesh.matrixAutoUpdate = false;
-        mesh.updateMatrix();
-        mesh.computeBoundingBox();
-        mesh.computeBoundingSphere();
-        this.scope.add(mesh, center, reach);
-      }
+      this.scope.add(group, center, reach);
     }
     return new Set(rocks.map((o) => o.id));
   }
 }
-
-const UP = new THREE.Vector3(0, 1, 0);
 
 function disposeTree(obj: THREE.Object3D): void {
   obj.traverse((o) => {
@@ -118,59 +96,28 @@ function seat(t: Terrain, o: Obstacle): THREE.Group {
   return g;
 }
 
-type RockPart = { pos: THREE.Vector3; yaw: number; scale: THREE.Vector3; color: number };
-
-// A jagged low-poly boulder: two stacked unit dodecahedra shrinking toward a peak, like the 2D rock prism.
-function rockParts(t: Terrain, o: Obstacle): { base: RockPart; peak: RockPart } {
+// A boulder from tools/blender/rock.py, modeled at a 1 m radius. Each rock gets its own yaw and tint.
+function rockPlacement(t: Terrain, o: Obstacle): { matrix: THREE.Matrix4; tint: number } {
   const seed = hashStr(o.id);
-  const r = o.r * S;
-  const tint = 0.9 + seed * 0.2;
-  const ground = heightAt(t, o.pos.x, o.pos.y) * S;
-  return {
-    base: {
-      pos: new THREE.Vector3(o.pos.x * S, ground + r * 0.3, o.pos.y * S),
-      yaw: seed * Math.PI * 2,
-      scale: new THREE.Vector3(r, r * 0.55, r),
-      color: shade(PAL.rock.top, tint),
-    },
-    peak: {
-      pos: new THREE.Vector3(o.pos.x * S, ground + r * 0.75, o.pos.y * S),
-      yaw: seed * Math.PI * 3,
-      scale: new THREE.Vector3(r * 0.6, r * 0.6 * 0.6, r * 0.6),
-      color: shade(PAL.rock.side, tint),
-    },
-  };
+  const g = seat(t, o);
+  g.rotation.y = seed * Math.PI * 2;
+  g.scale.setScalar(o.r * S);
+  g.updateMatrix();
+  return { matrix: g.matrix, tint: 0.9 + seed * 0.2 };
 }
 
-// A burnt truck: scorched frame, crushed cab, one loose wheel, like the 2D wreck.
+// A burnt pickup from tools/blender/wreck.py, modeled at the 0.7-tile reference size.
 function buildWreck(t: Terrain, o: Obstacle): THREE.Object3D {
   const seed = hashStr(o.id);
-  const k = o.r / 0.7; // scale relative to the 0.7-tile reference wreck the shape was drawn for
-  const heading = seed * Math.PI * 2;
   const g = seat(t, o);
-  g.rotation.y = -heading;
-  const rust = new THREE.MeshLambertMaterial({ color: PAL.rust.top, flatShading: true });
-  const rustDark = new THREE.MeshLambertMaterial({ color: PAL.rust.dark, flatShading: true });
-  const bed = new THREE.Mesh(new THREE.BoxGeometry(1.1 * k * S, 0.5 * S, 0.8 * k * S), rust);
-  bed.position.set(-0.3 * k * S, 0.3 * S, 0);
-  const cab = new THREE.Mesh(new THREE.BoxGeometry(0.5 * k * S, 0.3 * S, 0.6 * k * S), rustDark);
-  cab.position.set(-0.45 * k * S, 0.55 * S, 0);
-  cab.rotation.z = 0.15;
-  const wheel = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.16 * S, 0.16 * S, 0.12 * S, 12).rotateX(Math.PI / 2),
-    new THREE.MeshLambertMaterial({ color: PAL.wheel }),
-  );
-  wheel.position.set(0.3 * k * S, 0.16 * S, 0.75 * k * S);
-  wheel.rotation.z = 0.6;
-  g.add(bed, cab, wheel);
-  for (const m of g.children) {
-    m.castShadow = true;
-    m.receiveShadow = true;
-  }
+  g.rotation.y = -seed * Math.PI * 2;
+  g.scale.setScalar(o.r / 0.7);
+  g.add(model('wreck'));
   return g;
 }
 
-// A blocky building with a peaked roof cap. Random roof color per id, like the 2D version.
+// A building from tools/blender/building.py, modeled with a 1 by 0.85 m footprint and 1 m walls, stretched to
+// each footprint and height. Random roof color per id.
 function buildBuilding(t: Terrain, o: Obstacle): THREE.Object3D {
   const seed = hashStr(o.id);
   const size = o.r * 0.78 * 2 * S; // full footprint, in meters
@@ -178,16 +125,21 @@ function buildBuilding(t: Terrain, o: Obstacle): THREE.Object3D {
   const roof = PAL.roof[Math.floor(seed * 97) % PAL.roof.length];
   const g = seat(t, o);
   g.rotation.y = -seed * Math.PI;
-  const wall = new THREE.Mesh(new THREE.BoxGeometry(size, height, size * 0.85), new THREE.MeshLambertMaterial({ color: PAL.wall.top, flatShading: true }));
-  wall.position.y = height / 2;
-  const cap = new THREE.Mesh(new THREE.BoxGeometry(size * 1.08, height * 0.12, size * 0.95), new THREE.MeshLambertMaterial({ color: roof, flatShading: true }));
-  cap.position.y = height + (height * 0.12) / 2;
-  g.add(wall, cap);
-  for (const m of g.children) {
-    m.castShadow = true;
-    m.receiveShadow = true;
-  }
+  g.scale.set(size, height, size);
+  const house = model('building');
+  eachMaterial(house, (m) => {
+    if (m.name === 'roof') m.color.setHex(roof);
+  });
+  g.add(house);
   return g;
+}
+
+function eachMaterial(obj: THREE.Object3D, fn: (m: THREE.MeshLambertMaterial) => void): void {
+  obj.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) fn(m as THREE.MeshLambertMaterial);
+  });
 }
 
 function buildWater(t: Terrain, o: Obstacle): THREE.Object3D {

@@ -1,7 +1,8 @@
 import { START_KITS } from "../data/start";
 import { describe, expect, it } from "vitest";
 import { REGION } from "../data/region";
-import { TERRAIN, TERRAIN_TYPES } from "../data/terrain";
+import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from "../data/terrain";
+import { elevationAt } from './elevation';
 import { resolveMovement } from "./movement";
 import { route } from "./path";
 import { planPath } from "./steering";
@@ -9,6 +10,7 @@ import { vehicleStats } from "./stats";
 import {
   buildTerrain,
   driveFactor,
+  heightFromElevation,
   heightAt,
   isCliff,
   tileAt,
@@ -46,8 +48,8 @@ function terrainHash(t: Terrain): string {
 
 describe("terrain generation", () => {
   it("keeps the exact heights and types of known seeds", () => {
-    expect(terrainHash(buildTerrain(1, REGION.size))).toBe("003f1b36");
-    expect(terrainHash(buildTerrain(7, REGION.size))).toBe("95782f7a");
+    expect(terrainHash(buildTerrain(1, REGION.size))).toBe("40e8055b");
+    expect(terrainHash(buildTerrain(7, REGION.size))).toBe("3f6821fa");
   }, 30_000);
 
   it("finds the same road distance through the road index as over every road", () => {
@@ -58,6 +60,43 @@ describe("terrain generation", () => {
           expect(ROAD_INDEX.nearestWithin(x, y, reach)).toBe(exact < reach ? exact : Infinity);
         }
       }
+    }
+  });
+});
+
+describe('terrain variety', () => {
+  it.each([1, 1337, 2024])('generates all ten types without changing heights or road/site priority for seed %s', (seed) => {
+    expect(Object.keys(TERRAIN_TYPES)).toHaveLength(10);
+    const t = buildTerrain(seed, REGION.size);
+    expect(new Set(t.types)).toEqual(new Set(Object.keys(TERRAIN_TYPES)));
+    expect(buildTerrain(seed, REGION.size)).toEqual(t);
+    const heights: number[] = [];
+    for (let y = 0; y <= t.size; y++) for (let x = 0; x <= t.size; x++) heights.push(heightFromElevation(elevationAt(seed, x, y)));
+    expect(t.heights).toEqual(heights);
+    for (let y = 0; y < t.size; y++) for (let x = 0; x < t.size; x++) {
+      const point = { x: x + 0.5, y: y + 0.5 };
+      const kind = t.types[y * t.size + x];
+      if (REGION.roads.some((r) => polylineDist(point, r) < REGION.roadWidth / 2)) expect(kind).toBe('road');
+      else if ([...REGION.towns, ...REGION.locations].some((s) => dist(point, s.pos) < s.radius + TERRAIN.types.siteMargin)) expect(kind).toBe('hardpan');
+    }
+  });
+
+  it('applies each new surface to real movement and the same path preview', () => {
+    const fixture = emptyWorld({ x: 20, y: 30 });
+    const kinds = ['mud', 'gravel', 'saltCrust', 'asphalt', 'ash'] as TerrainTypeId[];
+    expect(new Set(kinds.map((id) => TERRAIN_TYPES[id]?.color)).size).toBe(5);
+    for (const kind of kinds) {
+      const w = structuredClone(fixture);
+      w.terrain.types.fill(kind);
+      const v = w.vehicles[0];
+      v.speed = 4;
+      v.direct = true;
+      v.order = { kind: 'through', dest: { x: 40, y: 30 } };
+      expect(driveFactor(w.terrain, v.pos, v.heading)).toBe(TERRAIN_TYPES[kind].speed);
+      const preview = planPath(w, vehicleStats(w, v), v, v.order, 1)[0].end;
+      resolveMovement(w);
+      expect(dist(v.pos, preview)).toBeLessThan(1e-6);
+      expect(v.pos.x).toBeGreaterThan(20);
     }
   });
 });

@@ -1,10 +1,14 @@
 // Activity execution uses the same steering and route planner as the player.
-import { NPCS } from '../data/npcs';
-import { RULES } from '../data/rules';
-import { chooseNpcActivity, getActivityDestination, setNpcActivity } from './npc-activities';
-import { vehicleStats } from './stats';
-import type { Vehicle, World } from './types';
-import { angleDiff, bearing, dist, type Vec } from './vec';
+import { NPCS } from "../data/npcs";
+import { RULES } from "../data/rules";
+import {
+  chooseNpcActivity,
+  getActivityDestination,
+  setNpcActivity,
+} from "./npc-activities";
+import { vehicleStats } from "./stats";
+import type { Vehicle, World } from "./types";
+import { angleDiff, bearing, dist, type Vec } from "./vec";
 
 const STRAFE_ANGLE = Math.PI / 3;
 
@@ -17,35 +21,85 @@ export function planNpcOrders(world: World): void {
     if (b.recovery) b.recovery--;
     const activity = chooseNpcActivity(world, v);
     setNpcActivity(world, v, activity, activity.reason);
-    const yielding = activity.kind !== 'fight' && activity.kind !== 'flee' && vehicleAhead(world, v);
-    if (b.lastPos && !yielding && dist(v.pos, b.lastPos) < RULES.arriveRadius / 2 && v.order && v.order.kind !== 'brake') b.stalled = (b.stalled ?? 0) + 1;
+    const yielding =
+      activity.kind !== "fight" &&
+      activity.kind !== "flee" &&
+      vehicleAhead(world, v);
+    if (
+      b.lastPos &&
+      !yielding &&
+      dist(v.pos, b.lastPos) < RULES.arriveRadius / 2 &&
+      v.order &&
+      v.order.kind !== "brake"
+    )
+      b.stalled = (b.stalled ?? 0) + 1;
     else b.stalled = 0;
     b.lastPos = { ...v.pos };
     if (b.stalled >= RULES.npcStuckTurns) {
       b.recovery = RULES.npcRecoveryTurns;
-      b.recoveryGoal = { x: v.pos.x - Math.cos(v.heading) * (RULES.reverse.distance + RULES.minAimDistance), y: v.pos.y - Math.sin(v.heading) * (RULES.reverse.distance + RULES.minAimDistance) };
+      b.recoveryGoal = {
+        x:
+          v.pos.x -
+          Math.cos(v.heading) * (RULES.reverse.distance + RULES.minAimDistance),
+        y:
+          v.pos.y -
+          Math.sin(v.heading) * (RULES.reverse.distance + RULES.minAimDistance),
+      };
       b.stalled = 0;
     }
     let goal = getActivityDestination(world, v);
-    if (activity.kind === 'fight') {
-      const target = world.vehicles.find((other) => other.id === activity.targetId);
-      if (!target) throw new Error('Fight activity missing visible target');
-      const preferredRange = tpl.preferredRange > 0 ? tpl.preferredRange : Math.min(...vehicleStats(world, v).weapons.map((weapon) => weapon.def.range));
+    if (activity.kind === "fight") {
+      const target = world.vehicles.find(
+        (other) => other.id === activity.targetId,
+      );
+      if (!target) throw new Error("Fight activity missing visible target");
+      const preferredRange =
+        tpl.preferredRange > 0
+          ? tpl.preferredRange
+          : Math.min(
+              ...vehicleStats(world, v).weapons.map(
+                (weapon) => weapon.def.range,
+              ),
+            );
       goal = computeFightGoal(world, v, preferredRange, target);
     }
-    v.order = yielding || !goal ? { kind: 'brake' } : b.recovery ? { kind: 'stopAt', dest: b.recoveryGoal! } : { kind: activity.kind === 'fight' || activity.kind === 'flee' ? 'through' : 'stopAt', dest: goal };
+    v.order =
+      yielding || !goal
+        ? { kind: "brake" }
+        : b.recovery
+          ? { kind: "stopAt", dest: b.recoveryGoal! }
+          : {
+              kind:
+                activity.kind === "fight" || activity.kind === "flee"
+                  ? "through"
+                  : "stopAt",
+              dest: goal,
+            };
     v.direct = false;
   }
 }
 
-function computeFightGoal(world: World, v: Vehicle, preferredRange: number, target: Vehicle): Vec {
+function computeFightGoal(
+  world: World,
+  v: Vehicle,
+  preferredRange: number,
+  target: Vehicle,
+): Vec {
   const d = dist(v.pos, target.pos);
-  const lead = { x: target.pos.x + Math.cos(target.heading) * target.speed, y: target.pos.y + Math.sin(target.heading) * target.speed };
+  const lead = {
+    x: target.pos.x + Math.cos(target.heading) * target.speed,
+    y: target.pos.y + Math.sin(target.heading) * target.speed,
+  };
   if (d > preferredRange) return lead;
-  const hasTurret = vehicleStats(world, v).weapons.some((w) => w.def.arc >= 360);
+  const hasTurret = vehicleStats(world, v).weapons.some(
+    (w) => w.def.arc >= 360,
+  );
   if (hasTurret) {
     const a = bearing(target.pos, v.pos) + STRAFE_ANGLE;
-    return { x: target.pos.x + Math.cos(a) * preferredRange, y: target.pos.y + Math.sin(a) * preferredRange };
+    return {
+      x: target.pos.x + Math.cos(a) * preferredRange,
+      y: target.pos.y + Math.sin(a) * preferredRange,
+    };
   }
   const a = bearing(v.pos, target.pos);
   const step = RULES.arriveRadius + 0.2;

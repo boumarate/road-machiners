@@ -30,6 +30,11 @@ export const PHYSICS = {
     hauler: { half: { x: 3.0, y: 0.6, z: 1.3 }, wheelX: 2.0, wheelZ: 1.2, wheelY: -0.4, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
     buggy: { half: { x: 1.8, y: 0.35, z: 0.95 }, wheelX: 1.3, wheelZ: 1.0, wheelY: -0.2, wheelRadius: 0.5, wheelHalfWidth: 0.22 },
     wagon: { half: { x: 3.0, y: 0.7, z: 1.35 }, wheelX: 1.9, wheelZ: 1.25, wheelY: -0.45, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
+    courier: { half: { x: 1.6, y: 0.3, z: 0.8 }, wheelX: 1.1, wheelZ: 0.8, wheelY: -0.2, wheelRadius: 0.4, wheelHalfWidth: 0.16 },
+    van: { half: { x: 2.5, y: 0.5, z: 1.1 }, wheelX: 1.6, wheelZ: 1.05, wheelY: -0.35, wheelRadius: 0.45, wheelHalfWidth: 0.18 },
+    longbed: { half: { x: 3.4, y: 0.55, z: 1.25 }, wheelX: 2.5, wheelZ: 1.2, wheelY: -0.35, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
+    carrier: { half: { x: 3.0, y: 0.6, z: 1.4 }, wheelX: 2.1, wheelZ: 1.3, wheelY: -0.4, wheelRadius: 0.65, wheelHalfWidth: 0.28 },
+    tractor: { half: { x: 3.2, y: 0.65, z: 1.35 }, wheelX: 2.0, wheelZ: 1.3, wheelY: -0.45, wheelRadius: 0.7, wheelHalfWidth: 0.3 },
   },
   driver: {
     steerGain: 1.6, // wheel angle per radian of heading error
