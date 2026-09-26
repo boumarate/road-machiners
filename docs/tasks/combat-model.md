@@ -1,6 +1,6 @@
 # Combat model
 
-**Status:** validating
+**Status:** done
 **Branch:** combat-model
 **Worktree:** .worktrees/combat-model
 **Goal:** In a real game, the player can switch off the route planner and drive straight into an enemy. Hovering an enemy shows both sides' hit chances with their causes. Machine guns fire bursts of separately rolled rounds. Every hit or ram breaks named parts, and armor on the struck side matters. Garage loadout mass visibly changes speed, handling and ram damage. The user confirms the fights feel decent by playing.
@@ -266,13 +266,12 @@ Approach: build bottom-up in six phases. Mass comes first, since stats and physi
   - The hover card lists both of the player's weapons and the buggy's MG, with chances and causes. It sits beside the buggy without covering it.
   - One turn fired the cannon, 1 of 1 hits, which disabled the buggy's engine. The MG hit 6 of 6. The buggy's MG hit the player's front: the ram bar, the cab and the rack.
   - The garage shows side letters, fixed built-in parts, condition bars, and plates on L and B.
-- Open: the user tries fights and ramming in play (Goal).
+- The user played the build and confirmed the Goal.
 
 ## Code smells
 - `src/three/render/vehicle.ts` draws the rebar cage over the cab at the nose, whatever side it is mounted on.
 - `src/three/game.ts` shot labels and target markers name weapons by look, such as "MG", not by the weapon's name.
 - `src/ui/inventory.ts` garage storage chips have no condition bar.
-- `DESIGN.md:43` still describes weapons by "accuracy".
 
 ## Conclusion
 All six phases landed through 61f4e80, and review found no defects in code. Its two findings were missing notes, now recorded.
