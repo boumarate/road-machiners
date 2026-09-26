@@ -78,7 +78,7 @@ describe("route", () => {
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
     w.player.fuel = 100;
     const me = w.player.vehicleId;
-    for (let i = 0; i < 80 && dist(w.vehicles[0].pos, nose.pos) > nose.radius + 1.5; i++) {
+    for (let i = 0; i < w.size && dist(w.vehicles[0].pos, nose.pos) > nose.radius + 1.5; i++) {
       w = endTurn(w);
       w.vehicles = w.vehicles.filter((v) => v.faction === "player");
       const staticHits = w.events.filter(
@@ -88,5 +88,5 @@ describe("route", () => {
     }
     expect(dist(w.vehicles[0].pos, nose.pos)).toBeGreaterThanOrEqual(nose.radius + 0.6 - 0.02);
     expect(dist(w.vehicles[0].pos, nose.pos)).toBeLessThanOrEqual(nose.radius + 1.5);
-  });
+  }, 120_000);
 });

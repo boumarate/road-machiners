@@ -106,12 +106,13 @@ describe('world', () => {
     expect(run()).toEqual(run());
   });
 
-  it('keeps the player out of obstacles on a long drive', () => {
+  it('keeps the player out of obstacles on a long drive', async () => {
     let w = setMoveOrder(newWorld(3, START_KITS.standard), { kind: 'stopAt', dest: { x: 50, y: 50 } });
     for (let i = 0; i < 30; i++) {
       w = endTurn(w);
       const v = w.vehicles[0];
       for (const o of w.obstacles) expect(dist(v.pos, o.pos)).toBeGreaterThanOrEqual(o.r + 0.6 - 0.01);
+      await new Promise<void>((resolve) => setTimeout(resolve, 0)); // Let the runner process messages between expanded-region turns.
     }
-  });
+  }, 120_000);
 });

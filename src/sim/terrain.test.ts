@@ -32,8 +32,8 @@ function flatWith(
 describe("terrain grid", () => {
   it('has fifteen distinct Icarus destinations with road access', () => {
     const w = newWorld(1337, START_KITS.standard);
-    expect(w.size).toBe(120);
-    expect(w.terrain.heights).toHaveLength(121 * 121);
+    expect(w.size).toBe(600);
+    expect(w.terrain.heights).toHaveLength(601 * 601);
     expect(REGION.name).toBe('Icarus');
     expect(REGION.towns.map((town) => town.name)).toEqual(['Bowl', 'Nose']);
     expect(REGION.locations.map((site) => site.name)).toEqual([
@@ -50,7 +50,7 @@ describe("terrain grid", () => {
       expect(site.pos.y).toBeLessThan(w.size - site.radius);
       expect(REGION.roads.some((road) => road.some((p) => dist(p, site.pos) <= (site.id === 'fallen-sun' ? site.radius : 0.01)))).toBe(true);
     }
-    for (let i = 0; i < sites.length; i++) for (let j = i + 1; j < sites.length; j++) expect(dist(sites[i].pos, sites[j].pos)).toBeGreaterThan(12);
+    for (let i = 0; i < sites.length; i++) for (let j = i + 1; j < sites.length; j++) expect(dist(sites[i].pos, sites[j].pos)).toBeGreaterThan(60);
   });
 
   it('links both towns by northern and southern canyon crossings', () => {
@@ -85,8 +85,8 @@ describe("terrain grid", () => {
     const pickMiddle = (line: { x: number; y: number }[]) => line[Math.floor(line.length / 2)];
     const c = pickMiddle(canyon.path);
     const r = { x: (river.path[0].x + river.path[1].x) / 2, y: (river.path[0].y + river.path[1].y) / 2 };
-    expect(heightAt(t, c.x, c.y)).toBeLessThan(heightAt(t, c.x + canyon.width + 3, c.y) - 1);
-    expect(heightAt(t, r.x, r.y)).toBeLessThan(heightAt(t, r.x, r.y + river.width + 3) - 0.3);
+    expect(heightAt(t, c.x, c.y)).toBeLessThan(heightAt(t, c.x + canyon.width + canyon.bank + 3, c.y) - 1);
+    expect(heightAt(t, r.x, r.y)).toBeLessThan(heightAt(t, r.x, r.y + river.width + river.bank + 3) - 0.3);
     for (const crater of TERRAIN.features.craters) {
       expect(heightAt(t, crater.center.x, crater.center.y)).toBeLessThan(heightAt(t, crater.center.x + crater.radius + crater.bank, crater.center.y) - 0.5);
     }
@@ -110,7 +110,7 @@ describe("terrain grid", () => {
       expect(t.types[tileAt(t, REGION.roads[0][1])]).toBe("road");
       expect(isCliff(t, tileAt(t, w.vehicles[0].pos))).toBe(false);
     }
-  });
+  }, 30_000);
 
   it("mountains produce cliff tiles", () => {
     const t = newWorld(1337, START_KITS.standard).terrain;

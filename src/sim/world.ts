@@ -90,9 +90,15 @@ export function newWorld(seed: number, kit: StartKit): World {
   return world;
 }
 
+export function cloneWorld(world: World): World {
+  if (!Object.isFrozen(world.terrain)) return structuredClone(world);
+  const { terrain, ...state } = world;
+  return { ...structuredClone(state), terrain };
+}
+
 // Clone, apply, return. Every command and the turn go through this.
 export function update(world: World, fn: (draft: World) => void): World {
-  const draft = structuredClone(world);
+  const draft = cloneWorld(world);
   draft.events = [];
   draft.removed = [];
   fn(draft);

@@ -64,12 +64,24 @@ export function flattenFactor(x: number, y: number): number {
 
 export function elevationAt(seed: number, x: number, y: number): number {
   const p = { x, y };
-  let height = rawElevation(seed, x, y);
+  const relief = TERRAIN.relief;
+  let rolling = (noise2(x * relief.broadFrequency, y * relief.broadFrequency, seed + 4000) - 0.5) * relief.broadAmplitude;
+  for (const site of [...REGION.towns, ...REGION.locations]) {
+    const gap = dist(p, site.pos) - site.radius;
+    if (gap >= TERRAIN.flattenMargin) continue;
+    const level = (noise2(site.pos.x * relief.broadFrequency, site.pos.y * relief.broadFrequency, seed + 4000) - 0.5) * relief.broadAmplitude;
+    const blend = gap <= 0 ? 1 : 1 - smooth(gap / TERRAIN.flattenMargin);
+    rolling += (level - rolling) * blend;
+  }
+  const ridges = Math.abs(noise2(x * relief.ridgeFrequency, y * relief.ridgeFrequency, seed + 5000) - 0.5) * relief.ridgeAmplitude;
+  let height = rawElevation(seed, x, y) + ridges;
   for (const feature of [TERRAIN.features.canyon, TERRAIN.features.dryRiver]) {
     const gap = polylineDist(p, feature.path) - feature.width;
     if (gap < feature.bank) height -= feature.depth * (gap <= 0 ? 1 : 1 - smooth(gap / feature.bank));
   }
   height *= 1 - flattenFactor(x, y);
+  // Roads retain broad grades; only their small bumps and channel crossings are smoothed.
+  height += rolling;
   for (const crater of TERRAIN.features.craters) {
     const gap = dist(p, crater.center) - crater.radius;
     if (gap < crater.bank) height -= crater.depth * (gap <= 0 ? 1 : 1 - smooth(gap / crater.bank));

@@ -7,19 +7,27 @@ import type { Terrain } from './terrain';
 import type { Faction, Vehicle, World } from './types';
 import type { Vec } from './vec';
 import { refreshVision } from './vision';
-import { newWorld } from './world';
+import { cloneWorld, newWorld } from './world';
 
 // Flat road-speed terrain, for tests that need predictable driving.
 export function flatTerrain(size: number): Terrain {
   return { size, heights: new Array((size + 1) * (size + 1)).fill(0), types: new Array(size * size).fill('road') };
 }
 
+let emptyTemplate: World | undefined;
+
 // A world on flat ground with no obstacles and no NPCs, the player truck at `pos` facing +x.
 export function emptyWorld(pos: Vec = { x: 30, y: 30 }): World {
-  const w = newWorld(1, START_KITS.standard);
-  w.obstacles = [];
-  w.terrain = flatTerrain(w.size);
-  w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
+  if (!emptyTemplate) {
+    emptyTemplate = newWorld(1, START_KITS.standard);
+    emptyTemplate.obstacles = [];
+    emptyTemplate.terrain = flatTerrain(emptyTemplate.size);
+    Object.freeze(emptyTemplate.terrain.heights);
+    Object.freeze(emptyTemplate.terrain.types);
+    Object.freeze(emptyTemplate.terrain);
+    emptyTemplate.vehicles = emptyTemplate.vehicles.filter((v) => v.faction === 'player');
+  }
+  const w = cloneWorld(emptyTemplate);
   const p = w.vehicles[0];
   p.pos = { ...pos };
   p.heading = 0;

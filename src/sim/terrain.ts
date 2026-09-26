@@ -19,11 +19,18 @@ export function heightFromElevation(e: number): number {
   return e * T.height.hill + Math.max(0, e - T.height.mountainFrom) * T.height.mountain;
 }
 
+let lastTerrain: { seed: number; size: number; terrain: Terrain } | undefined;
+
 export function buildTerrain(seed: number, size: number): Terrain {
+  if (lastTerrain?.seed === seed && lastTerrain.size === size) return lastTerrain.terrain;
   const heights: number[] = [];
   for (let j = 0; j <= size; j++) for (let i = 0; i <= size; i++) heights.push(heightFromElevation(elevationAt(seed, i, j)));
   const t: Terrain = { size, heights, types: [] };
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) t.types.push(pickType(seed, t, x, y));
+  Object.freeze(t.heights);
+  Object.freeze(t.types);
+  Object.freeze(t);
+  lastTerrain = { seed, size, terrain: t };
   return t;
 }
 

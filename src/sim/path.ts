@@ -3,6 +3,7 @@
 // so ramming and blocking still happen.
 
 import { TERRAIN_TYPES } from '../data/terrain';
+import { REGION } from '../data/region';
 import { isCliff, tileAt, type Terrain } from './terrain';
 import { isDriveObstacle } from './mapgen';
 import type { World } from './types';
@@ -23,6 +24,8 @@ export type Blocker = { pos: Vec; r: number };
 
 export function route(world: World, from: Vec, to: Vec, radius: number, extra: Blocker[]): Vec[] {
   const blockers: Blocker[] = [...world.obstacles.filter(isDriveObstacle), ...extra];
+  // An unobstructed road-speed line is already the shortest, cheapest route.
+  if (clearLine(world.terrain, blockers, from, to, radius + CLEARANCE, 1)) return [to];
   const grid = gridFor(world.terrain, blockers, radius);
   const start = cellOf(grid, from);
   const goal = nearestFree(grid, cellOf(grid, to));
@@ -31,7 +34,8 @@ export function route(world: World, from: Vec, to: Vec, radius: number, extra: B
   if (!cells) return [to];
   const end = goal === cellOf(grid, to) ? to : centerOf(grid, goal);
   const points = [...cells.slice(1, -1).map((c) => centerOf(grid, c)), end];
-  return shortcut(world.terrain, blockers, from, points, radius + CLEARANCE);
+  const result = shortcut(world.terrain, blockers, from, points, radius + CLEARANCE);
+  return result;
 }
 
 // Whether a vehicle can drive straight from a to b without touching an obstacle or a cliff.
@@ -169,7 +173,7 @@ function astar(g: Grid, start: number, goal: number): number[] | null {
   const closed = new Uint8Array(size);
   const open = new MinHeap();
   cost[start] = 0;
-  open.push(start, heuristic(g, start, goal));
+  open.push(start, heuristic(g, start, goal) * REGION.navigation.heuristicWeight);
   while (open.size() > 0) {
     const cur = open.pop();
     if (cur === goal) return unwind(from, goal);
@@ -181,7 +185,7 @@ function astar(g: Grid, start: number, goal: number): number[] | null {
       if (c >= cost[nb.c]) continue;
       cost[nb.c] = c;
       from[nb.c] = cur;
-      open.push(nb.c, c + heuristic(g, nb.c, goal));
+      open.push(nb.c, c + heuristic(g, nb.c, goal) * REGION.navigation.heuristicWeight);
     }
   }
   return null;
@@ -199,18 +203,33 @@ function unwind(from: Int32Array, goal: number): number[] {
   return path;
 }
 
-// Greedy string pulling: from each point jump to the farthest point in clear sight. A shortcut must
-// stay off cliffs and never cross slower ground than the path it replaces, so routes keep to roads.
+// Probe progressively longer shortcuts instead of rescanning the entire remaining route at every bend.
+// Each accepted segment still avoids obstacles, cliffs, and slower ground than its original path.
 function shortcut(t: Terrain, obstacles: Blocker[], from: Vec, points: Vec[], reach: number): Vec[] {
   const out: Vec[] = [];
   let cur = from;
   let i = 0;
   while (i < points.length) {
-    let j = points.length - 1;
-    while (j > i && !clearLine(t, obstacles, cur, points[j], reach, slowestSpeed(t, [cur, ...points.slice(i, j + 1)]))) j--;
-    out.push(points[j]);
-    cur = points[j];
-    i = j + 1;
+    let best = i;
+    let step = 1;
+    let failed = points.length;
+    while (best < points.length - 1) {
+      const candidate = Math.min(i + step, points.length - 1);
+      if (!clearLine(t, obstacles, cur, points[candidate], reach, slowestSpeed(t, [cur, ...points.slice(i, candidate + 1)]))) {
+        failed = candidate;
+        break;
+      }
+      best = candidate;
+      step *= 2;
+    }
+    while (failed - best > 1) {
+      const candidate = Math.floor((best + failed) / 2);
+      if (clearLine(t, obstacles, cur, points[candidate], reach, slowestSpeed(t, [cur, ...points.slice(i, candidate + 1)]))) best = candidate;
+      else failed = candidate;
+    }
+    out.push(points[best]);
+    cur = points[best];
+    i = best + 1;
   }
   return out;
 }

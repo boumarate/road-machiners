@@ -20,7 +20,7 @@ import type { Vec } from '../sim/vec';
 import { playerSees, tileOf, visibleTiles } from '../sim/vision';
 import { dist } from '../sim/vec';
 import { TERRAIN } from '../data/terrain';
-import { endTurn, hostileToPlayer, newWorld, setAutoFire, setDirect, setMoveOrder, setWeaponOrder } from '../sim/world';
+import { cloneWorld, endTurn, hostileToPlayer, newWorld, setAutoFire, setDirect, setMoveOrder, setWeaponOrder } from '../sim/world';
 import { PAL } from '../render/palette';
 import { CharacterScreen } from '../ui/character';
 import { HitCard } from '../ui/hitCard';
@@ -83,7 +83,7 @@ export class Game {
   private readonly scene = new THREE.Scene();
   private readonly sun = new THREE.DirectionalLight(0xfff0d0, 2.2);
   private readonly rig: CameraRig;
-  private readonly ground: THREE.Mesh;
+  private readonly ground: THREE.Group;
   private readonly obstacles: ObstacleViews;
   private readonly fog: FogView;
   private readonly weather: WeatherView;
@@ -514,7 +514,7 @@ export class Game {
     const me = playerVehicle(this.world);
     if (!me.order && me.speed === 0) return this.path.clear();
     const turns: VehicleFrame[][] = [];
-    let w = structuredClone(this.world);
+    let w = cloneWorld(this.world);
     let d = this.drive;
     for (let i = 0; i < PLAN_TURNS; i++) {
       const r = simulateTurn(d, w);

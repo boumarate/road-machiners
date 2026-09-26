@@ -85,7 +85,7 @@ Fuel and supplies limit range. Fuel burns at one tenth of the chassis fuel-per-t
 - Chassis: Scout pickup and Hauler.
 - Parts: MG turret and forward cannon, stock engine and tuned V8, steel plates and rebar cage, roof rack and cargo box.
 - Defeat takes all goods and spare parts from the grid. Mounted parts stay.
-- Region: Icarus, a 120-tile basin with Bowl and Nose as hubs, 13 other destinations, two canyon crossings, and the Fallen Sun.
+- Region: Icarus, a 600-tile basin with Bowl and Nose as hubs, 13 other destinations, two canyon crossings, and the Fallen Sun. Winding roads cross rolling grades between distinct landmarks. Sight remains ten tiles. See [landmark visuals](VISUAL_DESIGN.md).
 - Enemies: raider buggy and raider gunwagon.
 - Neutrals: trader caravans and scavengers. Shooting one makes it and its nearby mates hostile.
 - Skills: Driving, Gunnery, Mechanics, Trade, Survival.

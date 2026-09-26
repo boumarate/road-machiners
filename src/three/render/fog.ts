@@ -1,86 +1,61 @@
-// Fog of war draped over the terrain surface: dark where never explored, dimmed where explored
-// but not visible now, clear where visible now. depthTest is off and renderOrder is high, so it
-// darkens vehicles and the plan overlay too, cheaply, without shading each object separately.
-
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
 import { TERRAIN } from '../../data/terrain';
-import { terrainIndices } from '../../phys/drive';
 import { PAL } from '../../render/palette';
 import type { World } from '../../sim/types';
+import { TERRAIN_CHUNK } from './terrain';
 
 const S = PHYSICS.metersPerTile;
-const LIFT = 0.03; // meters above the terrain surface, avoids z-fighting
 
 export class FogView {
-  readonly mesh: THREE.Mesh;
-  private n: number;
+  readonly mesh = new THREE.Group();
+  private readonly chunks: { x: number; y: number; width: number; depth: number; alpha: THREE.BufferAttribute }[] = [];
 
   constructor(world: World) {
-    const t = world.terrain;
-    const n = t.size;
-    this.n = n;
-    const pos = new Float32Array((n + 1) * (n + 1) * 3);
-    for (let j = 0; j <= n; j++) {
-      for (let i = 0; i <= n; i++) {
-        const k = (j * (n + 1) + i) * 3;
-        pos.set([i * S, t.heights[j * (n + 1) + i] * S + LIFT, j * S], k);
-      }
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    geo.setAttribute('alpha', new THREE.BufferAttribute(new Float32Array((n + 1) * (n + 1)), 1));
-    geo.setIndex(new THREE.BufferAttribute(terrainIndices(n), 1));
     const c = new THREE.Color(PAL.bg);
-    const mat = new THREE.ShaderMaterial({
+    const material = new THREE.ShaderMaterial({
       uniforms: { color: { value: new THREE.Vector3(c.r, c.g, c.b) } },
-      vertexShader: `
-        attribute float alpha;
-        varying float vAlpha;
-        void main() {
-          vAlpha = alpha;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 color;
-        varying float vAlpha;
-        void main() {
-          gl_FragColor = vec4(color, vAlpha);
-        }
-      `,
-      transparent: true,
-      depthTest: false,
-      depthWrite: false,
+      vertexShader: 'attribute float alpha; varying float vAlpha; void main() { vAlpha = alpha; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform vec3 color; varying float vAlpha; void main() { gl_FragColor = vec4(color, vAlpha); }',
+      transparent: true, depthTest: false, depthWrite: false,
     });
-    this.mesh = new THREE.Mesh(geo, mat);
-    this.mesh.renderOrder = 900; // above ground, obstacles, zones and path; below HTML labels
+    for (let y = 0; y < world.size; y += TERRAIN_CHUNK) for (let x = 0; x < world.size; x += TERRAIN_CHUNK) {
+      const width = Math.min(TERRAIN_CHUNK, world.size - x);
+      const depth = Math.min(TERRAIN_CHUNK, world.size - y);
+      const geo = new THREE.PlaneGeometry(width * S, depth * S, width, depth).rotateX(-Math.PI / 2);
+      const pos = geo.getAttribute('position');
+      for (let j = 0; j <= depth; j++) for (let i = 0; i <= width; i++) {
+        pos.setXYZ(j * (width + 1) + i, (x + i) * S, world.terrain.heights[(y + j) * (world.size + 1) + x + i] * S + 0.03, (y + j) * S);
+      }
+      const alpha = new THREE.BufferAttribute(new Float32Array((width + 1) * (depth + 1)), 1);
+      geo.setAttribute('alpha', alpha);
+      geo.computeBoundingSphere();
+      const chunk = new THREE.Mesh(geo, material);
+      chunk.renderOrder = 900;
+      this.mesh.add(chunk);
+      this.chunks.push({ x, y, width, depth, alpha });
+    }
     this.update(world);
   }
 
   update(world: World): void {
-    const n = this.n;
+    const n = world.size;
     const visible = new Set(world.player.visible);
-    const alpha = this.mesh.geometry.getAttribute('alpha') as THREE.BufferAttribute;
-    // Per corner: average the fog alpha of the (up to) four surrounding tiles, so type borders blend.
-    for (let j = 0; j <= n; j++) {
-      for (let i = 0; i <= n; i++) {
+    for (const chunk of this.chunks) {
+      for (let j = 0; j <= chunk.depth; j++) for (let i = 0; i <= chunk.width; i++) {
         let sum = 0;
         let count = 0;
-        for (const [x, y] of [
-          [i - 1, j - 1],
-          [i, j - 1],
-          [i - 1, j],
-          [i, j],
-        ]) {
+        for (let dy = -1; dy <= 0; dy++) for (let dx = -1; dx <= 0; dx++) {
+          const x = chunk.x + i + dx;
+          const y = chunk.y + j + dy;
           if (x < 0 || y < 0 || x >= n || y >= n) continue;
-          const idx = y * n + x;
-          sum += visible.has(idx) ? 0 : world.player.explored[idx] ? TERRAIN.fog.dimAlpha : TERRAIN.fog.darkAlpha;
+          const index = y * n + x;
+          sum += visible.has(index) ? 0 : world.player.explored[index] ? TERRAIN.fog.dimAlpha : TERRAIN.fog.darkAlpha;
           count++;
         }
-        alpha.setX(j * (n + 1) + i, sum / count);
+        chunk.alpha.setX(j * (chunk.width + 1) + i, sum / count);
       }
+      chunk.alpha.needsUpdate = true;
     }
-    alpha.needsUpdate = true;
   }
 }

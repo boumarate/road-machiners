@@ -1,3 +1,4 @@
 import { defineConfig } from 'vitest/config';
 
-export default defineConfig({ test: { include: ['src/**/*.test.ts'] } });
+// Each 600-tile simulation worker holds terrain and routing grids. Two workers keep their measured combined heap below 1 GiB.
+export default defineConfig({ test: { include: ['src/**/*.test.ts'], maxWorkers: 2, testTimeout: 30_000 } });
