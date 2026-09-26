@@ -49,6 +49,11 @@ function inPlainView(world: World, a: Vec, b: Vec, blockers: Obstacle[]): boolea
   return dist(a, b) <= TERRAIN.vision.closeRadius || (hasLineOfSight(a, b, blockers) && clearOverTerrain(world.terrain, a, b));
 }
 
+// A straight line past rocks and over hills, with no close radius: a shot needs it even when the target is seen.
+export function hasLineOfFire(world: World, a: Vec, b: Vec): boolean {
+  return hasLineOfSight(a, b, world.obstacles.filter((o) => BLOCKING.includes(o.kind))) && clearOverTerrain(world.terrain, a, b);
+}
+
 // An obstacle blocks sight only if it sits between the viewer and the tile.
 function hasLineOfSight(a: Vec, b: Vec, blockers: Obstacle[]): boolean {
   const targetDist = dist(a, b);

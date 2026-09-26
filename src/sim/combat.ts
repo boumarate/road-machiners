@@ -9,7 +9,7 @@ import { PHYSICS } from '../data/physics';
 import { laneCount, partLane, sideToward, walkLane, type PartHit, type Side } from './armor';
 import { corePart, itemSize, mountedItems, mountedParts } from './grid';
 import { gainXp } from './progress';
-import { canVehicleSee } from './vision';
+import { canVehicleSee, hasLineOfFire } from './vision';
 import { createWreckSalvage } from './salvage';
 import { getResources } from './resources';
 import { chance, gauss, randRange } from './rng';
@@ -24,7 +24,8 @@ export type FireBlock =
   | "range"
   | "arc"
   | "noTarget"
-  | "unseen";
+  | "unseen"
+  | "covered";
 
 export function isHostile(a: Vehicle, b: Vehicle): boolean {
   if (a.id === b.id) return false;
@@ -55,6 +56,7 @@ export function fireBlock(
   if (mw.part.reload > 0) return "reloading";
   if (!target) return "noTarget";
   if (!canVehicleSee(world, shooter, target.pos)) return "unseen";
+  if (!hasLineOfFire(world, shooter.pos, target.pos)) return "covered";
   if (dist(shooter.pos, target.pos) > mw.def.range) return "range";
   if (!inArc(shooter, mw, target)) return "arc";
   return null;
@@ -455,7 +457,7 @@ function rewardKill(world: World, v: Vehicle): void {
   gainXp(world, tpl.xp, `destroyed ${v.name}`);
 }
 
-// Auto mode: every weapon gets a body shot at the nearest hostile it can hit. The player's auto fire
+// Auto mode: every weapon gets a body shot at the nearest hostile it can hit, in range, arc and line of fire. The player's auto fire
 // only picks targets the player sees.
 export function autoOrders(world: World, v: Vehicle): void {
   v.weaponOrders = {};
@@ -466,7 +468,7 @@ export function autoOrders(world: World, v: Vehicle): void {
   for (const mw of vehicleStats(world, v).weapons) {
     const target =
       hostiles.find(
-        (h) => dist(v.pos, h.pos) <= mw.def.range && inArc(v, mw, h),
+        (h) => dist(v.pos, h.pos) <= mw.def.range && inArc(v, mw, h) && hasLineOfFire(world, v.pos, h.pos),
       ) ?? hostiles[0];
     if (target)
       v.weaponOrders[mw.part.id] = { targetId: target.id, aim: "body" };

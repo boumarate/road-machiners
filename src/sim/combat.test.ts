@@ -388,6 +388,19 @@ describe('player vision', () => {
     fireWeapons(w);
     expect(w.events.some((e) => e.t === 'shot' && e.shooter === me.id)).toBe(false);
   });
+
+  it('a raider seen behind a rock inside the close radius cannot be shot', async () => {
+    const { fireBlock } = await import('./combat');
+    const { playerSees } = await import('./vision');
+    const { w, me, buggy, mg } = duel({ x: 32.5, y: 30 });
+    w.obstacles = [{ id: 'r', pos: { x: 31.2, y: 30 }, r: 0.6, kind: 'rock' }];
+    refreshVision(w);
+    expect(playerSees(w, buggy.pos)).toBe(true);
+    expect(fireBlock(w, me, mg, buggy)).toBe('covered');
+    order(me, mg.part.id, buggy.id);
+    fireWeapons(w);
+    expect(w.events.some((e) => e.t === 'shot' && e.shooter === me.id)).toBe(false);
+  });
 });
 
 describe('invariants under AI traffic', () => {
