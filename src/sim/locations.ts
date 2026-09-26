@@ -1,15 +1,12 @@
 // Discovery, the oasis and the convoy wreck.
 
 import { ECONOMY } from '../data/goods';
-import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
-import { makePart } from './factory';
+import { canReachSalvage, collectSalvage, hasSalvage } from './salvage';
 import { gainXp } from './progress';
 import { locationAt } from './sites';
-import { goodsCount } from './grid';
-import { addGoods, stowPart } from './inventory';
 import type { World } from './types';
 import { tileCenter } from './vision';
 import { dist, type Vec } from './vec';
@@ -38,28 +35,24 @@ function seesArea(world: World, center: Vec, radius: number): boolean {
 }
 
 export function canScavenge(world: World): boolean {
-  const loc = locationAt(world);
-  return loc?.kind === 'convoy' && !world.player.scavenged.includes(loc.id);
+  const me = playerVehicle(world);
+  return world.salvage.some((stock) => hasSalvage(stock) && canReachSalvage(me, stock));
 }
 
 // Loot that does not fit the grid stays behind.
 export function scavenge(world: World): World {
   return update(world, (w) => {
-    const loc = locationAt(w);
-    if (!loc || !canScavenge(w)) throw new Error('Nothing to scavenge here');
     const me = playerVehicle(w);
-    // The part goes first: big items need room before loose goods fill the gaps.
-    const found = partDef(ECONOMY.scavenge.part).name;
-    if (stowPart(w, me, makePart(w, ECONOMY.scavenge.part))) w.events.push({ t: 'info', text: `Found a ${found}. It is in your cargo.` });
-    else w.events.push({ t: 'info', text: `Found a ${found}, but there was no room for it.` });
-    for (const [good, n] of Object.entries(ECONOMY.scavenge.cargo)) {
-      const held = goodsCount(me)[good] ?? 0;
-      const took = addGoods(w, me, good, n);
-      if (took === 0) continue;
-      w.player.costBasis[good] = ((w.player.costBasis[good] ?? 0) * held) / (held + took);
-      w.events.push({ t: 'info', text: `Scavenged ${took} ${good}` });
+    const stock = w.salvage.find((entry) => hasSalvage(entry) && canReachSalvage(me, entry));
+    if (!stock) throw new Error('Nothing to scavenge here');
+    if (!collectSalvage(w, me, stock.id)) {
+      w.events.push({ t: 'info', text: 'No room for salvage. It remains here.' });
+      return;
     }
-    w.player.scavenged.push(loc.id);
-    gainXp(w, ECONOMY.scavenge.xp, `searched ${loc.name}`);
+    w.events.push({ t: 'info', text: 'Collected salvage into cargo.' });
+    if (!w.player.scavenged.includes(stock.id)) {
+      w.player.scavenged.push(stock.id);
+      gainXp(w, ECONOMY.scavenge.xp, 'searched salvage');
+    }
   });
 }

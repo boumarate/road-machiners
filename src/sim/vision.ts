@@ -1,9 +1,9 @@
 // Fog of war: which tiles the player vehicle can see, blocked by solid obstacles and hills. Water does not block sight.
 // The player's current view is world state: player targeting, fire, discovery and the render all read it.
-// NPCs are not limited by it.
+// NPCs query the same occlusion rules from their own positions.
 
 import { TERRAIN } from '../data/terrain';
-import type { Obstacle, World } from './types';
+import type { Obstacle, Vehicle, World } from './types';
 import { heightAt, type Terrain } from './terrain';
 import { dist, segmentDist, type Vec } from './vec';
 
@@ -25,6 +25,14 @@ export function visibleTiles(world: World, from: Vec): Set<number> {
     }
   }
   return out;
+}
+
+export function canVehicleSee(world: World, observer: Vehicle, position: Vec): boolean {
+  if (observer.id === world.player.vehicleId) return playerSees(world, position);
+  const target = tileCenter(world, tileOf(world, position));
+  return dist(observer.pos, target) <= TERRAIN.vision.radius &&
+    hasLineOfSight(observer.pos, target, world.obstacles.filter((o) => BLOCKING.includes(o.kind))) &&
+    clearOverTerrain(world.terrain, observer.pos, target);
 }
 
 // An obstacle blocks sight only if it sits between the viewer and the tile.

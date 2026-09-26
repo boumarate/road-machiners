@@ -26,6 +26,8 @@ export type MoveOrder =
   | { kind: 'stopAt'; dest: Vec } // brake in time to stop on the point
   | { kind: 'brake' }; // slow to a halt where you are
 
+export type SalvageStock = { id: string; pos: Vec; radius: number; goods: Record<string, number>; parts: PartInstance[] };
+
 export type DriverResources = { money: number; fuel: number; supplies: number; health: number };
 
 export type NpcBrain = {
@@ -106,6 +108,7 @@ export type World = {
   nextId: number;
   vehicles: Vehicle[];
   obstacles: Obstacle[];
+  salvage: SalvageStock[];
   terrain: Terrain; // corner heights and tile types, built from the seed
   player: Player;
   events: GameEvent[]; // events of the last resolved turn or action

@@ -15,6 +15,7 @@ import { discoverSites, useOasis } from './locations';
 import { resolveMovement } from './movement';
 import { consumeSupplies } from './supplies';
 import { spawnInitial, spawnNpcs } from './spawn';
+import { initializeSalvage } from './salvage';
 import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
 import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
@@ -30,6 +31,7 @@ export function newWorld(seed: number): World {
     nextId: 0,
     vehicles: [],
     obstacles: [],
+    salvage: [],
     terrain: buildTerrain(seed, REGION.size),
     player: {
       vehicleId: '',
@@ -70,6 +72,7 @@ export function newWorld(seed: number): World {
   if (blocked.length > 0) throw new Error(`Player start overlaps ${blocked.map((o) => o.id).join(', ')}`);
   world.vehicles.push(truck);
   world.player.vehicleId = truck.id;
+  initializeSalvage(world);
   spawnInitial(world);
   refreshVision(world);
   world.events = [];

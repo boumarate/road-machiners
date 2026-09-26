@@ -7,7 +7,9 @@ import { skillBonus } from '../data/skills';
 import { damageHull, damagePart, findPart } from './damage';
 import { mountedParts } from './grid';
 import { gainXp } from './progress';
-import { playerSees } from './vision';
+import { canVehicleSee } from './vision';
+import { createWreckSalvage } from './salvage';
+import { getResources } from './resources';
 import { chance } from './rng';
 import { vehicleStats, type MountedWeapon } from './stats';
 import type { Aim, Vehicle, World } from './types';
@@ -31,7 +33,7 @@ export function fireBlock(world: World, shooter: Vehicle, mw: MountedWeapon, tar
   if (mw.part.hp <= 0) return 'disabled';
   if (mw.part.reload > 0) return 'reloading';
   if (!target) return 'noTarget';
-  if (shooter.faction === 'player' && !playerSees(world, target.pos)) return 'unseen';
+  if (!canVehicleSee(world, shooter, target.pos)) return 'unseen';
   if (dist(shooter.pos, target.pos) > mw.def.range) return 'range';
   if (!inArc(shooter, mw, target)) return 'arc';
   return null;
@@ -84,7 +86,7 @@ function applyShot(world: World, s: Shot): void {
 function provoke(world: World, shooter: Vehicle, target: Vehicle): void {
   if (isHostile(target, shooter)) return;
   for (const v of world.vehicles) {
-    const joins = v.id === target.id || (v.faction === target.faction && dist(v.pos, target.pos) <= SPAWN.neighborHelp);
+    const joins = v.id === target.id || (v.faction === target.faction && dist(v.pos, target.pos) <= SPAWN.neighborHelp && canVehicleSee(world, v, shooter.pos));
     if (joins && v.faction !== 'player' && !v.grudges.includes(shooter.id)) {
       v.grudges.push(shooter.id);
       world.events.push({ t: 'hostile', vehicle: v.id, against: shooter.id });
@@ -94,8 +96,9 @@ function provoke(world: World, shooter: Vehicle, target: Vehicle): void {
 
 // NPCs at zero hull turn into wreck obstacles. The player's zero hull is handled by defeat.
 export function resolveDestroyed(world: World): void {
-  const dead = world.vehicles.filter((v) => v.hull <= 0 && v.faction !== 'player');
+  const dead = world.vehicles.filter((v) => v.faction !== 'player' && (v.hull <= 0 || getResources(world, v).health <= 0));
   for (const v of dead) {
+    createWreckSalvage(world, v);
     world.vehicles = world.vehicles.filter((x) => x.id !== v.id);
     world.removed.push(v);
     world.obstacles.push({ id: `wreck-${v.id}`, pos: { ...v.pos }, r: vehicleStats(world, v).radius * RULES.wreckRadiusScale, kind: 'wreck' });
@@ -114,7 +117,10 @@ export function resolveDestroyed(world: World): void {
 function clearOldWrecks(world: World): void {
   const kills = world.obstacles.filter((o) => o.id.startsWith('wreck-'));
   const drop = new Set(kills.slice(0, Math.max(0, kills.length - RULES.maxKillWrecks)).map((o) => o.id));
-  if (drop.size > 0) world.obstacles = world.obstacles.filter((o) => !drop.has(o.id));
+  if (drop.size > 0) {
+    world.obstacles = world.obstacles.filter((o) => !drop.has(o.id));
+    world.salvage = world.salvage.filter((stock) => !drop.has(stock.id));
+  }
 }
 
 function rewardKill(world: World, v: Vehicle): void {
@@ -131,7 +137,7 @@ function rewardKill(world: World, v: Vehicle): void {
 // only picks targets the player sees.
 export function autoOrders(world: World, v: Vehicle): void {
   v.weaponOrders = {};
-  const seen = (x: Vehicle) => v.faction !== 'player' || playerSees(world, x.pos);
+  const seen = (x: Vehicle) => canVehicleSee(world, v, x.pos);
   const hostiles = world.vehicles.filter((x) => isHostile(v, x) && seen(x)).sort((a, b) => dist(v.pos, a.pos) - dist(v.pos, b.pos));
   for (const mw of vehicleStats(world, v).weapons) {
     const target = hostiles.find((h) => dist(v.pos, h.pos) <= mw.def.range && inArc(v, mw, h)) ?? hostiles[0];
