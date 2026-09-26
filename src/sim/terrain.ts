@@ -33,9 +33,22 @@ function pickType(seed: number, t: Terrain, x: number, y: number): TerrainTypeId
   if ([...REGION.towns, ...REGION.locations].some((s) => dist(c, s.pos) < s.radius + T.types.siteMargin)) return 'hardpan';
   const s = tileSlope(t, y * t.size + x);
   if (Math.hypot(s.x, s.y) >= T.types.screeSlope) return 'scree';
+  const patch = pickSurfacePatch(seed, c);
+  if (patch !== null) return patch;
   if (elevationAt(seed, c.x, c.y) < T.types.sandBelow) return 'sand';
   if (noiseAt(seed, c.x * T.types.scrubFreq, c.y * T.types.scrubFreq) > T.types.scrubAbove) return 'scrub';
   return 'hardpan';
+}
+
+function pickSurfacePatch(seed: number, p: Vec): TerrainTypeId | null {
+  const patches = T.types.patches;
+  const x = p.x * patches.frequency;
+  const y = p.y * patches.frequency;
+  if (noiseAt(seed + patches.coverageSeedOffset, x, y) <= patches.coverageAbove) return null;
+  const sample = noiseAt(seed + patches.kindSeedOffset, x, y);
+  const band = patches.bands.find((entry) => sample <= entry.through);
+  if (!band) throw new Error(`No terrain surface band for ${sample}`);
+  return band.kind;
 }
 
 function corner(t: Terrain, i: number, j: number): number {
