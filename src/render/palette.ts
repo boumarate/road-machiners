@@ -30,7 +30,7 @@ export const PAL = {
   target: 0xe03020,
   select: 0xf0d060,
   contact: 0xf4f1ea, // faint white sound waves around a contact
-  dustPlume: 0xe0c49a, // hazy column over a contact seen by its dust, pale so it shows over fog
+  dustTrail: 0xe0c49a, // dust streak behind a contact seen by its dust, pale so it shows over fog
   radio: 0x8fe0c8, // crisp scanner blip
   flash: 0xfff0a0,
   text: '#f0e0b8',

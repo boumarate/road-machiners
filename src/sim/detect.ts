@@ -89,7 +89,10 @@ export function contactsOf(world: World, observer: Vehicle, within: number): Con
     const angle = hashRandom(world.seed, world.turn, key, 1) * Math.PI * 2;
     const frac = hashRandom(world.seed, world.turn, key, 2); // in [0, 1), so the offset always stays inside radius
     const center = { x: v.pos.x + Math.cos(angle) * frac * radius, y: v.pos.y + Math.sin(angle) * frac * radius };
-    out.push({ vehicleId: v.id, center, radius, sources });
+    // A dust trail shows roughly which way the truck runs, never exactly.
+    const skew = (hashRandom(world.seed, world.turn, key, 3) * 2 - 1) * DETECT.dust.headingError * (Math.PI / 180);
+    const trail = sources.includes('dust') ? v.heading + skew : null;
+    out.push({ vehicleId: v.id, center, radius, sources, trail });
   }
   return out;
 }

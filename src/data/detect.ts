@@ -13,6 +13,7 @@ export const DETECT = {
     perSpeed: 25, // extra tiles per tile/turn of the source's speed
     eyeHeight: 0.6, // dust rises above the truck, so it clears hills a plain sight line would not
     samplesPerTile: 1, // height samples along a dust sight line; a tall plume needs less care than sight
+    headingError: 25, // degrees a dust trail's apparent heading may be off, either way
   },
   // Scanner range lives on the part itself (src/data/parts.ts, PARTS.scanner.range), so towns and
   // the grid read one number.

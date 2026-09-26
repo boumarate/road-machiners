@@ -65,7 +65,8 @@ export type Job =
   | { kind: 'search'; stockId: string; turnsLeft: number };
 
 // A vehicle detected beyond sight. The circle always holds the true position, which it never reveals.
-export type Contact = { vehicleId: string; center: Vec; radius: number; sources: ('sound' | 'dust' | 'radio')[] };
+// trail is the rough heading of a dust trail in radians, or null when no dust is seen.
+export type Contact = { vehicleId: string; center: Vec; radius: number; sources: ('sound' | 'dust' | 'radio')[]; trail: number | null };
 
 // Weather that changes the rules. Storms are moving areas; heat waves and overcast cover the region.
 export type WeatherEvent =
