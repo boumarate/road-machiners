@@ -41,6 +41,7 @@ import { VehicleView, type Ring3 } from './render/vehicle';
 import { WeaponRangeView } from './render/weaponRange';
 import { WeatherView } from './render/weather';
 import { ZonesView } from './render/zones';
+import { loadWorld, saveWorld } from './save';
 
 const PLAN_TURNS = 3; // turns of path preview
 const PICK_PX = 30; // click radius around a vehicle's screen position
@@ -116,7 +117,7 @@ export class Game {
   private readonly inventory: InventoryScreen;
 
   constructor(container: HTMLElement, overlay: HTMLElement) {
-    this.world = newWorld(CONFIG.seed, startKit(CONFIG.startKit));
+    this.world = loadWorld(window.localStorage) ?? newWorld(CONFIG.seed, startKit(CONFIG.startKit));
     this.drive = buildDrive(this.world);
 
     this.renderer.setPixelRatio(window.devicePixelRatio);
@@ -453,6 +454,7 @@ export class Game {
   private finishPlayback(): void {
     this.anim = null;
     this.phase = null;
+    if ((this.world.turn - 1) % CONFIG.saveTurns === 0) saveWorld(window.localStorage, this.world);
     this.refreshUi();
   }
 
