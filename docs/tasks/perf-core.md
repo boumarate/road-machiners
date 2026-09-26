@@ -176,6 +176,13 @@ Design changes made during planning:
 - 6.7 `src/sim/far.test.ts` (create). Checks IV2, IV3 and IV4, and that far vehicles arrive and that crossing into range adds a body.
 - Commit: Move far NPCs along stored routes without physics.
 
+### PH7 — Corridor search for long routes (added after wave 1, RK2 hit)
+The first `npm run perf` after wave 1 missed only `turnMs`: 481 ms on the first turn, then 85-90 ms. The profile shows far NPCs planning long routes, one at 273 ms, all inside `findCells`.
+- 7.1 `src/sim/nav/layer.ts` (modify). Each blocked layer also stores connected components of free cells, from one flood fill at build time. It also stores a coarse grid of 8x8-cell blocks. A block is passable if any of its cells is free, and its cost is the mean `slow` of its free cells.
+- 7.2 `src/sim/nav/astar.ts` (modify). `findCells` returns null at once when start and goal sit in different components. That matches today's result for unreachable goals. For a start-to-goal distance over 32 cells, it first runs A* on the coarse grid. It then runs fine A* only inside the corridor: the coarse path's blocks plus one ring around them. If the corridor search fails, it runs the full fine search and calls `count('route-corridor-miss')`.
+- 7.3 `src/sim/path.test.ts` (extend). Corridor routes cost at most 5% more than the reference. Short routes keep the 1% rule, so IV1 is relaxed only for long routes. Unreachable goals return in under 5 ms.
+- Commit: Search long routes inside a coarse corridor.
+
 ### Interfaces
 - IF1 — `src/perf.ts`: `timed<T>(name: string, fn: () => T): T`, `count(name: string, n = 1): void`, `perfSnapshot(): Record<string, { last: number; max: number; total: number; calls: number }>`, `resetPerf(): void`. `last` is ms.
 - IF2 — `Game.debugView(x: number, y: number, zoom: number): void` centers the camera on a map point at a zoom, for scripts.
