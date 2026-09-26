@@ -6,14 +6,19 @@ export type PartKind = 'weapon' | 'engine' | 'armor' | 'cargo' | 'core';
 // armor is the penetration the part stops when a round passes through it.
 type PartBase = { id: string; name: string; hp: number; price: number; w: number; h: number; mass: number; armor: number };
 
+// One round. pen is the armor it gets through. speed in m/s. A miss within splashRadius meters of a lane's
+// edge hits that lane with splashDamage and splashPen. splashRadius 0 means no splash.
+export type WeaponRound = { damage: number; pen: number; speed: number; splashRadius: number; splashDamage: number; splashPen: number };
+
 export type WeaponDef = PartBase & {
   kind: 'weapon';
   range: number; // tiles
-  damage: number;
-  pen: number; // penetration of each round: the armor it gets through
   reload: number; // turns between shots, 1 = every turn
-  accuracy: number; // base hit chance at point blank
   arc: number; // total firing arc in degrees, centered forward
+  spread: number; // degrees; standard deviation of a round's angular error from the gun alone
+  rounds: number; // rounds per shot, each rolled on its own
+  round: WeaponRound;
+
   look: 'mg' | 'cannon';
 };
 
@@ -47,11 +52,13 @@ export type PartDef = WeaponDef | EngineDef | ArmorDef | CargoDef | CoreDef;
 export const PARTS: Record<string, PartDef> = {
   mg: {
     id: 'mg', kind: 'weapon', name: 'MG turret', hp: 20, price: 180, w: 1, h: 1, mass: 80, armor: 3,
-    range: 6, damage: 5, pen: 6, reload: 1, accuracy: 0.8, arc: 360, look: 'mg',
+    range: 6, reload: 1, arc: 360, look: 'mg', spread: 1.5, rounds: 6,
+    round: { damage: 3, pen: 6, speed: 600, splashRadius: 0, splashDamage: 0, splashPen: 0 },
   },
   cannon: {
     id: 'cannon', kind: 'weapon', name: 'Forward cannon', hp: 30, price: 320, w: 3, h: 1, mass: 400, armor: 3,
-    range: 9, damage: 20, pen: 20, reload: 3, accuracy: 0.7, arc: 60, look: 'cannon',
+    range: 9, reload: 3, arc: 60, look: 'cannon', spread: 0.8, rounds: 1,
+    round: { damage: 30, pen: 20, speed: 250, splashRadius: 2.5, splashDamage: 12, splashPen: 6 },
   },
   stockEngine: {
     id: 'stockEngine', kind: 'engine', name: 'Stock engine', hp: 25, price: 120, w: 2, h: 2, mass: 300, armor: 4,

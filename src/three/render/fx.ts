@@ -11,7 +11,6 @@ const MAX_PUFFS = 200; // pool size; effects beyond this are dropped rather than
 const MAX_TEXTS = 24;
 const GRAVITY = 2; // m/s^2 pulling sparks and dust down; a soft fraction of real gravity, for looks
 const RISE_METERS = 1.5; // how far a floating number drifts up over its life
-const MISS_METERS = 2; // a miss lands this far beside the target
 const CANNON_COLOR = 0xffad50;
 const BURST_GAP = 0.08; // share of the flight between machine-gun bolts
 const MG_BOLT = 0.04; // bolt length as a share of the flight
@@ -86,11 +85,9 @@ export class Fx3D {
     }
   }
 
-  // A shot travels for flightMs, then sparks on a hit or kicks dust on a miss, and shows its label for readMs.
-  // row stacks labels of several shots at the same target.
-  shot(from: V3, to: V3, hit: boolean, heavy: boolean, label: string, row: number, flightMs: number, readMs: number): void {
-    const side = Math.random() < 0.5 ? -1 : 1;
-    const b: V3 = hit ? to : { x: to.x + side * MISS_METERS, y: to.y, z: to.z - side * MISS_METERS };
+  // A shot travels from `from` to its landing point b for flightMs, then sparks on a hit or kicks dust on a miss,
+  // and shows its label over the target point `to` for readMs. row stacks labels of several shots at the same target.
+  shot(from: V3, to: V3, b: V3, hit: boolean, heavy: boolean, label: string, row: number, flightMs: number, readMs: number): void {
     const color = heavy ? CANNON_COLOR : PAL.flash;
     const line = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 1 }));
     this.scene.add(line);

@@ -60,6 +60,16 @@ const MARKER_LIFT = 3.5; // meters above a target where its weapon marker sits
 
 const GUN_HEIGHT = 1.6; // meters above the body center where shots start and land
 
+// The point `offset` meters from target point b, across the line of fire from a, positive to the shooter's right.
+// 3D x is map x and 3D z is map y, so the right-hand normal matches the sim's.
+function besideTarget(a: V3, b: V3, offset: number): V3 {
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const len = Math.hypot(dx, dz);
+  if (!(len > 0)) throw new Error('Shot from its own target point');
+  return { x: b.x - (dz / len) * offset, y: b.y, z: b.z + (dx / len) * offset };
+}
+
 export class Game {
   private world: World;
   private drive: Drive;
@@ -448,10 +458,14 @@ export class Game {
         const def = gun && partDef(gun.defId);
         const heavy = def?.kind === 'weapon' && def.look === 'cannon';
         const slot = mine.findIndex((mw) => mw.part.id === e.weapon);
-        const label = `${slot >= 0 ? `[${slot + 1}] ` : ''}${heavy ? 'Cannon' : 'MG'} ${e.hit ? `−${e.damage}` : 'miss'}`;
+        const hits = e.rounds.filter((r) => r.hit).length;
+        const dealt = e.rounds.flatMap((r) => r.hits).reduce((sum, h) => sum + h.damage, 0);
+        const label = `${slot >= 0 ? `[${slot + 1}] ` : ''}${heavy ? 'Cannon' : 'MG'} ${hits}/${e.rounds.length}${dealt > 0 ? ` −${dealt}` : ''}`;
         const row = rows.get(e.target) ?? 0;
         rows.set(e.target, row + 1);
-        this.fx.shot(a, b, e.hit, heavy, label, row, CONFIG.combatShotMs, CONFIG.combatReadMs);
+        // The burst lands on the target if any round hit, else beside it where the first round crossed.
+        const land = hits > 0 ? b : besideTarget(a, b, e.rounds[0].offset);
+        this.fx.shot(a, b, land, hits > 0, heavy, label, row, CONFIG.combatShotMs, CONFIG.combatReadMs);
       }
       if (e.t === 'collision') {
         const p = this.eventPoint(e.a);

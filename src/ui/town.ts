@@ -169,7 +169,7 @@ function partStats(d: PartDef): string {
 
 function kindStats(d: PartDef): string {
   switch (d.kind) {
-    case 'weapon': return `dmg ${d.damage}, pen ${d.pen}, range ${d.range}, reload ${d.reload}, arc ${d.arc}`;
+    case 'weapon': return `${d.rounds} × dmg ${d.round.damage}, pen ${d.round.pen}, spread ${d.spread}°, range ${d.range}, reload ${d.reload}, arc ${d.arc}`;
     case 'engine': return `speed +${d.speedBonus}, accel +${d.accelBonus}, fuel x${d.fuelMult}`;
     case 'armor': return d.ramMult > 1 ? `ram x${d.ramMult}` : 'side armor';
     case 'cargo': return `+${d.extraRows} grid rows`;

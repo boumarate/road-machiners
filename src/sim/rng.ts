@@ -22,3 +22,10 @@ export function randInt(r: Rng, lo: number, hi: number): number {
 export function chance(r: Rng, p: number): boolean {
   return nextRandom(r) < p;
 }
+
+// Standard normal draw, Box-Muller. 1 - u keeps the log argument in (0, 1].
+export function gauss(r: Rng): number {
+  const u = 1 - nextRandom(r);
+  const v = nextRandom(r);
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}

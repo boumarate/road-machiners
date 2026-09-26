@@ -1,5 +1,6 @@
 // World state. Plain data only, so it clones and serializes.
 
+import type { PartHit, Side } from './armor';
 import type { Terrain } from './terrain';
 import type { Vec } from './vec';
 
@@ -77,9 +78,13 @@ export type Player = {
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision
 };
 
+// One round of a shot. offset is where it crossed the target in meters from its center, across the line
+// of fire, positive to the shooter's right. hits lists the parts it damaged, by direct hit or splash.
+export type ShotRound = { hit: boolean; offset: number; hits: PartHit[] };
+
 export type GameEvent =
   | { t: 'collision'; a: string; b: string; damageA: number; damageB: number }
-  | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; hit: boolean; damage: number; chance: number }
+  | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; chance: number; side: Side; rounds: ShotRound[] }
   | { t: 'partDisabled'; vehicle: string; part: string }
   | { t: 'destroyed'; vehicle: string; by: string }
   | { t: 'arrived'; vehicle: string }

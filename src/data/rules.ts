@@ -33,9 +33,11 @@ export const RULES = {
   tankLeak: 1, // fuel lost per turn with a broken tank
 
   // Combat
-  rangeFalloff: 0.3, // hit chance lost at max range
-  speedEvasion: 0.03, // hit chance lost per tile/turn of target speed
-  aimedPenalty: 0.25,
+  // A round's angular error has a spread in radians: weapon spread × (1 − gunnery), plus
+  // leadError × crossing speed / round speed, plus shake × own speed in m/s.
+  leadError: 4.5, // share of the lead angle the gunner misjudges
+  shake: 0.002, // radians of spread per m/s of the shooter's own speed
+  cellMeters: 0.5, // width of one grid cell, for the size of an aimed part
   cabHealthShare: 0.5, // share of cab damage the player's character takes as health loss
   minHit: 0.05,
   maxHit: 0.95,

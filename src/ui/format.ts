@@ -34,8 +34,12 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
     case 'shot': {
       if (e.shooter !== me && e.target !== me) return null;
       const aim = e.aim === 'body' ? '' : ` at ${partName(world, e.target, e.aim)}`;
-      const what = e.hit ? `hit for ${e.damage}` : 'missed';
-      return { text: `${n(e.shooter)} shot ${n(e.target)}${aim}: ${what} (${Math.round(e.chance * 100)}%)`, cls: e.target === me && e.hit ? 'bad' : '' };
+      const hits = e.rounds.filter((r) => r.hit).length;
+      const dealt = new Map<string, number>();
+      for (const h of e.rounds.flatMap((r) => r.hits)) dealt.set(h.part, (dealt.get(h.part) ?? 0) + h.damage);
+      const parts = [...dealt].filter(([, d]) => d > 0).map(([id, d]) => `, ${partName(world, e.target, id)} −${d}`).join('');
+      const text = `${partName(world, e.shooter, e.weapon)} → ${n(e.target)}${aim}: ${hits}/${e.rounds.length} hits${parts} (${Math.round(e.chance * 100)}%)`;
+      return { text, cls: e.target === me && dealt.size > 0 ? 'bad' : '' };
     }
     case 'partDisabled':
       return { text: `${n(e.vehicle)}: ${partName(world, e.vehicle, e.part)} disabled`, cls: e.vehicle === me ? 'bad' : 'good' };
