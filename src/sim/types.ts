@@ -1,31 +1,55 @@
 // World state. Plain data only, so it clones and serializes.
 
-import type { PartHit, Side } from './armor';
-import type { Terrain } from './terrain';
-import type { Vec } from './vec';
+import type { PartHit, Side } from "./armor";
+import type { Terrain } from "./terrain";
+import type { Vec } from "./vec";
 
-export type Faction = 'player' | 'raiders' | 'traders' | 'scavengers';
-export type SkillId = 'driving' | 'gunnery' | 'mechanics' | 'trade' | 'survival';
+export type Faction = "player" | "raiders" | "traders" | "scavengers";
+export type SkillId =
+  | "driving"
+  | "gunnery"
+  | "mechanics"
+  | "trade"
+  | "survival";
 
-export type PartInstance = { id: string; defId: string; hp: number; reload: number };
+export type PartInstance = {
+  id: string;
+  defId: string;
+  hp: number;
+  reload: number;
+};
 
 // An item in a vehicle's inventory grid. x and y are the top-left cell. rot 1 swaps width and height.
 // A part works only while it lies fully on mount cells of its kind. Each good unit takes one cell.
 export type GridItem =
-  | { id: string; x: number; y: number; rot: 0 | 1; kind: 'part'; part: PartInstance }
-  | { id: string; x: number; y: number; rot: 0 | 1; kind: 'good'; good: string };
+  | {
+      id: string;
+      x: number;
+      y: number;
+      rot: 0 | 1;
+      kind: "part";
+      part: PartInstance;
+    }
+  | {
+      id: string;
+      x: number;
+      y: number;
+      rot: 0 | 1;
+      kind: "good";
+      good: string;
+    };
 
 // 'body' aims at the truck as a whole. Otherwise it is the id of a part on the target.
-export type Aim = 'body' | string;
+export type Aim = "body" | string;
 export type WeaponOrder = { targetId: string; aim: Aim };
 
 export type Pose = { x: number; y: number; heading: number };
 
 // Momentum carries over between turns. A vehicle without an order coasts.
 export type MoveOrder =
-  | { kind: 'through'; dest: Vec } // drive through the point at pace, then coast on
-  | { kind: 'stopAt'; dest: Vec } // brake in time to stop on the point
-  | { kind: 'brake' }; // slow to a halt where you are
+  | { kind: "through"; dest: Vec } // drive through the point at pace, then coast on
+  | { kind: "stopAt"; dest: Vec } // brake in time to stop on the point
+  | { kind: "brake" }; // slow to a halt where you are
 
 export type NpcBrain = {
   templateId: string;
@@ -56,7 +80,12 @@ export type Vehicle = {
   lastHitBy: string | null; // vehicle id of the last damage source, for kill credit
 };
 
-export type Obstacle = { id: string; pos: Vec; r: number; kind: 'rock' | 'wreck' | 'building' | 'water' | 'site' };
+export type Obstacle = {
+  id: string;
+  pos: Vec;
+  r: number;
+  kind: "rock" | "wreck" | "building" | "water" | "site";
+};
 
 export type Player = {
   vehicleId: string;
@@ -83,21 +112,30 @@ export type Player = {
 export type ShotRound = { hit: boolean; offset: number; hits: PartHit[] };
 
 export type GameEvent =
-  | { t: 'collision'; a: string; b: string; hitsA: PartHit[]; hitsB: PartHit[] } // parts damaged on a and on b; hitsB is empty when b is not a vehicle
-  | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; chance: number; side: Side; rounds: ShotRound[] }
-  | { t: 'partDisabled'; vehicle: string; part: string }
-  | { t: 'destroyed'; vehicle: string; by: string }
-  | { t: 'arrived'; vehicle: string }
-  | { t: 'spawn'; vehicle: string }
-  | { t: 'despawn'; vehicle: string }
-  | { t: 'hostile'; vehicle: string; against: string }
-  | { t: 'xp'; amount: number; reason: string }
-  | { t: 'levelUp'; level: number }
-  | { t: 'money'; amount: number; reason: string }
-  | { t: 'discover'; location: string }
-  | { t: 'supply'; what: string; text: string }
-  | { t: 'defeat' }
-  | { t: 'info'; text: string };
+  | { t: "collision"; a: string; b: string; hitsA: PartHit[]; hitsB: PartHit[] } // parts damaged on a and on b; hitsB is empty when b is not a vehicle
+  | {
+      t: "shot";
+      shooter: string;
+      weapon: string;
+      target: string;
+      aim: Aim;
+      chance: number;
+      side: Side;
+      rounds: ShotRound[];
+    }
+  | { t: "partDisabled"; vehicle: string; part: string }
+  | { t: "destroyed"; vehicle: string; by: string }
+  | { t: "arrived"; vehicle: string }
+  | { t: "spawn"; vehicle: string }
+  | { t: "despawn"; vehicle: string }
+  | { t: "hostile"; vehicle: string; against: string }
+  | { t: "xp"; amount: number; reason: string }
+  | { t: "levelUp"; level: number }
+  | { t: "money"; amount: number; reason: string }
+  | { t: "discover"; location: string }
+  | { t: "supply"; what: string; text: string }
+  | { t: "defeat" }
+  | { t: "info"; text: string };
 
 export type World = {
   seed: number;
