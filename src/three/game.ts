@@ -557,6 +557,7 @@ export class Game {
     this.sun.intensity = sun ? SUN_INTENSITY : NIGHT_INTENSITY;
     this.fx.tick(dt);
     this.weather.advance(dt);
+    this.weather.sync(this.world);
     this.labels.update(this.world, this.rig);
     this.renderer.render(this.scene, this.rig.camera);
     // The preview runs after the frame is drawn, so a click shows at once.
