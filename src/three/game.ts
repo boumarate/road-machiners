@@ -106,6 +106,7 @@ export class Game {
   private readonly scene = new THREE.Scene();
   private readonly sun = new THREE.DirectionalLight(0xfff0d0, 2.2);
   private readonly sky = new THREE.HemisphereLight(SKY_DAY, GROUND_DAY, SKY_DAY_INTENSITY);
+  private readonly stormTint = Object.assign(document.createElement('div'), { className: 'storm-tint' }); // dust haze while inside a storm
   private readonly rig: CameraRig;
   private readonly ground: THREE.Mesh;
   private readonly obstacles: ObstacleViews;
@@ -178,6 +179,7 @@ export class Game {
     this.weather = new WeatherView(this.world);
     this.scene.add(this.fog.mesh, this.shade.mesh, this.weather.root, this.zones.root, this.path.root, this.weaponRange.root, this.contacts.root);
     this.overlay = overlay;
+    overlay.append(this.stormTint);
     this.labels = new Labels(overlay);
     this.fx = new Fx3D(this.scene, overlay, this.rig);
 
@@ -717,6 +719,8 @@ export class Game {
     this.sky.color.set(sun ? SKY_DAY : SKY_NIGHT);
     this.sky.groundColor.set(sun ? GROUND_DAY : GROUND_NIGHT);
     this.sky.intensity = sun ? SKY_DAY_INTENSITY : SKY_NIGHT_INTENSITY;
+    const at = playerVehicle(this.world).pos;
+    this.stormTint.style.display = this.world.weather.some((e) => e.kind === 'storm' && dist(at, e.pos) <= e.radius) ? '' : 'none';
     this.fx.tick(dt);
     this.weather.advance(dt);
     this.weather.sync(this.world);

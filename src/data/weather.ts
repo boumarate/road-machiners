@@ -4,7 +4,8 @@ export const WEATHER = {
   stormSpacing: 90,
   wind: { x: 0.4, y: -0.14 },
   cloud: { puffs: 4, spread: 2, diameter: 3.5, height: 1.3, opacity: 0.36, color: 0xd5b58a },
-  storm: { puffs: 9, spread: 4, diameter: 6, height: 1.8, opacity: 0.48, color: 0x9d7954 },
+  // A storm bank fills its sim radius, with one puff per tilesPerPuff square tiles of area.
+  storm: { tilesPerPuff: 6, diameter: 6, height: 1.2, opacity: 0.35, color: 0x9d7954 },
   // Sim weather: storms are moving areas, heat waves and overcast cover the whole region.
   sim: {
     // Chance per turn to spawn a new event of that kind, checked only while none of that kind is active.

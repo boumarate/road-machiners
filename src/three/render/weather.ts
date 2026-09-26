@@ -9,11 +9,9 @@ import type { World } from '../../sim/types';
 
 const S = PHYSICS.metersPerTile;
 const WRAP_MARGIN = WEATHER.cloud.spread + WEATHER.cloud.diameter;
-// A storm at this tile radius looks like the shape's plain puffs; other radii scale from it.
-const BASE_STORM_RADIUS = (WEATHER.sim.stormRadius[0] + WEATHER.sim.stormRadius[1]) / 2;
 
 type Bank = { group: THREE.Group; x: number; y: number; speed: number; height: number };
-type Shape = typeof WEATHER.cloud | typeof WEATHER.storm;
+type Look = { puffs: number; spread: number; diameter: number; height: number; opacity: number; color: number };
 
 function createDustTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
@@ -51,7 +49,7 @@ export class WeatherView {
     for (let i = 0; i < count; i++) {
       const x = hash2(world.seed + i, 29) * world.size;
       const y = hash2(world.seed + i, 43) * world.size;
-      this.clouds.push(this.createBank(WEATHER.cloud, x, y, i, 1));
+      this.clouds.push(this.createBank(WEATHER.cloud, x, y, i, false));
     }
     this.sync(world);
   }
@@ -69,7 +67,8 @@ export class WeatherView {
       if (e.kind !== 'storm') continue;
       let bank = this.storms.get(e.id);
       if (!bank) {
-        bank = this.createBank(WEATHER.storm, e.pos.x, e.pos.y, idHash(e.id), e.radius / BASE_STORM_RADIUS);
+        const puffs = Math.ceil((Math.PI * e.radius * e.radius) / WEATHER.storm.tilesPerPuff);
+        bank = this.createBank({ ...WEATHER.storm, puffs, spread: e.radius }, e.pos.x, e.pos.y, idHash(e.id), true);
         this.storms.set(e.id, bank);
       }
       bank.x = e.pos.x;
@@ -78,16 +77,15 @@ export class WeatherView {
     }
   }
 
-  private createBank(shape: Shape, x: number, y: number, index: number, scale: number): Bank {
+  private createBank(shape: Look, x: number, y: number, index: number, storm: boolean): Bank {
     const group = new THREE.Group();
-    const storm = shape === WEATHER.storm;
     group.name = storm ? 'dust-storm' : 'dust-cloud';
     for (let i = 0; i < shape.puffs; i++) {
       const angle = hash2(index * 97 + i, storm ? 31 : 17) * Math.PI * 2;
-      const radius = Math.sqrt(hash2(index * 47 + i, storm ? 59 : 41)) * shape.spread * scale * S;
+      const radius = Math.sqrt(hash2(index * 47 + i, storm ? 59 : 41)) * shape.spread * S;
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.texture, color: shape.color, transparent: true, opacity: shape.opacity, depthWrite: false }));
       sprite.position.set(Math.cos(angle) * radius, hash2(index * 31 + i, 73) * S, Math.sin(angle) * radius);
-      sprite.scale.setScalar(shape.diameter * scale * S * (0.7 + hash2(i, index + 83) * 0.6));
+      sprite.scale.setScalar(shape.diameter * S * (0.7 + hash2(i, index + 83) * 0.6));
       group.add(sprite);
     }
     this.root.add(group);

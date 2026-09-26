@@ -5,14 +5,22 @@ import { playerVehicle } from '../sim/damage';
 import { corePart, mountedParts } from '../sim/grid';
 import { vehicleStats } from '../sim/stats';
 import { clockOf, heatAt } from '../sim/sun';
+import { TERRAIN } from '../data/terrain';
+import { dist, type Vec } from '../sim/vec';
 import type { World } from '../sim/types';
 
-const WEATHER_NAMES: Record<World['weather'][number]['kind'], string> = { storm: 'Storm', heatwave: 'Heat wave', overcast: 'Overcast' };
+const REGION_WEATHER: Record<'heatwave' | 'overcast', string> = { heatwave: 'Heat wave', overcast: 'Overcast' };
 const HOT = 2; // heat at or above this shows as a warning
 
-function weatherLabel(w: World): string {
-  if (w.weather.length === 0) return 'Clear';
-  return [...new Set(w.weather.map((e) => WEATHER_NAMES[e.kind]))].join(', ');
+// Storms are local: one shows only when the truck is inside it, or when its edge is within sight.
+function weatherLabel(w: World, pos: Vec): string {
+  const names: string[] = [];
+  for (const e of w.weather) {
+    if (e.kind !== 'storm') names.push(REGION_WEATHER[e.kind]);
+    else if (dist(pos, e.pos) <= e.radius) names.push('Dust storm');
+    else if (dist(pos, e.pos) - e.radius <= TERRAIN.vision.radius) names.push('Storm near');
+  }
+  return names.length ? [...new Set(names)].join(', ') : 'Clear';
 }
 
 function clockLabel(turn: number): string {
@@ -29,6 +37,7 @@ export function getHudReadout(w: World) {
   const capacity = chassisDef(me.chassisId).fuelCap;
   const p = w.player;
   const heat = heatAt(w, me.pos);
+  const weather = weatherLabel(w, me.pos);
   return {
     speed: me.speed.toFixed(1),
     maxSpeed: vehicleStats(w, me).maxSpeed.toFixed(1),
@@ -44,7 +53,7 @@ export function getHudReadout(w: World) {
     survival: [
       { label: 'Time', value: clockLabel(w.turn), warning: false },
       { label: 'Heat', value: `${heat.toFixed(1)}x`, warning: heat >= HOT },
-      { label: 'Weather', value: weatherLabel(w), warning: w.weather.some((e) => e.kind === 'storm') },
+      { label: 'Weather', value: weather, warning: weather !== 'Clear' && w.weather.some((e) => e.kind === 'storm' && dist(me.pos, e.pos) - e.radius <= TERRAIN.vision.radius) },
       ...(me.job ? [{ label: me.job.kind === 'search' ? 'Search' : 'Repair', value: `${me.job.turnsLeft} turns left`, warning: false }] : []),
     ],
   };
