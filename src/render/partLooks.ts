@@ -4,8 +4,10 @@
 import type { ModelName } from '../three/render/models';
 import { hashStr } from './noise';
 
+// Parts with no model of their own. The truck body draws them: the cab zone is the cab.
+export const BODY_PARTS: ReadonlySet<string> = new Set(['cab']);
+
 export const PART_MODELS: Record<string, ModelName> = {
-  cab: 'cockpit',
   transmission: 'transmission',
   wheel: 'wheel',
   tank: 'fuel_tank',
@@ -96,6 +98,7 @@ export const WEAPON_POOLS: Record<string, WeaponPool> = {
 export type WeaponLook = { mount: ModelName; receiver: ModelName; barrel: ModelName; extra: ModelName | null };
 
 export function partModel(defId: string): ModelName {
+  if (BODY_PARTS.has(defId)) throw new Error(`Part ${defId} is drawn by the truck body and has no model`);
   const name = PART_MODELS[defId];
   if (!name) throw new Error(`No model for part or good ${defId}. Add it to PART_MODELS.`);
   return name;

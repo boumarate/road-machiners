@@ -1,9 +1,10 @@
-"""The truck's front face for one front edge cell: a headlight strip, a grille and a chunky bumper.
+"""The truck's flat front for one front edge cell: a wide horizontal grille under the beltline.
 
 Footprint is one cell: 0.65 m along (Blender X) by 0.4 m across (Blender Y). The origin is the cell center on the deck top.
 The outer face is at X = +0.325, the cell's front edge. The face hangs from the deck top at Z = 0 to Z = -1.
-The view stretches Z to the chassis box height. The bumper spans the full cell width, so neighbours join into one bar.
-The bumper sticks out BUMPER_OUT past the front edge. Everything else stays inside the cell.
+The view stretches Z to the chassis box height. The grille spans the full cell, so a row of these reads as one wide grille.
+build() with a light side adds a rectangular headlight at that end, for nose_light_l.py and nose_light_r.py.
+bumper_front.py adds the bumper.
 Run: blender --background --python tools/blender/nose.py -- public/models/nose.glb [tmp/nose.png]
 """
 
@@ -21,44 +22,45 @@ FRONT = CELL_ALONG / 2  # the outer face, Blender X
 HALF_W = CELL_ACROSS / 2
 SKIN = 0.03
 RELIEF = 0.015  # grille, light and rail stand this far proud of the face panel
-RAIL_H = 0.1  # covers the deck tile's frame edge in the frame's own color, so the overlap does not flicker
-BUMPER_OUT = 0.22
-BUMPER_Z = (-0.97, -0.72)
+RAIL_H = 0.05  # the beltline rail along the top edge, as on body_side
+GRILLE_Z = (-0.5, -0.12)
+LIGHT_W = 0.2  # headlight width across
 
 NOSE_COLORS = {**COLORS, "light": 0xFFF0A0}  # PAL.flash
 
 
-def build(kit: Kit) -> None:
+def build(kit: Kit, light: int = 0) -> None:
+    """light is +1 for a headlight at the +Y end, -1 at the -Y end, 0 for none."""
     face = FRONT - RELIEF
     kit.box("panel", (SKIN, CELL_ACROSS, 1.0), (face - SKIN / 2, 0, -0.5), "paint")
-    kit.box("rail", (SKIN, CELL_ACROSS, RAIL_H), (FRONT - SKIN / 2, 0, -RAIL_H / 2), "metal_dark")
-    # A light strip over the grille. Both span the full cell, so a row of nose pieces reads as one wide front.
-    kit.box("light_bezel", (RELIEF * 2, CELL_ACROSS, 0.17), (FRONT - RELIEF, 0, -0.22), "soot")
-    kit.box("light", (RELIEF * 2 + 0.002, CELL_ACROSS - 0.05, 0.1), (FRONT - RELIEF + 0.001, 0, -0.22), "light")
-    grille_z = (-0.68, -0.34)
-    gh = grille_z[1] - grille_z[0]
-    kit.box("grille", (RELIEF * 2, CELL_ACROSS, gh), (FRONT - RELIEF * 1.5, 0, sum(grille_z) / 2), "soot")
-    for i in range(5):
-        y = -HALF_W + 0.04 + i * (CELL_ACROSS - 0.08) / 4
-        kit.box(f"bar{i}", (RELIEF * 2, 0.03, gh - 0.04), (FRONT - RELIEF, y, sum(grille_z) / 2), "metal_light")
-    # Bumper: a heavy steel beam on two brackets, full width.
-    bh = BUMPER_Z[1] - BUMPER_Z[0]
-    bz = sum(BUMPER_Z) / 2
-    beam_d = 0.12
-    kit.box("bumper", (beam_d, CELL_ACROSS, bh), (FRONT + BUMPER_OUT - beam_d / 2, 0, bz), "metal")
-    kit.box("bumper_top", (beam_d - 0.02, CELL_ACROSS, 0.03), (FRONT + BUMPER_OUT - beam_d / 2, 0, BUMPER_Z[1] + 0.012), "metal_light")
-    for y in (-HALF_W + 0.07, HALF_W - 0.07):
-        kit.box("bracket", (BUMPER_OUT - beam_d + 0.02, 0.06, bh * 0.6), (FRONT + (BUMPER_OUT - beam_d) / 2, y, bz), "metal_dark")
+    kit.box("rail", (RELIEF * 2, CELL_ACROSS, RAIL_H), (FRONT - RELIEF, 0, -RAIL_H / 2), "metal_dark")
+    gz = sum(GRILLE_Z) / 2
+    gh = GRILLE_Z[1] - GRILLE_Z[0]
+    y0, y1 = -HALF_W, HALF_W
+    if light:
+        edge = HALF_W * light
+        inner = edge - LIGHT_W * light
+        ly = (edge + inner) / 2
+        kit.box("light_bezel", (RELIEF * 2, LIGHT_W, gh), (FRONT - RELIEF - 0.002, ly, gz), "metal_dark")
+        kit.box("light", (RELIEF * 2, LIGHT_W - 0.05, gh - 0.1), (FRONT - RELIEF, ly, gz), "light")
+        kit.box("light_bar", (RELIEF * 2, 0.02, gh - 0.06), (FRONT - RELIEF, ly, gz), "metal_light")
+        y0, y1 = (y0, inner) if light > 0 else (inner, y1)
+    gw = y1 - y0
+    gy = (y0 + y1) / 2
+    kit.box("grille", (RELIEF * 2, gw, gh), (FRONT - RELIEF * 1.5, gy, gz), "soot")
+    for i in range(4):
+        z = GRILLE_Z[0] + 0.05 + i * (gh - 0.1) / 3
+        kit.box(f"slat{i}", (RELIEF * 2, gw, 0.035), (FRONT - RELIEF, gy, z), "metal_light")
+    kit.box("valance", (RELIEF * 2, CELL_ACROSS, 0.05), (FRONT - RELIEF, 0, GRILLE_Z[0] - 0.06), "metal_dark")
 
 
-def main() -> None:
+def run(name: str, light: int) -> None:
     args = parse_args()
     kit = Kit(NOSE_COLORS, SEED)
-    build(kit)
-    # The bumper is allowed past the front edge, so the fit check covers the cell plus the bumper depth.
-    check_footprint(kit, "nose", 1, 2 * (FRONT + BUMPER_OUT) / CELL_ALONG, min_z=-1.0, max_z=0.0)
-    kit.export("nose", args, view_size=1.4)
+    build(kit, light)
+    check_footprint(kit, name, 1, 1, min_z=-1.0, max_z=0.0)
+    kit.export(name, args, view_size=1.4)
 
 
 if __name__ == "__main__":
-    main()
+    run("nose", 0)

@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { CHASSIS, PLAYER_CHASSIS } from './chassis';
+import { CHASSIS, PLAYER_CHASSIS, type Zone } from './chassis';
 import { GOODS, GOOD_IDS, TOWN_PRICES } from './goods';
 import { PARTS, type PartKind } from './parts';
 import { REGION } from './region';
@@ -74,5 +74,26 @@ describe('equipment variety', () => {
       expect(goodsCount(w.vehicles[0])[id]).toBeUndefined();
       expect(w.player.money).toBeGreaterThan(start.player.money);
     }
+  });
+});
+
+describe('chassis zones', () => {
+  it.each(Object.keys(CHASSIS))('%s zones cover every row once, with a two-row cab and the engine mounts in the hood', (id) => {
+    const def = CHASSIS[id];
+    const zoneOf: (Zone | null)[] = def.layout.map(() => null);
+    for (const [zone, [first, last]] of Object.entries(def.zones) as [Zone, [number, number]][]) {
+      expect(Number.isInteger(first) && Number.isInteger(last), zone).toBe(true);
+      expect(first, zone).toBeLessThanOrEqual(last);
+      for (let y = first; y <= last; y++) {
+        expect(y >= 0 && y < def.layout.length, `${zone} row ${y}`).toBe(true);
+        expect(zoneOf[y], `row ${y}`).toBeNull();
+        zoneOf[y] = zone;
+      }
+    }
+    expect(zoneOf.every((z) => z !== null)).toBe(true);
+    expect(def.zones.cab[1] - def.zones.cab[0] + 1).toBeGreaterThanOrEqual(2);
+    def.layout.forEach((row, y) => {
+      if (row.includes('E')) expect(zoneOf[y], `engine row ${y}`).toBe('hood');
+    });
   });
 });

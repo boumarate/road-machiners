@@ -9,6 +9,11 @@
 // Any item may sit on any free cell, so empty mounts hold cargo too.
 //
 // core places the built-in parts at fixed cells, unrotated.
+//
+// zones split the rows into the body's hood, cab and bed, each a first and last row, inclusive. They only change the look.
+// Together they cover every row once. The cab spans at least two rows, and every engine mount cell lies in the hood.
+
+export type Zone = 'hood' | 'cab' | 'bed';
 
 export type ChassisDef = {
   id: string;
@@ -24,6 +29,7 @@ export type ChassisDef = {
   radius: number; // collision radius in tiles
   layout: string[];
   core: { defId: string; x: number; y: number }[];
+  zones: Record<Zone, [number, number]>;
   fuelCap: number;
   fuelPerTile: number;
   price: number;
@@ -62,6 +68,8 @@ export const CHASSIS: Record<string, ChassisDef> = {
       { defId: 'wheel', x: 0, y: 7 },
       { defId: 'wheel', x: 4, y: 7 },
     ],
+    // A pickup: the hood covers the engine rows, the weapon row sits on the cab roof, and the bed holds the cargo rows.
+    zones: { hood: [0, 2], cab: [3, 4], bed: [5, 7] },
     fuelCap: 40,
     fuelPerTile: 0.25,
     price: 400,
@@ -99,6 +107,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
       { defId: 'wheel', x: 0, y: 8 },
       { defId: 'wheel', x: 6, y: 8 },
     ],
+    zones: { hood: [0, 2], cab: [3, 4], bed: [5, 8] },
     fuelCap: 80,
     fuelPerTile: 0.4,
     price: 900,
@@ -133,6 +142,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
       { defId: 'wheel', x: 0, y: 5 },
       { defId: 'wheel', x: 3, y: 5 },
     ],
+    zones: { hood: [0, 2], cab: [3, 4], bed: [5, 5] },
     fuelCap: 30,
     fuelPerTile: 0.2,
     price: 250,
@@ -168,6 +178,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
       { defId: 'wheel', x: 0, y: 6 },
       { defId: 'wheel', x: 4, y: 6 },
     ],
+    zones: { hood: [0, 3], cab: [4, 5], bed: [6, 6] },
     fuelCap: 60,
     fuelPerTile: 0.4,
     price: 700,
@@ -182,6 +193,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
       { defId: 'wheel', x: 0, y: 0 }, { defId: 'wheel', x: 3, y: 0 },
       { defId: 'wheel', x: 0, y: 6 }, { defId: 'wheel', x: 3, y: 6 },
     ],
+    zones: { hood: [0, 2], cab: [3, 4], bed: [5, 6] },
     fuelCap: 24, fuelPerTile: 0.18, price: 550, look: 'courier',
   },
   van: {
@@ -193,6 +205,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
       { defId: 'wheel', x: 0, y: 0 }, { defId: 'wheel', x: 4, y: 0 },
       { defId: 'wheel', x: 0, y: 8 }, { defId: 'wheel', x: 4, y: 8 },
     ],
+    zones: { hood: [0, 2], cab: [3, 4], bed: [5, 8] },
     fuelCap: 55, fuelPerTile: 0.24, price: 650, look: 'van',
   },
   longbed: {
@@ -204,6 +217,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
       { defId: 'wheel', x: 0, y: 0 }, { defId: 'wheel', x: 6, y: 0 },
       { defId: 'wheel', x: 0, y: 10 }, { defId: 'wheel', x: 6, y: 10 },
     ],
+    zones: { hood: [0, 2], cab: [3, 4], bed: [5, 10] },
     fuelCap: 100, fuelPerTile: 0.48, price: 1300, look: 'longbed',
   },
   carrier: {
@@ -215,6 +229,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
       { defId: 'wheel', x: 0, y: 0 }, { defId: 'wheel', x: 5, y: 0 },
       { defId: 'wheel', x: 0, y: 8 }, { defId: 'wheel', x: 5, y: 8 },
     ],
+    zones: { cab: [0, 2], hood: [3, 4], bed: [5, 8] },
     fuelCap: 70, fuelPerTile: 0.5, price: 1600, look: 'carrier',
   },
   tractor: {
@@ -226,6 +241,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
       { defId: 'wheel', x: 0, y: 0 }, { defId: 'wheel', x: 6, y: 0 },
       { defId: 'wheel', x: 0, y: 8 }, { defId: 'wheel', x: 6, y: 8 },
     ],
+    zones: { hood: [0, 2], cab: [3, 4], bed: [5, 8] },
     fuelCap: 120, fuelPerTile: 0.6, price: 1400, look: 'tractor',
   },
 };

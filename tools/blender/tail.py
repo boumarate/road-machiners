@@ -1,9 +1,9 @@
-"""The truck's back face for one back edge cell: a tailgate with a lip, a red light strip and a rear bumper.
+"""The truck's back face for one back edge cell: a painted panel with a lip and a red light strip. bumper_rear.py adds the bumper.
 
 Footprint is one cell: 0.65 m along (Blender X) by 0.4 m across (Blender Y). The origin is the cell center on the deck top.
 It is authored facing +X like the nose, with the outer face at X = +0.325. The view turns it 180 degrees onto the back edge.
 The face hangs from the deck top at Z = 0 to Z = -1, and the view stretches Z to the chassis box height.
-The bumper sticks out BUMPER_OUT past the edge. Everything else stays inside the cell.
+Everything stays inside the cell.
 Run: blender --background --python tools/blender/tail.py -- public/models/tail.glb [tmp/tail.png]
 """
 
@@ -24,8 +24,6 @@ RELIEF = 0.015  # lip, seam and light stand this far proud of the gate
 PAINT_DOWN = 0.66  # the painted gate covers this share of the height from the top, as on body_side
 FRAME_IN = 0.05  # the dark chassis band below it sits this far in from the outer face
 RAIL_H = 0.1  # covers the deck tile's frame edge in the frame's own color, so the overlap does not flicker
-BUMPER_OUT = 0.12
-BUMPER_Z = (-0.97, -0.78)
 
 
 def build(kit: Kit) -> None:
@@ -38,20 +36,15 @@ def build(kit: Kit) -> None:
     kit.box("lip", (RELIEF * 2, CELL_ACROSS, 0.05), (BACK - RELIEF, 0, -0.14), "metal_light")
     kit.box("hem", (RELIEF * 2, CELL_ACROSS, 0.04), (BACK - RELIEF, 0, -PAINT_DOWN + 0.02), "paint")
     # The light strip spans the full cell, so a row of tail pieces reads as one wide back.
-    kit.box("light_box", (RELIEF * 2, CELL_ACROSS, 0.14), (BACK - RELIEF, 0, -0.34), "soot")
-    kit.box("taillight", (RELIEF * 2 + 0.002, CELL_ACROSS - 0.05, 0.08), (BACK - RELIEF + 0.001, 0, -0.34), "red")
-    bh = BUMPER_Z[1] - BUMPER_Z[0]
-    bz = sum(BUMPER_Z) / 2
-    kit.box("bumper", (0.09, CELL_ACROSS, bh), (BACK + BUMPER_OUT - 0.045, 0, bz), "metal")
-    kit.box("bumper_step", (BUMPER_OUT, CELL_ACROSS - 0.08, 0.03), (BACK + BUMPER_OUT / 2, 0, BUMPER_Z[1] - 0.015), "metal_light")
+    kit.box("light_box", (RELIEF * 2, CELL_ACROSS, 0.14), (BACK - RELIEF - 0.002, 0, -0.34), "soot")
+    kit.box("taillight", (RELIEF * 2, CELL_ACROSS - 0.05, 0.08), (BACK - RELIEF, 0, -0.34), "red")
 
 
 def main() -> None:
     args = parse_args()
     kit = Kit(COLORS, SEED)
     build(kit)
-    # The bumper is allowed past the edge, so the fit check covers the cell plus the bumper depth.
-    check_footprint(kit, "tail", 1, 2 * (BACK + BUMPER_OUT) / CELL_ALONG, min_z=-1.0, max_z=0.0)
+    check_footprint(kit, "tail", 1, 1, min_z=-1.0, max_z=0.0)
     kit.export("tail", args, view_size=1.4)
 
 

@@ -1,15 +1,14 @@
-"""A wheel arch over one wheel cell: a painted fender band with a flared outer lip and a dark well liner behind the wheel.
+"""A wheel arch over one wheel cell: a painted fender band with a squared flare and a dark well liner behind the wheel.
 
 Authored for a 1 m wheel radius and a 1 m wheel width, like wheel.py. The origin is the hub center at rest.
 The view scales X and Z by the chassis wheel radius and Y by the wheel width, so the arch hugs every wheel size.
-The arch runs from 25 to 155 degrees over the hub. Its outer side is +Y, the truck's left. The view turns it for the right.
+The opening is squared with cut corners, like a 4x4 fender flare. Its outer side is +Y, the truck's left. The view turns it for the right.
 The view fills the cell above the arch up to the deck with a painted box whose bottom is socket_top.
 Run: blender --background --python tools/blender/fender.py -- public/models/fender.glb [tmp/fender.png]
 """
 
 from __future__ import annotations
 
-import math
 import sys
 from pathlib import Path
 
@@ -21,27 +20,24 @@ from kit import Kit, parse_args  # noqa: E402
 from parts_common_core import COLORS  # noqa: E402
 
 SEED = 114
-ARC = (math.radians(25), math.radians(155))
-ARC_STEPS = 8
-INNER_R = 1.08  # clearance over the 1 m wheel at rest
 HALF_W = 0.5  # the band covers the wheel width
-LIP_W = 0.12  # the flared lip past the wheel's outer face
+LIP_W = 0.14  # the squared flare past the wheel's outer face
 LINER_W = 0.06
-TOP = 1.14  # the fill box bottom. It sits inside the band, between the inner arc top and the band top.
+TOP = 1.16  # the fill box bottom. It sits inside the band, between the opening top and the band top.
 
-# Right half of the band's outer edge, from the arch end up to the flat top. The left half mirrors it.
-OUTER = [(1.124, 0.524), (0.95, 1.05), (0.55, 1.2)]
-
-
-def arc(r: float) -> list[tuple[float, float]]:
-    """Points on a circle of radius r over the hub, from the front arch end to the back one."""
-    return [(r * math.cos(a), r * math.sin(a)) for a in (ARC[0] + (ARC[1] - ARC[0]) * i / ARC_STEPS for i in range(ARC_STEPS + 1))]
+# Right halves of the squared wheel opening and of the flare's outer edge, from the bottom up. The left halves mirror them.
+INNER = [(1.05, -0.05), (1.05, 0.72), (0.72, 1.08)]
+OUTER = [(1.22, -0.05), (1.22, 0.82), (0.82, 1.24)]
 
 
-def band(outer: list[tuple[float, float]], inner_r: float) -> list[tuple[float, float]]:
-    """A horseshoe profile: the outer edge over the top, then the inner arc back."""
-    full = outer + [(-x, z) for x, z in reversed(outer)]
-    return full + list(reversed(arc(inner_r)))
+def mirrored(half: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """A full outline over the hub from a right half, from the front bottom over the top to the back bottom."""
+    return half + [(-x, z) for x, z in reversed(half)]
+
+
+def band(outer: list[tuple[float, float]], inner: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """A squared horseshoe profile: the outer edge over the top, then the opening back."""
+    return mirrored(outer) + list(reversed(mirrored(inner)))
 
 
 def prism(kit: Kit, name: str, profile: list[tuple[float, float]], y0: float, y1: float, mat: str) -> None:
@@ -65,13 +61,12 @@ def prism(kit: Kit, name: str, profile: list[tuple[float, float]], y0: float, y1
 
 
 def build(kit: Kit) -> None:
-    prism(kit, "band", band(OUTER, INNER_R), -HALF_W, HALF_W, "paint")
-    lip = [(x * 1.03 + 0.02, z * 1.03) for x, z in OUTER]
-    prism(kit, "lip", band(lip, INNER_R - 0.03), HALF_W, HALF_W + LIP_W, "paint")
-    # A dark rim on the lip's inner edge, so the arch outline reads against the paint.
-    trim = arc(INNER_R + 0.04) + list(reversed(arc(INNER_R - 0.03)))
-    prism(kit, "trim", trim, HALF_W + LIP_W - 0.03, HALF_W + LIP_W + 0.01, "metal_dark")
-    prism(kit, "liner", arc(INNER_R), -HALF_W - LINER_W, -HALF_W, "metal_dark")
+    prism(kit, "band", band(OUTER, INNER), -HALF_W, HALF_W, "paint")
+    prism(kit, "lip", band(OUTER, INNER), HALF_W, HALF_W + LIP_W, "paint")
+    # A dark rim on the flare's inner edge, so the squared opening reads against the paint.
+    rim = [(x + 0.06 * (1 if x > 0 else -1), z + 0.06) for x, z in INNER]
+    prism(kit, "trim", band(rim, INNER), HALF_W + LIP_W - 0.03, HALF_W + LIP_W + 0.01, "metal_dark")
+    prism(kit, "liner", mirrored(INNER), -HALF_W - LINER_W, -HALF_W, "metal_dark")
     kit.socket("top", (0, 0, TOP))
 
 

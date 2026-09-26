@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { GOOD_IDS } from '../data/goods';
 import { PARTS } from '../data/parts';
-import { PART_MODELS, WEAPON_POOLS, partModel, weaponLook } from './partLooks';
+import { BODY_PARTS, PART_MODELS, WEAPON_POOLS, partModel, weaponLook } from './partLooks';
 
 const weaponIds = Object.values(PARTS).filter((d) => d.kind === 'weapon').map((d) => d.id);
-const otherIds = Object.values(PARTS).filter((d) => d.kind !== 'weapon').map((d) => d.id);
+const otherIds = Object.values(PARTS).filter((d) => d.kind !== 'weapon' && !BODY_PARTS.has(d.id)).map((d) => d.id);
 
 describe('part looks', () => {
-  it('gives every non-weapon part def and every good a model', () => {
+  it('gives every non-weapon part def and every good a model, except parts the body draws', () => {
     for (const id of [...otherIds, ...GOOD_IDS]) expect(() => partModel(id), id).not.toThrow();
     expect(Object.keys(PART_MODELS).sort()).toEqual([...otherIds, ...GOOD_IDS].sort());
   });
@@ -25,6 +25,7 @@ describe('part looks', () => {
   it('throws on an unknown id', () => {
     expect(() => partModel('nope')).toThrow();
     expect(() => partModel('mg')).toThrow();
+    expect(() => partModel('cab')).toThrow();
     expect(() => weaponLook('p1', 'nope')).toThrow();
   });
 
