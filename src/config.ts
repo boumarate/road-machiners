@@ -7,6 +7,14 @@ function requireInt(name: string, raw: string | undefined): number {
   return n;
 }
 
+function requirePositiveInt(name: string, raw: string | undefined): number {
+  const value = requireInt(name, raw);
+  if (value <= 0) throw new Error(`${name} must be positive, got ${value}`);
+  return value;
+}
+
 export const CONFIG = {
   seed: requireInt('VITE_SEED', import.meta.env.VITE_SEED),
+  combatShotMs: requirePositiveInt('VITE_COMBAT_SHOT_MS', import.meta.env.VITE_COMBAT_SHOT_MS),
+  combatReadMs: requirePositiveInt('VITE_COMBAT_READ_MS', import.meta.env.VITE_COMBAT_READ_MS),
 };

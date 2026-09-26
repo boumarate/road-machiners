@@ -20,13 +20,14 @@ import { groundLiftOf } from '../render/ground';
 import { drawFog, makeFog } from '../render/fog';
 import type { IsoCanvas } from '../render/isoCanvas';
 import { drawVehicle, type Ring } from '../render/vehicle';
-import { playerExplored, playerSees } from '../sim/vision';
+import { playerExplored, playerSees, tileOf } from '../sim/vision';
 import type { UiHost } from '../ui/host';
 import { Hud } from '../ui/hud';
 import { CharacterScreen } from '../ui/character';
 import { InventoryScreen } from '../ui/inventory';
 import { TownScreen } from '../ui/town';
-import { WeaponPanel, weaponsForClick } from '../ui/weapons';
+import { getWeaponReadout, WeaponPanel, weaponsForClick } from '../ui/weapons';
+import { drawWeaponRange } from '../render/weaponRange';
 import { canScavenge, scavenge } from '../sim/locations';
 import { locationAt, townAt } from '../sim/sites';
 
@@ -57,6 +58,11 @@ export class WorldScene extends Phaser.Scene {
   private hovered: string | null = null;
   private animStart: number | null = null;
   private fxPlayed = true;
+  private impactsPlayed = true;
+  private hasCombat = false;
+  private beforeTurn: World | null = null;
+  private phase: ReturnType<UiHost['getTurnPhase']> = null;
+  private targetMarkers = new Map<string, Phaser.GameObjects.Text>();
   private following = true;
   private panFrom: { x: number; y: number; sx: number; sy: number } | null = null;
 
@@ -89,14 +95,16 @@ export class WorldScene extends Phaser.Scene {
 
   private uiHost(): UiHost {
     return {
-      world: () => this.world,
+      world: () => this.getDisplayWorld(),
       apply: (next) => this.apply(next),
       selectedWeapon: () => this.selected,
       selectWeapon: (id) => {
+        if (this.animStart !== null) return;
         this.selected = id;
         this.refreshUi();
       },
       endTurn: () => this.endTurn(),
+      getTurnPhase: () => this.phase,
     };
   }
 
@@ -112,7 +120,13 @@ export class WorldScene extends Phaser.Scene {
 
   // Fog of war depends only on the world, so it is redrawn here, not every frame.
   private refreshFog(): void {
-    drawFog(this.fog, this.world, new Set(this.world.player.visible));
+    const visible = new Set(this.world.player.visible);
+    if (!this.impactsPlayed) {
+      for (const v of [...this.world.vehicles, ...this.world.removed]) {
+        if (this.canShowCombatVehicle(v)) visible.add(tileOf(this.world, v.pos));
+      }
+    }
+    drawFog(this.fog, this.world, visible);
   }
 
   private isVehicleVisible(v: Vehicle): boolean {
@@ -120,8 +134,9 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private refreshUi(): void {
+    if (this.selected && !vehicleStats(this.world, playerVehicle(this.world)).weapons.some((mw) => mw.part.id === this.selected)) this.selected = null;
     this.refreshFog();
-    this.hud.renderTop(this.world);
+    this.hud.renderTop(this.getDisplayWorld());
     this.weapons.render();
     this.town.render();
     this.character.render();
@@ -129,6 +144,11 @@ export class WorldScene extends Phaser.Scene {
     this.hud.renderAction(this.contextLabel(), () => this.useContext());
     this.refreshInfo();
     this.refreshLabels();
+    this.refreshTargetMarkers();
+  }
+
+  private getDisplayWorld(): World {
+    return this.beforeTurn && !this.impactsPlayed ? this.beforeTurn : this.world;
   }
 
   private contextLabel(): string | null {
@@ -153,8 +173,9 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private refreshInfo(): void {
-    const v = this.hovered ? this.world.vehicles.find((x) => x.id === this.hovered) ?? null : null;
-    this.hud.showInfo(this.world, v, v ? hostileToPlayer(this.world, v) : false);
+    const w = this.getDisplayWorld();
+    const v = this.hovered ? w.vehicles.find((x) => x.id === this.hovered && playerSees(w, x.pos)) ?? null : null;
+    this.hud.showInfo(w, v, v ? hostileToPlayer(w, v) : false);
   }
 
   private bindInput(): void {
@@ -170,16 +191,24 @@ export class WorldScene extends Phaser.Scene {
     this.input.on('pointerup', () => (this.panFrom = null));
     this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => this.onZoom(dy));
     const kb = this.input.keyboard!;
-    kb.on('keydown-SPACE', () => !this.modalOpen() && this.endTurn());
+    kb.on('keydown-SPACE', (e: KeyboardEvent) => {
+      if (e.repeat || this.isEditingControl() || this.modalOpen()) return;
+      e.preventDefault();
+      this.endTurn();
+    });
     kb.on('keydown-F', () => (this.following = true));
-    kb.on('keydown-A', () => !this.modalOpen() && this.weapons.toggleAuto());
+    kb.on('keydown-A', () => !this.modalOpen() && !this.isEditingControl() && this.weapons.toggleAuto());
+    kb.on('keydown-W', () => !this.modalOpen() && !this.isEditingControl() && this.weapons.toggleVisible());
+    kb.on('keydown-ZERO', () => !this.modalOpen() && !this.isEditingControl() && this.weapons.selectWeapon(null));
     kb.on('keydown-E', () => !this.modalOpen() && this.useContext());
     kb.on('keydown-C', () => {
+      if (this.animStart !== null || this.isEditingControl()) return;
       this.town.close();
       this.inventory.close();
       this.character.toggle();
     });
     kb.on('keydown-I', () => {
+      if (this.animStart !== null || this.isEditingControl()) return;
       this.town.close();
       this.character.close();
       this.inventory.toggle();
@@ -192,11 +221,15 @@ export class WorldScene extends Phaser.Scene {
     ['ONE', 'TWO', 'THREE', 'FOUR'].forEach((key, i) => kb.on(`keydown-${key}`, () => this.selectWeaponIndex(i)));
   }
 
+  private isEditingControl(): boolean {
+    return document.activeElement?.matches('input, select, textarea') ?? false;
+  }
+
   private selectWeaponIndex(i: number): void {
+    if (this.animStart !== null || this.modalOpen() || this.isEditingControl()) return;
     const all = vehicleStats(this.world, playerVehicle(this.world)).weapons;
     if (i >= all.length) return;
-    this.selected = this.selected === all[i].part.id ? null : all[i].part.id;
-    this.refreshUi();
+    this.weapons.selectWeapon(this.selected === all[i].part.id ? null : all[i].part.id);
   }
 
   private onLeftClick(p: Phaser.Input.Pointer): void {
@@ -253,59 +286,99 @@ export class WorldScene extends Phaser.Scene {
   }
 
   endTurn(): void {
-    if (this.animStart !== null) return;
+    if (this.animStart !== null || this.modalOpen()) return;
+    this.beforeTurn = this.world;
     this.world = endTurn(this.world);
+    this.hasCombat = this.world.events.some((e) => e.t === 'shot' && this.getEventPosition(e.shooter) && this.getEventPosition(e.target));
     this.animStart = this.time.now;
+    this.phase = 'Moving';
     this.fxPlayed = false;
-    this.hud.pushEvents(this.world);
+    this.impactsPlayed = false;
     this.refreshUi();
   }
 
   update(time: number): void {
-    const t = this.animStart === null ? 1 : Math.min(1, (time - this.animStart) / TURN_ANIM_MS);
+    const elapsed = this.animStart === null ? 0 : time - this.animStart;
+    const t = this.animStart === null ? 1 : Math.min(1, elapsed / TURN_ANIM_MS);
+    if (this.animStart !== null) {
+      if (t === 1 && !this.fxPlayed) {
+        this.fxPlayed = true;
+        this.playEventFx(this.world);
+        this.phase = this.hasCombat ? 'Firing' : 'Results';
+        this.weapons.render();
+      }
+      const impactAt = TURN_ANIM_MS + (this.hasCombat ? CONFIG.combatShotMs : 0);
+      if (elapsed >= impactAt && !this.impactsPlayed) {
+        this.impactsPlayed = true;
+        this.phase = 'Results';
+        this.playImpactFx();
+        this.syncObstacles();
+        this.hud.pushEvents(this.world);
+        this.refreshUi();
+      }
+      if (elapsed >= impactAt + (this.hasCombat ? CONFIG.combatReadMs : 0)) this.finishTurnAnim();
+    }
     this.syncVehicles(t);
-    if (t === 1 && !this.fxPlayed) this.finishTurnAnim();
-    if (t === 1) this.animStart = null;
     this.drawPlan();
+    for (const marker of this.targetMarkers.values()) marker.setVisible(this.animStart === null && !this.modalOpen());
     this.followPlayer(t);
   }
 
   private finishTurnAnim(): void {
-    this.fxPlayed = true;
-    this.syncObstacles();
-    this.playEventFx(this.world);
     this.animStart = null;
+    this.beforeTurn = null;
+    this.phase = null;
     this.refreshUi();
   }
 
+  private getEventPosition(id: string): { x: number; y: number } | null {
+    const v = this.world.vehicles.find((x) => x.id === id) ?? this.world.removed.find((x) => x.id === id);
+    return v && this.canShowCombatVehicle(v) ? toScreen(v.pos.x, v.pos.y) : null;
+  }
+
+  private canShowCombatVehicle(v: Vehicle): boolean {
+    // Player shots prove sight at firing time, before new wrecks change the fog.
+    return this.isVehicleVisible(v) || this.world.events.some((e) =>
+      e.t === 'shot' && e.shooter === this.world.player.vehicleId && e.target === v.id);
+  }
+
+  private playImpactFx(): void {
+    for (const e of this.world.events) {
+      if (e.t !== 'destroyed') continue;
+      const p = this.getEventPosition(e.vehicle);
+      if (p) this.fx.explode(p);
+    }
+  }
+
   private playEventFx(w: World): void {
-    const at = (id: string) => {
-      const v = w.vehicles.find((x) => x.id === id) ?? w.removed.find((x) => x.id === id);
-      return v ? toScreen(v.pos.x, v.pos.y) : null;
-    };
+    const rows = new Map<string, number>();
+    const weapons = vehicleStats(w, playerVehicle(w)).weapons;
     for (const e of w.events) {
       if (e.t === 'shot') {
-        const a = at(e.shooter);
-        const b = at(e.target);
+        const a = this.getEventPosition(e.shooter);
+        const b = this.getEventPosition(e.target);
         const shooter = w.vehicles.find((x) => x.id === e.shooter) ?? w.removed.find((x) => x.id === e.shooter);
         const gun = shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
         const def = gun && partDef(gun.defId);
         const heavy = def?.kind === 'weapon' && def.look === 'cannon';
-        if (a && b) this.fx.shot(a, b, e.hit, e.damage, heavy);
-      }
-      if (e.t === 'destroyed') {
-        const p = at(e.vehicle);
-        if (p) this.fx.explode(p);
+        if (a && b) {
+          const slot = weapons.findIndex((mw) => mw.part.id === e.weapon);
+          const label = `${slot >= 0 ? `[${slot + 1}] ` : ''}${heavy ? 'Cannon' : 'MG'} ${e.hit ? `−${e.damage}` : 'miss'}`;
+          const row = rows.get(e.target) ?? 0;
+          rows.set(e.target, row + 1);
+          this.fx.shot(a, b, e.hit, heavy, label, row, CONFIG.combatShotMs, CONFIG.combatReadMs);
+        }
       }
       if (e.t === 'collision') {
-        const p = at(e.a);
+        const p = this.getEventPosition(e.a);
         if (p) this.fx.crash(p);
       }
     }
   }
 
   private syncVehicles(t: number): void {
-    const shown = [...this.world.vehicles, ...(t < 1 ? this.world.removed : [])].filter((v) => this.isVehicleVisible(v));
+    const shown = [...this.world.vehicles, ...(!this.impactsPlayed ? this.world.removed : [])]
+      .filter((v) => this.impactsPlayed ? this.isVehicleVisible(v) : this.canShowCombatVehicle(v));
     const ids = new Set(shown.map((v) => v.id));
     for (const [id, g] of this.vehicleGfx) {
       if (!ids.has(id)) {
@@ -320,9 +393,11 @@ export class WorldScene extends Phaser.Scene {
         this.vehicleGfx.set(v.id, g);
       }
       const pose = poseAt(v, t);
-      drawVehicle(g, v, pose, this.turretAim(v, pose), this.ringsFor(v));
+      const before = !this.impactsPlayed && this.beforeTurn?.vehicles.find((x) => x.id === v.id);
+      const display = before ? { ...v, hull: before.hull, items: before.items } : v;
+      drawVehicle(g, display, pose, this.turretAim(v, pose), this.ringsFor(v));
       g.setDepth(depthOf(pose, vehicleStats(this.world, v).radius));
-      this.vehicleParticles(v, pose, t);
+      this.vehicleParticles(display, pose, t);
     }
   }
 
@@ -375,10 +450,36 @@ export class WorldScene extends Phaser.Scene {
     return rings;
   }
 
+  private refreshTargetMarkers(): void {
+    for (const label of this.targetMarkers.values()) label.destroy();
+    this.targetMarkers.clear();
+    if (this.animStart !== null) return;
+    const me = playerVehicle(this.world);
+    const targets = new Map<string, { vehicle: Vehicle; lines: string[] }>();
+    vehicleStats(this.world, me).weapons.forEach((mw, i) => {
+      const readout = getWeaponReadout(this.world, mw);
+      if (!readout.target) return;
+      let marker = targets.get(readout.target.id);
+      if (!marker) {
+        marker = { vehicle: readout.target, lines: [] };
+        targets.set(readout.target.id, marker);
+      }
+      marker.lines.push(`[${i + 1}] ${mw.def.look === 'cannon' ? 'Cannon' : 'MG'} · ${readout.status}`);
+    });
+    for (const [id, marker] of targets) {
+      const p = toScreen(marker.vehicle.pos.x, marker.vehicle.pos.y);
+      const label = this.add.text(p.x, p.y - 40, marker.lines.join('\n'), {
+        fontFamily: 'monospace', fontSize: '12px', color: '#f0e0b8', backgroundColor: '#261c14ee',
+        padding: { x: 6, y: 4 }, align: 'center',
+      }).setOrigin(0.5, 1).setDepth(1e6 + 2).setName(`weapon-target-${id}`).setVisible(!this.modalOpen());
+      this.targetMarkers.set(id, label);
+    }
+  }
+
   private drawRangeRing(g: Phaser.GameObjects.Graphics): void {
     const me = playerVehicle(this.world);
     const sel = vehicleStats(this.world, me).weapons.find((m) => m.part.id === this.selected);
-    if (sel) groundRing(g, me.pos, sel.def.range, 1.5, PAL.select, 0.6);
+    if (sel) drawWeaponRange(g, me, sel.def);
   }
 
 

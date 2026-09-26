@@ -15,7 +15,7 @@ Phaser 4, TypeScript, Vite, Vitest. Playwright for browser checks.
 
 ## Config
 
-`.env` holds `VITE_SEED`, the world seed. Copy `.env.example` to `.env` on a fresh checkout. A missing or bad seed stops the boot.
+`.env` holds `VITE_SEED`, the world seed, plus `VITE_COMBAT_SHOT_MS` and `VITE_COMBAT_READ_MS` for projectile travel and result-reading time. Durations must be positive integers in milliseconds. Copy `.env.example` to `.env` on a fresh checkout. Existing checkouts must add the two combat values from `.env.example`. Missing or invalid values stop the boot.
 
 ## Architecture
 

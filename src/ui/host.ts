@@ -8,4 +8,5 @@ export type UiHost = {
   selectedWeapon(): string | null;
   selectWeapon(id: string | null): void;
   endTurn(): void;
+  getTurnPhase(): 'Moving' | 'Firing' | 'Results' | null;
 };
