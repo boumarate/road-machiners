@@ -1,5 +1,9 @@
+import RAPIER from '@dimforge/rapier3d-compat';
+import { PHYSICS } from '../data/physics';
 import { START_KITS } from '../data/start';
 import { beforeAll, expect, it } from 'vitest';
+import { randRange } from '../sim/rng';
+import { heightAt } from '../sim/terrain';
 import { dist, type Vec } from '../sim/vec';
 import { endTurn, newWorld, setMoveOrder } from '../sim/world';
 import { buildDrive, freeDrive, initPhysics, type Drive, type TurnResult } from './drive';
@@ -50,3 +54,39 @@ it('the Bowl crater exit leans the truck without rolling it onto its side', () =
   // 45 degrees is halfway to a sideways rollover; the crater is rougher than a road crossing.
   expect(result.maxTilt).toBeLessThan(45);
 }, 60_000);
+
+it('the terrain collider is a heightfield whose surface matches the corner grid', () => {
+  const S = PHYSICS.metersPerTile;
+  const w = newWorld(1, START_KITS.standard);
+  const t = w.terrain;
+  const drive = buildDrive(w);
+  const ground = drive.world.getCollider(drive.terrain);
+  expect(ground.shapeType()).toBe(RAPIER.ShapeType.HeightField);
+  const corner = (i: number, j: number) => t.heights[j * (t.size + 1) + i] * S;
+  const rng = { rngState: 7 };
+  let flat = 0;
+  for (let k = 0; k < 200; k++) {
+    const x = randRange(rng, 0, t.size);
+    const y = randRange(rng, 0, t.size);
+    const top = 1000;
+    const toi = ground.castRay(new RAPIER.Ray({ x: x * S, y: top, z: y * S }, { x: 0, y: -1, z: 0 }), 2 * top, true);
+    expect(toi).toBeGreaterThanOrEqual(0);
+    const hit = top - toi;
+    const i = Math.floor(x);
+    const j = Math.floor(y);
+    const fx = x - i;
+    const fy = y - j;
+    const [a, b, c, d] = [corner(i, j), corner(i + 1, j), corner(i, j + 1), corner(i + 1, j + 1)];
+    // Both triangles share the b-c diagonal: a, b, c below it and b, c, d above it.
+    const split = fx + fy <= 1 ? a + (b - a) * fx + (c - a) * fy : d + (c - d) * (1 - fx) + (b - d) * (1 - fy);
+    expect(Math.abs(hit - split)).toBeLessThan(0.05);
+    expect(hit).toBeGreaterThanOrEqual(Math.min(a, b, c, d) - 0.05);
+    expect(hit).toBeLessThanOrEqual(Math.max(a, b, c, d) + 0.05);
+    if (Math.max(a, b, c, d) - Math.min(a, b, c, d) < 1e-6) {
+      flat++;
+      expect(Math.abs(hit - heightAt(t, x, y) * S)).toBeLessThan(0.05);
+    }
+  }
+  expect(flat).toBeGreaterThan(0);
+  freeDrive(drive);
+});

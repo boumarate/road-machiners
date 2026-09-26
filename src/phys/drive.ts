@@ -347,38 +347,19 @@ export function bodyState(d: Drive, id: string): { pos: Vec; heading: number; sp
   return { pos: { x: t.x / S, y: t.z / S }, heading: headingOf(body.rotation()), speed: forwardSpeed(body) };
 }
 
+// A heightfield over the (n + 1) x (n + 1) corner grid. Rapier rows run along z and columns along x,
+// stored column-major, and the field is centered on its collider, so it moves by half the map size.
 function addTerrain(world: RAPIER.World, w: World): number {
   const n = w.terrain.size;
-  const vertices = new Float32Array((n + 1) * (n + 1) * 3);
-  for (let j = 0; j <= n; j++) {
-    for (let i = 0; i <= n; i++) {
-      const k = (j * (n + 1) + i) * 3;
-      vertices[k] = i * S;
-      vertices[k + 1] = w.terrain.heights[j * (n + 1) + i] * S;
-      vertices[k + 2] = j * S;
-    }
+  const heights = new Float32Array((n + 1) * (n + 1));
+  for (let i = 0; i <= n; i++) {
+    for (let j = 0; j <= n; j++) heights[i * (n + 1) + j] = w.terrain.heights[j * (n + 1) + i];
   }
-  const terrain = world.createCollider(RAPIER.ColliderDesc.trimesh(vertices, terrainIndices(n))).handle;
   const size = n * S;
+  const field = RAPIER.ColliderDesc.heightfield(n, n, heights, { x: size, y: S, z: size }).setTranslation(size / 2, 0, size / 2);
+  const terrain = world.createCollider(field).handle;
   for (const [x, z, hx, hz] of [[-WALL, size / 2, WALL, size], [size + WALL, size / 2, WALL, size], [size / 2, -WALL, size, WALL], [size / 2, size + WALL, size, WALL]]) {
     world.createCollider(RAPIER.ColliderDesc.cuboid(hx, PHYSICS.wallHeight, hz).setTranslation(x, 0, z));
   }
   return terrain;
-}
-
-// Two upward-facing triangles per tile over the (n + 1) x (n + 1) corner grid.
-export function terrainIndices(n: number): Uint32Array {
-  const idx = new Uint32Array(n * n * 6);
-  let k = 0;
-  for (let j = 0; j < n; j++) {
-    for (let i = 0; i < n; i++) {
-      const a = j * (n + 1) + i;
-      const b = a + 1;
-      const c = a + n + 1;
-      const d = c + 1;
-      idx.set([a, c, b, b, c, d], k);
-      k += 6;
-    }
-  }
-  return idx;
 }
