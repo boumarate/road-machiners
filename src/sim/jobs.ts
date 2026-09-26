@@ -27,7 +27,7 @@ export function startRepair(world: World, partId: string): World {
     if (plan.hp <= 0) throw new Error('Already at the field repair cap');
     const held = goodsCount(v).parts ?? 0;
     if (held < plan.parts) throw new Error('Not enough parts to start this repair');
-    startJob(w, v, { kind: 'repair', partId, turnsLeft: plan.turns });
+    startJob(w, v, { kind: 'repair', partId, turnsLeft: plan.turns, total: plan.turns });
   });
 }
 

@@ -163,3 +163,7 @@ html, body { margin: 0; height: 100%; background: #1b1c1d; overflow: hidden; }
 
 /* Dust haze over the view while the player truck is inside a storm. */
 .storm-tint { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(157, 121, 84, 0.18), rgba(120, 88, 58, 0.55)); }
+
+/* Progress of a parked job: repair or search. */
+.job-bar { display: block; width: 90px; height: 5px; margin-top: 3px; background: rgba(255, 255, 255, 0.12); }
+.job-bar > span { display: block; height: 100%; background: #e0c070; }

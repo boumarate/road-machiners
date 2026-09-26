@@ -54,7 +54,7 @@ export function getHudReadout(w: World) {
       { label: 'Time', value: clockLabel(w.turn), warning: false },
       { label: 'Heat', value: `${heat.toFixed(1)}x`, warning: heat >= HOT },
       { label: 'Weather', value: weather, warning: weather !== 'Clear' && w.weather.some((e) => e.kind === 'storm' && dist(me.pos, e.pos) - e.radius <= TERRAIN.vision.radius) },
-      ...(me.job ? [{ label: me.job.kind === 'search' ? 'Search' : 'Repair', value: `${me.job.turnsLeft} turns left`, warning: false }] : []),
+      ...(me.job ? [{ label: me.job.kind === 'search' ? 'Search' : 'Repair', value: `${me.job.turnsLeft} turns left`, warning: false, progress: 1 - me.job.turnsLeft / me.job.total }] : []),
     ],
   };
 }

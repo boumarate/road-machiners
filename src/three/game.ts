@@ -6,12 +6,13 @@ import * as THREE from 'three';
 import { CONFIG } from '../config';
 import { partDef } from '../data/parts';
 import { PHYSICS } from '../data/physics';
+import { REGION } from '../data/region';
 import { buildDrive, freeDrive, restFrame, simulateTurn, syncDrive, TURN_STEPS, type Drive, type TurnResult } from '../phys/drive';
 import { groundPoint, toMap, type TurnFrames, type V3, type VehicleFrame } from '../phys/frames';
 import { applyTurn, physicsMove } from '../phys/turn';
 import { playerVehicle } from '../sim/damage';
 import { corePart, mountedParts } from '../sim/grid';
-import { canScavenge, scavenge } from '../sim/locations';
+import { canLoot, canScavenge, salvageHere, scavenge } from '../sim/locations';
 import { locationAt, townAt } from '../sim/sites';
 import { maxTurn, vehicleStats } from '../sim/stats';
 import { clickOrder, throttleFor } from '../sim/steering';
@@ -269,16 +270,21 @@ export class Game {
     if (this.anim) return null;
     const town = townAt(this.world);
     if (town) return `Enter ${town.name}`;
-    if (!playerVehicle(this.world).job && canScavenge(this.world)) return `Search ${locationAt(this.world)!.name}`;
+    if (playerVehicle(this.world).job) return null;
+    if (canScavenge(this.world)) return `Search ${salvageName(this.world)}`;
+    if (canLoot(this.world)) return `Loot ${salvageName(this.world)}`;
     return null;
   }
 
   private useContext(): void {
     if (this.anim) return;
     if (townAt(this.world)) return this.town.open();
-    if (!playerVehicle(this.world).job && canScavenge(this.world)) {
+    if (playerVehicle(this.world).job) return;
+    if (canScavenge(this.world)) {
       this.apply(scavenge(this.world));
       this.hud.pushEvents(this.world);
+    } else if (canLoot(this.world)) {
+      this.inventory.openLoot(salvageHere(this.world)!.id);
     }
   }
 
@@ -571,6 +577,9 @@ export class Game {
       if (p) this.fx.explode(p);
     }
     this.hud.pushEvents(this.world);
+    // A finished search opens the loot beside the truck's grid.
+    const searched = this.world.events.find((e) => e.t === 'searched');
+    if (searched) this.inventory.openLoot(searched.stock);
     this.refreshUi();
   }
 
@@ -884,4 +893,11 @@ export class Game {
       : PAL.plan;
     this.zones.hover(this.world.terrain, hover, color);
   }
+}
+
+// A salvage stock's display name: its site, or a wreck.
+function salvageName(world: World): string {
+  const stock = salvageHere(world);
+  if (!stock) throw new Error('No salvage in reach');
+  return REGION.locations.find((l) => l.id === stock.id)?.name ?? 'the wreck';
 }

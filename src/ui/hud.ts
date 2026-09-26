@@ -119,7 +119,9 @@ export class Hud {
       el('div', { class: 'resource-bank survival-bank' },
         ...readout.survival.map((entry) => el('span', {
           class: `resource ${entry.warning ? 'bad' : ''}`, title: entry.label, 'data-resource': entry.label,
-        }, el('span', {}, el('small', {}, entry.label), el('strong', {}, entry.value)))),
+        }, el('span', {}, el('small', {}, entry.label), el('strong', {}, entry.value),
+          ...('progress' in entry && entry.progress !== undefined ? [el('span', { class: 'job-bar', role: 'progressbar', 'aria-valuenow': String(Math.round(entry.progress * 100)) },
+            el('span', { style: `width:${Math.round(entry.progress * 100)}%` }))] : [])))),
       ),
     );
   }

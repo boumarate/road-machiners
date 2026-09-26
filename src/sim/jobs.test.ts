@@ -23,7 +23,7 @@ describe('field repair job', () => {
     expect(plan.hp).toBeGreaterThan(0);
 
     const next = startRepair(w, cage.id);
-    expect(next.vehicles[0].job).toEqual({ kind: 'repair', partId: cage.id, turnsLeft: plan.turns });
+    expect(next.vehicles[0].job).toEqual({ kind: 'repair', partId: cage.id, turnsLeft: plan.turns, total: plan.turns });
 
     for (let i = 0; i < plan.turns - 1; i++) advanceJobs(next);
     expect(next.vehicles[0].job).not.toBeNull();
@@ -90,7 +90,7 @@ describe('field repair job', () => {
     cage.hp = 1;
     addGoods(w, npc, 'parts', 20);
     const plan = repairPlan(w, npc, cage.id);
-    startJob(w, npc, { kind: 'repair', partId: cage.id, turnsLeft: plan.turns });
+    startJob(w, npc, { kind: 'repair', partId: cage.id, turnsLeft: plan.turns, total: plan.turns });
     for (let i = 0; i < plan.turns; i++) advanceJobs(w);
     expect(npc.job).toBeNull();
     expect(armorPart(npc).hp).toBe(1 + plan.hp);

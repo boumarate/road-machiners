@@ -37,9 +37,9 @@ describe('local game save', () => {
 
   it('rejects incompatible versions and incomplete worlds', () => {
     const storage = makeStorage();
-    storage.setItem('korovan.save', JSON.stringify({ version: 1, world: { turn: 21 } }));
-    expect(() => loadWorld(storage)).toThrow(/version/);
     storage.setItem('korovan.save', JSON.stringify({ version: 2, world: { turn: 21 } }));
+    expect(() => loadWorld(storage)).toThrow(/version/);
+    storage.setItem('korovan.save', JSON.stringify({ version: 3, world: { turn: 21 } }));
     expect(() => loadWorld(storage)).toThrow(/world/);
   });
 
@@ -49,7 +49,7 @@ describe('local game save', () => {
     for (const field of ['nextId', 'rngState', 'spawnTimer', 'weather'] as const) {
       const incomplete = { ...world };
       delete (incomplete as Partial<typeof world>)[field];
-      storage.setItem('korovan.save', JSON.stringify({ version: 2, world: incomplete }));
+      storage.setItem('korovan.save', JSON.stringify({ version: 3, world: incomplete }));
       expect(() => loadWorld(storage)).toThrow(/world/);
     }
   });

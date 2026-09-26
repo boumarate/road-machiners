@@ -61,8 +61,8 @@ export type SalvageStock = {
 
 // Work that needs the truck parked. Moving above parked speed cancels it, and finished turns are lost.
 export type Job =
-  | { kind: 'repair'; partId: string; turnsLeft: number }
-  | { kind: 'search'; stockId: string; turnsLeft: number };
+  | { kind: 'repair'; partId: string; turnsLeft: number; total: number }
+  | { kind: 'search'; stockId: string; turnsLeft: number; total: number };
 
 // A vehicle detected beyond sight. The circle always holds the true position, which it never reveals.
 // trail is the rough heading of a dust trail in radians, or null when no dust is seen.
@@ -135,7 +135,7 @@ export type Player = {
   supplies: number;
   autoFire: boolean;
   discovered: string[];
-  scavenged: string[];
+  scavenged: string[]; // stocks the player finished searching; their loot can be taken
   storage: PartInstance[]; // spare parts kept in town garages, usable in any town
   costBasis: Record<string, number>; // average paid per unit of each good, for trade XP
   knockouts: number;
@@ -171,7 +171,7 @@ export type GameEvent =
   | { t: 'defeat' }
   | { t: 'job'; vehicle: string; job: Job; outcome: 'started' | 'done' | 'cancelled' }
   | { t: 'breakdown'; vehicle: string; part: string }
-  | { t: 'found'; vehicle: string; goods: Record<string, number>; parts: string[] } // one search turn's haul; parts are def ids
+  | { t: 'searched'; stock: string } // the player finished searching a stock; its loot can now be taken
   | { t: 'contact'; vehicle: string; sources: Contact['sources'] }
   | { t: 'weather'; event: WeatherEvent; outcome: 'started' | 'ended' }
   | { t: 'info'; text: string };

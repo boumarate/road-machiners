@@ -1,7 +1,6 @@
 // Event log lines.
 
 import { partDef } from '../data/parts';
-import { GOODS } from '../data/goods';
 import { TERRAIN } from '../data/terrain';
 import { playerVehicle } from '../sim/damage';
 import { dist, type Vec } from '../sim/vec';
@@ -105,10 +104,9 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
         : e.outcome === 'cancelled' ? `${what} cancelled: the truck moved` : `${what} done`;
       return { text, cls: e.outcome === 'cancelled' ? 'bad' : e.outcome === 'done' ? 'good' : '' };
     }
-    case 'found': {
-      if (e.vehicle !== me) return null;
-      const items = [...Object.entries(e.goods).map(([g, k]) => `${k} ${GOODS[g].name}`), ...e.parts.map((id) => partDef(id).name)];
-      return { text: items.length ? `Found ${items.join(', ')}` : 'Found nothing this turn', cls: items.length ? 'good' : 'dim' };
+    case 'searched': {
+      const site = [...REGION.towns, ...REGION.locations].find((l) => l.id === e.stock);
+      return { text: `Search done${site ? ` at ${site.name}` : ''}. Drag what you want into the truck.`, cls: 'good' };
     }
     case 'breakdown':
       return e.vehicle === me ? { text: `${partName(world, e.vehicle, e.part)} broke down`, cls: 'bad' } : null;

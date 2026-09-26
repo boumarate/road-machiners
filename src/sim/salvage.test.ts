@@ -6,7 +6,7 @@ import { resolveDestroyed } from './combat';
 import { addGoods } from './inventory';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { partDef } from '../data/parts';
-import { canScavenge, scavenge } from './locations';
+import { takeAllLoot, canScavenge, scavenge } from './locations';
 import { collectSalvage, hasSalvage } from './salvage';
 import { freeCells } from './grid';
 import { endTurn } from './world';
@@ -45,6 +45,7 @@ describe('finite salvage', () => {
       next = endTurn(next);
       if (++turns > 50) throw new Error('search never finished');
     }
+    next = takeAllLoot(next, convoy.id);
     next.player.scavenged = [];
     expect(canScavenge(next)).toBe(false);
     expect(goodsCount(next.vehicles[0]).scrap).toBe(totalScrap);

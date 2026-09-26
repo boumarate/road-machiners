@@ -11,6 +11,8 @@ import { dumpGood, moveItem, storePart, takeFromStorage } from '../sim/inventory
 import { startRepair } from '../sim/jobs';
 import { repairPlan } from '../sim/repair';
 import { townAt } from '../sim/sites';
+import { takeAllLoot, takeLoot } from '../sim/locations';
+import { REGION } from '../data/region';
 import type { GridItem, PartInstance, Vehicle, World } from '../sim/types';
 import { el, panel } from './dom';
 import type { UiHost } from './host';
@@ -32,8 +34,8 @@ const CELL_TITLE: Record<Cell, string> = {
 const KIND_CLASS: Record<PartKind, string> = { weapon: 'k-weapon', engine: 'k-engine', armor: 'k-armor', cargo: 'k-cargo', core: 'k-core', scanner: 'k-weapon' };
 
 type Drag = {
-  source: 'grid' | 'storage';
-  id: string; // grid item id or storage part id
+  source: 'grid' | 'storage' | 'loot';
+  id: string; // grid item id, storage part id, loot part id, or a loot good id
   item: GridItem; // the item as it would be placed, position updated while dragging
   grab: { x: number; y: number }; // grabbed cell inside the item
   ghost: HTMLElement;
@@ -47,6 +49,7 @@ export class InventoryView {
   private root: HTMLElement = el('div');
   private inspection = el('div', { class: 'inv-inspection' });
   private selectedItem: string | null = null;
+  private loot: string | null = null; // salvage stock shown beside the grid, after a finished search
 
   constructor(private host: UiHost, private onChange: () => void) {
     window.addEventListener('pointermove', (e) => this.onMove(e));
@@ -59,6 +62,11 @@ export class InventoryView {
       e.preventDefault();
       this.rotate();
     });
+  }
+
+  // Shows a searched salvage stock beside the grid, or hides it with null.
+  setLoot(stockId: string | null): void {
+    this.loot = stockId;
   }
 
   render(): HTMLElement {
@@ -85,7 +93,8 @@ export class InventoryView {
         el('div', { class: 'inv-truck' }, el('div', { class: 'truck-shell' }, el('div', { class: 'truck-nose', 'aria-hidden': 'true' }), grid), this.legend()),
         el('div', { class: 'inv-side' },
           this.inspection,
-          inTown ? this.storageEl(w) : el('div', { class: 'dim' }, 'Mounting or unmounting parts needs a town garage. Goods can be moved anywhere.'),
+          this.loot ? this.lootEl(w, this.loot)
+            : inTown ? this.storageEl(w) : el('div', { class: 'dim' }, 'Mounting or unmounting parts needs a town garage. Goods can be moved anywhere.'),
           el('div', { class: 'inv-dump', 'data-drop': 'dump' }, 'Drop goods here to dump them'),
         ),
       ),
@@ -178,6 +187,34 @@ export class InventoryView {
     );
   }
 
+  // What a finished search turned up. Drag a chip onto the grid to take it; the rest stays here.
+  private lootEl(w: World, stockId: string): HTMLElement {
+    const stock = w.salvage.find((s) => s.id === stockId);
+    if (!stock) throw new Error(`Unknown salvage ${stockId}`);
+    const site = REGION.locations.find((l) => l.id === stockId);
+    const chips: HTMLElement[] = [];
+    for (const p of stock.parts) {
+      const d = partDef(p.defId);
+      const chip = el('div', { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) }, `${d.name} ${d.w}x${d.h} ${p.hp}/${d.hp}`);
+      const item: GridItem = { id: `loot-${p.id}`, x: 0, y: 0, rot: 0, kind: 'part', part: p };
+      chip.addEventListener('pointerdown', (e) => this.startDrag(e, 'loot', p.id, item, { x: 0, y: 0 }));
+      chips.push(chip);
+    }
+    for (const [good, count] of Object.entries(stock.goods)) {
+      if (count <= 0) continue;
+      const item: GridItem = { id: `loot-${good}`, x: 0, y: 0, rot: 0, kind: 'good', good };
+      const chip = el('div', { class: 'inv-chip k-good', title: `${GOODS[good].name}: drag one unit at a time` }, createIcon(getItemIcon(item)), `${GOODS[good].name} x${count}`);
+      chip.addEventListener('pointerdown', (e) => this.startDrag(e, 'loot', good, item, { x: 0, y: 0 }));
+      chips.push(chip);
+    }
+    return el('div', { class: 'inv-storage inv-loot' },
+      el('h3', {}, `Salvage${site ? `: ${site.name}` : ''}`),
+      ...(chips.length ? chips : [el('div', { class: 'dim' }, 'Nothing left here.')]),
+      ...(chips.length ? [el('button', { onclick: () => this.run((world) => takeAllLoot(world, stockId)) }, 'Take all that fits')] : []),
+      el('div', { class: 'dim' }, 'Drag items onto the grid. What you leave stays here.'),
+    );
+  }
+
   private startDrag(e: PointerEvent, source: Drag['source'], id: string, item: GridItem, grab: { x: number; y: number }): void {
     if (e.button !== 0) return;
     e.preventDefault();
@@ -248,7 +285,9 @@ export class InventoryView {
     this.run((w) => {
       if (onGrid) {
         const to = { x: d.item.x, y: d.item.y, rot: d.item.rot };
-        return d.source === 'grid' ? moveItem(w, d.id, to) : takeFromStorage(w, d.id, to);
+        if (d.source === 'grid') return moveItem(w, d.id, to);
+        if (d.source === 'storage') return takeFromStorage(w, d.id, to);
+        return takeLoot(w, this.loot!, d.item.kind === 'part' ? { kind: 'part', partId: d.id } : { kind: 'good', good: d.id }, to);
       }
       if (target === 'storage' && d.source === 'grid') return storePart(w, d.id);
       if (target === 'dump' && d.source === 'grid') return dumpGood(w, d.id);
@@ -290,6 +329,14 @@ export class InventoryScreen {
 
   toggle(): void {
     if (this.isOpen()) return this.close();
+    this.view.setLoot(null);
+    this.root.style.display = '';
+    this.render();
+  }
+
+  // Opens the inventory with a searched salvage stock beside the grid.
+  openLoot(stockId: string): void {
+    this.view.setLoot(stockId);
     this.root.style.display = '';
     this.render();
   }

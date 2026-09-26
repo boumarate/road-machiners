@@ -3,50 +3,53 @@ import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
 import { addVehicle, emptyWorld } from './testkit';
 import { goodsCount } from './grid';
-import { scavenge } from './locations';
+import { canLoot, canScavenge, scavenge, takeAllLoot, takeLoot } from './locations';
+import { findSpot, gridOf } from './grid';
 import { endTurn, setMoveOrder } from './world';
 
 describe('timed scavenging search', () => {
-  it('takes several turns to empty a rich stock', () => {
+  it('takes turns in proportion to the stock, then opens it for looting', () => {
     const w = emptyWorld({ x: 30, y: 30 });
-    const startingScrap = goodsCount(w.vehicles[0]).scrap ?? 0;
     w.salvage.push({ id: 'rich', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn * 3 }, parts: [] });
     let next = scavenge(w);
-    expect(next.vehicles[0].job?.kind).toBe('search');
+    expect(next.vehicles[0].job).toEqual(expect.objectContaining({ kind: 'search', turnsLeft: 3, total: 3 }));
     let turns = 0;
     while (next.vehicles[0].job) {
       next = endTurn(next);
       if (++turns > 20) throw new Error('search never finished');
     }
-    expect(turns).toBeGreaterThan(1);
-    expect(goodsCount(next.vehicles[0]).scrap).toBe(startingScrap + SALVAGE.unitsPerTurn * 3);
+    expect(turns).toBe(3);
+    expect(next.events).toContainEqual({ t: 'searched', stock: 'rich' });
+    expect(canLoot(next)).toBe(true);
+    expect(canScavenge(next)).toBe(false);
   });
 
-  it('a move cancels the search and keeps what already moved', () => {
+  it('a move cancels the search, and the stock stays closed', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.salvage.push({ id: 'rich', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn * 5 }, parts: [] });
-    let next = scavenge(w);
-    next = endTurn(next);
-    const partial = goodsCount(next.vehicles[0]).scrap ?? 0;
-    expect(partial).toBeGreaterThan(0);
-    expect(partial).toBeLessThan(SALVAGE.unitsPerTurn * 5);
+    let next = endTurn(scavenge(w));
     next = setMoveOrder(next, { kind: 'through', dest: { x: 60, y: 30 } });
     for (let t = 0; t < 5 && next.vehicles[0].job; t++) next = endTurn(next);
     expect(next.vehicles[0].job).toBeNull();
-    expect(goodsCount(next.vehicles[0]).scrap).toBe(partial);
+    expect(next.player.scavenged).not.toContain('rich');
   });
 
-  it('stock never grows past what it started with', () => {
+  it('takes one loot item into a chosen cell, and never more than the stock holds', () => {
     const w = emptyWorld({ x: 30, y: 30 });
-    w.salvage.push({ id: 'rich', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn * 3 }, parts: [] });
-    let next = scavenge(w);
-    let turns = 0;
-    while (next.vehicles[0].job) {
-      next = endTurn(next);
-      if (++turns > 20) throw new Error('search never finished');
-    }
-    const stock = next.salvage.find((s) => s.id === 'rich')!;
-    expect(stock.goods.scrap).toBe(0);
+    w.vehicles[0].items = w.vehicles[0].items.filter((item) => item.kind === 'part');
+    w.salvage.push({ id: 'rich', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: 1 }, parts: [] });
+    w.player.scavenged.push('rich');
+    const spot = findSpot(gridOf(w.vehicles[0]), w.vehicles[0].items, { id: 'x', kind: 'good', good: 'scrap', x: 0, y: 0, rot: 0 }, null, null)!;
+    const next = takeLoot(w, 'rich', { kind: 'good', good: 'scrap' }, spot);
+    expect(goodsCount(next.vehicles[0]).scrap).toBe(1);
+    expect(next.salvage.find((s) => s.id === 'rich')!.goods.scrap).toBe(0);
+    expect(() => takeLoot(next, 'rich', { kind: 'good', good: 'scrap' }, spot)).toThrow();
+  });
+
+  it('refuses loot from a stock that was never searched', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.salvage.push({ id: 'rich', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: 2 }, parts: [] });
+    expect(() => takeAllLoot(w, 'rich')).toThrow(/Search/);
   });
 
   it('lets an NPC scavenger finish a search job', () => {

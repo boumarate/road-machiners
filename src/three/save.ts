@@ -1,7 +1,7 @@
 import type { World } from '../sim/types';
 
 const SAVE_KEY = 'korovan.save';
-const SAVE_VERSION = 2; // 2 adds weather, jobs and contacts
+const SAVE_VERSION = 3; // 2 added weather, jobs and contacts; 3 adds job totals and dust trail headings
 
 export function loadWorld(storage: Storage): World | null {
   const raw = storage.getItem(SAVE_KEY);
