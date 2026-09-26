@@ -232,7 +232,7 @@ Plan adherence:
 - Items in rows added by cargo parts are not drawn. Those rows lie past the chassis grid and have no deck cells, so the cargo part model stands in for them.
 - Engines, cargo and core parts now darken to 0.6 when broken. Before, only weapons and armor darkened.
 - Spare weapons draw a fixed head. Spare wheels stand on their cell.
-- The frame is rails and posts rather than solid sides, because a solid box skirt hid the deck.
+- The body is built from edge pieces: painted side panels, a nose with grille and lights, a tail, and a fender over each wheel. Rails and posts read as a hospital bed.
 - The non-weapon Blender groups started in wave 1 against the fixed name list, because they need no sockets.
 
 Review findings:
