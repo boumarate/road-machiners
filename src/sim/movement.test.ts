@@ -115,5 +115,5 @@ describe('world', () => {
       const v = w.vehicles[0];
       for (const o of w.obstacles) expect(dist(v.pos, o.pos)).toBeGreaterThanOrEqual(o.r + 0.6 - 0.01);
     }
-  });
+  }, 10_000); // 30 turns of route planning on the 120-tile map take about 3 seconds alone.
 });
