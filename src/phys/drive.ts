@@ -252,7 +252,7 @@ function fuelLimited(w: World, v: Vehicle, s: VehicleStats, speed: number, order
 
 // One physics step of driving. Steer at the destination and hold the turn's speed. A stop order slows
 // to arrive. A slow truck with the destination far behind backs up, wheels turned the other way.
-// A drive-through point counts as passed once close, or once behind a moving truck; then it drives straight.
+// A drive-through point counts as passed only once close; a side click behind the truck still steers.
 function driveStep(c: Car): void {
   const { plan, mem, body, ctl } = c;
   const speed = forwardSpeed(body);
@@ -267,11 +267,10 @@ function driveStep(c: Car): void {
     const dz = aim.y * S - p.z;
     const heading = headingOf(body.rotation());
     const ang = angleDiff(heading, Math.atan2(dz, dx));
-    const destAng = angleDiff(heading, Math.atan2(plan.dest.y * S - p.z, plan.dest.x * S - p.x));
     if (plan.stopAt) {
       target = Math.min(target, Math.sqrt(2 * plan.stopDecel * Math.max(0, far - RULES.arriveRadius * S)));
       if (far < RULES.arriveRadius * S) c.result.arrived = true;
-    } else if (far < RULES.passRadius * S || (Math.abs(destAng) > Math.PI / 2 && speed > D.reverseBelow)) {
+    } else if (far < RULES.passRadius * S) {
       c.result.passed = true;
     }
     if (!c.result.passed && !c.result.arrived) {

@@ -63,11 +63,20 @@ export class CameraRig {
     this.resize();
   }
 
-  // Map point under the cursor, or null off the ground mesh.
-  groundUnder(clientX: number, clientY: number, ground: THREE.Object3D): Vec | null {
+  private aimRay(clientX: number, clientY: number): void {
     const rect = this.container.getBoundingClientRect();
     const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
     this.ray.setFromCamera(ndc, this.camera);
+  }
+
+  hitsObject(clientX: number, clientY: number, object: THREE.Object3D): boolean {
+    this.aimRay(clientX, clientY);
+    return this.ray.intersectObject(object, true).length > 0;
+  }
+
+  // Map point under the cursor, or null off the ground mesh.
+  groundUnder(clientX: number, clientY: number, ground: THREE.Object3D): Vec | null {
+    this.aimRay(clientX, clientY);
     const hit = this.ray.intersectObject(ground, true)[0];
     return hit ? { x: hit.point.x / S, y: hit.point.z / S } : null;
   }
