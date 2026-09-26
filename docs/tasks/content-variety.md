@@ -1,6 +1,6 @@
 # Content variety
 
-Status: verifying
+Status: done
 Branch: content-variety
 Worktree: /Users/boris/Documents/Korovan/.worktrees/content-variety
 Goal: Players can buy and use five additional weapons, engines, armor parts, cargo parts, goods, and chassis, drive over five additional terrain varieties on Icarus, and encounter NPCs with varied equipment sampled from weighted tables.
@@ -76,23 +76,43 @@ Approach: extend the catalog owners, add one focused NPC generation component, a
 
 ## Verify
 
-- Baseline npm test: 242 passed, one pre-existing timeout in combat.test.ts, the 80-turn traffic invariant at its 10-second deadline. Full output: tmp/baseline-npm-test.log. Recheck this test separately during final verification without changing its assertion or timeout.
+- Baseline npm test: 242 passed, one pre-existing timeout in combat.test.ts, the 80-turn traffic invariant at its 10-second deadline. Full output: tmp/baseline-npm-test.log. The unchanged test passed in focused and final full-suite checks.
 - PH1: six new catalog tests failed on missing content, then all 20 catalog/grid tests and npm run typecheck passed. Logs: tmp/content-red.log, tmp/content-green.log, tmp/content-typecheck.log.
 
 - PH2: seeded variation test failed with only two raider combinations, then 89 generation/grid/activity/economy/salvage/combat tests passed with two test workers. This includes the baseline 80-turn traffic test, unchanged, in 7.2 seconds. Typecheck passed. Logs: tmp/npc-red.log, tmp/npc-contracts.log, tmp/npc-regressions.log, tmp/npc-typecheck.log.
 
 - PH3: four terrain tests failed before implementation. All 15 terrain tests then passed, covering ten generated surface types, unchanged heights and road/site priority, and matching movement/preview results.
 - Full-suite attacks caught a stale three-good expectation and a courier collision-step violation. The price test now follows GOOD_IDS. Courier speed is 7.5 and radius 0.5, so its maximum speed with any engine remains below the substep bound. The movement test derives the maximum engine bonus from all engine definitions. All 61 combat/movement/economy tests passed with one test worker and unchanged timeouts (tmp/regression-recheck.log).
-- Browser checks bought the new goods and all five chassis. A subsequent check caught `+-1` for negative engine bonuses. Fixed the garage sign display and reran the same scenario. Final checks are pending.
-- Initial browser playtest completed 12 turns with no reported gameplay errors but failed its 20 FPS threshold at 9.5 FPS (tmp/playtest.log). Host load was later observed at 46.62 with multiple unrelated test processes. Do not stop other sessions' work or lower the threshold. Recheck after this task's overlapping checks finish.
-- The next full suite passed 276 tests but timed out in two movement tests at their unchanged five-second deadlines, while browser checks and unrelated jobs were active (tmp/full-tests-final.log). Both tests had passed in the focused 61-test run. An uncontended rerun remains pending.
+- Browser checks bought all twenty new parts and all five new chassis, verified all five new goods in the market, bought electronics, dragged the purchased shotgun onto a working mount, rejected excess cargo without changing state, and rendered varied NPCs plus all ten terrain types. The earlier `+-1` engine label failure is fixed. No browser errors occurred (tmp/content-browser-final.log, tmp/content-browser-results.json). Across 40 seeds, sampling produced 65 raider, 40 trader and 37 scavenger loadouts. Screenshots inspected under .playtest/content/.
+- The sequential 12-turn playtest had no reported gameplay errors but failed the frame-rate threshold at 19.5 FPS (tmp/release-playtest.log). Untouched baseline 8671df3 also completed 12 turns and failed at 12.5 FPS (/Users/boris/Documents/Korovan/.worktrees/content-baseline/tmp/playtest-verified.log). Both used the same lockfile, browser flags, viewport and seed. Server process working directories were verified: baseline port 5198 and content branch port 5187. An earlier comparison on occupied port 5188 was discarded. These observations do not establish a content performance regression. Renderer performance work is outside the variation scope.
+- Initial browser playtest completed 12 turns with no reported gameplay errors but failed its 20 FPS threshold at 9.5 FPS (tmp/playtest.log). Host load was later observed at 46.62 with multiple unrelated test processes. Neither other sessions nor the threshold were changed. The later sequential comparison is recorded above.
+- The next full suite passed 276 tests but timed out in two movement tests at their unchanged five-second deadlines, while browser checks and unrelated jobs were active (tmp/full-tests-final.log). Both tests had passed in the focused 61-test run. A subsequent full run without overlapping this task's browser check passed all 283 tests across 27 files in 74 seconds, with unchanged timeouts (tmp/release-tests.log).
 - Five real-physics chassis checks, typecheck and production build passed (tmp/chassis-physics.log, tmp/typecheck-final.log, tmp/build-final.log). Build reports the existing large-bundle warning.
 
+### Attack results
+
+- CK1 (IV1, IV5) — Catalog additions cannot be purchased, mounted or driven: held by catalog tests, five physical chassis checks and browser purchase/drag scenarios.
+- CK2 (IV3, IV4) — Weighted rolls allow malformed inputs, impossible mounts, overspending, excess mass or partial state mutation: held by 25 loadout tests, including invalid inputs and actual vehicle construction.
+- CK3 (IV2, IV5) — Terrain changes heights, roads or places, or disagrees with movement previews: held by terrain and routing tests. Region data is unchanged.
+- CK4 (IV6) — Random loadouts alter NPC caps or salvage rules: held by periodic spawn, NPC activity/economy and salvage tests. Salvage source is unchanged.
+- CK5 — Runtime content causes browser crashes or misses the frame-rate gate: interactions and twelve turns held, but frame-rate gate failed on both branch and untouched baseline. Performance remains an explicitly reported baseline issue, without changing the threshold or renderer.
+
+## Code smells
+
+- package-lock.json — Baseline npm ci reported two moderate vulnerability findings. The lockfile is unchanged, and dependency remediation is outside this content task. Details were not audited. Evidence: ../content-baseline/tmp/npm-ci.log.
+
 ## Conclusion
+
+Outcome: The content variation goal is demonstrated on source commit 7026155 through 283 passing tests, typecheck, build and real browser purchases, mounting, spawning and rendering. The frame-rate gate remains failed on both branch and untouched baseline.
+
+- Two fresh parallel reviews found no code issues: workflow 4d92f4fd-5b40-443d-9c41-32e7326cf88f, outputs review/npc-sampling.md and review/content-integration.md under the managed session artifacts. Parent verified Git state separately.
+- Browser evidence counts five listed goods but purchases electronics only. The catalog test buys and sells all five new goods. The reviewer wording that all five were bought in the browser is broader than the script evidence.
+- No skills, places, salvage rules, road network or elevation rules changed. Existing NPC caps and classes remain. Main is unmerged, and both test servers were stopped.
+- Remaining user choice: merge or open a pull request, or retain the branch. Worktrees content-variety and content-baseline are preserved pending cleanup approval.
 
 ### Deviations from plan
 
 - Use a four-wheel Longbed truck instead of the proposed six-wheel truck. src/phys/body.ts defines four physical wheel mounts and current chassis tests require four core wheels. This preserves the requested fifth chassis variety without adding a wheel/physics system.
 - Added physical body dimensions in src/data/physics.ts for distinct new chassis silhouettes, consumed by the existing bodyOf and render paths. src/phys/content.test.ts adds real driving and upright/reproducible physics checks for all five frames.
 - Updated src/sim/movement.test.ts, src/sim/economy.test.ts and src/ui/town.ts after verification exposed assumptions that the new content made invalid.
-- The single-worker workflow was stopped at the user's request. Only dependency setup and baseline tests had run. The parent owns implementation. Independent review can run in parallel with final checks.
+- The single-worker workflow was stopped at the user's request. Only dependency setup and baseline tests had run. The parent completed implementation. Two independent reviewers ran in parallel afterward.
