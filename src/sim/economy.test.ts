@@ -1,3 +1,4 @@
+import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { ECONOMY, TOWN_PRICES } from '../data/goods';
@@ -153,7 +154,7 @@ describe('locations', () => {
   });
 
   it('driving near a site discovers it once, with XP', () => {
-    let w = newWorld(5);
+    let w = newWorld(5, START_KITS.standard);
     const convoy = REGION.locations.find((l) => l.kind === 'convoy')!;
     w.vehicles.find((v) => v.faction === 'player')!.pos = { x: convoy.pos.x + 3.5, y: convoy.pos.y + 3.5 };
     w = endTurn(w);
@@ -187,7 +188,7 @@ describe('progress', () => {
 describe('defeat', () => {
   it('robs the player and patches the truck where it fell', () => {
     const w = emptyWorld({ x: 20, y: 40 });
-    w.obstacles = newWorld(1).obstacles;
+    w.obstacles = newWorld(1, START_KITS.standard).obstacles;
     const me = w.vehicles[0];
     corePart(me, 'cab').hp = 0;
     w.player.skills.gunnery = 2;

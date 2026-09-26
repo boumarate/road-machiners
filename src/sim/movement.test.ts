@@ -1,3 +1,4 @@
+import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { REGION } from '../data/region';
@@ -93,12 +94,12 @@ describe('movement', () => {
 
 describe('world', () => {
   it('starts the player with 1500 money', () => {
-    expect(newWorld(1).player.money).toBe(1500);
+    expect(newWorld(1, START_KITS.standard).player.money).toBe(1500);
   });
 
   it('is deterministic for the same seed and orders', () => {
     const run = () => {
-      let w = setMoveOrder(newWorld(7), { kind: 'through', dest: { x: 40, y: 20 } });
+      let w = setMoveOrder(newWorld(7, START_KITS.standard), { kind: 'through', dest: { x: 40, y: 20 } });
       for (let i = 0; i < 10; i++) w = endTurn(w);
       return w;
     };
@@ -106,7 +107,7 @@ describe('world', () => {
   });
 
   it('keeps the player out of obstacles on a long drive', () => {
-    let w = setMoveOrder(newWorld(3), { kind: 'stopAt', dest: { x: 50, y: 50 } });
+    let w = setMoveOrder(newWorld(3, START_KITS.standard), { kind: 'stopAt', dest: { x: 50, y: 50 } });
     for (let i = 0; i < 30; i++) {
       w = endTurn(w);
       const v = w.vehicles[0];

@@ -1,3 +1,4 @@
+import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
 import { fireWeapons, hitOdds, laneOfOffset, resolveDestroyed } from './combat';
@@ -371,7 +372,7 @@ describe('invariants under AI traffic', () => {
     const { newWorld, setMoveOrder } = await import('./world');
     const { maxTurn } = await import('./stats');
     const { chassisDef } = await import('../data/chassis');
-    let w = setMoveOrder(newWorld(11), { kind: 'stopAt', dest: { x: 45, y: 15 } });
+    let w = setMoveOrder(newWorld(11, START_KITS.standard), { kind: 'stopAt', dest: { x: 45, y: 15 } });
     for (let i = 0; i < 80; i++) {
       const before = new Map(w.vehicles.map((v) => [v.id, { speed: v.speed, heading: v.heading, s: vehicleStats(w, v) }]));
       w = endTurn(w);

@@ -1,3 +1,4 @@
+import { startKit } from '../data/start';
 // The 3D game: wires input to the sim, the sim and physics to the Three.js view, and the HTML UI.
 // Time only moves while a turn plays. The path preview runs the same physics the turn will run.
 
@@ -113,7 +114,7 @@ export class Game {
   private readonly inventory: InventoryScreen;
 
   constructor(container: HTMLElement, overlay: HTMLElement) {
-    this.world = newWorld(CONFIG.seed);
+    this.world = newWorld(CONFIG.seed, startKit(CONFIG.startKit));
     this.drive = buildDrive(this.world);
 
     this.renderer.setPixelRatio(window.devicePixelRatio);

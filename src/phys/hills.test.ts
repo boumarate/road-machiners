@@ -1,3 +1,4 @@
+import { START_KITS } from '../data/start';
 import { beforeAll, expect, it } from 'vitest';
 import { endTurn, newWorld, setMoveOrder } from '../sim/world';
 import { buildDrive, freeDrive, initPhysics, type Drive, type TurnResult } from './drive';
@@ -11,7 +12,7 @@ beforeAll(async () => {
 it('a truck driven fast over hills stays under 20 degrees of tilt', () => {
   let maxTilt = 0;
   for (const target of [{ x: 30, y: 30 }, { x: 50, y: 10 }, { x: 10, y: 50 }, { x: 45, y: 45 }]) {
-    let w = newWorld(1337);
+    let w = newWorld(1337, START_KITS.standard);
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
     w.player.fuel = 999;
     let d: Drive = buildDrive(w);

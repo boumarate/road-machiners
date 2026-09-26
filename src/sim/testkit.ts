@@ -1,3 +1,4 @@
+import { START_KITS } from '../data/start';
 // Helpers for sim tests.
 
 import { makeVehicle } from './factory';
@@ -15,7 +16,7 @@ export function flatTerrain(size: number): Terrain {
 
 // A world on flat ground with no obstacles and no NPCs, the player truck at `pos` facing +x.
 export function emptyWorld(pos: Vec = { x: 30, y: 30 }): World {
-  const w = newWorld(1);
+  const w = newWorld(1, START_KITS.standard);
   w.obstacles = [];
   w.terrain = flatTerrain(w.size);
   w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
