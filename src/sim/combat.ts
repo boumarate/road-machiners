@@ -158,7 +158,11 @@ export function hitOdds(world: World, shooter: Vehicle, mw: MountedWeapon, targe
 // One round's angular error in radians and whether it hit the aimed part or, for a body shot, the truck. The
 // Gaussian draw decides, so a miss lands where it strayed. When the clamp moved the chance, an extra roll turns some
 // hits into misses that land off the truck, or some misses into hits, so rounds hit exactly as often as hitOdds says.
-function rollRound(world: World, o: HitOdds, a: Aiming): { hit: boolean; error: number } {
+function rollRound(world: World, o: HitOdds, a: Aiming): Roll {
+  return { ...rollAim(world, o, a), crit: chance(world, RULES.critChance) };
+}
+
+function rollAim(world: World, o: HitOdds, a: Aiming): { hit: boolean; error: number } {
   const raw = rawChance(o);
   const error = gauss(world) * o.spread;
   const hit = Math.abs(error) < o.halfAngle;
@@ -170,7 +174,9 @@ function rollRound(world: World, o: HitOdds, a: Aiming): { hit: boolean; error: 
   return { hit, error };
 }
 
-type Shot = { shooter: Vehicle; mw: MountedWeapon; target: Vehicle; aim: Aim; odds: HitOdds; aiming: Aiming; rolls: { hit: boolean; error: number }[] };
+// crit applies only when the round lands on the truck: it multiplies damage and pen by the crit rules.
+type Roll = { hit: boolean; error: number; crit: boolean };
+type Shot = { shooter: Vehicle; mw: MountedWeapon; target: Vehicle; aim: Aim; odds: HitOdds; aiming: Aiming; rolls: Roll[] };
 
 // All rounds of the turn are rolled before any damage lands, so fire is simultaneous.
 export function fireWeapons(world: World): void {
@@ -204,14 +210,15 @@ function applyShot(world: World, s: Shot): void {
     const offset = s.aiming.center + roll.error * s.odds.distance;
     if (roll.hit || Math.abs(offset) < body / 2) {
       const lane = roll.hit && s.aiming.lane !== null ? s.aiming.lane : laneOfOffset(side, body, lanes, offset);
-      return { hit: true, offset, hits: walkLane(world, s.target, side, lane, { damage: r.damage, pen: r.pen }) };
+      const k = roll.crit ? { damage: RULES.critDamage, pen: RULES.critPen } : { damage: 1, pen: 1 };
+      return { hit: true, crit: roll.crit, offset, hits: walkLane(world, s.target, side, lane, { damage: r.damage * k.damage, pen: r.pen * k.pen }) };
     }
     const hits: PartHit[] = [];
     for (let lane = 0; lane < lanes; lane++) {
       if (Math.abs(offset - laneCenter(side, body, lanes, lane)) > r.splashRadius) continue;
       hits.push(...walkLane(world, s.target, side, lane, { damage: r.splashDamage, pen: r.splashPen }));
     }
-    return { hit: false, offset, hits };
+    return { hit: false, crit: false, offset, hits };
   });
   if (rounds.some((x) => x.hits.length > 0)) s.target.lastHitBy = s.shooter.id;
   world.events.push({

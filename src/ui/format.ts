@@ -52,9 +52,10 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       if (e.shooter !== me && e.target !== me) return null;
       const aim = e.aim === 'body' ? '' : ` at ${partName(world, e.target, e.aim)}`;
       const hits = e.rounds.filter((r) => r.hit).length;
+      const crits = e.rounds.filter((r) => r.crit).length;
       const dealt = partDamage(e.rounds.flatMap((r) => r.hits));
       const parts = [...dealt].map(([id, d]) => `, ${partName(world, e.target, id)} −${d}`).join('');
-      const text = `${partName(world, e.shooter, e.weapon)} → ${n(e.target)}${aim}: ${hits}/${e.rounds.length} hits${parts} (${Math.round(e.chance * 100)}%)`;
+      const text = `${partName(world, e.shooter, e.weapon)} → ${n(e.target)}${aim}: ${hits}/${e.rounds.length} hits${crits ? `, ${crits} crit` : ''}${parts} (${Math.round(e.chance * 100)}%)`;
       return { text, cls: e.target === me && dealt.size > 0 ? 'bad' : '' };
     }
     case 'partDisabled':

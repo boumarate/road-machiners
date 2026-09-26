@@ -489,7 +489,7 @@ export class Game {
         const slot = mine.findIndex((mw) => mw.part.id === e.weapon);
         const hits = e.rounds.filter((r) => r.hit).length;
         const dealt = e.rounds.flatMap((r) => r.hits).reduce((sum, h) => sum + h.damage, 0);
-        const label = `${slot >= 0 ? `[${slot + 1}] ` : ''}${heavy ? 'Cannon' : 'MG'} ${hits}/${e.rounds.length}${dealt > 0 ? ` −${dealt}` : ''}`;
+        const label = `${slot >= 0 ? `[${slot + 1}] ` : ''}${heavy ? 'Cannon' : 'MG'} ${hits}/${e.rounds.length}${e.rounds.some((r) => r.crit) ? ' crit' : ''}${dealt > 0 ? ` −${dealt}` : ''}`;
         const row = rows.get(e.target) ?? 0;
         rows.set(e.target, row + 1);
         // Round starts spread over the first part of the shot time, so every bolt lands before the results show.
