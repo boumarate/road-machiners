@@ -127,6 +127,13 @@ export function setWeaponOrder(world: World, weaponId: string, order: WeaponOrde
   });
 }
 
+// Manual mode: the player's truck skips the route planner and drives straight at its order's point.
+export function setDirect(world: World, on: boolean): World {
+  return update(world, (w) => {
+    playerVehicle(w).direct = on;
+  });
+}
+
 export function setAutoFire(world: World, on: boolean): World {
   return update(world, (w) => {
     w.player.autoFire = on;

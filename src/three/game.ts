@@ -19,7 +19,7 @@ import type { Vec } from '../sim/vec';
 import { playerSees, tileOf, visibleTiles } from '../sim/vision';
 import { dist } from '../sim/vec';
 import { TERRAIN } from '../data/terrain';
-import { endTurn, hostileToPlayer, newWorld, setAutoFire, setMoveOrder, setWeaponOrder } from '../sim/world';
+import { endTurn, hostileToPlayer, newWorld, setAutoFire, setDirect, setMoveOrder, setWeaponOrder } from '../sim/world';
 import { PAL } from '../render/palette';
 import { CharacterScreen } from '../ui/character';
 import type { UiHost } from '../ui/host';
@@ -298,6 +298,7 @@ export class Game {
       if (e.code === 'KeyW' && !modal) this.weapons.toggleVisible();
       if (e.code === 'Digit0' && !modal) this.weapons.selectWeapon(null);
       if (e.code === 'KeyE' && !modal) this.useContext();
+      if (e.code === 'KeyR' && !modal && !playing) this.toggleManual();
       if (e.code === 'KeyC' && !playing) {
         this.town.close();
         this.inventory.close();
@@ -316,6 +317,12 @@ export class Game {
       const digit = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
       if (digit >= 0) this.selectWeaponIndex(digit);
     });
+  }
+
+  // Manual mode drives straight at the click, so the preview must rerun with the new driver.
+  private toggleManual(): void {
+    this.apply(setDirect(this.world, !playerVehicle(this.world).direct));
+    this.refreshPlan();
   }
 
   private selectWeaponIndex(i: number): void {

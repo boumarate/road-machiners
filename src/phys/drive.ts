@@ -25,7 +25,7 @@ const DT = 1 / PHYSICS.stepsPerSecond;
 export const TURN_STEPS = Math.round(PHYSICS.turnSeconds * PHYSICS.stepsPerSecond);
 const TELEPORT_TILES = 0.5; // a sim position this far from its body was moved by the rules, not by driving
 const WALL = 50; // meters of wall thickness at the map edge
-const EDGE = 'edge';
+export const EDGE = 'edge'; // the crash target name for the map border
 
 // Tiles per turn to meters per second, and back.
 export const toMps = (tilesPerTurn: number) => (tilesPerTurn * S) / PHYSICS.turnSeconds;

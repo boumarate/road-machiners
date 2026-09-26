@@ -6,7 +6,7 @@ import { loadFactor, vehicleMass } from '../sim/mass';
 import { addVehicle, emptyWorld, partHp } from '../sim/testkit';
 import type { MoveOrder, World } from '../sim/types';
 import { angleDiff, dist } from '../sim/vec';
-import { endTurn, setMoveOrder } from '../sim/world';
+import { endTurn, setDirect, setMoveOrder } from '../sim/world';
 import { PHYSICS } from '../data/physics';
 import { buildDrive, freeDrive, initPhysics, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
 import { physicsMove } from './turn';
@@ -121,6 +121,31 @@ describe('physics turns', () => {
     }
     expect(crashes).toBeGreaterThan(0);
     expect(partHp(me(w))).toBeLessThan(hp);
+  });
+
+  it('in manual mode the truck drives into a truck parked on its path; off, it routes around', () => {
+    const drive = (manual: boolean) => {
+      let w = ordered({ kind: 'through', dest: { x: 45, y: 30 } }, 3);
+      const parked = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 37, y: 30 }, Math.PI / 2);
+      w = setDirect(w, manual);
+      let d = buildDrive(w);
+      const hits: string[] = [];
+      for (let i = 0; i < 4; i++) {
+        let next: Drive | null = null;
+        w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+        hits.push(...w.events.flatMap((e) => (e.t === 'collision' ? [e.b] : [])));
+        freeDrive(d);
+        d = next!;
+      }
+      freeDrive(d);
+      return { hits, parked: parked.id, w };
+    };
+    const on = drive(true);
+    expect(on.hits).toContain(on.parked);
+    expect(me(on.w).direct).toBe(true);
+    const off = drive(false);
+    expect(off.hits).toEqual([]);
+    expect(me(off.w).pos.x).toBeGreaterThan(38);
   });
 
   it('a careful driver follows the route around a rock wall', () => {

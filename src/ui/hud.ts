@@ -43,6 +43,7 @@ export class Hud {
         {},
         "Space: end turn. A: auto fire. C: character. I: inventory.",
       ),
+      el("div", {}, "R: manual driving, straight through anything."),
       el("div", {}, "Right-drag: pan. F: follow. Wheel: zoom."),
     );
   }
@@ -92,6 +93,7 @@ export class Hud {
       item("Speed", `${me.speed.toFixed(1)}/${s.maxSpeed}`),
       item("Lvl", `${p.level} (${p.xp}/${xpForLevel(p.level + 1)} XP)`),
     );
+    if (me.direct) this.top.append(item("Manual", "[R]"));
     if (p.skillPoints > 0)
       this.top.append(
         el("span", { class: "good" }, `${p.skillPoints} skill pt [C]`),

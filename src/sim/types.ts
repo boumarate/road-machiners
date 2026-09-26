@@ -48,7 +48,7 @@ export type Vehicle = {
   heading: number; // radians, 0 = +x
   speed: number; // tiles per turn at the end of the last turn
   order: MoveOrder | null; // null: coast, keeping speed and heading
-  direct: boolean; // drive straight at the order's point this turn instead of routing around obstacles
+  direct: boolean; // drive straight at the order's point instead of routing around obstacles; the player's manual mode
   weaponOrders: Record<string, WeaponOrder>; // key: weapon part id
   grudges: string[]; // vehicle ids this vehicle treats as hostile
   trail: Pose[]; // poses through the last turn, for animation
@@ -83,7 +83,7 @@ export type Player = {
 export type ShotRound = { hit: boolean; offset: number; hits: PartHit[] };
 
 export type GameEvent =
-  | { t: 'collision'; a: string; b: string; damageA: number; damageB: number }
+  | { t: 'collision'; a: string; b: string; hitsA: PartHit[]; hitsB: PartHit[] } // parts damaged on a and on b; hitsB is empty when b is not a vehicle
   | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; chance: number; side: Side; rounds: ShotRound[] }
   | { t: 'partDisabled'; vehicle: string; part: string }
   | { t: 'destroyed'; vehicle: string; by: string }

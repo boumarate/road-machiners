@@ -27,7 +27,9 @@ export const RULES = {
   disabledEngineSpeed: 1,
   minSpeedCap: 1, // a heavy load never pushes max speed below this
   collisionMinImpact: 1.5, // slower bumps deal no damage
-  collisionDamage: 4, // part damage per tile/turn of impact speed, scaled by mass ratio, spread over the struck side's lanes
+  // A crash gives each truck ramDamage × impact in tiles per turn × the other body's share of both masses,
+  // spread over the lanes of its struck side. An obstacle's share is 1.
+  ramDamage: 15,
   crashPen: 4, // penetration of crash damage in each lane
   wheelLoss: 0.15, // share of speed and turning lost per broken wheel
   tankLeak: 1, // fuel lost per turn with a broken tank

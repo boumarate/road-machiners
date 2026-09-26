@@ -3,7 +3,7 @@
 
 import { partDef } from '../data/parts';
 import { damagePart } from './damage';
-import { gridOf, itemCells, itemSize, mountedItems, type Grid } from './grid';
+import { gridOf, itemCells, itemSize, mountedItems, mountedParts, sideOf, type Grid, type SideLetter } from './grid';
 import type { PartInstance, Vehicle, World } from './types';
 import { angleDiff, bearing, type Vec } from './vec';
 
@@ -19,6 +19,19 @@ export function sideToward(v: Vehicle, p: Vec): Side {
   if (Math.abs(rel) <= QUARTER) return 'front';
   if (Math.abs(rel) >= 3 * QUARTER) return 'rear';
   return rel > 0 ? 'right' : 'left';
+}
+
+const LETTER: Record<Side, SideLetter> = { front: 'F', rear: 'B', left: 'L', right: 'R' };
+
+// The strongest ram multiplier among working armor parts mounted on the side, or 1 without one.
+export function ramMult(v: Vehicle, side: Side): number {
+  let mult = 1;
+  for (const p of mountedParts(v, 'armor')) {
+    const def = partDef(p.defId);
+    if (def.kind !== 'armor') throw new Error(`${p.id} is mounted as armor but is ${def.kind}`);
+    if (p.hp > 0 && sideOf(v, p) === LETTER[side]) mult = Math.max(mult, def.ramMult);
+  }
+  return mult;
 }
 
 // Front and rear lanes are grid columns. Left and right lanes are grid rows.
