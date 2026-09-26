@@ -1,16 +1,17 @@
 // After defeat, the robbers leave the player beside a field-patched truck.
 
+import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
 import { isHostile } from './combat';
+import { corePart, mountedParts } from './grid';
 import { removeAllGoods, removeSpareParts } from './inventory';
-import { vehicleStats } from './stats';
 import type { World } from './types';
 import { dist } from './vec';
 
 export function checkDefeat(world: World): void {
   const me = playerVehicle(world);
-  if (me.hull > 0 && world.player.health > 0) return;
+  if (corePart(me, 'cab').hp > 0 && world.player.health > 0) return;
   const p = world.player;
   const lost = Math.floor(p.money * RULES.defeatMoneyLoss);
   p.money -= lost;
@@ -20,7 +21,10 @@ export function checkDefeat(world: World): void {
   p.supplies = Math.max(p.supplies, RULES.defeatSupplies);
   removeAllGoods(me);
   removeSpareParts(me);
-  me.hull = Math.max(1, Math.round(vehicleStats(world, me).hullMax * RULES.defeatHull));
+  for (const part of mountedParts(me)) {
+    const def = partDef(part.defId);
+    if (part.hp === 0 && (def.kind === 'core' || def.kind === 'engine')) part.hp = Math.max(1, Math.round(def.hp * RULES.defeatPatch));
+  }
   me.order = null;
   me.speed = 0;
   me.weaponOrders = {};

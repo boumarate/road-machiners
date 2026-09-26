@@ -39,6 +39,11 @@ html, body { margin: 0; height: 100%; background: #1a1410; overflow: hidden; }
 .info .bar { height: 6px; background: #3a2a1e; border-radius: 3px; overflow: hidden; margin: 3px 0 6px; }
 .info .bar > div { height: 100%; background: #c86a3a; }
 
+#ui .hitcard { pointer-events: none; max-width: 340px; font-size: 12px; }
+.hitcard .hc-head { margin: 6px 0 2px; color: #d8b878; font-size: 11px; }
+.hitcard .hc-row { display: flex; justify-content: space-between; gap: 12px; }
+.hitcard .hc-cause { font-size: 11px; margin-bottom: 3px; }
+
 .modal { left: 50%; top: 50%; transform: translate(-50%, -50%); width: 720px; max-height: 80%; overflow: auto; padding: 14px 16px; }
 .modal .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
 .modal table { width: 100%; border-collapse: collapse; }
@@ -55,15 +60,21 @@ html, body { margin: 0; height: 100%; background: #1a1410; overflow: hidden; }
 .inv-cell.c-plain { background: #2e2218; }
 .inv-cell.c-W { background: #4a2a22; }
 .inv-cell.c-E { background: #3a3a34; }
-.inv-cell.c-A { background: #2e3a44; }
+.inv-cell.c-F, .inv-cell.c-B, .inv-cell.c-L, .inv-cell.c-R { background: #2e3a44; }
+.inv-cell.c-X { background: #141008; }
 .inv-cell.c-C { background: #4a3a22; }
 .inv-item { position: absolute; box-sizing: border-box; margin: 0; border: 2px solid #1a1410; border-radius: 4px; font-size: 11px; line-height: 1.1; padding: 3px; overflow: hidden; cursor: grab; user-select: none; }
 .inv-item.mounted { border-color: #f0d060; }
 .inv-item.spare { opacity: 0.75; border-style: dashed; border-color: #b8a888; }
+.inv-item.fixed { cursor: default; border-color: #6a5238; }
+.inv-hp { pointer-events: none; position: absolute; left: 2px; right: 2px; bottom: 2px; height: 3px; background: rgba(26, 20, 16, 0.7); border-radius: 2px; overflow: hidden; }
+.inv-hp > div { height: 100%; background: #a8c878; }
+.inv-hp.broken { background: #e07050; }
 .k-weapon { background: #8a3a2a; }
 .k-engine { background: #5a5a52; }
 .k-armor { background: #4a6070; }
 .k-cargo { background: #8a6a3a; }
+.k-core { background: #3a3028; color: #c8b898; }
 .k-good { background: #6a5a3a; }
 .g-scrap { background: #6a6a62; }
 .g-salt { background: #b8b0a0; color: #2a2018; }

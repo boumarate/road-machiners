@@ -3,9 +3,9 @@
 
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
-import { START } from '../data/start';
+import type { StartKit } from '../data/start';
 import { findPart, playerVehicle } from './damage';
-import { makeVehicle } from './factory';
+import { makePart, makeVehicle } from './factory';
 import { generateObstacles } from './mapgen';
 import { buildTerrain } from './terrain';
 import { planNpcOrders } from './ai';
@@ -13,14 +13,14 @@ import { assignAutoOrders, fireWeapons, isHostile, resolveDestroyed } from './co
 import { checkDefeat } from './defeat';
 import { discoverSites, useOasis } from './locations';
 import { resolveMovement } from './movement';
-import { consumeSupplies } from './supplies';
+import { consumeSupplies, leakFuel } from './supplies';
 import { spawnInitial, spawnNpcs } from './spawn';
 import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
 import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
 import { clamp, dist, type Vec } from './vec';
 
-export function newWorld(seed: number): World {
+export function newWorld(seed: number, kit: StartKit): World {
   if (!Number.isInteger(seed)) throw new Error(`Seed must be an integer, got ${seed}`);
   const world: World = {
     seed,
@@ -33,19 +33,19 @@ export function newWorld(seed: number): World {
     terrain: buildTerrain(seed, REGION.size),
     player: {
       vehicleId: '',
-      money: START.money,
+      money: kit.money,
       xp: 0,
       level: 1,
       skillPoints: RULES.startSkillPoints,
       skills: { driving: 0, gunnery: 0, mechanics: 0, trade: 0, survival: 0 },
       health: RULES.maxHealth,
-      fuel: START.fuel,
-      supplies: START.supplies,
+      fuel: kit.fuel,
+      supplies: kit.supplies,
       autoFire: false,
       discovered: [REGION.playerStart.town],
       scavenged: [],
       storage: [],
-      costBasis: { ...START.costBasis },
+      costBasis: { ...kit.costBasis },
       knockouts: 0,
       explored: new Array(REGION.size * REGION.size).fill(false),
       visible: [],
@@ -57,11 +57,11 @@ export function newWorld(seed: number): World {
   world.obstacles = generateObstacles(world);
   const town = REGION.towns.find((t) => t.id === REGION.playerStart.town)!;
   const truck = makeVehicle(world, {
-    name: START.name,
+    name: kit.name,
     faction: 'player',
-    chassisId: START.chassis,
-    parts: START.parts,
-    cargo: START.cargo,
+    chassisId: kit.chassis,
+    parts: kit.parts,
+    cargo: kit.cargo,
     pos: { x: town.pos.x + REGION.playerStart.offset.x, y: town.pos.y + REGION.playerStart.offset.y },
     heading: -Math.PI / 4,
     brain: null,
@@ -70,6 +70,7 @@ export function newWorld(seed: number): World {
   if (blocked.length > 0) throw new Error(`Player start overlaps ${blocked.map((o) => o.id).join(', ')}`);
   world.vehicles.push(truck);
   world.player.vehicleId = truck.id;
+  world.player.storage = kit.storage.map((defId) => makePart(world, defId));
   spawnInitial(world);
   refreshVision(world);
   world.events = [];
@@ -102,6 +103,7 @@ export function endTurn(world: World, move: (w: World) => void = resolveMovement
     fireWeapons(w);
     resolveDestroyed(w);
     consumeSupplies(w);
+    leakFuel(w);
     discoverSites(w);
     useOasis(w);
     checkDefeat(w);
@@ -121,8 +123,15 @@ export function setWeaponOrder(world: World, weaponId: string, order: WeaponOrde
     const target = w.vehicles.find((v) => v.id === order.targetId);
     if (!target || target.id === me.id) throw new Error(`Bad target ${order.targetId}`);
     if (!playerSees(w, target.pos)) throw new Error('You cannot see that target');
-    if (order.aim !== 'hull' && !findPart(target, order.aim)) throw new Error(`Target has no part ${order.aim}`);
+    if (order.aim !== 'body' && !findPart(target, order.aim)) throw new Error(`Target has no part ${order.aim}`);
     me.weaponOrders[weaponId] = order;
+  });
+}
+
+// Manual mode: the player's truck skips the route planner and drives straight at its order's point.
+export function setDirect(world: World, on: boolean): World {
+  return update(world, (w) => {
+    playerVehicle(w).direct = on;
   });
 }
 

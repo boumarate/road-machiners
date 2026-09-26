@@ -1,5 +1,6 @@
 // World state. Plain data only, so it clones and serializes.
 
+import type { PartHit, Side } from './armor';
 import type { Terrain } from './terrain';
 import type { Vec } from './vec';
 
@@ -14,8 +15,8 @@ export type GridItem =
   | { id: string; x: number; y: number; rot: 0 | 1; kind: 'part'; part: PartInstance }
   | { id: string; x: number; y: number; rot: 0 | 1; kind: 'good'; good: string };
 
-// 'hull' or the id of a part on the target.
-export type Aim = 'hull' | string;
+// 'body' aims at the truck as a whole. Otherwise it is the id of a part on the target.
+export type Aim = 'body' | string;
 export type WeaponOrder = { targetId: string; aim: Aim };
 
 export type Pose = { x: number; y: number; heading: number };
@@ -43,12 +44,11 @@ export type Vehicle = {
   faction: Faction;
   chassisId: string;
   items: GridItem[]; // inventory grid contents: parts, mounted or spare, and goods
-  hull: number;
   pos: Vec;
   heading: number; // radians, 0 = +x
   speed: number; // tiles per turn at the end of the last turn
   order: MoveOrder | null; // null: coast, keeping speed and heading
-  direct: boolean; // drive straight at the order's point this turn instead of routing around obstacles
+  direct: boolean; // drive straight at the order's point instead of routing around obstacles; the player's manual mode
   weaponOrders: Record<string, WeaponOrder>; // key: weapon part id
   grudges: string[]; // vehicle ids this vehicle treats as hostile
   trail: Pose[]; // poses through the last turn, for animation
@@ -78,9 +78,13 @@ export type Player = {
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision
 };
 
+// One round of a shot. offset is where it crossed the target in meters from its center, across the line
+// of fire, positive to the shooter's right. hits lists the parts it damaged, by direct hit or splash.
+export type ShotRound = { hit: boolean; offset: number; hits: PartHit[] };
+
 export type GameEvent =
-  | { t: 'collision'; a: string; b: string; damageA: number; damageB: number }
-  | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; hit: boolean; damage: number; chance: number }
+  | { t: 'collision'; a: string; b: string; hitsA: PartHit[]; hitsB: PartHit[] } // parts damaged on a and on b; hitsB is empty when b is not a vehicle
+  | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; chance: number; side: Side; rounds: ShotRound[] }
   | { t: 'partDisabled'; vehicle: string; part: string }
   | { t: 'destroyed'; vehicle: string; by: string }
   | { t: 'arrived'; vehicle: string }

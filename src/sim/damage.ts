@@ -1,19 +1,20 @@
-// Applying damage. Hit points clamp at zero.
+// Applying damage. Hit points clamp at zero. Damage reaches parts only through walkLane in armor.ts.
 
+import { partDef } from '../data/parts';
+import { RULES } from '../data/rules';
 import { mountedParts } from './grid';
 import type { PartInstance, Vehicle, World } from './types';
 
-export function damageHull(v: Vehicle, amount: number): number {
-  const dealt = Math.min(v.hull, Math.max(0, Math.round(amount)));
-  v.hull -= dealt;
-  return dealt;
-}
-
+// Damage to the player's cab also hurts the character.
 export function damagePart(world: World, v: Vehicle, part: PartInstance, amount: number): number {
   const wasWorking = part.hp > 0;
   const dealt = Math.min(part.hp, Math.max(0, Math.round(amount)));
   part.hp -= dealt;
   if (wasWorking && part.hp === 0) world.events.push({ t: 'partDisabled', vehicle: v.id, part: part.id });
+  const def = partDef(part.defId);
+  if (v.id === world.player.vehicleId && def.kind === 'core' && def.role === 'cab') {
+    world.player.health = Math.max(0, world.player.health - Math.round(dealt * RULES.cabHealthShare));
+  }
   return dealt;
 }
 

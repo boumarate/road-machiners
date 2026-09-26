@@ -14,13 +14,13 @@ The truck is equipment. It can be changed, upgraded, and destroyed.
 
 Each truck has an inventory grid, in the style of Dredge. Parts and goods all take cells, and the player arranges them by dragging and rotating.
 
-Each chassis marks some cells as mounts for weapons, engines, armor or cargo parts. A part works only while it lies fully on mounts of its own kind. Empty mounts hold cargo like any other cell, so every mounted part costs cargo room. Parts have shapes: a cannon is a 3x1 bar, an engine is a 2x2 block.
+The grid is a top view of the truck with the nose up. Each chassis marks some cells as mounts for weapons, engines or cargo parts. Armor mounts sit on the front, back, left and right edges, and plates and rams go on any side. A part works only while it lies fully on mounts of its own kind. Built-in parts sit on fixed cells: the cab, transmission, four wheels and fuel tank. They can be repaired but not removed. Empty mounts hold cargo like any other cell, so every mounted part costs cargo room. Parts have shapes: a cannon is a 3x1 bar, an engine is a 2x2 block.
 
 Cargo parts add full-width rows to the grid while mounted. A roof rack adds one row, a cargo box adds three.
 
 Goods take one cell per unit and can be moved or dumped anywhere. Mounting and unmounting parts needs a town garage. Spare parts ride in the grid or wait in garage storage.
 
-Trucks make tradeoffs: cargo vs armor vs fuel use. No truck is best at everything.
+Every part and good has a mass. A heavier truck accelerates, brakes, steers and tops out worse. Trucks make tradeoffs: cargo vs armor vs fuel use. No truck is best at everything.
 
 Parts wear. The frame cannot be fully repaired, so old trucks slowly decline. The player changes trucks every so often. Parts move between trucks, so a change keeps some progress.
 
@@ -38,19 +38,19 @@ A click is a waypoint to drive through. While moving, a close click brakes, a cl
 
 The truck plans a route around rocks, wrecks, parked vehicles and cliffs, preferring roads. The screen shows the planned path for the next turns.
 
-Crashes stop a vehicle and deal damage scaled by impact speed and mass. Heavy trucks win rams. NPC drivers use the same steering and obstacle routing as the player. A stuck driver backs away before trying the route again.
+Crash damage grows with impact speed. The lighter truck takes the bigger share, so heavy trucks win rams. A ram part on the striking side takes the blow and hits harder. R toggles manual driving, which skips the route planner so the truck can ram. NPC drivers use the same steering and obstacle routing as the player. A stuck driver backs away before trying the route again.
 
-Weapons have range, damage, reload time, accuracy and a firing arc. A turret covers all sides. A forward gun needs the truck to face the target.
+Weapons have range, reload time, scatter, a firing arc and a number of rounds per shot. A turret covers all sides. A forward gun needs the truck to face the target. Each round rolls on its own. It hits when its scatter is smaller than the target's width as seen from the gun. So distance, target size, facing, crossing speed, the shooter's own speed and round speed all matter. Hovering a truck shows both sides' chances and their causes.
 
-A normal shot hits the hull. An aimed shot targets one part at a lower hit chance. A part at 0 HP stops working: a dead weapon cannot fire, and a dead engine limits speed to a crawl. A cage armor shields parts from aimed shots.
+There is no hull. A round enters from the side facing the shooter and walks the grid cell by cell. Each part it meets takes damage, and the part's armor uses up the round's penetration. An aimed shot targets one part's lane, and a near miss still hits where it lands. A part at 0 HP stops working. A dead weapon cannot fire. A dead engine or transmission limits speed to a crawl. Dead wheels cut speed and steering, and a holed tank leaks fuel. A destroyed cab ends the fight: an NPC truck becomes a wreck, and the player is knocked out.
 
-An auto mode assigns every weapon a hull shot at the nearest hostile.
+An auto mode assigns every weapon a body shot at the nearest hostile.
 
 ## Defeat
 
 Losing a fight does not end the game, in Kenshi style.
 
-The character is knocked out. Enemies loot the cargo and half the money. The character stays with the truck and keeps stats, skills and mounted parts. The robbers leave. The character patches the hull to barely moving condition and must crawl back with no fuel.
+The character is knocked out. Enemies loot the cargo and half the money. The character stays with the truck and keeps stats, skills and mounted parts. The robbers leave. The character patches the broken built-in parts and engine to barely working condition and must crawl back with no fuel.
 
 Later the enemies may also take or wreck the truck.
 

@@ -1,3 +1,4 @@
+import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { TERRAIN } from '../data/terrain';
 import { emptyWorld } from './testkit';
@@ -50,7 +51,7 @@ describe('terrain line of sight', () => {
     const { heightAt } = await import('./terrain');
     const { newWorld } = await import('./world');
     const w = emptyWorld({ x: 30, y: 30 });
-    w.terrain = newWorld(1).terrain;
+    w.terrain = newWorld(1, START_KITS.standard).terrain;
     const elevationAt = (_seed: number, x: number, y: number) => heightAt(w.terrain, x, y);
     let found: { a: { x: number; y: number }; b: { x: number; y: number } } | null = null;
     for (let x = 6; x < 54 && !found; x++) {

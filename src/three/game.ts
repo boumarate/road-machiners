@@ -1,3 +1,4 @@
+import { startKit } from '../data/start';
 // The 3D game: wires input to the sim, the sim and physics to the Three.js view, and the HTML UI.
 // Time only moves while a turn plays. The path preview runs the same physics the turn will run.
 
@@ -9,7 +10,7 @@ import { buildDrive, freeDrive, restFrame, simulateTurn, syncDrive, TURN_STEPS, 
 import { groundPoint, toMap, type TurnFrames, type V3, type VehicleFrame } from '../phys/frames';
 import { applyTurn, physicsMove } from '../phys/turn';
 import { playerVehicle } from '../sim/damage';
-import { mountedParts } from '../sim/grid';
+import { corePart, mountedParts } from '../sim/grid';
 import { canScavenge, scavenge } from '../sim/locations';
 import { locationAt, townAt } from '../sim/sites';
 import { maxTurn, vehicleStats } from '../sim/stats';
@@ -19,9 +20,10 @@ import type { Vec } from '../sim/vec';
 import { playerSees, tileOf, visibleTiles } from '../sim/vision';
 import { dist } from '../sim/vec';
 import { TERRAIN } from '../data/terrain';
-import { endTurn, hostileToPlayer, newWorld, setAutoFire, setMoveOrder, setWeaponOrder } from '../sim/world';
+import { endTurn, hostileToPlayer, newWorld, setAutoFire, setDirect, setMoveOrder, setWeaponOrder } from '../sim/world';
 import { PAL } from '../render/palette';
 import { CharacterScreen } from '../ui/character';
+import { HitCard } from '../ui/hitCard';
 import type { UiHost } from '../ui/host';
 import { Hud } from '../ui/hud';
 import { InventoryScreen } from '../ui/inventory';
@@ -44,7 +46,7 @@ const PICK_PX = 30; // click radius around a vehicle's screen position
 const MIN_ZONE_HALF_ANGLE = Math.PI / 12; // zones stay visible for trucks that barely turn
 const DUST_CHANCE = 0.3; // per moving vehicle per frame while a turn plays
 const SMOKE_CHANCE = 0.05; // per hurt vehicle per frame
-const HURT_HULL = 0.35; // hull share under which a vehicle smokes
+const HURT_CAB = 0.35; // cab hp share under which a vehicle smokes
 const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is recomputed during a turn
 const SUN_DISTANCE = 100; // meters from the focus to the sun, sideways
 const SUN_HEIGHT = 120; // meters above the focus
@@ -57,8 +59,21 @@ type Playback = { result: TurnResult; before: World; start: number | null; moved
 const MOVE_MS = (TURN_STEPS / PHYSICS.stepsPerSecond) * 1000; // real time the movement plays over
 const MOVED_BY_RULES = 0.5; // tiles between a vehicle's drawn spot and its sim spot that mean the rules moved it
 const MARKER_LIFT = 3.5; // meters above a target where its weapon marker sits
+const CARD_RIM_POINTS = 16; // points around a truck's radius that measure how wide it shows on screen
 
 const GUN_HEIGHT = 1.6; // meters above the body center where shots start and land
+const ROUND_STAGGER = 0.4; // share of the shot time over which a burst's rounds leave the gun
+
+// Where a round lands: `offset` meters from target point b, across the line of fire from a, positive to the
+// shooter's right. A hit lands on the target at its offset, a miss beside it.
+// 3D x is map x and 3D z is map y, so the right-hand normal matches the sim's.
+function besideTarget(a: V3, b: V3, offset: number): V3 {
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const len = Math.hypot(dx, dz);
+  if (!(len > 0)) throw new Error('Shot from its own target point');
+  return { x: b.x - (dz / len) * offset, y: b.y, z: b.z + (dx / len) * offset };
+}
 
 export class Game {
   private world: World;
@@ -92,13 +107,14 @@ export class Game {
   private last = performance.now();
 
   private readonly hud = new Hud();
+  private readonly hitCard = new HitCard();
   private readonly weapons: WeaponPanel;
   private readonly town: TownScreen;
   private readonly character: CharacterScreen;
   private readonly inventory: InventoryScreen;
 
   constructor(container: HTMLElement, overlay: HTMLElement) {
-    this.world = newWorld(CONFIG.seed);
+    this.world = newWorld(CONFIG.seed, startKit(CONFIG.startKit));
     this.drive = buildDrive(this.world);
 
     this.renderer.setPixelRatio(window.devicePixelRatio);
@@ -217,6 +233,19 @@ export class Game {
     const w = this.displayWorld();
     const v = this.hovered ? w.vehicles.find((x) => x.id === this.hovered && playerSees(w, x.pos)) ?? null : null;
     this.hud.showInfo(w, v, v ? hostileToPlayer(w, v) : false);
+    this.hitCard.render(w, v ? v.id : null);
+  }
+
+  // The hover card sits beside the hovered truck, clear of it on screen. It hides during playback and in modals.
+  private placeHitCard(): void {
+    const f = this.hovered ? this.frames[this.hovered] : undefined;
+    const v = this.hovered ? this.world.vehicles.find((x) => x.id === this.hovered) : undefined;
+    if (this.anim !== null || this.modalOpen() || !f || !v) return this.hitCard.hide();
+    const r = vehicleStats(this.world, v).radius * PHYSICS.metersPerTile;
+    const c = this.rig.screenOf(f.pos);
+    const reach = Array.from({ length: CARD_RIM_POINTS }, (_, i) => (i / CARD_RIM_POINTS) * Math.PI * 2)
+      .map((a) => Math.abs(this.rig.screenOf({ x: f.pos.x + r * Math.cos(a), y: f.pos.y, z: f.pos.z + r * Math.sin(a) }).x - c.x));
+    this.hitCard.place(c, Math.max(...reach));
   }
 
   // Numbered labels above each target listing the weapons aimed at it and whether they can fire now.
@@ -288,6 +317,7 @@ export class Game {
       if (e.code === 'KeyW' && !modal) this.weapons.toggleVisible();
       if (e.code === 'Digit0' && !modal) this.weapons.selectWeapon(null);
       if (e.code === 'KeyE' && !modal) this.useContext();
+      if (e.code === 'KeyR' && !modal && !playing) this.toggleManual();
       if (e.code === 'KeyC' && !playing) {
         this.town.close();
         this.inventory.close();
@@ -306,6 +336,12 @@ export class Game {
       const digit = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
       if (digit >= 0) this.selectWeaponIndex(digit);
     });
+  }
+
+  // Manual mode drives straight at the click, so the preview must rerun with the new driver.
+  private toggleManual(): void {
+    this.apply(setDirect(this.world, !playerVehicle(this.world).direct));
+    this.refreshPlan();
   }
 
   private selectWeaponIndex(i: number): void {
@@ -328,7 +364,7 @@ export class Game {
   private targetVehicle(target: Vehicle): void {
     let w = this.world;
     if (w.player.autoFire) w = setAutoFire(w, false);
-    for (const mw of weaponsForClick(w, this.selected)) w = setWeaponOrder(w, mw.part.id, { targetId: target.id, aim: 'hull' });
+    for (const mw of weaponsForClick(w, this.selected)) w = setWeaponOrder(w, mw.part.id, { targetId: target.id, aim: 'body' });
     this.apply(w);
   }
 
@@ -398,7 +434,7 @@ export class Game {
     this.weapons.render();
   }
 
-  // Shots land: explosions, new wrecks, the log and the new hull values.
+  // Shots land: explosions, new wrecks, the log and the new part values.
   private landImpacts(a: Playback): void {
     a.impacts = true;
     this.phase = 'Results';
@@ -448,10 +484,18 @@ export class Game {
         const def = gun && partDef(gun.defId);
         const heavy = def?.kind === 'weapon' && def.look === 'cannon';
         const slot = mine.findIndex((mw) => mw.part.id === e.weapon);
-        const label = `${slot >= 0 ? `[${slot + 1}] ` : ''}${heavy ? 'Cannon' : 'MG'} ${e.hit ? `−${e.damage}` : 'miss'}`;
+        const hits = e.rounds.filter((r) => r.hit).length;
+        const dealt = e.rounds.flatMap((r) => r.hits).reduce((sum, h) => sum + h.damage, 0);
+        const label = `${slot >= 0 ? `[${slot + 1}] ` : ''}${heavy ? 'Cannon' : 'MG'} ${hits}/${e.rounds.length}${dealt > 0 ? ` −${dealt}` : ''}`;
         const row = rows.get(e.target) ?? 0;
         rows.set(e.target, row + 1);
-        this.fx.shot(a, b, e.hit, heavy, label, row, CONFIG.combatShotMs, CONFIG.combatReadMs);
+        // Round starts spread over the first part of the shot time, so every bolt lands before the results show.
+        const flight = CONFIG.combatShotMs * (1 - ROUND_STAGGER);
+        e.rounds.forEach((r, k) => {
+          const delay = e.rounds.length > 1 ? (k / (e.rounds.length - 1)) * CONFIG.combatShotMs * ROUND_STAGGER : 0;
+          this.fx.shot(a, besideTarget(a, b, r.offset), r.hit || r.hits.length > 0, heavy, delay, flight);
+        });
+        this.fx.label(b, label, hits > 0 ? '#ffb070' : '#c8b898', row, CONFIG.combatShotMs, CONFIG.combatReadMs);
       }
       if (e.t === 'collision') {
         const p = this.eventPoint(e.a);
@@ -546,7 +590,7 @@ export class Game {
       this.frames[v.id] = f;
       if (!(landed ? this.isVehicleVisible(v) : this.canShowCombatVehicle(v))) continue;
       const before = !landed && this.anim!.before.vehicles.find((x) => x.id === v.id);
-      const display = before ? { ...v, hull: before.hull, items: before.items } : v;
+      const display = before ? { ...v, items: before.items } : v;
       ids.add(v.id);
       let view = this.views.get(v.id);
       if (!view) {
@@ -570,7 +614,8 @@ export class Game {
 
   private vehicleParticles(v: Vehicle, f: VehicleFrame, moving: boolean): void {
     if (moving && v.speed > 0.5 && Math.random() < DUST_CHANCE) this.fx.dust(f.pos);
-    const hurt = v.hull < vehicleStats(this.world, v).hullMax * HURT_HULL || mountedParts(v).some((p) => p.hp === 0);
+    const cab = corePart(v, 'cab');
+    const hurt = cab.hp < partDef(cab.defId).hp * HURT_CAB || mountedParts(v).some((p) => p.hp === 0);
     if (hurt && Math.random() < SMOKE_CHANCE) this.fx.smoke(f.pos);
   }
 
@@ -600,6 +645,7 @@ export class Game {
     this.path.root.visible = !hide;
     this.weaponRange.root.visible = false;
     this.placeTargetMarkers();
+    this.placeHitCard();
     if (hide) return;
     const me = playerVehicle(this.world);
     const s = vehicleStats(this.world, me);

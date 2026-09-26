@@ -1,3 +1,4 @@
+import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { resolveMovement } from './movement';
@@ -47,7 +48,7 @@ describe("route", () => {
   });
 
   it('town buildings fit inside the blocked site instead of the road', () => {
-    const w = newWorld(1337);
+    const w = newWorld(1337, START_KITS.standard);
     for (const town of REGION.towns) {
       const buildings = w.obstacles.filter((o) => o.kind === 'building' && o.id.startsWith(`bld-${town.id}-`));
       expect(buildings.length).toBeGreaterThan(0);
@@ -56,7 +57,7 @@ describe("route", () => {
   });
 
   it('sites block driving but permit interaction from their edge', () => {
-    const w = newWorld(1337);
+    const w = newWorld(1337, START_KITS.standard);
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
     const site = REGION.locations.find((l) => l.kind === 'oasis')!;
     const v = w.vehicles[0];
@@ -73,7 +74,7 @@ describe("route", () => {
 
   it('the player drives from Tin Hollow to Saltmarch without hitting static obstacles', () => {
     const salt = REGION.towns.find((t) => t.id === 'salt')!;
-    let w = setMoveOrder(newWorld(1337), { kind: 'stopAt', dest: salt.pos });
+    let w = setMoveOrder(newWorld(1337, START_KITS.standard), { kind: 'stopAt', dest: salt.pos });
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
     w.player.fuel = 100;
     const me = w.player.vehicleId;

@@ -1,3 +1,4 @@
+import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
 import { REGION } from '../data/region';
@@ -22,7 +23,7 @@ describe('NPC driving', () => {
   });
 
   it('travels between towns without entering either site', () => {
-    const w = newWorld(1337);
+    const w = newWorld(1337, START_KITS.standard);
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
     const tin = REGION.towns[0];
     const salt = REGION.towns[1];

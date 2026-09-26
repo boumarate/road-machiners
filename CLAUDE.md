@@ -15,7 +15,7 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 
 ## Config
 
-`.env` holds `VITE_SEED`, the world seed, plus `VITE_COMBAT_SHOT_MS` and `VITE_COMBAT_READ_MS` for projectile travel and result-reading time. Durations must be positive integers in milliseconds. Copy `.env.example` to `.env` on a fresh checkout. Existing checkouts must add the two combat values from `.env.example`. Missing or invalid values stop the boot.
+`.env` holds `VITE_SEED`, the world seed, `VITE_START_KIT`, the player start kit from `src/data/start.ts`, plus `VITE_COMBAT_SHOT_MS` and `VITE_COMBAT_READ_MS` for projectile travel and result-reading time. Durations must be positive integers in milliseconds. Copy `.env.example` to `.env` on a fresh checkout. Existing checkouts must add any values missing from `.env.example`. Missing or invalid values stop the boot.
 
 ## Architecture
 

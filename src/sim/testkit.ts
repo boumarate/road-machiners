@@ -1,6 +1,8 @@
+import { START_KITS } from '../data/start';
 // Helpers for sim tests.
 
 import { makeVehicle } from './factory';
+import { mountedParts } from './grid';
 import type { Terrain } from './terrain';
 import type { Faction, Vehicle, World } from './types';
 import type { Vec } from './vec';
@@ -14,7 +16,7 @@ export function flatTerrain(size: number): Terrain {
 
 // A world on flat ground with no obstacles and no NPCs, the player truck at `pos` facing +x.
 export function emptyWorld(pos: Vec = { x: 30, y: 30 }): World {
-  const w = newWorld(1);
+  const w = newWorld(1, START_KITS.standard);
   w.obstacles = [];
   w.terrain = flatTerrain(w.size);
   w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
@@ -29,4 +31,9 @@ export function addVehicle(w: World, faction: Faction, chassisId: string, parts:
   const v = makeVehicle(w, { name: chassisId, faction, chassisId, parts, cargo: {}, pos, heading, brain: null });
   w.vehicles.push(v);
   return v;
+}
+
+// Total hit points of the mounted parts, for checking that damage landed.
+export function partHp(v: Vehicle): number {
+  return mountedParts(v).reduce((a, p) => a + p.hp, 0);
 }

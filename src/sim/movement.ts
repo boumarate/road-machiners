@@ -2,9 +2,8 @@
 
 import { RULES } from '../data/rules';
 import { skillBonus } from '../data/skills';
-import { chance, randInt } from './rng';
-import { damageHull, damagePart } from './damage';
-import { mountedParts } from './grid';
+import { laneCount, ramMult, sideToward, walkLane, type PartHit } from './armor';
+import { vehicleMass } from './mass';
 import { isDriveObstacle } from './mapgen';
 import { vehicleStats, type VehicleStats } from './stats';
 import { advanceOn, nextOrder, reached, steerTo, steerWithFuel, type Steer } from './steering';
@@ -49,20 +48,20 @@ function collideStatic(world: World, m: Mover): void {
   if (m.stopped) return;
   const hitWall = clampToMap(world, m);
   if (hitWall) {
-    world.events.push({ t: 'collision', a: m.v.id, b: 'edge', damageA: 0, damageB: 0 });
+    applyCrash(world, m.v, null, 'edge', nearestEdge(world, m.v.pos), Math.abs(m.steer.speed));
     stop(m);
     return;
   }
   if (hitsCliff(world, m)) {
     m.v.pos = { x: m.prev.x, y: m.prev.y };
-    crash(world, m, 'cliff');
+    crash(world, m, 'cliff', ahead(m.v));
     return;
   }
   for (const o of world.obstacles.filter(isDriveObstacle)) {
     const d = dist(m.v.pos, o.pos);
     if (d >= o.r + m.s.radius) continue;
     pushOut(m.v.pos, o.pos, o.r + m.s.radius, m.v.heading);
-    crash(world, m, o.id);
+    crash(world, m, o.id, o.pos);
     return;
   }
 }
@@ -73,11 +72,9 @@ function hitsCliff(world: World, m: Mover): boolean {
   return isCliff(t, tileAt(t, m.v.pos)) && !isCliff(t, tileAt(t, m.prev));
 }
 
-function crash(world: World, m: Mover, what: string): void {
-  const dmg = crashDamage(world, m.v, m.steer.speed, 1);
-  const dealt = damageHull(m.v, dmg);
-  maybeDamagePart(world, m.v, dmg);
-  world.events.push({ t: 'collision', a: m.v.id, b: what, damageA: dealt, damageB: 0 });
+// from is the point the blow comes from, which picks the struck side.
+function crash(world: World, m: Mover, what: string, from: Vec): void {
+  applyCrash(world, m.v, null, what, from, Math.abs(m.steer.speed));
   stop(m);
 }
 
@@ -92,15 +89,7 @@ function collideVehicles(world: World, movers: Mover[]): void {
       if (d >= reach) continue;
       const rel = relativeSpeed(a, b);
       separatePair(a.v.pos, b.v.pos, reach, a.v.heading);
-      const dmgA = crashDamage(world, a.v, rel, b.s.mass / a.s.mass);
-      const dmgB = crashDamage(world, b.v, rel, a.s.mass / b.s.mass);
-      a.v.lastHitBy = b.v.id;
-      b.v.lastHitBy = a.v.id;
-      const dealtA = damageHull(a.v, dmgA);
-      const dealtB = damageHull(b.v, dmgB);
-      maybeDamagePart(world, a.v, dmgA);
-      maybeDamagePart(world, b.v, dmgB);
-      world.events.push({ t: 'collision', a: a.v.id, b: b.v.id, damageA: dealtA, damageB: dealtB });
+      applyCrash(world, a.v, b.v, b.v.id, b.v.pos, rel);
       stop(a);
       stop(b);
     }
@@ -115,36 +104,46 @@ function relativeSpeed(a: Mover, b: Mover): number {
   return Math.hypot(dx, dy);
 }
 
-// A crash found by the physics engine. b is the other vehicle, or null for obstacles and walls;
-// what names the thing hit. impact is the closing speed in tiles per turn.
-export function applyCrash(world: World, a: Vehicle, b: Vehicle | null, what: string, impact: number): void {
-  const massA = vehicleStats(world, a).mass;
-  const massB = b ? vehicleStats(world, b).mass : massA;
-  const dmgA = crashDamage(world, a, impact, massB / massA);
-  const dmgB = b ? crashDamage(world, b, impact, massA / massB) : 0;
-  const dealtA = damageHull(a, dmgA);
-  const dealtB = b ? damageHull(b, dmgB) : 0;
-  maybeDamagePart(world, a, dmgA);
+// F4. Every crash, from the physics engine or the 2D rules, lands here. b is the other vehicle, or null for
+// obstacles, cliffs and the map edge; what names the thing hit. from is the other body's center, or the
+// point of the obstacle or edge, and picks a's struck side. impact is the closing speed in tiles per turn.
+export function applyCrash(world: World, a: Vehicle, b: Vehicle | null, what: string, from: Vec, impact: number): void {
+  if (!(impact >= 0)) throw new Error(`Bad crash impact ${impact}`);
+  // An obstacle counts as infinite mass, so a takes the whole energy.
+  const shareA = b ? vehicleMass(b) / (vehicleMass(a) + vehicleMass(b)) : 1;
+  const hitsA = crashHits(world, a, from, impact, shareA, b);
+  const hitsB = b ? crashHits(world, b, a.pos, impact, 1 - shareA, a) : [];
   if (b) {
-    maybeDamagePart(world, b, dmgB);
     a.lastHitBy = b.id;
     b.lastHitBy = a.id;
   }
-  world.events.push({ t: 'collision', a: a.id, b: what, damageA: dealtA, damageB: dealtB });
+  world.events.push({ t: 'collision', a: a.id, b: what, hitsA, hitsB });
 }
 
-// massRatio is the other body's mass over this vehicle's mass; 1 for obstacles.
-function crashDamage(world: World, v: Vehicle, impact: number, massRatio: number): number {
+// The energy spreads evenly over every lane of v's side facing from. A ram on the striker's side facing v
+// multiplies both the energy and its penetration. share is the other body's share of both masses.
+function crashHits(world: World, v: Vehicle, from: Vec, impact: number, share: number, striker: Vehicle | null): PartHit[] {
+  if (impact < RULES.collisionMinImpact) return [];
   const mech = v.faction === 'player' ? skillBonus('mechanics', world.player.skills.mechanics) : 0;
-  if (impact < RULES.collisionMinImpact) return 0;
-  return impact * massRatio * RULES.collisionDamage * Math.max(0, 1 - mech);
+  const mult = striker ? ramMult(striker, sideToward(striker, v.pos)) : 1;
+  const energy = RULES.ramDamage * impact * share * mult * Math.max(0, 1 - mech);
+  const side = sideToward(v, from);
+  const lanes = laneCount(v, side);
+  const hits: PartHit[] = [];
+  for (let lane = 0; lane < lanes; lane++) hits.push(...walkLane(world, v, side, lane, { damage: energy / lanes, pen: RULES.crashPen * mult }));
+  return hits;
 }
 
-function maybeDamagePart(world: World, v: Vehicle, dmg: number): void {
-  if (dmg <= 0 || !chance(world, RULES.collisionPartChance)) return;
-  const parts = mountedParts(v);
-  if (parts.length === 0) return;
-  damagePart(world, v, parts[randInt(world, 0, parts.length - 1)], dmg);
+// The point on the map border closest to p.
+export function nearestEdge(world: World, p: Vec): Vec {
+  const gaps = [p.x, world.size - p.x, p.y, world.size - p.y];
+  const i = gaps.indexOf(Math.min(...gaps));
+  return [{ x: 0, y: p.y }, { x: world.size, y: p.y }, { x: p.x, y: 0 }, { x: p.x, y: world.size }][i];
+}
+
+// A point one tile ahead of the vehicle's nose direction.
+function ahead(v: Vehicle): Vec {
+  return { x: v.pos.x + Math.cos(v.heading), y: v.pos.y + Math.sin(v.heading) };
 }
 
 function stop(m: Mover): void {

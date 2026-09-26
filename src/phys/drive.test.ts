@@ -1,9 +1,12 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
-import { addVehicle, emptyWorld } from '../sim/testkit';
+import { makeVehicle } from '../sim/factory';
+import { addGoods, removeAllGoods } from '../sim/inventory';
+import { loadFactor, vehicleMass } from '../sim/mass';
+import { addVehicle, emptyWorld, partHp } from '../sim/testkit';
 import type { MoveOrder, World } from '../sim/types';
 import { angleDiff, dist } from '../sim/vec';
-import { endTurn, setMoveOrder } from '../sim/world';
+import { endTurn, setDirect, setMoveOrder } from '../sim/world';
 import { PHYSICS } from '../data/physics';
 import { buildDrive, freeDrive, initPhysics, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
 import { physicsMove } from './turn';
@@ -32,6 +35,7 @@ function ordered(order: MoveOrder, speed = 0, heading = 0): World {
 }
 
 const me = (w: World) => w.vehicles[0];
+const HILL_GRADE = 0.2; // height per tile, steeper than 90% of the generated map's slopes
 
 describe('physics turns', () => {
   it('a new truck sits still on flat ground', () => {
@@ -99,13 +103,13 @@ describe('physics turns', () => {
     expect(a.frames[me(w).id].at(-1)).toEqual(b.frames[me(w).id].at(-1));
   });
 
-  it('ramming a rock is a crash that damages the hull', () => {
+  it('ramming a rock is a crash that damages parts', () => {
     let w = emptyWorld();
     w.obstacles = [{ id: 'rock1', pos: { x: 36, y: 30 }, r: 0.8, kind: 'rock' }];
     w.vehicles[0].speed = 5;
     w.vehicles[0].direct = true; // a careless driver skips the route planner
     w = setMoveOrder(w, { kind: 'through', dest: { x: 45, y: 30 } });
-    const hull = me(w).hull;
+    const hp = partHp(me(w));
     let crashes = 0;
     let d = buildDrive(w);
     for (let i = 0; i < 3; i++) {
@@ -116,7 +120,32 @@ describe('physics turns', () => {
       d = next!;
     }
     expect(crashes).toBeGreaterThan(0);
-    expect(me(w).hull).toBeLessThan(hull);
+    expect(partHp(me(w))).toBeLessThan(hp);
+  });
+
+  it('in manual mode the truck drives into a truck parked on its path; off, it routes around', () => {
+    const drive = (manual: boolean) => {
+      let w = ordered({ kind: 'through', dest: { x: 45, y: 30 } }, 3);
+      const parked = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 37, y: 30 }, Math.PI / 2);
+      w = setDirect(w, manual);
+      let d = buildDrive(w);
+      const hits: string[] = [];
+      for (let i = 0; i < 4; i++) {
+        let next: Drive | null = null;
+        w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+        hits.push(...w.events.flatMap((e) => (e.t === 'collision' ? [e.b] : [])));
+        freeDrive(d);
+        d = next!;
+      }
+      freeDrive(d);
+      return { hits, parked: parked.id, w };
+    };
+    const on = drive(true);
+    expect(on.hits).toContain(on.parked);
+    expect(me(on.w).direct).toBe(true);
+    const off = drive(false);
+    expect(off.hits).toEqual([]);
+    expect(me(off.w).pos.x).toBeGreaterThan(38);
   });
 
   it('a careful driver follows the route around a rock wall', () => {
@@ -170,6 +199,43 @@ describe('physics turns', () => {
     w0.player.fuel = 2; // under the low-fuel share of the tank, enough to drive
     const { w } = play(w0, 2);
     expect(me(w).speed).toBeLessThan(5);
+  });
+
+  it('a truck loaded with scrap covers less distance from rest than an empty one', () => {
+    const empty = ordered({ kind: 'through', dest: { x: 59, y: 30 } });
+    removeAllGoods(me(empty));
+    const loaded = ordered({ kind: 'through', dest: { x: 59, y: 30 } });
+    addGoods(loaded, me(loaded), 'scrap', 999);
+    expect(vehicleMass(me(loaded))).toBeGreaterThan(vehicleMass(me(empty)));
+    const a = play(empty, 2).w;
+    const b = play(loaded, 2).w;
+    expect(me(b).pos.x - 30).toBeLessThan(me(a).pos.x - 30);
+  });
+
+  it('the physics body mass follows the loadout on sync', () => {
+    const w = emptyWorld();
+    const d = buildDrive(w);
+    const body = () => d.world.getRigidBody(d.bodies[me(w).id]);
+    expect(body().mass()).toBeCloseTo(vehicleMass(me(w)), 0);
+    addGoods(w, me(w), 'scrap', 999);
+    syncDrive(d, w);
+    expect(body().mass()).toBeCloseTo(vehicleMass(me(w)), 0);
+    freeDrive(d);
+  });
+
+  it('a fully loaded hauler still climbs a hill', () => {
+    const w0 = emptyWorld({ x: 26, y: 30 });
+    const n = w0.terrain.size;
+    for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) w0.terrain.heights[j * (n + 1) + i] = Math.max(0, i - 28) * HILL_GRADE;
+    const hauler = makeVehicle(w0, { name: 'hauler', faction: 'player', chassisId: 'hauler', parts: ['mg', 'stockEngine', 'plates', 'trailerBox'], cargo: {}, pos: { x: 26, y: 30 }, heading: 0, brain: null });
+    w0.vehicles[0] = { ...hauler, id: me(w0).id };
+    addGoods(w0, me(w0), 'scrap', 999);
+    expect(loadFactor(me(w0))).toBeLessThan(1);
+    w0.player.fuel = 999;
+    const { w } = play(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 6);
+    // Well up the slope, which starts at x 28, and still gaining speed rather than stalling.
+    expect(me(w).pos.x).toBeGreaterThan(34);
+    expect(me(w).speed).toBeGreaterThan(2);
   });
 
   it('new vehicles and obstacles join the physics world', () => {

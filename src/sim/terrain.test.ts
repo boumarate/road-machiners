@@ -1,3 +1,4 @@
+import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { resolveMovement } from './movement';
@@ -18,13 +19,13 @@ function flatWith(size: number, lift: (i: number, j: number) => number): Terrain
 
 describe('terrain grid', () => {
   it('neighboring tiles share corners, so height is continuous across edges', () => {
-    const t = newWorld(1337).terrain;
+    const t = newWorld(1337, START_KITS.standard).terrain;
     for (const x of [10, 23, 41]) expect(heightAt(t, x - 1e-9, 20.3)).toBeCloseTo(heightAt(t, x + 1e-9, 20.3), 6);
   });
 
   it('roads, towns and the player start are drivable for several seeds', () => {
     for (const seed of [0, 1, 5, 100, 1337, 2024]) {
-      const w = newWorld(seed);
+      const w = newWorld(seed, START_KITS.standard);
       const t = w.terrain;
       for (const road of REGION.roads) for (const p of road) expect(isCliff(t, tileAt(t, p))).toBe(false);
       expect(t.types[tileAt(t, REGION.roads[0][1])]).toBe('road');
@@ -33,7 +34,7 @@ describe('terrain grid', () => {
   });
 
   it('mountains produce cliff tiles', () => {
-    const t = newWorld(1337).terrain;
+    const t = newWorld(1337, START_KITS.standard).terrain;
     expect(t.types.filter((_, i) => isCliff(t, i)).length).toBeGreaterThan(20);
   });
 

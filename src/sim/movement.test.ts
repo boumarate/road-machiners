@@ -1,10 +1,11 @@
+import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { resolveMovement } from './movement';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, partHp } from './testkit';
 import { dist } from './vec';
 import { endTurn, newWorld, setMoveOrder } from './world';
 
@@ -19,12 +20,13 @@ describe('movement', () => {
     const w = emptyWorld();
     const v = w.vehicles[0];
     v.speed = 5;
+    v.direct = true; // drive straight at the rock instead of routing around it
     v.order = { kind: 'through', dest: { x: 40, y: 30 } };
     w.obstacles = [{ id: 'r', pos: { x: 33, y: 30 }, r: 1, kind: 'rock' }];
-    const hull = v.hull;
+    const hp = partHp(v);
     resolveMovement(w);
     expect(v.speed).toBe(0);
-    expect(v.hull).toBeLessThan(hull);
+    expect(partHp(v)).toBeLessThan(hp);
     expect(dist(v.pos, { x: 33, y: 30 })).toBeGreaterThanOrEqual(1 + 0.6);
     expect(w.events.some((e) => e.t === 'collision')).toBe(true);
   });
@@ -36,9 +38,9 @@ describe('movement', () => {
     hauler.speed = 4;
     hauler.order = { kind: 'through', dest: { x: 40, y: 30 } };
     hauler.direct = true;
-    const before = { p: p.hull, h: hauler.hull };
+    const before = { p: partHp(p), h: partHp(hauler) };
     resolveMovement(w);
-    expect(before.p - p.hull).toBeGreaterThan(before.h - hauler.hull);
+    expect(before.p - partHp(p)).toBeGreaterThan(before.h - partHp(hauler));
     expect(dist(p.pos, hauler.pos)).toBeGreaterThanOrEqual(0.6 + 0.8 - 0.01);
   });
 
@@ -84,19 +86,20 @@ describe('movement', () => {
     const w = emptyWorld();
     w.vehicles[0].order = { kind: 'through', dest: { x: 40, y: 30 } };
     const fuel = w.player.fuel;
+    const s = vehicleStats(w, w.vehicles[0]); // from rest, one turn covers accel tiles
     resolveMovement(w);
-    expect(w.player.fuel).toBeCloseTo(fuel - 2 * CHASSIS.scout.fuelPerTile / 10, 5);
+    expect(w.player.fuel).toBeCloseTo(fuel - s.accel * s.fuelPerTile, 5);
   });
 });
 
 describe('world', () => {
   it('starts the player with 1500 money', () => {
-    expect(newWorld(1).player.money).toBe(1500);
+    expect(newWorld(1, START_KITS.standard).player.money).toBe(1500);
   });
 
   it('is deterministic for the same seed and orders', () => {
     const run = () => {
-      let w = setMoveOrder(newWorld(7), { kind: 'through', dest: { x: 40, y: 20 } });
+      let w = setMoveOrder(newWorld(7, START_KITS.standard), { kind: 'through', dest: { x: 40, y: 20 } });
       for (let i = 0; i < 10; i++) w = endTurn(w);
       return w;
     };
@@ -104,7 +107,7 @@ describe('world', () => {
   });
 
   it('keeps the player out of obstacles on a long drive', () => {
-    let w = setMoveOrder(newWorld(3), { kind: 'stopAt', dest: { x: 50, y: 50 } });
+    let w = setMoveOrder(newWorld(3, START_KITS.standard), { kind: 'stopAt', dest: { x: 50, y: 50 } });
     for (let i = 0; i < 30; i++) {
       w = endTurn(w);
       const v = w.vehicles[0];
