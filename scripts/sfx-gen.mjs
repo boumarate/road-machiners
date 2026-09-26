@@ -1,5 +1,5 @@
 // Generates new variants of one catalog cue with ElevenLabs, keeps the raw files in tmp/sfx-raw/,
-// imports them, and prints the names to add to the cue's files list. Never overwrites a file.
+// imports them. Never overwrites a file.
 // Usage: npm run sfx:gen -- <cue> <count>
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { MIX, SOUND_STYLE, SOUNDS } from '../src/data/sounds.ts';
@@ -28,14 +28,12 @@ console.log(`${id}: ${count} x ${cue.seconds}s ${music ? 'music' : `sound, about
 console.log(`prompt: ${text}`);
 
 mkdirSync(RAW_DIR, { recursive: true });
-const names = [];
 for (let i = 0; i < count; i++) {
   const audio = await generate();
   const raw = `${RAW_DIR}/${id}-${Date.now()}.mp3`;
   writeFileSync(raw, audio);
-  names.push(importFile(raw, id, cue, MIX.loudness[cue.bus]));
+  importFile(raw, id, cue, MIX.loudness[cue.bus]);
 }
-console.log(`Add to ${id}.files: ${JSON.stringify(names)}`);
 
 async function generate() {
   const [path, body] = music

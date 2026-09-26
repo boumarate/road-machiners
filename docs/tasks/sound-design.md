@@ -116,6 +116,11 @@ Approach: build the audio core and the file pipeline first, fill the catalog wit
 
 Greenfield: nothing existing consumes audio, so there is no compatibility risk.
 
+### Deviations from plan
+- Cue files come from disk by name, `<cue>-<n>.ogg`, through `filesOf` in `src/data/sounds.ts`. Hand-kept file lists broke on every import; rejecting a variant is now one file delete. IV3 becomes: every file in `public/sfx/` belongs to a cue.
+- The import script does not check loop seams. The user hears seams on the board, where loops play looped.
+- Silence trim keeps 20 ms at each end at -60 dB. At -50 dB it cut the Kenney click tails.
+
 ## Verify
 
 ## Conclusion
