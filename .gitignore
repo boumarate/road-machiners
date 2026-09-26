@@ -1,0 +1,7 @@
+node_modules/
+dist/
+tmp/
+.playtest/
+.worktrees/
+.env
+.claude/scheduled_tasks.lock

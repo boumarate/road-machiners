@@ -1,0 +1,69 @@
+html, body { margin: 0; height: 100%; background: #1a1410; overflow: hidden; }
+#game { position: absolute; inset: 0; }
+#ui { position: absolute; inset: 0; pointer-events: none; font: 13px/1.35 ui-monospace, "SF Mono", Menlo, monospace; color: #f0e0b8; }
+#ui .panel { position: absolute; pointer-events: auto; background: rgba(30, 22, 16, 0.88); border: 1px solid #6a5238; border-radius: 4px; padding: 8px 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4); }
+#ui h3 { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.08em; color: #d8b878; text-transform: uppercase; }
+#ui button { font: inherit; color: #f0e0b8; background: #4a3624; border: 1px solid #7a5a3a; border-radius: 3px; padding: 2px 8px; cursor: pointer; }
+#ui button:hover { background: #5e4630; }
+#ui button:disabled { opacity: 0.4; cursor: default; }
+#ui button.on { background: #7a5a2a; border-color: #d8b878; }
+#ui select { font: inherit; color: #f0e0b8; background: #2e2218; border: 1px solid #6a5238; }
+#ui .dim { color: #b8a888; }
+#ui .bad { color: #e07050; }
+#ui .good { color: #a8c878; }
+
+.topbar { top: 8px; left: 50%; transform: translateX(-50%); display: flex; gap: 16px; white-space: nowrap; }
+.topbar b { font-weight: normal; color: #d8b878; }
+
+.weapons { left: 8px; bottom: 8px; min-width: 420px; }
+.weapons .row { display: grid; grid-template-columns: 22px 120px 80px 1fr auto; gap: 6px; align-items: center; padding: 3px 4px; border-radius: 3px; cursor: pointer; }
+.weapons .row.sel { background: rgba(216, 184, 120, 0.18); outline: 1px solid #d8b878; }
+.weapons .hint { margin-top: 6px; color: #b8a888; font-size: 12px; }
+.weapons .head { display: flex; justify-content: space-between; align-items: center; }
+
+.log { right: 8px; bottom: 8px; width: 330px; max-height: 240px; overflow: hidden; font-size: 12px; }
+.log div { padding: 1px 0; }
+
+.help { left: 8px; top: 56px; font-size: 12px; color: #b8a888; }
+
+.info { right: 8px; top: 56px; width: 250px; }
+.info .bar { height: 6px; background: #3a2a1e; border-radius: 3px; overflow: hidden; margin: 3px 0 6px; }
+.info .bar > div { height: 100%; background: #c86a3a; }
+
+.modal { left: 50%; top: 50%; transform: translate(-50%, -50%); width: 720px; max-height: 80%; overflow: auto; padding: 14px 16px; }
+.modal .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.modal table { width: 100%; border-collapse: collapse; }
+.modal td, .modal th { padding: 3px 6px; text-align: left; border-bottom: 1px solid rgba(106, 82, 56, 0.4); }
+.modal th { color: #d8b878; font-weight: normal; }
+.modal .close { position: absolute; right: 10px; top: 10px; }
+.toast { left: 50%; top: 100px; transform: translateX(-50%); color: #f0d060; }
+.action { left: 50%; top: 52px; transform: translateX(-50%); padding: 6px; }
+.action button { font-size: 15px; padding: 6px 14px; }
+
+.inv-wrap { display: flex; gap: 16px; align-items: flex-start; }
+.inv-grid { position: relative; background: #1e1610; border: 1px solid #6a5238; }
+.inv-cell { position: absolute; box-sizing: border-box; border: 1px solid #3a2c20; font-size: 11px; color: rgba(240, 224, 184, 0.35); display: flex; align-items: center; justify-content: center; }
+.inv-cell.c-plain { background: #2e2218; }
+.inv-cell.c-W { background: #4a2a22; }
+.inv-cell.c-E { background: #3a3a34; }
+.inv-cell.c-A { background: #2e3a44; }
+.inv-cell.c-C { background: #4a3a22; }
+.inv-item { position: absolute; box-sizing: border-box; margin: 0; border: 2px solid #1a1410; border-radius: 4px; font-size: 11px; line-height: 1.1; padding: 3px; overflow: hidden; cursor: grab; user-select: none; }
+.inv-item.mounted { border-color: #f0d060; }
+.inv-item.spare { opacity: 0.75; border-style: dashed; border-color: #b8a888; }
+.k-weapon { background: #8a3a2a; }
+.k-engine { background: #5a5a52; }
+.k-armor { background: #4a6070; }
+.k-cargo { background: #8a6a3a; }
+.k-good { background: #6a5a3a; }
+.g-scrap { background: #6a6a62; }
+.g-salt { background: #b8b0a0; color: #2a2018; }
+.g-meds { background: #3a7a5a; }
+.inv-side { display: flex; flex-direction: column; gap: 10px; width: 220px; }
+.inv-storage { min-height: 80px; border: 1px dashed #6a5238; padding: 6px; border-radius: 4px; }
+.inv-chip { margin: 4px 0; padding: 4px 6px; border-radius: 3px; cursor: grab; user-select: none; font-size: 12px; }
+.inv-dump { border: 1px dashed #8a4a3a; color: #c89070; padding: 10px; text-align: center; border-radius: 4px; }
+.inv-legend { margin-top: 6px; max-width: 420px; font-size: 12px; }
+.inv-ghost { position: fixed; pointer-events: none; z-index: 1000; box-sizing: border-box; border: 2px solid #f0e0b8; background: rgba(240, 224, 184, 0.2); color: #f0e0b8; font: 11px ui-monospace, Menlo, monospace; padding: 3px; border-radius: 4px; }
+.inv-ghost.ok { border-color: #a8e078; background: rgba(120, 200, 90, 0.3); }
+.inv-ghost.no { border-color: #e07050; background: rgba(220, 80, 60, 0.3); }

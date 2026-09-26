@@ -1,0 +1,23 @@
+{
+  "name": "korovan",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "typecheck": "tsc",
+    "test": "vitest run",
+    "playtest": "node .claude/skills/phaser-playtest/scripts/playtest.mjs --project ."
+  },
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "phaser": "^4.2.1"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.7"
+  },
+  "type": "module"
+}
