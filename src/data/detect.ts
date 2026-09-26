@@ -13,7 +13,11 @@ export const DETECT = {
     perSpeed: 25, // extra tiles per tile/turn of the source's speed
     eyeHeight: 0.6, // dust rises above the truck, so it clears hills a plain sight line would not
     samplesPerTile: 1, // height samples along a dust sight line; a tall plume needs less care than sight
-    headingError: 25, // degrees a dust trail's apparent heading may be off, either way
+    lifetime: 8, // turns a cloud hangs in the air before it is gone
+    riseTurns: 2, // turns before a cloud has risen high enough to be seen beyond sight range
+    riseHeight: 0.25, // height units a cloud climbs per turn, so older clouds clear taller hills
+    backDrift: 0.6, // tiles per turn a cloud drifts back the way its truck came
+    windDrift: 0.4, // tiles per turn a cloud drifts with the wind, per unit of wind
   },
   // Scanner range lives on the part itself (src/data/parts.ts, PARTS.scanner.range), so towns and
   // the grid read one number.

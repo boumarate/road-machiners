@@ -3,7 +3,7 @@ import { sunAt } from './sun';
 import { TIME } from '../data/time';
 import { describe, expect, it } from 'vitest';
 import { addVehicle, emptyWorld } from './testkit';
-import { contactsOf, dustRange, scannerRange, soundRange } from './detect';
+import { advanceDust, cloudsSeenBy, contactsOf, dustRange, scannerRange, soundRange } from './detect';
 import { makePart } from './factory';
 import { mountPart } from './inventory';
 import { TERRAIN } from '../data/terrain';
@@ -115,5 +115,58 @@ describe('contact fuzz', () => {
 describe('sight radius stays 10 tiles', () => {
   it('matches TERRAIN.vision.radius', () => {
     expect(TERRAIN.vision.radius).toBe(10);
+  });
+});
+
+describe('dust clouds', () => {
+  // A daylight world with a dusty raider moving east at speed 4, 30 tiles from the observer.
+  function dustyWorld() {
+    const w = emptyWorld({ x: 10, y: 30 });
+    w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => sunAt(t))!;
+    const v = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    v.speed = 4;
+    v.heading = 0;
+    w.terrain.types.fill('sand'); // test ground is road, which raises little dust
+    expect(dustRange(w, v)).toBeGreaterThan(40);
+    return { w, v, observer: w.vehicles[0] };
+  }
+
+  it('a moving dusty truck raises a cloud, and a parked one does not', () => {
+    const { w, v } = dustyWorld();
+    advanceDust(w);
+    expect(w.dustClouds.filter((c) => c.source === v.id)).toHaveLength(1);
+    v.speed = 0;
+    advanceDust(w);
+    expect(w.dustClouds.filter((c) => c.source === v.id)).toHaveLength(1);
+  });
+
+  it('clouds drift back the way the truck came and are gone after their lifetime', () => {
+    const { w, v } = dustyWorld();
+    advanceDust(w);
+    v.speed = 0;
+    const start = { ...w.dustClouds[0].pos };
+    advanceDust(w);
+    expect(w.dustClouds[0].pos.x).toBeLessThan(start.x); // the truck heads east, so its dust drifts west
+    for (let t = 0; t < DETECT.dust.lifetime; t++) advanceDust(w);
+    expect(w.dustClouds).toHaveLength(0);
+  });
+
+  it('a fresh cloud stays hidden beyond sight until it has risen', () => {
+    const { w, v, observer } = dustyWorld();
+    advanceDust(w);
+    v.speed = 0;
+    expect(cloudsSeenBy(w, observer)).toHaveLength(0);
+    for (let t = 0; t < DETECT.dust.riseTurns; t++) advanceDust(w);
+    expect(cloudsSeenBy(w, observer)).toHaveLength(1);
+  });
+
+  it('a dust contact circle still holds the true position after the truck moves on', () => {
+    const { w, v, observer } = dustyWorld();
+    for (let t = 0; t <= DETECT.dust.riseTurns; t++) advanceDust(w);
+    v.pos = { x: 48, y: 36 };
+    v.speed = 0; // silent now, so only its dust gives it away
+    const c = contactsOf(w, observer, Infinity).find((x) => x.vehicleId === v.id)!;
+    expect(c.sources).toEqual(['dust']);
+    expect(dist(c.center, v.pos)).toBeLessThanOrEqual(c.radius);
   });
 });

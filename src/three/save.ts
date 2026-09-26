@@ -1,7 +1,7 @@
 import type { World } from '../sim/types';
 
 const SAVE_KEY = 'korovan.save';
-const SAVE_VERSION = 3; // 2 added weather, jobs and contacts; 3 adds job totals and dust trail headings
+const SAVE_VERSION = 3; // 2 added weather, jobs and contacts; 3 adds job totals and dust clouds
 
 export function loadWorld(storage: Storage): World | null {
   const raw = storage.getItem(SAVE_KEY);
@@ -23,10 +23,10 @@ function isWorld(value: unknown): value is World {
     && !!world.spawnTimer && typeof world.spawnTimer === 'object' && !Array.isArray(world.spawnTimer)
     && Array.isArray(world.vehicles) && Array.isArray(world.obstacles)
     && Array.isArray(world.salvage) && Array.isArray(world.events) && Array.isArray(world.removed)
-    && Array.isArray(world.weather)
+    && Array.isArray(world.weather) && Array.isArray(world.dustClouds)
     && !!world.terrain && typeof world.terrain === 'object'
     && !!world.player && typeof world.player === 'object'
-    && typeof world.player.vehicleId === 'string' && Array.isArray(world.player.contacts);
+    && typeof world.player.vehicleId === 'string' && Array.isArray(world.player.contacts) && Array.isArray(world.player.clouds);
 }
 
 export function saveWorld(storage: Storage, world: World, interval: number): void {

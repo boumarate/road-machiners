@@ -9,7 +9,7 @@ import { heightAt, type Terrain } from './terrain';
 import { sunAt } from './sun';
 import { weatherAt } from './weather';
 import { dist, segmentDist, type Vec } from './vec';
-import { contactsOf } from './detect';
+import { cloudsSeenBy, contactsOf } from './detect';
 
 const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building'];
 
@@ -81,6 +81,7 @@ export function refreshVision(world: World): void {
   const next = me ? contactsOf(world, me, Infinity) : [];
   for (const c of next) if (!before.has(c.vehicleId)) world.events.push({ t: 'contact', vehicle: c.vehicleId, sources: c.sources });
   world.player.contacts = next;
+  world.player.clouds = me ? cloudsSeenBy(world, me).map((c) => c.id) : [];
 }
 
 export function tileCenter(world: World, idx: number): Vec {

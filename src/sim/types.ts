@@ -65,8 +65,19 @@ export type Job =
   | { kind: 'search'; stockId: string; turnsLeft: number; total: number };
 
 // A vehicle detected beyond sight. The circle always holds the true position, which it never reveals.
-// trail is the rough heading of a dust trail in radians, or null when no dust is seen.
-export type Contact = { vehicleId: string; center: Vec; radius: number; sources: ('sound' | 'dust' | 'radio')[]; trail: number | null };
+// The circle always holds the vehicle's true position.
+export type Contact = { vehicleId: string; center: Vec; radius: number; sources: ('sound' | 'dust' | 'radio')[] };
+
+// A dust cloud a moving vehicle kicked up. It hangs in the world for a while: it rises, drifts back along
+// the way its truck came and with the wind, and fades. Once risen it can be seen from beyond sight range.
+export type DustCloud = {
+  id: string;
+  source: string; // vehicle id that raised it
+  pos: Vec;
+  vel: Vec; // tiles per turn
+  age: number; // turns since it was raised
+  range: number; // tiles it can be seen from once risen, set by the speed and ground that raised it
+};
 
 // Weather that changes the rules. Storms are moving areas; heat waves and overcast cover the region.
 export type WeatherEvent =
@@ -142,6 +153,7 @@ export type Player = {
   explored: boolean[]; // fog of war: tile y * world.size + x, true once seen
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision
   contacts: Contact[]; // vehicles detected beyond sight; refreshed by refreshVision
+  clouds: string[]; // ids of dust clouds the player sees right now; refreshed by refreshVision
 };
 
 // One round of a shot. offset is where it crossed the target in meters from its center, across the line
@@ -191,4 +203,5 @@ export type World = {
   removed: Vehicle[]; // vehicles destroyed or gone this turn, kept for the render
   spawnTimer: Record<string, number>; // template id -> turns until next spawn check
   weather: WeatherEvent[];
+  dustClouds: DustCloud[];
 };

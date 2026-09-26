@@ -22,6 +22,7 @@ import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
 import { advanceWeather } from './weather';
 import { applyWear } from './wear';
+import { advanceDust } from './detect';
 import { advanceJobs } from './jobs';
 import { clamp, dist, type Vec } from './vec';
 
@@ -57,11 +58,13 @@ export function newWorld(seed: number, kit: StartKit): World {
       explored: new Array(REGION.size * REGION.size).fill(false),
       visible: [],
       contacts: [],
+      clouds: [],
     },
     events: [],
     removed: [],
     spawnTimer: {},
     weather: [],
+    dustClouds: [],
   };
   world.obstacles = generateObstacles(world);
   const town = REGION.towns.find((t) => t.id === REGION.playerStart.town)!;
@@ -130,6 +133,7 @@ export function endTurn(
     planNpcOrders(w);
     move(w);
     applyWear(w);
+    advanceDust(w);
     advanceJobs(w);
     refreshVision(w);
     assignAutoOrders(w);

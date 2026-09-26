@@ -1,11 +1,9 @@
-// Markers for vehicles detected beyond sight, one look per source. All are drawn above the fog: a contact
+// Markers for vehicles detected beyond sight: sound and radio. Dust is drawn as clouds by dust.ts. All are drawn above the fog: a contact
 // is sensed, not seen, so it does not depend on the fog of war.
 // - Sound: faint white wavefronts, in bursts. Each turn opens with a burst of quick ripples, then a long
 //   quiet pause, and the burst repeats while the turn waits. Each front starts somewhere inside the vague
 //   contact circle and travels out, past the listener. Every point of a front moves on its own: it slows while climbing, fades in the
 //   shadow behind a ridge, runs faster downwind, and wobbles a little. So fronts bend around hills.
-// - Dust: a streak of dust lying on the ground, trailing back from the contact area along the rough
-//   heading the sim reports, drifting downwind and rising as it ages.
 // - Radio: a small crisp blip, since a scanner fixes the position.
 // Everything here is render-only. The sim's contact circle is the only claim about where the vehicle is.
 
@@ -38,15 +36,6 @@ const WAVE = {
   repeat: 14, // seconds from one burst to the next while the turn waits
 };
 
-const TRAIL = {
-  puffs: 14,
-  length: 9, // tiles from the head of the trail to its tail
-  width: 1.6, // tiles across a fresh puff; older puffs spread to twice this
-  rise: 1.2, // tiles an old puff has lifted off the ground
-  drift: 2.5, // tiles an old puff has drifted downwind
-  opacity: 0.6, // at the head; the tail fades out
-  flowMs: 2600, // time for a puff to travel from head to tail
-};
 const BLIP = { radius: 0.7, dot: 0.25, opacity: 0.9 }; // tiles
 
 type Front = {
@@ -60,7 +49,7 @@ type Front = {
   spawn: number; // how many times this front has restarted, for its start point
 };
 
-type Marker = { id: string; fronts: Front[]; trail: THREE.Group; blip: THREE.Group; root: THREE.Group; burstMs: number };
+type Marker = { id: string; fronts: Front[]; blip: THREE.Group; root: THREE.Group; burstMs: number };
 
 const WIND = (() => {
   const l = Math.hypot(WEATHER.wind.x, WEATHER.wind.y);
@@ -70,7 +59,6 @@ const WIND = (() => {
 export class ContactsView {
   readonly root = new THREE.Group();
   private readonly markers = new Map<string, Marker>();
-  private readonly dustTexture = createPuffTexture();
   private lastMs: number | null = null;
   private lastTurn = -1;
 
@@ -99,8 +87,6 @@ export class ContactsView {
       const hearsSound = c.sources.includes('sound');
       m.fronts.forEach((f) => (f.line.visible = hearsSound));
       if (hearsSound) m.fronts.forEach((f, k) => this.advanceFront(terrain, c, listener, f, dt, (nowMs - m.burstMs) / 1000 >= k * WAVE.stagger));
-      m.trail.visible = c.trail !== null;
-      if (c.trail !== null) placeTrail(terrain, m.trail, c.center, c.trail, nowMs);
       m.blip.visible = c.sources.includes('radio');
       if (m.blip.visible) m.blip.position.set(c.center.x * S, heightAt(terrain, c.center.x, c.center.y) * S + LIFT, c.center.y * S);
     }
@@ -110,11 +96,10 @@ export class ContactsView {
     const root = new THREE.Group();
     const seed = hashId(id);
     const fronts = Array.from({ length: WAVE.fronts }, (_, k) => makeFront(k, seed));
-    const trail = makeTrail(this.dustTexture);
     const blip = makeBlip();
-    root.add(...fronts.map((f) => f.line), trail, blip);
+    root.add(...fronts.map((f) => f.line), blip);
     this.root.add(root);
-    return { id, fronts, trail, blip, root, burstMs: 0 };
+    return { id, fronts, blip, root, burstMs: 0 };
   }
 
   // Moves every point of a front outward by its own local speed, then rewrites the line.
@@ -204,32 +189,6 @@ function makeFront(k: number, seed: number): Front {
   return { line, origin: { x: 0, y: 0 }, r: new Float32Array(n), peak: new Float32Array(n), amp: new Float32Array(n).fill(1), active: false, ran: false, spawn: seed % 1000 };
 }
 
-function makeTrail(texture: THREE.Texture): THREE.Group {
-  const group = new THREE.Group();
-  for (let i = 0; i < TRAIL.puffs; i++) {
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, color: PAL.dustTrail, transparent: true, opacity: 0, depthTest: false, depthWrite: false }));
-    sprite.renderOrder = RENDER_ORDER;
-    group.add(sprite);
-  }
-  return group;
-}
-
-// Puffs flow from the head of the trail back to its tail, so the streak looks kicked up and left behind.
-// Each puff sits on the ground under it, lifts and spreads as it ages, and drifts downwind.
-function placeTrail(terrain: Terrain, trail: THREE.Group, head: Vec, heading: number, nowMs: number): void {
-  trail.position.set(0, 0, 0);
-  const back = { x: -Math.cos(heading), y: -Math.sin(heading) };
-  trail.children.forEach((child, i) => {
-    const age = (nowMs / TRAIL.flowMs + i / TRAIL.puffs) % 1; // 0 at the head, 1 at the tail
-    const x = head.x + back.x * age * TRAIL.length + WIND.x * age * TRAIL.drift + (hash2(i, 5) - 0.5) * TRAIL.width * 0.5;
-    const y = head.y + back.y * age * TRAIL.length + WIND.y * age * TRAIL.drift + (hash2(i, 9) - 0.5) * TRAIL.width * 0.5;
-    const sprite = child as THREE.Sprite;
-    sprite.position.set(x * S, (heightAt(terrain, x, y) + age * TRAIL.rise) * S + LIFT, y * S);
-    sprite.scale.setScalar(TRAIL.width * S * (1 + age));
-    (sprite.material as THREE.SpriteMaterial).opacity = TRAIL.opacity * (1 - age) * Math.min(1, age * 6);
-  });
-}
-
 function makeBlip(): THREE.Group {
   const mat = () => new THREE.MeshBasicMaterial({ color: PAL.radio, transparent: true, opacity: BLIP.opacity, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
   const ring = new THREE.Mesh(new THREE.RingGeometry(BLIP.radius * S * 0.8, BLIP.radius * S, 32).rotateX(-Math.PI / 2), mat());
@@ -240,26 +199,13 @@ function makeBlip(): THREE.Group {
   return group;
 }
 
-function createPuffTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 64;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Could not create dust texture');
-  const g = ctx.createRadialGradient(32, 32, 4, 32, 32, 32);
-  g.addColorStop(0, 'rgba(255,255,255,0.8)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 64, 64);
-  return new THREE.CanvasTexture(canvas);
-}
-
 function disposeMarker(m: Marker): void {
   for (const f of m.fronts) {
     f.line.geometry.dispose();
     (f.line.material as THREE.Material).dispose();
   }
   m.root.traverse((o) => {
-    if (o instanceof THREE.Sprite || o instanceof THREE.Mesh) (o.material as THREE.Material).dispose();
+    if (o instanceof THREE.Mesh) (o.material as THREE.Material).dispose();
     if (o instanceof THREE.Mesh) o.geometry.dispose();
   });
 }
