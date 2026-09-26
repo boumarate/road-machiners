@@ -124,7 +124,7 @@ export class Game {
   private readonly contacts = new ContactsView();
   private readonly dust = new DustCloudsView();
   private readonly soundRing = new SoundRingView();
-  private readonly path = new PathView();
+  private readonly path: PathView;
   private readonly fx: Fx3D;
   private readonly views = new Map<string, VehicleView>();
   private frames: Record<string, VehicleFrame> = {}; // last shown pose per vehicle
@@ -181,6 +181,7 @@ export class Game {
     this.obstacles = new ObstacleViews(this.scene, this.world.terrain);
     this.obstacles.sync(this.world.obstacles);
     this.fog = new FogView(this.world);
+    this.path = new PathView(this.world.terrain);
     this.shade = new ShadeView(this.world);
     this.weather = new WeatherView(this.world);
     this.scene.add(this.fog.mesh, this.shade.mesh, this.weather.root, this.zones.root, this.path.root, this.weaponRange.root, this.contacts.root, this.dust.root, this.soundRing.root);
