@@ -8,6 +8,7 @@ import { cueOf, importFile } from './sfx-lib.mjs';
 const API = 'https://api.elevenlabs.io/v1';
 const RAW_DIR = 'tmp/sfx-raw';
 const SFX_CREDITS_PER_SECOND = 40; // ElevenLabs price for sound effects with a set duration
+const PROMPT_INFLUENCE = 0.5; // above the API default of 0.3, so named details like a sharp crack survive
 
 process.loadEnvFile('.env');
 const key = process.env.ELEVENLABS_API_KEY;
@@ -32,13 +33,13 @@ for (let i = 0; i < count; i++) {
   const audio = await generate();
   const raw = `${RAW_DIR}/${id}-${Date.now()}.mp3`;
   writeFileSync(raw, audio);
-  importFile(raw, id, cue, MIX.loudness[cue.bus]);
+  importFile(raw, id, cue, MIX.level[cue.bus]);
 }
 
 async function generate() {
   const [path, body] = music
     ? ['/music?output_format=mp3_44100_192', { prompt: cue.prompt, music_length_ms: cue.seconds * 1000, force_instrumental: true }]
-    : ['/sound-generation?output_format=mp3_44100_192', { text, duration_seconds: cue.seconds, loop: cue.loop, model_id: 'eleven_text_to_sound_v2' }];
+    : ['/sound-generation?output_format=mp3_44100_192', { text, duration_seconds: cue.seconds, loop: cue.loop, prompt_influence: PROMPT_INFLUENCE, model_id: 'eleven_text_to_sound_v2' }];
   const res = await fetch(API + path, { method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`ElevenLabs ${path} failed: ${res.status} ${await res.text()}`);
   return Buffer.from(await res.arrayBuffer());

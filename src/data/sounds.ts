@@ -17,8 +17,7 @@ export type CueDef = {
 export type Cue = CueDef & { files: string[] }; // variants; one is picked per play
 
 // Shared prompt start, so generated sounds share one recording style.
-export const SOUND_STYLE =
-  "Post-apocalyptic desert, worn diesel machinery and old steel, dry open air, close microphone, no music, no voices.";
+export const SOUND_STYLE = "Realistic crisp field recording, full frequency range, outdoors in a dry desert, no music, no voices.";
 
 const DEFS = {
   // UI: physical truck cab controls, never digital beeps.
@@ -38,7 +37,7 @@ const DEFS = {
 
   // Combat.
   "mg-fire": { bus: "sfx", volume: 1, pitchJitter: 0.06, maxVoices: 6, loop: false, prompt: "Single heavy machine gun shot outdoors, sharp crack with a short echo.", seconds: 0.6 },
-  "cannon-fire": { bus: "sfx", volume: 1, pitchJitter: 0.04, maxVoices: 3, loop: false, prompt: "Single autocannon shot outdoors, deep boom with a metallic clank and a rolling echo.", seconds: 1.5 },
+  "cannon-fire": { bus: "sfx", volume: 1, pitchJitter: 0.04, maxVoices: 3, loop: false, prompt: "One loud 30mm autocannon shot fired close by, sharp supersonic crack, powerful punchy boom, metallic breech clank, short echo off rocks.", seconds: 1.5 },
   "hit-metal": { bus: "sfx", volume: 1, pitchJitter: 0.08, maxVoices: 6, loop: false, prompt: "Bullet slams into a thick steel truck plate, hard metallic clang.", seconds: 0.6 },
   "miss": { bus: "sfx", volume: 1, pitchJitter: 0.1, maxVoices: 6, loop: false, prompt: "Bullet ricochet whizzing off rocks and kicking up dirt.", seconds: 0.8 },
   "part-broken": { bus: "sfx", volume: 1, pitchJitter: 0.05, maxVoices: 2, loop: false, prompt: "Truck part breaks apart, snapping metal, sparks and a short hiss of steam.", seconds: 1.2 },
@@ -46,7 +45,7 @@ const DEFS = {
   "crash": { bus: "sfx", volume: 1, pitchJitter: 0.06, maxVoices: 2, loop: false, prompt: "Two heavy trucks collide, crunching steel and breaking glass.", seconds: 1.5 },
 
   // Loops.
-  "engine": { bus: "sfx", volume: 0.7, pitchJitter: 0, maxVoices: 1, loop: true, prompt: "Old diesel truck engine running steadily at medium revs, seamless loop.", seconds: 5 },
+  "engine": { bus: "sfx", volume: 0.4, pitchJitter: 0, maxVoices: 1, loop: true, prompt: "Soft low rumble of a big diesel truck engine heard from a distance, smooth and steady, no rattles or whine, seamless loop.", seconds: 5 },
   "wind": { bus: "ambient", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompt: "Dry desert wind blowing over open sand and rocks, steady, seamless loop.", seconds: 12 },
   "music-calm": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompt: "Slow sparse post-apocalyptic desert road music, lonely twangy baritone guitar and low drone, 80 bpm, instrumental, seamless loop.", seconds: 90 },
   "music-combat": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompt: "Tense driving desert combat music, distorted baritone guitar riff, pounding tom drums, 120 bpm, instrumental, seamless loop.", seconds: 60 },
@@ -71,8 +70,8 @@ export const SOUNDS: Record<CueId, Cue> = Object.fromEntries(
 
 export const MIX = {
   busVolume: { ui: 0.8, sfx: 1, ambient: 0.6, music: 0.5 } satisfies Record<Bus, number>,
-  // Import loudness in LUFS per bus. Effects sit loudest; beds sit under them.
-  loudness: { ui: -20, sfx: -16, ambient: -26, music: -22 } satisfies Record<Bus, number>,
+  // Import RMS level in dBFS per bus. Effects sit loudest; beds sit under them.
+  level: { ui: -20, sfx: -16, ambient: -26, music: -22 } satisfies Record<Bus, number>,
   compressor: { threshold: -18, knee: 12, ratio: 4, attack: 0.003, release: 0.25 },
   // Short open-air tail on the effects bus, generated as decaying noise.
   reverb: { seconds: 1.2, decay: 3, wet: 0.12 },
@@ -80,5 +79,5 @@ export const MIX = {
   halfGainMeters: 40,
   panWidth: 0.7,
   // Approved reference cue per bus. The sound board plays it beside each candidate.
-  anchors: {} as Partial<Record<Bus, CueId>>,
+  anchors: { sfx: "cannon-fire" } as Partial<Record<Bus, CueId>>,
 } as const;

@@ -55,6 +55,6 @@ function cueRow(id: string, anchor: string | undefined): HTMLElement {
 root.append(el("button", { onclick: () => playing?.stop() }, "stop"));
 for (const bus of BUSES) {
   const ids = Object.keys(sounds).filter((id) => sounds[id].bus === bus);
-  root.append(el("h2", {}, `${bus}  bus volume ${MIX.busVolume[bus]}  target ${MIX.loudness[bus]} LUFS`));
+  root.append(el("h2", {}, `${bus}  bus volume ${MIX.busVolume[bus]}  target ${MIX.level[bus]} dB RMS`));
   for (const id of ids) root.append(cueRow(id, anchors[bus]));
 }
