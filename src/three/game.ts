@@ -15,6 +15,8 @@ import { canScavenge, scavenge } from '../sim/locations';
 import { locationAt, townAt } from '../sim/sites';
 import { maxTurn, vehicleStats } from '../sim/stats';
 import { clickOrder, throttleFor } from '../sim/steering';
+import { warmRoutes } from '../sim/path';
+import { CHASSIS } from '../data/chassis';
 import type { Vehicle, World } from '../sim/types';
 import type { Vec } from '../sim/vec';
 import { playerSees, tileOf, visibleTiles } from '../sim/vision';
@@ -123,6 +125,7 @@ export class Game {
   constructor(container: HTMLElement, overlay: HTMLElement) {
     this.world = newWorld(CONFIG.seed, startKit(CONFIG.startKit));
     this.drive = buildDrive(this.world);
+    warmRoutes(this.world, [...new Set(Object.values(CHASSIS).map((c) => c.radius))]);
 
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.shadowMap.enabled = true;

@@ -37,6 +37,13 @@ export function route(world: World, from: Vec, to: Vec, radius: number, extra: B
   });
 }
 
+// Builds the nav layers for these vehicle radii now, so the first turn or preview does not pay for them.
+export function warmRoutes(world: World, radii: number[]): void {
+  timed('warm-routes', () => {
+    for (const r of radii) navLayer(world.terrain, world.obstacles, r);
+  });
+}
+
 // Cached cells are shared between calls and never handed out, so callers cannot mutate them.
 function search(layer: NavLayer, dynamic: Blocker[], radius: number, start: number, target: number): { goal: number | null; cells: Int32Array | null } {
   const key = `${layer.id}:${radius}:${start}:${target}:${blockerKey(dynamic)}`;
