@@ -1,6 +1,6 @@
 # Modular Vehicle Parts
 
-**Status:** validating
+**Status:** executing
 **Branch:** modular-parts
 **Worktree:** .worktrees/modular-parts
 **Goal:** Every truck is drawn as an open rig of Blender part models that snap to one shared cell size, so any part fits any chassis and the drawn truck matches its physics collider. Weapons are assembled from sub-part models, so two weapons of the same kind can look different. The user confirms the look in game.
@@ -40,6 +40,18 @@ Draw cost. On rebuild, the static parts of one truck merge into one mesh per mat
 Order of work: grid-derived body and physics first, then socket support and the part-look tables, then the Blender models and the rig view in parallel.
 
 Compatibility: truck sizes change, so driving, ramming and routing feel change. The user approved this. Saves stay valid because they hold no body sizes.
+
+### Car-shaped chassis (revision)
+
+The user found the flat deck unlike a car and asked for car-shaped chassis with large closed cabs. This replaces the open rig and the cockpit pod.
+
+- Each chassis in `src/data/chassis.ts` gets `zones`: row ranges for `hood`, `cab` and `bed`. The cab spans at least two rows. Zones are look data only; physics is unchanged.
+- The body is built from zone pieces placed per edge cell and per zone surface: hood pieces with a sloped top, a closed cab with roof, doors and slit windows, and bed pieces with low walls and a tailgate. Nose, tail and fenders stay.
+- Armor replaces the side, nose or tail piece on its cells. A ram replaces the bumper.
+- Engines replace the hood section over their cells and show through it.
+- Other parts and goods sit on the surface of the zone their cells are in: cab roof, hood top or bed floor.
+- The `cockpit` model is removed. The cab core cell is drawn by the cab zone.
+- Work goes scout first. Other chassis get zones and must not crash, but tuning waits for the user's approval of the scout.
 
 TDD: yes for the grid-to-body derivation and the weapon pick, because both are pure functions. No for model looks, which are checked by screenshots.
 
