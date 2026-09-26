@@ -29,6 +29,7 @@ export const PAL = {
   throttle: { brake: 0xe05a3a, hold: 0xf0d060, accelerate: 0x7cc85a },
   target: 0xe03020,
   select: 0xf0d060,
+  contact: 0xe0a030,
   flash: 0xfff0a0,
   text: '#f0e0b8',
   textDim: '#b8a888',

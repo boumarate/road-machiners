@@ -103,6 +103,8 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       return e.vehicle === me ? { text: `${partName(world, e.vehicle, e.part)} broke down`, cls: 'bad' } : null;
     case 'weather':
       return { text: `${e.event.kind === 'storm' ? 'Dust storm' : e.event.kind === 'heatwave' ? 'Heat wave' : 'Overcast'} ${e.outcome}`, cls: 'dim' };
+    case 'contact':
+      return { text: `Contact: ${n(e.vehicle)} (${e.sources.join(', ')})`, cls: 'bad' };
     case 'spawn':
     case 'despawn':
     case 'arrived':

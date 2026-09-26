@@ -174,5 +174,6 @@ function kindStats(d: PartDef): string {
     case 'armor': return d.ramMult > 1 ? `ram x${d.ramMult}` : 'side armor';
     case 'cargo': return `+${d.extraRows} grid rows`;
     case 'core': return `built-in ${d.role}`;
+    case 'scanner': return `radio range ${d.range}`;
   }
 }

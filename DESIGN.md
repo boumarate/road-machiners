@@ -64,6 +64,20 @@ Later the enemies may also take or wreck the truck.
 
 Losing a truck is one natural way to change trucks.
 
+## Stealth
+
+Sight reaches 10 tiles with line of sight. Beyond it, a moving vehicle still gives itself away: engine sound, a dust trail, or a mounted radio scanner.
+
+A contact is a vehicle detected this way. It shows as a rough circle around the true position, not the position itself. The circle grows with distance, so a close contact pins a truck down and a far one only says roughly where it is.
+
+Engine sound reaches a range set by the engine and the vehicle's speed. A parked truck makes no sound. Hills do not block it. The listener's own speed shortens its hearing, so a parked observer hears furthest.
+
+A dust trail reaches a range set by speed and the ground driven on: roads raise little dust, sand and hardpan raise more. Dust rises above the truck, so it is seen over low hills that would block a plain sight line. Night and dust storms hide it.
+
+A radio scanner is a part that mounts on a weapon cell, so it competes with a gun. It detects every moving vehicle in its range, through hills, and reaches further than sight or a hurried listen. It is sold in towns.
+
+NPCs detect the player and each other with the same rules. Raiders drive toward a contact to find it, and give up on arrival or once they see the target, at which point the ordinary fight rule takes over. Traders and scavengers steer away from a hostile contact the same way they flee a visible one. A very faint, far contact is too vague to act on.
+
 ## World
 
 The map is a grid of tiles with a height on every tile corner, so the ground is smooth hills and valleys. Each tile has a terrain type: road, hardpan, loose sand, scrub or scree. Each type has its own driving speed. Uphill slows a truck, downhill speeds it up a little. Tiles too steep to climb are cliffs: driving into one is a crash. Hills and obstacles block sight, and the fog of war shows only what the truck sees.

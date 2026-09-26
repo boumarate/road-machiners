@@ -159,4 +159,40 @@ describe('NPC activities', () => {
     planNpcOrders(w);
     expect(npc.brain!.activity?.kind).toBe('resupply');
   });
+
+  it('a raider heads toward a heard player', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const player = w.vehicles[0];
+    player.speed = 4; // heard: soundRange 6 + 3*4 = 18 tiles, well past the 10-tile sight radius
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 45, y: 30 }); // 15 tiles off
+    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0 };
+    planNpcOrders(w);
+    expect(raider.brain!.activity?.kind).toBe('investigate');
+    expect(raider.brain!.activity?.targetId).toBe(player.id);
+  });
+
+  it('a trader turns away from a heard raider', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 30, y: 30 });
+    trader.brain = { templateId: 'trader', activity: null, goal: null, home: { ...trader.pos }, stepIndex: 0 };
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 45, y: 30 });
+    raider.speed = 4;
+    planNpcOrders(w);
+    expect(trader.brain!.activity?.kind).toBe('flee');
+    expect(trader.brain!.activity?.targetId).toBe(raider.id);
+  });
+
+  it('a parked player behind a hill goes unnoticed', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const player = w.vehicles[0];
+    player.speed = 0; // parked: no sound, no dust
+    const size = w.terrain.size;
+    for (let i = 33; i <= 37; i++) for (let j = 28; j <= 32; j++) w.terrain.heights[j * (size + 1) + i] = 3;
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 }); // beyond the hill
+    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0 };
+    planNpcOrders(w);
+    expect(raider.brain!.activity?.kind).not.toBe('investigate');
+    expect(raider.brain!.activity?.kind).not.toBe('fight');
+    expect(raider.brain!.activity?.kind).not.toBe('flee');
+  });
 });

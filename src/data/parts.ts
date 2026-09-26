@@ -1,6 +1,6 @@
 // Truck parts. Core parts are built into every chassis; the rest are bought and swapped in towns.
 
-export type PartKind = 'weapon' | 'engine' | 'armor' | 'cargo' | 'core';
+export type PartKind = 'weapon' | 'engine' | 'armor' | 'cargo' | 'core' | 'scanner';
 
 // w and h are the part's footprint in inventory cells before rotation. mass in kilograms.
 // armor is the penetration the part stops when a round passes through it.
@@ -27,6 +27,7 @@ export type EngineDef = PartBase & {
   speedBonus: number;
   accelBonus: number;
   fuelMult: number;
+  noise: number; // multiplies how far the engine is heard
 };
 
 export type ArmorDef = PartBase & {
@@ -47,7 +48,13 @@ export type CoreDef = PartBase & {
   role: 'cab' | 'transmission' | 'wheel' | 'tank';
 };
 
-export type PartDef = WeaponDef | EngineDef | ArmorDef | CargoDef | CoreDef;
+// Detects every moving vehicle within range, through hills. Mounts on W cells, so it competes with a gun.
+export type ScannerDef = PartBase & {
+  kind: 'scanner';
+  range: number; // tiles
+};
+
+export type PartDef = WeaponDef | EngineDef | ArmorDef | CargoDef | CoreDef | ScannerDef;
 
 export const PARTS: Record<string, PartDef> = {
   mg: {
@@ -62,11 +69,11 @@ export const PARTS: Record<string, PartDef> = {
   },
   stockEngine: {
     id: 'stockEngine', kind: 'engine', name: 'Stock engine', hp: 25, price: 120, w: 2, h: 2, mass: 300, armor: 4,
-    speedBonus: 0, accelBonus: 0, fuelMult: 1,
+    speedBonus: 0, accelBonus: 0, fuelMult: 1, noise: 1,
   },
   tunedEngine: {
     id: 'tunedEngine', kind: 'engine', name: 'Tuned V8', hp: 20, price: 380, w: 2, h: 2, mass: 380, armor: 4,
-    speedBonus: 1, accelBonus: 1, fuelMult: 1.4,
+    speedBonus: 1, accelBonus: 1, fuelMult: 1.4, noise: 1.3,
   },
   plates: {
     id: 'plates', kind: 'armor', name: 'Steel plates', hp: 40, price: 260, w: 1, h: 3, mass: 350, armor: 12,
@@ -103,6 +110,10 @@ export const PARTS: Record<string, PartDef> = {
   tank: {
     id: 'tank', kind: 'core', name: 'Fuel tank', hp: 15, price: 60, w: 1, h: 1, mass: 30, armor: 1,
     role: 'tank',
+  },
+  scanner: {
+    id: 'scanner', kind: 'scanner', name: 'Radio scanner', hp: 15, price: 280, w: 1, h: 1, mass: 30, armor: 2,
+    range: 16, // tiles; beats sight (10) and most sound and dust ranges
   },
 };
 
