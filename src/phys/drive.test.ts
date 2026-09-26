@@ -34,6 +34,18 @@ function ordered(order: MoveOrder, speed = 0, heading = 0): World {
 const me = (w: World) => w.vehicles[0];
 
 describe('physics turns', () => {
+  it('turns an NPC around for a destination behind it', () => {
+    const w = emptyWorld({ x: 50, y: 50 });
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 30, y: 30 });
+    npc.order = { kind: 'stopAt', dest: { x: 10, y: 30 } };
+    // Six seconds allow a pickup to reverse-steer through a half turn on flat ground.
+    const result = play(w, 6);
+    const actor = result.w.vehicles.find((v) => v.id === npc.id)!;
+    expect(Math.abs(angleDiff(actor.heading, Math.PI))).toBeLessThan(Math.PI / 2);
+    expect(actor.speed).toBeGreaterThan(0);
+    freeDrive(result.d);
+  });
+
   it('limits and charges NPC fuel through the physics turn pipeline', () => {
     const initial = emptyWorld();
     const npc = addVehicle(initial, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });

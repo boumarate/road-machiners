@@ -14,6 +14,7 @@ export function planNpcOrders(world: World): void {
     const tpl = NPCS[v.brain.templateId];
     if (!tpl) throw new Error(`Unknown NPC template ${v.brain.templateId}`);
     const b = v.brain;
+    if (b.recovery) b.recovery--;
     const activity = chooseNpcActivity(world, v);
     setNpcActivity(world, v, activity, activity.reason);
     const yielding = activity.kind !== 'fight' && activity.kind !== 'flee' && vehicleAhead(world, v);
@@ -33,7 +34,6 @@ export function planNpcOrders(world: World): void {
       goal = computeFightGoal(world, v, preferredRange, target);
     }
     v.order = yielding || !goal ? { kind: 'brake' } : b.recovery ? { kind: 'stopAt', dest: b.recoveryGoal! } : { kind: activity.kind === 'fight' || activity.kind === 'flee' ? 'through' : 'stopAt', dest: goal };
-    if (b.recovery) b.recovery--;
     v.direct = false;
   }
 }

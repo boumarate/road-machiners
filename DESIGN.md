@@ -38,7 +38,7 @@ A click is a waypoint to drive through. While moving, a close click brakes, a cl
 
 The truck plans a route around rocks, wrecks, parked vehicles and cliffs, preferring roads. The screen shows the planned path for the next turns.
 
-Crashes stop a vehicle and deal damage scaled by impact speed and mass. Heavy trucks win rams. NPC drivers use the same steering and obstacle routing as the player. A stuck driver backs away before trying the route again.
+Crashes stop a vehicle and deal damage scaled by impact speed and mass. Heavy trucks win rams. NPC drivers use the same steering and obstacle routing as the player. A stuck driver backs away before trying the route again. During normal travel, NPCs use reversing to turn their nose toward the route instead of following it rear-first.
 
 Weapons have range, damage, reload time, accuracy and a firing arc. A turret covers all sides. A forward gun needs the truck to face the target.
 

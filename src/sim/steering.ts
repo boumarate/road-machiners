@@ -218,12 +218,16 @@ export function steerWithFuel(world: World, s: VehicleStats, v: Pick<Vehicle, 'i
   return steerTo(world, { ...s, maxSpeed: cap, turnFast: maxTurn(s, cap), accel: Math.min(s.accel, RULES.crawlSpeed) }, v, order, direct);
 }
 
-// A nearly stopped truck backs toward a point behind it. For a point ahead, it backs on an arc
-// that swings its nose toward the route's next point. It only backs when the way back is clear.
+export function shouldBackToDestination(vehicle: Pick<Vehicle, 'faction' | 'brain'>): boolean {
+  return vehicle.faction === 'player' || (vehicle.brain?.recovery ?? 0) > 0;
+}
+
+// Players and blockage recovery back toward a point rear-first. Other NPC driving turns the
+// nose toward the route, so reversing is a turning maneuver rather than a travel mode.
 function reverseStep(
   world: World,
   s: VehicleStats,
-  v: Pick<Vehicle, "pos" | "heading" | "speed">,
+  v: Pick<Vehicle, "id" | "pos" | "heading" | "speed">,
   order: Exclude<MoveOrder, { kind: "brake" }>,
   direct: boolean,
   parked: Blocker[],
@@ -244,7 +248,9 @@ function reverseStep(
   if (Math.abs(ang) <= RULES.reverse.angle * DEG) return null;
   const behind =
     Math.abs(angleDiff(v.heading, bearing(v.pos, order.dest))) > Math.PI / 2;
-  const turn = behind
+  const driver = world.vehicles.find((vehicle) => vehicle.id === v.id);
+  if (!driver) throw new Error(`Missing driver ${v.id}`);
+  const turn = behind && shouldBackToDestination(driver)
     ? angleDiff(v.heading + Math.PI, bearing(v.pos, order.dest))
     : ang;
   const back = {

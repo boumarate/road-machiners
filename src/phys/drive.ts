@@ -11,7 +11,7 @@ import { isDriveObstacle } from '../sim/mapgen';
 import { getResources } from '../sim/resources';
 import { vehicleStats, type VehicleStats } from '../sim/stats';
 import { route, straightClear } from '../sim/path';
-import { aimPoint, parkedVehicles, zoneSpeed } from '../sim/steering';
+import { aimPoint, parkedVehicles, shouldBackToDestination, zoneSpeed } from '../sim/steering';
 import { heightAt } from '../sim/terrain';
 import type { MoveOrder, Vehicle, World } from '../sim/types';
 import { angleDiff, clamp, DEG, dist, type Vec } from '../sim/vec';
@@ -265,16 +265,17 @@ function driveStep(c: Car): void {
       c.result.passed = true;
     }
     if (!c.result.passed && !c.result.arrived) {
-      // From near rest, a point behind the truck is backed toward, rear first. It stays in reverse
-      // until the point is ahead again or reached.
+      // Reverse until the route is ahead. Ordinary NPCs steer their nose toward it, while
+      // player orders and blockage recovery aim the rear at the destination.
       const behind = Math.abs(ang) > Math.PI / 2;
       if (!mem.reverse && target > 0 && behind && Math.abs(speed) < D.reverseBelow) mem.reverse = true;
       if (mem.reverse && !behind) mem.reverse = false;
       if (mem.reverse) {
         target = -Math.min(D.reverseSpeed, plan.target);
-        // The rear aims at the point. Backing up turns the truck the opposite way from the wheels.
-        const rearAng = angleDiff(headingOf(body.rotation()) + Math.PI, Math.atan2(dz, dx));
-        steerTo = clamp(-rearAng * D.steerGain, -plan.maxSteer, plan.maxSteer);
+        // Backing up turns the truck the opposite way from the wheels.
+        const rearAng = angleDiff(heading + Math.PI, Math.atan2(dz, dx));
+        const turnAngle = shouldBackToDestination(c.v) ? rearAng : ang;
+        steerTo = clamp(-turnAngle * D.steerGain, -plan.maxSteer, plan.maxSteer);
       } else {
         steerTo = clamp(ang * D.steerGain, -plan.maxSteer, plan.maxSteer);
       }

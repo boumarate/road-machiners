@@ -1,6 +1,6 @@
 # NPC activities
 
-Status: done
+Status: integrating main
 Branch: npc-activities
 Worktree: /Users/boris/Documents/Korovan/.worktrees/npc-activities
 Mode: hands-off
@@ -189,6 +189,12 @@ Outcome: the observable NPC economic and raid loops run in the browser with Rapi
 - Resource initialization belongs in `factory.ts` so non-brained NPC fixtures also own resources. Activity and salvage shapes were added with their consuming phases instead of unused declarations in PH1.
 - Activity event formatting moved from PH4 into PH3 to keep the event formatter's exhaustive switch type-safe.
 - Observer sight correction landed in PH3 after full-loop evidence exposed wreck self-occlusion. Existing NPC driving tests now resolve activities between movement steps so traders can buy before departing.
+
+### Reverse-driving repair
+
+The user reported frequent rear-first driving. Flat-ground regressions reproduced it in both movement engines: an NPC aimed its rear at a destination behind it, and the physics truck still faced exactly away after six turns. Normal NPC reversing now steers the nose toward the route. Player reverse controls and straight-back blockage recovery retain their behavior. Recovery counters expire at the next planning step so both movement engines see the active recovery mode for the whole move. Fresh verification passed: 166 tests, typecheck, browser smoke at 26 fps, and 180 simulated turns in Chromium. The economic loop completed in 11 turns and the raid loop in 7. NPC decisions averaged 0.86 ms per turn over the normal 120-turn run, so no speculative caching or throttling was added.
+
+The long-run browser harness previously reused the pre-turn physics snapshot. It now adopts each returned snapshot, matching `Game.finishMovement()`. Earlier long-run stalls and timings from that harness are superseded by `tmp/npc-corrected-*.log` and the corrected trace. One smoke run measured 11 fps during concurrent system load. The corrected rerun passed at 26 fps, with no threshold changes. The user authorized finishing and merging into main. Integration preserves main's part-based combat and weather.
 
 ### Review
 

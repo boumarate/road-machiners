@@ -7,6 +7,8 @@ import { resolveNpcActivities } from './npc-activities';
 import { addVehicle, emptyWorld } from './testkit';
 import { dist } from './vec';
 import { newWorld } from './world';
+import { steerTo } from './steering';
+import { vehicleStats } from './stats';
 
 function buildChase() {
   const w = emptyWorld({ x: 40, y: 30 });
@@ -16,6 +18,22 @@ function buildChase() {
 }
 
 describe('NPC driving', () => {
+  it('turns its nose toward a destination behind instead of reversing the whole route', () => {
+    const w = emptyWorld({ x: 50, y: 50 });
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 30, y: 30 });
+    const dest = { x: 10, y: 30 };
+    const steer = steerTo(w, vehicleStats(w, npc), npc, { kind: 'stopAt', dest }, false);
+    expect(Math.abs(steer.turn)).toBeGreaterThan(0);
+  });
+
+  it('keeps blockage recovery rear-first', () => {
+    const { w, npc } = buildChase();
+    npc.brain!.recovery = RULES.npcRecoveryTurns;
+    const steer = steerTo(w, vehicleStats(w, npc), npc, { kind: 'stopAt', dest: { x: 27, y: 30 } }, false);
+    expect(steer.speed).toBeLessThan(0);
+    expect(steer.turn).toBe(0);
+  });
+
   it('uses the obstacle-aware driver on every turn', () => {
     const { w, npc } = buildChase();
     planNpcOrders(w);
