@@ -109,6 +109,8 @@ export const TERRAIN = {
     radius: 20, // tiles of sight from any vehicle, before weather and night
     eyeHeight: 0.12, // height units above the ground for the viewer and targets; hills taller than this block sight
     samplesPerTile: 3, // height samples per tile along a sight line
+    closeRadius: 3, // tiles around a vehicle seen even behind rocks and hills, since its crew hears and sees over them
+    lingerTurns: 2, // turns a vehicle stays drawn, moving, after the player loses sight of it
   },
   fog: {
     seen: { grey: 0.85, bright: 0.9 }, // explored but not visible now: share of color drained, brightness kept

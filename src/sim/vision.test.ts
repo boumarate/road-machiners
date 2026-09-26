@@ -2,7 +2,7 @@ import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { TERRAIN } from '../data/terrain';
 import { emptyWorld } from './testkit';
-import { playerVisible, refreshVision, visibleTiles } from './vision';
+import { canVehicleSee, playerVisible, refreshVision, visibleTiles } from './vision';
 
 describe('vision', () => {
   it('sees an unblocked tile within radius', () => {
@@ -18,6 +18,22 @@ describe('vision', () => {
     const near = visibleTiles(w, from);
     expect(near.has(30 * w.size + 31)).toBe(true); // in front of the rock, still visible
     expect(near.has(30 * w.size + 36)).toBe(false); // behind the rock, blocked
+  });
+
+  it('sees behind a rock within the close radius', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.obstacles = [{ id: 'r', pos: { x: 31.2, y: 30.5 }, r: 0.6, kind: 'rock' }];
+    const vis = visibleTiles(w, { x: 30, y: 30.5 });
+    expect(vis.has(30 * w.size + 32)).toBe(true); // 2.5 tiles away, behind the rock
+    expect(vis.has(30 * w.size + 35)).toBe(false); // 5.5 tiles away, behind the rock
+  });
+
+  it('lets an NPC see a vehicle behind a rock within the close radius', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.obstacles = [{ id: 'r', pos: { x: 31.2, y: 30 }, r: 0.6, kind: 'rock' }];
+    const npc = { ...w.vehicles[0], id: 'npc', pos: { x: 30, y: 30 } };
+    expect(canVehicleSee(w, npc, { x: 32.5, y: 30 })).toBe(true);
+    expect(canVehicleSee(w, npc, { x: 35.5, y: 30 })).toBe(false);
   });
 
   it('does not block sight past water', () => {

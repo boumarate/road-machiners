@@ -116,6 +116,7 @@ export class Game {
   private readonly ground: THREE.Mesh;
   private readonly obstacles: ObstacleViews;
   private readonly fog: FogView;
+  private readonly lastSeen = new Map<string, number>(); // vehicle id to the turn the player last saw it
   private readonly shade: ShadeView;
   private readonly weather: WeatherView;
   private readonly labels: Labels;
@@ -476,6 +477,13 @@ export class Game {
     );
   }
 
+  // A vehicle out of sight stays drawn for a few turns after the player last saw it, so it does not
+  // blink out behind a rock. Display only: it cannot be picked or targeted while lingering.
+  private lingers(v: Vehicle): boolean {
+    const seen = this.lastSeen.get(v.id);
+    return seen !== undefined && this.world.turn - seen <= TERRAIN.vision.lingerTurns;
+  }
+
   private isVehicleVisible(v: Vehicle): boolean {
     if (v.id === playerVehicle(this.world).id) return true;
     const f = this.frames[v.id];
@@ -797,8 +805,9 @@ export class Game {
         frames?.[v.id]?.[step!] ??
         (kept && !stale ? kept : restFrame(this.world, v));
       this.frames[v.id] = f;
-      if (!(landed ? this.isVehicleVisible(v) : this.canShowCombatVehicle(v)))
-        continue;
+      const seen = landed ? this.isVehicleVisible(v) : this.canShowCombatVehicle(v);
+      if (seen) this.lastSeen.set(v.id, this.world.turn);
+      if (!seen && !this.lingers(v)) continue;
       const before =
         !landed && this.anim!.before.vehicles.find((x) => x.id === v.id);
       const display = before ? { ...v, items: before.items } : v;
