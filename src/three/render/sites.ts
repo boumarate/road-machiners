@@ -1,93 +1,303 @@
-// Ground-level town and location decoration: pads, ship wreckage, palms, and landmarks.
-// Buildings that block movement are obstacles already (see obstacles.ts), so nothing here blocks.
-// Models come from tools/blender/; each script's docstring gives its size.
+// Town and location models. Buildings that block movement are obstacles already (see obstacles.ts),
+// so nothing here blocks. Blender models come from tools/blender/; each script's docstring gives its size.
 
-import * as THREE from "three";
-import { REGION, type LocationDef, type TownDef } from "../../data/region";
-import { PHYSICS } from "../../data/physics";
-import { PAL } from "../../render/palette";
-import { heightAt, type Terrain } from "../../sim/terrain";
-import { model, type ModelName } from "./models";
+import * as THREE from 'three';
+import { REGION, type LocationDef, type TownDef } from '../../data/region';
+import { PHYSICS } from '../../data/physics';
+import { PAL } from '../../render/palette';
+import { hash2 } from '../../render/noise';
+import { heightAt, type Terrain } from '../../sim/terrain';
+import { segmentDist } from '../../sim/vec';
+import { instancedModel, model, type ModelName } from './models';
+import type { RenderScope } from './scope';
 
 const S = PHYSICS.metersPerTile;
-const PAD_LIFT = 0.03 * S; // keeps the pad from z-fighting the terrain
+type Site = TownDef | LocationDef;
+// Scales that fit ship models to the Icarus footprint: a 272 m Fallen Sun hull from the 26 m model, and
+// Nose's 48 m bow from the 12 m cone.
+const HULL_SCALE = 272 / 26;
+const NOSE_SCALE = 4;
+// The bridge model's 32 m by 7 m deck stretched over the 18-tile diagonal canyon crossing, 2.5 tiles wide.
+const BRIDGE_TILES = 18;
+const BRIDGE_WIDTH = 2.5;
 
-const LANDMARKS: Record<string, ModelName> = {
-  "fallen-sun": "ship_hull",
-  granary: "silo",
-  "pump-station": "pump_station",
-  "south-lock": "lock_gate",
-  "glass-flats": "glass_flats",
-};
+// Site props stay within the site's collision footprint. Every prop is grounded independently.
+class SiteBuilder {
+  readonly root = new THREE.Group();
+  private readonly materials = new Map<number, THREE.MeshLambertMaterial>();
+  constructor(private readonly terrain: Terrain, private readonly site: Site) {
+    this.root.name = `landmark-${site.id}`;
+  }
+  groundAt(x: number, z: number): number {
+    return heightAt(this.terrain, this.site.pos.x + x, this.site.pos.y + z);
+  }
+  addShape(geometry: THREE.BufferGeometry, color: number, x: number, z: number, lift: number, yaw = 0): THREE.Mesh {
+    let material = this.materials.get(color);
+    if (!material) {
+      material = new THREE.MeshLambertMaterial({ color, flatShading: true });
+      this.materials.set(color, material);
+    }
+    const mesh = new THREE.Mesh(geometry, material);
+    const wx = this.site.pos.x + x;
+    const wz = this.site.pos.y + z;
+    mesh.position.set(wx * S, (heightAt(this.terrain, wx, wz) + lift) * S, wz * S);
+    mesh.rotation.y = yaw;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    this.root.add(mesh);
+    return mesh;
+  }
+  addBox(x: number, z: number, w: number, h: number, d: number, color: number, lift = 0, yaw = 0): THREE.Mesh {
+    return this.addShape(new THREE.BoxGeometry(w * S, h * S, d * S), color, x, z, lift + h / 2, yaw);
+  }
+  addTank(x: number, z: number, radius: number, height: number, color: number, lift = 0): void {
+    this.addShape(new THREE.CylinderGeometry(radius * S, radius * S, height * S, 10), color, x, z, lift + height / 2);
+  }
+  // A Blender model standing on the ground at site offset (x, z), turned by yaw radians.
+  addModel(name: ModelName, x: number, z: number, yaw = 0, scale: number | THREE.Vector3 = 1, lift = 0): THREE.Object3D {
+    const wx = this.site.pos.x + x;
+    const wz = this.site.pos.y + z;
+    const obj = model(name);
+    obj.position.set(wx * S, (heightAt(this.terrain, wx, wz) + lift) * S, wz * S);
+    obj.rotation.y = yaw;
+    if (typeof scale === 'number') obj.scale.setScalar(scale);
+    else obj.scale.copy(scale);
+    this.root.add(obj);
+    return obj;
+  }
+  // Many copies of one Blender model, each on the ground at its site offset, as instanced meshes.
+  addInstances(name: ModelName, spots: { x: number; z: number; yaw: number }[]): void {
+    const placements = spots.map(({ x, z, yaw }) => {
+      const wx = this.site.pos.x + x;
+      const wz = this.site.pos.y + z;
+      const pos = new THREE.Vector3(wx * S, heightAt(this.terrain, wx, wz) * S, wz * S);
+      return new THREE.Matrix4().compose(pos, new THREE.Quaternion().setFromAxisAngle(UP, yaw), new THREE.Vector3(1, 1, 1));
+    });
+    this.root.add(instancedModel(name, placements, placements.map(() => 1)));
+  }
+  // A site offset that must stay off every road, or the model would stand in traffic.
+  offRoad(x: number, z: number, clearance: number): void {
+    const pos = { x: this.site.pos.x + x, y: this.site.pos.y + z };
+    if (REGION.roads.some((road) => road.some((point, i) => i > 0 && segmentDist(pos, road[i - 1], point) < REGION.roadWidth / 2 + clearance))) {
+      throw new Error(`Site prop at ${x},${z} of ${this.site.id} stands on a road`);
+    }
+  }
+  // A dead orchard tree: bare trunk, two branches and a fallen limb.
+  addDeadTree(x: number, z: number, index: number): void {
+    const lean = (hash2(index, 19) - 0.5) * 0.35;
+    const trunk = this.addBox(x, z, 0.16, 1.5, 0.18, PAL.trunk);
+    trunk.rotation.z = lean;
+    for (const sign of [-1, 1]) {
+      const branch = this.addBox(x + sign * 0.24, z, 0.1, 0.95, 0.12, PAL.trunk, 0.85);
+      branch.rotation.z = sign * 0.75;
+    }
+    this.addBox(x + 0.35, z, 0.7, 0.13, 0.18, PAL.trunk, 0.03, lean);
+  }
+  addRuin(x: number, z: number, width: number, depth: number): void {
+    this.addBox(x, z, width, 0.12, depth, PAL.wall.dark);
+    this.addBox(x - width / 2, z, 0.2, 1.2, depth, PAL.wall.side);
+    this.addBox(x, z - depth / 2, width, 0.85, 0.2, PAL.wall.top);
+    this.addBox(x + width / 2, z - depth / 3, 0.2, 0.55, depth / 3, PAL.wall.side);
+    this.addBox(x + 0.3, z + 0.3, width * 0.7, 0.12, depth * 0.8, PAL.rust.top, 0.08, 0.35);
+  }
+  addHull(x: number, z: number, length: number, width: number, yaw: number): void {
+    this.addBox(x, z, length, 0.3, width, PAL.metal, 0.1, yaw);
+    for (let i = 0; i < 5; i++) {
+      const along = (i / 4 - 0.5) * length;
+      for (const side of [-1, 1]) {
+        const dx = along * Math.cos(yaw) + side * width * 0.42 * Math.sin(yaw);
+        const dz = -along * Math.sin(yaw) + side * width * 0.42 * Math.cos(yaw);
+        const rib = this.addBox(x + dx, z + dz, 0.16, width * 0.65, 0.18, PAL.metalLight, 0.25, yaw);
+        rib.rotation.x = side * 0.25;
+      }
+    }
+    const shell = new THREE.CylinderGeometry(width * 0.5 * S, width * 0.42 * S, length * 0.72 * S, 8, 1, true, 0, Math.PI * 1.55).rotateZ(Math.PI / 2);
+    const hull = this.addShape(shell, PAL.metalLight, x, z, width * 0.4, yaw);
+    (hull.material as THREE.MeshLambertMaterial).side = THREE.DoubleSide;
+    for (const side of [-1, 1]) {
+      this.addBox(x, z + side * width * 0.42, length * 0.68, 0.12, 0.2, PAL.rust.top, width * 0.55, yaw);
+    }
+    for (let i = -1; i <= 1; i++) {
+      this.addBox(x + i * length * 0.2, z, 0.2, 0.22, width * 0.7, PAL.metal, width * 0.88, yaw);
+      this.addBox(x + i * length * 0.3, z - width * 0.6, length * 0.12, 0.12, width * 0.3, PAL.metalLight, 0.15, yaw + i * 0.4);
+    }
+  }
+}
 
+function buildOrchard(b: SiteBuilder): void {
+  const { orchardRows: rows, orchardSpacing: spacing } = REGION.settlement;
+  const half = (rows - 1) / 2;
+  const living: { x: number; z: number; yaw: number }[] = [];
+  for (let row = 0; row < rows; row++) {
+    const x = (row - half) * spacing;
+    b.addBox(x - 0.65, 0, 0.18, 0.06, rows * spacing, PAL.wall.dark);
+    for (let col = 0; col < rows; col++) {
+      const index = row * rows + col;
+      const z = (col - half) * spacing;
+      if (index % 4 === 0) b.addDeadTree(x, z, index);
+      else living.push({ x, z, yaw: hash2(index, 29) * Math.PI * 2 });
+    }
+  }
+  b.addInstances('orchard_tree', living);
+  b.addRuin(0, 14, 6, 4);
+  for (let i = -6; i <= 6; i++) b.addBox(i * 2, -12, 0.12, 0.65, 0.12, PAL.trunk);
+  b.addBox(0, -12, 24, 0.1, 0.12, PAL.trunk, 0.4);
+}
+
+function buildSettlement(b: SiteBuilder, site: Site): void {
+  const layout = REGION.settlement;
+  const limit = site.radius - layout.houseWidth - 0.3;
+  let homes = 0;
+  for (let x = -limit; x <= limit; x += layout.streetSpacing) {
+    for (let z = -limit; z <= limit; z += layout.streetSpacing) {
+      if (Math.hypot(x, z) > limit) continue;
+      if (site.id === 'bowl' ? Math.hypot(x, z) < 9 : Math.abs(x) < 21 && Math.abs(z) < 9) continue;
+      const pos = { x: site.pos.x + x, y: site.pos.y + z };
+      if (REGION.roads.some((road) => road.some((point, i) => i > 0 && segmentDist(pos, road[i - 1], point) < REGION.roadWidth / 2 + layout.houseWidth))) continue;
+      const h = layout.houseHeights[homes % layout.houseHeights.length];
+      const w = layout.houseWidth;
+      const d = layout.houseDepth;
+      b.addBox(x, z, w, h, d, homes % 3 ? PAL.wall.side : PAL.wall.top);
+      b.addBox(x, z, w + 0.3, 0.12, d + 0.3, homes % 4 ? PAL.rust.top : PAL.metal, h);
+      b.addBox(x, z + d / 2 + 0.02, 0.3, 0.55, 0.03, PAL.wall.dark);
+      for (const dx of [-0.8, 0.8]) {
+        b.addBox(x + dx, z + d / 2 + 0.02, 0.3, 0.3, 0.03, PAL.wall.dark, 0.55);
+        if (h > 1.5) b.addBox(x + dx, z + d / 2 + 0.02, 0.3, 0.3, 0.03, PAL.wall.dark, 1.25);
+      }
+      if (homes % 5 === 0) b.addTank(x - 0.6, z - 0.4, 0.3, 0.55, PAL.metalLight, h + 0.12);
+      homes++;
+    }
+  }
+  b.root.userData.homes = homes;
+  // The water tower stands in the open center, clear of the pond, the hull and the roads.
+  const tower = site.id === 'bowl' ? { x: -6, z: -6 } : { x: -18, z: 6 };
+  b.offRoad(tower.x, tower.z, 1);
+  b.addModel('water_tower', tower.x, tower.z);
+  if (site.id === 'bowl') {
+    b.addTank(0, 0, 6, 0.05, PAL.water);
+    for (let row = 0; row < 4; row++) b.addBox(-6 + row * 3, 9, 2, 0.12, 4, PAL.scrub[0]);
+  } else {
+    b.addHull(-3, -1, 22, 10, 0);
+    b.addModel('ship_nose', 12, -1, 0, NOSE_SCALE);
+  }
+}
+
+function buildGranary(b: SiteBuilder): void {
+  // Silos at the 1.1-tile radius of the old tanks. Their sheds face the loading ruin.
+  for (let x = -3; x <= 3; x += 3) b.addModel('silo', x, -1, -Math.PI / 2, (1.1 * S) / 2.5);
+  b.addRuin(0, 2.8, 6, 2.2);
+  for (let i = 0; i < 8; i++) b.addBox(-2.5 + (i % 4) * 0.65, 2 + Math.floor(i / 4) * 0.65, 0.5, 0.45, 0.5, PAL.crate);
+}
+
+function buildPump(b: SiteBuilder): void {
+  b.addRuin(-1.7, 0, 3, 3.8);
+  b.addModel('pump_station', 2.5, 0);
+  b.addBox(-2, 0, 1.2, 0.85, 2, PAL.rust.side);
+}
+
+function buildLock(b: SiteBuilder): void {
+  for (const x of [-2, 2]) b.addBox(x, 0, 0.6, 1.1, 8, PAL.wall.side);
+  b.addBox(0, 0, 3.6, 0.05, 8, PAL.water);
+  // The gate wall runs along the model's Y, so a quarter turn sets it across the channel.
+  b.addModel('lock_gate', 0, 0, Math.PI / 2);
+  b.addRuin(3.7, 0, 1.7, 2);
+}
+
+function buildBridge(b: SiteBuilder): void {
+  // The road approaches the named eastern abutment from the southwest across the canyon.
+  // The deck runs from offset (-25.5, 25.5) to (-7.5, 7.5). Its origin is road level at the deck
+  // center, so it sits at the mean ground height of the two ends.
+  const ends = [-25.5, -7.5].map((d) => b.groundAt(d, -d));
+  const width = (BRIDGE_WIDTH * S) / 7;
+  const bridge = b.addModel('bridge', -16.5, 16.5, Math.PI / 4, new THREE.Vector3((BRIDGE_TILES * Math.SQRT2 * S) / 32, width, width));
+  bridge.position.y = ((ends[0] + ends[1]) / 2) * S;
+  b.addRuin(0, 0, 3, 2);
+}
+
+function buildOasis(b: SiteBuilder, well: boolean): void {
+  if (well) {
+    b.addTank(0, 0, 1.2, 0.8, PAL.wall.side);
+    b.addTank(0, 0, 0.9, 0.04, PAL.water, 0.8);
+    for (const x of [-1.5, 1.5]) b.addBox(x, 0, 0.18, 2.6, 0.18, PAL.trunk);
+    b.addBox(0, 0, 3.3, 0.2, 0.25, PAL.trunk, 2.5);
+    b.addRuin(2.7, 2.7, 2.3, 2);
+    // The palm model leans, so yaw varies the lean.
+    for (let i = 0; i < 4; i++) {
+      const a = i * 1.7 + 0.4;
+      b.addModel('palm', Math.cos(a) * 4.8, Math.sin(a) * 4.8, a * 2.3);
+    }
+  } else {
+    b.addTank(0, 0, 2.8, 0.04, PAL.waterLight);
+    for (let i = 0; i < 9; i++) {
+      const a = i * Math.PI * 2 / 9;
+      b.addModel('palm', Math.cos(a) * 4, Math.sin(a) * 4, a * 2.3);
+    }
+  }
+}
+
+function buildWrecks(b: SiteBuilder, id: string): void {
+  if (id === 'salvage-yard') {
+    for (const x of [-3, 0, 3]) {
+      b.addBox(x, -2, 2.3, 1.2, 2, PAL.rust.side);
+      b.addBox(x, -2, 2.6, 0.12, 2.4, PAL.metalLight, 1.3);
+      for (let i = 0; i < 3; i++) b.addBox(x, 1 + i * 0.8, 1.5, 0.5, 0.6, i % 2 ? PAL.metal : PAL.rust.top);
+    }
+    b.addBox(-3, 1, 0.25, 4, 0.25, PAL.metal);
+    b.addBox(-1.5, 1, 3.2, 0.22, 0.22, PAL.metal, 3.8);
+    b.addModel('crates', 4.8, 1.8, 0.3);
+  } else if (id === 'podfield') {
+    for (let i = 0; i < 7; i++) {
+      const a = i * 2.4;
+      const pod = b.addShape(new THREE.CapsuleGeometry(0.45 * S, 1.1 * S, 2, 6), PAL.metalLight, Math.cos(a) * 3.4, Math.sin(a) * 3.4, 0.65);
+      pod.rotation.z = 0.7 + i * 0.3;
+    }
+    b.addModel('crates', 0, 0, 0.3);
+  } else {
+    b.addHull(-1, 0, id === 'ridge-wrecks' ? 7 : 4, 2, 0.3);
+    b.addHull(2, 3, 3.5, 1.5, -0.6);
+    for (let i = 0; i < 5; i++) b.addBox(-3 + i, -3, 0.5, 0.25, 1, PAL.rust.dark, 0, i);
+    b.addModel('crates', 3.5, -2.5, 0.3);
+  }
+}
+
+function buildSite(t: Terrain, site: Site): THREE.Group {
+  const b = new SiteBuilder(t, site);
+  switch (site.id) {
+    case 'orchard': buildOrchard(b); break;
+    case 'granary': buildGranary(b); break;
+    case 'pump-station': buildPump(b); break;
+    case 'south-lock': buildLock(b); break;
+    case 'canyon-bridge': buildBridge(b); break;
+    case 'dustwell': buildOasis(b, true); break;
+    case 'green-pit': buildOasis(b, false); break;
+    case 'fallen-sun':
+      b.addModel('ship_hull', 0, 0, -0.2, HULL_SCALE);
+      b.addBox(-10, 16, 25, 0.3, 15, PAL.metalLight, 0.6, 0.3);
+      for (const z of [-8, 8]) b.addTank(-33, z, 3, 5, PAL.rust.dark);
+      break;
+    case 'glass-flats': b.addModel('glass_flats', 0, 0); break;
+    case 'nose': case 'bowl': buildSettlement(b, site); break;
+    case 'burnt-convoy': case 'podfield': case 'ridge-wrecks': case 'salvage-yard': buildWrecks(b, site.id); break;
+    default: throw new Error(`Missing landmark model for ${site.id}`);
+  }
+  // Site models never move after they are built.
+  b.root.traverse((o) => {
+    o.updateMatrix();
+    o.matrixAutoUpdate = false;
+  });
+  return b.root;
+}
+
+const UP = new THREE.Vector3(0, 1, 0);
+
+// Every site model under one group, for inspection.
 export function buildSites(t: Terrain): THREE.Group {
   const group = new THREE.Group();
-  for (const town of REGION.towns) group.add(buildTown(t, town));
-  for (const loc of REGION.locations)
-    group.add(
-      loc.kind === "oasis"
-        ? buildOasis(t, loc)
-        : loc.kind === "convoy"
-          ? buildConvoy(t, loc)
-          : buildLandmark(t, loc),
-    );
+  for (const site of [...REGION.towns, ...REGION.locations]) group.add(buildSite(t, site));
   return group;
 }
 
-// A model standing on the ground at map point (x, y), turned by yaw radians.
-function placed(t: Terrain, name: ModelName, x: number, y: number, yaw = 0): THREE.Group {
-  const g = new THREE.Group();
-  g.position.set(x * S, heightAt(t, x, y) * S, y * S);
-  g.rotation.y = yaw;
-  g.add(model(name));
-  return g;
-}
-
-function buildTown(t: Terrain, town: TownDef): THREE.Group {
-  const g = new THREE.Group();
-  const pad = new THREE.Mesh(
-    new THREE.CircleGeometry(town.radius * S * 1.15, 24).rotateX(-Math.PI / 2),
-    new THREE.MeshLambertMaterial({ color: PAL.wall.side }),
-  );
-  pad.position.set(
-    town.pos.x * S,
-    heightAt(t, town.pos.x, town.pos.y) * S + PAD_LIFT,
-    town.pos.y * S,
-  );
-  pad.receiveShadow = true;
-  g.add(
-    pad,
-    placed(t, "water_tower", town.pos.x - town.radius * 0.4, town.pos.y + town.radius * 0.3),
-  );
-  // Shifted off center so the cone clears the water tower.
-  if (town.id === "nose") g.add(placed(t, "ship_nose", town.pos.x + 0.6, town.pos.y - 0.5));
-  return g;
-}
-
-function buildOasis(t: Terrain, loc: LocationDef): THREE.Group {
-  const g = new THREE.Group();
-  for (let i = 0; i < 4; i++) {
-    const a = i * 1.7 + 0.4;
-    const x = loc.pos.x + Math.cos(a) * loc.radius * 0.8;
-    const y = loc.pos.y + Math.sin(a) * loc.radius * 0.8;
-    g.add(placed(t, "palm", x, y, a * 2.3)); // the model leans, so yaw varies the lean
-  }
-  return g;
-}
-
-function buildLandmark(t: Terrain, loc: LocationDef): THREE.Group {
-  const { x, y } = loc.pos;
-  if (loc.id === "canyon-bridge") return placed(t, "bridge", x - 3, y + 3, 0.75);
-  if (loc.id === "orchard") {
-    const g = new THREE.Group();
-    for (let i = -1; i <= 1; i++) g.add(placed(t, "orchard_tree", x + i, y + 0.5, i * 2.1));
-    return g;
-  }
-  const name = LANDMARKS[loc.id];
-  if (!name) throw new Error(`No model for landmark ${loc.id}`);
-  return placed(t, name, x, y, loc.id === "fallen-sun" ? -0.25 : 0);
-}
-
-function buildConvoy(t: Terrain, loc: LocationDef): THREE.Group {
-  return placed(t, "crates", loc.pos.x, loc.pos.y, 0.3);
+// Registers every site model with the scope at its site.
+export function addSites(t: Terrain, scope: RenderScope): void {
+  for (const site of [...REGION.towns, ...REGION.locations]) scope.add(buildSite(t, site), site.pos, site.radius);
 }

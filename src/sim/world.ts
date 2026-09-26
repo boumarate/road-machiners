@@ -21,6 +21,7 @@ import { resolveMovement } from "./movement";
 import { consumeSupplies, leakFuel } from "./supplies";
 import { spawnInitial, spawnNpcs } from "./spawn";
 import { initializeSalvage } from "./salvage";
+import { timed } from "../perf";
 import { resolveNpcActivities } from "./npc-activities";
 import type { MoveOrder, Vehicle, WeaponOrder, World } from "./types";
 import { vehicleStats } from "./stats";
@@ -95,9 +96,15 @@ export function newWorld(seed: number, kit: StartKit): World {
   return world;
 }
 
+export function cloneWorld(world: World): World {
+  if (!Object.isFrozen(world.terrain)) return structuredClone(world);
+  const { terrain, ...state } = world;
+  return { ...structuredClone(state), terrain };
+}
+
 // Clone, apply, return. Every command and the turn go through this.
 export function update(world: World, fn: (draft: World) => void): World {
-  const draft = structuredClone(world);
+  const draft = cloneWorld(world);
   draft.events = [];
   draft.removed = [];
   fn(draft);
@@ -124,7 +131,7 @@ export function endTurn(
   world: World,
   move: (w: World) => void = resolveMovement,
 ): World {
-  return update(world, (w) => {
+  return timed('turn', () => update(world, (w) => {
     w.turn++;
     planNpcOrders(w);
     move(w);
@@ -140,7 +147,7 @@ export function endTurn(
     checkDefeat(w);
     spawnNpcs(w);
     refreshVision(w);
-  });
+  }));
 }
 
 export function setWeaponOrder(

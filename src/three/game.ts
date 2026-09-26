@@ -30,12 +30,15 @@ import { canScavenge, scavenge } from "../sim/locations";
 import { locationAt, townAt } from "../sim/sites";
 import { maxTurn, vehicleStats } from "../sim/stats";
 import { clickOrder, throttleFor } from "../sim/steering";
+import { warmRoutes } from "../sim/path";
+import { CHASSIS } from "../data/chassis";
 import type { Vehicle, World } from "../sim/types";
 import type { Vec } from "../sim/vec";
 import { playerSees, tileOf, visibleTiles } from "../sim/vision";
 import { dist } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
 import {
+  cloneWorld,
   endTurn,
   hostileToPlayer,
   newWorld,
@@ -45,6 +48,7 @@ import {
   setWeaponOrder,
 } from "../sim/world";
 import { PAL } from "../render/palette";
+import { timed } from "../perf";
 import { CharacterScreen } from "../ui/character";
 import { HitCard } from "../ui/hitCard";
 import type { UiHost } from "../ui/host";
@@ -58,7 +62,8 @@ import { Fx3D } from "./render/fx";
 import { Labels } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
 import { PathView } from "./render/path";
-import { buildSites } from "./render/sites";
+import { RenderScope } from "./render/scope";
+import { addSites } from "./render/sites";
 import { terrainMesh } from "./render/terrain";
 import { VehicleView, type Ring3 } from "./render/vehicle";
 import { WeaponRangeView } from "./render/weaponRange";
@@ -129,7 +134,10 @@ export class Game {
   private readonly scene = new THREE.Scene();
   private readonly sun = new THREE.DirectionalLight(0xfff0d0, 2.2);
   private readonly rig: CameraRig;
-  private readonly ground: THREE.Mesh;
+  private readonly ground = new THREE.Group(); // terrain chunks near the view, for ground picking
+  private readonly props = new THREE.Group(); // sites and obstacles near the view
+  private readonly fogRoot = new THREE.Group();
+  private readonly scopes: RenderScope[];
   private readonly obstacles: ObstacleViews;
   private readonly fog: FogView;
   private readonly weather: WeatherView;
@@ -169,6 +177,7 @@ export class Game {
       loadWorld(window.localStorage) ??
       newWorld(CONFIG.seed, startKit(CONFIG.startKit));
     this.drive = buildDrive(this.world);
+    warmRoutes(this.world, [...new Set(Object.values(CHASSIS).map((c) => c.radius))]);
 
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.shadowMap.enabled = true;
@@ -190,19 +199,18 @@ export class Game {
     });
     this.scene.add(this.sun, this.sun.target);
 
-    this.ground = terrainMesh(this.world);
-    this.scene.add(this.ground, buildSites(this.world.terrain));
-    this.obstacles = new ObstacleViews(this.scene, this.world.terrain);
+    // Ground, props and fog cull separately, so ground picking only hits terrain.
+    const groundScope = new RenderScope(this.ground, this.world.size);
+    const propScope = new RenderScope(this.props, this.world.size);
+    const fogScope = new RenderScope(this.fogRoot, this.world.size);
+    this.scopes = [groundScope, propScope, fogScope];
+    terrainMesh(this.world, groundScope);
+    addSites(this.world.terrain, propScope);
+    this.obstacles = new ObstacleViews(propScope, this.world.terrain);
     this.obstacles.sync(this.world.obstacles);
-    this.fog = new FogView(this.world);
+    this.fog = new FogView(this.world, fogScope);
     this.weather = new WeatherView(this.world);
-    this.scene.add(
-      this.fog.mesh,
-      this.weather.root,
-      this.zones.root,
-      this.path.root,
-      this.weaponRange.root,
-    );
+    this.scene.add(this.ground, this.props, this.fogRoot, this.weather.root, this.zones.root, this.path.root, this.weaponRange.root);
     this.overlay = overlay;
     this.labels = new Labels(overlay);
     this.fx = new Fx3D(this.scene, overlay, this.rig);
@@ -254,6 +262,16 @@ export class Game {
     return this.rig.screenOf(groundPoint(this.world.terrain, { x, y }));
   }
 
+  // Centers the camera on map point x, y at the given zoom and stops following, for browser scripts.
+  debugView(x: number, y: number, zoom: number): void {
+    this.following = false;
+    this.rig.setZoom(zoom);
+    // An infinite step moves the smoothed follow all the way in one tick.
+    this.rig.follow(groundPoint(this.world.terrain, { x, y }));
+    this.rig.tick(Number.POSITIVE_INFINITY);
+    this.rig.follow(null);
+  }
+
   get state(): World {
     return this.world;
   }
@@ -282,16 +300,9 @@ export class Game {
 
   private refreshUi(): void {
     const me = playerVehicle(this.world);
-    if (
-      this.selected &&
-      !vehicleStats(this.world, me).weapons.some(
-        (mw) => mw.part.id === this.selected,
-      )
-    )
-      this.selected = null;
-    if (!this.anim) this.fog.update(this.world);
-    if (!this.anim || this.anim.impacts)
-      this.obstacles.sync(this.world.obstacles);
+    if (this.selected && !vehicleStats(this.world, me).weapons.some((mw) => mw.part.id === this.selected)) this.selected = null;
+    if (!this.anim) timed('fog', () => this.fog.update(this.world));
+    if (!this.anim || this.anim.impacts) this.obstacles.sync(this.world.obstacles);
     this.hud.renderTop(this.displayWorld());
     this.weapons.render();
     this.town.render();
@@ -578,8 +589,8 @@ export class Game {
     for (const [id, fs] of Object.entries(a.result.frames))
       this.frames[id] = fs[fs.length - 1];
     this.live = null;
-    this.phase = a.combat ? "Firing" : "Results";
-    this.fog.update(this.combatFogWorld());
+    this.phase = a.combat ? 'Firing' : 'Results';
+    timed('fog', () => this.fog.update(this.combatFogWorld()));
     this.playShotFx();
     this.weapons.render();
   }
@@ -727,8 +738,12 @@ export class Game {
     this.planFor = this.world;
     const me = playerVehicle(this.world);
     if (!me.order && me.speed === 0) return this.path.clear();
+    timed('preview', () => this.planPath(me));
+  }
+
+  private planPath(me: Vehicle): void {
     const turns: VehicleFrame[][] = [];
-    const w = structuredClone(this.world);
+    let w = cloneWorld(this.world);
     let d = this.drive;
     for (let i = 0; i < PLAN_TURNS; i++) {
       const r = simulateTurn(d, w);
@@ -784,6 +799,7 @@ export class Game {
     this.updateLoops();
     this.weather.advance(dt);
     this.labels.update(this.world, this.rig);
+    for (const scope of this.scopes) scope.update(this.rig.camera);
     this.renderer.render(this.scene, this.rig.camera);
     // The preview runs after the frame is drawn, so a click shows at once.
     this.refreshPlan();
@@ -800,12 +816,8 @@ export class Game {
     live.from = at;
     live.visible = visibleTiles(this.world, at);
     for (const t of live.visible) live.explored[t] = true;
-    const player = {
-      ...this.world.player,
-      visible: [...live.visible].sort((a, b) => a - b),
-      explored: live.explored,
-    };
-    this.fog.update({ ...this.world, player });
+    const player = { ...this.world.player, visible: [...live.visible].sort((a, b) => a - b), explored: live.explored };
+    timed('fog', () => this.fog.update({ ...this.world, player }));
   }
 
   // Physics step shown now while the movement plays, or null otherwise. Advances the playback phases.

@@ -413,6 +413,7 @@ describe('invariants under AI traffic', () => {
         expect(Math.abs(v.heading - b.heading)).toBeLessThanOrEqual(Math.max(maxTurn(b.s, v.speed), backed) + 1e-9);
       }
       for (const k of ['fuel', 'supplies', 'health', 'money'] as const) expect(w.player[k]).toBeGreaterThanOrEqual(0);
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
-  }, 10_000); // 120-tile terrain and 80 turns take about 5 seconds even without parallel tests.
+  }, 120_000); // Eighty turns include long-distance traffic across the 600-tile region.
 });

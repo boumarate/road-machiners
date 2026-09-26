@@ -2,6 +2,7 @@
 
 import type { Faction } from '../sim/types';
 import type { Vec } from '../sim/vec';
+import { MAP_SCALE, scalePoint } from './region';
 import { START_KITS } from './start';
 import { RULES } from './rules';
 
@@ -103,7 +104,7 @@ export const SPAWN = {
   initial: ['buggy', 'buggy', 'gunwagon', 'trader', 'scavenger'],
   wildMinPlayerDist: 16, // raiders never spawn closer to the player than this
   wildMinTownDist: 10,
-  wanderRadius: 8, // raiders patrol this far from their spawn point
+  wanderRadius: 8 * MAP_SCALE, // raiders patrol this far from their spawn point
   townSpread: 1, // distance beyond the site boundary for neutral spawns
   tries: 40,
   neighborHelp: 10, // same-faction vehicles in this range join a grudge
@@ -134,5 +135,5 @@ export const NPC_UPKEEP = {
 };
 
 export const WILD_SPAWNS: Vec[] = [
-  { x: 30, y: 8 }, { x: 110, y: 13 }, { x: 8, y: 28 }, { x: 111, y: 105 }, { x: 62, y: 73 },
+  ...([{ x: 30, y: 8 }, { x: 110, y: 13 }, { x: 8, y: 28 }, { x: 111, y: 105 }, { x: 62, y: 73 }].map(scalePoint)),
 ];

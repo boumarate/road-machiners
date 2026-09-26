@@ -63,6 +63,12 @@ export class CameraRig {
     this.resize();
   }
 
+  setZoom(zoom: number): void {
+    if (!(zoom >= ZOOM.min && zoom <= ZOOM.max)) throw new Error(`Zoom ${zoom} is outside ${ZOOM.min}..${ZOOM.max}`);
+    this.zoom = zoom;
+    this.resize();
+  }
+
   private aimRay(clientX: number, clientY: number): void {
     const rect = this.container.getBoundingClientRect();
     const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);

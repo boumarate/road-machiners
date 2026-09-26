@@ -1,5 +1,6 @@
-// Static map obstacles: rocks, wrecks, buildings, water. Synced by id, so wrecks that appear
-// mid-game (a vehicle dying) get added without touching the rest.
+// Static map obstacles: rocks, wrecks, buildings, water. Map rocks are drawn once as an instanced model
+// per terrain chunk. Other obstacles are synced by id, so wrecks that appear mid-game (a vehicle dying)
+// get added without touching the rest.
 
 import * as THREE from 'three';
 import { hashStr } from '../../render/noise';
@@ -7,31 +8,66 @@ import { PAL } from '../../render/palette';
 import { PHYSICS } from '../../data/physics';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import type { Obstacle } from '../../sim/types';
-import { model } from './models';
+import { dist } from '../../sim/vec';
+import { instancedModel, model } from './models';
+import type { RenderScope } from './scope';
+import { TERRAIN_CHUNK } from './terrain';
 
 const S = PHYSICS.metersPerTile;
 
 export class ObstacleViews {
   private readonly byId = new Map<string, THREE.Object3D>();
+  private rockIds: Set<string> | null = null; // map rocks, fixed at the first sync
 
-  constructor(private readonly parent: THREE.Object3D, private readonly terrain: Terrain) {}
+  constructor(private readonly scope: RenderScope, private readonly terrain: Terrain) {}
 
   sync(obstacles: Obstacle[]): void {
+    if (!this.rockIds) this.rockIds = this.addRocks(obstacles.filter((o) => o.kind === 'rock'));
     const seen = new Set<string>();
+    let rocks = 0;
     for (const o of obstacles) {
+      if (o.kind === 'rock') {
+        if (!this.rockIds.has(o.id)) throw new Error(`Rock ${o.id} appeared after map generation; rocks are drawn as fixed instances`);
+        rocks++;
+        continue;
+      }
       seen.add(o.id);
       if (!this.byId.has(o.id)) {
-        const mesh = buildObstacle(this.terrain, o);
-        this.parent.add(mesh);
-        this.byId.set(o.id, mesh);
+        const obj = buildObstacle(this.terrain, o);
+        obj.traverse((m) => {
+          m.updateMatrix();
+          m.matrixAutoUpdate = false;
+        });
+        this.scope.add(obj, o.pos, o.r);
+        this.byId.set(o.id, obj);
       }
     }
+    if (rocks !== this.rockIds.size) throw new Error('A map rock was removed; rocks are drawn as fixed instances');
     for (const [id, obj] of this.byId) {
       if (seen.has(id)) continue;
-      this.parent.remove(obj);
+      this.scope.remove(obj);
       disposeTree(obj);
       this.byId.delete(id);
     }
+  }
+
+  // One instanced rock model per chunk, with the placement and tint of rockPlacement.
+  private addRocks(rocks: Obstacle[]): Set<string> {
+    const byChunk = new Map<string, Obstacle[]>();
+    for (const o of rocks) {
+      const key = `${Math.floor(o.pos.x / TERRAIN_CHUNK)},${Math.floor(o.pos.y / TERRAIN_CHUNK)}`;
+      const list = byChunk.get(key);
+      if (list) list.push(o);
+      else byChunk.set(key, [o]);
+    }
+    for (const list of byChunk.values()) {
+      const placed = list.map((o) => rockPlacement(this.terrain, o));
+      const group = instancedModel('rock', placed.map((p) => p.matrix), placed.map((p) => p.tint));
+      const center = list.reduce((c, o) => ({ x: c.x + o.pos.x / list.length, y: c.y + o.pos.y / list.length }), { x: 0, y: 0 });
+      const reach = Math.max(...list.map((o) => dist(center, o.pos) + o.r));
+      this.scope.add(group, center, reach);
+    }
+    return new Set(rocks.map((o) => o.id));
   }
 }
 
@@ -46,7 +82,6 @@ function disposeTree(obj: THREE.Object3D): void {
 }
 
 function buildObstacle(t: Terrain, o: Obstacle): THREE.Object3D {
-  if (o.kind === 'rock') return buildRock(t, o);
   if (o.kind === 'wreck') return buildWreck(t, o);
   if (o.kind === 'building') return buildBuilding(t, o);
   if (o.kind === 'water') return buildWater(t, o);
@@ -62,16 +97,13 @@ function seat(t: Terrain, o: Obstacle): THREE.Group {
 }
 
 // A boulder from tools/blender/rock.py, modeled at a 1 m radius. Each rock gets its own yaw and tint.
-function buildRock(t: Terrain, o: Obstacle): THREE.Object3D {
+function rockPlacement(t: Terrain, o: Obstacle): { matrix: THREE.Matrix4; tint: number } {
   const seed = hashStr(o.id);
   const g = seat(t, o);
   g.rotation.y = seed * Math.PI * 2;
   g.scale.setScalar(o.r * S);
-  const rock = model('rock');
-  const tint = 0.9 + seed * 0.2;
-  eachMaterial(rock, (m) => m.color.multiplyScalar(tint));
-  g.add(rock);
-  return g;
+  g.updateMatrix();
+  return { matrix: g.matrix, tint: 0.9 + seed * 0.2 };
 }
 
 // A burnt pickup from tools/blender/wreck.py, modeled at the 0.7-tile reference size.
