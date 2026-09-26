@@ -6,7 +6,7 @@ import { CONFIG } from '../config';
 import { partDef } from '../data/parts';
 import { PHYSICS } from '../data/physics';
 import { buildDrive, freeDrive, restFrame, simulateTurn, syncDrive, TURN_STEPS, type Drive, type TurnResult } from '../phys/drive';
-import { groundPoint, type TurnFrames, type V3, type VehicleFrame } from '../phys/frames';
+import { groundPoint, toMap, type TurnFrames, type V3, type VehicleFrame } from '../phys/frames';
 import { applyTurn, physicsMove } from '../phys/turn';
 import { playerVehicle } from '../sim/damage';
 import { mountedParts } from '../sim/grid';
@@ -16,7 +16,9 @@ import { maxTurn, vehicleStats } from '../sim/stats';
 import { clickOrder, throttleFor } from '../sim/steering';
 import type { Vehicle, World } from '../sim/types';
 import type { Vec } from '../sim/vec';
-import { playerSees } from '../sim/vision';
+import { playerSees, tileOf, visibleTiles } from '../sim/vision';
+import { dist } from '../sim/vec';
+import { TERRAIN } from '../data/terrain';
 import { endTurn, hostileToPlayer, newWorld, setAutoFire, setMoveOrder, setWeaponOrder } from '../sim/world';
 import { PAL } from '../render/palette';
 import { CharacterScreen } from '../ui/character';
@@ -42,6 +44,12 @@ const MIN_ZONE_HALF_ANGLE = Math.PI / 12; // zones stay visible for trucks that 
 const DUST_CHANCE = 0.3; // per moving vehicle per frame while a turn plays
 const SMOKE_CHANCE = 0.05; // per hurt vehicle per frame
 const HURT_HULL = 0.35; // hull share under which a vehicle smokes
+const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is recomputed during a turn
+const SUN_DISTANCE = 100; // meters from the focus to the sun, sideways
+const SUN_HEIGHT = 120; // meters above the focus
+
+type LiveVision = { visible: Set<number>; explored: boolean[]; from: Vec | null };
+
 const GUN_HEIGHT = 1.6; // meters above the body center where shots start and land
 
 export class Game {
@@ -61,6 +69,7 @@ export class Game {
   private readonly views = new Map<string, VehicleView>();
   private frames: Record<string, VehicleFrame> = {}; // last shown pose per vehicle
   private anim: { result: TurnResult; start: number | null } | null = null;
+  private live: LiveVision | null = null; // the player's view while a turn plays
   private hoverGround: Vec | null = null;
   private hovered: string | null = null;
   private selected: string | null = null;
@@ -152,7 +161,7 @@ export class Game {
   }
 
   private refreshUi(): void {
-    this.fog.update(this.world);
+    if (!this.anim) this.fog.update(this.world);
     this.obstacles.sync(this.world.obstacles);
     this.hud.renderTop(this.world);
     this.weapons.render();
@@ -257,8 +266,12 @@ export class Game {
     this.apply(w);
   }
 
+  // While a turn plays, visibility follows the truck's current spot, not the end of the turn.
   private isVehicleVisible(v: Vehicle): boolean {
-    return v.id === playerVehicle(this.world).id || playerSees(this.world, v.pos);
+    if (v.id === playerVehicle(this.world).id) return true;
+    const f = this.frames[v.id];
+    if (this.live && f) return this.live.visible.has(tileOf(this.world, toMap(f.pos)));
+    return playerSees(this.world, v.pos);
   }
 
   private pickVehicle(cx: number, cy: number): Vehicle | null {
@@ -288,7 +301,9 @@ export class Game {
   endTurn(): void {
     if (this.anim) return;
     let result: TurnResult | null = null;
+    const explored = [...this.world.player.explored];
     this.world = endTurn(this.world, physicsMove(this.drive, (r) => (result = r)));
+    this.live = { visible: new Set(this.world.player.visible), explored, from: null };
     if (!result) throw new Error('Turn ran without physics');
     this.anim = { result, start: null };
     this.path.clear();
@@ -304,6 +319,7 @@ export class Game {
     syncDrive(this.drive, this.world);
     for (const [id, fs] of Object.entries(result.frames)) this.frames[id] = fs[fs.length - 1];
     this.anim = null;
+    this.live = null;
     this.playEventFx();
     this.refreshUi();
   }
@@ -363,6 +379,7 @@ export class Game {
     const dt = now - this.last;
     this.last = now;
     const step = this.animStep(now);
+    this.updateLiveVision();
     this.syncVehicles(step);
     this.drawOverlays();
     const me = this.frames[playerVehicle(this.world).id];
@@ -370,13 +387,27 @@ export class Game {
     this.rig.tick(dt);
     const focus = this.rig.camera.position.clone();
     this.sun.target.position.copy(me ? new THREE.Vector3(me.pos.x, me.pos.y, me.pos.z) : focus);
-    this.sun.position.copy(this.sun.target.position).add(new THREE.Vector3(-60, 120, -30));
+    this.sun.position.copy(this.sun.target.position).add(new THREE.Vector3(TERRAIN.light.x * SUN_DISTANCE, SUN_HEIGHT, TERRAIN.light.y * SUN_DISTANCE));
     this.fx.tick(dt);
     this.labels.update(this.world, this.rig);
     this.renderer.render(this.scene, this.rig.camera);
     // The preview runs after the frame is drawn, so a click shows at once.
     this.refreshPlan();
     requestAnimationFrame((t) => this.tick(t));
+  }
+
+  // Recomputes the player's sight from the truck's current spot once it has moved far enough.
+  private updateLiveVision(): void {
+    const live = this.live;
+    const f = this.frames[playerVehicle(this.world).id];
+    if (!live || !this.anim || !f) return;
+    const at = toMap(f.pos);
+    if (live.from && dist(live.from, at) < LIVE_VISION_STEP) return;
+    live.from = at;
+    live.visible = visibleTiles(this.world, at);
+    for (const t of live.visible) live.explored[t] = true;
+    const player = { ...this.world.player, visible: [...live.visible].sort((a, b) => a - b), explored: live.explored };
+    this.fog.update({ ...this.world, player });
   }
 
   // Physics step shown now while a turn plays, or null between turns.

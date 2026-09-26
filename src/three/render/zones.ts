@@ -46,13 +46,14 @@ export class ZonesView {
   }
 
   // halfAngle: the zones fan out over half of the truck's turn limit on each side of its heading.
-  // A truck at rest has no hold zone: red runs all the way to the hold zone's outer edge.
+  // At rest there is no hold zone: red covers the first third of reach and green the rest.
   update(terrain: Terrain, pos: Vec, heading: number, speed: number, halfAngle: number): void {
     const z = zoneEdges();
-    const holdStart = speed === 0 ? z.holdEnd : z.brakeEnd;
-    this.band('brake', terrain, pos, heading, halfAngle, 0, holdStart);
-    this.band('hold', terrain, pos, heading, halfAngle, holdStart, z.holdEnd);
-    this.band('accelerate', terrain, pos, heading, halfAngle, z.holdEnd, z.reach);
+    const brakeEnd = speed === 0 ? z.restBrakeEnd : z.brakeEnd;
+    const holdEnd = speed === 0 ? z.restBrakeEnd : z.holdEnd;
+    this.band('brake', terrain, pos, heading, halfAngle, 0, brakeEnd);
+    this.band('hold', terrain, pos, heading, halfAngle, brakeEnd, holdEnd);
+    this.band('accelerate', terrain, pos, heading, halfAngle, holdEnd, z.reach);
   }
 
   private band(t: Throttle, terrain: Terrain, pos: Vec, heading: number, half: number, r0: number, r1: number): void {

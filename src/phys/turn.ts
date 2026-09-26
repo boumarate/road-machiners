@@ -2,13 +2,16 @@
 // runs the turn in the physics engine and writes poses, speeds, trails, fuel, crashes and orders back.
 
 import { RULES } from '../data/rules';
+import { playerVehicle } from '../sim/damage';
 import { applyCrash } from '../sim/movement';
 import { vehicleStats } from '../sim/stats';
 import type { Pose, World } from '../sim/types';
 import { dist } from '../sim/vec';
+import { visibleTiles } from '../sim/vision';
 import { bodyState, simulateTurn, syncDrive, toTilesPerTurn, TURN_STEPS, type Drive, type TurnResult } from './drive';
 import { headingOf, toMap } from './frames';
 
+const EXPLORE_EVERY = 4; // trail poses between sight checks while exploring along a turn
 const STOPPED = 0.05; // tiles per turn; slower than this a braking truck counts as stopped
 
 // Returns the movement step for endTurn. It keeps the turn's result for the caller through done.
@@ -17,6 +20,7 @@ export function physicsMove(d: Drive, done: (r: TurnResult) => void): (w: World)
     syncDrive(d, w);
     const r = simulateTurn(d, w);
     applyTurn(w, r);
+    exploreAlong(w);
     done(r);
   };
 }
@@ -42,6 +46,14 @@ export function applyTurn(w: World, r: TurnResult): void {
     if (!a) throw new Error(`Crash with unknown vehicle ${c.a}`);
     const b = w.vehicles.find((v) => v.id === c.b) ?? null;
     applyCrash(w, a, b, c.b, toTilesPerTurn(c.impact));
+  }
+}
+
+// Tiles the player saw while driving count as explored, not only those seen at the turn's end.
+function exploreAlong(w: World): void {
+  const me = playerVehicle(w);
+  for (let i = 0; i < me.trail.length; i += EXPLORE_EVERY) {
+    for (const t of visibleTiles(w, me.trail[i])) w.player.explored[t] = true;
   }
 }
 

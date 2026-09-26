@@ -35,8 +35,6 @@ export const PHYSICS = {
     steerGain: 1.6, // wheel angle per radian of heading error
     throttleGain: 0.5, // throttle per m/s of speed error
     stopDecel: 8, // m/s^2 a driver plans to brake at when stopping on a point
-    reverseAbove: 100, // degrees off the target from which a slow truck backs up
-    reverseUntil: 50, // degrees off the target at which backing up ends
     reverseBelow: 4, // m/s; only a truck slower than this starts backing up
     reverseSpeed: 5, // m/s while backing up
   },

@@ -28,9 +28,8 @@ const EDGE = 'edge';
 export const toMps = (tilesPerTurn: number) => (tilesPerTurn * S) / PHYSICS.turnSeconds;
 export const toTilesPerTurn = (mps: number) => (mps * PHYSICS.turnSeconds) / S;
 
-// The driver's memory between turns. reverse is 0 when driving forward, or the side the nose swings
-// to while backing up: 1 or -1.
-type Memory = { steer: number; reverse: number };
+// The driver's memory between turns: current wheel angle, and whether it is backing toward its point.
+type Memory = { steer: number; reverse: boolean };
 
 // Everything a turn needs to start: the physics world, which body and collider belongs to which
 // vehicle or obstacle, and each driver's memory.
@@ -75,7 +74,7 @@ export function syncDrive(d: Drive, w: World): void {
     const handle = d.bodies[v.id];
     if (handle === undefined) {
       d.bodies[v.id] = addVehicle(d.world, w, v);
-      d.memory[v.id] = { steer: 0, reverse: 0 };
+      d.memory[v.id] = { steer: 0, reverse: false };
       continue;
     }
     const body = d.world.getRigidBody(handle);
@@ -240,15 +239,23 @@ function driveStep(c: Car): void {
       c.result.passed = true;
     }
     if (!c.result.passed && !c.result.arrived) {
-      if (mem.reverse === 0 && target > 0 && Math.abs(ang) > D.reverseAbove * DEG && Math.abs(speed) < D.reverseBelow) mem.reverse = Math.sign(ang) || 1;
-      if (mem.reverse !== 0 && Math.abs(ang) < D.reverseUntil * DEG) mem.reverse = 0;
-      if (mem.reverse !== 0) target = -D.reverseSpeed;
-      // Backing up turns the truck the opposite way from the wheels.
-      steerTo = mem.reverse !== 0 ? -mem.reverse * plan.maxSteer : clamp(ang * D.steerGain, -plan.maxSteer, plan.maxSteer);
+      // From near rest, a point behind the truck is backed toward, rear first. It stays in reverse
+      // until the point is ahead again or reached.
+      const behind = Math.abs(ang) > Math.PI / 2;
+      if (!mem.reverse && target > 0 && behind && Math.abs(speed) < D.reverseBelow) mem.reverse = true;
+      if (mem.reverse && !behind) mem.reverse = false;
+      if (mem.reverse) {
+        target = -Math.min(D.reverseSpeed, plan.target);
+        // The rear aims at the point. Backing up turns the truck the opposite way from the wheels.
+        const rearAng = angleDiff(headingOf(body.rotation()) + Math.PI, Math.atan2(dz, dx));
+        steerTo = clamp(-rearAng * D.steerGain, -plan.maxSteer, plan.maxSteer);
+      } else {
+        steerTo = clamp(ang * D.steerGain, -plan.maxSteer, plan.maxSteer);
+      }
     }
   }
   if (c.result.arrived) target = 0;
-  if (!plan.dest && mem.reverse !== 0) mem.reverse = 0;
+  if (!plan.dest) mem.reverse = false;
   const step = T.steerRate * DT;
   mem.steer = clamp(steerTo, mem.steer - step, mem.steer + step);
   // Positive wheel steering turns toward -z; map headings grow toward +z.

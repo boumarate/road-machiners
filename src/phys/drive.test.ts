@@ -53,9 +53,19 @@ describe('physics turns', () => {
     expect(me(w).order).toBeNull();
   });
 
-  it('a click behind backs up and turns the truck around', () => {
-    const { w } = play(ordered({ kind: 'through', dest: { x: 21, y: 31 } }), 4);
-    expect(Math.abs(angleDiff(me(w).heading, Math.PI))).toBeLessThan(Math.PI / 3);
+  it('from rest, a click behind backs toward it rear first', () => {
+    const { w } = play(ordered({ kind: 'through', dest: { x: 24, y: 31 } }), 8);
+    expect(dist(me(w).pos, { x: 24, y: 31 })).toBeLessThan(RULES.passRadius + 0.5);
+    expect(Math.abs(angleDiff(me(w).heading, 0))).toBeLessThan(Math.PI / 4);
+  });
+
+  it('tiles seen while driving stay explored', () => {
+    const w0 = ordered({ kind: 'through', dest: { x: 50, y: 30 } }, 6);
+    w0.player.explored.fill(false);
+    const { w } = play(w0, 1);
+    const mid = Math.round((30 + me(w).pos.x) / 2);
+    expect(w.player.explored[30 * w.size + mid]).toBe(true);
+    expect(w.player.explored[30 * w.size + mid + 12]).toBe(me(w).pos.x + 10 >= mid + 12);
   });
 
   it('a brake order stops the truck and clears', () => {
