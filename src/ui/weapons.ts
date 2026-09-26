@@ -1,5 +1,5 @@
 import { partDef } from "../data/parts";
-import { fireBlock, hitOdds } from "../sim/combat";
+import { fireBlock, hitOdds, type FireBlock } from "../sim/combat";
 import { playerVehicle } from "../sim/damage";
 import { mountedParts } from "../sim/grid";
 import { vehicleStats, type MountedWeapon } from "../sim/stats";
@@ -9,7 +9,7 @@ import { setAutoFire, setWeaponOrder } from "../sim/world";
 import { el, panel } from "./dom";
 import type { UiHost } from "./host";
 
-const BLOCK_TEXT = {
+export const BLOCK_TEXT: Record<FireBlock, string> = {
   disabled: "disabled",
   reloading: "reloading",
   range: "out of range",

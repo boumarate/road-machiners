@@ -104,6 +104,7 @@ export class InventoryView {
     const state = core ? 'fixed' : mounted ? 'mounted' : 'spare';
     const cls = it.kind === 'part' ? `${KIND_CLASS[partDef(it.part.defId).kind]} ${state}` : `k-good g-${it.good}`;
     const node = el('div', { class: `inv-item ${cls}`, style: pos(x, y, wd, ht), title: itemTitle(it, mounted) }, label.short);
+    if (it.kind === 'part') node.append(conditionBar(it.part));
     if (!core) node.addEventListener('pointerdown', (e) => this.startDrag(e, 'grid', it.id, it, { x: Math.floor(e.offsetX / CELL_PX), y: Math.floor(e.offsetY / CELL_PX) }));
     return node;
   }
@@ -271,6 +272,12 @@ function itemTitle(it: GridItem, mounted: boolean): string {
   if (it.kind === 'good') return GOODS[it.good].name;
   if (partDef(it.part.defId).kind === 'core') return `${partTitle(it.part)}\nBuilt in: cannot be moved, only repaired`;
   return `${partTitle(it.part)}\n${mounted ? 'Mounted and working' : 'Spare: not on a matching mount'}`;
+}
+
+// Thin bar along the bottom of a part: its width is hp over max hp. A broken part shows a red bar.
+function conditionBar(p: PartInstance): HTMLElement {
+  const max = partDef(p.defId).hp;
+  return el('div', { class: `inv-hp${p.hp > 0 ? '' : ' broken'}` }, el('div', { style: `width:${(p.hp / max) * 100}%` }));
 }
 
 function partTitle(p: PartInstance): string {

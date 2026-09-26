@@ -9,7 +9,7 @@ import { PHYSICS } from '../../data/physics';
 import { bodyOf, wheelMounts, type Body } from '../../phys/body';
 import { headingOf, headingQuat, type VehicleFrame } from '../../phys/frames';
 import { FACTION_COLORS, PAL, shade } from '../../render/palette';
-import { mountedParts } from '../../sim/grid';
+import { baseGrid, itemCells, mountedItems, mountedParts, sideOf, type SideLetter } from '../../sim/grid';
 import type { Vehicle } from '../../sim/types';
 
 const S = PHYSICS.metersPerTile;
@@ -19,8 +19,8 @@ export type Ring3 = { r: number; width: number; color: number; alpha: number };
 
 type Look = ChassisDef['look'];
 
-// Extra hull features as fractions of the chassis half-length (x) and half-height (y).
-// turretX/cargoFrom/cargoTo/armorFrom/armorTo are along x; cabHeight is a fraction of half.y.
+// Body shape features as fractions of the chassis half-length (x) and half-height (y).
+// turretX/cargoFrom/cargoTo/cageX are along x; cabHeight is a fraction of half.y.
 type Shape = {
   cabFrom: number;
   cabTo: number;
@@ -28,25 +28,36 @@ type Shape = {
   turretX: number;
   cargoFrom: number;
   cargoTo: number;
-  armorFrom: number;
-  armorTo: number;
+  cageX: number;
 };
 
 const SHAPES: Record<Look, Shape> = {
-  pickup: { cabFrom: 0.05, cabTo: 0.85, cabHeight: 1.1, turretX: 0.55, cargoFrom: -0.9, cargoTo: 0.0, armorFrom: -0.85, armorTo: 0.85 },
-  hauler: { cabFrom: 0.1, cabTo: 0.75, cabHeight: 1.1, turretX: 0.5, cargoFrom: -0.9, cargoTo: 0.15, armorFrom: -0.9, armorTo: 0.9 },
-  buggy: { cabFrom: -0.5, cabTo: 0.35, cabHeight: 0.8, turretX: -0.1, cargoFrom: -0.85, cargoTo: -0.4, armorFrom: -0.8, armorTo: 0.8 },
-  wagon: { cabFrom: 0.55, cabTo: 0.9, cabHeight: 0.7, turretX: 0.15, cargoFrom: -0.85, cargoTo: -0.2, armorFrom: -0.9, armorTo: 0.9 },
+  pickup: { cabFrom: 0.05, cabTo: 0.85, cabHeight: 1.1, turretX: 0.55, cargoFrom: -0.9, cargoTo: 0.0, cageX: 0.85 },
+  hauler: { cabFrom: 0.1, cabTo: 0.75, cabHeight: 1.1, turretX: 0.5, cargoFrom: -0.9, cargoTo: 0.15, cageX: 0.9 },
+  buggy: { cabFrom: -0.5, cabTo: 0.35, cabHeight: 0.8, turretX: -0.1, cargoFrom: -0.85, cargoTo: -0.4, cageX: 0.8 },
+  wagon: { cabFrom: 0.55, cabTo: 0.9, cabHeight: 0.7, turretX: 0.15, cargoFrom: -0.85, cargoTo: -0.2, cageX: 0.9 },
 };
+
+const PLATE_THICK = 0.12; // plate thickness as a fraction of the chassis half-width
+const RAM_DEPTH = 0.5; // how far a ram wedge sticks out, as a fraction of the chassis half-width
+
+// Yaw that turns a side piece's local +x outward. Local +x is the nose and local +z the truck's right.
+const SIDE_YAW: Record<SideLetter, number> = { F: 0, B: Math.PI, R: -Math.PI / 2, L: Math.PI / 2 };
+
+// A triangular prism with its base on x = 0, its tip at x = 1, across z from -0.5 to 0.5 and y from -0.5 to 0.5.
+function wedgeGeometry(): THREE.BufferGeometry {
+  const g = new THREE.CylinderGeometry(1, 1, 1, 3).rotateY(Math.PI / 2).translate(0.5, 0, 0);
+  return g.scale(1 / 1.5, 1, 1 / Math.sqrt(3));
+}
 
 type Wheel = { mount: THREE.Group; spin: THREE.Mesh; restY: number };
 
 // A model rebuilds only when this changes: chassis, faction, and each visually relevant
 // (non-engine) mounted part's def and damage state.
 function signatureOf(v: Vehicle): string {
-  const parts = mountedParts(v)
-    .filter((p) => partDef(p.defId).kind !== 'engine')
-    .map((p) => `${p.defId}:${p.hp > 0 ? 1 : 0}`)
+  const parts = mountedItems(v)
+    .filter((it) => partDef(it.part.defId).kind !== 'engine')
+    .map((it) => `${it.part.defId}@${it.x},${it.y},${it.rot}:${it.part.hp > 0 ? 1 : 0}`)
     .join(',');
   return `${v.chassisId}|${v.faction}|${parts}`;
 }
@@ -184,34 +195,36 @@ export class VehicleView {
     }
   }
 
+  // Plates and rams sit on the side they are mounted on, over the span their grid cells cover.
   private buildArmor(v: Vehicle, body: Body, shape: Shape): void {
     for (const p of mountedParts(v, 'armor')) {
       const def = partDef(p.defId);
-      if (def.kind !== 'armor') continue;
+      if (def.kind !== 'armor') throw new Error(`${p.id} is mounted as armor but is ${def.kind}`);
       const tone = p.hp > 0 ? 1 : 0.6;
-      const from = shape.armorFrom * body.half.x;
-      const to = shape.armorTo * body.half.x;
-      if (def.look === 'plates') {
-        for (const side of [-1, 1]) {
-          const plate = new THREE.Mesh(
-            new THREE.BoxGeometry(Math.abs(to - from), body.half.y * 1.6, body.half.z * 0.15),
-            new THREE.MeshLambertMaterial({ color: shade(PAL.metal, tone), flatShading: true }),
-          );
-          plate.position.set((from + to) / 2, body.half.y * 0.9, side * (body.half.z + body.half.z * 0.1));
-          plate.castShadow = true;
-          this.root.add(plate);
-        }
-      } else {
+      const side = sideOf(v, p);
+      if (!side) throw new Error(`Armor ${p.id} is mounted off a side letter`);
+      if (def.look === 'cage') {
         // A cage: bars rising above the cab, so it reads from the iso view instead of hiding under it.
         const cabTop = body.half.y + shape.cabHeight * body.half.y * 2;
         const barMat = new THREE.MeshLambertMaterial({ color: shade(PAL.metal, tone * 0.85), flatShading: true });
         for (const level of [0.2, 0.55, 0.9]) {
           const bar = new THREE.Mesh(new THREE.BoxGeometry(body.half.x * 0.08, body.half.y * 0.18, body.half.z * 1.9), barMat);
-          bar.position.set(to, cabTop + level * body.half.y, 0);
+          bar.position.set(shape.cageX * body.half.x, cabTop + level * body.half.y, 0);
           bar.castShadow = true;
           this.root.add(bar);
         }
+        continue;
       }
+      const span = cellSpan(v, p.id, side, body);
+      const plate = def.look === 'plates';
+      const depth = body.half.z * (plate ? PLATE_THICK : RAM_DEPTH);
+      const geo = plate ? new THREE.BoxGeometry(1, 1, 1).translate(0.5, 0, 0) : wedgeGeometry();
+      geo.scale(depth, body.half.y * (plate ? 1.6 : 0.9), span.width);
+      const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: shade(plate ? PAL.metal : PAL.metalLight, tone), flatShading: true }));
+      mesh.rotation.y = SIDE_YAW[side];
+      mesh.position.copy(sidePoint(side, span.center, body)).setY(body.half.y * (plate ? 0.9 : 0.6));
+      mesh.castShadow = true;
+      this.root.add(mesh);
     }
   }
 
@@ -274,6 +287,32 @@ export class VehicleView {
       turret.add(barrel);
     }
   }
+}
+
+// Where a part's grid cells lie along a side, in body meters. The grid is a top view with the nose on row 0 and
+// the truck's left on column 0. Front and back parts span across the body, left and right parts along it.
+function cellSpan(v: Vehicle, partId: string, side: SideLetter, body: Body): { center: number; width: number } {
+  const item = v.items.find((it) => it.kind === 'part' && it.part.id === partId);
+  if (!item) throw new Error(`Part ${partId} is not on ${v.id}`);
+  const grid = baseGrid(v.chassisId);
+  const cells = itemCells(item);
+  const across = side === 'F' || side === 'B';
+  const lo = Math.min(...cells.map((c) => (across ? c.x : c.y)));
+  const hi = Math.max(...cells.map((c) => (across ? c.x : c.y))) + 1;
+  if (across) {
+    const cell = (body.half.z * 2) / grid.w;
+    return { center: -body.half.z + ((lo + hi) / 2) * cell, width: (hi - lo) * cell };
+  }
+  const cell = (body.half.x * 2) / grid.h;
+  return { center: body.half.x - ((lo + hi) / 2) * cell, width: (hi - lo) * cell };
+}
+
+// The point on a side's edge at `along`, across the body for front and back, along it for left and right.
+function sidePoint(side: SideLetter, along: number, body: Body): THREE.Vector3 {
+  if (side === 'F') return new THREE.Vector3(body.half.x, 0, along);
+  if (side === 'B') return new THREE.Vector3(-body.half.x, 0, along);
+  if (side === 'R') return new THREE.Vector3(along, 0, body.half.z);
+  return new THREE.Vector3(along, 0, -body.half.z);
 }
 
 function disposeChildren(group: THREE.Group): void {

@@ -22,6 +22,7 @@ import { TERRAIN } from '../data/terrain';
 import { endTurn, hostileToPlayer, newWorld, setAutoFire, setDirect, setMoveOrder, setWeaponOrder } from '../sim/world';
 import { PAL } from '../render/palette';
 import { CharacterScreen } from '../ui/character';
+import { HitCard } from '../ui/hitCard';
 import type { UiHost } from '../ui/host';
 import { Hud } from '../ui/hud';
 import { InventoryScreen } from '../ui/inventory';
@@ -57,10 +58,13 @@ type Playback = { result: TurnResult; before: World; start: number | null; moved
 const MOVE_MS = (TURN_STEPS / PHYSICS.stepsPerSecond) * 1000; // real time the movement plays over
 const MOVED_BY_RULES = 0.5; // tiles between a vehicle's drawn spot and its sim spot that mean the rules moved it
 const MARKER_LIFT = 3.5; // meters above a target where its weapon marker sits
+const CARD_RIM_POINTS = 16; // points around a truck's radius that measure how wide it shows on screen
 
 const GUN_HEIGHT = 1.6; // meters above the body center where shots start and land
+const ROUND_STAGGER = 0.4; // share of the shot time over which a burst's rounds leave the gun
 
-// The point `offset` meters from target point b, across the line of fire from a, positive to the shooter's right.
+// Where a round lands: `offset` meters from target point b, across the line of fire from a, positive to the
+// shooter's right. A hit lands on the target at its offset, a miss beside it.
 // 3D x is map x and 3D z is map y, so the right-hand normal matches the sim's.
 function besideTarget(a: V3, b: V3, offset: number): V3 {
   const dx = b.x - a.x;
@@ -102,6 +106,7 @@ export class Game {
   private last = performance.now();
 
   private readonly hud = new Hud();
+  private readonly hitCard = new HitCard();
   private readonly weapons: WeaponPanel;
   private readonly town: TownScreen;
   private readonly character: CharacterScreen;
@@ -227,6 +232,19 @@ export class Game {
     const w = this.displayWorld();
     const v = this.hovered ? w.vehicles.find((x) => x.id === this.hovered && playerSees(w, x.pos)) ?? null : null;
     this.hud.showInfo(w, v, v ? hostileToPlayer(w, v) : false);
+    this.hitCard.render(w, v ? v.id : null);
+  }
+
+  // The hover card sits beside the hovered truck, clear of it on screen. It hides during playback and in modals.
+  private placeHitCard(): void {
+    const f = this.hovered ? this.frames[this.hovered] : undefined;
+    const v = this.hovered ? this.world.vehicles.find((x) => x.id === this.hovered) : undefined;
+    if (this.anim !== null || this.modalOpen() || !f || !v) return this.hitCard.hide();
+    const r = vehicleStats(this.world, v).radius * PHYSICS.metersPerTile;
+    const c = this.rig.screenOf(f.pos);
+    const reach = Array.from({ length: CARD_RIM_POINTS }, (_, i) => (i / CARD_RIM_POINTS) * Math.PI * 2)
+      .map((a) => Math.abs(this.rig.screenOf({ x: f.pos.x + r * Math.cos(a), y: f.pos.y, z: f.pos.z + r * Math.sin(a) }).x - c.x));
+    this.hitCard.place(c, Math.max(...reach));
   }
 
   // Numbered labels above each target listing the weapons aimed at it and whether they can fire now.
@@ -470,9 +488,13 @@ export class Game {
         const label = `${slot >= 0 ? `[${slot + 1}] ` : ''}${heavy ? 'Cannon' : 'MG'} ${hits}/${e.rounds.length}${dealt > 0 ? ` −${dealt}` : ''}`;
         const row = rows.get(e.target) ?? 0;
         rows.set(e.target, row + 1);
-        // The burst lands on the target if any round hit, else beside it where the first round crossed.
-        const land = hits > 0 ? b : besideTarget(a, b, e.rounds[0].offset);
-        this.fx.shot(a, b, land, hits > 0, heavy, label, row, CONFIG.combatShotMs, CONFIG.combatReadMs);
+        // Round starts spread over the first part of the shot time, so every bolt lands before the results show.
+        const flight = CONFIG.combatShotMs * (1 - ROUND_STAGGER);
+        e.rounds.forEach((r, k) => {
+          const delay = e.rounds.length > 1 ? (k / (e.rounds.length - 1)) * CONFIG.combatShotMs * ROUND_STAGGER : 0;
+          this.fx.shot(a, besideTarget(a, b, r.offset), r.hit || r.hits.length > 0, heavy, delay, flight);
+        });
+        this.fx.label(b, label, hits > 0 ? '#ffb070' : '#c8b898', row, CONFIG.combatShotMs, CONFIG.combatReadMs);
       }
       if (e.t === 'collision') {
         const p = this.eventPoint(e.a);
@@ -622,6 +644,7 @@ export class Game {
     this.path.root.visible = !hide;
     this.weaponRange.root.visible = false;
     this.placeTargetMarkers();
+    this.placeHitCard();
     if (hide) return;
     const me = playerVehicle(this.world);
     const s = vehicleStats(this.world, me);
