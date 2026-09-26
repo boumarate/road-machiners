@@ -9,6 +9,7 @@ import type { GameEvent } from "../sim/types";
 import type { CameraRig } from "./render/camera";
 
 const CENTER: Placement = { pan: 0, gain: 1 };
+const LOG_SIZE = 100; // recent cues kept for debugging, enough for several busy turns
 
 // Turn result stings, most important first. Only the first one found plays, so a busy turn stays readable.
 const STINGS: { cue: CueId; match: (e: GameEvent, playerId: string) => boolean }[] = [
@@ -24,14 +25,23 @@ export function stingOf(events: GameEvent[], playerId: string): CueId | null {
 }
 
 export class SoundDirector {
+  readonly log: string[] = []; // recent cue ids, newest last; read it from __KOROVAN__ in dev
+
   constructor(private player: SoundPlayer, private rig: CameraRig) {}
 
   at(cue: CueId, p: V3, delayMs: number): void {
+    this.record(cue);
     this.player.play(cue, this.place(p), delayMs);
   }
 
   ui(cue: CueId): void {
+    this.record(cue);
     this.player.play(cue, CENTER, 0);
+  }
+
+  private record(cue: CueId): void {
+    this.log.push(cue);
+    if (this.log.length > LOG_SIZE) this.log.shift();
   }
 
   private place(p: V3): Placement {

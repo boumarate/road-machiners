@@ -138,7 +138,7 @@ export class Game {
   private readonly zones = new ZonesView();
   private readonly path = new PathView();
   private readonly fx: Fx3D;
-  private readonly sound: SoundDirector;
+  readonly sound: SoundDirector;
   private panelOpen = false; // last frame's panel state, for open and close sounds
   private readonly loops: SoundLoops;
   private readonly views = new Map<string, VehicleView>();
