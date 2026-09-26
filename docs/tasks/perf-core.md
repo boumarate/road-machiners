@@ -1,6 +1,6 @@
 # Performance core
 
-**Status:** executing
+**Status:** validating
 **Branch:** icarus-exploration
 **Worktree:** .worktrees/icarus-exploration
 **Goal:** `npm run perf` passes every budget on the M3 Pro, and the user confirms the game feels smooth in play.
@@ -208,5 +208,17 @@ The first `npm run perf` after wave 1 missed only `turnMs`: 481 ms on the first 
 - Each phase is one commit and reverts alone.
 
 ## Verify
+
+`npm test` passes 285 tests in 37 s, down from 108 s. Typecheck and `npm run playtest` pass.
+
+| metric | before | after | budget |
+|---|---|---|---|
+| boot | 4.7 s | 1.98 s | 2 s |
+| turn, first | 1100 ms | 121 ms | 100 ms |
+| turn, later | 450 ms | 72-90 ms | 100 ms |
+| move preview | 150-450 ms | 37-51 ms | 50 ms |
+| frame p95 | 16.8 ms | 16.8 ms | 17 ms |
+
+The first turn and the first preview still miss by a small margin. On the first turn, physics takes 57 ms and vision takes 40 ms.
 
 ## Conclusion
