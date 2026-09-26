@@ -108,7 +108,7 @@ describe('world', () => {
       return w;
     };
     expect(run()).toEqual(run());
-  });
+  }, 10_000); // two 120-tile worlds run side by side; about 3 seconds alone
 
   it('keeps the player out of obstacles on a long drive', () => {
     let w = setMoveOrder(newWorld(3, START_KITS.standard), { kind: 'stopAt', dest: { x: 50, y: 50 } });

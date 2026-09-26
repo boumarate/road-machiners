@@ -37,7 +37,7 @@ const WAVE = {
   repeat: 14, // seconds from one burst to the next while the turn waits
 };
 
-const PLUME = { puffs: 5, width: 3, height: 4, opacity: 0.22, riseMs: 5000 }; // tiles and ms
+const PLUME = { puffs: 7, width: 4, height: 7, opacity: 0.55, riseMs: 5000 }; // tiles and ms; light enough to read over dark fog
 const BLIP = { radius: 0.7, dot: 0.25, opacity: 0.9 }; // tiles
 
 type Front = {
