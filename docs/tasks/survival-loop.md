@@ -1,6 +1,6 @@
 # Survival loop
 
-**Status:** executing
+**Status:** reviewing
 **Branch:** survival-loop
 **Worktree:** .worktrees/survival-loop
 **Goal:** On the Icarus map with the standard start kit, a town-to-town trade run makes the player manage fuel, supplies and breakdowns, choose shaded stops, spot raiders before they close in, and find worthwhile scavenging on the way. Combat is avoidable and dangerous. The user confirms this by playing.
