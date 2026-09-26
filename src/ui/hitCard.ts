@@ -4,50 +4,10 @@
 import { fireBlock, hitOdds, type HitOdds } from '../sim/combat';
 import { playerVehicle } from '../sim/damage';
 import { vehicleStats, type MountedWeapon } from '../sim/stats';
-import type { Aim, Contact, Vehicle, World } from '../sim/types';
+import type { Aim, Vehicle, World } from '../sim/types';
 import { DEG } from '../sim/vec';
-import { el, panel } from './dom';
+import { el } from './dom';
 import { BLOCK_TEXT } from './weapons';
-
-const CONTACT_SOURCE_NAMES: Record<Contact['sources'][number], string> = {
-  sound: 'Engine sound',
-  dust: 'Dust trail',
-  radio: 'Radio scanner',
-};
-
-// "Engine sound, dust trail" for a contact circle's causes.
-export function contactSourcesText(sources: Contact['sources']): string {
-  return sources.map((s) => CONTACT_SOURCE_NAMES[s]).join(', ');
-}
-
-// A small hover tip naming a contact circle's sources, positioned beside the cursor.
-export class ContactTip {
-  private root = panel('hitcard');
-
-  constructor() {
-    this.root.style.display = 'none';
-  }
-
-  render(sources: Contact['sources'] | null): void {
-    if (!sources) {
-      this.root.replaceChildren();
-      this.hide();
-      return;
-    }
-    this.root.replaceChildren(el('h3', {}, 'Contact'), el('div', { class: 'hc-row' }, contactSourcesText(sources)));
-  }
-
-  hide(): void {
-    this.root.style.display = 'none';
-  }
-
-  place(p: { x: number; y: number }): void {
-    if (this.root.childElementCount === 0) return this.hide();
-    this.root.style.display = '';
-    this.root.style.left = `${p.x + 14}px`;
-    this.root.style.top = `${p.y + 14}px`;
-  }
-}
 
 export type HitRow = { label: string; odds: HitOdds | null; text: string; cause: string | null };
 export type HitCardData = { name: string; mine: HitRow[]; theirs: HitRow[] };

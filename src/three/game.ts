@@ -27,7 +27,7 @@ import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
 import { endTurn, hostileToPlayer, newWorld, setAutoFire, setDirect, setMoveOrder, setWeaponOrder } from '../sim/world';
 import { PAL } from '../render/palette';
 import { CharacterScreen } from '../ui/character';
-import { ContactTip, HitCard } from '../ui/hitCard';
+import { HitCard } from '../ui/hitCard';
 import type { UiHost } from '../ui/host';
 import { Hud } from '../ui/hud';
 import { InventoryScreen } from '../ui/inventory';
@@ -137,7 +137,6 @@ export class Game {
   private live: LiveVision | null = null; // the player's view while a turn plays
   private hoverGround: Vec | null = null;
   private hovered: string | null = null;
-  private hoveredContact: Contact | null = null;
   private selected: string | null = null;
   private following = true;
   private panFrom: { x: number; y: number } | null = null;
@@ -146,7 +145,6 @@ export class Game {
 
   private readonly hud: Hud;
   private readonly hitCard: HitCard;
-  private readonly contactTip = new ContactTip();
   private readonly weapons: WeaponPanel;
   private readonly town: TownScreen;
   private readonly character: CharacterScreen;
@@ -310,16 +308,6 @@ export class Game {
     const f = this.hovered ? this.frames[this.hovered] : undefined;
     if (this.anim !== null || this.modalOpen() || !f) return this.hitCard.hide();
     this.hitCard.show();
-  }
-
-  // Names the sources of the hovered contact circle, beside the cursor.
-  private placeContactTip(): void {
-    if (this.anim !== null || this.modalOpen() || !this.hoveredContact) {
-      this.contactTip.render(null);
-      return;
-    }
-    this.contactTip.render(this.hoveredContact.sources);
-    this.contactTip.place(this.rig.screenOf(groundPoint(this.world.terrain, this.hoveredContact.center)));
   }
 
   // Numbered labels above each target listing the weapons aimed at it and whether they can fire now.
@@ -505,24 +493,9 @@ export class Game {
   private onHover(e: MouseEvent): void {
     const id = this.pickVehicle(e.clientX, e.clientY)?.id ?? null;
     this.hoverGround = id || this.modalOpen() ? null : this.rig.groundUnder(e.clientX, e.clientY, this.ground);
-    this.hoveredContact = id || !this.hoverGround ? null : this.pickContact(this.hoverGround);
     if (id === this.hovered) return;
     this.hovered = id;
     this.refreshInfo();
-  }
-
-  // The nearest contact whose circle contains the ground point under the cursor, or null.
-  private pickContact(ground: Vec): Contact | null {
-    let best: Contact | null = null;
-    let bestD = Infinity;
-    for (const c of this.world.player.contacts) {
-      const d = dist(ground, c.center);
-      if (d <= c.radius && d < bestD) {
-        best = c;
-        bestD = d;
-      }
-    }
-    return best;
   }
 
   endTurn(): void {
@@ -853,13 +826,12 @@ export class Game {
       : null;
   }
 
-  // Rings under vehicles: red for hostiles, bright for my targets, gold for my truck and the hovered one,
-  // and the selected weapon's range around my truck.
+  // Rings under other vehicles: red for hostiles, bright for my targets, gold for the hovered one.
+  // My own truck has none.
   private ringsFor(v: Vehicle): Ring3[] {
     const me = playerVehicle(this.world);
     const r = vehicleStats(this.world, v).radius + 0.25;
-    if (v.id === me.id)
-      return [{ r: r + 0.05, width: 0.08, color: PAL.select, alpha: 0.45 }];
+    if (v.id === me.id) return [];
     const rings: Ring3[] = [];
     if (Object.values(me.weaponOrders).some((o) => o.targetId === v.id))
       rings.push({ r: r + 0.1, width: 0.12, color: PAL.target, alpha: 1 });
@@ -881,7 +853,6 @@ export class Game {
     this.dust.update(this.world, this.world.terrain, performance.now());
     const meFrame = this.frames[playerVehicle(this.world).id];
     this.soundRing.update(this.world.terrain, this.world.player.contacts, meFrame ? toMap(meFrame.pos) : playerVehicle(this.world).pos, this.world.turn, performance.now());
-    this.placeContactTip();
     if (hide) return;
     const me = playerVehicle(this.world);
     const s = vehicleStats(this.world, me);

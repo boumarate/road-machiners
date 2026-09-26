@@ -65,8 +65,9 @@ export type Job =
   | { kind: 'search'; stockId: string; turnsLeft: number; total: number };
 
 // A vehicle detected beyond sight. The circle always holds the true position, which it never reveals.
-// The circle always holds the vehicle's true position.
-export type Contact = { vehicleId: string; center: Vec; radius: number; sources: ('sound' | 'dust' | 'radio')[] };
+// The circle always holds the vehicle's true position. loudness is how far the engine carries, in tiles,
+// when the vehicle is heard; a big engine or a fast truck is louder. Null when it is not heard.
+export type Contact = { vehicleId: string; center: Vec; radius: number; sources: ('sound' | 'dust' | 'radio')[]; loudness: number | null };
 
 // A dust cloud a moving vehicle kicked up. It hangs in the world for a while: it rises, drifts back along
 // the way its truck came and with the wind, and fades. Once risen it can be seen from beyond sight range.

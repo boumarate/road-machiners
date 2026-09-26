@@ -87,7 +87,7 @@ export function contactsOf(world: World, observer: Vehicle, within: number): Con
     if (dust) sources.push('dust');
     if (moving && scanned > 0 && d <= scanned) sources.push('radio');
     if (sources.length === 0) continue;
-    out.push({ vehicleId: v.id, ...contactCircle(world, v, sources, d, dust), sources });
+    out.push({ vehicleId: v.id, ...contactCircle(world, v, sources, d, dust), sources, loudness: sources.includes('sound') ? soundRange(world, v) : null });
   }
   return out;
 }
