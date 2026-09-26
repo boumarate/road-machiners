@@ -1,36 +1,47 @@
-// Top bar with resources, event log, hover info card and key help.
+// Vehicle instruments, critical resources, event history and inspection.
 
-import { chassisDef } from "../data/chassis";
 import { partDef } from "../data/parts";
-import { playerVehicle } from "../sim/damage";
-import { xpForLevel } from "../sim/progress";
-import { corePart, coreParts, freeCells, mountedParts } from "../sim/grid";
-import { vehicleStats } from "../sim/stats";
+import { corePart, coreParts, mountedParts } from "../sim/grid";
 import type { Vehicle, World } from "../sim/types";
 import { el, panel } from "./dom";
 import { eventText, formatNpcActivity } from "./format";
+import { getHudReadout } from './hud-readout';
+import { createIcon, createSpeedDial, type IconName } from './icons';
+
+type HudActions = {
+  openInventory: () => void;
+  openCharacter: () => void;
+  toggleManual: () => void;
+  isBusy: () => boolean;
+};
+const RESOURCE_ICONS: IconName[] = ['money', 'fuel', 'supplies', 'cab', 'driver'];
 
 const LOG_LINES = 14;
 const TOAST_MS = 3500;
 
 export class Hud {
-  private top = panel("topbar");
+  private top = panel("instruments");
   private log = panel("log");
   private info = panel("info");
+  private infoBody = el('div');
   private help = panel("help");
   private action = panel("action");
   private toastBox = panel("toast");
   private toastTimer: number | null = null;
   private lines: { text: string; cls: string }[] = [];
 
-  constructor() {
+  constructor(private actions: HudActions) {
     this.info.style.display = "none";
+    this.info.append(this.infoBody);
     this.toastBox.style.display = "none";
     this.log.replaceChildren(
       el("h3", {}, "Log"),
       el("div", { class: "dim" }, "Drive out. Watch for raiders."),
     );
-    this.help.append(
+    this.log.setAttribute('aria-label', 'Event log');
+    const guide = el('details', {}, el('summary', { title: 'Driving and combat controls' }, '?'));
+    this.help.append(guide);
+    guide.append(
       el("div", {}, "Click: drive through. Shift-click: stop there."),
       el("div", {}, "Click your truck: brake. No order: coast on."),
       el(
@@ -46,6 +57,10 @@ export class Hud {
       el("div", {}, "R: manual driving, straight through anything."),
       el("div", {}, "Right-drag: pan. F: follow. Wheel: zoom."),
     );
+  }
+
+  getInspectionRoot(): HTMLElement {
+    return this.info;
   }
 
   private toast(text: string): void {
@@ -68,36 +83,29 @@ export class Hud {
   }
 
   renderTop(w: World): void {
-    const me = playerVehicle(w);
-    const s = vehicleStats(w, me);
-    const p = w.player;
-    const cab = corePart(me, "cab");
-    const cabMax = partDef(cab.defId).hp;
-    const broken = mountedParts(me).filter((x) => x.hp === 0).length;
-    const warn = (v: number, low: number) => (v <= low ? "bad" : "");
-    const item = (label: string, value: string, cls = "") =>
-      el("span", { class: cls }, el("b", {}, label), " ", value);
+    const readout = getHudReadout(w);
+    const busy = this.actions.isBusy();
     this.top.replaceChildren(
-      item("Turn", `${w.turn}`),
-      item("Money", `${p.money}`),
-      item("Cab", `${cab.hp}/${cabMax}`, warn(cab.hp, cabMax * 0.3)),
-      item("Broken", `${broken}`, broken > 0 ? "bad" : ""),
-      item("Health", `${p.health}`, warn(p.health, 40)),
-      item(
-        "Fuel",
-        `${p.fuel.toFixed(1)}/${chassisDef(me.chassisId).fuelCap}`,
-        warn(p.fuel, 5),
+      el('button', {
+        class: 'truck-instrument', title: 'Truck inventory [I]', 'aria-label': 'Open truck inventory',
+        disabled: busy, onclick: () => this.actions.openInventory(),
+      }, createSpeedDial(Number(readout.speed), Number(readout.maxSpeed)),
+      el('span', { class: 'speed-value' }, readout.speed),
+      el('span', { class: 'speed-unit' }, `max ${readout.maxSpeed}`), createIcon('truck')),
+      el('div', { class: 'resource-bank' },
+        ...readout.resources.map((resource, i) => el('span', {
+          class: `resource ${resource.warning ? 'bad' : ''}`, title: resource.label,
+          'aria-label': `${resource.label}: ${resource.value}${resource.warning ? ', warning' : ''}`,
+          'data-resource': resource.label,
+        }, createIcon(RESOURCE_ICONS[i]), el('span', {},
+          el('small', {}, resource.label), el('strong', {}, `${resource.warning ? '! ' : ''}${resource.value}`)))),
       ),
-      item("Supplies", `${p.supplies.toFixed(1)}`, warn(p.supplies, 4)),
-      item("Free cells", `${freeCells(me)}`),
-      item("Speed", `${me.speed.toFixed(1)}/${s.maxSpeed}`),
-      item("Lvl", `${p.level} (${p.xp}/${xpForLevel(p.level + 1)} XP)`),
+      el('div', { class: 'instrument-actions' },
+        el('button', { class: readout.manual ? 'on' : '', disabled: busy, 'aria-pressed': String(readout.manual), onclick: () => this.actions.toggleManual(), title: 'Toggle manual driving [R]' }, readout.manual ? 'Manual [R]' : 'Route [R]'),
+        el('button', { disabled: busy, onclick: () => this.actions.openCharacter(), title: 'Driver and skills [C]' }, createIcon('driver'), w.player.skillPoints > 0 ? `+${w.player.skillPoints} [C]` : '[C]'),
+        ...(readout.broken ? [el('span', { class: 'bad', role: 'status' }, `! ${readout.broken} broken`)] : []),
+      ),
     );
-    if (me.direct) this.top.append(item("Manual", "[R]"));
-    if (p.skillPoints > 0)
-      this.top.append(
-        el("span", { class: "good" }, `${p.skillPoints} skill pt [C]`),
-      );
   }
 
   pushEvents(w: World): void {
@@ -112,7 +120,7 @@ export class Hud {
     if (this.lines.length === 0) return;
     this.log.replaceChildren(
       el("h3", {}, "Log"),
-      ...this.lines.map((l) => el("div", { class: l.cls }, l.text)),
+      el('div', { class: 'log-lines', tabindex: 0 }, ...this.lines.map((l) => el("div", { class: l.cls }, l.text))),
     );
   }
 
@@ -147,7 +155,7 @@ export class Hud {
     const stance =
       v.faction === "player" ? "" : hostile ? "hostile" : "neutral";
     this.info.style.display = "";
-    this.info.replaceChildren(
+    this.infoBody.replaceChildren(
       el("h3", {}, v.name),
       el(
         "div",
