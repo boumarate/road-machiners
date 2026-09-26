@@ -56,6 +56,13 @@ const SUN_RADIUS = 150; // meters from the focus to the sun light
 const SUN_INTENSITY = 2.2; // in full daylight
 const NIGHT_INTENSITY = 0.3; // dimmed light after sunset, before sunrise
 const NIGHT_ELEVATION = 25 * DEG; // shadow angle used at night, since sunAt is null then
+// Sky fill light. Night turns it dim and blue, so the time of day reads at a glance.
+const SKY_DAY = 0xfff0d8;
+const GROUND_DAY = 0x6a5038;
+const SKY_DAY_INTENSITY = 1.4;
+const SKY_NIGHT = 0x5a6c9c;
+const GROUND_NIGHT = 0x1c1e2a;
+const SKY_NIGHT_INTENSITY = 0.45;
 
 type LiveVision = { visible: Set<number>; explored: boolean[]; from: Vec | null };
 type TurnPhase = ReturnType<UiHost['getTurnPhase']>;
@@ -87,6 +94,7 @@ export class Game {
   private readonly renderer = new THREE.WebGLRenderer({ antialias: true });
   private readonly scene = new THREE.Scene();
   private readonly sun = new THREE.DirectionalLight(0xfff0d0, 2.2);
+  private readonly sky = new THREE.HemisphereLight(SKY_DAY, GROUND_DAY, SKY_DAY_INTENSITY);
   private readonly rig: CameraRig;
   private readonly ground: THREE.Mesh;
   private readonly obstacles: ObstacleViews;
@@ -135,7 +143,7 @@ export class Game {
     this.rig = new CameraRig(container);
 
     this.scene.background = new THREE.Color(PAL.bg);
-    this.scene.add(new THREE.HemisphereLight(0xfff0d8, 0x6a5038, 1.4));
+    this.scene.add(this.sky);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
     Object.assign(this.sun.shadow.camera, { left: -80, right: 80, top: 80, bottom: -80, near: 1, far: 500 });
@@ -584,6 +592,9 @@ export class Game {
     const horiz = Math.cos(elevation) * SUN_RADIUS;
     this.sun.position.copy(this.sun.target.position).add(new THREE.Vector3(dir.x * horiz, Math.sin(elevation) * SUN_RADIUS, dir.y * horiz));
     this.sun.intensity = sun ? SUN_INTENSITY : NIGHT_INTENSITY;
+    this.sky.color.set(sun ? SKY_DAY : SKY_NIGHT);
+    this.sky.groundColor.set(sun ? GROUND_DAY : GROUND_NIGHT);
+    this.sky.intensity = sun ? SKY_DAY_INTENSITY : SKY_NIGHT_INTENSITY;
     this.fx.tick(dt);
     this.weather.advance(dt);
     this.weather.sync(this.world);
