@@ -1,6 +1,6 @@
 # NPC activities
 
-Status: reviewing integrated branch
+Status: complete
 Branch: npc-activities
 Worktree: /Users/boris/Documents/Korovan/.worktrees/npc-activities
 Mode: hands-off
@@ -175,12 +175,12 @@ The raid test exposed wrecks hiding themselves when NPC sight snapped their cent
 
 ## Conclusion
 
-Outcome: the observable NPC economic and raid loops run in the browser with Rapier movement, and visible inspection explains the current activity. All four phases and the review repair are complete. No merge or push performed.
+Outcome: the observable NPC economic and raid loops run in the browser with Rapier movement, and visible inspection explains the current activity. All four phases and the review repair are complete. Main integration results are recorded below.
 
 - IV1-IV6: covered by the perception, transaction, salvage, activity, deterministic world, and dual-movement tests listed in Verify. Completion and failure transitions are now covered explicitly.
 - AS1: sufficient resources exist for the demonstrated loops. Long-session sustainability and subjective fun remain playtest questions.
 - UK1-UK2: approved boundaries retained, including unchanged player defeat and unlimited town markets.
-- UK3: survival thresholds reuse the existing low-fuel fraction and hull warning range, with recovery at half hull. Trade reserves one full fuel and supply load. These are class/data settings for later tuning.
+- UK3: survival thresholds reuse the existing low-fuel fraction and cab warning range, with recovery at half cab health. Trade reserves one full fuel and supply load. These are class/data settings for later tuning.
 - UK4: constructors and fixtures were updated. No saved-game consumer or migration layer was introduced.
 - Review: one medium finding fixed and reverified. No unresolved critical or important finding was reported.
 
@@ -202,13 +202,17 @@ Merged committed main `dd0c4eb` into the isolated NPC branch. Preserve part-base
 
 Integrated verification passed: 236 tests, typecheck, production build, browser smoke at 32.5 fps, corrected economic loop in 12 turns, corrected raid loop in 5 turns, and visible activity inspection. Logs: `tmp/integrated-*.log`. The language-server session retains pre-merge imported types despite explicit refresh requests. Fresh worktree-local TypeScript compilation and build pass against the actual merged files.
 
-Main still has unrelated uncommitted changes in combat, damage, defeat, economy, supplies, terrain tests, types, and world. Do not stash, discard, or commit those changes. The user authorized the final merge, but it must preserve this work. The original untracked root task draft also needs preserving if it blocks checkout of the committed task file.
+The user authorized committing main's existing changes and reconciling them before merging. Commit `e1f8819` preserves its simulation formatting and Icarus lore. The eight changed simulation files produced identical compiled JavaScript before and after formatting. The original untracked task draft is preserved in root `tmp/npc-activities-original-draft.md`. A concurrent critical-hit merge was left untouched until its owner completed it as `e490de6`, then integrated into the isolated NPC worktree. Shared NPC transactions, observer sight, salvage cleanup, and resource consumption take precedence over the prior player-only versions in formatting conflicts. Critical-hit behavior is retained.
+
+Final combined verification passed: 237 tests, typecheck, production build, economic loop in 12 turns, raid loop in 6 turns, and browser smoke at 33.5 fps. Both loops reported no browser errors. Evidence is in `tmp/final-merge-*.log`. The integrated branch is verified for merging into main. No caching or throttling was needed.
 
 ### Review
 
 Independent read-only review on GPT-6 Sol found one medium issue: completed activities bypassed transition events. Verified both the direct `activity = null` assignments and the absence of another completion logger. Completion and failure now use `setNpcActivity()`, with four failing-first regression cases. Fresh tests, typecheck, build, browser smoke, economic loop, and raid loop all passed. Evidence is in `tmp/review-fix-*.log`.
 
 The first review failed before any tool call because the account rejected GPT-5.4. Worktree was clean at `f98bc7b`. The same read-only protocol was retried on explicitly selected GPT-6 Sol and completed. No Astra subagent was used.
+
+The independent integration review of `67111b8` found no high-confidence bug in the inspected activity, combat, service, fuel-leak, movement, or turnaround paths. It was read-only and did not execute checks. Repeated partial service with a destroyed tank and recovery after long-session salvage depletion were not exercised by that reviewer.
 
 ### Hands-off decisions
 

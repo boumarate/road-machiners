@@ -18,7 +18,7 @@ import { addGoods, mountPart, removeGoods, stowPart } from './inventory';
 import type { PartInstance, Vehicle, World } from './types';
 import { update } from './world';
 
-export type Supply = 'fuel' | 'supplies';
+export type Supply = "fuel" | "supplies";
 
 export function requireVehicleTown(world: World, vehicle: Vehicle, townId: string): void {
   const town = REGION.towns.find((t) => t.id === townId);
@@ -84,7 +84,10 @@ export function serviceVehicle(world: World, vehicle: Vehicle, townId: string): 
 }
 
 function spread(world: World): number {
-  return Math.max(0, ECONOMY.spread - skillBonus('trade', world.player.skills.trade));
+  return Math.max(
+    0,
+    ECONOMY.spread - skillBonus("trade", world.player.skills.trade),
+  );
 }
 
 export function buyPrice(world: World, townId: string, good: string): number {
@@ -102,11 +105,15 @@ function basePrice(townId: string, good: string): number {
 }
 
 function repairMult(world: World): number {
-  return Math.max(0, 1 - skillBonus('mechanics', world.player.skills.mechanics));
+  return Math.max(
+    0,
+    1 - skillBonus("mechanics", world.player.skills.mechanics),
+  );
 }
 
 function pay(world: World, amount: number, reason: string): void {
-  if (amount > world.player.money) throw new Error(`Not enough money for ${reason}`);
+  if (amount > world.player.money)
+    throw new Error(`Not enough money for ${reason}`);
   world.player.money -= amount;
 }
 
@@ -128,21 +135,29 @@ export function sellGood(world: World, good: string, n: number): World {
 
 export function supplyRoom(world: World, kind: Supply): number {
   const p = world.player;
-  const cap = kind === 'fuel' ? chassisDef(playerVehicle(world).chassisId).fuelCap : RULES.suppliesCap;
+  const cap =
+    kind === "fuel"
+      ? chassisDef(playerVehicle(world).chassisId).fuelCap
+      : RULES.suppliesCap;
   return Math.max(0, Math.floor(cap - p[kind]));
 }
 
 export function buySupply(world: World, kind: Supply, n: number): World {
   return update(world, (w) => {
     requireTown(w);
-    if (n <= 0 || n > supplyRoom(w, kind)) throw new Error(`Cannot buy ${n} ${kind}`);
+    if (n <= 0 || n > supplyRoom(w, kind))
+      throw new Error(`Cannot buy ${n} ${kind}`);
     pay(w, ECONOMY.supplyPrice[kind] * n, kind);
     w.player[kind] += n;
   });
 }
 
 export function partRepairCost(world: World, part: PartInstance): number {
-  return Math.ceil((partDef(part.defId).hp - part.hp) * ECONOMY.partRepairPerHp * repairMult(world));
+  return Math.ceil(
+    (partDef(part.defId).hp - part.hp) *
+      ECONOMY.partRepairPerHp *
+      repairMult(world),
+  );
 }
 
 export function repairAll(world: World): World {
@@ -151,7 +166,7 @@ export function repairAll(world: World): World {
     const me = playerVehicle(w);
     const parts = allParts(me);
     const cost = parts.reduce((a, p) => a + partRepairCost(w, p), 0);
-    pay(w, cost, 'repairs');
+    pay(w, cost, "repairs");
     for (const p of parts) p.hp = partDef(p.defId).hp;
   });
 }
@@ -164,7 +179,10 @@ export function partSellPrice(part: PartInstance): number {
 export function buyPart(world: World, defId: string): World {
   return update(world, (w) => {
     requireTown(w);
-    if (partDef(defId).kind === 'core') throw new Error(`${partDef(defId).name} is built in. It is not for sale.`);
+    if (partDef(defId).kind === "core")
+      throw new Error(
+        `${partDef(defId).name} is built in. It is not for sale.`,
+      );
     pay(w, partDef(defId).price, partDef(defId).name);
     w.player.storage.push(makePart(w, defId));
   });
@@ -183,17 +201,23 @@ export function sellPart(world: World, partId: string): World {
 // The trade-in scales by the mean health of the built-in parts.
 export function chassisTradeIn(world: World): number {
   const me = playerVehicle(world);
-  const core = mountedParts(me, 'core');
-  const health = core.reduce((a, p) => a + p.hp / partDef(p.defId).hp, 0) / core.length;
-  return Math.floor(chassisDef(me.chassisId).price * ECONOMY.chassisSellFactor * health);
+  const core = mountedParts(me, "core");
+  const health =
+    core.reduce((a, p) => a + p.hp / partDef(p.defId).hp, 0) / core.length;
+  return Math.floor(
+    chassisDef(me.chassisId).price * ECONOMY.chassisSellFactor * health,
+  );
 }
 
 export function repairCost(world: World): number {
-  return allParts(playerVehicle(world)).reduce((a, p) => a + partRepairCost(world, p), 0);
+  return allParts(playerVehicle(world)).reduce(
+    (a, p) => a + partRepairCost(world, p),
+    0,
+  );
 }
 
 function allParts(v: Vehicle): PartInstance[] {
-  return v.items.flatMap((it) => (it.kind === 'part' ? [it.part] : []));
+  return v.items.flatMap((it) => (it.kind === "part" ? [it.part] : []));
 }
 
 // Swap chassis: the old built-in parts go with the old chassis and the new one brings its own.
@@ -202,9 +226,11 @@ function allParts(v: Vehicle): PartInstance[] {
 export function buyChassis(world: World, chassisId: string): World {
   return update(world, (w) => {
     requireTown(w);
-    if (!PLAYER_CHASSIS.includes(chassisId)) throw new Error(`${chassisId} is not for sale`);
+    if (!PLAYER_CHASSIS.includes(chassisId))
+      throw new Error(`${chassisId} is not for sale`);
     const me = playerVehicle(w);
-    if (me.chassisId === chassisId) throw new Error('You already drive this chassis');
+    if (me.chassisId === chassisId)
+      throw new Error("You already drive this chassis");
     const cost = chassisDef(chassisId).price - chassisTradeIn(w);
     pay(w, Math.max(0, cost), chassisDef(chassisId).name);
     const mounted = new Set(mountedParts(me).map((p) => p.id));
@@ -214,14 +240,27 @@ export function buyChassis(world: World, chassisId: string): World {
     me.items = [];
     addCoreParts(w, me);
     // Cargo parts first: their extra rows make room for the rest.
-    const parts = old.flatMap((it) => (it.kind === 'part' && partDef(it.part.defId).kind !== 'core' ? [it.part] : []));
-    parts.sort((a, b) => Number(partDef(b.defId).kind === 'cargo') - Number(partDef(a.defId).kind === 'cargo'));
+    const parts = old.flatMap((it) =>
+      it.kind === "part" && partDef(it.part.defId).kind !== "core"
+        ? [it.part]
+        : [],
+    );
+    parts.sort(
+      (a, b) =>
+        Number(partDef(b.defId).kind === "cargo") -
+        Number(partDef(a.defId).kind === "cargo"),
+    );
     for (const part of parts) {
-      const placed = mounted.has(part.id) ? mountPart(w, me, part) || stowPart(w, me, part) : stowPart(w, me, part);
+      const placed = mounted.has(part.id)
+        ? mountPart(w, me, part) || stowPart(w, me, part)
+        : stowPart(w, me, part);
       if (!placed) w.player.storage.push(part);
     }
     for (const [good, n] of Object.entries(goods)) {
-      if (addGoods(w, me, good, n) < n) throw new Error('Cargo would not fit the new chassis. Sell some first.');
+      if (addGoods(w, me, good, n) < n)
+        throw new Error(
+          "Cargo would not fit the new chassis. Sell some first.",
+        );
     }
     me.weaponOrders = {};
     w.player.fuel = Math.min(w.player.fuel, chassisDef(chassisId).fuelCap);

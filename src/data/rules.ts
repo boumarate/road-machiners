@@ -36,6 +36,11 @@ export const RULES = {
   tankLeak: 1, // fuel lost per turn with a broken tank
 
   // Combat
+  // A round that lands on the truck is a crit with this chance. A crit multiplies its damage and pen, so a few
+  // lucky rounds can swing a fight that many small rolls would otherwise average out.
+  critChance: 0.1,
+  critDamage: 2,
+  critPen: 2,
   // A round's angular error has a spread in radians: weapon spread × (1 − gunnery), plus
   // leadError × crossing speed / round speed, plus shake × own speed in m/s.
   leadError: 4.5, // share of the lead angle the gunner misjudges

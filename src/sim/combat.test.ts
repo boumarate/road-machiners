@@ -249,6 +249,29 @@ describe('rounds', () => {
     expect(mixed).toBe(true);
   });
 
+  it('a share of hits are crits, which deal more damage than plain hits', () => {
+    const { w, me, buggy, mg } = range(3, Math.PI / 2, 5);
+    for (const p of mountedParts(buggy)) p.hp = 1e9;
+    order(me, mg.part.id, buggy.id);
+    let hits = 0;
+    let crits = 0;
+    let critDamage = 0;
+    let plainDamage = 0;
+    for (let i = 0; i < 400; i++) {
+      w.events = [];
+      mg.part.reload = 0;
+      fireWeapons(w);
+      for (const r of shotsBy(w.events, me.id)[0].rounds) {
+        if (!r.hit) continue;
+        hits++;
+        const dealt = r.hits.reduce((a, h) => a + h.damage, 0);
+        if (r.crit) { crits++; critDamage += dealt; } else plainDamage += dealt;
+      }
+    }
+    expect(Math.abs(crits / hits - RULES.critChance)).toBeLessThan(0.03);
+    expect(critDamage / crits).toBeGreaterThan((plainDamage / (hits - crits)) * 1.5);
+  });
+
   it('rounds hit as often as the odds say', () => {
     const { w, me, buggy, mg } = range(5, Math.PI / 2, 5);
     me.speed = 3;
