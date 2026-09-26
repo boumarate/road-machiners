@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
 import { fireWeapons, hitChance, resolveDestroyed } from './combat';
 import { mountedParts } from './grid';
+import { isDriveObstacle } from './mapgen';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld } from './testkit';
@@ -185,7 +186,7 @@ describe('invariants under AI traffic', () => {
       const crashed = new Set(w.events.flatMap((e) => (e.t === 'collision' ? [e.a, e.b] : [])));
       for (const v of w.vehicles) {
         const r = vehicleStats(w, v).radius;
-        for (const o of w.obstacles) expect(dist(v.pos, o.pos)).toBeGreaterThanOrEqual(o.r + r - 0.02);
+        for (const o of w.obstacles.filter(isDriveObstacle)) expect(dist(v.pos, o.pos)).toBeGreaterThanOrEqual(o.r + r - 0.02);
         for (const x of w.vehicles) if (x.id < v.id) expect(dist(v.pos, x.pos)).toBeGreaterThanOrEqual(r + chassisDef(x.chassisId).radius - 0.02);
         expect(v.hull).toBeGreaterThanOrEqual(0);
         for (const p of mountedParts(v)) expect(p.hp).toBeGreaterThanOrEqual(0);
@@ -196,7 +197,7 @@ describe('invariants under AI traffic', () => {
         const backed = b.speed <= RULES.reverse.below ? b.s.reverseTurn : 0;
         expect(Math.abs(v.heading - b.heading)).toBeLessThanOrEqual(Math.max(maxTurn(b.s, v.speed), backed) + 1e-9);
       }
-      for (const k of ['fuel', 'water', 'food', 'health', 'money'] as const) expect(w.player[k]).toBeGreaterThanOrEqual(0);
+      for (const k of ['fuel', 'supplies', 'health', 'money'] as const) expect(w.player[k]).toBeGreaterThanOrEqual(0);
     }
   });
 });

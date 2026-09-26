@@ -37,7 +37,7 @@ export const REGION = {
   },
   sites: {
     buildingsPerTown: 6,
-    buildingRing: [1.0, 1.35] as [number, number], // distance from town center, in town radii
+    buildingRing: [0.65, 0.72] as [number, number], // buildings fit inside the non-drivable town radius
     buildingRadius: [0.55, 0.8] as [number, number],
     roadGapAngle: 0.5, // radians kept clear on each side of a road leaving a town
     convoyWrecks: [{ x: -1.3, y: 0.3 }, { x: 0.4, y: -1.3 }, { x: 1.2, y: 1.1 }] as Vec[],

@@ -9,7 +9,7 @@ export const SKILLS: Record<SkillId, SkillDef> = {
   gunnery: { id: 'gunnery', name: 'Gunnery', effect: 'hit chance +5% per level', perLevel: 0.05 },
   mechanics: { id: 'mechanics', name: 'Mechanics', effect: 'repair cost and crash damage -10% per level', perLevel: 0.1 },
   trade: { id: 'trade', name: 'Trade', effect: 'price spread -4% per level', perLevel: 0.04 },
-  survival: { id: 'survival', name: 'Survival', effect: 'water and food use -12% per level', perLevel: 0.12 },
+  survival: { id: 'survival', name: 'Survival', effect: 'supplies use -12% per level', perLevel: 0.12 },
 };
 
 export const SKILL_IDS: SkillId[] = ['driving', 'gunnery', 'mechanics', 'trade', 'survival'];

@@ -49,6 +49,16 @@ describe('steerStep', () => {
 });
 
 describe('planPath', () => {
+  it('previews the actual crawl distance with an empty tank', () => {
+    const { w, v, s } = setup(0);
+    w.player.fuel = 0;
+    const order = { kind: 'stopAt' as const, dest: { x: 45, y: 30 } };
+    v.order = order;
+    const preview = planPath(w, s, v, order, 1)[0];
+    const after = endTurn(w);
+    expect(dist(preview.end, after.vehicles[0].pos)).toBeLessThan(1e-6);
+  });
+
   it('reaches a point straight ahead and stops there', () => {
     const { w, v, s } = setup(0);
     const plan = planPath(w, s, v, { kind: 'stopAt', dest: { x: 45, y: 30 } }, 20);

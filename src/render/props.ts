@@ -18,7 +18,7 @@ export function depthOf(p: Vec, r: number): number {
 
 export function drawObstacle(scene: Phaser.Scene, o: Obstacle): Phaser.GameObjects.Graphics {
   const g = scene.add.graphics().setDepth(depthOf(o.pos, o.r));
-  if (o.kind !== 'water') groundEllipse(g, { x: o.pos.x + 0.25, y: o.pos.y + 0.25 }, o.r * 1.05, PAL.shadow, 0.22);
+  if (o.kind !== 'water' && o.kind !== 'site') groundEllipse(g, { x: o.pos.x + 0.25, y: o.pos.y + 0.25 }, o.r * 1.05, PAL.shadow, 0.22);
   if (o.kind === 'rock') drawRock(g, o);
   if (o.kind === 'wreck') drawWreck(g, o.pos, o.r, hashStr(o.id) * Math.PI * 2);
   if (o.kind === 'building') drawBuilding(g, o);

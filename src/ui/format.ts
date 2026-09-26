@@ -56,7 +56,7 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
     case 'supply':
       return { text: e.text, cls: 'bad' };
     case 'defeat':
-      return { text: `Knocked out. You wake up in ${e.wokeAt}.`, cls: 'bad' };
+      return { text: 'Robbed. You patch your truck enough to crawl back, but the tank is empty.', cls: 'bad' };
     case 'info':
       return { text: e.text, cls: 'dim' };
     case 'spawn':

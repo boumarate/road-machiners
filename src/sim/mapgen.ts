@@ -29,7 +29,7 @@ export function generateObstacles(world: World): Obstacle[] {
 // Buildings ring each town with gaps where roads leave. Wrecks sit at the convoy, a pond at the oasis.
 function placeSites(world: World): Obstacle[] {
   const S = REGION.sites;
-  const out: Obstacle[] = [];
+  const out: Obstacle[] = [...REGION.towns, ...REGION.locations].map((s) => ({ id: `site-${s.id}`, pos: { ...s.pos }, r: s.radius, kind: 'site' }));
   for (const town of REGION.towns) {
     const exits = roadExits(town.pos);
     for (let i = 0; i < S.buildingsPerTown; i++) {
@@ -95,5 +95,10 @@ function clearOfSites(pos: Vec, r: number): boolean {
 }
 
 function overlapsAny(out: Obstacle[], pos: Vec, r: number): boolean {
-  return out.some((o) => dist(pos, o.pos) < o.r + r + O.gap);
+  return out.some((o) => o.kind !== 'site' && dist(pos, o.pos) < o.r + r + O.gap);
+}
+
+// Site props are scenery. The whole site boundary blocks traffic instead.
+export function isDriveObstacle(o: Obstacle): boolean {
+  return o.kind !== 'building' && o.kind !== 'water' && !o.id.startsWith('cw-');
 }

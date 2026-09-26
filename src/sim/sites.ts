@@ -8,12 +8,12 @@ import { dist } from './vec';
 
 export function townAt(world: World): TownDef | null {
   const pos = playerVehicle(world).pos;
-  return REGION.towns.find((t) => dist(pos, t.pos) <= t.radius + ECONOMY.useRange) ?? null;
+  return REGION.towns.find((t) => dist(pos, t.pos) <= (t.radius + ECONOMY.useRange) * ECONOMY.interactionScale) ?? null;
 }
 
 export function locationAt(world: World): LocationDef | null {
   const pos = playerVehicle(world).pos;
-  return REGION.locations.find((l) => dist(pos, l.pos) <= l.radius + ECONOMY.useRange) ?? null;
+  return REGION.locations.find((l) => dist(pos, l.pos) <= (l.radius + ECONOMY.useRange) * ECONOMY.interactionScale) ?? null;
 }
 
 export function requireTown(world: World): TownDef {

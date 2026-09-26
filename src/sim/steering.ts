@@ -6,6 +6,7 @@ import { TERRAIN } from '../data/terrain';
 import { maxTurn, type VehicleStats } from './stats';
 import { chassisDef } from '../data/chassis';
 import { route, routeLength, straightClear, type Blocker } from './path';
+import { isDriveObstacle } from './mapgen';
 import { driveFactor, isCliff, tileAt, type Terrain } from './terrain';
 import type { MoveOrder, Pose, Vehicle, World } from './types';
 import { angleDiff, bearing, clamp, DEG, dist, segmentDist, type Vec } from './vec';
@@ -134,6 +135,18 @@ export function steerTo(world: World, s: VehicleStats, v: Pick<Vehicle, 'id' | '
   return steerStep(s, v, aim, remaining);
 }
 
+// An empty tank still permits careful steering at crawl speed. Speed already above the cap brakes normally.
+export function steerWithFuel(world: World, s: VehicleStats, v: Pick<Vehicle, 'id' | 'pos' | 'heading' | 'speed'>, order: MoveOrder | null, direct: boolean, fuel: number): Steer {
+  const low = fuel > 0 && fuel < chassisDef(world.vehicles.find((x) => x.id === v.id)!.chassisId).fuelCap * RULES.lowFuelThreshold;
+  const limit = low ? Math.max(s.maxSpeed * RULES.lowFuelSpeedFactor, v.speed - s.brake) : s.maxSpeed;
+  const stats = low ? { ...s, maxSpeed: limit, turnFast: maxTurn(s, limit) } : s;
+  const steer = steerTo(world, stats, v, order, direct);
+  if (Math.abs(steer.speed) * s.fuelPerTile <= fuel) return steer;
+  if (!order || order.kind === 'brake') return { speed: Math.max(0, v.speed - s.brake), turn: 0 };
+  const cap = Math.max(RULES.crawlSpeed, v.speed - s.brake);
+  return steerTo(world, { ...s, maxSpeed: cap, turnFast: maxTurn(s, cap), accel: Math.min(s.accel, RULES.crawlSpeed) }, v, order, direct);
+}
+
 // A nearly stopped truck facing away from where it should go backs up on a short arc that swings its
 // nose toward the destination, or toward the route's next point when the line there is blocked.
 // It only backs up when the order would move it at all, and only when the way back is clear.
@@ -152,7 +165,7 @@ function reverseStep(world: World, s: VehicleStats, v: Pick<Vehicle, 'pos' | 'he
 // without the route planner's safety margin.
 function arcClear(world: World, v: Pick<Vehicle, 'pos' | 'heading'>, steer: Steer, radius: number, parked: Blocker[]): boolean {
   const t = world.terrain;
-  const circles = [...world.obstacles, ...parked];
+  const circles = [...world.obstacles.filter(isDriveObstacle), ...parked];
   let pose: Pose = { x: v.pos.x, y: v.pos.y, heading: v.heading };
   for (let i = 0; i < RULES.substeps; i++) {
     const next = advanceOn(t, pose, steer, RULES.substeps);
@@ -248,8 +261,9 @@ export function planPath(world: World, s: VehicleStats, v: Pick<Vehicle, 'id' | 
   const plans: TurnPlan[] = [];
   let state = { id: v.id, pos: { ...v.pos }, heading: v.heading, speed: v.speed };
   let current: MoveOrder | null = order;
+  let fuel = world.player.fuel;
   for (let t = 0; t < turns; t++) {
-    const steer = steerTo(world, s, state, current, false);
+    const steer = v.id === world.player.vehicleId ? steerWithFuel(world, s, state, current, false, fuel) : steerTo(world, s, state, current, false);
     let pose: Pose = { x: state.pos.x, y: state.pos.y, heading: state.heading };
     const poses: Pose[] = [pose];
     for (let i = 0; i < RULES.substeps; i++) {
@@ -257,6 +271,7 @@ export function planPath(world: World, s: VehicleStats, v: Pick<Vehicle, 'id' | 
       poses.push(pose);
     }
     plans.push({ poses, end: pose, arrives: reached(current, poses, steer.speed) });
+    if (v.id === world.player.vehicleId) for (let i = 1; i < poses.length; i++) fuel = Math.max(0, fuel - dist(poses[i - 1], poses[i]) * s.fuelPerTile);
     current = nextOrder(current, poses, steer.speed);
     if (steer.speed === 0 && current === null) break;
     state = { id: v.id, pos: { x: pose.x, y: pose.y }, heading: pose.heading, speed: Math.max(0, steer.speed) };

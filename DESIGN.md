@@ -38,7 +38,7 @@ A click is a waypoint to drive through. Its distance sets the throttle: a close 
 
 The truck plans a route around rocks, wrecks, parked vehicles and cliffs, preferring roads. The screen shows the planned path for the next turns.
 
-Crashes stop a vehicle and deal damage scaled by impact speed and mass. Heavy trucks win rams. NPC drivers sometimes skip route planning and drive straight, so they can be lured into rocks.
+Crashes stop a vehicle and deal damage scaled by impact speed and mass. Heavy trucks win rams. NPC drivers use the same steering and obstacle routing as the player. A stuck driver backs away before trying the route again.
 
 Weapons have range, damage, reload time, accuracy and a firing arc. A turret covers all sides. A forward gun needs the truck to face the target.
 
@@ -50,7 +50,7 @@ An auto mode assigns every weapon a hull shot at the nearest hostile.
 
 Losing a fight does not end the game, in Kenshi style.
 
-The character is knocked out. Enemies loot the cargo and half the money. The character wakes up in the nearest town and keeps stats, skills and parts. The truck is left at low hull. Townsfolk top up fuel, water and food to a small amount, so a broke player can still move on.
+The character is knocked out. Enemies loot the cargo and half the money. The character stays with the truck and keeps stats, skills and mounted parts. The robbers leave. The character patches the hull to barely moving condition and must crawl back with no fuel.
 
 Later the enemies may also take or wreck the truck.
 
@@ -62,13 +62,13 @@ The map is a grid of tiles with a height on every tile corner, so the ground is 
 
 Danger is set by region, not by player level.
 
-Faction squads roam the map. Places are discovered by exploring.
+Faction squads roam the map. Places are discovered by exploring. Towns and locations block driving. Their interaction radius is 1.5 times the site's base service reach, so the player uses services without driving into buildings.
 
 ## Trade
 
 Each town produces and needs fixed goods. Profit comes from knowing routes, as in Dustland Delivery.
 
-Fuel and water limit range, as in Caravaneer 2. Fuel burns per tile driven. Water and food burn per turn. With no water or food the character loses health.
+Fuel and supplies limit range. Fuel burns at one tenth of the chassis fuel-per-tile rate. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn at 0.025 per turn. Without supplies the character loses health. The oasis refills supplies.
 
 ## Prototype v0.001 content
 
