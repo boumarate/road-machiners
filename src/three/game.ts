@@ -26,7 +26,7 @@ import type { UiHost } from '../ui/host';
 import { Hud } from '../ui/hud';
 import { InventoryScreen } from '../ui/inventory';
 import { TownScreen } from '../ui/town';
-import { WeaponPanel, weaponsForClick } from '../ui/weapons';
+import { getWeaponReadout, WeaponPanel, weaponsForClick } from '../ui/weapons';
 import { CameraRig } from './render/camera';
 import { FogView } from './render/fog';
 import { Fx3D } from './render/fx';
@@ -36,6 +36,7 @@ import { PathView } from './render/path';
 import { buildSites } from './render/sites';
 import { terrainMesh } from './render/terrain';
 import { VehicleView, type Ring3 } from './render/vehicle';
+import { WeaponRangeView } from './render/weaponRange';
 import { ZonesView } from './render/zones';
 
 const PLAN_TURNS = 3; // turns of path preview
@@ -49,6 +50,13 @@ const SUN_DISTANCE = 100; // meters from the focus to the sun, sideways
 const SUN_HEIGHT = 120; // meters above the focus
 
 type LiveVision = { visible: Set<number>; explored: boolean[]; from: Vec | null };
+type TurnPhase = ReturnType<UiHost['getTurnPhase']>;
+// before is the world at the turn's start: panels and vehicles show it until the shots land.
+type Playback = { result: TurnResult; before: World; start: number | null; moved: boolean; impacts: boolean; combat: boolean };
+
+const MOVE_MS = (TURN_STEPS / PHYSICS.stepsPerSecond) * 1000; // real time the movement plays over
+const MOVED_BY_RULES = 0.5; // tiles between a vehicle's drawn spot and its sim spot that mean the rules moved it
+const MARKER_LIFT = 3.5; // meters above a target where its weapon marker sits
 
 const GUN_HEIGHT = 1.6; // meters above the body center where shots start and land
 
@@ -68,7 +76,12 @@ export class Game {
   private readonly fx: Fx3D;
   private readonly views = new Map<string, VehicleView>();
   private frames: Record<string, VehicleFrame> = {}; // last shown pose per vehicle
-  private anim: { result: TurnResult; start: number | null } | null = null;
+  // A played turn: physics movement, then shots in flight when there was combat, then time to read results.
+  private anim: Playback | null = null;
+  private phase: TurnPhase = null;
+  private readonly weaponRange = new WeaponRangeView();
+  private readonly markers = new Map<string, HTMLDivElement>(); // weapon markers above targets, by target id
+  private readonly overlay: HTMLElement;
   private live: LiveVision | null = null; // the player's view while a turn plays
   private hoverGround: Vec | null = null;
   private hovered: string | null = null;
@@ -106,7 +119,8 @@ export class Game {
     this.obstacles = new ObstacleViews(this.scene, this.world.terrain);
     this.obstacles.sync(this.world.obstacles);
     this.fog = new FogView(this.world);
-    this.scene.add(this.fog.mesh, this.zones.root, this.path.root);
+    this.scene.add(this.fog.mesh, this.zones.root, this.path.root, this.weaponRange.root);
+    this.overlay = overlay;
     this.labels = new Labels(overlay);
     this.fx = new Fx3D(this.scene, overlay, this.rig);
 
@@ -125,14 +139,16 @@ export class Game {
 
   private uiHost(): UiHost {
     return {
-      world: () => this.world,
+      world: () => this.displayWorld(),
       apply: (next) => this.apply(next),
       selectedWeapon: () => this.selected,
       selectWeapon: (id) => {
+        if (this.anim) return;
         this.selected = id;
         this.refreshUi();
       },
       endTurn: () => this.endTurn(),
+      getTurnPhase: () => this.phase,
     };
   }
 
@@ -160,16 +176,24 @@ export class Game {
     return this.town.isOpen() || this.character.isOpen() || this.inventory.isOpen();
   }
 
+  // Until a turn's shots land, the panels show the world as it was when the turn began.
+  private displayWorld(): World {
+    return this.anim && !this.anim.impacts ? this.anim.before : this.world;
+  }
+
   private refreshUi(): void {
+    const me = playerVehicle(this.world);
+    if (this.selected && !vehicleStats(this.world, me).weapons.some((mw) => mw.part.id === this.selected)) this.selected = null;
     if (!this.anim) this.fog.update(this.world);
-    this.obstacles.sync(this.world.obstacles);
-    this.hud.renderTop(this.world);
+    if (!this.anim || this.anim.impacts) this.obstacles.sync(this.world.obstacles);
+    this.hud.renderTop(this.displayWorld());
     this.weapons.render();
     this.town.render();
     this.character.render();
     this.inventory.render();
     this.hud.renderAction(this.contextLabel(), () => this.useContext());
     this.refreshInfo();
+    this.refreshTargetMarkers();
   }
 
   private contextLabel(): string | null {
@@ -190,8 +214,47 @@ export class Game {
   }
 
   private refreshInfo(): void {
-    const v = this.hovered ? this.world.vehicles.find((x) => x.id === this.hovered) ?? null : null;
-    this.hud.showInfo(this.world, v, v ? hostileToPlayer(this.world, v) : false);
+    const w = this.displayWorld();
+    const v = this.hovered ? w.vehicles.find((x) => x.id === this.hovered && playerSees(w, x.pos)) ?? null : null;
+    this.hud.showInfo(w, v, v ? hostileToPlayer(w, v) : false);
+  }
+
+  // Numbered labels above each target listing the weapons aimed at it and whether they can fire now.
+  private refreshTargetMarkers(): void {
+    for (const el of this.markers.values()) el.remove();
+    this.markers.clear();
+    if (this.anim) return;
+    const lines = new Map<string, string[]>();
+    vehicleStats(this.world, playerVehicle(this.world)).weapons.forEach((mw, i) => {
+      const readout = getWeaponReadout(this.world, mw);
+      if (!readout.target) return;
+      const list = lines.get(readout.target.id) ?? [];
+      list.push(`[${i + 1}] ${mw.def.look === 'cannon' ? 'Cannon' : 'MG'} · ${readout.status}`);
+      lines.set(readout.target.id, list);
+    });
+    for (const [id, list] of lines) {
+      const el = document.createElement('div');
+      el.className = 'weapon-marker';
+      el.textContent = list.join('\n');
+      this.overlay.appendChild(el);
+      this.markers.set(id, el);
+    }
+  }
+
+  private placeTargetMarkers(): void {
+    const hide = this.anim !== null || this.modalOpen();
+    for (const [id, el] of this.markers) {
+      const f = this.frames[id];
+      el.style.display = hide || !f ? 'none' : 'block';
+      if (hide || !f) continue;
+      const p = this.rig.screenOf({ x: f.pos.x, y: f.pos.y + MARKER_LIFT, z: f.pos.z });
+      el.style.left = `${p.x}px`;
+      el.style.top = `${p.y}px`;
+    }
+  }
+
+  private isEditingControl(): boolean {
+    return document.activeElement?.matches('input, select, textarea') ?? false;
   }
 
   // Input: left click orders or targets, right drag pans, wheel zooms, keys like the 2D game.
@@ -213,21 +276,24 @@ export class Game {
     window.addEventListener('pointerup', () => (this.panFrom = null));
     canvas.addEventListener('wheel', (e) => this.rig.zoomBy(e.deltaY), { passive: true });
     window.addEventListener('keydown', (e) => {
-      if (e.target instanceof HTMLInputElement) return;
+      if (this.isEditingControl()) return;
       const modal = this.modalOpen();
-      if (e.code === 'Space' && !modal) {
+      const playing = this.anim !== null;
+      if (e.code === 'Space') {
         e.preventDefault();
-        this.endTurn();
+        if (!e.repeat && !modal) this.endTurn();
       }
       if (e.code === 'KeyF') this.following = true;
       if (e.code === 'KeyA' && !modal) this.weapons.toggleAuto();
+      if (e.code === 'KeyW' && !modal) this.weapons.toggleVisible();
+      if (e.code === 'Digit0' && !modal) this.weapons.selectWeapon(null);
       if (e.code === 'KeyE' && !modal) this.useContext();
-      if (e.code === 'KeyC') {
+      if (e.code === 'KeyC' && !playing) {
         this.town.close();
         this.inventory.close();
         this.character.toggle();
       }
-      if (e.code === 'KeyI') {
+      if (e.code === 'KeyI' && !playing) {
         this.town.close();
         this.character.close();
         this.inventory.toggle();
@@ -243,10 +309,10 @@ export class Game {
   }
 
   private selectWeaponIndex(i: number): void {
+    if (this.anim || this.modalOpen()) return;
     const all = vehicleStats(this.world, playerVehicle(this.world)).weapons;
     if (i >= all.length) return;
-    this.selected = this.selected === all[i].part.id ? null : all[i].part.id;
-    this.refreshUi();
+    this.weapons.selectWeapon(this.selected === all[i].part.id ? null : all[i].part.id);
   }
 
   private onLeftClick(e: MouseEvent): void {
@@ -267,6 +333,12 @@ export class Game {
   }
 
   // While a turn plays, visibility follows the truck's current spot, not the end of the turn.
+  // Player shots prove sight at firing time, so their targets stay shown until the shots land,
+  // even when a new wreck changes the fog.
+  private canShowCombatVehicle(v: Vehicle): boolean {
+    return this.isVehicleVisible(v) || this.world.events.some((e) => e.t === 'shot' && e.shooter === this.world.player.vehicleId && e.target === v.id);
+  }
+
   private isVehicleVisible(v: Vehicle): boolean {
     if (v.id === playerVehicle(this.world).id) return true;
     const f = this.frames[v.id];
@@ -299,53 +371,90 @@ export class Game {
   }
 
   endTurn(): void {
-    if (this.anim) return;
+    if (this.anim || this.modalOpen()) return;
+    const before = this.world;
     let result: TurnResult | null = null;
-    const explored = [...this.world.player.explored];
     this.world = endTurn(this.world, physicsMove(this.drive, (r) => (result = r)));
-    this.live = { visible: new Set(this.world.player.visible), explored, from: null };
     if (!result) throw new Error('Turn ran without physics');
-    this.anim = { result, start: null };
+    this.live = { visible: new Set(this.world.player.visible), explored: [...before.player.explored], from: null };
+    const combat = this.world.events.some((e) => e.t === 'shot' && this.eventPoint(e.shooter) !== null && this.eventPoint(e.target) !== null);
+    this.anim = { result, before, start: null, moved: false, impacts: false, combat };
+    this.phase = 'Moving';
     this.path.clear();
+    this.refreshUi();
+  }
+
+  // Movement is over: adopt the physics state, fire the volley.
+  private finishMovement(a: Playback): void {
+    a.moved = true;
+    freeDrive(this.drive);
+    this.drive = a.result.next;
+    syncDrive(this.drive, this.world);
+    for (const [id, fs] of Object.entries(a.result.frames)) this.frames[id] = fs[fs.length - 1];
+    this.live = null;
+    this.phase = a.combat ? 'Firing' : 'Results';
+    this.fog.update(this.combatFogWorld());
+    this.playShotFx();
+    this.weapons.render();
+  }
+
+  // Shots land: explosions, new wrecks, the log and the new hull values.
+  private landImpacts(a: Playback): void {
+    a.impacts = true;
+    this.phase = 'Results';
+    for (const e of this.world.events) {
+      if (e.t !== 'destroyed') continue;
+      const p = this.eventPoint(e.vehicle);
+      if (p) this.fx.explode(p);
+    }
     this.hud.pushEvents(this.world);
     this.refreshUi();
   }
 
-  private finishTurn(): void {
-    if (!this.anim) throw new Error('No turn is playing');
-    const { result } = this.anim;
-    freeDrive(this.drive);
-    this.drive = result.next;
-    syncDrive(this.drive, this.world);
-    for (const [id, fs] of Object.entries(result.frames)) this.frames[id] = fs[fs.length - 1];
+  private finishPlayback(): void {
     this.anim = null;
-    this.live = null;
-    this.playEventFx();
+    this.phase = null;
     this.refreshUi();
   }
 
-  private playEventFx(): void {
+  // The fog while shots fly also shows the tiles of vehicles the volley involves.
+  private combatFogWorld(): World {
+    const visible = new Set(this.world.player.visible);
+    for (const v of [...this.world.vehicles, ...this.world.removed]) {
+      if (this.canShowCombatVehicle(v)) visible.add(tileOf(this.world, v.pos));
+    }
+    return { ...this.world, player: { ...this.world.player, visible: [...visible].sort((a, b) => a - b) } };
+  }
+
+  // Where effects for a vehicle play, or null when the player may not see it.
+  private eventPoint(id: string): V3 | null {
+    const v = this.world.vehicles.find((x) => x.id === id) ?? this.world.removed.find((x) => x.id === id);
+    const f = this.frames[id] ?? (v ? restFrame(this.world, v) : null);
+    if (!v || !f || !this.canShowCombatVehicle(v)) return null;
+    return { x: f.pos.x, y: f.pos.y + GUN_HEIGHT, z: f.pos.z };
+  }
+
+  private playShotFx(): void {
     const w = this.world;
-    const at = (id: string): V3 | null => {
-      const f = this.frames[id];
-      return f ? { x: f.pos.x, y: f.pos.y + GUN_HEIGHT, z: f.pos.z } : null;
-    };
+    const rows = new Map<string, number>();
+    const mine = vehicleStats(w, playerVehicle(w)).weapons;
     for (const e of w.events) {
       if (e.t === 'shot') {
-        const a = at(e.shooter);
-        const b = at(e.target);
+        const a = this.eventPoint(e.shooter);
+        const b = this.eventPoint(e.target);
+        if (!a || !b) continue;
         const shooter = w.vehicles.find((x) => x.id === e.shooter) ?? w.removed.find((x) => x.id === e.shooter);
         const gun = shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
         const def = gun && partDef(gun.defId);
         const heavy = def?.kind === 'weapon' && def.look === 'cannon';
-        if (a && b) this.fx.shot(a, b, e.hit, e.damage, heavy);
-      }
-      if (e.t === 'destroyed') {
-        const p = at(e.vehicle);
-        if (p) this.fx.explode(p);
+        const slot = mine.findIndex((mw) => mw.part.id === e.weapon);
+        const label = `${slot >= 0 ? `[${slot + 1}] ` : ''}${heavy ? 'Cannon' : 'MG'} ${e.hit ? `−${e.damage}` : 'miss'}`;
+        const row = rows.get(e.target) ?? 0;
+        rows.set(e.target, row + 1);
+        this.fx.shot(a, b, e.hit, heavy, label, row, CONFIG.combatShotMs, CONFIG.combatReadMs);
       }
       if (e.t === 'collision') {
-        const p = at(e.a);
+        const p = this.eventPoint(e.a);
         if (p) this.fx.crash(p);
       }
     }
@@ -410,24 +519,34 @@ export class Game {
     this.fog.update({ ...this.world, player });
   }
 
-  // Physics step shown now while a turn plays, or null between turns.
+  // Physics step shown now while the movement plays, or null otherwise. Advances the playback phases.
   private animStep(now: number): number | null {
-    if (!this.anim) return null;
-    if (this.anim.start === null) this.anim.start = now;
-    const i = Math.floor(((now - this.anim.start) / 1000) * PHYSICS.stepsPerSecond);
-    if (i < TURN_STEPS) return i;
-    this.finishTurn();
+    const a = this.anim;
+    if (!a) return null;
+    if (a.start === null) a.start = now;
+    const elapsed = now - a.start;
+    if (elapsed < MOVE_MS) return Math.floor((elapsed / 1000) * PHYSICS.stepsPerSecond);
+    if (!a.moved) this.finishMovement(a);
+    const impactAt = MOVE_MS + (a.combat ? CONFIG.combatShotMs : 0);
+    if (elapsed >= impactAt && !a.impacts) this.landImpacts(a);
+    if (elapsed >= impactAt + (a.combat ? CONFIG.combatReadMs : 0)) this.finishPlayback();
     return null;
   }
 
   private syncVehicles(step: number | null): void {
     const frames: TurnFrames | null = step === null || !this.anim ? null : this.anim.result.frames;
-    const shown = [...this.world.vehicles, ...(frames ? this.world.removed : [])];
+    const landed = !this.anim || this.anim.impacts;
+    const shown = [...this.world.vehicles, ...(landed ? [] : this.world.removed)];
     const ids = new Set<string>();
     for (const v of shown) {
-      const f = frames?.[v.id]?.[step!] ?? this.frames[v.id] ?? restFrame(this.world, v);
+      const kept = this.frames[v.id];
+      // Between turns, a vehicle the rules moved, such as a defeated player waking in town, jumps to its new spot.
+      const stale = !this.anim && kept && dist(toMap(kept.pos), v.pos) > MOVED_BY_RULES;
+      const f = frames?.[v.id]?.[step!] ?? (kept && !stale ? kept : restFrame(this.world, v));
       this.frames[v.id] = f;
-      if (!this.isVehicleVisible(v)) continue;
+      if (!(landed ? this.isVehicleVisible(v) : this.canShowCombatVehicle(v))) continue;
+      const before = !landed && this.anim!.before.vehicles.find((x) => x.id === v.id);
+      const display = before ? { ...v, hull: before.hull, items: before.items } : v;
       ids.add(v.id);
       let view = this.views.get(v.id);
       if (!view) {
@@ -435,11 +554,11 @@ export class Game {
         this.views.set(v.id, view);
         this.scene.add(view.root, view.ground);
       }
-      view.update(v);
+      view.update(display);
       view.pose(f);
       view.aim(this.turretAim(v, f));
       view.rings(this.ringsFor(v));
-      this.vehicleParticles(v, f, frames !== null);
+      this.vehicleParticles(display, f, frames !== null);
     }
     for (const [id, view] of this.views) {
       if (ids.has(id)) continue;
@@ -467,12 +586,7 @@ export class Game {
   private ringsFor(v: Vehicle): Ring3[] {
     const me = playerVehicle(this.world);
     const r = vehicleStats(this.world, v).radius + 0.25;
-    if (v.id === me.id) {
-      const rings: Ring3[] = [{ r: r + 0.05, width: 0.08, color: PAL.select, alpha: 0.45 }];
-      const sel = vehicleStats(this.world, me).weapons.find((m) => m.part.id === this.selected);
-      if (sel && !this.anim) rings.push({ r: sel.def.range, width: 0.06, color: PAL.select, alpha: 0.6 });
-      return rings;
-    }
+    if (v.id === me.id) return [{ r: r + 0.05, width: 0.08, color: PAL.select, alpha: 0.45 }];
     const rings: Ring3[] = [];
     if (Object.values(me.weaponOrders).some((o) => o.targetId === v.id)) rings.push({ r: r + 0.1, width: 0.12, color: PAL.target, alpha: 1 });
     else if (hostileToPlayer(this.world, v)) rings.push({ r, width: 0.08, color: PAL.target, alpha: 0.55 });
@@ -484,9 +598,13 @@ export class Game {
     const hide = this.anim !== null || this.modalOpen();
     this.zones.root.visible = !hide;
     this.path.root.visible = !hide;
+    this.weaponRange.root.visible = false;
+    this.placeTargetMarkers();
     if (hide) return;
     const me = playerVehicle(this.world);
     const s = vehicleStats(this.world, me);
+    const sel = s.weapons.find((m) => m.part.id === this.selected);
+    this.weaponRange.set(this.world.terrain, me.pos, me.heading, sel ? sel.def : null);
     this.zones.update(this.world.terrain, me.pos, me.heading, me.speed, Math.max(MIN_ZONE_HALF_ANGLE, maxTurn(s, me.speed) / 2));
     const hover = this.hoverGround;
     const color = hover ? PAL.throttle[throttleFor(Math.hypot(hover.x - me.pos.x, hover.y - me.pos.y), me.speed)] : PAL.plan;

@@ -11,6 +11,12 @@ const MAX_PUFFS = 200; // pool size; effects beyond this are dropped rather than
 const MAX_TEXTS = 24;
 const GRAVITY = 2; // m/s^2 pulling sparks and dust down; a soft fraction of real gravity, for looks
 const RISE_METERS = 1.5; // how far a floating number drifts up over its life
+const MISS_METERS = 2; // a miss lands this far beside the target
+const CANNON_COLOR = 0xffad50;
+const BURST_GAP = 0.08; // share of the flight between machine-gun bolts
+const MG_BOLT = 0.04; // bolt length as a share of the flight
+const CANNON_BOLT = 0.06;
+const LABEL_ROW_PX = 22; // screen spacing between stacked shot labels
 
 let dotTexture: THREE.Texture | null = null;
 function dotMap(): THREE.Texture {
@@ -28,8 +34,9 @@ function dotMap(): THREE.Texture {
 }
 
 type Puff = { sprite: THREE.Sprite; vel: THREE.Vector3; age: number; life: number; fromScale: number; toScale: number; used: boolean };
-type FloatText = { el: HTMLDivElement; pos: V3; age: number; life: number; used: boolean };
-type Tracer = { line: THREE.Line; age: number; life: number };
+type FloatText = { el: HTMLDivElement; pos: V3; rowPx: number; age: number; life: number; used: boolean };
+// A shot in flight: bolts run from muzzle to impact over its life, then the impact plays.
+type Tracer = { line: THREE.LineSegments; from: THREE.Vector3; to: THREE.Vector3; heavy: boolean; age: number; life: number; land: () => void };
 
 export class Fx3D {
   private puffs: Puff[] = [];
@@ -52,7 +59,7 @@ export class Fx3D {
       el.style.pointerEvents = 'none';
       el.style.display = 'none';
       overlay.appendChild(el);
-      this.texts.push({ el, pos: { x: 0, y: 0, z: 0 }, age: 0, life: 1, used: false });
+      this.texts.push({ el, pos: { x: 0, y: 0, z: 0 }, rowPx: 0, age: 0, life: 1, used: false });
     }
   }
 
@@ -79,21 +86,21 @@ export class Fx3D {
     }
   }
 
-  shot(from: V3, to: V3, hit: boolean, damage: number, heavy: boolean): void {
-    const miss = hit ? { x: 0, z: 0 } : { x: (Math.random() - 0.5) * 3, z: (Math.random() - 0.5) * 3 };
-    const b: V3 = { x: to.x + miss.x, y: to.y, z: to.z + miss.z };
-    const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(from.x, from.y, from.z), new THREE.Vector3(b.x, b.y, b.z)]);
-    const mat = new THREE.LineBasicMaterial({ color: PAL.flash, transparent: true, opacity: 0.9 });
-    const line = new THREE.Line(geo, mat);
+  // A shot travels for flightMs, then sparks on a hit or kicks dust on a miss, and shows its label for readMs.
+  // row stacks labels of several shots at the same target.
+  shot(from: V3, to: V3, hit: boolean, heavy: boolean, label: string, row: number, flightMs: number, readMs: number): void {
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const b: V3 = hit ? to : { x: to.x + side * MISS_METERS, y: to.y, z: to.z - side * MISS_METERS };
+    const color = heavy ? CANNON_COLOR : PAL.flash;
+    const line = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 1 }));
     this.scene.add(line);
-    this.tracers.push({ line, age: 0, life: heavy ? 0.35 : 0.2 });
-    this.puff(from, PAL.flash, 1, { speed: 0, life: 0.15, scale: heavy ? 0.9 : 0.5, grow: 1.6, additive: true });
-    if (hit) {
-      this.puff(b, 0xffa040, heavy ? 14 : 6, { speed: 4, life: 0.35, scale: 0.35, grow: 0.3, additive: true });
-      this.floatText(b, `-${damage}`, '#ffb070');
-    } else {
-      this.floatText(b, 'miss', '#c8b898');
-    }
+    this.puff(from, PAL.flash, 1, { speed: 0, life: flightMs / 2000, scale: heavy ? 0.9 : 0.5, grow: 1.6, additive: true });
+    const land = () => {
+      if (hit) this.puff(b, 0xffa040, heavy ? 14 : 6, { speed: 4, life: 0.35, scale: 0.35, grow: 0.3, additive: true });
+      else this.puff(b, 0xd8c098, 4, { speed: 1.5, life: 0.9, scale: 0.5, grow: 1.4 });
+      this.floatText(to, label, hit ? '#ffb070' : '#c8b898', readMs, row * LABEL_ROW_PX);
+    };
+    this.tracers.push({ line, from: new THREE.Vector3(from.x, from.y, from.z), to: new THREE.Vector3(b.x, b.y, b.z), heavy, age: 0, life: flightMs / 1000, land });
   }
 
   explode(p: V3): void {
@@ -115,11 +122,12 @@ export class Fx3D {
     this.puff(p, 0x4a3f32, 1, { speed: 1.5, life: 1.6, scale: 0.8, grow: 2.4 });
   }
 
-  floatText(p: V3, text: string, color: string): void {
+  floatText(p: V3, text: string, color: string, durationMs: number, rowPx = 0): void {
     const slot = this.texts.find((x) => !x.used) ?? this.texts.reduce((a, b) => (a.age > b.age ? a : b));
     slot.used = true;
     slot.age = 0;
-    slot.life = 1.1;
+    slot.life = durationMs / 1000;
+    slot.rowPx = rowPx;
     slot.pos = { x: p.x, y: p.y, z: p.z };
     slot.el.textContent = text;
     slot.el.style.color = color;
@@ -151,9 +159,19 @@ export class Fx3D {
         tr.line.geometry.dispose();
         (tr.line.material as THREE.Material).dispose();
         this.tracers.splice(i, 1);
+        tr.land();
         continue;
       }
-      (tr.line.material as THREE.LineBasicMaterial).opacity = 0.9 * (1 - tr.age / tr.life);
+      // A cannon fires one long bolt, a machine gun a short burst of three.
+      const progress = tr.age / tr.life;
+      const points: THREE.Vector3[] = [];
+      for (let k = 0; k < (tr.heavy ? 1 : 3); k++) {
+        const head = Math.max(0, progress - k * BURST_GAP);
+        const tail = Math.max(0, head - (tr.heavy ? CANNON_BOLT : MG_BOLT));
+        points.push(tr.from.clone().lerp(tr.to, tail), tr.from.clone().lerp(tr.to, head));
+      }
+      tr.line.geometry.dispose();
+      tr.line.geometry = new THREE.BufferGeometry().setFromPoints(points);
     }
     for (const slot of this.texts) {
       if (!slot.used) continue;
@@ -166,7 +184,7 @@ export class Fx3D {
       const t = slot.age / slot.life;
       const screen = this.rig.screenOf({ x: slot.pos.x, y: slot.pos.y + t * RISE_METERS, z: slot.pos.z });
       slot.el.style.left = `${screen.x}px`;
-      slot.el.style.top = `${screen.y}px`;
+      slot.el.style.top = `${screen.y - slot.rowPx}px`;
       slot.el.style.opacity = `${1 - t}`;
     }
   }
