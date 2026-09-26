@@ -220,7 +220,9 @@ export class Game {
     this.hud = new Hud({
       openInventory: () => this.toggleInventory(),
       openCharacter: () => this.toggleCharacter(),
-      toggleManual: () => { if (!this.anim && !this.modalOpen()) this.toggleManual(); },
+      toggleManual: () => {
+        if (!this.anim && !this.modalOpen()) this.toggleManual();
+      },
       isBusy: () => this.anim !== null,
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
@@ -332,7 +334,8 @@ export class Game {
   // Combat details stay in the fixed inspection panel and hide during playback.
   private placeHitCard(): void {
     const f = this.hovered ? this.frames[this.hovered] : undefined;
-    if (this.anim !== null || this.modalOpen() || !f) return this.hitCard.hide();
+    if (this.anim !== null || this.modalOpen() || !f)
+      return this.hitCard.hide();
     this.hitCard.show();
   }
 
@@ -464,7 +467,11 @@ export class Game {
     const me = playerVehicle(this.world);
     if (picked && picked.id !== me.id) return this.targetVehicle(picked);
     const myView = this.views.get(me.id);
-    if (picked && myView && this.rig.hitsObject(e.clientX, e.clientY, myView.root))
+    if (
+      picked &&
+      myView &&
+      this.rig.hitsObject(e.clientX, e.clientY, myView.root)
+    )
       return this.apply(setMoveOrder(this.world, { kind: "brake" }));
     const p = this.rig.groundUnder(e.clientX, e.clientY, this.ground);
     if (p) this.apply(setMoveOrder(this.world, clickOrder(p, e.shiftKey)));

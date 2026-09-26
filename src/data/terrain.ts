@@ -3,7 +3,17 @@
 
 import type { Vec } from "../sim/vec";
 
-export type TerrainTypeId = "road" | "hardpan" | "sand" | "scrub" | "scree" | "mud" | "gravel" | "saltCrust" | "asphalt" | "ash";
+export type TerrainTypeId =
+  | "road"
+  | "hardpan"
+  | "sand"
+  | "scrub"
+  | "scree"
+  | "mud"
+  | "gravel"
+  | "saltCrust"
+  | "asphalt"
+  | "ash";
 
 export type TerrainType = {
   id: TerrainTypeId;
@@ -20,8 +30,18 @@ export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
   scree: { id: "scree", name: "Scree", speed: 0.55, color: 0x9a8a78 },
   mud: { id: "mud", name: "Mud", speed: 0.45, color: 0x665044 },
   gravel: { id: "gravel", name: "Gravel", speed: 0.85, color: 0x9e9489 },
-  saltCrust: { id: "saltCrust", name: "Salt crust", speed: 0.95, color: 0xe0d8ba },
-  asphalt: { id: "asphalt", name: "Cracked asphalt", speed: 0.98, color: 0x55565b },
+  saltCrust: {
+    id: "saltCrust",
+    name: "Salt crust",
+    speed: 0.95,
+    color: 0xe0d8ba,
+  },
+  asphalt: {
+    id: "asphalt",
+    name: "Cracked asphalt",
+    speed: 0.98,
+    color: 0x55565b,
+  },
   ash: { id: "ash", name: "Ash", speed: 0.6, color: 0x77737a },
 };
 
@@ -85,11 +105,11 @@ export const TERRAIN = {
       kindSeedOffset: 2027,
       coverageAbove: 0.57,
       bands: [
-        { through: 0.3, kind: 'mud' },
-        { through: 0.45, kind: 'gravel' },
-        { through: 0.6, kind: 'saltCrust' },
-        { through: 0.75, kind: 'asphalt' },
-        { through: 1, kind: 'ash' },
+        { through: 0.3, kind: "mud" },
+        { through: 0.45, kind: "gravel" },
+        { through: 0.6, kind: "saltCrust" },
+        { through: 0.75, kind: "asphalt" },
+        { through: 1, kind: "ash" },
       ] as { through: number; kind: TerrainTypeId }[],
     },
   },
