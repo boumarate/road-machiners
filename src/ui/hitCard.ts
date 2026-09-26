@@ -6,14 +6,11 @@ import { playerVehicle } from '../sim/damage';
 import { vehicleStats, type MountedWeapon } from '../sim/stats';
 import type { Aim, Vehicle, World } from '../sim/types';
 import { DEG } from '../sim/vec';
-import { el, panel } from './dom';
+import { el } from './dom';
 import { BLOCK_TEXT } from './weapons';
 
 export type HitRow = { label: string; odds: HitOdds | null; text: string; cause: string | null };
 export type HitCardData = { name: string; mine: HitRow[]; theirs: HitRow[] };
-
-const GAP_PX = 12; // space between the truck and the card
-const EDGE_PX = 8; // space between the card and the window edge
 
 function deg(r: number): string {
   return (Math.abs(r) / DEG).toFixed(1);
@@ -56,13 +53,14 @@ export function hitCardRows(world: World, hoveredId: string): HitCardData | null
 }
 
 export class HitCard {
-  private root = panel('hitcard');
+  private root = el('div', { class: 'hitcard' });
 
-  constructor() {
+  constructor(container: HTMLElement) {
     this.root.style.display = 'none';
+    container.append(this.root);
   }
 
-  // Fills the card for the hovered truck. It stays hidden until place() shows it.
+  // Combat details share the fixed vehicle inspection panel.
   render(world: World, hoveredId: string | null): void {
     const card = hoveredId === null ? null : hitCardRows(world, hoveredId);
     if (!card) {
@@ -76,24 +74,15 @@ export class HitCard {
         ...(r.cause ? [el('div', { class: 'hc-cause dim' }, r.cause)] : []),
       ])),
     ];
-    this.root.replaceChildren(el('h3', {}, card.name), ...section('You → it', card.mine), ...section('It → you', card.theirs));
+    this.root.replaceChildren(...section('You → it', card.mine), ...section('It → you', card.theirs));
   }
 
   hide(): void {
     this.root.style.display = 'none';
   }
 
-  // Shows the card beside the truck at screen point p. clearX is how far the truck reaches sideways on screen,
-  // so the card sits past it: on the right, or on the left when the right has no room.
-  place(p: { x: number; y: number }, clearX: number): void {
+  show(): void {
     if (this.root.childElementCount === 0) return this.hide();
     this.root.style.display = '';
-    const w = this.root.offsetWidth;
-    const h = this.root.offsetHeight;
-    const right = p.x + clearX + GAP_PX;
-    const left = right + w <= window.innerWidth - EDGE_PX ? right : p.x - clearX - GAP_PX - w;
-    const top = Math.min(Math.max(EDGE_PX, p.y - h / 2), window.innerHeight - h - EDGE_PX);
-    this.root.style.left = `${left}px`;
-    this.root.style.top = `${top}px`;
   }
 }

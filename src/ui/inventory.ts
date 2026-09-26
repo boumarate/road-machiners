@@ -2,14 +2,16 @@
 // In a town the garage storage shows beside the grid.
 
 import { GOODS } from '../data/goods';
+import { chassisDef } from '../data/chassis';
 import { partDef, type PartKind } from '../data/parts';
 import { playerVehicle } from '../sim/damage';
-import { gridOf, isMounted, itemCells, placementError, type Cell, type Spot } from '../sim/grid';
+import { freeCells, gridOf, isMounted, itemCells, placementError, type Cell, type Spot } from '../sim/grid';
 import { dumpGood, moveItem, storePart, takeFromStorage } from '../sim/inventory';
 import { townAt } from '../sim/sites';
 import type { GridItem, PartInstance, World } from '../sim/types';
 import { el, panel } from './dom';
 import type { UiHost } from './host';
+import { createIcon, type IconName } from './icons';
 
 const CELL_PX = 42;
 
@@ -40,6 +42,8 @@ export class InventoryView {
   private error = '';
   private gridEl: HTMLElement | null = null;
   private root: HTMLElement = el('div');
+  private inspection = el('div', { class: 'inv-inspection' });
+  private selectedItem: string | null = null;
 
   constructor(private host: UiHost, private onChange: () => void) {
     window.addEventListener('pointermove', (e) => this.onMove(e));
@@ -58,6 +62,9 @@ export class InventoryView {
     const w = this.host.world();
     const me = playerVehicle(w);
     const g = gridOf(me);
+    const selected = me.items.find(item => item.id === this.selectedItem);
+    if (selected) this.showItem(w, selected, selected.kind === 'part' && isMounted(me.chassisId, selected));
+    else this.inspection.replaceChildren(el('h3', {}, 'Equipment'), el('p', {}, 'Select a part or cargo to inspect it.'));
     const grid = el('div', { class: 'inv-grid', style: `width:${g.w * CELL_PX}px;height:${g.h * CELL_PX}px` });
     grid.addEventListener('contextmenu', (e) => e.preventDefault());
     for (let y = 0; y < g.h; y++) {
@@ -72,8 +79,9 @@ export class InventoryView {
     const inTown = townAt(w) !== null;
     this.root.replaceChildren(
       el('div', { class: 'inv-wrap' },
-        el('div', {}, grid, this.legend()),
+        el('div', { class: 'inv-truck' }, el('div', { class: 'truck-shell' }, el('div', { class: 'truck-nose', 'aria-hidden': 'true' }), grid), this.legend()),
         el('div', { class: 'inv-side' },
+          this.inspection,
           inTown ? this.storageEl(w) : el('div', { class: 'dim' }, 'Mounting or unmounting parts needs a town garage. Goods can be moved anywhere.'),
           el('div', { class: 'inv-dump', 'data-drop': 'dump' }, 'Drop goods here to dump them'),
         ),
@@ -84,7 +92,8 @@ export class InventoryView {
   }
 
   private legend(): HTMLElement {
-    return el('div', { class: 'dim inv-legend' },
+    return el('details', { class: 'dim inv-legend' },
+      el('summary', {}, 'Mounts & controls'),
       el('div', {}, 'Top view, nose up. W E C: weapon, engine, cargo mounts. F B L R: armor mounts on the front, back, left and right.'),
       el('div', {}, 'A part works only when it lies fully on one of its letters. Built-in parts are fixed and can only be repaired.'),
       el('div', {}, 'Drag to move, R or right click to rotate.'),
@@ -103,10 +112,28 @@ export class InventoryView {
     const core = it.kind === 'part' && partDef(it.part.defId).kind === 'core';
     const state = core ? 'fixed' : mounted ? 'mounted' : 'spare';
     const cls = it.kind === 'part' ? `${KIND_CLASS[partDef(it.part.defId).kind]} ${state}` : `k-good g-${it.good}`;
-    const node = el('div', { class: `inv-item ${cls}`, style: pos(x, y, wd, ht), title: itemTitle(it, mounted) }, label.short);
+    const node = el('div', { class: `inv-item ${cls}`, style: pos(x, y, wd, ht), title: itemTitle(it, mounted), tabindex: 0, role: 'button', 'aria-label': itemTitle(it, mounted) }, createIcon(getItemIcon(it)), el('span', { class: 'inv-item-name' }, label.short));
+    const inspect = () => this.showItem(w, it, mounted);
+    node.addEventListener('click', inspect);
+    node.addEventListener('focus', inspect);
+    node.addEventListener('keydown', e => { if (e.key === 'Enter') inspect(); });
     if (it.kind === 'part') node.append(conditionBar(it.part));
-    if (!core) node.addEventListener('pointerdown', (e) => this.startDrag(e, 'grid', it.id, it, { x: Math.floor(e.offsetX / CELL_PX), y: Math.floor(e.offsetY / CELL_PX) }));
+    if (!core) node.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      inspect();
+      this.startDrag(e, 'grid', it.id, it, { x: Math.floor(e.offsetX / CELL_PX), y: Math.floor(e.offsetY / CELL_PX) });
+    });
     return node;
+  }
+
+  private showItem(w: World, item: GridItem, mounted: boolean): void {
+    this.selectedItem = item.id;
+    this.inspection.replaceChildren(
+      createIcon(getItemIcon(item)),
+      el('h3', {}, itemLabel(item).short),
+      el('p', {}, itemTitle(item, mounted)),
+      el('p', { class: 'dim' }, item.kind === 'good' ? 'Drag to rearrange cargo. Dropping in the dump area discards it.' : townAt(w) ? 'Garage: drag movable parts onto matching mounts or into storage.' : 'Move or remove equipment at a town garage.'),
+    );
   }
 
   private storageEl(w: World): HTMLElement {
@@ -223,7 +250,8 @@ export class InventoryScreen {
   private root = panel('modal');
   private view: InventoryView;
 
-  constructor(host: UiHost) {
+  constructor(private host: UiHost) {
+    this.root.classList.add('inventory-screen');
     this.root.style.display = 'none';
     this.view = new InventoryView(host, () => this.render());
   }
@@ -248,10 +276,22 @@ export class InventoryScreen {
     if (!this.isOpen()) return;
     this.root.replaceChildren(
       el('button', { class: 'close', onclick: () => this.close() }, 'Close [I]'),
-      el('h3', {}, 'Truck inventory'),
+      el('h3', {}, chassisDef(playerVehicle(this.host.world()).chassisId).name),
+      el('div', { class: 'inv-summary' }, `Equipment & cargo · ${freeCells(playerVehicle(this.host.world()))} free cells · Money ${this.host.world().player.money}`),
       this.view.render(),
     );
   }
+}
+
+function getItemIcon(item: GridItem): IconName {
+  if (item.kind === 'good') {
+    if (item.good === 'scrap' || item.good === 'salt' || item.good === 'meds') return item.good;
+    throw new Error(`No inventory artwork for good: ${item.good}`);
+  }
+  const def = partDef(item.part.defId);
+  if (def.kind === 'weapon') return def.look;
+  if (def.kind === 'core') return def.role === 'tank' ? 'fuel' : def.role;
+  return def.kind;
 }
 
 function pos(x: number, y: number, w: number, h: number): string {
