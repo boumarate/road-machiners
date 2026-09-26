@@ -7,6 +7,7 @@ import { PAL, shade } from '../../render/palette';
 import { PHYSICS } from '../../data/physics';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import type { Obstacle } from '../../sim/types';
+import { model } from './models';
 
 const S = PHYSICS.metersPerTile;
 
@@ -88,31 +89,13 @@ function buildRock(t: Terrain, o: Obstacle): THREE.Object3D {
   return g;
 }
 
-// A burnt truck: scorched frame, crushed cab, one loose wheel, like the 2D wreck.
+// A burnt pickup from tools/blender/wreck.py, modeled at the 0.7-tile reference size.
 function buildWreck(t: Terrain, o: Obstacle): THREE.Object3D {
   const seed = hashStr(o.id);
-  const k = o.r / 0.7; // scale relative to the 0.7-tile reference wreck the shape was drawn for
-  const heading = seed * Math.PI * 2;
   const g = seat(t, o);
-  g.rotation.y = -heading;
-  const rust = new THREE.MeshLambertMaterial({ color: PAL.rust.top, flatShading: true });
-  const rustDark = new THREE.MeshLambertMaterial({ color: PAL.rust.dark, flatShading: true });
-  const bed = new THREE.Mesh(new THREE.BoxGeometry(1.1 * k * S, 0.5 * S, 0.8 * k * S), rust);
-  bed.position.set(-0.3 * k * S, 0.3 * S, 0);
-  const cab = new THREE.Mesh(new THREE.BoxGeometry(0.5 * k * S, 0.3 * S, 0.6 * k * S), rustDark);
-  cab.position.set(-0.45 * k * S, 0.55 * S, 0);
-  cab.rotation.z = 0.15;
-  const wheel = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.16 * S, 0.16 * S, 0.12 * S, 12).rotateX(Math.PI / 2),
-    new THREE.MeshLambertMaterial({ color: PAL.wheel }),
-  );
-  wheel.position.set(0.3 * k * S, 0.16 * S, 0.75 * k * S);
-  wheel.rotation.z = 0.6;
-  g.add(bed, cab, wheel);
-  for (const m of g.children) {
-    m.castShadow = true;
-    m.receiveShadow = true;
-  }
+  g.rotation.y = -seed * Math.PI * 2;
+  g.scale.setScalar(o.r / 0.7);
+  g.add(model('wreck'));
   return g;
 }
 
