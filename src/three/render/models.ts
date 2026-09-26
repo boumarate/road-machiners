@@ -4,7 +4,22 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-const NAMES = ['wreck'] as const;
+const NAMES = [
+  'wreck',
+  'rock',
+  'building',
+  'crates',
+  'water_tower',
+  'palm',
+  'orchard_tree',
+  'silo',
+  'ship_hull',
+  'ship_nose',
+  'bridge',
+  'pump_station',
+  'lock_gate',
+  'glass_flats',
+] as const;
 export type ModelName = (typeof NAMES)[number];
 
 const loaded = new Map<ModelName, THREE.Object3D>();

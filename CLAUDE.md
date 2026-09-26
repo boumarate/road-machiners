@@ -41,14 +41,14 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 
 ## Art
 
-Low-poly models built from Three.js boxes and shapes. The ground is a per-tile painted canvas texture.
+Static props, obstacles and landmarks are low-poly Blender models. Vehicles, the town pads and water are built from Three.js shapes in code. The ground is a per-tile painted canvas texture.
 
 Some models come from Blender scripts in `tools/blender/`. Blender is installed with `brew install --cask blender`. Each script writes a `.glb` into `public/models/`, and both are committed. Rebuild one with `blender --background --python tools/blender/<name>.py -- public/models/<name>.glb tmp/<name>.png`. The second path is an optional preview render from the game camera angle.
 
 To add a model:
 
 1. Copy `tools/blender/wreck.py` as the template. It shows the script shape: a `COLORS` table, a `build(kit)` function and a `main()`.
-2. Build from `Kit.box()` and `Kit.cylinder()` in `tools/blender/kit.py`. Add shared helpers to `kit.py` and one-model helpers to the model's script.
+2. Build from `Kit.box()` and `Kit.cylinder()` in `tools/blender/kit.py`. `tools/blender/shapes.py` adds struts, tapered cylinders, ladders and wall patches. Add shared helpers to those files and one-model helpers to the model's script.
 3. Work in meters with Z up and the front facing +X. Keep the origin at the model's ground point.
 4. Size the model to a reference radius or footprint from the sim, and state it in the docstring. The game scales it from there.
 5. Take colors from `src/render/palette.ts` and name the palette key in a comment. Blender cannot read the palette, so keep both in sync.
