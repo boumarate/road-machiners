@@ -1,3 +1,4 @@
+import { RULES } from '../data/rules';
 // Damage entering a truck. A round enters the grid from the struck side and walks one lane of cells inward.
 // Each working part it meets takes damage and stops some of its penetration.
 
@@ -76,8 +77,9 @@ export function walkLane(world: World, v: Vehicle, side: Side, lane: number, rou
   for (const c of laneCells(g, side, lane)) {
     if (pen <= 0) break;
     if (g.cells[c.y][c.x] === null) continue;
+    pen -= RULES.cellPen;
     const part = owner.get(`${c.x},${c.y}`);
-    if (!part || part.hp <= 0 || struck.has(part.id)) continue;
+    if (pen <= 0 || !part || part.hp <= 0 || struck.has(part.id)) continue;
     struck.add(part.id);
     const armor = partDef(part.defId).armor;
     hits.push({ part: part.id, damage: damagePart(world, v, part, round.damage * Math.min(1, pen / armor)) });

@@ -30,6 +30,7 @@ export const RULES = {
   // A crash gives each truck ramDamage × impact in tiles per turn × the other body's share of both masses,
   // spread over the lanes of its struck side. An obstacle's share is 1.
   ramDamage: 15,
+  cellPen: 0.5, // penetration every grid cell a round or crash passes costs, for the frame and bulk in the way
   crashPen: 4, // penetration of crash damage in each lane
   wheelLoss: 0.15, // share of speed and turning lost per broken wheel
   tankLeak: 1, // fuel lost per turn with a broken tank

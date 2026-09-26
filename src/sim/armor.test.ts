@@ -179,3 +179,15 @@ describe('broken core parts', () => {
     expect(vehicleStats(w, me).maxSpeed).toBe(RULES.disabledEngineSpeed);
   });
 });
+
+describe('lane depth', () => {
+  it('a crash-strength hit on the nose fades before the rear wheels', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine'], { x: 40, y: 40 });
+    for (let lane = 0; lane < laneCount(v, 'front'); lane++) walkLane(w, v, 'front', lane, { damage: 50, pen: RULES.crashPen });
+    const g = gridOf(v);
+    const rear = coreParts(v, 'wheel').filter((p) => mountedItems(v).find((it) => it.part.id === p.id)!.y > g.h / 2);
+    expect(rear.length).toBe(2);
+    for (const p of rear) expect(p.hp).toBeGreaterThan(0);
+  });
+});
