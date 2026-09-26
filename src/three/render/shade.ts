@@ -12,7 +12,7 @@ import { heightAt } from '../../sim/terrain';
 import type { World } from '../../sim/types';
 
 const S = PHYSICS.metersPerTile;
-const LIFT = 0.04; // meters above the terrain surface, above the fog layer's lift
+const LIFT = 0.04; // meters above the terrain surface, avoids z-fighting
 const REACH = 20; // tiles from the player to the patch edge, the base sight radius
 const SIDE = REACH * 2 + 1; // corners along one side of the patch
 
@@ -49,7 +49,7 @@ export class ShadeView {
     });
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.frustumCulled = false;
-    this.mesh.renderOrder = 901; // above the fog layer, below HTML labels
+    this.mesh.renderOrder = 901; // above ground, obstacles, zones and path; below HTML labels
     this.update(world);
   }
 
@@ -88,7 +88,7 @@ function patchIndices(): THREE.BufferAttribute {
   return new THREE.BufferAttribute(new Uint32Array(out), 1);
 }
 
-// A corner reads as explored if any of its up to four surrounding tiles is, matching the fog layer.
+// A corner reads as explored if any of its up to four surrounding tiles is, matching the fog.
 function cornerExplored(world: World, i: number, j: number): boolean {
   const n = world.size;
   for (const [x, y] of [

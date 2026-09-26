@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import type { World } from '../../sim/types';
 import { FogView } from './fog';
-import { RenderScope } from './scope';
+import { TERRAIN_CHUNK, type TerrainChunk } from './terrain';
 
 const SIZE = 70; // two full chunks and a partial one per side
 
@@ -20,23 +20,31 @@ function fogWorld(visible: number[], explored: boolean[]): World {
   return { size: SIZE, terrain: { size: SIZE, heights, types: [] }, player: { visible, explored } } as unknown as World;
 }
 
-function alphaAttributes(root: THREE.Object3D): THREE.BufferAttribute[] {
-  const out: THREE.BufferAttribute[] = [];
-  root.traverse((o) => {
-    if (o instanceof THREE.Mesh) out.push(o.geometry.getAttribute('alpha') as THREE.BufferAttribute);
-  });
-  if (out.length !== 9) throw new Error(`Expected 9 fog chunks under the scope root, found ${out.length}`);
+// Bare ground chunks: FogView only adds its attribute to each geometry and patches the shared material.
+function groundChunks(): TerrainChunk[] {
+  const material = new THREE.MeshLambertMaterial();
+  const out: TerrainChunk[] = [];
+  for (let y = 0; y < SIZE; y += TERRAIN_CHUNK) for (let x = 0; x < SIZE; x += TERRAIN_CHUNK) {
+    const width = Math.min(TERRAIN_CHUNK, SIZE - x);
+    const depth = Math.min(TERRAIN_CHUNK, SIZE - y);
+    out.push({ x, y, width, depth, mesh: new THREE.Mesh(new THREE.PlaneGeometry(1, 1, width, depth), material) });
+  }
+  if (out.length !== 9) throw new Error(`Expected 9 ground chunks, found ${out.length}`);
   return out;
 }
 
-function alphas(root: THREE.Object3D): number[][] {
-  return alphaAttributes(root).map((a) => Array.from(a.array as Float32Array));
+function lookAttributes(ground: TerrainChunk[]): THREE.BufferAttribute[] {
+  return ground.map((g) => g.mesh.geometry.getAttribute('fogLook') as THREE.BufferAttribute);
+}
+
+function looks(ground: TerrainChunk[]): number[][] {
+  return lookAttributes(ground).map((a) => Array.from(a.array as Float32Array));
 }
 
 function fresh(world: World): number[][] {
-  const root = new THREE.Group();
-  new FogView(world, new RenderScope(root, SIZE));
-  return alphas(root);
+  const ground = groundChunks();
+  new FogView(world, ground);
+  return looks(ground);
 }
 
 function disk(cx: number, cy: number, r: number): number[] {
@@ -49,8 +57,8 @@ describe('fog diff update', () => {
   it('matches a full recompute after random vision changes', () => {
     const rnd = random(3);
     const explored = new Array<boolean>(SIZE * SIZE).fill(false);
-    const root = new THREE.Group();
-    const view = new FogView(fogWorld([], explored), new RenderScope(root, SIZE));
+    const ground = groundChunks();
+    const view = new FogView(fogWorld([], explored), ground);
     for (let step = 0; step < 40; step++) {
       const visible = disk(rnd() * SIZE, rnd() * SIZE, 1 + rnd() * 12);
       for (const t of visible) explored[t] = true;
@@ -58,28 +66,28 @@ describe('fog diff update', () => {
       if (step % 5 === 4) for (let i = 0; i < 50; i++) explored[Math.floor(rnd() * SIZE * SIZE)] = false;
       const world = fogWorld(visible, [...explored]);
       view.update(world);
-      expect(alphas(root)).toEqual(fresh(world));
+      expect(looks(ground)).toEqual(fresh(world));
     }
   });
 
   it('dirties neighbouring chunks when a tile on a chunk border changes', () => {
     const explored = new Array<boolean>(SIZE * SIZE).fill(false);
-    const root = new THREE.Group();
-    const view = new FogView(fogWorld([], explored), new RenderScope(root, SIZE));
+    const ground = groundChunks();
+    const view = new FogView(fogWorld([], explored), ground);
     for (const [x, y] of [[31, 31], [32, 32], [31, 32], [63, 0], [64, 69], [0, 31]]) {
       const world = fogWorld([y * SIZE + x], explored);
       view.update(world);
-      expect(alphas(root)).toEqual(fresh(world));
+      expect(looks(ground)).toEqual(fresh(world));
     }
   });
 
   it('leaves chunks without changed tiles untouched', () => {
     const explored = new Array<boolean>(SIZE * SIZE).fill(false);
-    const root = new THREE.Group();
-    const view = new FogView(fogWorld([], explored), new RenderScope(root, SIZE));
-    const before = alphaAttributes(root).map((a) => a.version);
+    const ground = groundChunks();
+    const view = new FogView(fogWorld([], explored), ground);
+    const before = lookAttributes(ground).map((a) => a.version);
     view.update(fogWorld(disk(5, 5, 3), explored));
-    const changed = alphaAttributes(root).map((a, i) => a.version !== before[i]);
+    const changed = lookAttributes(ground).map((a, i) => a.version !== before[i]);
     expect(changed.filter(Boolean).length).toBe(1);
   });
 });

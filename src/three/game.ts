@@ -159,10 +159,10 @@ export class Game {
   private readonly rig: CameraRig;
   private readonly ground = new THREE.Group(); // terrain chunks near the view, for ground picking
   private readonly props = new THREE.Group(); // sites and obstacles near the view
-  private readonly fogRoot = new THREE.Group();
   private readonly scopes: RenderScope[];
   private readonly obstacles: ObstacleViews;
   private readonly fog: FogView;
+  private readonly lastSeen = new Map<string, number>(); // vehicle id to the turn the player last saw it
   private readonly shade: ShadeView;
   private readonly weather: WeatherView;
   private readonly labels: Labels;
@@ -226,20 +226,19 @@ export class Game {
     });
     this.scene.add(this.sun, this.sun.target);
 
-    // Ground, props and fog cull separately, so ground picking only hits terrain.
+    // Ground and props cull separately, so ground picking only hits terrain.
     const groundScope = new RenderScope(this.ground, this.world.size);
     const propScope = new RenderScope(this.props, this.world.size);
-    const fogScope = new RenderScope(this.fogRoot, this.world.size);
-    this.scopes = [groundScope, propScope, fogScope];
-    terrainMesh(this.world, groundScope);
+    this.scopes = [groundScope, propScope];
+    const groundChunks = terrainMesh(this.world, groundScope);
     addSites(this.world.terrain, propScope);
     this.obstacles = new ObstacleViews(propScope, this.world.terrain);
     this.obstacles.sync(this.world.obstacles);
-    this.fog = new FogView(this.world, fogScope);
+    this.fog = new FogView(this.world, groundChunks);
     this.path = new PathView(this.world.terrain);
     this.shade = new ShadeView(this.world);
     this.weather = new WeatherView(this.world);
-    this.scene.add(this.ground, this.props, this.fogRoot, this.shade.mesh, this.weather.root, this.zones.root, this.path.root, this.weaponRange.root, this.contacts.root, this.dust.root, this.soundRing.root);
+    this.scene.add(this.ground, this.props, this.shade.mesh, this.weather.root, this.zones.root, this.path.root, this.weaponRange.root, this.contacts.root, this.dust.root, this.soundRing.root);
     this.overlay = overlay;
     overlay.append(this.stormTint);
     this.labels = new Labels(overlay);
@@ -546,6 +545,13 @@ export class Game {
           e.target === v.id,
       )
     );
+  }
+
+  // A vehicle out of sight stays drawn for a few turns after the player last saw it, so it does not
+  // blink out behind a rock. Display only: it cannot be picked or targeted while lingering.
+  private lingers(v: Vehicle): boolean {
+    const seen = this.lastSeen.get(v.id);
+    return seen !== undefined && this.world.turn - seen <= TERRAIN.vision.lingerTurns;
   }
 
   private isVehicleVisible(v: Vehicle): boolean {
@@ -906,8 +912,9 @@ export class Game {
         frames?.[v.id]?.[step!] ??
         (kept && !stale ? kept : restFrame(this.world, v));
       this.frames[v.id] = f;
-      if (!(landed ? this.isVehicleVisible(v) : this.canShowCombatVehicle(v)))
-        continue;
+      const seen = landed ? this.isVehicleVisible(v) : this.canShowCombatVehicle(v);
+      if (seen) this.lastSeen.set(v.id, this.world.turn);
+      if (!seen && !this.lingers(v)) continue;
       const before =
         !landed && this.anim!.before.vehicles.find((x) => x.id === v.id);
       const display = before ? { ...v, items: before.items } : v;

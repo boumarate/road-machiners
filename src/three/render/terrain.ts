@@ -23,8 +23,12 @@ function paintTexture(w: World): THREE.CanvasTexture {
   return texture;
 }
 
-// Terrain chunks register with the scope, so only chunks near the view are drawn.
-export function terrainMesh(w: World, scope: RenderScope): void {
+export type TerrainChunk = { x: number; y: number; width: number; depth: number; mesh: THREE.Mesh };
+
+// Terrain chunks register with the scope, so only chunks near the view are drawn. Returned for the fog,
+// which greys out the ground per corner.
+export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
+  const chunks: TerrainChunk[] = [];
   const material = new THREE.MeshLambertMaterial({ map: paintTexture(w) });
   for (let y = 0; y < w.size; y += TERRAIN_CHUNK) for (let x = 0; x < w.size; x += TERRAIN_CHUNK) {
     const width = Math.min(TERRAIN_CHUNK, w.size - x);
@@ -44,5 +48,7 @@ export function terrainMesh(w: World, scope: RenderScope): void {
     mesh.matrixAutoUpdate = false;
     mesh.updateMatrix();
     scope.add(mesh, { x: x + width / 2, y: y + depth / 2 }, Math.hypot(width, depth) / 2);
+    chunks.push({ x, y, width, depth, mesh });
   }
+  return chunks;
 }

@@ -31,7 +31,7 @@ export function visibleTiles(world: World, from: Vec): Set<number> {
     for (let y = lo.y; y <= hi.y; y++) {
       const tile = { x: x + 0.5, y: y + 0.5 };
       if (dist(from, tile) > r) continue;
-      if (hasLineOfSight(from, tile, blockers) && clearOverTerrain(world.terrain, from, tile)) out.add(y * size + x);
+      if (inPlainView(world, from, tile, blockers)) out.add(y * size + x);
     }
   }
   return out;
@@ -41,8 +41,17 @@ export function canVehicleSee(world: World, observer: Vehicle, position: Vec): b
   if (observer.id === world.player.vehicleId) return playerSees(world, position);
   const target = position;
   return dist(observer.pos, target) <= sightRadius(world, observer.pos) &&
-    hasLineOfSight(observer.pos, target, world.obstacles.filter((o) => BLOCKING.includes(o.kind))) &&
-    clearOverTerrain(world.terrain, observer.pos, target);
+    inPlainView(world, observer.pos, target, world.obstacles.filter((o) => BLOCKING.includes(o.kind)));
+}
+
+// Within the close radius, rocks and hills do not hide anything.
+function inPlainView(world: World, a: Vec, b: Vec, blockers: Obstacle[]): boolean {
+  return dist(a, b) <= TERRAIN.vision.closeRadius || (hasLineOfSight(a, b, blockers) && clearOverTerrain(world.terrain, a, b));
+}
+
+// A straight line past rocks and over hills, with no close radius: a shot needs it even when the target is seen.
+export function hasLineOfFire(world: World, a: Vec, b: Vec): boolean {
+  return hasLineOfSight(a, b, world.obstacles.filter((o) => BLOCKING.includes(o.kind))) && clearOverTerrain(world.terrain, a, b);
 }
 
 // An obstacle blocks sight only if it sits between the viewer and the tile.
