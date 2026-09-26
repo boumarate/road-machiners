@@ -6,14 +6,15 @@ export const GOODS: Record<string, GoodDef> = {
   scrap: { id: 'scrap', name: 'Scrap metal', mass: 100 },
   salt: { id: 'salt', name: 'Salt', mass: 75 },
   meds: { id: 'meds', name: 'Meds', mass: 50 },
+  parts: { id: 'parts', name: 'Parts', mass: 20 }, // spent by field repair
 };
 
-export const GOOD_IDS = ['scrap', 'salt', 'meds'];
+export const GOOD_IDS = ['scrap', 'salt', 'meds', 'parts'];
 
 // Base unit prices. Buy adds the spread, sell subtracts it.
 export const TOWN_PRICES: Record<string, Record<string, number>> = {
-  bowl: { scrap: 10, salt: 38, meds: 55 },
-  nose: { scrap: 28, salt: 14, meds: 85 },
+  bowl: { scrap: 10, salt: 38, meds: 55, parts: 18 },
+  nose: { scrap: 28, salt: 14, meds: 85, parts: 22 },
 };
 
 export const ECONOMY = {
