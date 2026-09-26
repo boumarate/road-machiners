@@ -210,7 +210,7 @@ function makeCar(world: RAPIER.World, body: RAPIER.RigidBody, b: Body, mass: num
 // What a driver wants this turn, fixed at the start of the turn like the 2D rules: a destination to
 // steer at, and a speed from the throttle zone of the click. Without fuel the engine gives nothing.
 // route holds waypoints around obstacles when the straight line to dest is blocked, else null.
-type Plan = { dest: Vec | null; route: Vec[] | null; target: number; stopAt: boolean; engine: boolean; maxSteer: number; engineForce: number; brakeForce: number };
+type Plan = { dest: Vec | null; route: Vec[] | null; target: number; stopAt: boolean; engine: boolean; maxSteer: number; engineForce: number; brakeForce: number; stopDecel: number };
 
 function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBody, order: MoveOrder | null): Plan {
   const ch = chassisDef(v.chassisId);
@@ -224,6 +224,7 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
     maxSteer: T.maxSteer * (s.turnSlow / (ch.turnSlow * DEG)),
     engineForce: (full.mass * T.engineAccel * (s.accel / ch.accel)) / 2,
     brakeForce: T.brakeForce * (ch.ratedMass / 1000),
+    stopDecel: D.stopDecel * (ch.ratedMass / full.mass), // the stop plan brakes as hard as this load allows
   };
   if (!order) return { ...base, dest: null, route: null, target: toMps(speed), stopAt: false };
   if (order.kind === 'brake') return { ...base, dest: null, route: null, target: 0, stopAt: false };
@@ -267,7 +268,7 @@ function driveStep(c: Car): void {
     const ang = angleDiff(heading, Math.atan2(dz, dx));
     const destAng = angleDiff(heading, Math.atan2(plan.dest.y * S - p.z, plan.dest.x * S - p.x));
     if (plan.stopAt) {
-      target = Math.min(target, Math.sqrt(2 * D.stopDecel * Math.max(0, far - RULES.arriveRadius * S)));
+      target = Math.min(target, Math.sqrt(2 * plan.stopDecel * Math.max(0, far - RULES.arriveRadius * S)));
       if (far < RULES.arriveRadius * S) c.result.arrived = true;
     } else if (far < RULES.passRadius * S || (Math.abs(destAng) > Math.PI / 2 && speed > D.reverseBelow)) {
       c.result.passed = true;
