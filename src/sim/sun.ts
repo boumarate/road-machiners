@@ -46,12 +46,12 @@ export function inShade(world: World, pos: Vec, sun: Sun): boolean {
   return false;
 }
 
-// 1 in shade and at night, above 1 in full sun. Weather multiplies it.
+// 1 in shade and at night, above 1 in full sun. Weather multiplies the sun-driven share above 1:
+// overcast cancels it, a heat wave amplifies it.
 export function heatAt(world: World, pos: Vec): number {
   const sun = sunAt(world.turn);
-  if (!sun) return 1;
-  if (inShade(world, pos, sun)) return 1;
+  if (!sun || inShade(world, pos, sun)) return 1;
   const t = clamp(sun.elevation / (TIME.noonElevation * (Math.PI / 180)), 0, 1);
-  const heat = 1 + (TIME.sunHeat - 1) * t;
-  return heat * weatherAt(world, pos).heat;
+  const excess = (TIME.sunHeat - 1) * t;
+  return 1 + excess * weatherAt(world, pos).heat;
 }

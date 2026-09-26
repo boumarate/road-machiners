@@ -5,4 +5,19 @@ export const WEATHER = {
   wind: { x: 0.4, y: -0.14 },
   cloud: { puffs: 4, spread: 2, diameter: 3.5, height: 1.3, opacity: 0.36, color: 0xd5b58a },
   storm: { puffs: 9, spread: 4, diameter: 6, height: 1.8, opacity: 0.48, color: 0x9d7954 },
+  // Sim weather: storms are moving areas, heat waves and overcast cover the whole region.
+  sim: {
+    // Chance per turn to spawn a new event of that kind, checked only while none of that kind is active.
+    spawnChance: { storm: 0.006, heatwave: 0.004, overcast: 0.004 },
+    duration: { storm: [15, 30] as [number, number], heatwave: [25, 50] as [number, number], overcast: [25, 50] as [number, number] },
+    stormRadius: [8, 16] as [number, number], // tiles
+    stormSpeed: [0.1, 0.3] as [number, number], // tiles per turn
+    effects: {
+      // Multipliers on sight, top speed and wear, and extra scatter in radians, inside a storm.
+      storm: { sight: 0.4, spread: 0.15, speed: 0.6, wear: 1.5 },
+      // Multiplier on the sun-driven share of heat above 1. Overcast cancels it; a heat wave amplifies it.
+      heatwave: 1.6,
+      overcast: 0,
+    },
+  },
 } as const;

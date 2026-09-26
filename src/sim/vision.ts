@@ -3,17 +3,26 @@
 // NPCs query the same occlusion rules from their own positions.
 
 import { TERRAIN } from '../data/terrain';
+import { TIME } from '../data/time';
 import type { Obstacle, Vehicle, World } from './types';
 import { heightAt, type Terrain } from './terrain';
+import { sunAt } from './sun';
+import { weatherAt } from './weather';
 import { dist, segmentDist, type Vec } from './vec';
 import { contactsOf } from './detect';
 
 const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building'];
 
+// Base vision radius, shrunk by weather and at night.
+export function sightRadius(world: World, pos: Vec): number {
+  const night = sunAt(world.turn) ? 1 : TIME.nightSight;
+  return TERRAIN.vision.radius * weatherAt(world, pos).sight * night;
+}
+
 // Tile indices (y * world.size + x) visible from a point, within vision radius and line of sight.
 export function visibleTiles(world: World, from: Vec): Set<number> {
   const size = world.size;
-  const r = TERRAIN.vision.radius;
+  const r = sightRadius(world, from);
   const blockers = world.obstacles.filter((o) => BLOCKING.includes(o.kind));
   const out = new Set<number>();
   const lo = { x: Math.max(0, Math.floor(from.x - r)), y: Math.max(0, Math.floor(from.y - r)) };
@@ -31,7 +40,7 @@ export function visibleTiles(world: World, from: Vec): Set<number> {
 export function canVehicleSee(world: World, observer: Vehicle, position: Vec): boolean {
   if (observer.id === world.player.vehicleId) return playerSees(world, position);
   const target = position;
-  return dist(observer.pos, target) <= TERRAIN.vision.radius &&
+  return dist(observer.pos, target) <= sightRadius(world, observer.pos) &&
     hasLineOfSight(observer.pos, target, world.obstacles.filter((o) => BLOCKING.includes(o.kind))) &&
     clearOverTerrain(world.terrain, observer.pos, target);
 }
