@@ -39,7 +39,8 @@ const HILL_GRADE = 0.2; // height per tile, steeper than 90% of the generated ma
 
 describe('physics turns', () => {
   it('turns an NPC around for a destination behind it', () => {
-    const w = emptyWorld({ x: 50, y: 50 });
+    // The player stands within the live radius of the whole drive, so the NPC keeps its physics body.
+    const w = emptyWorld({ x: 20, y: 50 });
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 30, y: 30 });
     npc.order = { kind: 'stopAt', dest: { x: 10, y: 30 } };
     // Six seconds allow a pickup to reverse-steer through a half turn on flat ground.

@@ -7,8 +7,8 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
 import { RULES } from '../data/rules';
+import { fuelLimited, isNear } from '../sim/far';
 import { isDriveObstacle } from '../sim/mapgen';
-import { getResources } from '../sim/resources';
 import { vehicleMass } from '../sim/mass';
 import { vehicleStats, type VehicleStats } from '../sim/stats';
 import { route, straightClear } from '../sim/path';
@@ -66,15 +66,18 @@ export function freeDrive(d: Drive): void {
 
 // Brings the physics world in line with the sim: new and removed vehicles and obstacles, vehicle
 // masses after loadout changes, and vehicles the rules moved, such as a defeated player waking up in town.
+// Only near vehicles keep a body. A far vehicle loses its body and driver memory, and gets a new body
+// at its sim pose once it comes near again.
 export function syncDrive(d: Drive, w: World): void {
-  const ids = new Set(w.vehicles.map((v) => v.id));
+  const near = w.vehicles.filter((v) => isNear(w, v));
+  const ids = new Set(near.map((v) => v.id));
   for (const [id, handle] of Object.entries(d.bodies)) {
     if (ids.has(id)) continue;
     d.world.removeRigidBody(d.world.getRigidBody(handle));
     delete d.bodies[id];
     delete d.memory[id];
   }
-  for (const v of w.vehicles) {
+  for (const v of near) {
     const handle = d.bodies[v.id];
     if (handle === undefined) {
       d.bodies[v.id] = addVehicle(d.world, w, v);
@@ -99,6 +102,9 @@ export function syncDrive(d: Drive, w: World): void {
     const half = PHYSICS.rockHeight / 2;
     const desc = RAPIER.ColliderDesc.cylinder(half, o.r * S).setTranslation(o.pos.x * S, ground + half - PHYSICS.rockSink, o.pos.y * S);
     d.obstacles[o.id] = d.world.createCollider(desc).handle;
+  }
+  for (const v of w.vehicles) {
+    if (isNear(w, v) !== (d.bodies[v.id] !== undefined)) throw new Error(`Vehicle ${v.id} is ${isNear(w, v) ? 'near without' : 'far with'} a physics body`);
   }
 }
 
@@ -131,7 +137,8 @@ function placeBody(body: RAPIER.RigidBody, w: World, v: Vehicle): void {
 }
 
 // Runs one turn of the sim's orders from a copy of the physics world. The input drive stays untouched.
-// Call syncDrive first so the physics world matches the sim.
+// Call syncDrive first so the physics world matches the sim. Only vehicles with a body drive and get
+// frames; far vehicles travel through advanceFar instead.
 export function simulateTurn(d: Drive, w: World): TurnResult {
   return run(d, w, TURN_STEPS);
 }
@@ -143,10 +150,8 @@ function run(d: Drive, w: World, steps: number): TurnResult {
   world.timestep = DT;
   const events = new RAPIER.EventQueue(true);
   const memory: Record<string, Memory> = structuredClone(d.memory);
-  const cars: Car[] = w.vehicles.map((v) => {
-    const handle = d.bodies[v.id];
-    if (handle === undefined) throw new Error(`Vehicle ${v.id} has no physics body; call syncDrive first`);
-    const body = world.getRigidBody(handle);
+  const cars: Car[] = w.vehicles.filter((v) => d.bodies[v.id] !== undefined).map((v) => {
+    const body = world.getRigidBody(d.bodies[v.id]);
     const s = vehicleStats(w, v);
     const b = bodyOf(v.chassisId);
     const mem = memory[v.id];
@@ -235,19 +240,6 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   if (order.kind === 'stopAt') return { ...base, dest: order.dest, route: path, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
   const next = zoneSpeed(s, speed, dist(v.pos, order.dest));
   return { ...base, dest: order.dest, route: path, target: toMps(next), stopAt: false };
-}
-
-// Fuel limits the engine like the 2D rules: under the low-fuel share of the tank the top
-// speed halves, and a tank that cannot cover this turn's drive still lets the truck crawl.
-function fuelLimited(w: World, v: Vehicle, s: VehicleStats, speed: number, order: MoveOrder | null): VehicleStats {
-  const fuel = getResources(w, v).fuel;
-  const low = fuel > 0 && fuel < chassisDef(v.chassisId).fuelCap * RULES.lowFuelThreshold;
-  const limit = low ? Math.max(s.maxSpeed * RULES.lowFuelSpeedFactor, speed - s.brake) : s.maxSpeed;
-  const capped = low ? { ...s, maxSpeed: limit } : s;
-  const wanted = order?.kind === 'through' ? zoneSpeed(capped, speed, dist(v.pos, order.dest)) : Math.min(capped.maxSpeed, speed + capped.accel);
-  if (wanted * s.fuelPerTile <= fuel) return capped;
-  const cap = Math.max(RULES.crawlSpeed, speed - s.brake);
-  return { ...s, maxSpeed: cap, accel: Math.min(s.accel, RULES.crawlSpeed) };
 }
 
 // One physics step of driving. Steer at the destination and hold the turn's speed. A stop order slows
