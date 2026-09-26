@@ -23,12 +23,7 @@ import type { Aim, ShotRound, Vehicle, World } from "./types";
 import { angleDiff, bearing, clamp, dist, DEG, type Vec } from "./vec";
 
 export type FireBlock =
-  | "disabled"
-  | "reloading"
-  | "range"
-  | "arc"
-  | "noTarget"
-  | "unseen";
+  "disabled" | "reloading" | "range" | "arc" | "noTarget" | "unseen";
 
 export function isHostile(a: Vehicle, b: Vehicle): boolean {
   if (a.id === b.id) return false;
@@ -255,7 +250,11 @@ export function hitOdds(
 // One round's angular error in radians and whether it hit the aimed part or, for a body shot, the truck. The
 // Gaussian draw decides, so a miss lands where it strayed. When the clamp moved the chance, an extra roll turns some
 // hits into misses that land off the truck, or some misses into hits, so rounds hit exactly as often as hitOdds says.
-function rollRound(
+function rollRound(world: World, o: HitOdds, a: Aiming): Roll {
+  return { ...rollAim(world, o, a), crit: chance(world, RULES.critChance) };
+}
+
+function rollAim(
   world: World,
   o: HitOdds,
   a: Aiming,
@@ -276,6 +275,8 @@ function rollRound(
   return { hit, error };
 }
 
+// crit applies only when the round lands on the truck: it multiplies damage and pen by the crit rules.
+type Roll = { hit: boolean; error: number; crit: boolean };
 type Shot = {
   shooter: Vehicle;
   mw: MountedWeapon;
@@ -283,7 +284,7 @@ type Shot = {
   aim: Aim;
   odds: HitOdds;
   aiming: Aiming;
-  rolls: { hit: boolean; error: number }[];
+  rolls: Roll[];
 };
 
 // All rounds of the turn are rolled before any damage lands, so fire is simultaneous.
@@ -333,12 +334,16 @@ function applyShot(world: World, s: Shot): void {
         roll.hit && s.aiming.lane !== null
           ? s.aiming.lane
           : laneOfOffset(side, body, lanes, offset);
+      const k = roll.crit
+        ? { damage: RULES.critDamage, pen: RULES.critPen }
+        : { damage: 1, pen: 1 };
       return {
         hit: true,
+        crit: roll.crit,
         offset,
         hits: walkLane(world, s.target, side, lane, {
-          damage: r.damage,
-          pen: r.pen,
+          damage: r.damage * k.damage,
+          pen: r.pen * k.pen,
         }),
       };
     }
@@ -355,7 +360,7 @@ function applyShot(world: World, s: Shot): void {
         }),
       );
     }
-    return { hit: false, offset, hits };
+    return { hit: false, crit: false, offset, hits };
   });
   if (rounds.some((x) => x.hits.length > 0)) s.target.lastHitBy = s.shooter.id;
   world.events.push({

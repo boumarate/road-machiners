@@ -6,11 +6,7 @@ import type { Vec } from "./vec";
 
 export type Faction = "player" | "raiders" | "traders" | "scavengers";
 export type SkillId =
-  | "driving"
-  | "gunnery"
-  | "mechanics"
-  | "trade"
-  | "survival";
+  "driving" | "gunnery" | "mechanics" | "trade" | "survival";
 
 export type PartInstance = {
   id: string;
@@ -109,7 +105,12 @@ export type Player = {
 
 // One round of a shot. offset is where it crossed the target in meters from its center, across the line
 // of fire, positive to the shooter's right. hits lists the parts it damaged, by direct hit or splash.
-export type ShotRound = { hit: boolean; offset: number; hits: PartHit[] };
+export type ShotRound = {
+  hit: boolean;
+  crit: boolean;
+  offset: number;
+  hits: PartHit[];
+};
 
 export type GameEvent =
   | { t: "collision"; a: string; b: string; hitsA: PartHit[]; hitsB: PartHit[] } // parts damaged on a and on b; hitsB is empty when b is not a vehicle
