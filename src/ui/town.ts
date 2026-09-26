@@ -159,10 +159,14 @@ function partLabel(p: PartInstance): string {
 }
 
 function partStats(d: PartDef): string {
+  return `${kindStats(d)}, ${d.mass} kg`;
+}
+
+function kindStats(d: PartDef): string {
   switch (d.kind) {
     case 'weapon': return `dmg ${d.damage}, range ${d.range}, reload ${d.reload}, arc ${d.arc}`;
     case 'engine': return `speed +${d.speedBonus}, accel +${d.accelBonus}, fuel x${d.fuelMult}`;
     case 'armor': return `hull +${d.hullBonus}, block ${d.reduction}, part shield ${d.partShield * 100}%`;
-    case 'cargo': return `+${d.extraRows} grid rows, speed -${d.speedPenalty}`;
+    case 'cargo': return `+${d.extraRows} grid rows`;
   }
 }

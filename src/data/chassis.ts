@@ -1,4 +1,5 @@
-// Truck chassis. Speeds are tiles per turn. Turn rates are degrees per turn.
+// Truck chassis. Speeds are tiles per turn. Turn rates are degrees per turn. Masses are kilograms.
+// Speed, turn, accel and brake numbers hold for a truck at ratedMass: chassis, usual parts and half a load of goods.
 //
 // layout is the inventory grid, one string per row. Every character except a space is a cell.
 //   W, E, A, C  mount cells: a weapon, engine, armor or cargo part works only when it lies fully on its letter
@@ -15,7 +16,8 @@ export type ChassisDef = {
   turnFast: number; // turn limit at max speed
   reverseTurn: number; // turn limit for one turn of backing up
   hull: number;
-  mass: number;
+  mass: number; // empty chassis, without parts or goods
+  ratedMass: number; // loaded mass the speed and handling numbers assume
   radius: number; // collision radius in tiles
   layout: string[];
   fuelCap: number;
@@ -35,7 +37,8 @@ export const CHASSIS: Record<string, ChassisDef> = {
     turnFast: 40,
     reverseTurn: 60,
     hull: 60,
-    mass: 1,
+    mass: 950,
+    ratedMass: 2100,
     radius: 0.6,
     layout: [
       'WWWEE',
@@ -58,7 +61,8 @@ export const CHASSIS: Record<string, ChassisDef> = {
     turnFast: 25,
     reverseTurn: 45,
     hull: 120,
-    mass: 2.5,
+    mass: 3000,
+    ratedMass: 5800,
     radius: 0.8,
     layout: [
       'WWW.EE.',
@@ -83,7 +87,8 @@ export const CHASSIS: Record<string, ChassisDef> = {
     turnFast: 45,
     reverseTurn: 90,
     hull: 35,
-    mass: 0.8,
+    mass: 500,
+    ratedMass: 900,
     radius: 0.5,
     layout: [
       'WEE',
@@ -104,7 +109,8 @@ export const CHASSIS: Record<string, ChassisDef> = {
     turnFast: 25,
     reverseTurn: 45,
     hull: 110,
-    mass: 2.2,
+    mass: 2400,
+    ratedMass: 3700,
     radius: 0.8,
     layout: [
       'WWW.',

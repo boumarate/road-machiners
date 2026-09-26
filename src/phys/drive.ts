@@ -8,6 +8,7 @@ import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
 import { RULES } from '../data/rules';
 import { isDriveObstacle } from '../sim/mapgen';
+import { vehicleMass } from '../sim/mass';
 import { vehicleStats, type VehicleStats } from '../sim/stats';
 import { route, straightClear } from '../sim/path';
 import { aimPoint, parkedVehicles, zoneSpeed } from '../sim/steering';
@@ -62,8 +63,8 @@ export function freeDrive(d: Drive): void {
   d.world.free();
 }
 
-// Brings the physics world in line with the sim: new and removed vehicles and obstacles, and
-// vehicles the rules moved, such as a defeated player waking up in town.
+// Brings the physics world in line with the sim: new and removed vehicles and obstacles, vehicle
+// masses after loadout changes, and vehicles the rules moved, such as a defeated player waking up in town.
 export function syncDrive(d: Drive, w: World): void {
   const ids = new Set(w.vehicles.map((v) => v.id));
   for (const [id, handle] of Object.entries(d.bodies)) {
@@ -80,6 +81,7 @@ export function syncDrive(d: Drive, w: World): void {
       continue;
     }
     const body = d.world.getRigidBody(handle);
+    setMass(body, v);
     const t = body.translation();
     if (dist({ x: t.x / S, y: t.z / S }, v.pos) > TELEPORT_TILES) placeBody(body, w, v);
   }
@@ -102,16 +104,21 @@ export function syncDrive(d: Drive, w: World): void {
 function addVehicle(world: RAPIER.World, w: World, v: Vehicle): number {
   const b = bodyOf(v.chassisId);
   const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setCanSleep(false).setGravityScale(T.gravityScale));
-  // Box inertia per axis, scaled up, around a center of mass lowered toward the axles.
-  const h = b.half;
-  const k = (b.mass / 3) * T.inertiaScale; // m/12 * (2a)^2 = m/3 * a^2
-  const inertia = { x: k * (h.y * h.y + h.z * h.z), y: k * (h.x * h.x + h.z * h.z), z: k * (h.x * h.x + h.y * h.y) };
-  const collider = RAPIER.ColliderDesc.cuboid(h.x, h.y, h.z)
-    .setMassProperties(b.mass, { x: 0, y: -T.comBelow, z: 0 }, inertia, { x: 0, y: 0, z: 0, w: 1 })
-    .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
+  const collider = RAPIER.ColliderDesc.cuboid(b.half.x, b.half.y, b.half.z).setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
   world.createCollider(collider, body);
+  setMass(body, v);
   placeBody(body, w, v);
   return body.handle;
+}
+
+// Mass from the vehicle's load, with box inertia per axis, scaled up, around a center of mass lowered toward the axles.
+function setMass(body: RAPIER.RigidBody, v: Vehicle): void {
+  const h = bodyOf(v.chassisId).half;
+  const mass = vehicleMass(v);
+  const k = (mass / 3) * T.inertiaScale; // m/12 * (2a)^2 = m/3 * a^2
+  const inertia = { x: k * (h.y * h.y + h.z * h.z), y: k * (h.x * h.x + h.z * h.z), z: k * (h.x * h.x + h.y * h.y) };
+  body.collider(0).setMassProperties(mass, { x: 0, y: -T.comBelow, z: 0 }, inertia, { x: 0, y: 0, z: 0, w: 1 });
+  body.recomputeMassPropertiesFromColliders();
 }
 
 function placeBody(body: RAPIER.RigidBody, w: World, v: Vehicle): void {
@@ -142,7 +149,7 @@ function run(d: Drive, w: World, steps: number): TurnResult {
     const s = vehicleStats(w, v);
     const b = bodyOf(v.chassisId);
     const mem = memory[v.id];
-    return { v, s, b, body, ctl: makeCar(world, body, b), mem, plan: planTurn(w, v, s, body, v.order), result: { passed: false, arrived: false } };
+    return { v, s, b, body, ctl: makeCar(world, body, b, s.mass), mem, plan: planTurn(w, v, s, body, v.order), result: { passed: false, arrived: false } };
   });
   const owner = new Map<number, string>(); // collider handle to vehicle id
   for (const c of cars) owner.set(c.body.collider(0).handle, c.v.id);
@@ -184,7 +191,7 @@ function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf:
   return { a, b, impact: Math.hypot(va.x - vb.x, va.z - vb.z) };
 }
 
-function makeCar(world: RAPIER.World, body: RAPIER.RigidBody, b: Body): RAPIER.DynamicRayCastVehicleController {
+function makeCar(world: RAPIER.World, body: RAPIER.RigidBody, b: Body, mass: number): RAPIER.DynamicRayCastVehicleController {
   const car = world.createVehicleController(body);
   for (const m of wheelMounts(b)) {
     const i = car.numWheels();
@@ -193,7 +200,7 @@ function makeCar(world: RAPIER.World, body: RAPIER.RigidBody, b: Body): RAPIER.D
     car.setWheelSuspensionStiffness(i, T.suspensionStiffness);
     car.setWheelSuspensionCompression(i, T.suspensionCompression);
     car.setWheelSuspensionRelaxation(i, T.suspensionRelaxation);
-    car.setWheelMaxSuspensionForce(i, T.maxSuspensionForce * (b.mass / 1000));
+    car.setWheelMaxSuspensionForce(i, T.maxSuspensionForce * (mass / 1000));
     car.setWheelFrictionSlip(i, T.frictionSlip);
     car.setWheelSideFrictionStiffness(i, T.sideFrictionStiffness);
   }
@@ -206,15 +213,17 @@ function makeCar(world: RAPIER.World, body: RAPIER.RigidBody, b: Body): RAPIER.D
 type Plan = { dest: Vec | null; route: Vec[] | null; target: number; stopAt: boolean; engine: boolean; maxSteer: number; engineForce: number; brakeForce: number };
 
 function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBody, order: MoveOrder | null): Plan {
-  const b = bodyOf(v.chassisId);
+  const ch = chassisDef(v.chassisId);
   const speed = Math.max(0, toTilesPerTurn(forwardSpeed(body)));
   const s = v.faction === 'player' ? fuelLimited(w, v, full, speed, order) : full;
   const engine = s.maxSpeed > 0;
+  // The stats accel already falls with load, so the engine force stays fixed as mass grows.
+  // Brakes grip with a force sized for the rated mass, so a heavy truck brakes worse.
   const base = {
     engine,
-    maxSteer: T.maxSteer * (s.turnSlow / (chassisDef(v.chassisId).turnSlow * DEG)),
-    engineForce: (b.mass * T.engineAccel * (s.accel / chassisDef(v.chassisId).accel)) / 2,
-    brakeForce: T.brakeForce * (b.mass / 1000),
+    maxSteer: T.maxSteer * (s.turnSlow / (ch.turnSlow * DEG)),
+    engineForce: (full.mass * T.engineAccel * (s.accel / ch.accel)) / 2,
+    brakeForce: T.brakeForce * (ch.ratedMass / 1000),
   };
   if (!order) return { ...base, dest: null, route: null, target: toMps(speed), stopAt: false };
   if (order.kind === 'brake') return { ...base, dest: null, route: null, target: 0, stopAt: false };

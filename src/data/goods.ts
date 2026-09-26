@@ -1,11 +1,11 @@
 // Trade goods and town prices. Each town makes one good cheap and pays well for another.
 
-export type GoodDef = { id: string; name: string };
+export type GoodDef = { id: string; name: string; mass: number }; // mass in kilograms per unit
 
 export const GOODS: Record<string, GoodDef> = {
-  scrap: { id: 'scrap', name: 'Scrap metal' },
-  salt: { id: 'salt', name: 'Salt' },
-  meds: { id: 'meds', name: 'Meds' },
+  scrap: { id: 'scrap', name: 'Scrap metal', mass: 100 },
+  salt: { id: 'salt', name: 'Salt', mass: 75 },
+  meds: { id: 'meds', name: 'Meds', mass: 50 },
 };
 
 export const GOOD_IDS = ['scrap', 'salt', 'meds'];

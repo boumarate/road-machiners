@@ -19,6 +19,7 @@ describe('movement', () => {
     const w = emptyWorld();
     const v = w.vehicles[0];
     v.speed = 5;
+    v.direct = true; // drive straight at the rock instead of routing around it
     v.order = { kind: 'through', dest: { x: 40, y: 30 } };
     w.obstacles = [{ id: 'r', pos: { x: 33, y: 30 }, r: 1, kind: 'rock' }];
     const hull = v.hull;
@@ -84,8 +85,9 @@ describe('movement', () => {
     const w = emptyWorld();
     w.vehicles[0].order = { kind: 'through', dest: { x: 40, y: 30 } };
     const fuel = w.player.fuel;
+    const s = vehicleStats(w, w.vehicles[0]); // from rest, one turn covers accel tiles
     resolveMovement(w);
-    expect(w.player.fuel).toBeCloseTo(fuel - 2 * CHASSIS.scout.fuelPerTile / 10, 5);
+    expect(w.player.fuel).toBeCloseTo(fuel - s.accel * s.fuelPerTile, 5);
   });
 });
 

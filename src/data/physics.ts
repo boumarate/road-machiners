@@ -18,18 +18,18 @@ export const PHYSICS = {
     frictionSlip: 2,
     sideFrictionStiffness: 1,
     engineAccel: 12, // m/s^2 the engine can give at full throttle, before damage
-    brakeForce: 60, // per wheel per ton of mass, at full brake
+    brakeForce: 60, // per wheel per ton of chassis rated mass, at full brake
     maxSteer: 0.6, // radians of front wheel angle
     steerRate: 3, // radians per second the wheels can turn
   },
   // Body per chassis look, in meters. half: chassis box half extents along length, height, width.
   // wheelX: front and rear axle distance from the center. wheelZ: wheel distance from the center line.
-  // wheelY: suspension mount height relative to the chassis center. mass in kilograms.
+  // wheelY: suspension mount height relative to the chassis center. Mass comes from src/sim/mass.ts.
   bodies: {
-    pickup: { half: { x: 2.2, y: 0.45, z: 1.0 }, wheelX: 1.45, wheelZ: 0.95, wheelY: -0.3, wheelRadius: 0.45, wheelHalfWidth: 0.18, mass: 1500 },
-    hauler: { half: { x: 3.0, y: 0.6, z: 1.3 }, wheelX: 2.0, wheelZ: 1.2, wheelY: -0.4, wheelRadius: 0.6, wheelHalfWidth: 0.25, mass: 4000 },
-    buggy: { half: { x: 1.8, y: 0.35, z: 0.95 }, wheelX: 1.3, wheelZ: 1.0, wheelY: -0.2, wheelRadius: 0.5, wheelHalfWidth: 0.22, mass: 900 },
-    wagon: { half: { x: 3.0, y: 0.7, z: 1.35 }, wheelX: 1.9, wheelZ: 1.25, wheelY: -0.45, wheelRadius: 0.6, wheelHalfWidth: 0.25, mass: 3500 },
+    pickup: { half: { x: 2.2, y: 0.45, z: 1.0 }, wheelX: 1.45, wheelZ: 0.95, wheelY: -0.3, wheelRadius: 0.45, wheelHalfWidth: 0.18 },
+    hauler: { half: { x: 3.0, y: 0.6, z: 1.3 }, wheelX: 2.0, wheelZ: 1.2, wheelY: -0.4, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
+    buggy: { half: { x: 1.8, y: 0.35, z: 0.95 }, wheelX: 1.3, wheelZ: 1.0, wheelY: -0.2, wheelRadius: 0.5, wheelHalfWidth: 0.22 },
+    wagon: { half: { x: 3.0, y: 0.7, z: 1.35 }, wheelX: 1.9, wheelZ: 1.25, wheelY: -0.45, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
   },
   driver: {
     steerGain: 1.6, // wheel angle per radian of heading error

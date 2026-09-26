@@ -25,7 +25,7 @@ export const RULES = {
   yieldDistance: 1.5, // neutral drivers brake when another vehicle is this close past both radii ahead
   maxBulge: 0.25, // tiles a steering arc may stray from the straight route line
   disabledEngineSpeed: 1,
-  minSpeedCap: 1, // parts penalties never push max speed below this
+  minSpeedCap: 1, // a heavy load never pushes max speed below this
   collisionMinImpact: 1.5, // slower bumps deal no damage
   collisionDamage: 4, // hull damage per tile/turn of impact speed, scaled by mass ratio
   collisionPartChance: 0.3, // chance a collision also damages a random part

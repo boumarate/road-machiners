@@ -1,5 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
+import { makeVehicle } from '../sim/factory';
+import { addGoods, removeAllGoods } from '../sim/inventory';
+import { loadFactor, vehicleMass } from '../sim/mass';
 import { addVehicle, emptyWorld } from '../sim/testkit';
 import type { MoveOrder, World } from '../sim/types';
 import { angleDiff, dist } from '../sim/vec';
@@ -32,6 +35,7 @@ function ordered(order: MoveOrder, speed = 0, heading = 0): World {
 }
 
 const me = (w: World) => w.vehicles[0];
+const HILL_GRADE = 0.2; // height per tile, steeper than 90% of the generated map's slopes
 
 describe('physics turns', () => {
   it('a new truck sits still on flat ground', () => {
@@ -170,6 +174,43 @@ describe('physics turns', () => {
     w0.player.fuel = 2; // under the low-fuel share of the tank, enough to drive
     const { w } = play(w0, 2);
     expect(me(w).speed).toBeLessThan(5);
+  });
+
+  it('a truck loaded with scrap covers less distance from rest than an empty one', () => {
+    const empty = ordered({ kind: 'through', dest: { x: 59, y: 30 } });
+    removeAllGoods(me(empty));
+    const loaded = ordered({ kind: 'through', dest: { x: 59, y: 30 } });
+    addGoods(loaded, me(loaded), 'scrap', 999);
+    expect(vehicleMass(me(loaded))).toBeGreaterThan(vehicleMass(me(empty)));
+    const a = play(empty, 2).w;
+    const b = play(loaded, 2).w;
+    expect(me(b).pos.x - 30).toBeLessThan(me(a).pos.x - 30);
+  });
+
+  it('the physics body mass follows the loadout on sync', () => {
+    const w = emptyWorld();
+    const d = buildDrive(w);
+    const body = () => d.world.getRigidBody(d.bodies[me(w).id]);
+    expect(body().mass()).toBeCloseTo(vehicleMass(me(w)), 0);
+    addGoods(w, me(w), 'scrap', 999);
+    syncDrive(d, w);
+    expect(body().mass()).toBeCloseTo(vehicleMass(me(w)), 0);
+    freeDrive(d);
+  });
+
+  it('a fully loaded hauler still climbs a hill', () => {
+    const w0 = emptyWorld({ x: 26, y: 30 });
+    const n = w0.terrain.size;
+    for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) w0.terrain.heights[j * (n + 1) + i] = Math.max(0, i - 28) * HILL_GRADE;
+    const hauler = makeVehicle(w0, { name: 'hauler', faction: 'player', chassisId: 'hauler', parts: ['mg', 'stockEngine', 'plates', 'trailerBox'], cargo: {}, pos: { x: 26, y: 30 }, heading: 0, brain: null });
+    w0.vehicles[0] = { ...hauler, id: me(w0).id };
+    addGoods(w0, me(w0), 'scrap', 999);
+    expect(loadFactor(me(w0))).toBeLessThan(1);
+    w0.player.fuel = 999;
+    const { w } = play(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 6);
+    // Well up the slope, which starts at x 28, and still gaining speed rather than stalling.
+    expect(me(w).pos.x).toBeGreaterThan(34);
+    expect(me(w).speed).toBeGreaterThan(2);
   });
 
   it('new vehicles and obstacles join the physics world', () => {
