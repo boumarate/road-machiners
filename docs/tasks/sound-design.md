@@ -1,6 +1,6 @@
 # Sound design base
 
-**Status:** executing
+**Status:** done
 **Branch:** sound-design
 **Worktree:** .worktrees/sound-design
 **Goal:** The game plays sound for turn play, combat, driving, UI, ambience and music through one audio module, with volume sliders and mute, and the user confirms by ear that the cues sound consistent and fire at the right moments.
@@ -125,6 +125,18 @@ Greenfield: nothing existing consumes audio, so there is no compatibility risk.
 - Music import cuts the quiet intro and outro and crossfades the loop seam. The first tracks had 5 to 10 s intros and read as silent.
 - Each file carries its raw source in a comment tag, and `npm run sfx:reimport` rebuilds all files after an import change.
 
+- Driving uses one engine loop whose rate and gain follow the speed change over each turn. Generated per-state driving clips opened with a hard transient and sounded like shots.
+- End-turn sounds were removed; the user found them confusing.
+
 ## Verify
+- Vitest covers variant pick, spatial math, voice limit, catalog sync, stings, loop levels, engine glide and settings parsing.
+- A Playwright fight and drive fired every wired cue with no page errors.
+- Playtest FPS could not be judged: machine load stayed at 15 to 29, and the baseline failed the same check.
 
 ## Conclusion
+Merged to main on user request after the user approved the engine and found the rest improved; the formal review stage was skipped.
+- AS1 — Holds only on a paid ElevenLabs plan; not checked.
+- AS2 — Held for wind and engine; music needed intro and outro trimming plus a crossfade.
+- AS3 — Held once a load term from the speed change was added.
+- UK1 — `POST /v1/music` with `music_length_ms`; price not confirmed.
+- UK3 — Ogg Opus; Safari is untested.
