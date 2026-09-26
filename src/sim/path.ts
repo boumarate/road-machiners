@@ -1,46 +1,64 @@
 // Route planning around static obstacles and cliffs: A* on a grid weighted by terrain speed, so
-// routes prefer roads over sand, then shortcut to visible corners. Vehicles are not in the grid,
-// so ramming and blocking still happen.
+// routes prefer roads over sand, then shortcut to visible corners. Moving vehicles are not in the
+// grid, so ramming and blocking still happen. The grid itself lives in ./nav.
 
-import { TERRAIN_TYPES } from '../data/terrain';
-import { REGION } from '../data/region';
-import { isCliff, tileAt, type Terrain } from './terrain';
-import { isDriveObstacle } from './mapgen';
+import { count, timed } from '../perf';
+import { findCells, nearestFreeCell, stampOverlay } from './nav/astar';
+import type { Blocker } from './nav/buckets';
+import { CELL, CLEARANCE, blockerKey, dynamicBlockers, navLayer, nearCliff, staticSet, terrainNav, tileIndex, type NavLayer, type StaticSet, type TerrainNav } from './nav/layer';
 import type { World } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 
-const CELL = 0.5; // tiles per grid cell
-const CLEARANCE = 0.4; // extra gap from obstacles on top of the vehicle radius; covers RULES.maxBulge
+export type { Blocker };
 
-type Grid = { n: number; blocked: Uint8Array; slow: Float32Array }; // slow: step cost multiplier, 1 / terrain speed
-
-// Grids depend only on the terrain, the obstacle set and the vehicle radius, so they are cached by content.
-// A few radii times the current and previous obstacle sets fit well under this bound.
-const gridCache = new Map<string, Grid>();
-const GRID_CACHE_MAX = 16;
-
-// Circles to route around on top of the map obstacles, such as parked vehicles.
-export type Blocker = { pos: Vec; r: number };
+// Recent A* results. 64 covers up to 20 vehicles times 3 preview turns, so a repeated preview or
+// the turn after it finds every search done. Keys hold layer identity and exact blocker content.
+const ROUTE_CACHE_MAX = 64;
+const routeCache = new Map<string, { goal: number | null; cells: Int32Array | null }>();
 
 export function route(world: World, from: Vec, to: Vec, radius: number, extra: Blocker[]): Vec[] {
-  const blockers: Blocker[] = [...world.obstacles.filter(isDriveObstacle), ...extra];
-  // An unobstructed road-speed line is already the shortest, cheapest route.
-  if (clearLine(world.terrain, blockers, from, to, radius + CLEARANCE, 1)) return [to];
-  const grid = gridFor(world.terrain, blockers, radius);
-  const start = cellOf(grid, from);
-  const goal = nearestFree(grid, cellOf(grid, to));
-  if (goal === null) return [to];
-  const cells = astar(grid, start, goal);
-  if (!cells) return [to];
-  const end = goal === cellOf(grid, to) ? to : centerOf(grid, goal);
-  const points = [...cells.slice(1, -1).map((c) => centerOf(grid, c)), end];
-  const result = shortcut(world.terrain, blockers, from, points, radius + CLEARANCE);
+  return timed('route', () => {
+    const nav = terrainNav(world.terrain);
+    const statics = staticSet(world.obstacles, world.terrain.size);
+    const dynamic = dynamicBlockers(world.obstacles, extra);
+    const reach = radius + CLEARANCE;
+    // An unobstructed road-speed line is already the shortest, cheapest route.
+    if (clearLine(nav, statics, dynamic, from, to, reach, 1)) return [to];
+    const layer = navLayer(world.terrain, world.obstacles, radius);
+    const start = cellOf(layer, from);
+    const target = cellOf(layer, to);
+    const { goal, cells } = search(layer, dynamic, radius, start, target);
+    if (goal === null || !cells) return [to];
+    const end = goal === target ? to : centerOf(layer, goal);
+    const points: Vec[] = [];
+    for (let i = 1; i < cells.length - 1; i++) points.push(centerOf(layer, cells[i]));
+    points.push(end);
+    return shortcut(nav, statics, dynamic, from, points, reach);
+  });
+}
+
+// Cached cells are shared between calls and never handed out, so callers cannot mutate them.
+function search(layer: NavLayer, dynamic: Blocker[], radius: number, start: number, target: number): { goal: number | null; cells: Int32Array | null } {
+  const key = `${layer.id}:${radius}:${start}:${target}:${blockerKey(dynamic)}`;
+  const hit = routeCache.get(key);
+  if (hit) {
+    count('route-cache-hit');
+    routeCache.delete(key);
+    routeCache.set(key, hit);
+    return hit;
+  }
+  const overlay = stampOverlay(layer, dynamic, radius);
+  const goal = nearestFreeCell(layer, overlay, target);
+  const result = { goal, cells: goal === null ? null : findCells(layer, overlay, start, goal) };
+  if (routeCache.size >= ROUTE_CACHE_MAX) routeCache.delete(routeCache.keys().next().value!);
+  routeCache.set(key, result);
   return result;
 }
 
 // Whether a vehicle can drive straight from a to b without touching an obstacle or a cliff.
 export function straightClear(world: World, a: Vec, b: Vec, radius: number, extra: Blocker[]): boolean {
-  return clearLine(world.terrain, [...world.obstacles.filter(isDriveObstacle), ...extra], a, b, radius + CLEARANCE, 0);
+  const statics = staticSet(world.obstacles, world.terrain.size);
+  return clearLine(terrainNav(world.terrain), statics, dynamicBlockers(world.obstacles, extra), a, b, radius + CLEARANCE, 0);
 }
 
 export function routeLength(from: Vec, points: Vec[]): number {
@@ -53,166 +71,19 @@ export function routeLength(from: Vec, points: Vec[]): number {
   return total;
 }
 
-// The terrain layer (cliffs and speeds) never changes in play, so it is cached apart from obstacles.
-const terrainLayers = new Map<string, { cliff: Uint8Array; slow: Float32Array }>();
-
-function terrainLayer(terrain: Terrain, radius: number, n: number): { cliff: Uint8Array; slow: Float32Array } {
-  const key = `${terrainKey(terrain)}:${radius}`;
-  const hit = terrainLayers.get(key);
-  if (hit) return hit;
-  if (terrainLayers.size >= GRID_CACHE_MAX) terrainLayers.clear();
-  const cliff = new Uint8Array(n * n);
-  const slow = new Float32Array(n * n);
-  for (let y = 0; y < n; y++) {
-    for (let x = 0; x < n; x++) {
-      const c = { x: (x + 0.5) * CELL, y: (y + 0.5) * CELL };
-      if (nearCliff(terrain, c, radius + CLEARANCE)) cliff[y * n + x] = 1;
-      slow[y * n + x] = 1 / TERRAIN_TYPES[terrain.types[tileAt(terrain, c)]].speed;
-    }
-  }
-  const layer = { cliff, slow };
-  terrainLayers.set(key, layer);
-  return layer;
+function cellOf(l: NavLayer, p: Vec): number {
+  const x = Math.min(l.n - 1, Math.max(0, Math.floor(p.x / CELL)));
+  const y = Math.min(l.n - 1, Math.max(0, Math.floor(p.y / CELL)));
+  return y * l.n + x;
 }
 
-function gridFor(terrain: Terrain, blockers: Blocker[], radius: number): Grid {
-  const size = terrain.size;
-  const key = `${terrainKey(terrain)}:${radius}:` + blockers.map((o) => `${o.pos.x.toFixed(2)},${o.pos.y.toFixed(2)},${o.r.toFixed(2)}`).join('|');
-  const hit = gridCache.get(key);
-  if (hit) return hit;
-  if (gridCache.size >= GRID_CACHE_MAX) gridCache.clear();
-  const n = Math.ceil(size / CELL);
-  const layer = terrainLayer(terrain, radius, n);
-  const blocked = layer.cliff.slice();
-  for (const o of blockers) {
-    const reach = o.r + radius + CLEARANCE;
-    const lo = { x: Math.max(0, Math.floor((o.pos.x - reach) / CELL)), y: Math.max(0, Math.floor((o.pos.y - reach) / CELL)) };
-    const hi = { x: Math.min(n - 1, Math.floor((o.pos.x + reach) / CELL)), y: Math.min(n - 1, Math.floor((o.pos.y + reach) / CELL)) };
-    for (let x = lo.x; x <= hi.x; x++)
-      for (let y = lo.y; y <= hi.y; y++)
-        if (dist({ x: (x + 0.5) * CELL, y: (y + 0.5) * CELL }, o.pos) < reach) blocked[y * n + x] = 1;
-  }
-  const grid = { n, blocked, slow: layer.slow };
-  gridCache.set(key, grid);
-  return grid;
-}
-
-// Content signature of a terrain, memoized per object. Worlds are cloned each turn, so this runs
-// once per clone, not once per route.
-const terrainKeys = new WeakMap<Terrain, string>();
-
-function terrainKey(t: Terrain): string {
-  let key = terrainKeys.get(t);
-  if (key === undefined) {
-    let h = 2166136261;
-    const mix = (n: number) => (h = Math.imul(h ^ n, 16777619));
-    for (const v of t.heights) mix(Math.round(v * 1000));
-    for (const ty of t.types) mix(ty.charCodeAt(0) * 31 + ty.length);
-    key = `${t.size}:${h >>> 0}`;
-    terrainKeys.set(t, key);
-  }
-  return key;
-}
-
-// A cliff tile within reach of the point, checked at the point and four compass offsets.
-function nearCliff(t: Terrain, p: Vec, reach: number): boolean {
-  const probes = [p, { x: p.x + reach, y: p.y }, { x: p.x - reach, y: p.y }, { x: p.x, y: p.y + reach }, { x: p.x, y: p.y - reach }];
-  return probes.some((q) => isCliff(t, tileAt(t, q)));
-}
-
-function cellOf(g: Grid, p: Vec): number {
-  const x = Math.min(g.n - 1, Math.max(0, Math.floor(p.x / CELL)));
-  const y = Math.min(g.n - 1, Math.max(0, Math.floor(p.y / CELL)));
-  return y * g.n + x;
-}
-
-function centerOf(g: Grid, c: number): Vec {
-  return { x: ((c % g.n) + 0.5) * CELL, y: (Math.floor(c / g.n) + 0.5) * CELL };
-}
-
-// Breadth-first search to the closest unblocked cell.
-function nearestFree(g: Grid, c: number): number | null {
-  if (!g.blocked[c]) return c;
-  const seen = new Uint8Array(g.n * g.n);
-  const queue = [c];
-  seen[c] = 1;
-  for (let i = 0; i < queue.length; i++) {
-    const cur = queue[i];
-    if (!g.blocked[cur]) return cur;
-    for (const nb of neighbors(g, cur)) {
-      if (!seen[nb.c]) {
-        seen[nb.c] = 1;
-        queue.push(nb.c);
-      }
-    }
-  }
-  return null;
-}
-
-function neighbors(g: Grid, c: number): { c: number; cost: number }[] {
-  const x = c % g.n;
-  const y = Math.floor(c / g.n);
-  const out: { c: number; cost: number }[] = [];
-  for (let dx = -1; dx <= 1; dx++) {
-    for (let dy = -1; dy <= 1; dy++) {
-      if (dx === 0 && dy === 0) continue;
-      const nx = x + dx;
-      const ny = y + dy;
-      if (nx < 0 || ny < 0 || nx >= g.n || ny >= g.n) continue;
-      out.push({ c: ny * g.n + nx, cost: dx !== 0 && dy !== 0 ? Math.SQRT2 : 1 });
-    }
-  }
-  return out;
-}
-
-// The start cell may be blocked when a vehicle hugs an obstacle; it is allowed as a start.
-function astar(g: Grid, start: number, goal: number): number[] | null {
-  const size = g.n * g.n;
-  const cost = new Float64Array(size).fill(Infinity);
-  const from = new Int32Array(size).fill(-1);
-  const closed = new Uint8Array(size);
-  const open = new MinHeap();
-  cost[start] = 0;
-  open.push(start, heuristic(g, start, goal) * REGION.navigation.heuristicWeight);
-  while (open.size() > 0) {
-    const cur = open.pop();
-    if (cur === goal) return unwind(from, goal);
-    if (closed[cur]) continue;
-    closed[cur] = 1;
-    const x = cur % g.n;
-    const y = Math.floor(cur / g.n);
-    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
-      if (dx === 0 && dy === 0) continue;
-      const nx = x + dx;
-      const ny = y + dy;
-      if (nx < 0 || ny < 0 || nx >= g.n || ny >= g.n) continue;
-      const next = ny * g.n + nx;
-      if (g.blocked[next] || closed[next]) continue;
-      const c = cost[cur] + (dx !== 0 && dy !== 0 ? Math.SQRT2 : 1) * g.slow[next];
-      if (c >= cost[next]) continue;
-      cost[next] = c;
-      from[next] = cur;
-      open.push(next, c + heuristic(g, next, goal) * REGION.navigation.heuristicWeight);
-    }
-  }
-  return null;
-}
-
-function heuristic(g: Grid, a: number, b: number): number {
-  const dx = Math.abs((a % g.n) - (b % g.n));
-  const dy = Math.abs(Math.floor(a / g.n) - Math.floor(b / g.n));
-  return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
-}
-
-function unwind(from: Int32Array, goal: number): number[] {
-  const path = [goal];
-  while (from[path[0]] !== -1) path.unshift(from[path[0]]);
-  return path;
+function centerOf(l: NavLayer, c: number): Vec {
+  return { x: ((c % l.n) + 0.5) * CELL, y: (Math.floor(c / l.n) + 0.5) * CELL };
 }
 
 // Probe progressively longer shortcuts instead of rescanning the entire remaining route at every bend.
 // Each accepted segment still avoids obstacles, cliffs, and slower ground than its original path.
-function shortcut(t: Terrain, obstacles: Blocker[], from: Vec, points: Vec[], reach: number): Vec[] {
+function shortcut(nav: TerrainNav, statics: StaticSet, dynamic: Blocker[], from: Vec, points: Vec[], reach: number): Vec[] {
   const out: Vec[] = [];
   let cur = from;
   let i = 0;
@@ -222,7 +93,7 @@ function shortcut(t: Terrain, obstacles: Blocker[], from: Vec, points: Vec[], re
     let failed = points.length;
     while (best < points.length - 1) {
       const candidate = Math.min(i + step, points.length - 1);
-      if (!clearLine(t, obstacles, cur, points[candidate], reach, slowestSpeed(t, [cur, ...points.slice(i, candidate + 1)]))) {
+      if (!clearLine(nav, statics, dynamic, cur, points[candidate], reach, slowestSpeed(nav, cur, points, i, candidate))) {
         failed = candidate;
         break;
       }
@@ -231,7 +102,7 @@ function shortcut(t: Terrain, obstacles: Blocker[], from: Vec, points: Vec[], re
     }
     while (failed - best > 1) {
       const candidate = Math.floor((best + failed) / 2);
-      if (clearLine(t, obstacles, cur, points[candidate], reach, slowestSpeed(t, [cur, ...points.slice(i, candidate + 1)]))) best = candidate;
+      if (clearLine(nav, statics, dynamic, cur, points[candidate], reach, slowestSpeed(nav, cur, points, i, candidate))) best = candidate;
       else failed = candidate;
     }
     out.push(points[best]);
@@ -243,63 +114,22 @@ function shortcut(t: Terrain, obstacles: Blocker[], from: Vec, points: Vec[], re
 
 const LINE_SAMPLES_PER_TILE = 4;
 
-function slowestSpeed(t: Terrain, pts: Vec[]): number {
-  return Math.min(...pts.map((p) => TERRAIN_TYPES[t.types[tileAt(t, p)]].speed));
+// Slowest terrain under cur and points[i..last].
+function slowestSpeed(nav: TerrainNav, cur: Vec, points: Vec[], i: number, last: number): number {
+  let min = nav.tileSpeed[tileIndex(nav.size, cur.x, cur.y)];
+  for (let k = i; k <= last; k++) min = Math.min(min, nav.tileSpeed[tileIndex(nav.size, points[k].x, points[k].y)]);
+  return min;
 }
 
-function clearLine(t: Terrain, obstacles: Blocker[], a: Vec, b: Vec, reach: number, minSpeed: number): boolean {
-  if (!obstacles.every((o) => segmentDist(o.pos, a, b) >= o.r + reach)) return false;
+function clearLine(nav: TerrainNav, statics: StaticSet, dynamic: Blocker[], a: Vec, b: Vec, reach: number, minSpeed: number): boolean {
+  for (const o of dynamic) if (segmentDist(o.pos, a, b) < o.r + reach) return false;
+  for (const o of statics.buckets.alongSegment(a, b, reach)) if (segmentDist(o.pos, a, b) < o.r + reach) return false;
   const n = Math.ceil(dist(a, b) * LINE_SAMPLES_PER_TILE);
+  const steps = Math.max(1, n);
   for (let k = 0; k <= n; k++) {
-    const p = { x: a.x + ((b.x - a.x) * k) / Math.max(1, n), y: a.y + ((b.y - a.y) * k) / Math.max(1, n) };
-    if (nearCliff(t, p, reach) || TERRAIN_TYPES[t.types[tileAt(t, p)]].speed < minSpeed) return false;
+    const x = a.x + ((b.x - a.x) * k) / steps;
+    const y = a.y + ((b.y - a.y) * k) / steps;
+    if (nearCliff(nav, x, y, reach) || nav.tileSpeed[tileIndex(nav.size, x, y)] < minSpeed) return false;
   }
   return true;
-}
-
-class MinHeap {
-  private items: number[] = [];
-  private keys: number[] = [];
-
-  size(): number {
-    return this.items.length;
-  }
-
-  push(item: number, key: number): void {
-    this.items.push(item);
-    this.keys.push(key);
-    let i = this.items.length - 1;
-    while (i > 0) {
-      const p = (i - 1) >> 1;
-      if (this.keys[p] <= key) break;
-      this.items[i] = this.items[p];
-      this.keys[i] = this.keys[p];
-      i = p;
-    }
-    this.items[i] = item;
-    this.keys[i] = key;
-  }
-
-  pop(): number {
-    const top = this.items[0];
-    const lastItem = this.items.pop()!;
-    const lastKey = this.keys.pop()!;
-    if (this.items.length > 0) {
-      let i = 0;
-      for (;;) {
-        const left = 2 * i + 1;
-        if (left >= this.items.length) break;
-        const right = left + 1;
-        const child = right < this.items.length && this.keys[right] < this.keys[left] ? right : left;
-        if (this.keys[child] >= lastKey) break;
-        this.items[i] = this.items[child];
-        this.keys[i] = this.keys[child];
-        i = child;
-      }
-      this.items[i] = lastItem;
-      this.keys[i] = lastKey;
-    }
-    return top;
-  }
-
 }
