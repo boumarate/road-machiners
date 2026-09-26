@@ -12,14 +12,18 @@ const MIN_HALF_ANGLE = Math.PI / 12; // zones stay visible for trucks that barel
 const ARC_STEPS = 16;
 
 // turn is the truck's turn limit this turn; the zones fan out over half of it on each side.
-// A truck at rest has no hold zone; see throttleFor.
+// At rest the red sector is one third of reach and green covers the remaining two thirds.
 export function drawThrottleZones(g: Phaser.GameObjects.Graphics, pose: Pose, speed: number, turn: number): void {
   const half = Math.max(MIN_HALF_ANGLE, turn / 2);
   const z = zoneEdges();
-  const holdStart = speed === 0 ? z.holdEnd : z.brakeEnd;
-  band(g, pose, half, 0, holdStart, 'brake');
-  band(g, pose, half, holdStart, z.holdEnd, 'hold');
-  band(g, pose, half, z.holdEnd, z.reach, 'accelerate');
+  if (speed === 0) {
+    band(g, pose, half, 0, z.restBrakeEnd, 'brake');
+    band(g, pose, half, z.restBrakeEnd, z.reach, 'accelerate');
+  } else {
+    band(g, pose, half, 0, z.brakeEnd, 'brake');
+    band(g, pose, half, z.brakeEnd, z.holdEnd, 'hold');
+    band(g, pose, half, z.holdEnd, z.reach, 'accelerate');
+  }
 }
 
 // Annular sector between radii r0 and r1 around the heading, in map space.

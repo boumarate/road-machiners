@@ -134,17 +134,19 @@ export function steerTo(world: World, s: VehicleStats, v: Pick<Vehicle, 'id' | '
   return steerStep(s, v, aim, remaining);
 }
 
-// A nearly stopped truck facing away from where it should go backs up on a short arc that swings its
-// nose toward the destination, or toward the route's next point when the line there is blocked.
-// It only backs up when the order would move it at all, and only when the way back is clear.
+// A nearly stopped truck backs toward a point behind it. For a point ahead, it backs on an arc
+// that swings its nose toward the route's next point. It only backs when the way back is clear.
 function reverseStep(world: World, s: VehicleStats, v: Pick<Vehicle, 'pos' | 'heading' | 'speed'>, order: Exclude<MoveOrder, { kind: 'brake' }>, direct: boolean, parked: Blocker[]): Steer | null {
   if (v.speed > RULES.reverse.below) return null;
-  if (order.kind === 'through' && zoneSpeed(s, v.speed, dist(v.pos, order.dest)) === 0) return null;
+  const distance = dist(v.pos, order.dest);
+  if (distance === 0 || (order.kind === 'through' && zoneSpeed(s, v.speed, distance) === 0)) return null;
   const clear = direct || straightClear(world, v.pos, order.dest, s.radius, parked);
   const aim = clear ? order.dest : aimPoint(v.pos, route(world, v.pos, order.dest, s.radius, parked));
   const ang = angleDiff(v.heading, bearing(v.pos, aim));
   if (Math.abs(ang) <= RULES.reverse.angle * DEG) return null;
-  const back = { speed: -RULES.reverse.distance, turn: clamp(ang, -s.reverseTurn, s.reverseTurn) };
+  const behind = Math.abs(angleDiff(v.heading, bearing(v.pos, order.dest))) > Math.PI / 2;
+  const turn = behind ? angleDiff(v.heading + Math.PI, bearing(v.pos, order.dest)) : ang;
+  const back = { speed: -Math.min(RULES.reverse.distance, distance, zoneSpeed(s, 0, distance)), turn: clamp(turn, -s.reverseTurn, s.reverseTurn) };
   return arcClear(world, v, back, s.radius, parked) ? back : null;
 }
 
@@ -170,27 +172,29 @@ function aimPoint(from: Vec, points: Vec[]): Vec {
 }
 
 export type Throttle = 'brake' | 'hold' | 'accelerate';
-export type ZoneEdges = { brakeEnd: number; holdEnd: number; reach: number }; // distances from the truck, in tiles
+export type ZoneEdges = { brakeEnd: number; holdEnd: number; restBrakeEnd: number; reach: number }; // distances from the truck, in tiles
 
 export function zoneEdges(): ZoneEdges {
   const Z = RULES.throttleZones;
   if (Math.abs(Z.brake + Z.hold + Z.accelerate - 1) > 1e-9) throw new Error('Throttle zone shares must add up to 1');
   const reach = TERRAIN.vision.radius * Z.reach;
-  return { brakeEnd: reach * Z.brake, holdEnd: reach * (Z.brake + Z.hold), reach };
+  return { brakeEnd: reach * Z.brake, holdEnd: reach * (Z.brake + Z.hold), restBrakeEnd: reach / 3, reach };
 }
 
-// A truck at rest has no hold zone: a click either leaves it standing or starts it moving.
+// At rest the red zone covers one third of reach and the green zone covers the rest.
 export function throttleFor(d: number, speed: number): Throttle {
   const z = zoneEdges();
-  if (d < (speed === 0 ? z.holdEnd : z.brakeEnd)) return 'brake';
+  if (speed === 0) return d < z.restBrakeEnd ? 'brake' : 'accelerate';
+  if (d < z.brakeEnd) return 'brake';
   if (d < z.holdEnd) return 'hold';
   return 'accelerate';
 }
 
-// Next turn's speed for a drive-through click at distance d. Brake eases from full at the truck to
-// none at the brake zone's edge. Acceleration builds from none at the hold zone's edge to full at reach.
+// Next turn's speed for a drive-through click at distance d. From rest, speed grows with distance.
+// In motion, brake eases toward its edge and acceleration builds from the hold zone to full reach.
 export function zoneSpeed(s: VehicleStats, speed: number, d: number): number {
   const z = zoneEdges();
+  if (speed === 0) return Math.min(s.maxSpeed, s.accel * Math.min(1, d / z.reach));
   let next = speed;
   if (d < z.brakeEnd) next = speed - s.brake * (1 - d / z.brakeEnd);
   else if (d >= z.holdEnd) next = speed + s.accel * Math.min(1, (d - z.holdEnd) / (z.reach - z.holdEnd));

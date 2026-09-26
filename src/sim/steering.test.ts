@@ -155,11 +155,11 @@ describe('curve direction', () => {
 describe('backing up', () => {
   const far = { x: 20, y: 30 }; // behind the truck, in the accelerate zone
 
-  it('a stopped truck facing away backs up and swings its nose toward the click', () => {
+  it('a stopped truck facing away backs toward the click', () => {
     const { w, v, s } = setup(0);
     const st = steerTo(w, s, v, { kind: 'through', dest: { x: 20, y: 31 } }, false);
     expect(st.speed).toBe(-RULES.reverse.distance);
-    expect(st.turn).toBeCloseTo(s.reverseTurn);
+    expect(st.turn).toBeLessThan(0);
     const end = advance({ x: 30, y: 30, heading: 0 }, st, 1);
     expect(end.x).toBeLessThan(30);
   });
@@ -172,9 +172,29 @@ describe('backing up', () => {
     }
   });
 
-  it('a stopped truck stays put for a click that would not move it', () => {
+  it('backs toward a nearby point behind it', () => {
     const { w, v, s } = setup(0);
-    expect(steerTo(w, s, v, { kind: 'through', dest: { x: 25, y: 30 } }, false)).toEqual({ speed: 0, turn: 0 });
+    const dest = { x: 28, y: 30.5 };
+    const st = steerTo(w, s, v, clickOrder(v, dest, false), false);
+    const end = advance({ x: 30, y: 30, heading: 0 }, st, 1);
+    expect(st.speed).toBeLessThan(0);
+    expect(end.x).toBeLessThan(30);
+    expect(end.y).toBeGreaterThan(30);
+    expect(dist(end, dest)).toBeLessThan(dist(v.pos, dest));
+  });
+
+  it('moves slowly toward a nearby point from rest', () => {
+    const { w, v, s } = setup(0);
+    const dest = { x: 31, y: 30 };
+    const st = steerTo(w, s, v, clickOrder(v, dest, false), false);
+    expect(st.speed).toBeGreaterThan(0);
+    expect(st.speed).toBeLessThan(s.accel);
+    expect(st.speed).toBeLessThan(dist(v.pos, dest));
+  });
+
+  it('stays still when clicked at its own position', () => {
+    const { w, v, s } = setup(0);
+    expect(steerTo(w, s, v, clickOrder(v, v.pos, false), false)).toEqual({ speed: 0, turn: 0 });
   });
 
   it('a moving truck does not back up', () => {
@@ -195,6 +215,18 @@ describe('backing up', () => {
     expect(plan[0].end.x).toBeLessThan(30);
   });
 
+  it('a truck stopped near a rock backs toward a nearby click behind it', () => {
+    let w = emptyWorld();
+    w.obstacles = [{ id: 'r', pos: { x: 31.5, y: 30 }, r: 0.8, kind: 'rock' }];
+    const dest = { x: 28, y: 30.5 };
+    w = setMoveOrder(w, clickOrder(w.vehicles[0], dest, false));
+    w = endTurn(w);
+    expect(w.events.filter((e) => e.t === 'collision')).toHaveLength(0);
+    expect(w.vehicles[0].pos.x).toBeLessThan(30);
+    expect(w.vehicles[0].pos.y).toBeGreaterThan(30);
+    expect(dist(w.vehicles[0].pos, dest)).toBeLessThan(dist({ x: 30, y: 30 }, dest));
+  });
+
   it('a truck stopped against a rock backs out and drives to a click behind it', () => {
     let w = emptyWorld();
     w.obstacles = [{ id: 'r', pos: { x: 31.5, y: 30 }, r: 0.8, kind: 'rock' }];
@@ -210,10 +242,10 @@ describe('backing up', () => {
 });
 
 describe('click orders', () => {
-  it('at rest there is no hold zone', () => {
+  it('at rest the red zone is one third of reach and green is two thirds', () => {
     const z = zoneEdges();
-    expect(throttleFor((z.brakeEnd + z.holdEnd) / 2, 0)).toBe('brake');
-    expect(throttleFor(z.holdEnd + 0.1, 0)).toBe('accelerate');
+    expect(throttleFor(z.reach / 3 - 0.01, 0)).toBe('brake');
+    expect(throttleFor(z.reach / 3 + 0.01, 0)).toBe('accelerate');
   });
 
   it('above a small speed a brake zone click stops; slower it eases', () => {
