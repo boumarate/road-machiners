@@ -1,6 +1,6 @@
 # Modular Vehicle Parts
 
-**Status:** reviewing
+**Status:** validating
 **Branch:** modular-parts
 **Worktree:** .worktrees/modular-parts
 **Goal:** Every truck is drawn as an open rig of Blender part models that snap to one shared cell size, so any part fits any chassis and the drawn truck matches its physics collider. Weapons are assembled from sub-part models, so two weapons of the same kind can look different. The user confirms the look in game.
@@ -207,3 +207,39 @@ Weapon pools:
 - tankGun: mount cradle; receiver tank; barrel tank; extra shield.
 - rocketRack: mount ring_wide; receiver rocket_pod; barrel rocket_tubes; no extra.
 - sniperCannon: mount cradle; receiver sniper; barrel sniper; extra scope.
+
+## Conclusion
+
+Outcome: trucks draw as open rigs of 59 Blender part models on a shared 0.4 x 0.65 m cell, with bodies derived from the grid and weapons assembled from sub-parts; the in-game look waits for user confirmation (80ae61e).
+
+Invariants:
+- IV1, IV2 — every chassis matches the grid formula (`tmp/verify-body.ts`, `src/sim/body.test.ts`).
+- IV3 — all 33 part and good models fit their footprints; unknown ids throw. Exception: items in rows added by cargo parts are not drawn, see Plan adherence.
+- IV4 — unit test.
+- IV5 — static frame bounds equal the collider exactly.
+- IV6 — missing sockets throw at `socket()` and in the boot check.
+
+### Assumptions check
+- AS1 — held: empties export as root glTF nodes and load as Object3D.
+- AS2 — held: at the same camera points, idle FPS matches main within noise. Boot draw calls dropped from 290 to 179.
+
+### Unknowns outcome
+- UK1 — still-open: sim radius now differs from the half-diagonal by up to 0.71 m (wagon radius 3.2 m, half-diagonal 2.49 m; scout 2.4 m against 2.79 m). The radius stays unchanged as the design required. Deciding whether to derive it belongs in a separate balance change.
+- UK2 — resolved: no physics or combat test needed new expected values.
+- UK3 — resolved: one to three models per slot, as listed in Model names.
+
+Plan adherence:
+- Items in rows added by cargo parts are not drawn. Those rows lie past the chassis grid and have no deck cells, so the cargo part model stands in for them.
+- Engines, cargo and core parts now darken to 0.6 when broken. Before, only weapons and armor darkened.
+- Spare weapons draw a fixed head. Spare wheels stand on their cell.
+- The frame is rails and posts rather than solid sides, because a solid box skirt hid the deck.
+- The non-weapon Blender groups started in wave 1 against the fixed name list, because they need no sockets.
+
+Review findings:
+- Important: the cell size was copied into four Python helpers. Fixed: it now lives once in `kit.py` (80ae61e).
+- Important: the deck depth in `vehicle.ts` was tied to `deck_tile.py` only by a comment. Fixed: the deck tile carries an `underside` socket that the frame reads (80ae61e).
+
+Future work:
+- The wreck of a dead truck could be its own burnt rig, and world previews could show a reference truck for scale. The user agreed to do both as a separate task.
+
+Verified by: all 59 part models rebuilt byte-identical after the review fix.
