@@ -2,9 +2,10 @@
 
 import { chassisDef } from '../data/chassis';
 import { partDef } from '../data/parts';
+import { gridOf, isMounted, placementError } from './grid';
 import { addGoods, mountPart } from './inventory';
 import { vehicleStats } from './stats';
-import type { Faction, NpcBrain, PartInstance, Vehicle, World } from './types';
+import type { Faction, GridItem, NpcBrain, PartInstance, Vehicle, World } from './types';
 import type { Vec } from './vec';
 
 export type VehicleSpec = {
@@ -28,6 +29,19 @@ export function makePart(world: World, defId: string): PartInstance {
   return { id: newId(world, 'p'), defId, hp: def.hp, reload: 0 };
 }
 
+// Places the chassis's built-in parts at their fixed cells. Throws if a spot is taken or is not built-in cells.
+export function addCoreParts(world: World, v: Vehicle): void {
+  for (const c of chassisDef(v.chassisId).core) {
+    const def = partDef(c.defId);
+    if (def.kind !== 'core') throw new Error(`${c.defId} on ${v.chassisId} is not a core part`);
+    const item: GridItem = { id: newId(world, 'i'), x: c.x, y: c.y, rot: 0, kind: 'part', part: makePart(world, c.defId) };
+    const err = placementError(gridOf(v), v.items, item, null);
+    if (err) throw new Error(`${def.name} at ${c.x},${c.y} on ${v.chassisId}: ${err}`);
+    if (!isMounted(v.chassisId, item)) throw new Error(`${def.name} at ${c.x},${c.y} on ${v.chassisId} is not on built-in cells`);
+    v.items.push(item);
+  }
+}
+
 export function makeVehicle(world: World, spec: VehicleSpec): Vehicle {
   chassisDef(spec.chassisId);
   const v: Vehicle = {
@@ -48,6 +62,7 @@ export function makeVehicle(world: World, spec: VehicleSpec): Vehicle {
     brain: spec.brain,
     lastHitBy: null,
   };
+  addCoreParts(world, v);
   for (const defId of spec.parts) {
     if (!mountPart(world, v, makePart(world, defId))) throw new Error(`No free mount for ${defId} on ${spec.chassisId}`);
   }

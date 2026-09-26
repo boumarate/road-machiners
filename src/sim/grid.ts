@@ -4,11 +4,21 @@ import { chassisDef } from '../data/chassis';
 import { partDef, type PartKind } from '../data/parts';
 import type { GridItem, PartInstance, Vehicle } from './types';
 
-export type Cell = 'W' | 'E' | 'A' | 'C' | '.';
+export type SideLetter = 'F' | 'B' | 'L' | 'R';
+export type Cell = 'W' | 'E' | 'C' | SideLetter | 'X' | '.';
 export type Grid = { w: number; h: number; cells: (Cell | null)[][] }; // cells[y][x], null is a hole
 export type Spot = { x: number; y: number; rot: 0 | 1 };
 
-export const MOUNT_CELL: Record<PartKind, Cell> = { weapon: 'W', engine: 'E', armor: 'A', cargo: 'C' };
+// Letters each kind mounts on. Armor lists the front first, so auto-mounting fills the nose before the sides.
+export const MOUNT_CELLS: Record<PartKind, Cell[]> = {
+  weapon: ['W'],
+  engine: ['E'],
+  armor: ['F', 'B', 'L', 'R'],
+  cargo: ['C'],
+  core: ['X'],
+};
+const SIDES: readonly Cell[] = ['F', 'B', 'L', 'R'];
+const CELL_CHARS: readonly string[] = ['W', 'E', 'C', 'F', 'B', 'L', 'R', 'X', '.'];
 
 export function baseGrid(chassisId: string): Grid {
   const rows = chassisDef(chassisId).layout;
@@ -19,7 +29,7 @@ export function baseGrid(chassisId: string): Grid {
 
 function toCell(ch: string): Cell | null {
   if (ch === ' ') return null;
-  if (ch === 'W' || ch === 'E' || ch === 'A' || ch === 'C' || ch === '.') return ch;
+  if (CELL_CHARS.includes(ch)) return ch as Cell;
   throw new Error(`Bad layout character "${ch}"`);
 }
 
@@ -36,12 +46,26 @@ export function itemCells(item: GridItem): { x: number; y: number }[] {
   return out;
 }
 
-// A part works when every cell it covers is a mount cell of its kind in the chassis layout.
+// A part works when every cell it covers carries the same letter, and that letter is a mount of its kind.
 export function isMounted(chassisId: string, item: GridItem): boolean {
-  if (item.kind !== 'part') return false;
+  return mountLetter(chassisId, item) !== null;
+}
+
+function mountLetter(chassisId: string, item: GridItem): Cell | null {
+  if (item.kind !== 'part') return null;
   const base = baseGrid(chassisId);
-  const want = MOUNT_CELL[partDef(item.part.defId).kind];
-  return itemCells(item).every((c) => base.cells[c.y]?.[c.x] === want);
+  const letters = itemCells(item).map((c) => base.cells[c.y]?.[c.x] ?? null);
+  const first = letters[0];
+  if (first === null || !MOUNT_CELLS[partDef(item.part.defId).kind].includes(first)) return null;
+  return letters.every((l) => l === first) ? first : null;
+}
+
+// The side a mounted armor part covers. Null for any other part or an unmounted one.
+export function sideOf(v: Vehicle, part: PartInstance): SideLetter | null {
+  const item = v.items.find((it) => it.kind === 'part' && it.part.id === part.id);
+  if (!item) throw new Error(`Part ${part.id} is not on ${v.id}`);
+  const letter = mountLetter(v.chassisId, item);
+  return letter !== null && SIDES.includes(letter) ? (letter as SideLetter) : null;
 }
 
 export function gridOf(v: Vehicle): Grid {
@@ -91,15 +115,21 @@ export function placementError(g: Grid, items: GridItem[], item: GridItem, ignor
   return null;
 }
 
-// First free spot in reading order. With a mount cell given, only spots fully on that mount count.
-// Without one, plain cells are tried before mount cells so mounts stay free, and spots fully on
-// the avoid cell are skipped, so a stowed spare never mounts by accident.
-export function findSpot(g: Grid, items: GridItem[], item: GridItem, mount: Cell | null, avoid: Cell | null): Spot | null {
+// First free spot in reading order. With mount letters given, only spots fully on one letter count,
+// and earlier letters win. Without them, plain cells are tried before mount cells so mounts stay free,
+// and spots fully on one avoid letter are skipped, so a stowed spare never mounts by accident.
+export function findSpot(g: Grid, items: GridItem[], item: GridItem, mount: Cell[] | null, avoid: Cell[] | null): Spot | null {
   const tries: Spot[] = [];
   for (const rot of [0, 1] as const) for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) tries.push({ x, y, rot });
   const fits = (s: Spot) => placementError(g, items, { ...item, ...s }, item.id) === null;
   const onlyOn = (s: Spot, cell: Cell) => itemCells({ ...item, ...s }).every((c) => g.cells[c.y]?.[c.x] === cell);
-  if (mount) return tries.find((s) => fits(s) && onlyOn(s, mount)) ?? null;
-  const allowed = (s: Spot) => fits(s) && !(avoid && onlyOn(s, avoid));
+  if (mount) {
+    for (const letter of mount) {
+      const spot = tries.find((s) => fits(s) && onlyOn(s, letter));
+      if (spot) return spot;
+    }
+    return null;
+  }
+  const allowed = (s: Spot) => fits(s) && !(avoid && avoid.some((a) => onlyOn(s, a)));
   return tries.find((s) => allowed(s) && onlyOn(s, '.')) ?? tries.find(allowed) ?? null;
 }

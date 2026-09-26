@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { ECONOMY, TOWN_PRICES } from '../data/goods';
+import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { checkDefeat } from './defeat';
@@ -84,7 +85,7 @@ describe('garage', () => {
     w = buyChassis(w, 'hauler');
     const me = w.vehicles[0];
     expect(me.chassisId).toBe('hauler');
-    expect(mountedParts(me).map((p) => p.defId).sort()).toEqual(['cage', 'mg', 'rack', 'stockEngine']);
+    expect(mountedParts(me).map((p) => p.defId).filter((id) => partDef(id).kind !== 'core').sort()).toEqual(['cage', 'mg', 'rack', 'stockEngine']);
     expect(me.hull).toBe(vehicleStats(w, me).hullMax);
     expect(goodsCount(me)).toEqual({ scrap: 2 });
     expect(w.player.money).toBe(2000 - (CHASSIS.hauler.price - Math.floor(CHASSIS.scout.price * ECONOMY.chassisSellFactor)));

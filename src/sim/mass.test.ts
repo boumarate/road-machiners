@@ -8,20 +8,22 @@ import { loadFactor, vehicleMass } from './mass';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld } from './testkit';
 
+const coreMass = (id: string) => CHASSIS[id].core.reduce((a, c) => a + PARTS[c.defId].mass, 0);
+
 describe('vehicle mass', () => {
-  it('a bare chassis weighs its chassis mass', () => {
+  it('a bare chassis weighs its frame plus its built-in parts', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'hauler', [], { x: 40, y: 40 });
-    expect(vehicleMass(v)).toBe(CHASSIS.hauler.mass);
+    expect(vehicleMass(v)).toBe(CHASSIS.hauler.mass + coreMass('hauler'));
   });
 
   it('sums mounted parts, spare parts and goods', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'hauler', ['mg', 'stockEngine'], { x: 40, y: 40 });
-    expect(vehicleMass(v)).toBe(CHASSIS.hauler.mass + PARTS.mg.mass + PARTS.stockEngine.mass);
+    expect(vehicleMass(v)).toBe(CHASSIS.hauler.mass + coreMass('hauler') + PARTS.mg.mass + PARTS.stockEngine.mass);
     expect(stowPart(w, v, makePart(w, 'plates'))).toBe(true);
     expect(addGoods(w, v, 'scrap', 3)).toBe(3);
-    expect(vehicleMass(v)).toBe(CHASSIS.hauler.mass + PARTS.mg.mass + PARTS.stockEngine.mass + PARTS.plates.mass + 3 * GOODS.scrap.mass);
+    expect(vehicleMass(v)).toBe(CHASSIS.hauler.mass + coreMass('hauler') + PARTS.mg.mass + PARTS.stockEngine.mass + PARTS.plates.mass + 3 * GOODS.scrap.mass);
   });
 
   it('load factor is 1 up to the rated mass, then sqrt(rated / mass)', () => {

@@ -123,7 +123,7 @@ export class TownScreen {
       el('tr', {}, el('td', { class: 'dim' }, partDef(s.defId).kind), el('td', {}, partLabel(s)),
         el('td', {}, el('button', { onclick: () => this.run((x) => sellPart(x, s.id)) }, `Sell for ${partSellPrice(s)}`))),
     );
-    const shop = Object.values(PARTS).map((d) =>
+    const shop = Object.values(PARTS).filter((d) => d.kind !== 'core').map((d) =>
       el('tr', {}, el('td', { class: 'dim' }, d.kind), el('td', {}, `${d.name} ${d.w}x${d.h}: ${partStats(d)}`),
         el('td', {}, el('button', { disabled: w.player.money < d.price, onclick: () => this.run((x) => buyPart(x, d.id)) }, `Buy ${d.price}`))),
     );
@@ -159,14 +159,15 @@ function partLabel(p: PartInstance): string {
 }
 
 function partStats(d: PartDef): string {
-  return `${kindStats(d)}, ${d.mass} kg`;
+  return `${kindStats(d)}, armor ${d.armor}, ${d.mass} kg`;
 }
 
 function kindStats(d: PartDef): string {
   switch (d.kind) {
     case 'weapon': return `dmg ${d.damage}, range ${d.range}, reload ${d.reload}, arc ${d.arc}`;
     case 'engine': return `speed +${d.speedBonus}, accel +${d.accelBonus}, fuel x${d.fuelMult}`;
-    case 'armor': return `hull +${d.hullBonus}, block ${d.reduction}, part shield ${d.partShield * 100}%`;
+    case 'armor': return `hull +${d.hullBonus}, block ${d.reduction}, part shield ${d.partShield * 100}%${d.ramMult > 1 ? `, ram x${d.ramMult}` : ''}`;
     case 'cargo': return `+${d.extraRows} grid rows`;
+    case 'core': return `built-in ${d.role}`;
   }
 }

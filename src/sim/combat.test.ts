@@ -58,7 +58,7 @@ describe('combat', () => {
     const me = w.vehicles[0];
     const gun = me.items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
     me.items = me.items.filter((it) => it !== gun);
-    me.items.push({ id: 'i1', x: 0, y: 0, rot: 0, kind: 'part', part: { id: 'c1', defId: 'cannon', hp: 30, reload: 0 } });
+    me.items.push({ id: 'i1', x: gun.x, y: gun.y, rot: 0, kind: 'part', part: { id: 'c1', defId: 'cannon', hp: 30, reload: 0 } });
     const t = addVehicle(w, 'raiders', 'wagon', ['cannon', 'stockEngine', 'plates'], { x: 35, y: 30 }, Math.PI);
     order(me, 'c1', t.id);
     let shots = 0;

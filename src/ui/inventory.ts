@@ -13,8 +13,18 @@ import type { UiHost } from './host';
 
 const CELL_PX = 42;
 
-const CELL_LABEL: Record<Cell, string> = { W: 'weapon', E: 'engine', A: 'armor', C: 'cargo', '.': '' };
-const KIND_CLASS: Record<PartKind, string> = { weapon: 'k-weapon', engine: 'k-engine', armor: 'k-armor', cargo: 'k-cargo' };
+const CELL_TITLE: Record<Cell, string> = {
+  W: 'weapon mount',
+  E: 'engine mount',
+  C: 'cargo mount',
+  F: 'front armor mount',
+  B: 'back armor mount',
+  L: 'left armor mount',
+  R: 'right armor mount',
+  X: 'built-in part',
+  '.': '',
+};
+const KIND_CLASS: Record<PartKind, string> = { weapon: 'k-weapon', engine: 'k-engine', armor: 'k-armor', cargo: 'k-cargo', core: 'k-core' };
 
 type Drag = {
   source: 'grid' | 'storage';
@@ -54,7 +64,7 @@ export class InventoryView {
       for (let x = 0; x < g.w; x++) {
         const c = g.cells[y][x];
         if (c === null) continue;
-        grid.append(el('div', { class: `inv-cell c-${c === '.' ? 'plain' : c}`, style: pos(x, y, 1, 1), title: CELL_LABEL[c] ? `${CELL_LABEL[c]} mount` : '' }, c === '.' ? '' : c));
+        grid.append(el('div', { class: `inv-cell c-${c === '.' ? 'plain' : c}`, style: pos(x, y, 1, 1), title: CELL_TITLE[c] }, c === '.' || c === 'X' ? '' : c));
       }
     }
     for (const it of me.items) grid.append(this.itemEl(w, it));
@@ -74,7 +84,11 @@ export class InventoryView {
   }
 
   private legend(): HTMLElement {
-    return el('div', { class: 'dim inv-legend' }, 'W E A C: weapon, engine, armor, cargo mounts. A part works only fully on its own letter. Drag to move, R or right click to rotate.');
+    return el('div', { class: 'dim inv-legend' },
+      el('div', {}, 'Top view, nose up. W E C: weapon, engine, cargo mounts. F B L R: armor mounts on the front, back, left and right.'),
+      el('div', {}, 'A part works only when it lies fully on one of its letters. Built-in parts are fixed and can only be repaired.'),
+      el('div', {}, 'Drag to move, R or right click to rotate.'),
+    );
   }
 
   private itemEl(w: World, it: GridItem): HTMLElement {
@@ -86,9 +100,11 @@ export class InventoryView {
     const ht = Math.max(...cells.map((c) => c.y)) - y + 1;
     const label = itemLabel(it);
     const mounted = it.kind === 'part' && isMounted(me.chassisId, it);
-    const cls = it.kind === 'part' ? `${KIND_CLASS[partDef(it.part.defId).kind]} ${mounted ? 'mounted' : 'spare'}` : `k-good g-${it.good}`;
+    const core = it.kind === 'part' && partDef(it.part.defId).kind === 'core';
+    const state = core ? 'fixed' : mounted ? 'mounted' : 'spare';
+    const cls = it.kind === 'part' ? `${KIND_CLASS[partDef(it.part.defId).kind]} ${state}` : `k-good g-${it.good}`;
     const node = el('div', { class: `inv-item ${cls}`, style: pos(x, y, wd, ht), title: itemTitle(it, mounted) }, label.short);
-    node.addEventListener('pointerdown', (e) => this.startDrag(e, 'grid', it.id, it, { x: Math.floor(e.offsetX / CELL_PX), y: Math.floor(e.offsetY / CELL_PX) }));
+    if (!core) node.addEventListener('pointerdown', (e) => this.startDrag(e, 'grid', it.id, it, { x: Math.floor(e.offsetX / CELL_PX), y: Math.floor(e.offsetY / CELL_PX) }));
     return node;
   }
 
@@ -253,6 +269,7 @@ function itemLabel(it: GridItem): { short: string } {
 
 function itemTitle(it: GridItem, mounted: boolean): string {
   if (it.kind === 'good') return GOODS[it.good].name;
+  if (partDef(it.part.defId).kind === 'core') return `${partTitle(it.part)}\nBuilt in: cannot be moved, only repaired`;
   return `${partTitle(it.part)}\n${mounted ? 'Mounted and working' : 'Spare: not on a matching mount'}`;
 }
 

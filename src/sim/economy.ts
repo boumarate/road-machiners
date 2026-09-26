@@ -7,7 +7,7 @@ import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
 import { skillBonus } from '../data/skills';
 import { playerVehicle } from './damage';
-import { makePart } from './factory';
+import { addCoreParts, makePart } from './factory';
 import { gainXp } from './progress';
 import { requireTown } from './sites';
 import { goodsCount, mountedParts } from './grid';
@@ -116,6 +116,7 @@ export function partSellPrice(part: PartInstance): number {
 export function buyPart(world: World, defId: string): World {
   return update(world, (w) => {
     requireTown(w);
+    if (partDef(defId).kind === 'core') throw new Error(`${partDef(defId).name} is built in. It is not for sale.`);
     pay(w, partDef(defId).price, partDef(defId).name);
     w.player.storage.push(makePart(w, defId));
   });
@@ -145,8 +146,9 @@ function allParts(v: Vehicle): PartInstance[] {
   return v.items.flatMap((it) => (it.kind === 'part' ? [it.part] : []));
 }
 
-// Swap chassis: mounted parts move to free mounts, spares and goods to free cells, and parts that
-// do not fit go to garage storage. Goods that do not fit block the swap. The old chassis is traded in.
+// Swap chassis: the old built-in parts go with the old chassis and the new one brings its own.
+// Mounted parts move to free mounts, spares and goods to free cells, and parts that do not fit go to
+// garage storage. Goods that do not fit block the swap. The old chassis is traded in.
 export function buyChassis(world: World, chassisId: string): World {
   return update(world, (w) => {
     requireTown(w);
@@ -160,8 +162,9 @@ export function buyChassis(world: World, chassisId: string): World {
     const old = me.items;
     me.chassisId = chassisId;
     me.items = [];
+    addCoreParts(w, me);
     // Cargo parts first: their extra rows make room for the rest.
-    const parts = old.flatMap((it) => (it.kind === 'part' ? [it.part] : []));
+    const parts = old.flatMap((it) => (it.kind === 'part' && partDef(it.part.defId).kind !== 'core' ? [it.part] : []));
     parts.sort((a, b) => Number(partDef(b.defId).kind === 'cargo') - Number(partDef(a.defId).kind === 'cargo'));
     for (const part of parts) {
       const placed = mounted.has(part.id) ? mountPart(w, me, part) || stowPart(w, me, part) : stowPart(w, me, part);
