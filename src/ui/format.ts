@@ -94,8 +94,11 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       return { text: 'Robbed. You patch your truck enough to crawl back, but the tank is empty.', cls: 'bad' };
     case 'info':
       return { text: e.text, cls: 'dim' };
-    case 'job':
-      return e.vehicle === me ? { text: `${e.job.kind === 'repair' ? 'Repair' : 'Search'} ${e.outcome}`, cls: e.outcome === 'cancelled' ? 'bad' : 'dim' } : null;
+    case 'job': {
+      if (e.vehicle !== me) return null;
+      const what = e.job.kind === 'repair' ? `Repair (${partName(world, e.vehicle, e.job.partId)})` : 'Search';
+      return { text: `${what} ${e.outcome}`, cls: e.outcome === 'cancelled' ? 'bad' : 'dim' };
+    }
     case 'breakdown':
       return e.vehicle === me ? { text: `${partName(world, e.vehicle, e.part)} broke down`, cls: 'bad' } : null;
     case 'weather':

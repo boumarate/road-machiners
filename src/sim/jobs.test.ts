@@ -40,13 +40,14 @@ describe('field repair job', () => {
     const cage = armorPart(me);
     cage.hp = 1;
     addGoods(w, me, 'parts', 20);
+    const held = goodsCount(me).parts ?? 0;
     const next = startRepair(w, cage.id);
     advanceJobs(next); // one turn parked, progress made
     next.vehicles[0].speed = 5; // moves before the job finishes
     advanceJobs(next);
     expect(next.vehicles[0].job).toBeNull();
     expect(armorPart(next.vehicles[0]).hp).toBe(1); // no HP gained, parts untouched
-    expect(goodsCount(next.vehicles[0]).parts).toBe(20);
+    expect(goodsCount(next.vehicles[0]).parts).toBe(held);
   });
 
   it('spends parts only when the job finishes', () => {
@@ -55,13 +56,14 @@ describe('field repair job', () => {
     const cage = armorPart(me);
     cage.hp = 1;
     addGoods(w, me, 'parts', 20);
+    const held = goodsCount(me).parts ?? 0;
     const plan = repairPlan(w, me, cage.id);
     expect(plan.turns).toBeGreaterThan(1);
     const next = startRepair(w, cage.id);
     for (let i = 0; i < plan.turns - 1; i++) advanceJobs(next);
-    expect(goodsCount(next.vehicles[0]).parts).toBe(20); // not yet spent
+    expect(goodsCount(next.vehicles[0]).parts).toBe(held); // not yet spent
     advanceJobs(next);
-    expect(goodsCount(next.vehicles[0]).parts).toBe(20 - plan.parts);
+    expect(goodsCount(next.vehicles[0]).parts).toBe(held - plan.parts);
   });
 
   it('refuses to start once the part is already at the field cap', () => {

@@ -24,6 +24,14 @@ Every part and good has a mass. A heavier truck accelerates, brakes, steers and 
 
 Parts wear. The frame cannot be fully repaired, so old trucks slowly decline. The player changes trucks every so often. Parts move between trucks, so a change keeps some progress.
 
+Every turn, each mounted part may lose HP. The chance grows with the tiles driven that turn, the truck's speed and how rough the ground is. Rarely, a part breaks down and loses a large share of its HP at once, logged in the event feed. The same rule wears NPC trucks.
+
+Parts is a trade good, bought and sold in towns like scrap or salt. It is the resource field repair spends. The standard start kit carries a few.
+
+A job is work that needs the truck parked for a number of turns: field repair or scavenging. The player has at most one job at a time. Driving before it ends cancels it and the turns already spent are lost. The HUD shows the current job and its turns left.
+
+Field repair fixes one damaged mounted part. It spends parts and restores HP up to a field cap below full, only when the job finishes. Mechanics shortens the job and cuts the parts it needs. A full repair to 100% still needs a town. The inventory panel shows a Patch button on a damaged part, with its turns and parts cost, disabled with the reason when the truck is moving or the grid lacks parts. NPCs keep their town upkeep and do not field repair.
+
 The truck stays critical to progression, like the ship in Space Rangers 2.
 
 ## Turns and combat

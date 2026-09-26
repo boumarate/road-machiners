@@ -87,7 +87,7 @@ describe('garage', () => {
     const me = w.vehicles[0];
     expect(me.chassisId).toBe('hauler');
     expect(mountedParts(me).map((p) => p.defId).filter((id) => partDef(id).kind !== 'core').sort()).toEqual(['cage', 'mg', 'rack', 'stockEngine']);
-    expect(goodsCount(me)).toEqual({ scrap: 2 });
+    expect(goodsCount(me)).toEqual({ scrap: 2, parts: 2 });
     expect(w.player.money).toBe(2000 - (CHASSIS.hauler.price - Math.floor(CHASSIS.scout.price * ECONOMY.chassisSellFactor)));
     w = buyChassis(w, 'scout');
     expect(w.player.storage.length).toBe(0);

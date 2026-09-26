@@ -22,7 +22,7 @@ export const START_KITS: Record<string, StartKit> = {
     money: 1500,
     fuel: 30,
     supplies: 12,
-    cargo: { scrap: 2 },
+    cargo: { scrap: 2, parts: 2 },
     costBasis: { scrap: 10 },
   },
   // For testing combat: both weapons, a front ram and armor, with spares in the town garage.

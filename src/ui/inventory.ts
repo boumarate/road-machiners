@@ -3,11 +3,14 @@
 
 import { GOODS } from '../data/goods';
 import { partDef, type PartKind } from '../data/parts';
+import { RULES } from '../data/rules';
 import { playerVehicle } from '../sim/damage';
-import { gridOf, isMounted, itemCells, placementError, type Cell, type Spot } from '../sim/grid';
+import { goodsCount, gridOf, isMounted, itemCells, placementError, type Cell, type Spot } from '../sim/grid';
 import { dumpGood, moveItem, storePart, takeFromStorage } from '../sim/inventory';
+import { startRepair } from '../sim/jobs';
+import { repairPlan } from '../sim/repair';
 import { townAt } from '../sim/sites';
-import type { GridItem, PartInstance, World } from '../sim/types';
+import type { GridItem, PartInstance, Vehicle, World } from '../sim/types';
 import { el, panel } from './dom';
 import type { UiHost } from './host';
 
@@ -105,8 +108,36 @@ export class InventoryView {
     const cls = it.kind === 'part' ? `${KIND_CLASS[partDef(it.part.defId).kind]} ${state}` : `k-good g-${it.good}`;
     const node = el('div', { class: `inv-item ${cls}`, style: pos(x, y, wd, ht), title: itemTitle(it, mounted) }, label.short);
     if (it.kind === 'part') node.append(conditionBar(it.part));
+    if (it.kind === 'part' && mounted) {
+      const patch = this.patchButton(w, me, it.part);
+      if (patch) node.append(patch);
+    }
     if (!core) node.addEventListener('pointerdown', (e) => this.startDrag(e, 'grid', it.id, it, { x: Math.floor(e.offsetX / CELL_PX), y: Math.floor(e.offsetY / CELL_PX) }));
     return node;
+  }
+
+  // A damaged mounted part shows a Patch button, hidden once it is already at the field cap.
+  private patchButton(w: World, me: Vehicle, part: PartInstance): HTMLElement | null {
+    const plan = repairPlan(w, me, part.id);
+    if (plan.hp <= 0) return null;
+    const moving = me.speed > RULES.parkedSpeed;
+    const held = goodsCount(me).parts ?? 0;
+    const short = held < plan.parts;
+    const reason = moving ? 'Stop to patch' : short ? `Need ${plan.parts} parts, have ${held}` : null;
+    return el(
+      'button',
+      {
+        class: 'inv-patch',
+        disabled: reason !== null,
+        title: reason ?? `Patch: ${plan.turns} turns, ${plan.parts} parts, +${plan.hp} HP`,
+        onpointerdown: (e: Event) => e.stopPropagation(),
+        onclick: (e: Event) => {
+          e.stopPropagation();
+          this.run((world) => startRepair(world, part.id));
+        },
+      },
+      reason ? `Patch (${reason})` : `Patch ${plan.turns}t/${plan.parts}p`,
+    );
   }
 
   private storageEl(w: World): HTMLElement {

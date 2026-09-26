@@ -4,7 +4,7 @@ import { PARTS } from '../data/parts';
 import { REGION } from '../data/region';
 import { buyPart } from './economy';
 import { freeCells, gridOf, mountedParts } from './grid';
-import { dumpGood, moveItem, spareParts, storePart, takeFromStorage } from './inventory';
+import { dumpGood, moveItem, removeAllGoods, spareParts, storePart, takeFromStorage } from './inventory';
 import { vehicleStats } from './stats';
 import { emptyWorld } from './testkit';
 import type { World } from './types';
@@ -54,6 +54,7 @@ describe('inventory grid', () => {
   it('a cannon works only lying along the weapon mount', () => {
     let w = emptyWorld(bowl.pos);
     w.player.money = 2000;
+    removeAllGoods(w.vehicles[0]); // free the plain cells the cannon test claims, regardless of start cargo
     const mg = item(w, 'mg');
     w = storePart(w, mg.id);
     w = buyPart(w, 'cannon');
@@ -84,7 +85,8 @@ describe('inventory grid', () => {
 
   it('goods can be dumped, parts cannot', () => {
     const w = emptyWorld();
-    expect(dumpGood(w, good(w).id).vehicles[0].items.filter((it) => it.kind === 'good')).toHaveLength(1);
+    const before = w.vehicles[0].items.filter((it) => it.kind === 'good').length;
+    expect(dumpGood(w, good(w).id).vehicles[0].items.filter((it) => it.kind === 'good')).toHaveLength(before - 1);
     expect(() => dumpGood(w, item(w, 'mg').id)).toThrow();
   });
 });
