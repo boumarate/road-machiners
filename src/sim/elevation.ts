@@ -2,13 +2,17 @@
 // terrain grid in sim/terrain.ts; everything else reads that grid.
 // Flattened near roads, towns and locations so they stay drivable.
 
-import { TERRAIN } from '../data/terrain';
-import { REGION } from '../data/region';
-import { dist, polylineDist } from './vec';
+import { TERRAIN } from "../data/terrain";
+import { REGION } from "../data/region";
+import { dist, polylineDist } from "./vec";
 
 // Own hash, independent of render/noise.ts (render-only) and sim/rng.ts (consumes world.rngState).
 function hash(x: number, y: number, seed: number): number {
-  let h = (Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(seed | 0, 2246822519)) | 0;
+  let h =
+    (Math.imul(x | 0, 374761393) ^
+      Math.imul(y | 0, 668265263) ^
+      Math.imul(seed | 0, 2246822519)) |
+    0;
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
@@ -55,8 +59,10 @@ function rawElevation(seed: number, x: number, y: number): number {
 export function flattenFactor(x: number, y: number): number {
   const p = { x, y };
   let best = Infinity;
-  for (const road of REGION.roads) best = Math.min(best, polylineDist(p, road) - REGION.roadWidth / 2);
-  for (const site of [...REGION.towns, ...REGION.locations]) best = Math.min(best, dist(p, site.pos) - site.radius);
+  for (const road of REGION.roads)
+    best = Math.min(best, polylineDist(p, road) - REGION.roadWidth / 2);
+  for (const site of [...REGION.towns, ...REGION.locations])
+    best = Math.min(best, dist(p, site.pos) - site.radius);
   if (best <= 0) return 1;
   if (best >= TERRAIN.flattenMargin) return 0;
   return 1 - smooth(best / TERRAIN.flattenMargin);
@@ -67,12 +73,14 @@ export function elevationAt(seed: number, x: number, y: number): number {
   let height = rawElevation(seed, x, y);
   for (const feature of [TERRAIN.features.canyon, TERRAIN.features.dryRiver]) {
     const gap = polylineDist(p, feature.path) - feature.width;
-    if (gap < feature.bank) height -= feature.depth * (gap <= 0 ? 1 : 1 - smooth(gap / feature.bank));
+    if (gap < feature.bank)
+      height -= feature.depth * (gap <= 0 ? 1 : 1 - smooth(gap / feature.bank));
   }
   height *= 1 - flattenFactor(x, y);
   for (const crater of TERRAIN.features.craters) {
     const gap = dist(p, crater.center) - crater.radius;
-    if (gap < crater.bank) height -= crater.depth * (gap <= 0 ? 1 : 1 - smooth(gap / crater.bank));
+    if (gap < crater.bank)
+      height -= crater.depth * (gap <= 0 ? 1 : 1 - smooth(gap / crater.bank));
   }
   return height;
 }
