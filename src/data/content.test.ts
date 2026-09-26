@@ -3,7 +3,7 @@ import { CHASSIS, PLAYER_CHASSIS } from './chassis';
 import { GOODS, GOOD_IDS, TOWN_PRICES } from './goods';
 import { PARTS, type PartKind } from './parts';
 import { REGION } from './region';
-import { bodyOf } from '../phys/body';
+import { bodyOf } from '../sim/body';
 import { buyChassis, buyGood, buyPart, buyPrice, sellGood, sellPrice } from '../sim/economy';
 import { makePart, makeVehicle } from '../sim/factory';
 import { goodsCount, gridOf, isMounted, placementError } from '../sim/grid';

@@ -22,19 +22,20 @@ export const PHYSICS = {
     maxSteer: 0.6, // radians of front wheel angle
     steerRate: 3, // radians per second the wheels can turn
   },
-  // Body per chassis look, in meters. half: chassis box half extents along length, height, width.
-  // wheelX: front and rear axle distance from the center. wheelZ: wheel distance from the center line.
+  // One inventory grid cell in meters. A truck's body is its grid: length is rows x along, width is columns x across.
+  cell: { across: 0.4, along: 0.65 },
+  // Body per chassis look, in meters. halfHeight: chassis box half height. Length, width and wheel mounts come from the grid.
   // wheelY: suspension mount height relative to the chassis center. Mass comes from src/sim/mass.ts.
   bodies: {
-    pickup: { half: { x: 2.2, y: 0.45, z: 1.0 }, wheelX: 1.45, wheelZ: 0.95, wheelY: -0.3, wheelRadius: 0.45, wheelHalfWidth: 0.18 },
-    hauler: { half: { x: 3.0, y: 0.6, z: 1.3 }, wheelX: 2.0, wheelZ: 1.2, wheelY: -0.4, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
-    buggy: { half: { x: 1.8, y: 0.35, z: 0.95 }, wheelX: 1.3, wheelZ: 1.0, wheelY: -0.2, wheelRadius: 0.5, wheelHalfWidth: 0.22 },
-    wagon: { half: { x: 3.0, y: 0.7, z: 1.35 }, wheelX: 1.9, wheelZ: 1.25, wheelY: -0.45, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
-    courier: { half: { x: 1.6, y: 0.3, z: 0.8 }, wheelX: 1.1, wheelZ: 0.8, wheelY: -0.2, wheelRadius: 0.4, wheelHalfWidth: 0.16 },
-    van: { half: { x: 2.5, y: 0.5, z: 1.1 }, wheelX: 1.6, wheelZ: 1.05, wheelY: -0.35, wheelRadius: 0.45, wheelHalfWidth: 0.18 },
-    longbed: { half: { x: 3.4, y: 0.55, z: 1.25 }, wheelX: 2.5, wheelZ: 1.2, wheelY: -0.35, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
-    carrier: { half: { x: 3.0, y: 0.6, z: 1.4 }, wheelX: 2.1, wheelZ: 1.3, wheelY: -0.4, wheelRadius: 0.65, wheelHalfWidth: 0.28 },
-    tractor: { half: { x: 3.2, y: 0.65, z: 1.35 }, wheelX: 2.0, wheelZ: 1.3, wheelY: -0.45, wheelRadius: 0.7, wheelHalfWidth: 0.3 },
+    pickup: { halfHeight: 0.45, wheelY: -0.3, wheelRadius: 0.45, wheelHalfWidth: 0.18 },
+    hauler: { halfHeight: 0.6, wheelY: -0.4, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
+    buggy: { halfHeight: 0.35, wheelY: -0.2, wheelRadius: 0.5, wheelHalfWidth: 0.22 },
+    wagon: { halfHeight: 0.7, wheelY: -0.45, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
+    courier: { halfHeight: 0.3, wheelY: -0.2, wheelRadius: 0.4, wheelHalfWidth: 0.16 },
+    van: { halfHeight: 0.5, wheelY: -0.35, wheelRadius: 0.45, wheelHalfWidth: 0.18 },
+    longbed: { halfHeight: 0.55, wheelY: -0.35, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
+    carrier: { halfHeight: 0.6, wheelY: -0.4, wheelRadius: 0.65, wheelHalfWidth: 0.28 },
+    tractor: { halfHeight: 0.65, wheelY: -0.45, wheelRadius: 0.7, wheelHalfWidth: 0.3 },
   },
   driver: {
     steerGain: 1.6, // wheel angle per radian of heading error

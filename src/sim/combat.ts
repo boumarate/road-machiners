@@ -4,7 +4,6 @@
 import { NPCS, SPAWN } from "../data/npcs";
 import { RULES } from "../data/rules";
 import { skillBonus } from "../data/skills";
-import { chassisDef } from "../data/chassis";
 import { PHYSICS } from "../data/physics";
 import {
   laneCount,
@@ -14,6 +13,7 @@ import {
   type PartHit,
   type Side,
 } from "./armor";
+import { bodyOf } from "./body";
 import { corePart, itemSize, mountedItems, mountedParts } from "./grid";
 import { gainXp } from "./progress";
 import { canVehicleSee } from "./vision";
@@ -91,7 +91,7 @@ function across(shooter: Vehicle, target: Vehicle): Vec {
 
 // Width in meters the body shows to the shooter: its length seen broadside, its width seen head-on.
 export function presentedWidth(shooter: Vehicle, target: Vehicle): number {
-  const half = PHYSICS.bodies[chassisDef(target.chassisId).look].half;
+  const half = bodyOf(target.chassisId).half;
   const a = angleDiff(target.heading, bearing(shooter.pos, target.pos));
   return 2 * (Math.abs(half.x * Math.sin(a)) + Math.abs(half.z * Math.cos(a)));
 }

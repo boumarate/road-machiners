@@ -16,7 +16,8 @@ import { aimPoint, parkedVehicles, shouldBackToDestination, zoneSpeed } from '..
 import { heightAt } from '../sim/terrain';
 import type { MoveOrder, Vehicle, World } from '../sim/types';
 import { angleDiff, clamp, DEG, dist, type Vec } from '../sim/vec';
-import { bodyOf, wheelMounts, type Body } from './body';
+import { bodyOf, type Body } from '../sim/body';
+import { wheelMounts } from './body';
 import { headingOf, headingQuat, type TurnFrames, type VehicleFrame } from './frames';
 
 const S = PHYSICS.metersPerTile;
