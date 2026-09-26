@@ -9,7 +9,8 @@ import { getTradePrice, sellVehicleCargo, serviceVehicle, tradeGoods } from './e
 import { corePart, freeCells, goodsCount, mountedParts } from './grid';
 import { getResources } from './resources';
 import { randInt } from './rng';
-import { canReachSalvage, collectSalvage, hasSalvage } from './salvage';
+import { canReachSalvage, hasSalvage } from './salvage';
+import { beginSearch } from './search';
 import { vehicleStats } from './stats';
 import type { NpcActivity, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
@@ -183,10 +184,15 @@ function resolveActivity(world: World, vehicle: Vehicle, activity: NpcActivity):
   if (activity.kind === 'scavenge') {
     const stock = world.salvage.find((entry) => entry.id === activity.targetId);
     if (!stock) { setNpcActivity(world, vehicle, null, 'salvage no longer available'); return; }
+    // A search already runs at this stock: keep parked and wait for it to finish.
+    if (vehicle.job?.kind === 'search' && vehicle.job.stockId === stock.id) { activity.phase = 'act'; return; }
     if (!canReachSalvage(vehicle, stock)) return;
     activity.phase = 'act';
-    const collected = collectSalvage(world, vehicle, stock.id);
-    setNpcActivity(world, vehicle, null, collected ? 'collected salvage' : hasSalvage(stock) ? 'cargo cannot hold salvage' : 'salvage exhausted');
+    if (!hasSalvage(stock) || freeCells(vehicle) === 0) {
+      setNpcActivity(world, vehicle, null, !hasSalvage(stock) ? 'salvage exhausted' : 'cargo cannot hold salvage');
+      return;
+    }
+    if (!vehicle.job) beginSearch(world, vehicle, stock.id);
     return;
   }
   if (activity.kind === 'raid') {

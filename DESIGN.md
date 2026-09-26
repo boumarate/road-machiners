@@ -70,7 +70,7 @@ NPCs follow Space Rangers-style ordered rules: react to visible danger, address 
 
 Scavengers collect finite salvage, sell cargo, and fight manageable hostiles or flee. Traders buy profitable cargo while reserving upkeep money and flee from threats. Raiders search hunting grounds, fight, collect wreck cargo, and sell it. Each NPC pays for fuel, supplies, and repairs from its own wallet. Inspection shows its activity and reason.
 
-Convoy stock is shared with the player. Destroyed NPCs leave their actual goods and spare parts in wrecks. Collection takes only what fits and leaves the rest. Mounted equipment is not salvage. Old wreck retirement removes their remaining stock. Empty sites do not regenerate.
+Scavenging is a timed search: the truck parks at a stock and each turn moves some of it into the grid, over several turns. Moving the truck cancels the search and keeps whatever already moved. Landmark and convoy sites hold finite stock rolled at world creation: goods, parts and sometimes a spare mountable part. Destroyed NPCs leave a wreck with the same kind of stock. Their mounted parts join it at the HP they had; their built-in parts turn into the parts good instead. Collection takes only what fits and leaves the rest. Old wreck retirement removes their remaining stock. Empty sites do not regenerate.
 
 Town markets have fixed prices and unlimited stock and money. Initial NPC resources and the oasis are explicit sources. No offscreen catch-up grants are used. Player defeat retains its separate cargo-loss and enemy-despawn rules.
 

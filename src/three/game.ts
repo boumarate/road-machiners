@@ -219,14 +219,14 @@ export class Game {
     if (this.anim) return null;
     const town = townAt(this.world);
     if (town) return `Enter ${town.name}`;
-    if (canScavenge(this.world)) return `Search ${locationAt(this.world)!.name}`;
+    if (!playerVehicle(this.world).job && canScavenge(this.world)) return `Search ${locationAt(this.world)!.name}`;
     return null;
   }
 
   private useContext(): void {
     if (this.anim) return;
     if (townAt(this.world)) return this.town.open();
-    if (canScavenge(this.world)) {
+    if (!playerVehicle(this.world).job && canScavenge(this.world)) {
       this.apply(scavenge(this.world));
       this.hud.pushEvents(this.world);
     }

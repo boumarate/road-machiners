@@ -23,7 +23,6 @@ export const ECONOMY = {
   partRepairPerHp: 3,
   partSellFactor: 0.5, // of the part price, scaled by remaining hp
   chassisSellFactor: 0.5, // of the chassis price, scaled by mean built-in part health
-  scavenge: { cargo: { meds: 3, scrap: 5 } as Record<string, number>, part: 'tunedEngine', xp: 50 },
   useRange: 1.5, // extra tiles past a site radius where its services work
   interactionScale: 1.5, // multiplier for the total interaction radius
 };
