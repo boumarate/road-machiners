@@ -41,7 +41,7 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 
 ## Art
 
-Static props, obstacles and landmarks are low-poly Blender models. Vehicles, the town pads and water are built from Three.js shapes in code. The ground is a per-tile painted canvas texture.
+Props, obstacles, landmarks and truck parts are low-poly Blender models. Town pads and water are built from Three.js shapes in code. The ground is a per-tile painted canvas texture.
 
 Some models come from Blender scripts in `tools/blender/`. Blender is installed with `brew install --cask blender`. Each script writes a `.glb` into `public/models/`, and both are committed. Rebuild one with `blender --background --python tools/blender/<name>.py -- public/models/<name>.glb tmp/<name>.png`. The second path is an optional preview render from the game camera angle.
 
@@ -58,4 +58,15 @@ To add a model:
 9. Add the name to `NAMES` in `src/three/render/models.ts`. Use `model('<name>')` in a view. Boot fails if the file is missing.
 10. Take an in-game screenshot with a Playwright script in `tmp/`, and run `npm run playtest`. The user confirms small visual details.
 
-`models.ts` loads every model at boot. It swaps the glTF materials for flat Lambert, so models match the procedural meshes. Models that need to change with game state, such as vehicles with mounted parts, need a plan before they replace procedural code.
+`models.ts` loads every model at boot. It swaps the glTF materials for flat Lambert, so models match the procedural meshes.
+
+Trucks are open rigs built from part models on the inventory grid. One grid cell is 0.4 m across and 0.65 m along the truck on every chassis, set by `PHYSICS.cell`. `bodyOf()` in `src/sim/body.ts` derives each physics body from its grid, so the drawn truck matches its collider.
+
+Part models follow these rules:
+
+- Build a part for its rotation-0 footprint: w cells across in Blender Y and h cells along in Blender X, with the nose at +X. Truck right is Blender -Y. The origin is the footprint center on the deck top.
+- The view turns a part for rotation 1 and stretches it to the turned footprint. So keep parts boxy.
+- Build armor as a front-edge row with its outer face at +X. The view turns it to the side its cells lie on.
+- A material named `paint` takes the faction color. Other materials keep their colors.
+- `src/render/partLooks.ts` maps each part and good id to its model. A part with no model stops the build.
+- Weapons are assembled from a mount, a receiver, a barrel and an optional extra. They join at sockets made with `Kit.socket()`: `head` on mounts, and `muzzle` and `extra` on receivers. Each weapon def has a pool per slot in `WEAPON_POOLS`, and the part id picks from it. Boot fails when a pool model lacks a socket.
