@@ -9,11 +9,11 @@ export type Placement = { pan: number; gain: number };
 
 export type LoopHandle = {
   setRate(rate: number): void;
-  setGain(gain: number): void;
+  setGain(gain: number, rampSeconds: number): void;
   stop(fadeMs: number): void;
 };
 
-const RAMP_S = 0.05; // smoothing for live loop changes, to avoid clicks
+const RAMP_S = 0.05; // smoothing for live rate changes, to avoid clicks
 
 export class SoundPlayer {
   private last = new Map<string, number>();
@@ -47,7 +47,7 @@ export class SoundPlayer {
     src.start();
     return {
       setRate: (r) => src.playbackRate.setTargetAtTime(r, ctx.currentTime, RAMP_S),
-      setGain: (g) => gain.gain.setTargetAtTime(cue.volume * g, ctx.currentTime, RAMP_S),
+      setGain: (g, ramp) => gain.gain.setTargetAtTime(cue.volume * g, ctx.currentTime, ramp / 3),
       stop: (fadeMs) => {
         gain.gain.setTargetAtTime(0, ctx.currentTime, fadeMs / 1000 / 3);
         src.stop(ctx.currentTime + fadeMs / 1000);

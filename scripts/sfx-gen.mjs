@@ -24,7 +24,8 @@ const cue = cueOf(SOUNDS, id);
 if (!cue.prompt || !cue.seconds) throw new Error(`Cue ${id} needs prompt and seconds to generate`);
 
 const music = cue.bus === 'music';
-const text = `${SOUND_STYLE} ${cue.prompt}`;
+// Music gets its own prompt only: the shared style asks for no music.
+const text = music ? cue.prompt : `${SOUND_STYLE} ${cue.prompt}`;
 console.log(`${id}: ${count} x ${cue.seconds}s ${music ? 'music' : `sound, about ${count * cue.seconds * SFX_CREDITS_PER_SECOND} credits`}`);
 console.log(`prompt: ${text}`);
 
@@ -38,7 +39,7 @@ for (let i = 0; i < count; i++) {
 
 async function generate() {
   const [path, body] = music
-    ? ['/music?output_format=mp3_44100_192', { prompt: cue.prompt, music_length_ms: cue.seconds * 1000, force_instrumental: true }]
+    ? ['/music?output_format=mp3_44100_192', { prompt: text, music_length_ms: cue.seconds * 1000, force_instrumental: true }]
     : ['/sound-generation?output_format=mp3_44100_192', { text, duration_seconds: cue.seconds, loop: cue.loop, prompt_influence: PROMPT_INFLUENCE, model_id: 'eleven_text_to_sound_v2' }];
   const res = await fetch(API + path, { method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`ElevenLabs ${path} failed: ${res.status} ${await res.text()}`);

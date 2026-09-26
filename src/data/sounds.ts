@@ -78,6 +78,12 @@ export const MIX = {
   // Gain halves at this many meters from the camera focus; pan reaches this share at the screen edge.
   halfGainMeters: 40,
   panWidth: 0.7,
+  // Engine loop: playback rate rises with speed. Silent between turns, so it never drones.
+  engine: { idleRate: 0.8, topRate: 1.4, topSpeedMs: 24, idleGain: 0.5, fadeSeconds: 0.4 }, // 24 m/s is the fastest chassis
+  // Wind bed: a base level, rising near dust storms.
+  wind: { baseGain: 0.4, stormGain: 1, stormReachTiles: 12, fadeSeconds: 1 },
+  // Music crossfades to combat while a hostile is in sight, and back after the last one leaves.
+  music: { fadeSeconds: 3 },
   // Approved reference cue per bus. The sound board plays it beside each candidate.
   anchors: { sfx: "cannon-fire" } as Partial<Record<Bus, CueId>>,
 } as const;
