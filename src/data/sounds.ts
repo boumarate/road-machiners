@@ -32,4 +32,6 @@ export const MIX = {
   // Gain halves at this many meters from the camera focus; pan reaches this share at the screen edge.
   halfGainMeters: 40,
   panWidth: 0.7,
+  // Approved reference cue per bus. The sound board plays it beside each candidate.
+  anchors: {} as Partial<Record<Bus, CueId>>,
 } as const;

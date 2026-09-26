@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Korovan sound board</title>
+    <style>
+      body { background: #1a1410; color: #f0e0b8; font: 13px/1.5 ui-monospace, Menlo, monospace; margin: 16px; }
+      h2 { color: #d8b878; font-weight: normal; margin: 20px 0 4px; }
+      .cue { margin: 10px 0; }
+      .cue .prompt { color: #b8a888; font-size: 11px; max-width: 900px; }
+      .row { display: flex; gap: 10px; align-items: center; }
+      .missing { color: #e07050; }
+      button { font: inherit; background: #3a2a1e; color: #f0e0b8; border: 1px solid #6a4a30; padding: 1px 8px; cursor: pointer; }
+      button.on { background: #7a4a28; }
+    </style>
+  </head>
+  <body>
+    <div id="board"></div>
+    <script type="module" src="/src/audio/board.ts"></script>
+  </body>
+</html>
