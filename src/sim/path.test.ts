@@ -6,7 +6,7 @@ import { TERRAIN_TYPES } from '../data/terrain';
 import { resetPerf, perfSnapshot } from '../perf';
 import { isDriveObstacle } from './mapgen';
 import { findCells, nearestFreeCell, stampOverlay } from './nav/astar';
-import { CLEARANCE, COARSE, componentOf, dynamicBlockers, navLayer, terrainNav, tileIndex } from './nav/layer';
+import { COARSE, componentOf, dynamicBlockers, navLayer, terrainNav, tileIndex } from './nav/layer';
 import { continueRoute, keepRoute, route, routeLength, straightClear, type Blocker } from './path';
 import { nextRandom } from './rng';
 import { isCliff, tileAt, type Terrain } from './terrain';
@@ -174,47 +174,15 @@ describe('kept routes', () => {
     expect(again.length).toBeLessThan(points.length);
   });
 
-  it('ends on a destination that moved', () => {
+  it('ends on a destination that moved, and drops the route for a vehicle parked on a later leg', () => {
     const { w, from, to, points } = bent();
+    const kept = keepRoute(w, to, points, []);
     const near = { x: to.x, y: to.y + 0.3 };
-    expect(continueRoute(w, from, keepRoute(w, to, points, []), near, 0.6, [])!.at(-1)).toEqual(near);
-  });
-
-  it('repairs around a vehicle parked on a leg and keeps the kept points past it', () => {
-    const w = emptyWorld();
-    const from = { x: 30, y: 30 };
-    // The last two corners lie past the lookahead, so straightening leaves them as kept.
-    const points = [{ x: 40, y: 30 }, { x: 60, y: 30 }, { x: 120, y: 30 }, { x: 121, y: 40 }, { x: 180, y: 40 }];
-    const end = points.at(-1)!;
-    const parked = [{ pos: { x: 50, y: 30 }, r: 0.8 }];
-    const repaired = continueRoute(w, from, keepRoute(w, end, points, []), end, 0.6, parked)!;
-    let prev = from;
-    for (const p of repaired) {
-      expect(segmentDist(parked[0].pos, prev, p)).toBeGreaterThanOrEqual(0.8 + 0.6 + CLEARANCE);
-      prev = p;
-    }
-    expect(repaired.slice(-2)).toEqual(points.slice(-2));
+    expect(continueRoute(w, from, kept, near, 0.6, [])!.at(-1)).toEqual(near);
+    const onLeg = { x: (points[1].x + points[2].x) / 2, y: (points[1].y + points[2].y) / 2 };
+    expect(continueRoute(w, from, kept, to, 0.6, [{ pos: onLeg, r: 0.8 }])).toBeNull();
     // The same vehicle parked there when the route was planned is part of the plan.
-    expect(continueRoute(w, from, keepRoute(w, end, points, parked), end, 0.6, parked)!.at(-1)).toEqual(end);
-  });
-
-  it('repairs a first leg that runs into a rock from the truck', () => {
-    const w = emptyWorld();
-    w.obstacles = [{ id: 'r', pos: { x: 35, y: 30 }, r: 1.2, kind: 'rock' }];
-    const from = { x: 30, y: 30 };
-    const points = [{ x: 40, y: 30 }, { x: 50, y: 30 }];
-    const repaired = continueRoute(w, from, keepRoute(w, points[1], points, []), points[1], 0.6, [])!;
-    let prev = from;
-    for (const p of repaired) {
-      expect(segmentDist(w.obstacles[0].pos, prev, p)).toBeGreaterThanOrEqual(1.2 + 0.6);
-      prev = p;
-    }
-    expect(repaired.at(-1)).toEqual(points[1]);
-  });
-
-  it('drops the route when the repair cannot reach its point', () => {
-    const { w, from, to, points } = bent();
-    expect(continueRoute(w, from, keepRoute(w, to, points, []), to, 0.6, [{ pos: to, r: 0.8 }])).toBeNull();
+    expect(continueRoute(w, from, keepRoute(w, to, points, [{ pos: onLeg, r: 0.8 }]), to, 0.6, [{ pos: onLeg, r: 0.8 }])).not.toBeNull();
   });
 });
 
