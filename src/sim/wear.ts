@@ -10,6 +10,7 @@ import { corePart, mountedParts } from './grid';
 import { practice } from './progress';
 import { chance, randInt } from './rng';
 import { tileAt } from './terrain';
+import { isTowed } from './tow';
 import type { Vehicle, World } from './types';
 import { dist } from './vec';
 import { weatherAt } from './weather';
@@ -74,8 +75,10 @@ function roughness(type: TerrainTypeId): number {
   return (TERRAIN_TYPES[type].wear - SMOOTHEST) / (ROUGHEST - SMOOTHEST);
 }
 
-// The player practices driving on tiles crossed off the smoothest ground, harder on rougher ground.
+// The player practices driving on tiles crossed off the smoothest ground, harder on rougher ground. A towed
+// truck is not driven.
 function practiceRoughGround(world: World): void {
+  if (isTowed(world)) return;
   let tiles = 0;
   let weighted = 0;
   for (const { len, type } of trailSegments(world, playerVehicle(world))) {

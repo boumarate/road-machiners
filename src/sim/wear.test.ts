@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { partDef } from '../data/parts';
+import { REGION } from '../data/region';
 import { TERRAIN_TYPES, type TerrainTypeId } from '../data/terrain';
 import { addVehicle, emptyWorld, editableTerrain, practiceOf } from './testkit';
 import { corePart, mountedParts } from './grid';
+import { addState } from './states';
 import { tileAt } from './terrain';
 import type { Vehicle, World } from './types';
 import { applyWear } from './wear';
@@ -143,6 +145,17 @@ describe('rough ground practice', () => {
   it('pays nothing on the road', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
+    drive(me, 6);
+    applyWear(w);
+    expect(practiceOf(w, 'roughTiles')).toEqual([]);
+  });
+
+  it('pays nothing while the player is towed', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const tower = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 50, y: 50 });
+    addState(w, 'tow', tower.id, me.id, { kind: 'tow', town: REGION.towns[0].id, fee: 10, hitched: true });
+    setTerrainUnder(w, me, 6, 'hardpan');
     drive(me, 6);
     applyWear(w);
     expect(practiceOf(w, 'roughTiles')).toEqual([]);
