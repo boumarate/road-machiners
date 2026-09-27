@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import { corePart, mountedParts } from './grid';
 import { planNpcOrders } from './ai';
+import { NPC_BEHAVIOR } from '../data/npcs';
+import { thinkNpc } from './npc-activities';
+import { isWeak, optionWeights } from './npc-decisions';
 import type { Vehicle, World } from './types';
 
 // A raider already fighting the player, which it has decided on, so no new roll interrupts the fight.
@@ -44,5 +47,42 @@ describe('ram safety', () => {
     planNpcOrders(world);
     expect(raider.brain?.ramTarget).toBeUndefined();
     expect(corePart(raider, 'cab').hp).toBeGreaterThan(0);
+  });
+});
+
+describe('crippled drivers', () => {
+  // A raider with no goals and the player far off, heard but not seen.
+  function createListener() {
+    const world = emptyWorld({ x: 1, y: 1 });
+    const raider = addVehicle(world, 'raiders', 'hauler', ['mg', 'stockEngine', 'plowRam'], { x: 30, y: 30 });
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    return { world, raider, me: world.player.vehicleId };
+  }
+
+  it('counts a dead engine as weak even while its cab and gun work, so fleeing a new hostile rises', () => {
+    const { world, raider } = createFight();
+    const me = world.player.vehicleId;
+    const intact = optionWeights(world, raider, 'hostileSeen', me, 0).flee!;
+    mountedParts(raider, 'engine')[0].hp = 0;
+    expect(isWeak(world, raider)).toBe(true);
+    expect(optionWeights(world, raider, 'hostileSeen', me, 0).flee).toBeCloseTo(intact * NPC_BEHAVIOR.weakFlee);
+  });
+
+  it('counts broken wheels as weak', () => {
+    const { world, raider } = createFight();
+    expect(isWeak(world, raider)).toBe(false);
+    const wheel = mountedParts(raider).find((p) => p.defId === 'wheel');
+    if (!wheel) throw new Error('Missing wheel');
+    wheel.hp = 0;
+    expect(isWeak(world, raider)).toBe(true);
+  });
+
+  it('rarely closes in on a heard contact when crippled, and heads for repairs', () => {
+    const { world, raider, me } = createListener();
+    const intact = optionWeights(world, raider, 'contactHeard', me, null).investigate!;
+    mountedParts(raider, 'engine')[0].hp = 0;
+    expect(optionWeights(world, raider, 'contactHeard', me, null).investigate).toBeCloseTo(intact * NPC_BEHAVIOR.crippledInvestigate);
+    thinkNpc(world, raider);
+    expect(raider.brain!.goals.some((g) => g.kind === 'resupply')).toBe(true);
   });
 });

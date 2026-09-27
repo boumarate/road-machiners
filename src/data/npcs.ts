@@ -442,6 +442,9 @@ export const NPC_BEHAVIOR = {
   // Turns a noticed subject stays remembered after it was last perceived. A heard engine drops out for a turn or
   // two when the truck slows or crosses behind the listener, and 3 turns bridges that without a fresh roll.
   noticeMemory: 3,
+  // Investigate weight times this when the cab or a driving part is at or below the recover condition. A raider's
+  // investigate weight of 12 drops to 0.12, so a crippled raider closes in on a contact 1 to 4 times in 100.
+  crippledInvestigate: 0.01,
   // Salvage in sight weighs 10 times a known site out of sight.
   visibleSalvage: 10,
   // A robber mostly picks targets weaker than itself, away from town guards. Rob weight times this when the

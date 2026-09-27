@@ -29,7 +29,7 @@ import { randRange } from './rng';
 import { canReachSalvage, hasSalvage } from './salvage';
 import { canUseSite, siteGates } from './sites';
 import { statesHeld } from './states';
-import { vehicleStats } from './stats';
+import { getMobilityCondition, vehicleStats } from './stats';
 import { strandedPlayerAt } from './tow';
 import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
@@ -88,9 +88,11 @@ export function getKnownSite(id: string) {
   return site;
 }
 
-export function getCabCondition(vehicle: Vehicle): number {
+// The share left of the cab or the weakest driving part, whichever is lower. A truck that cannot drive cannot fight
+// on, however sound its cab.
+function getCombatCondition(vehicle: Vehicle): number {
   const cab = corePart(vehicle, 'cab');
-  return cab.hp / partDef(cab.defId).hp;
+  return Math.min(cab.hp / partDef(cab.defId).hp, getMobilityCondition(vehicle));
 }
 
 // Damage times rounds summed over working guns.
@@ -129,10 +131,11 @@ function isManageable(world: World, vehicle: Vehicle, danger: number): boolean {
   return danger <= ownDanger(world, vehicle) * NPC_BEHAVIOR.threatRatio * npcProfile(vehicle).boldness;
 }
 
-// At or below the flee condition, or below the higher recover condition while already fleeing.
+// Combat condition or driver health at or below the flee condition, or below the higher recover condition while
+// already fleeing.
 export function isWeak(world: World, vehicle: Vehicle): boolean {
   const threshold = topGoal(vehicle)?.kind === 'flee' ? NPC_BEHAVIOR.recoverCondition : NPC_BEHAVIOR.fleeCondition;
-  return getCabCondition(vehicle) <= threshold || getResources(world, vehicle).health / RULES.maxHealth <= threshold;
+  return getCombatCondition(vehicle) <= threshold || getResources(world, vehicle).health / RULES.maxHealth <= threshold;
 }
 
 // Hostile vehicles in sight, nearest first.
@@ -385,6 +388,11 @@ function towFactor(world: World, vehicle: Vehicle): number {
   return factor + (1 - factor) * clamp((gate - crawl) / (far - crawl), 0, 1);
 }
 
+// A driver below the recover condition rarely closes in on a contact. It needs repairs first.
+function investigateFactor(_world: World, vehicle: Vehicle): number {
+  return getCombatCondition(vehicle) <= NPC_BEHAVIOR.recoverCondition ? NPC_BEHAVIOR.crippledInvestigate : 1;
+}
+
 function scavengeFactor(world: World, vehicle: Vehicle): number {
   return visibleSalvage(world, vehicle).length > 0 ? NPC_BEHAVIOR.visibleSalvage : 1;
 }
@@ -394,7 +402,7 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   fight: fightFactor,
   fightBack: fightBackFactor,
   flee: fleeFactor,
-  investigate: neutral,
+  investigate: investigateFactor,
   rob: robFactor,
   tow: towFactor,
   resume: neutral,
