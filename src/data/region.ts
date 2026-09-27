@@ -37,6 +37,10 @@ export const REGION = {
     // detours up to about 60% longer, like the Bowl to Nose roads, are still followed. A road twice as
     // long as the straight line loses to open ground.
     offRoadCost: 1.75,
+    // Route cost multiplier on sloped tiles: 1 + slopeCost * (slope / cliff slope)^2. Gentle rolling
+    // ground stays close to 1, and ground at the cliff slope costs 4 times flat. A loaded hauler stalls
+    // from rest on slopes well below the cliff slope, so routes go around hills when that is not much longer.
+    slopeCost: 3,
   },
   towns: [
     { id: "bowl", name: "Bowl", pos: scalePoint({ x: 16, y: 94 }), radius: 28 },
