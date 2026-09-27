@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { CLASS_TALK, END, HUB, TOPICS, type Topic } from '../data/dialogue';
+import { CLASS_TALK, END, HONK_RANGE, HUB, TOPICS, type Topic } from '../data/dialogue';
 import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
-import { callVehicle, chooseOption, currentOptions, hangUp, placeholders, raiseCalls } from './dialogue';
+import { callVehicle, chooseOption, currentOptions, hangUp, honk, placeholders, raiseCalls } from './dialogue';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
 import { addVehicle, emptyWorld } from './testkit';
 import type { Vehicle, World } from './types';
@@ -170,5 +170,36 @@ describe('NPC calls', () => {
     expect(next.player.call?.topic).toBeNull();
     expect(next.events).toContainEqual({ t: 'say', speaker: npc.id, text: CLASS_TALK.trader.repeatLine, vars: {} });
     expect(next.player.call?.line).toEqual({ text: CLASS_TALK.trader.repeatLine, vars: {} });
+  });
+});
+
+function npcAt(w: World, templateId: string, faction: Vehicle['faction'], x: number): Vehicle {
+  const npc = addVehicle(w, faction, 'scout', [], { x, y: 30 });
+  npc.brain = { templateId, activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0, refusedTow: false };
+  return npc;
+}
+
+const honkers = (w: World) => w.events.filter((e) => e.t === 'honk').map((e) => e.vehicle);
+
+describe('honk', () => {
+  it('the player honks, and friendly trucks in earshot answer nearest first', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const far = npcAt(w, 'scavenger', 'scavengers', 30 + HONK_RANGE);
+    const near = npcAt(w, 'trader', 'traders', 36);
+    expect(honkers(honk(w))).toEqual([w.player.vehicleId, near.id, far.id]);
+  });
+
+  it('trucks out of earshot, raiders and trucks with a grudge stay silent', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    npcAt(w, 'trader', 'traders', 30 + HONK_RANGE + 1);
+    npcAt(w, 'scavenger', 'scavengers', 34).grudges.push(w.player.vehicleId);
+    npcAt(w, 'buggy', 'raiders', 36);
+    expect(honkers(honk(w))).toEqual([w.player.vehicleId]);
+  });
+
+  it('cannot honk during a call', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const npc = npcAt(w, 'trader', 'traders', 36);
+    expect(() => honk(callVehicle(w, npc.id))).toThrow(/radio call/);
   });
 });

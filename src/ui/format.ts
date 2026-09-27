@@ -62,6 +62,21 @@ function jobText(world: World, e: Extract<GameEvent, { t: 'job' }>): LogLine {
   return lines[e.outcome];
 }
 
+// A storm is local news: log it only when it starts or ends within sight of the player.
+function weatherText(world: World, e: Extract<GameEvent, { t: 'weather' }>): LogLine | null {
+  const ev = e.event;
+  if (ev.kind === 'storm' && dist(playerVehicle(world).pos, ev.pos) - ev.radius > TERRAIN.vision.radius) return null;
+  const names = { storm: 'Dust storm', heatwave: 'Heat wave', overcast: 'Overcast' };
+  return { text: `${names[ev.kind]} ${e.outcome}`, cls: 'dim' };
+}
+
+// A horn out of sight is heard, but the log does not name its truck.
+function honkText(world: World, e: Extract<GameEvent, { t: 'honk' }>): LogLine {
+  if (e.vehicle === world.player.vehicleId) return { text: 'You honk.', cls: 'dim' };
+  const v = findAny(world, e.vehicle);
+  return { text: v && playerSees(world, v.pos) ? `${v.name} honks back.` : 'A horn answers out of sight.', cls: '' };
+}
+
 function sayText(world: World, e: Extract<GameEvent, { t: 'say' }>): LogLine {
   const cls = e.speaker === world.player.vehicleId ? 'dim' : '';
   return { text: `${vehicleName(world, e.speaker)}: “${fillLine(e.text, e.vars)}”`, cls };
@@ -157,12 +172,10 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
     }
     case 'breakdown':
       return e.vehicle === me ? { text: `${partName(world, e.vehicle, e.part)} broke down`, cls: 'bad' } : null;
-    case 'weather': {
-      // A storm is local news: log it only when it starts or ends within sight of the player.
-      const ev = e.event;
-      if (ev.kind === 'storm' && dist(playerVehicle(world).pos, ev.pos) - ev.radius > TERRAIN.vision.radius) return null;
-      return { text: `${ev.kind === 'storm' ? 'Dust storm' : ev.kind === 'heatwave' ? 'Heat wave' : 'Overcast'} ${e.outcome}`, cls: 'dim' };
-    }
+    case 'weather':
+      return weatherText(world, e);
+    case 'honk':
+      return honkText(world, e);
     case 'spawn':
     case 'despawn':
     case 'arrived':

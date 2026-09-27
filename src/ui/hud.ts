@@ -89,7 +89,7 @@ export class Hud {
       el(
         "div",
         {},
-        "Space: start / pause travel. In combat: one turn. Hold: fast-forward. A: auto fire. P: auto patch. C: character. I: inventory.",
+        "Space: start / pause travel. In combat: one turn. Hold: fast-forward. A: auto fire. P: auto patch. C: character. I: inventory. T: radio the truck under the cursor. H: honk.",
       ),
       el("div", {}, "R: manual driving, straight through anything."),
       el("div", {}, "Right-drag: pan. F: follow. Wheel: zoom. M: mute."),

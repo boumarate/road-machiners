@@ -2,6 +2,7 @@
 // only. Its logic lives in the named conditions, effects and prepare steps of src/sim/dialogue-rules.ts.
 // Lines are templates: `{name}` is filled from the call values the topic's prepare step made.
 
+import { DETECT } from './detect';
 import type { Brain } from './npcs';
 
 export type TopicId = 'directions';
@@ -54,10 +55,14 @@ export type ClassTalk = {
   topics: TopicId[];
   repeatLine: string; // the answer to a `once` topic already settled
   refusal: string; // the answer when a grudge stops the call
+  honksBack: boolean; // answers the player's honk when not hostile
 };
 
+// Tiles a horn carries. It is about as loud as an engine at limp speed, so it reaches a little past sight.
+export const HONK_RANGE = DETECT.sound.limp;
+
 export const CLASS_TALK: Record<Brain, ClassTalk> = {
-  trader: { greeting: 'Caravan here. Go ahead.', topics: ['directions'], repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.' },
-  scavenger: { greeting: 'Yeah? Make it quick.', topics: ['directions'], repeatLine: 'I told you already.', refusal: 'Get off my channel.' },
-  raider: { greeting: 'Get lost.', topics: [], repeatLine: 'Get lost.', refusal: 'Heh. No.' },
+  trader: { greeting: 'Caravan here. Go ahead.', topics: ['directions'], repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true },
+  scavenger: { greeting: 'Yeah? Make it quick.', topics: ['directions'], repeatLine: 'I told you already.', refusal: 'Get off my channel.', honksBack: true },
+  raider: { greeting: 'Get lost.', topics: [], repeatLine: 'Get lost.', refusal: 'Heh. No.', honksBack: false },
 };

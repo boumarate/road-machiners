@@ -284,6 +284,7 @@ export type GameEvent =
   | { t: "weather"; event: WeatherEvent; outcome: "started" | "ended" }
   | { t: "say"; speaker: string; text: string; vars: CallVars } // speaker is a vehicle id; the player's lines use the player's
   | { t: "call"; with: string; outcome: "opened" | "ended" }
+  | { t: "honk"; vehicle: string }
   | { t: "info"; text: string };
 
 export type World = {

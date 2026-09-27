@@ -1,7 +1,7 @@
 # Social radio and dialogue
 
 **Status:** planning
-**Blocked:** PH2 onward waits for npc-traits to merge. Defeat-rescue merged into main, and main merged into this branch. The user approved that order. Then PH2 onward is re-planned against `docs/tasks/npc-traits.md`, section "Changes needed in social radio".
+**Blocked:** PH2 to PH4 wait for npc-traits to merge. PH1, PH5 and most of PH6 are done. Defeat-rescue merged into main, and main merged into this branch. The user approved that order. Then PH2 onward is re-planned against `docs/tasks/npc-traits.md`, section "Changes needed in social radio".
 **Branch:** social
 **Worktree:** .worktrees/social
 **Goal:** All player and NPC talk runs through one dialogue system, where new talk is a new topic in data. In the browser, the player calls a truck in sight and gets directions to a town, honks and hears friendly trucks honk back, patches a stranded NPC and gets patched, and receives a tow offer and a raider demand as dialogues. The user confirms the loop in play.
@@ -304,6 +304,10 @@ Deviation from PC3: raising a topic is a turn step, `raiseCalls()`, not an activ
 - PH1: `src/ui/dialogue-text.ts` and the `say` and `call` log lines in `src/ui/format.ts` came forward from PH6. The event switch must cover every event.
 
 - PH6 items 6.2 and 6.3 came forward at the user's request: the dialogue panel and the T key. The panel lives in `src/ui/dialogue.ts` with the line formatting, and the HUD owns it, because `src/three/game.ts` is over the file length limit. The panel takes keys in the capture phase, so an open call gets 1 to 9 and Escape before the game's key handler.
+
+- PH5: `honk()` lives in `src/sim/dialogue.ts` and its tests in `src/sim/dialogue.test.ts`, not in a new `honk.ts`. A new sim file broke the quality check's file-count ratio, and talk and honks share the class lookup. `HONK_RANGE` in `src/data/dialogue.ts` equals `DETECT.sound.limp`, so a horn carries as far as a crawling engine.
+- PH5: the vehicle labels moved out of `src/three/game.ts` into `VehicleMarkers` in `src/three/render/labels.ts`. That made room under the file length limit for the horn playback.
+- PH6: the `radio` and `horn` cues were generated with `npm run sfx:gen`, 3 variants each, about 290 credits in total. The user asked for both.
 
 ### Known risks
 - Saves from before PH1 have no `call` or `talked`. A missing `talked` throws on the first `once` topic lookup. PH6 adds the migration.

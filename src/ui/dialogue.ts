@@ -1,10 +1,11 @@
 // The radio call panel and dialogue text. The panel shows who is on the line, what they said, and the
-// numbered replies. While it is open, keys 1 to 9 pick a reply and Escape hangs up. T calls the hovered truck.
+// numbered replies. While it is open, keys 1 to 9 pick a reply and Escape hangs up. Otherwise T calls the
+// hovered truck and H honks.
 
 import { REGION } from '../data/region';
 import { FACTION_COLORS } from '../render/palette';
 import { vehicleById } from '../sim/damage';
-import { callVehicle, chooseOption, currentOptions, hangUp } from '../sim/dialogue';
+import { callVehicle, chooseOption, currentOptions, hangUp, honk } from '../sim/dialogue';
 import type { CallVar, CallVars, World } from '../sim/types';
 import { playerSees } from '../sim/vision';
 import { playerCanAct } from '../sim/world';
@@ -65,6 +66,7 @@ export type DialogueHost = {
   talk(next: World): void; // apply a dialogue command and log its lines
   hovered(): string | null; // the vehicle under the cursor
   busy(): boolean; // a turn plays
+  honked(): void; // play the horns of the honk just applied
 };
 
 const KEY_DIGITS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9'];
@@ -96,8 +98,20 @@ export class DialoguePanel {
 
   private onKey(e: KeyboardEvent): void {
     if (this.host.busy() || isTyping()) return;
-    const handled = this.host.world().player.call ? this.onCallKey(e.code) : e.code === 'KeyT' && this.callHovered();
+    const handled = this.host.world().player.call ? this.onCallKey(e.code) : this.onFreeKey(e.code);
     if (handled) e.stopImmediatePropagation();
+  }
+
+  private onFreeKey(code: string): boolean {
+    if (code === 'KeyT') return this.callHovered();
+    return code === 'KeyH' && this.honk();
+  }
+
+  private honk(): boolean {
+    if (!playerCanAct(this.host.world())) return false;
+    this.host.talk(honk(this.host.world()));
+    this.host.honked();
+    return true;
   }
 
   private onCallKey(code: string): boolean {

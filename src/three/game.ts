@@ -63,7 +63,7 @@ import { CameraRig } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
 import { Fx3D } from "./render/fx";
-import { Labels } from "./render/labels";
+import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
 import { PathView } from "./render/path";
 import { RenderScope } from "./render/scope";
@@ -97,6 +97,7 @@ import { computeRoundPoint } from "../phys/frames";
 
 const PLAN_TURNS = 3; // turns of path preview
 
+const HONK_REPLY_MS = 500; // a driver takes a moment to answer a horn
 const PICK_PX = 30; // click radius around a vehicle's screen position
 const MIN_ZONE_HALF_ANGLE = Math.PI / 12; // zones stay visible for trucks that barely turn
 const DUST_CHANCE = 0.3; // per moving vehicle per frame while a turn plays, times the ground's dust value
@@ -122,7 +123,6 @@ type TurnPhase = ReturnType<UiHost["getTurnPhase"]>;
 
 const MOVE_MS = (TURN_STEPS / PHYSICS.stepsPerSecond) * 1000; // real time the movement plays over
 const MOVED_BY_RULES = 0.5; // tiles between a vehicle's drawn spot and its sim spot that mean the rules moved it
-const MARKER_LIFT = 3.5; // meters above a target where its weapon marker sits
 
 const GUN_HEIGHT = 1.6; // meters above the body center where shots start and land
 const ROUND_STAGGER = 0.4; // share of the shot time over which a burst's rounds leave the gun
@@ -168,7 +168,7 @@ export class Game {
   private readonly travel = new Travel(CONFIG.travelHoldMs);
   private phase: TurnPhase = null;
   private readonly weaponRange = new WeaponRangeView();
-  private readonly markers = new Map<string, HTMLDivElement>(); // weapon markers above targets, by target id
+  private readonly markers: VehicleMarkers;
   private readonly overlay: HTMLElement;
   private live: LiveVision | null = null; // the player's view while a turn plays
   private hoverGround: Vec | null = null;
@@ -266,6 +266,7 @@ export class Game {
       this.soundRing.root,
     );
     this.overlay = overlay;
+    this.markers = new VehicleMarkers(overlay, this.rig);
     overlay.append(this.vignette, this.stormTint);
     this.labels = new Labels(overlay);
     this.fx = new Fx3D(this.scene, overlay, this.rig);
@@ -307,7 +308,7 @@ export class Game {
             : null,
         ),
       isBusy: () => this.anim !== null,
-      dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next) },
+      dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), honked: () => this.playHonks() },
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.menu = new GameMenu({
@@ -467,34 +468,8 @@ export class Game {
     this.hitCard.show();
   }
 
-  // Labels above vehicles: the weapons aimed at each target, and the radio key on the hovered truck.
   private refreshTargetMarkers(): void {
-    for (const el of this.markers.values()) el.remove();
-    this.markers.clear();
-    if (this.anim) return;
-    for (const [id, list] of markerLines(this.world, this.hovered)) {
-      const el = document.createElement("div");
-      el.className = "weapon-marker";
-      el.textContent = list.join("\n");
-      this.overlay.appendChild(el);
-      this.markers.set(id, el);
-    }
-  }
-
-  private placeTargetMarkers(): void {
-    const hide = this.anim !== null || this.modalOpen();
-    for (const [id, el] of this.markers) {
-      const f = this.frames[id];
-      el.style.display = hide || !f ? "none" : "block";
-      if (hide || !f) continue;
-      const p = this.rig.screenOf({
-        x: f.pos.x,
-        y: f.pos.y + MARKER_LIFT,
-        z: f.pos.z,
-      });
-      el.style.left = `${p.x}px`;
-      el.style.top = `${p.y}px`;
-    }
+    this.markers.refresh(this.anim ? null : markerLines(this.world, this.hovered));
   }
 
   private isEditingControl(): boolean {
@@ -782,6 +757,15 @@ export class Game {
   }
 
   // Explosions and broken parts where they happen, then one result sting for the turn.
+  // The player's horn at once, then each answer a beat later, nearest first. Fog silences unseen trucks.
+  private playHonks(): void {
+    const honks = this.world.events.filter((e) => e.t === "honk");
+    honks.forEach((e, i) => {
+      const p = this.eventPoint(e.vehicle);
+      if (p) this.sound.at("horn", p, i * HONK_REPLY_MS);
+    });
+  }
+
   private playImpactSounds(): void {
     for (const e of this.world.events) {
       const id =
@@ -1275,7 +1259,7 @@ export class Game {
     this.zones.root.visible = steer;
     this.path.root.visible = steer;
     this.weaponRange.root.visible = false;
-    this.placeTargetMarkers();
+    this.markers.place(this.frames, hide);
     this.placeHitCard();
     this.placePickRing(hide);
     this.contacts.update(

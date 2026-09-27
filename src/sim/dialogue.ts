@@ -1,14 +1,17 @@
-// Radio calls between the player and one NPC. Radio works in sight only. A player call opens on the hub,
-// which lists the topics this NPC can take up. An NPC call opens on the topic it raises. Turns wait while a
-// call is open. Topic content lives in src/data/dialogue.ts, and its logic in src/sim/dialogue-rules.ts.
+// Talk between the player and NPCs: radio calls and the horn. A radio call joins the player and one NPC, and
+// radio works in sight only. A player call opens on the hub, which lists the topics this NPC can take up. An
+// NPC call opens on the topic it raises. Turns wait while a call is open. Topic content lives in
+// src/data/dialogue.ts, and its logic in src/sim/dialogue-rules.ts.
 
-import { CLASS_TALK, END, HUB, TOPICS, type ClassTalk, type DialogueOption, type Topic, type TopicId } from '../data/dialogue';
+import { CLASS_TALK, END, HONK_RANGE, HUB, TOPICS, type ClassTalk, type DialogueOption, type Topic, type TopicId } from '../data/dialogue';
 import { NPCS } from '../data/npcs';
+import { isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
 import type { Call, CallVars, Vehicle, World } from './types';
+import { dist } from './vec';
 import { canVehicleSee } from './vision';
-import { requireActivePlayer, update } from './world';
+import { playerCommand, requireActivePlayer, update } from './world';
 
 // An option the player can pick now. The hub lists topics, and a topic node lists its own options.
 export type OfferedOption = { text: string; topic: TopicId | null; option: DialogueOption | null };
@@ -174,4 +177,20 @@ function raisedTopic(world: World, npc: Vehicle, me: Vehicle): Topic | null {
     .filter((t) => t.raise && !isSettled(world, npc, t) && holds(world, npc, t.raise.when))
     .sort((a, b) => b.raise!.priority - a.raise!.priority);
   return wanted[0] ?? null;
+}
+
+// The horn is a signal, not a call. The player honks, and every NPC in earshot whose class answers and that is
+// not hostile honks back, nearest first. Honking takes no turn.
+export function honk(world: World): World {
+  return playerCommand(world, (w) => {
+    const me = playerVehicle(w);
+    w.events.push({ t: 'honk', vehicle: me.id });
+    for (const npc of answering(w, me)) w.events.push({ t: 'honk', vehicle: npc.id });
+  });
+}
+
+function answering(world: World, me: Vehicle): Vehicle[] {
+  return world.vehicles
+    .filter((v) => v.brain && dist(v.pos, me.pos) <= HONK_RANGE && talkOf(v).honksBack && !isHostile(v, me))
+    .sort((a, b) => dist(a.pos, me.pos) - dist(b.pos, me.pos));
 }
