@@ -1,6 +1,6 @@
 """Heavy diesel with a turbo, twin upright filters and twin exhaust stacks, drawn for heavyDiesel.
 
-Footprint is 2x2 cells, 0.88 m across by 1.3 m along. The block top is 1.05 m and the stacks reach 1.6 m above the deck.
+Footprint is 2x2 cells, 0.97 m across by 1.3 m along. The block top is 1.05 m and the stacks reach 1.6 m above the deck.
 The tall radiator faces +X. The filters stand at the front corners and the stacks at the rear corners. Nothing takes paint.
 Run: blender --background --python tools/blender/eng_heavy_diesel.py -- public/models/eng_heavy_diesel.glb [tmp/eng_heavy_diesel.png]
 """

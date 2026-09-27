@@ -1,8 +1,8 @@
 """A raised steel lip along one hood cell edge that borders an engine cutout, so the engine reads as poking through a cut hole.
 
-Footprint is one cell: 0.65 m along (Blender X) by 0.44 m across (Blender Y). The origin is the cell center on the deck top.
-It runs along the cell's left edge, with its outer face at Y = +0.22, on the hood top at HOOD_H.
-The view turns it onto the edge that faces the engine and shortens it to 0.44 m on front and back edges.
+Footprint is one cell: 0.65 m along (Blender X) by 0.484 m across (Blender Y). The origin is the cell center on the deck top.
+It runs along the cell's left edge, with its outer face at Y = +0.242, on the hood top at HOOD_H.
+The view turns it onto the edge that faces the engine and shortens it to 0.484 m on front and back edges.
 Run: blender --background --python tools/blender/hood_rim.py -- public/models/hood_rim.glb [tmp/hood_rim.png]
 """
 

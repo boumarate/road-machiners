@@ -1,6 +1,6 @@
 """Chunky girder frame for the heavyFrame cargo part.
 
-Footprint 2x2: 1.3 m along (X) by 0.88 m across (Y). About 1.05 m tall. Origin at the footprint center on the deck top.
+Footprint 2x2: 1.3 m along (X) by 0.97 m across (Y). About 1.05 m tall. Origin at the footprint center on the deck top.
 The base skirt plates use the paint material.
 Run: blender --background --python tools/blender/cargo_heavy_frame.py -- public/models/cargo_heavy_frame.glb [tmp/cargo_heavy_frame.png]
 """

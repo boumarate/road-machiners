@@ -7,7 +7,7 @@ describe('body from the chassis grid', () => {
   it('sizes the scout from its 5 by 8 grid', () => {
     const b = bodyOf('scout');
     expect(b.half.x).toBeCloseTo(2.6);
-    expect(b.half.z).toBeCloseTo(1.1);
+    expect(b.half.z).toBeCloseTo(1.21);
   });
 
   it('puts the scout wheel mounts at the centers of its corner wheel cells', () => {
@@ -23,7 +23,7 @@ describe('body from the chassis grid', () => {
   it('gives the nose-left cell center in body meters', () => {
     const c = cellCenter('scout', 0, 0);
     expect(c.x).toBeCloseTo(2.6 - PHYSICS.cell.along / 2);
-    expect(c.z).toBeCloseTo(-1.1 + PHYSICS.cell.across / 2);
+    expect(c.z).toBeCloseTo(-1.21 + PHYSICS.cell.across / 2);
   });
 
   it('derives every chassis from its grid', () => {

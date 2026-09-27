@@ -1,6 +1,6 @@
 """Small ring mount for the 'mg' and 'shotgun' weapons.
 
-Fills a 1x1 footprint: 0.44 m across by 0.65 m along. A low traverse ring on a deck plate carries a short column.
+Fills a 1x1 footprint: 0.484 m across by 0.65 m along. A low traverse ring on a deck plate carries a short column.
 socket_head sits on the column top at 0.3 m.
 Run: blender --background --python tools/blender/wmount_ring_small.py -- public/models/wmount_ring_small.glb [tmp/wmount_ring_small.png]
 """

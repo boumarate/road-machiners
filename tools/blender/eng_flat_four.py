@@ -1,6 +1,6 @@
 """Air-cooled flat-four boxer, low and wide, drawn for flatFour.
 
-Footprint is 2x1 cells, 0.88 m across by 0.65 m along. The fan shroud tops out at 0.36 m.
+Footprint is 2x1 cells, 0.97 m across by 0.65 m along. The fan shroud tops out at 0.36 m.
 The cylinders stick out to both sides, and the cooling fan housing sits on top. Nothing takes paint.
 Run: blender --background --python tools/blender/eng_flat_four.py -- public/models/eng_flat_four.glb [tmp/eng_flat_four.png]
 """

@@ -1,6 +1,6 @@
 """Tiled ceramic plates for the 'ceramicPlates' armor.
 
-A front-edge row of 2 cells: 0.88 m across, 0.65 m deep, outer face at +X. A steel frame on the outer edge holds a
+A front-edge row of 2 cells: 0.97 m across, 0.65 m deep, outer face at +X. A steel frame on the outer edge holds a
 4 by 4 grid of pale ceramic tiles, 0.9 m tall. One tile is cracked out. The frame cap takes the faction paint.
 Run: blender --background --python tools/blender/arm_ceramic_plates.py -- public/models/arm_ceramic_plates.glb [tmp/arm_ceramic_plates.png]
 """

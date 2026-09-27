@@ -1,6 +1,6 @@
 """Heavy pedestal cradle for the 'cannon', 'tankGun' and 'sniperCannon' weapons.
 
-Fills a 3x1 footprint: 1.32 m across by 0.65 m along. A battered pedestal block with a traverse ring sits between
+Fills a 3x1 footprint: 1.45 m across by 0.65 m along. A battered pedestal block with a traverse ring sits between
 two shell crates and side rails. socket_head sits on the ring top at 0.36 m.
 Run: blender --background --python tools/blender/wmount_cradle.py -- public/models/wmount_cradle.glb [tmp/wmount_cradle.png]
 """

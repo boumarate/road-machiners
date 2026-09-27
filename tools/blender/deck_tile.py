@@ -1,6 +1,6 @@
 """One deck cell: a painted plate on a steel frame, the floor under every grid item.
 
-Footprint is one cell, 0.44 m across by 0.65 m along. The plate top is the deck top at Z = 0, and the frame hangs below it.
+Footprint is one cell, 0.484 m across by 0.65 m along. The plate top is the deck top at Z = 0, and the frame hangs below it.
 The plate is inset, so a row of tiles shows a dark seam between cells.
 Run: blender --background --python tools/blender/deck_tile.py -- public/models/deck_tile.glb [tmp/deck_tile.png]
 """

@@ -1,6 +1,6 @@
 """Shared layout and helpers for the armor part scripts `arm_*.py`.
 
-Armor is authored as a front-edge row of N deck cells. The row is N x 0.44 m across in Blender Y, centered, and
+Armor is authored as a front-edge row of N deck cells. The row is N x 0.484 m across in Blender Y, centered, and
 0.65 m deep in Blender X, centered on the origin. The outer face points to +X. The origin sits on the deck top.
 The game turns the row to the edge its cells lie on and stretches it along its length up to 1.625 times, so rows
 stay boxy and their ends stay flat, so neighbours tile cleanly.

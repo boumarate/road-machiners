@@ -1,6 +1,6 @@
 """Tarp-covered cargo frame for the enclosedFrame cargo part.
 
-Footprint 2x2: 1.3 m along (X) by 0.88 m across (Y). About 1.05 m tall at the tarp ridge. Origin at the footprint center
+Footprint 2x2: 1.3 m along (X) by 0.97 m across (Y). About 1.05 m tall at the tarp ridge. Origin at the footprint center
 on the deck top. The side panels use the paint material.
 Run: blender --background --python tools/blender/cargo_enclosed_frame.py -- public/models/cargo_enclosed_frame.glb [tmp/cargo_enclosed_frame.png]
 """

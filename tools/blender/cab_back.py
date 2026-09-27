@@ -1,6 +1,6 @@
 """One cab back cell: the upright rear wall on the beltline, with a barred window over a welded plate, facing the bed.
 
-Footprint is one cell: 0.65 m along (Blender X) by 0.44 m across (Blender Y). The origin is the cell center on the deck top.
+Footprint is one cell: 0.65 m along (Blender X) by 0.484 m across (Blender Y). The origin is the cell center on the deck top.
 It is authored facing +X, with the outer face at X = +0.325. The view turns it 180 degrees onto the cab's back edge.
 The wall rises from the beltline to WALL_H, under the cab roof.
 Run: blender --background --python tools/blender/cab_back.py -- public/models/cab_back.glb [tmp/cab_back.png]

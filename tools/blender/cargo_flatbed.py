@@ -1,6 +1,6 @@
 """Plank flatbed for the flatbed cargo part.
 
-Footprint 2x1: 0.65 m along (X) by 0.88 m across (Y). About 0.3 m tall at the stake posts. Origin at the footprint center
+Footprint 2x1: 0.65 m along (X) by 0.97 m across (Y). About 0.3 m tall at the stake posts. Origin at the footprint center
 on the deck top. The side skirts use the paint material.
 Run: blender --background --python tools/blender/cargo_flatbed.py -- public/models/cargo_flatbed.glb [tmp/cargo_flatbed.png]
 """

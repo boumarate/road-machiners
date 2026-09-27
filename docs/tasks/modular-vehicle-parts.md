@@ -19,9 +19,9 @@
 
 ## Design
 
-One cell is 0.44 m across and 0.65 m along the truck on every chassis. It started at 0.4 m; the user asked for a 10% wider pickup. The grid is the truck. Row 0 is the nose.
+One cell is 0.484 m across and 0.65 m along the truck on every chassis. It started at 0.4 m; the user asked twice for a 10% wider pickup. The grid is the truck. Row 0 is the nose.
 
-Body from the grid. `bodyOf()` derives half-length from rows x 0.65 / 2 and half-width from columns x 0.44 / 2. Wheel mount x and z are the centers of the chassis's wheel core cells. Height, wheel radius, wheel width and wheel drop stay per look in `PHYSICS.bodies`. The cell size lives once in `src/data/physics.ts`. Sim collision radius in `src/data/chassis.ts` stays as data, see UK1. New sizes follow the approved table: scout 2.0 x 5.2, hauler 2.8 x 5.9, buggy 1.6 x 3.9, wagon 2.0 x 4.6, courier 1.6 x 4.6, van 2.0 x 5.9, longbed 2.8 x 7.2, carrier 2.4 x 5.9, tractor 2.8 x 5.9 m.
+Body from the grid. `bodyOf()` derives half-length from rows x 0.65 / 2 and half-width from columns x 0.484 / 2. Wheel mount x and z are the centers of the chassis's wheel core cells. Height, wheel radius, wheel width and wheel drop stay per look in `PHYSICS.bodies`. The cell size lives once in `src/data/physics.ts`. Sim collision radius in `src/data/chassis.ts` stays as data, see UK1. New sizes follow the approved table: scout 2.0 x 5.2, hauler 2.8 x 5.9, buggy 1.6 x 3.9, wagon 2.0 x 4.6, courier 1.6 x 4.6, van 2.0 x 5.9, longbed 2.8 x 7.2, carrier 2.4 x 5.9, tractor 2.8 x 5.9 m.
 
 Open rig. The collider box is drawn as a frame with one deck tile per grid cell. Every grid item draws a model on its own cells: core parts (a one-seat roll-cage cockpit pod, transmission, fuel tank, wheels), engines, cargo parts, armor, weapons and goods. Nothing is hidden under a shell.
 
@@ -57,7 +57,7 @@ TDD: yes for the grid-to-body derivation and the weapon pick, because both are p
 
 ### Invariants
 
-- IV1 — For every chassis, body half-length is rows x 0.65 / 2 and half-width is columns x 0.44 / 2, from one cell-size constant.
+- IV1 — For every chassis, body half-length is rows x 0.65 / 2 and half-width is columns x 0.484 / 2, from one cell-size constant.
 - IV2 — Physics wheel mounts sit at the centers of the chassis's wheel core cells.
 - IV3 — Every grid item on a truck draws a model whose base covers exactly its cells. An item with no model throws.
 - IV4 — A weapon's sub-parts are a pure function of its part id and def.

@@ -1,6 +1,6 @@
 """Open cargo rack for the rack cargo part.
 
-Footprint 2x1: 0.65 m along (X) by 0.88 m across (Y). About 0.7 m tall. Origin at the footprint center on the deck top.
+Footprint 2x1: 0.65 m along (X) by 0.97 m across (Y). About 0.7 m tall. Origin at the footprint center on the deck top.
 Run: blender --background --python tools/blender/cargo_rack.py -- public/models/cargo_rack.glb [tmp/cargo_rack.png]
 """
 

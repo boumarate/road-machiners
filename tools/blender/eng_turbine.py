@@ -1,6 +1,6 @@
 """Gas turbine on a cradle, with an intake cone at the front and a nozzle at the rear, drawn for turbine.
 
-Footprint is 2x2 cells, 0.88 m across by 1.3 m along. The turbine axis is 0.42 m and the intake lip top 0.76 m above the deck.
+Footprint is 2x2 cells, 0.97 m across by 1.3 m along. The turbine axis is 0.42 m and the intake lip top 0.76 m above the deck.
 The intake faces +X. Nothing takes paint.
 Run: blender --background --python tools/blender/eng_turbine.py -- public/models/eng_turbine.glb [tmp/eng_turbine.png]
 """

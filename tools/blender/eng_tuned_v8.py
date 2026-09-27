@@ -1,6 +1,6 @@
 """Supercharged V8 with twin intake scoops and four exhaust stacks, drawn for tunedEngine.
 
-Footprint is 2x2 cells, 0.88 m across by 1.3 m along. The scoops top out at 0.8 m and the stacks at 0.95 m.
+Footprint is 2x2 cells, 0.97 m across by 1.3 m along. The scoops top out at 0.8 m and the stacks at 0.95 m.
 The radiator faces +X. Nothing takes paint.
 Run: blender --background --python tools/blender/eng_tuned_v8.py -- public/models/eng_tuned_v8.glb [tmp/eng_tuned_v8.png]
 """

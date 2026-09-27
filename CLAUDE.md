@@ -60,7 +60,7 @@ To add a model:
 
 `models.ts` loads every model at boot. It swaps the glTF materials for flat Lambert, so models match the procedural meshes.
 
-Trucks are car-shaped bodies built from part models on the inventory grid. One grid cell is 0.44 m across and 0.65 m along the truck on every chassis, set by `PHYSICS.cell`. `bodyOf()` in `src/sim/body.ts` derives each physics body from its grid, so the drawn truck matches its collider. Each chassis splits its rows into hood, cab and bed `zones` in `src/data/chassis.ts`. `buildFrame()` in `src/three/render/vehicle.ts` places zone pieces per cell and edge: hood panels and flares, a closed cab, a sunk bed, doors and bed walls, nose, tail, bumpers and fenders. Right-side pieces are mirrored left-side models.
+Trucks are car-shaped bodies built from part models on the inventory grid. One grid cell is 0.484 m across and 0.65 m along the truck on every chassis, set by `PHYSICS.cell`. `bodyOf()` in `src/sim/body.ts` derives each physics body from its grid, so the drawn truck matches its collider. Each chassis splits its rows into hood, cab and bed `zones` in `src/data/chassis.ts`. `buildFrame()` in `src/three/render/vehicle.ts` places zone pieces per cell and edge: hood panels and flares, a closed cab, a sunk bed, doors and bed walls, nose, tail, bumpers and fenders. Right-side pieces are mirrored left-side models.
 
 Part models follow these rules:
 

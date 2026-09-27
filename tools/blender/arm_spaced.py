@@ -1,6 +1,6 @@
 """Spaced armor for the 'spacedArmor' armor.
 
-A front-edge row of 4 cells: 1.76 m across, 0.65 m deep, outer face at +X. An inner steel wall and an outer layer of
+A front-edge row of 4 cells: 1.94 m across, 0.65 m deep, outer face at +X. An inner steel wall and an outer layer of
 four panels stand 0.2 m apart on bolted standoffs, 0.9 m tall. The outer panels take the faction paint.
 Run: blender --background --python tools/blender/arm_spaced.py -- public/models/arm_spaced.glb [tmp/arm_spaced.png]
 """

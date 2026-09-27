@@ -1,6 +1,6 @@
 """White medical crate with a red cross for the meds good.
 
-Footprint 1x1: 0.65 m along (X) by 0.44 m across (Y). About 0.4 m tall. Origin at the footprint center on the deck top.
+Footprint 1x1: 0.65 m along (X) by 0.484 m across (Y). About 0.4 m tall. Origin at the footprint center on the deck top.
 Run: blender --background --python tools/blender/good_meds.py -- public/models/good_meds.glb [tmp/good_meds.png]
 """
 

@@ -1,6 +1,6 @@
 """Ram bar with prongs for the 'ram' armor.
 
-A front-edge row of 3 cells: 1.32 m across, 0.65 m deep, outer face at +X. Two push arms carry a heavy bar in
+A front-edge row of 3 cells: 1.45 m across, 0.65 m deep, outer face at +X. Two push arms carry a heavy bar in
 front of the row, and four spikes stick out to X = 0.95 m. The bar takes the faction paint.
 Run: blender --background --python tools/blender/arm_ram.py -- public/models/arm_ram.glb [tmp/arm_ram.png]
 """

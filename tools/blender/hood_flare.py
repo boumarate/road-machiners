@@ -1,6 +1,6 @@
 """A front fender flare along one hood edge cell: the hood top rolls out past the body side and tucks back in below.
 
-Footprint is one cell along (0.65 m, Blender X). The flare sticks out FLARE meters past the cell's outer face at Y = +0.22,
+Footprint is one cell along (0.65 m, Blender X). The flare sticks out FLARE meters past the cell's outer face at Y = +0.242,
 so the hood reads wider than the cab and the bed, like a 4x4's front fenders. The view mirrors it for the right edge.
 Its top is flush with the hood top. Only the flare and the fender lips reach past the collider.
 Run: blender --background --python tools/blender/hood_flare.py -- public/models/hood_flare.glb [tmp/hood_flare.png]

@@ -1,7 +1,7 @@
 """One greenhouse side cell of the cab: a window on the beltline behind bars and a welded slit plate, with a pillar at its back end.
 
-Footprint is one cell: 0.65 m along (Blender X) by 0.44 m across (Blender Y). The origin is the cell center on the deck top.
-The outer face is at Y = +0.22, the cell's left edge. The view mirrors it for the right edge.
+Footprint is one cell: 0.65 m along (Blender X) by 0.484 m across (Blender Y). The origin is the cell center on the deck top.
+The outer face is at Y = +0.242, the cell's left edge. The view mirrors it for the right edge.
 The wall rises from the beltline at Z = 0 to WALL_H, under the cab roof. The view turns it 180 degrees for the right edge.
 Each cell's pillar stands at its back end, so a row of these gives B and C pillars at the seams.
 cab_side_front.py builds the front row, where an A pillar follows the windshield rake.

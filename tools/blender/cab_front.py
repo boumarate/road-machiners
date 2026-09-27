@@ -1,6 +1,6 @@
 """One windshield cell of the cab: raked dark glass on the beltline, half covered by a welded plate, with bars across the slit.
 
-Footprint is one cell: 0.65 m along (Blender X) by 0.44 m across (Blender Y). The origin is the cell center on the deck top.
+Footprint is one cell: 0.65 m along (Blender X) by 0.484 m across (Blender Y). The origin is the cell center on the deck top.
 The windshield's outer face runs from X = +0.325 at the beltline back to X = +0.325 - LEAN at WALL_H, under cab_roof_front.
 Run: blender --background --python tools/blender/cab_front.py -- public/models/cab_front.glb [tmp/cab_front.png]
 """

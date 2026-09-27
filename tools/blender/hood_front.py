@@ -1,6 +1,6 @@
 """One front-row hood cell: the hood panel with a slight slope down to the grille.
 
-Footprint is one cell: 0.65 m along (Blender X) by 0.44 m across (Blender Y). The origin is the cell center on the deck top.
+Footprint is one cell: 0.65 m along (Blender X) by 0.484 m across (Blender Y). The origin is the cell center on the deck top.
 The top falls from HOOD_H at the back edge to NOSE_H at the front edge, so a row of these rounds off the hood's nose.
 socket_surface marks the hood top, the same height as hood_panel.
 Run: blender --background --python tools/blender/hood_front.py -- public/models/hood_front.glb [tmp/hood_front.png]

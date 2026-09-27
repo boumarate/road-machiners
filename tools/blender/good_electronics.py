@@ -1,6 +1,6 @@
 """Electronics crate with a glowing screen and an antenna for the electronics good.
 
-Footprint 1x1: 0.65 m along (X) by 0.44 m across (Y). About 0.5 m tall at the antenna tip. Origin at the footprint center on the deck top.
+Footprint 1x1: 0.65 m along (X) by 0.484 m across (Y). About 0.5 m tall at the antenna tip. Origin at the footprint center on the deck top.
 Run: blender --background --python tools/blender/good_electronics.py -- public/models/good_electronics.glb [tmp/good_electronics.png]
 """
 

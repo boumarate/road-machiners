@@ -23,7 +23,7 @@ export const PHYSICS = {
     steerRate: 3, // radians per second the wheels can turn
   },
   // One inventory grid cell in meters. A truck's body is its grid: length is rows x along, width is columns x across.
-  cell: { across: 0.44, along: 0.65 },
+  cell: { across: 0.484, along: 0.65 },
   // Body per chassis look, in meters. halfHeight: chassis box half height. Length, width and wheel mounts come from the grid.
   // wheelY: suspension mount height relative to the chassis center. Mass comes from src/sim/mass.ts.
   bodies: {

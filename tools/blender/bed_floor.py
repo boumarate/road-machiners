@@ -1,6 +1,6 @@
 """One bed cell floor: a ribbed steel floor sunk below the beltline, so the body sides form the bed walls.
 
-Footprint is one cell: 0.65 m along (Blender X) by 0.44 m across (Blender Y). The origin is the cell center on the deck top.
+Footprint is one cell: 0.65 m along (Blender X) by 0.484 m across (Blender Y). The origin is the cell center on the deck top.
 The floor plate top is at BED_Z. socket_surface marks it, where items in the bed stand.
 socket_underside marks the plate bottom, where the view stops the dark inner body box.
 Run: blender --background --python tools/blender/bed_floor.py -- public/models/bed_floor.glb [tmp/bed_floor.png]

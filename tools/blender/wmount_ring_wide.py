@@ -1,6 +1,6 @@
 """Wide turret ring for the 'autocannon' and 'rocketRack' weapons.
 
-Fills a 2x1 footprint: 0.88 m across by 0.65 m along. A broad ring drum with two ammo crates beside it carries a
+Fills a 2x1 footprint: 0.97 m across by 0.65 m along. A broad ring drum with two ammo crates beside it carries a
 thick column. socket_head sits on the column top at 0.32 m.
 Run: blender --background --python tools/blender/wmount_ring_wide.py -- public/models/wmount_ring_wide.glb [tmp/wmount_ring_wide.png]
 """
