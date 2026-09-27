@@ -38,6 +38,14 @@ export function hasWorkingEngine(v: Vehicle): boolean {
   return engines.length > 0 && isWorking(engines[0]);
 }
 
+// The weakest installed driving part limits the truck's ability to survive another fight.
+export function getMobilityCondition(v: Vehicle): number {
+  const engine = mountedParts(v, 'engine')[0];
+  if (!engine) return 0;
+  const parts = [engine, corePart(v, 'transmission'), ...coreParts(v, 'wheel')];
+  return Math.min(...parts.map((part) => part.hp / partDef(part.defId).hp));
+}
+
 // A truck that can only crawl: no working engine, a broken transmission or an empty tank.
 export function isStranded(world: World, v: Vehicle): boolean {
   return !hasWorkingEngine(v) || !isWorking(corePart(v, 'transmission')) || getResources(world, v).fuel <= 0;

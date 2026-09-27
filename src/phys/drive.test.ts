@@ -19,6 +19,32 @@ beforeAll(async () => {
   await initPhysics();
 });
 
+describe('impact geometry', () => {
+  it('captures rear-end contacts and relative closing speed before the turn ends', () => {
+    const world = emptyWorld({ x: 35, y: 30 });
+    const target = world.vehicles[0];
+    target.speed = 2;
+    const attacker = addVehicle(world, 'raiders', 'scout', ['mg', 'stockEngine', 'ram'], { x: 30, y: 30 });
+    attacker.speed = 7;
+    attacker.order = null;
+    const drive = buildDrive(world);
+    const result = simulateTurn(drive, world);
+    try {
+      const crash = result.crashes.find((hit) => [hit.a, hit.b].includes(attacker.id));
+      if (!crash) throw new Error('Expected rear-end collision');
+      const front = crash.a === attacker.id ? crash.contact.a : crash.contact.b;
+      const rear = crash.a === target.id ? crash.contact.a : crash.contact.b;
+      expect(front?.side).toBe('front');
+      expect(rear?.side).toBe('rear');
+      expect(crash.impact).toBeCloseTo((7 - 2) * PHYSICS.metersPerTile, 0);
+      expect(structuredClone(crash)).toEqual(crash);
+    } finally {
+      freeDrive(result.next);
+      freeDrive(drive);
+    }
+  });
+});
+
 // Plays n turns through the real turn pipeline with physics movement.
 function play(w: World, n: number): { w: World; d: Drive } {
   let d = buildDrive(w);

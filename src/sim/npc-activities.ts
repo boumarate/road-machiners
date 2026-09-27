@@ -25,7 +25,7 @@ import { getResources } from "./resources";
 import { randInt } from "./rng";
 import { canReachSalvage, hasSalvage } from "./salvage";
 import { beginSearch } from "./search";
-import { vehicleStats } from "./stats";
+import { getMobilityCondition, vehicleStats } from "./stats";
 import type { Contact, NpcActivity, NpcBrain, Vehicle, World } from "./types";
 import { canUseSite, isWalled, siteGates } from "./sites";
 import { clamp, dist, type Vec } from "./vec";
@@ -99,9 +99,9 @@ function hasSaleCargo(vehicle: Vehicle): boolean {
   );
 }
 
-function getCabCondition(vehicle: Vehicle): number {
+function getCombatCondition(vehicle: Vehicle): number {
   const cab = corePart(vehicle, "cab");
-  return cab.hp / partDef(cab.defId).hp;
+  return Math.min(cab.hp / partDef(cab.defId).hp, getMobilityCondition(vehicle));
 }
 
 function computeVisibleStrength(vehicle: Vehicle): number {
@@ -165,7 +165,7 @@ function isTooDamagedToFight(
       ? profile.recoverCondition
       : profile.fleeCondition;
   return (
-    getCabCondition(vehicle) <= threshold ||
+    getCombatCondition(vehicle) <= threshold ||
     getResources(world, vehicle).health / RULES.maxHealth <= threshold
   );
 }
@@ -315,6 +315,7 @@ function chooseContactActivity(
   vehicle: Vehicle,
   profile: NpcClass,
 ): NpcActivity | null {
+  if (getCombatCondition(vehicle) <= profile.recoverCondition) return null;
   const brain = requireBrain(vehicle);
   const contacts = getUsefulContacts(world, vehicle, profile);
   brain.investigatedContacts = brain.investigatedContacts?.filter((id) =>
