@@ -33,4 +33,6 @@ export const CONFIG = {
     import.meta.env.VITE_COMBAT_READ_MS,
   ),
   saveTurns: requirePositiveInt("VITE_SAVE_TURNS", import.meta.env.VITE_SAVE_TURNS),
+  travelHoldMs: requirePositiveInt("VITE_TRAVEL_HOLD_MS", import.meta.env.VITE_TRAVEL_HOLD_MS),
+  travelFastSpeed: requirePositiveInt("VITE_TRAVEL_FAST_SPEED", import.meta.env.VITE_TRAVEL_FAST_SPEED),
 };

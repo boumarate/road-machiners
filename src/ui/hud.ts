@@ -68,7 +68,8 @@ export class Hud {
     );
     this.help.append(guide);
     guide.append(
-      el("div", {}, "Click: drive through. Shift-click: stop there."),
+      el("div", {}, "Click: travel and stop there. Hostiles pause travel."),
+      el("div", {}, "Combat / manual: click to drive through. Shift-click: stop there."),
       el("div", {}, "Click your truck: brake. No order: coast on."),
       el(
         "div",
@@ -78,7 +79,7 @@ export class Hud {
       el(
         "div",
         {},
-        "Space: end turn. A: auto fire. P: auto patch. C: character. I: inventory.",
+        "Space: pause travel / one turn. Hold: fast-forward. A: auto fire. P: auto patch. C: character. I: inventory.",
       ),
       el("div", {}, "R: manual driving, straight through anything."),
       el("div", {}, "Right-drag: pan. F: follow. Wheel: zoom. M: mute."),

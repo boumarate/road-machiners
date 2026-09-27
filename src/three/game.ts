@@ -89,6 +89,7 @@ import { MIX } from "../data/sounds";
 import { engineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
 import type { SoundPlayer } from "../audio/player";
 import { uiRoot } from "../ui/dom";
+import { canTravel, Travel } from "./travel";
 
 const PLAN_TURNS = 3; // turns of path preview
 
@@ -130,7 +131,8 @@ type TurnPhase = ReturnType<UiHost["getTurnPhase"]>;
 type Playback = {
   result: TurnResult;
   before: World;
-  start: number | null;
+  lastTick: number | null;
+  elapsed: number;
   moved: boolean;
   impacts: boolean;
   combat: boolean;
@@ -192,6 +194,7 @@ export class Game {
   private frames: Record<string, VehicleFrame> = {}; // last shown pose per vehicle
   // A played turn: physics movement, then shots in flight when there was combat, then time to read results.
   private anim: Playback | null = null;
+  private readonly travel = new Travel(CONFIG.travelHoldMs);
   private phase: TurnPhase = null;
   private readonly weaponRange = new WeaponRangeView();
   private readonly markers = new Map<string, HTMLDivElement>(); // weapon markers above targets, by target id
@@ -364,6 +367,7 @@ export class Game {
   }
 
   apply(next: World): void {
+    this.travel.pause();
     this.world = next;
     syncDrive(this.drive, this.world);
     this.refreshUi();
@@ -533,13 +537,21 @@ export class Game {
     canvas.addEventListener("wheel", (e) => this.rig.zoomBy(e.deltaY), {
       passive: true,
     });
+    window.addEventListener("keyup", (e) => {
+      if (e.code === "Space") this.travel.release();
+    });
+    window.addEventListener("blur", () => this.travel.pause());
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) this.travel.pause();
+    });
     window.addEventListener("keydown", (e) => {
       if (this.isEditingControl()) return;
       const modal = this.modalOpen();
       const playing = this.anim !== null;
       if (e.code === "Space") {
         e.preventDefault();
-        if (!e.repeat && !modal) this.endTurn();
+        if (!e.repeat && !modal && this.travel.press(performance.now(), playing))
+          this.endTurn();
       }
       if (e.code === "KeyF") this.following = true;
       if (e.code === "KeyM") this.toggleMute();
@@ -607,7 +619,11 @@ export class Game {
     )
       return this.apply(setMoveOrder(this.world, { kind: "brake" }));
     const p = this.rig.groundUnder(e.clientX, e.clientY, this.ground);
-    if (p) this.apply(setMoveOrder(this.world, clickOrder(p, e.shiftKey)));
+    if (p) {
+      const automatic = canTravel(this.world);
+      this.apply(setMoveOrder(this.world, clickOrder(p, automatic || e.shiftKey)));
+      if (automatic) this.travel.start();
+    }
   }
 
   private targetVehicle(target: Vehicle): void {
@@ -686,6 +702,7 @@ export class Game {
       physicsMove(this.drive, (r) => (result = r)),
     );
     if (!result) throw new Error("Turn ran without physics");
+    if (this.world.events.some((event) => event.t === "defeat")) this.travel.pause();
     this.live = {
       visible: new Set(this.world.player.visible),
       explored: before.player.explored.slice(),
@@ -701,7 +718,8 @@ export class Game {
     this.anim = {
       result,
       before,
-      start: null,
+      lastTick: null,
+      elapsed: 0,
       moved: false,
       impacts: false,
       combat,
@@ -976,7 +994,10 @@ export class Game {
   private tick(now: number): void {
     const dt = now - this.last;
     this.last = now;
-    const step = this.animStep(now);
+    if (this.modalOpen() || this.isEditingControl() || document.hidden)
+      this.travel.pause();
+    const speed = this.travel.isFast(now) ? CONFIG.travelFastSpeed : 1;
+    const step = this.animStep(now, speed);
     this.updateLiveVision();
     this.syncVehicles(step);
     this.drawOverlays();
@@ -987,7 +1008,7 @@ export class Game {
     this.sun.target.position.copy(
       me ? new THREE.Vector3(me.pos.x, me.pos.y, me.pos.z) : focus,
     );
-    const light = daylightAt(this.lightTurn(now));
+    const light = daylightAt(this.lightTurn());
     const horiz = Math.cos(light.elevation) * SUN_RADIUS;
     this.sun.position
       .copy(this.sun.target.position)
@@ -1010,7 +1031,7 @@ export class Game {
     )
       ? ""
       : "none";
-    this.fx.tick(dt);
+    this.fx.tick(dt * speed);
     this.playPanelSounds();
     this.updateLoops();
     this.weather.advance(dt);
@@ -1018,6 +1039,14 @@ export class Game {
     this.labels.update(this.world, this.rig);
     for (const scope of this.scopes) scope.update(this.rig.camera);
     this.renderer.render(this.scene, this.rig.camera);
+    const order = playerVehicle(this.world).order;
+    this.travel.update(
+      canTravel(this.world) && !this.world.vehicles.some(
+        (v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v),
+      ),
+      order !== null && order.kind !== "brake",
+    );
+    if (!this.anim && this.travel.shouldAdvance(now)) this.endTurn();
     // The preview runs after the frame is drawn, so a click shows at once.
     this.refreshPlan();
     requestAnimationFrame((t) => this.tick(t));
@@ -1043,18 +1072,19 @@ export class Game {
 
   // The clock the light shows. While a turn's movement plays it glides from the previous turn to this one,
   // so the sun moves and changes color continuously instead of once per turn.
-  private lightTurn(now: number): number {
+  private lightTurn(): number {
     const a = this.anim;
-    if (!a || a.start === null) return this.world.turn - (a ? 1 : 0);
-    return this.world.turn - 1 + Math.min(1, (now - a.start) / MOVE_MS);
+    if (!a) return this.world.turn;
+    return this.world.turn - 1 + Math.min(1, a.elapsed / MOVE_MS);
   }
 
   // Physics step shown now while the movement plays, or null otherwise. Advances the playback phases.
-  private animStep(now: number): number | null {
+  private animStep(now: number, speed: number): number | null {
     const a = this.anim;
     if (!a) return null;
-    if (a.start === null) a.start = now;
-    const elapsed = now - a.start;
+    if (a.lastTick !== null) a.elapsed += (now - a.lastTick) * speed;
+    a.lastTick = now;
+    const elapsed = a.elapsed;
     if (elapsed < MOVE_MS)
       return Math.floor((elapsed / 1000) * PHYSICS.stepsPerSecond);
     if (!a.moved) this.finishMovement(a);
