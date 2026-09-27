@@ -1,6 +1,6 @@
 # Defeat and rescue
 
-**Status:** executing
+**Status:** validating
 **Branch:** defeat-rescue
 **Worktree:** .worktrees/defeat-rescue
 **Goal:** In the browser, a lost fight shows raiders looting the player's truck, the stripped truck crawls, and a passing trader or scavenger tows it to town for a fee on debt. Health at 0 ends the run. The user confirms the loop in play.
@@ -63,6 +63,13 @@ Supplies:
 - Healing spends `RULES.healSupplies` per turn on top of the normal drain.
 - Without supplies, health drains `RULES.starveDamage` per turn down to `RULES.starveFloor`, which is 30, and stops there.
 
+Beacon:
+
+- A stranded, active player can switch on an emergency beacon. It switches off when the truck is no longer stranded or gets hitched.
+- The beacon is a radio contact with a tight circle for every vehicle within `BEACON.range` tiles. Hills do not block it.
+- Traders and scavengers that get the beacon contact start the tow activity, as if they saw the truck. The first to arrive makes the offer. The others drop the activity once another tower holds the offer.
+- Raiders get the same contact. The loot rule decides whether they come, so a stripped truck calls safely, and a truck with cargo draws raiders.
+
 Death:
 
 - Health at 0 kills the player. Starving stops at the floor, so only damage to the cab can kill.
@@ -99,7 +106,7 @@ TDD: yes. Each rule is a sim rule with a Vitest test.
 
 ### Assumptions
 
-- AS1 — Traders and scavengers pass within sight of a stranded truck on a road often enough that pickup takes tens of turns, not hundreds.
+- AS1 — Violated for passing traffic alone; see PH4b. The beacon covers it. Traders and scavengers pass within sight of a stranded truck on a road often enough that pickup takes tens of turns, not hundreds.
 
 ### Unknowns
 
@@ -183,7 +190,7 @@ UK3 resolved: `Game.tick()` in `src/three/game.ts` calls `endTurn()` when `autoR
 - 4.7 `src/sim/stats.ts` (modify) — A hitched tower's `maxSpeed` is multiplied by `TOW.speedShare`.
 - 4.8 `src/sim/world.ts:137-165` (modify)
   - The pipeline runs `followTower` after `move`.
-  - `autoRuns(world): boolean` is true while knocked out or hitched.
+  - `autoRuns(world): boolean` is true while knocked out or hitched, and while the beacon is on with the truck parked and no offer open. A beacon wait lasts 150 to 270 turns, too many to end by hand.
   - Driving the player out of reach clears an open offer and counts as refusing it.
 - 4.9 `src/sim/economy.ts:135-160` (modify) — `refuelAndRepair()` buys nothing on negative money, instead of flooring a negative count.
 - Tests:
@@ -205,6 +212,24 @@ Added after PH4 because AS1 failed. A stranded truck mid-road on either Bowl to 
 - Tests: a route between two points joined by a bent road follows the road, while a route with a far longer road detour goes straight. The re-measured pickup time on both roads is recorded here.
 - Commit: Make roads twice as wide and preferred by route planning
 
+### PH4c — Emergency beacon
+Added after PH4b, since pickup still took 150 to 190 turns on the busiest road and never came on the others. The user chose a beacon heard by friends and raiders.
+- 4c.1 `src/data/tow.ts` (modify) — `BEACON.range` in tiles and the contact circle radius, with reasons.
+- 4c.2 `src/sim/types.ts` (modify) — The player gains `beacon: boolean`. `Contact.sources` gains `beacon`.
+- 4c.3 `src/sim/detect.ts` (modify) — `contactsOf()` adds a beacon contact for a beaconing player within range of the observer.
+- 4c.4 `src/sim/tow.ts` (modify)
+  - `chooseTowActivity()` accepts a beacon contact in place of sight.
+  - `setBeacon(world, on)` is a command that needs an active, stranded, unhitched player.
+  - `checkBeacon(world)` switches the beacon off when the truck is no longer stranded or gets hitched.
+- 4c.5 `src/sim/world.ts` (modify) — The pipeline runs `checkBeacon`. New worlds start with the beacon off.
+- Tests:
+  - A trader out of sight but in beacon range drives over and offers.
+  - One outside the range ignores the beacon.
+  - A raider comes to a beaconing truck that has cargo and ignores a stripped one.
+  - The beacon needs a stranded truck and switches off on hitching and on recovery.
+  - Re-measure pickup with the beacon on at the AS1 spots.
+- Commit: Add an emergency beacon that calls towers and raiders
+
 ### PH5 — Game loop, HUD and saves
 - 5.1 `.env.example`, `.env`, `src/config.ts:24-36`, `CLAUDE.md` Config (modify) — Add `VITE_AUTO_TURN_MS`, a positive integer.
 - 5.2 `src/three/game.ts` (modify)
@@ -213,14 +238,14 @@ Added after PH4 because AS1 failed. A stranded truck mid-road on either Bowl to 
   - The death screen's Load reloads the page, and New game clears the save first.
 - 5.3 `src/ui/hud.ts`, `src/ui/hud-readout.ts` and `src/ui/format.ts` (modify)
   - Add a knocked-out banner and a tow offer panel with Accept and Refuse.
-  - Show an Unhitch button while towed.
+  - Show an Unhitch button while towed, and a Beacon switch while stranded.
   - Show negative money as debt.
   - Write log lines for the new events.
 - 5.4 `src/ui/death.ts` (create) — A fullscreen death screen with Load last save and New game.
 - 5.5 `src/three/sound.ts:16` (modify) — The `defeat` cue plays on `knockout`.
 - 5.6 `src/three/save.ts:21-46` (modify)
   - `SAVE_VERSION` becomes 8.
-  - `migrateFrom7` sets `state: 'active'`, `knockoutTurns: 0`, `tow: null` and `refusedTow: false`.
+  - `migrateFrom7` sets `state: 'active'`, `knockoutTurns: 0`, `tow: null`, `beacon: false` and `refusedTow: false`.
   - Version 6 saves migrate through version 7.
 - 5.7 `DESIGN.md` (modify) — Rewrite the Defeat section and update the supplies numbers and the defeat content line.
 - Tests: the save migration from version 7 and the refusal to save a dead world.
@@ -237,3 +262,38 @@ Added after PH4 because AS1 failed. A stranded truck mid-road on either Bowl to 
 - RK1 — Detaching the hitched player from physics can trip the body check in `syncDrive()`. Test attach and detach across several turns in `src/phys/drive.test.ts`.
 - RK2 — A raider idling in sight could hold a knockout. `knockoutMaxTurns` bounds it, and a test covers it.
 - RK3 — AS1 may fail if towers rarely pass. Verify measures pickup turns on the Bowl to Nose road in a sim test before tuning.
+
+## Code smells
+
+- `src/phys/drive.ts:254-266` — Physics driving sets speed from the distance to the destination only and never slows for corners, so trucks bump sites on sharp road turns.
+- `src/phys/drive.ts:271` — Physics reversing starts only past 90 degrees off, and the player truck has no stuck timer. A truck driving to a far point that hits an obstacle nose first keeps pushing until the player clicks behind it.
+- `src/sim/salvage.ts` — Player knockout stocks are never cleared, because `clearOldWrecks` only clears stocks with a matching obstacle.
+- `src/sim/nav/layer.ts` — Route planning prices ground type but not slope, so traders climb a scree slope near (451, 260) at 0.24 speed and lose hundreds of turns there.
+- `src/sim/npc-activities.ts:95` — The contact trust limit filters by distance, not circle size, so a trader with a grudge ignores a far, tight beacon contact.
+- `src/sim/ai.ts:28-35` — Very slow uphill motion counts as stuck, and the back-out recovery undoes the climb.
+
+## Conclusion
+
+Outcome: The sim loop, HUD and saves are built and verified in d9bf789 and later. The goal waits for the user to play a lost fight, a tow and a death.
+
+Invariants:
+- IV1 to IV9 — Each has a Vitest test in `defeat.test.ts`, `health.test.ts`, `wear.test.ts`, `resources.test.ts`, `pushing.test.ts`, `tow.test.ts` or `save.test.ts`. 569 tests pass.
+
+### Assumptions check
+- AS1 — violated. With passing traffic alone, no tow came in 600 turns on any road, even after PH4b. With the beacon, an offer came at turn 150 to 270 at all six spots. Traders lose turns on a steep scree slope, which is recorded under Code smells.
+
+### Unknowns outcome
+- UK1 — resolved. The loot rule lives in `isHostile()`, and `isFoe()` keeps the old side rule. The knockout wake check uses `isFoe()`, so the player stays out while looters watch.
+- UK2 — resolved. `isNear()` is false for the hitched player, and `followTower()` places the truck on the tower's trail.
+- UK3 — resolved. `Game.autoTurn()` runs turns every `VITE_AUTO_TURN_MS` while `autoRuns()` is true.
+
+### Deviations from plan
+- `435082e` changes NPC give-way in `src/sim/ai.ts` and the corner roll in `src/sim/steering.ts`. PH4b concentrated traffic on roads, and two NPCs meeting head on both waited forever. The NPC whose id sorts first now waits, and the other routes around it. Tests in `ai.test.ts` and `drive.test.ts` require two head-on traders to pass within 10 turns.
+- `f816bcf` keeps each driver's route between turns in `src/sim/path.ts` and `src/phys/drive.ts`. PH4b removed the straight-line fast path, and the first move preview rose from 33 ms to 70 ms against a 50 ms budget. The cost was replanning long NPC routes every turn. A kept route is reused only when its destination moved less than `RULES.arriveRadius`, its next leg is clear, and no new blocker sits near it. The first preview is now 35 to 43 ms. Tests in `path.test.ts` cover the reuse and give-up cases.
+- `src/ui/town.ts` shows debt, which PH5 did not list.
+
+Review findings:
+- Important: two unplanned movement changes lacked a recorded reason. They are recorded above.
+
+Verified by: `npm run playtest` at 60 fps. `npm run perf` shows previewMs at 35 to 43 against 50. turnMs is 135 to 155 against 100, and main is at 137. Five seeds drive Bowl to Nose in physics with 0 to 2 site bumps. Screenshots of the offer panel, the tow, the knockout banner and the death screen are in `tmp/ph5-*.png`.
+

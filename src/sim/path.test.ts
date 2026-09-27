@@ -6,14 +6,14 @@ import { TERRAIN_TYPES } from '../data/terrain';
 import { resetPerf, perfSnapshot } from '../perf';
 import { isDriveObstacle } from './mapgen';
 import { findCells, nearestFreeCell, stampOverlay } from './nav/astar';
-import { COARSE, componentOf, dynamicBlockers, navLayer } from './nav/layer';
-import { route, routeLength, straightClear, type Blocker } from './path';
+import { COARSE, componentOf, dynamicBlockers, navLayer, terrainNav, tileIndex } from './nav/layer';
+import { continueRoute, keepRoute, route, routeLength, straightClear, type Blocker } from './path';
 import { nextRandom } from './rng';
 import { isCliff, tileAt, type Terrain } from './terrain';
 import type { World } from './types';
 import { locationAt } from './sites';
-import { emptyWorld } from './testkit';
-import { dist, segmentDist, type Vec } from './vec';
+import { editableTerrain, emptyWorld } from './testkit';
+import { dist, polylineDist, segmentDist, type Vec } from './vec';
 import { endTurn, newWorld, setMoveOrder } from './world';
 
 describe("route", () => {
@@ -112,6 +112,133 @@ describe("route", () => {
   }, 120_000);
 });
 
+describe('kept routes', () => {
+  // A rock forces a bend, so the route has a corner before its end.
+  function bent(): { w: World; from: Vec; to: Vec; points: Vec[] } {
+    const w = emptyWorld();
+    w.obstacles = [{ id: 'r', pos: { x: 40, y: 30 }, r: 2, kind: 'rock' }];
+    const from = { x: 30, y: 30 };
+    const to = { x: 50, y: 30 };
+    return { w, from, to, points: route(w, from, to, 0.6, []) };
+  }
+
+  it('continues from a later position, dropping the corners driven past', () => {
+    const { w, from, to, points } = bent();
+    expect(points.length).toBeGreaterThan(2);
+    const kept = keepRoute(w, to, points, []);
+    const again = continueRoute(w, from, kept, to, 0.6, [])!;
+    expect(again[0]).toEqual(points[0]);
+    for (const p of again) expect(points).toContainEqual(p);
+    const past = { x: points[0].x + (points[1].x - points[0].x) * 0.1, y: points[0].y + (points[1].y - points[0].y) * 0.1 };
+    // From there it may shortcut past later corners too, but only to corners of the kept route.
+    const rest = continueRoute(w, past, kept, to, 0.6, [])!;
+    expect(rest.length).toBeGreaterThan(0);
+    for (const p of rest) expect(points.slice(1)).toContainEqual(p);
+    expect(rest.at(-1)).toEqual(to);
+  });
+
+  it('ends on a destination that moved, and drops the route for a vehicle parked on a later leg', () => {
+    const { w, from, to, points } = bent();
+    const kept = keepRoute(w, to, points, []);
+    const near = { x: to.x, y: to.y + 0.3 };
+    expect(continueRoute(w, from, kept, near, 0.6, [])!.at(-1)).toEqual(near);
+    const onLeg = { x: (points[1].x + points[2].x) / 2, y: (points[1].y + points[2].y) / 2 };
+    expect(continueRoute(w, from, kept, to, 0.6, [{ pos: onLeg, r: 0.8 }])).toBeNull();
+    // The same vehicle parked there when the route was planned is part of the plan.
+    expect(continueRoute(w, from, keepRoute(w, to, points, [{ pos: onLeg, r: 0.8 }]), to, 0.6, [{ pos: onLeg, r: 0.8 }])).not.toBeNull();
+  });
+});
+
+describe('routes prefer roads', () => {
+  // Flat hardpan with one road of the given center line and the map's road width.
+  function roadWorld(road: Vec[]): World {
+    const w = emptyWorld();
+    const t = editableTerrain(w);
+    for (let y = 0; y < t.size; y++)
+      for (let x = 0; x < t.size; x++) t.types[y * t.size + x] = polylineDist({ x: x + 0.5, y: y + 0.5 }, road) < REGION.roadWidth / 2 ? 'road' : 'hardpan';
+    return w;
+  }
+
+  // Share of the route length that runs on road tiles, sampled every quarter tile.
+  function roadShare(w: World, from: Vec, points: Vec[]): number {
+    let on = 0;
+    let all = 0;
+    let prev = from;
+    for (const p of points) {
+      const n = Math.ceil(dist(prev, p) * 4);
+      for (let k = 0; k < n; k++) {
+        all++;
+        if (w.terrain.types[tileAt(w.terrain, { x: prev.x + ((p.x - prev.x) * k) / n, y: prev.y + ((p.y - prev.y) * k) / n })] === 'road') on++;
+      }
+      prev = p;
+    }
+    return on / all;
+  }
+
+  it('follows a bent road that is 41% longer than the straight line', () => {
+    const a = { x: 100, y: 100 };
+    const b = { x: 160, y: 160 };
+    const w = roadWorld([a, { x: 160, y: 100 }, b]);
+    const pts = route(w, a, b, 0.6, []);
+    expect(roadShare(w, a, pts)).toBeGreaterThan(0.9);
+  });
+
+  it('joins the road from open ground next to it instead of cutting the bend', () => {
+    const a = { x: 100, y: 100 };
+    const b = { x: 160, y: 160 };
+    const w = roadWorld([a, { x: 160, y: 100 }, b]);
+    const start = { x: 100, y: 106 };
+    const pts = route(w, start, b, 0.6, []);
+    expect(roadShare(w, start, pts)).toBeGreaterThan(0.85);
+  });
+
+  it('a truck following a road into a blocking rock stops on the corner instead of rolling into it', () => {
+    // Two roads meet at the center of a big rock, like roads meeting at a site.
+    const rock = { x: 60, y: 30 };
+    const w = roadWorld([{ x: 20, y: 30 }, rock, { x: 60, y: 0 }]);
+    w.obstacles = [{ id: 'r', pos: rock, r: 6, kind: 'rock' }];
+    const v = w.vehicles[0];
+    v.pos = { x: 22, y: 30 };
+    v.order = { kind: 'stopAt', dest: { x: 60, y: 8 } };
+    for (let i = 0; i < 40 && v.order; i++) {
+      w.events = [];
+      resolveMovement(w);
+      expect(w.events.filter((e) => e.t === 'collision')).toEqual([]);
+    }
+    expect(dist(w.vehicles[0].pos, { x: 60, y: 8 })).toBeLessThan(0.5);
+  });
+
+  it('a truck pushed deep into a rock clearance routes out of it first', () => {
+    const w = emptyWorld();
+    const rock = { x: 40, y: 30 };
+    w.obstacles = [{ id: 'r', pos: rock, r: 3, kind: 'rock' }];
+    // 0.2 tiles from the rock edge, while the planner keeps the truck radius plus clearance, 1 tile.
+    const from = { x: 36.8, y: 30 };
+    const pts = route(w, from, { x: 44, y: 30 }, 0.6, []);
+    expect(pts.length).toBeGreaterThan(1);
+    expect(dist(pts[0], rock)).toBeGreaterThan(dist(from, rock));
+    for (let i = 1; i < pts.length; i++) expect(segmentDist(rock, pts[i - 1], pts[i])).toBeGreaterThanOrEqual(3 + 0.6);
+  });
+
+  it('prices the ground within a road width of a site like road', () => {
+    const w = emptyWorld();
+    editableTerrain(w).types.fill('hardpan');
+    const nav = terrainNav(w.terrain);
+    const site = REGION.locations[0];
+    const at = (d: number) => nav.tileCost[tileIndex(nav.size, site.pos.x + d, site.pos.y)];
+    expect(at(site.radius + REGION.roadWidth - 1)).toBeCloseTo(1 / TERRAIN_TYPES.hardpan.speed, 9);
+    expect(at(site.radius + REGION.roadWidth + 1)).toBeCloseTo(REGION.navigation.offRoadCost / TERRAIN_TYPES.hardpan.speed, 9);
+  });
+
+  it('crosses open ground when the road detour is three times longer', () => {
+    const a = { x: 100, y: 100 };
+    const b = { x: 160, y: 100 };
+    const w = roadWorld([a, { x: 100, y: 160 }, { x: 160, y: 160 }, b]);
+    const pts = route(w, a, b, 0.6, []);
+    expect(routeLength(a, pts)).toBeLessThan(1.2 * dist(a, b));
+  });
+});
+
 // The grid rules before the nav layers, kept as a reference: cliff probes, obstacle stamping,
 // weighted A*, nearest free cell and shortcuts. New routes must match them.
 namespace Ref {
@@ -124,6 +251,14 @@ namespace Ref {
     return probes.some((q) => isCliff(t, tileAt(t, q)));
   }
 
+  // Route cost per tile: 1 / terrain speed, times offRoadCost off the road and away from sites.
+  function tileCost(t: Terrain, p: Vec): number {
+    const type = t.types[tileAt(t, p)];
+    const c = { x: Math.floor(p.x) + 0.5, y: Math.floor(p.y) + 0.5 };
+    const bySite = [...REGION.towns, ...REGION.locations].some((s) => dist(c, s.pos) < s.radius + REGION.roadWidth);
+    return (type === 'road' || bySite ? 1 : REGION.navigation.offRoadCost) / TERRAIN_TYPES[type].speed;
+  }
+
   export function terrainLayer(t: Terrain, radius: number): { n: number; cliff: Uint8Array; slow: Float32Array } {
     const n = Math.ceil(t.size / CELL);
     const cliff = new Uint8Array(n * n);
@@ -132,7 +267,7 @@ namespace Ref {
       for (let x = 0; x < n; x++) {
         const c = { x: (x + 0.5) * CELL, y: (y + 0.5) * CELL };
         if (nearCliff(t, c, radius + CLEARANCE)) cliff[y * n + x] = 1;
-        slow[y * n + x] = 1 / TERRAIN_TYPES[t.types[tileAt(t, c)]].speed;
+        slow[y * n + x] = tileCost(t, c);
       }
     return { n, cliff, slow };
   }
@@ -272,18 +407,37 @@ namespace Ref {
     return total;
   }
 
-  export function clearLine(t: Terrain, obstacles: Blocker[], a: Vec, b: Vec, reach: number, minSpeed: number): boolean {
-    if (!obstacles.every((o) => segmentDist(o.pos, a, b) >= o.r + reach)) return false;
+  // Route cost of the straight line: length times the mean tile cost of its samples. Infinity when it
+  // touches an obstacle or, with a reach, a cliff, or crosses a tile costlier than maxCost.
+  export function lineCost(t: Terrain, obstacles: Blocker[], a: Vec, b: Vec, reach: number | null, maxCost: number): number {
+    if (reach !== null && !obstacles.every((o) => segmentDist(o.pos, a, b) >= o.r + reach)) return Infinity;
     const n = Math.ceil(dist(a, b) * 4);
+    let sum = 0;
     for (let k = 0; k <= n; k++) {
       const p = { x: a.x + ((b.x - a.x) * k) / Math.max(1, n), y: a.y + ((b.y - a.y) * k) / Math.max(1, n) };
-      if (nearCliff(t, p, reach) || TERRAIN_TYPES[t.types[tileAt(t, p)]].speed < minSpeed) return false;
+      if ((reach !== null && nearCliff(t, p, reach)) || tileCost(t, p) > maxCost) return Infinity;
+      sum += tileCost(t, p);
     }
-    return true;
+    return (dist(a, b) * sum) / (n + 1);
   }
 
-  function slowestSpeed(t: Terrain, pts: Vec[]): number {
-    return Math.min(...pts.map((p) => TERRAIN_TYPES[t.types[tileAt(t, p)]].speed));
+  export function clearLine(t: Terrain, obstacles: Blocker[], a: Vec, b: Vec, reach: number, maxCost: number): boolean {
+    return lineCost(t, obstacles, a, b, reach, maxCost) < Infinity;
+  }
+
+  function costliestTile(t: Terrain, pts: Vec[]): number {
+    return Math.max(...pts.map((p) => tileCost(t, p)));
+  }
+
+  // A shortcut must be clear, cross no tile costlier than the path it replaces, and cost no more than that path.
+  function fits(t: Terrain, obstacles: Blocker[], cur: Vec, replaced: Vec[], reach: number): boolean {
+    let pathCost = 0;
+    let prev = cur;
+    for (const p of replaced) {
+      pathCost += lineCost(t, [], prev, p, null, Infinity);
+      prev = p;
+    }
+    return lineCost(t, obstacles, cur, replaced[replaced.length - 1], reach, costliestTile(t, [cur, ...replaced])) <= pathCost * (1 + 1e-9);
   }
 
   function shortcut(t: Terrain, obstacles: Blocker[], from: Vec, points: Vec[], reach: number): Vec[] {
@@ -296,7 +450,7 @@ namespace Ref {
       let failed = points.length;
       while (best < points.length - 1) {
         const candidate = Math.min(i + step, points.length - 1);
-        if (!clearLine(t, obstacles, cur, points[candidate], reach, slowestSpeed(t, [cur, ...points.slice(i, candidate + 1)]))) {
+        if (!fits(t, obstacles, cur, points.slice(i, candidate + 1), reach)) {
           failed = candidate;
           break;
         }
@@ -305,7 +459,7 @@ namespace Ref {
       }
       while (failed - best > 1) {
         const candidate = Math.floor((best + failed) / 2);
-        if (clearLine(t, obstacles, cur, points[candidate], reach, slowestSpeed(t, [cur, ...points.slice(i, candidate + 1)]))) best = candidate;
+        if (fits(t, obstacles, cur, points.slice(i, candidate + 1), reach)) best = candidate;
         else failed = candidate;
       }
       out.push(points[best]);
@@ -320,11 +474,21 @@ namespace Ref {
     if (clearLine(w.terrain, all, from, to, radius + CLEARANCE, 1)) return [to];
     const g = grid(layer, all, radius);
     const start = cellOf(g, from);
+    const statics = grid(layer, blockers(w, []), radius);
+    // A start with no free neighbour first drives out to the nearest free cell.
+    let exit: number | null = start;
+    let reach = reachable(statics, start);
+    if (!reach.includes(1)) {
+      exit = nearestFree(g, start);
+      if (exit === null) return [to];
+      reach = reachable(statics, exit);
+    }
     // Reachability follows static blockers only; parked vehicles can still cut the route.
-    const goal = nearestFree(g, cellOf(g, to), reachable(grid(layer, blockers(w, []), radius), start));
+    const goal = nearestFree(g, cellOf(g, to), reach);
     if (goal === null) return [to];
-    const cells = astar(g, start, goal);
-    if (!cells) return [to];
+    const found = astar(g, exit, goal);
+    if (!found) return [to];
+    const cells = exit === start ? found : [start, ...found];
     const end = goal === cellOf(g, to) ? to : centerOf(g, goal);
     return shortcut(w.terrain, all, from, [...cells.slice(1, -1).map((c) => centerOf(g, c)), end], radius + CLEARANCE);
   }
@@ -400,10 +564,10 @@ describe('nav layers match the old grid rules', () => {
   it('straightClear equals the reference line check', () => {
     let clear = 0;
     for (const { from, to, extra, radius } of pairs) {
-      const expected = Ref.clearLine(w.terrain, Ref.blockers(w, extra), from, to, radius + Ref.CLEARANCE, 0);
+      const expected = Ref.clearLine(w.terrain, Ref.blockers(w, extra), from, to, radius + Ref.CLEARANCE, Infinity);
       expect(straightClear(w, from, to, radius, extra)).toBe(expected);
       // Without the parked vehicle in the middle, short lines are often clear.
-      const open = Ref.clearLine(w.terrain, Ref.blockers(w, []), from, to, radius + Ref.CLEARANCE, 0);
+      const open = Ref.clearLine(w.terrain, Ref.blockers(w, []), from, to, radius + Ref.CLEARANCE, Infinity);
       expect(straightClear(w, from, to, radius, [])).toBe(open);
       if (open) clear++;
     }

@@ -50,6 +50,28 @@ function damageList(world: World, vehicleId: string, hits: PartHit[]): string {
   return `; ${vehicleName(world, vehicleId)}: ${[...dealt].map(([id, d]) => `${partName(world, vehicleId, id)} −${d}`).join(', ')}`;
 }
 
+type LogLine = { text: string; cls: string };
+
+function jobText(world: World, e: Extract<GameEvent, { t: 'job' }>): LogLine {
+  const what = e.job.kind === 'repair' ? `Repair (${partName(world, e.vehicle, e.job.partId)})` : 'Search';
+  const lines = {
+    started: { text: `${what} started: stay parked about ${e.job.turnsLeft} turns. End turns with Space.`, cls: '' },
+    cancelled: { text: `${what} cancelled: the truck moved`, cls: 'bad' },
+    done: { text: `${what} done`, cls: 'good' },
+  };
+  return lines[e.outcome];
+}
+
+function sayText(world: World, e: Extract<GameEvent, { t: 'say' }>): LogLine {
+  const cls = e.speaker === world.player.vehicleId ? 'dim' : '';
+  return { text: `${vehicleName(world, e.speaker)}: “${fillLine(e.text, e.vars)}”`, cls };
+}
+
+function callText(world: World, e: Extract<GameEvent, { t: 'call' }>): LogLine {
+  const who = vehicleName(world, e.with);
+  return { text: e.outcome === 'opened' ? `Radio: ${who} on the line.` : `Radio: call with ${who} ended.`, cls: 'dim' };
+}
+
 // Returns null for events not worth a log line.
 export function eventText(world: World, e: GameEvent): { text: string; cls: string } | null {
   const n = (id: string) => vehicleName(world, id);
@@ -60,7 +82,7 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       return vehicle && playerSees(world, vehicle.pos) ? { text: `${vehicle.name}: ${e.activity ?? 'idle'} — ${e.reason}`, cls: 'dim' } : null;
     }
     case 'collision': {
-      const b = e.b === 'edge' ? 'the map edge' : e.b.startsWith('v') ? n(e.b) : 'an obstacle';
+      const b = e.b === 'edge' ? 'the map edge' : e.b === 'rail' ? 'the bridge rail' : e.b.startsWith('v') ? n(e.b) : 'an obstacle';
       const dealt = [...e.hitsA, ...e.hitsB].reduce((sum, h) => sum + h.damage, 0);
       if (e.a !== me && e.b !== me && dealt < 1) return null;
       const text = `${n(e.a)} crashed into ${b}${damageList(world, e.a, e.hitsA)}${damageList(world, e.b, e.hitsB)}`;
@@ -122,18 +144,13 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       return { text, cls: e.reason === 'refused' || e.reason === 'unhitched' ? 'dim' : 'bad' };
     }
     case 'say':
-      return { text: `${n(e.speaker)}: “${fillLine(e.text, e.vars)}”`, cls: e.speaker === me ? 'dim' : '' };
+      return sayText(world, e);
     case 'call':
-      return { text: e.outcome === 'opened' ? `Radio: ${n(e.with)} on the line.` : `Radio: call with ${n(e.with)} ended.`, cls: 'dim' };
+      return callText(world, e);
     case 'info':
       return { text: e.text, cls: 'dim' };
-    case 'job': {
-      if (e.vehicle !== me) return null;
-      const what = e.job.kind === 'repair' ? `Repair (${partName(world, e.vehicle, e.job.partId)})` : 'Search';
-      const text = e.outcome === 'started' ? `${what} started: stay parked about ${e.job.turnsLeft} turns. End turns with Space.`
-        : e.outcome === 'cancelled' ? `${what} cancelled: the truck moved` : `${what} done`;
-      return { text, cls: e.outcome === 'cancelled' ? 'bad' : e.outcome === 'done' ? 'good' : '' };
-    }
+    case 'job':
+      return e.vehicle === me ? jobText(world, e) : null;
     case 'searched': {
       const site = [...REGION.towns, ...REGION.locations].find((l) => l.id === e.stock);
       return { text: `Search done${site ? ` at ${site.name}` : ''}. Drag what you want into the truck.`, cls: 'good' };

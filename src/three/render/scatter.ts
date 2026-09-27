@@ -7,7 +7,7 @@ import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
 import { hash2 } from '../../render/noise';
 import { ROAD_INDEX } from '../../sim/road-index';
-import { heightAt, type Terrain } from '../../sim/terrain';
+import { groundAt, type Terrain } from '../../sim/terrain';
 import type { Obstacle } from '../../sim/types';
 import { instancedModel } from './models';
 import type { RenderScope } from './scope';
@@ -40,7 +40,7 @@ export function addScatter(t: Terrain, obstacles: Obstacle[], scope: RenderScope
       const p = { x: x + hash2(x, y * 3), y: y + hash2(x * 5, y) };
       if (ROAD_INDEX.nearestWithin(p.x, p.y, ROAD_GAP) < ROAD_GAP) continue;
       const size = hash2(x * 11 + 1, y * 17 + 9);
-      place.position.set(p.x * S, heightAt(t, p.x, p.y) * S, p.y * S);
+      place.position.set(p.x * S, groundAt(t, p.x, p.y) * S, p.y * S);
       place.rotation.y = hash2(x * 19, y * 23 + 1) * Math.PI * 2;
       place.scale.setScalar(lerp(isPebble ? PEBBLE_RADIUS : SCRUB_RADIUS, size) * S);
       place.updateMatrix();

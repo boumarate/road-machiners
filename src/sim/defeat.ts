@@ -26,8 +26,8 @@ export function checkKnockout(world: World): void {
   p.state = "knockedOut";
   p.knockoutTurns = 0;
   p.knockouts++;
-  me.order = null;
-  me.speed = 0;
+  // The driver is out, so the truck brakes to a stop instead of coasting on.
+  me.order = { kind: "brake" };
   me.weaponOrders = {};
   me.trail = [];
   cancelJob(world, me);

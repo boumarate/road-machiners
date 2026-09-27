@@ -127,7 +127,7 @@ describe('knockout', () => {
     expect(w.events).toContainEqual({ t: 'knockout' });
   });
 
-  it('stops the truck and clears its orders, its job and grudges against it', () => {
+  it('brakes the truck and clears its orders, its job and grudges against it', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = w.vehicles[0];
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
@@ -139,7 +139,7 @@ describe('knockout', () => {
     me.trail = [{ x: 29, y: 30, heading: 0 }, { x: 30, y: 30, heading: 0 }];
     corePart(me, 'cab').hp = 0;
     checkKnockout(w);
-    expect(me.order).toBeNull();
+    expect(me.order).toEqual({ kind: 'brake' });
     expect(me.speed).toBe(0);
     expect(me.job).toBeNull();
     expect(me.weaponOrders).toEqual({});

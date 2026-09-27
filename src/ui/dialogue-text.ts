@@ -14,18 +14,22 @@ function compass(rad: number): string {
   return COMPASS[((i % COMPASS.length) + COMPASS.length) % COMPASS.length];
 }
 
+function townName(id: string): string {
+  const town = REGION.towns.find((t) => t.id === id);
+  if (!town) throw new Error(`Unknown town ${id}`);
+  return town.name;
+}
+
+function distanceText(tiles: number): string {
+  const m = meters(tiles);
+  return m >= METERS_PER_KM ? `${(m / METERS_PER_KM).toFixed(1)} km` : `${m} m`;
+}
+
 function formatVar(v: CallVar): string {
   switch (v.kind) {
-    case 'town': {
-      const town = REGION.towns.find((t) => t.id === v.id);
-      if (!town) throw new Error(`Unknown town ${v.id}`);
-      return town.name;
-    }
+    case 'town': return townName(v.id);
     case 'money': return String(v.amount);
-    case 'distance': {
-      const m = meters(v.tiles);
-      return m >= METERS_PER_KM ? `${(m / METERS_PER_KM).toFixed(1)} km` : `${m} m`;
-    }
+    case 'distance': return distanceText(v.tiles);
     case 'bearing': return compass(v.rad);
     case 'count': return String(v.n);
   }

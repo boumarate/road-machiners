@@ -3,11 +3,13 @@
 
 import * as THREE from 'three';
 import { REGION, type LocationDef, type TownDef } from '../../data/region';
+import { TERRAIN } from '../../data/terrain';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
 import { siteGates } from '../../sim/sites';
-import { heightAt, type Terrain } from '../../sim/terrain';
+import { BRIDGE_AXIS, BRIDGE_LENGTH } from '../../sim/bridge';
+import { deckEnds, heightAt, type Terrain } from '../../sim/terrain';
 import { angleDiff, segmentDist } from '../../sim/vec';
 import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
@@ -18,15 +20,16 @@ type Site = TownDef | LocationDef;
 // Nose's 48 m bow from the 12 m cone.
 const HULL_SCALE = 272 / 26;
 const NOSE_SCALE = 4;
-// The bridge model's 32 m by 7 m deck stretched over the 18-tile diagonal canyon crossing, 2.5 tiles wide.
-const BRIDGE_TILES = 18;
-const BRIDGE_WIDTH = 2.5;
+// The bridge model's 32 m by 7 m deck is stretched to the sim deck. Its trusses stand 2.4 m over the
+// deck before this height scale.
+const BRIDGE_RISE = 1.5;
+const BRIDGE_DECK_TOP = 0.8; // meters from the model origin up to its deck top, before scaling
 
 // Site props stay within the site's collision footprint. Every prop is grounded independently.
 class SiteBuilder {
   readonly root = new THREE.Group();
   private readonly materials = new Map<number, THREE.MeshLambertMaterial>();
-  constructor(private readonly terrain: Terrain, private readonly site: Site) {
+  constructor(private readonly terrain: Terrain, readonly site: Site) {
     this.root.name = `landmark-${site.id}`;
   }
   groundAt(x: number, z: number): number {
@@ -291,14 +294,16 @@ function buildLock(b: SiteBuilder): void {
   b.addRuin(3.7, 0, 1.7, 2);
 }
 
-function buildBridge(b: SiteBuilder): void {
-  // The road approaches the named eastern abutment from the southwest across the canyon.
-  // The deck runs from offset (-25.5, 25.5) to (-7.5, 7.5). Its origin is road level at the deck
-  // center, so it sits at the mean ground height of the two ends.
-  const ends = [-25.5, -7.5].map((d) => b.groundAt(d, -d));
-  const width = (BRIDGE_WIDTH * S) / 7;
-  const bridge = b.addModel('bridge', -16.5, 16.5, Math.PI / 4, new THREE.Vector3((BRIDGE_TILES * Math.SQRT2 * S) / 32, width, width));
-  bridge.position.y = ((ends[0] + ends[1]) / 2) * S;
+// The deck top follows the sim deck line from sim/terrain.ts, which the physics deck also follows.
+function buildBridge(b: SiteBuilder, terrain: Terrain): void {
+  const { from, width } = TERRAIN.features.bridge;
+  const [h0, h1] = deckEnds(terrain);
+  const pitch = Math.atan2((h1 - h0) * S, BRIDGE_LENGTH * S);
+  const mid = { x: from.x + (BRIDGE_AXIS.x * BRIDGE_LENGTH) / 2, y: from.y + (BRIDGE_AXIS.y * BRIDGE_LENGTH) / 2 };
+  const bridge = b.addModel('bridge', mid.x - b.site.pos.x, mid.y - b.site.pos.y, 0, new THREE.Vector3((BRIDGE_LENGTH * S) / 32, BRIDGE_RISE, (width * S) / 7));
+  bridge.position.y = ((h0 + h1) / 2) * S - BRIDGE_DECK_TOP * BRIDGE_RISE;
+  // YXZ applies the pitch about the model's own z first, then the yaw.
+  bridge.rotation.set(0, -Math.atan2(BRIDGE_AXIS.y, BRIDGE_AXIS.x), pitch, 'YXZ');
   b.addRuin(0, 0, 3, 2);
 }
 
@@ -371,7 +376,7 @@ function buildSite(t: Terrain, site: Site): THREE.Group {
     case 'granary': buildGranary(b); break;
     case 'pump-station': buildPump(b); break;
     case 'south-lock': buildLock(b); break;
-    case 'canyon-bridge': buildBridge(b); break;
+    case 'canyon-bridge': buildBridge(b, t); break;
     case 'dustwell': buildOasis(b, true); break;
     case 'green-pit': buildOasis(b, false); break;
     case 'fallen-sun':

@@ -12,6 +12,7 @@ import {
   restFrame,
   simulateTurn,
   syncDrive,
+  trailFrames,
   TURN_STEPS,
   type Drive,
   type TurnResult,
@@ -28,7 +29,7 @@ import { playerVehicle } from "../sim/damage";
 import { corePart, mountedParts } from "../sim/grid";
 import { canScavenge, salvageNear, scavenge } from "../sim/locations";
 import { locationAt, townAt, townNear } from "../sim/sites";
-import { maxTurn, vehicleStats } from "../sim/stats";
+import { isStranded, maxTurn, vehicleStats } from "../sim/stats";
 import { clickOrder, parkedVehicles, throttleFor } from "../sim/steering";
 import { route, warmRoutes } from "../sim/path";
 import { CHASSIS } from "../data/chassis";
@@ -37,11 +38,14 @@ import type { Vec } from "../sim/vec";
 import { playerSees, tileOf, visibleTiles } from "../sim/vision";
 import { DEG, dist } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
+import { acceptTow, refuseTow, setBeacon, unhitch } from "../sim/tow";
 import {
+  autoRuns,
   cloneWorld,
   endTurn,
   hostileToPlayer,
   newWorld,
+  playerCanAct,
   setAutoFire,
   setAutoRepair,
   setDirect,
@@ -85,6 +89,7 @@ import { ShadeView } from "./render/shade";
 import { SoundRingView } from "./render/soundRing";
 import { clearSave, hasSave, loadWorld, saveWorld, writeSave } from "./save";
 import { GameMenu } from "../ui/game-menu";
+import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
 import { engineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
 import type { SoundPlayer } from "../audio/player";
@@ -214,6 +219,9 @@ export class Game {
   private panFrom: { x: number; y: number } | null = null;
   private planFor: World | null = null;
   private last = performance.now();
+  private idleSince = performance.now(); // when the last turn's playback ended, for the auto turn pace
+  // A rescue button pressed while a turn plays runs once the playback ends.
+  private pending: ((w: World) => World | null) | null = null;
 
   private readonly hud: Hud;
   private readonly hitCard: HitCard;
@@ -222,6 +230,7 @@ export class Game {
   private readonly character: CharacterScreen;
   private readonly inventory: InventoryScreen;
   private readonly menu: GameMenu;
+  private readonly death: DeathScreen;
 
   constructor(
     container: HTMLElement,
@@ -312,6 +321,22 @@ export class Game {
       toggleAutoRepair: () => {
         if (!this.anim && !this.modalOpen()) this.toggleAutoRepair();
       },
+      acceptTow: () =>
+        this.rescueCommand((w) => (canAnswerTow(w) ? acceptTow(w) : null)),
+      refuseTow: () =>
+        this.rescueCommand((w) => (canAnswerTow(w) ? refuseTow(w) : null)),
+      unhitch: () =>
+        this.rescueCommand((w) =>
+          w.player.state === "active" && w.player.tow?.hitched
+            ? unhitch(w)
+            : null,
+        ),
+      setBeacon: (on) =>
+        this.rescueCommand((w) =>
+          playerCanAct(w) && (!on || isStranded(w, playerVehicle(w)))
+            ? setBeacon(w, on)
+            : null,
+        ),
       isBusy: () => this.anim !== null,
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
@@ -320,6 +345,10 @@ export class Game {
       hasSave: () => hasSave(window.localStorage),
       clearSave: () => clearSave(window.localStorage),
       isBusy: () => this.anim !== null,
+    });
+    this.death = new DeathScreen({
+      hasSave: () => hasSave(window.localStorage),
+      clearSave: () => clearSave(window.localStorage),
     });
 
     this.bindInput();
@@ -402,6 +431,8 @@ export class Game {
     if (!this.anim || this.anim.impacts)
       this.obstacles.sync(this.world.obstacles);
     this.hud.renderTop(this.displayWorld());
+    this.hud.renderRescue(this.displayWorld());
+    if (!this.anim && this.world.player.state === "dead") this.death.show();
     this.weapons.render();
     this.town.render();
     this.character.render();
@@ -417,7 +448,7 @@ export class Game {
 
   // The E action, dimmed when a town or salvage is in range but the truck must stop first.
   private contextAction(): ContextAction | null {
-    if (this.anim) return null;
+    if (this.anim || !playerCanAct(this.world)) return null;
     const town = townNear(this.world);
     if (town)
       return {
@@ -437,7 +468,7 @@ export class Game {
   }
 
   private useContext(): void {
-    if (this.anim) return;
+    if (this.anim || !playerCanAct(this.world)) return;
     if (townAt(this.world)) return this.town.open();
     if (playerVehicle(this.world).job) return;
     if (canScavenge(this.world)) {
@@ -534,7 +565,7 @@ export class Game {
       passive: true,
     });
     window.addEventListener("keydown", (e) => {
-      if (this.isEditingControl()) return;
+      if (this.isEditingControl() || this.death.isShown()) return;
       const modal = this.modalOpen();
       const playing = this.anim !== null;
       if (e.code === "Space") {
@@ -577,6 +608,7 @@ export class Game {
 
   // Manual mode drives straight at the click, so the preview must rerun with the new driver.
   private toggleManual(): void {
+    if (!playerCanAct(this.world)) return;
     this.apply(setDirect(this.world, !playerVehicle(this.world).direct));
     this.refreshPlan();
   }
@@ -595,7 +627,7 @@ export class Game {
   }
 
   private onLeftClick(e: MouseEvent): void {
-    if (this.anim || this.modalOpen()) return;
+    if (this.anim || this.modalOpen() || !playerCanAct(this.world)) return;
     const picked = this.pickVehicle(e.clientX, e.clientY);
     const me = playerVehicle(this.world);
     if (picked && picked.id !== me.id) return this.targetVehicle(picked);
@@ -678,14 +710,20 @@ export class Game {
   }
 
   endTurn(): void {
-    if (this.anim || this.modalOpen()) return;
+    if (this.anim || this.modalOpen() || this.world.player.state === "dead")
+      return;
     const before = this.world;
-    let result: TurnResult | null = null;
+    let ran: TurnResult | null = null;
     this.world = endTurn(
       this.world,
-      physicsMove(this.drive, (r) => (result = r)),
+      physicsMove(this.drive, (r) => (ran = r)),
     );
-    if (!result) throw new Error("Turn ran without physics");
+    if (!ran) throw new Error("Turn ran without physics");
+    const result: TurnResult = ran;
+    // A towed truck has no physics body. Its tower placed it along a trail, which the playback follows.
+    const me = playerVehicle(this.world);
+    const towed = !result.frames[me.id];
+    if (towed) result.frames[me.id] = trailFrames(this.world, me);
     this.live = {
       visible: new Set(this.world.player.visible),
       explored: before.player.explored.slice(),
@@ -706,7 +744,8 @@ export class Game {
       impacts: false,
       combat,
     };
-    this.playDriveSound(result);
+    // A towed truck's engine is off.
+    if (!towed) this.playDriveSound(result);
     this.phase = "Moving";
     this.path.clear();
     this.refreshUi();
@@ -747,8 +786,39 @@ export class Game {
   private finishPlayback(): void {
     this.anim = null;
     this.phase = null;
+    this.idleSince = performance.now();
     saveWorld(window.localStorage, this.world, CONFIG.saveTurns);
+    const pending = this.pending;
+    this.pending = null;
+    if (pending) this.runRescue(pending);
     this.refreshUi();
+  }
+
+  // Tow and beacon buttons stay live while turns run on their own. A press during playback waits for its end.
+  private rescueCommand(fn: (w: World) => World | null): void {
+    if (this.modalOpen()) return;
+    if (this.anim) {
+      this.pending = fn;
+      return;
+    }
+    this.runRescue(fn);
+  }
+
+  // The command returns null when the world changed since the press and it no longer applies.
+  private runRescue(fn: (w: World) => World | null): void {
+    const next = fn(this.world);
+    if (!next) return this.refreshUi();
+    this.apply(next);
+    this.hud.pushEvents(this.world);
+  }
+
+  // Turns run on their own while the player is knocked out, towed or waiting on the beacon.
+  private autoTurn(now: number): void {
+    if (this.anim || this.modalOpen() || this.world.player.state === "dead")
+      return;
+    if (!autoRuns(this.world) || now - this.idleSince < CONFIG.autoTurnMs)
+      return;
+    this.endTurn();
   }
 
   // Explosions and broken parts where they happen, then one result sting for the turn.
@@ -921,6 +991,8 @@ export class Game {
   private refreshPlan(): void {
     if (this.anim || this.planFor === this.world) return;
     this.planFor = this.world;
+    // A knocked-out or towed truck takes no orders, and a towed one has no body to preview.
+    if (!playerCanAct(this.world)) return this.path.clear();
     const me = playerVehicle(this.world);
     if (!me.order && me.speed === 0) return this.path.clear();
     timed("preview", () => this.planPath(me));
@@ -928,7 +1000,7 @@ export class Game {
 
   private planPath(me: Vehicle): void {
     const turns: VehicleFrame[][] = [];
-    let w = cloneWorld(this.world);
+    const w = cloneWorld(this.world);
     let d = this.drive;
     let v = me;
     for (let i = 0; i < PLAN_TURNS; i++) {
@@ -944,9 +1016,8 @@ export class Game {
     if (d !== this.drive) freeDrive(d);
     // A course longer than the simulated turns continues as the route the driver will take.
     const order = v.order?.kind === "brake" ? null : v.order;
-    const course = !order
-      ? null
-      : v.direct
+    const course = order
+      ? v.direct
         ? [v.pos, order.dest]
         : [
             v.pos,
@@ -957,7 +1028,8 @@ export class Game {
               vehicleStats(w, v).radius,
               parkedVehicles(w, v.id),
             ),
-          ];
+          ]
+      : null;
     const first =
       me.order?.kind === "through"
         ? PAL.throttle[
@@ -1020,6 +1092,7 @@ export class Game {
     this.renderer.render(this.scene, this.rig.camera);
     // The preview runs after the frame is drawn, so a click shows at once.
     this.refreshPlan();
+    this.autoTurn(now);
     requestAnimationFrame((t) => this.tick(t));
   }
 
@@ -1077,7 +1150,7 @@ export class Game {
     const ids = new Set<string>();
     for (const v of shown) {
       const kept = this.frames[v.id];
-      // Between turns, a vehicle the rules moved, such as a defeated player waking in town, jumps to its new spot.
+      // Between turns, a vehicle moved outside a turn, such as by a debug script, jumps to its new spot.
       const stale =
         !this.anim && kept && dist(toMap(kept.pos), v.pos) > MOVED_BY_RULES;
       const f =
@@ -1218,8 +1291,10 @@ export class Game {
 
   private drawOverlays(): void {
     const hide = this.anim !== null || this.modalOpen();
-    this.zones.root.visible = !hide;
-    this.path.root.visible = !hide;
+    // Steering zones and the path preview only help a driver who can give orders.
+    const steer = !hide && playerCanAct(this.world);
+    this.zones.root.visible = steer;
+    this.path.root.visible = steer;
     this.weaponRange.root.visible = false;
     this.placeTargetMarkers();
     this.placeHitCard();
@@ -1268,6 +1343,11 @@ export class Game {
       : PAL.plan;
     this.zones.hover(this.world.terrain, hover, color);
   }
+}
+
+// An open tow offer can be answered by an awake player who is not yet hitched.
+function canAnswerTow(w: World): boolean {
+  return playerCanAct(w) && w.player.tow !== null;
 }
 
 // A salvage stock's display name: its site, or a wreck.

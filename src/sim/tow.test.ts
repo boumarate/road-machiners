@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { NPC_CLASSES } from '../data/npcs';
 import { REGION } from '../data/region';
-import { TOW } from '../data/tow';
+import { BEACON, TOW } from '../data/tow';
 import { partDef } from '../data/parts';
 import { playerVehicle } from './damage';
 import { route, routeLength } from './path';
 import { canUseSite, siteGates } from './sites';
+import { getResources } from './resources';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld } from './testkit';
-import { acceptTow, refuseTow, unhitch } from './tow';
+import { acceptTow, dropTow, refuseTow, setBeacon, unhitch } from './tow';
+import { canVehicleSee } from './vision';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { autoRuns, endTurn, setDirect, setMoveOrder } from './world';
@@ -116,6 +118,14 @@ describe('tow offer', () => {
     expect(r.w.player.tow?.by).toBe(scav.id);
   });
 
+  it('a trader that is crawling itself does not offer a tow', () => {
+    const s = stranded();
+    getResources(s.w, s.trader).fuel = 0;
+    const r = runUntil(s.w, 15, (x) => x.player.tow !== null);
+    expect(r.w.player.tow).toBeNull();
+    expect(r.events.some((e) => e.t === 'activity' && e.vehicle === s.trader.id && e.activity === 'tow')).toBe(false);
+  });
+
   it('a player who can drive gets no offer', () => {
     const s = stranded();
     s.w.player.fuel = 30;
@@ -125,6 +135,18 @@ describe('tow offer', () => {
 });
 
 describe('towing', () => {
+  it('a tower that dropped the tow for danger offers the same deal again', () => {
+    const s = stranded();
+    let w = acceptTow(offered(s));
+    const deal = { ...w.player.tow! };
+    // A few turns of towing shorten the way, so a new price would be lower.
+    for (let i = 0; i < 5; i++) w = endTurn(w);
+    expect(w.player.tow?.hitched).toBe(true);
+    dropTow(w, 'danger');
+    const r = runUntil(w, 30, (x) => x.player.tow !== null);
+    expect(r.w.player.tow).toEqual({ by: deal.by, town: deal.town, fee: deal.fee, hitched: false });
+  });
+
   it('accepting hitches the player, and the player follows the tower', () => {
     const s = stranded();
     let w = acceptTow(offered(s));
@@ -236,5 +258,111 @@ describe('towing', () => {
     const after = runUntil(w, 5, () => false);
     expect(after.events.some((e) => e.t === 'towDone')).toBe(false);
     expect(after.w.player.money).toBe(10 - fee);
+  });
+});
+
+describe('emergency beacon', () => {
+  const player = { x: 30, y: 30 };
+  const onlyCore = (v: Vehicle) => { v.items = v.items.filter((it) => it.kind === 'part' && partDef(it.part.defId).kind === 'core'); };
+  const activitiesOf = (events: GameEvent[], id: string) => events.filter((e) => e.t === 'activity' && e.vehicle === id);
+
+  it('a trader out of sight but in range drives over and offers', () => {
+    const s = stranded(player, { x: 130, y: 30 });
+    const w = setBeacon(s.w, true);
+    expect(w.player.beacon).toBe(true);
+    expect(canVehicleSee(w, find(w, s.trader.id), playerVehicle(w).pos)).toBe(false);
+    const r = runUntil(w, 150, (x) => x.player.tow !== null);
+    expect(r.w.player.tow?.by).toBe(s.trader.id);
+    expect(activitiesOf(r.events, s.trader.id)[0]).toMatchObject({ activity: 'tow', reason: 'help a stranded truck' });
+  });
+
+  it('a trader outside the range ignores it', () => {
+    const s = stranded(player, { x: 30 + BEACON.range + 60, y: 30 });
+    let w = setBeacon(s.w, true);
+    for (let i = 0; i < 10; i++) {
+      w = endTurn(w);
+      const trader = find(w, s.trader.id);
+      expect(dist(trader.pos, playerVehicle(w).pos)).toBeGreaterThan(BEACON.range);
+      expect(trader.brain!.activity?.kind).not.toBe('tow');
+    }
+  });
+
+  it('the first tower to arrive makes the offer, and the others drop the tow', () => {
+    const s = stranded(player, { x: 100, y: 30 });
+    const late = withTower(s.w, 'trader', 'traders', 'hauler', { x: 30, y: 150 });
+    const r = runUntil(setBeacon(s.w, true), 150, (x) => x.player.tow !== null);
+    expect(r.w.player.tow?.by).toBe(s.trader.id);
+    expect(activitiesOf(r.events, late.id)[0]).toMatchObject({ activity: 'tow' });
+    const next = endTurn(r.w);
+    expect(find(next, late.id).brain!.activity?.kind).not.toBe('tow');
+  });
+
+  it('a raider comes to a beaconing truck with cargo', () => {
+    const w = emptyWorld(player);
+    w.player.fuel = 0;
+    const raider = withTower(w, 'buggy', 'raiders', 'buggy', { x: 130, y: 30 });
+    const r = runUntil(setBeacon(w, true), 60, (x) => dist(find(x, raider.id).pos, playerVehicle(x).pos) < 15);
+    expect(dist(find(r.w, raider.id).pos, playerVehicle(r.w).pos)).toBeLessThan(15);
+    expect(activitiesOf(r.events, raider.id)[0]).toMatchObject({ activity: 'investigate' });
+  });
+
+  it('a raider ignores a stripped beaconing truck', () => {
+    const w = emptyWorld(player);
+    w.player.fuel = 0;
+    onlyCore(w.vehicles[0]);
+    const raider = withTower(w, 'buggy', 'raiders', 'buggy', { x: 130, y: 30 });
+    // Other NPCs spawn during the run and the raider may hunt them, so only its target is checked.
+    let now = setBeacon(w, true);
+    for (let i = 0; i < 30; i++) {
+      now = endTurn(now);
+      expect(find(now, raider.id).brain!.activity?.targetId).not.toBe(now.player.vehicleId);
+    }
+  });
+
+  it('needs a stranded, active and unhitched truck', () => {
+    const s = stranded();
+    s.w.player.fuel = 30;
+    expect(() => setBeacon(s.w, true)).toThrow(/stranded/);
+    s.w.player.fuel = 0;
+    s.w.player.state = 'knockedOut';
+    expect(() => setBeacon(s.w, true)).toThrow(/knockedOut/);
+    s.w.player.state = 'active';
+    const on = setBeacon(s.w, true);
+    expect(setBeacon(on, false).player.beacon).toBe(false);
+    expect(() => setBeacon(acceptTow(offered({ w: on, trader: s.trader })), true)).toThrow(/towed/);
+  });
+
+  it('switches off on hitching', () => {
+    const s = stranded();
+    const w = acceptTow(offered({ w: setBeacon(s.w, true), trader: s.trader }));
+    expect(w.player.beacon).toBe(false);
+  });
+
+  it('switches off when the truck can drive again', () => {
+    const s = stranded();
+    let w = setBeacon(s.w, true);
+    w = endTurn(w);
+    expect(w.player.beacon).toBe(true);
+    w.player.fuel = 30;
+    w = endTurn(w);
+    expect(w.player.beacon).toBe(false);
+  });
+
+  it('starts off in a new world', () => {
+    expect(emptyWorld().player.beacon).toBe(false);
+  });
+
+  it('runs turns on its own while the beacon is on, the truck is parked and no offer is open', () => {
+    const s = stranded();
+    expect(autoRuns(s.w)).toBe(false);
+    const w = setBeacon(s.w, true);
+    playerVehicle(w).speed = 0;
+    expect(autoRuns(w)).toBe(true);
+    playerVehicle(w).speed = 1;
+    expect(autoRuns(w)).toBe(false);
+    playerVehicle(w).speed = 0;
+    expect(autoRuns(setMoveOrder(w, { kind: 'stopAt', dest: { x: 40, y: 40 } }))).toBe(false);
+    w.player.tow = { by: s.trader.id, town: 'bowl', fee: 10, hitched: false };
+    expect(autoRuns(w)).toBe(false);
   });
 });

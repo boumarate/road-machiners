@@ -1,24 +1,39 @@
 // Dredge-style inventory grid: drag items to arrange them, R or right click rotates while dragging.
 // In a town the garage storage shows beside the grid.
 
-import { GOODS } from '../data/goods';
-import { chassisDef } from '../data/chassis';
-import { partDef, type PartKind } from '../data/parts';
-import { RULES } from '../data/rules';
-import { playerVehicle } from '../sim/damage';
-import { freeCells, goodsCount, gridOf, isMounted, itemCells, placementError, type Cell, type Spot } from '../sim/grid';
-import { dumpGood, moveItem, storePart, takeFromStorage } from '../sim/inventory';
-import { startRepair } from '../sim/jobs';
-import { repairPlan } from '../sim/repair';
-import { townAt } from '../sim/sites';
-import { takeAllLoot, takeLoot } from '../sim/locations';
-import { REGION } from '../data/region';
-import type { GridItem, PartInstance, Vehicle, World } from '../sim/types';
-import { el, panel } from './dom';
-import type { UiHost } from './host';
-import { createIcon, type IconName } from './icons';
-import { vehicleMass } from '../sim/mass';
-import { kg, liters } from './units';
+import { GOODS } from "../data/goods";
+import { chassisDef } from "../data/chassis";
+import { partDef, type PartKind } from "../data/parts";
+import { RULES } from "../data/rules";
+import { playerVehicle } from "../sim/damage";
+import { partRepairCost, repairPart } from "../sim/economy";
+import {
+  freeCells,
+  goodsCount,
+  gridOf,
+  isMounted,
+  itemCells,
+  placementError,
+  type Cell,
+  type Spot,
+} from "../sim/grid";
+import {
+  dumpGood,
+  moveItem,
+  storePart,
+  takeFromStorage,
+} from "../sim/inventory";
+import { startRepair } from "../sim/jobs";
+import { repairPlan } from "../sim/repair";
+import { townAt } from "../sim/sites";
+import { takeAllLoot, takeLoot } from "../sim/locations";
+import { REGION } from "../data/region";
+import type { GridItem, PartInstance, Vehicle, World } from "../sim/types";
+import { el, panel } from "./dom";
+import type { UiHost } from "./host";
+import { createIcon, type IconName } from "./icons";
+import { vehicleMass } from "../sim/mass";
+import { kg, liters } from "./units";
 
 const CELL_PX = 42;
 
@@ -43,7 +58,7 @@ const KIND_CLASS: Record<PartKind, string> = {
 };
 
 type Drag = {
-  source: 'grid' | 'storage' | 'loot';
+  source: "grid" | "storage" | "loot";
   id: string; // grid item id, storage part id, loot part id, or a loot good id
   item: GridItem; // the item as it would be placed, position updated while dragging
   grab: { x: number; y: number }; // grabbed cell inside the item
@@ -143,9 +158,20 @@ export class InventoryView {
           "div",
           { class: "inv-side" },
           this.inspection,
-          this.loot ? this.lootEl(w, this.loot)
-            : inTown ? this.storageEl(w) : el('div', { class: 'dim' }, 'Mounting or unmounting parts needs a town garage. Goods can be moved anywhere.'),
-          el('div', { class: 'inv-dump', 'data-drop': 'dump' }, 'Drop goods here to dump them'),
+          this.loot
+            ? this.lootEl(w, this.loot)
+            : inTown
+              ? this.storageEl(w)
+              : el(
+                  "div",
+                  { class: "dim" },
+                  "Mounting or unmounting parts needs a town garage. Goods can be moved anywhere.",
+                ),
+          el(
+            "div",
+            { class: "inv-dump", "data-drop": "dump" },
+            "Drop goods here to dump them",
+          ),
         ),
       ),
       this.error ? el("div", { class: "bad" }, this.error) : el("div"),
@@ -168,7 +194,11 @@ export class InventoryView {
         {},
         "A part works only when it lies fully on one of its letters. Built-in parts are fixed and can only be repaired.",
       ),
-      el("div", {}, "Drag to move. R turns the selected part, or the dragged item. Right click also turns it while dragging."),
+      el(
+        "div",
+        {},
+        "Drag to move. R turns the selected part, or the dragged item. Right click also turns it while dragging.",
+      ),
     );
   }
 
@@ -223,25 +253,50 @@ export class InventoryView {
     this.selectedItem = item.id;
     this.inspection.replaceChildren(
       createIcon(getItemIcon(item)),
-      el('h3', {}, itemLabel(item).short),
-      el('p', {}, itemTitle(item, mounted)),
-      el('p', { class: 'dim' }, item.kind === 'good' ? 'Drag to rearrange cargo. Dropping in the dump area discards it.' : townAt(w) ? 'Garage: drag movable parts onto matching mounts or into storage.' : 'Move or remove equipment at a town garage.'),
-      ...(item.kind === 'part' && mounted ? [this.patchButton(w, playerVehicle(w), item.part)].filter((b) => b !== null) : []),
+      el("h3", {}, itemLabel(item).short),
+      el("p", {}, itemTitle(item, mounted)),
+      el(
+        "p",
+        { class: "dim" },
+        item.kind === "good"
+          ? "Drag to rearrange cargo. Dropping in the dump area discards it."
+          : townAt(w)
+            ? "Garage: drag movable parts onto matching mounts or into storage."
+            : "Move or remove equipment at a town garage.",
+      ),
+      ...(item.kind === "part" && mounted
+        ? [this.patchButton(w, playerVehicle(w), item.part)].filter(
+            (b) => b !== null,
+          )
+        : []),
+      ...(item.kind === "part" && townAt(w)
+        ? [this.repairButton(w, item.part)].filter((b) => b !== null)
+        : []),
     );
   }
 
   // A damaged mounted part shows a Patch button, hidden once it is already at the field cap.
-  private patchButton(w: World, me: Vehicle, part: PartInstance): HTMLElement | null {
+  private patchButton(
+    w: World,
+    me: Vehicle,
+    part: PartInstance,
+  ): HTMLElement | null {
     const plan = repairPlan(w, me, part.id);
     if (plan.needed === 0) return null;
     const moving = me.speed > RULES.parkedSpeed;
-    const reason = moving ? 'Stop to patch' : plan.parts === 0 ? 'No parts' : null;
+    const reason = moving
+      ? "Stop to patch"
+      : plan.parts === 0
+        ? "No parts"
+        : null;
     return el(
-      'button',
+      "button",
       {
-        class: 'inv-patch',
+        class: "inv-patch",
         disabled: reason !== null,
-        title: reason ?? `Patch: ${plan.turns} turns, ${plan.parts} of ${plan.needed} parts, +${Math.round(plan.hp)} HP`,
+        title:
+          reason ??
+          `Patch: ${plan.turns} turns, ${plan.parts} of ${plan.needed} parts, +${Math.round(plan.hp)} HP`,
         onpointerdown: (e: Event) => e.stopPropagation(),
         onclick: (e: Event) => {
           e.stopPropagation();
@@ -249,6 +304,28 @@ export class InventoryView {
         },
       },
       reason ? `Patch (${reason})` : `Patch ${plan.turns}t/${plan.parts}p`,
+    );
+  }
+
+  private repairButton(w: World, part: PartInstance): HTMLElement | null {
+    const cost = partRepairCost(w, part);
+    if (cost === 0) return null;
+    return el(
+      "button",
+      {
+        class: "inv-patch",
+        disabled: w.player.money < cost,
+        title:
+          w.player.money < cost
+            ? "Not enough money"
+            : `Restore to ${partDef(part.defId).hp} HP`,
+        onpointerdown: (e: Event) => e.stopPropagation(),
+        onclick: (e: Event) => {
+          e.stopPropagation();
+          this.run((world) => repairPart(world, part.id));
+        },
+      },
+      `Repair ${cost}`,
     );
   }
 
@@ -291,27 +368,81 @@ export class InventoryView {
     const chips: HTMLElement[] = [];
     for (const p of stock.parts) {
       const d = partDef(p.defId);
-      const chip = el('div', { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) }, `${d.name} ${d.w}x${d.h} ${p.hp}/${d.hp}`);
-      const item: GridItem = { id: `loot-${p.id}`, x: 0, y: 0, rot: 0, kind: 'part', part: p };
-      chip.addEventListener('pointerdown', (e) => this.startDrag(e, 'loot', p.id, item, { x: 0, y: 0 }));
+      const chip = el(
+        "div",
+        { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
+        `${d.name} ${d.w}x${d.h} ${p.hp}/${d.hp}`,
+      );
+      const item: GridItem = {
+        id: `loot-${p.id}`,
+        x: 0,
+        y: 0,
+        rot: 0,
+        kind: "part",
+        part: p,
+      };
+      chip.addEventListener("pointerdown", (e) =>
+        this.startDrag(e, "loot", p.id, item, { x: 0, y: 0 }),
+      );
       chips.push(chip);
     }
     for (const [good, count] of Object.entries(stock.goods)) {
       if (count <= 0) continue;
-      const item: GridItem = { id: `loot-${good}`, x: 0, y: 0, rot: 0, kind: 'good', good };
-      const chip = el('div', { class: 'inv-chip k-good', title: `${GOODS[good].name}: drag one unit at a time` }, createIcon(getItemIcon(item)), `${GOODS[good].name} x${count}`);
-      chip.addEventListener('pointerdown', (e) => this.startDrag(e, 'loot', good, item, { x: 0, y: 0 }));
+      const item: GridItem = {
+        id: `loot-${good}`,
+        x: 0,
+        y: 0,
+        rot: 0,
+        kind: "good",
+        good,
+      };
+      const chip = el(
+        "div",
+        {
+          class: "inv-chip k-good",
+          title: `${GOODS[good].name}: drag one unit at a time`,
+        },
+        createIcon(getItemIcon(item)),
+        `${GOODS[good].name} x${count}`,
+      );
+      chip.addEventListener("pointerdown", (e) =>
+        this.startDrag(e, "loot", good, item, { x: 0, y: 0 }),
+      );
       chips.push(chip);
     }
-    return el('div', { class: 'inv-storage inv-loot' },
-      el('h3', {}, `Salvage${site ? `: ${site.name}` : ''}`),
-      ...(chips.length ? chips : [el('div', { class: 'dim' }, 'Nothing left here.')]),
-      ...(chips.length ? [el('button', { onclick: () => this.run((world) => takeAllLoot(world, stockId)) }, 'Take all that fits')] : []),
-      el('div', { class: 'dim' }, 'Drag items onto the grid. What you leave stays here.'),
+    return el(
+      "div",
+      { class: "inv-storage inv-loot" },
+      el("h3", {}, `Salvage${site ? `: ${site.name}` : ""}`),
+      ...(chips.length
+        ? chips
+        : [el("div", { class: "dim" }, "Nothing left here.")]),
+      ...(chips.length
+        ? [
+            el(
+              "button",
+              {
+                onclick: () => this.run((world) => takeAllLoot(world, stockId)),
+              },
+              "Take all that fits",
+            ),
+          ]
+        : []),
+      el(
+        "div",
+        { class: "dim" },
+        "Drag items onto the grid. What you leave stays here.",
+      ),
     );
   }
 
-  private startDrag(e: PointerEvent, source: Drag['source'], id: string, item: GridItem, grab: { x: number; y: number }): void {
+  private startDrag(
+    e: PointerEvent,
+    source: Drag["source"],
+    id: string,
+    item: GridItem,
+    grab: { x: number; y: number },
+  ): void {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
@@ -335,10 +466,14 @@ export class InventoryView {
   // R on a selected grid item turns it in place, keeping its top left cell.
   private rotateSelected(): void {
     if (!this.gridEl?.isConnected || this.selectedItem === null) return;
-    const item = playerVehicle(this.host.world()).items.find((it) => it.id === this.selectedItem);
+    const item = playerVehicle(this.host.world()).items.find(
+      (it) => it.id === this.selectedItem,
+    );
     if (!item || item.kind !== "part") return;
     const id = item.id;
-    this.run((w) => moveItem(w, id, { x: item.x, y: item.y, rot: item.rot === 0 ? 1 : 0 }));
+    this.run((w) =>
+      moveItem(w, id, { x: item.x, y: item.y, rot: item.rot === 0 ? 1 : 0 }),
+    );
   }
 
   private onMove(e: PointerEvent): void {
@@ -403,9 +538,16 @@ export class InventoryView {
     this.run((w) => {
       if (onGrid) {
         const to = { x: d.item.x, y: d.item.y, rot: d.item.rot };
-        if (d.source === 'grid') return moveItem(w, d.id, to);
-        if (d.source === 'storage') return takeFromStorage(w, d.id, to);
-        return takeLoot(w, this.loot!, d.item.kind === 'part' ? { kind: 'part', partId: d.id } : { kind: 'good', good: d.id }, to);
+        if (d.source === "grid") return moveItem(w, d.id, to);
+        if (d.source === "storage") return takeFromStorage(w, d.id, to);
+        return takeLoot(
+          w,
+          this.loot!,
+          d.item.kind === "part"
+            ? { kind: "part", partId: d.id }
+            : { kind: "good", good: d.id },
+          to,
+        );
       }
       if (target === "storage" && d.source === "grid")
         return storePart(w, d.id);
@@ -454,14 +596,14 @@ export class InventoryScreen {
   toggle(): void {
     if (this.isOpen()) return this.close();
     this.view.setLoot(null);
-    this.root.style.display = '';
+    this.root.style.display = "";
     this.render();
   }
 
   // Opens the inventory with a searched salvage stock beside the grid.
   openLoot(stockId: string): void {
     this.view.setLoot(stockId);
-    this.root.style.display = '';
+    this.root.style.display = "";
     this.render();
   }
 
@@ -491,17 +633,25 @@ export class InventoryScreen {
 }
 
 export function getItemIcon(item: GridItem): IconName {
-  if (item.kind === 'good') {
-    if (item.good === 'scrap' || item.good === 'salt' || item.good === 'meds'
-      || item.good === 'grain' || item.good === 'textiles' || item.good === 'tools'
-      || item.good === 'batteries' || item.good === 'electronics') return item.good;
-    if (item.good === 'parts') return item.good;
+  if (item.kind === "good") {
+    if (
+      item.good === "scrap" ||
+      item.good === "salt" ||
+      item.good === "meds" ||
+      item.good === "grain" ||
+      item.good === "textiles" ||
+      item.good === "tools" ||
+      item.good === "batteries" ||
+      item.good === "electronics"
+    )
+      return item.good;
+    if (item.good === "parts") return item.good;
     throw new Error(`No inventory artwork for good: ${item.good}`);
   }
   const def = partDef(item.part.defId);
-  if (def.kind === 'weapon') return def.look;
-  if (def.kind === 'core') return def.role === 'tank' ? 'fuel' : def.role;
-  if (def.kind === 'scanner') return 'scanner';
+  if (def.kind === "weapon") return def.look;
+  if (def.kind === "core") return def.role === "tank" ? "fuel" : def.role;
+  if (def.kind === "scanner") return "scanner";
   return def.kind;
 }
 

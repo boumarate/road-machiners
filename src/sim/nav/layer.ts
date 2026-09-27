@@ -1,8 +1,10 @@
-// Static navigation layers: per-tile cliff flags and speeds, and per-cell blocked flags and step
+// Static navigation layers: per-tile cliff flags and route costs, and per-cell blocked flags and step
 // costs for one vehicle radius. Kill wrecks and parked vehicles are not in here; the A* overlay
 // stamps them per query.
 
-import { TERRAIN_TYPES } from '../../data/terrain';
+import { REGION } from '../../data/region';
+import { TERRAIN_TYPES, type TerrainTypeId } from '../../data/terrain';
+import { nearRail } from '../bridge';
 import { isDriveObstacle } from '../mapgen';
 import { isCliff, type Terrain } from '../terrain';
 import type { Obstacle } from '../types';
@@ -17,8 +19,8 @@ export type TerrainNav = {
   size: number;
   n: number; // grid cells per side
   cliffTile: Uint8Array; // 1 where the tile is too steep to drive
-  tileSpeed: Float64Array; // terrain speed per tile
-  slow: Float32Array; // step cost multiplier per cell, 1 / terrain speed
+  tileCost: Float64Array; // route cost per tile driven: 1 / terrain speed, times offRoadCost off the road
+  slow: Float32Array; // step cost multiplier per cell, the tileCost under its center
 };
 
 export const COARSE = 8; // cells per coarse block side
@@ -41,7 +43,7 @@ export type CoarseGrid = {
 export type NavLayer = TerrainNav & {
   id: number; // identity for route cache keys
   radius: number;
-  blocked: Uint8Array; // cliffs within reach and static drive obstacles, per cell
+  blocked: Uint8Array; // cliffs and bridge rails within reach and static drive obstacles, per cell
   coarse: CoarseGrid;
 };
 
@@ -64,17 +66,32 @@ function terrainEntry(t: Terrain) {
   if (!e) {
     const n = Math.ceil(t.size / CELL);
     const cliffTile = new Uint8Array(t.size * t.size);
-    const tileSpeed = new Float64Array(t.size * t.size);
+    const tileCost = new Float64Array(t.size * t.size);
     for (let i = 0; i < t.size * t.size; i++) {
       cliffTile[i] = isCliff(t, i) ? 1 : 0;
-      tileSpeed[i] = TERRAIN_TYPES[t.types[i]].speed;
+      tileCost[i] = routeCost(t.types[i], nearSite((i % t.size) + 0.5, Math.floor(i / t.size) + 0.5));
     }
     const slow = new Float32Array(n * n);
-    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) slow[y * n + x] = 1 / tileSpeed[tileIndex(t.size, (x + 0.5) * CELL, (y + 0.5) * CELL)];
-    e = { nav: { size: t.size, n, cliffTile, tileSpeed, slow }, cellCliff: new Map(), layers: new Map() };
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) slow[y * n + x] = tileCost[tileIndex(t.size, (x + 0.5) * CELL, (y + 0.5) * CELL)];
+    e = { nav: { size: t.size, n, cliffTile, tileCost, slow }, cellCliff: new Map(), layers: new Map() };
     terrains.set(t, e);
   }
   return e;
+}
+
+// Road tiles and the ground next to sites are on the road. Roads meet at site centers, but sites
+// block driving, so traffic crosses from one road to the next around the site. Pricing that ground as
+// road lets routes leave the road early and round the site, instead of driving head-on at its edge.
+// Asphalt patches are loose pieces that lead nowhere, so they count as open ground.
+function routeCost(type: TerrainTypeId, bySite: boolean): number {
+  return (type === 'road' || bySite ? 1 : REGION.navigation.offRoadCost) / TERRAIN_TYPES[type].speed;
+}
+
+const SITES = [...REGION.towns, ...REGION.locations];
+
+// Within one road width of a site's edge.
+function nearSite(x: number, y: number): boolean {
+  return SITES.some((s) => (s.pos.x - x) ** 2 + (s.pos.y - y) ** 2 < (s.radius + REGION.roadWidth) ** 2);
 }
 
 export function terrainNav(t: Terrain): TerrainNav {
@@ -131,7 +148,11 @@ export function navLayer(terrain: Terrain, obstacles: Obstacle[], radius: number
     if (e.cellCliff.size >= LAYERS_MAX) e.cellCliff.clear();
     cliff = new Uint8Array(n * n);
     const reach = radius + CLEARANCE;
-    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (nearCliff(nav, (x + 0.5) * CELL, (y + 0.5) * CELL, reach)) cliff[y * n + x] = 1;
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const cx = (x + 0.5) * CELL;
+      const cy = (y + 0.5) * CELL;
+      if (nearCliff(nav, cx, cy, reach) || nearRail(cx, cy, reach)) cliff[y * n + x] = 1;
+    }
     e.cellCliff.set(radius, cliff);
   }
   const blocked = cliff.slice();

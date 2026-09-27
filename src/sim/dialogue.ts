@@ -121,17 +121,23 @@ export function chooseOption(world: World, index: number): World {
     const call = openCall(w);
     const npc = vehicleById(w, call.with);
     say(w, w.player.vehicleId, offered.text, call.vars);
-    if (!offered.option && !offered.topic) return hangUpCall(w, npc, call);
-    if (!offered.option) {
-      const topic = TOPICS[offered.topic!];
-      if (isSettled(w, npc, topic)) return say(w, npc.id, talkOf(npc).repeatLine, {});
-      return enterTopic(w, npc, call, topic);
-    }
-    for (const id of offered.option.effects) EFFECTS[id](w, npc, call);
-    if (offered.option.go === END) return endCall(w, call);
-    if (offered.option.go === HUB) return enter(w, call, null, HUB);
-    enter(w, call, call.topic, offered.option.go);
+    if (offered.option) return follow(w, npc, call, offered.option);
+    if (offered.topic) return askTopic(w, npc, call, TOPICS[offered.topic]);
+    hangUpCall(w, npc, call);
   });
+}
+
+// A topic picked from the hub. A settled `once` topic gets the repeat line, and the call stays on the hub.
+function askTopic(world: World, npc: Vehicle, call: Call, topic: Topic): void {
+  if (isSettled(world, npc, topic)) return say(world, npc.id, talkOf(npc).repeatLine, {});
+  enterTopic(world, npc, call, topic);
+}
+
+function follow(world: World, npc: Vehicle, call: Call, option: DialogueOption): void {
+  for (const id of option.effects) EFFECTS[id](world, npc, call);
+  if (option.go === END) return endCall(world, call);
+  if (option.go === HUB) return enter(world, call, null, HUB);
+  enter(world, call, call.topic, option.go);
 }
 
 function hangUpCall(world: World, npc: Vehicle, call: Call): void {
@@ -148,18 +154,23 @@ export function hangUp(world: World): World {
 }
 
 // A turn step: the first NPC in vehicle order that sees the player and wants to raise a topic calls. The
-// highest priority topic wins. A foe with a grudge never calls. One call at a time.
+// highest priority topic wins. A driver with a grudge never calls. One call at a time.
 export function raiseCalls(world: World): void {
   if (world.player.call || world.player.state !== 'active') return;
   const me = playerVehicle(world);
   for (const npc of world.vehicles) {
-    if (!npc.brain || !canVehicleSee(world, npc, me.pos) || hasGrudge(npc, me)) continue;
-    const own = talkOf(npc).topics;
-    const wanted = own.map((id) => TOPICS[id])
-      .filter((t) => t.raise && !isSettled(world, npc, t) && holds(world, npc, t.raise.when))
-      .sort((a, b) => b.raise!.priority - a.raise!.priority);
-    if (wanted.length === 0) continue;
-    enterTopic(world, npc, begin(world, npc), wanted[0]);
+    const topic = raisedTopic(world, npc, me);
+    if (!topic) continue;
+    enterTopic(world, npc, begin(world, npc), topic);
     return;
   }
+}
+
+function raisedTopic(world: World, npc: Vehicle, me: Vehicle): Topic | null {
+  if (!npc.brain || !canVehicleSee(world, npc, me.pos) || hasGrudge(npc, me)) return null;
+  const wanted = talkOf(npc).topics
+    .map((id) => TOPICS[id])
+    .filter((t) => t.raise && !isSettled(world, npc, t) && holds(world, npc, t.raise.when))
+    .sort((a, b) => b.raise!.priority - a.raise!.priority);
+  return wanted[0] ?? null;
 }

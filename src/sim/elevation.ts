@@ -1,9 +1,10 @@
 // Deterministic elevation noise derived from the world seed, not the seeded rng. It only seeds the
 // terrain grid in sim/terrain.ts; everything else reads that grid.
-// Flattened near roads, towns and locations so they stay drivable.
+// Flattened near roads, towns and locations so they stay drivable, except in the gap under Canyon Bridge.
 
 import { TERRAIN } from '../data/terrain';
 import { REGION } from '../data/region';
+import { bridgeCut } from './bridge';
 import { INDEX_CELL, ROAD_INDEX, RoadIndex } from './road-index';
 
 const SITES = [...REGION.towns, ...REGION.locations];
@@ -110,7 +111,7 @@ export function elevationAt(seed: number, x: number, y: number): number {
     const gap = index.nearestWithin(x, y, reach) - feature.width;
     if (gap < feature.bank) height -= feature.depth * (gap <= 0 ? 1 : 1 - smooth(gap / feature.bank));
   }
-  height *= 1 - flattenFactor(x, y);
+  height *= 1 - flattenFactor(x, y) * (1 - bridgeCut(x, y));
   // Roads retain broad grades; only their small bumps and channel crossings are smoothed.
   height += rolling;
   for (const crater of TERRAIN.features.craters) {

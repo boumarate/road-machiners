@@ -1,4 +1,5 @@
-// Detection beyond sight: engine sound, dust trails and radio scanners give rough contacts.
+// Detection beyond sight: engine sound, dust trails and radio scanners give rough contacts, and the player's
+// emergency beacon gives a tight one.
 // The same rules run for the player and every NPC: contactsOf takes any observer.
 
 import { DETECT } from '../data/detect';
@@ -12,6 +13,7 @@ import { heightAt, tileAt } from './terrain';
 import { hasWorkingEngine } from './stats';
 import { sunAt } from './sun';
 import type { Contact, DustCloud, Vehicle, World } from './types';
+import { BEACON } from '../data/tow';
 import { WEATHER } from '../data/weather';
 import { dist, type Vec } from './vec';
 import { weatherAt } from './weather';
@@ -86,17 +88,24 @@ export function contactsOf(world: World, observer: Vehicle, within: number): Con
     const dust = newestCloud(clouds, v.id);
     if (dust) sources.push('dust');
     if (moving && scanned > 0 && d <= scanned) sources.push('radio');
+    if (hearsBeacon(world, observer, v)) sources.push('beacon');
     if (sources.length === 0) continue;
     out.push({ vehicleId: v.id, ...contactCircle(world, v, sources, d, dust), sources, loudness: sources.includes('sound') ? soundRange(world, v) : null });
   }
   return out;
 }
 
-// Sound and radio give a circle around a jittered center. Dust alone points at its newest seen cloud,
-// with a circle wide enough to reach where the truck has driven since.
+// Whether the player's emergency beacon reaches the observer. Hills do not block it.
+export function hearsBeacon(world: World, observer: Vehicle, v: Vehicle): boolean {
+  return world.player.beacon && v.id === world.player.vehicleId && dist(observer.pos, v.pos) <= BEACON.range;
+}
+
+// Sound, radio and the beacon give a circle around a jittered center, as tight as the best source allows.
+// Dust alone points at its newest seen cloud, with a circle wide enough to reach where the truck has driven since.
 function contactCircle(world: World, v: Vehicle, sources: Contact['sources'], d: number, dust: DustCloud | null): { center: Vec; radius: number } {
   if (sources.length === 1 && dust) return { center: { ...dust.pos }, radius: DETECT.fuzz.base + dist(dust.pos, v.pos) };
-  const radius = DETECT.fuzz.base + (sources.includes('radio') ? DETECT.fuzz.radioPerTile : DETECT.fuzz.perTile) * d;
+  const sensed = DETECT.fuzz.base + (sources.includes('radio') ? DETECT.fuzz.radioPerTile : DETECT.fuzz.perTile) * d;
+  const radius = sources.includes('beacon') ? Math.min(BEACON.radius, sensed) : sensed;
   const key = idKey(v.id);
   const angle = hashRandom(world.seed, world.turn, key, 1) * Math.PI * 2;
   const frac = hashRandom(world.seed, world.turn, key, 2); // in [0, 1), so the offset always stays inside radius
