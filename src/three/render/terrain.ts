@@ -7,29 +7,34 @@ import {
 } from "../../render/groundPaint";
 import type { Terrain } from "../../sim/terrain";
 import type { World } from "../../sim/types";
-import { addRoads } from "./roads";
+import { drawRoads } from "./roads";
 import type { RenderScope } from "./scope";
 
 const S = PHYSICS.metersPerTile;
 const TEXTURE_SIDE = 2048; // 16 MiB RGBA before mipmaps, independent of region area.
 export const TERRAIN_CHUNK = 32; // Roughly two normal camera widths, allowing offscreen terrain culling.
 
-function paintTexture(w: World): THREE.CanvasTexture {
+// A canvas over the whole map and its margin, one per ground layer.
+function mapCanvas(w: World): PaintCanvas {
   const from = -TERRAIN_MARGIN;
   const res = TEXTURE_SIDE / (w.size + 2 * TERRAIN_MARGIN);
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = TEXTURE_SIDE;
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) throw new Error("Could not get terrain canvas context");
-  const c: PaintCanvas = {
+  return {
     ctx,
     size: TEXTURE_SIDE,
     res,
     from,
     toPx: (tile) => (tile - from) * res,
   };
+}
+
+function paintTexture(w: World): THREE.CanvasTexture {
+  const c = mapCanvas(w);
   paintGroundCanvas(c, w.terrain, { hillshade: 0.35 });
-  const texture = new THREE.CanvasTexture(canvas);
+  const texture = new THREE.CanvasTexture(c.ctx.canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   // Canvas row 0 is map y at the top edge, and the UVs grow with map y, so the image must not be flipped.
   texture.flipY = false;
@@ -63,12 +68,11 @@ export type TerrainChunk = {
 };
 
 // Terrain chunks register with the scope, so only chunks near the view are drawn. Returned for the fog,
-// which greys out the ground per corner. Roads lie on the ground but grey like props, so they go to the
-// prop scope.
-export function terrainMesh(w: World, scope: RenderScope, props: RenderScope): TerrainChunk[] {
-  addRoads(w.terrain, props);
+// which greys out the ground per corner. Roads are part of the ground material.
+export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
   const chunks: TerrainChunk[] = [];
   const material = new THREE.MeshLambertMaterial({ map: paintTexture(w) });
+  drawRoads(material, mapCanvas(w));
   for (let y = 0; y < w.size; y += TERRAIN_CHUNK)
     for (let x = 0; x < w.size; x += TERRAIN_CHUNK) {
       const width = Math.min(TERRAIN_CHUNK, w.size - x);

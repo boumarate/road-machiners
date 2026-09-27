@@ -226,7 +226,7 @@ export class Game {
     const groundScope = new RenderScope(this.ground, this.world.size, this.sightLimit, false);
     const propScope = new RenderScope(this.props, this.world.size, this.sightLimit, true);
     this.scopes = [groundScope, propScope];
-    const groundChunks = terrainMesh(this.world, groundScope, propScope);
+    const groundChunks = terrainMesh(this.world, groundScope);
     addSites(this.world.terrain, propScope);
     this.obstacles = new ObstacleViews(propScope, this.world.terrain);
     this.obstacles.sync(this.world.obstacles, this.world.salvage);
