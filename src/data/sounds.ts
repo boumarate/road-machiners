@@ -49,7 +49,7 @@ const DEFS = {
   "miss": { bus: "sfx", setup: "field", volume: 0.4, pitchJitter: 0.1, maxVoices: 6, loop: false, prompts: ["Bullet ricochet whizzing off rocks and kicking up dirt."], seconds: 0.8 },
   "part-broken": { bus: "sfx", setup: "field", volume: 0.7, pitchJitter: 0.05, maxVoices: 2, loop: false, prompts: ["Truck part breaks apart, snapping metal, sparks and a short hiss of steam."], seconds: 1.2 },
   "explosion": { bus: "sfx", setup: "field", volume: 1, pitchJitter: 0.04, maxVoices: 2, loop: false, prompts: ["Truck fuel tank explodes, big fiery blast with falling metal debris."], seconds: 3 },
-  "horn": { bus: "sfx", setup: "field", volume: 0.8, pitchJitter: 0.05, maxVoices: 4, loop: false, prompts: ["Car horn honk: an old pickup truck's electric vehicle horn beeps once, loud and brassy, like a 1970s truck horn. Vehicle horn only, not a musical instrument, no harmonica, no melody."], seconds: 1 },
+  "horn": { bus: "sfx", setup: "field", volume: 0.8, pitchJitter: 0.05, maxVoices: 4, loop: false, prompts: ["One short blast of a heavy diesel truck's air horn: deep, low-pitched, growling and rumbling, a big rig horn with a rough bass edge. Vehicle horn only, not a musical instrument, not a small car beep."], seconds: 1.5 },
   "crash": { bus: "sfx", setup: "field", volume: 0.9, pitchJitter: 0.06, maxVoices: 2, loop: false, prompts: ["Two heavy steel trucks ram each other at speed: one hard, deep crunch of thick metal, a short scrape, then debris settling. Single impact."], seconds: 1.5 },
 
   // Loops.
