@@ -24,7 +24,7 @@ import {
   type VehicleFrame,
 } from "../phys/frames";
 import { applyTurn, type PreparedTurn } from "../phys/turn";
-import { playerVehicle } from "../sim/damage";
+import { playerVehicle, vehicleById } from "../sim/damage";
 import { corePart, mountedParts } from "../sim/grid";
 import { applySiteAction } from "../sim/locations";
 import { getContextAction } from "../ui/hud-readout";
@@ -731,7 +731,7 @@ export class Game {
     const honks = this.world.events.filter((e) => e.t === "honk");
     honks.forEach((e, i) => {
       const p = this.eventPoint(e.vehicle);
-      if (p) this.sound.at("horn", p, i * HONK_REPLY_MS);
+      if (p) this.sound.honk(p, i * HONK_REPLY_MS, vehicleById(this.world, e.vehicle).chassisId);
     });
   }
 

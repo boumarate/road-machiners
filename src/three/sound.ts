@@ -1,7 +1,7 @@
 // Turns game events into sound cues. Positioned cues use the same points as the visual effects, so fog of
 // war silences what the player may not see.
 
-import { engineFileFor, MIX, type CueId } from "../data/sounds";
+import { engineFileFor, hornSoundFor, MIX, type CueId } from "../data/sounds";
 import { spatial } from "../audio/pick";
 import type {
   Glide,
@@ -39,13 +39,18 @@ export class SoundDirector {
   readonly log: string[] = []; // recent cue ids, newest last; read it from __KOROVAN__ in dev
 
   constructor(
-    private player: SoundPlayer,
-    private rig: CameraRig,
+    private player: Pick<SoundPlayer, "play">,
+    private rig: Pick<CameraRig, "focus" | "screenOf">,
   ) {}
 
   at(cue: CueId, p: V3, delayMs: number): void {
     this.record(cue);
     this.player.play(cue, this.place(p), delayMs);
+  }
+
+  honk(p: V3, delayMs: number, chassisId: string): void {
+    this.record("horn");
+    this.player.play("horn", this.place(p), delayMs, hornSoundFor(chassisId));
   }
 
   ui(cue: CueId): void {

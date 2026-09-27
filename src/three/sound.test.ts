@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { GameEvent } from "../sim/types";
 import { CHASSIS } from "../data/chassis";
-import { engineFileFor, MIX, SOUNDS } from "../data/sounds";
+import { engineFileFor, hornSoundFor, MIX, SOUNDS } from "../data/sounds";
 import type { SoundPlayer } from "../audio/player";
-import { engineGlide, loopLevels, SoundLoops, stingOf } from "./sound";
+import { engineGlide, loopLevels, SoundDirector, SoundLoops, stingOf } from "./sound";
+import type { CameraRig } from "./render/camera";
 
 describe("stingOf", () => {
   it("plays the most important result only", () => {
@@ -71,6 +72,34 @@ describe("engine sound assignment", () => {
 
     expect(started).toEqual([engineFileFor("scout"), engineFileFor("hauler")]);
     expect(stopped).toEqual([0]);
+  });
+});
+
+describe("horn sound assignment", () => {
+  it("gives every chassis a distinct, loaded horn and rejects unknown chassis", () => {
+    const sounds = Object.keys(CHASSIS).map((id) => hornSoundFor(id));
+    expect(sounds.every((sound) => SOUNDS.horn.files.includes(sound.file))).toBe(true);
+    expect(new Set(sounds.map((sound) => `${sound.file}:${sound.rate}`)).size).toBe(sounds.length);
+    expect(() => hornSoundFor("unknown")).toThrow("Unknown chassis");
+  });
+
+  it("plays the assigned horn at the vehicle's position after its delay", () => {
+    const calls: unknown[][] = [];
+    const player: Pick<SoundPlayer, "play"> = { play: (...args) => { calls.push(args); } };
+    const rig: Pick<CameraRig, "focus" | "screenOf"> = {
+      focus: () => ({ x: 0, y: 0, z: 0 }),
+      screenOf: () => ({ x: 50, y: 50 }),
+    };
+    const width = globalThis.window?.innerWidth;
+    Object.defineProperty(globalThis, "window", { value: { innerWidth: 100 }, configurable: true });
+    try {
+      const director = new SoundDirector(player, rig);
+      director.honk({ x: 0, y: 0, z: 0 }, 500, "scout");
+      expect(calls).toEqual([["horn", { pan: 0, gain: 1 }, 500, hornSoundFor("scout")]]);
+    } finally {
+      if (width === undefined) Reflect.deleteProperty(globalThis, "window");
+      else Object.defineProperty(globalThis, "window", { value: { innerWidth: width }, configurable: true });
+    }
   });
 });
 

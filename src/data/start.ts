@@ -1,5 +1,6 @@
-// New game setup for the player. VITE_START_KIT in .env picks the kit.
+// New game setup for the player. CONFIG.startKit picks the kit.
 
+import { CHASSIS } from './chassis';
 import { RULES } from './rules';
 
 export type StartKit = {
@@ -21,8 +22,8 @@ export const START_KITS: Record<string, StartKit> = {
     chassis: 'scout',
     parts: ['mg', 'stockEngine', 'cage', 'rack'],
     storage: [],
-    money: 1500,
-    fuel: 30,
+    money: 1000,
+    fuel: CHASSIS.scout.fuelCap,
     supplies: RULES.suppliesCap,
     cargo: { scrap: 2, parts: 2 },
     costBasis: { scrap: 10 },

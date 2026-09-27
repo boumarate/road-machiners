@@ -1,6 +1,6 @@
 # Social radio and dialogue
 
-**Status:** validating
+**Status:** done
 **Blocked:** none. Defeat-rescue and npc-traits are merged into this branch. PH1, PH5 and most of PH6 are done.
 **Branch:** social
 **Worktree:** .worktrees/social
@@ -322,7 +322,7 @@ Goal: the user confirms the loop in play.
 
 ## Conclusion
 
-Outcome: built and verified at 148b337. The goal waits for the user to confirm the loop in play.
+Outcome: goal achieved. The user confirmed the loop in play, and `social` merged into main at c4be278.
 
 Invariants:
 - IV1 — `endTurn()` and `autoRuns()` tests, and the travel-call browser check.
@@ -372,5 +372,5 @@ Review findings:
 - PH4: a raise rule has `duringFeud`. A demand may be raised during a feud, because a scumbag's robbery starts one. Hand-over pushes a `loot` goal on the demander toward the stock.
 
 ### Known risks
-- Saves from before PH1 have no `call` or `talked`. A missing `talked` throws on the first `once` topic lookup. PH6 adds the migration.
+- Resolved in 58d3a60: saves from before the merge lacked `call` and `talked`, and a missing `call` blocked every click. The save version is now 15, so such saves stop boot instead.
 

@@ -44,7 +44,7 @@ describe("trade", () => {
   it("buying moves money into cargo", () => {
     const w = buyGood(startAtBowl(), "scrap", 3);
     expect(goodsCount(w.vehicles[0]).scrap).toBe(2 + 3);
-    expect(w.player.money).toBe(1500 - 3 * buyPrice(w, "bowl", "scrap"));
+    expect(w.player.money).toBe(1000 - 3 * buyPrice(w, "bowl", "scrap"));
   });
 
   it("enforces cargo capacity and money", () => {
@@ -108,7 +108,7 @@ describe("garage", () => {
     const r = repairAll(w);
     expect(corePart(r.vehicles[0], "cab").hp).toBe(partDef("cab").hp);
     expect(mountedParts(r.vehicles[0])[0].hp).toBeGreaterThan(0);
-    expect(r.player.money).toBeLessThan(1500);
+    expect(r.player.money).toBeLessThan(1000);
   });
 
   it("repairs only the selected truck part for its quoted cost", () => {
@@ -363,6 +363,7 @@ describe("debt", () => {
   it("a player in debt cannot buy anything", () => {
     const w = startAtBowl();
     w.player.money = -100;
+    w.player.fuel = CHASSIS.scout.fuelCap - 1;
     expect(() => buyGood(w, "scrap", 1)).toThrow(/money/);
     expect(() => buySupply(w, "fuel", 1)).toThrow(/money/);
     expect(() => buyPart(w, "mg")).toThrow(/money/);

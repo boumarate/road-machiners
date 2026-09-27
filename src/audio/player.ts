@@ -6,6 +6,7 @@ import type { Mixer } from "./mixer";
 import { pickVariant, VoiceLimiter } from "./pick";
 
 export type Placement = { pan: number; gain: number };
+export type SoundSelection = { file: string; rate: number };
 
 export type LoopHandle = {
   setGain(gain: number, rampSeconds: number): void;
@@ -23,12 +24,12 @@ export class SoundPlayer {
 
   constructor(private mixer: Mixer, private bank: Bank, private sounds: Record<string, Cue>) {}
 
-  play(id: string, at: Placement, delayMs: number): void {
+  play(id: string, at: Placement, delayMs: number, selection?: SoundSelection): void {
     const cue = this.cue(id);
     if (cue.loop) throw new Error(`Sound ${id} is a loop; use loop()`);
     const ctx = this.mixer.ctx;
-    const buf = this.variant(id, cue);
-    const rate = 1 + (Math.random() * 2 - 1) * cue.pitchJitter;
+    const buf = selection ? this.getBuffer(id, cue, selection.file) : this.variant(id, cue);
+    const rate = selection ? this.checkedRate(id, selection.rate) : 1 + (Math.random() * 2 - 1) * cue.pitchJitter;
     const start = ctx.currentTime + delayMs / 1000;
     if (!this.voices.admit(id, cue.maxVoices, ctx.currentTime, start + buf.duration / rate)) return;
     const src = ctx.createBufferSource();
@@ -43,7 +44,7 @@ export class SoundPlayer {
     if (!cue.loop) throw new Error(`Sound ${id} is not a loop`);
     const ctx = this.mixer.ctx;
     const src = ctx.createBufferSource();
-    src.buffer = file === undefined ? this.variant(id, cue) : this.getLoopBuffer(id, cue, file);
+    src.buffer = file === undefined ? this.variant(id, cue) : this.getBuffer(id, cue, file);
     src.loop = true;
     const gain = this.chain(src, cue, at);
     src.start();
@@ -69,7 +70,12 @@ export class SoundPlayer {
     };
   }
 
-  private getLoopBuffer(id: string, cue: Cue, file: string): AudioBuffer {
+  private checkedRate(id: string, rate: number): number {
+    if (!Number.isFinite(rate) || rate <= 0) throw new Error(`Invalid playback rate for ${id}`);
+    return rate;
+  }
+
+  private getBuffer(id: string, cue: Cue, file: string): AudioBuffer {
     if (!cue.files.includes(file)) throw new Error(`Sound ${id} has no file ${file}`);
     const buffer = this.bank.get(file);
     if (!buffer) throw new Error(`Sound file ${file} was not loaded`);
