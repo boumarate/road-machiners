@@ -42,20 +42,20 @@
 - `src/sim/states.ts` and `src/sim/types.ts`: add a `trade` state kind. The NPC holds it toward the player. It lapses after its turn count and breaks when either truck is gone or they fall into a feud.
 - `src/sim/npc-activities.ts`: add a `trade` goal kind. It drives to the player and parks beside it, reusing the patch path in `towedRadius()`. It holds while the trade state holds. Add it to `INTERRUPTIONS`.
 - The trade topic: in reach, it opens trade. Out of reach, it starts the state and gives the NPC the goal. Add a condition and an effect in `src/sim/dialogue-rules.ts` for each branch.
-- `tradeReady(world)` in the new `src/sim/truck-trade.ts` returns the NPC when both trucks are parked in reach under a live trade state.
+- `tradeReady(world)` in `src/sim/economy.ts` returns the NPC when both trucks are parked in reach under a live trade state.
 - Tests: the NPC drives over and parks, the state lapses, and a feud breaks it.
 
 ### Phase 2: sim trades
-- `src/sim/truck-trade.ts` owns trades between the player and the NPC under the trade state. It exports `truckGoodPrice`, `truckSupplyPrice`, `truckSupplyForSale`, `buyTruckGood`, `sellTruckGood`, `buyTruckPart`, `sellTruckPart`, `buyTruckSupply` and `endTrade`.
+- `src/sim/economy.ts` owns trades between the player and the NPC under the trade state. It exports `truckGoodPrice`, `truckSupplyPrice`, `truckSupplyForSale`, `buyTruckGood`, `sellTruckGood`, `buyTruckPart`, `sellTruckPart`, `buyTruckSupply` and `endTrade`.
 - Move `buySpare()` out of `src/sim/dialogue-rules.ts` into `buyTruckPart()`. Remove `SpareOutcome`, `SPARE_OUTCOME_LINE`, `tradeOptions`, `tradeLine` and `partId` on `OfferedOption` in `src/sim/dialogue.ts`.
 - `src/data/dialogue.ts`: the trade topic asks "Want to trade?". Its nodes are "Pulling over." or "Come aboard.", and both end the call.
 - `src/data/npcs.ts`: add the trade reserve share to `NPC_UPKEEP` with a comment on why it sits above the low threshold.
 - Export `practiceSale()` from `src/sim/economy.ts`, and share the cost basis update with `tradeGoods()`.
-- New `src/sim/truck-trade.test.ts` covers each command, money conservation, no-money, no-room on both sides, the reserve, and no open trade call.
+- `src/sim/truck-trade.test.ts` covers each command, money conservation, no-money, no-room on both sides, the reserve, and no open trade call.
 - Update `src/sim/dialogue.test.ts` where it relies on the old trade options.
 
 ### Phase 3: trade screen
-- New `src/ui/truck-trade.ts` with `TruckTradeScreen`, modeled on `TownScreen`. It reuses the `modal`, `town-screen`, `town-split` and `tabs` CSS classes.
+- `TruckTradeScreen` in `src/ui/town.ts`, modeled on `TownScreen`. It reuses the `modal`, `town-screen`, `town-split` and `tabs` CSS classes.
 - `src/three/game.ts`: `useContext()` opens the screen when `tradeReady()` returns an NPC. The screen also opens after the call that says "Come aboard." ends.
 - Closing the screen applies `endTrade()`.
 
@@ -64,3 +64,13 @@
 - `npm run playtest -- --url <dev server>` passes.
 - Manual try, positive: a Playwright script in `tmp/` calls a distant trader, asks to trade, ends turns until it parks beside the player, presses the use key, buys a part, a good and fuel, and sells a spare. It checks both wallets and cargo, and takes a screenshot.
 - Manual try, negative: the NPC has less money than a spare is worth. Sell shows the error and nothing moves. Fuel at the reserve shows no fuel to buy.
+
+## Result
+- Done. All three phases work in the game.
+- The sim rules live in `src/sim/economy.ts`. The screen lives in `src/ui/town.ts`. New files broke the quality gate's file-count rule.
+- A ready trade wins the E key over a nearby shop. A trade still on its way shows after the shop and site actions.
+- The NPC keeps its field repair parts and does not sell them.
+- `npm test`: all pass. Four slow tests timed out under load and passed alone.
+- `npm run quality` and `npm run playtest` pass.
+- Manual try, positive: a trader 10 tiles away pulled alongside in 5 turns. E opened the trade screen. Buy max moved 30 fuel for 120 money.
+- Manual try, negative: selling goods to a broke driver shows "cannot pay that much", and no money moves. After leaving, the trade state is gone, and E opens the town again.

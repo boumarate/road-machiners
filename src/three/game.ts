@@ -399,8 +399,8 @@ export class Game {
 
   private useContext(): void {
     if (this.anim || !playerCanAct(this.world)) return;
-    if (shopAt(this.world)) return this.town.open();
-    if (!this.trade.openIfReady()) this.useSite();
+    if (this.trade.openIfReady()) return;
+    return shopAt(this.world) ? this.town.open() : this.useSite();
   }
 
   private useSite(): void {
