@@ -5,6 +5,7 @@ import { GOODS } from "../data/goods";
 import { chassisDef } from "../data/chassis";
 import { partDef, type PartKind } from "../data/parts";
 import { RULES } from "../data/rules";
+import { STRIP } from "../data/salvage";
 import { isJunk, maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
 import { partRepairCost, repairPart } from "../sim/economy";
@@ -24,13 +25,14 @@ import {
   storePart,
   takeFromStorage,
 } from "../sim/inventory";
-import { startRepair } from "../sim/jobs";
+import { startRepair, startStrip, stripYield } from "../sim/jobs";
 import { repairPlan, type RepairPlan } from "../sim/repair";
 import { townAt } from "../sim/sites";
 import { takeAllLoot, takeLoot } from "../sim/locations";
 import { REGION } from "../data/region";
 import type { GridItem, PartInstance, Vehicle, World } from "../sim/types";
 import { el, panel } from "./dom";
+import { wearLabel } from "./format";
 import type { UiHost } from "./host";
 import { createIcon, type IconName } from "./icons";
 import { vehicleMass } from "../sim/mass";
@@ -256,24 +258,23 @@ export class InventoryView {
       createIcon(getItemIcon(item)),
       el("h3", {}, itemLabel(item).short),
       el("p", {}, itemTitle(item, mounted)),
-      el(
-        "p",
-        { class: "dim" },
-        item.kind === "good"
-          ? "Drag to rearrange cargo. Dropping in the dump area discards it."
-          : townAt(w)
-            ? "Garage: drag movable parts onto matching mounts or into storage."
-            : "Move or remove equipment at a town garage.",
-      ),
-      ...(item.kind === "part" && mounted
-        ? [this.patchButton(w, playerVehicle(w), item.part)].filter(
-            (b) => b !== null,
-          )
-        : []),
-      ...(item.kind === "part" && townAt(w)
-        ? [this.repairButton(w, item.part)].filter((b) => b !== null)
-        : []),
+      el("p", { class: "dim" }, inspectionHint(w, item)),
+      ...this.itemActions(w, item, mounted),
     );
+  }
+
+  // The action buttons an inspected item offers: patch when mounted and damaged, repair in town,
+  // and strip when it is a spare. A good offers none.
+  private itemActions(w: World, item: GridItem, mounted: boolean): HTMLElement[] {
+    if (item.kind !== "part") return [];
+    const buttons: (HTMLElement | null)[] = [
+      mounted ? this.patchButton(w, playerVehicle(w), item.part) : null,
+      townAt(w) ? this.repairButton(w, item.part) : null,
+      !mounted && partDef(item.part.defId).kind !== "core"
+        ? this.stripButton(playerVehicle(w), item.part)
+        : null,
+    ];
+    return buttons.filter((b): b is HTMLElement => b !== null);
   }
 
   // A damaged mounted part shows a Patch button, hidden once it is already at the field cap or junk.
@@ -328,13 +329,36 @@ export class InventoryView {
     );
   }
 
+  // Strips a spare part for units of the parts good. Works on broken and junk spares too, which is
+  // the point: a part too far gone to sell whole still yields parts.
+  private stripButton(
+    me: Vehicle,
+    part: PartInstance,
+  ): HTMLElement {
+    const reason = stripBlocker(me);
+    return el(
+      "button",
+      {
+        class: "inv-patch",
+        disabled: reason !== null,
+        title: reason ?? `Strip: ${STRIP.turns} turns for ${stripYield(part)} parts`,
+        onpointerdown: (e: Event) => e.stopPropagation(),
+        onclick: (e: Event) => {
+          e.stopPropagation();
+          this.run((world) => startStrip(world, part.id));
+        },
+      },
+      reason ? "Strip" : `Strip ${STRIP.turns}t/${stripYield(part)}p`,
+    );
+  }
+
   private storageEl(w: World): HTMLElement {
     const chips = w.player.storage.map((p) => {
       const d = partDef(p.defId);
       const chip = el(
         "div",
         { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
-        `${d.name} ${d.w}x${d.h} ${p.hp}/${maxHp(p)}`,
+        `${d.name} ${d.w}x${d.h} ${wearLabel(p)} ${p.hp}/${maxHp(p)}`,
       );
       const item: GridItem = {
         id: `store-${p.id}`,
@@ -370,7 +394,7 @@ export class InventoryView {
       const chip = el(
         "div",
         { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
-        `${d.name} ${d.w}x${d.h} ${p.hp}/${maxHp(p)}`,
+        `${d.name} ${d.w}x${d.h} ${wearLabel(p)} ${p.hp}/${maxHp(p)}`,
       );
       const item: GridItem = {
         id: `loot-${p.id}`,
@@ -678,10 +702,25 @@ function itemTitle(it: GridItem, mounted: boolean): string {
   return `${partTitle(it.part)}\n${mounted ? "Mounted and working" : "Spare: not on a matching mount"}`;
 }
 
+// What the inspection panel says under an item's title: how to move it.
+function inspectionHint(w: World, item: GridItem): string {
+  if (item.kind === "good")
+    return "Drag to rearrange cargo. Dropping in the dump area discards it.";
+  if (townAt(w)) return "Garage: drag movable parts onto matching mounts or into storage.";
+  return "Move or remove equipment at a town garage.";
+}
+
 // Why a Patch button is disabled, or null when the patch can start.
 function patchBlocker(me: Vehicle, plan: RepairPlan): string | null {
   if (me.speed > RULES.parkedSpeed) return "Stop to patch";
   return plan.parts === 0 ? "No parts" : null;
+}
+
+// Why a Strip button is disabled, or null when stripping can start.
+function stripBlocker(me: Vehicle): string | null {
+  if (me.speed > RULES.parkedSpeed) return "Stop to strip";
+  if (me.job) return "Busy";
+  return null;
 }
 
 // Thin bar along the bottom of a part: its width is hp over max hp. A broken part shows a red bar.
@@ -696,5 +735,5 @@ function conditionBar(p: PartInstance): HTMLElement {
 
 function partTitle(p: PartInstance): string {
   const d = partDef(p.defId);
-  return `${d.name} (${d.kind}) ${p.hp}/${maxHp(p)} HP, ${d.w}x${d.h}`;
+  return `${d.name} (${d.kind}) ${wearLabel(p)}, ${p.hp}/${maxHp(p)} HP, ${d.w}x${d.h}`;
 }

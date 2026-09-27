@@ -17,14 +17,25 @@ import { celsius, engineCelsius, fuelLiters, kph } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./icons";
 import type { ContextAction } from './hud';
+import { SHOPS } from '../data/market';
+import { canUseSite } from '../sim/sites';
+import { shopAt } from '../sim/market';
 import { canUseOasis, salvageHere, salvageNear } from '../sim/locations';
-import { locationAt, townAt, townNear } from '../sim/sites';
+import { locationAt } from '../sim/sites';
 import { playerCanAct } from '../sim/world';
+
+// The shop in reach of the player truck at any speed, or null. Moving trucks must stop to use it.
+function shopNear(world: World): { id: string; name: string } | null {
+  const pos = playerVehicle(world).pos;
+  const sites = [...REGION.towns, ...REGION.locations].filter((s) => s.id in SHOPS);
+  const site = sites.find((s) => canUseSite(pos, s));
+  return site ? { id: site.id, name: site.name } : null;
+}
 
 export function getContextAction(world: World, playing: boolean): ContextAction | null {
   if (playing || !playerCanAct(world)) return null;
-  const town = townNear(world);
-  if (town) return { label: `Enter ${town.name}`, ready: townAt(world) !== null };
+  const shop = shopNear(world);
+  if (shop) return { label: `Enter ${shop.name}`, ready: shopAt(world) === shop.id };
   if (playerVehicle(world).job) return null;
   return getSiteAction(world);
 }

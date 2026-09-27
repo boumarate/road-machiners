@@ -301,7 +301,7 @@ export function shopAt(world: World): string | null {
   return Object.keys(SHOPS).find((id) => canUseSite(v.pos, siteOf(id))) ?? null;
 }
 
-function siteOf(shopId: string): Site {
+export function siteOf(shopId: string): Site {
   const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === shopId);
   if (!site) throw new Error(`Shop ${shopId} has no site in the region`);
   return site;

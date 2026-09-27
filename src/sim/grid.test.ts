@@ -3,7 +3,8 @@ import { CHASSIS } from '../data/chassis';
 import { NPCS } from '../data/npcs';
 import { PARTS } from '../data/parts';
 import { REGION } from '../data/region';
-import { buyChassis, buyPart } from './economy';
+import { buyChassis } from './economy';
+import { partDef } from '../data/parts';
 import { makePart, makeVehicle } from './factory';
 import { baseGrid, isMounted, itemCells, mountedItems, mountedParts, sideOf, type Cell } from './grid';
 import { moveItem, storePart } from './inventory';
@@ -64,9 +65,10 @@ describe('built-in parts', () => {
     expect(() => storePart(w, cab.id)).toThrow(/built in/);
   });
 
-  it('core parts are not for sale', () => {
+  it('shops never stock core parts', () => {
     const w = emptyWorld(siteGates(bowl)[0]);
-    expect(() => buyPart(w, 'cab')).toThrow(/built in/);
+    const stocked = Object.values(w.shops).flatMap((shop) => shop.stock);
+    expect(stocked.some((p) => partDef(p.defId).kind === 'core')).toBe(false);
   });
 
   it('a chassis swap replaces the core parts with the new chassis ones', () => {

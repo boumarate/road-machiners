@@ -6,6 +6,7 @@ import { baseGrid, corePart, coreParts, mountedParts } from "../sim/grid";
 import type { Job, Vehicle, World } from "../sim/types";
 import { el, panel, topRight } from "./dom";
 import {
+  contractSummary,
   eventText,
   formatNpcActivity,
   formatNpcStates,
@@ -124,6 +125,7 @@ function weatherLabel(w: World): string {
 export class Hud {
   private top = panel("instruments");
   private condition = new TruckConditionView();
+  private contracts = panel("contracts");
   private log = panel("log");
   private info = panel("info");
   private infoBody = el("div");
@@ -144,6 +146,7 @@ export class Hud {
     this.dialogue = new DialoguePanel(actions.dialogue);
     this.info.style.display = "none";
     this.info.append(this.infoBody);
+    this.contracts.style.display = "none";
     this.toastBox.style.display = "none";
     this.rescue.style.display = "none";
     this.recenter.style.display = "none";
@@ -308,10 +311,30 @@ export class Hud {
       );
   }
 
+  // Compact list of held contracts and their turns left. Hidden while the player holds none.
+  private renderContracts(w: World): void {
+    if (w.player.contracts.length === 0) {
+      this.contracts.style.display = "none";
+      return;
+    }
+    this.contracts.style.display = "";
+    this.contracts.replaceChildren(
+      el("h3", {}, "Contracts"),
+      ...w.player.contracts.map((c) =>
+        el(
+          "div",
+          { class: "contract-line" },
+          `${contractSummary(c)} — ${c.deadline - w.turn} turns left`,
+        ),
+      ),
+    );
+  }
+
   renderTop(w: World): void {
     const readout = getHudReadout(w);
     const busy = this.actions.isBusy();
     this.condition.render(playerVehicle(w));
+    this.renderContracts(w);
     this.top.replaceChildren(
       this.condition.root,
       el(

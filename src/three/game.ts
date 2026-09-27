@@ -29,7 +29,7 @@ import { playerVehicle, vehicleById } from "../sim/damage";
 import { corePart, mountedParts } from "../sim/grid";
 import { applySiteAction } from "../sim/locations";
 import { getContextAction } from "../ui/hud-readout";
-import { townAt } from "../sim/sites";
+import { shopAt } from "../sim/market";
 import { isStranded, maxTurn, vehicleStats } from "../sim/stats";
 import { clickOrder, parkedVehicles, throttleFor } from "../sim/steering";
 import { route, warmRoutes } from "../sim/path";
@@ -408,7 +408,7 @@ export class Game {
 
   private useContext(): void {
     if (this.anim || !playerCanAct(this.world)) return;
-    if (townAt(this.world)) return this.town.open();
+    if (shopAt(this.world)) return this.town.open();
     if (playerVehicle(this.world).job) return;
     const after = applySiteAction(this.world);
     if (after) {

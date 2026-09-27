@@ -396,6 +396,25 @@ body {
   border-left: 2px solid #777e81;
   font-size: 12px;
 }
+#ui .contracts {
+  right: 16px;
+  bottom: 246px;
+  width: 282px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  background: #202529e8;
+  border: 0;
+  border-left: 2px solid #777e81;
+  font-size: 12px;
+}
+.contracts h3 {
+  font-size: 12px !important;
+  margin-bottom: 4px !important;
+}
+.contract-line {
+  padding: 2px 0;
+  color: var(--muted);
+}
 .log h3 {
   font-size: 12px !important;
   margin-bottom: 4px !important;

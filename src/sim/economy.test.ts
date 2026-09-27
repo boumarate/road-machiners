@@ -1,7 +1,9 @@
 import { START_KITS } from "../data/start";
 import { describe, expect, it } from "vitest";
 import { CHASSIS } from "../data/chassis";
-import { ECONOMY, GOOD_IDS, TOWN_PRICES } from "../data/goods";
+import { ECONOMY, GOOD_IDS } from "../data/goods";
+import { SHOPS } from "../data/market";
+import { goodBasePrice } from "./market";
 import { partDef } from "../data/parts";
 import { REGION } from "../data/region";
 import { RULES } from "../data/rules";
@@ -9,7 +11,7 @@ import { CONDITION } from "../data/wear";
 import {
   buyChassis,
   buyGood,
-  buyPart,
+  buyStockPart,
   buyPrice,
   buySupply,
   chassisTradeIn,
@@ -47,9 +49,11 @@ const startAtBowl = () => emptyWorld(siteGates(bowl)[0]);
 
 describe("trade", () => {
   it("buying moves money into cargo", () => {
-    const w = buyGood(startAtBowl(), "scrap", 3);
+    const start = startAtBowl();
+    const price = buyPrice(start, "bowl", "scrap");
+    const w = buyGood(start, "scrap", 3);
     expect(goodsCount(w.vehicles[0]).scrap).toBe(2 + 3);
-    expect(w.player.money).toBe(1000 - 3 * buyPrice(w, "bowl", "scrap"));
+    expect(w.player.money).toBe(1000 - 3 * price);
   });
 
   it("enforces cargo capacity and money", () => {
@@ -63,15 +67,25 @@ describe("trade", () => {
   });
 
   it("the scrap route pays and gives XP", () => {
-    let w = buyGood(startAtBowl(), "scrap", 8);
+    const start = startAtBowl();
+    const bought = buyPrice(start, "bowl", "scrap");
+    let w = buyGood(start, "scrap", 8);
     w.vehicles[0].pos = { ...siteGates(nose)[0] };
     const money = w.player.money;
+    const sold = sellPrice(w, "nose", "scrap");
+    expect(sold).toBeGreaterThan(bought);
     w = sellGood(w, "scrap", 10);
-    expect(w.player.money - money).toBe(10 * sellPrice(w, "nose", "scrap"));
-    expect(sellPrice(w, "nose", "scrap")).toBeGreaterThan(
-      buyPrice(w, "bowl", "scrap"),
-    );
+    expect(w.player.money - money).toBe(10 * sold);
     expect(w.player.xp).toBeGreaterThan(0);
+  });
+
+  it("buying raises the local price and selling lowers it", () => {
+    const w = startAtBowl();
+    const before = buyPrice(w, "bowl", "scrap");
+    const after = buyGood(w, "scrap", 5);
+    expect(buyPrice(after, "bowl", "scrap")).toBeGreaterThan(before);
+    const sold = sellGood(after, "scrap", 7);
+    expect(buyPrice(sold, "bowl", "scrap")).toBeLessThan(buyPrice(after, "bowl", "scrap"));
   });
 
   it("trade skill narrows the spread", () => {
@@ -83,17 +97,15 @@ describe("trade", () => {
     ).toBeLessThan(before);
   });
 
-  it("town services need a town", () => {
+  it("trade needs a shop", () => {
     expect(() => buyGood(emptyWorld({ x: 30, y: 30 }), "scrap", 1)).toThrow(
-      /town/,
+      /shop/,
     );
   });
 
-  it("prices exist for every good in every town", () => {
-    for (const t of REGION.towns)
-      expect(Object.keys(TOWN_PRICES[t.id]).sort()).toEqual(
-        [...GOOD_IDS].sort(),
-      );
+  it("every garage prices every good", () => {
+    for (const [id] of Object.entries(SHOPS).filter(([, s]) => s.kind === "garage"))
+      for (const good of GOOD_IDS) expect(goodBasePrice(id, good)).toBeGreaterThan(0);
   });
 });
 
@@ -454,7 +466,7 @@ describe("debt", () => {
     w.player.fuel = CHASSIS.scout.fuelCap - 1;
     expect(() => buyGood(w, "scrap", 1)).toThrow(/money/);
     expect(() => buySupply(w, "fuel", 1)).toThrow(/money/);
-    expect(() => buyPart(w, "mg")).toThrow(/money/);
+    expect(() => buyStockPart(w, w.shops.bowl.stock[0].id)).toThrow(/money/);
     expect(() => repairAll(w)).toThrow(/money/);
     // A chassis swap that costs nothing is still a purchase.
     w.player.money = -1;
@@ -476,7 +488,7 @@ describe("debt", () => {
     npc.resources!.supplies = 1;
     const engine = mountedParts(npc, "engine")[0];
     engine.hp = 1;
-    serviceVehicle(w, npc, "bowl");
+    serviceVehicle(w, npc, "bowl", 0);
     expect(npc.resources).toMatchObject({ money: -50, fuel: 1, supplies: 1 });
     expect(engine.hp).toBe(1);
   });

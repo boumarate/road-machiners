@@ -1,14 +1,14 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { CHASSIS, PLAYER_CHASSIS } from "./chassis";
-import { GOODS, GOOD_IDS, TOWN_PRICES } from "./goods";
-import { EFFORT, type ItemKind } from "./market";
+import { GOODS, GOOD_IDS } from "./goods";
+import { EFFORT, SHOPS, type ItemKind } from "./market";
+import { goodBasePrice } from "../sim/market";
 import { PARTS, type PartKind } from "./parts";
 import { REGION } from "./region";
 import { bodyOf } from "../sim/body";
 import {
   buyChassis,
   buyGood,
-  buyPart,
   buyPrice,
   sellGood,
   sellPrice,
@@ -73,8 +73,8 @@ describe("equipment variety", () => {
       );
       for (const id of ids) {
         expect(PARTS[id].kind).toBe(kind);
-        const purchased = buyPart(world, id);
-        expect(purchased.player.storage.at(-1)?.defId).toBe(id);
+        const stocked = Object.values(SHOPS).some((shop) => shop.partStock.parts.some((entry) => entry.value === id));
+        expect(stocked, `${id} is in no shop's stock table`).toBe(true);
         const fits = PLAYER_CHASSIS.some((chassisId) => {
           const w = structuredClone(world);
           const v = makeVehicle(w, {
@@ -145,7 +145,7 @@ describe("equipment variety", () => {
     for (const id of addedGoods) {
       expect(GOODS[id].mass).toBeGreaterThan(0);
       const [cheap, dear] = [...REGION.towns].sort(
-        (a, b) => TOWN_PRICES[a.id][id] - TOWN_PRICES[b.id][id],
+        (a, b) => goodBasePrice(a.id, id) - goodBasePrice(b.id, id),
       );
       expect(sellPrice(world, dear.id, id)).toBeGreaterThan(
         buyPrice(world, cheap.id, id),

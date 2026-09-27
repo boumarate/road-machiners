@@ -1,4 +1,4 @@
-// Trade goods and town prices. Each town makes one good cheap and pays well for another.
+// Trade goods and shared economy numbers. Shop prices come from each good's value; see src/data/market.ts.
 
 import type { Tier } from './market';
 
@@ -19,11 +19,6 @@ export const GOODS: Record<string, GoodDef> = {
 
 export const GOOD_IDS = Object.keys(GOODS);
 
-// Base unit prices. Buy adds the spread, sell subtracts it.
-export const TOWN_PRICES: Record<string, Record<string, number>> = {
-  bowl: { scrap: 10, salt: 38, meds: 55, grain: 12, textiles: 22, tools: 150, batteries: 105, electronics: 100, parts: 18 },
-  nose: { scrap: 28, salt: 14, meds: 85, grain: 30, textiles: 48, tools: 70, batteries: 48, electronics: 210, parts: 22 },
-};
 
 export const ECONOMY = {
   spread: 0.2, // fraction added to buy and cut from sell prices, before Trade skill

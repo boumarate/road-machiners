@@ -12,9 +12,18 @@ import { playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
 import { npcTraits } from '../sim/npc-decisions';
 import { statesHeld, towData } from '../sim/states';
+import { isJunk } from '../sim/wear';
 import type { PartHit } from '../sim/armor';
-import type { GameEvent, NpcState, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
+import type { GameEvent, NpcState, PartInstance, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
+
+// A part's condition in one word: junk, pristine, or a rebuild count for a part that has broken and
+// been rebuilt before (one wear step per break).
+export function wearLabel(part: PartInstance): string {
+  if (isJunk(part)) return 'junk';
+  if (part.wear === 0) return 'pristine';
+  return `rebuilt x${part.wear}`;
+}
 
 export function vehicleName(world: World, id: string): string {
   if (id === world.player.vehicleId) return 'You';
@@ -198,8 +207,12 @@ function contractText(c: Contract, outcome: keyof typeof CONTRACT_OUTCOME): { te
 // One line naming what a contract asks for.
 export function contractSummary(c: Contract): string {
   if (c.kind === 'haul') return `haul ${c.units} ${GOODS[c.good].name} to ${siteName(c.to)}`;
-  if (c.kind === 'fetch') return `bring a ${partDef(c.defId).name} to ${siteName(c.shop)}`;
+  if (c.kind === 'fetch') return `bring ${article(partDef(c.defId).name)} ${partDef(c.defId).name} to ${siteName(c.shop)}`;
   return `destroy ${c.targetName}`;
+}
+
+function article(word: string): string {
+  return /^[aeiou]/i.test(word) ? 'an' : 'a';
 }
 
 function siteName(id: string): string {
