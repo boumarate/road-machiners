@@ -27,12 +27,12 @@ import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
 import { randRange } from './rng';
 import { canReachSalvage, hasSalvage } from './salvage';
-import { canUseSite } from './sites';
+import { canUseSite, siteGates } from './sites';
 import { statesHeld } from './states';
 import { vehicleStats } from './stats';
 import { strandedPlayerAt } from './tow';
 import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
-import { dist, type Vec } from './vec';
+import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 
 // ---- Traits and the profile they give.
@@ -375,6 +375,16 @@ function keepFactor(world: World, vehicle: Vehicle, decision: DecisionId, subjec
   return restrained ? NPC_BEHAVIOR.keepWork : 1;
 }
 
+// A stranded truck that can crawl to a town gate mostly gets no tow. The factor rises from NPC_BEHAVIOR.towNearTown
+// at a short crawl to 1 far out, measured from where the driver perceives the truck.
+function towFactor(world: World, vehicle: Vehicle): number {
+  const at = strandedPlayerAt(world, vehicle);
+  if (!at) throw new Error(`${vehicle.id} weighs a tow with no stranded player perceived`);
+  const { factor, crawl, far } = NPC_BEHAVIOR.towNearTown;
+  const gate = Math.min(...REGION.towns.flatMap((town) => siteGates(town).map((g) => dist(at, g))));
+  return factor + (1 - factor) * clamp((gate - crawl) / (far - crawl), 0, 1);
+}
+
 function scavengeFactor(world: World, vehicle: Vehicle): number {
   return visibleSalvage(world, vehicle).length > 0 ? NPC_BEHAVIOR.visibleSalvage : 1;
 }
@@ -386,7 +396,7 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   flee: fleeFactor,
   investigate: neutral,
   rob: robFactor,
-  tow: neutral,
+  tow: towFactor,
   resume: neutral,
   new: neutral,
   trade: neutral,

@@ -59,8 +59,8 @@ export function towGoal(world: World, vehicle: Vehicle): NpcActivity {
   return { kind: 'tow', targetId: town.id, destination: { ...town.pos }, phase: 'travel', reason: 'tow the player to town' };
 }
 
-// Where this NPC puts the player's truck when it could offer a tow: the player is awake and stranded with no tow,
-// not hostile to the NPC, and in sight or calling on the beacon. Otherwise null.
+// Where this NPC puts the player's truck when it could offer a tow: the player is awake and stranded with no tow
+// and no other driver answering, not hostile to the NPC, and in sight or calling on the beacon. Otherwise null.
 export function strandedPlayerAt(world: World, vehicle: Vehicle): Vec | null {
   const me = playerVehicle(world);
   if (!canTowPlayer(world, vehicle, me)) return null;
@@ -68,9 +68,14 @@ export function strandedPlayerAt(world: World, vehicle: Vehicle): Vec | null {
 }
 
 function canTowPlayer(world: World, vehicle: Vehicle, me: Vehicle): boolean {
-  if (playerTow(world) || world.player.state !== 'active') return false;
+  if (playerTow(world) || world.player.state !== 'active' || answeredByOther(world, vehicle, me)) return false;
   // A driver that can only crawl itself cannot pull another truck.
   return isStranded(world, me) && !isStranded(world, vehicle) && !isHostile(world, vehicle, me);
+}
+
+// The job is taken while another driver holds the claim to answer the player.
+function answeredByOther(world: World, vehicle: Vehicle, me: Vehicle): boolean {
+  return world.states.some((s) => s.kind === 'answering' && s.other === me.id && s.holder !== vehicle.id);
 }
 
 // Where the player's beacon contact puts the truck for this listener, or null when the beacon does not reach it.
@@ -125,6 +130,9 @@ function offer(world: World, vehicle: Vehicle): void {
   const town = kept ? townById(kept.town) : nearestKnownTown(world, vehicle);
   const fee = kept ? kept.fee : towFee(world, vehicle, me.pos, town);
   if (promise) endState(world, promise, 'fulfilled');
+  const claim = stateOf(world, 'answering', vehicle.id, me.id);
+  if (!claim) throw new Error(`${vehicle.id} offers a tow it never answered`);
+  endState(world, claim, 'fulfilled');
   addState(world, 'tow', vehicle.id, me.id, { kind: 'tow', town: town.id, fee, hitched: false });
   world.events.push({ t: 'towOffer', by: vehicle.id, town: town.id, fee });
 }

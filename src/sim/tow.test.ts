@@ -11,6 +11,7 @@ import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import { hasLoot } from './grid';
 import { thinkNpc, topGoal } from './npc-activities';
+import { optionChances, optionWeights } from './npc-decisions';
 import { addState, stateOf, towData } from './states';
 import { acceptTow, dropTow, isTowed, playerTow, refuseTow, setBeacon, unhitch } from './tow';
 import { sunAt } from './sun';
@@ -245,6 +246,73 @@ describe('towing', () => {
   });
 });
 
+describe('answering a stranded truck', () => {
+  const answering = (w: World) => w.states.filter((st) => st.kind === 'answering');
+
+  // Five towers around a stranded player far from any town, all in sight of it.
+  function crowd(): { w: World; towers: Vehicle[] } {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.player.fuel = 0;
+    const towers = [0, 1, 2, 3, 4].map((k) => {
+      const a = (k / 5) * Math.PI * 2;
+      const tpl = k % 2 ? 'trader' : 'scavenger';
+      return withTower(w, tpl, tpl === 'trader' ? 'traders' : 'scavengers', 'hauler', { x: 30 + Math.cos(a) * 12, y: 30 + Math.sin(a) * 12 });
+    });
+    return { w, towers };
+  }
+
+  it('only one of five towers in sight takes the tow goal, and the rest keep their work', () => {
+    const { w, towers } = crowd();
+    forceOption('strandedSeen', 'tow');
+    const next = endTurn(w);
+    const tows = towers.filter((t) => topGoal(find(next, t.id))?.kind === 'tow');
+    expect(tows).toHaveLength(1);
+    expect(answering(next)).toMatchObject([{ holder: tows[0].id, other: next.player.vehicleId }]);
+    for (const t of towers) if (t !== tows[0]) expect(find(next, t.id).brain!.goals.some((g) => g.kind === 'tow')).toBe(false);
+  });
+
+  it('a driver with a tow goal drops it once another driver holds the claim', () => {
+    const { w, towers } = crowd();
+    const [first, second] = towers;
+    forceOption('strandedSeen', 'tow');
+    thinkNpc(w, find(w, second.id));
+    expect(topGoal(find(w, second.id))?.kind).toBe('tow');
+    addState(w, 'answering', first.id, w.player.vehicleId, { kind: 'none' });
+    w.turn++;
+    thinkNpc(w, find(w, second.id));
+    expect(find(w, second.id).brain!.goals.some((g) => g.kind === 'tow')).toBe(false);
+  });
+
+  it('after the claimed tower gives up, another tower answers on a later decision', () => {
+    const { w, towers } = crowd();
+    forceOption('strandedSeen', 'tow');
+    let next = endTurn(w);
+    const [claim] = answering(next);
+    const holder = find(next, claim.holder);
+    holder.brain!.goals = holder.brain!.goals.filter((g) => g.kind !== 'tow');
+    next = runUntil(next, 3, (x) => answering(x).some((st) => st.holder !== claim.holder)).w;
+    const [again] = answering(next);
+    expect(again.holder).not.toBe(claim.holder);
+    expect(towers.map((t) => t.id)).toContain(again.holder);
+    expect(topGoal(find(next, again.holder))?.kind).toBe('tow');
+  });
+
+  it('a truck at a town gate gets the tow chosen far less often than 40 tiles out, and still above 0', () => {
+    const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
+    const gate = siteGates(bowl)[0];
+    const out = { x: (gate.x - bowl.pos.x) / bowl.radius, y: (gate.y - bowl.pos.y) / bowl.radius };
+    const towChance = (away: number) => {
+      const at = { x: gate.x + out.x * away, y: gate.y + out.y * away };
+      const s = stranded(at, { x: at.x + out.x * 8, y: at.y + out.y * 8 });
+      return optionChances(optionWeights(s.w, s.trader, 'strandedSeen', s.w.player.vehicleId, null)).tow!;
+    };
+    const atGate = towChance(0);
+    const farOut = towChance(40);
+    expect(atGate).toBeGreaterThan(0);
+    expect(atGate).toBeLessThan(farOut / 3);
+  });
+});
+
 describe('tow deals', () => {
   it('a trader that is crawling itself does not offer a tow', () => {
     const s = stranded();
@@ -340,14 +408,13 @@ describe('emergency beacon', () => {
     }
   });
 
-  it('the first tower to arrive makes the offer, and the others drop the tow', () => {
+  it('only the first tower to hear a beacon answers it, and its claim ends with the offer', () => {
     const s = stranded(player, { x: 100, y: 30 });
     const late = withTower(s.w, 'trader', 'traders', 'hauler', { x: 30, y: 150 });
     const r = runUntil(setBeacon(s.w, true), 150, (x) => playerTow(x) !== null);
     expect(playerTow(r.w)?.holder).toBe(s.trader.id);
-    expect(activitiesOf(r.events, late.id)[0]).toMatchObject({ activity: 'tow' });
-    const next = endTurn(r.w);
-    expect(topGoal(find(next, late.id))?.kind).not.toBe('tow');
+    expect(activitiesOf(r.events, late.id).filter((e) => e.t === 'activity' && e.activity === 'tow')).toEqual([]);
+    expect(r.w.states.filter((st) => st.kind === 'answering')).toEqual([]);
   });
 
   it('a raider comes to a beaconing truck with cargo', () => {

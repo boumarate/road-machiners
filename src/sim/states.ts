@@ -52,7 +52,16 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   },
   turnedDown: { refresh: never, check: noCheck, hooks: {} },
   towPromise: { refresh: never, check: noCheck, hooks: {} },
+  // The holder has taken the job of towing the player, so no other driver answers. It is fulfilled by the offer
+  // in src/sim/tow.ts, and broken once the holder's tow goal is gone from its stack.
+  answering: { refresh: never, check: (w, s) => (answerDropped(w, s) ? 'broken' : null), hooks: {} },
 };
+
+// A missing holder is left to the missing-party rule.
+function answerDropped(w: World, s: NpcState): boolean {
+  const holder = w.vehicles.find((v) => v.id === s.holder);
+  return holder !== undefined && !holder.brain!.goals.some((g) => g.kind === 'tow');
+}
 
 function kindOf(kind: StateKindId): StateKind {
   if (!Object.hasOwn(STATE_KINDS, kind)) throw new Error(`Unknown state kind ${kind}`);
@@ -65,7 +74,7 @@ function turnsOf(kind: StateKindId): number | null {
 }
 
 // The data kind each state kind carries.
-const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise' };
+const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none' };
 
 export function addState(w: World, kind: StateKindId, holder: string, other: string, data: StateData): NpcState {
   kindOf(kind);

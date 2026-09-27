@@ -50,6 +50,7 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   tow: (s) => (towData(s).hitched ? 'Towing you' : 'Tow offer to you'),
   turnedDown: () => 'You turned down its tow',
   towPromise: () => 'Promised you a tow',
+  answering: () => 'Coming to tow you',
 };
 
 // One line per state the NPC holds toward the player, with turns left when the state has a timer.

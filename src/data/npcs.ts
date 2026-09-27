@@ -345,6 +345,7 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   turnedDown: { strandedSeen: { tow: { mul: 0.001 } } },
   // A driver that dropped a tow for danger comes back for the player: tow outweighs keep 20 to 1.
   towPromise: { strandedSeen: { tow: { add: 20 } } },
+  answering: {},
 };
 
 // State durations in turns. See src/sim/states.ts. null means the state has no timer and ends only by its checks.
@@ -361,6 +362,8 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   turnedDown: null,
   // A tower that dropped a hitched tow for danger keeps its terms until its next offer to that player.
   towPromise: null,
+  // A driver on its way to a stranded player holds the job until it offers, its tow goal pops, or it is gone.
+  answering: null,
 };
 
 export type Trait = {
@@ -450,6 +453,11 @@ export const NPC_BEHAVIOR = {
   // Fight weight at a new hostile times this near town guards. A raider's fight weight of 50 against manageable
   // prey drops to 0.05, about 3%. Guards never lower fight back.
   fightNearGuards: 0.001,
+  // Tow weight falls when the stranded truck can crawl to a town gate. At limp speed, about 1 tile a turn, 15
+  // tiles is a crawl of 15 turns, under two hours of the day. Within it, a tow weight of 9 drops to 0.18 against
+  // keep 1, so about one passing driver in six offers. From there the factor rises in a straight line to 1 at 60
+  // tiles, a crawl of most of a morning.
+  towNearTown: { factor: 0.02, crawl: 15, far: 60 },
 };
 
 export const NPC_UPKEEP = {

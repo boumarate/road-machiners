@@ -419,11 +419,13 @@ function onStrandedSeen(world: World, vehicle: Vehicle): void {
 
 // A driver the player turned down that picks tow again is over it: its turnedDown state ends, so the tow goal holds.
 // The client counts as noticed prey, so a tower that set out for a beacon does not roll to rob it on arrival.
+// The driver claims the job, so no other driver answers while it is on its way.
 function startTow(world: World, vehicle: Vehicle, at: Vec): void {
   const me = world.player.vehicleId;
   const turnedDown = stateOf(world, 'turnedDown', vehicle.id, me);
   if (turnedDown) endState(world, turnedDown, 'fulfilled');
   vehicle.brain!.noticed[`preySeen:${me}`] = world.turn;
+  addState(world, 'answering', vehicle.id, me, { kind: 'none' });
   pushGoal(world, vehicle, createActivity('tow', me, { ...at }, 'help a stranded truck'));
 }
 
