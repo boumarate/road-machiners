@@ -1,19 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { CLASS_TALK, END, HONK_RANGE, HUB, TOPICS, type Topic } from '../data/dialogue';
+import { TRAIT_TALK, END, HONK_RANGE, HUB, TOPICS, type Topic } from '../data/dialogue';
 import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions, hangUp, honk, placeholders, raiseCalls } from './dialogue';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
-import { addVehicle, emptyWorld } from './testkit';
+import { addState } from './states';
+import { addVehicle, emptyWorld, npcBrain } from './testkit';
+import type { TraitId } from '../data/npcs';
 import type { Vehicle, World } from './types';
 import { dist } from './vec';
 import { refreshVision } from './vision';
 import { autoRuns, endTurn, setMoveOrder } from './world';
 
+const TRAITS_OF: Record<string, TraitId[]> = { trader: ['trader'], scavenger: ['scavenger'], buggy: ['raider'] };
+
 function withNpc(templateId: string, faction: Vehicle['faction'], x = 36): { w: World; npc: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
   const npc = addVehicle(w, faction, 'scout', [], { x, y: 30 });
-  npc.brain = { templateId, activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0, refusedTow: false };
+  npc.brain = npcBrain(templateId, npc.pos, TRAITS_OF[templateId]);
   refreshVision(w);
   return { w, npc };
 }
@@ -52,8 +56,8 @@ describe('topic data', () => {
   });
 
   it('class talk lines need no call values', () => {
-    for (const talk of Object.values(CLASS_TALK)) {
-      for (const line of [talk.greeting, talk.repeatLine, talk.refusal]) expect(placeholders(line)).toEqual([]);
+    for (const { voice } of Object.values(TRAIT_TALK)) {
+      for (const line of voice ? [voice.greeting, voice.repeatLine, voice.refusal] : []) expect(placeholders(line)).toEqual([]);
     }
   });
 });
@@ -62,9 +66,9 @@ describe('calls', () => {
   it('opens on the hub with the greeting when the player sees the truck', () => {
     const { w, npc } = withNpc('trader', 'traders');
     const next = callVehicle(w, npc.id);
-    expect(next.player.call).toEqual({ with: npc.id, topic: null, node: HUB, vars: {}, line: { text: CLASS_TALK.trader.greeting, vars: {} } });
+    expect(next.player.call).toEqual({ with: npc.id, topic: null, node: HUB, vars: {}, line: { text: TRAIT_TALK.trader.voice!.greeting, vars: {} } });
     expect(next.events).toContainEqual({ t: 'call', with: npc.id, outcome: 'opened' });
-    expect(next.events).toContainEqual({ t: 'say', speaker: npc.id, text: CLASS_TALK.trader.greeting, vars: {} });
+    expect(next.events).toContainEqual({ t: 'say', speaker: npc.id, text: TRAIT_TALK.trader.voice!.greeting, vars: {} });
   });
 
   it('cannot reach a truck out of sight', () => {
@@ -72,12 +76,12 @@ describe('calls', () => {
     expect(() => callVehicle(w, npc.id)).toThrow(/out of sight/);
   });
 
-  it('a truck with a grudge answers once and opens no call', () => {
+  it('a truck in a feud answers once and opens no call', () => {
     const { w, npc } = withNpc('trader', 'traders');
-    npc.grudges.push(w.player.vehicleId);
+    addState(w, 'feud', npc.id, w.player.vehicleId, { kind: 'feud', robbery: false });
     const next = callVehicle(w, npc.id);
     expect(next.player.call).toBeNull();
-    expect(next.events).toContainEqual({ t: 'say', speaker: npc.id, text: CLASS_TALK.trader.refusal, vars: {} });
+    expect(next.events).toContainEqual({ t: 'say', speaker: npc.id, text: TRAIT_TALK.trader.voice!.refusal, vars: {} });
   });
 
   it('stops turns and other commands until it ends', () => {
@@ -141,7 +145,7 @@ describe('NPC calls', () => {
   it('an NPC that sees the player opens one call on the topic it raises', () => {
     const { w, npc } = withNpc('trader', 'traders');
     const other = addVehicle(w, 'traders', 'scout', [], { x: 30, y: 36 });
-    other.brain = { ...npc.brain!, home: { ...other.pos } };
+    other.brain = npcBrain('trader', other.pos, ['trader']);
     raiseCalls(w);
     expect(w.player.call).toMatchObject({ with: npc.id, topic: 'directions', node: 'answer' });
     expect(w.events.filter((e) => e.t === 'call')).toHaveLength(1);
@@ -168,14 +172,14 @@ describe('NPC calls', () => {
     let next = callVehicle(w, npc.id);
     next = chooseOption(next, optionIndex(next, TOPICS.directions.ask!.text));
     expect(next.player.call?.topic).toBeNull();
-    expect(next.events).toContainEqual({ t: 'say', speaker: npc.id, text: CLASS_TALK.trader.repeatLine, vars: {} });
-    expect(next.player.call?.line).toEqual({ text: CLASS_TALK.trader.repeatLine, vars: {} });
+    expect(next.events).toContainEqual({ t: 'say', speaker: npc.id, text: TRAIT_TALK.trader.voice!.repeatLine, vars: {} });
+    expect(next.player.call?.line).toEqual({ text: TRAIT_TALK.trader.voice!.repeatLine, vars: {} });
   });
 });
 
 function npcAt(w: World, templateId: string, faction: Vehicle['faction'], x: number): Vehicle {
   const npc = addVehicle(w, faction, 'scout', [], { x, y: 30 });
-  npc.brain = { templateId, activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0, refusedTow: false };
+  npc.brain = npcBrain(templateId, npc.pos, TRAITS_OF[templateId]);
   return npc;
 }
 
@@ -189,10 +193,11 @@ describe('honk', () => {
     expect(honkers(honk(w))).toEqual([w.player.vehicleId, near.id, far.id]);
   });
 
-  it('trucks out of earshot, raiders and trucks with a grudge stay silent', () => {
+  it('trucks out of earshot, raiders and trucks in a feud stay silent', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     npcAt(w, 'trader', 'traders', 30 + HONK_RANGE + 1);
-    npcAt(w, 'scavenger', 'scavengers', 34).grudges.push(w.player.vehicleId);
+    const feuding = npcAt(w, 'scavenger', 'scavengers', 34);
+    addState(w, 'feud', feuding.id, w.player.vehicleId, { kind: 'feud', robbery: false });
     npcAt(w, 'buggy', 'raiders', 36);
     expect(honkers(honk(w))).toEqual([w.player.vehicleId]);
   });

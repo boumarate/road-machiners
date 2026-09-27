@@ -4,8 +4,8 @@ import { RULES } from '../data/rules';
 import { makeVehicle } from '../sim/factory';
 import { addGoods, removeAllGoods } from '../sim/inventory';
 import { loadFactor, vehicleMass } from '../sim/mass';
-import { addVehicle, emptyWorld, partHp } from '../sim/testkit';
 import { corePart } from '../sim/grid';
+import { addVehicle, emptyWorld, npcBrain, partHp } from '../sim/testkit';
 import type { MoveOrder, World } from '../sim/types';
 import { angleDiff, bearing, dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
@@ -13,7 +13,7 @@ import { endTurn, setDirect, setMoveOrder } from '../sim/world';
 import { PHYSICS } from '../data/physics';
 import { buildDrive, freeDrive, initPhysics, routeAim, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
 import { physicsMove } from './turn';
-import { acceptTow, unhitch } from '../sim/tow';
+import { acceptTow, playerTow, unhitch } from '../sim/tow';
 
 beforeAll(async () => {
   await initPhysics();
@@ -75,8 +75,8 @@ describe('physics turns', () => {
     const w = emptyWorld({ x: mid.x + Math.cos(toNose + Math.PI / 2) * 12, y: mid.y + Math.sin(toNose + Math.PI / 2) * 12 });
     const east = addVehicle(w, 'traders', 'hauler', ['stockEngine'], at(-1.5), toNose);
     const west = addVehicle(w, 'traders', 'hauler', ['stockEngine'], at(1.5), toNose + Math.PI);
-    east.brain = { templateId: 'trader', activity: { kind: 'sell', targetId: 'nose', destination: { ...nose.pos }, reason: 'test', phase: 'travel' }, goal: null, home: { ...east.pos }, stepIndex: 0, refusedTow: false };
-    west.brain = { templateId: 'trader', activity: { kind: 'sell', targetId: 'bowl', destination: { ...bowl.pos }, reason: 'test', phase: 'travel' }, goal: null, home: { ...west.pos }, stepIndex: 0, refusedTow: false };
+    east.brain = { ...npcBrain('trader', east.pos, ['trader']), goals: [{ kind: 'sell', targetId: 'nose', destination: { ...nose.pos }, reason: 'test', phase: 'travel' }] };
+    west.brain = { ...npcBrain('trader', west.pos, ['trader']), goals: [{ kind: 'sell', targetId: 'bowl', destination: { ...bowl.pos }, reason: 'test', phase: 'travel' }] };
     const along = (p: Vec) => (p.x - mid.x) * Math.cos(toNose) + (p.y - mid.y) * Math.sin(toNose);
     // Ten turns cover a stop, a detour around the stopped truck and the drive past it.
     const { w: after } = play(w, 10);
@@ -365,7 +365,7 @@ describe('physics turns', () => {
     let w = emptyWorld();
     w.player.fuel = 0;
     const trader = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 40, y: 30 }, Math.PI);
-    trader.brain = { templateId: 'trader', activity: null, goal: null, home: { ...trader.pos }, stepIndex: 0, refusedTow: false };
+    trader.brain = npcBrain('trader', trader.pos, ['trader']);
     let d = buildDrive(w);
     const turn = () => {
       let r: TurnResult | null = null;
@@ -374,8 +374,8 @@ describe('physics turns', () => {
       d = r!.next;
       return r!;
     };
-    for (let i = 0; i < 30 && !w.player.tow; i++) turn();
-    expect(w.player.tow).not.toBeNull();
+    for (let i = 0; i < 30 && !playerTow(w); i++) turn();
+    expect(playerTow(w)).not.toBeNull();
     w = acceptTow(w);
     const start = { ...me(w).pos };
     for (let i = 0; i < 10; i++) {

@@ -12,6 +12,7 @@ import { BRIDGE_RAILS } from '../sim/bridge';
 import { advanceFar } from '../sim/far';
 import { applyCrash, nearestEdge } from '../sim/movement';
 import { burnFuel } from '../sim/resources';
+import { isTowed } from '../sim/tow';
 import type { Pose, Vehicle, World } from '../sim/types';
 import { clamp, dist, type Vec } from '../sim/vec';
 import { visibleTiles } from '../sim/vision';
@@ -87,7 +88,7 @@ export function physicsMove(d: Drive, done: (r: TurnResult) => void): (w: World)
     syncDrive(d, w);
     const r = simulateTurn(d, w);
     // The towed player has no frames either, but its tower places it after this step.
-    const far = w.vehicles.filter((v) => !r.frames[v.id] && !(v.id === w.player.vehicleId && w.player.tow?.hitched));
+    const far = w.vehicles.filter((v) => !r.frames[v.id] && !(v.id === w.player.vehicleId && isTowed(w)));
     applyTurn(w, r);
     for (const v of far) {
       advanceFar(w, v);

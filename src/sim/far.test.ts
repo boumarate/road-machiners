@@ -8,7 +8,7 @@ import { physicsMove } from '../phys/turn';
 import { advanceFar, isNear } from './far';
 import { getResources } from './resources';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { Pose, World } from './types';
 import { dist } from './vec';
 import { endTurn } from './world';
@@ -154,11 +154,31 @@ describe('far NPC travel', () => {
     freeDrive(d);
   });
 
+  it('a far NPC keeps its goal stack across a turn and still drives by it', () => {
+    let w = emptyWorld();
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 30 + LIVE + 40, y: 80 });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    const goals = [
+      { kind: 'raid' as const, targetId: null, destination: { x: 30 + LIVE + 70, y: 80 }, phase: 'travel' as const, reason: 'long-term goal' },
+      { kind: 'investigate' as const, targetId: w.player.vehicleId, destination: { x: 30 + LIVE + 60, y: 80 }, phase: 'travel' as const, reason: 'interruption' },
+    ];
+    npc.brain.goals = structuredClone(goals);
+    // The investigation needs a hostile target, so the NPC holds a feud toward the player.
+    w.states.push({ id: 'feud-test', kind: 'feud', holder: npc.id, other: w.player.vehicleId, turnsLeft: 10, born: w.turn, data: { kind: 'feud', robbery: false } });
+    const { w: after, d } = play(w, 1);
+    w = after;
+    const v = w.vehicles.find((x) => x.id === npc.id)!;
+    expect(d.bodies[npc.id]).toBeUndefined();
+    expect(v.brain!.goals.map((g) => [g.kind, g.reason])).toEqual(goals.map((g) => [g.kind, g.reason]));
+    expect(v.pos.x).toBeGreaterThan(npc.pos.x);
+    freeDrive(d);
+  });
+
   it('stores the route and reuses it while the destination holds', () => {
     const w = emptyWorld();
     w.obstacles = [{ id: 'rock1', pos: { x: 135, y: 120 }, r: 3, kind: 'rock' }];
     const far = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });
-    far.brain = { templateId: 'trader', activity: null, goal: null, home: { x: 0, y: 0 }, stepIndex: 0, refusedTow: false };
+    far.brain = npcBrain('trader', { x: 0, y: 0 }, ['trader']);
     far.order = { kind: 'stopAt', dest: { x: 150, y: 120 } };
     advanceFar(w, far);
     const stored = far.brain.farRoute!;

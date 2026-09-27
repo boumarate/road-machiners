@@ -3,33 +3,29 @@
 // NPC call opens on the topic it raises. Turns wait while a call is open. Topic content lives in
 // src/data/dialogue.ts, and its logic in src/sim/dialogue-rules.ts.
 
-import { CLASS_TALK, END, HONK_RANGE, HUB, TOPICS, type ClassTalk, type DialogueOption, type Topic, type TopicId } from '../data/dialogue';
-import { NPCS } from '../data/npcs';
-import { isHostile } from './combat';
+import { END, HONK_RANGE, HUB, TOPICS, TRAIT_TALK, type DialogueOption, type Topic, type TopicId, type Voice } from '../data/dialogue';
+import { inFeud, isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
 import type { Call, CallVars, Vehicle, World } from './types';
 import { dist } from './vec';
+import { npcTraits } from './npc-decisions';
 import { canVehicleSee } from './vision';
 import { playerCommand, requireActivePlayer, update } from './world';
 
 // An option the player can pick now. The hub lists topics, and a topic node lists its own options.
 export type OfferedOption = { text: string; topic: TopicId | null; option: DialogueOption | null };
 
-// The one place talk reads the NPC class. Traits will replace this lookup.
-export function talkOf(npc: Vehicle): ClassTalk {
-  const template = npc.brain && NPCS[npc.brain.templateId];
-  if (!template) throw new Error(`${npc.id} has no NPC template to talk with`);
-  return CLASS_TALK[template.brain];
+// The one place talk reads traits: the first voice among the driver's traits, and the union of their topics.
+export function talkOf(npc: Vehicle): Voice & { topics: TopicId[] } {
+  const talks = npcTraits(npc).map((id) => TRAIT_TALK[id]);
+  const voice = talks.find((t) => t.voice)?.voice;
+  if (!voice) throw new Error(`${npc.id} has no trait with a voice`);
+  return { ...voice, topics: [...new Set(talks.flatMap((t) => t.topics))] };
 }
 
 function holds(world: World, npc: Vehicle, when: readonly (keyof typeof CONDITIONS)[]): boolean {
   return when.every((id) => CONDITIONS[id](world, npc));
-}
-
-// A grudge either way stops talk. npc-traits turns this into a feud check.
-function hasGrudge(a: Vehicle, b: Vehicle): boolean {
-  return a.grudges.includes(b.id) || b.grudges.includes(a.id);
 }
 
 function isSettled(world: World, npc: Vehicle, topic: Topic): boolean {
@@ -101,7 +97,7 @@ function begin(world: World, npc: Vehicle): Call {
   return call;
 }
 
-// The player calls a truck in sight. A truck with a grudge answers once and hangs up.
+// The player calls a truck in sight. A truck in a feud with the player answers once and hangs up.
 export function callVehicle(world: World, npcId: string): World {
   return update(world, (w) => {
     requireActivePlayer(w);
@@ -109,7 +105,7 @@ export function callVehicle(world: World, npcId: string): World {
     const npc = vehicleById(w, npcId);
     if (!npc.brain) throw new Error(`${npcId} has no driver to call`);
     if (!canVehicleSee(w, playerVehicle(w), npc.pos)) throw new Error(`${npcId} is out of sight`);
-    if (hasGrudge(npc, playerVehicle(w))) {
+    if (inFeud(w, npc, playerVehicle(w))) {
       say(w, npc.id, talkOf(npc).refusal, {});
       return;
     }
@@ -158,7 +154,7 @@ export function hangUp(world: World): World {
 }
 
 // A turn step: the first NPC in vehicle order that sees the player and wants to raise a topic calls. The
-// highest priority topic wins. A driver with a grudge never calls. One call at a time.
+// highest priority topic wins. A driver in a feud with the player never calls. One call at a time.
 export function raiseCalls(world: World): void {
   if (world.player.call || world.player.state !== 'active') return;
   const me = playerVehicle(world);
@@ -171,7 +167,7 @@ export function raiseCalls(world: World): void {
 }
 
 function raisedTopic(world: World, npc: Vehicle, me: Vehicle): Topic | null {
-  if (!npc.brain || !canVehicleSee(world, npc, me.pos) || hasGrudge(npc, me)) return null;
+  if (!npc.brain || !canVehicleSee(world, npc, me.pos) || inFeud(world, npc, me)) return null;
   const wanted = talkOf(npc).topics
     .map((id) => TOPICS[id])
     .filter((t) => t.raise && !isSettled(world, npc, t) && holds(world, npc, t.raise.when))
@@ -191,6 +187,6 @@ export function honk(world: World): World {
 
 function answering(world: World, me: Vehicle): Vehicle[] {
   return world.vehicles
-    .filter((v) => v.brain && dist(v.pos, me.pos) <= HONK_RANGE && talkOf(v).honksBack && !isHostile(v, me))
+    .filter((v) => v.brain && dist(v.pos, me.pos) <= HONK_RANGE && talkOf(v).honksBack && !isHostile(world, v, me))
     .sort((a, b) => dist(a.pos, me.pos) - dist(b.pos, me.pos));
 }

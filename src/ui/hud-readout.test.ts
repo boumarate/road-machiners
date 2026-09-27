@@ -3,6 +3,7 @@ import { chassisDef } from "../data/chassis";
 import { RULES } from "../data/rules";
 import { corePart } from "../sim/grid";
 import { emptyWorld } from "../sim/testkit";
+import { addState, towData } from "../sim/states";
 import { getHudReadout, getRescueReadout } from "./hud-readout";
 
 describe("critical vehicle readout", () => {
@@ -79,9 +80,9 @@ describe("rescue readout", () => {
     w.player.beacon = true;
     expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: true });
     w.player.money = 10;
-    w.player.tow = { by: w.vehicles[0].id, town: "bowl", fee: 50, hitched: false };
+    const tow = addState(w, "tow", w.vehicles[0].id, w.player.vehicleId, { kind: "tow", town: "bowl", fee: 50, hitched: false });
     expect(getRescueReadout(w)).toMatchObject({ kind: "offer", fee: 50, debt: true, beacon: true });
-    w.player.tow.hitched = true;
+    towData(tow).hitched = true;
     expect(getRescueReadout(w)).toMatchObject({ kind: "towed", fee: 50 });
     w.player.state = "knockedOut";
     expect(getRescueReadout(w)).toEqual({ kind: "knockedOut" });

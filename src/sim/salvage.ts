@@ -80,6 +80,15 @@ export function collectSalvage(world: World, vehicle: Vehicle, stockId: string, 
 
 // A wreck keeps its mounted non-core parts at their current HP. Built-in core parts are wrecked
 // beyond mounting, so they turn into the parts good instead, at a data rate off their remaining HP.
+// The stock a destroyed NPC leaves, and the stock a knocked-out player truck drops on a given turn.
+export function wreckStockId(vehicleId: string): string {
+  return `wreck-${vehicleId}`;
+}
+
+export function knockoutStockId(vehicleId: string, turn: number): string {
+  return `wreck-${vehicleId}-${turn}`;
+}
+
 export function createWreckSalvage(world: World, vehicle: Vehicle): void {
   const goods = goodsCount(vehicle);
   const parts: PartInstance[] = [];
@@ -90,7 +99,7 @@ export function createWreckSalvage(world: World, vehicle: Vehicle): void {
     else parts.push(item.part);
   }
   if (coreScrap > 0) goods.parts = (goods.parts ?? 0) + coreScrap;
-  addVehicleStock(world, vehicle, `wreck-${vehicle.id}`, goods, parts);
+  addVehicleStock(world, vehicle, wreckStockId(vehicle.id), goods, parts);
   vehicle.items = vehicle.items.filter((item) => item.kind === 'part' && partDef(item.part.defId).kind === 'core');
 }
 
@@ -104,7 +113,7 @@ export function createKnockoutSalvage(world: World, vehicle: Vehicle): void {
     if (item.kind === 'good') goods[item.good] = (goods[item.good] ?? 0) + 1;
     else parts.push(item.part);
   }
-  addVehicleStock(world, vehicle, `wreck-${vehicle.id}-${world.turn}`, goods, parts);
+  addVehicleStock(world, vehicle, knockoutStockId(vehicle.id, world.turn), goods, parts);
   vehicle.items = vehicle.items.filter((item) => !loot.includes(item));
 }
 

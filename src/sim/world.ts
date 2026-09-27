@@ -19,8 +19,9 @@ import { consumeSupplies, leakFuel } from './supplies';
 import { spawnInitial, spawnNpcs } from './spawn';
 import { initializeSalvage } from './salvage';
 import { timed } from '../perf';
-import { resolveNpcActivities } from './npc-activities';
-import { checkBeacon, checkTower, followTower } from './tow';
+import { noteHurt, resolveNpcActivities } from './npc-activities';
+import { advanceStates } from './states';
+import { checkBeacon, followTower, isTowed, playerTow } from './tow';
 import { raiseCalls } from './dialogue';
 import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
 import { vehicleStats } from './stats';
@@ -65,7 +66,6 @@ export function newWorld(seed: number, kit: StartKit): World {
       knockouts: 0,
       state: 'active',
       knockoutTurns: 0,
-      tow: null,
       beacon: false,
       call: null,
       talked: {},
@@ -79,6 +79,7 @@ export function newWorld(seed: number, kit: StartKit): World {
     spawnTimer: {},
     weather: [],
     dustClouds: [],
+    states: [],
   };
   world.obstacles = generateObstacles(world);
   const town = REGION.towns.find((t) => t.id === REGION.playerStart.town)!;
@@ -129,14 +130,14 @@ export function update(world: World, fn: (draft: World) => void): World {
 
 // Whether player commands are allowed now. The UI checks it before issuing one.
 export function playerCanAct(world: World): boolean {
-  return world.player.state === 'active' && !world.player.tow?.hitched && !world.player.call;
+  return world.player.state === 'active' && !isTowed(world) && !world.player.call;
 }
 
 // Player commands need an awake, living driver who is not on a tow rope or the radio. Unhitch checks the
 // rope itself, and the dialogue commands run the call.
 export function requireActivePlayer(world: World): void {
   if (world.player.state !== 'active') throw new Error(`Player is ${world.player.state}`);
-  if (world.player.tow?.hitched) throw new Error('Player is towed');
+  if (isTowed(world)) throw new Error('Player is towed');
   if (world.player.call) throw new Error('A radio call is open');
 }
 
@@ -145,7 +146,7 @@ export function requireActivePlayer(world: World): void {
 export function autoRuns(world: World): boolean {
   const p = world.player;
   if (p.call) return false; // an open call stops every turn until it ends
-  if (p.state === 'knockedOut' || p.tow?.hitched === true) return true;
+  if (p.state === 'knockedOut' || isTowed(world)) return true;
   return waitsOnBeacon(world);
 }
 
@@ -153,7 +154,7 @@ function waitsOnBeacon(world: World): boolean {
   const p = world.player;
   const me = playerVehicle(world);
   const parked = me.speed <= RULES.parkedSpeed && (me.order === null || me.order.kind === 'brake');
-  return p.state === 'active' && p.beacon && parked && p.tow === null;
+  return p.state === 'active' && p.beacon && parked && playerTow(world) === null;
 }
 
 // A player command: rejected unless the player is active and not towed, then applied like any update.
@@ -203,7 +204,7 @@ export function endTurn(
     healPlayer(w);
     leakFuel(w);
     resolveDestroyed(w);
-    checkTower(w);
+    advanceStates(w);
     checkBeacon(w);
     resolveNpcActivities(w);
     discoverSites(w);
@@ -213,6 +214,7 @@ export function endTurn(
     checkKnockout(w);
     spawnNpcs(w);
     refreshVision(w);
+    noteHurt(w);
     raiseCalls(w);
   }));
 }
@@ -261,5 +263,5 @@ export function setAutoFire(world: World, on: boolean): World {
 }
 
 export function hostileToPlayer(world: World, v: Vehicle): boolean {
-  return isHostile(playerVehicle(world), v);
+  return isHostile(world, playerVehicle(world), v);
 }

@@ -5,7 +5,7 @@ import type { ConditionId, EffectId, PrepareId } from '../data/dialogue';
 import { REGION, type TownDef } from '../data/region';
 import { playerVehicle } from './damage';
 import { discoverSite } from './locations';
-import { getNpcClass } from './npc-activities';
+import { npcProfile } from './npc-decisions';
 import type { Call, CallVars, TopicOutcome, Vehicle, World } from './types';
 import { bearing, dist } from './vec';
 
@@ -14,7 +14,7 @@ export type Effect = (world: World, npc: Vehicle, call: Call) => void;
 export type Prepare = (world: World, npc: Vehicle) => CallVars;
 
 function knownTowns(npc: Vehicle): TownDef[] {
-  return getNpcClass(npc).towns.map((id) => {
+  return npcProfile(npc).towns.map((id) => {
     const town = REGION.towns.find((t) => t.id === id);
     if (!town) throw new Error(`Unknown town ${id}`);
     return town;

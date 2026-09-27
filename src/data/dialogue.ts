@@ -3,7 +3,7 @@
 // Lines are templates: `{name}` is filled from the call values the topic's prepare step made.
 
 import { DETECT } from './detect';
-import type { Brain } from './npcs';
+import type { TraitId } from './npcs';
 
 export type TopicId = 'directions';
 export type ConditionId = 'knowsTown';
@@ -49,20 +49,25 @@ export const TOPICS: Record<TopicId, Topic> = {
   },
 };
 
-// What each class says and talks about. Only talkOf() in src/sim/dialogue.ts reads this.
-export type ClassTalk = {
+// How a driver talks. The first of its traits with a voice speaks for it.
+export type Voice = {
   greeting: string; // the hub line when the player calls
-  topics: TopicId[];
   repeatLine: string; // the answer to a `once` topic already settled
-  refusal: string; // the answer when a grudge stops the call
+  refusal: string; // the answer when a feud stops the call
   honksBack: boolean; // answers the player's honk when not hostile
 };
+
+// What each trait adds to talk. A driver can take up the union of its traits' topics. Only talkOf() in
+// src/sim/dialogue.ts reads this.
+export type TraitTalk = { voice: Voice | null; topics: TopicId[] };
 
 // Tiles a horn carries. It is about as loud as an engine at limp speed, so it reaches a little past sight.
 export const HONK_RANGE = DETECT.sound.limp;
 
-export const CLASS_TALK: Record<Brain, ClassTalk> = {
-  trader: { greeting: 'Caravan here. Go ahead.', topics: ['directions'], repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true },
-  scavenger: { greeting: 'Yeah? Make it quick.', topics: ['directions'], repeatLine: 'I told you already.', refusal: 'Get off my channel.', honksBack: true },
-  raider: { greeting: 'Get lost.', topics: [], repeatLine: 'Get lost.', refusal: 'Heh. No.', honksBack: false },
+export const TRAIT_TALK: Record<TraitId, TraitTalk> = {
+  trader: { voice: { greeting: 'Caravan here. Go ahead.', repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true }, topics: ['directions'] },
+  scavenger: { voice: { greeting: 'Yeah? Make it quick.', repeatLine: 'I told you already.', refusal: 'Get off my channel.', honksBack: true }, topics: ['directions'] },
+  raider: { voice: { greeting: 'Get lost.', repeatLine: 'Get lost.', refusal: 'Heh. No.', honksBack: false }, topics: [] },
+  scumbag: { voice: null, topics: [] },
+  coward: { voice: null, topics: [] },
 };

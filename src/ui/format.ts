@@ -7,8 +7,11 @@ import { dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
 import { mountedParts } from '../sim/grid';
 import { playerSees } from '../sim/vision';
+import { topGoal } from '../sim/npc-activities';
+import { npcTraits } from '../sim/npc-decisions';
+import { statesHeld, towData } from '../sim/states';
 import type { PartHit } from '../sim/armor';
-import type { GameEvent, Vehicle, World } from '../sim/types';
+import type { GameEvent, NpcState, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
 
 export function vehicleName(world: World, id: string): string {
@@ -28,12 +31,53 @@ function partName(world: World, vehicleId: string, partId: string): string {
 }
 
 export function formatNpcActivity(world: World, vehicle: Vehicle): string | null {
-  const activity = vehicle.brain?.activity;
+  const activity = vehicle.brain ? topGoal(vehicle) : null;
   if (!activity || !playerSees(world, vehicle.pos)) return null;
   const target = world.vehicles.find((v) => v.id === activity.targetId);
   const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === activity.targetId);
   const label = target && playerSees(world, target.pos) ? target.name : site && world.player.discovered.includes(site.id) ? site.name : null;
   return `${activity.kind}${label ? `: ${label}` : ''} — ${activity.reason}`;
+}
+
+// "Traits: scavenger, scumbag" for an NPC. The hover panel shows it as one line.
+export function formatNpcTraits(vehicle: Vehicle): string {
+  return `Traits: ${npcTraits(vehicle).join(', ')}`;
+}
+
+// How a state the NPC holds reads from the player's side.
+const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
+  feud: () => 'Feud with you',
+  backedOff: () => 'Backing off from you',
+  tow: (s) => (towData(s).hitched ? 'Towing you' : 'Tow offer to you'),
+  turnedDown: () => 'You turned down its tow',
+  towPromise: () => 'Promised you a tow',
+};
+
+// One line per state the NPC holds toward the player, with turns left when the state has a timer.
+export function formatNpcStates(world: World, vehicle: Vehicle): string[] {
+  return statesHeld(world, vehicle.id)
+    .filter((s) => s.other === world.player.vehicleId)
+    .map((s) => (s.turnsLeft === null ? STATE_LABELS[s.kind](s) : `${STATE_LABELS[s.kind](s)}, ${s.turnsLeft} turn${s.turnsLeft === 1 ? '' : 's'}`));
+}
+
+// Log lines for the end of a state an NPC holds toward the player. Tow states log through the tow events.
+const STATE_ENDED_TEXT: Partial<Record<StateKindId, Record<StateEnding, ((holder: string) => { text: string; cls: string }) | null>>> = {
+  feud: {
+    expired: (holder) => ({ text: `${holder} gives up the feud with you.`, cls: 'good' }),
+    fulfilled: (holder) => ({ text: `${holder} ends the feud: you are beaten.`, cls: 'bad' }),
+    broken: (holder) => ({ text: `The feud with ${holder} is over.`, cls: 'dim' }),
+  },
+  backedOff: {
+    expired: (holder) => ({ text: `${holder} stops backing off from you.`, cls: 'dim' }),
+    fulfilled: null,
+    broken: null,
+  },
+};
+
+function stateEndedText(world: World, e: Extract<GameEvent, { t: 'stateEnded' }>): { text: string; cls: string } | null {
+  if (e.state.other !== world.player.vehicleId) return null;
+  const line = STATE_ENDED_TEXT[e.state.kind]?.[e.ending];
+  return line ? line(vehicleName(world, e.state.holder)) : null;
 }
 
 // Damage summed per part, parts with no damage left out.
@@ -85,6 +129,14 @@ function sayText(world: World, e: Extract<GameEvent, { t: 'say' }>): LogLine {
 function callText(world: World, e: Extract<GameEvent, { t: 'call' }>): LogLine {
   const who = vehicleName(world, e.with);
   return { text: e.outcome === 'opened' ? `Radio: ${who} on the line.` : `Radio: call with ${who} ended.`, cls: 'dim' };
+}
+
+function towDroppedText(by: string, reason: Extract<GameEvent, { t: 'towDropped' }>['reason']): { text: string; cls: string } {
+  const text = reason === 'refused' ? `You turn down the tow from ${by}.`
+    : reason === 'unhitched' ? `You unhitch from ${by}.`
+    : reason === 'danger' ? `${by} drops the tow. There is danger.`
+    : `${by} is gone. The tow is off.`;
+  return { text, cls: reason === 'refused' || reason === 'unhitched' ? 'dim' : 'bad' };
 }
 
 // Returns null for events not worth a log line.
@@ -151,13 +203,10 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
     }
     case 'towDone':
       return { text: `${n(e.by)} tows you into town and takes ${e.fee}.`, cls: 'bad' };
-    case 'towDropped': {
-      const text = e.reason === 'refused' ? `You turn down the tow from ${n(e.by)}.`
-        : e.reason === 'unhitched' ? `You unhitch from ${n(e.by)}.`
-        : e.reason === 'danger' ? `${n(e.by)} drops the tow. There is danger.`
-        : `${n(e.by)} is gone. The tow is off.`;
-      return { text, cls: e.reason === 'refused' || e.reason === 'unhitched' ? 'dim' : 'bad' };
-    }
+    case 'towDropped':
+      return towDroppedText(n(e.by), e.reason);
+    case 'stateEnded':
+      return stateEndedText(world, e);
     case 'say':
       return sayText(world, e);
     case 'call':

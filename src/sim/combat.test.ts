@@ -4,9 +4,10 @@ import { RULES } from '../data/rules';
 import { fireWeapons, hitOdds, laneOfOffset, resolveDestroyed } from './combat';
 import { corePart, mountedItems, mountedParts } from './grid';
 import { isDriveObstacle } from './mapgen';
+import { stateOf } from './states';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import type { GameEvent, Vehicle } from './types';
 import { dist } from './vec';
 import { endTurn } from './world';
@@ -15,7 +16,7 @@ function duel(targetPos = { x: 33, y: 30 }) {
   const w = emptyWorld();
   const me = w.vehicles[0];
   const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], targetPos, Math.PI);
-  buggy.brain = { templateId: 'buggy', activity: null, goal: null, home: targetPos, stepIndex: 0, refusedTow: false };
+  buggy.brain = npcBrain('buggy', targetPos, ['raider']);
   const mg = vehicleStats(w, me).weapons[0];
   return { w, me, buggy, mg };
 }
@@ -124,7 +125,7 @@ describe('combat', () => {
     const { w, me } = duel();
     for (let i = 0; i < RULES.maxKillWrecks + 3; i++) {
       const b = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 10 + i * 2, y: 10 });
-      b.brain = { templateId: 'buggy', activity: null, goal: null, home: b.pos, stepIndex: 0, refusedTow: false };
+      b.brain = npcBrain('buggy', b.pos, ['raider']);
       corePart(b, 'cab').hp = 0;
       b.lastHitBy = me.id;
       resolveDestroyed(w);
@@ -139,12 +140,17 @@ describe('combat', () => {
     const mate = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine', 'plates'], { x: 36, y: 33 });
     order(me, vehicleStats(w, me).weapons[0].part.id, trader.id);
     fireWeapons(w);
-    expect(trader.grudges).toContain(me.id);
-    expect(mate.grudges).toContain(me.id);
+    expect(stateOf(w, 'feud', trader.id, me.id)).not.toBeNull();
+    expect(stateOf(w, 'feud', mate.id, me.id)).not.toBeNull();
+    expect(w.events.filter((e) => e.t === 'hostile')).toEqual([
+      { t: 'hostile', vehicle: trader.id, against: me.id },
+      { t: 'hostile', vehicle: mate.id, against: me.id },
+    ]);
   });
 
   it('raiders attack the player within aggro range over a few turns', () => {
     const { w, me, buggy } = duel({ x: 38, y: 30 });
+    forceOption('hostileSeen', 'fight');
     let world = w;
     let shotAt = false;
     for (let i = 0; i < 6; i++) {

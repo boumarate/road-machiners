@@ -1,10 +1,10 @@
 // NPC vehicle templates and how often they appear.
 
-import type { Faction } from "../sim/types";
-import type { Vec } from "../sim/vec";
-import { scalePoint } from "./region";
-import { START_KITS } from "./start";
-import { RULES } from "./rules";
+import type { Faction, StateKindId } from '../sim/types';
+import type { Vec } from '../sim/vec';
+import { scalePoint } from './region';
+import { START_KITS } from './start';
+import { RULES } from './rules';
 
 // NPCs begin with the player's upkeep budget. Their fuel is capped by their chassis.
 export const NPC_RESOURCES = {
@@ -13,7 +13,7 @@ export const NPC_RESOURCES = {
   supplies: START_KITS.standard.supplies,
 };
 
-export type Brain = "raider" | "trader" | "scavenger";
+export type TraitId = 'trader' | 'scavenger' | 'raider' | 'scumbag' | 'coward';
 
 export type Weighted<T> = { value: T; weight: number };
 export type CargoRoll = { good: string; count: number };
@@ -31,7 +31,8 @@ export type NpcTemplate = {
   id: string;
   name: string;
   faction: Faction;
-  brain: Brain;
+  traits: TraitId[]; // every NPC of the template has these
+  extraTraits: { trait: TraitId; chance: number }[]; // each rolled once at spawn
   loadout: NpcLoadoutTable;
   aggroRange: number; // raiders pick targets inside this range
   preferredRange: number; // distance a raider tries to hold while fighting
@@ -219,10 +220,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
 
 export const NPCS: Record<string, NpcTemplate> = {
   buggy: {
-    id: "buggy",
-    name: "Raider outrider",
-    faction: "raiders",
-    brain: "raider",
+    id: 'buggy', name: 'Raider outrider', faction: 'raiders', traits: ['raider'], extraTraits: [],
     loadout: LOADOUTS.outrider,
     aggroRange: 11,
     preferredRange: 3,
@@ -233,10 +231,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: "camp",
   },
   gunwagon: {
-    id: "gunwagon",
-    name: "Raider gunwagon",
-    faction: "raiders",
-    brain: "raider",
+    id: 'gunwagon', name: 'Raider gunwagon', faction: 'raiders', traits: ['raider'], extraTraits: [],
     loadout: LOADOUTS.gunwagon,
     aggroRange: 12,
     preferredRange: 6,
@@ -247,10 +242,9 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: "camp",
   },
   trader: {
-    id: "trader",
-    name: "Trader caravan",
-    faction: "traders",
-    brain: "trader",
+    id: 'trader', name: 'Trader caravan', faction: 'traders', traits: ['trader'],
+    // One trader in four is a coward.
+    extraTraits: [{ trait: 'coward', chance: 0.25 }],
     loadout: LOADOUTS.trader,
     aggroRange: 0,
     preferredRange: 0,
@@ -261,10 +255,9 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: "town",
   },
   scavenger: {
-    id: "scavenger",
-    name: "Scavenger",
-    faction: "scavengers",
-    brain: "scavenger",
+    id: 'scavenger', name: 'Scavenger', faction: 'scavengers', traits: ['scavenger'],
+    // One scavenger in four is a scumbag, and one in four a coward. Both can meet in one driver.
+    extraTraits: [{ trait: 'scumbag', chance: 0.25 }, { trait: 'coward', chance: 0.25 }],
     loadout: LOADOUTS.scavenger,
     aggroRange: 0,
     preferredRange: 0,
@@ -294,62 +287,155 @@ export const SPAWN = {
   campSpread: 6, // distance beyond a camp gate for raider spawns; room for a full camp to spawn at once
   campAngle: 0.3, // radians either side of the track leaving a camp gate
   tries: 40,
-  neighborHelp: 10, // same-faction vehicles in this range join a grudge
+  neighborHelp: 10, // same-faction vehicles in this range join a feud
 };
 
-export type NpcClass = {
+// A decision point is a moment when an NPC may change goals. See src/sim/npc-decisions.ts.
+export type DecisionOptions = {
+  hostileSeen: 'keep' | 'fight' | 'flee'; // a new hostile comes in sight
+  contactHeard: 'keep' | 'investigate' | 'flee'; // a new hostile contact beyond sight
+  hurt: 'keep' | 'flee' | 'fightBack'; // damage taken last turn
+  preySeen: 'keep' | 'rob'; // a new robbery target comes in sight
+  strandedSeen: 'keep' | 'tow'; // a stranded player comes in sight
+  resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal
+  idle: 'trade' | 'scavenge' | 'raid' | 'wait'; // the goal stack is empty
+};
+export type DecisionId = keyof DecisionOptions;
+export type OptionId = DecisionOptions[DecisionId];
+
+// The user's rule: "0 only for can't. For something you physically can, never go below 1% probability."
+// Every option a driver can take now gets at least this chance, and shares the rest by its weight.
+export const MIN_CHANCE = 0.01;
+
+// Base weight per option. The final weight is (base + adds) x muls x situation factor. A base of 0 leaves an
+// available option at MIN_CHANCE unless a trait adds weight.
+export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> } = {
+  // Without traits a driver ignores, fights or avoids a new hostile about equally, fighting a bit more.
+  hostileSeen: { keep: 1, fight: 2, flee: 1 },
+  // Most drivers steer away from a hostile they only hear. Investigating more than rarely needs a trait.
+  contactHeard: { keep: 1, investigate: 0, flee: 3 },
+  // Even odds to run from a hit worth NPC_BEHAVIOR.hurtFullFlee of the cab, keep going, or shoot back.
+  hurt: { keep: 1, flee: 1, fightBack: 1 },
+  // Robbing more than rarely needs a trait.
+  preySeen: { keep: 1, rob: 0 },
+  // Towing more than rarely needs a trait.
+  strandedSeen: { keep: 1, tow: 0 },
+  // After an interruption a driver goes back to its work 9 times in 10.
+  resume: { resume: 9, new: 1 },
+  // Anyone collects salvage in sight. Trading and raiding more than rarely need a trait. Waiting is the small
+  // fallback.
+  idle: { trade: 0, scavenge: 1, raid: 0, wait: 0.1 },
+};
+
+// A weight change: `add` raises an option with zero base weight above MIN_CHANCE, and `mul` tunes an option.
+// A mul is always above 0. A small mul makes an option rare, never impossible.
+export type WeightChange = { add?: number; mul?: number };
+export type TraitWeights = { [D in DecisionId]?: Partial<Record<DecisionOptions[D], WeightChange>> };
+
+// Weight changes of a state, applied only to decisions about the state's other party.
+export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
+  // A driver in a feud mostly fights that party when it comes into sight.
+  feud: { hostileSeen: { fight: { add: 4 } } },
+  // A failed robber mostly leaves the same target alone. A scumbag's rob weight of 2 drops to 0.01, about 2%.
+  backedOff: { preySeen: { rob: { mul: 0.005 } } },
+  tow: {},
+  // A driver the player turned down rarely offers that player a tow again. A tow weight of 9 drops to 0.009,
+  // about 2%.
+  turnedDown: { strandedSeen: { tow: { mul: 0.001 } } },
+  // A driver that dropped a tow for danger comes back for the player: tow outweighs keep 20 to 1.
+  towPromise: { strandedSeen: { tow: { add: 20 } } },
+};
+
+// State durations in turns. See src/sim/states.ts. null means the state has no timer and ends only by its checks.
+export const STATE_TURNS: Record<StateKindId, number | null> = {
+  // Sight or shots between the two parties reset it. 10 turns lets a chase lose sight behind a ridge or a
+  // wreck for a while and pick the fight up again. A pursuer that stays out of sight longer gives up.
+  feud: 10,
+  // A failed robber leaves the same target alone for 30 turns. At 200 turns a day that is a few hours,
+  // long enough for the target to drive well away before the robber may try again.
+  backedOff: 30,
+  // A tow lasts until the tower reaches town, the player lets go, or the tower is gone or in danger.
+  tow: null,
+  // A driver the player turned down holds it until it offers that player a tow again.
+  turnedDown: null,
+  // A tower that dropped a hitched tow for danger keeps its terms until its next offer to that player.
+  towPromise: null,
+};
+
+export type Trait = {
   towns: string[];
   bases: string[]; // own camps that give fuel, supplies and repairs instead of towns
   salvageSites: string[];
   supplySites: string[];
-  fleeCondition: number;
-  recoverCondition: number;
-  threatRatio: number;
-  defensive: boolean;
   // A hostile contact reacts only while its circle is at most this many tiles wide. Beyond it the
   // noise is too vague to act on. Raiders have no limit: they hear as far as the player does.
   contactReactRadius: number;
-  tows: boolean; // offers to tow a stranded player to town
+  // Multiplies the driver's own danger when it judges another truck, for robbing and for fight or flee.
+  // Traits multiply together. 1 judges trucks as they are.
+  boldness: number;
+  weights: TraitWeights;
 };
 
-// Cab warnings begin at 30%. Recovery to half cab health prevents fight/flee oscillation.
-export const NPC_CLASSES: Record<Brain, NpcClass> = {
+// An NPC knows the union of its traits' sites.
+export const TRAITS: Record<TraitId, Trait> = {
+  // Scavenging a known site beats waiting a hundredfold. Nine in ten scavengers help a stranded truck.
   scavenger: {
-    towns: ["bowl", "nose"],
-    bases: [],
-    salvageSites: ["burnt-convoy", "podfield", "ridge-wrecks", "salvage-yard"],
-    supplySites: ["dustwell", "green-pit"],
-    fleeCondition: 0.3,
-    recoverCondition: 0.5,
-    threatRatio: 1,
-    defensive: false,
-    contactReactRadius: 12,
-    tows: true,
+    towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
+    weights: { idle: { scavenge: { add: 10 } }, strandedSeen: { tow: { add: 9 } } },
   },
+  // Traders rarely pick a fight: a fight weight of 2 drops to 0.01, about 1.5%. A shot trader returns fire at half
+  // the usual weight, and mostly runs. Trading beats salvage in sight 3 to 1. Nine in ten traders help a stranded
+  // truck.
   trader: {
-    towns: ["bowl", "nose"],
-    bases: [],
-    salvageSites: [],
-    supplySites: ["dustwell", "green-pit"],
-    fleeCondition: 0.3,
-    recoverCondition: 0.5,
-    threatRatio: 1,
-    defensive: true,
-    contactReactRadius: 12,
-    tows: true,
+    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
+    weights: {
+      idle: { trade: { add: 30 } }, strandedSeen: { tow: { add: 9 } },
+      hostileSeen: { fight: { mul: 0.005 } }, hurt: { fightBack: { mul: 0.5 } },
+    },
   },
+  // Raiders fight most hostiles they see and close in on most they hear. A raid ties with salvage in sight.
   raider: {
-    towns: ["bowl", "nose"],
-    bases: ["scrapjaw", "kiln"],
-    salvageSites: [],
-    supplySites: [],
-    fleeCondition: 0.3,
-    recoverCondition: 0.5,
-    threatRatio: 1,
-    defensive: false,
-    contactReactRadius: Infinity,
-    tows: false,
+    towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], contactReactRadius: Infinity, boldness: 1,
+    weights: { idle: { raid: { add: 10 } }, contactHeard: { investigate: { add: 12 } }, hostileSeen: { fight: { add: 8 } } },
   },
+  // A scumbag robs about two targets in three it comes across: rob 2 against keep 1. Boldness 1.3 lets it rob a
+  // truck that looks as dangerous as its own, and stand against one up to 30% stronger.
+  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, boldness: 1.3, weights: { preySeen: { rob: { add: 2 } } } },
+  // A coward runs three times as often from a new hostile or a hit, picks a fight half as often, and shoots back
+  // at a third of the weight. Boldness 0.6 makes a truck that looks as dangerous as its own a threat, even at the
+  // lowest misjudgment.
+  coward: {
+    towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, boldness: 0.6,
+    weights: { hostileSeen: { flee: { mul: 3 }, fight: { mul: 0.5 } }, hurt: { flee: { mul: 3 }, fightBack: { mul: 0.3 } } },
+  },
+};
+
+export const NPC_BEHAVIOR = {
+  // Cab warnings begin at 30%. Recovery to half cab health prevents fight/flee oscillation.
+  fleeCondition: 0.3,
+  recoverCondition: 0.5,
+  // An enemy is a threat when its perceived danger beats the driver's own times this and its boldness.
+  threatRatio: 1,
+  // A sighting misjudges a truck's danger by up to a quarter either way, rolled once per sighting. Damage shows,
+  // but only roughly.
+  dangerSpread: 0.25,
+  // Flee weight times this against a threat, and again when the cab or driver is at the flee condition.
+  // 20 makes an outgunned raider run about two times in three, and an outgunned scavenger nearly always.
+  threatFlee: 20,
+  weakFlee: 20,
+  // Damage taken last turn, as a share of cab max HP, that gives the hurt flee option its base weight.
+  hurtFullFlee: 0.1,
+  // Turns a noticed subject stays remembered after it was last perceived. A heard engine drops out for a turn or
+  // two when the truck slows or crosses behind the listener, and 3 turns bridges that without a fresh roll.
+  noticeMemory: 3,
+  // Salvage in sight weighs 10 times a known site out of sight.
+  visibleSalvage: 10,
+  // A robber mostly picks targets weaker than itself, away from town guards. Rob weight times this when the
+  // target looks as strong as the robber times its boldness or stronger. A scumbag's rob weight of 2 drops to 0.03,
+  // so it robs at about 4%, not 66%.
+  robStronger: 0.015,
+  // Rob weight times this when the robber or target is within guard range of a town gate. Same drop as above.
+  robNearGuards: 0.015,
 };
 
 export const NPC_UPKEEP = {

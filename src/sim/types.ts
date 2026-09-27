@@ -1,6 +1,7 @@
 // World state. Plain data only, so it clones and serializes.
 
 import type { PartHit, Side } from "./armor";
+import type { TraitId } from "../data/npcs";
 import type { Terrain } from "./terrain";
 import type { Vec } from "./vec";
 import type { TopicId } from "../data/dialogue";
@@ -113,17 +114,7 @@ export type DriverResources = {
 };
 
 export type NpcActivity = {
-  kind:
-    | "scavenge"
-    | "sell"
-    | "trade"
-    | "resupply"
-    | "raid"
-    | "fight"
-    | "flee"
-    | "wait"
-    | "investigate"
-    | "tow";
+  kind: 'scavenge' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate' | 'tow' | 'loot';
   targetId: string | null;
   destination: Vec | null;
   phase: "travel" | "act";
@@ -132,18 +123,20 @@ export type NpcActivity = {
 };
 
 export type NpcBrain = {
-  templateId: string;
-  activity: NpcActivity | null;
-  goal: Vec | null;
-  home: Vec;
-  stepIndex: number; // route progress for traders and scavengers
-  lastPos?: Vec; // position before the last drive attempt
-  stalled?: number; // consecutive turns without forward progress
-  recovery?: number; // turns left backing away from a blockage
-  recoveryGoal?: Vec;
-  farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
-  refusedTow: boolean; // the player turned down this driver's tow, so it never offers again
-  brokenTow?: { town: string; fee: number }; // a tow this driver dropped for danger; it offers the same deal again
+    templateId: string;
+    traits: TraitId[]; // base traits of the template plus the extras rolled at spawn
+    goals: NpcActivity[]; // goal stack, top last: a long-term goal at the bottom, interruptions above it
+    noticed: Record<string, number>; // `<decision>:<vehicle id>` for subjects already decided on, to the turn last perceived
+    hurt: number; // part damage taken last turn
+    attacker: string | null; // the vehicle whose shots did the most damage last turn, for fighting back
+    goal: Vec | null;
+    home: Vec;
+    stepIndex: number; // route progress for traders and scavengers
+    lastPos?: Vec; // position before the last drive attempt
+    stalled?: number; // consecutive turns without forward progress
+    recovery?: number; // turns left backing away from a blockage
+    recoveryGoal?: Vec;
+    farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
 };
 
 export type Vehicle = {
@@ -158,7 +151,6 @@ export type Vehicle = {
   order: MoveOrder | null; // null: coast, keeping speed and heading
   direct: boolean; // drive straight at the order's point instead of routing around obstacles; the player's manual mode
   weaponOrders: Record<string, WeaponOrder>; // key: weapon part id
-  grudges: string[]; // vehicle ids this vehicle treats as hostile
   trail: Pose[]; // poses through the last turn, for animation
   brain: NpcBrain | null;
   resources: DriverResources | null;
@@ -173,9 +165,26 @@ export type Obstacle = {
   kind: "rock" | "wreck" | "building" | "water" | "site";
 };
 
-// A tow to town by the NPC `by`. The fee is paid on arrival.
-export type Tow = { by: string; town: string; fee: number; hitched: boolean };
-export type TowDropReason = "refused" | "unhitched" | "danger" | "gone";
+// A timed relation one vehicle holds toward another. src/sim/states.ts owns them.
+export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise';
+export type StateEnding = 'expired' | 'fulfilled' | 'broken';
+// A tow state: the holder tows the other party to `town` for `fee`, paid on arrival. hitched is false while the offer is open.
+// A tow promise: the terms of a tow the holder dropped for danger, which its next offer keeps.
+// A feud: robbery is true when the holder started it to rob the other party, so a win sends it to loot.
+export type StateData =
+  | { kind: 'tow'; town: string; fee: number; hitched: boolean }
+  | { kind: 'feud'; robbery: boolean }
+  | { kind: 'towPromise'; town: string; fee: number }
+  | { kind: 'none' };
+export type NpcState = {
+  id: string;
+  kind: StateKindId;
+  holder: string; // vehicle id
+  other: string; // vehicle id
+  turnsLeft: number | null; // null: no timer
+  born: number; // turn it was added; it cannot end in that turn
+  data: StateData;
+};
 
 // A value a dialogue line shows. The sim keeps raw values, and the UI formats them.
 export type CallVar =
@@ -211,7 +220,6 @@ export type Player = {
   knockouts: number;
   state: "active" | "knockedOut" | "dead";
   knockoutTurns: number; // turns spent in the current knockout
-  tow: Tow | null; // an open tow offer, or the tow in progress once hitched
   beacon: boolean; // the emergency beacon calls every vehicle within BEACON.range; see src/sim/tow.ts
   call: Call | null;
   talked: Record<string, Partial<Record<TopicId, TopicOutcome>>>; // NPC id to how each topic with it ended
@@ -231,61 +239,36 @@ export type ShotRound = {
 };
 
 export type GameEvent =
-  | {
-      t: "activity";
-      vehicle: string;
-      previous: NpcActivity["kind"] | null;
-      activity: NpcActivity["kind"] | null;
-      reason: string;
-    }
-  | { t: "collision"; a: string; b: string; hitsA: PartHit[]; hitsB: PartHit[] } // parts damaged on a and on b; hitsB is empty when b is not a vehicle
-  | {
-      t: "shot";
-      shooter: string;
-      weapon: string;
-      target: string;
-      aim: Aim;
-      chance: number;
-      side: Side;
-      rounds: ShotRound[];
-    }
-  | {
-      t: "guardShot";
-      site: string;
-      from: Vec;
-      target: string;
-      rounds: ShotRound[];
-    }
-  | { t: "partDisabled"; vehicle: string; part: string }
-  | { t: "destroyed"; vehicle: string; by: string }
-  | { t: "arrived"; vehicle: string }
-  | { t: "spawn"; vehicle: string }
-  | { t: "despawn"; vehicle: string }
-  | { t: "hostile"; vehicle: string; against: string }
-  | { t: "xp"; amount: number; reason: string }
-  | { t: "levelUp"; level: number }
-  | { t: "money"; amount: number; reason: string }
-  | { t: "discover"; location: string }
-  | { t: "supply"; what: string; text: string }
-  | { t: "death" }
-  | { t: "knockout" }
-  | { t: "wake" }
-  | { t: "towOffer"; by: string; town: string; fee: number }
-  | { t: "towDone"; by: string; fee: number }
-  | { t: "towDropped"; by: string; reason: TowDropReason }
-  | {
-      t: "job";
-      vehicle: string;
-      job: Job;
-      outcome: "started" | "done" | "cancelled";
-    }
-  | { t: "breakdown"; vehicle: string; part: string }
-  | { t: "searched"; stock: string } // the player finished searching a stock; its loot can now be taken
-  | { t: "weather"; event: WeatherEvent; outcome: "started" | "ended" }
-  | { t: "say"; speaker: string; text: string; vars: CallVars } // speaker is a vehicle id; the player's lines use the player's
-  | { t: "call"; with: string; outcome: "opened" | "ended" }
-  | { t: "honk"; vehicle: string }
-  | { t: "info"; text: string };
+  | { t: 'activity'; vehicle: string; previous: NpcActivity['kind'] | null; activity: NpcActivity['kind'] | null; reason: string }
+  | { t: 'collision'; a: string; b: string; hitsA: PartHit[]; hitsB: PartHit[] } // parts damaged on a and on b; hitsB is empty when b is not a vehicle
+  | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; chance: number; side: Side; rounds: ShotRound[] }
+  | { t: 'guardShot'; site: string; from: Vec; target: string; rounds: ShotRound[] }
+  | { t: 'partDisabled'; vehicle: string; part: string }
+  | { t: 'destroyed'; vehicle: string; by: string }
+  | { t: 'arrived'; vehicle: string }
+  | { t: 'spawn'; vehicle: string }
+  | { t: 'despawn'; vehicle: string }
+  | { t: 'hostile'; vehicle: string; against: string }
+  | { t: 'xp'; amount: number; reason: string }
+  | { t: 'levelUp'; level: number }
+  | { t: 'money'; amount: number; reason: string }
+  | { t: 'discover'; location: string }
+  | { t: 'supply'; what: string; text: string }
+  | { t: 'death' }
+  | { t: 'knockout' }
+  | { t: 'wake' }
+  | { t: 'towOffer'; by: string; town: string; fee: number }
+  | { t: 'towDone'; by: string; fee: number }
+  | { t: 'towDropped'; by: string; reason: 'refused' | 'unhitched' | 'danger' | 'gone' }
+  | { t: 'stateEnded'; state: NpcState; ending: StateEnding }
+  | { t: 'job'; vehicle: string; job: Job; outcome: 'started' | 'done' | 'cancelled' }
+  | { t: 'breakdown'; vehicle: string; part: string }
+  | { t: 'searched'; stock: string } // the player finished searching a stock; its loot can now be taken
+  | { t: 'weather'; event: WeatherEvent; outcome: 'started' | 'ended' }
+  | { t: 'say'; speaker: string; text: string; vars: CallVars } // speaker is a vehicle id; the player's lines use the player's
+  | { t: 'call'; with: string; outcome: 'opened' | 'ended' }
+  | { t: 'honk'; vehicle: string }
+  | { t: 'info'; text: string };
 
 export type World = {
   seed: number;
@@ -303,4 +286,5 @@ export type World = {
   spawnTimer: Record<string, number>; // template id -> turns until next spawn check
   weather: WeatherEvent[];
   dustClouds: DustCloud[];
+  states: NpcState[];
 };

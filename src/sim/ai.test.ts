@@ -5,7 +5,7 @@ import { REGION } from '../data/region';
 import { planNpcOrders } from './ai';
 import { resolveMovement } from './movement';
 import { resolveNpcActivities } from './npc-activities';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import { bearing, dist, type Vec } from './vec';
 import { newWorld } from './world';
 import { steerTo } from './steering';
@@ -14,7 +14,7 @@ import { vehicleStats } from './stats';
 function buildChase() {
   const w = emptyWorld({ x: 40, y: 30 });
   const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
-  npc.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0, refusedTow: false };
+  npc.brain = npcBrain('buggy', npc.pos, ['raider']);
   return { w, npc };
 }
 
@@ -47,7 +47,7 @@ describe('NPC driving', () => {
     const bowl = REGION.towns[0];
     const nose = REGION.towns[1];
     const npc = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: bowl.pos.x + bowl.radius + 2, y: bowl.pos.y });
-    npc.brain = { templateId: 'trader', activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0, refusedTow: false };
+    npc.brain = npcBrain('trader', npc.pos, ['trader']);
     let closest = Infinity;
     for (let i = 0; i < w.size && closest >= nose.radius + 2; i++) {
       planNpcOrders(w);
@@ -69,8 +69,8 @@ describe('NPC driving', () => {
     // One tile apart past both radii, well inside the give-way distance, nose to nose.
     const east = addVehicle(w, 'traders', 'hauler', ['stockEngine'], at(-1.5), toNose);
     const west = addVehicle(w, 'traders', 'hauler', ['stockEngine'], at(1.5), toNose + Math.PI);
-    east.brain = { templateId: 'trader', activity: { kind: 'sell', targetId: 'nose', destination: { ...nose.pos }, reason: 'test', phase: 'travel' }, goal: null, home: { ...east.pos }, stepIndex: 0, refusedTow: false };
-    west.brain = { templateId: 'trader', activity: { kind: 'sell', targetId: 'bowl', destination: { ...bowl.pos }, reason: 'test', phase: 'travel' }, goal: null, home: { ...west.pos }, stepIndex: 0, refusedTow: false };
+    east.brain = { ...npcBrain('trader', east.pos, ['trader']), goals: [{ kind: 'sell', targetId: 'nose', destination: { ...nose.pos }, reason: 'test', phase: 'travel' }] };
+    west.brain = { ...npcBrain('trader', west.pos, ['trader']), goals: [{ kind: 'sell', targetId: 'bowl', destination: { ...bowl.pos }, reason: 'test', phase: 'travel' }] };
     const along = (p: Vec) => (p.x - mid.x) * Math.cos(toNose) + (p.y - mid.y) * Math.sin(toNose);
     // Ten turns cover a stop, a detour around the stopped truck and the drive past it.
     for (let i = 0; i < 10; i++) {

@@ -1,36 +1,24 @@
 // Weapons fire after movement. All shots of a turn are rolled first, then applied,
 // so fire is simultaneous: a vehicle killed this turn still gets its shots off.
 
-import { NPCS, SPAWN } from "../data/npcs";
-import { RULES } from "../data/rules";
-import { skillBonus } from "../data/skills";
-import { chassisDef } from "../data/chassis";
-import { PHYSICS } from "../data/physics";
-import {
-  laneCount,
-  partLane,
-  sideToward,
-  walkLane,
-  type PartHit,
-  type Side,
-} from "./armor";
-import { bodyOf } from "./body";
-import {
-  corePart,
-  hasLoot,
-  itemSize,
-  mountedItems,
-  mountedParts,
-} from "./grid";
-import { gainXp } from "./progress";
-import { canVehicleSee, hasLineOfFire } from "./vision";
-import { createWreckSalvage } from "./salvage";
-import { getResources } from "./resources";
-import { chance, gauss, randRange } from "./rng";
-import { vehicleStats, type MountedWeapon } from "./stats";
-import type { Aim, ShotRound, Vehicle, World } from "./types";
-import { weatherAt } from "./weather";
-import { angleDiff, bearing, clamp, dist, DEG, type Vec } from "./vec";
+import { NPCS, SPAWN } from '../data/npcs';
+import { RULES } from '../data/rules';
+import { skillBonus } from '../data/skills';
+import { chassisDef } from '../data/chassis';
+import { PHYSICS } from '../data/physics';
+import { laneCount, partLane, sideToward, walkLane, type PartHit, type Side } from './armor';
+import { bodyOf } from './body';
+import { corePart, hasLoot, itemSize, mountedItems, mountedParts } from './grid';
+import { gainXp } from './progress';
+import { canVehicleSee, hasLineOfFire } from './vision';
+import { createWreckSalvage } from './salvage';
+import { addState, stateOf } from './states';
+import { getResources } from './resources';
+import { chance, gauss, randRange } from './rng';
+import { vehicleStats, type MountedWeapon } from './stats';
+import type { Aim, ShotRound, Vehicle, World } from './types';
+import { weatherAt } from './weather';
+import { angleDiff, bearing, clamp, dist, DEG, type Vec } from './vec';
 
 export type FireBlock =
   | "disabled"
@@ -41,17 +29,21 @@ export type FireBlock =
   | "unseen"
   | "covered";
 
-// Sides at odds: a grudge either way, or a raider against anyone else.
-export function isFoe(a: Vehicle, b: Vehicle): boolean {
+export function inFeud(world: World, a: Vehicle, b: Vehicle): boolean {
+  return stateOf(world, "feud", a.id, b.id) !== null || stateOf(world, "feud", b.id, a.id) !== null;
+}
+
+// Sides at odds: a feud either way, or a raider against anyone else.
+export function isFoe(world: World, a: Vehicle, b: Vehicle): boolean {
   if (a.id === b.id) return false;
-  if (a.grudges.includes(b.id) || b.grudges.includes(a.id)) return true;
+  if (inFeud(world, a, b)) return true;
   return (a.faction === "raiders") !== (b.faction === "raiders");
 }
 
-// Foes fight, but a raider leaves a vehicle with nothing to take unless a grudge is held.
-export function isHostile(a: Vehicle, b: Vehicle): boolean {
-  if (!isFoe(a, b)) return false;
-  if (a.grudges.includes(b.id) || b.grudges.includes(a.id)) return true;
+// Foes fight, but a raider leaves a vehicle with nothing to take unless a feud is held.
+export function isHostile(world: World, a: Vehicle, b: Vehicle): boolean {
+  if (!isFoe(world, a, b)) return false;
+  if (inFeud(world, a, b)) return true;
   return hasLoot(a.faction === "raiders" ? b : a);
 }
 
@@ -413,15 +405,15 @@ function applyShot(world: World, s: Shot): void {
 
 // A shot at a vehicle that was not hostile starts a feud with it and its nearby faction mates.
 function provoke(world: World, shooter: Vehicle, target: Vehicle): void {
-  if (isHostile(target, shooter)) return;
+  if (isHostile(world, target, shooter)) return;
   for (const v of world.vehicles) {
     const joins =
       v.id === target.id ||
       (v.faction === target.faction &&
         dist(v.pos, target.pos) <= SPAWN.neighborHelp &&
         canVehicleSee(world, v, shooter.pos));
-    if (joins && v.faction !== "player" && !v.grudges.includes(shooter.id)) {
-      v.grudges.push(shooter.id);
+    if (joins && v.faction !== "player" && !stateOf(world, "feud", v.id, shooter.id)) {
+      addState(world, "feud", v.id, shooter.id, { kind: "feud", robbery: false });
       world.events.push({ t: "hostile", vehicle: v.id, against: shooter.id });
     }
   }
@@ -453,9 +445,6 @@ export function resolveDestroyed(world: World): void {
   }
   clearOldWrecks(world);
   for (const v of world.vehicles) {
-    v.grudges = v.grudges.filter((id) =>
-      world.vehicles.some((x) => x.id === id),
-    );
     for (const [wid, order] of Object.entries(v.weaponOrders))
       if (!world.vehicles.some((x) => x.id === order.targetId))
         delete v.weaponOrders[wid];
@@ -496,7 +485,7 @@ export function autoOrders(world: World, v: Vehicle): void {
   v.weaponOrders = {};
   const seen = (x: Vehicle) => canVehicleSee(world, v, x.pos);
   const hostiles = world.vehicles
-    .filter((x) => isHostile(v, x) && seen(x))
+    .filter((x) => isHostile(world, v, x) && seen(x))
     .sort((a, b) => dist(v.pos, a.pos) - dist(v.pos, b.pos));
   for (const mw of vehicleStats(world, v).weapons) {
     const target =

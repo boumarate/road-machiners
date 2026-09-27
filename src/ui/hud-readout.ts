@@ -4,6 +4,8 @@ import { RULES } from "../data/rules";
 import { playerVehicle } from "../sim/damage";
 import { corePart, mountedParts } from "../sim/grid";
 import { isStranded, vehicleStats } from "../sim/stats";
+import { towData } from "../sim/states";
+import { playerTow } from "../sim/tow";
 import { clockOf, heatAt } from "../sim/sun";
 import { TERRAIN } from "../data/terrain";
 import { dist, type Vec } from "../sim/vec";
@@ -57,10 +59,12 @@ export function getRescueReadout(w: World): RescueReadout | null {
   const p = w.player;
   if (p.state === "knockedOut") return { kind: "knockedOut" };
   if (p.state === "dead") return null;
-  if (p.tow) {
-    const tow = { tower: vehicleName(w, p.tow.by), town: townName(p.tow.town), fee: p.tow.fee };
-    if (p.tow.hitched) return { kind: "towed", ...tow };
-    return { kind: "offer", ...tow, debt: p.money < p.tow.fee, beacon: p.beacon };
+  const state = playerTow(w);
+  if (state) {
+    const data = towData(state);
+    const tow = { tower: vehicleName(w, state.holder), town: townName(data.town), fee: data.fee };
+    if (data.hitched) return { kind: "towed", ...tow };
+    return { kind: "offer", ...tow, debt: p.money < data.fee, beacon: p.beacon };
   }
   if (p.beacon || isStranded(w, playerVehicle(w))) return { kind: "stranded", beacon: p.beacon };
   return null;

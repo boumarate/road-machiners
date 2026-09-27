@@ -1,12 +1,10 @@
 // Activity execution uses the same steering and route planner as the player.
 import { NPCS } from "../data/npcs";
 import { RULES } from "../data/rules";
-import {
-  chooseNpcActivity,
-  getActivityDestination,
-  setNpcActivity,
-} from "./npc-activities";
+import { getActivityDestination, thinkNpc, topGoal } from "./npc-activities";
+import { towData } from "./states";
 import { vehicleStats } from "./stats";
+import { playerTow } from "./tow";
 import type { Vehicle, World } from "./types";
 import { angleDiff, bearing, dist, type Vec } from "./vec";
 
@@ -19,8 +17,7 @@ export function planNpcOrders(world: World): void {
     if (!tpl) throw new Error(`Unknown NPC template ${v.brain.templateId}`);
     const b = v.brain;
     if (b.recovery) b.recovery--;
-    const activity = chooseNpcActivity(world, v);
-    setNpcActivity(world, v, activity, activity.reason);
+    const activity = thinkNpc(world, v);
     const yielding =
       activity.kind !== "fight" &&
       activity.kind !== "flee" &&
@@ -47,7 +44,7 @@ export function planNpcOrders(world: World): void {
       };
       b.stalled = 0;
     }
-    let goal = getActivityDestination(world, v);
+    let goal = getActivityDestination(world, v, activity);
     if (activity.kind === "fight") {
       const target = world.vehicles.find(
         (other) => other.id === activity.targetId,
@@ -109,12 +106,11 @@ function computeFightGoal(
 // Two NPCs that give way to each other would both wait forever. Only the one whose id sorts first waits.
 // Stopped, it counts as parked, so the other one's route goes around it.
 function vehicleAhead(world: World, v: Vehicle): boolean {
-  const tow = world.player.tow;
+  const tow = playerTow(world);
   return world.vehicles.some((x) => {
     if (x.id === v.id) return false;
     // A tower never yields to the truck on its own rope.
-    if (tow?.hitched && tow.by === v.id && x.id === world.player.vehicleId)
-      return false;
+    if (tow && towData(tow).hitched && tow.holder === v.id && x.id === world.player.vehicleId) return false;
     if (!inTheWay(world, v, x)) return false;
     return !(v.id > x.id && givesWay(x) && inTheWay(world, x, v));
   });
@@ -132,6 +128,7 @@ function inTheWay(world: World, v: Vehicle, x: Vehicle): boolean {
 
 // NPCs give way unless they fight or flee; the player never does.
 function givesWay(x: Vehicle): boolean {
-  const kind = x.brain?.activity?.kind;
-  return Boolean(x.brain) && kind !== "fight" && kind !== "flee";
+  if (!x.brain) return false;
+  const kind = topGoal(x)?.kind;
+  return kind !== "fight" && kind !== "flee";
 }
