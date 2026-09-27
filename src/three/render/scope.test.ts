@@ -85,7 +85,7 @@ describe('render scope', () => {
   for (const zoom of [1, 0.35]) for (const spot of spots) {
     it(`keeps every object in view attached at zoom ${zoom} over ${spot.x},${spot.y}`, () => {
       const root = new THREE.Group();
-      const scope = new RenderScope(root, SIZE, new SightLimit());
+      const scope = new RenderScope(root, SIZE, new SightLimit(SIZE), true);
       const objects = populate(scope);
       const rig = rigAt(spot.x, spot.y, zoom);
       scope.update(rig.camera);
@@ -99,7 +99,7 @@ describe('render scope', () => {
 
   it('follows the camera and detaches removed objects', () => {
     const root = new THREE.Group();
-    const scope = new RenderScope(root, SIZE, new SightLimit());
+    const scope = new RenderScope(root, SIZE, new SightLimit(SIZE), true);
     const objects = populate(scope);
     const first = rigAt(100, 100, 1);
     scope.update(first.camera);
@@ -114,15 +114,15 @@ describe('render scope', () => {
   });
 
   it('rejects objects outside the map', () => {
-    const scope = new RenderScope(new THREE.Group(), SIZE, new SightLimit());
+    const scope = new RenderScope(new THREE.Group(), SIZE, new SightLimit(SIZE), true);
     expect(() => scope.add(new THREE.Object3D(), { x: -5, y: 10 }, 1)).toThrow();
     expect(() => scope.add(new THREE.Object3D(), { x: 10, y: SIZE + 1 }, 1)).toThrow();
   });
 
   it('detaches chunks beyond gray vision and keeps those inside it', () => {
     const root = new THREE.Group();
-    const limit = new SightLimit();
-    const scope = new RenderScope(root, SIZE, limit);
+    const limit = new SightLimit(SIZE);
+    const scope = new RenderScope(root, SIZE, limit, true);
     const objects = populate(scope);
     const rig = rigAt(SIZE / 2, SIZE / 2, 0.35);
     const center = { x: (SIZE / 2) * S, y: 0, z: (SIZE / 2) * S };
@@ -138,18 +138,36 @@ describe('render scope', () => {
 });
 
 describe('sight limit', () => {
-  it('discards fragments beyond the edge in every clipped shader', () => {
-    const limit = new SightLimit();
-    const material = new THREE.MeshLambertMaterial();
-    limit.clip(new THREE.Mesh(new THREE.BoxGeometry(), material));
+  function compiled(material: THREE.Material): string {
     const shader = { uniforms: {}, vertexShader: THREE.ShaderLib.lambert.vertexShader, fragmentShader: THREE.ShaderLib.lambert.fragmentShader };
     material.onBeforeCompile(shader as unknown as THREE.WebGLProgramParametersWithUniforms, {} as THREE.WebGLRenderer);
-    expect(shader.fragmentShader).toContain('discard');
-    expect(material.customProgramCacheKey()).toContain('|sight');
+    return shader.fragmentShader;
+  }
+
+  it('discards fragments beyond the edge and greys only when asked', () => {
+    const limit = new SightLimit(SIZE);
+    const prop = new THREE.MeshLambertMaterial();
+    const ground = new THREE.MeshLambertMaterial();
+    limit.patch(new THREE.Mesh(new THREE.BoxGeometry(), prop), true);
+    limit.patch(new THREE.Mesh(new THREE.BoxGeometry(), ground), false);
+
+    const propShader = compiled(prop);
+    const groundShader = compiled(ground);
+
+    expect(propShader).toContain('discard');
+    expect(propShader).toContain('sightSeen');
+    expect(groundShader).toContain('discard');
+    expect(groundShader).not.toContain('sightSeen');
+    expect(prop.customProgramCacheKey()).not.toBe(ground.customProgramCacheKey());
+  });
+
+  it('rejects a visible tile outside the map', () => {
+    const limit = new SightLimit(SIZE);
+    expect(() => limit.showVisible([SIZE * SIZE])).toThrow();
   });
 
   it('rejects a radius that is not a finite positive number', () => {
-    const limit = new SightLimit();
+    const limit = new SightLimit(SIZE);
     expect(() => limit.set({ x: 0, y: 0, z: 0 }, 0)).toThrow();
     expect(() => limit.set({ x: 0, y: 0, z: 0 }, Number.NaN)).toThrow();
   });

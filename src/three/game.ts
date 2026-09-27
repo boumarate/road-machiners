@@ -184,7 +184,7 @@ export class Game {
   );
   private selected: string | null = null;
   private following = true;
-  private readonly sightLimit = new SightLimit();
+  private readonly sightLimit: SightLimit;
   private panFrom: { x: number; y: number } | null = null;
   private planFor: World | null = null;
   private last = performance.now();
@@ -231,15 +231,16 @@ export class Game {
     this.scene.add(this.pickRing);
 
     // Ground and props cull separately, so ground picking only hits terrain.
-    const groundScope = new RenderScope(this.ground, this.world.size, this.sightLimit);
-    const propScope = new RenderScope(this.props, this.world.size, this.sightLimit);
+    this.sightLimit = new SightLimit(this.world.size);
+    const groundScope = new RenderScope(this.ground, this.world.size, this.sightLimit, false);
+    const propScope = new RenderScope(this.props, this.world.size, this.sightLimit, true);
     this.scopes = [groundScope, propScope];
     const groundChunks = terrainMesh(this.world, groundScope);
     addSites(this.world.terrain, propScope);
     this.obstacles = new ObstacleViews(propScope, this.world.terrain);
     this.obstacles.sync(this.world.obstacles);
     addScatter(this.world.terrain, this.world.obstacles, propScope);
-    this.fog = new FogView(this.world, groundChunks);
+    this.fog = new FogView(this.world, groundChunks, this.sightLimit);
     this.path = new PathView(this.world.terrain);
     this.shade = new ShadeView(this.world);
     this.weather = new WeatherView(this.world);
@@ -1034,7 +1035,11 @@ export class Game {
     this.drawOverlays();
     // syncVehicles gives every vehicle a frame, the player's included.
     const truck = this.frames[playerVehicle(this.world).id].pos;
-    this.limitSight(truck);
+    // Gray vision centers on the drawn truck, so its edge moves with the truck while a turn plays. The
+    // camera cannot pan past it.
+    const sightRadius = grayRadius(this.world, playerVehicle(this.world).pos) * PHYSICS.metersPerTile;
+    this.sightLimit.set(truck, sightRadius);
+    this.rig.leash(truck, sightRadius);
     if (this.following) this.rig.follow(truck);
     this.hud.showRecenter(!this.following);
     this.rig.tick(dt);
@@ -1058,14 +1063,6 @@ export class Game {
     this.refreshPlan();
     this.autoTurn(now);
     requestAnimationFrame((t) => this.tick(t));
-  }
-
-  // Gray vision centers on the drawn truck, so its edge moves with the truck while a turn plays. The
-  // camera cannot pan past it.
-  private limitSight(truck: V3): void {
-    const radius = grayRadius(this.world, playerVehicle(this.world).pos) * PHYSICS.metersPerTile;
-    this.sightLimit.set(truck, radius);
-    this.rig.leash(truck, radius);
   }
 
   // Recomputes the player's sight from the truck's current spot once it has moved far enough.

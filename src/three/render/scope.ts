@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
+import { TERRAIN } from '../../data/terrain';
 import type { Vec } from '../../sim/vec';
 import type { V3 } from '../../phys/frames';
 import { TERRAIN_CHUNK } from './terrain';
@@ -28,7 +29,8 @@ export class RenderScope {
   private readonly test = new THREE.Box3();
 
   // The root must stay at the world origin: chunk bounds are world boxes.
-  constructor(private readonly root: THREE.Object3D, private readonly mapSize: number, private readonly limit: SightLimit) {
+  // grey: objects out of clear sight drain to grey. The ground greys itself, so its scope passes false.
+  constructor(private readonly root: THREE.Object3D, private readonly mapSize: number, private readonly limit: SightLimit, private readonly grey: boolean) {
     this.perSide = Math.ceil(mapSize / TERRAIN_CHUNK);
     this.chunks = new Array<Chunk | null>(this.perSide * this.perSide).fill(null);
   }
@@ -48,7 +50,7 @@ export class RenderScope {
     chunk.box.union(bounds);
     chunk.group.add(obj);
     this.owner.set(obj, chunk);
-    this.limit.clip(obj);
+    this.limit.patch(obj, this.grey);
   }
 
   // The chunk keeps its bounds, which stay a safe superset.
@@ -96,24 +98,49 @@ export class RenderScope {
   }
 }
 
-// The edge of gray vision. Ground and props farther than the gray radius from the player's truck are not
-// drawn: their shaders discard every fragment beyond it, so the background shows. Culling uses the same
-// circle, so chunks wholly beyond it skip rendering. Shadow casting is not clipped, so a hidden prop just past
-// the edge can still shade ground inside it.
+// What the player sees, applied to ground and props. Past the gray radius from the truck nothing is drawn:
+// shaders discard every fragment there, so the background shows. Culling uses the same circle, so chunks
+// wholly beyond it skip rendering. Inside it, props on tiles out of clear sight drain to grey like the
+// ground. The ground greys itself in fog.ts, so only props take the grey here. Shadow casting is not
+// clipped, so a hidden prop just past the edge can still shade ground inside it.
 type Clipped = THREE.Material & { onBeforeCompile: THREE.Material['onBeforeCompile'] };
 
 export class SightLimit {
-  private readonly uniforms = {
-    sightCenter: { value: new THREE.Vector2() },
-    sightRadius: { value: Number.POSITIVE_INFINITY },
-  };
-  private readonly clipped = new WeakSet<THREE.Material>();
+  private readonly visible: THREE.DataTexture;
+  private readonly uniforms;
+  private readonly patched = new WeakSet<THREE.Material>();
+
+  constructor(private readonly mapSize: number) {
+    // One texel per tile, 255 where the player sees it now. Row y holds map row y.
+    this.visible = new THREE.DataTexture(new Uint8Array(mapSize * mapSize), mapSize, mapSize, THREE.RedFormat, THREE.UnsignedByteType);
+    this.visible.magFilter = THREE.NearestFilter;
+    this.visible.minFilter = THREE.NearestFilter;
+    this.visible.needsUpdate = true;
+    this.uniforms = {
+      sightCenter: { value: new THREE.Vector2() },
+      sightRadius: { value: Number.POSITIVE_INFINITY },
+      sightVisible: { value: this.visible },
+      sightMapMeters: { value: mapSize * S },
+      sightGrey: { value: new THREE.Vector2(TERRAIN.fog.seen.grey, TERRAIN.fog.seen.bright) },
+    };
+  }
 
   // center is the truck's point in 3D meters. radius is in meters.
   set(center: V3, radius: number): void {
     if (!(radius > 0 && Number.isFinite(radius))) throw new Error(`Sight limit radius must be a finite positive number, got ${radius}`);
     this.uniforms.sightCenter.value.set(center.x, center.z);
     this.uniforms.sightRadius.value = radius;
+  }
+
+  // Tile indices, y * mapSize + x, the player sees clearly now.
+  showVisible(tiles: Iterable<number>): void {
+    const data = this.visible.image.data as Uint8Array;
+    data.fill(0);
+    for (const t of tiles) {
+      if (!(t >= 0 && t < data.length)) throw new Error(`Visible tile ${t} is outside the ${this.mapSize}-tile map`);
+      data[t] = 255;
+    }
+    this.visible.needsUpdate = true;
   }
 
   // Whether a 3D point lies inside the edge, on the ground plane.
@@ -130,18 +157,19 @@ export class SightLimit {
     return Math.hypot(dx, dz) <= this.uniforms.sightRadius.value + margin;
   }
 
-  // Patches every material under obj once. Chains any shader patch the material already has.
-  clip(obj: THREE.Object3D): void {
+  // Patches every material under obj once. Chains any shader patch the material already has. With grey,
+  // fragments on tiles out of clear sight drain to grey.
+  patch(obj: THREE.Object3D, grey: boolean): void {
     obj.traverse((o) => {
       if (!(o instanceof THREE.Mesh)) return;
       const materials: THREE.Material[] = Array.isArray(o.material) ? o.material : [o.material];
-      for (const m of materials) this.clipMaterial(m);
+      for (const m of materials) this.patchMaterial(m, grey);
     });
   }
 
-  private clipMaterial(mat: Clipped): void {
-    if (this.clipped.has(mat)) return;
-    this.clipped.add(mat);
+  private patchMaterial(mat: Clipped, grey: boolean): void {
+    if (this.patched.has(mat)) return;
+    this.patched.add(mat);
     const before = mat.onBeforeCompile.bind(mat);
     const key = mat.customProgramCacheKey.bind(mat);
     mat.onBeforeCompile = (shader, renderer) => {
@@ -157,12 +185,21 @@ export class SightLimit {
         #endif
         vSightXZ = (modelMatrix * sightWorld).xz;`,
       );
-      shader.fragmentShader = inject(shader.fragmentShader, '#include <common>', 'varying vec2 vSightXZ;\nuniform vec2 sightCenter;\nuniform float sightRadius;');
+      shader.fragmentShader = inject(
+        shader.fragmentShader,
+        '#include <common>',
+        'varying vec2 vSightXZ;\nuniform vec2 sightCenter;\nuniform float sightRadius;\nuniform sampler2D sightVisible;\nuniform float sightMapMeters;\nuniform vec2 sightGrey;',
+      );
       shader.fragmentShader = inject(shader.fragmentShader, '#include <clipping_planes_fragment>', 'if (distance(vSightXZ, sightCenter) > sightRadius) discard;');
+      if (grey) shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `float sightSeen = texture2D(sightVisible, vSightXZ / sightMapMeters).r;
+        float sightLuma = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
+        outgoingLight = mix(mix(outgoingLight, vec3(sightLuma), sightGrey.x) * sightGrey.y, outgoingLight, sightSeen);
+        #include <opaque_fragment>`);
+      if (grey && !shader.fragmentShader.includes('sightSeen')) throw new Error('Sight limit cannot grey a shader without #include <opaque_fragment>');
     };
-    // Programs are cached by this key. Without the tag, clipped and unclipped materials with the same
+    // Programs are cached by this key. Without the tag, patched and unpatched materials with the same
     // hook source would share one program.
-    mat.customProgramCacheKey = () => `${key()}|sight`;
+    mat.customProgramCacheKey = () => `${key()}|sight${grey ? '-grey' : ''}`;
     mat.needsUpdate = true;
   }
 }
