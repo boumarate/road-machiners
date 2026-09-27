@@ -10,21 +10,27 @@ import { chance, randInt } from './rng';
 import { vehicleStats } from './stats';
 import type { PartInstance, SalvageStock, Vehicle, World } from './types';
 import { canUseSite } from './sites';
-import { dist } from './vec';
+import { dist, type Vec } from './vec';
 
-// Landmark and convoy sites get finite stock at world creation, drawn from their loot table.
+// Landmark and convoy sites, and the wrecks placed on roads, get finite stock at world creation,
+// drawn from their loot table. A road wreck's stock shares its obstacle id.
 export function initializeSalvage(world: World): void {
-  world.salvage = REGION.locations
+  const sites = REGION.locations
     .filter((site) => site.kind === 'convoy' || site.kind === 'landmark')
-    .map((site) => {
-      const table: LootTable = site.kind === 'convoy' ? SALVAGE.convoy : SALVAGE.landmark;
-      const goods: Record<string, number> = {};
-      for (const [good, [lo, hi]] of Object.entries(table.goods)) goods[good] = randInt(world, lo, hi);
-      goods.parts = randInt(world, table.parts[0], table.parts[1]);
-      const parts: PartInstance[] = [];
-      if (chance(world, table.sparePartChance)) parts.push(makePart(world, table.spareParts[randInt(world, 0, table.spareParts.length - 1)]));
-      return { id: site.id, pos: { ...site.pos }, radius: site.radius, goods, parts };
-    });
+    .map((site) => rollStock(world, site.kind === 'convoy' ? SALVAGE.convoy : SALVAGE.landmark, site.id, site.pos, site.radius));
+  const wrecks = world.obstacles
+    .filter((o) => o.kind === 'wreck' && /^wreck\d+$/.test(o.id))
+    .map((o) => rollStock(world, SALVAGE.roadWreck, o.id, o.pos, o.r * RULES.wreckRadiusScale));
+  world.salvage = [...sites, ...wrecks];
+}
+
+function rollStock(world: World, table: LootTable, id: string, pos: Vec, radius: number): SalvageStock {
+  const goods: Record<string, number> = {};
+  for (const [good, [lo, hi]] of Object.entries(table.goods)) goods[good] = randInt(world, lo, hi);
+  goods.parts = randInt(world, table.parts[0], table.parts[1]);
+  const parts: PartInstance[] = [];
+  if (chance(world, table.sparePartChance)) parts.push(makePart(world, table.spareParts[randInt(world, 0, table.spareParts.length - 1)]));
+  return { id, pos: { ...pos }, radius, goods, parts };
 }
 
 export function hasSalvage(stock: SalvageStock): boolean {

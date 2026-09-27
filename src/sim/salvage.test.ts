@@ -75,3 +75,18 @@ describe('finite salvage', () => {
     expect(w.salvage.filter((s) => s.id === stock.id)).toHaveLength(1);
   });
 });
+
+describe('road wreck salvage', () => {
+  it('gives every wreck placed on a road its own stock to search', async () => {
+    const { newWorld } = await import('./world');
+    const { startKit } = await import('../data/start');
+    const w = newWorld(1337, startKit('standard'));
+    const wrecks = w.obstacles.filter((o) => /^wreck\d+$/.test(o.id));
+    expect(wrecks.length).toBeGreaterThan(0);
+    for (const o of wrecks) {
+      const stock = w.salvage.find((s) => s.id === o.id);
+      expect(stock).toBeDefined();
+      expect(hasSalvage(stock!)).toBe(true);
+    }
+  }, 30_000);
+});

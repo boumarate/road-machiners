@@ -26,9 +26,10 @@ export const RULES = {
   limpSpeed: 2, // top speed with an empty tank or a dead engine or transmission; a truck this slow raises no dust
   minSpeedCap: 1, // a heavy load never pushes max speed below this
   collisionMinImpact: 1.5, // slower bumps deal no damage
-  // A crash gives each truck ramDamage × impact in tiles per turn × the other body's share of both masses,
-  // spread over the lanes of its struck side. An obstacle's share is 1.
-  ramDamage: 15,
+  // A crash gives each truck ramDamage × impact² in tiles per turn × the other body's share of both masses,
+  // spread over the lanes of its struck side. An obstacle's share is 1. Squaring the impact, like crash
+  // energy, keeps a full-speed crash at 6 as hard as before while a bump at 2 only scratches the paint.
+  ramDamage: 2.5,
   cellPen: 0.5, // penetration every grid cell a round or crash passes costs, for the frame and bulk in the way
   crashPen: 4, // penetration of crash damage in each lane
   wheelLoss: 0.15, // share of speed and turning lost per broken wheel

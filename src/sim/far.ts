@@ -1,5 +1,6 @@
 // Travel for vehicles far from the player. They have no physics body: each turn they follow their
-// stored route at the speed the physics driver would plan, burn fuel for the distance and never crash.
+// stored route at the speed the physics driver would plan and burn fuel for the distance. They never
+// crash, but they cannot drive into another vehicle: a truck in the way stops them just short of it.
 
 import { chassisDef } from '../data/chassis';
 import { PERF } from '../data/perf';
@@ -9,7 +10,7 @@ import { playerVehicle } from './damage';
 import { route } from './path';
 import { getResources } from './resources';
 import { vehicleStats, type VehicleStats } from './stats';
-import { zoneSpeed } from './steering';
+import { parkedVehicles, zoneSpeed } from './steering';
 import type { MoveOrder, Pose, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
 
@@ -53,22 +54,55 @@ export function advanceFar(w: World, v: Vehicle): void {
   const next = order.kind === 'through' ? zoneSpeed(s, v.speed, dist(v.pos, order.dest)) : Math.min(s.maxSpeed, v.speed + s.accel);
   // Vehicles without a brain have nowhere to store the route, so they plan it every turn.
   const stored = v.brain?.farRoute;
-  const points = stored && stored.dest.x === order.dest.x && stored.dest.y === order.dest.y ? stored.points : route(w, v.pos, order.dest, full.radius, []);
+  // A new route steers around parked vehicles, like the physics driver's.
+  const points = stored && stored.dest.x === order.dest.x && stored.dest.y === order.dest.y ? stored.points : route(w, v.pos, order.dest, full.radius, parkedVehicles(w, v.id));
 
-  const walk = follow(v.pos, points, (v.speed + next) / 2);
+  const planned = follow(v.pos, points, (v.speed + next) / 2);
+  const block = firstContact(w, v, planned.path, full.radius);
+  const walk = block ? follow(v.pos, points, block.clear) : planned;
   const end = walk.path[walk.path.length - 1];
-  const done = dist(end, order.dest) < (order.kind === 'stopAt' ? RULES.arriveRadius : RULES.passRadius);
+  const reach = order.kind === 'stopAt' ? RULES.arriveRadius : RULES.passRadius;
+  // A truck on the destination leaves the closest free spot as the arrival: either the planner's
+  // route ends there, or the walk stops against that truck.
+  const routeEnd = walk.ahead.length === 0;
+  const done = dist(end, order.dest) < reach || routeEnd || (block !== null && dist(block.other.pos, order.dest) < block.contact + reach);
   v.trail = sample(start, walk.path, walk.moved);
   v.pos = { x: end.x, y: end.y };
   v.heading = v.trail[v.trail.length - 1].heading;
-  v.speed = done && order.kind === 'stopAt' ? 0 : next;
+  v.speed = block || (done && order.kind === 'stopAt') ? 0 : next;
   const resources = getResources(w, v);
   resources.fuel = Math.max(0, resources.fuel - walk.moved * full.fuelPerTile);
-  if (v.brain) v.brain.farRoute = done ? undefined : { dest: { ...order.dest }, points: walk.ahead };
+  // A blocked truck drops its route, so next turn it plans one around the vehicles now parked.
+  if (v.brain) v.brain.farRoute = done || block ? undefined : { dest: { ...order.dest }, points: walk.ahead };
   if (done) {
     w.events.push({ t: 'arrived', vehicle: v.id });
     v.order = null;
   }
+}
+
+const CONTACT_STEP = 0.25; // tiles between overlap checks along a far walk, below the smallest vehicle radius
+
+// The first vehicle the walk would drive into, and how far the walk stays clear of it. Moving away from a
+// vehicle already overlapped is allowed, so two trucks that start on top of each other can separate.
+function firstContact(w: World, v: Vehicle, path: Vec[], radius: number): { other: Vehicle; clear: number; contact: number } | null {
+  const others = w.vehicles.filter((o) => o.id !== v.id).map((o) => ({ o, contact: radius + chassisDef(o.chassisId).radius }));
+  let walked = 0;
+  for (let seg = 1; seg < path.length; seg++) {
+    const a = path[seg - 1];
+    const b = path[seg];
+    const len = dist(a, b);
+    for (let d = Math.min(CONTACT_STEP, len); d <= len; d += CONTACT_STEP) {
+      const t = len > 0 ? d / len : 0;
+      const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+      for (const { o, contact } of others) {
+        const gap = dist(p, o.pos);
+        if (gap < contact && gap < dist(path[0], o.pos)) return { other: o, clear: Math.max(0, walked + d - CONTACT_STEP), contact };
+      }
+      if (d < len && d + CONTACT_STEP > len) d = len - CONTACT_STEP; // always check the segment's end
+    }
+    walked += len;
+  }
+  return null;
 }
 
 // Walks up to `budget` tiles along the route. path starts at from and holds each corner passed and the end point.

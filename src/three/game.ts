@@ -830,7 +830,7 @@ export class Game {
     this.rig.tick(dt);
     const focus = this.rig.camera.position.clone();
     this.sun.target.position.copy(me ? new THREE.Vector3(me.pos.x, me.pos.y, me.pos.z) : focus);
-    const light = daylightAt(this.world.turn);
+    const light = daylightAt(this.lightTurn(now));
     const horiz = Math.cos(light.elevation) * SUN_RADIUS;
     this.sun.position.copy(this.sun.target.position).add(new THREE.Vector3(light.dir.x * horiz, Math.sin(light.elevation) * SUN_RADIUS, light.dir.y * horiz));
     this.sun.color.copy(light.sun);
@@ -865,6 +865,14 @@ export class Game {
     for (const t of live.visible) live.explored[t] = true;
     const player = { ...this.world.player, visible: [...live.visible].sort((a, b) => a - b), explored: live.explored };
     timed('fog', () => this.fog.update({ ...this.world, player }));
+  }
+
+  // The clock the light shows. While a turn's movement plays it glides from the previous turn to this one,
+  // so the sun moves and changes color continuously instead of once per turn.
+  private lightTurn(now: number): number {
+    const a = this.anim;
+    if (!a || a.start === null) return this.world.turn - (a ? 1 : 0);
+    return this.world.turn - 1 + Math.min(1, (now - a.start) / MOVE_MS);
   }
 
   // Physics step shown now while the movement plays, or null otherwise. Advances the playback phases.

@@ -212,3 +212,42 @@ describe('far NPC travel', () => {
     for (const v of w.vehicles) expect(last.frames[v.id]).toHaveLength(TURN_STEPS);
   });
 });
+
+describe('far travel contact', () => {
+  function far() {
+    const w = emptyWorld();
+    const mover = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });
+    mover.speed = 4;
+    return { w, mover };
+  }
+
+  it('stops just short of a moving truck in the way', () => {
+    const { w, mover } = far();
+    const parked = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 122.5, y: 120 });
+    parked.speed = 2; // moving, so the route planner does not steer around it
+    mover.order = { kind: 'through', dest: { x: 200, y: 120 } };
+    advanceFar(w, mover);
+    const contact = vehicleStats(w, mover).radius + vehicleStats(w, parked).radius;
+    expect(dist(mover.pos, parked.pos)).toBeGreaterThanOrEqual(contact);
+    expect(mover.pos.x).toBeGreaterThan(120);
+    expect(mover.speed).toBe(0);
+    expect(mover.order).not.toBeNull();
+  });
+
+  it('arrives next to a truck parked on its stop point', () => {
+    const { w, mover } = far();
+    addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 123, y: 120 });
+    mover.order = { kind: 'stopAt', dest: { x: 123, y: 120 } };
+    advanceFar(w, mover);
+    expect(mover.order).toBeNull();
+    expect(mover.speed).toBe(0);
+  });
+
+  it('lets two trucks on the same point drive apart', () => {
+    const { w, mover } = far();
+    addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });
+    mover.order = { kind: 'through', dest: { x: 200, y: 120 } };
+    advanceFar(w, mover);
+    expect(mover.pos.x).toBeGreaterThan(121);
+  });
+});

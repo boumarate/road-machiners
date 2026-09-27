@@ -19,6 +19,12 @@ export const SALVAGE = {
     sparePartChance: 0.4,
     spareParts: ['stockEngine', 'plates', 'cage', 'mg'],
   } as LootTable,
+  roadWreck: {
+    goods: { scrap: [1, 3] },
+    parts: [1, 3],
+    sparePartChance: 0.2,
+    spareParts: ['mg', 'cage', 'rack', 'flatFour'],
+  } as LootTable,
   convoy: {
     goods: { scrap: [3, 8], meds: [1, 4] },
     parts: [3, 6],

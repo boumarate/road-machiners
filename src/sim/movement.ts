@@ -127,7 +127,7 @@ function crashHits(world: World, v: Vehicle, from: Vec, impact: number, share: n
   if (impact < RULES.collisionMinImpact) return [];
   const mech = v.faction === 'player' ? skillBonus('mechanics', world.player.skills.mechanics) : 0;
   const mult = striker ? ramMult(striker, sideToward(striker, v.pos)) : 1;
-  const energy = RULES.ramDamage * impact * share * mult * Math.max(0, 1 - mech);
+  const energy = RULES.ramDamage * impact * impact * share * mult * Math.max(0, 1 - mech);
   const side = sideToward(v, from);
   const lanes = laneCount(v, side);
   const hits: PartHit[] = [];
