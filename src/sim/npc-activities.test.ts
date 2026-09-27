@@ -235,7 +235,7 @@ describe('NPC activities', () => {
     expect(trader.order?.kind).toBe('stopAt');
   });
 
-  it('a fleeing driver that stands parked stops fleeing', () => {
+  it('a fleeing driver parked on its flee point stops fleeing', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 30, y: 30 });
     trader.brain = npcBrain('trader', trader.pos, ['trader']);
@@ -244,7 +244,9 @@ describe('NPC activities', () => {
     forceOption('contactHeard', 'flee');
     planNpcOrders(w);
     expect(topGoal(trader)?.kind).toBe('flee');
-    trader.speed = 0;
+    resolveNpcActivities(w);
+    expect(topGoal(trader)?.kind).toBe('flee');
+    trader.pos = { ...topGoal(trader)!.destination! };
     resolveNpcActivities(w);
     expect(topGoal(trader)?.kind).not.toBe('flee');
     planNpcOrders(w);

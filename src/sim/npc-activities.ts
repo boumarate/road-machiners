@@ -731,10 +731,10 @@ function resolveRaid(world: World, vehicle: Vehicle, activity: NpcActivity): voi
   if (reachedDestination(vehicle, activity)) finishGoal(world, vehicle, 'reached hunting ground');
 }
 
-// A fleeing driver stands parked only where it cannot get farther: at its safe spot, or at the closest point it
-// can reach. The flee ends there, and the driver keeps the threat noticed while it still perceives it.
-function resolveFlee(world: World, vehicle: Vehicle): void {
-  finishGoal(world, vehicle, 'nowhere farther to run');
+// A flee ends parked on its point: a safe spot, or the map edge. The driver keeps the threat noticed while it
+// still perceives it, so it does not flee again from the same truck.
+function resolveFlee(world: World, vehicle: Vehicle, activity: NpcActivity): void {
+  if (reachedDestination(vehicle, activity)) finishGoal(world, vehicle, 'nowhere farther to run');
 }
 
 function resolveInvestigate(world: World, vehicle: Vehicle, activity: NpcActivity): void {
