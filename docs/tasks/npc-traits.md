@@ -1,6 +1,6 @@
 # NPC behavior: traits, goals and states
 
-**Status:** reviewing
+**Status:** executing
 **Branch:** npc-traits (from defeat-rescue at 6619d53)
 **Worktree:** .worktrees/npc-traits
 **Goal:** In the running game, NPCs show traits in the hover panel. NPCs with the same traits make different choices. A scumbag scavenger scavenges, sometimes attacks a weaker player or NPC who has loot, and returns to scavenging after interruptions. A feud that goes quiet ends, and its hook runs. Tows run as states. Confirming needs a Playwright run and user sign-off.
@@ -40,7 +40,7 @@ A decision point is a moment when the NPC may change goals. It fires once per tr
 
 - `hostileSeen`: a new hostile comes in sight. Options: keep, fight, flee.
 - `contactHeard`: a new hostile contact beyond sight. Options: keep, investigate, flee.
-- `hurt`: the NPC took damage this turn. Options: keep, flee.
+- `hurt`: the NPC took damage this turn. Options: keep, flee, fight back.
 - `preySeen`: a new robbery target comes in sight. Options: keep, rob.
 - `strandedSeen`: a stranded player comes in sight. Options: keep, tow.
 - `resume`: an interruption goal popped. Options: resume, new.
@@ -49,6 +49,11 @@ A decision point is a moment when the NPC may change goals. It fires once per tr
 Each option has a base weight in `DECISIONS` in `src/data/npcs.ts`. A situation factor in `src/sim/npc-decisions.ts` scales it from what the NPC perceives. Examples: flee scales with threat ratio and damage taken, rob with target loot and weakness, scavenge with nearness of known salvage. Options that cannot run now get weight zero, like trade with no affordable profit.
 
 The final weight is (base + adds) × multipliers × situation factor. Adds and multipliers come from the NPC's traits and from the states it holds. A roll with world RNG picks one option.
+
+### Chances
+A weight of 0 means only "cannot". An option is unavailable when it physically cannot happen: no working gun to fight, no affordable profitable trade, no loot on the target, the target out of sight, or a tower that is stranded itself. Every available option gets at least `MIN_CHANCE`, which is 1%. Its chance is MIN_CHANCE plus its weighted share of the rest. Judgments such as "looks stronger than me" or "near town guards" are weights, not availability. Multipliers and situation factors are always above 0. A trait or state lowers an option with a small multiplier and never removes it. So any NPC robs at 1% per chance, a trader starts a fight at 1%, and a turned-down tower offers again at 1%.
+
+`hurt` has a third option, fight back, aimed at whoever hit the NPC this turn. Traders never start fights by weight, but fight back sometimes.
 
 ### Fixed rules
 Survival stays deterministic. Low fuel, low supplies or cab damage below the service threshold pushes a service goal with no roll. An NPC with sale cargo and an empty stack sells before it rolls `idle`. A scavenge goal already ends when the cargo is full.
@@ -132,7 +137,7 @@ TDD: yes (trait weights, decision rolls, goal stack, state endings and robbery c
 - IV4 — An interruption never loses the goal below it. After the interruption pops, that goal is active again unless the resume roll picks new.
 - IV5 — The stack never holds two goals of the same kind.
 - IV6 — A scumbag starts a robbery only against a target that passes every robbery check.
-- IV7 — An option with final weight zero is never picked. A decision with all weights zero throws.
+- IV7 — An unavailable option is never picked. Every available option has at least MIN_CHANCE. A multiplier or situation factor at or below 0 throws.
 - IV8 — A missing `brain.traits`, a missing `brain.goals`, an unknown trait id or an unknown state kind throws.
 - IV9 — Traits never change faction. Faction still decides base hostility and camp guns.
 - IV10 — Hostility between two vehicles comes only from faction and `feud`. No other hostility list exists.
