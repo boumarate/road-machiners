@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { CONTRACTS, SHOPS } from '../data/market';
+import { CONTRACTS, EFFORT, SHOPS } from '../data/market';
+import { GOODS } from '../data/goods';
+import { PARTS } from '../data/parts';
 import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
 import { makePart } from './factory';
 import { goodsCount } from './grid';
+import { stowPart } from './inventory';
 import { sitePads } from './sites';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { Vehicle, World } from './types';
@@ -11,15 +14,18 @@ import { update } from './world';
 import {
   acceptContract,
   advanceContracts,
+  advanceShops,
   bountyFulfilled,
   deliverContract,
   goodValue,
   bountyLapsed,
   contractReward,
   estimateTurns,
+  fetchReward,
   haulPenalty,
   initializeShops,
   isExpired,
+  partPristineBuyPrice,
   rollContract,
   type Contract,
 } from './market';
@@ -41,14 +47,14 @@ describe('estimateTurns', () => {
 
 describe('contractReward', () => {
   it('scales with turns', () => {
-    const short = contractReward('fetch', 50, 1, 0);
-    const long = contractReward('fetch', 200, 1, 0);
+    const short = contractReward('bounty', 50, 1, 0);
+    const long = contractReward('bounty', 200, 1, 0);
     expect(long).toBeGreaterThan(short);
   });
 
   it('scales with tier at the same turns', () => {
-    const tier1 = contractReward('fetch', 100, 1, 0);
-    const tier3 = contractReward('fetch', 100, 3, 0);
+    const tier1 = contractReward('bounty', 100, 1, 0);
+    const tier3 = contractReward('bounty', 100, 3, 0);
     expect(tier3).toBeGreaterThan(tier1);
   });
 
@@ -62,7 +68,25 @@ describe('contractReward', () => {
     const plain = contractReward('haul', 100, 2, 0);
     const withCargo = contractReward('haul', 100, 2, 1000);
     expect(withCargo).toBeGreaterThan(plain);
-    expect(contractReward('fetch', 100, 2, 1000)).toBe(contractReward('fetch', 100, 2, 0));
+  });
+});
+
+describe('fetchReward', () => {
+  it('exceeds the part\'s buy price by exactly the search fee', () => {
+    for (const defId of ['mg', 'plates', 'stockEngine']) {
+      for (const tier of [1, 2, 3] as const) {
+        const fee = Math.round(CONTRACTS.fetch.searchFeeTurns * EFFORT.wage[tier]);
+        expect(fetchReward(defId, tier)).toBe(partPristineBuyPrice(defId) + fee);
+      }
+    }
+  });
+
+  it('pays more for a pricier part at the same tier', () => {
+    expect(PARTS.cage.value).toBeGreaterThan(PARTS.stockEngine.value);
+    expect(PARTS.cage.tier).toBe(PARTS.stockEngine.tier);
+    const cheap = fetchReward('stockEngine', PARTS.stockEngine.tier);
+    const dear = fetchReward('cage', PARTS.cage.tier);
+    expect(dear).toBeGreaterThan(cheap);
   });
 });
 
@@ -70,7 +94,7 @@ describe('rollContract', () => {
   const shop = { id: 'bowl', pos: { x: 0, y: 0 } };
   const places = [{ id: 'nose', pos: { x: 100, y: 0 } }];
   const goods = ['salt'];
-  const partDefIds = ['rifle'];
+  const partDefIds = ['mg'];
 
   it('is deterministic for the same rng state', () => {
     const w1 = emptyWorld();
@@ -123,6 +147,43 @@ describe('rollContract', () => {
     }
     expect(haul).not.toBeNull();
     expect(haul!.deadline).toBeGreaterThan(w.turn);
+  });
+
+  it('takes a haul\'s tier from the hauled good, not a random roll', () => {
+    const w = emptyWorld();
+    const dearGoods = ['tools']; // tier 3
+    let haul: Contract | null = null;
+    for (let i = 0; i < 50 && !haul; i++) {
+      const c = rollContract(w, shop, places, dearGoods, [], []);
+      if (c?.kind === 'haul') haul = c;
+    }
+    expect(haul).not.toBeNull();
+    expect(haul!.tier).toBe(GOODS.tools.tier);
+  });
+
+  it('takes a fetch\'s tier from the fetched part, not a random roll', () => {
+    const w = emptyWorld();
+    let fetchContract: Contract | null = null;
+    for (let i = 0; i < 50 && !fetchContract; i++) {
+      const c = rollContract(w, shop, [], [], ['workhorseDiesel'], []);
+      if (c?.kind === 'fetch') fetchContract = c;
+    }
+    expect(fetchContract).not.toBeNull();
+    expect(fetchContract!.tier).toBe(PARTS.workhorseDiesel.tier);
+  });
+
+  it('takes a bounty\'s tier from the highest tier fitted to the target', () => {
+    const w = emptyWorld();
+    const raider = addRaider(w, 'buggy');
+    const stowed = stowPart(w, raider, makePart(w, 'plates', 0)); // tier 2 armor
+    expect(stowed).toBe(true);
+    let bounty: Contract | null = null;
+    for (let i = 0; i < 50 && !bounty; i++) {
+      const c = rollContract(w, shop, [], [], [], [raider]);
+      if (c?.kind === 'bounty') bounty = c;
+    }
+    expect(bounty).not.toBeNull();
+    expect(bounty!.tier).toBe(PARTS.plates.tier);
   });
 });
 
@@ -177,8 +238,8 @@ describe('haulPenalty', () => {
 describe('contract boards and delivery', () => {
   const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
   const nose = REGION.towns.find((t) => t.id === 'nose')!;
-  const haul = (to: string, units: number): Contract => ({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'salt', units, to, reward: 300, xp: 30, deadline: 500, tier: 1 });
-  const fetch = (): Contract => ({ id: 'ct-fetch', shop: 'bowl', kind: 'fetch', defId: 'mg', reward: 200, xp: 20, deadline: 500, tier: 1 });
+  const haul = (to: string, units: number): Contract => ({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'salt', units, to, reward: 300, deadline: 500, tier: 1 });
+  const fetch = (): Contract => ({ id: 'ct-fetch', shop: 'bowl', kind: 'fetch', defId: 'mg', reward: 200, deadline: 500, tier: 1 });
 
   function atBowlWithOffer(c: Contract): World {
     const w = emptyWorld(sitePads(bowl)[0]);
@@ -260,7 +321,7 @@ describe('contract boards and delivery', () => {
   it('pays a bounty on the player kill and lapses when the target leaves', () => {
     const base = emptyWorld();
     const raider = addRaider(base, 'buggy', { x: 50, y: 50 });
-    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: raider.name, reward: 400, xp: 40, deadline: 900, tier: 2 };
+    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: raider.name, reward: 400, deadline: 900, tier: 2 };
     const paid = update(base, (d) => {
       d.player.contracts = [bounty];
       d.removed = [raider];
@@ -275,5 +336,49 @@ describe('contract boards and delivery', () => {
     });
     expect(lapsed.player.money).toBe(base.player.money);
     expect(lapsed.player.contracts).toHaveLength(0);
+  });
+
+  it('pays out at most one held bounty per kill of the same template', () => {
+    const base = emptyWorld();
+    const raider = addRaider(base, 'buggy', { x: 50, y: 50 });
+    const held = (id: string, reward: number): Contract => ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: raider.name, reward, deadline: 900, tier: 2 });
+    const bounties = [held('ct-b1', 400), held('ct-b2', 400), held('ct-b3', 400)];
+    const result = update(base, (d) => {
+      d.player.contracts = bounties;
+      d.vehicles = d.vehicles.filter((v) => v.id !== raider.id);
+      d.removed = [raider];
+      d.events = [{ t: 'destroyed', vehicle: raider.id, by: d.player.vehicleId }];
+      advanceContracts(d);
+    });
+    expect(result.player.money).toBe(base.player.money + 400);
+    expect(result.player.contracts).toHaveLength(0); // the other two lapse, the target is gone
+  });
+
+  it('never posts two bounties for the same template on one board', () => {
+    const w = emptyWorld();
+    addRaider(w, 'buggy', { x: 1, y: 1 });
+    addRaider(w, 'buggy', { x: 2, y: 2 });
+    addRaider(w, 'buggy', { x: 3, y: 3 });
+    for (const seed of [1, 2, 3, 4, 5]) {
+      w.marketRng.rngState = seed;
+      initializeShops(w);
+      for (const state of Object.values(w.shops)) {
+        const templates = state.contracts.filter((c) => c.kind === 'bounty').map((c) => c.template);
+        expect(new Set(templates).size).toBe(templates.length);
+      }
+    }
+  });
+
+  it('drops an expired offer from the board every turn, before any restock', () => {
+    let w = atBowlWithOffer(haul('nose', 3));
+    w.shops.bowl.restockAt = 10000; // far off, so only the expiry filter runs
+    w = update(w, (d) => { d.turn = 501; advanceShops(d); });
+    expect(w.shops.bowl.contracts.find((c) => c.id === 'ct-haul')).toBeUndefined();
+  });
+
+  it('refuses to accept an offer past its deadline', () => {
+    let w = atBowlWithOffer(haul('nose', 3));
+    w = update(w, (d) => { d.turn = 501; });
+    expect(() => acceptContract(w, 'ct-haul')).toThrow(/expired/);
   });
 });

@@ -91,16 +91,15 @@ export const CONTRACTS = {
     units: [3, 12] as [number, number],
     // Owed share of the hauled goods' value if the deadline passes (Design > Contract terms).
     penaltyShare: 1,
-    xpPerReward: 0.1,
   },
 
   fetch: {
     // A fetch has no fixed travel: the part can come from a garage or the field. The window is a
-    // flat turn range that stands in for the effort of finding one.
+    // flat turn range that stands in for the effort of finding one, and sets the deadline.
     durationTurns: [150, 400] as [number, number],
-    // Finding a part of a named type, in any condition, is plain trade effort.
-    rewardFactor: 1,
-    xpPerReward: 0.15,
+    // The reward is the part's own pristine buy price plus this search fee: turns of effort spent
+    // finding a part of a named type, in any condition, at the fetch's own tier wage.
+    searchFeeTurns: 60,
   },
 
   bounty: {
@@ -109,7 +108,6 @@ export const CONTRACTS = {
     durationTurns: [200, 500] as [number, number],
     // Combat risk pays above a flat wage.
     rewardFactor: 1.6,
-    xpPerReward: 0.25,
   },
 };
 

@@ -6,7 +6,7 @@
 // the world, so they replay from the seed without shifting the main stream combat and NPCs use.
 // IV7: recordTrade is the one place pressure moves, for player and NPC trades alike.
 
-import { GOODS } from '../data/goods';
+import { ECONOMY, GOODS } from '../data/goods';
 import { PARTS } from '../data/parts';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
@@ -149,9 +149,9 @@ export function addStockPart(state: ShopState, part: PartInstance): void {
 // Contracts. Shops post them; rewards follow the effort model.
 
 export type Contract =
-  | { id: string; shop: string; kind: 'haul'; good: string; units: number; to: string; reward: number; xp: number; deadline: number; tier: Tier }
-  | { id: string; shop: string; kind: 'fetch'; defId: string; reward: number; xp: number; deadline: number; tier: Tier }
-  | { id: string; shop: string; kind: 'bounty'; template: string; targetName: string; reward: number; xp: number; deadline: number; tier: Tier };
+  | { id: string; shop: string; kind: 'haul'; good: string; units: number; to: string; reward: number; deadline: number; tier: Tier }
+  | { id: string; shop: string; kind: 'fetch'; defId: string; reward: number; deadline: number; tier: Tier }
+  | { id: string; shop: string; kind: 'bounty'; template: string; targetName: string; reward: number; deadline: number; tier: Tier };
 
 // Estimated turns to travel between two points: straight distance stretched to a road-like route,
 // at cruise speed, plus the turns spent handling the stop.
@@ -160,16 +160,31 @@ export function estimateTurns(from: Vec, to: Vec): number {
 }
 
 // Reward for turns of estimated work at a tier's wage, times the kind's factor. A haul reward also
-// carries a small cut of the goods' value (0 for a fetch or bounty, which call with cargoValue 0).
-export function contractReward(kind: Contract['kind'], turns: number, tier: Tier, cargoValue: number): number {
+// carries a small cut of the goods' value (0 for a bounty, which calls with cargoValue 0). Fetch
+// rewards do not go through this: see fetchReward, which pays the part's own price instead.
+export function contractReward(kind: 'haul' | 'bounty', turns: number, tier: Tier, cargoValue: number): number {
   const commission = kind === 'haul' ? cargoValue * CONTRACTS.haul.valueShare : 0;
   return Math.round(turns * EFFORT.wage[tier] * CONTRACTS[kind].rewardFactor + commission);
 }
 
-// Picks a tier uniformly. The effort model gives every tier a wage; nothing yet biases which tier a
-// shop offers, so PH8 can skew this once the harness has real data.
-function rollTier(world: World): Tier {
-  return randInt(world.marketRng, 1, 3) as Tier;
+// The pristine buy price of a part def: its base value plus the shop spread, ignoring wear. A fetch
+// reward is priced off this, not off any one stocked instance, since the contract does not name a
+// condition.
+export function partPristineBuyPrice(defId: string): number {
+  return Math.round(PARTS[defId].value * (1 + ECONOMY.spread));
+}
+
+// A fetch's reward: the part's own pristine buy price, plus a flat search fee of turns at the
+// fetch's tier wage. So the reward always covers the part's cost, whatever the part.
+export function fetchReward(defId: string, tier: Tier): number {
+  return partPristineBuyPrice(defId) + Math.round(CONTRACTS.fetch.searchFeeTurns * EFFORT.wage[tier]);
+}
+
+// Highest tier among a truck's mounted or spare non-core parts. A bare truck with none carries the
+// lowest tier: there is nothing riskier to name on its bounty.
+function highestPartTier(v: Vehicle): Tier {
+  const tiers = v.items.flatMap((it) => (it.kind === 'part' && PARTS[it.part.defId].kind !== 'core' ? [PARTS[it.part.defId].tier] : []));
+  return tiers.length ? (Math.max(...tiers) as Tier) : 1;
 }
 
 type RollInput = {
@@ -192,29 +207,35 @@ function possibleKinds(input: RollInput): Contract['kind'][] {
   return kinds;
 }
 
-function rollHaul(world: World, input: RollInput, id: string, tier: Tier): Contract {
+// Tier follows the content on offer, not a random roll: a haul takes the good's own tier, a fetch
+// the part's own tier, and a bounty the highest tier fitted to its target.
+
+function rollHaul(world: World, input: RollInput, id: string): Contract {
   const to = pick(world, input.places);
   const good = pick(world, input.goods);
+  const tier = GOODS[good].tier;
   const units = randInt(world.marketRng, CONTRACTS.haul.units[0], CONTRACTS.haul.units[1]);
   const turns = estimateTurns(input.shop.pos, to.pos);
-  const reward = contractReward('haul', turns, tier, 0);
+  const reward = contractReward('haul', turns, tier, units * goodValue(good));
   const deadline = world.turn + Math.round(turns * CONTRACTS.haul.durationFactor);
-  return { id, shop: input.shop.id, kind: 'haul', good, units, to: to.id, reward, xp: Math.round(reward * CONTRACTS.haul.xpPerReward), deadline, tier };
+  return { id, shop: input.shop.id, kind: 'haul', good, units, to: to.id, reward, deadline, tier };
 }
 
-function rollFetch(world: World, input: RollInput, id: string, tier: Tier): Contract {
+function rollFetch(world: World, input: RollInput, id: string): Contract {
   const defId = pick(world, input.partDefIds);
+  const tier = PARTS[defId].tier;
   const turns = randInt(world.marketRng, CONTRACTS.fetch.durationTurns[0], CONTRACTS.fetch.durationTurns[1]);
-  const reward = contractReward('fetch', turns, tier, 0);
-  return { id, shop: input.shop.id, kind: 'fetch', defId, reward, xp: Math.round(reward * CONTRACTS.fetch.xpPerReward), deadline: world.turn + turns, tier };
+  const reward = fetchReward(defId, tier);
+  return { id, shop: input.shop.id, kind: 'fetch', defId, reward, deadline: world.turn + turns, tier };
 }
 
-function rollBounty(world: World, input: RollInput, id: string, tier: Tier): Contract {
+function rollBounty(world: World, input: RollInput, id: string): Contract {
   const target = pick(world, input.raiders);
   if (!target.brain) throw new Error(`Raider ${target.id} has no brain`);
+  const tier = highestPartTier(target);
   const turns = randInt(world.marketRng, CONTRACTS.bounty.durationTurns[0], CONTRACTS.bounty.durationTurns[1]);
   const reward = contractReward('bounty', turns, tier, 0);
-  return { id, shop: input.shop.id, kind: 'bounty', template: target.brain.templateId, targetName: target.name, reward, xp: Math.round(reward * CONTRACTS.bounty.xpPerReward), deadline: world.turn + turns, tier };
+  return { id, shop: input.shop.id, kind: 'bounty', template: target.brain.templateId, targetName: target.name, reward, deadline: world.turn + turns, tier };
 }
 
 const ROLLS = { haul: rollHaul, fetch: rollFetch, bounty: rollBounty };
@@ -234,8 +255,7 @@ export function rollContract(
   const kinds = possibleKinds(input);
   if (kinds.length === 0) return null;
   const kind = pick(world, kinds);
-  const tier = rollTier(world);
-  return ROLLS[kind](world, input, newId(world, 'ct'), tier);
+  return ROLLS[kind](world, input, newId(world, 'ct'));
 }
 
 export function isExpired(world: World, c: Contract): boolean {

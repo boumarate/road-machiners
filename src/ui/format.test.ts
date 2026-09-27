@@ -24,7 +24,7 @@ describe("wearLabel", () => {
 });
 
 describe("contract text", () => {
-  const bounty: Contract = { id: "c1", shop: "bowl", kind: "bounty", template: "buggy", targetName: "Raider outrider", reward: 100, xp: 10, deadline: 100, tier: 1 };
+  const bounty: Contract = { id: "c1", shop: "bowl", kind: "bounty", template: "buggy", targetName: "Raider outrider", reward: 100, deadline: 100, tier: 1 };
 
   it("shows the deadline as the game time the contract fails", () => {
     expect(contractDue(bounty)).toBe("by Day 1 19:00");
