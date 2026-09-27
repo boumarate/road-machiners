@@ -2,6 +2,7 @@
 // cost for leaving the road, so routes prefer roads, then shortcut to visible corners. Moving vehicles are not in the
 // grid, so ramming and blocking still happen. The grid itself lives in ./nav.
 
+import { crossesRail } from './bridge';
 import { count, timed } from '../perf';
 import { findCells, nearestFreeCell, stampOverlay, startComponent } from './nav/astar';
 import type { Blocker } from './nav/buckets';
@@ -195,6 +196,7 @@ function costliestTile(nav: TerrainNav, cur: Vec, points: Vec[], i: number, last
 // crosses a tile costlier than maxCost.
 function lineCost(nav: TerrainNav, statics: StaticSet, dynamic: Blocker[], a: Vec, b: Vec, reach: number, maxCost: number): number {
   for (const o of dynamic) if (segmentDist(o.pos, a, b) < o.r + reach) return Infinity;
+  if (crossesRail(a, b, reach)) return Infinity;
   for (const o of statics.buckets.alongSegment(a, b, reach)) if (segmentDist(o.pos, a, b) < o.r + reach) return Infinity;
   return groundCost(nav, a, b, reach, maxCost);
 }

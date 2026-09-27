@@ -3,7 +3,8 @@
 
 import { REGION } from "../data/region";
 import { TERRAIN, TERRAIN_TYPES } from "../data/terrain";
-import { tileAt, tileSlope, type Terrain } from "../sim/terrain";
+import { BRIDGE_AXIS, BRIDGE_LENGTH } from "../sim/bridge";
+import { groundSlope, tileAt, type Terrain } from "../sim/terrain";
 import { type Vec } from "../sim/vec";
 import { hash2, valueNoise } from "./noise";
 import { PAL, mix, shade } from "./palette";
@@ -77,12 +78,32 @@ export function paintGroundCanvas(
     );
     disc(c, crater.center, crater.radius, css(PAL.rust.dark, 0.25));
   }
+  // No road on the canyon floor under Canyon Bridge.
+  c.ctx.save();
+  c.ctx.beginPath();
+  c.ctx.rect(0, 0, c.size, c.size);
+  const gap = bridgeGap();
+  gap.forEach((p, i) => (i === 0 ? c.ctx.moveTo(c.toPx(p.x), c.toPx(p.y)) : c.ctx.lineTo(c.toPx(p.x), c.toPx(p.y))));
+  c.ctx.closePath();
+  c.ctx.clip("evenodd");
   for (const road of REGION.roads) paintRoad(c, road);
+  c.ctx.restore();
+}
+
+// The cut between the two abutments, one road width to each side of the deck axis.
+function bridgeGap(): Vec[] {
+  const { from, abutment } = TERRAIN.features.bridge;
+  const a = BRIDGE_AXIS;
+  const w = REGION.roadWidth;
+  return [[abutment, -w], [BRIDGE_LENGTH - abutment, -w], [BRIDGE_LENGTH - abutment, w], [abutment, w]].map(([along, across]) => ({
+    x: from.x + a.x * along - a.y * across,
+    y: from.y + a.y * along + a.x * across,
+  }));
 }
 
 // Hillshade: brighten slopes turned toward the light, darken slopes turned away.
 function hillshade(t: Terrain, tile: number, strength: number): number {
-  const s = tileSlope(t, tile);
+  const s = groundSlope(t, tile);
   return (
     1 +
     (s.x * TERRAIN.light.x + s.y * TERRAIN.light.y) *

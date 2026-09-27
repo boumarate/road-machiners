@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 
+import bmesh
 import bpy
 from mathutils import Vector
 
@@ -70,3 +71,23 @@ def ladder(kit: Kit, name: str, base: Vec3, top_z: float, width: float, facing: 
     rungs = int(height / rung_gap)
     for i in range(1, rungs + 1):
         kit.box(f"{name}_rung{i}", (0.05, width, 0.05), (bx, by, bz + i * height / (rungs + 1)), mat, rot=(0, 0, facing))
+
+
+def prism(kit: Kit, name: str, profile: list[tuple[float, float]], y0: float, y1: float, mat: str, lean: float = 0.0) -> None:
+    """Extrudes a closed XZ profile from Blender Y y0 to y1 as one mesh. lean shifts each vertex by -lean * z in Y."""
+    mesh = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    near = [bm.verts.new((x, y0 - lean * z, z)) for x, z in profile]
+    far = [bm.verts.new((x, y1 - lean * z, z)) for x, z in profile]
+    bm.faces.new(near)
+    bm.faces.new(list(reversed(far)))
+    n = len(profile)
+    for i in range(n):
+        j = (i + 1) % n
+        bm.faces.new((near[i], near[j], far[j], far[i]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(mesh)
+    bm.free()
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    kit._add(obj, name, mat, 0.0)

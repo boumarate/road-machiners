@@ -1,9 +1,10 @@
 // The terrain grid. Heights live on tile corners, (size + 1) x (size + 1), so neighboring tiles share
 // edges. Each tile reads its four corners for slope, and has a type. Driving, sight, routing and
-// drawing all read this grid.
+// drawing all read this grid. On Canyon Bridge, heights and slopes are the deck's (see bridge.ts).
 
 import { REGION } from '../data/region';
 import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from '../data/terrain';
+import { BRIDGE_AXIS, BRIDGE_LENGTH, deckAlong } from './bridge';
 import { elevationAt, noiseAt } from './elevation';
 import { clamp, type Vec } from './vec';
 import { ROAD_INDEX } from './road-index';
@@ -39,6 +40,7 @@ export function buildTerrain(seed: number, size: number): Terrain {
 
 function pickType(seed: number, t: Terrain, x: number, y: number): TerrainTypeId {
   const c = { x: x + 0.5, y: y + 0.5 };
+  if (deckAlong(c.x, c.y) !== null) return 'road';
   if (ROAD_INDEX.nearestWithin(c.x, c.y, REGION.roadWidth / 2) < REGION.roadWidth / 2) return 'road';
   for (const s of SITES) {
     const dx = s.pos.x - c.x;
@@ -78,8 +80,14 @@ export function tileAt(t: Terrain, p: Vec): number {
   return y * t.size + x;
 }
 
-// Ground height at a map point: blend of the four corners of its tile. Outside the map, the nearest edge.
+// Height at a map point: the deck on Canyon Bridge, else the ground.
 export function heightAt(t: Terrain, x: number, y: number): number {
+  const a = deckAlong(x, y);
+  return a === null ? groundAt(t, x, y) : deckHeight(t, a);
+}
+
+// Ground height at a map point: blend of the four corners of its tile. Outside the map, the nearest edge.
+export function groundAt(t: Terrain, x: number, y: number): number {
   const cx = clamp(x, 0, t.size);
   const cy = clamp(y, 0, t.size);
   const i = Math.min(Math.floor(cx), t.size - 1);
@@ -93,8 +101,30 @@ export function heightAt(t: Terrain, x: number, y: number): number {
   return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
 }
 
-// Height change per tile along x and y, averaged over the tile's two edges on each axis.
+// Deck surface height at a distance along it: a straight line between the ground at both ends.
+export function deckHeight(t: Terrain, along: number): number {
+  const [from, to] = deckEnds(t);
+  return from + (to - from) * (along / BRIDGE_LENGTH);
+}
+
+// Ground height at the deck's from and to ends.
+export function deckEnds(t: Terrain): [number, number] {
+  const { from, to } = T.features.bridge;
+  return [groundAt(t, from.x, from.y), groundAt(t, to.x, to.y)];
+}
+
+// Height change per tile along x and y. A tile centered on the deck takes the deck's grade.
 export function tileSlope(t: Terrain, tile: number): Vec {
+  const i = tile % t.size;
+  const j = Math.floor(tile / t.size);
+  if (deckAlong(i + 0.5, j + 0.5) === null) return groundSlope(t, tile);
+  const [from, to] = deckEnds(t);
+  const grade = (to - from) / BRIDGE_LENGTH;
+  return { x: grade * BRIDGE_AXIS.x, y: grade * BRIDGE_AXIS.y };
+}
+
+// Ground height change per tile along x and y, averaged over the tile's two edges on each axis.
+export function groundSlope(t: Terrain, tile: number): Vec {
   const i = tile % t.size;
   const j = Math.floor(tile / t.size);
   const a = corner(t, i, j);

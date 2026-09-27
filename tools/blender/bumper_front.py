@@ -1,7 +1,7 @@
 """The front bumper for one front edge cell: a chunky steel beam on two brackets, with a skid plate under it.
 
 Footprint is one cell: 0.65 m along (Blender X) by 0.484 m across (Blender Y). The origin is the cell center on the deck top.
-It hangs below the deck like nose.py, from Z = 0 to Z = -1, and the view stretches Z to the chassis box height.
+It hangs below the deck from Z = 0 to Z = -1, and the view stretches Z to the chassis box height plus the base skirt.
 The beam spans the full cell width, so neighbours join into one bar. It sticks out BUMPER_OUT past the front edge.
 The view leaves it off cells that carry a ram.
 Run: blender --background --python tools/blender/bumper_front.py -- public/models/bumper_front.glb [tmp/bumper_front.png]
