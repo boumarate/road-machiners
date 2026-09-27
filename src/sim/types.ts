@@ -11,7 +11,12 @@ export type PatchDeal = DecisionOptions["patchDeal"];
 
 export type Faction = "player" | "raiders" | "traders" | "scavengers";
 export type SkillId = "driving" | "perception" | "machining" | "toughness" | "social";
-export type XpSource = "discover" | "search" | "profit";
+export type XpSource =
+  | "roughTiles" | "ram" | "escape"
+  | "hit" | "contact" | "discover"
+  | "fieldJob" | "patch" | "search"
+  | "heat" | "damage" | "knockout"
+  | "profit" | "deal" | "call";
 
 export type PartInstance = {
   id: string;
@@ -249,6 +254,7 @@ export type Player = {
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision
   contacts: Contact[]; // vehicles detected beyond sight; refreshed by refreshVision
   clouds: string[]; // ids of dust clouds the player sees right now; refreshed by refreshVision
+  hostilesSeen: string[]; // ids of hostile trucks in sight at the end of the last turn, for escapes; see src/sim/escape.ts
 };
 
 // One round of a shot. offset is where it crossed the target in meters from its center, across the line

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { moveItem, dumpGood, removeAllGoods } from './inventory';
 import { advanceJobs, startJob } from './jobs';
-import { emptyWorld } from './testkit';
+import { emptyWorld, practiceOf } from './testkit';
 import { findSpot, gridOf, MOUNT_CELLS } from './grid';
 import { planItemMove } from './inventory';
 import type { GridItem, World } from './types';
@@ -32,6 +32,7 @@ describe('field refits', () => {
     expect(getWeapon(next).y).toBe(weapon.y);
     advanceJobs(next);
     expect(getWeapon(next)).toMatchObject(target);
+    expect(practiceOf(next, 'fieldJob')).toMatchObject([{ amount: 5, difficulty: null }]);
   });
 
   it('charges removal and installation for relocation between mounts', () => {

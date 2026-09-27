@@ -12,6 +12,7 @@ import { buyPrice } from './economy';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { removeGoods } from './inventory';
 import { decide, optionWeights } from './npc-decisions';
+import { practice } from './progress';
 import { machiningMult, planPartRepair } from './repair';
 import { getResources } from './resources';
 import { addState } from './states';
@@ -158,6 +159,7 @@ export function settlePatch(world: World, s: NpcState): void {
   getResources(world, roles.patcher).money += data.price;
   for (const part of brokenDriveParts(roles.client)) part.hp = Math.max(1, Math.round(partDef(part.defId).hp * PATCH.share));
   world.events.push({ t: 'patch', patcher: s.holder, client: s.other, outcome: 'done' });
+  if (s.holder === world.player.vehicleId) practice(world, 'patch', 1, null);
 }
 
 // A patch nobody worked on for its whole timer lapses for free.

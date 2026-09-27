@@ -156,3 +156,11 @@ Approach: replace the XP pool with per-skill practice first, then widen effects 
 - RK1 — PH3 touches about 20 hooks, so balance may shift. PH6 recordings measure the new rules before targets lock.
 - RK2 — Bots may stall on terrain or dialogue. The recorder fails loud when the player truck makes no progress for a day.
 - RK3 — Hiding traits changes NPC inspection for all players. It follows DESIGN.md, which already plans hidden traits.
+
+## Conclusion
+
+### Deviations from plan
+- PH2 `roughTiles` uses each ground type's wear multiplier as roughness, because terrain data has no roughness field.
+- PH2 `hit` fires one event per shot with the hit count as amount. Total XP matches one event per round.
+- PH2 `escape` counts only when every hostile seen last turn still exists and is out of sight. A hostile that drives off on its own also counts, bounded by the daily cap.
+- PH2 `contact` compares with the previous refresh only. A truck that leaves sight but stays audible pays again, bounded by the daily cap. Contacts detected at world creation pay a little Perception XP.

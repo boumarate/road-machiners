@@ -42,13 +42,26 @@ export const XP_TO_REACH: readonly number[] = [0, 100, 300, 600, 1000, 1500];
 export const MAX_SKILL_LEVEL = XP_TO_REACH.length - 1;
 
 // weight is XP per unit of amount. A scaled source multiplies by the difficulty curve in XP_RULES;
-// an unscaled source has no difficulty.
+// an unscaled source has no difficulty. Weights aim for about dailyCap XP from one day (200 turns) of the matching
+// activity at mid difficulty.
 export type XpSourceDef = { skill: SkillId; weight: number; scaled: boolean };
 
 export const XP_SOURCES: Record<XpSource, XpSourceDef> = {
+  roughTiles: { skill: 'driving', weight: 0.17, scaled: true }, // per tile driven off the road; about 4 tiles a turn
+  ram: { skill: 'driving', weight: 0.25, scaled: true }, // per HP of crash damage the player's truck deals
+  escape: { skill: 'driving', weight: 45, scaled: true }, // per turn every hostile truck seen last turn drops out of sight
+  hit: { skill: 'perception', weight: 1.3, scaled: true }, // per round of the player's that hits
+  contact: { skill: 'perception', weight: 4.5, scaled: true }, // per truck newly detected beyond sight
   discover: { skill: 'perception', weight: 25, scaled: false }, // per place found
+  fieldJob: { skill: 'machining', weight: 0.75, scaled: false }, // per turn of a finished repair or refit job
+  patch: { skill: 'machining', weight: 75, scaled: false }, // per finished roadside patch on another truck
   search: { skill: 'machining', weight: 50, scaled: false }, // per first finished search of a stock
+  heat: { skill: 'toughness', weight: 0.67, scaled: true }, // per turn driven in heat above shade
+  damage: { skill: 'toughness', weight: 1.5, scaled: false }, // per point of health lost to cab damage
+  knockout: { skill: 'toughness', weight: 100, scaled: false }, // per knockout the player wakes from
   profit: { skill: 'social', weight: 0.3, scaled: false }, // per money unit of profit on a sale
+  deal: { skill: 'social', weight: 30, scaled: false }, // per talk topic that ends agreed
+  call: { skill: 'social', weight: 15, scaled: false }, // per radio call that ends
 };
 
 export const XP_RULES = {

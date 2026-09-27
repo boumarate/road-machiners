@@ -7,6 +7,7 @@ import { playerVehicle } from "./damage";
 import { goodsCount, mountedParts } from "./grid";
 import { partDef } from "../data/parts";
 import { repairPlan, repairTurn } from "./repair";
+import { practice } from "./progress";
 import { searchTurn } from "./search";
 import { applyRefitLayout, getRefitLayout } from './inventory';
 import type { Job, RefitJob, Vehicle, World } from "./types";
@@ -114,4 +115,11 @@ function endJob(
 ): void {
   v.job = null;
   world.events.push({ t: "job", vehicle: v.id, job: { ...job }, outcome });
+  if (outcome === "done") practiceFieldJob(world, v, job);
+}
+
+// The player practices machining from each finished repair or refit, by its total turns.
+function practiceFieldJob(world: World, v: Vehicle, job: Job): void {
+  if (v.id !== world.player.vehicleId || job.kind === "search") return;
+  practice(world, "fieldJob", job.total, null);
 }

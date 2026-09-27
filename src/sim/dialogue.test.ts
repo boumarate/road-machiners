@@ -11,7 +11,7 @@ import { hasCargo } from './salvage';
 import { vehicleStats } from './stats';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
 import { addState, endState, stateOf } from './states';
-import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
 import type { TraitId } from '../data/npcs';
 import type { Vehicle, World } from './types';
 import { dist } from './vec';
@@ -278,6 +278,20 @@ describe('demand', () => {
     }
   });
 
+  it('handing over pays the player for a closed deal', () => {
+    const { w: start } = ambush();
+    const w = endTurn(start, testDrive);
+    const next = chooseOption(w, optionIndex(w, 'Fine. Take it.'));
+    expect(practiceOf(next, 'deal')).toMatchObject([{ amount: 1, difficulty: null }]);
+  });
+
+  it('refusing pays nothing for a deal', () => {
+    const { w: start } = ambush();
+    const w = endTurn(start, testDrive);
+    const next = chooseOption(w, optionIndex(w, 'Come and get it.'));
+    expect(practiceOf(next, 'deal')).toEqual([]);
+  });
+
   it('refusing keeps the fight, and the demand is not made twice', () => {
     const { w: start, raider } = ambush();
     let w = endTurn(start, testDrive);
@@ -303,5 +317,21 @@ describe('demand', () => {
     stateOf(w, 'truce', raider.id, me)!.turnsLeft = 1;
     w = endTurn(w, testDrive);
     expect(stateOf(w, 'truce', raider.id, me)).toBeNull();
+  });
+});
+
+describe('call practice', () => {
+  it('pays the player once when a call ends', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    const open = callVehicle(w, npc.id);
+    expect(practiceOf(open, 'call')).toEqual([]);
+    const closed = hangUp(open);
+    expect(practiceOf(closed, 'call')).toMatchObject([{ amount: 1, difficulty: null }]);
+  });
+
+  it('pays nothing for a refused call', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    addState(w, 'feud', npc.id, w.player.vehicleId, { kind: 'feud', robbery: false });
+    expect(practiceOf(callVehicle(w, npc.id), 'call')).toEqual([]);
   });
 });

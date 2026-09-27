@@ -9,7 +9,8 @@ import { heightAt, type Terrain } from './terrain';
 import { sunAt } from './sun';
 import { weatherAt } from './weather';
 import { dist, segmentDist, type Vec } from './vec';
-import { cloudsSeenBy, contactsOf } from './detect';
+import { cloudsSeenBy, contactDifficulty, contactsOf } from './detect';
+import { practice } from './progress';
 
 const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building'];
 
@@ -92,8 +93,17 @@ export function refreshVision(world: World): void {
   world.player.visible = [...seen].sort((a, b) => a - b);
   for (const idx of seen) world.player.explored[idx] = 1;
   const me = world.vehicles.find((x) => x.id === world.player.vehicleId);
+  const known = new Set(world.player.contacts.map((c) => c.vehicleId));
   world.player.contacts = me ? contactsOf(world, me, Infinity) : [];
   world.player.clouds = me ? cloudsSeenBy(world, me).map((c) => c.id) : [];
+  if (me) practiceNewContacts(world, me, known);
+}
+
+// The player practices perception once per vehicle that becomes a contact, harder near the edge of reach.
+function practiceNewContacts(world: World, me: Vehicle, known: Set<string>): void {
+  for (const c of world.player.contacts) {
+    if (!known.has(c.vehicleId)) practice(world, 'contact', 1, contactDifficulty(world, me, c));
+  }
 }
 
 export function tileCenter(world: World, idx: number): Vec {

@@ -11,7 +11,7 @@ import { corePart, mountedItems, mountedParts } from './grid';
 import { stateOf } from './states';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
 import type { GameEvent, Vehicle } from './types';
 import { dist } from './vec';
 import { endTurn } from './world';
@@ -460,5 +460,38 @@ describe('NPC attack records and defensive fire', () => {
     npc.brain.attackers = { [prey.id]: true };
     autoOrders(w, npc);
     expect(aimed()).toEqual([prey.id]);
+  });
+});
+
+describe('hit practice', () => {
+  it('pays the player per round that hits, harder at a lower chance', () => {
+    const { w, me, buggy, mg } = duel();
+    let hits = 0;
+    for (let i = 0; i < 10; i++) {
+      w.events = [];
+      mg.part.reload = 0;
+      order(me, mg.part.id, buggy.id);
+      fireWeapons(w);
+      const shot = w.events.find((e) => e.t === 'shot' && e.shooter === me.id);
+      if (shot?.t !== 'shot') throw new Error('The player did not fire');
+      for (const event of practiceOf(w, 'hit')) {
+        expect(event.difficulty).toBeCloseTo(1 - shot.chance);
+        expect(event.amount).toBeLessThanOrEqual(shot.rounds.length);
+        hits += event.amount;
+      }
+    }
+    expect(hits).toBeGreaterThan(0);
+  });
+
+  it('pays nothing for an NPC hitting the player', () => {
+    const { w, me, buggy } = duel();
+    const gun = vehicleStats(w, buggy).weapons[0];
+    for (let i = 0; i < 10; i++) {
+      gun.part.reload = 0;
+      order(buggy, gun.part.id, me.id);
+      fireWeapons(w);
+    }
+    expect(w.events.filter((e) => e.t === 'shot' && e.shooter === buggy.id)).toHaveLength(10);
+    expect(practiceOf(w, 'hit')).toEqual([]);
   });
 });

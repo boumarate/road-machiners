@@ -10,6 +10,7 @@ import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
 import type { Call, CallVars, Vehicle, World } from './types';
 import { dist } from './vec';
 import { npcTraits } from './npc-decisions';
+import { practice } from './progress';
 import { canVehicleSee } from './vision';
 import { playerCommand, requireActivePlayer, update } from './world';
 
@@ -84,9 +85,11 @@ function enterTopic(world: World, npc: Vehicle, call: Call, topic: Topic): void 
   enter(world, call, topic.id, topic.start);
 }
 
+// Every ended call practices social.
 function endCall(world: World, call: Call): void {
   world.player.call = null;
   world.events.push({ t: 'call', with: call.with, outcome: 'ended' });
+  practice(world, 'call', 1, null);
 }
 
 function begin(world: World, npc: Vehicle): Call {

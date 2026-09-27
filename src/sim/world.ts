@@ -27,6 +27,7 @@ import { advancePatches } from './patch';
 import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
 import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
+import { noteEscape } from './escape';
 import { advanceWeather } from './weather';
 import { applyWear } from './wear';
 import { advanceDust } from './detect';
@@ -53,7 +54,13 @@ export function newWorld(seed: number, kit: StartKit): World {
       skills: { driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 },
       xpToday: { driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 },
       xpDay: 1,
-      xpBySource: { discover: 0, search: 0, profit: 0 },
+      xpBySource: {
+        roughTiles: 0, ram: 0, escape: 0,
+        hit: 0, contact: 0, discover: 0,
+        fieldJob: 0, patch: 0, search: 0,
+        heat: 0, damage: 0, knockout: 0,
+        profit: 0, deal: 0, call: 0,
+      },
       health: RULES.maxHealth,
       fuel: kit.fuel,
       supplies: kit.supplies,
@@ -76,6 +83,7 @@ export function newWorld(seed: number, kit: StartKit): World {
       visible: [],
       contacts: [],
       clouds: [],
+      hostilesSeen: [],
     },
     events: [],
     removed: [],
@@ -220,6 +228,7 @@ export function endTurn(
     checkKnockout(w);
     spawnNpcs(w);
     refreshVision(w);
+    noteEscape(w);
     noteHurt(w);
     endCallIfOut(w);
     raiseCalls(w);

@@ -3,6 +3,7 @@
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { mountedParts } from "./grid";
+import { practice } from "./progress";
 import type { PartInstance, Vehicle, World } from "./types";
 
 // Damage to the player's cab also hurts the character.
@@ -23,12 +24,16 @@ export function damagePart(
     def.kind === "core" &&
     def.role === "cab"
   ) {
-    world.player.health = Math.max(
-      0,
-      world.player.health - Math.round(dealt * RULES.cabHealthShare),
-    );
+    hurtDriver(world, dealt);
   }
   return dealt;
+}
+
+// The player's character takes a share of cab damage, and the health lost practices toughness.
+function hurtDriver(world: World, dealt: number): void {
+  const health = world.player.health;
+  world.player.health = Math.max(0, health - Math.round(dealt * RULES.cabHealthShare));
+  if (world.player.health < health) practice(world, "damage", health - world.player.health, null);
 }
 
 // Mounted parts only: spares in the cargo grid cannot be shot or crashed.

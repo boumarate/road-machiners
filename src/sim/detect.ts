@@ -95,6 +95,34 @@ export function contactsOf(world: World, observer: Vehicle, within: number): Con
   return out;
 }
 
+// How hard a contact was to pick up, from 0 at the observer to 1 at the edge of reach. Each channel that detects the
+// vehicle gives its distance over its reach, and the easiest channel counts. Dust counts from its cloud.
+export function contactDifficulty(world: World, observer: Vehicle, contact: Contact): number {
+  const v = world.vehicles.find((x) => x.id === contact.vehicleId);
+  if (!v) throw new Error(`Contact with unknown vehicle ${contact.vehicleId}`);
+  const shares = contact.sources.map((source) => channelShare(world, observer, v, source));
+  return Math.min(1, ...shares);
+}
+
+function channelShare(world: World, observer: Vehicle, v: Vehicle, source: Contact['sources'][number]): number {
+  const d = dist(observer.pos, v.pos);
+  switch (source) {
+    case 'sound': return reachShare(d, soundRange(world, v) - ownHearingPenalty(observer), source);
+    case 'radio': return reachShare(d, scannerRange(observer), source);
+    case 'beacon': return reachShare(d, BEACON.range, source);
+    case 'dust': {
+      const cloud = newestCloud(cloudsSeenBy(world, observer), v.id);
+      if (!cloud) throw new Error(`Dust contact on ${v.id} has no seen cloud`);
+      return reachShare(dist(observer.pos, cloud.pos), cloud.range, source);
+    }
+  }
+}
+
+function reachShare(distance: number, reach: number, source: string): number {
+  if (!(reach > 0)) throw new Error(`A ${source} contact has reach ${reach}`);
+  return distance / reach;
+}
+
 // Whether the player's emergency beacon reaches the observer. Hills do not block it.
 export function hearsBeacon(world: World, observer: Vehicle, v: Vehicle): boolean {
   return world.player.beacon && v.id === world.player.vehicleId && dist(observer.pos, v.pos) <= BEACON.range;

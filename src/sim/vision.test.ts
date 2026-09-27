@@ -1,7 +1,8 @@
 import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { TERRAIN } from '../data/terrain';
-import { emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, practiceOf } from './testkit';
+import { contactsOf, soundRange } from './detect';
 import { TIME } from '../data/time';
 import { sunAt } from './sun';
 import { canVehicleSee, grayRadius, playerVisible, refreshVision, sightRadius, visibleTiles } from './vision';
@@ -96,5 +97,40 @@ describe('terrain line of sight', () => {
     w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
     expect(grayRadius(w, { x: 30, y: 30 })).toBe(sightRadius(w, { x: 30, y: 30 }) * TERRAIN.vision.grayFactor);
     expect(grayRadius(w, { x: 30, y: 30 })).toBeLessThan(TERRAIN.vision.radius * TERRAIN.vision.grayFactor);
+  });
+});
+
+describe('contact practice', () => {
+  // Night hides dust, so a moving buggy past sight is heard and nothing else.
+  function heardBuggy() {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
+    const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 45, y: 30 });
+    buggy.speed = 6;
+    return { w, buggy };
+  }
+
+  it('pays the player once for a newly heard truck, harder near the edge of hearing', () => {
+    const { w, buggy } = heardBuggy();
+    refreshVision(w);
+    const [event] = practiceOf(w, 'contact');
+    expect(event.amount).toBe(1);
+    expect(event.difficulty).toBeCloseTo(15 / soundRange(w, buggy));
+    refreshVision(w);
+    expect(practiceOf(w, 'contact')).toHaveLength(1);
+  });
+
+  it('pays nothing for a truck in sight', () => {
+    const { w, buggy } = heardBuggy();
+    buggy.pos = { x: 34, y: 30 };
+    refreshVision(w);
+    expect(practiceOf(w, 'contact')).toEqual([]);
+  });
+
+  it('pays nothing when an NPC hears a truck', () => {
+    const { w, buggy } = heardBuggy();
+    const trader = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 60, y: 30 });
+    expect(contactsOf(w, trader, Infinity).map((c) => c.vehicleId)).toContain(buggy.id);
+    expect(practiceOf(w, 'contact')).toEqual([]);
   });
 });

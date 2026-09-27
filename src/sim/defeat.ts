@@ -7,6 +7,7 @@ import { playerVehicle } from "./damage";
 import { isFoe } from "./combat";
 import { corePart, mountedParts } from "./grid";
 import { cancelJob } from "./jobs";
+import { practice } from "./progress";
 import { createKnockoutSalvage } from "./salvage";
 import { endState } from "./states";
 import type { World } from "./types";
@@ -53,4 +54,5 @@ export function advanceKnockout(world: World): void {
       part.hp = Math.max(1, Math.round(partDef(part.defId).hp * RULES.defeatPatch));
   p.state = "active";
   world.events.push({ t: "wake" });
+  practice(world, "knockout", 1, null);
 }

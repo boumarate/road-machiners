@@ -7,10 +7,10 @@ import { callVehicle, chooseOption, currentOptions } from './dialogue';
 import { goodsCount, mountedParts } from './grid';
 import { addGoods, removeGoods } from './inventory';
 import { topGoal } from './npc-activities';
-import { patchData } from './patch';
-import { stateOf } from './states';
+import { patchData, settlePatch } from './patch';
+import { addState, stateOf } from './states';
 import { isStranded } from './stats';
-import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
 import type { GameEvent, PatchDeal, Vehicle, World } from './types';
 import { endTurn, setMoveOrder } from './world';
 
@@ -204,5 +204,36 @@ describe('a stranded driver asking the player', () => {
     expect(parts(playerVehicle(r.w))).toBe(4);
     // The driver notices the deal is off when it next thinks.
     expect(topGoal(find(endTurn(r.w, testDrive), npc.id))?.kind).not.toBe('patch');
+  });
+});
+
+describe('patch practice', () => {
+  // A finished free patch that spends one of the patcher's parts on the client's dead engine.
+  function settle(w: World, patcher: Vehicle, client: Vehicle): void {
+    setParts(w, patcher, 1);
+    breakEngine(client);
+    settlePatch(w, addState(w, 'patch', patcher.id, client.id, { kind: 'patch', deal: 'free', parts: 1, price: 0, work: 1, workLeft: 0 }));
+  }
+
+  it('pays the player for patching another truck', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 32, y: 30 });
+    settle(w, playerVehicle(w), npc);
+    expect(practiceOf(w, 'patch')).toMatchObject([{ amount: 1, difficulty: null }]);
+  });
+
+  it('pays nothing when an NPC patches the player', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
+    settle(w, npc, playerVehicle(w));
+    expect(practiceOf(w, 'patch')).toEqual([]);
+  });
+
+  it('pays nothing when an NPC patches another NPC', () => {
+    const w = emptyWorld();
+    const patcher = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 50, y: 30 });
+    const client = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 52, y: 30 });
+    settle(w, patcher, client);
+    expect(practiceOf(w, 'patch')).toEqual([]);
   });
 });

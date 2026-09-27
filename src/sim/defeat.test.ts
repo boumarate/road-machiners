@@ -10,7 +10,7 @@ import { scavenge } from './locations';
 import { startSearch } from './search';
 import { addState, endState, stateOf } from './states';
 import { startRepair } from './jobs';
-import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
 import type { SalvageStock, Vehicle, World } from './types';
 import { endTurn, setDirect, setMoveOrder, setWeaponOrder } from './world';
 
@@ -300,5 +300,30 @@ describe('commands while knocked out', () => {
     addState(w, 'feud', raider.id, w.vehicles[0].id, { kind: 'feud', robbery: false });
     w = endTurn(w, testDrive);
     expect(w.vehicles[0].job).toBeNull();
+  });
+});
+
+describe('knockout practice', () => {
+  it('pays the player on coming to after a knockout', () => {
+    const { w } = knockedOut();
+    advanceKnockout(w);
+    expect(w.player.state).toBe('active');
+    expect(practiceOf(w, 'knockout')).toMatchObject([{ amount: 1, difficulty: null }]);
+  });
+
+  it('pays nothing while the driver is still out', () => {
+    const { w } = knockedOut();
+    addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
+    advanceKnockout(w);
+    expect(practiceOf(w, 'knockout')).toEqual([]);
+  });
+
+  it('pays nothing for an NPC whose cab breaks', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    corePart(npc, 'cab').hp = 0;
+    checkKnockout(w);
+    advanceKnockout(w);
+    expect(practiceOf(w, 'knockout')).toEqual([]);
   });
 });

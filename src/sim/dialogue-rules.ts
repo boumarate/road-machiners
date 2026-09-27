@@ -10,6 +10,7 @@ import { patchGoal, pushGoal, startTow, topGoal } from './npc-activities';
 import { createCargoSalvage, hasCargo } from './salvage';
 import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
 import { npcProfile } from './npc-decisions';
+import { practice } from './progress';
 import { addState, endState, stateOf, towData } from './states';
 import { acceptOffer, playerTow, refuseOffer, strandedPlayerAt } from './tow';
 import type { Call, CallVars, TopicOutcome, Vehicle, World } from './types';
@@ -39,6 +40,7 @@ function nearestKnownTown(world: World, npc: Vehicle): TownDef {
 function settle(world: World, npc: Vehicle, call: Call, outcome: TopicOutcome): void {
   if (!call.topic) throw new Error('Only a topic can be settled');
   world.player.talked[npc.id] = { ...world.player.talked[npc.id], [call.topic]: outcome };
+  if (outcome === 'agreed') practice(world, 'deal', 1, null);
 }
 
 // The player drops the cargo. The demander and its faction mates nearby end any feud with the player and hold a

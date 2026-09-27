@@ -9,7 +9,7 @@ import { PHYSICS } from '../data/physics';
 import { laneCount, partLane, sideToward, walkLane, type PartHit, type Side } from './armor';
 import { bodyOf } from './body';
 import { corePart, hasLoot, itemSize, mountedItems, mountedParts } from './grid';
-import { skillEffect } from './progress';
+import { practice, skillEffect } from './progress';
 import { canVehicleSee, hasLineOfFire } from './vision';
 import { createWreckSalvage } from './salvage';
 import { addState, stateOf } from './states';
@@ -405,6 +405,7 @@ function applyShot(world: World, s: Shot): void {
     return { hit: false, crit: false, offset, hits };
   });
   if (rounds.some((x) => x.hits.length > 0)) s.target.lastHitBy = s.shooter.id;
+  practiceHits(world, s);
   world.events.push({
     t: "shot",
     shooter: s.shooter.id,
@@ -415,6 +416,14 @@ function applyShot(world: World, s: Shot): void {
     side,
     rounds,
   });
+}
+
+// The player practices perception from each round that hits as rolled, harder at a lower hit chance. A miss
+// that lands on the truck anyway does not count.
+function practiceHits(world: World, s: Shot): void {
+  if (s.shooter.id !== world.player.vehicleId) return;
+  const hits = s.rolls.filter((roll) => roll.hit).length;
+  if (hits > 0) practice(world, 'hit', hits, 1 - s.odds.chance);
 }
 
 function witnessesAttack(world: World, observer: Vehicle, shooter: Vehicle, target: Vehicle): boolean {

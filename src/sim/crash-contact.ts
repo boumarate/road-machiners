@@ -8,7 +8,7 @@ import { angleDiff, bearing, clamp, type Vec } from './vec';
 import { laneCount, ramMult, walkLane, type PartHit, type Side } from './armor';
 import { damagePart } from './damage';
 import { RULES } from '../data/rules';
-import { skillEffect } from './progress';
+import { practice, skillEffect } from './progress';
 import { vehicleMass } from './mass';
 import { bodyOf } from './body';
 import type { Vehicle, World } from './types';
@@ -23,10 +23,22 @@ export function applyContactCrash(world: World, a: Vehicle, b: Vehicle | null, w
     const { hitsA, hitsB } = damageVehicleCrash(world, a, b, impact, contact);
     noteCollision(world, a, b, hitsA, hitsB);
     world.events.push({ t: 'collision', a: a.id, b: b.id, hitsA, hitsB });
+    practiceRam(world, a, b, hitsA, hitsB);
     return;
   }
   const hitsA = applyContactDamage(world, a, contact.a, impact, 1, 1);
   world.events.push({ t: 'collision', a: a.id, b: what, hitsA, hitsB: [] });
+}
+
+// The player practices driving from the damage its truck deals in a crash with another vehicle. A heavier
+// vehicle is harder to hurt.
+function practiceRam(world: World, a: Vehicle, b: Vehicle, hitsA: PartHit[], hitsB: PartHit[]): void {
+  const me = world.player.vehicleId;
+  if (a.id !== me && b.id !== me) return;
+  const [own, other, dealt] = a.id === me ? [a, b, hitsB] : [b, a, hitsA];
+  const damage = dealt.reduce((sum, hit) => sum + hit.damage, 0);
+  if (damage === 0) return;
+  practice(world, 'ram', damage, vehicleMass(other) / (vehicleMass(other) + vehicleMass(own)));
 }
 
 // Damage only. The real crash also notes the attacks, which a ram forecast must not.
