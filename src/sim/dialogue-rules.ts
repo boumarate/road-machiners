@@ -3,13 +3,16 @@
 
 import type { ConditionId, EffectId, PrepareId } from '../data/dialogue';
 import { REGION, type TownDef } from '../data/region';
+import { partTradePrice } from './economy';
 import { playerVehicle } from './damage';
+import { stowPart } from './inventory';
 import { discoverSite } from './locations';
 import { SPAWN } from '../data/npcs';
 import { patchGoal, pushGoal, startTow, topGoal } from './npc-activities';
 import { createCargoSalvage, hasCargo } from './salvage';
 import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
 import { npcProfile } from './npc-decisions';
+import { getResources } from './resources';
 import { addState, endState, stateOf, towData } from './states';
 import { acceptOffer, playerTow, refuseOffer, strandedPlayerAt } from './tow';
 import type { Call, CallVars, TopicOutcome, Vehicle, World } from './types';
@@ -63,6 +66,23 @@ function inPatch(world: World, id: string): boolean {
 function offerBy(world: World, npc: Vehicle) {
   const tow = playerTow(world);
   return tow?.holder === npc.id && !towData(tow).hitched ? tow : null;
+}
+
+// The radio trade topic buys a live NPC spare, not a static option, so it calls this directly from
+// src/sim/dialogue.ts instead of going through EFFECTS. The price uses the player's own trade spread,
+// the same one town buys use, since it is the player's Trade skill narrowing it, not the NPC's.
+export type SpareOutcome = 'bought' | 'noRoom' | 'noMoney';
+
+export function buySpare(world: World, npc: Vehicle, partId: string): SpareOutcome {
+  const item = npc.items.find((it) => it.kind === 'part' && it.part.id === partId);
+  if (!item || item.kind !== 'part') throw new Error(`${npc.id} has no spare part ${partId}`);
+  const price = partTradePrice(world, playerVehicle(world), item.part, 'buy');
+  if (world.player.money < price) return 'noMoney';
+  if (!stowPart(world, playerVehicle(world), item.part)) return 'noRoom';
+  npc.items = npc.items.filter((it) => it.id !== item.id);
+  world.player.money -= price;
+  getResources(world, npc).money += price;
+  return 'bought';
 }
 
 export const CONDITIONS: Record<ConditionId, Condition> = {

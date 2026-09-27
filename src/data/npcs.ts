@@ -17,6 +17,9 @@ export type TraitId = 'trader' | 'scavenger' | 'raider' | 'scumbag' | 'coward';
 
 export type Weighted<T> = { value: T; weight: number };
 export type CargoRoll = { good: string; count: number };
+// Spare parts a driver carries loose, not mounted. `count` rolls how many it tries to fit, and each roll of
+// `pool` picks a part or null for an empty slot. Grid room and rated mass cap how many actually fit.
+export type SpareTable = { pool: Weighted<string | null>[]; count: Weighted<number>[] };
 export type NpcLoadoutTable = {
   budget: number; // chassis and mounted parts, separate from the driver's upkeep wallet
   chassis: Weighted<string>[];
@@ -25,6 +28,47 @@ export type NpcLoadoutTable = {
   armor: Weighted<string | null>[];
   cargoPart: Weighted<string | null>[];
   goods: Weighted<CargoRoll | null>[];
+  wear: Weighted<number>[]; // wear step rolled for every mounted, non-core part and every spare
+  spares: SpareTable | null; // loose parts a driver carries to sell; null for none
+};
+
+// Shared wear rolls for spawned kit. Raiders run rougher rigs than traders, who keep theirs closer to new.
+// Values stay within CONDITION.maxWear, so a freshly spawned NPC never carries junk.
+const WEAR_TRADER: Weighted<number>[] = [
+  { value: 0, weight: 6 },
+  { value: 1, weight: 3 },
+  { value: 2, weight: 1 },
+];
+const WEAR_SCAVENGER: Weighted<number>[] = [
+  { value: 0, weight: 3 },
+  { value: 1, weight: 4 },
+  { value: 2, weight: 2 },
+  { value: 3, weight: 1 },
+];
+const WEAR_RAIDER: Weighted<number>[] = [
+  { value: 0, weight: 2 },
+  { value: 1, weight: 3 },
+  { value: 2, weight: 3 },
+  { value: 3, weight: 1 },
+  { value: 4, weight: 1 },
+];
+
+// A trader's spare stock: mostly nothing, sometimes a gun, some armor plate or a rack it picked up cheap.
+const TRADER_SPARES: SpareTable = {
+  pool: [
+    { value: null, weight: 3 },
+    { value: "mg", weight: 2 },
+    { value: "shotgun", weight: 1 },
+    { value: "scrapPanels", weight: 2 },
+    { value: "flatFour", weight: 1 },
+    { value: "rack", weight: 1 },
+  ],
+  count: [
+    { value: 0, weight: 2 },
+    { value: 1, weight: 4 },
+    { value: 2, weight: 3 },
+    { value: 3, weight: 1 },
+  ],
 };
 
 export type NpcTemplate = {
@@ -82,6 +126,8 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
+    wear: WEAR_RAIDER,
+    spares: null,
   },
   gunwagon: {
     budget: 3500,
@@ -126,6 +172,8 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "batteries", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 2 }, weight: 1 },
     ],
+    wear: WEAR_RAIDER,
+    spares: null,
   },
   trader: {
     budget: 3000,
@@ -173,6 +221,8 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "meds", count: 4 }, weight: 2 },
       { value: { good: "electronics", count: 4 }, weight: 1 },
     ],
+    wear: WEAR_TRADER,
+    spares: TRADER_SPARES,
   },
   scavenger: {
     budget: 1800,
@@ -215,6 +265,8 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "batteries", count: 1 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
+    wear: WEAR_SCAVENGER,
+    spares: null,
   },
 };
 
