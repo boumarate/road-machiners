@@ -6,7 +6,7 @@
 import { REGION } from '../data/region';
 import { crossesRail } from './bridge';
 import { count, timed } from '../perf';
-import { findCells, nearestFreeCell, stampOverlay, startComponent } from './nav/astar';
+import { canStepOut, findCellsToward, nearestFreeCell, stampOverlay, startComponent, type Overlay } from './nav/astar';
 import type { Blocker } from './nav/buckets';
 import { CELL, CLEARANCE, blockerKey, componentOf, dynamicBlockers, navLayer, nearCliff, staticSet, tasted, tasteKey, tasteOf, terrainNav, tileIndex, type NavLayer, type StaticSet, type Taste, type TerrainNav } from './nav/layer';
 import type { Vehicle, World } from './types';
@@ -17,7 +17,7 @@ export type { Blocker };
 // Recent A* results. 64 covers up to 20 vehicles times 3 preview turns, so a repeated preview or
 // the turn after it finds every search done. Keys hold layer identity and exact blocker content.
 const ROUTE_CACHE_MAX = 64;
-const routeCache = new Map<string, { goal: number | null; cells: Int32Array | null }>();
+const routeCache = new Map<string, { goal: number; cells: Int32Array }>();
 
 // `driver` plans with its taste; without one the route is the plain cheapest.
 export function route(world: World, from: Vec, to: Vec, radius: number, extra: Blocker[], driver?: Pick<Vehicle, "id" | "brain">): Vec[] {
@@ -33,7 +33,6 @@ export function route(world: World, from: Vec, to: Vec, radius: number, extra: B
     const start = cellOf(layer, from);
     const target = cellOf(layer, to);
     const { goal, cells } = search(layer, dynamic, radius, start, target, taste);
-    if (goal === null || !cells) return [to];
     const end = goal === target ? to : centerOf(layer, goal);
     const points: Vec[] = [];
     for (let i = 1; i < cells.length - 1; i++) points.push(centerOf(layer, cells[i]));
@@ -50,7 +49,9 @@ export function warmRoutes(world: World, radii: number[]): void {
 }
 
 // Cached cells are shared between calls and never handed out, so callers cannot mutate them.
-function search(layer: NavLayer, dynamic: Blocker[], radius: number, start: number, target: number, taste: Taste | null): { goal: number | null; cells: Int32Array | null } {
+// The goal is the target cell, or the reachable cell closest to it when the target lies beyond a cliff or behind
+// kill wrecks and parked vehicles.
+function search(layer: NavLayer, dynamic: Blocker[], radius: number, start: number, target: number, taste: Taste | null): { goal: number; cells: Int32Array } {
   const key = `${layer.id}:${radius}:${start}:${target}:${tasteKey(taste)}:${blockerKey(dynamic)}`;
   const hit = routeCache.get(key);
   if (hit) {
@@ -60,18 +61,31 @@ function search(layer: NavLayer, dynamic: Blocker[], radius: number, start: numb
     return hit;
   }
   const overlay = stampOverlay(layer, dynamic, radius);
-  // A truck pushed into an obstacle's clearance past its neighbouring cells first drives out to the
-  // nearest free cell. The start cell stays first, since route() drops it.
-  const own = startComponent(layer, start);
-  const exit = own === 0 ? nearestFreeCell(layer, overlay, start) : start;
-  const component = exit === null ? 0 : own === 0 ? componentOf(layer, exit) : own;
+  // A truck pushed into the clearance of an obstacle or another vehicle past its neighbouring cells first drives
+  // out to a free cell. The start cell stays first, since route() drops it.
+  const exit = canStepOut(layer, overlay, start) ? start : exitCell(layer, overlay, start, target, radius);
   // An unreachable point, such as one beyond a cliff, routes to the closest point the truck can reach.
-  const goal = exit === null || component === 0 ? null : nearestFreeCell(layer, overlay, target, component);
-  const found = goal === null ? null : findCells(layer, overlay, exit!, goal, taste);
-  const result = { goal, cells: found && exit !== start ? Int32Array.of(start, ...found) : found };
+  const near = nearestFreeCell(layer, overlay, target, startComponent(layer, exit));
+  if (near === null) throw new Error(`No free cell joined to cell ${exit} for a route to cell ${target}`);
+  const found = findCellsToward(layer, overlay, exit, near, taste);
+  if (!found) throw new Error(`Cells ${exit} and ${near} share a component but have no route`);
+  const result = { goal: found[found.length - 1], cells: exit !== start ? Int32Array.of(start, ...found) : found };
   if (routeCache.size >= ROUTE_CACHE_MAX) routeCache.delete(routeCache.keys().next().value!);
   routeCache.set(key, result);
   return result;
+}
+
+// The free cell a truck on blocked ground drives out to. A truck pushed against an obstacle lies at most its
+// radius plus CLEARANCE inside blocked cells, and one more cell covers the grid rounding. Within that ring, a cell
+// joined to the target's side wins over a closer one in a closed pocket. A truck deeper in, such as one on steep
+// ground, drives out to the nearest free cell.
+function exitCell(layer: NavLayer, overlay: Overlay, start: number, target: number, radius: number): number {
+  const ring = Math.ceil((radius + CLEARANCE) / CELL) + 1;
+  const targetSide = nearestFreeCell(layer, overlay, target);
+  const toward = targetSide === null ? null : nearestFreeCell(layer, overlay, start, componentOf(layer, targetSide), ring);
+  const exit = toward ?? nearestFreeCell(layer, overlay, start);
+  if (exit === null) throw new Error(`Route starts at cell ${start} on a map with no free cell`);
+  return exit;
 }
 
 // Whether a vehicle can drive straight from a to b without touching an obstacle or a cliff.
