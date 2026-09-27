@@ -1,6 +1,6 @@
 # Occluded Vehicle Outline
 
-**Status:** reviewing
+**Status:** done
 **Branch:** occluded-vehicle-outline
 **Worktree:** .worktrees/occluded-vehicle-outline
 **Goal:** A vehicle hidden behind terrain or props shows a filled silhouette, so the player never loses their truck on screen. User confirms the look in game.
@@ -60,6 +60,22 @@ TDD: no (a render-only change with no sim rule; it is verified by screenshots an
 - `npm run quality` and `npm run playtest` pass.
 - `npm run perf` fails `bootMs` and `turnMs`. The parent commit 5019536 fails both by the same margin, so this change does not cause it. `frameP95Ms` stays 16.7 to 16.8 ms against a 17 ms budget on both (AS1 held).
 
-## Code smells
-
 ## Conclusion
+
+Outcome: goal achieved; the user approved the day, open and night screenshots. Commit 4e2d6b3.
+
+Invariants:
+- IV1 — `game.ts` passes the loop's `seen` flag to `VehicleView.update`, and lingering vehicles get `false`.
+- IV2 — `hidden_open.png` shows an uncovered truck unchanged.
+- IV3 — The diff touches no file in `src/sim/`.
+
+### Assumptions check
+- AS1 — held — `frameP95Ms` stayed at 16.7 to 16.8 ms, the same as the parent commit.
+- AS2 — held — screenshots of the open view match the old build.
+
+### Unknowns outcome
+- UK1 — resolved — the user accepted the unlit silhouette at night.
+
+Plan adherence: `silhouette(on)` became a `seen` parameter of `VehicleView.update`, because a separate call pushed `game.ts` over its max-lines limit.
+
+Review findings: the independent reviewer found no critical or important issues.
