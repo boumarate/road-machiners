@@ -21,7 +21,7 @@ const KEYS: Key[] = [
   { h: 8, sun: 0xffa860, sunI: 1.9, sky: 0xf0b890, ground: 0x5a4030, skyI: 1.1 },
   { h: 1, sun: 0xff5030, sunI: 1.5, sky: 0xc07868, ground: 0x3a2a28, skyI: 0.85 },
   { h: -4, sun: 0xa04050, sunI: 0.6, sky: 0x7a6080, ground: 0x241e2a, skyI: 0.55 },
-  { h: -TWILIGHT, sun: 0x8090c0, sunI: 0.3, sky: 0x5a6c9c, ground: 0x1c1e2a, skyI: 0.45 },
+  { h: -TWILIGHT, sun: 0x8090c0, sunI: 0.12, sky: 0x5a6c9c, ground: 0x1c1e2a, skyI: 0.2 },
 ];
 
 export type Daylight = {
@@ -49,9 +49,10 @@ function sunHeight(hour: number): { h: number; dir: Vec } {
 }
 
 function colorsAt(h: number): Omit<Daylight, 'dir' | 'elevation'> {
+  // Past either end the light holds the end key, so deep night never extrapolates.
   const hi = KEYS.findIndex((k) => k.h <= h);
-  const a = KEYS[Math.max(0, hi - 1)];
-  const b = hi === -1 ? KEYS[KEYS.length - 1] : KEYS[hi];
+  const a = hi === -1 ? KEYS[KEYS.length - 1] : KEYS[Math.max(0, hi - 1)];
+  const b = hi === -1 ? a : KEYS[hi];
   const s = a === b ? 0 : (a.h - h) / (a.h - b.h);
   const mix = (x: number, y: number) => new THREE.Color(x).lerp(new THREE.Color(y), s);
   return {
