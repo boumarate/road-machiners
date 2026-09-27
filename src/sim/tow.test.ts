@@ -251,6 +251,8 @@ describe('towing', () => {
     const s = stranded(at(20), at(30));
     // A raider spawning near the gate would scare the tower off, and this test is about arrival.
     for (const id of Object.keys(NPCS)) s.w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    forceOption('idle', 'wait');
+    forceOption('strandedSeen', 'tow');
     let w = offered(s);
     const fee = feeOf(w);
     w.player.money = 10;
@@ -429,6 +431,9 @@ describe('emergency beacon', () => {
   it('only the first tower to hear a beacon answers it, and its claim ends with the offer', () => {
     const s = stranded(player, { x: 100, y: 30 });
     const late = withTower(s.w, 'trader', 'traders', 'hauler', { x: 30, y: 150 });
+    // Only the two towers placed here may answer, and both mean to tow.
+    for (const id of Object.keys(NPCS)) s.w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    forceOption('strandedSeen', 'tow');
     const r = runUntil(setBeacon(s.w, true), 150, (x) => playerTow(x) !== null);
     expect(playerTow(r.w)?.holder).toBe(s.trader.id);
     expect(activitiesOf(r.events, late.id).filter((e) => e.t === 'activity' && e.activity === 'tow')).toEqual([]);

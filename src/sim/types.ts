@@ -4,6 +4,7 @@ import type { PartHit, Side } from "./armor";
 import type { TraitId } from "../data/npcs";
 import type { Terrain } from "./terrain";
 import type { Vec } from "./vec";
+import type { LandmarkLook } from "../data/region";
 import type { TopicId } from "../data/dialogue";
 import type { DecisionOptions } from "../data/npcs";
 
@@ -184,12 +185,10 @@ export type Vehicle = {
   job: Job | null;
 };
 
-export type Obstacle = {
-  id: string;
-  pos: Vec;
-  r: number;
-  kind: "rock" | "wreck" | "building" | "water" | "site";
-};
+export type Obstacle =
+  | { id: string; pos: Vec; r: number; kind: "rock" | "wreck" | "building" | "water" | "site" }
+  // yaw is the direction a landmark faces, toward its road, in radians from map +x toward +y.
+  | { id: string; pos: Vec; r: number; kind: "landmark"; look: LandmarkLook; yaw: number };
 
 // A timed relation one vehicle holds toward another. src/sim/states.ts owns them.
 export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce';

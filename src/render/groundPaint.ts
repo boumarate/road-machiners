@@ -1,9 +1,8 @@
-// Map-space ground painter: tile type colors, hillshade and roads. Pebbles and scrub are 3D, in
+// Map-space ground painter: tile type colors and hillshade. Roads are 3D, in three/render/roads.ts. Pebbles and scrub are 3D, in
 // three/render/scatter.ts. The 3D terrain (three/render/terrain.ts) uses it as its texture.
 
 import { REGION } from "../data/region";
-import { TERRAIN, TERRAIN_TYPES } from "../data/terrain";
-import { BRIDGE_AXIS, BRIDGE_LENGTH } from "../sim/bridge";
+import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from "../data/terrain";
 import { groundSlope, tileAt, type Terrain } from "../sim/terrain";
 import { type Vec } from "../sim/vec";
 import { hash2, valueNoise } from "./noise";
@@ -78,27 +77,6 @@ export function paintGroundCanvas(
     );
     disc(c, crater.center, crater.radius, css(PAL.rust.dark, 0.25));
   }
-  // No road on the canyon floor under Canyon Bridge.
-  c.ctx.save();
-  c.ctx.beginPath();
-  c.ctx.rect(0, 0, c.size, c.size);
-  const gap = bridgeGap();
-  gap.forEach((p, i) => (i === 0 ? c.ctx.moveTo(c.toPx(p.x), c.toPx(p.y)) : c.ctx.lineTo(c.toPx(p.x), c.toPx(p.y))));
-  c.ctx.closePath();
-  c.ctx.clip("evenodd");
-  for (const road of REGION.roads) paintRoad(c, road);
-  c.ctx.restore();
-}
-
-// The cut between the two abutments, one road width to each side of the deck axis.
-function bridgeGap(): Vec[] {
-  const { from, abutment } = TERRAIN.features.bridge;
-  const a = BRIDGE_AXIS;
-  const w = REGION.roadWidth;
-  return [[abutment, -w], [BRIDGE_LENGTH - abutment, -w], [BRIDGE_LENGTH - abutment, w], [abutment, w]].map(([along, across]) => ({
-    x: from.x + a.x * along - a.y * across,
-    y: from.y + a.y * along + a.x * across,
-  }));
 }
 
 // Hillshade: brighten slopes turned toward the light, darken slopes turned away.
@@ -128,8 +106,7 @@ function typeColor(t: Terrain, x: number, y: number): number {
     0.5;
   const i = Math.floor(jx);
   const j = Math.floor(jy);
-  const at = (a: number, b: number) =>
-    TERRAIN_TYPES[t.types[tileAt(t, { x: a + 0.5, y: b + 0.5 })]].color;
+  const at = (a: number, b: number) => paintColor(t.types[tileAt(t, { x: a + 0.5, y: b + 0.5 })]);
   const fx = jx - i;
   const fy = jy - j;
   return mix(
@@ -137,6 +114,11 @@ function typeColor(t: Terrain, x: number, y: number): number {
     mix(at(i, j + 1), at(i + 1, j + 1), fx),
     fy,
   );
+}
+
+// Road tiles paint as hardpan, since the road itself is a 3D strip with its own worn edge.
+function paintColor(type: TerrainTypeId): number {
+  return TERRAIN_TYPES[type === "road" ? "hardpan" : type].color;
 }
 
 function groundColor(
@@ -184,14 +166,6 @@ function paintGround(
 
 function css(color: number, alpha: number): string {
   return `rgba(${(color >> 16) & 0xff},${(color >> 8) & 0xff},${color & 0xff},${alpha})`;
-}
-
-function paintRoad(c: PaintCanvas, road: Vec[]): void {
-  const w = REGION.roadWidth;
-  stroke(c, road, w + 0.3, css(shade(PAL.road, 1.06), 0.5), 0);
-  stroke(c, road, w, css(PAL.road, 1), 0);
-  stroke(c, road, 0.24, css(PAL.roadRut, 0.8), -0.35);
-  stroke(c, road, 0.24, css(PAL.roadRut, 0.8), 0.35);
 }
 
 // A polyline stroke in map units, shifted sideways by offset tiles along each segment's normal.

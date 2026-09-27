@@ -74,9 +74,14 @@ export function flattenFactor(x: number, y: number): number {
     if (dx * dx + dy * dy > SITE_SKIP2[k]) continue;
     best = Math.min(best, Math.hypot(dx, dy) - site.radius);
   }
-  if (best <= 0) return 1;
-  if (best >= TERRAIN.flattenMargin) return 0;
-  return 1 - smooth(best / TERRAIN.flattenMargin);
+  return flattenFalloff(best);
+}
+
+// 1 on a road or site, falling smoothly to 0 at flattenMargin. gap is the distance past its edge.
+export function flattenFalloff(gap: number): number {
+  if (gap <= 0) return 1;
+  if (gap >= TERRAIN.flattenMargin) return 0;
+  return 1 - smooth(gap / TERRAIN.flattenMargin);
 }
 
 // Broad rolling height at each site center. Holds one seed, the one terrain generation is using.
