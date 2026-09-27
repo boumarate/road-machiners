@@ -31,6 +31,8 @@ import { vehicleStats, type MountedWeapon } from "./stats";
 import type { Aim, ShotRound, Vehicle, World } from "./types";
 import { weatherAt } from "./weather";
 import { angleDiff, bearing, clamp, dist, DEG, type Vec } from "./vec";
+import { isTownGuarded } from './guards';
+
 
 export type FireBlock =
   | "disabled"
@@ -360,6 +362,7 @@ export function fireWeapons(world: World): void {
 // lies within the splash radius of where it landed.
 function applyShot(world: World, s: Shot): void {
   s.mw.part.reload = s.mw.def.reload;
+  recordNpcAttack(world, s.shooter, s.target);
   provoke(world, s.shooter, s.target);
   const r = s.mw.def.round;
   const { side, lanes, body } = s.aiming;
@@ -409,6 +412,27 @@ function applyShot(world: World, s: Shot): void {
     side,
     rounds,
   });
+}
+
+function witnessesAllyAttack(world: World, observer: Vehicle, shooter: Vehicle, target: Vehicle): boolean {
+  if (observer.faction !== target.faction) return false;
+  if (dist(observer.pos, target.pos) > SPAWN.neighborHelp) return false;
+  return canVehicleSee(world, observer, target.pos) && canVehicleSee(world, observer, shooter.pos);
+}
+
+// Shots, including misses, establish a local threat without broadcasting hidden targets.
+function recordNpcAttack(world: World, shooter: Vehicle, target: Vehicle): void {
+  for (const observer of world.vehicles) {
+    if (observer.id === shooter.id) continue;
+    if (observer.id === target.id || witnessesAllyAttack(world, observer, shooter, target)) rememberNpcAttacker(observer, shooter.id);
+  }
+}
+
+function rememberNpcAttacker(observer: Vehicle, attackerId: string): void {
+  const brain = observer.brain;
+  if (!brain) return;
+  const attackers = brain.attackers ??= [];
+  if (!attackers.includes(attackerId)) attackers.push(attackerId);
 }
 
 // A shot at a vehicle that was not hostile starts a feud with it and its nearby faction mates.
@@ -490,13 +514,24 @@ function rewardKill(world: World, v: Vehicle): void {
   gainXp(world, tpl.xp, `destroyed ${v.name}`);
 }
 
-// Auto mode: every weapon gets a body shot at the nearest hostile it can hit, in range, arc and line of fire. The player's auto fire
-// only picks targets the player sees.
+function canNpcEngage(vehicle: Vehicle, target: Vehicle): boolean {
+  const brain = vehicle.brain;
+  if (!brain) return true;
+  if (brain.attackers?.includes(target.id)) return true;
+  if (brain.activity?.kind !== 'fight') return false;
+  return canInitiateFire(vehicle, target, brain.activity.targetId);
+}
+
+function canInitiateFire(vehicle: Vehicle, target: Vehicle, targetId: string | null): boolean {
+  return target.id === targetId && !isTownGuarded(vehicle.pos) && !isTownGuarded(target.pos);
+}
+
+// Defensive fire is independent of movement. Guard caution limits initiative, not self-defense.
 export function autoOrders(world: World, v: Vehicle): void {
   v.weaponOrders = {};
   const seen = (x: Vehicle) => canVehicleSee(world, v, x.pos);
   const hostiles = world.vehicles
-    .filter((x) => isHostile(v, x) && seen(x))
+    .filter((x) => isHostile(v, x) && seen(x) && canNpcEngage(v, x))
     .sort((a, b) => dist(v.pos, a.pos) - dist(v.pos, b.pos));
   for (const mw of vehicleStats(world, v).weapons) {
     const target =

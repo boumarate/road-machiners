@@ -243,7 +243,7 @@ describe("NPC activities", () => {
     expect(npc.brain!.activity?.kind).toBe("resupply");
   });
 
-  it("lets a healthy scavenger fight a nearby raider", () => {
+  it("lets an idle healthy scavenger fight a nearby raider", () => {
     const { w, npc } = createScavenger();
     addVehicle(w, "raiders", "buggy", ["mg"], { x: 13, y: 10 });
     planNpcOrders(w);
@@ -266,7 +266,7 @@ describe("NPC activities", () => {
     expect(npc.brain!.activity?.kind).toBe("resupply");
   });
 
-  it("a raider heads toward a heard player", () => {
+  it("a raider investigates a nearby heard player", () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const player = w.vehicles[0];
     player.speed = 4; // loud enough to be heard far past sight range
@@ -287,7 +287,7 @@ describe("NPC activities", () => {
     expect(raider.brain!.activity?.targetId).toBe(player.id);
   });
 
-  it("a raider hears the player as far as the player hears it", () => {
+  it("a distant contact remains audible without redirecting a raider", () => {
     const w = emptyWorld({ x: 100, y: 300 });
     const player = w.vehicles[0];
     player.speed = 4;
@@ -307,8 +307,8 @@ describe("NPC activities", () => {
     expect(
       contactsOf(w, raider, Infinity).some((c) => c.vehicleId === player.id),
     ).toBe(true);
-    expect(raider.brain!.activity?.kind).toBe("investigate");
-    expect(raider.brain!.activity?.targetId).toBe(player.id);
+    expect(raider.brain!.activity?.kind).toBe("raid");
+    expect(raider.brain!.activity?.targetId).toBeNull();
   });
 
   it("a trader turns away from a heard raider", () => {

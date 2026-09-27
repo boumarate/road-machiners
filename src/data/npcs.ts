@@ -306,8 +306,7 @@ export type NpcClass = {
   recoverCondition: number;
   threatRatio: number;
   defensive: boolean;
-  // A hostile contact reacts only while its circle is at most this many tiles wide. Beyond it the
-  // noise is too vague to act on. Raiders have no limit: they hear as far as the player does.
+  // Reaction requires a useful position estimate, without reducing hearing range.
   contactReactRadius: number;
   tows: boolean; // offers to tow a stranded player to town
 };
@@ -347,12 +346,14 @@ export const NPC_CLASSES: Record<Brain, NpcClass> = {
     recoverCondition: 0.5,
     threatRatio: 1,
     defensive: false,
-    contactReactRadius: Infinity,
+    contactReactRadius: 12,
     tows: false,
   },
 };
 
 export const NPC_UPKEEP = {
+  repairParts: 2, // two field patches, kept out of sale cargo
+  shadeSearchRadius: 6, // a short local detour, rather than a journey while damaged
   lowFuel: RULES.lowFuelThreshold,
   lowSupplies: RULES.lowFuelThreshold,
   // Reserve one full tank and supply load before buying trade cargo.
