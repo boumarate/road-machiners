@@ -35,6 +35,7 @@ import { REGION } from "../data/region";
 import type {
   GridItem,
   PartInstance,
+  RefitJob,
   SalvageStock,
   Vehicle,
   World,
@@ -150,6 +151,7 @@ export class InventoryView {
       }
     }
     for (const it of me.items) grid.append(this.itemEl(w, it));
+    const refitBanner = showRefit(w, me, grid);
     this.gridEl = grid;
     const inTown = townAt(w) !== null;
     this.root.replaceChildren(
@@ -170,6 +172,7 @@ export class InventoryView {
         el(
           "div",
           { class: "inv-side" },
+          refitBanner,
           this.inspection,
           this.loot
             ? this.lootEl(w, this.loot)
@@ -258,9 +261,12 @@ export class InventoryView {
     if (!core)
       node.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
+        // The grab uses the same grid math as spotAt, so a drop where the drag began lands on the item's own spot.
+        if (!this.gridEl) throw new Error("Grid item pressed without a grid");
+        const r = this.gridEl.getBoundingClientRect();
         this.startDrag(e, "grid", it.id, it, {
-          x: Math.floor(e.offsetX / CELL_PX),
-          y: Math.floor(e.offsetY / CELL_PX),
+          x: Math.floor((e.clientX - r.left) / CELL_PX) - it.x,
+          y: Math.floor((e.clientY - r.top) / CELL_PX) - it.y,
         });
       });
     return node;
@@ -770,6 +776,44 @@ export function getItemIcon(item: GridItem): IconName {
 
 function pos(x: number, y: number, w: number, h: number): string {
   return `left:${x * CELL_PX}px;top:${y * CELL_PX}px;width:${w * CELL_PX}px;height:${h * CELL_PX}px`;
+}
+
+// A running refit draws its target outlines on the grid and returns its notice. Without one the notice is empty.
+function showRefit(w: World, v: Vehicle, grid: HTMLElement): HTMLElement {
+  if (v.job?.kind !== "refit") return el("div");
+  grid.append(...refitTargets(w, v, v.job));
+  return refitNotice(v.job);
+}
+
+// Dashed outlines where a running refit puts each part when it ends.
+function refitTargets(w: World, v: Vehicle, job: RefitJob): HTMLElement[] {
+  const moved: GridItem[] = job.moves.map((move) => {
+    const item = v.items.find((it) => it.id === move.itemId);
+    if (!item) throw new Error(`Refit moves missing item ${move.itemId}`);
+    return { ...item, ...move.to };
+  });
+  const pickup = job.pickup;
+  const part = pickup && w.salvage.find((stock) => stock.id === pickup.stockId)?.parts.find((p) => p.id === pickup.partId);
+  if (pickup && part) moved.push({ kind: "part", id: pickup.itemId, part, ...pickup.to });
+  return moved.map((item) => {
+    const size = footprint(item);
+    return el(
+      "div",
+      { class: "inv-refit-target", style: pos(item.x, item.y, size.w, size.h) },
+      itemLabel(item).short,
+    );
+  });
+}
+
+function refitNotice(job: RefitJob): HTMLElement {
+  const turns = job.turnsLeft === 1 ? "1 turn" : `${job.turnsLeft} turns`;
+  return el(
+    "div",
+    { class: "inv-refit-notice" },
+    el("h3", {}, `Refit: ${turns} left`),
+    el("p", {}, "Parts move to the dashed outlines when the refit ends."),
+    el("p", {}, "End turns while parked. Driving cancels the refit."),
+  );
 }
 
 function footprint(it: GridItem): { w: number; h: number } {

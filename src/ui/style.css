@@ -866,6 +866,28 @@ body {
 .inv-legend > div {
   margin-top: 7px;
 }
+.inv-refit-target {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px dashed #eac779;
+  background: #eac77922;
+  color: #f0e0b8;
+  font: 11px var(--font-mono);
+  padding: 3px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.inv-refit-notice {
+  border: 2px dashed #eac779;
+  padding: 6px 10px;
+}
+.inv-refit-notice h3 {
+  margin: 0 0 4px;
+  color: #eac779;
+}
+.inv-refit-notice p {
+  margin: 2px 0;
+}
 .inv-ghost {
   position: fixed;
   pointer-events: none;
