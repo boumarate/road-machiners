@@ -7,7 +7,7 @@ import type { DecisionOptions, TraitId } from './npcs';
 
 type PatchDeal = DecisionOptions['patchDeal'];
 
-export type TopicId = 'directions' | 'tow' | 'askTow' | 'patch' | 'patchRequest' | 'demand' | 'truce' | 'mercy' | 'rob' | 'truceOffer' | 'mercyPlea' | 'offerTow' | 'releaseTow' | 'offerPatch';
+export type TopicId = 'directions' | 'tow' | 'askTow' | 'patch' | 'patchRequest' | 'demand' | 'trade' | 'truce' | 'mercy' | 'rob' | 'truceOffer' | 'mercyPlea' | 'offerTow' | 'releaseTow' | 'offerPatch';
 export type ConditionId =
   | 'knowsTown' | 'offersTow' | 'canTowPlayer' | 'playerNeedsPatch' | 'npcNeedsPatch' | 'hasDeal' | 'noDeal' | 'demandsCargo'
   | 'atOdds' | 'atPeace' | 'noPlayerPlea' | 'npcHasCargo' | 'offersTruce' | 'begsMercy'
@@ -165,6 +165,21 @@ export const TOPICS: Record<TopicId, Topic> = {
           { text: 'Come and get it.', when: [], effects: ['settleRefused'], go: END },
         ],
       },
+    },
+  },
+  // Lists a driver's loose, unmounted parts with a buy price each. src/sim/dialogue.ts builds this node's
+  // line and options live from the NPC's current spares, since the list shrinks as the player buys, so
+  // the static line and empty options below are never read.
+  trade: {
+    id: 'trade',
+    once: false,
+    ask: { text: 'Got any spares to sell?', when: [], duringFeud: false },
+    raise: null,
+    prepare: null,
+    hangUp: [],
+    start: 'offers',
+    nodes: {
+      offers: { line: 'Have a look.', options: [] },
     },
   },
   // The player asks a foe for a truce. The driver's answer is rolled when the topic opens. The player asks the same
@@ -367,8 +382,8 @@ export const HONK_RANGE = DETECT.sound.limp;
 const PARLEY: TopicId[] = ['truce', 'mercy', 'rob', 'truceOffer', 'mercyPlea', 'offerTow', 'releaseTow', 'offerPatch'];
 
 export const TRAIT_TALK: Record<TraitId, TraitTalk> = {
-  trader: { voice: { greeting: 'Caravan here. Go ahead.', repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'patch', 'patchRequest', ...PARLEY] },
-  scavenger: { voice: { greeting: 'Yeah? Make it quick.', repeatLine: 'I told you already.', refusal: 'Get off my channel.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'patch', 'patchRequest', ...PARLEY] },
+  trader: { voice: { greeting: 'Caravan here. Go ahead.', repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'patch', 'patchRequest', 'trade', ...PARLEY] },
+  scavenger: { voice: { greeting: 'Yeah? Make it quick.', repeatLine: 'I told you already.', refusal: 'Get off my channel.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'patch', 'patchRequest', 'trade', ...PARLEY] },
   raider: { voice: { greeting: 'Get lost.', repeatLine: 'Get lost.', refusal: 'Heh. No.', honksBack: false }, topics: ['demand', ...PARLEY] },
   scumbag: { voice: null, topics: ['demand', ...PARLEY] },
   coward: { voice: null, topics: PARLEY },

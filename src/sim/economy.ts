@@ -1,19 +1,22 @@
-// Town services: trade, supplies, repairs, parts and chassis. All need the player in a town. Raider camps service raiders.
+// Paid services. Goods and part trade happen at any shop (src/sim/market.ts owns shop state). Supplies,
+// repairs, mounting and chassis need a town. Raider camps service raiders.
 // Invalid requests throw: the UI only offers valid ones.
 
 import { chassisDef, PLAYER_CHASSIS } from "../data/chassis";
-import { ECONOMY, GOODS, TOWN_PRICES } from "../data/goods";
+import { ECONOMY, GOODS } from "../data/goods";
+import { shopDef } from "../data/market";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { REGION } from "../data/region";
-import { dist } from "./vec";
 import { getResources } from "./resources";
+import { isJunk, maxHp, partValue, restorePart, scrapValue, wearFactor } from "./wear";
 import { playerVehicle } from "./damage";
-import { addCoreParts, makePart } from "./factory";
+import { addCoreParts } from "./factory";
 import { practice, skillEffect } from "./progress";
+import { addStockPart, goodPrice, recordTrade, shopAt, shopState, siteOf, takeStockPart } from "./market";
 import { canUseSite, requireTown } from "./sites";
 import { freeCells, goodsCount, mountedParts } from "./grid";
-import { addGoods, mountPart, removeGoods, stowPart } from "./inventory";
+import { addGoods, mountPart, removeGoods, spareParts, stowPart } from "./inventory";
 import type { PartInstance, Vehicle, World } from "./types";
 import { playerCommand } from "./world";
 
@@ -34,33 +37,39 @@ export function requireVehicleTown(
     throw new Error("Stop before using town services");
 }
 
+// A vehicle trading at a shop must be at its gate, and an NPC must be parked.
+export function requireVehicleShop(world: World, vehicle: Vehicle, shopId: string): void {
+  if (!canUseSite(vehicle.pos, siteOf(shopId)))
+    throw new Error(`Not at a gate of ${shopId}`);
+  if (vehicle.id !== world.player.vehicleId && vehicle.speed > RULES.parkedSpeed)
+    throw new Error("Stop before trading");
+}
+
 export function getTradePrice(
   world: World,
   vehicle: Vehicle,
-  townId: string,
+  shopId: string,
   good: string,
   direction: "buy" | "sell",
 ): number {
   const margin =
     vehicle.id === world.player.vehicleId ? spread(world) : ECONOMY.spread;
-  return Math.round(
-    basePrice(townId, good) * (1 + (direction === "buy" ? margin : -margin)),
-  );
+  return goodPrice(shopId, shopState(world, shopId), good, direction, margin);
 }
 
 export function tradeGoods(
   world: World,
   vehicle: Vehicle,
-  townId: string,
+  shopId: string,
   good: string,
   count: number,
   direction: "buy" | "sell",
 ): void {
-  requireVehicleTown(world, vehicle, townId);
+  requireVehicleShop(world, vehicle, shopId);
   if (!GOODS[good] || !Number.isInteger(count) || count <= 0)
     throw new Error(`Bad trade ${count} ${good}`);
   const resources = getResources(world, vehicle);
-  const price = getTradePrice(world, vehicle, townId, good, direction);
+  const price = getTradePrice(world, vehicle, shopId, good, direction);
   const held = goodsCount(vehicle)[good] ?? 0;
   if (direction === "buy") {
     if (resources.money < price * count) throw new Error("Not enough money");
@@ -79,6 +88,7 @@ export function tradeGoods(
     resources.money += price * count;
     if (vehicle.id === world.player.vehicleId) practiceSale(world, good, price, count);
   }
+  recordTrade(shopId, shopState(world, shopId), good, count, direction);
 }
 
 // Social grows from profit over the average price paid. A sale at a loss teaches nothing.
@@ -87,31 +97,34 @@ function practiceSale(world: World, good: string, price: number, count: number):
   if (profit > 0) practice(world, "profit", profit, null);
 }
 
+// Sells every good the shop trades, keeping `retainedParts` units of the parts good, and every
+// loose part, which joins the shop's stock.
 export function sellVehicleCargo(
   world: World,
   vehicle: Vehicle,
-  townId: string,
-  retainedParts = 0,
+  shopId: string,
+  retainedParts: number,
 ): void {
-  requireVehicleTown(world, vehicle, townId);
+  requireVehicleShop(world, vehicle, shopId);
+  const traded = shopDef(shopId).goods;
   for (const [good, count] of Object.entries(goodsCount(vehicle))) {
     const sellCount = good === 'parts' ? Math.max(0, count - retainedParts) : count;
-    if (sellCount > 0) tradeGoods(world, vehicle, townId, good, sellCount, "sell");
+    if (sellCount > 0 && traded.includes(good)) tradeGoods(world, vehicle, shopId, good, sellCount, "sell");
   }
-  const mounted = new Set(mountedParts(vehicle).map((part) => part.id));
   const resources = getResources(world, vehicle);
-  vehicle.items = vehicle.items.filter((item) => {
-    if (item.kind !== "part" || mounted.has(item.part.id)) return true;
-    resources.money += partSellPrice(item.part);
-    return false;
-  });
+  const spares = spareParts(vehicle);
+  for (const part of spares) {
+    resources.money += partTradePrice(world, vehicle, part, "sell");
+    addStockPart(shopState(world, shopId), part);
+  }
+  vehicle.items = vehicle.items.filter((item) => item.kind !== "part" || !spares.includes(item.part));
 }
 
 export function serviceVehicle(
   world: World,
   vehicle: Vehicle,
   townId: string,
-  retainedParts = 0,
+  retainedParts: number,
 ): void {
   requireVehicleTown(world, vehicle, townId);
   sellVehicleCargo(world, vehicle, townId, retainedParts);
@@ -155,13 +168,14 @@ function refuelAndRepair(world: World, vehicle: Vehicle): void {
   }
   const multiplier =
     vehicle.id === world.player.vehicleId ? repairMult(world) : 1;
-  for (const part of allParts(vehicle)) {
-    const unitCost = ECONOMY.partRepairPerHp * multiplier;
+  for (const part of repairableParts(vehicle)) {
+    // Same formula as partRepairCost: a share of the part's value per HP share restored.
+    const unitCost = (ECONOMY.repairShare * partValue(part) * multiplier) / maxHp(part);
     const hp = Math.min(
-      partDef(part.defId).hp - part.hp,
+      maxHp(part) - part.hp,
       Math.floor(resources.money / unitCost),
     );
-    part.hp += hp;
+    restorePart(part, part.hp + hp);
     resources.money -= Math.ceil(hp * unitCost);
   }
 }
@@ -173,18 +187,19 @@ function spread(world: World): number {
   );
 }
 
-export function buyPrice(world: World, townId: string, good: string): number {
-  return getTradePrice(world, playerVehicle(world), townId, good, "buy");
+export function buyPrice(world: World, shopId: string, good: string): number {
+  return getTradePrice(world, playerVehicle(world), shopId, good, "buy");
 }
 
-export function sellPrice(world: World, townId: string, good: string): number {
-  return getTradePrice(world, playerVehicle(world), townId, good, "sell");
+export function sellPrice(world: World, shopId: string, good: string): number {
+  return getTradePrice(world, playerVehicle(world), shopId, good, "sell");
 }
 
-function basePrice(townId: string, good: string): number {
-  const p = TOWN_PRICES[townId]?.[good];
-  if (p === undefined) throw new Error(`No price for ${good} in ${townId}`);
-  return p;
+// The shop the parked player can use. Throws when there is none.
+export function requireShop(world: World): string {
+  const shopId = shopAt(world);
+  if (!shopId) throw new Error("Not parked at a shop");
+  return shopId;
 }
 
 function repairMult(world: World): number {
@@ -203,17 +218,13 @@ function pay(world: World, amount: number, reason: string): void {
 
 export function buyGood(world: World, good: string, n: number): World {
   return playerCommand(world, (w) => {
-    const town = requireTown(w);
-    const me = playerVehicle(w);
-    tradeGoods(w, me, town.id, good, n, "buy");
+    tradeGoods(w, playerVehicle(w), requireShop(w), good, n, "buy");
   });
 }
 
 export function sellGood(world: World, good: string, n: number): World {
   return playerCommand(world, (w) => {
-    const town = requireTown(w);
-    const me = playerVehicle(w);
-    tradeGoods(w, me, town.id, good, n, "sell");
+    tradeGoods(w, playerVehicle(w), requireShop(w), good, n, "sell");
   });
 }
 
@@ -236,11 +247,14 @@ export function buySupply(world: World, kind: Supply, n: number): World {
   });
 }
 
+// A share of the part's value per HP share restored, times Mechanics. A broken part (0 HP) pays
+// the same formula for a full rebuild. Throws for a junk part, which no repair rebuilds.
 export function partRepairCost(world: World, part: PartInstance): number {
+  if (isJunk(part))
+    throw new Error(`${partDef(part.defId).name} is junk and cannot be rebuilt`);
+  const missingShare = 1 - part.hp / maxHp(part);
   return Math.ceil(
-    (partDef(part.defId).hp - part.hp) *
-      ECONOMY.partRepairPerHp *
-      repairMult(world),
+    ECONOMY.repairShare * partValue(part) * missingShare * repairMult(world),
   );
 }
 
@@ -250,7 +264,7 @@ export function repairPart(world: World, partId: string): World {
     const part = allParts(playerVehicle(w)).find((p) => p.id === partId);
     if (!part) throw new Error(`No truck part ${partId}`);
     pay(w, partRepairCost(w, part), "repairs");
-    part.hp = partDef(part.defId).hp;
+    restorePart(part, maxHp(part));
   });
 }
 
@@ -258,53 +272,84 @@ export function repairAll(world: World): World {
   return playerCommand(world, (w) => {
     requireTown(w);
     const me = playerVehicle(w);
-    const parts = allParts(me);
+    const parts = repairableParts(me);
     const cost = parts.reduce((a, p) => a + partRepairCost(w, p), 0);
     pay(w, cost, "repairs");
-    for (const p of parts) p.hp = partDef(p.defId).hp;
+    for (const p of parts) restorePart(p, maxHp(p));
   });
 }
 
+// Buy or sell price at one place. Buy adds the spread to partValue. Sell scales partValue by
+// condition and cuts the spread, floored at the scrap value (IV4). The Trade skill narrows the
+// spread for the player, like the goods spread above.
+export function partTradePrice(world: World, vehicle: Vehicle, part: PartInstance, direction: 'buy' | 'sell'): number {
+  const margin = vehicle.id === world.player.vehicleId ? spread(world) : ECONOMY.spread;
+  const value = partValue(part);
+  if (direction === 'buy') return Math.round(value * (1 + margin));
+  const conditionShare = part.hp / maxHp(part);
+  return Math.max(Math.round(scrapValue(part)), Math.round(value * conditionShare * (1 - margin)));
+}
+
+// A world-free, skill-free sell quote for garage storage listings, which have no vehicle context.
 export function partSellPrice(part: PartInstance): number {
-  const def = partDef(part.defId);
-  return Math.floor(def.price * ECONOMY.partSellFactor * (part.hp / def.hp));
+  return Math.max(
+    Math.round(scrapValue(part)),
+    Math.round(partValue(part) * (part.hp / maxHp(part)) * (1 - ECONOMY.spread)),
+  );
 }
 
-export function buyPart(world: World, defId: string): World {
+// Buys a part from the stock of the shop the player is parked at. It goes into the truck grid, or
+// into garage storage at a garage when the grid has no room.
+export function buyStockPart(world: World, partId: string): World {
   return playerCommand(world, (w) => {
-    requireTown(w);
-    if (partDef(defId).kind === "core")
-      throw new Error(
-        `${partDef(defId).name} is built in. It is not for sale.`,
-      );
-    pay(w, partDef(defId).price, partDef(defId).name);
-    w.player.storage.push(makePart(w, defId));
+    const shopId = requireShop(w);
+    const part = takeStockPart(shopState(w, shopId), partId);
+    pay(w, partTradePrice(w, playerVehicle(w), part, "buy"), partDef(part.defId).name);
+    if (stowPart(w, playerVehicle(w), part)) return;
+    if (shopDef(shopId).kind !== "garage") throw new Error("No room in the truck for this part");
+    w.player.storage.push(part);
   });
 }
 
+// Sells a spare part from the truck grid, or from garage storage at a garage. It joins the shop's stock.
 export function sellPart(world: World, partId: string): World {
   return playerCommand(world, (w) => {
-    requireTown(w);
-    const i = w.player.storage.findIndex((p) => p.id === partId);
-    if (i < 0) throw new Error(`No stored part ${partId}`);
-    w.player.money += partSellPrice(w.player.storage[i]);
-    w.player.storage.splice(i, 1);
+    const shopId = requireShop(w);
+    const part = takeSellablePart(w, shopId, partId);
+    w.player.money += partTradePrice(w, playerVehicle(w), part, "sell");
+    addStockPart(shopState(w, shopId), part);
   });
 }
 
-// The trade-in scales by the mean health of the built-in parts.
+function takeSellablePart(world: World, shopId: string, partId: string): PartInstance {
+  const me = playerVehicle(world);
+  const spare = spareParts(me).find((p) => p.id === partId);
+  if (spare) {
+    me.items = me.items.filter((it) => it.kind !== "part" || it.part.id !== partId);
+    return spare;
+  }
+  const i = world.player.storage.findIndex((p) => p.id === partId);
+  if (i < 0 || shopDef(shopId).kind !== "garage") throw new Error(`No sellable part ${partId} here`);
+  return world.player.storage.splice(i, 1)[0];
+}
+
+// The trade-in scales by the mean health and the mean wear of the built-in parts.
 export function chassisTradeIn(world: World): number {
   const me = playerVehicle(world);
   const core = mountedParts(me, "core");
   const health =
-    core.reduce((a, p) => a + p.hp / partDef(p.defId).hp, 0) / core.length;
+    core.reduce((a, p) => a + p.hp / maxHp(p), 0) / core.length;
+  const meanWear = core.reduce((a, p) => a + p.wear, 0) / core.length;
   return Math.floor(
-    chassisDef(me.chassisId).price * ECONOMY.chassisSellFactor * health,
+    chassisDef(me.chassisId).value *
+      ECONOMY.chassisSellFactor *
+      health *
+      wearFactor(meanWear),
   );
 }
 
 export function repairCost(world: World): number {
-  return allParts(playerVehicle(world)).reduce(
+  return repairableParts(playerVehicle(world)).reduce(
     (a, p) => a + partRepairCost(world, p),
     0,
   );
@@ -312,6 +357,11 @@ export function repairCost(world: World): number {
 
 function allParts(v: Vehicle): PartInstance[] {
   return v.items.flatMap((it) => (it.kind === "part" ? [it.part] : []));
+}
+
+// Town repairs skip junk parts, which no repair rebuilds.
+function repairableParts(v: Vehicle): PartInstance[] {
+  return allParts(v).filter((p) => !isJunk(p));
 }
 
 // Swap chassis: the old built-in parts go with the old chassis and the new one brings its own.
@@ -325,7 +375,7 @@ export function buyChassis(world: World, chassisId: string): World {
     const me = playerVehicle(w);
     if (me.chassisId === chassisId)
       throw new Error("You already drive this chassis");
-    const cost = chassisDef(chassisId).price - chassisTradeIn(w);
+    const cost = chassisDef(chassisId).value - chassisTradeIn(w);
     pay(w, Math.max(0, cost), chassisDef(chassisId).name);
     const mounted = new Set(mountedParts(me).map((p) => p.id));
     const goods = goodsCount(me);

@@ -7,6 +7,7 @@ import type { Job, Vehicle, World } from "../sim/types";
 import { isAutoPatch } from "../sim/jobs";
 import { el, panel, topRight } from "./dom";
 import {
+  contractSummary,
   eventText,
   formatNpcActivity,
   formatNpcStates,
@@ -15,6 +16,7 @@ import {
 import { getHudReadout, getRescueReadout, moneyLabel, TruckConditionReadout } from "./hud-readout";
 import { createIcon, createSpeedDial, type IconName } from "./icons";
 import { hp, kph } from "./units";
+import { maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
 import { pendingPerkPairs } from "../sim/progress";
 import "./truck-condition.css";
@@ -126,6 +128,7 @@ function weatherLabel(w: World): string {
 export class Hud {
   private top = panel("instruments");
   private condition = new TruckConditionView();
+  private contracts = panel("contracts");
   private log = panel("log");
   private info = panel("info");
   private infoBody = el("div");
@@ -146,6 +149,7 @@ export class Hud {
     this.dialogue = new DialoguePanel(actions.dialogue);
     this.info.style.display = "none";
     this.info.append(this.infoBody);
+    this.contracts.style.display = "none";
     this.toastBox.style.display = "none";
     this.rescue.style.display = "none";
     this.recenter.style.display = "none";
@@ -226,7 +230,7 @@ export class Hud {
 
   private renderJob(job: Job): void {
     const progress = Math.round((1 - job.turnsLeft / job.total) * 100);
-    const label = { search: 'Search', repair: 'Repair', refit: 'Refit' }[job.kind];
+    const label = { search: 'Search', repair: 'Repair', refit: 'Refit', strip: 'Strip' }[job.kind];
     this.action.replaceChildren(
       el(
         "span",
@@ -318,6 +322,25 @@ export class Hud {
       );
   }
 
+  // Compact list of held contracts and their turns left. Hidden while the player holds none.
+  private renderContracts(w: World): void {
+    if (w.player.contracts.length === 0) {
+      this.contracts.style.display = "none";
+      return;
+    }
+    this.contracts.style.display = "";
+    this.contracts.replaceChildren(
+      el("h3", {}, "Contracts"),
+      ...w.player.contracts.map((c) =>
+        el(
+          "div",
+          { class: "contract-line" },
+          `${contractSummary(c)} — ${c.deadline - w.turn} turns left`,
+        ),
+      ),
+    );
+  }
+
   // The character button, marked while a perk pair waits for a pick.
   private characterButton(w: World, busy: boolean): HTMLElement {
     const perkOpen = pendingPerkPairs(w).length > 0;
@@ -337,6 +360,7 @@ export class Hud {
     const readout = getHudReadout(w);
     const busy = this.actions.isBusy();
     this.condition.render(playerVehicle(w));
+    this.renderContracts(w);
     this.top.replaceChildren(
       this.condition.root,
       el(
@@ -485,7 +509,7 @@ export class Hud {
       return;
     }
     const cab = corePart(v, "cab");
-    const pct = Math.round((cab.hp / partDef(cab.defId).hp) * 100);
+    const pct = Math.round((cab.hp / maxHp(cab)) * 100);
     // The four wheels read as one line.
     const wheels = coreParts(v, "wheel");
     const working = wheels.filter((p) => p.hp > 0).length;
@@ -496,7 +520,7 @@ export class Hud {
         return el(
           "div",
           { class: p.hp > 0 ? "" : "bad" },
-          `${def.name}: ${hp(p.hp)}/${def.hp}`,
+          `${def.name}: ${hp(p.hp)}/${hp(maxHp(p))}`,
         );
       });
     parts.push(

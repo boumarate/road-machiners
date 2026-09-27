@@ -2,11 +2,12 @@
 // Every rule that needs speed, turning or capacity reads it from here.
 
 import { chassisDef } from '../data/chassis';
-import { partDef, type EngineDef, type WeaponDef } from '../data/parts';
+import type { EngineDef, WeaponDef } from '../data/parts';
 import { RULES } from '../data/rules';
 import { PERK_NUMBERS } from '../data/skills';
 import { skillEffect, vehicleHasPerk } from './progress';
 import { TOW } from '../data/tow';
+import { maxHp, wornDef } from './wear';
 import { corePart, coreParts, mountedParts } from './grid';
 import { loadFactor, vehicleMass } from './mass';
 import { getResources } from './resources';
@@ -47,7 +48,7 @@ export function getMobilityCondition(v: Vehicle): number {
   const engine = mountedParts(v, 'engine')[0];
   if (!engine) return 0;
   const parts = [engine, corePart(v, 'transmission'), ...coreParts(v, 'wheel')];
-  return Math.min(...parts.map((part) => part.hp / partDef(part.defId).hp));
+  return Math.min(...parts.map((part) => part.hp / maxHp(part)));
 }
 
 // A truck that can only crawl: no working engine, a broken transmission or an empty tank.
@@ -73,7 +74,7 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   let fuelMult = 0;
   // Without a working engine the driver pushes the truck at limp speed and burns no fuel.
   if (hasWorkingEngine(v)) {
-    const e = partDef(engines[0].defId) as EngineDef;
+    const e = wornDef<EngineDef>(engines[0]);
     maxSpeed = Math.max(RULES.minSpeedCap, (ch.maxSpeed + e.speedBonus) * load * wheels);
     accel = (ch.accel + e.accelBonus) * force;
     fuelMult = e.fuelMult;
@@ -96,7 +97,7 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     roughSkill: skillEffect(world, v, 'driving', 'roughSpeed'),
     mass,
     radius: ch.radius,
-    weapons: mountedParts(v, 'weapon').map((part) => ({ part, def: partDef(part.defId) as WeaponDef })),
+    weapons: mountedParts(v, 'weapon').map((part) => ({ part, def: wornDef<WeaponDef>(part) })),
   };
 }
 

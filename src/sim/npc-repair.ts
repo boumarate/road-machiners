@@ -2,7 +2,7 @@
 // and spend parts. src/sim/npc-activities.ts decides when a repair goal goes on the stack.
 
 import { NPC_UPKEEP } from '../data/npcs';
-import { partDef } from '../data/parts';
+import { isJunk, maxHp } from './wear';
 import { mountedParts } from './grid';
 import { startJob } from './jobs';
 import { reachedDestination } from './npc-activities';
@@ -16,8 +16,8 @@ import { dist, type Vec } from './vec';
 
 function chooseRepairPart(world: World, vehicle: Vehicle) {
   return mountedParts(vehicle)
-    .filter((part) => repairPlan(world, vehicle, part.id).parts > 0)
-    .sort((a, b) => a.hp / partDef(a.defId).hp - b.hp / partDef(b.defId).hp)[0];
+    .filter((part) => !isJunk(part) && repairPlan(world, vehicle, part.id).parts > 0)
+    .sort((a, b) => a.hp / maxHp(a) - b.hp / maxHp(b))[0];
 }
 
 function canSearchForShade(world: World, vehicle: Vehicle): boolean {
@@ -63,7 +63,7 @@ function chooseRepairSpot(world: World, vehicle: Vehicle): Vec | null {
 export function chooseNpcRepair(world: World, vehicle: Vehicle, condition: number): NpcActivity | null {
   const part = chooseRepairPart(world, vehicle);
   if (!part) return null;
-  if (part.hp / partDef(part.defId).hp > condition) return null;
+  if (part.hp / maxHp(part) > condition) return null;
   const destination = chooseRepairSpot(world, vehicle);
   return {
     kind: 'repair',

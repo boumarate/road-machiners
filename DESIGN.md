@@ -32,11 +32,11 @@ Goods take one cell per unit and can be moved or dumped anywhere. Select an inve
 
 Every part and good has a mass. A heavier truck accelerates, brakes, steers and tops out worse. Trucks make tradeoffs: cargo vs armor vs fuel use. No truck is best at everything.
 
-Parts wear. The frame cannot be fully repaired, so old trucks slowly decline. The player changes trucks every so often. Parts move between trucks, so a change keeps some progress.
+Parts wear. Each part has a wear level, from pristine to the last step. A part gains one wear step each time it drops to 0 HP. Fixing a damaged part that still works adds no wear. Each step lowers max HP and makes the part worse at its job: a gun scatters more, an engine gives less speed and acceleration, armor stops less and a scanner sees less far. A part that breaks at the last step is junk. Junk cannot be rebuilt, only stripped or sold for scrap. Built-in parts stop at the last step and never turn to junk, so old trucks slowly decline and the player changes trucks every so often. Parts move between trucks, so a change keeps some progress. Pristine parts are rare, so the player hunts for them.
 
 Every turn, each mounted part may lose HP. The chance grows with the tiles driven that turn, the truck's speed and how rough the ground is. Rarely, a part breaks down and loses a large share of its HP at once, logged in the event feed. The same rule wears NPC trucks.
 
-Parts is a trade good, bought and sold in towns like scrap or salt. It is the resource field repair spends. The standard start kit carries a few.
+Parts is a trade good, bought and sold like scrap or salt. It is the resource field repair spends. The standard start kit carries a few. Stripping a spare part is a parked job that turns it into units of parts. Its value sets the yield, so a broken or junk gun still pays.
 
 A job is work that needs the truck parked for a number of turns: field repair or scavenging. The player has at most one job at a time. Driving before it ends cancels it and the turns already spent are lost. The HUD shows the current job and its turns left.
 
@@ -132,7 +132,7 @@ Scavengers collect finite salvage and sell cargo. Idle scavengers mostly fight m
 
 Scavenging is a timed search: the truck parks at a stock and searches for turns in proportion to what the stock holds, with a progress bar. Moving the truck cancels the search. A finished search opens the stock beside the truck's grid, and the player drags in what they want. What they leave stays at the site for later. NPC scavengers take everything that fits. Landmark and convoy sites hold finite stock rolled at world creation: goods, parts and sometimes a spare mountable part. Destroyed NPCs leave a wreck with the same kind of stock. Their mounted parts join it at the HP they had; their built-in parts turn into the parts good instead. Collection takes only what fits and leaves the rest. Old wreck retirement removes their remaining stock. Empty sites do not regenerate.
 
-Town markets have fixed prices and unlimited stock and money. Initial NPC resources and the oasis are explicit sources. No offscreen catch-up grants are used. A knocked-out player's parts and cargo go into a wreck stock that any collector can take.
+Shops have unlimited money. Goods prices move with trade, and part stock is finite. Initial NPC resources and the oasis are explicit sources. No offscreen catch-up grants are used. A knocked-out player's parts and cargo go into a wreck stock that any collector can take.
 
 ## NPC traits and states
 
@@ -185,7 +185,15 @@ H honks. Traders and scavengers in earshot that are not hostile honk back.
 
 ## Trade
 
-Each town produces and needs fixed goods. Profit comes from knowing routes, as in Dustland Delivery.
+Every good, part and chassis has one base value and a tier from 1 to 3. Every price is a formula from that value. Buy adds a spread, and the Trade skill narrows it. A part's value falls with each wear step. Its sell price also scales with its HP, but never drops below its scrap value from mass. Repair and rebuild cost a share of the part's value per HP restored, so an expensive part costs more to fix.
+
+Shops trade in Bowl and Nose garages and in stalls at the Salvage Yard, the Granary and the Pump Station. Each shop makes some goods cheap and needs others. Each unit bought raises the local price, and each unit sold lowers it. Prices drift back over about two days. NPC traders trade through the same prices, so they move them too. Profit comes from knowing routes, as in Dustland Delivery.
+
+Each shop holds a random, finite part stock with rolled wear, and restocks on a timer. Garages hold more and fresher parts, and stalls hold a few worn ones. A part sold to a shop joins its stock. Mounting, repairs, garage storage and chassis need a town garage. NPC traders and scavengers also sell their spare parts over the radio.
+
+Shops post contracts. A haul loads goods for another shop by a deadline, and a missed deadline charges their value. A fetch asks for a part of one type in any condition. A bounty names a living raider and pays on the kill. Contracts pay money and XP, and the player holds a few at once.
+
+The unit of effort is one turn of play. The wage is the net money per turn a player earns at a tier. An item's effort is its value divided by its tier's wage, and data keeps each item inside a target band. Contract rewards are estimated turns of work times the wage. `npm run econ` plays the sim economy with bot policies and reports wages and the day each upgrade is reached.
 
 Fuel and supplies limit range. Fuel burns at 0.075 of the chassis fuel-per-tile rate, times heat. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn at 0.015 per turn, times heat. Start kits carry a full load of 20, which lasts about 550 daytime turns. Healing spends extra supplies. Without supplies the character loses health down to 30. Oases refill supplies.
 
@@ -193,7 +201,7 @@ Fuel and supplies limit range. Fuel burns at 0.075 of the chassis fuel-per-tile 
 
 - Buyable chassis: Scout pickup, Hauler, Courier, Utility van, Longbed truck, Armored carrier and Heavy tractor. Raiders can also use the buggy and gunwagon chassis.
 - Parts: seven weapons, seven engines, eight armor parts and seven cargo parts. Cheap, light, durable, fuel-efficient and high-output variants have different costs and footprints. Cargo frames extend the inventory grid, without articulated trailer physics.
-- Goods: scrap metal, salt, meds, grain, textiles, machine tools, batteries and electronics. Bowl and Nose price every good.
+- Goods: scrap metal, salt, meds, grain, textiles, machine tools, batteries and electronics. Bowl and Nose trade every good. Each stall trades a few.
 - A knockout drops all goods, spare parts and mounted non-core parts into a wreck stock. Built-in parts stay.
 - Region: Icarus, a 600-tile basin with Bowl and Nose as hubs, 13 other destinations, two raider camps, two canyon crossings, and the Fallen Sun. Winding roads cross rolling grades between distinct landmarks. Sight is twenty tiles. See [landmark visuals](VISUAL_DESIGN.md).
 - Enemies: raider outriders and gunwagons with sampled chassis and equipment.

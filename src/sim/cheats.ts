@@ -10,6 +10,7 @@ import { CHEATS, RULES } from '../data/rules';
 import { PERK_IDS, PERKS, SKILL_IDS } from '../data/skills';
 import { TIME } from '../data/time';
 import { resolveDestroyed } from './combat';
+import { damagePart, isJunk, maxHp, restorePart } from './wear';
 import { playerVehicle } from './damage';
 import { makePart } from './factory';
 import { maxHealthOf } from './health';
@@ -91,9 +92,9 @@ function isSkillId(id: string): id is SkillId {
   return (SKILL_IDS as readonly string[]).includes(id);
 }
 
-// Mounted and spare parts alike.
+// Mounted and spare parts alike. Junk parts stay broken, since no repair rebuilds them.
 function repairParts(v: Vehicle): void {
-  for (const it of v.items) if (it.kind === 'part') it.part.hp = partDef(it.part.defId).hp;
+  for (const it of v.items) if (it.kind === 'part' && !isJunk(it.part)) restorePart(it.part, maxHp(it.part));
 }
 
 export function repairAll(world: World): World {
@@ -105,8 +106,13 @@ export function damagePartTo(world: World, defId: string, hp: number): World {
     const mounted = mountedParts(playerVehicle(w));
     const part = mounted.find((p) => p.defId === defId);
     if (!part) throw new CheatError(`No mounted ${defId}. Mounted: ${[...new Set(mounted.map((p) => p.defId))].join(', ')}`);
-    requireInteger('Hit points', hp, 0, partDef(defId).hp);
-    part.hp = hp;
+    requireInteger('Hit points', hp, 0, maxHp(part));
+    if (hp <= part.hp) {
+      damagePart(part, part.hp - hp, 0);
+      return;
+    }
+    if (part.hp === 0 && isJunk(part)) throw new CheatError(`${partDef(defId).name} is junk and cannot be rebuilt`);
+    restorePart(part, hp);
   });
 }
 
@@ -120,7 +126,7 @@ export function give(world: World, id: string, count: number): World {
 function givePart(w: World, defId: string, count: number): void {
   const me = playerVehicle(w);
   for (let i = 0; i < count; i++) {
-    if (!stowPart(w, me, makePart(w, defId))) throw new CheatError(`No room for ${count} ${defId}`);
+    if (!stowPart(w, me, makePart(w, defId, 0))) throw new CheatError(`No room for ${count} ${defId}`);
   }
 }
 
@@ -272,7 +278,8 @@ function killTargets(w: World, target: string): Vehicle[] {
 export function killVehicles(world: World, target: string): World {
   return update(world, (w) => {
     for (const v of killTargets(w, target)) {
-      corePart(v, 'cab').hp = 0;
+      const cab = corePart(v, 'cab');
+      damagePart(cab, cab.hp, 0);
       v.lastHitBy = null;
     }
     resolveDestroyed(w);

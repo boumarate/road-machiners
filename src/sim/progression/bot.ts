@@ -6,17 +6,18 @@
 import { chassisDef } from '../../data/chassis';
 import { ECONOMY, GOOD_IDS } from '../../data/goods';
 import { HUNTING_GROUNDS, NPC_BEHAVIOR, NPC_UPKEEP } from '../../data/npcs';
-import { START_KITS } from '../../data/start';
 import { partDef } from '../../data/parts';
 import { REGION, type TownDef } from '../../data/region';
 import { RULES } from '../../data/rules';
 import { ENGINE_HEAT } from '../../data/wear';
+import { maxHp } from '../wear';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder } from '../world';
 import { playerVehicle, vehicleById } from '../damage';
 import { chooseOption, currentOptions } from '../dialogue';
-import { buyGood, buyPart, buySupply, getTradePrice, repairAll, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
+import { buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
 import { findSpot, freeCells, goodsCount, gridOf, isMounted, MOUNT_CELLS, mountedParts, type Spot } from '../grid';
-import { storePart, takeFromStorage } from '../inventory';
+import { moveItem, storePart, takeFromStorage } from '../inventory';
+import { shopAt, shopState } from '../market';
 import { canLoot, salvageHere, takeAllLoot } from '../locations';
 import { getUpkeepReserve } from '../npc-decisions';
 import { canReachSalvage, hasSalvage } from '../salvage';
@@ -34,15 +35,6 @@ export const ARCHETYPES: readonly Archetype[] = ['trader', 'scavenger', 'fighter
 type Goal = Exclude<Archetype, 'mixed'>;
 // The mixed bot plays one goal per in-game day, in this order.
 const MIXED_ROTATION: readonly Goal[] = ['trader', 'scavenger', 'fighter'];
-// The engine a bot buys when a knockout stripped its own: the one the recorder's start kit mounts.
-const KIT_ENGINE = kitEngine();
-
-function kitEngine(): string {
-  const id = START_KITS.standard.parts.find((part) => partDef(part).kind === 'engine');
-  if (!id) throw new Error('The standard start kit has no engine');
-  return id;
-}
-
 // The world after the bot's commands, and every event those commands raised.
 export type BotTurn = { world: World; events: GameEvent[] };
 
@@ -167,23 +159,47 @@ function paidFixNeeded(world: World): boolean {
 }
 
 function canRestoreEngine(world: World): boolean {
-  return mountedParts(playerVehicle(world), 'engine').length === 0 && world.player.money >= partDef(KIT_ENGINE).price;
+  return mountedParts(playerVehicle(world), 'engine').length === 0 && stockEngine(world) !== null;
+}
+
+// The cheapest engine the parked garage stocks that the bot can afford.
+function stockEngine(world: World): PartInstance | null {
+  const shopId = shopAt(world);
+  if (!shopId) return null;
+  const me = playerVehicle(world);
+  const engines = shopState(world, shopId).stock.filter((p) => partDef(p.defId).kind === 'engine')
+    .map((part) => ({ part, price: partTradePrice(world, me, part, 'buy') }))
+    .filter((e) => e.price <= world.player.money)
+    .sort((a, b) => a.price - b.price);
+  return engines[0]?.part ?? null;
 }
 
 // Buys and mounts the start kit's engine when the truck has none and the money covers it. Cargo on the engine mount
 // is sold to make room.
 function restoreEngine(o: Orders): void {
-  if (!canRestoreEngine(o.world)) return;
-  if (!engineSpot(o.me) && hasCargo(o.me)) sellCargo(o);
-  const spot = engineSpot(o.me);
+  const engine = canRestoreEngine(o.world) ? stockEngine(o.world) : null;
+  if (!engine) return;
+  if (!engineSpot(o.me, engine.defId) && hasCargo(o.me)) sellCargo(o);
+  const spot = engineSpot(o.me, engine.defId);
   if (!spot) throw new Error('No free engine mount for a new engine');
-  o.run((w) => buyPart(w, KIT_ENGINE));
-  const part = o.world.player.storage[o.world.player.storage.length - 1];
-  o.run((w) => takeFromStorage(w, part.id, spot));
+  o.run((w) => buyStockPart(w, engine.id));
+  mountBought(o, engine.id, spot);
 }
 
-function engineSpot(v: Vehicle): Spot | null {
-  const probe: GridItem = { id: 'engine-probe', x: 0, y: 0, rot: 0, kind: 'part', part: { id: 'engine-probe', defId: KIT_ENGINE, hp: 0, reload: 0 } };
+// A bought part lands in garage storage or loose in the grid; either way it moves onto the spot.
+function mountBought(o: Orders, partId: string, spot: Spot): void {
+  if (o.world.player.storage.some((p) => p.id === partId)) o.run((w) => takeFromStorage(w, partId, spot));
+  else o.run((w) => moveItem(w, itemOf(w, partId), spot));
+}
+
+function itemOf(world: World, partId: string): string {
+  const item = playerVehicle(world).items.find((it) => it.kind === 'part' && it.part.id === partId);
+  if (!item) throw new Error(`Bought part ${partId} is not on the truck`);
+  return item.id;
+}
+
+function engineSpot(v: Vehicle, defId: string): Spot | null {
+  const probe: GridItem = { id: 'engine-probe', x: 0, y: 0, rot: 0, kind: 'part', part: { id: 'engine-probe', defId, hp: 0, reload: 0, wear: 0 } };
   return findSpot(gridOf(v), v.items, probe, MOUNT_CELLS.engine, null);
 }
 
@@ -197,7 +213,7 @@ function needsService(world: World): boolean {
 }
 
 function isBadlyDamaged(part: PartInstance): boolean {
-  return part.hp / partDef(part.defId).hp <= NPC_BEHAVIOR.fleeCondition;
+  return part.hp / maxHp(part) <= NPC_BEHAVIOR.fleeCondition;
 }
 
 // Fills fuel and supplies as far as the money goes, then repairs everything if the money covers it.

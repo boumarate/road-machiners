@@ -12,6 +12,8 @@
 //
 // Each chassis is drawn from its base model in src/render/partLooks.ts, built by tools/blender/base_<id>.py on this grid.
 
+import type { Tier } from './market';
+
 export type ChassisDef = {
   id: string;
   name: string;
@@ -28,7 +30,8 @@ export type ChassisDef = {
   core: { defId: string; x: number; y: number }[];
   fuelCap: number;
   fuelPerTile: number;
-  price: number;
+  value: number; // base money value of a new chassis
+  tier: Tier;
   look: 'pickup' | 'hauler' | 'buggy' | 'wagon' | 'courier' | 'van' | 'longbed' | 'carrier' | 'tractor';
 };
 
@@ -67,7 +70,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
     ],
     fuelCap: 40,
     fuelPerTile: 0.25,
-    price: 400,
+    value: 400, tier: 1,
     look: 'pickup',
   },
   hauler: {
@@ -94,7 +97,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
     ],
     fuelCap: 80,
     fuelPerTile: 0.4,
-    price: 900,
+    value: 900, tier: 2,
     look: 'hauler',
   },
   buggy: {
@@ -121,7 +124,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
     ],
     fuelCap: 30,
     fuelPerTile: 0.2,
-    price: 250,
+    value: 250, tier: 1,
     look: 'buggy',
   },
   wagon: {
@@ -148,7 +151,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
     ],
     fuelCap: 60,
     fuelPerTile: 0.4,
-    price: 700,
+    value: 700, tier: 2,
     look: 'wagon',
   },
   courier: {
@@ -160,7 +163,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
       { defId: 'wheel', x: 0, y: 1 }, { defId: 'wheel', x: 3, y: 1 },
       { defId: 'wheel', x: 0, y: 5 }, { defId: 'wheel', x: 3, y: 5 },
     ],
-    fuelCap: 24, fuelPerTile: 0.18, price: 550, look: 'courier',
+    fuelCap: 24, fuelPerTile: 0.18, value: 550, tier: 1, look: 'courier',
   },
   van: {
     id: 'van', name: 'Utility van', maxSpeed: 6.5, accel: 1.5, brake: 3, turnSlow: 100, turnFast: 35, reverseTurn: 65,
@@ -171,7 +174,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
       { defId: 'wheel', x: 0, y: 1 }, { defId: 'wheel', x: 4, y: 1 },
       { defId: 'wheel', x: 0, y: 7 }, { defId: 'wheel', x: 4, y: 7 },
     ],
-    fuelCap: 55, fuelPerTile: 0.24, price: 650, look: 'van',
+    fuelCap: 55, fuelPerTile: 0.24, value: 650, tier: 2, look: 'van',
   },
   longbed: {
     id: 'longbed', name: 'Longbed truck', maxSpeed: 4.55, accel: 0.8, brake: 1.8, turnSlow: 70, turnFast: 20, reverseTurn: 40,
@@ -182,7 +185,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
       { defId: 'wheel', x: 0, y: 1 }, { defId: 'wheel', x: 6, y: 1 },
       { defId: 'wheel', x: 0, y: 9 }, { defId: 'wheel', x: 6, y: 9 },
     ],
-    fuelCap: 100, fuelPerTile: 0.48, price: 1300, look: 'longbed',
+    fuelCap: 100, fuelPerTile: 0.48, value: 1300, tier: 3, look: 'longbed',
   },
   carrier: {
     id: 'carrier', name: 'Armored carrier', maxSpeed: 5.2, accel: 1, brake: 2.5, turnSlow: 75, turnFast: 28, reverseTurn: 50,
@@ -193,7 +196,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
       { defId: 'wheel', x: 0, y: 1 }, { defId: 'wheel', x: 5, y: 1 },
       { defId: 'wheel', x: 0, y: 7 }, { defId: 'wheel', x: 5, y: 7 },
     ],
-    fuelCap: 70, fuelPerTile: 0.5, price: 1600, look: 'carrier',
+    fuelCap: 70, fuelPerTile: 0.5, value: 1600, tier: 3, look: 'carrier',
   },
   tractor: {
     id: 'tractor', name: 'Heavy tractor', maxSpeed: 3.9, accel: 1.8, brake: 2, turnSlow: 65, turnFast: 22, reverseTurn: 55,
@@ -204,7 +207,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
       { defId: 'wheel', x: 0, y: 1 }, { defId: 'wheel', x: 6, y: 1 },
       { defId: 'wheel', x: 0, y: 7 }, { defId: 'wheel', x: 6, y: 7 },
     ],
-    fuelCap: 120, fuelPerTile: 0.6, price: 1400, look: 'tractor',
+    fuelCap: 120, fuelPerTile: 0.6, value: 1400, tier: 3, look: 'tractor',
   },
 };
 

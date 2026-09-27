@@ -15,6 +15,7 @@
     "sfx:import": "vite-node scripts/sfx-import.mjs",
     "sfx:board": "vite --open /sound.html",
     "sfx:reimport": "vite-node scripts/sfx-reimport.mjs",
+    "econ": "vite-node scripts/econ.mjs",
     "progression:record": "vite-node scripts/progression-record.mjs",
     "progression:report": "vite-node scripts/progression-report.mjs"
   },

@@ -1,13 +1,14 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { CHASSIS, PLAYER_CHASSIS } from "./chassis";
-import { GOODS, GOOD_IDS, TOWN_PRICES } from "./goods";
+import { GOODS, GOOD_IDS } from "./goods";
+import { EFFORT, SHOPS, type ItemKind } from "./market";
+import { goodBasePrice } from "../sim/market";
 import { PARTS, type PartKind } from "./parts";
 import { REGION } from "./region";
 import { bodyOf } from "../sim/body";
 import {
   buyChassis,
   buyGood,
-  buyPart,
   buyPrice,
   sellGood,
   sellPrice,
@@ -72,8 +73,8 @@ describe("equipment variety", () => {
       );
       for (const id of ids) {
         expect(PARTS[id].kind).toBe(kind);
-        const purchased = buyPart(world, id);
-        expect(purchased.player.storage.at(-1)?.defId).toBe(id);
+        const stocked = Object.values(SHOPS).some((shop) => shop.partStock.parts.some((entry) => entry.value === id));
+        expect(stocked, `${id} is in no shop's stock table`).toBe(true);
         const fits = PLAYER_CHASSIS.some((chassisId) => {
           const w = structuredClone(world);
           const v = makeVehicle(w, {
@@ -81,12 +82,13 @@ describe("equipment variety", () => {
             faction: "player",
             chassisId,
             parts: [],
+            spares: [],
             cargo: {},
             pos: { x: 20, y: 20 },
             heading: 0,
             brain: null,
           });
-          return mountPart(w, v, makePart(w, id));
+          return mountPart(w, v, makePart(w, id, 0));
         });
         expect(fits, id).toBe(true);
       }
@@ -119,13 +121,32 @@ describe("equipment variety", () => {
     ).toBe(5);
   });
 
+  // PH8 tunes values. Every non-core part, chassis and good currently misses its target effort
+  // band; see the phase report for the full mismatch list. Kept as a real, skipped assertion so
+  // PH8 can un-skip it once values are retuned from the harness, rather than writing it from scratch.
+  it.skip("keeps every part, chassis and good inside its tier's effort band", () => {
+    const items: { name: string; kind: ItemKind; tier: 1 | 2 | 3; value: number }[] = [
+      ...Object.values(PARTS)
+        .filter((p) => p.kind !== "core")
+        .map((p) => ({ name: p.id, kind: p.kind as ItemKind, tier: p.tier, value: p.value })),
+      ...Object.values(CHASSIS).map((c) => ({ name: c.id, kind: "chassis" as ItemKind, tier: c.tier, value: c.value })),
+      ...Object.values(GOODS).map((g) => ({ name: g.id, kind: "good" as ItemKind, tier: g.tier, value: g.value })),
+    ];
+    for (const item of items) {
+      const effort = item.value / EFFORT.wage[item.tier];
+      const [lo, hi] = EFFORT.bands[item.tier][item.kind];
+      expect(effort, `${item.name} (tier ${item.tier} ${item.kind}): ${effort.toFixed(1)} turns`).toBeGreaterThanOrEqual(lo);
+      expect(effort, `${item.name} (tier ${item.tier} ${item.kind}): ${effort.toFixed(1)} turns`).toBeLessThanOrEqual(hi);
+    }
+  });
+
   it("adds five goods with profitable routes and real buy/sell transactions", () => {
     expect(Object.keys(GOODS)).toHaveLength(9); // three base goods, five trade goods, and parts for field repair
     expect(GOOD_IDS).toEqual(Object.keys(GOODS));
     for (const id of addedGoods) {
       expect(GOODS[id].mass).toBeGreaterThan(0);
       const [cheap, dear] = [...REGION.towns].sort(
-        (a, b) => TOWN_PRICES[a.id][id] - TOWN_PRICES[b.id][id],
+        (a, b) => goodBasePrice(a.id, id) - goodBasePrice(b.id, id),
       );
       expect(sellPrice(world, dear.id, id)).toBeGreaterThan(
         buyPrice(world, cheap.id, id),
