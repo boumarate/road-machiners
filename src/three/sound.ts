@@ -4,7 +4,8 @@
 import { MIX, type CueId } from "../data/sounds";
 import { spatial } from "../audio/pick";
 import type { Glide, LoopHandle, Placement, SoundPlayer } from "../audio/player";
-import type { V3 } from "../phys/frames";
+import type { V3, VehicleFrame } from "../phys/frames";
+import { PHYSICS } from "../data/physics";
 import type { GameEvent } from "../sim/types";
 import type { CameraRig } from "./render/camera";
 
@@ -68,6 +69,17 @@ export function loopLevels(s: LoopState, mix: typeof MIX): LoopLevels {
 }
 
 // Engine over one turn from the player's speed at its start and end, in m/s, or null when standing still.
+export function computeEngineGlide(frames: VehicleFrame[], seconds: number, mix: typeof MIX): ReturnType<typeof engineGlide> {
+  return engineGlide(computeStepSpeed(frames, 1), computeStepSpeed(frames, frames.length - 1), seconds, mix);
+}
+
+function computeStepSpeed(frames: VehicleFrame[] | undefined, step: number): number {
+  if (!frames || step < 1 || step >= frames.length) return 0;
+  const a = frames[step - 1].pos;
+  const b = frames[step].pos;
+  return Math.hypot(b.x - a.x, b.z - a.z) * PHYSICS.stepsPerSecond;
+}
+
 export function engineGlide(from: number, to: number, seconds: number, mix: typeof MIX): (Glide & { brake: boolean }) | null {
   const e = mix.engine;
   if (Math.max(from, to) < e.movingMs) return null;

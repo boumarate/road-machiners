@@ -39,11 +39,14 @@ results.bootMs = await page.evaluate(() => {
 await page.evaluate(() => window.__KOROVAN_PERF__.reset());
 const turnMs = [];
 for (let i = 0; i < TURNS; i++) {
-  turnMs.push(await page.evaluate(() => {
+  const before = await page.evaluate(() => {
     const g = window.__KOROVAN__;
-    const before = g.state.turn;
+    const turn = g.state.turn;
     g.endTurn();
-    if (g.state.turn !== before + 1) throw new Error(`Turn did not run: still turn ${g.state.turn}`);
+    return turn;
+  });
+  await page.waitForFunction((turn) => window.__KOROVAN__.state.turn === turn + 1, before, { timeout: 30000 });
+  turnMs.push(await page.evaluate(() => {
     const s = window.__KOROVAN_PERF__.snapshot().turn;
     if (!s) throw new Error('No turn timer recorded');
     return s.last;
