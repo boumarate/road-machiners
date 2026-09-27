@@ -295,7 +295,7 @@ describe('rounds', () => {
   it('an aimed miss that lands on the truck hits the lane where it landed', () => {
     const { w, me, buggy, mg } = range(4, Math.PI);
     for (const p of mountedParts(buggy)) p.hp = 1e9; // keep the target whole, so every round sees the same truck
-    const wheel = mountedItems(buggy).find((it) => it.x === 0 && it.y === 0)!.part; // front left, lane 0 from the front
+    const wheel = mountedItems(buggy).find((it) => it.x === 0 && it.y === 1)!.part; // front left, lane 0 from the front
     order(me, mg.part.id, buggy.id, wheel.id);
     const odds = hitOdds(w, me, mg, buggy, wheel.id);
     expect(odds.bodyChance).toBeGreaterThan(odds.chance);
