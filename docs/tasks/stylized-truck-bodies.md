@@ -1,6 +1,6 @@
 # Stylized truck bodies
 
-**Status:** executing
+**Status:** reviewing
 **Branch:** stylized-trucks
 **Worktree:** .worktrees/stylized-trucks
 **Goal:** At the default game zoom, the user can tell each chassis apart by its silhouette, and the scout reads as a stylized Hilux. The user signs off on screenshots.
@@ -102,5 +102,16 @@ Approach: add the base path next to the old cell builder, prove it on the scout,
 - RK1 — Kit parts placed from row sockets may float or sink on some bases. Screenshots per chassis in PH3 catch it.
 
 ## Verify
+
+Result: passed
+
+- CK1 (IV1) — every base fits its footprint: `check_base` passed in all nine Blender builds, and `checkBaseFits` threw on none in the in-game renders — held.
+- CK2 (IV2, IV3) — every chassis has a base with all row and floor sockets: `partLooks.test.ts` checks `baseModel` per chassis, and solo renders of all nine booted without a missing-socket error — held.
+- CK3 (IV4) — physics, grids and saves unchanged: the diff touches no `src/sim`, `src/phys` or `physics.ts`, and `chassis.ts` loses only `zones`. 470 tests and the typecheck pass after merging main — held.
+- CK4 — a weapon on a low row clips the cab: a second autocannon on the hauler bed row stands on a riser at the roof height — held.
+- CK5 — a roof weapon overhangs the raked windshield: the scout mount now sits behind the roof front edge — held.
+
+Smoke: `tmp/lineup.mjs` renders all nine chassis in four factions at the default zoom with no page errors.
+Notes: `npm run playtest` fails on FPS: 19 to 19.5 against a 20 floor, with load average 9. The same playtest on main at bd56835 gave 5.5 FPS at the same time, so the machine sets the number. No page errors or crash screen appeared.
 
 ## Conclusion
