@@ -59,7 +59,7 @@ export class TownScreen {
     this.root.replaceChildren(
       el('button', { class: 'close', onclick: () => this.close() }, 'Leave [Esc]'),
       el('h3', {}, town.name),
-      el('div', { class: 'dim' }, `Money ${w.player.money}   Free cells ${freeCells(me)}`),
+      el('div', { class: 'dim' }, `${w.player.money < 0 ? `Debt ${-w.player.money}` : `Money ${w.player.money}`}   Free cells ${freeCells(me)}`),
       el('div', { class: 'tabs' }, ...tabs),
       this.error ? el('div', { class: 'bad' }, this.error) : el('div'),
       body,
