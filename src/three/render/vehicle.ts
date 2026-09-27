@@ -15,7 +15,6 @@ import type { Vehicle } from '../../sim/types';
 const S = PHYSICS.metersPerTile;
 const T = PHYSICS.truck;
 
-export type Ring3 = { r: number; width: number; color: number; alpha: number };
 
 type Look = ChassisDef['look'];
 
@@ -71,15 +70,11 @@ function signatureOf(v: Vehicle): string {
 
 export class VehicleView {
   readonly root = new THREE.Group();
-  readonly ground = new THREE.Group();
 
   private sig = '';
   private wheels: Wheel[] = [];
   private turrets: THREE.Group[] = [];
-  private ringMeshes: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>[] = [];
-  private ringSizes: { r: number; width: number }[] = [];
   private heading = 0;
-  private groundOffset = 0;
   private lampMat = new THREE.MeshBasicMaterial({ color: PAL.lamp.off });
 
   constructor(v: Vehicle) {
@@ -104,7 +99,6 @@ export class VehicleView {
       wheel.mount.rotation.y = w.steer;
       wheel.spin.rotation.z = -w.spin;
     });
-    this.ground.position.set(f.pos.x, f.pos.y - this.groundOffset, f.pos.z);
   }
 
   lamps(on: boolean): void {
@@ -118,36 +112,8 @@ export class VehicleView {
     for (const turret of this.turrets) turret.quaternion.set(q.x, q.y, q.z, q.w);
   }
 
-  rings(rs: Ring3[]): void {
-    for (let i = 0; i < this.ringMeshes.length; i++) this.ringMeshes[i].visible = i < rs.length;
-    rs.forEach((r, i) => {
-      let mesh = this.ringMeshes[i];
-      const size = this.ringSizes[i];
-      if (!size || size.r !== r.r || size.width !== r.width) {
-        const inner = Math.max(0.01, r.r - r.width / 2) * S;
-        const outer = (r.r + r.width / 2) * S;
-        const geometry = new THREE.RingGeometry(inner, outer, 48).rotateX(-Math.PI / 2);
-        if (mesh) {
-          mesh.geometry.dispose();
-          mesh.geometry = geometry;
-        } else {
-          mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide }));
-          mesh.position.y = 0.02;
-          mesh.renderOrder = 5;
-          this.ground.add(mesh);
-          this.ringMeshes.push(mesh);
-        }
-        this.ringSizes[i] = { r: r.r, width: r.width };
-      }
-      mesh.visible = true;
-      mesh.material.color.setHex(r.color);
-      mesh.material.opacity = r.alpha;
-    });
-  }
-
   dispose(): void {
     disposeChildren(this.root);
-    disposeChildren(this.ground);
   }
 
   private rebuild(v: Vehicle): void {
@@ -158,7 +124,6 @@ export class VehicleView {
     const body = bodyOf(v.chassisId);
     const shape = SHAPES[ch.look];
     const col = FACTION_COLORS[v.faction];
-    this.groundOffset = body.wheelRadius + T.suspensionRest;
 
     this.buildFrame(body, col);
     this.buildCab(body, shape, col);

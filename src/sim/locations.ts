@@ -4,7 +4,7 @@ import { SALVAGE } from '../data/salvage';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
-import { canReachSalvage, collectSalvage, hasSalvage } from './salvage';
+import { canReachSalvage, collectSalvage, hasSalvage, salvageInRange } from './salvage';
 import { newId } from './factory';
 import { gridOf, placementError, type Spot } from './grid';
 import { beginSearch } from './search';
@@ -48,6 +48,12 @@ function seesArea(world: World, center: Vec, radius: number): boolean {
 export function salvageHere(world: World): SalvageStock | null {
   const me = playerVehicle(world);
   return world.salvage.find((stock) => hasSalvage(stock) && canReachSalvage(me, stock)) ?? null;
+}
+
+// The stock with loot left in range of the player truck at any speed, or null. Moving trucks must stop to use it.
+export function salvageNear(world: World): SalvageStock | null {
+  const me = playerVehicle(world);
+  return world.salvage.find((stock) => hasSalvage(stock) && salvageInRange(me, stock)) ?? null;
 }
 
 // An unsearched stock is in reach: the player can start a search.

@@ -9,12 +9,12 @@ import { checkDefeat } from './defeat';
 import { buyChassis, buyGood, buyPart, buyPrice, buySupply, chassisTradeIn, repairAll, sellGood, sellPrice } from './economy';
 import { corePart, coreParts, freeCells, goodsCount, mountedParts } from './grid';
 import { spareParts } from './inventory';
-import { canScavenge, scavenge, useOasis } from './locations';
+import { canScavenge, salvageNear, scavenge, useOasis } from './locations';
 import { gainXp, spendSkillPoint, xpForLevel } from './progress';
 import { vehicleStats } from './stats';
 import { consumeSupplies } from './supplies';
 import { heatAt } from './sun';
-import { locationAt, siteGates, townAt } from './sites';
+import { locationAt, siteGates, townAt, townNear } from './sites';
 import { addVehicle, emptyWorld } from './testkit';
 import { dist } from './vec';
 import { endTurn, newWorld } from './world';
@@ -156,6 +156,22 @@ describe('locations', () => {
     const after = scavenge(w);
     expect(after.vehicles[0].job).toEqual(expect.objectContaining({ kind: 'search', stockId: convoy.id }));
     expect(() => scavenge(after)).toThrow();
+  });
+
+  it('a town in reach needs a stop before it can be used', () => {
+    const gate = siteGates(REGION.towns[0])[0];
+    const w = emptyWorld({ ...gate });
+    w.vehicles[0].speed = RULES.parkedSpeed + 1;
+    expect(townAt(w)).toBeNull();
+    expect(townNear(w)?.id).toBe(REGION.towns[0].id);
+  });
+
+  it('salvage in range needs a stop before it can be searched', () => {
+    const convoy = REGION.locations.find((l) => l.kind === 'convoy')!;
+    const w = emptyWorld({ x: convoy.pos.x + 2, y: convoy.pos.y });
+    w.vehicles[0].speed = RULES.parkedSpeed + 1;
+    expect(canScavenge(w)).toBe(false);
+    expect(salvageNear(w)?.id).toBe(convoy.id);
   });
 
   it('driving near a site discovers it once, with XP', () => {
