@@ -230,11 +230,11 @@ export function huntingGroundsAway(vehicle: Vehicle): Vec[] {
 // ---- Robbery.
 
 // A robber can rob a truck it sees, that is not hostile yet, and that carries loot.
+// Cheap checks run before the sight line.
 export function canRob(w: World, robber: Vehicle, target: Vehicle): boolean {
-  if (robber.id === target.id) return false;
-  if (!canVehicleSee(w, robber, target.pos)) return false;
+  if (robber.id === target.id || !hasLoot(target)) return false;
   if (isHostile(w, robber, target)) return false;
-  return hasLoot(target);
+  return canVehicleSee(w, robber, target.pos);
 }
 
 // ---- Availability, one check per option. An option is available when the driver physically can take it now.
@@ -450,6 +450,13 @@ function positiveMul(change: WeightChange, decision: DecisionId, option: OptionN
 // keeps what it does with no roll.
 export function hasChoice(weights: Partial<Record<OptionName, number>>): boolean {
   return !('keep' in weights) || Object.keys(weights).some((option) => option !== 'keep');
+}
+
+// hasChoice from availability alone, without the situation factors.
+export function offersChoice(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  const options = Object.keys(DECISIONS[decision]) as OptionName[];
+  if (!options.includes('keep')) return true;
+  return options.some((option) => option !== 'keep' && AVAILABLE[option](world, vehicle, decision, subject));
 }
 
 // Each option's chance: MIN_CHANCE plus its weighted share of the rest. With no weight at all, equal shares.

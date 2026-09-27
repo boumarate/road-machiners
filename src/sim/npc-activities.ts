@@ -13,7 +13,7 @@ import { getTradePrice, sellVehicleCargo, serviceAtCamp, serviceVehicle, tradeGo
 import { corePart, freeCells, goodsCount, mountedParts } from './grid';
 import { cancelJob } from './jobs';
 import {
-  bestTrade, canRob, decide, hasChoice, optionWeights, perceiveDanger, getKnownSite, getUpkeepReserve,
+  bestTrade, canRob, decide, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve,
   huntingGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleHostiles, visibleSalvage, type NpcProfile,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, resolveNpcRepair } from './npc-repair';
@@ -307,7 +307,7 @@ type NoticedDecision = 'hostileSeen' | 'contactHeard' | 'preySeen' | 'strandedSe
 function react<D extends NoticedDecision>(world: World, vehicle: Vehicle, decision: D, id: string): DecisionOptions[D] | null {
   const key = `${decision}:${id}`;
   if (key in vehicle.brain!.noticed) return null;
-  if (!hasChoice(optionWeights(world, vehicle, decision, id, null))) return 'keep' as DecisionOptions[D];
+  if (!offersChoice(world, vehicle, decision, id)) return 'keep' as DecisionOptions[D];
   vehicle.brain!.noticed[key] = world.turn;
   const seen = decision === 'hostileSeen' || decision === 'preySeen';
   return decide(world, vehicle, decision, id, seen ? perceiveDanger(world, vehicle, vehicleById(world, id)) : null);
@@ -330,11 +330,10 @@ function fleeFrom(world: World, vehicle: Vehicle, profile: NpcProfile, threatId:
 // One roll per new hostile in sight, nearest first. A reaction ends the turn's rolls. Later hostiles fire next turn.
 function onHostilesSeen(world: World, vehicle: Vehicle, profile: NpcProfile): void {
   for (const enemy of visibleHostiles(world, vehicle)) {
-    const weak = isWeak(world, vehicle);
     const option = react(world, vehicle, 'hostileSeen', enemy.id);
     if (option === null || option === 'keep') continue;
     if (option === 'fight') interrupt(world, vehicle, createActivity('fight', enemy.id, { ...enemy.pos }, 'fight a hostile in sight'));
-    else interrupt(world, vehicle, fleeFrom(world, vehicle, profile, enemy.id, enemy.pos, weak ? 'damaged and threatened' : 'avoid a costly fight'));
+    else interrupt(world, vehicle, fleeFrom(world, vehicle, profile, enemy.id, enemy.pos, isWeak(world, vehicle) ? 'damaged and threatened' : 'avoid a costly fight'));
     return;
   }
 }
@@ -392,7 +391,7 @@ function onAttacked(world: World, vehicle: Vehicle, profile: NpcProfile): void {
 // Rob starts a feud with the target and fights it.
 function onPreySeen(world: World, vehicle: Vehicle): void {
   const prey = world.vehicles
-    .filter((other) => canRob(world, vehicle, other))
+    .filter((other) => !(`preySeen:${other.id}` in vehicle.brain!.noticed) && canRob(world, vehicle, other))
     .sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   for (const target of prey) {
     if (react(world, vehicle, 'preySeen', target.id) !== 'rob') continue;
