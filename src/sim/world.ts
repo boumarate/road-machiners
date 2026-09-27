@@ -17,7 +17,7 @@ import { fireGuards } from './guards';
 import { discoverSites } from './locations';
 import { consumeSupplies, leakFuel } from './supplies';
 import { spawnInitial, spawnNpcs } from './spawn';
-import { clearPiles, initializeSalvage } from './salvage';
+import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
 import { timed } from '../perf';
 import { noteHurt, resolveNpcActivities } from './npc-activities';
 import { advanceStates } from './states';
@@ -214,6 +214,7 @@ export function endTurn(
     advanceEngineHeat(w);
     advanceDust(w);
     clearPiles(w);
+    renewSalvage(w);
     advanceJobs(w);
     startAutoRepair(w);
     refreshVision(w);

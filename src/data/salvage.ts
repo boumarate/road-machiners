@@ -1,4 +1,4 @@
-// Loot tables and search speed for scavenging. Rolls draw through rng.ts at world creation.
+// Loot tables, search speed and daily renewal for scavenging. Rolls draw through rng.ts.
 
 export type LootRange = [number, number];
 
@@ -15,6 +15,12 @@ export const SALVAGE = {
   unitsPerTurn: 2, // stock units, goods or parts, a search gets through per turn
   pileTurns: 400, // two days a dropped pile lies on the ground, time for a road crossing and back
   coreScrapPerHp: 0.5, // parts good units salvaged per HP of a wrecked built-in part
+  // Each day a site regains this share of a fresh roll from its loot table, up to the table's highs. An emptied
+  // site is about full again after four days.
+  restockShare: 0.25,
+  // Days a looted road wreck lies empty before it goes. It goes only beyond the player's gray vision, and a new
+  // road wreck appears elsewhere, also beyond it, so the road wreck count stays constant.
+  wreckClearDays: 3,
   landmark: {
     goods: { scrap: [2, 6], salt: [0, 4], meds: [0, 2] },
     parts: [2, 5],

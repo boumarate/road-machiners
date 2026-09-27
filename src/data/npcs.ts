@@ -344,6 +344,7 @@ export type DecisionOptions = {
   attacked: 'keep' | 'flee' | 'fightBack'; // a shot at the driver or a nearby visible faction mate, hit or miss
   preySeen: 'keep' | 'rob'; // a new robbery target comes in sight
   strandedSeen: 'keep' | 'tow'; // a stranded player comes in sight
+  salvageSeen: 'keep' | 'loot'; // a wreck or pile comes in sight on the way to a goal
   patchDeal: 'paid' | 'ownParts' | 'free'; // the terms a driver names for a roadside patch; see src/sim/patch.ts
   ramChance: 'keep' | 'ram'; // the fight target lies ahead within reach of a damaging ram
   crashed: 'forgive' | 'retaliate'; // a truck at peace with the driver damaged it in a crash
@@ -375,6 +376,8 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   preySeen: { keep: 1, rob: 0 },
   // Towing more than rarely needs a trait.
   strandedSeen: { keep: 1, tow: 0 },
+  // Stopping for salvage on the way more than rarely needs a trait.
+  salvageSeen: { keep: 1, loot: 0 },
   // Most drivers want paying for a patch, some only charge for the work, and one in ten helps for free.
   patchDeal: { paid: 6, ownParts: 3, free: 1 },
   // A fighter takes 9 in 10 rams that look worth it. Otherwise it keeps shooting from its range.
@@ -467,11 +470,12 @@ export type Trait = {
 
 // An NPC knows the union of its traits' sites.
 export const TRAITS: Record<TraitId, Trait> = {
-  // Scavenging a known site beats waiting a hundredfold. Nine in ten scavengers help a stranded truck. An idle
-  // scavenger takes on a manageable hostile about nine times in ten: fight 4, times NPC_BEHAVIOR.manageableFight.
+  // Scavenging a known site beats waiting a hundredfold. Three in four scavengers stop for a wreck they pass. Nine
+  // in ten scavengers help a stranded truck. An idle scavenger takes on a manageable hostile about nine times in
+  // ten: fight 4, times NPC_BEHAVIOR.manageableFight.
   scavenger: {
     towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
-    weights: { idle: { scavenge: { add: 10 } }, strandedSeen: { tow: { add: 9 } }, hostileSeen: { fight: { add: 2 } } },
+    weights: { idle: { scavenge: { add: 10 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 9 } }, hostileSeen: { fight: { add: 2 } } },
   },
   // Traders rarely pick a fight: a fight weight of 2 drops to 0.004, about 1%, and to 0.02, about 2%, against a
   // manageable hostile. A shot trader returns fire at a tenth of the usual weight, and mostly runs. A trader in a

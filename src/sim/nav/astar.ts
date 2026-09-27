@@ -7,7 +7,7 @@ import { count } from '../../perf';
 import type { Blocker } from './buckets';
 import { CELL, COARSE, componentOf, stampCircles, tasted, type NavLayer, type Taste } from './layer';
 
-// Cells blocked by kill wrecks and parked vehicles: stamp[c] === gen. Valid until the next stampOverlay.
+// Cells blocked by road and kill wrecks and parked vehicles: stamp[c] === gen. Valid until the next stampOverlay.
 export type Overlay = { stamp: Uint32Array; gen: number };
 
 const overlay: Overlay = { stamp: new Uint32Array(0), gen: 0 };
@@ -136,7 +136,7 @@ const LONG_CELLS = 32;
 
 // Cells from start to goal, both included. The start cell may be blocked when a vehicle hugs an
 // obstacle; it is allowed as a start. Long searches stay inside the corridor of a coarse path plus
-// one ring of blocks. Kill wrecks and parked vehicles are not in the coarse grid, so when they cut
+// one ring of blocks. Road and kill wrecks and parked vehicles are not in the coarse grid, so when they cut
 // the corridor the full search runs. A taste multiplies step costs in both searches.
 export function findCells(layer: NavLayer, ov: Overlay, start: number, goal: number, taste: Taste | null): Int32Array | null {
   if (start === goal) return Int32Array.of(start);
