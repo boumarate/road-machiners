@@ -256,6 +256,22 @@ describe('scumbag robbery', () => {
     expect(thinkNpc(w, robber)).toMatchObject({ kind: 'scavenge', targetId: 'salvage-yard' });
   });
 
+  it('a robber keeps its rob goal while its victim stays in sight, with no hostileSeen roll on the victim', () => {
+    const { w, robber, target } = passing();
+    robber.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' }];
+    forceOption('preySeen', 'rob');
+    // A hostileSeen roll on the victim would almost surely flee.
+    forceOption('hostileSeen', 'flee');
+    thinkNpc(w, robber);
+    for (let turn = 0; turn < 5; turn++) {
+      w.turn++;
+      w.events = [];
+      thinkNpc(w, robber);
+      expect(isRob(robber.brain!.goals.at(-1), target.id)).toBe(true);
+      expect(w.events.filter((e) => e.t === 'activity')).toEqual([]);
+    }
+  });
+
   it('a robber stops its search to rob', () => {
     const { w, robber, target } = passing();
     robber.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'act', reason: 'search a known salvage site' }];

@@ -388,7 +388,8 @@ function onAttacked(world: World, vehicle: Vehicle, profile: NpcProfile): void {
 }
 
 // One roll per new truck in sight the NPC can rob, nearest first. The sighting's perceived danger weighs the roll.
-// Rob starts a feud with the target and fights it.
+// Rob starts a feud with the target and fights it. The feud makes the target a hostile in sight, so it is noticed
+// as one and fires no second roll.
 function onPreySeen(world: World, vehicle: Vehicle): void {
   const prey = world.vehicles
     .filter((other) => !(`preySeen:${other.id}` in vehicle.brain!.noticed) && canRob(world, vehicle, other))
@@ -396,6 +397,7 @@ function onPreySeen(world: World, vehicle: Vehicle): void {
   for (const target of prey) {
     if (react(world, vehicle, 'preySeen', target.id) !== 'rob') continue;
     addState(world, 'feud', vehicle.id, target.id, { kind: 'feud', robbery: true });
+    vehicle.brain!.noticed[`hostileSeen:${target.id}`] = world.turn;
     world.events.push({ t: 'hostile', vehicle: vehicle.id, against: target.id });
     interrupt(world, vehicle, createActivity('fight', target.id, { ...target.pos }, 'rob cargo'));
     return;
@@ -411,10 +413,12 @@ function onStrandedSeen(world: World, vehicle: Vehicle): void {
 }
 
 // A driver the player turned down that picks tow again is over it: its turnedDown state ends, so the tow goal holds.
+// The client counts as noticed prey, so a tower that set out for a beacon does not roll to rob it on arrival.
 function startTow(world: World, vehicle: Vehicle, at: Vec): void {
   const me = world.player.vehicleId;
   const turnedDown = stateOf(world, 'turnedDown', vehicle.id, me);
   if (turnedDown) endState(world, turnedDown, 'fulfilled');
+  vehicle.brain!.noticed[`preySeen:${me}`] = world.turn;
   pushGoal(world, vehicle, createActivity('tow', me, { ...at }, 'help a stranded truck'));
 }
 
