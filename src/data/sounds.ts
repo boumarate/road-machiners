@@ -49,7 +49,9 @@ const DEFS = {
   "miss": { bus: "sfx", setup: "field", volume: 0.4, pitchJitter: 0.1, maxVoices: 6, loop: false, prompts: ["Bullet ricochet whizzing off rocks and kicking up dirt."], seconds: 0.8 },
   "part-broken": { bus: "sfx", setup: "field", volume: 0.7, pitchJitter: 0.05, maxVoices: 2, loop: false, prompts: ["Truck part breaks apart, snapping metal, sparks and a short hiss of steam."], seconds: 1.2 },
   "explosion": { bus: "sfx", setup: "field", volume: 1, pitchJitter: 0.04, maxVoices: 2, loop: false, prompts: ["Truck fuel tank explodes, big fiery blast with falling metal debris."], seconds: 3 },
-  "horn": { bus: "sfx", setup: "field", volume: 0.8, pitchJitter: 0.05, maxVoices: 4, loop: false, prompts: ["One short blast of a heavy diesel truck's air horn: deep, low-pitched, growling and rumbling, a big rig horn with a rough bass edge. Vehicle horn only, not a musical instrument, not a small car beep."], seconds: 1.5 },
+  // Generated horns come out thin and high. The files are generated takes run through ffmpeg
+  // "asetrate=44100*0.55,aresample=44100,bass=g=8:f=120,volume=8dB,asoftclip=type=tanh" before import.
+  "horn": { bus: "sfx", setup: "field", volume: 0.8, pitchJitter: 0.05, maxVoices: 4, loop: false, prompts: ["Mad Max war rig horn: a huge rusted diesel truck blasts its twin air horns once, a deep booming low chord, brassy, gritty and overdriven, heavy as a freight train. Vehicle horn only, no music."], seconds: 1.5 },
   "crash": { bus: "sfx", setup: "field", volume: 0.9, pitchJitter: 0.06, maxVoices: 2, loop: false, prompts: ["Two heavy steel trucks ram each other at speed: one hard, deep crunch of thick metal, a short scrape, then debris settling. Single impact."], seconds: 1.5 },
 
   // Loops.
