@@ -139,6 +139,32 @@ Approach: sim cheats first with Vitest, then the text command table, then the co
 - PH2 IF1 -> IF2 @ src/ui/cheat-commands.ts, src/ui/cheat-commands.test.ts
 - PH3 IF2 -> @ src/ui/console.ts, src/ui/style.css, src/three/game.ts, src/three/main.ts
 
+## Verify
+
+Result: passed
+
+Happy-path:
+- CK1 — each command group works in the live game through the console — held: `tmp/console-check.mjs` 25 of 25.
+- CK2 — `tp <place>` lands where the place works — broke, then fixed: every place center lies inside its own obstacle, so `tp nose` found no free spot within 20 tiles. `placeSpot` now aims at the nearest gate or the edge, and a test checks `canUseSite` for every town and location.
+
+Negative:
+- CK3 — malformed input like `money 1e3x`, `money Infinity`, `tp 1 2 3`, `hour 7.5`, `spawn buggy friendly` and an empty line raises something other than `CheatError` — held: 15 probes, each one worked or threw `CheatError` with usage.
+- CK4 — a command during turn playback changes the world — held: it prints the wait line and money stays unchanged.
+
+Invariants / assumptions:
+- CK5 (IV2) — a failed command changes the world — held: `bogus` leaves money, turn and vehicle count the same, and a unit test covers a mid-draft `give` failure.
+- CK6 (IV3) — typing `ire` in the console toggles manual mode or opens panels — held.
+- CK7 (IV5) — god mode on with the cab at 0 hp still ends the turn with a knockout — held: the player stays active in the browser and in the unit test.
+- CK8 (AS1) — after `tp`, a stale physics body keeps the truck from driving — held: the truck drives from the new spot.
+- CK9 (AS2) — `hour` jumping the turn breaks turn-counted rules — held: spawn and weather timers count turns run, not the turn number, and turns after `hour 22` run.
+- CK10 (RK2) — killing the hitched tower crashes the next turn — broke, then fixed: `followTower` threw "No vehicle". `killVehicles` now runs `checkTower`, and a test covers it.
+- CK11 — god mode survives a save round trip — held.
+- CK12 — the console is left out of production builds — held: `npm run build` bundles it.
+
+Smoke: `npm test` 721 passed. `npm run playtest` PASS at 60 fps. `tmp/console-check.mjs` 25 of 25.
+Goal: proxy only — the command set covering the situations the user tests needs the user's confirmation. UK2, backquote on the user's keyboard layouts, needs the user to try it. The key check uses `e.code`, so it follows the physical key on any layout.
+Notes: the console moved from bottom left to top center, because it covered the money and fuel readouts. The user confirms the look.
+
 ## Conclusion
 
 ### Deviations from plan
