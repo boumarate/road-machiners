@@ -202,6 +202,9 @@ export const NPC_BEHAVIOR = {
   weakFlee: 20,
   // Damage taken last turn, as a share of cab max HP, that gives the hurt flee option its base weight.
   hurtFullFlee: 0.1,
+  // Turns a noticed subject stays remembered after it was last perceived. A heard engine drops out for a turn or
+  // two when the truck slows or crosses behind the listener, and 3 turns bridges that without a fresh roll.
+  noticeMemory: 3,
   // Salvage in sight weighs 10 times a known site out of sight.
   visibleSalvage: 10,
 };

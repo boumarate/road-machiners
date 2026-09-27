@@ -163,23 +163,29 @@ function invalidReason(world: World, vehicle: Vehicle, goal: NpcActivity, contac
 
 // ---- Decision points.
 
-// Drops noticed subjects the NPC no longer perceives, so they fire again when perceived again.
+// Refreshes noticed subjects the NPC perceives now. A subject a goal still targets stays noticed. Any other one is
+// forgotten NPC_BEHAVIOR.noticeMemory turns after it was last perceived, so it fires again when perceived again.
 function forget(world: World, vehicle: Vehicle, contacts: Contact[]): void {
   const brain = vehicle.brain!;
-  brain.noticed = brain.noticed.filter((key) => {
+  for (const [key, last] of Object.entries(brain.noticed)) {
     const [decision, id] = key.split(':');
-    if (decision === 'contactHeard') return contacts.some((c) => c.vehicleId === id);
-    if (decision !== 'hostileSeen' && decision !== 'preySeen' && decision !== 'strandedSeen') throw new Error(`Unknown noticed key ${key}`);
-    const other = world.vehicles.find((v) => v.id === id);
-    return other !== undefined && canVehicleSee(world, vehicle, other.pos);
-  });
+    if (perceives(world, vehicle, decision, id, contacts)) brain.noticed[key] = world.turn;
+    else if (!brain.goals.some((g) => g.targetId === id) && world.turn - last > NPC_BEHAVIOR.noticeMemory) delete brain.noticed[key];
+  }
+}
+
+function perceives(world: World, vehicle: Vehicle, decision: string, id: string, contacts: Contact[]): boolean {
+  if (decision === 'contactHeard') return contacts.some((c) => c.vehicleId === id);
+  if (decision !== 'hostileSeen' && decision !== 'preySeen' && decision !== 'strandedSeen') throw new Error(`Unknown noticed decision ${decision}`);
+  const other = world.vehicles.find((v) => v.id === id);
+  return other !== undefined && canVehicleSee(world, vehicle, other.pos);
 }
 
 // Marks the subject noticed for the decision. False when it already was.
-function notice(vehicle: Vehicle, decision: string, id: string): boolean {
+function notice(world: World, vehicle: Vehicle, decision: string, id: string): boolean {
   const key = `${decision}:${id}`;
-  if (vehicle.brain!.noticed.includes(key)) return false;
-  vehicle.brain!.noticed.push(key);
+  if (key in vehicle.brain!.noticed) return false;
+  vehicle.brain!.noticed[key] = world.turn;
   return true;
 }
 
@@ -200,7 +206,7 @@ function fleeFrom(world: World, vehicle: Vehicle, profile: NpcProfile, threatId:
 // One roll per new hostile in sight, nearest first. A reaction ends the turn's rolls. Later hostiles fire next turn.
 function onHostilesSeen(world: World, vehicle: Vehicle, profile: NpcProfile): void {
   for (const enemy of visibleHostiles(world, vehicle)) {
-    if (!notice(vehicle, 'hostileSeen', enemy.id)) continue;
+    if (!notice(world, vehicle, 'hostileSeen', enemy.id)) continue;
     const weak = isWeak(world, vehicle);
     const option = decide(world, vehicle, 'hostileSeen', enemy.id);
     if (option === 'keep') continue;
@@ -212,7 +218,7 @@ function onHostilesSeen(world: World, vehicle: Vehicle, profile: NpcProfile): vo
 
 function onContactsHeard(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[]): void {
   for (const contact of contacts) {
-    if (!isHostileContact(world, vehicle, contact) || !notice(vehicle, 'contactHeard', contact.vehicleId)) continue;
+    if (!isHostileContact(world, vehicle, contact) || !notice(world, vehicle, 'contactHeard', contact.vehicleId)) continue;
     const option = decide(world, vehicle, 'contactHeard', contact.vehicleId);
     if (option === 'keep') continue;
     if (option === 'investigate') interrupt(world, vehicle, createActivity('investigate', contact.vehicleId, { ...contact.center }, 'heard a hostile beyond sight'));
@@ -231,7 +237,7 @@ function onHurt(world: World, vehicle: Vehicle, profile: NpcProfile): void {
 
 function onStrandedSeen(world: World, vehicle: Vehicle): void {
   const me = strandedPlayer(world, vehicle);
-  if (!me || !notice(vehicle, 'strandedSeen', me.id)) return;
+  if (!me || !notice(world, vehicle, 'strandedSeen', me.id)) return;
   if (decide(world, vehicle, 'strandedSeen', me.id) === 'tow') pushGoal(world, vehicle, createActivity('tow', me.id, { ...me.pos }, 'help a stranded truck'));
 }
 

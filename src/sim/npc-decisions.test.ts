@@ -1,3 +1,4 @@
+import { NPC_BEHAVIOR } from '../data/npcs';
 import { describe, expect, it } from 'vitest';
 import { TERRAIN } from '../data/terrain';
 import { corePart } from './grid';
@@ -94,22 +95,40 @@ describe('decision points', () => {
     const w = emptyWorld({ x: 80, y: 80 });
     const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 });
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 14, y: 10 });
+    const key = `hostileSeen:${raider.id}`;
     forceOption('hostileSeen', 'keep');
     thinkNpc(w, npc);
-    expect(npc.brain!.noticed).toContain(`hostileSeen:${raider.id}`);
+    expect(npc.brain!.noticed).toHaveProperty([key]);
     const rng = w.rngState;
     thinkNpc(w, npc);
     thinkNpc(w, npc);
     expect(w.rngState).toBe(rng);
-    // Out of sight, the raider is forgotten. Back in sight, it fires again.
+    // Briefly out of sight, the raider is still remembered, so it fires no new roll.
     w.obstacles.push({ id: 'cover', kind: 'rock', pos: { x: 12, y: 10 }, r: 1 });
+    w.turn += NPC_BEHAVIOR.noticeMemory;
     thinkNpc(w, npc);
-    expect(npc.brain!.noticed).not.toContain(`hostileSeen:${raider.id}`);
+    expect(npc.brain!.noticed).toHaveProperty([key]);
+    // Out of sight past the memory, it is forgotten. Back in sight, it fires again.
+    w.turn += 1;
+    thinkNpc(w, npc);
+    expect(npc.brain!.noticed).not.toHaveProperty([key]);
     w.obstacles = [];
     const hidden = w.rngState;
     thinkNpc(w, npc);
     expect(w.rngState).not.toBe(hidden);
-    expect(npc.brain!.noticed).toContain(`hostileSeen:${raider.id}`);
+    expect(npc.brain!.noticed).toHaveProperty([key]);
+  });
+
+  it('a subject a goal targets stays noticed while out of perception', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = w.player.vehicleId;
+    const raider = addNpc(w, 'raiders', 'buggy', ['raider'], { x: 70, y: 30 });
+    raider.brain!.goals = [{ kind: 'investigate', targetId: me, destination: { x: 30, y: 30 }, phase: 'travel', reason: 'heard a hostile beyond sight' }];
+    raider.brain!.noticed = { [`contactHeard:${me}`]: w.turn };
+    w.turn += NPC_BEHAVIOR.noticeMemory + 1;
+    thinkNpc(w, raider);
+    expect(raider.brain!.goals.at(-1)).toMatchObject({ kind: 'investigate', targetId: me });
+    expect(raider.brain!.noticed).toHaveProperty([`contactHeard:${me}`]);
   });
 
   it('a raider investigates a contact, and a scavenger does not', () => {

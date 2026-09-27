@@ -101,7 +101,7 @@ export type NpcBrain = {
     templateId: string;
     traits: TraitId[]; // base traits of the template plus the extras rolled at spawn
     goals: NpcActivity[]; // goal stack, top last: a long-term goal at the bottom, interruptions above it
-    noticed: string[]; // `<decision>:<vehicle id>` for subjects already decided on while perceived
+    noticed: Record<string, number>; // `<decision>:<vehicle id>` for subjects already decided on, to the turn last perceived
     hurt: number; // part damage taken last turn
     goal: Vec | null;
     home: Vec;

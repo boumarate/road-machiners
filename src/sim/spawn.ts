@@ -53,7 +53,7 @@ function spawnOne(world: World, tpl: NpcTemplate): boolean {
         templateId: tpl.id,
         traits: rollTraits(world, tpl),
         goals: [],
-        noticed: [],
+        noticed: {},
         hurt: 0,
         goal: null,
         home: { ...pos },
