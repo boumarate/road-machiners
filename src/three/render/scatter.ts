@@ -18,7 +18,7 @@ const ROAD_GAP = REGION.roadWidth / 2 + 0.3; // tiles from a road center line ke
 const OBSTACLE_GAP = 0.5; // tiles past an obstacle's radius kept free of scatter
 const PEBBLE_CHANCE = 0.3; // share of tiles with a pebble cluster
 const SCRUB_CHANCE = 0.14; // share of tiles with a scrub tuft
-const PEBBLE_RADIUS = { min: 0.07, max: 0.15 }; // tiles
+const PEBBLE_RADIUS = { min: 0.025, max: 0.045 }; // tiles
 const SCRUB_RADIUS = { min: 0.22, max: 0.4 }; // tiles
 const TINT = { min: 0.85, max: 1.15 };
 

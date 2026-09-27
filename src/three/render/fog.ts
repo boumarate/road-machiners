@@ -92,9 +92,7 @@ export class FogView {
 
 // Mixes the lit ground color toward its own grey, then scales its brightness, by the fogLook attribute.
 function greyOut(mat: THREE.MeshLambertMaterial): void {
-  const prev = mat.onBeforeCompile;
-  mat.onBeforeCompile = (shader, renderer) => {
-    prev.call(mat, shader, renderer);
+  mat.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec2 fogLook;\nvarying vec2 vFogLook;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFogLook = fogLook;');

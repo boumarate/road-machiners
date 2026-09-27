@@ -2,14 +2,13 @@ import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
 import { paintGroundCanvas, TERRAIN_MARGIN, type PaintCanvas } from '../../render/groundPaint';
 import type { World } from '../../sim/types';
-import { addGroundDetail } from './groundDetail';
 import type { RenderScope } from './scope';
 
 const S = PHYSICS.metersPerTile;
 const TEXTURE_SIDE = 2048; // 16 MiB RGBA before mipmaps, independent of region area.
 export const TERRAIN_CHUNK = 32; // Roughly two normal camera widths, allowing offscreen terrain culling.
 
-function paintTexture(w: World, anisotropy: number): THREE.CanvasTexture {
+function paintTexture(w: World): THREE.CanvasTexture {
   const from = -TERRAIN_MARGIN;
   const res = TEXTURE_SIDE / (w.size + 2 * TERRAIN_MARGIN);
   const canvas = document.createElement('canvas');
@@ -20,7 +19,7 @@ function paintTexture(w: World, anisotropy: number): THREE.CanvasTexture {
   paintGroundCanvas(c, w.terrain, { hillshade: 0.35 });
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = anisotropy;
+  texture.magFilter = THREE.NearestFilter;
   return texture;
 }
 
@@ -28,10 +27,9 @@ export type TerrainChunk = { x: number; y: number; width: number; depth: number;
 
 // Terrain chunks register with the scope, so only chunks near the view are drawn. Returned for the fog,
 // which greys out the ground per corner.
-export function terrainMesh(w: World, scope: RenderScope, anisotropy: number): TerrainChunk[] {
+export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
   const chunks: TerrainChunk[] = [];
-  const material = new THREE.MeshLambertMaterial({ map: paintTexture(w, anisotropy) });
-  addGroundDetail(material, anisotropy);
+  const material = new THREE.MeshLambertMaterial({ map: paintTexture(w) });
   for (let y = 0; y < w.size; y += TERRAIN_CHUNK) for (let x = 0; x < w.size; x += TERRAIN_CHUNK) {
     const width = Math.min(TERRAIN_CHUNK, w.size - x);
     const depth = Math.min(TERRAIN_CHUNK, w.size - y);
