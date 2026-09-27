@@ -68,7 +68,7 @@ Raiders ignore a truck with nothing to take. A truck has loot when it holds good
 
 A truck with no working engine, a broken transmission or an empty tank still moves at a crawl. The driver pushes it. Pushing burns no fuel, and a truck without a working engine makes no sound. A player truck that can only crawl is stranded.
 
-Traders and scavengers help a stranded player. One that sees the truck drives over, if it is not hostile and not in danger. It parks beside the truck and offers a tow to the nearest town it knows. The fee is a base price plus a price per tile of the route. The player accepts or refuses. Refusing, or driving away, ends the offer, and that driver never offers again.
+Traders and scavengers help a stranded player. One that sees the truck may drive over, if it is not hostile and not in danger. It parks beside the truck and radios a tow offer to the nearest town it knows. The fee is a base price plus a price per tile of the route. The player accepts, refuses or hangs up. A driver the player turned down rarely offers again. A stranded player can also radio a passing trader or scavenger and ask for a tow.
 
 A towed truck hangs behind its tower and follows its path. The tower drives slower than its top speed. Turns run on their own while towed. The player can unhitch at any time for free. A tower that enters a fight or flees drops the tow for free. On arrival in town the tower takes the fee. Money can go below zero, and the HUD shows it as debt. A player in debt cannot buy anything, and sales pay the debt off.
 
@@ -123,6 +123,19 @@ Scavengers collect finite salvage, sell cargo, and fight manageable hostiles or 
 Scavenging is a timed search: the truck parks at a stock and searches for turns in proportion to what the stock holds, with a progress bar. Moving the truck cancels the search. A finished search opens the stock beside the truck's grid, and the player drags in what they want. What they leave stays at the site for later. NPC scavengers take everything that fits. Landmark and convoy sites hold finite stock rolled at world creation: goods, parts and sometimes a spare mountable part. Destroyed NPCs leave a wreck with the same kind of stock. Their mounted parts join it at the HP they had; their built-in parts turn into the parts good instead. Collection takes only what fits and leaves the rest. Old wreck retirement removes their remaining stock. Empty sites do not regenerate.
 
 Town markets have fixed prices and unlimited stock and money. Initial NPC resources and the oasis are explicit sources. No offscreen catch-up grants are used. A knocked-out player's parts and cargo go into a wreck stock that any collector can take.
+
+## Social
+
+Every truck has a radio, as in Space Rangers 2. A call reaches only a truck in sight. The player calls the truck under the cursor with T. An NPC calls the player when it has something to say. Turns wait while a call is open, and neither truck on the line shoots the other.
+
+Talk is built from topics. A topic is lines and replies in data, and its logic is named conditions and effects in code. The player's call opens on a menu of the topics that truck can take up. A driver's traits decide its voice and its topics. A topic can be once per driver: that driver remembers how it ended.
+
+- Directions: traders and scavengers name the nearest town they know, with direction and distance. The town counts as found.
+- Tow: see Defeat.
+- Patch: a patch gets a broken engine or gearbox going again at a quarter of its HP. A stranded player asks a trader or scavenger, and a stranded NPC asks the player once. The NPC's traits roll the terms: paid, bring your own parts, or free. Only terms the payer can cover come up. The work runs while both trucks stay parked side by side, and the payment moves once when it ends. A deal nobody works on lapses for free.
+- Demand: a raider or robber about to attack radios first, once, and asks for the cargo. Handing it over drops the goods and loose parts beside the truck, and the attacker and its mates nearby keep a truce for a while. Shots break the truce. Refusing keeps the fight.
+
+H honks. Traders and scavengers in earshot that are not hostile honk back.
 
 ## Trade
 
