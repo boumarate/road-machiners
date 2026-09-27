@@ -343,7 +343,7 @@ export type DecisionOptions = {
   contactHeard: 'keep' | 'investigate' | 'flee'; // a new hostile contact beyond sight
   attacked: 'keep' | 'flee' | 'fightBack'; // a shot at the driver or a nearby visible faction mate, hit or miss
   preySeen: 'keep' | 'rob'; // a new robbery target comes in sight
-  strandedSeen: 'keep' | 'tow'; // a stranded player comes in sight
+  strandedSeen: 'keep' | 'tow'; // a stranded truck comes in sight
   salvageSeen: 'keep' | 'loot'; // a wreck or pile comes in sight on the way to a goal
   patchDeal: 'paid' | 'ownParts' | 'free'; // the terms a driver names for a roadside patch; see src/sim/patch.ts
   ramChance: 'keep' | 'ram'; // the fight target lies ahead within reach of a damaging ram
@@ -493,11 +493,11 @@ export const TRAITS: Record<TraitId, Trait> = {
   },
   // Raiders fight most hostiles they see and close in on most useful contacts. A raid ties with salvage in sight.
   // A raider answers half the crashes with a fight, seldom asks for peace and refuses a truce more often than not.
-  // Threatened, it mostly fights.
+  // Threatened, it mostly fights. Nine in ten raiders help a stranded raider, the only truck they tow.
   raider: {
     towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], contactReactRadius: 12, boldness: 1,
     weights: {
-      idle: { raid: { add: 10 } }, contactHeard: { investigate: { add: 12 } }, hostileSeen: { fight: { add: 8 } },
+      idle: { raid: { add: 10 } }, contactHeard: { investigate: { add: 12 } }, hostileSeen: { fight: { add: 8 } }, strandedSeen: { tow: { add: 9 } },
       crashed: { retaliate: { add: 3 } }, parley: { truce: { mul: 0.3 }, beg: { mul: 0.3 } }, truceOffered: { refuse: { add: 2 } },
       mercyBegged: { finish: { add: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
     },

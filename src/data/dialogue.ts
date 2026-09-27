@@ -14,7 +14,7 @@ export type ConditionId =
   | 'accepts' | 'refuses' | 'complies' | 'resists' | 'runs' | 'canTowNpc' | 'towedByPlayer';
 export type EffectId =
   | 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow' | 'agreePatch' | 'handOver'
-  | 'acceptPlea' | 'refusePlea' | 'settlePlea' | 'withdrawPlea' | 'settleThreat' | 'hitchNpc' | 'releaseNpc';
+  | 'acceptPlea' | 'refusePlea' | 'settlePlea' | 'withdrawPlea' | 'settleThreat' | 'hitchNpc' | 'hitchNpcFree' | 'releaseNpc';
 export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms' | 'truceAnswer' | 'mercyAnswer' | 'threatAnswer' | 'npcTowTerms';
 
 // `go` is a node of the same topic, the hub of topics, or the end of the call.
@@ -286,7 +286,7 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // The player offers a stranded driver a tow to the town it names, for what it can pay.
+  // The player offers a stranded driver a tow to the town or camp it names, for what it can pay or for free.
   offerTow: {
     id: 'offerTow',
     once: false,
@@ -297,9 +297,10 @@ export const TOPICS: Record<TopicId, Topic> = {
     start: 'terms',
     nodes: {
       terms: {
-        line: 'Take me to {town}. I can pay {fee} when we get there.',
+        line: 'Take me to {site}. I can pay {fee} when we get there.',
         options: [
           { text: 'Deal. Hitch up.', when: [], effects: ['hitchNpc'], go: END },
+          { text: 'No charge. Hitch up.', when: [], effects: ['hitchNpcFree'], go: END },
           { text: 'Not now. Something else.', when: [], effects: [], go: HUB },
         ],
       },

@@ -57,9 +57,9 @@ it('tells a tow offer from a running tow', () => {
   const me = playerVehicle(w);
   const npc = addVehicle(w, 'traders', 'scout', [], { x: 32, y: 30 });
   npc.brain = npcBrain('trader', npc.pos, ['trader']);
-  const tow = addState(w, 'tow', npc.id, me.id, { kind: 'tow', town: 'x', fee: 10, hitched: false });
+  const tow = addState(w, 'tow', npc.id, me.id, { kind: 'tow', site: 'x', fee: 10, waived: 0, hitched: false });
   expect(formatNpcStates(w, npc)).toEqual(['Tow offer to you']);
-  tow.data = { kind: 'tow', town: 'x', fee: 10, hitched: true };
+  tow.data = { kind: 'tow', site: 'x', fee: 10, waived: 0, hitched: true };
   expect(formatNpcStates(w, npc)).toEqual(['Towing you']);
 });
 
@@ -78,7 +78,7 @@ it('logs no state ending for tow states or states between NPCs', () => {
   const me = playerVehicle(w);
   const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 32, y: 30 });
   const other = addVehicle(w, 'raiders', 'buggy', [], { x: 40, y: 40 });
-  const tow = addState(w, 'tow', npc.id, me.id, { kind: 'tow', town: 'x', fee: 10, hitched: true });
+  const tow = addState(w, 'tow', npc.id, me.id, { kind: 'tow', site: 'x', fee: 10, waived: 0, hitched: true });
   const feud = addState(w, 'feud', npc.id, other.id, { kind: 'feud', robbery: false });
   expect(eventText(w, { t: 'stateEnded', state: tow, ending: 'fulfilled' })).toBeNull();
   expect(eventText(w, { t: 'stateEnded', state: feud, ending: 'expired' })).toBeNull();
@@ -96,6 +96,9 @@ describe('events far from the player', () => {
       { t: 'collision', a: a.id, b: b.id, hitsA: [{ part: cab.id, damage: 5 }], hitsB: [] },
       { t: 'partDisabled', vehicle: a.id, part: cab.id },
       { t: 'destroyed', vehicle: a.id, by: b.id },
+      { t: 'towHitched', by: a.id, client: b.id, site: 'kiln' },
+      { t: 'towDone', by: a.id, client: b.id, fee: 12 },
+      { t: 'towDropped', by: a.id, client: b.id, reason: 'danger' },
     ];
     return { w, a, events };
   };
@@ -128,4 +131,17 @@ it('says a perk can be picked when a skill reaches a perk level', () => {
   const w = emptyWorld();
   expect(eventText(w, { t: 'skillUp', skill: 'driving', level: 2 })?.text).toBe('Driving reached level 2. Pick a perk on the character screen [C].');
   expect(eventText(w, { t: 'skillUp', skill: 'driving', level: 3 })?.text).toBe('Driving reached level 3.');
+});
+
+it('names both trucks in a tow between NPCs', () => {
+  const w = emptyWorld();
+  const tower = addVehicle(w, 'scavengers', 'scout', [], { x: 32, y: 30 });
+  const client = addVehicle(w, 'traders', 'hauler', [], { x: 34, y: 30 });
+  tower.name = 'Tower';
+  client.name = 'Client';
+  refreshVision(w);
+  expect(eventText(w, { t: 'towHitched', by: tower.id, client: client.id, site: 'kiln' })).toEqual({ text: 'Tower takes Client in tow to Kiln Camp.', cls: 'dim' });
+  expect(eventText(w, { t: 'towDone', by: tower.id, client: client.id, fee: 12 })).toEqual({ text: 'Tower tows Client in and takes 12.', cls: 'dim' });
+  expect(eventText(w, { t: 'towDropped', by: tower.id, client: client.id, reason: 'danger' })).toEqual({ text: 'Tower drops the tow of Client.', cls: 'dim' });
+  expect(eventText(w, { t: 'towDone', by: tower.id, client: w.player.vehicleId, fee: 12 })).toEqual({ text: 'Tower tows you into town and takes 12.', cls: 'bad' });
 });

@@ -29,7 +29,7 @@ import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, SalvageS
 import { canUseSite, nearestPad } from './sites';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
-import { dropTow, isOnRope, playerTow, runTow, strandedPlayerAt, towGoal } from './tow';
+import { dropTow, isOnRope, runTow, strandedAt, towGoal, towHeldBy } from './tow';
 
 // ---- The goal stack. The top goal drives the NPC. A long-term goal sits at the bottom, and interruptions go on top
 // of it. A new goal replaces any goal of its kind, so the stack never holds two goals of one kind. Every change logs
@@ -232,8 +232,7 @@ export function finishGoal(world: World, vehicle: Vehicle, reason: string): void
 }
 
 function heldTow(world: World, vehicle: Vehicle): NpcState | null {
-  const tow = playerTow(world);
-  return tow?.holder === vehicle.id ? tow : null;
+  return towHeldBy(world, vehicle.id);
 }
 
 // Why a goal of one kind can no longer run, or null while it can.
@@ -268,9 +267,11 @@ function lootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string 
   return freeCells(vehicle) === 0 ? 'cargo cannot hold the loot' : null;
 }
 
-function towInvalid(world: World, vehicle: Vehicle): string | null {
+function towInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   if (heldTow(world, vehicle)) return null;
-  return strandedPlayerAt(world, vehicle) && !stateOf(world, 'turnedDown', vehicle.id, world.player.vehicleId) ? null : 'the tow is off';
+  const client = world.vehicles.find((v) => v.id === goal.targetId);
+  if (!client || stateOf(world, 'turnedDown', vehicle.id, client.id)) return 'the tow is off';
+  return strandedAt(world, vehicle, client) ? null : 'the tow is off';
 }
 
 // A patch goal holds while its patch state does: the patcher drives over, and the client waits.
@@ -519,11 +520,16 @@ function onPreySeen(world: World, vehicle: Vehicle): void {
   }
 }
 
-// A driver in a fight or on the run never starts a tow. It decides once the danger goal pops.
+// One roll per stranded truck the driver could tow, nearest first. A driver in a fight or on the run never starts
+// a tow. It decides once the danger goal pops.
 function onStrandedSeen(world: World, vehicle: Vehicle): void {
   if (inDanger(vehicle)) return;
-  const at = strandedPlayerAt(world, vehicle);
-  if (at && react(world, vehicle, 'strandedSeen', world.player.vehicleId) === 'tow') startTow(world, vehicle, at);
+  const clients = world.vehicles
+    .map((client) => ({ client, at: strandedAt(world, vehicle, client) }))
+    .filter((c): c is { client: Vehicle; at: Vec } => c.at !== null)
+    .sort((a, b) => dist(vehicle.pos, a.at) - dist(vehicle.pos, b.at));
+  const chosen = clients.find((c) => react(world, vehicle, 'strandedSeen', c.client.id) === 'tow');
+  if (chosen) startTow(world, vehicle, chosen.client, chosen.at);
 }
 
 // One roll per wreck or pile in sight while the driver travels to a long-term goal, nearest first. Sites are goals
@@ -558,13 +564,12 @@ function fightTarget(vehicle: Vehicle): string | null {
 // A driver the player turned down that picks tow again is over it: its turnedDown state ends, so the tow goal holds.
 // The client counts as noticed prey, so a tower that set out for a beacon does not roll to rob it on arrival.
 // The driver claims the job, so no other driver answers while it is on its way.
-export function startTow(world: World, vehicle: Vehicle, at: Vec): void {
-  const me = world.player.vehicleId;
-  const turnedDown = stateOf(world, 'turnedDown', vehicle.id, me);
+export function startTow(world: World, vehicle: Vehicle, client: Vehicle, at: Vec): void {
+  const turnedDown = stateOf(world, 'turnedDown', vehicle.id, client.id);
   if (turnedDown) endState(world, turnedDown, 'fulfilled');
-  vehicle.brain!.noticed[`preySeen:${me}`] = world.turn;
-  addState(world, 'answering', vehicle.id, me, { kind: 'none' });
-  pushGoal(world, vehicle, createActivity('tow', me, { ...at }, 'help a stranded truck'));
+  vehicle.brain!.noticed[`preySeen:${client.id}`] = world.turn;
+  addState(world, 'answering', vehicle.id, client.id, { kind: 'none' });
+  pushGoal(world, vehicle, createActivity('tow', client.id, { ...at }, 'help a stranded truck'));
 }
 
 // A flee keeps running from where its threat is now. An investigation keeps the destination it started with.
@@ -577,8 +582,8 @@ function steer(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Co
 // A tower on its way re-aims every turn: at the truck once it sees it, else at the newest beacon circle. A stale
 // point can leave it parked out of tow reach, since the player may crawl and a beacon circle is off by its radius.
 function steerToStranded(world: World, vehicle: Vehicle, goal: NpcActivity): void {
-  const at = strandedPlayerAt(world, vehicle);
-  if (!at) throw new Error(`${vehicle.id} heads for a tow with no stranded player perceived`);
+  const at = strandedAt(world, vehicle, vehicleById(world, goal.targetId!));
+  if (!at) throw new Error(`${vehicle.id} heads for a tow with no stranded client perceived`);
   goal.destination = { ...at };
 }
 
@@ -686,10 +691,17 @@ function keepRepairing(world: World, vehicle: Vehicle): boolean {
 }
 
 // A held wait wins unless an interruption is on top. Then the top goal runs, or the empty stack sells or rolls idle.
+// A stranded driver with a tower on its way waits for it outside danger, since crawling off would leave the tower
+// chasing it.
 function currentActivity(world: World, vehicle: Vehicle, profile: NpcProfile, hold: NpcActivity | null): NpcActivity {
   const top = topGoal(vehicle);
+  if (awaitsTower(world, vehicle)) return createActivity('wait', null, null, 'wait for a tow');
   if (hold && (!top || !INTERRUPTIONS.includes(top.kind))) return hold;
   return top ?? nextGoal(world, vehicle, profile);
+}
+
+function awaitsTower(world: World, vehicle: Vehicle): boolean {
+  return !inDanger(vehicle) && world.states.some((s) => s.kind === 'answering' && s.other === vehicle.id);
 }
 
 function nextGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity {

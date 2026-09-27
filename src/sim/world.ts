@@ -62,7 +62,7 @@ export function newWorld(seed: number, kit: StartKit): World {
         hit: 0, contact: 0, discover: 0,
         fieldJob: 0, patch: 0, search: 0,
         heat: 0, damage: 0, knockout: 0,
-        profit: 0, deal: 0, call: 0,
+        profit: 0, deal: 0, call: 0, freeTow: 0,
       },
       perks: [],
       health: RULES.maxHealth,

@@ -150,7 +150,7 @@ export function getRescueReadout(w: World): RescueReadout | null {
   const state = playerTow(w);
   if (state && towData(state).hitched) {
     const data = towData(state);
-    return { kind: "towed", tower: vehicleName(w, state.holder), town: townName(data.town), fee: data.fee };
+    return { kind: "towed", tower: vehicleName(w, state.holder), town: townName(data.site), fee: data.fee };
   }
   if (p.beacon || isStranded(w, playerVehicle(w)))
     return { kind: "stranded", beacon: p.beacon };

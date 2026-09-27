@@ -19,7 +19,7 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { isHostile } from './combat';
 import { isRamGainful, ramImpact } from './crash-contact';
-import { playerVehicle, vehicleById } from './damage';
+import { vehicleById } from './damage';
 import { contactsOf } from './detect';
 import { getTradePrice } from './economy';
 import { maxHp } from './wear';
@@ -34,7 +34,7 @@ import { canReachSalvage, hasSalvage } from './salvage';
 import { canUseSite, siteGates } from './sites';
 import { statesHeld } from './states';
 import { getMobilityCondition, vehicleStats } from './stats';
-import { strandedPlayerAt } from './tow';
+import { strandedAt, towSite } from './tow';
 import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
@@ -281,8 +281,8 @@ function canRamSubject(world: World, vehicle: Vehicle, decision: DecisionId, sub
   return top?.kind === 'fight' && top.targetId === target.id && ramImpact(world, vehicle, target) !== null;
 }
 
-function canTow(world: World, vehicle: Vehicle): boolean {
-  return strandedPlayerAt(world, vehicle) !== null;
+function canTow(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  return strandedAt(world, vehicle, subjectOf(world, decision, subject)) !== null;
 }
 
 function canResume(_world: World, vehicle: Vehicle): boolean {
@@ -449,14 +449,18 @@ function complyFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _su
   return danger !== null && !isManageable(world, vehicle, danger) ? NPC_BEHAVIOR.threatComply : 1;
 }
 
-// A stranded truck that can crawl to a town gate mostly gets no tow. The factor rises from NPC_BEHAVIOR.towNearTown
-// at a short crawl to 1 far out, measured from where the driver perceives the truck. The known face perk raises it.
-function towFactor(world: World, vehicle: Vehicle): number {
-  const at = strandedPlayerAt(world, vehicle);
-  if (!at) throw new Error(`${vehicle.id} weighs a tow with no stranded player perceived`);
+// A stranded truck that can crawl to a gate mostly gets no tow. The factor rises from NPC_BEHAVIOR.towNearTown at a
+// short crawl to 1 far out, measured from where the driver perceives the truck. The player crawls to any town. An
+// NPC crawls to the site it would be towed to. The known face perk raises it for the player.
+function towFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): number {
+  const client = subjectOf(world, decision, subject);
+  const at = strandedAt(world, vehicle, client);
+  if (!at) throw new Error(`${vehicle.id} weighs a tow with no stranded ${client.id} perceived`);
+  const player = client.id === world.player.vehicleId;
+  const sites = player ? REGION.towns : [towSite(world, vehicle, client)];
   const { factor, crawl, far } = NPC_BEHAVIOR.towNearTown;
-  const gate = Math.min(...REGION.towns.flatMap((town) => siteGates(town).map((g) => dist(at, g))));
-  const known = vehicleHasPerk(world, playerVehicle(world), 'knownFace') ? PERK_NUMBERS.knownFace.tow : 1;
+  const gate = Math.min(...sites.flatMap((site) => siteGates(site).map((g) => dist(at, g))));
+  const known = player && vehicleHasPerk(world, client, 'knownFace') ? PERK_NUMBERS.knownFace.tow : 1;
   return (factor + (1 - factor) * clamp((gate - crawl) / (far - crawl), 0, 1)) * known;
 }
 

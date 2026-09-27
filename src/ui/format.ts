@@ -173,7 +173,28 @@ function callText(world: World, e: Extract<GameEvent, { t: 'call' }>): LogLine {
   return { text: e.outcome === 'opened' ? `Radio: ${who} on the line.` : `Radio: call with ${who} ended.`, cls: 'dim' };
 }
 
-function towDroppedText(by: string, reason: Extract<GameEvent, { t: 'towDropped' }>['reason']): { text: string; cls: string } {
+function towOfferText(world: World, e: Extract<GameEvent, { t: 'towOffer' }>): LogLine {
+  return { text: `${vehicleName(world, e.by)} offers to tow you to ${siteName(e.town)} for ${e.fee}.`, cls: '' };
+}
+
+function towHitchedText(world: World, e: Extract<GameEvent, { t: 'towHitched' }>): LogLine {
+  return { text: `${vehicleName(world, e.by)} takes ${vehicleName(world, e.client)} in tow to ${siteName(e.site)}.`, cls: 'dim' };
+}
+
+function towDoneText(world: World, e: Extract<GameEvent, { t: 'towDone' }>): LogLine {
+  const by = vehicleName(world, e.by);
+  if (e.client === world.player.vehicleId) return { text: `${by} tows you into town and takes ${e.fee}.`, cls: 'bad' };
+  return { text: `${by} tows ${vehicleName(world, e.client)} in and takes ${e.fee}.`, cls: 'dim' };
+}
+
+function towDroppedText(world: World, e: Extract<GameEvent, { t: 'towDropped' }>): LogLine {
+  const by = vehicleName(world, e.by);
+  if (e.client === world.player.vehicleId) return playerTowDroppedText(by, e.reason);
+  const client = vehicleName(world, e.client);
+  return { text: e.reason === 'gone' ? `${by} is gone. ${client} is off the rope.` : `${by} drops the tow of ${client}.`, cls: 'dim' };
+}
+
+function playerTowDroppedText(by: string, reason: Extract<GameEvent, { t: 'towDropped' }>['reason']): LogLine {
   const text = reason === 'refused' ? `You turn down the tow from ${by}.`
     : reason === 'unhitched' ? `You unhitch from ${by}.`
     : reason === 'danger' ? `${by} drops the tow. There is danger.`
@@ -200,6 +221,9 @@ const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => st
   partDisabled: (e) => [e.vehicle],
   destroyed: (e) => [e.vehicle],
   plea: (e) => [e.from, e.to],
+  towHitched: (e) => [e.by, e.client],
+  towDone: (e) => [e.by, e.client],
+  towDropped: (e) => [e.by, e.client],
 };
 
 function unnoticed(world: World, e: GameEvent): boolean {
@@ -261,6 +285,10 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   honk: honkText,
   patch: patchText,
   plea: pleaText,
+  towOffer: towOfferText,
+  towHitched: towHitchedText,
+  towDone: towDoneText,
+  towDropped: towDroppedText,
 };
 
 // Returns null for events not worth a log line.
@@ -322,14 +350,6 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       return { text: 'You are knocked out.', cls: 'bad' };
     case 'wake':
       return { text: 'You come to.', cls: 'dim' };
-    case 'towOffer': {
-      const town = REGION.towns.find((t) => t.id === e.town);
-      return { text: `${n(e.by)} offers to tow you to ${town?.name ?? e.town} for ${e.fee}.`, cls: '' };
-    }
-    case 'towDone':
-      return { text: `${n(e.by)} tows you into town and takes ${e.fee}.`, cls: 'bad' };
-    case 'towDropped':
-      return towDroppedText(n(e.by), e.reason);
     case 'info':
       return { text: e.text, cls: 'dim' };
     case 'searched':

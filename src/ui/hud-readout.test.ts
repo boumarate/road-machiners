@@ -132,7 +132,7 @@ describe("rescue readout", () => {
     w.player.beacon = true;
     expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: true });
     w.player.money = 10;
-    const tow = addState(w, "tow", w.vehicles[0].id, w.player.vehicleId, { kind: "tow", town: "bowl", fee: 50, hitched: false });
+    const tow = addState(w, "tow", w.vehicles[0].id, w.player.vehicleId, { kind: "tow", site: "bowl", fee: 50, waived: 0, hitched: false });
     expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: true });
     towData(tow).hitched = true;
     expect(getRescueReadout(w)).toMatchObject({ kind: "towed", fee: 50 });
