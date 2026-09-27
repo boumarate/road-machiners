@@ -7,6 +7,7 @@ import { dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
 import { mountedParts } from '../sim/grid';
 import { playerSees } from '../sim/vision';
+import { topGoal } from '../sim/npc-goals';
 import type { PartHit } from '../sim/armor';
 import type { GameEvent, Vehicle, World } from '../sim/types';
 
@@ -27,7 +28,7 @@ function partName(world: World, vehicleId: string, partId: string): string {
 }
 
 export function formatNpcActivity(world: World, vehicle: Vehicle): string | null {
-  const activity = vehicle.brain?.activity;
+  const activity = vehicle.brain ? topGoal(vehicle) : null;
   if (!activity || !playerSees(world, vehicle.pos)) return null;
   const target = world.vehicles.find((v) => v.id === activity.targetId);
   const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === activity.targetId);

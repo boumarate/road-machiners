@@ -1,11 +1,7 @@
 // Activity execution uses the same steering and route planner as the player.
 import { NPCS } from "../data/npcs";
 import { RULES } from "../data/rules";
-import {
-  chooseNpcActivity,
-  getActivityDestination,
-  setNpcActivity,
-} from "./npc-activities";
+import { getActivityDestination, thinkNpc } from "./npc-activities";
 import { towData } from "./states";
 import { vehicleStats } from "./stats";
 import { playerTow } from "./tow";
@@ -21,8 +17,7 @@ export function planNpcOrders(world: World): void {
     if (!tpl) throw new Error(`Unknown NPC template ${v.brain.templateId}`);
     const b = v.brain;
     if (b.recovery) b.recovery--;
-    const activity = chooseNpcActivity(world, v);
-    setNpcActivity(world, v, activity, activity.reason);
+    const activity = thinkNpc(world, v);
     const yielding =
       activity.kind !== "fight" &&
       activity.kind !== "flee" &&
@@ -49,7 +44,7 @@ export function planNpcOrders(world: World): void {
       };
       b.stalled = 0;
     }
-    let goal = getActivityDestination(world, v);
+    let goal = getActivityDestination(world, v, activity);
     if (activity.kind === "fight") {
       const target = world.vehicles.find(
         (other) => other.id === activity.targetId,

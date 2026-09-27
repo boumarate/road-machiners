@@ -7,7 +7,8 @@ import { playerVehicle } from './damage';
 import { route, routeLength } from './path';
 import { canUseSite, siteGates } from './sites';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
+import { topGoal } from './npc-goals';
 import { stateOf, towData } from './states';
 import { acceptTow, isTowed, playerTow, refuseTow, unhitch } from './tow';
 import type { GameEvent, Vehicle, World } from './types';
@@ -59,7 +60,7 @@ describe('tow offer', () => {
     expect(r.events.filter((e) => e.t === 'towOffer')).toEqual([{ t: 'towOffer', by: s.trader.id, town: 'bowl', fee: feeOf(r.w) }]);
     const trader = find(r.w, s.trader.id);
     expect(dist(trader.pos, playerVehicle(r.w).pos)).toBeLessThan(10 - 1);
-    expect(trader.brain!.activity?.kind).toBe('tow');
+    expect(topGoal(trader)?.kind).toBe('tow');
   });
 
   it('prices the tow by the route length to the nearest gate of the town', () => {
@@ -177,11 +178,11 @@ describe('towing', () => {
     expect(playerTow(w)).toBeNull();
     expect(w.player.money).toBe(money);
     expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, reason: 'unhitched' });
-    expect(find(w, s.trader.id).brain!.activity).toBeNull();
     expect(autoRuns(w)).toBe(false);
     expect(() => setMoveOrder(w, { kind: 'stopAt', dest: { x: 0, y: 0 } })).not.toThrow();
     const r = runUntil(w, 10, (x) => playerTow(x) !== null);
     expect(r.w.player.money).toBe(money);
+    expect(find(r.w, s.trader.id).brain!.goals.some((g) => g.kind === 'tow')).toBe(false);
     expect(r.events.some((e) => e.t === 'towOffer')).toBe(false);
   });
 
@@ -192,11 +193,12 @@ describe('towing', () => {
     const money = w.player.money;
     const tower = find(w, s.trader.id);
     const raider = withTower(w, 'buggy', 'raiders', 'buggy', { x: tower.pos.x + 8, y: tower.pos.y });
+    forceOption('hostileSeen', 'flee');
     w = endTurn(w);
     expect(playerTow(w)).toBeNull();
     expect(w.player.money).toBe(money);
     expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, reason: 'danger' });
-    expect(find(w, s.trader.id).brain!.activity?.kind).toBe('flee');
+    expect(topGoal(find(w, s.trader.id))?.kind).toBe('flee');
   });
 
   it('a tower that is destroyed drops the tow', () => {

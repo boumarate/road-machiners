@@ -100,7 +100,9 @@ export type NpcActivity = {
 export type NpcBrain = {
     templateId: string;
     traits: TraitId[]; // base traits of the template plus the extras rolled at spawn
-    activity: NpcActivity | null;
+    goals: NpcActivity[]; // goal stack, top last: a long-term goal at the bottom, interruptions above it
+    noticed: string[]; // `<decision>:<vehicle id>` for subjects already decided on while perceived
+    hurt: number; // part damage taken last turn
     goal: Vec | null;
     home: Vec;
     stepIndex: number; // route progress for traders and scavengers

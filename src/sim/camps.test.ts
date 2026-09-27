@@ -8,6 +8,7 @@ import { corePart, goodsCount } from './grid';
 import { fireGuards } from './guards';
 import { addGoods } from './inventory';
 import { resolveNpcActivities } from './npc-activities';
+import { topGoal } from './npc-goals';
 import { getResources } from './resources';
 import { canUseSite, siteGates } from './sites';
 import { spawnInitial } from './spawn';
@@ -63,13 +64,13 @@ describe('raider camps', () => {
     corePart(raider, 'cab').hp = 1;
     addGoods(w, raider, 'scrap', 1);
     planNpcOrders(w);
-    expect(raider.brain!.activity).toMatchObject({ kind: 'resupply', targetId: 'kiln' });
+    expect(topGoal(raider)).toMatchObject({ kind: 'resupply', targetId: 'kiln' });
     raider.pos = outside(1);
     raider.speed = 0;
     resolveNpcActivities(w);
     expect(corePart(raider, 'cab').hp).toBeGreaterThan(1);
     expect(goodsCount(raider).scrap).toBe(1);
-    expect(raider.brain!.activity).toBeNull();
+    expect(topGoal(raider)).toBeNull();
   });
 
   it('send a broke raider with cargo to sell in town before its camp', () => {
@@ -79,8 +80,8 @@ describe('raider camps', () => {
     getResources(w, raider).money = 0;
     addGoods(w, raider, 'scrap', 1);
     planNpcOrders(w);
-    expect(raider.brain!.activity?.kind).toBe('sell');
-    expect(TRAITS.raider.towns).toContain(raider.brain!.activity?.targetId);
+    expect(topGoal(raider)?.kind).toBe('sell');
+    expect(TRAITS.raider.towns).toContain(topGoal(raider)?.targetId);
   });
 
   it('serve only raiders at a gate', () => {

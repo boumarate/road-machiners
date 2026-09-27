@@ -1,8 +1,8 @@
-// Towing a stranded player to town. A trader or scavenger that sees the stranded truck drives over and offers a
-// tow for a fee. The offer is a `tow` state held by the tower toward the player. Once the player accepts, the truck
-// leaves physics and trails the tower along its path. Arrival fulfils the state, and its hook in src/sim/states.ts
-// takes the fee, even into debt. Refusing, driving away or unhitching breaks it for free, and the tower holds
-// `spurned` toward the player, so it never offers again.
+// Towing a stranded player to town. An NPC that sees the stranded truck may choose to help at its strandedSeen
+// decision. It drives over and offers a tow for a fee. The offer is a `tow` state held by the tower toward the
+// player. Once the player accepts, the truck leaves physics and trails the tower along its path. Arrival fulfils
+// the state, and its hook in src/sim/states.ts takes the fee, even into debt. Refusing, driving away or unhitching
+// breaks it for free, and the tower holds `spurned` toward the player, so it never offers again.
 
 import { chassisDef } from '../data/chassis';
 import { ECONOMY } from '../data/goods';
@@ -11,9 +11,9 @@ import { TOW } from '../data/tow';
 import { isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
 import { route, routeLength } from './path';
-import { hasTrait, npcProfile } from './npc-profile';
+import { npcProfile } from './npc-profile';
 import { canUseSite, siteGates } from './sites';
-import { addState, endState, stateOf, towData } from './states';
+import { addState, endState, towData } from './states';
 import { isStranded, vehicleStats } from './stats';
 import type { GameEvent, NpcActivity, NpcState, Pose, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
@@ -47,22 +47,23 @@ export function isTowed(world: World): boolean {
   return tow !== null && towData(tow).hitched;
 }
 
-// The tow activity for this turn. A driver with an open offer waits for the answer, and a hitched one heads for
-// the town. Otherwise a trader or scavenger starts one when it sees the stranded player, is not hostile to it, and has
-// not been spurned by it. Danger is chosen before this, so a driver in danger never starts a tow.
-export function chooseTowActivity(world: World, vehicle: Vehicle): NpcActivity | null {
+// The tower's goal while it holds the tow: wait for an answer to the offer, then head for the town.
+export function towGoal(world: World, vehicle: Vehicle): NpcActivity {
   const tow = playerTow(world);
+  if (tow?.holder !== vehicle.id) throw new Error(`${vehicle.id} holds no tow`);
+  const data = towData(tow);
+  if (!data.hitched) return { kind: 'tow', targetId: tow.other, destination: null, phase: 'act', reason: 'wait for an answer to a tow offer' };
+  const town = townById(data.town);
+  return { kind: 'tow', targetId: town.id, destination: { ...town.pos }, phase: 'travel', reason: 'tow the player to town' };
+}
+
+// The player's truck when this NPC could offer it a tow: the player is awake and stranded with no tow, in sight,
+// and not hostile to the NPC. Otherwise null.
+export function strandedPlayer(world: World, vehicle: Vehicle): Vehicle | null {
   const me = playerVehicle(world);
-  if (tow?.holder === vehicle.id) {
-    const data = towData(tow);
-    if (!data.hitched) return { kind: 'tow', targetId: me.id, destination: null, phase: 'act', reason: 'wait for an answer to a tow offer' };
-    const town = townById(data.town);
-    return { kind: 'tow', targetId: town.id, destination: { ...town.pos }, phase: 'travel', reason: 'tow the player to town' };
-  }
-  const tows = hasTrait(vehicle, 'trader') || hasTrait(vehicle, 'scavenger');
-  if (!tows || tow || stateOf(world, 'spurned', vehicle.id, me.id) || world.player.state !== 'active') return null;
+  if (playerTow(world) || world.player.state !== 'active') return null;
   if (!isStranded(world, me) || isHostile(world, vehicle, me) || !canVehicleSee(world, vehicle, me.pos)) return null;
-  return { kind: 'tow', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'help a stranded truck' };
+  return me;
 }
 
 // Runs a parked tower's activity. Returns why the activity ended, or null while it goes on.
@@ -80,7 +81,7 @@ export function runTow(world: World, vehicle: Vehicle, activity: NpcActivity): s
     endState(world, tow, 'fulfilled');
     return 'towed the player to town';
   }
-  // Another driver made an offer first this turn. Next turn this one chooses again.
+  // Another driver made an offer first this turn. Next turn this one's tow goal pops.
   if (tow || !inTowReach(vehicle, me)) return null;
   activity.phase = 'act';
   offer(world, vehicle);
@@ -172,7 +173,6 @@ export function refuseTow(world: World): World {
   return playerCommand(world, (w) => {
     const tow = playerTow(w);
     if (!tow) throw new Error('No tow offer to refuse');
-    vehicleById(w, tow.holder).brain!.activity = null;
     refuse(w, tow);
   });
 }
@@ -183,7 +183,6 @@ export function unhitch(world: World): World {
     if (w.player.state !== 'active') throw new Error(`Player is ${w.player.state}`);
     const tow = playerTow(w);
     if (!tow || !towData(tow).hitched) throw new Error('Player is not towed');
-    vehicleById(w, tow.holder).brain!.activity = null;
     addState(w, 'spurned', tow.holder, tow.other, { kind: 'none' });
     dropTow(w, tow, 'unhitched');
   });

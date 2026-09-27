@@ -19,7 +19,7 @@ import { consumeSupplies, leakFuel } from './supplies';
 import { spawnInitial, spawnNpcs } from './spawn';
 import { initializeSalvage } from './salvage';
 import { timed } from '../perf';
-import { resolveNpcActivities } from './npc-activities';
+import { noteHurt, resolveNpcActivities } from './npc-activities';
 import { advanceStates } from './states';
 import { followTower, isTowed } from './tow';
 import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
@@ -190,6 +190,7 @@ export function endTurn(
     checkKnockout(w);
     spawnNpcs(w);
     refreshVision(w);
+    noteHurt(w);
   }));
 }
 

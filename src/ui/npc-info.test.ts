@@ -8,7 +8,7 @@ it('shows a visible NPC reason without naming its unseen target', () => {
   const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 32, y: 30 });
   const target = addVehicle(w, 'raiders', 'buggy', [], { x: 58, y: 58 });
   target.name = 'Hidden target';
-  npc.brain = { ...npcBrain('scavenger', npc.pos, ['scavenger']), activity: { kind: 'flee', targetId: target.id, destination: target.pos, phase: 'travel', reason: 'avoid a costly fight' } };
+  npc.brain = { ...npcBrain('scavenger', npc.pos, ['scavenger']), goals: [{ kind: 'flee', targetId: target.id, destination: target.pos, phase: 'travel', reason: 'avoid a costly fight' }] };
   refreshVision(w);
   expect(formatNpcActivity(w, npc)).toBe('flee — avoid a costly fight');
   npc.pos = { x: 58, y: 55 };

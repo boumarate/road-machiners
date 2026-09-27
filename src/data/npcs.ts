@@ -1,6 +1,6 @@
 // NPC vehicle templates and how often they appear.
 
-import type { Faction } from '../sim/types';
+import type { Faction, StateKindId } from '../sim/types';
 import type { Vec } from '../sim/vec';
 import { scalePoint } from './region';
 import { START_KITS } from './start';
@@ -111,8 +111,52 @@ export const SPAWN = {
   neighborHelp: 10, // same-faction vehicles in this range join a feud
 };
 
-// Decision weights per trait. Empty until decisions read them.
-export type TraitWeights = Record<string, never>;
+// A decision point is a moment when an NPC may change goals. See src/sim/npc-decisions.ts.
+export type DecisionOptions = {
+  hostileSeen: 'keep' | 'fight' | 'flee'; // a new hostile comes in sight
+  contactHeard: 'keep' | 'investigate' | 'flee'; // a new hostile contact beyond sight
+  hurt: 'keep' | 'flee'; // damage taken last turn
+  preySeen: 'keep' | 'rob'; // a new robbery target comes in sight
+  strandedSeen: 'keep' | 'tow'; // a stranded player comes in sight
+  resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal
+  idle: 'trade' | 'scavenge' | 'raid' | 'wait'; // the goal stack is empty
+};
+export type DecisionId = keyof DecisionOptions;
+export type OptionId = DecisionOptions[DecisionId];
+
+// Base weight per option. The final weight is (base + adds) x muls x situation factor.
+export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> } = {
+  // Without traits a driver ignores, fights or avoids a new hostile about equally, fighting a bit more.
+  hostileSeen: { keep: 1, fight: 2, flee: 1 },
+  // Most drivers steer away from a hostile they only hear. Investigating needs a trait.
+  contactHeard: { keep: 1, investigate: 0, flee: 3 },
+  // Even odds to run from a hit worth NPC_BEHAVIOR.hurtFullFlee of the cab.
+  hurt: { keep: 1, flee: 1 },
+  // Robbing needs a trait.
+  preySeen: { keep: 1, rob: 0 },
+  // Towing needs a trait.
+  strandedSeen: { keep: 1, tow: 0 },
+  // After an interruption a driver goes back to its work 9 times in 10.
+  resume: { resume: 9, new: 1 },
+  // Anyone collects salvage in sight. Trading and raiding need a trait. Waiting is the small fallback, so the
+  // roll always has an option.
+  idle: { trade: 0, scavenge: 1, raid: 0, wait: 0.1 },
+};
+
+// A weight change: `add` enables an option with zero base weight, and `mul` tunes an option.
+export type WeightChange = { add?: number; mul?: number };
+export type TraitWeights = { [D in DecisionId]?: Partial<Record<DecisionOptions[D], WeightChange>> };
+
+// Weight changes of a state, applied only to decisions about the state's other party.
+export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
+  // A driver in a feud mostly fights that party when it comes into sight.
+  feud: { hostileSeen: { fight: { add: 4 } } },
+  // A failed robber leaves the same target alone.
+  backedOff: { preySeen: { rob: { mul: 0 } } },
+  tow: {},
+  // A driver the player turned down never offers that player a tow again.
+  spurned: { strandedSeen: { tow: { mul: 0 } } },
+};
 
 export type Trait = {
   towns: string[];
@@ -127,15 +171,40 @@ export type Trait = {
 
 // An NPC knows the union of its traits' sites.
 export const TRAITS: Record<TraitId, Trait> = {
-  scavenger: { towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, weights: {} },
-  trader: { towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, weights: {} },
-  raider: { towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], contactReactRadius: Infinity, weights: {} },
+  // Scavenging a known site beats waiting a hundredfold. Nine in ten scavengers help a stranded truck.
+  scavenger: {
+    towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12,
+    weights: { idle: { scavenge: { add: 10 } }, strandedSeen: { tow: { add: 9 } } },
+  },
+  // Traders never pick a fight. Trading beats salvage in sight 3 to 1. Nine in ten traders help a stranded truck.
+  trader: {
+    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12,
+    weights: { idle: { trade: { add: 30 } }, strandedSeen: { tow: { add: 9 } }, hostileSeen: { fight: { mul: 0 } } },
+  },
+  // Raiders fight most hostiles they see and close in on most they hear. A raid ties with salvage in sight.
+  raider: {
+    towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], contactReactRadius: Infinity,
+    weights: { idle: { raid: { add: 10 } }, contactHeard: { investigate: { add: 12 } }, hostileSeen: { fight: { add: 8 } } },
+  },
   scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, weights: {} },
   coward: { towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, weights: {} },
 };
 
-// Cab warnings begin at 30%. Recovery to half cab health prevents fight/flee oscillation.
-export const NPC_BEHAVIOR = { fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1 };
+export const NPC_BEHAVIOR = {
+  // Cab warnings begin at 30%. Recovery to half cab health prevents fight/flee oscillation.
+  fleeCondition: 0.3,
+  recoverCondition: 0.5,
+  // An enemy is a threat when its visible guns outweigh the driver's own times this.
+  threatRatio: 1,
+  // Flee weight times this against a threat, and again when the cab or driver is at the flee condition.
+  // 20 makes an outgunned raider run about two times in three, and an outgunned scavenger nearly always.
+  threatFlee: 20,
+  weakFlee: 20,
+  // Damage taken last turn, as a share of cab max HP, that gives the hurt flee option its base weight.
+  hurtFullFlee: 0.1,
+  // Salvage in sight weighs 10 times a known site out of sight.
+  visibleSalvage: 10,
+};
 
 export const NPC_UPKEEP = {
   lowFuel: RULES.lowFuelThreshold,

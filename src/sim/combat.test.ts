@@ -7,7 +7,7 @@ import { isDriveObstacle } from './mapgen';
 import { stateOf } from './states';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import type { GameEvent, Vehicle } from './types';
 import { dist } from './vec';
 import { endTurn } from './world';
@@ -150,6 +150,7 @@ describe('combat', () => {
 
   it('raiders attack the player within aggro range over a few turns', () => {
     const { w, me, buggy } = duel({ x: 38, y: 30 });
+    forceOption('hostileSeen', 'fight');
     let world = w;
     let shotAt = false;
     for (let i = 0; i < 6; i++) {

@@ -4,7 +4,8 @@ import { START_KITS } from '../data/start';
 import { makeVehicle } from './factory';
 import { mountedParts } from './grid';
 import type { Terrain } from './terrain';
-import type { TraitId } from '../data/npcs';
+import { onTestFinished } from 'vitest';
+import { DECISIONS, STATE_WEIGHTS, TRAITS, type DecisionId, type DecisionOptions, type TraitId } from '../data/npcs';
 import type { Faction, NpcBrain, Vehicle, World } from './types';
 import type { Vec } from './vec';
 import { refreshVision } from './vision';
@@ -48,9 +49,31 @@ export function addVehicle(w: World, faction: Faction, chassisId: string, parts:
   return v;
 }
 
-// A fresh NPC brain with no activity.
+// A fresh NPC brain with no goals.
 export function npcBrain(templateId: string, home: Vec, traits: TraitId[]): NpcBrain {
-  return { templateId, traits, activity: null, goal: null, home: { ...home }, stepIndex: 0 };
+  return { templateId, traits, goals: [], noticed: [], hurt: 0, goal: null, home: { ...home }, stepIndex: 0 };
+}
+
+// Makes `option` the only option of `decision` that can carry weight until the test ends. Other options lose their
+// base weight and every trait and state change. The forced option keeps its own weight, so it can still be zero.
+export function forceOption<D extends DecisionId>(decision: D, option: DecisionOptions[D]): void {
+  const base = DECISIONS[decision] as Record<string, number>;
+  const savedBase = { ...base };
+  const tables = [...Object.values(TRAITS).map((t) => t.weights), ...Object.values(STATE_WEIGHTS)] as Record<string, Record<string, unknown> | undefined>[];
+  const saved = tables.map((t) => t[decision]);
+  for (const key of Object.keys(base)) if (key !== option) base[key] = 0;
+  for (const table of tables) {
+    const entry = table[decision];
+    if (!entry) continue;
+    table[decision] = option in entry ? { [option]: entry[option] } : {};
+  }
+  onTestFinished(() => {
+    Object.assign(base, savedBase);
+    tables.forEach((table, i) => {
+      if (saved[i] === undefined) delete table[decision];
+      else table[decision] = saved[i];
+    });
+  });
 }
 
 // Total hit points of the mounted parts, for checking that damage landed.
