@@ -78,7 +78,7 @@ import { TERRAIN_TYPES } from "../data/terrain";
 import { bodyOf } from "../sim/body";
 import { headingOf } from "../phys/frames";
 import { canLoot, salvageHere } from "../sim/locations";
-import { daylightAt } from "./render/daylight";
+import { daylightAt, sunLight } from "./render/daylight";
 import { sunAt } from "../sim/sun";
 import { tileAt } from "../sim/terrain";
 import { ContactsView } from "./render/contacts";
@@ -132,7 +132,7 @@ export class Game {
   private drive: Drive;
   private readonly renderer = new THREE.WebGLRenderer({ antialias: true });
   private readonly scene = new THREE.Scene();
-  private readonly sun = new THREE.DirectionalLight();
+  private readonly sun = sunLight();
   private readonly sky = new THREE.HemisphereLight();
   private readonly beams: THREE.SpotLight[] = [];
   private readonly vignette = Object.assign(document.createElement("div"), {
@@ -226,16 +226,6 @@ export class Game {
     this.scene.background = new THREE.Color(PAL.bg);
     this.renderer.domElement.classList.add("view");
     this.scene.add(this.sky);
-    this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
-    Object.assign(this.sun.shadow.camera, {
-      left: -80,
-      right: 80,
-      top: 80,
-      bottom: -80,
-      near: 1,
-      far: 500,
-    });
     this.scene.add(this.sun, this.sun.target);
     this.pickRing.renderOrder = 5;
     this.scene.add(this.pickRing);
