@@ -262,3 +262,9 @@ Added after PH4b, since pickup still took 150 to 190 turns on the busiest road a
 - RK1 — Detaching the hitched player from physics can trip the body check in `syncDrive()`. Test attach and detach across several turns in `src/phys/drive.test.ts`.
 - RK2 — A raider idling in sight could hold a knockout. `knockoutMaxTurns` bounds it, and a test covers it.
 - RK3 — AS1 may fail if towers rarely pass. Verify measures pickup turns on the Bowl to Nose road in a sim test before tuning.
+
+## Code smells
+
+- `src/phys/drive.ts:254-266` — Physics driving sets speed from the distance to the destination only and never slows for corners, so trucks bump sites on sharp road turns.
+- `src/phys/drive.ts:271` — Physics reversing starts only past 90 degrees off, and the player truck has no stuck recovery, so a truck pressed nose first against an obstacle stays there.
+- `src/sim/salvage.ts` — Player knockout stocks are never cleared, because `clearOldWrecks` only clears stocks with a matching obstacle.
