@@ -1,6 +1,6 @@
 # Fast varied NPC routes
 
-**Status:** executing
+**Status:** executing (stopped, see Deferred)
 **Branch:** route-variety
 **Worktree:** .worktrees/route-variety
 **Goal:** In the convoy scenario, route planning per real turn drops at least 4x from the baseline, drivers still split onto at least 3 ways between Bowl and Nose, and the user confirms turns feel smooth in play.
@@ -85,3 +85,27 @@ Approach: all changes sit in `continueRoute` in `src/sim/path.ts`, the one place
 ### Risks / rollback
 - RK1 — A repair that keeps missing its point replans the full trip every turn, as today. `route-repair-failed` shows it in the benchmark.
 - RK2 — Corners past the lookahead are straightened only when the truck gets close, so a far-away route can look less straight in the preview course. Straightening itself does not change which way the driver takes.
+
+## Verify
+
+PH1 `7290a3e` and PH2 `16084e5` are committed. 675 tests and the quality gate pass.
+
+The convoy benchmark was wrong. `tmp/lag.mjs` and `tmp/show-routes.mjs` deep-copied the world every turn, so the terrain became a new object. Route grids are cached per terrain object, so every turn rebuilt one grid per vehicle radius at about 88 ms each. Timing inside `route()` showed 942 ms of 1565 ms spent in `navLayer` builds and 512 ms in searches. This also caused the lag the user saw in the headed demo. The game itself keeps one terrain object.
+
+With the terrain kept, over 15 turns:
+
+- Main: `route` 667 ms in 87 calls, `preview` 782 ms, `turn` 1115 ms.
+- Branch: `route` 566 ms in 126 calls, `route-continue` 172 ms in 273 calls, `preview` 659 ms, `turn` 1135 ms.
+
+Branch and main are within noise. The Context numbers and the 4x Goal rest on the polluted baseline. AS1 does not hold.
+
+Repairs ran 49 times and failed 9 times. When a kept route's end moves, the broken leg is the last one, so the repair searches the whole trip from the truck.
+
+## Conclusion
+
+### Hands-off decisions
+- uexecute: stopped after PH2, before perf and playtest, because the Goal's baseline is invalid.
+
+### Deferred (needs user input)
+- The measured lag came from the benchmark scripts. Decide whether to keep PH1 and PH2, which are neutral in the corrected benchmark, or revert them. Then decide whether a new Goal is needed, measured in normal play.
+
