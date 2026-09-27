@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { startKit } from '../data/start';
 import { newWorld } from '../sim/world';
-import { loadWorld, saveWorld } from './save';
+import { clearSave, hasSave, loadWorld, saveWorld, writeSave } from './save';
 
 function makeStorage(): Storage {
   const values = new Map<string, string>();
@@ -16,6 +16,16 @@ function makeStorage(): Storage {
 }
 
 describe('local game save', () => {
+  it('saves by hand on any turn and clears for a new game', () => {
+    const storage = makeStorage();
+    const world = { ...newWorld(1337, startKit('standard')), turn: 7 };
+    writeSave(storage, world);
+    expect(hasSave(storage)).toBe(true);
+    expect(loadWorld(storage)).toEqual(world);
+    clearSave(storage);
+    expect(hasSave(storage)).toBe(false);
+  });
+
   it('returns null when there is no saved game', () => {
     expect(loadWorld(makeStorage())).toBeNull();
   });

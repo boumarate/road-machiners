@@ -10,6 +10,10 @@ export function clearSave(storage: Storage): void {
   storage.removeItem(SAVE_KEY);
 }
 
+export function hasSave(storage: Storage): boolean {
+  return storage.getItem(SAVE_KEY) !== null;
+}
+
 // Saves leave out the terrain, which buildTerrain rebuilds from the seed. The 600-tile terrain alone is
 // about 10 MB of JSON, past the browser's local storage quota. 4 adds weather, jobs, contacts and dust.
 const SAVE_VERSION = 5;
@@ -43,6 +47,10 @@ function isWorld(value: unknown): value is Omit<World, 'terrain'> {
 export function saveWorld(storage: Storage, world: World, interval: number): void {
   if (!Number.isInteger(interval) || interval <= 0) throw new Error('Invalid save interval');
   if ((world.turn - 1) % interval !== 0) return;
+  writeSave(storage, world);
+}
+
+export function writeSave(storage: Storage, world: World): void {
   const { terrain: _terrain, ...saved } = world;
   storage.setItem(SAVE_KEY, JSON.stringify({ version: SAVE_VERSION, world: saved }));
 }

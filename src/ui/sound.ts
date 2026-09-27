@@ -2,7 +2,7 @@
 
 import { MIX, type Bus } from "../data/sounds";
 import type { Mixer } from "../audio/mixer";
-import { el, panel } from "./dom";
+import { el, panel, topRight } from "./dom";
 
 const KEY = "korovan-sound";
 const BUSES: Bus[] = ["music", "sfx", "ambient", "ui"];
@@ -25,7 +25,7 @@ export function parseSettings(raw: string | null): Settings {
 
 export class SoundSettings {
   private settings: Settings;
-  private root = panel("sound");
+  private root = panel("sound", topRight());
   private body: HTMLElement;
   private muteButton: HTMLElement;
 

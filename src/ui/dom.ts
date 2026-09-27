@@ -21,11 +21,21 @@ export function uiRoot(): HTMLElement {
   return root;
 }
 
-export function panel(cls: string): HTMLElement {
+// Panels in the top right corner sit side by side in one row.
+export function topRight(): HTMLElement {
+  const root = uiRoot();
+  const found = root.querySelector<HTMLElement>(':scope > .top-right');
+  if (found) return found;
+  const row = el('div', { class: 'top-right' });
+  root.append(row);
+  return row;
+}
+
+export function panel(cls: string, parent: HTMLElement = uiRoot()): HTMLElement {
   const p = el('div', { class: `panel ${cls}` });
   // Keep clicks on panels from reaching the game canvas.
   p.addEventListener('pointerdown', (e) => e.stopPropagation());
   p.addEventListener('wheel', (e) => e.stopPropagation());
-  uiRoot().append(p);
+  parent.append(p);
   return p;
 }

@@ -81,7 +81,8 @@ import { ContactsView } from './render/contacts';
 import { DustCloudsView } from './render/dust';
 import { ShadeView } from './render/shade';
 import { SoundRingView } from './render/soundRing';
-import { loadWorld, saveWorld } from "./save";
+import { clearSave, hasSave, loadWorld, saveWorld, writeSave } from "./save";
+import { GameMenu } from "../ui/game-menu";
 import { MIX } from "../data/sounds";
 import { engineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
 import type { SoundPlayer } from "../audio/player";
@@ -199,6 +200,7 @@ export class Game {
   private readonly town: TownScreen;
   private readonly character: CharacterScreen;
   private readonly inventory: InventoryScreen;
+  private readonly menu: GameMenu;
 
   constructor(container: HTMLElement, overlay: HTMLElement, player: SoundPlayer, private toggleMute: () => void) {
     this.world =
@@ -265,6 +267,12 @@ export class Game {
       isBusy: () => this.anim !== null,
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
+    this.menu = new GameMenu({
+      save: () => writeSave(window.localStorage, this.world),
+      hasSave: () => hasSave(window.localStorage),
+      clearSave: () => clearSave(window.localStorage),
+      isBusy: () => this.anim !== null,
+    });
 
     this.bindInput();
     window.addEventListener("resize", () => this.resize());
@@ -330,6 +338,7 @@ export class Game {
   }
 
   private refreshUi(): void {
+    this.menu.refresh();
     const me = playerVehicle(this.world);
     if (this.selected && !vehicleStats(this.world, me).weapons.some((mw) => mw.part.id === this.selected)) this.selected = null;
     if (!this.anim) {
