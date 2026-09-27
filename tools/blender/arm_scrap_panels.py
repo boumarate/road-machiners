@@ -1,6 +1,6 @@
 """Scrap panel patchwork for the 'scrapPanels' armor.
 
-A front-edge row of 2 cells: 0.8 m across, 0.65 m deep, outer face at +X. Mismatched rusty sheets and an old
+A front-edge row of 2 cells: 0.88 m across, 0.65 m deep, outer face at +X. Mismatched rusty sheets and an old
 road sign are bolted over two posts on the outer edge, about 0.9 m tall. One sheet takes the faction paint.
 Run: blender --background --python tools/blender/arm_scrap_panels.py -- public/models/arm_scrap_panels.glb [tmp/arm_scrap_panels.png]
 """

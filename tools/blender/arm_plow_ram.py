@@ -1,6 +1,6 @@
 """Plow ram for the 'plowRam' armor.
 
-A front-edge row of 3 cells: 1.2 m across, 0.65 m deep, outer face at +X. A big curved blade, built from three
+A front-edge row of 3 cells: 1.32 m across, 0.65 m deep, outer face at +X. A big curved blade, built from three
 angled strips, rises from a cutting edge at X = 0.98 m and curls forward at the top. Ribs and push arms tie it to the row. The middle strip
 takes the faction paint.
 Run: blender --background --python tools/blender/arm_plow_ram.py -- public/models/arm_plow_ram.glb [tmp/arm_plow_ram.png]

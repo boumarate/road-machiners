@@ -1,6 +1,6 @@
 """Tall workhorse diesel with a big upright air filter and one exhaust stack, drawn for workhorseDiesel.
 
-Footprint is 2x2 cells, 0.8 m across by 1.3 m along. The block top is 0.86 m and the stack top 1.3 m above the deck.
+Footprint is 2x2 cells, 0.88 m across by 1.3 m along. The block top is 0.86 m and the stack top 1.3 m above the deck.
 The radiator faces +X. The filter stands on the left side and the stack on the right rear corner. Nothing takes paint.
 Run: blender --background --python tools/blender/eng_workhorse_diesel.py -- public/models/eng_workhorse_diesel.glb [tmp/eng_workhorse_diesel.png]
 """

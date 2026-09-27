@@ -1,6 +1,6 @@
 """Reinforced cage for the 'reinforcedCage' armor.
 
-A front-edge row of 3 cells: 1.2 m across, 0.65 m deep, outer face at +X. Heavy box-section bars fill the row and
+A front-edge row of 3 cells: 1.32 m across, 0.65 m deep, outer face at +X. Heavy box-section bars fill the row and
 rise to 1.6 m, with cross-bracing in every bay of the outer face and both sides. The top front rail and corner gussets take the
 faction paint.
 Run: blender --background --python tools/blender/arm_reinforced_cage.py -- public/models/arm_reinforced_cage.glb [tmp/arm_reinforced_cage.png]

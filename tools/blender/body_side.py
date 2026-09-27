@@ -1,7 +1,7 @@
 """One side panel of the truck body below the beltline, for one left edge cell.
 
-Footprint is one cell: 0.65 m along (Blender X) by 0.4 m across (Blender Y). The origin is the cell center on the deck top.
-The outer face is at Y = +0.2, the cell's left edge. The panel hangs from the deck top at Z = 0 to Z = -1.
+Footprint is one cell: 0.65 m along (Blender X) by 0.44 m across (Blender Y). The origin is the cell center on the deck top.
+The outer face is at Y = +0.22, the cell's left edge. The panel hangs from the deck top at Z = 0 to Z = -1.
 The view stretches Z to the chassis box height and mirrors the panel for the right edge.
 The painted panel covers most of the height, with a cream stripe along it. Below it a thin dark chassis band sits FRAME_IN in.
 The rail, stripe and hem run to both cell ends, so a row of panels reads as one side. door_side.py and bed_side.py add door gaps or bed wall details.

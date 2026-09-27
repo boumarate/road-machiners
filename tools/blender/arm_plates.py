@@ -1,6 +1,6 @@
 """Welded steel plates for the 'plates' armor.
 
-A front-edge row of 3 cells: 1.2 m across, 0.65 m deep, outer face at +X. Three riveted plates, one per cell,
+A front-edge row of 3 cells: 1.32 m across, 0.65 m deep, outer face at +X. Three riveted plates, one per cell,
 stand upright on the outer edge, 0.9 m tall, braced from behind. The top band takes the faction paint.
 Run: blender --background --python tools/blender/arm_plates.py -- public/models/arm_plates.glb [tmp/arm_plates.png]
 """

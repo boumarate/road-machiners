@@ -1,6 +1,6 @@
 """Exposed gearbox with a bell housing and a shift lever, drawn for the transmission core part.
 
-Footprint is one cell, 0.4 m across by 0.65 m along. The block is 0.3 m tall and the lever knob reaches 0.62 m.
+Footprint is one cell, 0.44 m across by 0.65 m along. The block is 0.3 m tall and the lever knob reaches 0.62 m.
 The bell housing faces +X toward the engine side, and the output shaft points to the rear.
 Run: blender --background --python tools/blender/transmission.py -- public/models/transmission.glb [tmp/transmission.png]
 """

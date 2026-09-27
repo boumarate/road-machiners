@@ -1,6 +1,6 @@
 """Closed cargo box for the trailerBox cargo part.
 
-Footprint 2x2: 1.3 m along (X) by 0.8 m across (Y). About 1.07 m tall. Origin at the footprint center on the deck top.
+Footprint 2x2: 1.3 m along (X) by 0.88 m across (Y). About 1.07 m tall. Origin at the footprint center on the deck top.
 The side panels and roof use the paint material.
 Run: blender --background --python tools/blender/cargo_trailer_box.py -- public/models/cargo_trailer_box.glb [tmp/cargo_trailer_box.png]
 """

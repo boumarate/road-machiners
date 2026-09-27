@@ -60,13 +60,14 @@ To add a model:
 
 `models.ts` loads every model at boot. It swaps the glTF materials for flat Lambert, so models match the procedural meshes.
 
-Trucks are open rigs built from part models on the inventory grid. One grid cell is 0.4 m across and 0.65 m along the truck on every chassis, set by `PHYSICS.cell`. `bodyOf()` in `src/sim/body.ts` derives each physics body from its grid, so the drawn truck matches its collider.
+Trucks are car-shaped bodies built from part models on the inventory grid. One grid cell is 0.44 m across and 0.65 m along the truck on every chassis, set by `PHYSICS.cell`. `bodyOf()` in `src/sim/body.ts` derives each physics body from its grid, so the drawn truck matches its collider. Each chassis splits its rows into hood, cab and bed `zones` in `src/data/chassis.ts`. `buildFrame()` in `src/three/render/vehicle.ts` places zone pieces per cell and edge: hood panels and flares, a closed cab, a sunk bed, doors and bed walls, nose, tail, bumpers and fenders. Right-side pieces are mirrored left-side models.
 
 Part models follow these rules:
 
 - Build a part for its rotation-0 footprint: w cells across in Blender Y and h cells along in Blender X, with the nose at +X. Truck right is Blender -Y. The origin is the footprint center on the deck top.
 - The view turns a part for rotation 1 and stretches it to the turned footprint. So keep parts boxy.
-- Build armor as a front-edge row with its outer face at +X. The view turns it to the side its cells lie on.
+- Build armor as a front-edge row with its outer face at +X. The view turns it to the side its cells lie on. Mounted plates replace the body side below the beltline, and rams replace the bumper.
+- Items stand on the surface of their zone: the hood top, the cab roof or the bed floor. Engines in the hood show through a cutout.
 - A material named `paint` takes the faction color. Other materials keep their colors.
 - `src/render/partLooks.ts` maps each part and good id to its model. A part with no model stops the build.
 - Weapons are assembled from a mount, a receiver, a barrel and an optional extra. They join at sockets made with `Kit.socket()`: `head` on mounts, and `muzzle` and `extra` on receivers. Each weapon def has a pool per slot in `WEAPON_POOLS`, and the part id picks from it. Boot fails when a pool model lacks a socket.

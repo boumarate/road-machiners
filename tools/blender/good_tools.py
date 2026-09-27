@@ -1,6 +1,6 @@
 """Red tool chest for the machine tools good.
 
-Footprint 1x1: 0.65 m along (X) by 0.4 m across (Y). About 0.45 m tall. Origin at the footprint center on the deck top.
+Footprint 1x1: 0.65 m along (X) by 0.44 m across (Y). About 0.45 m tall. Origin at the footprint center on the deck top.
 Run: blender --background --python tools/blender/good_tools.py -- public/models/good_tools.glb [tmp/good_tools.png]
 """
 

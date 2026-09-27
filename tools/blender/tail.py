@@ -1,6 +1,6 @@
 """The truck's back face for one back edge cell: a painted panel with a lip and a red light strip. bumper_rear.py adds the bumper.
 
-Footprint is one cell: 0.65 m along (Blender X) by 0.4 m across (Blender Y). The origin is the cell center on the deck top.
+Footprint is one cell: 0.65 m along (Blender X) by 0.44 m across (Blender Y). The origin is the cell center on the deck top.
 It is authored facing +X like the nose, with the outer face at X = +0.325. The view turns it 180 degrees onto the back edge.
 The face hangs from the deck top at Z = 0 to Z = -1, and the view stretches Z to the chassis box height.
 Everything stays inside the cell.

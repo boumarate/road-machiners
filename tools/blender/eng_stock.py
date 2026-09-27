@@ -1,6 +1,6 @@
 """Plain inline-six crate engine, drawn for stockEngine.
 
-Footprint is 2x2 cells, 0.8 m across by 1.3 m along. The block top is 0.5 m and the air filter top 0.62 m above the deck.
+Footprint is 2x2 cells, 0.88 m across by 1.3 m along. The block top is 0.5 m and the air filter top 0.62 m above the deck.
 The radiator faces +X. Nothing takes paint.
 Run: blender --background --python tools/blender/eng_stock.py -- public/models/eng_stock.glb [tmp/eng_stock.png]
 """

@@ -1,6 +1,6 @@
 """Open tube frame for the lightFrame cargo part.
 
-Footprint 2x2: 1.3 m along (X) by 0.8 m across (Y). About 0.9 m tall. Origin at the footprint center on the deck top.
+Footprint 2x2: 1.3 m along (X) by 0.88 m across (Y). About 0.9 m tall. Origin at the footprint center on the deck top.
 The top rails use the paint material.
 Run: blender --background --python tools/blender/cargo_light_frame.py -- public/models/cargo_light_frame.glb [tmp/cargo_light_frame.png]
 """

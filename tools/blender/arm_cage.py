@@ -1,6 +1,6 @@
 """Rebar cage for the 'cage' armor.
 
-A front-edge row of 2 cells: 0.8 m across, 0.65 m deep, outer face at +X. A frame of thin bars fills the row and
+A front-edge row of 2 cells: 0.88 m across, 0.65 m deep, outer face at +X. A frame of thin bars fills the row and
 rises to 1.6 m, with rebar rungs across the outer face. The top front rail takes the faction paint.
 Run: blender --background --python tools/blender/arm_cage.py -- public/models/arm_cage.glb [tmp/arm_cage.png]
 """

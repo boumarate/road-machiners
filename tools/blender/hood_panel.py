@@ -1,6 +1,6 @@
 """One hood cell: a thin painted panel on the beltline, for every hood cell except the front row and engine cells.
 
-Footprint is one cell: 0.65 m along (Blender X) by 0.4 m across (Blender Y). The origin is the cell center on the deck top.
+Footprint is one cell: 0.65 m along (Blender X) by 0.44 m across (Blender Y). The origin is the cell center on the deck top.
 The panel fills the cell from the deck top to HOOD_H, so neighbours join into one low flat hood without seams.
 socket_surface marks the hood top, where items in the hood zone stand.
 socket_bay marks the engine bay floor below the beltline, where engines under a hood cutout stand.

@@ -1,6 +1,6 @@
 """Compact racing V6 with red cam covers, velocity stacks and rear exhaust tips, drawn for racingV6.
 
-Footprint is 2x2 cells, 0.8 m across by 1.3 m along. The block is low, and the velocity stacks top out at 0.58 m.
+Footprint is 2x2 cells, 0.88 m across by 1.3 m along. The block is low, and the velocity stacks top out at 0.58 m.
 The small radiator faces +X and carries a red stripe. Nothing takes paint.
 Run: blender --background --python tools/blender/eng_racing_v6.py -- public/models/eng_racing_v6.glb [tmp/eng_racing_v6.png]
 """

@@ -1,7 +1,7 @@
 """One greenhouse side cell in the cab's front row: the cab_side window with an A pillar along the windshield rake.
 
-Footprint is one cell: 0.65 m along (Blender X) by 0.4 m across (Blender Y). The origin is the cell center on the deck top.
-The outer face is at Y = +0.2, the cell's left edge, and the view turns it 180 degrees for the right edge.
+Footprint is one cell: 0.65 m along (Blender X) by 0.44 m across (Blender Y). The origin is the cell center on the deck top.
+The outer face is at Y = +0.22, the cell's left edge, and the view mirrors it for the right edge.
 Run: blender --background --python tools/blender/cab_side_front.py -- public/models/cab_side_front.glb [tmp/cab_side_front.png]
 """
 

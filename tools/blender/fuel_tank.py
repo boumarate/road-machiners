@@ -1,6 +1,6 @@
 """Strapped-down boxy fuel cell with a filler cap, drawn for the tank core part.
 
-Footprint is one cell, 0.4 m across by 0.65 m along, and the cap top is 0.47 m above the deck.
+Footprint is one cell, 0.44 m across by 0.65 m along, and the cap top is 0.47 m above the deck.
 The tank shell is paint, so it takes the faction color. Straps, cap and feed line are metal.
 Run: blender --background --python tools/blender/fuel_tank.py -- public/models/fuel_tank.glb [tmp/fuel_tank.png]
 """

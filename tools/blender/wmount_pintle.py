@@ -1,6 +1,6 @@
 """Pintle post mount for the 'mg' and 'shotgun' weapons.
 
-Fills a 1x1 footprint: 0.4 m across by 0.65 m along. A thin post on a socket block, braced to the deck plate,
+Fills a 1x1 footprint: 0.44 m across by 0.65 m along. A thin post on a socket block, braced to the deck plate,
 lifts socket_head to 0.44 m.
 Run: blender --background --python tools/blender/wmount_pintle.py -- public/models/wmount_pintle.glb [tmp/wmount_pintle.png]
 """

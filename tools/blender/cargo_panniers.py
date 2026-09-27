@@ -1,6 +1,6 @@
 """Strapped side bags for the panniers cargo part.
 
-Footprint 1x1: 0.65 m along (X) by 0.4 m across (Y). About 0.55 m tall. Origin at the footprint center on the deck top.
+Footprint 1x1: 0.65 m along (X) by 0.44 m across (Y). About 0.55 m tall. Origin at the footprint center on the deck top.
 The bag lids use the paint material.
 Run: blender --background --python tools/blender/cargo_panniers.py -- public/models/cargo_panniers.glb [tmp/cargo_panniers.png]
 """

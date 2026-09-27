@@ -1,6 +1,6 @@
 """The truck's flat front for one front edge cell: a wide horizontal grille under the beltline.
 
-Footprint is one cell: 0.65 m along (Blender X) by 0.4 m across (Blender Y). The origin is the cell center on the deck top.
+Footprint is one cell: 0.65 m along (Blender X) by 0.44 m across (Blender Y). The origin is the cell center on the deck top.
 The outer face is at X = +0.325, the cell's front edge. The face hangs from the deck top at Z = 0 to Z = -1.
 The view stretches Z to the chassis box height. The grille spans the full cell, so a row of these reads as one wide grille.
 build() with a light side adds a rectangular headlight at that end, for nose_light_l.py and nose_light_r.py.

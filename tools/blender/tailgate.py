@@ -1,6 +1,6 @@
 """The bed's tailgate for one back edge cell of the bed, below the beltline: a painted gate with ribs, a latch and a light strip.
 
-Footprint is one cell: 0.65 m along (Blender X) by 0.4 m across (Blender Y). The origin is the cell center on the deck top.
+Footprint is one cell: 0.65 m along (Blender X) by 0.44 m across (Blender Y). The origin is the cell center on the deck top.
 It is authored facing +X like tail.py, with the outer face at X = +0.325. The view turns it 180 degrees onto the back edge.
 The gate hangs from the deck top at Z = 0 to Z = -1, and the view stretches Z to the chassis box height.
 Its top cap is the bed rail at the beltline. bumper_rear.py adds the bumper.

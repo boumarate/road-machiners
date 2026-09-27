@@ -1,6 +1,6 @@
 """Scrap metal pile for the scrap good.
 
-Footprint 1x1: 0.65 m along (X) by 0.4 m across (Y). About 0.4 m tall. Origin at the footprint center on the deck top.
+Footprint 1x1: 0.65 m along (X) by 0.44 m across (Y). About 0.4 m tall. Origin at the footprint center on the deck top.
 Run: blender --background --python tools/blender/good_scrap.py -- public/models/good_scrap.glb [tmp/good_scrap.png]
 """
 
