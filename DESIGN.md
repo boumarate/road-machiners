@@ -140,6 +140,8 @@ Drivers judge each other by danger: the firepower of working guns times the curr
 
 A robbery is an attack. The winner searches the wreck or the knockout stock the loser left. A robber whose target escapes backs off that target for a while.
 
+In a fight, each chance to ram the target is a decision. A ram that the driver expects to hurt itself more than the target is rare, and traders almost never ram.
+
 Damage from one vehicle to another is an attack, whether it comes from a shot or a crash. A missed shot counts too. The victim and its nearby faction mates that see it start a feud with the attacker. A slow bump that does no damage is not an attack, and neither is contact with the truck on a tow rope.
 
 States are timed relations between two trucks. Each ends as expired, fulfilled or broken, and each ending can start other states.
