@@ -1,6 +1,6 @@
 # NPC behavior: traits, goals and states
 
-**Status:** executing
+**Status:** reviewing
 **Branch:** npc-traits (from defeat-rescue at 6619d53)
 **Worktree:** .worktrees/npc-traits
 **Goal:** In the running game, NPCs show traits in the hover panel. NPCs with the same traits make different choices. A scumbag scavenger scavenges, sometimes attacks a weaker player or NPC who has loot, and returns to scavenging after interruptions. A feud that goes quiet ends, and its hook runs. Tows run as states. Confirming needs a Playwright run and user sign-off.
@@ -273,6 +273,35 @@ UK2 resolved: `update()` clears `world.events` at the start of each turn. So `no
 - IF3 — `decide()` and `optionWeights()` in `src/sim/npc-decisions.ts`, and the goal functions in `src/sim/npc-goals.ts`. PH3 makes them. PH4 uses them.
 
 ## Verify
+
+Result: passed
+
+Happy-path:
+- CK1 — a staged scumbag in the browser never robs a weaker loaded player — held: feud on turn 1, fight goal "rob cargo", panel shows "Traits: scavenger, scumbag" and "Feud with you, 10 turns". The rob weight was forced for a certain roll.
+- CK2 (IV4) — a scavenger loses its salvage-site goal after flee, fight, hurt and service interruptions — held in three orders.
+- CK13 — a beacon no longer calls a tow through the tow state — held: offer on turn 13, 97 to Bowl, panel shown.
+
+Negative:
+- CK3 (IV6) — a scumbag robs a hostile, lootless or gate-near target — held: 600 random setups, 765 robberies, 0 illegal.
+- CK4 — a version 8 save boots — held: crash screen "Incompatible game save version".
+- CK10 (IV8) — unknown ids pass — broke, then fixed in f3dfd31: prototype names such as `constructor` passed the `in` check.
+
+Invariants / assumptions:
+- CK5 (IV2) — two 300-turn runs from one seed differ — held, byte-identical.
+- CK7 (IV5) — a stack holds two goals of one kind in 1000 turns — held, max depth 5.
+- CK8 (IV11, IV12, IV13) — a state ends twice, ends at birth, or duplicates — held over 23 endings in a scumbag-heavy run.
+- CK9 (IV10) — another hostility source exists — held.
+- CK11 (AS3) — far NPCs freeze or lose goals — held: 33 far NPCs, 731 goal changes, 35 near/far switches.
+- CK12 — a robbery feud does not expire, adds no backedOff, or re-robs during backedOff — held.
+- CK16 — a 1000-turn run throws — held.
+- CK17 (IV3) — a subject is rolled twice while perceived — held.
+
+Smoke: `npm run playtest` passed. `npm run perf` misses boot (2374-2474 ms of 2000) and first turn (126-142 ms of 100). Main misses the same budgets under the same load (2412-2574 ms, 128-142 ms), so the misses predate this branch.
+Goal: pending user sign-off. On the default seed no robbery happened in 1000 turns: one scumbag spawned and saw prey 3 times, rolling keep each time. With every non-raider a scumbag, 14 robberies and 3 loots happened. Robbery frequency is a tuning question (UK1).
+Notes:
+- Heard contacts still churn: 1289 contactHeard rolls on 395 subjects in 1000 turns, giving 684 investigate-to-investigate switches. Each gap of 4 turns or more in hearing gives a new roll.
+- `loadWorld` checks no brain fields, so a malformed version 9 save loads and throws on the first turn.
+- A leftover `grudges` field in a save is ignored silently.
 
 ## Code smells
 - `src/sim/search.ts` `searchTurn` — throws when another collector or `clearOldWrecks` removes the stock during a search.
