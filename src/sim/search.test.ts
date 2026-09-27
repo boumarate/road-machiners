@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
 import { RULES } from '../data/rules';
-import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { partDef } from '../data/parts';
 import { beginSearch } from './search';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import { goodsCount } from './grid';
@@ -152,5 +153,74 @@ describe('machining on searches', () => {
     const next = takeLoot(w, 'weapon-stock', { kind: 'part', partId: weapon.part.id }, { x: weapon.x, y: weapon.y, rot: weapon.rot });
     const turns = Math.ceil(RULES.refitTurnsPerPart * (1 - 5 * SKILL_EFFECTS.machining.refit));
     expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: turns, total: turns });
+  });
+});
+
+describe('scrounger perk', () => {
+  // The player parked on a one-turn stock of scrap, searched to the end.
+  function searched(perk: boolean) {
+    const w = emptyWorld({ x: 30, y: 30 });
+    if (perk) w.player.perks.push('scrounger');
+    w.salvage.push({ id: 'pile', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: 1 }, parts: [] });
+    const next = scavenge(w);
+    advanceJobs(next);
+    expect(next.player.scavenged).toContain('pile');
+    return next;
+  }
+
+  const stockParts = (w: ReturnType<typeof emptyWorld>) => w.salvage.find((s) => s.id === 'pile')!.goods.parts ?? 0;
+
+  it('adds parts to a stock the player finishes searching', () => {
+    expect(stockParts(searched(false))).toBe(0);
+    expect(stockParts(searched(true))).toBe(PERK_NUMBERS.scrounger.parts);
+  });
+
+  it('adds nothing on a second search of the same stock', () => {
+    const w = searched(true);
+    const me = w.vehicles[0];
+    beginSearch(w, me, 'pile');
+    advanceJobs(w);
+    expect(stockParts(w)).toBe(PERK_NUMBERS.scrounger.parts);
+  });
+
+  it('adds nothing to a stock an NPC searches', () => {
+    const w = emptyWorld({ x: 60, y: 60 });
+    w.player.perks.push('scrounger');
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });
+    w.salvage.push({ id: 'pile', pos: { x: 10, y: 10 }, radius: 1, goods: { scrap: 1 }, parts: [] });
+    const held = goodsCount(npc).parts ?? 0;
+    beginSearch(w, npc, 'pile');
+    advanceJobs(w);
+    expect(goodsCount(npc).parts ?? 0).toBe(held);
+  });
+});
+
+describe('careful strip perk', () => {
+  // The player's machine gun, worn down to 10 HP and lying in a stock, to be mounted back in the field.
+  function mountFromStock(stockId: string, perk: boolean) {
+    const w = emptyWorld({ x: 30, y: 30 });
+    if (perk) w.player.perks.push('carefulStrip');
+    const me = w.vehicles[0];
+    const weapon = me.items.find((item) => item.kind === 'part' && item.part.defId === 'mg');
+    if (!weapon || weapon.kind !== 'part') throw new Error('Expected weapon');
+    weapon.part.hp = 10;
+    me.items = me.items.filter((item) => item.id !== weapon.id);
+    w.salvage.push({ id: stockId, pos: { ...me.pos }, radius: 1, goods: {}, parts: [weapon.part] });
+    w.player.scavenged.push(stockId);
+    const next = takeLoot(w, stockId, { kind: 'part', partId: weapon.part.id }, { x: weapon.x, y: weapon.y, rot: weapon.rot });
+    for (let turn = 0; turn < 20 && next.vehicles[0].job; turn++) advanceJobs(next);
+    const mounted = next.vehicles[0].items.find((item) => item.kind === 'part' && item.part.id === weapon.part.id);
+    if (!mounted || mounted.kind !== 'part') throw new Error('Weapon was not mounted');
+    return mounted.part.hp;
+  }
+
+  it('mounts a wreck part with more HP', () => {
+    const max = partDef('mg').hp;
+    expect(mountFromStock('wreck-raider', false)).toBe(10);
+    expect(mountFromStock('wreck-raider', true)).toBe(Math.min(max, 10 + Math.round(max * PERK_NUMBERS.carefulStrip.hp)));
+  });
+
+  it('leaves a part from a site stock as it is', () => {
+    expect(mountFromStock('weapon-stock', true)).toBe(10);
   });
 });

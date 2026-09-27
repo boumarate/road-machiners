@@ -7,6 +7,7 @@ import {
   addSkillXp,
   damagePartTo,
   give,
+  grantPerk,
   killVehicles,
   makeHostile,
   nearbyVehicles,
@@ -24,7 +25,7 @@ import {
   toggleFullLog,
   toggleGod,
 } from "../sim/cheats";
-import { SKILL_IDS, XP_RULES } from "../data/skills";
+import { PERKS, SKILL_IDS, XP_RULES } from "../data/skills";
 import { levelOf } from "../sim/progress";
 import type { World, XpSource } from "../sim/types";
 import { el, panel } from "./dom";
@@ -91,6 +92,11 @@ export const COMMANDS: readonly Command[] = [
   command("xp <skill> <n>", "Add XP to a skill.", { min: 2, max: 2 }, (world, [skill, text], usage) => {
     const n = parseNumber(text, usage);
     return changed(addSkillXp(world, skill, n), `${skill} XP added: ${n}`);
+  }),
+  command("perk <perk id>", "Grant a perk at any skill level.", { min: 1, max: 1 }, (world, [id]) => {
+    const next = grantPerk(world, id);
+    const granted = next.player.perks[next.player.perks.length - 1];
+    return changed(next, `perk granted: ${PERKS[granted].name}`);
   }),
   command("skills", "Show skill XP, levels, today's XP and XP per source.", { min: 0, max: 0 }, (world) => ({
     world: null,

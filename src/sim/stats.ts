@@ -4,7 +4,8 @@
 import { chassisDef } from '../data/chassis';
 import { partDef, type EngineDef, type WeaponDef } from '../data/parts';
 import { RULES } from '../data/rules';
-import { skillEffect } from './progress';
+import { PERK_NUMBERS } from '../data/skills';
+import { skillEffect, vehicleHasPerk } from './progress';
 import { TOW } from '../data/tow';
 import { corePart, coreParts, mountedParts } from './grid';
 import { loadFactor, vehicleMass } from './mass';
@@ -66,7 +67,7 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   // Each broken wheel cuts top speed and turning by the same share.
   const wheels = (1 - RULES.wheelLoss) ** coreParts(v, 'wheel').filter((p) => !isWorking(p)).length;
   const turnMult = (1 + skillEffect(world, v, 'driving', 'turnRate')) * load * wheels;
-  const limpSpeed = RULES.limpSpeed * (1 + skillEffect(world, v, 'driving', 'crawl'));
+  const limpSpeed = limpSpeedOf(world, v);
 
   let maxSpeed = limpSpeed;
   let accel = limpSpeed;
@@ -99,6 +100,12 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     radius: ch.radius,
     weapons: mountedParts(v, 'weapon').map((part) => ({ part, def: partDef(part.defId) as WeaponDef })),
   };
+}
+
+// Top speed of a stranded truck, raised by the player's driving and the pusher perk.
+function limpSpeedOf(world: World, v: Vehicle): number {
+  const pusher = vehicleHasPerk(world, v, 'pusher') ? PERK_NUMBERS.pusher.crawl : 1;
+  return RULES.limpSpeed * (1 + skillEffect(world, v, 'driving', 'crawl')) * pusher;
 }
 
 // Speed factor of ground with base factor `factor`, after the driver's skill cuts part of its penalty.

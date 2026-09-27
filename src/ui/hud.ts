@@ -15,6 +15,7 @@ import { getHudReadout, getRescueReadout, moneyLabel, TruckConditionReadout } fr
 import { createIcon, createSpeedDial, type IconName } from "./icons";
 import { kph } from "./units";
 import { playerVehicle } from "../sim/damage";
+import { pendingPerkPairs } from "../sim/progress";
 import "./truck-condition.css";
 
 type ConditionPart = ReturnType<TruckConditionReadout["update"]>[number];
@@ -308,6 +309,21 @@ export class Hud {
       );
   }
 
+  // The character button, marked while a perk pair waits for a pick.
+  private characterButton(w: World, busy: boolean): HTMLElement {
+    const perkOpen = pendingPerkPairs(w).length > 0;
+    return el(
+      "button",
+      {
+        disabled: busy,
+        onclick: () => this.actions.openCharacter(),
+        title: perkOpen ? "Driver and skills: a perk is ready to pick [C]" : "Driver and skills [C]",
+      },
+      createIcon("driver"),
+      perkOpen ? "! [C]" : "[C]",
+    );
+  }
+
   renderTop(w: World): void {
     const readout = getHudReadout(w);
     const busy = this.actions.isBusy();
@@ -380,16 +396,7 @@ export class Hud {
           },
           w.player.autoRepair ? "Auto patch [P]" : "No patch [P]",
         ),
-        el(
-          "button",
-          {
-            disabled: busy,
-            onclick: () => this.actions.openCharacter(),
-            title: "Driver and skills [C]",
-          },
-          createIcon("driver"),
-          "[C]",
-        ),
+        this.characterButton(w, busy),
         ...(readout.broken
           ? [
               el(
@@ -508,12 +515,13 @@ export class Hud {
   }
 }
 
-// The NPC's traits, top goal and the states it holds toward the player. The player's own truck has none.
+// The NPC's traits once the player can read them, top goal and the states it holds toward the player. The player's own truck has none.
 function npcLines(w: World, v: Vehicle): HTMLElement[] {
   if (!v.brain) return [];
   const activity = formatNpcActivity(w, v);
+  const traits = formatNpcTraits(w, v);
   return [
-    el("div", { class: "npc-traits" }, formatNpcTraits(v)),
+    ...(traits ? [el("div", { class: "npc-traits" }, traits)] : []),
     ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),
     ...formatNpcStates(w, v).map((line) =>
       el("div", { class: "npc-state" }, line),

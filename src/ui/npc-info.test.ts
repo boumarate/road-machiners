@@ -20,16 +20,24 @@ it('shows a visible NPC reason without naming its unseen target', () => {
   expect(eventText(w, { t: 'activity', vehicle: npc.id, previous: null, activity: 'flee', reason: 'avoid a costly fight' })).toBeNull();
 });
 
-it('shows NPC traits as one line', () => {
+it('shows NPC traits as one line with the read the driver perk', () => {
+  const w = emptyWorld();
+  w.player.perks.push('readDriver');
+  const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 32, y: 30 });
+  npc.brain = npcBrain('scavenger', npc.pos, ['scavenger', 'scumbag']);
+  expect(formatNpcTraits(w, npc)).toBe('Traits: scavenger, scumbag');
+});
+
+it('hides NPC traits without the read the driver perk', () => {
   const w = emptyWorld();
   const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 32, y: 30 });
   npc.brain = npcBrain('scavenger', npc.pos, ['scavenger', 'scumbag']);
-  expect(formatNpcTraits(npc)).toBe('Traits: scavenger, scumbag');
+  expect(formatNpcTraits(w, npc)).toBeNull();
 });
 
 it('fails loudly for a vehicle with no NPC brain', () => {
   const w = emptyWorld();
-  expect(() => formatNpcTraits(playerVehicle(w))).toThrow('has no NPC brain');
+  expect(() => formatNpcTraits(w, playerVehicle(w))).toThrow('has no NPC brain');
 });
 
 it('lists states toward the player with turns left', () => {
@@ -114,4 +122,10 @@ describe('events far from the player', () => {
     w.player.fullLog = true;
     for (const e of events) expect(eventText(w, e)).not.toBeNull();
   });
+});
+
+it('says a perk can be picked when a skill reaches a perk level', () => {
+  const w = emptyWorld();
+  expect(eventText(w, { t: 'skillUp', skill: 'driving', level: 2 })?.text).toBe('Driving reached level 2. Pick a perk on the character screen [C].');
+  expect(eventText(w, { t: 'skillUp', skill: 'driving', level: 3 })?.text).toBe('Driving reached level 3.');
 });

@@ -6,6 +6,7 @@ import type { Terrain } from "./terrain";
 import type { Vec } from "./vec";
 import type { TopicId } from "../data/dialogue";
 import type { DecisionOptions } from "../data/npcs";
+import type { PerkId } from "../data/skills";
 
 export type PatchDeal = DecisionOptions["patchDeal"];
 
@@ -232,6 +233,7 @@ export type Player = {
   xpToday: Record<SkillId, number>; // XP per skill earned on day xpDay, for the daily soft cap
   xpDay: number;
   xpBySource: Record<XpSource, number>; // lifetime XP per source, for the debug console
+  perks: PerkId[]; // picked perks, at most one per pair; see src/sim/perks.ts
   health: number;
   fuel: number;
   supplies: number;

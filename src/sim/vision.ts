@@ -11,16 +11,20 @@ import { weatherAt } from './weather';
 import { dist, segmentDist, type Vec } from './vec';
 import { playerVehicle } from './damage';
 import { cloudsSeenBy, contactDifficulty, contactsOf } from './detect';
-import { practice, skillEffect } from './progress';
+import { PERK_NUMBERS } from '../data/skills';
+import { RULES } from '../data/rules';
+import { practice, skillEffect, vehicleHasPerk } from './progress';
 
 const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building'];
 
 // A viewer's vision radius at a point: the base radius, shrunk by weather and at night, and widened by the
-// player's perception.
+// player's perception and, while parked, the lookout perk.
 export function sightRadius(world: World, viewer: Vehicle, at: Vec = viewer.pos): number {
   const night = sunAt(world.turn) ? 1 : TIME.nightSight;
   const skill = 1 + skillEffect(world, viewer, 'perception', 'sight');
-  return TERRAIN.vision.radius * weatherAt(world, at).sight * night * skill;
+  const parked = viewer.speed <= RULES.parkedSpeed;
+  const lookout = parked && vehicleHasPerk(world, viewer, 'lookout') ? PERK_NUMBERS.lookout.sight : 1;
+  return TERRAIN.vision.radius * weatherAt(world, at).sight * night * skill * lookout;
 }
 
 // Reach of the player's gray vision at a point. It ignores rocks and hills, and it shows places but never vehicles.

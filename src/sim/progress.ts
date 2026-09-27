@@ -1,9 +1,15 @@
 // Skills grow from practice. practice() is the one entry point for XP; xpFor() is its pure rule, shared
-// with the progression replay.
+// with the progression replay. Each skill opens a pair of perks at every perk level, and the player keeps one perk
+// from each pair for good. Rules read a perk through vehicleHasPerk, so a perk only ever changes rules for the player
+// truck.
 
-import { MAX_SKILL_LEVEL, SKILL_EFFECTS, type SkillEffect, XP_RULES, XP_SOURCES, XP_TO_REACH } from '../data/skills';
+import {
+  MAX_SKILL_LEVEL, PERK_IDS, PERK_LEVELS, PERKS, type PerkId, type PerkLevel, SKILL_EFFECTS, SKILL_IDS, type SkillEffect,
+  XP_RULES, XP_SOURCES, XP_TO_REACH,
+} from '../data/skills';
 import { clockOf } from './sun';
 import type { Player, SkillId, Vehicle, World, XpSource } from './types';
+import { update } from './world';
 
 export type SkillProgress = Pick<Player, 'skills' | 'xpToday' | 'xpDay'>;
 
@@ -65,4 +71,50 @@ export function grantXp(world: World, skill: SkillId, xp: number): void {
   const before = levelOf(p.skills[skill]);
   p.skills[skill] += xp;
   for (let level = before + 1; level <= levelOf(p.skills[skill]); level++) world.events.push({ t: 'skillUp', skill, level });
+}
+
+// ---- Perks.
+
+export type PerkPair = { skill: SkillId; level: PerkLevel; perks: PerkId[] };
+
+export function hasPerk(world: World, perk: PerkId): boolean {
+  return world.player.perks.includes(perk);
+}
+
+// Whether a perk changes rules for this vehicle: it is the player truck and the player picked the perk.
+export function vehicleHasPerk(world: World, v: Vehicle, perk: PerkId): boolean {
+  return v.id === world.player.vehicleId && hasPerk(world, perk);
+}
+
+export function perkPair(skill: SkillId, level: PerkLevel): PerkPair {
+  return { skill, level, perks: PERK_IDS.filter((id) => PERKS[id].skill === skill && PERKS[id].level === level) };
+}
+
+// The perk the player holds from a perk's pair, or null.
+export function pickedFromPair(world: World, perk: PerkId): PerkId | null {
+  const { skill, level } = PERKS[perk];
+  return perkPair(skill, level).perks.find((id) => hasPerk(world, id)) ?? null;
+}
+
+// Pairs the player can pick from now: the skill has reached their level and no perk of the pair is picked.
+export function pendingPerkPairs(world: World): PerkPair[] {
+  return SKILL_IDS.flatMap((skill) => PERK_LEVELS
+    .filter((level) => skillLevel(world, skill) >= level)
+    .map((level) => perkPair(skill, level))
+    .filter((pair) => pair.perks.every((id) => !hasPerk(world, id))));
+}
+
+export function isPerkId(id: string): id is PerkId {
+  return (PERK_IDS as readonly string[]).includes(id);
+}
+
+// Picks a perk for good. It needs an active player, the skill at the perk's level and no pick yet from its pair.
+export function choosePerk(world: World, perk: PerkId): World {
+  if (!isPerkId(perk)) throw new Error(`Unknown perk ${perk}`);
+  const def = PERKS[perk];
+  if (world.player.state !== 'active') throw new Error(`Player is ${world.player.state}`);
+  if (skillLevel(world, def.skill) < def.level) throw new Error(`${def.name} needs ${def.skill} level ${def.level}`);
+  const picked = pickedFromPair(world, perk);
+  if (picked) throw new Error(`${PERKS[picked].name} is already picked from this pair`);
+  return update(world, (w) => { w.player.perks.push(perk); });
 }

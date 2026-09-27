@@ -84,3 +84,52 @@ describe('toughness on heat drain', () => {
     expect(before - npc.resources!.supplies).toBeCloseTo(RULES.suppliesPerTurn * heatAt(w, npc.pos), 9);
   });
 });
+
+describe('iron gut perk', () => {
+  it('keeps the starving player from losing health', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    w.player.supplies = 0;
+    const health = w.player.health;
+    consumeVehicleSupplies(w, me);
+    expect(w.player.health).toBe(health - RULES.starveDamage);
+    w.player.perks.push('ironGut');
+    consumeVehicleSupplies(w, me);
+    expect(w.player.health).toBe(health - RULES.starveDamage);
+  });
+
+  it('still starves an NPC', () => {
+    const w = emptyWorld();
+    w.player.perks.push('ironGut');
+    const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 10, y: 10 });
+    npc.resources!.supplies = 0;
+    const health = npc.resources!.health;
+    consumeVehicleSupplies(w, npc);
+    expect(npc.resources!.health).toBe(health - RULES.starveDamage);
+  });
+});
+
+describe('desert born perk', () => {
+  const NOON = 1 + (((TIME.sunrise + TIME.sunset) / 2 - TIME.startHour) * TIME.turnsPerDay) / 24;
+
+  it('keeps heat from raising player supply use', () => {
+    const w = emptyWorld();
+    w.turn = NOON;
+    const me = w.vehicles[0];
+    expect(heatAt(w, me.pos)).toBeGreaterThan(1);
+    w.player.perks.push('desertBorn');
+    const before = w.player.supplies;
+    consumeVehicleSupplies(w, me);
+    expect(before - w.player.supplies).toBeCloseTo(RULES.suppliesPerTurn, 9);
+  });
+
+  it('leaves NPC heat drain alone', () => {
+    const w = emptyWorld();
+    w.turn = NOON;
+    w.player.perks.push('desertBorn');
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });
+    const before = npc.resources!.supplies;
+    consumeVehicleSupplies(w, npc);
+    expect(before - npc.resources!.supplies).toBeCloseTo(RULES.suppliesPerTurn * heatAt(w, npc.pos), 9);
+  });
+});

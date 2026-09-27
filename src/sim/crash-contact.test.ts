@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PERK_NUMBERS } from '../data/skills';
 import { applyContactCrash, computeClosingSpeed, locateCrashContact } from './crash-contact';
 import { addVehicle, emptyWorld, practiceOf } from './testkit';
 import { vehicleMass } from './mass';
@@ -94,5 +95,27 @@ describe('ram practice', () => {
     const b = addVehicle(world, 'traders', 'hauler', ['stockEngine'], { x: 42, y: 40 });
     applyContactCrash(world, a, b, b.id, 6, geometry);
     expect(practiceOf(world, 'ram')).toEqual([]);
+  });
+});
+
+describe('ram guard perk', () => {
+  // Total damage a truck takes from a head-on crash into a rock. Crash damage grows with the square of the impact.
+  function crashDamage(perk: boolean, npc: boolean, impact = 8): number {
+    const world = emptyWorld();
+    if (perk) world.player.perks.push('ramGuard');
+    const vehicle = npc ? addVehicle(world, 'raiders', 'scout', ['stockEngine', 'ram'], { x: 40, y: 40 }) : world.vehicles[0];
+    const before = mountedParts(vehicle).reduce((sum, part) => sum + part.hp, 0);
+    applyContactCrash(world, vehicle, null, 'rock', impact, { a: { side: 'front', lanes: [1, 2, 3] }, b: null });
+    return before - mountedParts(vehicle).reduce((sum, part) => sum + part.hp, 0);
+  }
+
+  it('makes a crash hurt the player truck like one with half the energy', () => {
+    const halfEnergy = crashDamage(false, false, 8 * Math.sqrt(PERK_NUMBERS.ramGuard.crashTaken));
+    expect(crashDamage(true, false)).toBe(halfEnergy);
+    expect(halfEnergy).toBeLessThan(crashDamage(false, false));
+  });
+
+  it('leaves NPC crash damage unchanged', () => {
+    expect(crashDamage(true, true)).toBe(crashDamage(false, true));
   });
 });

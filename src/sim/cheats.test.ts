@@ -5,7 +5,7 @@ import { REGION } from '../data/region';
 import { CHEATS, RULES } from '../data/rules';
 import { START_KITS } from '../data/start';
 import {
-  addSkillXp, applyGodMode, CheatError, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
+  addSkillXp, applyGodMode, CheatError, grantPerk, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
   repairAll, revealMap, setFuel, setHealth, setMoney, setSupplies, skipToHour, spawnNear,
   startWeather, teleport, toggleFullLog, toggleGod,
 } from './cheats';
@@ -71,6 +71,18 @@ describe('resource cheats', () => {
     expect(w.events.some((e) => e.t === 'skillUp' && e.skill === 'social')).toBe(true);
     expect(() => addSkillXp(emptyWorld(), 'social', 0)).toThrow(CheatError);
     expect(() => addSkillXp(emptyWorld(), 'trade', 10)).toThrow(CheatError);
+  });
+
+  it('grants a perk below its skill level', () => {
+    const w = grantPerk(emptyWorld(), 'goodwill');
+    expect(w.player.perks).toEqual(['goodwill']);
+  });
+
+  it('refuses an unknown perk and a second perk from one pair', () => {
+    expect(() => grantPerk(emptyWorld(), 'flying')).toThrow(CheatError);
+    const w = grantPerk(emptyWorld(), 'goodwill');
+    expect(() => grantPerk(w, 'bluff')).toThrow(CheatError);
+    expect(() => grantPerk(w, 'goodwill')).toThrow(CheatError);
   });
 });
 

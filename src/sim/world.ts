@@ -61,6 +61,7 @@ export function newWorld(seed: number, kit: StartKit): World {
         heat: 0, damage: 0, knockout: 0,
         profit: 0, deal: 0, call: 0,
       },
+      perks: [],
       health: RULES.maxHealth,
       fuel: kit.fuel,
       supplies: kit.supplies,

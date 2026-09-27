@@ -2,7 +2,8 @@
 // Parts are spent only when the job finishes. Mechanics shortens the job and cuts parts use.
 
 import { partDef } from '../data/parts';
-import { skillEffect } from './progress';
+import { PERK_NUMBERS } from '../data/skills';
+import { skillEffect, vehicleHasPerk } from './progress';
 import { REPAIR } from '../data/wear';
 import { goodsCount, mountedParts } from './grid';
 import { removeGoods } from './inventory';
@@ -28,9 +29,10 @@ export function repairPlan(world: World, v: Vehicle, partId: string, maxParts = 
   return planPartRepair(part, fieldCapShare(world, v), machiningMult(world, v), goodsCount(v).parts ?? 0, maxParts);
 }
 
-// Share of max HP a field repair lifts a part to. The player's machining raises it, up to full HP.
+// Share of max HP a field repair lifts a part to. The player's machining and the jury rig perk raise it, up to full HP.
 function fieldCapShare(world: World, v: Vehicle): number {
-  return Math.min(1, REPAIR.fieldCapShare + skillEffect(world, v, 'machining', 'fieldCap'));
+  const juryRig = vehicleHasPerk(world, v, 'juryRig') ? PERK_NUMBERS.juryRig.fieldCap : 0;
+  return Math.min(1, REPAIR.fieldCapShare + skillEffect(world, v, 'machining', 'fieldCap') + juryRig);
 }
 
 // The repair math for one part: lift it to `capShare` of max HP, spending at most the parts held and maxParts.

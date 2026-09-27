@@ -6,7 +6,7 @@ import { thinkNpc } from './npc-activities';
 import { npcProfile, optionWeights, ownDanger, vehicleDanger } from './npc-decisions';
 import { NPC_BEHAVIOR, TRAITS } from '../data/npcs';
 import { RULES } from '../data/rules';
-import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { resolveDestroyed } from './combat';
 import { checkKnockout } from './defeat';
 import { corePart, mountedParts } from './grid';
@@ -417,6 +417,30 @@ describe('social on robbery danger', () => {
     const { w, robber, target } = passing();
     const danger = nearThreshold(w, robber);
     w.player.skills.social = XP_TO_REACH[5];
+    expect(robWeight(w, robber, target, danger)).toBe(FULL_ROB);
+  });
+});
+
+describe('bluff perk', () => {
+  // A danger just under what the robber judges stronger than itself, and over it once doubled by the perk.
+  function underThreshold(w: World, robber: Vehicle): number {
+    return (ownDanger(w, robber) * npcProfile(robber).boldness) / (PERK_NUMBERS.bluff.danger * 0.8);
+  }
+
+  it('a scumbag sees the player truck as stronger', () => {
+    const w = emptyWorld({ x: 15, y: 10 });
+    const me = w.vehicles[0];
+    const robber = addScumbag(w, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
+    const danger = underThreshold(w, robber);
+    expect(robWeight(w, robber, me, danger)).toBe(FULL_ROB);
+    w.player.perks.push('bluff');
+    expect(robWeight(w, robber, me, danger)).toBeLessThanOrEqual(FULL_ROB * 0.1);
+  });
+
+  it('leaves robbery of an NPC truck unchanged', () => {
+    const { w, robber, target } = passing();
+    const danger = underThreshold(w, robber);
+    w.player.perks.push('bluff');
     expect(robWeight(w, robber, target, danger)).toBe(FULL_ROB);
   });
 });

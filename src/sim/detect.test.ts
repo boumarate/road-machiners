@@ -287,3 +287,79 @@ describe('perception hearing and contact fix', () => {
     expect(radius()).toBe(base);
   });
 });
+
+describe('road ghost perk', () => {
+  // A daylight world, so dust shows, with the player truck driving at speed 4 on the road of the test ground.
+  function drivingOnRoad() {
+    const w = emptyWorld();
+    w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => sunAt(t))!;
+    const me = w.vehicles[0];
+    me.speed = 4;
+    return { w, me };
+  }
+
+  it('raises no dust from the player truck on a road', () => {
+    const { w, me } = drivingOnRoad();
+    expect(dustRange(w, me)).toBeGreaterThan(0);
+    w.player.perks.push('roadGhost');
+    expect(dustRange(w, me)).toBe(0);
+  });
+
+  it('still raises dust off the road', () => {
+    const { w, me } = drivingOnRoad();
+    editableTerrain(w).types.fill('sand');
+    w.player.perks.push('roadGhost');
+    expect(dustRange(w, me)).toBeGreaterThan(0);
+  });
+
+  it('leaves NPC dust on a road', () => {
+    const { w } = drivingOnRoad();
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    npc.speed = 4;
+    const before = dustRange(w, npc);
+    w.player.perks.push('roadGhost');
+    expect(dustRange(w, npc)).toBe(before);
+  });
+});
+
+describe('listener perk', () => {
+  const night = () => Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
+
+  // A moving buggy 1.3 times past plain hearing range of a listener, at night so it raises no dust.
+  function pastHearing(listenerPos = { x: 2, y: 30 }) {
+    const w = emptyWorld(listenerPos);
+    w.turn = night();
+    const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], listenerPos);
+    target.speed = 2;
+    target.pos = { x: listenerPos.x + soundRange(w, target) * 1.3, y: listenerPos.y };
+    return { w, target };
+  }
+
+  const heard = (w: ReturnType<typeof emptyWorld>, observerId: string, targetId: string) =>
+    contactsOf(w, w.vehicles.find((v) => v.id === observerId)!, Infinity).some((c) => c.vehicleId === targetId && c.sources.includes('sound'));
+
+  it('the parked player hears farther', () => {
+    const { w, target } = pastHearing();
+    const me = w.vehicles[0];
+    me.speed = 0;
+    expect(heard(w, me.id, target.id)).toBe(false);
+    w.player.perks.push('listener');
+    expect(heard(w, me.id, target.id)).toBe(true);
+  });
+
+  it('a moving player hears no farther', () => {
+    const { w, target } = pastHearing();
+    const me = w.vehicles[0];
+    me.speed = RULES.parkedSpeed + 0.01;
+    w.player.perks.push('listener');
+    expect(heard(w, me.id, target.id)).toBe(false);
+  });
+
+  it('a parked NPC listener hears no farther', () => {
+    const { w, target } = pastHearing({ x: 2, y: 60 });
+    const listener = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 2, y: 60 });
+    listener.speed = 0;
+    w.player.perks.push('listener');
+    expect(heard(w, listener.id, target.id)).toBe(false);
+  });
+});

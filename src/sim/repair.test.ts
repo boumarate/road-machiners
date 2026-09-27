@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { partDef } from '../data/parts';
 import { REPAIR } from '../data/wear';
 import { addVehicle, emptyWorld } from './testkit';
@@ -82,6 +82,28 @@ describe('field repair cap', () => {
     const engine = mountedParts(npc, 'engine')[0];
     engine.hp = Math.ceil(partDef(engine.defId).hp * REPAIR.fieldCapShare);
     w.player.skills.machining = XP_TO_REACH[5];
+    expect(repairPlan(w, npc, engine.id).needed).toBe(0);
+  });
+});
+
+describe('jury rig perk', () => {
+  it('lifts the field repair cap of the player truck', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const cage = armorPart(me);
+    const max = partDef(cage.defId).hp;
+    cage.hp = Math.floor(max * REPAIR.fieldCapShare);
+    w.player.perks.push('juryRig');
+    const cap = max * Math.min(1, REPAIR.fieldCapShare + PERK_NUMBERS.juryRig.fieldCap);
+    expect(repairPlan(w, me, cage.id).hp).toBeCloseTo(cap - cage.hp, 5);
+  });
+
+  it('keeps an NPC part at the base field cap', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    const engine = mountedParts(npc, 'engine')[0];
+    engine.hp = Math.ceil(partDef(engine.defId).hp * REPAIR.fieldCapShare);
+    w.player.perks.push('juryRig');
     expect(repairPlan(w, npc, engine.id).needed).toBe(0);
   });
 });

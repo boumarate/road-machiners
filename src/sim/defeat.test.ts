@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PERK_NUMBERS } from '../data/skills';
 import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
 import { autoOrders, isHostile } from './combat';
@@ -325,5 +326,21 @@ describe('knockout practice', () => {
     checkKnockout(w);
     advanceKnockout(w);
     expect(practiceOf(w, 'knockout')).toEqual([]);
+  });
+});
+
+describe('quick wake perk', () => {
+  it('wakes the player at a shorter turn limit with a raider idling in sight', () => {
+    let { w } = knockedOut();
+    w.player.perks.push('quickWake');
+    addVehicle(w, 'raiders', 'buggy', [], { x: 36, y: 30 });
+    const limit = Math.ceil(RULES.knockoutMaxTurns * PERK_NUMBERS.quickWake.knockoutTurns);
+    let turns = 0;
+    while (w.player.state === 'knockedOut') {
+      w = endTurn(w, testDrive);
+      turns++;
+      expect(turns).toBeLessThanOrEqual(limit);
+    }
+    expect(turns).toBe(limit);
   });
 });

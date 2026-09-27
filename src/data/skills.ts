@@ -88,3 +88,61 @@ export const XP_RULES = {
   dailyCap: 150,
   overCap: 0.1,
 };
+
+// Perks. At each perk level of a skill the player picks one perk from its pair, for good. A perk changes a rule the
+// player can see in play. `rule` is the player-facing line on the character screen.
+
+export type PerkId =
+  | 'ramGuard' | 'pusher' | 'steadyAim' | 'roadGhost'
+  | 'lookout' | 'listener' | 'readDriver' | 'calledShot'
+  | 'juryRig' | 'scrounger' | 'quickRefit' | 'carefulStrip'
+  | 'ironGut' | 'hardHead' | 'quickWake' | 'desertBorn'
+  | 'knownFace' | 'smoothTalker' | 'bluff' | 'goodwill';
+
+// Skill levels that open a pair of perks.
+export const PERK_LEVELS = [2, 4] as const;
+export type PerkLevel = (typeof PERK_LEVELS)[number];
+
+export type PerkDef = { skill: SkillId; level: PerkLevel; name: string; rule: string };
+
+export const PERKS: Record<PerkId, PerkDef> = {
+  ramGuard: { skill: 'driving', level: 2, name: 'Ram guard', rule: 'Crashes do half damage to your truck.' },
+  pusher: { skill: 'driving', level: 2, name: 'Pusher', rule: 'You crawl twice as fast when stranded.' },
+  steadyAim: { skill: 'driving', level: 4, name: 'Steady aim', rule: 'Your own speed adds no scatter to your shots.' },
+  roadGhost: { skill: 'driving', level: 4, name: 'Road ghost', rule: 'Your truck raises no dust on roads.' },
+  lookout: { skill: 'perception', level: 2, name: 'Lookout', rule: 'You see farther while parked.' },
+  listener: { skill: 'perception', level: 2, name: 'Listener', rule: 'You hear engines from farther while parked.' },
+  readDriver: { skill: 'perception', level: 4, name: 'Read the driver', rule: 'You see the traits of other drivers.' },
+  calledShot: { skill: 'perception', level: 4, name: 'Called shot', rule: 'Shots aimed at a part scatter less.' },
+  juryRig: { skill: 'machining', level: 2, name: 'Jury rig', rule: 'Field repairs lift parts closer to full HP.' },
+  scrounger: { skill: 'machining', level: 2, name: 'Scrounger', rule: 'Your first search of a stock turns up extra parts.' },
+  quickRefit: { skill: 'machining', level: 4, name: 'Quick refit', rule: 'Field refits take half the turns.' },
+  carefulStrip: { skill: 'machining', level: 4, name: 'Careful strip', rule: 'Parts you mount from a wreck come off with more HP.' },
+  ironGut: { skill: 'toughness', level: 2, name: 'Iron gut', rule: 'Running out of supplies costs you no health.' },
+  hardHead: { skill: 'toughness', level: 2, name: 'Hard head', rule: 'Cab hits cost you half the health.' },
+  quickWake: { skill: 'toughness', level: 4, name: 'Quick wake', rule: 'You come to from a knockout in half the time.' },
+  desertBorn: { skill: 'toughness', level: 4, name: 'Desert born', rule: 'Heat does not raise your supply use.' },
+  knownFace: { skill: 'social', level: 2, name: 'Known face', rule: 'Drivers offer you a tow more often when stranded.' },
+  smoothTalker: { skill: 'social', level: 2, name: 'Smooth talker', rule: 'Handing over cargo to a demand drops only half your goods.' },
+  bluff: { skill: 'social', level: 4, name: 'Bluff', rule: 'Robbers see your truck as twice as dangerous.' },
+  goodwill: { skill: 'social', level: 4, name: 'Goodwill', rule: 'Drivers patch your truck for free.' },
+};
+
+export const PERK_IDS = Object.keys(PERKS) as PerkId[];
+
+export const PERK_NUMBERS = {
+  ramGuard: { crashTaken: 0.5 }, // crash damage the player truck takes, times this
+  pusher: { crawl: 2 }, // limp speed of the stranded player truck, times this
+  lookout: { sight: 1.25 }, // sight radius of the parked player truck, times this
+  listener: { hearing: 1.5 }, // range the parked player truck hears engines from, times this
+  calledShot: { spread: 0.7 }, // spread of the player's shots aimed at a part, times this
+  juryRig: { fieldCap: 0.15 }, // share of max HP added to the field repair cap, up to full HP
+  scrounger: { parts: 1 }, // units of the parts good added to a stock on the player's first finished search of it
+  quickRefit: { refit: 0.5 }, // field refit turns of the player, times this, at least 1
+  carefulStrip: { hp: 0.25 }, // share of max HP a part mounted from a wreck stock gains, up to full HP
+  hardHead: { cabShare: 0.5 }, // share of cab damage the player loses as health, times this
+  quickWake: { knockoutTurns: 0.5 }, // turn limit of a watched knockout, times this
+  knownFace: { tow: 2 }, // tow offer weight toward the stranded player, times this
+  smoothTalker: { cargo: 0.5 }, // share of each good the player drops to a demand, rounded down
+  bluff: { danger: 2 }, // danger a robber sees in the player truck, times this
+};

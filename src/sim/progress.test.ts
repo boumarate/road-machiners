@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TIME } from '../data/time';
-import { MAX_SKILL_LEVEL, XP_RULES, XP_SOURCES, XP_TO_REACH } from '../data/skills';
-import { practice, skillEffect, skillLevel, xpFor } from './progress';
+import { MAX_SKILL_LEVEL, type PerkId, XP_RULES, XP_SOURCES, XP_TO_REACH } from '../data/skills';
+import { choosePerk, hasPerk, pendingPerkPairs, practice, skillEffect, skillLevel, vehicleHasPerk, xpFor } from './progress';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld } from './testkit';
 
@@ -100,5 +100,68 @@ describe('skill effects on the truck', () => {
     const before = vehicleStats(w, me).turnSlow;
     w.player.skills.driving = XP_TO_REACH[2];
     expect(vehicleStats(w, me).turnSlow).toBeGreaterThan(before);
+  });
+});
+
+describe('choosing a perk', () => {
+  it('adds a perk once the skill reaches its level', () => {
+    const w = emptyWorld();
+    w.player.skills.driving = XP_TO_REACH[2];
+    const next = choosePerk(w, 'ramGuard');
+    expect(hasPerk(next, 'ramGuard')).toBe(true);
+    expect(hasPerk(w, 'ramGuard')).toBe(false);
+  });
+
+  it('refuses a perk above the skill level', () => {
+    const w = emptyWorld();
+    w.player.skills.driving = XP_TO_REACH[3];
+    expect(() => choosePerk(w, 'steadyAim')).toThrow(/level 4/);
+  });
+
+  it('refuses a second perk from the same pair', () => {
+    const w = emptyWorld();
+    w.player.skills.driving = XP_TO_REACH[2];
+    const next = choosePerk(w, 'ramGuard');
+    expect(() => choosePerk(next, 'pusher')).toThrow(/Ram guard/);
+    expect(() => choosePerk(next, 'ramGuard')).toThrow(/Ram guard/);
+  });
+
+  it('refuses an unknown perk', () => {
+    const w = emptyWorld();
+    expect(() => choosePerk(w, 'flying' as PerkId)).toThrow(/Unknown perk flying/);
+  });
+
+  it('refuses a pick while the player is knocked out', () => {
+    const w = emptyWorld();
+    w.player.skills.driving = XP_TO_REACH[2];
+    w.player.state = 'knockedOut';
+    expect(() => choosePerk(w, 'ramGuard')).toThrow();
+  });
+});
+
+describe('open perk pairs', () => {
+  it('lists no pair below level 2', () => {
+    expect(pendingPerkPairs(emptyWorld())).toEqual([]);
+  });
+
+  it('lists each reached pair until it has a pick', () => {
+    const w = emptyWorld();
+    w.player.skills.social = XP_TO_REACH[4];
+    expect(pendingPerkPairs(w)).toEqual([
+      { skill: 'social', level: 2, perks: ['knownFace', 'smoothTalker'] },
+      { skill: 'social', level: 4, perks: ['bluff', 'goodwill'] },
+    ]);
+    const next = choosePerk(w, 'bluff');
+    expect(pendingPerkPairs(next)).toEqual([{ skill: 'social', level: 2, perks: ['knownFace', 'smoothTalker'] }]);
+  });
+});
+
+describe('perks on vehicles', () => {
+  it('apply to the player truck only', () => {
+    const w = emptyWorld();
+    w.player.perks.push('ramGuard');
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    expect(vehicleHasPerk(w, w.vehicles[0], 'ramGuard')).toBe(true);
+    expect(vehicleHasPerk(w, npc, 'ramGuard')).toBe(false);
   });
 });

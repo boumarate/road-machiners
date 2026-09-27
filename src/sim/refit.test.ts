@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { RULES } from '../data/rules';
-import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
-import { moveItem, dumpGood, removeAllGoods } from './inventory';
+import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { moveItem, dumpGood, refitTurns, removeAllGoods } from './inventory';
 import { advanceJobs, startJob } from './jobs';
-import { emptyWorld, practiceOf } from './testkit';
+import { addVehicle, emptyWorld, practiceOf } from './testkit';
 import { findSpot, gridOf, MOUNT_CELLS } from './grid';
 import { planItemMove } from './inventory';
 import type { GridItem, World } from './types';
@@ -174,5 +174,30 @@ describe('machining on refits', () => {
     const turns = Math.ceil(RULES.refitTurnsPerPart * (1 - 5 * SKILL_EFFECTS.machining.refit));
     expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: turns, total: turns });
     expect(turns).toBeLessThan(RULES.refitTurnsPerPart);
+  });
+});
+
+describe('quick refit perk', () => {
+  it('halves the field refit turns of the player', () => {
+    const w = emptyWorld();
+    w.player.perks.push('quickRefit');
+    const weapon = getWeapon(w);
+    const next = moveItem(w, weapon.id, { x: 1, y: CHASSIS.scout.layout.length, rot: 0 });
+    const turns = Math.max(1, Math.ceil(RULES.refitTurnsPerPart * PERK_NUMBERS.quickRefit.refit));
+    expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: turns, total: turns });
+    expect(turns).toBeLessThan(RULES.refitTurnsPerPart);
+  });
+
+  it('keeps at least one turn', () => {
+    const w = emptyWorld();
+    w.player.perks.push('quickRefit');
+    expect(refitTurns(w, w.vehicles[0], 1)).toBe(1);
+  });
+
+  it('leaves NPC refit turns alone', () => {
+    const w = emptyWorld();
+    w.player.perks.push('quickRefit');
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    expect(refitTurns(w, npc, RULES.refitTurnsPerPart)).toBe(RULES.refitTurnsPerPart);
   });
 });

@@ -1,6 +1,6 @@
 import { chooseOption, currentOptions } from './dialogue';
 import { describe, expect, it } from 'vitest';
-import { XP_TO_REACH } from '../data/skills';
+import { PERK_NUMBERS, XP_TO_REACH } from '../data/skills';
 import { RULES } from '../data/rules';
 import { SPAWN } from '../data/npcs';
 import { REGION } from '../data/region';
@@ -493,5 +493,48 @@ describe('hit practice', () => {
     }
     expect(w.events.filter((e) => e.t === 'shot' && e.shooter === buggy.id)).toHaveLength(10);
     expect(practiceOf(w, 'hit')).toEqual([]);
+  });
+});
+
+describe('aim perks', () => {
+  const broadside = Math.PI / 2;
+
+  it('steady aim takes the scatter of own speed away from the player', () => {
+    const { w, me, buggy, mg } = range(5, broadside);
+    me.speed = 6;
+    const shaky = hitOdds(w, me, mg, buggy, 'body');
+    w.player.perks.push('steadyAim');
+    const steady = hitOdds(w, me, mg, buggy, 'body');
+    expect(shaky.causes.own).toBeGreaterThan(0);
+    expect(steady.causes.own).toBe(0);
+    expect(steady.chance).toBeGreaterThan(shaky.chance);
+  });
+
+  it('steady aim leaves an NPC shooter shaking', () => {
+    const { w, me, buggy } = range(5, broadside);
+    buggy.speed = 6;
+    const gun = vehicleStats(w, buggy).weapons[0];
+    const before = hitOdds(w, buggy, gun, me, 'body');
+    w.player.perks.push('steadyAim');
+    expect(hitOdds(w, buggy, gun, me, 'body').causes.own).toBe(before.causes.own);
+  });
+
+  it('called shot cuts the spread of the player aimed shots only', () => {
+    const { w, me, buggy, mg } = range(5, broadside);
+    const part = mountedParts(buggy, 'weapon')[0].id;
+    const aimed = hitOdds(w, me, mg, buggy, part);
+    const body = hitOdds(w, me, mg, buggy, 'body');
+    w.player.perks.push('calledShot');
+    expect(hitOdds(w, me, mg, buggy, part).spread).toBeCloseTo(aimed.spread * PERK_NUMBERS.calledShot.spread, 12);
+    expect(hitOdds(w, me, mg, buggy, 'body').spread).toBe(body.spread);
+  });
+
+  it('called shot leaves NPC aimed shots alone', () => {
+    const { w, me, buggy } = range(5, broadside);
+    const gun = vehicleStats(w, buggy).weapons[0];
+    const part = mountedParts(me, 'weapon')[0].id;
+    const before = hitOdds(w, buggy, gun, me, part);
+    w.player.perks.push('calledShot');
+    expect(hitOdds(w, buggy, gun, me, part).spread).toBe(before.spread);
   });
 });

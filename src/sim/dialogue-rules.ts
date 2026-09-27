@@ -6,11 +6,12 @@ import { REGION, type TownDef } from '../data/region';
 import { playerVehicle } from './damage';
 import { discoverSite } from './locations';
 import { SPAWN } from '../data/npcs';
+import { PERK_NUMBERS } from '../data/skills';
+import { practice, vehicleHasPerk } from './progress';
 import { patchGoal, pushGoal, startTow, topGoal } from './npc-activities';
 import { createCargoSalvage, hasCargo } from './salvage';
 import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
 import { npcProfile } from './npc-decisions';
-import { practice } from './progress';
 import { addState, endState, stateOf, towData } from './states';
 import { acceptOffer, playerTow, refuseOffer, strandedPlayerAt } from './tow';
 import type { Call, CallVars, TopicOutcome, Vehicle, World } from './types';
@@ -43,11 +44,12 @@ function settle(world: World, npc: Vehicle, call: Call, outcome: TopicOutcome): 
   if (outcome === 'agreed') practice(world, 'deal', 1, null);
 }
 
-// The player drops the cargo. The demander and its faction mates nearby end any feud with the player and hold a
-// truce instead, and the demander goes to search the stock.
+// The player drops the cargo, only half of each good with the smooth talker perk. The demander and its faction mates
+// nearby end any feud with the player and hold a truce instead, and the demander goes to search the stock.
 function handOverCargo(world: World, npc: Vehicle): void {
   const me = playerVehicle(world);
-  const stock = createCargoSalvage(world, me);
+  const share = vehicleHasPerk(world, me, 'smoothTalker') ? PERK_NUMBERS.smoothTalker.cargo : 1;
+  const stock = createCargoSalvage(world, me, share);
   const party = world.vehicles.filter((v) => v.brain && v.faction === npc.faction && dist(v.pos, npc.pos) <= SPAWN.neighborHelp);
   for (const v of party) {
     for (const s of [stateOf(world, 'feud', v.id, me.id), stateOf(world, 'feud', me.id, v.id)]) if (s) endState(world, s, 'broken');

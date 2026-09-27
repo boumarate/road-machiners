@@ -3,12 +3,14 @@ import { ECONOMY } from '../data/goods';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { partDef } from '../data/parts';
+import { PERK_NUMBERS } from '../data/skills';
 import { makePart } from './factory';
 import { goodsCount, isLoot, isMounted } from './grid';
 import { addGoods, stowPart } from './inventory';
+import { vehicleHasPerk } from './progress';
 import { chance, randInt } from './rng';
 import { vehicleStats } from './stats';
-import type { PartInstance, SalvageStock, Vehicle, World } from './types';
+import type { GridItem, PartInstance, SalvageStock, Vehicle, World } from './types';
 import { canUseSite } from './sites';
 import { dist, type Vec } from './vec';
 
@@ -89,6 +91,18 @@ export function knockoutStockId(vehicleId: string, turn: number): string {
   return `wreck-${vehicleId}-${turn}`;
 }
 
+// A wreck stock: a road wreck, a destroyed truck or a knocked-out player truck.
+function isWreckStock(stock: SalvageStock): boolean {
+  return stock.id.startsWith('wreck');
+}
+
+// The careful strip perk: a part the player mounts from a wreck stock gains a share of its max HP, up to full.
+export function stripPart(world: World, vehicle: Vehicle, stock: SalvageStock, part: PartInstance): void {
+  if (!isWreckStock(stock) || !vehicleHasPerk(world, vehicle, 'carefulStrip')) return;
+  const max = partDef(part.defId).hp;
+  part.hp = Math.min(max, part.hp + Math.round(max * PERK_NUMBERS.carefulStrip.hp));
+}
+
 export function createWreckSalvage(world: World, vehicle: Vehicle): void {
   const goods = goodsCount(vehicle);
   const parts: PartInstance[] = [];
@@ -117,9 +131,10 @@ export function createKnockoutSalvage(world: World, vehicle: Vehicle): void {
   vehicle.items = vehicle.items.filter((item) => !loot.includes(item));
 }
 
-// A truck that hands over its cargo drops its goods and loose parts where it stands. Mounted parts stay.
-export function createCargoSalvage(world: World, vehicle: Vehicle): SalvageStock {
-  const cargo = vehicle.items.filter((item) => item.kind === 'good' || !isMounted(vehicle.chassisId, item));
+// A truck that hands over its cargo drops `goodsShare` of each good, rounded down, and every loose part where it
+// stands. Mounted parts stay.
+export function createCargoSalvage(world: World, vehicle: Vehicle, goodsShare: number): SalvageStock {
+  const cargo = cargoItems(vehicle, goodsShare);
   const goods: Record<string, number> = {};
   const parts: PartInstance[] = [];
   for (const item of cargo) {
@@ -129,6 +144,19 @@ export function createCargoSalvage(world: World, vehicle: Vehicle): SalvageStock
   addVehicleStock(world, vehicle, `cargo-${vehicle.id}-${world.turn}`, goods, parts);
   vehicle.items = vehicle.items.filter((item) => !cargo.includes(item));
   return world.salvage[world.salvage.length - 1];
+}
+
+// The items a handover drops: `goodsShare` of each good, rounded down, and every loose part.
+function cargoItems(vehicle: Vehicle, goodsShare: number): GridItem[] {
+  if (!(goodsShare >= 0 && goodsShare <= 1)) throw new Error(`Cargo share ${goodsShare} is not in [0, 1]`);
+  const quota: Record<string, number> = {};
+  for (const [good, count] of Object.entries(goodsCount(vehicle))) quota[good] = Math.floor(count * goodsShare);
+  return vehicle.items.filter((item) => {
+    if (item.kind === 'part') return !isMounted(vehicle.chassisId, item);
+    if (quota[item.good] <= 0) return false;
+    quota[item.good]--;
+    return true;
+  });
 }
 
 // Goods or loose parts a demand can ask for.

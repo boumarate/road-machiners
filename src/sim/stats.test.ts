@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
-import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { corePart, mountedParts } from './grid';
 import { groundSpeed, vehicleStats } from './stats';
 import { addVehicle, emptyWorld } from './testkit';
@@ -59,6 +59,24 @@ describe('crawling when stranded', () => {
   it('leaves a stranded NPC truck at limp speed', () => {
     const w = emptyWorld();
     w.player.skills.driving = XP_TO_REACH[5];
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    mountedParts(npc, 'engine')[0].hp = 0;
+    expect(vehicleStats(w, npc).maxSpeed).toBeCloseTo(RULES.limpSpeed);
+  });
+});
+
+describe('pusher perk', () => {
+  it('doubles the crawl speed of the stranded player truck', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    mountedParts(me, 'engine')[0].hp = 0;
+    w.player.perks.push('pusher');
+    expect(vehicleStats(w, me).maxSpeed).toBeCloseTo(RULES.limpSpeed * PERK_NUMBERS.pusher.crawl);
+  });
+
+  it('leaves a stranded NPC truck at limp speed', () => {
+    const w = emptyWorld();
+    w.player.perks.push('pusher');
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
     mountedParts(npc, 'engine')[0].hp = 0;
     expect(vehicleStats(w, npc).maxSpeed).toBeCloseTo(RULES.limpSpeed);

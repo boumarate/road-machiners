@@ -161,6 +161,8 @@ Approach: replace the XP pool with per-skill practice first, then widen effects 
 
 - src/sim/patch.ts:partsValue — prices an NPC client's parts with the player's buy price, so the player's Social skill lowers what an NPC pays (IV2).
 
+- src/ui/format.ts:formatNpcActivity — goal reasons such as a robbery goal can still hint at hidden traits.
+
 ## Conclusion
 
 ### Deviations from plan
@@ -172,3 +174,6 @@ Approach: replace the XP pool with per-skill practice first, then widen effects 
 - PH3 `contactFix` shrinks sound, radio and beacon circles only. A dust circle must still reach its truck.
 - PH3 `heal` rounds to whole health. With a base of 1 per turn, levels 1 to 4 add nothing outside town. PH6 tuning must fix this or drop the effect.
 - PH3 knockout health loss is covered by `cabShare`, which cuts all health lost to cab damage.
+- PH4 perk data lives in `src/data/skills.ts` and perk logic in `src/sim/progress.ts`, not new perk files. The quality gate rejected the extra files as fragmentation.
+- PH4 `scrounger` adds one `parts` unit to the searched stock. `smoothTalker` drops half of each good, rounded down, and every loose part. `goodwill` makes every patch free for the player client, own-parts deals included.
+- PH4 `choosePerk` needs an active player only, so a pick during a tow or a call is allowed.
