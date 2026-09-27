@@ -109,7 +109,7 @@ const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is reco
 // The circle under the hovered vehicle, which a click targets. Sizes are in tiles.
 const PICK_RING = { gap: 0.45, width: 0.06, alpha: 0.9, lift: 0.02 };
 
-// Headlight beams for every vehicle the player sees at night. Sight bounds the range.
+// Headlight beams at night for every vehicle within gray vision, also one the player cannot see.
 const BEAM_COLOR = 0xfff2c8;
 const BEAM_INTENSITY = 25; // lit only at night
 const BEAM_DECAY = 0.4; // below the physical 2, so the ground by the nose does not burn white
@@ -1108,9 +1108,7 @@ export class Game {
       }
       return;
     }
-    const lit = this.world.vehicles.filter(
-      (v) => this.frames[v.id] && this.isVehicleVisible(v),
-    );
+    const lit = this.world.vehicles.filter((v) => this.frames[v.id] && this.sightLimit.reaches(this.frames[v.id].pos));
     while (this.beams.length < lit.length) {
       const beam = new THREE.SpotLight(
         BEAM_COLOR,
