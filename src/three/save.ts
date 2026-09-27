@@ -16,7 +16,7 @@ export function hasSave(storage: Storage): boolean {
 
 // Saves leave out the terrain, which buildTerrain rebuilds from the seed. The 600-tile terrain alone is
 // about 10 MB of JSON, past the browser's local storage quota. 4 adds weather, jobs, contacts and dust.
-const SAVE_VERSION = 5;
+const SAVE_VERSION = 6;
 
 export function loadWorld(storage: Storage): World | null {
   const raw = storage.getItem(SAVE_KEY);
