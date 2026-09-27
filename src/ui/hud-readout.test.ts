@@ -70,7 +70,10 @@ describe("rescue readout", () => {
   it("shows negative money as debt with a warning", () => {
     const w = emptyWorld();
     w.player.money = -1200;
-    expect(getHudReadout(w).resources[0]).toMatchObject({ value: "Debt 1,200", warning: true });
+    expect(getHudReadout(w).resources[0]).toMatchObject({
+      value: "Debt 1,200",
+      warning: true,
+    });
   });
   it("follows the player from stranded to tow, and leaves an open offer to the radio", () => {
     const w = emptyWorld();

@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { TERRAIN } from '../../data/terrain';
 import type { World } from '../../sim/types';
+import type { SightLimit } from './scope';
 import { TERRAIN_CHUNK, type TerrainChunk } from './terrain';
 
 const VISIBLE = 0;
@@ -24,7 +25,8 @@ export class FogView {
   private readonly dirty: Uint8Array;
   private readonly lookOf: Look[] = [{ grey: 0, bright: 1 }, TERRAIN.fog.seen, TERRAIN.fog.unseen];
 
-  constructor(world: World, ground: TerrainChunk[]) {
+  // Each update also passes the clearly seen tiles to the sight limit, which greys props by them.
+  constructor(world: World, ground: TerrainChunk[], private readonly limit: SightLimit) {
     const n = world.size;
     this.perSide = Math.ceil(n / TERRAIN_CHUNK);
     this.state = new Uint8Array(n * n).fill(UNSET);
@@ -44,6 +46,7 @@ export class FogView {
     const n = world.size;
     const visible = new Uint8Array(n * n);
     for (const t of world.player.visible) visible[t] = 1;
+    this.limit.showVisible(world.player.visible);
     const explored = world.player.explored;
     const C = TERRAIN_CHUNK;
     for (let t = 0; t < n * n; t++) {
@@ -91,8 +94,12 @@ export class FogView {
 }
 
 // Mixes the lit ground color toward its own grey, then scales its brightness, by the fogLook attribute.
+// Chains any shader patch the material already has, like the sight limit.
 function greyOut(mat: THREE.MeshLambertMaterial): void {
-  mat.onBeforeCompile = (shader) => {
+  const before = mat.onBeforeCompile.bind(mat);
+  const key = mat.customProgramCacheKey.bind(mat);
+  mat.onBeforeCompile = (shader, renderer) => {
+    before(shader, renderer);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec2 fogLook;\nvarying vec2 vFogLook;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFogLook = fogLook;');
@@ -105,5 +112,6 @@ function greyOut(mat: THREE.MeshLambertMaterial): void {
         #include <opaque_fragment>`,
       );
   };
+  mat.customProgramCacheKey = () => `${key()}|fog`;
   mat.needsUpdate = true;
 }

@@ -60,7 +60,7 @@ Player auto mode assigns every weapon a body shot at a visible hostile. NPC weap
 
 Losing a fight does not end the game, in Kenshi style. A loss starts a new story on real turns the player watches. There are no fade screens.
 
-A broken cab knocks the player out while health is above 0. Every mounted part except the built-in ones, all goods and all spare parts drop into a wreck stock beside the truck. Money, fuel and supplies stay. Grudges against the player end.
+A broken cab knocks the player out while health is above 0. Every mounted part except the built-in ones, all goods and all spare parts drop into a wreck stock beside the truck. Money, fuel and supplies stay. Feuds against the player end.
 
 While knocked out, turns run on their own and the player gives no orders. Looters search the stock. The player comes to when no hostile sees the truck, or after 30 turns. Broken built-in parts are patched to a quarter of their HP. What the looters left stays in the stock beside the truck.
 
@@ -106,7 +106,7 @@ Raiders have two camps, Scrapjaw Camp in the north and Kiln Camp in the south. A
 
 ## Sun, time and weather
 
-A day is a fixed number of turns, and the clock starts in the morning. The sun rises in the east, crosses south at noon and sets in the west; there is no sun at night. A point is in shade when a ray toward the sun is blocked by a hill or by a rock, wreck or building. Heat is at its base rate in shade and at night, and rises toward its peak in full sun; heat multiplies fuel and supply drain, so the wrong time and route cost more of the tank and the larder. The ground darkens over shaded tiles once they are explored, using the same rule the sim drains by. The sun's light follows the clock, and the scene dims after dark. Sight also shrinks at night.
+A day is a fixed number of turns, and the clock starts in the morning. The sun rises in the east, crosses north at noon and sets in the west; there is no sun at night. A point is in shade when a ray toward the sun is blocked by a hill or by a rock, wreck or building. Heat is at its base rate in shade and at night, and rises toward its peak in full sun; heat multiplies fuel and supply drain, so the wrong time and route cost more of the tank and the larder. The ground darkens over shaded tiles once they are explored, using the same rule the sim drains by. The sun's light follows the clock, and the scene dims after dark. Sight also shrinks at night.
 
 Weather events come from the world's own randomness, so a seed replays the same weather. A dust storm is a moving area: inside it, sight and aim both suffer, top speed drops, and wear climbs faster. A heat wave covers the whole region and raises heat further. Overcast also covers the region, and cancels the sun's heat instead. The HUD shows the day, time, current heat and the region's weather.
 
@@ -123,6 +123,32 @@ Scavengers collect finite salvage and sell cargo. Idle scavengers mostly fight m
 Scavenging is a timed search: the truck parks at a stock and searches for turns in proportion to what the stock holds, with a progress bar. Moving the truck cancels the search. A finished search opens the stock beside the truck's grid, and the player drags in what they want. What they leave stays at the site for later. NPC scavengers take everything that fits. Landmark and convoy sites hold finite stock rolled at world creation: goods, parts and sometimes a spare mountable part. Destroyed NPCs leave a wreck with the same kind of stock. Their mounted parts join it at the HP they had; their built-in parts turn into the parts good instead. Collection takes only what fits and leaves the rest. Old wreck retirement removes their remaining stock. Empty sites do not regenerate.
 
 Town markets have fixed prices and unlimited stock and money. Initial NPC resources and the oasis are explicit sources. No offscreen catch-up grants are used. A knocked-out player's parts and cargo go into a wreck stock that any collector can take.
+
+## NPC traits and states
+
+Every NPC carries a set of traits instead of one class. Each trait adds activities and shifts chances. A scavenger with the scumbag trait still scavenges, and it also robs. Traits roll at spawn: every scavenger scavenges, and some are also scumbags or cowards. For now the hover panel shows traits. In the final game they stay hidden, so the player learns a driver is a scumbag only when it starts acting like one.
+
+- Scavenger collects salvage and helps stranded trucks.
+- Trader buys and sells between towns, rarely starts a fight, and sometimes fights back.
+- Raider hunts at hunting grounds, investigates distant engines and knows the raider camps.
+- Scumbag robs trucks that carry loot and look weaker than it.
+- Coward flees more often and fights back less.
+
+A chance is 0 only when an option is physically impossible. A driver with no working gun cannot fight, and a truck with no loot cannot be robbed. Anything a driver can do keeps at least a 1% chance. So an ordinary scavenger robs about once in a hundred chances, and a trader sometimes starts a fight.
+
+Drivers judge each other by danger: the firepower of working guns times the current toughness of the cab, chassis and armor. A tank looks more dangerous than a scout, and a half-beaten tank looks about half as dangerous. Danger counts nearby visible faction mates on each side. A driver misjudges another truck's danger by up to a quarter each time it first sees it. A scumbag robs a truck whose danger looks below its own times its boldness. Scumbags are bold, and cowards are timid. A stronger target, or one near a town gate, is robbed only rarely.
+
+A robbery is an attack. The winner searches the wreck or the knockout stock the loser left. A robber whose target escapes backs off that target for a while.
+
+Damage from one vehicle to another is an attack, whether it comes from a shot or a crash. A missed shot counts too. The victim and its nearby faction mates that see it start a feud with the attacker. A slow bump that does no damage is not an attack, and neither is contact with the truck on a tow rope.
+
+States are timed relations between two trucks. Each ends as expired, fulfilled or broken, and each ending can start other states.
+
+- A feud makes both trucks hostile. Sight or shots between them keep it going. It expires after some turns without either, and a failed robber then backs off.
+- A tow runs from the offer to arrival in town, where the fee is paid. It breaks for free when the player refuses or unhitches, or when the tower meets danger.
+- A tower the player turned down rarely offers again.
+- A tower that dropped a tow for danger comes back with the same deal.
+- Only one driver answers a stranded player at a time. Near a town gate, drivers rarely offer a tow at all.
 
 ## Social
 

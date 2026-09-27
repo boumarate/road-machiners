@@ -18,6 +18,7 @@ import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { isHostile } from './combat';
+import { isRamGainful, ramImpact } from './crash-contact';
 import { vehicleById } from './damage';
 import { contactsOf } from './detect';
 import { getTradePrice } from './economy';
@@ -28,12 +29,12 @@ import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
 import { randRange } from './rng';
 import { canReachSalvage, hasSalvage } from './salvage';
-import { canUseSite } from './sites';
+import { canUseSite, siteGates } from './sites';
 import { statesHeld } from './states';
-import { vehicleStats } from './stats';
+import { getMobilityCondition, vehicleStats } from './stats';
 import { strandedPlayerAt } from './tow';
 import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
-import { dist, type Vec } from './vec';
+import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 
 // ---- Traits and the profile they give.
@@ -89,9 +90,11 @@ export function getKnownSite(id: string) {
   return site;
 }
 
-export function getCabCondition(vehicle: Vehicle): number {
+// The share left of the cab or the weakest driving part, whichever is lower. A truck that cannot drive cannot fight
+// on, however sound its cab.
+function getCombatCondition(vehicle: Vehicle): number {
   const cab = corePart(vehicle, 'cab');
-  return cab.hp / partDef(cab.defId).hp;
+  return Math.min(cab.hp / partDef(cab.defId).hp, getMobilityCondition(vehicle));
 }
 
 // Damage times rounds summed over working guns.
@@ -130,10 +133,11 @@ function isManageable(world: World, vehicle: Vehicle, danger: number): boolean {
   return danger <= ownDanger(world, vehicle) * NPC_BEHAVIOR.threatRatio * npcProfile(vehicle).boldness;
 }
 
-// At or below the flee condition, or below the higher recover condition while already fleeing.
+// Combat condition or driver health at or below the flee condition, or below the higher recover condition while
+// already fleeing.
 export function isWeak(world: World, vehicle: Vehicle): boolean {
   const threshold = topGoal(vehicle)?.kind === 'flee' ? NPC_BEHAVIOR.recoverCondition : NPC_BEHAVIOR.fleeCondition;
-  return getCabCondition(vehicle) <= threshold || getResources(world, vehicle).health / RULES.maxHealth <= threshold;
+  return getCombatCondition(vehicle) <= threshold || getResources(world, vehicle).health / RULES.maxHealth <= threshold;
 }
 
 // Hostile vehicles in sight, nearest first.
@@ -263,6 +267,13 @@ function canRobSubject(world: World, vehicle: Vehicle, decision: DecisionId, sub
   return canRob(world, vehicle, subjectOf(world, decision, subject));
 }
 
+// A ram needs the subject as the fight target on top of the goals, within reach of a damaging ram.
+function canRamSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  const target = subjectOf(world, decision, subject);
+  const top = topGoal(vehicle);
+  return top?.kind === 'fight' && top.targetId === target.id && ramImpact(world, vehicle, target) !== null;
+}
+
 function canTow(world: World, vehicle: Vehicle): boolean {
   return strandedPlayerAt(world, vehicle) !== null;
 }
@@ -293,6 +304,7 @@ const AVAILABLE: Record<OptionName, Availability> = {
   flee: canDrive,
   investigate: canDrive,
   rob: canRobSubject,
+  ram: canRamSubject,
   tow: canTow,
   resume: canResume,
   new: always,
@@ -379,6 +391,26 @@ function keepFactor(world: World, vehicle: Vehicle, decision: DecisionId, subjec
   return restrained ? NPC_BEHAVIOR.keepWork : 1;
 }
 
+// A ram the forecast calls costly is rare.
+function ramFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): number {
+  return isRamGainful(world, vehicle, subjectOf(world, decision, subject)) ? 1 : NPC_BEHAVIOR.riskyRam;
+}
+
+// A stranded truck that can crawl to a town gate mostly gets no tow. The factor rises from NPC_BEHAVIOR.towNearTown
+// at a short crawl to 1 far out, measured from where the driver perceives the truck.
+function towFactor(world: World, vehicle: Vehicle): number {
+  const at = strandedPlayerAt(world, vehicle);
+  if (!at) throw new Error(`${vehicle.id} weighs a tow with no stranded player perceived`);
+  const { factor, crawl, far } = NPC_BEHAVIOR.towNearTown;
+  const gate = Math.min(...REGION.towns.flatMap((town) => siteGates(town).map((g) => dist(at, g))));
+  return factor + (1 - factor) * clamp((gate - crawl) / (far - crawl), 0, 1);
+}
+
+// A driver below the recover condition rarely closes in on a contact. It needs repairs first.
+function investigateFactor(_world: World, vehicle: Vehicle): number {
+  return getCombatCondition(vehicle) <= NPC_BEHAVIOR.recoverCondition ? NPC_BEHAVIOR.crippledInvestigate : 1;
+}
+
 function scavengeFactor(world: World, vehicle: Vehicle): number {
   return visibleSalvage(world, vehicle).length > 0 ? NPC_BEHAVIOR.visibleSalvage : 1;
 }
@@ -388,9 +420,10 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   fight: fightFactor,
   fightBack: fightBackFactor,
   flee: fleeFactor,
-  investigate: neutral,
+  investigate: investigateFactor,
   rob: robFactor,
-  tow: neutral,
+  ram: ramFactor,
+  tow: towFactor,
   resume: neutral,
   new: neutral,
   trade: neutral,

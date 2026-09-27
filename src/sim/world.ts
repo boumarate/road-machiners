@@ -9,6 +9,7 @@ import { makePart, makeVehicle } from './factory';
 import { generateObstacles } from './mapgen';
 import { buildTerrain } from './terrain';
 import { planNpcOrders } from './ai';
+import { applyGodMode } from './cheats';
 import { assignAutoOrders, fireWeapons, isHostile, resolveDestroyed } from './combat';
 import { advanceKnockout, checkDeath, checkKnockout } from './defeat';
 import { healPlayer } from './health';
@@ -70,6 +71,7 @@ export function newWorld(seed: number, kit: StartKit): World {
       beacon: false,
       call: null,
       talked: {},
+      god: false,
       explored: new Uint8Array(REGION.size * REGION.size),
       visible: [],
       contacts: [],
@@ -205,6 +207,7 @@ export function endTurn(
     consumeSupplies(w);
     healPlayer(w);
     leakFuel(w);
+    applyGodMode(w);
     resolveDestroyed(w);
     advancePatches(w);
     advanceStates(w);

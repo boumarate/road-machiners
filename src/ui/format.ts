@@ -51,6 +51,7 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   tow: (s) => (towData(s).hitched ? 'Towing you' : 'Tow offer to you'),
   turnedDown: () => 'You turned down its tow',
   towPromise: () => 'Promised you a tow',
+  answering: () => 'Coming to tow you',
   patch: () => 'Patching your truck',
   truce: () => 'Truce with you',
 };

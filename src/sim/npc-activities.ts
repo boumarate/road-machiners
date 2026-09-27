@@ -24,7 +24,7 @@ import { beginSearch } from './search';
 import { vehicleById } from './damage';
 import { addState, endState, stateOf } from './states';
 import { vehicleStats } from './stats';
-import type { Contact, GameEvent, Job, NpcActivity, NpcState, SalvageStock, Vehicle, World } from './types';
+import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, SalvageStock, Vehicle, World } from './types';
 import { canUseSite, isWalled, siteGates } from './sites';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
@@ -304,23 +304,55 @@ function invalidReason(world: World, vehicle: Vehicle, goal: NpcActivity, contac
 
 // Refreshes noticed subjects the NPC perceives now. A subject a goal still targets stays noticed. Any other one is
 // forgotten NPC_BEHAVIOR.noticeMemory turns after it was last perceived, so it fires again when perceived again.
+// A ram chance is noticed only while it lasts, and forgetting it drops the ram choice.
 function forget(world: World, vehicle: Vehicle, contacts: Contact[]): void {
   const brain = vehicle.brain!;
   for (const [key, last] of Object.entries(brain.noticed)) {
     const [decision, id] = key.split(':');
     if (perceives(world, vehicle, decision, id, contacts)) brain.noticed[key] = world.turn;
-    else if (!brain.goals.some((g) => g.targetId === id) && world.turn - last > NPC_BEHAVIOR.noticeMemory) delete brain.noticed[key];
+    else if (!heldByGoal(brain, decision, id) && world.turn - last > NPC_BEHAVIOR.noticeMemory) unnotice(brain, key, id);
   }
 }
 
+function heldByGoal(brain: NpcBrain, decision: string, id: string): boolean {
+  return decision !== 'ramChance' && brain.goals.some((g) => g.targetId === id);
+}
+
+function unnotice(brain: NpcBrain, key: string, id: string): void {
+  delete brain.noticed[key];
+  if (key.startsWith('ramChance:') && brain.ramChoice === id) delete brain.ramChoice;
+}
+
 function perceives(world: World, vehicle: Vehicle, decision: string, id: string, contacts: Contact[]): boolean {
-  if (decision === 'contactHeard') return contacts.some((c) => c.vehicleId === id);
-  if (decision !== 'hostileSeen' && decision !== 'preySeen' && decision !== 'strandedSeen') throw new Error(`Unknown noticed decision ${decision}`);
+  if (!Object.hasOwn(PERCEIVES, decision)) throw new Error(`Unknown noticed decision ${decision}`);
+  return PERCEIVES[decision as NoticedDecision](world, vehicle, id, contacts);
+}
+
+type NoticedDecision = 'hostileSeen' | 'contactHeard' | 'preySeen' | 'strandedSeen' | 'ramChance';
+
+type Perception = (world: World, vehicle: Vehicle, id: string, contacts: Contact[]) => boolean;
+
+function seesVehicle(world: World, vehicle: Vehicle, id: string): boolean {
   const other = world.vehicles.find((v) => v.id === id);
   return other !== undefined && canVehicleSee(world, vehicle, other.pos);
 }
 
-type NoticedDecision = 'hostileSeen' | 'contactHeard' | 'preySeen' | 'strandedSeen';
+function hearsVehicle(_world: World, _vehicle: Vehicle, id: string, contacts: Contact[]): boolean {
+  return contacts.some((c) => c.vehicleId === id);
+}
+
+function hasRamChance(world: World, vehicle: Vehicle, id: string): boolean {
+  return world.vehicles.some((v) => v.id === id) && offersChoice(world, vehicle, 'ramChance', id);
+}
+
+// How a driver still perceives the subject of each noticed decision.
+const PERCEIVES: Record<NoticedDecision, Perception> = {
+  hostileSeen: seesVehicle,
+  contactHeard: hearsVehicle,
+  preySeen: seesVehicle,
+  strandedSeen: seesVehicle,
+  ramChance: hasRamChance,
+};
 
 // Rolls a decision about a subject once while the subject stays noticed. Null when it already is. When only keep
 // has weight, the driver keeps without a roll and without noticing, so the decision fires once a choice appears.
@@ -433,13 +465,29 @@ function onStrandedSeen(world: World, vehicle: Vehicle): void {
   if (at && react(world, vehicle, 'strandedSeen', world.player.vehicleId) === 'tow') startTow(world, vehicle, at);
 }
 
+// One roll per ram chance on the fight target on top. The choice holds while the chance lasts, and the fight
+// planner rams only while the target stays within reach. A driver that keeps fights from its range.
+function onRamChance(world: World, vehicle: Vehicle): void {
+  const brain = vehicle.brain!;
+  const target = fightTarget(vehicle);
+  if (brain.ramChoice !== target) delete brain.ramChoice;
+  if (target !== null && react(world, vehicle, 'ramChance', target) === 'ram') brain.ramChoice = target;
+}
+
+function fightTarget(vehicle: Vehicle): string | null {
+  const top = topGoal(vehicle);
+  return top?.kind === 'fight' ? top.targetId : null;
+}
+
 // A driver the player turned down that picks tow again is over it: its turnedDown state ends, so the tow goal holds.
 // The client counts as noticed prey, so a tower that set out for a beacon does not roll to rob it on arrival.
+// The driver claims the job, so no other driver answers while it is on its way.
 export function startTow(world: World, vehicle: Vehicle, at: Vec): void {
   const me = world.player.vehicleId;
   const turnedDown = stateOf(world, 'turnedDown', vehicle.id, me);
   if (turnedDown) endState(world, turnedDown, 'fulfilled');
   vehicle.brain!.noticed[`preySeen:${me}`] = world.turn;
+  addState(world, 'answering', vehicle.id, me, { kind: 'none' });
   pushGoal(world, vehicle, createActivity('tow', me, { ...at }, 'help a stranded truck'));
 }
 
@@ -447,6 +495,15 @@ export function startTow(world: World, vehicle: Vehicle, at: Vec): void {
 function steer(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[]): void {
   const top = topGoal(vehicle);
   if (top?.kind === 'flee') steerFlee(world, vehicle, profile, contacts, top);
+  else if (top?.kind === 'tow' && !heldTow(world, vehicle)) steerToStranded(world, vehicle, top);
+}
+
+// A tower on its way re-aims every turn: at the truck once it sees it, else at the newest beacon circle. A stale
+// point can leave it parked out of tow reach, since the player may crawl and a beacon circle is off by its radius.
+function steerToStranded(world: World, vehicle: Vehicle, goal: NpcActivity): void {
+  const at = strandedPlayerAt(world, vehicle);
+  if (!at) throw new Error(`${vehicle.id} heads for a tow with no stranded player perceived`);
+  goal.destination = { ...at };
 }
 
 function steerFlee(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[], goal: NpcActivity): void {
@@ -479,6 +536,7 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   onContactsHeard(world, vehicle, profile, contacts);
   onPreySeen(world, vehicle);
   onStrandedSeen(world, vehicle);
+  onRamChance(world, vehicle);
   steer(world, vehicle, profile, contacts);
   return currentActivity(world, vehicle, profile, hold);
 }

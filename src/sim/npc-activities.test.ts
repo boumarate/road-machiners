@@ -208,10 +208,10 @@ describe('NPC activities', () => {
   });
 
   it('a distant contact remains audible without redirecting a raider', () => {
-    const w = emptyWorld({ x: 100, y: 300 });
+    const w = emptyWorld({ x: 180, y: 300 });
     const player = w.vehicles[0];
     player.speed = 4;
-    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 220, y: 300 }); // 120 tiles, far past the old 34-tile limit
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 220, y: 300 }); // 40 tiles: heard, but the contact circle is wider than the reaction limit
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     forceOption('contactHeard', 'investigate');
     planNpcOrders(w);

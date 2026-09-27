@@ -11,9 +11,11 @@ import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import { hasLoot } from './grid';
 import { thinkNpc, topGoal } from './npc-activities';
+import { optionChances, optionWeights } from './npc-decisions';
 import { addState, stateOf, towData } from './states';
 import { callVehicle, chooseOption, currentOptions, hangUp } from './dialogue';
 import { dropTow, isTowed, playerTow, setBeacon, unhitch } from './tow';
+import { sunAt } from './sun';
 import { canVehicleSee } from './vision';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
@@ -241,6 +243,47 @@ describe('towing', () => {
     expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, reason: 'gone' });
   });
 
+  // A hitched tower on its way to town, a point `ahead` tiles along its way and `side` tiles to its left, and how
+  // far along its way a point lies.
+  function underWay(): { w: World; tower: Vehicle; along: (ahead: number, side: number) => Vec; progress: (p: Vec) => number } {
+    const s = stranded();
+    let w = acceptTow(offered(s));
+    w = endTurn(endTurn(w));
+    const tower = find(w, s.trader.id);
+    const goal = topGoal(tower)!.destination!;
+    const a = Math.atan2(goal.y - tower.pos.y, goal.x - tower.pos.x);
+    const along = (ahead: number, side: number) => ({
+      x: tower.pos.x + Math.cos(a) * ahead - Math.sin(a) * side,
+      y: tower.pos.y + Math.sin(a) * ahead + Math.cos(a) * side,
+    });
+    const origin = { ...tower.pos };
+    const progress = (p: Vec) => (p.x - origin.x) * Math.cos(a) + (p.y - origin.y) * Math.sin(a);
+    return { w, tower, along, progress };
+  }
+
+  const crashes = (events: GameEvent[], id: string) => events.filter((e) => e.t === 'collision' && (e.a === id || e.b === id));
+
+  it('a hitched tower gets past a parked truck in its path without a collision', () => {
+    const { w, tower, along } = underWay();
+    const parked = addVehicle(w, 'scavengers', 'hauler', ['stockEngine'], along(14, 0.5), 0);
+    const r = runUntil(w, 20, () => false);
+    expect(crashes(r.events, tower.id)).toEqual([]);
+    expect(dist(find(r.w, tower.id).pos, parked.pos)).toBeGreaterThan(10);
+  });
+
+  it('a hitched tower and a truck meeting it head-on both get past without a collision', () => {
+    const { w, tower, along, progress } = underWay();
+    const start = along(25, 0);
+    const behind = along(-30, 0);
+    const other = withTower(w, 'scavenger', 'scavengers', 'hauler', start);
+    other.heading = Math.atan2(behind.y - start.y, behind.x - start.x);
+    other.brain!.goals = [{ kind: 'raid', targetId: null, destination: behind, phase: 'travel', reason: 'drive past the tower' }];
+    const r = runUntil(w, 20, () => false);
+    expect(crashes(r.events, tower.id)).toEqual([]);
+    expect(progress(find(r.w, other.id).pos)).toBeLessThan(0);
+    expect(progress(find(r.w, tower.id).pos)).toBeGreaterThan(10);
+  });
+
   it('arrival in town charges the fee once and allows debt', () => {
     const town = REGION.towns.find((t) => t.id === 'bowl')!;
     const gate = siteGates(town)[0];
@@ -269,6 +312,73 @@ describe('towing', () => {
     const after = runUntil(w, 5, () => false);
     expect(after.events.some((e) => e.t === 'towDone')).toBe(false);
     expect(after.w.player.money).toBe(10 - fee);
+  });
+});
+
+describe('answering a stranded truck', () => {
+  const answering = (w: World) => w.states.filter((st) => st.kind === 'answering');
+
+  // Five towers around a stranded player far from any town, all in sight of it.
+  function crowd(): { w: World; towers: Vehicle[] } {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.player.fuel = 0;
+    const towers = [0, 1, 2, 3, 4].map((k) => {
+      const a = (k / 5) * Math.PI * 2;
+      const tpl = k % 2 ? 'trader' : 'scavenger';
+      return withTower(w, tpl, tpl === 'trader' ? 'traders' : 'scavengers', 'hauler', { x: 30 + Math.cos(a) * 12, y: 30 + Math.sin(a) * 12 });
+    });
+    return { w, towers };
+  }
+
+  it('only one of five towers in sight takes the tow goal, and the rest keep their work', () => {
+    const { w, towers } = crowd();
+    forceOption('strandedSeen', 'tow');
+    const next = endTurn(w);
+    const tows = towers.filter((t) => topGoal(find(next, t.id))?.kind === 'tow');
+    expect(tows).toHaveLength(1);
+    expect(answering(next)).toMatchObject([{ holder: tows[0].id, other: next.player.vehicleId }]);
+    for (const t of towers) if (t !== tows[0]) expect(find(next, t.id).brain!.goals.some((g) => g.kind === 'tow')).toBe(false);
+  });
+
+  it('a driver with a tow goal drops it once another driver holds the claim', () => {
+    const { w, towers } = crowd();
+    const [first, second] = towers;
+    forceOption('strandedSeen', 'tow');
+    thinkNpc(w, find(w, second.id));
+    expect(topGoal(find(w, second.id))?.kind).toBe('tow');
+    addState(w, 'answering', first.id, w.player.vehicleId, { kind: 'none' });
+    w.turn++;
+    thinkNpc(w, find(w, second.id));
+    expect(find(w, second.id).brain!.goals.some((g) => g.kind === 'tow')).toBe(false);
+  });
+
+  it('after the claimed tower gives up, another tower answers on a later decision', () => {
+    const { w, towers } = crowd();
+    forceOption('strandedSeen', 'tow');
+    let next = endTurn(w);
+    const [claim] = answering(next);
+    const holder = find(next, claim.holder);
+    holder.brain!.goals = holder.brain!.goals.filter((g) => g.kind !== 'tow');
+    next = runUntil(next, 3, (x) => answering(x).some((st) => st.holder !== claim.holder)).w;
+    const [again] = answering(next);
+    expect(again.holder).not.toBe(claim.holder);
+    expect(towers.map((t) => t.id)).toContain(again.holder);
+    expect(topGoal(find(next, again.holder))?.kind).toBe('tow');
+  });
+
+  it('a truck at a town gate gets the tow chosen far less often than 40 tiles out, and still above 0', () => {
+    const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
+    const gate = siteGates(bowl)[0];
+    const out = { x: (gate.x - bowl.pos.x) / bowl.radius, y: (gate.y - bowl.pos.y) / bowl.radius };
+    const towChance = (away: number) => {
+      const at = { x: gate.x + out.x * away, y: gate.y + out.y * away };
+      const s = stranded(at, { x: at.x + out.x * 8, y: at.y + out.y * 8 });
+      return optionChances(optionWeights(s.w, s.trader, 'strandedSeen', s.w.player.vehicleId, null)).tow!;
+    };
+    const atGate = towChance(0);
+    const farOut = towChance(40);
+    expect(atGate).toBeGreaterThan(0);
+    expect(atGate).toBeLessThan(farOut / 3);
   });
 });
 
@@ -315,6 +425,29 @@ describe('emergency beacon', () => {
     expect(activitiesOf(r.events, s.trader.id)[0]).toMatchObject({ activity: 'tow', reason: 'help a stranded truck' });
   });
 
+  it('a tower re-aims at a player who crawled off at night, then reaches and offers', () => {
+    const s = stranded(player, { x: 90, y: 30 });
+    let w = s.w;
+    while (sunAt(w.turn + 1)) w.turn++;
+    w = runUntil(setBeacon(w, true), 5, (x) => topGoal(find(x, s.trader.id))?.kind === 'tow').w;
+    expect(topGoal(find(w, s.trader.id))?.kind).toBe('tow');
+    w = setMoveOrder(w, { kind: 'stopAt', dest: { x: 30, y: 44 } });
+    const r = runUntil(w, 60, (x) => playerTow(x) !== null);
+    expect(sunAt(r.w.turn)).toBeNull();
+    expect(playerVehicle(r.w).pos.y).toBeGreaterThan(40);
+    expect(playerTow(r.w)?.holder).toBe(s.trader.id);
+  });
+
+  it('a tower beyond sight heads for the newest beacon circle', () => {
+    const s = stranded(player, { x: 90, y: 30 });
+    let w = runUntil(setBeacon(s.w, true), 5, (x) => topGoal(find(x, s.trader.id))?.kind === 'tow').w;
+    playerVehicle(w).pos = { x: 30, y: 60 };
+    w = endTurn(w);
+    const trader = find(w, s.trader.id);
+    expect(canVehicleSee(w, trader, playerVehicle(w).pos)).toBe(false);
+    expect(dist(topGoal(trader)!.destination!, playerVehicle(w).pos)).toBeLessThanOrEqual(BEACON.radius);
+  });
+
   it('a tower that set out for a beacon does not roll to rob its client on arrival', () => {
     const s = stranded(player, { x: 130, y: 30 });
     const w = setBeacon(s.w, true);
@@ -344,14 +477,13 @@ describe('emergency beacon', () => {
     }
   });
 
-  it('the first tower to arrive makes the offer, and the others drop the tow', () => {
+  it('only the first tower to hear a beacon answers it, and its claim ends with the offer', () => {
     const s = stranded(player, { x: 100, y: 30 });
     const late = withTower(s.w, 'trader', 'traders', 'hauler', { x: 30, y: 150 });
     const r = runUntil(setBeacon(s.w, true), 150, (x) => playerTow(x) !== null);
     expect(playerTow(r.w)?.holder).toBe(s.trader.id);
-    expect(activitiesOf(r.events, late.id)[0]).toMatchObject({ activity: 'tow' });
-    const next = endTurn(acceptTow(r.w));
-    expect(topGoal(find(next, late.id))?.kind).not.toBe('tow');
+    expect(activitiesOf(r.events, late.id).filter((e) => e.t === 'activity' && e.activity === 'tow')).toEqual([]);
+    expect(r.w.states.filter((st) => st.kind === 'answering')).toEqual([]);
   });
 
   it('a raider comes to a beaconing truck with cargo', () => {

@@ -369,8 +369,8 @@ export function fireWeapons(world: World): void {
 // lies within the splash radius of where it landed.
 function applyShot(world: World, s: Shot): void {
   s.mw.part.reload = s.mw.def.reload;
-  recordAttack(world, s.shooter, s.target);
-  provoke(world, s.shooter, s.target);
+  // A shot counts as an attack even when it misses: the target and witnesses saw it fired at them.
+  noteAttack(world, s.shooter, s.target, !isHostile(world, s.target, s.shooter));
   const r = s.mw.def.round;
   const { side, lanes, body } = s.aiming;
   const rounds: ShotRound[] = s.rolls.map((roll) => {
@@ -424,7 +424,10 @@ function applyShot(world: World, s: Shot): void {
 function witnessesAttack(world: World, observer: Vehicle, shooter: Vehicle, target: Vehicle): boolean {
   if (observer.faction !== target.faction) return false;
   if (dist(observer.pos, target.pos) > SPAWN.neighborHelp) return false;
-  return canVehicleSee(world, observer, target.pos) && canVehicleSee(world, observer, shooter.pos);
+  return (
+    canVehicleSee(world, observer, target.pos) &&
+    canVehicleSee(world, observer, shooter.pos)
+  );
 }
 
 // A shot, hit or miss, marks its shooter as an attacker of the target and of faction mates nearby that see both.
@@ -436,20 +439,43 @@ function recordAttack(world: World, shooter: Vehicle, target: Vehicle): void {
   }
 }
 
-// A shot at a vehicle that was not hostile starts a feud with it and its nearby faction mates.
-function provoke(world: World, shooter: Vehicle, target: Vehicle): void {
-  if (isHostile(world, target, shooter)) return;
-  for (const v of world.vehicles) {
-    const joins =
-      v.id === target.id ||
-      (v.faction === target.faction &&
-        dist(v.pos, target.pos) <= SPAWN.neighborHelp &&
-        canVehicleSee(world, v, shooter.pos));
-    if (joins && v.faction !== "player" && !stateOf(world, "feud", v.id, shooter.id)) {
-      addState(world, "feud", v.id, shooter.id, { kind: "feud", robbery: false });
-      world.events.push({ t: "hostile", vehicle: v.id, against: shooter.id });
-    }
+// The one attack rule: a vehicle that damages another attacks it. The victim and witnesses learn the attacker,
+// and a feud starts when the two were at peace before the blow. calm is that peace, read before any damage lands.
+export function noteAttack(world: World, attacker: Vehicle, victim: Vehicle, calm: boolean): void {
+  recordAttack(world, attacker, victim);
+  if (calm) startFeuds(world, attacker, victim);
+}
+
+// A crash damages both sides, so each side that took damage was attacked by the other. The event does not name a
+// striker. A slow bump deals no damage and is no attack. A tower and the truck it tows or offers to tow never
+// attack each other by contact.
+export function noteCollision(world: World, a: Vehicle, b: Vehicle, hitsA: PartHit[], hitsB: PartHit[]): void {
+  if (towPair(world, a, b)) return;
+  const calm = !isHostile(world, a, b);
+  const attacks = ([[b, a, hitsA], [a, b, hitsB]] as const).filter(([, , hits]) => hits.some((h) => h.damage > 0));
+  for (const [attacker, victim] of attacks) {
+    victim.lastHitBy = attacker.id;
+    noteAttack(world, attacker, victim, calm);
   }
+}
+
+function towPair(world: World, a: Vehicle, b: Vehicle): boolean {
+  return stateOf(world, 'tow', a.id, b.id) !== null || stateOf(world, 'tow', b.id, a.id) !== null;
+}
+
+function startFeuds(world: World, shooter: Vehicle, target: Vehicle): void {
+  for (const v of world.vehicles) {
+    if (!joinsFeud(world, v, shooter, target) || stateOf(world, "feud", v.id, shooter.id)) continue;
+    addState(world, "feud", v.id, shooter.id, { kind: "feud", robbery: false });
+    world.events.push({ t: "hostile", vehicle: v.id, against: shooter.id });
+  }
+}
+
+// The target and its faction mates nearby that see the shooter. The player decides its own hostility.
+function joinsFeud(world: World, v: Vehicle, shooter: Vehicle, target: Vehicle): boolean {
+  if (v.faction === "player") return false;
+  if (v.id === target.id) return true;
+  return v.faction === target.faction && dist(v.pos, target.pos) <= SPAWN.neighborHelp && canVehicleSee(world, v, shooter.pos);
 }
 
 // NPCs with a broken cab turn into wreck obstacles. The player's broken cab is a knockout.

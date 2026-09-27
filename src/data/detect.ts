@@ -1,15 +1,15 @@
 // Detection beyond sight: engine sound, dust trails and radio scanners.
-// Sight is TERRAIN.vision.radius. These ranges are several times longer, so a moving truck is
-// usually heard or seen by its dust from across much of the map, as a rough circle that shrinks as it nears.
+// Sight is TERRAIN.vision.radius. At driving speeds a normal engine is heard 2 to 4 times as far, and dust on
+// hardpan is seen 4 to 6 times as far. A contact is a rough circle that shrinks as the truck nears.
 
 export const DETECT = {
   sound: {
-    limp: 30, // tiles heard at limp speed or below, a little past sight
-    perSpeed: 52, // extra tiles per tile/turn of the source's speed above limp speed, ignoring terrain and hills
+    limp: 24, // tiles heard at limp speed or below, a little past sight
+    perSpeed: 8, // extra tiles per tile/turn of the source's speed above limp speed, ignoring terrain and hills
     ownPenalty: 10, // tiles of hearing lost per tile/turn of the listener's own speed
   },
   dust: {
-    perSpeed: 57, // tiles per tile/turn of the source's speed, before the terrain's dust multiplier; none at limp speed or below
+    perSpeed: 20, // tiles per tile/turn of the source's speed, before the terrain's dust multiplier; none at limp speed or below
     eyeHeight: 0.6, // dust rises above the truck, so it clears hills a plain sight line would not
     samplesPerTile: 1, // height samples along a dust sight line; a tall plume needs less care than sight
     spawnBack: 0.5, // share of the turn's trail behind the truck where its new cloud rises

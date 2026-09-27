@@ -53,6 +53,9 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   },
   turnedDown: { refresh: never, check: noCheck, hooks: {} },
   towPromise: { refresh: never, check: noCheck, hooks: {} },
+  // The holder has taken the job of towing the player, so no other driver answers. It is fulfilled by the offer
+  // in src/sim/tow.ts, and broken once the holder's tow goal is gone from its stack.
+  answering: { refresh: never, check: (w, s) => (answerDropped(w, s) ? 'broken' : null), hooks: {} },
   // The holder patches the other party's truck. See src/sim/patch.ts. Work keeps it going, and the fulfilled hook
   // pays once.
   // The two parties are not foes while it lasts, unless a feud says otherwise. See isFoe() in src/sim/combat.ts.
@@ -63,6 +66,12 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
     hooks: { fulfilled: settlePatch, expired: lapsePatch },
   },
 };
+
+// A missing holder is left to the missing-party rule.
+function answerDropped(w: World, s: NpcState): boolean {
+  const holder = w.vehicles.find((v) => v.id === s.holder);
+  return holder !== undefined && !holder.brain!.goals.some((g) => g.kind === 'tow');
+}
 
 function kindOf(kind: StateKindId): StateKind {
   if (!Object.hasOwn(STATE_KINDS, kind)) throw new Error(`Unknown state kind ${kind}`);
@@ -75,7 +84,7 @@ function turnsOf(kind: StateKindId): number | null {
 }
 
 // The data kind each state kind carries.
-const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', patch: 'patch', truce: 'none' };
+const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none' };
 
 export function addState(w: World, kind: StateKindId, holder: string, other: string, data: StateData): NpcState {
   kindOf(kind);
@@ -110,13 +119,20 @@ export function advanceStates(w: World): void {
 
 // Ends the state by its kind's check or a missing party, or else runs its timer.
 function advanceState(w: World, s: NpcState): void {
-  const kind = kindOf(s.kind);
-  const ending = kind.check(w, s) ?? (partyMissing(w, s) ? 'broken' : null);
-  if (ending) {
-    endState(w, s, ending);
-    return;
-  }
-  runTimer(w, s, kind);
+  if (!settleState(w, s)) runTimer(w, s, kindOf(s.kind));
+}
+
+// Ends every state whose kind's check or a missing party calls for it, with no timers run. Commands outside the
+// turn that remove a vehicle call it, so the next turn never meets a state with a missing party.
+export function settleStates(w: World): void {
+  for (const s of [...w.states]) if (w.states.includes(s)) settleState(w, s);
+}
+
+// True when the state ended.
+function settleState(w: World, s: NpcState): boolean {
+  const ending = kindOf(s.kind).check(w, s) ?? (partyMissing(w, s) ? 'broken' : null);
+  if (ending) endState(w, s, ending);
+  return ending !== null;
 }
 
 // A state without a timer waits. This turn's events refresh a timer to its full length. Otherwise it counts down

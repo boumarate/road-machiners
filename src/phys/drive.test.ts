@@ -20,6 +20,32 @@ beforeAll(async () => {
   await initPhysics();
 });
 
+describe('impact geometry', () => {
+  it('captures rear-end contacts and relative closing speed before the turn ends', () => {
+    const world = emptyWorld({ x: 35, y: 30 });
+    const target = world.vehicles[0];
+    target.speed = 2;
+    const attacker = addVehicle(world, 'raiders', 'scout', ['mg', 'stockEngine', 'ram'], { x: 30, y: 30 });
+    attacker.speed = 7;
+    attacker.order = null;
+    const drive = buildDrive(world);
+    const result = simulateTurn(drive, world);
+    try {
+      const crash = result.crashes.find((hit) => [hit.a, hit.b].includes(attacker.id));
+      if (!crash) throw new Error('Expected rear-end collision');
+      const front = crash.a === attacker.id ? crash.contact.a : crash.contact.b;
+      const rear = crash.a === target.id ? crash.contact.a : crash.contact.b;
+      expect(front?.side).toBe('front');
+      expect(rear?.side).toBe('rear');
+      expect(crash.impact).toBeCloseTo((7 - 2) * PHYSICS.metersPerTile, 0);
+      expect(structuredClone(crash)).toEqual(crash);
+    } finally {
+      freeDrive(result.next);
+      freeDrive(drive);
+    }
+  });
+});
+
 // Plays n turns through the real turn pipeline with physics movement.
 function play(w: World, n: number): { w: World; d: Drive } {
   let d = buildDrive(w);
@@ -133,6 +159,31 @@ describe('physics turns', () => {
     expect(me(result.w).order).toEqual({ kind: 'through', dest });
     expect(me(result.w).heading).toBeGreaterThan(initial.vehicles[0].heading);
     freeDrive(result.d);
+  });
+
+  it('a fast truck slows to curve onto a drive-through point inside its turning circle', () => {
+    const { w, d } = play(ordered({ kind: 'through', dest: { x: 36, y: 35 } }, 7.8), 2);
+    expect(me(w).order).toBeNull();
+    freeDrive(d);
+  });
+
+  it('a fast truck brakes before a sharp route corner instead of running into the wall past it', () => {
+    let w = ordered({ kind: 'stopAt', dest: { x: 45, y: 48 } }, 7.8);
+    // A wall on the right forces the route east to a corner, and a wall past the corner catches overshoot.
+    for (let x = 26; x <= 43; x += 1.2) w.obstacles.push({ id: `s${x}`, pos: { x, y: 32 }, r: 0.7, kind: 'rock' });
+    for (let y = 20; y <= 55; y += 1.2) w.obstacles.push({ id: `e${y}`, pos: { x: 48, y }, r: 0.7, kind: 'rock' });
+    let d = buildDrive(w);
+    let crashes = 0;
+    for (let i = 0; i < 10 && me(w).order; i++) {
+      let r: TurnResult | null = null;
+      w = endTurn(w, physicsMove(d, (x) => (r = x)));
+      crashes += w.events.filter((e) => e.t === 'collision').length;
+      freeDrive(d);
+      d = r!.next;
+    }
+    freeDrive(d);
+    expect(crashes).toBe(0);
+    expect(me(w).order).toBeNull();
   });
 
   it('a stop order stops on the point', () => {

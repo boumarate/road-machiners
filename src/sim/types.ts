@@ -141,6 +141,8 @@ export type NpcBrain = {
     stalled?: number; // consecutive turns without forward progress
     recovery?: number; // turns left backing away from a blockage
     recoveryGoal?: Vec;
+    ramChoice?: string; // the fight target this driver chose to ram while its ram chance lasts
+    ramTarget?: string; // the fight target this driver drives through this turn
     farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
 };
 
@@ -171,7 +173,7 @@ export type Obstacle = {
 };
 
 // A timed relation one vehicle holds toward another. src/sim/states.ts owns them.
-export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'patch' | 'truce';
+export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce';
 export type StateEnding = 'expired' | 'fulfilled' | 'broken';
 // A tow state: the holder tows the other party to `town` for `fee`, paid on arrival. hitched is false while the offer is open.
 // A tow promise: the terms of a tow the holder dropped for danger, which its next offer keeps.
@@ -227,6 +229,7 @@ export type Player = {
   knockouts: number;
   state: "active" | "knockedOut" | "dead";
   knockoutTurns: number; // turns spent in the current knockout
+  god: boolean; // debug god mode: parts, health, fuel and supplies refill every turn; see src/sim/cheats.ts
   beacon: boolean; // the emergency beacon calls every vehicle within BEACON.range; see src/sim/tow.ts
   call: Call | null;
   talked: Record<string, Partial<Record<TopicId, TopicOutcome>>>; // NPC id to how each topic with it ended

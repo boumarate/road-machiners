@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { partDef } from '../data/parts';
 import type { TerrainTypeId } from '../data/terrain';
 import { addVehicle, emptyWorld, editableTerrain } from './testkit';
 import { corePart, mountedParts } from './grid';
@@ -93,6 +94,25 @@ describe('wear', () => {
       applyWear(w);
       expect(corePart(me, 'cab').hp).toBe(1);
     }
+  });
+
+  it('costs each part about a third of its max HP over an hour of off-road driving', () => {
+    const w = emptyWorld();
+    w.rngState = 3;
+    const me = w.vehicles[0];
+    const tiles = 7.8; // scout top speed in tiles per turn
+    setTerrainUnder(w, me, tiles, 'hardpan');
+    for (let turn = 0; turn < 2900; turn++) {
+      drive(me, tiles);
+      applyWear(w);
+    }
+    const parts = mountedParts(me);
+    const lostShare = parts.reduce((a, p) => a + 1 - p.hp / partDef(p.defId).hp, 0) / parts.length;
+    const breakdowns = w.events.filter((e) => e.t === 'breakdown').length;
+    expect(lostShare).toBeGreaterThan(0.2);
+    expect(lostShare).toBeLessThan(0.45);
+    expect(breakdowns).toBeGreaterThanOrEqual(1);
+    expect(breakdowns).toBeLessThanOrEqual(6);
   });
 
   it('wears NPCs too', () => {

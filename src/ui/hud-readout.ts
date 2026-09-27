@@ -37,7 +37,9 @@ export class TruckConditionReadout {
     const previous = this.health;
     this.health = new Map();
     return mountedItems(vehicle)
-      .filter((item) => ["core", "engine", "weapon"].includes(partDef(item.part.defId).kind))
+      .filter((item) =>
+        ["core", "engine", "weapon"].includes(partDef(item.part.defId).kind),
+      )
       .map((item) => {
         const def = partDef(item.part.defId);
         const hp = item.part.hp;
@@ -45,8 +47,12 @@ export class TruckConditionReadout {
         const before = previous.get(item.part.id);
         const ratio = hp / def.hp;
         return {
-          id: item.part.id, name: def.name, icon: getConditionIcon(def),
-          x: item.x, y: item.y, ...itemSize(item),
+          id: item.part.id,
+          name: def.name,
+          icon: getConditionIcon(def),
+          x: item.x,
+          y: item.y,
+          ...itemSize(item),
           percent: hp > 0 ? Math.max(1, Math.floor(ratio * 100)) : 0,
           state: getConditionState(ratio),
           hit: before !== undefined && hp < before,
@@ -103,7 +109,8 @@ export function getRescueReadout(w: World): RescueReadout | null {
     const data = towData(state);
     return { kind: "towed", tower: vehicleName(w, state.holder), town: townName(data.town), fee: data.fee };
   }
-  if (p.beacon || isStranded(w, playerVehicle(w))) return { kind: "stranded", beacon: p.beacon };
+  if (p.beacon || isStranded(w, playerVehicle(w)))
+    return { kind: "stranded", beacon: p.beacon };
   return null;
 }
 

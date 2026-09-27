@@ -36,7 +36,7 @@ describe('soundRange and dustRange', () => {
     expect(dustRange(w, v)).toBe(0);
     const crawl = soundRange(w, v);
     v.speed = 6;
-    expect(crawl).toBeLessThan(soundRange(w, v) / 4);
+    expect(crawl).toBeLessThan(soundRange(w, v) / 2);
   });
 
   it('a road raises less dust than sand', () => {

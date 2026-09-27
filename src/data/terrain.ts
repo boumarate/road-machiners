@@ -143,6 +143,7 @@ export const TERRAIN = {
     samplesPerTile: 3, // height samples per tile along a sight line
     closeRadius: 3, // tiles around a vehicle seen even behind rocks and hills, since its crew hears and sees over them
     lingerTurns: 2, // turns a vehicle stays drawn, moving, after the player loses sight of it
+    grayFactor: 4, // gray vision reaches this many sight radii: ground and buildings show grey, vehicles do not, and nothing shows beyond
   },
   fog: {
     seen: { grey: 0.85, bright: 0.9 }, // explored but not visible now: share of color drained, brightness kept

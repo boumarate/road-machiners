@@ -298,6 +298,7 @@ export type DecisionOptions = {
   preySeen: 'keep' | 'rob'; // a new robbery target comes in sight
   strandedSeen: 'keep' | 'tow'; // a stranded player comes in sight
   patchDeal: 'paid' | 'ownParts' | 'free'; // the terms a driver names for a roadside patch; see src/sim/patch.ts
+  ramChance: 'keep' | 'ram'; // the fight target lies ahead within reach of a damaging ram
   resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal
   idle: 'trade' | 'scavenge' | 'raid' | 'wait'; // the goal stack is empty
 };
@@ -324,6 +325,8 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   strandedSeen: { keep: 1, tow: 0 },
   // Most drivers want paying for a patch, some only charge for the work, and one in ten helps for free.
   patchDeal: { paid: 6, ownParts: 3, free: 1 },
+  // A fighter takes 9 in 10 rams that look worth it. Otherwise it keeps shooting from its range.
+  ramChance: { keep: 1, ram: 9 },
   // After an interruption a driver goes back to its work 9 times in 10.
   resume: { resume: 9, new: 1 },
   // Anyone collects salvage in sight. Trading and raiding more than rarely need a trait. Waiting is the small
@@ -350,6 +353,7 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   turnedDown: { strandedSeen: { tow: { mul: 0.001 } } },
   // A driver that dropped a tow for danger comes back for the player: tow outweighs keep 20 to 1.
   towPromise: { strandedSeen: { tow: { add: 20 } } },
+  answering: {},
 };
 
 // State durations in turns. See src/sim/states.ts. null means the state has no timer and ends only by its checks.
@@ -372,6 +376,8 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   turnedDown: null,
   // A tower that dropped a hitched tow for danger keeps its terms until its next offer to that player.
   towPromise: null,
+  // A driver on its way to a stranded player holds the job until it offers, its tow goal pops, or it is gone.
+  answering: null,
 };
 
 export type Trait = {
@@ -397,13 +403,14 @@ export const TRAITS: Record<TraitId, Trait> = {
     weights: { idle: { scavenge: { add: 10 } }, strandedSeen: { tow: { add: 9 } }, hostileSeen: { fight: { add: 2 } } },
   },
   // Traders rarely pick a fight: a fight weight of 2 drops to 0.004, about 1%, and to 0.02, about 2%, against a
-  // manageable hostile. A shot trader returns fire at a tenth of the usual weight, and mostly runs. Trading beats
+  // manageable hostile. A shot trader returns fire at a tenth of the usual weight, and mostly runs. A trader in a
+  // fight rams about 1 time in 100: a ram weight of 9 drops to 0.009. Trading beats
   // salvage in sight 3 to 1. Nine in ten traders help a stranded truck.
   trader: {
     towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
     weights: {
       idle: { trade: { add: 30 } }, strandedSeen: { tow: { add: 9 } },
-      hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } },
+      hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } }, ramChance: { ram: { mul: 0.001 } },
     },
   },
   // Raiders fight most hostiles they see and close in on most useful contacts. A raid ties with salvage in sight.
@@ -450,6 +457,12 @@ export const NPC_BEHAVIOR = {
   // Turns a noticed subject stays remembered after it was last perceived. A heard engine drops out for a turn or
   // two when the truck slows or crosses behind the listener, and 3 turns bridges that without a fresh roll.
   noticeMemory: 3,
+  // Investigate weight times this when the cab or a driving part is at or below the recover condition. A raider's
+  // investigate weight of 12 drops to 0.12, so a crippled raider closes in on a contact 1 to 4 times in 100.
+  crippledInvestigate: 0.01,
+  // Ram weight times this when the forecast says the ram costs the driver more than the target, or breaks one of
+  // its working parts. A ram weight of 9 drops to 0.009, about 1%.
+  riskyRam: 0.001,
   // Salvage in sight weighs 10 times a known site out of sight.
   visibleSalvage: 10,
   // A robber mostly picks targets weaker than itself, away from town guards. Rob weight times this when the
@@ -461,6 +474,11 @@ export const NPC_BEHAVIOR = {
   // Fight weight at a new hostile times this near town guards. A raider's fight weight of 50 against manageable
   // prey drops to 0.05, about 3%. Guards never lower fight back.
   fightNearGuards: 0.001,
+  // Tow weight falls when the stranded truck can crawl to a town gate. At limp speed, about 1 tile a turn, 15
+  // tiles is a crawl of 15 turns, under two hours of the day. Within it, a tow weight of 9 drops to 0.18 against
+  // keep 1, so about one passing driver in six offers. From there the factor rises in a straight line to 1 at 60
+  // tiles, a crawl of most of a morning.
+  towNearTown: { factor: 0.02, crawl: 15, far: 60 },
 };
 
 export const NPC_UPKEEP = {

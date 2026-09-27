@@ -1,12 +1,13 @@
 // Wear and field repair numbers. All survival-loop wear and repair rule numbers live here, not in rules.ts.
 
 export const WEAR = {
-  // An off-road crossing is about 500 tiles. At these rates each part loses about 3 HP to wear on one,
-  // and the truck has about one breakdown. Roads wear at half rate, so they roughly halve both.
-  chancePerTile: 0.004, // per mounted part, per tile driven, at terrain wear 1 and zero speed
-  hpLoss: 1, // HP lost on a plain wear hit
+  // A scout at top speed covers about 22,000 off-road tiles per hour of play, at about 1.25 s per turn.
+  // At these rates each part then loses about 30% of its max HP, one field repair's worth,
+  // and the truck has about three breakdowns. Roads wear at half rate.
+  chancePerTile: 0.00055, // per mounted part, per tile driven, at terrain wear 1 and zero speed
+  hpShare: 0.02, // share of max HP lost on a plain wear hit, so small and large parts decline alike
   speedWeight: 0.03, // extra chance per tile of speed, as a multiplier on the base chance
-  breakdownChancePerTile: 0.0015, // per vehicle, per tile driven
+  breakdownChancePerTile: 0.0001, // per vehicle, per tile driven
   breakdownHpShare: 0.15, // share of max HP a breakdown takes off the chosen part
 };
 
@@ -23,10 +24,10 @@ export const REPAIR = {
 };
 
 // Engine heat for the player truck. 0 is a cold engine and 1 is overheated. The sun heats a running
-// engine; shade, night and parking cool it. Full noon sun overheats a cold engine in about 11 turns
-// at top speed and 17 at 70% of it. Morning and evening sun barely warm it.
+// engine; shade, night and parking cool it. Full noon sun overheats a cold engine in about 44 turns
+// at top speed and 74 at 70% of it. Morning and evening sun barely warm it.
 export const ENGINE_HEAT = {
-  gain: 0.075, // heat per turn per unit of sun heat above 1, at top speed; scales with speed share
+  gain: 0.02875, // heat per turn per unit of sun heat above 1, at top speed; scales with speed share
   coolDriving: 0.02, // heat lost per turn to airflow while driving
   coolParked: 0.15, // heat lost per turn while parked, divided by the sun heat at the spot
   warnAt: 0.75, // heat at which the log warns once and the gauge turns red
