@@ -8,6 +8,10 @@ import { WEAPON_POOLS } from '../../render/partLooks';
 
 const NAMES = [
   'base_scout',
+  'base_van',
+  'base_longbed',
+  'base_hauler',
+  'base_tractor',
   'wmount_riser',
   'wreck',
   'rock',
