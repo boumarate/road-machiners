@@ -47,6 +47,8 @@ import { vehicleMass } from "../sim/mass";
 import { fuelLiters, hp, kg, liters } from "./units";
 
 const CELL_PX = 42;
+// Below this the part icons and condition bars stop being readable, so a taller grid scrolls instead.
+const MIN_CELL_PX = 28;
 
 const CELL_TITLE: Record<Cell, string> = {
   W: "weapon mount",
@@ -87,6 +89,7 @@ export class InventoryView {
   private inspection = el("div", { class: "inv-inspection" });
   private selectedItem: string | null = null;
   private loot: string | null = null; // salvage stock shown beside the grid, after a finished search
+  private cell = CELL_PX; // grid cell size in pixels, shrunk by fitTo()
 
   constructor(
     private host: UiHost,
@@ -106,7 +109,21 @@ export class InventoryView {
     });
   }
 
-  // Shows a searched salvage stock beside the grid, or hides it with null.
+  // Renders the mounted view again with grid cells shrunk until the truck fits the height of box, the scrolling
+  // column that holds the view. Stops at MIN_CELL_PX.
+  fitTo(box: HTMLElement): void {
+    this.cell = CELL_PX;
+    this.render();
+    const truck = this.root.querySelector(".inv-truck");
+    if (!truck) throw new Error("Inventory view is not rendered");
+    const over = truck.getBoundingClientRect().bottom - box.getBoundingClientRect().bottom;
+    if (over <= 0) return;
+    const rows = gridOf(playerVehicle(this.host.world())).h;
+    this.cell = Math.max(MIN_CELL_PX, Math.floor(this.cell - over / rows));
+    this.render();
+  }
+
+    // Shows a searched salvage stock beside the grid, or hides it with null.
   setLoot(stockId: string | null): void {
     this.loot = stockId;
   }
@@ -129,7 +146,7 @@ export class InventoryView {
       );
     const grid = el("div", {
       class: "inv-grid",
-      style: `width:${g.w * CELL_PX}px;height:${g.h * CELL_PX}px`,
+      style: `width:${g.w * this.cell}px;height:${g.h * this.cell}px`,
     });
     grid.addEventListener("contextmenu", (e) => e.preventDefault());
     for (let y = 0; y < g.h; y++) {
@@ -141,7 +158,7 @@ export class InventoryView {
             "div",
             {
               class: `inv-cell c-${c === "." ? "plain" : c}`,
-              style: pos(x, y, 1, 1),
+              style: pos(x, y, 1, 1, this.cell),
               title: CELL_TITLE[c],
             },
             c === "." || c === "X" ? "" : c,
@@ -236,7 +253,7 @@ export class InventoryView {
         class: `inv-item ${cls}`,
         "aria-pressed": String(this.selectedItem === it.id),
         "data-item-id": it.id,
-        style: pos(x, y, wd, ht),
+        style: pos(x, y, wd, ht, this.cell),
         title: itemTitle(it, mounted),
         tabindex: 0,
         role: "button",
@@ -259,8 +276,8 @@ export class InventoryView {
       node.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
         this.startDrag(e, "grid", it.id, it, {
-          x: Math.floor(e.offsetX / CELL_PX),
-          y: Math.floor(e.offsetY / CELL_PX),
+          x: Math.floor(e.offsetX / this.cell),
+          y: Math.floor(e.offsetY / this.cell),
         });
       });
     return node;
@@ -573,7 +590,7 @@ export class InventoryView {
         e.clientX - this.drag.start.x,
         e.clientY - this.drag.start.y,
       ) >=
-      CELL_PX / 4
+      this.cell / 4
     )
       this.drag.moved = true;
     const spot = this.spotAt(e.clientX, e.clientY);
@@ -589,14 +606,14 @@ export class InventoryView {
     const ok = onGrid && this.placementProblem(d) === null;
     d.ghost.className = `inv-ghost ${onGrid ? (ok ? "ok" : "no") : ""}`;
     d.ghost.textContent = itemLabel(d.item).short;
-    d.ghost.style.width = `${size.w * CELL_PX}px`;
-    d.ghost.style.height = `${size.h * CELL_PX}px`;
+    d.ghost.style.width = `${size.w * this.cell}px`;
+    d.ghost.style.height = `${size.h * this.cell}px`;
     if (onGrid && g) {
-      d.ghost.style.left = `${g.left + d.item.x * CELL_PX}px`;
-      d.ghost.style.top = `${g.top + d.item.y * CELL_PX}px`;
+      d.ghost.style.left = `${g.left + d.item.x * this.cell}px`;
+      d.ghost.style.top = `${g.top + d.item.y * this.cell}px`;
     } else {
-      d.ghost.style.left = `${e.clientX - CELL_PX / 2}px`;
-      d.ghost.style.top = `${e.clientY - CELL_PX / 2}px`;
+      d.ghost.style.left = `${e.clientX - this.cell / 2}px`;
+      d.ghost.style.top = `${e.clientY - this.cell / 2}px`;
     }
   }
 
@@ -622,8 +639,8 @@ export class InventoryView {
     const r = this.gridEl.getBoundingClientRect();
     if (cx < r.left || cy < r.top || cx >= r.right || cy >= r.bottom)
       return null;
-    const x = Math.floor((cx - r.left) / CELL_PX) - this.drag.grab.x;
-    const y = Math.floor((cy - r.top) / CELL_PX) - this.drag.grab.y;
+    const x = Math.floor((cx - r.left) / this.cell) - this.drag.grab.x;
+    const y = Math.floor((cy - r.top) / this.cell) - this.drag.grab.y;
     return { x, y, rot: this.drag.item.rot };
   }
 
@@ -768,8 +785,8 @@ export function getItemIcon(item: GridItem): IconName {
   return def.kind;
 }
 
-function pos(x: number, y: number, w: number, h: number): string {
-  return `left:${x * CELL_PX}px;top:${y * CELL_PX}px;width:${w * CELL_PX}px;height:${h * CELL_PX}px`;
+function pos(x: number, y: number, w: number, h: number, cell: number): string {
+  return `left:${x * cell}px;top:${y * cell}px;width:${w * cell}px;height:${h * cell}px`;
 }
 
 function footprint(it: GridItem): { w: number; h: number } {
