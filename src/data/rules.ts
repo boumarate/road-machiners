@@ -86,3 +86,11 @@ export const RULES = {
   defeatPatch: 0.25, // share of max hp broken core parts get back when the player wakes from a knockout
   knockoutMaxTurns: 30, // a knockout ends after this many turns even if a hostile idles in sight
 };
+
+// Debug console numbers. Distances are in tiles.
+export const CHEATS = {
+  spawnDistance: 10, // a spawned vehicle appears this far from the truck, inside sight range
+  spawnAngles: 12, // points tried on the spawn circle before the ring search
+  searchStep: 1, // spacing between rings and between points on a ring, in the free spot search
+  searchRings: 20, // rings searched around a target before giving up
+};

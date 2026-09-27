@@ -6,10 +6,10 @@ import { REGION } from "../data/region";
 import { playerVehicle } from "./damage";
 import { makeVehicle } from "./factory";
 import { isDriveObstacle } from "./mapgen";
-import { generateNpcLoadout } from "./npc-loadout";
+import { generateNpcLoadout, type NpcLoadout } from "./npc-loadout";
 import { randInt, randRange } from "./rng";
 import { siteGates } from "./sites";
-import type { World } from "./types";
+import type { Vehicle, World } from "./types";
 import { dist, type Vec } from "./vec";
 
 export function spawnNpcs(world: World): void {
@@ -36,28 +36,34 @@ function spawnOne(world: World, tpl: NpcTemplate): boolean {
   for (let i = 0; i < SPAWN.tries; i++) {
     const pos =
       tpl.spawn === "camp" ? campSpot(world, tpl, radius) : townSpot(world, radius);
-    if (!pos || !isFree(world, pos, radius)) continue;
-    const v = makeVehicle(world, {
-      name: tpl.name,
-      faction: tpl.faction,
-      ...loadout,
-      pos,
-      heading: randRange(world, -Math.PI, Math.PI),
-      brain: {
-        templateId: tpl.id,
-        activity: null,
-        goal: null,
-        home: { ...pos },
-        stepIndex: 0,
-        refusedTow: false,
-      },
-    });
-    world.vehicles.push(v);
-    world.events.push({ t: "spawn", vehicle: v.id });
+    if (!pos || !isFree(world, pos, radius, null)) continue;
+    spawnAt(world, tpl, loadout, pos);
     return true;
   }
   world.events.push({ t: "info", text: `No free spot to spawn ${tpl.name}` });
   return false;
+}
+
+// Adds a template's vehicle with a sampled loadout at pos. The caller checks that pos is free.
+export function spawnAt(world: World, tpl: NpcTemplate, loadout: NpcLoadout, pos: Vec): Vehicle {
+  const v = makeVehicle(world, {
+    name: tpl.name,
+    faction: tpl.faction,
+    ...loadout,
+    pos,
+    heading: randRange(world, -Math.PI, Math.PI),
+    brain: {
+      templateId: tpl.id,
+      activity: null,
+      goal: null,
+      home: { ...pos },
+      stepIndex: 0,
+      refusedTow: false,
+    },
+  });
+  world.vehicles.push(v);
+  world.events.push({ t: "spawn", vehicle: v.id });
+  return v;
 }
 
 // A point on the track just outside a random gate of one of the template's camps.
@@ -83,7 +89,9 @@ function townSpot(world: World, radius: number): Vec {
   return { x: town.pos.x + Math.cos(a) * d, y: town.pos.y + Math.sin(a) * d };
 }
 
-function isFree(world: World, pos: Vec, radius: number): boolean {
+// Whether a vehicle of radius fits at pos, on the map and clear of obstacles and other vehicles.
+// ignoreId names a vehicle left out of the check, like the one being moved.
+export function isFree(world: World, pos: Vec, radius: number, ignoreId: string | null): boolean {
   if (
     pos.x < radius ||
     pos.y < radius ||
@@ -99,6 +107,6 @@ function isFree(world: World, pos: Vec, radius: number): boolean {
   )
     return false;
   return world.vehicles.every(
-    (v) => dist(v.pos, pos) >= chassisDef(v.chassisId).radius + radius + margin,
+    (v) => v.id === ignoreId || dist(v.pos, pos) >= chassisDef(v.chassisId).radius + radius + margin,
   );
 }
