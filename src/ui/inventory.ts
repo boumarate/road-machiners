@@ -44,7 +44,7 @@ import type {
 import { el, panel } from "./dom";
 import { wearLabel } from "./format";
 import type { UiHost } from "./host";
-import { createIcon, type IconName } from "./icons";
+import { baselinePart, conditionMeter, createIcon, type IconName, diffStats, footprint as footprintEl, goodIcon, partIcon, partStats, statGrid } from "./cards";
 import { vehicleMass } from "../sim/mass";
 import { fuelLiters, hp, kg, liters } from "./units";
 
@@ -320,12 +320,18 @@ export class InventoryView {
 
   private showItem(w: World, item: GridItem, mounted: boolean): void {
     this.inspection.replaceChildren(
-      createIcon(getItemIcon(item)),
-      el("h3", {}, itemLabel(item).short),
-      el("p", {}, itemTitle(item, mounted)),
+      el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
+      ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, mounted) : []),
       el("p", { class: "dim" }, inspectionHint(w, item)),
-      ...this.itemActions(w, item, mounted),
+      el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
     );
+  }
+
+  // Lights up the grid cells of these mount letters, or clears the light with null.
+  hintMounts(cells: readonly Cell[] | null): void {
+    if (!this.gridEl) return;
+    if (cells) this.gridEl.dataset.hint = cells.join(" ");
+    else delete this.gridEl.dataset.hint;
   }
 
   // The action buttons an inspected item offers: patch when mounted and damaged, repair in town,
@@ -423,7 +429,10 @@ export class InventoryView {
       const chip = el(
         "div",
         { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
-        `${d.name} ${d.w}x${d.h} ${wearLabel(p)} ${hp(p.hp)}/${hp(maxHp(p))}`,
+        createIcon(partIcon(p)),
+        el("span", {}, d.name),
+        footprintEl(d.w, d.h),
+        conditionMeter(p),
       );
       const item: GridItem = {
         id: `store-${p.id}`,
@@ -455,7 +464,10 @@ export class InventoryView {
       const chip = el(
         "div",
         { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
-        `${d.name} ${d.w}x${d.h} ${wearLabel(p)} ${hp(p.hp)}/${hp(maxHp(p))}`,
+        createIcon(partIcon(p)),
+        el("span", {}, d.name),
+        footprintEl(d.w, d.h),
+        conditionMeter(p),
       );
       const item: GridItem = {
         id: `loot-${p.id}`,
@@ -784,26 +796,7 @@ export class InventoryScreen {
 }
 
 export function getItemIcon(item: GridItem): IconName {
-  if (item.kind === "good") {
-    if (
-      item.good === "scrap" ||
-      item.good === "salt" ||
-      item.good === "meds" ||
-      item.good === "grain" ||
-      item.good === "textiles" ||
-      item.good === "tools" ||
-      item.good === "batteries" ||
-      item.good === "electronics"
-    )
-      return item.good;
-    if (item.good === "parts") return item.good;
-    throw new Error(`No inventory artwork for good: ${item.good}`);
-  }
-  const def = partDef(item.part.defId);
-  if (def.kind === "weapon") return def.look;
-  if (def.kind === "core") return def.role === "tank" ? "fuel" : def.role;
-  if (def.kind === "scanner") return "scanner";
-  return def.kind;
+  return item.kind === "good" ? goodIcon(item.good) : partIcon(item.part);
 }
 
 function pos(x: number, y: number, w: number, h: number, cell: number): string {
@@ -884,4 +877,25 @@ function conditionBar(p: PartInstance): HTMLElement {
 function partTitle(p: PartInstance): string {
   const d = partDef(p.defId);
   return `${d.name} (${d.kind}) ${wearLabel(p)}, ${hp(p.hp)}/${hp(maxHp(p))} HP, ${d.w}x${d.h}`;
+}
+
+function itemName(it: GridItem): string {
+  return it.kind === "good" ? GOODS[it.good].name : partDef(it.part.defId).name;
+}
+
+function itemState(it: GridItem, mounted: boolean): string {
+  if (it.kind === "good") return `Cargo, ${kg(GOODS[it.good].mass)}`;
+  if (partDef(it.part.defId).kind === "core") return `Built in, ${wearLabel(it.part)}`;
+  return `${mounted ? "Mounted" : "Spare"}, ${wearLabel(it.part)}`;
+}
+
+// A part's condition and stats. A spare shows the change against the mounted part of its kind.
+function partDetails(me: Vehicle, part: PartInstance, mounted: boolean): HTMLElement[] {
+  const kind = partDef(part.defId).kind;
+  const base = mounted ? null : baselinePart(me, kind);
+  return [
+    conditionMeter(part),
+    statGrid(diffStats(partStats(part), base ? partStats(base) : null)),
+    base ? el("p", { class: "dim" }, `Against ${partDef(base.defId).name}`) : el("span"),
+  ];
 }

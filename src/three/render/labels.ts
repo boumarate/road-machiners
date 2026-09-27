@@ -7,7 +7,7 @@ import { groundPoint, type VehicleFrame } from '../../phys/frames';
 import { PAL } from '../../render/palette';
 import type { World } from '../../sim/types';
 import { el } from '../../ui/dom';
-import { createIcon } from '../../ui/icons';
+import { createIcon } from '../../ui/cards';
 import type { JobMark, VehicleMark, WeaponMark } from '../../ui/weapons';
 import { playerExplored } from '../../sim/vision';
 import type { CameraRig } from './camera';

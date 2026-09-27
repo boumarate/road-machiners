@@ -9,7 +9,7 @@ import { playerCanAct, setAutoFire, setWeaponOrder } from "../sim/world";
 import { el, panel } from "./dom";
 import { meters } from "./units";
 import type { UiHost } from "./host";
-import { createIcon } from './icons';
+import { createIcon } from './cards';
 import { canCall } from "./dialogue";
 import { JOB_LABELS, jobProgress } from "./format";
 
