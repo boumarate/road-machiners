@@ -27,13 +27,13 @@ import {
 import { applyTurn, physicsMove } from "../phys/turn";
 import { playerVehicle } from "../sim/damage";
 import { corePart, mountedParts } from "../sim/grid";
-import { canScavenge, scavenge } from "../sim/locations";
-import { locationAt, townAt } from "../sim/sites";
+import { canScavenge, salvageNear, scavenge } from "../sim/locations";
+import { locationAt, townAt, townNear } from "../sim/sites";
 import { maxTurn, vehicleStats } from "../sim/stats";
 import { clickOrder, throttleFor } from "../sim/steering";
 import { warmRoutes } from "../sim/path";
 import { CHASSIS } from "../data/chassis";
-import type { ShotRound, Vehicle, World } from "../sim/types";
+import type { SalvageStock, ShotRound, Vehicle, World } from "../sim/types";
 import type { Vec } from "../sim/vec";
 import { playerSees, tileOf, visibleTiles } from "../sim/vision";
 import { DEG, dist } from "../sim/vec";
@@ -53,7 +53,7 @@ import { timed } from "../perf";
 import { CharacterScreen } from "../ui/character";
 import { HitCard } from "../ui/hitCard";
 import type { UiHost } from "../ui/host";
-import { Hud } from "../ui/hud";
+import { Hud, type ContextAction } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
 import { TownScreen } from "../ui/town";
 import { getWeaponReadout, WeaponPanel, weaponsForClick } from "../ui/weapons";
@@ -66,7 +66,7 @@ import { PathView } from "./render/path";
 import { RenderScope } from "./render/scope";
 import { addSites } from "./render/sites";
 import { terrainMesh } from "./render/terrain";
-import { VehicleView, type Ring3 } from "./render/vehicle";
+import { VehicleView } from "./render/vehicle";
 import { WeaponRangeView } from "./render/weaponRange";
 import { WeatherView } from "./render/weather";
 import { ZonesView } from "./render/zones";
@@ -353,19 +353,21 @@ export class Game {
     this.town.render();
     this.character.render();
     this.inventory.render();
-    this.hud.renderAction(this.contextLabel(), () => this.useContext());
+    this.hud.renderAction(this.contextAction(), () => this.useContext());
     this.refreshInfo();
     this.refreshTargetMarkers();
   }
 
-  private contextLabel(): string | null {
+  // The E action, dimmed when a town or salvage is in range but the truck must stop first.
+  private contextAction(): ContextAction | null {
     if (this.anim) return null;
-    const town = townAt(this.world);
-    if (town) return `Enter ${town.name}`;
+    const town = townNear(this.world);
+    if (town) return { label: `Enter ${town.name}`, ready: townAt(this.world) !== null };
     if (playerVehicle(this.world).job) return null;
-    if (canScavenge(this.world)) return `Search ${salvageName(this.world)}`;
-    if (canLoot(this.world)) return `Loot ${salvageName(this.world)}`;
-    return null;
+    const stock = salvageNear(this.world);
+    if (!stock) return null;
+    const verb = this.world.player.scavenged.includes(stock.id) ? 'Loot' : 'Search';
+    return { label: `${verb} ${salvageName(stock)}`, ready: salvageHere(this.world) !== null };
   }
 
   private useContext(): void {
@@ -946,18 +948,17 @@ export class Game {
       if (!view) {
         view = new VehicleView(v);
         this.views.set(v.id, view);
-        this.scene.add(view.root, view.ground);
+        this.scene.add(view.root);
       }
       view.update(display);
       view.lamps(night);
       view.pose(f);
       view.aim(this.turretAim(v, f));
-      view.rings(this.ringsFor(v));
       this.vehicleParticles(display, f, frames !== null);
     }
     for (const [id, view] of this.views) {
       if (ids.has(id)) continue;
-      this.scene.remove(view.root, view.ground);
+      this.scene.remove(view.root);
       view.dispose();
       this.views.delete(id);
     }
@@ -1016,22 +1017,6 @@ export class Game {
       : null;
   }
 
-  // Rings under other vehicles: red for hostiles, bright for my targets, gold for the hovered one.
-  // My own truck has none.
-  private ringsFor(v: Vehicle): Ring3[] {
-    const me = playerVehicle(this.world);
-    const r = vehicleStats(this.world, v).radius + 0.25;
-    if (v.id === me.id) return [];
-    const rings: Ring3[] = [];
-    if (Object.values(me.weaponOrders).some((o) => o.targetId === v.id))
-      rings.push({ r: r + 0.1, width: 0.12, color: PAL.target, alpha: 1 });
-    else if (hostileToPlayer(this.world, v))
-      rings.push({ r, width: 0.08, color: PAL.target, alpha: 0.55 });
-    if (v.id === this.hovered)
-      rings.push({ r: r + 0.2, width: 0.06, color: PAL.select, alpha: 0.9 });
-    return rings;
-  }
-
   private drawOverlays(): void {
     const hide = this.anim !== null || this.modalOpen();
     this.zones.root.visible = !hide;
@@ -1074,8 +1059,6 @@ export class Game {
 }
 
 // A salvage stock's display name: its site, or a wreck.
-function salvageName(world: World): string {
-  const stock = salvageHere(world);
-  if (!stock) throw new Error('No salvage in reach');
+function salvageName(stock: SalvageStock): string {
   return REGION.locations.find((l) => l.id === stock.id)?.name ?? 'the wreck';
 }

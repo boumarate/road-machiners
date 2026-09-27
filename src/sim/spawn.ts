@@ -1,6 +1,6 @@
-// NPC spawning up to per-template caps. Raiders appear in the wild, neutrals at towns.
+// NPC spawning up to per-template caps. Raiders appear at their camp gates, neutrals at towns.
 
-import { NPCS, SPAWN, WILD_SPAWNS, type NpcTemplate } from "../data/npcs";
+import { NPC_CLASSES, NPCS, SPAWN, type NpcTemplate } from "../data/npcs";
 import { chassisDef } from "../data/chassis";
 import { REGION } from "../data/region";
 import { playerVehicle } from "./damage";
@@ -8,6 +8,7 @@ import { makeVehicle } from "./factory";
 import { isDriveObstacle } from "./mapgen";
 import { generateNpcLoadout } from "./npc-loadout";
 import { randInt, randRange } from "./rng";
+import { siteGates } from "./sites";
 import type { World } from "./types";
 import { dist, type Vec } from "./vec";
 
@@ -34,7 +35,7 @@ function spawnOne(world: World, tpl: NpcTemplate): boolean {
   const radius = chassisDef(loadout.chassisId).radius;
   for (let i = 0; i < SPAWN.tries; i++) {
     const pos =
-      tpl.spawn === "wild" ? wildSpot(world) : townSpot(world, radius);
+      tpl.spawn === "camp" ? campSpot(world, tpl, radius) : townSpot(world, radius);
     if (!pos || !isFree(world, pos, radius)) continue;
     const v = makeVehicle(world, {
       name: tpl.name,
@@ -58,16 +59,19 @@ function spawnOne(world: World, tpl: NpcTemplate): boolean {
   return false;
 }
 
-function wildSpot(world: World): Vec | null {
-  const base = WILD_SPAWNS[randInt(world, 0, WILD_SPAWNS.length - 1)];
-  const pos = {
-    x: base.x + randRange(world, -3, 3),
-    y: base.y + randRange(world, -3, 3),
-  };
-  if (dist(pos, playerVehicle(world).pos) < SPAWN.wildMinPlayerDist)
-    return null;
-  if (REGION.towns.some((t) => dist(pos, t.pos) < SPAWN.wildMinTownDist))
-    return null;
+// A point on the track just outside a random gate of one of the template's camps.
+function campSpot(world: World, tpl: NpcTemplate, radius: number): Vec | null {
+  const bases = NPC_CLASSES[tpl.brain].bases;
+  if (bases.length === 0) throw new Error(`${tpl.id} spawns at a camp but its class has none`);
+  const id = bases[randInt(world, 0, bases.length - 1)];
+  const camp = REGION.locations.find((l) => l.id === id);
+  if (!camp) throw new Error(`Unknown camp ${id}`);
+  const gates = siteGates(camp);
+  const gate = gates[randInt(world, 0, gates.length - 1)];
+  const a = Math.atan2(gate.y - camp.pos.y, gate.x - camp.pos.x) + randRange(world, -SPAWN.campAngle, SPAWN.campAngle);
+  const d = radius + 0.3 + randRange(world, 0, SPAWN.campSpread);
+  const pos = { x: gate.x + Math.cos(a) * d, y: gate.y + Math.sin(a) * d };
+  if (dist(pos, playerVehicle(world).pos) < SPAWN.campMinPlayerDist) return null;
   return pos;
 }
 

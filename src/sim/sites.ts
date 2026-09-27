@@ -2,6 +2,7 @@
 
 import { ECONOMY } from '../data/goods';
 import { REGION, type LocationDef, type TownDef } from '../data/region';
+import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
 import { roadExits } from './mapgen';
 import type { World } from './types';
@@ -31,7 +32,13 @@ export function canUseSite(pos: Vec, site: Site): boolean {
   return siteGates(site).some((gate) => dist(pos, gate) <= REGION.settlement.gateReach);
 }
 
+// The town the parked player truck can use, or null.
 export function townAt(world: World): TownDef | null {
+  return playerVehicle(world).speed <= RULES.parkedSpeed ? townNear(world) : null;
+}
+
+// The town in reach of the player truck at any speed, or null. Moving trucks must stop to use it.
+export function townNear(world: World): TownDef | null {
   const pos = playerVehicle(world).pos;
   return REGION.towns.find((t) => canUseSite(pos, t)) ?? null;
 }

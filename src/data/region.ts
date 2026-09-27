@@ -6,7 +6,7 @@ export type TownDef = { id: string; name: string; pos: Vec; radius: number };
 export type LocationDef = {
   id: string;
   name: string;
-  kind: "oasis" | "convoy" | "landmark";
+  kind: "oasis" | "convoy" | "landmark" | "camp";
   pos: Vec;
   radius: number;
   walled?: boolean; // a palisade closes the site, so it is used only from a gate
@@ -128,6 +128,23 @@ export const REGION = {
       radius: 6,
       walled: true,
     },
+    // Raider camps. Raiders spawn at their gates and service there. Their gate guns shoot every outsider in range.
+    {
+      id: "scrapjaw",
+      name: "Scrapjaw Camp",
+      kind: "camp",
+      pos: scalePoint({ x: 22, y: 14 }),
+      radius: 6,
+      walled: true,
+    },
+    {
+      id: "kiln",
+      name: "Kiln Camp",
+      kind: "camp",
+      pos: scalePoint({ x: 66, y: 76 }),
+      radius: 6,
+      walled: true,
+    },
   ] as LocationDef[],
   roads: [
     // The north and south routes meet only beyond the canyon crossings at Podfield and Canyon Bridge.
@@ -192,6 +209,17 @@ export const REGION = {
       { x: 90, y: 56 },
       { x: 93, y: 70 },
       { x: 88, y: 84 },
+    ]),
+    // Dead-end tracks lead to the raider camps.
+    scaleRoad([
+      { x: 37, y: 32 },
+      { x: 30, y: 22 },
+      { x: 22, y: 14 },
+    ]),
+    scaleRoad([
+      { x: 55, y: 80 },
+      { x: 61, y: 79 },
+      { x: 66, y: 76 },
     ]),
     // Two dead-end approaches reach the hull rim; no road goes through the Fallen Sun.
     [

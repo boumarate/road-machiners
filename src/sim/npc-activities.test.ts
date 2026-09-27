@@ -22,7 +22,7 @@ describe('NPC activities', () => {
   it('uses Icarus sites for every class destination', () => {
     const sites = [...REGION.towns, ...REGION.locations];
     for (const profile of Object.values(NPC_CLASSES)) {
-      for (const id of [...profile.towns, ...profile.salvageSites, ...profile.supplySites]) {
+      for (const id of [...profile.towns, ...profile.bases, ...profile.salvageSites, ...profile.supplySites]) {
         expect(sites.find((site) => site.id === id), `missing site ${id}`).toBeDefined();
       }
     }

@@ -27,7 +27,6 @@ export const PAL = {
   plan: 0xf0e0b8,
   dest: 0xe05030,
   throttle: { brake: 0xe05a3a, hold: 0xf0d060, accelerate: 0x7cc85a },
-  target: 0xe03020,
   select: 0xf0d060,
   contact: 0xf4f1ea, // faint white sound waves around a contact
   dustTrail: 0xe0c49a, // dust streak behind a contact seen by its dust, pale so it shows over fog

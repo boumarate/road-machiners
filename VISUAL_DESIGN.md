@@ -15,7 +15,7 @@ Recognizable destinations interrupt long stretches of damaged farmland and rough
 - Cold metal identifies ship debris and machinery. Fallen Sun has an open, faceted hull, exposed ribs, detached plates, and engine remains. Nose combines hull shelter with buildings.
 - Muted green identifies surviving vegetation. Old Orchard has planted rows, dead branching trunks, irrigation lines, fencing, and a ruined building.
 - Blue-green marks water at Bowl, Dustwell, Green Pit, and South Lock. Glass Flats uses shallow angular fragments rather than a building.
-- Rust marks damaged equipment, wrecks, gates, and salvage stock. The Granary has silos and a ruined loading shed. Pump Station has tanks, pipes, and valves. Salvage Yard has sorted stock, sheds, and a lifting beam.
+- Rust marks damaged equipment, wrecks, gates, and salvage stock. The Granary has silos and a ruined loading shed. Pump Station has tanks, pipes, and valves. Salvage Yard has sorted stock, sheds, and a lifting beam. Raider camps have a rusted palisade with gun towers at each gate, scrap shacks around a fire pit, fuel tanks and a stripped hull.
 
 ## Readability
 

@@ -9,6 +9,9 @@ import { getHudReadout } from './hud-readout';
 import { createIcon, createSpeedDial, type IconName } from './icons';
 import { kph } from './units';
 
+// The E key action. ready is false while the truck must stop first.
+export type ContextAction = { label: string; ready: boolean };
+
 type HudActions = {
   openInventory: () => void;
   openCharacter: () => void;
@@ -85,12 +88,12 @@ export class Hud {
     );
   }
 
-  // The context action for the E key, or hidden.
-  renderAction(label: string | null, onUse: () => void): void {
-    this.action.style.display = label ? "" : "none";
-    if (label)
+  // The context action for the E key, or hidden. An action that needs a stop first shows disabled.
+  renderAction(action: ContextAction | null, onUse: () => void): void {
+    this.action.style.display = action ? "" : "none";
+    if (action)
       this.action.replaceChildren(
-        el("button", { onclick: onUse }, `[E] ${label}`),
+        el("button", { onclick: onUse, disabled: !action.ready, title: action.ready ? "" : "Stop to use" }, `[E] ${action.label}`),
       );
   }
 

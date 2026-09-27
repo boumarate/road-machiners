@@ -206,6 +206,11 @@ function palisade(): WallStyle {
   return { height: s.palisadeHeight, thickness: s.palisadeThickness, segment: s.palisadeSegment, gateWidth: s.palisadeGateWidth, towerEvery: null, ragged: true, color: PAL.trunk, postColor: PAL.rust.side, guarded: false };
 }
 
+// Raider camps hide behind rusted scrap, with a gun tower on each side of every gate.
+function campWall(): WallStyle {
+  return { ...palisade(), color: PAL.rust.side, postColor: PAL.rust.dark, guarded: true };
+}
+
 // A wall on the site's blocked edge, open at each gate. Each section sinks into the ground, so slopes leave
 // no gap under it. Box depth runs along the wall, so a yaw of -a turns it onto the tangent at angle a, and
 // box width then runs outward.
@@ -343,6 +348,22 @@ function buildWrecks(b: SiteBuilder, id: string): void {
   }
 }
 
+// Scrap shacks ring a fire pit. Fuel tanks and a stripped hull fill the gaps.
+function buildCamp(b: SiteBuilder, id: string): void {
+  const turn = id === 'kiln' ? 1.3 : 0;
+  for (let i = 0; i < 3; i++) {
+    const a = turn + i * 2.1;
+    const x = Math.cos(a) * 3.2;
+    const z = Math.sin(a) * 3.2;
+    b.addBox(x, z, 1.8, 1.1, 1.4, i % 2 ? PAL.rust.side : PAL.metal, 0, -a);
+    b.addBox(x, z, 2.1, 0.12, 1.7, PAL.rust.top, 1.1, -a + 0.1);
+  }
+  b.addTank(0, 0, 0.7, 0.12, PAL.rust.dark);
+  for (const a of [turn + 1, turn + 1.3]) b.addTank(Math.cos(a) * 4.3, Math.sin(a) * 4.3, 0.45, 0.9, PAL.rust.top);
+  b.addHull(Math.cos(turn + 3.1) * 3.6, Math.sin(turn + 3.1) * 3.6, 3, 1.4, turn + 1.6);
+  b.addModel('crates', Math.cos(turn + 5.2) * 3.5, Math.sin(turn + 5.2) * 3.5, turn);
+}
+
 function buildSite(t: Terrain, site: Site): THREE.Group {
   const b = new SiteBuilder(t, site);
   switch (site.id) {
@@ -361,9 +382,10 @@ function buildSite(t: Terrain, site: Site): THREE.Group {
     case 'glass-flats': b.addModel('glass_flats', 0, 0); break;
     case 'nose': case 'bowl': buildSettlement(b, site); break;
     case 'burnt-convoy': case 'podfield': case 'ridge-wrecks': case 'salvage-yard': buildWrecks(b, site.id); break;
+    case 'scrapjaw': case 'kiln': buildCamp(b, site.id); break;
     default: throw new Error(`Missing landmark model for ${site.id}`);
   }
-  if ('kind' in site && site.walled) addWall(b, site, palisade());
+  if ('kind' in site && site.walled) addWall(b, site, site.kind === 'camp' ? campWall() : palisade());
   // Site models never move after they are built.
   b.root.traverse((o) => {
     o.updateMatrix();
