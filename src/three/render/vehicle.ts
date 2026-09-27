@@ -199,9 +199,10 @@ export class VehicleView {
       into.add(mesh);
     };
     // A piece on the cell center at the deck top. height stretches local y, along stretches local x for a 0.65 m side piece on a 0.4 m face.
-    const piece = (name: ModelName, c: { x: number; z: number }, yaw: number, height = 1, along = 1, color = paint): void => {
+    // mirror flips a left-side piece onto the right side, so its front stays at the front. A half turn would swap front and back.
+    const piece = (name: ModelName, c: { x: number; z: number }, yaw: number, height = 1, along = 1, color = paint, mirror = false): void => {
       const obj = model(name);
-      place(obj, { pos: new THREE.Vector3(c.x, top, c.z), yaw, scale: new THREE.Vector3(along, height, 1) });
+      place(obj, { pos: new THREE.Vector3(c.x, top, c.z), yaw, scale: new THREE.Vector3(along, height, mirror ? -1 : 1) });
       tint(obj, color, 1);
       into.add(obj);
     };
@@ -221,6 +222,7 @@ export class VehicleView {
         const wheel = wheels.has(key);
         const engine = cover.engines.has(key);
         const plated = (side: SideLetter): boolean => cover.plates.has(`${key},${side}`);
+        const sideModel: ModelName = zone === 'cab' ? 'door_side' : zone === 'bed' ? 'bed_side' : 'body_side';
 
         // Above the beltline.
         const openFront = zoneAt(x, y - 1) !== zone;
@@ -234,13 +236,13 @@ export class VehicleView {
           if (cut(x - 1, y)) piece('hood_rim', c, 0);
           if (cut(x + 1, y)) piece('hood_rim', c, Math.PI);
         } else if (zone === 'cab') {
-          const cab = (name: ModelName, yaw: number): void => piece(name, c, yaw, 1, 1, cabPaint);
+          const cab = (name: ModelName, yaw: number, mirror = false): void => piece(name, c, yaw, 1, 1, cabPaint, mirror);
           cab(openFront ? 'cab_roof_front' : 'cab_roof', 0);
           const side = openFront ? 'cab_side_front' : 'cab_side';
           if (openFront) cab('cab_front', 0);
           if (openBack) cab('cab_back', Math.PI);
           if (left) cab(side, 0);
-          if (right) cab(side, Math.PI);
+          if (right) cab(side, 0, true);
         } else if (zone === 'bed') {
           // A wheel cell under the bed floor keeps the floor. A taller wheel gets the hump from the fill box below.
           if (!wheel || wellTop === floors.bed) piece('bed_floor', c, 0);
@@ -249,6 +251,10 @@ export class VehicleView {
           if (!wheel && openFront && !front) piece('body_side', c, -Math.PI / 2, stretch, inner);
           if (!wheel && openBack && !back) piece('body_side', c, Math.PI / 2, stretch, inner);
         }
+
+        // The hood flares out past the body sides, so the front reads wider than the cab.
+        if (zone === 'hood' && left) piece('hood_flare', c, 0);
+        if (zone === 'hood' && right) piece('hood_flare', c, 0, 1, 1, paint, true);
 
         // Below the beltline.
         const x0 = c.x - CELL.along / 2;
@@ -260,11 +266,14 @@ export class VehicleView {
           into.add(fender.obj);
           if (fender.fillBottom >= underside) throw new Error(`${v.chassisId} fender reaches above the deck underside`);
           box(paintMat, x0, x1, fender.fillBottom, zone === 'bed' ? wellTop : underside, z0, z1);
+          // The bumpers run across the wheel corners too, so they span the full width.
+          if (front && !inGrid(x, y - 1) && !cover.rams.has(key)) piece('bumper_front', c, 0, stretch);
+          if (back && !inGrid(x, y + 1) && !cover.rams.has(key)) piece('bumper_rear', c, Math.PI, stretch);
           // Above a bed wheel's hump, short body sides keep the bed walls closed on the cell's open faces.
           if (zone === 'bed' && wellTop < top) {
             const wall = (top - wellTop) / EDGE_H;
-            if (left) piece('body_side', c, 0, wall);
-            if (right) piece('body_side', c, Math.PI, wall);
+            if (left) piece(sideModel, c, 0, wall);
+            if (right) piece(sideModel, c, 0, wall, 1, paint, true);
             if (front) piece('body_side', c, -Math.PI / 2, wall, shortSide);
             if (back) piece('body_side', c, Math.PI / 2, wall, shortSide);
           }
@@ -284,8 +293,8 @@ export class VehicleView {
           else piece(zone === 'bed' ? 'tailgate' : 'tail', c, Math.PI, stretch);
         }
         if (back && !inGrid(x, y + 1) && !cover.rams.has(key)) piece('bumper_rear', c, Math.PI, stretch);
-        if (left && !plated('L')) piece('body_side', c, 0, stretch);
-        if (right && !plated('R')) piece('body_side', c, Math.PI, stretch);
+        if (left && !plated('L')) piece(sideModel, c, 0, stretch);
+        if (right && !plated('R')) piece(sideModel, c, 0, stretch, 1, paint, true);
         const inset = (open: boolean, side: SideLetter): number => (!open ? 0 : plated(side) ? ARMOR_INSET : CORE_INSET);
         const floor = engine ? bay : floors[zone];
         box(coreMat, x0 + inset(back, 'B'), x1 - inset(front, 'F'), bottom + CORE_INSET, floor, z0 + inset(left, 'L'), z1 - inset(right, 'R'));
@@ -536,6 +545,21 @@ function tint(obj: THREE.Object3D, paint: number, tone: number): void {
 }
 
 // One mesh per material color for everything under group, in group space. The returned group has an identity transform.
+// A mirrored mesh turns its triangles inside out. Swapping two corners of each triangle turns them back.
+function flipWinding(geo: THREE.BufferGeometry): void {
+  for (const name of Object.keys(geo.attributes)) {
+    const a = geo.getAttribute(name) as THREE.BufferAttribute;
+    for (let i = 0; i < a.count; i += 3) {
+      for (let k = 0; k < a.itemSize; k++) {
+        const one = a.array[(i + 1) * a.itemSize + k];
+        a.array[(i + 1) * a.itemSize + k] = a.array[(i + 2) * a.itemSize + k];
+        a.array[(i + 2) * a.itemSize + k] = one;
+      }
+    }
+    a.needsUpdate = true;
+  }
+}
+
 function mergeStatic(group: THREE.Group): THREE.Group {
   group.updateMatrixWorld(true);
   const toGroup = group.matrixWorld.clone().invert();
@@ -544,8 +568,10 @@ function mergeStatic(group: THREE.Group): THREE.Group {
   group.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
     const mat = o.material as THREE.MeshLambertMaterial;
-    let geo = o.geometry.clone().applyMatrix4(toGroup.clone().multiply(o.matrixWorld));
+    const toHere = toGroup.clone().multiply(o.matrixWorld);
+    let geo = o.geometry.clone().applyMatrix4(toHere);
     if (geo.index) geo = geo.toNonIndexed();
+    if (toHere.determinant() < 0) flipWinding(geo);
     if (!geo.getAttribute('normal')) geo.computeVertexNormals();
     for (const name of Object.keys(geo.attributes)) if (name !== 'position' && name !== 'normal') geo.deleteAttribute(name);
     geo.morphAttributes = {};

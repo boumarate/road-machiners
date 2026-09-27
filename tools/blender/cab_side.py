@@ -42,7 +42,8 @@ def build(kit: Kit, front: bool) -> None:
     prism(kit, "header", [(-HALF_X, top), (HALF_X - (LEAN * top / WALL_H if front else 0), top), (nose, WALL_H), (-HALF_X, WALL_H)], *frame, "paint", lean)
     prism(kit, "pillar", [(-HALF_X, SILL), (back, SILL), (back, top), (-HALF_X, top)], *frame, "paint", lean)
     if front:
-        prism(kit, "a_pillar", [(HALF_X - PILLAR, 0), (HALF_X, 0), (nose, WALL_H), (nose - PILLAR, WALL_H)], *frame, "paint", lean)
+        # The pillar reaches the cell's outer face, so it caps the end of the windshield slab.
+        prism(kit, "a_pillar", [(HALF_X - PILLAR, 0), (HALF_X, 0), (nose, WALL_H), (nose - PILLAR, WALL_H)], frame[0], HALF_Y, "paint", lean)
     prism(kit, "glass", [(back, SILL), (front_x(SILL), SILL), (front_x(top), top), (back, top)], *glass, "glass", lean)
     # Post-apocalyptic armor: a welded plate over the lower glass, then bars across the slit above it.
     prism(kit, "plate", [(back, SILL), (front_x(SILL), SILL), (front_x(PLATE_TOP), PLATE_TOP), (back, PLATE_TOP)], *armor, "metal", lean)

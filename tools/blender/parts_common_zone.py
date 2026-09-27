@@ -27,7 +27,7 @@ CAB_H = 0.8  # cab roof top above the beltline
 ROOF_T = 0.06  # roof plate thickness, so the greenhouse walls stop at CAB_H - ROOF_T
 WALL_H = CAB_H - ROOF_T  # greenhouse wall height
 LEAN = 0.34  # the windshield top sits this far behind its bottom
-TUMBLE = 0.05  # the greenhouse sides lean in this far at the top, so the roof overhangs them like a drip rail
+TUMBLE = 0.0  # the greenhouse sides stand upright, so the cab is as wide as the body
 SILL = 0.1  # painted band on the greenhouse wall below the glass
 
 SKIN = 0.04  # wall thickness

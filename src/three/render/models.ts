@@ -24,6 +24,9 @@ const NAMES = [
 
   'deck_tile',
   'body_side',
+  'door_side',
+  'bed_side',
+  'hood_flare',
   'nose',
   'tail',
   'bumper_front',
