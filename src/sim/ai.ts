@@ -70,10 +70,7 @@ export function planNpcOrders(world: World): void {
         : b.recovery
           ? { kind: "stopAt", dest: b.recoveryGoal! }
           : {
-              kind:
-                b.ramTarget || activity.kind === "flee"
-                  ? "through"
-                  : "stopAt",
+              kind: b.ramTarget ? "through" : "stopAt",
               dest: goal,
             };
     v.direct = false;

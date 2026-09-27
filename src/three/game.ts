@@ -26,7 +26,7 @@ import {
 import { applyTurn, type PreparedTurn } from "../phys/turn";
 import { playerVehicle, vehicleById } from "../sim/damage";
 import { corePart, mountedParts } from "../sim/grid";
-import { applySiteAction } from "../sim/locations";
+import { applySiteAction, canLoot, salvageHere } from "../sim/locations";
 import { getContextAction } from "../ui/hud-readout";
 import { townAt } from "../sim/sites";
 import { isStranded, maxTurn, vehicleStats } from "../sim/stats";
@@ -45,11 +45,9 @@ import {
   hostileToPlayer,
   newWorld,
   playerCanAct,
-  setAutoFire,
   setAutoRepair,
   setDirect,
   setMoveOrder,
-  setWeaponOrder,
 } from "../sim/world";
 import { PAL } from "../render/palette";
 import { timed } from "../perf";
@@ -59,7 +57,7 @@ import type { UiHost } from "../ui/host";
 import { Hud } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
 import { TownScreen } from "../ui/town";
-import { markerLines, WeaponPanel, weaponsForClick } from "../ui/weapons";
+import { toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
 import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
@@ -78,7 +76,7 @@ import { REGION } from "../data/region";
 import { TERRAIN_TYPES } from "../data/terrain";
 import { bodyOf } from "../sim/body";
 import { headingOf } from "../phys/frames";
-import { canLoot, salvageHere } from "../sim/locations";
+import { isBusy } from "../sim/jobs";
 import { daylightAt, lightScene, sunLight } from "./render/daylight";
 import { sunAt } from "../sim/sun";
 import { tileAt } from "../sim/terrain";
@@ -109,7 +107,7 @@ const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is reco
 // The circle under the hovered vehicle, which a click targets. Sizes are in tiles.
 const PICK_RING = { gap: 0.45, width: 0.06, alpha: 0.9, lift: 0.02 };
 
-// Headlight beams for every vehicle the player sees at night. Sight bounds the range.
+// Headlight beams at night for every vehicle within gray vision, also one the player cannot see.
 const BEAM_COLOR = 0xfff2c8;
 const BEAM_INTENSITY = 25; // lit only at night
 const BEAM_DECAY = 0.4; // below the physical 2, so the ground by the nose does not burn white
@@ -407,7 +405,7 @@ export class Game {
   private useContext(): void {
     if (this.anim || !playerCanAct(this.world)) return;
     if (townAt(this.world)) return this.town.open();
-    if (playerVehicle(this.world).job) return;
+    if (isBusy(playerVehicle(this.world))) return;
     const after = applySiteAction(this.world);
     if (after) {
       this.apply(after);
@@ -444,7 +442,7 @@ export class Game {
   }
 
   private refreshTargetMarkers(): void {
-    this.markers.refresh(this.anim ? null : markerLines(this.world, this.hovered));
+    this.markers.refresh(this.anim ? null : vehicleMarks(this.world, this.hovered));
   }
 
   private isEditingControl(): boolean {
@@ -547,11 +545,7 @@ export class Game {
   }
 
   private targetVehicle(target: Vehicle): void {
-    let w = this.world;
-    if (w.player.autoFire) w = setAutoFire(w, false);
-    for (const mw of weaponsForClick(w, this.selected))
-      w = setWeaponOrder(w, mw.part.id, { targetId: target.id, aim: "body" });
-    this.apply(w);
+    this.apply(toggleTarget(this.world, weaponsForClick(this.world, this.selected), target));
   }
 
   // While a turn plays, visibility follows the truck's current spot, not the end of the turn.
@@ -725,12 +719,11 @@ export class Game {
   }
 
   // Explosions and broken parts where they happen, then one result sting for the turn.
-  // The player's horn at once, then each answer a beat later, nearest first. Fog silences unseen trucks.
+  // The player's horn at once, then each answer a beat later, nearest first. Answers come only from earshot, so unseen trucks are heard.
   private playHonks(): void {
-    const honks = this.world.events.filter((e) => e.t === "honk");
-    honks.forEach((e, i) => {
-      const p = this.eventPoint(e.vehicle);
-      if (p) this.sound.honk(p, i * HONK_REPLY_MS, vehicleById(this.world, e.vehicle).chassisId);
+    this.world.events.filter((e) => e.t === "honk").forEach((e, i) => {
+      const v = vehicleById(this.world, e.vehicle), f = this.frames[v.id] ?? restFrame(this.world, v);
+      this.sound.honk({ x: f.pos.x, y: f.pos.y + GUN_HEIGHT, z: f.pos.z }, i * HONK_REPLY_MS, v.chassisId);
     });
   }
 
@@ -1109,9 +1102,7 @@ export class Game {
       }
       return;
     }
-    const lit = this.world.vehicles.filter(
-      (v) => this.frames[v.id] && this.isVehicleVisible(v),
-    );
+    const lit = this.world.vehicles.filter((v) => this.frames[v.id] && this.sightLimit.reaches(this.frames[v.id].pos));
     while (this.beams.length < lit.length) {
       const beam = new THREE.SpotLight(
         BEAM_COLOR,

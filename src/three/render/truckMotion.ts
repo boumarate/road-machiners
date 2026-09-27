@@ -1,6 +1,6 @@
 // Render-only motion of a truck body and its loose parts. Driving physics never reads it.
 // The body leans on a spring toward a tilt set by the truck's acceleration. It lifts its nose when the truck speeds up,
-// dips it on braking and leans out of turns. A running engine shakes it a little.
+// dips it on braking and leans out of turns. A running engine shakes it a little while a turn plays.
 // Loose parts, like the antenna and the tow chain, swing on their own springs from the same acceleration.
 // Body space: +x is the nose, +z the truck's right, +y up.
 
@@ -117,13 +117,13 @@ export class TruckMotion {
   }
 
   // dt: seconds since the last call. running: the engine runs, so the body shakes.
-  // The same frame again means the turn is paused, so the lean and the loose parts hold still. The engine keeps shaking.
+  // The same frame again means the turn is paused, so the whole truck holds still, engine shake included.
   step(f: VehicleFrame, dt: number, running: boolean): void {
     if (!(dt >= 0)) throw new Error(`Truck motion step of ${dt} s`);
     this.time += dt;
     const paused = f === this.last;
     this.last = f;
-    if (paused) return this.apply(running);
+    if (paused) return this.apply(false);
     if (dt > MAX_GAP) this.reset();
     this.inverse.set(f.rot.x, f.rot.y, f.rot.z, f.rot.w).invert();
     this.local.set(f.acc.x, f.acc.y, f.acc.z).applyQuaternion(this.inverse);

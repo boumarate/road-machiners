@@ -56,7 +56,9 @@ class SiteBuilder {
   }
   // A flat rectangle of packed dust laid over the ground: length tiles along yaw, width across, centered at
   // site offset (x, z). It lies outside the site edge, where trucks park.
-  addPatch(x: number, z: number, length: number, width: number, yaw: number, lift: number, color: number): void {
+  // It writes no depth, so ground overlays like zones and waypoints stay visible over it.
+  // Higher layers draw later, so a floor covers its rim.
+  addPatch(x: number, z: number, length: number, width: number, yaw: number, lift: number, color: number, layer: number): void {
     const geo = new THREE.PlaneGeometry(length, width, Math.ceil(length) * 2, Math.ceil(width) * 2);
     const pos = geo.getAttribute('position');
     for (let i = 0; i < pos.count; i++) {
@@ -68,7 +70,8 @@ class SiteBuilder {
       pos.setXYZ(i, wx * S, (heightAt(this.terrain, wx, wz) + lift) * S, wz * S);
     }
     geo.computeVertexNormals();
-    const patch = new THREE.Mesh(geo, this.material(color));
+    const patch = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color, flatShading: true, depthWrite: false }));
+    patch.renderOrder = layer;
     patch.receiveShadow = true;
     patch.userData.outsideEdge = true;
     this.root.add(patch);
@@ -369,8 +372,8 @@ function addPads(b: SiteBuilder, site: Site): void {
     const yaw = Math.atan2(pad.y - site.pos.y, pad.x - site.pos.x);
     const x = pad.x - site.pos.x;
     const z = pad.y - site.pos.y;
-    b.addPatch(x, z, length, width, yaw, 0.03, PAL.roadRut);
-    b.addPatch(x, z, length - 0.5, width - 0.5, yaw, 0.05, PAL.sand[3]);
+    b.addPatch(x, z, length, width, yaw, 0.03, PAL.roadRut, 1);
+    b.addPatch(x, z, length - 0.5, width - 0.5, yaw, 0.05, PAL.sand[3], 2);
   }
 }
 

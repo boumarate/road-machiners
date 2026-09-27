@@ -3,7 +3,7 @@ import { hitOdds } from "../sim/combat";
 import { vehicleStats } from "../sim/stats";
 import { addVehicle, emptyWorld } from "../sim/testkit";
 import { refreshVision } from "../sim/vision";
-import { getWeaponReadout } from "./weapons";
+import { getWeaponReadout, toggleTarget, vehicleMarks } from "./weapons";
 
 function createDuel() {
   const world = emptyWorld();
@@ -109,5 +109,39 @@ describe("weapon readout at current positions", () => {
       chance: null,
       canFire: false,
     });
+  });
+});
+
+describe("targeting by click", () => {
+  it("aims at the clicked vehicle, and a second click clears the order", () => {
+    const { world, target, gun } = createDuel();
+    world.vehicles[0].weaponOrders = {};
+    const aimed = toggleTarget(world, [gun], target);
+    expect(aimed.vehicles[0].weaponOrders[gun.part.id]).toEqual({ targetId: target.id, aim: "body" });
+    expect(toggleTarget(aimed, [gun], target).vehicles[0].weaponOrders).toEqual({});
+  });
+
+  it("moves an order from another vehicle instead of clearing it", () => {
+    const { world, gun } = createDuel();
+    const other = addVehicle(world, "raiders", "buggy", ["mg", "stockEngine"], { x: 30, y: 33 });
+    refreshVision(world);
+    const moved = toggleTarget(world, [gun], other);
+    expect(moved.vehicles[0].weaponOrders[gun.part.id].targetId).toBe(other.id);
+  });
+});
+
+describe("vehicle marks", () => {
+  it("shows each aimed weapon on its target with slot, look and status", () => {
+    const { world, target, gun } = createDuel();
+    expect(vehicleMarks(world, null).get(target.id)).toEqual({
+      weapons: [{ slot: 1, look: gun.def.look, status: "ready", ready: true }],
+      radio: false,
+    });
+  });
+
+  it("shows nothing for a vehicle without orders", () => {
+    const { world, target } = createDuel();
+    world.vehicles[0].weaponOrders = {};
+    expect(vehicleMarks(world, null).has(target.id)).toBe(false);
   });
 });

@@ -25,6 +25,17 @@ describe('oasis interaction', () => {
   });
 });
 
+describe('salvage interaction', () => {
+  it('says a site is picked clean when its stock is empty', () => {
+    const site = REGION.locations.find((site) => site.id === 'podfield')!;
+    const w = emptyWorld({ ...sitePads(site)[0] });
+    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [] }];
+    expect(getContextAction(w, false)).toEqual({ label: `Search ${site.name}`, ready: true });
+    w.salvage[0].goods.scrap = 0;
+    expect(getContextAction(w, false)).toEqual({ label: `${site.name} is picked clean`, ready: false, hint: 'No loot left' });
+  });
+});
+
 describe("critical vehicle readout", () => {
   it("keeps money, survival resources, cab and driver condition visible", () => {
     const w = emptyWorld();

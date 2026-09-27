@@ -67,10 +67,10 @@ const KEYS: Key[] = [
   {
     h: -TWILIGHT,
     sun: 0x8090c0,
-    sunI: 0.5,
+    sunI: 0.6,
     sky: 0x5a6c9c,
     ground: 0x1c1e2a,
-    skyI: 0.65,
+    skyI: 0.78,
   },
 ];
 

@@ -132,6 +132,12 @@ export class SightLimit {
     this.uniforms.sightRadius.value = radius;
   }
 
+  // Whether a point in 3D meters lies within gray vision.
+  reaches(at: V3): boolean {
+    const c = this.uniforms.sightCenter.value;
+    return Math.hypot(at.x - c.x, at.z - c.y) <= this.uniforms.sightRadius.value;
+  }
+
   // Tile indices, y * mapSize + x, the player sees clearly now.
   showVisible(tiles: Iterable<number>): void {
     const data = this.visible.image.data as Uint8Array;

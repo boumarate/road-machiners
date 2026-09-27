@@ -9,7 +9,7 @@ import type { PreparedTurn, TurnRequest, TurnResponse } from "../phys/turn";
 import { mergePerf } from "../perf";
 import { playerVehicle } from "../sim/damage";
 import type { GameEvent, World } from "../sim/types";
-import type { Vec } from "../sim/vec";
+import { dist, type Vec } from "../sim/vec";
 import { playerSees } from "../sim/vision";
 import { hostileToPlayer, playerCanAct } from "../sim/world";
 
@@ -54,6 +54,17 @@ function interruptsTravel(event: GameEvent, id: string): boolean {
     default:
       return stopsVehicle(event, id);
   }
+}
+
+// Whether a turn passes the drive-through point and ends farther from it than the truck is now.
+// Travel stops before such a turn, so control returns at the turn end nearest the point.
+export function overshoots(world: World, next: Pick<World, "events" | "vehicles">): boolean {
+  const me = playerVehicle(world);
+  if (me.order?.kind !== "through") return false;
+  const passed = next.events.some((e) => e.t === "arrived" && e.vehicle === me.id);
+  const after = next.vehicles.find((v) => v.id === me.id);
+  if (!passed || !after) return false;
+  return dist(after.pos, me.order.dest) > dist(me.pos, me.order.dest);
 }
 
 export function canTravel(world: World): boolean {
@@ -143,8 +154,14 @@ export class Travel {
     if (!this.isAdvancing(null, now)) return null;
     this.turns.prepare(world, drive);
     const prepared = this.turns.take(world);
-    if (prepared) this.requested = false;
-    return prepared;
+    if (!prepared) return null;
+    if (this.requested) {
+      this.requested = false;
+      return prepared;
+    }
+    if (!overshoots(world, prepared.world)) return prepared;
+    this.pause();
+    return null;
   }
 
   prepareNext(world: World, playback: Playback | null, now: number): void {

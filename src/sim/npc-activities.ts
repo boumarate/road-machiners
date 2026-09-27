@@ -115,14 +115,14 @@ function hasSaleCargo(vehicle: Vehicle): boolean {
   return goods || vehicle.items.some((item) => item.kind === 'part' && !mounted.has(item.part.id));
 }
 
-// Where an NPC flees to, away from a threat at `threatPos`: the nearest known town or own camp whose direction
-// from the vehicle is more than 90 degrees off the threat's, or straight away from the threat if no such site is
-// known.
+// Where an NPC flees to, away from a threat at `threatPos`: its spot at the nearest known town or own camp whose
+// direction from the vehicle is more than 90 degrees off the threat's, or straight away from the threat if no such
+// site is known. Trucks never enter a site, so the spot lies on a pad.
 function fleeDestination(world: World, vehicle: Vehicle, profile: NpcProfile, threatPos: Vec): Vec {
   const safe = [...profile.towns, ...profile.bases].map(getKnownSite).filter((site) => pointsAway(vehicle.pos, site.pos, threatPos));
   safe.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   const away = { x: vehicle.pos.x + (vehicle.pos.x - threatPos.x), y: vehicle.pos.y + (vehicle.pos.y - threatPos.y) };
-  const destination = safe[0]?.pos ?? away;
+  const destination = safe[0] ? siteSpot(world, vehicle, safe[0], vehicleStats(world, vehicle).radius + RULES.arriveRadius) : away;
   return { x: clamp(destination.x, 1, world.size - 1), y: clamp(destination.y, 1, world.size - 1) };
 }
 
@@ -393,14 +393,18 @@ function onHostilesSeen(world: World, vehicle: Vehicle, profile: NpcProfile): vo
 }
 
 function onContactsHeard(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[]): void {
-  for (const contact of contacts) {
-    if (!isHostileContact(world, vehicle, contact)) continue;
+  for (const contact of hostileContacts(world, vehicle, contacts)) {
     const option = react(world, vehicle, 'contactHeard', contact.vehicleId);
     if (option === null || option === 'keep') continue;
     if (option === 'investigate') interrupt(world, vehicle, createActivity('investigate', contact.vehicleId, { ...contact.center }, 'heard a hostile beyond sight'));
     else interrupt(world, vehicle, fleeFrom(world, vehicle, profile, contact.vehicleId, contact.center, 'heard a hostile beyond sight'));
     return;
   }
+}
+
+// A driver in a fight or on the run ignores contacts beyond sight. It decides on them once the danger goal pops.
+function hostileContacts(world: World, vehicle: Vehicle, contacts: Contact[]): Contact[] {
+  return inDanger(vehicle) ? [] : contacts.filter((contact) => isHostileContact(world, vehicle, contact));
 }
 
 // An attacker stays remembered while it is a hostile in sight.
@@ -503,8 +507,7 @@ function onPreySeen(world: World, vehicle: Vehicle): void {
 
 // A driver in a fight or on the run never starts a tow. It decides once the danger goal pops.
 function onStrandedSeen(world: World, vehicle: Vehicle): void {
-  const top = topGoal(vehicle)?.kind;
-  if (top === 'fight' || top === 'flee') return;
+  if (inDanger(vehicle)) return;
   const at = strandedPlayerAt(world, vehicle);
   if (at && react(world, vehicle, 'strandedSeen', world.player.vehicleId) === 'tow') startTow(world, vehicle, at);
 }
@@ -516,6 +519,11 @@ function onRamChance(world: World, vehicle: Vehicle): void {
   const target = fightTarget(vehicle);
   if (brain.ramChoice !== target) delete brain.ramChoice;
   if (target !== null && react(world, vehicle, 'ramChance', target) === 'ram') brain.ramChoice = target;
+}
+
+function inDanger(vehicle: Vehicle): boolean {
+  const top = topGoal(vehicle)?.kind;
+  return top === 'fight' || top === 'flee';
 }
 
 function fightTarget(vehicle: Vehicle): string | null {
@@ -769,6 +777,12 @@ function resolveRaid(world: World, vehicle: Vehicle, activity: NpcActivity): voi
   if (reachedDestination(vehicle, activity)) finishGoal(world, vehicle, 'reached hunting ground');
 }
 
+// A flee ends parked on its point: a safe spot, or the map edge. The driver keeps the threat noticed while it
+// still perceives it, so it does not flee again from the same truck.
+function resolveFlee(world: World, vehicle: Vehicle, activity: NpcActivity): void {
+  if (reachedDestination(vehicle, activity)) finishGoal(world, vehicle, 'nowhere farther to run');
+}
+
 function resolveInvestigate(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   if (reachedDestination(vehicle, activity)) finishGoal(world, vehicle, 'found nothing at the contact');
 }
@@ -824,6 +838,7 @@ const RESOLVERS: Partial<Record<NpcActivity['kind'], Resolver>> = {
   loot: resolveSearch,
   raid: resolveRaid,
   investigate: resolveInvestigate,
+  flee: resolveFlee,
   resupply: resolveResupply,
   sell: resolveSell,
   trade: resolveTrade,

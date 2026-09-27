@@ -6,9 +6,26 @@ import { goodsCount } from './grid';
 import { canLoot, canScavenge, scavenge, takeAllLoot, takeLoot } from './locations';
 import { findSpot, gridOf } from './grid';
 import { endTurn, setMoveOrder } from './world';
-import { advanceJobs } from './jobs';
+import { advanceJobs, isBusy, startAutoRepair } from './jobs';
+import { addGoods } from './inventory';
+import { mountedParts } from './grid';
 
 describe('timed scavenging search', () => {
+  it('replaces a running auto patch', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = w.vehicles[0];
+    me.speed = 0;
+    mountedParts(me)[0].hp = 1;
+    addGoods(w, me, 'parts', 5);
+    startAutoRepair(w);
+    expect(me.job).toEqual(expect.objectContaining({ kind: 'repair', auto: true }));
+    expect(isBusy(me)).toBe(false);
+    w.salvage.push({ id: 'rich', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn * 3 }, parts: [] });
+    const next = scavenge(w);
+    expect(next.vehicles[0].job).toEqual(expect.objectContaining({ kind: 'search' }));
+    expect(next.events).toContainEqual(expect.objectContaining({ t: 'job', outcome: 'cancelled', job: expect.objectContaining({ auto: true }) }));
+  });
+
   it('takes turns in proportion to the stock, then opens it for looting', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.salvage.push({ id: 'rich', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn * 3 }, parts: [] });

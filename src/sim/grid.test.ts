@@ -5,7 +5,7 @@ import { PARTS } from '../data/parts';
 import { REGION } from '../data/region';
 import { buyChassis, buyPart } from './economy';
 import { makePart, makeVehicle } from './factory';
-import { baseGrid, isMounted, itemCells, mountedItems, mountedParts, sideOf, type Cell } from './grid';
+import { baseGrid, gridOf, isMounted, placementError, itemCells, mountedItems, mountedParts, sideOf, type Cell } from './grid';
 import { moveItem, storePart } from './inventory';
 import { generateNpcLoadout } from './npc-loadout';
 import { addVehicle, emptyWorld } from './testkit';
@@ -78,6 +78,19 @@ describe('built-in parts', () => {
     expect(coreIds(me)).toEqual(CHASSIS.hauler.core.map((c) => c.defId).sort());
     expect(mountedParts(me, 'core').every((p) => p.hp === PARTS[p.defId].hp)).toBe(true);
     expect(w.player.storage.filter((p) => PARTS[p.defId].kind === 'core')).toHaveLength(0);
+  });
+});
+
+describe('cargo rows', () => {
+  it('rejects an item across the end of the chassis grid', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'scout', [], { x: 40, y: 40 });
+    v.items.push({ ...spotOn('scout', 'rack', 'C', v.items), id: 'i-rack', part: makePart(w, 'rack') } as GridItem);
+    const g = gridOf(v);
+    const spare = (y: number): GridItem => ({ id: 'i-spare', x: 0, y, rot: 1, kind: 'part', part: makePart(w, 'rack') });
+    expect(g.cells[g.chassisH - 1][0]).toBe('.');
+    expect(placementError(g, v.items, spare(g.chassisH - 1), null)).toBe('Does not fit there');
+    expect(placementError(g, v.items, { ...spare(g.chassisH - 1), rot: 0 }, null)).toBeNull();
   });
 });
 

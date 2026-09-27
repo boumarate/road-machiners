@@ -4,6 +4,7 @@ import { DialoguePanel, type DialogueHost } from "./dialogue";
 import { partDef } from "../data/parts";
 import { baseGrid, corePart, coreParts, mountedParts } from "../sim/grid";
 import type { Job, Vehicle, World } from "../sim/types";
+import { isAutoPatch } from "../sim/jobs";
 import { el, panel, topRight } from "./dom";
 import {
   eventText,
@@ -82,7 +83,8 @@ class TruckConditionView {
 }
 
 // The E key action. ready is false while the truck must stop first.
-export type ContextAction = { label: string; ready: boolean };
+// A hint marks an action that can never run here, and says why.
+export type ContextAction = { label: string; ready: boolean; hint?: string };
 
 type HudActions = {
   openInventory: () => void;
@@ -209,47 +211,54 @@ export class Hud {
   }
 
   // The context action for the E key, or hidden. An action that needs a stop first shows disabled.
+  // A job shows its progress instead, except an auto patch, which yields to any action.
   renderAction(
     action: ContextAction | null,
     job: Job | null,
     onUse: () => void,
   ): void {
-    this.action.style.display = action || job ? "" : "none";
-    if (job) {
-      const progress = Math.round((1 - job.turnsLeft / job.total) * 100);
-      const label = { search: 'Search', repair: 'Repair', refit: 'Refit' }[job.kind];
-      this.action.replaceChildren(
-        el(
-          "span",
-          { class: "job-label" },
-          `${label} · ${job.turnsLeft} turns left`,
-        ),
-        el(
-          "span",
-          {
-            class: "job-bar",
-            role: "progressbar",
-            "aria-label": `${label} progress`,
-            "aria-valuemin": "0",
-            "aria-valuemax": "100",
-            "aria-valuenow": String(progress),
-          },
-          el("span", { style: `width:${progress}%` }),
-        ),
-      );
-    } else if (action) {
-      this.action.replaceChildren(
-        el(
-          "button",
-          {
-            onclick: onUse,
-            disabled: !action.ready,
-            title: action.ready ? "" : "Stop to use",
-          },
-          `[E] ${action.label}`,
-        ),
-      );
-    }
+    const shown = shownJob(action, job);
+    this.action.style.display = action || shown ? "" : "none";
+    if (shown) this.renderJob(shown);
+    else if (action) this.renderActionButton(action, onUse);
+  }
+
+  private renderJob(job: Job): void {
+    const progress = Math.round((1 - job.turnsLeft / job.total) * 100);
+    const label = { search: 'Search', repair: 'Repair', refit: 'Refit' }[job.kind];
+    this.action.replaceChildren(
+      el(
+        "span",
+        { class: "job-label" },
+        `${label} · ${job.turnsLeft} turns left`,
+      ),
+      el(
+        "span",
+        {
+          class: "job-bar",
+          role: "progressbar",
+          "aria-label": `${label} progress`,
+          "aria-valuemin": "0",
+          "aria-valuemax": "100",
+          "aria-valuenow": String(progress),
+        },
+        el("span", { style: `width:${progress}%` }),
+      ),
+    );
+  }
+
+  private renderActionButton(action: ContextAction, onUse: () => void): void {
+    this.action.replaceChildren(
+      el(
+        "button",
+        {
+          onclick: onUse,
+          disabled: !action.ready,
+          title: action.hint ?? (action.ready ? "" : "Stop to use"),
+        },
+        action.hint ? action.label : `[E] ${action.label}`,
+      ),
+    );
   }
 
   // The prompts in the middle of the screen: an open radio call, and the rescue state. That is the knockout
@@ -519,4 +528,9 @@ function npcLines(w: World, v: Vehicle): HTMLElement[] {
       el("div", { class: "npc-state" }, line),
     ),
   ];
+}
+
+// A running auto patch gives way to any usable context action, so the player can still act.
+function shownJob(action: ContextAction | null, job: Job | null): Job | null {
+  return action && !action.hint && isAutoPatch(job) ? null : job;
 }
