@@ -44,7 +44,7 @@ export const RULES = {
     rounds: 4,
     hitChance: 0.5,
     missOffset: 1.5,
-    round: { damage: 6, pen: 10 },
+    round: { damage: 6, pen: 10, blast: false },
   },
 
   // Combat
@@ -54,7 +54,8 @@ export const RULES = {
   critDamage: 2,
   critPen: 2,
   // A round's angular error has a spread in radians: weapon spread × (1 − gunnery), plus
-  // leadError × crossing speed / round speed, plus shake × own speed in m/s.
+  // leadError × crossing speed / round speed, plus shake × the gun's shake × own speed in m/s,
+  // plus the gun's recoil over the truck mass in tonnes.
   leadError: 4.5, // share of the lead angle the gunner misjudges
   shake: 0.002, // radians of spread per m/s of the shooter's own speed
   cellMeters: 0.5, // width of one grid cell, for the size of an aimed part

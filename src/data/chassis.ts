@@ -1,12 +1,14 @@
 // Truck chassis. Speeds are tiles per turn. Turn rates are degrees per turn. Masses are kilograms.
 // Speed, turn, accel and brake numbers hold for a truck at ratedMass: chassis, usual parts and half a load of goods.
+// A lighter truck beats them and a heavier one falls short. See loadFactor() in src/sim/mass.ts.
 //
 // layout is the inventory grid as a top view, nose on row 0. One string per row. Every character except a space is a cell.
-//   W, E, C     mount cells: a weapon, engine or cargo part works only when it lies fully on its letter
+//   D           deck mount: weapons, scanners and cargo frames all compete for these cells
+//   E           engine bay, fixed per chassis because the base model has a hood cutout over it
 //   F, B, L, R  armor mounts on the front, back, left and right edges. Armor works when it lies fully on one of them.
 //   X           built-in cells, each filled by a core part listed in core
-//   .           plain cell
-// Any item may sit on any free cell, so empty mounts hold cargo too.
+//   .           plain cell, where spare parts ride without being installed
+// A part works only when it lies fully on mount cells of its kind. Any item may sit on any free cell, so empty mounts hold cargo too.
 //
 // core places the built-in parts at fixed cells, unrotated.
 //
@@ -51,12 +53,12 @@ export const CHASSIS: Record<string, ChassisDef> = {
     // The wheels sit one row in from each end, so the body overhangs them like a real pickup.
     layout: [
       '.FFF.',
-      'XEE.X',
+      'XEEDX',
       'LEEXR',
-      'LWWWR',
+      'LDDDR',
       'L.X.R',
-      'LCC.R',
-      'XCCXX',
+      'LDDDR',
+      'XDDXX',
       '.BBB.',
     ],
     core: [
@@ -85,7 +87,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
     mass: 2730,
     ratedMass: 5800,
     radius: 0.8,
-    layout: ['.FFFFF.', 'X.EE..X', 'L.EEX.R', 'LWWW..R', 'L..X..R', 'LWWW..R', 'L...CCR', 'X..XCCX', '.BBBBB.'],
+    layout: ['.FFFFF.', 'XDEEDDX', 'LDEEXDR', 'LDDDDDR', 'L..X..R', 'LDDDDDR', 'LDDDDDR', 'XDDXDDX', '.BBBBB.'],
     core: [
       { defId: 'cab', x: 4, y: 2 },
       { defId: 'transmission', x: 3, y: 4 },
@@ -112,7 +114,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
     mass: 230,
     ratedMass: 900,
     radius: 0.5,
-    layout: ['.FF.', 'XEEX', 'LEER', 'LXWR', 'XXXX', '.BB.'],
+    layout: ['.FF.', 'XEEX', 'LEER', 'LXDR', 'XXXX', '.BB.'],
     core: [
       { defId: 'cab', x: 1, y: 3 },
       { defId: 'transmission', x: 1, y: 4 },
@@ -139,7 +141,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
     mass: 2130,
     ratedMass: 3700,
     radius: 0.8,
-    layout: ['.FFF.', 'XWWWX', 'LEEXR', 'LEE.R', 'L.X.R', 'X..XX', '.BBB.'],
+    layout: ['.FFF.', 'XDDDX', 'LEEXR', 'LEEDR', 'L.X.R', 'XDDXX', '.BBB.'],
     core: [
       { defId: 'cab', x: 3, y: 2 },
       { defId: 'transmission', x: 2, y: 4 },
@@ -157,7 +159,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
   courier: {
     id: 'courier', name: 'Courier', maxSpeed: 9.75, accel: 3, brake: 3, turnSlow: 125, turnFast: 42, reverseTurn: 80,
     mass: 280, ratedMass: 1100, radius: 0.5,
-    layout: ['.FF.', 'XEEX', 'LEER', 'LXWR', 'LXXR', 'XCCX', '.BB.'],
+    layout: ['.FF.', 'XEEX', 'LEER', 'LXDR', 'LXXR', 'XDDX', '.BB.'],
     core: [
       { defId: 'cab', x: 1, y: 3 }, { defId: 'transmission', x: 1, y: 4 }, { defId: 'tank', x: 2, y: 4 },
       { defId: 'wheel', x: 0, y: 1 }, { defId: 'wheel', x: 3, y: 1 },
@@ -168,7 +170,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
   van: {
     id: 'van', name: 'Utility van', maxSpeed: 6.5, accel: 1.5, brake: 3, turnSlow: 100, turnFast: 35, reverseTurn: 65,
     mass: 1100, ratedMass: 3000, radius: 0.7,
-    layout: ['.FFF.', 'XEE.X', 'LEEXR', 'L.W.R', 'L.X.R', 'LCC.R', 'LCCXR', 'X...X', '.BBB.'],
+    layout: ['.FFF.', 'XEEDX', 'LEEXR', 'LDDDR', 'L.X.R', 'LDDDR', 'LDDXR', 'XDDDX', '.BBB.'],
     core: [
       { defId: 'cab', x: 3, y: 2 }, { defId: 'transmission', x: 2, y: 4 }, { defId: 'tank', x: 3, y: 6 },
       { defId: 'wheel', x: 0, y: 1 }, { defId: 'wheel', x: 4, y: 1 },
@@ -179,7 +181,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
   longbed: {
     id: 'longbed', name: 'Longbed truck', maxSpeed: 4.55, accel: 0.8, brake: 1.8, turnSlow: 70, turnFast: 20, reverseTurn: 40,
     mass: 2900, ratedMass: 7200, radius: 0.95,
-    layout: ['.FFFFF.', 'X.EE..X', 'L.EEX.R', 'LWWW..R', 'L..X..R', 'LCC.CCR', 'LCC.CCR', 'L.....R', 'L..X..R', 'X.....X', '.BBBBB.'],
+    layout: ['.FFFFF.', 'XDEEDDX', 'LDEEXDR', 'LDDDDDR', 'L..X..R', 'LDDDDDR', 'LDDDDDR', 'LDDDDDR', 'LDDXDDR', 'XDDDDDX', '.BBBBB.'],
     core: [
       { defId: 'cab', x: 4, y: 2 }, { defId: 'transmission', x: 3, y: 4 }, { defId: 'tank', x: 3, y: 8 },
       { defId: 'wheel', x: 0, y: 1 }, { defId: 'wheel', x: 6, y: 1 },
@@ -190,7 +192,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
   carrier: {
     id: 'carrier', name: 'Armored carrier', maxSpeed: 5.2, accel: 1, brake: 2.5, turnSlow: 75, turnFast: 28, reverseTurn: 50,
     mass: 3200, ratedMass: 5200, radius: 0.85,
-    layout: ['.FFFF.', 'XWWW.X', 'LWWWXR', 'LEE..R', 'LEEX.R', 'L.CC.R', 'L.CCXR', 'X....X', '.BBBB.'],
+    layout: ['.FFFF.', 'XDDDDX', 'LDDDXR', 'LEE..R', 'LEEXDR', 'LDDDDR', 'LDDDXR', 'XDDDDX', '.BBBB.'],
     core: [
       { defId: 'cab', x: 4, y: 2 }, { defId: 'transmission', x: 3, y: 4 }, { defId: 'tank', x: 4, y: 6 },
       { defId: 'wheel', x: 0, y: 1 }, { defId: 'wheel', x: 5, y: 1 },
@@ -201,7 +203,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
   tractor: {
     id: 'tractor', name: 'Heavy tractor', maxSpeed: 3.9, accel: 1.8, brake: 2, turnSlow: 65, turnFast: 22, reverseTurn: 55,
     mass: 3600, ratedMass: 6500, radius: 0.9,
-    layout: ['.FFFFF.', 'X.EEX.X', 'L.EE..R', 'LWWW..R', 'L..X..R', 'L.CC..R', 'L.CC..R', 'X..X..X', '.BBBBB.'],
+    layout: ['.FFFFF.', 'XDEEXDX', 'LDEEDDR', 'LDDDDDR', 'L..X..R', 'LDDDDDR', 'LDDDDDR', 'XDDXDDX', '.BBBBB.'],
     core: [
       { defId: 'cab', x: 4, y: 1 }, { defId: 'transmission', x: 3, y: 4 }, { defId: 'tank', x: 3, y: 7 },
       { defId: 'wheel', x: 0, y: 1 }, { defId: 'wheel', x: 6, y: 1 },

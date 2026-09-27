@@ -17,6 +17,7 @@ export const BLOCK_TEXT: Record<FireBlock, string> = {
   reloading: "reloading",
   range: "out of range",
   arc: "out of arc",
+  blocked: "view blocked on truck",
   noTarget: "hold fire",
   unseen: "not in sight",
   covered: "behind cover",

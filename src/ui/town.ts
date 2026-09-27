@@ -3,7 +3,7 @@
 import { chassisDef, PLAYER_CHASSIS } from "../data/chassis";
 import { ECONOMY, GOODS } from "../data/goods";
 import { CONTRACTS, shopDef, type ShopDef } from "../data/market";
-import { partDef, type PartDef, type PartKind } from "../data/parts";
+import { partDef, type ArmorDef, type FieldRepair, type PartDef, type PartKind, type WeaponDef } from "../data/parts";
 import { isJunk, maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
 import {
@@ -618,17 +618,33 @@ function partLabel(p: PartInstance): string {
 }
 
 function partStats(d: PartDef): string {
-  return `${kindStats(d)}, armor ${d.armor}, ${d.mass} kg`;
+  return `${kindStats(d)}, armor ${d.armor}, ${d.mass} kg${d.tall ? ", tall: blocks fire" : ""}`;
+}
+
+const FIELD_REPAIR_TEXT: Record<FieldRepair, string> = {
+  full: "patches to full on the road",
+  capped: "patches to the field cap",
+  none: "town repair only",
+};
+
+function weaponStats(d: WeaponDef): string {
+  const kind = d.round.blast ? "blast" : "kinetic";
+  return `${d.rounds} × dmg ${d.round.damage} ${kind}, pen ${d.round.pen}, spread ${d.spread}°, range ${meters(d.range)} m, reload ${d.reload}, arc ${d.arc}°, recoil ${d.recoil}° per t, shake x${d.shake}`;
+}
+
+function armorStats(d: ArmorDef): string {
+  const ram = d.ramMult > 1 ? `, ram x${d.ramMult}` : "";
+  return `blast armor ${d.blastArmor}, ${FIELD_REPAIR_TEXT[d.fieldRepair]}${ram}`;
 }
 
 function kindStats(d: PartDef): string {
   switch (d.kind) {
     case "weapon":
-      return `${d.rounds} × dmg ${d.round.damage}, pen ${d.round.pen}, spread ${d.spread}°, range ${meters(d.range)} m, reload ${d.reload}, arc ${d.arc}°`;
+      return weaponStats(d);
     case "engine":
-      return `speed ${d.speedBonus >= 0 ? "+" : ""}${kph(d.speedBonus)} km/h, accel ${d.accelBonus >= 0 ? "+" : ""}${mps2(d.accelBonus)} m/s², fuel x${d.fuelMult}`;
+      return `speed ${d.speedBonus >= 0 ? "+" : ""}${kph(d.speedBonus)} km/h, accel ${d.accelBonus >= 0 ? "+" : ""}${mps2(d.accelBonus)} m/s², fuel x${d.fuelMult}, heat x${d.heat}`;
     case "armor":
-      return d.ramMult > 1 ? `ram x${d.ramMult}` : "side armor";
+      return armorStats(d);
     case "cargo":
       return `+${d.extraRows} grid rows`;
     case "core":

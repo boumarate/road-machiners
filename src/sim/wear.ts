@@ -112,7 +112,7 @@ export function wornDef<T extends PartDef>(part: PartInstance): T {
     case 'engine':
       return { ...def, hp, speedBonus: def.speedBonus - loss.speedBonus * steps, accelBonus: def.accelBonus - loss.accelBonus * steps } as T;
     case 'armor':
-      return { ...def, hp, armor: def.armor * (1 - loss.armor * steps) } as T;
+      return { ...def, hp, armor: def.armor * (1 - loss.armor * steps), blastArmor: def.blastArmor * (1 - loss.armor * steps) } as T;
     case 'scanner':
       return { ...def, hp, range: def.range * (1 - loss.scannerRange * steps) } as T;
     default: // cargo and core parts lose max HP only

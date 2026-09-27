@@ -11,9 +11,10 @@ export function vehicleMass(v: Vehicle): number {
   return mass;
 }
 
-// Top speed and turning scale by this. 1 up to the chassis rated mass, lower above it.
+// Top speed and turning scale by this. 1 at the chassis rated mass, above 1 when lighter and below 1 when heavier,
+// so every kilogram of armor, guns and cargo costs speed.
 export function loadFactor(v: Vehicle): number {
-  return Math.min(1, Math.sqrt(chassisDef(v.chassisId).ratedMass / vehicleMass(v)));
+  return Math.sqrt(chassisDef(v.chassisId).ratedMass / vehicleMass(v));
 }
 
 function goodMass(id: string): number {

@@ -237,7 +237,7 @@ describe('hit odds', () => {
     const { w, me, buggy, mg } = range(4, broadside, 3);
     me.speed = 2;
     const o = hitOdds(w, me, mg, buggy, 'body');
-    expect(o.spread).toBeCloseTo(o.causes.weapon + o.causes.skill + o.causes.crossing + o.causes.own, 12);
+    expect(o.spread).toBeCloseTo(o.causes.weapon + o.causes.skill + o.causes.crossing + o.causes.own + o.causes.recoil, 12);
     expect(o.halfAngle).toBeCloseTo(o.width / (2 * o.distance), 12);
   });
 });
@@ -536,5 +536,39 @@ describe('aim perks', () => {
     const before = hitOdds(w, buggy, gun, me, part);
     w.player.perks.push('calledShot');
     expect(hitOdds(w, buggy, gun, me, part).spread).toBe(before.spread);
+  });
+});
+
+describe('recoil and shake', () => {
+  // A tank gun on the given chassis, facing a buggy 5 tiles ahead.
+  function tankGunOn(chassisId: string) {
+    const w = emptyWorld();
+    const shooter = addVehicle(w, 'player', chassisId, ['stockEngine', 'tankGun'], { x: 60, y: 60 });
+    const target = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 65, y: 60 }, Math.PI / 2);
+    return { w, shooter, target, gun: vehicleStats(w, shooter).weapons[0] };
+  }
+
+  it('a heavy gun kicks harder on a light truck', () => {
+    const light = tankGunOn('scout');
+    const heavy = tankGunOn('tractor');
+    const a = hitOdds(light.w, light.shooter, light.gun, light.target, 'body');
+    const b = hitOdds(heavy.w, heavy.shooter, heavy.gun, heavy.target, 'body');
+    expect(a.causes.recoil).toBeGreaterThan(b.causes.recoil);
+    expect(a.chance).toBeLessThan(b.chance);
+  });
+
+  it('a light gun barely kicks', () => {
+    const { w, me, buggy, mg } = duel();
+    const odds = hitOdds(w, me, mg, buggy, 'body');
+    expect(odds.causes.recoil).toBeLessThan(odds.causes.weapon / 10);
+  });
+
+  it('a stabilized gun loses less aim to its own speed than a sniper cannon', () => {
+    const w = emptyWorld();
+    const shooter = addVehicle(w, 'player', 'tractor', ['stockEngine', 'mg', 'sniperCannon'], { x: 60, y: 60 });
+    const target = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 65, y: 60 }, Math.PI / 2);
+    shooter.speed = 4;
+    const [mg, sniper] = ['mg', 'sniperCannon'].map((id) => vehicleStats(w, shooter).weapons.find((x) => x.def.id === id)!);
+    expect(hitOdds(w, shooter, mg, target, 'body').causes.own).toBeLessThan(hitOdds(w, shooter, sniper, target, 'body').causes.own);
   });
 });

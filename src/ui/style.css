@@ -757,7 +757,7 @@ body {
 .inv-cell.c-plain {
   background: #303d44;
 }
-.inv-cell.c-W {
+.inv-cell.c-D {
   background: #483e36;
 }
 .inv-cell.c-E {
@@ -771,9 +771,6 @@ body {
 }
 .inv-cell.c-X {
   background: #20292e;
-}
-.inv-cell.c-C {
-  background: #48433a;
 }
 .inv-item {
   position: absolute;
@@ -819,6 +816,34 @@ body {
 .inv-item.fixed {
   cursor: pointer;
   border-color: #707f86;
+}
+.inv-blocked {
+  position: absolute;
+  background: #c8553d;
+}
+.inv-blocked.s-front {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+}
+.inv-blocked.s-rear {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+}
+.inv-blocked.s-left {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+}
+.inv-blocked.s-right {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 4px;
 }
 .inv-item.selected {
   outline: 2px solid #eac779;

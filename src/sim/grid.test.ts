@@ -87,7 +87,7 @@ describe('cargo rows', () => {
   it('rejects an item across the end of the chassis grid', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'scout', [], { x: 40, y: 40 });
-    v.items.push({ ...spotOn('scout', 'rack', 'C', v.items), id: 'i-rack', part: makePart(w, 'rack', 0) } as GridItem);
+    v.items.push({ ...spotOn('scout', 'rack', 'D', v.items), id: 'i-rack', part: makePart(w, 'rack', 0) } as GridItem);
     const g = gridOf(v);
     const spare = (y: number): GridItem => ({ id: 'i-spare', x: 0, y, rot: 1, kind: 'part', part: makePart(w, 'rack', 0) });
     expect(g.cells[g.chassisH - 1][0]).toBe('.');

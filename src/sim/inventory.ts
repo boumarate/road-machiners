@@ -5,7 +5,8 @@ import { PERK_NUMBERS } from '../data/skills';
 import { skillEffect, vehicleHasPerk } from './progress';
 import { playerVehicle } from './damage';
 import { newId } from './factory';
-import { findSpot, gridOf, isMounted, itemCells, MOUNT_CELLS, placementError, type Spot } from './grid';
+import { openSideCount } from './armor';
+import { findSpot, gridOf, isMounted, itemCells, MOUNT_CELLS, mountSpots, placementError, type Cell, type Spot } from './grid';
 import { requireTown, townAt } from './sites';
 import { startJob } from './jobs';
 import { RULES } from '../data/rules';
@@ -14,13 +15,26 @@ import { vehicleStats } from './stats';
 import type { GridItem, PartInstance, RefitJob, RefitMove, Vehicle, World } from './types';
 import { playerCommand } from './world';
 
-// Mount a part on the first free fitting mount. Returns false when no mount has room.
+// Mount a part on a free fitting mount. Returns false when no mount has room. A gun or a tall part takes the first
+// spot that leaves the mounted guns the most open sides, so a gun is not placed behind the cab and a box blinds no gun.
 export function mountPart(world: World, v: Vehicle, part: PartInstance): boolean {
   const item: GridItem = { id: newId(world, 'i'), x: 0, y: 0, rot: 0, kind: 'part', part };
-  const spot = findSpot(gridOf(v), v.items, item, MOUNT_CELLS[partDef(part.defId).kind], null);
+  const def = partDef(part.defId);
+  const mount = MOUNT_CELLS[def.kind];
+  const spot = def.kind === 'weapon' || def.tall ? bestArcSpot(v, item, mount) : findSpot(gridOf(v), v.items, item, mount, null);
   if (!spot) return false;
   v.items.push({ ...item, ...spot });
   return true;
+}
+
+function bestArcSpot(v: Vehicle, item: GridItem, mount: Cell[]): Spot | null {
+  let best: Spot | null = null;
+  let bestScore = -1;
+  for (const spot of mountSpots(gridOf(v), v.items, item, mount)) {
+    const score = openSideCount({ ...v, items: [...v.items, { ...item, ...spot }] });
+    if (score > bestScore) [best, bestScore] = [spot, score];
+  }
+  return best;
 }
 
 // Put a spare part anywhere it fits without mounting it. Returns false when there is no room.

@@ -107,3 +107,23 @@ describe('jury rig perk', () => {
     expect(repairPlan(w, npc, engine.id).needed).toBe(0);
   });
 });
+
+describe('field repair by armor type', () => {
+  it('patches scrap panels to full HP', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'scout', ['scrapPanels', 'stockEngine'], { x: 40, y: 40 });
+    const panels = armorPart(v);
+    panels.hp = 1;
+    v.items.push({ id: 'i-parts', x: 1, y: 4, rot: 0, kind: 'good', good: 'parts' }, { id: 'i-parts2', x: 3, y: 4, rot: 0, kind: 'good', good: 'parts' }, { id: 'i-parts3', x: 1, y: 3, rot: 0, kind: 'good', good: 'parts' });
+    expect(repairPlan(w, v, panels.id).hp).toBeCloseTo(partDef('scrapPanels').hp - 1, 5);
+  });
+
+  it('leaves ceramic plates for a town garage', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'scout', ['ceramicPlates', 'stockEngine'], { x: 40, y: 40 });
+    const plates = armorPart(v);
+    plates.hp = 1;
+    v.items.push({ id: 'i-parts', x: 1, y: 4, rot: 0, kind: 'good', good: 'parts' });
+    expect(repairPlan(w, v, plates.id).needed).toBe(0);
+  });
+});

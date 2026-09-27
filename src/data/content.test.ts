@@ -3,7 +3,7 @@ import { CHASSIS, PLAYER_CHASSIS } from "./chassis";
 import { GOODS, GOOD_IDS } from "./goods";
 import { EFFORT, SHOPS, type ItemKind } from "./market";
 import { goodBasePrice } from "../sim/market";
-import { PARTS, type PartKind } from "./parts";
+import { PARTS, type PartDef, type PartKind } from "./parts";
 import { REGION } from "./region";
 import { bodyOf } from "../sim/body";
 import {
@@ -171,5 +171,50 @@ describe("one-cell armor plates", () => {
     const line = { steelPlate: "plates", scrapSheet: "scrapPanels", ceramicTile: "ceramicPlates" }[id]!;
     expect([PARTS[id].w, PARTS[id].h]).toEqual([1, 1]);
     expect(PARTS[id].armor).toBe(PARTS[line].armor);
+  });
+});
+
+// Every part must pay for its strengths somewhere other than its price. Higher is better on every axis.
+// Armor compares per cell, because a longer plate covers more of a side rather than being worse.
+function partAxes(def: PartDef): number[] {
+  const cells = def.w * def.h;
+  const tall = def.tall ? -1 : 0;
+  switch (def.kind) {
+    case "weapon": {
+      const r = def.round;
+      return [def.hp, -def.mass, def.armor, -cells, tall, def.range, -def.reload, def.arc, -def.spread, def.rounds,
+        r.damage, r.pen, r.speed, r.splashRadius, r.splashDamage, r.splashPen, -def.recoil, -def.shake];
+    }
+    case "engine":
+      return [def.hp, -def.mass, def.armor, -cells, def.speedBonus, def.accelBonus, -def.fuelMult, -def.noise, -def.heat];
+    case "armor": {
+      const repair = { none: 0, capped: 1, full: 2 }[def.fieldRepair];
+      return [def.hp / cells, -def.mass / cells, def.armor, def.blastArmor, def.ramMult, repair, tall];
+    }
+    case "cargo":
+      return [def.hp, -def.mass, def.armor, -cells, tall, def.extraRows];
+    default:
+      return [];
+  }
+}
+
+function dominates(a: PartDef, b: PartDef): boolean {
+  if (a.kind === "weapon" && b.kind === "weapon" && a.round.blast !== b.round.blast) return false;
+  const x = partAxes(a);
+  const y = partAxes(b);
+  return x.every((v, i) => v >= y[i]) && x.some((v, i) => v > y[i]);
+}
+
+describe("part trade-offs", () => {
+  it("no part matches or beats another of its kind on every stat but price", () => {
+    const parts = Object.values(PARTS).filter((p) => p.kind !== "core");
+    const pairs = parts.flatMap((a) => parts.filter((b) => a.kind === b.kind && a.id !== b.id && dominates(a, b)).map((b) => `${a.id} beats ${b.id}`));
+    expect(pairs).toEqual([]);
+  });
+
+  it("flags a part that beats another on every stat", () => {
+    const worse = { ...PARTS.mg, id: "worseMg", hp: PARTS.mg.hp - 1 } as PartDef;
+    expect(dominates(PARTS.mg, worse)).toBe(true);
+    expect(dominates(worse, PARTS.mg)).toBe(false);
   });
 });

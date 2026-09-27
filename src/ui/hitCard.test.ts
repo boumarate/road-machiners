@@ -25,7 +25,8 @@ describe('hover card rows', () => {
     expect(card.mine[0]).toMatchObject({ odds: o, text: `${Math.round(o.chance * 100)}%` });
     const deg = (r: number) => (r / DEG).toFixed(1);
     expect(o.causes.crossing).toBeGreaterThan(0);
-    expect(card.mine[0].cause).toBe(`${Math.round(o.distance)} m · shows ${o.width.toFixed(1)} m wide · scatter ${deg(o.causes.weapon)}° weapon +${deg(o.causes.crossing)}° crossing`);
+    expect(o.causes.recoil).toBeGreaterThan(0);
+    expect(card.mine[0].cause).toBe(`${Math.round(o.distance)} m · shows ${o.width.toFixed(1)} m wide · scatter ${deg(o.causes.weapon)}° weapon +${deg(o.causes.crossing)}° crossing +${deg(o.causes.recoil)}° recoil`);
   });
 
   it('shows its weapons against me with the aim of its order at me', () => {

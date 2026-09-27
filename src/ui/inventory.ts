@@ -44,14 +44,14 @@ import { wearLabel } from "./format";
 import type { UiHost } from "./host";
 import { createIcon, type IconName } from "./icons";
 import { vehicleMass } from "../sim/mass";
+import { openSides, SIDES } from "../sim/armor";
 import { fuelLiters, hp, kg, liters } from "./units";
 
 const CELL_PX = 42;
 
 const CELL_TITLE: Record<Cell, string> = {
-  W: "weapon mount",
+  D: "deck mount for a weapon, scanner or cargo frame",
   E: "engine mount",
-  C: "cargo mount",
   F: "front armor mount",
   B: "back armor mount",
   L: "left armor mount",
@@ -200,12 +200,12 @@ export class InventoryView {
       el(
         "div",
         {},
-        "Top view, nose up. W E C: weapon, engine, cargo mounts. F B L R: armor mounts on the front, back, left and right.",
+        "Top view, nose up. D: deck mounts for weapons, scanners and cargo frames. E: engine mount. F B L R: armor mounts on the front, back, left and right.",
       ),
       el(
         "div",
         {},
-        "A part works only when it lies fully on one of its letters. Built-in parts are fixed and can only be repaired.",
+        "A part works only when it lies fully on one of its letters. Built-in parts are fixed and can only be repaired. A gun cannot fire across the cab, big guns or cargo boxes. The marks on a gun show its blocked sides.",
       ),
       el(
         "div",
@@ -255,6 +255,7 @@ export class InventoryView {
       if (e.key === "Enter") this.activateItem(it);
     });
     if (it.kind === "part") node.append(conditionBar(it.part));
+    node.append(...blockedMarks(me, it, mounted));
     if (!core)
       node.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
@@ -311,6 +312,7 @@ export class InventoryView {
     part: PartInstance,
   ): HTMLElement | null {
     if (isJunk(part)) return null;
+    if (!fieldPatchable(part)) return townOnlyPatch(part);
     const plan = repairPlan(w, me, part.id);
     if (plan.needed === 0) return null;
     const reason = patchBlocker(me, plan);
@@ -826,4 +828,21 @@ function conditionBar(p: PartInstance): HTMLElement {
 function partTitle(p: PartInstance): string {
   const d = partDef(p.defId);
   return `${d.name} (${d.kind}) ${wearLabel(p)}, ${hp(p.hp)}/${hp(maxHp(p))} HP, ${d.w}x${d.h}`;
+}
+
+// A bar on each edge of a mounted gun where a tall part blocks its fire toward that side.
+function blockedMarks(me: Vehicle, it: GridItem, mounted: boolean): HTMLElement[] {
+  if (!mounted || it.kind !== "part" || partDef(it.part.defId).kind !== "weapon") return [];
+  const open = openSides(me, it);
+  return SIDES.filter((side) => !open.includes(side)).map((side) => el("span", { class: `inv-blocked s-${side}`, "aria-hidden": "true" }));
+}
+
+function fieldPatchable(part: PartInstance): boolean {
+  const def = partDef(part.defId);
+  return def.kind !== "armor" || def.fieldRepair !== "none";
+}
+
+// Armor that only a town repairs shows a disabled Patch button while damaged, so the player learns why.
+function townOnlyPatch(part: PartInstance): HTMLElement | null {
+  return part.hp < maxHp(part) ? el("button", { class: "inv-patch", disabled: true }, "Patch (town only)") : null;
 }
