@@ -5,7 +5,8 @@
 
 import { chassisDef } from '../../data/chassis';
 import { ECONOMY, GOOD_IDS } from '../../data/goods';
-import { NPC_BEHAVIOR, NPC_UPKEEP } from '../../data/npcs';
+import { HUNTING_GROUNDS, NPC_BEHAVIOR, NPC_UPKEEP } from '../../data/npcs';
+import { START_KITS } from '../../data/start';
 import { partDef } from '../../data/parts';
 import { REGION, type TownDef } from '../../data/region';
 import { RULES } from '../../data/rules';
@@ -13,18 +14,18 @@ import { ENGINE_HEAT } from '../../data/wear';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder } from '../world';
 import { playerVehicle, vehicleById } from '../damage';
 import { chooseOption, currentOptions } from '../dialogue';
-import { buyGood, buySupply, getTradePrice, repairAll, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
-import { freeCells, goodsCount, isMounted, mountedParts } from '../grid';
-import { storePart } from '../inventory';
+import { buyGood, buyPart, buySupply, getTradePrice, repairAll, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
+import { findSpot, freeCells, goodsCount, gridOf, isMounted, MOUNT_CELLS, mountedParts, type Spot } from '../grid';
+import { storePart, takeFromStorage } from '../inventory';
 import { canLoot, salvageHere, takeAllLoot } from '../locations';
-import { getUpkeepReserve, huntingGroundsAway } from '../npc-decisions';
+import { getUpkeepReserve } from '../npc-decisions';
 import { canReachSalvage, hasSalvage } from '../salvage';
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, townAt, type Site } from '../sites';
 import { isStranded, vehicleStats } from '../stats';
 import { clockOf } from '../sun';
 import { inTowReach, setBeacon } from '../tow';
-import type { GameEvent, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
+import type { GameEvent, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
 import { dist, type Vec } from '../vec';
 import { playerExplored, playerSees } from '../vision';
 
@@ -33,6 +34,14 @@ export const ARCHETYPES: readonly Archetype[] = ['trader', 'scavenger', 'fighter
 type Goal = Exclude<Archetype, 'mixed'>;
 // The mixed bot plays one goal per in-game day, in this order.
 const MIXED_ROTATION: readonly Goal[] = ['trader', 'scavenger', 'fighter'];
+// The engine a bot buys when a knockout stripped its own: the one the recorder's start kit mounts.
+const KIT_ENGINE = kitEngine();
+
+function kitEngine(): string {
+  const id = START_KITS.standard.parts.find((part) => partDef(part).kind === 'engine');
+  if (!id) throw new Error('The standard start kit has no engine');
+  return id;
+}
 
 // The world after the bot's commands, and every event those commands raised.
 export type BotTurn = { world: World; events: GameEvent[] };
@@ -131,20 +140,51 @@ function workPatch(o: Orders, deal: NpcState): void {
 
 // ---- Service.
 
-// In town the bot tops up and repairs. Out of town with low fuel, low supplies or a badly damaged part that it can
-// pay for, it drives to the nearest town. A need it cannot pay for does not send it to town, so a poor bot drives on
-// to earn. A stranded truck crawls to town with its beacon on and takes the first tow offered on the radio. Returns
-// true when the trip to town is this turn's order.
+// In town the bot tops up, repairs and buys an engine if a knockout stripped its own. Out of town with low fuel, low
+// supplies, a badly damaged part or no engine, and the money to fix it, it drives to the nearest town. A need it
+// cannot pay for does not send it to town, so a poor bot drives on to earn, crawling if it must. A stranded truck
+// also turns its beacon on and takes the first tow offered on the radio. Returns true when the trip to town is this
+// turn's order.
 function serviceTrip(o: Orders): boolean {
   if (isStranded(o.world, o.me) && !o.world.player.beacon) o.run((w) => setBeacon(w, true));
   if (townAt(o.world)) {
-    serviceHere(o);
-    if (needsService(o.world)) throw new Error(`Town service left a need the bot can pay for, with ${o.world.player.money} money`);
+    serviceInTown(o);
     return false;
   }
-  if (!needsService(o.world)) return false;
+  if (!paidFixNeeded(o.world)) return false;
   driveToSite(o, nearestTown(o.world));
   return true;
+}
+
+function serviceInTown(o: Orders): void {
+  serviceHere(o);
+  restoreEngine(o);
+  if (paidFixNeeded(o.world)) throw new Error(`Town service left a need the bot can pay for, with ${o.world.player.money} money`);
+}
+
+function paidFixNeeded(world: World): boolean {
+  return needsService(world) || canRestoreEngine(world);
+}
+
+function canRestoreEngine(world: World): boolean {
+  return mountedParts(playerVehicle(world), 'engine').length === 0 && world.player.money >= partDef(KIT_ENGINE).price;
+}
+
+// Buys and mounts the start kit's engine when the truck has none and the money covers it. Cargo on the engine mount
+// is sold to make room.
+function restoreEngine(o: Orders): void {
+  if (!canRestoreEngine(o.world)) return;
+  if (!engineSpot(o.me) && hasCargo(o.me)) sellCargo(o);
+  const spot = engineSpot(o.me);
+  if (!spot) throw new Error('No free engine mount for a new engine');
+  o.run((w) => buyPart(w, KIT_ENGINE));
+  const part = o.world.player.storage[o.world.player.storage.length - 1];
+  o.run((w) => takeFromStorage(w, part.id, spot));
+}
+
+function engineSpot(v: Vehicle): Spot | null {
+  const probe: GridItem = { id: 'engine-probe', x: 0, y: 0, rot: 0, kind: 'part', part: { id: 'engine-probe', defId: KIT_ENGINE, hp: 0, reload: 0 } };
+  return findSpot(gridOf(v), v.items, probe, MOUNT_CELLS.engine, null);
 }
 
 function needsService(world: World): boolean {
@@ -276,9 +316,17 @@ function collectOrHunt(o: Orders): void {
   if (freeCells(o.me) === 0) return driveToSite(o, nearestTown(o.world));
   const wreck = nearestStock(o.world, knownStocks(o.world).filter((s) => s.id.startsWith('wreck-') && playerSees(o.world, s.pos)));
   if (wreck) return visitStock(o, wreck);
-  const ground = nearest(o.me.pos, huntingGroundsAway(o.me));
-  if (!ground) throw new Error('Fighter bot has no hunting ground to drive to');
-  driveTo(o, ground);
+  hunt(o);
+}
+
+// The fighter keeps driving to the hunting ground it is bound for. Without one, it goes to the ground after the one
+// nearest it, in data order. A ground the truck cannot quite reach, like one a parked truck stands on, counts as
+// visited once its stop order ends.
+function hunt(o: Orders): void {
+  const order = o.me.order;
+  if (order?.kind === 'stopAt' && HUNTING_GROUNDS.some((g) => g.x === order.dest.x && g.y === order.dest.y)) return;
+  const here = HUNTING_GROUNDS.indexOf(nearest(o.me.pos, HUNTING_GROUNDS) ?? HUNTING_GROUNDS[0]);
+  driveTo(o, HUNTING_GROUNDS[(here + 1) % HUNTING_GROUNDS.length]);
 }
 
 // Where a hostile truck is: in sight, or at the center of its contact circle. Nearest first.
