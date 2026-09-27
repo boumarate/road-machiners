@@ -292,3 +292,16 @@ Deviation from PC3: raising a topic is a turn step, `raiseCalls()`, not an activ
 ### Interfaces
 - IF1 — `CONDITIONS`, `EFFECTS` and `PREPARES` in `src/sim/dialogue-rules.ts`, keyed by the unions in `src/data/dialogue.ts`. Later phases add entries.
 - IF2 — `KindRules` and `makeAgreement()` in `src/sim/agreements.ts`. PH3 adds the patch kind.
+
+## Conclusion
+
+### Deviations from plan
+- PH1: the topic memory is `Player.talked`, keyed by NPC id, not `NpcBrain.talked`, and `refusedTow` stays. So PH1 edits no brain literal and none of the tow code the defeat-rescue agent still owns. 1.1 was dropped with it.
+- PH1: 1.8 was dropped. A call opens at the end of a turn, after fire, and no turn runs while it is open, so no shot can land during a call. PH4 must raise the demand before fire, so RK1 still applies there.
+- PH1: `raiseCalls(world)` reads `TOPICS` and takes no topic list. Tests give `directions` a raise rule for their duration.
+- PH1: `discoverSite()` was split out of `discoverSites()` in `src/sim/locations.ts`. A town learned by directions pays the discovery XP once, like a town found by sight.
+- PH1: `src/ui/dialogue-text.ts` and the `say` and `call` log lines in `src/ui/format.ts` came forward from PH6. The event switch must cover every event.
+
+### Known risks
+- Saves from before PH1 have no `call` or `talked`. A missing `talked` throws on the first `once` topic lookup. PH6 adds the migration.
+

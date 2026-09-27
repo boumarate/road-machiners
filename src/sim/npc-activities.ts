@@ -20,7 +20,7 @@ import { canVehicleSee } from './vision';
 import { chooseTowActivity, dropTow, runTow } from './tow';
 import { DETECT } from '../data/detect';
 
-function getNpcClass(vehicle: Vehicle): NpcClass {
+export function getNpcClass(vehicle: Vehicle): NpcClass {
   const template = vehicle.brain && NPCS[vehicle.brain.templateId];
   if (!template) throw new Error(`Missing NPC template for ${vehicle.id}`);
   return NPC_CLASSES[template.brain];

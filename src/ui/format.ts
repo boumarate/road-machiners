@@ -9,6 +9,7 @@ import { mountedParts } from '../sim/grid';
 import { playerSees } from '../sim/vision';
 import type { PartHit } from '../sim/armor';
 import type { GameEvent, Vehicle, World } from '../sim/types';
+import { fillLine } from './dialogue-text';
 
 export function vehicleName(world: World, id: string): string {
   if (id === world.player.vehicleId) return 'You';
@@ -120,6 +121,10 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
         : `${n(e.by)} is gone. The tow is off.`;
       return { text, cls: e.reason === 'refused' || e.reason === 'unhitched' ? 'dim' : 'bad' };
     }
+    case 'say':
+      return { text: `${n(e.speaker)}: “${fillLine(e.text, e.vars)}”`, cls: e.speaker === me ? 'dim' : '' };
+    case 'call':
+      return { text: e.outcome === 'opened' ? `Radio: ${n(e.with)} on the line.` : `Radio: call with ${n(e.with)} ended.`, cls: 'dim' };
     case 'info':
       return { text: e.text, cls: 'dim' };
     case 'job': {

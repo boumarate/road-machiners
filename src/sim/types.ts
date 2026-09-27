@@ -3,6 +3,7 @@
 import type { PartHit, Side } from "./armor";
 import type { Terrain } from "./terrain";
 import type { Vec } from "./vec";
+import type { TopicId } from "../data/dialogue";
 
 export type Faction = "player" | "raiders" | "traders" | "scavengers";
 export type SkillId =
@@ -141,6 +142,19 @@ export type Obstacle = {
 export type Tow = { by: string; town: string; fee: number; hitched: boolean };
 export type TowDropReason = 'refused' | 'unhitched' | 'danger' | 'gone';
 
+// A value a dialogue line shows. The sim keeps raw values, and the UI formats them.
+export type CallVar =
+  | { kind: 'town'; id: string }
+  | { kind: 'money'; amount: number }
+  | { kind: 'distance'; tiles: number }
+  | { kind: 'bearing'; rad: number }
+  | { kind: 'count'; n: number };
+export type CallVars = Record<string, CallVar>;
+
+// An open radio call with the NPC `with`. A null topic means the hub of topics.
+export type Call = { with: string; topic: TopicId | null; node: string; vars: CallVars };
+export type TopicOutcome = 'agreed' | 'refused' | 'done';
+
 export type Player = {
   vehicleId: string;
   money: number;
@@ -162,6 +176,8 @@ export type Player = {
   state: 'active' | 'knockedOut' | 'dead';
   knockoutTurns: number; // turns spent in the current knockout
   tow: Tow | null; // an open tow offer, or the tow in progress once hitched
+  call: Call | null;
+  talked: Record<string, Partial<Record<TopicId, TopicOutcome>>>; // NPC id to how each topic with it ended
   explored: Uint8Array; // fog of war: tile y * world.size + x, 1 once seen
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision
   contacts: Contact[]; // vehicles detected beyond sight; refreshed by refreshVision
@@ -203,6 +219,8 @@ export type GameEvent =
   | { t: 'breakdown'; vehicle: string; part: string }
   | { t: 'searched'; stock: string } // the player finished searching a stock; its loot can now be taken
   | { t: 'weather'; event: WeatherEvent; outcome: 'started' | 'ended' }
+  | { t: 'say'; speaker: string; text: string; vars: CallVars } // speaker is a vehicle id; the player's lines use the player's
+  | { t: 'call'; with: string; outcome: 'opened' | 'ended' }
   | { t: 'info'; text: string };
 
 export type World = {
