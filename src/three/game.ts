@@ -800,7 +800,7 @@ export class Game {
     const frames = result.frames[playerVehicle(this.world).id];
     const g = computeEngineGlide(frames, MOVE_MS / 1000, MIX);
     if (!g) return;
-    this.loops.drive(g);
+    this.loops.drive(g, playerVehicle(this.world).chassisId);
     if (g.brake) this.sound.at("air-brake", frames[0].pos, 0);
   }
 
