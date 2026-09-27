@@ -23,17 +23,38 @@ export const BLOCK_TEXT: Record<FireBlock, string> = {
   talking: "on the radio",
 };
 
-// Label lines above vehicles, by vehicle id: each weapon aimed at a target with its status, and the radio
-// key on the hovered truck when it can take a call.
-export function markerLines(w: World, hovered: string | null): Map<string, string[]> {
-  const lines = new Map<string, string[]>();
-  const add = (id: string, line: string) => lines.set(id, [...(lines.get(id) ?? []), line]);
+// One weapon aimed at a vehicle, as its marker shows it.
+export type WeaponMark = { slot: number; look: "mg" | "cannon"; status: string; ready: boolean };
+export type VehicleMark = { weapons: WeaponMark[]; radio: boolean };
+
+// Markers above vehicles, by vehicle id: each player weapon aimed at the vehicle with its status, and the
+// radio key on the hovered truck when it can take a call.
+export function vehicleMarks(w: World, hovered: string | null): Map<string, VehicleMark> {
+  const marks = new Map<string, VehicleMark>();
+  const markOf = (id: string) => {
+    const found = marks.get(id);
+    if (found) return found;
+    const made: VehicleMark = { weapons: [], radio: false };
+    marks.set(id, made);
+    return made;
+  };
   vehicleStats(w, playerVehicle(w)).weapons.forEach((mw, i) => {
     const readout = getWeaponReadout(w, mw);
-    if (readout.target) add(readout.target.id, `[${i + 1}] ${mw.def.look === "cannon" ? "Cannon" : "MG"} · ${readout.status}`);
+    if (readout.target)
+      markOf(readout.target.id).weapons.push({ slot: i + 1, look: mw.def.look, status: readout.status, ready: readout.canFire });
   });
-  if (hovered && canCall(w, hovered)) add(hovered, "[T] Radio");
-  return lines;
+  if (hovered && canCall(w, hovered)) markOf(hovered).radio = true;
+  return marks;
+}
+
+// A click on a vehicle aims the weapons at it. When all of them already aim at it, the click clears them.
+export function toggleTarget(w: World, weapons: MountedWeapon[], target: Vehicle): World {
+  const orders = playerVehicle(w).weaponOrders;
+  const aimed = weapons.length > 0 && weapons.every((mw) => orders[mw.part.id]?.targetId === target.id);
+  if (w.player.autoFire) w = setAutoFire(w, false);
+  for (const mw of weapons)
+    w = setWeaponOrder(w, mw.part.id, aimed ? null : { targetId: target.id, aim: "body" });
+  return w;
 }
 
 // Current-position feedback shared by the weapon buttons and map markers.

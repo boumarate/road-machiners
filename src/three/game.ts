@@ -45,11 +45,9 @@ import {
   hostileToPlayer,
   newWorld,
   playerCanAct,
-  setAutoFire,
   setAutoRepair,
   setDirect,
   setMoveOrder,
-  setWeaponOrder,
 } from "../sim/world";
 import { PAL } from "../render/palette";
 import { timed } from "../perf";
@@ -59,7 +57,7 @@ import type { UiHost } from "../ui/host";
 import { Hud } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
 import { TownScreen } from "../ui/town";
-import { markerLines, WeaponPanel, weaponsForClick } from "../ui/weapons";
+import { toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
 import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
@@ -444,7 +442,7 @@ export class Game {
   }
 
   private refreshTargetMarkers(): void {
-    this.markers.refresh(this.anim ? null : markerLines(this.world, this.hovered));
+    this.markers.refresh(this.anim ? null : vehicleMarks(this.world, this.hovered));
   }
 
   private isEditingControl(): boolean {
@@ -547,11 +545,7 @@ export class Game {
   }
 
   private targetVehicle(target: Vehicle): void {
-    let w = this.world;
-    if (w.player.autoFire) w = setAutoFire(w, false);
-    for (const mw of weaponsForClick(w, this.selected))
-      w = setWeaponOrder(w, mw.part.id, { targetId: target.id, aim: "body" });
-    this.apply(w);
+    this.apply(toggleTarget(this.world, weaponsForClick(this.world, this.selected), target));
   }
 
   // While a turn plays, visibility follows the truck's current spot, not the end of the turn.
