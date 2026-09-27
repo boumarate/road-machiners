@@ -85,6 +85,7 @@ First kinds:
 - `backedOff` sets the holder's rob weight to zero against the other party until it expires. So a failed robber does not start again at once. It shows chaining.
 - `tow` replaces `world.player.tow` from defeat-rescue. The holder is the tower, and the other party is the client. The tower's goal is the client, then the town. On `fulfilled`, the fee moves. On `broken`, nothing moves. A refusal or an unhitch adds `spurned`.
 - `spurned` has no timer. It stops the holder from offering a tow to the other party again. It replaces `NpcBrain.refusedTow`.
+- `towPromise` has no timer. A tower that drops a hitched tow for danger holds it with the old town and fee, and its next offer keeps those terms. It came with main's tow change.
 
 State weight changes apply only when the decision is about the state's other party. A feud raises fight weight against its target, not against every hostile.
 
@@ -163,6 +164,8 @@ Design deviations made while planning:
 - `wary` became `backedOff`. A `wary` victim would need a sighting of a non-hostile vehicle to fire a decision, which no decision point covers.
 - `truce` moves to the social task. Nothing here creates one.
 - `spurned` is added. It replaces `refusedTow` as a state instead of a brain flag.
+- Execution added `towPromise` when main's tow change merged, and a `robbery` flag on feud data, so only a robbery feud sends the winner to loot.
+- Execution added the `loot` goal kind, so a winning robber searches the wreck or knockout stock without replacing a base scavenge goal.
 
 UK2 resolved: `update()` clears `world.events` at the start of each turn. So `noteHurt()` runs at the end of the turn. It sums part damage to each NPC from this turn's `shot`, `guardShot` and `collision` events into `brain.hurt`. The next turn's decisions read it.
 
