@@ -144,7 +144,7 @@ export const PERK_NUMBERS = {
   hardHead: { cabShare: 0.5 }, // share of cab damage the player loses as health, times this
   quickWake: { knockoutTurns: 0.5 }, // turn limit of a watched knockout, times this
   knownFace: { tow: 2 }, // tow offer weight toward the stranded player, times this
-  smoothTalker: { cargo: 0.5 }, // share of each good the player drops to a demand, rounded down
+  smoothTalker: { cargo: 0.5 }, // share of each good the player drops to a demand, rounded up
   bluff: { danger: 2 }, // danger a robber sees in the player truck, times this
 };
 

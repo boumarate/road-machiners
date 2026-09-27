@@ -5,7 +5,7 @@ import { RULES } from '../data/rules';
 import { autoOrders, isHostile } from './combat';
 import { buyGood } from './economy';
 import { advanceKnockout, checkDeath, checkKnockout } from './defeat';
-import { corePart, coreParts, goodsCount, hasLoot, mountedParts } from './grid';
+import { corePart, coreParts, goodsCount, hasLoot, isLoot, mountedParts } from './grid';
 import { addGoods, dumpItem, moveItem, spareParts } from './inventory';
 import { scavenge } from './locations';
 import { startSearch } from './search';
@@ -315,6 +315,18 @@ describe('knockout practice', () => {
     corePart(w.vehicles[0], 'cab').hp = 0;
     checkKnockout(w);
     expect(practiceOf(w, 'knockout')).toMatchObject([{ amount: 1, difficulty: null }]);
+  });
+
+  it('pays nothing for a knockout next to a raider that ignores a stripped truck', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = w.vehicles[0];
+    me.items = me.items.filter((it) => !isLoot(me.chassisId, it));
+    addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
+    refreshVision(w);
+    corePart(me, 'cab').hp = 0;
+    checkKnockout(w);
+    expect(w.player.state).toBe('knockedOut');
+    expect(practiceOf(w, 'knockout')).toEqual([]);
   });
 
   it('pays nothing for a knockout with nobody around', () => {

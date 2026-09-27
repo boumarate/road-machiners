@@ -5,7 +5,7 @@ import { partDef } from "../data/parts";
 import { PERK_NUMBERS } from "../data/skills";
 import { RULES } from "../data/rules";
 import { playerVehicle } from "./damage";
-import { isFoe } from "./combat";
+import { isFoe, isHostile } from "./combat";
 import { corePart, mountedParts } from "./grid";
 import { cancelJob } from "./jobs";
 import { hasPerk, practice } from "./progress";
@@ -25,13 +25,14 @@ export function checkKnockout(world: World): void {
   const p = world.player;
   const me = playerVehicle(world);
   if (p.state !== "active" || corePart(me, "cab").hp > 0) return;
+  // Only a knockout with a hostile truck in sight teaches toughness, judged before the truck is stripped. A cab
+  // broken on purpose next to a foe that ignores a stripped truck does not.
+  if (hostileWatches(world, me)) practice(world, "knockout", 1, null);
   createKnockoutSalvage(world, me);
   p.state = "knockedOut";
   p.knockoutTurns = 0;
   p.knockouts++;
   // The driver is out, so the truck brakes to a stop instead of coasting on.
-  // Only a knockout with a foe in sight teaches toughness. A cab broken on purpose with nobody around does not.
-  if (foeWatches(world, me)) practice(world, "knockout", 1, null);
   me.order = { kind: "brake" };
   me.weaponOrders = {};
   me.trail = [];
@@ -64,4 +65,8 @@ export function advanceKnockout(world: World): void {
 
 function foeWatches(world: World, me: Vehicle): boolean {
   return world.vehicles.some((v) => isFoe(world, v, me) && canVehicleSee(world, v, me.pos));
+}
+
+function hostileWatches(world: World, me: Vehicle): boolean {
+  return world.vehicles.some((v) => isHostile(world, v, me) && canVehicleSee(world, v, me.pos));
 }

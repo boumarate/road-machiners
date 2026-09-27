@@ -379,7 +379,7 @@ describe('call practice', () => {
 });
 
 describe('smooth talker perk', () => {
-  it('hands over half of each good, rounded down, and every loose part', () => {
+  it('hands over half of each good, rounded up, and every loose part', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
     w.player.perks.push('smoothTalker');
@@ -394,7 +394,7 @@ describe('smooth talker perk', () => {
     next = chooseOption(next, currentOptions(next).findIndex((o) => o.text === 'Fine. Take it.'));
     const stock = next.salvage.find((s) => s.id.startsWith(`cargo-${me.id}`))!;
     for (const [good, count] of Object.entries(held)) {
-      const dropped = Math.floor(count * PERK_NUMBERS.smoothTalker.cargo);
+      const dropped = Math.ceil(count * PERK_NUMBERS.smoothTalker.cargo);
       expect(stock.goods[good] ?? 0).toBe(dropped);
       expect(goodsCount(playerVehicle(next))[good] ?? 0).toBe(count - dropped);
     }

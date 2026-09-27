@@ -139,9 +139,10 @@ function isWreckStock(stock: SalvageStock): boolean {
   return stock.id.startsWith('wreck');
 }
 
-// The careful strip perk: a part the player mounts from a wreck stock gains a share of its max HP, up to full.
+// The careful strip perk: a part the player mounts from a wreck stock gains a share of its max HP, up to full. The
+// player's own knockout pile is no wreck, or dumping a part back on it would repair it for free.
 export function stripPart(world: World, vehicle: Vehicle, stock: SalvageStock, part: PartInstance): void {
-  if (!isWreckStock(stock) || !vehicleHasPerk(world, vehicle, 'carefulStrip')) return;
+  if (!isWreckStock(stock) || stock.pile?.fromPlayer || !vehicleHasPerk(world, vehicle, 'carefulStrip')) return;
   const max = partDef(part.defId).hp;
   part.hp = Math.min(max, part.hp + Math.round(max * PERK_NUMBERS.carefulStrip.hp));
 }
@@ -166,8 +167,8 @@ export function createKnockoutSalvage(world: World, vehicle: Vehicle): SalvageSt
   return dropOnPile(world, vehicle, vehicle.items.filter((item) => isLoot(vehicle.chassisId, item)), knockoutStockId(vehicle.id, world.turn));
 }
 
-// A truck that hands over its cargo drops `goodsShare` of each good, rounded down, and every loose part where it
-// stands. Mounted parts stay.
+// A truck that hands over its cargo drops `goodsShare` of each good, rounded up, and every loose part where it
+// stands. Mounted parts stay. Rounding up means a handover of cargo never drops nothing.
 export function createCargoSalvage(world: World, vehicle: Vehicle, goodsShare: number): SalvageStock {
   return dropOnPile(world, vehicle, cargoItems(vehicle, goodsShare), `cargo-${vehicle.id}-${world.turn}`);
 }
@@ -177,11 +178,11 @@ export function dumpOnPile(world: World, vehicle: Vehicle, item: GridItem): Salv
   return dropOnPile(world, vehicle, [item], `dump-${vehicle.id}-${world.turn}`);
 }
 
-// The items a handover drops: `goodsShare` of each good, rounded down, and every loose part.
+// The items a handover drops: `goodsShare` of each good, rounded up, and every loose part.
 function cargoItems(vehicle: Vehicle, goodsShare: number): GridItem[] {
   if (!(goodsShare >= 0 && goodsShare <= 1)) throw new Error(`Cargo share ${goodsShare} is not in [0, 1]`);
   const quota: Record<string, number> = {};
-  for (const [good, count] of Object.entries(goodsCount(vehicle))) quota[good] = Math.floor(count * goodsShare);
+  for (const [good, count] of Object.entries(goodsCount(vehicle))) quota[good] = Math.ceil(count * goodsShare);
   return vehicle.items.filter((item) => {
     if (item.kind === 'part') return !isMounted(vehicle.chassisId, item);
     if (quota[item.good] <= 0) return false;
