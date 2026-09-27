@@ -13,6 +13,32 @@ import { vehicleName } from "./format";
 import { celsius, engineCelsius, fuelLiters, kph } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./icons";
+import type { ContextAction } from './hud';
+import { canUseOasis, salvageHere, salvageNear } from '../sim/locations';
+import { locationAt, townAt, townNear } from '../sim/sites';
+import { playerCanAct } from '../sim/world';
+
+export function getContextAction(world: World, playing: boolean): ContextAction | null {
+  if (playing || !playerCanAct(world)) return null;
+  const town = townNear(world);
+  if (town) return { label: `Enter ${town.name}`, ready: townAt(world) !== null };
+  if (playerVehicle(world).job) return null;
+  return getSiteAction(world);
+}
+
+function getSiteAction(world: World): ContextAction | null {
+  const oasis = locationAt(world);
+  if (oasis?.kind === 'oasis')
+    return { label: `Refill supplies at ${oasis.name}`, ready: canUseOasis(world) };
+  const stock = salvageNear(world);
+  if (!stock) return null;
+  const verb = world.player.scavenged.includes(stock.id) ? 'Loot' : 'Search';
+  return { label: `${verb} ${getSalvageName(stock.id)}`, ready: salvageHere(world) !== null };
+}
+
+function getSalvageName(id: string): string {
+  return REGION.locations.find((site) => site.id === id)?.name ?? 'the wreck';
+}
 
 function getConditionIcon(def: ReturnType<typeof partDef>): IconName {
   if (def.kind === "core") return def.role === "tank" ? "fuel" : def.role;

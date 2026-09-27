@@ -14,7 +14,7 @@ import { assignAutoOrders, fireWeapons, isHostile, resolveDestroyed } from './co
 import { advanceKnockout, checkDeath, checkKnockout } from './defeat';
 import { healPlayer } from './health';
 import { fireGuards } from './guards';
-import { discoverSites, useOasis } from './locations';
+import { discoverSites } from './locations';
 import { consumeSupplies, leakFuel } from './supplies';
 import { spawnInitial, spawnNpcs } from './spawn';
 import { initializeSalvage } from './salvage';
@@ -198,7 +198,6 @@ export function endTurn(
     checkBeacon(w);
     resolveNpcActivities(w);
     discoverSites(w);
-    useOasis(w);
     checkDeath(w);
     advanceKnockout(w);
     checkKnockout(w);

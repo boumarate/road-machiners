@@ -26,13 +26,14 @@ import {
 import { applyTurn, type PreparedTurn } from "../phys/turn";
 import { playerVehicle } from "../sim/damage";
 import { corePart, mountedParts } from "../sim/grid";
-import { canScavenge, salvageNear, scavenge } from "../sim/locations";
-import { locationAt, townAt, townNear } from "../sim/sites";
+import { applySiteAction } from "../sim/locations";
+import { getContextAction } from "../ui/hud-readout";
+import { townAt } from "../sim/sites";
 import { isStranded, maxTurn, vehicleStats } from "../sim/stats";
 import { clickOrder, parkedVehicles, throttleFor } from "../sim/steering";
 import { route, warmRoutes } from "../sim/path";
 import { CHASSIS } from "../data/chassis";
-import type { SalvageStock, ShotRound, Vehicle, World } from "../sim/types";
+import type { ShotRound, Vehicle, World } from "../sim/types";
 import type { Vec } from "../sim/vec";
 import { grayRadius, playerSees, tileOf, visibleTiles } from "../sim/vision";
 import { DEG, dist } from "../sim/vec";
@@ -55,7 +56,7 @@ import { timed } from "../perf";
 import { CharacterScreen } from "../ui/character";
 import { HitCard } from "../ui/hitCard";
 import type { UiHost } from "../ui/host";
-import { Hud, type ContextAction } from "../ui/hud";
+import { Hud } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
 import { TownScreen } from "../ui/town";
 import { getWeaponReadout, WeaponPanel, weaponsForClick } from "../ui/weapons";
@@ -401,7 +402,7 @@ export class Game {
     this.character.render();
     this.inventory.render();
     this.hud.renderAction(
-      this.contextAction(),
+      getContextAction(this.world, this.anim !== null),
       playerVehicle(this.displayWorld()).job,
       () => this.useContext(),
     );
@@ -409,33 +410,13 @@ export class Game {
     this.refreshTargetMarkers();
   }
 
-  // The E action, dimmed when a town or salvage is in range but the truck must stop first.
-  private contextAction(): ContextAction | null {
-    if (this.anim || !playerCanAct(this.world)) return null;
-    const town = townNear(this.world);
-    if (town)
-      return {
-        label: `Enter ${town.name}`,
-        ready: townAt(this.world) !== null,
-      };
-    if (playerVehicle(this.world).job) return null;
-    const stock = salvageNear(this.world);
-    if (!stock) return null;
-    const verb = this.world.player.scavenged.includes(stock.id)
-      ? "Loot"
-      : "Search";
-    return {
-      label: `${verb} ${salvageName(stock)}`,
-      ready: salvageHere(this.world) !== null,
-    };
-  }
-
   private useContext(): void {
     if (this.anim || !playerCanAct(this.world)) return;
     if (townAt(this.world)) return this.town.open();
     if (playerVehicle(this.world).job) return;
-    if (canScavenge(this.world)) {
-      this.apply(scavenge(this.world));
+    const after = applySiteAction(this.world);
+    if (after) {
+      this.apply(after);
       this.hud.pushEvents(this.world);
     } else if (canLoot(this.world)) {
       this.inventory.openLoot(salvageHere(this.world)!.id);
@@ -1323,7 +1304,3 @@ function canAnswerTow(w: World): boolean {
   return playerCanAct(w) && w.player.tow !== null;
 }
 
-// A salvage stock's display name: its site, or a wreck.
-function salvageName(stock: SalvageStock): string {
-  return REGION.locations.find((l) => l.id === stock.id)?.name ?? "the wreck";
-}
