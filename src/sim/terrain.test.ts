@@ -48,8 +48,8 @@ function terrainHash(t: Terrain): string {
 
 describe("terrain generation", () => {
   it("keeps the exact heights and types of known seeds", () => {
-    expect(terrainHash(buildTerrain(1, REGION.size))).toBe("4b41fe45");
-    expect(terrainHash(buildTerrain(7, REGION.size))).toBe("3497f518");
+    expect(terrainHash(buildTerrain(1, REGION.size))).toBe("6401ed7b");
+    expect(terrainHash(buildTerrain(7, REGION.size))).toBe("772d60a5");
   }, 30_000);
 
   it("finds the same road distance through the road index as over every road", () => {
@@ -102,7 +102,7 @@ describe('terrain variety', () => {
 });
 
 describe("terrain grid", () => {
-  it('has fifteen distinct Icarus destinations with road access', () => {
+  it('has seventeen distinct Icarus destinations with road access', () => {
     const w = newWorld(1337, START_KITS.standard);
     expect(w.size).toBe(600);
     expect(w.terrain.heights).toHaveLength(601 * 601);
@@ -111,10 +111,10 @@ describe("terrain grid", () => {
     expect(REGION.locations.map((site) => site.name)).toEqual([
       'Old Orchard', 'Dustwell', 'The Granary', 'Burnt Convoy', 'Podfield',
       'Canyon Bridge', 'Glass Flats', 'Green Pit', 'South Lock', 'Ridge Wrecks',
-      'Pump Station', 'Fallen Sun', 'Salvage Yard',
+      'Pump Station', 'Fallen Sun', 'Salvage Yard', 'Scrapjaw Camp', 'Kiln Camp',
     ]);
     const sites = [...REGION.towns, ...REGION.locations];
-    expect(new Set(sites.map((site) => site.id)).size).toBe(15);
+    expect(new Set(sites.map((site) => site.id)).size).toBe(17);
     for (const site of sites) {
       expect(site.pos.x).toBeGreaterThan(site.radius);
       expect(site.pos.y).toBeGreaterThan(site.radius);
