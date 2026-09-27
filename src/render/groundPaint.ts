@@ -1,4 +1,4 @@
-// Map-space ground painter: tile type colors and hillshade. Roads are 3D, in three/render/roads.ts. Pebbles and scrub are 3D, in
+// Map-space ground painter: tile type colors and hillshade. The ground shader draws roads over it, see render/roadPaint.ts. Pebbles and scrub are 3D, in
 // three/render/scatter.ts. The 3D terrain (three/render/terrain.ts) uses it as its texture.
 
 import { REGION } from "../data/region";
@@ -29,7 +29,7 @@ export type PaintOptions = {
 
 const DEFAULT_OPTIONS: PaintOptions = { hillshade: 1 };
 
-// Paints ground, oasis/convoy discs, roads and scatter onto the canvas. The caller uploads the texture.
+// Paints ground, oasis/convoy discs and terrain features onto the canvas. The caller uploads the texture.
 export function paintGroundCanvas(
   c: PaintCanvas,
   t: Terrain,
@@ -116,7 +116,7 @@ function typeColor(t: Terrain, x: number, y: number): number {
   );
 }
 
-// Road tiles paint as hardpan, since the road itself is a 3D strip with its own worn edge.
+// Road tiles paint as hardpan, since the ground shader draws the road over it with its own edge.
 function paintColor(type: TerrainTypeId): number {
   return TERRAIN_TYPES[type === "road" ? "hardpan" : type].color;
 }
