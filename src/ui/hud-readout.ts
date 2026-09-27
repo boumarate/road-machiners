@@ -2,16 +2,56 @@ import { chassisDef } from "../data/chassis";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { playerVehicle } from "../sim/damage";
-import { corePart, mountedParts } from "../sim/grid";
+import { corePart, mountedParts, mountedItems, itemSize } from "../sim/grid";
 import { isStranded, vehicleStats } from "../sim/stats";
 import { clockOf, heatAt } from "../sim/sun";
 import { TERRAIN } from "../data/terrain";
 import { dist, type Vec } from "../sim/vec";
-import type { World } from "../sim/types";
+import type { Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
 import { vehicleName } from "./format";
 import { celsius, engineCelsius, fuelLiters, kph } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
+import type { IconName } from "./icons";
+
+function getConditionIcon(def: ReturnType<typeof partDef>): IconName {
+  if (def.kind === "core") return def.role === "tank" ? "fuel" : def.role;
+  if (def.kind === "weapon") return def.look;
+  return "engine" as const;
+}
+
+function getConditionState(ratio: number): string {
+  if (ratio <= 0.25) return "critical";
+  return ratio < 1 ? "damaged" : "healthy";
+}
+
+export class TruckConditionReadout {
+  private vehicleId: string | null = null;
+  private health = new Map<string, number>();
+
+  update(vehicle: Vehicle) {
+    if (this.vehicleId !== vehicle.id) this.health.clear();
+    this.vehicleId = vehicle.id;
+    const previous = this.health;
+    this.health = new Map();
+    return mountedItems(vehicle)
+      .filter((item) => ["core", "engine", "weapon"].includes(partDef(item.part.defId).kind))
+      .map((item) => {
+        const def = partDef(item.part.defId);
+        const hp = item.part.hp;
+        this.health.set(item.part.id, hp);
+        const before = previous.get(item.part.id);
+        const ratio = hp / def.hp;
+        return {
+          id: item.part.id, name: def.name, icon: getConditionIcon(def),
+          x: item.x, y: item.y, ...itemSize(item),
+          percent: hp > 0 ? Math.max(1, Math.floor(ratio * 100)) : 0,
+          state: getConditionState(ratio),
+          hit: before !== undefined && hp < before,
+        };
+      });
+  }
+}
 
 const REGION_WEATHER: Record<"heatwave" | "overcast", string> = {
   heatwave: "Heat wave",
