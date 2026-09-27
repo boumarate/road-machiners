@@ -1,4 +1,4 @@
-// New game setup for the player. VITE_START_KIT in .env picks the kit.
+// New game setup for the player. CONFIG.startKit picks the kit.
 
 import { CHASSIS } from './chassis';
 import { RULES } from './rules';

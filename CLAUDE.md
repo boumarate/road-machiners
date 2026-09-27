@@ -23,7 +23,7 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 
 ## Config
 
-`.env` holds `VITE_SEED`, the world seed, `VITE_START_KIT`, the player start kit from `src/data/start.ts`, `VITE_COMBAT_SHOT_MS` and `VITE_COMBAT_READ_MS` for projectile travel and result-reading time, `VITE_SAVE_TURNS` for the number of completed turns between local saves, and `VITE_AUTO_TURN_MS` for the pause between turns that run on their own while knocked out, towed or waiting on the beacon. `VITE_TRAVEL_HOLD_MS` sets the Space hold delay and `VITE_TRAVEL_FAST_SPEED` multiplies playback speed while held. `ELEVENLABS_API_KEY` and `SFX_MAX_GENERATIONS` are read only by the sound generation script. Durations, the save interval and the speed multiplier must be positive integers. Copy `.env.example` to `.env` on a fresh checkout. Existing checkouts must add any values missing from `.env.example`. Missing or invalid values stop the boot.
+`src/config.ts` holds the world seed, start kit, combat playback times, save interval, automatic turn delay, Space hold delay and travel speed multiplier. Change these values to adjust game settings. `.env` holds only `ELEVENLABS_API_KEY` and `SFX_MAX_GENERATIONS` for sound generation. Copy `.env.example` to `.env` before using sound generation.
 
 ## Architecture
 
