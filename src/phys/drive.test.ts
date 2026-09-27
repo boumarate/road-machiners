@@ -166,6 +166,25 @@ describe('physics turns', () => {
     freeDrive(d);
   });
 
+  it('a fast truck brakes before a sharp route corner instead of running into the wall past it', () => {
+    let w = ordered({ kind: 'stopAt', dest: { x: 45, y: 48 } }, 7.8);
+    // A wall on the right forces the route east to a corner, and a wall past the corner catches overshoot.
+    for (let x = 26; x <= 43; x += 1.2) w.obstacles.push({ id: `s${x}`, pos: { x, y: 32 }, r: 0.7, kind: 'rock' });
+    for (let y = 20; y <= 55; y += 1.2) w.obstacles.push({ id: `e${y}`, pos: { x: 48, y }, r: 0.7, kind: 'rock' });
+    let d = buildDrive(w);
+    let crashes = 0;
+    for (let i = 0; i < 10 && me(w).order; i++) {
+      let r: TurnResult | null = null;
+      w = endTurn(w, physicsMove(d, (x) => (r = x)));
+      crashes += w.events.filter((e) => e.t === 'collision').length;
+      freeDrive(d);
+      d = r!.next;
+    }
+    freeDrive(d);
+    expect(crashes).toBe(0);
+    expect(me(w).order).toBeNull();
+  });
+
   it('a stop order stops on the point', () => {
     const { w } = play(ordered({ kind: 'stopAt', dest: { x: 38, y: 31 } }), 8);
     expect(dist(me(w).pos, { x: 38, y: 31 })).toBeLessThan(RULES.arriveRadius + 0.3);

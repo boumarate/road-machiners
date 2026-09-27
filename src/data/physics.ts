@@ -42,6 +42,7 @@ export const PHYSICS = {
     throttleGain: 0.5, // throttle per m/s of speed error
     stopDecel: 8, // m/s^2 a driver plans to brake at when stopping on a point, at rated mass
     cornerAccel: 15, // m/s^2 sideways a driver plans to corner at; trucks orbit a missed point at about 30 on flat ground
+    cornerCut: 8, // meters before a route corner where the driver starts its turn, and after it where the turn ends
     reverseBelow: 4, // m/s; only a truck slower than this starts backing up
     reverseSpeed: 5, // m/s while backing up
   },

@@ -17,7 +17,7 @@ import { BRIDGE_AXIS, BRIDGE_LENGTH } from '../sim/bridge';
 import { deckEnds, heightAt } from '../sim/terrain';
 import { TERRAIN } from '../data/terrain';
 import type { MoveOrder, Vehicle, World } from '../sim/types';
-import { angleDiff, clamp, DEG, dist, type Vec } from '../sim/vec';
+import { angleDiff, bearing, clamp, DEG, dist, type Vec } from '../sim/vec';
 import { bodyOf, type Body } from '../sim/body';
 import { wheelMounts } from './body';
 import { computeClosingSpeed, locateCrashContact, type CrashGeometry } from '../sim/crash-contact';
@@ -361,6 +361,7 @@ function driveStep(c: Car): void {
       } else {
         steerTo = clamp(ang * D.steerGain, -plan.maxSteer, plan.maxSteer);
         target = Math.min(target, cornerSpeed(Math.hypot(dx, dz), ang));
+        target = Math.min(target, routeCornerSpeed(plan.route, { x: p.x / S, y: p.z / S }, Math.abs(speed), plan.stopDecel));
       }
     }
   }
@@ -385,6 +386,39 @@ function driveStep(c: Car): void {
 function cornerSpeed(aimDist: number, ang: number): number {
   const sin = Math.abs(Math.sin(ang));
   return sin === 0 ? Infinity : Math.sqrt((D.cornerAccel * aimDist) / (2 * sin));
+}
+
+// The fastest speed now that still brakes in time for every route corner ahead. A corner turned by
+// theta is driven as an arc that starts cornerCut before it, of radius cornerCut / tan(theta / 2).
+// Theta runs to the route point cornerCut past the corner, so a sharp turn split into small steps counts whole.
+// Corners past the braking distance at the current speed cannot limit it, so the scan stops there.
+// A driver without a route drives straight and has no corners.
+function routeCornerSpeed(route: Vec[] | null, at: Vec, speed: number, decel: number): number {
+  if (!route) return Infinity;
+  const reach = (speed * speed) / (2 * decel) + D.cornerCut;
+  let limit = Infinity;
+  let along = dist(at, route[0]) * S;
+  let prev = at;
+  for (let k = 0; k + 1 < route.length && along <= reach; k++) {
+    const theta = Math.abs(angleDiff(bearing(prev, route[k]), bearing(route[k], pointAfter(route, k, D.cornerCut / S))));
+    if (theta > 0) {
+      const corner = Math.sqrt((D.cornerAccel * D.cornerCut) / Math.tan(theta / 2));
+      limit = Math.min(limit, Math.sqrt(corner * corner + 2 * decel * Math.max(0, along - D.cornerCut)));
+    }
+    along += dist(route[k], route[k + 1]) * S;
+    prev = route[k];
+  }
+  return limit;
+}
+
+// The route point at least `d` tiles along the route after point k, or the last one.
+function pointAfter(route: Vec[], k: number, d: number): Vec {
+  let along = 0;
+  for (let i = k + 1; i < route.length; i++) {
+    along += dist(route[i - 1], route[i]);
+    if (along >= d) return route[i];
+  }
+  return route[route.length - 1];
 }
 
 // The truck covers several route points in one turn. Points it has come close to or driven past
