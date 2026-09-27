@@ -63,6 +63,13 @@ describe('repeats on one target', () => {
     expect(pay[2] / pay[0]).toBeCloseTo(r * r);
   });
 
+  it('every source decays on a repeated target, so no source pays forever', () => {
+    for (const [source, def] of Object.entries(XP_SOURCES)) {
+      expect(def.repeat, source).toBeGreaterThanOrEqual(0);
+      expect(def.repeat, source).toBeLessThan(1);
+    }
+  });
+
   it('another target pays in full', () => {
     const w = emptyWorld();
     practice(w, 'profit', 10, null, 'bowl:salt');

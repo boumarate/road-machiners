@@ -63,7 +63,7 @@ export const MAX_SKILL_LEVEL = XP_TO_REACH.length - 1;
 // Every practice event names its target, like a driver, a truck, a pile, a map region or a trade good. `repeat` is
 // what each earlier event on the same target multiplies the pay by. The count of earlier events halves every
 // XP_RULES.repeatHalfLife turns, so a target pays again slowly with game time. A repeat of 0 pays once per target
-// for good, and a repeat of 1 never decays. Spamming a target pays a bounded total: 1 / (1 - repeat) events.
+// for good. Every source decays, so spamming a target pays a bounded total: 1 / (1 - repeat) events.
 export type XpSourceDef = { skill: SkillId; weight: number; scaled: boolean; repeat: number };
 
 export const XP_SOURCES: Record<XpSource, XpSourceDef> = {
@@ -77,7 +77,7 @@ export const XP_SOURCES: Record<XpSource, XpSourceDef> = {
   patch: { skill: 'machining', weight: 75, scaled: false, repeat: 0.5 }, // per finished roadside patch on another truck; target: patched truck
   search: { skill: 'machining', weight: 80, scaled: false, repeat: 0 }, // per first finished search of a stock; target: the stock
   heat: { skill: 'toughness', weight: 0.3, scaled: true, repeat: 0.9 }, // per turn driven in heat above shade; target: map region
-  damage: { skill: 'toughness', weight: 1.5, scaled: false, repeat: 1 }, // per point of health lost to cab damage; target: the driver. Health is the cost.
+  damage: { skill: 'toughness', weight: 1.5, scaled: false, repeat: 0.95 }, // per point of health lost to cab damage; target: the driver
   knockout: { skill: 'toughness', weight: 100, scaled: false, repeat: 0.5 }, // per knockout with a hostile truck in sight; target: the driver
   profit: { skill: 'social', weight: 0.8, scaled: false, repeat: 0.8 }, // per money unit of profit on a sale; target: town and good
   deal: { skill: 'social', weight: 30, scaled: false, repeat: 0.5 }, // per finished patch deal, and per handover or threat that ends agreed; target: the other driver
