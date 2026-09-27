@@ -180,6 +180,21 @@ describe('NPC activities', () => {
     expect(topGoal(npc)?.kind).toBe('resupply');
   });
 
+  it('flees away from an attacker that stands between it and a known town', () => {
+    const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
+    const w = emptyWorld({ x: bowl.pos.x + 150, y: bowl.pos.y + 150 });
+    const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: bowl.pos.x + bowl.radius + 20, y: bowl.pos.y });
+    trader.brain = npcBrain('trader', trader.pos, ['trader']);
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: trader.pos.x - 5, y: trader.pos.y });
+    forceOption('hostileSeen', 'flee');
+    planNpcOrders(w);
+    const flee = topGoal(trader)!;
+    expect(flee.kind).toBe('flee');
+    const away = { x: flee.destination!.x - trader.pos.x, y: flee.destination!.y - trader.pos.y };
+    const toThreat = { x: raider.pos.x - trader.pos.x, y: raider.pos.y - trader.pos.y };
+    expect(away.x * toThreat.x + away.y * toThreat.y).toBeLessThan(0);
+  });
+
   it('a raider investigates a nearby heard player', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const player = w.vehicles[0];

@@ -114,14 +114,19 @@ function hasSaleCargo(vehicle: Vehicle): boolean {
   return goods || vehicle.items.some((item) => item.kind === 'part' && !mounted.has(item.part.id));
 }
 
-// Where an NPC flees to, away from a threat at `threatPos`: the nearest known town or own camp further from the
-// threat than the vehicle already is, or straight away from it if no such site is known.
+// Where an NPC flees to, away from a threat at `threatPos`: the nearest known town or own camp whose direction
+// from the vehicle is more than 90 degrees off the threat's, or straight away from the threat if no such site is
+// known.
 function fleeDestination(world: World, vehicle: Vehicle, profile: NpcProfile, threatPos: Vec): Vec {
-  const safe = [...profile.towns, ...profile.bases].map(getKnownSite).filter((site) => dist(site.pos, threatPos) > dist(vehicle.pos, threatPos));
+  const safe = [...profile.towns, ...profile.bases].map(getKnownSite).filter((site) => pointsAway(vehicle.pos, site.pos, threatPos));
   safe.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   const away = { x: vehicle.pos.x + (vehicle.pos.x - threatPos.x), y: vehicle.pos.y + (vehicle.pos.y - threatPos.y) };
   const destination = safe[0]?.pos ?? away;
   return { x: clamp(destination.x, 1, world.size - 1), y: clamp(destination.y, 1, world.size - 1) };
+}
+
+function pointsAway(from: Vec, to: Vec, threat: Vec): boolean {
+  return (to.x - from.x) * (threat.x - from.x) + (to.y - from.y) * (threat.y - from.y) < 0;
 }
 
 // ---- Goal builders.
