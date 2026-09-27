@@ -10,6 +10,8 @@ import {
   contractSummary,
   eventText,
   formatNpcActivity,
+  JOB_LABELS,
+  jobProgress,
   formatNpcStates,
   formatNpcTraits,
 } from "./format";
@@ -229,8 +231,8 @@ export class Hud {
   }
 
   private renderJob(job: Job): void {
-    const progress = Math.round((1 - job.turnsLeft / job.total) * 100);
-    const label = { search: 'Search', repair: 'Repair', refit: 'Refit', strip: 'Strip' }[job.kind];
+    const progress = Math.round(jobProgress(job) * 100);
+    const label = JOB_LABELS[job.kind];
     this.action.replaceChildren(
       el(
         "span",

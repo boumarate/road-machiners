@@ -8,7 +8,7 @@ import { PAL } from '../../render/palette';
 import type { World } from '../../sim/types';
 import { el } from '../../ui/dom';
 import { createIcon } from '../../ui/icons';
-import type { VehicleMark, WeaponMark } from '../../ui/weapons';
+import type { JobMark, VehicleMark, WeaponMark } from '../../ui/weapons';
 import { playerExplored } from '../../sim/vision';
 import type { CameraRig } from './camera';
 import type { SightLimit } from './scope';
@@ -64,10 +64,25 @@ function weaponChip(mark: WeaponMark): HTMLElement {
   );
 }
 
+function jobChip(job: JobMark): HTMLElement {
+  return el('div', { class: 'marker-job' },
+    el('span', {}, job.label),
+    el('span', { class: 'job-bar' }, el('span', { style: `width:${Math.round(job.progress * 100)}%` })),
+  );
+}
+
+function markerNode(mark: VehicleMark): HTMLElement {
+  return el('div', { class: 'vehicle-marker' },
+    mark.weapons.length > 0 ? el('div', { class: 'marker-weapons' }, ...mark.weapons.map(weaponChip)) : null,
+    mark.radio ? el('div', { class: 'marker-radio' }, '[T] Radio') : null,
+    mark.job ? jobChip(mark.job) : null,
+  );
+}
+
 const MARKER_LIFT = 3.5; // meters above a vehicle where its label sits
 
-// Markers above vehicles: an icon per player weapon aimed at the vehicle, and the radio key on the hovered
-// truck. The content comes from vehicleMarks() in src/ui/weapons.ts.
+// Markers above vehicles: an icon per player weapon aimed at the vehicle, the radio key on the hovered
+// truck, and the job an NPC works on. The content comes from vehicleMarks() in src/ui/weapons.ts.
 export class VehicleMarkers {
   private readonly els = new Map<string, HTMLElement>(); // by vehicle id
 
@@ -78,10 +93,7 @@ export class VehicleMarkers {
     for (const node of this.els.values()) node.remove();
     this.els.clear();
     for (const [id, mark] of marks ?? []) {
-      const node = el('div', { class: 'vehicle-marker' },
-        mark.weapons.length > 0 ? el('div', { class: 'marker-weapons' }, ...mark.weapons.map(weaponChip)) : null,
-        mark.radio ? el('div', { class: 'marker-radio' }, '[T] Radio') : null,
-      );
+      const node = markerNode(mark);
       this.container.appendChild(node);
       this.els.set(id, node);
     }
