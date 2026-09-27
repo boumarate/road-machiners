@@ -11,11 +11,9 @@ from __future__ import annotations
 
 import math
 
-import bmesh
-import bpy
-
 from kit import CELL_ACROSS, CELL_ALONG, Kit
 from parts_common_core import COLORS, check_footprint
+from shapes import prism  # noqa: F401  re-exported for the zone piece scripts
 
 HALF_X = CELL_ALONG / 2
 HALF_Y = CELL_ACROSS / 2
@@ -61,23 +59,3 @@ def rivet_row(kit: Kit, name: str, start: tuple[float, float, float], end: tuple
 def check_piece(kit: Kit, name: str, min_z: float, max_z: float) -> None:
     """Raises if the piece leaves its cell or its height range."""
     check_footprint(kit, name, 1, 1, min_z=min_z, max_z=max_z)
-
-
-def prism(kit: Kit, name: str, profile: list[tuple[float, float]], y0: float, y1: float, mat: str, lean: float = 0.0) -> None:
-    """Extrudes a closed XZ profile from Blender Y y0 to y1 as one mesh. lean shifts each vertex by -lean * z in Y."""
-    mesh = bpy.data.meshes.new(name)
-    bm = bmesh.new()
-    near = [bm.verts.new((x, y0 - lean * z, z)) for x, z in profile]
-    far = [bm.verts.new((x, y1 - lean * z, z)) for x, z in profile]
-    bm.faces.new(near)
-    bm.faces.new(list(reversed(far)))
-    n = len(profile)
-    for i in range(n):
-        j = (i + 1) % n
-        bm.faces.new((near[i], near[j], far[j], far[i]))
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    bm.to_mesh(mesh)
-    bm.free()
-    obj = bpy.data.objects.new(name, mesh)
-    bpy.context.scene.collection.objects.link(obj)
-    kit._add(obj, name, mat, 0.0)

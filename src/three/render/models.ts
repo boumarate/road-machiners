@@ -7,6 +7,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { WEAPON_POOLS } from '../../render/partLooks';
 
 const NAMES = [
+  'base_scout',
+  'wmount_riser',
   'wreck',
   'rock',
   'building',

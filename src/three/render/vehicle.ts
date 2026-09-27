@@ -12,7 +12,7 @@ import { wheelMounts } from '../../phys/body';
 import { bodyOf, cellCenter, type Body } from '../../sim/body';
 import { headingOf, headingQuat, type VehicleFrame } from '../../phys/frames';
 import { FACTION_COLORS, PAL, shade } from '../../render/palette';
-import { BODY_PARTS, partModel, weaponLook } from '../../render/partLooks';
+import { BASE_MODELS, BODY_PARTS, partModel, weaponLook } from '../../render/partLooks';
 import { baseGrid, isMounted, itemCells, itemSize, sideOf, type SideLetter } from '../../sim/grid';
 import type { GridItem, Vehicle } from '../../sim/types';
 import { model, socket, type ModelName } from './models';
@@ -26,7 +26,9 @@ type PartItem = Extract<GridItem, { kind: 'part' }>;
 
 // Material name that takes the faction color.
 const PAINT = 'paint';
-const LAMP = 'light'; // the headlight face material in the nose models
+const LAMP = 'light'; // the headlight face material in the nose and base models
+const TRIM = 'trim'; // base material that takes the faction cab color
+const FIT_SLACK = 1e-3; // meters a base may pass its footprint by float noise
 
 // Color factor for every material of a broken part.
 const BROKEN_TONE: Record<PartKind, number> = { weapon: 0.5, armor: 0.6, engine: 0.6, cargo: 0.6, core: 0.6, scanner: 0.6 };
@@ -129,10 +131,12 @@ export class VehicleView {
 
     const still = new THREE.Group();
     const onBody = v.items.filter((item) => onChassis(v, item));
-    this.buildFrame(v, body, still, paint, FACTION_COLORS[v.faction].cab, coverOf(v, onBody));
+    const base = BASE_MODELS[v.chassisId];
+    if (base) this.buildBase(v, body, base, still, paint, FACTION_COLORS[v.faction].cab, coverOf(v, onBody));
+    else this.buildFrame(v, body, still, paint, FACTION_COLORS[v.faction].cab, coverOf(v, onBody));
     const wheelItems: PartItem[] = [];
     for (const item of onBody) {
-      const surface = surfaceOf(v, body, item);
+      const surface = base ? baseLevel(base, item, 'row') : surfaceOf(v, body, item);
       if (item.kind === 'good') {
         still.add(this.placeItem(v, item, paint, surface));
         continue;
@@ -143,14 +147,51 @@ export class VehicleView {
       if (BODY_PARTS.has(def.id)) continue;
       if (def.id === 'wheel' && mounted) wheelItems.push(item);
       else if (def.id === 'wheel') still.add(this.spareWheel(v, body, item, paint, surface));
-      else if (def.kind === 'weapon') this.buildWeapon(v, item, mounted, still, paint, surface);
+      else if (def.kind === 'weapon') this.buildWeapon(v, item, mounted, still, paint, this.riser(v, item, base ? baseTop(v, base) : body.half.y + zoneTop('cab'), surface, paint, still));
       else if (def.kind === 'armor') still.add(this.placeArmor(v, body, item, paint, mounted, surface));
-      // Core parts sit on their zone's floor. An engine in the hood stands in the engine bay and shows through the cutout.
-      else if (def.kind === 'core' || (def.kind === 'engine' && inZone(v, item, 'hood'))) still.add(this.placeItem(v, item, paint, floorOf(v, body, item)));
+      // Core parts sit on the floor. An engine on its mount stands in the engine bay and shows through the cutout.
+      else if (base && (def.kind === 'core' || (def.kind === 'engine' && mounted))) still.add(this.placeItem(v, item, paint, baseLevel(base, item, 'floor')));
+      else if (!base && (def.kind === 'core' || (def.kind === 'engine' && inZone(v, item, 'hood')))) still.add(this.placeItem(v, item, paint, floorOf(v, body, item)));
       else still.add(this.placeItem(v, item, paint, surface));
     }
     this.buildWheels(v, body, wheelItems, paint);
     this.root.add(mergeStatic(still));
+  }
+
+  // Headlight faces share the lamp material, so lamps() switches them all.
+  private useLamp(obj: THREE.Object3D): void {
+    obj.traverse((o) => {
+      if (o instanceof THREE.Mesh && o.material.name === LAMP) {
+        o.material.dispose();
+        o.material = this.lampMat;
+        o.userData.lamp = true;
+      }
+    });
+  }
+
+  // The chassis base model at the collider center, and kit bumpers on its front and back row cells unless a ram covers them.
+  private buildBase(v: Vehicle, body: Body, name: ModelName, into: THREE.Group, paint: number, trim: number, cover: Cover): void {
+    const obj = model(name);
+    checkBaseFits(v.chassisId, body, obj);
+    tint(obj, paint, 1);
+    obj.traverse((o) => {
+      if (o instanceof THREE.Mesh && o.material.name === TRIM) o.material.color.setHex(trim);
+    });
+    this.useLamp(obj);
+    into.add(obj);
+    const grid = baseGrid(v.chassisId);
+    const stretch = (2 * body.half.y + SKIRT) / EDGE_H; // bumpers hang to the skirt bottom
+    const ends: [number, ModelName, number][] = [[0, 'bumper_front', 0], [grid.h - 1, 'bumper_rear', Math.PI]];
+    for (const [y, bumperName, yaw] of ends) {
+      for (let x = 0; x < grid.w; x++) {
+        if (grid.cells[y][x] === null || cover.rams.has(`${x},${y}`)) continue;
+        const c = cellCenter(v.chassisId, x, y);
+        const bumper = model(bumperName);
+        place(bumper, { pos: new THREE.Vector3(c.x, body.half.y, c.z), yaw, scale: new THREE.Vector3(1, stretch, 1) });
+        tint(bumper, paint, 1);
+        into.add(bumper);
+      }
+    }
   }
 
   // The body within the collider footprint (IV5). Only bumpers, fender flares and wheels reach past it.
@@ -191,14 +232,7 @@ export class VehicleView {
       const obj = model(name);
       place(obj, { pos: new THREE.Vector3(c.x, top, c.z), yaw, scale: new THREE.Vector3(along, height, mirror ? -1 : 1) });
       tint(obj, color, 1);
-      // Headlight faces share the lamp material, so lamps() switches them all.
-      obj.traverse((o) => {
-        if (o instanceof THREE.Mesh && o.material.name === LAMP) {
-          o.material.dispose();
-          o.material = this.lampMat;
-          o.userData.lamp = true;
-        }
-      });
+      this.useLamp(obj);
       into.add(obj);
     };
     const shortSide = CELL.across / CELL.along;
@@ -388,6 +422,18 @@ export class VehicleView {
     return obj;
   }
 
+  // A weapon standing below the base top gets a riser post up to it, so its turret clears the cab when it turns.
+  // Returns the height the weapon mount stands on.
+  private riser(v: Vehicle, item: PartItem, clear: number, y: number, paint: number, into: THREE.Group): number {
+    if (y >= clear) return y;
+    const post = model('wmount_riser');
+    const at = footprint(v, item, y);
+    place(post, { pos: at.pos, yaw: 0, scale: new THREE.Vector3(1, (clear - y) / socket('wmount_riser', 'top').y, 1) });
+    tint(post, paint, toneOf(item));
+    into.add(post);
+    return clear;
+  }
+
   // The mount fills the footprint. The head keeps its authored size, sits at the mount's head socket and turns with aim.
   // The receiver is the head's origin, the barrel joins at its muzzle socket and the extra at its extra socket.
   private buildWeapon(v: Vehicle, item: PartItem, active: boolean, still: THREE.Group, paint: number, y: number): void {
@@ -540,6 +586,23 @@ function roofFrontEdge(v: Vehicle): number {
   return cellCenter(v.chassisId, 0, frontRow).x + socket('cab_roof_front', 'front_edge').x;
 }
 
+// A base model's level under an item: the highest row or floor socket over its rows, in body meters.
+function baseLevel(base: ModelName, item: GridItem, level: 'row' | 'floor'): number {
+  return Math.max(...itemCells(item).map((c) => socket(base, `${level}${c.y}`).y));
+}
+
+// The highest row surface of a base, in body meters: the cab roof on a pickup.
+function baseTop(v: Vehicle, base: ModelName): number {
+  return Math.max(...baseGrid(v.chassisId).cells.map((_, y) => socket(base, `row${y}`).y));
+}
+
+// A base fills its chassis footprint in length and width, so the drawn truck matches its collider.
+function checkBaseFits(chassisId: string, body: Body, obj: THREE.Object3D): void {
+  const box = new THREE.Box3().setFromObject(obj);
+  const out = box.min.x < -body.half.x - FIT_SLACK || box.max.x > body.half.x + FIT_SLACK || box.min.z < -body.half.z - FIT_SLACK || box.max.z > body.half.z + FIT_SLACK;
+  if (out) throw new Error(`${chassisId} base spans x ${box.min.x.toFixed(3)}..${box.max.x.toFixed(3)}, z ${box.min.z.toFixed(3)}..${box.max.z.toFixed(3)}, past its footprint ${body.half.x} by ${body.half.z}`);
+}
+
 function wheelCells(chassisId: string): Set<string> {
   return new Set(chassisDef(chassisId).core.filter((c) => c.defId === 'wheel').map((c) => `${c.x},${c.y}`));
 }
@@ -560,7 +623,7 @@ function footprint(v: Vehicle, item: GridItem, y: number): Placement {
   const first = cellCenter(v.chassisId, cells[0].x, cells[0].y);
   const last = cellCenter(v.chassisId, cells[cells.length - 1].x, cells[cells.length - 1].y);
   const pos = new THREE.Vector3((first.x + last.x) / 2, y, (first.z + last.z) / 2);
-  if (y === bodyOf(v.chassisId).half.y + zoneTop('cab')) pos.x -= Math.max(0, pos.x + (itemSize(item).h * CELL.along) / 2 - roofFrontEdge(v));
+  if (!BASE_MODELS[v.chassisId] && y === bodyOf(v.chassisId).half.y + zoneTop('cab')) pos.x -= Math.max(0, pos.x + (itemSize(item).h * CELL.along) / 2 - roofFrontEdge(v));
   if (item.rot === 0) return { pos, yaw: 0, scale: new THREE.Vector3(1, 1, 1) };
   return { pos, yaw: ROT_YAW, scale: new THREE.Vector3(CELL.across / CELL.along, 1, CELL.along / CELL.across) };
 }
