@@ -11,13 +11,14 @@ import { route } from './path';
 import { getResources } from './resources';
 import { vehicleStats, type VehicleStats } from './stats';
 import { parkedVehicles, zoneSpeed } from './steering';
+import { isTowed } from './tow';
 import type { MoveOrder, Pose, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
 
 // The player, and every vehicle within sight radius plus the live margin of the player, drives in physics.
 // A towed player has no body: it follows its tower through followTower instead.
 export function isNear(w: World, v: Vehicle): boolean {
-  if (v.id === w.player.vehicleId) return !w.player.tow?.hitched;
+  if (v.id === w.player.vehicleId) return !isTowed(w);
   return dist(v.pos, playerVehicle(w).pos) <= TERRAIN.vision.radius + PERF.liveMargin;
 }
 

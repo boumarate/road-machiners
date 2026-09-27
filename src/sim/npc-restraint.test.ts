@@ -1,28 +1,44 @@
 import { describe, expect, it } from 'vitest';
-import { NPCS } from '../data/npcs';
+import { NPCS, type TraitId } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { REGION } from '../data/region';
 import { partDef } from '../data/parts';
 import { planNpcOrders } from './ai';
 import { assignAutoOrders } from './combat';
-import { corePart, goodsCount } from './grid';
+import { corePart, goodsCount, mountedParts } from './grid';
 import { addGoods } from './inventory';
 import { advanceJobs } from './jobs';
-import { chooseNpcActivity, resolveNpcActivities } from './npc-activities';
+import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { spawnInitial } from './spawn';
 import { inShade, sunAt } from './sun';
 import { straightClear } from './path';
 import { vehicleStats } from './stats';
-import { endTurn } from './world';
-import { addVehicle, emptyWorld, testDrive } from './testkit';
+import { cloneWorld, endTurn } from './world';
+import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import { siteGates } from './sites';
+import type { NpcActivity, Vehicle, World } from './types';
+
+const TRAITS_OF: Record<string, TraitId[]> = { scavenger: ['scavenger'], buggy: ['raider'], trader: ['trader'] };
 
 function createNpc(templateId = 'scavenger') {
   const world = emptyWorld({ x: 200, y: 200 });
-  const template = NPCS[templateId];
-  const npc = addVehicle(world, template.faction, 'scout', ['mg', 'stockEngine'], { x: 30, y: 30 });
-  npc.brain = { templateId, activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0, refusedTow: false };
+  const npc = addVehicle(world, NPCS[templateId].faction, 'scout', ['mg', 'stockEngine'], { x: 30, y: 30 });
+  npc.brain = npcBrain(templateId, npc.pos, TRAITS_OF[templateId]);
   return { world, npc };
+}
+
+const scavengeGoal: NpcActivity = { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' };
+
+// Runs `check` on a copy of the world for each seed and returns the share of seeds where it holds. Seeds are
+// spread over the RNG state, since neighboring states give correlated first draws.
+function shareOfSeeds(world: World, npcId: string, check: (x: World, npc: Vehicle) => boolean, seeds = 200): number {
+  let held = 0;
+  for (let seed = 0; seed < seeds; seed++) {
+    const x = cloneWorld(world);
+    x.rngState = Math.imul(seed, 2654435761);
+    if (check(x, x.vehicles.find((v) => v.id === npcId)!)) held++;
+  }
+  return held / seeds;
 }
 
 describe('NPC restraint', () => {
@@ -34,43 +50,58 @@ describe('NPC restraint', () => {
     expect(raiders.some((npc) => (goodsCount(npc).parts ?? 0) > 0)).toBe(true);
   });
 
-  it('does not abandon civilian work or open fire at an uninvolved hostile', () => {
+  it('mostly keeps civilian work and never opens fire at an uninvolved hostile', () => {
     const { world, npc } = createNpc();
-    planNpcOrders(world);
+    npc.brain!.goals = [{ ...scavengeGoal }];
     addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
-    planNpcOrders(world);
-    assignAutoOrders(world);
-    expect(npc.brain!.activity!.kind).toBe('scavenge');
-    expect(npc.weaponOrders).toEqual({});
+    const kept = shareOfSeeds(world, npc.id, (x, me) => {
+      planNpcOrders(x);
+      assignAutoOrders(x);
+      const keeps = topGoal(me)?.kind === 'scavenge';
+      if (keeps) expect(me.weaponOrders).toEqual({});
+      return keeps;
+    });
+    expect(kept).toBeGreaterThan(0.9);
   });
 
   it('judges the nearby hostile faction group before attacking', () => {
     const { world, npc } = createNpc('buggy');
     addVehicle(world, 'traders', 'scout', ['mg'], { x: 33, y: 30 });
+    const alone = shareOfSeeds(world, npc.id, (x, me) => thinkNpc(x, me).kind === 'flee');
     addVehicle(world, 'traders', 'scout', ['mg'], { x: 33, y: 32 });
-    expect(chooseNpcActivity(world, npc).kind).toBe('flee');
+    const grouped = shareOfSeeds(world, npc.id, (x, me) => thinkNpc(x, me).kind === 'flee');
+    expect(grouped).toBeGreaterThan(0.5);
+    expect(grouped).toBeGreaterThan(alone + 0.2);
   });
 
-  it('still attacks an isolated manageable target', () => {
+  it('mostly attacks an isolated manageable target', () => {
     const { world, npc } = createNpc('buggy');
     const prey = addVehicle(world, 'traders', 'scout', [], { x: 33, y: 30 });
     addGoods(world, prey, 'scrap', 1);
-    planNpcOrders(world);
-    assignAutoOrders(world);
-    expect(npc.brain!.activity!.kind).toBe('fight');
-    expect(Object.keys(npc.weaponOrders)).toHaveLength(1);
+    const fought = shareOfSeeds(world, npc.id, (x, me) => {
+      planNpcOrders(x);
+      assignAutoOrders(x);
+      const fights = topGoal(me)?.kind === 'fight';
+      if (fights) expect(Object.keys(me.weaponOrders)).toHaveLength(1);
+      return fights;
+    });
+    expect(fought).toBeGreaterThan(0.9);
   });
 
-  it('does not attack prey at a guarded town gate', () => {
+  it('rarely attacks prey at a guarded town gate, and holds fire when it does not', () => {
     const { world, npc } = createNpc('buggy');
     const gate = siteGates(REGION.towns[0])[0];
     npc.pos = { x: gate.x + 3, y: gate.y };
     const prey = addVehicle(world, 'traders', 'scout', [], gate);
     addGoods(world, prey, 'scrap', 1);
-    planNpcOrders(world);
-    assignAutoOrders(world);
-    expect(npc.brain!.activity!.kind).not.toBe('fight');
-    expect(npc.weaponOrders).toEqual({});
+    const fought = shareOfSeeds(world, npc.id, (x, me) => {
+      planNpcOrders(x);
+      assignAutoOrders(x);
+      const fights = topGoal(me)?.kind === 'fight';
+      if (!fights) expect(me.weaponOrders).toEqual({});
+      return fights;
+    });
+    expect(fought).toBeLessThan(0.05);
   });
 });
 
@@ -85,7 +116,7 @@ describe('NPC field repairs', () => {
     world.obstacles.push({ id: 'shade-rock', kind: 'rock', pos: { x: 34, y: 33 }, r: 1 });
     expect(inShade(world, npc.pos, sun)).toBe(false);
     planNpcOrders(world);
-    const activity = npc.brain!.activity!;
+    const activity = topGoal(npc)!;
     expect(activity.kind).toBe('repair');
     expect(inShade(world, activity.destination!, sun)).toBe(true);
     expect(straightClear(world, npc.pos, activity.destination!, vehicleStats(world, npc).radius, [])).toBe(true);
@@ -104,12 +135,55 @@ describe('NPC field repairs', () => {
     expect(goodsCount(npc).parts ?? 0).toBeLessThan(2);
   });
 
+  it('keeps repairing where it stands after drifting off its shade spot', () => {
+    const { world, npc } = createNpc();
+    addGoods(world, npc, 'parts', 2);
+    // Each part is one carried part short of the field cap.
+    const cab = corePart(npc, 'cab');
+    cab.hp = partDef(cab.defId).hp * 0.4;
+    const engine = mountedParts(npc, 'engine')[0];
+    engine.hp = partDef(engine.defId).hp * 0.45;
+    const before = { cab: cab.hp, engine: engine.hp };
+    world.obstacles.push({ id: 'shade-rock', kind: 'rock', pos: { x: 34, y: 33 }, r: 1 });
+    planNpcOrders(world);
+    const spot = { ...topGoal(npc)!.destination! };
+    npc.pos = { ...spot };
+    npc.speed = 0;
+    resolveNpcActivities(world);
+    expect(npc.job?.kind).toBe('repair');
+    while (npc.job) advanceJobs(world);
+    npc.pos = { x: spot.x + 0.7, y: spot.y };
+    for (let turn = 0; turn < 6 && npc.job === null && (goodsCount(npc).parts ?? 0) > 0; turn++) {
+      planNpcOrders(world);
+      expect(npc.order?.kind).toBe('brake');
+      resolveNpcActivities(world);
+      while (npc.job) advanceJobs(world);
+    }
+    expect(goodsCount(npc).parts ?? 0).toBe(0);
+    expect(cab.hp).toBeGreaterThan(before.cab);
+    expect(engine.hp).toBeGreaterThan(before.engine);
+  });
+
+  it('repairs where it stands when no shade was found, even after rolling on', () => {
+    const { world, npc } = createNpc();
+    addGoods(world, npc, 'parts', 2);
+    corePart(npc, 'cab').hp = 1;
+    planNpcOrders(world);
+    expect(topGoal(npc)!.kind).toBe('repair');
+    npc.pos = { x: npc.pos.x + 3, y: npc.pos.y };
+    npc.speed = 0;
+    planNpcOrders(world);
+    expect(npc.order?.kind).toBe('brake');
+    resolveNpcActivities(world);
+    expect(npc.job?.kind).toBe('repair');
+  });
+
   it('parks to repair when no shade is reachable', () => {
     const { world, npc } = createNpc();
     addGoods(world, npc, 'parts', 2);
     corePart(npc, 'cab').hp = 1;
     planNpcOrders(world);
-    expect(npc.brain!.activity!.kind).toBe('repair');
+    expect(topGoal(npc)!.kind).toBe('repair');
     expect(npc.order?.kind).toBe('brake');
     resolveNpcActivities(world);
     expect(npc.job?.kind).toBe('repair');
@@ -123,21 +197,25 @@ describe('NPC field repairs', () => {
     if (started) planNpcOrders(world);
     npc.resources!.fuel = 0;
     planNpcOrders(world);
-    expect(npc.brain!.activity!.kind).toBe('repair');
+    expect(topGoal(npc)!.kind).toBe('repair');
     expect(npc.order?.kind).toBe('brake');
     resolveNpcActivities(world);
     expect(npc.job?.kind).toBe('repair');
   });
 
-  it('flees instead of repairing under visible threat', () => {
+  it('mostly flees instead of repairing under visible threat, and never starts the repair then', () => {
     const { world, npc } = createNpc();
     addGoods(world, npc, 'parts', 2);
     corePart(npc, 'cab').hp = 1;
     addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
-    planNpcOrders(world);
-    resolveNpcActivities(world);
-    expect(npc.brain!.activity!.kind).toBe('flee');
-    expect(npc.job).toBeNull();
+    const fled = shareOfSeeds(world, npc.id, (x, me) => {
+      planNpcOrders(x);
+      resolveNpcActivities(x);
+      const flees = topGoal(me)!.kind === 'flee';
+      if (flees) expect(me.job).toBeNull();
+      return flees;
+    });
+    expect(fled).toBeGreaterThan(0.9);
   });
 
   it.each([false, true])('orders escape during a repair and obeys parked-job rules, pinned: %s', (pinned) => {
@@ -152,16 +230,25 @@ describe('NPC field repairs', () => {
     addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
 
     // Exercise both movement outcomes at the public turn boundary, without depending on steering startup.
-    const next = endTurn(world, (draft) => {
-      const moved = draft.vehicles.find((vehicle) => vehicle.id === npc.id);
-      if (!moved) throw new Error('Missing repair NPC');
-      const before = { ...moved.pos, heading: moved.heading };
-      moved.speed = pinned ? 0 : RULES.parkedSpeed * 2;
-      moved.pos = { x: moved.pos.x + moved.speed, y: moved.pos.y };
-      moved.trail = [before, { ...moved.pos, heading: moved.heading }];
-    });
-    const actor = next.vehicles.find((vehicle) => vehicle.id === npc.id)!;
-    expect(actor.brain!.activity?.kind).toBe('flee');
+    const turn = (seed: number) => {
+      const start = cloneWorld(world);
+      start.rngState = seed;
+      return endTurn(start, (draft) => {
+        const moved = draft.vehicles.find((vehicle) => vehicle.id === npc.id);
+        if (!moved) throw new Error('Missing repair NPC');
+        const before = { ...moved.pos, heading: moved.heading };
+        moved.speed = pinned ? 0 : RULES.parkedSpeed * 2;
+        moved.pos = { x: moved.pos.x + moved.speed, y: moved.pos.y };
+        moved.trail = [before, { ...moved.pos, heading: moved.heading }];
+      });
+    };
+    const actorIn = (w: World) => w.vehicles.find((vehicle) => vehicle.id === npc.id)!;
+    // The escape is a weighted choice, so take the first seed on which the driver flees.
+    const seed = Array.from({ length: 20 }, (_, i) => i).find((s) => topGoal(actorIn(turn(s)))?.kind === 'flee');
+    if (seed === undefined) throw new Error('No seed in 20 flees');
+    const next = turn(seed);
+    const actor = actorIn(next);
+    expect(actor.brain!.goals.map((g) => g.kind)).toEqual(['repair', 'flee']);
     expect(actor.order?.kind).toBe('through');
     expect(goodsCount(actor).parts).toBe(2);
     if (pinned) {
@@ -179,7 +266,7 @@ describe('NPC field repairs', () => {
     const engine = npc.items.find((item) => item.kind === 'part' && item.part.defId === 'stockEngine');
     if (!engine || engine.kind !== 'part') throw new Error('Missing test engine');
     engine.part.hp = 1;
-    expect(chooseNpcActivity(world, npc).kind).toBe('resupply');
+    expect(thinkNpc(world, npc).kind).toBe('resupply');
   });
 
   it('preserves repair supplies during a town service visit', () => {
@@ -188,7 +275,7 @@ describe('NPC field repairs', () => {
     npc.resources!.fuel = 0;
     npc.pos = { ...siteGates(REGION.towns[0])[0] };
     planNpcOrders(world);
-    expect(npc.brain!.activity!.kind).toBe('resupply');
+    expect(topGoal(npc)!.kind).toBe('resupply');
     resolveNpcActivities(world);
     expect(goodsCount(npc).parts).toBe(2);
     expect(npc.resources!.fuel).toBeGreaterThan(0);
@@ -198,6 +285,7 @@ describe('NPC field repairs', () => {
     let { world, npc } = createNpc();
     for (const id of Object.keys(NPCS)) world.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
     addGoods(world, npc, 'parts', 2);
+    npc.brain!.goals = [{ ...scavengeGoal }];
     const cab = corePart(npc, 'cab');
     cab.hp = partDef(cab.defId).hp * 0.2;
     const initialHp = cab.hp;
@@ -213,17 +301,17 @@ describe('NPC field repairs', () => {
     expect(started).toBe(true);
     expect(completed).toBe(true);
     expect(corePart(npc, 'cab').hp).toBeGreaterThan(initialHp);
-    expect(npc.brain!.activity!.kind).toBe('scavenge');
+    expect(topGoal(npc)!.kind).toBe('scavenge');
     expect(goodsCount(npc).parts ?? 0).toBe(0);
   });
 
   it('does not sell its repair reserve or treat it as trade cargo', () => {
     const { world, npc } = createNpc();
     addGoods(world, npc, 'parts', 2);
-    expect(chooseNpcActivity(world, npc).kind).toBe('scavenge');
+    expect(thinkNpc(world, npc).kind).not.toBe('sell');
     addGoods(world, npc, 'scrap', 1);
     npc.pos = { ...siteGates(REGION.towns[0])[0] };
-    npc.brain!.activity = { kind: 'sell', targetId: REGION.towns[0].id, destination: REGION.towns[0].pos, phase: 'act', reason: 'sell loot' };
+    npc.brain!.goals = [{ kind: 'sell', targetId: REGION.towns[0].id, destination: REGION.towns[0].pos, phase: 'act', reason: 'sell loot' }];
     resolveNpcActivities(world);
     expect(goodsCount(npc).scrap ?? 0).toBe(0);
     expect(goodsCount(npc).parts).toBe(2);

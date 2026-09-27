@@ -18,14 +18,14 @@ function describeLoadout(v: Vehicle): string {
 }
 
 describe('NPC equipment generation', () => {
-  it('spawns at least five equipment combinations for each existing class', () => {
-    const seen = { raider: new Set<string>(), trader: new Set<string>(), scavenger: new Set<string>() };
+  it('spawns at least five equipment combinations for each base trait', () => {
+    const seen: Record<string, Set<string>> = { raider: new Set(), trader: new Set(), scavenger: new Set() };
     for (let seed = 1; seed <= 40; seed++) {
       const world = structuredClone(fixture);
       world.rngState = seed;
       spawnInitial(world);
       for (const v of world.vehicles) {
-        if (v.brain) seen[NPCS[v.brain.templateId].brain].add(describeLoadout(v));
+        if (v.brain) seen[NPCS[v.brain.templateId].traits[0]].add(describeLoadout(v));
       }
     }
     for (const [role, variants] of Object.entries(seen)) expect(variants.size, role).toBeGreaterThanOrEqual(5);

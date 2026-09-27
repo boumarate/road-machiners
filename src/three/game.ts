@@ -38,7 +38,7 @@ import type { Vec } from "../sim/vec";
 import { grayRadius, playerSees, tileOf, visibleTiles } from "../sim/vision";
 import { DEG, dist } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
-import { acceptTow, refuseTow, setBeacon, unhitch } from "../sim/tow";
+import { acceptTow, isTowed, playerTow, refuseTow, setBeacon, unhitch } from "../sim/tow";
 import {
   autoRuns,
   cloneWorld,
@@ -288,9 +288,7 @@ export class Game {
         this.rescueCommand((w) => (canAnswerTow(w) ? refuseTow(w) : null)),
       unhitch: () =>
         this.rescueCommand((w) =>
-          w.player.state === "active" && w.player.tow?.hitched
-            ? unhitch(w)
-            : null,
+          w.player.state === "active" && isTowed(w) ? unhitch(w) : null,
         ),
       setBeacon: (on) =>
         this.rescueCommand((w) =>
@@ -1301,6 +1299,6 @@ export class Game {
 
 // An open tow offer can be answered by an awake player who is not yet hitched.
 function canAnswerTow(w: World): boolean {
-  return playerCanAct(w) && w.player.tow !== null;
+  return playerCanAct(w) && playerTow(w) !== null;
 }
 

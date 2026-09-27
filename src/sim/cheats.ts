@@ -17,7 +17,8 @@ import { generateNpcLoadout } from './npc-loadout';
 import { gainXp } from './progress';
 import { isWalled, siteGates, type Site } from './sites';
 import { isFree, spawnAt } from './spawn';
-import { checkTower } from './tow';
+import { addState, settleStates, stateOf } from './states';
+import { isTowed } from './tow';
 import { clockOf } from './sun';
 import type { Faction, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
@@ -156,7 +157,7 @@ function firstFree(w: World, points: Vec[], radius: number, ignoreId: string | n
 
 export function teleport(world: World, target: Vec): World {
   if (!Number.isFinite(target.x) || !Number.isFinite(target.y)) throw new CheatError(`Bad target ${target.x}, ${target.y}`);
-  if (!playerCanAct(world)) throw new CheatError(`Cannot teleport while the player is ${world.player.tow?.hitched ? 'towed' : world.player.state}`);
+  if (!playerCanAct(world)) throw new CheatError(`Cannot teleport while the player is ${isTowed(world) ? 'towed' : world.player.state}`);
   return update(world, (w) => {
     const me = playerVehicle(w);
     const spot = freeSpotNear(w, target, chassisDef(me.chassisId).radius, me.id);
@@ -229,12 +230,15 @@ export function spawnNear(world: World, templateId: string, hostile: boolean): W
   });
 }
 
+// The vehicle starts a feud with the player and counts the player as its attacker, so it decides at once whether
+// to fight back.
 function turnHostile(w: World, v: Vehicle): void {
   const me = w.player.vehicleId;
-  if (!v.grudges.includes(me)) v.grudges.push(me);
-  if (!v.brain) return;
-  v.brain.attackers = v.brain.attackers ?? [];
-  if (!v.brain.attackers.includes(me)) v.brain.attackers.push(me);
+  if (!stateOf(w, 'feud', v.id, me)) {
+    addState(w, 'feud', v.id, me, { kind: 'feud', robbery: false });
+    w.events.push({ t: 'hostile', vehicle: v.id, against: me });
+  }
+  if (v.brain && !(me in v.brain.attackers)) v.brain.attackers[me] = false;
 }
 
 function otherVehicle(w: World, vehicleId: string): Vehicle {
@@ -256,7 +260,7 @@ function killTargets(w: World, target: string): Vehicle[] {
 }
 
 // Zeroes each target's cab and lets the normal destruction make wrecks and salvage. No kill is credited.
-// A killed tower drops its tow, as it does after destruction in a turn.
+// States with a killed party end at once, as they do after destruction in a turn. So a killed tower drops its tow.
 export function killVehicles(world: World, target: string): World {
   return update(world, (w) => {
     for (const v of killTargets(w, target)) {
@@ -264,7 +268,7 @@ export function killVehicles(world: World, target: string): World {
       v.lastHitBy = null;
     }
     resolveDestroyed(w);
-    checkTower(w);
+    settleStates(w);
   });
 }
 

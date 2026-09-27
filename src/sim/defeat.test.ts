@@ -9,8 +9,9 @@ import { addGoods, dumpGood, moveItem, spareParts } from './inventory';
 import { scavenge } from './locations';
 import { spendSkillPoint } from './progress';
 import { startSearch } from './search';
+import { addState, endState, stateOf } from './states';
 import { startRepair } from './jobs';
-import { addVehicle, emptyWorld, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
 import type { SalvageStock, Vehicle, World } from './types';
 import { endTurn, setDirect, setMoveOrder, setWeaponOrder } from './world';
 
@@ -127,11 +128,11 @@ describe('knockout', () => {
     expect(w.events).toContainEqual({ t: 'knockout' });
   });
 
-  it('brakes the truck and clears its orders, its job and grudges against it', () => {
+  it('brakes the truck, clears its orders and its job, and fulfils feuds against it', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = w.vehicles[0];
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
-    raider.grudges = [me.id];
+    addState(w, 'feud', raider.id, me.id, { kind: 'feud', robbery: false });
     me.order = { kind: 'stopAt', dest: { x: 50, y: 30 } };
     me.speed = 0;
     me.job = { kind: 'repair', partId: corePart(me, 'cab').id, parts: 1, turnsLeft: 3, total: 3 };
@@ -144,7 +145,8 @@ describe('knockout', () => {
     expect(me.job).toBeNull();
     expect(me.weaponOrders).toEqual({});
     expect(me.trail).toEqual([]);
-    expect(raider.grudges).toEqual([]);
+    expect(stateOf(w, 'feud', raider.id, me.id)).toBeNull();
+    expect(w.events).toContainEqual({ t: 'stateEnded', state: expect.objectContaining({ kind: 'feud', holder: raider.id }), ending: 'fulfilled' });
     expect(w.events).toContainEqual(expect.objectContaining({ t: 'job', outcome: 'cancelled' }));
   });
 
@@ -175,7 +177,7 @@ describe('knockout', () => {
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 36, y: 30 });
     corePart(w.vehicles[0], 'cab').hp = 0;
     checkKnockout(w);
-    raider.grudges = [w.vehicles[0].id]; // keeps the player knocked out
+    addState(w, 'feud', raider.id, w.vehicles[0].id, { kind: 'feud', robbery: false }); // keeps the player knocked out
     const at = { ...w.vehicles[0].pos };
     for (let i = 0; i < 5; i++) {
       w = endTurn(w, testDrive);
@@ -202,7 +204,7 @@ describe('waking', () => {
   it('stays knocked out while a raider sees the truck, even one ignoring it', () => {
     const { w, me } = knockedOut();
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
-    expect(isHostile(raider, me)).toBe(false);
+    expect(isHostile(w, raider, me)).toBe(false);
     advanceKnockout(w);
     expect(w.player.state).toBe('knockedOut');
     expect(w.player.knockoutTurns).toBe(1);
@@ -223,19 +225,20 @@ describe('waking', () => {
 });
 
 describe('the loot rule', () => {
-  it('a raider ignores a truck without loot but fights on a grudge', () => {
+  it('a raider ignores a truck without loot but fights on a feud', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
     const bare = addVehicle(w, 'traders', 'scout', [], { x: 40, y: 30 });
-    expect(isHostile(raider, bare)).toBe(false);
-    expect(isHostile(bare, raider)).toBe(false);
+    expect(isHostile(w, raider, bare)).toBe(false);
+    expect(isHostile(w, bare, raider)).toBe(false);
     autoOrders(w, raider);
     expect(Object.values(raider.weaponOrders).map((o) => o.targetId)).not.toContain(bare.id);
-    bare.grudges = [raider.id];
-    expect(isHostile(raider, bare)).toBe(true);
-    bare.grudges = [];
-    raider.grudges = [bare.id];
-    expect(isHostile(bare, raider)).toBe(true);
+    const feud = addState(w, 'feud', bare.id, raider.id, { kind: 'feud', robbery: false });
+    expect(isHostile(w, raider, bare)).toBe(true);
+    endState(w, feud, 'expired');
+    expect(isHostile(w, raider, bare)).toBe(false);
+    addState(w, 'feud', raider.id, bare.id, { kind: 'feud', robbery: false });
+    expect(isHostile(w, bare, raider)).toBe(true);
   });
 
   it('a raider is hostile to a truck with loot, and others ignore each other', () => {
@@ -243,16 +246,17 @@ describe('the loot rule', () => {
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 36, y: 30 });
     const trader = addVehicle(w, 'traders', 'scout', ['mg'], { x: 40, y: 30 });
     const bare = addVehicle(w, 'traders', 'scout', [], { x: 44, y: 30 });
-    expect(isHostile(raider, trader)).toBe(true);
-    expect(isHostile(trader, raider)).toBe(true);
-    expect(isHostile(trader, bare)).toBe(false);
+    expect(isHostile(w, raider, trader)).toBe(true);
+    expect(isHostile(w, trader, raider)).toBe(true);
+    expect(isHostile(w, trader, bare)).toBe(false);
   });
 
   it('a raider with free cargo searches the knocked-out truck', () => {
     const { w: w0, me, stock } = knockedOut();
     const before = inventory(w0, me);
     const raider = addVehicle(w0, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 42, y: 30 });
-    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0, refusedTow: false };
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    forceOption('idle', 'scavenge');
     for (const key of ['buggy', 'gunwagon', 'trader', 'scavenger']) w0.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
     const units = (s: SalvageStock) => s.parts.length + Object.values(s.goods).reduce((a, n) => a + n, 0);
     const full = units(stock);
@@ -295,7 +299,7 @@ describe('commands while knocked out', () => {
     expect(addGoods(w, w.vehicles[0], 'parts', 1)).toBe(1);
     w.player.autoRepair = true;
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 36, y: 30 });
-    raider.grudges = [w.vehicles[0].id];
+    addState(w, 'feud', raider.id, w.vehicles[0].id, { kind: 'feud', robbery: false });
     w = endTurn(w, testDrive);
     expect(w.vehicles[0].job).toBeNull();
   });

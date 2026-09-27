@@ -1,37 +1,25 @@
 // Weapons fire after movement. All shots of a turn are rolled first, then applied,
 // so fire is simultaneous: a vehicle killed this turn still gets its shots off.
 
-import { NPCS, SPAWN } from "../data/npcs";
-import { RULES } from "../data/rules";
-import { skillBonus } from "../data/skills";
-import { chassisDef } from "../data/chassis";
-import { PHYSICS } from "../data/physics";
-import {
-  laneCount,
-  partLane,
-  sideToward,
-  walkLane,
-  type PartHit,
-  type Side,
-} from "./armor";
-import { bodyOf } from "./body";
-import {
-  corePart,
-  hasLoot,
-  itemSize,
-  mountedItems,
-  mountedParts,
-} from "./grid";
-import { gainXp } from "./progress";
-import { canVehicleSee, hasLineOfFire } from "./vision";
-import { createWreckSalvage } from "./salvage";
-import { getResources } from "./resources";
-import { chance, gauss, randRange } from "./rng";
-import { vehicleStats, type MountedWeapon } from "./stats";
-import type { Aim, ShotRound, Vehicle, World } from "./types";
-import { weatherAt } from "./weather";
-import { angleDiff, bearing, clamp, dist, DEG, type Vec } from "./vec";
-import { isTownGuarded } from "./guards";
+import { NPCS, SPAWN } from '../data/npcs';
+import { RULES } from '../data/rules';
+import { skillBonus } from '../data/skills';
+import { chassisDef } from '../data/chassis';
+import { PHYSICS } from '../data/physics';
+import { laneCount, partLane, sideToward, walkLane, type PartHit, type Side } from './armor';
+import { bodyOf } from './body';
+import { corePart, hasLoot, itemSize, mountedItems, mountedParts } from './grid';
+import { gainXp } from './progress';
+import { canVehicleSee, hasLineOfFire } from './vision';
+import { createWreckSalvage } from './salvage';
+import { addState, stateOf } from './states';
+import { isTownGuarded } from './guards';
+import { getResources } from './resources';
+import { chance, gauss, randRange } from './rng';
+import { vehicleStats, type MountedWeapon } from './stats';
+import type { Aim, NpcActivity, ShotRound, Vehicle, World } from './types';
+import { weatherAt } from './weather';
+import { angleDiff, bearing, clamp, dist, DEG, type Vec } from './vec';
 
 export type FireBlock =
   | "disabled"
@@ -42,17 +30,21 @@ export type FireBlock =
   | "unseen"
   | "covered";
 
-// Sides at odds: a grudge either way, or a raider against anyone else.
-export function isFoe(a: Vehicle, b: Vehicle): boolean {
+function inFeud(world: World, a: Vehicle, b: Vehicle): boolean {
+  return stateOf(world, "feud", a.id, b.id) !== null || stateOf(world, "feud", b.id, a.id) !== null;
+}
+
+// Sides at odds: a feud either way, or a raider against anyone else.
+export function isFoe(world: World, a: Vehicle, b: Vehicle): boolean {
   if (a.id === b.id) return false;
-  if (a.grudges.includes(b.id) || b.grudges.includes(a.id)) return true;
+  if (inFeud(world, a, b)) return true;
   return (a.faction === "raiders") !== (b.faction === "raiders");
 }
 
-// Foes fight, but a raider leaves a vehicle with nothing to take unless a grudge is held.
-export function isHostile(a: Vehicle, b: Vehicle): boolean {
-  if (!isFoe(a, b)) return false;
-  if (a.grudges.includes(b.id) || b.grudges.includes(a.id)) return true;
+// Foes fight, but a raider leaves a vehicle with nothing to take unless a feud is held.
+export function isHostile(world: World, a: Vehicle, b: Vehicle): boolean {
+  if (!isFoe(world, a, b)) return false;
+  if (inFeud(world, a, b)) return true;
   return hasLoot(a.faction === "raiders" ? b : a);
 }
 
@@ -361,8 +353,8 @@ export function fireWeapons(world: World): void {
 // lies within the splash radius of where it landed.
 function applyShot(world: World, s: Shot): void {
   s.mw.part.reload = s.mw.def.reload;
-  recordNpcAttack(world, s.shooter, s.target);
-  provoke(world, s.shooter, s.target);
+  // A shot counts as an attack even when it misses: the target and witnesses saw it fired at them.
+  noteAttack(world, s.shooter, s.target, !isHostile(world, s.target, s.shooter));
   const r = s.mw.def.round;
   const { side, lanes, body } = s.aiming;
   const rounds: ShotRound[] = s.rolls.map((roll) => {
@@ -413,12 +405,7 @@ function applyShot(world: World, s: Shot): void {
   });
 }
 
-function witnessesAllyAttack(
-  world: World,
-  observer: Vehicle,
-  shooter: Vehicle,
-  target: Vehicle,
-): boolean {
+function witnessesAttack(world: World, observer: Vehicle, shooter: Vehicle, target: Vehicle): boolean {
   if (observer.faction !== target.faction) return false;
   if (dist(observer.pos, target.pos) > SPAWN.neighborHelp) return false;
   return (
@@ -427,43 +414,52 @@ function witnessesAllyAttack(
   );
 }
 
-// Shots, including misses, establish a local threat without broadcasting hidden targets.
-function recordNpcAttack(
-  world: World,
-  shooter: Vehicle,
-  target: Vehicle,
-): void {
+// A shot, hit or miss, marks its shooter as an attacker of the target and of faction mates nearby that see both.
+// Each NPC decides once on the latest shots. Hidden targets are not broadcast.
+function recordAttack(world: World, shooter: Vehicle, target: Vehicle): void {
   for (const observer of world.vehicles) {
-    if (observer.id === shooter.id) continue;
-    if (
-      observer.id === target.id ||
-      witnessesAllyAttack(world, observer, shooter, target)
-    )
-      rememberNpcAttacker(observer, shooter.id);
+    if (!observer.brain || observer.id === shooter.id) continue;
+    if (observer.id === target.id || witnessesAttack(world, observer, shooter, target)) observer.brain.attackers[shooter.id] = false;
   }
 }
 
-function rememberNpcAttacker(observer: Vehicle, attackerId: string): void {
-  const brain = observer.brain;
-  if (!brain) return;
-  const attackers = (brain.attackers ??= []);
-  if (!attackers.includes(attackerId)) attackers.push(attackerId);
+// The one attack rule: a vehicle that damages another attacks it. The victim and witnesses learn the attacker,
+// and a feud starts when the two were at peace before the blow. calm is that peace, read before any damage lands.
+export function noteAttack(world: World, attacker: Vehicle, victim: Vehicle, calm: boolean): void {
+  recordAttack(world, attacker, victim);
+  if (calm) startFeuds(world, attacker, victim);
 }
 
-// A shot at a vehicle that was not hostile starts a feud with it and its nearby faction mates.
-function provoke(world: World, shooter: Vehicle, target: Vehicle): void {
-  if (isHostile(target, shooter)) return;
+// A crash damages both sides, so each side that took damage was attacked by the other. The event does not name a
+// striker. A slow bump deals no damage and is no attack. A tower and the truck it tows or offers to tow never
+// attack each other by contact.
+export function noteCollision(world: World, a: Vehicle, b: Vehicle, hitsA: PartHit[], hitsB: PartHit[]): void {
+  if (towPair(world, a, b)) return;
+  const calm = !isHostile(world, a, b);
+  const attacks = ([[b, a, hitsA], [a, b, hitsB]] as const).filter(([, , hits]) => hits.some((h) => h.damage > 0));
+  for (const [attacker, victim] of attacks) {
+    victim.lastHitBy = attacker.id;
+    noteAttack(world, attacker, victim, calm);
+  }
+}
+
+function towPair(world: World, a: Vehicle, b: Vehicle): boolean {
+  return stateOf(world, 'tow', a.id, b.id) !== null || stateOf(world, 'tow', b.id, a.id) !== null;
+}
+
+function startFeuds(world: World, shooter: Vehicle, target: Vehicle): void {
   for (const v of world.vehicles) {
-    const joins =
-      v.id === target.id ||
-      (v.faction === target.faction &&
-        dist(v.pos, target.pos) <= SPAWN.neighborHelp &&
-        canVehicleSee(world, v, shooter.pos));
-    if (joins && v.faction !== "player" && !v.grudges.includes(shooter.id)) {
-      v.grudges.push(shooter.id);
-      world.events.push({ t: "hostile", vehicle: v.id, against: shooter.id });
-    }
+    if (!joinsFeud(world, v, shooter, target) || stateOf(world, "feud", v.id, shooter.id)) continue;
+    addState(world, "feud", v.id, shooter.id, { kind: "feud", robbery: false });
+    world.events.push({ t: "hostile", vehicle: v.id, against: shooter.id });
   }
+}
+
+// The target and its faction mates nearby that see the shooter. The player decides its own hostility.
+function joinsFeud(world: World, v: Vehicle, shooter: Vehicle, target: Vehicle): boolean {
+  if (v.faction === "player") return false;
+  if (v.id === target.id) return true;
+  return v.faction === target.faction && dist(v.pos, target.pos) <= SPAWN.neighborHelp && canVehicleSee(world, v, shooter.pos);
 }
 
 // NPCs with a broken cab turn into wreck obstacles. The player's broken cab is a knockout.
@@ -492,9 +488,6 @@ export function resolveDestroyed(world: World): void {
   }
   clearOldWrecks(world);
   for (const v of world.vehicles) {
-    v.grudges = v.grudges.filter((id) =>
-      world.vehicles.some((x) => x.id === id),
-    );
     for (const [wid, order] of Object.entries(v.weaponOrders))
       if (!world.vehicles.some((x) => x.id === order.targetId))
         delete v.weaponOrders[wid];
@@ -529,32 +522,26 @@ function rewardKill(world: World, v: Vehicle): void {
   gainXp(world, tpl.xp, `destroyed ${v.name}`);
 }
 
-function canNpcEngage(vehicle: Vehicle, target: Vehicle): boolean {
-  const brain = vehicle.brain;
-  if (!brain) return true;
-  if (brain.attackers?.includes(target.id)) return true;
-  if (brain.activity?.kind !== "fight") return false;
-  return canInitiateFire(vehicle, target, brain.activity.targetId);
+// An NPC fires back at any attacker, fleeing or not. It opens fire only on the target of the fight on top of its
+// goals, and not while either stands in guard range of a town gate.
+function canNpcEngage(v: Vehicle, target: Vehicle): boolean {
+  if (!v.brain) return true;
+  return target.id in v.brain.attackers || opensFireOn(v, v.brain.goals, target);
 }
 
-function canInitiateFire(
-  vehicle: Vehicle,
-  target: Vehicle,
-  targetId: string | null,
-): boolean {
-  return (
-    target.id === targetId &&
-    !isTownGuarded(vehicle.pos) &&
-    !isTownGuarded(target.pos)
-  );
+function opensFireOn(v: Vehicle, goals: NpcActivity[], target: Vehicle): boolean {
+  const top = goals[goals.length - 1];
+  if (top?.kind !== 'fight' || top.targetId !== target.id) return false;
+  return !isTownGuarded(v.pos) && !isTownGuarded(target.pos);
 }
 
-// Defensive fire is independent of movement. Guard caution limits initiative, not self-defense.
+// Auto mode: every weapon gets a body shot at the nearest hostile it can hit, in range, arc and line of fire. The player's auto fire
+// only picks targets the player sees.
 export function autoOrders(world: World, v: Vehicle): void {
   v.weaponOrders = {};
   const seen = (x: Vehicle) => canVehicleSee(world, v, x.pos);
   const hostiles = world.vehicles
-    .filter((x) => isHostile(v, x) && seen(x) && canNpcEngage(v, x))
+    .filter((x) => isHostile(world, v, x) && seen(x) && canNpcEngage(v, x))
     .sort((a, b) => dist(v.pos, a.pos) - dist(v.pos, b.pos));
   for (const mw of vehicleStats(world, v).weapons) {
     const target =

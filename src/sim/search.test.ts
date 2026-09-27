@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
-import { addVehicle, emptyWorld, testDrive } from './testkit';
+import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import { goodsCount } from './grid';
 import { canLoot, canScavenge, scavenge, takeAllLoot, takeLoot } from './locations';
 import { findSpot, gridOf } from './grid';
@@ -55,7 +55,7 @@ describe('timed scavenging search', () => {
   it('lets an NPC scavenger finish a search job', () => {
     const w = emptyWorld({ x: 60, y: 60 });
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });
-    npc.brain = { templateId: 'scavenger', activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0, refusedTow: false };
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
     for (const key of ['buggy', 'gunwagon', 'trader', 'scavenger']) w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
     const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
     npc.pos = { x: convoy.pos.x + convoy.radius + 1, y: convoy.pos.y };
