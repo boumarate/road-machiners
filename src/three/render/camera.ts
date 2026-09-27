@@ -9,7 +9,8 @@ import type { Vec } from '../../sim/vec';
 const S = PHYSICS.metersPerTile;
 const VIEW_METERS = 72; // world meters across the shorter screen side at zoom 1
 // 30 degrees down, from the +x +z side: map x runs right and down, map y left and down, like the 2D iso view.
-const OFFSET = new THREE.Vector3(1, 0.816, 1).normalize().multiplyScalar(300);
+export const CAMERA_DISTANCE = 300; // meters from the camera to the ground point it looks at
+const OFFSET = new THREE.Vector3(1, 0.816, 1).normalize().multiplyScalar(CAMERA_DISTANCE);
 const ZOOM = { min: 0.35, max: 4 };
 const FOLLOW_TAU_MS = 150; // smoothing time constant for camera follow
 
