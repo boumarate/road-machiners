@@ -4,7 +4,17 @@ A post-apocalyptic wasteland RPG where you drive a truck. 3D world seen from an 
 
 ## Character
 
-The character has stats and skills. These are the durable upgrades that persist across trucks.
+The character has five skills. These are the durable upgrades that persist across trucks. Each skill is broad: it touches several activities and grows from several activities.
+
+- Driving improves handling, crash damage, rough ground and crawling. It grows from driving off the road, rams and escapes from hostiles.
+- Perception improves aim, sight, hearing and contact circles. It grows from hits, new contacts and discovered places.
+- Machining improves repair and refit time, the field repair cap, search time and engine heat. It grows from field jobs, patches for other trucks and searches.
+- Toughness raises max health and healing, and cuts health lost to cab damage, supply use and heat drain. It grows from turns in heat, health lost and knockouts survived.
+- Social improves prices, tow fees and patch prices, and makes scumbags see the truck as stronger. It grows from trade profit, agreed deals and radio calls.
+
+Skills grow from use. Each skill has its own XP and five levels, and each level costs more XP. A hard action pays more than an easy one: a hit at a low chance pays more than a sure hit. Each skill earns full XP up to a daily cap, and much less after it until the next day. So grinding one easy action does not pay.
+
+At level 2 and level 4 of each skill the player picks one of two perks. A perk changes a rule instead of a number, like crashes doing half damage or aimed shots scattering less. A pick is permanent.
 
 Personal items grant special abilities and modifiers. They stay with the character, not the truck.
 
@@ -126,7 +136,7 @@ Town markets have fixed prices and unlimited stock and money. Initial NPC resour
 
 ## NPC traits and states
 
-Every NPC carries a set of traits instead of one class. Each trait adds activities and shifts chances. A scavenger with the scumbag trait still scavenges, and it also robs. Traits roll at spawn: every scavenger scavenges, and some are also scumbags or cowards. For now the hover panel shows traits. In the final game they stay hidden, so the player learns a driver is a scumbag only when it starts acting like one.
+Every NPC carries a set of traits instead of one class. Each trait adds activities and shifts chances. A scavenger with the scumbag trait still scavenges, and it also robs. Traits roll at spawn: every scavenger scavenges, and some are also scumbags or cowards. Traits stay hidden, so the player learns a driver is a scumbag only when it starts acting like one. The Perception perk Read the driver shows traits in the hover panel.
 
 - Scavenger collects salvage and helps stranded trucks.
 - Trader buys and sells between towns, rarely starts a fight, and sometimes fights back.
@@ -180,7 +190,7 @@ Fuel and supplies limit range. Fuel burns at 0.075 of the chassis fuel-per-tile 
 - Region: Icarus, a 600-tile basin with Bowl and Nose as hubs, 13 other destinations, two raider camps, two canyon crossings, and the Fallen Sun. Winding roads cross rolling grades between distinct landmarks. Sight is twenty tiles. See [landmark visuals](VISUAL_DESIGN.md).
 - Enemies: raider outriders and gunwagons with sampled chassis and equipment.
 - Neutrals: trader caravans and scavengers. Shooting one makes it and its nearby mates hostile.
-- Skills: Driving, Gunnery, Mechanics, Trade, Survival.
+- Skills: Driving, Perception, Machining, Toughness, Social.
 
 ## Out of scope for now
 

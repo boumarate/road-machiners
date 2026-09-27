@@ -4,7 +4,7 @@
 **Branch:** feature/character-progression
 **Worktree:** .worktrees/character-progression
 **Goal:** Skills grow from use, perks change visible rules, and a headless progression simulator shows each skill's time to each level per player archetype. The user confirms the feel in play.
-**Mode:** interactive
+**Mode:** hands-off
 
 ## Context
 
