@@ -197,6 +197,14 @@ UK3 resolved: `Game.tick()` in `src/three/game.ts` calls `endTurn()` when `autoR
   - Raiders never tow.
 - Commit: Traders and scavengers offer to tow stranded players for a fee
 
+### PH4b — Roads as lanes
+Added after PH4 because AS1 failed. A stranded truck mid-road on either Bowl to Nose road got no tow offer in 600 turns. Route planning rated road at speed 1 and hardpan at 0.9, so caravans cut across the desert. The user chose a soft preference and wider roads.
+- 4b.1 `src/data/region.ts:242` (modify) — `roadWidth` goes from 3 to 6. Gate widths and road clearance that derive from it follow, with their comments.
+- 4b.2 `src/sim/nav/layer.ts:62-78` (modify) — The step cost of a cell off the road is multiplied by a new data value, `offRoadCost`. A road saves navigation and puts the driver where others can help, so every route planner weighs it beyond speed. It is not a hard rule, and a long enough detour still loses to open ground.
+- 4b.3 `src/sim/path.ts` (modify) — Corner shortcuts and the coarse corridor search must not undo the road preference by cutting across open ground.
+- Tests: a route between two points joined by a bent road follows the road, while a route with a far longer road detour goes straight. The re-measured pickup time on both roads is recorded here.
+- Commit: Make roads twice as wide and preferred by route planning
+
 ### PH5 — Game loop, HUD and saves
 - 5.1 `.env.example`, `.env`, `src/config.ts:24-36`, `CLAUDE.md` Config (modify) — Add `VITE_AUTO_TURN_MS`, a positive integer.
 - 5.2 `src/three/game.ts` (modify)
