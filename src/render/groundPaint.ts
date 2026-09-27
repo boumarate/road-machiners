@@ -9,6 +9,8 @@ import { hash2, valueNoise } from "./noise";
 import { PAL, mix, shade } from "./palette";
 
 export const TERRAIN_MARGIN = 10; // tiles of dim ground drawn past the map edge
+const TYPE_JITTER = 0.6; // tiles; jittered sampling frays the blend between tile types
+const JITTER_GRID = 6; // samples per tile for the type-jitter hash, independent of paint resolution
 
 // A map-space canvas: canvas pixel (px, py) covers map point (from + px / res, from + py / res).
 export type PaintCanvas = {
@@ -89,6 +91,33 @@ function hillshade(t: Terrain, tile: number, strength: number): number {
   );
 }
 
+// Type colors blend between tile centers, with a little jitter so borders look worn, not ruled.
+function typeColor(t: Terrain, x: number, y: number): number {
+  const jx =
+    x +
+    (hash2(Math.floor(x * JITTER_GRID), Math.floor(y * JITTER_GRID) + 7) -
+      0.5) *
+      TYPE_JITTER -
+    0.5;
+  const jy =
+    y +
+    (hash2(Math.floor(x * JITTER_GRID) + 3, Math.floor(y * JITTER_GRID)) -
+      0.5) *
+      TYPE_JITTER -
+    0.5;
+  const i = Math.floor(jx);
+  const j = Math.floor(jy);
+  const at = (a: number, b: number) =>
+    TERRAIN_TYPES[t.types[tileAt(t, { x: a + 0.5, y: b + 0.5 })]].color;
+  const fx = jx - i;
+  const fy = jy - j;
+  return mix(
+    mix(at(i, j), at(i + 1, j), fx),
+    mix(at(i, j + 1), at(i + 1, j + 1), fx),
+    fy,
+  );
+}
+
 function groundColor(
   t: Terrain,
   x: number,
@@ -96,10 +125,10 @@ function groundColor(
   hillshadeStrength: number,
 ): number {
   const n = valueNoise(x / 7, y / 7) * 0.7 + valueNoise(x / 2.5, y / 2.5) * 0.3;
-  let color = mix(TERRAIN_TYPES[t.types[tileAt(t, { x, y })]].color, PAL.sand[3], n * 0.2);
+  let color = mix(typeColor(t, x, y), PAL.sand[3], n * 0.2);
   color = shade(
     color,
-    (0.97 + hash2(Math.floor(x), Math.floor(y)) * 0.05) *
+    (0.97 + hash2(Math.floor(x * 3), Math.floor(y * 3)) * 0.05) *
       hillshade(t, tileAt(t, { x, y }), hillshadeStrength),
   );
   const out = Math.max(-x, -y, x - t.size, y - t.size, 0);
@@ -108,27 +137,25 @@ function groundColor(
   return color;
 }
 
-// One flat color per tile, sampled at the tile center, so tiles read as clean blocks.
 function paintGround(
   c: PaintCanvas,
   t: Terrain,
   hillshadeStrength: number,
 ): void {
-  if (!Number.isInteger(c.res)) throw new Error(`Ground paint needs whole pixels per tile, got ${c.res}`);
   const img = c.ctx.createImageData(c.size, c.size);
-  const tiles = c.size / c.res;
-  for (let ty = 0; ty < tiles; ty++) {
-    for (let tx = 0; tx < tiles; tx++) {
-      const color = groundColor(t, c.from + tx + 0.5, c.from + ty + 0.5, hillshadeStrength);
-      for (let py = ty * c.res; py < (ty + 1) * c.res; py++) {
-        for (let px = tx * c.res; px < (tx + 1) * c.res; px++) {
-          const i = (py * c.size + px) * 4;
-          img.data[i] = (color >> 16) & 0xff;
-          img.data[i + 1] = (color >> 8) & 0xff;
-          img.data[i + 2] = color & 0xff;
-          img.data[i + 3] = 255;
-        }
-      }
+  for (let py = 0; py < c.size; py++) {
+    for (let px = 0; px < c.size; px++) {
+      const color = groundColor(
+        t,
+        c.from + (px + 0.5) / c.res,
+        c.from + (py + 0.5) / c.res,
+        hillshadeStrength,
+      );
+      const i = (py * c.size + px) * 4;
+      img.data[i] = (color >> 16) & 0xff;
+      img.data[i + 1] = (color >> 8) & 0xff;
+      img.data[i + 2] = color & 0xff;
+      img.data[i + 3] = 255;
     }
   }
   c.ctx.putImageData(img, 0, 0);
