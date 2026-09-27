@@ -1,4 +1,4 @@
-// Town services: trade, supplies, repairs, parts and chassis. All need the player in a town.
+// Town services: trade, supplies, repairs, parts and chassis. All need the player in a town. Raider camps service raiders.
 // Invalid requests throw: the UI only offers valid ones.
 
 import { chassisDef, PLAYER_CHASSIS } from "../data/chassis";
@@ -113,6 +113,26 @@ export function serviceVehicle(
 ): void {
   requireVehicleTown(world, vehicle, townId);
   sellVehicleCargo(world, vehicle, townId);
+  refuelAndRepair(world, vehicle);
+}
+
+// A raider camp sells fuel, supplies and repairs to raiders at the town rates. It buys no cargo.
+export function serviceAtCamp(
+  world: World,
+  vehicle: Vehicle,
+  campId: string,
+): void {
+  const camp = REGION.locations.find((l) => l.id === campId);
+  if (camp?.kind !== "camp" || !canUseSite(vehicle.pos, camp))
+    throw new Error("Not at a gate of the requested camp");
+  if (vehicle.faction !== "raiders")
+    throw new Error("Only raiders use camp services");
+  if (vehicle.speed > RULES.parkedSpeed)
+    throw new Error("Stop before using camp services");
+  refuelAndRepair(world, vehicle);
+}
+
+function refuelAndRepair(world: World, vehicle: Vehicle): void {
   const resources = getResources(world, vehicle);
   for (const kind of ["fuel", "supplies"] as const) {
     const cap =

@@ -2,7 +2,7 @@
 
 import type { Faction } from '../sim/types';
 import type { Vec } from '../sim/vec';
-import { MAP_SCALE, scalePoint } from './region';
+import { scalePoint } from './region';
 import { START_KITS } from './start';
 import { RULES } from './rules';
 
@@ -35,7 +35,7 @@ export type NpcTemplate = {
   xp: number;
   cap: number; // max alive at once
   interval: number; // turns between spawn attempts
-  spawn: 'wild' | 'town';
+  spawn: 'camp' | 'town';
 };
 
 const LOADOUTS: Record<string, NpcLoadoutTable> = {
@@ -81,12 +81,12 @@ export const NPCS: Record<string, NpcTemplate> = {
   buggy: {
     id: 'buggy', name: 'Raider outrider', faction: 'raiders', brain: 'raider',
     loadout: LOADOUTS.outrider,
-    aggroRange: 11, preferredRange: 3, bounty: 60, xp: 40, cap: 3, interval: 12, spawn: 'wild',
+    aggroRange: 11, preferredRange: 3, bounty: 60, xp: 40, cap: 3, interval: 12, spawn: 'camp',
   },
   gunwagon: {
     id: 'gunwagon', name: 'Raider gunwagon', faction: 'raiders', brain: 'raider',
     loadout: LOADOUTS.gunwagon,
-    aggroRange: 12, preferredRange: 6, bounty: 150, xp: 90, cap: 1, interval: 25, spawn: 'wild',
+    aggroRange: 12, preferredRange: 6, bounty: 150, xp: 90, cap: 1, interval: 25, spawn: 'camp',
   },
   trader: {
     id: 'trader', name: 'Trader caravan', faction: 'traders', brain: 'trader',
@@ -102,16 +102,17 @@ export const NPCS: Record<string, NpcTemplate> = {
 
 export const SPAWN = {
   initial: ['buggy', 'buggy', 'gunwagon', 'trader', 'scavenger'],
-  wildMinPlayerDist: 16, // raiders never spawn closer to the player than this
-  wildMinTownDist: 10,
-  wanderRadius: 8 * MAP_SCALE, // raiders patrol this far from their spawn point
+  campMinPlayerDist: 16, // raiders never spawn closer to the player than this
   townSpread: 1, // distance beyond the site boundary for neutral spawns
+  campSpread: 3, // distance beyond a camp gate for raider spawns
+  campAngle: 0.3, // radians either side of the track leaving a camp gate
   tries: 40,
   neighborHelp: 10, // same-faction vehicles in this range join a grudge
 };
 
 export type NpcClass = {
   towns: string[];
+  bases: string[]; // own camps that give fuel, supplies and repairs instead of towns
   salvageSites: string[];
   supplySites: string[];
   fleeCondition: number;
@@ -125,9 +126,9 @@ export type NpcClass = {
 
 // Cab warnings begin at 30%. Recovery to half cab health prevents fight/flee oscillation.
 export const NPC_CLASSES: Record<Brain, NpcClass> = {
-  scavenger: { towns: ['bowl', 'nose'], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: 12 },
-  trader: { towns: ['bowl', 'nose'], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: true, contactReactRadius: 12 },
-  raider: { towns: ['bowl', 'nose'], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: 14 },
+  scavenger: { towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: 12 },
+  trader: { towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: true, contactReactRadius: 12 },
+  raider: { towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: 14 },
 };
 
 export const NPC_UPKEEP = {
@@ -137,6 +138,7 @@ export const NPC_UPKEEP = {
   reserveLoads: 1,
 };
 
-export const WILD_SPAWNS: Vec[] = [
+// Raiders drive between these points to look for prey.
+export const HUNTING_GROUNDS: Vec[] = [
   ...([{ x: 30, y: 8 }, { x: 110, y: 13 }, { x: 8, y: 28 }, { x: 111, y: 105 }, { x: 62, y: 73 }].map(scalePoint)),
 ];

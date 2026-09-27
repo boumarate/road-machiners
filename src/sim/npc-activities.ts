@@ -1,12 +1,12 @@
 import { chassisDef } from '../data/chassis';
 import { ECONOMY, GOOD_IDS } from '../data/goods';
-import { NPC_CLASSES, NPC_UPKEEP, NPCS, WILD_SPAWNS, type NpcClass } from '../data/npcs';
+import { HUNTING_GROUNDS, NPC_CLASSES, NPC_UPKEEP, NPCS, type NpcClass } from '../data/npcs';
 import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { isHostile } from './combat';
 import { contactsOf } from './detect';
-import { getTradePrice, sellVehicleCargo, serviceVehicle, tradeGoods } from './economy';
+import { getTradePrice, sellVehicleCargo, serviceAtCamp, serviceVehicle, tradeGoods } from './economy';
 import { corePart, freeCells, goodsCount, mountedParts } from './grid';
 import { getResources } from './resources';
 import { randInt } from './rng';
@@ -66,10 +66,10 @@ function computeVisibleStrength(vehicle: Vehicle): number {
   }, 0);
 }
 
-// Where a class flees to, away from a threat at `threatPos`: the nearest known town further from the
-// threat than the vehicle already is, or straight away from it if no such town is known.
+// Where a class flees to, away from a threat at `threatPos`: the nearest known town or own camp further from the
+// threat than the vehicle already is, or straight away from it if no such site is known.
 function fleeDestination(world: World, vehicle: Vehicle, profile: NpcClass, threatPos: Vec): Vec {
-  const safe = profile.towns.map(getKnownSite).filter((site) => dist(site.pos, threatPos) > dist(vehicle.pos, threatPos));
+  const safe = [...profile.towns, ...profile.bases].map(getKnownSite).filter((site) => dist(site.pos, threatPos) > dist(vehicle.pos, threatPos));
   safe.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   const away = { x: vehicle.pos.x + (vehicle.pos.x - threatPos.x), y: vehicle.pos.y + (vehicle.pos.y - threatPos.y) };
   const destination = safe[0]?.pos ?? away;
@@ -108,16 +108,21 @@ function chooseServiceActivity(world: World, vehicle: Vehicle, profile: NpcClass
   const lowSupplies = resources.supplies <= RULES.suppliesCap * NPC_UPKEEP.lowSupplies;
   const damaged = getCabCondition(vehicle) <= profile.fleeCondition || mountedParts(vehicle).some((part) => part.hp === 0);
   if (!lowFuel && !lowSupplies && !damaged) return null;
+  const reason = lowFuel ? 'low fuel' : lowSupplies ? 'low supplies' : 'needs repairs';
+  const broke = resources.money < Math.min(ECONOMY.supplyPrice.fuel, ECONOMY.supplyPrice.supplies, ECONOMY.partRepairPerHp);
+  if (profile.bases.length > 0) {
+    if (!broke) return createSiteActivity('resupply', chooseNearestSite(vehicle, profile.bases).id, reason);
+    // A camp buys no cargo, so a broke raider sells in town first.
+    return hasSaleCargo(vehicle) ? chooseSaleActivity(world, vehicle, profile) : createActivity('wait', null, null, 'cannot afford upkeep');
+  }
   if (lowSupplies && !lowFuel && !damaged) {
     const oasis = chooseNearestSite(vehicle, profile.supplySites);
     if (oasis) return createSiteActivity('resupply', oasis.id, 'low supplies');
   }
-  if (resources.money < Math.min(ECONOMY.supplyPrice.fuel, ECONOMY.supplyPrice.supplies, ECONOMY.partRepairPerHp) && !hasSaleCargo(vehicle)) {
-    return createActivity('wait', null, null, 'cannot afford upkeep');
-  }
+  if (broke && !hasSaleCargo(vehicle)) return createActivity('wait', null, null, 'cannot afford upkeep');
   const town = chooseNearestSite(vehicle, profile.towns);
   if (!town) return createActivity('wait', null, null, 'no known service town');
-  return createSiteActivity('resupply', town.id, lowFuel ? 'low fuel' : lowSupplies ? 'low supplies' : 'needs repairs');
+  return createSiteActivity('resupply', town.id, reason);
 }
 
 function canContinueActivity(world: World, vehicle: Vehicle, activity: NpcActivity): boolean {
@@ -171,7 +176,7 @@ export function chooseNpcActivity(world: World, vehicle: Vehicle): NpcActivity {
   visible.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   if (visible[0] && freeCells(vehicle) > 0) return createActivity('scavenge', visible[0].id, { ...visible[0].pos }, 'collect visible salvage');
   if (template.brain === 'raider') {
-    const places = WILD_SPAWNS.filter((point) => dist(vehicle.pos, point) > RULES.arriveRadius * 2);
+    const places = HUNTING_GROUNDS.filter((point) => dist(vehicle.pos, point) > RULES.arriveRadius * 2);
     const destination = places[randInt(world, 0, places.length - 1)];
     return createActivity('raid', null, { ...destination }, 'look for prey at known hunting grounds');
   }
@@ -232,6 +237,7 @@ function resolveActivity(world: World, vehicle: Vehicle, activity: NpcActivity):
   activity.phase = 'act';
   if (activity.kind === 'resupply') {
     if ('kind' in site && site.kind === 'oasis') getResources(world, vehicle).supplies = RULES.suppliesCap;
+    else if ('kind' in site && site.kind === 'camp') serviceAtCamp(world, vehicle, site.id);
     else serviceVehicle(world, vehicle, site.id);
   } else if (activity.kind === 'sell') sellVehicleCargo(world, vehicle, site.id);
   else {

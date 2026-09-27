@@ -11,6 +11,7 @@ import { refreshVision } from './vision';
 const original = [
   [16, 94], [102, 35], [28, 64], [37, 32], [50, 36], [63, 20], [77, 24],
   [103, 70], [88, 84], [73, 92], [58, 91], [41, 87], [43, 54], [64, 54], [82, 49],
+  [22, 14], [66, 76],
 ];
 
 describe('Icarus exploration distances', () => {

@@ -86,6 +86,8 @@ Danger is set by region, not by player level.
 
 Faction squads roam the map. Places are discovered by exploring. Towns and locations block driving. Open locations have an interaction radius of 1.5 times the site's base service reach, so the player uses services without driving into buildings. Towns have a wall, and the Granary and the Salvage Yard have a palisade. Walled sites are used only near a gate, where a road enters. Each town gate has a guard gun. It shoots the nearest vehicle that fired within its range that turn, whatever its faction. Raiders also trade in towns, so guards judge by action. A town gate is therefore a safe place to run to.
 
+Raiders have two camps, Scrapjaw Camp in the north and Kiln Camp in the south. A dirt track leads to each camp gate. Raiders spawn outside a camp gate. Each camp gate has a gun on each side. It shoots the nearest non-raider within its range every turn, whether or not that vehicle fired. The player cannot use camp services.
+
 ## Sun, time and weather
 
 A day is a fixed number of turns, and the clock starts in the morning. The sun rises in the east, crosses south at noon and sets in the west; there is no sun at night. A point is in shade when a ray toward the sun is blocked by a hill or by a rock, wreck or building. Heat is at its base rate in shade and at night, and rises toward its peak in full sun; heat multiplies fuel and supply drain, so the wrong time and route cost more of the tank and the larder. The ground darkens over shaded tiles once they are explored, using the same rule the sim drains by. The sun's light follows the clock, and the scene dims after dark. Sight also shrinks at night.
@@ -98,7 +100,7 @@ NPCs follow Space Rangers-style ordered rules: react to visible danger, address 
 
 NPCs spawn with equipment sampled from weighted tables for their role. The generator chooses a chassis, a fitting engine and weapon, then optional cargo parts, armor and goods. It respects mount space, rated mass and a chassis-plus-parts budget separate from the driver's wallet. Rare equipment has a lower weight among eligible choices. The same world seed and actions produce the same equipment. There is no separate loot roll on death.
 
-Scavengers collect finite salvage, sell cargo, and fight manageable hostiles or flee. Traders buy profitable cargo while reserving upkeep money and flee from threats. Raiders search hunting grounds, fight, collect wreck cargo, and sell it. Each NPC pays for fuel, supplies, and repairs from its own wallet. Inspection shows its activity and reason.
+Scavengers collect finite salvage, sell cargo, and fight manageable hostiles or flee. Traders buy profitable cargo while reserving upkeep money and flee from threats. Raiders search hunting grounds, fight, collect wreck cargo, and sell it in towns. Raiders buy fuel, supplies and repairs at their nearest camp, and flee to a camp or a town. A camp buys no cargo, so a raider without money sells its cargo in town first. Each NPC pays for fuel, supplies, and repairs from its own wallet. Inspection shows its activity and reason.
 
 Scavenging is a timed search: the truck parks at a stock and searches for turns in proportion to what the stock holds, with a progress bar. Moving the truck cancels the search. A finished search opens the stock beside the truck's grid, and the player drags in what they want. What they leave stays at the site for later. NPC scavengers take everything that fits. Landmark and convoy sites hold finite stock rolled at world creation: goods, parts and sometimes a spare mountable part. Destroyed NPCs leave a wreck with the same kind of stock. Their mounted parts join it at the HP they had; their built-in parts turn into the parts good instead. Collection takes only what fits and leaves the rest. Old wreck retirement removes their remaining stock. Empty sites do not regenerate.
 
@@ -116,7 +118,7 @@ Fuel and supplies limit range. Fuel burns at 0.075 of the chassis fuel-per-tile 
 - Parts: seven weapons, seven engines, eight armor parts and seven cargo parts. Cheap, light, durable, fuel-efficient and high-output variants have different costs and footprints. Cargo frames extend the inventory grid, without articulated trailer physics.
 - Goods: scrap metal, salt, meds, grain, textiles, machine tools, batteries and electronics. Bowl and Nose price every good.
 - Defeat takes all goods and spare parts from the grid. Mounted parts stay.
-- Region: Icarus, a 600-tile basin with Bowl and Nose as hubs, 13 other destinations, two canyon crossings, and the Fallen Sun. Winding roads cross rolling grades between distinct landmarks. Sight is twenty tiles. See [landmark visuals](VISUAL_DESIGN.md).
+- Region: Icarus, a 600-tile basin with Bowl and Nose as hubs, 13 other destinations, two raider camps, two canyon crossings, and the Fallen Sun. Winding roads cross rolling grades between distinct landmarks. Sight is twenty tiles. See [landmark visuals](VISUAL_DESIGN.md).
 - Enemies: raider outriders and gunwagons with sampled chassis and equipment.
 - Neutrals: trader caravans and scavengers. Shooting one makes it and its nearby mates hostile.
 - Skills: Driving, Gunnery, Mechanics, Trade, Survival.
