@@ -207,19 +207,24 @@ export class TownScreen {
       );
     });
     return el(
-      "table",
+      "div",
       {},
+      def.supplies.length ? this.supplies(w, def.supplies) : null,
       el(
-        "tr",
+        "table",
         {},
-        el("th", {}, "Good"),
-        el("th", {}, "Buy"),
-        el("th", {}, "Sell"),
-        el("th", {}, "Market"),
-        el("th", {}, "Held"),
-        el("th", {}),
+        el(
+          "tr",
+          {},
+          el("th", {}, "Good"),
+          el("th", {}, "Buy"),
+          el("th", {}, "Sell"),
+          el("th", {}, "Market"),
+          el("th", {}, "Held"),
+          el("th", {}),
+        ),
+        ...rows,
       ),
-      ...rows,
     );
   }
 
@@ -257,9 +262,9 @@ export class TownScreen {
     return el("table", {}, ...rows);
   }
 
-  // Supplies. Only a garage sells fuel and food; a stall's stock is parts and goods alone.
-  private supplies(w: World): HTMLElement {
-    const rows = (["fuel", "supplies"] as Supply[]).map((k) => {
+  // Supplies. Shown only for the kinds this shop's ShopDef lists.
+  private supplies(w: World, kinds: Supply[]): HTMLElement {
+    const rows = kinds.map((k) => {
       const room = supplyRoom(w, k);
       const price = ECONOMY.supplyPrice[k];
       const afford = Math.min(room, Math.floor(w.player.money / price));
@@ -348,8 +353,6 @@ export class TownScreen {
     return el(
       "div",
       {},
-      el("h3", {}, "Fuel & supplies"),
-      this.supplies(w),
       el(
         "div",
         {},

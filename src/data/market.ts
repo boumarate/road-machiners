@@ -158,6 +158,7 @@ export type ShopDef = {
   pressurePerUnit: number; // fraction of base price a single unit traded moves the price
   driftPerTurn: number; // fraction of standing pressure removed each turn
   contractSlots: number; // contracts this shop can post at once; used from PH4
+  supplies: ('fuel' | 'supplies')[]; // which of fuel and food this shop sells
 };
 
 // Fraction pressure is clamped to either side of base price. A good can never trade for more than
@@ -180,6 +181,7 @@ export const SHOPS: Record<string, ShopDef> = {
     pressurePerUnit: 0.02,
     driftPerTurn: 0.0075, // decays a standing pressure below 5% of itself over about 400 turns (2 days)
     contractSlots: 3,
+    supplies: ['fuel', 'supplies'],
   },
   // Nose: cheap salt, tools and batteries (the mirror of Bowl); dear scrap, grain, textiles, meds,
   // electronics and parts.
@@ -196,6 +198,7 @@ export const SHOPS: Record<string, ShopDef> = {
     pressurePerUnit: 0.02,
     driftPerTurn: 0.0075,
     contractSlots: 3,
+    supplies: ['fuel', 'supplies'],
   },
   // Salvage Yard: the picked-over source of scrap and stripped parts. Sells scrap and parts cheap,
   // pays over the odds for tools to keep its own gear running.
@@ -215,6 +218,7 @@ export const SHOPS: Record<string, ShopDef> = {
     pressurePerUnit: 0.02,
     driftPerTurn: 0.0075,
     contractSlots: 1,
+    supplies: [],
   },
   // The Granary: a farm stop. Sells its own grain cheap, and buys in salt and textiles for the
   // caravans that pass through, so those cost more here.
@@ -234,6 +238,7 @@ export const SHOPS: Record<string, ShopDef> = {
     pressurePerUnit: 0.02,
     driftPerTurn: 0.0075,
     contractSlots: 1,
+    supplies: [],
   },
   // Pump Station: sells the batteries it charges cheap, and pays well for scrap and parts to keep
   // its pumps and generators running.
@@ -253,6 +258,7 @@ export const SHOPS: Record<string, ShopDef> = {
     pressurePerUnit: 0.02,
     driftPerTurn: 0.0075,
     contractSlots: 1,
+    supplies: ['fuel'],
   },
 };
 

@@ -164,6 +164,22 @@ describe("garage", () => {
     expect(() => buySupply(w, "supplies", 1)).toThrow();
   });
 
+  it("sells fuel at the pump station but refuses food", () => {
+    const pumpStation = REGION.locations.find((l) => l.id === "pump-station")!;
+    const w = emptyWorld({ ...sitePads(pumpStation)[0] });
+    w.player.fuel = 0;
+    const fueled = buySupply(w, "fuel", 1);
+    expect(fueled.player.fuel).toBeGreaterThan(0);
+    expect(() => buySupply(w, "supplies", 1)).toThrow(/does not sell/);
+  });
+
+  it("refuses any supply at a stall that sells none", () => {
+    const granary = REGION.locations.find((l) => l.id === "granary")!;
+    const w = emptyWorld({ ...sitePads(granary)[0] });
+    expect(() => buySupply(w, "fuel", 1)).toThrow(/does not sell/);
+    expect(() => buySupply(w, "supplies", 1)).toThrow(/does not sell/);
+  });
+
   it("repairs parts for money", () => {
     const w = startAtBowl();
     corePart(w.vehicles[0], "cab").hp = 10;

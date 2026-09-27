@@ -278,7 +278,9 @@ export function supplyRoom(world: World, kind: Supply): number {
 
 export function buySupply(world: World, kind: Supply, n: number): World {
   return playerCommand(world, (w) => {
-    requireTown(w);
+    const shopId = requireShop(w);
+    if (!shopDef(shopId).supplies.includes(kind))
+      throw new Error(`${shopId} does not sell ${kind}`);
     if (n <= 0 || n > supplyRoom(w, kind))
       throw new Error(`Cannot buy ${n} ${kind}`);
     pay(w, ECONOMY.supplyPrice[kind] * n, kind);
