@@ -1,9 +1,9 @@
-// HTML labels for towns and locations, floating above their map position. Same rules as the 2D
-// WorldScene: sites under never-explored fog or past gray vision show nothing, explored but
+// HTML labels floating over the map: site labels for towns and locations, and vehicle markers. Site labels
+// follow the old 2D WorldScene rules: sites under never-explored fog or past gray vision show nothing, explored but
 // undiscovered sites show ???, discovered sites show their name.
 
 import { REGION } from '../../data/region';
-import { groundPoint } from '../../phys/frames';
+import { groundPoint, type VehicleFrame } from '../../phys/frames';
 import { PAL } from '../../render/palette';
 import type { World } from '../../sim/types';
 import { playerExplored } from '../../sim/vision';
@@ -51,4 +51,38 @@ export class Labels {
 
 function sites(): Site[] {
   return [...REGION.towns, ...REGION.locations];
+}
+
+const MARKER_LIFT = 3.5; // meters above a vehicle where its label sits
+
+// Labels above vehicles: weapons aimed at a target, and the radio key on the hovered truck. The text comes
+// from markerLines() in src/ui/weapons.ts.
+export class VehicleMarkers {
+  private readonly els = new Map<string, HTMLDivElement>(); // by vehicle id
+
+  constructor(private readonly container: HTMLElement, private readonly rig: CameraRig) {}
+
+  // Replaces every label. Null clears them, as during a turn's playback.
+  refresh(lines: Map<string, string[]> | null): void {
+    for (const el of this.els.values()) el.remove();
+    this.els.clear();
+    for (const [id, list] of lines ?? []) {
+      const el = document.createElement('div');
+      el.className = 'weapon-marker';
+      el.textContent = list.join('\n');
+      this.container.appendChild(el);
+      this.els.set(id, el);
+    }
+  }
+
+  place(frames: Record<string, VehicleFrame>, hide: boolean): void {
+    for (const [id, el] of this.els) {
+      const f = frames[id];
+      el.style.display = hide || !f ? 'none' : 'block';
+      if (hide || !f) continue;
+      const p = this.rig.screenOf({ x: f.pos.x, y: f.pos.y + MARKER_LIFT, z: f.pos.z });
+      el.style.left = `${p.x}px`;
+      el.style.top = `${p.y}px`;
+    }
+  }
 }

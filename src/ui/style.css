@@ -1013,3 +1013,28 @@ canvas.view { filter: saturate(1.12) contrast(1.06); }
   gap: 8px;
   margin-top: 4px;
 }
+
+#ui .dialogue {
+  left: 50%;
+  top: 112px;
+  transform: translateX(-50%);
+  min-width: 320px;
+  max-width: 460px;
+  background: var(--metal);
+  border-left: 4px solid var(--edge);
+}
+.dialogue .dialogue-speaker {
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.dialogue .dialogue-line {
+  margin-bottom: 10px;
+}
+.dialogue .dialogue-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dialogue .dialogue-option {
+  text-align: left;
+}

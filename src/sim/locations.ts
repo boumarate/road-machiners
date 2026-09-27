@@ -23,10 +23,16 @@ export function discoverSites(world: World): void {
       !seesArea(world, s.pos, s.radius)
     )
       continue;
-    world.player.discovered.push(s.id);
-    world.events.push({ t: "discover", location: s.id });
-    gainXp(world, RULES.discoverXp, `found ${s.name}`);
+    discoverSite(world, s);
   }
+}
+
+// Marks a site found, by sight or by being told the way, and pays the discovery XP once.
+export function discoverSite(world: World, s: { id: string; name: string }): void {
+  if (world.player.discovered.includes(s.id)) throw new Error(`${s.id} is already discovered`);
+  world.player.discovered.push(s.id);
+  world.events.push({ t: "discover", location: s.id });
+  gainXp(world, RULES.discoverXp, `found ${s.name}`);
 }
 
 export function applySiteAction(world: World): World | null {

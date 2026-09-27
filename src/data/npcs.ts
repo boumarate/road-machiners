@@ -297,6 +297,7 @@ export type DecisionOptions = {
   attacked: 'keep' | 'flee' | 'fightBack'; // a shot at the driver or a nearby visible faction mate, hit or miss
   preySeen: 'keep' | 'rob'; // a new robbery target comes in sight
   strandedSeen: 'keep' | 'tow'; // a stranded player comes in sight
+  patchDeal: 'paid' | 'ownParts' | 'free'; // the terms a driver names for a roadside patch; see src/sim/patch.ts
   ramChance: 'keep' | 'ram'; // the fight target lies ahead within reach of a damaging ram
   resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal
   idle: 'trade' | 'scavenge' | 'raid' | 'wait'; // the goal stack is empty
@@ -322,6 +323,8 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   preySeen: { keep: 1, rob: 0 },
   // Towing more than rarely needs a trait.
   strandedSeen: { keep: 1, tow: 0 },
+  // Most drivers want paying for a patch, some only charge for the work, and one in ten helps for free.
+  patchDeal: { paid: 6, ownParts: 3, free: 1 },
   // A fighter takes 9 in 10 rams that look worth it. Otherwise it keeps shooting from its range.
   ramChance: { keep: 1, ram: 9 },
   // After an interruption a driver goes back to its work 9 times in 10.
@@ -343,6 +346,8 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   // A failed robber mostly leaves the same target alone. A scumbag's rob weight of 2 drops to 0.01, about 2%.
   backedOff: { preySeen: { rob: { mul: 0.005 } } },
   tow: {},
+  patch: {},
+  truce: {},
   // A driver the player turned down rarely offers that player a tow again. A tow weight of 9 drops to 0.009,
   // about 2%.
   turnedDown: { strandedSeen: { tow: { mul: 0.001 } } },
@@ -361,6 +366,12 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   backedOff: 30,
   // A tow lasts until the tower reaches town, the player lets go, or the tower is gone or in danger.
   tow: null,
+  // Work on a patch keeps it going. Without work it lapses after 40 turns, a fifth of a day, so a client
+  // stops waiting for a patcher who never comes.
+  patch: 40,
+  // A truck that handed over its cargo is left alone for 60 turns: time for the raiders to search the stock and the
+  // truck to drive well away. Shots start a feud, which ends the truce's effect at once.
+  truce: 60,
   // A driver the player turned down holds it until it offers that player a tow again.
   turnedDown: null,
   // A tower that dropped a hitched tow for danger keeps its terms until its next offer to that player.

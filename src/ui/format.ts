@@ -12,6 +12,7 @@ import { npcTraits } from '../sim/npc-decisions';
 import { statesHeld, towData } from '../sim/states';
 import type { PartHit } from '../sim/armor';
 import type { GameEvent, NpcState, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
+import { fillLine } from './dialogue';
 
 export function vehicleName(world: World, id: string): string {
   if (id === world.player.vehicleId) return 'You';
@@ -51,6 +52,8 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   turnedDown: () => 'You turned down its tow',
   towPromise: () => 'Promised you a tow',
   answering: () => 'Coming to tow you',
+  patch: () => 'Patching your truck',
+  truce: () => 'Truce with you',
 };
 
 // One line per state the NPC holds toward the player, with turns left when the state has a timer.
@@ -92,6 +95,57 @@ function damageList(world: World, vehicleId: string, hits: PartHit[]): string {
   const dealt = partDamage(hits);
   if (dealt.size === 0) return '';
   return `; ${vehicleName(world, vehicleId)}: ${[...dealt].map(([id, d]) => `${partName(world, vehicleId, id)} −${d}`).join(', ')}`;
+}
+
+type LogLine = { text: string; cls: string };
+
+// Only the player's own jobs are logged.
+function jobText(world: World, e: Extract<GameEvent, { t: 'job' }>): LogLine | null {
+  if (e.vehicle !== world.player.vehicleId) return null;
+  const what = e.job.kind === 'repair' ? `Repair (${partName(world, e.vehicle, e.job.partId)})` : 'Search';
+  const lines = {
+    started: { text: `${what} started: stay parked about ${e.job.turnsLeft} turns. End turns with Space.`, cls: '' },
+    cancelled: { text: `${what} cancelled: the truck moved`, cls: 'bad' },
+    done: { text: `${what} done`, cls: 'good' },
+  };
+  return lines[e.outcome];
+}
+
+// A storm is local news: log it only when it starts or ends within sight of the player.
+function weatherText(world: World, e: Extract<GameEvent, { t: 'weather' }>): LogLine | null {
+  const ev = e.event;
+  if (ev.kind === 'storm' && dist(playerVehicle(world).pos, ev.pos) - ev.radius > TERRAIN.vision.radius) return null;
+  const names = { storm: 'Dust storm', heatwave: 'Heat wave', overcast: 'Overcast' };
+  return { text: `${names[ev.kind]} ${e.outcome}`, cls: 'dim' };
+}
+
+// A horn out of sight is heard, but the log does not name its truck.
+function honkText(world: World, e: Extract<GameEvent, { t: 'honk' }>): LogLine {
+  if (e.vehicle === world.player.vehicleId) return { text: 'You honk.', cls: 'dim' };
+  const v = findAny(world, e.vehicle);
+  return { text: v && playerSees(world, v.pos) ? `${v.name} honks back.` : 'A horn answers out of sight.', cls: '' };
+}
+
+// Patch work between the player and an NPC, from the player's side.
+function patchText(world: World, e: Extract<GameEvent, { t: 'patch' }>): LogLine {
+  const me = world.player.vehicleId;
+  const other = vehicleName(world, e.patcher === me ? e.client : e.patcher);
+  const lines = {
+    started: e.patcher === me ? `You start patching ${other}. Stay parked beside it.` : `${other} starts patching your truck. Stay parked.`,
+    done: e.patcher === me ? `You patched ${other}.` : `${other} patched your truck.`,
+    lapsed: `The patch with ${other} is off: nobody worked on it.`,
+  };
+  return { text: lines[e.outcome], cls: e.outcome === 'lapsed' ? 'dim' : e.outcome === 'done' ? 'good' : '' };
+}
+
+function sayText(world: World, e: Extract<GameEvent, { t: 'say' }>): LogLine {
+  const cls = e.speaker === world.player.vehicleId ? 'dim' : '';
+  return { text: `${vehicleName(world, e.speaker)}: “${fillLine(e.text, e.vars)}”`, cls };
+}
+
+function callText(world: World, e: Extract<GameEvent, { t: 'call' }>): LogLine {
+  const who = vehicleName(world, e.with);
+  return { text: e.outcome === 'opened' ? `Radio: ${who} on the line.` : `Radio: call with ${who} ended.`, cls: 'dim' };
 }
 
 function towDroppedText(by: string, reason: Extract<GameEvent, { t: 'towDropped' }>['reason']): { text: string; cls: string } {
@@ -194,27 +248,26 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       return towDroppedText(n(e.by), e.reason);
     case 'stateEnded':
       return stateEndedText(world, e);
+    case 'say':
+      return sayText(world, e);
+    case 'call':
+      return callText(world, e);
     case 'info':
       return { text: e.text, cls: 'dim' };
-    case 'job': {
-      if (e.vehicle !== me) return null;
-      const what = e.job.kind === 'repair' ? `Repair (${partName(world, e.vehicle, e.job.partId)})` : 'Search';
-      const text = e.outcome === 'started' ? `${what} started: stay parked about ${e.job.turnsLeft} turns. End turns with Space.`
-        : e.outcome === 'cancelled' ? `${what} cancelled: the truck moved` : `${what} done`;
-      return { text, cls: e.outcome === 'cancelled' ? 'bad' : e.outcome === 'done' ? 'good' : '' };
-    }
+    case 'job':
+      return jobText(world, e);
     case 'searched': {
       const site = [...REGION.towns, ...REGION.locations].find((l) => l.id === e.stock);
       return { text: `Search done${site ? ` at ${site.name}` : ''}. Drag what you want into the truck.`, cls: 'good' };
     }
     case 'breakdown':
       return e.vehicle === me ? { text: `${partName(world, e.vehicle, e.part)} broke down`, cls: 'bad' } : null;
-    case 'weather': {
-      // A storm is local news: log it only when it starts or ends within sight of the player.
-      const ev = e.event;
-      if (ev.kind === 'storm' && dist(playerVehicle(world).pos, ev.pos) - ev.radius > TERRAIN.vision.radius) return null;
-      return { text: `${ev.kind === 'storm' ? 'Dust storm' : ev.kind === 'heatwave' ? 'Heat wave' : 'Overcast'} ${e.outcome}`, cls: 'dim' };
-    }
+    case 'weather':
+      return weatherText(world, e);
+    case 'honk':
+      return honkText(world, e);
+    case 'patch':
+      return patchText(world, e);
     case 'spawn':
     case 'despawn':
     case 'arrived':

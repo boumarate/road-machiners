@@ -6,6 +6,7 @@ import { STATE_TURNS } from '../data/npcs';
 import { playerVehicle, vehicleById } from './damage';
 import { newId } from './factory';
 import { lootRobbed } from './npc-activities';
+import { checkPatch, isPatching, lapsePatch, settlePatch } from './patch';
 import { getResources } from './resources';
 import type { NpcState, StateData, StateEnding, StateKindId, World } from './types';
 import { canVehicleSee } from './vision';
@@ -55,6 +56,15 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   // The holder has taken the job of towing the player, so no other driver answers. It is fulfilled by the offer
   // in src/sim/tow.ts, and broken once the holder's tow goal is gone from its stack.
   answering: { refresh: never, check: (w, s) => (answerDropped(w, s) ? 'broken' : null), hooks: {} },
+  // The holder patches the other party's truck. See src/sim/patch.ts. Work keeps it going, and the fulfilled hook
+  // pays once.
+  // The two parties are not foes while it lasts, unless a feud says otherwise. See isFoe() in src/sim/combat.ts.
+  truce: { refresh: never, check: noCheck, hooks: {} },
+  patch: {
+    refresh: isPatching,
+    check: checkPatch,
+    hooks: { fulfilled: settlePatch, expired: lapsePatch },
+  },
 };
 
 // A missing holder is left to the missing-party rule.
@@ -74,7 +84,7 @@ function turnsOf(kind: StateKindId): number | null {
 }
 
 // The data kind each state kind carries.
-const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none' };
+const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none' };
 
 export function addState(w: World, kind: StateKindId, holder: string, other: string, data: StateData): NpcState {
   kindOf(kind);

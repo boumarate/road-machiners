@@ -28,8 +28,8 @@ function townById(id: string): TownDef {
   return town;
 }
 
-// Close enough to hand over a rope: the same reach a truck has to a wreck stock.
-function inTowReach(tower: Vehicle, towed: Vehicle): boolean {
+// Close enough to hand over a rope or a toolbox: the same reach a truck has to a wreck stock.
+export function inTowReach(tower: Vehicle, towed: Vehicle): boolean {
   const radii = chassisDef(tower.chassisId).radius + chassisDef(towed.chassisId).radius;
   return dist(tower.pos, towed.pos) <= (radii + ECONOMY.useRange) * ECONOMY.interactionScale;
 }
@@ -68,9 +68,19 @@ export function strandedPlayerAt(world: World, vehicle: Vehicle): Vec | null {
 }
 
 function canTowPlayer(world: World, vehicle: Vehicle, me: Vehicle): boolean {
-  if (playerTow(world) || world.player.state !== 'active' || answeredByOther(world, vehicle, me)) return false;
+  if (towTaken(world, vehicle, me)) return false;
   // A driver that can only crawl itself cannot pull another truck.
   return isStranded(world, me) && !isStranded(world, vehicle) && !isHostile(world, vehicle, me);
+}
+
+// No offer is open: the player already has a tow, is not awake, has another driver coming, or waits for a patch.
+function towTaken(world: World, vehicle: Vehicle, me: Vehicle): boolean {
+  return playerTow(world) !== null || world.player.state !== 'active' || answeredByOther(world, vehicle, me) || awaitsPatch(world, me);
+}
+
+// A truck with a patch deal under way waits for its patch instead of a tow.
+function awaitsPatch(world: World, me: Vehicle): boolean {
+  return world.states.some((s) => s.kind === 'patch' && (s.holder === me.id || s.other === me.id));
 }
 
 // The job is taken while another driver holds the claim to answer the player.
@@ -202,24 +212,25 @@ function poseBehind(path: Pose[], k: number, gap: number): Pose {
   return { x: first.x - Math.cos(first.heading) * left, y: first.y - Math.sin(first.heading) * left, heading: first.heading };
 }
 
-export function acceptTow(world: World): World {
-  return playerCommand(world, (w) => {
-    const tow = playerTow(w);
-    if (!tow) throw new Error('No tow offer to accept');
-    towData(tow).hitched = true;
-    const me = playerVehicle(w);
-    me.order = null;
-    me.speed = 0;
-    checkBeacon(w);
-  });
+// The player takes the open offer over the radio. Runs inside the dialogue command.
+export function acceptOffer(world: World): void {
+  const tow = openOffer(world);
+  towData(tow).hitched = true;
+  const me = playerVehicle(world);
+  me.order = null;
+  me.speed = 0;
+  checkBeacon(world);
 }
 
-export function refuseTow(world: World): World {
-  return playerCommand(world, (w) => {
-    const tow = playerTow(w);
-    if (!tow) throw new Error('No tow offer to refuse');
-    refuse(w, tow);
-  });
+// The player turns the open offer down over the radio. Runs inside the dialogue command.
+export function refuseOffer(world: World): void {
+  refuse(world, openOffer(world));
+}
+
+function openOffer(world: World): NpcState {
+  const tow = playerTow(world);
+  if (!tow || towData(tow).hitched) throw new Error('No open tow offer');
+  return tow;
 }
 
 // The one command allowed while towed. It is free, and that driver rarely offers again.

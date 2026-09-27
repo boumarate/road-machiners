@@ -35,7 +35,7 @@ import { dropTow, playerTow, runTow, strandedPlayerAt, towGoal } from './tow';
 // an `activity` event.
 
 // Goals that interrupt a long-term goal. Popping one that uncovers the long-term goal fires the resume decision.
-export const INTERRUPTIONS: readonly NpcActivity['kind'][] = ['fight', 'flee', 'investigate', 'resupply', 'tow', 'loot', 'repair'];
+export const INTERRUPTIONS: readonly NpcActivity['kind'][] = ['fight', 'flee', 'investigate', 'resupply', 'tow', 'loot', 'repair', 'patch'];
 
 function goalsOf(v: Vehicle): NpcActivity[] {
   if (!v.brain) throw new Error(`${v.id} has no NPC brain`);
@@ -270,6 +270,21 @@ function towInvalid(world: World, vehicle: Vehicle): string | null {
   return strandedPlayerAt(world, vehicle) && !stateOf(world, 'turnedDown', vehicle.id, world.player.vehicleId) ? null : 'the tow is off';
 }
 
+// A patch goal holds while its patch state does: the patcher drives over, and the client waits.
+function patchInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
+  const other = goal.targetId;
+  const held = world.states.some((s) => s.kind === 'patch' && ((s.holder === vehicle.id && s.other === other) || (s.holder === other && s.other === vehicle.id)));
+  return held ? null : 'the patch is off';
+}
+
+// The goal a patch deal gives an NPC party: the patcher drives to the client, and the client waits parked.
+export function patchGoal(world: World, npc: Vehicle, other: Vehicle, patcher: boolean): void {
+  const goal = patcher
+    ? createActivity('patch', other.id, { ...other.pos }, 'patch a stranded truck')
+    : createActivity('patch', other.id, null, 'wait for a patch');
+  pushGoal(world, npc, goal);
+}
+
 const GOAL_CHECKS: Partial<Record<NpcActivity['kind'], GoalCheck>> = {
   fight: fightInvalid,
   flee: fleeInvalid,
@@ -277,6 +292,7 @@ const GOAL_CHECKS: Partial<Record<NpcActivity['kind'], GoalCheck>> = {
   scavenge: scavengeInvalid,
   loot: lootInvalid,
   tow: towInvalid,
+  patch: patchInvalid,
 };
 
 function invalidReason(world: World, vehicle: Vehicle, goal: NpcActivity, contacts: Contact[]): string | null {
@@ -466,7 +482,7 @@ function fightTarget(vehicle: Vehicle): string | null {
 // A driver the player turned down that picks tow again is over it: its turnedDown state ends, so the tow goal holds.
 // The client counts as noticed prey, so a tower that set out for a beacon does not roll to rob it on arrival.
 // The driver claims the job, so no other driver answers while it is on its way.
-function startTow(world: World, vehicle: Vehicle, at: Vec): void {
+export function startTow(world: World, vehicle: Vehicle, at: Vec): void {
   const me = world.player.vehicleId;
   const turnedDown = stateOf(world, 'turnedDown', vehicle.id, me);
   if (turnedDown) endState(world, turnedDown, 'fulfilled');
@@ -540,7 +556,8 @@ function applyFixedRules(world: World, vehicle: Vehicle, profile: NpcProfile): N
     keepTowGoal(world, vehicle);
     return null;
   }
-  if (topGoal(vehicle)?.kind === 'tow') return null;
+  const top = topGoal(vehicle)?.kind;
+  if (top === 'tow' || top === 'patch') return null;
   return pushService(world, vehicle, profile);
 }
 
@@ -666,9 +683,9 @@ function stockRadius(world: World, activity: NpcActivity): number | undefined {
   return world.salvage.find((entry) => entry.id === activity.targetId)?.radius;
 }
 
-// A tower drives up to the truck it tows, and parks beside it like beside a stock.
+// A tower or a patcher drives up to its client, and parks beside it like beside a stock.
 function towedRadius(world: World, activity: NpcActivity): number | undefined {
-  if (activity.kind !== 'tow') return undefined;
+  if (activity.kind !== 'tow' && activity.kind !== 'patch') return undefined;
   const towed = world.vehicles.find((entry) => entry.id === activity.targetId);
   return towed && chassisDef(towed.chassisId).radius;
 }

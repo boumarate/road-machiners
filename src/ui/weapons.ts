@@ -10,6 +10,7 @@ import { el, panel } from "./dom";
 import { meters } from "./units";
 import type { UiHost } from "./host";
 import { createIcon } from './icons';
+import { canCall } from "./dialogue";
 
 export const BLOCK_TEXT: Record<FireBlock, string> = {
   disabled: "disabled",
@@ -19,7 +20,21 @@ export const BLOCK_TEXT: Record<FireBlock, string> = {
   noTarget: "hold fire",
   unseen: "not in sight",
   covered: "behind cover",
+  talking: "on the radio",
 };
+
+// Label lines above vehicles, by vehicle id: each weapon aimed at a target with its status, and the radio
+// key on the hovered truck when it can take a call.
+export function markerLines(w: World, hovered: string | null): Map<string, string[]> {
+  const lines = new Map<string, string[]>();
+  const add = (id: string, line: string) => lines.set(id, [...(lines.get(id) ?? []), line]);
+  vehicleStats(w, playerVehicle(w)).weapons.forEach((mw, i) => {
+    const readout = getWeaponReadout(w, mw);
+    if (readout.target) add(readout.target.id, `[${i + 1}] ${mw.def.look === "cannon" ? "Cannon" : "MG"} · ${readout.status}`);
+  });
+  if (hovered && canCall(w, hovered)) add(hovered, "[T] Radio");
+  return lines;
+}
 
 // Current-position feedback shared by the weapon buttons and map markers.
 export function getWeaponReadout(w: World, mw: MountedWeapon) {

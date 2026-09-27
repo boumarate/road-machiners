@@ -1,5 +1,6 @@
 // Vehicle instruments, critical resources, event history and inspection.
 
+import { DialoguePanel, type DialogueHost } from "./dialogue";
 import { partDef } from "../data/parts";
 import { baseGrid, corePart, coreParts, mountedParts } from "../sim/grid";
 import type { Job, Vehicle, World } from "../sim/types";
@@ -88,11 +89,10 @@ type HudActions = {
   openCharacter: () => void;
   toggleManual: () => void;
   toggleAutoRepair: () => void;
-  acceptTow: () => void;
-  refuseTow: () => void;
   unhitch: () => void;
   setBeacon: (on: boolean) => void;
   isBusy: () => boolean;
+  dialogue: DialogueHost;
   recenter: () => void;
 };
 const RESOURCE_ICONS: IconName[] = [
@@ -137,7 +137,10 @@ export class Hud {
   private toastTimer: number | null = null;
   private lines: { text: string; cls: string }[] = [];
 
+  private readonly dialogue: DialoguePanel;
+
   constructor(private actions: HudActions) {
+    this.dialogue = new DialoguePanel(actions.dialogue);
     this.info.style.display = "none";
     this.info.append(this.infoBody);
     this.toastBox.style.display = "none";
@@ -171,7 +174,7 @@ export class Hud {
       el(
         "div",
         {},
-        "Space: start / pause travel. In combat: one turn. Hold: fast-forward. A: auto fire. P: auto patch. C: character. I: inventory.",
+        "Space: start / pause travel. In combat: one turn. Hold: fast-forward. A: auto fire. P: auto patch. C: character. I: inventory. T: radio the truck under the cursor. H: honk.",
       ),
       el("div", {}, "R: manual driving, straight through anything."),
       el("div", {}, "Right-drag: pan. F: center on truck. Wheel: zoom. V: camera mode. M: mute."),
@@ -248,8 +251,10 @@ export class Hud {
     }
   }
 
-  // The knockout banner, a tow offer, the tow in progress, or the beacon switch of a stranded truck.
+  // The prompts in the middle of the screen: an open radio call, and the rescue state. That is the knockout
+  // banner, the tow in progress, or the beacon switch of a stranded truck.
   renderRescue(w: World): void {
+    this.dialogue.render(w);
     const r = getRescueReadout(w);
     this.rescue.style.display = r ? "" : "none";
     if (!r) return this.rescue.replaceChildren();
@@ -273,18 +278,6 @@ export class Hud {
           "div",
           { class: "dim" },
           "Looters strip the truck. You come to when they leave.",
-        ),
-      );
-    if (r.kind === "offer")
-      this.rescue.replaceChildren(
-        el("h3", {}, "Tow offer"),
-        el("div", {}, `${r.tower} tows you to ${r.town}.`),
-        el("div", {}, `Fee ${moneyLabel(r.fee)}, paid on arrival.`),
-        ...(r.debt ? [el("div", { class: "bad" }, "You go into debt.")] : []),
-        buttons(
-          el("button", { onclick: () => this.actions.acceptTow() }, "Accept"),
-          el("button", { onclick: () => this.actions.refuseTow() }, "Refuse"),
-          ...(r.beacon ? [beacon(true)] : []),
         ),
       );
     if (r.kind === "towed")

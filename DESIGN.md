@@ -68,7 +68,7 @@ Raiders ignore a truck with nothing to take. A truck has loot when it holds good
 
 A truck with no working engine, a broken transmission or an empty tank still moves at a crawl. The driver pushes it. Pushing burns no fuel, and a truck without a working engine makes no sound. A player truck that can only crawl is stranded.
 
-Traders and scavengers help a stranded player. One that sees the truck drives over, if it is not hostile and not in danger. It parks beside the truck and offers a tow to the nearest town it knows. The fee is a base price plus a price per tile of the route. The player accepts or refuses. Refusing, or driving away, ends the offer, and that driver rarely offers again.
+Traders and scavengers help a stranded player. One that sees the truck may drive over, if it is not hostile and not in danger. It parks beside the truck and radios a tow offer to the nearest town it knows. The fee is a base price plus a price per tile of the route. The player accepts, refuses or hangs up. A driver the player turned down rarely offers again. A stranded player can also radio a passing trader or scavenger and ask for a tow.
 
 A towed truck hangs behind its tower and follows its path. The tower drives slower than its top speed. Turns run on their own while towed. The player can unhitch at any time for free. A tower that enters a fight or flees drops the tow for free. On arrival in town the tower takes the fee. Money can go below zero, and the HUD shows it as debt. A player in debt cannot buy anything, and sales pay the debt off.
 
@@ -151,6 +151,19 @@ States are timed relations between two trucks. Each ends as expired, fulfilled o
 - A tower the player turned down rarely offers again.
 - A tower that dropped a tow for danger comes back with the same deal.
 - Only one driver answers a stranded player at a time. Near a town gate, drivers rarely offer a tow at all.
+
+## Social
+
+Every truck has a radio, as in Space Rangers 2. A call reaches only a truck in sight. The player calls the truck under the cursor with T. An NPC calls the player when it has something to say. Turns wait while a call is open, and neither truck on the line shoots the other.
+
+Talk is built from topics. A topic is lines and replies in data, and its logic is named conditions and effects in code. The player's call opens on a menu of the topics that truck can take up. A driver's traits decide its voice and its topics. A topic can be once per driver: that driver remembers how it ended.
+
+- Directions: traders and scavengers name the nearest town they know, with direction and distance. The town counts as found.
+- Tow: see Defeat.
+- Patch: a patch gets a broken engine or gearbox going again at a quarter of its HP. A stranded player asks a trader or scavenger. A stranded NPC asks the player once, unless it carries the parts to fix its own truck. The NPC's traits roll the terms: paid, bring your own parts, or free. Only terms the payer can cover come up. The work runs while both trucks stay parked side by side, and the payment moves once when it ends. A deal nobody works on lapses for free.
+- Demand: a raider or robber about to attack radios first, once, and asks for the cargo. Handing it over drops the goods and loose parts beside the truck, and the attacker and its mates nearby keep a truce for a while. Shots break the truce. Refusing keeps the fight.
+
+H honks. Traders and scavengers in earshot that are not hostile honk back.
 
 ## Trade
 

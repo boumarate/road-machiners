@@ -4,6 +4,10 @@ import type { PartHit, Side } from "./armor";
 import type { TraitId } from "../data/npcs";
 import type { Terrain } from "./terrain";
 import type { Vec } from "./vec";
+import type { TopicId } from "../data/dialogue";
+import type { DecisionOptions } from "../data/npcs";
+
+export type PatchDeal = DecisionOptions["patchDeal"];
 
 export type Faction = "player" | "raiders" | "traders" | "scavengers";
 export type SkillId =
@@ -113,7 +117,7 @@ export type DriverResources = {
 };
 
 export type NpcActivity = {
-  kind: 'scavenge' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate' | 'tow' | 'loot' | 'repair';
+  kind: 'scavenge' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate' | 'tow' | 'loot' | 'repair' | 'patch';
   targetId: string | null;
   destination: Vec | null;
   phase: "travel" | "act";
@@ -169,7 +173,7 @@ export type Obstacle = {
 };
 
 // A timed relation one vehicle holds toward another. src/sim/states.ts owns them.
-export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering';
+export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce';
 export type StateEnding = 'expired' | 'fulfilled' | 'broken';
 // A tow state: the holder tows the other party to `town` for `fee`, paid on arrival. hitched is false while the offer is open.
 // A tow promise: the terms of a tow the holder dropped for danger, which its next offer keeps.
@@ -178,6 +182,7 @@ export type StateData =
   | { kind: 'tow'; town: string; fee: number; hitched: boolean }
   | { kind: 'feud'; robbery: boolean }
   | { kind: 'towPromise'; town: string; fee: number }
+  | { kind: 'patch'; deal: PatchDeal; parts: number; price: number; work: number; workLeft: number } // holder patches other
   | { kind: 'none' };
 export type NpcState = {
   id: string;
@@ -188,6 +193,21 @@ export type NpcState = {
   born: number; // turn it was added; it cannot end in that turn
   data: StateData;
 };
+
+// A value a dialogue line shows. The sim keeps raw values, and the UI formats them.
+export type CallVar =
+  | { kind: "town"; id: string }
+  | { kind: "money"; amount: number }
+  | { kind: "distance"; tiles: number }
+  | { kind: "bearing"; rad: number }
+  | { kind: "count"; n: number; unit: string } // shown as "1 part" or "2 parts"
+  | { kind: "deal"; deal: PatchDeal; patcher: "player" | "npc"; price: number; parts: number; turns: number };
+export type CallVars = Record<string, CallVar>;
+
+// An open radio call with the NPC `with`. A null topic means the hub of topics. `line` is what the NPC said
+// last, which is the node's line or an answer that kept the call on the hub.
+export type Call = { with: string; topic: TopicId | null; node: string; vars: CallVars; line: { text: string; vars: CallVars } };
+export type TopicOutcome = "agreed" | "refused" | "done";
 
 export type Player = {
   vehicleId: string;
@@ -212,6 +232,8 @@ export type Player = {
   god: boolean; // debug god mode: parts, health, fuel and supplies refill every turn; see src/sim/cheats.ts
   fullLog: boolean; // debug: the log shows events the player cannot see or hear; see src/ui/format.ts
   beacon: boolean; // the emergency beacon calls every vehicle within BEACON.range; see src/sim/tow.ts
+  call: Call | null;
+  talked: Record<string, Partial<Record<TopicId, TopicOutcome>>>; // NPC id to how each topic with it ended
   explored: Uint8Array; // fog of war: tile y * world.size + x, 1 once seen
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision
   contacts: Contact[]; // vehicles detected beyond sight; refreshed by refreshVision
@@ -254,6 +276,10 @@ export type GameEvent =
   | { t: 'breakdown'; vehicle: string; part: string }
   | { t: 'searched'; stock: string } // the player finished searching a stock; its loot can now be taken
   | { t: 'weather'; event: WeatherEvent; outcome: 'started' | 'ended' }
+  | { t: 'say'; speaker: string; text: string; vars: CallVars } // speaker is a vehicle id; the player's lines use the player's
+  | { t: 'call'; with: string; outcome: 'opened' | 'ended' }
+  | { t: 'honk'; vehicle: string }
+  | { t: 'patch'; patcher: string; client: string; outcome: 'started' | 'done' | 'lapsed' }
   | { t: 'info'; text: string };
 
 export type World = {

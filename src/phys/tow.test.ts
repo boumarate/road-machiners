@@ -10,7 +10,8 @@ import { NPCS } from '../data/npcs';
 import { partDef } from '../data/parts';
 import { topGoal } from '../sim/npc-activities';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from '../sim/testkit';
-import { acceptTow, playerTow, setBeacon } from '../sim/tow';
+import { chooseOption, currentOptions } from '../sim/dialogue';
+import { playerTow, setBeacon } from '../sim/tow';
 import type { GameEvent, Vehicle, World } from '../sim/types';
 import { dist, type Vec } from '../sim/vec';
 import { endTurn } from '../sim/world';
@@ -72,7 +73,7 @@ describe('hitched tower traffic', () => {
     forceOption('strandedSeen', 'tow');
     const offer = runUntil(s.w, 30, (x) => playerTow(x) !== null);
     expect(playerTow(offer.w)).not.toBeNull();
-    const w = play(acceptTow(offer.w), 2).w;
+    const w = play(chooseOption(offer.w, currentOptions(offer.w).findIndex((o) => o.text === 'Deal. Hitch me up.')), 2).w;
     const tower = find(w, s.trader.id);
     const goal = topGoal(tower)!.destination!;
     const a = Math.atan2(goal.y - tower.pos.y, goal.x - tower.pos.x);

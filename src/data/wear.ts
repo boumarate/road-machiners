@@ -11,6 +11,12 @@ export const WEAR = {
   breakdownHpShare: 0.15, // share of max HP a breakdown takes off the chosen part
 };
 
+// A roadside patch between two trucks. See src/sim/patch.ts.
+export const PATCH = {
+  share: 0.25, // share of max HP a patch gives a broken engine or transmission: enough to drive, not to trust
+  laborPerTurn: 8, // money per turn of work on the paid and own-parts deals, a little under a unit of parts
+};
+
 export const REPAIR = {
   fieldCapShare: 0.7, // field repair never lifts a part above this share of its max HP
   sharePerPart: 0.35, // share of a part's max HP restored per unit of the parts good spent, so a broken part patches to the field cap with 2

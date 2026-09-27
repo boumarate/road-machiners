@@ -7,6 +7,7 @@
 // work mostly keeps on around hostiles not aimed at it or its group. Robbery is a fight against a truck the robber
 // can rob, mostly a weaker one away from guards.
 
+import { dealAvailable } from './patch';
 import { chassisDef } from '../data/chassis';
 import { ECONOMY, GOOD_IDS } from '../data/goods';
 import {
@@ -311,6 +312,9 @@ const AVAILABLE: Record<OptionName, Availability> = {
   scavenge: canScavenge,
   raid: canRaid,
   wait: always,
+  paid: dealAvailable('paid'),
+  ownParts: dealAvailable('ownParts'),
+  free: dealAvailable('free'),
 };
 
 // ---- Situation factors, one per option. Each returns a number above 0.
@@ -426,6 +430,9 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   scavenge: scavengeFactor,
   raid: neutral,
   wait: neutral,
+  paid: neutral,
+  ownParts: neutral,
+  free: neutral,
 };
 
 // ---- Weights and the roll.

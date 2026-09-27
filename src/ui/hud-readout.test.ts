@@ -93,7 +93,7 @@ describe("rescue readout", () => {
       warning: true,
     });
   });
-  it("follows the player from stranded to offer to tow", () => {
+  it("follows the player from stranded to tow, and leaves an open offer to the radio", () => {
     const w = emptyWorld();
     expect(getRescueReadout(w)).toBeNull();
     w.player.fuel = 0;
@@ -102,7 +102,7 @@ describe("rescue readout", () => {
     expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: true });
     w.player.money = 10;
     const tow = addState(w, "tow", w.vehicles[0].id, w.player.vehicleId, { kind: "tow", town: "bowl", fee: 50, hitched: false });
-    expect(getRescueReadout(w)).toMatchObject({ kind: "offer", fee: 50, debt: true, beacon: true });
+    expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: true });
     towData(tow).hitched = true;
     expect(getRescueReadout(w)).toMatchObject({ kind: "towed", fee: 50 });
     w.player.state = "knockedOut";

@@ -15,7 +15,7 @@ function findRepairPart(v: Vehicle, partId: string): PartInstance {
 }
 
 // Mechanics scales down both parts spent and turns needed. Player only: NPCs have no skills.
-function mechanicsMult(world: World, v: Vehicle): number {
+export function mechanicsMult(world: World, v: Vehicle): number {
   return v.id === world.player.vehicleId ? Math.max(0, 1 - skillBonus('mechanics', world.player.skills.mechanics)) : 1;
 }
 
@@ -25,14 +25,19 @@ export type RepairPlan = { turns: number; parts: number; hp: number; needed: num
 
 export function repairPlan(world: World, v: Vehicle, partId: string, maxParts = Infinity): RepairPlan {
   const part = findRepairPart(v, partId);
+  return planPartRepair(part, REPAIR.fieldCapShare, mechanicsMult(world, v), goodsCount(v).parts ?? 0, maxParts);
+}
+
+// The repair math for one part: lift it to `capShare` of max HP, spending at most the parts held and maxParts.
+// `mult` is the repairer's Mechanics multiplier.
+export function planPartRepair(part: PartInstance, capShare: number, mult: number, partsHeld: number, maxParts: number): RepairPlan {
   const def = partDef(part.defId);
-  const cap = Math.min(def.hp, def.hp * REPAIR.fieldCapShare);
+  const cap = Math.min(def.hp, def.hp * capShare);
   const gap = Math.max(0, cap - part.hp);
   if (gap === 0) return { turns: 0, parts: 0, hp: 0, needed: 0 };
-  const mult = mechanicsMult(world, v);
   const hpPerPart = mult > 0 ? (def.hp * REPAIR.sharePerPart) / mult : Infinity;
   const needed = Math.max(1, Math.ceil(gap / hpPerPart - 1e-9)); // float slack keeps an exact 2 from rounding to 3
-  const parts = Math.min(needed, maxParts, goodsCount(v).parts ?? 0);
+  const parts = Math.min(needed, maxParts, partsHeld);
   if (parts === 0) return { turns: 0, parts: 0, hp: 0, needed };
   const hp = Math.min(gap, parts * hpPerPart);
   const turns = Math.max(1, Math.ceil(parts * REPAIR.turnsPerPart * mult));

@@ -1,3 +1,4 @@
+import { chooseOption, currentOptions } from './dialogue';
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
 import { SPAWN } from '../data/npcs';
@@ -156,6 +157,8 @@ describe('combat', () => {
     let world = w;
     let shotAt = false;
     for (let i = 0; i < 6; i++) {
+      // A raider radios its demand first. Refusing keeps the fight.
+      if (world.player.call) world = chooseOption(world, currentOptions(world).findIndex((o) => o.text === 'Come and get it.'));
       world = endTurn(world, testDrive);
       if (world.events.some((e) => e.t === 'shot' && e.shooter === buggy.id && e.target === me.id)) shotAt = true;
     }

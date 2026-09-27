@@ -13,7 +13,8 @@ import { endTurn, setDirect, setMoveOrder } from '../sim/world';
 import { PHYSICS } from '../data/physics';
 import { buildDrive, freeDrive, initPhysics, routeAim, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
 import { physicsMove } from './turn';
-import { acceptTow, playerTow, unhitch } from '../sim/tow';
+import { playerTow, unhitch } from '../sim/tow';
+import { chooseOption, currentOptions } from '../sim/dialogue';
 import { soundRange } from '../sim/detect';
 
 beforeAll(async () => {
@@ -461,7 +462,7 @@ describe('physics turns', () => {
     };
     for (let i = 0; i < 30 && !playerTow(w); i++) turn();
     expect(playerTow(w)).not.toBeNull();
-    w = acceptTow(w);
+    w = chooseOption(w, currentOptions(w).findIndex((o) => o.text === 'Deal. Hitch me up.'));
     const start = { ...me(w).pos };
     for (let i = 0; i < 10; i++) {
       const r = turn();
