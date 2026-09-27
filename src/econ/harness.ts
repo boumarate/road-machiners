@@ -27,6 +27,7 @@ import {
   sellGood,
   sellPart,
   sellPrice,
+  affordableBuyCount,
 } from '../sim/economy';
 import { makeVehicle } from '../sim/factory';
 import { corePart, freeCells, goodsCount, mountedParts } from '../sim/grid';
@@ -452,9 +453,8 @@ function bestGoodBetween(mem: Memory, buyShop: string, sellShop: string): HaulPl
 
 function runBuy(world: World, telemetry: Telemetry, mem: Memory, plan: HaulPlan): World {
   recordShopVisit(world, mem, plan.buyShop);
-  const price = mem.prices[plan.buyShop][plan.good].buy;
-  const afford = price > 0 ? Math.floor(world.player.money / price) : 0;
-  const units = Math.min(afford, freeCells(playerVehicle(world)));
+  const me = playerVehicle(world);
+  const units = affordableBuyCount(world, me, plan.buyShop, plan.good, freeCells(me), world.player.money);
   if (units <= 0) return world;
   world = buyGood(world, plan.good, units);
   telemetry.trades++;
