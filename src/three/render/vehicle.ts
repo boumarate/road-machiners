@@ -45,6 +45,10 @@ const CORE_INSET = 0.03;
 const ARMOR_INSET = 0.12;
 // A bed's inner wall stops this far from each cell end, inside the side skin next to it.
 const WELL_CLEARANCE = 0.08; // meters between a bed wheel's rest top and its hump
+const SKIRT = 0.22; // meters the painted skirt hangs below the collider, so the wheels tuck into arches in the body
+const SKIRT_SKIN = 0.03; // skirt thickness
+const ARCH_CLEARANCE = 0.06; // meters between a wheel and its arch in the skirt
+const ARCH_SEGMENTS = 6; // straight edges along each side of an arch, for the low-poly look
 const INNER_WALL_GAP = 0.02;
 // The inner box shows inside the wheel wells.
 const CORE_COLOR = shade(PAL.metal, 0.8);
@@ -185,6 +189,7 @@ export class VehicleView {
     const top = body.half.y;
     const bottom = -body.half.y;
     const stretch = (top - bottom) / EDGE_H;
+    const skirtStretch = (top - bottom + SKIRT) / EDGE_H; // bumpers hang to the skirt bottom
     const underside = top + socket('deck_tile', 'underside').y; // the socket sits below the deck top
     const floors: Record<Zone, number> = { hood: underside, cab: underside, bed: top + socket('bed_floor', 'underside').y };
     const bay = top + socket('hood_panel', 'bay').y;
@@ -267,8 +272,8 @@ export class VehicleView {
           if (fender.fillBottom >= underside) throw new Error(`${v.chassisId} fender reaches above the deck underside`);
           box(paintMat, x0, x1, fender.fillBottom, zone === 'bed' ? wellTop : underside, z0, z1);
           // The bumpers run across the wheel corners too, so they span the full width.
-          if (front && !inGrid(x, y - 1) && !cover.rams.has(key)) piece('bumper_front', c, 0, stretch);
-          if (back && !inGrid(x, y + 1) && !cover.rams.has(key)) piece('bumper_rear', c, Math.PI, stretch);
+          if (front && !inGrid(x, y - 1) && !cover.rams.has(key)) piece('bumper_front', c, 0, skirtStretch);
+          if (back && !inGrid(x, y + 1) && !cover.rams.has(key)) piece('bumper_rear', c, Math.PI, skirtStretch);
           // Above a bed wheel's hump, short body sides keep the bed walls closed on the cell's open faces.
           if (zone === 'bed' && wellTop < top) {
             const wall = (top - wellTop) / EDGE_H;
@@ -287,18 +292,61 @@ export class VehicleView {
             piece(l && !r ? 'nose_light_l' : r && !l ? 'nose_light_r' : 'nose', c, 0, stretch);
           }
         }
-        if (front && !inGrid(x, y - 1) && !cover.rams.has(key)) piece('bumper_front', c, 0, stretch);
+        if (front && !inGrid(x, y - 1) && !cover.rams.has(key)) piece('bumper_front', c, 0, skirtStretch);
         if (back && !plated('B')) {
           if (inGrid(x, y + 1)) piece('body_side', c, Math.PI / 2, stretch, shortSide);
           else piece(zone === 'bed' ? 'tailgate' : 'tail', c, Math.PI, stretch);
         }
-        if (back && !inGrid(x, y + 1) && !cover.rams.has(key)) piece('bumper_rear', c, Math.PI, stretch);
+        if (back && !inGrid(x, y + 1) && !cover.rams.has(key)) piece('bumper_rear', c, Math.PI, skirtStretch);
         if (left && !plated('L')) piece(sideModel, c, 0, stretch);
         if (right && !plated('R')) piece(sideModel, c, 0, stretch, 1, paint, true);
         const inset = (open: boolean, side: SideLetter): number => (!open ? 0 : plated(side) ? ARMOR_INSET : CORE_INSET);
         const floor = engine ? bay : floors[zone];
         box(coreMat, x0 + inset(back, 'B'), x1 - inset(front, 'F'), bottom + CORE_INSET, floor, z0 + inset(left, 'L'), z1 - inset(right, 'R'));
       }
+    }
+    this.buildSkirt(body, into, paintMat);
+  }
+
+  // A painted skirt below the collider on all four faces. The side skirts break at an arch around each wheel,
+  // so the wheels sit inside the body line like on a real truck. Physics is unchanged: the skirt hangs below the collider box.
+  private buildSkirt(body: Body, into: THREE.Group, mat: THREE.Material): void {
+    const y1 = -body.half.y;
+    const y0 = y1 - SKIRT;
+    const hub = body.wheelY - T.suspensionRest;
+    const r = body.wheelRadius + ARCH_CLEARANCE;
+    // Half width of the arch at height y, zero where the arch no longer reaches.
+    const halfArch = (y: number): number => Math.sqrt(Math.max(0, r * r - (y - hub) * (y - hub)));
+    for (const sign of [-1, 1]) {
+      const wheels = wheelMounts(body).filter((m) => Math.sign(m.z) === sign).map((m) => m.x).sort((a, b) => a - b);
+      // Solid runs of skirt between the arches, each bounded by the arch curves at its ends.
+      const ends = [-body.half.x, ...wheels.flatMap((x) => [x, x]), body.half.x];
+      for (let i = 0; i < ends.length; i += 2) {
+        const [from, to] = [ends[i], ends[i + 1]];
+        const shape = new THREE.Shape();
+        const edge = (x: number, dir: number, up: boolean): [number, number][] => {
+          if (Math.abs(x) === body.half.x) return up ? [[x, y0], [x, y1]] : [[x, y1], [x, y0]];
+          const pts: [number, number][] = [];
+          for (let k = 0; k <= ARCH_SEGMENTS; k++) {
+            const y = y0 + ((y1 - y0) * k) / ARCH_SEGMENTS;
+            pts.push([x + dir * halfArch(y), y]);
+          }
+          return up ? pts : pts.reverse();
+        };
+        const pts = [...edge(from, 1, true), ...edge(to, -1, false)];
+        if (pts[pts.length - 1][0] - pts[0][0] <= 0) continue;
+        shape.moveTo(pts[0][0], pts[0][1]);
+        for (const [x, y] of pts.slice(1)) shape.lineTo(x, y);
+        const geo = new THREE.ExtrudeGeometry(shape, { depth: SKIRT_SKIN, bevelEnabled: false });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.z = sign < 0 ? -body.half.z : body.half.z - SKIRT_SKIN;
+        into.add(mesh);
+      }
+    }
+    for (const sign of [-1, 1]) {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(SKIRT_SKIN, SKIRT, body.half.z * 2), mat);
+      mesh.position.set(sign * (body.half.x - SKIRT_SKIN / 2), (y0 + y1) / 2, 0);
+      into.add(mesh);
     }
   }
 
