@@ -1,6 +1,6 @@
 # Fast varied NPC routes
 
-**Status:** executing (stopped, see Deferred)
+**Status:** done
 **Branch:** route-variety
 **Worktree:** .worktrees/route-variety
 **Goal:** In the convoy scenario, route planning per real turn drops at least 4x from the baseline, drivers still split onto at least 3 ways between Bowl and Nose, and the user confirms turns feel smooth in play.
@@ -106,6 +106,6 @@ Repairs ran 49 times and failed 9 times. When a kept route's end moves, the brok
 ### Hands-off decisions
 - uexecute: stopped after PH2, before perf and playtest, because the Goal's baseline is invalid.
 
-### Deferred (needs user input)
-- The measured lag came from the benchmark scripts. Decide whether to keep PH1 and PH2, which are neutral in the corrected benchmark, or revert them. Then decide whether a new Goal is needed, measured in normal play.
-
+### Outcome
+- The user chose to keep local straightening, PH1 `7290a3e`, which caps reuse cost on long trips. They reverted local repair, PH2 `16084e5`, because it added code with no measured gain.
+- The Goal was dropped with the invalid baseline. In normal play, route planning costs about 40 ms per turn on main and the branch alike.
