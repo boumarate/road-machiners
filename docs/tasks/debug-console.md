@@ -1,6 +1,6 @@
 # Debug Console
 
-**Status:** validating
+**Status:** done
 **Branch:** debug-console
 **Worktree:** .worktrees/debug-console
 **Goal:** In any build, the user opens an in-game console, types cheat commands, and the game enters the requested test situation. The user confirms the command set covers the situations they test.
@@ -167,7 +167,7 @@ Notes: the console moved from bottom left to top center, because it covered the 
 
 ## Conclusion
 
-Outcome: the console, cheats and god mode work in the live game, up to 77db079. The user still needs to confirm the command set and the backquote key.
+Outcome: the console, cheats and god mode work in the live game, up to fd4f080. The user tried it and confirmed.
 
 Invariants:
 - IV1 — every command goes through `runCommand` to a `src/sim/cheats.ts` function and `Game.apply()`.
