@@ -40,7 +40,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
   scout: {
     id: 'scout',
     name: 'Scout pickup',
-    maxSpeed: 6,
+    maxSpeed: 7.8,
     accel: 2,
     brake: 3,
     turnSlow: 110,
@@ -79,7 +79,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
   hauler: {
     id: 'hauler',
     name: 'Hauler',
-    maxSpeed: 4,
+    maxSpeed: 5.2,
     accel: 1,
     brake: 2,
     turnSlow: 80,
@@ -107,7 +107,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
   buggy: {
     id: 'buggy',
     name: 'Raider buggy',
-    maxSpeed: 7,
+    maxSpeed: 9.1,
     accel: 3,
     brake: 3,
     turnSlow: 120,
@@ -135,7 +135,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
   wagon: {
     id: 'wagon',
     name: 'Raider gunwagon',
-    maxSpeed: 3,
+    maxSpeed: 3.9,
     accel: 1,
     brake: 2,
     turnSlow: 70,
@@ -161,7 +161,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
     look: 'wagon',
   },
   courier: {
-    id: 'courier', name: 'Courier', maxSpeed: 7.5, accel: 3, brake: 3, turnSlow: 125, turnFast: 42, reverseTurn: 80,
+    id: 'courier', name: 'Courier', maxSpeed: 9.75, accel: 3, brake: 3, turnSlow: 125, turnFast: 42, reverseTurn: 80,
     mass: 280, ratedMass: 1100, radius: 0.5,
     layout: ['.FF.', 'XEEX', 'LEER', 'LXWR', 'LXXR', 'XCCX', '.BB.'],
     core: [
@@ -173,7 +173,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
     fuelCap: 24, fuelPerTile: 0.18, price: 550, look: 'courier',
   },
   van: {
-    id: 'van', name: 'Utility van', maxSpeed: 5, accel: 1.5, brake: 3, turnSlow: 100, turnFast: 35, reverseTurn: 65,
+    id: 'van', name: 'Utility van', maxSpeed: 6.5, accel: 1.5, brake: 3, turnSlow: 100, turnFast: 35, reverseTurn: 65,
     mass: 1100, ratedMass: 3000, radius: 0.7,
     layout: ['.FFF.', 'XEE.X', 'LEEXR', 'L.W.R', 'L.X.R', 'LCC.R', 'LCCXR', 'X...X', '.BBB.'],
     core: [
@@ -185,7 +185,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
     fuelCap: 55, fuelPerTile: 0.24, price: 650, look: 'van',
   },
   longbed: {
-    id: 'longbed', name: 'Longbed truck', maxSpeed: 3.5, accel: 0.8, brake: 1.8, turnSlow: 70, turnFast: 20, reverseTurn: 40,
+    id: 'longbed', name: 'Longbed truck', maxSpeed: 4.55, accel: 0.8, brake: 1.8, turnSlow: 70, turnFast: 20, reverseTurn: 40,
     mass: 2900, ratedMass: 7200, radius: 0.95,
     layout: ['.FFFFF.', 'X.EE..X', 'L.EEX.R', 'LWWW..R', 'L..X..R', 'LCC.CCR', 'LCC.CCR', 'L.....R', 'L..X..R', 'X.....X', '.BBBBB.'],
     core: [
@@ -197,7 +197,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
     fuelCap: 100, fuelPerTile: 0.48, price: 1300, look: 'longbed',
   },
   carrier: {
-    id: 'carrier', name: 'Armored carrier', maxSpeed: 4, accel: 1, brake: 2.5, turnSlow: 75, turnFast: 28, reverseTurn: 50,
+    id: 'carrier', name: 'Armored carrier', maxSpeed: 5.2, accel: 1, brake: 2.5, turnSlow: 75, turnFast: 28, reverseTurn: 50,
     mass: 3200, ratedMass: 5200, radius: 0.85,
     layout: ['.FFFF.', 'XWWW.X', 'LWWWXR', 'LEE..R', 'LEEX.R', 'L.CC.R', 'L.CCXR', 'X....X', '.BBBB.'],
     core: [
@@ -209,7 +209,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
     fuelCap: 70, fuelPerTile: 0.5, price: 1600, look: 'carrier',
   },
   tractor: {
-    id: 'tractor', name: 'Heavy tractor', maxSpeed: 3, accel: 1.8, brake: 2, turnSlow: 65, turnFast: 22, reverseTurn: 55,
+    id: 'tractor', name: 'Heavy tractor', maxSpeed: 3.9, accel: 1.8, brake: 2, turnSlow: 65, turnFast: 22, reverseTurn: 55,
     mass: 3600, ratedMass: 6500, radius: 0.9,
     layout: ['.FFFFF.', 'X.EEX.X', 'L.EE..R', 'LWWW..R', 'L..X..R', 'L.CC..R', 'L.CC..R', 'X..X..X', '.BBBBB.'],
     core: [

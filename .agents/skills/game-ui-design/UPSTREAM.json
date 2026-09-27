@@ -1,0 +1,34 @@
+{
+  "repository": "https://github.com/jeremylongworth-source/AgentSkills",
+  "revision": "45f314d2a3d3201dd5a0304a3a4f3a5f23a905a2",
+  "files": [
+    {
+      "repo": "jeremylongworth-source/AgentSkills",
+      "revision": "45f314d2a3d3201dd5a0304a3a4f3a5f23a905a2",
+      "source": "LICENSE",
+      "local": "jeremylongworth-source-LICENSE",
+      "sha256": "11f5e60786b82e616ba07f5abe671291f23916f60d197babde5ea46353c441a3"
+    },
+    {
+      "repo": "jeremylongworth-source/AgentSkills",
+      "revision": "45f314d2a3d3201dd5a0304a3a4f3a5f23a905a2",
+      "source": "skills/game-ui-design/SKILL.md",
+      "local": "game-ui-design/SKILL.md",
+      "sha256": "3291770337d611d6fc6425e1d273c4dffdc6d5a8634eac8a2c23459f356c303a"
+    },
+    {
+      "repo": "jeremylongworth-source/AgentSkills",
+      "revision": "45f314d2a3d3201dd5a0304a3a4f3a5f23a905a2",
+      "source": "skills/game-ui-design/agents/openai.yaml",
+      "local": "game-ui-design/agents/openai.yaml",
+      "sha256": "75cc88078c67ae24ab0dd620224adc23a948327b93ea1380031d5e81faf1d1ef"
+    },
+    {
+      "repo": "jeremylongworth-source/AgentSkills",
+      "revision": "45f314d2a3d3201dd5a0304a3a4f3a5f23a905a2",
+      "source": "skills/game-ui-design/references/game-ui-checklist.md",
+      "local": "game-ui-design/references/game-ui-checklist.md",
+      "sha256": "e996d7c0ff61bc2e5900810457d8cbd18f2171a2c40edc6a7a836ecc1c974a7a"
+    }
+  ]
+}

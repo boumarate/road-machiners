@@ -5,15 +5,19 @@ import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { isHostile } from './combat';
+import { contactsOf } from './detect';
 import { getTradePrice, sellVehicleCargo, serviceVehicle, tradeGoods } from './economy';
 import { corePart, freeCells, goodsCount, mountedParts } from './grid';
 import { getResources } from './resources';
 import { randInt } from './rng';
-import { canReachSalvage, collectSalvage, hasSalvage } from './salvage';
+import { canReachSalvage, hasSalvage } from './salvage';
+import { beginSearch } from './search';
 import { vehicleStats } from './stats';
 import type { NpcActivity, Vehicle, World } from './types';
+import { canUseSite, isWalled, siteGates } from './sites';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
+import { DETECT } from '../data/detect';
 
 function getNpcClass(vehicle: Vehicle): NpcClass {
   const template = vehicle.brain && NPCS[vehicle.brain.templateId];
@@ -62,22 +66,40 @@ function computeVisibleStrength(vehicle: Vehicle): number {
   }, 0);
 }
 
+// Where a class flees to, away from a threat at `threatPos`: the nearest known town further from the
+// threat than the vehicle already is, or straight away from it if no such town is known.
+function fleeDestination(world: World, vehicle: Vehicle, profile: NpcClass, threatPos: Vec): Vec {
+  const safe = profile.towns.map(getKnownSite).filter((site) => dist(site.pos, threatPos) > dist(vehicle.pos, threatPos));
+  safe.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
+  const away = { x: vehicle.pos.x + (vehicle.pos.x - threatPos.x), y: vehicle.pos.y + (vehicle.pos.y - threatPos.y) };
+  const destination = safe[0]?.pos ?? away;
+  return { x: clamp(destination.x, 1, world.size - 1), y: clamp(destination.y, 1, world.size - 1) };
+}
+
 function chooseDangerActivity(world: World, vehicle: Vehicle, profile: NpcClass): NpcActivity | null {
   const enemies = world.vehicles.filter((other) => isHostile(vehicle, other) && canVehicleSee(world, vehicle, other.pos));
   enemies.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   const enemy = enemies[0];
-  if (!enemy) return null;
-  const ownStrength = vehicleStats(world, vehicle).weapons.filter((weapon) => weapon.part.hp > 0).reduce((sum, weapon) => sum + weapon.def.round.damage * weapon.def.rounds, 0);
-  const conditionThreshold = vehicle.brain!.activity?.kind === 'flee' ? profile.recoverCondition : profile.fleeCondition;
-  const weak = getCabCondition(vehicle) <= conditionThreshold || getResources(world, vehicle).health / RULES.maxHealth <= conditionThreshold;
-  if (profile.defensive || weak || ownStrength === 0 || computeVisibleStrength(enemy) > ownStrength * profile.threatRatio) {
-    const safe = profile.towns.map(getKnownSite).filter((site) => dist(site.pos, enemy.pos) > dist(vehicle.pos, enemy.pos));
-    safe.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
-    const away = { x: vehicle.pos.x + (vehicle.pos.x - enemy.pos.x), y: vehicle.pos.y + (vehicle.pos.y - enemy.pos.y) };
-    const destination = safe[0]?.pos ?? away;
-    return createActivity('flee', enemy.id, { x: clamp(destination.x, 1, world.size - 1), y: clamp(destination.y, 1, world.size - 1) }, weak ? 'damaged and threatened' : 'avoid a costly fight');
+  if (enemy) {
+    const ownStrength = vehicleStats(world, vehicle).weapons.filter((weapon) => weapon.part.hp > 0).reduce((sum, weapon) => sum + weapon.def.round.damage * weapon.def.rounds, 0);
+    const conditionThreshold = vehicle.brain!.activity?.kind === 'flee' ? profile.recoverCondition : profile.fleeCondition;
+    const weak = getCabCondition(vehicle) <= conditionThreshold || getResources(world, vehicle).health / RULES.maxHealth <= conditionThreshold;
+    if (profile.defensive || weak || ownStrength === 0 || computeVisibleStrength(enemy) > ownStrength * profile.threatRatio) {
+      return createActivity('flee', enemy.id, fleeDestination(world, vehicle, profile, enemy.pos), weak ? 'damaged and threatened' : 'avoid a costly fight');
+    }
+    return createActivity('fight', enemy.id, { ...enemy.pos }, 'manageable visible hostile');
   }
-  return createActivity('fight', enemy.id, { ...enemy.pos }, 'manageable visible hostile');
+  // No visible enemy: react to a hostile heard, dusted or scanned beyond sight, while its contact
+  // circle stays tight enough to trust. Raiders close in on it; everyone else steers away from it.
+  const trusted = (profile.contactReactRadius - DETECT.fuzz.base) / DETECT.fuzz.perTile; // farther circles are too loose
+  const contacts = contactsOf(world, vehicle, trusted)
+    .filter((c) => world.vehicles.some((other) => other.id === c.vehicleId && isHostile(vehicle, other)));
+  contacts.sort((a, b) => dist(vehicle.pos, a.center) - dist(vehicle.pos, b.center));
+  const contact = contacts[0];
+  if (!contact) return null;
+  const template = NPCS[vehicle.brain!.templateId];
+  if (template.brain === 'raider') return createActivity('investigate', contact.vehicleId, { ...contact.center }, 'heard a hostile beyond sight');
+  return createActivity('flee', contact.vehicleId, fleeDestination(world, vehicle, profile, contact.center), 'heard a hostile beyond sight');
 }
 
 function chooseServiceActivity(world: World, vehicle: Vehicle, profile: NpcClass): NpcActivity | null {
@@ -153,7 +175,7 @@ export function chooseNpcActivity(world: World, vehicle: Vehicle): NpcActivity {
     const destination = places[randInt(world, 0, places.length - 1)];
     return createActivity('raid', null, { ...destination }, 'look for prey at known hunting grounds');
   }
-  const sites = profile.salvageSites.map(getKnownSite).filter((site) => dist(vehicle.pos, site.pos) > (site.radius + ECONOMY.useRange) * ECONOMY.interactionScale);
+  const sites = profile.salvageSites.map(getKnownSite).filter((site) => !canUseSite(vehicle.pos, site));
   if (sites.length > 0) return createSiteActivity('scavenge', sites[randInt(world, 0, sites.length - 1)].id, 'search a known salvage site');
   return createActivity('wait', null, null, 'no salvage here');
 }
@@ -169,13 +191,15 @@ export function setNpcActivity(world: World, vehicle: Vehicle, activity: NpcActi
 export function getActivityDestination(world: World, vehicle: Vehicle): Vec | null {
   const activity = vehicle.brain!.activity;
   if (!activity?.destination) return null;
-  if (['fight', 'flee', 'raid'].includes(activity.kind)) return activity.destination;
+  if (['fight', 'flee', 'raid', 'investigate'].includes(activity.kind)) return activity.destination;
   const site = [...REGION.towns, ...REGION.locations].find((entry) => entry.id === activity.targetId);
   const stock = activity.kind === 'scavenge' ? world.salvage.find((entry) => entry.id === activity.targetId) : undefined;
   const radius = site?.radius ?? stock?.radius;
   if (radius === undefined) throw new Error(`Missing activity destination ${activity.targetId}`);
-  const angle = Math.atan2(vehicle.pos.y - activity.destination.y, vehicle.pos.x - activity.destination.x);
   const stopRadius = radius + vehicleStats(world, vehicle).radius + RULES.arriveRadius;
+  // A walled site is used from its gate nearest the vehicle, so the stop lies just outside that gate.
+  const gate = site && isWalled(site) ? siteGates(site).reduce((a, b) => (dist(vehicle.pos, a) <= dist(vehicle.pos, b) ? a : b)) : null;
+  const angle = gate ? Math.atan2(gate.y - site!.pos.y, gate.x - site!.pos.x) : Math.atan2(vehicle.pos.y - activity.destination.y, vehicle.pos.x - activity.destination.x);
   return { x: activity.destination.x + Math.cos(angle) * stopRadius, y: activity.destination.y + Math.sin(angle) * stopRadius };
 }
 
@@ -183,19 +207,28 @@ function resolveActivity(world: World, vehicle: Vehicle, activity: NpcActivity):
   if (activity.kind === 'scavenge') {
     const stock = world.salvage.find((entry) => entry.id === activity.targetId);
     if (!stock) { setNpcActivity(world, vehicle, null, 'salvage no longer available'); return; }
+    // A search already runs at this stock: keep parked and wait for it to finish.
+    if (vehicle.job?.kind === 'search' && vehicle.job.stockId === stock.id) { activity.phase = 'act'; return; }
     if (!canReachSalvage(vehicle, stock)) return;
     activity.phase = 'act';
-    const collected = collectSalvage(world, vehicle, stock.id);
-    setNpcActivity(world, vehicle, null, collected ? 'collected salvage' : hasSalvage(stock) ? 'cargo cannot hold salvage' : 'salvage exhausted');
+    if (!hasSalvage(stock) || freeCells(vehicle) === 0) {
+      setNpcActivity(world, vehicle, null, !hasSalvage(stock) ? 'salvage exhausted' : 'cargo cannot hold salvage');
+      return;
+    }
+    if (!vehicle.job) beginSearch(world, vehicle, stock.id);
     return;
   }
   if (activity.kind === 'raid') {
     if (activity.destination && dist(vehicle.pos, activity.destination) <= RULES.arriveRadius * 2) setNpcActivity(world, vehicle, null, 'reached hunting ground');
     return;
   }
+  if (activity.kind === 'investigate') {
+    if (activity.destination && dist(vehicle.pos, activity.destination) <= RULES.arriveRadius * 2) setNpcActivity(world, vehicle, null, 'found nothing at the contact');
+    return;
+  }
   if (!['sell', 'trade', 'resupply'].includes(activity.kind)) return;
   const site = getKnownSite(activity.targetId!);
-  if (dist(vehicle.pos, site.pos) > (site.radius + ECONOMY.useRange) * ECONOMY.interactionScale) return;
+  if (!canUseSite(vehicle.pos, site)) return;
   activity.phase = 'act';
   if (activity.kind === 'resupply') {
     if ('kind' in site && site.kind === 'oasis') getResources(world, vehicle).supplies = RULES.suppliesCap;

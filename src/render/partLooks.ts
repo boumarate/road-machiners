@@ -37,6 +37,8 @@ export const PART_MODELS: Record<string, ModelName> = {
   enclosedFrame: 'cargo_enclosed_frame',
   heavyFrame: 'cargo_heavy_frame',
 
+  scanner: 'scanner',
+
   scrap: 'good_scrap',
   salt: 'good_salt',
   meds: 'good_meds',
@@ -45,6 +47,7 @@ export const PART_MODELS: Record<string, ModelName> = {
   tools: 'good_tools',
   batteries: 'good_batteries',
   electronics: 'good_electronics',
+  parts: 'good_parts',
 };
 
 export type WeaponPool = { mount: ModelName[]; receiver: ModelName[]; barrel: ModelName[]; extra: ModelName[] };

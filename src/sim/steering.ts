@@ -2,7 +2,6 @@
 // within the vehicle's acceleration, braking and turn limits.
 
 import { RULES } from "../data/rules";
-import { TERRAIN } from "../data/terrain";
 import { maxTurn, type VehicleStats } from "./stats";
 import { chassisDef } from "../data/chassis";
 import { route, routeLength, straightClear, type Blocker } from "./path";
@@ -206,7 +205,7 @@ export function steerTo(
   return steerStep(s, v, aim, remaining);
 }
 
-// An empty tank still permits careful steering at crawl speed. Speed already above the cap brakes normally.
+// An empty tank still permits careful steering at limp speed. Speed already above the cap brakes normally.
 export function steerWithFuel(world: World, s: VehicleStats, v: Pick<Vehicle, 'id' | 'pos' | 'heading' | 'speed'>, order: MoveOrder | null, direct: boolean, fuel: number): Steer {
   const low = fuel > 0 && fuel < chassisDef(world.vehicles.find((x) => x.id === v.id)!.chassisId).fuelCap * RULES.lowFuelThreshold;
   const limit = low ? Math.max(s.maxSpeed * RULES.lowFuelSpeedFactor, v.speed - s.brake) : s.maxSpeed;
@@ -214,8 +213,8 @@ export function steerWithFuel(world: World, s: VehicleStats, v: Pick<Vehicle, 'i
   const steer = steerTo(world, stats, v, order, direct);
   if (Math.abs(steer.speed) * s.fuelPerTile <= fuel) return steer;
   if (!order || order.kind === 'brake') return { speed: Math.max(0, v.speed - s.brake), turn: 0 };
-  const cap = Math.max(RULES.crawlSpeed, v.speed - s.brake);
-  return steerTo(world, { ...s, maxSpeed: cap, turnFast: maxTurn(s, cap), accel: Math.min(s.accel, RULES.crawlSpeed) }, v, order, direct);
+  const cap = Math.max(RULES.limpSpeed, v.speed - s.brake);
+  return steerTo(world, { ...s, maxSpeed: cap, turnFast: maxTurn(s, cap), accel: Math.min(s.accel, RULES.limpSpeed) }, v, order, direct);
 }
 
 export function shouldBackToDestination(vehicle: Pick<Vehicle, 'faction' | 'brain'>): boolean {
@@ -307,7 +306,7 @@ export function zoneEdges(): ZoneEdges {
   const Z = RULES.throttleZones;
   if (Math.abs(Z.brake + Z.hold + Z.accelerate - 1) > 1e-9)
     throw new Error("Throttle zone shares must add up to 1");
-  const reach = TERRAIN.vision.radius * Z.reach;
+  const reach = Z.reach;
   return {
     brakeEnd: reach * Z.brake,
     holdEnd: reach * (Z.brake + Z.hold),

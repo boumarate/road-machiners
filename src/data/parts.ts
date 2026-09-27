@@ -1,6 +1,6 @@
 // Truck parts. Core parts are built into every chassis; the rest are bought and swapped in towns.
 
-export type PartKind = 'weapon' | 'engine' | 'armor' | 'cargo' | 'core';
+export type PartKind = 'weapon' | 'engine' | 'armor' | 'cargo' | 'core' | 'scanner';
 
 // w and h are the part's footprint in inventory cells before rotation. mass in kilograms.
 // armor is the penetration the part stops when a round passes through it.
@@ -27,6 +27,7 @@ export type EngineDef = PartBase & {
   speedBonus: number;
   accelBonus: number;
   fuelMult: number;
+  noise: number; // multiplies how far the engine is heard
 };
 
 export type ArmorDef = PartBase & {
@@ -47,7 +48,13 @@ export type CoreDef = PartBase & {
   role: 'cab' | 'transmission' | 'wheel' | 'tank';
 };
 
-export type PartDef = WeaponDef | EngineDef | ArmorDef | CargoDef | CoreDef;
+// Detects every moving vehicle within range, through hills. Mounts on W cells, so it competes with a gun.
+export type ScannerDef = PartBase & {
+  kind: 'scanner';
+  range: number; // tiles
+};
+
+export type PartDef = WeaponDef | EngineDef | ArmorDef | CargoDef | CoreDef | ScannerDef;
 
 export const PARTS: Record<string, PartDef> = {
   mg: {
@@ -87,31 +94,31 @@ export const PARTS: Record<string, PartDef> = {
   },
   stockEngine: {
     id: 'stockEngine', kind: 'engine', name: 'Stock engine', hp: 25, price: 120, w: 2, h: 2, mass: 300, armor: 4,
-    speedBonus: 0, accelBonus: 0, fuelMult: 1,
+    speedBonus: 0, accelBonus: 0, fuelMult: 1, noise: 1,
   },
   tunedEngine: {
     id: 'tunedEngine', kind: 'engine', name: 'Tuned V8', hp: 20, price: 380, w: 2, h: 2, mass: 380, armor: 4,
-    speedBonus: 1, accelBonus: 1, fuelMult: 1.4,
+    speedBonus: 1.3, accelBonus: 1, fuelMult: 1.4, noise: 1.3,
   },
   flatFour: {
     id: 'flatFour', kind: 'engine', name: 'Light flat-four', hp: 18, price: 100, w: 2, h: 1, mass: 150, armor: 2,
-    speedBonus: -1, accelBonus: 0, fuelMult: 0.75,
+    speedBonus: -1.3, accelBonus: 0, fuelMult: 0.75, noise: 0.7,
   },
   workhorseDiesel: {
     id: 'workhorseDiesel', kind: 'engine', name: 'Workhorse diesel', hp: 40, price: 290, w: 2, h: 2, mass: 420, armor: 6,
-    speedBonus: -0.5, accelBonus: 0.5, fuelMult: 0.7,
+    speedBonus: -0.65, accelBonus: 0.5, fuelMult: 0.7, noise: 1.2,
   },
   racingV6: {
     id: 'racingV6', kind: 'engine', name: 'Racing V6', hp: 16, price: 460, w: 2, h: 2, mass: 240, armor: 2,
-    speedBonus: 1.5, accelBonus: 0.5, fuelMult: 1.25,
+    speedBonus: 1.95, accelBonus: 0.5, fuelMult: 1.25, noise: 1.4,
   },
   heavyDiesel: {
     id: 'heavyDiesel', kind: 'engine', name: 'Heavy diesel', hp: 55, price: 520, w: 2, h: 2, mass: 600, armor: 8,
-    speedBonus: -1, accelBonus: 1.5, fuelMult: 1.1,
+    speedBonus: -1.3, accelBonus: 1.5, fuelMult: 1.1, noise: 1.5,
   },
   turbine: {
     id: 'turbine', kind: 'engine', name: 'Turbine', hp: 22, price: 850, w: 2, h: 2, mass: 310, armor: 3,
-    speedBonus: 2, accelBonus: 2, fuelMult: 2.2,
+    speedBonus: 2.6, accelBonus: 2, fuelMult: 2.2, noise: 1.8,
   },
   plates: {
     id: 'plates', kind: 'armor', name: 'Steel plates', hp: 40, price: 260, w: 1, h: 3, mass: 350, armor: 12,
@@ -188,6 +195,10 @@ export const PARTS: Record<string, PartDef> = {
   tank: {
     id: 'tank', kind: 'core', name: 'Fuel tank', hp: 15, price: 60, w: 1, h: 1, mass: 30, armor: 1,
     role: 'tank',
+  },
+  scanner: {
+    id: 'scanner', kind: 'scanner', name: 'Radio scanner', hp: 15, price: 280, w: 1, h: 1, mass: 30, armor: 2,
+    range: 160, // tiles; covers the whole map, through hills
   },
 };
 

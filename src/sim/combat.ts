@@ -1,28 +1,23 @@
 // Weapons fire after movement. All shots of a turn are rolled first, then applied,
 // so fire is simultaneous: a vehicle killed this turn still gets its shots off.
 
-import { NPCS, SPAWN } from "../data/npcs";
-import { RULES } from "../data/rules";
-import { skillBonus } from "../data/skills";
-import { PHYSICS } from "../data/physics";
-import {
-  laneCount,
-  partLane,
-  sideToward,
-  walkLane,
-  type PartHit,
-  type Side,
-} from "./armor";
-import { bodyOf } from "./body";
-import { corePart, itemSize, mountedItems, mountedParts } from "./grid";
-import { gainXp } from "./progress";
-import { canVehicleSee } from "./vision";
-import { createWreckSalvage } from "./salvage";
-import { getResources } from "./resources";
-import { chance, gauss, randRange } from "./rng";
-import { vehicleStats, type MountedWeapon } from "./stats";
-import type { Aim, ShotRound, Vehicle, World } from "./types";
-import { angleDiff, bearing, clamp, dist, DEG, type Vec } from "./vec";
+import { NPCS, SPAWN } from '../data/npcs';
+import { RULES } from '../data/rules';
+import { skillBonus } from '../data/skills';
+import { chassisDef } from '../data/chassis';
+import { PHYSICS } from '../data/physics';
+import { laneCount, partLane, sideToward, walkLane, type PartHit, type Side } from './armor';
+import { bodyOf } from './body';
+import { corePart, itemSize, mountedItems, mountedParts } from './grid';
+import { gainXp } from './progress';
+import { canVehicleSee, hasLineOfFire } from './vision';
+import { createWreckSalvage } from './salvage';
+import { getResources } from './resources';
+import { chance, gauss, randRange } from './rng';
+import { vehicleStats, type MountedWeapon } from './stats';
+import type { Aim, ShotRound, Vehicle, World } from './types';
+import { weatherAt } from './weather';
+import { angleDiff, bearing, clamp, dist, DEG, type Vec } from './vec';
 
 export type FireBlock =
   | "disabled"
@@ -30,7 +25,8 @@ export type FireBlock =
   | "range"
   | "arc"
   | "noTarget"
-  | "unseen";
+  | "unseen"
+  | "covered";
 
 export function isHostile(a: Vehicle, b: Vehicle): boolean {
   if (a.id === b.id) return false;
@@ -61,6 +57,7 @@ export function fireBlock(
   if (mw.part.reload > 0) return "reloading";
   if (!target) return "noTarget";
   if (!canVehicleSee(world, shooter, target.pos)) return "unseen";
+  if (!hasLineOfFire(world, shooter.pos, target.pos)) return "covered";
   if (dist(shooter.pos, target.pos) > mw.def.range) return "range";
   if (!inArc(shooter, mw, target)) return "arc";
   return null;
@@ -73,7 +70,7 @@ export type HitOdds = {
   width: number; // meters the target, or the aimed part, shows across the line of fire
   halfAngle: number; // radians
   spread: number; // radians; standard deviation of a round's angular error, the sum of the causes
-  causes: { weapon: number; crossing: number; own: number; skill: number }; // radians
+  causes: { weapon: number; crossing: number; own: number; skill: number; weather: number }; // radians
 };
 
 const M = PHYSICS.metersPerTile;
@@ -240,8 +237,9 @@ export function hitOdds(
       (RULES.leadError * Math.abs(rel.x * n.x + rel.y * n.y)) /
       mw.def.round.speed,
     own: RULES.shake * mps(Math.abs(shooter.speed)),
+    weather: weatherAt(world, shooter.pos).spread,
   };
-  const spread = causes.weapon + causes.skill + causes.crossing + causes.own;
+  const spread = causes.weapon + causes.skill + causes.crossing + causes.own + causes.weather;
   if (!(spread > 0))
     throw new Error(`Spread ${spread} of ${mw.def.id} is not positive`);
   const chance = clamp(
@@ -460,7 +458,7 @@ function rewardKill(world: World, v: Vehicle): void {
   gainXp(world, tpl.xp, `destroyed ${v.name}`);
 }
 
-// Auto mode: every weapon gets a body shot at the nearest hostile it can hit. The player's auto fire
+// Auto mode: every weapon gets a body shot at the nearest hostile it can hit, in range, arc and line of fire. The player's auto fire
 // only picks targets the player sees.
 export function autoOrders(world: World, v: Vehicle): void {
   v.weaponOrders = {};
@@ -471,7 +469,7 @@ export function autoOrders(world: World, v: Vehicle): void {
   for (const mw of vehicleStats(world, v).weapons) {
     const target =
       hostiles.find(
-        (h) => dist(v.pos, h.pos) <= mw.def.range && inArc(v, mw, h),
+        (h) => dist(v.pos, h.pos) <= mw.def.range && inArc(v, mw, h) && hasLineOfFire(world, v.pos, h.pos),
       ) ?? hostiles[0];
     if (target)
       v.weaponOrders[mw.part.id] = { targetId: target.id, aim: "body" };

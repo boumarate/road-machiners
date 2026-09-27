@@ -62,6 +62,7 @@ export function makeVehicle(world: World, spec: VehicleSpec): Vehicle {
     brain: spec.brain,
     resources: spec.faction === 'player' ? null : { ...NPC_RESOURCES, fuel: Math.min(NPC_RESOURCES.fuel, chassisDef(spec.chassisId).fuelCap), health: RULES.maxHealth },
     lastHitBy: null,
+    job: null,
   };
   addCoreParts(world, v);
   for (const defId of spec.parts) {

@@ -1,0 +1,27 @@
+{
+  "repository": "https://github.com/abagames/agentic-gamedev-skills",
+  "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+  "files": [
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": ".agents/skills/maximizing-game-feel/SKILL.md",
+      "local": "maximizing-game-feel/SKILL.md",
+      "sha256": "9d5afa98a56c8b0a0ffdea4b46fa975caacc8576ae22665ba1590b05fad7e4c6"
+    },
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": ".agents/skills/maximizing-game-feel/references/technique-catalog.md",
+      "local": "maximizing-game-feel/references/technique-catalog.md",
+      "sha256": "ec328d4ba9086b34603c6b55a331d5a0beba32ffb04f9d8f0165b59645146caf"
+    },
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": "LICENSE",
+      "local": "abagames-LICENSE",
+      "sha256": "141037de19d4de87073c3b70f31ab37572b39a94862cba5d0149bbc3d45b9323"
+    }
+  ]
+}

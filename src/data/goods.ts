@@ -11,14 +11,15 @@ export const GOODS: Record<string, GoodDef> = {
   tools: { id: 'tools', name: 'Machine tools', mass: 160 },
   batteries: { id: 'batteries', name: 'Batteries', mass: 120 },
   electronics: { id: 'electronics', name: 'Electronics', mass: 15 },
+  parts: { id: 'parts', name: 'Parts', mass: 20 }, // spent by field repair
 };
 
 export const GOOD_IDS = Object.keys(GOODS);
 
 // Base unit prices. Buy adds the spread, sell subtracts it.
 export const TOWN_PRICES: Record<string, Record<string, number>> = {
-  bowl: { scrap: 10, salt: 38, meds: 55, grain: 12, textiles: 22, tools: 150, batteries: 105, electronics: 100 },
-  nose: { scrap: 28, salt: 14, meds: 85, grain: 30, textiles: 48, tools: 70, batteries: 48, electronics: 210 },
+  bowl: { scrap: 10, salt: 38, meds: 55, grain: 12, textiles: 22, tools: 150, batteries: 105, electronics: 100, parts: 18 },
+  nose: { scrap: 28, salt: 14, meds: 85, grain: 30, textiles: 48, tools: 70, batteries: 48, electronics: 210, parts: 22 },
 };
 
 export const ECONOMY = {
@@ -27,7 +28,6 @@ export const ECONOMY = {
   partRepairPerHp: 3,
   partSellFactor: 0.5, // of the part price, scaled by remaining hp
   chassisSellFactor: 0.5, // of the chassis price, scaled by mean built-in part health
-  scavenge: { cargo: { meds: 3, scrap: 5 } as Record<string, number>, part: 'tunedEngine', xp: 50 },
   useRange: 1.5, // extra tiles past a site radius where its services work
   interactionScale: 1.5, // multiplier for the total interaction radius
 };

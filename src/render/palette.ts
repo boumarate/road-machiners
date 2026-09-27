@@ -29,7 +29,11 @@ export const PAL = {
   throttle: { brake: 0xe05a3a, hold: 0xf0d060, accelerate: 0x7cc85a },
   target: 0xe03020,
   select: 0xf0d060,
+  contact: 0xf4f1ea, // faint white sound waves around a contact
+  dustTrail: 0xe0c49a, // dust streak behind a contact seen by its dust, pale so it shows over fog
+  radio: 0x8fe0c8, // crisp scanner blip
   flash: 0xfff0a0,
+  lamp: { on: 0xfff2c8, off: 0x8a8470 }, // headlight glass, lit at night
   text: '#f0e0b8',
   textDim: '#b8a888',
 };

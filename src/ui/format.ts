@@ -1,6 +1,9 @@
 // Event log lines.
 
 import { partDef } from '../data/parts';
+import { TERRAIN } from '../data/terrain';
+import { playerVehicle } from '../sim/damage';
+import { dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
 import { mountedParts } from '../sim/grid';
 import { playerSees } from '../sim/vision';
@@ -72,6 +75,14 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       const text = `${partName(world, e.shooter, e.weapon)} → ${n(e.target)}${aim}: ${hits}/${e.rounds.length} hits${crits ? `, ${crits} crit` : ''}${parts} (${Math.round(e.chance * 100)}%)`;
       return { text, cls: e.target === me && dealt.size > 0 ? 'bad' : '' };
     }
+    case 'guardShot': {
+      const target = findAny(world, e.target);
+      if (!target || !playerSees(world, target.pos)) return null;
+      const town = REGION.towns.find((t) => t.id === e.town)!;
+      const hits = e.rounds.filter((r) => r.hit).length;
+      const parts = [...partDamage(e.rounds.flatMap((r) => r.hits))].map(([id, d]) => `, ${partName(world, e.target, id)} −${d}`).join('');
+      return { text: `${town.name} guards → ${n(e.target)}: ${hits}/${e.rounds.length} hits${parts}`, cls: 'dim' };
+    }
     case 'partDisabled':
       return { text: `${n(e.vehicle)}: ${partName(world, e.vehicle, e.part)} disabled`, cls: e.vehicle === me ? 'bad' : 'good' };
     case 'destroyed':
@@ -94,6 +105,25 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       return { text: 'Robbed. You patch your truck enough to crawl back, but the tank is empty.', cls: 'bad' };
     case 'info':
       return { text: e.text, cls: 'dim' };
+    case 'job': {
+      if (e.vehicle !== me) return null;
+      const what = e.job.kind === 'repair' ? `Repair (${partName(world, e.vehicle, e.job.partId)})` : 'Search';
+      const text = e.outcome === 'started' ? `${what} started: stay parked about ${e.job.turnsLeft} turns. End turns with Space.`
+        : e.outcome === 'cancelled' ? `${what} cancelled: the truck moved` : `${what} done`;
+      return { text, cls: e.outcome === 'cancelled' ? 'bad' : e.outcome === 'done' ? 'good' : '' };
+    }
+    case 'searched': {
+      const site = [...REGION.towns, ...REGION.locations].find((l) => l.id === e.stock);
+      return { text: `Search done${site ? ` at ${site.name}` : ''}. Drag what you want into the truck.`, cls: 'good' };
+    }
+    case 'breakdown':
+      return e.vehicle === me ? { text: `${partName(world, e.vehicle, e.part)} broke down`, cls: 'bad' } : null;
+    case 'weather': {
+      // A storm is local news: log it only when it starts or ends within sight of the player.
+      const ev = e.event;
+      if (ev.kind === 'storm' && dist(playerVehicle(world).pos, ev.pos) - ev.radius > TERRAIN.vision.radius) return null;
+      return { text: `${ev.kind === 'storm' ? 'Dust storm' : ev.kind === 'heatwave' ? 'Heat wave' : 'Overcast'} ${e.outcome}`, cls: 'dim' };
+    }
     case 'spawn':
     case 'despawn':
     case 'arrived':

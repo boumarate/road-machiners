@@ -10,11 +10,12 @@ import { goodsCount, gridOf, isMounted, placementError } from '../sim/grid';
 import { mountPart } from '../sim/inventory';
 import { emptyWorld } from '../sim/testkit';
 import type { World } from '../sim/types';
+import { siteGates } from '../sim/sites';
 
 let world: World;
-beforeAll(() => { world = emptyWorld(REGION.towns[0].pos); world.player.money = 100000; });
+beforeAll(() => { world = emptyWorld(siteGates(REGION.towns[0])[0]); world.player.money = 100000; });
 
-const addedParts: Record<Exclude<PartKind, 'core'>, string[]> = {
+const addedParts: Record<Exclude<PartKind, 'core' | 'scanner'>, string[]> = {
   weapon: ['shotgun', 'autocannon', 'tankGun', 'rocketRack', 'sniperCannon'],
   engine: ['flatFour', 'workhorseDiesel', 'racingV6', 'heavyDiesel', 'turbine'],
   armor: ['scrapPanels', 'ceramicPlates', 'spacedArmor', 'reinforcedCage', 'plowRam'],
@@ -59,17 +60,17 @@ describe('equipment variety', () => {
   });
 
   it('adds five goods with profitable routes and real buy/sell transactions', () => {
-    expect(Object.keys(GOODS)).toHaveLength(8);
+    expect(Object.keys(GOODS)).toHaveLength(9); // three base goods, five trade goods, and parts for field repair
     expect(GOOD_IDS).toEqual(Object.keys(GOODS));
     for (const id of addedGoods) {
       expect(GOODS[id].mass).toBeGreaterThan(0);
       const [cheap, dear] = [...REGION.towns].sort((a, b) => TOWN_PRICES[a.id][id] - TOWN_PRICES[b.id][id]);
       expect(sellPrice(world, dear.id, id)).toBeGreaterThan(buyPrice(world, cheap.id, id));
       const start = structuredClone(world);
-      start.vehicles[0].pos = { ...cheap.pos };
+      start.vehicles[0].pos = { ...siteGates(cheap)[0] };
       let w = buyGood(start, id, 1);
       expect(goodsCount(w.vehicles[0])[id]).toBe(1);
-      w.vehicles[0].pos = { ...dear.pos };
+      w.vehicles[0].pos = { ...siteGates(dear)[0] };
       w = sellGood(w, id, 1);
       expect(goodsCount(w.vehicles[0])[id]).toBeUndefined();
       expect(w.player.money).toBeGreaterThan(start.player.money);

@@ -1,31 +1,32 @@
 // World creation and the turn pipeline. No rendering or physics imports: this runs in Node tests.
 // Public functions take a world and return a new one. Inside, a cloned draft is mutated.
 
-import { REGION } from "../data/region";
-import { RULES } from "../data/rules";
-import type { StartKit } from "../data/start";
-import { findPart, playerVehicle } from "./damage";
-import { makePart, makeVehicle } from "./factory";
-import { generateObstacles } from "./mapgen";
-import { buildTerrain } from "./terrain";
-import { planNpcOrders } from "./ai";
-import {
-  assignAutoOrders,
-  fireWeapons,
-  isHostile,
-  resolveDestroyed,
-} from "./combat";
-import { checkDefeat } from "./defeat";
-import { discoverSites, useOasis } from "./locations";
-import { resolveMovement } from "./movement";
-import { consumeSupplies, leakFuel } from "./supplies";
-import { spawnInitial, spawnNpcs } from "./spawn";
-import { initializeSalvage } from "./salvage";
-import { resolveNpcActivities } from "./npc-activities";
-import type { MoveOrder, Vehicle, WeaponOrder, World } from "./types";
-import { vehicleStats } from "./stats";
-import { playerSees, refreshVision } from "./vision";
-import { clamp, dist, type Vec } from "./vec";
+import { REGION } from '../data/region';
+import { RULES } from '../data/rules';
+import type { StartKit } from '../data/start';
+import { findPart, playerVehicle } from './damage';
+import { makePart, makeVehicle } from './factory';
+import { generateObstacles } from './mapgen';
+import { buildTerrain } from './terrain';
+import { planNpcOrders } from './ai';
+import { assignAutoOrders, fireWeapons, isHostile, resolveDestroyed } from './combat';
+import { checkDefeat } from './defeat';
+import { fireGuards } from './guards';
+import { discoverSites, useOasis } from './locations';
+import { resolveMovement } from './movement';
+import { consumeSupplies, leakFuel } from './supplies';
+import { spawnInitial, spawnNpcs } from './spawn';
+import { initializeSalvage } from './salvage';
+import { timed } from '../perf';
+import { resolveNpcActivities } from './npc-activities';
+import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
+import { vehicleStats } from './stats';
+import { playerSees, refreshVision } from './vision';
+import { advanceWeather } from './weather';
+import { applyWear } from './wear';
+import { advanceDust } from './detect';
+import { advanceJobs } from './jobs';
+import { clamp, dist, type Vec } from './vec';
 
 export function newWorld(seed: number, kit: StartKit): World {
   if (!Number.isInteger(seed))
@@ -56,12 +57,16 @@ export function newWorld(seed: number, kit: StartKit): World {
       storage: [],
       costBasis: { ...kit.costBasis },
       knockouts: 0,
-      explored: new Array(REGION.size * REGION.size).fill(false),
+      explored: new Uint8Array(REGION.size * REGION.size),
       visible: [],
+      contacts: [],
+      clouds: [],
     },
     events: [],
     removed: [],
     spawnTimer: {},
+    weather: [],
+    dustClouds: [],
   };
   world.obstacles = generateObstacles(world);
   const town = REGION.towns.find((t) => t.id === REGION.playerStart.town)!;
@@ -95,9 +100,15 @@ export function newWorld(seed: number, kit: StartKit): World {
   return world;
 }
 
+export function cloneWorld(world: World): World {
+  if (!Object.isFrozen(world.terrain)) return structuredClone(world);
+  const { terrain, ...state } = world;
+  return { ...structuredClone(state), terrain };
+}
+
 // Clone, apply, return. Every command and the turn go through this.
 export function update(world: World, fn: (draft: World) => void): World {
-  const draft = structuredClone(world);
+  const draft = cloneWorld(world);
   draft.events = [];
   draft.removed = [];
   fn(draft);
@@ -124,13 +135,18 @@ export function endTurn(
   world: World,
   move: (w: World) => void = resolveMovement,
 ): World {
-  return update(world, (w) => {
+  return timed('turn', () => update(world, (w) => {
     w.turn++;
+    advanceWeather(w);
     planNpcOrders(w);
     move(w);
+    applyWear(w);
+    advanceDust(w);
+    advanceJobs(w);
     refreshVision(w);
     assignAutoOrders(w);
     fireWeapons(w);
+    fireGuards(w);
     consumeSupplies(w);
     leakFuel(w);
     resolveDestroyed(w);
@@ -140,7 +156,7 @@ export function endTurn(
     checkDefeat(w);
     spawnNpcs(w);
     refreshVision(w);
-  });
+  }));
 }
 
 export function setWeaponOrder(

@@ -1,0 +1,253 @@
+import { beforeAll, describe, expect, it } from 'vitest';
+import { PERF } from '../data/perf';
+import { RULES } from '../data/rules';
+import { TERRAIN } from '../data/terrain';
+import { buildDrive, bodyState, freeDrive, initPhysics, syncDrive, TURN_STEPS, type Drive, type TurnResult } from '../phys/drive';
+import { PHYSICS } from '../data/physics';
+import { physicsMove } from '../phys/turn';
+import { advanceFar, isNear } from './far';
+import { getResources } from './resources';
+import { vehicleStats } from './stats';
+import { addVehicle, emptyWorld } from './testkit';
+import type { Pose, World } from './types';
+import { dist } from './vec';
+import { endTurn } from './world';
+
+beforeAll(async () => {
+  await initPhysics();
+});
+
+const LIVE = TERRAIN.vision.radius + PERF.liveMargin;
+
+// Plays n turns through the real turn pipeline with physics movement.
+function play(w: World, n: number): { w: World; d: Drive; last: TurnResult } {
+  let d = buildDrive(w);
+  let last: TurnResult | null = null;
+  for (let i = 0; i < n; i++) {
+    let r: TurnResult | null = null;
+    w = endTurn(w, physicsMove(d, (x) => (r = x)));
+    freeDrive(d);
+    d = r!.next;
+    last = r;
+  }
+  return { w, d, last: last! };
+}
+
+function pathLength(trail: Pose[]): number {
+  let total = 0;
+  for (let i = 1; i < trail.length; i++) total += dist(trail[i - 1], trail[i]);
+  return total;
+}
+
+// Player at (30, 30); one NPC inside the live radius and one far beyond it.
+function mixedWorld(): World {
+  const w = emptyWorld();
+  const near = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 40, y: 30 });
+  near.order = { kind: 'through', dest: { x: 50, y: 34 } };
+  const far = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 30 + LIVE + 40, y: 80 });
+  far.order = { kind: 'stopAt', dest: { x: 30 + LIVE + 60, y: 90 } };
+  return w;
+}
+
+describe('far NPC travel', () => {
+  it('counts the player and vehicles inside sight plus the live margin as near', () => {
+    const w = emptyWorld();
+    const inside = addVehicle(w, 'traders', 'scout', [], { x: 30 + LIVE - 0.5, y: 30 });
+    const outside = addVehicle(w, 'traders', 'scout', [], { x: 30 + LIVE + 0.5, y: 30 });
+    expect(isNear(w, w.vehicles[0])).toBe(true);
+    expect(isNear(w, inside)).toBe(true);
+    expect(isNear(w, outside)).toBe(false);
+  });
+
+  it('gives the same turn result for the same world and orders, near and far alike (IV2)', () => {
+    const a = play(mixedWorld(), 3);
+    const b = play(mixedWorld(), 3);
+    const pick = (w: World) => w.vehicles.map((v) => ({ id: v.id, pos: v.pos, heading: v.heading, speed: v.speed, trail: v.trail, order: v.order, fuel: getResources(w, v).fuel }));
+    expect(pick(a.w)).toEqual(pick(b.w));
+    expect(a.w.vehicles[2].pos).not.toEqual(mixedWorld().vehicles[2].pos);
+    freeDrive(a.d);
+    freeDrive(b.d);
+  });
+
+  it('keeps a body for every near vehicle and none for far ones after each sync (IV3)', () => {
+    const w = mixedWorld();
+    const d = buildDrive(w);
+    expect(Object.keys(d.bodies).sort()).toEqual([w.vehicles[0].id, w.vehicles[1].id].sort());
+    w.vehicles[1].pos = { x: 30, y: 30 + LIVE + 5 };
+    syncDrive(d, w);
+    expect(Object.keys(d.bodies)).toEqual([w.vehicles[0].id]);
+    expect(d.memory[w.vehicles[1].id]).toBeUndefined();
+    freeDrive(d);
+  });
+
+  it('simulates only near vehicles in physics', () => {
+    const { w, d, last } = play(mixedWorld(), 1);
+    expect(Object.keys(d.bodies).sort()).toEqual([w.vehicles[0].id, w.vehicles[1].id].sort());
+    expect(w.vehicles[2].trail).toHaveLength(RULES.substeps + 1);
+    freeDrive(d);
+  });
+
+  it('moves a far vehicle no farther than its speed allows and burns fuel for that distance (IV4)', () => {
+    const w = emptyWorld();
+    const far = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });
+    far.speed = 2;
+    far.order = { kind: 'through', dest: { x: 200, y: 120 } };
+    const s = vehicleStats(w, far);
+    for (let turn = 0; turn < 4; turn++) {
+      const start = { ...far.pos };
+      const before = { fuel: getResources(w, far).fuel, speed: far.speed };
+      advanceFar(w, far);
+      const moved = pathLength(far.trail);
+      expect(far.trail[0]).toMatchObject(start);
+      expect(far.trail).toHaveLength(RULES.substeps + 1);
+      expect(moved).toBeGreaterThan(0);
+      expect(moved).toBeLessThanOrEqual(Math.max(before.speed, far.speed) + 1e-9);
+      expect(far.speed).toBeLessThanOrEqual(s.maxSpeed);
+      expect(far.speed).toBeLessThanOrEqual(before.speed + s.accel + 1e-9);
+      expect(before.fuel - getResources(w, far).fuel).toBeCloseTo(moved * s.fuelPerTile, 9);
+    }
+  });
+
+  it('crawls without fuel and burns nothing below empty', () => {
+    const w = emptyWorld();
+    const far = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });
+    far.resources!.fuel = 0;
+    far.order = { kind: 'through', dest: { x: 200, y: 120 } };
+    advanceFar(w, far);
+    expect(far.speed).toBeLessThanOrEqual(RULES.limpSpeed);
+    expect(far.resources!.fuel).toBe(0);
+  });
+
+  it('a brake order or no order slows a far vehicle where it stands', () => {
+    const w = emptyWorld();
+    const far = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });
+    far.speed = 5;
+    far.order = { kind: 'brake' };
+    const s = vehicleStats(w, far);
+    advanceFar(w, far);
+    expect(far.pos).toEqual({ x: 120, y: 120 });
+    expect(far.speed).toBeCloseTo(Math.max(0, 5 - s.brake), 9);
+    for (let i = 0; i < 10 && far.order; i++) advanceFar(w, far);
+    expect(far.order).toBeNull();
+    expect(far.speed).toBe(0);
+  });
+
+  it('reaches a distant site over turns and reports arrival', () => {
+    let w = emptyWorld();
+    const npc = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });
+    const site = { x: 150, y: 140 };
+    npc.order = { kind: 'stopAt', dest: site };
+    let d = buildDrive(w);
+    let arrived = false;
+    for (let i = 0; i < 40 && !arrived; i++) {
+      let next: Drive | null = null;
+      w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+      freeDrive(d);
+      d = next!;
+      arrived = w.events.some((e) => e.t === 'arrived' && e.vehicle === npc.id);
+    }
+    const v = w.vehicles.find((x) => x.id === npc.id)!;
+    expect(arrived).toBe(true);
+    expect(v.order).toBeNull();
+    expect(dist(v.pos, site)).toBeLessThan(RULES.arriveRadius);
+    expect(d.bodies[npc.id]).toBeUndefined();
+    freeDrive(d);
+  });
+
+  it('stores the route and reuses it while the destination holds', () => {
+    const w = emptyWorld();
+    w.obstacles = [{ id: 'rock1', pos: { x: 135, y: 120 }, r: 3, kind: 'rock' }];
+    const far = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });
+    far.brain = { templateId: 'trader', activity: null, goal: null, home: { x: 0, y: 0 }, stepIndex: 0 };
+    far.order = { kind: 'stopAt', dest: { x: 150, y: 120 } };
+    advanceFar(w, far);
+    const stored = far.brain.farRoute!;
+    expect(stored.dest).toEqual({ x: 150, y: 120 });
+    expect(stored.points.length).toBeGreaterThan(1);
+    const marker = { x: 150, y: 120 };
+    stored.points = [marker];
+    advanceFar(w, far);
+    expect(far.brain.farRoute!.points).toEqual([marker]);
+    far.order = { kind: 'stopAt', dest: { x: 150, y: 100 } };
+    advanceFar(w, far);
+    expect(far.brain.farRoute!.dest).toEqual({ x: 150, y: 100 });
+  });
+
+  it('adds a body at the sim pose when a far vehicle crosses into range', () => {
+    let w = emptyWorld();
+    const npc = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 30 + LIVE + 6, y: 30 });
+    npc.order = { kind: 'through', dest: { x: 20, y: 30 } };
+    npc.speed = 4;
+    npc.heading = Math.PI;
+    let d = buildDrive(w);
+    expect(d.bodies[npc.id]).toBeUndefined();
+    let crossed = false;
+    for (let i = 0; i < 6 && !crossed; i++) {
+      let next: Drive | null = null;
+      w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+      freeDrive(d);
+      d = next!;
+      crossed = isNear(w, w.vehicles.find((x) => x.id === npc.id)!);
+    }
+    expect(crossed).toBe(true);
+    syncDrive(d, w);
+    const v = w.vehicles.find((x) => x.id === npc.id)!;
+    const body = bodyState(d, npc.id);
+    expect(dist(body.pos, v.pos)).toBeLessThan(1e-3);
+    expect(Math.abs(body.heading - v.heading)).toBeLessThan(1e-3);
+    freeDrive(d);
+  });
+  it('gives far vehicles frames along their trail, so the view never jumps', () => {
+    const { w, last } = play(mixedWorld(), 1);
+    const far = w.vehicles[2];
+    const frames = last.frames[far.id];
+    expect(frames).toHaveLength(TURN_STEPS);
+    const S = PHYSICS.metersPerTile;
+    const end = frames[frames.length - 1].pos;
+    expect(Math.hypot(end.x / S - far.pos.x, end.z / S - far.pos.y)).toBeLessThan(1e-6);
+    for (let i = 1; i < frames.length; i++) {
+      const step = Math.hypot(frames[i].pos.x - frames[i - 1].pos.x, frames[i].pos.z - frames[i - 1].pos.z) / S;
+      expect(step).toBeLessThanOrEqual(pathLength(far.trail) / RULES.substeps + 1e-6);
+    }
+    for (const v of w.vehicles) expect(last.frames[v.id]).toHaveLength(TURN_STEPS);
+  });
+});
+
+describe('far travel contact', () => {
+  function far() {
+    const w = emptyWorld();
+    const mover = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });
+    mover.speed = 4;
+    return { w, mover };
+  }
+
+  it('stops just short of a moving truck in the way', () => {
+    const { w, mover } = far();
+    const parked = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 122.5, y: 120 });
+    parked.speed = 2; // moving, so the route planner does not steer around it
+    mover.order = { kind: 'through', dest: { x: 200, y: 120 } };
+    advanceFar(w, mover);
+    const contact = vehicleStats(w, mover).radius + vehicleStats(w, parked).radius;
+    expect(dist(mover.pos, parked.pos)).toBeGreaterThanOrEqual(contact);
+    expect(mover.pos.x).toBeGreaterThan(120);
+    expect(mover.speed).toBe(0);
+    expect(mover.order).not.toBeNull();
+  });
+
+  it('arrives next to a truck parked on its stop point', () => {
+    const { w, mover } = far();
+    addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 123, y: 120 });
+    mover.order = { kind: 'stopAt', dest: { x: 123, y: 120 } };
+    advanceFar(w, mover);
+    expect(mover.order).toBeNull();
+    expect(mover.speed).toBe(0);
+  });
+
+  it('lets two trucks on the same point drive apart', () => {
+    const { w, mover } = far();
+    addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });
+    mover.order = { kind: 'through', dest: { x: 200, y: 120 } };
+    advanceFar(w, mover);
+    expect(mover.pos.x).toBeGreaterThan(121);
+  });
+});

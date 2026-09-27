@@ -1,15 +1,16 @@
 // Physics as the sim's movement step. The turn pipeline hands the draft world to physicsMove, which
 // runs the turn in the physics engine and writes poses, speeds, trails, fuel, crashes and orders back.
+// Vehicles far from the player have no body and travel through advanceFar.
 
 import { RULES } from '../data/rules';
 import { playerVehicle } from '../sim/damage';
+import { advanceFar } from '../sim/far';
 import { applyCrash, nearestEdge } from '../sim/movement';
-import { getResources } from '../sim/resources';
-import { vehicleStats } from '../sim/stats';
+import { burnFuel } from '../sim/resources';
 import type { Pose, Vehicle, World } from '../sim/types';
 import { dist, type Vec } from '../sim/vec';
 import { visibleTiles } from '../sim/vision';
-import { bodyState, EDGE, simulateTurn, syncDrive, toTilesPerTurn, TURN_STEPS, type Drive, type TurnResult } from './drive';
+import { bodyState, EDGE, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type TurnResult } from './drive';
 import { headingOf, toMap } from './frames';
 
 const EXPLORE_EVERY = 4; // trail poses between sight checks while exploring along a turn
@@ -20,24 +21,32 @@ export function physicsMove(d: Drive, done: (r: TurnResult) => void): (w: World)
   return (w) => {
     syncDrive(d, w);
     const r = simulateTurn(d, w);
+    const far = w.vehicles.filter((v) => !r.frames[v.id]);
     applyTurn(w, r);
+    for (const v of far) {
+      advanceFar(w, v);
+      r.frames[v.id] = trailFrames(w, v);
+    }
     exploreAlong(w);
     done(r);
   };
 }
 
+// Writes the physics result back for the vehicles that drove in it. Vehicles without frames were far
+// and are left alone. A vehicle driving in physics drops any route stored while it was far, since it
+// no longer starts where that route left off.
 export function applyTurn(w: World, r: TurnResult): void {
   for (const v of w.vehicles) {
     const frames = r.frames[v.id];
-    if (!frames) throw new Error(`No frames for ${v.id}`);
+    if (!frames) continue;
+    if (v.brain) delete v.brain.farRoute;
     const s = bodyState(r.next, v.id);
     const start: Pose = { x: v.pos.x, y: v.pos.y, heading: v.heading };
     v.pos = s.pos;
     v.heading = s.heading;
     v.speed = Math.max(0, toTilesPerTurn(s.speed));
     v.trail = trailOf(start, frames);
-    const resources = getResources(w, v);
-    resources.fuel = Math.max(0, resources.fuel - pathLength(v.trail) * vehicleStats(w, v).fuelPerTile);
+    burnFuel(w, v, pathLength(v.trail));
     const res = r.results[v.id];
     const done = (v.order?.kind === 'through' && res.passed) || (v.order?.kind === 'stopAt' && res.arrived);
     if (done) w.events.push({ t: 'arrived', vehicle: v.id });
@@ -64,7 +73,7 @@ function crashPoint(w: World, a: Vehicle, b: Vehicle | null, what: string): Vec 
 function exploreAlong(w: World): void {
   const me = playerVehicle(w);
   for (let i = 0; i < me.trail.length; i += EXPLORE_EVERY) {
-    for (const t of visibleTiles(w, me.trail[i])) w.player.explored[t] = true;
+    for (const t of visibleTiles(w, me.trail[i])) w.player.explored[t] = 1;
   }
 }
 

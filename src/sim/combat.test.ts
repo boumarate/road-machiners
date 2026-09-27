@@ -105,7 +105,7 @@ describe('combat', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
     mountedParts(me, 'engine')[0].hp = 0;
-    expect(vehicleStats(w, me).maxSpeed).toBe(RULES.disabledEngineSpeed);
+    expect(vehicleStats(w, me).maxSpeed).toBe(RULES.limpSpeed);
   });
 
   it('a kill leaves a wreck obstacle and pays the player', () => {
@@ -388,6 +388,19 @@ describe('player vision', () => {
     fireWeapons(w);
     expect(w.events.some((e) => e.t === 'shot' && e.shooter === me.id)).toBe(false);
   });
+
+  it('a raider seen behind a rock inside the close radius cannot be shot', async () => {
+    const { fireBlock } = await import('./combat');
+    const { playerSees } = await import('./vision');
+    const { w, me, buggy, mg } = duel({ x: 32.5, y: 30 });
+    w.obstacles = [{ id: 'r', pos: { x: 31.2, y: 30 }, r: 0.6, kind: 'rock' }];
+    refreshVision(w);
+    expect(playerSees(w, buggy.pos)).toBe(true);
+    expect(fireBlock(w, me, mg, buggy)).toBe('covered');
+    order(me, mg.part.id, buggy.id);
+    fireWeapons(w);
+    expect(w.events.some((e) => e.t === 'shot' && e.shooter === me.id)).toBe(false);
+  });
 });
 
 describe('invariants under AI traffic', () => {
@@ -413,6 +426,7 @@ describe('invariants under AI traffic', () => {
         expect(Math.abs(v.heading - b.heading)).toBeLessThanOrEqual(Math.max(maxTurn(b.s, v.speed), backed) + 1e-9);
       }
       for (const k of ['fuel', 'supplies', 'health', 'money'] as const) expect(w.player[k]).toBeGreaterThanOrEqual(0);
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
-  }, 10_000); // 120-tile terrain and 80 turns take about 5 seconds even without parallel tests.
+  }, 120_000); // Eighty turns include long-distance traffic across the 600-tile region.
 });

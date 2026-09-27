@@ -7,6 +7,7 @@ import type { Vehicle, World } from "../sim/types";
 import { playerSees } from "../sim/vision";
 import { setAutoFire, setWeaponOrder } from "../sim/world";
 import { el, panel } from "./dom";
+import { meters } from "./units";
 import type { UiHost } from "./host";
 import { createIcon } from './icons';
 
@@ -17,6 +18,7 @@ export const BLOCK_TEXT: Record<FireBlock, string> = {
   arc: "out of arc",
   noTarget: "hold fire",
   unseen: "not in sight",
+  covered: "behind cover",
 };
 
 // Current-position feedback shared by the weapon buttons and map markers.
@@ -132,7 +134,7 @@ export class WeaponPanel {
           class: `weapon-pick ${selected ? "on" : ""}`,
           "aria-pressed": String(selected),
           'aria-label': `${mw.def.name}: ${readout.status}, ${target}`,
-          title: `${mw.def.name}: ${mw.def.rounds} × ${mw.def.round.damage} damage, pen ${mw.def.round.pen}, range ${mw.def.range}, arc ${mw.def.arc}°, fires every ${mw.def.reload} turn(s)`,
+          title: `${mw.def.name}: ${mw.def.rounds} × ${mw.def.round.damage} damage, pen ${mw.def.round.pen}, range ${meters(mw.def.range)} m, arc ${mw.def.arc}°, fires every ${mw.def.reload} turn(s)`,
           onclick: () => this.selectWeapon(selected ? null : mw.part.id),
         },
         el('span', { class: 'weapon-number' }, `${i + 1}`),

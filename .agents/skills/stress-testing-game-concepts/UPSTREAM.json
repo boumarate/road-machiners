@@ -1,0 +1,48 @@
+{
+  "repository": "https://github.com/abagames/agentic-gamedev-skills",
+  "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+  "files": [
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": ".agents/skills/stress-testing-game-concepts/SKILL.md",
+      "local": "stress-testing-game-concepts/SKILL.md",
+      "sha256": "765bca7e82fef0d84acddfd2879011d380c3048949cf221fe7542bb665296ca7"
+    },
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": ".agents/skills/stress-testing-game-concepts/references/failure-taxonomy.md",
+      "local": "stress-testing-game-concepts/references/failure-taxonomy.md",
+      "sha256": "7b1f30d6f30c3884f1d15f396b15e9bc8457db252e052e1da90f94c640a68775"
+    },
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": ".agents/skills/stress-testing-game-concepts/references/human-review.md",
+      "local": "stress-testing-game-concepts/references/human-review.md",
+      "sha256": "58719b642fbf20e008da2c19fb96ea187b98fda852b30b924631cdc8b731dee6"
+    },
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": ".agents/skills/stress-testing-game-concepts/references/policy-library.md",
+      "local": "stress-testing-game-concepts/references/policy-library.md",
+      "sha256": "cd8d017dbc88060e76298dcd6555a123aae62057af16edfb490ca023bcbde10c"
+    },
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": ".agents/skills/stress-testing-game-concepts/references/report-contract.md",
+      "local": "stress-testing-game-concepts/references/report-contract.md",
+      "sha256": "2e706342208b1598d569b6dbe701838572c5303c9146539e73a50b462adf659b"
+    },
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": "LICENSE",
+      "local": "abagames-LICENSE",
+      "sha256": "141037de19d4de87073c3b70f31ab37572b39a94862cba5d0149bbc3d45b9323"
+    }
+  ]
+}

@@ -160,3 +160,17 @@ html, body { margin: 0; height: 100%; background: #1b1c1d; overflow: hidden; }
   .inv-side { width: 100%; }
   .modal td, .modal th { padding: 7px 4px; }
 }
+
+/* Dust haze over the view while the player truck is inside a storm. */
+.storm-tint { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(157, 121, 84, 0.18), rgba(120, 88, 58, 0.55)); }
+
+/* Progress of a parked job: repair or search. */
+.job-bar { display: block; width: 90px; height: 5px; margin-top: 3px; background: rgba(255, 255, 255, 0.12); }
+.job-bar > span { display: block; height: 100%; background: #e0c070; }
+
+.top-right { position: absolute; right: 14px; top: 14px; display: flex; gap: 6px; align-items: flex-start; }
+#ui .top-right > .panel { position: static; padding: 6px 8px; }
+.sound { font-size: 12px; }
+.game-menu { display: flex; gap: 6px; font-size: 12px; }
+.sound .row { display: flex; gap: 6px; }
+.sound .sound-sliders label { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; }

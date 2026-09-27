@@ -18,6 +18,7 @@ import {
   type Terrain,
 } from "./terrain";
 import { emptyWorld } from "./testkit";
+import { ROAD_INDEX } from "./road-index";
 import { dist, polylineDist, segmentDist } from "./vec";
 import { newWorld } from "./world";
 
@@ -31,6 +32,37 @@ function flatWith(
     for (let i = 0; i <= size; i++) heights.push(lift(i, j));
   return { size, heights, types: new Array(size * size).fill("hardpan") };
 }
+
+// FNV-1a over the exact float bits of every corner height, then the type of every tile.
+function terrainHash(t: Terrain): string {
+  const bits = new Uint32Array(new Float64Array(t.heights).buffer);
+  let h = 0x811c9dc5;
+  const mix = (v: number) => {
+    h = Math.imul(h ^ v, 0x01000193);
+  };
+  for (const v of bits) mix(v);
+  const typeIds = Object.keys(TERRAIN_TYPES);
+  for (const type of t.types) mix(typeIds.indexOf(type));
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+describe("terrain generation", () => {
+  it("keeps the exact heights and types of known seeds", () => {
+    expect(terrainHash(buildTerrain(1, REGION.size))).toBe("4b41fe45");
+    expect(terrainHash(buildTerrain(7, REGION.size))).toBe("3497f518");
+  }, 30_000);
+
+  it("finds the same road distance through the road index as over every road", () => {
+    for (const reach of [REGION.roadWidth / 2, REGION.roadWidth / 2 + TERRAIN.flattenMargin]) {
+      for (let y = -20.25; y < REGION.size + 20; y += 3.7) {
+        for (let x = -20.25; x < REGION.size + 20; x += 3.7) {
+          const exact = Math.min(...REGION.roads.map((road) => polylineDist({ x, y }, road)));
+          expect(ROAD_INDEX.nearestWithin(x, y, reach)).toBe(exact < reach ? exact : Infinity);
+        }
+      }
+    }
+  });
+});
 
 describe('terrain variety', () => {
   it.each([1, 1337, 2024])('generates all ten types without changing heights or road/site priority for seed %s', (seed) => {
@@ -72,8 +104,8 @@ describe('terrain variety', () => {
 describe("terrain grid", () => {
   it('has fifteen distinct Icarus destinations with road access', () => {
     const w = newWorld(1337, START_KITS.standard);
-    expect(w.size).toBe(120);
-    expect(w.terrain.heights).toHaveLength(121 * 121);
+    expect(w.size).toBe(600);
+    expect(w.terrain.heights).toHaveLength(601 * 601);
     expect(REGION.name).toBe('Icarus');
     expect(REGION.towns.map((town) => town.name)).toEqual(['Bowl', 'Nose']);
     expect(REGION.locations.map((site) => site.name)).toEqual([
@@ -90,7 +122,7 @@ describe("terrain grid", () => {
       expect(site.pos.y).toBeLessThan(w.size - site.radius);
       expect(REGION.roads.some((road) => road.some((p) => dist(p, site.pos) <= (site.id === 'fallen-sun' ? site.radius : 0.01)))).toBe(true);
     }
-    for (let i = 0; i < sites.length; i++) for (let j = i + 1; j < sites.length; j++) expect(dist(sites[i].pos, sites[j].pos)).toBeGreaterThan(12);
+    for (let i = 0; i < sites.length; i++) for (let j = i + 1; j < sites.length; j++) expect(dist(sites[i].pos, sites[j].pos)).toBeGreaterThan(60);
   });
 
   it('links both towns by northern and southern canyon crossings', () => {
@@ -125,8 +157,8 @@ describe("terrain grid", () => {
     const pickMiddle = (line: { x: number; y: number }[]) => line[Math.floor(line.length / 2)];
     const c = pickMiddle(canyon.path);
     const r = { x: (river.path[0].x + river.path[1].x) / 2, y: (river.path[0].y + river.path[1].y) / 2 };
-    expect(heightAt(t, c.x, c.y)).toBeLessThan(heightAt(t, c.x + canyon.width + 3, c.y) - 1);
-    expect(heightAt(t, r.x, r.y)).toBeLessThan(heightAt(t, r.x, r.y + river.width + 3) - 0.3);
+    expect(heightAt(t, c.x, c.y)).toBeLessThan(heightAt(t, c.x + canyon.width + canyon.bank + 3, c.y) - 1);
+    expect(heightAt(t, r.x, r.y)).toBeLessThan(heightAt(t, r.x, r.y + river.width + river.bank + 3) - 0.3);
     for (const crater of TERRAIN.features.craters) {
       expect(heightAt(t, crater.center.x, crater.center.y)).toBeLessThan(heightAt(t, crater.center.x + crater.radius + crater.bank, crater.center.y) - 0.5);
     }
@@ -150,7 +182,7 @@ describe("terrain grid", () => {
       expect(t.types[tileAt(t, REGION.roads[0][1])]).toBe("road");
       expect(isCliff(t, tileAt(t, w.vehicles[0].pos))).toBe(false);
     }
-  });
+  }, 30_000);
 
   it("mountains produce cliff tiles", () => {
     const t = newWorld(1337, START_KITS.standard).terrain;

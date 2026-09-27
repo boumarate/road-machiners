@@ -1,0 +1,55 @@
+{
+  "repository": "https://github.com/abagames/agentic-gamedev-skills",
+  "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+  "files": [
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": ".agents/skills/evaluating-gameplay-balance/SKILL.md",
+      "local": "evaluating-gameplay-balance/SKILL.md",
+      "sha256": "b071d970ebe6ee2c9e4f26d495f18e5eadc60a40f07babfc59f4cf0635f87866"
+    },
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": ".agents/skills/evaluating-gameplay-balance/references/balance-patterns.md",
+      "local": "evaluating-gameplay-balance/references/balance-patterns.md",
+      "sha256": "08a1cfc29a141cf13e04b09cfc3a688b625c40589deaa47339cb0268312ac77e"
+    },
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": ".agents/skills/evaluating-gameplay-balance/references/godot-implementation-notes.md",
+      "local": "evaluating-gameplay-balance/references/godot-implementation-notes.md",
+      "sha256": "4cbb96df66d63c298d48a8424317d9809856acb8e76f9de7387a2138d65f785b"
+    },
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": ".agents/skills/evaluating-gameplay-balance/references/improvement-analysis.md",
+      "local": "evaluating-gameplay-balance/references/improvement-analysis.md",
+      "sha256": "3e67410c08f3361ccb5328679f2115746e1337f221e80d69d67840f910787d78"
+    },
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": ".agents/skills/evaluating-gameplay-balance/references/log-contract.md",
+      "local": "evaluating-gameplay-balance/references/log-contract.md",
+      "sha256": "5c3c959558b74a8d1e8218c1e559de4471b8de1c0d19ce80a684eea7f26da7a7"
+    },
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": ".agents/skills/evaluating-gameplay-balance/references/simulation-harness.md",
+      "local": "evaluating-gameplay-balance/references/simulation-harness.md",
+      "sha256": "24b59211f3a4ce4448af3ac4007a63c6782e28badbc3576c2da57c3297a37de0"
+    },
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": "LICENSE",
+      "local": "abagames-LICENSE",
+      "sha256": "141037de19d4de87073c3b70f31ab37572b39a94862cba5d0149bbc3d45b9323"
+    }
+  ]
+}

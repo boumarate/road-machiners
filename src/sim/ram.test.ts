@@ -86,3 +86,13 @@ describe('rams', () => {
     expect(e.hitsA.some((h) => h.part === partOf(v, 'stockEngine').id)).toBe(true);
   });
 });
+
+describe('slow bumps', () => {
+  it('a bump into a rock at a slow speed only scratches parts', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const before = new Map(mountedParts(me).map((p) => [p.id, p.hp]));
+    applyCrash(w, me, null, 'rock', { x: me.pos.x + 1, y: me.pos.y }, 2);
+    for (const p of mountedParts(me)) expect(p.hp).toBeGreaterThan(before.get(p.id)! * 0.8);
+  });
+});

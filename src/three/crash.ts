@@ -1,4 +1,7 @@
 // Any uncaught error stops the game behind a fullscreen message, so a crash is never silent.
+// A save the game cannot load gets a button that deletes it and starts a new game.
+
+import { clearSave, SaveError } from './save';
 
 let shown = false;
 
@@ -24,5 +27,15 @@ function showCrash(err: unknown): void {
   hint.style.cssText = 'margin-top:24px;color:#c8a898;';
   hint.textContent = 'Reload the page to start again.';
   box.append(title, body, hint);
+  if (err instanceof SaveError) {
+    const reset = document.createElement('button');
+    reset.style.cssText = 'margin-top:16px;padding:10px 18px;font:inherit;font-size:16px;cursor:pointer;';
+    reset.textContent = 'Yeah, fuck it, start a new game';
+    reset.onclick = () => {
+      clearSave(window.localStorage);
+      window.location.reload();
+    };
+    box.append(reset);
+  }
   document.body.appendChild(box);
 }

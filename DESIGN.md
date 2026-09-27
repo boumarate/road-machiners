@@ -24,6 +24,14 @@ Every part and good has a mass. A heavier truck accelerates, brakes, steers and 
 
 Parts wear. The frame cannot be fully repaired, so old trucks slowly decline. The player changes trucks every so often. Parts move between trucks, so a change keeps some progress.
 
+Every turn, each mounted part may lose HP. The chance grows with the tiles driven that turn, the truck's speed and how rough the ground is. Rarely, a part breaks down and loses a large share of its HP at once, logged in the event feed. The same rule wears NPC trucks.
+
+Parts is a trade good, bought and sold in towns like scrap or salt. It is the resource field repair spends. The standard start kit carries a few.
+
+A job is work that needs the truck parked for a number of turns: field repair or scavenging. The player has at most one job at a time. Driving before it ends cancels it and the turns already spent are lost. The HUD shows the current job and its turns left.
+
+Field repair fixes one damaged mounted part. It spends parts and restores HP up to a field cap below full, only when the job finishes. Each unit of parts restores the same share of any part's max HP, so a broken wheel and a broken cab cost the same. Mechanics shortens the job and cuts the parts it needs. A full repair to 100% still needs a town. The inventory panel shows a Patch button on a damaged part, with its turns and parts cost, disabled with the reason when the truck is moving or the grid lacks parts. NPCs keep their town upkeep and do not field repair.
+
 The truck stays critical to progression, like the ship in Space Rangers 2.
 
 ## Turns and combat
@@ -38,7 +46,7 @@ A click is a waypoint to drive through. While moving, a close click brakes, a cl
 
 The truck plans a route around rocks, wrecks, parked vehicles and cliffs, preferring roads. The screen shows the planned path for the next turns.
 
-Crash damage grows with impact speed. The lighter truck takes the bigger share, so heavy trucks win rams. A ram part on the striking side takes the blow and hits harder. R toggles manual driving, which skips the route planner so the truck can ram. NPC drivers use the same steering and obstacle routing as the player. A stuck driver backs away before trying the route again. During normal travel, NPCs use reversing to turn their nose toward the route instead of following it rear-first.
+Crash damage grows with the square of impact speed, so a slow bump only scratches parts. The lighter truck takes the bigger share, so heavy trucks win rams. A ram part on the striking side takes the blow and hits harder. R toggles manual driving, which skips the route planner so the truck can ram. NPC drivers use the same steering and obstacle routing as the player. A stuck driver backs away before trying the route again. During normal travel, NPCs use reversing to turn their nose toward the route instead of following it rear-first.
 
 Weapons have range, reload time, scatter, a firing arc and a number of rounds per shot. A turret covers all sides. A forward gun needs the truck to face the target. Each round rolls on its own. It hits when its scatter is smaller than the target's width as seen from the gun. So distance, target size, facing, crossing speed, the shooter's own speed and round speed all matter. Hovering a truck shows both sides' chances and their causes.
 
@@ -56,13 +64,33 @@ Later the enemies may also take or wreck the truck.
 
 Losing a truck is one natural way to change trucks.
 
+## Stealth
+
+Sight reaches 20 tiles with line of sight, halved at night and cut in dust storms. Beyond it, a moving vehicle still gives itself away: engine sound, dust clouds, or a mounted radio scanner.
+
+A contact is a vehicle detected this way. It is a rough circle that always holds the true position. For sound the circle is about a third of the distance wide, so a far sound gives little more than a direction. A scanner fixes a position much more tightly.
+
+Engine sound reaches far, by the engine and the vehicle's speed. A crawling truck is heard only a little past sight, and a parked truck makes no sound. Hills do not block it. The listener's own speed shortens its hearing, so a parked observer hears furthest. Sound shows as faint arcs around the player's truck, pointing toward each heard truck: a wide arc for a vague bearing, a thick one for a loud engine, a bright one for a near sound. The arcs hum and ripple outward.
+
+Dust clouds are objects in the world. Every turn a truck moving faster than a crawl on dusty ground leaves a cloud behind it. Roads raise little dust, sand and hardpan raise more, and none rises at night. A cloud rises, drifts back along its truck's route and with the wind, wanders a little, and fades after a few turns. Once risen it is seen from far beyond sight and over hills. So a line of clouds shows where a truck passed, a little late.
+
+A radio scanner is a part that mounts on a weapon cell, so it competes with a gun. It detects every moving vehicle across the map, through hills, and shows it as a steady blip. It is sold in towns.
+
+NPCs detect the player and each other with the same rules. Raiders drive toward a contact to find it, and give up on arrival or once they see the target, at which point the ordinary fight rule takes over. Traders and scavengers steer away from a hostile contact the same way they flee a visible one. A very faint, far contact is too vague to act on.
+
 ## World
 
 The map is a grid of tiles with a height on every tile corner, so the ground is smooth hills and valleys. Each tile has a terrain type: road, hardpan, loose sand, scrub, scree, mud, gravel, salt crust, cracked asphalt or ash. Each type has its own driving speed. Uphill slows a truck, downhill speeds it up a little. Tiles too steep to climb are cliffs: driving into one is a crash. Hills and obstacles block sight, and the fog of war shows only what the truck sees.
 
 Danger is set by region, not by player level.
 
-Faction squads roam the map. Places are discovered by exploring. Towns and locations block driving. Their interaction radius is 1.5 times the site's base service reach, so the player uses services without driving into buildings.
+Faction squads roam the map. Places are discovered by exploring. Towns and locations block driving. Open locations have an interaction radius of 1.5 times the site's base service reach, so the player uses services without driving into buildings. Towns have a wall, and the Granary and the Salvage Yard have a palisade. Walled sites are used only near a gate, where a road enters. Each town gate has a guard gun. It shoots the nearest vehicle that fired within its range that turn, whatever its faction. Raiders also trade in towns, so guards judge by action. A town gate is therefore a safe place to run to.
+
+## Sun, time and weather
+
+A day is a fixed number of turns, and the clock starts in the morning. The sun rises in the east, crosses south at noon and sets in the west; there is no sun at night. A point is in shade when a ray toward the sun is blocked by a hill or by a rock, wreck or building. Heat is at its base rate in shade and at night, and rises toward its peak in full sun; heat multiplies fuel and supply drain, so the wrong time and route cost more of the tank and the larder. The ground darkens over shaded tiles once they are explored, using the same rule the sim drains by. The sun's light follows the clock, and the scene dims after dark. Sight also shrinks at night.
+
+Weather events come from the world's own randomness, so a seed replays the same weather. A dust storm is a moving area: inside it, sight and aim both suffer, top speed drops, and wear climbs faster. A heat wave covers the whole region and raises heat further. Overcast also covers the region, and cancels the sun's heat instead. The HUD shows the day, time, current heat and the region's weather.
 
 ## NPC activities
 
@@ -72,7 +100,7 @@ NPCs spawn with equipment sampled from weighted tables for their role. The gener
 
 Scavengers collect finite salvage, sell cargo, and fight manageable hostiles or flee. Traders buy profitable cargo while reserving upkeep money and flee from threats. Raiders search hunting grounds, fight, collect wreck cargo, and sell it. Each NPC pays for fuel, supplies, and repairs from its own wallet. Inspection shows its activity and reason.
 
-Convoy stock is shared with the player. Destroyed NPCs leave their actual goods and spare parts in wrecks. Collection takes only what fits and leaves the rest. Mounted equipment is not salvage. Old wreck retirement removes their remaining stock. Empty sites do not regenerate.
+Scavenging is a timed search: the truck parks at a stock and searches for turns in proportion to what the stock holds, with a progress bar. Moving the truck cancels the search. A finished search opens the stock beside the truck's grid, and the player drags in what they want. What they leave stays at the site for later. NPC scavengers take everything that fits. Landmark and convoy sites hold finite stock rolled at world creation: goods, parts and sometimes a spare mountable part. Destroyed NPCs leave a wreck with the same kind of stock. Their mounted parts join it at the HP they had; their built-in parts turn into the parts good instead. Collection takes only what fits and leaves the rest. Old wreck retirement removes their remaining stock. Empty sites do not regenerate.
 
 Town markets have fixed prices and unlimited stock and money. Initial NPC resources and the oasis are explicit sources. No offscreen catch-up grants are used. Player defeat retains its separate cargo-loss and enemy-despawn rules.
 
@@ -80,7 +108,7 @@ Town markets have fixed prices and unlimited stock and money. Initial NPC resour
 
 Each town produces and needs fixed goods. Profit comes from knowing routes, as in Dustland Delivery.
 
-Fuel and supplies limit range. Fuel burns at one tenth of the chassis fuel-per-tile rate. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn at 0.025 per turn. Without supplies the character loses health. Oases refill supplies.
+Fuel and supplies limit range. Fuel burns at 0.075 of the chassis fuel-per-tile rate, times heat. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn at 0.03 per turn, times heat. Without supplies the character loses health. Oases refill supplies.
 
 ## Prototype v0.001 content
 
@@ -88,7 +116,7 @@ Fuel and supplies limit range. Fuel burns at one tenth of the chassis fuel-per-t
 - Parts: seven weapons, seven engines, eight armor parts and seven cargo parts. Cheap, light, durable, fuel-efficient and high-output variants have different costs and footprints. Cargo frames extend the inventory grid, without articulated trailer physics.
 - Goods: scrap metal, salt, meds, grain, textiles, machine tools, batteries and electronics. Bowl and Nose price every good.
 - Defeat takes all goods and spare parts from the grid. Mounted parts stay.
-- Region: Icarus, a 120-tile basin with Bowl and Nose as hubs, 13 other destinations, two canyon crossings, and the Fallen Sun.
+- Region: Icarus, a 600-tile basin with Bowl and Nose as hubs, 13 other destinations, two canyon crossings, and the Fallen Sun. Winding roads cross rolling grades between distinct landmarks. Sight is twenty tiles. See [landmark visuals](VISUAL_DESIGN.md).
 - Enemies: raider outriders and gunwagons with sampled chassis and equipment.
 - Neutrals: trader caravans and scavengers. Shooting one makes it and its nearby mates hostile.
 - Skills: Driving, Gunnery, Mechanics, Trade, Survival.

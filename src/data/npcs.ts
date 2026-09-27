@@ -2,6 +2,7 @@
 
 import type { Faction } from '../sim/types';
 import type { Vec } from '../sim/vec';
+import { MAP_SCALE, scalePoint } from './region';
 import { START_KITS } from './start';
 import { RULES } from './rules';
 
@@ -103,7 +104,7 @@ export const SPAWN = {
   initial: ['buggy', 'buggy', 'gunwagon', 'trader', 'scavenger'],
   wildMinPlayerDist: 16, // raiders never spawn closer to the player than this
   wildMinTownDist: 10,
-  wanderRadius: 8, // raiders patrol this far from their spawn point
+  wanderRadius: 8 * MAP_SCALE, // raiders patrol this far from their spawn point
   townSpread: 1, // distance beyond the site boundary for neutral spawns
   tries: 40,
   neighborHelp: 10, // same-faction vehicles in this range join a grudge
@@ -117,13 +118,16 @@ export type NpcClass = {
   recoverCondition: number;
   threatRatio: number;
   defensive: boolean;
+  // A hostile contact reacts only while its circle is at most this many tiles wide. Beyond it the
+  // noise is too vague to act on. Raiders press further than traders and scavengers will flee from.
+  contactReactRadius: number;
 };
 
 // Cab warnings begin at 30%. Recovery to half cab health prevents fight/flee oscillation.
 export const NPC_CLASSES: Record<Brain, NpcClass> = {
-  scavenger: { towns: ['bowl', 'nose'], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false },
-  trader: { towns: ['bowl', 'nose'], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: true },
-  raider: { towns: ['bowl', 'nose'], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false },
+  scavenger: { towns: ['bowl', 'nose'], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: 12 },
+  trader: { towns: ['bowl', 'nose'], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: true, contactReactRadius: 12 },
+  raider: { towns: ['bowl', 'nose'], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: 14 },
 };
 
 export const NPC_UPKEEP = {
@@ -134,5 +138,5 @@ export const NPC_UPKEEP = {
 };
 
 export const WILD_SPAWNS: Vec[] = [
-  { x: 30, y: 8 }, { x: 110, y: 13 }, { x: 8, y: 28 }, { x: 111, y: 105 }, { x: 62, y: 73 },
+  ...([{ x: 30, y: 8 }, { x: 110, y: 13 }, { x: 8, y: 28 }, { x: 111, y: 105 }, { x: 62, y: 73 }].map(scalePoint)),
 ];

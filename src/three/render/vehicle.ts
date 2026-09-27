@@ -27,9 +27,10 @@ type PartItem = Extract<GridItem, { kind: 'part' }>;
 
 // Material name that takes the faction color.
 const PAINT = 'paint';
+const LAMP = 'light'; // the headlight face material in the nose models
 
 // Color factor for every material of a broken part.
-const BROKEN_TONE: Record<PartKind, number> = { weapon: 0.5, armor: 0.6, engine: 0.6, cargo: 0.6, core: 0.6 };
+const BROKEN_TONE: Record<PartKind, number> = { weapon: 0.5, armor: 0.6, engine: 0.6, cargo: 0.6, core: 0.6, scanner: 0.6 };
 
 // Yaw for rotation 1. Local +x, the model's front, turns to the truck's left.
 const ROT_YAW = Math.PI / 2;
@@ -76,9 +77,11 @@ export class VehicleView {
   private sig = '';
   private wheels: Wheel[] = [];
   private turrets: THREE.Group[] = [];
-  private ringMeshes: THREE.Mesh[] = [];
+  private ringMeshes: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>[] = [];
+  private ringSizes: { r: number; width: number }[] = [];
   private heading = 0;
   private groundOffset = 0;
+  private lampMat = new THREE.MeshBasicMaterial({ color: PAL.lamp.off });
 
   constructor(v: Vehicle) {
     this.update(v);
@@ -105,6 +108,10 @@ export class VehicleView {
     this.ground.position.set(f.pos.x, f.pos.y - this.groundOffset, f.pos.z);
   }
 
+  lamps(on: boolean): void {
+    this.lampMat.color.setHex(on ? PAL.lamp.on : PAL.lamp.off);
+  }
+
   // yaw is a map-space heading (radians, 0 = +x). null points turrets forward.
   aim(yaw: number | null): void {
     const delta = yaw === null ? 0 : yaw - this.heading;
@@ -113,22 +120,29 @@ export class VehicleView {
   }
 
   rings(rs: Ring3[]): void {
-    for (const m of this.ringMeshes) {
-      this.ground.remove(m);
-      m.geometry.dispose();
-      (m.material as THREE.Material).dispose();
-    }
-    this.ringMeshes = rs.map((r) => {
-      const inner = Math.max(0.01, r.r - r.width / 2) * S;
-      const outer = (r.r + r.width / 2) * S;
-      const mesh = new THREE.Mesh(
-        new THREE.RingGeometry(inner, outer, 48).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({ color: r.color, transparent: true, opacity: r.alpha, depthWrite: false, side: THREE.DoubleSide }),
-      );
-      mesh.position.y = 0.02; // clears z-fighting with the ground mesh
-      mesh.renderOrder = 5;
-      this.ground.add(mesh);
-      return mesh;
+    for (let i = 0; i < this.ringMeshes.length; i++) this.ringMeshes[i].visible = i < rs.length;
+    rs.forEach((r, i) => {
+      let mesh = this.ringMeshes[i];
+      const size = this.ringSizes[i];
+      if (!size || size.r !== r.r || size.width !== r.width) {
+        const inner = Math.max(0.01, r.r - r.width / 2) * S;
+        const outer = (r.r + r.width / 2) * S;
+        const geometry = new THREE.RingGeometry(inner, outer, 48).rotateX(-Math.PI / 2);
+        if (mesh) {
+          mesh.geometry.dispose();
+          mesh.geometry = geometry;
+        } else {
+          mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+          mesh.position.y = 0.02;
+          mesh.renderOrder = 5;
+          this.ground.add(mesh);
+          this.ringMeshes.push(mesh);
+        }
+        this.ringSizes[i] = { r: r.r, width: r.width };
+      }
+      mesh.visible = true;
+      mesh.material.color.setHex(r.color);
+      mesh.material.opacity = r.alpha;
     });
   }
 
@@ -144,6 +158,9 @@ export class VehicleView {
     const body = bodyOf(v.chassisId);
     const paint = FACTION_COLORS[v.faction].top;
     this.groundOffset = body.wheelRadius + T.suspensionRest;
+    // disposeChildren disposed the lamp material, so a new one keeps the lamp state.
+    const on = this.lampMat.color.getHex() === PAL.lamp.on;
+    this.lampMat = new THREE.MeshBasicMaterial({ color: on ? PAL.lamp.on : PAL.lamp.off });
 
     const still = new THREE.Group();
     const onBody = v.items.filter((item) => onChassis(v, item));
@@ -209,6 +226,14 @@ export class VehicleView {
       const obj = model(name);
       place(obj, { pos: new THREE.Vector3(c.x, top, c.z), yaw, scale: new THREE.Vector3(along, height, mirror ? -1 : 1) });
       tint(obj, color, 1);
+      // Headlight faces share the lamp material, so lamps() switches them all.
+      obj.traverse((o) => {
+        if (o instanceof THREE.Mesh && o.material.name === LAMP) {
+          o.material.dispose();
+          o.material = this.lampMat;
+          o.userData.lamp = true;
+        }
+      });
       into.add(obj);
     };
     const shortSide = CELL.across / CELL.along;
@@ -613,8 +638,13 @@ function mergeStatic(group: THREE.Group): THREE.Group {
   const toGroup = group.matrixWorld.clone().invert();
   const byColor = new Map<number, THREE.BufferGeometry[]>();
   const used: THREE.Mesh[] = [];
+  const lamps: THREE.Mesh[] = [];
   group.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
+    if (o.userData.lamp) {
+      lamps.push(o);
+      return;
+    }
     const mat = o.material as THREE.MeshLambertMaterial;
     const toHere = toGroup.clone().multiply(o.matrixWorld);
     let geo = o.geometry.clone().applyMatrix4(toHere);
@@ -639,6 +669,14 @@ function mergeStatic(group: THREE.Group): THREE.Group {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     out.add(mesh);
+  }
+  // Lamp meshes keep their shared material, so they stay separate meshes.
+  for (const lamp of lamps) {
+    const toHere = toGroup.clone().multiply(lamp.matrixWorld);
+    const geo = lamp.geometry.clone().applyMatrix4(toHere);
+    if (toHere.determinant() < 0) flipWinding(geo);
+    lamp.geometry.dispose();
+    out.add(new THREE.Mesh(geo, lamp.material));
   }
   for (const m of used) {
     m.geometry.dispose();

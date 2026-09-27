@@ -5,6 +5,7 @@ import { REGION } from '../data/region';
 import { PARTS } from '../data/parts';
 import { RULES } from '../data/rules';
 import { resolveMovement } from './movement';
+import { heatAt } from './sun';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, partHp } from './testkit';
 import { dist } from './vec';
@@ -52,7 +53,7 @@ describe('movement', () => {
     w.vehicles[0].order = { kind: 'stopAt', dest: { x: 40, y: 30 } };
     resolveMovement(w);
     expect(w.vehicles[0].pos.x).toBeGreaterThan(30);
-    expect(w.vehicles[0].pos.x).toBeLessThanOrEqual(30 + RULES.crawlSpeed);
+    expect(w.vehicles[0].pos.x).toBeLessThanOrEqual(30 + RULES.limpSpeed);
     expect(w.player.fuel).toBe(0);
   });
 
@@ -89,8 +90,9 @@ describe('movement', () => {
     w.vehicles[0].order = { kind: 'through', dest: { x: 40, y: 30 } };
     const fuel = w.player.fuel;
     const s = vehicleStats(w, w.vehicles[0]); // from rest, one turn covers accel tiles
+    const heat = heatAt(w, w.vehicles[0].pos);
     resolveMovement(w);
-    expect(w.player.fuel).toBeCloseTo(fuel - s.accel * s.fuelPerTile, 5);
+    expect(w.player.fuel).toBeCloseTo(fuel - s.accel * s.fuelPerTile * heat, 5);
   });
 });
 
@@ -106,14 +108,15 @@ describe('world', () => {
       return w;
     };
     expect(run()).toEqual(run());
-  });
+  }, 10_000); // two 120-tile worlds run side by side; about 3 seconds alone
 
-  it('keeps the player out of obstacles on a long drive', () => {
+  it('keeps the player out of obstacles on a long drive', async () => {
     let w = setMoveOrder(newWorld(3, START_KITS.standard), { kind: 'stopAt', dest: { x: 50, y: 50 } });
     for (let i = 0; i < 30; i++) {
       w = endTurn(w);
       const v = w.vehicles[0];
       for (const o of w.obstacles) expect(dist(v.pos, o.pos)).toBeGreaterThanOrEqual(o.r + 0.6 - 0.01);
+      await new Promise<void>((resolve) => setTimeout(resolve, 0)); // Let the runner process messages between expanded-region turns.
     }
-  });
+  }, 120_000);
 });

@@ -1,5 +1,6 @@
+import { TERRAIN } from '../data/terrain';
 import { describe, expect, it } from 'vitest';
-import { emptyWorld, addVehicle } from './testkit';
+import { emptyWorld, addVehicle, editableTerrain } from './testkit';
 import { planNpcOrders } from './ai';
 import { getResources } from './resources';
 import { REGION } from '../data/region';
@@ -7,7 +8,8 @@ import { NPC_CLASSES } from '../data/npcs';
 import { endTurn } from './world';
 import { corePart, goodsCount } from './grid';
 import { addGoods } from './inventory';
-import { resolveNpcActivities, chooseNpcActivity } from './npc-activities';
+import { resolveNpcActivities, chooseNpcActivity, getActivityDestination } from './npc-activities';
+import { canUseSite, siteGates } from './sites';
 
 function createScavenger() {
   const w = emptyWorld({ x: 50, y: 50 });
@@ -26,9 +28,20 @@ describe('NPC activities', () => {
     }
   });
 
+  it('stops at the town gate nearest to it, even from the far side of the wall', () => {
+    const { w, npc } = createScavenger();
+    const town = REGION.towns[0];
+    const gate = siteGates(town)[0];
+    npc.pos = { x: town.pos.x - (gate.x - town.pos.x) * 1.3, y: town.pos.y - (gate.y - town.pos.y) * 1.3 };
+    npc.brain!.activity = { kind: 'sell', targetId: town.id, destination: { ...town.pos }, phase: 'travel', reason: 'test activity' };
+    const stop = getActivityDestination(w, npc)!;
+    expect(canUseSite(stop, town)).toBe(true);
+    expect(Math.hypot(stop.x - town.pos.x, stop.y - town.pos.y)).toBeGreaterThan(town.radius);
+  });
+
   it.each(['sell', 'resupply', 'raid'] as const)('records completion of %s once', (kind) => {
     const { w, npc } = createScavenger();
-    npc.pos = { ...REGION.towns[0].pos };
+    npc.pos = { ...siteGates(REGION.towns[0])[0] };
     npc.brain!.activity = { kind, targetId: REGION.towns[0].id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' };
     w.events = [];
     resolveNpcActivities(w);
@@ -92,7 +105,7 @@ describe('NPC activities', () => {
   it('keeps upkeep money when buying trade cargo', () => {
     const { w, npc } = createScavenger();
     npc.brain!.templateId = 'trader';
-    npc.pos = { ...REGION.towns[0].pos };
+    npc.pos = { ...siteGates(REGION.towns[0])[0] };
     planNpcOrders(w);
     resolveNpcActivities(w);
     expect(npc.resources!.money).toBeGreaterThan(0);
@@ -158,5 +171,42 @@ describe('NPC activities', () => {
     w.obstacles.push({ id: 'cover', kind: 'rock', pos: { x: 12, y: 10 }, r: 1 });
     planNpcOrders(w);
     expect(npc.brain!.activity?.kind).toBe('resupply');
+  });
+
+  it('a raider heads toward a heard player', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const player = w.vehicles[0];
+    player.speed = 4; // loud enough to be heard far past sight range
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 }); // just past sight
+    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0 };
+    planNpcOrders(w);
+    expect(raider.brain!.activity?.kind).toBe('investigate');
+    expect(raider.brain!.activity?.targetId).toBe(player.id);
+  });
+
+  it('a trader turns away from a heard raider', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 30, y: 30 });
+    trader.brain = { templateId: 'trader', activity: null, goal: null, home: { ...trader.pos }, stepIndex: 0 };
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 45, y: 30 });
+    raider.speed = 4;
+    planNpcOrders(w);
+    expect(trader.brain!.activity?.kind).toBe('flee');
+    expect(trader.brain!.activity?.targetId).toBe(raider.id);
+  });
+
+  it('a parked player behind a hill goes unnoticed', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const player = w.vehicles[0];
+    player.speed = 0; // parked: no sound, no dust
+    editableTerrain(w);
+    const size = w.terrain.size;
+    for (let i = 33; i <= 37; i++) for (let j = 28; j <= 32; j++) w.terrain.heights[j * (size + 1) + i] = 3;
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 }); // beyond the hill
+    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0 };
+    planNpcOrders(w);
+    expect(raider.brain!.activity?.kind).not.toBe('investigate');
+    expect(raider.brain!.activity?.kind).not.toBe('fight');
+    expect(raider.brain!.activity?.kind).not.toBe('flee');
   });
 });

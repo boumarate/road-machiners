@@ -48,6 +48,7 @@ const NAMES = [
   'wheel',
   'transmission',
   'fuel_tank',
+  'scanner',
 
   'eng_stock',
   'eng_tuned_v8',
@@ -82,6 +83,7 @@ const NAMES = [
   'good_tools',
   'good_batteries',
   'good_electronics',
+  'good_parts',
 
   'wmount_ring_small',
   'wmount_pintle',
@@ -118,11 +120,12 @@ const SOCKET_PREFIX = 'socket_';
 const loaded = new Map<ModelName, THREE.Object3D>();
 const sockets = new Map<ModelName, Map<string, THREE.Vector3>>();
 
-export async function loadModels(): Promise<void> {
+// read returns a model's .glb bytes. The default fetches from public/models/; tests read the files from disk.
+export async function loadModels(read: (name: ModelName) => Promise<ArrayBuffer> = fetchModel): Promise<void> {
   const loader = new GLTFLoader();
   await Promise.all(
     NAMES.map(async (name) => {
-      const gltf = await loader.loadAsync(`${import.meta.env.BASE_URL}models/${name}.glb`);
+      const gltf = await loader.parseAsync(await read(name), '');
       sockets.set(name, takeSockets(name, gltf.scene));
       loaded.set(name, toLambert(gltf.scene));
     }),
@@ -168,11 +171,22 @@ function checkWeaponSockets(): void {
   }
 }
 
-// A fresh copy. Materials are cloned too, because obstacle views dispose them on removal.
-export function model(name: ModelName): THREE.Object3D {
+async function fetchModel(name: ModelName): Promise<ArrayBuffer> {
+  const url = `${import.meta.env.BASE_URL}models/${name}.glb`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Model ${url} failed to load: HTTP ${res.status}`);
+  return res.arrayBuffer();
+}
+
+function source(name: ModelName): THREE.Object3D {
   const src = loaded.get(name);
   if (!src) throw new Error(`Model ${name} is not loaded. Call loadModels() before building views.`);
-  const copy = src.clone(true);
+  return src;
+}
+
+// A fresh copy. Materials are cloned too, because obstacle views dispose them on removal.
+export function model(name: ModelName): THREE.Object3D {
+  const copy = source(name).clone(true);
   copy.traverse((o) => {
     if (o instanceof THREE.Mesh) {
       o.geometry = o.geometry.clone();
@@ -180,6 +194,38 @@ export function model(name: ModelName): THREE.Object3D {
     }
   });
   return copy;
+}
+
+// Many copies of one model as one InstancedMesh per model mesh. Each placement is a model-to-world
+// matrix. tints scale each copy's colors, one gray level per placement. The meshes share the loaded
+// geometry and materials, so they must never be disposed.
+export function instancedModel(name: ModelName, placements: THREE.Matrix4[], tints: number[]): THREE.Group {
+  if (placements.length === 0) throw new Error(`Instanced ${name} needs at least one placement`);
+  if (tints.length !== placements.length) throw new Error(`Instanced ${name} has ${placements.length} placements but ${tints.length} tints`);
+  const src = source(name);
+  src.updateMatrixWorld(true);
+  const toRoot = new THREE.Matrix4().copy(src.matrixWorld).invert();
+  const group = new THREE.Group();
+  const local = new THREE.Matrix4();
+  const matrix = new THREE.Matrix4();
+  const color = new THREE.Color();
+  src.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    local.multiplyMatrices(toRoot, o.matrixWorld);
+    const mesh = new THREE.InstancedMesh(o.geometry, o.material, placements.length);
+    placements.forEach((placement, i) => {
+      mesh.setMatrixAt(i, matrix.multiplyMatrices(placement, local));
+      mesh.setColorAt(i, color.setScalar(tints[i]));
+    });
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.matrixAutoUpdate = false;
+    mesh.computeBoundingBox();
+    mesh.computeBoundingSphere();
+    group.add(mesh);
+  });
+  group.matrixAutoUpdate = false;
+  return group;
 }
 
 // glTF brings PBR materials. The rest of the scene is flat-shaded Lambert, so models match it.

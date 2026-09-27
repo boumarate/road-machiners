@@ -184,7 +184,7 @@ describe('broken core parts', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
     corePart(me, 'transmission').hp = 0;
-    expect(vehicleStats(w, me).maxSpeed).toBe(RULES.disabledEngineSpeed);
+    expect(vehicleStats(w, me).maxSpeed).toBe(RULES.limpSpeed);
   });
 });
 

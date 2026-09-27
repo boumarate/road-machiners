@@ -2,20 +2,20 @@
 
 export const RULES = {
   // Movement
-  substeps: 20, // per turn; step length must stay below the smallest collision radius
-  crawlSpeed: 1, // speed used for sharp turns and moving without fuel
+  substeps: 26, // per turn; step length must stay below the smallest collision radius
+  crawlSpeed: 1, // below this speed turning slows toward a standstill
   lowFuelThreshold: 0.2, // share of tank remaining when speed is limited
   lowFuelSpeedFactor: 0.5, // share of normal top speed below the threshold
-  fuelUseFactor: 0.1, // fuel burns at a tenth of the chassis rate
+  fuelUseFactor: 0.075, // share of the chassis fuel rate burned per tile; a daytime Bowl to Nose road trip uses under 60% of the starting fuel, leaving room for detours and fights
   npcStuckTurns: 2, // failed drive attempts before backing out
   npcRecoveryTurns: 2, // turns spent backing out before resuming the route
   // At or below `below` speed, a truck more than `angle` degrees off its destination backs up
   // `distance` tiles in a turn, swinging its nose by up to the chassis reverseTurn. It stops after.
   reverse: { below: 1, angle: 45, distance: 1 },
   arriveRadius: 0.5, // a stop order clears inside this distance
-  // Throttle zones ahead of the truck. They span `reach` of the vision radius, split into brake, hold
-  // and accelerate shares in that order. A click's distance picks the zone.
-  throttleZones: { reach: 1, brake: 0.25, hold: 0.5, accelerate: 0.25 },
+  // Throttle zones ahead of the truck. They span `reach` tiles, split into brake, hold and accelerate
+  // shares in that order. A click's distance picks the zone.
+  throttleZones: { reach: 10, brake: 0.25, hold: 0.5, accelerate: 0.25 },
   passRadius: 1, // a drive-through order clears once the trail passes this close to its point
   passSpeedShare: 0.5, // ...or once its point is nearer than this share of the current speed
   minAimDistance: 1.5, // tiles; steering ignores route points closer than this
@@ -23,16 +23,21 @@ export const RULES = {
   parkedSpeed: 0.5, // vehicles slower than this are routed around like obstacles
   yieldDistance: 1.5, // neutral drivers brake when another vehicle is this close past both radii ahead
   maxBulge: 0.25, // tiles a steering arc may stray from the straight route line
-  disabledEngineSpeed: 1,
+  limpSpeed: 2, // top speed with an empty tank or a dead engine or transmission; a truck this slow raises no dust
   minSpeedCap: 1, // a heavy load never pushes max speed below this
   collisionMinImpact: 1.5, // slower bumps deal no damage
-  // A crash gives each truck ramDamage × impact in tiles per turn × the other body's share of both masses,
-  // spread over the lanes of its struck side. An obstacle's share is 1.
-  ramDamage: 15,
+  // A crash gives each truck ramDamage × impact² in tiles per turn × the other body's share of both masses,
+  // spread over the lanes of its struck side. An obstacle's share is 1. Squaring the impact, like crash
+  // energy, keeps a full-speed crash at 6 as hard as before while a bump at 2 only scratches the paint.
+  ramDamage: 2.5,
   cellPen: 0.5, // penetration every grid cell a round or crash passes costs, for the frame and bulk in the way
   crashPen: 4, // penetration of crash damage in each lane
   wheelLoss: 0.15, // share of speed and turning lost per broken wheel
   tankLeak: 1, // fuel lost per turn with a broken tank
+
+  // Town guards. Each town gate has one gun. Every turn it shoots the nearest vehicle within range that fired.
+  // Each round hits with a flat chance and enters a random lane of the side facing the gate.
+  guards: { range: 8, rounds: 4, hitChance: 0.5, missOffset: 1.5, round: { damage: 6, pen: 10 } },
 
   // Combat
   // A round that lands on the truck is a crit with this chance. A crit multiplies its damage and pen, so a few
@@ -53,7 +58,7 @@ export const RULES = {
   maxKillWrecks: 12, // oldest wrecks from kills are cleared past this, so obstacles do not pile up
 
   // Supplies, per turn
-  suppliesPerTurn: 0.025,
+  suppliesPerTurn: 0.03, // at base heat; a daytime Bowl to Nose crossing uses under 60% of the starting supplies, leaving room for stops
   suppliesCap: 20,
   starveDamage: 5, // character health lost per turn without supplies
   maxHealth: 100,

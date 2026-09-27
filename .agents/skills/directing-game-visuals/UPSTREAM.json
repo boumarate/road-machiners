@@ -1,0 +1,27 @@
+{
+  "repository": "https://github.com/abagames/agentic-gamedev-skills",
+  "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+  "files": [
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": ".agents/skills/directing-game-visuals/SKILL.md",
+      "local": "directing-game-visuals/SKILL.md",
+      "sha256": "ccfd8543784cbcaf605a8dfe1b22d79e5fec43a344e55926b6c33889d9ad4c49"
+    },
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": ".agents/skills/directing-game-visuals/references/visual-design-guide.md",
+      "local": "directing-game-visuals/references/visual-design-guide.md",
+      "sha256": "d4d037d6da63ac9377ad781f0be87923fd9c443aa41d84d928cfafe2ab97aa73"
+    },
+    {
+      "repo": "abagames/agentic-gamedev-skills",
+      "revision": "24a4cdce3b629f123162c0bdcf61647eeb85f8db",
+      "source": "LICENSE",
+      "local": "abagames-LICENSE",
+      "sha256": "141037de19d4de87073c3b70f31ab37572b39a94862cba5d0149bbc3d45b9323"
+    }
+  ]
+}

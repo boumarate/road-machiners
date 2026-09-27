@@ -9,6 +9,7 @@ import { corePart, coreParts, mountedParts } from './grid';
 import { loadFactor, vehicleMass } from './mass';
 import type { PartInstance, Vehicle, World } from './types';
 import { DEG } from './vec';
+import { weatherAt } from './weather';
 
 export type MountedWeapon = { part: PartInstance; def: WeaponDef };
 
@@ -51,7 +52,8 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     accel = (ch.accel + e.accelBonus) * force;
     fuelMult = e.fuelMult;
     // A broken engine or transmission leaves only a crawl to limp home.
-    if (!isWorking(engines[0]) || !isWorking(corePart(v, 'transmission'))) maxSpeed = Math.min(maxSpeed, RULES.disabledEngineSpeed);
+    if (!isWorking(engines[0]) || !isWorking(corePart(v, 'transmission'))) maxSpeed = Math.min(maxSpeed, RULES.limpSpeed);
+    maxSpeed *= weatherAt(world, v.pos).speed;
   }
 
   return {

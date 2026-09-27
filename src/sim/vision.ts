@@ -3,17 +3,28 @@
 // NPCs query the same occlusion rules from their own positions.
 
 import { TERRAIN } from '../data/terrain';
+import { TIME } from '../data/time';
 import type { Obstacle, Vehicle, World } from './types';
 import { heightAt, type Terrain } from './terrain';
+import { sunAt } from './sun';
+import { weatherAt } from './weather';
 import { dist, segmentDist, type Vec } from './vec';
+import { cloudsSeenBy, contactsOf } from './detect';
 
 const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building'];
+
+// Base vision radius, shrunk by weather and at night.
+export function sightRadius(world: World, pos: Vec): number {
+  const night = sunAt(world.turn) ? 1 : TIME.nightSight;
+  return TERRAIN.vision.radius * weatherAt(world, pos).sight * night;
+}
 
 // Tile indices (y * world.size + x) visible from a point, within vision radius and line of sight.
 export function visibleTiles(world: World, from: Vec): Set<number> {
   const size = world.size;
-  const r = TERRAIN.vision.radius;
-  const blockers = world.obstacles.filter((o) => BLOCKING.includes(o.kind));
+  const r = sightRadius(world, from);
+  // Every sight line lies within r of the viewer, so blockers beyond r plus their radius cannot touch it.
+  const blockers = world.obstacles.filter((o) => BLOCKING.includes(o.kind) && dist(from, o.pos) < r + o.r);
   const out = new Set<number>();
   const lo = { x: Math.max(0, Math.floor(from.x - r)), y: Math.max(0, Math.floor(from.y - r)) };
   const hi = { x: Math.min(size - 1, Math.ceil(from.x + r)), y: Math.min(size - 1, Math.ceil(from.y + r)) };
@@ -21,7 +32,7 @@ export function visibleTiles(world: World, from: Vec): Set<number> {
     for (let y = lo.y; y <= hi.y; y++) {
       const tile = { x: x + 0.5, y: y + 0.5 };
       if (dist(from, tile) > r) continue;
-      if (hasLineOfSight(from, tile, blockers) && clearOverTerrain(world.terrain, from, tile)) out.add(y * size + x);
+      if (inPlainView(world, from, tile, blockers)) out.add(y * size + x);
     }
   }
   return out;
@@ -30,9 +41,18 @@ export function visibleTiles(world: World, from: Vec): Set<number> {
 export function canVehicleSee(world: World, observer: Vehicle, position: Vec): boolean {
   if (observer.id === world.player.vehicleId) return playerSees(world, position);
   const target = position;
-  return dist(observer.pos, target) <= TERRAIN.vision.radius &&
-    hasLineOfSight(observer.pos, target, world.obstacles.filter((o) => BLOCKING.includes(o.kind))) &&
-    clearOverTerrain(world.terrain, observer.pos, target);
+  return dist(observer.pos, target) <= sightRadius(world, observer.pos) &&
+    inPlainView(world, observer.pos, target, world.obstacles.filter((o) => BLOCKING.includes(o.kind)));
+}
+
+// Within the close radius, rocks and hills do not hide anything.
+function inPlainView(world: World, a: Vec, b: Vec, blockers: Obstacle[]): boolean {
+  return dist(a, b) <= TERRAIN.vision.closeRadius || (hasLineOfSight(a, b, blockers) && clearOverTerrain(world.terrain, a, b));
+}
+
+// A straight line past rocks and over hills, with no close radius: a shot needs it even when the target is seen.
+export function hasLineOfFire(world: World, a: Vec, b: Vec): boolean {
+  return hasLineOfSight(a, b, world.obstacles.filter((o) => BLOCKING.includes(o.kind))) && clearOverTerrain(world.terrain, a, b);
 }
 
 // An obstacle blocks sight only if it sits between the viewer and the tile.
@@ -65,7 +85,10 @@ export function playerVisible(world: World): Set<number> {
 export function refreshVision(world: World): void {
   const seen = playerVisible(world);
   world.player.visible = [...seen].sort((a, b) => a - b);
-  for (const idx of seen) world.player.explored[idx] = true;
+  for (const idx of seen) world.player.explored[idx] = 1;
+  const me = world.vehicles.find((x) => x.id === world.player.vehicleId);
+  world.player.contacts = me ? contactsOf(world, me, Infinity) : [];
+  world.player.clouds = me ? cloudsSeenBy(world, me).map((c) => c.id) : [];
 }
 
 export function tileCenter(world: World, idx: number): Vec {
@@ -84,5 +107,5 @@ export function playerSees(world: World, p: Vec): boolean {
 }
 
 export function playerExplored(world: World, p: Vec): boolean {
-  return world.player.explored[tileOf(world, p)];
+  return world.player.explored[tileOf(world, p)] === 1;
 }

@@ -7,6 +7,7 @@ import { el, panel } from "./dom";
 import { eventText, formatNpcActivity } from "./format";
 import { getHudReadout } from './hud-readout';
 import { createIcon, createSpeedDial, type IconName } from './icons';
+import { kph } from './units';
 
 type HudActions = {
   openInventory: () => void;
@@ -18,6 +19,17 @@ const RESOURCE_ICONS: IconName[] = ['money', 'fuel', 'supplies', 'cab', 'driver'
 
 const LOG_LINES = 14;
 const TOAST_MS = 3500;
+
+const WEATHER_NAMES: Record<World["weather"][number]["kind"], string> = {
+  storm: "Storm",
+  heatwave: "Heat wave",
+  overcast: "Overcast",
+};
+
+function weatherLabel(w: World): string {
+  if (w.weather.length === 0) return "Clear";
+  return [...new Set(w.weather.map((e) => WEATHER_NAMES[e.kind]))].join(", ");
+}
 
 export class Hud {
   private top = panel("instruments");
@@ -55,7 +67,7 @@ export class Hud {
         "Space: end turn. A: auto fire. C: character. I: inventory.",
       ),
       el("div", {}, "R: manual driving, straight through anything."),
-      el("div", {}, "Right-drag: pan. F: follow. Wheel: zoom."),
+      el("div", {}, "Right-drag: pan. F: follow. Wheel: zoom. M: mute."),
     );
   }
 
@@ -91,7 +103,7 @@ export class Hud {
         disabled: busy, onclick: () => this.actions.openInventory(),
       }, createSpeedDial(Number(readout.speed), Number(readout.maxSpeed)),
       el('span', { class: 'speed-value' }, readout.speed),
-      el('span', { class: 'speed-unit' }, `max ${readout.maxSpeed}`), createIcon('truck')),
+      el('span', { class: 'speed-unit' }, `km/h · max ${readout.maxSpeed}`), createIcon('truck')),
       el('div', { class: 'resource-bank' },
         ...readout.resources.map((resource, i) => el('span', {
           class: `resource ${resource.warning ? 'bad' : ''}`, title: resource.label,
@@ -104,6 +116,13 @@ export class Hud {
         el('button', { class: readout.manual ? 'on' : '', disabled: busy, 'aria-pressed': String(readout.manual), onclick: () => this.actions.toggleManual(), title: 'Toggle manual driving [R]' }, readout.manual ? 'Manual [R]' : 'Route [R]'),
         el('button', { disabled: busy, onclick: () => this.actions.openCharacter(), title: 'Driver and skills [C]' }, createIcon('driver'), w.player.skillPoints > 0 ? `+${w.player.skillPoints} [C]` : '[C]'),
         ...(readout.broken ? [el('span', { class: 'bad', role: 'status' }, `! ${readout.broken} broken`)] : []),
+      ),
+      el('div', { class: 'resource-bank survival-bank' },
+        ...readout.survival.map((entry) => el('span', {
+          class: `resource ${entry.warning ? 'bad' : ''}`, title: entry.label, 'data-resource': entry.label,
+        }, el('span', {}, el('small', {}, entry.label), el('strong', {}, entry.value),
+          ...('progress' in entry && entry.progress !== undefined ? [el('span', { class: 'job-bar', role: 'progressbar', 'aria-valuenow': String(Math.round(entry.progress * 100)) },
+            el('span', { style: `width:${Math.round(entry.progress * 100)}%` }))] : [])))),
       ),
     );
   }
@@ -165,7 +184,7 @@ export class Hud {
       el(
         "div",
         {},
-        `Cab ${pct}%   Speed ${v.speed.toFixed(1)}`,
+        `Cab ${pct}%   Speed ${kph(v.speed)} km/h`,
       ),
       el("div", { class: "bar" }, el("div", { style: `width:${pct}%` })),
       ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),

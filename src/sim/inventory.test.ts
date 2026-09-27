@@ -4,10 +4,11 @@ import { PARTS } from '../data/parts';
 import { REGION } from '../data/region';
 import { buyPart } from './economy';
 import { freeCells, gridOf, mountedParts } from './grid';
-import { dumpGood, moveItem, spareParts, storePart, takeFromStorage } from './inventory';
+import { dumpGood, moveItem, removeAllGoods, spareParts, storePart, takeFromStorage } from './inventory';
 import { vehicleStats } from './stats';
 import { emptyWorld } from './testkit';
 import type { World } from './types';
+import { siteGates } from './sites';
 
 const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
 const item = (w: World, defId: string) => w.vehicles[0].items.find((it) => it.kind === 'part' && it.part.defId === defId)!;
@@ -45,15 +46,16 @@ describe('inventory grid', () => {
     const w = emptyWorld();
     const mg = item(w, 'mg');
     expect(() => moveItem(w, mg.id, { x: 1, y: rackRow, rot: 0 })).toThrow(/town/);
-    const inTown = emptyWorld(bowl.pos);
+    const inTown = emptyWorld(siteGates(bowl)[0]);
     const off = moveItem(inTown, item(inTown, 'mg').id, { x: 1, y: rackRow, rot: 0 });
     expect(vehicleStats(off, off.vehicles[0]).weapons).toHaveLength(0);
     expect(spareParts(off.vehicles[0]).map((p) => p.defId)).toEqual(['mg']);
   });
 
   it('a cannon works only lying along the weapon mount', () => {
-    let w = emptyWorld(bowl.pos);
+    let w = emptyWorld(siteGates(bowl)[0]);
     w.player.money = 2000;
+    removeAllGoods(w.vehicles[0]); // free the plain cells the cannon test claims, regardless of start cargo
     const mg = item(w, 'mg');
     w = storePart(w, mg.id);
     w = buyPart(w, 'cannon');
@@ -66,13 +68,13 @@ describe('inventory grid', () => {
   });
 
   it('removing the rack is blocked while its row holds items', () => {
-    let w = emptyWorld(bowl.pos);
+    let w = emptyWorld(siteGates(bowl)[0]);
     w = moveItem(w, good(w).id, { x: 0, y: rackRow, rot: 0 });
     expect(() => storePart(w, item(w, 'rack').id)).toThrow(/fall off/);
   });
 
   it('more parts mean less cargo room', () => {
-    let w = emptyWorld(bowl.pos);
+    let w = emptyWorld(siteGates(bowl)[0]);
     w.player.money = 2000;
     const free = freeCells(w.vehicles[0]);
     const mg = item(w, 'mg');
@@ -84,7 +86,8 @@ describe('inventory grid', () => {
 
   it('goods can be dumped, parts cannot', () => {
     const w = emptyWorld();
-    expect(dumpGood(w, good(w).id).vehicles[0].items.filter((it) => it.kind === 'good')).toHaveLength(1);
+    const before = w.vehicles[0].items.filter((it) => it.kind === 'good').length;
+    expect(dumpGood(w, good(w).id).vehicles[0].items.filter((it) => it.kind === 'good')).toHaveLength(before - 1);
     expect(() => dumpGood(w, item(w, 'mg').id)).toThrow();
   });
 });

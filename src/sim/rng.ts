@@ -29,3 +29,18 @@ export function gauss(r: Rng): number {
   const v = nextRandom(r);
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
+
+// A pure draw in [0, 1), keyed by a seed and any number of integer keys. Same inputs always give the
+// same output, and it never reads or writes world.rngState, so it can be called any number of times
+// within a turn (for example once per contact) without shifting the world's random stream.
+export function hashRandom(seed: number, ...keys: number[]): number {
+  let h = seed | 0;
+  for (const k of keys) {
+    h = Math.imul(h ^ (k | 0), 0x9e3779b1);
+    h ^= h >>> 15;
+  }
+  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
+  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}

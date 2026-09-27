@@ -49,7 +49,7 @@ describe('NPC driving', () => {
     const npc = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: bowl.pos.x + bowl.radius + 2, y: bowl.pos.y });
     npc.brain = { templateId: 'trader', activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0 };
     let closest = Infinity;
-    for (let i = 0; i < 150; i++) {
+    for (let i = 0; i < w.size && closest >= nose.radius + 2; i++) {
       planNpcOrders(w);
       resolveMovement(w);
       resolveNpcActivities(w);
@@ -57,7 +57,7 @@ describe('NPC driving', () => {
       expect(dist(npc.pos, nose.pos)).toBeGreaterThanOrEqual(nose.radius + 0.8 - 0.02);
     }
     expect(closest).toBeLessThan(nose.radius + 2);
-  });
+  }, 120_000);
 
   it('backs out after repeated failed drive attempts', () => {
     const { w, npc } = buildChase();
