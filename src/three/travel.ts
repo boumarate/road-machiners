@@ -28,20 +28,16 @@ export class Travel {
 
   constructor(private readonly holdMs: number) {}
 
-  start(): void {
-    this.automatic = true;
-  }
-
   pause(): void {
     this.automatic = false;
     this.release();
   }
 
-  press(now: number, playing: boolean): boolean {
+  press(now: number, playing: boolean, followWaypoint: boolean): boolean {
     if (this.pressedAt !== null) return false;
     this.pressedAt = now;
     const step = !this.automatic && !playing;
-    this.automatic = false;
+    this.automatic = step && followWaypoint;
     return step;
   }
 

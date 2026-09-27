@@ -550,7 +550,9 @@ export class Game {
       const playing = this.anim !== null;
       if (e.code === "Space") {
         e.preventDefault();
-        if (!e.repeat && !modal && this.travel.press(performance.now(), playing))
+        const order = playerVehicle(this.world).order;
+        const followWaypoint = canTravel(this.world) && order !== null && order.kind !== "brake";
+        if (!e.repeat && !modal && this.travel.press(performance.now(), playing, followWaypoint))
           this.endTurn();
       }
       if (e.code === "KeyF") this.following = true;
@@ -619,11 +621,7 @@ export class Game {
     )
       return this.apply(setMoveOrder(this.world, { kind: "brake" }));
     const p = this.rig.groundUnder(e.clientX, e.clientY, this.ground);
-    if (p) {
-      const automatic = canTravel(this.world);
-      this.apply(setMoveOrder(this.world, clickOrder(p, automatic || e.shiftKey)));
-      if (automatic) this.travel.start();
-    }
+    if (p) this.apply(setMoveOrder(this.world, clickOrder(p, e.shiftKey)));
   }
 
   private targetVehicle(target: Vehicle): void {

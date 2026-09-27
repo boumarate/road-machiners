@@ -18,32 +18,35 @@ function makeSafeWorld() {
 }
 
 describe("turn advancement", () => {
-  it("starts paused and runs only after a waypoint click", () => {
+  it("keeps planning paused until Space starts waypoint travel", () => {
     const travel = new Travel(250);
+    travel.update(true, true);
     expect(travel.shouldAdvance(0)).toBe(false);
-    travel.start();
-    expect(travel.shouldAdvance(0)).toBe(true);
+    expect(travel.press(0, false, true)).toBe(true);
+    travel.release();
+    expect(travel.shouldAdvance(1000)).toBe(true);
   });
 
   it("Space pauses travel without scheduling an extra turn", () => {
     const travel = new Travel(250);
-    travel.start();
-    expect(travel.press(0, true)).toBe(false);
+    travel.press(0, false, true);
+    travel.release();
+    expect(travel.press(100, true, true)).toBe(false);
     travel.release();
     expect(travel.shouldAdvance(1000)).toBe(false);
   });
 
-  it("a tap while paused advances exactly one turn", () => {
+  it("a tap without safe waypoint travel advances exactly one turn", () => {
     const travel = new Travel(250);
-    expect(travel.press(0, false)).toBe(true);
-    expect(travel.press(10, false)).toBe(false);
+    expect(travel.press(0, false, false)).toBe(true);
+    expect(travel.press(10, false, false)).toBe(false);
     travel.release();
     expect(travel.shouldAdvance(1000)).toBe(false);
   });
 
   it("holding Space advances faster, even in combat, until release", () => {
     const travel = new Travel(250);
-    travel.press(0, false);
+    travel.press(0, false, false);
     expect(travel.isFast(249)).toBe(false);
     expect(travel.isFast(250)).toBe(true);
     travel.update(false, false);
@@ -53,20 +56,21 @@ describe("turn advancement", () => {
     expect(travel.shouldAdvance(251)).toBe(false);
   });
 
-  it.each(["danger", "arrival"])("%s cancels automatic travel until a new click", (reason) => {
+  it.each(["danger", "arrival"])("%s cancels automatic travel until Space is pressed again", (reason) => {
     const travel = new Travel(250);
-    travel.start();
+    travel.press(0, false, true);
+    travel.release();
     travel.update(reason !== "danger", reason !== "arrival");
     expect(travel.shouldAdvance(0)).toBe(false);
     expect(travel.shouldAdvance(1)).toBe(false);
-    travel.start();
+    travel.press(2, false, true);
+    travel.release();
     expect(travel.shouldAdvance(2)).toBe(true);
   });
 
   it("focus loss or a panel clears held input and automatic travel", () => {
     const travel = new Travel(250);
-    travel.start();
-    travel.press(0, true);
+    travel.press(0, false, true);
     travel.pause();
     expect(travel.isFast(1000)).toBe(false);
     expect(travel.shouldAdvance(1000)).toBe(false);
@@ -76,12 +80,13 @@ describe("turn advancement", () => {
 describe("waypoint travel with physics", () => {
   beforeAll(initPhysics);
 
-  it("advances to the waypoint without Space and stops scheduling on arrival", () => {
+  it("one Space press advances to the waypoint and stops scheduling on arrival", () => {
     const dest = { x: 38, y: 31 };
     let world = setMoveOrder(emptyWorld(), { kind: "stopAt", dest });
     let drive = buildDrive(world);
     const travel = new Travel(250);
-    travel.start();
+    travel.press(0, false, true);
+    travel.release();
     let turns = 0;
     try {
       // The existing stop-at physics fixture reaches this destination within eight turns.
