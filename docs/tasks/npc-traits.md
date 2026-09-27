@@ -88,8 +88,8 @@ A hook can end hostility, log an event, move money, or add new states. Chains of
 First kinds:
 - `feud` replaces `Vehicle.grudges`. It makes both parties hostile and adds fight weight against the other party. Shots between the two, or either one seeing the other, refresh it. On `expired`, the robbery failed: hostility ends, and the holder gets `backedOff`.
 - `backedOff` sets the holder's rob weight to zero against the other party until it expires. So a failed robber does not start again at once. It shows chaining.
-- `tow` replaces `world.player.tow` from defeat-rescue. The holder is the tower, and the other party is the client. The tower's goal is the client, then the town. On `fulfilled`, the fee moves. On `broken`, nothing moves. A refusal or an unhitch adds `spurned`.
-- `spurned` has no timer. It stops the holder from offering a tow to the other party again. It replaces `NpcBrain.refusedTow`.
+- `tow` replaces `world.player.tow` from defeat-rescue. The holder is the tower, and the other party is the client. The tower's goal is the client, then the town. On `fulfilled`, the fee moves. On `broken`, nothing moves. A refusal or an unhitch adds `turnedDown`.
+- `turnedDown` has no timer. It lowers the holder's tow weight toward the other party to the minimum chance. It replaces `NpcBrain.refusedTow`.
 - `towPromise` has no timer. A tower that drops a hitched tow for danger holds it with the old town and fee, and its next offer keeps those terms. It came with main's tow change.
 
 State weight changes apply only when the decision is about the state's other party. A feud raises fight weight against its target, not against every hostile.
@@ -168,7 +168,7 @@ Design deviations made while planning:
 - The full-cargo sell rule is dropped. A scavenge goal already ends on full cargo, and an idle NPC with sale cargo sells.
 - `wary` became `backedOff`. A `wary` victim would need a sighting of a non-hostile vehicle to fire a decision, which no decision point covers.
 - `truce` moves to the social task. Nothing here creates one.
-- `spurned` is added. It replaces `refusedTow` as a state instead of a brain flag.
+- `turnedDown` is added. It replaces `refusedTow` as a state instead of a brain flag.
 - Execution added `towPromise` when main's tow change merged, and a `robbery` flag on feud data, so only a robbery feud sends the winner to loot.
 - Execution added the `loot` goal kind, so a winning robber searches the wreck or knockout stock without replacing a base scavenge goal.
 
@@ -197,7 +197,7 @@ UK2 resolved: `update()` clears `world.events` at the start of each turn. So `no
   - `NpcState = { id: string; kind: StateKindId; holder: string; other: string; turnsLeft: number | null; born: number; data: StateData }`. `StateData` is `{ kind: 'tow'; town: string; fee: number; hitched: boolean } | { kind: 'none' }`.
   - `World.states: NpcState[]`. `Vehicle.grudges`, `Tow`, `TowDropReason` and `Player.tow` leave.
   - Events gain `{ t: 'stateEnded'; state: NpcState; ending: StateEnding }`. `hostile` stays for a new feud. The tow events stay.
-- 2.2 `src/data/states.ts` (create) — `STATE_TURNS: Record<StateKindId, number | null>` with a comment per value. `feud` and `backedOff` have turns, `tow` and `spurned` have none.
+- 2.2 `src/data/states.ts` (create) — `STATE_TURNS: Record<StateKindId, number | null>` with a comment per value. `feud` and `backedOff` have turns, `tow` and `turnedDown` have none.
 - 2.3 `src/sim/states.ts` (create)
   - `STATE_KINDS: Record<StateKindId, StateKind>`. `StateKind` is `{ refresh(w, s): boolean; check(w, s): StateEnding | null; hooks: Partial<Record<StateEnding, (w, s) => void>> }`.
   - `addState(w, kind, holder, other, data): NpcState` replaces any state of the same kind, holder and other. Respects IV12.
@@ -207,7 +207,7 @@ UK2 resolved: `update()` clears `world.events` at the start of each turn. So `no
 - 2.4 `src/sim/combat.ts:31-43,388-403,430-435` (modify) — `isFoe` and `isHostile` read `stateOf(w, 'feud', …)` in either direction. They take `world` as a new first argument, and every caller passes it. `provoke()` calls `addState(…'feud'…)`. The grudge cleanup leaves, since `advanceStates` breaks states with a missing party. Respects IV10.
 - 2.5 `src/sim/defeat.ts:21-38` (modify) — A knockout ends feuds against the player as `fulfilled`.
 - 2.6 `src/sim/tow.ts` (rewrite around the state)
-  - The offer adds a `tow` state with `hitched: false`. Accept sets `hitched`. Arrival ends it `fulfilled`, and the hook moves the fee. Refusal, unhitch, drive-away, danger and a missing tower end it `broken`. Refusal and unhitch add `spurned`.
+  - The offer adds a `tow` state with `hitched: false`. Accept sets `hitched`. Arrival ends it `fulfilled`, and the hook moves the fee. Refusal, unhitch, drive-away, danger and a missing tower end it `broken`. Refusal and unhitch add `turnedDown`.
   - `playerTow(w): NpcState | null` and `isTowed(w): boolean` are the queries.
   - `checkTower()` leaves, since `advanceStates` covers a missing tower.
 - 2.7 `src/sim/world.ts:67,126-135,169,183`, `src/sim/far.ts:20`, `src/phys/turn.ts:25`, `src/sim/movement.ts:21`, `src/sim/stats.ts:72` and `src/sim/ai.ts:111-115` (modify) — Each reads `playerTow()` or `isTowed()`. The pipeline runs `advanceStates()` where `checkTower()` ran.
