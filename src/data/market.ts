@@ -1,5 +1,4 @@
-// Market data: shop profiles and stock, the effort model and contract terms. See src/sim/market.ts
-// and src/sim/contracts.ts.
+// Market data: shop profiles and stock, the effort model and contract terms. See src/sim/market.ts.
 
 import { PARTS } from './parts';
 import type { Weighted } from './npcs';
