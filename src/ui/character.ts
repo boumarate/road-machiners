@@ -3,7 +3,7 @@
 
 import { MAX_SKILL_LEVEL, PERK_LEVELS, PERKS, type PerkId, SKILL_IDS, SKILL_INFO, XP_RULES, XP_TO_REACH } from '../data/skills';
 import { maxHealthOf } from '../sim/health';
-import { choosePerk, hasPerk, levelOf, pendingPerkPairs, perkPair, type PerkPair } from '../sim/progress';
+import { choosePerk, hasPerk, levelOf, pendingPerkPairs, perkPair, type PerkPair, xpTodayOf } from '../sim/progress';
 import type { SkillId, World } from '../sim/types';
 import { el, panel } from './dom';
 import type { UiHost } from './host';
@@ -39,7 +39,7 @@ export class CharacterScreen {
       el('button', { class: 'close', onclick: () => this.close() }, 'Close [C]'),
       el('h3', {}, 'Character'),
       el('div', { class: 'dim' }, `Health ${p.health}/${maxHealthOf(world)}   Knockouts ${p.knockouts}`),
-      el('table', {}, ...SKILL_IDS.flatMap((id) => [this.row(id, p.skills[id], p.xpToday[id]), this.perkRow(world, id)])),
+      el('table', {}, ...SKILL_IDS.flatMap((id) => [this.row(id, p.skills[id], xpTodayOf(world, id)), this.perkRow(world, id)])),
     );
   }
 

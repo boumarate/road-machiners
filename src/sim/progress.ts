@@ -30,6 +30,11 @@ export function skillEffect<S extends SkillId>(world: World, v: Vehicle, skill: 
   return perLevel * skillLevel(world, skill);
 }
 
+// XP a skill earned today. The stored count belongs to day xpDay and resets on the next practice.
+export function xpTodayOf(world: World, skill: SkillId): number {
+  return world.player.xpDay === clockOf(world.turn).day ? world.player.xpToday[skill] : 0;
+}
+
 // XP one practice event earns. Difficulty runs from 0 for a sure thing to 1 for a long shot, and is null
 // for an unscaled source. XP past the skill's daily cap pays at the over-cap rate.
 export function xpFor(p: SkillProgress, source: XpSource, amount: number, difficulty: number | null, day: number): number {

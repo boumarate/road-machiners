@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TIME } from '../data/time';
 import { MAX_SKILL_LEVEL, type PerkId, XP_RULES, XP_SOURCES, XP_TO_REACH } from '../data/skills';
-import { choosePerk, hasPerk, pendingPerkPairs, practice, skillEffect, skillLevel, vehicleHasPerk, xpFor } from './progress';
+import { choosePerk, hasPerk, pendingPerkPairs, practice, skillEffect, skillLevel, vehicleHasPerk, xpFor, xpTodayOf } from './progress';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld } from './testkit';
 
@@ -163,5 +163,15 @@ describe('perks on vehicles', () => {
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
     expect(vehicleHasPerk(w, w.vehicles[0], 'ramGuard')).toBe(true);
     expect(vehicleHasPerk(w, npc, 'ramGuard')).toBe(false);
+  });
+});
+
+describe('xpTodayOf', () => {
+  it('counts only XP earned on the current day', () => {
+    const w = emptyWorld();
+    practice(w, 'discover', 1, null);
+    expect(xpTodayOf(w, 'perception')).toBeCloseTo(XP_SOURCES.discover.weight);
+    w.turn += TIME.turnsPerDay;
+    expect(xpTodayOf(w, 'perception')).toBe(0);
   });
 });

@@ -26,7 +26,7 @@ import {
   toggleGod,
 } from "../sim/cheats";
 import { PERKS, SKILL_IDS, XP_RULES } from "../data/skills";
-import { levelOf } from "../sim/progress";
+import { levelOf, xpTodayOf } from "../sim/progress";
 import type { World, XpSource } from "../sim/types";
 import { el, panel } from "./dom";
 
@@ -170,7 +170,7 @@ export const COMMANDS: readonly Command[] = [
 function skillLines(world: World): string[] {
   const p = world.player;
   const skills = SKILL_IDS.map(
-    (id) => `${id}  level ${levelOf(p.skills[id])}  xp ${Math.round(p.skills[id])}  today ${Math.round(p.xpToday[id])}/${XP_RULES.dailyCap}`,
+    (id) => `${id}  level ${levelOf(p.skills[id])}  xp ${Math.round(p.skills[id])}  today ${Math.round(xpTodayOf(world, id))}/${XP_RULES.dailyCap}`,
   );
   const sources = (Object.keys(p.xpBySource) as XpSource[]).map((s) => `${s}  ${Math.round(p.xpBySource[s])} xp`);
   return [...skills, ...sources];
