@@ -1,6 +1,6 @@
 import { chassisDef } from '../data/chassis';
 import { GOODS } from '../data/goods';
-import type { NpcLoadoutTable, NpcTemplate, Weighted } from '../data/npcs';
+import { NPC_UPKEEP, type NpcLoadoutTable, type NpcTemplate, type Weighted } from '../data/npcs';
 import { partDef, type PartKind } from '../data/parts';
 import { makePart, makeVehicle } from './factory';
 import { freeCells } from './grid';
@@ -121,10 +121,13 @@ export function generateNpcLoadout(world: World, template: NpcTemplate): NpcLoad
   v = chooseOptionalPart(probe, rng, v, table.budget, table.armor);
   const room = freeCells(v);
   const massRoom = chassisDef(v.chassisId).ratedMass - vehicleMass(v);
-  const goods = table.goods.filter(({ value }) => value === null || (value.count <= room && GOODS[value.good].mass * value.count <= massRoom));
+  const repairParts = Math.min(NPC_UPKEEP.repairParts, room, Math.floor(massRoom / GOODS.parts.mass));
+  const goods = table.goods.filter(({ value }) => value === null || (value.count <= room - repairParts && GOODS[value.good].mass * value.count <= massRoom - repairParts * GOODS.parts.mass));
   if (!goods.length) throw new Error(`No fitting cargo outcome for ${template.id}`);
   const cargo = sampleWeighted(rng, goods);
   const parts = v.items.flatMap((item) => item.kind === 'part' && partDef(item.part.defId).kind !== 'core' ? [item.part.defId] : []);
   world.rngState = rng.rngState;
-  return { chassisId: v.chassisId, parts, cargo: cargo === null ? {} : { [cargo.good]: cargo.count } };
+  const carried: Record<string, number> = repairParts > 0 ? { parts: repairParts } : {};
+  if (cargo) carried[cargo.good] = (carried[cargo.good] ?? 0) + cargo.count;
+  return { chassisId: v.chassisId, parts, cargo: carried };
 }

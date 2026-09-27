@@ -122,7 +122,8 @@ export type NpcActivity = {
     | "flee"
     | "wait"
     | "investigate"
-    | "tow";
+    | "tow"
+    | "repair";
   targetId: string | null;
   destination: Vec | null;
   phase: "travel" | "act";
@@ -133,6 +134,9 @@ export type NpcActivity = {
 export type NpcBrain = {
   templateId: string;
   activity: NpcActivity | null;
+  interruptedWork?: NpcActivity;
+  attackers?: string[];
+  investigatedContacts?: string[];
   goal: Vec | null;
   home: Vec;
   stepIndex: number; // route progress for traders and scavengers
