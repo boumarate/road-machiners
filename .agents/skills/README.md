@@ -1,6 +1,6 @@
 # Project skills
 
-Project-local skills for TypeScript engineering, game interface design, visual direction, feedback, balance, and design critique. Pi discovers these directories in trusted projects at startup. Start a new session to refresh discovery, or read a skill's `SKILL.md` directly in an existing session.
+Project-local skills for TypeScript engineering, game interface design, visual direction, feedback, balance, and design critique. Pi discovers these directories in trusted projects at startup. Claude Code does not, so read a skill's `SKILL.md` directly. CLAUDE.md links the engineering skills.
 
 ## Engineering
 
@@ -18,11 +18,11 @@ These are local copies adapted from the corresponding global practices. `typescr
 - `stress-testing-game-concepts` challenges rules and player choices with concrete failure traces rather than unsupported judgments about fun.
 - `evaluating-gameplay-balance` compares strategies through telemetry and separates exploit detection from human difficulty.
 
-Example after discovery: `/skill:game-ui-design`.
+Example in Pi: `/skill:game-ui-design`.
 
 ## Sources and selection
 
-Four skills come from [abagames/agentic-gamedev-skills](https://github.com/abagames/agentic-gamedev-skills). The interface skill comes from [Jeremy Longworth's AgentSkills](https://github.com/jeremylongworth-source/AgentSkills/tree/main/skills/game-ui-design). Each directory contains its upstream license and an `UPSTREAM.json` recording the source revision and downloaded file hashes. Local Markdown formatting may differ because the project formatter runs on imported files.
+Four skills come from [abagames/agentic-gamedev-skills](https://github.com/abagames/agentic-gamedev-skills). The interface skill comes from [Jeremy Longworth's AgentSkills](https://github.com/jeremylongworth-source/AgentSkills/tree/main/skills/game-ui-design). Each imported directory contains its upstream license and an `UPSTREAM.json` recording the source revision and downloaded file hashes. Local Markdown formatting may differ because the project formatter runs on imported files.
 
 The [awesome-gamedev-agent-skills](https://github.com/gamedev-skills/awesome-gamedev-agent-skills) pack was also considered. Its interface skill emphasizes layout engineering and engine integration. The selected skills address visual hierarchy and player decisions more directly. This is a focused selection, not either complete upstream collection.
 

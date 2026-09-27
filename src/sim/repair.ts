@@ -1,5 +1,5 @@
 // Field repair: a parked job that spends parts to restore one part's HP up to a field cap.
-// Parts are spent only when the job finishes. Mechanics shortens the job and cuts parts use.
+// Parts are spent only when the job finishes. Machining shortens the job and cuts parts use.
 
 import { partDef } from '../data/parts';
 import { PERK_NUMBERS } from '../data/skills';
@@ -44,7 +44,7 @@ function fieldCapShare(world: World, v: Vehicle): number {
 }
 
 // The repair math for one part: lift it to `capShare` of max HP, spending at most the parts held and maxParts.
-// `mult` is the repairer's Mechanics multiplier.
+// `mult` is the repairer's Machining multiplier.
 // Throws for a junk part, which no repair rebuilds.
 export function planPartRepair(part: PartInstance, capShare: number, mult: number, partsHeld: number, maxParts: number): RepairPlan {
   if (isJunk(part)) throw new Error(`${partDef(part.defId).name} is junk and cannot be rebuilt`);

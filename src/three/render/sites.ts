@@ -7,7 +7,7 @@ import { TERRAIN } from '../../data/terrain';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
-import { siteGates, sitePads } from '../../sim/sites';
+import { siteGates } from '../../sim/sites';
 import { BRIDGE_AXIS, BRIDGE_LENGTH } from '../../sim/bridge';
 import { deckEnds, heightAt, type Terrain } from '../../sim/terrain';
 import { angleDiff, segmentDist } from '../../sim/vec';
@@ -53,28 +53,6 @@ class SiteBuilder {
     mesh.receiveShadow = true;
     this.root.add(mesh);
     return mesh;
-  }
-  // A flat rectangle of packed dust laid over the ground: length tiles along yaw, width across, centered at
-  // site offset (x, z). It lies outside the site edge, where trucks park.
-  // It writes no depth, so ground overlays like zones and waypoints stay visible over it.
-  // Higher layers draw later, so a floor covers its rim.
-  addPatch(x: number, z: number, length: number, width: number, yaw: number, lift: number, color: number, layer: number): void {
-    const geo = new THREE.PlaneGeometry(length, width, Math.ceil(length) * 2, Math.ceil(width) * 2);
-    const pos = geo.getAttribute('position');
-    for (let i = 0; i < pos.count; i++) {
-      // The plane faces +z. Taking its y as -across turns that face up.
-      const u = pos.getX(i);
-      const v = -pos.getY(i);
-      const wx = this.site.pos.x + x + Math.cos(yaw) * u - Math.sin(yaw) * v;
-      const wz = this.site.pos.y + z + Math.sin(yaw) * u + Math.cos(yaw) * v;
-      pos.setXYZ(i, wx * S, (heightAt(this.terrain, wx, wz) + lift) * S, wz * S);
-    }
-    geo.computeVertexNormals();
-    const patch = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color, flatShading: true, depthWrite: false }));
-    patch.renderOrder = layer;
-    patch.receiveShadow = true;
-    patch.userData.outsideEdge = true;
-    this.root.add(patch);
   }
   // A door leaf hinged at site offset (x, z) that reaches length tiles toward yaw. The group named `door`
   // stands at the hinge, so turning it about y swings the leaf.
@@ -365,17 +343,6 @@ function addLamp(b: SiteBuilder, ring: Ring, style: WallStyle, a: number): void 
   b.addBox(q.x, q.z, 0.24, 0.22, 0.45, PAL.lamp.on, top + 0.06, -a);
 }
 
-// A packed-dust pad outside each gate: a dark rim and a paler floor.
-function addPads(b: SiteBuilder, site: Site): void {
-  const { length, width } = REGION.sites.pad;
-  for (const pad of sitePads(site)) {
-    const yaw = Math.atan2(pad.y - site.pos.y, pad.x - site.pos.x);
-    const x = pad.x - site.pos.x;
-    const z = pad.y - site.pos.y;
-    b.addPatch(x, z, length, width, yaw, 0.03, PAL.roadRut, 1);
-    b.addPatch(x, z, length - 0.5, width - 0.5, yaw, 0.05, PAL.sand[3], 2);
-  }
-}
 
 function addGuardTower(b: SiteBuilder, ring: Ring, style: WallStyle, a: number): void {
   const tower = SET.guardTowerHeight;
@@ -516,7 +483,6 @@ function buildSite(t: Terrain, site: Site): THREE.Group {
     default: throw new Error(`Missing landmark model for ${site.id}`);
   }
   addWall(b, site, edgeStyle(site));
-  addPads(b, site);
   // Site models never move after they are built.
   b.root.traverse((o) => {
     o.updateMatrix();

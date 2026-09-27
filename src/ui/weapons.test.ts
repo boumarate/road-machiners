@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { hitOdds } from "../sim/combat";
 import { vehicleStats } from "../sim/stats";
-import { addVehicle, emptyWorld } from "../sim/testkit";
+import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import { refreshVision } from "../sim/vision";
 import { getWeaponReadout, toggleTarget, vehicleMarks } from "./weapons";
 
@@ -136,12 +136,29 @@ describe("vehicle marks", () => {
     expect(vehicleMarks(world, null).get(target.id)).toEqual({
       weapons: [{ slot: 1, look: gun.def.look, status: "ready", ready: true }],
       radio: false,
+      job: null,
     });
   });
 
   it("shows nothing for a vehicle without orders", () => {
     const { world, target } = createDuel();
     world.vehicles[0].weaponOrders = {};
+    expect(vehicleMarks(world, null).has(target.id)).toBe(false);
+  });
+
+  it("shows the job of a seen NPC with its progress", () => {
+    const { world, target } = createDuel();
+    target.brain = npcBrain("scavenger", target.pos, ["scavenger"]);
+    target.job = { kind: "search", stockId: "wreck-1", turnsLeft: 3, total: 4 };
+    expect(vehicleMarks(world, null).get(target.id)?.job).toEqual({ label: "Search", progress: 0.25 });
+  });
+
+  it("hides the job of an NPC out of sight", () => {
+    const { world, target } = createDuel();
+    world.vehicles[0].weaponOrders = {};
+    target.brain = npcBrain("scavenger", target.pos, ["scavenger"]);
+    target.job = { kind: "search", stockId: "wreck-1", turnsLeft: 3, total: 4 };
+    target.pos = { x: 58, y: 58 };
     expect(vehicleMarks(world, null).has(target.id)).toBe(false);
   });
 });

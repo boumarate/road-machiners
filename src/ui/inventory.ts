@@ -35,6 +35,8 @@ import { REGION } from "../data/region";
 import type {
   GridItem,
   PartInstance,
+  RefitJob,
+  RefitMove,
   SalvageStock,
   Vehicle,
   World,
@@ -42,12 +44,14 @@ import type {
 import { el, panel } from "./dom";
 import { wearLabel } from "./format";
 import type { UiHost } from "./host";
-import { createIcon, type IconName } from "./icons";
+import { baselinePart, conditionMeter, createIcon, type IconName, diffStats, footprint as footprintEl, goodIcon, partIcon, partStats, statGrid } from "./cards";
 import { vehicleMass } from "../sim/mass";
 import { openSides, SIDES } from "../sim/armor";
 import { fuelLiters, hp, kg, liters } from "./units";
 
 const CELL_PX = 42;
+// Below this the part icons and condition bars stop being readable, so a taller grid scrolls instead.
+const MIN_CELL_PX = 28;
 
 const CELL_TITLE: Record<Cell, string> = {
   D: "deck mount for a weapon, scanner or cargo frame",
@@ -87,6 +91,7 @@ export class InventoryView {
   private inspection = el("div", { class: "inv-inspection" });
   private selectedItem: string | null = null;
   private loot: string | null = null; // salvage stock shown beside the grid, after a finished search
+  private cell = CELL_PX; // grid cell size in pixels, shrunk by fitTo()
 
   constructor(
     private host: UiHost,
@@ -106,7 +111,21 @@ export class InventoryView {
     });
   }
 
-  // Shows a searched salvage stock beside the grid, or hides it with null.
+  // Renders the mounted view again with grid cells shrunk until the truck fits the height of box, the scrolling
+  // column that holds the view. Stops at MIN_CELL_PX.
+  fitTo(box: HTMLElement): void {
+    this.cell = CELL_PX;
+    this.render();
+    const truck = this.root.querySelector(".inv-truck");
+    if (!truck) throw new Error("Inventory view is not rendered");
+    const over = truck.getBoundingClientRect().bottom - box.getBoundingClientRect().bottom;
+    if (over <= 0) return;
+    const rows = gridOf(playerVehicle(this.host.world())).h;
+    this.cell = Math.max(MIN_CELL_PX, Math.floor(this.cell - over / rows));
+    this.render();
+  }
+
+    // Shows a searched salvage stock beside the grid, or hides it with null.
   setLoot(stockId: string | null): void {
     this.loot = stockId;
   }
@@ -129,7 +148,7 @@ export class InventoryView {
       );
     const grid = el("div", {
       class: "inv-grid",
-      style: `width:${g.w * CELL_PX}px;height:${g.h * CELL_PX}px`,
+      style: `width:${g.w * this.cell}px;height:${g.h * this.cell}px`,
     });
     grid.addEventListener("contextmenu", (e) => e.preventDefault());
     for (let y = 0; y < g.h; y++) {
@@ -141,7 +160,7 @@ export class InventoryView {
             "div",
             {
               class: `inv-cell c-${c === "." ? "plain" : c}`,
-              style: pos(x, y, 1, 1),
+              style: pos(x, y, 1, 1, this.cell),
               title: CELL_TITLE[c],
             },
             c === "." || c === "X" ? "" : c,
@@ -149,7 +168,7 @@ export class InventoryView {
         );
       }
     }
-    for (const it of me.items) grid.append(this.itemEl(w, it));
+    grid.append(...this.gridItems(w, me));
     this.gridEl = grid;
     const inTown = townAt(w) !== null;
     this.root.replaceChildren(
@@ -236,7 +255,7 @@ export class InventoryView {
         class: `inv-item ${cls}`,
         "aria-pressed": String(this.selectedItem === it.id),
         "data-item-id": it.id,
-        style: pos(x, y, wd, ht),
+        style: pos(x, y, wd, ht, this.cell),
         title: itemTitle(it, mounted),
         tabindex: 0,
         role: "button",
@@ -259,11 +278,30 @@ export class InventoryView {
     if (!core)
       node.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
+        // The grab uses the same grid math as spotAt, so a drop where the drag began lands on the item's own spot.
+        if (!this.gridEl) throw new Error("Grid item pressed without a grid");
+        const r = this.gridEl.getBoundingClientRect();
         this.startDrag(e, "grid", it.id, it, {
-          x: Math.floor(e.offsetX / CELL_PX),
-          y: Math.floor(e.offsetY / CELL_PX),
+          x: Math.floor((e.clientX - r.left) / this.cell) - it.x,
+          y: Math.floor((e.clientY - r.top) / this.cell) - it.y,
         });
       });
+    return node;
+  }
+
+  // Every item on the grid. Parts in a running refit show at the spots they go to.
+  private gridItems(w: World, v: Vehicle): HTMLElement[] {
+    const moving = refitItems(w, v);
+    const staying = v.items.filter((it) => !moving.some((m) => m.id === it.id));
+    return [...staying.map((it) => this.itemEl(w, it)), ...moving.map((it) => this.refittingEl(w, v, it))];
+  }
+
+  // A part in a running refit, drawn where it goes with a dashed outline. Hover shows the turns left.
+  private refittingEl(w: World, v: Vehicle, item: GridItem): HTMLElement {
+    const node = this.itemEl(w, item);
+    const left = v.job?.kind === "refit" ? v.job.turnsLeft : 0;
+    node.classList.add("refitting");
+    node.title = `Refit: ${left === 1 ? "1 turn" : `${left} turns`} left. Driving cancels it.`;
     return node;
   }
 
@@ -283,12 +321,18 @@ export class InventoryView {
 
   private showItem(w: World, item: GridItem, mounted: boolean): void {
     this.inspection.replaceChildren(
-      createIcon(getItemIcon(item)),
-      el("h3", {}, itemLabel(item).short),
-      el("p", {}, itemTitle(item, mounted)),
+      el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
+      ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, mounted) : []),
       el("p", { class: "dim" }, inspectionHint(w, item)),
-      ...this.itemActions(w, item, mounted),
+      el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
     );
+  }
+
+  // Lights up the grid cells of these mount letters, or clears the light with null.
+  hintMounts(cells: readonly Cell[] | null): void {
+    if (!this.gridEl) return;
+    if (cells) this.gridEl.dataset.hint = cells.join(" ");
+    else delete this.gridEl.dataset.hint;
   }
 
   // The action buttons an inspected item offers: patch when mounted and damaged, repair in town,
@@ -387,7 +431,10 @@ export class InventoryView {
       const chip = el(
         "div",
         { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
-        `${d.name} ${d.w}x${d.h} ${wearLabel(p)} ${hp(p.hp)}/${hp(maxHp(p))}`,
+        createIcon(partIcon(p)),
+        el("span", {}, d.name),
+        footprintEl(d.w, d.h),
+        conditionMeter(p),
       );
       const item: GridItem = {
         id: `store-${p.id}`,
@@ -419,7 +466,10 @@ export class InventoryView {
       const chip = el(
         "div",
         { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
-        `${d.name} ${d.w}x${d.h} ${wearLabel(p)} ${hp(p.hp)}/${hp(maxHp(p))}`,
+        createIcon(partIcon(p)),
+        el("span", {}, d.name),
+        footprintEl(d.w, d.h),
+        conditionMeter(p),
       );
       const item: GridItem = {
         id: `loot-${p.id}`,
@@ -575,7 +625,7 @@ export class InventoryView {
         e.clientX - this.drag.start.x,
         e.clientY - this.drag.start.y,
       ) >=
-      CELL_PX / 4
+      this.cell / 4
     )
       this.drag.moved = true;
     const spot = this.spotAt(e.clientX, e.clientY);
@@ -591,14 +641,14 @@ export class InventoryView {
     const ok = onGrid && this.placementProblem(d) === null;
     d.ghost.className = `inv-ghost ${onGrid ? (ok ? "ok" : "no") : ""}`;
     d.ghost.textContent = itemLabel(d.item).short;
-    d.ghost.style.width = `${size.w * CELL_PX}px`;
-    d.ghost.style.height = `${size.h * CELL_PX}px`;
+    d.ghost.style.width = `${size.w * this.cell}px`;
+    d.ghost.style.height = `${size.h * this.cell}px`;
     if (onGrid && g) {
-      d.ghost.style.left = `${g.left + d.item.x * CELL_PX}px`;
-      d.ghost.style.top = `${g.top + d.item.y * CELL_PX}px`;
+      d.ghost.style.left = `${g.left + d.item.x * this.cell}px`;
+      d.ghost.style.top = `${g.top + d.item.y * this.cell}px`;
     } else {
-      d.ghost.style.left = `${e.clientX - CELL_PX / 2}px`;
-      d.ghost.style.top = `${e.clientY - CELL_PX / 2}px`;
+      d.ghost.style.left = `${e.clientX - this.cell / 2}px`;
+      d.ghost.style.top = `${e.clientY - this.cell / 2}px`;
     }
   }
 
@@ -624,8 +674,8 @@ export class InventoryView {
     const r = this.gridEl.getBoundingClientRect();
     if (cx < r.left || cy < r.top || cx >= r.right || cy >= r.bottom)
       return null;
-    const x = Math.floor((cx - r.left) / CELL_PX) - this.drag.grab.x;
-    const y = Math.floor((cy - r.top) / CELL_PX) - this.drag.grab.y;
+    const x = Math.floor((cx - r.left) / this.cell) - this.drag.grab.x;
+    const y = Math.floor((cy - r.top) / this.cell) - this.drag.grab.y;
     return { x, y, rot: this.drag.item.rot };
   }
 
@@ -748,30 +798,31 @@ export class InventoryScreen {
 }
 
 export function getItemIcon(item: GridItem): IconName {
-  if (item.kind === "good") {
-    if (
-      item.good === "scrap" ||
-      item.good === "salt" ||
-      item.good === "meds" ||
-      item.good === "grain" ||
-      item.good === "textiles" ||
-      item.good === "tools" ||
-      item.good === "batteries" ||
-      item.good === "electronics"
-    )
-      return item.good;
-    if (item.good === "parts") return item.good;
-    throw new Error(`No inventory artwork for good: ${item.good}`);
-  }
-  const def = partDef(item.part.defId);
-  if (def.kind === "weapon") return def.look;
-  if (def.kind === "core") return def.role === "tank" ? "fuel" : def.role;
-  if (def.kind === "scanner") return "scanner";
-  return def.kind;
+  return item.kind === "good" ? goodIcon(item.good) : partIcon(item.part);
 }
 
-function pos(x: number, y: number, w: number, h: number): string {
-  return `left:${x * CELL_PX}px;top:${y * CELL_PX}px;width:${w * CELL_PX}px;height:${h * CELL_PX}px`;
+function pos(x: number, y: number, w: number, h: number, cell: number): string {
+  return `left:${x * cell}px;top:${y * cell}px;width:${w * cell}px;height:${h * cell}px`;
+}
+
+// The parts a running refit moves, at the spots they go to.
+function refitItems(w: World, v: Vehicle): GridItem[] {
+  if (v.job?.kind !== "refit") return [];
+  return [...v.job.moves.map((move) => movedItem(v, move)), ...pickupItem(w, v.job)];
+}
+
+function movedItem(v: Vehicle, move: RefitMove): GridItem {
+  const item = v.items.find((it) => it.id === move.itemId);
+  if (!item) throw new Error(`Refit moves missing item ${move.itemId}`);
+  return { ...item, ...move.to };
+}
+
+// The salvage part a refit mounts, at its target. A part gone from the stock is not drawn.
+function pickupItem(w: World, job: RefitJob): GridItem[] {
+  const pickup = job.pickup;
+  if (!pickup) return [];
+  const part = w.salvage.find((stock) => stock.id === pickup.stockId)?.parts.find((p) => p.id === pickup.partId);
+  return part ? [{ kind: "part", id: pickup.itemId, part, ...pickup.to }] : [];
 }
 
 function footprint(it: GridItem): { w: number; h: number } {
@@ -799,7 +850,7 @@ function inspectionHint(w: World, item: GridItem): string {
   if (item.kind === "good")
     return "Drag to rearrange cargo. Dropping in the dump area discards it.";
   if (townAt(w)) return "Garage: drag movable parts onto matching mounts or into storage.";
-  return "Move or remove equipment at a town garage.";
+  return "Drag onto a mount or off it to start a refit. It runs while the truck stays parked.";
 }
 
 // Why a Patch button is disabled, or null when the patch can start.
@@ -845,4 +896,25 @@ function fieldPatchable(part: PartInstance): boolean {
 // Armor that only a town repairs shows a disabled Patch button while damaged, so the player learns why.
 function townOnlyPatch(part: PartInstance): HTMLElement | null {
   return part.hp < maxHp(part) ? el("button", { class: "inv-patch", disabled: true }, "Patch (town only)") : null;
+}
+
+function itemName(it: GridItem): string {
+  return it.kind === "good" ? GOODS[it.good].name : partDef(it.part.defId).name;
+}
+
+function itemState(it: GridItem, mounted: boolean): string {
+  if (it.kind === "good") return `Cargo, ${kg(GOODS[it.good].mass)}`;
+  if (partDef(it.part.defId).kind === "core") return `Built in, ${wearLabel(it.part)}`;
+  return `${mounted ? "Mounted" : "Spare"}, ${wearLabel(it.part)}`;
+}
+
+// A part's condition and stats. A spare shows the change against the mounted part of its kind.
+function partDetails(me: Vehicle, part: PartInstance, mounted: boolean): HTMLElement[] {
+  const kind = partDef(part.defId).kind;
+  const base = mounted ? null : baselinePart(me, kind);
+  return [
+    conditionMeter(part),
+    statGrid(diffStats(partStats(part), base ? partStats(base) : null)),
+    base ? el("p", { class: "dim" }, `Against ${partDef(base.defId).name}`) : el("span"),
+  ];
 }

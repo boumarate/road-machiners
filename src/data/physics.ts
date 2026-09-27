@@ -46,6 +46,8 @@ export const PHYSICS = {
     cornerCut: 8, // meters before a route corner where the driver starts its turn, and after it where the turn ends
     reverseBelow: 4, // m/s; only a truck slower than this starts backing up
     reverseSpeed: 5, // m/s while backing up
+    stallSpeed: 0.3, // m/s; a truck pushing at a point behind it slower than this is blocked in front
+    stallSeconds: 0.5, // seconds blocked in front before the truck backs up; a truck from rest passes stallSpeed sooner
   },
   rockHeight: 3, // meters of obstacle collider height
   rockSink: 0.5, // meters an obstacle collider reaches below the ground, so slopes leave no gap

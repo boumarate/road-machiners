@@ -12,7 +12,7 @@ import { corePart, hasLoot, itemSize, mountedItems, mountedParts } from './grid'
 import { PERK_NUMBERS } from '../data/skills';
 import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { canVehicleSee, hasLineOfFire } from './vision';
-import { createWreckSalvage } from './salvage';
+import { createWreckSalvage, removeStocks } from './salvage';
 import { addState, stateOf } from './states';
 import { isTownGuarded } from './guards';
 import { getResources } from './resources';
@@ -541,7 +541,7 @@ function clearOldWrecks(world: World): void {
   );
   if (drop.size > 0) {
     world.obstacles = world.obstacles.filter((o) => !drop.has(o.id));
-    world.salvage = world.salvage.filter((stock) => !drop.has(stock.id));
+    removeStocks(world, drop);
   }
 }
 
