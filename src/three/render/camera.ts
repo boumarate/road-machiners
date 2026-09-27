@@ -93,7 +93,7 @@ export class CameraRig {
     up.y = 0;
     up.normalize();
     // Content follows the cursor: dragging right or down moves the look point the other way.
-    this.center.addScaledVector(right, -dxPx * metersPerPixel).addScaledVector(up, -dyPx * metersPerPixel);
+    this.center.addScaledVector(right, -dxPx * metersPerPixel).addScaledVector(up, dyPx * metersPerPixel);
     this.clampToLeash();
   }
 
@@ -162,5 +162,45 @@ export class CameraRig {
     }
     this.camera.position.copy(this.center).add(OFFSET);
     this.camera.lookAt(this.center);
+  }
+}
+
+// Key panning: the view moves while W, A, S or D is held.
+// Screen direction per pan key. Screen y grows down.
+const KEY_PAN_DIRECTIONS: Record<string, { x: number; y: number }> = {
+  KeyW: { x: 0, y: -1 },
+  KeyA: { x: -1, y: 0 },
+  KeyS: { x: 0, y: 1 },
+  KeyD: { x: 1, y: 0 },
+};
+// Screen pixels per second, so panning feels the same at every zoom. Crosses a 1080 px tall view in about a second.
+const KEY_PAN_PX_PER_S = 1000;
+
+export class KeyPan {
+  private held = new Set<string>();
+
+  // typing: true while a text field has focus, so its keys do not pan.
+  constructor(typing: () => boolean) {
+    window.addEventListener("keydown", (e) => {
+      if (e.code in KEY_PAN_DIRECTIONS && !typing()) this.held.add(e.code);
+    });
+    window.addEventListener("keyup", (e) => this.held.delete(e.code));
+    window.addEventListener("blur", () => this.held.clear());
+  }
+
+  // Moves the view for dtMs milliseconds of held keys. Returns true if it moved.
+  pan(rig: CameraRig, dtMs: number): boolean {
+    let x = 0;
+    let y = 0;
+    for (const code of this.held) {
+      x += KEY_PAN_DIRECTIONS[code].x;
+      y += KEY_PAN_DIRECTIONS[code].y;
+    }
+    const len = Math.hypot(x, y);
+    if (len === 0) return false;
+    const px = (KEY_PAN_PX_PER_S * Math.max(0, dtMs)) / 1000;
+    // panBy drags the content, so the view moves the opposite way.
+    rig.panBy((-x / len) * px, (-y / len) * px);
+    return true;
   }
 }

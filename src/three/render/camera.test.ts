@@ -20,6 +20,25 @@ describe('camera picking', () => {
   });
 });
 
+describe('camera pan', () => {
+  it('moves ground content with the drag on both screen axes', () => {
+    const container = {
+      clientWidth: 1280,
+      clientHeight: 720,
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 1280, height: 720 }),
+    } as HTMLElement;
+    const rig = new CameraRig(container);
+    rig.tick(0);
+    const before = rig.screenOf({ x: 0, y: 0, z: 0 });
+    rig.panBy(10, 20);
+    rig.tick(0);
+    const after = rig.screenOf({ x: 0, y: 0, z: 0 });
+
+    expect(after.x).toBeGreaterThan(before.x);
+    expect(after.y).toBeGreaterThan(before.y);
+  });
+});
+
 describe('camera leash', () => {
   it('stops a pan at the leash radius', () => {
     const container = {

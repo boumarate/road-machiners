@@ -60,7 +60,7 @@ import { Hud } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
 import { TownScreen } from "../ui/town";
 import { markerLines, WeaponPanel, weaponsForClick } from "../ui/weapons";
-import { CameraRig } from "./render/camera";
+import { CameraRig, KeyPan } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
 import { Fx3D } from "./render/fx";
@@ -187,6 +187,7 @@ export class Game {
   private following = true;
   private readonly sightLimit: SightLimit;
   private panFrom: { x: number; y: number } | null = null;
+  private keyPan = new KeyPan(() => this.isEditingControl());
   private planFor: World | null = null;
   private last = performance.now();
   private idleSince = performance.now(); // when the last turn's playback ended, for the auto turn pace
@@ -461,9 +462,7 @@ export class Game {
       if (e.target === canvas) this.onHover(e);
     });
     window.addEventListener("pointerup", () => (this.panFrom = null));
-    canvas.addEventListener("wheel", (e) => this.rig.zoomBy(e.deltaY), {
-      passive: true,
-    });
+    canvas.addEventListener("wheel", (e) => this.rig.zoomBy(e.deltaY), { passive: true });
     window.addEventListener("keyup", (e) => {
       if (e.code === "Space") this.travel.release();
     });
@@ -480,8 +479,8 @@ export class Game {
       }
       if (e.code === "KeyF") this.following = true;
       if (e.code === "KeyM") this.toggleMute();
-      if (e.code === "KeyA" && !modal) this.weapons.toggleAuto();
-      if (e.code === "KeyW" && !modal) this.weapons.toggleVisible();
+      if (e.code === "KeyQ" && !modal) this.weapons.toggleAuto();
+      if (e.code === "KeyX" && !modal) this.weapons.toggleVisible();
       if (e.code === "Digit0" && !modal) this.weapons.selectWeapon(null);
       if (e.code === "KeyE" && !modal) this.useContext();
       if (e.code === "KeyR" && !modal && !playing) this.toggleManual();
@@ -983,6 +982,7 @@ export class Game {
     const sightRadius = grayRadius(this.world, playerVehicle(this.world).pos) * PHYSICS.metersPerTile;
     this.sightLimit.set(truck, sightRadius);
     this.rig.leash(truck, sightRadius);
+    if (this.keyPan.pan(this.rig, dt)) this.following = false;
     if (this.following) this.rig.follow(truck, this.hud.cameraMode === "auto" ? headingOf(this.frames[playerVehicle(this.world).id].rot) : null);
     this.hud.showRecenter(!this.following);
     this.rig.tick(dt);

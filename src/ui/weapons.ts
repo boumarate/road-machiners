@@ -96,7 +96,7 @@ export class WeaponPanel {
             "aria-pressed": String(w.player.autoFire),
             onclick: () => this.toggleAuto(),
           },
-          `Auto: ${w.player.autoFire ? "on" : "off"} [A]`,
+          `Auto: ${w.player.autoFire ? "on" : "off"} [Q]`,
         ),
       ),
       el(
@@ -121,7 +121,7 @@ export class WeaponPanel {
       ));
     }
     this.root.replaceChildren(
-      el('button', { class: 'weapon-toggle', 'aria-expanded': String(this.expanded), onclick: () => this.toggleVisible(), title: 'Show or hide weapons [W]' }, this.expanded ? '− [W]' : 'Weapons [W]'),
+      el('button', { class: 'weapon-toggle', 'aria-expanded': String(this.expanded), onclick: () => this.toggleVisible(), title: 'Show or hide weapons [X]' }, this.expanded ? '− [X]' : 'Weapons [X]'),
       ...(this.expanded ? [controls] : []),
     );
     this.turn.replaceChildren(el('button', {
