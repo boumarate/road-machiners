@@ -1,6 +1,6 @@
 # Occluded Vehicle Outline
 
-**Status:** executing
+**Status:** reviewing
 **Branch:** occluded-vehicle-outline
 **Worktree:** .worktrees/occluded-vehicle-outline
 **Goal:** A vehicle hidden behind terrain or props shows a filled silhouette, so the player never loses their truck on screen. User confirms the look in game.
@@ -55,6 +55,10 @@ TDD: no (a render-only change with no sim rule; it is verified by screenshots an
 - PH3 — Playwright script in `tmp/` puts the player truck behind a hill and screenshots it. Then `npm run playtest` and `npm run perf`.
 
 ## Verify
+- `tmp/hidden.mjs` puts the player truck behind a hill at tile 170,450 on the default seed. Before the change the truck is invisible there. After it, a faction-color silhouette shows. A truck in the open looks unchanged (IV2).
+- Night: the silhouette keeps its day brightness, because it is unlit (UK1, for the user to judge).
+- `npm run quality` and `npm run playtest` pass.
+- `npm run perf` fails `bootMs` and `turnMs`. The parent commit 5019536 fails both by the same margin, so this change does not cause it. `frameP95Ms` stays 16.7 to 16.8 ms against a 17 ms budget on both (AS1 held).
 
 ## Code smells
 
