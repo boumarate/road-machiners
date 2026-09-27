@@ -3,7 +3,7 @@
 import { chassisDef, PLAYER_CHASSIS } from "../data/chassis";
 import { ECONOMY, GOODS } from "../data/goods";
 import { CONTRACTS, shopDef, type ShopDef } from "../data/market";
-import { partDef, type PartDef } from "../data/parts";
+import { partDef, type PartDef, type PartKind } from "../data/parts";
 import { isJunk, maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
 import {
@@ -43,6 +43,11 @@ import { fuelLiters, kg, kph, liters, meters, mps2 } from "./units";
 
 type Tab = "market" | "parts" | "garage" | "trucks" | "contracts";
 
+// The part stock filter. Core parts are built in, so no shop sells them.
+type StockFilter = "all" | Exclude<PartKind, "core">;
+
+const STOCK_FILTERS: StockFilter[] = ["all", "weapon", "engine", "armor", "cargo", "scanner"];
+
 const GARAGE_ONLY: Tab[] = ["garage", "trucks"];
 
 // A price is pushed away from the shop's usual factor once trading has moved it this far, worth
@@ -52,11 +57,13 @@ const PRESSURE_HINT_AT = 0.2;
 export class TownScreen {
   private root = panel("modal");
   private tab: Tab = "market";
+  private stockFilter: StockFilter = "all";
   private error = "";
 
   private inventory: InventoryView;
 
   constructor(private host: UiHost) {
+    this.root.classList.add("town-screen");
     this.root.style.display = "none";
     this.inventory = new InventoryView(host, () => this.render());
   }
@@ -85,15 +92,20 @@ export class TownScreen {
     const def = shopDef(shopId);
     this.normalizeTab(def);
     const me = playerVehicle(w);
-    const children = [
+    const shop = [el("div", { class: "tabs" }, ...this.tabButtons(def))];
+    if (this.error) shop.push(el("div", { class: "bad" }, this.error));
+    shop.push(this.tabBody(w, shopId, def));
+    this.root.replaceChildren(
       el("button", { class: "close", onclick: () => this.close() }, "Leave [Esc]"),
       el("h3", {}, siteName(shopId)),
       el("div", { class: "dim" }, `${moneyLine(w)}   Free cells ${freeCells(me)}`),
-      el("div", { class: "tabs" }, ...this.tabButtons(def)),
-    ];
-    if (this.error) children.push(el("div", { class: "bad" }, this.error));
-    children.push(this.tabBody(w, shopId, def));
-    this.root.replaceChildren(...children);
+      el(
+        "div",
+        { class: "town-split" },
+        el("div", { class: "town-truck" }, el("h4", {}, chassisDef(me.chassisId).name), this.inventory.render()),
+        el("div", { class: "town-shop" }, ...shop),
+      ),
+    );
   }
 
   // A garage-only tab left over from a garage falls back to Market at a stall.
@@ -223,15 +235,14 @@ export class TownScreen {
   private parts(w: World, shopId: string): HTMLElement {
     const me = playerVehicle(w);
     const stock = shopState(w, shopId).stock;
-    if (stock.length === 0)
-      return el("div", { class: "dim" }, "No parts in stock right now.");
-    const rows = stock.map((p) => {
+    const shown = stock.filter((p) => this.stockFilter === "all" || partDef(p.defId).kind === this.stockFilter);
+    const rows = shown.map((p) => {
       const d = partDef(p.defId);
       const price = partTradePrice(w, me, p, "buy");
       return el(
         "tr",
         {},
-        el("td", { class: "dim" }, d.kind),
+        this.stockFilter === "all" ? el("td", { class: "dim" }, d.kind) : null,
         el(
           "td",
           { title: partPriceTitle(p) },
@@ -251,7 +262,33 @@ export class TownScreen {
         ),
       );
     });
-    return el("table", {}, ...rows);
+    return el(
+      "div",
+      {},
+      el("div", { class: "tabs sub" }, ...this.stockFilterButtons(stock)),
+      rows.length
+        ? el("table", {}, ...rows)
+        : el("div", { class: "dim" }, stock.length ? "No parts of this kind in stock." : "No parts in stock right now."),
+    );
+  }
+
+  // One button per part kind with its stock count. A kind with nothing in stock is disabled.
+  private stockFilterButtons(stock: PartInstance[]): HTMLElement[] {
+    return STOCK_FILTERS.map((f) => {
+      const count = f === "all" ? stock.length : stock.filter((p) => partDef(p.defId).kind === f).length;
+      return el(
+        "button",
+        {
+          class: this.stockFilter === f ? "on" : "",
+          disabled: count === 0 && f !== "all",
+          onclick: () => {
+            this.stockFilter = f;
+            this.render();
+          },
+        },
+        `${STOCK_FILTER_LABEL[f]} ${count}`,
+      );
+    });
   }
 
   // Supplies. Only a garage sells fuel and food; a stall's stock is parts and goods alone.
@@ -357,8 +394,6 @@ export class TownScreen {
           `Repair all: ${cost}`,
         ),
       ),
-      el("h3", {}, "Truck"),
-      this.inventory.render(),
       el("h3", {}, "Sell storage or spare parts"),
       rows.length
         ? el("table", {}, ...rows)
@@ -504,6 +539,15 @@ export class TownScreen {
     );
   }
 }
+
+const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
+  all: "All",
+  weapon: "Weapons",
+  engine: "Engines",
+  armor: "Armor",
+  cargo: "Cargo",
+  scanner: "Scanners",
+};
 
 const TAB_LABEL: Record<Tab, string> = {
   market: "Market",
