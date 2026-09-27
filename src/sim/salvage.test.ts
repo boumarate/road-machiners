@@ -9,7 +9,11 @@ import { partDef } from '../data/parts';
 import { chassisDef } from '../data/chassis';
 import { RULES } from '../data/rules';
 import { takeAllLoot, takeStores, canScavenge, scavenge } from './locations';
-import { clearPiles, collectSalvage, createKnockoutSalvage, hasSalvage, salvageUnits } from './salvage';
+import { clearPiles, collectSalvage, createKnockoutSalvage, hasSalvage, isRoadWreck, renewSalvage, salvageUnits } from './salvage';
+import { TIME } from '../data/time';
+import type { SalvageStock, World } from './types';
+import { dist, type Vec } from './vec';
+import { grayRadius } from './vision';
 import { sitePads } from './sites';
 import { freeCells } from './grid';
 import { endTurn } from './world';
@@ -182,5 +186,108 @@ describe('loot piles', () => {
     pile.goods = {};
     clearPiles(w);
     expect(piles(w)).toHaveLength(0);
+  });
+});
+
+const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
+
+function stockOf(w: World, id: string): SalvageStock {
+  return w.salvage.find((stock) => stock.id === id)!;
+}
+
+function emptyStock(stock: SalvageStock): void {
+  for (const good of Object.keys(stock.goods)) stock.goods[good] = 0;
+  stock.parts = [];
+  stock.fuel = 0;
+  stock.supplies = 0;
+}
+
+// A world whose only road wreck is a looted one at `pos`, with the player at `playerPos`.
+function worldWithLootedWreck(playerPos: Vec, pos: Vec): World {
+  const w = emptyWorld(playerPos);
+  w.salvage = w.salvage.filter((stock) => !isRoadWreck(stock));
+  w.obstacles = [{ id: 'wreck0', pos, r: 0.6, kind: 'wreck' }];
+  w.salvage.push({ id: 'wreck0', pos, radius: 0.6, goods: { scrap: 0 }, parts: [] });
+  return w;
+}
+
+// Jumps to the last turn of each of the next `days` days and renews there.
+function runDays(w: World, days: number): void {
+  for (let day = 0; day < days; day++) {
+    w.turn = (Math.floor(w.turn / TIME.turnsPerDay) + 1) * TIME.turnsPerDay;
+    renewSalvage(w);
+  }
+}
+
+describe('site restock', () => {
+  it('refills an emptied site a share at a time, up to the table highs', () => {
+    const w = emptyWorld();
+    const stock = stockOf(w, convoy.id);
+    emptyStock(stock);
+    runDays(w, 1);
+    const firstDay = stock.goods.scrap;
+    runDays(w, 29);
+    expect(firstDay).toBeLessThan(SALVAGE.convoy.goods.scrap[1]);
+    expect(stock.goods.scrap).toBe(SALVAGE.convoy.goods.scrap[1]);
+    expect(stock.goods.parts).toBe(SALVAGE.convoy.parts[1]);
+    expect(stock.fuel).toBe(SALVAGE.convoy.fuel[1]);
+    expect(stock.parts).toHaveLength(1);
+  });
+
+  it('restocks only on the last turn of a day', () => {
+    const w = emptyWorld();
+    const stock = stockOf(w, convoy.id);
+    emptyStock(stock);
+    for (let turn = 1; turn < TIME.turnsPerDay; turn++) {
+      w.turn = turn;
+      renewSalvage(w);
+    }
+    expect(stock.goods.scrap).toBe(0);
+  });
+
+  it('keeps a count above the table high', () => {
+    const w = emptyWorld();
+    const stock = stockOf(w, convoy.id);
+    stock.goods.parts = SALVAGE.convoy.parts[1] + 5;
+    runDays(w, 1);
+    expect(stock.goods.parts).toBe(SALVAGE.convoy.parts[1] + 5);
+  });
+});
+
+describe('road wreck turnover', () => {
+  const near = { x: 30, y: 30 };
+  const far = { x: REGION.size - 20, y: REGION.size - 20 };
+
+  it('replaces a looted wreck beyond gray vision after its days run out', () => {
+    const w = worldWithLootedWreck(near, far);
+    runDays(w, SALVAGE.wreckClearDays);
+    expect(stockOf(w, 'wreck0')).toBeDefined();
+    runDays(w, 1);
+    const wrecks = w.obstacles.filter(isRoadWreck);
+    expect(wrecks).toHaveLength(1);
+    expect(wrecks[0].id).not.toBe('wreck0');
+    expect(dist(wrecks[0].pos, near)).toBeGreaterThan(grayRadius(w, wrecks[0].pos));
+    expect(stockOf(w, wrecks[0].id).goods.scrap).toBeGreaterThan(0);
+  });
+
+  it('keeps a looted wreck the player can see', () => {
+    const w = worldWithLootedWreck(near, { x: 40, y: 30 });
+    runDays(w, SALVAGE.wreckClearDays + 2);
+    expect(w.obstacles.map((o) => o.id)).toEqual(['wreck0']);
+  });
+
+  it('keeps a wreck that still holds loot', () => {
+    const w = worldWithLootedWreck(near, far);
+    stockOf(w, 'wreck0').goods.scrap = 1;
+    runDays(w, SALVAGE.wreckClearDays + 2);
+    expect(w.obstacles.map((o) => o.id)).toEqual(['wreck0']);
+  });
+
+  it('stops a search of the wreck it removes', () => {
+    const w = worldWithLootedWreck(near, far);
+    const npc = addVehicle(w, 'scavengers', 'scout', [], far);
+    npc.job = { kind: 'search', stockId: 'wreck0', turnsLeft: 3, total: 3 };
+    runDays(w, SALVAGE.wreckClearDays + 1);
+    expect(npc.job).toBeNull();
   });
 });

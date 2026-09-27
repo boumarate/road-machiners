@@ -1,5 +1,5 @@
 // Static navigation layers: per-tile cliff flags and route costs, and per-cell blocked flags and step
-// costs for one vehicle radius. Kill wrecks and parked vehicles are not in here; the A* overlay
+// costs for one vehicle radius. Road and kill wrecks and parked vehicles are not in here; the A* overlay
 // stamps them per query. Per-driver route taste scales these costs.
 
 import { REGION } from '../../data/region';
@@ -51,9 +51,9 @@ export type NavLayer = TerrainNav & {
 // The static drive obstacles of one obstacles array and a bucket index over them.
 export type StaticSet = { key: string; buckets: ObstacleBuckets };
 
-// Kill wrecks come and go in play; every other drive obstacle is fixed at map generation.
-export function isKillWreck(o: Obstacle): boolean {
-  return o.id.startsWith('wreck-');
+// Road and kill wrecks come and go in play. Every other drive obstacle is fixed at map generation.
+export function isTransientWreck(o: Obstacle): boolean {
+  return o.kind === 'wreck' && o.id.startsWith('wreck');
 }
 
 // Terrains are frozen and shared by world clones, so identity is the key. Dropped terrains free their layers.
@@ -125,15 +125,15 @@ const staticSets = new WeakMap<Obstacle[], { length: number; set: StaticSet }>()
 export function staticSet(obstacles: Obstacle[], size: number): StaticSet {
   const hit = staticSets.get(obstacles);
   if (hit && hit.length === obstacles.length) return hit.set;
-  const statics = obstacles.filter((o) => isDriveObstacle(o) && !isKillWreck(o));
+  const statics = obstacles.filter((o) => isDriveObstacle(o) && !isTransientWreck(o));
   const set = { key: blockerKey(statics), buckets: new ObstacleBuckets(statics, size) };
   staticSets.set(obstacles, { length: obstacles.length, set });
   return set;
 }
 
-// Blockers that change during play: kill wrecks and the caller's extra circles.
+// Blockers that change during play: road and kill wrecks and the caller's extra circles.
 export function dynamicBlockers(obstacles: Obstacle[], extra: Blocker[]): Blocker[] {
-  return [...obstacles.filter((o) => isDriveObstacle(o) && isKillWreck(o)), ...extra];
+  return [...obstacles.filter((o) => isDriveObstacle(o) && isTransientWreck(o)), ...extra];
 }
 
 // Exact content key: number-to-string round-trips, so equal keys mean equal circles.
@@ -163,7 +163,7 @@ export function navLayer(terrain: Terrain, obstacles: Obstacle[], radius: number
     e.cellCliff.set(radius, cliff);
   }
   const blocked = cliff.slice();
-  stampCircles(n, obstacles.filter((o) => isDriveObstacle(o) && !isKillWreck(o)), radius, (c) => (blocked[c] = 1));
+  stampCircles(n, obstacles.filter((o) => isDriveObstacle(o) && !isTransientWreck(o)), radius, (c) => (blocked[c] = 1));
   const layer: NavLayer = { ...nav, id: nextLayerId++, radius, blocked, coarse: coarseGrid(n, blocked, nav.slow) };
   e.layers.set(key, layer);
   return layer;

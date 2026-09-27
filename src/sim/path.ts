@@ -93,7 +93,7 @@ export function keepRoute(world: World, dest: Vec, points: Vec[], extra: Blocker
 // that ended at the closest reachable spot keeps it. The leg from the vehicle and a moved last leg must
 // be clear lines over ground no costlier than either end, as for a shortcut. The vehicle may already
 // drive inside the CLEARANCE margin, which only absorbs steering bulge, so these legs must just not
-// touch. A kill wreck or parked vehicle the route was not planned around must keep full clearance
+// touch. A road or kill wreck or parked vehicle the route was not planned around must keep full clearance
 // from every leg. Static obstacles, cliffs and the known blockers are as the planner checked them.
 export function continueRoute(world: World, from: Vec, kept: KeptRoute, to: Vec, radius: number, extra: Blocker[], driver?: Pick<Vehicle, "id" | "brain">): Vec[] | null {
   return timed('route-continue', () => continueKept(world, from, kept, to, radius, extra, driver));

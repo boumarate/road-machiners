@@ -5,7 +5,8 @@ import { emptyWorld, addVehicle, editableTerrain, forceOption, npcBrain, testDri
 import { planNpcOrders } from './ai';
 import { getResources } from './resources';
 import { REGION } from '../data/region';
-import { TRAITS } from '../data/npcs';
+import { MIN_CHANCE, TRAITS, type TraitId } from '../data/npcs';
+import { optionChances, optionWeights } from './npc-decisions';
 import { endTurn } from './world';
 import { corePart, goodsCount } from './grid';
 import { addGoods } from './inventory';
@@ -318,5 +319,73 @@ describe('NPC activities', () => {
     expect(topGoal(raider)?.kind).not.toBe('investigate');
     expect(topGoal(raider)?.kind).not.toBe('fight');
     expect(topGoal(raider)?.kind).not.toBe('flee');
+  });
+});
+
+describe('salvage on the way', () => {
+  // A scavenger driving to a known site, with a road wreck in sight off its route.
+  function passingWreck(traits: TraitId[] = ['scavenger']) {
+    const { w, npc } = createScavenger();
+    npc.brain = npcBrain('scavenger', npc.pos, traits);
+    npc.brain.goals = [{ kind: 'scavenge', targetId: 'podfield', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'search a known salvage site' }];
+    w.salvage.push({ id: 'wreck900', pos: { x: 14, y: 10 }, radius: 0.6, goods: { scrap: 2 }, parts: [] });
+    return { w, npc };
+  }
+
+  it('a scavenger mostly stops, and a trader rarely does', () => {
+    const scavenger = passingWreck(['scavenger']);
+    const trader = passingWreck(['trader']);
+    const chanceOf = ({ w, npc }: ReturnType<typeof passingWreck>) => optionChances(optionWeights(w, npc, 'salvageSeen', 'wreck900', null)).loot!;
+    expect(chanceOf(scavenger)).toBeCloseTo(0.745);
+    expect(chanceOf(trader)).toBeCloseTo(MIN_CHANCE);
+  });
+
+  it('pushes a loot goal on the long-term goal and goes back to it after', () => {
+    forceOption('salvageSeen', 'loot');
+    forceOption('resume', 'resume');
+    const { w, npc } = passingWreck();
+    thinkNpc(w, npc);
+    expect(npc.brain!.goals.map((g) => `${g.kind}:${g.targetId}`)).toEqual(['scavenge:podfield', 'loot:wreck900']);
+    w.salvage.find((s) => s.id === 'wreck900')!.goods.scrap = 0;
+    npc.pos = { x: 14, y: 10 };
+    npc.speed = 0;
+    thinkNpc(w, npc);
+    expect(topGoal(npc)?.targetId).toBe('podfield');
+  });
+
+  it('rolls once per sighting', () => {
+    forceOption('salvageSeen', 'keep');
+    const { w, npc } = passingWreck();
+    thinkNpc(w, npc);
+    forceOption('salvageSeen', 'loot');
+    thinkNpc(w, npc);
+    expect(topGoal(npc)?.kind).toBe('scavenge');
+  });
+
+  it('ignores salvage while an interruption is on top', () => {
+    forceOption('salvageSeen', 'loot');
+    const { w, npc } = passingWreck();
+    npc.brain!.goals.push({ kind: 'resupply', targetId: 'dustwell', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'test' });
+    thinkNpc(w, npc);
+    expect(topGoal(npc)?.kind).toBe('resupply');
+  });
+
+  it('ignores the stock of a site it passes', () => {
+    forceOption('salvageSeen', 'loot');
+    const { w, npc } = passingWreck();
+    w.salvage = w.salvage.filter((s) => s.id !== 'wreck900');
+    const site = REGION.locations.find((l) => l.id === 'ridge-wrecks')!;
+    npc.pos = { ...sitePads(site)[0] };
+    thinkNpc(w, npc);
+    expect(topGoal(npc)?.kind).toBe('scavenge');
+  });
+
+  it('keeps heading for a looted wreck it cannot inspect yet', () => {
+    forceOption('salvageSeen', 'loot');
+    const { w, npc } = passingWreck();
+    w.salvage.find((s) => s.id === 'wreck900')!.goods.scrap = 0;
+    thinkNpc(w, npc);
+    thinkNpc(w, npc);
+    expect(topGoal(npc)?.kind).toBe('loot');
   });
 });

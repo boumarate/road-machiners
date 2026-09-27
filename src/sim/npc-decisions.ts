@@ -221,8 +221,12 @@ function offerGoods(world: World, vehicle: Vehicle, route: { source: string; sel
 
 // Salvage in sight that still holds something, or that is too far to inspect. Nearest first.
 export function visibleSalvage(world: World, vehicle: Vehicle): SalvageStock[] {
-  const visible = world.salvage.filter((stock) => canVehicleSee(world, vehicle, stock.pos) && (!canReachSalvage(vehicle, stock) || hasSalvage(stock)));
+  const visible = world.salvage.filter((stock) => seesSalvage(world, vehicle, stock));
   return visible.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
+}
+
+function seesSalvage(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
+  return canVehicleSee(world, vehicle, stock.pos) && (!canReachSalvage(vehicle, stock) || hasSalvage(stock));
 }
 
 // Known salvage sites other than the one the NPC stands at.
@@ -293,6 +297,13 @@ function canScavenge(world: World, vehicle: Vehicle): boolean {
   return visibleSalvage(world, vehicle).length > 0 || salvageSitesAway(vehicle).length > 0;
 }
 
+// Looting salvage on the way needs cargo room and the stock in sight.
+function canLootSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  if (subject === null) throw new Error(`${decision} needs a subject`);
+  const stock = world.salvage.find((entry) => entry.id === subject);
+  return stock !== undefined && freeCells(vehicle) > 0 && seesSalvage(world, vehicle, stock);
+}
+
 function canRaid(_world: World, vehicle: Vehicle): boolean {
   return huntingGroundsAway(vehicle).length > 0;
 }
@@ -313,6 +324,7 @@ const AVAILABLE: Record<OptionName, Availability> = {
   trade: canTrade,
   scavenge: canScavenge,
   raid: canRaid,
+  loot: canLootSubject,
   wait: always,
   paid: dealAvailable('paid'),
   ownParts: dealAvailable('ownParts'),
@@ -470,6 +482,7 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   trade: neutral,
   scavenge: scavengeFactor,
   raid: neutral,
+  loot: neutral,
   wait: neutral,
   paid: neutral,
   ownParts: neutral,

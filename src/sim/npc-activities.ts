@@ -19,7 +19,7 @@ import {
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
 import { hashRandom, randInt } from './rng';
-import { canReachSalvage, hasSalvage, pileInReach, wreckStockId } from './salvage';
+import { canReachSalvage, hasSalvage, isSiteStock, pileInReach, wreckStockId } from './salvage';
 import { beginSearch } from './search';
 import { vehicleById } from './damage';
 import { plead } from './parley';
@@ -259,10 +259,11 @@ function scavengeInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): str
   return world.salvage.some((stock) => stock.id === goal.targetId && canVehicleSee(world, vehicle, stock.pos)) ? null : 'lost sight of the wreck';
 }
 
+// A driver learns a stock is empty only once it can reach it.
 function lootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   const stock = world.salvage.find((s) => s.id === goal.targetId);
   if (!stock) return 'the loot is gone';
-  if (!hasSalvage(stock)) return 'nothing left to loot';
+  if (canReachSalvage(vehicle, stock) && !hasSalvage(stock)) return 'nothing left to loot';
   return freeCells(vehicle) === 0 ? 'cargo cannot hold the loot' : null;
 }
 
@@ -335,7 +336,7 @@ function perceives(world: World, vehicle: Vehicle, decision: string, id: string,
   return PERCEIVES[decision as NoticedDecision](world, vehicle, id, contacts);
 }
 
-type NoticedDecision = 'hostileSeen' | 'contactHeard' | 'preySeen' | 'strandedSeen' | 'ramChance';
+type NoticedDecision = 'hostileSeen' | 'contactHeard' | 'preySeen' | 'strandedSeen' | 'salvageSeen' | 'ramChance';
 
 type Perception = (world: World, vehicle: Vehicle, id: string, contacts: Contact[]) => boolean;
 
@@ -348,6 +349,11 @@ function hearsVehicle(_world: World, _vehicle: Vehicle, id: string, contacts: Co
   return contacts.some((c) => c.vehicleId === id);
 }
 
+function seesStock(world: World, vehicle: Vehicle, id: string): boolean {
+  const stock = world.salvage.find((s) => s.id === id);
+  return stock !== undefined && canVehicleSee(world, vehicle, stock.pos);
+}
+
 function hasRamChance(world: World, vehicle: Vehicle, id: string): boolean {
   return world.vehicles.some((v) => v.id === id) && offersChoice(world, vehicle, 'ramChance', id);
 }
@@ -358,6 +364,7 @@ const PERCEIVES: Record<NoticedDecision, Perception> = {
   contactHeard: hearsVehicle,
   preySeen: seesVehicle,
   strandedSeen: seesVehicle,
+  salvageSeen: seesStock,
   ramChance: hasRamChance,
 };
 
@@ -518,6 +525,16 @@ function onStrandedSeen(world: World, vehicle: Vehicle): void {
   if (at && react(world, vehicle, 'strandedSeen', world.player.vehicleId) === 'tow') startTow(world, vehicle, at);
 }
 
+// One roll per wreck or pile in sight while the driver travels to a long-term goal, nearest first. Sites are goals
+// of their own. Loot pushes a loot goal, and popping it fires the resume roll.
+function onSalvageSeen(world: World, vehicle: Vehicle): void {
+  const top = topGoal(vehicle);
+  if (!top || top.phase !== 'travel' || INTERRUPTIONS.includes(top.kind)) return;
+  const passed = visibleSalvage(world, vehicle).filter((stock) => stock.id !== top.targetId && !isSiteStock(stock));
+  const stock = passed.find((s) => react(world, vehicle, 'salvageSeen', s.id) === 'loot');
+  if (stock) pushGoal(world, vehicle, createActivity('loot', stock.id, { ...stock.pos }, 'loot salvage on the way'));
+}
+
 // One roll per ram chance on the fight target on top. The choice holds while the chance lasts, and the fight
 // planner rams only while the target stays within reach. A driver that keeps fights from its range.
 function onRamChance(world: World, vehicle: Vehicle): void {
@@ -598,6 +615,7 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   onContactsHeard(world, vehicle, profile, contacts);
   onPreySeen(world, vehicle);
   onStrandedSeen(world, vehicle);
+  onSalvageSeen(world, vehicle);
   onRamChance(world, vehicle);
   steer(world, vehicle, profile, contacts);
   return currentActivity(world, vehicle, profile, hold);

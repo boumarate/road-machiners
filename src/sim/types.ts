@@ -68,6 +68,7 @@ export type SalvageStock = {
   fuel?: number; // fuel units that pour into a tank, not the grid
   supplies?: number; // supply units that go to driver stores, not the grid
   pile?: { until: number }; // loot lying loose on the ground, drawn as a heap, gone at turn `until`. Sites and wrecks draw their own stock.
+  emptySince?: number; // turn a daily check first found a road wreck looted; see renewSalvage in src/sim/salvage.ts
 };
 
 export type RefitMove = {
