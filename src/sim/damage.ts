@@ -3,7 +3,7 @@
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { mountedParts } from "./grid";
-import { practice } from "./progress";
+import { practice, skillEffect } from "./progress";
 import type { PartInstance, Vehicle, World } from "./types";
 
 // Damage to the player's cab also hurts the character.
@@ -24,15 +24,16 @@ export function damagePart(
     def.kind === "core" &&
     def.role === "cab"
   ) {
-    hurtDriver(world, dealt);
+    hurtDriver(world, v, dealt);
   }
   return dealt;
 }
 
-// The player's character takes a share of cab damage, and the health lost practices toughness.
-function hurtDriver(world: World, dealt: number): void {
+// The player's character takes a share of cab damage, cut by toughness, and the health lost practices toughness.
+function hurtDriver(world: World, v: Vehicle, dealt: number): void {
   const health = world.player.health;
-  world.player.health = Math.max(0, health - Math.round(dealt * RULES.cabHealthShare));
+  const share = RULES.cabHealthShare * (1 - skillEffect(world, v, "toughness", "cabShare"));
+  world.player.health = Math.max(0, health - Math.round(dealt * share));
   if (world.player.health < health) practice(world, "damage", health - world.player.health, null);
 }
 

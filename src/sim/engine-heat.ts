@@ -8,7 +8,7 @@ import { TIME } from '../data/time';
 import { ENGINE_HEAT } from '../data/wear';
 import { playerVehicle } from './damage';
 import { mountedParts } from './grid';
-import { practice } from './progress';
+import { practice, skillEffect } from './progress';
 import { vehicleStats } from './stats';
 import { heatAt } from './sun';
 import type { World } from './types';
@@ -20,7 +20,8 @@ export function advanceEngineHeat(world: World): void {
   let next: number;
   if (me.speed > RULES.parkedSpeed) {
     const share = Math.min(1, me.speed / vehicleStats(world, me).maxSpeed);
-    next = before + ENGINE_HEAT.gain * (heat - 1) * share - ENGINE_HEAT.coolDriving;
+    const skill = 1 - skillEffect(world, me, 'machining', 'engineHeat');
+    next = before + ENGINE_HEAT.gain * (heat - 1) * share * skill - ENGINE_HEAT.coolDriving;
   } else {
     next = before - ENGINE_HEAT.coolParked / heat;
   }

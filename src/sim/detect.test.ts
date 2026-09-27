@@ -9,6 +9,7 @@ import { advanceDust, cloudsSeenBy, contactsOf, dustRange, scannerRange, soundRa
 import { makePart } from './factory';
 import { mountPart } from './inventory';
 import { TERRAIN } from '../data/terrain';
+import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { dist } from './vec';
 import { refreshVision } from './vision';
 
@@ -233,5 +234,56 @@ describe('the emergency beacon', () => {
   it('leaves the player its own contacts', () => {
     const { w, me } = beaconing(40);
     expect(contactsOf(w, me, Infinity).some((c) => c.vehicleId === me.id)).toBe(false);
+  });
+});
+
+describe('perception hearing and contact fix', () => {
+  const night = () => Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
+
+  // A moving buggy a little past plain hearing range of a parked listener, at night so it raises no dust.
+  function pastHearing(listenerPos = { x: 2, y: 30 }) {
+    const w = emptyWorld(listenerPos);
+    w.turn = night();
+    const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], listenerPos);
+    target.speed = 2;
+    target.pos = { x: listenerPos.x + soundRange(w, target) * 1.2, y: listenerPos.y };
+    return { w, target };
+  }
+
+  it('the player hears farther at level 5', () => {
+    const { w, target } = pastHearing();
+    const me = w.vehicles[0];
+    expect(contactsOf(w, me, Infinity).find((c) => c.vehicleId === target.id)).toBeUndefined();
+    w.player.skills.perception = XP_TO_REACH[5];
+    expect(contactsOf(w, me, Infinity).find((c) => c.vehicleId === target.id)?.sources).toContain('sound');
+  });
+
+  it('an NPC listener does not hear farther from the player skill', () => {
+    const { w, target } = pastHearing({ x: 2, y: 60 });
+    const listener = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 2, y: 60 });
+    listener.speed = 0;
+    w.player.skills.perception = XP_TO_REACH[5];
+    expect(contactsOf(w, listener, Infinity).find((c) => c.vehicleId === target.id)).toBeUndefined();
+  });
+
+  it('the player gets a tighter contact circle at level 5', () => {
+    const w = emptyWorld({ x: 20, y: 30 });
+    const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 45, y: 30 });
+    target.speed = 3;
+    const radius = () => contactsOf(w, w.vehicles[0], Infinity).find((c) => c.vehicleId === target.id)!.radius;
+    const base = radius();
+    w.player.skills.perception = XP_TO_REACH[5];
+    expect(radius()).toBeCloseTo(base * (1 - 5 * SKILL_EFFECTS.perception.contactFix));
+  });
+
+  it('an NPC observer keeps its contact circle', () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const observer = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 20, y: 30 });
+    const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 45, y: 30 });
+    target.speed = 3;
+    const radius = () => contactsOf(w, observer, Infinity).find((c) => c.vehicleId === target.id)!.radius;
+    const base = radius();
+    w.player.skills.perception = XP_TO_REACH[5];
+    expect(radius()).toBe(base);
   });
 });

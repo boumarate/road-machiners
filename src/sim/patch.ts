@@ -12,7 +12,7 @@ import { buyPrice } from './economy';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { removeGoods } from './inventory';
 import { decide, optionWeights } from './npc-decisions';
-import { practice } from './progress';
+import { practice, skillEffect } from './progress';
 import { machiningMult, planPartRepair } from './repair';
 import { getResources } from './resources';
 import { addState } from './states';
@@ -60,10 +60,12 @@ function partsValue(world: World, client: Vehicle, parts: number): number {
   return parts * buyPrice(world, town.id, 'parts');
 }
 
+// The client's price. A player client's social skill talks it down.
 function priceOf(world: World, deal: PatchDeal, roles: Roles, plan: PatchPlan): number {
   const labor = plan.turns * PATCH.laborPerTurn;
   if (deal === 'free') return 0;
-  return deal === 'ownParts' ? labor : labor + partsValue(world, roles.client, plan.parts);
+  const full = deal === 'ownParts' ? labor : labor + partsValue(world, roles.client, plan.parts);
+  return Math.round(full * (1 - skillEffect(world, roles.client, 'social', 'patchPrice')));
 }
 
 // Who spends the parts on a deal.

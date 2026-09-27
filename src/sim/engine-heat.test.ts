@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { partDef } from '../data/parts';
 import { TIME } from '../data/time';
 import { ENGINE_HEAT } from '../data/wear';
+import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { advanceEngineHeat } from './engine-heat';
 import { mountedParts } from './grid';
 import { vehicleStats } from './stats';
@@ -91,5 +92,22 @@ describe('heat practice', () => {
     npc.speed = vehicleStats(w, npc).maxSpeed;
     advanceEngineHeat(w);
     expect(practiceOf(w, 'heat')).toEqual([]);
+  });
+});
+
+describe('machining on engine heat', () => {
+  // Heat one turn of top speed in the noon sun adds, before driving cools it.
+  function heating(machining: number): number {
+    const w = emptyWorld();
+    w.turn = NOON;
+    w.player.skills.machining = machining;
+    const me = w.vehicles[0];
+    me.speed = vehicleStats(w, me).maxSpeed;
+    advanceEngineHeat(w);
+    return w.player.engineHeat + ENGINE_HEAT.coolDriving;
+  }
+
+  it('heats the player engine slower at level 5', () => {
+    expect(heating(XP_TO_REACH[5])).toBeCloseTo(heating(0) * (1 - 5 * SKILL_EFFECTS.machining.engineHeat));
   });
 });

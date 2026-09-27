@@ -57,9 +57,9 @@ describe('weatherAt', () => {
 
   it('a truck in a storm sees less and scatters more', () => {
     const w = emptyWorld();
-    const before = sightRadius(w, w.vehicles[0].pos);
+    const before = sightRadius(w, w.vehicles[0]);
     w.weather = [{ id: 'w1', kind: 'storm', pos: { ...w.vehicles[0].pos }, radius: 5, vel: { x: 0, y: 0 }, turnsLeft: 10 }];
-    expect(sightRadius(w, w.vehicles[0].pos)).toBeLessThan(before);
+    expect(sightRadius(w, w.vehicles[0])).toBeLessThan(before);
     const me = w.vehicles[0];
     const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: me.pos.x + 3, y: me.pos.y }, Math.PI);
     const mg = vehicleStats(w, me).weapons[0];

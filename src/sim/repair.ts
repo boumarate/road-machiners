@@ -25,7 +25,12 @@ export type RepairPlan = { turns: number; parts: number; hp: number; needed: num
 
 export function repairPlan(world: World, v: Vehicle, partId: string, maxParts = Infinity): RepairPlan {
   const part = findRepairPart(v, partId);
-  return planPartRepair(part, REPAIR.fieldCapShare, machiningMult(world, v), goodsCount(v).parts ?? 0, maxParts);
+  return planPartRepair(part, fieldCapShare(world, v), machiningMult(world, v), goodsCount(v).parts ?? 0, maxParts);
+}
+
+// Share of max HP a field repair lifts a part to. The player's machining raises it, up to full HP.
+function fieldCapShare(world: World, v: Vehicle): number {
+  return Math.min(1, REPAIR.fieldCapShare + skillEffect(world, v, 'machining', 'fieldCap'));
 }
 
 // The repair math for one part: lift it to `capShare` of max HP, spending at most the parts held and maxParts.

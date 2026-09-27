@@ -12,6 +12,7 @@ import { TIME } from '../data/time';
 import { resolveDestroyed } from './combat';
 import { playerVehicle } from './damage';
 import { makePart } from './factory';
+import { maxHealthOf } from './health';
 import { corePart, mountedParts } from './grid';
 import { addGoods, stowPart } from './inventory';
 import { generateNpcLoadout } from './npc-loadout';
@@ -68,7 +69,7 @@ export function setSupplies(world: World, n: number): World {
 }
 
 export function setHealth(world: World, n: number): World {
-  requireInteger('Health', n, 0, RULES.maxHealth);
+  requireInteger('Health', n, 0, maxHealthOf(world));
   return update(world, (w) => { w.player.health = n; });
 }
 
@@ -132,7 +133,7 @@ export function applyGodMode(world: World): void {
   if (!world.player.god) return;
   const me = playerVehicle(world);
   repairParts(me);
-  world.player.health = RULES.maxHealth;
+  world.player.health = maxHealthOf(world);
   world.player.fuel = chassisDef(me.chassisId).fuelCap;
   world.player.supplies = RULES.suppliesCap;
 }

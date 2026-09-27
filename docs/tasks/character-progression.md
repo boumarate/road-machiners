@@ -157,6 +157,10 @@ Approach: replace the XP pool with per-skill practice first, then widen effects 
 - RK2 — Bots may stall on terrain or dialogue. The recorder fails loud when the player truck makes no progress for a day.
 - RK3 — Hiding traits changes NPC inspection for all players. It follows DESIGN.md, which already plans hidden traits.
 
+## Code smells
+
+- src/sim/patch.ts:partsValue — prices an NPC client's parts with the player's buy price, so the player's Social skill lowers what an NPC pays (IV2).
+
 ## Conclusion
 
 ### Deviations from plan
@@ -164,3 +168,7 @@ Approach: replace the XP pool with per-skill practice first, then widen effects 
 - PH2 `hit` fires one event per shot with the hit count as amount. Total XP matches one event per round.
 - PH2 `escape` counts only when every hostile seen last turn still exists and is out of sight. A hostile that drives off on its own also counts, bounded by the daily cap.
 - PH2 `contact` compares with the previous refresh only. A truck that leaves sight but stays audible pays again, bounded by the daily cap. Contacts detected at world creation pay a little Perception XP.
+- PH3 `roughSpeed` applies only in physics grip. Far travel has no ground speed factor, so recordings do not see it.
+- PH3 `contactFix` shrinks sound, radio and beacon circles only. A dust circle must still reach its truck.
+- PH3 `heal` rounds to whole health. With a base of 1 per turn, levels 1 to 4 add nothing outside town. PH6 tuning must fix this or drop the effect.
+- PH3 knockout health loss is covered by `cabShare`, which cuts all health lost to cab damage.

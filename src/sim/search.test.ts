@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
+import { RULES } from '../data/rules';
+import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { beginSearch } from './search';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import { goodsCount } from './grid';
 import { canLoot, canScavenge, scavenge, takeAllLoot, takeLoot } from './locations';
@@ -109,5 +112,45 @@ describe('timed scavenging search', () => {
     }
     expect(sawJob).toBe(true);
     expect(finished).toBe(true);
+  });
+});
+
+describe('machining on searches', () => {
+  it('searches in fewer turns for the player at level 5', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.salvage.push({ id: 'rich', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn * 5 }, parts: [] });
+    w.player.skills.machining = XP_TO_REACH[5];
+    const turns = Math.ceil(5 * (1 - 5 * SKILL_EFFECTS.machining.search));
+    expect(scavenge(w).vehicles[0].job).toEqual(expect.objectContaining({ kind: 'search', turnsLeft: turns, total: turns }));
+  });
+
+  it('still takes at least one turn at level 5', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.salvage.push({ id: 'small', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: 1 }, parts: [] });
+    w.player.skills.machining = XP_TO_REACH[5];
+    expect(scavenge(w).vehicles[0].job).toEqual(expect.objectContaining({ kind: 'search', turnsLeft: 1, total: 1 }));
+  });
+
+  it('leaves NPC searches at full length', () => {
+    const w = emptyWorld({ x: 60, y: 60 });
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });
+    w.salvage.push({ id: 'rich', pos: { x: 10, y: 10 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn * 5 }, parts: [] });
+    w.player.skills.machining = XP_TO_REACH[5];
+    beginSearch(w, npc, 'rich');
+    expect(npc.job).toEqual(expect.objectContaining({ kind: 'search', turnsLeft: 5, total: 5 }));
+  });
+
+  it('installs salvage in fewer turns for the player at level 5', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = w.vehicles[0];
+    const weapon = me.items.find((item) => item.kind === 'part' && item.part.defId === 'mg');
+    if (!weapon || weapon.kind !== 'part') throw new Error('Expected weapon');
+    me.items = me.items.filter((item) => item.id !== weapon.id);
+    w.salvage.push({ id: 'weapon-stock', pos: { ...me.pos }, radius: 1, goods: {}, parts: [weapon.part] });
+    w.player.scavenged.push('weapon-stock');
+    w.player.skills.machining = XP_TO_REACH[5];
+    const next = takeLoot(w, 'weapon-stock', { kind: 'part', partId: weapon.part.id }, { x: weapon.x, y: weapon.y, rot: weapon.rot });
+    const turns = Math.ceil(RULES.refitTurnsPerPart * (1 - 5 * SKILL_EFFECTS.machining.refit));
+    expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: turns, total: turns });
   });
 });

@@ -9,26 +9,29 @@ import { heightAt, type Terrain } from './terrain';
 import { sunAt } from './sun';
 import { weatherAt } from './weather';
 import { dist, segmentDist, type Vec } from './vec';
+import { playerVehicle } from './damage';
 import { cloudsSeenBy, contactDifficulty, contactsOf } from './detect';
-import { practice } from './progress';
+import { practice, skillEffect } from './progress';
 
 const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building'];
 
-// Base vision radius, shrunk by weather and at night.
-export function sightRadius(world: World, pos: Vec): number {
+// A viewer's vision radius at a point: the base radius, shrunk by weather and at night, and widened by the
+// player's perception.
+export function sightRadius(world: World, viewer: Vehicle, at: Vec = viewer.pos): number {
   const night = sunAt(world.turn) ? 1 : TIME.nightSight;
-  return TERRAIN.vision.radius * weatherAt(world, pos).sight * night;
+  const skill = 1 + skillEffect(world, viewer, 'perception', 'sight');
+  return TERRAIN.vision.radius * weatherAt(world, at).sight * night * skill;
 }
 
-// Reach of gray vision. It ignores rocks and hills, and it shows places but never vehicles.
-export function grayRadius(world: World, pos: Vec): number {
-  return sightRadius(world, pos) * TERRAIN.vision.grayFactor;
+// Reach of the player's gray vision at a point. It ignores rocks and hills, and it shows places but never vehicles.
+export function grayRadius(world: World, at: Vec): number {
+  return sightRadius(world, playerVehicle(world), at) * TERRAIN.vision.grayFactor;
 }
 
-// Tile indices (y * world.size + x) visible from a point, within vision radius and line of sight.
+// Tile indices (y * world.size + x) the player would see from a point, within vision radius and line of sight.
 export function visibleTiles(world: World, from: Vec): Set<number> {
   const size = world.size;
-  const r = sightRadius(world, from);
+  const r = sightRadius(world, playerVehicle(world), from);
   // Every sight line lies within r of the viewer, so blockers beyond r plus their radius cannot touch it.
   const blockers = world.obstacles.filter((o) => BLOCKING.includes(o.kind) && dist(from, o.pos) < r + o.r);
   const out = new Set<number>();
@@ -47,7 +50,7 @@ export function visibleTiles(world: World, from: Vec): Set<number> {
 export function canVehicleSee(world: World, observer: Vehicle, position: Vec): boolean {
   if (observer.id === world.player.vehicleId) return playerSees(world, position);
   const target = position;
-  return dist(observer.pos, target) <= sightRadius(world, observer.pos) &&
+  return dist(observer.pos, target) <= sightRadius(world, observer) &&
     inPlainView(world, observer.pos, target, world.obstacles.filter((o) => BLOCKING.includes(o.kind)));
 }
 

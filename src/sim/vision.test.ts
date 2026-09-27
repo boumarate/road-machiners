@@ -1,6 +1,7 @@
 import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { TERRAIN } from '../data/terrain';
+import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { addVehicle, emptyWorld, practiceOf } from './testkit';
 import { contactsOf, soundRange } from './detect';
 import { TIME } from '../data/time';
@@ -95,7 +96,7 @@ describe('terrain line of sight', () => {
   it('shrinks gray vision at night with sight', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
-    expect(grayRadius(w, { x: 30, y: 30 })).toBe(sightRadius(w, { x: 30, y: 30 }) * TERRAIN.vision.grayFactor);
+    expect(grayRadius(w, { x: 30, y: 30 })).toBe(sightRadius(w, w.vehicles[0], { x: 30, y: 30 }) * TERRAIN.vision.grayFactor);
     expect(grayRadius(w, { x: 30, y: 30 })).toBeLessThan(TERRAIN.vision.radius * TERRAIN.vision.grayFactor);
   });
 });
@@ -132,5 +133,30 @@ describe('contact practice', () => {
     const trader = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 60, y: 30 });
     expect(contactsOf(w, trader, Infinity).map((c) => c.vehicleId)).toContain(buggy.id);
     expect(practiceOf(w, 'contact')).toEqual([]);
+  });
+});
+
+describe('perception sight', () => {
+  it('reaches farther for the player at level 5', () => {
+    const w = emptyWorld({ x: 60, y: 60 });
+    const me = w.vehicles[0];
+    const base = sightRadius(w, me);
+    w.player.skills.perception = XP_TO_REACH[5];
+    expect(sightRadius(w, me)).toBeCloseTo(base * (1 + 5 * SKILL_EFFECTS.perception.sight));
+  });
+
+  it('shows the player more tiles at level 5', () => {
+    const w = emptyWorld({ x: 60, y: 60 });
+    const base = visibleTiles(w, { x: 60, y: 60 }).size;
+    w.player.skills.perception = XP_TO_REACH[5];
+    expect(visibleTiles(w, { x: 60, y: 60 }).size).toBeGreaterThan(base);
+  });
+
+  it('leaves NPC sight alone', () => {
+    const w = emptyWorld({ x: 60, y: 60 });
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
+    const base = sightRadius(w, npc);
+    w.player.skills.perception = XP_TO_REACH[5];
+    expect(sightRadius(w, npc)).toBe(base);
   });
 });

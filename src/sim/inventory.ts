@@ -1,6 +1,7 @@
 // Inventory commands. Field equipment changes use parked refit jobs.
 
 import { partDef } from '../data/parts';
+import { skillEffect } from './progress';
 import { playerVehicle } from './damage';
 import { newId } from './factory';
 import { findSpot, gridOf, isMounted, itemCells, MOUNT_CELLS, placementError, type Spot } from './grid';
@@ -67,9 +68,15 @@ export function moveItem(world: World, itemId: string, to: Spot): World {
     if (result.error !== null) throw new Error(result.error);
     const { moves, items, turns } = result.plan;
     if (turns > 0 && !townAt(w)) {
-      startJob(w, me, { kind: 'refit', moves, pickup: null, turnsLeft: turns, total: turns });
+      const work = refitTurns(w, me, turns);
+      startJob(w, me, { kind: 'refit', moves, pickup: null, turnsLeft: work, total: work });
     } else applyRefitLayout(w, me, items);
   });
+}
+
+// Turns a field refit takes: the planned turns cut by the player's machining, at least 1.
+export function refitTurns(world: World, v: Vehicle, planned: number): number {
+  return Math.max(1, Math.ceil(planned * (1 - skillEffect(world, v, 'machining', 'refit'))));
 }
 
 // Town garage storage holds spare parts between trips.

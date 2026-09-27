@@ -2,17 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { NPCS } from '../data/npcs';
 import { partDef } from '../data/parts';
 import { PATCH } from '../data/wear';
+import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions } from './dialogue';
 import { goodsCount, mountedParts } from './grid';
 import { addGoods, removeGoods } from './inventory';
 import { topGoal } from './npc-activities';
-import { patchData, settlePatch } from './patch';
+import { patchData, patchTerms, settlePatch } from './patch';
 import { addState, stateOf } from './states';
 import { isStranded } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
 import type { GameEvent, PatchDeal, Vehicle, World } from './types';
-import { endTurn, setMoveOrder } from './world';
+import { cloneWorld, endTurn, setMoveOrder } from './world';
 
 function answer(w: World, text: string): World {
   const i = currentOptions(w).findIndex((o) => o.text === text);
@@ -235,5 +236,37 @@ describe('patch practice', () => {
     const client = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 52, y: 30 });
     settle(w, patcher, client);
     expect(practiceOf(w, 'patch')).toEqual([]);
+  });
+});
+
+describe('social on patch prices', () => {
+  // The own-parts terms an NPC names, rolled on a copy so both sides of a test see the same rolls. Own-parts terms
+  // charge labor only, so the trade price spread of the same skill stays out of the price.
+  function laborPrice(w: World, npcId: string, social: number): number {
+    const copy = cloneWorld(w);
+    copy.player.skills.social = social;
+    forceOption('patchDeal', 'ownParts');
+    const terms = patchTerms(copy, find(copy, npcId));
+    if (terms?.kind !== 'deal' || terms.deal !== 'ownParts') throw new Error(`Expected own-parts terms, got ${JSON.stringify(terms)}`);
+    return terms.price;
+  }
+
+  it('the player pays less for a patch at level 5', () => {
+    const { w, trader } = brokenPlayer(0);
+    setParts(w, playerVehicle(w), 3);
+    const base = laborPrice(w, trader.id, 0);
+    const cut = 1 - 5 * SKILL_EFFECTS.social.patchPrice;
+    expect(laborPrice(w, trader.id, XP_TO_REACH[5])).toBe(Math.round(base * cut));
+    expect(Math.round(base * cut)).toBeLessThan(base);
+  });
+
+  it('an NPC client pays the full price to a level 5 player', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 40, y: 30 }, Math.PI);
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    npc.resources!.money = 10000;
+    addGoods(w, npc, 'parts', 3);
+    breakEngine(npc);
+    expect(laborPrice(w, npc.id, XP_TO_REACH[5])).toBe(laborPrice(w, npc.id, 0));
   });
 });

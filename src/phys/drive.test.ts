@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
+import { XP_TO_REACH } from '../data/skills';
 import { makeVehicle } from '../sim/factory';
 import { addGoods, removeAllGoods } from '../sim/inventory';
 import { loadFactor, vehicleMass } from '../sim/mass';
@@ -166,6 +167,16 @@ describe('physics turns', () => {
     const mud = play(setMoveOrder(w, { kind: 'through', dest: { x: 60, y: 30 } }), 3).w;
     const road = play(ordered({ kind: 'through', dest: { x: 60, y: 30 } }), 3).w;
     expect(me(mud).pos.x - 30).toBeLessThan(me(road).pos.x - 30);
+  });
+
+  it('a player at driving level 5 covers more mud than at level 0', () => {
+    const w = emptyWorld();
+    editableTerrain(w).types.fill('mud');
+    const order: MoveOrder = { kind: 'through', dest: { x: 60, y: 30 } };
+    const plain = play(setMoveOrder(w, order), 3).w;
+    w.player.skills.driving = XP_TO_REACH[5];
+    const skilled = play(setMoveOrder(w, order), 3).w;
+    expect(me(skilled).pos.x).toBeGreaterThan(me(plain).pos.x);
   });
 
   it('a far click speeds up, a mid click holds speed', () => {

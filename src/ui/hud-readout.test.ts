@@ -3,6 +3,8 @@ import { chassisDef } from "../data/chassis";
 import { RULES } from "../data/rules";
 import { corePart } from "../sim/grid";
 import { emptyWorld } from "../sim/testkit";
+import { maxHealthOf } from "../sim/health";
+import { XP_TO_REACH } from "../data/skills";
 import { addState, towData } from "../sim/states";
 import { getContextAction, getHudReadout, getRescueReadout } from "./hud-readout";
 import { REGION } from '../data/region';
@@ -62,6 +64,14 @@ describe("critical vehicle readout", () => {
     expect(r.broken).toBeGreaterThan(0);
     expect(r.resources.slice(2).every((r) => r.warning)).toBe(true);
   });
+  it("shows driver health against the raised max health and warns below it", () => {
+    const w = emptyWorld();
+    w.player.skills.toughness = XP_TO_REACH[5];
+    w.player.health = RULES.maxHealth;
+    const driver = getHudReadout(w).resources.find((r) => r.label === "Driver")!;
+    expect(driver).toEqual({ label: "Driver", value: `${RULES.maxHealth} / ${maxHealthOf(w)}`, warning: true });
+  });
+
   it("keeps parked jobs out of the survival instruments", () => {
     const w = emptyWorld();
     w.vehicles[0].job = {

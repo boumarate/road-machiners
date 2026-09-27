@@ -10,6 +10,8 @@ import {
   startWeather, teleport, toggleFullLog, toggleGod,
 } from './cheats';
 import { playerVehicle } from './damage';
+import { maxHealthOf } from './health';
+import { XP_TO_REACH } from '../data/skills';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { spareParts } from './inventory';
 import { clockOf } from './sun';
@@ -325,5 +327,22 @@ describe('vehicle cheats', () => {
       { id: near.id, name: near.name, templateId: null, faction: 'raiders', distance: 5, hostile: true },
       { id: far.id, name: far.name, templateId: null, faction: 'traders', distance: 20, hostile: false },
     ]);
+  });
+});
+
+describe('cheats and toughness', () => {
+  it('lets health reach the raised max health at toughness level 5', () => {
+    const w = emptyWorld();
+    w.player.skills.toughness = XP_TO_REACH[5];
+    expect(setHealth(w, maxHealthOf(w)).player.health).toBe(maxHealthOf(w));
+    expect(() => setHealth(w, maxHealthOf(w) + 1)).toThrow(new RegExp(`${maxHealthOf(w)}`));
+  });
+
+  it('god mode fills health to the raised max health', () => {
+    const w = toggleGod(emptyWorld());
+    w.player.skills.toughness = XP_TO_REACH[5];
+    w.player.health = 1;
+    applyGodMode(w);
+    expect(w.player.health).toBe(maxHealthOf(w));
   });
 });

@@ -7,7 +7,7 @@ import { playerVehicle } from './damage';
 import { canReachSalvage, collectSalvage, hasSalvage, salvageInRange } from './salvage';
 import { newId } from './factory';
 import { isMounted, type Spot } from './grid';
-import { getLayoutError, requireIdleRefit } from './inventory';
+import { getLayoutError, refitTurns, requireIdleRefit } from './inventory';
 import { startJob } from './jobs';
 import { beginSearch } from './search';
 import { practice } from './progress';
@@ -116,10 +116,11 @@ export function takeLoot(world: World, stockId: string, pick: LootPick, to: Spot
 function transferLoot(world: World, stock: SalvageStock, item: GridItem, to: Spot): void {
   const me = playerVehicle(world);
   if (item.kind === 'part' && isMounted(me.chassisId, item) && !townAt(world)) {
+    const work = refitTurns(world, me, RULES.refitTurnsPerPart);
     startJob(world, me, {
       kind: 'refit', moves: [],
       pickup: { stockId: stock.id, partId: item.part.id, itemId: item.id, to },
-      turnsLeft: RULES.refitTurnsPerPart, total: RULES.refitTurnsPerPart,
+      turnsLeft: work, total: work,
     });
     return;
   }

@@ -1,7 +1,7 @@
 // Character screen: skill levels, XP to the next level and today's XP against the daily cap.
 
 import { MAX_SKILL_LEVEL, SKILL_IDS, SKILL_INFO, XP_RULES, XP_TO_REACH } from '../data/skills';
-import { RULES } from '../data/rules';
+import { maxHealthOf } from '../sim/health';
 import { levelOf } from '../sim/progress';
 import type { SkillId } from '../sim/types';
 import { el, panel } from './dom';
@@ -32,11 +32,12 @@ export class CharacterScreen {
 
   render(): void {
     if (!this.isOpen()) return;
-    const p = this.host.world().player;
+    const world = this.host.world();
+    const p = world.player;
     this.root.replaceChildren(
       el('button', { class: 'close', onclick: () => this.close() }, 'Close [C]'),
       el('h3', {}, 'Character'),
-      el('div', { class: 'dim' }, `Health ${p.health}/${RULES.maxHealth}   Knockouts ${p.knockouts}`),
+      el('div', { class: 'dim' }, `Health ${p.health}/${maxHealthOf(world)}   Knockouts ${p.knockouts}`),
       el('table', {}, ...SKILL_IDS.map((id) => this.row(id, p.skills[id], p.xpToday[id]))),
     );
   }

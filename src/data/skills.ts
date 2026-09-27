@@ -19,18 +19,34 @@ const EFFECTS = {
   driving: {
     turnRate: 0.1, // turn rate +10% per level
     crashDamage: 0.1, // crash damage taken -10% per level
+    roughSpeed: 0.1, // speed penalty of slow ground -10% per level
+    crawl: 0.1, // limp speed of a stranded truck +10% per level
   },
   perception: {
     spread: 0.05, // weapon spread -5% per level
+    sight: 0.04, // sight radius +4% per level
+    hearing: 0.08, // range engines are heard from +8% per level
+    contactFix: 0.08, // contact circle radius -8% per level
   },
   machining: {
     repair: 0.1, // repair turns and parts -10% per level
+    fieldCap: 0.04, // field repair cap +4% of max HP per level, up to full HP
+    refit: 0.08, // refit turns -8% per level, at least 1
+    search: 0.08, // salvage search turns -8% per level, at least 1
+    engineHeat: 0.08, // engine heating while driving -8% per level
   },
   toughness: {
     supplies: 0.12, // supplies use -12% per level
+    maxHealth: 0.06, // max health +6% per level
+    heal: 0.1, // health healed per turn +10% per level
+    cabShare: 0.08, // health lost from cab damage -8% per level
+    heatDrain: 0.08, // extra supplies use from heat -8% per level
   },
   social: {
     priceSpread: 0.04, // trade price spread -4% per level
+    towFee: 0.06, // tow fees -6% per level
+    patchPrice: 0.06, // paid patch prices -6% per level
+    robberyDanger: 0.08, // danger a robber sees in the truck +8% per level
   },
 } as const satisfies Record<SkillId, Record<string, number>>;
 

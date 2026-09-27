@@ -27,6 +27,7 @@ import { isTownGuarded } from './guards';
 import { topGoal } from './npc-activities';
 import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
+import { skillEffect } from './progress';
 import { randRange } from './rng';
 import { canReachSalvage, hasSalvage } from './salvage';
 import { canUseSite, siteGates } from './sites';
@@ -359,10 +360,12 @@ function fleeFactor(world: World, vehicle: Vehicle, decision: DecisionId, subjec
 }
 
 // A robber mostly picks a target that looks weaker than itself times its boldness, away from town guards. Each
-// failed judgment scales rob down. Before the sighting's danger roll, `danger` is null and only guards count.
+// failed judgment scales rob down. Before the sighting's danger roll, `danger` is null and only guards count. The
+// player's social skill makes the player truck look more dangerous.
 function robFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
   const target = subjectOf(world, decision, subject);
-  const stronger = danger !== null && danger >= ownDanger(world, vehicle) * npcProfile(vehicle).boldness;
+  const seen = danger === null ? null : danger * (1 + skillEffect(world, target, 'social', 'robberyDanger'));
+  const stronger = seen !== null && seen >= ownDanger(world, vehicle) * npcProfile(vehicle).boldness;
   return (stronger ? NPC_BEHAVIOR.robStronger : 1) * guardFactor(vehicle, target, NPC_BEHAVIOR.robNearGuards);
 }
 
