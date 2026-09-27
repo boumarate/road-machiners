@@ -14,7 +14,8 @@
     "sfx:gen": "vite-node scripts/sfx-gen.mjs",
     "sfx:import": "vite-node scripts/sfx-import.mjs",
     "sfx:board": "vite --open /sound.html",
-    "sfx:reimport": "vite-node scripts/sfx-reimport.mjs"
+    "sfx:reimport": "vite-node scripts/sfx-reimport.mjs",
+    "econ": "vite-node scripts/econ.mjs"
   },
   "license": "ISC",
   "description": "",
