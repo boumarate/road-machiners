@@ -268,6 +268,15 @@ describe('physics turns', () => {
     freeDrive(d);
   });
 
+  it('facing a wall, a click back and to the side backs the truck out instead of pushing into the wall', () => {
+    const w = ordered({ kind: 'through', dest: { x: 28, y: 33 } });
+    const at = me(w).pos;
+    w.obstacles = [-3, -2, -1, 0, 1, 2, 3].map((i) => ({ id: `r${i}`, pos: { x: at.x + 1.8, y: at.y + i * 1.2 }, r: 0.7, kind: 'rock' as const }));
+    const { w: after, d } = play(w, 12);
+    expect(me(after).order).toBeNull();
+    freeDrive(d);
+  });
+
   it('route aiming drops points the truck has passed, even ones still far away', () => {
     const route = [{ x: 5, y: 0 }, { x: 10, y: 2 }, { x: 20, y: 2 }];
     expect(routeAim(route, { x: 7, y: -1 })).toEqual({ x: 10, y: 2 });
