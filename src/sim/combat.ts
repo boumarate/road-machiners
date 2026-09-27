@@ -13,10 +13,11 @@ import { gainXp } from './progress';
 import { canVehicleSee, hasLineOfFire } from './vision';
 import { createWreckSalvage } from './salvage';
 import { addState, stateOf } from './states';
+import { isTownGuarded } from './guards';
 import { getResources } from './resources';
 import { chance, gauss, randRange } from './rng';
 import { vehicleStats, type MountedWeapon } from './stats';
-import type { Aim, ShotRound, Vehicle, World } from './types';
+import type { Aim, NpcActivity, ShotRound, Vehicle, World } from './types';
 import { weatherAt } from './weather';
 import { angleDiff, bearing, clamp, dist, DEG, type Vec } from './vec';
 
@@ -352,6 +353,7 @@ export function fireWeapons(world: World): void {
 // lies within the splash radius of where it landed.
 function applyShot(world: World, s: Shot): void {
   s.mw.part.reload = s.mw.def.reload;
+  recordAttack(world, s.shooter, s.target);
   provoke(world, s.shooter, s.target);
   const r = s.mw.def.round;
   const { side, lanes, body } = s.aiming;
@@ -401,6 +403,21 @@ function applyShot(world: World, s: Shot): void {
     side,
     rounds,
   });
+}
+
+function witnessesAttack(world: World, observer: Vehicle, shooter: Vehicle, target: Vehicle): boolean {
+  if (observer.faction !== target.faction) return false;
+  if (dist(observer.pos, target.pos) > SPAWN.neighborHelp) return false;
+  return canVehicleSee(world, observer, target.pos) && canVehicleSee(world, observer, shooter.pos);
+}
+
+// A shot, hit or miss, marks its shooter as an attacker of the target and of faction mates nearby that see both.
+// Each NPC decides once on the latest shots. Hidden targets are not broadcast.
+function recordAttack(world: World, shooter: Vehicle, target: Vehicle): void {
+  for (const observer of world.vehicles) {
+    if (!observer.brain || observer.id === shooter.id) continue;
+    if (observer.id === target.id || witnessesAttack(world, observer, shooter, target)) observer.brain.attackers[shooter.id] = false;
+  }
 }
 
 // A shot at a vehicle that was not hostile starts a feud with it and its nearby faction mates.
@@ -479,13 +496,26 @@ function rewardKill(world: World, v: Vehicle): void {
   gainXp(world, tpl.xp, `destroyed ${v.name}`);
 }
 
+// An NPC fires back at any attacker, fleeing or not. It opens fire only on the target of the fight on top of its
+// goals, and not while either stands in guard range of a town gate.
+function canNpcEngage(v: Vehicle, target: Vehicle): boolean {
+  if (!v.brain) return true;
+  return target.id in v.brain.attackers || opensFireOn(v, v.brain.goals, target);
+}
+
+function opensFireOn(v: Vehicle, goals: NpcActivity[], target: Vehicle): boolean {
+  const top = goals[goals.length - 1];
+  if (top?.kind !== 'fight' || top.targetId !== target.id) return false;
+  return !isTownGuarded(v.pos) && !isTownGuarded(target.pos);
+}
+
 // Auto mode: every weapon gets a body shot at the nearest hostile it can hit, in range, arc and line of fire. The player's auto fire
 // only picks targets the player sees.
 export function autoOrders(world: World, v: Vehicle): void {
   v.weaponOrders = {};
   const seen = (x: Vehicle) => canVehicleSee(world, v, x.pos);
   const hostiles = world.vehicles
-    .filter((x) => isHostile(world, v, x) && seen(x))
+    .filter((x) => isHostile(world, v, x) && seen(x) && canNpcEngage(v, x))
     .sort((a, b) => dist(v.pos, a.pos) - dist(v.pos, b.pos));
   for (const mw of vehicleStats(world, v).weapons) {
     const target =

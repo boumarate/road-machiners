@@ -1,5 +1,5 @@
 import { MIN_CHANCE, NPC_BEHAVIOR } from '../data/npcs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { TERRAIN } from '../data/terrain';
 import { corePart } from './grid';
 import { decide, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
@@ -54,23 +54,26 @@ describe('decision weights', () => {
   });
 
   it('keeps with no roll when keep is the only available option', () => {
-    const w = emptyWorld({ x: 80, y: 80 });
-    const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 });
-    npc.brain!.hurt = 5;
-    // Nothing in sight and no attacker: there is nothing to flee from or fight back.
-    expect(Object.keys(optionWeights(w, npc, 'hurt', null, null))).toEqual(['keep']);
+    const w = emptyWorld({ x: 30, y: 30 });
+    const raider = addNpc(w, 'raiders', 'buggy', ['raider'], { x: 60, y: 30 });
+    // With an empty tank the driver can neither close in on a contact nor drive off.
+    raider.resources!.fuel = 0;
+    expect(Object.keys(optionWeights(w, raider, 'contactHeard', w.player.vehicleId, null))).toEqual(['keep']);
     const rng = w.rngState;
-    expect(decide(w, npc, 'hurt', null, null)).toBe('keep');
+    expect(decide(w, raider, 'contactHeard', w.player.vehicleId, null)).toBe('keep');
     expect(w.rngState).toBe(rng);
   });
 
   it('throws on a situation factor at or below zero', () => {
     const w = emptyWorld({ x: 80, y: 80 });
     const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 });
-    addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 14, y: 10 });
-    // A hurt decision with no damage taken gives flee a factor of 0.
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 14, y: 10 });
+    // A miss with no weight and no damage taken gives flee a factor of 0.
+    const missFlee = NPC_BEHAVIOR.missFlee;
+    NPC_BEHAVIOR.missFlee = 0;
+    onTestFinished(() => { NPC_BEHAVIOR.missFlee = missFlee; });
     npc.brain!.hurt = 0;
-    expect(() => optionWeights(w, npc, 'hurt', null, null)).toThrow(/factor/);
+    expect(() => optionWeights(w, npc, 'attacked', raider.id, null)).toThrow(/factor/);
   });
 
   it('makes fight unavailable without a working weapon', () => {
@@ -95,7 +98,6 @@ describe('decision weights', () => {
     const flees = (traits: TraitId[]) => {
       const w = emptyWorld({ x: 80, y: 80 });
       const npc = addNpc(w, 'scavengers', 'scavenger', traits, { x: 10, y: 10 });
-      npc.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' }];
       addNpc(w, 'raiders', 'buggy', ['raider'], { x: 14, y: 10 });
       let count = 0;
       for (let seed = 0; seed < 100; seed++) {
@@ -164,17 +166,18 @@ describe('decision weights', () => {
 describe('fight back', () => {
   const round = (damage: number) => ({ hit: true, crit: false, offset: 0, hits: [{ part: 'x', damage }] });
 
-  // A trader shot this turn by a raider in sight for `damage`. The raider is already noticed, and a base goal is
-  // set, so only the hurt decision rolls. 18 damage is 30% of a cab, three times the hit that gives flee its base weight.
+  // A trader shot this turn by a raider in sight for `damage`. A base goal is set, so only the attacked decision
+  // rolls. 18 damage is 30% of a cab, three times the hit that gives flee its base weight.
   function shotTrader(traits: TraitId[], damage: number) {
     const w = emptyWorld({ x: 80, y: 80 });
     const trader = addNpc(w, 'traders', 'trader', traits, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
     trader.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'test base goal' }];
     const raider = addNpc(w, 'raiders', 'buggy', ['raider'], { x: 14, y: 10 });
-    trader.brain!.noticed = { [`hostileSeen:${raider.id}`]: w.turn };
     w.events = [{ t: 'shot', shooter: raider.id, weapon: 'w', target: trader.id, aim: 'body', chance: 1, side: 'front', rounds: [round(damage)] }];
     noteHurt(w);
     w.events = [];
+    // The shot's attack record, as combat leaves it.
+    trader.brain!.attackers = { [raider.id]: false };
     return { w, trader, raider };
   }
 
@@ -200,18 +203,21 @@ describe('fight back', () => {
   it('a coward fights back less than a plain trader', () => {
     const plain = shotTrader(['trader'], 18);
     const coward = shotTrader(['trader', 'coward'], 18);
-    const back = (s: { w: World; trader: Vehicle }) => optionChances(optionWeights(s.w, s.trader, 'hurt', null, null)).fightBack!;
+    const back = (s: { w: World; trader: Vehicle; raider: Vehicle }) => optionChances(optionWeights(s.w, s.trader, 'attacked', s.raider.id, vehicleDanger(s.w, s.raider))).fightBack!;
     expect(back(coward)).toBeLessThan(back(plain));
   });
 
-  it('fight back is unavailable without a vehicle attacker', () => {
+  it('a guard shot fires no attacked decision', () => {
     const w = emptyWorld({ x: 80, y: 80 });
     const trader = addNpc(w, 'traders', 'trader', ['trader'], { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
-    addNpc(w, 'raiders', 'buggy', ['raider'], { x: 14, y: 10 });
+    trader.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'test base goal' }];
     w.events = [{ t: 'guardShot', site: 'bowl', from: { x: 0, y: 0 }, target: trader.id, rounds: [round(8)] }];
     noteHurt(w);
-    expect(trader.brain!.attacker).toBeNull();
-    expect(optionWeights(w, trader, 'hurt', null, null)).not.toHaveProperty('fightBack');
+    w.events = [];
+    expect(trader.brain!.hurt).toBe(8);
+    const rng = w.rngState;
+    expect(thinkNpc(w, trader).kind).toBe('wait');
+    expect(w.rngState).toBe(rng);
   });
 });
 
@@ -291,15 +297,28 @@ describe('decision points', () => {
     expect(scavInvestigated).toBeLessThan(10);
   });
 
-  it('fires hurt while damage was taken last turn', () => {
+  it('fires attacked once per new shot, even a miss', () => {
     const w = emptyWorld({ x: 80, y: 80 });
     const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 });
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 14, y: 10 });
-    forceOption('hostileSeen', 'keep');
-    forceOption('hurt', 'flee');
+    npc.brain!.noticed = { [`hostileSeen:${raider.id}`]: w.turn };
+    npc.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'test base goal' }];
+    forceOption('attacked', 'flee');
     thinkNpc(w, npc);
     expect(npc.brain!.goals.some((g) => g.kind === 'flee')).toBe(false);
-    npc.brain!.hurt = 5;
-    expect(thinkNpc(w, npc)).toMatchObject({ kind: 'flee', targetId: raider.id });
+    npc.brain!.attackers = { [raider.id]: false };
+    const rolls = (seed: number) => {
+      const x = cloneWorld(w);
+      x.rngState = seed;
+      return thinkNpc(x, find(x, npc.id)).kind === 'flee' ? x : null;
+    };
+    const fled = Array.from({ length: 20 }, (_, i) => rolls(i)).find((x) => x !== null);
+    if (!fled) throw new Error('No seed in 20 flees');
+    const me = find(fled, npc.id);
+    expect(me.brain!.goals.at(-1)).toMatchObject({ kind: 'flee', targetId: raider.id });
+    expect(me.brain!.attackers).toEqual({ [raider.id]: true });
+    const rng = fled.rngState;
+    thinkNpc(fled, me);
+    expect(fled.rngState).toBe(rng);
   });
 });

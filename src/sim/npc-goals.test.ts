@@ -112,22 +112,4 @@ describe('damage taken', () => {
     expect(npc.brain!.hurt).toBe(0);
   });
 
-  it('keeps as attacker the shooter that did the most damage this turn', () => {
-    const { w, npc } = scavengerWorld();
-    const a = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 14, y: 10 });
-    const b = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 14, y: 12 });
-    const round = (damage: number) => ({ hit: true, crit: false, offset: 0, hits: [{ part: 'x', damage }] });
-    const shot = (shooter: string, damage: number) => ({ t: 'shot' as const, shooter, weapon: 'w', target: npc.id, aim: 'body' as const, chance: 1, side: 'front' as const, rounds: [round(damage)] });
-    // Guards and rams hit hardest, but they are not attackers to fight back.
-    w.events = [
-      shot(a.id, 3), shot(b.id, 4), shot(a.id, 2),
-      { t: 'guardShot', site: 'bowl', from: { x: 0, y: 0 }, target: npc.id, rounds: [round(20)] },
-      { t: 'collision', a: b.id, b: npc.id, hitsA: [], hitsB: [{ part: 'x', damage: 20 }] },
-    ];
-    noteHurt(w);
-    expect(npc.brain!.attacker).toBe(a.id);
-    w.events = [{ t: 'guardShot', site: 'bowl', from: { x: 0, y: 0 }, target: npc.id, rounds: [round(20)] }];
-    noteHurt(w);
-    expect(npc.brain!.attacker).toBeNull();
-  });
 });
