@@ -81,6 +81,9 @@ Approach: add the base path next to the old cell builder, prove it on the scout,
 - Render the scout alone and in the game at the default zoom with `tmp/solo-chassis.mjs` and `tmp/far.mjs`. Show the user and adjust `base_scout.py` and the shared style file until the user signs off.
 - Commit per accepted round.
 
+### PH2 outcome
+- User signed off the scout style after two rounds: af29358. Added in PH2: weapons below the base top stand on a `wmount_riser` post, and row sockets carry the surface front edge so roof items stay behind the windshield.
+
 ### PH3 — Base per remaining chassis
 - For each of hauler, buggy, wagon, courier, van, longbed, carrier and tractor: confirm the reference with the user, write `tools/blender/base_<id>.py` on its grid and physics half height, add it to `NAMES` and `BASE_MODELS`, screenshot it next to the scout.
 - Commit per chassis.
