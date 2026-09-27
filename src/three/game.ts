@@ -35,7 +35,7 @@ import { CHASSIS } from "../data/chassis";
 import type { ShotRound, Vehicle, World } from "../sim/types";
 import type { Vec } from "../sim/vec";
 import { playerSees, tileOf, visibleTiles } from "../sim/vision";
-import { dist } from "../sim/vec";
+import { DEG, dist } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
 import {
   cloneWorld,
@@ -75,6 +75,7 @@ import { bodyOf } from '../phys/body';
 import { headingOf } from '../phys/frames';
 import { canLoot, salvageHere } from '../sim/locations';
 import { daylightAt } from './render/daylight';
+import { sunAt } from '../sim/sun';
 import { tileAt } from '../sim/terrain';
 import { ContactsView } from './render/contacts';
 import { DustCloudsView } from './render/dust';
@@ -103,6 +104,15 @@ const SMOKE_CHANCE = 0.05; // per hurt vehicle per frame
 const HURT_CAB = 0.35; // cab hp share under which a vehicle smokes
 const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is recomputed during a turn
 const SUN_RADIUS = 150; // meters from the focus to the sun light
+// The player's headlight beam. Only the player gets one, since each light costs every lit pixel.
+const BEAM_COLOR = 0xfff2c8;
+const BEAM_INTENSITY = 25; // lit only at night
+const BEAM_DECAY = 0.4; // below the physical 2, so the ground by the nose does not burn white
+const BEAM_RANGE = 70; // meters where the light fades to nothing
+const BEAM_ANGLE = 42 * DEG; // half-angle of the cone
+const BEAM_PENUMBRA = 0.6; // soft share of the cone edge
+const BEAM_HEIGHT = 4; // meters above the truck center where the beam starts
+const BEAM_AIM = { ahead: 30, down: 6 }; // meters ahead of the nose and below the truck center the beam points at
 
 type LiveVision = {
   visible: Set<number>;
@@ -145,6 +155,7 @@ export class Game {
   private readonly scene = new THREE.Scene();
   private readonly sun = new THREE.DirectionalLight();
   private readonly sky = new THREE.HemisphereLight();
+  private readonly beam = new THREE.SpotLight(BEAM_COLOR, 0, BEAM_RANGE, BEAM_ANGLE, BEAM_PENUMBRA, BEAM_DECAY);
   private readonly stormTint = Object.assign(document.createElement('div'), { className: 'storm-tint' }); // dust haze while inside a storm
   private readonly rig: CameraRig;
   private readonly ground = new THREE.Group(); // terrain chunks near the view, for ground picking
@@ -215,6 +226,7 @@ export class Game {
       far: 500,
     });
     this.scene.add(this.sun, this.sun.target);
+    this.scene.add(this.beam, this.beam.target);
 
     // Ground and props cull separately, so ground picking only hits terrain.
     const groundScope = new RenderScope(this.ground, this.world.size);
@@ -838,6 +850,7 @@ export class Game {
     this.sky.color.copy(light.sky);
     this.sky.groundColor.copy(light.ground);
     this.sky.intensity = light.skyIntensity;
+    this.aimBeam(me, !sunAt(this.world.turn));
     const at = playerVehicle(this.world).pos;
     this.stormTint.style.display = this.world.weather.some((e) => e.kind === 'storm' && dist(at, e.pos) <= e.radius) ? '' : 'none';
     this.fx.tick(dt);
@@ -887,6 +900,7 @@ export class Game {
     const frames: TurnFrames | null =
       step === null || !this.anim ? null : this.anim.result.frames;
     const landed = !this.anim || this.anim.impacts;
+    const night = !sunAt(this.world.turn);
     const shown = [
       ...this.world.vehicles,
       ...(landed ? [] : this.world.removed),
@@ -915,6 +929,7 @@ export class Game {
         this.scene.add(view.root, view.ground);
       }
       view.update(display);
+      view.lamps(night);
       view.pose(f);
       view.aim(this.turretAim(v, f));
       view.rings(this.ringsFor(v));
@@ -926,6 +941,17 @@ export class Game {
       view.dispose();
       this.views.delete(id);
     }
+  }
+
+  // The beam stays in the scene by day at zero intensity. Adding and removing it would recompile every material.
+  private aimBeam(me: VehicleFrame | undefined, night: boolean): void {
+    this.beam.intensity = night && me ? BEAM_INTENSITY : 0;
+    if (!me) return;
+    const rot = new THREE.Quaternion(me.rot.x, me.rot.y, me.rot.z, me.rot.w);
+    const at = new THREE.Vector3(me.pos.x, me.pos.y, me.pos.z);
+    const nose = bodyOf(playerVehicle(this.world).chassisId).half.x;
+    this.beam.position.copy(new THREE.Vector3(nose, BEAM_HEIGHT, 0).applyQuaternion(rot).add(at));
+    this.beam.target.position.copy(new THREE.Vector3(nose + BEAM_AIM.ahead, -BEAM_AIM.down, 0).applyQuaternion(rot).add(at));
   }
 
   // Wheel dust rises from the ground just behind the rear wheels, so it never reads as exhaust.
