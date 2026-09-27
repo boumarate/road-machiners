@@ -51,12 +51,13 @@ export function throttleFor(d: number, speed: number): Throttle {
 
 // Next turn's speed for a drive-through click at distance d. From rest, speed grows with distance.
 // In motion, brake eases toward its edge and acceleration builds from the hold zone to full reach.
+// Braking stops at the speed from rest, so the truck creeps onto a close point instead of stopping short.
 export function zoneSpeed(s: VehicleStats, speed: number, d: number): number {
   const z = zoneEdges();
-  if (speed === 0)
-    return Math.min(s.maxSpeed, s.accel * Math.min(1, d / z.reach));
+  const creep = Math.min(s.maxSpeed, s.accel * Math.min(1, d / z.reach));
+  if (speed === 0) return creep;
   let next = speed;
-  if (d < z.brakeEnd) next = speed - s.brake * (1 - d / z.brakeEnd);
+  if (d < z.brakeEnd) next = Math.max(creep, speed - s.brake * (1 - d / z.brakeEnd));
   else if (d >= z.holdEnd)
     next =
       speed + s.accel * Math.min(1, (d - z.holdEnd) / (z.reach - z.holdEnd));
