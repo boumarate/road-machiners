@@ -45,6 +45,8 @@ const SHAPES: Record<Look, Shape> = {
 
 const PLATE_THICK = 0.12; // plate thickness as a fraction of the chassis half-width
 const RAM_DEPTH = 0.5; // how far a ram wedge sticks out, as a fraction of the chassis half-width
+const LAMP_SIZE = 0.35; // headlight face size, as a fraction of the chassis half-height
+const LAMP_SPREAD = 0.65; // headlight distance from the centerline, as a fraction of the chassis half-width
 
 // Yaw that turns a side piece's local +x outward. Local +x is the nose and local +z the truck's right.
 const SIDE_YAW: Record<SideLetter, number> = { F: 0, B: Math.PI, R: -Math.PI / 2, L: Math.PI / 2 };
@@ -78,6 +80,7 @@ export class VehicleView {
   private ringSizes: { r: number; width: number }[] = [];
   private heading = 0;
   private groundOffset = 0;
+  private lampMat = new THREE.MeshBasicMaterial({ color: PAL.lamp.off });
 
   constructor(v: Vehicle) {
     this.update(v);
@@ -102,6 +105,10 @@ export class VehicleView {
       wheel.spin.rotation.z = -w.spin;
     });
     this.ground.position.set(f.pos.x, f.pos.y - this.groundOffset, f.pos.z);
+  }
+
+  lamps(on: boolean): void {
+    this.lampMat.color.setHex(on ? PAL.lamp.on : PAL.lamp.off);
   }
 
   // yaw is a map-space heading (radians, 0 = +x). null points turrets forward.
@@ -156,6 +163,7 @@ export class VehicleView {
     this.buildFrame(body, col);
     this.buildCab(body, shape, col);
     this.buildWheels(body);
+    this.buildLamps(body);
     this.buildArmor(v, body, shape);
     this.buildCargo(v, body, shape);
     this.buildWeapons(v, body, shape);
@@ -189,6 +197,19 @@ export class VehicleView {
     cab.position.set((from + to) / 2, body.half.y + height / 2, 0);
     cab.castShadow = true;
     this.root.add(cab);
+  }
+
+  // Two lamps on the nose. They keep one material, so lamps() switches both.
+  private buildLamps(body: Body): void {
+    const on = this.lampMat.color.getHex() === PAL.lamp.on;
+    this.lampMat = new THREE.MeshBasicMaterial({ color: on ? PAL.lamp.on : PAL.lamp.off });
+    const size = body.half.y * LAMP_SIZE;
+    const geo = new THREE.BoxGeometry(size * 0.5, size, size * 1.4);
+    for (const z of [-1, 1]) {
+      const lamp = new THREE.Mesh(geo, this.lampMat);
+      lamp.position.set(body.half.x + size * 0.2, body.half.y * 0.4, z * body.half.z * LAMP_SPREAD);
+      this.root.add(lamp);
+    }
   }
 
   private buildWheels(body: Body): void {
