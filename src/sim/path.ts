@@ -88,13 +88,14 @@ export function keepRoute(world: World, dest: Vec, points: Vec[], extra: Blocker
   return { dest: { ...dest }, points, blockers: dynamicBlockers(world.obstacles, extra).map((o) => blockerKey([o])) };
 }
 
-// The rest of a kept route toward nearly the same point, or null when it no longer holds. Points the
+// The rest of a kept route toward nearly the same point, or null when it cannot be mended. Points the
 // vehicle has driven past drop off first. A route that ended on its old point now ends on `to`; one
 // that ended at the closest reachable spot keeps it. The leg from the vehicle and a moved last leg must
 // be clear lines over ground no costlier than either end, as for a shortcut. The vehicle may already
 // drive inside the CLEARANCE margin, which only absorbs steering bulge, so these legs must just not
 // touch. A kill wreck or parked vehicle the route was not planned around must keep full clearance
 // from every leg. Static obstacles, cliffs and the known blockers are as the planner checked them.
+// When legs break, only the stretch up to the last broken leg is planned again.
 export function continueRoute(world: World, from: Vec, kept: KeptRoute, to: Vec, radius: number, extra: Blocker[], driver?: Pick<Vehicle, "id" | "brain">): Vec[] | null {
   return timed('route-continue', () => continueKept(world, from, kept, to, radius, extra, driver));
 }
@@ -102,10 +103,27 @@ export function continueRoute(world: World, from: Vec, kept: KeptRoute, to: Vec,
 function continueKept(world: World, from: Vec, kept: KeptRoute, to: Vec, radius: number, extra: Blocker[], driver: Pick<Vehicle, "id" | "brain"> | undefined): Vec[] | null {
   const c = legCheck(world, kept, radius, extra);
   const { rest, moved } = remainingPoints(from, kept, to);
-  if (lastBrokenLeg(c, from, rest, moved) >= 0) return null;
+  const broken = lastBrokenLeg(c, from, rest, moved);
+  const path = broken < 0 ? rest : repair(world, from, rest, broken, radius, extra, driver);
+  // The planner answers a point it cannot reach with a straight line to it, so a repair must hold too.
+  if (!path || (broken >= 0 && lastBrokenLeg(c, from, path, false) >= 0)) return null;
   // Shortcuts from the new position, as a fresh plan takes them, so the truck does not hold to a corner
   // chosen from where it was a turn ago.
-  return straightenAhead(c.nav, c.statics, c.dynamic, from, rest, c.reach, tasteOf(world, driver));
+  return straightenAhead(c.nav, c.statics, c.dynamic, from, path, c.reach, tasteOf(world, driver));
+}
+
+// A fresh route from the vehicle to the end of the broken leg, joined to the kept points after it. Null
+// when the fresh route cannot reach that point, so the caller plans the whole trip.
+function repair(world: World, from: Vec, rest: Vec[], broken: number, radius: number, extra: Blocker[], driver: Pick<Vehicle, "id" | "brain"> | undefined): Vec[] | null {
+  const target = rest[broken];
+  const fresh = route(world, from, target, radius, extra, driver);
+  const end = fresh[fresh.length - 1];
+  if (end.x !== target.x || end.y !== target.y) {
+    count('route-repair-failed');
+    return null;
+  }
+  count('route-repair');
+  return [...fresh, ...rest.slice(broken + 1)];
 }
 
 // What the legs of a kept route are checked against. `fresh` holds the dynamic blockers the route was
