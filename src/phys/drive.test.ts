@@ -176,6 +176,23 @@ describe('physics turns', () => {
     freeDrive(d);
   });
 
+  it('a fast truck that misses a drive-through point wide drives on instead of circling back', () => {
+    const dest = { x: 33, y: 32 };
+    let w = ordered({ kind: 'through', dest }, 7.8);
+    let d = buildDrive(w);
+    let turned = 0;
+    for (let i = 0; i < 3; i++) {
+      let r: TurnResult | null = null;
+      w = endTurn(w, physicsMove(d, (x) => (r = x)));
+      freeDrive(d);
+      d = r!.next;
+      turned = Math.max(turned, Math.abs(angleDiff(me(w).heading, 0)));
+    }
+    freeDrive(d);
+    expect(me(w).order).toBeNull();
+    expect(turned).toBeLessThan(Math.PI / 2);
+  });
+
   it('a fast truck brakes before a sharp route corner instead of running into the wall past it', () => {
     let w = ordered({ kind: 'stopAt', dest: { x: 45, y: 48 } }, 7.8);
     // A wall on the right forces the route east to a corner, and a wall past the corner catches overshoot.

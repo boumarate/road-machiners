@@ -40,7 +40,8 @@ export const toTilesPerTurn = (mps: number) => (mps * PHYSICS.turnSeconds) / S;
 // The driver's memory between turns: current wheel angle, and whether it is backing toward its point.
 // route is the rest of the route driven last turn, so a driver keeps following it instead of planning
 // the whole way again every turn.
-type Memory = { steer: number; reverse: boolean; route: (KeptRoute & { radius: number }) | null };
+// ahead holds the drive-through point that was ahead of the nose on the last leg at the last step.
+type Memory = { steer: number; reverse: boolean; route: (KeptRoute & { radius: number }) | null; ahead: Vec | null };
 
 // Everything a turn needs to start: the physics world, which body and collider belongs to which
 // vehicle or obstacle, and each driver's memory.
@@ -104,7 +105,7 @@ export function syncDrive(d: Drive, w: World): void {
     const handle = d.bodies[v.id];
     if (handle === undefined) {
       d.bodies[v.id] = addVehicle(d.world, w, v);
-      d.memory[v.id] = { steer: 0, reverse: false, route: null };
+      d.memory[v.id] = { steer: 0, reverse: false, route: null, ahead: null };
       continue;
     }
     const body = d.world.getRigidBody(handle);
@@ -334,7 +335,8 @@ function applyTerrainGrip(ctl: RAPIER.DynamicRayCastVehicleController, body: RAP
 
 // One physics step of driving. Steer at the destination and hold the turn's speed. A stop order slows
 // to arrive. A slow truck with the destination far behind backs up, wheels turned the other way.
-// A drive-through point counts as passed only once close; a side click behind the truck still steers.
+// A drive-through point counts as passed once close, or once the truck drives forward past it on the
+// last leg, so a wide miss does not circle back. A side click behind the truck still steers.
 function driveStep(c: Car, terrain: Terrain): void {
   const { plan, mem, body, ctl } = c;
   applyTerrainGrip(ctl, body, terrain);
@@ -353,8 +355,8 @@ function driveStep(c: Car, terrain: Terrain): void {
     if (plan.stopAt) {
       target = Math.min(target, Math.sqrt(2 * plan.stopDecel * Math.max(0, far - RULES.arriveRadius * S)));
       if (far < RULES.arriveRadius * S) c.result.arrived = true;
-    } else if (far < RULES.passRadius * S) {
-      c.result.passed = true;
+    } else {
+      c.result.passed = passedThrough(plan.dest, plan.route, mem, { x: p.x, y: p.z }, heading, speed);
     }
     if (!c.result.passed && !c.result.arrived) {
       // Reverse until the route is ahead. Ordinary NPCs steer their nose toward it, while
@@ -388,6 +390,30 @@ function driveStep(c: Car, terrain: Terrain): void {
   const brake = pushing ? 0 : Math.abs(u) * plan.brakeForce + (target === 0 ? plan.brakeForce : 0);
   for (let i = 0; i < 4; i++) ctl.setWheelBrake(i, brake);
   for (const i of [2, 3]) ctl.setWheelEngineForce(i, pushing ? u * plan.engineForce : 0);
+}
+
+// Whether a drive-through point is passed: the truck is close, or it drove forward past the point
+// on the last leg. `at` is in physics meters. Records in mem whether the point is ahead now.
+function passedThrough(dest: Vec, route: Vec[] | null, mem: Memory, at: Vec, heading: number, speed: number): boolean {
+  const dx = dest.x * S - at.x;
+  const dz = dest.y * S - at.y;
+  if (Math.hypot(dx, dz) < RULES.passRadius * S) return true;
+  if (!onLastLeg(route)) {
+    mem.ahead = null;
+    return false;
+  }
+  const ahead = Math.abs(angleDiff(heading, Math.atan2(dz, dx))) < Math.PI / 2;
+  const wasAhead = samePoint(mem.ahead, dest);
+  mem.ahead = ahead ? dest : null;
+  return wasAhead && !ahead && speed > 0;
+}
+
+function onLastLeg(route: Vec[] | null): boolean {
+  return !route || route.length === 1;
+}
+
+function samePoint(a: Vec | null, b: Vec): boolean {
+  return a !== null && a.x === b.x && a.y === b.y;
 }
 
 // The fastest speed that still curves onto a point `aimDist` meters away, `ang` off the nose. The arc
