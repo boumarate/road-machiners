@@ -21,7 +21,7 @@ import { practice } from './progress';
 import { randInt, type Rng } from './rng';
 import { canUseSite, type Site } from './sites';
 import { playerCommand } from './world';
-import type { GameEvent, PartInstance, Vehicle, World } from './types';
+import type { PartInstance, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 
 export type ShopState = {
@@ -130,7 +130,7 @@ export function addStockPart(state: ShopState, part: PartInstance): void {
 export type Contract =
   | { id: string; shop: string; kind: 'haul'; good: string; units: number; to: string; reward: number; xp: number; deadline: number; tier: Tier }
   | { id: string; shop: string; kind: 'fetch'; defId: string; reward: number; xp: number; deadline: number; tier: Tier }
-  | { id: string; shop: string; kind: 'bounty'; target: string; targetName: string; reward: number; xp: number; deadline: number; tier: Tier };
+  | { id: string; shop: string; kind: 'bounty'; template: string; targetName: string; reward: number; xp: number; deadline: number; tier: Tier };
 
 // Estimated turns to travel between two points: straight distance stretched to a road-like route,
 // at cruise speed, plus the turns spent handling the stop.
@@ -190,9 +190,10 @@ function rollFetch(world: World, input: RollInput, id: string, tier: Tier): Cont
 
 function rollBounty(world: World, input: RollInput, id: string, tier: Tier): Contract {
   const target = pick(world, input.raiders);
+  if (!target.brain) throw new Error(`Raider ${target.id} has no brain`);
   const turns = randInt(world.marketRng, CONTRACTS.bounty.durationTurns[0], CONTRACTS.bounty.durationTurns[1]);
   const reward = contractReward('bounty', turns, tier, 0);
-  return { id, shop: input.shop.id, kind: 'bounty', target: target.id, targetName: target.name, reward, xp: Math.round(reward * CONTRACTS.bounty.xpPerReward), deadline: world.turn + turns, tier };
+  return { id, shop: input.shop.id, kind: 'bounty', template: target.brain.templateId, targetName: target.name, reward, xp: Math.round(reward * CONTRACTS.bounty.xpPerReward), deadline: world.turn + turns, tier };
 }
 
 const ROLLS = { haul: rollHaul, fetch: rollFetch, bounty: rollBounty };
@@ -220,17 +221,18 @@ export function isExpired(world: World, c: Contract): boolean {
   return world.turn > c.deadline;
 }
 
-// True when this turn's events show the player's kill of the bounty's target.
-export function bountyFulfilled(events: GameEvent[], c: Contract, playerVehicleId: string): boolean {
+// True when this turn the player destroyed a truck of the bounty's template. Any such truck counts.
+export function bountyFulfilled(world: World, c: Contract): boolean {
   if (c.kind !== 'bounty') throw new Error(`${c.kind} contract has no bounty target`);
-  return events.some((e) => e.t === 'destroyed' && e.vehicle === c.target && e.by === playerVehicleId);
+  const killedByPlayer = (id: string) => world.events.some((e) => e.t === 'destroyed' && e.vehicle === id && e.by === world.player.vehicleId);
+  return world.removed.some((v) => v.brain?.templateId === c.template && killedByPlayer(v.id));
 }
 
-// True once the bounty's target is gone from the world. Check bountyFulfilled for the same turn
-// first: once a bounty is fulfilled, the completed contract is removed, so this never runs on it.
+// True once no truck of the bounty's template is left in the world. Check bountyFulfilled for the
+// same turn first: once a bounty is fulfilled, the completed contract is removed, so this never runs on it.
 export function bountyLapsed(world: World, c: Contract): boolean {
   if (c.kind !== 'bounty') throw new Error(`${c.kind} contract has no bounty target`);
-  return !world.vehicles.some((v) => v.id === c.target);
+  return !world.vehicles.some((v) => v.brain?.templateId === c.template);
 }
 
 // Owed share of the haul's goods value if its deadline passes.
@@ -251,10 +253,12 @@ export function shopState(world: World, shopId: string): ShopState {
 }
 
 // Tops a shop's board up to its contract slots. Haul targets are the other shops that trade the good.
+// A fetch never asks for a part the shop has in stock.
 function fillBoard(world: World, shopId: string, state: ShopState): void {
   const def = shopDef(shopId);
   const places = Object.keys(SHOPS).filter((id) => id !== shopId).map((id) => ({ id, pos: shopPos(id) }));
-  const partDefIds = Object.keys(PARTS).filter((id) => PARTS[id].kind !== 'core');
+  const stocked = new Set(state.stock.map((p) => p.defId));
+  const partDefIds = Object.keys(PARTS).filter((id) => PARTS[id].kind !== 'core' && !stocked.has(id));
   const raiders = world.vehicles.filter((v) => v.faction === 'raiders');
   while (state.contracts.length < def.contractSlots) {
     const contract = rollContract(world, { id: shopId, pos: shopPos(shopId) }, places, def.goods, partDefIds, raiders);
@@ -390,7 +394,7 @@ export function advanceContracts(world: World): void {
 }
 
 function contractOutcome(world: World, c: Contract): 'done' | 'failed' | 'lapsed' | null {
-  if (c.kind === 'bounty' && bountyFulfilled(world.events, c, world.player.vehicleId)) return 'done';
+  if (c.kind === 'bounty' && bountyFulfilled(world, c)) return 'done';
   if (c.kind === 'bounty' && bountyLapsed(world, c)) return 'lapsed';
   return isExpired(world, c) ? 'failed' : null;
 }

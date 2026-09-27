@@ -7,6 +7,7 @@ import type { Job, Vehicle, World } from "../sim/types";
 import { isAutoPatch } from "../sim/jobs";
 import { el, panel, topRight } from "./dom";
 import {
+  contractDue,
   contractSummary,
   eventText,
   formatNpcActivity,
@@ -322,7 +323,7 @@ export class Hud {
       );
   }
 
-  // Compact list of held contracts and their turns left. Hidden while the player holds none.
+  // Compact list of held contracts and their due times. Hidden while the player holds none.
   private renderContracts(w: World): void {
     if (w.player.contracts.length === 0) {
       this.contracts.style.display = "none";
@@ -335,7 +336,7 @@ export class Hud {
         el(
           "div",
           { class: "contract-line" },
-          `${contractSummary(c)} — ${c.deadline - w.turn} turns left`,
+          `${contractSummary(c)} — ${contractDue(c)}`,
         ),
       ),
     );

@@ -501,7 +501,7 @@ function contractsOnlyAction(world: World, mem: Memory): Action {
 
 function contractIsActionable(world: World, mem: Memory, c: Contract): boolean {
   if (c.kind === 'haul') return true;
-  if (c.kind === 'bounty') return world.vehicles.some((v) => v.id === c.target);
+  if (c.kind === 'bounty') return world.vehicles.some((v) => v.brain?.templateId === c.template);
   const v = playerVehicle(world);
   if (hasSpare(v, c.defId) || hasStored(world, c.defId)) return true;
   if (knownStockShop(world, mem, c.defId)) return true;
@@ -575,10 +575,10 @@ function buyFetchPart(world: World, defId: string): World {
   }
 }
 
-// Drives to the bounty's named raider, if it is still in the world, and fights it. A raider that
-// left the world lapses the contract on its own via advanceContracts; the bot does nothing then.
+// Drives to a raider of the bounty's template, if one is still in the world, and fights it. With
+// none left, advanceContracts lapses the contract on its own; the bot does nothing then.
 function pursueBounty(world: World, telemetry: Telemetry, c: Extract<Contract, { kind: 'bounty' }>): void {
-  const target = world.vehicles.find((v) => v.id === c.target);
+  const target = world.vehicles.find((v) => v.brain?.templateId === c.template);
   if (!target) return;
   driveToPoint(world, telemetry, target.pos);
   resolveEncounter(world, telemetry, target);

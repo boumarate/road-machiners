@@ -36,7 +36,7 @@ import { acceptContract, deliverContract, shopAt, shopState, type Contract, type
 import { REGION } from "../data/region";
 import type { PartInstance, Vehicle, World } from "../sim/types";
 import { el, panel } from "./dom";
-import { contractSummary, wearLabel } from "./format";
+import { contractDue, contractSummary, wearLabel } from "./format";
 import { InventoryView } from "./inventory";
 import type { UiHost } from "./host";
 import { fuelLiters, hp, kg, kph, liters, meters, mps2 } from "./units";
@@ -419,7 +419,7 @@ export class TownScreen {
         {},
         el("td", {}, contractSummary(c)),
         el("td", {}, `${c.reward}`),
-        el("td", {}, `${c.deadline - w.turn} turns left`),
+        el("td", {}, contractDue(c)),
         el(
           "td",
           {},
@@ -443,7 +443,7 @@ export class TownScreen {
         {},
         el("td", {}, contractSummary(c)),
         el("td", {}, `${c.reward}`),
-        el("td", {}, `${c.deadline - w.turn} turns left`),
+        el("td", {}, contractDue(c)),
         el("td", {}, this.deliverCell(w, shopId, c)),
       ),
     );

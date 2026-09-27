@@ -15,6 +15,7 @@ import { npcTraits } from '../sim/npc-decisions';
 import { hasPerk } from '../sim/progress';
 import { pleaData, statesHeld, towData } from '../sim/states';
 import { isJunk } from '../sim/wear';
+import { clockOf } from '../sim/sun';
 import type { PartHit } from '../sim/armor';
 import type { GameEvent, NpcState, PartInstance, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
@@ -222,8 +223,20 @@ function contractText(c: Contract, outcome: keyof typeof CONTRACT_OUTCOME): { te
 // One line naming what a contract asks for.
 export function contractSummary(c: Contract): string {
   if (c.kind === 'haul') return `haul ${c.units} ${GOODS[c.good].name} to ${siteName(c.to)}`;
-  if (c.kind === 'fetch') return `bring ${article(partDef(c.defId).name)} ${partDef(c.defId).name} to ${siteName(c.shop)}`;
-  return `destroy ${c.targetName}`;
+  if (c.kind === 'fetch') return `find ${article(partDef(c.defId).name)} ${partDef(c.defId).name} anywhere, bring it to ${siteName(c.shop)}`;
+  return `destroy any ${c.targetName}`;
+}
+
+// The game time a contract is due. It fails at the end of its deadline turn.
+export function contractDue(c: Contract): string {
+  return `by ${clockLabel(c.deadline + 1)}`;
+}
+
+export function clockLabel(turn: number): string {
+  const { day, hour } = clockOf(turn);
+  const hh = Math.floor(hour);
+  const mm = Math.floor((hour - hh) * 60);
+  return `Day ${day} ${hh}:${String(mm).padStart(2, "0")}`;
 }
 
 function article(word: string): string {

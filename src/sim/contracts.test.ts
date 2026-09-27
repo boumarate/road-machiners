@@ -5,8 +5,8 @@ import { playerVehicle } from './damage';
 import { makePart } from './factory';
 import { goodsCount } from './grid';
 import { sitePads } from './sites';
-import { addVehicle, emptyWorld } from './testkit';
-import type { World } from './types';
+import { addVehicle, emptyWorld, npcBrain } from './testkit';
+import type { Vehicle, World } from './types';
 import { update } from './world';
 import {
   acceptContract,
@@ -18,10 +18,18 @@ import {
   contractReward,
   estimateTurns,
   haulPenalty,
+  initializeShops,
   isExpired,
   rollContract,
   type Contract,
 } from './market';
+
+// A raider NPC of a spawn template, as bounties name raiders by template.
+function addRaider(w: World, templateId: string, pos = { x: 5, y: 5 }): Vehicle {
+  const v = addVehicle(w, 'raiders', 'buggy', [], pos);
+  v.brain = npcBrain(templateId, pos, ['raider']);
+  return v;
+}
 
 describe('estimateTurns', () => {
   it('grows with distance', () => {
@@ -69,8 +77,8 @@ describe('rollContract', () => {
     const w2 = emptyWorld();
     w1.marketRng.rngState = 42;
     w2.marketRng.rngState = 42;
-    const raider = addVehicle(w1, 'raiders', 'buggy', [], { x: 5, y: 5 });
-    addVehicle(w2, 'raiders', 'buggy', [], { x: 5, y: 5 });
+    const raider = addRaider(w1, 'buggy');
+    addRaider(w2, 'buggy');
     const c1 = rollContract(w1, shop, places, goods, partDefIds, [raider]);
     const c2 = rollContract(w2, shop, places, goods, partDefIds, [w2.vehicles.find((v) => v.faction === 'raiders')!]);
     expect(c1).toEqual(c2);
@@ -130,21 +138,31 @@ describe('isExpired', () => {
 });
 
 describe('bountyFulfilled', () => {
-  it('is true only for the player\'s kill of the target', () => {
-    const c = { kind: 'bounty', target: 'raider-1' } as Contract;
-    expect(bountyFulfilled([{ t: 'destroyed', vehicle: 'raider-1', by: 'player-1' }], c, 'player-1')).toBe(true);
-    expect(bountyFulfilled([{ t: 'destroyed', vehicle: 'raider-1', by: 'other-npc' }], c, 'player-1')).toBe(false);
-    expect(bountyFulfilled([{ t: 'destroyed', vehicle: 'raider-2', by: 'player-1' }], c, 'player-1')).toBe(false);
+  it('is true for the player\'s kill of any truck of the template', () => {
+    const w = emptyWorld();
+    const outrider = addRaider(w, 'buggy');
+    const other = addRaider(w, 'warband');
+    const c = { kind: 'bounty', template: 'buggy' } as Contract;
+    const kill = (v: Vehicle, by: string) => {
+      w.removed = [v];
+      w.events = [{ t: 'destroyed', vehicle: v.id, by }];
+      return bountyFulfilled(w, c);
+    };
+    expect(kill(outrider, w.player.vehicleId)).toBe(true);
+    expect(kill(outrider, 'other-npc')).toBe(false);
+    expect(kill(other, w.player.vehicleId)).toBe(false);
   });
 });
 
 describe('bountyLapsed', () => {
-  it('is true once the target vehicle is gone from the world', () => {
+  it('is true once no truck of the template is left in the world', () => {
     const w = emptyWorld();
-    const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 5, y: 5 });
-    const c = { kind: 'bounty', target: raider.id } as Contract;
+    const first = addRaider(w, 'buggy');
+    const second = addRaider(w, 'buggy', { x: 20, y: 5 });
+    const c = { kind: 'bounty', template: 'buggy' } as Contract;
+    w.vehicles = w.vehicles.filter((v) => v.id !== first.id);
     expect(bountyLapsed(w, c)).toBe(false);
-    w.vehicles = w.vehicles.filter((v) => v.id !== raider.id);
+    w.vehicles = w.vehicles.filter((v) => v.id !== second.id);
     expect(bountyLapsed(w, c)).toBe(true);
   });
 });
@@ -171,6 +189,18 @@ describe('contract boards and delivery', () => {
   it('posts contracts on every shop board at world creation', () => {
     const w = emptyWorld();
     for (const id of Object.keys(SHOPS)) expect(w.shops[id].contracts.length).toBeGreaterThan(0);
+  });
+
+  it('never posts a fetch for a part the shop has in stock', () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const w = emptyWorld();
+      w.marketRng.rngState = seed;
+      initializeShops(w);
+      for (const state of Object.values(w.shops)) {
+        const stocked = new Set(state.stock.map((p) => p.defId));
+        for (const c of state.contracts) if (c.kind === 'fetch') expect(stocked.has(c.defId)).toBe(false);
+      }
+    }
   });
 
   it('loads haul cargo on acceptance and pays on delivery at the destination', () => {
@@ -229,10 +259,11 @@ describe('contract boards and delivery', () => {
 
   it('pays a bounty on the player kill and lapses when the target leaves', () => {
     const base = emptyWorld();
-    const raider = addVehicle(base, 'raiders', 'scout', [], { x: 50, y: 50 });
-    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', target: raider.id, targetName: raider.name, reward: 400, xp: 40, deadline: 900, tier: 2 };
+    const raider = addRaider(base, 'buggy', { x: 50, y: 50 });
+    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: raider.name, reward: 400, xp: 40, deadline: 900, tier: 2 };
     const paid = update(base, (d) => {
       d.player.contracts = [bounty];
+      d.removed = [raider];
       d.events = [{ t: 'destroyed', vehicle: raider.id, by: d.player.vehicleId }];
       advanceContracts(d);
     });

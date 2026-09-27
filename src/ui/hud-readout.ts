@@ -8,12 +8,12 @@ import { corePart, mountedParts, mountedItems, itemSize } from "../sim/grid";
 import { isStranded, vehicleStats } from "../sim/stats";
 import { towData } from "../sim/states";
 import { playerTow } from "../sim/tow";
-import { clockOf, heatAt } from "../sim/sun";
+import { heatAt } from "../sim/sun";
 import { TERRAIN } from "../data/terrain";
 import { dist, type Vec } from "../sim/vec";
 import type { SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
-import { vehicleName } from "./format";
+import { clockLabel, vehicleName } from "./format";
 import { celsius, engineCelsius, fuelLiters, hp, kph } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./icons";
@@ -120,13 +120,6 @@ function weatherLabel(w: World, pos: Vec): string {
       names.push("Storm near");
   }
   return names.length ? [...new Set(names)].join(", ") : "Clear";
-}
-
-function clockLabel(turn: number): string {
-  const { day, hour } = clockOf(turn);
-  const hh = Math.floor(hour);
-  const mm = Math.floor((hour - hh) * 60);
-  return `Day ${day} ${hh}:${String(mm).padStart(2, "0")}`;
 }
 
 // Negative money is debt. It shows as a positive amount owed.
