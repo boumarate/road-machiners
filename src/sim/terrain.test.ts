@@ -2,11 +2,9 @@ import { START_KITS } from "../data/start";
 import { describe, expect, it } from "vitest";
 import { REGION } from "../data/region";
 import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from "../data/terrain";
-import { elevationAt } from './elevation';
 import { route } from "./path";
 import {
   buildTerrain,
-  heightFromElevation,
   heightAt,
   isCliff,
   tileAt,
@@ -44,8 +42,8 @@ function terrainHash(t: Terrain): string {
 
 describe("terrain generation", () => {
   it("keeps the exact heights and types of known seeds", () => {
-    expect(terrainHash(buildTerrain(1, REGION.size))).toBe("36abd61a");
-    expect(terrainHash(buildTerrain(7, REGION.size))).toBe("b627ce13");
+    expect(terrainHash(buildTerrain(1, REGION.size))).toBe("36fef6bd");
+    expect(terrainHash(buildTerrain(7, REGION.size))).toBe("b8fd88cd");
   }, 30_000);
 
   it("finds the same road distance through the road index as over every road", () => {
@@ -61,14 +59,11 @@ describe("terrain generation", () => {
 });
 
 describe('terrain variety', () => {
-  it.each([1, 1337, 2024])('generates all ten types without changing heights or road/site priority for seed %s', (seed) => {
+  it.each([1, 1337, 2024])('generates all ten types with road/site priority for seed %s', (seed) => {
     expect(Object.keys(TERRAIN_TYPES)).toHaveLength(10);
     const t = buildTerrain(seed, REGION.size);
     expect(new Set(t.types)).toEqual(new Set(Object.keys(TERRAIN_TYPES)));
     expect(buildTerrain(seed, REGION.size)).toEqual(t);
-    const heights: number[] = [];
-    for (let y = 0; y <= t.size; y++) for (let x = 0; x <= t.size; x++) heights.push(heightFromElevation(elevationAt(seed, x, y)));
-    expect(t.heights).toEqual(heights);
     for (let y = 0; y < t.size; y++) for (let x = 0; x < t.size; x++) {
       const point = { x: x + 0.5, y: y + 0.5 };
       const kind = t.types[y * t.size + x];

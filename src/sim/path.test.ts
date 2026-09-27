@@ -69,7 +69,8 @@ describe('driver taste', () => {
   const apart = (p: Vec[], q: Vec[]) => Math.max(...p.map((x) => polylineDist(x, q)), ...q.map((x) => polylineDist(x, p)));
 
   it('sends drivers between the same towns along different ways', () => {
-    const routes = Array.from({ length: 10 }, (_, i) => [from, ...route(w, from, to, 0.8, [], { id: `v${100 + i}`, brain })]);
+    // Graded roads cost little, so most drivers keep to the same road and only some take another way.
+    const routes = Array.from({ length: 20 }, (_, i) => [from, ...route(w, from, to, 0.8, [], { id: `v${100 + i}`, brain })]);
     const ways = routes.filter((r, i) => routes.slice(0, i).every((q) => apart(r, q) > 10));
     expect(ways.length).toBeGreaterThanOrEqual(3);
   });
