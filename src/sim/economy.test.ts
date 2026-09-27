@@ -5,7 +5,6 @@ import { ECONOMY, GOOD_IDS, TOWN_PRICES } from "../data/goods";
 import { partDef } from "../data/parts";
 import { REGION } from "../data/region";
 import { RULES } from "../data/rules";
-import { checkDefeat } from "./defeat";
 import {
   buyChassis,
   buyGood,
@@ -18,6 +17,7 @@ import {
   repairPart,
   sellGood,
   sellPrice,
+  serviceVehicle,
 } from "./economy";
 import {
   corePart,
@@ -34,7 +34,6 @@ import { consumeSupplies } from "./supplies";
 import { heatAt } from "./sun";
 import { locationAt, siteGates, townAt, townNear } from "./sites";
 import { addVehicle, emptyWorld } from "./testkit";
-import { dist } from "./vec";
 import { endTurn, newWorld } from "./world";
 
 const bowl = REGION.towns.find((t) => t.id === "bowl")!;
@@ -95,7 +94,9 @@ describe("trade", () => {
 
 describe("garage", () => {
   it("buys supplies up to the cap", () => {
-    const w = buySupply(startAtBowl(), "supplies", RULES.suppliesCap - 12);
+    const start = startAtBowl();
+    start.player.supplies = 12;
+    const w = buySupply(start, "supplies", RULES.suppliesCap - 12);
     expect(w.player.supplies).toBe(RULES.suppliesCap);
     expect(() => buySupply(w, "supplies", 1)).toThrow();
   });
@@ -190,9 +191,10 @@ describe("supplies", () => {
   it("drains suppliesPerTurn times heat over ten turns", () => {
     const w = emptyWorld();
     const heat = heatAt(w, w.vehicles[0].pos);
+    const before = w.player.supplies;
     for (let i = 0; i < 10; i++) consumeSupplies(w);
     expect(w.player.supplies).toBeCloseTo(
-      12 - 10 * RULES.suppliesPerTurn * heat,
+      before - 10 * RULES.suppliesPerTurn * heat,
     );
   });
 
@@ -200,8 +202,9 @@ describe("supplies", () => {
     const w = emptyWorld();
     const heat = heatAt(w, w.vehicles[0].pos);
     w.player.skills.survival = 2;
+    const before = w.player.supplies;
     consumeSupplies(w);
-    expect(12 - w.player.supplies).toBeLessThan(RULES.suppliesPerTurn * heat);
+    expect(before - w.player.supplies).toBeLessThan(RULES.suppliesPerTurn * heat);
   });
 });
 
@@ -322,60 +325,36 @@ describe("progress", () => {
   });
 });
 
-describe("defeat", () => {
-  it("robs the player and patches the truck where it fell", () => {
-    const w = emptyWorld({ x: 20, y: 40 });
-    w.obstacles = newWorld(1, START_KITS.standard).obstacles;
-    const me = w.vehicles[0];
-    corePart(me, "cab").hp = 0;
-    w.player.skills.gunnery = 2;
-    const raider = addVehicle(w, "raiders", "buggy", ["mg", "stockEngine"], {
-      x: me.pos.x + 4,
-      y: me.pos.y - 4,
-    });
-    checkDefeat(w);
-    expect(me.pos).toEqual({ x: 20, y: 40 });
-    expect(corePart(me, "cab").hp).toBe(
-      Math.max(1, Math.round(partDef("cab").hp * RULES.defeatPatch)),
-    );
-    expect(w.player.fuel).toBe(0);
-    expect(goodsCount(me)).toEqual({});
-    expect(w.player.money).toBe(750);
-    expect(w.player.skills.gunnery).toBe(2);
-    expect(w.vehicles.find((v) => v.id === raider.id)).toBeUndefined();
-    expect(w.events.some((e) => e.t === "defeat")).toBe(true);
+describe("debt", () => {
+  it("a player in debt cannot buy anything", () => {
+    const w = startAtBowl();
+    w.player.money = -100;
+    expect(() => buyGood(w, "scrap", 1)).toThrow(/money/);
+    expect(() => buySupply(w, "fuel", 1)).toThrow(/money/);
+    expect(() => buyPart(w, "mg")).toThrow(/money/);
+    expect(() => repairAll(w)).toThrow(/money/);
+    // A chassis swap that costs nothing is still a purchase.
+    w.player.money = -1;
+    expect(() => buyChassis(w, "courier")).toThrow(/money/);
   });
 
-  it("a broke, starving player can recover without fuel", () => {
-    let w = emptyWorld({ x: 30, y: 30 });
-    Object.assign(w.player, { fuel: 0, supplies: 0, money: 0 });
-    for (let i = 0; i < 20; i++) w = endTurn(w);
-    expect(w.player.knockouts).toBe(1);
-    expect(w.player.fuel).toBe(0);
-    expect(corePart(w.vehicles[0], "cab").hp).toBeGreaterThan(0);
+  it("sales pay the debt down", () => {
+    const w = startAtBowl();
+    w.player.money = -100;
+    const after = sellGood(w, "scrap", 2);
+    expect(after.player.money).toBe(-100 + 2 * sellPrice(w, "bowl", "scrap"));
   });
 
-  it("can crawl toward town after losing a battle", () => {
-    let w = emptyWorld({ x: 20, y: 40 });
-    corePart(w.vehicles[0], "cab").hp = 0;
-    w = endTurn(w);
-    const from = { ...w.vehicles[0].pos };
-    w.vehicles[0].order = { kind: "stopAt", dest: { x: 16, y: 43 } };
-    w = endTurn(w);
-    expect(dist(w.vehicles[0].pos, bowl.pos)).toBeLessThan(
-      dist(from, bowl.pos),
-    );
-    expect(w.player.fuel).toBe(0);
-    expect(corePart(w.vehicles[0], "cab").hp).toBeGreaterThan(0);
-  });
-
-  it("the game keeps running after a defeat", () => {
-    let w = emptyWorld({ x: 20, y: 40 });
-    corePart(w.vehicles[0], "cab").hp = 0;
-    w = endTurn(w);
-    expect(w.events.some((e) => e.t === "defeat")).toBe(true);
-    w.vehicles[0].order = { kind: "stopAt", dest: { x: 20, y: 40 } };
-    for (let i = 0; i < 5; i++) w = endTurn(w);
-    expect(corePart(w.vehicles[0], "cab").hp).toBeGreaterThan(0);
+  it("an NPC in debt gets no fuel, supplies or repairs in town", () => {
+    const w = startAtBowl();
+    const npc = addVehicle(w, "traders", "hauler", ["stockEngine"], { ...siteGates(bowl)[0] });
+    npc.resources!.money = -50;
+    npc.resources!.fuel = 1;
+    npc.resources!.supplies = 1;
+    const engine = mountedParts(npc, "engine")[0];
+    engine.hp = 1;
+    serviceVehicle(w, npc, "bowl");
+    expect(npc.resources).toMatchObject({ money: -50, fuel: 1, supplies: 1 });
+    expect(engine.hp).toBe(1);
   });
 });

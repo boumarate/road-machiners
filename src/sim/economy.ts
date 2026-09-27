@@ -16,7 +16,7 @@ import { canUseSite, requireTown } from "./sites";
 import { freeCells, goodsCount, mountedParts } from "./grid";
 import { addGoods, mountPart, removeGoods, stowPart } from "./inventory";
 import type { PartInstance, Vehicle, World } from "./types";
-import { update } from "./world";
+import { playerCommand } from "./world";
 
 export type Supply = "fuel" | "supplies";
 
@@ -132,8 +132,10 @@ export function serviceAtCamp(
   refuelAndRepair(world, vehicle);
 }
 
+// A driver in debt buys nothing.
 function refuelAndRepair(world: World, vehicle: Vehicle): void {
   const resources = getResources(world, vehicle);
+  if (resources.money < 0) return;
   for (const kind of ["fuel", "supplies"] as const) {
     const cap =
       kind === "fuel"
@@ -190,14 +192,15 @@ function repairMult(world: World): number {
   );
 }
 
+// A player in debt cannot buy anything, even at no cost.
 function pay(world: World, amount: number, reason: string): void {
-  if (amount > world.player.money)
+  if (world.player.money < 0 || amount > world.player.money)
     throw new Error(`Not enough money for ${reason}`);
   world.player.money -= amount;
 }
 
 export function buyGood(world: World, good: string, n: number): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     const town = requireTown(w);
     const me = playerVehicle(w);
     tradeGoods(w, me, town.id, good, n, "buy");
@@ -205,7 +208,7 @@ export function buyGood(world: World, good: string, n: number): World {
 }
 
 export function sellGood(world: World, good: string, n: number): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     const town = requireTown(w);
     const me = playerVehicle(w);
     tradeGoods(w, me, town.id, good, n, "sell");
@@ -222,7 +225,7 @@ export function supplyRoom(world: World, kind: Supply): number {
 }
 
 export function buySupply(world: World, kind: Supply, n: number): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     requireTown(w);
     if (n <= 0 || n > supplyRoom(w, kind))
       throw new Error(`Cannot buy ${n} ${kind}`);
@@ -240,7 +243,7 @@ export function partRepairCost(world: World, part: PartInstance): number {
 }
 
 export function repairPart(world: World, partId: string): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     requireTown(w);
     const part = allParts(playerVehicle(w)).find((p) => p.id === partId);
     if (!part) throw new Error(`No truck part ${partId}`);
@@ -250,7 +253,7 @@ export function repairPart(world: World, partId: string): World {
 }
 
 export function repairAll(world: World): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     requireTown(w);
     const me = playerVehicle(w);
     const parts = allParts(me);
@@ -266,7 +269,7 @@ export function partSellPrice(part: PartInstance): number {
 }
 
 export function buyPart(world: World, defId: string): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     requireTown(w);
     if (partDef(defId).kind === "core")
       throw new Error(
@@ -278,7 +281,7 @@ export function buyPart(world: World, defId: string): World {
 }
 
 export function sellPart(world: World, partId: string): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     requireTown(w);
     const i = w.player.storage.findIndex((p) => p.id === partId);
     if (i < 0) throw new Error(`No stored part ${partId}`);
@@ -313,7 +316,7 @@ function allParts(v: Vehicle): PartInstance[] {
 // Mounted parts move to free mounts, spares and goods to free cells, and parts that do not fit go to
 // garage storage. Goods that do not fit block the swap. The old chassis is traded in.
 export function buyChassis(world: World, chassisId: string): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     requireTown(w);
     if (!PLAYER_CHASSIS.includes(chassisId))
       throw new Error(`${chassisId} is not for sale`);

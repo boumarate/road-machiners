@@ -1,15 +1,19 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
 import { makeVehicle } from '../sim/factory';
 import { addGoods, removeAllGoods } from '../sim/inventory';
 import { loadFactor, vehicleMass } from '../sim/mass';
 import { addVehicle, emptyWorld, partHp } from '../sim/testkit';
+import { corePart } from '../sim/grid';
 import type { MoveOrder, World } from '../sim/types';
-import { angleDiff, dist } from '../sim/vec';
+import { angleDiff, bearing, dist, type Vec } from '../sim/vec';
+import { REGION } from '../data/region';
 import { endTurn, setDirect, setMoveOrder } from '../sim/world';
 import { PHYSICS } from '../data/physics';
 import { buildDrive, freeDrive, initPhysics, routeAim, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
 import { physicsMove } from './turn';
+import { acceptTow, unhitch } from '../sim/tow';
 
 beforeAll(async () => {
   await initPhysics();
@@ -38,6 +42,48 @@ const me = (w: World) => w.vehicles[0];
 const HILL_GRADE = 0.2; // height per tile, steeper than 90% of the generated map's slopes
 
 describe('physics turns', () => {
+  it('a truck knocked out while driving brakes to a stop', () => {
+    // One drive carried from turn to turn, as in the game, so the body keeps its speed.
+    let w = ordered({ kind: 'stopAt', dest: { x: 200, y: 30 } });
+    let d = buildDrive(w);
+    const turn = () => {
+      let next: Drive | null = null;
+      w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+      freeDrive(d);
+      d = next!;
+    };
+    for (let i = 0; i < 3; i++) turn();
+    expect(me(w).speed).toBeGreaterThan(1);
+    corePart(me(w), 'cab').hp = 0;
+    turn();
+    expect(w.player.state).toBe('knockedOut');
+    // A few turns of braking, then the truck stands still.
+    for (let i = 0; i < 3; i++) turn();
+    const at = { ...me(w).pos };
+    turn();
+    freeDrive(d);
+    expect(dist(me(w).pos, at)).toBeLessThan(0.05);
+  });
+
+  it('two traders meeting head-on on a road both get past', () => {
+    const bowl = REGION.towns[0];
+    const nose = REGION.towns[1];
+    const toNose = bearing(bowl.pos, nose.pos);
+    const mid = { x: (bowl.pos.x + nose.pos.x) / 2, y: (bowl.pos.y + nose.pos.y) / 2 };
+    const at = (d: number) => ({ x: mid.x + Math.cos(toNose) * d, y: mid.y + Math.sin(toNose) * d });
+    // The player watches from the side, so both traders drive in physics.
+    const w = emptyWorld({ x: mid.x + Math.cos(toNose + Math.PI / 2) * 12, y: mid.y + Math.sin(toNose + Math.PI / 2) * 12 });
+    const east = addVehicle(w, 'traders', 'hauler', ['stockEngine'], at(-1.5), toNose);
+    const west = addVehicle(w, 'traders', 'hauler', ['stockEngine'], at(1.5), toNose + Math.PI);
+    east.brain = { templateId: 'trader', activity: { kind: 'sell', targetId: 'nose', destination: { ...nose.pos }, reason: 'test', phase: 'travel' }, goal: null, home: { ...east.pos }, stepIndex: 0, refusedTow: false };
+    west.brain = { templateId: 'trader', activity: { kind: 'sell', targetId: 'bowl', destination: { ...bowl.pos }, reason: 'test', phase: 'travel' }, goal: null, home: { ...west.pos }, stepIndex: 0, refusedTow: false };
+    const along = (p: Vec) => (p.x - mid.x) * Math.cos(toNose) + (p.y - mid.y) * Math.sin(toNose);
+    // Ten turns cover a stop, a detour around the stopped truck and the drive past it.
+    const { w: after } = play(w, 10);
+    expect(along(after.vehicles.find((v) => v.id === east.id)!.pos)).toBeGreaterThan(5);
+    expect(along(after.vehicles.find((v) => v.id === west.id)!.pos)).toBeLessThan(-5);
+  });
+
   it('turns an NPC around for a destination behind it', () => {
     // The player stands within the live radius of the whole drive, so the NPC keeps its physics body.
     const w = emptyWorld({ x: 20, y: 50 });
@@ -238,6 +284,17 @@ describe('physics turns', () => {
     expect(dist(me(w).pos, { x: 40, y: 30 })).toBeGreaterThan(3);
   });
 
+  it('a truck without an engine is pushed toward the click at limp speed and burns no fuel', () => {
+    const w0 = ordered({ kind: 'stopAt', dest: { x: 38, y: 30 } });
+    w0.vehicles[0].items = w0.vehicles[0].items.filter((it) => it.kind !== 'part' || partDef(it.part.defId).kind !== 'engine');
+    const fuel = w0.player.fuel;
+    const { w, d } = play(w0, 3);
+    expect(me(w).pos.x).toBeGreaterThan(30 + RULES.limpSpeed);
+    expect(me(w).speed).toBeLessThanOrEqual(RULES.limpSpeed + 0.3);
+    expect(w.player.fuel).toBe(fuel);
+    freeDrive(d);
+  });
+
   it('an empty tank still crawls toward the click', () => {
     const w0 = ordered({ kind: 'through', dest: { x: 45, y: 30 } });
     w0.player.fuel = 0;
@@ -302,5 +359,34 @@ describe('physics turns', () => {
     w.vehicles.pop();
     syncDrive(d, w);
     expect(Object.keys(d.bodies)).toHaveLength(1);
+  });
+
+  it('a hitched player leaves physics and returns on unhitch', () => {
+    let w = emptyWorld();
+    w.player.fuel = 0;
+    const trader = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 40, y: 30 }, Math.PI);
+    trader.brain = { templateId: 'trader', activity: null, goal: null, home: { ...trader.pos }, stepIndex: 0, refusedTow: false };
+    let d = buildDrive(w);
+    const turn = () => {
+      let r: TurnResult | null = null;
+      w = endTurn(w, physicsMove(d, (x) => (r = x)));
+      freeDrive(d);
+      d = r!.next;
+      return r!;
+    };
+    for (let i = 0; i < 30 && !w.player.tow; i++) turn();
+    expect(w.player.tow).not.toBeNull();
+    w = acceptTow(w);
+    const start = { ...me(w).pos };
+    for (let i = 0; i < 10; i++) {
+      const r = turn();
+      expect(d.bodies[me(w).id]).toBeUndefined();
+      expect(r.frames[me(w).id]).toBeUndefined();
+    }
+    expect(dist(me(w).pos, start)).toBeGreaterThan(3);
+    w = unhitch(w);
+    for (let i = 0; i < 3; i++) turn();
+    expect(d.bodies[me(w).id]).toBeDefined();
+    freeDrive(d);
   });
 });

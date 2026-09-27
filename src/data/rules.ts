@@ -23,7 +23,7 @@ export const RULES = {
   parkedSpeed: 0.5, // vehicles slower than this are routed around like obstacles
   yieldDistance: 1.5, // neutral drivers brake when another vehicle is this close past both radii ahead
   maxBulge: 0.25, // tiles a steering arc may stray from the straight route line
-  limpSpeed: 2, // top speed with an empty tank or a dead engine or transmission; a truck this slow raises no dust
+  limpSpeed: 1.04, // 15 km/h, top speed with an empty tank or a dead engine or transmission; a truck this slow raises no dust
   minSpeedCap: 1, // a heavy load never pushes max speed below this
   collisionMinImpact: 1.5, // slower bumps deal no damage
   // A crash gives each truck ramDamage × impact² in tiles per turn × the other body's share of both masses,
@@ -58,10 +58,15 @@ export const RULES = {
   maxKillWrecks: 12, // oldest wrecks from kills are cleared past this, so obstacles do not pile up
 
   // Supplies, per turn
-  suppliesPerTurn: 0.03, // at base heat; a daytime Bowl to Nose crossing uses under 60% of the starting supplies, leaving room for stops
+  suppliesPerTurn: 0.015, // at base heat; a full load lasts about 550 daytime turns, enough to explore off the roads
   suppliesCap: 20,
+  suppliesLow: 4, // the HUD warns at or below this, about 110 daytime turns before running out
   starveDamage: 5, // character health lost per turn without supplies
+  starveFloor: 30, // starving stops here, so only cab damage can kill
   maxHealth: 100,
+  healPerTurn: 1, // health a parked player with supplies regains per turn; from the starve floor to full in 70 turns
+  healSupplies: 0.01, // supplies spent per turn of healing, on top of the normal drain
+  townHealMult: 5, // healing multiplier at a town, where the driver rests in a bed
 
   // Progress
   xpPerLevel: 100, // level n needs n * xpPerLevel more
@@ -70,10 +75,7 @@ export const RULES = {
   discoverXp: 25,
   tradeXpPerProfit: 0.3, // xp per money unit of profit on a sale
 
-  // Defeat
-  defeatMoneyLoss: 0.5,
-  defeatPatch: 0.25, // share of max hp broken core parts and the engine get back after defeat
-  defeatHealth: 50,
-  defeatClearRadius: 15, // robbers leave the truck after the fight
-  defeatSupplies: 4, // enough to survive the walk back after patching up
+  // Knockout
+  defeatPatch: 0.25, // share of max hp broken core parts get back when the player wakes from a knockout
+  knockoutMaxTurns: 30, // a knockout ends after this many turns even if a hostile idles in sight
 };

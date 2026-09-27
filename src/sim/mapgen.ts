@@ -75,7 +75,10 @@ function placeRoadWrecks(world: World, out: Obstacle[]): void {
     const t = randRange(world, 0.2, 0.8);
     const a = road[seg];
     const b = road[seg + 1];
-    const pos = { x: a.x + (b.x - a.x) * t + randRange(world, -0.5, 0.5), y: a.y + (b.y - a.y) * t + randRange(world, -0.5, 0.5) };
+    // On the shoulder, left or right of the center line, so traffic keeps an open lane past it.
+    const side = (randInt(world, 0, 1) * 2 - 1) * randRange(world, O.roadWreckShoulder[0], O.roadWreckShoulder[1]) * (REGION.roadWidth / 2);
+    const len = dist(a, b);
+    const pos = { x: a.x + (b.x - a.x) * t - ((b.y - a.y) / len) * side, y: a.y + (b.y - a.y) * t + ((b.x - a.x) / len) * side };
     const r = randRange(world, 0.55, 0.8);
     if (!clearOfSites(pos, r) || overlapsAny(out, pos, r) || onBridge(pos, r)) continue;
     out.push({ id: `wreck${placed}`, pos, r, kind: 'wreck' });

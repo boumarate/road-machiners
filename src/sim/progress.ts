@@ -2,6 +2,7 @@
 
 import { RULES } from '../data/rules';
 import type { SkillId, World } from './types';
+import { requireActivePlayer } from './world';
 
 // Total XP needed to reach `level`. Level 2 needs 1 * xpPerLevel, level 3 needs 3 * xpPerLevel.
 export function xpForLevel(level: number): number {
@@ -21,6 +22,7 @@ export function gainXp(world: World, amount: number, reason: string): void {
 }
 
 export function spendSkillPoint(world: World, skill: SkillId): void {
+  requireActivePlayer(world);
   const p = world.player;
   if (p.skillPoints <= 0) throw new Error('No skill points to spend');
   if (p.skills[skill] >= RULES.maxSkillLevel) throw new Error(`${skill} is already at max level`);

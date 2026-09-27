@@ -4,7 +4,7 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { partDef } from '../data/parts';
 import { makePart } from './factory';
-import { goodsCount } from './grid';
+import { goodsCount, isLoot } from './grid';
 import { addGoods, stowPart } from './inventory';
 import { chance, randInt } from './rng';
 import { vehicleStats } from './stats';
@@ -81,8 +81,6 @@ export function collectSalvage(world: World, vehicle: Vehicle, stockId: string, 
 // A wreck keeps its mounted non-core parts at their current HP. Built-in core parts are wrecked
 // beyond mounting, so they turn into the parts good instead, at a data rate off their remaining HP.
 export function createWreckSalvage(world: World, vehicle: Vehicle): void {
-  const id = `wreck-${vehicle.id}`;
-  if (world.salvage.some((stock) => stock.id === id)) throw new Error(`Duplicate wreck salvage ${id}`);
   const goods = goodsCount(vehicle);
   const parts: PartInstance[] = [];
   let coreScrap = 0;
@@ -92,6 +90,25 @@ export function createWreckSalvage(world: World, vehicle: Vehicle): void {
     else parts.push(item.part);
   }
   if (coreScrap > 0) goods.parts = (goods.parts ?? 0) + coreScrap;
-  world.salvage.push({ id, pos: { ...vehicle.pos }, radius: vehicleStats(world, vehicle).radius * RULES.wreckRadiusScale, goods, parts });
+  addVehicleStock(world, vehicle, `wreck-${vehicle.id}`, goods, parts);
   vehicle.items = vehicle.items.filter((item) => item.kind === 'part' && partDef(item.part.defId).kind === 'core');
+}
+
+// A knocked-out truck is stripped where it stands. Every loot item moves to a stock, and the
+// built-in core parts stay mounted. The turn keeps the id unique over repeated knockouts.
+export function createKnockoutSalvage(world: World, vehicle: Vehicle): void {
+  const loot = vehicle.items.filter((item) => isLoot(vehicle.chassisId, item));
+  const goods: Record<string, number> = {};
+  const parts: PartInstance[] = [];
+  for (const item of loot) {
+    if (item.kind === 'good') goods[item.good] = (goods[item.good] ?? 0) + 1;
+    else parts.push(item.part);
+  }
+  addVehicleStock(world, vehicle, `wreck-${vehicle.id}-${world.turn}`, goods, parts);
+  vehicle.items = vehicle.items.filter((item) => !loot.includes(item));
+}
+
+function addVehicleStock(world: World, vehicle: Vehicle, id: string, goods: Record<string, number>, parts: PartInstance[]): void {
+  if (world.salvage.some((stock) => stock.id === id)) throw new Error(`Duplicate wreck salvage ${id}`);
+  world.salvage.push({ id, pos: { ...vehicle.pos }, radius: vehicleStats(world, vehicle).radius * RULES.wreckRadiusScale, goods, parts });
 }

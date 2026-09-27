@@ -49,6 +49,7 @@ function spawnOne(world: World, tpl: NpcTemplate): boolean {
         goal: null,
         home: { ...pos },
         stepIndex: 0,
+        refusedTow: false,
       },
     });
     world.vehicles.push(v);

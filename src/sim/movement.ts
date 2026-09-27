@@ -16,8 +16,10 @@ const EPS = 0.01;
 
 type Mover = { v: Vehicle; s: VehicleStats; steer: Steer; stopped: boolean; prev: Pose };
 
+// The towed player does not drive: its tower places it after this step.
 export function resolveMovement(world: World): void {
-  const movers: Mover[] = world.vehicles.map((v) => {
+  const drivers = world.vehicles.filter((v) => !(v.id === world.player.vehicleId && world.player.tow?.hitched));
+  const movers: Mover[] = drivers.map((v) => {
     const s = vehicleStats(world, v);
     return { v, s, steer: moveSteer(world, v, s), stopped: false, prev: { x: v.pos.x, y: v.pos.y, heading: v.heading } };
   });

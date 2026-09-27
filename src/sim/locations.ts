@@ -13,7 +13,7 @@ import { locationAt } from './sites';
 import type { GridItem, PartInstance, SalvageStock, World } from './types';
 import { tileCenter } from './vision';
 import { dist, type Vec } from './vec';
-import { update } from './world';
+import { playerCommand } from './world';
 
 // A site is discovered once the player sees any tile inside it. Buildings and wrecks can hide the center.
 export function discoverSites(world: World): void {
@@ -70,7 +70,7 @@ export function canLoot(world: World): boolean {
 
 // Starts a timed search of the reachable stock. When it ends, the stock opens for looting.
 export function scavenge(world: World): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     if (!canScavenge(w)) throw new Error('Nothing unsearched in reach');
     beginSearch(w, playerVehicle(w), salvageHere(w)!.id);
   });
@@ -80,7 +80,7 @@ export type LootPick = { kind: 'part'; partId: string } | { kind: 'good'; good: 
 
 // Moves one loot item from a searched stock to a chosen grid spot.
 export function takeLoot(world: World, stockId: string, pick: LootPick, to: Spot): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     const stock = requireLootable(w, stockId);
     const me = playerVehicle(w);
     const item: GridItem = pick.kind === 'part'
@@ -97,7 +97,7 @@ export function takeLoot(world: World, stockId: string, pick: LootPick, to: Spot
 
 // Moves everything that fits from a searched stock into the grid. The rest stays behind.
 export function takeAllLoot(world: World, stockId: string): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     requireLootable(w, stockId);
     collectSalvage(w, playerVehicle(w), stockId, Infinity);
   });

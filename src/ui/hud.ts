@@ -5,7 +5,7 @@ import { corePart, coreParts, mountedParts } from "../sim/grid";
 import type { Job, Vehicle, World } from "../sim/types";
 import { el, panel } from "./dom";
 import { eventText, formatNpcActivity } from "./format";
-import { getHudReadout } from "./hud-readout";
+import { getHudReadout, getRescueReadout, moneyLabel } from "./hud-readout";
 import { createIcon, createSpeedDial, type IconName } from "./icons";
 import { kph } from "./units";
 
@@ -17,6 +17,10 @@ type HudActions = {
   openCharacter: () => void;
   toggleManual: () => void;
   toggleAutoRepair: () => void;
+  acceptTow: () => void;
+  refuseTow: () => void;
+  unhitch: () => void;
+  setBeacon: (on: boolean) => void;
   isBusy: () => boolean;
 };
 const RESOURCE_ICONS: IconName[] = [
@@ -49,6 +53,7 @@ export class Hud {
   private help = panel("help");
   private action = panel("action");
   private toastBox = panel("toast");
+  private rescue = panel("rescue");
   private toastTimer: number | null = null;
   private lines: { text: string; cls: string }[] = [];
 
@@ -56,6 +61,7 @@ export class Hud {
     this.info.style.display = "none";
     this.info.append(this.infoBody);
     this.toastBox.style.display = "none";
+    this.rescue.style.display = "none";
     this.log.replaceChildren(
       el("h3", {}, "Log"),
       el("div", { class: "dim" }, "Drive out. Watch for raiders."),
@@ -140,6 +146,60 @@ export class Hud {
         ),
       );
     }
+  }
+
+  // The knockout banner, a tow offer, the tow in progress, or the beacon switch of a stranded truck.
+  renderRescue(w: World): void {
+    const r = getRescueReadout(w);
+    this.rescue.style.display = r ? "" : "none";
+    if (!r) return this.rescue.replaceChildren();
+    const beacon = (on: boolean) =>
+      el(
+        "button",
+        {
+          class: on ? "on" : "",
+          "aria-pressed": String(on),
+          onclick: () => this.actions.setBeacon(!on),
+          title: "Call for a tow by radio. Raiders hear it too.",
+        },
+        on ? "Beacon on" : "Beacon off",
+      );
+    const buttons = (...children: HTMLElement[]) =>
+      el("div", { class: "rescue-buttons" }, ...children);
+    if (r.kind === "knockedOut")
+      this.rescue.replaceChildren(
+        el("h3", { class: "bad" }, "Knocked out"),
+        el("div", { class: "dim" }, "Looters strip the truck. You come to when they leave."),
+      );
+    if (r.kind === "offer")
+      this.rescue.replaceChildren(
+        el("h3", {}, "Tow offer"),
+        el("div", {}, `${r.tower} tows you to ${r.town}.`),
+        el("div", {}, `Fee ${moneyLabel(r.fee)}, paid on arrival.`),
+        ...(r.debt ? [el("div", { class: "bad" }, "You go into debt.")] : []),
+        buttons(
+          el("button", { onclick: () => this.actions.acceptTow() }, "Accept"),
+          el("button", { onclick: () => this.actions.refuseTow() }, "Refuse"),
+          ...(r.beacon ? [beacon(true)] : []),
+        ),
+      );
+    if (r.kind === "towed")
+      this.rescue.replaceChildren(
+        el("h3", {}, "Under tow"),
+        el("div", {}, `${r.tower} tows you to ${r.town}.`),
+        el("div", { class: "dim" }, `Fee ${moneyLabel(r.fee)} on arrival. Unhitching is free.`),
+        buttons(el("button", { onclick: () => this.actions.unhitch() }, "Unhitch")),
+      );
+    if (r.kind === "stranded")
+      this.rescue.replaceChildren(
+        el("h3", {}, "Stranded"),
+        el(
+          "div",
+          { class: "dim" },
+          r.beacon ? "Calling for a tow. Raiders hear it too." : "The truck can only crawl.",
+        ),
+        buttons(beacon(r.beacon)),
+      );
   }
 
   renderTop(w: World): void {
@@ -277,7 +337,7 @@ export class Hud {
       const line = eventText(w, e);
       if (line)
         this.lines.unshift({ text: `T${w.turn} ${line.text}`, cls: line.cls });
-      if (line && (e.t === "defeat" || e.t === "levelUp" || e.t === "discover"))
+      if (line && (e.t === "knockout" || e.t === "levelUp" || e.t === "discover"))
         this.toast(line.text);
     }
     this.lines = this.lines.slice(0, LOG_LINES);

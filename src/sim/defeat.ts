@@ -1,48 +1,54 @@
-// After defeat, the robbers leave the player beside a field-patched truck.
+// A lost fight knocks the player out: the truck is stripped into a stock that anyone can loot,
+// and the driver wakes once no foe is watching. Health at 0 ends the run.
 
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { playerVehicle } from "./damage";
-import { isHostile } from "./combat";
+import { isFoe } from "./combat";
 import { corePart, mountedParts } from "./grid";
-import { removeAllGoods, removeSpareParts } from "./inventory";
+import { cancelJob } from "./jobs";
+import { createKnockoutSalvage } from "./salvage";
 import type { World } from "./types";
-import { dist } from "./vec";
+import { canVehicleSee } from "./vision";
 
-export function checkDefeat(world: World): void {
-  const me = playerVehicle(world);
-  if (corePart(me, "cab").hp > 0 && world.player.health > 0) return;
+export function checkDeath(world: World): void {
   const p = world.player;
-  const lost = Math.floor(p.money * RULES.defeatMoneyLoss);
-  p.money -= lost;
-  p.health = Math.max(p.health, RULES.defeatHealth);
+  if (p.health > 0 || p.state === "dead") return;
+  p.state = "dead";
+  world.events.push({ t: "death" });
+}
+
+export function checkKnockout(world: World): void {
+  const p = world.player;
+  const me = playerVehicle(world);
+  if (p.state !== "active" || corePart(me, "cab").hp > 0) return;
+  createKnockoutSalvage(world, me);
+  p.state = "knockedOut";
+  p.knockoutTurns = 0;
   p.knockouts++;
-  p.fuel = 0;
-  p.supplies = Math.max(p.supplies, RULES.defeatSupplies);
-  removeAllGoods(me);
-  removeSpareParts(me);
-  for (const part of mountedParts(me)) {
-    const def = partDef(part.defId);
-    if (part.hp === 0 && (def.kind === "core" || def.kind === "engine"))
-      part.hp = Math.max(1, Math.round(def.hp * RULES.defeatPatch));
-  }
-  me.order = null;
-  me.speed = 0;
+  // The driver is out, so the truck brakes to a stop instead of coasting on.
+  me.order = { kind: "brake" };
   me.weaponOrders = {};
   me.trail = [];
-  for (const v of world.vehicles.filter(
-    (x) => isHostile(me, x) && dist(x.pos, me.pos) < RULES.defeatClearRadius,
-  )) {
-    world.vehicles = world.vehicles.filter((x) => x.id !== v.id);
-    world.removed.push(v);
-    world.events.push({ t: "despawn", vehicle: v.id });
-  }
+  cancelJob(world, me);
   for (const v of world.vehicles)
     v.grudges = v.grudges.filter((id) => id !== me.id);
-  world.events.push({
-    t: "money",
-    amount: -lost,
-    reason: "robbed while knocked out",
-  });
-  world.events.push({ t: "defeat" });
+  world.events.push({ t: "knockout" });
+}
+
+// A foe counts even when it ignores the stripped truck, so the driver lies still until the looters leave.
+export function advanceKnockout(world: World): void {
+  const p = world.player;
+  if (p.state !== "knockedOut") return;
+  p.knockoutTurns++;
+  const me = playerVehicle(world);
+  const watched = world.vehicles.some(
+    (v) => isFoe(v, me) && canVehicleSee(world, v, me.pos),
+  );
+  if (watched && p.knockoutTurns < RULES.knockoutMaxTurns) return;
+  for (const part of mountedParts(me, "core"))
+    if (part.hp === 0)
+      part.hp = Math.max(1, Math.round(partDef(part.defId).hp * RULES.defeatPatch));
+  p.state = "active";
+  world.events.push({ t: "wake" });
 }

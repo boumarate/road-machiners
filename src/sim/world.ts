@@ -10,7 +10,8 @@ import { generateObstacles } from './mapgen';
 import { buildTerrain } from './terrain';
 import { planNpcOrders } from './ai';
 import { assignAutoOrders, fireWeapons, isHostile, resolveDestroyed } from './combat';
-import { checkDefeat } from './defeat';
+import { advanceKnockout, checkDeath, checkKnockout } from './defeat';
+import { healPlayer } from './health';
 import { fireGuards } from './guards';
 import { discoverSites, useOasis } from './locations';
 import { resolveMovement } from './movement';
@@ -19,6 +20,7 @@ import { spawnInitial, spawnNpcs } from './spawn';
 import { initializeSalvage } from './salvage';
 import { timed } from '../perf';
 import { resolveNpcActivities } from './npc-activities';
+import { checkBeacon, checkTower, followTower } from './tow';
 import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
 import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
@@ -60,6 +62,10 @@ export function newWorld(seed: number, kit: StartKit): World {
       storage: [],
       costBasis: { ...kit.costBasis },
       knockouts: 0,
+      state: 'active',
+      knockoutTurns: 0,
+      tow: null,
+      beacon: false,
       explored: new Uint8Array(REGION.size * REGION.size),
       visible: [],
       contacts: [],
@@ -118,8 +124,35 @@ export function update(world: World, fn: (draft: World) => void): World {
   return draft;
 }
 
+// Whether player commands are allowed now. The UI checks it before issuing one.
+export function playerCanAct(world: World): boolean {
+  return world.player.state === 'active' && !world.player.tow?.hitched;
+}
+
+// Player commands need an awake, living driver who is not on a tow rope. Unhitch checks the rope itself.
+export function requireActivePlayer(world: World): void {
+  if (world.player.state !== 'active') throw new Error(`Player is ${world.player.state}`);
+  if (world.player.tow?.hitched) throw new Error('Player is towed');
+}
+
+// Turns run on their own while the player cannot act, knocked out or towed. They also run while the player waits
+// on the beacon: parked with no move order and no offer open. A beacon wait is too many turns to end by hand.
+export function autoRuns(world: World): boolean {
+  const p = world.player;
+  if (p.state === 'knockedOut' || p.tow?.hitched === true) return true;
+  const me = playerVehicle(world);
+  const parked = me.speed <= RULES.parkedSpeed && (me.order === null || me.order.kind === 'brake');
+  return p.state === 'active' && p.beacon && parked && p.tow === null;
+}
+
+// A player command: rejected unless the player is active and not towed, then applied like any update.
+export function playerCommand(world: World, fn: (draft: World) => void): World {
+  requireActivePlayer(world);
+  return update(world, fn);
+}
+
 export function setMoveOrder(world: World, order: MoveOrder | null): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     playerVehicle(w).order =
       order && order.kind !== "brake"
         ? {
@@ -138,11 +171,13 @@ export function endTurn(
   world: World,
   move: (w: World) => void = resolveMovement,
 ): World {
+  if (world.player.state === 'dead') throw new Error('The player is dead; no more turns run');
   return timed('turn', () => update(world, (w) => {
     w.turn++;
     advanceWeather(w);
     planNpcOrders(w);
     move(w);
+    followTower(w);
     applyWear(w);
     advanceEngineHeat(w);
     advanceDust(w);
@@ -153,12 +188,17 @@ export function endTurn(
     fireWeapons(w);
     fireGuards(w);
     consumeSupplies(w);
+    healPlayer(w);
     leakFuel(w);
     resolveDestroyed(w);
+    checkTower(w);
+    checkBeacon(w);
     resolveNpcActivities(w);
     discoverSites(w);
     useOasis(w);
-    checkDefeat(w);
+    checkDeath(w);
+    advanceKnockout(w);
+    checkKnockout(w);
     spawnNpcs(w);
     refreshVision(w);
   }));
@@ -169,7 +209,7 @@ export function setWeaponOrder(
   weaponId: string,
   order: WeaponOrder | null,
 ): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     const me = playerVehicle(w);
     if (!vehicleStats(w, me).weapons.some((m) => m.part.id === weaponId))
       throw new Error(`Player has no weapon ${weaponId}`);
@@ -190,7 +230,7 @@ export function setWeaponOrder(
 
 // Manual mode: the player's truck skips the route planner and drives straight at its order's point.
 export function setDirect(world: World, on: boolean): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     playerVehicle(w).direct = on;
   });
 }

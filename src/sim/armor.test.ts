@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
 import { laneCount, sideToward, walkLane } from './armor';
 import { resolveDestroyed } from './combat';
-import { checkDefeat } from './defeat';
+import { advanceKnockout, checkKnockout } from './defeat';
 import { corePart, coreParts, gridOf, mountedItems, mountedParts } from './grid';
 import { vehicleStats } from './stats';
 import { leakFuel } from './supplies';
@@ -124,7 +124,7 @@ describe('knockout', () => {
   it('an NPC with a dead cab becomes a wreck', () => {
     const w = emptyWorld();
     const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 34, y: 30 });
-    buggy.brain = { templateId: 'buggy', activity: null, goal: null, home: buggy.pos, stepIndex: 0 };
+    buggy.brain = { templateId: 'buggy', activity: null, goal: null, home: buggy.pos, stepIndex: 0, refusedTow: false };
     resolveDestroyed(w);
     expect(w.vehicles.some((v) => v.id === buggy.id)).toBe(true);
     corePart(buggy, 'cab').hp = 0;
@@ -133,27 +133,27 @@ describe('knockout', () => {
     expect(w.obstacles.some((o) => o.id === `wreck-${buggy.id}`)).toBe(true);
   });
 
-  it('player cab death triggers defeat and patches broken core parts and the engine', () => {
+  it('player cab death knocks the player out, and waking patches broken core parts', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
     const cab = corePart(me, 'cab');
     const wheel = coreParts(me, 'wheel')[0];
-    const engine = mountedParts(me, 'engine')[0];
     cab.hp = 0;
     wheel.hp = 0;
-    engine.hp = 0;
-    checkDefeat(w);
-    expect(w.events.some((e) => e.t === 'defeat')).toBe(true);
+    checkKnockout(w);
+    expect(w.events.some((e) => e.t === 'knockout')).toBe(true);
+    expect(mountedParts(me, 'engine')).toEqual([]);
+    advanceKnockout(w);
+    expect(w.events.some((e) => e.t === 'wake')).toBe(true);
     expect(cab.hp).toBe(Math.max(1, Math.round(partDef('cab').hp * RULES.defeatPatch)));
     expect(wheel.hp).toBeGreaterThan(0);
-    expect(engine.hp).toBeGreaterThan(0);
   });
 
-  it('a hurt but working cab is no defeat', () => {
+  it('a hurt but working cab is no knockout', () => {
     const w = emptyWorld();
     corePart(w.vehicles[0], 'cab').hp = 1;
-    checkDefeat(w);
-    expect(w.events.some((e) => e.t === 'defeat')).toBe(false);
+    checkKnockout(w);
+    expect(w.events.some((e) => e.t === 'knockout')).toBe(false);
   });
 });
 

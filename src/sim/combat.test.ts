@@ -15,7 +15,7 @@ function duel(targetPos = { x: 33, y: 30 }) {
   const w = emptyWorld();
   const me = w.vehicles[0];
   const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], targetPos, Math.PI);
-  buggy.brain = { templateId: 'buggy', activity: null, goal: null, home: targetPos, stepIndex: 0 };
+  buggy.brain = { templateId: 'buggy', activity: null, goal: null, home: targetPos, stepIndex: 0, refusedTow: false };
   const mg = vehicleStats(w, me).weapons[0];
   return { w, me, buggy, mg };
 }
@@ -124,7 +124,7 @@ describe('combat', () => {
     const { w, me } = duel();
     for (let i = 0; i < RULES.maxKillWrecks + 3; i++) {
       const b = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 10 + i * 2, y: 10 });
-      b.brain = { templateId: 'buggy', activity: null, goal: null, home: b.pos, stepIndex: 0 };
+      b.brain = { templateId: 'buggy', activity: null, goal: null, home: b.pos, stepIndex: 0, refusedTow: false };
       corePart(b, 'cab').hp = 0;
       b.lastHitBy = me.id;
       resolveDestroyed(w);

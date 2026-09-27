@@ -122,13 +122,14 @@ export type NpcClass = {
   // A hostile contact reacts only while its circle is at most this many tiles wide. Beyond it the
   // noise is too vague to act on. Raiders have no limit: they hear as far as the player does.
   contactReactRadius: number;
+  tows: boolean; // offers to tow a stranded player to town
 };
 
 // Cab warnings begin at 30%. Recovery to half cab health prevents fight/flee oscillation.
 export const NPC_CLASSES: Record<Brain, NpcClass> = {
-  scavenger: { towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: 12 },
-  trader: { towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: true, contactReactRadius: 12 },
-  raider: { towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: Infinity },
+  scavenger: { towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: 12, tows: true },
+  trader: { towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: true, contactReactRadius: 12, tows: true },
+  raider: { towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: Infinity, tows: false },
 };
 
 export const NPC_UPKEEP = {

@@ -15,17 +15,19 @@ import type { MoveOrder, Pose, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
 
 // The player, and every vehicle within sight radius plus the live margin of the player, drives in physics.
+// A towed player has no body: it follows its tower through followTower instead.
 export function isNear(w: World, v: Vehicle): boolean {
-  if (v.id === w.player.vehicleId) return true;
+  if (v.id === w.player.vehicleId) return !w.player.tow?.hitched;
   return dist(v.pos, playerVehicle(w).pos) <= TERRAIN.vision.radius + PERF.liveMargin;
 }
 
 // Fuel limits the engine like the 2D rules: under the low-fuel share of the tank the top
 // speed halves, and a tank that cannot cover this turn's drive still lets the truck crawl.
+// A pushed truck burns no fuel, so its tank limits nothing.
 // Shared by the physics driver and far travel, so both plan the same speed.
 export function fuelLimited(w: World, v: Vehicle, s: VehicleStats, speed: number, order: MoveOrder | null): VehicleStats {
   const fuel = getResources(w, v).fuel;
-  const low = fuel > 0 && fuel < chassisDef(v.chassisId).fuelCap * RULES.lowFuelThreshold;
+  const low = s.fuelPerTile > 0 && fuel > 0 && fuel < chassisDef(v.chassisId).fuelCap * RULES.lowFuelThreshold;
   const limit = low ? Math.max(s.maxSpeed * RULES.lowFuelSpeedFactor, speed - s.brake) : s.maxSpeed;
   const capped = low ? { ...s, maxSpeed: limit } : s;
   const wanted = order?.kind === 'through' ? zoneSpeed(capped, speed, dist(v.pos, order.dest)) : Math.min(capped.maxSpeed, speed + capped.accel);

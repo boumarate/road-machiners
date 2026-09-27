@@ -7,7 +7,7 @@ import { findSpot, gridOf, isMounted, MOUNT_CELLS, placementError, type Spot } f
 import { requireTown, townAt } from './sites';
 import { vehicleStats } from './stats';
 import type { GridItem, PartInstance, Vehicle, World } from './types';
-import { update } from './world';
+import { playerCommand } from './world';
 
 // Mount a part on the first free fitting mount. Returns false when no mount has room.
 export function mountPart(world: World, v: Vehicle, part: PartInstance): boolean {
@@ -58,7 +58,7 @@ export function spareParts(v: Vehicle): PartInstance[] {
 }
 
 export function moveItem(world: World, itemId: string, to: Spot): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     const me = playerVehicle(w);
     const item = findItem(me, itemId);
     requireRemovable(item);
@@ -74,7 +74,7 @@ export function moveItem(world: World, itemId: string, to: Spot): World {
 
 // Town garage storage holds spare parts between trips.
 export function storePart(world: World, itemId: string): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     requireTown(w);
     const me = playerVehicle(w);
     const item = findItem(me, itemId);
@@ -87,7 +87,7 @@ export function storePart(world: World, itemId: string): World {
 }
 
 export function takeFromStorage(world: World, partId: string, to: Spot): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     requireTown(w);
     const me = playerVehicle(w);
     const i = w.player.storage.findIndex((p) => p.id === partId);
@@ -103,7 +103,7 @@ export function takeFromStorage(world: World, partId: string, to: Spot): World {
 
 // Throw goods out to make room. Parts are never dumped; store or sell them in town.
 export function dumpGood(world: World, itemId: string): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     const me = playerVehicle(w);
     if (findItem(me, itemId).kind !== 'good') throw new Error('Only goods can be dumped');
     me.items = me.items.filter((it) => it.id !== itemId);

@@ -110,6 +110,15 @@ export function corePart(v: Vehicle, role: CoreDef['role']): PartInstance {
   return parts[0];
 }
 
+// Anything a robber can take: goods, spare parts and mounted non-core parts. Mounted core parts are built in.
+export function isLoot(chassisId: string, item: GridItem): boolean {
+  return item.kind === 'good' || partDef(item.part.defId).kind !== 'core' || !isMounted(chassisId, item);
+}
+
+export function hasLoot(v: Vehicle): boolean {
+  return v.items.some((item) => isLoot(v.chassisId, item));
+}
+
 export function goodsCount(v: Vehicle): Record<string, number> {
   const out: Record<string, number> = {};
   for (const it of v.items) if (it.kind === 'good') out[it.good] = (out[it.good] ?? 0) + 1;

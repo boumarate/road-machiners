@@ -16,19 +16,20 @@ export function hasSave(storage: Storage): boolean {
 
 // Saves leave out the terrain, which buildTerrain rebuilds from the seed. The 600-tile terrain alone is
 // about 10 MB of JSON, past the browser's local storage quota. 4 adds weather, jobs, contacts and dust.
-// 6 moves wheel cells. 7 adds engine heat, auto patch and a parts limit on repair jobs; 6 saves
-// migrate on load.
-const SAVE_VERSION = 7;
+// 6 moves wheel cells. 7 adds engine heat, auto patch and a parts limit on repair jobs. 8 adds the
+// player state, tows and the beacon. 6 and 7 saves migrate on load.
+const SAVE_VERSION = 8;
 
 export function loadWorld(storage: Storage): World | null {
   const raw = storage.getItem(SAVE_KEY);
   if (raw === null) return null;
   const save: unknown = JSON.parse(raw);
-  if (!save || typeof save !== 'object' || !('version' in save) || (save.version !== SAVE_VERSION && save.version !== 6)) {
+  if (!save || typeof save !== 'object' || !('version' in save) || ![6, 7, SAVE_VERSION].includes(save.version as number)) {
     throw new SaveError('Incompatible game save version');
   }
   if (!('world' in save) || !isWorld(save.world)) throw new SaveError('Invalid saved world');
   if (save.version === 6) migrateFrom6(save.world);
+  if (save.version === 6 || save.version === 7) migrateFrom7(save.world);
   const explored: unknown = save.world.player.explored;
   const tiles = save.world.size * save.world.size;
   if (!Array.isArray(explored) || explored.length !== tiles) throw new SaveError('Invalid saved explored tiles');
@@ -43,6 +44,17 @@ function migrateFrom6(world: Omit<World, 'terrain'>): void {
   world.player.autoRepair = true;
   for (const v of world.vehicles) {
     if (v.job?.kind === 'repair') v.job.parts = Number.MAX_SAFE_INTEGER;
+  }
+}
+
+// A version 7 world has an awake player with no tow offer and the beacon off. No driver has been refused.
+function migrateFrom7(world: Omit<World, 'terrain'>): void {
+  world.player.state = 'active';
+  world.player.knockoutTurns = 0;
+  world.player.tow = null;
+  world.player.beacon = false;
+  for (const v of world.vehicles) {
+    if (v.brain) v.brain.refusedTow = false;
   }
 }
 
@@ -64,10 +76,13 @@ function isWorld(value: unknown): value is Omit<World, 'terrain'> {
 export function saveWorld(storage: Storage, world: World, interval: number): void {
   if (!Number.isInteger(interval) || interval <= 0) throw new Error('Invalid save interval');
   if ((world.turn - 1) % interval !== 0) return;
+  // A dead run keeps its last save, so the player can load it.
+  if (world.player.state === 'dead') return;
   writeSave(storage, world);
 }
 
 export function writeSave(storage: Storage, world: World): void {
+  if (world.player.state === 'dead') throw new Error('Cannot save a world whose player is dead');
   const { terrain: _terrain, ...saved } = world;
   // JSON writes a typed array as an object keyed by index, so explored goes out as a plain list.
   const player = { ...saved.player, explored: Array.from(saved.player.explored) };

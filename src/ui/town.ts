@@ -100,7 +100,7 @@ export class TownScreen {
       el(
         "div",
         { class: "dim" },
-        `Money ${w.player.money}   Free cells ${freeCells(me)}`,
+        `${w.player.money < 0 ? `Debt ${-w.player.money}` : `Money ${w.player.money}`}   Free cells ${freeCells(me)}`,
       ),
       el("div", { class: "tabs" }, ...tabs),
       this.error ? el("div", { class: "bad" }, this.error) : el("div"),
