@@ -14,6 +14,8 @@ const NAMES = [
   'base_tractor',
   'base_wagon',
   'base_carrier',
+  'base_buggy',
+  'base_courier',
   'wmount_riser',
   'wreck',
   'rock',
