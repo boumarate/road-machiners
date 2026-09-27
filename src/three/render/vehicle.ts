@@ -164,7 +164,7 @@ export class VehicleView {
     const still = new THREE.Group();
     const onBody = v.items.filter((item) => onChassis(v, item));
     const base = baseModel(v.chassisId);
-    this.buildBase(v, body, base, still, paint, FACTION_COLORS[v.faction].cab, ramCells(v, onBody));
+    this.buildBase(v, body, base, still, paint, FACTION_COLORS[v.faction].cab, bumperlessCells(v, onBody));
     const wheelItems: PartItem[] = [];
     for (const item of onBody) {
       const surface = baseLevel(base, item, 'row');
@@ -222,8 +222,8 @@ export class VehicleView {
     });
   }
 
-  // The chassis base model at the collider center, and kit bumpers on its front and back row cells unless a ram covers them.
-  private buildBase(v: Vehicle, body: Body, name: ModelName, into: THREE.Group, paint: number, trim: number, rams: Set<string>): void {
+  // The chassis base model at the collider center, and kit bumpers on its front and back row cells unless a ram or cage covers them.
+  private buildBase(v: Vehicle, body: Body, name: ModelName, into: THREE.Group, paint: number, trim: number, bumperless: Set<string>): void {
     const obj = model(name);
     checkBaseFits(v.chassisId, body, obj);
     tint(obj, paint, 1);
@@ -237,7 +237,7 @@ export class VehicleView {
     const ends: [number, ModelName, number][] = [[0, 'bumper_front', 0], [grid.h - 1, 'bumper_rear', Math.PI]];
     for (const [y, bumperName, yaw] of ends) {
       for (let x = 0; x < grid.w; x++) {
-        if (grid.cells[y][x] === null || rams.has(`${x},${y}`)) continue;
+        if (grid.cells[y][x] === null || bumperless.has(`${x},${y}`)) continue;
         const c = cellCenter(v.chassisId, x, y);
         const bumper = model(bumperName);
         place(bumper, { pos: new THREE.Vector3(c.x, body.half.y, c.z), yaw, scale: new THREE.Vector3(1, stretch, 1) });
@@ -257,8 +257,8 @@ export class VehicleView {
 
   // Armor is authored as a front-edge row of N cells with its outer face at +x.
   // It turns to the side its cells lie on and stretches to their span. A spare armor part lies as a front or a left row on its row surface.
-  // A mounted plate hangs from the deck top over the base side. A mounted ram hangs from the chassis bottom,
-  // in the bumper's place. A mounted cage stands on the beltline over the body.
+  // A mounted plate or cage hangs from the deck top over the base side. A mounted cage or ram takes the bumper's place.
+  // A mounted ram hangs from the chassis bottom.
   private placeArmor(v: Vehicle, body: Body, item: PartItem, paint: number, mounted: boolean, surface: number): THREE.Object3D {
     const def = partDef(item.part.defId);
     const n = Math.max(def.w, def.h);
@@ -273,7 +273,7 @@ export class VehicleView {
     if (def.kind !== 'armor') throw new Error(`Part ${def.id} is not armor`);
     const obj = model(partModel(def.id));
     const height = new THREE.Box3().setFromObject(obj).max.y;
-    const hung = { plates: body.half.y - height, ram: -body.half.y, cage: body.half.y }[def.look];
+    const hung = { plates: body.half.y - height, ram: -body.half.y, cage: body.half.y - height }[def.look];
     const at = footprint(v, item, mounted ? hung : surface);
     place(obj, { pos: at.pos, yaw: SIDE_YAW[side], scale: new THREE.Vector3(depth / CELL.along, 1, span / (n * CELL.across)) });
     tint(obj, paint, toneOf(item));
@@ -463,15 +463,21 @@ function onChassis(v: Vehicle, item: GridItem): boolean {
   return inside === cells.length;
 }
 
-// Cells of mounted rams, which replace the bumper there.
-function ramCells(v: Vehicle, items: GridItem[]): Set<string> {
-  const rams = new Set<string>();
-  for (const item of items) {
-    if (item.kind !== 'part' || !isMounted(v.chassisId, item)) continue;
-    const def = partDef(item.part.defId);
-    if (def.kind === 'armor' && def.look === 'ram') for (const c of itemCells(item)) rams.add(`${c.x},${c.y}`);
-  }
-  return rams;
+// Looks of mounted armor that takes the bumper's place.
+const BUMPER_LOOKS: readonly string[] = ['ram', 'cage'];
+
+// True for a mounted ram or cage.
+function replacesBumper(v: Vehicle, item: GridItem): boolean {
+  if (item.kind !== 'part' || !isMounted(v.chassisId, item)) return false;
+  const def = partDef(item.part.defId);
+  return def.kind === 'armor' && BUMPER_LOOKS.includes(def.look);
+}
+
+// Cells of mounted rams and cages, which replace the bumper there.
+function bumperlessCells(v: Vehicle, items: GridItem[]): Set<string> {
+  const cells = new Set<string>();
+  for (const item of items.filter((it) => replacesBumper(v, it))) for (const c of itemCells(item)) cells.add(`${c.x},${c.y}`);
+  return cells;
 }
 
 // A base model's level under an item: the highest row or floor socket over its rows, in body meters.
