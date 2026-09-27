@@ -32,6 +32,11 @@ export function needsPatch(v: Vehicle): boolean {
   return brokenDriveParts(v).length > 0;
 }
 
+// A driver carrying enough parts fixes its own truck with a field repair and needs no one's help.
+export function canFixItself(world: World, v: Vehicle): boolean {
+  return partsHeld(v) >= patchPlan(world, { patcher: v, client: v }).parts;
+}
+
 export function patchPlan(world: World, { patcher, client }: Roles): PatchPlan {
   const mult = mechanicsMult(world, patcher);
   const plans = brokenDriveParts(client).map((p) => planPartRepair(p, PATCH.share, mult, Infinity, Infinity));

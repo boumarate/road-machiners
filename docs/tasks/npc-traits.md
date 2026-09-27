@@ -1,6 +1,6 @@
 # NPC behavior: traits, goals and states
 
-**Status:** executing
+**Status:** validating
 **Branch:** npc-traits (from defeat-rescue at 6619d53)
 **Worktree:** .worktrees/npc-traits
 **Goal:** In the running game, NPCs show traits in the hover panel. NPCs with the same traits make different choices. A scumbag scavenger scavenges, sometimes attacks a weaker player or NPC who has loot, and returns to scavenging after interruptions. A feud that goes quiet ends, and its hook runs. Tows run as states. Confirming needs a Playwright run and user sign-off.
@@ -40,7 +40,7 @@ A decision point is a moment when the NPC may change goals. It fires once per tr
 
 - `hostileSeen`: a new hostile comes in sight. Options: keep, fight, flee.
 - `contactHeard`: a new hostile contact beyond sight. Options: keep, investigate, flee.
-- `hurt`: the NPC took damage this turn. Options: keep, flee, fight back.
+- `attacked`: a shot, hit or miss, was aimed at the NPC or at a nearby visible faction mate. The subject is the shooter. Options: keep, flee, fight back.
 - `preySeen`: a new robbery target comes in sight. Options: keep, rob.
 - `strandedSeen`: a stranded player comes in sight. Options: keep, tow.
 - `resume`: an interruption goal popped. Options: resume, new.
@@ -53,7 +53,7 @@ The final weight is (base + adds) × multipliers × situation factor. Adds and m
 ### Chances
 A weight of 0 means only "cannot". An option is unavailable when it physically cannot happen: no working gun to fight, no affordable profitable trade, no loot on the target, the target out of sight, or a tower that is stranded itself. Every available option gets at least `MIN_CHANCE`, which is 1%. Its chance is MIN_CHANCE plus its weighted share of the rest. Judgments such as "looks stronger than me" or "near town guards" are weights, not availability. Multipliers and situation factors are always above 0. A trait or state lowers an option with a small multiplier and never removes it. So any NPC robs at 1% per chance, a trader starts a fight at 1%, and a turned-down tower offers again at 1%.
 
-`hurt` has a third option, fight back, aimed at whoever hit the NPC this turn. Traders never start fights by weight, but fight back sometimes.
+`attacked` has a fight back option aimed at the shooter. An NPC always returns fire at an attacker, even while fleeing. Traders never start fights by weight, but fight back sometimes.
 
 ### Fixed rules
 Survival stays deterministic. Low fuel, low supplies or cab damage below the service threshold pushes a service goal with no roll. An NPC with sale cargo and an empty stack sells before it rolls `idle`. A scavenge goal already ends when the cargo is full.
@@ -65,7 +65,7 @@ Survival stays deterministic. Low fuel, low supplies or cab damage below the ser
 - `trader` adds idle trade and strandedSeen tow, and sets hostileSeen fight to zero.
 - `raider` adds idle raid and contactHeard investigate, and knows the raider camps.
 - `scumbag` adds preySeen rob.
-- `coward` multiplies hurt flee and hostileSeen flee.
+- `coward` multiplies attacked flee and hostileSeen flee.
 
 Traits reach both layers. Weights at `idle` and `resume` shape long-term goals. Weights at the other decision points shape immediate reactions. Known sites and topics are the union over all traits.
 
@@ -325,13 +325,28 @@ Notes:
 - `loadWorld` checks no brain fields, so a malformed version 9 save loads and throws on the first turn.
 - A leftover `grudges` field in a save is ignored silently.
 
+### Re-verify after PH6
+
+Result: passed after fixes 872cc1b, fd6410e, 255ab39 and 964eca6.
+- CK1 — staged robbery in the browser — held. The rob weight was forced by rewriting the served data, because turns now run in a worker.
+- CK18 — a shot trader never fires back — held: it fires every turn while fleeing.
+- CK19 — a busy scavenger drops its work for an unrelated raider — held in 5 of 5 stagings.
+- CK20 — a damaged NPC never repairs — held on the first try. A drift of 0.7 tiles off the repair spot then stalled it for 17 turns. That broke, and 964eca6 fixes it.
+- CK21 — a robber rolls again on its own victim and may flee — broke, fixed in fd6410e. The same gap let a beacon tower roll to rob its client.
+- CK22 — a fleeing NPC picks a town behind its attacker — broke, and main has the same bug. Fixed in 255ab39.
+- CK13 — beacon tow — held.
+- CK14 — playtest — 3 of 3 passed after the fixes. An earlier 1-in-3 failure comes from `scripts/playtest.mjs` waiting a fixed 2600 ms against about 2420 ms of combat playback plus the turn time.
+- CK15 — perf — the first turn averages 131.1 ms on the branch against 131.5 ms on main at the same load. Boot misses its 2000 ms budget on both.
+Smoke: 1000 turns from the default seed gave 9 robberies, 1 loot and 46 NPC repair jobs.
+
 ## Code smells
+- `scripts/playtest.mjs` — waits a fixed 2600 ms per turn. A slow turn under load skips one turn and fails the run.
 - `src/sim/search.ts` `searchTurn` — throws when another collector or `clearOldWrecks` removes the stock during a search.
 - `src/sim/npc-activities.ts` `onPreySeen` and `src/sim/npc-decisions.ts` `robFactor` both run `isRobberyTarget`, a double guard for IV6.
 
 ## Conclusion
 
-Outcome: traits, the goal stack, weighted decisions with a 1% floor, states with hooks, robbery and loot, and the hover panel are built and verified at c2e170e. The goal waits on two things: user playtest sign-off, and integration with main's `npc-restraint` work, which rewrote the same NPC code after this branch last merged main.
+Outcome: traits, the goal stack, weighted decisions with a 1% floor, states with hooks, robbery and loot, the hover panel and main's npc-restraint behavior are built and verified at 964eca6. The goal waits on user playtest sign-off.
 
 Invariants:
 - IV1–IV5, IV8–IV13 — held under the CK checks in Verify.
@@ -343,7 +358,7 @@ Invariants:
 - AS3 — held: 33 far NPCs changed goals 731 times in 500 turns.
 
 ### Unknowns outcome
-- UK1 — still-open: starting weights are set. On the default seed, 1000 turns gave 1 robbery and 22 fight-backs. Playtest decides the rest.
+- UK1 — still-open: starting weights are set. On the default seed, 1000 turns gave 9 robberies after PH6. Playtest decides the rest.
 - UK2 — resolved: `noteHurt()` reads the turn's shot, guard and collision events at the end of the turn.
 - UK3 — resolved: the tow code was ported through three merges, including beacon and tow promises.
 
@@ -353,7 +368,6 @@ Review findings:
 - Critical and important: none. The reviewer flagged task-file drift, fixed in 5efaf6f.
 
 Future work:
-- Integrate main's `npc-restraint` (field repairs, restraint around unrelated hostiles, group force assessment, attack observations) into the decision system before merge.
 - `forceOption` no longer makes a choice certain because of the 1% floor. Tests rely on fixed seeds.
 - Heard contacts churn: about 1300 contactHeard rolls per 1000 turns.
 

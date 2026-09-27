@@ -117,7 +117,7 @@ export type DriverResources = {
 };
 
 export type NpcActivity = {
-  kind: 'scavenge' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate' | 'tow' | 'loot' | 'patch';
+  kind: 'scavenge' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate' | 'tow' | 'loot' | 'repair' | 'patch';
   targetId: string | null;
   destination: Vec | null;
   phase: "travel" | "act";
@@ -131,7 +131,9 @@ export type NpcBrain = {
     goals: NpcActivity[]; // goal stack, top last: a long-term goal at the bottom, interruptions above it
     noticed: Record<string, number>; // `<decision>:<vehicle id>` for subjects already decided on, to the turn last perceived
     hurt: number; // part damage taken last turn
-    attacker: string | null; // the vehicle whose shots did the most damage last turn, for fighting back
+    // Vehicles that shot at this driver or a nearby visible faction mate, while they stay visible hostiles. The value
+    // is true once the driver decided on the latest shots. Attackers may always be fired back at.
+    attackers: Record<string, boolean>;
     goal: Vec | null;
     home: Vec;
     stepIndex: number; // route progress for traders and scavengers

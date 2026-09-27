@@ -30,7 +30,7 @@ Parts is a trade good, bought and sold in towns like scrap or salt. It is the re
 
 A job is work that needs the truck parked for a number of turns: field repair or scavenging. The player has at most one job at a time. Driving before it ends cancels it and the turns already spent are lost. The HUD shows the current job and its turns left.
 
-Field repair fixes one damaged mounted part. It spends parts and restores HP up to a field cap below full, only when the job finishes. Each unit of parts restores the same share of any part's max HP, so a broken wheel and a broken cab cost the same. Mechanics shortens the job and cuts the parts it needs. A full repair to 100% still needs a town. The inventory panel shows a Patch button on a damaged part, with its turns and parts cost, disabled with the reason when the truck is moving or the grid lacks parts. NPCs keep their town upkeep and do not field repair.
+Field repair fixes one damaged mounted part. It spends parts and restores HP up to a field cap below full, only when the job finishes. Each unit of parts restores the same share of any part's max HP, so a broken wheel and a broken cab cost the same. Mechanics shortens the job and cuts the parts it needs. A full repair to 100% still needs a town. The inventory panel shows a Patch button on a damaged part, with its turns and parts cost, disabled with the reason when the truck is moving or the grid lacks parts. NPCs also use field-repair jobs and keep town upkeep. New NPCs carry up to two repair parts when their loadout has room and mass capacity. They retain these parts when selling cargo. A damaged NPC prefers nearby reachable shade, or repairs where it stopped if no shade is reachable or fuel is exhausted. Low supplies and a low but nonempty tank take priority over a repair detour.
 
 Auto patch is on by default and toggles with P. Whenever the player truck is parked and idle, it patches the most damaged part with one unit of parts at a time. Driving off cancels at most one short job. A repair job ends as cancelled once the grid holds no parts for it.
 
@@ -54,7 +54,7 @@ Weapons have range, reload time, scatter, a firing arc and a number of rounds pe
 
 There is no hull. A round enters from the side facing the shooter and walks the grid cell by cell. Each part it meets takes damage, and the part's armor uses up the round's penetration. An aimed shot targets one part's lane, and a near miss still hits where it lands. A part at 0 HP stops working. A dead weapon cannot fire. A dead engine or transmission limits speed to a crawl. Dead wheels cut speed and steering, and a holed tank leaks fuel. A destroyed cab ends the fight: an NPC truck becomes a wreck, and the player is knocked out.
 
-An auto mode assigns every weapon a body shot at the nearest hostile.
+Player auto mode assigns every weapon a body shot at a visible hostile. NPC weapons target their chosen opponent or a visible attacker that shot at them or a nearby faction mate. Retreat does not disable defensive fire. NPCs avoid initiating attacks in town guard range, but can defend themselves there. Guards still punish firing by their existing rules.
 
 ## Defeat
 
@@ -64,7 +64,7 @@ A broken cab knocks the player out while health is above 0. Every mounted part e
 
 While knocked out, turns run on their own and the player gives no orders. Looters search the stock. The player comes to when no hostile sees the truck, or after 30 turns. Broken built-in parts are patched to a quarter of their HP. What the looters left stays in the stock beside the truck.
 
-Raiders ignore a truck with nothing to take. A truck has loot when it holds goods, spare parts or mounted parts beyond the built-in ones. A grudge still makes a raider fight a stripped truck.
+Raiders ignore a truck with nothing to take. A truck has loot when it holds goods, spare parts or mounted parts beyond the built-in ones. A feud still makes a raider fight a stripped truck.
 
 A truck with no working engine, a broken transmission or an empty tank still moves at a crawl. The driver pushes it. Pushing burns no fuel, and a truck without a working engine makes no sound. A player truck that can only crawl is stranded.
 
@@ -92,7 +92,7 @@ Dust clouds are objects in the world. Every turn a truck moving faster than a cr
 
 A radio scanner is a part that mounts on a weapon cell, so it competes with a gun. It detects every moving vehicle across the map, through hills, and shows it as a steady blip. It is sold in towns.
 
-NPCs detect the player and each other with the same rules. Raiders drive toward a contact to find it, and give up on arrival or once they see the target, at which point the ordinary fight rule takes over. Traders and scavengers steer away from a hostile contact the same way they flee a visible one. Traders and scavengers ignore a very faint, far contact. Raiders act on any contact, so they hear the player as far as the player hears them.
+NPCs detect the player and each other with the same rules. Reaction requires a contact circle within the traits' uncertainty limit. Vague distant sounds stay audible without redirecting an NPC. Accurate scanner and emergency-beacon contacts stay useful from farther away. A useful hostile contact fires one decision: keep, investigate or flee. Raiders mostly investigate, and traders and scavengers mostly flee. An investigation keeps the first contact destination instead of following its moving center, and ends on arrival. A continuously useful contact does not start another investigation. A driver busy with trade, salvage, service or repairs mostly keeps on.
 
 ## World
 
@@ -114,11 +114,11 @@ The sun also heats the player's running engine, faster at higher speed. Airflow,
 
 ## NPC activities
 
-NPCs follow Space Rangers-style ordered rules: react to visible danger, address urgent upkeep, continue an unfinished activity, then choose class work. Classes share fixed knowledge of towns, salvage sites, and hunting grounds. They have no individual memory or live shared intelligence.
+NPC behavior has three layers. Traits are permanent and set the chances of choices. A goal stack keeps long-term work under interruptions like fights, flight, service and repairs, and the driver usually resumes that work once an interruption ends. Decision points pick reactions by weighted chance when a new hostile, contact, attack, prey or stranded player appears. An option the driver can take always keeps at least a 1% chance. Traits give fixed knowledge of towns, salvage sites and hunting grounds. Each NPC remembers the subjects it already decided on and the attackers still in sight. There is no live shared intelligence.
 
 NPCs spawn with equipment sampled from weighted tables for their role. The generator chooses a chassis, a fitting engine and weapon, then optional cargo parts, armor and goods. It respects mount space, rated mass and a chassis-plus-parts budget separate from the driver's wallet. Rare equipment has a lower weight among eligible choices. The same world seed and actions produce the same equipment. There is no separate loot roll on death.
 
-Scavengers collect finite salvage, sell cargo, and fight manageable hostiles or flee. Traders buy profitable cargo while reserving upkeep money and flee from threats. Raiders search hunting grounds, fight, collect wreck cargo, and sell it in towns. Raiders buy fuel, supplies and repairs at their nearest camp, and flee to a camp or a town. A camp buys no cargo, so a raider without money sells its cargo in town first. Each NPC pays for fuel, supplies, and repairs from its own wallet. Inspection shows its activity and reason.
+Scavengers collect finite salvage and sell cargo. Idle scavengers mostly fight manageable hostiles and flee stronger ones. A healthy driver busy with work mostly keeps on when a hostile appears that is not aimed at it or a nearby faction mate. Towing retains its safety rule: a tower drops a tow when it takes on a fight or flees. A shot at a driver or a nearby visible faction mate, hit or miss, prompts a decision to fight back, flee or rarely keep on. Damaged NPCs react to visible hostiles before starting repairs. Local force assessment compares the target's nearby visible faction group against the NPC and nearby visible faction mates, rather than treating every visible enemy as one force. Traders buy profitable cargo while reserving upkeep money and flee from threats. Raiders search hunting grounds, fight, collect wreck cargo, and sell it in towns. Raiders buy fuel, supplies and repairs at their nearest camp, and flee to a camp or a town. A camp buys no cargo, so a raider without money sells its cargo in town first. Each NPC pays for fuel, supplies, and repairs from its own wallet. Inspection shows its activity and reason.
 
 Scavenging is a timed search: the truck parks at a stock and searches for turns in proportion to what the stock holds, with a progress bar. Moving the truck cancels the search. A finished search opens the stock beside the truck's grid, and the player drags in what they want. What they leave stays at the site for later. NPC scavengers take everything that fits. Landmark and convoy sites hold finite stock rolled at world creation: goods, parts and sometimes a spare mountable part. Destroyed NPCs leave a wreck with the same kind of stock. Their mounted parts join it at the HP they had; their built-in parts turn into the parts good instead. Collection takes only what fits and leaves the rest. Old wreck retirement removes their remaining stock. Empty sites do not regenerate.
 

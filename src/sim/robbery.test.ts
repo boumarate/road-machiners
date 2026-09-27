@@ -118,7 +118,8 @@ describe('robbery checks', () => {
     const me = w.vehicles[0];
     const robber = addScumbag(w, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
     expect(robWeight(w, robber, me, vehicleDanger(w, me))).toBe(FULL_ROB);
-    const bare = addScumbag(w, { x: 10, y: 12 }, ['stockEngine']);
+    // Out of the armed scumbag's group, so the bare one judges by its own guns alone.
+    const bare = addScumbag(w, { x: 15, y: 25 }, ['stockEngine']);
     expect(robWeight(w, bare, me, lowest(w, me))).toBeLessThanOrEqual(FULL_ROB * 0.1);
   });
 });
@@ -253,6 +254,22 @@ describe('scumbag robbery', () => {
     w.vehicles = w.vehicles.filter((v) => v.id !== target.id);
     forceOption('resume', 'resume');
     expect(thinkNpc(w, robber)).toMatchObject({ kind: 'scavenge', targetId: 'salvage-yard' });
+  });
+
+  it('a robber keeps its rob goal while its victim stays in sight, with no hostileSeen roll on the victim', () => {
+    const { w, robber, target } = passing();
+    robber.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' }];
+    forceOption('preySeen', 'rob');
+    // A hostileSeen roll on the victim would almost surely flee.
+    forceOption('hostileSeen', 'flee');
+    thinkNpc(w, robber);
+    for (let turn = 0; turn < 5; turn++) {
+      w.turn++;
+      w.events = [];
+      thinkNpc(w, robber);
+      expect(isRob(robber.brain!.goals.at(-1), target.id)).toBe(true);
+      expect(w.events.filter((e) => e.t === 'activity')).toEqual([]);
+    }
   });
 
   it('a robber stops its search to rob', () => {

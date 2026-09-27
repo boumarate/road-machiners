@@ -93,10 +93,13 @@ export function sellVehicleCargo(
   world: World,
   vehicle: Vehicle,
   townId: string,
+  retainedParts = 0,
 ): void {
   requireVehicleTown(world, vehicle, townId);
-  for (const [good, count] of Object.entries(goodsCount(vehicle)))
-    tradeGoods(world, vehicle, townId, good, count, "sell");
+  for (const [good, count] of Object.entries(goodsCount(vehicle))) {
+    const sellCount = good === 'parts' ? Math.max(0, count - retainedParts) : count;
+    if (sellCount > 0) tradeGoods(world, vehicle, townId, good, sellCount, "sell");
+  }
   const mounted = new Set(mountedParts(vehicle).map((part) => part.id));
   const resources = getResources(world, vehicle);
   vehicle.items = vehicle.items.filter((item) => {
@@ -110,9 +113,10 @@ export function serviceVehicle(
   world: World,
   vehicle: Vehicle,
   townId: string,
+  retainedParts = 0,
 ): void {
   requireVehicleTown(world, vehicle, townId);
-  sellVehicleCargo(world, vehicle, townId);
+  sellVehicleCargo(world, vehicle, townId, retainedParts);
   refuelAndRepair(world, vehicle);
 }
 

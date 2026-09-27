@@ -14,7 +14,8 @@ describe('NPC traits', () => {
     expect(profile.bases).toEqual(TRAITS.raider.bases);
     expect(profile.salvageSites).toEqual(TRAITS.scavenger.salvageSites);
     expect(profile.supplySites).toEqual(TRAITS.scavenger.supplySites);
-    expect(profile.contactReactRadius).toBe(Infinity);
+    expect(profile.contactReactRadius).toBe(TRAITS.raider.contactReactRadius);
+    expect(profileOf(['scumbag', 'scavenger']).contactReactRadius).toBe(TRAITS.scavenger.contactReactRadius);
     expect(profileOf(['trader'])).toEqual({ towns: TRAITS.trader.towns, bases: [], salvageSites: [], supplySites: TRAITS.trader.supplySites, contactReactRadius: TRAITS.trader.contactReactRadius, boldness: 1 });
     expect(profileOf(['scavenger', 'scumbag', 'coward']).boldness).toBeCloseTo(TRAITS.scumbag.boldness * TRAITS.coward.boldness);
   });

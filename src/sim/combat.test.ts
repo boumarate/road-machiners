@@ -2,7 +2,11 @@ import { START_KITS } from '../data/start';
 import { chooseOption, currentOptions } from './dialogue';
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
-import { fireWeapons, hitOdds, laneOfOffset, resolveDestroyed } from './combat';
+import { SPAWN } from '../data/npcs';
+import { REGION } from '../data/region';
+import { getResources } from './resources';
+import { siteGates } from './sites';
+import { autoOrders, fireWeapons, hitOdds, laneOfOffset, resolveDestroyed } from './combat';
 import { corePart, mountedItems, mountedParts } from './grid';
 import { isDriveObstacle } from './mapgen';
 import { stateOf } from './states';
@@ -438,4 +442,53 @@ describe('invariants under AI traffic', () => {
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
   }, 120_000); // Eighty turns include long-distance traffic across the 600-tile region.
+});
+
+describe('NPC attack records and defensive fire', () => {
+  it('records every shot at the driver or a nearby faction mate it sees as an attack, even a miss', () => {
+    const w = emptyWorld({ x: 80, y: 80 });
+    const npc = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 10, y: 10 });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 14, y: 10 });
+    const mate = addVehicle(w, 'scavengers', 'scout', [], { x: 12, y: 12 });
+    const far = addVehicle(w, 'scavengers', 'scout', [], { x: 10 + SPAWN.neighborHelp + 8, y: 10 });
+    const shootAt = (target: Vehicle) => {
+      w.events = [];
+      raider.weaponOrders = { [mountedParts(raider, 'weapon')[0].id]: { targetId: target.id, aim: 'body' } };
+      raider.pos = { x: target.pos.x + 4, y: target.pos.y };
+      fireWeapons(w);
+      expect(w.events.some((e) => e.t === 'shot' && e.target === target.id)).toBe(true);
+      getResources(w, target).health = RULES.maxHealth;
+      mountedParts(raider, 'weapon')[0].reload = 0;
+    };
+    shootAt(far);
+    expect(npc.brain!.attackers).toEqual({});
+    shootAt(mate);
+    expect(npc.brain!.attackers).toEqual({ [raider.id]: false });
+    npc.brain!.attackers[raider.id] = true;
+    shootAt(npc);
+    expect(npc.brain!.attackers).toEqual({ [raider.id]: false });
+  });
+
+  it('an NPC opens fire only on its fight target away from guards, and always on an attacker', () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const npc = addVehicle(w, 'raiders', 'scout', ['mg', 'stockEngine'], { x: 30, y: 30 });
+    npc.brain = npcBrain('buggy', npc.pos, ['raider']);
+    const prey = addVehicle(w, 'traders', 'scout', ['mg'], { x: 33, y: 30 });
+    const aimed = () => Object.values(npc.weaponOrders).map((order) => order.targetId);
+    autoOrders(w, npc);
+    expect(aimed()).toEqual([]);
+    npc.brain.goals = [{ kind: 'fight', targetId: prey.id, destination: { ...prey.pos }, phase: 'travel', reason: 'test fight' }];
+    autoOrders(w, npc);
+    expect(aimed()).toEqual([prey.id]);
+    const gate = siteGates(REGION.towns[0])[0];
+    npc.pos = { x: gate.x + 3, y: gate.y };
+    prey.pos = { ...gate };
+    autoOrders(w, npc);
+    expect(aimed()).toEqual([]);
+    npc.brain.goals = [{ kind: 'flee', targetId: prey.id, destination: { x: 100, y: 100 }, phase: 'travel', reason: 'test flee' }];
+    npc.brain.attackers = { [prey.id]: true };
+    autoOrders(w, npc);
+    expect(aimed()).toEqual([prey.id]);
+  });
 });

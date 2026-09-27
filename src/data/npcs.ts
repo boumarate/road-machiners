@@ -25,7 +25,6 @@ export type NpcLoadoutTable = {
   armor: Weighted<string | null>[];
   cargoPart: Weighted<string | null>[];
   goods: Weighted<CargoRoll | null>[];
-  spareParts: Weighted<number>[] | null; // units of the parts good carried for roadside patches, on top of the cargo; null carries none and rolls nothing
 };
 
 export type NpcTemplate = {
@@ -83,7 +82,6 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
-    spareParts: null,
   },
   gunwagon: {
     budget: 3500,
@@ -128,7 +126,6 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "batteries", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 2 }, weight: 1 },
     ],
-    spareParts: null,
   },
   trader: {
     budget: 3000,
@@ -176,8 +173,6 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "meds", count: 4 }, weight: 2 },
       { value: { good: "electronics", count: 4 }, weight: 1 },
     ],
-    // A patch takes one unit of parts per broken engine or gearbox, so most traders can patch a truck or two.
-    spareParts: [{ value: 0, weight: 1 }, { value: 2, weight: 3 }, { value: 4, weight: 2 }],
   },
   scavenger: {
     budget: 1800,
@@ -220,8 +215,6 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "batteries", count: 1 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
-    // Scavengers carry a few parts from their finds, enough for a patch or two.
-    spareParts: [{ value: 0, weight: 1 }, { value: 2, weight: 3 }, { value: 3, weight: 2 }],
   },
 };
 
@@ -294,14 +287,14 @@ export const SPAWN = {
   campSpread: 6, // distance beyond a camp gate for raider spawns; room for a full camp to spawn at once
   campAngle: 0.3, // radians either side of the track leaving a camp gate
   tries: 40,
-  neighborHelp: 10, // same-faction vehicles in this range join a feud
+  neighborHelp: 10, // same-faction vehicles in this range join a feud, witness attacks and count as one group in danger
 };
 
 // A decision point is a moment when an NPC may change goals. See src/sim/npc-decisions.ts.
 export type DecisionOptions = {
   hostileSeen: 'keep' | 'fight' | 'flee'; // a new hostile comes in sight
   contactHeard: 'keep' | 'investigate' | 'flee'; // a new hostile contact beyond sight
-  hurt: 'keep' | 'flee' | 'fightBack'; // damage taken last turn
+  attacked: 'keep' | 'flee' | 'fightBack'; // a shot at the driver or a nearby visible faction mate, hit or miss
   preySeen: 'keep' | 'rob'; // a new robbery target comes in sight
   strandedSeen: 'keep' | 'tow'; // a stranded player comes in sight
   patchDeal: 'paid' | 'ownParts' | 'free'; // the terms a driver names for a roadside patch; see src/sim/patch.ts
@@ -322,8 +315,9 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   hostileSeen: { keep: 1, fight: 2, flee: 1 },
   // Most drivers steer away from a hostile they only hear. Investigating more than rarely needs a trait.
   contactHeard: { keep: 1, investigate: 0, flee: 3 },
-  // Even odds to run from a hit worth NPC_BEHAVIOR.hurtFullFlee of the cab, keep going, or shoot back.
-  hurt: { keep: 1, flee: 1, fightBack: 1 },
+  // A shot mostly prompts defense or retreat. Shooting back is twice as likely as running from a miss, and keeping
+  // on is rare. Damage, a stronger shooter group and local force scale flee and fight back.
+  attacked: { keep: 0.5, flee: 1, fightBack: 2 },
   // Robbing more than rarely needs a trait.
   preySeen: { keep: 1, rob: 0 },
   // Towing more than rarely needs a trait.
@@ -385,8 +379,8 @@ export type Trait = {
   bases: string[]; // own camps that give fuel, supplies and repairs instead of towns
   salvageSites: string[];
   supplySites: string[];
-  // A hostile contact reacts only while its circle is at most this many tiles wide. Beyond it the
-  // noise is too vague to act on. Raiders have no limit: they hear as far as the player does.
+  // A contact is useful only while its circle is at most this many tiles wide. A vague distant sound stays audible
+  // without redirecting the driver. Scanner and beacon circles stay tight, so they stay useful from farther away.
   contactReactRadius: number;
   // Multiplies the driver's own danger when it judges another truck, for robbing and for fight or flee.
   // Traits multiply together. 1 judges trucks as they are.
@@ -396,35 +390,36 @@ export type Trait = {
 
 // An NPC knows the union of its traits' sites.
 export const TRAITS: Record<TraitId, Trait> = {
-  // Scavenging a known site beats waiting a hundredfold. Nine in ten scavengers help a stranded truck.
+  // Scavenging a known site beats waiting a hundredfold. Nine in ten scavengers help a stranded truck. An idle
+  // scavenger takes on a manageable hostile about nine times in ten: fight 4, times NPC_BEHAVIOR.manageableFight.
   scavenger: {
     towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
-    weights: { idle: { scavenge: { add: 10 } }, strandedSeen: { tow: { add: 9 } } },
+    weights: { idle: { scavenge: { add: 10 } }, strandedSeen: { tow: { add: 9 } }, hostileSeen: { fight: { add: 2 } } },
   },
-  // Traders rarely pick a fight: a fight weight of 2 drops to 0.01, about 1.5%. A shot trader returns fire at half
-  // the usual weight, and mostly runs. Trading beats salvage in sight 3 to 1. Nine in ten traders help a stranded
-  // truck.
+  // Traders rarely pick a fight: a fight weight of 2 drops to 0.004, about 1%, and to 0.02, about 2%, against a
+  // manageable hostile. A shot trader returns fire at a tenth of the usual weight, and mostly runs. Trading beats
+  // salvage in sight 3 to 1. Nine in ten traders help a stranded truck.
   trader: {
     towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
     weights: {
       idle: { trade: { add: 30 } }, strandedSeen: { tow: { add: 9 } },
-      hostileSeen: { fight: { mul: 0.005 } }, hurt: { fightBack: { mul: 0.5 } },
+      hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } },
     },
   },
-  // Raiders fight most hostiles they see and close in on most they hear. A raid ties with salvage in sight.
+  // Raiders fight most hostiles they see and close in on most useful contacts. A raid ties with salvage in sight.
   raider: {
-    towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], contactReactRadius: Infinity, boldness: 1,
+    towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], contactReactRadius: 12, boldness: 1,
     weights: { idle: { raid: { add: 10 } }, contactHeard: { investigate: { add: 12 } }, hostileSeen: { fight: { add: 8 } } },
   },
   // A scumbag robs about two targets in three it comes across: rob 2 against keep 1. Boldness 1.3 lets it rob a
   // truck that looks as dangerous as its own, and stand against one up to 30% stronger.
   scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, boldness: 1.3, weights: { preySeen: { rob: { add: 2 } } } },
-  // A coward runs three times as often from a new hostile or a hit, picks a fight half as often, and shoots back
+  // A coward runs three times as often from a new hostile or a shot, picks a fight half as often, and shoots back
   // at a third of the weight. Boldness 0.6 makes a truck that looks as dangerous as its own a threat, even at the
   // lowest misjudgment.
   coward: {
     towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, boldness: 0.6,
-    weights: { hostileSeen: { flee: { mul: 3 }, fight: { mul: 0.5 } }, hurt: { flee: { mul: 3 }, fightBack: { mul: 0.3 } } },
+    weights: { hostileSeen: { flee: { mul: 3 }, fight: { mul: 0.5 } }, attacked: { flee: { mul: 3 }, fightBack: { mul: 0.3 } } },
   },
 };
 
@@ -441,8 +436,17 @@ export const NPC_BEHAVIOR = {
   // 20 makes an outgunned raider run about two times in three, and an outgunned scavenger nearly always.
   threatFlee: 20,
   weakFlee: 20,
-  // Damage taken last turn, as a share of cab max HP, that gives the hurt flee option its base weight.
+  // Damage taken last turn, as a share of cab max HP, that adds the base weight to flee when attacked.
   hurtFullFlee: 0.1,
+  // A shot that did no damage gives flee this much of its base weight when attacked.
+  missFlee: 0.5,
+  // Fight and fight back times this when the hostile's local group looks no stronger than the driver's own. A
+  // driver busy with work gets it only when attacked, so it defends but does not start fights.
+  manageableFight: 5,
+  // Keep times this when a driver busy with work and not weak sees or hears a hostile that is not aimed at it or
+  // at a nearby faction mate. A scavenger at work then keeps on about 99 times in 100 beside an equal hostile, and
+  // about 94 times in 100 beside one it judges a threat.
+  keepWork: 400,
   // Turns a noticed subject stays remembered after it was last perceived. A heard engine drops out for a turn or
   // two when the truck slows or crosses behind the listener, and 3 turns bridges that without a fresh roll.
   noticeMemory: 3,
@@ -454,9 +458,14 @@ export const NPC_BEHAVIOR = {
   robStronger: 0.015,
   // Rob weight times this when the robber or target is within guard range of a town gate. Same drop as above.
   robNearGuards: 0.015,
+  // Fight weight at a new hostile times this near town guards. A raider's fight weight of 50 against manageable
+  // prey drops to 0.05, about 3%. Guards never lower fight back.
+  fightNearGuards: 0.001,
 };
 
 export const NPC_UPKEEP = {
+  repairParts: 2, // two field patches, kept out of sale cargo
+  shadeSearchRadius: 6, // a short local detour, rather than a journey while damaged
   lowFuel: RULES.lowFuelThreshold,
   lowSupplies: RULES.lowFuelThreshold,
   // Reserve one full tank and supply load before buying trade cargo.

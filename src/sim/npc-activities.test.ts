@@ -160,7 +160,7 @@ describe('NPC activities', () => {
     expect(topGoal(npc)?.kind).toBe('resupply');
   });
 
-  it('lets a healthy scavenger fight a nearby raider', () => {
+  it('lets an idle healthy scavenger fight a nearby raider', () => {
     const { w, npc } = createScavenger();
     addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 13, y: 10 });
     forceOption('hostileSeen', 'fight');
@@ -180,7 +180,22 @@ describe('NPC activities', () => {
     expect(topGoal(npc)?.kind).toBe('resupply');
   });
 
-  it('a raider heads toward a heard player', () => {
+  it('flees away from an attacker that stands between it and a known town', () => {
+    const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
+    const w = emptyWorld({ x: bowl.pos.x + 150, y: bowl.pos.y + 150 });
+    const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: bowl.pos.x + bowl.radius + 20, y: bowl.pos.y });
+    trader.brain = npcBrain('trader', trader.pos, ['trader']);
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: trader.pos.x - 5, y: trader.pos.y });
+    forceOption('hostileSeen', 'flee');
+    planNpcOrders(w);
+    const flee = topGoal(trader)!;
+    expect(flee.kind).toBe('flee');
+    const away = { x: flee.destination!.x - trader.pos.x, y: flee.destination!.y - trader.pos.y };
+    const toThreat = { x: raider.pos.x - trader.pos.x, y: raider.pos.y - trader.pos.y };
+    expect(away.x * toThreat.x + away.y * toThreat.y).toBeLessThan(0);
+  });
+
+  it('a raider investigates a nearby heard player', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const player = w.vehicles[0];
     player.speed = 4; // loud enough to be heard far past sight range
@@ -192,7 +207,7 @@ describe('NPC activities', () => {
     expect(topGoal(raider)?.targetId).toBe(player.id);
   });
 
-  it('a raider hears the player as far as the player hears it', () => {
+  it('a distant contact remains audible without redirecting a raider', () => {
     const w = emptyWorld({ x: 100, y: 300 });
     const player = w.vehicles[0];
     player.speed = 4;
@@ -201,8 +216,8 @@ describe('NPC activities', () => {
     forceOption('contactHeard', 'investigate');
     planNpcOrders(w);
     expect(contactsOf(w, raider, Infinity).some((c) => c.vehicleId === player.id)).toBe(true);
-    expect(topGoal(raider)?.kind).toBe('investigate');
-    expect(topGoal(raider)?.targetId).toBe(player.id);
+    expect(topGoal(raider)?.kind).toBe('raid');
+    expect(topGoal(raider)?.targetId).toBeNull();
   });
 
   it('a trader turns away from a heard raider', () => {

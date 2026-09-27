@@ -8,7 +8,7 @@ import { discoverSite } from './locations';
 import { SPAWN } from '../data/npcs';
 import { patchGoal, pushGoal, startTow, topGoal } from './npc-activities';
 import { createCargoSalvage, hasCargo } from './salvage';
-import { agreePatch, needsPatch, patchTerms } from './patch';
+import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
 import { npcProfile } from './npc-decisions';
 import { addState, endState, stateOf, towData } from './states';
 import { acceptOffer, playerTow, refuseOffer, strandedPlayerAt } from './tow';
@@ -71,7 +71,7 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   // A driver already on its way does not need asking.
   canTowPlayer: (world, npc) => strandedPlayerAt(world, npc) !== null && topGoal(npc)?.kind !== 'tow',
   playerNeedsPatch: (world) => needsPatch(playerVehicle(world)) && !inPatch(world, world.player.vehicleId),
-  npcNeedsPatch: (world, npc) => needsPatch(npc) && !inPatch(world, npc.id),
+  npcNeedsPatch: (world, npc) => needsPatch(npc) && !canFixItself(world, npc) && !inPatch(world, npc.id),
   hasDeal: (_world, _npc, vars) => vars.deal !== undefined,
   noDeal: (_world, _npc, vars) => vars.deal === undefined,
   // About to attack the player, who carries something worth taking.

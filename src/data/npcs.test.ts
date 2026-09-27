@@ -17,7 +17,7 @@ function nonPositiveMuls(tables: Record<string, TraitWeights>): string[] {
 
 describe('decision weight changes', () => {
   it('finds a mul of 0 in a table', () => {
-    expect(nonPositiveMuls({ spiteful: { hurt: { flee: { mul: 0 }, keep: { mul: 2 } }, idle: { wait: { add: 1 } } } })).toEqual(['spiteful.hurt.flee']);
+    expect(nonPositiveMuls({ spiteful: { attacked: { flee: { mul: 0 }, keep: { mul: 2 } }, idle: { wait: { add: 1 } } } })).toEqual(['spiteful.attacked.flee']);
   });
 
   it('every trait and state mul is above 0', () => {

@@ -51,7 +51,7 @@ export function addVehicle(w: World, faction: Faction, chassisId: string, parts:
 
 // A fresh NPC brain with no goals.
 export function npcBrain(templateId: string, home: Vec, traits: TraitId[]): NpcBrain {
-  return { templateId, traits, goals: [], noticed: {}, hurt: 0, attacker: null, goal: null, home: { ...home }, stepIndex: 0 };
+  return { templateId, traits, goals: [], noticed: {}, hurt: 0, attackers: {}, goal: null, home: { ...home }, stepIndex: 0 };
 }
 
 // Makes `option` the only option of `decision` that can carry weight until the test ends. Other options lose their

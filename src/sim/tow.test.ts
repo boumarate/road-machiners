@@ -9,7 +9,8 @@ import { canUseSite, siteGates } from './sites';
 import { getResources } from './resources';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
-import { topGoal } from './npc-activities';
+import { hasLoot } from './grid';
+import { thinkNpc, topGoal } from './npc-activities';
 import { addState, stateOf, towData } from './states';
 import { callVehicle, chooseOption, currentOptions, hangUp } from './dialogue';
 import { dropTow, isTowed, playerTow, setBeacon, unhitch } from './tow';
@@ -312,6 +313,24 @@ describe('emergency beacon', () => {
     const r = runUntil(w, 150, (x) => playerTow(x) !== null);
     expect(playerTow(r.w)?.holder).toBe(s.trader.id);
     expect(activitiesOf(r.events, s.trader.id)[0]).toMatchObject({ activity: 'tow', reason: 'help a stranded truck' });
+  });
+
+  it('a tower that set out for a beacon does not roll to rob its client on arrival', () => {
+    const s = stranded(player, { x: 130, y: 30 });
+    const w = setBeacon(s.w, true);
+    const trader = find(w, s.trader.id);
+    trader.brain!.traits = ['trader', 'scumbag'];
+    expect(hasLoot(playerVehicle(w))).toBe(true);
+    forceOption('strandedSeen', 'tow');
+    // A preySeen roll on the client would almost surely rob.
+    forceOption('preySeen', 'rob');
+    thinkNpc(w, trader);
+    expect(topGoal(trader)?.kind).toBe('tow');
+    trader.pos = { x: 40, y: 30 };
+    w.turn++;
+    thinkNpc(w, trader);
+    expect(topGoal(trader)?.kind).toBe('tow');
+    expect(stateOf(w, 'feud', trader.id, w.player.vehicleId)).toBeNull();
   });
 
   it('a trader outside the range ignores it', () => {

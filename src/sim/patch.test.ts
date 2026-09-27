@@ -162,6 +162,13 @@ describe('a stranded driver asking the player', () => {
     expect(w.player.talked[npc.id]).toEqual({ patchRequest: 'agreed' });
   });
 
+  it('a driver carrying the parts fixes its own truck instead of asking', () => {
+    const { w: start, npc } = brokenNpc();
+    addGoods(start, npc, 'parts', 2);
+    const w = endTurn(start);
+    expect(w.player.call).toBeNull();
+  });
+
   it('a refused request is not raised again', () => {
     const { w: start, npc } = brokenNpc();
     let w = endTurn(start);
