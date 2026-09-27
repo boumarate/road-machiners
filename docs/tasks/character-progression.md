@@ -1,6 +1,6 @@
 # Character progression
 
-**Status:** executing
+**Status:** validating
 **Branch:** feature/character-progression
 **Worktree:** .worktrees/character-progression
 **Goal:** Skills grow from use, perks change visible rules, and a headless progression simulator shows each skill's time to each level per player archetype. The user confirms the feel in play.
@@ -181,7 +181,6 @@ Notes: 4 stalls sit near map point (476 to 480, 150 to 175) on different seeds, 
 
 ## Code smells
 
-- src/sim/patch.ts:partsValue — prices an NPC client's parts with the player's buy price, so the player's Social skill lowers what an NPC pays (IV2).
 
 - src/ui/format.ts:formatNpcActivity — goal reasons such as a robbery goal can still hint at hidden traits.
 
@@ -202,6 +201,11 @@ Notes: 4 stalls sit near map point (476 to 480, 150 to 175) on different seeds, 
 - PH5 bots fire back, stop to cool the engine, work patch deals and use the beacon when stranded. Without these, bots broke down or went broke within a day. All bots use auto fire, not only the fighter.
 - PH5 a broke trader scavenges, and a scavenger with no stock left trades. Death ends a recording with a marker, and the report counts deaths per archetype.
 - PH5 `ram` never fires in recordings, because far travel has no crashes (AS1).
+
+### Review
+- Fixed: `patch.ts:partsValue` priced an NPC client's parts with the player's Social discount (IV2). It now uses the client's own trade price.
+- Fixed: a stale pointer to a perk file that does not exist.
+- Open: `replay.ts` repeats the day reset and XP bookkeeping of `practice()`, sharing only `xpFor()`. A change to one can drift from the other while the band test still passes.
 
 ### Hands-off decisions
 - make: mode switched to hands-off after PH5 on the user's request.
