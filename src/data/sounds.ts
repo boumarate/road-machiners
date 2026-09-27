@@ -51,7 +51,7 @@ const DEFS = {
   "explosion": { bus: "sfx", setup: "field", volume: 1, pitchJitter: 0.04, maxVoices: 2, loop: false, prompts: ["Truck fuel tank explodes, big fiery blast with falling metal debris."], seconds: 3 },
   // Generated horns come out thin and high. The files are generated takes run through ffmpeg
   // "asetrate=44100*0.55,aresample=44100,bass=g=8:f=120,volume=8dB,asoftclip=type=tanh" before import.
-  "horn": { bus: "sfx", setup: "field", volume: 0.8, pitchJitter: 0.05, maxVoices: 4, loop: false, prompts: ["Mad Max war rig horn: a huge rusted diesel truck blasts its twin air horns once, a deep booming low chord, brassy, gritty and overdriven, heavy as a freight train. Vehicle horn only, no music."], seconds: 1.5 },
+  "horn": { bus: "sfx", setup: "field", volume: 0.8, pitchJitter: 0, maxVoices: 4, loop: false, prompts: ["Mad Max war rig horn: a huge rusted diesel truck blasts its twin air horns once, a deep booming low chord, brassy, gritty and overdriven, heavy as a freight train. Vehicle horn only, no music."], seconds: 1.5 },
   "crash": { bus: "sfx", setup: "field", volume: 0.9, pitchJitter: 0.06, maxVoices: 2, loop: false, prompts: ["Two heavy steel trucks ram each other at speed: one hard, deep crunch of thick metal, a short scrape, then debris settling. Single impact."], seconds: 1.5 },
 
   // Loops.
@@ -94,6 +94,25 @@ const ENGINE_FILES: Record<string, string> = {
   carrier: "engine-3.ogg",
   tractor: "engine-3.ogg",
 };
+
+// Two recordings with fixed pitch profiles give each chassis a recognizable horn.
+const HORN_SOUNDS: Record<string, { file: string; rate: number }> = {
+  scout: { file: "horn-1.ogg", rate: 1 },
+  hauler: { file: "horn-2.ogg", rate: 0.82 },
+  buggy: { file: "horn-1.ogg", rate: 1.18 },
+  wagon: { file: "horn-2.ogg", rate: 0.92 },
+  courier: { file: "horn-2.ogg", rate: 1.18 },
+  van: { file: "horn-1.ogg", rate: 0.92 },
+  longbed: { file: "horn-2.ogg", rate: 1 },
+  carrier: { file: "horn-1.ogg", rate: 0.82 },
+  tractor: { file: "horn-2.ogg", rate: 1.08 },
+};
+
+export function hornSoundFor(chassisId: string): { file: string; rate: number } {
+  const sound = HORN_SOUNDS[chassisId];
+  if (!sound) throw new Error(`Unknown chassis ${chassisId}`);
+  return sound;
+}
 
 export function engineFileFor(chassisId: string): string {
   const file = ENGINE_FILES[chassisId];
