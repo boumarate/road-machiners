@@ -2,10 +2,10 @@
 // as expired, fulfilled or broken, and its kind's hook for that ending runs once. A holder holds at most one state
 // of each kind toward each other party.
 
-import { STATE_TURNS } from '../data/states';
+import { STATE_TURNS } from '../data/npcs';
 import { playerVehicle, vehicleById } from './damage';
 import { newId } from './factory';
-import { lootRobbed } from './robbery';
+import { lootRobbed } from './npc-activities';
 import { getResources } from './resources';
 import type { NpcState, StateData, StateEnding, StateKindId, World } from './types';
 import { canVehicleSee } from './vision';
@@ -96,22 +96,30 @@ export function endState(w: World, s: NpcState, ending: StateEnding): void {
 
 // The turn step. A state added this turn waits for the next one, so a hook chain moves one step per turn.
 export function advanceStates(w: World): void {
-  for (const s of [...w.states]) {
-    if (s.born === w.turn || !w.states.includes(s)) continue;
-    const kind = kindOf(s.kind);
-    const ending = kind.check(w, s) ?? (partyMissing(w, s) ? 'broken' : null);
-    if (ending) {
-      endState(w, s, ending);
-      continue;
-    }
-    if (s.turnsLeft === null) continue;
-    if (kind.refresh(w, s)) {
-      s.turnsLeft = turnsOf(s.kind);
-      continue;
-    }
-    s.turnsLeft--;
-    if (s.turnsLeft === 0) endState(w, s, 'expired');
+  for (const s of [...w.states]) if (s.born !== w.turn && w.states.includes(s)) advanceState(w, s);
+}
+
+// Ends the state by its kind's check or a missing party, or else runs its timer.
+function advanceState(w: World, s: NpcState): void {
+  const kind = kindOf(s.kind);
+  const ending = kind.check(w, s) ?? (partyMissing(w, s) ? 'broken' : null);
+  if (ending) {
+    endState(w, s, ending);
+    return;
   }
+  runTimer(w, s, kind);
+}
+
+// A state without a timer waits. This turn's events refresh a timer to its full length. Otherwise it counts down
+// and the state expires at zero.
+function runTimer(w: World, s: NpcState, kind: StateKind): void {
+  if (s.turnsLeft === null) return;
+  if (kind.refresh(w, s)) {
+    s.turnsLeft = turnsOf(s.kind);
+    return;
+  }
+  s.turnsLeft--;
+  if (s.turnsLeft === 0) endState(w, s, 'expired');
 }
 
 function partyMissing(w: World, s: NpcState): boolean {

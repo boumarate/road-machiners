@@ -35,6 +35,9 @@ export function loadWorld(storage: Storage): World | null {
   return { ...save.world, player, terrain: buildTerrain(save.world.seed, save.world.size) };
 }
 
+// World fields a save must hold as arrays.
+const WORLD_LISTS = ['vehicles', 'obstacles', 'salvage', 'events', 'removed', 'weather', 'dustClouds', 'states'] as const;
+
 function isWorld(value: unknown): value is Omit<World, 'terrain'> {
   if (!value || typeof value !== 'object') return false;
   const world = value as Partial<World>;
@@ -43,9 +46,7 @@ function isWorld(value: unknown): value is Omit<World, 'terrain'> {
     && Number.isInteger(world.rngState) && Number.isInteger(world.nextId) && world.nextId! >= 0
     && Number.isInteger(world.size) && world.size! > 0
     && !!world.spawnTimer && typeof world.spawnTimer === 'object' && !Array.isArray(world.spawnTimer)
-    && Array.isArray(world.vehicles) && Array.isArray(world.obstacles)
-    && Array.isArray(world.salvage) && Array.isArray(world.events) && Array.isArray(world.removed)
-    && Array.isArray(world.weather) && Array.isArray(world.dustClouds) && Array.isArray(world.states)
+    && WORLD_LISTS.every((key) => Array.isArray(world[key]))
     && !!world.player && typeof world.player === 'object'
     && typeof world.player.vehicleId === 'string' && Array.isArray(world.player.contacts) && Array.isArray(world.player.clouds);
 }

@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { STATE_TURNS } from '../data/states';
+import { STATE_TURNS } from '../data/npcs';
 import type { TraitId } from '../data/npcs';
 import { addGoods } from './inventory';
 import { thinkNpc } from './npc-activities';
-import { optionWeights, vehicleDanger } from './npc-decisions';
+import { isRobberyTarget, optionWeights, vehicleDanger } from './npc-decisions';
 import { NPC_BEHAVIOR } from '../data/npcs';
-import { isRobberyTarget } from './robbery';
 import { resolveDestroyed } from './combat';
 import { checkKnockout } from './defeat';
 import { corePart, mountedParts } from './grid';

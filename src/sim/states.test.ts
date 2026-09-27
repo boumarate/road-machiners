@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { STATE_TURNS } from '../data/states';
+import { STATE_TURNS } from '../data/npcs';
 import { corePart } from './grid';
 import { resolveDestroyed } from './combat';
 import { addState, advanceStates, endState, STATE_KINDS, stateOf, statesHeld } from './states';

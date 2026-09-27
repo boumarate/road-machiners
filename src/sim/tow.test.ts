@@ -9,7 +9,7 @@ import { canUseSite, siteGates } from './sites';
 import { getResources } from './resources';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
-import { topGoal } from './npc-goals';
+import { topGoal } from './npc-activities';
 import { addState, stateOf, towData } from './states';
 import { acceptTow, dropTow, isTowed, playerTow, refuseTow, setBeacon, unhitch } from './tow';
 import { canVehicleSee } from './vision';

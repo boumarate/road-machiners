@@ -7,7 +7,7 @@ import { dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
 import { mountedParts } from '../sim/grid';
 import { playerSees } from '../sim/vision';
-import { topGoal } from '../sim/npc-goals';
+import { topGoal } from '../sim/npc-activities';
 import type { PartHit } from '../sim/armor';
 import type { GameEvent, Vehicle, World } from '../sim/types';
 
@@ -51,6 +51,14 @@ function damageList(world: World, vehicleId: string, hits: PartHit[]): string {
 }
 
 // Returns null for events not worth a log line.
+function towDroppedText(by: string, reason: Extract<GameEvent, { t: 'towDropped' }>['reason']): { text: string; cls: string } {
+  const text = reason === 'refused' ? `You turn down the tow from ${by}.`
+    : reason === 'unhitched' ? `You unhitch from ${by}.`
+    : reason === 'danger' ? `${by} drops the tow. There is danger.`
+    : `${by} is gone. The tow is off.`;
+  return { text, cls: reason === 'refused' || reason === 'unhitched' ? 'dim' : 'bad' };
+}
+
 export function eventText(world: World, e: GameEvent): { text: string; cls: string } | null {
   const n = (id: string) => vehicleName(world, id);
   const me = world.player.vehicleId;
@@ -114,13 +122,8 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
     }
     case 'towDone':
       return { text: `${n(e.by)} tows you into town and takes ${e.fee}.`, cls: 'bad' };
-    case 'towDropped': {
-      const text = e.reason === 'refused' ? `You turn down the tow from ${n(e.by)}.`
-        : e.reason === 'unhitched' ? `You unhitch from ${n(e.by)}.`
-        : e.reason === 'danger' ? `${n(e.by)} drops the tow. There is danger.`
-        : `${n(e.by)} is gone. The tow is off.`;
-      return { text, cls: e.reason === 'refused' || e.reason === 'unhitched' ? 'dim' : 'bad' };
-    }
+    case 'towDropped':
+      return towDroppedText(n(e.by), e.reason);
     case 'stateEnded':
       // Tow endings log through the tow events above.
       return null;

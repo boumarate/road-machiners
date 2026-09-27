@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { corePart } from './grid';
-import { noteHurt, resolveNpcActivities, thinkNpc } from './npc-activities';
-import { popGoal, pushGoal, replaceBase, topGoal } from './npc-goals';
+import { noteHurt, popGoal, pushGoal, replaceBase, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { siteGates } from './sites';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import type { NpcActivity, World } from './types';

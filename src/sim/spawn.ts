@@ -7,7 +7,7 @@ import { playerVehicle } from "./damage";
 import { makeVehicle } from "./factory";
 import { isDriveObstacle } from "./mapgen";
 import { generateNpcLoadout } from "./npc-loadout";
-import { profileOf } from "./npc-profile";
+import { profileOf } from "./npc-decisions";
 import { chance, randInt, randRange, type Rng } from "./rng";
 import { siteGates } from "./sites";
 import type { World } from "./types";

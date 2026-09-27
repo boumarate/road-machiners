@@ -1,8 +1,7 @@
 // Activity execution uses the same steering and route planner as the player.
 import { NPCS } from "../data/npcs";
 import { RULES } from "../data/rules";
-import { getActivityDestination, thinkNpc } from "./npc-activities";
-import { topGoal } from "./npc-goals";
+import { getActivityDestination, thinkNpc, topGoal } from "./npc-activities";
 import { towData } from "./states";
 import { vehicleStats } from "./stats";
 import { playerTow } from "./tow";

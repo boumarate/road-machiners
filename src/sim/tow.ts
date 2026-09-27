@@ -13,7 +13,7 @@ import { isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
 import { contactsOf, hearsBeacon } from './detect';
 import { route, routeLength } from './path';
-import { npcProfile } from './npc-profile';
+import { npcProfile } from './npc-decisions';
 import { canUseSite, siteGates } from './sites';
 import { addState, endState, stateOf, towData, towPromiseData } from './states';
 import { isStranded, vehicleStats } from './stats';
@@ -63,10 +63,14 @@ export function towGoal(world: World, vehicle: Vehicle): NpcActivity {
 // not hostile to the NPC, and in sight or calling on the beacon. Otherwise null.
 export function strandedPlayerAt(world: World, vehicle: Vehicle): Vec | null {
   const me = playerVehicle(world);
-  if (playerTow(world) || world.player.state !== 'active') return null;
-  // A driver that can only crawl itself cannot pull another truck.
-  if (!isStranded(world, me) || isStranded(world, vehicle) || isHostile(world, vehicle, me)) return null;
+  if (!canTowPlayer(world, vehicle, me)) return null;
   return canVehicleSee(world, vehicle, me.pos) ? me.pos : beaconCenter(world, vehicle, me);
+}
+
+function canTowPlayer(world: World, vehicle: Vehicle, me: Vehicle): boolean {
+  if (playerTow(world) || world.player.state !== 'active') return false;
+  // A driver that can only crawl itself cannot pull another truck.
+  return isStranded(world, me) && !isStranded(world, vehicle) && !isHostile(world, vehicle, me);
 }
 
 // Where the player's beacon contact puts the truck for this listener, or null when the beacon does not reach it.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NPCS, TRAITS, type NpcTemplate, type TraitId } from '../data/npcs';
-import { npcProfile, npcTraits, profileOf } from './npc-profile';
+import { npcProfile, npcTraits, profileOf } from './npc-decisions';
 import { rollTraits } from './spawn';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 

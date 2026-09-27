@@ -9,8 +9,7 @@ import { TRAITS } from '../data/npcs';
 import { endTurn } from './world';
 import { corePart, goodsCount } from './grid';
 import { addGoods } from './inventory';
-import { resolveNpcActivities, thinkNpc, getActivityDestination } from './npc-activities';
-import { topGoal } from './npc-goals';
+import { getActivityDestination, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { cloneWorld } from './world';
 import { canUseSite, siteGates } from './sites';
 
