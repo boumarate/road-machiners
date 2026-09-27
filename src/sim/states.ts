@@ -55,13 +55,12 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
 };
 
 function kindOf(kind: StateKindId): StateKind {
-  const def = STATE_KINDS[kind];
-  if (!def) throw new Error(`Unknown state kind ${kind}`);
-  return def;
+  if (!Object.hasOwn(STATE_KINDS, kind)) throw new Error(`Unknown state kind ${kind}`);
+  return STATE_KINDS[kind];
 }
 
 function turnsOf(kind: StateKindId): number | null {
-  if (!(kind in STATE_TURNS)) throw new Error(`Unknown state kind ${kind}`);
+  if (!Object.hasOwn(STATE_TURNS, kind)) throw new Error(`Unknown state kind ${kind}`);
   return STATE_TURNS[kind];
 }
 

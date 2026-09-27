@@ -46,7 +46,7 @@ export function npcTraits(v: Vehicle): TraitId[] {
   if (!v.brain) throw new Error(`${v.id} has no NPC brain`);
   const traits = v.brain.traits;
   if (!traits) throw new Error(`${v.id} has no traits`);
-  for (const id of traits) if (!(id in TRAITS)) throw new Error(`${v.id} has unknown trait ${id}`);
+  for (const id of traits) if (!Object.hasOwn(TRAITS, id)) throw new Error(`${v.id} has unknown trait ${id}`);
   return traits;
 }
 
@@ -58,7 +58,7 @@ export function hasTrait(v: Vehicle, id: TraitId): boolean {
 export function profileOf(traits: TraitId[]): NpcProfile {
   if (traits.length === 0) throw new Error('A profile needs at least one trait');
   const defs = traits.map((id) => {
-    if (!(id in TRAITS)) throw new Error(`Unknown trait ${id}`);
+    if (!Object.hasOwn(TRAITS, id)) throw new Error(`Unknown trait ${id}`);
     return TRAITS[id];
   });
   const union = (key: 'towns' | 'bases' | 'salvageSites' | 'supplySites') => [...new Set(defs.flatMap((t) => t[key]))];
