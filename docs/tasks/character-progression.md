@@ -218,4 +218,5 @@ Notes: 4 stalls sit near map point (476 to 480, 150 to 175) on different seeds, 
 - Toughness `heal` — it rounds to nothing at levels 1 to 4 outside town. Choose between fractional health and dropping the effect.
 - Radio `call` XP — calling and hanging up pays Social up to the daily cap. Choose whether a call must discuss a topic to pay.
 - Perception pace — contact XP likely dominates. Choose whether to cut the contact weight now or after the full recording.
+- Sim bugs found by the recorder, outside this task: a route from blocked nav cells can snap into a small closed area and trap the truck (`src/sim/path.ts`). Far-travel trucks meeting head-on on a road stop short of each other forever (`src/sim/far.ts`). `src/sim/npc-activities.ts:563` throws "flees with no threat perceived" (seed 3, fighter turn 194 and mixed turn 1005). Decide whether these get their own task. Until they are fixed, 3 of 12 recordings fail.
 
