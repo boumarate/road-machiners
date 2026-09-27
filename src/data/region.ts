@@ -286,7 +286,8 @@ export const REGION = {
       { x: -0.8, y: 2.8 },
     ] as Vec[],
     pondRadius: 2.2,
-    padRadius: 3, // tiles; a pad lies outside each gate and touches it, and site services work only on a pad
+    // Tiles. A rectangular pad lies outside each gate, its inner edge on the site edge. Site services work only on a pad.
+    pad: { length: 5, width: 7 }, // length runs out from the gate, width along the site edge
     gateSpacing: 7, // tiles; road crossings closer than this share one gate, so door gaps never overlap
   },
   settlement: {
@@ -294,25 +295,26 @@ export const REGION = {
     houseWidth: 2.7, // 10.8 m, against the pickup's 4.4 m length
     houseDepth: 2.1,
     houseHeights: [1.1, 1.8],
-    wallHeight: 0.9, // 3.6 m, taller than a truck
-    wallThickness: 0.5,
+    wallHeight: 1.6, // 6.4 m, well over a truck roof
+    wallThickness: 1.2,
     wallSegment: 3, // tiles per straight wall section around the curve
     wallTowerEvery: 5, // wall sections between towers
     gateWidth: 5, // tiles of shut doors where a road meets any site edge
-    palisadeHeight: 0.55, // 2.2 m of scrap and posts, below a truck roof
-    palisadeThickness: 0.25,
+    palisadeHeight: 1, // 4 m of scrap and posts
+    palisadeThickness: 0.6,
     palisadeSegment: 1.5,
-    stoneHeight: 0.3, // 1.2 m of piled stone around an oasis
-    stoneThickness: 0.45,
+    stoneHeight: 0.6, // 2.4 m of piled stone around an oasis
+    stoneThickness: 0.9,
     stoneSegment: 1.2,
-    fenceHeight: 0.4, // 1.6 m of posts and rails
-    fenceThickness: 0.08,
+    fenceHeight: 0.8, // 3.2 m of posts and rails
+    fenceThickness: 0.15,
     fenceSegment: 1.5,
-    wreckHeight: 0.5, // 2 m of piled car wrecks
-    wreckThickness: 0.55,
+    wreckHeight: 0.9, // 3.6 m of piled car wrecks
+    wreckThickness: 1,
     wreckSegment: 1.1, // about one car length
-    guardTowerHeight: 1.8, // gate towers stand twice the wall height
-    gatePoleHeight: 4.5, // 18 m, so a gate shows from across the fog edge
+    guardTowerHeight: 2.6, // gate towers stand a full floor over the town wall
+    gatePoleHeight: 5.5, // 22 m, so a gate shows from across the fog edge
+    lampHeight: 1.6, // 6.4 m gate lamp posts, lower on the higher walls and towers
     orchardRows: 11,
     orchardSpacing: 2,
   },

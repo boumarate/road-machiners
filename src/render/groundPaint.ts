@@ -4,7 +4,6 @@
 import { REGION } from "../data/region";
 import { TERRAIN, TERRAIN_TYPES } from "../data/terrain";
 import { BRIDGE_AXIS, BRIDGE_LENGTH } from "../sim/bridge";
-import { sitePads } from "../sim/sites";
 import { groundSlope, tileAt, type Terrain } from "../sim/terrain";
 import { type Vec } from "../sim/vec";
 import { hash2, valueNoise } from "./noise";
@@ -89,7 +88,6 @@ export function paintGroundCanvas(
   c.ctx.clip("evenodd");
   for (const road of REGION.roads) paintRoad(c, road);
   c.ctx.restore();
-  paintPads(c);
 }
 
 // The cut between the two abutments, one road width to each side of the deck axis.
@@ -194,21 +192,6 @@ function paintRoad(c: PaintCanvas, road: Vec[]): void {
   stroke(c, road, w, css(PAL.road, 1), 0);
   stroke(c, road, 0.24, css(PAL.roadRut, 0.8), -0.35);
   stroke(c, road, 0.24, css(PAL.roadRut, 0.8), 0.35);
-}
-
-function paintPads(c: PaintCanvas): void {
-  for (const site of [...REGION.towns, ...REGION.locations]) sitePads(site).forEach((pad) => paintPad(c, pad));
-}
-
-// A gray gravel lot with a dark rim, where a truck parks to use a site.
-function paintPad(c: PaintCanvas, pad: Vec): void {
-  const r = REGION.sites.padRadius;
-  disc(c, pad, r, css(PAL.rock.top, 1));
-  c.ctx.strokeStyle = css(PAL.rock.dark, 1);
-  c.ctx.lineWidth = 0.6 * c.res;
-  c.ctx.beginPath();
-  c.ctx.arc(c.toPx(pad.x), c.toPx(pad.y), (r - 0.3) * c.res, 0, Math.PI * 2);
-  c.ctx.stroke();
 }
 
 // A polyline stroke in map units, shifted sideways by offset tiles along each segment's normal.

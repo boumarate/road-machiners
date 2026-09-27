@@ -54,11 +54,11 @@ describe('landmark scale', () => {
     }
   });
 
-  it('draws each edge within its wall thickness of the collision edge', () => {
+  it('draws each edge on the collision edge, at most 1.5 tiles thick', () => {
     for (const site of [...REGION.towns, ...REGION.locations]) {
       const group = sites.getObjectByName(`landmark-${site.id}`)!;
       const reach = group.userData.edgeReach as [number, number];
-      expect(reach[0], site.id).toBeGreaterThan(site.radius - 1);
+      expect(reach[0], site.id).toBeGreaterThan(site.radius - 1.5);
       expect(reach[1], site.id).toBeLessThanOrEqual(site.radius + 0.01);
     }
   });

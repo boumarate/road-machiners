@@ -25,11 +25,11 @@ export function siteGates(site: Site): Vec[] {
   return gates;
 }
 
-// One pad per gate, in gate order. Each lies outside the site and touches its gate.
+// One pad center per gate, in gate order. Each pad lies outside the site with its inner edge on the gate.
 export function sitePads(site: Site): Vec[] {
   let pads = PADS.get(site.id);
   if (!pads) {
-    const out = site.radius + REGION.sites.padRadius;
+    const out = site.radius + REGION.sites.pad.length / 2;
     pads = siteGates(site).map((g) => {
       const a = Math.atan2(g.y - site.pos.y, g.x - site.pos.x);
       return { x: site.pos.x + Math.cos(a) * out, y: site.pos.y + Math.sin(a) * out };
@@ -44,7 +44,17 @@ export function nearestPad(site: Site, from: Vec): Vec {
 }
 
 export function canUseSite(pos: Vec, site: Site): boolean {
-  return sitePads(site).some((pad) => dist(pos, pad) <= REGION.sites.padRadius);
+  return sitePads(site).some((pad) => onPad(pos, pad, site.pos));
+}
+
+// Whether pos lies on the pad rectangle, which runs out from the site center.
+function onPad(pos: Vec, pad: Vec, center: Vec): boolean {
+  const a = Math.atan2(pad.y - center.y, pad.x - center.x);
+  const dx = pos.x - pad.x;
+  const dy = pos.y - pad.y;
+  const along = dx * Math.cos(a) + dy * Math.sin(a);
+  const across = -dx * Math.sin(a) + dy * Math.cos(a);
+  return Math.abs(along) <= REGION.sites.pad.length / 2 && Math.abs(across) <= REGION.sites.pad.width / 2;
 }
 
 // The site whose edge encloses a point, or null.

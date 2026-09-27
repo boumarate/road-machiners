@@ -7,7 +7,7 @@ import { TERRAIN } from '../../data/terrain';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
-import { siteGates } from '../../sim/sites';
+import { siteGates, sitePads } from '../../sim/sites';
 import { BRIDGE_AXIS, BRIDGE_LENGTH } from '../../sim/bridge';
 import { deckEnds, heightAt, type Terrain } from '../../sim/terrain';
 import { angleDiff, segmentDist } from '../../sim/vec';
@@ -53,6 +53,25 @@ class SiteBuilder {
     mesh.receiveShadow = true;
     this.root.add(mesh);
     return mesh;
+  }
+  // A flat rectangle of packed dust laid over the ground: length tiles along yaw, width across, centered at
+  // site offset (x, z). It lies outside the site edge, where trucks park.
+  addPatch(x: number, z: number, length: number, width: number, yaw: number, lift: number, color: number): void {
+    const geo = new THREE.PlaneGeometry(length, width, Math.ceil(length) * 2, Math.ceil(width) * 2);
+    const pos = geo.getAttribute('position');
+    for (let i = 0; i < pos.count; i++) {
+      // The plane faces +z. Taking its y as -across turns that face up.
+      const u = pos.getX(i);
+      const v = -pos.getY(i);
+      const wx = this.site.pos.x + x + Math.cos(yaw) * u - Math.sin(yaw) * v;
+      const wz = this.site.pos.y + z + Math.sin(yaw) * u + Math.cos(yaw) * v;
+      pos.setXYZ(i, wx * S, (heightAt(this.terrain, wx, wz) + lift) * S, wz * S);
+    }
+    geo.computeVertexNormals();
+    const patch = new THREE.Mesh(geo, this.material(color));
+    patch.receiveShadow = true;
+    patch.userData.outsideEdge = true;
+    this.root.add(patch);
   }
   // A door leaf hinged at site offset (x, z) that reaches length tiles toward yaw. The group named `door`
   // stands at the hinge, so turning it about y swings the leaf.
@@ -229,6 +248,7 @@ const EDGE_STYLES: Record<SiteEdge | 'town', WallStyle> = {
   wrecks: { height: SET.wreckHeight, thickness: SET.wreckThickness, segment: SET.wreckSegment, towerEvery: null, ragged: true, fence: false, colors: [PAL.rust.side, PAL.metal, PAL.rust.dark], postColor: PAL.rust.dark, doorColor: PAL.metal, guarded: false },
 };
 const SINK = 0.3; // tiles each edge piece reaches below the ground, so slopes leave no gap under it
+const DOOR_THICKNESS = 0.4; // door leaves as a share of the wall thickness
 
 function edgeStyle(site: Site): WallStyle {
   return EDGE_STYLES['kind' in site ? site.edge : 'town'];
@@ -248,9 +268,9 @@ function edgeRing(site: Site, style: WallStyle): Ring {
   return { radius, count, step, open, mid: radius * Math.cos(step / 2) - style.thickness / 2, length: 2 * radius * Math.sin(step / 2) };
 }
 
-// Where boxes of a given width stand with their outer face on the edge, at angle a.
+// Where square boxes of a given width stand at angle a with their outer corners on the edge.
 function onEdge(ring: Ring, a: number, width: number): { x: number; z: number } {
-  const r = ring.radius - width / 2;
+  const r = Math.sqrt(ring.radius * ring.radius - (width / 2) ** 2) - width / 2;
   return { x: Math.cos(a) * r, z: Math.sin(a) * r };
 }
 
@@ -317,6 +337,7 @@ function addGate(b: SiteBuilder, ring: Ring, style: WallStyle, from: number, to:
     else addPost(b, ring, a, style.thickness * 1.6, style.height * 1.4, style.postColor);
   }
   if (style.guarded) addBanner(b, ring, from);
+  for (const a of [from, to]) addLamp(b, ring, style, a);
   const middle = (from + to) / 2;
   const doorHeight = style.fence ? style.height : style.height * 0.95;
   addLeaf(b, ring, style, from, middle, doorHeight);
@@ -329,7 +350,28 @@ function addLeaf(b: SiteBuilder, ring: Ring, style: WallStyle, hinge: number, ti
   const h = { x: Math.cos(hinge) * r, z: Math.sin(hinge) * r };
   const t = { x: Math.cos(tip) * r, z: Math.sin(tip) * r };
   const length = Math.hypot(t.x - h.x, t.z - h.z);
-  b.addDoor(h.x, h.z, length, height, style.thickness, style.doorColor, -Math.atan2(t.z - h.z, t.x - h.x));
+  b.addDoor(h.x, h.z, length, height, style.thickness * DOOR_THICKNESS, style.doorColor, -Math.atan2(t.z - h.z, t.x - h.x));
+}
+
+// A lamp on a post, or on the tower top, beside each gate, so a stop shows from far away.
+function addLamp(b: SiteBuilder, ring: Ring, style: WallStyle, a: number): void {
+  const top = style.guarded ? SET.guardTowerHeight : Math.max(SET.lampHeight, style.height * 1.4);
+  const q = onEdge(ring, a, style.thickness);
+  if (!style.guarded) b.addBox(q.x, q.z, 0.18, top + SINK, 0.18, PAL.metal, -SINK, -a);
+  b.addBox(q.x, q.z, 0.2, 0.35, 0.6, PAL.metal, top, -a);
+  b.addBox(q.x, q.z, 0.24, 0.22, 0.45, PAL.lamp.on, top + 0.06, -a);
+}
+
+// A packed-dust pad outside each gate: a dark rim and a paler floor.
+function addPads(b: SiteBuilder, site: Site): void {
+  const { length, width } = REGION.sites.pad;
+  for (const pad of sitePads(site)) {
+    const yaw = Math.atan2(pad.y - site.pos.y, pad.x - site.pos.x);
+    const x = pad.x - site.pos.x;
+    const z = pad.y - site.pos.y;
+    b.addPatch(x, z, length, width, yaw, 0.03, PAL.roadRut);
+    b.addPatch(x, z, length - 0.5, width - 0.5, yaw, 0.05, PAL.sand[3]);
+  }
 }
 
 function addGuardTower(b: SiteBuilder, ring: Ring, style: WallStyle, a: number): void {
@@ -471,6 +513,7 @@ function buildSite(t: Terrain, site: Site): THREE.Group {
     default: throw new Error(`Missing landmark model for ${site.id}`);
   }
   addWall(b, site, edgeStyle(site));
+  addPads(b, site);
   // Site models never move after they are built.
   b.root.traverse((o) => {
     o.updateMatrix();

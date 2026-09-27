@@ -5,7 +5,7 @@ import { canUseSite, nearestPad, siteGates, sitePads, siteUnder } from './sites'
 import { dist } from './vec';
 
 const SITES = [...REGION.towns, ...REGION.locations];
-const PAD = REGION.sites.padRadius;
+const PAD = REGION.sites.pad;
 
 describe('site gates and pads', () => {
   it('gives every site a gate on its edge', () => {
@@ -20,8 +20,8 @@ describe('site gates and pads', () => {
     for (const site of SITES) {
       const gates = siteGates(site);
       sitePads(site).forEach((pad, i) => {
-        expect(dist(pad, site.pos), site.id).toBeCloseTo(site.radius + PAD, 6);
-        expect(dist(pad, gates[i]), site.id).toBeCloseTo(PAD, 6);
+        expect(dist(pad, site.pos), site.id).toBeCloseTo(site.radius + PAD.length / 2, 6);
+        expect(dist(pad, gates[i]), site.id).toBeCloseTo(PAD.length / 2, 6);
       });
     }
   });
@@ -29,10 +29,15 @@ describe('site gates and pads', () => {
   it('lets a truck use a site only on a pad', () => {
     for (const site of SITES) {
       const pad = sitePads(site)[0];
-      const out = { x: (pad.x - site.pos.x) / dist(pad, site.pos), y: (pad.y - site.pos.y) / dist(pad, site.pos) };
-      const beyond = { x: pad.x + out.x * (PAD + 0.01), y: pad.y + out.y * (PAD + 0.01) };
+      const a = Math.atan2(pad.y - site.pos.y, pad.x - site.pos.x);
+      const at = (along: number, across: number) => ({
+        x: pad.x + Math.cos(a) * along - Math.sin(a) * across,
+        y: pad.y + Math.sin(a) * along + Math.cos(a) * across,
+      });
       expect(canUseSite(pad, site), site.id).toBe(true);
-      expect(canUseSite(beyond, site), site.id).toBe(false);
+      expect(canUseSite(at(PAD.length / 2 - 0.01, PAD.width / 2 - 0.01), site), site.id).toBe(true);
+      expect(canUseSite(at(PAD.length / 2 + 0.01, 0), site), site.id).toBe(false);
+      expect(canUseSite(at(0, PAD.width / 2 + 0.01), site), site.id).toBe(false);
     }
   });
 

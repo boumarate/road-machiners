@@ -53,7 +53,7 @@ describe('NPC driving', () => {
     // No spawns, so no raider cuts the trip short.
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Infinity;
     // The trader parks on a pad outside the gate.
-    const arrived = nose.radius + REGION.sites.padRadius + RULES.arriveRadius;
+    const arrived = nose.radius + REGION.sites.pad.length / 2 + RULES.arriveRadius;
     let closest = Infinity;
     for (let i = 0; i < w.size && closest >= arrived; i++) {
       ({ w } = play(w, 1));
