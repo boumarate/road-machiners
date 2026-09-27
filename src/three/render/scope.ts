@@ -116,15 +116,6 @@ export class SightLimit {
     this.uniforms.sightRadius.value = radius;
   }
 
-  center(): V3 {
-    const c = this.uniforms.sightCenter.value;
-    return { x: c.x, y: 0, z: c.y };
-  }
-
-  radius(): number {
-    return this.uniforms.sightRadius.value;
-  }
-
   // Whether a 3D point lies inside the edge, on the ground plane.
   covers(p: V3): boolean {
     const c = this.uniforms.sightCenter.value;
