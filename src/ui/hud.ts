@@ -7,6 +7,7 @@ import { el, panel } from "./dom";
 import { eventText, formatNpcActivity } from "./format";
 import { getHudReadout } from './hud-readout';
 import { createIcon, createSpeedDial, type IconName } from './icons';
+import { kph } from './units';
 
 type HudActions = {
   openInventory: () => void;
@@ -102,7 +103,7 @@ export class Hud {
         disabled: busy, onclick: () => this.actions.openInventory(),
       }, createSpeedDial(Number(readout.speed), Number(readout.maxSpeed)),
       el('span', { class: 'speed-value' }, readout.speed),
-      el('span', { class: 'speed-unit' }, `max ${readout.maxSpeed}`), createIcon('truck')),
+      el('span', { class: 'speed-unit' }, `km/h · max ${readout.maxSpeed}`), createIcon('truck')),
       el('div', { class: 'resource-bank' },
         ...readout.resources.map((resource, i) => el('span', {
           class: `resource ${resource.warning ? 'bad' : ''}`, title: resource.label,
@@ -183,7 +184,7 @@ export class Hud {
       el(
         "div",
         {},
-        `Cab ${pct}%   Speed ${v.speed.toFixed(1)}`,
+        `Cab ${pct}%   Speed ${kph(v.speed)} km/h`,
       ),
       el("div", { class: "bar" }, el("div", { style: `width:${pct}%` })),
       ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),

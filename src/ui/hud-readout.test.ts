@@ -12,7 +12,7 @@ describe('critical vehicle readout', () => {
     w.player.fuel = 18.5;
     w.player.supplies = 7.25;
     expect(getHudReadout(w).resources.map(r => r.label)).toEqual(['Money', 'Fuel', 'Supplies', 'Cab', 'Driver']);
-    expect(getHudReadout(w).resources.slice(0, 3).map(r => r.value)).toEqual(['1,234', '18.5 / 40', '7.3']);
+    expect(getHudReadout(w).resources.slice(0, 3).map(r => r.value)).toEqual(['1,234', '93 / 200 L', '7.3']);
   });
   it('warns at the actual fuel speed-limit threshold', () => {
     const w = emptyWorld();
@@ -35,6 +35,6 @@ describe('critical vehicle readout', () => {
     const w = emptyWorld();
     w.vehicles[0].speed = -2;
     w.vehicles[0].direct = true;
-    expect(getHudReadout(w)).toMatchObject({ speed: '-2.0', manual: true });
+    expect(getHudReadout(w)).toMatchObject({ speed: '-29', manual: true });
   });
 });

@@ -8,6 +8,7 @@ import { clockOf, heatAt } from '../sim/sun';
 import { TERRAIN } from '../data/terrain';
 import { dist, type Vec } from '../sim/vec';
 import type { World } from '../sim/types';
+import { celsius, fuelLiters, kph } from './units';
 
 const REGION_WEATHER: Record<'heatwave' | 'overcast', string> = { heatwave: 'Heat wave', overcast: 'Overcast' };
 const HOT = 2; // heat at or above this shows as a warning
@@ -39,20 +40,20 @@ export function getHudReadout(w: World) {
   const heat = heatAt(w, me.pos);
   const weather = weatherLabel(w, me.pos);
   return {
-    speed: me.speed.toFixed(1),
-    maxSpeed: vehicleStats(w, me).maxSpeed.toFixed(1),
+    speed: String(kph(me.speed)),
+    maxSpeed: String(kph(vehicleStats(w, me).maxSpeed)),
     manual: me.direct,
     broken: mountedParts(me).filter(part => part.hp === 0).length,
     resources: [
       { label: 'Money', value: p.money.toLocaleString('en-US'), warning: false },
-      { label: 'Fuel', value: `${p.fuel.toFixed(1)} / ${capacity}`, warning: p.fuel < capacity * RULES.lowFuelThreshold },
+      { label: 'Fuel', value: `${fuelLiters(p.fuel)} / ${fuelLiters(capacity)} L`, warning: p.fuel < capacity * RULES.lowFuelThreshold },
       { label: 'Supplies', value: p.supplies.toFixed(1), warning: p.supplies <= RULES.defeatSupplies },
       { label: 'Cab', value: `${cab.hp} / ${cabMax}`, warning: cab.hp < cabMax },
       { label: 'Driver', value: `${p.health} / ${RULES.maxHealth}`, warning: p.health < RULES.maxHealth },
     ],
     survival: [
       { label: 'Time', value: clockLabel(w.turn), warning: false },
-      { label: 'Heat', value: `${heat.toFixed(1)}x`, warning: heat >= HOT },
+      { label: 'Heat', value: `${celsius(heat)} °C`, warning: heat >= HOT },
       { label: 'Weather', value: weather, warning: weather !== 'Clear' && w.weather.some((e) => e.kind === 'storm' && dist(me.pos, e.pos) - e.radius <= TERRAIN.vision.radius) },
       ...(me.job ? [{ label: me.job.kind === 'search' ? 'Search' : 'Repair', value: `${me.job.turnsLeft} turns left`, warning: false, progress: 1 - me.job.turnsLeft / me.job.total }] : []),
     ],

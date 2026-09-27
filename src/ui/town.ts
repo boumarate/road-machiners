@@ -14,6 +14,7 @@ import type { PartInstance, Vehicle, World } from '../sim/types';
 import { el, panel } from './dom';
 import { InventoryView } from './inventory';
 import type { UiHost } from './host';
+import { fuelLiters, kg, kph, liters, meters, mps2 } from './units';
 
 type Tab = 'trade' | 'supplies' | 'garage' | 'trucks';
 
@@ -104,11 +105,11 @@ export class TownScreen {
       const afford = Math.min(room, Math.floor(w.player.money / price));
       return el('tr', {},
         el('td', {}, k),
-        el('td', {}, `${w.player[k].toFixed(1)}`),
-        el('td', {}, `${price} each`),
+        el('td', {}, k === 'fuel' ? `${fuelLiters(w.player.fuel)} L` : w.player.supplies.toFixed(1)),
+        el('td', {}, k === 'fuel' ? `${price} per ${fuelLiters(1)} L` : `${price} each`),
         el('td', {},
-          el('button', { disabled: afford < 1, onclick: () => this.run((x) => buySupply(x, k, 1)) }, 'Buy 1'), ' ',
-          el('button', { disabled: afford < 1, onclick: () => this.run((x) => buySupply(x, k, afford)) }, `Fill (${afford})`),
+          el('button', { disabled: afford < 1, onclick: () => this.run((x) => buySupply(x, k, 1)) }, k === 'fuel' ? `Buy ${fuelLiters(1)} L` : 'Buy 1'), ' ',
+          el('button', { disabled: afford < 1, onclick: () => this.run((x) => buySupply(x, k, afford)) }, `Fill (${k === 'fuel' ? `${fuelLiters(afford)} L` : afford})`),
         ),
       );
     });
@@ -144,7 +145,7 @@ export class TownScreen {
       const cost = Math.max(0, c.price - tradeIn);
       return el('tr', {},
         el('td', {}, c.name),
-        el('td', { class: 'dim' }, `speed ${c.maxSpeed}, turn ${c.turnFast}-${c.turnSlow}, ${cellCount(baseGrid(id))} cells`),
+        el('td', { class: 'dim' }, `${kph(c.maxSpeed)} km/h, turn ${c.turnFast}-${c.turnSlow}°, ${liters(cellCount(baseGrid(id)))} L cargo, ${kg(c.mass)} empty, rated ${kg(c.ratedMass)}, tank ${fuelLiters(c.fuelCap)} L`),
         el('td', {}, mine ? 'yours' : el('button', { disabled: w.player.money < cost, onclick: () => this.run((x) => buyChassis(x, id)) }, `Swap for ${cost}`)),
       );
     });
@@ -169,11 +170,11 @@ function partStats(d: PartDef): string {
 
 function kindStats(d: PartDef): string {
   switch (d.kind) {
-    case 'weapon': return `${d.rounds} × dmg ${d.round.damage}, pen ${d.round.pen}, spread ${d.spread}°, range ${d.range}, reload ${d.reload}, arc ${d.arc}`;
-    case 'engine': return `speed ${d.speedBonus >= 0 ? '+' : ''}${d.speedBonus}, accel ${d.accelBonus >= 0 ? '+' : ''}${d.accelBonus}, fuel x${d.fuelMult}`;
+    case 'weapon': return `${d.rounds} × dmg ${d.round.damage}, pen ${d.round.pen}, spread ${d.spread}°, range ${meters(d.range)} m, reload ${d.reload}, arc ${d.arc}°`;
+    case 'engine': return `speed ${d.speedBonus >= 0 ? '+' : ''}${kph(d.speedBonus)} km/h, accel ${d.accelBonus >= 0 ? '+' : ''}${mps2(d.accelBonus)} m/s², fuel x${d.fuelMult}`;
     case 'armor': return d.ramMult > 1 ? `ram x${d.ramMult}` : 'side armor';
     case 'cargo': return `+${d.extraRows} grid rows`;
     case 'core': return `built-in ${d.role}`;
-    case 'scanner': return `radio range ${d.range}`;
+    case 'scanner': return `radio range ${meters(d.range)} m`;
   }
 }

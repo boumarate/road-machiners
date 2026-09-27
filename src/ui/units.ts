@@ -1,0 +1,35 @@
+// Converts sim units to real units for the player to read.
+import { PHYSICS } from '../data/physics';
+import { RULES } from '../data/rules';
+import { UNITS } from '../data/units';
+
+const MS_TO_KPH = 3.6;
+
+export function kph(tilesPerTurn: number): number {
+  return Math.round((tilesPerTurn * PHYSICS.metersPerTile) / PHYSICS.turnSeconds * MS_TO_KPH);
+}
+
+// Acceleration in tiles per turn per turn, as m/s².
+export function mps2(tilesPerTurn2: number): number {
+  return Math.round((tilesPerTurn2 * PHYSICS.metersPerTile) / PHYSICS.turnSeconds ** 2 * 10) / 10;
+}
+
+export function meters(tiles: number): number {
+  return Math.round(tiles * PHYSICS.metersPerTile);
+}
+
+export function liters(cells: number): number {
+  return Math.round(cells * RULES.cellMeters * RULES.cellMeters * UNITS.cellDepth * 1000);
+}
+
+export function fuelLiters(units: number): number {
+  return Math.round(units * UNITS.fuelLiters);
+}
+
+export function celsius(heat: number): number {
+  return Math.round(UNITS.shadeCelsius + (heat - 1) * UNITS.celsiusPerHeat);
+}
+
+export function kg(mass: number): string {
+  return `${Math.round(mass).toLocaleString('en-US')} kg`;
+}

@@ -33,7 +33,7 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 - `src/phys/` runs vehicle movement in Rapier. `endTurn(world, physicsMove(...))` plugs it into the turn pipeline in place of the sim's 2D movement. A turn restores the physics world from a snapshot and simulates one second, so the path preview runs the same physics as the turn. Physics numbers live in `src/data/physics.ts`.
 - `src/three/` holds the 3D game: `game.ts` wires input to sim, sim and physics to the view, and the HTML UI. `src/three/render/` holds the 3D views. `src/render/` holds the palette and the ground painter. `src/ui/` holds the HTML overlay panels.
 - `src/sim/nav/` holds route planning data. Grids are built once per terrain and vehicle radius, and `warmRoutes` builds them at boot. Wrecks and parked vehicles are stamped per query. Long routes search a coarse corridor first.
-- NPCs farther than sight radius plus `PERF.liveMargin` from the player have no physics body. `src/sim/far.ts` moves them along stored routes, and they never crash or ram.
+- NPCs farther than sight radius plus `PERF.liveMargin` from the player have no physics body. `src/sim/far.ts` moves them along stored routes. They never crash or ram, but they stop short of any other vehicle, so two trucks never share a point.
 - `src/three/render/scope.ts` detaches map chunks outside the camera view. Static views register with a scope instead of adding to the scene.
 - `src/perf.ts` holds named timers for seams, never hot loops. In dev, a panel in the top left shows them.
 - `src/three/save.ts` stores the whole world except the terrain in browser local storage after each configured number of completed turns and restores it on boot. The terrain is rebuilt from the seed on load. Later unsaved changes are lost on reload. Invalid or incompatible saves stop boot with the crash screen. New world fields enter new saves automatically, but old saves can need migration.
@@ -41,6 +41,7 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 - Any uncaught error shows a fullscreen crash screen with the message.
 - All randomness goes through `src/sim/rng.ts` with state in the world. Render-only noise lives in `src/render/noise.ts`.
 - Map coordinates are in tiles. Physics and 3D space are in meters: map x is 3D x, map y is 3D z, height is 3D y. `src/phys/frames.ts` converts.
+- The UI shows real units: km/h, meters, kg, liters and °C. `src/ui/units.ts` converts from sim units, with display numbers in `src/data/units.ts`.
 
 ## Verification
 

@@ -17,6 +17,8 @@ import type { GridItem, PartInstance, Vehicle, World } from '../sim/types';
 import { el, panel } from './dom';
 import type { UiHost } from './host';
 import { createIcon, type IconName } from './icons';
+import { vehicleMass } from '../sim/mass';
+import { kg, liters } from './units';
 
 const CELL_PX = 42;
 
@@ -481,7 +483,7 @@ export class InventoryScreen {
       el(
         "div",
         { class: "inv-summary" },
-        `Equipment & cargo · ${freeCells(playerVehicle(this.host.world()))} free cells · Money ${this.host.world().player.money}`,
+        `Equipment & cargo · ${liters(freeCells(playerVehicle(this.host.world())))} L free · Mass ${kg(vehicleMass(playerVehicle(this.host.world())))} of ${kg(chassisDef(playerVehicle(this.host.world()).chassisId).ratedMass)} rated · Money ${this.host.world().player.money}`,
       ),
       this.view.render(),
     );
