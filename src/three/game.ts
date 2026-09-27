@@ -864,7 +864,7 @@ export class Game {
 
   private playPanelSounds(): void {
     const open = this.modalOpen();
-    if (open !== this.panelOpen) this.sound.ui(open ? "ui-open" : "ui-close");
+    if (open !== this.panelOpen) this.sound.ui(open ? (this.world.player.call ? "radio" : "ui-open") : "ui-close");
     this.panelOpen = open;
   }
 
