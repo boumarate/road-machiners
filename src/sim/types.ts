@@ -198,7 +198,7 @@ export type CallVar =
   | { kind: "money"; amount: number }
   | { kind: "distance"; tiles: number }
   | { kind: "bearing"; rad: number }
-  | { kind: "count"; n: number }
+  | { kind: "count"; n: number; unit: string } // shown as "1 part" or "2 parts"
   | { kind: "deal"; deal: PatchDeal; patcher: "player" | "npc"; price: number; parts: number; turns: number };
 export type CallVars = Record<string, CallVar>;
 

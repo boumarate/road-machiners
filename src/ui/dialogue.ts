@@ -37,7 +37,7 @@ function distanceText(tiles: number): string {
 // A patch deal in words, from the NPC's side, with its numbers filled in.
 function dealText(v: Extract<CallVar, { kind: 'deal' }>): string {
   const line = DEAL_LINES[v.deal][v.patcher === 'player' ? 'playerPatches' : 'npcPatches'];
-  return fillLine(line, { price: { kind: 'money', amount: v.price }, parts: { kind: 'count', n: v.parts }, turns: { kind: 'count', n: v.turns } });
+  return fillLine(line, { price: { kind: 'money', amount: v.price }, parts: { kind: 'count', n: v.parts, unit: 'part' }, turns: { kind: 'count', n: v.turns, unit: 'turn' } });
 }
 
 type VarText = { [K in CallVar['kind']]: (v: Extract<CallVar, { kind: K }>) => string };
@@ -47,7 +47,7 @@ const VAR_TEXT: VarText = {
   money: (v) => String(v.amount),
   distance: (v) => distanceText(v.tiles),
   bearing: (v) => compass(v.rad),
-  count: (v) => String(v.n),
+  count: (v) => `${v.n} ${v.n === 1 ? v.unit : `${v.unit}s`}`,
   deal: dealText,
 };
 

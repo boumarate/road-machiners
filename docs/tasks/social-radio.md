@@ -344,6 +344,8 @@ Invariants:
 - UK2 — resolved — a waiting client holds a `patch` goal, and the state timer ends the wait.
 - UK3 — resolved — deal kinds are states in `src/sim/states.ts`.
 
+After the npc-traits update: npc-traits now gives every NPC `NPC_UPKEEP.repairParts` for its own field repairs. That replaced this task's spare parts tables, which were removed as a duplicate. A stranded NPC that carries enough parts fixes itself and does not ask the player for a patch. The rest of `main` is not merged here: it conflicts with npc-traits in 12 files that belong to other tasks.
+
 Review findings:
 - Important: the spare parts roll skipped the RNG for a one-outcome table, unlike every other loadout roll. Fixed in 397fd9d: raider tables say `spareParts: null` and roll nothing.
 
