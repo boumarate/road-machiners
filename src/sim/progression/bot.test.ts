@@ -69,6 +69,20 @@ describe('botOrders', () => {
     expect(Object.keys(goodsCount(playerVehicle(turn.world)))).toEqual(['salt']);
   });
 
+  it('has a scavenger with no salvage left, every site found and no load it can afford wait in the nearest town', () => {
+    const w = emptyWorld({ x: 60, y: 60 });
+    const me = playerVehicle(w);
+    removeAllGoods(me);
+    w.salvage = [];
+    w.player.discovered = [...REGION.towns, ...REGION.locations].map((site) => site.id);
+    w.player.money = 0;
+
+    const turn = botOrders(w, 'scavenger');
+
+    const home = nearestTown(w);
+    expect(playerVehicle(turn.world).order).toEqual({ kind: 'stopAt', dest: nearestPad(home, me.pos) });
+  });
+
   // A knockout strips the engine, and the stranded truck is stuck until it gets one.
   function withoutEngine(w: ReturnType<typeof parkedAt>) {
     const me = playerVehicle(w);

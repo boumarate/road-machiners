@@ -214,14 +214,15 @@ function serviceHere(o: Orders): void {
 
 const GOALS: Record<Goal, (o: Orders) => void> = { trader: traderGoal, scavenger: scavengerGoal, fighter: fight };
 
-// A trader with too little money for a load, and every town known, scavenges until it can buy one.
+// A trader with too little money for a load, and every town known, scavenges until it can buy one. Salvage never
+// grows back, so a bot with neither left waits in the nearest town.
 function traderGoal(o: Orders): void {
-  if (!trade(o) && !scavenge(o)) throw new Error(`Trader bot can neither trade nor scavenge, with ${o.world.player.money} money`);
+  if (!trade(o) && !scavenge(o)) driveToSite(o, nearestTown(o.world));
 }
 
-// A scavenger with no stock left to search and no salvage site left to find trades instead.
+// A scavenger with no stock left to search and no salvage site left to find trades instead, or waits in town.
 function scavengerGoal(o: Orders): void {
-  if (!scavenge(o) && !trade(o)) throw new Error(`Scavenger bot can neither scavenge nor trade, with ${o.world.player.money} money`);
+  if (!scavenge(o) && !trade(o)) driveToSite(o, nearestTown(o.world));
 }
 
 type Purchase = { town: TownDef; good: string; count: number; profit: number };
