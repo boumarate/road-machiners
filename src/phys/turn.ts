@@ -12,10 +12,10 @@ import { advanceFar } from '../sim/far';
 import { applyContactCrash } from '../sim/crash-contact';
 import { isTowed } from '../sim/tow';
 import { burnFuel } from '../sim/resources';
-import type { Pose, World } from '../sim/types';
+import type { MoveOrder, Pose, Vehicle, World } from '../sim/types';
 import { dist } from '../sim/vec';
 import { visibleTiles } from '../sim/vision';
-import { bodyState, captureDrive, freeDrive, initPhysics, restoreDrive, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type DriveSnapshot, type TurnResult } from './drive';
+import { bodyState, captureDrive, freeDrive, initPhysics, restoreDrive, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type DriveSnapshot, type TurnResult, type VehicleResult } from './drive';
 import { headingOf, toMap } from './frames';
 
 export type TurnState = Omit<World, 'terrain'>;
@@ -113,16 +113,32 @@ export function applyTurn(w: World, r: TurnResult): void {
     v.speed = Math.max(0, toTilesPerTurn(s.speed));
     v.trail = trailOf(start, frames);
     burnFuel(w, v, pathLength(v.trail));
-    const res = r.results[v.id];
-    const done = (v.order?.kind === 'through' && res.passed) || (v.order?.kind === 'stopAt' && res.arrived);
-    if (done) w.events.push({ t: 'arrived', vehicle: v.id });
-    if (done || (v.order?.kind === 'brake' && v.speed < STOPPED)) v.order = null;
+    settleOrder(w, v, r.results[v.id]);
   }
   for (const c of r.crashes) {
     const a = w.vehicles.find((v) => v.id === c.a);
     if (!a) throw new Error(`Crash with unknown vehicle ${c.a}`);
     const b = w.vehicles.find((v) => v.id === c.b) ?? null;
     applyContactCrash(w, a, b, c.b, toTilesPerTurn(c.impact), c.contact);
+  }
+}
+
+// Clears an order the turn completed. A stop order holds until the truck stands still,
+// so a slow roll after arrival still brakes.
+function settleOrder(w: World, v: Vehicle, res: VehicleResult): void {
+  if (!v.order || !orderDone(v.order, res, v.speed < STOPPED)) return;
+  if (v.order.kind !== 'brake') w.events.push({ t: 'arrived', vehicle: v.id });
+  v.order = null;
+}
+
+function orderDone(order: MoveOrder, res: VehicleResult, stopped: boolean): boolean {
+  switch (order.kind) {
+    case 'through':
+      return res.passed;
+    case 'stopAt':
+      return res.arrived && stopped;
+    case 'brake':
+      return stopped;
   }
 }
 
