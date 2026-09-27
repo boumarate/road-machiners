@@ -5,7 +5,7 @@ import { makeVehicle } from '../sim/factory';
 import { addGoods, removeAllGoods } from '../sim/inventory';
 import { loadFactor, vehicleMass } from '../sim/mass';
 import { corePart } from '../sim/grid';
-import { addVehicle, emptyWorld, npcBrain, partHp } from '../sim/testkit';
+import { addVehicle, editableTerrain, emptyWorld, npcBrain, partHp } from '../sim/testkit';
 import type { MoveOrder, World } from '../sim/types';
 import { angleDiff, bearing, dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
@@ -15,10 +15,24 @@ import { buildDrive, freeDrive, initPhysics, routeAim, simulateTurn, syncDrive, 
 import { physicsMove } from './turn';
 import { playerTow, unhitch } from '../sim/tow';
 import { chooseOption, currentOptions } from '../sim/dialogue';
+import { soundRange } from '../sim/detect';
 
 beforeAll(async () => {
   await initPhysics();
 });
+
+// Plays n turns through the real turn pipeline with physics movement, carrying one Drive from turn
+// to turn as the game does, so the body keeps its speed.
+function play(w: World, n: number): { w: World; d: Drive } {
+  let d = buildDrive(w);
+  for (let i = 0; i < n; i++) {
+    let next: Drive | null = null;
+    w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+    freeDrive(d);
+    d = next!;
+  }
+  return { w, d };
+}
 
 describe('impact geometry', () => {
   it('captures rear-end contacts and relative closing speed before the turn ends', () => {
@@ -45,18 +59,6 @@ describe('impact geometry', () => {
     }
   });
 });
-
-// Plays n turns through the real turn pipeline with physics movement.
-function play(w: World, n: number): { w: World; d: Drive } {
-  let d = buildDrive(w);
-  for (let i = 0; i < n; i++) {
-    let next: Drive | null = null;
-    w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
-    freeDrive(d);
-    d = next!;
-  }
-  return { w, d };
-}
 
 function ordered(order: MoveOrder, speed = 0, heading = 0): World {
   const w = emptyWorld();
@@ -145,6 +147,14 @@ describe('physics turns', () => {
     expect(me(w).speed).toBeLessThan(0.1);
   });
 
+  it('mud covers less ground than road at the same order', () => {
+    const w = emptyWorld();
+    editableTerrain(w).types.fill('mud');
+    const mud = play(setMoveOrder(w, { kind: 'through', dest: { x: 60, y: 30 } }), 3).w;
+    const road = play(ordered({ kind: 'through', dest: { x: 60, y: 30 } }), 3).w;
+    expect(me(mud).pos.x - 30).toBeLessThan(me(road).pos.x - 30);
+  });
+
   it('a far click speeds up, a mid click holds speed', () => {
     const far = play(ordered({ kind: 'through', dest: { x: 45, y: 30 } }, 3), 1).w;
     expect(me(far).speed).toBeGreaterThan(3.5);
@@ -163,6 +173,29 @@ describe('physics turns', () => {
 
   it('a fast truck slows to curve onto a drive-through point inside its turning circle', () => {
     const { w, d } = play(ordered({ kind: 'through', dest: { x: 36, y: 35 } }, 7.8), 2);
+    expect(me(w).order).toBeNull();
+    freeDrive(d);
+  });
+
+  it('a fast truck that misses a drive-through point wide drives on instead of circling back', () => {
+    const dest = { x: 33, y: 32 };
+    let w = ordered({ kind: 'through', dest }, 7.8);
+    let d = buildDrive(w);
+    let turned = 0;
+    for (let i = 0; i < 3; i++) {
+      let r: TurnResult | null = null;
+      w = endTurn(w, physicsMove(d, (x) => (r = x)));
+      freeDrive(d);
+      d = r!.next;
+      turned = Math.max(turned, Math.abs(angleDiff(me(w).heading, 0)));
+    }
+    freeDrive(d);
+    expect(me(w).order).toBeNull();
+    expect(turned).toBeLessThan(Math.PI / 2);
+  });
+
+  it('from rest, a close drive-through click is reached instead of stopping short', () => {
+    const { w, d } = play(ordered({ kind: 'through', dest: { x: 33, y: 30.5 } }), 5);
     expect(me(w).order).toBeNull();
     freeDrive(d);
   });
@@ -336,7 +369,7 @@ describe('physics turns', () => {
     expect(dist(me(w).pos, { x: 40, y: 30 })).toBeGreaterThan(3);
   });
 
-  it('a truck without an engine is pushed toward the click at limp speed and burns no fuel', () => {
+  it('a truck without an engine is pushed toward the click at limp speed, burns no fuel and makes no sound', () => {
     const w0 = ordered({ kind: 'stopAt', dest: { x: 38, y: 30 } });
     w0.vehicles[0].items = w0.vehicles[0].items.filter((it) => it.kind !== 'part' || partDef(it.part.defId).kind !== 'engine');
     const fuel = w0.player.fuel;
@@ -344,6 +377,7 @@ describe('physics turns', () => {
     expect(me(w).pos.x).toBeGreaterThan(30 + RULES.limpSpeed);
     expect(me(w).speed).toBeLessThanOrEqual(RULES.limpSpeed + 0.3);
     expect(w.player.fuel).toBe(fuel);
+    expect(soundRange(w, me(w))).toBe(0);
     freeDrive(d);
   });
 

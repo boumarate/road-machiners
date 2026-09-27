@@ -11,7 +11,7 @@ import { spendSkillPoint } from './progress';
 import { startSearch } from './search';
 import { addState, endState, stateOf } from './states';
 import { startRepair } from './jobs';
-import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
 import type { SalvageStock, Vehicle, World } from './types';
 import { endTurn, setDirect, setMoveOrder, setWeaponOrder } from './world';
 
@@ -57,11 +57,11 @@ describe('death', () => {
   it('dies in a turn that ends at 0 health, and no turn runs after', () => {
     let w = emptyWorld();
     w.player.health = 0;
-    w = endTurn(w);
+    w = endTurn(w, testDrive);
     expect(w.player.state).toBe('dead');
     expect(w.events.some((e) => e.t === 'death')).toBe(true);
     expect(w.events.some((e) => e.t === 'knockout')).toBe(false);
-    expect(() => endTurn(w)).toThrow(/dead/);
+    expect(() => endTurn(w, testDrive)).toThrow(/dead/);
   });
 
   it('does not knock out a dead player with a broken cab', () => {
@@ -77,7 +77,7 @@ describe('death', () => {
   it('a broke, starving player weakens to the starve floor without a knockout', () => {
     let w = emptyWorld({ x: 30, y: 30 });
     Object.assign(w.player, { fuel: 0, supplies: 0, money: 0 });
-    for (let i = 0; i < 20; i++) w = endTurn(w);
+    for (let i = 0; i < 20; i++) w = endTurn(w, testDrive);
     expect(w.player.health).toBe(RULES.starveFloor);
     expect(w.player.state).toBe('active');
     expect(w.player.knockouts).toBe(0);
@@ -162,12 +162,12 @@ describe('knockout', () => {
     let w = emptyWorld({ x: 30, y: 30 });
     w.salvage = [];
     corePart(w.vehicles[0], 'cab').hp = 0;
-    w = endTurn(w);
-    w = endTurn(w);
+    w = endTurn(w, testDrive);
+    w = endTurn(w, testDrive);
     expect(w.player.state).toBe('active');
     expect(addGoods(w, w.vehicles[0], 'scrap', 1)).toBe(1);
     corePart(w.vehicles[0], 'cab').hp = 0;
-    w = endTurn(w);
+    w = endTurn(w, testDrive);
     expect(w.player.state).toBe('knockedOut');
     expect(new Set(w.salvage.map((s) => s.id)).size).toBe(2);
   });
@@ -180,7 +180,7 @@ describe('knockout', () => {
     addState(w, 'feud', raider.id, w.vehicles[0].id, { kind: 'feud', robbery: false }); // keeps the player knocked out
     const at = { ...w.vehicles[0].pos };
     for (let i = 0; i < 5; i++) {
-      w = endTurn(w);
+      w = endTurn(w, testDrive);
       expect(w.player.state).toBe('knockedOut');
       expect(w.vehicles[0].pos).toEqual(at);
     }
@@ -192,7 +192,7 @@ describe('waking', () => {
     const { w, me } = knockedOut();
     const wheel = coreParts(me, 'wheel')[0];
     wheel.hp = 0;
-    const next = endTurn(w);
+    const next = endTurn(w, testDrive);
     const truck = next.vehicles[0];
     expect(next.player.state).toBe('active');
     expect(next.events).toContainEqual({ t: 'wake' });
@@ -215,7 +215,7 @@ describe('waking', () => {
     addVehicle(w, 'raiders', 'buggy', [], { x: 36, y: 30 });
     let turns = 0;
     while (w.player.state === 'knockedOut') {
-      w = endTurn(w);
+      w = endTurn(w, testDrive);
       turns++;
       expect(turns).toBeLessThanOrEqual(RULES.knockoutMaxTurns);
     }
@@ -263,7 +263,7 @@ describe('the loot rule', () => {
     let w = w0;
     let took = false;
     for (let turn = 0; turn < 60 && !took; turn++) {
-      w = endTurn(w);
+      w = endTurn(w, testDrive);
       took = units(w.salvage.find((s) => s.id === stock.id)!) < full;
     }
     expect(took).toBe(true);
@@ -300,7 +300,7 @@ describe('commands while knocked out', () => {
     w.player.autoRepair = true;
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 36, y: 30 });
     addState(w, 'feud', raider.id, w.vehicles[0].id, { kind: 'feud', robbery: false });
-    w = endTurn(w);
+    w = endTurn(w, testDrive);
     expect(w.vehicles[0].job).toBeNull();
   });
 });

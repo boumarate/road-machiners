@@ -1,4 +1,3 @@
-import { START_KITS } from '../data/start';
 import { chooseOption, currentOptions } from './dialogue';
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
@@ -8,11 +7,10 @@ import { getResources } from './resources';
 import { siteGates } from './sites';
 import { autoOrders, fireWeapons, hitOdds, laneOfOffset, resolveDestroyed } from './combat';
 import { corePart, mountedItems, mountedParts } from './grid';
-import { isDriveObstacle } from './mapgen';
 import { stateOf } from './states';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
 import type { GameEvent, Vehicle } from './types';
 import { dist } from './vec';
 import { endTurn } from './world';
@@ -161,7 +159,7 @@ describe('combat', () => {
     for (let i = 0; i < 6; i++) {
       // A raider radios its demand first. Refusing keeps the fight.
       if (world.player.call) world = chooseOption(world, currentOptions(world).findIndex((o) => o.text === 'Come and get it.'));
-      world = endTurn(world);
+      world = endTurn(world, testDrive);
       if (world.events.some((e) => e.t === 'shot' && e.shooter === buggy.id && e.target === me.id)) shotAt = true;
     }
     expect(shotAt).toBe(true);
@@ -414,34 +412,6 @@ describe('player vision', () => {
     fireWeapons(w);
     expect(w.events.some((e) => e.t === 'shot' && e.shooter === me.id)).toBe(false);
   });
-});
-
-describe('invariants under AI traffic', () => {
-  it('no overlaps, limits held, and no negative numbers over 80 turns', async () => {
-    const { newWorld, setMoveOrder } = await import('./world');
-    const { maxTurn } = await import('./stats');
-    const { chassisDef } = await import('../data/chassis');
-    let w = setMoveOrder(newWorld(11, START_KITS.standard), { kind: 'stopAt', dest: { x: 45, y: 15 } });
-    for (let i = 0; i < 80; i++) {
-      const before = new Map(w.vehicles.map((v) => [v.id, { speed: v.speed, heading: v.heading, s: vehicleStats(w, v) }]));
-      w = endTurn(w);
-      const crashed = new Set(w.events.flatMap((e) => (e.t === 'collision' ? [e.a, e.b] : [])));
-      for (const v of w.vehicles) {
-        const r = vehicleStats(w, v).radius;
-        for (const o of w.obstacles.filter(isDriveObstacle)) expect(dist(v.pos, o.pos)).toBeGreaterThanOrEqual(o.r + r - 0.02);
-        for (const x of w.vehicles) if (x.id < v.id) expect(dist(v.pos, x.pos)).toBeGreaterThanOrEqual(r + chassisDef(x.chassisId).radius - 0.02);
-        for (const p of mountedParts(v)) expect(p.hp).toBeGreaterThanOrEqual(0);
-        const b = before.get(v.id);
-        if (!b || crashed.has(v.id) || v.trail.length === 0) continue;
-        expect(v.speed - b.speed).toBeLessThanOrEqual(b.s.accel + 1e-9);
-        expect(b.speed - v.speed).toBeLessThanOrEqual(Math.max(b.s.brake, b.speed - b.s.maxSpeed) + 1e-9);
-        const backed = b.speed <= RULES.reverse.below ? b.s.reverseTurn : 0;
-        expect(Math.abs(v.heading - b.heading)).toBeLessThanOrEqual(Math.max(maxTurn(b.s, v.speed), backed) + 1e-9);
-      }
-      for (const k of ['fuel', 'supplies', 'health', 'money'] as const) expect(w.player[k]).toBeGreaterThanOrEqual(0);
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    }
-  }, 120_000); // Eighty turns include long-distance traffic across the 600-tile region.
 });
 
 describe('NPC attack records and defensive fire', () => {

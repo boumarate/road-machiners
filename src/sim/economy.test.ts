@@ -27,13 +27,13 @@ import {
   mountedParts,
 } from "./grid";
 import { spareParts } from "./inventory";
-import { canScavenge, salvageNear, scavenge, useOasis } from "./locations";
+import { applySiteAction, canScavenge, salvageNear, scavenge, useOasis } from "./locations";
 import { gainXp, spendSkillPoint, xpForLevel } from "./progress";
 import { vehicleStats } from "./stats";
 import { consumeSupplies } from "./supplies";
 import { heatAt } from "./sun";
 import { locationAt, siteGates, townAt, townNear } from "./sites";
-import { addVehicle, emptyWorld } from "./testkit";
+import { addVehicle, emptyWorld, testDrive } from "./testkit";
 import { endTurn, newWorld } from "./world";
 
 const bowl = REGION.towns.find((t) => t.id === "bowl")!;
@@ -256,8 +256,42 @@ describe("locations", () => {
     const oasis = REGION.locations.find((l) => l.kind === "oasis")!;
     const w = emptyWorld({ x: oasis.pos.x + 2, y: oasis.pos.y });
     w.player.supplies = 1;
-    useOasis(w);
-    expect(w.player.supplies).toBe(RULES.suppliesCap);
+    const after = useOasis(w);
+    expect(after.player.supplies).toBe(RULES.suppliesCap);
+    expect(w.player.supplies).toBe(1);
+  });
+
+  it.each(REGION.locations.filter((site) => site.kind === "oasis"))("$name does not refill automatically", (oasis) => {
+    const w = emptyWorld({ x: oasis.pos.x + 2, y: oasis.pos.y });
+    w.player.supplies = 10;
+    const after = endTurn(w, () => {});
+    expect(after.player.supplies).toBeLessThanOrEqual(10);
+  });
+
+  it("requires stopping before refilling at an oasis", () => {
+    const oasis = REGION.locations.find((site) => site.kind === "oasis")!;
+    const w = emptyWorld(oasis.pos);
+    w.player.supplies = 1;
+    w.vehicles[0].speed = RULES.parkedSpeed + 1;
+    expect(() => useOasis(w)).toThrow("Stop the truck first");
+    expect(w.player.supplies).toBe(1);
+  });
+
+  it.each(REGION.locations.filter((site) => site.kind === "oasis"))("interacts with $name only while stopped", (oasis) => {
+    const w = emptyWorld(oasis.pos);
+    w.player.supplies = 1;
+    w.vehicles[0].speed = RULES.parkedSpeed + 1;
+    expect(applySiteAction(w)).toBeNull();
+    expect(w.player.supplies).toBe(1);
+    w.vehicles[0].speed = 0;
+    const after = applySiteAction(w);
+    expect(after?.player.supplies).toBe(RULES.suppliesCap);
+    expect(after?.events).toContainEqual({ t: "info", text: `Filled supplies at ${oasis.name}` });
+  });
+
+  it("rejects refilling away from an oasis", () => {
+    const w = emptyWorld({ x: 0, y: 0 });
+    expect(() => useOasis(w)).toThrow("Not at an oasis");
   });
 
   it("convoy starts a timed search, and a second search cannot start while it runs", () => {
@@ -293,12 +327,12 @@ describe("locations", () => {
       x: convoy.pos.x + 3.5,
       y: convoy.pos.y + 3.5,
     };
-    w = endTurn(w);
+    w = endTurn(w, testDrive);
     expect(w.player.discovered).toContain("burnt-convoy");
     expect(
       w.events.filter((e) => e.t === "discover" && e.location === convoy.id),
     ).toHaveLength(1);
-    w = endTurn(w);
+    w = endTurn(w, testDrive);
     expect(
       w.events.filter((e) => e.t === "discover" && e.location === convoy.id),
     ).toHaveLength(0);

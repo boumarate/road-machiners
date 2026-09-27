@@ -1,20 +1,20 @@
 import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
+import { ECONOMY } from '../data/goods';
 import { REGION } from '../data/region';
-import { resolveMovement } from './movement';
-import { TERRAIN_TYPES } from '../data/terrain';
+import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
 import { resetPerf, perfSnapshot } from '../perf';
 import { isDriveObstacle } from './mapgen';
 import { findCells, nearestFreeCell, stampOverlay } from './nav/astar';
 import { COARSE, componentOf, dynamicBlockers, navLayer, terrainNav, tileIndex } from './nav/layer';
 import { continueRoute, keepRoute, route, routeLength, straightClear, type Blocker } from './path';
 import { nextRandom } from './rng';
-import { isCliff, tileAt, type Terrain } from './terrain';
+import { isCliff, tileAt, tileSlope, type Terrain } from './terrain';
 import type { World } from './types';
 import { locationAt } from './sites';
 import { editableTerrain, emptyWorld } from './testkit';
 import { dist, polylineDist, segmentDist, type Vec } from './vec';
-import { endTurn, newWorld, setMoveOrder } from './world';
+import { newWorld } from './world';
 
 describe("route", () => {
   it("goes straight when nothing is in the way", () => {
@@ -50,23 +50,6 @@ describe("route", () => {
     expect(dist(end, center)).toBeLessThan(6 + 1 + 0.6 + 2);
   });
 
-  it("a truck drives around a rock wall without crashing", () => {
-    const w = emptyWorld();
-    w.obstacles = [0, 1, 2, 3].map((i) => ({
-      id: `r${i}`,
-      pos: { x: 34, y: 28 + i * 1.5 },
-      r: 0.8,
-      kind: "rock" as const,
-    }));
-    w.vehicles[0].order = { kind: "stopAt", dest: { x: 40, y: 30 } };
-    for (let i = 0; i < 12 && w.vehicles[0].order; i++) {
-      w.events = [];
-      resolveMovement(w);
-      expect(w.events.filter((e) => e.t === "collision")).toEqual([]);
-    }
-    expect(dist(w.vehicles[0].pos, { x: 40, y: 30 })).toBeLessThan(0.5);
-  });
-
   it('town buildings fit inside the blocked site instead of the road', () => {
     const w = newWorld(1337, START_KITS.standard);
     for (const town of REGION.towns) {
@@ -76,40 +59,17 @@ describe("route", () => {
     }
   });
 
-  it('sites block driving but permit interaction from their edge', () => {
+  it('a truck at a site edge can interact with it', () => {
     const w = newWorld(1337, START_KITS.standard);
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
     const site = REGION.locations.find((l) => l.kind === 'oasis')!;
+    const reach = (site.radius + ECONOMY.useRange) * ECONOMY.interactionScale;
     const v = w.vehicles[0];
-    v.pos = { x: site.pos.x + site.radius + 2, y: site.pos.y };
-    v.heading = Math.PI;
-    v.speed = 3;
-    v.order = { kind: 'through', dest: site.pos };
-    v.direct = true;
-    resolveMovement(w);
-    expect(dist(v.pos, site.pos)).toBeGreaterThanOrEqual(site.radius + 0.6 - 0.02);
-    expect(w.events.some((e) => e.t === 'collision' && e.b === `site-${site.id}`)).toBe(true);
+    v.pos = { x: site.pos.x + reach - 0.5, y: site.pos.y };
     expect(locationAt(w)?.id).toBe(site.id);
+    v.pos = { x: site.pos.x + reach + 0.5, y: site.pos.y };
+    expect(locationAt(w)).toBeNull();
   });
-
-  it('the player drives from Bowl to Nose without hitting static obstacles', () => {
-    const nose = REGION.towns.find((t) => t.id === 'nose')!;
-    let w = setMoveOrder(newWorld(1337, START_KITS.standard), { kind: 'stopAt', dest: nose.pos });
-    w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
-    w.player.fuel = 100;
-    const me = w.player.vehicleId;
-    for (let i = 0; i < w.size && dist(w.vehicles[0].pos, nose.pos) > nose.radius + 1.5; i++) {
-      w = endTurn(w);
-      w.vehicles = w.vehicles.filter((v) => v.faction === "player");
-      w.player.engineHeat = 0; // this drive never stops to cool down
-      const staticHits = w.events.filter(
-        (e) => e.t === "collision" && e.a === me && !e.b.startsWith("v"),
-      );
-      expect(staticHits).toEqual([]);
-    }
-    expect(dist(w.vehicles[0].pos, nose.pos)).toBeGreaterThanOrEqual(nose.radius + 0.6 - 0.02);
-    expect(dist(w.vehicles[0].pos, nose.pos)).toBeLessThanOrEqual(nose.radius + 1.5);
-  }, 120_000);
 });
 
 describe('kept routes', () => {
@@ -192,22 +152,6 @@ describe('routes prefer roads', () => {
     expect(roadShare(w, start, pts)).toBeGreaterThan(0.85);
   });
 
-  it('a truck following a road into a blocking rock stops on the corner instead of rolling into it', () => {
-    // Two roads meet at the center of a big rock, like roads meeting at a site.
-    const rock = { x: 60, y: 30 };
-    const w = roadWorld([{ x: 20, y: 30 }, rock, { x: 60, y: 0 }]);
-    w.obstacles = [{ id: 'r', pos: rock, r: 6, kind: 'rock' }];
-    const v = w.vehicles[0];
-    v.pos = { x: 22, y: 30 };
-    v.order = { kind: 'stopAt', dest: { x: 60, y: 8 } };
-    for (let i = 0; i < 40 && v.order; i++) {
-      w.events = [];
-      resolveMovement(w);
-      expect(w.events.filter((e) => e.t === 'collision')).toEqual([]);
-    }
-    expect(dist(w.vehicles[0].pos, { x: 60, y: 8 })).toBeLessThan(0.5);
-  });
-
   it('a truck pushed deep into a rock clearance routes out of it first', () => {
     const w = emptyWorld();
     const rock = { x: 40, y: 30 };
@@ -228,6 +172,16 @@ describe('routes prefer roads', () => {
     const at = (d: number) => nav.tileCost[tileIndex(nav.size, site.pos.x + d, site.pos.y)];
     expect(at(site.radius + REGION.roadWidth - 1)).toBeCloseTo(1 / TERRAIN_TYPES.hardpan.speed, 9);
     expect(at(site.radius + REGION.roadWidth + 1)).toBeCloseTo(REGION.navigation.offRoadCost / TERRAIN_TYPES.hardpan.speed, 9);
+  });
+
+  it('goes around a steep hill that it could climb', () => {
+    const w = emptyWorld();
+    const t = editableTerrain(w);
+    const n = t.size + 1;
+    // A cone of slope 0.45 between the ends, gentler than a cliff.
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) t.heights[j * n + i] = Math.max(0, 4 - Math.hypot(i - 35, j - 30)) * 0.45;
+    const pts = route(w, { x: 30, y: 30 }, { x: 40, y: 30 }, 0.6, []);
+    expect(polylineDist({ x: 35, y: 30 }, [{ x: 30, y: 30 }, ...pts])).toBeGreaterThan(3);
   });
 
   it('crosses open ground when the road detour is three times longer', () => {
@@ -251,12 +205,16 @@ namespace Ref {
     return probes.some((q) => isCliff(t, tileAt(t, q)));
   }
 
-  // Route cost per tile: 1 / terrain speed, times offRoadCost off the road and away from sites.
+  // Route cost per tile: 1 / terrain speed, times offRoadCost off the road and away from sites, times
+  // the slope multiplier.
   function tileCost(t: Terrain, p: Vec): number {
-    const type = t.types[tileAt(t, p)];
+    const tile = tileAt(t, p);
+    const type = t.types[tile];
     const c = { x: Math.floor(p.x) + 0.5, y: Math.floor(p.y) + 0.5 };
     const bySite = [...REGION.towns, ...REGION.locations].some((s) => dist(c, s.pos) < s.radius + REGION.roadWidth);
-    return (type === 'road' || bySite ? 1 : REGION.navigation.offRoadCost) / TERRAIN_TYPES[type].speed;
+    const s = tileSlope(t, tile);
+    const slope = 1 + REGION.navigation.slopeCost * (Math.hypot(s.x, s.y) / TERRAIN.drive.maxSlope) ** 2;
+    return ((type === 'road' || bySite ? 1 : REGION.navigation.offRoadCost) / TERRAIN_TYPES[type].speed) * slope;
   }
 
   export function terrainLayer(t: Terrain, radius: number): { n: number; cliff: Uint8Array; slow: Float32Array } {

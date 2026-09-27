@@ -14,7 +14,7 @@ import { corePart, goodsCount, mountedParts } from './grid';
 import { spareParts } from './inventory';
 import { clockOf } from './sun';
 import { addState, stateOf } from './states';
-import { addVehicle, emptyWorld, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import type { World } from './types';
 import { dist } from './vec';
 import { canUseSite } from './sites';
@@ -145,8 +145,8 @@ describe('god mode', () => {
       corePart(playerVehicle(w), 'cab').hp = 0;
       return w;
     };
-    expect(endTurn(broken(false)).player.state).toBe('knockedOut');
-    expect(endTurn(broken(true)).player.state).toBe('active');
+    expect(endTurn(broken(false), testDrive).player.state).toBe('knockedOut');
+    expect(endTurn(broken(true), testDrive).player.state).toBe('active');
   });
 });
 
@@ -294,7 +294,7 @@ describe('vehicle cheats', () => {
     const next = killVehicles(w, tower.id);
     expect(next.states).toEqual([]);
     expect(next.events).toContainEqual({ t: 'towDropped', by: tower.id, reason: 'gone' });
-    expect(() => endTurn(next)).not.toThrow();
+    expect(() => endTurn(next, testDrive)).not.toThrow();
   });
 
   it('ends feuds with a killed vehicle, so its enemy drops the fight next turn', () => {
@@ -306,7 +306,7 @@ describe('vehicle cheats', () => {
     hunter.brain.goals.push({ kind: 'fight', targetId: prey.id, destination: { ...prey.pos }, phase: 'travel', reason: 'test' });
     const next = killVehicles(w, prey.id);
     expect(next.states).toEqual([]);
-    const after = endTurn(next).vehicles.find((v) => v.id === hunter.id)!;
+    const after = endTurn(next, testDrive).vehicles.find((v) => v.id === hunter.id)!;
     expect(after.brain!.goals.some((g) => g.kind === 'fight')).toBe(false);
   });
 

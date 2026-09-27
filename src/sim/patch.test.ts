@@ -10,7 +10,7 @@ import { topGoal } from './npc-activities';
 import { patchData } from './patch';
 import { stateOf } from './states';
 import { isStranded } from './stats';
-import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
 import type { GameEvent, PatchDeal, Vehicle, World } from './types';
 import { endTurn, setMoveOrder } from './world';
 
@@ -54,7 +54,7 @@ function askPatch(w: World, traderId: string): World {
 function runUntil(w: World, max: number, done: (w: World) => boolean): { w: World; events: GameEvent[] } {
   const events: GameEvent[] = [];
   for (let i = 0; i < max && !done(w); i++) {
-    w = endTurn(w);
+    w = endTurn(w, testDrive);
     events.push(...w.events);
   }
   return { w, events };
@@ -146,7 +146,7 @@ describe('a stranded driver asking the player', () => {
   it('calls once, and the player patches it for pay by parking beside it', () => {
     const { w: start, npc } = brokenNpc();
     forceOption('patchDeal', 'paid');
-    let w = endTurn(start);
+    let w = endTurn(start, testDrive);
     expect(w.player.call).toMatchObject({ with: npc.id, topic: 'patchRequest' });
     w = answer(w, 'What are you offering?');
     w = answer(w, 'Deal. Stay where you are.');
@@ -165,13 +165,13 @@ describe('a stranded driver asking the player', () => {
   it('a driver carrying the parts fixes its own truck instead of asking', () => {
     const { w: start, npc } = brokenNpc();
     addGoods(start, npc, 'parts', 2);
-    const w = endTurn(start);
+    const w = endTurn(start, testDrive);
     expect(w.player.call).toBeNull();
   });
 
   it('a refused request is not raised again', () => {
     const { w: start, npc } = brokenNpc();
-    let w = endTurn(start);
+    let w = endTurn(start, testDrive);
     w = answer(w, 'What are you offering?');
     w = answer(w, 'Not today.');
     w = runUntil(w, 5, (x) => x.player.call !== null).w;
@@ -182,7 +182,7 @@ describe('a stranded driver asking the player', () => {
   it('a client that can no longer pay breaks the deal for free', () => {
     const { w: start, npc } = brokenNpc();
     forceOption('patchDeal', 'paid');
-    let w = endTurn(start);
+    let w = endTurn(start, testDrive);
     w = answer(answer(w, 'What are you offering?'), 'Deal. Stay where you are.');
     find(w, npc.id).resources!.money = 0;
     w = setMoveOrder(w, { kind: 'stopAt', dest: { x: 38, y: 30 } });
@@ -194,7 +194,7 @@ describe('a stranded driver asking the player', () => {
 
   it('a deal nobody works on lapses for free', () => {
     const { w: start, npc } = brokenNpc();
-    let w = endTurn(start);
+    let w = endTurn(start, testDrive);
     w = answer(w, 'What are you offering?');
     w = answer(w, 'Deal. Stay where you are.');
     const money = w.player.money;
@@ -203,6 +203,6 @@ describe('a stranded driver asking the player', () => {
     expect(r.w.player.money).toBe(money);
     expect(parts(playerVehicle(r.w))).toBe(4);
     // The driver notices the deal is off when it next thinks.
-    expect(topGoal(find(endTurn(r.w), npc.id))?.kind).not.toBe('patch');
+    expect(topGoal(find(endTurn(r.w, testDrive), npc.id))?.kind).not.toBe('patch');
   });
 });

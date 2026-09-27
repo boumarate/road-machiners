@@ -14,8 +14,7 @@ import { assignAutoOrders, fireWeapons, isHostile, resolveDestroyed } from './co
 import { advanceKnockout, checkDeath, checkKnockout } from './defeat';
 import { healPlayer } from './health';
 import { fireGuards } from './guards';
-import { discoverSites, useOasis } from './locations';
-import { resolveMovement } from './movement';
+import { discoverSites } from './locations';
 import { consumeSupplies, leakFuel } from './supplies';
 import { spawnInitial, spawnNpcs } from './spawn';
 import { initializeSalvage } from './salvage';
@@ -181,10 +180,11 @@ export function setMoveOrder(world: World, order: MoveOrder | null): World {
   });
 }
 
-// move resolves this turn's driving on the draft: the 2D rules, or the physics engine.
+// move resolves this turn's driving on the draft. The game always plugs in the physics engine
+// via src/phys/turn.ts; tests that need a real turn build a Drive and pass physicsMove.
 export function endTurn(
   world: World,
-  move: (w: World) => void = resolveMovement,
+  move: (w: World) => void,
 ): World {
   if (world.player.state === 'dead') throw new Error('The player is dead; no more turns run');
   if (world.player.call) throw new Error('A radio call is open; no turn runs until it ends');
@@ -214,7 +214,6 @@ export function endTurn(
     checkBeacon(w);
     resolveNpcActivities(w);
     discoverSites(w);
-    useOasis(w);
     checkDeath(w);
     advanceKnockout(w);
     checkKnockout(w);

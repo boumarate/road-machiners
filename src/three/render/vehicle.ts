@@ -40,6 +40,11 @@ const SIDE_YAW: Record<SideLetter, number> = { F: 0, B: Math.PI, R: -Math.PI / 2
 const EDGE_H = 1;
 const SKIRT = 0.22; // meters a base hangs below the collider, SKIRT in tools/blender/parts_common_base.py
 
+// A truck behind terrain or props shows through as a flat faction-color silhouette.
+const SILHOUETTE_OPACITY = 0.5;
+const SILHOUETTE_ORDER = 810; // after opaque ground, props and trucks; below the path (820) and zones (850)
+const TRUCK_STENCIL = 1; // stencil value marking pixels where a truck or its silhouette is already drawn
+
 type Wheel = { mount: THREE.Group; spin: THREE.Object3D; restY: number };
 
 // Where a model goes in body space.
@@ -64,16 +69,18 @@ export class VehicleView {
   private turrets: THREE.Group[] = [];
   private heading = 0;
   private lampMat = new THREE.MeshBasicMaterial({ color: PAL.lamp.off });
+  private silhouetteMat!: THREE.MeshBasicMaterial; // set by rebuild
 
-  constructor(v: Vehicle) {
-    this.update(v);
+  constructor(v: Vehicle, seen: boolean) {
+    this.update(v, seen);
   }
 
-  update(v: Vehicle): void {
+  // seen: the player sees the vehicle now, so it shows its silhouette where something nearer covers it.
+  update(v: Vehicle, seen: boolean): void {
     const sig = signatureOf(v);
-    if (sig === this.sig) return;
+    if (sig !== this.sig) this.rebuild(v);
     this.sig = sig;
-    this.rebuild(v);
+    this.silhouetteMat.visible = seen;
   }
 
   pose(f: VehicleFrame): void {
@@ -139,6 +146,27 @@ export class VehicleView {
     }
     this.buildWheels(v, body, wheelItems, paint);
     this.root.add(mergeStatic(still));
+    this.buildSilhouette(paint);
+  }
+
+  // Every truck mesh marks its pixels in the stencil and gets a twin with the silhouette material under the same parent.
+  // The twin draws only where it is behind the depth buffer and the stencil is unmarked, so it never covers the visible truck.
+  // It marks what it draws, so overlapping parts paint each pixel once.
+  private buildSilhouette(paint: number): void {
+    this.silhouetteMat = silhouetteMaterial(paint);
+    const meshes: THREE.Mesh[] = [];
+    this.root.traverse((o) => {
+      if (o instanceof THREE.Mesh) meshes.push(o);
+    });
+    for (const mesh of meshes) {
+      markStencil(mesh.material as THREE.Material);
+      const twin = new THREE.Mesh(mesh.geometry, this.silhouetteMat);
+      twin.position.copy(mesh.position);
+      twin.quaternion.copy(mesh.quaternion);
+      twin.scale.copy(mesh.scale);
+      twin.renderOrder = SILHOUETTE_ORDER;
+      mesh.parent!.add(twin);
+    }
   }
 
   // Headlight faces share the lamp material, so lamps() switches them all.
@@ -295,6 +323,27 @@ export class VehicleView {
     wheel.scale.set(body.wheelRadius, body.wheelRadius, body.wheelHalfWidth * 2);
     return wheel;
   }
+}
+
+function silhouetteMaterial(color: number): THREE.MeshBasicMaterial {
+  return new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: SILHOUETTE_OPACITY,
+    depthWrite: false,
+    depthFunc: THREE.GreaterDepth,
+    stencilWrite: true,
+    stencilRef: TRUCK_STENCIL,
+    stencilFunc: THREE.NotEqualStencilFunc,
+    stencilZPass: THREE.ReplaceStencilOp,
+  });
+}
+
+function markStencil(mat: THREE.Material): void {
+  mat.stencilWrite = true;
+  mat.stencilRef = TRUCK_STENCIL;
+  mat.stencilFunc = THREE.AlwaysStencilFunc;
+  mat.stencilZPass = THREE.ReplaceStencilOp;
 }
 
 // Rows past the chassis grid come from mounted cargo parts. The cargo model stands for them, so their items are not drawn.

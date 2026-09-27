@@ -1,6 +1,6 @@
 # NPC behavior: traits, goals and states
 
-**Status:** validating
+**Status:** done
 **Branch:** npc-traits (from defeat-rescue at 6619d53)
 **Worktree:** .worktrees/npc-traits
 **Goal:** In the running game, NPCs show traits in the hover panel. NPCs with the same traits make different choices. A scumbag scavenger scavenges, sometimes attacks a weaker player or NPC who has loot, and returns to scavenging after interruptions. A feud that goes quiet ends, and its hook runs. Tows run as states. Confirming needs a Playwright run and user sign-off.
@@ -346,7 +346,7 @@ Smoke: 1000 turns from the default seed gave 9 robberies, 1 loot and 46 NPC repa
 
 ## Conclusion
 
-Outcome: traits, the goal stack, weighted decisions with a 1% floor, states with hooks, robbery and loot, the hover panel and main's npc-restraint behavior are built and verified at 964eca6. The goal waits on user playtest sign-off.
+Outcome: traits, the goal stack, weighted decisions with a 1% floor, states with hooks, robbery and loot, the hover panel and main's npc-restraint behavior are built and verified at 964eca6. The user playtested it, and the four bugs found are fixed. Merged into main as 891367e.
 
 Invariants:
 - IV1–IV5, IV8–IV13 — held under the CK checks in Verify.

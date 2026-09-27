@@ -35,13 +35,24 @@ export function discoverSite(world: World, s: { id: string; name: string }): voi
   gainXp(world, RULES.discoverXp, `found ${s.name}`);
 }
 
-// Passive effect: stopping at the oasis refills supplies for free.
-export function useOasis(world: World): void {
-  const loc = locationAt(world);
-  if (loc?.kind !== 'oasis' || world.player.supplies >= RULES.suppliesCap) return;
-  if (playerVehicle(world).speed > RULES.parkedSpeed) return;
-  world.player.supplies = RULES.suppliesCap;
-  world.events.push({ t: "info", text: `Filled supplies at ${loc.name}` });
+export function applySiteAction(world: World): World | null {
+  if (canUseOasis(world)) return useOasis(world);
+  if (canScavenge(world)) return scavenge(world);
+  return null;
+}
+
+export function canUseOasis(world: World): boolean {
+  return locationAt(world)?.kind === 'oasis' && playerVehicle(world).speed <= RULES.parkedSpeed;
+}
+
+export function useOasis(world: World): World {
+  return playerCommand(world, (w) => {
+    const loc = locationAt(w);
+    if (loc?.kind !== 'oasis') throw new Error('Not at an oasis');
+    if (!canUseOasis(w)) throw new Error('Stop the truck first');
+    w.player.supplies = RULES.suppliesCap;
+    w.events.push({ t: "info", text: `Filled supplies at ${loc.name}` });
+  });
 }
 
 function seesArea(world: World, center: Vec, radius: number): boolean {

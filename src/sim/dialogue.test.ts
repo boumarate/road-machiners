@@ -11,7 +11,7 @@ import { hasCargo } from './salvage';
 import { vehicleStats } from './stats';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
 import { addState, endState, stateOf } from './states';
-import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
 import type { TraitId } from '../data/npcs';
 import type { Vehicle, World } from './types';
 import { dist } from './vec';
@@ -93,12 +93,12 @@ describe('calls', () => {
   it('stops turns and other commands until it ends', () => {
     const { w, npc } = withNpc('trader', 'traders');
     const open = callVehicle(w, npc.id);
-    expect(() => endTurn(open)).toThrow(/radio call/);
+    expect(() => endTurn(open, testDrive)).toThrow(/radio call/);
     expect(() => setMoveOrder(open, { kind: 'brake' })).toThrow(/radio call/);
     expect(autoRuns({ ...open, player: { ...open.player, state: 'knockedOut' } })).toBe(false);
     const closed = hangUp(open);
     expect(closed.player.call).toBeNull();
-    expect(() => endTurn(closed)).not.toThrow();
+    expect(() => endTurn(closed, testDrive)).not.toThrow();
   });
 
   it('a raider offers only hanging up', () => {
@@ -254,14 +254,14 @@ describe('demand', () => {
 
   it('a raider calls with its demand before the first shot', () => {
     const { w: start, raider } = ambush();
-    const w = endTurn(start);
+    const w = endTurn(start, testDrive);
     expect(w.player.call).toMatchObject({ with: raider.id, topic: 'demand' });
     expect(shotsBetween(w, raider.id, w.player.vehicleId)).toEqual([]);
   });
 
   it('handing over drops every goods item and loose part, and buys a truce', () => {
     const { w: start, raider } = ambush();
-    let w = endTurn(start);
+    let w = endTurn(start, testDrive);
     const me = playerVehicle(w);
     const cargo = me.items.filter((i) => i.kind === 'good' || !isMounted(me.chassisId, i)).length;
     w = chooseOption(w, currentOptions(w).findIndex((o) => o.text === 'Fine. Take it.'));
@@ -273,18 +273,18 @@ describe('demand', () => {
     const r = w.vehicles.find((v) => v.id === raider.id)!;
     expect(isHostile(w, r, playerVehicle(w))).toBe(false);
     for (let i = 0; i < 5; i++) {
-      w = endTurn(w);
+      w = endTurn(w, testDrive);
       expect(shotsBetween(w, raider.id, me.id)).toEqual([]);
     }
   });
 
   it('refusing keeps the fight, and the demand is not made twice', () => {
     const { w: start, raider } = ambush();
-    let w = endTurn(start);
+    let w = endTurn(start, testDrive);
     w = chooseOption(w, currentOptions(w).findIndex((o) => o.text === 'Come and get it.'));
     let shots = 0;
     for (let i = 0; i < 8; i++) {
-      w = endTurn(w);
+      w = endTurn(w, testDrive);
       expect(w.player.call).toBeNull();
       shots += shotsBetween(w, raider.id, w.player.vehicleId).length;
     }
@@ -293,7 +293,7 @@ describe('demand', () => {
 
   it('shots end a truce through a feud, and the truce expires on its own', () => {
     const { w: start, raider } = ambush();
-    let w = endTurn(start);
+    let w = endTurn(start, testDrive);
     w = chooseOption(w, currentOptions(w).findIndex((o) => o.text === 'Fine. Take it.'));
     const me = w.player.vehicleId;
     addState(w, 'feud', raider.id, me, { kind: 'feud', robbery: false });
@@ -301,7 +301,7 @@ describe('demand', () => {
     expect(isHostile(w, r, playerVehicle(w))).toBe(true);
     endState(w, stateOf(w, 'feud', raider.id, me)!, 'broken');
     stateOf(w, 'truce', raider.id, me)!.turnsLeft = 1;
-    w = endTurn(w);
+    w = endTurn(w, testDrive);
     expect(stateOf(w, 'truce', raider.id, me)).toBeNull();
   });
 });

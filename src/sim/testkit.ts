@@ -1,13 +1,16 @@
 import { START_KITS } from '../data/start';
 // Helpers for sim tests.
 
+import { RULES } from '../data/rules';
 import { makeVehicle } from './factory';
 import { mountedParts } from './grid';
+import { burnFuel } from './resources';
+import { vehicleStats } from './stats';
 import type { Terrain } from './terrain';
 import { onTestFinished } from 'vitest';
 import { DECISIONS, STATE_WEIGHTS, TRAITS, type DecisionId, type DecisionOptions, type TraitId } from '../data/npcs';
 import type { Faction, NpcBrain, Vehicle, World } from './types';
-import type { Vec } from './vec';
+import { dist, type Vec } from './vec';
 import { refreshVision } from './vision';
 import { cloneWorld, newWorld } from './world';
 
@@ -80,4 +83,40 @@ export function forceOption<D extends DecisionId>(decision: D, option: DecisionO
 // Total hit points of the mounted parts, for checking that damage landed.
 export function partHp(v: Vehicle): number {
   return mountedParts(v).reduce((a, p) => a + p.hp, 0);
+}
+
+// A driving stand-in for tests that only need vehicles to make progress toward their orders, not to
+// drive realistically: it ignores terrain, obstacles and other vehicles, so it never fires a collision
+// event and its speeds do not match the physics engine. Pass to endTurn in tests of combat, defeat,
+// the economy, NPC activities, salvage, search and tow, none of which assert on driving itself. Tests
+// of driving belong in src/phys/, played through the real physics turn, as in src/phys/traffic.test.ts.
+export function testDrive(world: World): void {
+  for (const v of world.vehicles) if (v.order) driveOne(world, v);
+}
+
+function driveOne(world: World, v: Vehicle): void {
+  const s = vehicleStats(world, v);
+  if (v.order!.kind === 'brake') {
+    v.speed = Math.max(0, v.speed - s.brake);
+    if (v.speed === 0) v.order = null;
+    return;
+  }
+  const dest = v.order!.dest;
+  const remaining = dist(v.pos, dest);
+  if (remaining < RULES.arriveRadius) {
+    v.speed = 0;
+    v.order = null;
+    world.events.push({ t: 'arrived', vehicle: v.id });
+    return;
+  }
+  // Ramp by at most accel or brake, like real steering, so tests that race a decision against an
+  // approach (a threat check, a reach check) see the same timing the game gives them.
+  const target = Math.min(s.maxSpeed, remaining);
+  const speed = target > v.speed ? Math.min(target, v.speed + s.accel) : Math.max(target, v.speed - s.brake);
+  v.heading = Math.atan2(dest.y - v.pos.y, dest.x - v.pos.x);
+  const from = { ...v.pos, heading: v.heading };
+  v.pos = { x: v.pos.x + Math.cos(v.heading) * speed, y: v.pos.y + Math.sin(v.heading) * speed };
+  v.trail = [from, { ...v.pos, heading: v.heading }];
+  v.speed = speed;
+  burnFuel(world, v, speed);
 }
