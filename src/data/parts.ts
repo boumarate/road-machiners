@@ -699,7 +699,7 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 30,
     armor: 2,
-    range: 160, // tiles; covers the whole map, through hills
+    range: 160, // tiles, through hills
   },
 };
 

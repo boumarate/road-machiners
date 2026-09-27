@@ -855,7 +855,7 @@ function inspectionHint(w: World, item: GridItem): string {
   if (item.kind === "good")
     return "Drag to rearrange cargo. Dropping in the dump area discards it.";
   if (townAt(w)) return "Garage: drag movable parts onto matching mounts or into storage.";
-  return "Move or remove equipment at a town garage.";
+  return "Drag onto a mount or off it to start a refit. It runs while the truck stays parked.";
 }
 
 // Why a Patch button is disabled, or null when the patch can start.

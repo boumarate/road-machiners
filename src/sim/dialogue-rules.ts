@@ -81,7 +81,7 @@ function offerBy(world: World, npc: Vehicle) {
 
 // The radio trade topic buys a live NPC spare, not a static option, so it calls this directly from
 // src/sim/dialogue.ts instead of going through EFFECTS. The price uses the player's own trade spread,
-// the same one town buys use, since it is the player's Trade skill narrowing it, not the NPC's.
+// the same one town buys use, since it is the player's Social skill narrowing it, not the NPC's.
 export type SpareOutcome = 'bought' | 'noRoom' | 'noMoney';
 
 export function buySpare(world: World, npc: Vehicle, partId: string): SpareOutcome {
