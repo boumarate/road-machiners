@@ -58,6 +58,7 @@ import { InventoryScreen } from "../ui/inventory";
 import { TownScreen } from "../ui/town";
 import { getWeaponReadout, WeaponPanel, weaponsForClick } from "../ui/weapons";
 import { CameraRig } from "./render/camera";
+import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
 import { Fx3D } from "./render/fx";
 import { Labels } from "./render/labels";
@@ -161,6 +162,9 @@ export class Game {
   private readonly sun = new THREE.DirectionalLight();
   private readonly sky = new THREE.HemisphereLight();
   private readonly beams: THREE.SpotLight[] = [];
+  private readonly vignette = Object.assign(document.createElement("div"), {
+    className: "vignette",
+  });
   private readonly stormTint = Object.assign(document.createElement("div"), {
     className: "storm-tint",
   }); // dust haze while inside a storm
@@ -236,10 +240,13 @@ export class Game {
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
     container.appendChild(this.renderer.domElement);
     this.rig = new CameraRig(container);
 
     this.scene.background = new THREE.Color(PAL.bg);
+    this.renderer.domElement.classList.add("view");
     this.scene.add(this.sky);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -263,6 +270,7 @@ export class Game {
     addSites(this.world.terrain, propScope);
     this.obstacles = new ObstacleViews(propScope, this.world.terrain);
     this.obstacles.sync(this.world.obstacles);
+    addScatter(this.world.terrain, this.world.obstacles, propScope);
     this.fog = new FogView(this.world, groundChunks);
     this.path = new PathView(this.world.terrain);
     this.shade = new ShadeView(this.world);
@@ -280,7 +288,7 @@ export class Game {
       this.soundRing.root,
     );
     this.overlay = overlay;
-    overlay.append(this.stormTint);
+    overlay.append(this.vignette, this.stormTint);
     this.labels = new Labels(overlay);
     this.fx = new Fx3D(this.scene, overlay, this.rig);
     this.sound = new SoundDirector(player, this.rig);

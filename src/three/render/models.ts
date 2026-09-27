@@ -9,6 +9,8 @@ import { WEAPON_POOLS } from '../../render/partLooks';
 const NAMES = [
   'wreck',
   'rock',
+  'pebbles',
+  'scrub',
   'building',
   'crates',
   'water_tower',

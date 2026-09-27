@@ -1,13 +1,10 @@
-// Map-space ground painter: tile type colors, hillshade, roads, pebbles and scrub, in a blocky
-// per-tile look. The 3D terrain (three/render/terrain.ts) uses it as its texture.
+// Map-space ground painter: tile type colors, hillshade and roads. Pebbles and scrub are 3D, in
+// three/render/scatter.ts. The 3D terrain (three/render/terrain.ts) uses it as its texture.
 
 import { REGION } from "../data/region";
 import { TERRAIN, TERRAIN_TYPES } from "../data/terrain";
 import { tileAt, tileSlope, type Terrain } from "../sim/terrain";
-import { ROAD_INDEX } from "../sim/road-index";
 import { type Vec } from "../sim/vec";
-
-const ROAD_SCATTER_GAP = REGION.roadWidth / 2 + 0.3; // tiles from a road center line kept free of pebbles and scrub
 import { hash2, valueNoise } from "./noise";
 import { PAL, mix, shade } from "./palette";
 
@@ -81,7 +78,6 @@ export function paintGroundCanvas(
     disc(c, crater.center, crater.radius, css(PAL.rust.dark, 0.25));
   }
   for (const road of REGION.roads) paintRoad(c, road);
-  paintScatter(c, t.size);
 }
 
 // Hillshade: brighten slopes turned toward the light, darken slopes turned away.
@@ -201,31 +197,6 @@ function stroke(
     ctx.lineTo(c.toPx(b.x + nx), c.toPx(b.y + ny));
   }
   ctx.stroke();
-}
-
-// Pebbles and dry scrub. Decoration only, no collision.
-function paintScatter(c: PaintCanvas, size: number): void {
-  for (let x = 0; x < size; x++) {
-    for (let y = 0; y < size; y++) {
-      const h = hash2(x * 7 + 3, y * 13 + 5);
-      const p = { x: x + hash2(x, y * 3), y: y + hash2(x * 5, y) };
-      if (ROAD_INDEX.nearestWithin(p.x, p.y, ROAD_SCATTER_GAP) < ROAD_SCATTER_GAP) continue;
-      if (h < 0.18) blob(c, p, 0.05 + h * 0.3, css(PAL.pebble, 0.7));
-      else if (h > 0.93) scrub(c, p, h);
-    }
-  }
-}
-
-function scrub(c: PaintCanvas, p: Vec, h: number): void {
-  const color = PAL.scrub[Math.floor(h * 1000) % PAL.scrub.length];
-  blob(c, { x: p.x + 0.12, y: p.y + 0.12 }, 0.32, css(PAL.shadow, 0.18));
-  for (let i = 0; i < 4; i++) {
-    const o = {
-      x: p.x + (hash2(p.x * 10 + i, p.y * 10) - 0.5) * 0.35,
-      y: p.y + (hash2(p.x * 10, p.y * 10 + i) - 0.5) * 0.35,
-    };
-    blob(c, o, 0.14, css(shade(color, 0.85 + i * 0.07), 1));
-  }
 }
 
 function disc(c: PaintCanvas, p: Vec, r: number, style: string): void {
