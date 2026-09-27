@@ -74,7 +74,7 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
     check: checkPatch,
     hooks: { fulfilled: settlePatch, expired: lapsePatch },
   },
-  // The holder pulls over to trade with the player. See src/sim/truck-trade.ts. Being parked in reach keeps it
+  // The holder pulls over to trade with the player. See src/sim/economy.ts. Being parked in reach keeps it
   // going. The player ends it when done trading, and a feud between the two breaks it.
   trade: { refresh: isMeeting, check: checkTrade, hooks: {} },
 };

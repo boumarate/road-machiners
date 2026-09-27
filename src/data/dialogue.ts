@@ -167,7 +167,7 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // Both trucks pull over side by side, and the trade screen opens once they are parked. See src/sim/truck-trade.ts.
+  // Both trucks pull over side by side, and E opens the trade screen once both are parked. See src/sim/economy.ts.
   trade: {
     id: 'trade',
     once: false,
