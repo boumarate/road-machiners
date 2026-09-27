@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, testDrive } from './testkit';
 import { goodsCount } from './grid';
 import { canLoot, canScavenge, scavenge, takeAllLoot, takeLoot } from './locations';
 import { findSpot, gridOf } from './grid';
@@ -15,7 +15,7 @@ describe('timed scavenging search', () => {
     expect(next.vehicles[0].job).toEqual(expect.objectContaining({ kind: 'search', turnsLeft: 3, total: 3 }));
     let turns = 0;
     while (next.vehicles[0].job) {
-      next = endTurn(next);
+      next = endTurn(next, testDrive);
       if (++turns > 20) throw new Error('search never finished');
     }
     expect(turns).toBe(3);
@@ -27,9 +27,9 @@ describe('timed scavenging search', () => {
   it('a move cancels the search, and the stock stays closed', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.salvage.push({ id: 'rich', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn * 5 }, parts: [] });
-    let next = endTurn(scavenge(w));
+    let next = endTurn(scavenge(w), testDrive);
     next = setMoveOrder(next, { kind: 'through', dest: { x: 60, y: 30 } });
-    for (let t = 0; t < 5 && next.vehicles[0].job; t++) next = endTurn(next);
+    for (let t = 0; t < 5 && next.vehicles[0].job; t++) next = endTurn(next, testDrive);
     expect(next.vehicles[0].job).toBeNull();
     expect(next.player.scavenged).not.toContain('rich');
   });
@@ -64,7 +64,7 @@ describe('timed scavenging search', () => {
     let sawJob = false;
     let finished = false;
     for (let t = 0; t < w.size * 5; t++) {
-      cur = endTurn(cur);
+      cur = endTurn(cur, testDrive);
       const actor = cur.vehicles.find((v) => v.id === npc.id)!;
       if (actor.job?.kind === 'search') sawJob = true;
       if (sawJob && !actor.job) { finished = true; break; }

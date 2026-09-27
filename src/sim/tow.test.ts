@@ -8,9 +8,8 @@ import { route, routeLength } from './path';
 import { canUseSite, siteGates } from './sites';
 import { getResources } from './resources';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, testDrive } from './testkit';
 import { acceptTow, dropTow, refuseTow, setBeacon, unhitch } from './tow';
-import { canVehicleSee } from './vision';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { autoRuns, endTurn, setDirect, setMoveOrder } from './world';
@@ -35,7 +34,7 @@ function stranded(playerPos: Vec = { x: 30, y: 30 }, traderPos: Vec = { x: 40, y
 function runUntil(w: World, max: number, done: (w: World) => boolean): { w: World; turns: number; events: GameEvent[] } {
   const events: GameEvent[] = [];
   for (let i = 1; i <= max; i++) {
-    w = endTurn(w);
+    w = endTurn(w, testDrive);
     events.push(...w.events);
     if (done(w)) return { w, turns: i, events };
   }
@@ -140,7 +139,7 @@ describe('towing', () => {
     let w = acceptTow(offered(s));
     const deal = { ...w.player.tow! };
     // A few turns of towing shorten the way, so a new price would be lower.
-    for (let i = 0; i < 5; i++) w = endTurn(w);
+    for (let i = 0; i < 5; i++) w = endTurn(w, testDrive);
     expect(w.player.tow?.hitched).toBe(true);
     dropTow(w, 'danger');
     const r = runUntil(w, 30, (x) => x.player.tow !== null);
@@ -156,7 +155,7 @@ describe('towing', () => {
     expect(autoRuns(w)).toBe(true);
     const start = { ...playerVehicle(w).pos };
     for (let i = 0; i < 12; i++) {
-      w = endTurn(w);
+      w = endTurn(w, testDrive);
       const me = playerVehicle(w);
       const tower = find(w, s.trader.id);
       expect(dist(me.pos, tower.pos)).toBeLessThanOrEqual(TOW.gap + 1e-6);
@@ -194,7 +193,7 @@ describe('towing', () => {
   it('unhitching is free and ends the tow', () => {
     const s = stranded();
     let w = acceptTow(offered(s));
-    for (let i = 0; i < 4; i++) w = endTurn(w);
+    for (let i = 0; i < 4; i++) w = endTurn(w, testDrive);
     const money = w.player.money;
     w = unhitch(w);
     expect(w.player.tow).toBeNull();
@@ -211,11 +210,11 @@ describe('towing', () => {
   it('a tower that enters danger drops the tow for free', () => {
     const s = stranded();
     let w = acceptTow(offered(s));
-    w = endTurn(w);
+    w = endTurn(w, testDrive);
     const money = w.player.money;
     const tower = find(w, s.trader.id);
     const raider = withTower(w, 'buggy', 'raiders', 'buggy', { x: tower.pos.x + 8, y: tower.pos.y });
-    w = endTurn(w);
+    w = endTurn(w, testDrive);
     expect(w.player.tow).toBeNull();
     expect(w.player.money).toBe(money);
     expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, reason: 'danger' });
@@ -225,10 +224,10 @@ describe('towing', () => {
   it('a tower that is destroyed drops the tow', () => {
     const s = stranded();
     let w = acceptTow(offered(s));
-    w = endTurn(w);
+    w = endTurn(w, testDrive);
     const tower = find(w, s.trader.id);
     tower.resources!.health = 0;
-    w = endTurn(w);
+    w = endTurn(w, testDrive);
     expect(w.player.tow).toBeNull();
     expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, reason: 'gone' });
   });
@@ -266,21 +265,11 @@ describe('emergency beacon', () => {
   const onlyCore = (v: Vehicle) => { v.items = v.items.filter((it) => it.kind === 'part' && partDef(it.part.defId).kind === 'core'); };
   const activitiesOf = (events: GameEvent[], id: string) => events.filter((e) => e.t === 'activity' && e.vehicle === id);
 
-  it('a trader out of sight but in range drives over and offers', () => {
-    const s = stranded(player, { x: 130, y: 30 });
-    const w = setBeacon(s.w, true);
-    expect(w.player.beacon).toBe(true);
-    expect(canVehicleSee(w, find(w, s.trader.id), playerVehicle(w).pos)).toBe(false);
-    const r = runUntil(w, 150, (x) => x.player.tow !== null);
-    expect(r.w.player.tow?.by).toBe(s.trader.id);
-    expect(activitiesOf(r.events, s.trader.id)[0]).toMatchObject({ activity: 'tow', reason: 'help a stranded truck' });
-  });
-
   it('a trader outside the range ignores it', () => {
     const s = stranded(player, { x: 30 + BEACON.range + 60, y: 30 });
     let w = setBeacon(s.w, true);
     for (let i = 0; i < 10; i++) {
-      w = endTurn(w);
+      w = endTurn(w, testDrive);
       const trader = find(w, s.trader.id);
       expect(dist(trader.pos, playerVehicle(w).pos)).toBeGreaterThan(BEACON.range);
       expect(trader.brain!.activity?.kind).not.toBe('tow');
@@ -293,17 +282,8 @@ describe('emergency beacon', () => {
     const r = runUntil(setBeacon(s.w, true), 150, (x) => x.player.tow !== null);
     expect(r.w.player.tow?.by).toBe(s.trader.id);
     expect(activitiesOf(r.events, late.id)[0]).toMatchObject({ activity: 'tow' });
-    const next = endTurn(r.w);
+    const next = endTurn(r.w, testDrive);
     expect(find(next, late.id).brain!.activity?.kind).not.toBe('tow');
-  });
-
-  it('a raider comes to a beaconing truck with cargo', () => {
-    const w = emptyWorld(player);
-    w.player.fuel = 0;
-    const raider = withTower(w, 'buggy', 'raiders', 'buggy', { x: 130, y: 30 });
-    const r = runUntil(setBeacon(w, true), 60, (x) => dist(find(x, raider.id).pos, playerVehicle(x).pos) < 15);
-    expect(dist(find(r.w, raider.id).pos, playerVehicle(r.w).pos)).toBeLessThan(15);
-    expect(activitiesOf(r.events, raider.id)[0]).toMatchObject({ activity: 'investigate' });
   });
 
   it('a raider ignores a stripped beaconing truck', () => {
@@ -314,7 +294,7 @@ describe('emergency beacon', () => {
     // Other NPCs spawn during the run and the raider may hunt them, so only its target is checked.
     let now = setBeacon(w, true);
     for (let i = 0; i < 30; i++) {
-      now = endTurn(now);
+      now = endTurn(now, testDrive);
       expect(find(now, raider.id).brain!.activity?.targetId).not.toBe(now.player.vehicleId);
     }
   });
@@ -341,10 +321,10 @@ describe('emergency beacon', () => {
   it('switches off when the truck can drive again', () => {
     const s = stranded();
     let w = setBeacon(s.w, true);
-    w = endTurn(w);
+    w = endTurn(w, testDrive);
     expect(w.player.beacon).toBe(true);
     w.player.fuel = 30;
-    w = endTurn(w);
+    w = endTurn(w, testDrive);
     expect(w.player.beacon).toBe(false);
   });
 

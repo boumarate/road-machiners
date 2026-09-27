@@ -1,0 +1,74 @@
+// Route planning (src/sim/path.ts) driven through the real physics turn pipeline.
+
+import { beforeAll, expect, it } from 'vitest';
+import { START_KITS } from '../data/start';
+import { REGION } from '../data/region';
+import { dist, polylineDist, type Vec } from '../sim/vec';
+import { editableTerrain, emptyWorld } from '../sim/testkit';
+import type { World } from '../sim/types';
+import { endTurn, newWorld, setMoveOrder } from '../sim/world';
+import { buildDrive, freeDrive, initPhysics, type Drive } from './drive';
+import { physicsMove } from './turn';
+
+beforeAll(async () => {
+  await initPhysics();
+});
+
+// Plays n turns through the real turn pipeline with physics movement.
+function play(w: World, n: number): { w: World } {
+  let d = buildDrive(w);
+  for (let i = 0; i < n; i++) {
+    let next: Drive | null = null;
+    w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+    freeDrive(d);
+    d = next!;
+  }
+  freeDrive(d);
+  return { w };
+}
+
+it('the player drives from Bowl to Nose without a serious hit on a static obstacle', () => {
+  const nose = REGION.towns.find((t) => t.id === 'nose')!;
+  let w = setMoveOrder(newWorld(1337, START_KITS.standard), { kind: 'stopAt', dest: nose.pos });
+  w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
+  w.player.fuel = 100;
+  const me = w.player.vehicleId;
+  let staticDamage = 0;
+  for (let i = 0; i < w.size && dist(w.vehicles[0].pos, nose.pos) > nose.radius + 1.5; i++) {
+    ({ w } = play(w, 1));
+    w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
+    w.player.engineHeat = 0; // this drive never stops to cool down
+    for (const e of w.events)
+      // A route can graze a site's edge, which the game allows; a rock or building should not touch it.
+      if (e.t === 'collision' && e.a === me && !e.b.startsWith('v') && !e.b.startsWith('site-'))
+        staticDamage += e.hitsA.reduce((sum, h) => sum + h.damage, 0);
+  }
+  expect(staticDamage).toBeLessThan(5);
+  expect(dist(w.vehicles[0].pos, nose.pos)).toBeGreaterThanOrEqual(nose.radius + 0.6 - 0.02);
+  expect(dist(w.vehicles[0].pos, nose.pos)).toBeLessThanOrEqual(nose.radius + 1.5);
+}, 120_000);
+
+// Flat hardpan with one road of the given center line and the map's road width.
+function roadWorld(road: Vec[]) {
+  const w = emptyWorld();
+  const t = editableTerrain(w);
+  for (let y = 0; y < t.size; y++)
+    for (let x = 0; x < t.size; x++) t.types[y * t.size + x] = polylineDist({ x: x + 0.5, y: y + 0.5 }, road) < REGION.roadWidth / 2 ? 'road' : 'hardpan';
+  return w;
+}
+
+it('a truck following a road into a blocking rock stops on the corner without a serious hit', () => {
+  // Two roads meet at the center of a big rock, like roads meeting at a site.
+  const rock = { x: 60, y: 30 };
+  let w = roadWorld([{ x: 20, y: 30 }, rock, { x: 60, y: 0 }]);
+  w.obstacles = [{ id: 'r', pos: rock, r: 6, kind: 'rock' }];
+  w.vehicles[0].pos = { x: 22, y: 30 };
+  w = setMoveOrder(w, { kind: 'stopAt', dest: { x: 60, y: 8 } });
+  let damage = 0;
+  for (let i = 0; i < 40 && w.vehicles[0].order; i++) {
+    ({ w } = play(w, 1));
+    for (const e of w.events) if (e.t === 'collision') damage += e.hitsA.reduce((sum, h) => sum + h.damage, 0);
+  }
+  expect(damage).toBeLessThan(5);
+  expect(dist(w.vehicles[0].pos, { x: 60, y: 8 })).toBeLessThan(0.5);
+});

@@ -14,10 +14,24 @@ import { PHYSICS } from '../data/physics';
 import { buildDrive, freeDrive, initPhysics, routeAim, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
 import { physicsMove } from './turn';
 import { acceptTow, unhitch } from '../sim/tow';
+import { soundRange } from '../sim/detect';
 
 beforeAll(async () => {
   await initPhysics();
 });
+
+// Plays n turns through the real turn pipeline with physics movement, carrying one Drive from turn
+// to turn as the game does, so the body keeps its speed.
+function play(w: World, n: number): { w: World; d: Drive } {
+  let d = buildDrive(w);
+  for (let i = 0; i < n; i++) {
+    let next: Drive | null = null;
+    w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+    freeDrive(d);
+    d = next!;
+  }
+  return { w, d };
+}
 
 describe('impact geometry', () => {
   it('captures rear-end contacts and relative closing speed before the turn ends', () => {
@@ -44,18 +58,6 @@ describe('impact geometry', () => {
     }
   });
 });
-
-// Plays n turns through the real turn pipeline with physics movement.
-function play(w: World, n: number): { w: World; d: Drive } {
-  let d = buildDrive(w);
-  for (let i = 0; i < n; i++) {
-    let next: Drive | null = null;
-    w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
-    freeDrive(d);
-    d = next!;
-  }
-  return { w, d };
-}
 
 function ordered(order: MoveOrder, speed = 0, heading = 0): World {
   const w = emptyWorld();
@@ -335,7 +337,7 @@ describe('physics turns', () => {
     expect(dist(me(w).pos, { x: 40, y: 30 })).toBeGreaterThan(3);
   });
 
-  it('a truck without an engine is pushed toward the click at limp speed and burns no fuel', () => {
+  it('a truck without an engine is pushed toward the click at limp speed, burns no fuel and makes no sound', () => {
     const w0 = ordered({ kind: 'stopAt', dest: { x: 38, y: 30 } });
     w0.vehicles[0].items = w0.vehicles[0].items.filter((it) => it.kind !== 'part' || partDef(it.part.defId).kind !== 'engine');
     const fuel = w0.player.fuel;
@@ -343,6 +345,7 @@ describe('physics turns', () => {
     expect(me(w).pos.x).toBeGreaterThan(30 + RULES.limpSpeed);
     expect(me(w).speed).toBeLessThanOrEqual(RULES.limpSpeed + 0.3);
     expect(w.player.fuel).toBe(fuel);
+    expect(soundRange(w, me(w))).toBe(0);
     freeDrive(d);
   });
 
