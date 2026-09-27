@@ -6,7 +6,6 @@ import * as THREE from "three";
 import { CONFIG } from "../config";
 import { partDef } from "../data/parts";
 import { PHYSICS } from "../data/physics";
-import { PERF } from "../data/perf";
 import {
   buildDrive,
   freeDrive,
@@ -106,7 +105,10 @@ const SMOKE_CHANCE = 0.05; // per hurt vehicle per frame
 const HURT_CAB = 0.35; // cab hp share under which a vehicle smokes
 const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is recomputed during a turn
 const SUN_RADIUS = 150; // meters from the focus to the sun light
-// Headlight beams: the player's, then the nearest seen NPCs up to PERF.npcBeams, since each light costs every lit pixel.
+// The circle under the hovered vehicle, which a click targets. Sizes are in tiles.
+const PICK_RING = { gap: 0.45, width: 0.06, alpha: 0.9, lift: 0.02 };
+
+// Headlight beams for every vehicle the player sees at night. Sight bounds the range.
 const BEAM_COLOR = 0xfff2c8;
 const BEAM_INTENSITY = 25; // lit only at night
 const BEAM_DECAY = 0.4; // below the physical 2, so the ground by the nose does not burn white
@@ -157,7 +159,7 @@ export class Game {
   private readonly scene = new THREE.Scene();
   private readonly sun = new THREE.DirectionalLight();
   private readonly sky = new THREE.HemisphereLight();
-  private readonly beams = Array.from({ length: 1 + PERF.npcBeams }, () => new THREE.SpotLight(BEAM_COLOR, 0, BEAM_RANGE, BEAM_ANGLE, BEAM_PENUMBRA, BEAM_DECAY));
+  private readonly beams: THREE.SpotLight[] = [];
   private readonly stormTint = Object.assign(document.createElement('div'), { className: 'storm-tint' }); // dust haze while inside a storm
   private readonly rig: CameraRig;
   private readonly ground = new THREE.Group(); // terrain chunks near the view, for ground picking
@@ -190,6 +192,10 @@ export class Game {
   private live: LiveVision | null = null; // the player's view while a turn plays
   private hoverGround: Vec | null = null;
   private hovered: string | null = null;
+  private readonly pickRing = new THREE.Mesh(
+    new THREE.RingGeometry(1, 1, 48).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: PAL.select, transparent: true, opacity: PICK_RING.alpha, depthWrite: false, side: THREE.DoubleSide }),
+  );
   private selected: string | null = null;
   private following = true;
   private panFrom: { x: number; y: number } | null = null;
@@ -230,7 +236,8 @@ export class Game {
       far: 500,
     });
     this.scene.add(this.sun, this.sun.target);
-    for (const beam of this.beams) this.scene.add(beam, beam.target);
+    this.pickRing.renderOrder = 5;
+    this.scene.add(this.pickRing);
 
     // Ground and props cull separately, so ground picking only hits terrain.
     const groundScope = new RenderScope(this.ground, this.world.size);
@@ -964,18 +971,22 @@ export class Game {
     }
   }
 
-  // Beams stay in the scene by day at zero intensity. Adding and removing lights would recompile every material.
+  // A change in light count recompiles every material. So beams exist only at night, and through the night
+  // the pool only grows, to the most vehicles seen at once. Unused beams stay at zero until dawn.
   private aimBeams(night: boolean): void {
-    const player = playerVehicle(this.world);
-    const lit = night
-      ? [
-          player,
-          ...this.world.vehicles
-            .filter((v) => v.id !== player.id && this.frames[v.id] && this.isVehicleVisible(v))
-            .sort((a, b) => dist(a.pos, player.pos) - dist(b.pos, player.pos))
-            .slice(0, PERF.npcBeams),
-        ]
-      : [];
+    if (!night) {
+      for (const beam of this.beams.splice(0)) {
+        this.scene.remove(beam, beam.target);
+        beam.dispose();
+      }
+      return;
+    }
+    const lit = this.world.vehicles.filter((v) => this.frames[v.id] && this.isVehicleVisible(v));
+    while (this.beams.length < lit.length) {
+      const beam = new THREE.SpotLight(BEAM_COLOR, 0, BEAM_RANGE, BEAM_ANGLE, BEAM_PENUMBRA, BEAM_DECAY);
+      this.beams.push(beam);
+      this.scene.add(beam, beam.target);
+    }
     this.beams.forEach((beam, i) => {
       const v = lit[i];
       const f = v && this.frames[v.id];
@@ -1017,6 +1028,23 @@ export class Game {
       : null;
   }
 
+  // The ring is rebuilt only when the hovered vehicle's radius changes.
+  private placePickRing(hide: boolean): void {
+    const v = this.hovered && this.hovered !== playerVehicle(this.world).id ? this.world.vehicles.find((x) => x.id === this.hovered) : undefined;
+    const f = v && this.frames[v.id];
+    this.pickRing.visible = !hide && !!f;
+    if (!v || !f || hide) return;
+    const S = PHYSICS.metersPerTile;
+    const r = vehicleStats(this.world, v).radius + PICK_RING.gap;
+    const geo = this.pickRing.geometry;
+    if (geo.parameters.outerRadius !== (r + PICK_RING.width / 2) * S) {
+      geo.dispose();
+      this.pickRing.geometry = new THREE.RingGeometry((r - PICK_RING.width / 2) * S, (r + PICK_RING.width / 2) * S, 48).rotateX(-Math.PI / 2);
+    }
+    const p = groundPoint(this.world.terrain, toMap(f.pos));
+    this.pickRing.position.set(p.x, p.y + PICK_RING.lift * S, p.z);
+  }
+
   private drawOverlays(): void {
     const hide = this.anim !== null || this.modalOpen();
     this.zones.root.visible = !hide;
@@ -1024,6 +1052,7 @@ export class Game {
     this.weaponRange.root.visible = false;
     this.placeTargetMarkers();
     this.placeHitCard();
+    this.placePickRing(hide);
     this.contacts.update(this.world.terrain, this.world.player.contacts, playerVehicle(this.world).pos, this.world.turn, performance.now());
     this.dust.update(this.world, this.world.terrain, performance.now());
     const meFrame = this.frames[playerVehicle(this.world).id];
