@@ -1,6 +1,7 @@
 import { chassisDef } from "../data/chassis";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
+import { maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
 import { corePart, mountedParts, mountedItems, itemSize } from "../sim/grid";
 import { isStranded, vehicleStats } from "../sim/stats";
@@ -71,7 +72,7 @@ export class TruckConditionReadout {
         const hp = item.part.hp;
         this.health.set(item.part.id, hp);
         const before = previous.get(item.part.id);
-        const ratio = hp / def.hp;
+        const ratio = hp / maxHp(item.part);
         return {
           id: item.part.id,
           name: def.name,
@@ -149,7 +150,7 @@ function townName(id: string): string {
 export function getHudReadout(w: World) {
   const me = playerVehicle(w);
   const cab = corePart(me, "cab");
-  const cabMax = partDef(cab.defId).hp;
+  const cabMax = maxHp(cab);
   const capacity = chassisDef(me.chassisId).fuelCap;
   const p = w.player;
   const heat = heatAt(w, me.pos);

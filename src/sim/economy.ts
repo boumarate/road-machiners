@@ -9,6 +9,7 @@ import { REGION } from "../data/region";
 import { dist } from "./vec";
 import { getResources } from "./resources";
 import { skillBonus } from "../data/skills";
+import { isJunk, maxHp, restorePart } from "./wear";
 import { playerVehicle } from "./damage";
 import { addCoreParts, makePart } from "./factory";
 import { gainXp } from "./progress";
@@ -157,13 +158,13 @@ function refuelAndRepair(world: World, vehicle: Vehicle): void {
   }
   const multiplier =
     vehicle.id === world.player.vehicleId ? repairMult(world) : 1;
-  for (const part of allParts(vehicle)) {
+  for (const part of repairableParts(vehicle)) {
     const unitCost = ECONOMY.partRepairPerHp * multiplier;
     const hp = Math.min(
-      partDef(part.defId).hp - part.hp,
+      maxHp(part) - part.hp,
       Math.floor(resources.money / unitCost),
     );
-    part.hp += hp;
+    restorePart(part, part.hp + hp);
     resources.money -= Math.ceil(hp * unitCost);
   }
 }
@@ -238,9 +239,12 @@ export function buySupply(world: World, kind: Supply, n: number): World {
   });
 }
 
+// Throws for a junk part, which no repair rebuilds.
 export function partRepairCost(world: World, part: PartInstance): number {
+  if (isJunk(part))
+    throw new Error(`${partDef(part.defId).name} is junk and cannot be rebuilt`);
   return Math.ceil(
-    (partDef(part.defId).hp - part.hp) *
+    (maxHp(part) - part.hp) *
       ECONOMY.partRepairPerHp *
       repairMult(world),
   );
@@ -252,7 +256,7 @@ export function repairPart(world: World, partId: string): World {
     const part = allParts(playerVehicle(w)).find((p) => p.id === partId);
     if (!part) throw new Error(`No truck part ${partId}`);
     pay(w, partRepairCost(w, part), "repairs");
-    part.hp = partDef(part.defId).hp;
+    restorePart(part, maxHp(part));
   });
 }
 
@@ -260,16 +264,16 @@ export function repairAll(world: World): World {
   return playerCommand(world, (w) => {
     requireTown(w);
     const me = playerVehicle(w);
-    const parts = allParts(me);
+    const parts = repairableParts(me);
     const cost = parts.reduce((a, p) => a + partRepairCost(w, p), 0);
     pay(w, cost, "repairs");
-    for (const p of parts) p.hp = partDef(p.defId).hp;
+    for (const p of parts) restorePart(p, maxHp(p));
   });
 }
 
 export function partSellPrice(part: PartInstance): number {
   const def = partDef(part.defId);
-  return Math.floor(def.price * ECONOMY.partSellFactor * (part.hp / def.hp));
+  return Math.floor(def.price * ECONOMY.partSellFactor * (part.hp / maxHp(part)));
 }
 
 export function buyPart(world: World, defId: string): World {
@@ -280,7 +284,7 @@ export function buyPart(world: World, defId: string): World {
         `${partDef(defId).name} is built in. It is not for sale.`,
       );
     pay(w, partDef(defId).price, partDef(defId).name);
-    w.player.storage.push(makePart(w, defId));
+    w.player.storage.push(makePart(w, defId, 0));
   });
 }
 
@@ -299,14 +303,14 @@ export function chassisTradeIn(world: World): number {
   const me = playerVehicle(world);
   const core = mountedParts(me, "core");
   const health =
-    core.reduce((a, p) => a + p.hp / partDef(p.defId).hp, 0) / core.length;
+    core.reduce((a, p) => a + p.hp / maxHp(p), 0) / core.length;
   return Math.floor(
     chassisDef(me.chassisId).price * ECONOMY.chassisSellFactor * health,
   );
 }
 
 export function repairCost(world: World): number {
-  return allParts(playerVehicle(world)).reduce(
+  return repairableParts(playerVehicle(world)).reduce(
     (a, p) => a + partRepairCost(world, p),
     0,
   );
@@ -314,6 +318,11 @@ export function repairCost(world: World): number {
 
 function allParts(v: Vehicle): PartInstance[] {
   return v.items.flatMap((it) => (it.kind === "part" ? [it.part] : []));
+}
+
+// Town repairs skip junk parts, which no repair rebuilds.
+function repairableParts(v: Vehicle): PartInstance[] {
+  return allParts(v).filter((p) => !isJunk(p));
 }
 
 // Swap chassis: the old built-in parts go with the old chassis and the new one brings its own.

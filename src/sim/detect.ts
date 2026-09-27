@@ -7,6 +7,7 @@ import { RULES } from '../data/rules';
 import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
 import type { EngineDef, ScannerDef } from '../data/parts';
 import { partDef } from '../data/parts';
+import { wornDef } from './wear';
 import { mountedParts } from './grid';
 import { hashRandom } from './rng';
 import { heightAt, tileAt } from './terrain';
@@ -59,7 +60,7 @@ function dustVisible(world: World, a: Vec, b: Vec, age: number): boolean {
 export function scannerRange(v: Vehicle): number {
   const scanners = mountedParts(v, 'scanner');
   if (scanners.length === 0) return 0;
-  return (partDef(scanners[0].defId) as ScannerDef).range;
+  return wornDef<ScannerDef>(scanners[0]).range;
 }
 
 // A stable hash of a vehicle id, for keying hashRandom without touching the world rng stream.

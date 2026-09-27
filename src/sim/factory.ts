@@ -4,6 +4,8 @@ import { chassisDef } from '../data/chassis';
 import { partDef } from '../data/parts';
 import { NPC_RESOURCES } from '../data/npcs';
 import { RULES } from '../data/rules';
+import { CONDITION } from '../data/wear';
+import { maxHp } from './wear';
 import { gridOf, isMounted, placementError } from './grid';
 import { addGoods, mountPart } from './inventory';
 import type { Faction, GridItem, NpcBrain, PartInstance, Vehicle, World } from './types';
@@ -25,9 +27,11 @@ export function newId(world: World, prefix: string): string {
   return `${prefix}${world.nextId}`;
 }
 
-export function makePart(world: World, defId: string): PartInstance {
-  const def = partDef(defId);
-  return { id: newId(world, 'p'), defId, hp: def.hp, reload: 0 };
+// A part at the given wear step, at full HP for that step.
+export function makePart(world: World, defId: string, wear: number): PartInstance {
+  if (!Number.isInteger(wear) || wear < 0 || wear > CONDITION.maxWear) throw new Error(`Bad wear ${wear} for a new ${defId}`);
+  const part: PartInstance = { id: newId(world, 'p'), defId, hp: 0, reload: 0, wear };
+  return { ...part, hp: maxHp(part) };
 }
 
 // Places the chassis's built-in parts at their fixed cells. Throws if a spot is taken or is not built-in cells.
@@ -35,7 +39,7 @@ export function addCoreParts(world: World, v: Vehicle): void {
   for (const c of chassisDef(v.chassisId).core) {
     const def = partDef(c.defId);
     if (def.kind !== 'core') throw new Error(`${c.defId} on ${v.chassisId} is not a core part`);
-    const item: GridItem = { id: newId(world, 'i'), x: c.x, y: c.y, rot: 0, kind: 'part', part: makePart(world, c.defId) };
+    const item: GridItem = { id: newId(world, 'i'), x: c.x, y: c.y, rot: 0, kind: 'part', part: makePart(world, c.defId, 0) };
     const err = placementError(gridOf(v), v.items, item, null);
     if (err) throw new Error(`${def.name} at ${c.x},${c.y} on ${v.chassisId}: ${err}`);
     if (!isMounted(v.chassisId, item)) throw new Error(`${def.name} at ${c.x},${c.y} on ${v.chassisId} is not on built-in cells`);
@@ -65,7 +69,7 @@ export function makeVehicle(world: World, spec: VehicleSpec): Vehicle {
   };
   addCoreParts(world, v);
   for (const defId of spec.parts) {
-    if (!mountPart(world, v, makePart(world, defId))) throw new Error(`No free mount for ${defId} on ${spec.chassisId}`);
+    if (!mountPart(world, v, makePart(world, defId, 0))) throw new Error(`No free mount for ${defId} on ${spec.chassisId}`);
   }
   for (const [good, n] of Object.entries(spec.cargo)) {
     if (addGoods(world, v, good, n) < n) throw new Error(`No room for ${n} ${good} on ${spec.chassisId}`);

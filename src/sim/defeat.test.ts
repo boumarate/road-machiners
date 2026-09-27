@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
+import { CONDITION } from '../data/wear';
 import { autoOrders, isHostile } from './combat';
 import { buyGood } from './economy';
 import { advanceKnockout, checkDeath, checkKnockout } from './defeat';
@@ -199,6 +200,22 @@ describe('waking', () => {
     const patched = (defId: string) => Math.max(1, Math.round(partDef(defId).hp * RULES.defeatPatch));
     expect(corePart(truck, 'cab').hp).toBe(patched('cab'));
     expect(coreParts(truck, 'wheel').find((p) => p.id === wheel.id)!.hp).toBe(patched(wheel.defId));
+  });
+
+  it('leaves junk core parts broken on waking', () => {
+    const { w, me } = knockedOut();
+    const wheel = coreParts(me, 'wheel')[0];
+    wheel.hp = 0;
+    wheel.wear = CONDITION.maxWear + 1;
+    const next = endTurn(w, testDrive);
+    expect(next.player.state).toBe('active');
+    expect(coreParts(next.vehicles[0], 'wheel').find((p) => p.id === wheel.id)!.hp).toBe(0);
+  });
+
+  it('stops with the reason when the cab is junk', () => {
+    const { w, me } = knockedOut();
+    corePart(me, 'cab').wear = CONDITION.maxWear + 1;
+    expect(() => advanceKnockout(w)).toThrow(/junk/);
   });
 
   it('stays knocked out while a raider sees the truck, even one ignoring it', () => {

@@ -24,7 +24,7 @@ function spotOn(chassisId: string, defId: string, letter: Cell, items: GridItem[
   for (const rot of [0, 1] as const) {
     for (let y = 0; y < g.h; y++) {
       for (let x = 0; x < g.w; x++) {
-        const item: GridItem = { id: 'probe', x, y, rot, kind: 'part', part: { id: 'probe', defId, hp: 1, reload: 0 } };
+        const item: GridItem = { id: 'probe', x, y, rot, kind: 'part', part: { id: 'probe', defId, hp: 1, reload: 0, wear: 0 } };
         const cells = itemCells(item);
         if (cells.every((c) => g.cells[c.y]?.[c.x] === letter && !taken.has(`${c.x},${c.y}`))) return item;
       }
@@ -86,7 +86,7 @@ describe('side armor mounts', () => {
     it(`armor mounts on ${letter}`, () => {
       const w = emptyWorld();
       const v = addVehicle(w, 'raiders', 'hauler', [], { x: 40, y: 40 });
-      const plate: GridItem = { ...spotOn('hauler', 'plates', letter, v.items), id: 'i-plate', part: makePart(w, 'plates') } as GridItem;
+      const plate: GridItem = { ...spotOn('hauler', 'plates', letter, v.items), id: 'i-plate', part: makePart(w, 'plates', 0) } as GridItem;
       v.items.push(plate);
       expect(isMounted('hauler', plate)).toBe(true);
       expect(sideOf(v, (plate as Extract<GridItem, { kind: 'part' }>).part)).toBe(letter);
@@ -99,7 +99,7 @@ describe('side armor mounts', () => {
     const onL = spotOn('hauler', 'plates', 'L', v.items);
     const g = baseGrid('hauler');
     // Lay the plate across from the L column into the interior.
-    const across: GridItem = { ...onL, rot: 1, id: 'i-plate', part: makePart(w, 'plates') } as GridItem;
+    const across: GridItem = { ...onL, rot: 1, id: 'i-plate', part: makePart(w, 'plates', 0) } as GridItem;
     const letters = new Set(itemCells(across).map((c) => g.cells[c.y][c.x]));
     expect(letters.has('L')).toBe(true);
     expect(letters.size).toBeGreaterThan(1);

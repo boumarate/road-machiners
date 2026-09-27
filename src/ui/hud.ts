@@ -14,6 +14,7 @@ import {
 import { getHudReadout, getRescueReadout, moneyLabel, TruckConditionReadout } from "./hud-readout";
 import { createIcon, createSpeedDial, type IconName } from "./icons";
 import { kph } from "./units";
+import { maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
 import "./truck-condition.css";
 
@@ -468,7 +469,7 @@ export class Hud {
       return;
     }
     const cab = corePart(v, "cab");
-    const pct = Math.round((cab.hp / partDef(cab.defId).hp) * 100);
+    const pct = Math.round((cab.hp / maxHp(cab)) * 100);
     // The four wheels read as one line.
     const wheels = coreParts(v, "wheel");
     const working = wheels.filter((p) => p.hp > 0).length;
@@ -479,7 +480,7 @@ export class Hud {
         return el(
           "div",
           { class: p.hp > 0 ? "" : "bad" },
-          `${def.name}: ${p.hp}/${def.hp}`,
+          `${def.name}: ${p.hp}/${maxHp(p)}`,
         );
       });
     parts.push(

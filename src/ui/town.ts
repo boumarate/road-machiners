@@ -3,6 +3,7 @@
 import { chassisDef, PLAYER_CHASSIS } from "../data/chassis";
 import { ECONOMY, GOOD_IDS, GOODS } from "../data/goods";
 import { PARTS, partDef, type PartDef } from "../data/parts";
+import { maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
 import {
   buyChassis,
@@ -355,12 +356,12 @@ export class TownScreen {
 function cabLine(v: Vehicle): string {
   const cab = corePart(v, "cab");
   const broken = mountedParts(v).filter((p) => p.hp === 0).length;
-  return `Cab ${cab.hp}/${partDef(cab.defId).hp}, ${broken} broken ${broken === 1 ? "part" : "parts"}`;
+  return `Cab ${cab.hp}/${maxHp(cab)}, ${broken} broken ${broken === 1 ? "part" : "parts"}`;
 }
 
 function partLabel(p: PartInstance): string {
   const d = partDef(p.defId);
-  return `${d.name} ${p.hp}/${d.hp}${p.hp === 0 ? " BROKEN" : ""}`;
+  return `${d.name} ${p.hp}/${maxHp(p)}${p.hp === 0 ? " BROKEN" : ""}`;
 }
 
 function partStats(d: PartDef): string {

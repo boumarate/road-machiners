@@ -5,7 +5,7 @@
 import { RULES } from "../data/rules";
 import { playerVehicle } from "./damage";
 import { goodsCount, mountedParts } from "./grid";
-import { partDef } from "../data/parts";
+import { isJunk, maxHp } from "./wear";
 import { repairPlan, repairTurn } from "./repair";
 import { searchTurn } from "./search";
 import type { Job, Vehicle, World } from "./types";
@@ -52,8 +52,8 @@ export function startAutoRepair(world: World): void {
   if (v.job || v.speed > RULES.parkedSpeed || (goodsCount(v).parts ?? 0) === 0)
     return;
   const worst = mountedParts(v)
-    .filter((p) => repairPlan(world, v, p.id).needed > 0)
-    .sort((a, b) => a.hp / partDef(a.defId).hp - b.hp / partDef(b.defId).hp)[0];
+    .filter((p) => !isJunk(p) && repairPlan(world, v, p.id).needed > 0)
+    .sort((a, b) => a.hp / maxHp(a) - b.hp / maxHp(b))[0];
   if (!worst) return;
   const plan = repairPlan(world, v, worst.id, 1);
   startJob(world, v, {
@@ -72,17 +72,21 @@ export function advanceJobs(world: World): void {
 // A turn handler does one turn of work and returns true once the job is finished.
 function advanceJob(world: World, v: Vehicle, job: Job): void {
   if (v.speed > RULES.parkedSpeed) return endJob(world, v, job, "cancelled");
-  // Parts can leave the grid mid-job, by a sale, a knockout or a destroyed cargo part.
-  if (
-    job.kind === "repair" &&
-    repairPlan(world, v, job.partId, job.parts).parts === 0
-  )
+  if (job.kind === "repair" && isRepairStalled(world, v, job.partId, job.parts))
     return endJob(world, v, job, "cancelled");
   const done =
     job.kind === "repair"
       ? repairTurn(world, v, job)
       : searchTurn(world, v, job);
   if (done) endJob(world, v, job, "done");
+}
+
+// Parts can leave the grid mid-job, by a sale, a knockout or a destroyed cargo part.
+// The part can also break into junk while the truck stands.
+function isRepairStalled(world: World, v: Vehicle, partId: string, parts: number): boolean {
+  const part = mountedParts(v).find((p) => p.id === partId);
+  if (!part) throw new Error(`${partId} is not a mounted part on ${v.name}`);
+  return isJunk(part) || repairPlan(world, v, partId, parts).parts === 0;
 }
 
 export function cancelJob(world: World, v: Vehicle): void {

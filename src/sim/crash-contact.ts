@@ -1,11 +1,11 @@
 import { PHYSICS } from '../data/physics';
 import { baseGrid, corePart, mountedParts } from './grid';
-import { partDef } from '../data/parts';
 import { NPC_BEHAVIOR } from '../data/npcs';
 import { noteCollision } from './combat';
 import { getMobilityCondition, isStranded, vehicleStats } from './stats';
 import { angleDiff, bearing, clamp, type Vec } from './vec';
 import { laneCount, ramMult, walkLane, type PartHit, type Side } from './armor';
+import { isJunk, maxHp, restorePart } from './wear';
 import { damagePart } from './damage';
 import { RULES } from '../data/rules';
 import { skillBonus } from '../data/skills';
@@ -98,13 +98,15 @@ function canSurviveRam(world: World, attacker: Vehicle, target: Vehicle, impact:
   const own = structuredClone(attacker);
   const other = structuredClone(target);
   // Enemy part health is not observable. Assume intact protection for the risk estimate.
-  for (const part of mountedParts(other)) part.hp = partDef(part.defId).hp;
+  // A junk part stays broken, since no repair rebuilds it.
+  for (const part of mountedParts(other)) if (!isJunk(part)) restorePart(part, maxHp(part));
+  const intact = structuredClone(other);
   const draft = { ...world, player: structuredClone(world.player), events: [] };
   own.heading = heading;
   const contact = estimateCrashGeometry(own, other, other.pos);
   damageVehicleCrash(draft, own, other, impact, contact);
   const ownLoss = computePartLoss(attacker, own);
-  const otherLoss = mountedParts(other).reduce((sum, part) => sum + partDef(part.defId).hp - part.hp, 0);
+  const otherLoss = computePartLoss(intact, other);
   return otherLoss > ownLoss && retainsCombatParts(attacker, own, minimum);
 }
 
@@ -120,7 +122,7 @@ function computePartLoss(before: Vehicle, after: Vehicle): number {
 function retainsCombatParts(before: Vehicle, after: Vehicle, minimum: number): boolean {
   const working = new Set(mountedParts(before).filter((part) => part.hp > 0).map((part) => part.id));
   const disabled = mountedParts(after).some((part) => working.has(part.id) && part.hp === 0);
-  return !disabled && getMobilityCondition(after) > minimum && corePart(after, 'cab').hp > partDef('cab').hp * minimum;
+  return !disabled && getMobilityCondition(after) > minimum && corePart(after, 'cab').hp > maxHp(corePart(after, 'cab')) * minimum;
 }
 
 export function estimateCrashGeometry(a: Vehicle, b: Vehicle | null, from: Vec): CrashGeometry {

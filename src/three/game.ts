@@ -24,6 +24,7 @@ import {
   type VehicleFrame,
 } from "../phys/frames";
 import { applyTurn, type PreparedTurn } from "../phys/turn";
+import { maxHp } from "../sim/wear";
 import { playerVehicle, vehicleById } from "../sim/damage";
 import { corePart, mountedParts } from "../sim/grid";
 import { applySiteAction } from "../sim/locations";
@@ -1165,9 +1166,7 @@ export class Game {
     if (moving && v.speed > 0.5 && Math.random() < DUST_CHANCE * ground.dust)
       this.fx.dust(this.dustPoint(v, f));
     const cab = corePart(v, "cab");
-    const hurt =
-      cab.hp < partDef(cab.defId).hp * HURT_CAB ||
-      mountedParts(v).some((p) => p.hp === 0);
+    const hurt = cab.hp < maxHp(cab) * HURT_CAB || mountedParts(v).some((p) => p.hp === 0);
     if (hurt && Math.random() < SMOKE_CHANCE) this.fx.smoke(f.pos);
   }
 

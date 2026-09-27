@@ -86,7 +86,7 @@ describe("equipment variety", () => {
             heading: 0,
             brain: null,
           });
-          return mountPart(w, v, makePart(w, id));
+          return mountPart(w, v, makePart(w, id, 0));
         });
         expect(fits, id).toBe(true);
       }

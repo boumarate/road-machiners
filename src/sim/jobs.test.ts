@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { partDef } from '../data/parts';
-import { REPAIR } from '../data/wear';
+import { CONDITION, REPAIR } from '../data/wear';
+import { damagePart } from './wear';
 import { addVehicle, emptyWorld } from './testkit';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { addGoods, removeGoods } from './inventory';
@@ -126,6 +127,33 @@ describe('field repair job', () => {
   });
 });
 
+describe('junk parts', () => {
+  it('refuses a field repair of a junk part', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const cage = armorPart(me);
+    cage.hp = 0;
+    cage.wear = CONDITION.maxWear + 1;
+    addGoods(w, me, 'parts', 20);
+    expect(() => startRepair(w, cage.id)).toThrow(/junk/);
+  });
+
+  it('cancels a field repair once its part breaks into junk', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const cage = armorPart(me);
+    cage.hp = 1;
+    cage.wear = CONDITION.maxWear;
+    addGoods(w, me, 'parts', 20);
+    const next = startRepair(w, cage.id);
+    damagePart(armorPart(next.vehicles[0]), 1, 0);
+    advanceJobs(next);
+    expect(next.vehicles[0].job).toBeNull();
+    expect(armorPart(next.vehicles[0]).hp).toBe(0);
+    expect(next.events.some((e) => e.t === 'job' && e.outcome === 'cancelled')).toBe(true);
+  });
+});
+
 describe('repair without parts', () => {
   it('cancels once the parts leave the grid mid-job', () => {
     const w = emptyWorld();
@@ -158,6 +186,18 @@ describe('auto patch', () => {
     for (let i = 0; i < plan.turns; i++) advanceJobs(w);
     expect(goodsCount(me).parts).toBe(held - 1);
     expect(engine.hp).toBe(1 + plan.hp);
+  });
+
+  it('skips a junk part', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    me.speed = 0;
+    const cage = armorPart(me);
+    cage.hp = 0;
+    cage.wear = CONDITION.maxWear + 1;
+    addGoods(w, me, 'parts', 5);
+    startAutoRepair(w);
+    expect(me.job).toBeNull();
   });
 
   it('waits while off, moving, busy or out of parts', () => {

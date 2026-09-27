@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { partDef } from '../data/parts';
+import { partDef, type ArmorDef, type CargoDef, type EngineDef, type ScannerDef, type WeaponDef } from '../data/parts';
+import { CONDITION } from '../data/wear';
 import type { TerrainTypeId } from '../data/terrain';
 import { addVehicle, emptyWorld, editableTerrain } from './testkit';
 import { corePart, mountedParts } from './grid';
 import { tileAt } from './terrain';
-import type { Vehicle, World } from './types';
-import { applyWear } from './wear';
+import type { PartInstance, Vehicle, World } from './types';
+import { applyWear, damagePart, isJunk, maxHp, restorePart, wornDef } from './wear';
 
 // Sets a vehicle's trail to a single straight segment of the given length, and its end-of-turn speed.
 function drive(v: Vehicle, len: number): void {
@@ -122,5 +123,142 @@ describe('wear', () => {
     const before = totalHp(npc);
     applyWear(w);
     expect(totalHp(npc)).toBeLessThan(before);
+  });
+});
+
+function part(defId: string, wear: number, hp = partDef(defId).hp): PartInstance {
+  return { id: 'p1', defId, hp, reload: 0, wear };
+}
+
+// Source files of src/sim/ keyed by path, without tests.
+const SIM_SOURCES = import.meta.glob<string>('./**/*.ts', { query: '?raw', import: 'default', eager: true });
+
+describe('wear on break', () => {
+  it('adds one wear step when a part drops to 0 HP', () => {
+    const p = part('mg', 0);
+    damagePart(p, 999, 0);
+    expect(p).toMatchObject({ hp: 0, wear: 1 });
+  });
+
+  it('adds no wear to damage that leaves the part working', () => {
+    const p = part('mg', 0);
+    damagePart(p, 5, 0);
+    expect(p).toMatchObject({ hp: partDef('mg').hp - 5, wear: 0 });
+  });
+
+  it('adds no wear to a part that was already broken', () => {
+    const p = part('mg', 1, 0);
+    damagePart(p, 5, 0);
+    expect(p).toMatchObject({ hp: 0, wear: 1 });
+  });
+
+  it('stops at the floor without wear', () => {
+    const p = part('cab', 0);
+    damagePart(p, 999, 1);
+    expect(p).toMatchObject({ hp: 1, wear: 0 });
+  });
+
+  it('never raises HP to the floor', () => {
+    const p = part('cab', 0, 0.5);
+    damagePart(p, 1, 1);
+    expect(p.hp).toBe(0.5);
+  });
+
+  it('refuses negative damage', () => {
+    expect(() => damagePart(part('mg', 0), -1, 0)).toThrow();
+  });
+
+  it('adds no wear on repair of a damaged working part', () => {
+    const p = part('mg', 0, 3);
+    restorePart(p, maxHp(p));
+    expect(p).toMatchObject({ hp: partDef('mg').hp, wear: 0 });
+  });
+});
+
+describe('stat loss per wear step', () => {
+  it('keeps a pristine part at its def', () => {
+    expect(maxHp(part('plates', 0))).toBe(partDef('plates').hp);
+    expect(wornDef(part('plates', 0))).toEqual(partDef('plates'));
+  });
+
+  it('lowers max HP by a share of def HP per step', () => {
+    const def = partDef('cab');
+    expect(maxHp(part('cab', 2))).toBe(Math.round(def.hp * (1 - 2 * CONDITION.hpLoss)));
+  });
+
+  it('widens weapon spread', () => {
+    const def = partDef('mg') as WeaponDef;
+    expect(wornDef<WeaponDef>(part('mg', 2)).spread).toBeCloseTo(def.spread * (1 + 2 * CONDITION.statLoss.spread));
+  });
+
+  it('cuts engine speed and accel bonus', () => {
+    const def = partDef('stockEngine') as EngineDef;
+    const worn = wornDef<EngineDef>(part('stockEngine', 2));
+    expect(worn.speedBonus).toBeCloseTo(def.speedBonus - 2 * CONDITION.statLoss.speedBonus);
+    expect(worn.accelBonus).toBeCloseTo(def.accelBonus - 2 * CONDITION.statLoss.accelBonus);
+  });
+
+  it('lowers armor on armor parts', () => {
+    const def = partDef('plates') as ArmorDef;
+    expect(wornDef<ArmorDef>(part('plates', 2)).armor).toBeCloseTo(def.armor * (1 - 2 * CONDITION.statLoss.armor));
+  });
+
+  it('shortens scanner range', () => {
+    const def = partDef('scanner') as ScannerDef;
+    expect(wornDef<ScannerDef>(part('scanner', 2)).range).toBeCloseTo(def.range * (1 - 2 * CONDITION.statLoss.scannerRange));
+  });
+
+  it('costs cargo and core parts max HP only', () => {
+    const cargo = partDef('rack') as CargoDef;
+    expect(wornDef(part('rack', 2))).toEqual({ ...cargo, hp: maxHp(part('rack', 2)) });
+    expect(wornDef(part('cab', 2))).toEqual({ ...partDef('cab'), hp: maxHp(part('cab', 2)) });
+  });
+});
+
+describe('junk', () => {
+  it('is junk only past the last wear step', () => {
+    expect(isJunk(part('mg', CONDITION.maxWear))).toBe(false);
+    expect(isJunk(part('mg', CONDITION.maxWear + 1))).toBe(true);
+  });
+
+  it('turns junk when a part at the last wear step breaks', () => {
+    const p = part('mg', CONDITION.maxWear);
+    damagePart(p, 999, 0);
+    expect(isJunk(p)).toBe(true);
+  });
+
+  it('keeps a built-in core part at the last wear step when it breaks', () => {
+    const p = part('transmission', CONDITION.maxWear);
+    damagePart(p, 999, 0);
+    expect(p.wear).toBe(CONDITION.maxWear);
+    expect(isJunk(p)).toBe(false);
+  });
+
+  it('refuses to restore a junk part from 0 HP', () => {
+    const p = part('mg', CONDITION.maxWear + 1, 0);
+    expect(() => restorePart(p, 5)).toThrow(/junk/);
+    expect(p.hp).toBe(0);
+  });
+
+  it('rebuilds a broken part at the last wear step', () => {
+    const p = part('mg', CONDITION.maxWear, 0);
+    restorePart(p, 999);
+    expect(p.hp).toBe(maxHp(p));
+  });
+
+  it('refuses to lower HP through a restore', () => {
+    expect(() => restorePart(part('mg', 0, 10), 5)).toThrow();
+  });
+});
+
+describe('HP ownership', () => {
+  it('lets no sim file but wear.ts write part HP', () => {
+    const hpWrite = /\.hp\s*(?:[-+*/]?=(?!=)|\+\+|--)/;
+    const writers = Object.entries(SIM_SOURCES)
+      .filter(([path]) => !path.endsWith('.test.ts') && path !== './wear.ts')
+      .filter(([, source]) => hpWrite.test(source))
+      .map(([path]) => path);
+    expect(Object.keys(SIM_SOURCES).length).toBeGreaterThan(20);
+    expect(writers).toEqual([]);
   });
 });

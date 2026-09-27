@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { NPCS } from '../data/npcs';
 import { partDef } from '../data/parts';
-import { PATCH } from '../data/wear';
+import { CONDITION, PATCH } from '../data/wear';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions } from './dialogue';
 import { goodsCount, mountedParts } from './grid';
 import { addGoods, removeGoods } from './inventory';
 import { topGoal } from './npc-activities';
-import { patchData } from './patch';
+import { needsPatch, patchData } from './patch';
 import { stateOf } from './states';
 import { isStranded } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
@@ -74,6 +74,14 @@ describe('asking a driver for a patch', () => {
     const { w, trader } = brokenPlayer(0);
     const asked = askPatch(w, trader.id);
     expect(currentOptions(asked).map((o) => o.text)).toContain('Engine or gearbox. Can you do anything?');
+  });
+
+  it('a junk engine needs no patch, since no patch rebuilds it', () => {
+    const { w } = brokenPlayer(4);
+    const engine = mountedParts(playerVehicle(w), 'engine')[0];
+    expect(needsPatch(playerVehicle(w))).toBe(true);
+    engine.wear = CONDITION.maxWear + 1;
+    expect(needsPatch(playerVehicle(w))).toBe(false);
   });
 
   it('a truck that is not broken cannot ask', () => {

@@ -3,6 +3,7 @@ import { RULES } from '../data/rules';
 // Each working part it meets takes damage and stops some of its penetration.
 
 import { partDef } from '../data/parts';
+import { wornDef } from './wear';
 import { damagePart } from './damage';
 import { gridOf, itemCells, itemSize, mountedItems, mountedParts, sideOf, type Grid, type SideLetter } from './grid';
 import type { PartInstance, Vehicle, World } from './types';
@@ -82,7 +83,7 @@ export function walkLane(world: World, v: Vehicle, side: Side, lane: number, rou
     const part = owner.get(`${c.x},${c.y}`);
     if (pen <= 0 || !part || part.hp <= 0 || struck.has(part.id)) continue;
     struck.add(part.id);
-    const armor = partDef(part.defId).armor;
+    const armor = wornDef(part).armor;
     hits.push({ part: part.id, damage: damagePart(world, v, part, damage * Math.min(1, pen / armor)) });
     damage *= Math.max(0, pen - armor) / pen;
     pen -= armor;

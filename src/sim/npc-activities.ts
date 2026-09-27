@@ -7,9 +7,9 @@ import { NPC_BEHAVIOR, NPC_UPKEEP, type DecisionOptions } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import type { PartHit } from './armor';
-import { partDef } from '../data/parts';
 import { isHostile } from './combat';
 import { getTradePrice, sellVehicleCargo, serviceAtCamp, serviceVehicle, tradeGoods } from './economy';
+import { isJunk, maxHp } from './wear';
 import { corePart, freeCells, goodsCount, mountedParts } from './grid';
 import { cancelJob } from './jobs';
 import {
@@ -134,8 +134,9 @@ function pointsAway(from: Vec, to: Vec, threat: Vec): boolean {
 // Why an NPC needs service, and whether low supplies are its only need.
 type ServiceNeed = { reason: string; suppliesOnly: boolean };
 
+// Junk parts do not count, since no service rebuilds them.
 function isDamaged(vehicle: Vehicle): boolean {
-  return mountedParts(vehicle).some((part) => part.hp / partDef(part.defId).hp <= NPC_BEHAVIOR.fleeCondition);
+  return mountedParts(vehicle).some((part) => !isJunk(part) && part.hp / maxHp(part) <= NPC_BEHAVIOR.fleeCondition);
 }
 
 function serviceReason(lowFuel: boolean, lowSupplies: boolean): string {

@@ -69,7 +69,7 @@ function tryMountChoice(world: World, v: Vehicle, id: string, budget: number): V
   if (computeEquipmentCost(v) + partDef(id).price > budget) return null;
   if (vehicleMass(v) + partDef(id).mass > chassisDef(v.chassisId).ratedMass) return null;
   const candidate = { ...v, items: [...v.items] };
-  if (!mountPart(world, candidate, makePart(world, id))) return null;
+  if (!mountPart(world, candidate, makePart(world, id, 0))) return null;
   return candidate;
 }
 

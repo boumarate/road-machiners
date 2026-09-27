@@ -5,6 +5,7 @@
 import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
 import { ENGINE_HEAT } from '../data/wear';
+import { damagePart } from './wear';
 import { playerVehicle } from './damage';
 import { mountedParts } from './grid';
 import { vehicleStats } from './stats';
@@ -29,6 +30,6 @@ export function advanceEngineHeat(world: World): void {
   }
   if (world.player.engineHeat < 1 || me.speed <= RULES.parkedSpeed) return;
   const engines = mountedParts(me).filter((p) => partDef(p.defId).kind === 'engine' && p.hp > 0);
-  for (const e of engines) e.hp = Math.max(0, e.hp - ENGINE_HEAT.overheatDamage);
+  for (const e of engines) damagePart(e, ENGINE_HEAT.overheatDamage, 0);
   if (engines.length > 0) world.events.push({ t: 'info', text: `Engine overheated: engine -${ENGINE_HEAT.overheatDamage} HP` });
 }

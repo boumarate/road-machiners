@@ -29,7 +29,7 @@ function rollStock(world: World, table: LootTable, id: string, pos: Vec, radius:
   for (const [good, [lo, hi]] of Object.entries(table.goods)) goods[good] = randInt(world, lo, hi);
   goods.parts = randInt(world, table.parts[0], table.parts[1]);
   const parts: PartInstance[] = [];
-  if (chance(world, table.sparePartChance)) parts.push(makePart(world, table.spareParts[randInt(world, 0, table.spareParts.length - 1)]));
+  if (chance(world, table.sparePartChance)) parts.push(makePart(world, table.spareParts[randInt(world, 0, table.spareParts.length - 1)], 0));
   return { id, pos: { ...pos }, radius, goods, parts };
 }
 

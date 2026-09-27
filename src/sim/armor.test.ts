@@ -63,6 +63,16 @@ describe('walkLane', () => {
     expect(engine.hp).toBe(25);
   });
 
+  it('a worn plate lets more of a round through to the part behind', () => {
+    const fresh = plated();
+    const worn = plated();
+    worn.plate.wear = 3;
+    const round = { damage: 10, pen: 20 };
+    const freshHits = walkLane(fresh.w, fresh.v, 'front', 1, round);
+    const wornHits = walkLane(worn.w, worn.v, 'front', 1, round);
+    expect(wornHits[1].damage).toBeGreaterThan(freshHits[1].damage);
+  });
+
   it('a strong round passes the plate and hits the part behind', () => {
     const { w, v, plate, engine } = plated();
     const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 20 });

@@ -5,6 +5,7 @@ import { ECONOMY, GOOD_IDS, TOWN_PRICES } from "../data/goods";
 import { partDef } from "../data/parts";
 import { REGION } from "../data/region";
 import { RULES } from "../data/rules";
+import { CONDITION } from "../data/wear";
 import {
   buyChassis,
   buyGood,
@@ -26,6 +27,7 @@ import {
   goodsCount,
   mountedParts,
 } from "./grid";
+import { maxHp } from "./wear";
 import { spareParts } from "./inventory";
 import { applySiteAction, canScavenge, salvageNear, scavenge, useOasis } from "./locations";
 import { gainXp, spendSkillPoint, xpForLevel } from "./progress";
@@ -109,6 +111,30 @@ describe("garage", () => {
     expect(corePart(r.vehicles[0], "cab").hp).toBe(partDef("cab").hp);
     expect(mountedParts(r.vehicles[0])[0].hp).toBeGreaterThan(0);
     expect(r.player.money).toBeLessThan(1000);
+  });
+
+  it("refuses to rebuild a junk part and leaves it out of repair all", () => {
+    const w = startAtBowl();
+    const junk = mountedParts(w.vehicles[0])[0];
+    junk.hp = 0;
+    junk.wear = CONDITION.maxWear + 1;
+    corePart(w.vehicles[0], "cab").hp = 10;
+
+    expect(() => repairPart(w, junk.id)).toThrow(/junk/);
+    const r = repairAll(w);
+
+    expect(mountedParts(r.vehicles[0])[0].hp).toBe(0);
+    expect(corePart(r.vehicles[0], "cab").hp).toBe(partDef("cab").hp);
+  });
+
+  it("repairs a worn part up to its worn max HP", () => {
+    const w = startAtBowl();
+    const cab = corePart(w.vehicles[0], "cab");
+    cab.wear = 2;
+    cab.hp = 0;
+    const r = repairPart(w, cab.id);
+    expect(corePart(r.vehicles[0], "cab")).toMatchObject({ hp: maxHp(cab), wear: 2 });
+    expect(maxHp(cab)).toBeLessThan(partDef("cab").hp);
   });
 
   it("repairs only the selected truck part for its quoted cost", () => {

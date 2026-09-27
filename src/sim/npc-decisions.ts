@@ -14,7 +14,6 @@ import {
   DECISIONS, HUNTING_GROUNDS, MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, STATE_WEIGHTS, TRAITS,
   type DecisionId, type DecisionOptions, type TraitId, type TraitWeights, type WeightChange,
 } from '../data/npcs';
-import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { isHostile } from './combat';
@@ -22,6 +21,7 @@ import { isRamGainful, ramImpact } from './crash-contact';
 import { vehicleById } from './damage';
 import { contactsOf } from './detect';
 import { getTradePrice } from './economy';
+import { maxHp } from './wear';
 import { corePart, freeCells, hasLoot, mountedParts } from './grid';
 import { isTownGuarded } from './guards';
 import { topGoal } from './npc-activities';
@@ -94,7 +94,7 @@ export function getKnownSite(id: string) {
 // on, however sound its cab.
 function getCombatCondition(vehicle: Vehicle): number {
   const cab = corePart(vehicle, 'cab');
-  return Math.min(cab.hp / partDef(cab.defId).hp, getMobilityCondition(vehicle));
+  return Math.min(cab.hp / maxHp(cab), getMobilityCondition(vehicle));
 }
 
 // Damage times rounds summed over working guns.
@@ -345,7 +345,7 @@ function fleeHeardFactor(world: World, vehicle: Vehicle): number {
 
 // A miss counts a little, and damage taken last turn adds by its share of the cab.
 function fleeAttackedFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
-  const cabMax = partDef(corePart(vehicle, 'cab').defId).hp;
+  const cabMax = maxHp(corePart(vehicle, 'cab'));
   const hit = NPC_BEHAVIOR.missFlee + vehicle.brain!.hurt / cabMax / NPC_BEHAVIOR.hurtFullFlee;
   return hit * weakFlee(world, vehicle) * threatFlee(world, vehicle, danger);
 }

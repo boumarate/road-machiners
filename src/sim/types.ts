@@ -22,6 +22,7 @@ export type PartInstance = {
   defId: string;
   hp: number;
   reload: number;
+  wear: number; // wear steps from breaking, 0 for pristine. See src/sim/condition.ts.
 };
 
 // An item in a vehicle's inventory grid. x and y are the top-left cell. rot 1 swaps width and height.

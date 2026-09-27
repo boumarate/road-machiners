@@ -109,7 +109,7 @@ export function newWorld(seed: number, kit: StartKit): World {
   world.vehicles.push(truck);
   world.player.vehicleId = truck.id;
   initializeSalvage(world);
-  world.player.storage = kit.storage.map((defId) => makePart(world, defId));
+  world.player.storage = kit.storage.map((defId) => makePart(world, defId, 0));
   spawnInitial(world);
   refreshVision(world);
   world.events = [];

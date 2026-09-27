@@ -5,6 +5,7 @@ import { GOODS } from "../data/goods";
 import { chassisDef } from "../data/chassis";
 import { partDef, type PartKind } from "../data/parts";
 import { RULES } from "../data/rules";
+import { isJunk, maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
 import { partRepairCost, repairPart } from "../sim/economy";
 import {
@@ -24,7 +25,7 @@ import {
   takeFromStorage,
 } from "../sim/inventory";
 import { startRepair } from "../sim/jobs";
-import { repairPlan } from "../sim/repair";
+import { repairPlan, type RepairPlan } from "../sim/repair";
 import { townAt } from "../sim/sites";
 import { takeAllLoot, takeLoot } from "../sim/locations";
 import { REGION } from "../data/region";
@@ -275,20 +276,16 @@ export class InventoryView {
     );
   }
 
-  // A damaged mounted part shows a Patch button, hidden once it is already at the field cap.
+  // A damaged mounted part shows a Patch button, hidden once it is already at the field cap or junk.
   private patchButton(
     w: World,
     me: Vehicle,
     part: PartInstance,
   ): HTMLElement | null {
+    if (isJunk(part)) return null;
     const plan = repairPlan(w, me, part.id);
     if (plan.needed === 0) return null;
-    const moving = me.speed > RULES.parkedSpeed;
-    const reason = moving
-      ? "Stop to patch"
-      : plan.parts === 0
-        ? "No parts"
-        : null;
+    const reason = patchBlocker(me, plan);
     return el(
       "button",
       {
@@ -307,7 +304,9 @@ export class InventoryView {
     );
   }
 
+  // Junk parts get no button, since no repair rebuilds them.
   private repairButton(w: World, part: PartInstance): HTMLElement | null {
+    if (isJunk(part)) return null;
     const cost = partRepairCost(w, part);
     if (cost === 0) return null;
     return el(
@@ -318,7 +317,7 @@ export class InventoryView {
         title:
           w.player.money < cost
             ? "Not enough money"
-            : `Restore to ${partDef(part.defId).hp} HP`,
+            : `Restore to ${maxHp(part)} HP`,
         onpointerdown: (e: Event) => e.stopPropagation(),
         onclick: (e: Event) => {
           e.stopPropagation();
@@ -335,7 +334,7 @@ export class InventoryView {
       const chip = el(
         "div",
         { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
-        `${d.name} ${d.w}x${d.h} ${p.hp}/${d.hp}`,
+        `${d.name} ${d.w}x${d.h} ${p.hp}/${maxHp(p)}`,
       );
       const item: GridItem = {
         id: `store-${p.id}`,
@@ -371,7 +370,7 @@ export class InventoryView {
       const chip = el(
         "div",
         { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
-        `${d.name} ${d.w}x${d.h} ${p.hp}/${d.hp}`,
+        `${d.name} ${d.w}x${d.h} ${p.hp}/${maxHp(p)}`,
       );
       const item: GridItem = {
         id: `loot-${p.id}`,
@@ -679,9 +678,15 @@ function itemTitle(it: GridItem, mounted: boolean): string {
   return `${partTitle(it.part)}\n${mounted ? "Mounted and working" : "Spare: not on a matching mount"}`;
 }
 
+// Why a Patch button is disabled, or null when the patch can start.
+function patchBlocker(me: Vehicle, plan: RepairPlan): string | null {
+  if (me.speed > RULES.parkedSpeed) return "Stop to patch";
+  return plan.parts === 0 ? "No parts" : null;
+}
+
 // Thin bar along the bottom of a part: its width is hp over max hp. A broken part shows a red bar.
 function conditionBar(p: PartInstance): HTMLElement {
-  const max = partDef(p.defId).hp;
+  const max = maxHp(p);
   return el(
     "div",
     { class: `inv-hp${p.hp > 0 ? "" : " broken"}` },
@@ -691,5 +696,5 @@ function conditionBar(p: PartInstance): HTMLElement {
 
 function partTitle(p: PartInstance): string {
   const d = partDef(p.defId);
-  return `${d.name} (${d.kind}) ${p.hp}/${d.hp} HP, ${d.w}x${d.h}`;
+  return `${d.name} (${d.kind}) ${p.hp}/${maxHp(p)} HP, ${d.w}x${d.h}`;
 }
