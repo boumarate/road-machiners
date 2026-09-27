@@ -29,7 +29,7 @@ import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, SalvageS
 import { canUseSite, nearestPad } from './sites';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
-import { dropTow, playerTow, runTow, strandedPlayerAt, towGoal } from './tow';
+import { dropTow, isOnRope, playerTow, runTow, strandedPlayerAt, towGoal } from './tow';
 
 // ---- The goal stack. The top goal drives the NPC. A long-term goal sits at the bottom, and interruptions go on top
 // of it. A new goal replaces any goal of its kind, so the stack never holds two goals of one kind. Every change logs
@@ -833,9 +833,15 @@ function resolveActivity(world: World, vehicle: Vehicle, activity: NpcActivity):
   RESOLVERS[activity.kind]?.(world, vehicle, activity);
 }
 
+// A driver works on its goal when alive, parked and off any tow rope.
+function canAct(world: World, vehicle: Vehicle): boolean {
+  if (corePart(vehicle, 'cab').hp <= 0 || getResources(world, vehicle).health <= 0) return false;
+  return vehicle.speed <= RULES.parkedSpeed && !isOnRope(world, vehicle.id);
+}
+
 export function resolveNpcActivities(world: World): void {
   for (const vehicle of world.vehicles) {
-    if (!vehicle.brain || corePart(vehicle, 'cab').hp <= 0 || getResources(world, vehicle).health <= 0 || vehicle.speed > RULES.parkedSpeed) continue;
+    if (!vehicle.brain || !canAct(world, vehicle)) continue;
     const top = topGoal(vehicle);
     if (top) resolveActivity(world, vehicle, top);
   }

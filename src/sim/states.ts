@@ -3,10 +3,11 @@
 // of each kind toward each other party.
 
 import { STATE_TURNS } from '../data/npcs';
-import { playerVehicle, vehicleById } from './damage';
+import { vehicleById } from './damage';
 import { newId } from './factory';
 import { lootRobbed } from './npc-activities';
 import { checkPatch, isPatching, lapsePatch, settlePatch } from './patch';
+import { checkPlayerTow } from './tow';
 import { getResources } from './resources';
 import type { NpcState, StateData, StateEnding, StateKindId, World } from './types';
 import { canVehicleSee } from './vision';
@@ -45,10 +46,11 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   },
   // The holder does not rob the other party while it lasts.
   backedOff: { refresh: never, check: noCheck, hooks: {} },
-  // The holder tows the player to a town. See src/sim/tow.ts, which fulfils and breaks it.
+  // The holder tows the other party to a town. See src/sim/tow.ts. An NPC tower's goal fulfils and breaks it. A
+  // player tower's arrival is its check.
   tow: {
     refresh: never,
-    check: noCheck,
+    check: (w, s) => (s.holder === w.player.vehicleId ? checkPlayerTow(w, s) : null),
     hooks: { fulfilled: payTow, broken: releaseTow },
   },
   turnedDown: { refresh: never, check: noCheck, hooks: {} },
@@ -180,19 +182,22 @@ export function towData(s: NpcState): Extract<StateData, { kind: 'tow' }> {
 // The one place a tow fee is paid. The player's money may go negative. The towed truck stops where it was dropped.
 function payTow(w: World, s: NpcState): void {
   const tow = towData(s);
-  const me = playerVehicle(w);
-  w.player.money -= tow.fee;
+  const towed = vehicleById(w, s.other);
+  getResources(w, towed).money -= tow.fee;
   getResources(w, vehicleById(w, s.holder)).money += tow.fee;
-  me.speed = 0;
-  me.order = null;
-  w.events.push({ t: 'towDone', by: s.holder, fee: tow.fee });
+  towed.speed = 0;
+  towed.order = null;
+  if (s.holder === w.player.vehicleId) w.events.push({ t: 'money', amount: tow.fee, reason: `towing ${towed.name}` });
+  else w.events.push({ t: 'towDone', by: s.holder, fee: tow.fee });
 }
 
 // A released truck brakes to a stop. The caller logs why the tow broke, except for a tower that left the world,
 // which only this step sees.
-// The tower forgets it decided on this player, so a stranded player in sight is a fresh strandedSeen decision.
+// An NPC tower forgets it decided on this player, so a stranded player in sight is a fresh strandedSeen decision.
 function releaseTow(w: World, s: NpcState): void {
-  if (towData(s).hitched) playerVehicle(w).order = { kind: 'brake' };
+  const towed = w.vehicles.find((v) => v.id === s.other);
+  if (towed && towData(s).hitched) towed.order = { kind: 'brake' };
+  if (s.holder === w.player.vehicleId) return;
   const holder = w.vehicles.find((v) => v.id === s.holder);
   if (!holder) w.events.push({ t: 'towDropped', by: s.holder, reason: 'gone' });
   else delete holder.brain!.noticed[`strandedSeen:${s.other}`];

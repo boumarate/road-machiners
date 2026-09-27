@@ -7,15 +7,15 @@ import type { DecisionOptions, TraitId } from './npcs';
 
 type PatchDeal = DecisionOptions['patchDeal'];
 
-export type TopicId = 'directions' | 'tow' | 'askTow' | 'patch' | 'patchRequest' | 'demand' | 'truce' | 'mercy' | 'rob' | 'truceOffer' | 'mercyPlea';
+export type TopicId = 'directions' | 'tow' | 'askTow' | 'patch' | 'patchRequest' | 'demand' | 'truce' | 'mercy' | 'rob' | 'truceOffer' | 'mercyPlea' | 'offerTow' | 'releaseTow' | 'offerPatch';
 export type ConditionId =
   | 'knowsTown' | 'offersTow' | 'canTowPlayer' | 'playerNeedsPatch' | 'npcNeedsPatch' | 'hasDeal' | 'noDeal' | 'demandsCargo'
   | 'atOdds' | 'atPeace' | 'noPlayerPlea' | 'npcHasCargo' | 'offersTruce' | 'begsMercy'
-  | 'accepts' | 'refuses' | 'complies' | 'resists' | 'runs';
+  | 'accepts' | 'refuses' | 'complies' | 'resists' | 'runs' | 'canTowNpc' | 'towedByPlayer';
 export type EffectId =
   | 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow' | 'agreePatch' | 'handOver'
-  | 'acceptPlea' | 'refusePlea' | 'settlePlea' | 'withdrawPlea' | 'settleThreat';
-export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms' | 'truceAnswer' | 'mercyAnswer' | 'threatAnswer';
+  | 'acceptPlea' | 'refusePlea' | 'settlePlea' | 'withdrawPlea' | 'settleThreat' | 'hitchNpc' | 'releaseNpc';
+export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms' | 'truceAnswer' | 'mercyAnswer' | 'threatAnswer' | 'npcTowTerms';
 
 // `go` is a node of the same topic, the hub of topics, or the end of the call.
 export type DialogueOption = { text: string; when: ConditionId[]; effects: EffectId[]; go: string };
@@ -271,6 +271,64 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
+  // The player offers a stranded driver a tow to the town it names, for what it can pay.
+  offerTow: {
+    id: 'offerTow',
+    once: false,
+    ask: { text: 'Need a tow to town?', when: ['canTowNpc'], duringFeud: false },
+    raise: null,
+    prepare: 'npcTowTerms',
+    hangUp: [],
+    start: 'terms',
+    nodes: {
+      terms: {
+        line: 'Take me to {town}. I can pay {fee} when we get there.',
+        options: [
+          { text: 'Deal. Hitch up.', when: [], effects: ['hitchNpc'], go: END },
+          { text: 'Not now. Something else.', when: [], effects: [], go: HUB },
+        ],
+      },
+    },
+  },
+  // The player lets a towed driver off the rope for free.
+  releaseTow: {
+    id: 'releaseTow',
+    once: false,
+    ask: { text: 'I am letting you off the rope here.', when: ['towedByPlayer'], duringFeud: false },
+    raise: null,
+    prepare: null,
+    hangUp: ['releaseNpc'],
+    start: 'released',
+    nodes: {
+      released: { line: 'Fine. Thanks for the pull.', options: [{ text: 'Over and out.', when: [], effects: ['releaseNpc'], go: END }] },
+    },
+  },
+  // The player offers to patch a driver stranded by a broken engine or gearbox.
+  offerPatch: {
+    id: 'offerPatch',
+    once: false,
+    ask: { text: 'Your truck looks dead. Want me to patch it?', when: ['npcNeedsPatch'], duringFeud: false },
+    raise: null,
+    prepare: 'patchTerms',
+    hangUp: [],
+    start: 'ask',
+    nodes: {
+      ask: {
+        line: 'You know how? Then name it.',
+        options: [
+          { text: 'What can you offer?', when: ['hasDeal'], effects: [], go: 'terms' },
+          { text: 'On second thought, I cannot.', when: ['noDeal'], effects: [], go: HUB },
+        ],
+      },
+      terms: {
+        line: '{deal}',
+        options: [
+          { text: 'Deal. Stay where you are.', when: [], effects: ['agreePatch'], go: END },
+          { text: 'Not now. Something else.', when: [], effects: [], go: HUB },
+        ],
+      },
+    },
+  },
 };
 
 // Patch terms in the NPC's words. `npcPatches` when the NPC does the work, `playerPatches` when it asks the player
@@ -305,8 +363,8 @@ export type TraitTalk = { voice: Voice | null; topics: TopicId[] };
 // Tiles a horn carries. It is about as loud as an engine at limp speed, so it reaches a little past sight.
 export const HONK_RANGE = DETECT.sound.limp;
 
-// Every driver can be asked for peace, robbed and plead for peace.
-const PARLEY: TopicId[] = ['truce', 'mercy', 'rob', 'truceOffer', 'mercyPlea'];
+// Every driver can be asked for peace, robbed, towed and patched, and can plead for peace.
+const PARLEY: TopicId[] = ['truce', 'mercy', 'rob', 'truceOffer', 'mercyPlea', 'offerTow', 'releaseTow', 'offerPatch'];
 
 export const TRAIT_TALK: Record<TraitId, TraitTalk> = {
   trader: { voice: { greeting: 'Caravan here. Go ahead.', repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'patch', 'patchRequest', ...PARLEY] },

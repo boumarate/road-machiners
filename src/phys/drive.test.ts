@@ -14,7 +14,8 @@ import { PHYSICS } from '../data/physics';
 import { buildDrive, freeDrive, initPhysics, routeAim, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
 import { physicsMove } from './turn';
 import { playerTow, unhitch } from '../sim/tow';
-import { chooseOption, currentOptions } from '../sim/dialogue';
+import { callVehicle, chooseOption, currentOptions } from '../sim/dialogue';
+import { TOW } from '../data/tow';
 import { soundRange } from '../sim/detect';
 
 beforeAll(async () => {
@@ -528,6 +529,41 @@ describe('physics turns', () => {
     w = unhitch(w);
     for (let i = 0; i < 3; i++) turn();
     expect(d.bodies[me(w).id]).toBeDefined();
+    freeDrive(d);
+  });
+
+  it('an NPC on the player rope leaves physics, trails the player and returns when let go', () => {
+    let w = emptyWorld();
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 26, y: 30 }, 0);
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    npc.resources!.fuel = 0;
+    let d = buildDrive(w);
+    const turn = () => {
+      let r: TurnResult | null = null;
+      w = endTurn(w, physicsMove(d, (x) => (r = x)));
+      freeDrive(d);
+      d = r!.next;
+      return r!;
+    };
+    const pick = (text: string) => { w = chooseOption(w, currentOptions(w).findIndex((o) => o.text === text)); };
+    w = callVehicle(w, npc.id);
+    pick('Need a tow to town?');
+    pick('Deal. Hitch up.');
+    w = setMoveOrder(w, { kind: 'stopAt', dest: { x: 60, y: 30 } });
+    const start = { ...npc.pos };
+    for (let i = 0; i < 6; i++) {
+      const r = turn();
+      expect(d.bodies[npc.id]).toBeUndefined();
+      expect(r.frames[npc.id]).toBeUndefined();
+    }
+    const towed = w.vehicles.find((v) => v.id === npc.id)!;
+    expect(dist(towed.pos, start)).toBeGreaterThan(3);
+    expect(dist(towed.pos, me(w).pos)).toBeLessThanOrEqual(TOW.gap + 1e-6);
+    w = callVehicle(w, npc.id);
+    pick('I am letting you off the rope here.');
+    pick('Over and out.');
+    for (let i = 0; i < 3; i++) turn();
+    expect(d.bodies[npc.id]).toBeDefined();
     freeDrive(d);
   });
 });

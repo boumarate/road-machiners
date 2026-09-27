@@ -14,9 +14,9 @@ import { thinkNpc, topGoal } from './npc-activities';
 import { optionChances, optionWeights } from './npc-decisions';
 import { addState, stateOf, towData } from './states';
 import { callVehicle, chooseOption, currentOptions, hangUp } from './dialogue';
-import { dropTow, isTowed, playerTow, setBeacon, unhitch } from './tow';
+import { dropTow, isOnRope, isTowed, playerTow, playerTowing, setBeacon, unhitch } from './tow';
 import { sunAt } from './sun';
-import { canVehicleSee } from './vision';
+import { canVehicleSee, refreshVision } from './vision';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { autoRuns, endTurn, setDirect, setMoveOrder } from './world';
@@ -493,5 +493,108 @@ describe('emergency beacon', () => {
     expect(autoRuns(setMoveOrder(w, { kind: 'stopAt', dest: { x: 40, y: 40 } }))).toBe(false);
     addState(w, 'tow', s.trader.id, w.player.vehicleId, { kind: 'tow', town: 'bowl', fee: 10, hitched: false });
     expect(autoRuns(w)).toBe(false);
+  });
+});
+
+describe('the player towing an NPC', () => {
+  const OFFER = 'Need a tow to town?';
+  const HITCH = 'Deal. Hitch up.';
+  const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
+  const gate = siteGates(bowl)[0];
+  const out = { x: (gate.x - bowl.pos.x) / bowl.radius, y: (gate.y - bowl.pos.y) / bowl.radius };
+  const at = (d: number) => ({ x: gate.x + out.x * d, y: gate.y + out.y * d });
+
+  // A scavenger with an empty tank parks 3 tiles behind the player, 25 tiles out from the Bowl gate.
+  function strandedNpc(): { w: World; npc: Vehicle } {
+    const w = emptyWorld(at(25));
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    const npc = withTower(w, 'scavenger', 'scavengers', 'scout', at(28));
+    npc.resources!.fuel = 0;
+    return { w, npc };
+  }
+
+  function pick(w: World, text: string): World {
+    const i = currentOptions(w).findIndex((o) => o.text === text);
+    if (i < 0) throw new Error(`No option "${text}" in ${currentOptions(w).map((o) => o.text).join(' | ')}`);
+    return chooseOption(w, i);
+  }
+
+  function hitched(): { w: World; npc: Vehicle } {
+    const { w, npc } = strandedNpc();
+    return { w: pick(pick(callVehicle(w, npc.id), OFFER), HITCH), npc };
+  }
+
+  it('the driver names its nearest town and a fee it can pay', () => {
+    const { w: start, npc } = strandedNpc();
+    npc.resources!.money = 30;
+    const w = pick(callVehicle(start, npc.id), OFFER);
+    expect(w.player.call?.vars).toEqual({ town: { kind: 'town', id: 'bowl' }, fee: { kind: 'money', amount: 30 } });
+  });
+
+  it('hitching takes the driver out of physics, and it trails the player', () => {
+    let { w, npc } = hitched();
+    expect(isOnRope(w, npc.id)).toBe(true);
+    expect(towData(playerTowing(w)!)).toMatchObject({ town: 'bowl', hitched: true });
+    w = setMoveOrder(w, { kind: 'stopAt', dest: at(40) });
+    for (let i = 0; i < 4; i++) {
+      w = endTurn(w, testDrive);
+      expect(dist(find(w, npc.id).pos, playerVehicle(w).pos)).toBeLessThanOrEqual(TOW.gap + 1e-6);
+      expect(find(w, npc.id).order).toBeNull();
+    }
+  });
+
+  it('the player tows slower', () => {
+    const { w } = hitched();
+    const free = structuredClone(w);
+    free.states = [];
+    expect(vehicleStats(w, playerVehicle(w)).maxSpeed).toBeCloseTo(vehicleStats(free, playerVehicle(free)).maxSpeed * TOW.speedShare);
+  });
+
+  it('reaching the town gets the player paid once and leaves the driver there', () => {
+    let { w, npc } = hitched();
+    const fee = towData(playerTowing(w)!).fee;
+    const money = w.player.money;
+    const npcMoney = find(w, npc.id).resources!.money;
+    w = setMoveOrder(w, { kind: 'stopAt', dest: gate });
+    const r = runUntil(w, 60, (x) => playerTowing(x) === null);
+    expect(r.events.filter((e) => e.t === 'stateEnded').map((e) => e.t === 'stateEnded' && e.ending)).toEqual(['fulfilled']);
+    expect(r.w.player.money).toBe(money + fee);
+    expect(find(r.w, npc.id).resources!.money).toBe(npcMoney - fee);
+    expect(find(r.w, npc.id).speed).toBe(0);
+  });
+
+  it('the player can let the driver off the rope for free', () => {
+    let { w, npc } = hitched();
+    const money = w.player.money;
+    w = pick(pick(callVehicle(w, npc.id), 'I am letting you off the rope here.'), 'Over and out.');
+    expect(playerTowing(w)).toBeNull();
+    expect(isOnRope(w, npc.id)).toBe(false);
+    expect(w.player.money).toBe(money);
+  });
+
+  it('hostility breaks the tow', () => {
+    let { w, npc } = hitched();
+    addState(w, 'feud', npc.id, w.player.vehicleId, { kind: 'feud', robbery: false });
+    w = setMoveOrder(w, { kind: 'stopAt', dest: at(40) });
+    w = endTurn(w, testDrive);
+    expect(playerTowing(w)).toBeNull();
+  });
+
+  it('is not offered to a driver already at its town', () => {
+    const { w, npc } = strandedNpc();
+    npc.pos = { ...sitePads(bowl)[0] };
+    playerVehicle(w).pos = { x: npc.pos.x + out.x * 3, y: npc.pos.y + out.y * 3 };
+    refreshVision(w);
+    expect(canUseSite(npc.pos, bowl)).toBe(true);
+    expect(currentOptions(callVehicle(w, npc.id)).map((o) => o.text)).not.toContain(OFFER);
+  });
+
+  it('is not offered to a driver that can drive or parks out of reach', () => {
+    const { w, npc } = strandedNpc();
+    npc.resources!.fuel = 50;
+    expect(currentOptions(callVehicle(w, npc.id)).map((o) => o.text)).not.toContain(OFFER);
+    const far = strandedNpc();
+    far.npc.pos = at(35);
+    expect(currentOptions(callVehicle(far.w, far.npc.id)).map((o) => o.text)).not.toContain(OFFER);
   });
 });

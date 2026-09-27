@@ -4,17 +4,21 @@ import { RULES } from "../data/rules";
 import { getActivityDestination, thinkNpc, topGoal } from "./npc-activities";
 import { towData } from "./states";
 import { vehicleStats } from "./stats";
-import { playerTow } from "./tow";
+import { isOnRope, playerTow } from "./tow";
 import { ramImpact } from "./crash-contact";
 import type { Vehicle, World } from "./types";
 import { angleDiff, bearing, dist, type Vec } from "./vec";
 
+// NPC drivers that plan this turn. A truck on a tow rope only trails its tower, so it keeps no order.
+function planners(world: World): Vehicle[] {
+  return world.vehicles.filter((v) => v.brain && !isOnRope(world, v.id));
+}
+
 export function planNpcOrders(world: World): void {
-  for (const v of world.vehicles) {
-    if (!v.brain) continue;
-    const tpl = NPCS[v.brain.templateId];
-    if (!tpl) throw new Error(`Unknown NPC template ${v.brain.templateId}`);
-    const b = v.brain;
+  for (const v of planners(world)) {
+    const tpl = NPCS[v.brain!.templateId];
+    if (!tpl) throw new Error(`Unknown NPC template ${v.brain!.templateId}`);
+    const b = v.brain!;
     delete b.ramTarget;
     if (b.recovery) b.recovery--;
     const activity = thinkNpc(world, v);

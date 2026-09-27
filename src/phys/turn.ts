@@ -10,7 +10,7 @@ import { perfSnapshot, resetPerf, type PerfStat } from '../perf';
 import { playerVehicle } from '../sim/damage';
 import { advanceFar } from '../sim/far';
 import { applyContactCrash } from '../sim/crash-contact';
-import { isTowed } from '../sim/tow';
+import { isOnRope } from '../sim/tow';
 import { burnFuel } from '../sim/resources';
 import type { Pose, World } from '../sim/types';
 import { dist } from '../sim/vec';
@@ -86,8 +86,8 @@ export function physicsMove(d: Drive, done: (r: TurnResult) => void): (w: World)
   return (w) => {
     syncDrive(d, w);
     const r = simulateTurn(d, w);
-    // The towed player has no frames either, but its tower places it after this step.
-    const far = w.vehicles.filter((v) => !r.frames[v.id] && !(v.id === w.player.vehicleId && isTowed(w)));
+    // A towed truck has no frames either, but its tower places it after this step.
+    const far = w.vehicles.filter((v) => !r.frames[v.id] && !isOnRope(w, v.id));
     applyTurn(w, r);
     for (const v of far) {
       advanceFar(w, v);

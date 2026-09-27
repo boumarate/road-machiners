@@ -4,6 +4,9 @@
 // the state, and its hook in src/sim/states.ts takes the fee, even into debt. Refusing, driving away or unhitching
 // breaks it for free, and the tower holds `turnedDown` toward the player, so it rarely offers again.
 // A stranded player can switch on an emergency beacon, which calls towers from beyond sight, and raiders too.
+// The player can also tow a stranded NPC to the town it names, for what the NPC can pay. That tow is a `tow` state
+// held by the player toward the NPC. It is fulfilled when the player reaches the town, and the radio releases it.
+// Any hitched truck leaves physics and trails its tower.
 
 import { chassisDef } from '../data/chassis';
 import { ECONOMY } from '../data/goods';
@@ -17,7 +20,8 @@ import { npcProfile } from './npc-decisions';
 import { canUseSite, nearestPad } from './sites';
 import { addState, endState, stateOf, towData, towPromiseData } from './states';
 import { isStranded, vehicleStats } from './stats';
-import type { GameEvent, NpcActivity, NpcState, Pose, Vehicle, World } from './types';
+import { getResources } from './resources';
+import type { GameEvent, NpcActivity, NpcState, Pose, StateEnding, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 import { playerCommand, update } from './world';
@@ -45,8 +49,79 @@ export function playerTow(world: World): NpcState | null {
 
 // The player is on a tow rope.
 export function isTowed(world: World): boolean {
-  const tow = playerTow(world);
-  return tow !== null && towData(tow).hitched;
+  return isOnRope(world, world.player.vehicleId);
+}
+
+function hitchedTows(world: World): NpcState[] {
+  return world.states.filter((s) => s.kind === 'tow' && towData(s).hitched);
+}
+
+// The vehicle hangs on a tow rope, so it has no physics body and trails its tower.
+export function isOnRope(world: World, id: string): boolean {
+  return hitchedTows(world).some((s) => s.other === id);
+}
+
+// The vehicle pulls a truck on its tow rope.
+export function isTowing(world: World, id: string): boolean {
+  return hitchedTows(world).some((s) => s.holder === id);
+}
+
+// The tow the player holds toward an NPC, or null.
+export function playerTowing(world: World): NpcState | null {
+  return world.states.find((s) => s.kind === 'tow' && s.holder === world.player.vehicleId) ?? null;
+}
+
+// The player can tow this NPC: it is stranded and at peace, knows a town it is not at yet, waits for no patch, and
+// parks within reach of a player truck that drives and has no tow of its own.
+export function canTowNpc(world: World, npc: Vehicle): boolean {
+  const me = playerVehicle(world);
+  return ropeFree(world, npc) && awayFromTown(npc) && !isHostile(world, npc, me)
+    && isStranded(world, npc) && !isStranded(world, me) && inTowReach(me, npc);
+}
+
+function awayFromTown(npc: Vehicle): boolean {
+  return npcProfile(npc).towns.length > 0 && !canUseSite(npc.pos, npcTowTown(npc));
+}
+
+// The town the NPC wants a tow to: the nearest it knows.
+function npcTowTown(npc: Vehicle): TownDef {
+  return npcProfile(npc).towns.map(townById).sort((a, b) => dist(npc.pos, a.pos) - dist(npc.pos, b.pos))[0];
+}
+
+// Neither the player nor the NPC is in a tow or a patch deal already.
+function ropeFree(world: World, npc: Vehicle): boolean {
+  return !(playerTow(world) || playerTowing(world) || awaitsPatch(world, npc) || isOnRope(world, npc.id));
+}
+
+// The NPC's terms: its nearest known town, and the tow fee up to the money it holds.
+export function npcTowTerms(world: World, npc: Vehicle): { town: TownDef; fee: number } {
+  const town = npcTowTown(npc);
+  const fee = Math.min(towFee(world, playerVehicle(world), npc.pos, town), Math.max(0, getResources(world, npc).money));
+  return { town, fee };
+}
+
+// The player hitches the NPC. Runs inside the dialogue command.
+export function hitchNpc(world: World, npc: Vehicle, town: string, fee: number): void {
+  if (!canTowNpc(world, npc)) throw new Error(`The player cannot tow ${npc.id}`);
+  addState(world, 'tow', world.player.vehicleId, npc.id, { kind: 'tow', town, fee, hitched: true });
+  npc.order = null;
+  npc.speed = 0;
+}
+
+// The player lets the NPC go. Runs inside the dialogue command.
+export function releaseNpc(world: World, npc: Vehicle): void {
+  const tow = playerTowing(world);
+  if (tow?.other !== npc.id) throw new Error(`The player does not tow ${npc.id}`);
+  endState(world, tow, 'broken');
+}
+
+// The player's tow ends at the NPC's town, and breaks when the two turn hostile.
+export function checkPlayerTow(world: World, s: NpcState): StateEnding | null {
+  const me = world.vehicles.find((v) => v.id === s.holder);
+  const npc = world.vehicles.find((v) => v.id === s.other);
+  if (!me || !npc) return null;
+  if (isHostile(world, me, npc)) return 'broken';
+  return canUseSite(me.pos, townById(towData(s).town)) ? 'fulfilled' : null;
 }
 
 // The tower's goal while it holds the tow: wait for an answer to the offer, then head for the town.
@@ -79,8 +154,8 @@ function towTaken(world: World, vehicle: Vehicle, me: Vehicle): boolean {
 }
 
 // A truck with a patch deal under way waits for its patch instead of a tow.
-function awaitsPatch(world: World, me: Vehicle): boolean {
-  return world.states.some((s) => s.kind === 'patch' && (s.holder === me.id || s.other === me.id));
+function awaitsPatch(world: World, v: Vehicle): boolean {
+  return world.states.some((s) => s.kind === 'patch' && (s.holder === v.id || s.other === v.id));
 }
 
 // The job is taken while another driver holds the claim to answer the player.
@@ -177,20 +252,20 @@ export function dropTow(world: World, tow: NpcState, reason: DropReason): void {
   world.events.push({ t: 'towDropped', by: tow.holder, reason });
 }
 
-// Places the hitched player TOW.gap tiles behind the tower along the path both trucks drive: the player's own
+// Places each hitched truck TOW.gap tiles behind its tower along the path both trucks drive: the towed truck's own
 // last pose, then the tower's trail. Each trail pose of the towed truck trails the matching pose of the tower.
 export function followTower(world: World): void {
-  const tow = playerTow(world);
-  if (!tow || !towData(tow).hitched) return;
-  const tower = vehicleById(world, tow.holder);
+  for (const tow of hitchedTows(world)) follow(vehicleById(world, tow.holder), vehicleById(world, tow.other));
+}
+
+function follow(tower: Vehicle, towed: Vehicle): void {
   if (tower.trail.length === 0) throw new Error(`Tower ${tower.id} has no trail to follow`);
-  const me = playerVehicle(world);
-  const path: Pose[] = [{ x: me.pos.x, y: me.pos.y, heading: me.heading }, ...tower.trail];
-  me.trail = tower.trail.map((_, i) => poseBehind(path, i + 1, TOW.gap));
-  const end = me.trail[me.trail.length - 1];
-  me.pos = { x: end.x, y: end.y };
-  me.heading = end.heading;
-  me.speed = tower.speed;
+  const path: Pose[] = [{ x: towed.pos.x, y: towed.pos.y, heading: towed.heading }, ...tower.trail];
+  towed.trail = tower.trail.map((_, i) => poseBehind(path, i + 1, TOW.gap));
+  const end = towed.trail[towed.trail.length - 1];
+  towed.pos = { x: end.x, y: end.y };
+  towed.heading = end.heading;
+  towed.speed = tower.speed;
 }
 
 // The pose `gap` tiles back along the path from path[k], facing along the path. A path shorter than the gap is
