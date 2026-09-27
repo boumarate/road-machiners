@@ -402,7 +402,7 @@ function provoke(world: World, shooter: Vehicle, target: Vehicle): void {
         dist(v.pos, target.pos) <= SPAWN.neighborHelp &&
         canVehicleSee(world, v, shooter.pos));
     if (joins && v.faction !== "player" && !stateOf(world, "feud", v.id, shooter.id)) {
-      addState(world, "feud", v.id, shooter.id, { kind: "none" });
+      addState(world, "feud", v.id, shooter.id, { kind: "feud", robbery: false });
       world.events.push({ t: "hostile", vehicle: v.id, against: shooter.id });
     }
   }

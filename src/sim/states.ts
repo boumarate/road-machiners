@@ -5,6 +5,7 @@
 import { STATE_TURNS } from '../data/states';
 import { playerVehicle, vehicleById } from './damage';
 import { newId } from './factory';
+import { lootRobbed } from './robbery';
 import { getResources } from './resources';
 import type { NpcState, StateData, StateEnding, StateKindId, World } from './types';
 import { canVehicleSee } from './vision';
@@ -34,8 +35,12 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
       return canVehicleSee(w, holder, other.pos) || canVehicleSee(w, other, holder.pos);
     },
     check: (w, s) => (w.events.some((e) => e.t === 'destroyed' && e.vehicle === s.other) ? 'fulfilled' : null),
-    // A feud that went quiet failed. Hostility ends, and the holder backs off from the other party.
-    hooks: { expired: (w, s) => { addState(w, 'backedOff', s.holder, s.other, { kind: 'none' }); } },
+    hooks: {
+      // A feud that went quiet failed. Hostility ends, and the holder backs off from the other party.
+      expired: (w, s) => { addState(w, 'backedOff', s.holder, s.other, { kind: 'none' }); },
+      // A won robbery sends the robber to loot what the other party left behind.
+      fulfilled: (w, s) => { if (feudData(s).robbery) lootRobbed(w, s.holder, s.other); },
+    },
   },
   // The holder does not rob the other party while it lasts.
   backedOff: { refresh: never, check: noCheck, hooks: {} },
@@ -59,8 +64,12 @@ function turnsOf(kind: StateKindId): number | null {
   return STATE_TURNS[kind];
 }
 
+// The data kind each state kind carries.
+const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', spurned: 'none' };
+
 export function addState(w: World, kind: StateKindId, holder: string, other: string, data: StateData): NpcState {
   kindOf(kind);
+  if (data.kind !== DATA_KIND[kind]) throw new Error(`A ${kind} state needs ${DATA_KIND[kind]} data, got ${data.kind}`);
   const s: NpcState = { id: newId(w, 'state'), kind, holder, other, turnsLeft: turnsOf(kind), born: w.turn, data };
   w.states = w.states.filter((x) => !(x.kind === kind && x.holder === holder && x.other === other));
   w.states.push(s);
@@ -106,6 +115,11 @@ export function advanceStates(w: World): void {
 
 function partyMissing(w: World, s: NpcState): boolean {
   return !w.vehicles.some((v) => v.id === s.holder) || !w.vehicles.some((v) => v.id === s.other);
+}
+
+export function feudData(s: NpcState): Extract<StateData, { kind: 'feud' }> {
+  if (s.data.kind !== 'feud') throw new Error(`State ${s.id} holds no feud`);
+  return s.data;
 }
 
 export function towData(s: NpcState): Extract<StateData, { kind: 'tow' }> {

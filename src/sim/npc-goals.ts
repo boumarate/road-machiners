@@ -5,7 +5,7 @@
 import type { NpcActivity, Vehicle, World } from './types';
 
 // Goals that interrupt a long-term goal. Popping one that uncovers the long-term goal fires the resume decision.
-export const INTERRUPTIONS: readonly NpcActivity['kind'][] = ['fight', 'flee', 'investigate', 'resupply', 'tow'];
+export const INTERRUPTIONS: readonly NpcActivity['kind'][] = ['fight', 'flee', 'investigate', 'resupply', 'tow', 'loot'];
 
 function goalsOf(v: Vehicle): NpcActivity[] {
   if (!v.brain) throw new Error(`${v.id} has no NPC brain`);

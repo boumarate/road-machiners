@@ -164,7 +164,7 @@ describe('far NPC travel', () => {
     ];
     npc.brain.goals = structuredClone(goals);
     // The investigation needs a hostile target, so the NPC holds a feud toward the player.
-    w.states.push({ id: 'feud-test', kind: 'feud', holder: npc.id, other: w.player.vehicleId, turnsLeft: 10, born: w.turn, data: { kind: 'none' } });
+    w.states.push({ id: 'feud-test', kind: 'feud', holder: npc.id, other: w.player.vehicleId, turnsLeft: 10, born: w.turn, data: { kind: 'feud', robbery: false } });
     const { w: after, d } = play(w, 1);
     w = after;
     const v = w.vehicles.find((x) => x.id === npc.id)!;

@@ -1,10 +1,13 @@
-// Which trucks a robber may rob. Robbery itself is a fight: see the preySeen decision in src/sim/npc-activities.ts.
+// Which trucks a robber may rob, and what it loots after a win. Robbery itself is a fight: see the preySeen
+// decision in src/sim/npc-activities.ts.
 
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { isHostile } from './combat';
 import { hasLoot } from './grid';
 import { computeVisibleStrength, ownStrength } from './npc-decisions';
+import { pushGoal } from './npc-goals';
+import { knockoutStockId, wreckStockId } from './salvage';
 import { siteGates } from './sites';
 import type { Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
@@ -23,4 +26,15 @@ export function isRobberyTarget(w: World, robber: Vehicle, target: Vehicle): boo
   if (!hasLoot(target)) return false;
   if (computeVisibleStrength(target) >= ownStrength(w, robber)) return false;
   return !nearTownGate(robber.pos) && !nearTownGate(target.pos);
+}
+
+// Sends a robber that won to search the stock its victim left: an NPC's wreck, or the stock a knocked-out player
+// dropped this turn. A robber that died in the same fight loots nothing.
+export function lootRobbed(w: World, robberId: string, victimId: string): void {
+  const robber = w.vehicles.find((v) => v.id === robberId);
+  if (!robber) return;
+  const ids = [wreckStockId(victimId), knockoutStockId(victimId, w.turn)];
+  const stock = w.salvage.find((s) => ids.includes(s.id));
+  if (!stock) throw new Error(`${robberId} won a robbery, but ${victimId} left no stock`);
+  pushGoal(w, robber, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'loot the robbed truck' });
 }

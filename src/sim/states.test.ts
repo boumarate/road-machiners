@@ -8,6 +8,7 @@ import type { NpcState, StateKindId, World } from './types';
 import { canVehicleSee } from './vision';
 
 const NONE = { kind: 'none' } as const;
+const FEUD = { kind: 'feud', robbery: false } as const;
 
 // Two NPCs far enough apart that neither sees the other, so nothing refreshes a feud.
 function apart(): { w: World; a: string; b: string } {
@@ -43,11 +44,11 @@ describe('states', () => {
 
   it('a new state of the same kind, holder and other replaces the old one', () => {
     const { w, a, b } = apart();
-    const first = addState(w, 'feud', a, b, NONE);
-    const second = addState(w, 'feud', a, b, NONE);
+    const first = addState(w, 'feud', a, b, FEUD);
+    const second = addState(w, 'feud', a, b, FEUD);
     expect(w.states).toEqual([second]);
     expect(second.id).not.toBe(first.id);
-    addState(w, 'feud', b, a, NONE);
+    addState(w, 'feud', b, a, FEUD);
     addState(w, 'backedOff', a, b, NONE);
     expect(w.states).toHaveLength(3);
     expect(stateOf(w, 'feud', a, b)).toBe(second);
@@ -56,8 +57,8 @@ describe('states', () => {
 
   it('a new state starts with its kind timer and the current turn', () => {
     const { w, a, b } = apart();
-    const s = addState(w, 'feud', a, b, NONE);
-    expect(s).toMatchObject({ kind: 'feud', holder: a, other: b, turnsLeft: STATE_TURNS.feud, born: w.turn, data: NONE });
+    const s = addState(w, 'feud', a, b, FEUD);
+    expect(s).toMatchObject({ kind: 'feud', holder: a, other: b, turnsLeft: STATE_TURNS.feud, born: w.turn, data: FEUD });
     expect(addState(w, 'spurned', a, b, NONE).turnsLeft).toBeNull();
   });
 
@@ -66,9 +67,15 @@ describe('states', () => {
     expect(() => addState(w, 'truce' as StateKindId, a, b, NONE)).toThrow(/truce/);
   });
 
+  it('a state with data of another kind throws', () => {
+    const { w, a, b } = apart();
+    expect(() => addState(w, 'feud', a, b, NONE)).toThrow(/feud data/);
+    expect(() => addState(w, 'backedOff', a, b, FEUD)).toThrow(/none data/);
+  });
+
   it('a state with a missing party ends broken', () => {
     const { w, a } = apart();
-    addState(w, 'feud', a, 'v-gone', NONE);
+    addState(w, 'feud', a, 'v-gone', FEUD);
     turn(w);
     expect(w.states).toEqual([]);
     expect(endings(w)).toEqual(['broken']);
@@ -76,8 +83,8 @@ describe('states', () => {
 
   it('a feud whose other party was destroyed this turn ends fulfilled', () => {
     const { w, a, b } = apart();
-    addState(w, 'feud', a, b, NONE);
-    addState(w, 'feud', b, a, NONE);
+    addState(w, 'feud', a, b, FEUD);
+    addState(w, 'feud', b, a, FEUD);
     w.turn++;
     w.events = [];
     corePart(w.vehicles.find((v) => v.id === b)!, 'cab').hp = 0;
@@ -92,7 +99,7 @@ describe('states', () => {
     const { w, a, b } = apart();
     const expired = vi.fn();
     STATE_KINDS.feud.hooks = { expired };
-    addState(w, 'feud', a, b, NONE);
+    addState(w, 'feud', a, b, FEUD);
     const all: string[] = [];
     for (let i = 0; i < feudTurns() + 5; i++) {
       turn(w);
@@ -105,7 +112,7 @@ describe('states', () => {
 
   it('a state ends only once', () => {
     const { w, a, b } = apart();
-    const s = addState(w, 'feud', a, b, NONE);
+    const s = addState(w, 'feud', a, b, FEUD);
     endState(w, s, 'broken');
     expect(() => endState(w, s, 'broken')).toThrow();
   });
@@ -114,7 +121,7 @@ describe('states', () => {
     const { w, a, b } = apart();
     let added: NpcState | null = null;
     STATE_KINDS.feud.hooks = { broken: (x) => { added = addState(x, 'backedOff', a, 'v-gone', NONE); } };
-    addState(w, 'feud', a, b, NONE);
+    addState(w, 'feud', a, b, FEUD);
     turn(w);
     const s = stateOf(w, 'feud', a, b)!;
     endState(w, s, 'broken');
@@ -131,14 +138,14 @@ describe('states', () => {
     const a = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 100, y: 100 });
     const b = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 104, y: 100 });
     expect(canVehicleSee(w, a, b.pos)).toBe(true);
-    addState(w, 'feud', a.id, b.id, NONE);
+    addState(w, 'feud', a.id, b.id, FEUD);
     for (let i = 0; i < feudTurns() * 2; i++) turn(w);
     expect(stateOf(w, 'feud', a.id, b.id)?.turnsLeft).toBe(STATE_TURNS.feud);
   });
 
   it('a feud refreshed by a shot does not expire', () => {
     const { w, a, b } = apart();
-    addState(w, 'feud', a, b, NONE);
+    addState(w, 'feud', a, b, FEUD);
     for (let i = 0; i < feudTurns() * 2; i++) {
       w.turn++;
       w.events = [{ t: 'shot', shooter: b, weapon: 'x', target: a, aim: 'body', chance: 0.5, side: 'front', rounds: [] }];
@@ -149,7 +156,7 @@ describe('states', () => {
 
   it('a feud counts down while neither party sees or shoots the other', () => {
     const { w, a, b } = apart();
-    addState(w, 'feud', a, b, NONE);
+    addState(w, 'feud', a, b, FEUD);
     turn(w);
     turn(w);
     expect(stateOf(w, 'feud', a, b)?.turnsLeft).toBe(feudTurns() - 2);

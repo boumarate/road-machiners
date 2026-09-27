@@ -249,6 +249,12 @@ export function optionWeights<D extends DecisionId>(world: World, vehicle: Vehic
   return out as Record<DecisionOptions[D], number>;
 }
 
+// A decision with a keep option offers a choice only while another option has weight. Without one, the driver
+// keeps what it does with no roll.
+export function hasChoice(weights: Partial<Record<OptionName, number>>): boolean {
+  return !('keep' in weights) || Object.entries(weights).some(([option, weight]) => option !== 'keep' && weight! > 0);
+}
+
 export function decide<D extends DecisionId>(world: World, vehicle: Vehicle, decision: D, subject: string | null): DecisionOptions[D] {
   const weights = optionWeights(world, vehicle, decision, subject);
   const pool: { value: DecisionOptions[D]; weight: number }[] = [];
@@ -257,5 +263,6 @@ export function decide<D extends DecisionId>(world: World, vehicle: Vehicle, dec
     if (weight > 0) pool.push({ value: option, weight });
   }
   if (pool.length === 0) throw new Error(`${vehicle.id} has no option with weight at ${decision}`);
+  if (!hasChoice(weights)) return pool[0].value;
   return sampleWeighted(world, pool);
 }

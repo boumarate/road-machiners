@@ -89,7 +89,7 @@ export type WeatherEvent =
 export type DriverResources = { money: number; fuel: number; supplies: number; health: number };
 
 export type NpcActivity = {
-  kind: 'scavenge' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate' | 'tow';
+  kind: 'scavenge' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate' | 'tow' | 'loot';
   targetId: string | null;
   destination: Vec | null;
   phase: 'travel' | 'act';
@@ -143,7 +143,11 @@ export type Obstacle = {
 export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'spurned';
 export type StateEnding = 'expired' | 'fulfilled' | 'broken';
 // A tow state: the holder tows the other party to `town` for `fee`, paid on arrival. hitched is false while the offer is open.
-export type StateData = { kind: 'tow'; town: string; fee: number; hitched: boolean } | { kind: 'none' };
+// A feud: robbery is true when the holder started it to rob the other party, so a win sends it to loot.
+export type StateData =
+  | { kind: 'tow'; town: string; fee: number; hitched: boolean }
+  | { kind: 'feud'; robbery: boolean }
+  | { kind: 'none' };
 export type NpcState = {
   id: string;
   kind: StateKindId;

@@ -4,7 +4,7 @@
 
 import { chassisDef } from '../data/chassis';
 import { ECONOMY } from '../data/goods';
-import { NPC_BEHAVIOR, NPC_UPKEEP } from '../data/npcs';
+import { NPC_BEHAVIOR, NPC_UPKEEP, type DecisionOptions } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import type { PartHit } from './armor';
@@ -12,12 +12,13 @@ import { isHostile } from './combat';
 import { getTradePrice, sellVehicleCargo, serviceAtCamp, serviceVehicle, tradeGoods } from './economy';
 import { corePart, freeCells, goodsCount, mountedParts } from './grid';
 import {
-  bestTrade, decide, getCabCondition, getKnownSite, getUpkeepReserve, huntingGroundsAway, isHostileContact, isWeak,
+  bestTrade, decide, getCabCondition, hasChoice, optionWeights, getKnownSite, getUpkeepReserve, huntingGroundsAway, isHostileContact, isWeak,
   salvageSitesAway, trustedContacts, visibleHostiles, visibleSalvage,
 } from './npc-decisions';
 import { INTERRUPTIONS, popGoal, pushGoal, replaceBase, topGoal } from './npc-goals';
 import { npcProfile, type NpcProfile } from './npc-profile';
 import { getResources } from './resources';
+import { cancelJob } from './jobs';
 import { randInt } from './rng';
 import { canReachSalvage, hasSalvage } from './salvage';
 import { beginSearch } from './search';
@@ -154,6 +155,12 @@ function invalidReason(world: World, vehicle: Vehicle, goal: NpcActivity, contac
     // A wreck is an opportunity only while it remains observable.
     return world.salvage.some((stock) => stock.id === goal.targetId && canVehicleSee(world, vehicle, stock.pos)) ? null : 'lost sight of the wreck';
   }
+  if (goal.kind === 'loot') {
+    const stock = world.salvage.find((s) => s.id === goal.targetId);
+    if (!stock) return 'the loot is gone';
+    if (!hasSalvage(stock)) return 'nothing left to loot';
+    return freeCells(vehicle) === 0 ? 'cargo cannot hold the loot' : null;
+  }
   if (goal.kind === 'tow') {
     if (heldTow(world, vehicle)) return null;
     return strandedPlayerAt(world, vehicle) && !stateOf(world, 'spurned', vehicle.id, world.player.vehicleId) ? null : 'the tow is off';
@@ -181,16 +188,21 @@ function perceives(world: World, vehicle: Vehicle, decision: string, id: string,
   return other !== undefined && canVehicleSee(world, vehicle, other.pos);
 }
 
-// Marks the subject noticed for the decision. False when it already was.
-function notice(world: World, vehicle: Vehicle, decision: string, id: string): boolean {
+type NoticedDecision = 'hostileSeen' | 'contactHeard' | 'preySeen' | 'strandedSeen';
+
+// Rolls a decision about a subject once while the subject stays noticed. Null when it already is. When only keep
+// has weight, the driver keeps without a roll and without noticing, so the decision fires once a choice appears.
+function react<D extends NoticedDecision>(world: World, vehicle: Vehicle, decision: D, id: string): DecisionOptions[D] | null {
   const key = `${decision}:${id}`;
-  if (key in vehicle.brain!.noticed) return false;
+  if (key in vehicle.brain!.noticed) return null;
+  if (!hasChoice(optionWeights(world, vehicle, decision, id))) return 'keep' as DecisionOptions[D];
   vehicle.brain!.noticed[key] = world.turn;
-  return true;
+  return decide(world, vehicle, decision, id);
 }
 
-// Pushes a danger goal. A tower in danger drops its tow for free.
+// Pushes a danger goal. The driver drops its search or repair to react, and a tower in danger drops its tow for free.
 function interrupt(world: World, vehicle: Vehicle, goal: NpcActivity): void {
+  cancelJob(world, vehicle);
   const tow = heldTow(world, vehicle);
   if (tow) {
     dropTow(world, tow, 'danger');
@@ -206,10 +218,9 @@ function fleeFrom(world: World, vehicle: Vehicle, profile: NpcProfile, threatId:
 // One roll per new hostile in sight, nearest first. A reaction ends the turn's rolls. Later hostiles fire next turn.
 function onHostilesSeen(world: World, vehicle: Vehicle, profile: NpcProfile): void {
   for (const enemy of visibleHostiles(world, vehicle)) {
-    if (!notice(world, vehicle, 'hostileSeen', enemy.id)) continue;
     const weak = isWeak(world, vehicle);
-    const option = decide(world, vehicle, 'hostileSeen', enemy.id);
-    if (option === 'keep') continue;
+    const option = react(world, vehicle, 'hostileSeen', enemy.id);
+    if (option === null || option === 'keep') continue;
     if (option === 'fight') interrupt(world, vehicle, createActivity('fight', enemy.id, { ...enemy.pos }, 'fight a hostile in sight'));
     else interrupt(world, vehicle, fleeFrom(world, vehicle, profile, enemy.id, enemy.pos, weak ? 'damaged and threatened' : 'avoid a costly fight'));
     return;
@@ -218,9 +229,9 @@ function onHostilesSeen(world: World, vehicle: Vehicle, profile: NpcProfile): vo
 
 function onContactsHeard(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[]): void {
   for (const contact of contacts) {
-    if (!isHostileContact(world, vehicle, contact) || !notice(world, vehicle, 'contactHeard', contact.vehicleId)) continue;
-    const option = decide(world, vehicle, 'contactHeard', contact.vehicleId);
-    if (option === 'keep') continue;
+    if (!isHostileContact(world, vehicle, contact)) continue;
+    const option = react(world, vehicle, 'contactHeard', contact.vehicleId);
+    if (option === null || option === 'keep') continue;
     if (option === 'investigate') interrupt(world, vehicle, createActivity('investigate', contact.vehicleId, { ...contact.center }, 'heard a hostile beyond sight'));
     else interrupt(world, vehicle, fleeFrom(world, vehicle, profile, contact.vehicleId, contact.center, 'heard a hostile beyond sight'));
     return;
@@ -241,9 +252,8 @@ function onPreySeen(world: World, vehicle: Vehicle): void {
     .filter((other) => isRobberyTarget(world, vehicle, other))
     .sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   for (const target of prey) {
-    if (!notice(world, vehicle, 'preySeen', target.id)) continue;
-    if (decide(world, vehicle, 'preySeen', target.id) === 'keep') continue;
-    addState(world, 'feud', vehicle.id, target.id, { kind: 'none' });
+    if (react(world, vehicle, 'preySeen', target.id) !== 'rob') continue;
+    addState(world, 'feud', vehicle.id, target.id, { kind: 'feud', robbery: true });
     world.events.push({ t: 'hostile', vehicle: vehicle.id, against: target.id });
     interrupt(world, vehicle, createActivity('fight', target.id, { ...target.pos }, 'rob cargo'));
     return;
@@ -253,8 +263,7 @@ function onPreySeen(world: World, vehicle: Vehicle): void {
 function onStrandedSeen(world: World, vehicle: Vehicle): void {
   const at = strandedPlayerAt(world, vehicle);
   const me = world.player.vehicleId;
-  if (!at || !notice(world, vehicle, 'strandedSeen', me)) return;
-  if (decide(world, vehicle, 'strandedSeen', me) === 'tow') pushGoal(world, vehicle, createActivity('tow', me, { ...at }, 'help a stranded truck'));
+  if (at && react(world, vehicle, 'strandedSeen', me) === 'tow') pushGoal(world, vehicle, createActivity('tow', me, { ...at }, 'help a stranded truck'));
 }
 
 // A flee keeps running from where its threat is now, and an investigation heads for the contact's newest circle.
@@ -328,7 +337,7 @@ export function getActivityDestination(world: World, vehicle: Vehicle, activity:
   if (!activity.destination) return null;
   if (['fight', 'flee', 'raid', 'investigate'].includes(activity.kind)) return activity.destination;
   const site = [...REGION.towns, ...REGION.locations].find((entry) => entry.id === activity.targetId);
-  const stock = activity.kind === 'scavenge' ? world.salvage.find((entry) => entry.id === activity.targetId) : undefined;
+  const stock = activity.kind === 'scavenge' || activity.kind === 'loot' ? world.salvage.find((entry) => entry.id === activity.targetId) : undefined;
   // A tower drives up to the truck it tows, and parks beside it like beside a stock.
   const towed = activity.kind === 'tow' ? world.vehicles.find((entry) => entry.id === activity.targetId) : undefined;
   const radius = site?.radius ?? stock?.radius ?? (towed && chassisDef(towed.chassisId).radius);
@@ -346,7 +355,8 @@ function resolveActivity(world: World, vehicle: Vehicle, activity: NpcActivity):
     if (ended) finishGoal(world, vehicle, ended);
     return;
   }
-  if (activity.kind === 'scavenge') {
+  // Looting searches the robbed stock like any salvage.
+  if (activity.kind === 'scavenge' || activity.kind === 'loot') {
     const stock = world.salvage.find((entry) => entry.id === activity.targetId);
     if (!stock) { finishGoal(world, vehicle, 'salvage no longer available'); return; }
     // A search already runs at this stock: keep parked and wait for it to finish.

@@ -132,7 +132,7 @@ describe('knockout', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = w.vehicles[0];
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
-    addState(w, 'feud', raider.id, me.id, { kind: 'none' });
+    addState(w, 'feud', raider.id, me.id, { kind: 'feud', robbery: false });
     me.order = { kind: 'stopAt', dest: { x: 50, y: 30 } };
     me.speed = 0;
     me.job = { kind: 'repair', partId: corePart(me, 'cab').id, parts: 1, turnsLeft: 3, total: 3 };
@@ -177,7 +177,7 @@ describe('knockout', () => {
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 36, y: 30 });
     corePart(w.vehicles[0], 'cab').hp = 0;
     checkKnockout(w);
-    addState(w, 'feud', raider.id, w.vehicles[0].id, { kind: 'none' }); // keeps the player knocked out
+    addState(w, 'feud', raider.id, w.vehicles[0].id, { kind: 'feud', robbery: false }); // keeps the player knocked out
     const at = { ...w.vehicles[0].pos };
     for (let i = 0; i < 5; i++) {
       w = endTurn(w);
@@ -233,11 +233,11 @@ describe('the loot rule', () => {
     expect(isHostile(w, bare, raider)).toBe(false);
     autoOrders(w, raider);
     expect(Object.values(raider.weaponOrders).map((o) => o.targetId)).not.toContain(bare.id);
-    const feud = addState(w, 'feud', bare.id, raider.id, { kind: 'none' });
+    const feud = addState(w, 'feud', bare.id, raider.id, { kind: 'feud', robbery: false });
     expect(isHostile(w, raider, bare)).toBe(true);
     endState(w, feud, 'expired');
     expect(isHostile(w, raider, bare)).toBe(false);
-    addState(w, 'feud', raider.id, bare.id, { kind: 'none' });
+    addState(w, 'feud', raider.id, bare.id, { kind: 'feud', robbery: false });
     expect(isHostile(w, bare, raider)).toBe(true);
   });
 
@@ -299,7 +299,7 @@ describe('commands while knocked out', () => {
     expect(addGoods(w, w.vehicles[0], 'parts', 1)).toBe(1);
     w.player.autoRepair = true;
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 36, y: 30 });
-    addState(w, 'feud', raider.id, w.vehicles[0].id, { kind: 'none' });
+    addState(w, 'feud', raider.id, w.vehicles[0].id, { kind: 'feud', robbery: false });
     w = endTurn(w);
     expect(w.vehicles[0].job).toBeNull();
   });

@@ -4,6 +4,7 @@ import { TERRAIN } from '../data/terrain';
 import { corePart } from './grid';
 import { decide, optionWeights } from './npc-decisions';
 import { thinkNpc } from './npc-activities';
+import { topGoal } from './npc-goals';
 import { addState } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import type { TraitId } from '../data/npcs';
@@ -64,7 +65,7 @@ describe('decision weights', () => {
     const a = addVehicle(w, 'raiders', 'buggy', [], { x: 14, y: 10 });
     const b = addVehicle(w, 'raiders', 'buggy', [], { x: 14, y: 12 });
     const before = optionWeights(w, npc, 'hostileSeen', a.id).fight;
-    addState(w, 'feud', npc.id, a.id, { kind: 'none' });
+    addState(w, 'feud', npc.id, a.id, { kind: 'feud', robbery: false });
     expect(optionWeights(w, npc, 'hostileSeen', a.id).fight).toBeGreaterThan(before);
     expect(optionWeights(w, npc, 'hostileSeen', b.id).fight).toBe(before);
   });
@@ -96,9 +97,20 @@ describe('decision points', () => {
     const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 });
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 14, y: 10 });
     const key = `hostileSeen:${raider.id}`;
-    forceOption('hostileSeen', 'keep');
+    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' }];
+    // The first sighting rolls. Start from a seed on which it keeps, so later turns show only whether a roll fires.
+    const keeps = (seed: number) => {
+      const x = cloneWorld(w);
+      x.rngState = seed;
+      return decide(x, find(x, npc.id), 'hostileSeen', raider.id) === 'keep';
+    };
+    const seed = Array.from({ length: 100 }, (_, i) => i).find(keeps);
+    if (seed === undefined) throw new Error('No seed in 100 keeps');
+    w.rngState = seed;
     thinkNpc(w, npc);
+    expect(w.rngState).not.toBe(seed);
     expect(npc.brain!.noticed).toHaveProperty([key]);
+    expect(topGoal(npc)?.kind).toBe('scavenge');
     const rng = w.rngState;
     thinkNpc(w, npc);
     thinkNpc(w, npc);
@@ -138,7 +150,7 @@ describe('decision points', () => {
     const raider = addNpc(w, 'raiders', 'buggy', ['raider'], { x: beyond, y: 30 });
     const scav = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: beyond, y: 31 });
     // The player is hostile to the scavenger through a feud, so both hear a hostile contact.
-    addState(w, 'feud', scav.id, w.player.vehicleId, { kind: 'none' });
+    addState(w, 'feud', scav.id, w.player.vehicleId, { kind: 'feud', robbery: false });
     expect(optionWeights(w, raider, 'contactHeard', w.player.vehicleId).investigate).toBeGreaterThan(0);
     expect(optionWeights(w, scav, 'contactHeard', w.player.vehicleId).investigate).toBe(0);
     let investigated = 0;
