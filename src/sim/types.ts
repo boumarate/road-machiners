@@ -175,6 +175,7 @@ export type Vehicle = {
   pos: Vec;
   heading: number; // radians, 0 = +x
   speed: number; // tiles per turn at the end of the last turn
+  flippedTurns?: number; // consecutive turns that ended with the truck flipped
   order: MoveOrder | null; // null: coast, keeping speed and heading
   direct: boolean; // drive straight at the order's point instead of routing around obstacles; the player's manual mode
   weaponOrders: Record<string, WeaponOrder>; // key: weapon part id

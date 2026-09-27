@@ -567,3 +567,23 @@ describe('physics turns', () => {
     freeDrive(d);
   });
 });
+
+describe('flipped trucks', () => {
+  it('sets a truck back on its wheels after it ends flipBackTurns turns flipped', () => {
+    let w = emptyWorld();
+    const id = w.vehicles[0].id;
+    let d = buildDrive(w);
+    const body = d.world.getRigidBody(d.bodies[id]);
+    body.setRotation({ x: 1, y: 0, z: 0, w: 0 }, true); // upside down
+    const flipped: number[] = [];
+    for (let i = 0; i <= RULES.flipBackTurns; i++) {
+      let next: Drive | null = null;
+      w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+      freeDrive(d);
+      d = next!;
+      flipped.push(w.vehicles[0].flippedTurns!);
+    }
+    freeDrive(d);
+    expect(flipped).toEqual([...Array.from({ length: RULES.flipBackTurns }, (_, i) => i + 1), 0]);
+  });
+});

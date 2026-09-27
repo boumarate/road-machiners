@@ -21,7 +21,7 @@ import { angleDiff, bearing, clamp, DEG, dist, type Vec } from '../sim/vec';
 import { bodyOf, type Body } from '../sim/body';
 import { wheelMounts } from './body';
 import { computeClosingSpeed, locateCrashContact, type CrashGeometry } from '../sim/crash-contact';
-import { headingOf, headingQuat, noseRise, type TurnFrames, type V3, type VehicleFrame } from './frames';
+import { headingOf, headingQuat, noseRise, upOf, type TurnFrames, type V3, type VehicleFrame } from './frames';
 
 const S = PHYSICS.metersPerTile;
 const T = PHYSICS.truck;
@@ -101,18 +101,7 @@ export function syncDrive(d: Drive, w: World): void {
     delete d.bodies[id];
     delete d.memory[id];
   }
-  for (const v of near) {
-    const handle = d.bodies[v.id];
-    if (handle === undefined) {
-      d.bodies[v.id] = addVehicle(d.world, w, v);
-      d.memory[v.id] = { steer: 0, reverse: false, route: null, ahead: null };
-      continue;
-    }
-    const body = d.world.getRigidBody(handle);
-    setMass(body, v);
-    const t = body.translation();
-    if (dist({ x: t.x / S, y: t.z / S }, v.pos) > TELEPORT_TILES) placeBody(body, w, v);
-  }
+  for (const v of near) syncVehicle(d, w, v);
   const obstacleIds = new Set(w.obstacles.filter(isDriveObstacle).map((o) => o.id));
   for (const [id, handle] of Object.entries(d.obstacles)) {
     if (obstacleIds.has(id)) continue;
@@ -130,6 +119,21 @@ export function syncDrive(d: Drive, w: World): void {
   for (const v of w.vehicles) {
     if (isNear(w, v) !== (d.bodies[v.id] !== undefined)) throw new Error(`Vehicle ${v.id} is ${isNear(w, v) ? 'near without' : 'far with'} a physics body`);
   }
+}
+
+// A truck flipped for RULES.flipBackTurns turns is set back on its wheels at its sim pose.
+function syncVehicle(d: Drive, w: World, v: Vehicle): void {
+  const handle = d.bodies[v.id];
+  if (handle === undefined) {
+    d.bodies[v.id] = addVehicle(d.world, w, v);
+    d.memory[v.id] = { steer: 0, reverse: false, route: null, ahead: null };
+    return;
+  }
+  const body = d.world.getRigidBody(handle);
+  setMass(body, v);
+  const t = body.translation();
+  const moved = dist({ x: t.x / S, y: t.z / S }, v.pos) > TELEPORT_TILES;
+  if (moved || (v.flippedTurns ?? 0) >= RULES.flipBackTurns) placeBody(body, w, v);
 }
 
 function addVehicle(world: RAPIER.World, w: World, v: Vehicle): number {
@@ -560,13 +564,15 @@ function rideHeight(w: World, v: Vehicle): number {
   return heightAt(w.terrain, v.pos.x, v.pos.y) * S + b.wheelRadius + T.suspensionRest - b.wheelY;
 }
 
-// Map pose and speed of a vehicle's body.
-export function bodyState(d: Drive, id: string): { pos: Vec; heading: number; speed: number } {
+// Map pose and speed of a vehicle's body, and whether it stands on its wheels.
+export function bodyState(d: Drive, id: string): { pos: Vec; heading: number; speed: number; upright: boolean } {
   const handle = d.bodies[id];
   if (handle === undefined) throw new Error(`No physics body for ${id}`);
   const body = d.world.getRigidBody(handle);
   const t = body.translation();
-  return { pos: { x: t.x / S, y: t.z / S }, heading: headingOf(body.rotation()), speed: forwardSpeed(body) };
+  const r = body.rotation();
+  const upright = upOf(r) >= Math.cos(T.flipTilt * DEG);
+  return { pos: { x: t.x / S, y: t.z / S }, heading: headingOf(r), speed: forwardSpeed(body), upright };
 }
 
 // A heightfield over the (n + 1) x (n + 1) corner grid. Rapier rows run along z and columns along x,
