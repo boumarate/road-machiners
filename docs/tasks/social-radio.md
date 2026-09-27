@@ -1,7 +1,7 @@
 # Social radio and dialogue
 
-**Status:** planning
-**Blocked:** PH2 to PH4 wait for npc-traits to merge. PH1, PH5 and most of PH6 are done. Defeat-rescue merged into main, and main merged into this branch. The user approved that order. Then PH2 onward is re-planned against `docs/tasks/npc-traits.md`, section "Changes needed in social radio".
+**Status:** executing
+**Blocked:** none. npc-traits merged. PH1, PH5 and most of PH6 are done. Defeat-rescue merged into main, and main merged into this branch. The user approved that order. Then PH2 onward is re-planned against `docs/tasks/npc-traits.md`, section "Changes needed in social radio".
 **Branch:** social
 **Worktree:** .worktrees/social
 **Goal:** All player and NPC talk runs through one dialogue system, where new talk is a new topic in data. In the browser, the player calls a truck in sight and gets directions to a town, honks and hears friendly trucks honk back, patches a stranded NPC and gets patched, and receives a tow offer and a raider demand as dialogues. The user confirms the loop in play.
@@ -182,71 +182,75 @@ Deviation from PC3: raising a topic is a turn step, `raiseCalls()`, not an activ
   - `raiseCalls()` opens one call at a time, with a test-only topic.
 - Commit: Talk to trucks in sight through topic-based dialogue, starting with directions
 
-### PH2 — Agreements, with the tow as the first kind
-- 2.1 `src/sim/types.ts:140-170` (modify)
-  - `Agreement` is `{ id; kind: AgreementKind; provider: string; client: string; state: 'agreed' | 'working'; terms: AgreementTerms; age: number; turnsLeft: number }`. `AgreementTerms` is `{ price: number; parts: number; partsFrom: 'provider' | 'client' | null; town: string | null }`.
-  - `World.agreements: Agreement[]`.
-  - `Tow`, `TowDropReason`, `Player.tow` and the three tow events are removed. Events gain `agreement` with outcome `made`, `done` or `cancelled` plus a reason.
-- 2.2 `src/sim/agreements.ts` (create)
-  - `AGREEMENT_KINDS: Record<AgreementKind, KindRules>`. `KindRules` is `{ destination(w, a): Vec; advance(w, a): 'ongoing' | 'complete' | CancelReason; complete(w, a): void }`.
-  - `makeAgreement(w, kind, provider, client, terms): Agreement` throws on a second live agreement of the kind between the two. Respects IV9.
-  - `advanceAgreements(w): void` is a turn step. It ages each agreement, cancels on a missing party or on `SOCIAL.agreedMaxTurns`, and runs `advance()`.
-  - `settleAgreement(w, a)` is the one place money and parts move. It runs `complete()`, then removes the agreement. Respects IV4.
-  - `cancelAgreement(w, a, reason)` is free and removes it.
-  - Queries: `providerAgreement(w, v)`, `clientAgreement(w, v)`, `isTowed(w)`.
-- 2.3 `src/sim/tow.ts` (rewrite)
-  - `TOW_RULES: KindRules`. The destination is the client while agreed and the town gate while working. `advance()` hitches in reach and completes in town.
-  - `prepareTow` rolls nothing. It sets the fee and the town, as now.
-  - `followTower()` reads the working tow agreement.
-  - `unhitch(world)` cancels it, as now.
-  - The offer, accept and refuse code leaves. Topic effects replace them.
-- 2.4 `src/data/dialogue.ts` (modify) — The `tow` topic. The raise rule is a trader or scavenger that tows and sees the stranded player. The player asks when stranded. It is `once`. Accept runs `makeTowAgreement`.
-- 2.5 `src/sim/npc-activities.ts:166-225` (modify)
-  - The danger branch cancels the provider's agreements.
-  - After danger, a provider gets an `agreement` activity toward `destination()`. A waiting client gets `wait`.
-  - `NpcActivity.kind` gains `agreement`, and `tow` leaves.
-  - `canContinueActivity` treats `agreement` as chosen afresh.
-- 2.6 `src/sim/world.ts`, `src/sim/far.ts:20`, `src/phys/turn.ts:25`, `src/sim/movement.ts:21`, `src/sim/stats.ts:72` and `src/sim/ai.ts:111` (modify) — Each reads `isTowed()` or the tow agreement instead of `player.tow`. The pipeline runs `advanceAgreements()` where `checkTower()` ran.
-- 2.7 `src/data/npcs.ts:113-132` (modify) — `NpcClass.tows` leaves. `CLASS_TALK` topics decide who tows.
-- Tests: `src/sim/tow.test.ts` is ported to agreements. New cases:
-  - A second tow agreement between the same pair throws.
-  - The fee moves once on arrival.
-  - An agreement left in the agreed state is cancelled at the limit.
-  - `src/phys/drive.test.ts` keeps the hitch and unhitch case.
-- Commit: Run tows as agreements made by radio
+### Re-plan after npc-traits
+
+npc-traits merged into this branch at 25cedab. Its states replace agreements, and the tow already runs as a `tow` state with a `tow` goal. Traits replace classes. PH2 to PH4 below replace the first plan. PH1 and PH5 are done.
+
+- UK3 resolved: agreements are state kinds in `src/sim/states.ts`. `world.agreements`, `KindRules` and `settleAgreement` are dropped. The fulfilled hook is the one place a deal pays.
+- UK2 resolved: an NPC client waits under a `wait` goal pushed on its goal stack. The deal state's timer runs down while the patcher is not working, and its expiry ends the wait.
+- Deal terms are a decision, `patchDeal`, rolled with `decide()`. Traits and states change its weights like any other decision, and an unaffordable deal is unavailable.
+- Calls may open during a turn. `raiseCalls()` moves to right after the first `refreshVision()`, before fire, and no shot is fired between the player and the NPC on the line. This brings back 1.8 and closes RK1.
+- The truce is a `truce` state. `isFoe()` in `src/sim/combat.ts` reads it.
+- Old saves stop boot, as npc-traits decided, so no migration is written. 6.6 is dropped.
+
+### PH2 — Tow by radio
+- 2.1 `src/sim/world.ts` (modify) — `raiseCalls()` runs after the first `refreshVision()`. `src/sim/combat.ts` `fireWeapons()` skips shots between the call's two parties.
+- 2.2 `src/sim/types.ts` (modify) — Tow state data gains `accepted: boolean`. A tow state exists only once the player accepts.
+- 2.3 `src/sim/tow.ts` (modify)
+  - `towTerms(world, tower): { town; fee }` computes the offer, keeping a `towPromise`.
+  - `acceptTowCall(world, tower)` adds the accepted tow state, ends `turnedDown` and `towPromise`, and pushes the tow goal when the tower has none.
+  - `refuseTowCall(world, tower)` adds `turnedDown`, so the tow goal pops.
+  - `runTow()` hitches in reach once accepted, and settles in town as now. A tower without a tow state waits in reach for the call.
+  - `towGoal()` drives to the player while accepted and not hitched.
+  - `acceptTow`, `refuseTow` and the `towOffer` event are removed.
+- 2.4 `src/data/dialogue.ts` and `src/sim/dialogue-rules.ts` (modify)
+  - The `tow` topic. It is raised by a driver whose top goal is `tow` and who holds no tow state. The player asks it while stranded, from a driver that could tow.
+  - Prepare `towTerms`. Accept runs `acceptTow`, and refuse and hang-up run `refuseTow`.
+  - Trader and scavenger talk gains `tow`.
+- 2.5 `src/ui/hud.ts` and `src/ui/hud-readout.ts` (modify) — The tow offer panel goes. Beacon, towed and knocked-out panels stay.
+- Tests: `src/sim/tow.test.ts` moves offers to calls. Cases: a tower raises the call on sight, accept hitches in reach, refuse and hang-up turn it down, the player asks a passing trader, and a call opened mid-turn stops shots between the two.
+- Commit: Offer and ask for tows by radio
 
 ### PH3 — Roadside patch
-- 3.1 `src/sim/repair.ts:26-40` (modify) — Split out `planPartRepair(part, capShare, mechanicsMult, partsHeld, maxParts): RepairPlan` as a pure function. `repairPlan()` calls it with the field cap.
-- 3.2 `src/sim/patch.ts` (create)
-  - `patchPlan(world, patcher, target): { parts; turns; partIds }` covers the broken engine and transmission up to `SOCIAL.patchShare`, with the patcher's Mechanics.
-  - `affordableDeals(world, patcher, client, plan): PatchDeal[]`.
-  - `preparePatch` rolls one deal with `sampleWeighted()` over `SOCIAL.dealWeights`, limited to affordable deals. It stores price, parts and payer in the call values. Respects PC2.
-  - `PATCH_RULES: KindRules`. `advance()` works while both trucks stay parked in reach, counts `turnsLeft`, and cancels on a break. `complete()` sets the HP.
-- 3.3 `src/data/dialogue.ts` (modify)
-  - The `patch` topic, for the player asking.
-  - The `patchRequest` topic, raised by a stranded NPC whose engine or transmission is broken.
-  - Both are `once`. With no affordable deal they reach a "can't help" node.
-- 3.4 `src/data/npcs.ts:16-24,55-80` (modify) and `src/sim/npc-loadout.ts:111` (modify) — `NpcLoadoutTable.spareParts: Weighted<number>[]` puts a count of the `parts` good in the cargo. Raiders roll 0.
+- 3.1 `src/sim/repair.ts:26-40` (modify) — Split out `planPartRepair()` as in the first plan.
+- 3.2 `src/data/npcs.ts` (modify)
+  - `DecisionOptions.patchDeal: 'paid' | 'ownParts' | 'free'` with base weights.
+  - `STATE_TURNS.patch`, the turns a patch deal waits for work to start.
+  - `NpcLoadoutTable.spareParts` for traders and scavengers.
+- 3.3 `src/sim/npc-decisions.ts` (modify) — Availability of each `patchDeal` option: the payer holds what the deal needs. Situation factors are neutral.
+- 3.4 `src/sim/patch.ts` (create)
+  - `patchPlan(world, patcher, client)`.
+  - `patchTerms(world, npc)` rolls `patchDeal` and prices it.
+  - The `patch` state kind: holder is the patcher, other is the client. Its data holds the deal, parts, price and work turns left. It is refreshed while both trucks stay parked in reach, and work counts down then. Its fulfilled hook moves parts, money and HP.
+  - `advancePatches(world)` is a turn step.
+  - An NPC patcher gets a `patch` goal to the client. An NPC client gets a `wait` goal.
+- 3.5 `src/data/dialogue.ts` and `src/sim/dialogue-rules.ts` (modify)
+  - The `patch` topic, which the player asks when stranded by a broken engine or transmission.
+  - The `patchRequest` topic, raised once by a stranded NPC that sees the player.
+  - Both have a "can't help" node when no deal is available.
 - Tests in `src/sim/patch.test.ts`:
-  - Each deal moves the right parts and money once. Respects IV4.
-  - Only affordable deals are rolled.
-  - Moving out of reach cancels for free.
-  - The player patching an NPC and an NPC patching the player both work over real turns.
-  - A patched truck is no longer stranded.
-  - A waiting client gives up at `SOCIAL.agreedMaxTurns`.
-- Commit: Patch stranded trucks by radio agreement
+  - Each deal moves parts and money once.
+  - Unaffordable deals are never rolled.
+  - A trait weight change shifts the roll.
+  - Moving out of reach stops the work, and expiry ends the deal for free.
+  - Both directions work over real turns, and a patched truck is no longer stranded.
+- Commit: Patch stranded trucks by radio
 
-### PH4 — Raider demand and truce
-- 4.1 `src/sim/types.ts:99-111` (modify) — `NpcBrain.truce: { with: string; turnsLeft: number } | null`.
-- 4.2 `src/sim/combat.ts:31-42` (modify) — `isHostile()` is false across a truce unless a grudge exists. Respects IV6.
-- 4.3 `src/sim/salvage.ts:99-114` (modify) — `createCargoSalvage(world, v)` moves goods and unmounted parts to a stock and shares the builder with `createKnockoutSalvage()`.
-- 4.4 `src/data/dialogue.ts` and `src/sim/dialogue-rules.ts` (modify)
-  - The `demand` topic, raised by a raider hostile to the player who sees them while the player carries goods or unmounted parts. It is `once`.
-  - Handing over runs `handOver`. That makes the stock and sets the truce on the raider and its faction mates within `SPAWN.neighborHelp`.
-  - Hanging up and refusing mark it refused.
-- 4.5 `src/sim/world.ts` (modify) — The pipeline counts truces down.
-- Tests: handing over moves every item once, the raider then searches the stock and does not shoot, a grudge breaks the truce, refusing starts the fight, and the truce ends on time.
-- Commit: Raiders demand cargo by radio before a fight
+### PH4 — Demand and truce
+- 4.1 `src/sim/states.ts`, `src/data/npcs.ts` and `src/sim/combat.ts` (modify) — The `truce` state kind with `STATE_TURNS.truce`. `isFoe()` is false across a truce unless a feud exists.
+- 4.2 `src/sim/salvage.ts` (modify) — `createCargoSalvage(world, v)` moves goods and unmounted parts to a stock.
+- 4.3 `src/data/dialogue.ts` and `src/sim/dialogue-rules.ts` (modify)
+  - The `demand` topic, `once`. It is raised by a driver whose top goal is `fight` or `rob` against the player while the player carries goods or unmounted parts.
+  - Hand over makes the stock, ends the feuds between the player and the demander and its faction mates within `SPAWN.neighborHelp`, and gives each a truce.
+  - Refuse and hang-up leave the fight running.
+  - Raider and scumbag talk gains `demand`.
+- Tests:
+  - Hand-over moves every item once.
+  - The raider stops shooting and searches the stock.
+  - Shooting breaks the truce through a feud.
+  - Refusing keeps the fight.
+  - The truce expires on time.
+- Commit: Raiders and scumbags demand cargo by radio
 
 ### PH5 — Honk
 - 5.1 `src/data/dialogue.ts` (modify) — `CLASS_TALK` gains `honksBack`.
@@ -263,7 +267,6 @@ Deviation from PC3: raising a topic is a turn step, `raiseCalls()`, not an activ
   - While a call is open, the weapon keys and End Turn are off.
 - 6.4 `src/ui/format.ts` (modify) — Log lines cover `say`, `call`, `agreement` and `honk`, and the old tow lines go.
 - 6.5 `src/data/sounds.ts` and `src/three/sound.ts` (modify) — A positional `horn` cue on `honk` and a `radio` cue on an opened call.
-- 6.6 `src/three/save.ts:17-48` (modify) — `SAVE_VERSION` becomes 8. `migrateFrom7` sets `call`, `agreements`, `talked` and `truce`. Respects IV8.
 - 6.7 `DESIGN.md` (modify) — Add a Social section. `CLAUDE.md` Architecture gains one line on dialogue topics and agreements.
 - Tests: the save migration from version 7, and a round trip of a world with an open call and a live agreement.
 - Commit: Show dialogue and honks in the game, and save calls and agreements
