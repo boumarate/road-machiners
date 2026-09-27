@@ -1,4 +1,4 @@
-// Boots the game in headless Chromium, plays turns, and fails on page errors, the crash screen,
+// Boots the game in headless Chromium on the Metal GPU, plays turns, and fails on page errors, the crash screen,
 // a blank canvas or a low frame rate. Screenshots go to .playtest/.
 // Usage: npm run playtest -- [--url http://localhost:5173] [--turns 12]
 import { mkdirSync } from 'node:fs';
@@ -10,11 +10,11 @@ const arg = (name, fallback) => {
 };
 const url = arg('url', 'http://localhost:5173');
 const turns = Number(arg('turns', '12'));
-const MIN_FPS = 20; // headless software rendering; a real GPU runs far faster
+const MIN_FPS = 50; // headless Chromium caps frames at 60 Hz
 const TURN_WAIT_MS = 2600; // movement plus combat playback, with margin
 
 mkdirSync('.playtest', { recursive: true });
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader'] });
+const browser = await chromium.launch({ args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.stack ?? e.message));
