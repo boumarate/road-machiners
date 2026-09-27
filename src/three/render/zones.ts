@@ -39,7 +39,12 @@ export class ZonesView {
   }
 
   private makeBand(color: number, opacity: number): THREE.Mesh {
-    const mesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthTest: false, side: THREE.DoubleSide }));
+    // Depth test keeps the zones under trucks. Polygon offset keeps them above the ground between arc points.
+    const material = new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide,
+      polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+    });
+    const mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
     mesh.renderOrder = 800;
     mesh.visible = false;
     return mesh;
