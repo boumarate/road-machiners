@@ -65,6 +65,8 @@ export class TownScreen {
   constructor(private host: UiHost) {
     this.root.classList.add("town-screen");
     this.root.style.display = "none";
+    // The truck grid fits its cells to the window height, so a resize lays the screen out again.
+    window.addEventListener("resize", () => this.render());
     this.inventory = new InventoryView(host, () => this.render());
   }
 
@@ -95,17 +97,13 @@ export class TownScreen {
     const shop = [el("div", { class: "tabs" }, ...this.tabButtons(def))];
     if (this.error) shop.push(el("div", { class: "bad" }, this.error));
     shop.push(this.tabBody(w, shopId, def));
+    const truck = el("div", { class: "town-truck" }, this.inventory.render());
     this.root.replaceChildren(
       el("button", { class: "close", onclick: () => this.close() }, "Leave [Esc]"),
-      el("h3", {}, siteName(shopId)),
-      el("div", { class: "dim" }, `${moneyLine(w)}   Free cells ${freeCells(me)}`),
-      el(
-        "div",
-        { class: "town-split" },
-        el("div", { class: "town-truck" }, el("h4", {}, chassisDef(me.chassisId).name), this.inventory.render()),
-        el("div", { class: "town-shop" }, ...shop),
-      ),
+      el("h3", {}, siteName(shopId), el("span", { class: "dim" }, `${chassisDef(me.chassisId).name} · ${moneyLine(w)} · Free cells ${freeCells(me)}`)),
+      el("div", { class: "town-split" }, truck, el("div", { class: "town-shop" }, ...shop)),
     );
+    this.inventory.fitTo(truck);
   }
 
   // A garage-only tab left over from a garage falls back to Market at a stall.
@@ -239,15 +237,12 @@ export class TownScreen {
     const rows = shown.map((p) => {
       const d = partDef(p.defId);
       const price = partTradePrice(w, me, p, "buy");
+      const line = `${d.name} ${d.w}x${d.h}: ${partStats(d)}, ${wearLabel(p)} ${p.hp}/${maxHp(p)} HP`;
       return el(
         "tr",
         {},
         this.stockFilter === "all" ? el("td", { class: "dim" }, d.kind) : null,
-        el(
-          "td",
-          { title: partPriceTitle(p) },
-          `${d.name} ${d.w}x${d.h}: ${partStats(d)}, ${wearLabel(p)} ${p.hp}/${maxHp(p)} HP`,
-        ),
+        el("td", { class: "stock-line", title: `${line}\n${partPriceTitle(p)}` }, line),
         el(
           "td",
           {},
