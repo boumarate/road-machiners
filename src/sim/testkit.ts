@@ -89,7 +89,7 @@ export function partHp(v: Vehicle): number {
 // drive realistically: it ignores terrain, obstacles and other vehicles, so it never fires a collision
 // event and its speeds do not match the physics engine. Pass to endTurn in tests of combat, defeat,
 // the economy, NPC activities, salvage, search and tow, none of which assert on driving itself. Tests
-// of driving belong in src/phys/, played through the real physics turn (see src/phys/testkit.ts).
+// of driving belong in src/phys/, played through the real physics turn, as in src/phys/traffic.test.ts.
 export function testDrive(world: World): void {
   for (const v of world.vehicles) if (v.order) driveOne(world, v);
 }
