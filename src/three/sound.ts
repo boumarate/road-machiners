@@ -1,7 +1,7 @@
 // Turns game events into sound cues. Positioned cues use the same points as the visual effects, so fog of
 // war silences what the player may not see.
 
-import { MIX, type CueId } from "../data/sounds";
+import { engineFileFor, MIX, type CueId } from "../data/sounds";
 import { spatial } from "../audio/pick";
 import type {
   Glide,
@@ -141,22 +141,32 @@ export function engineGlide(
 // Engine, wind and music run for the whole session. Wind and music change gain; the engine sounds only
 // while a turn plays.
 export class SoundLoops {
-  private engine: LoopHandle;
+  private engine: LoopHandle | null = null;
+  private engineChassis: string | null = null;
+  private player: SoundPlayer;
   private wind: LoopHandle;
   private calm: LoopHandle;
   private combat: LoopHandle;
   private last: LoopLevels | null = null;
 
   constructor(player: SoundPlayer) {
+    this.player = player;
     const silent = { pan: 0, gain: 0 };
-    this.engine = player.loop("engine", silent);
     this.wind = player.loop("wind", silent);
     this.calm = player.loop("music-calm", silent);
     this.combat = player.loop("music-combat", silent);
   }
 
-  drive(g: Glide): void {
-    this.engine.glide(g);
+  drive(g: Glide, chassisId: string): void {
+    let engine = this.engine;
+    if (this.engineChassis !== chassisId || !engine) {
+      const file = engineFileFor(chassisId);
+      engine?.stop(0);
+      engine = this.player.loop("engine", { pan: 0, gain: 0 }, file);
+      this.engine = engine;
+      this.engineChassis = chassisId;
+    }
+    engine.glide(g);
   }
 
   // Sends only changed targets, so ramps are not restarted every frame.
@@ -166,6 +176,10 @@ export class SoundLoops {
     this.last = l;
     if (was?.windGain !== l.windGain)
       this.wind.setGain(l.windGain, MIX.wind.fadeSeconds);
+    this.updateMusic(l, was);
+  }
+
+  private updateMusic(l: LoopLevels, was: LoopLevels | null): void {
     if (was?.calmGain !== l.calmGain)
       this.calm.setGain(l.calmGain, MIX.music.fadeSeconds);
     if (was?.combatGain !== l.combatGain)

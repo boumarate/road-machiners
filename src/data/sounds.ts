@@ -51,7 +51,7 @@ const DEFS = {
   "crash": { bus: "sfx", setup: "field", volume: 0.9, pitchJitter: 0.06, maxVoices: 2, loop: false, prompts: ["Two heavy steel trucks ram each other at speed: one hard, deep crunch of thick metal, a short scrape, then debris settling. Single impact."], seconds: 1.5 },
 
   // Loops.
-  // One engine whose pitch and level the game bends each turn from the truck's speed.
+  // Engine recordings are assigned by chassis; pitch and level follow the truck's speed.
   "engine": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Old heavy diesel truck engine running at steady medium revs, recorded close to the engine bay: clear exhaust note, mechanical clatter and valve tick, full and present, not muffled, seamless loop."], seconds: 4 },
   "wind": { bus: "ambient", setup: "field", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Dry desert wind blowing over open sand and rocks, steady, seamless loop."], seconds: 12 },
   "music-calm": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Slow sparse post-apocalyptic desert road music, lonely twangy baritone guitar and low drone, 80 bpm, instrumental, seamless loop."], seconds: 90 },
@@ -78,6 +78,24 @@ function withFiles(): Record<CueId, Cue> {
 
 export const SOUNDS = withFiles();
 
+// The three recordings cover light, medium and heavy chassis. A chassis keeps its note across turns.
+const ENGINE_FILES: Record<string, string> = {
+  scout: "engine-2.ogg",
+  hauler: "engine-3.ogg",
+  buggy: "engine-1.ogg",
+  wagon: "engine-2.ogg",
+  courier: "engine-1.ogg",
+  van: "engine-2.ogg",
+  longbed: "engine-3.ogg",
+  carrier: "engine-3.ogg",
+  tractor: "engine-3.ogg",
+};
+
+export function engineFileFor(chassisId: string): string {
+  const file = ENGINE_FILES[chassisId];
+  if (!file) throw new Error(`Unknown chassis ${chassisId}`);
+  return file;
+}
 
 export const MIX = {
   busVolume: { ui: 0.8, sfx: 1, ambient: 0.6, music: 0.8 } satisfies Record<Bus, number>,

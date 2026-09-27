@@ -38,12 +38,12 @@ export class SoundPlayer {
     src.start(start);
   }
 
-  loop(id: string, at: Placement): LoopHandle {
+  loop(id: string, at: Placement, file?: string): LoopHandle {
     const cue = this.cue(id);
     if (!cue.loop) throw new Error(`Sound ${id} is not a loop`);
     const ctx = this.mixer.ctx;
     const src = ctx.createBufferSource();
-    src.buffer = this.variant(id, cue);
+    src.buffer = file === undefined ? this.variant(id, cue) : this.getLoopBuffer(id, cue, file);
     src.loop = true;
     const gain = this.chain(src, cue, at);
     src.start();
@@ -67,6 +67,13 @@ export class SoundPlayer {
         src.stop(ctx.currentTime + fadeMs / 1000);
       },
     };
+  }
+
+  private getLoopBuffer(id: string, cue: Cue, file: string): AudioBuffer {
+    if (!cue.files.includes(file)) throw new Error(`Sound ${id} has no file ${file}`);
+    const buffer = this.bank.get(file);
+    if (!buffer) throw new Error(`Sound file ${file} was not loaded`);
+    return buffer;
   }
 
   private cue(id: string): Cue {

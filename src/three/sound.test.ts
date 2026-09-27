@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { GameEvent } from "../sim/types";
-import { MIX } from "../data/sounds";
-import { engineGlide, loopLevels, stingOf } from "./sound";
+import { CHASSIS } from "../data/chassis";
+import { engineFileFor, MIX, SOUNDS } from "../data/sounds";
+import type { SoundPlayer } from "../audio/player";
+import { engineGlide, loopLevels, SoundLoops, stingOf } from "./sound";
 
 describe("stingOf", () => {
   it("plays the most important result only", () => {
@@ -39,6 +41,36 @@ describe("loopLevels", () => {
     const hold = MIX.music.holdTurns;
     expect(loopLevels({ ...calm, turnsSinceDanger: hold }, MIX).combatGain).toBe(1);
     expect(loopLevels({ ...calm, turnsSinceDanger: hold + 1 }, MIX).combatGain).toBe(0);
+  });
+});
+
+describe("engine sound assignment", () => {
+  it("assigns an existing recording to every chassis", () => {
+    for (const id of Object.keys(CHASSIS)) {
+      expect(SOUNDS.engine.files).toContain(engineFileFor(id));
+    }
+    expect(engineFileFor("scout")).not.toBe(engineFileFor("hauler"));
+    expect(() => engineFileFor("unknown")).toThrow("Unknown chassis");
+  });
+
+  it("changes the engine loop only when the chassis changes", () => {
+    const started: string[] = [];
+    const stopped: number[] = [];
+    const player = {
+      loop: (id: string, _at: unknown, file?: string) => {
+        if (id === "engine") started.push(file ?? "random");
+        return { glide: () => {}, setGain: () => {}, stop: (ms: number) => stopped.push(ms) };
+      },
+    } as unknown as SoundPlayer;
+    const loops = new SoundLoops(player);
+    const glide = engineGlide(0, 10, 1, MIX)!;
+
+    loops.drive(glide, "scout");
+    loops.drive(glide, "scout");
+    loops.drive(glide, "hauler");
+
+    expect(started).toEqual([engineFileFor("scout"), engineFileFor("hauler")]);
+    expect(stopped).toEqual([0]);
   });
 });
 
