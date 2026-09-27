@@ -102,10 +102,10 @@ type LogLine = { text: string; cls: string };
 // Only the player's own jobs are logged.
 function jobText(world: World, e: Extract<GameEvent, { t: 'job' }>): LogLine | null {
   if (e.vehicle !== world.player.vehicleId) return null;
-  const what = e.job.kind === 'repair' ? `Repair (${partName(world, e.vehicle, e.job.partId)})` : 'Search';
+  const what = e.job.kind === 'repair' ? `Repair (${partName(world, e.vehicle, e.job.partId)})` : e.job.kind === 'refit' ? 'Refit' : 'Search';
   const lines = {
     started: { text: `${what} started: stay parked about ${e.job.turnsLeft} turns. End turns with Space.`, cls: '' },
-    cancelled: { text: `${what} cancelled: the truck moved`, cls: 'bad' },
+    cancelled: { text: `${what} cancelled: the truck moved or required items changed`, cls: 'bad' },
     done: { text: `${what} done`, cls: 'good' },
   };
   return lines[e.outcome];

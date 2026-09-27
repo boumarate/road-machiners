@@ -20,6 +20,7 @@ import {
 import {
   dumpGood,
   moveItem,
+  planItemMove,
   storePart,
   takeFromStorage,
 } from "../sim/inventory";
@@ -63,6 +64,8 @@ type Drag = {
   item: GridItem; // the item as it would be placed, position updated while dragging
   grab: { x: number; y: number }; // grabbed cell inside the item
   ghost: HTMLElement;
+  start: { x: number; y: number };
+  moved: boolean;
 };
 
 export class InventoryView {
@@ -165,7 +168,7 @@ export class InventoryView {
               : el(
                   "div",
                   { class: "dim" },
-                  "Mounting or unmounting parts needs a town garage. Goods can be moved anywhere.",
+                  "Park to install or remove parts: 5 turns each, 10 to replace. Driving cancels the work. Goods and spares move instantly.",
                 ),
           el(
             "div",
@@ -197,7 +200,7 @@ export class InventoryView {
       el(
         "div",
         {},
-        "Drag to move. R turns the selected part, or the dragged item. Right click also turns it while dragging.",
+        "Select an item, then click another to swap. Drag to move or swap. R turns the selected part, or the dragged item. Right click also turns it while dragging.",
       ),
     );
   }
@@ -221,6 +224,8 @@ export class InventoryView {
       "div",
       {
         class: `inv-item ${cls}`,
+        'aria-pressed': String(this.selectedItem === it.id),
+        'data-item-id': it.id,
         style: pos(x, y, wd, ht),
         title: itemTitle(it, mounted),
         tabindex: 0,
@@ -230,17 +235,19 @@ export class InventoryView {
       createIcon(getItemIcon(it)),
       el("span", { class: "inv-item-name" }, label.short),
     );
+    node.classList.toggle('selected', this.selectedItem === it.id);
     const inspect = () => this.showItem(w, it, mounted);
-    node.addEventListener("click", inspect);
+    node.addEventListener("click", (e) => {
+      if (core || e.detail === 0) this.activateItem(it);
+    });
     node.addEventListener("focus", inspect);
     node.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") inspect();
+      if (e.key === "Enter") this.activateItem(it);
     });
     if (it.kind === "part") node.append(conditionBar(it.part));
     if (!core)
       node.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
-        inspect();
         this.startDrag(e, "grid", it.id, it, {
           x: Math.floor(e.offsetX / CELL_PX),
           y: Math.floor(e.offsetY / CELL_PX),
@@ -249,8 +256,17 @@ export class InventoryView {
     return node;
   }
 
+  private activateItem(item: GridItem): void {
+    const selected = playerVehicle(this.host.world()).items.find((entry) => entry.id === this.selectedItem);
+    if (selected && selected.id !== item.id) {
+      this.run((w) => moveItem(w, selected.id, { x: item.x, y: item.y, rot: selected.rot }));
+      return;
+    }
+    this.selectedItem = selected ? null : item.id;
+    this.onChange();
+  }
+
   private showItem(w: World, item: GridItem, mounted: boolean): void {
-    this.selectedItem = item.id;
     this.inspection.replaceChildren(
       createIcon(getItemIcon(item)),
       el("h3", {}, itemLabel(item).short),
@@ -259,10 +275,10 @@ export class InventoryView {
         "p",
         { class: "dim" },
         item.kind === "good"
-          ? "Drag to rearrange cargo. Dropping in the dump area discards it."
+          ? "Click another item to swap, or drag to move. Dropping in the dump area discards it."
           : townAt(w)
             ? "Garage: drag movable parts onto matching mounts or into storage."
-            : "Move or remove equipment at a town garage.",
+            : "Park to install or remove: 5 turns each, 10 to replace. Equipment changes when work finishes. Driving cancels work.",
       ),
       ...(item.kind === "part" && mounted
         ? [this.patchButton(w, playerVehicle(w), item.part)].filter(
@@ -448,13 +464,14 @@ export class InventoryView {
     e.stopPropagation();
     const ghost = el("div", { class: "inv-ghost" });
     document.body.append(ghost);
-    this.drag = { source, id, item: { ...item }, grab, ghost };
+    this.drag = { source, id, item: { ...item }, grab, ghost, start: { x: e.clientX, y: e.clientY }, moved: false };
     this.error = "";
     this.onMove(e);
   }
 
   private rotate(): void {
     if (!this.drag) return;
+    this.drag.moved = true;
     this.drag.item = {
       ...this.drag.item,
       rot: this.drag.item.rot === 0 ? 1 : 0,
@@ -479,6 +496,8 @@ export class InventoryView {
   private onMove(e: PointerEvent): void {
     this.lastPointer = e;
     if (!this.drag) return;
+    // A quarter-cell motion separates dragging from pointer jitter during a click.
+    if (Math.hypot(e.clientX - this.drag.start.x, e.clientY - this.drag.start.y) >= CELL_PX / 4) this.drag.moved = true;
     const spot = this.spotAt(e.clientX, e.clientY);
     if (spot) this.drag.item = { ...this.drag.item, x: spot.x, y: spot.y };
     this.paintGhost(e, spot !== null);
@@ -505,6 +524,7 @@ export class InventoryView {
 
   private placementProblem(d: Drag): string | null {
     const me = playerVehicle(this.host.world());
+    if (d.source === 'grid') return planItemMove(me, d.id, { x: d.item.x, y: d.item.y, rot: d.item.rot }).error;
     const others = me.items.filter((it) => it.id !== d.id);
     return placementError(
       gridOf({ ...me, items: [...others, d.item] }),
@@ -529,6 +549,7 @@ export class InventoryView {
     if (!d) return;
     this.drag = null;
     d.ghost.remove();
+    if (this.finishSelection(d)) return;
     const target = (
       document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null
     )
@@ -554,6 +575,13 @@ export class InventoryView {
       if (target === "dump" && d.source === "grid") return dumpGood(w, d.id);
       return w;
     });
+  }
+
+  private finishSelection(drag: Drag): boolean {
+    if (drag.source !== 'grid' || drag.moved) return false;
+    const item = playerVehicle(this.host.world()).items.find((entry) => entry.id === drag.id);
+    if (item) this.activateItem(item);
+    return true;
   }
 
   private inside(e: PointerEvent): boolean {

@@ -20,6 +20,7 @@ export const RULES = {
   passRadius: 1, // a drive-through order clears once the truck passes this close to its point, or drives past it
   minAimDistance: 1.5, // tiles; steering ignores route points closer than this
   cornerSlack: 2, // tiles past a route corner the brake plan allows
+  refitTurnsPerPart: 5,
   parkedSpeed: 0.5, // vehicles slower than this are routed around like obstacles
   yieldDistance: 1.5, // tiles neutral drivers keep past both radii from a vehicle ahead, beyond what both close before they stop; see src/sim/ai.ts
   maxBulge: 0.25, // tiles a steering arc may stray from the straight route line

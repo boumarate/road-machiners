@@ -6,6 +6,7 @@ import { goodsCount } from './grid';
 import { canLoot, canScavenge, scavenge, takeAllLoot, takeLoot } from './locations';
 import { findSpot, gridOf } from './grid';
 import { endTurn, setMoveOrder } from './world';
+import { advanceJobs } from './jobs';
 
 describe('timed scavenging search', () => {
   it('takes turns in proportion to the stock, then opens it for looting', () => {
@@ -44,6 +45,43 @@ describe('timed scavenging search', () => {
     expect(goodsCount(next.vehicles[0]).scrap).toBe(1);
     expect(next.salvage.find((s) => s.id === 'rich')!.goods.scrap).toBe(0);
     expect(() => takeLoot(next, 'rich', { kind: 'good', good: 'scrap' }, spot)).toThrow();
+  });
+
+  it('takes five turns to install salvage and leaves the part in stock until completion', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = w.vehicles[0];
+    const weapon = me.items.find((item) => item.kind === 'part' && item.part.defId === 'mg');
+    if (!weapon || weapon.kind !== 'part') throw new Error('Expected weapon');
+    me.items = me.items.filter((item) => item.id !== weapon.id);
+    w.salvage.push({ id: 'weapon-stock', pos: { ...me.pos }, radius: 1, goods: {}, parts: [weapon.part] });
+    w.player.scavenged.push('weapon-stock');
+    const next = takeLoot(w, 'weapon-stock', { kind: 'part', partId: weapon.part.id }, { x: weapon.x, y: weapon.y, rot: weapon.rot });
+    expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: 5 });
+    for (let turn = 0; turn < 4; turn++) advanceJobs(next);
+    expect(next.salvage.find((stock) => stock.id === 'weapon-stock')?.parts).toHaveLength(1);
+    advanceJobs(next);
+    expect(next.salvage.find((stock) => stock.id === 'weapon-stock')?.parts).toHaveLength(0);
+    expect(next.vehicles[0].items.some((item) => item.kind === 'part' && item.part.id === weapon.part.id)).toBe(true);
+  });
+
+  it.each(['movement', 'missing part', 'missing stock'])('cancels salvage installation after %s without duplicating the part', (reason) => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = w.vehicles[0];
+    const weapon = me.items.find((item) => item.kind === 'part' && item.part.defId === 'mg');
+    if (!weapon || weapon.kind !== 'part') throw new Error('Expected weapon');
+    me.items = me.items.filter((item) => item.id !== weapon.id);
+    w.salvage.push({ id: 'weapon-stock', pos: { ...me.pos }, radius: 1, goods: {}, parts: [weapon.part] });
+    w.player.scavenged.push('weapon-stock');
+    const next = takeLoot(w, 'weapon-stock', { kind: 'part', partId: weapon.part.id }, { x: weapon.x, y: weapon.y, rot: weapon.rot });
+    const stock = next.salvage.find((entry) => entry.id === 'weapon-stock');
+    if (!stock) throw new Error('Expected stock');
+    if (reason === 'movement') next.vehicles[0].speed = 5;
+    if (reason === 'missing part') stock.parts = [];
+    if (reason === 'missing stock') next.salvage = next.salvage.filter((entry) => entry.id !== stock.id);
+    advanceJobs(next);
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.vehicles[0].items.some((item) => item.kind === 'part' && item.part.id === weapon.part.id)).toBe(false);
+    if (reason === 'movement') expect(stock.parts).toHaveLength(1);
   });
 
   it('refuses loot from a stock that was never searched', () => {

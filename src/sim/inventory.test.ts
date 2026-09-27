@@ -10,6 +10,7 @@ import { vehicleStats } from './stats';
 import { emptyWorld } from './testkit';
 import type { World } from './types';
 import { siteGates } from './sites';
+import { advanceJobs } from './jobs';
 
 const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
 const item = (w: World, defId: string) => w.vehicles[0].items.find((it) => it.kind === 'part' && it.part.defId === defId)!;
@@ -48,18 +49,50 @@ describe('inventory grid', () => {
   it('items cannot overlap or leave the grid', () => {
     const w = emptyWorld();
     const g = good(w);
-    expect(() => moveItem(w, g.id, { x: 0, y: 1, rot: 0 })).toThrow(/in the way/);
+    expect(() => moveItem(w, g.id, { x: 0, y: 1, rot: 0 })).toThrow(/Built-in/);
     expect(() => moveItem(w, g.id, { x: 9, y: 0, rot: 0 })).toThrow(/fit/);
   });
 
-  it('unmounting a part needs a town and switches it off', () => {
+  it('unmounting takes five turns in the field and is instant in town', () => {
     const w = emptyWorld();
     const mg = item(w, 'mg');
-    expect(() => moveItem(w, mg.id, { x: 1, y: rackRow, rot: 0 })).toThrow(/town/);
+    const field = moveItem(w, mg.id, { x: 1, y: rackRow, rot: 0 });
+    expect(field.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: 5 });
+    for (let turn = 0; turn < 4; turn++) advanceJobs(field);
+    expect(vehicleStats(field, field.vehicles[0]).weapons).toHaveLength(1);
+    advanceJobs(field);
+    expect(field.vehicles[0].job).toBeNull();
+    expect(vehicleStats(field, field.vehicles[0]).weapons).toHaveLength(0);
     const inTown = emptyWorld(siteGates(bowl)[0]);
     const off = moveItem(inTown, item(inTown, 'mg').id, { x: 1, y: rackRow, rot: 0 });
     expect(vehicleStats(off, off.vehicles[0]).weapons).toHaveLength(0);
     expect(spareParts(off.vehicles[0]).map((p) => p.defId)).toEqual(['mg']);
+  });
+
+  it('swaps a spare with a mounted weapon after ten turns', () => {
+    const w = emptyWorld();
+    const mg = item(w, 'mg');
+    if (mg.kind !== 'part') throw new Error('Expected weapon');
+    w.vehicles[0].items.push({ ...mg, id: 'spare-item', part: { ...mg.part, id: 'spare-part' }, x: 1, y: rackRow });
+    const next = moveItem(w, 'spare-item', { x: mg.x, y: mg.y, rot: 0 });
+    expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', total: 10 });
+    for (let turn = 0; turn < 9; turn++) advanceJobs(next);
+    expect(next.vehicles[0].items.find((it) => it.id === mg.id)).toMatchObject({ x: mg.x, y: mg.y });
+    advanceJobs(next);
+    expect(next.vehicles[0].items.find((it) => it.id === mg.id)).toMatchObject({ x: 1, y: rackRow });
+    expect(next.vehicles[0].items.find((it) => it.id === 'spare-item')).toMatchObject({ x: mg.x, y: mg.y });
+    expect(next.vehicles[0].items.map((it) => it.id).sort()).toEqual(w.vehicles[0].items.map((it) => it.id).sort());
+  });
+
+  it('swaps a spare with installed equipment instantly in a garage', () => {
+    const w = emptyWorld(siteGates(bowl)[0]);
+    const mg = item(w, 'mg');
+    if (mg.kind !== 'part') throw new Error('Expected weapon');
+    w.vehicles[0].items.push({ ...mg, id: 'spare-item', part: { ...mg.part, id: 'spare-part' }, x: 1, y: rackRow });
+    const next = moveItem(w, 'spare-item', { x: mg.x, y: mg.y, rot: 0 });
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.vehicles[0].items.find((entry) => entry.id === mg.id)).toMatchObject({ x: 1, y: rackRow });
+    expect(next.vehicles[0].items.find((entry) => entry.id === 'spare-item')).toMatchObject({ x: mg.x, y: mg.y });
   });
 
   it('a cannon works only lying along the weapon mount', () => {
