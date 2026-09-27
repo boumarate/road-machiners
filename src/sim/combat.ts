@@ -353,8 +353,8 @@ export function fireWeapons(world: World): void {
 // lies within the splash radius of where it landed.
 function applyShot(world: World, s: Shot): void {
   s.mw.part.reload = s.mw.def.reload;
-  recordAttack(world, s.shooter, s.target);
-  provoke(world, s.shooter, s.target);
+  // A shot counts as an attack even when it misses: the target and witnesses saw it fired at them.
+  noteAttack(world, s.shooter, s.target, !isHostile(world, s.target, s.shooter));
   const r = s.mw.def.round;
   const { side, lanes, body } = s.aiming;
   const rounds: ShotRound[] = s.rolls.map((roll) => {
@@ -420,25 +420,28 @@ function recordAttack(world: World, shooter: Vehicle, target: Vehicle): void {
   }
 }
 
-// A collision that damages a vehicle is an attack on it by the other vehicle, like a shot. The event does not
-// name a striker, so when both take damage each attacked the other, and both feuds start from the hostility
-// before the crash. A slow bump deals no damage and is no attack. A tower and the truck it tows or offers to tow
-// never attack each other by contact.
+// The one attack rule: a vehicle that damages another attacks it. The victim and witnesses learn the attacker,
+// and a feud starts when the two were at peace before the blow. calm is that peace, read before any damage lands.
+export function noteAttack(world: World, attacker: Vehicle, victim: Vehicle, calm: boolean): void {
+  recordAttack(world, attacker, victim);
+  if (calm) startFeuds(world, attacker, victim);
+}
+
+// A crash damages both sides, so each side that took damage was attacked by the other. The event does not name a
+// striker. A slow bump deals no damage and is no attack. A tower and the truck it tows or offers to tow never
+// attack each other by contact.
 export function noteCollision(world: World, a: Vehicle, b: Vehicle, hitsA: PartHit[], hitsB: PartHit[]): void {
   if (towPair(world, a, b)) return;
-  const attacks = ([[b, a, hitsA], [a, b, hitsB]] as const).filter(([, , hits]) => hits.some((h) => h.damage > 0));
   const calm = !isHostile(world, a, b);
-  for (const [rammer, victim] of attacks) recordAttack(world, rammer, victim);
-  if (calm) for (const [rammer, victim] of attacks) startFeuds(world, rammer, victim);
+  const attacks = ([[b, a, hitsA], [a, b, hitsB]] as const).filter(([, , hits]) => hits.some((h) => h.damage > 0));
+  for (const [attacker, victim] of attacks) {
+    victim.lastHitBy = attacker.id;
+    noteAttack(world, attacker, victim, calm);
+  }
 }
 
 function towPair(world: World, a: Vehicle, b: Vehicle): boolean {
   return stateOf(world, 'tow', a.id, b.id) !== null || stateOf(world, 'tow', b.id, a.id) !== null;
-}
-
-// A shot at a vehicle that was not hostile starts a feud with it and its nearby faction mates.
-function provoke(world: World, shooter: Vehicle, target: Vehicle): void {
-  if (!isHostile(world, target, shooter)) startFeuds(world, shooter, target);
 }
 
 function startFeuds(world: World, shooter: Vehicle, target: Vehicle): void {

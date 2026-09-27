@@ -119,8 +119,6 @@ export function applyCrash(world: World, a: Vehicle, b: Vehicle | null, what: st
   const hitsA = crashHits(world, a, from, impact, shareA, b);
   const hitsB = b ? crashHits(world, b, a.pos, impact, 1 - shareA, a) : [];
   if (b) {
-    a.lastHitBy = b.id;
-    b.lastHitBy = a.id;
     noteCollision(world, a, b, hitsA, hitsB);
   }
   world.events.push({ t: 'collision', a: a.id, b: what, hitsA, hitsB });
