@@ -1,62 +1,64 @@
 # NPC combat and field repairs
 
-Status: integration verification in progress
+Status: ready for merge against main 3fb73ea, with pre-existing performance budget failures recorded
 Branch: npc-restraint-ready
 Worktree: .worktrees/npc-restraint-ready
+Candidate: ebb422c
 Base: main at 23c5d22
+Combined-main check: 3fb73ea
 Preserved checkpoint: npc-restraint at 8e10d64
 
-## Contract
+## Gameplay contract
 
-NPC work and combat must coexist. Busy civilians continue unrelated work. Idle scavengers may initiate manageable fights. Attacked civilians and nearby faction mates can defend themselves, including while retreating. Raiders retain normal cargo, hunting and contact investigation. Damage can interrupt work for paid-in-parts repairs in nearby reachable shade.
+- Healthy civilians keep ordinary work around unrelated hostiles. Idle scavengers can initiate manageable fights.
+- Actual shots, including misses, against an NPC or a nearby visible faction mate prompt defense or retreat. Retreat does not disable defensive fire.
+- Local force assessment considers nearby visible faction groups, rather than adding every visible enemy together.
+- Raiders retain normal cargo and hunting. Useful contacts prompt investigation of a fixed destination. A continuously useful contact does not repeatedly restart investigation. Accurate scanners and emergency beacons remain useful at longer range.
+- Guard caution limits initiation, not defense. Guard enforcement itself is unchanged.
+- Damage can interrupt work for field repairs. Repairs use existing jobs, spend carried parts and prefer nearby reachable shade. Danger and urgent supplies take priority over a repair detour. With no fuel, repair can happen where the truck stopped.
+- One interrupted work activity resumes after combat or maintenance if still valid. This is not the planned traits or goal-stack rewrite.
+- Towing retains its danger rule, emergency-beacon response and payment rules. Raiders retain the rule against robbing stripped vehicles without a grudge.
 
-The main checkout and the planned traits rewrite remain untouched. This is a focused change to the existing activity system, not the traits, state or goal-stack rewrite.
+## Audit and integration
 
-## Audit of a25f320
+The first restraint patch incorrectly made scavengers always flee, blocked defensive fire during retreat, disabled raider investigation and removed raider cargo. Those policies were rejected. Their passing tests and browser results do not validate this integration.
 
-- Remove unconditional scavenger flight. It contradicted the existing scavenger fight rule.
-- Replace fight-only weapon orders. Movement away from danger must not disable defensive fire.
-- Restore raider cargo tables. Removing loot was unrelated to combat restraint.
-- Restore contact investigation with an uncertainty limit, fixed destination and no repeat for the same continuously detected contact. Hearing stays unchanged. Accurate scanner and emergency-beacon contacts remain useful at longer range.
-- Replace the sum of all visible enemy weapons with the target's nearby faction group, balanced against visible nearby allies. Unrelated factions are not one army.
-- Apply guard caution to attack initiation, not defensive fire. Existing guard retaliation remains unchanged.
-- Retain shared repair jobs, capacity-limited starting repair parts, reserve retention during sales and service, and damaged-part service selection. Verify interruption and supply priorities again.
-- Replace tests that codified passive scavengers and disarmed retreat. Old passing results do not verify the recovered behavior.
+The recovery was preserved at `8e10d64`. Integration started from committed main `23c5d22` in a new worktree. Conflicts were resolved without dropping towing or defeat behavior. The initial integration checks caught lost beacon response and failure to drop a tow on danger. Both were corrected, and the existing towing suite passed.
 
-## Ownership and implementation
+The quality gate required simpler decision functions. Attack observations were kept with combat instead of adding another module. Quality policy was not changed or bypassed.
 
-- `src/data/npcs.ts` owns cargo tables and contact/repair policy values.
-- `src/sim/types.ts` holds optional NPC attack observations, contact history and one interrupted work activity. One saved work activity is sufficient for the current single-activity model. No general goal stack is introduced.
-- `src/sim/combat.ts` records actual shots, including misses, against an NPC or a nearby faction mate. Only local witnesses receive ally observations. It assigns defensive fire independently of movement. Player orders remain unchanged.
-- `src/sim/npc-activities.ts` owns work continuity, initiative, local force assessment, investigation and survival priorities.
-- `src/sim/npc-repair.ts` owns repair-part and reachable shade selection. Shared jobs alone spend resources and complete repairs.
-- `src/sim/guards.ts` exposes the existing town protection area without changing guard enforcement.
-- `src/sim/npc-loadout.ts` and `src/sim/economy.ts` retain their existing loadout and transaction responsibilities with the repair reserve.
-- Sim tests demonstrate both aggression and restraint. `DESIGN.md` documents the resulting behavior.
+Main advanced during testing. A read-only `git merge-tree` combined `3fb73ea` and `ebb422c` without conflicts. Tree `968cf6c976563d365f2aec66808798a8d7ddb6db` was exported under `tmp/combined` for tests. Its dependency manifests match the isolated worktree's installed environment. No merge into main was made.
 
-Combat owns attack observations. Activities read observations and data, then choose movement. Combat selects legal weapon targets from the activity or observed attackers. Repair selection uses the existing jobs, path and sun rules.
+All explicit source edits targeted the isolated worktrees. The harness also reported automatic formatting of main's `src/ui/hud-readout.test.ts` outside the agent turn. Explicit edit-tool paths alone cannot prove that main stayed untouched by tooling.
 
-## Verification plan
+## Ownership
 
-- Reproduce idle-scavenger passivity, lost work, silenced retreat and guard-zone defense failures before implementation.
-- Test busy civilian neutrality, self-defense, ally defense, mismatched and matched local forces, finite investigation, upkeep and repair interruption.
-- Run the full test suite and typecheck after final edits.
-- Exercise actual browser turns with Metal rendering and run the standard browser playtest.
-- Compare fixed-seed scenarios with the pre-patch behavior. Quiet NPCs alone do not count as success. Require continued work, successful attacks and paid repairs.
+- `src/data/npcs.ts` owns contact and repair policy values.
+- `src/sim/types.ts` holds attack observations, investigated contacts and one interrupted work activity.
+- `src/sim/combat.ts` records observed attacks and assigns defensive fire independently of movement.
+- `src/sim/npc-activities.ts` owns initiative, local force assessment, investigation, work continuity and upkeep priority.
+- `src/sim/npc-repair.ts` owns repair-part selection, reachable shade and job startup. Shared jobs alone complete repairs and spend parts.
+- `src/sim/guards.ts` exposes the existing town protection area without changing enforcement.
+- `src/sim/npc-loadout.ts` and `src/sim/economy.ts` retain capacity-limited repair supplies through loadout generation and sales.
 
-## Verification
+## Verified evidence
 
-- The recovery regression file reproduced ten failures before implementation. Log: `tmp/recovery-red.log`.
-- Fresh full suite: 56 files, 502 tests passed. Log: `tmp/recovery-tests.log`.
-- Fresh `npm run typecheck`: passed. Log: `tmp/recovery-types.log`.
-- Primary language-server checks passed for the new threat owner, activity selection and recovery tests. Lens's session cache omitted the worktree files, so it supplies no additional clean verdict.
-- `git diff --check`: passed.
-- No browser or comparative multi-seed playtest was run for the recovery. Earlier browser evidence belongs to the rejected policy and must not be reused.
+- Candidate source passed `npm run quality`, including the full TypeScript check. Its commit also passed the staged quality hook.
+- The combined tree passed 65 test files and 629 tests, plus `npm run typecheck`. Logs: `tmp/combined-tests.log` and `tmp/combined-types.log`.
+- Three matched RNG seeds compared eight-turn scenarios against `23c5d22`. Busy scavengers worked for all eight turns instead of fighting for all eight. Idle scavengers fired seven times in both versions. Retreating scavengers fired twice in both versions. Field repairs completed two jobs, spent two parts and restored cab health from 12 to 42. Log: `tmp/ready-comparison.log`.
+- Combined-tree browser scenarios passed with Metal and actual physics turns: unrelated work continued, an idle scavenger fired, a retreating scavenger fired, and field repair completed while spending parts. The standard playtest passed 12 turns at 60.5 fps. Logs: `tmp/combined-browser.log` and `tmp/combined-playtest.log`.
+- The first browser fixture tried to add a static rock after boot, which rendering rejects. The corrected fixture uses a dynamic wreck and unique NPC ids. No production change was needed.
+- Independent read-only review on `openai-codex/gpt-6-sol` found no confirmed significant gameplay defect. Its remaining question was whether a stationary NPC can continue a repair while choosing escape.
+- Targeted tests confirm the shared job rule: movement cancels repair without spending parts, while a pinned, still-parked NPC may continue an existing job even though its movement order is escape. No repair is selected while danger takes priority. The fixture supplies both complete movement outcomes at the turn boundary rather than assuming that steering moves a truck immediately. Log: `tmp/final-repair-tests.log`.
 
-## Preserved checkpoint handoff
+## Performance evidence
 
-The user requested a stable commit and stop. The branch restores opportunistic scavenger combat, defensive fire while retreating, observed local ally defense, normal raider cargo and selective contact investigation. Work interrupted by combat, investigation or maintenance is retained in one saved activity. Local faction groups replace the indiscriminate sum of all visible enemies. Field-repair infrastructure remains from the earlier commit.
+The candidate and unchanged `23c5d22` baseline both missed the existing boot and first-turn budgets. Baseline measured 2378 ms boot and 145 ms first turn. Candidate measured 2325 ms and 138 ms. Preview and frame budgets passed for both. Logs: `tmp/baseline-perf.log` and `tmp/ready-perf-comparison.log`. These results do not justify changing unrelated performance code or weakening budgets.
 
-The investigation test initially moved its contact beyond the configured useful-contact distance. That correctly ended investigation. The test now moves it within that distance to test a fixed destination, and separately checks completion without immediate repetition.
+The combined tree and unchanged current main `3fb73ea` also both missed boot and first-turn budgets. Combined measured 2480 ms boot, 146 ms first turn, 38 ms preview and 16.7 ms frame p95. Unchanged main measured 2746 ms boot, 140 ms first turn, 41 ms preview and 16.7 ms frame p95. These single runs establish that both budget failures exist without this patch, not that every timing difference is significant. Logs: `tmp/combined-perf.log` and `tmp/baseline-current-perf.log`.
 
-This checkpoint is not a gameplay sign-off. Next authorized work should exercise browser scenarios and compare fixed-seed work, combat and repair outcomes against the pre-patch baseline. Inspect player bullying, guard-boundary attacks, repair interruption and repeated pursuit before merge. The traits rewrite remains separate. Other operations were changing the main checkout during this work. All explicit edits from this recovery targeted its worktree. The harness later reported automatic formatting of main's `src/ui/hud-readout.test.ts` outside the agent turn. The session's edit-tool paths alone cannot prove that main stayed untouched by tooling.
+## Result
+
+The recovered behavior is verified by 629 combined-tree tests, typecheck, the quality gate, fresh browser scenarios, a 60.5 fps playtest, matched-seed comparisons and a bounded independent review. Boot and first-turn budgets remain failed on unchanged main as well as the combined build. No unrelated performance repair or budget change was made.
+
+The candidate merges cleanly with main `3fb73ea`. The original checkpoint remains preserved, and no merge into main was made. The user controls the merge. If main changes again, check the new combined tree rather than claiming these results cover it.
