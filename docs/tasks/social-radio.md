@@ -297,6 +297,17 @@ npc-traits merged into this branch at 25cedab. Its states replace agreements, an
 - IF1 — `CONDITIONS`, `EFFECTS` and `PREPARES` in `src/sim/dialogue-rules.ts`, keyed by the unions in `src/data/dialogue.ts`. Later phases add entries.
 - IF2 — `KindRules` and `makeAgreement()` in `src/sim/agreements.ts`. PH3 adds the patch kind.
 
+## Verify
+
+Result: incomplete. Verification stopped at the usage limit and must resume.
+
+- CK3 (IV8) — a world with an open call and a patch state saves and loads intact — held.
+- CK4 — a call ends when the NPC on the line is gone — held.
+- CK6 — a patch breaks when the NPC patcher is destroyed — not run: the probe called a trader 20 tiles away, out of sight. Rerun with the trader in sight.
+- CK13 — an NPC client with no money pays for a paid patch — inconclusive: the patch never started in 20 turns, because the player did not drive into reach. Rerun with the player parked beside the client.
+- CK18 (AS2) — NPC drive parts break often enough for patch requests — held: over 1000 turns, 25 NPCs had a broken engine or gearbox, 5509 NPC-turns in total. The probe timed out at 30 s before it finished its assertions, so counts are from its log.
+- Still to run: the travel worker with a call opened at the end of a turn (RK5), the independent review, and the docs update.
+
 ## Conclusion
 
 ### Deviations from plan
