@@ -92,6 +92,8 @@ export class VehicleView {
   private glassMat = new THREE.MeshLambertMaterial({ flatShading: true });
   private readonly glassGlow = new THREE.Color(0); // kept across rebuilds, which replace the glass material
   private silhouetteMat!: THREE.MeshBasicMaterial; // set by rebuild
+  private darkMat!: THREE.MeshBasicMaterial; // set by rebuild
+  private dark = false;
 
   constructor(v: Vehicle, seen: boolean) {
     this.root.add(this.body);
@@ -136,6 +138,22 @@ export class VehicleView {
 
   lamps(on: boolean): void {
     this.lampMat.color.setHex(on ? PAL.lamp.on : PAL.lamp.off);
+  }
+
+  // dark: the player sees only the headlights, so the truck draws as a black shape around its lit lamps.
+  outline(dark: boolean): void {
+    if (dark === this.dark) return;
+    this.dark = dark;
+    this.root.traverse((o) => {
+      if (!(o instanceof THREE.Mesh) || o.material === this.silhouetteMat || o.material === this.lampMat) return;
+      if (dark) {
+        o.userData.litMat = o.material;
+        o.material = this.darkMat;
+      } else {
+        o.material = o.userData.litMat;
+        delete o.userData.litMat;
+      }
+    });
   }
 
   // glow: the color cab windows add over their lit color.
@@ -199,6 +217,9 @@ export class VehicleView {
     this.buildLooseParts(v, body, base, onBody.length === v.items.length);
     this.body.add(mergeStatic(still));
     this.buildSilhouette(paint);
+    this.darkMat = new THREE.MeshBasicMaterial({ color: PAL.outline });
+    markStencil(this.darkMat);
+    this.dark = false;
   }
 
   // Every truck mesh marks its pixels in the stencil and gets a twin with the silhouette material under the same parent.
@@ -634,6 +655,8 @@ function disposeChildren(group: THREE.Group): void {
         o.geometry.dispose();
         const mats = Array.isArray(o.material) ? o.material : [o.material];
         for (const m of mats) m.dispose();
+        // A dark truck keeps its own materials aside while it draws black.
+        o.userData.litMat?.dispose();
       }
     });
   }

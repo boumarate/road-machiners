@@ -585,6 +585,8 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   const hold = applyFixedRules(world, vehicle, profile);
   onGrievances(world, vehicle);
   onParley(world, vehicle);
+  // A truce ends hostility, so goals that held only against the truce partner end here.
+  dropInvalidGoals(world, vehicle, contacts);
   onAttacked(world, vehicle, profile);
   onHostilesSeen(world, vehicle, profile);
   onContactsHeard(world, vehicle, profile, contacts);
