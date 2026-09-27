@@ -277,7 +277,7 @@ export class Hud {
       const line = eventText(w, e);
       if (line)
         this.lines.unshift({ text: `T${w.turn} ${line.text}`, cls: line.cls });
-      if (line && (e.t === "defeat" || e.t === "levelUp" || e.t === "discover"))
+      if (line && (e.t === "knockout" || e.t === "levelUp" || e.t === "discover"))
         this.toast(line.text);
     }
     this.lines = this.lines.slice(0, LOG_LINES);

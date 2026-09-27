@@ -5,7 +5,6 @@ import { ECONOMY, GOOD_IDS, TOWN_PRICES } from '../data/goods';
 import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
-import { checkDefeat } from './defeat';
 import { buyChassis, buyGood, buyPart, buyPrice, buySupply, chassisTradeIn, repairAll, sellGood, sellPrice } from './economy';
 import { corePart, coreParts, freeCells, goodsCount, mountedParts } from './grid';
 import { spareParts } from './inventory';
@@ -15,8 +14,7 @@ import { vehicleStats } from './stats';
 import { consumeSupplies } from './supplies';
 import { heatAt } from './sun';
 import { locationAt, siteGates, townAt, townNear } from './sites';
-import { addVehicle, emptyWorld } from './testkit';
-import { dist } from './vec';
+import { emptyWorld } from './testkit';
 import { endTurn, newWorld } from './world';
 
 const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
@@ -207,57 +205,5 @@ describe('progress', () => {
     expect(vehicleStats(w, me).turnSlow).toBeGreaterThan(turn);
     w.player.skillPoints = 0;
     expect(() => spendSkillPoint(w, 'gunnery')).toThrow();
-  });
-});
-
-describe('defeat', () => {
-  it('robs the player and patches the truck where it fell', () => {
-    const w = emptyWorld({ x: 20, y: 40 });
-    w.obstacles = newWorld(1, START_KITS.standard).obstacles;
-    const me = w.vehicles[0];
-    corePart(me, 'cab').hp = 0;
-    w.player.skills.gunnery = 2;
-    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: me.pos.x + 4, y: me.pos.y - 4 });
-    checkDefeat(w);
-    expect(me.pos).toEqual({ x: 20, y: 40 });
-    expect(corePart(me, 'cab').hp).toBe(Math.max(1, Math.round(partDef('cab').hp * RULES.defeatPatch)));
-    expect(w.player.fuel).toBe(0);
-    expect(goodsCount(me)).toEqual({});
-    expect(w.player.money).toBe(750);
-    expect(w.player.skills.gunnery).toBe(2);
-    expect(w.vehicles.find((v) => v.id === raider.id)).toBeUndefined();
-    expect(w.events.some((e) => e.t === 'defeat')).toBe(true);
-  });
-
-  it('a broke, starving player weakens to the starve floor without a knockout', () => {
-    let w = emptyWorld({ x: 30, y: 30 });
-    Object.assign(w.player, { fuel: 0, supplies: 0, money: 0 });
-    for (let i = 0; i < 20; i++) w = endTurn(w);
-    expect(w.player.health).toBe(RULES.starveFloor);
-    expect(w.player.state).toBe('active');
-    expect(w.player.knockouts).toBe(0);
-    expect(corePart(w.vehicles[0], 'cab').hp).toBeGreaterThan(0);
-  });
-
-  it('can crawl toward town after losing a battle', () => {
-    let w = emptyWorld({ x: 20, y: 40 });
-    corePart(w.vehicles[0], 'cab').hp = 0;
-    w = endTurn(w);
-    const from = { ...w.vehicles[0].pos };
-    w.vehicles[0].order = { kind: 'stopAt', dest: { x: 16, y: 43 } };
-    w = endTurn(w);
-    expect(dist(w.vehicles[0].pos, bowl.pos)).toBeLessThan(dist(from, bowl.pos));
-    expect(w.player.fuel).toBe(0);
-    expect(corePart(w.vehicles[0], 'cab').hp).toBeGreaterThan(0);
-  });
-
-  it('the game keeps running after a defeat', () => {
-    let w = emptyWorld({ x: 20, y: 40 });
-    corePart(w.vehicles[0], 'cab').hp = 0;
-    w = endTurn(w);
-    expect(w.events.some((e) => e.t === 'defeat')).toBe(true);
-    w.vehicles[0].order = { kind: 'stopAt', dest: { x: 20, y: 40 } };
-    for (let i = 0; i < 5; i++) w = endTurn(w);
-    expect(corePart(w.vehicles[0], 'cab').hp).toBeGreaterThan(0);
   });
 });

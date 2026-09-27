@@ -9,7 +9,7 @@ import { partDef } from '../data/parts';
 import { repairPlan, repairTurn } from './repair';
 import { searchTurn } from './search';
 import type { Job, Vehicle, World } from './types';
-import { update } from './world';
+import { playerCommand } from './world';
 
 export { repairPlan };
 
@@ -23,7 +23,7 @@ export function startJob(world: World, v: Vehicle, job: Job): void {
 // The player command that starts a field repair. Throws when the truck is not parked, the part is
 // already at the field cap, or the grid holds no parts.
 export function startRepair(world: World, partId: string): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     const v = playerVehicle(w);
     const plan = repairPlan(w, v, partId);
     if (plan.needed === 0) throw new Error('Already at the field repair cap');
@@ -35,7 +35,7 @@ export function startRepair(world: World, partId: string): World {
 // Auto patch: a parked, idle player truck patches its most damaged part with one unit of parts at a
 // time, so driving off loses at most one short job.
 export function startAutoRepair(world: World): void {
-  if (!world.player.autoRepair) return;
+  if (!world.player.autoRepair || world.player.state !== 'active') return;
   const v = playerVehicle(world);
   if (v.job || v.speed > RULES.parkedSpeed || (goodsCount(v).parts ?? 0) === 0) return;
   const worst = mountedParts(v)
@@ -53,10 +53,14 @@ export function advanceJobs(world: World): void {
 // A turn handler does one turn of work and returns true once the job is finished.
 function advanceJob(world: World, v: Vehicle, job: Job): void {
   if (v.speed > RULES.parkedSpeed) return endJob(world, v, job, 'cancelled');
-  // Parts can leave the grid mid-job, by a sale, a defeat or a destroyed cargo part.
+  // Parts can leave the grid mid-job, by a sale, a knockout or a destroyed cargo part.
   if (job.kind === 'repair' && repairPlan(world, v, job.partId, job.parts).parts === 0) return endJob(world, v, job, 'cancelled');
   const done = job.kind === 'repair' ? repairTurn(world, v, job) : searchTurn(world, v, job);
   if (done) endJob(world, v, job, 'done');
+}
+
+export function cancelJob(world: World, v: Vehicle): void {
+  if (v.job) endJob(world, v, v.job, 'cancelled');
 }
 
 function endJob(world: World, v: Vehicle, job: Job, outcome: 'done' | 'cancelled'): void {

@@ -7,7 +7,7 @@ import { startJob } from './jobs';
 import { gainXp } from './progress';
 import { collectSalvage, salvageUnits } from './salvage';
 import type { Job, Vehicle, World } from './types';
-import { update } from './world';
+import { playerCommand } from './world';
 
 // Turns a search needs: the stock's units at unitsPerTurn a turn.
 function estimateTurns(units: number): number {
@@ -23,7 +23,7 @@ export function beginSearch(world: World, v: Vehicle, stockId: string): void {
 }
 
 export function startSearch(world: World, stockId: string): World {
-  return update(world, (w) => beginSearch(w, playerVehicle(w), stockId));
+  return playerCommand(world, (w) => beginSearch(w, playerVehicle(w), stockId));
 }
 
 export function searchTurn(world: World, v: Vehicle, job: Extract<Job, { kind: 'search' }>): boolean {

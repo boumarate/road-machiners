@@ -13,7 +13,7 @@ const LOG_SIZE = 100; // recent cues kept for debugging, enough for several busy
 
 // Turn result stings, most important first. Only the first one found plays, so a busy turn stays readable.
 const STINGS: { cue: CueId; match: (e: GameEvent, playerId: string) => boolean }[] = [
-  { cue: "defeat", match: (e) => e.t === "defeat" },
+  { cue: "defeat", match: (e) => e.t === "knockout" },
   { cue: "level-up", match: (e) => e.t === "levelUp" },
   { cue: "discover", match: (e) => e.t === "discover" },
   { cue: "money", match: (e) => e.t === "money" && e.amount > 0 },

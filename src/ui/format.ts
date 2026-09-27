@@ -101,8 +101,6 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
     }
     case 'supply':
       return { text: e.text, cls: 'bad' };
-    case 'defeat':
-      return { text: 'Robbed. You patch your truck enough to crawl back, but the tank is empty.', cls: 'bad' };
     case 'death':
       return { text: 'You died.', cls: 'bad' };
     case 'knockout':

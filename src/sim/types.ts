@@ -187,7 +187,6 @@ export type GameEvent =
   | { t: 'money'; amount: number; reason: string }
   | { t: 'discover'; location: string }
   | { t: 'supply'; what: string; text: string }
-  | { t: 'defeat' }
   | { t: 'death' }
   | { t: 'knockout' }
   | { t: 'wake' }

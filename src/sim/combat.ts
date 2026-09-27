@@ -8,7 +8,7 @@ import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
 import { laneCount, partLane, sideToward, walkLane, type PartHit, type Side } from './armor';
 import { bodyOf } from './body';
-import { corePart, itemSize, mountedItems, mountedParts } from './grid';
+import { corePart, hasLoot, itemSize, mountedItems, mountedParts } from './grid';
 import { gainXp } from './progress';
 import { canVehicleSee, hasLineOfFire } from './vision';
 import { createWreckSalvage } from './salvage';
@@ -28,10 +28,18 @@ export type FireBlock =
   | "unseen"
   | "covered";
 
-export function isHostile(a: Vehicle, b: Vehicle): boolean {
+// Sides at odds: a grudge either way, or a raider against anyone else.
+export function isFoe(a: Vehicle, b: Vehicle): boolean {
   if (a.id === b.id) return false;
   if (a.grudges.includes(b.id) || b.grudges.includes(a.id)) return true;
   return (a.faction === "raiders") !== (b.faction === "raiders");
+}
+
+// Foes fight, but a raider leaves a vehicle with nothing to take unless a grudge is held.
+export function isHostile(a: Vehicle, b: Vehicle): boolean {
+  if (!isFoe(a, b)) return false;
+  if (a.grudges.includes(b.id) || b.grudges.includes(a.id)) return true;
+  return hasLoot(a.faction === "raiders" ? b : a);
 }
 
 export function inArc(
@@ -395,7 +403,7 @@ function provoke(world: World, shooter: Vehicle, target: Vehicle): void {
   }
 }
 
-// NPCs with a broken cab turn into wreck obstacles. The player's broken cab is handled by defeat.
+// NPCs with a broken cab turn into wreck obstacles. The player's broken cab is a knockout.
 export function resolveDestroyed(world: World): void {
   const dead = world.vehicles.filter(
     (v) =>

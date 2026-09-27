@@ -60,6 +60,7 @@ export const RULES = {
   // Supplies, per turn
   suppliesPerTurn: 0.015, // at base heat; a full load lasts about 550 daytime turns, enough to explore off the roads
   suppliesCap: 20,
+  suppliesLow: 4, // the HUD warns at or below this, about 110 daytime turns before running out
   starveDamage: 5, // character health lost per turn without supplies
   starveFloor: 30, // starving stops here, so only cab damage can kill
   maxHealth: 100,
@@ -74,11 +75,7 @@ export const RULES = {
   discoverXp: 25,
   tradeXpPerProfit: 0.3, // xp per money unit of profit on a sale
 
-  // Defeat
-  defeatMoneyLoss: 0.5,
-  defeatPatch: 0.25, // share of max hp broken core parts and the engine get back after defeat
-  defeatHealth: 50,
-  defeatClearRadius: 15, // robbers leave the truck after the fight
-  defeatSupplies: 4, // enough to survive the walk back after patching up
+  // Knockout
+  defeatPatch: 0.25, // share of max hp broken core parts get back when the player wakes from a knockout
   knockoutMaxTurns: 30, // a knockout ends after this many turns even if a hostile idles in sight
 };

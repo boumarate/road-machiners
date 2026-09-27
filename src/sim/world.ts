@@ -10,7 +10,7 @@ import { generateObstacles } from './mapgen';
 import { buildTerrain } from './terrain';
 import { planNpcOrders } from './ai';
 import { assignAutoOrders, fireWeapons, isHostile, resolveDestroyed } from './combat';
-import { checkDeath, checkDefeat } from './defeat';
+import { advanceKnockout, checkDeath, checkKnockout } from './defeat';
 import { healPlayer } from './health';
 import { fireGuards } from './guards';
 import { discoverSites, useOasis } from './locations';
@@ -121,8 +121,18 @@ export function update(world: World, fn: (draft: World) => void): World {
   return draft;
 }
 
+export function requireActivePlayer(world: World): void {
+  if (world.player.state !== 'active') throw new Error(`Player is ${world.player.state}`);
+}
+
+// A player command: rejected unless the player is active, then applied like any update.
+export function playerCommand(world: World, fn: (draft: World) => void): World {
+  requireActivePlayer(world);
+  return update(world, fn);
+}
+
 export function setMoveOrder(world: World, order: MoveOrder | null): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     playerVehicle(w).order =
       order && order.kind !== "brake"
         ? {
@@ -164,7 +174,8 @@ export function endTurn(
     discoverSites(w);
     useOasis(w);
     checkDeath(w);
-    checkDefeat(w);
+    advanceKnockout(w);
+    checkKnockout(w);
     spawnNpcs(w);
     refreshVision(w);
   }));
@@ -175,7 +186,7 @@ export function setWeaponOrder(
   weaponId: string,
   order: WeaponOrder | null,
 ): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     const me = playerVehicle(w);
     if (!vehicleStats(w, me).weapons.some((m) => m.part.id === weaponId))
       throw new Error(`Player has no weapon ${weaponId}`);
@@ -196,7 +207,7 @@ export function setWeaponOrder(
 
 // Manual mode: the player's truck skips the route planner and drives straight at its order's point.
 export function setDirect(world: World, on: boolean): World {
-  return update(world, (w) => {
+  return playerCommand(world, (w) => {
     playerVehicle(w).direct = on;
   });
 }

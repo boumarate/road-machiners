@@ -63,7 +63,7 @@ export function getHudReadout(w: World) {
       {
         label: "Supplies",
         value: p.supplies.toFixed(1),
-        warning: p.supplies <= RULES.defeatSupplies,
+        warning: p.supplies <= RULES.suppliesLow,
       },
       {
         label: "Cab",
