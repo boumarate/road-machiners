@@ -1,6 +1,6 @@
 # Site Collision and Walls
 
-**Status:** in progress
+**Status:** done
 **Branch:** site-collision-and-walls
 **Worktree:** .worktrees/site-collision-and-walls
 **Goal:** Sites are closed, static places. A truck approaches a site's gate and uses it from there, and it never drives inside. Each site's blocking shape is its visible outer edge. Walls, gates and site props look like worn places in the style of Ex Machina. The user confirms the look in game.
@@ -61,9 +61,9 @@ Landmarks like Canyon Bridge and Fallen Sun keep their own shapes. The bridge st
 ## Plan
 - PH1 — Use spots: every site gets gates and pads. `canUseSite` works on pads only. A click on a site stops at its nearest pad. Tests cover use from a pad and refusal elsewhere. Done.
 - PH2 — Boundaries: each site draws a boundary on its collision edge. Radii are tuned so models fill the shape. Done: every location names its edge in `src/data/region.ts`, and doors close every gate. Models are fitted to the radii instead.
-- PH3 — Wall kit: Blender slab, post, gatehouse with doors and scrap panel. The user reviews each preview.
-- PH4 — Gate animation: doors open, the truck drives in and hides, and the reverse on leave.
-- PH5 — Site props per site, one site at a time, each reviewed in game.
+- PH3 — Wall kit: Blender slab, post, gatehouse with doors and scrap panel. Dropped: the user finds the code-built edges good enough.
+- PH4 — Gate animation: doors open, the truck drives in and hides, and the reverse on leave. Dropped for now.
+- PH5 — Site props per site, one site at a time, each reviewed in game. Dropped for now.
 
 ## Verify
 - PH1: `src/sim/sites.test.ts` covers gates on every site edge, pads outside each gate, use only on a pad, and site clicks. `tmp/pad-check.mjs dustwell` clicks the Dustwell center, and the truck stops and stays on the pad. `tmp/bowl-pad.mjs` shows the Bowl pad with the enter action.
