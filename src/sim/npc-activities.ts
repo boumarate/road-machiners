@@ -296,6 +296,12 @@ const GOAL_CHECKS: Partial<Record<NpcActivity['kind'], GoalCheck>> = {
   patch: patchInvalid,
 };
 
+// Whether a goal still holds, for a driver that has not thought yet this turn. Its stock, tow or target may be
+// gone since it last did.
+export function goalHolds(world: World, vehicle: Vehicle, goal: NpcActivity): boolean {
+  return invalidReason(world, vehicle, goal, usefulContacts(world, vehicle)) === null;
+}
+
 function invalidReason(world: World, vehicle: Vehicle, goal: NpcActivity, contacts: Contact[]): string | null {
   const check = GOAL_CHECKS[goal.kind];
   return check ? check(world, vehicle, goal, contacts) : null;

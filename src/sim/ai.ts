@@ -1,7 +1,7 @@
 // Activity execution uses the same steering and route planner as the player.
 import { NPCS } from "../data/npcs";
 import { RULES } from "../data/rules";
-import { getActivityDestination, thinkNpc, topGoal } from "./npc-activities";
+import { getActivityDestination, goalHolds, thinkNpc, topGoal } from "./npc-activities";
 import { towData } from "./states";
 import { vehicleStats } from "./stats";
 import { isOnRope, playerTow } from "./tow";
@@ -160,9 +160,10 @@ function facesOff(world: World, v: Vehicle, x: Vehicle, gap: number): boolean {
 }
 
 // An NPC whose goal lies farther than the reach rule, so it sets off again. A driver parked at its work does not.
+// x may not have thought yet this turn, so a goal that no longer holds counts as none.
 function wantsToDrive(world: World, x: Vehicle): boolean {
   const top = topGoal(x);
-  const dest = top && getActivityDestination(world, x, top);
+  const dest = top && goalHolds(world, x, top) && getActivityDestination(world, x, top);
   return !!dest && dist(x.pos, dest) > RULES.arriveRadius * 2;
 }
 

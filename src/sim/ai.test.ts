@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { planNpcOrders } from './ai';
+import { topGoal } from './npc-activities';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 
 describe('NPC driving', () => {
@@ -29,5 +30,19 @@ describe('NPC driving', () => {
     npc.speed = 4;
     planNpcOrders(w);
     expect(npc.order?.kind === 'brake').toBe(brakes);
+  });
+
+  it('a parked truck ahead whose loot is gone before it thinks gives no face off', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const first = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 100, y: 100 });
+    first.brain = npcBrain('trader', first.pos, ['trader']);
+    first.heading = 0;
+    const second = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 103, y: 100 });
+    second.brain = npcBrain('trader', second.pos, ['trader']);
+    second.heading = Math.PI;
+    second.brain.goals.push({ kind: 'loot', targetId: 'cargo-gone', destination: { x: 130, y: 100 }, phase: 'travel', reason: 'take the handed-over cargo' });
+    expect(first.id < second.id).toBe(true);
+    planNpcOrders(w);
+    expect(topGoal(second)?.kind).not.toBe('loot');
   });
 });
