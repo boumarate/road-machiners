@@ -6,7 +6,7 @@ import { REGION } from '../data/region';
 import { buyChassis } from './economy';
 import { partDef } from '../data/parts';
 import { makePart, makeVehicle } from './factory';
-import { baseGrid, isMounted, itemCells, mountedItems, mountedParts, sideOf, type Cell } from './grid';
+import { baseGrid, gridOf, isMounted, itemCells, mountedItems, mountedParts, placementError, sideOf, type Cell } from './grid';
 import { moveItem, storePart } from './inventory';
 import { generateNpcLoadout } from './npc-loadout';
 import { addVehicle, emptyWorld } from './testkit';
@@ -134,5 +134,18 @@ describe('side armor mounts', () => {
       if (d.kind !== 'armor') throw new Error(`${id} must be armor`);
       expect(d.ramMult).toBe(1);
     }
+  });
+});
+
+describe('cargo rows', () => {
+  it('a part cannot lie across the end of the chassis into cargo rows', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'van', ['flatbed'], { x: 40, y: 40 });
+    const end = baseGrid('van').h;
+    const across: GridItem = { id: 'i-panel', x: 0, y: end - 1, rot: 0, kind: 'part', part: makePart(w, 'scrapPanels', 0) };
+    const below: GridItem = { ...across, y: end };
+
+    expect(placementError(gridOf(v), v.items, across, null)).toBe('Cannot lie across the end of the truck bed');
+    expect(placementError(gridOf(v), v.items, below, null)).toBeNull();
   });
 });
