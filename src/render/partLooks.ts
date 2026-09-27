@@ -6,7 +6,7 @@ import { hashStr } from './noise';
 
 // Parts with no model of their own. The truck body draws them: the cab zone is the cab.
 // Chassis drawn from one base model, with kit parts on its row surfaces. The rest still use the zone cell pieces.
-export const BASE_MODELS: Partial<Record<string, ModelName>> = { scout: 'base_scout', van: 'base_van', longbed: 'base_longbed', hauler: 'base_hauler', tractor: 'base_tractor' };
+export const BASE_MODELS: Partial<Record<string, ModelName>> = { scout: 'base_scout', van: 'base_van', longbed: 'base_longbed', hauler: 'base_hauler', tractor: 'base_tractor', wagon: 'base_wagon', carrier: 'base_carrier' };
 
 export const BODY_PARTS: ReadonlySet<string> = new Set(['cab']);
 
