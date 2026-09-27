@@ -162,22 +162,36 @@ describe('physics turns', () => {
     expect(dist(me(after).pos, { x: 40, y: 30 })).toBeLessThan(0.6);
   });
 
-  it('mud covers less ground than road at the same order', () => {
-    const w = emptyWorld();
-    editableTerrain(w).types.fill('mud');
-    const mud = play(setMoveOrder(w, { kind: 'through', dest: { x: 60, y: 30 } }), 3).w;
-    const road = play(ordered({ kind: 'through', dest: { x: 60, y: 30 } }), 3).w;
-    expect(me(mud).pos.x - 30).toBeLessThan(me(road).pos.x - 30);
-  });
-
-  it('a player at driving level 5 covers more mud than at level 0', () => {
-    const w = emptyWorld();
-    editableTerrain(w).types.fill('mud');
+  describe('mud driving', () => {
+    // The mud-at-skill-0 run backs both tests below, so it is simulated once and read twice
+    // instead of twice over independently.
     const order: MoveOrder = { kind: 'through', dest: { x: 60, y: 30 } };
-    const plain = play(setMoveOrder(w, order), 3).w;
-    w.player.skills.driving = XP_TO_REACH[5];
-    const skilled = play(setMoveOrder(w, order), 3).w;
-    expect(me(skilled).pos.x).toBeGreaterThan(me(plain).pos.x);
+    let mudSkill0: World;
+    let roadSkill0: World;
+    let mudSkill5: World;
+
+    beforeAll(() => {
+      const w = emptyWorld();
+      editableTerrain(w).types.fill('mud');
+      const mud = play(setMoveOrder(w, order), 3);
+      mudSkill0 = mud.w;
+      freeDrive(mud.d);
+      const road = play(ordered(order), 3);
+      roadSkill0 = road.w;
+      freeDrive(road.d);
+      w.player.skills.driving = XP_TO_REACH[5];
+      const skilled = play(setMoveOrder(w, order), 3);
+      mudSkill5 = skilled.w;
+      freeDrive(skilled.d);
+    }, 30_000); // three physics runs share this hook; the default 10s hook timeout is too tight under load
+
+    it('mud covers less ground than road at the same order', () => {
+      expect(me(mudSkill0).pos.x - 30).toBeLessThan(me(roadSkill0).pos.x - 30);
+    });
+
+    it('a player at driving level 5 covers more mud than at level 0', () => {
+      expect(me(mudSkill5).pos.x).toBeGreaterThan(me(mudSkill0).pos.x);
+    });
   });
 
   it('a far click speeds up, a mid click holds speed', () => {
@@ -259,11 +273,18 @@ describe('physics turns', () => {
   });
 
   it('a click behind outside the reverse cone turns the truck around nose first', () => {
+    // One continuous drive: the truck first steps forward (still nose-first outbound), then over
+    // the rest of the turns comes fully around onto the point behind it.
     const dest = { x: 26, y: 33 };
-    const first = play(ordered({ kind: 'through', dest }), 1);
-    expect(me(first.w).pos.x).toBeGreaterThan(30);
-    freeDrive(first.d);
-    const { w, d } = play(ordered({ kind: 'through', dest }), 8);
+    let w = ordered({ kind: 'through', dest });
+    let d = buildDrive(w);
+    for (let i = 0; i < 8; i++) {
+      let next: Drive | null = null;
+      w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+      freeDrive(d);
+      d = next!;
+      if (i === 0) expect(me(w).pos.x).toBeGreaterThan(30);
+    }
     expect(me(w).order).toBeNull();
     freeDrive(d);
   });
