@@ -20,6 +20,8 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 - `npm run sfx:import -- <cue> <file...>` imports files as variants of a cue in `src/data/sounds.ts`.
 - `npm run sfx:gen -- <cue> <count>` generates variants with ElevenLabs. It costs credits, so ask before running it.
 - `npm run sfx:reimport` rebuilds every sound file from its raw source in `tmp/sfx-raw/` after an import change.
+- `npm run progression:record -- --archetypes trader,scavenger,fighter,mixed --seeds 1,2,3 --turns 2000` plays a bot per archetype and seed and writes each trace to `tmp/progression/`. Runs go in parallel. It is slow: about 75 seconds per 2000 turns per run.
+- `npm run progression:report` replays every trace in `tmp/progression/` with the current XP rules. It prints the turns to each skill level and the XP per day per archetype.
 
 ## Config
 

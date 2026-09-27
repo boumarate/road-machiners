@@ -177,3 +177,6 @@ Approach: replace the XP pool with per-skill practice first, then widen effects 
 - PH4 perk data lives in `src/data/skills.ts` and perk logic in `src/sim/progress.ts`, not new perk files. The quality gate rejected the extra files as fragmentation.
 - PH4 `scrounger` adds one `parts` unit to the searched stock. `smoothTalker` drops half of each good, rounded down, and every loose part. `goodwill` makes every patch free for the player client, own-parts deals included.
 - PH4 `choosePerk` needs an active player only, so a pick during a tow or a call is allowed.
+- PH5 bots fire back, stop to cool the engine, work patch deals and use the beacon when stranded. Without these, bots broke down or went broke within a day. All bots use auto fire, not only the fighter.
+- PH5 a broke trader scavenges, and a scavenger with no stock left trades. Death ends a recording with a marker, and the report counts deaths per archetype.
+- PH5 `ram` never fires in recordings, because far travel has no crashes (AS1).
