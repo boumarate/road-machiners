@@ -52,6 +52,7 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   turnedDown: () => 'You turned down its tow',
   towPromise: () => 'Promised you a tow',
   patch: () => 'Patching your truck',
+  truce: () => 'Truce with you',
 };
 
 // One line per state the NPC holds toward the player, with turns left when the state has a timer.

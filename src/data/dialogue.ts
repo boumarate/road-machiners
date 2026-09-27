@@ -7,9 +7,9 @@ import type { DecisionOptions, TraitId } from './npcs';
 
 type PatchDeal = DecisionOptions['patchDeal'];
 
-export type TopicId = 'directions' | 'tow' | 'askTow' | 'patch' | 'patchRequest';
-export type ConditionId = 'knowsTown' | 'offersTow' | 'canTowPlayer' | 'playerNeedsPatch' | 'npcNeedsPatch' | 'hasDeal' | 'noDeal';
-export type EffectId = 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow' | 'agreePatch';
+export type TopicId = 'directions' | 'tow' | 'askTow' | 'patch' | 'patchRequest' | 'demand';
+export type ConditionId = 'knowsTown' | 'offersTow' | 'canTowPlayer' | 'playerNeedsPatch' | 'npcNeedsPatch' | 'hasDeal' | 'noDeal' | 'demandsCargo';
+export type EffectId = 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow' | 'agreePatch' | 'handOver';
 export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms';
 
 // `go` is a node of the same topic, the hub of topics, or the end of the call.
@@ -20,7 +20,8 @@ export type Topic = {
   id: TopicId;
   once: boolean; // a driver raises or answers it with the player at most once
   ask: { text: string; when: ConditionId[] } | null; // how the player raises it from the hub
-  raise: { when: ConditionId[]; priority: number } | null; // when an NPC calls the player with it; higher wins
+  // When an NPC calls the player with it; higher priority wins. A feud stops the call unless `duringFeud`.
+  raise: { when: ConditionId[]; priority: number; duringFeud: boolean } | null;
   prepare: PrepareId | null; // fills the call values when the topic opens
   hangUp: EffectId[]; // runs when the player hangs up inside the topic
   start: string;
@@ -54,7 +55,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     id: 'tow',
     once: false,
     ask: null,
-    raise: { when: ['offersTow'], priority: 2 },
+    raise: { when: ['offersTow'], priority: 2, duringFeud: false },
     prepare: 'towOffer',
     hangUp: ['refuseTow'],
     start: 'offer',
@@ -119,7 +120,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     id: 'patchRequest',
     once: true,
     ask: null,
-    raise: { when: ['npcNeedsPatch'], priority: 1 },
+    raise: { when: ['npcNeedsPatch'], priority: 1, duringFeud: false },
     prepare: 'patchTerms',
     hangUp: ['settleRefused'],
     start: 'ask',
@@ -136,6 +137,25 @@ export const TOPICS: Record<TopicId, Topic> = {
         options: [
           { text: 'Deal. Stay where you are.', when: [], effects: ['agreePatch'], go: END },
           { text: 'Not today.', when: [], effects: ['settleRefused'], go: END },
+        ],
+      },
+    },
+  },
+  // A raider or robber about to attack the player calls first, once, and asks for the cargo.
+  demand: {
+    id: 'demand',
+    once: true,
+    ask: null,
+    raise: { when: ['demandsCargo'], priority: 3, duringFeud: true },
+    prepare: null,
+    hangUp: ['settleRefused'],
+    start: 'demand',
+    nodes: {
+      demand: {
+        line: 'Dump your cargo and roll on. Or we take it off your wreck.',
+        options: [
+          { text: 'Fine. Take it.', when: [], effects: ['handOver'], go: END },
+          { text: 'Come and get it.', when: [], effects: ['settleRefused'], go: END },
         ],
       },
     },
@@ -177,7 +197,7 @@ export const HONK_RANGE = DETECT.sound.limp;
 export const TRAIT_TALK: Record<TraitId, TraitTalk> = {
   trader: { voice: { greeting: 'Caravan here. Go ahead.', repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'patch', 'patchRequest'] },
   scavenger: { voice: { greeting: 'Yeah? Make it quick.', repeatLine: 'I told you already.', refusal: 'Get off my channel.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'patch', 'patchRequest'] },
-  raider: { voice: { greeting: 'Get lost.', repeatLine: 'Get lost.', refusal: 'Heh. No.', honksBack: false }, topics: [] },
-  scumbag: { voice: null, topics: [] },
+  raider: { voice: { greeting: 'Get lost.', repeatLine: 'Get lost.', refusal: 'Heh. No.', honksBack: false }, topics: ['demand'] },
+  scumbag: { voice: null, topics: ['demand'] },
   coward: { voice: null, topics: [] },
 };

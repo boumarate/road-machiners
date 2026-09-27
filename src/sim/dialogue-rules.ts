@@ -5,10 +5,12 @@ import type { ConditionId, EffectId, PrepareId } from '../data/dialogue';
 import { REGION, type TownDef } from '../data/region';
 import { playerVehicle } from './damage';
 import { discoverSite } from './locations';
-import { patchGoal, startTow, topGoal } from './npc-activities';
+import { SPAWN } from '../data/npcs';
+import { patchGoal, pushGoal, startTow, topGoal } from './npc-activities';
+import { createCargoSalvage, hasCargo } from './salvage';
 import { agreePatch, needsPatch, patchTerms } from './patch';
 import { npcProfile } from './npc-decisions';
-import { towData } from './states';
+import { addState, endState, stateOf, towData } from './states';
 import { acceptOffer, playerTow, refuseOffer, strandedPlayerAt } from './tow';
 import type { Call, CallVars, TopicOutcome, Vehicle, World } from './types';
 import { bearing, dist } from './vec';
@@ -39,6 +41,19 @@ function settle(world: World, npc: Vehicle, call: Call, outcome: TopicOutcome): 
   world.player.talked[npc.id] = { ...world.player.talked[npc.id], [call.topic]: outcome };
 }
 
+// The player drops the cargo. The demander and its faction mates nearby end any feud with the player and hold a
+// truce instead, and the demander goes to search the stock.
+function handOverCargo(world: World, npc: Vehicle): void {
+  const me = playerVehicle(world);
+  const stock = createCargoSalvage(world, me);
+  const party = world.vehicles.filter((v) => v.brain && v.faction === npc.faction && dist(v.pos, npc.pos) <= SPAWN.neighborHelp);
+  for (const v of party) {
+    for (const s of [stateOf(world, 'feud', v.id, me.id), stateOf(world, 'feud', me.id, v.id)]) if (s) endState(world, s, 'broken');
+    addState(world, 'truce', v.id, me.id, { kind: 'none' });
+  }
+  pushGoal(world, npc, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'take the handed-over cargo' });
+}
+
 // A truck already in a patch deal, as patcher or client.
 function inPatch(world: World, id: string): boolean {
   return world.states.some((s) => s.kind === 'patch' && (s.holder === id || s.other === id));
@@ -59,6 +74,11 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   npcNeedsPatch: (world, npc) => needsPatch(npc) && !inPatch(world, npc.id),
   hasDeal: (_world, _npc, vars) => vars.deal !== undefined,
   noDeal: (_world, _npc, vars) => vars.deal === undefined,
+  // About to attack the player, who carries something worth taking.
+  demandsCargo: (world, npc) => {
+    const top = topGoal(npc);
+    return top?.kind === 'fight' && top.targetId === world.player.vehicleId && hasCargo(playerVehicle(world));
+  },
 };
 
 export const EFFECTS: Record<EffectId, Effect> = {
@@ -76,6 +96,10 @@ export const EFFECTS: Record<EffectId, Effect> = {
     if (terms?.kind !== 'deal') throw new Error('agreePatch needs deal terms');
     const deal = agreePatch(world, npc, terms);
     patchGoal(world, npc, playerVehicle(world), deal.holder === npc.id);
+    settle(world, npc, call, 'agreed');
+  },
+  handOver: (world, npc, call) => {
+    handOverCargo(world, npc);
     settle(world, npc, call, 'agreed');
   },
   settleDone: (world, npc, call) => settle(world, npc, call, 'done'),

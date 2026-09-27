@@ -4,7 +4,7 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { partDef } from '../data/parts';
 import { makePart } from './factory';
-import { goodsCount, isLoot } from './grid';
+import { goodsCount, isLoot, isMounted } from './grid';
 import { addGoods, stowPart } from './inventory';
 import { chance, randInt } from './rng';
 import { vehicleStats } from './stats';
@@ -115,6 +115,25 @@ export function createKnockoutSalvage(world: World, vehicle: Vehicle): void {
   }
   addVehicleStock(world, vehicle, knockoutStockId(vehicle.id, world.turn), goods, parts);
   vehicle.items = vehicle.items.filter((item) => !loot.includes(item));
+}
+
+// A truck that hands over its cargo drops its goods and loose parts where it stands. Mounted parts stay.
+export function createCargoSalvage(world: World, vehicle: Vehicle): SalvageStock {
+  const cargo = vehicle.items.filter((item) => item.kind === 'good' || !isMounted(vehicle.chassisId, item));
+  const goods: Record<string, number> = {};
+  const parts: PartInstance[] = [];
+  for (const item of cargo) {
+    if (item.kind === 'good') goods[item.good] = (goods[item.good] ?? 0) + 1;
+    else parts.push(item.part);
+  }
+  addVehicleStock(world, vehicle, `cargo-${vehicle.id}-${world.turn}`, goods, parts);
+  vehicle.items = vehicle.items.filter((item) => !cargo.includes(item));
+  return world.salvage[world.salvage.length - 1];
+}
+
+// Goods or loose parts a demand can ask for.
+export function hasCargo(vehicle: Vehicle): boolean {
+  return vehicle.items.some((item) => item.kind === 'good' || !isMounted(vehicle.chassisId, item));
 }
 
 function addVehicleStock(world: World, vehicle: Vehicle, id: string, goods: Record<string, number>, parts: PartInstance[]): void {

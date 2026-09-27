@@ -172,7 +172,7 @@ export function hangUp(world: World): World {
 }
 
 // A turn step: the first NPC in vehicle order that sees the player and wants to raise a topic calls. The
-// highest priority topic wins. A driver in a feud with the player never calls. One call at a time.
+// highest priority topic wins. A driver in a feud with the player calls only with a topic raised during feuds. One call at a time.
 export function raiseCalls(world: World): void {
   if (world.player.call || world.player.state !== 'active') return;
   const me = playerVehicle(world);
@@ -185,10 +185,11 @@ export function raiseCalls(world: World): void {
 }
 
 function raisedTopic(world: World, npc: Vehicle, me: Vehicle): Topic | null {
-  if (!npc.brain || !canVehicleSee(world, npc, me.pos) || inFeud(world, npc, me)) return null;
+  if (!npc.brain || !canVehicleSee(world, npc, me.pos)) return null;
+  const feud = inFeud(world, npc, me);
   const wanted = talkOf(npc).topics
     .map((id) => TOPICS[id])
-    .filter((t) => t.raise && !isSettled(world, npc, t) && holds(world, npc, t.raise.when, {}))
+    .filter((t) => t.raise && (!feud || t.raise.duringFeud) && !isSettled(world, npc, t) && holds(world, npc, t.raise.when, {}))
     .sort((a, b) => b.raise!.priority - a.raise!.priority);
   return wanted[0] ?? null;
 }

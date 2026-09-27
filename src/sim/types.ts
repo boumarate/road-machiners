@@ -169,7 +169,7 @@ export type Obstacle = {
 };
 
 // A timed relation one vehicle holds toward another. src/sim/states.ts owns them.
-export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'patch';
+export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'patch' | 'truce';
 export type StateEnding = 'expired' | 'fulfilled' | 'broken';
 // A tow state: the holder tows the other party to `town` for `fee`, paid on arrival. hitched is false while the offer is open.
 // A tow promise: the terms of a tow the holder dropped for danger, which its next offer keeps.

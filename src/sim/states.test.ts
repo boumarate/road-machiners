@@ -64,7 +64,7 @@ describe('states', () => {
 
   it('an unknown state kind throws', () => {
     const { w, a, b } = apart();
-    expect(() => addState(w, 'truce' as StateKindId, a, b, NONE)).toThrow(/truce/);
+    expect(() => addState(w, 'alliance' as StateKindId, a, b, NONE)).toThrow(/alliance/);
     expect(() => addState(w, 'constructor' as StateKindId, a, b, NONE)).toThrow(/Unknown state kind constructor/);
   });
 

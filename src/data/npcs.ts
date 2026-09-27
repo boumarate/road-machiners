@@ -350,6 +350,7 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   backedOff: { preySeen: { rob: { mul: 0.005 } } },
   tow: {},
   patch: {},
+  truce: {},
   // A driver the player turned down rarely offers that player a tow again. A tow weight of 9 drops to 0.009,
   // about 2%.
   turnedDown: { strandedSeen: { tow: { mul: 0.001 } } },
@@ -370,6 +371,9 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   // Work on a patch keeps it going. Without work it lapses after 40 turns, a fifth of a day, so a client
   // stops waiting for a patcher who never comes.
   patch: 40,
+  // A truck that handed over its cargo is left alone for 60 turns: time for the raiders to search the stock and the
+  // truck to drive well away. Shots start a feud, which ends the truce's effect at once.
+  truce: 60,
   // A driver the player turned down holds it until it offers that player a tow again.
   turnedDown: null,
   // A tower that dropped a hitched tow for danger keeps its terms until its next offer to that player.

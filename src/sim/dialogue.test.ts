@@ -3,11 +3,15 @@ import { TRAIT_TALK, END, HONK_RANGE, HUB, TOPICS, type Topic } from '../data/di
 import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, honk, placeholders, raiseCalls } from './dialogue';
-import { fireBlock } from './combat';
+import { fireBlock, isHostile } from './combat';
+import { NPCS } from '../data/npcs';
+import { isMounted } from './grid';
+import { addGoods } from './inventory';
+import { hasCargo } from './salvage';
 import { vehicleStats } from './stats';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
-import { addState } from './states';
-import { addVehicle, emptyWorld, npcBrain } from './testkit';
+import { addState, endState, stateOf } from './states';
+import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import type { TraitId } from '../data/npcs';
 import type { Vehicle, World } from './types';
 import { dist } from './vec';
@@ -141,7 +145,7 @@ describe('directions', () => {
 describe('NPC calls', () => {
   // Directions stands in for a topic NPCs raise once, so the raise rules run without real raised content.
   const original = { ...TOPICS.directions };
-  beforeEach(() => Object.assign(TOPICS.directions, { once: true, raise: { when: ['knowsTown'], priority: 1 }, hangUp: ['settleRefused'] } satisfies Partial<Topic>));
+  beforeEach(() => Object.assign(TOPICS.directions, { once: true, raise: { when: ['knowsTown'], priority: 1, duringFeud: false }, hangUp: ['settleRefused'] } satisfies Partial<Topic>));
   afterEach(() => Object.assign(TOPICS.directions, original));
 
   it('an NPC that sees the player opens one call on the topic it raises', () => {
@@ -230,5 +234,74 @@ describe('calls during a turn', () => {
     endCallIfOut(open);
     expect(open.player.call).toBeNull();
     expect(open.events).toContainEqual({ t: 'call', with: npc.id, outcome: 'ended' });
+  });
+});
+
+describe('demand', () => {
+  // A raider with a machine gun spots a player who carries goods. It always picks the fight.
+  function ambush(): { w: World; raider: Vehicle } {
+    const w = emptyWorld({ x: 30, y: 30 });
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    addGoods(w, playerVehicle(w), 'scrap', 2);
+    const raider = addVehicle(w, 'raiders', 'buggy', ['stockEngine', 'mg'], { x: 40, y: 30 }, Math.PI);
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    forceOption('hostileSeen', 'fight');
+    return { w, raider };
+  }
+
+  const shotsBetween = (w: World, a: string, b: string) =>
+    w.events.filter((e) => e.t === 'shot' && ((e.shooter === a && e.target === b) || (e.shooter === b && e.target === a)));
+
+  it('a raider calls with its demand before the first shot', () => {
+    const { w: start, raider } = ambush();
+    const w = endTurn(start);
+    expect(w.player.call).toMatchObject({ with: raider.id, topic: 'demand' });
+    expect(shotsBetween(w, raider.id, w.player.vehicleId)).toEqual([]);
+  });
+
+  it('handing over drops every goods item and loose part, and buys a truce', () => {
+    const { w: start, raider } = ambush();
+    let w = endTurn(start);
+    const me = playerVehicle(w);
+    const cargo = me.items.filter((i) => i.kind === 'good' || !isMounted(me.chassisId, i)).length;
+    w = chooseOption(w, currentOptions(w).findIndex((o) => o.text === 'Fine. Take it.'));
+    const stock = w.salvage.find((s) => s.id.startsWith(`cargo-${me.id}`))!;
+    const inStock = Object.values(stock.goods).reduce((a, b) => a + b, 0) + stock.parts.length;
+    expect(inStock).toBe(cargo);
+    expect(hasCargo(playerVehicle(w))).toBe(false);
+    expect(stateOf(w, 'truce', raider.id, me.id)).not.toBeNull();
+    const r = w.vehicles.find((v) => v.id === raider.id)!;
+    expect(isHostile(w, r, playerVehicle(w))).toBe(false);
+    for (let i = 0; i < 5; i++) {
+      w = endTurn(w);
+      expect(shotsBetween(w, raider.id, me.id)).toEqual([]);
+    }
+  });
+
+  it('refusing keeps the fight, and the demand is not made twice', () => {
+    const { w: start, raider } = ambush();
+    let w = endTurn(start);
+    w = chooseOption(w, currentOptions(w).findIndex((o) => o.text === 'Come and get it.'));
+    let shots = 0;
+    for (let i = 0; i < 8; i++) {
+      w = endTurn(w);
+      expect(w.player.call).toBeNull();
+      shots += shotsBetween(w, raider.id, w.player.vehicleId).length;
+    }
+    expect(shots).toBeGreaterThan(0);
+  });
+
+  it('shots end a truce through a feud, and the truce expires on its own', () => {
+    const { w: start, raider } = ambush();
+    let w = endTurn(start);
+    w = chooseOption(w, currentOptions(w).findIndex((o) => o.text === 'Fine. Take it.'));
+    const me = w.player.vehicleId;
+    addState(w, 'feud', raider.id, me, { kind: 'feud', robbery: false });
+    const r = w.vehicles.find((v) => v.id === raider.id)!;
+    expect(isHostile(w, r, playerVehicle(w))).toBe(true);
+    endState(w, stateOf(w, 'feud', raider.id, me)!, 'broken');
+    stateOf(w, 'truce', raider.id, me)!.turnsLeft = 1;
+    w = endTurn(w);
+    expect(stateOf(w, 'truce', raider.id, me)).toBeNull();
   });
 });

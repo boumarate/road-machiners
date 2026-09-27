@@ -35,11 +35,16 @@ export function inFeud(world: World, a: Vehicle, b: Vehicle): boolean {
   return stateOf(world, "feud", a.id, b.id) !== null || stateOf(world, "feud", b.id, a.id) !== null;
 }
 
-// Sides at odds: a feud either way, or a raider against anyone else.
+// Sides at odds: a feud either way, or a raider against anyone else outside a truce.
 export function isFoe(world: World, a: Vehicle, b: Vehicle): boolean {
   if (a.id === b.id) return false;
   if (inFeud(world, a, b)) return true;
+  if (inTruce(world, a, b)) return false;
   return (a.faction === "raiders") !== (b.faction === "raiders");
+}
+
+function inTruce(world: World, a: Vehicle, b: Vehicle): boolean {
+  return stateOf(world, "truce", a.id, b.id) !== null || stateOf(world, "truce", b.id, a.id) !== null;
 }
 
 // Foes fight, but a raider leaves a vehicle with nothing to take unless a feud is held.

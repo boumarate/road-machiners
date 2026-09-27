@@ -55,6 +55,8 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   towPromise: { refresh: never, check: noCheck, hooks: {} },
   // The holder patches the other party's truck. See src/sim/patch.ts. Work keeps it going, and the fulfilled hook
   // pays once.
+  // The two parties are not foes while it lasts, unless a feud says otherwise. See isFoe() in src/sim/combat.ts.
+  truce: { refresh: never, check: noCheck, hooks: {} },
   patch: {
     refresh: isPatching,
     check: checkPatch,
@@ -73,7 +75,7 @@ function turnsOf(kind: StateKindId): number | null {
 }
 
 // The data kind each state kind carries.
-const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', patch: 'patch' };
+const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', patch: 'patch', truce: 'none' };
 
 export function addState(w: World, kind: StateKindId, holder: string, other: string, data: StateData): NpcState {
   kindOf(kind);
