@@ -255,6 +255,18 @@ describe('physics turns', () => {
     expect(w.player.explored[30 * w.size + mid + 12]).toBe(Number(me(w).pos.x + 10 >= mid + 12));
   });
 
+  it('a frame acceleration is the speed change over its physics step', () => {
+    const w = ordered({ kind: 'through', dest: { x: 60, y: 40 } }, 0);
+    const d = buildDrive(w);
+    const frames = simulateTurn(d, w).frames[me(w).id];
+    freeDrive(d);
+    const speed = (i: number) => Math.hypot(frames[i + 1].pos.x - frames[i].pos.x, frames[i + 1].pos.z - frames[i].pos.z) * PHYSICS.stepsPerSecond;
+    const along = frames.map((f) => Math.hypot(f.acc.x, f.acc.z));
+    // A truck starting from rest speeds up, so early frames carry forward acceleration and speed grows.
+    expect(speed(20)).toBeGreaterThan(speed(5));
+    expect(Math.max(...along.slice(0, 30))).toBeGreaterThan(1);
+  });
+
   it('a brake order stops the truck and clears', () => {
     const { w } = play(ordered({ kind: 'brake' }, 4), 3);
     expect(me(w).speed).toBeLessThan(0.1);

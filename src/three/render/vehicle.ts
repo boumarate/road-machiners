@@ -14,6 +14,8 @@ import { BODY_PARTS, baseModel, partModel, weaponLook } from '../../render/partL
 import { baseGrid, isMounted, itemCells, itemSize, sideOf, type SideLetter } from '../../sim/grid';
 import type { GridItem, Vehicle } from '../../sim/types';
 import { model, socket, type ModelName } from './models';
+import { hashStr } from '../../render/noise';
+import { TruckMotion, WHIPS } from './truckMotion';
 
 const T = PHYSICS.truck;
 const CELL = PHYSICS.cell;
@@ -46,6 +48,17 @@ const SILHOUETTE_ORDER = 810; // after opaque ground, props and trucks; below th
 const TRUCK_STENCIL = 1; // stencil value marking pixels where a truck or its silhouette is already drawn
 
 type Wheel = { mount: THREE.Group; spin: THREE.Object3D; restY: number };
+// A shock stretches from its body mount, which leans with the body, down to its wheel's hub.
+type Shock = { obj: THREE.Object3D; top: THREE.Vector3; wheel: number; z: number };
+// An axle beam joins the inner faces of two wheels, from wheel a on the left to wheel b on the right.
+// inset: meters from a wheel's center to its inner face.
+type Axle = { obj: THREE.Object3D; a: number; b: number; inset: number };
+
+// Suspension parts are authored for a 1 m wheel radius and 1 m long along their +y.
+const SHOCK_R = 0.2; // coil radius of the coilover model at a 1 m wheel radius
+const UP = new THREE.Vector3(0, 1, 0);
+const ANTENNA_INSET = 0.12; // meters from the body side and the cab's back edge
+const CHAIN_SIDE = 0.4; // fraction of the half width from the center line to the chain
 
 // Where a model goes in body space.
 type Placement = { pos: THREE.Vector3; yaw: number; scale: THREE.Vector3 };
@@ -63,15 +76,22 @@ function signatureOf(v: Vehicle): string {
 
 export class VehicleView {
   readonly root = new THREE.Group();
+  // The leaning part of the truck. Wheels, shocks and axles stay on the root with the physics pose.
+  private readonly body = new THREE.Group();
 
   private sig = '';
   private wheels: Wheel[] = [];
+  private shocks: Shock[] = [];
+  private axles: Axle[] = [];
+  private motion!: TruckMotion; // set by rebuild
+  private running = false;
   private turrets: THREE.Group[] = [];
   private heading = 0;
   private lampMat = new THREE.MeshBasicMaterial({ color: PAL.lamp.off });
   private silhouetteMat!: THREE.MeshBasicMaterial; // set by rebuild
 
   constructor(v: Vehicle, seen: boolean) {
+    this.root.add(this.body);
     this.update(v, seen);
   }
 
@@ -81,9 +101,11 @@ export class VehicleView {
     if (sig !== this.sig) this.rebuild(v);
     this.sig = sig;
     this.silhouetteMat.visible = seen;
+    this.running = engineRuns(v);
   }
 
-  pose(f: VehicleFrame): void {
+  // dt: seconds since the last pose, for the body's lean and the swinging parts.
+  pose(f: VehicleFrame, dt: number): void {
     this.root.position.set(f.pos.x, f.pos.y, f.pos.z);
     this.root.quaternion.set(f.rot.x, f.rot.y, f.rot.z, f.rot.w);
     this.heading = headingOf(f.rot);
@@ -94,6 +116,19 @@ export class VehicleView {
       wheel.mount.rotation.y = w.steer;
       wheel.spin.rotation.z = -w.spin;
     });
+    this.motion.step(f, dt, this.running);
+    this.body.updateMatrix();
+    this.poseSuspension();
+  }
+
+  // Hubs follow the physics suspension. Shock tops follow the leaning body.
+  private poseSuspension(): void {
+    const hub = (i: number, dz: number) => {
+      const p = this.wheels[i].mount.position;
+      return new THREE.Vector3(p.x, p.y, p.z + dz);
+    };
+    for (const s of this.shocks) stretch(s.obj, hub(s.wheel, s.z), s.top.clone().applyMatrix4(this.body.matrix), 0);
+    for (const a of this.axles) stretch(a.obj, hub(a.a, a.inset), hub(a.b, -a.inset), 0.5);
   }
 
   lamps(on: boolean): void {
@@ -112,10 +147,15 @@ export class VehicleView {
   }
 
   private rebuild(v: Vehicle): void {
+    disposeChildren(this.body);
     disposeChildren(this.root);
+    this.root.add(this.body);
     this.wheels = [];
+    this.shocks = [];
+    this.axles = [];
     this.turrets = [];
     const body = bodyOf(v.chassisId);
+    this.motion = new TruckMotion(this.body, new THREE.Vector3(0, body.wheelY, 0), hashStr(v.id));
     const paint = FACTION_COLORS[v.faction].top;
     // disposeChildren disposed the lamp material, so a new one keeps the lamp state.
     const on = this.lampMat.color.getHex() === PAL.lamp.on;
@@ -145,7 +185,9 @@ export class VehicleView {
       else still.add(this.placeItem(v, item, paint, surface));
     }
     this.buildWheels(v, body, wheelItems, paint);
-    this.root.add(mergeStatic(still));
+    this.buildSuspension(body, paint);
+    this.buildLooseParts(v, body, base, onBody.length === v.items.length);
+    this.body.add(mergeStatic(still));
     this.buildSilhouette(paint);
   }
 
@@ -280,7 +322,7 @@ export class VehicleView {
       still.add(head);
       return;
     }
-    this.root.add(head);
+    this.body.add(head);
     this.turrets.push(head);
   }
 
@@ -306,6 +348,51 @@ export class VehicleView {
     });
   }
 
+  // A coilover inboard of every wheel, from the chassis bottom to the hub, and an axle beam across each wheel pair.
+  private buildSuspension(body: Body, paint: number): void {
+    const thick = new THREE.Vector3(body.wheelRadius, 1, body.wheelRadius);
+    const inset = body.wheelHalfWidth + SHOCK_R * body.wheelRadius;
+    wheelMounts(body).forEach((m, wheel) => {
+      const z = -Math.sign(m.z) * inset;
+      const obj = this.stretchModel('coilover', thick, paint);
+      this.shocks.push({ obj, top: new THREE.Vector3(m.x, -body.half.y, m.z + z), wheel, z });
+    });
+    // wheelMounts lists the front pair, then the rear pair, each left then right.
+    for (const [a, b] of [[0, 1], [2, 3]]) this.axles.push({ obj: this.stretchModel('axle', thick, paint), a, b, inset: body.wheelHalfWidth });
+  }
+
+  private stretchModel(name: ModelName, thick: THREE.Vector3, paint: number): THREE.Object3D {
+    const raw = model(name);
+    tint(raw, paint, 1);
+    const inner = new THREE.Group();
+    inner.add(raw);
+    const merged = mergeStatic(inner);
+    merged.scale.copy(thick);
+    // The outer group takes the stretch and the turn; the merged model inside keeps its thickness scale.
+    const outer = new THREE.Group();
+    outer.add(merged);
+    this.root.add(outer);
+    return outer;
+  }
+
+  // A whip antenna at the back corner of the cab roof, and a tow chain under the rear bumper.
+  // A truck with cargo rows past its grid has the cargo model at its rear, so it gets no chain.
+  private buildLooseParts(v: Vehicle, body: Body, base: ModelName, bareRear: boolean): void {
+    const cab = v.items.find((it) => it.kind === 'part' && it.part.defId === 'cab');
+    if (!cab) throw new Error(`${v.id} has no cab`);
+    const row = Math.max(...itemCells(cab).map((c) => c.y));
+    const back = cellCenter(v.chassisId, 0, row).x - CELL.along / 2;
+    const antenna = mergeStatic(wrapped(model('antenna')));
+    antenna.position.set(back + ANTENNA_INSET, socket(base, `row${row}`).y, -body.half.z + ANTENNA_INSET);
+    this.body.add(antenna);
+    this.motion.addWhip(antenna, WHIPS.antenna);
+    if (!bareRear) return;
+    const chain = mergeStatic(wrapped(model('tow_chain')));
+    chain.position.set(-body.half.x, -body.half.y - SKIRT, body.half.z * CHAIN_SIDE);
+    this.body.add(chain);
+    this.motion.addWhip(chain, WHIPS.chain);
+  }
+
   // A spare wheel stands on its row surface at its cell.
   private spareWheel(v: Vehicle, body: Body, item: PartItem, paint: number, y: number): THREE.Object3D {
     const wheel = this.wheelModel(body, paint, toneOf(item));
@@ -323,6 +410,27 @@ export class VehicleView {
     wheel.scale.set(body.wheelRadius, body.wheelRadius, body.wheelHalfWidth * 2);
     return wheel;
   }
+}
+
+// A truck with a working mounted engine shakes at idle.
+function engineRuns(v: Vehicle): boolean {
+  return v.items.some((it) => it.kind === 'part' && it.part.hp > 0 && partDef(it.part.defId).kind === 'engine' && isMounted(v.chassisId, it));
+}
+
+function wrapped(obj: THREE.Object3D): THREE.Group {
+  const g = new THREE.Group();
+  g.add(obj);
+  return g;
+}
+
+// Stands a model authored along +y between two points. at: where along its length the model's origin sits, 0 at from, 1 at to.
+function stretch(obj: THREE.Object3D, from: THREE.Vector3, to: THREE.Vector3, at: number): void {
+  const dir = to.clone().sub(from);
+  const length = dir.length();
+  if (!(length > 0)) throw new Error('Suspension part has zero length');
+  obj.position.copy(from).addScaledVector(dir, at);
+  obj.quaternion.setFromUnitVectors(UP, dir.divideScalar(length));
+  obj.scale.set(1, length, 1);
 }
 
 function silhouetteMaterial(color: number): THREE.MeshBasicMaterial {

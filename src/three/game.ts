@@ -973,7 +973,8 @@ export class Game {
     const dt = now - this.last;
     this.last = now;
     const { step, speed } = this.advanceTurn(now);
-    this.syncVehicles(step);
+    // The first frame's rAF time can come before the performance.now() the clock started from.
+    this.syncVehicles(step, Math.max(0, dt) / 1000);
     this.drawOverlays();
     // syncVehicles gives every vehicle a frame, the player's included.
     const truck = this.frames[playerVehicle(this.world).id].pos;
@@ -1051,7 +1052,8 @@ export class Game {
     return null;
   }
 
-  private syncVehicles(step: number | null): void {
+  // dt: seconds since the last drawn frame.
+  private syncVehicles(step: number | null, dt: number): void {
     const frames: TurnFrames | null =
       step === null || !this.anim ? null : this.anim.result.frames;
     const landed = !this.anim || this.anim.impacts;
@@ -1087,7 +1089,7 @@ export class Game {
       }
       view.update(display, seen);
       view.lamps(night);
-      view.pose(f);
+      view.pose(f, dt);
       view.aim(this.turretAim(v, f));
       this.vehicleParticles(display, f, frames !== null);
     }

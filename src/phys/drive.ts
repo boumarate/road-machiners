@@ -21,7 +21,7 @@ import { angleDiff, bearing, clamp, DEG, dist, type Vec } from '../sim/vec';
 import { bodyOf, type Body } from '../sim/body';
 import { wheelMounts } from './body';
 import { computeClosingSpeed, locateCrashContact, type CrashGeometry } from '../sim/crash-contact';
-import { headingOf, headingQuat, type TurnFrames, type VehicleFrame } from './frames';
+import { headingOf, headingQuat, type TurnFrames, type V3, type VehicleFrame } from './frames';
 
 const S = PHYSICS.metersPerTile;
 const T = PHYSICS.truck;
@@ -202,7 +202,7 @@ function run(d: Drive, w: World, steps: number): TurnResult {
       crashed.add(key);
       crashes.push(crash);
     });
-    for (const c of cars) frames[c.v.id].push(frameOf(c.ctl, c.body));
+    for (const c of cars) frames[c.v.id].push(frameOf(c.ctl, c.body, before.get(c.v.id)!.velocity));
   }
   for (const c of cars) world.removeVehicleController(c.ctl);
   events.free();
@@ -476,14 +476,17 @@ export function forwardSpeed(body: RAPIER.RigidBody): number {
   return v.x * Math.cos(h) + v.z * Math.sin(h);
 }
 
-function frameOf(car: RAPIER.DynamicRayCastVehicleController, body: RAPIER.RigidBody): VehicleFrame {
+// velocityBefore: the body's velocity before this step, for the step's acceleration.
+function frameOf(car: RAPIER.DynamicRayCastVehicleController, body: RAPIER.RigidBody, velocityBefore: V3): VehicleFrame {
   const wheels = [];
   for (let i = 0; i < car.numWheels(); i++) {
     wheels.push({ steer: car.wheelSteering(i) ?? 0, spin: car.wheelRotation(i) ?? 0, suspension: car.wheelSuspensionLength(i) ?? T.suspensionRest });
   }
   const t = body.translation();
   const r = body.rotation();
-  return { pos: { x: t.x, y: t.y, z: t.z }, rot: { x: r.x, y: r.y, z: r.z, w: r.w }, wheels };
+  const v = body.linvel();
+  const acc = { x: (v.x - velocityBefore.x) / DT, y: (v.y - velocityBefore.y) / DT, z: (v.z - velocityBefore.z) / DT };
+  return { pos: { x: t.x, y: t.y, z: t.z }, rot: { x: r.x, y: r.y, z: r.z, w: r.w }, acc, wheels };
 }
 
 // A vehicle standing on the ground at its sim pose, wheels at rest. For vehicles that have not
@@ -492,7 +495,7 @@ export function restFrame(w: World, v: Vehicle): VehicleFrame {
   const b = bodyOf(v.chassisId);
   const q = headingQuat(v.heading);
   const wheels = wheelMounts(b).map(() => ({ steer: 0, spin: 0, suspension: T.suspensionRest }));
-  return { pos: { x: v.pos.x * S, y: rideHeight(w, v), z: v.pos.y * S }, rot: q, wheels };
+  return { pos: { x: v.pos.x * S, y: rideHeight(w, v), z: v.pos.y * S }, rot: q, acc: { x: 0, y: 0, z: 0 }, wheels };
 }
 
 // Frames for a vehicle that moved without physics: rest poses along its trail, one per physics step,
