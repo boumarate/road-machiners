@@ -3,6 +3,7 @@
 import { partDef } from "../data/parts";
 import { PERK_NUMBERS } from "../data/skills";
 import { RULES } from "../data/rules";
+import * as wear from "./wear";
 import { practice, skillEffect, vehicleHasPerk } from "./progress";
 import { mountedParts } from "./grid";
 import type { PartInstance, Vehicle, World } from "./types";
@@ -16,7 +17,7 @@ export function damagePart(
 ): number {
   const wasWorking = part.hp > 0;
   const dealt = Math.min(part.hp, Math.max(0, Math.round(amount)));
-  part.hp -= dealt;
+  wear.damagePart(part, dealt, 0);
   if (wasWorking && part.hp === 0)
     world.events.push({ t: "partDisabled", vehicle: v.id, part: part.id });
   const def = partDef(part.defId);

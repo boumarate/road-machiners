@@ -54,7 +54,7 @@ export class Fx3D {
       const el = document.createElement('div');
       el.style.position = 'absolute';
       el.style.transform = 'translate(-50%, -50%)';
-      el.style.font = 'bold 15px monospace';
+      el.style.font = 'bold 15px var(--font-mono)';
       el.style.textShadow = '0 1px 2px #1a1410';
       el.style.pointerEvents = 'none';
       el.style.display = 'none';

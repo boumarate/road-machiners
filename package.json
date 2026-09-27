@@ -15,6 +15,7 @@
     "sfx:import": "vite-node scripts/sfx-import.mjs",
     "sfx:board": "vite --open /sound.html",
     "sfx:reimport": "vite-node scripts/sfx-reimport.mjs",
+    "econ": "vite-node scripts/econ.mjs",
     "progression:record": "vite-node scripts/progression-record.mjs",
     "progression:report": "vite-node scripts/progression-report.mjs"
   },
@@ -22,6 +23,8 @@
   "description": "",
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.21.0",
+    "@fontsource/barlow-semi-condensed": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
     "three": "^0.186.1"
   },
   "devDependencies": {

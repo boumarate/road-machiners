@@ -46,3 +46,9 @@ export const SALVAGE = {
     supplies: [2, 6],
   } as LootTable,
 };
+
+// Stripping a spare part in the field for units of the parts good. See src/sim/jobs.ts.
+export const STRIP = {
+  yieldShare: 0.5, // share of the part's value paid out in parts-good units
+  turns: 3, // turns the job takes, flat regardless of the part
+};

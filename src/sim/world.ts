@@ -29,6 +29,7 @@ import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
 import { noteEscape } from './escape';
 import { advanceWeather } from './weather';
+import { advanceContracts, advanceShops, initializeShops, marketStream } from './market';
 import { applyWear } from './wear';
 import { advanceDust } from './detect';
 import { advanceJobs, startAutoRepair } from './jobs';
@@ -41,12 +42,14 @@ export function newWorld(seed: number, kit: StartKit): World {
   const world: World = {
     seed,
     rngState: seed,
+    marketRng: marketStream(seed),
     turn: 1,
     size: REGION.size,
     nextId: 0,
     vehicles: [],
     obstacles: [],
     salvage: [],
+    shops: {},
     terrain: buildTerrain(seed, REGION.size),
     player: {
       vehicleId: "",
@@ -71,6 +74,7 @@ export function newWorld(seed: number, kit: StartKit): World {
       discovered: [REGION.playerStart.town],
       scavenged: [],
       storage: [],
+      contracts: [],
       costBasis: { ...kit.costBasis },
       knockouts: 0,
       state: 'active',
@@ -99,7 +103,8 @@ export function newWorld(seed: number, kit: StartKit): World {
     name: kit.name,
     faction: "player",
     chassisId: kit.chassis,
-    parts: kit.parts,
+    parts: kit.parts.map((defId) => ({ defId, wear: 0 })),
+    spares: [],
     cargo: kit.cargo,
     pos: {
       x: town.pos.x + REGION.playerStart.offset.x,
@@ -118,8 +123,9 @@ export function newWorld(seed: number, kit: StartKit): World {
   world.vehicles.push(truck);
   world.player.vehicleId = truck.id;
   initializeSalvage(world);
-  world.player.storage = kit.storage.map((defId) => makePart(world, defId));
+  world.player.storage = kit.storage.map((defId) => makePart(world, defId, 0));
   spawnInitial(world);
+  initializeShops(world);
   refreshVision(world);
   world.events = [];
   return world;
@@ -221,6 +227,7 @@ export function endTurn(
     leakFuel(w);
     applyGodMode(w);
     resolveDestroyed(w);
+    advanceContracts(w);
     advancePatches(w);
     advanceStates(w);
     checkBeacon(w);
@@ -230,6 +237,7 @@ export function endTurn(
     advanceKnockout(w);
     checkKnockout(w);
     spawnNpcs(w);
+    advanceShops(w);
     refreshVision(w);
     noteEscape(w);
     noteHurt(w);

@@ -1,5 +1,12 @@
+@import "@fontsource/barlow-semi-condensed/400.css";
+@import "@fontsource/barlow-semi-condensed/700.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/700.css";
+
 html,
 body {
+  --font-ui: "Barlow Semi Condensed", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
   margin: 0;
   height: 100%;
   background: #1b1c1d;
@@ -20,9 +27,7 @@ body {
   inset: 0;
   pointer-events: none;
   color: var(--ink);
-  font:
-    14px / 1.4 Georgia,
-    serif;
+  font: 14px / 1.4 var(--font-ui);
 }
 #ui .panel {
   position: absolute;
@@ -168,9 +173,7 @@ body {
   left: 0;
   right: 0;
   text-align: center;
-  font:
-    15px ui-monospace,
-    monospace;
+  font: 15px var(--font-mono);
 }
 .speed-unit {
   position: absolute;
@@ -178,9 +181,7 @@ body {
   left: 0;
   right: 0;
   text-align: center;
-  font:
-    9px ui-monospace,
-    monospace;
+  font: 9px var(--font-mono);
   color: var(--muted);
 }
 .truck-instrument > .icon {
@@ -208,16 +209,12 @@ body {
 }
 .resource small {
   display: block;
-  font:
-    10px / 1.2 Georgia,
-    serif;
+  font: 10px / 1.2 var(--font-ui);
   color: var(--muted);
 }
 .resource strong {
   display: block;
-  font:
-    12px / 1.5 ui-monospace,
-    monospace;
+  font: 12px / 1.5 var(--font-mono);
   font-weight: normal;
 }
 .resource.bad .icon svg {
@@ -267,9 +264,7 @@ body {
 #ui .weapon-tools button,
 #ui .weapon-toggle {
   padding: 3px 7px;
-  font:
-    10px Georgia,
-    serif;
+  font: 10px var(--font-ui);
 }
 #ui .weapon-toggle {
   position: absolute;
@@ -302,15 +297,11 @@ body {
   position: absolute;
   top: 3px;
   left: 5px;
-  font:
-    11px ui-monospace,
-    monospace;
+  font: 11px var(--font-mono);
   color: #e5c47c;
 }
 .weapon-pick [data-status] {
-  font:
-    10px / 1.2 ui-monospace,
-    monospace;
+  font: 10px / 1.2 var(--font-mono);
 }
 .weapon-target {
   font-size: 10px;
@@ -379,9 +370,7 @@ body {
   height: 43px;
 }
 .end-turn span:last-child {
-  font:
-    10px ui-monospace,
-    monospace;
+  font: 10px var(--font-mono);
 }
 
 #ui .log {
@@ -395,6 +384,25 @@ body {
   border: 0;
   border-left: 2px solid #777e81;
   font-size: 12px;
+}
+#ui .contracts {
+  right: 16px;
+  bottom: 246px;
+  width: 282px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  background: #202529e8;
+  border: 0;
+  border-left: 2px solid #777e81;
+  font-size: 12px;
+}
+.contracts h3 {
+  font-size: 12px !important;
+  margin-bottom: 4px !important;
+}
+.contract-line {
+  padding: 2px 0;
+  color: var(--muted);
 }
 .log h3 {
   font-size: 12px !important;
@@ -423,10 +431,7 @@ body {
   width: 442px;
   max-width: calc(100vw - 58px);
   padding: 6px 8px;
-  font:
-    12px / 1.35 ui-monospace,
-    Menlo,
-    monospace;
+  font: 12px / 1.35 var(--font-mono);
 }
 .debug-console-log {
   max-height: 180px;
@@ -653,9 +658,7 @@ body {
 .inv-summary {
   color: var(--muted);
   margin: -4px 0 22px;
-  font:
-    12px ui-monospace,
-    monospace;
+  font: 12px var(--font-mono);
 }
 .inv-wrap {
   display: flex;
@@ -697,9 +700,7 @@ body {
   position: absolute;
   box-sizing: border-box;
   border: 1px solid #58656b;
-  font:
-    10px ui-monospace,
-    monospace;
+  font: 10px var(--font-mono);
   color: #a0adb2;
   display: flex;
   align-items: center;
@@ -873,9 +874,7 @@ body {
   border: 2px solid #e7d6a0;
   background: #b5bc7955;
   color: #f0e0b8;
-  font:
-    11px ui-monospace,
-    monospace;
+  font: 11px var(--font-mono);
   padding: 3px;
 }
 .inv-ghost.ok {
@@ -957,10 +956,21 @@ body {
 }
 
 /* Color grade on the 3D view: a little more saturation and contrast after tone mapping. */
-canvas.view { filter: saturate(1.12) contrast(1.06); }
+canvas.view {
+  filter: saturate(1.12) contrast(1.06);
+}
 
 /* Darkens the screen corners, so the eye rests on the middle of the view. */
-.vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 55%, rgba(20, 12, 6, 0.38) 100%); }
+.vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0) 55%,
+    rgba(20, 12, 6, 0.38) 100%
+  );
+}
 
 /* Dust haze over the view while the player truck is inside a storm. */
 .storm-tint {

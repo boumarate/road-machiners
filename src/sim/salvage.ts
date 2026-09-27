@@ -20,6 +20,7 @@ import { cancelJob } from './jobs';
 import type { GridItem, PartInstance, SalvageStock, Vehicle, World } from './types';
 import { canUseSite } from './sites';
 import { dist, type Vec } from './vec';
+import { isJunk, maxHp, restorePart } from './wear';
 
 // Landmark and convoy sites, and the wrecks placed on roads, get stock at world creation,
 // drawn from their loot table. A road wreck's stock shares its obstacle id.
@@ -53,7 +54,7 @@ export function rollStock(world: World, table: LootTable, id: string, pos: Vec, 
   for (const [good, [lo, hi]] of Object.entries(table.goods)) goods[good] = randInt(world, lo, hi);
   goods.parts = randInt(world, table.parts[0], table.parts[1]);
   const parts: PartInstance[] = [];
-  if (chance(world, table.sparePartChance)) parts.push(makePart(world, table.spareParts[randInt(world, 0, table.spareParts.length - 1)]));
+  if (chance(world, table.sparePartChance)) parts.push(makePart(world, table.spareParts[randInt(world, 0, table.spareParts.length - 1)], 0));
   return { id, pos: { ...pos }, radius, goods, parts, fuel: randInt(world, ...table.fuel), supplies: randInt(world, ...table.supplies) };
 }
 
@@ -140,9 +141,8 @@ function isWreckStock(stock: SalvageStock): boolean {
 
 // The careful strip perk: a part the player mounts from a wreck stock gains a share of its max HP, up to full.
 export function stripPart(world: World, vehicle: Vehicle, stock: SalvageStock, part: PartInstance): void {
-  if (!isWreckStock(stock) || !vehicleHasPerk(world, vehicle, 'carefulStrip')) return;
-  const max = partDef(part.defId).hp;
-  part.hp = Math.min(max, part.hp + Math.round(max * PERK_NUMBERS.carefulStrip.hp));
+  if (!isWreckStock(stock) || !vehicleHasPerk(world, vehicle, 'carefulStrip') || isJunk(part)) return;
+  restorePart(part, part.hp + Math.round(maxHp(part) * PERK_NUMBERS.carefulStrip.hp));
 }
 
 export function createWreckSalvage(world: World, vehicle: Vehicle): void {
@@ -258,7 +258,7 @@ function restockSite(world: World, stock: SalvageStock, table: LootTable): void 
   stock.fuel = refill(world, stock.fuel, table.fuel);
   stock.supplies = refill(world, stock.supplies, table.supplies);
   if (stock.parts.length > 0 || !chance(world, table.sparePartChance * SALVAGE.restockShare)) return;
-  stock.parts.push(makePart(world, table.spareParts[randInt(world, 0, table.spareParts.length - 1)]));
+  stock.parts.push(makePart(world, table.spareParts[randInt(world, 0, table.spareParts.length - 1)], 0));
 }
 
 // Each unit of a fresh roll comes back with chance restockShare. The high caps the gain, but a count already

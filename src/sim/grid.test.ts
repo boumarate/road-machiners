@@ -3,7 +3,8 @@ import { CHASSIS } from '../data/chassis';
 import { NPCS } from '../data/npcs';
 import { PARTS } from '../data/parts';
 import { REGION } from '../data/region';
-import { buyChassis, buyPart } from './economy';
+import { buyChassis } from './economy';
+import { partDef } from '../data/parts';
 import { makePart, makeVehicle } from './factory';
 import { baseGrid, gridOf, isMounted, placementError, itemCells, mountedItems, mountedParts, sideOf, type Cell } from './grid';
 import { moveItem, storePart } from './inventory';
@@ -24,7 +25,7 @@ function spotOn(chassisId: string, defId: string, letter: Cell, items: GridItem[
   for (const rot of [0, 1] as const) {
     for (let y = 0; y < g.h; y++) {
       for (let x = 0; x < g.w; x++) {
-        const item: GridItem = { id: 'probe', x, y, rot, kind: 'part', part: { id: 'probe', defId, hp: 1, reload: 0 } };
+        const item: GridItem = { id: 'probe', x, y, rot, kind: 'part', part: { id: 'probe', defId, hp: 1, reload: 0, wear: 0 } };
         const cells = itemCells(item);
         if (cells.every((c) => g.cells[c.y]?.[c.x] === letter && !taken.has(`${c.x},${c.y}`))) return item;
       }
@@ -53,7 +54,7 @@ describe('built-in parts', () => {
       const loadout = generateNpcLoadout(w, tpl);
       const v = makeVehicle(w, { name: tpl.name, faction: tpl.faction, ...loadout, pos: { x: 40, y: 40 }, heading: 0, brain: null });
       const mounted = mountedParts(v).map((p) => p.defId).filter((id) => PARTS[id].kind !== 'core');
-      expect(mounted.sort()).toEqual([...loadout.parts].sort());
+      expect(mounted.sort()).toEqual(loadout.parts.map((p) => p.defId).sort());
     }
   });
 
@@ -64,9 +65,10 @@ describe('built-in parts', () => {
     expect(() => storePart(w, cab.id)).toThrow(/built.in/i);
   });
 
-  it('core parts are not for sale', () => {
+  it('shops never stock core parts', () => {
     const w = emptyWorld(sitePads(bowl)[0]);
-    expect(() => buyPart(w, 'cab')).toThrow(/built.in/i);
+    const stocked = Object.values(w.shops).flatMap((shop) => shop.stock);
+    expect(stocked.some((p) => partDef(p.defId).kind === 'core')).toBe(false);
   });
 
   it('a chassis swap replaces the core parts with the new chassis ones', () => {
@@ -85,9 +87,9 @@ describe('cargo rows', () => {
   it('rejects an item across the end of the chassis grid', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'scout', [], { x: 40, y: 40 });
-    v.items.push({ ...spotOn('scout', 'rack', 'C', v.items), id: 'i-rack', part: makePart(w, 'rack') } as GridItem);
+    v.items.push({ ...spotOn('scout', 'rack', 'C', v.items), id: 'i-rack', part: makePart(w, 'rack', 0) } as GridItem);
     const g = gridOf(v);
-    const spare = (y: number): GridItem => ({ id: 'i-spare', x: 0, y, rot: 1, kind: 'part', part: makePart(w, 'rack') });
+    const spare = (y: number): GridItem => ({ id: 'i-spare', x: 0, y, rot: 1, kind: 'part', part: makePart(w, 'rack', 0) });
     expect(g.cells[g.chassisH - 1][0]).toBe('.');
     expect(placementError(g, v.items, spare(g.chassisH - 1), null)).toBe('Does not fit there');
     expect(placementError(g, v.items, { ...spare(g.chassisH - 1), rot: 0 }, null)).toBeNull();
@@ -99,7 +101,7 @@ describe('side armor mounts', () => {
     it(`armor mounts on ${letter}`, () => {
       const w = emptyWorld();
       const v = addVehicle(w, 'raiders', 'hauler', [], { x: 40, y: 40 });
-      const plate: GridItem = { ...spotOn('hauler', 'plates', letter, v.items), id: 'i-plate', part: makePart(w, 'plates') } as GridItem;
+      const plate: GridItem = { ...spotOn('hauler', 'plates', letter, v.items), id: 'i-plate', part: makePart(w, 'plates', 0) } as GridItem;
       v.items.push(plate);
       expect(isMounted('hauler', plate)).toBe(true);
       expect(sideOf(v, (plate as Extract<GridItem, { kind: 'part' }>).part)).toBe(letter);
@@ -112,7 +114,7 @@ describe('side armor mounts', () => {
     const onL = spotOn('hauler', 'plates', 'L', v.items);
     const g = baseGrid('hauler');
     // Lay the plate across from the L column into the interior.
-    const across: GridItem = { ...onL, rot: 1, id: 'i-plate', part: makePart(w, 'plates') } as GridItem;
+    const across: GridItem = { ...onL, rot: 1, id: 'i-plate', part: makePart(w, 'plates', 0) } as GridItem;
     const letters = new Set(itemCells(across).map((c) => g.cells[c.y][c.x]));
     expect(letters.has('L')).toBe(true);
     expect(letters.size).toBeGreaterThan(1);

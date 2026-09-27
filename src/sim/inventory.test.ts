@@ -3,10 +3,10 @@ import { CHASSIS } from '../data/chassis';
 import { PARTS } from '../data/parts';
 import { RULES } from '../data/rules';
 import { REGION } from '../data/region';
-import { buyPart } from './economy';
+import { makePart } from './factory';
+import { update } from './world';
 import { freeCells, goodsCount, gridOf, mountedParts } from './grid';
 import { dumpItem, moveItem, removeAllGoods, spareParts, storePart, stowPart, takeFromStorage } from './inventory';
-import { makePart } from './factory';
 import { vehicleStats } from './stats';
 import { emptyWorld } from './testkit';
 import type { World } from './types';
@@ -102,7 +102,7 @@ describe('inventory grid', () => {
     removeAllGoods(w.vehicles[0]); // free the plain cells the cannon test claims, regardless of start cargo
     const mg = item(w, 'mg');
     w = storePart(w, mg.id);
-    w = buyPart(w, 'cannon');
+    w = update(w, (d) => { d.player.storage.push(makePart(d, 'cannon', 0)); });
     const id = w.player.storage.find((p) => p.defId === 'cannon')!.id;
     const flat = takeFromStorage(w, id, { x: mg.x, y: mg.y, rot: 0 });
     expect(vehicleStats(flat, flat.vehicles[0]).weapons.map((m) => m.def.id)).toEqual(['cannon']);
@@ -122,7 +122,7 @@ describe('inventory grid', () => {
     w.player.money = 2000;
     const free = freeCells(w.vehicles[0]);
     const mg = item(w, 'mg');
-    w = buyPart(w, 'mg');
+    w = update(w, (d) => { d.player.storage.push(makePart(d, 'mg', 0)); });
     w = takeFromStorage(w, w.player.storage[0].id, { x: mg.x + 1, y: mg.y, rot: 0 });
     expect(freeCells(w.vehicles[0])).toBe(free - 1);
     expect(vehicleStats(w, w.vehicles[0]).weapons).toHaveLength(2);
@@ -133,7 +133,7 @@ describe('inventory grid', () => {
     const before = w.vehicles[0].items.filter((it) => it.kind === 'good').length;
     expect(dumpItem(w, good(w).id).vehicles[0].items.filter((it) => it.kind === 'good')).toHaveLength(before - 1);
     expect(() => dumpItem(w, item(w, 'mg').id)).toThrow('Remove an installed part');
-    expect(stowPart(w, w.vehicles[0], makePart(w, 'mg'))).toBe(true);
+    expect(stowPart(w, w.vehicles[0], makePart(w, 'mg', 0))).toBe(true);
     const loose = w.vehicles[0].items.filter((it) => it.kind === 'part' && it.part.defId === 'mg').at(-1)!;
     expect(dumpItem(w, loose.id).vehicles[0].items.some((it) => it.id === loose.id)).toBe(false);
   });

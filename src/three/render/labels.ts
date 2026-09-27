@@ -25,7 +25,7 @@ export class Labels {
       const el = document.createElement('div');
       el.style.position = 'absolute';
       el.style.transform = 'translate(-50%, -100%)';
-      el.style.font = '15px monospace';
+      el.style.font = '15px var(--font-mono)';
       el.style.color = PAL.text;
       el.style.background = '#1a1410aa'; // PAL.bg with alpha, matches the old 2D label backing
       el.style.padding = '3px 6px';
