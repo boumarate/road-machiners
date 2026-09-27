@@ -18,9 +18,9 @@ export function hasSave(storage: Storage): boolean {
 // about 10 MB of JSON, past the browser's local storage quota. 4 adds weather, jobs, contacts and dust.
 // 6 moves wheel cells. 7 adds engine heat, auto patch and a parts limit on repair jobs. 8 adds the
 // player state, tows and the beacon. 9 adds NPC traits, goal stacks and states. 10 renames spurned to
-// turnedDown. 11 replaces the NPC's last attacker with its attack records and adds repair goals. Older saves do
-// not load.
-const SAVE_VERSION = 11;
+// turnedDown. 11 replaces the NPC's last attacker with its attack records and adds repair goals. 12 adds the
+// answering claim on a tow job. Older saves do not load.
+const SAVE_VERSION = 12;
 
 export function loadWorld(storage: Storage): World | null {
   const raw = storage.getItem(SAVE_KEY);
