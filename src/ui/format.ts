@@ -9,7 +9,7 @@ import { mountedParts } from '../sim/grid';
 import { playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
 import { npcTraits } from '../sim/npc-decisions';
-import { statesHeld, towData } from '../sim/states';
+import { pleaData, statesHeld, towData } from '../sim/states';
 import type { PartHit } from '../sim/armor';
 import type { GameEvent, NpcState, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
@@ -54,6 +54,8 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   answering: () => 'Coming to tow you',
   patch: () => 'Patching your truck',
   truce: () => 'Truce with you',
+  grievance: () => 'Angry at your crash',
+  plea: (s) => (pleaData(s).plea === 'truce' ? 'Asked you for a truce' : 'Begged you for mercy'),
 };
 
 // One line per state the NPC holds toward the player, with turns left when the state has a timer.
@@ -174,6 +176,7 @@ const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => st
   guardShot: (e) => [e.target],
   partDisabled: (e) => [e.vehicle],
   destroyed: (e) => [e.vehicle],
+  plea: (e) => [e.from, e.to],
 };
 
 function unnoticed(world: World, e: GameEvent): boolean {
@@ -181,9 +184,32 @@ function unnoticed(world: World, e: GameEvent): boolean {
   return vehicles !== undefined && !playerNotices(world, ...vehicles(e));
 }
 
+// Pleas between two NPCs. The player's own pleas show as radio lines.
+function pleaText(world: World, e: Extract<GameEvent, { t: 'plea' }>): LogLine | null {
+  const me = world.player.vehicleId;
+  if (e.from === me || e.to === me) return null;
+  const asks = e.plea === 'truce' ? 'asks for a truce' : 'begs for mercy';
+  const answer = e.accepted ? 'granted' : 'refused';
+  return { text: `${vehicleName(world, e.from)} ${asks} from ${vehicleName(world, e.to)}: ${answer}`, cls: 'dim' };
+}
+
+// Events whose log line has its own function.
+const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent, { t: K }>) => LogLine | null } = {
+  stateEnded: stateEndedText,
+  say: sayText,
+  call: callText,
+  job: jobText,
+  weather: weatherText,
+  honk: honkText,
+  patch: patchText,
+  plea: pleaText,
+};
+
 // Returns null for events not worth a log line.
 export function eventText(world: World, e: GameEvent): { text: string; cls: string } | null {
   if (unnoticed(world, e)) return null;
+  const own = EVENT_TEXTS[e.t] as ((world: World, e: GameEvent) => LogLine | null) | undefined;
+  if (own) return own(world, e);
   const n = (id: string) => vehicleName(world, id);
   const me = world.player.vehicleId;
   switch (e.t) {
@@ -246,31 +272,18 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       return { text: `${n(e.by)} tows you into town and takes ${e.fee}.`, cls: 'bad' };
     case 'towDropped':
       return towDroppedText(n(e.by), e.reason);
-    case 'stateEnded':
-      return stateEndedText(world, e);
-    case 'say':
-      return sayText(world, e);
-    case 'call':
-      return callText(world, e);
     case 'info':
       return { text: e.text, cls: 'dim' };
-    case 'job':
-      return jobText(world, e);
     case 'searched': {
       const site = [...REGION.towns, ...REGION.locations].find((l) => l.id === e.stock);
       return { text: `Search done${site ? ` at ${site.name}` : ''}. Drag what you want into the truck.`, cls: 'good' };
     }
     case 'breakdown':
       return e.vehicle === me ? { text: `${partName(world, e.vehicle, e.part)} broke down`, cls: 'bad' } : null;
-    case 'weather':
-      return weatherText(world, e);
-    case 'honk':
-      return honkText(world, e);
-    case 'patch':
-      return patchText(world, e);
     case 'spawn':
     case 'despawn':
     case 'arrived':
       return null;
   }
+  throw new Error(`EVENT_TEXTS has no log text for ${e.t}`);
 }

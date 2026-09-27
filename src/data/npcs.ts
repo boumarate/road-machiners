@@ -299,6 +299,11 @@ export type DecisionOptions = {
   strandedSeen: 'keep' | 'tow'; // a stranded player comes in sight
   patchDeal: 'paid' | 'ownParts' | 'free'; // the terms a driver names for a roadside patch; see src/sim/patch.ts
   ramChance: 'keep' | 'ram'; // the fight target lies ahead within reach of a damaging ram
+  crashed: 'forgive' | 'retaliate'; // a truck at peace with the driver damaged it in a crash
+  parley: 'keep' | 'truce' | 'beg'; // a foe hurt the driver this turn
+  truceOffered: 'accept' | 'refuse'; // a foe asks for a truce
+  mercyBegged: 'spare' | 'finish'; // a foe gives up and asks to be let go
+  threatened: 'comply' | 'fightBack' | 'flee'; // the player demands the driver's cargo
   resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal
   idle: 'trade' | 'scavenge' | 'raid' | 'wait'; // the goal stack is empty
 };
@@ -327,6 +332,17 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   patchDeal: { paid: 6, ownParts: 3, free: 1 },
   // A fighter takes 9 in 10 rams that look worth it. Otherwise it keeps shooting from its range.
   ramChance: { keep: 1, ram: 9 },
+  // Most crashes between trucks at peace are accidents. Four drivers in five shrug one off.
+  crashed: { forgive: 4, retaliate: 1 },
+  // A hurt driver mostly fights on. Asking for a truce is rare unless the foe is a threat, and begging is rare
+  // unless the driver is weak.
+  parley: { keep: 8, truce: 0.5, beg: 0.1 },
+  // Two drivers in three take a truce. A threat on the other side makes it more likely.
+  truceOffered: { accept: 2, refuse: 1 },
+  // Three drivers in four let a beaten foe go. The beggar leaves its cargo.
+  mercyBegged: { spare: 3, finish: 1 },
+  // A threatened driver gives up its cargo, fights or runs about equally. The two sides' strength decides most.
+  threatened: { comply: 1, fightBack: 1, flee: 1 },
   // After an interruption a driver goes back to its work 9 times in 10.
   resume: { resume: 9, new: 1 },
   // Anyone collects salvage in sight. Trading and raiding more than rarely need a trait. Waiting is the small
@@ -348,6 +364,9 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   tow: {},
   patch: {},
   truce: {},
+  grievance: {},
+  // A driver that pleaded with a foe rarely pleads with it again soon. A truce weight of 2.5 drops to 0.025.
+  plea: { parley: { truce: { mul: 0.01 }, beg: { mul: 0.01 } } },
   // A driver the player turned down rarely offers that player a tow again. A tow weight of 9 drops to 0.009,
   // about 2%.
   turnedDown: { strandedSeen: { tow: { mul: 0.001 } } },
@@ -372,6 +391,11 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   // A truck that handed over its cargo is left alone for 60 turns: time for the raiders to search the stock and the
   // truck to drive well away. Shots start a feud, which ends the truce's effect at once.
   truce: 60,
+  // A crash victim decides on the crash the first turn it sees the other truck. It lets the crash go after 5
+  // turns out of sight.
+  grievance: 5,
+  // A driver waits 20 turns before it pleads with the same foe again. The player answers within that time too.
+  plea: 20,
   // A driver the player turned down holds it until it offers that player a tow again.
   turnedDown: null,
   // A tower that dropped a hitched tow for danger keeps its terms until its next offer to that player.
@@ -405,28 +429,42 @@ export const TRAITS: Record<TraitId, Trait> = {
   // Traders rarely pick a fight: a fight weight of 2 drops to 0.004, about 1%, and to 0.02, about 2%, against a
   // manageable hostile. A shot trader returns fire at a tenth of the usual weight, and mostly runs. A trader in a
   // fight rams about 1 time in 100: a ram weight of 9 drops to 0.009. Trading beats
-  // salvage in sight 3 to 1. Nine in ten traders help a stranded truck.
+  // salvage in sight 3 to 1. Nine in ten traders help a stranded truck. Traders want peace: they shrug off 19
+  // crashes in 20, ask for truces, take nearly every truce and spare a beaten foe. Threatened, they mostly pay.
   trader: {
     towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
     weights: {
       idle: { trade: { add: 30 } }, strandedSeen: { tow: { add: 9 } },
       hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } }, ramChance: { ram: { mul: 0.001 } },
+      crashed: { retaliate: { mul: 0.2 } }, parley: { truce: { add: 2 } }, truceOffered: { accept: { add: 4 } },
+      mercyBegged: { spare: { add: 3 } }, threatened: { comply: { add: 1 }, fightBack: { mul: 0.1 } },
     },
   },
   // Raiders fight most hostiles they see and close in on most useful contacts. A raid ties with salvage in sight.
+  // A raider answers half the crashes with a fight, seldom asks for peace and refuses a truce more often than not.
+  // Threatened, it mostly fights.
   raider: {
     towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], contactReactRadius: 12, boldness: 1,
-    weights: { idle: { raid: { add: 10 } }, contactHeard: { investigate: { add: 12 } }, hostileSeen: { fight: { add: 8 } } },
+    weights: {
+      idle: { raid: { add: 10 } }, contactHeard: { investigate: { add: 12 } }, hostileSeen: { fight: { add: 8 } },
+      crashed: { retaliate: { add: 3 } }, parley: { truce: { mul: 0.3 }, beg: { mul: 0.3 } }, truceOffered: { refuse: { add: 2 } },
+      mercyBegged: { finish: { add: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
+    },
   },
   // A scumbag robs about two targets in three it comes across: rob 2 against keep 1. Boldness 1.3 lets it rob a
-  // truck that looks as dangerous as its own, and stand against one up to 30% stronger.
-  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, boldness: 1.3, weights: { preySeen: { rob: { add: 2 } } } },
+  // truck that looks as dangerous as its own, and stand against one up to 30% stronger. It answers a crash with a
+  // fight twice as often as most drivers.
+  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, boldness: 1.3, weights: { preySeen: { rob: { add: 2 } }, crashed: { retaliate: { add: 1 } } } },
   // A coward runs three times as often from a new hostile or a shot, picks a fight half as often, and shoots back
   // at a third of the weight. Boldness 0.6 makes a truck that looks as dangerous as its own a threat, even at the
-  // lowest misjudgment.
+  // lowest misjudgment. It asks for a truce twice as often and begs three times as often. Threatened, it runs or
+  // pays.
   coward: {
     towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, boldness: 0.6,
-    weights: { hostileSeen: { flee: { mul: 3 }, fight: { mul: 0.5 } }, attacked: { flee: { mul: 3 }, fightBack: { mul: 0.3 } } },
+    weights: {
+      hostileSeen: { flee: { mul: 3 }, fight: { mul: 0.5 } }, attacked: { flee: { mul: 3 }, fightBack: { mul: 0.3 } },
+      parley: { truce: { mul: 2 }, beg: { mul: 3 } }, threatened: { flee: { mul: 3 }, comply: { add: 1 } },
+    },
   },
 };
 
@@ -479,6 +517,17 @@ export const NPC_BEHAVIOR = {
   // keep 1, so about one passing driver in six offers. From there the factor rises in a straight line to 1 at 60
   // tiles, a crawl of most of a morning.
   towNearTown: { factor: 0.02, crawl: 15, far: 60 },
+  // Retaliate weight times this after a crash with a faction mate. Four in five raiders then forgive a mate.
+  mateRetaliate: 0.1,
+  // Truce weight times this when the foe's local group is a threat. A trader's truce weight of 2.5 rises to 12.5
+  // against keep 8, so about three hurt turns in five bring an offer.
+  threatTruce: 5,
+  // Beg weight times this when the driver is weak. A weight of 0.1 rises to 4 against keep 8.
+  weakBeg: 40,
+  // Accept weight times this when the pleading foe's group is a threat or the answering driver is weak.
+  threatAccept: 5,
+  // Comply weight times this when the player's local group is a threat. It then beats fight back and flee by far.
+  threatComply: 20,
 };
 
 export const NPC_UPKEEP = {

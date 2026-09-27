@@ -60,6 +60,12 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   // pays once.
   // The two parties are not foes while it lasts, unless a feud says otherwise. See isFoe() in src/sim/combat.ts.
   truce: { refresh: never, check: noCheck, hooks: {} },
+  // The holder took damage in a crash with the other party while the two were at peace. The holder decides once
+  // whether to forgive it, and src/sim/npc-activities.ts ends it then.
+  grievance: { refresh: never, check: noCheck, hooks: {} },
+  // The holder asked the other party for a truce or mercy. See src/sim/parley.ts. It holds after the answer, so the
+  // holder rarely asks the same party again soon.
+  plea: { refresh: never, check: noCheck, hooks: {} },
   patch: {
     refresh: isPatching,
     check: checkPatch,
@@ -84,7 +90,7 @@ function turnsOf(kind: StateKindId): number | null {
 }
 
 // The data kind each state kind carries.
-const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none' };
+const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none', grievance: 'none', plea: 'plea' };
 
 export function addState(w: World, kind: StateKindId, holder: string, other: string, data: StateData): NpcState {
   kindOf(kind);
@@ -153,6 +159,11 @@ function partyMissing(w: World, s: NpcState): boolean {
 
 export function feudData(s: NpcState): Extract<StateData, { kind: 'feud' }> {
   if (s.data.kind !== 'feud') throw new Error(`State ${s.id} holds no feud`);
+  return s.data;
+}
+
+export function pleaData(s: NpcState): Extract<StateData, { kind: 'plea' }> {
+  if (s.data.kind !== 'plea') throw new Error(`State ${s.id} holds no plea`);
   return s.data;
 }
 

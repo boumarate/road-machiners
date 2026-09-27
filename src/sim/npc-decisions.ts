@@ -315,6 +315,15 @@ const AVAILABLE: Record<OptionName, Availability> = {
   paid: dealAvailable('paid'),
   ownParts: dealAvailable('ownParts'),
   free: dealAvailable('free'),
+  forgive: always,
+  retaliate: always,
+  truce: always,
+  beg: always,
+  accept: always,
+  refuse: always,
+  spare: always,
+  finish: always,
+  comply: always,
 };
 
 // ---- Situation factors, one per option. Each returns a number above 0.
@@ -350,7 +359,7 @@ function fleeAttackedFactor(world: World, vehicle: Vehicle, _decision: DecisionI
   return hit * weakFlee(world, vehicle) * threatFlee(world, vehicle, danger);
 }
 
-const FLEE_FACTORS: Partial<Record<DecisionId, SituationFactor>> = { hostileSeen: fleeSeenFactor, contactHeard: fleeHeardFactor, attacked: fleeAttackedFactor };
+const FLEE_FACTORS: Partial<Record<DecisionId, SituationFactor>> = { hostileSeen: fleeSeenFactor, contactHeard: fleeHeardFactor, attacked: fleeAttackedFactor, threatened: fleeSeenFactor };
 
 function fleeFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
   const factor = FLEE_FACTORS[decision];
@@ -396,6 +405,32 @@ function ramFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject
   return isRamGainful(world, vehicle, subjectOf(world, decision, subject)) ? 1 : NPC_BEHAVIOR.riskyRam;
 }
 
+// A crash with a faction mate is mostly forgiven.
+function retaliateFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): number {
+  return subjectOf(world, decision, subject).faction === vehicle.faction ? NPC_BEHAVIOR.mateRetaliate : 1;
+}
+
+// A driver facing a threat asks for a truce more often.
+function truceFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
+  return danger !== null && !isManageable(world, vehicle, danger) ? NPC_BEHAVIOR.threatTruce : 1;
+}
+
+// A weak driver begs.
+function begFactor(world: World, vehicle: Vehicle): number {
+  return isWeak(world, vehicle) ? NPC_BEHAVIOR.weakBeg : 1;
+}
+
+// A driver takes a truce more often from a threat, or when it is weak itself.
+function acceptFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
+  const threat = danger !== null && !isManageable(world, vehicle, danger);
+  return threat || isWeak(world, vehicle) ? NPC_BEHAVIOR.threatAccept : 1;
+}
+
+// A driver hands its cargo to a threat.
+function complyFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
+  return danger !== null && !isManageable(world, vehicle, danger) ? NPC_BEHAVIOR.threatComply : 1;
+}
+
 // A stranded truck that can crawl to a town gate mostly gets no tow. The factor rises from NPC_BEHAVIOR.towNearTown
 // at a short crawl to 1 far out, measured from where the driver perceives the truck.
 function towFactor(world: World, vehicle: Vehicle): number {
@@ -433,6 +468,15 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   paid: neutral,
   ownParts: neutral,
   free: neutral,
+  forgive: neutral,
+  retaliate: retaliateFactor,
+  truce: truceFactor,
+  beg: begFactor,
+  accept: acceptFactor,
+  refuse: neutral,
+  spare: neutral,
+  finish: neutral,
+  comply: complyFactor,
 };
 
 // ---- Weights and the roll.

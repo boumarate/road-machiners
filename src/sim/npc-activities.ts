@@ -8,7 +8,7 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import type { PartHit } from './armor';
 import { partDef } from '../data/parts';
-import { isHostile } from './combat';
+import { isHostile, startFeuds } from './combat';
 import { getTradePrice, sellVehicleCargo, serviceAtCamp, serviceVehicle, tradeGoods } from './economy';
 import { corePart, freeCells, goodsCount, mountedParts } from './grid';
 import { cancelJob } from './jobs';
@@ -22,7 +22,8 @@ import { hashRandom, randInt } from './rng';
 import { canReachSalvage, hasSalvage, knockoutStockId, wreckStockId } from './salvage';
 import { beginSearch } from './search';
 import { vehicleById } from './damage';
-import { addState, endState, stateOf } from './states';
+import { plead } from './parley';
+import { addState, endState, stateOf, statesHeld } from './states';
 import { vehicleStats } from './stats';
 import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, SalvageStock, Vehicle, World } from './types';
 import { canUseSite, nearestPad } from './sites';
@@ -440,6 +441,49 @@ function onAttacked(world: World, vehicle: Vehicle, profile: NpcProfile): void {
   }
 }
 
+// One roll per crash grievance whose other truck the driver sees. Retaliating starts a feud with that truck and
+// counts it as an attacker, so the attacked roll picks fight back or flight this turn. A grievance against a truck
+// already hostile leaves nothing to decide.
+function onGrievances(world: World, vehicle: Vehicle): void {
+  for (const s of statesHeld(world, vehicle.id).filter((x) => x.kind === 'grievance')) {
+    const other = world.vehicles.find((v) => v.id === s.other);
+    if (!other) continue;
+    if (isHostile(world, vehicle, other)) {
+      endState(world, s, 'broken');
+      continue;
+    }
+    if (!canVehicleSee(world, vehicle, other.pos)) continue;
+    endState(world, s, 'fulfilled');
+    if (decide(world, vehicle, 'crashed', other.id, null) !== 'retaliate') continue;
+    startFeuds(world, other, vehicle);
+    vehicle.brain!.attackers[other.id] = false;
+  }
+}
+
+// One roll per turn the driver was hurt, about the hostile that hit it last, while it sees that hostile. A truce
+// or a beg pleads with it.
+function onParley(world: World, vehicle: Vehicle): void {
+  const foe = hurtingFoe(world, vehicle);
+  if (!foe) return;
+  const option = decide(world, vehicle, 'parley', foe.id, perceiveDanger(world, vehicle, foe));
+  if (option !== 'keep') plead(world, vehicle, foe, option === 'truce' ? 'truce' : 'mercy');
+}
+
+// The hostile in sight that hit the driver last, when the driver took damage last turn.
+function hurtingFoe(world: World, vehicle: Vehicle): Vehicle | null {
+  if (vehicle.brain!.hurt <= 0) return null;
+  const foe = world.vehicles.find((v) => v.id === vehicle.lastHitBy);
+  return foe && isHostile(world, vehicle, foe) && canVehicleSee(world, vehicle, foe.pos) ? foe : null;
+}
+
+// A driver that refuses a threat starts a feud with the one who made it, then fights it or runs from it.
+export function defyThreat(world: World, vehicle: Vehicle, threatener: Vehicle, answer: Exclude<DecisionOptions['threatened'], 'comply'>): void {
+  startFeuds(world, threatener, vehicle);
+  vehicle.brain!.noticed[`hostileSeen:${threatener.id}`] = world.turn;
+  if (answer === 'fightBack') interrupt(world, vehicle, createActivity('fight', threatener.id, { ...threatener.pos }, 'refuse a threat'));
+  else interrupt(world, vehicle, fleeFrom(world, vehicle, npcProfile(vehicle), threatener.id, threatener.pos, 'escape a threat'));
+}
+
 // One roll per new truck in sight the NPC can rob, nearest first. The sighting's perceived danger weighs the roll.
 // Rob starts a feud with the target and fights it. The feud makes the target a hostile in sight, so it is noticed
 // as one and fires no second roll.
@@ -531,6 +575,8 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   pruneAttackers(world, vehicle);
   dropInvalidGoals(world, vehicle, contacts);
   const hold = applyFixedRules(world, vehicle, profile);
+  onGrievances(world, vehicle);
+  onParley(world, vehicle);
   onAttacked(world, vehicle, profile);
   onHostilesSeen(world, vehicle, profile);
   onContactsHeard(world, vehicle, profile, contacts);

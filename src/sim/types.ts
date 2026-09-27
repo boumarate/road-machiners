@@ -188,15 +188,19 @@ export type Obstacle = {
 };
 
 // A timed relation one vehicle holds toward another. src/sim/states.ts owns them.
-export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce';
+export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce' | 'grievance' | 'plea';
 export type StateEnding = 'expired' | 'fulfilled' | 'broken';
+export type Plea = 'truce' | 'mercy';
 // A tow state: the holder tows the other party to `town` for `fee`, paid on arrival. hitched is false while the offer is open.
 // A tow promise: the terms of a tow the holder dropped for danger, which its next offer keeps.
 // A feud: robbery is true when the holder started it to rob the other party, so a win sends it to loot.
+// A plea: the holder asked the other party for a truce or for mercy. answered is false while the player has not
+// answered yet.
 export type StateData =
   | { kind: 'tow'; town: string; fee: number; hitched: boolean }
   | { kind: 'feud'; robbery: boolean }
   | { kind: 'towPromise'; town: string; fee: number }
+  | { kind: 'plea'; plea: Plea; answered: boolean }
   | { kind: 'patch'; deal: PatchDeal; parts: number; price: number; work: number; workLeft: number } // holder patches other
   | { kind: 'none' };
 export type NpcState = {
@@ -216,7 +220,8 @@ export type CallVar =
   | { kind: "distance"; tiles: number }
   | { kind: "bearing"; rad: number }
   | { kind: "count"; n: number; unit: string } // shown as "1 part" or "2 parts"
-  | { kind: "deal"; deal: PatchDeal; patcher: "player" | "npc"; price: number; parts: number; turns: number };
+  | { kind: "deal"; deal: PatchDeal; patcher: "player" | "npc"; price: number; parts: number; turns: number }
+  | { kind: "answer"; option: string }; // a driver's rolled answer, which picks the next line; never shown
 export type CallVars = Record<string, CallVar>;
 
 // An open radio call with the NPC `with`. A null topic means the hub of topics. `line` is what the NPC said
@@ -295,6 +300,7 @@ export type GameEvent =
   | { t: 'call'; with: string; outcome: 'opened' | 'ended' }
   | { t: 'honk'; vehicle: string }
   | { t: 'patch'; patcher: string; client: string; outcome: 'started' | 'done' | 'lapsed' }
+  | { t: 'plea'; from: string; to: string; plea: Plea; accepted: boolean | null } // null while the player has to answer
   | { t: 'info'; text: string };
 
 export type World = {
