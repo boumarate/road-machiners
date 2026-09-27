@@ -102,7 +102,7 @@ Social radio's agreements become state kinds. Its patch deal is a later kind in 
 A template keeps loadout, faction, bounty, spawn and caps. It loses `brain`. It gets fixed base traits and a weighted table of extra traits. At spawn, world RNG rolls the extras into `brain.traits`. The scavenger template has base `scavenger` and a chance of `scumbag` or `coward`. The trader template has a chance of `coward`.
 
 ### Robbery
-Robbery works by attack and loot. A robbery target passes all of these checks:
+Robbery works by attack and loot. Sight, loot and not already hostile decide whether rob is available. Danger and guard range are weights, per the Chances section. The original checks were:
 - The scumbag sees it.
 - It is not already hostile.
 - It has loot by `hasLoot()`.
@@ -136,7 +136,7 @@ TDD: yes (trait weights, decision rolls, goal stack, state endings and robbery c
 - IV3 — Each decision point fires once per trigger. The same hostile or prey never triggers a second roll while it stays in sight.
 - IV4 — An interruption never loses the goal below it. After the interruption pops, that goal is active again unless the resume roll picks new.
 - IV5 — The stack never holds two goals of the same kind.
-- IV6 — A scumbag starts a robbery only against a target that passes every robbery check.
+- IV6 — A robbery starts only against a target in sight, with loot and not already hostile. A stronger target or one near town guards lowers the rob weight to about 4% of normal.
 - IV7 — An unavailable option is never picked. Every available option has at least MIN_CHANCE. A multiplier or situation factor at or below 0 throws.
 - IV8 — A missing `brain.traits`, a missing `brain.goals`, an unknown trait id or an unknown state kind throws.
 - IV9 — Traits never change faction. Faction still decides base hostility and camp guns.
