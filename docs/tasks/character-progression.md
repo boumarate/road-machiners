@@ -213,10 +213,10 @@ Notes: 4 stalls sit near map point (476 to 480, 150 to 175) on different seeds, 
 - uexecute: merged the game features before the recorder stalls are fixed. The stalls affect only dev tooling.
 - uexecute: kept the starting XP numbers. Perception reaches level 5 in 8 to 9 days for every archetype in the finished runs, likely from contact XP.
 
+- user: dropped the heal effect, calls pay only after a topic, contact XP cut, day targets set (main skill level 2 by day 2, level 4 by day 8, level 5 by day 15; off skills level 2 by day 5).
+- uexecute: merged into main on the user's request (fast-forward to 884d67b).
+
 ### Deferred (needs user input)
-- PH6 target bands — the targets are a design choice. Decide how many days each level should take per play style, then I tune and lock them.
-- Toughness `heal` — it rounds to nothing at levels 1 to 4 outside town. Choose between fractional health and dropping the effect.
-- Radio `call` XP — calling and hanging up pays Social up to the daily cap. Choose whether a call must discuss a topic to pay.
-- Perception pace — contact XP likely dominates. Choose whether to cut the contact weight now or after the full recording.
+- PH6 band test — not committed. Targets are set in `src/data/skills.ts`, and the weights are tuned on the 4 runs that finished (1ea1dc4). Remaining misses come from the bots: the fighter lands few hits and the trader sells late. Lock the band test after the sim bugs are fixed and a full 12-run recording passes.
 - Sim bugs found by the recorder, outside this task: a route from blocked nav cells can snap into a small closed area and trap the truck (`src/sim/path.ts`). Far-travel trucks meeting head-on on a road stop short of each other forever (`src/sim/far.ts`). `src/sim/npc-activities.ts:563` throws "flees with no threat perceived" (seed 3, fighter turn 194 and mixed turn 1005). Decide whether these get their own task. Until they are fixed, 3 of 12 recordings fail.
 
