@@ -43,6 +43,7 @@ import {
   hostileToPlayer,
   newWorld,
   setAutoFire,
+  setAutoRepair,
   setDirect,
   setMoveOrder,
   setWeaponOrder,
@@ -273,6 +274,9 @@ export class Game {
       toggleManual: () => {
         if (!this.anim && !this.modalOpen()) this.toggleManual();
       },
+      toggleAutoRepair: () => {
+        if (!this.anim && !this.modalOpen()) this.toggleAutoRepair();
+      },
       isBusy: () => this.anim !== null,
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
@@ -489,6 +493,7 @@ export class Game {
       if (e.code === "Digit0" && !modal) this.weapons.selectWeapon(null);
       if (e.code === "KeyE" && !modal) this.useContext();
       if (e.code === "KeyR" && !modal && !playing) this.toggleManual();
+      if (e.code === "KeyP" && !modal && !playing) this.toggleAutoRepair();
       if (e.code === "KeyC" && !playing) this.toggleCharacter();
       if (e.code === "KeyI" && !playing) this.toggleInventory();
       if (e.code === "Escape") {
@@ -519,6 +524,10 @@ export class Game {
   private toggleManual(): void {
     this.apply(setDirect(this.world, !playerVehicle(this.world).direct));
     this.refreshPlan();
+  }
+
+  private toggleAutoRepair(): void {
+    this.apply(setAutoRepair(this.world, !this.world.player.autoRepair));
   }
 
   private selectWeaponIndex(i: number): void {

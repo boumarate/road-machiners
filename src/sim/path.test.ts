@@ -101,6 +101,7 @@ describe("route", () => {
     for (let i = 0; i < w.size && dist(w.vehicles[0].pos, nose.pos) > nose.radius + 1.5; i++) {
       w = endTurn(w);
       w.vehicles = w.vehicles.filter((v) => v.faction === "player");
+      w.player.engineHeat = 0; // this drive never stops to cool down
       const staticHits = w.events.filter(
         (e) => e.t === "collision" && e.a === me && !e.b.startsWith("v"),
       );
