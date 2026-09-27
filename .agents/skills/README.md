@@ -1,8 +1,16 @@
-# Game design skills
+# Project skills
 
-Project-local skills for game interface design, visual direction, feedback, balance, and design critique. Pi discovers these directories in trusted projects at startup. Start a new session to refresh discovery, or read a skill's `SKILL.md` directly in an existing session.
+Project-local skills for TypeScript engineering, game interface design, visual direction, feedback, balance, and design critique. Pi discovers these directories in trusted projects at startup. Start a new session to refresh discovery, or read a skill's `SKILL.md` directly in an existing session.
 
-## Use
+## Engineering
+
+- `responsibility-driven-design` assigns behavior and state to clear owners and keeps simulation rules separate from rendering.
+- `testing-practices` covers Vitest, hook fixtures, browser checks, and fresh verification evidence.
+- `typescript-practices` covers npm environments, ESM imports, strict types, explicit APIs, and runtime validation.
+
+These are local copies adapted from the corresponding global practices. `typescript-practices` adapts Python practices to this project's JavaScript and TypeScript tools. Read them before related work as required by [project guidance](../../CLAUDE.md).
+
+## Game design
 
 - `game-ui-design` maps player decisions before layout, limits the HUD to decision-relevant information, rejects generic dashboard styling, and checks gameplay occlusion. Start here for interface work.
 - `directing-game-visuals` defines visual hierarchy, palette roles, negative space, and feedback that does not depend on explanatory text.

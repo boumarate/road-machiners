@@ -11,6 +11,9 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 - `npm run dev` starts the game at http://localhost:5173.
 - `npm test` runs the sim unit tests.
 - `npm run typecheck` runs tsc.
+- `npm run quality` checks working-tree JavaScript and TypeScript for new lint and architecture debt against HEAD, then runs tsc.
+- `npm run hooks:install` installs the pre-commit quality gate from the main checkout. Run it after `npm ci`. The hook checks staged content without changing the working tree or index.
+- `npm run test:quality` tests the quality gate in disposable Git repositories. See [Quality checks](docs/quality.md) for limits and scope.
 - `npm run playtest -- --url <dev server>` boots the game in headless Chromium on the Metal GPU, plays turns, and fails on page errors, the crash screen or low FPS. It needs the dev server running. Screenshots go to `.playtest/`.
 - `npm run perf -- --url <dev server>` boots the game in Chromium with the Metal GPU and times boot, turns, move previews and frames. It fails on any miss against `scripts/perf-budgets.json`.
 - `npm run sfx:board` opens the dev sound board for auditioning every cue.
@@ -43,6 +46,16 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 - `src/sim/bridge.ts` holds Canyon Bridge. The map stays one level. `heightAt` returns the deck height on the deck, and `groundAt` returns the canyon floor under it. Both rails block routes and physics, so trucks get on only over the ends.
 - Map coordinates are in tiles. Physics and 3D space are in meters: map x is 3D x, map y is 3D z, height is 3D y. `src/phys/frames.ts` converts.
 - The UI shows real units: km/h, meters, kg, liters and °C. `src/ui/units.ts` converts from sim units, with display numbers in `src/data/units.ts`.
+
+## Agent practices
+
+Read the project-local skills before related work:
+
+- [Responsibility-driven design](.agents/skills/responsibility-driven-design/SKILL.md) before designing or changing code.
+- [Testing practices](.agents/skills/testing-practices/SKILL.md) before testing, debugging, or reviewing changes.
+- [TypeScript practices](.agents/skills/typescript-practices/SKILL.md) before JavaScript or TypeScript work.
+
+Do not bypass the quality hook, add suppressions, or raise its limits to make a commit pass. Existing debt may remain or improve. New code must meet the limits. Changes to quality policy need explicit user approval.
 
 ## Verification
 
