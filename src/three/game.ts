@@ -60,7 +60,7 @@ import { Hud } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
 import { TownScreen } from "../ui/town";
 import { markerLines, WeaponPanel, weaponsForClick } from "../ui/weapons";
-import { CameraRig, KeyPan } from "./render/camera";
+import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
 import { Fx3D } from "./render/fx";
@@ -184,10 +184,8 @@ export class Game {
     }),
   );
   private selected: string | null = null;
-  private following = true;
   private readonly sightLimit: SightLimit;
-  private panFrom: { x: number; y: number } | null = null;
-  private keyPan = new KeyPan(() => this.isEditingControl());
+  private readonly follow: TruckFollow;
   private planFor: World | null = null;
   private last = performance.now();
   private idleSince = performance.now(); // when the last turn's playback ended, for the auto turn pace
@@ -224,6 +222,7 @@ export class Game {
     this.renderer.toneMappingExposure = 1.05;
     container.appendChild(this.renderer.domElement);
     this.rig = new CameraRig(container);
+    this.follow = new TruckFollow(this.rig, new KeyPan(() => this.isEditingControl()), this.renderer.domElement);
 
     this.scene.background = new THREE.Color(PAL.bg);
     this.renderer.domElement.classList.add("view");
@@ -296,7 +295,7 @@ export class Game {
         ),
       isBusy: () => this.anim !== null,
       dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), honked: () => this.playHonks() },
-      recenter: () => (this.following = true),
+      recenter: () => this.follow.recenter(),
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.menu = new GameMenu({
@@ -339,7 +338,7 @@ export class Game {
 
   // Centers the camera on map point x, y at the given zoom and stops following, for browser scripts.
   debugView(x: number, y: number, zoom: number): void {
-    this.following = false;
+    this.follow.release();
     this.rig.setZoom(zoom);
     // An infinite step moves the smoothed follow all the way in one tick.
     this.rig.follow(groundPoint(this.world.terrain, { x, y }));
@@ -437,6 +436,13 @@ export class Game {
     this.hitCard.show();
   }
 
+  // Ground point of the order the truck drives, or null without one. While a turn plays, the order
+  // is the one the turn started with, since the turn may have finished it.
+  private orderPoint(): V3 | null {
+    const order = playerVehicle(this.anim ? this.anim.before : this.world).order;
+    return order === null || order.kind === "brake" ? null : groundPoint(this.world.terrain, order.dest);
+  }
+
   private refreshTargetMarkers(): void {
     this.markers.refresh(this.anim ? null : markerLines(this.world, this.hovered));
   }
@@ -445,23 +451,16 @@ export class Game {
     return document.activeElement?.matches("input, select, textarea") ?? false;
   }
 
-  // Input: left click orders or targets, right drag pans, wheel zooms, keys like the 2D game.
+  // Input: left click orders or targets, wheel zooms, keys like the 2D game.
   private bindInput(): void {
     const canvas = this.renderer.domElement;
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
     canvas.addEventListener("pointerdown", (e) => {
-      if (e.button === 2) this.panFrom = { x: e.clientX, y: e.clientY };
       if (e.button === 0) this.onLeftClick(e);
     });
     window.addEventListener("pointermove", (e) => {
-      if (this.panFrom) {
-        this.rig.panBy(e.clientX - this.panFrom.x, e.clientY - this.panFrom.y);
-        this.panFrom = { x: e.clientX, y: e.clientY };
-        this.following = false;
-      }
       if (e.target === canvas) this.onHover(e);
     });
-    window.addEventListener("pointerup", () => (this.panFrom = null));
     canvas.addEventListener("wheel", (e) => this.rig.zoomBy(e.deltaY), { passive: true });
     window.addEventListener("keyup", (e) => {
       if (e.code === "Space") this.travel.release();
@@ -477,7 +476,7 @@ export class Game {
       if (e.code === "Space") {
         if (!modal && this.travel.handleSpace(e, playing, this.world)) this.endTurn();
       }
-      if (e.code === "KeyF") this.following = true;
+      if (e.code === "KeyF") this.follow.recenter();
       if (e.code === "KeyM") this.toggleMute();
       if (e.code === "KeyQ" && !modal) this.weapons.toggleAuto();
       if (e.code === "KeyX" && !modal) this.weapons.toggleVisible();
@@ -621,9 +620,11 @@ export class Game {
   }
 
   private updateTravel(): void {
-    this.travel.updateWorld(this.world, this.world.vehicles.some(
+    const danger = this.world.vehicles.some(
       (v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v),
-    ));
+    );
+    this.follow.noteDanger(danger);
+    this.travel.updateWorld(this.world, danger);
   }
 
   private beginTurn(
@@ -634,7 +635,6 @@ export class Game {
     const { world, playback, towed } = this.travel.beginPlayback(this.world, prepared, now, elapsed);
     this.world = world;
     this.anim = playback;
-    this.following = true;
     this.live = {
       visible: new Set(this.world.player.visible),
       explored: playback.before.player.explored.slice(),
@@ -982,10 +982,8 @@ export class Game {
     const sightRadius = grayRadius(this.world, playerVehicle(this.world).pos) * PHYSICS.metersPerTile;
     this.sightLimit.set(truck, sightRadius);
     this.rig.leash(truck, sightRadius);
-    if (this.keyPan.pan(this.rig, dt)) this.following = false;
-    if (this.following) this.rig.follow(truck, this.hud.cameraMode === "auto" ? headingOf(this.frames[playerVehicle(this.world).id].rot) : null);
-    this.hud.showRecenter(!this.following);
-    this.rig.tick(dt);
+    this.follow.update(truck, this.hud.cameraMode === "auto" ? this.orderPoint() : null, this.anim !== null, dt);
+    this.hud.showRecenter(!this.follow.isFollowing());
     lightScene(this.sun, this.sky, truck, daylightAt(this.lightTurn()));
     this.aimBeams(!sunAt(this.world.turn));
     const at = playerVehicle(this.world).pos;
