@@ -1,73 +1,129 @@
-import { TERRAIN } from '../data/terrain';
-import { describe, expect, it } from 'vitest';
-import { contactsOf } from './detect';
-import { emptyWorld, addVehicle, editableTerrain } from './testkit';
-import { planNpcOrders } from './ai';
-import { getResources } from './resources';
-import { REGION } from '../data/region';
-import { NPC_CLASSES } from '../data/npcs';
-import { endTurn } from './world';
-import { corePart, goodsCount } from './grid';
-import { addGoods } from './inventory';
-import { resolveNpcActivities, chooseNpcActivity, getActivityDestination } from './npc-activities';
-import { canUseSite, siteGates } from './sites';
+import { TERRAIN } from "../data/terrain";
+import { describe, expect, it } from "vitest";
+import { contactsOf } from "./detect";
+import { emptyWorld, addVehicle, editableTerrain } from "./testkit";
+import { planNpcOrders } from "./ai";
+import { getResources } from "./resources";
+import { REGION } from "../data/region";
+import { NPC_CLASSES } from "../data/npcs";
+import { endTurn } from "./world";
+import { corePart, goodsCount } from "./grid";
+import { addGoods } from "./inventory";
+import {
+  resolveNpcActivities,
+  chooseNpcActivity,
+  getActivityDestination,
+} from "./npc-activities";
+import { canUseSite, siteGates } from "./sites";
 
 function createScavenger() {
   const w = emptyWorld({ x: 50, y: 50 });
-  const npc = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 10, y: 10 });
-  npc.brain = { templateId: 'scavenger', activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0, refusedTow: false };
+  const npc = addVehicle(w, "scavengers", "scout", ["mg", "stockEngine"], {
+    x: 10,
+    y: 10,
+  });
+  npc.brain = {
+    templateId: "scavenger",
+    activity: null,
+    goal: null,
+    home: { ...npc.pos },
+    stepIndex: 0,
+    refusedTow: false,
+  };
   return { w, npc };
 }
 
-describe('NPC activities', () => {
-  it('uses Icarus sites for every class destination', () => {
+describe("NPC activities", () => {
+  it("uses Icarus sites for every class destination", () => {
     const sites = [...REGION.towns, ...REGION.locations];
     for (const profile of Object.values(NPC_CLASSES)) {
-      for (const id of [...profile.towns, ...profile.bases, ...profile.salvageSites, ...profile.supplySites]) {
-        expect(sites.find((site) => site.id === id), `missing site ${id}`).toBeDefined();
+      for (const id of [
+        ...profile.towns,
+        ...profile.bases,
+        ...profile.salvageSites,
+        ...profile.supplySites,
+      ]) {
+        expect(
+          sites.find((site) => site.id === id),
+          `missing site ${id}`,
+        ).toBeDefined();
       }
     }
   });
 
-  it('stops at the town gate nearest to it, even from the far side of the wall', () => {
+  it("stops at the town gate nearest to it, even from the far side of the wall", () => {
     const { w, npc } = createScavenger();
     const town = REGION.towns[0];
     const gate = siteGates(town)[0];
-    npc.pos = { x: town.pos.x - (gate.x - town.pos.x) * 1.3, y: town.pos.y - (gate.y - town.pos.y) * 1.3 };
-    npc.brain!.activity = { kind: 'sell', targetId: town.id, destination: { ...town.pos }, phase: 'travel', reason: 'test activity' };
+    npc.pos = {
+      x: town.pos.x - (gate.x - town.pos.x) * 1.3,
+      y: town.pos.y - (gate.y - town.pos.y) * 1.3,
+    };
+    npc.brain!.activity = {
+      kind: "sell",
+      targetId: town.id,
+      destination: { ...town.pos },
+      phase: "travel",
+      reason: "test activity",
+    };
     const stop = getActivityDestination(w, npc)!;
     expect(canUseSite(stop, town)).toBe(true);
-    expect(Math.hypot(stop.x - town.pos.x, stop.y - town.pos.y)).toBeGreaterThan(town.radius);
+    expect(
+      Math.hypot(stop.x - town.pos.x, stop.y - town.pos.y),
+    ).toBeGreaterThan(town.radius);
   });
 
-  it.each(['sell', 'resupply', 'raid'] as const)('records completion of %s once', (kind) => {
+  it.each(["sell", "resupply", "raid"] as const)(
+    "records completion of %s once",
+    (kind) => {
+      const { w, npc } = createScavenger();
+      npc.pos = { ...siteGates(REGION.towns[0])[0] };
+      npc.brain!.activity = {
+        kind,
+        targetId: REGION.towns[0].id,
+        destination: { ...npc.pos },
+        phase: "travel",
+        reason: "test activity",
+      };
+      w.events = [];
+      resolveNpcActivities(w);
+      resolveNpcActivities(w);
+      expect(w.events.filter((event) => event.t === "activity")).toEqual([
+        expect.objectContaining({ previous: kind, activity: null }),
+      ]);
+    },
+  );
+
+  it("records failure when a salvage target disappears", () => {
     const { w, npc } = createScavenger();
-    npc.pos = { ...siteGates(REGION.towns[0])[0] };
-    npc.brain!.activity = { kind, targetId: REGION.towns[0].id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' };
+    npc.brain!.activity = {
+      kind: "scavenge",
+      targetId: "retired-wreck",
+      destination: { ...npc.pos },
+      phase: "travel",
+      reason: "collect visible salvage",
+    };
     w.events = [];
     resolveNpcActivities(w);
-    resolveNpcActivities(w);
-    expect(w.events.filter((event) => event.t === 'activity')).toEqual([
-      expect.objectContaining({ previous: kind, activity: null }),
+    expect(w.events).toEqual([
+      expect.objectContaining({
+        previous: "scavenge",
+        activity: null,
+        reason: "salvage no longer available",
+      }),
     ]);
   });
 
-  it('records failure when a salvage target disappears', () => {
-    const { w, npc } = createScavenger();
-    npc.brain!.activity = { kind: 'scavenge', targetId: 'retired-wreck', destination: { ...npc.pos }, phase: 'travel', reason: 'collect visible salvage' };
-    w.events = [];
-    resolveNpcActivities(w);
-    expect(w.events).toEqual([expect.objectContaining({ previous: 'scavenge', activity: null, reason: 'salvage no longer available' })]);
-  });
-
-  it('completes a collect-sell-upkeep loop through actual turns', () => {
+  it("completes a collect-sell-upkeep loop through actual turns", () => {
     let { w, npc } = createScavenger();
-    const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
+    const convoy = REGION.locations.find((site) => site.kind === "convoy")!;
     npc.pos = { x: convoy.pos.x + convoy.radius + 1, y: convoy.pos.y };
     npc.heading = Math.PI;
-    for (const key of Object.keys(w.spawnTimer)) w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
+    for (const key of Object.keys(w.spawnTimer))
+      w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
     // Spawn timers are initialized lazily, so disable every template explicitly.
-    for (const key of ['buggy', 'gunwagon', 'trader', 'scavenger']) w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
+    for (const key of ["buggy", "gunwagon", "trader", "scavenger"])
+      w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
     const id = npc.id;
     const initialMoney = npc.resources!.money;
     let collected = false;
@@ -80,22 +136,33 @@ describe('NPC activities', () => {
       if (collected && npc.resources!.money > initialMoney && !sold) {
         sold = true;
         npc.resources!.fuel = 0;
-      } else if (sold && npc.resources!.fuel > 0) { serviced = true; break; }
+      } else if (sold && npc.resources!.fuel > 0) {
+        serviced = true;
+        break;
+      }
     }
     expect(collected).toBe(true);
     expect(sold).toBe(true);
     expect(serviced).toBe(true);
   });
 
-  it('cannot inspect distant salvage contents', () => {
+  it("cannot inspect distant salvage contents", () => {
     const { w, npc } = createScavenger();
-    w.salvage = [{ id: 'wreck-test', pos: { x: 17, y: 10 }, radius: 0.6, goods: { scrap: 0 }, parts: [] }];
+    w.salvage = [
+      {
+        id: "wreck-test",
+        pos: { x: 17, y: 10 },
+        radius: 0.6,
+        goods: { scrap: 0 },
+        parts: [],
+      },
+    ];
     const empty = chooseNpcActivity(w, npc);
     w.salvage[0].goods.scrap = 5;
     expect(chooseNpcActivity(w, npc)).toEqual(empty);
   });
 
-  it('preserves a trip even when another site becomes closer', () => {
+  it("preserves a trip even when another site becomes closer", () => {
     const { w, npc } = createScavenger();
     planNpcOrders(w);
     const activity = npc.brain!.activity;
@@ -103,25 +170,38 @@ describe('NPC activities', () => {
     expect(chooseNpcActivity(w, npc)).toBe(activity);
   });
 
-  it('keeps upkeep money when buying trade cargo', () => {
+  it("keeps upkeep money when buying trade cargo", () => {
     const { w, npc } = createScavenger();
-    npc.brain!.templateId = 'trader';
+    npc.brain!.templateId = "trader";
     npc.pos = { ...siteGates(REGION.towns[0])[0] };
     planNpcOrders(w);
     resolveNpcActivities(w);
     expect(npc.resources!.money).toBeGreaterThan(0);
-    expect(Object.values(goodsCount(npc)).reduce((sum, n) => sum + n, 0)).toBeGreaterThan(0);
-    expect(npc.brain!.activity?.kind).toBe('sell');
+    expect(
+      Object.values(goodsCount(npc)).reduce((sum, n) => sum + n, 0),
+    ).toBeGreaterThan(0);
+    expect(npc.brain!.activity?.kind).toBe("sell");
   });
 
-  it('a raider can destroy an NPC and sell the actual loot', () => {
+  it("a raider can destroy an NPC and sell the actual loot", () => {
     const w0 = emptyWorld({ x: 58, y: 58 });
-    const raider = addVehicle(w0, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 14, y: 12 });
-    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0, refusedTow: false };
-    const victim = addVehicle(w0, 'scavengers', 'scout', [], { x: 16, y: 12 });
-    corePart(victim, 'cab').hp = 1;
-    addGoods(w0, victim, 'scrap', 3);
-    for (const key of ['buggy', 'gunwagon', 'trader', 'scavenger']) w0.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
+    const raider = addVehicle(w0, "raiders", "buggy", ["mg", "stockEngine"], {
+      x: 14,
+      y: 12,
+    });
+    raider.brain = {
+      templateId: "buggy",
+      activity: null,
+      goal: null,
+      home: { ...raider.pos },
+      stepIndex: 0,
+      refusedTow: false,
+    };
+    const victim = addVehicle(w0, "scavengers", "scout", [], { x: 16, y: 12 });
+    corePart(victim, "cab").hp = 1;
+    addGoods(w0, victim, "scrap", 3);
+    for (const key of ["buggy", "gunwagon", "trader", "scavenger"])
+      w0.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
     const money = raider.resources!.money;
     let w = w0;
     let looted = false;
@@ -131,95 +211,153 @@ describe('NPC activities', () => {
       const actor = w.vehicles.find((v) => v.id === raider.id)!;
       if ((goodsCount(actor).scrap ?? 0) > 0) {
         looted = true;
-        const stock = w.salvage.find((entry) => entry.id === `wreck-${victim.id}`)!;
+        const stock = w.salvage.find(
+          (entry) => entry.id === `wreck-${victim.id}`,
+        )!;
         expect(stock.goods.scrap + goodsCount(actor).scrap).toBe(3);
       }
-      if (looted && actor.resources!.money > money) { sold = true; break; }
+      if (looted && actor.resources!.money > money) {
+        sold = true;
+        break;
+      }
     }
     expect(w.vehicles.some((v) => v.id === victim.id)).toBe(false);
     expect(looted).toBe(true);
     expect(sold).toBe(true);
   });
 
-  it('selects a known salvage site without needing to see it', () => {
+  it("selects a known salvage site without needing to see it", () => {
     const { w, npc } = createScavenger();
     planNpcOrders(w);
-    expect(npc.brain!.activity?.kind).toBe('scavenge');
-    expect(NPC_CLASSES.scavenger.salvageSites).toContain(npc.brain!.activity?.targetId);
+    expect(npc.brain!.activity?.kind).toBe("scavenge");
+    expect(NPC_CLASSES.scavenger.salvageSites).toContain(
+      npc.brain!.activity?.targetId,
+    );
   });
 
-  it('interrupts work for low fuel', () => {
+  it("interrupts work for low fuel", () => {
     const { w, npc } = createScavenger();
     planNpcOrders(w);
     getResources(w, npc).fuel = 0;
     planNpcOrders(w);
-    expect(npc.brain!.activity?.kind).toBe('resupply');
+    expect(npc.brain!.activity?.kind).toBe("resupply");
   });
 
-  it('lets a healthy scavenger fight a nearby raider', () => {
+  it("lets a healthy scavenger fight a nearby raider", () => {
     const { w, npc } = createScavenger();
-    addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 13, y: 10 });
+    addVehicle(w, "raiders", "buggy", ["mg"], { x: 13, y: 10 });
     planNpcOrders(w);
-    expect(npc.brain!.activity?.kind).toBe('fight');
+    expect(npc.brain!.activity?.kind).toBe("fight");
   });
 
-  it('flees when damaged, and stops tracking a target behind cover', () => {
+  it("flees when damaged, and stops tracking a target behind cover", () => {
     const { w, npc } = createScavenger();
-    addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 14, y: 10 });
-    corePart(npc, 'cab').hp = 1;
+    addVehicle(w, "raiders", "buggy", ["mg"], { x: 14, y: 10 });
+    corePart(npc, "cab").hp = 1;
     planNpcOrders(w);
-    expect(npc.brain!.activity?.kind).toBe('flee');
-    w.obstacles.push({ id: 'cover', kind: 'rock', pos: { x: 12, y: 10 }, r: 1 });
+    expect(npc.brain!.activity?.kind).toBe("flee");
+    w.obstacles.push({
+      id: "cover",
+      kind: "rock",
+      pos: { x: 12, y: 10 },
+      r: 1,
+    });
     planNpcOrders(w);
-    expect(npc.brain!.activity?.kind).toBe('resupply');
+    expect(npc.brain!.activity?.kind).toBe("resupply");
   });
 
-  it('a raider heads toward a heard player', () => {
+  it("a raider heads toward a heard player", () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const player = w.vehicles[0];
     player.speed = 4; // loud enough to be heard far past sight range
-    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 }); // just past sight
-    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0, refusedTow: false };
+    const raider = addVehicle(w, "raiders", "buggy", ["mg", "stockEngine"], {
+      x: 30 + TERRAIN.vision.radius + 5,
+      y: 30,
+    }); // just past sight
+    raider.brain = {
+      templateId: "buggy",
+      activity: null,
+      goal: null,
+      home: { ...raider.pos },
+      stepIndex: 0,
+      refusedTow: false,
+    };
     planNpcOrders(w);
-    expect(raider.brain!.activity?.kind).toBe('investigate');
+    expect(raider.brain!.activity?.kind).toBe("investigate");
     expect(raider.brain!.activity?.targetId).toBe(player.id);
   });
 
-  it('a raider hears the player as far as the player hears it', () => {
+  it("a raider hears the player as far as the player hears it", () => {
     const w = emptyWorld({ x: 100, y: 300 });
     const player = w.vehicles[0];
     player.speed = 4;
-    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 220, y: 300 }); // 120 tiles, far past the old 34-tile limit
-    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0, refusedTow: false };
+    const raider = addVehicle(w, "raiders", "buggy", ["mg", "stockEngine"], {
+      x: 220,
+      y: 300,
+    }); // 120 tiles, far past the old 34-tile limit
+    raider.brain = {
+      templateId: "buggy",
+      activity: null,
+      goal: null,
+      home: { ...raider.pos },
+      stepIndex: 0,
+      refusedTow: false,
+    };
     planNpcOrders(w);
-    expect(contactsOf(w, raider, Infinity).some((c) => c.vehicleId === player.id)).toBe(true);
-    expect(raider.brain!.activity?.kind).toBe('investigate');
+    expect(
+      contactsOf(w, raider, Infinity).some((c) => c.vehicleId === player.id),
+    ).toBe(true);
+    expect(raider.brain!.activity?.kind).toBe("investigate");
     expect(raider.brain!.activity?.targetId).toBe(player.id);
   });
 
-  it('a trader turns away from a heard raider', () => {
+  it("a trader turns away from a heard raider", () => {
     const w = emptyWorld({ x: 30, y: 30 });
-    const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 30, y: 30 });
-    trader.brain = { templateId: 'trader', activity: null, goal: null, home: { ...trader.pos }, stepIndex: 0, refusedTow: false };
-    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 45, y: 30 });
+    const trader = addVehicle(w, "traders", "hauler", ["mg", "stockEngine"], {
+      x: 30,
+      y: 30,
+    });
+    trader.brain = {
+      templateId: "trader",
+      activity: null,
+      goal: null,
+      home: { ...trader.pos },
+      stepIndex: 0,
+      refusedTow: false,
+    };
+    const raider = addVehicle(w, "raiders", "buggy", ["mg", "stockEngine"], {
+      x: 45,
+      y: 30,
+    });
     raider.speed = 4;
     planNpcOrders(w);
-    expect(trader.brain!.activity?.kind).toBe('flee');
+    expect(trader.brain!.activity?.kind).toBe("flee");
     expect(trader.brain!.activity?.targetId).toBe(raider.id);
   });
 
-  it('a parked player behind a hill goes unnoticed', () => {
+  it("a parked player behind a hill goes unnoticed", () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const player = w.vehicles[0];
     player.speed = 0; // parked: no sound, no dust
     editableTerrain(w);
     const size = w.terrain.size;
-    for (let i = 33; i <= 37; i++) for (let j = 28; j <= 32; j++) w.terrain.heights[j * (size + 1) + i] = 3;
-    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 }); // beyond the hill
-    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0, refusedTow: false };
+    for (let i = 33; i <= 37; i++)
+      for (let j = 28; j <= 32; j++) w.terrain.heights[j * (size + 1) + i] = 3;
+    const raider = addVehicle(w, "raiders", "buggy", ["mg", "stockEngine"], {
+      x: 40,
+      y: 30,
+    }); // beyond the hill
+    raider.brain = {
+      templateId: "buggy",
+      activity: null,
+      goal: null,
+      home: { ...raider.pos },
+      stepIndex: 0,
+      refusedTow: false,
+    };
     planNpcOrders(w);
-    expect(raider.brain!.activity?.kind).not.toBe('investigate');
-    expect(raider.brain!.activity?.kind).not.toBe('fight');
-    expect(raider.brain!.activity?.kind).not.toBe('flee');
+    expect(raider.brain!.activity?.kind).not.toBe("investigate");
+    expect(raider.brain!.activity?.kind).not.toBe("fight");
+    expect(raider.brain!.activity?.kind).not.toBe("flee");
   });
 });

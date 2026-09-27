@@ -1,23 +1,36 @@
 // Weapons fire after movement. All shots of a turn are rolled first, then applied,
 // so fire is simultaneous: a vehicle killed this turn still gets its shots off.
 
-import { NPCS, SPAWN } from '../data/npcs';
-import { RULES } from '../data/rules';
-import { skillBonus } from '../data/skills';
-import { chassisDef } from '../data/chassis';
-import { PHYSICS } from '../data/physics';
-import { laneCount, partLane, sideToward, walkLane, type PartHit, type Side } from './armor';
-import { bodyOf } from './body';
-import { corePart, hasLoot, itemSize, mountedItems, mountedParts } from './grid';
-import { gainXp } from './progress';
-import { canVehicleSee, hasLineOfFire } from './vision';
-import { createWreckSalvage } from './salvage';
-import { getResources } from './resources';
-import { chance, gauss, randRange } from './rng';
-import { vehicleStats, type MountedWeapon } from './stats';
-import type { Aim, ShotRound, Vehicle, World } from './types';
-import { weatherAt } from './weather';
-import { angleDiff, bearing, clamp, dist, DEG, type Vec } from './vec';
+import { NPCS, SPAWN } from "../data/npcs";
+import { RULES } from "../data/rules";
+import { skillBonus } from "../data/skills";
+import { chassisDef } from "../data/chassis";
+import { PHYSICS } from "../data/physics";
+import {
+  laneCount,
+  partLane,
+  sideToward,
+  walkLane,
+  type PartHit,
+  type Side,
+} from "./armor";
+import { bodyOf } from "./body";
+import {
+  corePart,
+  hasLoot,
+  itemSize,
+  mountedItems,
+  mountedParts,
+} from "./grid";
+import { gainXp } from "./progress";
+import { canVehicleSee, hasLineOfFire } from "./vision";
+import { createWreckSalvage } from "./salvage";
+import { getResources } from "./resources";
+import { chance, gauss, randRange } from "./rng";
+import { vehicleStats, type MountedWeapon } from "./stats";
+import type { Aim, ShotRound, Vehicle, World } from "./types";
+import { weatherAt } from "./weather";
+import { angleDiff, bearing, clamp, dist, DEG, type Vec } from "./vec";
 
 export type FireBlock =
   | "disabled"
@@ -78,7 +91,13 @@ export type HitOdds = {
   width: number; // meters the target, or the aimed part, shows across the line of fire
   halfAngle: number; // radians
   spread: number; // radians; standard deviation of a round's angular error, the sum of the causes
-  causes: { weapon: number; crossing: number; own: number; skill: number; weather: number }; // radians
+  causes: {
+    weapon: number;
+    crossing: number;
+    own: number;
+    skill: number;
+    weather: number;
+  }; // radians
 };
 
 const M = PHYSICS.metersPerTile;
@@ -247,7 +266,12 @@ export function hitOdds(
     own: RULES.shake * mps(Math.abs(shooter.speed)),
     weather: weatherAt(world, shooter.pos).spread,
   };
-  const spread = causes.weapon + causes.skill + causes.crossing + causes.own + causes.weather;
+  const spread =
+    causes.weapon +
+    causes.skill +
+    causes.crossing +
+    causes.own +
+    causes.weather;
   if (!(spread > 0))
     throw new Error(`Spread ${spread} of ${mw.def.id} is not positive`);
   const chance = clamp(
@@ -477,7 +501,10 @@ export function autoOrders(world: World, v: Vehicle): void {
   for (const mw of vehicleStats(world, v).weapons) {
     const target =
       hostiles.find(
-        (h) => dist(v.pos, h.pos) <= mw.def.range && inArc(v, mw, h) && hasLineOfFire(world, v.pos, h.pos),
+        (h) =>
+          dist(v.pos, h.pos) <= mw.def.range &&
+          inArc(v, mw, h) &&
+          hasLineOfFire(world, v.pos, h.pos),
       ) ?? hostiles[0];
     if (target)
       v.weaponOrders[mw.part.id] = { targetId: target.id, aim: "body" };

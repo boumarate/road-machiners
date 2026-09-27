@@ -113,7 +113,8 @@ function vehicleAhead(world: World, v: Vehicle): boolean {
   return world.vehicles.some((x) => {
     if (x.id === v.id) return false;
     // A tower never yields to the truck on its own rope.
-    if (tow?.hitched && tow.by === v.id && x.id === world.player.vehicleId) return false;
+    if (tow?.hitched && tow.by === v.id && x.id === world.player.vehicleId)
+      return false;
     if (!inTheWay(world, v, x)) return false;
     return !(v.id > x.id && givesWay(x) && inTheWay(world, x, v));
   });
@@ -121,7 +122,10 @@ function vehicleAhead(world: World, v: Vehicle): boolean {
 
 // Whether x is close ahead of v, within 45 degrees of its heading.
 function inTheWay(world: World, v: Vehicle, x: Vehicle): boolean {
-  const gap = dist(v.pos, x.pos) - vehicleStats(world, v).radius - vehicleStats(world, x).radius;
+  const gap =
+    dist(v.pos, x.pos) -
+    vehicleStats(world, v).radius -
+    vehicleStats(world, x).radius;
   const off = Math.abs(angleDiff(v.heading, bearing(v.pos, x.pos)));
   return gap < RULES.yieldDistance + v.speed && off < Math.PI / 4;
 }
