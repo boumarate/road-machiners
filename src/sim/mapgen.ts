@@ -1,10 +1,11 @@
 // Seeded obstacle placement: rock clusters off the roads, a few wrecks on them.
 
 import { REGION } from '../data/region';
+import { TERRAIN } from '../data/terrain';
 import { isCliff, tileAt } from './terrain';
 import { randInt, randRange } from './rng';
 import type { Obstacle, World } from './types';
-import { angleDiff, bearing, dist, type Vec } from './vec';
+import { angleDiff, bearing, dist, segmentDist, type Vec } from './vec';
 import { ROAD_INDEX } from './road-index';
 
 const O = REGION.obstacles;
@@ -76,7 +77,7 @@ function placeRoadWrecks(world: World, out: Obstacle[]): void {
     const b = road[seg + 1];
     const pos = { x: a.x + (b.x - a.x) * t + randRange(world, -0.5, 0.5), y: a.y + (b.y - a.y) * t + randRange(world, -0.5, 0.5) };
     const r = randRange(world, 0.55, 0.8);
-    if (!clearOfSites(pos, r) || overlapsAny(out, pos, r)) continue;
+    if (!clearOfSites(pos, r) || overlapsAny(out, pos, r) || onBridge(pos, r)) continue;
     out.push({ id: `wreck${placed}`, pos, r, kind: 'wreck' });
     placed++;
   }
@@ -88,6 +89,12 @@ function fitsOffRoad(world: World, out: Obstacle[], pos: Vec, r: number): boolea
   if (ROAD_INDEX.nearestWithin(pos.x, pos.y, roadGap) < roadGap) return false;
   if (isCliff(world.terrain, tileAt(world.terrain, pos))) return false;
   return clearOfSites(pos, r) && !overlapsAny(out, pos, r);
+}
+
+// A wreck on the narrow bridge deck would close the crossing.
+function onBridge(pos: Vec, r: number): boolean {
+  const bridge = TERRAIN.features.bridge;
+  return segmentDist(pos, bridge.from, bridge.to) < bridge.width / 2 + r;
 }
 
 function clearOfSites(pos: Vec, r: number): boolean {

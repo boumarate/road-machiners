@@ -40,6 +40,7 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 - `src/audio/` plays sound through Web Audio. `src/data/sounds.ts` lists every cue and its files in `public/sfx/`, and a test keeps both in sync. Every file goes through `scripts/sfx-lib.mjs`, which sets loudness per sound group and one format. Generated prompts start with the shared `SOUND_STYLE`, so sounds stay consistent.
 - Any uncaught error shows a fullscreen crash screen with the message.
 - All randomness goes through `src/sim/rng.ts` with state in the world. Render-only noise lives in `src/render/noise.ts`.
+- `src/sim/bridge.ts` holds Canyon Bridge. The map stays one level. `heightAt` returns the deck height on the deck, and `groundAt` returns the canyon floor under it. Both rails block routes and physics, so trucks get on only over the ends.
 - Map coordinates are in tiles. Physics and 3D space are in meters: map x is 3D x, map y is 3D z, height is 3D y. `src/phys/frames.ts` converts.
 - The UI shows real units: km/h, meters, kg, liters and °C. `src/ui/units.ts` converts from sim units, with display numbers in `src/data/units.ts`.
 

@@ -13,7 +13,9 @@ import { vehicleMass } from '../sim/mass';
 import { vehicleStats, type VehicleStats } from '../sim/stats';
 import { route, straightClear } from '../sim/path';
 import { parkedVehicles, shouldBackToDestination, zoneSpeed } from '../sim/steering';
-import { heightAt } from '../sim/terrain';
+import { BRIDGE_AXIS, BRIDGE_LENGTH } from '../sim/bridge';
+import { deckEnds, heightAt } from '../sim/terrain';
+import { TERRAIN } from '../data/terrain';
 import type { MoveOrder, Vehicle, World } from '../sim/types';
 import { angleDiff, clamp, DEG, dist, type Vec } from '../sim/vec';
 import { bodyOf, type Body } from '../sim/body';
@@ -28,6 +30,7 @@ export const TURN_STEPS = Math.round(PHYSICS.turnSeconds * PHYSICS.stepsPerSecon
 const TELEPORT_TILES = 0.5; // a sim position this far from its body was moved by the rules, not by driving
 const WALL = 50; // meters of wall thickness at the map edge
 export const EDGE = 'edge'; // the crash target name for the map border
+export const RAIL = 'rail'; // the crash target name for a Canyon Bridge rail
 
 // Tiles per turn to meters per second, and back.
 export const toMps = (tilesPerTurn: number) => (tilesPerTurn * S) / PHYSICS.turnSeconds;
@@ -44,9 +47,13 @@ export type Drive = {
   obstacles: Record<string, number>; // obstacle id to collider handle
   memory: Record<string, Memory>;
   terrain: number; // terrain collider handle
+  bridge: Bridge;
 };
 
-export type Crash = { a: string; b: string; impact: number }; // b is a vehicle id, an obstacle id or 'edge'; impact in m/s
+// Collider handles of the Canyon Bridge deck and its two rails.
+export type Bridge = { deck: number; rails: number[] };
+
+export type Crash = { a: string; b: string; impact: number }; // b is a vehicle id, an obstacle id, 'edge' or 'rail'; impact in m/s
 export type VehicleResult = { passed: boolean; arrived: boolean };
 export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; results: Record<string, VehicleResult> };
 
@@ -56,7 +63,7 @@ export async function initPhysics(): Promise<void> {
 
 export function buildDrive(w: World): Drive {
   const world = new RAPIER.World({ x: 0, y: -PHYSICS.gravity, z: 0 });
-  const d: Drive = { world, bodies: {}, obstacles: {}, memory: {}, terrain: addTerrain(world, w) };
+  const d: Drive = { world, bodies: {}, obstacles: {}, memory: {}, terrain: addTerrain(world, w), bridge: addBridge(world, w) };
   syncDrive(d, w);
   return d;
 }
@@ -172,7 +179,7 @@ function run(d: Drive, w: World, steps: number): TurnResult {
     world.step(events);
     events.drainCollisionEvents((h1, h2, started) => {
       if (!started) return;
-      const crash = crashOf(h1, h2, owner, obstacleOf, d.terrain, before);
+      const crash = crashOf(h1, h2, owner, obstacleOf, d, before);
       if (!crash) return;
       const key = [crash.a, crash.b].sort().join('|');
       if (crashed.has(key)) return;
@@ -184,16 +191,17 @@ function run(d: Drive, w: World, steps: number): TurnResult {
   for (const c of cars) world.removeVehicleController(c.ctl);
   events.free();
   const results = Object.fromEntries(cars.map((c) => [c.v.id, c.result]));
-  return { next: { world, bodies: { ...d.bodies }, obstacles: { ...d.obstacles }, memory, terrain: d.terrain }, frames, crashes, results };
+  return { next: { world, bodies: { ...d.bodies }, obstacles: { ...d.obstacles }, memory, terrain: d.terrain, bridge: d.bridge }, frames, crashes, results };
 }
 
-function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf: Map<number, string>, terrain: number, before: Map<string, RAPIER.Vector>): Crash | null {
+function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf: Map<number, string>, d: Drive, before: Map<string, RAPIER.Vector>): Crash | null {
   const a = owner.get(h1) ?? owner.get(h2);
   if (a === undefined) return null;
   const other = owner.get(h1) === a ? h2 : h1;
-  if (other === terrain) return null;
+  // The deck is ground, like the terrain.
+  if (other === d.terrain || other === d.bridge.deck) return null;
   const va = before.get(a)!;
-  const b = owner.get(other) ?? obstacleOf.get(other) ?? EDGE;
+  const b = owner.get(other) ?? obstacleOf.get(other) ?? (d.bridge.rails.includes(other) ? RAIL : EDGE);
   const vb = owner.has(other) ? before.get(b)! : { x: 0, y: 0, z: 0 };
   return { a, b, impact: Math.hypot(va.x - vb.x, va.z - vb.z) };
 }
@@ -384,4 +392,35 @@ function addTerrain(world: RAPIER.World, w: World): number {
     world.createCollider(RAPIER.ColliderDesc.cuboid(hx, PHYSICS.wallHeight, hz).setTranslation(x, 0, z));
   }
   return terrain;
+}
+
+// The Canyon Bridge deck, its top on the deck line from sim/terrain.ts, and a rail along each edge.
+function addBridge(world: RAPIER.World, w: World): Bridge {
+  const B = PHYSICS.bridge;
+  const { from } = TERRAIN.features.bridge;
+  const [h0, h1] = deckEnds(w.terrain);
+  const length = BRIDGE_LENGTH * S;
+  const pitch = Math.atan2((h1 - h0) * S, length);
+  // Yaw turns local +x onto the deck axis, then pitch about local z raises the to end.
+  const yaw = headingQuat(Math.atan2(BRIDGE_AXIS.y, BRIDGE_AXIS.x));
+  const rot = { x: yaw.y * Math.sin(pitch / 2), y: yaw.y * Math.cos(pitch / 2), z: yaw.w * Math.sin(pitch / 2), w: yaw.w * Math.cos(pitch / 2) };
+  const up = { x: -Math.sin(pitch) * BRIDGE_AXIS.x, y: Math.cos(pitch), z: -Math.sin(pitch) * BRIDGE_AXIS.y };
+  const across = { x: -BRIDGE_AXIS.y, z: BRIDGE_AXIS.x };
+  const mid = {
+    x: (from.x + (BRIDGE_AXIS.x * BRIDGE_LENGTH) / 2) * S,
+    y: ((h0 + h1) / 2) * S,
+    z: (from.y + (BRIDGE_AXIS.y * BRIDGE_LENGTH) / 2) * S,
+  };
+  // A box whose top face center sits `lift` meters along the deck's up from the deck line, `side` meters across.
+  const box = (halfWidth: number, halfHeight: number, side: number, lift: number) => {
+    const c = lift - halfHeight;
+    const desc = RAPIER.ColliderDesc.cuboid(length / 2, halfHeight, halfWidth)
+      .setTranslation(mid.x + up.x * c + across.x * side, mid.y + up.y * c, mid.z + up.z * c + across.z * side)
+      .setRotation(rot);
+    return world.createCollider(desc).handle;
+  };
+  const halfWidth = (TERRAIN.features.bridge.width * S) / 2;
+  const deck = box(halfWidth, B.deckThickness / 2, 0, 0);
+  const rails = [-1, 1].map((side) => box(B.railThickness / 2, B.railHeight / 2, side * halfWidth, B.railHeight));
+  return { deck, rails };
 }

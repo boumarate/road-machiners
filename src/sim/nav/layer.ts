@@ -3,6 +3,7 @@
 // stamps them per query.
 
 import { TERRAIN_TYPES } from '../../data/terrain';
+import { nearRail } from '../bridge';
 import { isDriveObstacle } from '../mapgen';
 import { isCliff, type Terrain } from '../terrain';
 import type { Obstacle } from '../types';
@@ -41,7 +42,7 @@ export type CoarseGrid = {
 export type NavLayer = TerrainNav & {
   id: number; // identity for route cache keys
   radius: number;
-  blocked: Uint8Array; // cliffs within reach and static drive obstacles, per cell
+  blocked: Uint8Array; // cliffs and bridge rails within reach and static drive obstacles, per cell
   coarse: CoarseGrid;
 };
 
@@ -131,7 +132,11 @@ export function navLayer(terrain: Terrain, obstacles: Obstacle[], radius: number
     if (e.cellCliff.size >= LAYERS_MAX) e.cellCliff.clear();
     cliff = new Uint8Array(n * n);
     const reach = radius + CLEARANCE;
-    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (nearCliff(nav, (x + 0.5) * CELL, (y + 0.5) * CELL, reach)) cliff[y * n + x] = 1;
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const cx = (x + 0.5) * CELL;
+      const cy = (y + 0.5) * CELL;
+      if (nearCliff(nav, cx, cy, reach) || nearRail(cx, cy, reach)) cliff[y * n + x] = 1;
+    }
     e.cellCliff.set(radius, cliff);
   }
   const blocked = cliff.slice();

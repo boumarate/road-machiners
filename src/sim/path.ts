@@ -2,6 +2,7 @@
 // routes prefer roads over sand, then shortcut to visible corners. Moving vehicles are not in the
 // grid, so ramming and blocking still happen. The grid itself lives in ./nav.
 
+import { crossesRail } from './bridge';
 import { count, timed } from '../perf';
 import { findCells, nearestFreeCell, stampOverlay, startComponent } from './nav/astar';
 import type { Blocker } from './nav/buckets';
@@ -132,6 +133,7 @@ function slowestSpeed(nav: TerrainNav, cur: Vec, points: Vec[], i: number, last:
 
 function clearLine(nav: TerrainNav, statics: StaticSet, dynamic: Blocker[], a: Vec, b: Vec, reach: number, minSpeed: number): boolean {
   for (const o of dynamic) if (segmentDist(o.pos, a, b) < o.r + reach) return false;
+  if (crossesRail(a, b, reach)) return false;
   for (const o of statics.buckets.alongSegment(a, b, reach)) if (segmentDist(o.pos, a, b) < o.r + reach) return false;
   const n = Math.ceil(dist(a, b) * LINE_SAMPLES_PER_TILE);
   const steps = Math.max(1, n);

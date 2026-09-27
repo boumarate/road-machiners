@@ -46,5 +46,6 @@ export const PHYSICS = {
   },
   rockHeight: 3, // meters of obstacle collider height
   rockSink: 0.5, // meters an obstacle collider reaches below the ground, so slopes leave no gap
+  bridge: { deckThickness: 0.6, railHeight: 1.6, railThickness: 0.3 }, // meters
   wallHeight: 200, // meters; half height of the walls at the map edge
 } as const;
