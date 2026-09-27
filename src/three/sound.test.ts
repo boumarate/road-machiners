@@ -23,14 +23,19 @@ describe("stingOf", () => {
 });
 
 describe("loopLevels", () => {
-  const calm = { stormTiles: 100, danger: false };
+  const calm = { stormTiles: 100, turnsSinceDanger: Infinity };
   it("raises wind near storms", () => {
     expect(loopLevels(calm, MIX).windGain).toBe(MIX.wind.baseGain);
     expect(loopLevels({ ...calm, stormTiles: 0 }, MIX).windGain).toBe(MIX.wind.stormGain);
   });
   it("switches music to combat while in danger", () => {
-    const l = loopLevels({ ...calm, danger: true }, MIX);
+    const l = loopLevels({ ...calm, turnsSinceDanger: 0 }, MIX);
     expect([l.calmGain, l.combatGain]).toEqual([0, 1]);
+  });
+  it("holds combat music for a few turns after the last hostile leaves sight", () => {
+    const hold = MIX.music.holdTurns;
+    expect(loopLevels({ ...calm, turnsSinceDanger: hold }, MIX).combatGain).toBe(1);
+    expect(loopLevels({ ...calm, turnsSinceDanger: hold + 1 }, MIX).combatGain).toBe(0);
   });
 });
 

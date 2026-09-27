@@ -51,18 +51,19 @@ export class SoundDirector {
   }
 }
 
-// What the loops respond to each frame.
-export type LoopState = { stormTiles: number; danger: boolean };
+// What the loops respond to each frame. turnsSinceDanger is Infinity when no hostile was ever in sight.
+export type LoopState = { stormTiles: number; turnsSinceDanger: number };
 
 export type LoopLevels = { windGain: number; calmGain: number; combatGain: number };
 
 export function loopLevels(s: LoopState, mix: typeof MIX): LoopLevels {
   const w = mix.wind;
   const near = Math.max(0, 1 - s.stormTiles / w.stormReachTiles);
+  const danger = s.turnsSinceDanger <= mix.music.holdTurns;
   return {
     windGain: w.baseGain + (w.stormGain - w.baseGain) * near,
-    calmGain: s.danger ? 0 : 1,
-    combatGain: s.danger ? 1 : 0,
+    calmGain: danger ? 0 : 1,
+    combatGain: danger ? 1 : 0,
   };
 }
 
