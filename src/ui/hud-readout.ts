@@ -19,12 +19,13 @@ import type { ContextAction } from './hud';
 import { canUseOasis, salvageHere, salvageNear } from '../sim/locations';
 import { locationAt, townAt, townNear } from '../sim/sites';
 import { playerCanAct } from '../sim/world';
+import { isBusy } from '../sim/jobs';
 
 export function getContextAction(world: World, playing: boolean): ContextAction | null {
   if (playing || !playerCanAct(world)) return null;
   const town = townNear(world);
   if (town) return { label: `Enter ${town.name}`, ready: townAt(world) !== null };
-  if (playerVehicle(world).job) return null;
+  if (isBusy(playerVehicle(world))) return null;
   return getSiteAction(world);
 }
 

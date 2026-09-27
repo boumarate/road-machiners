@@ -86,7 +86,8 @@ export type Job =
       parts: number;
       turnsLeft: number;
       total: number;
-    } // parts: the most this job spends
+      auto?: true;
+    } // parts: the most this job spends. auto: started by auto patch, so any player job replaces it
   | { kind: "search"; stockId: string; turnsLeft: number; total: number }
   | RefitJob;
 

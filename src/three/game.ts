@@ -26,7 +26,7 @@ import {
 import { applyTurn, type PreparedTurn } from "../phys/turn";
 import { playerVehicle, vehicleById } from "../sim/damage";
 import { corePart, mountedParts } from "../sim/grid";
-import { applySiteAction } from "../sim/locations";
+import { applySiteAction, canLoot, salvageHere } from "../sim/locations";
 import { getContextAction } from "../ui/hud-readout";
 import { townAt } from "../sim/sites";
 import { isStranded, maxTurn, vehicleStats } from "../sim/stats";
@@ -78,7 +78,7 @@ import { REGION } from "../data/region";
 import { TERRAIN_TYPES } from "../data/terrain";
 import { bodyOf } from "../sim/body";
 import { headingOf } from "../phys/frames";
-import { canLoot, salvageHere } from "../sim/locations";
+import { isBusy } from "../sim/jobs";
 import { daylightAt, lightScene, sunLight } from "./render/daylight";
 import { sunAt } from "../sim/sun";
 import { tileAt } from "../sim/terrain";
@@ -407,7 +407,7 @@ export class Game {
   private useContext(): void {
     if (this.anim || !playerCanAct(this.world)) return;
     if (townAt(this.world)) return this.town.open();
-    if (playerVehicle(this.world).job) return;
+    if (isBusy(playerVehicle(this.world))) return;
     const after = applySiteAction(this.world);
     if (after) {
       this.apply(after);
