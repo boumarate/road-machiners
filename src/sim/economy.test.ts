@@ -4,7 +4,7 @@ import { XP_TO_REACH } from "../data/skills";
 import { CHASSIS } from "../data/chassis";
 import { ECONOMY, GOOD_IDS } from "../data/goods";
 import { SHOPS } from "../data/market";
-import { goodBasePrice } from "./market";
+import { goodBasePrice, lotPrice, shopState } from "./market";
 import { partDef } from "../data/parts";
 import { REGION } from "../data/region";
 import { RULES } from "../data/rules";
@@ -16,6 +16,7 @@ import {
   buyPrice,
   buySupply,
   chassisTradeIn,
+  getLotTradePrice,
   partRepairCost,
   partTradePrice,
   repairAll,
@@ -33,7 +34,7 @@ import {
 } from "./grid";
 import { makePart } from "./factory";
 import { maxHp, partValue } from "./wear";
-import { spareParts } from "./inventory";
+import { addGoods, spareParts } from "./inventory";
 import { applySiteAction, canScavenge, salvageNear, scavenge, useOasis } from "./locations";
 import { consumeSupplies } from "./supplies";
 import { heatAt } from "./sun";
@@ -72,8 +73,9 @@ describe("trade", () => {
     const money = w.player.money;
     const sold = sellPrice(w, "nose", "scrap");
     expect(sold).toBeGreaterThan(bought);
+    const total = getLotTradePrice(w, w.vehicles[0], "nose", "scrap", 10, "sell");
     w = sellGood(w, "scrap", 10);
-    expect(w.player.money - money).toBe(10 * sold);
+    expect(w.player.money - money).toBe(total);
     expect(w.player.skills.social).toBeGreaterThan(0);
   });
 
@@ -105,6 +107,52 @@ describe("trade", () => {
     for (const [id] of Object.entries(SHOPS).filter(([, s]) => s.kind === "garage"))
       for (const good of GOOD_IDS) expect(goodBasePrice(id, good)).toBeGreaterThan(0);
   });
+
+  it("a lot price equals the sum of single-unit trades", () => {
+    const w = startAtBowl();
+    const state = shopState(w, "bowl");
+    for (const direction of ["buy", "sell"] as const) {
+      const lot = lotPrice("bowl", state, "scrap", direction, ECONOMY.spread, 25);
+      let summed = 0;
+      const pressure = { ...state.pressure };
+      for (let i = 0; i < 25; i++) {
+        summed += lotPrice("bowl", { ...state, pressure }, "scrap", direction, ECONOMY.spread, 1);
+        pressure.scrap = (pressure.scrap ?? 0) + SHOPS.bowl.pressurePerUnit * (direction === "buy" ? 1 : -1);
+      }
+      expect(lot).toBe(summed);
+    }
+  });
+
+  it.each([0, XP_TO_REACH[3]])(
+    "selling then buying back 25 units always loses money, at social skill %i",
+    (social) => {
+      for (const pressureStart of [0, 0.3, -0.3]) {
+        const w = startAtBowl();
+        w.player.skills.social = social;
+        w.shops.bowl.pressure.scrap = pressureStart;
+        addGoods(w, w.vehicles[0], "scrap", 25 - (goodsCount(w.vehicles[0]).scrap ?? 0));
+
+        const before = w.player.money;
+        const after = buyGood(sellGood(w, "scrap", 25), "scrap", 25);
+        expect(after.player.money).toBeLessThan(before);
+      }
+    },
+  );
+
+  it.each([0, XP_TO_REACH[3]])(
+    "buying then selling back 25 units always loses money, at social skill %i",
+    (social) => {
+      for (const pressureStart of [0, 0.3, -0.3]) {
+        const w = startAtBowl();
+        w.player.skills.social = social;
+        w.shops.bowl.pressure.scrap = pressureStart;
+
+        const before = w.player.money;
+        const after = sellGood(buyGood(w, "scrap", 25), "scrap", 25);
+        expect(after.player.money).toBeLessThan(before);
+      }
+    },
+  );
 });
 
 describe("garage", () => {

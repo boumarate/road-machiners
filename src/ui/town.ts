@@ -13,6 +13,7 @@ import {
   buyStockPart,
   buySupply,
   chassisTradeIn,
+  getLotTradePrice,
   partRepairCost,
   partTradePrice,
   repairAll,
@@ -180,7 +181,7 @@ export class TownScreen {
           el(
             "button",
             { onclick: () => this.run((x) => buyGood(x, g, 5)) },
-            "Buy 5",
+            `Buy 5 for ${getLotTradePrice(w, me, shopId, g, 5, "buy")}`,
           ),
           " ",
           el(
@@ -198,7 +199,9 @@ export class TownScreen {
               disabled: held === 0,
               onclick: () => this.run((x) => sellGood(x, g, held)),
             },
-            "Sell all",
+            held
+              ? `Sell all for ${getLotTradePrice(w, me, shopId, g, held, "sell")}`
+              : "Sell all",
           ),
         ),
       );

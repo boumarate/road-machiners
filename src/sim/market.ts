@@ -90,14 +90,35 @@ export function goodBasePrice(shopId: string, good: string): number {
   return goodValue(good) * priceFactorFor(def, good);
 }
 
-// The buy or sell price of a good at a shop, from its base price, standing pressure and a spread
-// fraction applied on top (buy up, sell down). Sell always rounds to strictly below buy (IV4).
-export function goodPrice(shopId: string, state: ShopState, good: string, direction: 'buy' | 'sell', spread: number): number {
+// The buy or sell price of one unit at a given standing pressure, from the good's base price and a
+// spread fraction applied on top (buy up, sell down). Sell always rounds to strictly below buy (IV4).
+function priceAtPressure(shopId: string, good: string, pressure: number, direction: 'buy' | 'sell', spread: number): number {
   if (!(spread >= 0)) throw new Error(`Bad spread ${spread}`);
-  const pressured = goodBasePrice(shopId, good) * (1 + (state.pressure[good] ?? 0));
+  const pressured = goodBasePrice(shopId, good) * (1 + pressure);
   const buy = Math.max(1, Math.ceil(pressured * (1 + spread)));
   const sell = Math.min(buy - 1, Math.floor(pressured * (1 - spread)));
   return direction === 'buy' ? buy : Math.max(0, sell);
+}
+
+// The buy or sell price of one unit at a shop's standing pressure (IV1).
+export function goodPrice(shopId: string, state: ShopState, good: string, direction: 'buy' | 'sell', spread: number): number {
+  return priceAtPressure(shopId, good, state.pressure[good] ?? 0, direction, spread);
+}
+
+// The price of a whole lot: each unit priced at the pressure left by the unit before it, so a lot
+// price always equals the sum of trading the same units one at a time. A round trip through
+// tradeGoods, which prices every unit this way and moves pressure only after the whole lot, can
+// never turn a profit at one shop.
+export function lotPrice(shopId: string, state: ShopState, good: string, direction: 'buy' | 'sell', spread: number, count: number): number {
+  if (!Number.isInteger(count) || count <= 0) throw new Error(`Bad lot count ${count}`);
+  const perUnit = shopDef(shopId).pressurePerUnit * (direction === 'buy' ? 1 : -1);
+  let pressure = state.pressure[good] ?? 0;
+  let total = 0;
+  for (let i = 0; i < count; i++) {
+    total += priceAtPressure(shopId, good, pressure, direction, spread);
+    pressure = Math.max(-PRESSURE_MAX, Math.min(PRESSURE_MAX, pressure + perUnit));
+  }
+  return total;
 }
 
 // Moves standing pressure by the shop's pressurePerUnit per unit traded, clamped to PRESSURE_MAX
@@ -253,14 +274,17 @@ export function shopState(world: World, shopId: string): ShopState {
 }
 
 // Tops a shop's board up to its contract slots. Haul targets are the other shops that trade the good.
-// A fetch never asks for a part the shop has in stock.
+// A fetch never asks for a part the shop has in stock. A board never names the same bounty template
+// twice: raiders already posted on this board are dropped before each roll, so one kill can never be
+// asked for by two offers on the same board.
 function fillBoard(world: World, shopId: string, state: ShopState): void {
   const def = shopDef(shopId);
   const places = Object.keys(SHOPS).filter((id) => id !== shopId).map((id) => ({ id, pos: shopPos(id) }));
   const stocked = new Set(state.stock.map((p) => p.defId));
   const partDefIds = Object.keys(PARTS).filter((id) => PARTS[id].kind !== 'core' && !stocked.has(id));
-  const raiders = world.vehicles.filter((v) => v.faction === 'raiders');
   while (state.contracts.length < def.contractSlots) {
+    const postedTemplates = new Set(state.contracts.filter((c) => c.kind === 'bounty').map((c) => c.template));
+    const raiders = world.vehicles.filter((v) => v.faction === 'raiders' && v.brain && !postedTemplates.has(v.brain.templateId));
     const contract = rollContract(world, { id: shopId, pos: shopPos(shopId) }, places, def.goods, partDefIds, raiders);
     if (!contract) return;
     state.contracts.push(contract);
@@ -283,13 +307,16 @@ export function initializeShops(world: World): void {
   }
 }
 
-// Drift and restock every shop. A restock also drops stale offers and refills the board.
+// Drift and restock every shop. Expired offers drop from every board every turn, so an accepted
+// offer is never past its deadline. A restock also drops offers whose target has lapsed and refills
+// the board.
 export function advanceShops(world: World): void {
   for (const [shopId, state] of Object.entries(world.shops)) {
     const restockAt = state.restockAt;
     advanceShop(world, shopId, state);
+    state.contracts = state.contracts.filter((c) => !isExpired(world, c));
     if (state.restockAt === restockAt) continue;
-    state.contracts = state.contracts.filter((c) => !isExpired(world, c) && offerStillValid(world, c));
+    state.contracts = state.contracts.filter((c) => offerStillValid(world, c));
     fillBoard(world, shopId, state);
   }
 }
@@ -323,6 +350,7 @@ export function acceptContract(world: World, contractId: string): World {
     const board = shopState(w, shopId).contracts;
     const contract = board.find((c) => c.id === contractId);
     if (!contract) throw new Error(`No contract ${contractId} at ${shopId}`);
+    if (isExpired(w, contract)) throw new Error(`Offer ${contractId} has expired`);
     if (w.player.contracts.length >= CONTRACTS.maxActive) throw new Error(`You already hold ${CONTRACTS.maxActive} contracts`);
     if (contract.kind === 'haul') loadHaul(w, contract);
     board.splice(board.indexOf(contract), 1);
@@ -385,16 +413,26 @@ function finishContract(world: World, c: Contract, outcome: 'done' | 'failed' | 
   }
 }
 
-// Settles bounties from this turn's kills and ends contracts past their deadline or target.
+// Settles bounties from this turn's kills and ends contracts past their deadline or target. A held
+// bounty pays only once per template this turn, so one kill never pays out several held bounties on
+// the same template.
 export function advanceContracts(world: World): void {
+  const paidTemplates = new Set<string>();
   for (const c of [...world.player.contracts]) {
-    const outcome = contractOutcome(world, c);
+    const outcome = contractOutcome(world, c, paidTemplates);
     if (outcome) finishContract(world, c, outcome);
   }
 }
 
-function contractOutcome(world: World, c: Contract): 'done' | 'failed' | 'lapsed' | null {
-  if (c.kind === 'bounty' && bountyFulfilled(world, c)) return 'done';
-  if (c.kind === 'bounty' && bountyLapsed(world, c)) return 'lapsed';
+function bountyOutcome(world: World, c: Extract<Contract, { kind: 'bounty' }>, paidTemplates: Set<string>): 'done' | 'lapsed' | null {
+  if (bountyFulfilled(world, c) && !paidTemplates.has(c.template)) {
+    paidTemplates.add(c.template);
+    return 'done';
+  }
+  return bountyLapsed(world, c) ? 'lapsed' : null;
+}
+
+function contractOutcome(world: World, c: Contract, paidTemplates: Set<string>): 'done' | 'failed' | 'lapsed' | null {
+  if (c.kind === 'bounty') return bountyOutcome(world, c, paidTemplates) ?? (isExpired(world, c) ? 'failed' : null);
   return isExpired(world, c) ? 'failed' : null;
 }

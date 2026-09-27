@@ -14,7 +14,7 @@ import { maxHp } from '../wear';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder } from '../world';
 import { playerVehicle, vehicleById } from '../damage';
 import { chooseOption, currentOptions } from '../dialogue';
-import { buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
+import { affordableBuyCount, buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
 import { findSpot, freeCells, goodsCount, gridOf, isMounted, MOUNT_CELLS, mountedParts, type Spot } from '../grid';
 import { moveItem, storePart, takeFromStorage } from '../inventory';
 import { shopAt, shopState } from '../market';
@@ -290,7 +290,7 @@ function bestPurchase(world: World): Purchase | null {
 function purchase(world: World, { source, market, good, spend }: { source: TownDef; market: TownDef; good: string; spend: number }): Purchase {
   const me = playerVehicle(world);
   const buy = getTradePrice(world, me, source.id, good, 'buy');
-  const count = Math.max(0, Math.min(freeCells(me), Math.floor(spend / buy)));
+  const count = affordableBuyCount(world, me, source.id, good, freeCells(me), spend);
   return { town: source, good, count, profit: (sellAt(world, market, good) - buy) * count };
 }
 

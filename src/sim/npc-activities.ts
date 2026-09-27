@@ -8,7 +8,7 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import type { PartHit } from './armor';
 import { isHostile, startFeuds } from './combat';
-import { getTradePrice, sellVehicleCargo, serviceAtCamp, serviceVehicle, tradeGoods } from './economy';
+import { affordableBuyCount, getTradePrice, sellVehicleCargo, serviceAtCamp, serviceVehicle, tradeGoods } from './economy';
 import { isJunk, maxHp } from './wear';
 import { corePart, freeCells, goodsCount, mountedParts } from './grid';
 import { cancelJob } from './jobs';
@@ -819,8 +819,8 @@ function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): vo
   const site = reachSite(vehicle, activity);
   if (!site) return;
   if (!activity.purchase) throw new Error('Trade activity missing purchase');
-  const price = getTradePrice(world, vehicle, site.id, activity.purchase.good, 'buy');
-  const count = Math.min(freeCells(vehicle), Math.floor((getResources(world, vehicle).money - getUpkeepReserve(vehicle)) / price));
+  const budget = getResources(world, vehicle).money - getUpkeepReserve(vehicle);
+  const count = affordableBuyCount(world, vehicle, site.id, activity.purchase.good, freeCells(vehicle), budget);
   if (count > 0) {
     tradeGoods(world, vehicle, site.id, activity.purchase.good, count, 'buy');
     if (vehicle.brain!.goals[0] !== activity) throw new Error(`${vehicle.id} trades above its long-term goal`);

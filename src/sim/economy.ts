@@ -13,7 +13,7 @@ import { isJunk, maxHp, partValue, restorePart, scrapValue, wearFactor } from ".
 import { playerVehicle } from "./damage";
 import { addCoreParts } from "./factory";
 import { practice, skillEffect } from "./progress";
-import { addStockPart, goodPrice, recordTrade, shopAt, shopState, siteOf, takeStockPart } from "./market";
+import { addStockPart, goodPrice, lotPrice, recordTrade, shopAt, shopState, siteOf, takeStockPart } from "./market";
 import { canUseSite, requireTown } from "./sites";
 import { freeCells, goodsCount, mountedParts } from "./grid";
 import { addGoods, mountPart, removeGoods, spareParts, stowPart } from "./inventory";
@@ -57,6 +57,20 @@ export function getTradePrice(
   return goodPrice(shopId, shopState(world, shopId), good, direction, margin);
 }
 
+// The total price of a whole lot, each unit priced at the pressure left by the unit before it.
+export function getLotTradePrice(
+  world: World,
+  vehicle: Vehicle,
+  shopId: string,
+  good: string,
+  count: number,
+  direction: "buy" | "sell",
+): number {
+  const margin =
+    vehicle.id === world.player.vehicleId ? spread(world) : ECONOMY.spread;
+  return lotPrice(shopId, shopState(world, shopId), good, direction, margin, count);
+}
+
 export function tradeGoods(
   world: World,
   vehicle: Vehicle,
@@ -68,27 +82,52 @@ export function tradeGoods(
   requireVehicleShop(world, vehicle, shopId);
   if (!GOODS[good] || !Number.isInteger(count) || count <= 0)
     throw new Error(`Bad trade ${count} ${good}`);
-  const resources = getResources(world, vehicle);
-  const price = getTradePrice(world, vehicle, shopId, good, direction);
-  const held = goodsCount(vehicle)[good] ?? 0;
-  if (direction === "buy") {
-    if (resources.money < price * count) throw new Error("Not enough money");
-    if (freeCells(vehicle) < count) throw new Error("Not enough cargo space");
-    const added = addGoods(world, vehicle, good, count);
-    if (added !== count) throw new Error("Cargo capacity invariant failed");
-    resources.money -= price * count;
-    if (vehicle.id === world.player.vehicleId)
-      world.player.costBasis[good] =
-        ((world.player.costBasis[good] ?? 0) * held + price * count) /
-        (held + count);
-  } else {
-    if (count > held)
-      throw new Error(`Cannot sell ${count} ${good}, holding ${held}`);
-    removeGoods(vehicle, good, count);
-    resources.money += price * count;
-    if (vehicle.id === world.player.vehicleId) practiceSale(world, good, price, count);
-  }
+  const total = getLotTradePrice(world, vehicle, shopId, good, count, direction);
+  if (direction === "buy") buyGoods(world, vehicle, good, count, total);
+  else sellGoods(world, vehicle, good, count, total);
   recordTrade(shopId, shopState(world, shopId), good, count, direction);
+}
+
+function buyGoods(world: World, vehicle: Vehicle, good: string, count: number, total: number): void {
+  const resources = getResources(world, vehicle);
+  if (resources.money < total) throw new Error("Not enough money");
+  if (freeCells(vehicle) < count) throw new Error("Not enough cargo space");
+  const added = addGoods(world, vehicle, good, count);
+  if (added !== count) throw new Error("Cargo capacity invariant failed");
+  resources.money -= total;
+  if (vehicle.id === world.player.vehicleId) trackCostBasis(world, vehicle, good, count, total);
+}
+
+// The player's running average price paid for a good, weighted by units held before this buy.
+function trackCostBasis(world: World, vehicle: Vehicle, good: string, count: number, total: number): void {
+  const held = goodsCount(vehicle)[good] ?? 0;
+  const heldBefore = held - count;
+  world.player.costBasis[good] =
+    ((world.player.costBasis[good] ?? 0) * heldBefore + total) / held;
+}
+
+function sellGoods(world: World, vehicle: Vehicle, good: string, count: number, total: number): void {
+  const held = goodsCount(vehicle)[good] ?? 0;
+  if (count > held) throw new Error(`Cannot sell ${count} ${good}, holding ${held}`);
+  removeGoods(vehicle, good, count);
+  getResources(world, vehicle).money += total;
+  if (vehicle.id === world.player.vehicleId) practiceSale(world, good, total / count, count);
+}
+
+// The largest lot of `good` a buyer can both fit and afford at `shopId`, since a lot's total price
+// rises unit by unit and a single-unit estimate can overshoot the budget.
+export function affordableBuyCount(
+  world: World,
+  vehicle: Vehicle,
+  shopId: string,
+  good: string,
+  cap: number,
+  budget: number,
+): number {
+  const unitPrice = getTradePrice(world, vehicle, shopId, good, "buy");
+  let count = Math.max(0, Math.min(cap, Math.floor(budget / unitPrice)));
+  while (count > 0 && getLotTradePrice(world, vehicle, shopId, good, count, "buy") > budget) count--;
+  return count;
 }
 
 // Social grows from profit over the average price paid. A sale at a loss teaches nothing.
