@@ -725,12 +725,11 @@ export class Game {
   }
 
   // Explosions and broken parts where they happen, then one result sting for the turn.
-  // The player's horn at once, then each answer a beat later, nearest first. Fog silences unseen trucks.
+  // The player's horn at once, then each answer a beat later, nearest first. Answers come only from earshot, so unseen trucks are heard.
   private playHonks(): void {
-    const honks = this.world.events.filter((e) => e.t === "honk");
-    honks.forEach((e, i) => {
-      const p = this.eventPoint(e.vehicle);
-      if (p) this.sound.honk(p, i * HONK_REPLY_MS, vehicleById(this.world, e.vehicle).chassisId);
+    this.world.events.filter((e) => e.t === "honk").forEach((e, i) => {
+      const v = vehicleById(this.world, e.vehicle), f = this.frames[v.id] ?? restFrame(this.world, v);
+      this.sound.honk({ x: f.pos.x, y: f.pos.y + GUN_HEIGHT, z: f.pos.z }, i * HONK_REPLY_MS, v.chassisId);
     });
   }
 
