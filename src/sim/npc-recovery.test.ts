@@ -238,6 +238,6 @@ describe('NPC gameplay recovery', () => {
     prey.speed = 4;
     const activity = thinkNpc(world, npc);
     expect(['resupply', 'repair']).toContain(activity.kind);
-    if (activity.kind === 'repair') expect(activity.destination).toEqual(npc.pos);
+    if (activity.kind === 'repair') expect(activity.destination).toBeNull();
   });
 });

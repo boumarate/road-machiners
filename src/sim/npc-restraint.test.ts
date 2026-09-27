@@ -5,7 +5,7 @@ import { REGION } from '../data/region';
 import { partDef } from '../data/parts';
 import { planNpcOrders } from './ai';
 import { assignAutoOrders } from './combat';
-import { corePart, goodsCount } from './grid';
+import { corePart, goodsCount, mountedParts } from './grid';
 import { addGoods } from './inventory';
 import { advanceJobs } from './jobs';
 import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
@@ -133,6 +133,49 @@ describe('NPC field repairs', () => {
     expect(npc.job).toBeNull();
     expect(cab.hp).toBeGreaterThan(before);
     expect(goodsCount(npc).parts ?? 0).toBeLessThan(2);
+  });
+
+  it('keeps repairing where it stands after drifting off its shade spot', () => {
+    const { world, npc } = createNpc();
+    addGoods(world, npc, 'parts', 2);
+    // Each part is one carried part short of the field cap.
+    const cab = corePart(npc, 'cab');
+    cab.hp = partDef(cab.defId).hp * 0.4;
+    const engine = mountedParts(npc, 'engine')[0];
+    engine.hp = partDef(engine.defId).hp * 0.45;
+    const before = { cab: cab.hp, engine: engine.hp };
+    world.obstacles.push({ id: 'shade-rock', kind: 'rock', pos: { x: 34, y: 33 }, r: 1 });
+    planNpcOrders(world);
+    const spot = { ...topGoal(npc)!.destination! };
+    npc.pos = { ...spot };
+    npc.speed = 0;
+    resolveNpcActivities(world);
+    expect(npc.job?.kind).toBe('repair');
+    while (npc.job) advanceJobs(world);
+    npc.pos = { x: spot.x + 0.7, y: spot.y };
+    for (let turn = 0; turn < 6 && npc.job === null && (goodsCount(npc).parts ?? 0) > 0; turn++) {
+      planNpcOrders(world);
+      expect(npc.order?.kind).toBe('brake');
+      resolveNpcActivities(world);
+      while (npc.job) advanceJobs(world);
+    }
+    expect(goodsCount(npc).parts ?? 0).toBe(0);
+    expect(cab.hp).toBeGreaterThan(before.cab);
+    expect(engine.hp).toBeGreaterThan(before.engine);
+  });
+
+  it('repairs where it stands when no shade was found, even after rolling on', () => {
+    const { world, npc } = createNpc();
+    addGoods(world, npc, 'parts', 2);
+    corePart(npc, 'cab').hp = 1;
+    planNpcOrders(world);
+    expect(topGoal(npc)!.kind).toBe('repair');
+    npc.pos = { x: npc.pos.x + 3, y: npc.pos.y };
+    npc.speed = 0;
+    planNpcOrders(world);
+    expect(npc.order?.kind).toBe('brake');
+    resolveNpcActivities(world);
+    expect(npc.job?.kind).toBe('repair');
   });
 
   it('parks to repair when no shade is reachable', () => {

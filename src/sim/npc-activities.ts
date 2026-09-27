@@ -16,7 +16,7 @@ import {
   bestTrade, canRob, decide, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve,
   huntingGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleHostiles, visibleSalvage, type NpcProfile,
 } from './npc-decisions';
-import { chooseNpcRepair, continueNpcRepair, resolveNpcRepair } from './npc-repair';
+import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
 import { randInt } from './rng';
 import { canReachSalvage, hasSalvage, knockoutStockId, wreckStockId } from './salvage';
@@ -565,7 +565,7 @@ function addHurt(hurt: Map<string, number>, id: string, hits: PartHit[]): void {
 // A repair spot is driven to directly. Once there, the driver brakes.
 export function getActivityDestination(world: World, vehicle: Vehicle, activity: NpcActivity): Vec | null {
   if (!activity.destination) return null;
-  if (activity.kind === 'repair') return dist(vehicle.pos, activity.destination) <= RULES.arriveRadius ? null : activity.destination;
+  if (activity.kind === 'repair') return repairsHere(vehicle, activity) ? null : activity.destination;
   if (['fight', 'flee', 'raid', 'investigate'].includes(activity.kind)) return activity.destination;
   return siteStop(world, vehicle, activity, activity.destination);
 }
@@ -631,7 +631,8 @@ function searchStock(world: World, vehicle: Vehicle, stock: SalvageStock): void 
   if (!vehicle.job) beginSearch(world, vehicle, stock.id);
 }
 
-function reachedDestination(vehicle: Vehicle, activity: NpcActivity): boolean {
+// The goal reach rule: within twice the stop radius of the destination.
+export function reachedDestination(vehicle: Vehicle, activity: NpcActivity): boolean {
   return activity.destination !== null && dist(vehicle.pos, activity.destination) <= RULES.arriveRadius * 2;
 }
 

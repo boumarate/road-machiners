@@ -3,9 +3,9 @@
 
 import { NPC_UPKEEP } from '../data/npcs';
 import { partDef } from '../data/parts';
-import { RULES } from '../data/rules';
 import { mountedParts } from './grid';
 import { startJob } from './jobs';
+import { reachedDestination } from './npc-activities';
 import { straightClear } from './path';
 import { repairPlan } from './repair';
 import { getResources } from './resources';
@@ -45,8 +45,9 @@ function getRepairCandidates(world: World, vehicle: Vehicle): Vec[] {
   return candidates.sort((a, b) => dist(vehicle.pos, a) - dist(vehicle.pos, b));
 }
 
-function chooseRepairSpot(world: World, vehicle: Vehicle): Vec {
-  if (!canSearchForShade(world, vehicle)) return { ...vehicle.pos };
+// Reachable shade nearby, or null to repair wherever the driver stops.
+function chooseRepairSpot(world: World, vehicle: Vehicle): Vec | null {
+  if (!canSearchForShade(world, vehicle)) return null;
   const sun = sunAt(world.turn);
   if (!sun) throw new Error('Shade search requires sunlight');
   const radius = vehicleStats(world, vehicle).radius;
@@ -55,7 +56,7 @@ function chooseRepairSpot(world: World, vehicle: Vehicle): Vec {
     .map((other) => ({ pos: other.pos, r: vehicleStats(world, other).radius }));
   const shaded = getRepairCandidates(world, vehicle)
     .find((point) => inShade(world, point, sun) && straightClear(world, vehicle.pos, point, radius, blockers));
-  return shaded ?? { ...vehicle.pos };
+  return shaded ?? null;
 }
 
 // A repair goal when the most damaged part carried parts can patch is at or below `condition`. Null otherwise.
@@ -63,24 +64,30 @@ export function chooseNpcRepair(world: World, vehicle: Vehicle, condition: numbe
   const part = chooseRepairPart(world, vehicle);
   if (!part) return null;
   if (part.hp / partDef(part.defId).hp > condition) return null;
+  const destination = chooseRepairSpot(world, vehicle);
   return {
     kind: 'repair',
     targetId: null,
-    destination: chooseRepairSpot(world, vehicle),
-    phase: 'travel',
+    destination,
+    phase: destination ? 'travel' : 'act',
     reason: 'patch damaged parts',
   };
 }
 
 // A driver out of fuel repairs where it stopped.
 export function continueNpcRepair(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  if (getResources(world, vehicle).fuel === 0) activity.destination = { ...vehicle.pos };
+  if (getResources(world, vehicle).fuel === 0) activity.destination = null;
 }
 
-// Starts the next repair job once parked at the spot. True when nothing is left to patch.
+// A driver repairs where it stands with no spot, or within the goal reach rule of its spot, so a drift after a
+// patch does not send it circling back.
+export function repairsHere(vehicle: Vehicle, activity: NpcActivity): boolean {
+  return activity.destination === null || reachedDestination(vehicle, activity);
+}
+
+// Starts the next repair job once parked where it repairs. True when nothing is left to patch.
 export function resolveNpcRepair(world: World, vehicle: Vehicle, activity: NpcActivity): boolean {
-  if (!activity.destination) throw new Error('Repair activity needs a destination');
-  if (dist(vehicle.pos, activity.destination) > RULES.arriveRadius) return false;
+  if (!repairsHere(vehicle, activity)) return false;
   activity.phase = 'act';
   if (vehicle.job) return false;
   return startNpcRepair(world, vehicle);
