@@ -266,7 +266,7 @@ Added after PH4b, since pickup still took 150 to 190 turns on the busiest road a
 ## Code smells
 
 - `src/phys/drive.ts:254-266` — Physics driving sets speed from the distance to the destination only and never slows for corners, so trucks bump sites on sharp road turns.
-- `src/phys/drive.ts:271` — Physics reversing starts only past 90 degrees off, and the player truck has no stuck recovery, so a truck pressed nose first against an obstacle stays there.
+- `src/phys/drive.ts:271` — Physics reversing starts only past 90 degrees off, and the player truck has no stuck timer. A truck driving to a far point that hits an obstacle nose first keeps pushing until the player clicks behind it.
 - `src/sim/salvage.ts` — Player knockout stocks are never cleared, because `clearOldWrecks` only clears stocks with a matching obstacle.
 - `src/sim/nav/layer.ts` — Route planning prices ground type but not slope, so traders climb a scree slope near (451, 260) at 0.24 speed and lose hundreds of turns there.
 - `src/sim/npc-activities.ts:95` — The contact trust limit filters by distance, not circle size, so a trader with a grudge ignores a far, tight beacon contact.
