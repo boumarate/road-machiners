@@ -1,11 +1,11 @@
-// Route planning around static obstacles and cliffs: A* on a grid weighted by terrain speed, so
-// routes prefer roads over sand, then shortcut to visible corners. Moving vehicles are not in the
+// Route planning around static obstacles and cliffs: A* on a grid weighted by terrain speed and a
+// cost for leaving the road, so routes prefer roads, then shortcut to visible corners. Moving vehicles are not in the
 // grid, so ramming and blocking still happen. The grid itself lives in ./nav.
 
 import { count, timed } from '../perf';
 import { findCells, nearestFreeCell, stampOverlay, startComponent } from './nav/astar';
 import type { Blocker } from './nav/buckets';
-import { CELL, CLEARANCE, blockerKey, dynamicBlockers, navLayer, nearCliff, staticSet, terrainNav, tileIndex, type NavLayer, type StaticSet, type TerrainNav } from './nav/layer';
+import { CELL, CLEARANCE, blockerKey, componentOf, dynamicBlockers, navLayer, nearCliff, staticSet, terrainNav, tileIndex, type NavLayer, type StaticSet, type TerrainNav } from './nav/layer';
 import type { World } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 
@@ -22,8 +22,8 @@ export function route(world: World, from: Vec, to: Vec, radius: number, extra: B
     const statics = staticSet(world.obstacles, world.terrain.size);
     const dynamic = dynamicBlockers(world.obstacles, extra);
     const reach = radius + CLEARANCE;
-    // An unobstructed road-speed line is already the shortest, cheapest route.
-    if (clearLine(nav, statics, dynamic, from, to, reach, 1)) return [to];
+    // An unobstructed line all on road is already the shortest, cheapest route.
+    if (lineCost(nav, statics, dynamic, from, to, reach, 1) < Infinity) return [to];
     const layer = navLayer(world.terrain, world.obstacles, radius);
     const start = cellOf(layer, from);
     const target = cellOf(layer, to);
@@ -55,10 +55,15 @@ function search(layer: NavLayer, dynamic: Blocker[], radius: number, start: numb
     return hit;
   }
   const overlay = stampOverlay(layer, dynamic, radius);
+  // A truck pushed into an obstacle's clearance past its neighbouring cells first drives out to the
+  // nearest free cell. The start cell stays first, since route() drops it.
+  const own = startComponent(layer, start);
+  const exit = own === 0 ? nearestFreeCell(layer, overlay, start) : start;
+  const component = exit === null ? 0 : own === 0 ? componentOf(layer, exit) : own;
   // An unreachable point, such as one beyond a cliff, routes to the closest point the truck can reach.
-  const component = startComponent(layer, start);
-  const goal = component === 0 ? null : nearestFreeCell(layer, overlay, target, component);
-  const result = { goal, cells: goal === null ? null : findCells(layer, overlay, start, goal) };
+  const goal = exit === null || component === 0 ? null : nearestFreeCell(layer, overlay, target, component);
+  const found = goal === null ? null : findCells(layer, overlay, exit!, goal);
+  const result = { goal, cells: found && exit !== start ? Int32Array.of(start, ...found) : found };
   if (routeCache.size >= ROUTE_CACHE_MAX) routeCache.delete(routeCache.keys().next().value!);
   routeCache.set(key, result);
   return result;
@@ -67,7 +72,7 @@ function search(layer: NavLayer, dynamic: Blocker[], radius: number, start: numb
 // Whether a vehicle can drive straight from a to b without touching an obstacle or a cliff.
 export function straightClear(world: World, a: Vec, b: Vec, radius: number, extra: Blocker[]): boolean {
   const statics = staticSet(world.obstacles, world.terrain.size);
-  return clearLine(terrainNav(world.terrain), statics, dynamicBlockers(world.obstacles, extra), a, b, radius + CLEARANCE, 0);
+  return lineCost(terrainNav(world.terrain), statics, dynamicBlockers(world.obstacles, extra), a, b, radius + CLEARANCE, Infinity) < Infinity;
 }
 
 export function routeLength(from: Vec, points: Vec[]): number {
@@ -91,18 +96,23 @@ function centerOf(l: NavLayer, c: number): Vec {
 }
 
 // Probe progressively longer shortcuts instead of rescanning the entire remaining route at every bend.
-// Each accepted segment still avoids obstacles, cliffs, and slower ground than its original path.
+// Each accepted segment still avoids obstacles, cliffs and costlier ground than its original path, and
+// costs no more than the path it replaces, so a shortcut never trades the road for open ground.
 function shortcut(nav: TerrainNav, statics: StaticSet, dynamic: Blocker[], from: Vec, points: Vec[], reach: number): Vec[] {
+  // along[j] is the route cost from `from` to points[j - 1]; along[0] is `from` itself.
+  const along = new Float64Array(points.length + 1);
+  for (let j = 0; j < points.length; j++) along[j + 1] = along[j] + groundCost(nav, j === 0 ? from : points[j - 1], points[j], null, Infinity);
   const out: Vec[] = [];
   let cur = from;
   let i = 0;
+  const fits = (candidate: number) => lineCost(nav, statics, dynamic, cur, points[candidate], reach, costliestTile(nav, cur, points, i, candidate)) <= (along[candidate + 1] - along[i]) * (1 + COST_ROUNDING);
   while (i < points.length) {
     let best = i;
     let step = 1;
     let failed = points.length;
     while (best < points.length - 1) {
       const candidate = Math.min(i + step, points.length - 1);
-      if (!clearLine(nav, statics, dynamic, cur, points[candidate], reach, slowestSpeed(nav, cur, points, i, candidate))) {
+      if (!fits(candidate)) {
         failed = candidate;
         break;
       }
@@ -111,7 +121,7 @@ function shortcut(nav: TerrainNav, statics: StaticSet, dynamic: Blocker[], from:
     }
     while (failed - best > 1) {
       const candidate = Math.floor((best + failed) / 2);
-      if (clearLine(nav, statics, dynamic, cur, points[candidate], reach, slowestSpeed(nav, cur, points, i, candidate))) best = candidate;
+      if (fits(candidate)) best = candidate;
       else failed = candidate;
     }
     out.push(points[best]);
@@ -122,23 +132,39 @@ function shortcut(nav: TerrainNav, statics: StaticSet, dynamic: Blocker[], from:
 }
 
 const LINE_SAMPLES_PER_TILE = 4;
+// Relative slack when a shortcut's cost is compared with the path it replaces. Summing the same
+// segments in another order differs in the last bits, and a straight run must still count as equal.
+const COST_ROUNDING = 1e-9;
 
-// Slowest terrain under cur and points[i..last].
-function slowestSpeed(nav: TerrainNav, cur: Vec, points: Vec[], i: number, last: number): number {
-  let min = nav.tileSpeed[tileIndex(nav.size, cur.x, cur.y)];
-  for (let k = i; k <= last; k++) min = Math.min(min, nav.tileSpeed[tileIndex(nav.size, points[k].x, points[k].y)]);
-  return min;
+// Costliest tile under cur and points[i..last].
+function costliestTile(nav: TerrainNav, cur: Vec, points: Vec[], i: number, last: number): number {
+  let max = nav.tileCost[tileIndex(nav.size, cur.x, cur.y)];
+  for (let k = i; k <= last; k++) max = Math.max(max, nav.tileCost[tileIndex(nav.size, points[k].x, points[k].y)]);
+  return max;
 }
 
-function clearLine(nav: TerrainNav, statics: StaticSet, dynamic: Blocker[], a: Vec, b: Vec, reach: number, minSpeed: number): boolean {
-  for (const o of dynamic) if (segmentDist(o.pos, a, b) < o.r + reach) return false;
-  for (const o of statics.buckets.alongSegment(a, b, reach)) if (segmentDist(o.pos, a, b) < o.r + reach) return false;
-  const n = Math.ceil(dist(a, b) * LINE_SAMPLES_PER_TILE);
+// Route cost of the straight line from a to b, or Infinity when it touches an obstacle or a cliff or
+// crosses a tile costlier than maxCost.
+function lineCost(nav: TerrainNav, statics: StaticSet, dynamic: Blocker[], a: Vec, b: Vec, reach: number, maxCost: number): number {
+  for (const o of dynamic) if (segmentDist(o.pos, a, b) < o.r + reach) return Infinity;
+  for (const o of statics.buckets.alongSegment(a, b, reach)) if (segmentDist(o.pos, a, b) < o.r + reach) return Infinity;
+  return groundCost(nav, a, b, reach, maxCost);
+}
+
+// Length of the line times the mean tile cost of its samples. With a reach, a sample near a cliff
+// makes it Infinity; so does a tile costlier than maxCost.
+function groundCost(nav: TerrainNav, a: Vec, b: Vec, reach: number | null, maxCost: number): number {
+  const length = dist(a, b);
+  const n = Math.ceil(length * LINE_SAMPLES_PER_TILE);
   const steps = Math.max(1, n);
+  let sum = 0;
   for (let k = 0; k <= n; k++) {
     const x = a.x + ((b.x - a.x) * k) / steps;
     const y = a.y + ((b.y - a.y) * k) / steps;
-    if (nearCliff(nav, x, y, reach) || nav.tileSpeed[tileIndex(nav.size, x, y)] < minSpeed) return false;
+    if (reach !== null && nearCliff(nav, x, y, reach)) return Infinity;
+    const cost = nav.tileCost[tileIndex(nav.size, x, y)];
+    if (cost > maxCost) return Infinity;
+    sum += cost;
   }
-  return true;
+  return (length * sum) / (n + 1);
 }

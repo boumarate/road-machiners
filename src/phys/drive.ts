@@ -11,7 +11,7 @@ import { fuelLimited, isNear } from '../sim/far';
 import { isDriveObstacle } from '../sim/mapgen';
 import { vehicleMass } from '../sim/mass';
 import { vehicleStats, type VehicleStats } from '../sim/stats';
-import { route, straightClear } from '../sim/path';
+import { route } from '../sim/path';
 import { parkedVehicles, shouldBackToDestination, zoneSpeed } from '../sim/steering';
 import { heightAt } from '../sim/terrain';
 import type { MoveOrder, Vehicle, World } from '../sim/types';
@@ -216,7 +216,7 @@ function makeCar(world: RAPIER.World, body: RAPIER.RigidBody, b: Body, mass: num
 
 // What a driver wants this turn, fixed at the start of the turn like the 2D rules: a destination to
 // steer at, and a speed from the throttle zone of the click. Without fuel the engine gives nothing.
-// route holds waypoints around obstacles when the straight line to dest is blocked, else null.
+// route holds the planner's waypoints to dest, or null for a careless driver who drives straight.
 type Plan = { dest: Vec | null; route: Vec[] | null; target: number; stopAt: boolean; engine: boolean; maxSteer: number; engineForce: number; brakeForce: number; stopDecel: number };
 
 function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBody, order: MoveOrder | null): Plan {
@@ -235,9 +235,9 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   };
   if (!order) return { ...base, dest: null, route: null, target: toMps(speed), stopAt: false };
   if (order.kind === 'brake') return { ...base, dest: null, route: null, target: 0, stopAt: false };
-  // Careful drivers follow the route planner around obstacles; careless ones drive straight.
+  // Careful drivers follow the route planner, which keeps to roads and goes around obstacles; careless ones drive straight.
   const parked = parkedVehicles(w, v.id);
-  const path = v.direct || straightClear(w, v.pos, order.dest, s.radius, parked) ? null : [...route(w, v.pos, order.dest, s.radius, parked)]; // copied, since driving consumes it
+  const path = v.direct ? null : [...route(w, v.pos, order.dest, s.radius, parked)]; // copied, since driving consumes it
   if (order.kind === 'stopAt') return { ...base, dest: order.dest, route: path, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
   const next = zoneSpeed(s, speed, dist(v.pos, order.dest));
   return { ...base, dest: order.dest, route: path, target: toMps(next), stopAt: false };

@@ -29,7 +29,15 @@ export const REGION = {
   name: "Icarus",
   size: 120 * MAP_SCALE,
   danger: 1,
-  navigation: { heuristicWeight: 1.2 }, // Weighted A* trades at most 20% grid path cost for faster long-distance searches.
+  navigation: {
+    heuristicWeight: 1.2, // Weighted A* trades at most 20% grid path cost for faster long-distance searches.
+    // Route cost multiplier for every tile that is not road. On a road a driver does not have to find a
+    // way, and others pass by who can help. With road speed 1 and hardpan 0.9, a road detour up to 94%
+    // longer than a straight hardpan line costs less. The heuristic weight can give back 20% of that, so
+    // detours up to about 60% longer, like the Bowl to Nose roads, are still followed. A road twice as
+    // long as the straight line loses to open ground.
+    offRoadCost: 1.75,
+  },
   towns: [
     { id: "bowl", name: "Bowl", pos: scalePoint({ x: 16, y: 94 }), radius: 28 },
     { id: "nose", name: "Nose", pos: scalePoint({ x: 102, y: 35 }), radius: 32 },
@@ -239,13 +247,14 @@ export const REGION = {
       { x: FALLEN_SUN_POS.x + FALLEN_SUN_RADIUS, y: FALLEN_SUN_POS.y },
     ],
   ] as Vec[][],
-  roadWidth: 3,
+  roadWidth: 6,
   obstacles: {
     clusters: 220,
     rocksPerCluster: [2, 6] as [number, number],
     clusterSpread: 4,
     radius: [0.6, 1.6] as [number, number],
     roadWrecks: 30, // wrecks placed on roads on purpose
+    roadWreckShoulder: [0.5, 0.85] as [number, number], // wreck center from the road center line, as a share of the half-width
     roadClearance: 1.6, // extra gap between rocks and road edge
     siteClearance: 8, // extra gap around towns and locations
     edgeMargin: 8,
@@ -274,12 +283,12 @@ export const REGION = {
     wallThickness: 0.5,
     wallSegment: 3, // tiles per straight wall section around the curve
     wallTowerEvery: 5, // wall sections between towers
-    gateWidth: 7, // tiles of open wall where a road enters, over twice the road width
+    gateWidth: 13, // tiles of open wall where a road enters, over twice the road width
     gateReach: 5, // tiles from a gate on the wall line where a walled site's services work
     palisadeHeight: 0.55, // 2.2 m of scrap and posts, below a truck roof
     palisadeThickness: 0.25,
     palisadeSegment: 1.5,
-    palisadeGateWidth: 4, // a road width plus half a tile each side
+    palisadeGateWidth: 7, // a road width plus half a tile each side
     guardTowerHeight: 1.8, // gate towers stand twice the wall height
     gatePoleHeight: 4.5, // 18 m, so a gate shows from across the fog edge
     orchardRows: 11,
