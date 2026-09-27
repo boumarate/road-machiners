@@ -5,10 +5,10 @@
 import { DETECT } from './detect';
 import type { TraitId } from './npcs';
 
-export type TopicId = 'directions';
-export type ConditionId = 'knowsTown';
-export type EffectId = 'revealTown' | 'settleDone' | 'settleRefused';
-export type PrepareId = 'nearestTown';
+export type TopicId = 'directions' | 'tow' | 'askTow';
+export type ConditionId = 'knowsTown' | 'offersTow' | 'canTowPlayer';
+export type EffectId = 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow';
+export type PrepareId = 'nearestTown' | 'towOffer';
 
 // `go` is a node of the same topic, the hub of topics, or the end of the call.
 export type DialogueOption = { text: string; when: ConditionId[]; effects: EffectId[]; go: string };
@@ -47,6 +47,41 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
+  // A driver that parked beside the stranded player and made its offer calls with the terms.
+  tow: {
+    id: 'tow',
+    once: false,
+    ask: null,
+    raise: { when: ['offersTow'], priority: 2 },
+    prepare: 'towOffer',
+    hangUp: ['refuseTow'],
+    start: 'offer',
+    nodes: {
+      offer: {
+        line: 'I can pull you to {town}. {fee} when we get there.',
+        options: [
+          { text: 'Deal. Hitch me up.', when: [], effects: ['acceptTow'], go: END },
+          { text: 'No thanks.', when: [], effects: ['refuseTow'], go: END },
+        ],
+      },
+    },
+  },
+  // A stranded player asks a passing driver for help. It comes over and makes its offer by radio.
+  askTow: {
+    id: 'askTow',
+    once: false,
+    ask: { text: 'I am stranded. Can you tow me?', when: ['canTowPlayer'] },
+    raise: null,
+    prepare: null,
+    hangUp: [],
+    start: 'coming',
+    nodes: {
+      coming: {
+        line: 'Hold on. I am coming over.',
+        options: [{ text: 'Thanks. I will wait.', when: [], effects: ['askTow'], go: END }],
+      },
+    },
+  },
 };
 
 // How a driver talks. The first of its traits with a voice speaks for it.
@@ -65,8 +100,8 @@ export type TraitTalk = { voice: Voice | null; topics: TopicId[] };
 export const HONK_RANGE = DETECT.sound.limp;
 
 export const TRAIT_TALK: Record<TraitId, TraitTalk> = {
-  trader: { voice: { greeting: 'Caravan here. Go ahead.', repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true }, topics: ['directions'] },
-  scavenger: { voice: { greeting: 'Yeah? Make it quick.', repeatLine: 'I told you already.', refusal: 'Get off my channel.', honksBack: true }, topics: ['directions'] },
+  trader: { voice: { greeting: 'Caravan here. Go ahead.', repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true }, topics: ['directions', 'tow', 'askTow'] },
+  scavenger: { voice: { greeting: 'Yeah? Make it quick.', repeatLine: 'I told you already.', refusal: 'Get off my channel.', honksBack: true }, topics: ['directions', 'tow', 'askTow'] },
   raider: { voice: { greeting: 'Get lost.', repeatLine: 'Get lost.', refusal: 'Heh. No.', honksBack: false }, topics: [] },
   scumbag: { voice: null, topics: [] },
   coward: { voice: null, topics: [] },

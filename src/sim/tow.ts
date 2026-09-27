@@ -194,24 +194,25 @@ function poseBehind(path: Pose[], k: number, gap: number): Pose {
   return { x: first.x - Math.cos(first.heading) * left, y: first.y - Math.sin(first.heading) * left, heading: first.heading };
 }
 
-export function acceptTow(world: World): World {
-  return playerCommand(world, (w) => {
-    const tow = playerTow(w);
-    if (!tow) throw new Error('No tow offer to accept');
-    towData(tow).hitched = true;
-    const me = playerVehicle(w);
-    me.order = null;
-    me.speed = 0;
-    checkBeacon(w);
-  });
+// The player takes the open offer over the radio. Runs inside the dialogue command.
+export function acceptOffer(world: World): void {
+  const tow = openOffer(world);
+  towData(tow).hitched = true;
+  const me = playerVehicle(world);
+  me.order = null;
+  me.speed = 0;
+  checkBeacon(world);
 }
 
-export function refuseTow(world: World): World {
-  return playerCommand(world, (w) => {
-    const tow = playerTow(w);
-    if (!tow) throw new Error('No tow offer to refuse');
-    refuse(w, tow);
-  });
+// The player turns the open offer down over the radio. Runs inside the dialogue command.
+export function refuseOffer(world: World): void {
+  refuse(world, openOffer(world));
+}
+
+function openOffer(world: World): NpcState {
+  const tow = playerTow(world);
+  if (!tow || towData(tow).hitched) throw new Error('No open tow offer');
+  return tow;
 }
 
 // The one command allowed while towed. It is free, and that driver rarely offers again.

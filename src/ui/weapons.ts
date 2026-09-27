@@ -20,6 +20,7 @@ export const BLOCK_TEXT: Record<FireBlock, string> = {
   noTarget: "hold fire",
   unseen: "not in sight",
   covered: "behind cover",
+  talking: "on the radio",
 };
 
 // Label lines above vehicles, by vehicle id: each weapon aimed at a target with its status, and the radio

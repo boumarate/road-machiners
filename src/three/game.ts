@@ -37,7 +37,7 @@ import type { Vec } from "../sim/vec";
 import { playerSees, tileOf, visibleTiles } from "../sim/vision";
 import { DEG, dist } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
-import { acceptTow, isTowed, playerTow, refuseTow, setBeacon, unhitch } from "../sim/tow";
+import { isTowed, setBeacon, unhitch } from "../sim/tow";
 import {
   autoRuns,
   cloneWorld,
@@ -291,10 +291,6 @@ export class Game {
       toggleAutoRepair: () => {
         if (!this.anim && !this.modalOpen()) this.toggleAutoRepair();
       },
-      acceptTow: () =>
-        this.rescueCommand((w) => (canAnswerTow(w) ? acceptTow(w) : null)),
-      refuseTow: () =>
-        this.rescueCommand((w) => (canAnswerTow(w) ? refuseTow(w) : null)),
       unhitch: () =>
         this.rescueCommand((w) =>
           w.player.state === "active" && isTowed(w) ? unhitch(w) : null,
@@ -1304,11 +1300,6 @@ export class Game {
       : PAL.plan;
     this.zones.hover(this.world.terrain, hover, color);
   }
-}
-
-// An open tow offer can be answered by an awake player who is not yet hitched.
-function canAnswerTow(w: World): boolean {
-  return playerCanAct(w) && playerTow(w) !== null;
 }
 
 // A salvage stock's display name: its site, or a wreck.

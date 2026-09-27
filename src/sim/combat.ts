@@ -1,6 +1,7 @@
 // Weapons fire after movement. All shots of a turn are rolled first, then applied,
 // so fire is simultaneous: a vehicle killed this turn still gets its shots off.
 
+import { onCall } from "./dialogue";
 import { NPCS, SPAWN } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { skillBonus } from '../data/skills';
@@ -27,7 +28,8 @@ export type FireBlock =
   | "arc"
   | "noTarget"
   | "unseen"
-  | "covered";
+  | "covered"
+  | "talking";
 
 export function inFeud(world: World, a: Vehicle, b: Vehicle): boolean {
   return stateOf(world, "feud", a.id, b.id) !== null || stateOf(world, "feud", b.id, a.id) !== null;
@@ -66,9 +68,18 @@ export function fireBlock(
   mw: MountedWeapon,
   target: Vehicle | null,
 ): FireBlock | null {
+  return weaponBlock(mw) ?? (target ? targetBlock(world, shooter, mw, target) : "noTarget");
+}
+
+function weaponBlock(mw: MountedWeapon): FireBlock | null {
   if (mw.part.hp <= 0) return "disabled";
   if (mw.part.reload > 0) return "reloading";
-  if (!target) return "noTarget";
+  return null;
+}
+
+// Two trucks on a radio call hold fire at each other.
+function targetBlock(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle): FireBlock | null {
+  if (onCall(world, shooter, target)) return "talking";
   if (!canVehicleSee(world, shooter, target.pos)) return "unseen";
   if (!hasLineOfFire(world, shooter.pos, target.pos)) return "covered";
   if (dist(shooter.pos, target.pos) > mw.def.range) return "range";

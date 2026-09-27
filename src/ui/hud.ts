@@ -23,8 +23,6 @@ type HudActions = {
   openCharacter: () => void;
   toggleManual: () => void;
   toggleAutoRepair: () => void;
-  acceptTow: () => void;
-  refuseTow: () => void;
   unhitch: () => void;
   setBeacon: (on: boolean) => void;
   isBusy: () => boolean;
@@ -158,8 +156,8 @@ export class Hud {
     }
   }
 
-  // The knockout banner, a tow offer, the tow in progress, or the beacon switch of a stranded truck.
-  // The prompts in the middle of the screen: an open radio call, and the rescue state.
+  // The prompts in the middle of the screen: an open radio call, and the rescue state. That is the knockout
+  // banner, the tow in progress, or the beacon switch of a stranded truck.
   renderRescue(w: World): void {
     this.dialogue.render(w);
     const r = getRescueReadout(w);
@@ -182,18 +180,6 @@ export class Hud {
       this.rescue.replaceChildren(
         el("h3", { class: "bad" }, "Knocked out"),
         el("div", { class: "dim" }, "Looters strip the truck. You come to when they leave."),
-      );
-    if (r.kind === "offer")
-      this.rescue.replaceChildren(
-        el("h3", {}, "Tow offer"),
-        el("div", {}, `${r.tower} tows you to ${r.town}.`),
-        el("div", {}, `Fee ${moneyLabel(r.fee)}, paid on arrival.`),
-        ...(r.debt ? [el("div", { class: "bad" }, "You go into debt.")] : []),
-        buttons(
-          el("button", { onclick: () => this.actions.acceptTow() }, "Accept"),
-          el("button", { onclick: () => this.actions.refuseTow() }, "Refuse"),
-          ...(r.beacon ? [beacon(true)] : []),
-        ),
       );
     if (r.kind === "towed")
       this.rescue.replaceChildren(

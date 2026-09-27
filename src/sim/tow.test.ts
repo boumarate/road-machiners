@@ -11,7 +11,8 @@ import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import { topGoal } from './npc-activities';
 import { addState, stateOf, towData } from './states';
-import { acceptTow, dropTow, isTowed, playerTow, refuseTow, setBeacon, unhitch } from './tow';
+import { callVehicle, chooseOption, currentOptions, hangUp } from './dialogue';
+import { dropTow, isTowed, playerTow, setBeacon, unhitch } from './tow';
 import { canVehicleSee } from './vision';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
@@ -47,11 +48,22 @@ function runUntil(w: World, max: number, done: (w: World) => boolean): { w: Worl
 const find = (w: World, id: string) => w.vehicles.find((v) => v.id === id)!;
 const feeOf = (w: World) => towData(playerTow(w)!).fee;
 
+// Runs turns until the tower makes its offer, which it then calls in by radio.
 function offered(s: Setup): World {
   const r = runUntil(s.w, 30, (w) => playerTow(w) !== null);
   expect(playerTow(r.w)).not.toBeNull();
+  expect(r.w.player.call).toMatchObject({ with: playerTow(r.w)!.holder, topic: 'tow' });
   return r.w;
 }
+
+function answer(w: World, text: string): World {
+  const i = currentOptions(w).findIndex((o) => o.text === text);
+  if (i < 0) throw new Error(`No option "${text}" in ${currentOptions(w).map((o) => o.text).join(' | ')}`);
+  return chooseOption(w, i);
+}
+
+const acceptTow = (w: World) => answer(w, 'Deal. Hitch me up.');
+const refuseTow = (w: World) => answer(w, 'No thanks.');
 
 describe('tow offer', () => {
   it('a trader that sees a stranded player drives over and offers a tow', () => {
@@ -86,16 +98,34 @@ describe('tow offer', () => {
     expect(r.events.some((e) => e.t === 'towOffer')).toBe(false);
   });
 
-  it('driving away from an open offer counts as refusing', () => {
+  it('hanging up on the offer counts as refusing', () => {
     const s = stranded();
-    let w = offered(s);
-    w = setMoveOrder(w, { kind: 'stopAt', dest: { x: 30, y: 60 } });
-    const r = runUntil(w, 15, (x) => playerTow(x) === null);
-    expect(playerTow(r.w)).toBeNull();
-    expect(r.events).toContainEqual({ t: 'towDropped', by: s.trader.id, reason: 'refused' });
-    expect(stateOf(r.w, 'turnedDown', s.trader.id, r.w.player.vehicleId)).not.toBeNull();
-    const later = runUntil(r.w, 15, (x) => playerTow(x) !== null);
+    const w = hangUp(offered(s));
+    expect(playerTow(w)).toBeNull();
+    expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, reason: 'refused' });
+    expect(stateOf(w, 'turnedDown', s.trader.id, w.player.vehicleId)).not.toBeNull();
+    const later = runUntil(w, 15, (x) => playerTow(x) !== null);
     expect(later.events.some((e) => e.t === 'towOffer')).toBe(false);
+  });
+
+  it('a stranded player can ask a passing trader, which comes over and offers', () => {
+    const s = stranded({ x: 30, y: 30 }, { x: 44, y: 30 });
+    forceOption('strandedSeen', 'keep');
+    let w = endTurn(s.w);
+    expect(topGoal(find(w, s.trader.id))?.kind).not.toBe('tow');
+    w = callVehicle(w, s.trader.id);
+    w = answer(w, 'I am stranded. Can you tow me?');
+    w = answer(w, 'Thanks. I will wait.');
+    expect(topGoal(find(w, s.trader.id))?.kind).toBe('tow');
+    const r = runUntil(w, 30, (x) => playerTow(x) !== null);
+    expect(r.w.player.call).toMatchObject({ with: s.trader.id, topic: 'tow' });
+  });
+
+  it('a driver that cannot tow is not asked', () => {
+    const s = stranded();
+    s.w.player.fuel = 30;
+    const w = callVehicle(s.w, s.trader.id);
+    expect(currentOptions(w).map((o) => o.text)).not.toContain('I am stranded. Can you tow me?');
   });
 
   it('raiders never tow', () => {
@@ -159,16 +189,12 @@ describe('towing', () => {
     const w = acceptTow(offered(stranded()));
     expect(() => setMoveOrder(w, { kind: 'stopAt', dest: { x: 0, y: 0 } })).toThrow(/towed/);
     expect(() => setDirect(w, true)).toThrow(/towed/);
-    expect(() => acceptTow(w)).toThrow(/towed/);
-    expect(() => refuseTow(w)).toThrow(/towed/);
+    expect(() => acceptTow(w)).toThrow(/No call/);
     expect(() => unhitch(w)).not.toThrow();
   });
 
-  it('accept and refuse need an open offer, and unhitch needs a hitch', () => {
-    const w = stranded().w;
-    expect(() => acceptTow(w)).toThrow(/offer/);
-    expect(() => refuseTow(w)).toThrow(/offer/);
-    expect(() => unhitch(w)).toThrow(/not towed/);
+  it('unhitch needs a hitch', () => {
+    expect(() => unhitch(stranded().w)).toThrow(/not towed/);
   });
 
   it('unhitching is free and ends the tow', () => {
@@ -303,7 +329,7 @@ describe('emergency beacon', () => {
     const r = runUntil(setBeacon(s.w, true), 150, (x) => playerTow(x) !== null);
     expect(playerTow(r.w)?.holder).toBe(s.trader.id);
     expect(activitiesOf(r.events, late.id)[0]).toMatchObject({ activity: 'tow' });
-    const next = endTurn(r.w);
+    const next = endTurn(acceptTow(r.w));
     expect(topGoal(find(next, late.id))?.kind).not.toBe('tow');
   });
 

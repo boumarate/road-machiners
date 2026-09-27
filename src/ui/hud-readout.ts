@@ -47,11 +47,10 @@ export function moneyLabel(money: number): string {
     : money.toLocaleString("en-US");
 }
 
-// What the rescue panel shows: the knockout, an open tow offer, the tow in progress, or a stranded truck with its
-// beacon switch. Null when none applies, and for a dead player, whom the death screen covers.
+// What the rescue panel shows: the knockout, the tow in progress, or a stranded truck with its beacon switch. Null
+// when none applies, and for a dead player, whom the death screen covers. A tow offer comes as a radio call.
 export type RescueReadout =
   | { kind: "knockedOut" }
-  | { kind: "offer"; tower: string; town: string; fee: number; debt: boolean; beacon: boolean }
   | { kind: "towed"; tower: string; town: string; fee: number }
   | { kind: "stranded"; beacon: boolean };
 
@@ -60,11 +59,9 @@ export function getRescueReadout(w: World): RescueReadout | null {
   if (p.state === "knockedOut") return { kind: "knockedOut" };
   if (p.state === "dead") return null;
   const state = playerTow(w);
-  if (state) {
+  if (state && towData(state).hitched) {
     const data = towData(state);
-    const tow = { tower: vehicleName(w, state.holder), town: townName(data.town), fee: data.fee };
-    if (data.hitched) return { kind: "towed", ...tow };
-    return { kind: "offer", ...tow, debt: p.money < data.fee, beacon: p.beacon };
+    return { kind: "towed", tower: vehicleName(w, state.holder), town: townName(data.town), fee: data.fee };
   }
   if (p.beacon || isStranded(w, playerVehicle(w))) return { kind: "stranded", beacon: p.beacon };
   return null;

@@ -385,7 +385,7 @@ function onStrandedSeen(world: World, vehicle: Vehicle): void {
 }
 
 // A driver the player turned down that picks tow again is over it: its turnedDown state ends, so the tow goal holds.
-function startTow(world: World, vehicle: Vehicle, at: Vec): void {
+export function startTow(world: World, vehicle: Vehicle, at: Vec): void {
   const me = world.player.vehicleId;
   const turnedDown = stateOf(world, 'turnedDown', vehicle.id, me);
   if (turnedDown) endState(world, turnedDown, 'fulfilled');

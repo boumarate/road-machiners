@@ -22,7 +22,7 @@ import { timed } from '../perf';
 import { noteHurt, resolveNpcActivities } from './npc-activities';
 import { advanceStates } from './states';
 import { checkBeacon, followTower, isTowed, playerTow } from './tow';
-import { raiseCalls } from './dialogue';
+import { endCallIfOut, raiseCalls } from './dialogue';
 import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
 import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
@@ -197,6 +197,7 @@ export function endTurn(
     advanceJobs(w);
     startAutoRepair(w);
     refreshVision(w);
+    raiseCalls(w);
     assignAutoOrders(w);
     fireWeapons(w);
     fireGuards(w);
@@ -215,6 +216,7 @@ export function endTurn(
     spawnNpcs(w);
     refreshVision(w);
     noteHurt(w);
+    endCallIfOut(w);
     raiseCalls(w);
   }));
 }

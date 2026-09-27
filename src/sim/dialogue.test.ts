@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TRAIT_TALK, END, HONK_RANGE, HUB, TOPICS, type Topic } from '../data/dialogue';
 import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
-import { callVehicle, chooseOption, currentOptions, hangUp, honk, placeholders, raiseCalls } from './dialogue';
+import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, honk, placeholders, raiseCalls } from './dialogue';
+import { fireBlock } from './combat';
+import { vehicleStats } from './stats';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
 import { addState } from './states';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
@@ -206,5 +208,27 @@ describe('honk', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const npc = npcAt(w, 'trader', 'traders', 36);
     expect(() => honk(callVehicle(w, npc.id))).toThrow(/radio call/);
+  });
+});
+
+describe('calls during a turn', () => {
+  it('neither side of a call can shoot the other', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 36, y: 30 }, Math.PI);
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    const open = callVehicle(w, raider.id);
+    const r = open.vehicles.find((v) => v.id === raider.id)!;
+    const me = open.vehicles.find((v) => v.id === open.player.vehicleId)!;
+    expect(fireBlock(open, r, vehicleStats(open, r).weapons[0], me)).toBe('talking');
+    expect(fireBlock(w, raider, vehicleStats(w, raider).weapons[0], w.vehicles[0])).not.toBe('talking');
+  });
+
+  it('a call ends when the player is knocked out during the turn', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    const open = callVehicle(w, npc.id);
+    open.player.state = 'knockedOut';
+    endCallIfOut(open);
+    expect(open.player.call).toBeNull();
+    expect(open.events).toContainEqual({ t: 'call', with: npc.id, outcome: 'ended' });
   });
 });

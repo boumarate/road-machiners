@@ -140,6 +140,24 @@ function follow(world: World, npc: Vehicle, call: Call, option: DialogueOption):
   enter(world, call, call.topic, option.go);
 }
 
+// A call opened during a turn ends when the player is knocked out or killed later in that turn, or the NPC is
+// gone. It counts as hanging up.
+export function endCallIfOut(world: World): void {
+  const call = world.player.call;
+  if (!call) return;
+  const npc = world.vehicles.find((v) => v.id === call.with);
+  if (!npc) return endCall(world, call);
+  if (world.player.state !== 'active') hangUpCall(world, npc, call);
+}
+
+// True while the player and this vehicle talk: neither shoots the other.
+export function onCall(world: World, a: Vehicle, b: Vehicle): boolean {
+  const call = world.player.call;
+  if (!call) return false;
+  const pair = [a.id, b.id];
+  return pair.includes(call.with) && pair.includes(world.player.vehicleId);
+}
+
 function hangUpCall(world: World, npc: Vehicle, call: Call): void {
   if (call.topic) for (const id of TOPICS[call.topic].hangUp) EFFECTS[id](world, npc, call);
   endCall(world, call);
