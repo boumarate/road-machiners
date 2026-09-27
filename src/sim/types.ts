@@ -202,6 +202,7 @@ export type Player = {
   state: "active" | "knockedOut" | "dead";
   knockoutTurns: number; // turns spent in the current knockout
   tow: Tow | null; // an open tow offer, or the tow in progress once hitched
+  god: boolean; // debug god mode: parts, health, fuel and supplies refill every turn; see src/sim/cheats.ts
   beacon: boolean; // the emergency beacon calls every vehicle within BEACON.range; see src/sim/tow.ts
   explored: Uint8Array; // fog of war: tile y * world.size + x, 1 once seen
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision

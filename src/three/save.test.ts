@@ -49,7 +49,7 @@ describe('local game save', () => {
     const storage = makeStorage();
     storage.setItem('korovan.save', JSON.stringify({ version: 5, world: { turn: 21 } }));
     expect(() => loadWorld(storage)).toThrow(/version/);
-    storage.setItem('korovan.save', JSON.stringify({ version: 8, world: { turn: 21 } }));
+    storage.setItem('korovan.save', JSON.stringify({ version: 9, world: { turn: 21 } }));
     expect(() => loadWorld(storage)).toThrow(/world/);
   });
 
@@ -68,11 +68,13 @@ describe('local game save', () => {
     expect(loaded.vehicles[0].job).toEqual({ kind: 'repair', partId: 'x', parts: Number.MAX_SAFE_INTEGER, turnsLeft: 2, total: 4 });
   });
 
-  // A save from before defeat and rescue: no player state, tow or beacon, and brains without refusedTow.
-  function oldSave(version: 6 | 7): string {
+  // A save from before god mode. Before version 8 it also lacks player state, tow and beacon, and brains lack refusedTow.
+  function oldSave(version: 6 | 7 | 8): string {
     const world = newWorld(1337, startKit('standard'));
     const { terrain: _terrain, ...saved } = world;
     const player: Record<string, unknown> = { ...saved.player, explored: Array.from(saved.player.explored) };
+    delete player.god;
+    if (version === 8) return JSON.stringify({ version, world: { ...saved, player } });
     for (const field of ['state', 'knockoutTurns', 'tow', 'beacon']) delete player[field];
     if (version === 6) {
       delete player.engineHeat;
@@ -101,11 +103,20 @@ describe('local game save', () => {
     expect(loaded).toEqual(newWorld(1337, startKit('standard')));
   });
 
+  it('migrates a version 8 save to god mode off', () => {
+    const storage = makeStorage();
+    storage.setItem('korovan.save', oldSave(8));
+    const loaded = loadWorld(storage);
+    expect(loaded!.player.god).toBe(false);
+    expect(loaded).toEqual(newWorld(1337, startKit('standard')));
+  });
+
   it('migrates a version 6 save through version 7', () => {
     const storage = makeStorage();
     storage.setItem('korovan.save', oldSave(6));
     const loaded = loadWorld(storage);
     expectRescueFields(loaded);
+    expect(loaded!.player.god).toBe(false);
     expect(loaded!.player.engineHeat).toBe(0);
     expect(loaded!.player.autoRepair).toBe(true);
   });
@@ -117,7 +128,7 @@ describe('local game save', () => {
       const incomplete = { ...world };
       delete (incomplete as Partial<typeof world>)[field];
       const { terrain: _terrain, ...saved } = incomplete;
-      storage.setItem('korovan.save', JSON.stringify({ version: 8, world: saved }));
+      storage.setItem('korovan.save', JSON.stringify({ version: 9, world: saved }));
       expect(() => loadWorld(storage)).toThrow(/world/);
     }
   });

@@ -1,0 +1,297 @@
+import { describe, expect, it } from 'vitest';
+import { chassisDef } from '../data/chassis';
+import { partDef } from '../data/parts';
+import { REGION } from '../data/region';
+import { CHEATS, RULES } from '../data/rules';
+import { START_KITS } from '../data/start';
+import {
+  addXp, applyGodMode, CheatError, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
+  repairAll, revealMap, setFuel, setHealth, setMoney, setSkillPoints, setSupplies, skipToHour, spawnNear,
+  startWeather, teleport, toggleGod,
+} from './cheats';
+import { playerVehicle } from './damage';
+import { corePart, goodsCount, mountedParts } from './grid';
+import { spareParts } from './inventory';
+import { clockOf } from './sun';
+import { addVehicle, emptyWorld } from './testkit';
+import type { World } from './types';
+import { dist } from './vec';
+import { canUseSite } from './sites';
+import { endTurn, hostileToPlayer, newWorld } from './world';
+
+function withSpawned(w: World, templateId: string, hostile: boolean): { w: World; id: string } {
+  const next = spawnNear(w, templateId, hostile);
+  const id = next.vehicles[next.vehicles.length - 1].id;
+  return { w: next, id };
+}
+
+describe('resource cheats', () => {
+  it('sets money and skill points', () => {
+    const w = setSkillPoints(setMoney(emptyWorld(), 12345), 4);
+    expect(w.player.money).toBe(12345);
+    expect(w.player.skillPoints).toBe(4);
+  });
+
+  it('rejects negative, fractional and NaN counts', () => {
+    const w = emptyWorld();
+    expect(() => setMoney(w, -1)).toThrow(CheatError);
+    expect(() => setMoney(w, 1.5)).toThrow(CheatError);
+    expect(() => setSkillPoints(w, Number.NaN)).toThrow(CheatError);
+    expect(() => setHealth(w, 50.5)).toThrow(CheatError);
+    expect(() => setFuel(w, Number.NaN)).toThrow(CheatError);
+  });
+
+  it('sets fractional fuel and supplies up to their caps', () => {
+    const cap = chassisDef(playerVehicle(emptyWorld()).chassisId).fuelCap;
+    const w = setSupplies(setFuel(emptyWorld(), cap - 0.5), 2.5);
+    expect(w.player.fuel).toBe(cap - 0.5);
+    expect(w.player.supplies).toBe(2.5);
+  });
+
+  it('rejects values above the fuel, supplies and health caps and names the cap', () => {
+    const w = emptyWorld();
+    const cap = chassisDef(playerVehicle(w).chassisId).fuelCap;
+    expect(() => setFuel(w, cap + 1)).toThrow(new RegExp(`${cap}`));
+    expect(() => setSupplies(w, RULES.suppliesCap + 1)).toThrow(new RegExp(`${RULES.suppliesCap}`));
+    expect(() => setHealth(w, RULES.maxHealth + 1)).toThrow(new RegExp(`${RULES.maxHealth}`));
+    expect(() => setFuel(w, -1)).toThrow(CheatError);
+  });
+
+  it('leaves the input world unchanged', () => {
+    const w = emptyWorld();
+    const next = setMoney(w, 7);
+    expect(w.player.money).not.toBe(7);
+    expect(next).not.toBe(w);
+  });
+
+  it('adds xp through levels', () => {
+    const w = addXp(emptyWorld(), 10_000);
+    expect(w.player.xp).toBe(10_000);
+    expect(w.player.level).toBeGreaterThan(1);
+    expect(w.events.some((e) => e.t === 'levelUp')).toBe(true);
+    expect(() => addXp(emptyWorld(), 0)).toThrow(CheatError);
+  });
+});
+
+describe('part cheats', () => {
+  it('repairs every part to full hit points', () => {
+    const w = emptyWorld();
+    for (const p of mountedParts(playerVehicle(w))) p.hp = 0;
+    const fixed = repairAll(w);
+    for (const p of mountedParts(playerVehicle(fixed))) expect(p.hp).toBe(partDef(p.defId).hp);
+  });
+
+  it('damages the first mounted part with a def', () => {
+    const w = damagePartTo(emptyWorld(), 'mg', 3);
+    expect(mountedParts(playerVehicle(w)).find((p) => p.defId === 'mg')!.hp).toBe(3);
+  });
+
+  it('rejects an unmounted def and hit points out of range', () => {
+    const w = emptyWorld();
+    expect(() => damagePartTo(w, 'cannon', 1)).toThrow(/mg/);
+    expect(() => damagePartTo(w, 'mg', partDef('mg').hp + 1)).toThrow(CheatError);
+    expect(() => damagePartTo(w, 'mg', -1)).toThrow(CheatError);
+  });
+
+  it('gives parts as spares and goods as cargo', () => {
+    const w = give(give(emptyWorld(), 'plates', 1), 'salt', 2);
+    const me = playerVehicle(w);
+    expect(spareParts(me).map((p) => p.defId)).toContain('plates');
+    expect(goodsCount(me).salt).toBe(2);
+  });
+
+  it('rejects a give without room and keeps the world unchanged', () => {
+    const w = emptyWorld();
+    const before = goodsCount(playerVehicle(w));
+    expect(() => give(w, 'salt', 500)).toThrow(CheatError);
+    expect(goodsCount(playerVehicle(w))).toEqual(before);
+  });
+
+  it('rejects unknown ids and bad counts', () => {
+    const w = emptyWorld();
+    expect(() => give(w, 'unobtainium', 1)).toThrow(/salt/);
+    expect(() => give(w, 'salt', 0)).toThrow(CheatError);
+  });
+});
+
+describe('god mode', () => {
+  it('toggles on and off', () => {
+    const on = toggleGod(emptyWorld());
+    expect(on.player.god).toBe(true);
+    expect(toggleGod(on).player.god).toBe(false);
+  });
+
+  it('restores parts, health, fuel and supplies on a draft', () => {
+    const w = toggleGod(emptyWorld());
+    const me = playerVehicle(w);
+    corePart(me, 'cab').hp = 0;
+    Object.assign(w.player, { health: 1, fuel: 0, supplies: 0 });
+    applyGodMode(w);
+    expect(corePart(me, 'cab').hp).toBe(partDef(corePart(me, 'cab').defId).hp);
+    expect(w.player).toMatchObject({ health: RULES.maxHealth, fuel: chassisDef(me.chassisId).fuelCap, supplies: RULES.suppliesCap });
+  });
+
+  it('does nothing while off', () => {
+    const w = emptyWorld();
+    w.player.fuel = 1;
+    applyGodMode(w);
+    expect(w.player.fuel).toBe(1);
+  });
+
+  it('keeps the player awake through a turn that would knock them out', () => {
+    const broken = (god: boolean): World => {
+      const w = god ? toggleGod(emptyWorld()) : emptyWorld();
+      corePart(playerVehicle(w), 'cab').hp = 0;
+      return w;
+    };
+    expect(endTurn(broken(false)).player.state).toBe('knockedOut');
+    expect(endTurn(broken(true)).player.state).toBe('active');
+  });
+});
+
+describe('teleport', () => {
+  it('moves the truck to a free target and stops it', () => {
+    const w = emptyWorld();
+    const me = playerVehicle(w);
+    me.speed = 3;
+    me.order = { kind: 'through', dest: { x: 50, y: 50 } };
+    const moved = playerVehicle(teleport(w, { x: 80, y: 90 }));
+    expect(moved.pos).toEqual({ x: 80, y: 90 });
+    expect(moved).toMatchObject({ speed: 0, order: null, trail: [] });
+  });
+
+  it('finds the nearest free spot next to an obstacle', () => {
+    const w = emptyWorld();
+    w.obstacles.push({ id: 'rock-x', pos: { x: 80, y: 90 }, r: 2, kind: 'rock' });
+    const moved = playerVehicle(teleport(w, { x: 80, y: 90 }));
+    const d = dist(moved.pos, { x: 80, y: 90 });
+    expect(d).toBeGreaterThan(2);
+    expect(d).toBeLessThanOrEqual(CHEATS.searchStep * CHEATS.searchRings);
+  });
+
+  it('refreshes vision at the new spot', () => {
+    const w = teleport(emptyWorld(), { x: 200, y: 200 });
+    expect(w.player.explored[200 * w.size + 200]).toBe(1);
+  });
+
+  it('rejects a knocked out player and a target off the map', () => {
+    const w = emptyWorld();
+    expect(() => teleport(w, { x: -500, y: -500 })).toThrow(CheatError);
+    expect(() => teleport(w, { x: Number.NaN, y: 10 })).toThrow(CheatError);
+    w.player.state = 'knockedOut';
+    expect(() => teleport(w, { x: 80, y: 90 })).toThrow(CheatError);
+  });
+});
+
+describe('places and time', () => {
+  it('teleports to a spot where every town and location can be used', () => {
+    const w = newWorld(1, START_KITS.standard);
+    for (const place of [...REGION.towns, ...REGION.locations]) {
+      const next = teleport(w, placeSpot(w, place.id));
+      expect(canUseSite(playerVehicle(next).pos, place), place.id).toBe(true);
+    }
+    expect(() => placeSpot(w, 'atlantis')).toThrow(new RegExp(REGION.towns[0].id));
+  });
+
+  it('skips to the first later turn at the hour', () => {
+    const w = emptyWorld();
+    const next = skipToHour(w, 22);
+    expect(next.turn).toBeGreaterThan(w.turn);
+    expect(Math.floor(clockOf(next.turn).hour)).toBe(22);
+    expect(Math.floor(clockOf(next.turn - 1).hour)).not.toBe(22);
+    expect(() => skipToHour(w, 24)).toThrow(CheatError);
+    expect(() => skipToHour(w, 1.5)).toThrow(CheatError);
+  });
+
+  it('starts one storm at the truck', () => {
+    const w = startWeather(startWeather(emptyWorld(), 'storm'), 'storm');
+    const storms = w.weather.filter((e) => e.kind === 'storm');
+    expect(storms).toHaveLength(1);
+    expect(storms[0]).toMatchObject({ pos: playerVehicle(w).pos });
+    expect(() => startWeather(w, 'snow')).toThrow(CheatError);
+  });
+
+  it('starts regional weather', () => {
+    expect(startWeather(emptyWorld(), 'heatwave').weather.map((e) => e.kind)).toContain('heatwave');
+  });
+
+  it('reveals the whole map', () => {
+    expect(revealMap(emptyWorld()).player.explored.every((t) => t === 1)).toBe(true);
+  });
+});
+
+describe('vehicle cheats', () => {
+  it('spawns a template at the spawn distance with a spawn event', () => {
+    const { w, id } = withSpawned(emptyWorld(), 'trader', false);
+    const v = w.vehicles.find((x) => x.id === id)!;
+    expect(v.brain?.templateId).toBe('trader');
+    expect(dist(v.pos, playerVehicle(w).pos)).toBeCloseTo(CHEATS.spawnDistance);
+    expect(w.events).toContainEqual({ t: 'spawn', vehicle: id });
+    expect(hostileToPlayer(w, v)).toBe(false);
+  });
+
+  it('spawns a hostile vehicle', () => {
+    const { w, id } = withSpawned(emptyWorld(), 'trader', true);
+    const v = w.vehicles.find((x) => x.id === id)!;
+    expect(hostileToPlayer(w, v)).toBe(true);
+    expect(v.brain!.attackers).toContain(w.player.vehicleId);
+  });
+
+  it('rejects an unknown template', () => {
+    expect(() => spawnNear(emptyWorld(), 'dragon', false)).toThrow(/buggy/);
+  });
+
+  it('turns a vehicle hostile', () => {
+    const { w, id } = withSpawned(emptyWorld(), 'trader', false);
+    const next = makeHostile(w, id);
+    expect(hostileToPlayer(next, next.vehicles.find((v) => v.id === id)!)).toBe(true);
+    expect(() => makeHostile(w, w.player.vehicleId)).toThrow(CheatError);
+    expect(() => makeHostile(w, 'v999999')).toThrow(CheatError);
+  });
+
+  it('kills a vehicle into a wreck without paying a bounty', () => {
+    const { w, id } = withSpawned(emptyWorld(), 'buggy', false);
+    w.vehicles.find((v) => v.id === id)!.lastHitBy = w.player.vehicleId;
+    const next = killVehicles(w, id);
+    expect(next.vehicles.some((v) => v.id === id)).toBe(false);
+    expect(next.obstacles.some((o) => o.id === `wreck-${id}`)).toBe(true);
+    expect(next.player.money).toBe(w.player.money);
+    expect(next.player.xp).toBe(w.player.xp);
+  });
+
+  it('kills hostiles or all other vehicles', () => {
+    const w = emptyWorld();
+    const foe = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    foe.grudges.push(w.player.vehicleId);
+    addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 30, y: 40 });
+    expect(killVehicles(w, 'hostiles').vehicles).toHaveLength(2);
+    expect(killVehicles(w, 'all').vehicles.map((v) => v.id)).toEqual([w.player.vehicleId]);
+    expect(killVehicles(emptyWorld(), 'hostiles').vehicles).toHaveLength(1);
+  });
+
+  it('rejects the player and unknown ids as kill targets', () => {
+    const w = emptyWorld();
+    expect(() => killVehicles(w, w.player.vehicleId)).toThrow(CheatError);
+    expect(() => killVehicles(w, 'v999999')).toThrow(CheatError);
+  });
+
+  it('drops the tow when the tower is killed, so the next turn runs', () => {
+    const w = emptyWorld();
+    const tower = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 40, y: 30 });
+    w.player.tow = { by: tower.id, town: REGION.towns[0].id, fee: 10, hitched: true };
+    const next = killVehicles(w, tower.id);
+    expect(next.player.tow).toBeNull();
+    expect(() => endTurn(next)).not.toThrow();
+  });
+
+  it('lists other vehicles by distance', () => {
+    const w = emptyWorld();
+    const far = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 50, y: 30 });
+    const near = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 35, y: 30 });
+    near.grudges.push(w.player.vehicleId);
+    expect(nearbyVehicles(w)).toEqual([
+      { id: near.id, name: near.name, templateId: null, faction: 'raiders', distance: 5, hostile: true },
+      { id: far.id, name: far.name, templateId: null, faction: 'traders', distance: 20, hostile: false },
+    ]);
+  });
+});

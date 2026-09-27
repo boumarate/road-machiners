@@ -35,22 +35,26 @@ function moveStorm(world: World, e: Extract<WeatherEvent, { kind: 'storm' }>): v
 function spawnIfClear(world: World, kind: WeatherEvent['kind']): void {
   if (world.weather.some((e) => e.kind === kind)) return;
   if (!chance(world, SIM.spawnChance[kind])) return;
+  const event = makeWeather(world, kind);
+  world.weather.push(event);
+  world.events.push({ t: 'weather', event, outcome: 'started' });
+}
+
+// A new event with a random duration. A storm gets a random position, radius and drift.
+export function makeWeather(world: World, kind: WeatherEvent['kind']): WeatherEvent {
   const [lo, hi] = SIM.duration[kind];
   const turnsLeft = randInt(world, lo, hi);
   const id = newId(world, 'wx');
-  const event: WeatherEvent =
-    kind === 'storm'
-      ? {
-          id,
-          kind: 'storm',
-          pos: { x: randRange(world, 0, world.size), y: randRange(world, 0, world.size) },
-          radius: randRange(world, SIM.stormRadius[0], SIM.stormRadius[1]),
-          vel: angledVel(world, randRange(world, SIM.stormSpeed[0], SIM.stormSpeed[1])),
-          turnsLeft,
-        }
-      : { id, kind, turnsLeft };
-  world.weather.push(event);
-  world.events.push({ t: 'weather', event, outcome: 'started' });
+  return kind === 'storm'
+    ? {
+        id,
+        kind: 'storm',
+        pos: { x: randRange(world, 0, world.size), y: randRange(world, 0, world.size) },
+        radius: randRange(world, SIM.stormRadius[0], SIM.stormRadius[1]),
+        vel: angledVel(world, randRange(world, SIM.stormSpeed[0], SIM.stormSpeed[1])),
+        turnsLeft,
+      }
+    : { id, kind, turnsLeft };
 }
 
 function angledVel(world: World, speed: number): Vec {
