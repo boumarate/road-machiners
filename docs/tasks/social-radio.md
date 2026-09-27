@@ -1,7 +1,7 @@
 # Social radio and dialogue
 
 **Status:** executing
-**Blocked:** none. npc-traits merged. PH1, PH5 and most of PH6 are done. Defeat-rescue merged into main, and main merged into this branch. The user approved that order. Then PH2 onward is re-planned against `docs/tasks/npc-traits.md`, section "Changes needed in social radio".
+**Blocked:** none. Defeat-rescue and npc-traits are merged into this branch. PH1, PH5 and most of PH6 are done.
 **Branch:** social
 **Worktree:** .worktrees/social
 **Goal:** All player and NPC talk runs through one dialogue system, where new talk is a new topic in data. In the browser, the player calls a truck in sight and gets directions to a town, honks and hears friendly trucks honk back, patches a stranded NPC and gets patched, and receives a tow offer and a raider demand as dialogues. The user confirms the loop in play.
@@ -311,6 +311,14 @@ npc-traits merged into this branch at 25cedab. Its states replace agreements, an
 - PH5: `honk()` lives in `src/sim/dialogue.ts` and its tests in `src/sim/dialogue.test.ts`, not in a new `honk.ts`. A new sim file broke the quality check's file-count ratio, and talk and honks share the class lookup. `HONK_RANGE` in `src/data/dialogue.ts` equals `DETECT.sound.limp`, so a horn carries as far as a crawling engine.
 - PH5: the vehicle labels moved out of `src/three/game.ts` into `VehicleMarkers` in `src/three/render/labels.ts`. That made room under the file length limit for the horn playback.
 - PH6: the `radio` and `horn` cues were generated with `npm run sfx:gen`, 3 variants each, about 290 credits in total. The user asked for both.
+
+- PH2: the tow keeps npc-traits' flow. The tower drives over and makes its offer in reach, and the offer then arrives as a radio call. The planned `accepted` flag was not needed. Asking a driver for a tow pushes its tow goal without a `strandedSeen` roll: a direct request is always honored when the driver could tow.
+- PH2: `raiseCalls()` runs twice per turn, before fire and at the end. `endCallIfOut()` ends a call when the player is knocked out or killed later in the same turn.
+- PH3: `Condition` takes the call values, so options can depend on a rolled deal. `CallVar` gained a `deal` kind that the UI words from `DEAL_LINES`.
+- PH3: a truck with a patch deal under way gets no tow offers. Without this, the patcher also offered a tow when it arrived.
+- PH3: the spare parts roll skips the RNG when a table has one outcome, so raider spawns keep their random sequence. The tow arrival test now pauses spawns, because a raider spawned by the shifted sequence scared the tower off.
+- PH3: no separate test checks that a trait weight shifts the deal roll. The roll goes through `decide()`, which npc-traits tests.
+- PH4: a raise rule has `duringFeud`. A demand may be raised during a feud, because a scumbag's robbery starts one. Hand-over pushes a `loot` goal on the demander toward the stock.
 
 ### Known risks
 - Saves from before PH1 have no `call` or `talked`. A missing `talked` throws on the first `once` topic lookup. PH6 adds the migration.
