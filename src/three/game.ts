@@ -249,7 +249,7 @@ export class Game {
       this.shade.mesh,
       this.weather.root,
       this.zones.root,
-      this.path.root,
+      this.path.root, this.path.waypoint,
       this.weaponRange.root,
       this.contacts.root,
       this.dust.root,
@@ -1275,7 +1275,7 @@ export class Game {
     // Steering zones and the path preview only help a driver who can give orders.
     const steer = !hide && playerCanAct(this.world);
     this.zones.root.visible = steer;
-    this.path.root.visible = steer;
+    this.path.updateVisibility(steer, this.anim, this.modalOpen());
     this.weaponRange.root.visible = false;
     this.placeTargetMarkers();
     this.placeHitCard();

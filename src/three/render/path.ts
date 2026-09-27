@@ -10,6 +10,8 @@ import type { VehicleFrame } from '../../phys/frames';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { heightAt, type Terrain } from '../../sim/terrain';
+import { playerVehicle } from '../../sim/damage';
+import type { World } from '../../sim/types';
 import type { Vec } from '../../sim/vec';
 
 const S = PHYSICS.metersPerTile;
@@ -24,10 +26,17 @@ const MARKER_INNER = 0.8;
 
 export class PathView {
   readonly root = new THREE.Group();
+  readonly waypoint = new THREE.Mesh(
+    new THREE.RingGeometry(MARKER_INNER, MARKER_OUTER, 24).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: PAL.plan, transparent: true, opacity: OPACITY.later, depthWrite: false, side: THREE.DoubleSide }),
+  );
   private lines: Line2[] = [];
   private markers: THREE.Mesh[] = [];
 
-  constructor(private readonly terrain: Terrain) {}
+  constructor(private readonly terrain: Terrain) {
+    this.waypoint.visible = false;
+    this.waypoint.renderOrder = 820;
+  }
 
   // A frame's point dropped onto the ground under it.
   private ground(p: { x: number; z: number }): [number, number, number] {
@@ -90,6 +99,17 @@ export class PathView {
     marker.renderOrder = 820;
     this.root.add(marker);
     this.markers.push(marker);
+  }
+
+  updateVisibility(preview: boolean, playback: { before: World } | null, modalOpen: boolean): void {
+    this.root.visible = preview;
+    const order = playback && playerVehicle(playback.before).order;
+    this.showWaypoint(!modalOpen && order && order.kind !== 'brake' ? order.dest : null);
+  }
+
+  showWaypoint(point: Vec | null): void {
+    this.waypoint.visible = point !== null;
+    if (point) this.waypoint.position.set(...this.ground({ x: point.x * S, z: point.y * S }));
   }
 
   clear(): void {
