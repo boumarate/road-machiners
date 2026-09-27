@@ -40,7 +40,7 @@ A decision point is a moment when the NPC may change goals. It fires once per tr
 
 - `hostileSeen`: a new hostile comes in sight. Options: keep, fight, flee.
 - `contactHeard`: a new hostile contact beyond sight. Options: keep, investigate, flee.
-- `hurt`: the NPC took damage this turn. Options: keep, flee, fight back.
+- `attacked`: a shot, hit or miss, was aimed at the NPC or at a nearby visible faction mate. The subject is the shooter. Options: keep, flee, fight back.
 - `preySeen`: a new robbery target comes in sight. Options: keep, rob.
 - `strandedSeen`: a stranded player comes in sight. Options: keep, tow.
 - `resume`: an interruption goal popped. Options: resume, new.
@@ -53,7 +53,7 @@ The final weight is (base + adds) × multipliers × situation factor. Adds and m
 ### Chances
 A weight of 0 means only "cannot". An option is unavailable when it physically cannot happen: no working gun to fight, no affordable profitable trade, no loot on the target, the target out of sight, or a tower that is stranded itself. Every available option gets at least `MIN_CHANCE`, which is 1%. Its chance is MIN_CHANCE plus its weighted share of the rest. Judgments such as "looks stronger than me" or "near town guards" are weights, not availability. Multipliers and situation factors are always above 0. A trait or state lowers an option with a small multiplier and never removes it. So any NPC robs at 1% per chance, a trader starts a fight at 1%, and a turned-down tower offers again at 1%.
 
-`hurt` has a third option, fight back, aimed at whoever hit the NPC this turn. Traders never start fights by weight, but fight back sometimes.
+`attacked` has a fight back option aimed at the shooter. An NPC always returns fire at an attacker, even while fleeing. Traders never start fights by weight, but fight back sometimes.
 
 ### Fixed rules
 Survival stays deterministic. Low fuel, low supplies or cab damage below the service threshold pushes a service goal with no roll. An NPC with sale cargo and an empty stack sells before it rolls `idle`. A scavenge goal already ends when the cargo is full.
@@ -65,7 +65,7 @@ Survival stays deterministic. Low fuel, low supplies or cab damage below the ser
 - `trader` adds idle trade and strandedSeen tow, and sets hostileSeen fight to zero.
 - `raider` adds idle raid and contactHeard investigate, and knows the raider camps.
 - `scumbag` adds preySeen rob.
-- `coward` multiplies hurt flee and hostileSeen flee.
+- `coward` multiplies attacked flee and hostileSeen flee.
 
 Traits reach both layers. Weights at `idle` and `resume` shape long-term goals. Weights at the other decision points shape immediate reactions. Known sites and topics are the union over all traits.
 
