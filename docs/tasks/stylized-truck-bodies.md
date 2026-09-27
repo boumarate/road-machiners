@@ -1,6 +1,6 @@
 # Stylized truck bodies
 
-**Status:** reviewing
+**Status:** validating
 **Branch:** stylized-trucks
 **Worktree:** .worktrees/stylized-trucks
 **Goal:** At the default game zoom, the user can tell each chassis apart by its silhouette, and the scout reads as a stylized Hilux. The user signs off on screenshots.
@@ -115,3 +115,29 @@ Smoke: `tmp/lineup.mjs` renders all nine chassis in four factions at the default
 Notes: `npm run playtest` fails on FPS: 19 to 19.5 against a 20 floor, with load average 9. The same playtest on main at bd56835 gave 5.5 FPS at the same time, so the machine sets the number. No page errors or crash screen appeared.
 
 ## Conclusion
+
+Outcome: all nine chassis draw from their own stylized base model with the shared kit on top, at a7f39d0. The goal needs the user to sign off on `tmp/lineup-merged.png`.
+
+Invariants:
+- IV1 — `check_base` in Blender and `checkBaseFits` in the view both enforce the footprint.
+- IV2, IV3 — `socket()` throws on a missing row or floor socket, `baseModel()` throws on a chassis without a base, and `partLooks.test.ts` covers every chassis.
+- IV4 — no change under `src/sim`, `src/phys` or `physics.ts`. `chassis.ts` only loses `zones`.
+
+### Assumptions check
+- AS1 — held. Every base reads well with one stand height per row. Two bases have small clips at row edges, listed below.
+- AS2 — held in the carrier and scout renders. Plates hang outside the base sides with no z-fighting.
+
+### Unknowns outcome
+- UK1 — resolved. Chassis without a base kept the old cell pieces until PH4 removed them.
+
+Plan adherence: PH2 added the weapon riser and roof front edges on user feedback. `BASE_MODELS` became a full `Record` behind `baseModel()` once every chassis had a base.
+
+Review findings: none at confidence 80 or above.
+
+Future work:
+- Share the helpers the base scripts copy: a length-wise loft, a partial arch outline and a half-ring fender.
+- Small clips from the agents' reports: the hauler roof hatch rim, the tractor fifth-wheel plate and the courier rear rails can touch items by up to 0.1 m.
+- Van core parts sit hidden inside the closed box, so their damage never shows.
+- Player paint 0x9c7a3e still blends with the sand.
+
+Verified by: user sign-off on the scout style, and solo renders of all nine chassis.
