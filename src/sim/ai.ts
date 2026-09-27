@@ -106,15 +106,28 @@ function computeFightGoal(
   return { x: v.pos.x + Math.cos(a) * step, y: v.pos.y + Math.sin(a) * step };
 }
 
+// Two NPCs that give way to each other would both wait forever. Only the one whose id sorts first waits.
+// Stopped, it counts as parked, so the other one's route goes around it.
 function vehicleAhead(world: World, v: Vehicle): boolean {
-  const r = vehicleStats(world, v).radius;
   const tow = world.player.tow;
   return world.vehicles.some((x) => {
     if (x.id === v.id) return false;
     // A tower never yields to the truck on its own rope.
     if (tow?.hitched && tow.by === v.id && x.id === world.player.vehicleId) return false;
-    const gap = dist(v.pos, x.pos) - r - vehicleStats(world, x).radius;
-    const off = Math.abs(angleDiff(v.heading, bearing(v.pos, x.pos)));
-    return gap < RULES.yieldDistance + v.speed && off < Math.PI / 4;
+    if (!inTheWay(world, v, x)) return false;
+    return !(v.id > x.id && givesWay(x) && inTheWay(world, x, v));
   });
+}
+
+// Whether x is close ahead of v, within 45 degrees of its heading.
+function inTheWay(world: World, v: Vehicle, x: Vehicle): boolean {
+  const gap = dist(v.pos, x.pos) - vehicleStats(world, v).radius - vehicleStats(world, x).radius;
+  const off = Math.abs(angleDiff(v.heading, bearing(v.pos, x.pos)));
+  return gap < RULES.yieldDistance + v.speed && off < Math.PI / 4;
+}
+
+// NPCs give way unless they fight or flee; the player never does.
+function givesWay(x: Vehicle): boolean {
+  const kind = x.brain?.activity?.kind;
+  return Boolean(x.brain) && kind !== "fight" && kind !== "flee";
 }

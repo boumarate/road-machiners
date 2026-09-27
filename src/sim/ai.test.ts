@@ -6,7 +6,7 @@ import { planNpcOrders } from './ai';
 import { resolveMovement } from './movement';
 import { resolveNpcActivities } from './npc-activities';
 import { addVehicle, emptyWorld } from './testkit';
-import { dist } from './vec';
+import { bearing, dist, type Vec } from './vec';
 import { newWorld } from './world';
 import { steerTo } from './steering';
 import { vehicleStats } from './stats';
@@ -58,6 +58,28 @@ describe('NPC driving', () => {
     }
     expect(closest).toBeLessThan(nose.radius + 2);
   }, 120_000);
+
+  it('two traders meeting head-on on a road both get past', () => {
+    const bowl = REGION.towns[0];
+    const nose = REGION.towns[1];
+    const w = emptyWorld({ x: 300, y: 450 });
+    const toNose = bearing(bowl.pos, nose.pos);
+    const mid = { x: (bowl.pos.x + nose.pos.x) / 2, y: (bowl.pos.y + nose.pos.y) / 2 };
+    const at = (d: number) => ({ x: mid.x + Math.cos(toNose) * d, y: mid.y + Math.sin(toNose) * d });
+    // One tile apart past both radii, well inside the give-way distance, nose to nose.
+    const east = addVehicle(w, 'traders', 'hauler', ['stockEngine'], at(-1.5), toNose);
+    const west = addVehicle(w, 'traders', 'hauler', ['stockEngine'], at(1.5), toNose + Math.PI);
+    east.brain = { templateId: 'trader', activity: { kind: 'sell', targetId: 'nose', destination: { ...nose.pos }, reason: 'test', phase: 'travel' }, goal: null, home: { ...east.pos }, stepIndex: 0, refusedTow: false };
+    west.brain = { templateId: 'trader', activity: { kind: 'sell', targetId: 'bowl', destination: { ...bowl.pos }, reason: 'test', phase: 'travel' }, goal: null, home: { ...west.pos }, stepIndex: 0, refusedTow: false };
+    const along = (p: Vec) => (p.x - mid.x) * Math.cos(toNose) + (p.y - mid.y) * Math.sin(toNose);
+    // Ten turns cover a stop, a detour around the stopped truck and the drive past it.
+    for (let i = 0; i < 10; i++) {
+      planNpcOrders(w);
+      resolveMovement(w);
+    }
+    expect(along(east.pos)).toBeGreaterThan(5);
+    expect(along(west.pos)).toBeLessThan(-5);
+  });
 
   it('backs out after repeated failed drive attempts', () => {
     const { w, npc } = buildChase();

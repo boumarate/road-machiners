@@ -5,6 +5,7 @@ import { RULES } from "../data/rules";
 import { maxTurn, type VehicleStats } from "./stats";
 import { chassisDef } from "../data/chassis";
 import { route, routeLength, straightClear, type Blocker } from "./path";
+import { CLEARANCE } from "./nav/layer";
 import { isDriveObstacle } from "./mapgen";
 import { driveFactor, isCliff, tileAt, type Terrain } from "./terrain";
 import type { MoveOrder, Pose, Vehicle, World } from "./types";
@@ -201,7 +202,9 @@ export function steerTo(
 
 // Careful driving: slow for corners as if stopping a little past them, so the arc does not swing into
 // the obstacle. Route lines keep only CLEARANCE from obstacles, so rolling past a corner is allowed
-// only where that overrun is clear. Where it is not, the truck must be able to stop on the corner,
+// only where that overrun does not touch an obstacle or a cliff. The overrun may use the CLEARANCE
+// margin: checking with it would make a truck on a route that hugs a cliff stop at every corner, and
+// crawl too slowly to climb. Where the overrun touches, the truck must be able to stop on the corner,
 // including corners before the aim point that aimPoint skips as too close.
 // Returns the route length within which the truck must be able to stop.
 function stopReach(world: World, s: VehicleStats, from: Vec, points: Vec[], aim: Vec, parked: Blocker[]): number {
@@ -215,7 +218,7 @@ function stopReach(world: World, s: VehicleStats, from: Vec, points: Vec[], aim:
     const overrun = d > 0 && straightClear(world, corner, {
       x: corner.x + ((corner.x - prev.x) / d) * RULES.cornerSlack,
       y: corner.y + ((corner.y - prev.y) / d) * RULES.cornerSlack,
-    }, s.radius, parked);
+    }, s.radius - CLEARANCE, parked);
     if (!overrun) reach = Math.min(reach, along);
     else if (corner === aim) reach = Math.min(reach, along + RULES.cornerSlack);
     prev = corner;
