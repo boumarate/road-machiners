@@ -190,19 +190,37 @@ export function steerTo(
       Infinity,
     );
   }
-  const clear =
-    direct || straightClear(world, v.pos, order.dest, s.radius, parked);
-  const points = clear
+  // The planner returns the straight line itself when that is the cheapest way.
+  const points = direct
     ? [order.dest]
     : route(world, v.pos, order.dest, s.radius, parked);
   const aim = aimPoint(v.pos, points);
-  // Careful driving: slow for corners as if stopping a little past them, so the arc does not swing into the obstacle.
-  const total = routeLength(v.pos, points);
-  const remaining =
-    points.length > 1
-      ? Math.min(total, dist(v.pos, aim) + RULES.cornerSlack)
-      : total;
+  const remaining = Math.min(routeLength(v.pos, points), stopReach(world, s, v.pos, points, aim, parked));
   return steerStep(s, v, aim, remaining);
+}
+
+// Careful driving: slow for corners as if stopping a little past them, so the arc does not swing into
+// the obstacle. Route lines keep only CLEARANCE from obstacles, so rolling past a corner is allowed
+// only where that overrun is clear. Where it is not, the truck must be able to stop on the corner,
+// including corners before the aim point that aimPoint skips as too close.
+// Returns the route length within which the truck must be able to stop.
+function stopReach(world: World, s: VehicleStats, from: Vec, points: Vec[], aim: Vec, parked: Blocker[]): number {
+  let reach = Infinity;
+  let along = 0;
+  let prev = from;
+  for (let k = 0; k < points.length - 1 && along <= reach; k++) {
+    const corner = points[k];
+    const d = dist(prev, corner);
+    along += d;
+    const overrun = d > 0 && straightClear(world, corner, {
+      x: corner.x + ((corner.x - prev.x) / d) * RULES.cornerSlack,
+      y: corner.y + ((corner.y - prev.y) / d) * RULES.cornerSlack,
+    }, s.radius, parked);
+    if (!overrun) reach = Math.min(reach, along);
+    else if (corner === aim) reach = Math.min(reach, along + RULES.cornerSlack);
+    prev = corner;
+  }
+  return reach;
 }
 
 // An empty tank still permits careful steering at limp speed. Speed already above the cap brakes normally.
@@ -239,9 +257,7 @@ function reverseStep(
     (order.kind === "through" && zoneSpeed(s, v.speed, distance) === 0)
   )
     return null;
-  const clear =
-    direct || straightClear(world, v.pos, order.dest, s.radius, parked);
-  const aim = clear
+  const aim = direct
     ? order.dest
     : aimPoint(v.pos, route(world, v.pos, order.dest, s.radius, parked));
   const ang = angleDiff(v.heading, bearing(v.pos, aim));
