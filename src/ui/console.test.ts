@@ -128,6 +128,7 @@ describe("queries", () => {
         "hour",
         "kill",
         "list",
+        "log",
         "money",
         "repair",
         "reveal",
@@ -152,5 +153,14 @@ describe("queries", () => {
 
     expect(on.lines).toEqual(["god mode on"]);
     expect(off.lines).toEqual(["god mode off"]);
+  });
+
+  it("log reports the new mode", () => {
+    const on = runCommand(emptyWorld(), "log");
+    if (!on.world) throw new Error("log returned no world");
+    const off = runCommand(on.world, "log");
+
+    expect(on.lines).toEqual(["full log on"]);
+    expect(off.lines).toEqual(["full log off"]);
   });
 });

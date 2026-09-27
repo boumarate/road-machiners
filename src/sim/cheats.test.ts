@@ -7,7 +7,7 @@ import { START_KITS } from '../data/start';
 import {
   addXp, applyGodMode, CheatError, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
   repairAll, revealMap, setFuel, setHealth, setMoney, setSkillPoints, setSupplies, skipToHour, spawnNear,
-  startWeather, teleport, toggleGod,
+  startWeather, teleport, toggleFullLog, toggleGod,
 } from './cheats';
 import { playerVehicle } from './damage';
 import { corePart, goodsCount, mountedParts } from './grid';
@@ -112,6 +112,14 @@ describe('part cheats', () => {
     const w = emptyWorld();
     expect(() => give(w, 'unobtainium', 1)).toThrow(/salt/);
     expect(() => give(w, 'salt', 0)).toThrow(CheatError);
+  });
+});
+
+describe('full log', () => {
+  it('toggles on and off', () => {
+    const on = toggleFullLog(emptyWorld());
+    expect(on.player.fullLog).toBe(true);
+    expect(toggleFullLog(on).player.fullLog).toBe(false);
   });
 });
 

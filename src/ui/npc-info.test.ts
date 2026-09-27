@@ -1,6 +1,8 @@
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { addVehicle, emptyWorld, npcBrain } from '../sim/testkit';
 import { playerVehicle } from '../sim/damage';
+import { corePart } from '../sim/grid';
+import type { GameEvent } from '../sim/types';
 import { addState } from '../sim/states';
 import { refreshVision } from '../sim/vision';
 import { eventText, formatNpcActivity, formatNpcStates, formatNpcTraits } from './format';
@@ -72,4 +74,44 @@ it('logs no state ending for tow states or states between NPCs', () => {
   const feud = addState(w, 'feud', npc.id, other.id, { kind: 'feud', robbery: false });
   expect(eventText(w, { t: 'stateEnded', state: tow, ending: 'fulfilled' })).toBeNull();
   expect(eventText(w, { t: 'stateEnded', state: feud, ending: 'expired' })).toBeNull();
+});
+
+describe('events far from the player', () => {
+  const setup = () => {
+    const w = emptyWorld();
+    const a = addVehicle(w, 'scavengers', 'scout', [], { x: 58, y: 55 });
+    const b = addVehicle(w, 'raiders', 'buggy', [], { x: 58, y: 57 });
+    refreshVision(w);
+    w.player.contacts = [];
+    const cab = corePart(a, 'cab');
+    const events: GameEvent[] = [
+      { t: 'collision', a: a.id, b: b.id, hitsA: [{ part: cab.id, damage: 5 }], hitsB: [] },
+      { t: 'partDisabled', vehicle: a.id, part: cab.id },
+      { t: 'destroyed', vehicle: a.id, by: b.id },
+    ];
+    return { w, a, events };
+  };
+
+  it('give no line when the player neither sees nor detects them', () => {
+    const { w, events } = setup();
+    for (const e of events) expect(eventText(w, e)).toBeNull();
+  });
+
+  it('give a line when the player detects a vehicle in them', () => {
+    const { w, a, events } = setup();
+    w.player.contacts = [{ vehicleId: a.id, center: a.pos, radius: 3, sources: ['sound'], loudness: 10 }];
+    for (const e of events) expect(eventText(w, e)).not.toBeNull();
+  });
+
+  it('give a line when the player sees a vehicle in them', () => {
+    const { w, a, events } = setup();
+    a.pos = { x: 32, y: 30 };
+    for (const e of events) expect(eventText(w, e)).not.toBeNull();
+  });
+
+  it('give a line with the full log on', () => {
+    const { w, events } = setup();
+    w.player.fullLog = true;
+    for (const e of events) expect(eventText(w, e)).not.toBeNull();
+  });
 });

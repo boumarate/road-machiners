@@ -122,6 +122,10 @@ export function toggleGod(world: World): World {
   return update(world, (w) => { w.player.god = !w.player.god; });
 }
 
+export function toggleFullLog(world: World): World {
+  return update(world, (w) => { w.player.fullLog = !w.player.fullLog; });
+}
+
 // Runs on the turn draft before destruction and defeat checks, so nothing the turn did can break the truck.
 export function applyGodMode(world: World): void {
   if (!world.player.god) return;

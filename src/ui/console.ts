@@ -22,6 +22,7 @@ import {
   spawnNear,
   startWeather,
   teleport,
+  toggleFullLog,
   toggleGod,
 } from "../sim/cheats";
 import type { World } from "../sim/types";
@@ -103,6 +104,10 @@ export const COMMANDS: readonly Command[] = [
   command("god", "Toggle god mode.", { min: 0, max: 0 }, (world) => {
     const next = toggleGod(world);
     return changed(next, `god mode ${next.player.god ? "on" : "off"}`);
+  }),
+  command("log", "Toggle the full log with events you cannot see or hear.", { min: 0, max: 0 }, (world) => {
+    const next = toggleFullLog(world);
+    return changed(next, `full log ${next.player.fullLog ? "on" : "off"}`);
   }),
 
   command("tp <location id> | tp <x> <y>", "Move the truck to a location or map point.", { min: 1, max: 2 }, (world, args, usage) => {

@@ -102,8 +102,34 @@ function towDroppedText(by: string, reason: Extract<GameEvent, { t: 'towDropped'
   return { text, cls: reason === 'refused' || reason === 'unhitched' ? 'dim' : 'bad' };
 }
 
+// Whether the player's truck is one of the vehicles, or the player sees or detects one of them.
+// The full log debug flag shows every event.
+function playerNotices(world: World, ...ids: string[]): boolean {
+  if (world.player.fullLog) return true;
+  return ids.some((id) => {
+    if (id === world.player.vehicleId) return true;
+    if (world.player.contacts.some((c) => c.vehicleId === id)) return true;
+    const v = findAny(world, id);
+    return v !== undefined && playerSees(world, v.pos);
+  });
+}
+
+// The vehicles in events that log only when the player notices one of them.
+const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => string[] } = {
+  collision: (e) => [e.a, e.b],
+  guardShot: (e) => [e.target],
+  partDisabled: (e) => [e.vehicle],
+  destroyed: (e) => [e.vehicle],
+};
+
+function unnoticed(world: World, e: GameEvent): boolean {
+  const vehicles = NOTICED[e.t] as ((e: GameEvent) => string[]) | undefined;
+  return vehicles !== undefined && !playerNotices(world, ...vehicles(e));
+}
+
 // Returns null for events not worth a log line.
 export function eventText(world: World, e: GameEvent): { text: string; cls: string } | null {
+  if (unnoticed(world, e)) return null;
   const n = (id: string) => vehicleName(world, id);
   const me = world.player.vehicleId;
   switch (e.t) {
@@ -129,8 +155,6 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       return { text, cls: e.target === me && dealt.size > 0 ? 'bad' : '' };
     }
     case 'guardShot': {
-      const target = findAny(world, e.target);
-      if (!target || !playerSees(world, target.pos)) return null;
       const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === e.site)!;
       const hits = e.rounds.filter((r) => r.hit).length;
       const parts = [...partDamage(e.rounds.flatMap((r) => r.hits))].map(([id, d]) => `, ${partName(world, e.target, id)} −${d}`).join('');
