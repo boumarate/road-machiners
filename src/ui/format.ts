@@ -60,7 +60,7 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       return vehicle && playerSees(world, vehicle.pos) ? { text: `${vehicle.name}: ${e.activity ?? 'idle'} — ${e.reason}`, cls: 'dim' } : null;
     }
     case 'collision': {
-      const b = e.b === 'edge' ? 'the map edge' : e.b.startsWith('v') ? n(e.b) : 'an obstacle';
+      const b = e.b === 'edge' ? 'the map edge' : e.b === 'rail' ? 'the bridge rail' : e.b.startsWith('v') ? n(e.b) : 'an obstacle';
       const dealt = [...e.hitsA, ...e.hitsB].reduce((sum, h) => sum + h.damage, 0);
       if (e.a !== me && e.b !== me && dealt < 1) return null;
       const text = `${n(e.a)} crashed into ${b}${damageList(world, e.a, e.hitsA)}${damageList(world, e.b, e.hitsB)}`;

@@ -262,7 +262,10 @@ function onPreySeen(world: World, vehicle: Vehicle): void {
   }
 }
 
+// A driver in a fight or on the run never starts a tow. It decides once the danger goal pops.
 function onStrandedSeen(world: World, vehicle: Vehicle): void {
+  const top = topGoal(vehicle)?.kind;
+  if (top === 'fight' || top === 'flee') return;
   const at = strandedPlayerAt(world, vehicle);
   const me = world.player.vehicleId;
   if (at && react(world, vehicle, 'strandedSeen', me) === 'tow') pushGoal(world, vehicle, createActivity('tow', me, { ...at }, 'help a stranded truck'));

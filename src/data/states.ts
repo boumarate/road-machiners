@@ -13,4 +13,6 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   tow: null,
   // A driver the player turned down never offers a tow to that player again.
   spurned: null,
+  // A tower that dropped a hitched tow for danger keeps its terms until its next offer to that player.
+  towPromise: null,
 };

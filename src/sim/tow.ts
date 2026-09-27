@@ -15,7 +15,7 @@ import { contactsOf, hearsBeacon } from './detect';
 import { route, routeLength } from './path';
 import { npcProfile } from './npc-profile';
 import { canUseSite, siteGates } from './sites';
-import { addState, endState, towData } from './states';
+import { addState, endState, stateOf, towData, towPromiseData } from './states';
 import { isStranded, vehicleStats } from './stats';
 import type { GameEvent, NpcActivity, NpcState, Pose, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
@@ -64,7 +64,8 @@ export function towGoal(world: World, vehicle: Vehicle): NpcActivity {
 export function strandedPlayerAt(world: World, vehicle: Vehicle): Vec | null {
   const me = playerVehicle(world);
   if (playerTow(world) || world.player.state !== 'active') return null;
-  if (!isStranded(world, me) || isHostile(world, vehicle, me)) return null;
+  // A driver that can only crawl itself cannot pull another truck.
+  if (!isStranded(world, me) || isStranded(world, vehicle) || isHostile(world, vehicle, me)) return null;
   return canVehicleSee(world, vehicle, me.pos) ? me.pos : beaconCenter(world, vehicle, me);
 }
 
@@ -112,10 +113,14 @@ export function runTow(world: World, vehicle: Vehicle, activity: NpcActivity): s
   return null;
 }
 
+// A driver that broke off a tow for danger keeps its word: the same town and fee as the deal it dropped.
 function offer(world: World, vehicle: Vehicle): void {
   const me = playerVehicle(world);
-  const town = nearestKnownTown(world, vehicle);
-  const fee = towFee(world, vehicle, me.pos, town);
+  const promise = stateOf(world, 'towPromise', vehicle.id, me.id);
+  const kept = promise && towPromiseData(promise);
+  const town = kept ? townById(kept.town) : nearestKnownTown(world, vehicle);
+  const fee = kept ? kept.fee : towFee(world, vehicle, me.pos, town);
+  if (promise) endState(world, promise, 'fulfilled');
   addState(world, 'tow', vehicle.id, me.id, { kind: 'tow', town: town.id, fee, hitched: false });
   world.events.push({ t: 'towOffer', by: vehicle.id, town: town.id, fee });
 }
@@ -142,8 +147,11 @@ function refuse(world: World, tow: NpcState): void {
 }
 
 // Ends an offer or a tow for free. The state's broken hook brakes a released truck.
+// A tower that leaves a hitched truck for danger remembers the deal as a towPromise.
 export function dropTow(world: World, tow: NpcState, reason: DropReason): void {
+  const data = towData(tow);
   endState(world, tow, 'broken');
+  if (data.hitched && reason === 'danger') addState(world, 'towPromise', tow.holder, tow.other, { kind: 'towPromise', town: data.town, fee: data.fee });
   world.events.push({ t: 'towDropped', by: tow.holder, reason });
 }
 

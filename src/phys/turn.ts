@@ -4,14 +4,15 @@
 
 import { RULES } from '../data/rules';
 import { playerVehicle } from '../sim/damage';
+import { BRIDGE_RAILS } from '../sim/bridge';
 import { advanceFar } from '../sim/far';
 import { applyCrash, nearestEdge } from '../sim/movement';
 import { burnFuel } from '../sim/resources';
 import { isTowed } from '../sim/tow';
 import type { Pose, Vehicle, World } from '../sim/types';
-import { dist, type Vec } from '../sim/vec';
+import { clamp, dist, type Vec } from '../sim/vec';
 import { visibleTiles } from '../sim/vision';
-import { bodyState, EDGE, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type TurnResult } from './drive';
+import { bodyState, EDGE, RAIL, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type TurnResult } from './drive';
 import { headingOf, toMap } from './frames';
 
 const EXPLORE_EVERY = 4; // trail poses between sight checks while exploring along a turn
@@ -66,9 +67,22 @@ export function applyTurn(w: World, r: TurnResult): void {
 function crashPoint(w: World, a: Vehicle, b: Vehicle | null, what: string): Vec {
   if (b) return b.pos;
   if (what === EDGE) return nearestEdge(w, a.pos);
+  if (what === RAIL) return nearestRailPoint(a.pos);
   const o = w.obstacles.find((x) => x.id === what);
   if (!o) throw new Error(`Crash with unknown obstacle ${what}`);
   return o.pos;
+}
+
+function nearestRailPoint(p: Vec): Vec {
+  let best: Vec | null = null;
+  for (const [a, b] of BRIDGE_RAILS) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const t = clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy), 0, 1);
+    const q = { x: a.x + dx * t, y: a.y + dy * t };
+    if (!best || dist(p, q) < dist(p, best)) best = q;
+  }
+  return best!;
 }
 
 // Tiles the player saw while driving count as explored, not only those seen at the turn's end.

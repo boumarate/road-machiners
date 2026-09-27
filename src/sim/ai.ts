@@ -119,7 +119,10 @@ function vehicleAhead(world: World, v: Vehicle): boolean {
 
 // Whether x is close ahead of v, within 45 degrees of its heading.
 function inTheWay(world: World, v: Vehicle, x: Vehicle): boolean {
-  const gap = dist(v.pos, x.pos) - vehicleStats(world, v).radius - vehicleStats(world, x).radius;
+  const gap =
+    dist(v.pos, x.pos) -
+    vehicleStats(world, v).radius -
+    vehicleStats(world, x).radius;
   const off = Math.abs(angleDiff(v.heading, bearing(v.pos, x.pos)));
   return gap < RULES.yieldDistance + v.speed && off < Math.PI / 4;
 }

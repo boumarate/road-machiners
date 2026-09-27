@@ -51,6 +51,7 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
     hooks: { fulfilled: payTow, broken: releaseTow },
   },
   spurned: { refresh: never, check: noCheck, hooks: {} },
+  towPromise: { refresh: never, check: noCheck, hooks: {} },
 };
 
 function kindOf(kind: StateKindId): StateKind {
@@ -65,7 +66,7 @@ function turnsOf(kind: StateKindId): number | null {
 }
 
 // The data kind each state kind carries.
-const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', spurned: 'none' };
+const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', spurned: 'none', towPromise: 'towPromise' };
 
 export function addState(w: World, kind: StateKindId, holder: string, other: string, data: StateData): NpcState {
   kindOf(kind);
@@ -122,6 +123,11 @@ export function feudData(s: NpcState): Extract<StateData, { kind: 'feud' }> {
   return s.data;
 }
 
+export function towPromiseData(s: NpcState): Extract<StateData, { kind: 'towPromise' }> {
+  if (s.data.kind !== 'towPromise') throw new Error(`State ${s.id} holds no tow promise`);
+  return s.data;
+}
+
 export function towData(s: NpcState): Extract<StateData, { kind: 'tow' }> {
   if (s.data.kind !== 'tow') throw new Error(`State ${s.id} holds no tow`);
   return s.data;
@@ -140,7 +146,10 @@ function payTow(w: World, s: NpcState): void {
 
 // A released truck brakes to a stop. The caller logs why the tow broke, except for a tower that left the world,
 // which only this step sees.
+// The tower forgets it decided on this player, so a stranded player in sight is a fresh strandedSeen decision.
 function releaseTow(w: World, s: NpcState): void {
   if (towData(s).hitched) playerVehicle(w).order = { kind: 'brake' };
-  if (!w.vehicles.some((v) => v.id === s.holder)) w.events.push({ t: 'towDropped', by: s.holder, reason: 'gone' });
+  const holder = w.vehicles.find((v) => v.id === s.holder);
+  if (!holder) w.events.push({ t: 'towDropped', by: s.holder, reason: 'gone' });
+  else delete holder.brain!.noticed[`strandedSeen:${s.other}`];
 }

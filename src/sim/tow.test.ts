@@ -6,11 +6,12 @@ import { partDef } from '../data/parts';
 import { playerVehicle } from './damage';
 import { route, routeLength } from './path';
 import { canUseSite, siteGates } from './sites';
+import { getResources } from './resources';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import { topGoal } from './npc-goals';
 import { addState, stateOf, towData } from './states';
-import { acceptTow, isTowed, playerTow, refuseTow, setBeacon, unhitch } from './tow';
+import { acceptTow, dropTow, isTowed, playerTow, refuseTow, setBeacon, unhitch } from './tow';
 import { canVehicleSee } from './vision';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
@@ -239,6 +240,34 @@ describe('towing', () => {
     const after = runUntil(w, 5, () => false);
     expect(after.events.some((e) => e.t === 'towDone')).toBe(false);
     expect(after.w.player.money).toBe(10 - fee);
+  });
+});
+
+describe('tow deals', () => {
+  it('a trader that is crawling itself does not offer a tow', () => {
+    const s = stranded();
+    getResources(s.w, s.trader).fuel = 0;
+    forceOption('strandedSeen', 'tow');
+    const r = runUntil(s.w, 15, (x) => playerTow(x) !== null);
+    expect(playerTow(r.w)).toBeNull();
+    expect(r.events.some((e) => e.t === 'activity' && e.vehicle === s.trader.id && e.activity === 'tow')).toBe(false);
+  });
+
+  it('a tower that dropped the tow for danger offers the same deal again', () => {
+    const s = stranded();
+    forceOption('strandedSeen', 'tow');
+    let w = acceptTow(offered(s));
+    const deal = { holder: playerTow(w)!.holder, ...towData(playerTow(w)!) };
+    // A few turns of towing shorten the way, so a new price would be lower.
+    for (let i = 0; i < 5; i++) w = endTurn(w);
+    expect(isTowed(w)).toBe(true);
+    dropTow(w, playerTow(w)!, 'danger');
+    expect(stateOf(w, 'towPromise', deal.holder, w.player.vehicleId)).not.toBeNull();
+    const r = runUntil(w, 30, (x) => playerTow(x) !== null);
+    const again = playerTow(r.w)!;
+    expect(again.holder).toBe(deal.holder);
+    expect(towData(again)).toEqual({ kind: 'tow', town: deal.town, fee: deal.fee, hitched: false });
+    expect(stateOf(r.w, 'towPromise', deal.holder, r.w.player.vehicleId)).toBeNull();
   });
 });
 

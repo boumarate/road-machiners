@@ -998,7 +998,7 @@ export class Game {
 
   private planPath(me: Vehicle): void {
     const turns: VehicleFrame[][] = [];
-    let w = cloneWorld(this.world);
+    const w = cloneWorld(this.world);
     let d = this.drive;
     let v = me;
     for (let i = 0; i < PLAN_TURNS; i++) {
@@ -1014,9 +1014,8 @@ export class Game {
     if (d !== this.drive) freeDrive(d);
     // A course longer than the simulated turns continues as the route the driver will take.
     const order = v.order?.kind === "brake" ? null : v.order;
-    const course = !order
-      ? null
-      : v.direct
+    const course = order
+      ? v.direct
         ? [v.pos, order.dest]
         : [
             v.pos,
@@ -1027,7 +1026,8 @@ export class Game {
               vehicleStats(w, v).radius,
               parkedVehicles(w, v.id),
             ),
-          ];
+          ]
+      : null;
     const first =
       me.order?.kind === "through"
         ? PAL.throttle[

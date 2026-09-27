@@ -196,7 +196,10 @@ export function steerTo(
     ? [order.dest]
     : route(world, v.pos, order.dest, s.radius, parked);
   const aim = aimPoint(v.pos, points);
-  const remaining = Math.min(routeLength(v.pos, points), stopReach(world, s, v.pos, points, aim, parked));
+  const remaining = Math.min(
+    routeLength(v.pos, points),
+    stopReach(world, s, v.pos, points, aim, parked),
+  );
   return steerStep(s, v, aim, remaining);
 }
 
@@ -207,7 +210,14 @@ export function steerTo(
 // crawl too slowly to climb. Where the overrun touches, the truck must be able to stop on the corner,
 // including corners before the aim point that aimPoint skips as too close.
 // Returns the route length within which the truck must be able to stop.
-function stopReach(world: World, s: VehicleStats, from: Vec, points: Vec[], aim: Vec, parked: Blocker[]): number {
+function stopReach(
+  world: World,
+  s: VehicleStats,
+  from: Vec,
+  points: Vec[],
+  aim: Vec,
+  parked: Blocker[],
+): number {
   let reach = Infinity;
   let along = 0;
   let prev = from;
@@ -215,10 +225,18 @@ function stopReach(world: World, s: VehicleStats, from: Vec, points: Vec[], aim:
     const corner = points[k];
     const d = dist(prev, corner);
     along += d;
-    const overrun = d > 0 && straightClear(world, corner, {
-      x: corner.x + ((corner.x - prev.x) / d) * RULES.cornerSlack,
-      y: corner.y + ((corner.y - prev.y) / d) * RULES.cornerSlack,
-    }, s.radius - CLEARANCE, parked);
+    const overrun =
+      d > 0 &&
+      straightClear(
+        world,
+        corner,
+        {
+          x: corner.x + ((corner.x - prev.x) / d) * RULES.cornerSlack,
+          y: corner.y + ((corner.y - prev.y) / d) * RULES.cornerSlack,
+        },
+        s.radius - CLEARANCE,
+        parked,
+      );
     if (!overrun) reach = Math.min(reach, along);
     else if (corner === aim) reach = Math.min(reach, along + RULES.cornerSlack);
     prev = corner;
@@ -227,20 +245,54 @@ function stopReach(world: World, s: VehicleStats, from: Vec, points: Vec[], aim:
 }
 
 // An empty tank still permits careful steering at limp speed. Speed already above the cap brakes normally.
-export function steerWithFuel(world: World, s: VehicleStats, v: Pick<Vehicle, 'id' | 'pos' | 'heading' | 'speed'>, order: MoveOrder | null, direct: boolean, fuel: number): Steer {
-  const low = s.fuelPerTile > 0 && fuel > 0 && fuel < chassisDef(world.vehicles.find((x) => x.id === v.id)!.chassisId).fuelCap * RULES.lowFuelThreshold;
-  const limit = low ? Math.max(s.maxSpeed * RULES.lowFuelSpeedFactor, v.speed - s.brake) : s.maxSpeed;
-  const stats = low ? { ...s, maxSpeed: limit, turnFast: maxTurn(s, limit) } : s;
+export function steerWithFuel(
+  world: World,
+  s: VehicleStats,
+  v: Pick<Vehicle, "id" | "pos" | "heading" | "speed">,
+  order: MoveOrder | null,
+  direct: boolean,
+  fuel: number,
+): Steer {
+  const low =
+    s.fuelPerTile > 0 &&
+    fuel > 0 &&
+    fuel <
+      chassisDef(world.vehicles.find((x) => x.id === v.id)!.chassisId).fuelCap *
+        RULES.lowFuelThreshold;
+  const limit = low
+    ? Math.max(s.maxSpeed * RULES.lowFuelSpeedFactor, v.speed - s.brake)
+    : s.maxSpeed;
+  const stats = low
+    ? { ...s, maxSpeed: limit, turnFast: maxTurn(s, limit) }
+    : s;
   const steer = steerTo(world, stats, v, order, direct);
   if (Math.abs(steer.speed) * s.fuelPerTile <= fuel) return steer;
-  if (!order || order.kind === 'brake') return { speed: Math.max(0, v.speed - s.brake), turn: 0 };
+  if (!order || order.kind === "brake")
+    return { speed: Math.max(0, v.speed - s.brake), turn: 0 };
   const cap = Math.max(RULES.limpSpeed, v.speed - s.brake);
-  return steerTo(world, { ...s, maxSpeed: cap, turnFast: maxTurn(s, cap), accel: Math.min(s.accel, RULES.limpSpeed) }, v, order, direct);
+  return steerTo(
+    world,
+    {
+      ...s,
+      maxSpeed: cap,
+      turnFast: maxTurn(s, cap),
+      accel: Math.min(s.accel, RULES.limpSpeed),
+    },
+    v,
+    order,
+    direct,
+  );
 }
 
 // The player backs only to points within throttle reach. A farther point is a course, so the truck turns around.
-export function shouldBackToDestination(vehicle: Pick<Vehicle, 'faction' | 'brain'>, distance: number): boolean {
-  return (vehicle.faction === 'player' && distance < RULES.throttleZones.reach) || (vehicle.brain?.recovery ?? 0) > 0;
+export function shouldBackToDestination(
+  vehicle: Pick<Vehicle, "faction" | "brain">,
+  distance: number,
+): boolean {
+  return (
+    (vehicle.faction === "player" && distance < RULES.throttleZones.reach) ||
+    (vehicle.brain?.recovery ?? 0) > 0
+  );
 }
 
 // Players and blockage recovery back toward a point rear-first. Other NPC driving turns the
@@ -269,9 +321,10 @@ function reverseStep(
     Math.abs(angleDiff(v.heading, bearing(v.pos, order.dest))) > Math.PI / 2;
   const driver = world.vehicles.find((vehicle) => vehicle.id === v.id);
   if (!driver) throw new Error(`Missing driver ${v.id}`);
-  const turn = behind && shouldBackToDestination(driver, distance)
-    ? angleDiff(v.heading + Math.PI, bearing(v.pos, order.dest))
-    : ang;
+  const turn =
+    behind && shouldBackToDestination(driver, distance)
+      ? angleDiff(v.heading + Math.PI, bearing(v.pos, order.dest))
+      : ang;
   const back = {
     speed: -Math.min(
       RULES.reverse.distance,
@@ -443,7 +496,10 @@ export function planPath(
   let current: MoveOrder | null = order;
   let fuel = world.player.fuel;
   for (let t = 0; t < turns; t++) {
-    const steer = v.id === world.player.vehicleId ? steerWithFuel(world, s, state, current, false, fuel) : steerTo(world, s, state, current, false);
+    const steer =
+      v.id === world.player.vehicleId
+        ? steerWithFuel(world, s, state, current, false, fuel)
+        : steerTo(world, s, state, current, false);
     let pose: Pose = { x: state.pos.x, y: state.pos.y, heading: state.heading };
     const poses: Pose[] = [pose];
     for (let i = 0; i < RULES.substeps; i++) {
@@ -455,7 +511,9 @@ export function planPath(
       end: pose,
       arrives: reached(current, poses, steer.speed),
     });
-    if (v.id === world.player.vehicleId) for (let i = 1; i < poses.length; i++) fuel = Math.max(0, fuel - dist(poses[i - 1], poses[i]) * s.fuelPerTile);
+    if (v.id === world.player.vehicleId)
+      for (let i = 1; i < poses.length; i++)
+        fuel = Math.max(0, fuel - dist(poses[i - 1], poses[i]) * s.fuelPerTile);
     current = nextOrder(current, poses, steer.speed);
     if (steer.speed === 0 && current === null) break;
     state = {

@@ -7,38 +7,38 @@ import type { Vec } from "./vec";
 
 export type Faction = "player" | "raiders" | "traders" | "scavengers";
 export type SkillId =
-    | "driving"
-    | "gunnery"
-    | "mechanics"
-    | "trade"
-    | "survival";
+  | "driving"
+  | "gunnery"
+  | "mechanics"
+  | "trade"
+  | "survival";
 
 export type PartInstance = {
-    id: string;
-    defId: string;
-    hp: number;
-    reload: number;
+  id: string;
+  defId: string;
+  hp: number;
+  reload: number;
 };
 
 // An item in a vehicle's inventory grid. x and y are the top-left cell. rot 1 swaps width and height.
 // A part works only while it lies fully on mount cells of its kind. Each good unit takes one cell.
 export type GridItem =
-    | {
-          id: string;
-          x: number;
-          y: number;
-          rot: 0 | 1;
-          kind: "part";
-          part: PartInstance;
-      }
-    | {
-          id: string;
-          x: number;
-          y: number;
-          rot: 0 | 1;
-          kind: "good";
-          good: string;
-      };
+  | {
+      id: string;
+      x: number;
+      y: number;
+      rot: 0 | 1;
+      kind: "part";
+      part: PartInstance;
+    }
+  | {
+      id: string;
+      x: number;
+      y: number;
+      rot: 0 | 1;
+      kind: "good";
+      good: string;
+    };
 
 // 'body' aims at the truck as a whole. Otherwise it is the id of a part on the target.
 export type Aim = "body" | string;
@@ -48,27 +48,39 @@ export type Pose = { x: number; y: number; heading: number };
 
 // Momentum carries over between turns. A vehicle without an order coasts.
 export type MoveOrder =
-    | { kind: "through"; dest: Vec } // drive through the point at pace, then coast on
-    | { kind: "stopAt"; dest: Vec } // brake in time to stop on the point
-    | { kind: "brake" }; // slow to a halt where you are
+  | { kind: "through"; dest: Vec } // drive through the point at pace, then coast on
+  | { kind: "stopAt"; dest: Vec } // brake in time to stop on the point
+  | { kind: "brake" }; // slow to a halt where you are
 
 export type SalvageStock = {
-    id: string;
-    pos: Vec;
-    radius: number;
-    goods: Record<string, number>;
-    parts: PartInstance[];
+  id: string;
+  pos: Vec;
+  radius: number;
+  goods: Record<string, number>;
+  parts: PartInstance[];
 };
 
 // Work that needs the truck parked. Moving above parked speed cancels it, and finished turns are lost.
 export type Job =
-  | { kind: 'repair'; partId: string; parts: number; turnsLeft: number; total: number } // parts: the most this job spends
-  | { kind: 'search'; stockId: string; turnsLeft: number; total: number };
+  | {
+      kind: "repair";
+      partId: string;
+      parts: number;
+      turnsLeft: number;
+      total: number;
+    } // parts: the most this job spends
+  | { kind: "search"; stockId: string; turnsLeft: number; total: number };
 
 // A vehicle detected beyond sight. The circle always holds the true position, which it never reveals.
 // The circle always holds the vehicle's true position. loudness is how far the engine carries, in tiles,
 // when the vehicle is heard; a big engine or a fast truck is louder. Null when it is not heard.
-export type Contact = { vehicleId: string; center: Vec; radius: number; sources: ('sound' | 'dust' | 'radio' | 'beacon')[]; loudness: number | null };
+export type Contact = {
+  vehicleId: string;
+  center: Vec;
+  radius: number;
+  sources: ("sound" | "dust" | "radio" | "beacon")[];
+  loudness: number | null;
+};
 
 // A dust cloud a moving vehicle kicked up. It hangs in the world for a while: it rises, drifts back along
 // the way its truck came and with the wind, and fades. Once risen it can be seen from beyond sight range.
@@ -83,16 +95,28 @@ export type DustCloud = {
 
 // Weather that changes the rules. Storms are moving areas; heat waves and overcast cover the region.
 export type WeatherEvent =
-  | { id: string; kind: 'storm'; pos: Vec; radius: number; vel: Vec; turnsLeft: number }
-  | { id: string; kind: 'heatwave' | 'overcast'; turnsLeft: number };
+  | {
+      id: string;
+      kind: "storm";
+      pos: Vec;
+      radius: number;
+      vel: Vec;
+      turnsLeft: number;
+    }
+  | { id: string; kind: "heatwave" | "overcast"; turnsLeft: number };
 
-export type DriverResources = { money: number; fuel: number; supplies: number; health: number };
+export type DriverResources = {
+  money: number;
+  fuel: number;
+  supplies: number;
+  health: number;
+};
 
 export type NpcActivity = {
   kind: 'scavenge' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate' | 'tow' | 'loot';
   targetId: string | null;
   destination: Vec | null;
-  phase: 'travel' | 'act';
+  phase: "travel" | "act";
   reason: string;
   purchase?: { good: string; sellTown: string };
 };
@@ -133,20 +157,22 @@ export type Vehicle = {
 };
 
 export type Obstacle = {
-    id: string;
-    pos: Vec;
-    r: number;
-    kind: "rock" | "wreck" | "building" | "water" | "site";
+  id: string;
+  pos: Vec;
+  r: number;
+  kind: "rock" | "wreck" | "building" | "water" | "site";
 };
 
 // A timed relation one vehicle holds toward another. src/sim/states.ts owns them.
-export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'spurned';
+export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'spurned' | 'towPromise';
 export type StateEnding = 'expired' | 'fulfilled' | 'broken';
 // A tow state: the holder tows the other party to `town` for `fee`, paid on arrival. hitched is false while the offer is open.
+// A tow promise: the terms of a tow the holder dropped for danger, which its next offer keeps.
 // A feud: robbery is true when the holder started it to rob the other party, so a win sends it to loot.
 export type StateData =
   | { kind: 'tow'; town: string; fee: number; hitched: boolean }
   | { kind: 'feud'; robbery: boolean }
+  | { kind: 'towPromise'; town: string; fee: number }
   | { kind: 'none' };
 export type NpcState = {
   id: string;
@@ -176,7 +202,7 @@ export type Player = {
   storage: PartInstance[]; // spare parts kept in town garages, usable in any town
   costBasis: Record<string, number>; // average paid per unit of each good, for trade XP
   knockouts: number;
-  state: 'active' | 'knockedOut' | 'dead';
+  state: "active" | "knockedOut" | "dead";
   knockoutTurns: number; // turns spent in the current knockout
   beacon: boolean; // the emergency beacon calls every vehicle within BEACON.range; see src/sim/tow.ts
   explored: Uint8Array; // fog of war: tile y * world.size + x, 1 once seen
@@ -188,10 +214,10 @@ export type Player = {
 // One round of a shot. offset is where it crossed the target in meters from its center, across the line
 // of fire, positive to the shooter's right. hits lists the parts it damaged, by direct hit or splash.
 export type ShotRound = {
-    hit: boolean;
-    crit: boolean;
-    offset: number;
-    hits: PartHit[];
+  hit: boolean;
+  crit: boolean;
+  offset: number;
+  hits: PartHit[];
 };
 
 export type GameEvent =
