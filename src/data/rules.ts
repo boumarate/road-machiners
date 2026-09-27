@@ -75,13 +75,6 @@ export const RULES = {
   healSupplies: 0.01, // supplies spent per turn of healing, on top of the normal drain
   townHealMult: 5, // healing multiplier at a town, where the driver rests in a bed
 
-  // Progress
-  xpPerLevel: 100, // level n needs n * xpPerLevel more
-  startSkillPoints: 2,
-  maxSkillLevel: 5,
-  discoverXp: 25,
-  tradeXpPerProfit: 0.3, // xp per money unit of profit on a sale
-
   // Knockout
   defeatPatch: 0.25, // share of max hp broken core parts get back when the player wakes from a knockout
   knockoutMaxTurns: 30, // a knockout ends after this many turns even if a hostile idles in sight

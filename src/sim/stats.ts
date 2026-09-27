@@ -4,7 +4,7 @@
 import { chassisDef } from '../data/chassis';
 import { partDef, type EngineDef, type WeaponDef } from '../data/parts';
 import { RULES } from '../data/rules';
-import { skillBonus } from '../data/skills';
+import { skillEffect } from './progress';
 import { TOW } from '../data/tow';
 import { corePart, coreParts, mountedParts } from './grid';
 import { loadFactor, vehicleMass } from './mass';
@@ -63,7 +63,7 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   const force = ch.ratedMass / mass;
   // Each broken wheel cuts top speed and turning by the same share.
   const wheels = (1 - RULES.wheelLoss) ** coreParts(v, 'wheel').filter((p) => !isWorking(p)).length;
-  const turnMult = (v.faction === 'player' ? 1 + skillBonus('driving', world.player.skills.driving) : 1) * load * wheels;
+  const turnMult = (1 + skillEffect(world, v, 'driving', 'turnRate')) * load * wheels;
 
   let maxSpeed = RULES.limpSpeed;
   let accel = RULES.limpSpeed;

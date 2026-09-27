@@ -8,7 +8,7 @@ import { angleDiff, bearing, clamp, type Vec } from './vec';
 import { laneCount, ramMult, walkLane, type PartHit, type Side } from './armor';
 import { damagePart } from './damage';
 import { RULES } from '../data/rules';
-import { skillBonus } from '../data/skills';
+import { skillEffect } from './progress';
 import { vehicleMass } from './mass';
 import { bodyOf } from './body';
 import type { Vehicle, World } from './types';
@@ -59,8 +59,8 @@ function applyContactDamage(world: World, vehicle: Vehicle, contact: CrashContac
 }
 
 function computeCrashEnergy(world: World, vehicle: Vehicle, impact: number, share: number, mult: number): number {
-  const mechanics = vehicle.faction === 'player' ? skillBonus('mechanics', world.player.skills.mechanics) : 0;
-  return RULES.ramDamage * impact * impact * share * mult * Math.max(0, 1 - mechanics);
+  const driving = skillEffect(world, vehicle, 'driving', 'crashDamage');
+  return RULES.ramDamage * impact * impact * share * mult * Math.max(0, 1 - driving);
 }
 
 function applyCrashHits(world: World, vehicle: Vehicle, hits: Map<string, number>): PartHit[] {

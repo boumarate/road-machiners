@@ -388,7 +388,7 @@ export class Hud {
             title: "Driver and skills [C]",
           },
           createIcon("driver"),
-          w.player.skillPoints > 0 ? `+${w.player.skillPoints} [C]` : "[C]",
+          "[C]",
         ),
         ...(readout.broken
           ? [
@@ -447,7 +447,7 @@ export class Hud {
         this.lines.unshift({ text: `T${w.turn} ${line.text}`, cls: line.cls });
       if (
         line &&
-        (e.t === "knockout" || e.t === "levelUp" || e.t === "discover")
+        (e.t === "knockout" || e.t === "skillUp" || e.t === "discover")
       )
         this.toast(line.text);
     }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { XP_TO_REACH } from '../data/skills';
 import { hitOdds } from '../sim/combat';
 import { vehicleStats } from '../sim/stats';
 import { addVehicle, emptyWorld } from '../sim/testkit';
@@ -49,12 +50,12 @@ describe('hover card rows', () => {
     expect(hitCardRows(world, them.id)!.mine[0]).toMatchObject({ odds: null, text: 'disabled', cause: null });
   });
 
-  it('shows gunnery as a negative scatter cause', () => {
+  it('shows perception as a negative scatter cause', () => {
     const { world, me, them, mine } = createDuel();
-    world.player.skills.gunnery = 3;
+    world.player.skills.perception = XP_TO_REACH[3];
     const o = hitOdds(world, me, mine, them, 'body');
     expect(o.causes.skill).toBeLessThan(0);
-    expect(hitCardRows(world, them.id)!.mine[0].cause).toContain(` −${(-o.causes.skill / DEG).toFixed(1)}° gunnery`);
+    expect(hitCardRows(world, them.id)!.mine[0].cause).toContain(` −${(-o.causes.skill / DEG).toFixed(1)}° perception`);
   });
 
   it('shows no card for my own truck', () => {

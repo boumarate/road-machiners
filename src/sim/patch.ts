@@ -12,7 +12,7 @@ import { buyPrice } from './economy';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { removeGoods } from './inventory';
 import { decide, optionWeights } from './npc-decisions';
-import { mechanicsMult, planPartRepair } from './repair';
+import { machiningMult, planPartRepair } from './repair';
 import { getResources } from './resources';
 import { addState } from './states';
 import { inTowReach } from './tow';
@@ -38,7 +38,7 @@ export function canFixItself(world: World, v: Vehicle): boolean {
 }
 
 export function patchPlan(world: World, { patcher, client }: Roles): PatchPlan {
-  const mult = mechanicsMult(world, patcher);
+  const mult = machiningMult(world, patcher);
   const plans = brokenDriveParts(client).map((p) => planPartRepair(p, PATCH.share, mult, Infinity, Infinity));
   return { parts: plans.reduce((sum, p) => sum + p.parts, 0), turns: plans.reduce((sum, p) => sum + p.turns, 0) };
 }

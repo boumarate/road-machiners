@@ -7,7 +7,6 @@ import { advanceKnockout, checkDeath, checkKnockout } from './defeat';
 import { corePart, coreParts, goodsCount, hasLoot, mountedParts } from './grid';
 import { addGoods, dumpGood, moveItem, spareParts } from './inventory';
 import { scavenge } from './locations';
-import { spendSkillPoint } from './progress';
 import { startSearch } from './search';
 import { addState, endState, stateOf } from './states';
 import { startRepair } from './jobs';
@@ -289,7 +288,6 @@ describe('commands while knocked out', () => {
       () => dumpGood(w, me.items[0].id),
       () => buyGood(w, 'scrap', 1),
       () => scavenge(w),
-      () => spendSkillPoint(w, 'driving'),
     ];
     for (const command of commands) expect(command).toThrow('Player is knockedOut');
   });

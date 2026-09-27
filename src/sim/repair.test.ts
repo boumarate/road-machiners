@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { XP_TO_REACH } from '../data/skills';
 import { partDef } from '../data/parts';
 import { REPAIR } from '../data/wear';
 import { emptyWorld } from './testkit';
@@ -49,13 +50,13 @@ describe('repairPlan', () => {
     expect(repairPlan(w, me, cab.id).parts).toBe(2);
   });
 
-  it('mechanics shortens the job and cuts parts use for the player', () => {
+  it('machining shortens the job and cuts parts use for the player', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
     const cage = armorPart(me);
     cage.hp = 1;
     const base = repairPlan(w, me, cage.id);
-    w.player.skills.mechanics = 3;
+    w.player.skills.machining = XP_TO_REACH[3];
     const tuned = repairPlan(w, me, cage.id);
     expect(tuned.parts).toBeLessThanOrEqual(base.parts);
     expect(tuned.turns).toBeLessThanOrEqual(base.turns);

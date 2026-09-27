@@ -1,6 +1,7 @@
 // Event log lines.
 
 import { partDef } from '../data/parts';
+import { SKILL_INFO } from '../data/skills';
 import { TERRAIN } from '../data/terrain';
 import { playerVehicle } from '../sim/damage';
 import { dist, type Vec } from '../sim/vec';
@@ -220,10 +221,10 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       return { text: `${n(e.vehicle)} destroyed`, cls: 'good' };
     case 'hostile':
       return e.against === me ? { text: `${n(e.vehicle)} turns hostile to you`, cls: 'bad' } : null;
-    case 'xp':
-      return { text: `+${e.amount} XP: ${e.reason}`, cls: 'good' };
-    case 'levelUp':
-      return { text: `Level ${e.level}! Skill point gained. Press C.`, cls: 'good' };
+    case 'practice':
+      return null;
+    case 'skillUp':
+      return { text: `${SKILL_INFO[e.skill].name} reached level ${e.level}.`, cls: 'good' };
     case 'money':
       return { text: `${e.amount > 0 ? '+' : ''}${e.amount} money: ${e.reason}`, cls: e.amount > 0 ? 'good' : 'bad' };
     case 'discover': {

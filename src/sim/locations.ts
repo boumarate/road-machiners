@@ -10,7 +10,7 @@ import { isMounted, type Spot } from './grid';
 import { getLayoutError, requireIdleRefit } from './inventory';
 import { startJob } from './jobs';
 import { beginSearch } from './search';
-import { gainXp } from './progress';
+import { practice } from './progress';
 import { locationAt, townAt } from './sites';
 import type { GridItem, PartInstance, SalvageStock, World } from './types';
 import { tileCenter } from './vision';
@@ -34,7 +34,7 @@ export function discoverSite(world: World, s: { id: string; name: string }): voi
   if (world.player.discovered.includes(s.id)) throw new Error(`${s.id} is already discovered`);
   world.player.discovered.push(s.id);
   world.events.push({ t: "discover", location: s.id });
-  gainXp(world, RULES.discoverXp, `found ${s.name}`);
+  practice(world, 'discover', 1, null);
 }
 
 export function applySiteAction(world: World): World | null {

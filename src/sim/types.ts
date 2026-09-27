@@ -10,12 +10,8 @@ import type { DecisionOptions } from "../data/npcs";
 export type PatchDeal = DecisionOptions["patchDeal"];
 
 export type Faction = "player" | "raiders" | "traders" | "scavengers";
-export type SkillId =
-  | "driving"
-  | "gunnery"
-  | "mechanics"
-  | "trade"
-  | "survival";
+export type SkillId = "driving" | "perception" | "machining" | "toughness" | "social";
+export type XpSource = "discover" | "search" | "profit";
 
 export type PartInstance = {
   id: string;
@@ -227,10 +223,10 @@ export type TopicOutcome = "agreed" | "refused" | "done";
 export type Player = {
   vehicleId: string;
   money: number;
-  xp: number;
-  level: number;
-  skillPoints: number;
-  skills: Record<SkillId, number>;
+  skills: Record<SkillId, number>; // XP per skill; the level follows from XP_TO_REACH
+  xpToday: Record<SkillId, number>; // XP per skill earned on day xpDay, for the daily soft cap
+  xpDay: number;
+  xpBySource: Record<XpSource, number>; // lifetime XP per source, for the debug console
   health: number;
   fuel: number;
   supplies: number;
@@ -275,8 +271,8 @@ export type GameEvent =
   | { t: 'spawn'; vehicle: string }
   | { t: 'despawn'; vehicle: string }
   | { t: 'hostile'; vehicle: string; against: string }
-  | { t: 'xp'; amount: number; reason: string }
-  | { t: 'levelUp'; level: number }
+  | { t: 'practice'; source: XpSource; amount: number; difficulty: number | null; xp: number }
+  | { t: 'skillUp'; skill: SkillId; level: number }
   | { t: 'money'; amount: number; reason: string }
   | { t: 'discover'; location: string }
   | { t: 'supply'; what: string; text: string }

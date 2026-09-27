@@ -2,7 +2,7 @@
 // Parts are spent only when the job finishes. Mechanics shortens the job and cuts parts use.
 
 import { partDef } from '../data/parts';
-import { skillBonus } from '../data/skills';
+import { skillEffect } from './progress';
 import { REPAIR } from '../data/wear';
 import { goodsCount, mountedParts } from './grid';
 import { removeGoods } from './inventory';
@@ -14,9 +14,9 @@ function findRepairPart(v: Vehicle, partId: string): PartInstance {
   return part;
 }
 
-// Mechanics scales down both parts spent and turns needed. Player only: NPCs have no skills.
-export function mechanicsMult(world: World, v: Vehicle): number {
-  return v.id === world.player.vehicleId ? Math.max(0, 1 - skillBonus('mechanics', world.player.skills.mechanics)) : 1;
+// Machining scales down both parts spent and turns needed. Player only: NPCs have no skills.
+export function machiningMult(world: World, v: Vehicle): number {
+  return Math.max(0, 1 - skillEffect(world, v, 'machining', 'repair'));
 }
 
 // A patch spends the parts held, up to what the field cap needs and at most maxParts. Fewer parts
@@ -25,7 +25,7 @@ export type RepairPlan = { turns: number; parts: number; hp: number; needed: num
 
 export function repairPlan(world: World, v: Vehicle, partId: string, maxParts = Infinity): RepairPlan {
   const part = findRepairPart(v, partId);
-  return planPartRepair(part, REPAIR.fieldCapShare, mechanicsMult(world, v), goodsCount(v).parts ?? 0, maxParts);
+  return planPartRepair(part, REPAIR.fieldCapShare, machiningMult(world, v), goodsCount(v).parts ?? 0, maxParts);
 }
 
 // The repair math for one part: lift it to `capShare` of max HP, spending at most the parts held and maxParts.

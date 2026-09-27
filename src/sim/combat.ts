@@ -4,13 +4,12 @@
 import { onCall } from "./dialogue";
 import { NPCS, SPAWN } from '../data/npcs';
 import { RULES } from '../data/rules';
-import { skillBonus } from '../data/skills';
 import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
 import { laneCount, partLane, sideToward, walkLane, type PartHit, type Side } from './armor';
 import { bodyOf } from './body';
 import { corePart, hasLoot, itemSize, mountedItems, mountedParts } from './grid';
-import { gainXp } from './progress';
+import { skillEffect } from './progress';
 import { canVehicleSee, hasLineOfFire } from './vision';
 import { createWreckSalvage } from './salvage';
 import { addState, stateOf } from './states';
@@ -252,10 +251,7 @@ export function hitOdds(
   const a = aiming(shooter, target, aim);
   const width = a.width;
   const halfAngle = width / (2 * distance);
-  const gunnery =
-    shooter.faction === "player"
-      ? skillBonus("gunnery", world.player.skills.gunnery)
-      : 0;
+  const perception = skillEffect(world, shooter, "perception", "spread");
   const weapon = mw.def.spread * DEG;
   const n = across(shooter, target);
   const rel = {
@@ -268,7 +264,7 @@ export function hitOdds(
   };
   const causes = {
     weapon,
-    skill: -weapon * gunnery,
+    skill: -weapon * perception,
     crossing:
       (RULES.leadError * Math.abs(rel.x * n.x + rel.y * n.y)) /
       mw.def.round.speed,
@@ -535,7 +531,6 @@ function rewardKill(world: World, v: Vehicle): void {
       reason: `bounty for ${v.name}`,
     });
   }
-  gainXp(world, tpl.xp, `destroyed ${v.name}`);
 }
 
 // An NPC fires back at any attacker, fleeing or not. It opens fire only on the target of the fight on top of its

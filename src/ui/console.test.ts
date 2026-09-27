@@ -132,7 +132,7 @@ describe("queries", () => {
         "money",
         "repair",
         "reveal",
-        "skillpoints",
+        "skills",
         "spawn",
         "supplies",
         "tp",

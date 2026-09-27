@@ -10,7 +10,7 @@ describe("stingOf", () => {
   it("plays the most important result only", () => {
     const events: GameEvent[] = [
       { t: "money", amount: 20, reason: "sale" },
-      { t: "levelUp", level: 2 },
+      { t: "skillUp", skill: "driving", level: 2 },
       { t: "discover", location: "oasis" },
     ];
     expect(stingOf(events, "p")).toBe("level-up");
@@ -24,7 +24,7 @@ describe("stingOf", () => {
     expect(stingOf([{ t: "arrived", vehicle: "p" }], "p")).toBe("air-brake");
   });
   it("plays the defeat cue on a knockout", () => {
-    expect(stingOf([{ t: "levelUp", level: 2 }, { t: "knockout" }], "p")).toBe("defeat");
+    expect(stingOf([{ t: "skillUp", skill: "driving", level: 2 }, { t: "knockout" }], "p")).toBe("defeat");
   });
 });
 

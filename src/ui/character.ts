@@ -1,9 +1,9 @@
-// Character screen: level, XP and skills.
+// Character screen: skill levels, XP to the next level and today's XP against the daily cap.
 
+import { MAX_SKILL_LEVEL, SKILL_IDS, SKILL_INFO, XP_RULES, XP_TO_REACH } from '../data/skills';
 import { RULES } from '../data/rules';
-import { SKILL_IDS, SKILLS } from '../data/skills';
-import { spendSkillPoint, xpForLevel } from '../sim/progress';
-import { update } from '../sim/world';
+import { levelOf } from '../sim/progress';
+import type { SkillId } from '../sim/types';
 import { el, panel } from './dom';
 import type { UiHost } from './host';
 
@@ -33,27 +33,23 @@ export class CharacterScreen {
   render(): void {
     if (!this.isOpen()) return;
     const p = this.host.world().player;
-    const rows = SKILL_IDS.map((id) => {
-      const lvl = p.skills[id];
-      const canRaise = p.skillPoints > 0 && lvl < RULES.maxSkillLevel;
-      return el('tr', {},
-        el('td', {}, SKILLS[id].name),
-        el('td', {}, `${'#'.repeat(lvl)}${'.'.repeat(RULES.maxSkillLevel - lvl)}`),
-        el('td', { class: 'dim' }, SKILLS[id].effect),
-        el('td', {}, el('button', { disabled: !canRaise, onclick: () => this.raise(id) }, '+')),
-      );
-    });
     this.root.replaceChildren(
       el('button', { class: 'close', onclick: () => this.close() }, 'Close [C]'),
       el('h3', {}, 'Character'),
-      el('div', {}, `Level ${p.level}   XP ${p.xp}/${xpForLevel(p.level + 1)}   Skill points ${p.skillPoints}`),
       el('div', { class: 'dim' }, `Health ${p.health}/${RULES.maxHealth}   Knockouts ${p.knockouts}`),
-      el('table', {}, ...rows),
+      el('table', {}, ...SKILL_IDS.map((id) => this.row(id, p.skills[id], p.xpToday[id]))),
     );
   }
 
-  private raise(id: (typeof SKILL_IDS)[number]): void {
-    this.host.apply(update(this.host.world(), (w) => spendSkillPoint(w, id)));
-    this.render();
+  private row(id: SkillId, xp: number, today: number): HTMLElement {
+    const lvl = levelOf(xp);
+    const next = lvl < MAX_SKILL_LEVEL ? `${Math.floor(xp)}/${XP_TO_REACH[lvl + 1]} XP` : 'max';
+    return el('tr', {},
+      el('td', {}, SKILL_INFO[id].name),
+      el('td', {}, `${'#'.repeat(lvl)}${'.'.repeat(MAX_SKILL_LEVEL - lvl)}`),
+      el('td', {}, next),
+      el('td', { class: 'dim' }, `today ${Math.floor(today)}/${XP_RULES.dailyCap}`),
+      el('td', { class: 'dim' }, `grows from ${SKILL_INFO[id].grows}`),
+    );
   }
 }

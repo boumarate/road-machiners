@@ -1,5 +1,5 @@
 import { RULES } from '../data/rules';
-import { skillBonus } from '../data/skills';
+import { skillEffect } from './progress';
 import { heatAt } from './sun';
 import { vehicleStats } from './stats';
 import type { DriverResources, Vehicle, World } from './types';
@@ -19,7 +19,7 @@ export function burnFuel(world: World, vehicle: Vehicle, tiles: number): void {
 
 export function consumeVehicleSupplies(world: World, vehicle: Vehicle): void {
   const resources = getResources(world, vehicle);
-  const use = vehicle.id === world.player.vehicleId ? Math.max(0, 1 - skillBonus('survival', world.player.skills.survival)) : 1;
+  const use = Math.max(0, 1 - skillEffect(world, vehicle, 'toughness', 'supplies'));
   const heat = heatAt(world, vehicle.pos);
   resources.supplies = Math.max(0, resources.supplies - RULES.suppliesPerTurn * use * heat);
   if (resources.supplies > 0) return;

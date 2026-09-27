@@ -4,7 +4,7 @@
 import { SALVAGE } from '../data/salvage';
 import { playerVehicle } from './damage';
 import { startJob } from './jobs';
-import { gainXp } from './progress';
+import { practice } from './progress';
 import { collectSalvage, salvageUnits } from './salvage';
 import type { Job, Vehicle, World } from './types';
 import { playerCommand } from './world';
@@ -41,7 +41,7 @@ function finishSearch(world: World, v: Vehicle, stockId: string): void {
   }
   if (!world.player.scavenged.includes(stockId)) {
     world.player.scavenged.push(stockId);
-    gainXp(world, SALVAGE.xp, 'searched salvage');
+    practice(world, 'search', 1, null);
   }
   world.events.push({ t: 'searched', stock: stockId });
 }
