@@ -65,15 +65,18 @@ function openCall(world: World): Call {
   return call;
 }
 
+// The topics the player can raise with this driver now. A driver in a feud takes up only topics asked during feuds.
+function askable(world: World, npc: Vehicle): Topic[] {
+  const feud = inFeud(world, npc, playerVehicle(world));
+  return talkOf(npc).topics.map((id) => TOPICS[id]).filter((t) => t.ask && (!feud || t.ask.duringFeud) && holds(world, npc, t.ask.when, {}));
+}
+
 // The options on offer right now, in display order. Hang up is always the last.
 export function currentOptions(world: World): OfferedOption[] {
   const call = openCall(world);
   const npc = vehicleById(world, call.with);
   const hangUp: OfferedOption = { text: 'Hang up.', topic: null, option: null };
-  if (!call.topic) {
-    const topics = talkOf(npc).topics.map((id) => TOPICS[id]).filter((t) => t.ask && holds(world, npc, t.ask.when, {}));
-    return [...topics.map((t) => ({ text: t.ask!.text, topic: t.id, option: null })), hangUp];
-  }
+  if (!call.topic) return [...askable(world, npc).map((t) => ({ text: t.ask!.text, topic: t.id, option: null })), hangUp];
   if (call.topic === 'trade') return [...tradeOptions(world, npc), hangUp];
   const node = TOPICS[call.topic].nodes[call.node];
   const options = node.options.filter((o) => holds(world, npc, o.when, call.vars)).map((o) => ({ text: o.text, topic: call.topic, option: o }));
@@ -126,7 +129,8 @@ function begin(world: World, npc: Vehicle): Call {
   return call;
 }
 
-// The player calls a truck in sight. A truck in a feud with the player answers once and hangs up.
+// The player calls a truck in sight. A truck in a feud with the player with no topic to take up answers once and
+// hangs up.
 export function callVehicle(world: World, npcId: string): World {
   return update(world, (w) => {
     requireActivePlayer(w);
@@ -134,7 +138,7 @@ export function callVehicle(world: World, npcId: string): World {
     const npc = vehicleById(w, npcId);
     if (!npc.brain) throw new Error(`${npcId} has no driver to call`);
     if (!canVehicleSee(w, playerVehicle(w), npc.pos)) throw new Error(`${npcId} is out of sight`);
-    if (inFeud(w, npc, playerVehicle(w))) {
+    if (inFeud(w, npc, playerVehicle(w)) && askable(w, npc).length === 0) {
       say(w, npc.id, talkOf(npc).refusal, {});
       return;
     }

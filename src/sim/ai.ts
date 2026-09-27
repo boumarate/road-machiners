@@ -4,17 +4,21 @@ import { RULES } from "../data/rules";
 import { getActivityDestination, thinkNpc, topGoal } from "./npc-activities";
 import { towData } from "./states";
 import { vehicleStats } from "./stats";
-import { playerTow } from "./tow";
+import { isOnRope, playerTow } from "./tow";
 import { ramImpact } from "./crash-contact";
 import type { Vehicle, World } from "./types";
 import { angleDiff, bearing, dist, type Vec } from "./vec";
 
+// NPC drivers that plan this turn. A truck on a tow rope only trails its tower, so it keeps no order.
+function planners(world: World): Vehicle[] {
+  return world.vehicles.filter((v) => v.brain && !isOnRope(world, v.id));
+}
+
 export function planNpcOrders(world: World): void {
-  for (const v of world.vehicles) {
-    if (!v.brain) continue;
-    const tpl = NPCS[v.brain.templateId];
-    if (!tpl) throw new Error(`Unknown NPC template ${v.brain.templateId}`);
-    const b = v.brain;
+  for (const v of planners(world)) {
+    const tpl = NPCS[v.brain!.templateId];
+    if (!tpl) throw new Error(`Unknown NPC template ${v.brain!.templateId}`);
+    const b = v.brain!;
     delete b.ramTarget;
     if (b.recovery) b.recovery--;
     const activity = thinkNpc(world, v);
@@ -60,10 +64,7 @@ export function planNpcOrders(world: World): void {
         : b.recovery
           ? { kind: "stopAt", dest: b.recoveryGoal! }
           : {
-              kind:
-                b.ramTarget || activity.kind === "flee"
-                  ? "through"
-                  : "stopAt",
+              kind: b.ramTarget ? "through" : "stopAt",
               dest: goal,
             };
     v.direct = false;
@@ -90,17 +91,34 @@ function computeFightGoal(
   return { x: target.pos.x + Math.cos(a) * range, y: target.pos.y + Math.sin(a) * range };
 }
 
-// A driver brakes for any moving vehicle close ahead, so two trucks meeting head-on both brake. A parked vehicle
-// is routed around instead, unless the two face off. A driver never brakes for the truck it rams.
+// A driver brakes for a moving vehicle close ahead whose path meets its own, so two trucks meeting head-on both
+// brake. A parked vehicle is routed around instead, unless the two face off. A driver never brakes for the truck it rams.
 function vehicleAhead(world: World, v: Vehicle): boolean {
   const others = world.vehicles.filter((x) => x.id !== v.id && x.id !== v.brain?.ramTarget);
   return others.some((x) => {
     if (onOwnRope(world, v, x)) return false;
     const gap = gapAhead(world, v, x);
     if (gap === null) return false;
-    if (x.speed >= RULES.parkedSpeed) return gap < brakingReach(world, v, x);
+    if (x.speed >= RULES.parkedSpeed) return gap < brakingReach(world, v, x) && pathsMeet(world, v, x);
     return v.id < x.id && facesOff(world, v, x, gap);
   });
+}
+
+// Whether v and x, both holding their headings, pass closer than both radii plus the yield distance before v could
+// stop. v may speed up this turn, as in brakingReach. The horizon is the turn until the next check plus v's
+// stopping time. So a truck passing in the next lane or driving off to the side does not stop v.
+function pathsMeet(world: World, v: Vehicle, x: Vehicle): boolean {
+  const sv = vehicleStats(world, v);
+  const sx = vehicleStats(world, x);
+  const vs = Math.min(sv.maxSpeed, v.speed + sv.accel);
+  const px = x.pos.x - v.pos.x;
+  const py = x.pos.y - v.pos.y;
+  const rx = Math.cos(x.heading) * x.speed - Math.cos(v.heading) * vs;
+  const ry = Math.sin(x.heading) * x.speed - Math.sin(v.heading) * vs;
+  const rr = rx * rx + ry * ry;
+  const horizon = 1 + vs / sv.brake;
+  const t = rr === 0 ? 0 : Math.min(horizon, Math.max(0, -(px * rx + py * ry) / rr));
+  return Math.hypot(px + rx * t, py + ry * t) < sv.radius + sx.radius + RULES.yieldDistance;
 }
 
 // A tower never yields to the truck on its own rope.

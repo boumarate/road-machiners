@@ -6,11 +6,12 @@ import { REGION } from '../data/region';
 import { makePart } from './factory';
 import { update } from './world';
 import { freeCells, goodsCount, gridOf, mountedParts } from './grid';
-import { dumpGood, moveItem, removeAllGoods, spareParts, storePart, takeFromStorage } from './inventory';
+import { dumpItem, moveItem, removeAllGoods, spareParts, storePart, stowPart, takeFromStorage } from './inventory';
 import { vehicleStats } from './stats';
 import { emptyWorld } from './testkit';
 import type { World } from './types';
-import { siteGates } from './sites';
+import { sitePads } from './sites';
+import { advanceJobs } from './jobs';
 
 const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
 const item = (w: World, defId: string) => w.vehicles[0].items.find((it) => it.kind === 'part' && it.part.defId === defId)!;
@@ -49,22 +50,54 @@ describe('inventory grid', () => {
   it('items cannot overlap or leave the grid', () => {
     const w = emptyWorld();
     const g = good(w);
-    expect(() => moveItem(w, g.id, { x: 0, y: 1, rot: 0 })).toThrow(/in the way/);
+    expect(() => moveItem(w, g.id, { x: 0, y: 1, rot: 0 })).toThrow(/Built-in/);
     expect(() => moveItem(w, g.id, { x: 9, y: 0, rot: 0 })).toThrow(/fit/);
   });
 
-  it('unmounting a part needs a town and switches it off', () => {
+  it('unmounting takes five turns in the field and is instant in town', () => {
     const w = emptyWorld();
     const mg = item(w, 'mg');
-    expect(() => moveItem(w, mg.id, { x: 1, y: rackRow, rot: 0 })).toThrow(/town/);
-    const inTown = emptyWorld(siteGates(bowl)[0]);
+    const field = moveItem(w, mg.id, { x: 1, y: rackRow, rot: 0 });
+    expect(field.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: 5 });
+    for (let turn = 0; turn < 4; turn++) advanceJobs(field);
+    expect(vehicleStats(field, field.vehicles[0]).weapons).toHaveLength(1);
+    advanceJobs(field);
+    expect(field.vehicles[0].job).toBeNull();
+    expect(vehicleStats(field, field.vehicles[0]).weapons).toHaveLength(0);
+    const inTown = emptyWorld(sitePads(bowl)[0]);
     const off = moveItem(inTown, item(inTown, 'mg').id, { x: 1, y: rackRow, rot: 0 });
     expect(vehicleStats(off, off.vehicles[0]).weapons).toHaveLength(0);
     expect(spareParts(off.vehicles[0]).map((p) => p.defId)).toEqual(['mg']);
   });
 
+  it('swaps a spare with a mounted weapon after ten turns', () => {
+    const w = emptyWorld();
+    const mg = item(w, 'mg');
+    if (mg.kind !== 'part') throw new Error('Expected weapon');
+    w.vehicles[0].items.push({ ...mg, id: 'spare-item', part: { ...mg.part, id: 'spare-part' }, x: 1, y: rackRow });
+    const next = moveItem(w, 'spare-item', { x: mg.x, y: mg.y, rot: 0 });
+    expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', total: 10 });
+    for (let turn = 0; turn < 9; turn++) advanceJobs(next);
+    expect(next.vehicles[0].items.find((it) => it.id === mg.id)).toMatchObject({ x: mg.x, y: mg.y });
+    advanceJobs(next);
+    expect(next.vehicles[0].items.find((it) => it.id === mg.id)).toMatchObject({ x: 1, y: rackRow });
+    expect(next.vehicles[0].items.find((it) => it.id === 'spare-item')).toMatchObject({ x: mg.x, y: mg.y });
+    expect(next.vehicles[0].items.map((it) => it.id).sort()).toEqual(w.vehicles[0].items.map((it) => it.id).sort());
+  });
+
+  it('swaps a spare with installed equipment instantly in a garage', () => {
+    const w = emptyWorld(sitePads(bowl)[0]);
+    const mg = item(w, 'mg');
+    if (mg.kind !== 'part') throw new Error('Expected weapon');
+    w.vehicles[0].items.push({ ...mg, id: 'spare-item', part: { ...mg.part, id: 'spare-part' }, x: 1, y: rackRow });
+    const next = moveItem(w, 'spare-item', { x: mg.x, y: mg.y, rot: 0 });
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.vehicles[0].items.find((entry) => entry.id === mg.id)).toMatchObject({ x: 1, y: rackRow });
+    expect(next.vehicles[0].items.find((entry) => entry.id === 'spare-item')).toMatchObject({ x: mg.x, y: mg.y });
+  });
+
   it('a cannon works only lying along the weapon mount', () => {
-    let w = emptyWorld(siteGates(bowl)[0]);
+    let w = emptyWorld(sitePads(bowl)[0]);
     w.player.money = 2000;
     removeAllGoods(w.vehicles[0]); // free the plain cells the cannon test claims, regardless of start cargo
     const mg = item(w, 'mg');
@@ -79,13 +112,13 @@ describe('inventory grid', () => {
   });
 
   it('removing the rack is blocked while its row holds items', () => {
-    let w = emptyWorld(siteGates(bowl)[0]);
+    let w = emptyWorld(sitePads(bowl)[0]);
     w = moveItem(w, good(w).id, { x: 0, y: rackRow, rot: 0 });
     expect(() => storePart(w, item(w, 'rack').id)).toThrow(/fall off/);
   });
 
   it('more parts mean less cargo room', () => {
-    let w = emptyWorld(siteGates(bowl)[0]);
+    let w = emptyWorld(sitePads(bowl)[0]);
     w.player.money = 2000;
     const free = freeCells(w.vehicles[0]);
     const mg = item(w, 'mg');
@@ -95,10 +128,13 @@ describe('inventory grid', () => {
     expect(vehicleStats(w, w.vehicles[0]).weapons).toHaveLength(2);
   });
 
-  it('goods can be dumped, parts cannot', () => {
+  it('goods and loose parts can be dumped, installed parts cannot', () => {
     const w = emptyWorld();
     const before = w.vehicles[0].items.filter((it) => it.kind === 'good').length;
-    expect(dumpGood(w, good(w).id).vehicles[0].items.filter((it) => it.kind === 'good')).toHaveLength(before - 1);
-    expect(() => dumpGood(w, item(w, 'mg').id)).toThrow();
+    expect(dumpItem(w, good(w).id).vehicles[0].items.filter((it) => it.kind === 'good')).toHaveLength(before - 1);
+    expect(() => dumpItem(w, item(w, 'mg').id)).toThrow('Remove an installed part');
+    expect(stowPart(w, w.vehicles[0], makePart(w, 'mg', 0))).toBe(true);
+    const loose = w.vehicles[0].items.filter((it) => it.kind === 'part' && it.part.defId === 'mg').at(-1)!;
+    expect(dumpItem(w, loose.id).vehicles[0].items.some((it) => it.id === loose.id)).toBe(false);
   });
 });

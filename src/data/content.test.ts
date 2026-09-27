@@ -18,11 +18,11 @@ import { goodsCount, gridOf, isMounted, placementError } from "../sim/grid";
 import { mountPart } from "../sim/inventory";
 import { emptyWorld } from "../sim/testkit";
 import type { World } from "../sim/types";
-import { siteGates } from "../sim/sites";
+import { sitePads } from "../sim/sites";
 
 let world: World;
 beforeAll(() => {
-  world = emptyWorld(siteGates(REGION.towns[0])[0]);
+  world = emptyWorld(sitePads(REGION.towns[0])[0]);
   world.player.money = 100000;
 });
 
@@ -152,10 +152,10 @@ describe("equipment variety", () => {
         buyPrice(world, cheap.id, id),
       );
       const start = structuredClone(world);
-      start.vehicles[0].pos = { ...siteGates(cheap)[0] };
+      start.vehicles[0].pos = { ...sitePads(cheap)[0] };
       let w = buyGood(start, id, 1);
       expect(goodsCount(w.vehicles[0])[id]).toBe(1);
-      w.vehicles[0].pos = { ...siteGates(dear)[0] };
+      w.vehicles[0].pos = { ...sitePads(dear)[0] };
       w = sellGood(w, id, 1);
       expect(goodsCount(w.vehicles[0])[id]).toBeUndefined();
       expect(w.player.money).toBeGreaterThan(start.player.money);

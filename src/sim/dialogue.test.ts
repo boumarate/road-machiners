@@ -85,9 +85,10 @@ describe('calls', () => {
     expect(() => callVehicle(w, npc.id)).toThrow(/out of sight/);
   });
 
-  it('a truck in a feud answers once and opens no call', () => {
+  it('a truck in a feud with nothing left to talk about answers once and opens no call', () => {
     const { w, npc } = withNpc('trader', 'traders');
     addState(w, 'feud', npc.id, w.player.vehicleId, { kind: 'feud', robbery: false });
+    addState(w, 'plea', w.player.vehicleId, npc.id, { kind: 'plea', plea: 'truce', answered: true });
     const next = callVehicle(w, npc.id);
     expect(next.player.call).toBeNull();
     expect(next.events).toContainEqual({ t: 'say', speaker: npc.id, text: TRAIT_TALK.trader.voice!.refusal, vars: {} });
@@ -104,11 +105,11 @@ describe('calls', () => {
     expect(() => endTurn(closed, testDrive)).not.toThrow();
   });
 
-  it('a raider offers only hanging up', () => {
+  it('a hostile raider offers only peace talk', () => {
     const { w, npc } = withNpc('buggy', 'raiders');
     const open = callVehicle(w, npc.id);
-    expect(currentOptions(open).map((o) => o.text)).toEqual(['Hang up.']);
-    expect(chooseOption(open, 0).player.call).toBeNull();
+    expect(currentOptions(open).map((o) => o.text)).toEqual(['Enough shooting. Can we call a truce?', 'I give up. Let me go.', 'Hang up.']);
+    expect(chooseOption(open, 2).player.call).toBeNull();
   });
 
   it('rejects an option that is not on offer', () => {

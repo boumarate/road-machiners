@@ -5,7 +5,7 @@ import { BEACON, TOW } from '../data/tow';
 import { partDef } from '../data/parts';
 import { playerVehicle } from './damage';
 import { route, routeLength } from './path';
-import { canUseSite, siteGates } from './sites';
+import { canUseSite, siteGates, sitePads } from './sites';
 import { getResources } from './resources';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
@@ -14,9 +14,9 @@ import { thinkNpc, topGoal } from './npc-activities';
 import { optionChances, optionWeights } from './npc-decisions';
 import { addState, stateOf, towData } from './states';
 import { callVehicle, chooseOption, currentOptions, hangUp } from './dialogue';
-import { dropTow, isTowed, playerTow, setBeacon, unhitch } from './tow';
+import { dropTow, isOnRope, isTowed, playerTow, playerTowing, setBeacon, unhitch } from './tow';
 import { sunAt } from './sun';
-import { canVehicleSee } from './vision';
+import { canVehicleSee, refreshVision } from './vision';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { autoRuns, endTurn, setDirect, setMoveOrder } from './world';
@@ -80,13 +80,13 @@ describe('tow offer', () => {
     expect(topGoal(trader)?.kind).toBe('tow');
   });
 
-  it('prices the tow by the route length to the nearest gate of the town', () => {
+  it('prices the tow by the route length to the nearest pad of the town', () => {
     const s = stranded();
     const w = offered(s);
     const me = playerVehicle(w);
     const town = REGION.towns.find((t) => t.id === 'bowl')!;
-    const gate = siteGates(town).reduce((a, b) => (dist(me.pos, a) <= dist(me.pos, b) ? a : b));
-    const length = routeLength(me.pos, route(w, me.pos, gate, vehicleStats(w, find(w, s.trader.id)).radius, []));
+    const pad = sitePads(town).reduce((a, b) => (dist(me.pos, a) <= dist(me.pos, b) ? a : b));
+    const length = routeLength(me.pos, route(w, me.pos, pad, vehicleStats(w, find(w, s.trader.id)).radius, []));
     expect(feeOf(w)).toBe(Math.round(TOW.base + TOW.perTile * length));
   });
 
@@ -252,6 +252,8 @@ describe('towing', () => {
     forceOption('strandedSeen', 'tow');
     // A raider spawning near the gate would scare the tower off, and this test is about arrival.
     for (const id of Object.keys(NPCS)) s.w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    forceOption('idle', 'wait');
+    forceOption('strandedSeen', 'tow');
     let w = offered(s);
     const fee = feeOf(w);
     w.player.money = 10;
@@ -430,6 +432,9 @@ describe('emergency beacon', () => {
   it('only the first tower to hear a beacon answers it, and its claim ends with the offer', () => {
     const s = stranded(player, { x: 100, y: 30 });
     const late = withTower(s.w, 'trader', 'traders', 'hauler', { x: 30, y: 150 });
+    // Only the two towers placed here may answer, and both mean to tow.
+    for (const id of Object.keys(NPCS)) s.w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    forceOption('strandedSeen', 'tow');
     const r = runUntil(setBeacon(s.w, true), 150, (x) => playerTow(x) !== null);
     expect(playerTow(r.w)?.holder).toBe(s.trader.id);
     expect(activitiesOf(r.events, late.id).filter((e) => e.t === 'activity' && e.activity === 'tow')).toEqual([]);
@@ -494,5 +499,108 @@ describe('emergency beacon', () => {
     expect(autoRuns(setMoveOrder(w, { kind: 'stopAt', dest: { x: 40, y: 40 } }))).toBe(false);
     addState(w, 'tow', s.trader.id, w.player.vehicleId, { kind: 'tow', town: 'bowl', fee: 10, hitched: false });
     expect(autoRuns(w)).toBe(false);
+  });
+});
+
+describe('the player towing an NPC', () => {
+  const OFFER = 'Need a tow to town?';
+  const HITCH = 'Deal. Hitch up.';
+  const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
+  const gate = siteGates(bowl)[0];
+  const out = { x: (gate.x - bowl.pos.x) / bowl.radius, y: (gate.y - bowl.pos.y) / bowl.radius };
+  const at = (d: number) => ({ x: gate.x + out.x * d, y: gate.y + out.y * d });
+
+  // A scavenger with an empty tank parks 3 tiles behind the player, 25 tiles out from the Bowl gate.
+  function strandedNpc(): { w: World; npc: Vehicle } {
+    const w = emptyWorld(at(25));
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    const npc = withTower(w, 'scavenger', 'scavengers', 'scout', at(28));
+    npc.resources!.fuel = 0;
+    return { w, npc };
+  }
+
+  function pick(w: World, text: string): World {
+    const i = currentOptions(w).findIndex((o) => o.text === text);
+    if (i < 0) throw new Error(`No option "${text}" in ${currentOptions(w).map((o) => o.text).join(' | ')}`);
+    return chooseOption(w, i);
+  }
+
+  function hitched(): { w: World; npc: Vehicle } {
+    const { w, npc } = strandedNpc();
+    return { w: pick(pick(callVehicle(w, npc.id), OFFER), HITCH), npc };
+  }
+
+  it('the driver names its nearest town and a fee it can pay', () => {
+    const { w: start, npc } = strandedNpc();
+    npc.resources!.money = 30;
+    const w = pick(callVehicle(start, npc.id), OFFER);
+    expect(w.player.call?.vars).toEqual({ town: { kind: 'town', id: 'bowl' }, fee: { kind: 'money', amount: 30 } });
+  });
+
+  it('hitching takes the driver out of physics, and it trails the player', () => {
+    let { w, npc } = hitched();
+    expect(isOnRope(w, npc.id)).toBe(true);
+    expect(towData(playerTowing(w)!)).toMatchObject({ town: 'bowl', hitched: true });
+    w = setMoveOrder(w, { kind: 'stopAt', dest: at(40) });
+    for (let i = 0; i < 4; i++) {
+      w = endTurn(w, testDrive);
+      expect(dist(find(w, npc.id).pos, playerVehicle(w).pos)).toBeLessThanOrEqual(TOW.gap + 1e-6);
+      expect(find(w, npc.id).order).toBeNull();
+    }
+  });
+
+  it('the player tows slower', () => {
+    const { w } = hitched();
+    const free = structuredClone(w);
+    free.states = [];
+    expect(vehicleStats(w, playerVehicle(w)).maxSpeed).toBeCloseTo(vehicleStats(free, playerVehicle(free)).maxSpeed * TOW.speedShare);
+  });
+
+  it('reaching the town gets the player paid once and leaves the driver there', () => {
+    let { w, npc } = hitched();
+    const fee = towData(playerTowing(w)!).fee;
+    const money = w.player.money;
+    const npcMoney = find(w, npc.id).resources!.money;
+    w = setMoveOrder(w, { kind: 'stopAt', dest: gate });
+    const r = runUntil(w, 60, (x) => playerTowing(x) === null);
+    expect(r.events.filter((e) => e.t === 'stateEnded').map((e) => e.t === 'stateEnded' && e.ending)).toEqual(['fulfilled']);
+    expect(r.w.player.money).toBe(money + fee);
+    expect(find(r.w, npc.id).resources!.money).toBe(npcMoney - fee);
+    expect(find(r.w, npc.id).speed).toBe(0);
+  });
+
+  it('the player can let the driver off the rope for free', () => {
+    let { w, npc } = hitched();
+    const money = w.player.money;
+    w = pick(pick(callVehicle(w, npc.id), 'I am letting you off the rope here.'), 'Over and out.');
+    expect(playerTowing(w)).toBeNull();
+    expect(isOnRope(w, npc.id)).toBe(false);
+    expect(w.player.money).toBe(money);
+  });
+
+  it('hostility breaks the tow', () => {
+    let { w, npc } = hitched();
+    addState(w, 'feud', npc.id, w.player.vehicleId, { kind: 'feud', robbery: false });
+    w = setMoveOrder(w, { kind: 'stopAt', dest: at(40) });
+    w = endTurn(w, testDrive);
+    expect(playerTowing(w)).toBeNull();
+  });
+
+  it('is not offered to a driver already at its town', () => {
+    const { w, npc } = strandedNpc();
+    npc.pos = { ...sitePads(bowl)[0] };
+    playerVehicle(w).pos = { x: npc.pos.x + out.x * 3, y: npc.pos.y + out.y * 3 };
+    refreshVision(w);
+    expect(canUseSite(npc.pos, bowl)).toBe(true);
+    expect(currentOptions(callVehicle(w, npc.id)).map((o) => o.text)).not.toContain(OFFER);
+  });
+
+  it('is not offered to a driver that can drive or parks out of reach', () => {
+    const { w, npc } = strandedNpc();
+    npc.resources!.fuel = 50;
+    expect(currentOptions(callVehicle(w, npc.id)).map((o) => o.text)).not.toContain(OFFER);
+    const far = strandedNpc();
+    far.npc.pos = at(35);
+    expect(currentOptions(callVehicle(far.w, far.npc.id)).map((o) => o.text)).not.toContain(OFFER);
   });
 });

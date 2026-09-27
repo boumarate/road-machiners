@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { startKit } from '../data/start';
 import { newWorld } from '../sim/world';
+import { emptyWorld } from '../sim/testkit';
+import { moveItem } from '../sim/inventory';
+import { advanceJobs } from '../sim/jobs';
+import { CHASSIS } from '../data/chassis';
 import { clearSave, hasSave, loadWorld, saveWorld, writeSave } from './save';
 
 function makeStorage(): Storage {
@@ -24,6 +28,23 @@ describe('local game save', () => {
     expect(loadWorld(storage)).toEqual(world);
     clearSave(storage);
     expect(hasSave(storage)).toBe(false);
+  });
+
+  it('resumes a pending refit after loading without losing progress', () => {
+    const storage = makeStorage();
+    const world = emptyWorld();
+    const weapon = world.vehicles[0].items.find((item) => item.kind === 'part' && item.part.defId === 'mg');
+    if (!weapon) throw new Error('Expected weapon');
+    const to = { x: 1, y: CHASSIS.scout.layout.length, rot: 0 as const };
+    const next = moveItem(world, weapon.id, to);
+    advanceJobs(next);
+    writeSave(storage, next);
+    const loaded = loadWorld(storage);
+    if (!loaded) throw new Error('Expected saved refit');
+    expect(loaded.vehicles[0].job).toEqual(next.vehicles[0].job);
+    for (let turn = 0; turn < 4; turn++) advanceJobs(loaded);
+    expect(loaded.vehicles[0].job).toBeNull();
+    expect(loaded.vehicles[0].items.find((item) => item.id === weapon.id)).toMatchObject(to);
   });
 
   it('returns null when there is no saved game', () => {

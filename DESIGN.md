@@ -18,7 +18,7 @@ The grid is a top view of the truck with the nose up. Each chassis marks some ce
 
 Cargo parts add full-width rows to the grid while mounted. A roof rack adds one row, a cargo box adds three.
 
-Goods take one cell per unit and can be moved or dumped anywhere. Mounting and unmounting parts needs a town garage. Spare parts ride in the grid or wait in garage storage.
+Goods take one cell per unit and can be moved or dumped anywhere. Select an inventory item, then click another to swap their positions if both fit. Dragging onto another item also swaps them. Spare parts ride in the grid or wait in garage storage. Garage equipment changes are instant. Outside town, installing or removing a part takes 5 parked turns per operation. Replacing an installed part with a spare takes 10 turns. Moving an installed part to another mount also takes 10 turns. The old layout remains active until the whole job finishes. Driving cancels the job and loses its progress. Rearranging, storing, dumping or collecting items is blocked during a refit. Missing items or invalid space cancel it. Installing a salvaged part takes 5 turns and leaves it in the stock until completion. Moving goods or spare parts without installing them stays instant.
 
 Every part and good has a mass. A heavier truck accelerates, brakes, steers and tops out worse. Trucks make tradeoffs: cargo vs armor vs fuel use. No truck is best at everything.
 
@@ -100,7 +100,7 @@ The map is a grid of tiles with a height on every tile corner, so the ground is 
 
 Danger is set by region, not by player level.
 
-Faction squads roam the map. Places are discovered by exploring. Towns and locations block driving. Open locations have an interaction radius of 1.5 times the site's base service reach, so the player uses services without driving into buildings. Towns have a wall, and the Granary and the Salvage Yard have a palisade. Walled sites are used only near a gate, where a road enters. The truck must be stopped to use a town or search salvage. In reach but still moving, the action shows dimmed. Each town gate has a guard gun. It shoots the nearest vehicle that fired within its range that turn, whatever its faction. Raiders also trade in towns, so guards judge by action. A town gate is therefore a safe place to run to.
+Faction squads roam the map. Places are discovered by exploring. Towns and locations are static places that trucks never enter, so they block driving. Towns and small locations have one gate, where the first road crosses their edge. Large locations have a gate on every road. Each gate post carries a lamp. A rectangular dust pad lies outside each gate. A site is used only from a pad. A click on a site orders a stop at its pad nearest the truck. Towns have a wall, and the Granary and the Salvage Yard have a palisade. The truck must be stopped to use a town or search salvage. In reach but still moving, the action shows dimmed. Each town gate has a guard gun. It shoots the nearest vehicle that fired within its range that turn, whatever its faction. Raiders also trade in towns, so guards judge by action. A town gate is therefore a safe place to run to.
 
 Raiders have two camps, Scrapjaw Camp in the north and Kiln Camp in the south. A dirt track leads to each camp gate. Raiders spawn outside a camp gate. Each camp gate has a gun on each side. It shoots the nearest non-raider within its range every turn, whether or not that vehicle fired. The player cannot use camp services.
 
@@ -142,7 +142,11 @@ A robbery is an attack. The winner searches the wreck or the knockout stock the 
 
 In a fight, each chance to ram the target is a decision. A ram that the driver expects to hurt itself more than the target is rare, and traders almost never ram.
 
-Damage from one vehicle to another is an attack, whether it comes from a shot or a crash. A missed shot counts too. The victim and its nearby faction mates that see it start a feud with the attacker. A slow bump that does no damage is not an attack, and neither is contact with the truck on a tow rope.
+A shot at another vehicle is an attack, hit or miss. The victim and its nearby faction mates that see it start a feud with the attacker. A damaging crash between hostile trucks is an attack too.
+
+A damaging crash between trucks at peace is most likely an accident. Each damaged NPC decides once whether to forgive it or retaliate. Most drivers forgive. Raiders and scumbags retaliate more often, and a crash with a faction mate is nearly always forgiven. A retaliating driver starts a feud as if it was attacked. A slow bump that does no damage counts for nothing, and neither does contact with the truck on a tow rope.
+
+A driver hurt by a hostile may plead with it. It asks for a truce, or it begs for mercy when it is weak. Traders and cowards plead most, and raiders seldom. The other side decides whether to accept. A truce ends the feuds between both sides and their nearby faction mates. Mercy is a truce the beggar pays for with its cargo, which it drops for the winner to take. A driver rarely pleads with the same foe again soon.
 
 States are timed relations between two trucks. Each ends as expired, fulfilled or broken, and each ending can start other states.
 
@@ -162,6 +166,10 @@ Talk is built from topics. A topic is lines and replies in data, and its logic i
 - Tow: see Defeat.
 - Patch: a patch gets a broken engine or gearbox going again at a quarter of its HP. A stranded player asks a trader or scavenger. A stranded NPC asks the player once, unless it carries the parts to fix its own truck. The NPC's traits roll the terms: paid, bring your own parts, or free. Only terms the payer can cover come up. The work runs while both trucks stay parked side by side, and the payment moves once when it ends. A deal nobody works on lapses for free.
 - Demand: a raider or robber about to attack radios first, once, and asks for the cargo. Handing it over drops the goods and loose parts beside the truck, and the attacker and its mates nearby keep a truce for a while. Shots break the truce. Refusing keeps the fight.
+- Truce and mercy: the player can call a hostile truck and ask for a truce or give up. Mercy costs the player's cargo. The driver's answer is rolled like an NPC plea. After an answer, the player cannot ask the same driver again for a while. A driver in a feud takes up only these topics. A hurt NPC calls the player with its own truce or plea for mercy. Sparing a beggar leaves its cargo on the ground.
+- Towing an NPC: the player can offer a tow to a stranded driver at peace parked within reach. The driver names its nearest known town and pays the tow fee, up to the money it holds, when the player reaches that town. The towed truck trails the player, and the player drives slower. The player can let it off the rope by radio for free. Hostility breaks the tow.
+- Patching an NPC: the player can offer a patch to a driver stranded by a broken engine or gearbox. The driver names its terms as it does when it asks.
+- Robbery: the player can demand the cargo of a truck at peace, once per driver. The driver gives it up, fights or runs. Traders and cowards give up more, raiders fight more, and every driver gives up to a much stronger player. Giving up drops the cargo beside the truck and holds a truce with the player. Fighting or running starts a feud.
 
 H honks. Traders and scavengers in earshot that are not hostile honk back.
 

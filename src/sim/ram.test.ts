@@ -5,7 +5,7 @@ import { applyContactCrash, estimateCrashGeometry, isRamGainful } from './crash-
 import { RULES } from '../data/rules';
 import { thinkNpc } from './npc-activities';
 import { addState, stateOf } from './states';
-import { addVehicle, emptyWorld, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import type { GameEvent, Vehicle, World } from './types';
 import type { Vec } from './vec';
 
@@ -119,24 +119,30 @@ describe('rams as attacks', () => {
     return { w, trader, victim, mate };
   }
 
-  it('a damaging ram gives the victim and its mate a feud and an attacked decision on the rammer', () => {
-    const { w, trader, victim, mate } = ramSetup();
+  it('a damaging ram between trucks at peace gives the victim a grievance, not a feud', () => {
+    const { w, trader, victim } = ramSetup();
     applyCrash(w, trader, victim, victim.id, victim.pos, FULL_SPEED);
     expect(total(crashOf(w).hitsB)).toBeGreaterThan(0);
+    expect(stateOf(w, 'grievance', victim.id, trader.id)).not.toBeNull();
+    expect(w.states.filter((s) => s.kind === 'feud')).toEqual([]);
+    expect(victim.brain!.attackers).toEqual({});
+  });
+
+  it('a victim that retaliates feuds with its mate against the rammer and decides on it as an attacker', () => {
+    forceOption('crashed', 'retaliate');
+    const { w, trader, victim, mate } = ramSetup();
+    applyCrash(w, trader, victim, victim.id, victim.pos, FULL_SPEED);
+    thinkNpc(w, victim);
     expect(stateOf(w, 'feud', victim.id, trader.id)).not.toBeNull();
     expect(stateOf(w, 'feud', mate.id, trader.id)).not.toBeNull();
-    expect(victim.brain!.attackers).toEqual({ [trader.id]: false });
-    thinkNpc(w, victim);
     expect(victim.brain!.attackers).toEqual({ [trader.id]: true });
   });
 
-  it('a crash with measured physics contact geometry is an attack too', () => {
-    const { w, trader, victim, mate } = ramSetup();
+  it('a crash with measured physics contact geometry gives a grievance too', () => {
+    const { w, trader, victim } = ramSetup();
     applyContactCrash(w, trader, victim, victim.id, FULL_SPEED, { a: { side: 'front', lanes: [1, 2] }, b: { side: 'left', lanes: [2, 3] } });
     expect(total(crashOf(w).hitsB)).toBeGreaterThan(0);
-    expect(stateOf(w, 'feud', victim.id, trader.id)).not.toBeNull();
-    expect(stateOf(w, 'feud', mate.id, trader.id)).not.toBeNull();
-    expect(victim.brain!.attackers).toEqual({ [trader.id]: false });
+    expect(stateOf(w, 'grievance', victim.id, trader.id)).not.toBeNull();
     expect(victim.lastHitBy).toBe(trader.id);
   });
 
@@ -153,13 +159,12 @@ describe('rams as attacks', () => {
     expect(mate.brain!.attackers).toEqual({});
   });
 
-  it('the player ramming an NPC is an attack too', () => {
+  it('the player ramming an NPC at peace gives it a grievance too', () => {
     const { w, victim } = ramSetup();
     const me = w.vehicles[0];
     me.pos = { x: 41.6, y: 38.4 };
     applyCrash(w, me, victim, victim.id, victim.pos, FULL_SPEED);
-    expect(stateOf(w, 'feud', victim.id, me.id)).not.toBeNull();
-    expect(victim.brain!.attackers).toEqual({ [me.id]: false });
+    expect(stateOf(w, 'grievance', victim.id, me.id)).not.toBeNull();
   });
 
   it('a slow bump with no damage is no attack', () => {

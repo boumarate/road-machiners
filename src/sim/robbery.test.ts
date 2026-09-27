@@ -14,10 +14,18 @@ import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import type { NpcActivity, Vehicle, World } from './types';
 import type { Vec } from './vec';
 import { cloneWorld } from './world';
+import { REGION } from '../data/region';
+import { siteGates } from './sites';
 
 // A gate of Bowl. The robbery spots below lie outside Bowl's wall, north of the gate: one within guard range and one
 // past it.
-const GATE = { x: 106.2, y: 460.2 };
+const BOWL = REGION.towns[0];
+const GATE = siteGates(BOWL)[0];
+// A point d tiles out from the Bowl gate, away from the town.
+function outFromGate(d: number): Vec {
+  const k = d / BOWL.radius;
+  return { x: GATE.x + (GATE.x - BOWL.pos.x) * k, y: GATE.y + (GATE.y - BOWL.pos.y) * k };
+}
 const GUARDED = RULES.guards.range / 2;
 const UNGUARDED = RULES.guards.range + 4;
 
@@ -80,11 +88,11 @@ const JUDGED: Record<string, Setup> = {
   },
   robberAtGate: () => {
     const w = emptyWorld({ x: 200, y: 200 });
-    return { w, robber: addScumbag(w, { x: GATE.x, y: GATE.y - GUARDED }), target: addPrey(w, { x: GATE.x, y: GATE.y - UNGUARDED }) };
+    return { w, robber: addScumbag(w, outFromGate(GUARDED)), target: addPrey(w, outFromGate(UNGUARDED)) };
   },
   targetAtGate: () => {
     const w = emptyWorld({ x: 200, y: 200 });
-    return { w, robber: addScumbag(w, { x: GATE.x, y: GATE.y - UNGUARDED }), target: addPrey(w, { x: GATE.x, y: GATE.y - GUARDED }) };
+    return { w, robber: addScumbag(w, outFromGate(UNGUARDED)), target: addPrey(w, outFromGate(GUARDED)) };
   },
 };
 
@@ -104,7 +112,7 @@ describe('robbery checks', () => {
     expect(robWeight(w, robber, target, vehicleDanger(w, target))).toBe(FULL_ROB);
     // Beside the gate, but both past guard range, passes too.
     const far = emptyWorld({ x: 200, y: 200 });
-    expect(robWeight(far, addScumbag(far, { x: GATE.x, y: GATE.y - UNGUARDED }), addPrey(far, { x: GATE.x, y: GATE.y - UNGUARDED - 5 }), 0)).toBe(FULL_ROB);
+    expect(robWeight(far, addScumbag(far, outFromGate(UNGUARDED)), addPrey(far, outFromGate(UNGUARDED + 5)), 0)).toBe(FULL_ROB);
   });
 
   for (const [name, make] of Object.entries(UNAVAILABLE)) {

@@ -12,7 +12,7 @@ import { isDriveObstacle } from '../sim/mapgen';
 import { vehicleMass } from '../sim/mass';
 import { vehicleStats, type VehicleStats } from '../sim/stats';
 import { continueRoute, keepRoute, route, type KeptRoute } from '../sim/path';
-import { parkedVehicles, shouldBackToDestination, zoneSpeed } from '../sim/steering';
+import { backsToDestination, parkedVehicles, zoneSpeed } from '../sim/steering';
 import { BRIDGE_AXIS, BRIDGE_LENGTH } from '../sim/bridge';
 import { deckEnds, heightAt, tileAt, type Terrain } from '../sim/terrain';
 import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
@@ -21,7 +21,7 @@ import { angleDiff, bearing, clamp, DEG, dist, type Vec } from '../sim/vec';
 import { bodyOf, type Body } from '../sim/body';
 import { wheelMounts } from './body';
 import { computeClosingSpeed, locateCrashContact, type CrashGeometry } from '../sim/crash-contact';
-import { headingOf, headingQuat, type TurnFrames, type V3, type VehicleFrame } from './frames';
+import { headingOf, headingQuat, noseRise, upOf, type TurnFrames, type V3, type VehicleFrame } from './frames';
 
 const S = PHYSICS.metersPerTile;
 const T = PHYSICS.truck;
@@ -101,18 +101,7 @@ export function syncDrive(d: Drive, w: World): void {
     delete d.bodies[id];
     delete d.memory[id];
   }
-  for (const v of near) {
-    const handle = d.bodies[v.id];
-    if (handle === undefined) {
-      d.bodies[v.id] = addVehicle(d.world, w, v);
-      d.memory[v.id] = { steer: 0, reverse: false, route: null, ahead: null };
-      continue;
-    }
-    const body = d.world.getRigidBody(handle);
-    setMass(body, v);
-    const t = body.translation();
-    if (dist({ x: t.x / S, y: t.z / S }, v.pos) > TELEPORT_TILES) placeBody(body, w, v);
-  }
+  for (const v of near) syncVehicle(d, w, v);
   const obstacleIds = new Set(w.obstacles.filter(isDriveObstacle).map((o) => o.id));
   for (const [id, handle] of Object.entries(d.obstacles)) {
     if (obstacleIds.has(id)) continue;
@@ -130,6 +119,21 @@ export function syncDrive(d: Drive, w: World): void {
   for (const v of w.vehicles) {
     if (isNear(w, v) !== (d.bodies[v.id] !== undefined)) throw new Error(`Vehicle ${v.id} is ${isNear(w, v) ? 'near without' : 'far with'} a physics body`);
   }
+}
+
+// A truck flipped for RULES.flipBackTurns turns is set back on its wheels at its sim pose.
+function syncVehicle(d: Drive, w: World, v: Vehicle): void {
+  const handle = d.bodies[v.id];
+  if (handle === undefined) {
+    d.bodies[v.id] = addVehicle(d.world, w, v);
+    d.memory[v.id] = { steer: 0, reverse: false, route: null, ahead: null };
+    return;
+  }
+  const body = d.world.getRigidBody(handle);
+  setMass(body, v);
+  const t = body.translation();
+  const moved = dist({ x: t.x / S, y: t.z / S }, v.pos) > TELEPORT_TILES;
+  if (moved || (v.flippedTurns ?? 0) >= RULES.flipBackTurns) placeBody(body, w, v);
 }
 
 function addVehicle(world: RAPIER.World, w: World, v: Vehicle): number {
@@ -311,7 +315,7 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
     brakeForce: T.brakeForce * (ch.ratedMass / 1000),
     stopDecel: D.stopDecel * (ch.ratedMass / full.mass), // the stop plan brakes as hard as this load allows
   };
-  if (!order) return { ...base, dest: null, route: null, target: toMps(speed), stopAt: false };
+  if (!order) return { ...base, dest: null, route: null, target: idleTarget(speed), stopAt: false };
   if (order.kind === 'brake') return { ...base, dest: null, route: null, target: 0, stopAt: false };
   // Careful drivers follow the route planner, which keeps to roads and goes around obstacles; careless ones drive straight.
   const parked = parkedVehicles(w, v.id);
@@ -324,6 +328,11 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   return { ...base, dest: order.dest, route: path, target: toMps(next), stopAt: false };
 }
 
+// Without an order a moving truck coasts on, and a parked one holds its brakes, so it does not roll down a slope.
+function idleTarget(speed: number): number {
+  return speed <= RULES.parkedSpeed ? 0 : toMps(speed);
+}
+
 // Loose ground gives less grip, so wheels spin instead of converting engine force to speed. Slope
 // needs no separate handling: it already slows or speeds the climb through gravity on the heightfield.
 function applyTerrainGrip(ctl: RAPIER.DynamicRayCastVehicleController, body: RAPIER.RigidBody, terrain: Terrain): void {
@@ -334,62 +343,95 @@ function applyTerrainGrip(ctl: RAPIER.DynamicRayCastVehicleController, body: RAP
 }
 
 // One physics step of driving. Steer at the destination and hold the turn's speed. A stop order slows
-// to arrive. A slow truck with the destination far behind backs up, wheels turned the other way.
-// A drive-through point counts as passed once close, or once the truck drives forward past it on the
-// last leg, so a wide miss does not circle back. A side click behind the truck still steers.
+// to arrive. A drive-through point counts as passed once close, or once the truck drives forward past
+// it on the last leg, so a wide miss does not circle back. A side click behind the truck still steers.
 function driveStep(c: Car, terrain: Terrain): void {
-  const { plan, mem, body, ctl } = c;
-  applyTerrainGrip(ctl, body, terrain);
-  const speed = forwardSpeed(body);
-  let target = plan.target;
-  let steerTo = 0;
-  if (plan.dest && !c.result.passed && !c.result.arrived) {
-    const p = body.translation();
-    const far = Math.hypot(plan.dest.x * S - p.x, plan.dest.y * S - p.z);
-    // Steer at the next route point far enough ahead, or at the destination.
-    const aim = plan.route ? routeAim(plan.route, { x: p.x / S, y: p.z / S }) : plan.dest;
-    const dx = aim.x * S - p.x;
-    const dz = aim.y * S - p.z;
-    const heading = headingOf(body.rotation());
-    const ang = angleDiff(heading, Math.atan2(dz, dx));
-    if (plan.stopAt) {
-      target = Math.min(target, Math.sqrt(2 * plan.stopDecel * Math.max(0, far - RULES.arriveRadius * S)));
-      if (far < RULES.arriveRadius * S) c.result.arrived = true;
-    } else {
-      c.result.passed = passedThrough(plan.dest, plan.route, mem, { x: p.x, y: p.z }, heading, speed);
-    }
-    if (!c.result.passed && !c.result.arrived) {
-      // Reverse until the route is ahead. Ordinary NPCs steer their nose toward it, while
-      // player orders and blockage recovery aim the rear at the destination.
-      const behind = Math.abs(ang) > Math.PI / 2;
-      if (!mem.reverse && target > 0 && behind && Math.abs(speed) < D.reverseBelow) mem.reverse = true;
-      if (mem.reverse && !behind) mem.reverse = false;
-      if (mem.reverse) {
-        target = -Math.min(D.reverseSpeed, plan.target);
-        // Backing up turns the truck the opposite way from the wheels.
-        const rearAng = angleDiff(heading + Math.PI, Math.atan2(dz, dx));
-        const turnAngle = shouldBackToDestination(c.v, far / S) ? rearAng : ang;
-        steerTo = clamp(-turnAngle * D.steerGain, -plan.maxSteer, plan.maxSteer);
-      } else {
-        steerTo = clamp(ang * D.steerGain, -plan.maxSteer, plan.maxSteer);
-        target = Math.min(target, cornerSpeed(Math.hypot(dx, dz), ang));
-        target = Math.min(target, routeCornerSpeed(plan.route, { x: p.x / S, y: p.z / S }, Math.abs(speed), plan.stopDecel));
-      }
-    }
-  }
-  if (c.result.arrived) target = 0;
-  if (!plan.dest) mem.reverse = false;
-  const step = T.steerRate * DT;
-  mem.steer = clamp(steerTo, mem.steer - step, mem.steer + step);
-  // Positive wheel steering turns toward -z; map headings grow toward +z.
-  ctl.setWheelSteering(0, -mem.steer);
-  ctl.setWheelSteering(1, -mem.steer);
+  applyTerrainGrip(c.ctl, c.body, terrain);
+  const speed = forwardSpeed(c.body);
+  const command = c.plan.dest && !reached(c) ? commandToward(c, c.plan.dest, speed) : { target: c.plan.target, steerTo: 0 };
+  if (c.result.arrived) command.target = 0;
+  if (!c.plan.dest) c.mem.reverse = false;
+  turnWheels(c, command.steerTo);
+  applyPedals(c, command.target, speed);
+}
 
-  const u = clamp((target - speed) * D.throttleGain, -1, 1);
-  const pushing = plan.engine && (target > 0 ? u > 0 : target < 0 ? u < 0 : false);
-  const brake = pushing ? 0 : Math.abs(u) * plan.brakeForce + (target === 0 ? plan.brakeForce : 0);
+type Command = { target: number; steerTo: number }; // target in m/s along the nose, steerTo in radians of wheel angle
+
+function reached(c: Car): boolean {
+  return c.result.passed || c.result.arrived;
+}
+
+// Steer at the next route point far enough ahead, or at the destination.
+function commandToward(c: Car, dest: Vec, speed: number): Command {
+  const { plan, body } = c;
+  const p = body.translation();
+  const at = { x: p.x / S, y: p.z / S };
+  const heading = headingOf(body.rotation());
+  const target = arrivalTarget(c, dest, at, heading, speed);
+  if (reached(c)) return { target, steerTo: 0 };
+  const aim = plan.route ? routeAim(plan.route, at) : dest;
+  const ang = angleDiff(heading, bearing(at, aim));
+  c.mem.reverse = backs(c, ang, angleDiff(heading + Math.PI, bearing(at, dest)), dist(at, dest), target, speed);
+  if (c.mem.reverse) {
+    // Backing up turns the truck the opposite way from the wheels.
+    const rearAng = angleDiff(heading + Math.PI, bearing(at, aim));
+    return { target: -Math.min(D.reverseSpeed, plan.target), steerTo: clamp(-rearAng * D.steerGain, -plan.maxSteer, plan.maxSteer) };
+  }
+  const corner = Math.min(cornerSpeed(dist(at, aim) * S, ang), routeCornerSpeed(plan.route, at, Math.abs(speed), plan.stopDecel));
+  return { target: Math.min(target, corner), steerTo: clamp(ang * D.steerGain, -plan.maxSteer, plan.maxSteer) };
+}
+
+// The turn's target speed, capped by a stop order's braking curve. Marks the destination arrived or passed.
+function arrivalTarget(c: Car, dest: Vec, at: Vec, heading: number, speed: number): number {
+  const far = dist(at, dest) * S;
+  if (!c.plan.stopAt) {
+    c.result.passed = passedThrough(dest, c.plan.route, c.mem, { x: at.x * S, y: at.y * S }, heading, speed);
+    return c.plan.target;
+  }
+  if (far < RULES.arriveRadius * S) c.result.arrived = true;
+  return Math.min(c.plan.target, Math.sqrt(2 * c.plan.stopDecel * Math.max(0, far - RULES.arriveRadius * S)));
+}
+
+// Whether the truck backs up this step. A slow truck starts backing only when backsToDestination allows it.
+// It stops once its aim is ahead. Any other point behind turns the truck around nose first.
+// ang: aim off the nose. rearAng: destination off straight behind. Both in radians; far in tiles.
+function backs(c: Car, ang: number, rearAng: number, far: number, target: number, speed: number): boolean {
+  if (Math.abs(ang) <= Math.PI / 2) return false;
+  if (c.mem.reverse) return true;
+  return target > 0 && Math.abs(speed) < D.reverseBelow && backsToDestination(c.v, far, rearAng);
+}
+
+function turnWheels(c: Car, steerTo: number): void {
+  const step = T.steerRate * DT;
+  c.mem.steer = clamp(steerTo, c.mem.steer - step, c.mem.steer + step);
+  // Positive wheel steering turns toward -z; map headings grow toward +z.
+  c.ctl.setWheelSteering(0, -c.mem.steer);
+  c.ctl.setWheelSteering(1, -c.mem.steer);
+}
+
+// Throttle toward the target speed, plus the engine share that cancels gravity along the nose,
+// so a truck holds its speed on a slope. Without engine push the truck brakes.
+function applyPedals(c: Car, target: number, speed: number): void {
+  const { plan, ctl } = c;
+  const u = clamp((target - speed) * D.throttleGain + slopeThrottle(c, target), -1, 1);
+  const pushing = plan.engine && target !== 0 && Math.sign(u) === Math.sign(target);
+  const brake = brakeOf(plan, u, target, pushing);
+  const force = pushing ? u * plan.engineForce : 0;
   for (let i = 0; i < 4; i++) ctl.setWheelBrake(i, brake);
-  for (const i of [2, 3]) ctl.setWheelEngineForce(i, pushing ? u * plan.engineForce : 0);
+  for (const i of [2, 3]) ctl.setWheelEngineForce(i, force);
+}
+
+// Throttle share that holds the truck against gravity along its nose. A truck holding still brakes instead.
+function slopeThrottle(c: Car, target: number): number {
+  if (target === 0) return 0;
+  const pull = T.gravityScale * PHYSICS.gravity * noseRise(c.body.rotation()) * c.s.mass;
+  return pull / (2 * c.plan.engineForce);
+}
+
+// No brake while the engine pushes. A truck holding still brakes fully on top of the throttle's brake share.
+function brakeOf(plan: Plan, u: number, target: number, pushing: boolean): number {
+  if (pushing) return 0;
+  return Math.abs(u) * plan.brakeForce + (target === 0 ? plan.brakeForce : 0);
 }
 
 // Whether a drive-through point is passed: the truck is close, or it drove forward past the point
@@ -522,13 +564,15 @@ function rideHeight(w: World, v: Vehicle): number {
   return heightAt(w.terrain, v.pos.x, v.pos.y) * S + b.wheelRadius + T.suspensionRest - b.wheelY;
 }
 
-// Map pose and speed of a vehicle's body.
-export function bodyState(d: Drive, id: string): { pos: Vec; heading: number; speed: number } {
+// Map pose and speed of a vehicle's body, and whether it stands on its wheels.
+export function bodyState(d: Drive, id: string): { pos: Vec; heading: number; speed: number; upright: boolean } {
   const handle = d.bodies[id];
   if (handle === undefined) throw new Error(`No physics body for ${id}`);
   const body = d.world.getRigidBody(handle);
   const t = body.translation();
-  return { pos: { x: t.x / S, y: t.z / S }, heading: headingOf(body.rotation()), speed: forwardSpeed(body) };
+  const r = body.rotation();
+  const upright = upOf(r) >= Math.cos(T.flipTilt * DEG);
+  return { pos: { x: t.x / S, y: t.z / S }, heading: headingOf(r), speed: forwardSpeed(body), upright };
 }
 
 // A heightfield over the (n + 1) x (n + 1) corner grid. Rapier rows run along z and columns along x,

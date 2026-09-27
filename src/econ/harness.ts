@@ -52,7 +52,7 @@ import {
 import { advanceJobs } from '../sim/jobs';
 import { burnFuel, consumeVehicleSupplies } from '../sim/resources';
 import { collectSalvage, createWreckSalvage, salvageUnits, wreckStockId } from '../sim/salvage';
-import { siteGates } from '../sim/sites';
+import { siteGates, sitePads } from '../sim/sites';
 import { vehicleStats } from '../sim/stats';
 import type { PartInstance, SkillId, Vehicle, World } from '../sim/types';
 import { dist, type Vec } from '../sim/vec';
@@ -198,7 +198,7 @@ function hitPart(part: PartInstance, amount: number, floor: number, telemetry: T
 // encounters and fights land mid-trip rather than all at once.
 
 function nearestGate(pos: Vec, siteId: string): Vec {
-  const gates = siteGates(siteOf(siteId));
+  const gates = sitePads(siteOf(siteId));
   return [...gates].sort((a, b) => dist(pos, a) - dist(pos, b))[0];
 }
 

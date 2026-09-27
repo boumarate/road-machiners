@@ -6,7 +6,8 @@ import type { GridItem, PartInstance, Vehicle } from './types';
 
 export type SideLetter = 'F' | 'B' | 'L' | 'R';
 export type Cell = 'W' | 'E' | 'C' | SideLetter | 'X' | '.';
-export type Grid = { w: number; h: number; cells: (Cell | null)[][] }; // cells[y][x], null is a hole
+// cells[y][x], null is a hole. Rows from chassisH on come from mounted cargo parts.
+export type Grid = { w: number; h: number; chassisH: number; cells: (Cell | null)[][] };
 export type Spot = { x: number; y: number; rot: 0 | 1 };
 
 // Letters each kind mounts on. Armor lists the front first, so auto-mounting fills the nose before the sides.
@@ -31,7 +32,7 @@ export function baseGrid(chassisId: string): Grid {
   const rows = chassisDef(chassisId).layout;
   const w = Math.max(...rows.map((r) => r.length));
   const cells = rows.map((r) => Array.from({ length: w }, (_, x) => toCell(r[x] ?? ' ')));
-  const grid = { w, h: rows.length, cells };
+  const grid = { w, h: rows.length, chassisH: rows.length, cells };
   baseGridCache.set(chassisId, grid);
   return grid;
 }
@@ -81,7 +82,7 @@ export function gridOf(v: Vehicle): Grid {
   const base = baseGrid(v.chassisId);
   const extra = mountedItems(v, 'cargo').reduce((a, it) => a + (partDef(it.part.defId) as { extraRows: number }).extraRows, 0);
   const rows = Array.from({ length: extra }, () => Array.from({ length: base.w }, () => '.' as Cell));
-  return { w: base.w, h: base.h + extra, cells: [...base.cells, ...rows] };
+  return { w: base.w, h: base.h + extra, chassisH: base.h, cells: [...base.cells, ...rows] };
 }
 
 type PartItem = Extract<GridItem, { kind: 'part' }>;
@@ -138,11 +139,20 @@ export function freeCells(v: Vehicle): number {
 export function placementError(g: Grid, items: GridItem[], item: GridItem, ignoreId: string | null): string | null {
   const taken = new Set<string>();
   for (const it of items) if (it.id !== ignoreId) for (const c of itemCells(it)) taken.add(`${c.x},${c.y}`);
-  for (const c of itemCells(item)) {
-    if (c.x < 0 || c.y < 0 || c.x >= g.w || c.y >= g.h || g.cells[c.y][c.x] === null) return 'Does not fit there';
-    if (taken.has(`${c.x},${c.y}`)) return 'Something is in the way';
-  }
+  const cells = itemCells(item);
+  if (crossesChassisEnd(g, cells) || !cells.every((c) => onGrid(g, c))) return 'Does not fit there';
+  if (cells.some((c) => taken.has(`${c.x},${c.y}`))) return 'Something is in the way';
   return null;
+}
+
+function onGrid(g: Grid, c: { x: number; y: number }): boolean {
+  return c.x >= 0 && c.y >= 0 && c.x < g.w && c.y < g.h && g.cells[c.y][c.x] !== null;
+}
+
+// True when an item lies partly on the chassis grid and partly on cargo rows.
+function crossesChassisEnd(g: Grid, cells: { y: number }[]): boolean {
+  const onChassis = cells.filter((c) => c.y < g.chassisH).length;
+  return onChassis !== 0 && onChassis !== cells.length;
 }
 
 // First free spot in reading order. With mount letters given, only spots fully on one letter count,

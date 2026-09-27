@@ -4,12 +4,14 @@ import { SALVAGE } from '../data/salvage';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
-import { canReachSalvage, collectSalvage, hasSalvage, salvageInRange } from './salvage';
+import { canReachSalvage, collectSalvage, hasSalvage, pourStores, salvageInRange } from './salvage';
 import { newId } from './factory';
-import { gridOf, placementError, type Spot } from './grid';
+import { isMounted, type Spot } from './grid';
+import { getLayoutError, requireIdleRefit } from './inventory';
+import { startJob } from './jobs';
 import { beginSearch } from './search';
 import { gainXp } from './progress';
-import { locationAt } from './sites';
+import { locationAt, townAt } from './sites';
 import type { GridItem, PartInstance, SalvageStock, World } from './types';
 import { tileCenter } from './vision';
 import { dist, type Vec } from './vec';
@@ -73,6 +75,13 @@ export function salvageNear(world: World): SalvageStock | null {
   return world.salvage.find((stock) => hasSalvage(stock) && salvageInRange(me, stock)) ?? null;
 }
 
+// A site or wreck stock in range of the player truck with no loot left, or null. Collectors emptied it.
+// An empty pile is gone from the ground, so it never counts.
+export function emptySalvageNear(world: World): SalvageStock | null {
+  const me = playerVehicle(world);
+  return world.salvage.find((stock) => !stock.pile && !hasSalvage(stock) && salvageInRange(me, stock)) ?? null;
+}
+
 // An unsearched stock is in reach: the player can start a search.
 export function canScavenge(world: World): boolean {
   const stock = salvageHere(world);
@@ -100,24 +109,44 @@ export function takeLoot(world: World, stockId: string, pick: LootPick, to: Spot
   return playerCommand(world, (w) => {
     const stock = requireLootable(w, stockId);
     const me = playerVehicle(w);
+    requireIdleRefit(me);
     const item: GridItem = pick.kind === 'part'
       ? { id: newId(w, 'i'), kind: 'part', part: requireStockPart(stock, pick.partId), ...to }
       : { id: newId(w, 'i'), kind: 'good', good: pick.good, ...to };
     if (pick.kind === 'good' && (stock.goods[pick.good] ?? 0) <= 0) throw new Error(`No ${pick.good} left here`);
-    const err = placementError(gridOf(me), me.items, item, null);
+    const err = getLayoutError(me, [...me.items, item]);
     if (err) throw new Error(err);
-    me.items.push(item);
-    if (pick.kind === 'part') stock.parts = stock.parts.filter((p) => p.id !== pick.partId);
-    else stock.goods[pick.good] -= 1;
+    transferLoot(w, stock, item, to);
   });
+}
+
+function transferLoot(world: World, stock: SalvageStock, item: GridItem, to: Spot): void {
+  const me = playerVehicle(world);
+  if (item.kind === 'part' && isMounted(me.chassisId, item) && !townAt(world)) {
+    startJob(world, me, {
+      kind: 'refit', moves: [],
+      pickup: { stockId: stock.id, partId: item.part.id, itemId: item.id, to },
+      turnsLeft: RULES.refitTurnsPerPart, total: RULES.refitTurnsPerPart,
+    });
+    return;
+  }
+  me.items.push(item);
+  if (item.kind === 'part') stock.parts = stock.parts.filter((part) => part.id !== item.part.id);
+  else stock.goods[item.good] -= 1;
 }
 
 // Moves everything that fits from a searched stock into the grid. The rest stays behind.
 export function takeAllLoot(world: World, stockId: string): World {
   return playerCommand(world, (w) => {
     requireLootable(w, stockId);
+    requireIdleRefit(playerVehicle(w));
     collectSalvage(w, playerVehicle(w), stockId, Infinity);
   });
+}
+
+// Pours the fuel and supplies of a searched stock into the tank and stores, up to their caps.
+export function takeStores(world: World, stockId: string): World {
+  return playerCommand(world, (w) => pourStores(w, playerVehicle(w), requireLootable(w, stockId)));
 }
 
 function requireLootable(world: World, stockId: string): SalvageStock {

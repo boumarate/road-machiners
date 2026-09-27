@@ -6,10 +6,11 @@ import { emptyWorld } from "../sim/testkit";
 import { addState, towData } from "../sim/states";
 import { getContextAction, getHudReadout, getRescueReadout } from "./hud-readout";
 import { REGION } from '../data/region';
+import { sitePads } from '../sim/sites';
 
 describe('oasis interaction', () => {
   it.each(REGION.locations.filter((site) => site.kind === 'oasis'))('offers refilling at $name only while stopped', (site) => {
-    const w = emptyWorld(site.pos);
+    const w = emptyWorld({ ...sitePads(site)[0] });
     expect(getContextAction(w, false)).toEqual({ label: `Refill supplies at ${site.name}`, ready: true });
     w.vehicles[0].speed = RULES.parkedSpeed + 1;
     expect(getContextAction(w, false)).toEqual({ label: `Refill supplies at ${site.name}`, ready: false });
@@ -17,10 +18,21 @@ describe('oasis interaction', () => {
 
   it('hides interaction during playback and while knocked out', () => {
     const site = REGION.locations.find((site) => site.kind === 'oasis')!;
-    const w = emptyWorld(site.pos);
+    const w = emptyWorld({ ...sitePads(site)[0] });
     expect(getContextAction(w, true)).toBeNull();
     w.player.state = 'knockedOut';
     expect(getContextAction(w, false)).toBeNull();
+  });
+});
+
+describe('salvage interaction', () => {
+  it('says a site is picked clean when its stock is empty', () => {
+    const site = REGION.locations.find((site) => site.id === 'podfield')!;
+    const w = emptyWorld({ ...sitePads(site)[0] });
+    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [] }];
+    expect(getContextAction(w, false)).toEqual({ label: `Search ${site.name}`, ready: true });
+    w.salvage[0].goods.scrap = 0;
+    expect(getContextAction(w, false)).toEqual({ label: `${site.name} is picked clean`, ready: false, hint: 'No loot left' });
   });
 });
 
@@ -42,6 +54,15 @@ describe("critical vehicle readout", () => {
         .resources.slice(0, 3)
         .map((r) => r.value),
     ).toEqual(["1,234", "93 / 200 L", "7.3"]);
+  });
+  it("shows fractional cab HP and driver health as whole numbers", () => {
+    const w = emptyWorld();
+    const cab = corePart(w.vehicles[0], "cab");
+    cab.hp = 0.2;
+    w.player.health = 41.123456789;
+    const [, , , cabValue, driver] = getHudReadout(w).resources.map((r) => r.value);
+    expect(cabValue).toMatch(/^1 \/ \d+$/);
+    expect(driver).toBe(`42 / ${RULES.maxHealth}`);
   });
   it("warns at the actual fuel speed-limit threshold", () => {
     const w = emptyWorld();

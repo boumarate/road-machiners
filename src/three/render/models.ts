@@ -33,6 +33,10 @@ const NAMES = [
   'pump_station',
   'lock_gate',
   'glass_flats',
+  'power_pole',
+  'billboard',
+  'crag',
+  'tank_hulk',
 
   'bumper_front',
   'bumper_rear',

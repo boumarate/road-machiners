@@ -16,7 +16,7 @@ import { corePart, mountedParts } from './grid';
 import { addGoods, stowPart } from './inventory';
 import { generateNpcLoadout } from './npc-loadout';
 import { gainXp } from './progress';
-import { isWalled, siteGates, type Site } from './sites';
+import { nearestPad, type Site } from './sites';
 import { isFree, spawnAt } from './spawn';
 import { addState, settleStates, stateOf } from './states';
 import { isTowed } from './tow';
@@ -180,18 +180,12 @@ export function teleport(world: World, target: Vec): World {
   });
 }
 
-// Where a place's services work, nearest the truck: a gate of a walled site, or the edge of an open one.
-// A place's center lies inside its own obstacle, so teleport cannot land there.
+// Where a place's services work, nearest the truck: the pad of its nearest gate.
 export function placeSpot(world: World, id: string): Vec {
   const places: Site[] = [...REGION.towns, ...REGION.locations];
   const place = places.find((p) => p.id === id);
   if (!place) throw new CheatError(`Unknown place ${id}. Places: ${places.map((p) => p.id).join(', ')}`);
-  const from = playerVehicle(world).pos;
-  if (isWalled(place)) return { ...siteGates(place).reduce((a, b) => (dist(a, from) <= dist(b, from) ? a : b)) };
-  const d = dist(place.pos, from);
-  if (d === 0) return { x: place.pos.x + place.radius, y: place.pos.y };
-  const k = place.radius / d;
-  return { x: place.pos.x + (from.x - place.pos.x) * k, y: place.pos.y + (from.y - place.pos.y) * k };
+  return { ...nearestPad(place, playerVehicle(world).pos) };
 }
 
 export function skipToHour(world: World, hour: number): World {

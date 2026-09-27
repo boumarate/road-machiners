@@ -5,6 +5,7 @@ import { START_KITS } from '../data/start';
 import { RULES } from '../data/rules';
 import { NPCS } from '../data/npcs';
 import { REGION } from '../data/region';
+import { canUseSite } from '../sim/sites';
 import { addVehicle, emptyWorld, npcBrain } from '../sim/testkit';
 import type { World } from '../sim/types';
 import { dist } from '../sim/vec';
@@ -52,15 +53,16 @@ describe('NPC driving', () => {
     const nose = REGION.towns[1];
     const npc = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: bowl.pos.x + bowl.radius + 2, y: bowl.pos.y });
     npc.brain = npcBrain('trader', npc.pos, ['trader']);
-    let closest = Infinity;
-    for (let i = 0; i < w.size && closest >= nose.radius + 2; i++) {
+    // The trader parks on the Nose pad, outside the gate.
+    let arrived = false;
+    for (let i = 0; i < w.size && !arrived; i++) {
       ({ w } = play(w, 1));
       // NPCs that spawn along the way would pick fights, so only the route is under test.
       w.vehicles = w.vehicles.filter((v) => v.faction === 'player' || v.id === npc.id);
       const actor = w.vehicles.find((v) => v.id === npc.id)!;
-      closest = Math.min(closest, dist(actor.pos, nose.pos));
+      arrived = canUseSite(actor.pos, nose);
       expect(dist(actor.pos, nose.pos)).toBeGreaterThanOrEqual(nose.radius + 0.8 - 0.5);
     }
-    expect(closest).toBeLessThan(nose.radius + 2);
+    expect(arrived).toBe(true);
   }, 120_000);
 });

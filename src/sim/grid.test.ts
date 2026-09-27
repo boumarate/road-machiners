@@ -6,12 +6,12 @@ import { REGION } from '../data/region';
 import { buyChassis } from './economy';
 import { partDef } from '../data/parts';
 import { makePart, makeVehicle } from './factory';
-import { baseGrid, isMounted, itemCells, mountedItems, mountedParts, sideOf, type Cell } from './grid';
+import { baseGrid, gridOf, isMounted, placementError, itemCells, mountedItems, mountedParts, sideOf, type Cell } from './grid';
 import { moveItem, storePart } from './inventory';
 import { generateNpcLoadout } from './npc-loadout';
 import { addVehicle, emptyWorld } from './testkit';
 import type { GridItem, Vehicle, World } from './types';
-import { siteGates } from './sites';
+import { sitePads } from './sites';
 
 const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
 
@@ -59,20 +59,20 @@ describe('built-in parts', () => {
   });
 
   it('moving or storing a core part throws', () => {
-    const w = emptyWorld(siteGates(bowl)[0]);
+    const w = emptyWorld(sitePads(bowl)[0]);
     const cab = coreItem(w, 'cab');
-    expect(() => moveItem(w, cab.id, { x: cab.x, y: cab.y, rot: 1 })).toThrow(/built in/);
-    expect(() => storePart(w, cab.id)).toThrow(/built in/);
+    expect(() => moveItem(w, cab.id, { x: cab.x, y: cab.y, rot: 1 })).toThrow(/built.in/i);
+    expect(() => storePart(w, cab.id)).toThrow(/built.in/i);
   });
 
   it('shops never stock core parts', () => {
-    const w = emptyWorld(siteGates(bowl)[0]);
+    const w = emptyWorld(sitePads(bowl)[0]);
     const stocked = Object.values(w.shops).flatMap((shop) => shop.stock);
     expect(stocked.some((p) => partDef(p.defId).kind === 'core')).toBe(false);
   });
 
   it('a chassis swap replaces the core parts with the new chassis ones', () => {
-    let w = emptyWorld(siteGates(bowl)[0]);
+    let w = emptyWorld(sitePads(bowl)[0]);
     w.player.money = 2000;
     w.vehicles[0].items.forEach((it) => { if (it.kind === 'part' && it.part.defId === 'cab') it.part.hp = 1; });
     w = buyChassis(w, 'hauler');
@@ -80,6 +80,19 @@ describe('built-in parts', () => {
     expect(coreIds(me)).toEqual(CHASSIS.hauler.core.map((c) => c.defId).sort());
     expect(mountedParts(me, 'core').every((p) => p.hp === PARTS[p.defId].hp)).toBe(true);
     expect(w.player.storage.filter((p) => PARTS[p.defId].kind === 'core')).toHaveLength(0);
+  });
+});
+
+describe('cargo rows', () => {
+  it('rejects an item across the end of the chassis grid', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'scout', [], { x: 40, y: 40 });
+    v.items.push({ ...spotOn('scout', 'rack', 'C', v.items), id: 'i-rack', part: makePart(w, 'rack', 0) } as GridItem);
+    const g = gridOf(v);
+    const spare = (y: number): GridItem => ({ id: 'i-spare', x: 0, y, rot: 1, kind: 'part', part: makePart(w, 'rack', 0) });
+    expect(g.cells[g.chassisH - 1][0]).toBe('.');
+    expect(placementError(g, v.items, spare(g.chassisH - 1), null)).toBe('Does not fit there');
+    expect(placementError(g, v.items, { ...spare(g.chassisH - 1), rot: 0 }, null)).toBeNull();
   });
 });
 

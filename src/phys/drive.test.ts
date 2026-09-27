@@ -14,7 +14,8 @@ import { PHYSICS } from '../data/physics';
 import { buildDrive, freeDrive, initPhysics, routeAim, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
 import { physicsMove } from './turn';
 import { playerTow, unhitch } from '../sim/tow';
-import { chooseOption, currentOptions } from '../sim/dialogue';
+import { callVehicle, chooseOption, currentOptions } from '../sim/dialogue';
+import { TOW } from '../data/tow';
 import { soundRange } from '../sim/detect';
 
 beforeAll(async () => {
@@ -118,7 +119,7 @@ describe('physics turns', () => {
     const w = emptyWorld({ x: 20, y: 50 });
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 30, y: 30 });
     npc.order = { kind: 'stopAt', dest: { x: 10, y: 30 } };
-    // Six seconds allow a pickup to reverse-steer through a half turn on flat ground.
+    // Six seconds allow a pickup to turn around nose first on flat ground.
     const result = play(w, 6);
     const actor = result.w.vehicles.find((v) => v.id === npc.id)!;
     expect(Math.abs(angleDiff(actor.heading, Math.PI))).toBeLessThan(Math.PI / 2);
@@ -145,6 +146,19 @@ describe('physics turns', () => {
     const { w } = play(emptyWorld(), 2);
     expect(dist(me(w).pos, { x: 30, y: 30 })).toBeLessThan(0.1);
     expect(me(w).speed).toBeLessThan(0.1);
+  });
+
+  it('a parked truck without an order brakes instead of rolling faster down a slope', () => {
+    const w = emptyWorld({ x: 40, y: 30 });
+    w.terrain = structuredClone(w.terrain);
+    const n = w.terrain.size;
+    for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) w.terrain.heights[j * (n + 1) + i] = i * HILL_GRADE;
+    me(w).heading = Math.PI; // facing downhill
+    const { w: after, d } = play(w, 8);
+    freeDrive(d);
+    // Brakes slip a little on this steep grade, but the truck never picks up speed.
+    expect(me(after).speed).toBeLessThan(0.05);
+    expect(dist(me(after).pos, { x: 40, y: 30 })).toBeLessThan(0.6);
   });
 
   it('mud covers less ground than road at the same order', () => {
@@ -230,6 +244,16 @@ describe('physics turns', () => {
     const { w, d } = play(ordered({ kind: 'through', dest }), 4);
     expect(Math.abs(angleDiff(me(w).heading, Math.PI))).toBeLessThan(Math.PI / 4);
     expect(me(w).speed).toBeGreaterThan(0);
+    freeDrive(d);
+  });
+
+  it('a click behind outside the reverse cone turns the truck around nose first', () => {
+    const dest = { x: 26, y: 33 };
+    const first = play(ordered({ kind: 'through', dest }), 1);
+    expect(me(first.w).pos.x).toBeGreaterThan(30);
+    freeDrive(first.d);
+    const { w, d } = play(ordered({ kind: 'through', dest }), 8);
+    expect(me(w).order).toBeNull();
     freeDrive(d);
   });
 
@@ -446,6 +470,26 @@ describe('physics turns', () => {
     expect(me(w).speed).toBeGreaterThan(2);
   });
 
+  it('a click in the hold zone keeps its speed up a hill', () => {
+    let w = emptyWorld({ x: 29, y: 30 });
+    const t = editableTerrain(w);
+    const n = t.size;
+    for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) t.heights[j * (n + 1) + i] = Math.max(0, i - 28) * HILL_GRADE;
+    let d = buildDrive(w);
+    const speeds: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      // Each turn the player clicks the middle of the hold zone again.
+      w = setMoveOrder(w, { kind: 'through', dest: { x: me(w).pos.x + RULES.throttleZones.reach / 2, y: 30 } });
+      let next: Drive | null = null;
+      w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+      freeDrive(d);
+      d = next!;
+      speeds.push(me(w).speed);
+    }
+    freeDrive(d);
+    expect(speeds[7]).toBeGreaterThan(speeds[1] * 0.95);
+  });
+
   it('new vehicles and obstacles join the physics world', () => {
     const w = emptyWorld();
     const d = buildDrive(w);
@@ -486,5 +530,60 @@ describe('physics turns', () => {
     for (let i = 0; i < 3; i++) turn();
     expect(d.bodies[me(w).id]).toBeDefined();
     freeDrive(d);
+  });
+
+  it('an NPC on the player rope leaves physics, trails the player and returns when let go', () => {
+    let w = emptyWorld();
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 26, y: 30 }, 0);
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    npc.resources!.fuel = 0;
+    let d = buildDrive(w);
+    const turn = () => {
+      let r: TurnResult | null = null;
+      w = endTurn(w, physicsMove(d, (x) => (r = x)));
+      freeDrive(d);
+      d = r!.next;
+      return r!;
+    };
+    const pick = (text: string) => { w = chooseOption(w, currentOptions(w).findIndex((o) => o.text === text)); };
+    w = callVehicle(w, npc.id);
+    pick('Need a tow to town?');
+    pick('Deal. Hitch up.');
+    w = setMoveOrder(w, { kind: 'stopAt', dest: { x: 60, y: 30 } });
+    const start = { ...npc.pos };
+    for (let i = 0; i < 6; i++) {
+      const r = turn();
+      expect(d.bodies[npc.id]).toBeUndefined();
+      expect(r.frames[npc.id]).toBeUndefined();
+    }
+    const towed = w.vehicles.find((v) => v.id === npc.id)!;
+    expect(dist(towed.pos, start)).toBeGreaterThan(3);
+    expect(dist(towed.pos, me(w).pos)).toBeLessThanOrEqual(TOW.gap + 1e-6);
+    w = callVehicle(w, npc.id);
+    pick('I am letting you off the rope here.');
+    pick('Over and out.');
+    for (let i = 0; i < 3; i++) turn();
+    expect(d.bodies[npc.id]).toBeDefined();
+    freeDrive(d);
+  });
+});
+
+describe('flipped trucks', () => {
+  it('sets a truck back on its wheels after it ends flipBackTurns turns flipped', () => {
+    let w = emptyWorld();
+    const id = w.vehicles[0].id;
+    let d = buildDrive(w);
+    const body = d.world.getRigidBody(d.bodies[id]);
+    body.setRotation({ x: 1, y: 0, z: 0, w: 0 }, true); // upside down
+    const flipped: number[] = [];
+    for (let i = 0; i <= RULES.flipBackTurns; i++) {
+      let next: Drive | null = null;
+      w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+      freeDrive(d);
+      d = next!;
+      flipped.push(w.vehicles[0].flippedTurns!);
+    }
+    freeDrive(d);
+    expect(flipped).toEqual([...Array.from({ length: RULES.flipBackTurns }, (_, i) => i + 1), 0]);
   });
 });

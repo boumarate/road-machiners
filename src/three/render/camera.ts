@@ -1,5 +1,5 @@
 // Orthographic iso camera. Same angle as the physics test in main.ts used to validate the view.
-// Owns pan, zoom, follow and the pan leash, plus the pixel <-> world conversions labels, fx and picking need.
+// Owns pan, zoom, follow, the pan leash, the check for a truck leaving the view, plus the pixel <-> world conversions labels, fx and picking need.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
@@ -19,6 +19,9 @@ const FOLLOW_TAU_MS = 250;
 const LEAD = 0.5;
 // Smoothing time constant for the lead. Much slower than follow, so steering wobble does not swing the view.
 const LEAD_TAU_MS = 3000;
+// Share of the way from screen center to the edge where a point counts as leaving the view.
+// Below 1, so the truck body and a little ground around it are still on screen.
+const VIEW_EDGE = 0.8;
 // Camera axes on the ground plane. Screen up on the ground is foreshortened by the sine of the view elevation.
 const GROUND_RIGHT = new THREE.Vector3(OFFSET.z, 0, -OFFSET.x).normalize();
 const GROUND_UP = new THREE.Vector3(-OFFSET.x, 0, -OFFSET.z).normalize();
@@ -31,6 +34,9 @@ export class CameraRig {
   private target: V3 | null = null;
   private heading: number | null = null;
   private lead = new THREE.Vector3();
+  private moveLead = true;
+  private pointInView = false;
+  private viewMoved = false; // a pan or zoom since the last pointLeftView() call
   private tether: { at: V3; radius: number } | null = null;
   private zoom = 1;
   private ray = new THREE.Raycaster();
@@ -55,9 +61,22 @@ export class CameraRig {
 
   // Call every tick with the point to track; smoothing happens in tick(). Pass null to hold still.
   // With a heading, the view shifts ahead so the point sits toward the screen edge behind it.
-  follow(p: V3 | null, heading: number | null = null): void {
+  // With moveLead false, the shift keeps its current size and direction.
+  follow(p: V3 | null, heading: number | null = null, moveLead = true): void {
     this.target = p;
     this.heading = heading;
+    this.moveLead = moveLead;
+  }
+
+  // True when point p was in view at the last call and is out of view now, and no pan or zoom moved
+  // the view in between. So only the point's own motion counts. Call every tick.
+  pointLeftView(p: V3): boolean {
+    const v = new THREE.Vector3(p.x, p.y, p.z).project(this.camera);
+    const inView = Math.max(Math.abs(v.x), Math.abs(v.y)) <= VIEW_EDGE;
+    const left = this.pointInView && !inView && !this.viewMoved;
+    this.pointInView = inView;
+    this.viewMoved = false;
+    return left;
   }
 
   // Ground offset from the followed point to the look point for a heading in radians.
@@ -85,6 +104,7 @@ export class CameraRig {
   panBy(dxPx: number, dyPx: number): void {
     this.target = null;
     this.heading = null;
+    this.viewMoved = true;
     const metersPerPixel = (this.camera.right - this.camera.left) / this.container.clientWidth;
     const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
     const up = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
@@ -109,6 +129,7 @@ export class CameraRig {
   }
 
   zoomBy(wheelDeltaY: number): void {
+    this.viewMoved = true;
     this.zoom = Math.min(ZOOM.max, Math.max(ZOOM.min, this.zoom * Math.exp(-wheelDeltaY * 0.001)));
     this.resize();
   }
@@ -153,7 +174,7 @@ export class CameraRig {
     if (this.target) {
       const k = 1 - Math.exp(-dtMs / FOLLOW_TAU_MS);
       const leadGoal = this.heading === null ? new THREE.Vector3() : this.leadOffset(this.heading);
-      this.lead.lerp(leadGoal, 1 - Math.exp(-dtMs / LEAD_TAU_MS));
+      if (this.moveLead) this.lead.lerp(leadGoal, 1 - Math.exp(-dtMs / LEAD_TAU_MS));
       this.chase.lerp(new THREE.Vector3(this.target.x, this.target.y, this.target.z).add(this.lead), k);
       this.center.lerp(this.chase, k);
     } else {
@@ -162,6 +183,69 @@ export class CameraRig {
     }
     this.camera.position.copy(this.center).add(OFFSET);
     this.camera.lookAt(this.center);
+  }
+}
+
+// Decides when the view follows the truck, and pans it on right drag. A pan stops following. Following resumes on recenter,
+// when the truck drives out of view, or when danger comes into sight.
+// The view moves only while a turn plays, so it holds still while the player plans. The exception is
+// a resumed follow, which brings the view back to the truck at once.
+export class TruckFollow {
+  private following = true;
+  private recentering = true; // the view starts away from the truck
+  private dangerSeen = false;
+
+  constructor(
+    private rig: CameraRig,
+    private keyPan: KeyPan,
+    canvas: HTMLElement,
+  ) {
+    let from: { x: number; y: number } | null = null;
+    canvas.addEventListener("pointerdown", (e) => {
+      if (e.button === 2) from = { x: e.clientX, y: e.clientY };
+    });
+    window.addEventListener("pointermove", (e) => {
+      if (!from) return;
+      this.rig.panBy(e.clientX - from.x, e.clientY - from.y);
+      from = { x: e.clientX, y: e.clientY };
+      this.following = false;
+    });
+    window.addEventListener("pointerup", () => (from = null));
+  }
+
+  isFollowing(): boolean {
+    return this.following;
+  }
+
+  recenter(): void {
+    this.following = true;
+    this.recentering = true;
+  }
+
+  // Stops following, for a view move made outside this class.
+  release(): void {
+    this.following = false;
+  }
+
+  // Call with whether a hostile is in sight. Following resumes when one first comes into sight.
+  noteDanger(danger: boolean): void {
+    if (danger && !this.dangerSeen) this.recenter();
+    this.dangerSeen = danger;
+  }
+
+  // Moves the view for one frame. The view leads toward dest, or centers the truck when dest is null.
+  update(truck: V3, dest: V3 | null, playing: boolean, dtMs: number): void {
+    if (this.keyPan.pan(this.rig, dtMs)) this.following = false;
+    if (playing) this.recentering = false;
+    if (this.following) this.aim(truck, dest, playing);
+    this.rig.tick(dtMs);
+    if (this.rig.pointLeftView(truck)) this.recenter();
+  }
+
+  // A recenter while planning keeps the lead as it is, so a new order point does not shift the view.
+  private aim(truck: V3, dest: V3 | null, playing: boolean): void {
+    const heading = dest ? Math.atan2(dest.z - truck.z, dest.x - truck.x) : null;
+    this.rig.follow(playing || this.recentering ? truck : null, heading, playing);
   }
 }
 

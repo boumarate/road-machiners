@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { describe, expect, it } from 'vitest';
-import { CameraRig } from './camera';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { CameraRig, KeyPan, TruckFollow } from './camera';
 
 describe('camera picking', () => {
   it('hits the vehicle model but not nearby ground inside the old click radius', () => {
@@ -100,5 +100,187 @@ describe('camera lead', () => {
     const truck = rig.screenOf({ x: 5, y: 0, z: 7 });
     expect(truck.x).toBeCloseTo(640, 3);
     expect(truck.y).toBeCloseTo(360, 3);
+  });
+});
+
+describe('camera lead hold', () => {
+  const container = {
+    clientWidth: 1280,
+    clientHeight: 720,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 1280, height: 720 }),
+  } as HTMLElement;
+
+  it('keeps the current shift when the lead is held', () => {
+    const rig = new CameraRig(container);
+    rig.follow({ x: 0, y: 0, z: 0 }, 0);
+    rig.tick(Number.POSITIVE_INFINITY);
+    const shifted = rig.focus();
+
+    rig.follow({ x: 0, y: 0, z: 0 }, Math.PI, false);
+    rig.tick(10_000);
+    const held = rig.focus();
+
+    expect(held.x).toBeCloseTo(shifted.x, 3);
+    expect(held.z).toBeCloseTo(shifted.z, 3);
+  });
+});
+
+describe('camera view exit', () => {
+  const container = {
+    clientWidth: 1280,
+    clientHeight: 720,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 1280, height: 720 }),
+  } as HTMLElement;
+
+  it('reports a point that moves out of the view', () => {
+    const rig = new CameraRig(container);
+    rig.tick(0);
+    expect(rig.pointLeftView({ x: 0, y: 0, z: 0 })).toBe(false);
+
+    const far = { x: 500, y: 0, z: -500 };
+    expect(rig.pointLeftView(far)).toBe(true);
+    expect(rig.pointLeftView(far)).toBe(false);
+  });
+
+  it('ignores a point that a pan moves out of the view', () => {
+    const rig = new CameraRig(container);
+    rig.tick(0);
+    const truck = { x: 0, y: 0, z: 0 };
+    rig.pointLeftView(truck);
+
+    rig.panBy(2000, 0);
+    rig.tick(0);
+
+    expect(rig.pointLeftView(truck)).toBe(false);
+  });
+
+  it('ignores a point that a zoom moves out of the view', () => {
+    const rig = new CameraRig(container);
+    rig.follow({ x: 0, y: 0, z: 0 });
+    rig.tick(Number.POSITIVE_INFINITY);
+    rig.follow(null);
+    const edge = { x: 20, y: 0, z: -20 };
+    rig.pointLeftView(edge);
+
+    rig.zoomBy(-2000);
+    rig.tick(0);
+
+    expect(rig.pointLeftView(edge)).toBe(false);
+  });
+});
+
+describe('truck follow', () => {
+  const container = {
+    clientWidth: 1280,
+    clientHeight: 720,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 1280, height: 720 }),
+  } as HTMLElement;
+  const truck = { x: 0, y: 0, z: 0 };
+
+  function pointer(type: string, button: number, x: number, y: number): Event {
+    return Object.assign(new Event(type), { button, clientX: x, clientY: y });
+  }
+
+  function setup(): { follow: TruckFollow; canvas: EventTarget } {
+    vi.stubGlobal('window', new EventTarget());
+    const canvas = new EventTarget();
+    const rig = new CameraRig(container);
+    const follow = new TruckFollow(rig, new KeyPan(() => false), canvas as HTMLElement);
+    follow.update(truck, null, true, 0);
+    return { follow, canvas };
+  }
+
+  function drag(canvas: EventTarget): void {
+    canvas.dispatchEvent(pointer('pointerdown', 2, 0, 0));
+    window.dispatchEvent(pointer('pointermove', 2, 50, 0));
+    window.dispatchEvent(pointer('pointerup', 2, 50, 0));
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('stops following on a right drag and keeps the pan through later frames', () => {
+    const { follow, canvas } = setup();
+
+    drag(canvas);
+    for (let i = 0; i < 10; i++) follow.update(truck, null, true, 100);
+
+    expect(follow.isFollowing()).toBe(false);
+  });
+
+  it('follows again when a hostile first comes into sight', () => {
+    const { follow, canvas } = setup();
+    drag(canvas);
+
+    follow.noteDanger(true);
+
+    expect(follow.isFollowing()).toBe(true);
+  });
+
+  it('keeps a pan while the same hostile stays in sight', () => {
+    const { follow, canvas } = setup();
+    follow.noteDanger(true);
+    drag(canvas);
+
+    follow.noteDanger(true);
+
+    expect(follow.isFollowing()).toBe(false);
+  });
+
+  it('follows again when the truck drives out of view', () => {
+    const { follow, canvas } = setup();
+    drag(canvas);
+    follow.update(truck, null, true, 16);
+
+    follow.update({ x: 500, y: 0, z: -500 }, null, true, 16);
+
+    expect(follow.isFollowing()).toBe(true);
+  });
+});
+
+describe('truck follow while planning', () => {
+  const container = {
+    clientWidth: 1280,
+    clientHeight: 720,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 1280, height: 720 }),
+  } as HTMLElement;
+
+  function setup(): { follow: TruckFollow; rig: CameraRig } {
+    vi.stubGlobal('window', new EventTarget());
+    const rig = new CameraRig(container);
+    const follow = new TruckFollow(rig, new KeyPan(() => false), new EventTarget() as HTMLElement);
+    return { follow, rig };
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('brings the view to the truck at boot', () => {
+    const { follow, rig } = setup();
+
+    follow.update({ x: 10, y: 0, z: 10 }, null, false, Number.POSITIVE_INFINITY);
+
+    expect(rig.focus().x).toBeCloseTo(10, 3);
+  });
+
+  it('holds the view still after a turn while the view still lags the truck', () => {
+    const { follow, rig } = setup();
+    follow.update({ x: 0, y: 0, z: 0 }, null, true, Number.POSITIVE_INFINITY);
+    follow.update({ x: 10, y: 0, z: 0 }, null, true, 100);
+    const lagging = rig.focus();
+
+    follow.update({ x: 10, y: 0, z: 0 }, null, false, 5000);
+
+    expect(rig.focus().x).toBeCloseTo(lagging.x, 6);
+    expect(lagging.x).toBeLessThan(10);
+  });
+
+  it('brings the view to the truck on recenter while planning', () => {
+    const { follow, rig } = setup();
+    follow.update({ x: 0, y: 0, z: 0 }, null, true, Number.POSITIVE_INFINITY);
+    follow.update({ x: 10, y: 0, z: 0 }, null, true, 100);
+
+    follow.recenter();
+    follow.update({ x: 10, y: 0, z: 0 }, null, false, Number.POSITIVE_INFINITY);
+
+    expect(rig.focus().x).toBeCloseTo(10, 3);
   });
 });

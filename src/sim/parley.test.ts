@@ -1,0 +1,310 @@
+import { describe, expect, it } from 'vitest';
+import { NPCS, type TraitId } from '../data/npcs';
+import { isHostile, noteCollision } from './combat';
+import { playerVehicle } from './damage';
+import { callVehicle, chooseOption, currentOptions, hangUp, raiseCalls } from './dialogue';
+import { addGoods } from './inventory';
+import { thinkNpc, topGoal } from './npc-activities';
+import { makePeace, plead } from './parley';
+import { hasCargo } from './salvage';
+import { addState, stateOf } from './states';
+import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
+import type { Faction, Vehicle, World } from './types';
+import { refreshVision } from './vision';
+
+function quietWorld(): World {
+  const w = emptyWorld({ x: 30, y: 30 });
+  for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+  return w;
+}
+
+function npcAt(w: World, faction: Faction, traits: TraitId[], x: number, y = 30): Vehicle {
+  const npc = addVehicle(w, faction, 'scout', ['stockEngine', 'mg'], { x, y });
+  npc.brain = npcBrain('trader', npc.pos, traits);
+  refreshVision(w);
+  return npc;
+}
+
+function feud(w: World, a: Vehicle, b: Vehicle): void {
+  addState(w, 'feud', a.id, b.id, { kind: 'feud', robbery: false });
+  addState(w, 'feud', b.id, a.id, { kind: 'feud', robbery: false });
+}
+
+function pick(w: World, text: string): World {
+  const i = currentOptions(w).findIndex((o) => o.text === text);
+  if (i < 0) throw new Error(`No option "${text}" in ${currentOptions(w).map((o) => o.text).join(' | ')}`);
+  return chooseOption(w, i);
+}
+
+const dent = [{ part: 'cab', damage: 5 }];
+
+describe('crashes between trucks at peace', () => {
+  it('start no feud, and each damaged NPC holds a grievance', () => {
+    const w = quietWorld();
+    const a = npcAt(w, 'traders', ['trader'], 34);
+    const b = npcAt(w, 'scavengers', ['scavenger'], 36);
+    noteCollision(w, a, b, dent, dent);
+    expect(isHostile(w, a, b)).toBe(false);
+    expect(stateOf(w, 'grievance', a.id, b.id)).not.toBeNull();
+    expect(stateOf(w, 'grievance', b.id, a.id)).not.toBeNull();
+    expect(a.brain!.attackers).toEqual({});
+  });
+
+  it('a forgiven crash ends the grievance and leaves the two at peace', () => {
+    forceOption('crashed', 'forgive');
+    const w = quietWorld();
+    const a = npcAt(w, 'traders', ['trader'], 34);
+    const b = npcAt(w, 'scavengers', ['scavenger'], 36);
+    noteCollision(w, a, b, [], dent);
+    thinkNpc(w, b);
+    expect(stateOf(w, 'grievance', b.id, a.id)).toBeNull();
+    expect(isHostile(w, a, b)).toBe(false);
+  });
+
+  it('a retaliating driver starts a feud and treats the other truck as an attacker', () => {
+    forceOption('crashed', 'retaliate');
+    const w = quietWorld();
+    const a = npcAt(w, 'traders', ['trader'], 34);
+    const b = npcAt(w, 'raiders', ['raider'], 36);
+    addState(w, 'truce', b.id, a.id, { kind: 'none' });
+    noteCollision(w, a, b, [], dent);
+    thinkNpc(w, b);
+    expect(stateOf(w, 'feud', b.id, a.id)).not.toBeNull();
+    expect(b.brain!.attackers[a.id]).toBe(true);
+  });
+
+  it('a crash between hostiles is an attack, not a grievance', () => {
+    const w = quietWorld();
+    const a = npcAt(w, 'traders', ['trader'], 34);
+    const b = npcAt(w, 'scavengers', ['scavenger'], 36);
+    feud(w, a, b);
+    noteCollision(w, a, b, [], dent);
+    expect(stateOf(w, 'grievance', b.id, a.id)).toBeNull();
+    expect(b.brain!.attackers[a.id]).toBe(false);
+  });
+
+  it('the player never holds a grievance', () => {
+    const w = quietWorld();
+    const a = npcAt(w, 'traders', ['trader'], 34);
+    const me = playerVehicle(w);
+    noteCollision(w, a, me, [], dent);
+    expect(w.states.filter((s) => s.kind === 'grievance')).toEqual([]);
+  });
+});
+
+describe('peace', () => {
+  it('ends feuds both ways between the sides, holds truces and drops aim at the other side', () => {
+    const w = quietWorld();
+    const a = npcAt(w, 'traders', ['trader'], 34);
+    const mate = npcAt(w, 'traders', ['trader'], 34, 33);
+    const b = npcAt(w, 'raiders', ['raider'], 40);
+    feud(w, a, b);
+    feud(w, mate, b);
+    b.weaponOrders = { gun: { targetId: a.id, aim: 'body' } };
+    makePeace(w, a, b);
+    expect(w.states.filter((s) => s.kind === 'feud')).toEqual([]);
+    expect(isHostile(w, a, b)).toBe(false);
+    expect(isHostile(w, mate, b)).toBe(false);
+    expect(b.weaponOrders).toEqual({});
+  });
+});
+
+describe('NPC pleas to NPCs', () => {
+  it('an accepted truce makes peace at once', () => {
+    forceOption('truceOffered', 'accept');
+    const w = quietWorld();
+    const a = npcAt(w, 'traders', ['trader'], 34);
+    const b = npcAt(w, 'raiders', ['raider'], 40);
+    feud(w, a, b);
+    plead(w, a, b, 'truce');
+    expect(isHostile(w, a, b)).toBe(false);
+    expect(w.events).toContainEqual({ t: 'plea', from: a.id, to: b.id, plea: 'truce', accepted: true });
+  });
+
+  it('a refused truce keeps the feud', () => {
+    forceOption('truceOffered', 'refuse');
+    const w = quietWorld();
+    const a = npcAt(w, 'traders', ['trader'], 34);
+    const b = npcAt(w, 'raiders', ['raider'], 40);
+    feud(w, a, b);
+    plead(w, a, b, 'truce');
+    expect(isHostile(w, a, b)).toBe(true);
+  });
+
+  it('spared mercy costs the beggar its cargo, and the winner goes to take it', () => {
+    forceOption('mercyBegged', 'spare');
+    const w = quietWorld();
+    const a = npcAt(w, 'traders', ['trader'], 34);
+    addGoods(w, a, 'scrap', 2);
+    const b = npcAt(w, 'raiders', ['raider'], 40);
+    feud(w, a, b);
+    plead(w, a, b, 'mercy');
+    expect(hasCargo(a)).toBe(false);
+    expect(isHostile(w, a, b)).toBe(false);
+    expect(topGoal(b)).toMatchObject({ kind: 'loot' });
+  });
+
+  it('a hurt driver pleads with the hostile that hit it', () => {
+    forceOption('parley', 'truce');
+    forceOption('truceOffered', 'accept');
+    const w = quietWorld();
+    const a = npcAt(w, 'traders', ['trader'], 34);
+    const b = npcAt(w, 'raiders', ['raider'], 40);
+    feud(w, a, b);
+    a.brain!.hurt = 5;
+    a.lastHitBy = b.id;
+    thinkNpc(w, a);
+    expect(stateOf(w, 'plea', a.id, b.id)).not.toBeNull();
+    expect(isHostile(w, a, b)).toBe(false);
+  });
+
+  it('an unhurt driver does not plead', () => {
+    forceOption('parley', 'truce');
+    const w = quietWorld();
+    const a = npcAt(w, 'traders', ['trader'], 34);
+    const b = npcAt(w, 'raiders', ['raider'], 40);
+    feud(w, a, b);
+    a.lastHitBy = b.id;
+    thinkNpc(w, a);
+    expect(stateOf(w, 'plea', a.id, b.id)).toBeNull();
+  });
+});
+
+describe('NPC pleas to the player', () => {
+  function pleading(plea: 'truce' | 'mercy'): { w: World; npc: Vehicle } {
+    const w = quietWorld();
+    const npc = npcAt(w, 'traders', ['trader'], 36);
+    addGoods(w, npc, 'scrap', 2);
+    feud(w, npc, playerVehicle(w));
+    plead(w, npc, playerVehicle(w), plea);
+    raiseCalls(w);
+    return { w, npc };
+  }
+
+  it('the driver calls with its truce, and accepting makes peace', () => {
+    const { w: start, npc } = pleading('truce');
+    expect(start.player.call).toMatchObject({ with: npc.id, topic: 'truceOffer' });
+    const w = pick(start, 'Agreed. Guns down.');
+    expect(isHostile(w, w.vehicles.find((v) => v.id === npc.id)!, playerVehicle(w))).toBe(false);
+  });
+
+  it('refusing keeps the feud, and the driver does not call again with the same plea', () => {
+    const { w: start, npc } = pleading('truce');
+    const w = pick(start, 'No. We finish this.');
+    expect(isHostile(w, w.vehicles.find((v) => v.id === npc.id)!, playerVehicle(w))).toBe(true);
+    raiseCalls(w);
+    expect(w.player.call).toBeNull();
+  });
+
+  it('hanging up refuses the plea', () => {
+    const { w: start, npc } = pleading('truce');
+    const w = hangUp(start);
+    expect(w.events).toContainEqual({ t: 'plea', from: npc.id, to: w.player.vehicleId, plea: 'truce', accepted: false });
+  });
+
+  it('sparing a beggar leaves its cargo on the ground for the player', () => {
+    const { w: start, npc } = pleading('mercy');
+    expect(start.player.call).toMatchObject({ topic: 'mercyPlea' });
+    const w = pick(start, 'Dump your cargo and drive off.');
+    expect(hasCargo(w.vehicles.find((v) => v.id === npc.id)!)).toBe(false);
+    expect(w.salvage.some((s) => s.id.startsWith(`cargo-${npc.id}`))).toBe(true);
+  });
+});
+
+describe('player pleas', () => {
+  function atWar(): { w: World; npc: Vehicle } {
+    const w = quietWorld();
+    const npc = npcAt(w, 'scavengers', ['scavenger'], 36);
+    feud(w, npc, playerVehicle(w));
+    return { w, npc };
+  }
+
+  it('a driver in a feud takes the call and offers only peace talk', () => {
+    const { w: start, npc } = atWar();
+    const w = callVehicle(start, npc.id);
+    expect(w.player.call).toMatchObject({ with: npc.id });
+    expect(currentOptions(w).map((o) => o.text)).toEqual(['Enough shooting. Can we call a truce?', 'I give up. Let me go.', 'Hang up.']);
+  });
+
+  it('an accepted truce makes peace', () => {
+    forceOption('truceOffered', 'accept');
+    const { w: start, npc } = atWar();
+    let w = pick(callVehicle(start, npc.id), 'Enough shooting. Can we call a truce?');
+    w = pick(w, 'We both drive away, and nobody else gets hurt.');
+    expect(w.player.call?.node).toBe('agreed');
+    expect(isHostile(w, w.vehicles.find((v) => v.id === npc.id)!, playerVehicle(w))).toBe(false);
+  });
+
+  it('a refused truce keeps the feud, and the player cannot ask again at once', () => {
+    forceOption('truceOffered', 'refuse');
+    const { w: start, npc } = atWar();
+    let w = pick(callVehicle(start, npc.id), 'Enough shooting. Can we call a truce?');
+    w = pick(w, 'We both drive away, and nobody else gets hurt.');
+    w = pick(w, 'Then we finish this.');
+    expect(isHostile(w, w.vehicles.find((v) => v.id === npc.id)!, playerVehicle(w))).toBe(true);
+    w = callVehicle(w, npc.id);
+    expect(w.player.call).toBeNull();
+  });
+
+  it('spared mercy costs the player the cargo', () => {
+    forceOption('mercyBegged', 'spare');
+    const { w: start, npc } = atWar();
+    addGoods(start, playerVehicle(start), 'scrap', 2);
+    let w = pick(callVehicle(start, npc.id), 'I give up. Let me go.');
+    w = pick(w, 'Take what I carry. Just let me drive away.');
+    expect(hasCargo(playerVehicle(w))).toBe(false);
+    expect(isHostile(w, w.vehicles.find((v) => v.id === npc.id)!, playerVehicle(w))).toBe(false);
+  });
+});
+
+describe('player robbery', () => {
+  const DEMAND = 'Drop your cargo, or we open fire.';
+  const INSIST = 'You heard me. Cargo on the ground, now.';
+
+  function loaded(): { w: World; npc: Vehicle } {
+    const w = quietWorld();
+    const npc = npcAt(w, 'traders', ['trader'], 36);
+    addGoods(w, npc, 'scrap', 2);
+    return { w, npc };
+  }
+
+  it('a complying driver drops its cargo and holds a truce with the player', () => {
+    forceOption('threatened', 'comply');
+    const { w: start, npc } = loaded();
+    let w = pick(callVehicle(start, npc.id), DEMAND);
+    w = pick(w, INSIST);
+    const after = w.vehicles.find((v) => v.id === npc.id)!;
+    expect(hasCargo(after)).toBe(false);
+    expect(w.salvage.some((s) => s.id.startsWith(`cargo-${npc.id}`))).toBe(true);
+    expect(stateOf(w, 'truce', npc.id, w.player.vehicleId)).not.toBeNull();
+  });
+
+  it('a defiant driver starts a feud and fights', () => {
+    forceOption('threatened', 'fightBack');
+    const { w: start, npc } = loaded();
+    let w = pick(callVehicle(start, npc.id), DEMAND);
+    w = pick(w, INSIST);
+    const after = w.vehicles.find((v) => v.id === npc.id)!;
+    expect(stateOf(w, 'feud', npc.id, w.player.vehicleId)).not.toBeNull();
+    expect(topGoal(after)).toMatchObject({ kind: 'fight', targetId: w.player.vehicleId });
+  });
+
+  it('a scared driver starts a feud and runs', () => {
+    forceOption('threatened', 'flee');
+    const { w: start, npc } = loaded();
+    let w = pick(callVehicle(start, npc.id), DEMAND);
+    w = pick(w, INSIST);
+    expect(topGoal(w.vehicles.find((v) => v.id === npc.id)!)).toMatchObject({ kind: 'flee' });
+  });
+
+  it('is not offered to a driver without cargo, and only once per driver', () => {
+    forceOption('threatened', 'comply');
+    const { w: start, npc } = loaded();
+    const empty = npcAt(start, 'traders', ['trader'], 36, 33);
+    expect(currentOptions(callVehicle(start, empty.id)).map((o) => o.text)).not.toContain(DEMAND);
+    let w = pick(callVehicle(start, npc.id), DEMAND);
+    w = hangUp(w);
+    w = pick(callVehicle(w, npc.id), DEMAND);
+    expect(w.player.call?.topic).toBeNull();
+  });
+});

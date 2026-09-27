@@ -9,16 +9,27 @@ import { STRIP } from "../data/salvage";
 import { playerVehicle } from "./damage";
 import { partValue } from "./wear";
 import { freeCells, goodsCount, isMounted, itemSize, mountedParts } from "./grid";
-import { addGoods } from "./inventory";
+import { addGoods, applyRefitLayout, getRefitLayout } from "./inventory";
 import { isJunk, maxHp } from "./wear";
 import { repairPlan, repairTurn } from "./repair";
 import { searchTurn } from "./search";
-import type { GridItem, Job, PartInstance, Vehicle, World } from "./types";
+import type { GridItem, Job, PartInstance, RefitJob, Vehicle, World } from "./types";
 import { playerCommand } from "./world";
 
 export { repairPlan };
 
+// An auto patch job yields to any job the player starts.
+export function isAutoPatch(job: Job | null): boolean {
+  return job?.kind === "repair" && job.auto === true;
+}
+
+// The truck runs a job that blocks other jobs.
+export function isBusy(v: Vehicle): boolean {
+  return v.job !== null && !isAutoPatch(v.job);
+}
+
 export function startJob(world: World, v: Vehicle, job: Job): void {
+  if (isAutoPatch(v.job)) cancelJob(world, v);
   if (v.job)
     throw new Error(`${v.name} is already busy with a ${v.job.kind} job`);
   if (v.speed > RULES.parkedSpeed) throw new Error("Stop the truck first");
@@ -67,6 +78,7 @@ export function startAutoRepair(world: World): void {
     parts: plan.parts,
     turnsLeft: plan.turns,
     total: plan.turns,
+    auto: true,
   });
 }
 
@@ -125,6 +137,7 @@ export function advanceJobs(world: World): void {
 // A turn handler does one turn of work and returns true once the job is finished.
 function advanceJob(world: World, v: Vehicle, job: Job): void {
   if (v.speed > RULES.parkedSpeed) return endJob(world, v, job, "cancelled");
+  if (job.kind === "refit") return advanceRefit(world, v, job);
   if (isStalled(world, v, job)) return endJob(world, v, job, "cancelled");
   if (jobTurn(world, v, job)) endJob(world, v, job, "done");
 }
@@ -137,7 +150,8 @@ function isStalled(world: World, v: Vehicle, job: Job): boolean {
 function jobTurn(world: World, v: Vehicle, job: Job): boolean {
   if (job.kind === "repair") return repairTurn(world, v, job);
   if (job.kind === "search") return searchTurn(world, v, job);
-  return stripTurn(world, v, job);
+  if (job.kind === "strip") return stripTurn(world, v, job);
+  throw new Error(`Unhandled job kind ${job.kind}`);
 }
 
 function stripTurn(world: World, v: Vehicle, job: Extract<Job, { kind: "strip" }>): boolean {
@@ -162,6 +176,21 @@ function isRepairStalled(world: World, v: Vehicle, partId: string, parts: number
   const part = mountedParts(v).find((p) => p.id === partId);
   if (!part) throw new Error(`${partId} is not a mounted part on ${v.name}`);
   return isJunk(part) || repairPlan(world, v, partId, parts).parts === 0;
+}
+
+function advanceRefit(world: World, v: Vehicle, job: RefitJob): void {
+  const result = getRefitLayout(world, v, job);
+  if (result.error !== null) return endJob(world, v, job, 'cancelled');
+  job.turnsLeft -= 1;
+  if (job.turnsLeft > 0) return;
+  applyRefitLayout(world, v, result.items);
+  const pickup = job.pickup;
+  if (pickup) {
+    const stock = world.salvage.find((entry) => entry.id === pickup.stockId);
+    if (!stock) throw new Error('Refit stock disappeared after validation');
+    stock.parts = stock.parts.filter((part) => part.id !== pickup.partId);
+  }
+  endJob(world, v, job, 'done');
 }
 
 export function cancelJob(world: World, v: Vehicle): void {

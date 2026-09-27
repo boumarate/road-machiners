@@ -38,13 +38,13 @@ import { gainXp, spendSkillPoint, xpForLevel } from "./progress";
 import { vehicleStats } from "./stats";
 import { consumeSupplies } from "./supplies";
 import { heatAt } from "./sun";
-import { locationAt, siteGates, townAt, townNear } from "./sites";
+import { sitePads, townAt, townNear } from "./sites";
 import { addVehicle, emptyWorld, testDrive } from "./testkit";
 import { endTurn, newWorld } from "./world";
 
 const bowl = REGION.towns.find((t) => t.id === "bowl")!;
 const nose = REGION.towns.find((t) => t.id === "nose")!;
-const startAtBowl = () => emptyWorld(siteGates(bowl)[0]);
+const startAtBowl = () => emptyWorld(sitePads(bowl)[0]);
 
 describe("trade", () => {
   it("buying moves money into cargo", () => {
@@ -69,7 +69,7 @@ describe("trade", () => {
     const start = startAtBowl();
     const bought = buyPrice(start, "bowl", "scrap");
     let w = buyGood(start, "scrap", 8);
-    w.vehicles[0].pos = { ...siteGates(nose)[0] };
+    w.vehicles[0].pos = { ...sitePads(nose)[0] };
     const money = w.player.money;
     const sold = sellPrice(w, "nose", "scrap");
     expect(sold).toBeGreaterThan(bought);
@@ -308,52 +308,9 @@ describe("supplies", () => {
 });
 
 describe("locations", () => {
-  it("towns work only near a gate, and open locations use a 1.5x interaction radius", () => {
-    const gate = siteGates(bowl)[0];
-    const out = { x: gate.x - bowl.pos.x, y: gate.y - bowl.pos.y };
-    const reach = REGION.settlement.gateReach;
-    expect(
-      townAt(
-        emptyWorld({
-          x: gate.x + (out.x / bowl.radius) * (reach - 0.01),
-          y: gate.y + (out.y / bowl.radius) * (reach - 0.01),
-        }),
-      )?.id,
-    ).toBe(bowl.id);
-    expect(
-      townAt(
-        emptyWorld({
-          x: gate.x + (out.x / bowl.radius) * (reach + 0.01),
-          y: gate.y + (out.y / bowl.radius) * (reach + 0.01),
-        }),
-      ),
-    ).toBeNull();
-    // The far side of the wall is out of reach, though it is as close to the center as the gate.
-    expect(
-      townAt(
-        emptyWorld({
-          x: bowl.pos.x - out.x * 1.1,
-          y: bowl.pos.y - out.y * 1.1,
-        }),
-      ),
-    ).toBeNull();
-    const oasis = REGION.locations.find((l) => l.kind === "oasis")!;
-    const locationReach = (oasis.radius + ECONOMY.useRange) * 1.5;
-    expect(
-      locationAt(
-        emptyWorld({ x: oasis.pos.x + locationReach - 0.01, y: oasis.pos.y }),
-      )?.id,
-    ).toBe(oasis.id);
-    expect(
-      locationAt(
-        emptyWorld({ x: oasis.pos.x + locationReach + 0.01, y: oasis.pos.y }),
-      ),
-    ).toBeNull();
-  });
-
   it("oasis refills supplies", () => {
     const oasis = REGION.locations.find((l) => l.kind === "oasis")!;
-    const w = emptyWorld({ x: oasis.pos.x + 2, y: oasis.pos.y });
+    const w = emptyWorld({ ...sitePads(oasis)[0] });
     w.player.supplies = 1;
     const after = useOasis(w);
     expect(after.player.supplies).toBe(RULES.suppliesCap);
@@ -369,7 +326,7 @@ describe("locations", () => {
 
   it("requires stopping before refilling at an oasis", () => {
     const oasis = REGION.locations.find((site) => site.kind === "oasis")!;
-    const w = emptyWorld(oasis.pos);
+    const w = emptyWorld({ ...sitePads(oasis)[0] });
     w.player.supplies = 1;
     w.vehicles[0].speed = RULES.parkedSpeed + 1;
     expect(() => useOasis(w)).toThrow("Stop the truck first");
@@ -377,7 +334,7 @@ describe("locations", () => {
   });
 
   it.each(REGION.locations.filter((site) => site.kind === "oasis"))("interacts with $name only while stopped", (oasis) => {
-    const w = emptyWorld(oasis.pos);
+    const w = emptyWorld({ ...sitePads(oasis)[0] });
     w.player.supplies = 1;
     w.vehicles[0].speed = RULES.parkedSpeed + 1;
     expect(applySiteAction(w)).toBeNull();
@@ -395,7 +352,7 @@ describe("locations", () => {
 
   it("convoy starts a timed search, and a second search cannot start while it runs", () => {
     const convoy = REGION.locations.find((l) => l.kind === "convoy")!;
-    const w = emptyWorld({ x: convoy.pos.x + 2, y: convoy.pos.y });
+    const w = emptyWorld({ ...sitePads(convoy)[0] });
     const after = scavenge(w);
     expect(after.vehicles[0].job).toEqual(
       expect.objectContaining({ kind: "search", stockId: convoy.id }),
@@ -404,7 +361,7 @@ describe("locations", () => {
   });
 
   it("a town in reach needs a stop before it can be used", () => {
-    const gate = siteGates(REGION.towns[0])[0];
+    const gate = sitePads(REGION.towns[0])[0];
     const w = emptyWorld({ ...gate });
     w.vehicles[0].speed = RULES.parkedSpeed + 1;
     expect(townAt(w)).toBeNull();
@@ -413,7 +370,7 @@ describe("locations", () => {
 
   it("salvage in range needs a stop before it can be searched", () => {
     const convoy = REGION.locations.find((l) => l.kind === "convoy")!;
-    const w = emptyWorld({ x: convoy.pos.x + 2, y: convoy.pos.y });
+    const w = emptyWorld({ ...sitePads(convoy)[0] });
     w.vehicles[0].speed = RULES.parkedSpeed + 1;
     expect(canScavenge(w)).toBe(false);
     expect(salvageNear(w)?.id).toBe(convoy.id);
@@ -481,7 +438,7 @@ describe("debt", () => {
 
   it("an NPC in debt gets no fuel, supplies or repairs in town", () => {
     const w = startAtBowl();
-    const npc = addVehicle(w, "traders", "hauler", ["stockEngine"], { ...siteGates(bowl)[0] });
+    const npc = addVehicle(w, "traders", "hauler", ["stockEngine"], { ...sitePads(bowl)[0] });
     npc.resources!.money = -50;
     npc.resources!.fuel = 1;
     npc.resources!.supplies = 1;

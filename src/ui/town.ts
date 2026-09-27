@@ -39,7 +39,7 @@ import { el, panel } from "./dom";
 import { contractSummary, wearLabel } from "./format";
 import { InventoryView } from "./inventory";
 import type { UiHost } from "./host";
-import { fuelLiters, kg, kph, liters, meters, mps2 } from "./units";
+import { fuelLiters, hp, kg, kph, liters, meters, mps2 } from "./units";
 
 type Tab = "market" | "parts" | "garage" | "trucks" | "contracts";
 
@@ -565,12 +565,12 @@ function siteName(id: string): string {
 function cabLine(v: Vehicle): string {
   const cab = corePart(v, "cab");
   const broken = mountedParts(v).filter((p) => p.hp === 0).length;
-  return `Cab ${cab.hp}/${maxHp(cab)}, ${broken} broken ${broken === 1 ? "part" : "parts"}`;
+  return `Cab ${hp(cab.hp)}/${hp(maxHp(cab))}, ${broken} broken ${broken === 1 ? "part" : "parts"}`;
 }
 
 function partLabel(p: PartInstance): string {
   const d = partDef(p.defId);
-  return `${d.name} ${wearLabel(p)} ${p.hp}/${maxHp(p)}${p.hp === 0 ? " BROKEN" : ""}`;
+  return `${d.name} ${wearLabel(p)} ${hp(p.hp)}/${hp(maxHp(p))}${p.hp === 0 ? " BROKEN" : ""}`;
 }
 
 function partStats(d: PartDef): string {

@@ -8,7 +8,7 @@ import { startKit } from "../data/start";
 import { playerVehicle } from "../sim/damage";
 import type { GameEvent } from "../sim/types";
 import { endTurn, newWorld, setMoveOrder } from "../sim/world";
-import { canTravel, Travel } from "./travel";
+import { canTravel, overshoots, Travel } from "./travel";
 
 function makeSafeWorld() {
   const world = newWorld(1337, startKit("standard"));
@@ -112,10 +112,38 @@ describe("waypoint travel with physics", () => {
       expect(dist(playerVehicle(world).pos, dest)).toBeLessThan(
         RULES.arriveRadius + 0.3,
       );
+      expect(playerVehicle(world).speed).toBeLessThan(0.05);
       expect(travel.shouldAdvance(0)).toBe(false);
     } finally {
       freeDrive(drive);
     }
+  });
+});
+
+describe("drive-through overshoot", () => {
+  function passing(to: { x: number; y: number }) {
+    const world = setMoveOrder(makeSafeWorld(), { kind: "through", dest: { x: 40, y: 30 } });
+    const next = structuredClone({ events: world.events, vehicles: world.vehicles });
+    playerVehicle(world).pos = { x: 36, y: 30 };
+    next.vehicles[0].pos = to;
+    next.events.push({ t: "arrived", vehicle: next.vehicles[0].id });
+    return { world, next };
+  }
+
+  it("stops travel before a turn that ends farther past the point than the truck is now", () => {
+    const { world, next } = passing({ x: 45, y: 30 });
+    expect(overshoots(world, next)).toBe(true);
+  });
+
+  it("plays a passing turn that ends nearer the point", () => {
+    const { world, next } = passing({ x: 41, y: 30 });
+    expect(overshoots(world, next)).toBe(false);
+  });
+
+  it("plays a turn that does not pass the point", () => {
+    const { world, next } = passing({ x: 45, y: 30 });
+    next.events = [];
+    expect(overshoots(world, next)).toBe(false);
   });
 });
 

@@ -11,11 +11,12 @@ import { mountedParts } from '../sim/grid';
 import { playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
 import { npcTraits } from '../sim/npc-decisions';
-import { statesHeld, towData } from '../sim/states';
+import { pleaData, statesHeld, towData } from '../sim/states';
 import { isJunk } from '../sim/wear';
 import type { PartHit } from '../sim/armor';
-import type { GameEvent, NpcState, PartInstance, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
+import type { GameEvent, NpcState, PartInstance, ShotRound, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
+import { damage } from './units';
 
 // A part's condition in one word: junk, pristine, or a rebuild count for a part that has broken and
 // been rebuilt before (one wear step per break).
@@ -65,6 +66,8 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   answering: () => 'Coming to tow you',
   patch: () => 'Patching your truck',
   truce: () => 'Truce with you',
+  grievance: () => 'Angry at your crash',
+  plea: (s) => (pleaData(s).plea === 'truce' ? 'Asked you for a truce' : 'Begged you for mercy'),
 };
 
 // One line per state the NPC holds toward the player, with turns left when the state has a timer.
@@ -105,7 +108,14 @@ function partDamage(hits: PartHit[]): Map<string, number> {
 function damageList(world: World, vehicleId: string, hits: PartHit[]): string {
   const dealt = partDamage(hits);
   if (dealt.size === 0) return '';
-  return `; ${vehicleName(world, vehicleId)}: ${[...dealt].map(([id, d]) => `${partName(world, vehicleId, id)} −${d}`).join(', ')}`;
+  return `; ${vehicleName(world, vehicleId)}: ${[...dealt].map(([id, d]) => `${partName(world, vehicleId, id)} −${damage(d)}`).join(', ')}`;
+}
+
+// "3/5 crit −12" over a volley: hits, crits and damage dealt.
+export function volleyTally(rounds: ShotRound[]): string {
+  const hits = rounds.filter((r) => r.hit).length;
+  const dealt = rounds.flatMap((r) => r.hits).reduce((sum, h) => sum + h.damage, 0);
+  return `${hits}/${rounds.length}${rounds.some((r) => r.crit) ? ' crit' : ''}${dealt > 0 ? ` −${damage(dealt)}` : ''}`;
 }
 
 type LogLine = { text: string; cls: string };
@@ -113,10 +123,10 @@ type LogLine = { text: string; cls: string };
 // Only the player's own jobs are logged.
 function jobText(world: World, e: Extract<GameEvent, { t: 'job' }>): LogLine | null {
   if (e.vehicle !== world.player.vehicleId) return null;
-  const what = e.job.kind === 'repair' ? `Repair (${partName(world, e.vehicle, e.job.partId)})` : 'Search';
+  const what = e.job.kind === 'repair' ? `Repair (${partName(world, e.vehicle, e.job.partId)})` : e.job.kind === 'refit' ? 'Refit' : 'Search';
   const lines = {
     started: { text: `${what} started: stay parked about ${e.job.turnsLeft} turns. End turns with Space.`, cls: '' },
-    cancelled: { text: `${what} cancelled: the truck moved`, cls: 'bad' },
+    cancelled: { text: `${what} cancelled: the truck moved or required items changed`, cls: 'bad' },
     done: { text: `${what} done`, cls: 'good' },
   };
   return lines[e.outcome];
@@ -185,6 +195,7 @@ const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => st
   guardShot: (e) => [e.target],
   partDisabled: (e) => [e.vehicle],
   destroyed: (e) => [e.vehicle],
+  plea: (e) => [e.from, e.to],
 };
 
 function unnoticed(world: World, e: GameEvent): boolean {
@@ -221,9 +232,32 @@ function siteName(id: string): string {
   return site.name;
 }
 
+// Pleas between two NPCs. The player's own pleas show as radio lines.
+function pleaText(world: World, e: Extract<GameEvent, { t: 'plea' }>): LogLine | null {
+  const me = world.player.vehicleId;
+  if (e.from === me || e.to === me) return null;
+  const asks = e.plea === 'truce' ? 'asks for a truce' : 'begs for mercy';
+  const answer = e.accepted ? 'granted' : 'refused';
+  return { text: `${vehicleName(world, e.from)} ${asks} from ${vehicleName(world, e.to)}: ${answer}`, cls: 'dim' };
+}
+
+// Events whose log line has its own function.
+const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent, { t: K }>) => LogLine | null } = {
+  stateEnded: stateEndedText,
+  say: sayText,
+  call: callText,
+  job: jobText,
+  weather: weatherText,
+  honk: honkText,
+  patch: patchText,
+  plea: pleaText,
+};
+
 // Returns null for events not worth a log line.
 export function eventText(world: World, e: GameEvent): { text: string; cls: string } | null {
   if (unnoticed(world, e)) return null;
+  const own = EVENT_TEXTS[e.t] as ((world: World, e: GameEvent) => LogLine | null) | undefined;
+  if (own) return own(world, e);
   const n = (id: string) => vehicleName(world, id);
   const me = world.player.vehicleId;
   switch (e.t) {
@@ -244,14 +278,14 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       const hits = e.rounds.filter((r) => r.hit).length;
       const crits = e.rounds.filter((r) => r.crit).length;
       const dealt = partDamage(e.rounds.flatMap((r) => r.hits));
-      const parts = [...dealt].map(([id, d]) => `, ${partName(world, e.target, id)} −${d}`).join('');
+      const parts = [...dealt].map(([id, d]) => `, ${partName(world, e.target, id)} −${damage(d)}`).join('');
       const text = `${partName(world, e.shooter, e.weapon)} → ${n(e.target)}${aim}: ${hits}/${e.rounds.length} hits${crits ? `, ${crits} crit` : ''}${parts} (${Math.round(e.chance * 100)}%)`;
       return { text, cls: e.target === me && dealt.size > 0 ? 'bad' : '' };
     }
     case 'guardShot': {
       const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === e.site)!;
       const hits = e.rounds.filter((r) => r.hit).length;
-      const parts = [...partDamage(e.rounds.flatMap((r) => r.hits))].map(([id, d]) => `, ${partName(world, e.target, id)} −${d}`).join('');
+      const parts = [...partDamage(e.rounds.flatMap((r) => r.hits))].map(([id, d]) => `, ${partName(world, e.target, id)} −${damage(d)}`).join('');
       return { text: `${site.name} guards → ${n(e.target)}: ${hits}/${e.rounds.length} hits${parts}`, cls: 'dim' };
     }
     case 'partDisabled':
@@ -286,31 +320,18 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       return { text: `${n(e.by)} tows you into town and takes ${e.fee}.`, cls: 'bad' };
     case 'towDropped':
       return towDroppedText(n(e.by), e.reason);
-    case 'stateEnded':
-      return stateEndedText(world, e);
-    case 'say':
-      return sayText(world, e);
-    case 'call':
-      return callText(world, e);
     case 'info':
       return { text: e.text, cls: 'dim' };
-    case 'job':
-      return jobText(world, e);
     case 'searched':
       return searchedText(e.stock);
     case 'contract':
       return contractText(e.contract, e.outcome);
     case 'breakdown':
       return e.vehicle === me ? { text: `${partName(world, e.vehicle, e.part)} broke down`, cls: 'bad' } : null;
-    case 'weather':
-      return weatherText(world, e);
-    case 'honk':
-      return honkText(world, e);
-    case 'patch':
-      return patchText(world, e);
     case 'spawn':
     case 'despawn':
     case 'arrived':
       return null;
   }
+  throw new Error(`EVENT_TEXTS has no log text for ${e.t}`);
 }

@@ -186,7 +186,7 @@ describe('auto patch', () => {
     const held = goodsCount(me).parts!;
     startAutoRepair(w);
     const plan = repairPlan(w, me, engine.id, 1);
-    expect(me.job).toEqual({ kind: 'repair', partId: engine.id, parts: 1, turnsLeft: plan.turns, total: plan.turns });
+    expect(me.job).toEqual({ kind: 'repair', partId: engine.id, parts: 1, turnsLeft: plan.turns, total: plan.turns, auto: true });
     for (let i = 0; i < plan.turns; i++) advanceJobs(w);
     expect(goodsCount(me).parts).toBe(held - 1);
     expect(engine.hp).toBe(1 + plan.hp);

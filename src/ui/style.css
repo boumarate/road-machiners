@@ -790,6 +790,10 @@ body {
   cursor: pointer;
   border-color: #707f86;
 }
+.inv-item.selected {
+  outline: 2px solid #eac779;
+  outline-offset: -2px;
+}
 .inv-hp {
   position: absolute;
   left: 2px;

@@ -10,19 +10,19 @@ import { playerTow } from "../sim/tow";
 import { clockOf, heatAt } from "../sim/sun";
 import { TERRAIN } from "../data/terrain";
 import { dist, type Vec } from "../sim/vec";
-import type { Vehicle, World } from "../sim/types";
+import type { SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
 import { vehicleName } from "./format";
-import { celsius, engineCelsius, fuelLiters, kph } from "./units";
+import { celsius, engineCelsius, fuelLiters, hp, kph } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./icons";
 import type { ContextAction } from './hud';
 import { SHOPS } from '../data/market';
-import { canUseSite } from '../sim/sites';
+import { canUseSite, locationAt } from '../sim/sites';
 import { shopAt } from '../sim/market';
-import { canUseOasis, salvageHere, salvageNear } from '../sim/locations';
-import { locationAt } from '../sim/sites';
+import { canUseOasis, emptySalvageNear, salvageHere, salvageNear } from '../sim/locations';
 import { playerCanAct } from '../sim/world';
+import { isBusy } from '../sim/jobs';
 
 // The shop in reach of the player truck at any speed, or null. Moving trucks must stop to use it.
 function shopNear(world: World): { id: string; name: string } | null {
@@ -36,7 +36,7 @@ export function getContextAction(world: World, playing: boolean): ContextAction 
   if (playing || !playerCanAct(world)) return null;
   const shop = shopNear(world);
   if (shop) return { label: `Enter ${shop.name}`, ready: shopAt(world) === shop.id };
-  if (playerVehicle(world).job) return null;
+  if (isBusy(playerVehicle(world))) return null;
   return getSiteAction(world);
 }
 
@@ -45,13 +45,17 @@ function getSiteAction(world: World): ContextAction | null {
   if (oasis?.kind === 'oasis')
     return { label: `Refill supplies at ${oasis.name}`, ready: canUseOasis(world) };
   const stock = salvageNear(world);
-  if (!stock) return null;
+  if (!stock) {
+    const empty = emptySalvageNear(world);
+    return empty && { label: `${getSalvageName(empty)} is picked clean`, ready: false, hint: 'No loot left' };
+  }
   const verb = world.player.scavenged.includes(stock.id) ? 'Loot' : 'Search';
-  return { label: `${verb} ${getSalvageName(stock.id)}`, ready: salvageHere(world) !== null };
+  return { label: `${verb} ${getSalvageName(stock)}`, ready: salvageHere(world) !== null };
 }
 
-function getSalvageName(id: string): string {
-  return REGION.locations.find((site) => site.id === id)?.name ?? 'the wreck';
+function getSalvageName(stock: SalvageStock): string {
+  if (stock.pile) return 'the pile';
+  return REGION.locations.find((site) => site.id === stock.id)?.name ?? 'the wreck';
 }
 
 function getConditionIcon(def: ReturnType<typeof partDef>): IconName {
@@ -189,12 +193,12 @@ export function getHudReadout(w: World) {
       },
       {
         label: "Cab",
-        value: `${cab.hp} / ${cabMax}`,
+        value: `${hp(cab.hp)} / ${cabMax}`,
         warning: cab.hp < cabMax,
       },
       {
         label: "Driver",
-        value: `${p.health} / ${RULES.maxHealth}`,
+        value: `${hp(p.health)} / ${RULES.maxHealth}`,
         warning: p.health < RULES.maxHealth,
       },
     ],

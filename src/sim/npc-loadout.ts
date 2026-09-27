@@ -205,7 +205,7 @@ function chooseGoods(rng: Rng, table: NpcLoadoutTable, room: Room): CargoRoll | 
 }
 
 // Repair parts, goods and spares all draw from the same grid room and rated mass, in that order of priority.
-function chooseCargo(rng: Rng, table: NpcLoadoutTable, v: Vehicle): { spares: { defId: string; wear: number }[]; carried: Record<string, number> } {
+function chooseCargo(rng: Rng, wearRng: Rng, table: NpcLoadoutTable, v: Vehicle): { spares: { defId: string; wear: number }[]; carried: Record<string, number> } {
   let room: Room = { cells: freeCells(v), mass: chassisDef(v.chassisId).ratedMass - vehicleMass(v) };
   const repairParts = chooseRepairParts(v, room);
   room = spend(room, repairParts, repairParts * GOODS.parts.mass);
@@ -213,23 +213,24 @@ function chooseCargo(rng: Rng, table: NpcLoadoutTable, v: Vehicle): { spares: { 
   if (cargo) room = spend(room, cargo.count, GOODS[cargo.good].mass * cargo.count);
   const carried: Record<string, number> = repairParts > 0 ? { parts: repairParts } : {};
   if (cargo) carried[cargo.good] = (carried[cargo.good] ?? 0) + cargo.count;
-  return { spares: addSpareParts(rng, table, room.cells, room.mass), carried };
+  return { spares: addSpareParts(wearRng, table, room.cells, room.mass), carried };
 }
 
 // Rolls the chassis, its required engine and weapon, then optional cargo and armor, each fitting the
 // budget and rated mass at pristine wear. Only the finally mounted parts get an actual wear roll (IV6).
-function chooseVehicle(probe: World, rng: Rng, template: NpcTemplate): Vehicle {
+// Wear and spares draw from `wearRng`, the market stream, so they never shift the main stream's decisions.
+function chooseVehicle(probe: World, rng: Rng, wearRng: Rng, template: NpcTemplate): Vehicle {
   const table = template.loadout;
   const chassisChoices = table.chassis.map((entry) => ({ value: buildArmedChoices(probe, template, entry.value), weight: entry.weight })).filter((entry) => entry.value.length > 0);
   if (!chassisChoices.length) throw new Error(`No valid required NPC loadout for ${template.id}`);
   let v = chooseRequiredParts(rng, table, sampleWeighted(rng, chassisChoices));
-  rollNewWear(probe, rng, table, new Set(), v);
+  rollNewWear(probe, wearRng, table, new Set(), v);
   let mounted = new Set(v.items.map((item) => item.id));
   v = chooseOptionalPart(probe, rng, v, table.budget, table.cargoPart);
-  rollNewWear(probe, rng, table, mounted, v);
+  rollNewWear(probe, wearRng, table, mounted, v);
   mounted = new Set(v.items.map((item) => item.id));
   v = chooseOptionalPart(probe, rng, v, table.budget, table.armor);
-  rollNewWear(probe, rng, table, mounted, v);
+  rollNewWear(probe, wearRng, table, mounted, v);
   return v;
 }
 
@@ -239,9 +240,11 @@ export function generateNpcLoadout(world: World, template: NpcTemplate): NpcLoad
   // Probes may allocate IDs, but only the completed selection advances the real world's RNG.
   const probe = { ...world };
   const rng = { rngState: world.rngState };
-  const v = chooseVehicle(probe, rng, template);
-  const { spares, carried } = chooseCargo(rng, table, v);
+  const wearRng = { rngState: world.marketRng.rngState };
+  const v = chooseVehicle(probe, rng, wearRng, template);
+  const { spares, carried } = chooseCargo(rng, wearRng, table, v);
   const parts = mountedNonCore(v);
   world.rngState = rng.rngState;
+  world.marketRng = wearRng;
   return { chassisId: v.chassisId, parts, spares, cargo: carried };
 }

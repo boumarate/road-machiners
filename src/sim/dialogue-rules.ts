@@ -7,15 +7,16 @@ import { partTradePrice } from './economy';
 import { playerVehicle } from './damage';
 import { stowPart } from './inventory';
 import { discoverSite } from './locations';
-import { SPAWN } from '../data/npcs';
-import { patchGoal, pushGoal, startTow, topGoal } from './npc-activities';
-import { createCargoSalvage, hasCargo } from './salvage';
+import { isHostile } from './combat';
+import { patchGoal, startTow, topGoal } from './npc-activities';
+import { answerPlea, answersPlea, answersThreat, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, yieldTo, type ThreatAnswer } from './parley';
+import { hasCargo } from './salvage';
 import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
 import { npcProfile } from './npc-decisions';
 import { getResources } from './resources';
-import { addState, endState, stateOf, towData } from './states';
-import { acceptOffer, playerTow, refuseOffer, strandedPlayerAt } from './tow';
-import type { Call, CallVars, TopicOutcome, Vehicle, World } from './types';
+import { towData } from './states';
+import { acceptOffer, canTowNpc, hitchNpc, npcTowTerms, playerTow, playerTowing, refuseOffer, releaseNpc, strandedPlayerAt } from './tow';
+import type { Call, CallVars, Plea, TopicOutcome, Vehicle, World } from './types';
 import { bearing, dist } from './vec';
 
 // `vars` are the call values, empty on the hub and before a topic's prepare step.
@@ -44,17 +45,25 @@ function settle(world: World, npc: Vehicle, call: Call, outcome: TopicOutcome): 
   world.player.talked[npc.id] = { ...world.player.talked[npc.id], [call.topic]: outcome };
 }
 
-// The player drops the cargo. The demander and its faction mates nearby end any feud with the player and hold a
-// truce instead, and the demander goes to search the stock.
-function handOverCargo(world: World, npc: Vehicle): void {
-  const me = playerVehicle(world);
-  const stock = createCargoSalvage(world, me);
-  const party = world.vehicles.filter((v) => v.brain && v.faction === npc.faction && dist(v.pos, npc.pos) <= SPAWN.neighborHelp);
-  for (const v of party) {
-    for (const s of [stateOf(world, 'feud', v.id, me.id), stateOf(world, 'feud', me.id, v.id)]) if (s) endState(world, s, 'broken');
-    addState(world, 'truce', v.id, me.id, { kind: 'none' });
-  }
-  pushGoal(world, npc, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'take the handed-over cargo' });
+// The rolled answer a line waits on, or null before the topic's prepare step.
+function answerOf(vars: CallVars): string | null {
+  const v = vars.answer;
+  if (v === undefined) return null;
+  if (v.kind !== 'answer') throw new Error(`The answer value holds a ${v.kind}`);
+  return v.option;
+}
+
+// The plea the player makes in the open topic.
+function playerPlea(call: Call): Plea {
+  if (call.topic === 'truce') return 'truce';
+  if (call.topic === 'mercy') return 'mercy';
+  throw new Error(`Topic ${call.topic} holds no plea`);
+}
+
+function threatAnswer(call: Call): ThreatAnswer {
+  const option = answerOf(call.vars);
+  if (option !== 'comply' && option !== 'fightBack' && option !== 'flee') throw new Error(`Bad threat answer ${option}`);
+  return option;
 }
 
 // A truck already in a patch deal, as patcher or client.
@@ -99,6 +108,19 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
     const top = topGoal(npc);
     return top?.kind === 'fight' && top.targetId === world.player.vehicleId && hasCargo(playerVehicle(world));
   },
+  atOdds: (world, npc) => isHostile(world, npc, playerVehicle(world)),
+  atPeace: (world, npc) => !isHostile(world, npc, playerVehicle(world)),
+  noPlayerPlea: (world, npc) => !playerPleaded(world, npc),
+  npcHasCargo: (_world, npc) => hasCargo(npc),
+  offersTruce: (world, npc) => pendingPlea(world, npc) === 'truce',
+  begsMercy: (world, npc) => pendingPlea(world, npc) === 'mercy',
+  accepts: (_world, _npc, vars) => answerOf(vars) === 'yes',
+  refuses: (_world, _npc, vars) => answerOf(vars) === 'no',
+  complies: (_world, _npc, vars) => answerOf(vars) === 'comply',
+  resists: (_world, _npc, vars) => answerOf(vars) === 'fightBack',
+  runs: (_world, _npc, vars) => answerOf(vars) === 'flee',
+  canTowNpc: (world, npc) => canTowNpc(world, npc),
+  towedByPlayer: (world, npc) => playerTowing(world)?.other === npc.id,
 };
 
 export const EFFECTS: Record<EffectId, Effect> = {
@@ -119,14 +141,36 @@ export const EFFECTS: Record<EffectId, Effect> = {
     settle(world, npc, call, 'agreed');
   },
   handOver: (world, npc, call) => {
-    handOverCargo(world, npc);
+    yieldTo(world, playerVehicle(world), npc);
     settle(world, npc, call, 'agreed');
+  },
+  acceptPlea: (world, npc) => answerPlea(world, npc, true),
+  refusePlea: (world, npc) => answerPlea(world, npc, false),
+  settlePlea: (world, npc, call) => settlePlayerPlea(world, npc, playerPlea(call), answerOf(call.vars) === 'yes'),
+  withdrawPlea: (world, npc, call) => settlePlayerPlea(world, npc, playerPlea(call), false),
+  hitchNpc: (world, npc, call) => {
+    const { town, fee } = call.vars;
+    if (town?.kind !== 'town' || fee?.kind !== 'money') throw new Error('hitchNpc needs a town and a fee');
+    hitchNpc(world, npc, town.id, fee.amount);
+  },
+  releaseNpc: (world, npc) => releaseNpc(world, npc),
+  settleThreat: (world, npc, call) => {
+    const answer = threatAnswer(call);
+    settleThreat(world, npc, answer);
+    settle(world, npc, call, answer === 'comply' ? 'agreed' : 'refused');
   },
   settleDone: (world, npc, call) => settle(world, npc, call, 'done'),
   settleRefused: (world, npc, call) => settle(world, npc, call, 'refused'),
 };
 
 export const PREPARES: Record<PrepareId, Prepare> = {
+  truceAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'truce') ? 'yes' : 'no' } }),
+  mercyAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'mercy') ? 'yes' : 'no' } }),
+  threatAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersThreat(world, npc) } }),
+  npcTowTerms: (world, npc) => {
+    const { town, fee } = npcTowTerms(world, npc);
+    return { town: { kind: 'town', id: town.id }, fee: { kind: 'money', amount: fee } };
+  },
   // No `deal` value means the driver cannot offer a patch.
   patchTerms: (world, npc): CallVars => {
     const deal = patchTerms(world, npc);

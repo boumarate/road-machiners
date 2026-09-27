@@ -11,7 +11,7 @@ import { corePart, goodsCount } from './grid';
 import { addGoods } from './inventory';
 import { getActivityDestination, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { cloneWorld } from './world';
-import { canUseSite, siteGates } from './sites';
+import { canUseSite, siteGates, sitePads } from './sites';
 
 function createScavenger() {
   const w = emptyWorld({ x: 50, y: 50 });
@@ -40,7 +40,7 @@ describe('NPC activities', () => {
     expect(Math.hypot(stop.x - town.pos.x, stop.y - town.pos.y)).toBeGreaterThan(town.radius);
   });
 
-  it('gives drivers bound for one town their own usable spots at its gate', () => {
+  it('gives drivers bound for one town their own usable spots on its pad', () => {
     const { w, npc } = createScavenger();
     const town = REGION.towns[0];
     const gate = siteGates(town)[0];
@@ -51,12 +51,12 @@ describe('NPC activities', () => {
     for (const stop of stops) expect(canUseSite(stop, town)).toBe(true);
     const gaps = stops.flatMap((a, i) => stops.slice(i + 1).map((b) => Math.hypot(a.x - b.x, a.y - b.y)));
     expect(Math.min(...gaps)).toBeGreaterThan(0);
-    expect(Math.max(...gaps)).toBeGreaterThan(REGION.settlement.gateReach);
+    expect(Math.max(...gaps)).toBeGreaterThan(REGION.sites.pad.width / 4);
   });
 
-  it('gives drivers bound for an open site their own usable spots on its edge', () => {
+  it('gives drivers bound for a location their own usable spots on its pad', () => {
     const { w, npc } = createScavenger();
-    const site = REGION.locations.find((l) => !l.walled)!;
+    const site = REGION.locations.find((l) => l.kind === 'oasis')!;
     const stops = ['v101', 'v102', 'v103', 'v104'].map((id) =>
       getActivityDestination(w, { ...npc, id }, { kind: 'resupply', targetId: site.id, destination: { ...site.pos }, phase: 'travel', reason: 'test activity' })!,
     );
@@ -66,7 +66,7 @@ describe('NPC activities', () => {
 
   it.each(['sell', 'resupply', 'raid'] as const)('records completion of %s once', (kind) => {
     const { w, npc } = createScavenger();
-    npc.pos = { ...siteGates(REGION.towns[0])[0] };
+    npc.pos = { ...sitePads(REGION.towns[0])[0] };
     npc.brain!.goals = [{ kind, targetId: REGION.towns[0].id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
     w.events = [];
     resolveNpcActivities(w);
@@ -131,7 +131,7 @@ describe('NPC activities', () => {
     const { w, npc } = createScavenger();
     npc.brain!.templateId = 'trader';
     npc.brain!.traits = ['trader'];
-    npc.pos = { ...siteGates(REGION.towns[0])[0] };
+    npc.pos = { ...sitePads(REGION.towns[0])[0] };
     forceOption('idle', 'trade');
     planNpcOrders(w);
     resolveNpcActivities(w);
@@ -219,6 +219,40 @@ describe('NPC activities', () => {
     expect(away.x * toThreat.x + away.y * toThreat.y).toBeLessThan(0);
   });
 
+  it('flees to a pad of a safe town, since trucks never enter a site', () => {
+    const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
+    const w = emptyWorld({ x: bowl.pos.x + 150, y: bowl.pos.y + 150 });
+    const pad = sitePads(bowl)[0];
+    const out = { x: pad.x - bowl.pos.x, y: pad.y - bowl.pos.y };
+    const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: pad.x + out.x * 0.3, y: pad.y + out.y * 0.3 });
+    trader.brain = npcBrain('trader', trader.pos, ['trader']);
+    addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: trader.pos.x + out.x * 0.2, y: trader.pos.y + out.y * 0.2 });
+    forceOption('hostileSeen', 'flee');
+    planNpcOrders(w);
+    const flee = topGoal(trader)!;
+    expect(flee.kind).toBe('flee');
+    expect(canUseSite(flee.destination!, bowl)).toBe(true);
+    expect(trader.order?.kind).toBe('stopAt');
+  });
+
+  it('a fleeing driver parked on its flee point stops fleeing', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 30, y: 30 });
+    trader.brain = npcBrain('trader', trader.pos, ['trader']);
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 });
+    raider.speed = 4;
+    forceOption('contactHeard', 'flee');
+    planNpcOrders(w);
+    expect(topGoal(trader)?.kind).toBe('flee');
+    resolveNpcActivities(w);
+    expect(topGoal(trader)?.kind).toBe('flee');
+    trader.pos = { ...topGoal(trader)!.destination! };
+    resolveNpcActivities(w);
+    expect(topGoal(trader)?.kind).not.toBe('flee');
+    planNpcOrders(w);
+    expect(topGoal(trader)?.kind).not.toBe('flee');
+  });
+
   it('a raider investigates a nearby heard player', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const player = w.vehicles[0];
@@ -229,6 +263,21 @@ describe('NPC activities', () => {
     planNpcOrders(w);
     expect(topGoal(raider)?.kind).toBe('investigate');
     expect(topGoal(raider)?.targetId).toBe(player.id);
+  });
+
+  it('a raider fighting a hostile in sight ignores a heard contact beyond sight', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const player = w.vehicles[0];
+    player.speed = 4;
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 }); // hears the player just past sight
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: raider.pos.x + 5, y: 30 });
+    trader.brain = npcBrain('trader', trader.pos, ['trader']);
+    forceOption('hostileSeen', 'fight');
+    forceOption('contactHeard', 'investigate');
+    planNpcOrders(w);
+    expect(topGoal(raider)?.kind).toBe('fight');
+    expect(topGoal(raider)?.targetId).toBe(trader.id);
   });
 
   it('a distant contact remains audible without redirecting a raider', () => {

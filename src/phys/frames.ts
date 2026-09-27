@@ -41,6 +41,16 @@ export function headingQuat(heading: number): Quat {
   return { x: 0, y: Math.sin(-heading / 2), z: 0, w: Math.cos(-heading / 2) };
 }
 
+// Sine of the nose pitch: positive when the nose points uphill.
+export function noseRise(q: Quat): number {
+  return 2 * (q.x * q.y + q.w * q.z);
+}
+
+// Vertical part of the body's up axis: 1 when level, 0 on its side, -1 upside down.
+export function upOf(q: Quat): number {
+  return 1 - 2 * (q.x * q.x + q.z * q.z);
+}
+
 export function headingOf(q: Quat): number {
   const fx = 1 - 2 * (q.y * q.y + q.z * q.z);
   const fz = 2 * (q.x * q.z - q.w * q.y);

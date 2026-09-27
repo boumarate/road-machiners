@@ -4,7 +4,7 @@ import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
 import { makePart } from './factory';
 import { goodsCount } from './grid';
-import { siteGates } from './sites';
+import { sitePads } from './sites';
 import { addVehicle, emptyWorld } from './testkit';
 import type { World } from './types';
 import { update } from './world';
@@ -163,7 +163,7 @@ describe('contract boards and delivery', () => {
   const fetch = (): Contract => ({ id: 'ct-fetch', shop: 'bowl', kind: 'fetch', defId: 'mg', reward: 200, xp: 20, deadline: 500, tier: 1 });
 
   function atBowlWithOffer(c: Contract): World {
-    const w = emptyWorld(siteGates(bowl)[0]);
+    const w = emptyWorld(sitePads(bowl)[0]);
     w.shops.bowl.contracts = [c];
     return w;
   }
@@ -178,7 +178,7 @@ describe('contract boards and delivery', () => {
     w = acceptContract(w, 'ct-haul');
     expect(goodsCount(playerVehicle(w)).salt).toBe(3);
     expect(w.shops.bowl.contracts).toHaveLength(0);
-    w.vehicles[0].pos = { ...siteGates(nose)[0] };
+    w.vehicles[0].pos = { ...sitePads(nose)[0] };
     const money = w.player.money;
     w = deliverContract(w, 'ct-haul');
     expect(w.player.money).toBe(money + 300);
