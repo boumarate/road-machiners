@@ -37,6 +37,16 @@ export function perfSnapshot(): Record<string, PerfStat> {
   return Object.fromEntries([...stats].map(([k, v]) => [k, { ...v }]));
 }
 
+export function mergePerf(incoming: Record<string, PerfStat>): void {
+  for (const [name, measured] of Object.entries(incoming)) {
+    const current = stat(name);
+    current.last = measured.last;
+    current.max = Math.max(current.max, measured.max);
+    current.total += measured.total;
+    current.calls += measured.calls;
+  }
+}
+
 export function resetPerf(): void {
   stats.clear();
 }

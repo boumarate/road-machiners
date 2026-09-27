@@ -57,6 +57,18 @@ export type Crash = { a: string; b: string; impact: number }; // b is a vehicle 
 export type VehicleResult = { passed: boolean; arrived: boolean };
 export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; results: Record<string, VehicleResult> };
 
+export type DriveSnapshot = Omit<Drive, "world"> & { snapshot: Uint8Array };
+
+export function captureDrive(drive: Drive): DriveSnapshot {
+  const { world, ...handles } = drive;
+  return { ...structuredClone(handles), snapshot: world.takeSnapshot() };
+}
+
+export function restoreDrive(saved: DriveSnapshot): Drive {
+  const { snapshot, ...handles } = saved;
+  return { ...handles, world: RAPIER.World.restoreSnapshot(snapshot) };
+}
+
 export async function initPhysics(): Promise<void> {
   await RAPIER.init();
 }

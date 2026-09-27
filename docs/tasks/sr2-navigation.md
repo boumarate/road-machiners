@@ -35,6 +35,26 @@ TDD: yes for the deterministic controller. Browser checks cover real keyboard in
 - Corrected Space-start behavior passed 37 focused travel, save and sound tests, typecheck, and browser checks for paused planning, drive-through and stop-at order preservation, Space start, pause and resume, held speed, focus loss, panels and combat interruption. Browser evidence is in `tmp/navigation-space-browser.log`.
 - The corrected standard playtest passed 12 turns at 60.5 fps. The planning screenshot is `tmp/navigation-planning.png`.
 
+## Turn-boundary stutter
+The foreground probe at `tmp/travel-profile-before.log` measured 200–300 ms rendering blocks at most turn boundaries, with one 366 ms gap. Route and physics calculation ran on the drawing thread, and playback reset its clock after each gap.
+
+- `src/phys/drive.ts` owns portable physics snapshots.
+- `src/phys/turn-task.ts` computes the unchanged turn pipeline from a snapshot. `src/phys/turn-task.test.ts` compares it with foreground simulation and checks input preservation.
+- `src/phys/turn-worker.ts` owns background calculation and retains terrain identity for route caches.
+- `src/three/turn-preparation.ts` owns one prepared result keyed to its exact input world. Its tests cover readiness, stale results and visible failure.
+- `src/three/game.ts` prepares the next turn during playback, commits it only when advancement is still requested, and carries playback time across ready boundaries before drawing. Paused planning remains on the main thread.
+- `src/perf.ts` merges worker measurements, with `src/perf.test.ts` checking aggregation. `scripts/perf.mjs` waits for asynchronous turns before reading their timing.
+
+A prepared turn does not change visible world state, saves, sounds or RNG state. Pausing retains the result without committing it. Replanning invalidates it by world identity. At most one future result is retained, and worker failures reach the crash screen.
+
+The final worker implementation passed all 499 tests, worktree typecheck, production build, browser control checks and the standard 12-turn playtest at 60.5 fps. A delayed-worker browser test first reproduced an extra turn after releasing Space, then passed after keeping automatic advancement separate from an explicit single-turn request. The final profile recorded 21 turn-boundary frame gaps of 16.6–33.3 ms, down from 200–366.7 ms. Evidence is in `tmp/worker-final-pause.log`, `tmp/worker-final-controls.log`, `tmp/worker-final-playtest.log` and `tmp/travel-profile-cached.json`.
+
+Worker transfer dropped the terrain's frozen flags, causing turn cloning to copy terrain and rebuild route caches. A regression test reproduced this. Restoring immutability and warming navigation layers reduced worker calculation in the final travel profile to a 70.1 ms maximum across 22 calculations. The worker starts lazily to avoid competing with boot.
+
+`npm run perf -- --url http://127.0.0.1:5175` still failed cold-start budgets: boot 2295.8 ms against 2000 ms and first turn 154.1 ms against 100 ms. Later turns took 37.9–63.0 ms. Preview and frame budgets passed. These misses remain recorded in `tmp/worker-final-perf.log`.
+
+The language-server tool reported a missing `mergePerf` export even though the worktree source exports it and fresh typecheck and build both passed. Compiler verification is recorded in `tmp/worker-typecheck.log` and `tmp/worker-build.log`.
+
 ## Conclusion
 The prototype runs in the isolated worktree with local dependencies. Simulation rules and saved world structure are unchanged. Automatic travel state is session-only. The main checkout is untouched and the branch is not merged.
 

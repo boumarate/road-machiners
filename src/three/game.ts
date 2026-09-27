@@ -10,6 +10,7 @@ import {
   buildDrive,
   freeDrive,
   restFrame,
+  restoreDrive,
   simulateTurn,
   syncDrive,
   TURN_STEPS,
@@ -23,7 +24,8 @@ import {
   type V3,
   type VehicleFrame,
 } from "../phys/frames";
-import { applyTurn, physicsMove } from "../phys/turn";
+import { applyTurn } from "../phys/turn";
+import type { PreparedTurn } from "../phys/turn-task";
 import { playerVehicle } from "../sim/damage";
 import { corePart, mountedParts } from "../sim/grid";
 import { canScavenge, salvageNear, scavenge } from "../sim/locations";
@@ -39,7 +41,6 @@ import { DEG, dist } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
 import {
   cloneWorld,
-  endTurn,
   hostileToPlayer,
   newWorld,
   setAutoFire,
@@ -90,6 +91,7 @@ import { engineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
 import type { SoundPlayer } from "../audio/player";
 import { uiRoot } from "../ui/dom";
 import { canTravel, Travel } from "./travel";
+import { TurnPreparation } from "./turn-preparation";
 
 const PLAN_TURNS = 3; // turns of path preview
 
@@ -195,6 +197,9 @@ export class Game {
   // A played turn: physics movement, then shots in flight when there was combat, then time to read results.
   private anim: Playback | null = null;
   private readonly travel = new Travel(CONFIG.travelHoldMs);
+  private readonly turns = new TurnPreparation();
+  private turnRequested = false;
+  private playbackRemainder = 0;
   private phase: TurnPhase = null;
   private readonly weaponRange = new WeaponRangeView();
   private readonly markers = new Map<string, HTMLDivElement>(); // weapon markers above targets, by target id
@@ -367,7 +372,7 @@ export class Game {
   }
 
   apply(next: World): void {
-    this.travel.pause();
+    this.pauseTravel();
     this.world = next;
     syncDrive(this.drive, this.world);
     this.refreshUi();
@@ -540,20 +545,22 @@ export class Game {
     window.addEventListener("keyup", (e) => {
       if (e.code === "Space") this.travel.release();
     });
-    window.addEventListener("blur", () => this.travel.pause());
+    window.addEventListener("blur", () => this.pauseTravel());
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden) this.travel.pause();
+      if (document.hidden) this.pauseTravel();
     });
     window.addEventListener("keydown", (e) => {
       if (this.isEditingControl()) return;
       const modal = this.modalOpen();
-      const playing = this.anim !== null;
+      const playing = this.anim !== null || this.turnRequested;
       if (e.code === "Space") {
         e.preventDefault();
         const order = playerVehicle(this.world).order;
         const followWaypoint = canTravel(this.world) && order !== null && order.kind !== "brake";
-        if (!e.repeat && !modal && this.travel.press(performance.now(), playing, followWaypoint))
-          this.endTurn();
+        if (!e.repeat && !modal) {
+          if (this.travel.press(performance.now(), playing, followWaypoint)) this.endTurn();
+          else this.turnRequested = false;
+        }
       }
       if (e.code === "KeyF") this.following = true;
       if (e.code === "KeyM") this.toggleMute();
@@ -692,15 +699,32 @@ export class Game {
   }
 
   endTurn(): void {
-    if (this.anim || this.modalOpen()) return;
-    const before = this.world;
-    let result: TurnResult | null = null;
-    this.world = endTurn(
-      this.world,
-      physicsMove(this.drive, (r) => (result = r)),
+    if (this.anim || this.turnRequested || this.modalOpen()) return;
+    this.turnRequested = true;
+    this.turns.prepare(this.world, this.drive);
+  }
+
+  private pauseTravel(): void {
+    this.travel.pause();
+    this.turnRequested = false;
+  }
+
+  private updateTravel(): void {
+    const order = playerVehicle(this.world).order;
+    this.travel.update(
+      canTravel(this.world) && !this.world.vehicles.some(
+        (v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v),
+      ),
+      order !== null && order.kind !== "brake",
     );
-    if (!result) throw new Error("Turn ran without physics");
-    if (this.world.events.some((event) => event.t === "defeat")) this.travel.pause();
+  }
+
+  private beginTurn(prepared: PreparedTurn, now: number, elapsed: number): void {
+    const before = this.world;
+    this.turnRequested = false;
+    this.world = { ...prepared.world, terrain: before.terrain };
+    const result: TurnResult = { ...prepared.result, next: restoreDrive(prepared.result.next) };
+    if (this.world.events.some((event) => event.t === "defeat")) this.pauseTravel();
     this.live = {
       visible: new Set(this.world.player.visible),
       explored: before.player.explored.slice(),
@@ -716,8 +740,8 @@ export class Game {
     this.anim = {
       result,
       before,
-      lastTick: null,
-      elapsed: 0,
+      lastTick: now,
+      elapsed,
       moved: false,
       impacts: false,
       combat,
@@ -935,7 +959,7 @@ export class Game {
 
   // The path preview chains physics turns from the current state, so it shows what will happen.
   private refreshPlan(): void {
-    if (this.anim || this.planFor === this.world) return;
+    if (this.anim || this.turnRequested || this.travel.shouldAdvance(this.last) || this.planFor === this.world) return;
     this.planFor = this.world;
     const me = playerVehicle(this.world);
     if (!me.order && me.speed === 0) return this.path.clear();
@@ -993,10 +1017,23 @@ export class Game {
     const dt = now - this.last;
     this.last = now;
     if (this.modalOpen() || this.isEditingControl() || document.hidden)
-      this.travel.pause();
+      this.pauseTravel();
     const speed = this.travel.isFast(now) ? CONFIG.travelFastSpeed : 1;
-    const step = this.animStep(now, speed);
+    const wasPlaying = this.anim !== null;
+    let step = this.animStep(now, speed);
     this.updateLiveVision();
+    this.updateTravel();
+    if (!this.anim && (this.turnRequested || this.travel.shouldAdvance(now))) {
+      this.turns.prepare(this.world, this.drive);
+      const prepared = this.turns.take(this.world);
+      if (prepared) {
+        this.beginTurn(prepared, now, wasPlaying ? this.playbackRemainder : 0);
+        step = this.animStep(now, speed);
+        this.updateTravel();
+      }
+    }
+    if (this.anim && this.travel.shouldAdvance(now))
+      this.turns.prepare(this.world, this.anim.result.next);
     this.syncVehicles(step);
     this.drawOverlays();
     const me = this.frames[playerVehicle(this.world).id];
@@ -1037,14 +1074,6 @@ export class Game {
     this.labels.update(this.world, this.rig);
     for (const scope of this.scopes) scope.update(this.rig.camera);
     this.renderer.render(this.scene, this.rig.camera);
-    const order = playerVehicle(this.world).order;
-    this.travel.update(
-      canTravel(this.world) && !this.world.vehicles.some(
-        (v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v),
-      ),
-      order !== null && order.kind !== "brake",
-    );
-    if (!this.anim && this.travel.shouldAdvance(now)) this.endTurn();
     // The preview runs after the frame is drawn, so a click shows at once.
     this.refreshPlan();
     requestAnimationFrame((t) => this.tick(t));
@@ -1088,8 +1117,11 @@ export class Game {
     if (!a.moved) this.finishMovement(a);
     const impactAt = MOVE_MS + (a.combat ? CONFIG.combatShotMs : 0);
     if (elapsed >= impactAt && !a.impacts) this.landImpacts(a);
-    if (elapsed >= impactAt + (a.combat ? CONFIG.combatReadMs : 0))
+    const finishAt = impactAt + (a.combat ? CONFIG.combatReadMs : 0);
+    if (elapsed >= finishAt) {
+      this.playbackRemainder = elapsed - finishAt;
       this.finishPlayback();
+    }
     return null;
   }
 
@@ -1245,7 +1277,7 @@ export class Game {
   }
 
   private drawOverlays(): void {
-    const hide = this.anim !== null || this.modalOpen();
+    const hide = this.anim !== null || this.turnRequested || this.travel.shouldAdvance(this.last) || this.modalOpen();
     this.zones.root.visible = !hide;
     this.path.root.visible = !hide;
     this.weaponRange.root.visible = false;
