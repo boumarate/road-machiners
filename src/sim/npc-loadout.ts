@@ -58,15 +58,15 @@ function validateTable(table: NpcLoadoutTable): void {
 }
 
 function computeEquipmentCost(v: Vehicle): number {
-  return chassisDef(v.chassisId).price + v.items.reduce((sum, item) => {
+  return chassisDef(v.chassisId).value + v.items.reduce((sum, item) => {
     if (item.kind !== 'part') return sum;
     const def = partDef(item.part.defId);
-    return sum + (def.kind === 'core' ? 0 : def.price);
+    return sum + (def.kind === 'core' ? 0 : def.value);
   }, 0);
 }
 
 function tryMountChoice(world: World, v: Vehicle, id: string, budget: number): Vehicle | null {
-  if (computeEquipmentCost(v) + partDef(id).price > budget) return null;
+  if (computeEquipmentCost(v) + partDef(id).value > budget) return null;
   if (vehicleMass(v) + partDef(id).mass > chassisDef(v.chassisId).ratedMass) return null;
   const candidate = { ...v, items: [...v.items] };
   if (!mountPart(world, candidate, makePart(world, id, 0))) return null;

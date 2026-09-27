@@ -273,7 +273,7 @@ export function repairAll(world: World): World {
 
 export function partSellPrice(part: PartInstance): number {
   const def = partDef(part.defId);
-  return Math.floor(def.price * ECONOMY.partSellFactor * (part.hp / maxHp(part)));
+  return Math.floor(def.value * ECONOMY.partSellFactor * (part.hp / maxHp(part)));
 }
 
 export function buyPart(world: World, defId: string): World {
@@ -283,7 +283,7 @@ export function buyPart(world: World, defId: string): World {
       throw new Error(
         `${partDef(defId).name} is built in. It is not for sale.`,
       );
-    pay(w, partDef(defId).price, partDef(defId).name);
+    pay(w, partDef(defId).value, partDef(defId).name);
     w.player.storage.push(makePart(w, defId, 0));
   });
 }
@@ -305,7 +305,7 @@ export function chassisTradeIn(world: World): number {
   const health =
     core.reduce((a, p) => a + p.hp / maxHp(p), 0) / core.length;
   return Math.floor(
-    chassisDef(me.chassisId).price * ECONOMY.chassisSellFactor * health,
+    chassisDef(me.chassisId).value * ECONOMY.chassisSellFactor * health,
   );
 }
 
@@ -336,7 +336,7 @@ export function buyChassis(world: World, chassisId: string): World {
     const me = playerVehicle(w);
     if (me.chassisId === chassisId)
       throw new Error("You already drive this chassis");
-    const cost = chassisDef(chassisId).price - chassisTradeIn(w);
+    const cost = chassisDef(chassisId).value - chassisTradeIn(w);
     pay(w, Math.max(0, cost), chassisDef(chassisId).name);
     const mounted = new Set(mountedParts(me).map((p) => p.id));
     const goods = goodsCount(me);

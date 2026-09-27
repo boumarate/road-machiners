@@ -46,7 +46,7 @@ describe('NPC equipment generation', () => {
       }
       expect(goodsCount(v)).toEqual(loadout.cargo);
       expect(vehicleMass(v)).toBeLessThanOrEqual(CHASSIS[v.chassisId].ratedMass);
-      const cost = CHASSIS[v.chassisId].price + loadout.parts.reduce((sum, id) => sum + PARTS[id].price, 0);
+      const cost = CHASSIS[v.chassisId].value + loadout.parts.reduce((sum, id) => sum + PARTS[id].value, 0);
       expect(cost).toBeLessThanOrEqual(template.loadout.budget);
       expect(v.resources?.money).toBe(fixture.player.money);
     }
@@ -64,7 +64,7 @@ describe('NPC equipment generation', () => {
 
   it('reserves the budget for both required parts before choosing an engine', () => {
     const template = structuredClone(NPCS.trader);
-    template.loadout.budget = CHASSIS.hauler.price + PARTS.stockEngine.price + PARTS.mg.price;
+    template.loadout.budget = CHASSIS.hauler.value + PARTS.stockEngine.value + PARTS.mg.value;
     template.loadout.chassis = [{ value: 'hauler', weight: 1 }];
     template.loadout.engine = [{ value: 'turbine', weight: 1000 }, { value: 'stockEngine', weight: 1 }];
     template.loadout.weapon = [{ value: 'mg', weight: 1 }];

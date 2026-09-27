@@ -7,7 +7,7 @@
 
 import { GOODS } from '../data/goods';
 import { CONDITION } from '../data/wear';
-import { CONTRACTS, EFFORT, GOOD_VALUE, PRESSURE_MAX, shopDef, type ShopDef, type Tier } from '../data/market';
+import { CONTRACTS, EFFORT, PRESSURE_MAX, shopDef, type ShopDef, type Tier } from '../data/market';
 import { makePart, newId } from './factory';
 import { sampleWeighted } from './npc-loadout';
 import { randInt } from './rng';
@@ -24,9 +24,9 @@ export type ShopState = {
 // yet (PH2 adds one to GoodDef); GOOD_VALUE in src/data/shops.ts stands in until then. This is the
 // only function that reads either source, so the switch to a real field touches one place.
 export function goodValue(good: string): number {
-  const def = GOODS[good] as { value?: number } | undefined;
+  const def = GOODS[good];
   if (!def) throw new Error(`Unknown good ${good}`);
-  return def.value ?? GOOD_VALUE[good];
+  return def.value;
 }
 
 function rollStock(world: World, def: ShopDef, count: number): PartInstance[] {

@@ -264,17 +264,3 @@ export function shopDef(id: string): ShopDef {
   return def;
 }
 
-// Placeholder base good value until src/data/goods.ts gets a `value` field (PH2). The mean of the
-// two current TOWN_PRICES entries per good. Only src/sim/market.ts's goodValue() reads this, so the
-// switch to a real GoodDef.value field touches one function.
-export const GOOD_VALUE: Record<string, number> = {
-  scrap: (10 + 28) / 2,
-  salt: (38 + 14) / 2,
-  meds: (55 + 85) / 2,
-  grain: (12 + 30) / 2,
-  textiles: (22 + 48) / 2,
-  tools: (150 + 70) / 2,
-  batteries: (105 + 48) / 2,
-  electronics: (100 + 210) / 2,
-  parts: (18 + 22) / 2,
-};

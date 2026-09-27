@@ -190,8 +190,8 @@ describe("garage", () => {
     expect(goodsCount(me)).toEqual({ scrap: 2, parts: 2 });
     expect(w.player.money).toBe(
       2000 -
-        (CHASSIS.hauler.price -
-          Math.floor(CHASSIS.scout.price * ECONOMY.chassisSellFactor)),
+        (CHASSIS.hauler.value -
+          Math.floor(CHASSIS.scout.value * ECONOMY.chassisSellFactor)),
     );
     w = buyChassis(w, "scout");
     expect(w.player.storage.length).toBe(0);
