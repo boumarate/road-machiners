@@ -217,6 +217,47 @@ describe('towing', () => {
     expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, reason: 'gone' });
   });
 
+  // A hitched tower on its way to town, a point `ahead` tiles along its way and `side` tiles to its left, and how
+  // far along its way a point lies.
+  function underWay(): { w: World; tower: Vehicle; along: (ahead: number, side: number) => Vec; progress: (p: Vec) => number } {
+    const s = stranded();
+    let w = acceptTow(offered(s));
+    w = endTurn(endTurn(w));
+    const tower = find(w, s.trader.id);
+    const goal = topGoal(tower)!.destination!;
+    const a = Math.atan2(goal.y - tower.pos.y, goal.x - tower.pos.x);
+    const along = (ahead: number, side: number) => ({
+      x: tower.pos.x + Math.cos(a) * ahead - Math.sin(a) * side,
+      y: tower.pos.y + Math.sin(a) * ahead + Math.cos(a) * side,
+    });
+    const origin = { ...tower.pos };
+    const progress = (p: Vec) => (p.x - origin.x) * Math.cos(a) + (p.y - origin.y) * Math.sin(a);
+    return { w, tower, along, progress };
+  }
+
+  const crashes = (events: GameEvent[], id: string) => events.filter((e) => e.t === 'collision' && (e.a === id || e.b === id));
+
+  it('a hitched tower gets past a parked truck in its path without a collision', () => {
+    const { w, tower, along } = underWay();
+    const parked = addVehicle(w, 'scavengers', 'hauler', ['stockEngine'], along(14, 0.5), 0);
+    const r = runUntil(w, 20, () => false);
+    expect(crashes(r.events, tower.id)).toEqual([]);
+    expect(dist(find(r.w, tower.id).pos, parked.pos)).toBeGreaterThan(10);
+  });
+
+  it('a hitched tower and a truck meeting it head-on both get past without a collision', () => {
+    const { w, tower, along, progress } = underWay();
+    const start = along(25, 0);
+    const behind = along(-30, 0);
+    const other = withTower(w, 'scavenger', 'scavengers', 'hauler', start);
+    other.heading = Math.atan2(behind.y - start.y, behind.x - start.x);
+    other.brain!.goals = [{ kind: 'raid', targetId: null, destination: behind, phase: 'travel', reason: 'drive past the tower' }];
+    const r = runUntil(w, 20, () => false);
+    expect(crashes(r.events, tower.id)).toEqual([]);
+    expect(progress(find(r.w, other.id).pos)).toBeLessThan(0);
+    expect(progress(find(r.w, tower.id).pos)).toBeGreaterThan(10);
+  });
+
   it('arrival in town charges the fee once and allows debt', () => {
     const town = REGION.towns.find((t) => t.id === 'bowl')!;
     const gate = siteGates(town)[0];

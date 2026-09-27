@@ -103,27 +103,55 @@ function computeFightGoal(
   return { x: v.pos.x + Math.cos(a) * step, y: v.pos.y + Math.sin(a) * step };
 }
 
-// Two NPCs that give way to each other would both wait forever. Only the one whose id sorts first waits.
-// Stopped, it counts as parked, so the other one's route goes around it.
+// A driver brakes for any moving vehicle close ahead, so two trucks meeting head-on both brake. A parked vehicle
+// is routed around instead, unless the two face off.
 function vehicleAhead(world: World, v: Vehicle): boolean {
-  const tow = playerTow(world);
   return world.vehicles.some((x) => {
-    if (x.id === v.id) return false;
-    // A tower never yields to the truck on its own rope.
-    if (tow && towData(tow).hitched && tow.holder === v.id && x.id === world.player.vehicleId) return false;
-    if (!inTheWay(world, v, x)) return false;
-    return !(v.id > x.id && givesWay(x) && inTheWay(world, x, v));
+    if (x.id === v.id || onOwnRope(world, v, x)) return false;
+    const gap = gapAhead(world, v, x);
+    if (gap === null) return false;
+    if (x.speed >= RULES.parkedSpeed) return gap < brakingReach(world, v, x);
+    return v.id < x.id && facesOff(world, v, x, gap);
   });
 }
 
-// Whether x is close ahead of v, within 45 degrees of its heading.
-function inTheWay(world: World, v: Vehicle, x: Vehicle): boolean {
-  const gap =
-    dist(v.pos, x.pos) -
-    vehicleStats(world, v).radius -
-    vehicleStats(world, x).radius;
-  const off = Math.abs(angleDiff(v.heading, bearing(v.pos, x.pos)));
-  return gap < RULES.yieldDistance + v.speed && off < Math.PI / 4;
+// A tower never yields to the truck on its own rope.
+function onOwnRope(world: World, tower: Vehicle, x: Vehicle): boolean {
+  const tow = playerTow(world);
+  return tow !== null && towData(tow).hitched && tow.holder === tower.id && x.id === world.player.vehicleId;
+}
+
+// The gap between v and x past both radii when x lies within 45 degrees of v's heading, else null.
+function gapAhead(world: World, v: Vehicle, x: Vehicle): number | null {
+  if (Math.abs(angleDiff(v.heading, bearing(v.pos, x.pos))) >= Math.PI / 4) return null;
+  return dist(v.pos, x.pos) - vehicleStats(world, v).radius - vehicleStats(world, x).radius;
+}
+
+// The gap within which v must brake for moving x. Orders are set once per turn, so v must brake now when both
+// could close the gap before next turn's check leaves room to stop: v may speed up this turn and then needs its
+// stopping distance. An oncoming x may do the same. An x driving away covers at least its own stopping distance.
+function brakingReach(world: World, v: Vehicle, x: Vehicle): number {
+  const sv = vehicleStats(world, v);
+  const sx = vehicleStats(world, x);
+  const vs = Math.min(sv.maxSpeed, v.speed + sv.accel);
+  const toward = Math.cos(angleDiff(x.heading, bearing(x.pos, v.pos)));
+  const xs = toward > 0 ? Math.min(sx.maxSpeed, x.speed + sx.accel) * toward : x.speed * toward;
+  const xTravel = Math.max(0, xs) + (Math.sign(xs) * xs ** 2) / (2 * sx.brake);
+  return RULES.yieldDistance + vs + vs ** 2 / (2 * sv.brake) + xTravel;
+}
+
+// Two drivers stopped nose to nose that both set off would each go around the other and meet again. Within what
+// both close in their first turn of driving, the one whose id sorts first waits, and the other goes around it.
+function facesOff(world: World, v: Vehicle, x: Vehicle, gap: number): boolean {
+  if (!givesWay(x) || !wantsToDrive(world, x) || gapAhead(world, x, v) === null) return false;
+  return gap < RULES.yieldDistance + vehicleStats(world, v).accel + vehicleStats(world, x).accel;
+}
+
+// An NPC whose goal lies farther than the reach rule, so it sets off again. A driver parked at its work does not.
+function wantsToDrive(world: World, x: Vehicle): boolean {
+  const top = topGoal(x);
+  const dest = top && getActivityDestination(world, x, top);
+  return !!dest && dist(x.pos, dest) > RULES.arriveRadius * 2;
 }
 
 // NPCs give way unless they fight or flee; the player never does.
