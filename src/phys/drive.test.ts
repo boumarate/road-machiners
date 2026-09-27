@@ -4,7 +4,7 @@ import { RULES } from '../data/rules';
 import { makeVehicle } from '../sim/factory';
 import { addGoods, removeAllGoods } from '../sim/inventory';
 import { loadFactor, vehicleMass } from '../sim/mass';
-import { addVehicle, emptyWorld, partHp } from '../sim/testkit';
+import { addVehicle, editableTerrain, emptyWorld, partHp } from '../sim/testkit';
 import { corePart } from '../sim/grid';
 import type { MoveOrder, World } from '../sim/types';
 import { angleDiff, bearing, dist, type Vec } from '../sim/vec';
@@ -144,6 +144,14 @@ describe('physics turns', () => {
     const { w } = play(emptyWorld(), 2);
     expect(dist(me(w).pos, { x: 30, y: 30 })).toBeLessThan(0.1);
     expect(me(w).speed).toBeLessThan(0.1);
+  });
+
+  it('mud covers less ground than road at the same order', () => {
+    const w = emptyWorld();
+    editableTerrain(w).types.fill('mud');
+    const mud = play(setMoveOrder(w, { kind: 'through', dest: { x: 60, y: 30 } }), 3).w;
+    const road = play(ordered({ kind: 'through', dest: { x: 60, y: 30 } }), 3).w;
+    expect(me(mud).pos.x - 30).toBeLessThan(me(road).pos.x - 30);
   });
 
   it('a far click speeds up, a mid click holds speed', () => {

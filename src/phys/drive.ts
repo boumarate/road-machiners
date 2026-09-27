@@ -14,8 +14,8 @@ import { vehicleStats, type VehicleStats } from '../sim/stats';
 import { continueRoute, keepRoute, route, type KeptRoute } from '../sim/path';
 import { parkedVehicles, shouldBackToDestination, zoneSpeed } from '../sim/steering';
 import { BRIDGE_AXIS, BRIDGE_LENGTH } from '../sim/bridge';
-import { deckEnds, heightAt } from '../sim/terrain';
-import { TERRAIN } from '../data/terrain';
+import { deckEnds, heightAt, tileAt, type Terrain } from '../sim/terrain';
+import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
 import type { MoveOrder, Vehicle, World } from '../sim/types';
 import { angleDiff, bearing, clamp, DEG, dist, type Vec } from '../sim/vec';
 import { bodyOf, type Body } from '../sim/body';
@@ -189,7 +189,7 @@ function run(d: Drive, w: World, steps: number): TurnResult {
   const crashed = new Set<string>(); // one crash per pair per turn
   for (let i = 0; i < steps; i++) {
     const before = new Map(cars.map((c) => [c.v.id, captureImpactMotion(c.body)]));
-    for (const c of cars) driveStep(c);
+    for (const c of cars) driveStep(c, w.terrain);
     for (const c of cars) c.ctl.updateVehicle(DT);
     world.step(events);
     events.drainCollisionEvents((h1, h2, started) => {
@@ -323,11 +323,21 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   return { ...base, dest: order.dest, route: path, target: toMps(next), stopAt: false };
 }
 
+// Loose ground gives less grip, so wheels spin instead of converting engine force to speed. Slope
+// needs no separate handling: it already slows or speeds the climb through gravity on the heightfield.
+function applyTerrainGrip(ctl: RAPIER.DynamicRayCastVehicleController, body: RAPIER.RigidBody, terrain: Terrain): void {
+  const p = body.translation();
+  const type = terrain.types[tileAt(terrain, { x: p.x / S, y: p.z / S })];
+  const grip = T.frictionSlip * TERRAIN_TYPES[type].speed;
+  for (let i = 0; i < 4; i++) ctl.setWheelFrictionSlip(i, grip);
+}
+
 // One physics step of driving. Steer at the destination and hold the turn's speed. A stop order slows
 // to arrive. A slow truck with the destination far behind backs up, wheels turned the other way.
 // A drive-through point counts as passed only once close; a side click behind the truck still steers.
-function driveStep(c: Car): void {
+function driveStep(c: Car, terrain: Terrain): void {
   const { plan, mem, body, ctl } = c;
+  applyTerrainGrip(ctl, body, terrain);
   const speed = forwardSpeed(body);
   let target = plan.target;
   let steerTo = 0;

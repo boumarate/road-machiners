@@ -6,7 +6,6 @@ import { elevationAt } from './elevation';
 import { route } from "./path";
 import {
   buildTerrain,
-  driveFactor,
   heightFromElevation,
   heightAt,
   isCliff,
@@ -176,19 +175,6 @@ describe("terrain grid", () => {
     const t = flatWith(10, (i) => i * 0.3);
     const p = { x: 5.5, y: 5.5 };
     expect(tileSlope(t, tileAt(t, p)).x).toBeCloseTo(0.3);
-  });
-
-  // driveFactor is not wired into the physics turn: physics drives on the real heightfield and one
-  // fixed wheel friction, so terrain type and slope have no effect on driving today. See CLAUDE.md.
-  it("uphill is slower than downhill, and sand is slower than road", () => {
-    const t = flatWith(10, (i) => i * 0.3);
-    const p = { x: 5.5, y: 5.5 };
-    expect(driveFactor(t, p, 0)).toBeLessThan(1);
-    expect(driveFactor(t, p, Math.PI)).toBeGreaterThan(driveFactor(t, p, 0));
-    t.types[tileAt(t, p)] = "sand";
-    const sand = driveFactor(t, p, Math.PI / 2);
-    t.types[tileAt(t, p)] = "road";
-    expect(sand).toBeLessThan(driveFactor(t, p, Math.PI / 2));
   });
 
   it("routes go around cliffs", () => {

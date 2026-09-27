@@ -130,9 +130,6 @@ export const TERRAIN = {
   // Driving: grade is the slope along the driving direction.
   drive: {
     maxSlope: 0.6, // tiles steeper than this are cliffs: impassable
-    uphill: 2.5, // distance factor 1 / (1 + uphill * grade) going up
-    downhill: 0.8, // distance factor 1 + downhill * grade going down
-    downhillCap: 0.25, // downhill never adds more than this fraction
   },
   // Light direction in map space for hillshade, upper-left of the screen.
   light: { x: -0.6, y: -0.8 },
