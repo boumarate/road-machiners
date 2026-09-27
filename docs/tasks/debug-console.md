@@ -1,6 +1,6 @@
 # Debug Console
 
-**Status:** executing
+**Status:** validating
 **Branch:** debug-console
 **Worktree:** .worktrees/debug-console
 **Goal:** In any build, the user opens an in-game console, types cheat commands, and the game enters the requested test situation. The user confirms the command set covers the situations they test.
@@ -167,6 +167,28 @@ Notes: the console moved from bottom left to top center, because it covered the 
 
 ## Conclusion
 
+Outcome: the console, cheats and god mode work in the live game, up to 77db079. The user still needs to confirm the command set and the backquote key.
+
+Invariants:
+- IV1 — every command goes through `runCommand` to a `src/sim/cheats.ts` function and `Game.apply()`.
+- IV2 — `bogus` in the browser and a mid-draft `give` failure in a unit test leave the world unchanged.
+- IV3 — typing `ire` in the console toggles nothing in the browser check.
+- IV4 — unit tests check `spawn` and `tp` land on free spots.
+- IV5 — god mode keeps the player active with a broken cab, in the browser and in a unit test.
+- IV6 — `src/sim/cheats.ts` imports no Three.js or Rapier, and typecheck and quality pass.
+
+### Assumptions check
+- AS1 — held: after `tp`, `reveal` and `hour`, the view updates, and the truck drives from the new spot.
+- AS2 — held: spawn and weather timers count turns run, not the turn number.
+
+### Unknowns outcome
+- UK1 — resolved: `killVehicles` reuses `resolveDestroyed`, then `checkTower` drops a killed tower's tow.
+- UK2 — still-open: the key check uses `e.code`, which follows the physical key on any layout. The user must try it.
+
+Plan adherence: see Deviations from plan.
+
+Review findings: the independent reviewer found nothing at confidence 80 or above.
+
 ### Deviations from plan
 - PH2 and PH3 share one file, `src/ui/console.ts`, and one commit — two new `src/ui` files broke the quality gate's fragmentation limit, and one file passes.
 - `CHEATS` lives in `src/data/rules.ts`, not a new `src/data/cheats.ts` — a new data file broke the same limit.
@@ -175,4 +197,5 @@ Notes: the console moved from bottom left to top center, because it covered the 
 - `isFree` takes an `ignoreId` — teleport must leave the player truck out of its own overlap check.
 - `makeWeather(world, kind)` takes no position, and `startWeather` moves the storm after — this keeps natural storms drawing random numbers in the old order.
 - `killVehicles` clears `lastHitBy`, so no bounty or XP is paid for cheat kills.
+- `locationPos` became `placeSpot(world, id)` — a place's center lies inside its own obstacle, so `tp` aims at the nearest gate or edge.
 - `repairAll` and god mode also restore spare parts. `skipToHour` also refreshes vision, because sight shrinks at night.
