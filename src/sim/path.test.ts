@@ -2,17 +2,17 @@ import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { ECONOMY } from '../data/goods';
 import { REGION } from '../data/region';
-import { TERRAIN_TYPES } from '../data/terrain';
+import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
 import { resetPerf, perfSnapshot } from '../perf';
 import { isDriveObstacle } from './mapgen';
 import { findCells, nearestFreeCell, stampOverlay } from './nav/astar';
 import { COARSE, componentOf, dynamicBlockers, navLayer, terrainNav, tileIndex } from './nav/layer';
 import { continueRoute, keepRoute, route, routeLength, straightClear, type Blocker } from './path';
 import { nextRandom } from './rng';
-import { isCliff, tileAt, type Terrain } from './terrain';
+import { isCliff, tileAt, tileSlope, type Terrain } from './terrain';
 import type { World } from './types';
 import { locationAt, siteGates } from './sites';
-import { editableTerrain, emptyWorld } from './testkit';
+import { editableTerrain, emptyWorld, npcBrain } from './testkit';
 import { dist, polylineDist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
 
@@ -73,7 +73,7 @@ describe("route", () => {
 });
 
 describe('driver taste', () => {
-  const brain = { templateId: 'trader', activity: null, goal: null, home: { x: 0, y: 0 }, stepIndex: 0, refusedTow: false };
+  const brain = npcBrain('trader', { x: 0, y: 0 }, ['trader']);
   const [bowl, nose] = REGION.towns;
   const from = siteGates(bowl)[0];
   const to = siteGates(nose)[0];
@@ -211,6 +211,16 @@ describe('routes prefer roads', () => {
     expect(at(site.radius + REGION.roadWidth + 1)).toBeCloseTo(REGION.navigation.offRoadCost / TERRAIN_TYPES.hardpan.speed, 9);
   });
 
+  it('goes around a steep hill that it could climb', () => {
+    const w = emptyWorld();
+    const t = editableTerrain(w);
+    const n = t.size + 1;
+    // A cone of slope 0.45 between the ends, gentler than a cliff.
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) t.heights[j * n + i] = Math.max(0, 4 - Math.hypot(i - 35, j - 30)) * 0.45;
+    const pts = route(w, { x: 30, y: 30 }, { x: 40, y: 30 }, 0.6, []);
+    expect(polylineDist({ x: 35, y: 30 }, [{ x: 30, y: 30 }, ...pts])).toBeGreaterThan(3);
+  });
+
   it('crosses open ground when the road detour is three times longer', () => {
     const a = { x: 100, y: 100 };
     const b = { x: 160, y: 100 };
@@ -232,12 +242,16 @@ namespace Ref {
     return probes.some((q) => isCliff(t, tileAt(t, q)));
   }
 
-  // Route cost per tile: 1 / terrain speed, times offRoadCost off the road and away from sites.
+  // Route cost per tile: 1 / terrain speed, times offRoadCost off the road and away from sites, times
+  // the slope multiplier.
   function tileCost(t: Terrain, p: Vec): number {
-    const type = t.types[tileAt(t, p)];
+    const tile = tileAt(t, p);
+    const type = t.types[tile];
     const c = { x: Math.floor(p.x) + 0.5, y: Math.floor(p.y) + 0.5 };
     const bySite = [...REGION.towns, ...REGION.locations].some((s) => dist(c, s.pos) < s.radius + REGION.roadWidth);
-    return (type === 'road' || bySite ? 1 : REGION.navigation.offRoadCost) / TERRAIN_TYPES[type].speed;
+    const s = tileSlope(t, tile);
+    const slope = 1 + REGION.navigation.slopeCost * (Math.hypot(s.x, s.y) / TERRAIN.drive.maxSlope) ** 2;
+    return ((type === 'road' || bySite ? 1 : REGION.navigation.offRoadCost) / TERRAIN_TYPES[type].speed) * slope;
   }
 
   export function terrainLayer(t: Terrain, radius: number): { n: number; cliff: Uint8Array; slow: Float32Array } {

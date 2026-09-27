@@ -5,7 +5,7 @@ import { START_KITS } from '../data/start';
 import { RULES } from '../data/rules';
 import { NPCS } from '../data/npcs';
 import { REGION } from '../data/region';
-import { addVehicle, emptyWorld } from '../sim/testkit';
+import { addVehicle, emptyWorld, npcBrain } from '../sim/testkit';
 import type { World } from '../sim/types';
 import { dist } from '../sim/vec';
 import { endTurn, newWorld } from '../sim/world';
@@ -33,7 +33,7 @@ describe('NPC driving', () => {
   it('backs out after repeated failed drive attempts', () => {
     const w = emptyWorld({ x: 40, y: 30 });
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
-    npc.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0, refusedTow: false };
+    npc.brain = npcBrain('buggy', npc.pos, ['raider']);
     w.obstacles = [{ id: 'rock', pos: { x: 31.4, y: 30 }, r: 0.8, kind: 'rock' }];
     const startX = npc.pos.x;
     let { w: result } = play(w, RULES.npcStuckTurns + 1);
@@ -51,10 +51,12 @@ describe('NPC driving', () => {
     const bowl = REGION.towns[0];
     const nose = REGION.towns[1];
     const npc = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: bowl.pos.x + bowl.radius + 2, y: bowl.pos.y });
-    npc.brain = { templateId: 'trader', activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0, refusedTow: false };
+    npc.brain = npcBrain('trader', npc.pos, ['trader']);
     let closest = Infinity;
     for (let i = 0; i < w.size && closest >= nose.radius + 2; i++) {
       ({ w } = play(w, 1));
+      // NPCs that spawn along the way would pick fights, so only the route is under test.
+      w.vehicles = w.vehicles.filter((v) => v.faction === 'player' || v.id === npc.id);
       const actor = w.vehicles.find((v) => v.id === npc.id)!;
       closest = Math.min(closest, dist(actor.pos, nose.pos));
       expect(dist(actor.pos, nose.pos)).toBeGreaterThanOrEqual(nose.radius + 0.8 - 0.5);

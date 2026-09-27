@@ -4,13 +4,13 @@ import { partDef } from "../data/parts";
 import { baseGrid, corePart, coreParts, mountedParts } from "../sim/grid";
 import type { Job, Vehicle, World } from "../sim/types";
 import { el, panel } from "./dom";
-import { eventText, formatNpcActivity } from "./format";
 import {
-  getHudReadout,
-  getRescueReadout,
-  moneyLabel,
-  TruckConditionReadout,
-} from "./hud-readout";
+  eventText,
+  formatNpcActivity,
+  formatNpcStates,
+  formatNpcTraits,
+} from "./format";
+import { getHudReadout, getRescueReadout, moneyLabel, TruckConditionReadout } from "./hud-readout";
 import { createIcon, createSpeedDial, type IconName } from "./icons";
 import { kph } from "./units";
 import { playerVehicle } from "../sim/damage";
@@ -477,7 +477,6 @@ export class Hud {
         `Wheels ${working}/${wheels.length} working`,
       ),
     );
-    const activity = formatNpcActivity(w, v);
     const stance =
       v.faction === "player" ? "" : hostile ? "hostile" : "neutral";
     this.info.style.display = "";
@@ -490,8 +489,21 @@ export class Hud {
       ),
       el("div", {}, `Cab ${pct}%   Speed ${kph(v.speed)} km/h`),
       el("div", { class: "bar" }, el("div", { style: `width:${pct}%` })),
-      ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),
+      ...npcLines(w, v),
       ...parts,
     );
   }
+}
+
+// The NPC's traits, top goal and the states it holds toward the player. The player's own truck has none.
+function npcLines(w: World, v: Vehicle): HTMLElement[] {
+  if (!v.brain) return [];
+  const activity = formatNpcActivity(w, v);
+  return [
+    el("div", { class: "npc-traits" }, formatNpcTraits(v)),
+    ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),
+    ...formatNpcStates(w, v).map((line) =>
+      el("div", { class: "npc-state" }, line),
+    ),
+  ];
 }

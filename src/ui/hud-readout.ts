@@ -4,6 +4,8 @@ import { RULES } from "../data/rules";
 import { playerVehicle } from "../sim/damage";
 import { corePart, mountedParts, mountedItems, itemSize } from "../sim/grid";
 import { isStranded, vehicleStats } from "../sim/stats";
+import { towData } from "../sim/states";
+import { playerTow } from "../sim/tow";
 import { clockOf, heatAt } from "../sim/sun";
 import { TERRAIN } from "../data/terrain";
 import { dist, type Vec } from "../sim/vec";
@@ -13,6 +15,32 @@ import { vehicleName } from "./format";
 import { celsius, engineCelsius, fuelLiters, kph } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./icons";
+import type { ContextAction } from './hud';
+import { canUseOasis, salvageHere, salvageNear } from '../sim/locations';
+import { locationAt, townAt, townNear } from '../sim/sites';
+import { playerCanAct } from '../sim/world';
+
+export function getContextAction(world: World, playing: boolean): ContextAction | null {
+  if (playing || !playerCanAct(world)) return null;
+  const town = townNear(world);
+  if (town) return { label: `Enter ${town.name}`, ready: townAt(world) !== null };
+  if (playerVehicle(world).job) return null;
+  return getSiteAction(world);
+}
+
+function getSiteAction(world: World): ContextAction | null {
+  const oasis = locationAt(world);
+  if (oasis?.kind === 'oasis')
+    return { label: `Refill supplies at ${oasis.name}`, ready: canUseOasis(world) };
+  const stock = salvageNear(world);
+  if (!stock) return null;
+  const verb = world.player.scavenged.includes(stock.id) ? 'Loot' : 'Search';
+  return { label: `${verb} ${getSalvageName(stock.id)}`, ready: salvageHere(world) !== null };
+}
+
+function getSalvageName(id: string): string {
+  return REGION.locations.find((site) => site.id === id)?.name ?? 'the wreck';
+}
 
 function getConditionIcon(def: ReturnType<typeof partDef>): IconName {
   if (def.kind === "core") return def.role === "tank" ? "fuel" : def.role;
@@ -110,19 +138,12 @@ export function getRescueReadout(w: World): RescueReadout | null {
   const p = w.player;
   if (p.state === "knockedOut") return { kind: "knockedOut" };
   if (p.state === "dead") return null;
-  if (p.tow) {
-    const tow = {
-      tower: vehicleName(w, p.tow.by),
-      town: townName(p.tow.town),
-      fee: p.tow.fee,
-    };
-    if (p.tow.hitched) return { kind: "towed", ...tow };
-    return {
-      kind: "offer",
-      ...tow,
-      debt: p.money < p.tow.fee,
-      beacon: p.beacon,
-    };
+  const state = playerTow(w);
+  if (state) {
+    const data = towData(state);
+    const tow = { tower: vehicleName(w, state.holder), town: townName(data.town), fee: data.fee };
+    if (data.hitched) return { kind: "towed", ...tow };
+    return { kind: "offer", ...tow, debt: p.money < data.fee, beacon: p.beacon };
   }
   if (p.beacon || isStranded(w, playerVehicle(w)))
     return { kind: "stranded", beacon: p.beacon };

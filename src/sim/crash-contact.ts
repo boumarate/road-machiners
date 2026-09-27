@@ -1,8 +1,9 @@
 import { PHYSICS } from '../data/physics';
 import { baseGrid, corePart, mountedParts } from './grid';
 import { partDef } from '../data/parts';
-import { NPC_CLASSES, NPCS } from '../data/npcs';
-import { getMobilityCondition, vehicleStats } from './stats';
+import { NPC_BEHAVIOR } from '../data/npcs';
+import { noteCollision } from './combat';
+import { getMobilityCondition, isStranded, vehicleStats } from './stats';
 import { angleDiff, bearing, clamp, type Vec } from './vec';
 import { laneCount, ramMult, walkLane, type PartHit, type Side } from './armor';
 import { damagePart } from './damage';
@@ -19,23 +20,24 @@ export function applyContactCrash(world: World, a: Vehicle, b: Vehicle | null, w
   if (!Number.isFinite(impact) || impact < 0) throw new Error(`Bad crash impact ${impact}`);
   if (Boolean(b) !== Boolean(contact.b)) throw new Error('Crash geometry does not match the bodies');
   if (b) {
-    applyVehicleCrash(world, a, b, impact, contact);
+    const { hitsA, hitsB } = damageVehicleCrash(world, a, b, impact, contact);
+    noteCollision(world, a, b, hitsA, hitsB);
+    world.events.push({ t: 'collision', a: a.id, b: b.id, hitsA, hitsB });
     return;
   }
   const hitsA = applyContactDamage(world, a, contact.a, impact, 1, 1);
   world.events.push({ t: 'collision', a: a.id, b: what, hitsA, hitsB: [] });
 }
 
-function applyVehicleCrash(world: World, a: Vehicle, b: Vehicle, impact: number, contact: CrashGeometry): void {
+// Damage only. The real crash also notes the attacks, which a ram forecast must not.
+function damageVehicleCrash(world: World, a: Vehicle, b: Vehicle, impact: number, contact: CrashGeometry): { hitsA: PartHit[]; hitsB: PartHit[] } {
   if (!contact.b) throw new Error('Vehicle crash has no target contact');
   const share = vehicleMass(b) / (vehicleMass(a) + vehicleMass(b));
   const multA = ramMult(a, contact.a.side);
   const multB = ramMult(b, contact.b.side);
   const hitsA = applyContactDamage(world, a, contact.a, impact, share, multB);
   const hitsB = applyContactDamage(world, b, contact.b, impact, 1 - share, multA);
-  a.lastHitBy = b.id;
-  b.lastHitBy = a.id;
-  world.events.push({ t: 'collision', a: a.id, b: b.id, hitsA, hitsB });
+  return { hitsA, hitsB };
 }
 
 function applyContactDamage(world: World, vehicle: Vehicle, contact: CrashContact, impact: number, share: number, mult: number): PartHit[] {
@@ -70,21 +72,29 @@ function applyCrashHits(world: World, vehicle: Vehicle, hits: Map<string, number
   });
 }
 
-export function shouldRam(world: World, attacker: Vehicle, target: Vehicle): boolean {
-  if (!attacker.brain) return false;
-  const profile = NPC_CLASSES[NPCS[attacker.brain.templateId].brain];
-  if (profile.defensive || getMobilityCondition(attacker) <= profile.recoverCondition) return false;
+// The closing speed of a ram if the attacker drove at the target now, in tiles per turn. Null when it cannot ram: it
+// cannot drive, the target lies more than 45 degrees off its nose, or the blow would be too slow to hurt.
+export function ramImpact(world: World, attacker: Vehicle, target: Vehicle): number | null {
+  if (isStranded(world, attacker)) return null;
   const heading = bearing(attacker.pos, target.pos);
-  if (Math.abs(angleDiff(attacker.heading, heading)) > Math.PI / 4) return false;
+  if (Math.abs(angleDiff(attacker.heading, heading)) > Math.PI / 4) return null;
   const stats = vehicleStats(world, attacker);
   const speed = Math.min(stats.maxSpeed, attacker.speed + stats.accel);
   const along = target.speed * Math.cos(target.heading - heading);
   const impact = Math.max(0, speed - along);
-  return canSurviveRam(world, attacker, target, impact, heading, profile.fleeCondition);
+  return impact < RULES.collisionMinImpact ? null : impact;
+}
+
+// Whether a ram now looks worth it: the attacker drives well enough, the forecast target loses more than the
+// attacker, and the attacker keeps its working parts, its cab and its driving parts above the flee condition.
+export function isRamGainful(world: World, attacker: Vehicle, target: Vehicle): boolean {
+  const impact = ramImpact(world, attacker, target);
+  if (impact === null) throw new Error(`${attacker.id} weighs a ram on ${target.id} it cannot make`);
+  if (getMobilityCondition(attacker) <= NPC_BEHAVIOR.recoverCondition) return false;
+  return canSurviveRam(world, attacker, target, impact, bearing(attacker.pos, target.pos), NPC_BEHAVIOR.fleeCondition);
 }
 
 function canSurviveRam(world: World, attacker: Vehicle, target: Vehicle, impact: number, heading: number, minimum: number): boolean {
-  if (impact < RULES.collisionMinImpact) return false;
   const own = structuredClone(attacker);
   const other = structuredClone(target);
   // Enemy part health is not observable. Assume intact protection for the risk estimate.
@@ -92,7 +102,7 @@ function canSurviveRam(world: World, attacker: Vehicle, target: Vehicle, impact:
   const draft = { ...world, player: structuredClone(world.player), events: [] };
   own.heading = heading;
   const contact = estimateCrashGeometry(own, other, other.pos);
-  applyContactCrash(draft, own, other, other.id, impact, contact);
+  damageVehicleCrash(draft, own, other, impact, contact);
   const ownLoss = computePartLoss(attacker, own);
   const otherLoss = mountedParts(other).reduce((sum, part) => sum + partDef(part.defId).hp - part.hp, 0);
   return otherLoss > ownLoss && retainsCombatParts(attacker, own, minimum);

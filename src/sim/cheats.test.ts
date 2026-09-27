@@ -13,7 +13,8 @@ import { playerVehicle } from './damage';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { spareParts } from './inventory';
 import { clockOf } from './sun';
-import { addVehicle, emptyWorld, testDrive } from './testkit';
+import { addState, stateOf } from './states';
+import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import type { World } from './types';
 import { dist } from './vec';
 import { canUseSite } from './sites';
@@ -174,6 +175,13 @@ describe('teleport', () => {
     expect(w.player.explored[200 * w.size + 200]).toBe(1);
   });
 
+  it('rejects a player on a tow rope', () => {
+    const w = emptyWorld();
+    const tower = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 40, y: 30 });
+    addState(w, 'tow', tower.id, w.player.vehicleId, { kind: 'tow', town: REGION.towns[0].id, fee: 10, hitched: true });
+    expect(() => teleport(w, { x: 80, y: 90 })).toThrow(/towed/);
+  });
+
   it('rejects a knocked out player and a target off the map', () => {
     const w = emptyWorld();
     expect(() => teleport(w, { x: -500, y: -500 })).toThrow(CheatError);
@@ -234,7 +242,8 @@ describe('vehicle cheats', () => {
     const { w, id } = withSpawned(emptyWorld(), 'trader', true);
     const v = w.vehicles.find((x) => x.id === id)!;
     expect(hostileToPlayer(w, v)).toBe(true);
-    expect(v.brain!.attackers).toContain(w.player.vehicleId);
+    expect(stateOf(w, 'feud', id, w.player.vehicleId)).not.toBeNull();
+    expect(v.brain!.attackers).toEqual({ [w.player.vehicleId]: false });
   });
 
   it('rejects an unknown template', () => {
@@ -243,8 +252,10 @@ describe('vehicle cheats', () => {
 
   it('turns a vehicle hostile', () => {
     const { w, id } = withSpawned(emptyWorld(), 'trader', false);
-    const next = makeHostile(w, id);
+    const next = makeHostile(makeHostile(w, id), id);
     expect(hostileToPlayer(next, next.vehicles.find((v) => v.id === id)!)).toBe(true);
+    expect(next.states.filter((s) => s.kind === 'feud' && s.holder === id)).toHaveLength(1);
+    expect(next.vehicles.find((v) => v.id === id)!.brain!.attackers).toEqual({ [w.player.vehicleId]: false });
     expect(() => makeHostile(w, w.player.vehicleId)).toThrow(CheatError);
     expect(() => makeHostile(w, 'v999999')).toThrow(CheatError);
   });
@@ -262,7 +273,7 @@ describe('vehicle cheats', () => {
   it('kills hostiles or all other vehicles', () => {
     const w = emptyWorld();
     const foe = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
-    foe.grudges.push(w.player.vehicleId);
+    addState(w, 'feud', foe.id, w.player.vehicleId, { kind: 'feud', robbery: false });
     addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 30, y: 40 });
     expect(killVehicles(w, 'hostiles').vehicles).toHaveLength(2);
     expect(killVehicles(w, 'all').vehicles.map((v) => v.id)).toEqual([w.player.vehicleId]);
@@ -278,17 +289,32 @@ describe('vehicle cheats', () => {
   it('drops the tow when the tower is killed, so the next turn runs', () => {
     const w = emptyWorld();
     const tower = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 40, y: 30 });
-    w.player.tow = { by: tower.id, town: REGION.towns[0].id, fee: 10, hitched: true };
+    tower.brain = npcBrain('trader', tower.pos, ['trader']);
+    addState(w, 'tow', tower.id, w.player.vehicleId, { kind: 'tow', town: REGION.towns[0].id, fee: 10, hitched: true });
     const next = killVehicles(w, tower.id);
-    expect(next.player.tow).toBeNull();
+    expect(next.states).toEqual([]);
+    expect(next.events).toContainEqual({ t: 'towDropped', by: tower.id, reason: 'gone' });
     expect(() => endTurn(next, testDrive)).not.toThrow();
+  });
+
+  it('ends feuds with a killed vehicle, so its enemy drops the fight next turn', () => {
+    const w = emptyWorld();
+    const hunter = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    hunter.brain = npcBrain('scavenger', hunter.pos, ['scavenger']);
+    const prey = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 45, y: 30 });
+    addState(w, 'feud', hunter.id, prey.id, { kind: 'feud', robbery: false });
+    hunter.brain.goals.push({ kind: 'fight', targetId: prey.id, destination: { ...prey.pos }, phase: 'travel', reason: 'test' });
+    const next = killVehicles(w, prey.id);
+    expect(next.states).toEqual([]);
+    const after = endTurn(next, testDrive).vehicles.find((v) => v.id === hunter.id)!;
+    expect(after.brain!.goals.some((g) => g.kind === 'fight')).toBe(false);
   });
 
   it('lists other vehicles by distance', () => {
     const w = emptyWorld();
     const far = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 50, y: 30 });
     const near = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 35, y: 30 });
-    near.grudges.push(w.player.vehicleId);
+    addState(w, 'feud', near.id, w.player.vehicleId, { kind: 'feud', robbery: false });
     expect(nearbyVehicles(w)).toEqual([
       { id: near.id, name: near.name, templateId: null, faction: 'raiders', distance: 5, hostile: true },
       { id: far.id, name: far.name, templateId: null, faction: 'traders', distance: 20, hostile: false },

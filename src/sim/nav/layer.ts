@@ -3,10 +3,10 @@
 // stamps them per query. Per-driver route taste scales these costs.
 
 import { REGION } from '../../data/region';
-import { TERRAIN_TYPES, type TerrainTypeId } from '../../data/terrain';
+import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from '../../data/terrain';
 import { nearRail } from '../bridge';
 import { isDriveObstacle } from '../mapgen';
-import { isCliff, type Terrain } from '../terrain';
+import { isCliff, tileSlope, type Terrain } from '../terrain';
 import { hashRandom } from '../rng';
 import type { Obstacle, Vehicle, World } from '../types';
 import { dist } from '../vec';
@@ -20,7 +20,7 @@ export type TerrainNav = {
   size: number;
   n: number; // grid cells per side
   cliffTile: Uint8Array; // 1 where the tile is too steep to drive
-  tileCost: Float64Array; // route cost per tile driven: 1 / terrain speed, times offRoadCost off the road
+  tileCost: Float64Array; // route cost per tile driven: 1 / terrain speed, times offRoadCost off the road and the slope multiplier
   slow: Float32Array; // step cost multiplier per cell, the tileCost under its center
 };
 
@@ -70,7 +70,7 @@ function terrainEntry(t: Terrain) {
     const tileCost = new Float64Array(t.size * t.size);
     for (let i = 0; i < t.size * t.size; i++) {
       cliffTile[i] = isCliff(t, i) ? 1 : 0;
-      tileCost[i] = routeCost(t.types[i], nearSite((i % t.size) + 0.5, Math.floor(i / t.size) + 0.5));
+      tileCost[i] = routeCost(t.types[i], nearSite((i % t.size) + 0.5, Math.floor(i / t.size) + 0.5)) * slopeCost(t, i);
     }
     const slow = new Float32Array(n * n);
     for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) slow[y * n + x] = tileCost[tileIndex(t.size, (x + 0.5) * CELL, (y + 0.5) * CELL)];
@@ -86,6 +86,12 @@ function terrainEntry(t: Terrain) {
 // Asphalt patches are loose pieces that lead nowhere, so they count as open ground.
 function routeCost(type: TerrainTypeId, bySite: boolean): number {
   return (type === 'road' || bySite ? 1 : REGION.navigation.offRoadCost) / TERRAIN_TYPES[type].speed;
+}
+
+// Steeper ground is slower to climb and harder to hold, so routes prefer gentler ground.
+function slopeCost(t: Terrain, tile: number): number {
+  const s = tileSlope(t, tile);
+  return 1 + REGION.navigation.slopeCost * (Math.hypot(s.x, s.y) / TERRAIN.drive.maxSlope) ** 2;
 }
 
 const SITES = [...REGION.towns, ...REGION.locations];

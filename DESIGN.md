@@ -60,15 +60,15 @@ Player auto mode assigns every weapon a body shot at a visible hostile. NPC weap
 
 Losing a fight does not end the game, in Kenshi style. A loss starts a new story on real turns the player watches. There are no fade screens.
 
-A broken cab knocks the player out while health is above 0. Every mounted part except the built-in ones, all goods and all spare parts drop into a wreck stock beside the truck. Money, fuel and supplies stay. Grudges against the player end.
+A broken cab knocks the player out while health is above 0. Every mounted part except the built-in ones, all goods and all spare parts drop into a wreck stock beside the truck. Money, fuel and supplies stay. Feuds against the player end.
 
 While knocked out, turns run on their own and the player gives no orders. Looters search the stock. The player comes to when no hostile sees the truck, or after 30 turns. Broken built-in parts are patched to a quarter of their HP. What the looters left stays in the stock beside the truck.
 
-Raiders ignore a truck with nothing to take. A truck has loot when it holds goods, spare parts or mounted parts beyond the built-in ones. A grudge still makes a raider fight a stripped truck.
+Raiders ignore a truck with nothing to take. A truck has loot when it holds goods, spare parts or mounted parts beyond the built-in ones. A feud still makes a raider fight a stripped truck.
 
 A truck with no working engine, a broken transmission or an empty tank still moves at a crawl. The driver pushes it. Pushing burns no fuel, and a truck without a working engine makes no sound. A player truck that can only crawl is stranded.
 
-Traders and scavengers help a stranded player. One that sees the truck drives over, if it is not hostile and not in danger. It parks beside the truck and offers a tow to the nearest town it knows. The fee is a base price plus a price per tile of the route. The player accepts or refuses. Refusing, or driving away, ends the offer, and that driver never offers again.
+Traders and scavengers help a stranded player. One that sees the truck drives over, if it is not hostile and not in danger. It parks beside the truck and offers a tow to the nearest town it knows. The fee is a base price plus a price per tile of the route. The player accepts or refuses. Refusing, or driving away, ends the offer, and that driver rarely offers again.
 
 A towed truck hangs behind its tower and follows its path. The tower drives slower than its top speed. Turns run on their own while towed. The player can unhitch at any time for free. A tower that enters a fight or flees drops the tow for free. On arrival in town the tower takes the fee. Money can go below zero, and the HUD shows it as debt. A player in debt cannot buy anything, and sales pay the debt off.
 
@@ -92,7 +92,7 @@ Dust clouds are objects in the world. Every turn a truck moving faster than a cr
 
 A radio scanner is a part that mounts on a weapon cell, so it competes with a gun. It detects every moving vehicle across the map, through hills, and shows it as a steady blip. It is sold in towns.
 
-NPCs detect the player and each other with the same rules. Reaction requires a contact circle within the class's uncertainty limit. Vague distant sounds stay audible without redirecting an NPC. Accurate scanner and emergency-beacon contacts can prompt investigation from farther away. Raiders investigate from idle or hunting, keeping the first contact destination instead of following its moving center. They stop on arrival, loss of the useful contact, or sight of the target. A continuously useful contact does not start another investigation. Idle traders and scavengers flee useful hostile contacts. Contacts alone do not interrupt existing trade, salvage, service or repairs.
+NPCs detect the player and each other with the same rules. Reaction requires a contact circle within the traits' uncertainty limit. Vague distant sounds stay audible without redirecting an NPC. Accurate scanner and emergency-beacon contacts stay useful from farther away. A useful hostile contact fires one decision: keep, investigate or flee. Raiders mostly investigate, and traders and scavengers mostly flee. An investigation keeps the first contact destination instead of following its moving center, and ends on arrival. A continuously useful contact does not start another investigation. A driver busy with trade, salvage, service or repairs mostly keeps on.
 
 ## World
 
@@ -114,15 +114,43 @@ The sun also heats the player's running engine, faster at higher speed. Airflow,
 
 ## NPC activities
 
-NPCs follow Space Rangers-style ordered rules: react to relevant visible danger, address urgent upkeep and repairs, continue unfinished work, then choose class work. Classes share fixed knowledge of towns, salvage sites, and hunting grounds. Each NPC remembers visible attackers, contacts it has investigated while they remain detected, and one interrupted work activity. It resumes that activity when danger and upkeep are resolved, provided the activity remains valid. There is no live shared intelligence.
+NPC behavior has three layers. Traits are permanent and set the chances of choices. A goal stack keeps long-term work under interruptions like fights, flight, service and repairs, and the driver usually resumes that work once an interruption ends. Decision points pick reactions by weighted chance when a new hostile, contact, attack, prey or stranded player appears. An option the driver can take always keeps at least a 1% chance. Traits give fixed knowledge of towns, salvage sites and hunting grounds. Each NPC remembers the subjects it already decided on and the attackers still in sight. There is no live shared intelligence.
 
 NPCs spawn with equipment sampled from weighted tables for their role. The generator chooses a chassis, a fitting engine and weapon, then optional cargo parts, armor and goods. It respects mount space, rated mass and a chassis-plus-parts budget separate from the driver's wallet. Rare equipment has a lower weight among eligible choices. The same world seed and actions produce the same equipment. There is no separate loot roll on death.
 
-Scavengers collect finite salvage and sell cargo. Idle scavengers may fight manageable hostiles or flee. Healthy working civilians do not abandon ordinary work merely because they see a hostile. Towing retains its safety rule: a tower drops a tow when visible danger appears. Actual shots against them or a nearby visible faction mate interrupt work. Damaged NPCs also react to visible hostiles before attempting repairs. Local force assessment compares the target's nearby visible faction group against the NPC and nearby visible faction mates, rather than treating every visible enemy as one force. Traders buy profitable cargo while reserving upkeep money and flee from threats. Raiders search hunting grounds, fight, collect wreck cargo, and sell it in towns. Raiders buy fuel, supplies and repairs at their nearest camp, and flee to a camp or a town. A camp buys no cargo, so a raider without money sells its cargo in town first. Each NPC pays for fuel, supplies, and repairs from its own wallet. Inspection shows its activity and reason.
+Scavengers collect finite salvage and sell cargo. Idle scavengers mostly fight manageable hostiles and flee stronger ones. A healthy driver busy with work mostly keeps on when a hostile appears that is not aimed at it or a nearby faction mate. Towing retains its safety rule: a tower drops a tow when it takes on a fight or flees. A shot at a driver or a nearby visible faction mate, hit or miss, prompts a decision to fight back, flee or rarely keep on. Damaged NPCs react to visible hostiles before starting repairs. Local force assessment compares the target's nearby visible faction group against the NPC and nearby visible faction mates, rather than treating every visible enemy as one force. Traders buy profitable cargo while reserving upkeep money and flee from threats. Raiders search hunting grounds, fight, collect wreck cargo, and sell it in towns. Raiders buy fuel, supplies and repairs at their nearest camp, and flee to a camp or a town. A camp buys no cargo, so a raider without money sells its cargo in town first. Each NPC pays for fuel, supplies, and repairs from its own wallet. Inspection shows its activity and reason.
 
 Scavenging is a timed search: the truck parks at a stock and searches for turns in proportion to what the stock holds, with a progress bar. Moving the truck cancels the search. A finished search opens the stock beside the truck's grid, and the player drags in what they want. What they leave stays at the site for later. NPC scavengers take everything that fits. Landmark and convoy sites hold finite stock rolled at world creation: goods, parts and sometimes a spare mountable part. Destroyed NPCs leave a wreck with the same kind of stock. Their mounted parts join it at the HP they had; their built-in parts turn into the parts good instead. Collection takes only what fits and leaves the rest. Old wreck retirement removes their remaining stock. Empty sites do not regenerate.
 
 Town markets have fixed prices and unlimited stock and money. Initial NPC resources and the oasis are explicit sources. No offscreen catch-up grants are used. A knocked-out player's parts and cargo go into a wreck stock that any collector can take.
+
+## NPC traits and states
+
+Every NPC carries a set of traits instead of one class. Each trait adds activities and shifts chances. A scavenger with the scumbag trait still scavenges, and it also robs. Traits roll at spawn: every scavenger scavenges, and some are also scumbags or cowards. For now the hover panel shows traits. In the final game they stay hidden, so the player learns a driver is a scumbag only when it starts acting like one.
+
+- Scavenger collects salvage and helps stranded trucks.
+- Trader buys and sells between towns, rarely starts a fight, and sometimes fights back.
+- Raider hunts at hunting grounds, investigates distant engines and knows the raider camps.
+- Scumbag robs trucks that carry loot and look weaker than it.
+- Coward flees more often and fights back less.
+
+A chance is 0 only when an option is physically impossible. A driver with no working gun cannot fight, and a truck with no loot cannot be robbed. Anything a driver can do keeps at least a 1% chance. So an ordinary scavenger robs about once in a hundred chances, and a trader sometimes starts a fight.
+
+Drivers judge each other by danger: the firepower of working guns times the current toughness of the cab, chassis and armor. A tank looks more dangerous than a scout, and a half-beaten tank looks about half as dangerous. Danger counts nearby visible faction mates on each side. A driver misjudges another truck's danger by up to a quarter each time it first sees it. A scumbag robs a truck whose danger looks below its own times its boldness. Scumbags are bold, and cowards are timid. A stronger target, or one near a town gate, is robbed only rarely.
+
+A robbery is an attack. The winner searches the wreck or the knockout stock the loser left. A robber whose target escapes backs off that target for a while.
+
+In a fight, each chance to ram the target is a decision. A ram that the driver expects to hurt itself more than the target is rare, and traders almost never ram.
+
+Damage from one vehicle to another is an attack, whether it comes from a shot or a crash. A missed shot counts too. The victim and its nearby faction mates that see it start a feud with the attacker. A slow bump that does no damage is not an attack, and neither is contact with the truck on a tow rope.
+
+States are timed relations between two trucks. Each ends as expired, fulfilled or broken, and each ending can start other states.
+
+- A feud makes both trucks hostile. Sight or shots between them keep it going. It expires after some turns without either, and a failed robber then backs off.
+- A tow runs from the offer to arrival in town, where the fee is paid. It breaks for free when the player refuses or unhitches, or when the tower meets danger.
+- A tower the player turned down rarely offers again.
+- A tower that dropped a tow for danger comes back with the same deal.
+- Only one driver answers a stranded player at a time. Near a town gate, drivers rarely offer a tow at all.
 
 ## Trade
 

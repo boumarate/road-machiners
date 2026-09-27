@@ -21,7 +21,7 @@ export const RULES = {
   minAimDistance: 1.5, // tiles; steering ignores route points closer than this
   cornerSlack: 2, // tiles past a route corner the brake plan allows
   parkedSpeed: 0.5, // vehicles slower than this are routed around like obstacles
-  yieldDistance: 1.5, // neutral drivers brake when another vehicle is this close past both radii ahead
+  yieldDistance: 1.5, // tiles neutral drivers keep past both radii from a vehicle ahead, beyond what both close before they stop; see src/sim/ai.ts
   maxBulge: 0.25, // tiles a steering arc may stray from the straight route line
   limpSpeed: 1.04, // 15 km/h, top speed with an empty tank or a dead engine or transmission; a truck this slow raises no dust
   minSpeedCap: 1, // a heavy load never pushes max speed below this

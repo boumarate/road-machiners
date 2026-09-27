@@ -17,18 +17,19 @@ export function hasSave(storage: Storage): boolean {
 // Saves leave out the terrain, which buildTerrain rebuilds from the seed. The 600-tile terrain alone is
 // about 10 MB of JSON, past the browser's local storage quota. 4 adds weather, jobs, contacts and dust.
 // 6 moves wheel cells. 7 adds engine heat, auto patch and a parts limit on repair jobs. 8 adds the
-// player state, tows and the beacon. 9 adds god mode. 6 to 8 saves migrate on load.
-const SAVE_VERSION = 9;
+// player state, tows and the beacon. 9 adds NPC traits, goal stacks and states. 10 renames spurned to
+// turnedDown. 11 replaces the NPC's last attacker with its attack records and adds repair goals. 12 adds the
+// answering claim on a tow job. 13 adds god mode. Older saves do not load.
+const SAVE_VERSION = 13;
 
 export function loadWorld(storage: Storage): World | null {
   const raw = storage.getItem(SAVE_KEY);
   if (raw === null) return null;
   const save: unknown = JSON.parse(raw);
-  if (!save || typeof save !== 'object' || !('version' in save) || ![6, 7, 8, SAVE_VERSION].includes(save.version as number)) {
+  if (!save || typeof save !== 'object' || !('version' in save) || save.version !== SAVE_VERSION) {
     throw new SaveError('Incompatible game save version');
   }
   if (!('world' in save) || !isWorld(save.world)) throw new SaveError('Invalid saved world');
-  migrate(save.world, save.version as number);
   const explored: unknown = save.world.player.explored;
   const tiles = save.world.size * save.world.size;
   if (!Array.isArray(explored) || explored.length !== tiles) throw new SaveError('Invalid saved explored tiles');
@@ -36,38 +37,8 @@ export function loadWorld(storage: Storage): World | null {
   return { ...save.world, player, terrain: buildTerrain(save.world.seed, save.world.size) };
 }
 
-// Brings an older world up to SAVE_VERSION, one version step at a time.
-function migrate(world: Omit<World, 'terrain'>, version: number): void {
-  if (version === 6) migrateFrom6(world);
-  if (version <= 7) migrateFrom7(world);
-  if (version <= 8) migrateFrom8(world);
-}
-
-// A version 6 world has a cold engine and auto patch on. An open repair job may spend every part it
-// needs, as it could before the limit existed.
-function migrateFrom6(world: Omit<World, 'terrain'>): void {
-  world.player.engineHeat = 0;
-  world.player.autoRepair = true;
-  for (const v of world.vehicles) {
-    if (v.job?.kind === 'repair') v.job.parts = Number.MAX_SAFE_INTEGER;
-  }
-}
-
-// A version 7 world has an awake player with no tow offer and the beacon off. No driver has been refused.
-function migrateFrom7(world: Omit<World, 'terrain'>): void {
-  world.player.state = 'active';
-  world.player.knockoutTurns = 0;
-  world.player.tow = null;
-  world.player.beacon = false;
-  for (const v of world.vehicles) {
-    if (v.brain) v.brain.refusedTow = false;
-  }
-}
-
-// A version 8 world has god mode off.
-function migrateFrom8(world: Omit<World, 'terrain'>): void {
-  world.player.god = false;
-}
+// World fields a save must hold as arrays.
+const WORLD_LISTS = ['vehicles', 'obstacles', 'salvage', 'events', 'removed', 'weather', 'dustClouds', 'states'] as const;
 
 function isWorld(value: unknown): value is Omit<World, 'terrain'> {
   if (!value || typeof value !== 'object') return false;
@@ -77,9 +48,7 @@ function isWorld(value: unknown): value is Omit<World, 'terrain'> {
     && Number.isInteger(world.rngState) && Number.isInteger(world.nextId) && world.nextId! >= 0
     && Number.isInteger(world.size) && world.size! > 0
     && !!world.spawnTimer && typeof world.spawnTimer === 'object' && !Array.isArray(world.spawnTimer)
-    && Array.isArray(world.vehicles) && Array.isArray(world.obstacles)
-    && Array.isArray(world.salvage) && Array.isArray(world.events) && Array.isArray(world.removed)
-    && Array.isArray(world.weather) && Array.isArray(world.dustClouds)
+    && WORLD_LISTS.every((key) => Array.isArray(world[key]))
     && !!world.player && typeof world.player === 'object'
     && typeof world.player.vehicleId === 'string' && Array.isArray(world.player.contacts) && Array.isArray(world.player.clouds);
 }

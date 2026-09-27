@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../../data/region';
 import { makeTaste, tasteAt, tasteOf } from './layer';
-import { emptyWorld } from '../testkit';
+import { emptyWorld, npcBrain } from '../testkit';
 
 const { scale, strength } = REGION.navigation.taste;
 
@@ -26,7 +26,7 @@ describe('route taste', () => {
 
   it('differs between drivers and stays the same for one driver', () => {
     const w = emptyWorld();
-    const brain = { templateId: 'trader', activity: null, goal: null, home: { x: 0, y: 0 }, stepIndex: 0, refusedTow: false };
+    const brain = npcBrain('trader', { x: 0, y: 0 }, ['trader']);
     const a = tasteOf(w, { id: 'v12', brain })!;
     const b = tasteOf(w, { id: 'v13', brain })!;
     expect(tasteOf(w, { id: 'v12', brain })!.values).toEqual(a.values);

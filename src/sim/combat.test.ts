@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
-import { fireWeapons, hitOdds, laneOfOffset, resolveDestroyed } from './combat';
+import { SPAWN } from '../data/npcs';
+import { REGION } from '../data/region';
+import { getResources } from './resources';
+import { siteGates } from './sites';
+import { autoOrders, fireWeapons, hitOdds, laneOfOffset, resolveDestroyed } from './combat';
 import { corePart, mountedItems, mountedParts } from './grid';
+import { stateOf } from './states';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
 import type { GameEvent, Vehicle } from './types';
 import { dist } from './vec';
 import { endTurn } from './world';
@@ -13,7 +18,7 @@ function duel(targetPos = { x: 33, y: 30 }) {
   const w = emptyWorld();
   const me = w.vehicles[0];
   const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], targetPos, Math.PI);
-  buggy.brain = { templateId: 'buggy', activity: null, goal: null, home: targetPos, stepIndex: 0, refusedTow: false };
+  buggy.brain = npcBrain('buggy', targetPos, ['raider']);
   const mg = vehicleStats(w, me).weapons[0];
   return { w, me, buggy, mg };
 }
@@ -122,7 +127,7 @@ describe('combat', () => {
     const { w, me } = duel();
     for (let i = 0; i < RULES.maxKillWrecks + 3; i++) {
       const b = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 10 + i * 2, y: 10 });
-      b.brain = { templateId: 'buggy', activity: null, goal: null, home: b.pos, stepIndex: 0, refusedTow: false };
+      b.brain = npcBrain('buggy', b.pos, ['raider']);
       corePart(b, 'cab').hp = 0;
       b.lastHitBy = me.id;
       resolveDestroyed(w);
@@ -137,12 +142,17 @@ describe('combat', () => {
     const mate = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine', 'plates'], { x: 36, y: 33 });
     order(me, vehicleStats(w, me).weapons[0].part.id, trader.id);
     fireWeapons(w);
-    expect(trader.grudges).toContain(me.id);
-    expect(mate.grudges).toContain(me.id);
+    expect(stateOf(w, 'feud', trader.id, me.id)).not.toBeNull();
+    expect(stateOf(w, 'feud', mate.id, me.id)).not.toBeNull();
+    expect(w.events.filter((e) => e.t === 'hostile')).toEqual([
+      { t: 'hostile', vehicle: trader.id, against: me.id },
+      { t: 'hostile', vehicle: mate.id, against: me.id },
+    ]);
   });
 
   it('raiders attack the player within aggro range over a few turns', () => {
     const { w, me, buggy } = duel({ x: 38, y: 30 });
+    forceOption('hostileSeen', 'fight');
     let world = w;
     let shotAt = false;
     for (let i = 0; i < 6; i++) {
@@ -401,3 +411,51 @@ describe('player vision', () => {
   });
 });
 
+describe('NPC attack records and defensive fire', () => {
+  it('records every shot at the driver or a nearby faction mate it sees as an attack, even a miss', () => {
+    const w = emptyWorld({ x: 80, y: 80 });
+    const npc = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 10, y: 10 });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 14, y: 10 });
+    const mate = addVehicle(w, 'scavengers', 'scout', [], { x: 12, y: 12 });
+    const far = addVehicle(w, 'scavengers', 'scout', [], { x: 10 + SPAWN.neighborHelp + 8, y: 10 });
+    const shootAt = (target: Vehicle) => {
+      w.events = [];
+      raider.weaponOrders = { [mountedParts(raider, 'weapon')[0].id]: { targetId: target.id, aim: 'body' } };
+      raider.pos = { x: target.pos.x + 4, y: target.pos.y };
+      fireWeapons(w);
+      expect(w.events.some((e) => e.t === 'shot' && e.target === target.id)).toBe(true);
+      getResources(w, target).health = RULES.maxHealth;
+      mountedParts(raider, 'weapon')[0].reload = 0;
+    };
+    shootAt(far);
+    expect(npc.brain!.attackers).toEqual({});
+    shootAt(mate);
+    expect(npc.brain!.attackers).toEqual({ [raider.id]: false });
+    npc.brain!.attackers[raider.id] = true;
+    shootAt(npc);
+    expect(npc.brain!.attackers).toEqual({ [raider.id]: false });
+  });
+
+  it('an NPC opens fire only on its fight target away from guards, and always on an attacker', () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const npc = addVehicle(w, 'raiders', 'scout', ['mg', 'stockEngine'], { x: 30, y: 30 });
+    npc.brain = npcBrain('buggy', npc.pos, ['raider']);
+    const prey = addVehicle(w, 'traders', 'scout', ['mg'], { x: 33, y: 30 });
+    const aimed = () => Object.values(npc.weaponOrders).map((order) => order.targetId);
+    autoOrders(w, npc);
+    expect(aimed()).toEqual([]);
+    npc.brain.goals = [{ kind: 'fight', targetId: prey.id, destination: { ...prey.pos }, phase: 'travel', reason: 'test fight' }];
+    autoOrders(w, npc);
+    expect(aimed()).toEqual([prey.id]);
+    const gate = siteGates(REGION.towns[0])[0];
+    npc.pos = { x: gate.x + 3, y: gate.y };
+    prey.pos = { ...gate };
+    autoOrders(w, npc);
+    expect(aimed()).toEqual([]);
+    npc.brain.goals = [{ kind: 'flee', targetId: prey.id, destination: { x: 100, y: 100 }, phase: 'travel', reason: 'test flee' }];
+    npc.brain.attackers = { [prey.id]: true };
+    autoOrders(w, npc);
+    expect(aimed()).toEqual([prey.id]);
+  });
+});
