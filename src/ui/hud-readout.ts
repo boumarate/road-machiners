@@ -12,7 +12,7 @@ import { dist, type Vec } from "../sim/vec";
 import type { SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
 import { vehicleName } from "./format";
-import { celsius, engineCelsius, fuelLiters, kph } from "./units";
+import { celsius, engineCelsius, fuelLiters, hp, kph } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./icons";
 import type { ContextAction } from './hud';
@@ -182,12 +182,12 @@ export function getHudReadout(w: World) {
       },
       {
         label: "Cab",
-        value: `${cab.hp} / ${cabMax}`,
+        value: `${hp(cab.hp)} / ${cabMax}`,
         warning: cab.hp < cabMax,
       },
       {
         label: "Driver",
-        value: `${p.health} / ${RULES.maxHealth}`,
+        value: `${hp(p.health)} / ${RULES.maxHealth}`,
         warning: p.health < RULES.maxHealth,
       },
     ],

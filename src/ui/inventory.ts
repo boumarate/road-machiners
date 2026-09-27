@@ -41,7 +41,7 @@ import { el, panel } from "./dom";
 import type { UiHost } from "./host";
 import { createIcon, type IconName } from "./icons";
 import { vehicleMass } from "../sim/mass";
-import { fuelLiters, kg, liters } from "./units";
+import { fuelLiters, hp, kg, liters } from "./units";
 
 const CELL_PX = 42;
 
@@ -362,7 +362,7 @@ export class InventoryView {
       const chip = el(
         "div",
         { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
-        `${d.name} ${d.w}x${d.h} ${p.hp}/${d.hp}`,
+        `${d.name} ${d.w}x${d.h} ${hp(p.hp)}/${d.hp}`,
       );
       const item: GridItem = {
         id: `store-${p.id}`,
@@ -394,7 +394,7 @@ export class InventoryView {
       const chip = el(
         "div",
         { class: `inv-chip ${KIND_CLASS[d.kind]}`, title: partTitle(p) },
-        `${d.name} ${d.w}x${d.h} ${p.hp}/${d.hp}`,
+        `${d.name} ${d.w}x${d.h} ${hp(p.hp)}/${d.hp}`,
       );
       const item: GridItem = {
         id: `loot-${p.id}`,
@@ -781,5 +781,5 @@ function conditionBar(p: PartInstance): HTMLElement {
 
 function partTitle(p: PartInstance): string {
   const d = partDef(p.defId);
-  return `${d.name} (${d.kind}) ${p.hp}/${d.hp} HP, ${d.w}x${d.h}`;
+  return `${d.name} (${d.kind}) ${hp(p.hp)}/${d.hp} HP, ${d.w}x${d.h}`;
 }

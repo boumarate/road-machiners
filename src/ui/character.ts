@@ -6,6 +6,7 @@ import { spendSkillPoint, xpForLevel } from '../sim/progress';
 import { update } from '../sim/world';
 import { el, panel } from './dom';
 import type { UiHost } from './host';
+import { hp } from './units';
 
 export class CharacterScreen {
   private root = panel('modal');
@@ -47,7 +48,7 @@ export class CharacterScreen {
       el('button', { class: 'close', onclick: () => this.close() }, 'Close [C]'),
       el('h3', {}, 'Character'),
       el('div', {}, `Level ${p.level}   XP ${p.xp}/${xpForLevel(p.level + 1)}   Skill points ${p.skillPoints}`),
-      el('div', { class: 'dim' }, `Health ${p.health}/${RULES.maxHealth}   Knockouts ${p.knockouts}`),
+      el('div', { class: 'dim' }, `Health ${hp(p.health)}/${RULES.maxHealth}   Knockouts ${p.knockouts}`),
       el('table', {}, ...rows),
     );
   }

@@ -86,6 +86,7 @@ import { ShadeView } from "./render/shade";
 import { SoundRingView } from "./render/soundRing";
 import { clearSave, hasSave, loadWorld, saveWorld, writeSave } from "./save";
 import { GameMenu } from "../ui/game-menu";
+import { volleyTally } from "../ui/format";
 import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
 import { computeEngineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
@@ -801,11 +802,7 @@ export class Game {
         const def = gun && partDef(gun.defId);
         const heavy = def?.kind === "weapon" && def.look === "cannon";
         const slot = mine.findIndex((mw) => mw.part.id === e.weapon);
-        const hits = e.rounds.filter((r) => r.hit).length;
-        const dealt = e.rounds
-          .flatMap((r) => r.hits)
-          .reduce((sum, h) => sum + h.damage, 0);
-        const label = `${slot >= 0 ? `[${slot + 1}] ` : ""}${heavy ? "Cannon" : "MG"} ${hits}/${e.rounds.length}${e.rounds.some((r) => r.crit) ? " crit" : ""}${dealt > 0 ? ` −${dealt}` : ""}`;
+        const label = `${slot >= 0 ? `[${slot + 1}] ` : ""}${heavy ? "Cannon" : "MG"} ${volleyTally(e.rounds)}`;
         this.playVolley(a, b, e.rounds, heavy, label, e.target, rows);
       }
       if (e.t === "guardShot") {
@@ -819,16 +816,12 @@ export class Game {
             (REGION.settlement.guardTowerHeight + 0.2) * PHYSICS.metersPerTile,
           z: g.z,
         };
-        const hits = e.rounds.filter((r) => r.hit).length;
-        const dealt = e.rounds
-          .flatMap((r) => r.hits)
-          .reduce((sum, h) => sum + h.damage, 0);
         this.playVolley(
           a,
           b,
           e.rounds,
           false,
-          `Guards ${hits}/${e.rounds.length}${dealt > 0 ? ` −${dealt}` : ""}`,
+          `Guards ${volleyTally(e.rounds)}`,
           e.target,
           rows,
         );

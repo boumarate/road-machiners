@@ -37,3 +37,13 @@ export function kg(mass: number): string {
 export function engineCelsius(engineHeat: number): number {
   return Math.round(UNITS.engineColdCelsius + engineHeat * (UNITS.engineHotCelsius - UNITS.engineColdCelsius));
 }
+
+// Part HP and player health are fractional in the sim. A working part never reads 0.
+export function hp(value: number): number {
+  return Math.ceil(value);
+}
+
+// Damage is fractional in the sim. Any damage reads at least 1.
+export function damage(value: number): number {
+  return Math.ceil(value);
+}

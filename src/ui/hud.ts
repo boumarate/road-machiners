@@ -14,7 +14,7 @@ import {
 } from "./format";
 import { getHudReadout, getRescueReadout, moneyLabel, TruckConditionReadout } from "./hud-readout";
 import { createIcon, createSpeedDial, type IconName } from "./icons";
-import { kph } from "./units";
+import { hp, kph } from "./units";
 import { playerVehicle } from "../sim/damage";
 import "./truck-condition.css";
 
@@ -489,7 +489,7 @@ export class Hud {
         return el(
           "div",
           { class: p.hp > 0 ? "" : "bad" },
-          `${def.name}: ${p.hp}/${def.hp}`,
+          `${def.name}: ${hp(p.hp)}/${def.hp}`,
         );
       });
     parts.push(

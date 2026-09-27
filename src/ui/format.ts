@@ -11,8 +11,9 @@ import { topGoal } from '../sim/npc-activities';
 import { npcTraits } from '../sim/npc-decisions';
 import { pleaData, statesHeld, towData } from '../sim/states';
 import type { PartHit } from '../sim/armor';
-import type { GameEvent, NpcState, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
+import type { GameEvent, NpcState, ShotRound, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
+import { damage } from './units';
 
 export function vehicleName(world: World, id: string): string {
   if (id === world.player.vehicleId) return 'You';
@@ -96,7 +97,14 @@ function partDamage(hits: PartHit[]): Map<string, number> {
 function damageList(world: World, vehicleId: string, hits: PartHit[]): string {
   const dealt = partDamage(hits);
   if (dealt.size === 0) return '';
-  return `; ${vehicleName(world, vehicleId)}: ${[...dealt].map(([id, d]) => `${partName(world, vehicleId, id)} −${d}`).join(', ')}`;
+  return `; ${vehicleName(world, vehicleId)}: ${[...dealt].map(([id, d]) => `${partName(world, vehicleId, id)} −${damage(d)}`).join(', ')}`;
+}
+
+// "3/5 crit −12" over a volley: hits, crits and damage dealt.
+export function volleyTally(rounds: ShotRound[]): string {
+  const hits = rounds.filter((r) => r.hit).length;
+  const dealt = rounds.flatMap((r) => r.hits).reduce((sum, h) => sum + h.damage, 0);
+  return `${hits}/${rounds.length}${rounds.some((r) => r.crit) ? ' crit' : ''}${dealt > 0 ? ` −${damage(dealt)}` : ''}`;
 }
 
 type LogLine = { text: string; cls: string };
@@ -230,14 +238,14 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       const hits = e.rounds.filter((r) => r.hit).length;
       const crits = e.rounds.filter((r) => r.crit).length;
       const dealt = partDamage(e.rounds.flatMap((r) => r.hits));
-      const parts = [...dealt].map(([id, d]) => `, ${partName(world, e.target, id)} −${d}`).join('');
+      const parts = [...dealt].map(([id, d]) => `, ${partName(world, e.target, id)} −${damage(d)}`).join('');
       const text = `${partName(world, e.shooter, e.weapon)} → ${n(e.target)}${aim}: ${hits}/${e.rounds.length} hits${crits ? `, ${crits} crit` : ''}${parts} (${Math.round(e.chance * 100)}%)`;
       return { text, cls: e.target === me && dealt.size > 0 ? 'bad' : '' };
     }
     case 'guardShot': {
       const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === e.site)!;
       const hits = e.rounds.filter((r) => r.hit).length;
-      const parts = [...partDamage(e.rounds.flatMap((r) => r.hits))].map(([id, d]) => `, ${partName(world, e.target, id)} −${d}`).join('');
+      const parts = [...partDamage(e.rounds.flatMap((r) => r.hits))].map(([id, d]) => `, ${partName(world, e.target, id)} −${damage(d)}`).join('');
       return { text: `${site.name} guards → ${n(e.target)}: ${hits}/${e.rounds.length} hits${parts}`, cls: 'dim' };
     }
     case 'partDisabled':

@@ -55,6 +55,15 @@ describe("critical vehicle readout", () => {
         .map((r) => r.value),
     ).toEqual(["1,234", "93 / 200 L", "7.3"]);
   });
+  it("shows fractional cab HP and driver health as whole numbers", () => {
+    const w = emptyWorld();
+    const cab = corePart(w.vehicles[0], "cab");
+    cab.hp = 0.2;
+    w.player.health = 41.123456789;
+    const [, , , cabValue, driver] = getHudReadout(w).resources.map((r) => r.value);
+    expect(cabValue).toMatch(/^1 \/ \d+$/);
+    expect(driver).toBe(`42 / ${RULES.maxHealth}`);
+  });
   it("warns at the actual fuel speed-limit threshold", () => {
     const w = emptyWorld();
     const threshold =
