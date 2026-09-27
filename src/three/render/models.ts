@@ -65,6 +65,9 @@ const NAMES = [
   'arm_spaced',
   'arm_reinforced_cage',
   'arm_plow_ram',
+  'arm_plate',
+  'arm_scrap_sheet',
+  'arm_ceramic_tile',
 
   'cargo_rack',
   'cargo_trailer_box',
