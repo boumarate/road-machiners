@@ -16,6 +16,7 @@ export const RULES = {
   // Throttle zones ahead of the truck. They span `reach` tiles, split into brake, hold and accelerate
   // shares in that order. A click's distance picks the zone.
   throttleZones: { reach: 10, brake: 0.25, hold: 0.5, accelerate: 0.25 },
+  reclickRadius: 0.75, // tiles; a click this close to the order's point switches its kind, and the point's icon is this big
   passRadius: 1, // a drive-through order clears once the trail passes this close to its point
   passSpeedShare: 0.5, // ...or once its point is nearer than this share of the current speed
   minAimDistance: 1.5, // tiles; steering ignores route points closer than this

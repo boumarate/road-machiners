@@ -264,7 +264,7 @@ describe("backing up", () => {
   it("backs toward a nearby point behind it", () => {
     const { w, v, s } = setup(0);
     const dest = { x: 28, y: 30.5 };
-    const st = steerTo(w, s, v, clickOrder(dest, false), false);
+    const st = steerTo(w, s, v, clickOrder(dest, false, null), false);
     const end = advance({ x: 30, y: 30, heading: 0 }, st, 1);
     expect(st.speed).toBeLessThan(0);
     expect(end.x).toBeLessThan(30);
@@ -275,7 +275,7 @@ describe("backing up", () => {
   it("moves slowly toward a nearby point from rest", () => {
     const { w, v, s } = setup(0);
     const dest = { x: 31, y: 30 };
-    const st = steerTo(w, s, v, clickOrder(dest, false), false);
+    const st = steerTo(w, s, v, clickOrder(dest, false, null), false);
     expect(st.speed).toBeGreaterThan(0);
     expect(st.speed).toBeLessThan(s.accel);
     expect(st.speed).toBeLessThan(dist(v.pos, dest));
@@ -283,7 +283,7 @@ describe("backing up", () => {
 
   it("stays still when clicked at its own position", () => {
     const { w, v, s } = setup(0);
-    expect(steerTo(w, s, v, clickOrder(v.pos, false), false)).toEqual({
+    expect(steerTo(w, s, v, clickOrder(v.pos, false, null), false)).toEqual({
       speed: 0,
       turn: 0,
     });
@@ -316,7 +316,7 @@ describe("backing up", () => {
     let w = emptyWorld();
     w.obstacles = [{ id: "r", pos: { x: 31.5, y: 30 }, r: 0.8, kind: "rock" }];
     const dest = { x: 28, y: 30.5 };
-    w = setMoveOrder(w, clickOrder(dest, false));
+    w = setMoveOrder(w, clickOrder(dest, false, null));
     w = endTurn(w);
     expect(w.events.filter((e) => e.t === "collision")).toHaveLength(0);
     expect(w.vehicles[0].pos.x).toBeLessThan(30);
@@ -348,8 +348,22 @@ describe("click orders", () => {
   });
 
   it("a nearby ground click remains a destination", () => {
-    expect(clickOrder({ x: 31, y: 30 }, false)).toEqual({ kind: "through", dest: { x: 31, y: 30 } });
-    expect(clickOrder({ x: 36, y: 30 }, false).kind).toBe("through");
-    expect(clickOrder({ x: 31, y: 30 }, true).kind).toBe("stopAt");
+    expect(clickOrder({ x: 31, y: 30 }, false, null)).toEqual({ kind: "through", dest: { x: 31, y: 30 } });
+    expect(clickOrder({ x: 36, y: 30 }, false, null).kind).toBe("through");
+    expect(clickOrder({ x: 31, y: 30 }, true, null).kind).toBe("stopAt");
+  });
+
+  it("a click on the order's point switches it between driving through and stopping", () => {
+    const dest = { x: 31, y: 30 };
+    const near = { x: 31 + RULES.reclickRadius / 2, y: 30 };
+    const stop = clickOrder(near, false, { kind: "through", dest });
+    expect(stop).toEqual({ kind: "stopAt", dest });
+    expect(clickOrder(near, false, stop)).toEqual({ kind: "through", dest });
+  });
+
+  it("a click away from the order's point sets a new drive-through point", () => {
+    const far = { x: 31 + RULES.reclickRadius * 2, y: 30 };
+    expect(clickOrder(far, false, { kind: "stopAt", dest: { x: 31, y: 30 } })).toEqual({ kind: "through", dest: far });
+    expect(clickOrder(far, false, { kind: "brake" })).toEqual({ kind: "through", dest: far });
   });
 });

@@ -605,7 +605,7 @@ export class Game {
     )
       return this.apply(setMoveOrder(this.world, { kind: "brake" }));
     const p = this.rig.groundUnder(e.clientX, e.clientY, this.ground);
-    if (p) this.apply(setMoveOrder(this.world, clickOrder(p, e.shiftKey)));
+    if (p) this.apply(setMoveOrder(this.world, clickOrder(p, e.shiftKey, playerVehicle(this.world).order)));
   }
 
   private targetVehicle(target: Vehicle): void {
@@ -1275,7 +1275,7 @@ export class Game {
     // Steering zones and the path preview only help a driver who can give orders.
     const steer = !hide && playerCanAct(this.world);
     this.zones.root.visible = steer;
-    this.path.root.visible = steer;
+    this.path.show(steer, this.displayWorld(), this.modalOpen());
     this.weaponRange.root.visible = false;
     this.placeTargetMarkers();
     this.placeHitCard();

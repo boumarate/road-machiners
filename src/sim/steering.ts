@@ -416,8 +416,12 @@ export function zoneSpeed(s: VehicleStats, speed: number, d: number): number {
 }
 
 // A ground click always orders a course. Shift stops at the point.
-export function clickOrder(dest: Vec, shift: boolean): MoveOrder {
-  return shift ? { kind: "stopAt", dest } : { kind: "through", dest };
+// A plain click on the current point switches it between driving through and stopping.
+export function clickOrder(dest: Vec, shift: boolean, current: MoveOrder | null): MoveOrder {
+  if (shift) return { kind: "stopAt", dest };
+  if (current && current.kind !== "brake" && dist(dest, current.dest) < RULES.reclickRadius)
+    return { kind: current.kind === "through" ? "stopAt" : "through", dest: current.dest };
+  return { kind: "through", dest };
 }
 
 // Momentum driving. The click's distance picks the throttle zone; see zoneSpeed.
