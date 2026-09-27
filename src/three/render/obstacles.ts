@@ -1,27 +1,33 @@
 // Static map obstacles: rocks, wrecks, buildings, water. Map rocks are drawn once as an instanced model
 // per terrain chunk. Other obstacles are synced by id, so wrecks that appear mid-game (a vehicle dying)
-// get added without touching the rest.
+// get added without touching the rest. Loose loot piles are synced the same way.
 
 import * as THREE from 'three';
 import { hashStr } from '../../render/noise';
 import { PAL } from '../../render/palette';
 import { PHYSICS } from '../../data/physics';
 import { heightAt, type Terrain } from '../../sim/terrain';
-import type { Obstacle } from '../../sim/types';
+import { hasSalvage, salvageUnits } from '../../sim/salvage';
+import type { Obstacle, SalvageStock } from '../../sim/types';
 import { dist } from '../../sim/vec';
 import { instancedModel, model } from './models';
 import type { RenderScope } from './scope';
 import { TERRAIN_CHUNK } from './terrain';
 
 const S = PHYSICS.metersPerTile;
+const CRATES_RADIUS = 1.5; // meters, the reference radius of tools/blender/crates.py
+const PILE_FULL_UNITS = 20; // loot units at which a pile reaches the crates model's full size, about a full pickup bed
+const PILE_MIN_SIZE = 0.5; // share of full size for a small pile, so it still reads at the default zoom
 
 export class ObstacleViews {
   private readonly byId = new Map<string, THREE.Object3D>();
   private rockIds: Set<string> | null = null; // map rocks, fixed at the first sync
+  private readonly piles = new Map<string, { obj: THREE.Object3D; units: number }>();
 
   constructor(private readonly scope: RenderScope, private readonly terrain: Terrain) {}
 
-  sync(obstacles: Obstacle[]): void {
+  sync(obstacles: Obstacle[], salvage: SalvageStock[]): void {
+    this.syncPiles(salvage);
     if (!this.rockIds) this.rockIds = this.addRocks(obstacles.filter((o) => o.kind === 'rock'));
     const seen = new Set<string>();
     let rocks = 0;
@@ -49,6 +55,37 @@ export class ObstacleViews {
       disposeTree(obj);
       this.byId.delete(id);
     }
+  }
+
+  // A pile is drawn while it holds loot. Its footprint grows with its loot, so its size follows the square root of the units.
+  private syncPiles(salvage: SalvageStock[]): void {
+    const shown = salvage.filter((stock) => stock.pile && hasSalvage(stock));
+    const ids = new Set(shown.map((stock) => stock.id));
+    for (const [id, pile] of this.piles) {
+      if (ids.has(id)) continue;
+      this.scope.remove(pile.obj);
+      disposeTree(pile.obj);
+      this.piles.delete(id);
+    }
+    for (const stock of shown) {
+      const pile = this.piles.get(stock.id) ?? this.addPile(stock);
+      const units = salvageUnits(stock);
+      if (pile.units === units) continue;
+      pile.units = units;
+      pile.obj.scale.setScalar(Math.max(PILE_MIN_SIZE, Math.min(1, Math.sqrt(units / PILE_FULL_UNITS))));
+      pile.obj.traverse((o) => o.updateMatrix());
+    }
+  }
+
+  private addPile(stock: SalvageStock): { obj: THREE.Object3D; units: number } {
+    const obj = model('crates');
+    obj.position.set(stock.pos.x * S, heightAt(this.terrain, stock.pos.x, stock.pos.y) * S, stock.pos.y * S);
+    obj.rotation.y = hashStr(stock.id) * Math.PI * 2;
+    obj.traverse((o) => (o.matrixAutoUpdate = false));
+    const pile = { obj, units: 0 };
+    this.scope.add(obj, stock.pos, CRATES_RADIUS / S);
+    this.piles.set(stock.id, pile);
+    return pile;
   }
 
   // One instanced rock model per chunk, with the placement and tint of rockPlacement.

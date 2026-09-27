@@ -5,7 +5,8 @@ import { RULES } from '../data/rules';
 import { REGION } from '../data/region';
 import { buyPart } from './economy';
 import { freeCells, goodsCount, gridOf, mountedParts } from './grid';
-import { dumpGood, moveItem, removeAllGoods, spareParts, storePart, takeFromStorage } from './inventory';
+import { dumpItem, moveItem, removeAllGoods, spareParts, storePart, stowPart, takeFromStorage } from './inventory';
+import { makePart } from './factory';
 import { vehicleStats } from './stats';
 import { emptyWorld } from './testkit';
 import type { World } from './types';
@@ -127,10 +128,13 @@ describe('inventory grid', () => {
     expect(vehicleStats(w, w.vehicles[0]).weapons).toHaveLength(2);
   });
 
-  it('goods can be dumped, parts cannot', () => {
+  it('goods and loose parts can be dumped, installed parts cannot', () => {
     const w = emptyWorld();
     const before = w.vehicles[0].items.filter((it) => it.kind === 'good').length;
-    expect(dumpGood(w, good(w).id).vehicles[0].items.filter((it) => it.kind === 'good')).toHaveLength(before - 1);
-    expect(() => dumpGood(w, item(w, 'mg').id)).toThrow();
+    expect(dumpItem(w, good(w).id).vehicles[0].items.filter((it) => it.kind === 'good')).toHaveLength(before - 1);
+    expect(() => dumpItem(w, item(w, 'mg').id)).toThrow('Remove an installed part');
+    expect(stowPart(w, w.vehicles[0], makePart(w, 'mg'))).toBe(true);
+    const loose = w.vehicles[0].items.filter((it) => it.kind === 'part' && it.part.defId === 'mg').at(-1)!;
+    expect(dumpItem(w, loose.id).vehicles[0].items.some((it) => it.id === loose.id)).toBe(false);
   });
 });

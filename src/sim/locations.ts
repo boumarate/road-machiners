@@ -75,10 +75,11 @@ export function salvageNear(world: World): SalvageStock | null {
   return world.salvage.find((stock) => hasSalvage(stock) && salvageInRange(me, stock)) ?? null;
 }
 
-// A stock in range of the player truck with no loot left, or null. Collectors emptied it.
+// A site or wreck stock in range of the player truck with no loot left, or null. Collectors emptied it.
+// An empty pile is gone from the ground, so it never counts.
 export function emptySalvageNear(world: World): SalvageStock | null {
   const me = playerVehicle(world);
-  return world.salvage.find((stock) => !hasSalvage(stock) && salvageInRange(me, stock)) ?? null;
+  return world.salvage.find((stock) => !stock.pile && !hasSalvage(stock) && salvageInRange(me, stock)) ?? null;
 }
 
 // An unsearched stock is in reach: the player can start a search.

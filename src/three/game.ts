@@ -237,7 +237,7 @@ export class Game {
     const groundChunks = terrainMesh(this.world, groundScope);
     addSites(this.world.terrain, propScope);
     this.obstacles = new ObstacleViews(propScope, this.world.terrain);
-    this.obstacles.sync(this.world.obstacles);
+    this.obstacles.sync(this.world.obstacles, this.world.salvage);
     addScatter(this.world.terrain, this.world.obstacles, propScope);
     this.fog = new FogView(this.world, groundChunks, this.sightLimit);
     this.path = new PathView(this.world.terrain);
@@ -385,7 +385,7 @@ export class Game {
       this.shade.update(this.world);
     }
     if (!this.anim || this.anim.impacts)
-      this.obstacles.sync(this.world.obstacles);
+      this.obstacles.sync(this.world.obstacles, this.world.salvage);
     this.hud.renderTop(this.displayWorld());
     this.hud.renderRescue(this.displayWorld());
     if (!this.anim && this.world.player.state === "dead") this.death.show();
@@ -940,7 +940,7 @@ export class Game {
             )
           ]
         : PAL.plan;
-    this.path.set(turns, first, course);
+    this.path.set(turns, first, course, !v.direct);
   }
 
   private advanceTurn(now: number): { step: number | null; speed: number } {

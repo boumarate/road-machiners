@@ -3,13 +3,13 @@ import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
 import { addVehicle, emptyWorld, testDrive } from './testkit';
 import { resolveDestroyed } from './combat';
-import { addGoods } from './inventory';
-import { corePart, goodsCount, mountedParts } from './grid';
+import { addGoods, dumpItem } from './inventory';
+import { corePart, goodsCount, isLoot, mountedParts } from './grid';
 import { partDef } from '../data/parts';
 import { chassisDef } from '../data/chassis';
 import { RULES } from '../data/rules';
 import { takeAllLoot, takeStores, canScavenge, scavenge } from './locations';
-import { collectSalvage, hasSalvage } from './salvage';
+import { clearPiles, collectSalvage, createKnockoutSalvage, hasSalvage, salvageUnits } from './salvage';
 import { sitePads } from './sites';
 import { freeCells } from './grid';
 import { endTurn } from './world';
@@ -126,4 +126,61 @@ describe('road wreck salvage', () => {
       expect(hasSalvage(stock!)).toBe(true);
     }
   }, 30_000);
+});
+
+describe('loot piles', () => {
+  const goodItem = (w: ReturnType<typeof emptyWorld>) => w.vehicles[0].items.find((it) => it.kind === 'good')!;
+  const piles = (w: ReturnType<typeof emptyWorld>) => w.salvage.filter((stock) => stock.pile);
+
+  it('merges drops in reach into one pile and starts a new one out of reach', () => {
+    let w = emptyWorld({ x: 30, y: 30 });
+    w.salvage = [];
+    w = dumpItem(w, goodItem(w).id);
+    w.turn += 5;
+    w = dumpItem(w, goodItem(w).id);
+    expect(piles(w)).toHaveLength(1);
+    expect(salvageUnits(piles(w)[0])).toBe(2);
+    expect(piles(w)[0].pile!.until).toBe(w.turn + SALVAGE.pileTurns);
+    expect(w.player.scavenged).toContain(piles(w)[0].id);
+    w.vehicles[0].pos = { x: 60, y: 30 };
+    w = dumpItem(w, goodItem(w).id);
+    expect(piles(w)).toHaveLength(2);
+  });
+
+  it('adds a knockout drop to the pile already in reach', () => {
+    let w = emptyWorld({ x: 30, y: 30 });
+    w.salvage = [];
+    w = dumpItem(w, goodItem(w).id);
+    const loot = w.vehicles[0].items.filter((it) => isLoot(w.vehicles[0].chassisId, it)).length;
+    createKnockoutSalvage(w, w.vehicles[0]);
+    expect(piles(w)).toHaveLength(1);
+    expect(salvageUnits(piles(w)[0])).toBe(loot + 1);
+  });
+
+  it('clears a pile when it expires and stops searches of it', () => {
+    let w = emptyWorld({ x: 30, y: 30 });
+    w.salvage = [];
+    w = dumpItem(w, goodItem(w).id);
+    const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 30, y: 31 });
+    const id = piles(w)[0].id;
+    npc.job = { kind: 'search', stockId: id, turnsLeft: 3, total: 3 };
+    w.turn = piles(w)[0].pile!.until - 1;
+    clearPiles(w);
+    expect(piles(w)).toHaveLength(1);
+    w.turn += 1;
+    clearPiles(w);
+    expect(piles(w)).toHaveLength(0);
+    expect(npc.job).toBeNull();
+    expect(w.player.scavenged).not.toContain(id);
+  });
+
+  it('clears a pile once it is empty', () => {
+    let w = emptyWorld({ x: 30, y: 30 });
+    w.salvage = [];
+    w = dumpItem(w, goodItem(w).id);
+    const pile = piles(w)[0];
+    pile.goods = {};
+    clearPiles(w);
+    expect(piles(w)).toHaveLength(0);
+  });
 });
