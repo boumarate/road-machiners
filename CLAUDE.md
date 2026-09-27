@@ -20,7 +20,7 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 
 ## Config
 
-`.env` holds `VITE_SEED`, the world seed, `VITE_START_KIT`, the player start kit from `src/data/start.ts`, `VITE_COMBAT_SHOT_MS` and `VITE_COMBAT_READ_MS` for projectile travel and result-reading time, and `VITE_SAVE_TURNS` for the number of completed turns between local saves. `ELEVENLABS_API_KEY` and `SFX_MAX_GENERATIONS` are read only by the sound generation script. Durations and the save interval must be positive integers. Copy `.env.example` to `.env` on a fresh checkout. Existing checkouts must add any values missing from `.env.example`. Missing or invalid values stop the boot.
+`.env` holds `VITE_SEED`, the world seed, `VITE_START_KIT`, the player start kit from `src/data/start.ts`, `VITE_COMBAT_SHOT_MS` and `VITE_COMBAT_READ_MS` for projectile travel and result-reading time, `VITE_SAVE_TURNS` for the number of completed turns between local saves, and `VITE_AUTO_TURN_MS` for the pause between turns that run on their own. `ELEVENLABS_API_KEY` and `SFX_MAX_GENERATIONS` are read only by the sound generation script. Durations and the save interval must be positive integers. Copy `.env.example` to `.env` on a fresh checkout. Existing checkouts must add any values missing from `.env.example`. Missing or invalid values stop the boot.
 
 ## Architecture
 
@@ -28,9 +28,9 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 - Sim functions take state and return new state. Rendering reads state and never changes rules.
 - `src/sim/world.ts` runs the turn pipeline. Commands go through `update()`, which clones the world and mutates the draft.
 - `src/data/` holds all balance numbers and content. Sim code reads numbers from there, never inline.
-- NPC behavior has three layers. Traits in `brain.traits` are permanent and replace classes. A goal stack in `brain.goals` keeps long-term goals under interruptions, in `src/sim/npc-goals.ts`. Decision points in `src/sim/npc-decisions.ts` pick reactions by weighted chance with world RNG, and `src/sim/npc-activities.ts` fires them in `thinkNpc()`. `src/data/npcs.ts` holds traits, decision weights, thresholds and weighted spawn equipment tables.
-- `src/sim/states.ts` holds timed states between two vehicles, like a feud or a tow. A state ends as expired, fulfilled or broken, and its hook for that ending runs once. Feuds are the only source of hostility besides faction. `src/sim/npc-loadout.ts` samples fitting loadouts within equipment budgets and rated mass using world RNG. Equipment budgets do not spend driver wallets. NPCs know fixed places but perceive current vehicles only through their own sight and detection. `src/sim/detect.ts` gives player and NPCs the same sound, dust and scanner contacts.
-- `src/sim/resources.ts` accesses driver resources. NPC fuel and supplies use the player base rules. `src/sim/economy.ts` owns paid transactions, and `src/sim/salvage.ts` owns finite site and wreck stock shared by all collectors. Town markets remain unlimited. Player defeat remains a separate recovery rule.
+- NPC behavior has three layers. Traits in `brain.traits` are permanent and replace classes. A goal stack in `brain.goals` keeps long-term goals under interruptions, in `src/sim/npc-goals.ts`. Decision points in `src/sim/npc-decisions.ts` pick reactions by weighted chance with world RNG, and `src/sim/npc-activities.ts` fires them in `thinkNpc()`. `src/data/npcs.ts` holds traits, decision weights, thresholds and weighted spawn equipment tables. `src/sim/npc-loadout.ts` samples fitting loadouts within equipment budgets and rated mass using world RNG. Equipment budgets do not spend driver wallets. NPCs know fixed places but perceive current vehicles only through their own sight and detection. `src/sim/detect.ts` gives player and NPCs the same sound, dust and scanner contacts.
+- `src/sim/states.ts` holds timed states between two vehicles, like a feud or a tow. A state ends as expired, fulfilled or broken, and its hook for that ending runs once. Feuds are the only source of hostility besides faction.
+- `src/sim/resources.ts` accesses driver resources. NPC fuel and supplies use the player base rules. `src/sim/economy.ts` owns paid transactions, and `src/sim/salvage.ts` owns finite site and wreck stock shared by all collectors. Town markets remain unlimited.
 - `src/phys/` runs vehicle movement in Rapier. `endTurn(world, physicsMove(...))` plugs it into the turn pipeline in place of the sim's 2D movement. A turn restores the physics world from a snapshot and simulates one second, so the path preview runs the same physics as the turn. Physics numbers live in `src/data/physics.ts`.
 - `src/three/` holds the 3D game: `game.ts` wires input to sim, sim and physics to the view, and the HTML UI. `src/three/render/` holds the 3D views. `src/render/` holds the palette and the ground painter. `src/ui/` holds the HTML overlay panels.
 - `src/sim/nav/` holds route planning data. Grids are built once per terrain and vehicle radius, and `warmRoutes` builds them at boot. Wrecks and parked vehicles are stamped per query. Long routes search a coarse corridor first.
@@ -41,6 +41,7 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 - `src/audio/` plays sound through Web Audio. `src/data/sounds.ts` lists every cue and its files in `public/sfx/`, and a test keeps both in sync. Every file goes through `scripts/sfx-lib.mjs`, which sets loudness per sound group and one format. Generated prompts start with the shared `SOUND_STYLE`, so sounds stay consistent.
 - Any uncaught error shows a fullscreen crash screen with the message.
 - All randomness goes through `src/sim/rng.ts` with state in the world. Render-only noise lives in `src/render/noise.ts`.
+- `src/sim/bridge.ts` holds Canyon Bridge. The map stays one level. `heightAt` returns the deck height on the deck, and `groundAt` returns the canyon floor under it. Both rails block routes and physics, so trucks get on only over the ends.
 - Map coordinates are in tiles. Physics and 3D space are in meters: map x is 3D x, map y is 3D z, height is 3D y. `src/phys/frames.ts` converts.
 - The UI shows real units: km/h, meters, kg, liters and °C. `src/ui/units.ts` converts from sim units, with display numbers in `src/data/units.ts`.
 
@@ -72,14 +73,14 @@ To add a model:
 
 `models.ts` loads every model at boot. It swaps the glTF materials for flat Lambert, so models match the procedural meshes.
 
-Trucks are car-shaped bodies built from part models on the inventory grid. One grid cell is 0.484 m across and 0.65 m along the truck on every chassis, set by `PHYSICS.cell`. `bodyOf()` in `src/sim/body.ts` derives each physics body from its grid, so the drawn truck matches its collider. Each chassis splits its rows into hood, cab and bed `zones` in `src/data/chassis.ts`. `buildFrame()` in `src/three/render/vehicle.ts` places zone pieces per cell and edge: hood panels and flares, a closed cab, a sunk bed, doors and bed walls, nose, tail, bumpers and fenders. Right-side pieces are mirrored left-side models.
+Each truck is one base model per chassis plus shared kit parts on its inventory grid. One grid cell is 0.484 m across and 0.65 m along the truck on every chassis, set by `PHYSICS.cell`. `bodyOf()` in `src/sim/body.ts` derives each physics body from its grid. The base, `tools/blender/base_<chassis>.py`, fills that footprint with its origin at the collider center, so the drawn truck matches its collider. Each base copies a real vehicle in the stylized style of `base_scout.py`: big flat panels and few strong color blocks, readable at the default zoom. `tools/blender/parts_common_base.py` holds the shared style and checks. A base exports a `row<y>` socket per grid row where kit parts stand, with its x at the surface front edge, and a `floor<y>` socket where core parts and mounted engines stand. `src/render/partLooks.ts` maps each chassis to its base.
 
 Part models follow these rules:
 
 - Build a part for its rotation-0 footprint: w cells across in Blender Y and h cells along in Blender X, with the nose at +X. Truck right is Blender -Y. The origin is the footprint center on the deck top.
 - The view turns a part for rotation 1 and stretches it to the turned footprint. So keep parts boxy.
-- Build armor as a front-edge row with its outer face at +X. The view turns it to the side its cells lie on. Mounted plates replace the body side below the beltline, and rams replace the bumper.
-- Items stand on the surface of their zone: the hood top, the cab roof or the bed floor. Engines in the hood show through a cutout.
-- A material named `paint` takes the faction color. Other materials keep their colors.
+- Build armor as a front-edge row with its outer face at +X. The view turns it to the side its cells lie on. Mounted plates hang over the base side, and rams replace the bumper.
+- Items stand on their row surface. An engine on its mount cells shows through a cutout in the base. A weapon below the base's highest row surface stands on a riser post, so its turret clears the cab.
+- A material named `paint` takes the faction color, and `trim` on a base takes the faction's second color. Other materials keep their colors.
 - `src/render/partLooks.ts` maps each part and good id to its model. A part with no model stops the build.
 - Weapons are assembled from a mount, a receiver, a barrel and an optional extra. They join at sockets made with `Kit.socket()`: `head` on mounts, and `muzzle` and `extra` on receivers. Each weapon def has a pool per slot in `WEAPON_POOLS`, and the part id picks from it. Boot fails when a pool model lacks a socket.

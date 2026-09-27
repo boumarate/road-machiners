@@ -3,13 +3,15 @@
 // player. Once the player accepts, the truck leaves physics and trails the tower along its path. Arrival fulfils
 // the state, and its hook in src/sim/states.ts takes the fee, even into debt. Refusing, driving away or unhitching
 // breaks it for free, and the tower holds `spurned` toward the player, so it never offers again.
+// A stranded player can switch on an emergency beacon, which calls towers from beyond sight, and raiders too.
 
 import { chassisDef } from '../data/chassis';
 import { ECONOMY } from '../data/goods';
 import { REGION, type TownDef } from '../data/region';
-import { TOW } from '../data/tow';
+import { BEACON, TOW } from '../data/tow';
 import { isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
+import { contactsOf, hearsBeacon } from './detect';
 import { route, routeLength } from './path';
 import { npcProfile } from './npc-profile';
 import { canUseSite, siteGates } from './sites';
@@ -57,13 +59,35 @@ export function towGoal(world: World, vehicle: Vehicle): NpcActivity {
   return { kind: 'tow', targetId: town.id, destination: { ...town.pos }, phase: 'travel', reason: 'tow the player to town' };
 }
 
-// The player's truck when this NPC could offer it a tow: the player is awake and stranded with no tow, in sight,
-// and not hostile to the NPC. Otherwise null.
-export function strandedPlayer(world: World, vehicle: Vehicle): Vehicle | null {
+// Where this NPC puts the player's truck when it could offer a tow: the player is awake and stranded with no tow,
+// not hostile to the NPC, and in sight or calling on the beacon. Otherwise null.
+export function strandedPlayerAt(world: World, vehicle: Vehicle): Vec | null {
   const me = playerVehicle(world);
   if (playerTow(world) || world.player.state !== 'active') return null;
-  if (!isStranded(world, me) || isHostile(world, vehicle, me) || !canVehicleSee(world, vehicle, me.pos)) return null;
-  return me;
+  if (!isStranded(world, me) || isHostile(world, vehicle, me)) return null;
+  return canVehicleSee(world, vehicle, me.pos) ? me.pos : beaconCenter(world, vehicle, me);
+}
+
+// Where the player's beacon contact puts the truck for this listener, or null when the beacon does not reach it.
+function beaconCenter(world: World, listener: Vehicle, me: Vehicle): Vec | null {
+  if (!hearsBeacon(world, listener, me)) return null;
+  const contact = contactsOf(world, listener, BEACON.range).find((c) => c.vehicleId === me.id);
+  if (!contact) throw new Error(`${listener.id} hears the beacon but has no contact for it`);
+  return contact.center;
+}
+
+// The emergency beacon switch. Switching on needs a stranded truck. Switching off is always allowed.
+export function setBeacon(world: World, on: boolean): World {
+  return playerCommand(world, (w) => {
+    if (on && !isStranded(w, playerVehicle(w))) throw new Error('The beacon needs a stranded truck');
+    w.player.beacon = on;
+  });
+}
+
+// The beacon switches off once the truck can drive again or hangs on a tow rope.
+export function checkBeacon(world: World): void {
+  if (!world.player.beacon) return;
+  if (isTowed(world) || !isStranded(world, playerVehicle(world))) world.player.beacon = false;
 }
 
 // Runs a parked tower's activity. Returns why the activity ended, or null while it goes on.
@@ -166,6 +190,7 @@ export function acceptTow(world: World): World {
     const me = playerVehicle(w);
     me.order = null;
     me.speed = 0;
+    checkBeacon(w);
   });
 }
 

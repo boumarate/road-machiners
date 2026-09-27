@@ -16,34 +16,23 @@ export function hasSave(storage: Storage): boolean {
 
 // Saves leave out the terrain, which buildTerrain rebuilds from the seed. The 600-tile terrain alone is
 // about 10 MB of JSON, past the browser's local storage quota. 4 adds weather, jobs, contacts and dust.
-// 6 moves wheel cells. 7 adds engine heat, auto patch and a parts limit on repair jobs; 6 saves
-// migrate on load.
-const SAVE_VERSION = 7;
+// 6 moves wheel cells. 7 adds engine heat, auto patch and a parts limit on repair jobs. 8 adds the
+// player state, tows and the beacon. 9 adds NPC traits, goal stacks and states. Older saves do not load.
+const SAVE_VERSION = 9;
 
 export function loadWorld(storage: Storage): World | null {
   const raw = storage.getItem(SAVE_KEY);
   if (raw === null) return null;
   const save: unknown = JSON.parse(raw);
-  if (!save || typeof save !== 'object' || !('version' in save) || (save.version !== SAVE_VERSION && save.version !== 6)) {
+  if (!save || typeof save !== 'object' || !('version' in save) || save.version !== SAVE_VERSION) {
     throw new SaveError('Incompatible game save version');
   }
   if (!('world' in save) || !isWorld(save.world)) throw new SaveError('Invalid saved world');
-  if (save.version === 6) migrateFrom6(save.world);
   const explored: unknown = save.world.player.explored;
   const tiles = save.world.size * save.world.size;
   if (!Array.isArray(explored) || explored.length !== tiles) throw new SaveError('Invalid saved explored tiles');
   const player = { ...save.world.player, explored: Uint8Array.from(explored) };
   return { ...save.world, player, terrain: buildTerrain(save.world.seed, save.world.size) };
-}
-
-// A version 6 world has a cold engine and auto patch on. An open repair job may spend every part it
-// needs, as it could before the limit existed.
-function migrateFrom6(world: Omit<World, 'terrain'>): void {
-  world.player.engineHeat = 0;
-  world.player.autoRepair = true;
-  for (const v of world.vehicles) {
-    if (v.job?.kind === 'repair') v.job.parts = Number.MAX_SAFE_INTEGER;
-  }
 }
 
 function isWorld(value: unknown): value is Omit<World, 'terrain'> {

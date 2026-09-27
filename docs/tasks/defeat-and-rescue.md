@@ -1,6 +1,6 @@
 # Defeat and rescue
 
-**Status:** executing
+**Status:** validating
 **Branch:** defeat-rescue
 **Worktree:** .worktrees/defeat-rescue
 **Goal:** In the browser, a lost fight shows raiders looting the player's truck, the stripped truck crawls, and a passing trader or scavenger tows it to town for a fee on debt. Health at 0 ends the run. The user confirms the loop in play.
@@ -190,7 +190,7 @@ UK3 resolved: `Game.tick()` in `src/three/game.ts` calls `endTurn()` when `autoR
 - 4.7 `src/sim/stats.ts` (modify) — A hitched tower's `maxSpeed` is multiplied by `TOW.speedShare`.
 - 4.8 `src/sim/world.ts:137-165` (modify)
   - The pipeline runs `followTower` after `move`.
-  - `autoRuns(world): boolean` is true while knocked out or hitched.
+  - `autoRuns(world): boolean` is true while knocked out or hitched, and while the beacon is on with the truck parked and no offer open. A beacon wait lasts 150 to 270 turns, too many to end by hand.
   - Driving the player out of reach clears an open offer and counts as refusing it.
 - 4.9 `src/sim/economy.ts:135-160` (modify) — `refuelAndRepair()` buys nothing on negative money, instead of flooring a negative count.
 - Tests:
@@ -266,5 +266,34 @@ Added after PH4b, since pickup still took 150 to 190 turns on the busiest road a
 ## Code smells
 
 - `src/phys/drive.ts:254-266` — Physics driving sets speed from the distance to the destination only and never slows for corners, so trucks bump sites on sharp road turns.
-- `src/phys/drive.ts:271` — Physics reversing starts only past 90 degrees off, and the player truck has no stuck recovery, so a truck pressed nose first against an obstacle stays there.
+- `src/phys/drive.ts:271` — Physics reversing starts only past 90 degrees off, and the player truck has no stuck timer. A truck driving to a far point that hits an obstacle nose first keeps pushing until the player clicks behind it.
 - `src/sim/salvage.ts` — Player knockout stocks are never cleared, because `clearOldWrecks` only clears stocks with a matching obstacle.
+- `src/sim/nav/layer.ts` — Route planning prices ground type but not slope, so traders climb a scree slope near (451, 260) at 0.24 speed and lose hundreds of turns there.
+- `src/sim/npc-activities.ts:95` — The contact trust limit filters by distance, not circle size, so a trader with a grudge ignores a far, tight beacon contact.
+- `src/sim/ai.ts:28-35` — Very slow uphill motion counts as stuck, and the back-out recovery undoes the climb.
+
+## Conclusion
+
+Outcome: The sim loop, HUD and saves are built and verified in d9bf789 and later. The goal waits for the user to play a lost fight, a tow and a death.
+
+Invariants:
+- IV1 to IV9 — Each has a Vitest test in `defeat.test.ts`, `health.test.ts`, `wear.test.ts`, `resources.test.ts`, `pushing.test.ts`, `tow.test.ts` or `save.test.ts`. 569 tests pass.
+
+### Assumptions check
+- AS1 — violated. With passing traffic alone, no tow came in 600 turns on any road, even after PH4b. With the beacon, an offer came at turn 150 to 270 at all six spots. Traders lose turns on a steep scree slope, which is recorded under Code smells.
+
+### Unknowns outcome
+- UK1 — resolved. The loot rule lives in `isHostile()`, and `isFoe()` keeps the old side rule. The knockout wake check uses `isFoe()`, so the player stays out while looters watch.
+- UK2 — resolved. `isNear()` is false for the hitched player, and `followTower()` places the truck on the tower's trail.
+- UK3 — resolved. `Game.autoTurn()` runs turns every `VITE_AUTO_TURN_MS` while `autoRuns()` is true.
+
+### Deviations from plan
+- `435082e` changes NPC give-way in `src/sim/ai.ts` and the corner roll in `src/sim/steering.ts`. PH4b concentrated traffic on roads, and two NPCs meeting head on both waited forever. The NPC whose id sorts first now waits, and the other routes around it. Tests in `ai.test.ts` and `drive.test.ts` require two head-on traders to pass within 10 turns.
+- `f816bcf` keeps each driver's route between turns in `src/sim/path.ts` and `src/phys/drive.ts`. PH4b removed the straight-line fast path, and the first move preview rose from 33 ms to 70 ms against a 50 ms budget. The cost was replanning long NPC routes every turn. A kept route is reused only when its destination moved less than `RULES.arriveRadius`, its next leg is clear, and no new blocker sits near it. The first preview is now 35 to 43 ms. Tests in `path.test.ts` cover the reuse and give-up cases.
+- `src/ui/town.ts` shows debt, which PH5 did not list.
+
+Review findings:
+- Important: two unplanned movement changes lacked a recorded reason. They are recorded above.
+
+Verified by: `npm run playtest` at 60 fps. `npm run perf` shows previewMs at 35 to 43 against 50. turnMs is 135 to 155 against 100, and main is at 137. Five seeds drive Bowl to Nose in physics with 0 to 2 site bumps. Screenshots of the offer panel, the tow, the knockout banner and the death screen are in `tmp/ph5-*.png`.
+

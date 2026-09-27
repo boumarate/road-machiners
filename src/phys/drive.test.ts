@@ -6,7 +6,8 @@ import { addGoods, removeAllGoods } from '../sim/inventory';
 import { loadFactor, vehicleMass } from '../sim/mass';
 import { addVehicle, emptyWorld, npcBrain, partHp } from '../sim/testkit';
 import type { MoveOrder, World } from '../sim/types';
-import { angleDiff, dist } from '../sim/vec';
+import { angleDiff, bearing, dist, type Vec } from '../sim/vec';
+import { REGION } from '../data/region';
 import { endTurn, setDirect, setMoveOrder } from '../sim/world';
 import { PHYSICS } from '../data/physics';
 import { buildDrive, freeDrive, initPhysics, routeAim, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
@@ -40,6 +41,25 @@ const me = (w: World) => w.vehicles[0];
 const HILL_GRADE = 0.2; // height per tile, steeper than 90% of the generated map's slopes
 
 describe('physics turns', () => {
+  it('two traders meeting head-on on a road both get past', () => {
+    const bowl = REGION.towns[0];
+    const nose = REGION.towns[1];
+    const toNose = bearing(bowl.pos, nose.pos);
+    const mid = { x: (bowl.pos.x + nose.pos.x) / 2, y: (bowl.pos.y + nose.pos.y) / 2 };
+    const at = (d: number) => ({ x: mid.x + Math.cos(toNose) * d, y: mid.y + Math.sin(toNose) * d });
+    // The player watches from the side, so both traders drive in physics.
+    const w = emptyWorld({ x: mid.x + Math.cos(toNose + Math.PI / 2) * 12, y: mid.y + Math.sin(toNose + Math.PI / 2) * 12 });
+    const east = addVehicle(w, 'traders', 'hauler', ['stockEngine'], at(-1.5), toNose);
+    const west = addVehicle(w, 'traders', 'hauler', ['stockEngine'], at(1.5), toNose + Math.PI);
+    east.brain = { ...npcBrain('trader', east.pos, ['trader']), goals: [{ kind: 'sell', targetId: 'nose', destination: { ...nose.pos }, reason: 'test', phase: 'travel' }] };
+    west.brain = { ...npcBrain('trader', west.pos, ['trader']), goals: [{ kind: 'sell', targetId: 'bowl', destination: { ...bowl.pos }, reason: 'test', phase: 'travel' }] };
+    const along = (p: Vec) => (p.x - mid.x) * Math.cos(toNose) + (p.y - mid.y) * Math.sin(toNose);
+    // Ten turns cover a stop, a detour around the stopped truck and the drive past it.
+    const { w: after } = play(w, 10);
+    expect(along(after.vehicles.find((v) => v.id === east.id)!.pos)).toBeGreaterThan(5);
+    expect(along(after.vehicles.find((v) => v.id === west.id)!.pos)).toBeLessThan(-5);
+  });
+
   it('turns an NPC around for a destination behind it', () => {
     // The player stands within the live radius of the whole drive, so the NPC keeps its physics body.
     const w = emptyWorld({ x: 20, y: 50 });

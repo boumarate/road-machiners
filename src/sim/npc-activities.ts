@@ -27,7 +27,7 @@ import type { Contact, NpcActivity, NpcState, Vehicle, World } from './types';
 import { canUseSite, isWalled, siteGates } from './sites';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
-import { dropTow, playerTow, runTow, strandedPlayer, towGoal } from './tow';
+import { dropTow, playerTow, runTow, strandedPlayerAt, towGoal } from './tow';
 
 function createActivity(kind: NpcActivity['kind'], targetId: string | null, destination: Vec | null, reason: string): NpcActivity {
   return { kind, targetId, destination, reason, phase: destination ? 'travel' : 'act' };
@@ -155,8 +155,7 @@ function invalidReason(world: World, vehicle: Vehicle, goal: NpcActivity, contac
   }
   if (goal.kind === 'tow') {
     if (heldTow(world, vehicle)) return null;
-    const me = strandedPlayer(world, vehicle);
-    return me && !stateOf(world, 'spurned', vehicle.id, me.id) ? null : 'the tow is off';
+    return strandedPlayerAt(world, vehicle) && !stateOf(world, 'spurned', vehicle.id, world.player.vehicleId) ? null : 'the tow is off';
   }
   return null;
 }
@@ -236,9 +235,10 @@ function onHurt(world: World, vehicle: Vehicle, profile: NpcProfile): void {
 }
 
 function onStrandedSeen(world: World, vehicle: Vehicle): void {
-  const me = strandedPlayer(world, vehicle);
-  if (!me || !notice(world, vehicle, 'strandedSeen', me.id)) return;
-  if (decide(world, vehicle, 'strandedSeen', me.id) === 'tow') pushGoal(world, vehicle, createActivity('tow', me.id, { ...me.pos }, 'help a stranded truck'));
+  const at = strandedPlayerAt(world, vehicle);
+  const me = world.player.vehicleId;
+  if (!at || !notice(world, vehicle, 'strandedSeen', me)) return;
+  if (decide(world, vehicle, 'strandedSeen', me) === 'tow') pushGoal(world, vehicle, createActivity('tow', me, { ...at }, 'help a stranded truck'));
 }
 
 // A flee keeps running from where its threat is now, and an investigation heads for the contact's newest circle.

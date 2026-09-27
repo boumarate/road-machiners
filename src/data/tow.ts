@@ -1,4 +1,6 @@
-// Towing a stranded player to town. See src/sim/tow.ts.
+// Towing a stranded player to town, and the emergency beacon that calls for it. See src/sim/tow.ts.
+
+import { DETECT } from './detect';
 
 export const TOW = {
   // Money for any tow, however short, so a tow from the town gate still costs something.
@@ -12,4 +14,14 @@ export const TOW = {
   gap: 2,
   // Share of its top speed the tower drives at. It drives with care, so the towed truck does not swing out.
   speedShare: 0.6,
+};
+
+export const BEACON = {
+  // Tiles the beacon reaches, through hills. The map is 600 tiles across. The nearest trader or scavenger to a
+  // stranded truck on the main roads was 75 to 170 tiles away over 600 turns. 250 tiles covers that with margin
+  // for a helper on the far side of its route, yet stays under half the map, so one call never draws everyone.
+  range: 250,
+  // Contact circle radius in tiles: the smallest circle any contact has. The beacon names the truck, so every
+  // listener trusts it at any distance, and a driver that reaches the circle is close enough to see the truck.
+  radius: DETECT.fuzz.base,
 };

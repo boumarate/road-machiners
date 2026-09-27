@@ -75,6 +75,54 @@ export function straightClear(world: World, a: Vec, b: Vec, radius: number, extr
   return lineCost(terrainNav(world.terrain), statics, dynamicBlockers(world.obstacles, extra), a, b, radius + CLEARANCE, Infinity) < Infinity;
 }
 
+// A route kept from an earlier turn: its point, its waypoints, and the keys of the blockers that
+// change during play which it was planned around.
+export type KeptRoute = { dest: Vec; points: Vec[]; blockers: string[] };
+
+export function keepRoute(world: World, dest: Vec, points: Vec[], extra: Blocker[]): KeptRoute {
+  return { dest: { ...dest }, points, blockers: dynamicBlockers(world.obstacles, extra).map((o) => blockerKey([o])) };
+}
+
+// The rest of a kept route toward nearly the same point, or null when it no longer holds. Points the
+// vehicle has driven past drop off first. A route that ended on its old point now ends on `to`; one
+// that ended at the closest reachable spot keeps it. The leg from the vehicle and a moved last leg must
+// be clear lines over ground no costlier than either end, as for a shortcut. The vehicle may already
+// drive inside the CLEARANCE margin, which only absorbs steering bulge, so these legs must just not
+// touch. A kill wreck or parked vehicle the route was not planned around must keep full clearance
+// from every leg. Static obstacles, cliffs and the known blockers are as the planner checked them.
+export function continueRoute(world: World, from: Vec, kept: KeptRoute, to: Vec, radius: number, extra: Blocker[]): Vec[] | null {
+  const dynamic = dynamicBlockers(world.obstacles, extra);
+  const known = new Set(kept.blockers);
+  const fresh = dynamic.filter((o) => !known.has(blockerKey([o])));
+  const nav = terrainNav(world.terrain);
+  const statics = staticSet(world.obstacles, world.terrain.size);
+  const reach = radius + CLEARANCE;
+  const points = kept.points;
+  let k = 0;
+  while (k < points.length - 1 && passed(from, points[k], points[k + 1])) k++;
+  const last = points[points.length - 1];
+  const moved = last.x === kept.dest.x && last.y === kept.dest.y && (last.x !== to.x || last.y !== to.y);
+  const rest = moved ? [...points.slice(k, -1), to] : points.slice(k);
+  const leg = (a: Vec, b: Vec) => lineCost(nav, statics, dynamic, a, b, radius, costliestTile(nav, a, [b], 0, 0)) < Infinity;
+  if (!leg(from, rest[0])) return null;
+  if (moved && rest.length > 1 && !leg(rest[rest.length - 2], to)) return null;
+  for (const o of fresh) {
+    let prev = from;
+    for (const p of rest) {
+      if (segmentDist(o.pos, prev, p) < o.r + reach) return null;
+      prev = p;
+    }
+  }
+  // Shortcuts from the new position, as a fresh plan takes them, so the truck does not hold to a corner
+  // chosen from where it was a turn ago.
+  return shortcut(nav, statics, dynamic, from, rest, reach);
+}
+
+// Whether at is beyond point a along the leg from a to b.
+function passed(at: Vec, a: Vec, b: Vec): boolean {
+  return (at.x - a.x) * (b.x - a.x) + (at.y - a.y) * (b.y - a.y) > 0;
+}
+
 export function routeLength(from: Vec, points: Vec[]): number {
   let total = 0;
   let prev = from;

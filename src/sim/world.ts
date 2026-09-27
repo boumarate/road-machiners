@@ -21,7 +21,7 @@ import { initializeSalvage } from './salvage';
 import { timed } from '../perf';
 import { noteHurt, resolveNpcActivities } from './npc-activities';
 import { advanceStates } from './states';
-import { followTower, isTowed } from './tow';
+import { checkBeacon, followTower, isTowed, playerTow } from './tow';
 import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
 import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
@@ -65,6 +65,7 @@ export function newWorld(seed: number, kit: StartKit): World {
       knockouts: 0,
       state: 'active',
       knockoutTurns: 0,
+      beacon: false,
       explored: new Uint8Array(REGION.size * REGION.size),
       visible: [],
       contacts: [],
@@ -124,15 +125,25 @@ export function update(world: World, fn: (draft: World) => void): World {
   return draft;
 }
 
+// Whether player commands are allowed now. The UI checks it before issuing one.
+export function playerCanAct(world: World): boolean {
+  return world.player.state === 'active' && !isTowed(world);
+}
+
 // Player commands need an awake, living driver who is not on a tow rope. Unhitch checks the rope itself.
 export function requireActivePlayer(world: World): void {
   if (world.player.state !== 'active') throw new Error(`Player is ${world.player.state}`);
   if (isTowed(world)) throw new Error('Player is towed');
 }
 
-// Turns run on their own while the player cannot act: knocked out, or towed.
+// Turns run on their own while the player cannot act, knocked out or towed. They also run while the player waits
+// on the beacon: parked with no move order and no offer open. A beacon wait is too many turns to end by hand.
 export function autoRuns(world: World): boolean {
-  return world.player.state === 'knockedOut' || isTowed(world);
+  const p = world.player;
+  if (p.state === 'knockedOut' || isTowed(world)) return true;
+  const me = playerVehicle(world);
+  const parked = me.speed <= RULES.parkedSpeed && (me.order === null || me.order.kind === 'brake');
+  return p.state === 'active' && p.beacon && parked && playerTow(world) === null;
 }
 
 // A player command: rejected unless the player is active and not towed, then applied like any update.
@@ -182,6 +193,7 @@ export function endTurn(
     leakFuel(w);
     resolveDestroyed(w);
     advanceStates(w);
+    checkBeacon(w);
     resolveNpcActivities(w);
     discoverSites(w);
     useOasis(w);
