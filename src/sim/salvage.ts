@@ -2,11 +2,13 @@ import { SALVAGE, type LootTable } from '../data/salvage';
 import { ECONOMY } from '../data/goods';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
+import { chassisDef } from '../data/chassis';
 import { partDef } from '../data/parts';
 import { makePart } from './factory';
 import { goodsCount, isLoot, isMounted } from './grid';
 import { addGoods, stowPart } from './inventory';
 import { chance, randInt } from './rng';
+import { getResources } from './resources';
 import { vehicleStats } from './stats';
 import type { PartInstance, SalvageStock, Vehicle, World } from './types';
 import { canUseSite } from './sites';
@@ -30,14 +32,20 @@ function rollStock(world: World, table: LootTable, id: string, pos: Vec, radius:
   goods.parts = randInt(world, table.parts[0], table.parts[1]);
   const parts: PartInstance[] = [];
   if (chance(world, table.sparePartChance)) parts.push(makePart(world, table.spareParts[randInt(world, 0, table.spareParts.length - 1)]));
-  return { id, pos: { ...pos }, radius, goods, parts };
+  return { id, pos: { ...pos }, radius, goods, parts, fuel: randInt(world, ...table.fuel), supplies: randInt(world, ...table.supplies) };
 }
 
 export function hasSalvage(stock: SalvageStock): boolean {
-  return stock.parts.length > 0 || Object.values(stock.goods).some((count) => count > 0);
+  return stock.parts.length > 0 || Object.values(stock.goods).some((count) => count > 0) || hasStores(stock);
+}
+
+// Fuel or supplies left in the stock.
+export function hasStores(stock: SalvageStock): boolean {
+  return (stock.fuel ?? 0) > 0 || (stock.supplies ?? 0) > 0;
 }
 
 // Total loot units left in a stock, goods and parts alike, for estimating a search's length.
+// Fuel and supplies pour out at once, so they add no search time.
 export function salvageUnits(stock: SalvageStock): number {
   return stock.parts.length + Object.values(stock.goods).reduce((sum, count) => sum + count, 0);
 }
@@ -53,12 +61,13 @@ export function salvageInRange(vehicle: Vehicle, stock: SalvageStock): boolean {
   return site ? canUseSite(vehicle.pos, site) : dist(vehicle.pos, stock.pos) <= (stock.radius + ECONOMY.useRange) * ECONOMY.interactionScale;
 }
 
-// Moves at most `units` from the stock into the vehicle's grid. The stock never grows: whatever
+// Pours out fuel and supplies, then moves at most `units` from the stock into the vehicle's grid. The stock never grows: whatever
 // does not fit stays behind for the next turn or another collector.
 export function collectSalvage(world: World, vehicle: Vehicle, stockId: string, units: number): number {
   const stock = world.salvage.find((entry) => entry.id === stockId);
   if (!stock) throw new Error(`Unknown salvage ${stockId}`);
   if (!canReachSalvage(vehicle, stock)) throw new Error('Stop within salvage reach');
+  pourStores(world, vehicle, stock);
   let moved = 0;
   stock.parts = stock.parts.filter((part) => {
     if (moved >= units || !stowPart(world, vehicle, part)) return true;
@@ -76,6 +85,19 @@ export function collectSalvage(world: World, vehicle: Vehicle, stockId: string, 
     if (vehicle.id === world.player.vehicleId) world.player.costBasis[good] = ((world.player.costBasis[good] ?? 0) * held) / (held + took);
   }
   return moved;
+}
+
+// Pours the stock's fuel and supplies into the driver's tank and stores up to their caps.
+// Whatever does not fit stays behind.
+export function pourStores(world: World, vehicle: Vehicle, stock: SalvageStock): void {
+  const resources = getResources(world, vehicle);
+  const caps = { fuel: chassisDef(vehicle.chassisId).fuelCap, supplies: RULES.suppliesCap };
+  for (const kind of ['fuel', 'supplies'] as const) {
+    const took = Math.min(stock[kind] ?? 0, Math.max(0, caps[kind] - resources[kind]));
+    if (took <= 0) continue;
+    resources[kind] += took;
+    stock[kind] = (stock[kind] ?? 0) - took;
+  }
 }
 
 // A wreck keeps its mounted non-core parts at their current HP. Built-in core parts are wrecked

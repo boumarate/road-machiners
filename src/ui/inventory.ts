@@ -27,14 +27,21 @@ import {
 import { startRepair } from "../sim/jobs";
 import { repairPlan } from "../sim/repair";
 import { townAt } from "../sim/sites";
-import { takeAllLoot, takeLoot } from "../sim/locations";
+import { takeAllLoot, takeLoot, takeStores } from "../sim/locations";
+import { hasStores } from "../sim/salvage";
 import { REGION } from "../data/region";
-import type { GridItem, PartInstance, Vehicle, World } from "../sim/types";
+import type {
+  GridItem,
+  PartInstance,
+  SalvageStock,
+  Vehicle,
+  World,
+} from "../sim/types";
 import { el, panel } from "./dom";
 import type { UiHost } from "./host";
 import { createIcon, type IconName } from "./icons";
 import { vehicleMass } from "../sim/mass";
-import { kg, liters } from "./units";
+import { fuelLiters, kg, liters } from "./units";
 
 const CELL_PX = 42;
 
@@ -376,11 +383,7 @@ export class InventoryView {
     );
   }
 
-  // What a finished search turned up. Drag a chip onto the grid to take it; the rest stays here.
-  private lootEl(w: World, stockId: string): HTMLElement {
-    const stock = w.salvage.find((s) => s.id === stockId);
-    if (!stock) throw new Error(`Unknown salvage ${stockId}`);
-    const site = REGION.locations.find((l) => l.id === stockId);
+  private lootPartChips(stock: SalvageStock): HTMLElement[] {
     const chips: HTMLElement[] = [];
     for (const p of stock.parts) {
       const d = partDef(p.defId);
@@ -402,6 +405,11 @@ export class InventoryView {
       );
       chips.push(chip);
     }
+    return chips;
+  }
+
+  private lootGoodChips(stock: SalvageStock): HTMLElement[] {
+    const chips: HTMLElement[] = [];
     for (const [good, count] of Object.entries(stock.goods)) {
       if (count <= 0) continue;
       const item: GridItem = {
@@ -426,6 +434,34 @@ export class InventoryView {
       );
       chips.push(chip);
     }
+    return chips;
+  }
+
+  // Fuel and supplies pour into the tank and stores instead of the grid.
+  private lootStoresButton(stock: SalvageStock): HTMLElement[] {
+    if (!hasStores(stock)) return [];
+    return [
+      el(
+        "button",
+        {
+          title: "Pour into the tank and stores up to their caps",
+          onclick: () => this.run((world) => takeStores(world, stock.id)),
+        },
+        `Take fuel ${fuelLiters(stock.fuel ?? 0)} L, supplies ${(stock.supplies ?? 0).toFixed(1)}`,
+      ),
+    ];
+  }
+
+  // What a finished search turned up. Drag a chip onto the grid to take it; the rest stays here.
+  private lootEl(w: World, stockId: string): HTMLElement {
+    const stock = w.salvage.find((s) => s.id === stockId);
+    if (!stock) throw new Error(`Unknown salvage ${stockId}`);
+    const site = REGION.locations.find((l) => l.id === stockId);
+    const chips = [
+      ...this.lootPartChips(stock),
+      ...this.lootGoodChips(stock),
+      ...this.lootStoresButton(stock),
+    ];
     return el(
       "div",
       { class: "inv-storage inv-loot" },

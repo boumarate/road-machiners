@@ -4,7 +4,7 @@ import { SALVAGE } from '../data/salvage';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
-import { canReachSalvage, collectSalvage, hasSalvage, salvageInRange } from './salvage';
+import { canReachSalvage, collectSalvage, hasSalvage, pourStores, salvageInRange } from './salvage';
 import { newId } from './factory';
 import { isMounted, type Spot } from './grid';
 import { getLayoutError, requireIdleRefit } from './inventory';
@@ -141,6 +141,11 @@ export function takeAllLoot(world: World, stockId: string): World {
     requireIdleRefit(playerVehicle(w));
     collectSalvage(w, playerVehicle(w), stockId, Infinity);
   });
+}
+
+// Pours the fuel and supplies of a searched stock into the tank and stores, up to their caps.
+export function takeStores(world: World, stockId: string): World {
+  return playerCommand(world, (w) => pourStores(w, playerVehicle(w), requireLootable(w, stockId)));
 }
 
 function requireLootable(world: World, stockId: string): SalvageStock {

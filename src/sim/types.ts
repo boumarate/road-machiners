@@ -62,6 +62,8 @@ export type SalvageStock = {
   radius: number;
   goods: Record<string, number>;
   parts: PartInstance[];
+  fuel?: number; // fuel units that pour into a tank, not the grid
+  supplies?: number; // supply units that go to driver stores, not the grid
 };
 
 export type RefitMove = {

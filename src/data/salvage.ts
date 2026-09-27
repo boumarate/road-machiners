@@ -7,6 +7,8 @@ export type LootTable = {
   parts: LootRange; // units of the parts good
   sparePartChance: number; // odds the site also holds one mountable spare part
   spareParts: string[]; // part def ids the spare part is drawn from
+  fuel: LootRange; // fuel units left in tanks and cans
+  supplies: LootRange; // supply units left in crates
 };
 
 export const SALVAGE = {
@@ -18,17 +20,23 @@ export const SALVAGE = {
     parts: [2, 5],
     sparePartChance: 0.4,
     spareParts: ['stockEngine', 'plates', 'cage', 'mg'],
+    fuel: [0, 8],
+    supplies: [0, 3],
   } as LootTable,
   roadWreck: {
     goods: { scrap: [1, 3] },
     parts: [1, 3],
     sparePartChance: 0.2,
     spareParts: ['mg', 'cage', 'rack', 'flatFour'],
+    fuel: [0, 4],
+    supplies: [0, 1],
   } as LootTable,
   convoy: {
     goods: { scrap: [3, 8], meds: [1, 4] },
     parts: [3, 6],
     sparePartChance: 0.6,
     spareParts: ['tunedEngine', 'cannon', 'ram', 'trailerBox'],
+    fuel: [4, 12],
+    supplies: [2, 6],
   } as LootTable,
 };
