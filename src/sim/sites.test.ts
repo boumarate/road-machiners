@@ -16,6 +16,15 @@ describe('site gates and pads', () => {
     }
   });
 
+  it('gives towns and small locations one gate, and large locations a gate per road', () => {
+    const large = REGION.locations.filter((l) => l.radius >= REGION.sites.multiGateRadius);
+    expect(large.map((l) => l.id).sort()).toEqual(['fallen-sun', 'orchard']);
+    for (const site of SITES) {
+      if (large.includes(site as never)) expect(siteGates(site).length, site.id).toBeGreaterThan(1);
+      else expect(siteGates(site).length, site.id).toBe(1);
+    }
+  });
+
   it('puts each pad outside its site, touching the gate', () => {
     for (const site of SITES) {
       const gates = siteGates(site);
@@ -56,10 +65,10 @@ describe('site gates and pads', () => {
   });
 
   it('finds the pad nearest a point', () => {
-    const nose = REGION.towns.find((t) => t.id === 'nose')!;
-    for (const pad of sitePads(nose)) {
+    const ship = REGION.locations.find((l) => l.id === 'fallen-sun')!;
+    for (const pad of sitePads(ship)) {
       const near = { x: pad.x + 1, y: pad.y };
-      expect(nearestPad(nose, near)).toEqual(pad);
+      expect(nearestPad(ship, near)).toEqual(pad);
     }
   });
 });
@@ -72,10 +81,10 @@ describe('clicks on a site', () => {
   });
 
   it('turns a click inside a site into a stop at its pad nearest the truck', () => {
-    const nose = REGION.towns.find((t) => t.id === 'nose')!;
-    const pad = sitePads(nose)[1];
-    const from = { x: pad.x + 20 * (pad.x - nose.pos.x) / dist(pad, nose.pos), y: pad.y + 20 * (pad.y - nose.pos.y) / dist(pad, nose.pos) };
-    expect(clickOrder(nose.pos, false, { pos: from, order: null })).toEqual({ kind: 'stopAt', dest: pad });
+    const ship = REGION.locations.find((l) => l.id === 'fallen-sun')!;
+    const pad = sitePads(ship)[1];
+    const from = { x: pad.x + 20 * (pad.x - ship.pos.x) / dist(pad, ship.pos), y: pad.y + 20 * (pad.y - ship.pos.y) / dist(pad, ship.pos) };
+    expect(clickOrder(ship.pos, false, { pos: from, order: null })).toEqual({ kind: 'stopAt', dest: pad });
   });
 
   it('keeps a click on open ground as a drive-through order', () => {

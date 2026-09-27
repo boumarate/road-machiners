@@ -289,6 +289,7 @@ export const REGION = {
     // Tiles. A rectangular pad lies outside each gate, its inner edge on the site edge. Site services work only on a pad.
     pad: { length: 5, width: 7 }, // length runs out from the gate, width along the site edge
     gateSpacing: 7, // tiles; road crossings closer than this share one gate, so door gaps never overlap
+    multiGateRadius: 12, // tiles; locations at least this large get a gate per road, towns and smaller sites get one
   },
   settlement: {
     streetSpacing: 5, // 20 m blocks, with houses separated by alleys

@@ -37,11 +37,11 @@ describe('landmark scale', () => {
     }
   });
 
-  it('walls each town with a gate per road', () => {
+  it('walls each town with one gate', () => {
     for (const id of ['bowl', 'nose']) {
       const town = sites.getObjectByName(`landmark-${id}`)!;
       expect(town.userData.wallSections).toBeGreaterThan(40);
-      expect(town.userData.gates).toBe(2);
+      expect(town.userData.gates).toBe(1);
     }
   });
 
