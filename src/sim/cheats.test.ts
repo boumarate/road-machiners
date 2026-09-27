@@ -13,7 +13,7 @@ import { playerVehicle } from './damage';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { spareParts } from './inventory';
 import { clockOf } from './sun';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, testDrive } from './testkit';
 import type { World } from './types';
 import { dist } from './vec';
 import { canUseSite } from './sites';
@@ -144,8 +144,8 @@ describe('god mode', () => {
       corePart(playerVehicle(w), 'cab').hp = 0;
       return w;
     };
-    expect(endTurn(broken(false)).player.state).toBe('knockedOut');
-    expect(endTurn(broken(true)).player.state).toBe('active');
+    expect(endTurn(broken(false), testDrive).player.state).toBe('knockedOut');
+    expect(endTurn(broken(true), testDrive).player.state).toBe('active');
   });
 });
 
@@ -281,7 +281,7 @@ describe('vehicle cheats', () => {
     w.player.tow = { by: tower.id, town: REGION.towns[0].id, fee: 10, hitched: true };
     const next = killVehicles(w, tower.id);
     expect(next.player.tow).toBeNull();
-    expect(() => endTurn(next)).not.toThrow();
+    expect(() => endTurn(next, testDrive)).not.toThrow();
   });
 
   it('lists other vehicles by distance', () => {
