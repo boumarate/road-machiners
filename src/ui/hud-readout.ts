@@ -16,7 +16,7 @@ import { REGION } from "../data/region";
 import { vehicleName } from "./format";
 import { celsius, engineCelsius, fuelLiters, hp, kph } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
-import type { IconName } from "./icons";
+import type { IconName } from "./cards";
 import type { ContextAction } from './hud';
 import { SHOPS } from '../data/market';
 import { canUseSite, locationAt } from '../sim/sites';
