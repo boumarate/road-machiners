@@ -1,4 +1,5 @@
 import { DETECT } from '../data/detect';
+import { BEACON } from '../data/tow';
 import { RULES } from '../data/rules';
 import { sunAt } from './sun';
 import { TIME } from '../data/time';
@@ -180,5 +181,57 @@ describe('dust clouds', () => {
     const c = contactsOf(w, observer, Infinity).find((x) => x.vehicleId === v.id)!;
     expect(c.sources).toEqual(['dust']);
     expect(dist(c.center, v.pos)).toBeLessThanOrEqual(c.radius);
+  });
+});
+
+describe('the emergency beacon', () => {
+  // A parked player behind the hill at x=32..36, beaconing, and a parked raider east of the hill.
+  function beaconing(observerX: number) {
+    const w = emptyWorld({ x: 30, y: 30 });
+    raiseHill(w);
+    refreshVision(w);
+    const me = w.vehicles[0];
+    me.speed = 0;
+    w.player.beacon = true;
+    const observer = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: observerX, y: 30 });
+    observer.speed = 0;
+    return { w, me, observer };
+  }
+
+  it('gives any vehicle in range a tight contact through hills', () => {
+    const { w, me, observer } = beaconing(40);
+    const contact = contactsOf(w, observer, Infinity).find((c) => c.vehicleId === me.id);
+    expect(contact?.sources).toEqual(['beacon']);
+    expect(contact!.radius).toBe(BEACON.radius);
+    expect(dist(contact!.center, me.pos)).toBeLessThan(BEACON.radius);
+    expect(contact!.loudness).toBeNull();
+  });
+
+  it('reaches BEACON.range tiles and no farther', () => {
+    const inRange = beaconing(30 + BEACON.range);
+    expect(contactsOf(inRange.w, inRange.observer, Infinity).some((c) => c.vehicleId === inRange.me.id)).toBe(true);
+    const outOfRange = beaconing(30 + BEACON.range + 1);
+    expect(contactsOf(outOfRange.w, outOfRange.observer, Infinity).some((c) => c.vehicleId === outOfRange.me.id)).toBe(false);
+  });
+
+  it('gives nothing while off', () => {
+    const { w, me, observer } = beaconing(40);
+    w.player.beacon = false;
+    expect(contactsOf(w, observer, Infinity).some((c) => c.vehicleId === me.id)).toBe(false);
+  });
+
+  it('merges with sound into one tight contact', () => {
+    const { w, me, observer } = beaconing(40);
+    w.player.fuel = 30;
+    me.speed = 4;
+    const contacts = contactsOf(w, observer, Infinity).filter((c) => c.vehicleId === me.id);
+    expect(contacts).toHaveLength(1);
+    expect(contacts[0].sources).toEqual(['sound', 'beacon']);
+    expect(contacts[0].radius).toBe(BEACON.radius);
+  });
+
+  it('leaves the player its own contacts', () => {
+    const { w, me } = beaconing(40);
+    expect(contactsOf(w, me, Infinity).some((c) => c.vehicleId === me.id)).toBe(false);
   });
 });

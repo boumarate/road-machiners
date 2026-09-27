@@ -67,7 +67,7 @@ export type Job =
 // A vehicle detected beyond sight. The circle always holds the true position, which it never reveals.
 // The circle always holds the vehicle's true position. loudness is how far the engine carries, in tiles,
 // when the vehicle is heard; a big engine or a fast truck is louder. Null when it is not heard.
-export type Contact = { vehicleId: string; center: Vec; radius: number; sources: ('sound' | 'dust' | 'radio')[]; loudness: number | null };
+export type Contact = { vehicleId: string; center: Vec; radius: number; sources: ('sound' | 'dust' | 'radio' | 'beacon')[]; loudness: number | null };
 
 // A dust cloud a moving vehicle kicked up. It hangs in the world for a while: it rises, drifts back along
 // the way its truck came and with the wind, and fades. Once risen it can be seen from beyond sight range.
@@ -162,6 +162,7 @@ export type Player = {
   state: 'active' | 'knockedOut' | 'dead';
   knockoutTurns: number; // turns spent in the current knockout
   tow: Tow | null; // an open tow offer, or the tow in progress once hitched
+  beacon: boolean; // the emergency beacon calls every vehicle within BEACON.range; see src/sim/tow.ts
   explored: Uint8Array; // fog of war: tile y * world.size + x, 1 once seen
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision
   contacts: Contact[]; // vehicles detected beyond sight; refreshed by refreshVision

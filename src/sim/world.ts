@@ -20,7 +20,7 @@ import { spawnInitial, spawnNpcs } from './spawn';
 import { initializeSalvage } from './salvage';
 import { timed } from '../perf';
 import { resolveNpcActivities } from './npc-activities';
-import { checkTower, followTower } from './tow';
+import { checkBeacon, checkTower, followTower } from './tow';
 import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
 import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
@@ -65,6 +65,7 @@ export function newWorld(seed: number, kit: StartKit): World {
       state: 'active',
       knockoutTurns: 0,
       tow: null,
+      beacon: false,
       explored: new Uint8Array(REGION.size * REGION.size),
       visible: [],
       contacts: [],
@@ -181,6 +182,7 @@ export function endTurn(
     leakFuel(w);
     resolveDestroyed(w);
     checkTower(w);
+    checkBeacon(w);
     resolveNpcActivities(w);
     discoverSites(w);
     useOasis(w);
