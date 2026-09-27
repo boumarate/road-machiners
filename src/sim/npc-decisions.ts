@@ -22,6 +22,7 @@ import { npcProfile, npcTraits } from './npc-profile';
 import { topGoal } from './npc-goals';
 import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
+import { isRobberyTarget } from './robbery';
 import { canReachSalvage, hasSalvage } from './salvage';
 import { canUseSite } from './sites';
 import { statesHeld } from './states';
@@ -159,9 +160,10 @@ function investigateFactor(): number {
   return 1;
 }
 
-// Rob carries weight only through a trait.
-function robFactor(): number {
-  return 1;
+// Rob carries weight only through a trait, and only against a target that passes every robbery check.
+function robFactor(world: World, vehicle: Vehicle, subject: string | null): number {
+  if (subject === null) throw new Error('preySeen needs a subject');
+  return isRobberyTarget(world, vehicle, vehicleById(world, subject)) ? 1 : 0;
 }
 
 // The subject already passed the tow checks: stranded, in sight, not hostile.
@@ -203,7 +205,7 @@ function situation(world: World, vehicle: Vehicle, decision: DecisionId, option:
     case 'fight': return fightFactor(world, vehicle);
     case 'flee': return fleeFactor(world, vehicle, decision, subject);
     case 'investigate': return investigateFactor();
-    case 'rob': return robFactor();
+    case 'rob': return robFactor(world, vehicle, subject);
     case 'tow': return towFactor();
     case 'resume': return resumeFactor();
     case 'new': return newFactor();

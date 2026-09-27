@@ -293,8 +293,12 @@ describe('emergency beacon', () => {
     w.player.fuel = 0;
     onlyCore(w.vehicles[0]);
     const raider = withTower(w, 'buggy', 'raiders', 'buggy', { x: 130, y: 30 });
-    const r = runUntil(setBeacon(w, true), 30, () => false);
-    expect(r.events.some((e) => e.t === 'activity' && e.vehicle === raider.id && ['investigate', 'fight'].includes(e.activity!))).toBe(false);
+    // Spawned NPCs may draw the raider, so only goals aimed at the player count.
+    runUntil(setBeacon(w, true), 30, (x) => {
+      const goal = topGoal(find(x, raider.id));
+      expect(goal?.targetId === x.player.vehicleId && ['investigate', 'fight'].includes(goal.kind)).toBe(false);
+      return false;
+    });
   });
 
   it('needs a stranded, active and unhitched truck', () => {

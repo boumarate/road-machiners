@@ -34,8 +34,10 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
       return canVehicleSee(w, holder, other.pos) || canVehicleSee(w, other, holder.pos);
     },
     check: (w, s) => (w.events.some((e) => e.t === 'destroyed' && e.vehicle === s.other) ? 'fulfilled' : null),
-    hooks: {},
+    // A feud that went quiet failed. Hostility ends, and the holder backs off from the other party.
+    hooks: { expired: (w, s) => { addState(w, 'backedOff', s.holder, s.other, { kind: 'none' }); } },
   },
+  // The holder does not rob the other party while it lasts.
   backedOff: { refresh: never, check: noCheck, hooks: {} },
   // The holder tows the player to a town. See src/sim/tow.ts, which fulfils and breaks it.
   tow: {

@@ -90,12 +90,16 @@ export const NPCS: Record<string, NpcTemplate> = {
     aggroRange: 12, preferredRange: 6, bounty: 150, xp: 90, cap: 2, interval: 20, spawn: 'camp',
   },
   trader: {
-    id: 'trader', name: 'Trader caravan', faction: 'traders', traits: ['trader'], extraTraits: [],
+    id: 'trader', name: 'Trader caravan', faction: 'traders', traits: ['trader'],
+    // One trader in four is a coward.
+    extraTraits: [{ trait: 'coward', chance: 0.25 }],
     loadout: LOADOUTS.trader,
     aggroRange: 0, preferredRange: 0, bounty: 0, xp: 60, cap: 5, interval: 12, spawn: 'town',
   },
   scavenger: {
-    id: 'scavenger', name: 'Scavenger', faction: 'scavengers', traits: ['scavenger'], extraTraits: [],
+    id: 'scavenger', name: 'Scavenger', faction: 'scavengers', traits: ['scavenger'],
+    // One scavenger in four is a scumbag, and one in four a coward. Both can meet in one driver.
+    extraTraits: [{ trait: 'scumbag', chance: 0.25 }, { trait: 'coward', chance: 0.25 }],
     loadout: LOADOUTS.scavenger,
     aggroRange: 0, preferredRange: 0, bounty: 0, xp: 40, cap: 4, interval: 12, spawn: 'town',
   },
@@ -186,8 +190,13 @@ export const TRAITS: Record<TraitId, Trait> = {
     towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], contactReactRadius: Infinity,
     weights: { idle: { raid: { add: 10 } }, contactHeard: { investigate: { add: 12 } }, hostileSeen: { fight: { add: 8 } } },
   },
-  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, weights: {} },
-  coward: { towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, weights: {} },
+  // A scumbag robs about one weaker loaded truck in three it comes across.
+  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, weights: { preySeen: { rob: { add: 0.5 } } } },
+  // A coward runs three times as often from a new hostile or a hit, and picks a fight half as often.
+  coward: {
+    towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0,
+    weights: { hostileSeen: { flee: { mul: 3 }, fight: { mul: 0.5 } }, hurt: { flee: { mul: 3 } } },
+  },
 };
 
 export const NPC_BEHAVIOR = {

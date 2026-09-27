@@ -210,7 +210,7 @@ describe('NPC activities', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 30, y: 30 });
     trader.brain = npcBrain('trader', trader.pos, ['trader']);
-    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 45, y: 30 });
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 }); // just past sight
     raider.speed = 4;
     forceOption('contactHeard', 'flee');
     planNpcOrders(w);

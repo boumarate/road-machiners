@@ -21,7 +21,8 @@ import { getResources } from './resources';
 import { randInt } from './rng';
 import { canReachSalvage, hasSalvage } from './salvage';
 import { beginSearch } from './search';
-import { stateOf } from './states';
+import { isRobberyTarget } from './robbery';
+import { addState, stateOf } from './states';
 import { vehicleStats } from './stats';
 import type { Contact, NpcActivity, NpcState, Vehicle, World } from './types';
 import { canUseSite, isWalled, siteGates } from './sites';
@@ -234,6 +235,21 @@ function onHurt(world: World, vehicle: Vehicle, profile: NpcProfile): void {
   interrupt(world, vehicle, fleeFrom(world, vehicle, profile, enemy.id, enemy.pos, 'hurt and threatened'));
 }
 
+// One roll per new robbery target in sight, nearest first. Rob starts a feud with the target and fights it.
+function onPreySeen(world: World, vehicle: Vehicle): void {
+  const prey = world.vehicles
+    .filter((other) => isRobberyTarget(world, vehicle, other))
+    .sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
+  for (const target of prey) {
+    if (!notice(world, vehicle, 'preySeen', target.id)) continue;
+    if (decide(world, vehicle, 'preySeen', target.id) === 'keep') continue;
+    addState(world, 'feud', vehicle.id, target.id, { kind: 'none' });
+    world.events.push({ t: 'hostile', vehicle: vehicle.id, against: target.id });
+    interrupt(world, vehicle, createActivity('fight', target.id, { ...target.pos }, 'rob cargo'));
+    return;
+  }
+}
+
 function onStrandedSeen(world: World, vehicle: Vehicle): void {
   const at = strandedPlayerAt(world, vehicle);
   const me = world.player.vehicleId;
@@ -283,6 +299,7 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   onHostilesSeen(world, vehicle, profile);
   onContactsHeard(world, vehicle, profile, contacts);
   onHurt(world, vehicle, profile);
+  onPreySeen(world, vehicle);
   onStrandedSeen(world, vehicle);
   steer(world, vehicle, profile, contacts);
   const top = topGoal(vehicle);
