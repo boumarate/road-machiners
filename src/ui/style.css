@@ -594,7 +594,7 @@ body {
   top: 16px;
   transform: translateX(-50%);
   box-sizing: border-box;
-  width: min(880px, calc(100vw - 32px));
+  width: min(1360px, calc(100vw - 32px));
   height: min(760px, calc(100dvh - 270px));
   overflow: auto;
   padding: 24px 28px;
@@ -612,6 +612,10 @@ body {
 #ui:has(.modal:not([style*="display: none"])) > .instruments,
 #ui:has(.modal:not([style*="display: none"])) > .log {
   z-index: 21;
+}
+/* The wide modal reaches under the condition panel, which stands above the instruments. */
+#ui:has(.modal:not([style*="display: none"])) .truck-condition {
+  display: none;
 }
 #ui .modal > h3 {
   font-size: 26px;
@@ -653,6 +657,50 @@ body {
   position: absolute;
   right: 20px;
   top: 23px;
+  font-size: 12px;
+}
+/* Town screen: the truck stays on the left and the shop tabs on the right. Each column scrolls on its own. */
+#ui .modal.town-screen {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.town-split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(420px, 1fr);
+  gap: 28px;
+  margin-top: 14px;
+}
+.town-truck,
+.town-shop {
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.town-truck {
+  padding-right: 24px;
+  border-right: 1px solid #4b555b;
+}
+.town-truck > h4 {
+  color: #c4b888;
+  font-weight: normal;
+}
+.town-truck .inv-wrap {
+  justify-content: flex-start;
+  gap: 24px;
+}
+.town-shop > .tabs {
+  padding-top: 0;
+}
+.modal .tabs.sub {
+  border-bottom: none;
+  padding: 0 0 4px;
+  margin-bottom: 0;
+}
+.modal .tabs.sub button {
+  min-width: 0;
   font-size: 12px;
 }
 .inv-summary {
@@ -948,6 +996,18 @@ body {
   }
   .inv-side {
     width: 100%;
+  }
+  .town-split {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+  .town-truck,
+  .town-shop {
+    overflow: visible;
+  }
+  .town-truck {
+    padding-right: 0;
+    border-right: none;
   }
   .modal td,
   .modal th {
