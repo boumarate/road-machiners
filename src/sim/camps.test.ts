@@ -25,7 +25,7 @@ function outside(d: number): Vec {
 
 function addNpc(w: World, faction: Faction, templateId: string, pos: Vec) {
   const v = addVehicle(w, faction, 'buggy', ['mg', 'stockEngine'], pos);
-  v.brain = { templateId, activity: null, goal: null, home: { ...pos }, stepIndex: 0 };
+  v.brain = { templateId, activity: null, goal: null, home: { ...pos }, stepIndex: 0, refusedTow: false };
   return v;
 }
 

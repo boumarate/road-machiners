@@ -14,7 +14,7 @@ import { vehicleStats } from './stats';
 function buildChase() {
   const w = emptyWorld({ x: 40, y: 30 });
   const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
-  npc.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0 };
+  npc.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0, refusedTow: false };
   return { w, npc };
 }
 
@@ -47,7 +47,7 @@ describe('NPC driving', () => {
     const bowl = REGION.towns[0];
     const nose = REGION.towns[1];
     const npc = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: bowl.pos.x + bowl.radius + 2, y: bowl.pos.y });
-    npc.brain = { templateId: 'trader', activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0 };
+    npc.brain = { templateId: 'trader', activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0, refusedTow: false };
     let closest = Infinity;
     for (let i = 0; i < w.size && closest >= nose.radius + 2; i++) {
       planNpcOrders(w);

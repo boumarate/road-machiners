@@ -88,7 +88,7 @@ export type WeatherEvent =
 export type DriverResources = { money: number; fuel: number; supplies: number; health: number };
 
 export type NpcActivity = {
-  kind: 'scavenge' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate';
+  kind: 'scavenge' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate' | 'tow';
   targetId: string | null;
   destination: Vec | null;
   phase: 'travel' | 'act';
@@ -107,6 +107,7 @@ export type NpcBrain = {
     recovery?: number; // turns left backing away from a blockage
     recoveryGoal?: Vec;
     farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
+    refusedTow: boolean; // the player turned down this driver's tow, so it never offers again
 };
 
 export type Vehicle = {
@@ -136,6 +137,10 @@ export type Obstacle = {
     kind: "rock" | "wreck" | "building" | "water" | "site";
 };
 
+// A tow to town by the NPC `by`. The fee is paid on arrival.
+export type Tow = { by: string; town: string; fee: number; hitched: boolean };
+export type TowDropReason = 'refused' | 'unhitched' | 'danger' | 'gone';
+
 export type Player = {
   vehicleId: string;
   money: number;
@@ -156,6 +161,7 @@ export type Player = {
   knockouts: number;
   state: 'active' | 'knockedOut' | 'dead';
   knockoutTurns: number; // turns spent in the current knockout
+  tow: Tow | null; // an open tow offer, or the tow in progress once hitched
   explored: Uint8Array; // fog of war: tile y * world.size + x, 1 once seen
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision
   contacts: Contact[]; // vehicles detected beyond sight; refreshed by refreshVision
@@ -190,6 +196,9 @@ export type GameEvent =
   | { t: 'death' }
   | { t: 'knockout' }
   | { t: 'wake' }
+  | { t: 'towOffer'; by: string; town: string; fee: number }
+  | { t: 'towDone'; by: string; fee: number }
+  | { t: 'towDropped'; by: string; reason: TowDropReason }
   | { t: 'job'; vehicle: string; job: Job; outcome: 'started' | 'done' | 'cancelled' }
   | { t: 'breakdown'; vehicle: string; part: string }
   | { t: 'searched'; stock: string } // the player finished searching a stock; its loot can now be taken

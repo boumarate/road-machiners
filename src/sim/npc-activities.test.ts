@@ -15,7 +15,7 @@ import { canUseSite, siteGates } from './sites';
 function createScavenger() {
   const w = emptyWorld({ x: 50, y: 50 });
   const npc = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 10, y: 10 });
-  npc.brain = { templateId: 'scavenger', activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0 };
+  npc.brain = { templateId: 'scavenger', activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0, refusedTow: false };
   return { w, npc };
 }
 
@@ -117,7 +117,7 @@ describe('NPC activities', () => {
   it('a raider can destroy an NPC and sell the actual loot', () => {
     const w0 = emptyWorld({ x: 58, y: 58 });
     const raider = addVehicle(w0, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 14, y: 12 });
-    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0 };
+    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0, refusedTow: false };
     const victim = addVehicle(w0, 'scavengers', 'scout', [], { x: 16, y: 12 });
     corePart(victim, 'cab').hp = 1;
     addGoods(w0, victim, 'scrap', 3);
@@ -179,7 +179,7 @@ describe('NPC activities', () => {
     const player = w.vehicles[0];
     player.speed = 4; // loud enough to be heard far past sight range
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 }); // just past sight
-    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0 };
+    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0, refusedTow: false };
     planNpcOrders(w);
     expect(raider.brain!.activity?.kind).toBe('investigate');
     expect(raider.brain!.activity?.targetId).toBe(player.id);
@@ -190,7 +190,7 @@ describe('NPC activities', () => {
     const player = w.vehicles[0];
     player.speed = 4;
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 220, y: 300 }); // 120 tiles, far past the old 34-tile limit
-    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0 };
+    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0, refusedTow: false };
     planNpcOrders(w);
     expect(contactsOf(w, raider, Infinity).some((c) => c.vehicleId === player.id)).toBe(true);
     expect(raider.brain!.activity?.kind).toBe('investigate');
@@ -200,7 +200,7 @@ describe('NPC activities', () => {
   it('a trader turns away from a heard raider', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 30, y: 30 });
-    trader.brain = { templateId: 'trader', activity: null, goal: null, home: { ...trader.pos }, stepIndex: 0 };
+    trader.brain = { templateId: 'trader', activity: null, goal: null, home: { ...trader.pos }, stepIndex: 0, refusedTow: false };
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 45, y: 30 });
     raider.speed = 4;
     planNpcOrders(w);
@@ -216,7 +216,7 @@ describe('NPC activities', () => {
     const size = w.terrain.size;
     for (let i = 33; i <= 37; i++) for (let j = 28; j <= 32; j++) w.terrain.heights[j * (size + 1) + i] = 3;
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 }); // beyond the hill
-    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0 };
+    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0, refusedTow: false };
     planNpcOrders(w);
     expect(raider.brain!.activity?.kind).not.toBe('investigate');
     expect(raider.brain!.activity?.kind).not.toBe('fight');

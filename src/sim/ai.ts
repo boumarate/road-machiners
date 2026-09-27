@@ -108,8 +108,11 @@ function computeFightGoal(
 
 function vehicleAhead(world: World, v: Vehicle): boolean {
   const r = vehicleStats(world, v).radius;
+  const tow = world.player.tow;
   return world.vehicles.some((x) => {
     if (x.id === v.id) return false;
+    // A tower never yields to the truck on its own rope.
+    if (tow?.hitched && tow.by === v.id && x.id === world.player.vehicleId) return false;
     const gap = dist(v.pos, x.pos) - r - vehicleStats(world, x).radius;
     const off = Math.abs(angleDiff(v.heading, bearing(v.pos, x.pos)));
     return gap < RULES.yieldDistance + v.speed && off < Math.PI / 4;

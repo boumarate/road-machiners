@@ -107,6 +107,19 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       return { text: 'You are knocked out.', cls: 'bad' };
     case 'wake':
       return { text: 'You come to.', cls: 'dim' };
+    case 'towOffer': {
+      const town = REGION.towns.find((t) => t.id === e.town);
+      return { text: `${n(e.by)} offers to tow you to ${town?.name ?? e.town} for ${e.fee}.`, cls: '' };
+    }
+    case 'towDone':
+      return { text: `${n(e.by)} tows you into town and takes ${e.fee}.`, cls: 'bad' };
+    case 'towDropped': {
+      const text = e.reason === 'refused' ? `You turn down the tow from ${n(e.by)}.`
+        : e.reason === 'unhitched' ? `You unhitch from ${n(e.by)}.`
+        : e.reason === 'danger' ? `${n(e.by)} drops the tow. There is danger.`
+        : `${n(e.by)} is gone. The tow is off.`;
+      return { text, cls: e.reason === 'refused' || e.reason === 'unhitched' ? 'dim' : 'bad' };
+    }
     case 'info':
       return { text: e.text, cls: 'dim' };
     case 'job': {

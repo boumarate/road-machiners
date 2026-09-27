@@ -11,6 +11,7 @@ import { endTurn, setDirect, setMoveOrder } from '../sim/world';
 import { PHYSICS } from '../data/physics';
 import { buildDrive, freeDrive, initPhysics, routeAim, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
 import { physicsMove } from './turn';
+import { acceptTow, unhitch } from '../sim/tow';
 
 beforeAll(async () => {
   await initPhysics();
@@ -314,5 +315,34 @@ describe('physics turns', () => {
     w.vehicles.pop();
     syncDrive(d, w);
     expect(Object.keys(d.bodies)).toHaveLength(1);
+  });
+
+  it('a hitched player leaves physics and returns on unhitch', () => {
+    let w = emptyWorld();
+    w.player.fuel = 0;
+    const trader = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 40, y: 30 }, Math.PI);
+    trader.brain = { templateId: 'trader', activity: null, goal: null, home: { ...trader.pos }, stepIndex: 0, refusedTow: false };
+    let d = buildDrive(w);
+    const turn = () => {
+      let r: TurnResult | null = null;
+      w = endTurn(w, physicsMove(d, (x) => (r = x)));
+      freeDrive(d);
+      d = r!.next;
+      return r!;
+    };
+    for (let i = 0; i < 30 && !w.player.tow; i++) turn();
+    expect(w.player.tow).not.toBeNull();
+    w = acceptTow(w);
+    const start = { ...me(w).pos };
+    for (let i = 0; i < 10; i++) {
+      const r = turn();
+      expect(d.bodies[me(w).id]).toBeUndefined();
+      expect(r.frames[me(w).id]).toBeUndefined();
+    }
+    expect(dist(me(w).pos, start)).toBeGreaterThan(3);
+    w = unhitch(w);
+    for (let i = 0; i < 3; i++) turn();
+    expect(d.bodies[me(w).id]).toBeDefined();
+    freeDrive(d);
   });
 });

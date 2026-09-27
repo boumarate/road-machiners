@@ -5,7 +5,7 @@ import { ECONOMY, GOOD_IDS, TOWN_PRICES } from '../data/goods';
 import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
-import { buyChassis, buyGood, buyPart, buyPrice, buySupply, chassisTradeIn, repairAll, sellGood, sellPrice } from './economy';
+import { buyChassis, buyGood, buyPart, buyPrice, buySupply, chassisTradeIn, repairAll, sellGood, sellPrice, serviceVehicle } from './economy';
 import { corePart, coreParts, freeCells, goodsCount, mountedParts } from './grid';
 import { spareParts } from './inventory';
 import { canScavenge, salvageNear, scavenge, useOasis } from './locations';
@@ -14,7 +14,7 @@ import { vehicleStats } from './stats';
 import { consumeSupplies } from './supplies';
 import { heatAt } from './sun';
 import { locationAt, siteGates, townAt, townNear } from './sites';
-import { emptyWorld } from './testkit';
+import { addVehicle, emptyWorld } from './testkit';
 import { endTurn, newWorld } from './world';
 
 const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
@@ -205,5 +205,39 @@ describe('progress', () => {
     expect(vehicleStats(w, me).turnSlow).toBeGreaterThan(turn);
     w.player.skillPoints = 0;
     expect(() => spendSkillPoint(w, 'gunnery')).toThrow();
+  });
+});
+
+describe('debt', () => {
+  it('a player in debt cannot buy anything', () => {
+    const w = startAtBowl();
+    w.player.money = -100;
+    expect(() => buyGood(w, 'scrap', 1)).toThrow(/money/);
+    expect(() => buySupply(w, 'fuel', 1)).toThrow(/money/);
+    expect(() => buyPart(w, 'mg')).toThrow(/money/);
+    expect(() => repairAll(w)).toThrow(/money/);
+    // A chassis swap that costs nothing is still a purchase.
+    w.player.money = -1;
+    expect(() => buyChassis(w, 'courier')).toThrow(/money/);
+  });
+
+  it('sales pay the debt down', () => {
+    const w = startAtBowl();
+    w.player.money = -100;
+    const after = sellGood(w, 'scrap', 2);
+    expect(after.player.money).toBe(-100 + 2 * sellPrice(w, 'bowl', 'scrap'));
+  });
+
+  it('an NPC in debt gets no fuel, supplies or repairs in town', () => {
+    const w = startAtBowl();
+    const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { ...siteGates(bowl)[0] });
+    npc.resources!.money = -50;
+    npc.resources!.fuel = 1;
+    npc.resources!.supplies = 1;
+    const engine = mountedParts(npc, 'engine')[0];
+    engine.hp = 1;
+    serviceVehicle(w, npc, 'bowl');
+    expect(npc.resources).toMatchObject({ money: -50, fuel: 1, supplies: 1 });
+    expect(engine.hp).toBe(1);
   });
 });

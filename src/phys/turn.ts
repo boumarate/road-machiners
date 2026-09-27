@@ -21,7 +21,8 @@ export function physicsMove(d: Drive, done: (r: TurnResult) => void): (w: World)
   return (w) => {
     syncDrive(d, w);
     const r = simulateTurn(d, w);
-    const far = w.vehicles.filter((v) => !r.frames[v.id]);
+    // The towed player has no frames either, but its tower places it after this step.
+    const far = w.vehicles.filter((v) => !r.frames[v.id] && !(v.id === w.player.vehicleId && w.player.tow?.hitched));
     applyTurn(w, r);
     for (const v of far) {
       advanceFar(w, v);

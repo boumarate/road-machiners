@@ -17,6 +17,7 @@ import type { NpcActivity, Vehicle, World } from './types';
 import { canUseSite, isWalled, siteGates } from './sites';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
+import { chooseTowActivity, dropTow, runTow } from './tow';
 import { DETECT } from '../data/detect';
 
 function getNpcClass(vehicle: Vehicle): NpcClass {
@@ -126,7 +127,8 @@ function chooseServiceActivity(world: World, vehicle: Vehicle, profile: NpcClass
 }
 
 function canContinueActivity(world: World, vehicle: Vehicle, activity: NpcActivity): boolean {
-  if (['wait', 'fight', 'flee'].includes(activity.kind)) return false;
+  // A tow is chosen afresh each turn by chooseTowActivity.
+  if (['wait', 'fight', 'flee', 'tow'].includes(activity.kind)) return false;
   if (activity.kind === 'scavenge' && activity.targetId?.startsWith('wreck-')) {
     // A wreck is an opportunity only while it remains observable.
     return world.salvage.some((stock) => stock.id === activity.targetId && canVehicleSee(world, vehicle, stock.pos));
@@ -164,7 +166,12 @@ function chooseTradeActivity(world: World, vehicle: Vehicle, profile: NpcClass):
 export function chooseNpcActivity(world: World, vehicle: Vehicle): NpcActivity {
   const profile = getNpcClass(vehicle);
   const danger = chooseDangerActivity(world, vehicle, profile);
-  if (danger) return danger;
+  if (danger) {
+    if (world.player.tow?.by === vehicle.id) dropTow(world, 'danger');
+    return danger;
+  }
+  const tow = chooseTowActivity(world, vehicle, profile);
+  if (tow) return tow;
   const service = chooseServiceActivity(world, vehicle, profile);
   if (service) return service;
   const current = vehicle.brain!.activity;
@@ -199,7 +206,9 @@ export function getActivityDestination(world: World, vehicle: Vehicle): Vec | nu
   if (['fight', 'flee', 'raid', 'investigate'].includes(activity.kind)) return activity.destination;
   const site = [...REGION.towns, ...REGION.locations].find((entry) => entry.id === activity.targetId);
   const stock = activity.kind === 'scavenge' ? world.salvage.find((entry) => entry.id === activity.targetId) : undefined;
-  const radius = site?.radius ?? stock?.radius;
+  // A tower drives up to the truck it tows, and parks beside it like beside a stock.
+  const towed = activity.kind === 'tow' ? world.vehicles.find((entry) => entry.id === activity.targetId) : undefined;
+  const radius = site?.radius ?? stock?.radius ?? (towed && chassisDef(towed.chassisId).radius);
   if (radius === undefined) throw new Error(`Missing activity destination ${activity.targetId}`);
   const stopRadius = radius + vehicleStats(world, vehicle).radius + RULES.arriveRadius;
   // A walled site is used from its gate nearest the vehicle, so the stop lies just outside that gate.
@@ -209,6 +218,11 @@ export function getActivityDestination(world: World, vehicle: Vehicle): Vec | nu
 }
 
 function resolveActivity(world: World, vehicle: Vehicle, activity: NpcActivity): void {
+  if (activity.kind === 'tow') {
+    const ended = runTow(world, vehicle, activity);
+    if (ended) setNpcActivity(world, vehicle, null, ended);
+    return;
+  }
   if (activity.kind === 'scavenge') {
     const stock = world.salvage.find((entry) => entry.id === activity.targetId);
     if (!stock) { setNpcActivity(world, vehicle, null, 'salvage no longer available'); return; }

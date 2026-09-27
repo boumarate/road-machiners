@@ -5,6 +5,7 @@ import { chassisDef } from '../data/chassis';
 import { partDef, type EngineDef, type WeaponDef } from '../data/parts';
 import { RULES } from '../data/rules';
 import { skillBonus } from '../data/skills';
+import { TOW } from '../data/tow';
 import { corePart, coreParts, mountedParts } from './grid';
 import { loadFactor, vehicleMass } from './mass';
 import { getResources } from './resources';
@@ -67,6 +68,8 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     if (!isWorking(corePart(v, 'transmission'))) maxSpeed = Math.min(maxSpeed, RULES.limpSpeed);
   }
   maxSpeed *= weatherAt(world, v.pos).speed;
+  // A tower drives with care while a truck hangs on its rope.
+  if (world.player.tow?.hitched && world.player.tow.by === v.id) maxSpeed *= TOW.speedShare;
 
   return {
     maxSpeed,

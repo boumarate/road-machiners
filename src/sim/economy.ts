@@ -132,8 +132,10 @@ export function serviceAtCamp(
   refuelAndRepair(world, vehicle);
 }
 
+// A driver in debt buys nothing.
 function refuelAndRepair(world: World, vehicle: Vehicle): void {
   const resources = getResources(world, vehicle);
+  if (resources.money < 0) return;
   for (const kind of ["fuel", "supplies"] as const) {
     const cap =
       kind === "fuel"
@@ -190,8 +192,9 @@ function repairMult(world: World): number {
   );
 }
 
+// A player in debt cannot buy anything, even at no cost.
 function pay(world: World, amount: number, reason: string): void {
-  if (amount > world.player.money)
+  if (world.player.money < 0 || amount > world.player.money)
     throw new Error(`Not enough money for ${reason}`);
   world.player.money -= amount;
 }
