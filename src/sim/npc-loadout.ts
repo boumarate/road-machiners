@@ -1,6 +1,6 @@
 import { chassisDef } from '../data/chassis';
 import { GOODS } from '../data/goods';
-import type { NpcLoadoutTable, NpcTemplate, Weighted } from '../data/npcs';
+import type { CargoRoll, NpcLoadoutTable, NpcTemplate, Weighted } from '../data/npcs';
 import { partDef, type PartKind } from '../data/parts';
 import { makePart, makeVehicle } from './factory';
 import { freeCells } from './grid';
@@ -55,6 +55,12 @@ function validateTable(table: NpcLoadoutTable): void {
     if (!GOODS[value.good]) throw new Error(`Unknown NPC cargo ${value.good}`);
     if (!Number.isInteger(value.count) || value.count <= 0) throw new Error('NPC cargo counts must be positive integers');
   }
+  validateSpareParts(table.spareParts);
+}
+
+function validateSpareParts(pool: Weighted<number>[]): void {
+  validateWeights(pool);
+  if (pool.some(({ value }) => !Number.isInteger(value) || value < 0)) throw new Error('NPC spare parts must be whole counts');
 }
 
 function computeEquipmentCost(v: Vehicle): number {
@@ -124,7 +130,31 @@ export function generateNpcLoadout(world: World, template: NpcTemplate): NpcLoad
   const goods = table.goods.filter(({ value }) => value === null || (value.count <= room && GOODS[value.good].mass * value.count <= massRoom));
   if (!goods.length) throw new Error(`No fitting cargo outcome for ${template.id}`);
   const cargo = sampleWeighted(rng, goods);
+  const spare = sampleSpareParts(rng, table, room - cargoCells(cargo), massRoom - cargoMass(cargo));
   const parts = v.items.flatMap((item) => item.kind === 'part' && partDef(item.part.defId).kind !== 'core' ? [item.part.defId] : []);
   world.rngState = rng.rngState;
-  return { chassisId: v.chassisId, parts, cargo: cargo === null ? {} : { [cargo.good]: cargo.count } };
+  return { chassisId: v.chassisId, parts, cargo: withSpareParts(cargo, spare) };
+}
+
+function cargoCells(cargo: CargoRoll | null): number {
+  return cargo?.count ?? 0;
+}
+
+function cargoMass(cargo: CargoRoll | null): number {
+  return cargo ? GOODS[cargo.good].mass * cargo.count : 0;
+}
+
+// The rolled cargo plus the spare parts, as goods counts.
+function withSpareParts(cargo: CargoRoll | null, spare: number): Record<string, number> {
+  const goods: Record<string, number> = cargo === null ? {} : { [cargo.good]: cargo.count };
+  if (spare > 0) goods.parts = (goods.parts ?? 0) + spare;
+  return goods;
+}
+
+// Spare parts that fit the room left after the cargo. Zero always fits.
+function sampleSpareParts(rng: Rng, table: NpcLoadoutTable, room: number, massRoom: number): number {
+  const fitting = table.spareParts.filter(({ value }) => value <= room && GOODS.parts.mass * value <= massRoom);
+  if (!fitting.length) throw new Error('No fitting spare parts outcome; a table needs a zero entry');
+  // A single outcome needs no roll, so tables without spare parts leave the RNG untouched.
+  return fitting.length === 1 ? fitting[0].value : sampleWeighted(rng, fitting);
 }

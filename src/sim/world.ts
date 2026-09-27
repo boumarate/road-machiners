@@ -23,6 +23,7 @@ import { noteHurt, resolveNpcActivities } from './npc-activities';
 import { advanceStates } from './states';
 import { checkBeacon, followTower, isTowed, playerTow } from './tow';
 import { endCallIfOut, raiseCalls } from './dialogue';
+import { advancePatches } from './patch';
 import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
 import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
@@ -205,6 +206,7 @@ export function endTurn(
     healPlayer(w);
     leakFuel(w);
     resolveDestroyed(w);
+    advancePatches(w);
     advanceStates(w);
     checkBeacon(w);
     resolveNpcActivities(w);

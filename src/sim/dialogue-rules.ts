@@ -5,14 +5,16 @@ import type { ConditionId, EffectId, PrepareId } from '../data/dialogue';
 import { REGION, type TownDef } from '../data/region';
 import { playerVehicle } from './damage';
 import { discoverSite } from './locations';
-import { startTow, topGoal } from './npc-activities';
+import { patchGoal, startTow, topGoal } from './npc-activities';
+import { agreePatch, needsPatch, patchTerms } from './patch';
 import { npcProfile } from './npc-decisions';
 import { towData } from './states';
 import { acceptOffer, playerTow, refuseOffer, strandedPlayerAt } from './tow';
 import type { Call, CallVars, TopicOutcome, Vehicle, World } from './types';
 import { bearing, dist } from './vec';
 
-export type Condition = (world: World, npc: Vehicle) => boolean;
+// `vars` are the call values, empty on the hub and before a topic's prepare step.
+export type Condition = (world: World, npc: Vehicle, vars: CallVars) => boolean;
 export type Effect = (world: World, npc: Vehicle, call: Call) => void;
 export type Prepare = (world: World, npc: Vehicle) => CallVars;
 
@@ -37,6 +39,11 @@ function settle(world: World, npc: Vehicle, call: Call, outcome: TopicOutcome): 
   world.player.talked[npc.id] = { ...world.player.talked[npc.id], [call.topic]: outcome };
 }
 
+// A truck already in a patch deal, as patcher or client.
+function inPatch(world: World, id: string): boolean {
+  return world.states.some((s) => s.kind === 'patch' && (s.holder === id || s.other === id));
+}
+
 // The open offer this driver made to the player, or null.
 function offerBy(world: World, npc: Vehicle) {
   const tow = playerTow(world);
@@ -48,6 +55,10 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   offersTow: (world, npc) => offerBy(world, npc) !== null,
   // A driver already on its way does not need asking.
   canTowPlayer: (world, npc) => strandedPlayerAt(world, npc) !== null && topGoal(npc)?.kind !== 'tow',
+  playerNeedsPatch: (world) => needsPatch(playerVehicle(world)) && !inPatch(world, world.player.vehicleId),
+  npcNeedsPatch: (world, npc) => needsPatch(npc) && !inPatch(world, npc.id),
+  hasDeal: (_world, _npc, vars) => vars.deal !== undefined,
+  noDeal: (_world, _npc, vars) => vars.deal === undefined,
 };
 
 export const EFFECTS: Record<EffectId, Effect> = {
@@ -60,11 +71,23 @@ export const EFFECTS: Record<EffectId, Effect> = {
   acceptTow: (world) => acceptOffer(world),
   refuseTow: (world) => refuseOffer(world),
   askTow: (world, npc) => startTow(world, npc, strandedPlayerAt(world, npc)!),
+  agreePatch: (world, npc, call) => {
+    const terms = call.vars.deal;
+    if (terms?.kind !== 'deal') throw new Error('agreePatch needs deal terms');
+    const deal = agreePatch(world, npc, terms);
+    patchGoal(world, npc, playerVehicle(world), deal.holder === npc.id);
+    settle(world, npc, call, 'agreed');
+  },
   settleDone: (world, npc, call) => settle(world, npc, call, 'done'),
   settleRefused: (world, npc, call) => settle(world, npc, call, 'refused'),
 };
 
 export const PREPARES: Record<PrepareId, Prepare> = {
+  // No `deal` value means the driver cannot offer a patch.
+  patchTerms: (world, npc): CallVars => {
+    const deal = patchTerms(world, npc);
+    return deal ? { deal } : {};
+  },
   towOffer: (world, npc) => {
     const tow = offerBy(world, npc);
     if (!tow) throw new Error(`${npc.id} made no tow offer`);

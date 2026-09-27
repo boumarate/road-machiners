@@ -6,6 +6,7 @@ import { STATE_TURNS } from '../data/npcs';
 import { playerVehicle, vehicleById } from './damage';
 import { newId } from './factory';
 import { lootRobbed } from './npc-activities';
+import { checkPatch, isPatching, lapsePatch, settlePatch } from './patch';
 import { getResources } from './resources';
 import type { NpcState, StateData, StateEnding, StateKindId, World } from './types';
 import { canVehicleSee } from './vision';
@@ -52,6 +53,13 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   },
   turnedDown: { refresh: never, check: noCheck, hooks: {} },
   towPromise: { refresh: never, check: noCheck, hooks: {} },
+  // The holder patches the other party's truck. See src/sim/patch.ts. Work keeps it going, and the fulfilled hook
+  // pays once.
+  patch: {
+    refresh: isPatching,
+    check: checkPatch,
+    hooks: { fulfilled: settlePatch, expired: lapsePatch },
+  },
 };
 
 function kindOf(kind: StateKindId): StateKind {
@@ -65,7 +73,7 @@ function turnsOf(kind: StateKindId): number | null {
 }
 
 // The data kind each state kind carries.
-const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise' };
+const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', patch: 'patch' };
 
 export function addState(w: World, kind: StateKindId, holder: string, other: string, data: StateData): NpcState {
   kindOf(kind);

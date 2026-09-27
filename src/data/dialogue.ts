@@ -3,12 +3,14 @@
 // Lines are templates: `{name}` is filled from the call values the topic's prepare step made.
 
 import { DETECT } from './detect';
-import type { TraitId } from './npcs';
+import type { DecisionOptions, TraitId } from './npcs';
 
-export type TopicId = 'directions' | 'tow' | 'askTow';
-export type ConditionId = 'knowsTown' | 'offersTow' | 'canTowPlayer';
-export type EffectId = 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow';
-export type PrepareId = 'nearestTown' | 'towOffer';
+type PatchDeal = DecisionOptions['patchDeal'];
+
+export type TopicId = 'directions' | 'tow' | 'askTow' | 'patch' | 'patchRequest';
+export type ConditionId = 'knowsTown' | 'offersTow' | 'canTowPlayer' | 'playerNeedsPatch' | 'npcNeedsPatch' | 'hasDeal' | 'noDeal';
+export type EffectId = 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow' | 'agreePatch';
+export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms';
 
 // `go` is a node of the same topic, the hub of topics, or the end of the call.
 export type DialogueOption = { text: string; when: ConditionId[]; effects: EffectId[]; go: string };
@@ -82,6 +84,79 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
+  // The stranded player asks for a patch. The driver looks, then names its terms or says it cannot help.
+  patch: {
+    id: 'patch',
+    once: false,
+    ask: { text: 'My truck is broken down. Can you patch it?', when: ['playerNeedsPatch'] },
+    raise: null,
+    prepare: 'patchTerms',
+    hangUp: [],
+    start: 'look',
+    nodes: {
+      look: {
+        line: 'Let me hear what broke.',
+        options: [
+          { text: 'Engine or gearbox. What would it take?', when: ['hasDeal'], effects: [], go: 'terms' },
+          { text: 'Engine or gearbox. Can you do anything?', when: ['noDeal'], effects: [], go: 'cannot' },
+        ],
+      },
+      terms: {
+        line: '{deal}',
+        options: [
+          { text: 'Deal. I will stay put.', when: [], effects: ['agreePatch'], go: END },
+          { text: 'Not now. Something else.', when: [], effects: [], go: HUB },
+        ],
+      },
+      cannot: {
+        line: 'Not with what I have. Sorry.',
+        options: [{ text: 'Understood.', when: [], effects: [], go: HUB }],
+      },
+    },
+  },
+  // A driver stranded by a broken engine or gearbox asks the player once for a patch.
+  patchRequest: {
+    id: 'patchRequest',
+    once: true,
+    ask: null,
+    raise: { when: ['npcNeedsPatch'], priority: 1 },
+    prepare: 'patchTerms',
+    hangUp: ['settleRefused'],
+    start: 'ask',
+    nodes: {
+      ask: {
+        line: 'My engine is dead out here. Can you patch me up?',
+        options: [
+          { text: 'What are you offering?', when: ['hasDeal'], effects: [], go: 'terms' },
+          { text: 'I cannot help, sorry.', when: ['noDeal'], effects: ['settleRefused'], go: END },
+        ],
+      },
+      terms: {
+        line: '{deal}',
+        options: [
+          { text: 'Deal. Stay where you are.', when: [], effects: ['agreePatch'], go: END },
+          { text: 'Not today.', when: [], effects: ['settleRefused'], go: END },
+        ],
+      },
+    },
+  },
+};
+
+// Patch terms in the NPC's words. `npcPatches` when the NPC does the work, `playerPatches` when it asks the player
+// to. Filled with {price}, {parts} and {turns}.
+export const DEAL_LINES: Record<PatchDeal, { npcPatches: string; playerPatches: string }> = {
+  paid: {
+    npcPatches: 'I have the parts. {parts} parts and about {turns} turns of work, {price} all in.',
+    playerPatches: 'I pay {price} if you use {parts} of your parts. About {turns} turns of work.',
+  },
+  ownParts: {
+    npcPatches: 'It takes {parts} of your parts. I charge {price} for about {turns} turns of work.',
+    playerPatches: 'I have {parts} parts here. {price} for your work, about {turns} turns.',
+  },
+  free: {
+    npcPatches: 'I will do it for nothing. {parts} of my parts, about {turns} turns.',
+    playerPatches: 'I cannot pay. Could you spare {parts} parts? About {turns} turns.',
+  },
 };
 
 // How a driver talks. The first of its traits with a voice speaks for it.
@@ -100,8 +175,8 @@ export type TraitTalk = { voice: Voice | null; topics: TopicId[] };
 export const HONK_RANGE = DETECT.sound.limp;
 
 export const TRAIT_TALK: Record<TraitId, TraitTalk> = {
-  trader: { voice: { greeting: 'Caravan here. Go ahead.', repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true }, topics: ['directions', 'tow', 'askTow'] },
-  scavenger: { voice: { greeting: 'Yeah? Make it quick.', repeatLine: 'I told you already.', refusal: 'Get off my channel.', honksBack: true }, topics: ['directions', 'tow', 'askTow'] },
+  trader: { voice: { greeting: 'Caravan here. Go ahead.', repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'patch', 'patchRequest'] },
+  scavenger: { voice: { greeting: 'Yeah? Make it quick.', repeatLine: 'I told you already.', refusal: 'Get off my channel.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'patch', 'patchRequest'] },
   raider: { voice: { greeting: 'Get lost.', repeatLine: 'Get lost.', refusal: 'Heh. No.', honksBack: false }, topics: [] },
   scumbag: { voice: null, topics: [] },
   coward: { voice: null, topics: [] },

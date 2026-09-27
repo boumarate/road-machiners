@@ -51,6 +51,7 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   tow: (s) => (towData(s).hitched ? 'Towing you' : 'Tow offer to you'),
   turnedDown: () => 'You turned down its tow',
   towPromise: () => 'Promised you a tow',
+  patch: () => 'Patching your truck',
 };
 
 // One line per state the NPC holds toward the player, with turns left when the state has a timer.
@@ -96,7 +97,9 @@ function damageList(world: World, vehicleId: string, hits: PartHit[]): string {
 
 type LogLine = { text: string; cls: string };
 
-function jobText(world: World, e: Extract<GameEvent, { t: 'job' }>): LogLine {
+// Only the player's own jobs are logged.
+function jobText(world: World, e: Extract<GameEvent, { t: 'job' }>): LogLine | null {
+  if (e.vehicle !== world.player.vehicleId) return null;
   const what = e.job.kind === 'repair' ? `Repair (${partName(world, e.vehicle, e.job.partId)})` : 'Search';
   const lines = {
     started: { text: `${what} started: stay parked about ${e.job.turnsLeft} turns. End turns with Space.`, cls: '' },
@@ -119,6 +122,18 @@ function honkText(world: World, e: Extract<GameEvent, { t: 'honk' }>): LogLine {
   if (e.vehicle === world.player.vehicleId) return { text: 'You honk.', cls: 'dim' };
   const v = findAny(world, e.vehicle);
   return { text: v && playerSees(world, v.pos) ? `${v.name} honks back.` : 'A horn answers out of sight.', cls: '' };
+}
+
+// Patch work between the player and an NPC, from the player's side.
+function patchText(world: World, e: Extract<GameEvent, { t: 'patch' }>): LogLine {
+  const me = world.player.vehicleId;
+  const other = vehicleName(world, e.patcher === me ? e.client : e.patcher);
+  const lines = {
+    started: e.patcher === me ? `You start patching ${other}. Stay parked beside it.` : `${other} starts patching your truck. Stay parked.`,
+    done: e.patcher === me ? `You patched ${other}.` : `${other} patched your truck.`,
+    lapsed: `The patch with ${other} is off: nobody worked on it.`,
+  };
+  return { text: lines[e.outcome], cls: e.outcome === 'lapsed' ? 'dim' : e.outcome === 'done' ? 'good' : '' };
 }
 
 function sayText(world: World, e: Extract<GameEvent, { t: 'say' }>): LogLine {
@@ -214,7 +229,7 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
     case 'info':
       return { text: e.text, cls: 'dim' };
     case 'job':
-      return e.vehicle === me ? jobText(world, e) : null;
+      return jobText(world, e);
     case 'searched': {
       const site = [...REGION.towns, ...REGION.locations].find((l) => l.id === e.stock);
       return { text: `Search done${site ? ` at ${site.name}` : ''}. Drag what you want into the truck.`, cls: 'good' };
@@ -225,6 +240,8 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       return weatherText(world, e);
     case 'honk':
       return honkText(world, e);
+    case 'patch':
+      return patchText(world, e);
     case 'spawn':
     case 'despawn':
     case 'arrived':

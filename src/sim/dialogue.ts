@@ -24,8 +24,8 @@ export function talkOf(npc: Vehicle): Voice & { topics: TopicId[] } {
   return { ...voice, topics: [...new Set(talks.flatMap((t) => t.topics))] };
 }
 
-function holds(world: World, npc: Vehicle, when: readonly (keyof typeof CONDITIONS)[]): boolean {
-  return when.every((id) => CONDITIONS[id](world, npc));
+function holds(world: World, npc: Vehicle, when: readonly (keyof typeof CONDITIONS)[], vars: CallVars): boolean {
+  return when.every((id) => CONDITIONS[id](world, npc, vars));
 }
 
 function isSettled(world: World, npc: Vehicle, topic: Topic): boolean {
@@ -44,11 +44,11 @@ export function currentOptions(world: World): OfferedOption[] {
   const npc = vehicleById(world, call.with);
   const hangUp: OfferedOption = { text: 'Hang up.', topic: null, option: null };
   if (!call.topic) {
-    const topics = talkOf(npc).topics.map((id) => TOPICS[id]).filter((t) => t.ask && holds(world, npc, t.ask.when));
+    const topics = talkOf(npc).topics.map((id) => TOPICS[id]).filter((t) => t.ask && holds(world, npc, t.ask.when, {}));
     return [...topics.map((t) => ({ text: t.ask!.text, topic: t.id, option: null })), hangUp];
   }
   const node = TOPICS[call.topic].nodes[call.node];
-  const options = node.options.filter((o) => holds(world, npc, o.when)).map((o) => ({ text: o.text, topic: call.topic, option: o }));
+  const options = node.options.filter((o) => holds(world, npc, o.when, call.vars)).map((o) => ({ text: o.text, topic: call.topic, option: o }));
   return [...options, hangUp];
 }
 
@@ -188,7 +188,7 @@ function raisedTopic(world: World, npc: Vehicle, me: Vehicle): Topic | null {
   if (!npc.brain || !canVehicleSee(world, npc, me.pos) || inFeud(world, npc, me)) return null;
   const wanted = talkOf(npc).topics
     .map((id) => TOPICS[id])
-    .filter((t) => t.raise && !isSettled(world, npc, t) && holds(world, npc, t.raise.when))
+    .filter((t) => t.raise && !isSettled(world, npc, t) && holds(world, npc, t.raise.when, {}))
     .sort((a, b) => b.raise!.priority - a.raise!.priority);
   return wanted[0] ?? null;
 }

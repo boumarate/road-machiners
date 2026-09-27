@@ -28,8 +28,8 @@ function townById(id: string): TownDef {
   return town;
 }
 
-// Close enough to hand over a rope: the same reach a truck has to a wreck stock.
-function inTowReach(tower: Vehicle, towed: Vehicle): boolean {
+// Close enough to hand over a rope or a toolbox: the same reach a truck has to a wreck stock.
+export function inTowReach(tower: Vehicle, towed: Vehicle): boolean {
   const radii = chassisDef(tower.chassisId).radius + chassisDef(towed.chassisId).radius;
   return dist(tower.pos, towed.pos) <= (radii + ECONOMY.useRange) * ECONOMY.interactionScale;
 }
@@ -67,8 +67,10 @@ export function strandedPlayerAt(world: World, vehicle: Vehicle): Vec | null {
   return canVehicleSee(world, vehicle, me.pos) ? me.pos : beaconCenter(world, vehicle, me);
 }
 
+// A truck with a patch deal under way waits for its patch instead of a tow.
 function canTowPlayer(world: World, vehicle: Vehicle, me: Vehicle): boolean {
   if (playerTow(world) || world.player.state !== 'active') return false;
+  if (world.states.some((s) => s.kind === 'patch' && (s.holder === me.id || s.other === me.id))) return false;
   // A driver that can only crawl itself cannot pull another truck.
   return isStranded(world, me) && !isStranded(world, vehicle) && !isHostile(world, vehicle, me);
 }

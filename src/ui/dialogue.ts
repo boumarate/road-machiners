@@ -2,6 +2,7 @@
 // numbered replies. While it is open, keys 1 to 9 pick a reply and Escape hangs up. Otherwise T calls the
 // hovered truck and H honks.
 
+import { DEAL_LINES } from '../data/dialogue';
 import { REGION } from '../data/region';
 import { FACTION_COLORS } from '../render/palette';
 import { vehicleById } from '../sim/damage';
@@ -33,14 +34,25 @@ function distanceText(tiles: number): string {
   return m >= METERS_PER_KM ? `${(m / METERS_PER_KM).toFixed(1)} km` : `${m} m`;
 }
 
-function formatVar(v: CallVar): string {
-  switch (v.kind) {
-    case 'town': return townName(v.id);
-    case 'money': return String(v.amount);
-    case 'distance': return distanceText(v.tiles);
-    case 'bearing': return compass(v.rad);
-    case 'count': return String(v.n);
-  }
+// A patch deal in words, from the NPC's side, with its numbers filled in.
+function dealText(v: Extract<CallVar, { kind: 'deal' }>): string {
+  const line = DEAL_LINES[v.deal][v.patcher === 'player' ? 'playerPatches' : 'npcPatches'];
+  return fillLine(line, { price: { kind: 'money', amount: v.price }, parts: { kind: 'count', n: v.parts }, turns: { kind: 'count', n: v.turns } });
+}
+
+type VarText = { [K in CallVar['kind']]: (v: Extract<CallVar, { kind: K }>) => string };
+
+const VAR_TEXT: VarText = {
+  town: (v) => townName(v.id),
+  money: (v) => String(v.amount),
+  distance: (v) => distanceText(v.tiles),
+  bearing: (v) => compass(v.rad),
+  count: (v) => String(v.n),
+  deal: dealText,
+};
+
+function formatVar<K extends CallVar['kind']>(v: Extract<CallVar, { kind: K }>): string {
+  return (VAR_TEXT[v.kind as K] as (x: typeof v) => string)(v);
 }
 
 export function fillLine(text: string, vars: CallVars): string {

@@ -246,6 +246,8 @@ describe('towing', () => {
     const out = { x: (gate.x - town.pos.x) / town.radius, y: (gate.y - town.pos.y) / town.radius };
     const at = (d: number) => ({ x: gate.x + out.x * d, y: gate.y + out.y * d });
     const s = stranded(at(20), at(30));
+    // A raider spawning near the gate would scare the tower off, and this test is about arrival.
+    for (const id of Object.keys(NPCS)) s.w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
     let w = offered(s);
     const fee = feeOf(w);
     w.player.money = 10;

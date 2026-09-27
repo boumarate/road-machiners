@@ -25,6 +25,7 @@ export type NpcLoadoutTable = {
   armor: Weighted<string | null>[];
   cargoPart: Weighted<string | null>[];
   goods: Weighted<CargoRoll | null>[];
+  spareParts: Weighted<number>[]; // units of the parts good carried for roadside patches, on top of the cargo
 };
 
 export type NpcTemplate = {
@@ -82,6 +83,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
+    spareParts: [{ value: 0, weight: 1 }],
   },
   gunwagon: {
     budget: 3500,
@@ -126,6 +128,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "batteries", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 2 }, weight: 1 },
     ],
+    spareParts: [{ value: 0, weight: 1 }],
   },
   trader: {
     budget: 3000,
@@ -173,6 +176,8 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "meds", count: 4 }, weight: 2 },
       { value: { good: "electronics", count: 4 }, weight: 1 },
     ],
+    // A patch takes one unit of parts per broken engine or gearbox, so most traders can patch a truck or two.
+    spareParts: [{ value: 0, weight: 1 }, { value: 2, weight: 3 }, { value: 4, weight: 2 }],
   },
   scavenger: {
     budget: 1800,
@@ -215,6 +220,8 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "batteries", count: 1 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
+    // Scavengers carry a few parts from their finds, enough for a patch or two.
+    spareParts: [{ value: 0, weight: 1 }, { value: 2, weight: 3 }, { value: 3, weight: 2 }],
   },
 };
 
@@ -297,6 +304,7 @@ export type DecisionOptions = {
   hurt: 'keep' | 'flee' | 'fightBack'; // damage taken last turn
   preySeen: 'keep' | 'rob'; // a new robbery target comes in sight
   strandedSeen: 'keep' | 'tow'; // a stranded player comes in sight
+  patchDeal: 'paid' | 'ownParts' | 'free'; // the terms a driver names for a roadside patch; see src/sim/patch.ts
   resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal
   idle: 'trade' | 'scavenge' | 'raid' | 'wait'; // the goal stack is empty
 };
@@ -320,6 +328,8 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   preySeen: { keep: 1, rob: 0 },
   // Towing more than rarely needs a trait.
   strandedSeen: { keep: 1, tow: 0 },
+  // Most drivers want paying for a patch, some only charge for the work, and one in ten helps for free.
+  patchDeal: { paid: 6, ownParts: 3, free: 1 },
   // After an interruption a driver goes back to its work 9 times in 10.
   resume: { resume: 9, new: 1 },
   // Anyone collects salvage in sight. Trading and raiding more than rarely need a trait. Waiting is the small
@@ -339,6 +349,7 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   // A failed robber mostly leaves the same target alone. A scumbag's rob weight of 2 drops to 0.01, about 2%.
   backedOff: { preySeen: { rob: { mul: 0.005 } } },
   tow: {},
+  patch: {},
   // A driver the player turned down rarely offers that player a tow again. A tow weight of 9 drops to 0.009,
   // about 2%.
   turnedDown: { strandedSeen: { tow: { mul: 0.001 } } },
@@ -356,6 +367,9 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   backedOff: 30,
   // A tow lasts until the tower reaches town, the player lets go, or the tower is gone or in danger.
   tow: null,
+  // Work on a patch keeps it going. Without work it lapses after 40 turns, a fifth of a day, so a client
+  // stops waiting for a patcher who never comes.
+  patch: 40,
   // A driver the player turned down holds it until it offers that player a tow again.
   turnedDown: null,
   // A tower that dropped a hitched tow for danger keeps its terms until its next offer to that player.
