@@ -16,6 +16,7 @@ export const RULES = {
   // Throttle zones ahead of the truck. They span `reach` tiles, split into brake, hold and accelerate
   // shares in that order. A click's distance picks the zone.
   throttleZones: { reach: 10, brake: 0.25, hold: 0.5, accelerate: 0.25 },
+  reclickRadius: 0.75, // tiles; a click this close to the order's point switches its kind
   passRadius: 1, // a drive-through order clears once the trail passes this close to its point
   passSpeedShare: 0.5, // ...or once its point is nearer than this share of the current speed
   minAimDistance: 1.5, // tiles; steering ignores route points closer than this
@@ -37,7 +38,13 @@ export const RULES = {
 
   // Town guards. Each town gate has one gun. Every turn it shoots the nearest vehicle within range that fired.
   // Each round hits with a flat chance and enters a random lane of the side facing the gate.
-  guards: { range: 8, rounds: 4, hitChance: 0.5, missOffset: 1.5, round: { damage: 6, pen: 10 } },
+  guards: {
+    range: 12,
+    rounds: 4,
+    hitChance: 0.5,
+    missOffset: 1.5,
+    round: { damage: 6, pen: 10 },
+  },
 
   // Combat
   // A round that lands on the truck is a crit with this chance. A crit multiplies its damage and pen, so a few
@@ -78,4 +85,12 @@ export const RULES = {
   // Knockout
   defeatPatch: 0.25, // share of max hp broken core parts get back when the player wakes from a knockout
   knockoutMaxTurns: 30, // a knockout ends after this many turns even if a hostile idles in sight
+};
+
+// Debug console numbers. Distances are in tiles.
+export const CHEATS = {
+  spawnDistance: 10, // a spawned vehicle appears this far from the truck, inside sight range
+  spawnAngles: 12, // points tried on the spawn circle before the ring search
+  searchStep: 1, // spacing between rings and between points on a ring, in the free spot search
+  searchRings: 20, // rings searched around a target before giving up
 };

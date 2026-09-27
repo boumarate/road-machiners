@@ -27,6 +27,12 @@ describe('sunAt', () => {
     expect(noon).not.toBeNull();
     expect(noon!.elevation).toBeCloseTo(TIME.noonElevation * DEG, 2);
   });
+
+  it('crosses the north at noon, the side away from the camera', () => {
+    const noon = sunAt(turnFor((TIME.sunrise + TIME.sunset) / 2))!;
+    expect(noon.dir.x).toBeCloseTo(0);
+    expect(noon.dir.y).toBeCloseTo(-1);
+  });
 });
 
 describe('inShade', () => {

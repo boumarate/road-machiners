@@ -408,7 +408,10 @@ function applyShot(world: World, s: Shot): void {
 function witnessesAttack(world: World, observer: Vehicle, shooter: Vehicle, target: Vehicle): boolean {
   if (observer.faction !== target.faction) return false;
   if (dist(observer.pos, target.pos) > SPAWN.neighborHelp) return false;
-  return canVehicleSee(world, observer, target.pos) && canVehicleSee(world, observer, shooter.pos);
+  return (
+    canVehicleSee(world, observer, target.pos) &&
+    canVehicleSee(world, observer, shooter.pos)
+  );
 }
 
 // A shot, hit or miss, marks its shooter as an attacker of the target and of faction mates nearby that see both.

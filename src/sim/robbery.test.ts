@@ -5,6 +5,7 @@ import { addGoods } from './inventory';
 import { thinkNpc } from './npc-activities';
 import { optionWeights, vehicleDanger } from './npc-decisions';
 import { NPC_BEHAVIOR, TRAITS } from '../data/npcs';
+import { RULES } from '../data/rules';
 import { resolveDestroyed } from './combat';
 import { checkKnockout } from './defeat';
 import { corePart, mountedParts } from './grid';
@@ -14,8 +15,11 @@ import type { NpcActivity, Vehicle, World } from './types';
 import type { Vec } from './vec';
 import { cloneWorld } from './world';
 
-// A gate of Bowl. The robbery spots below lie outside Bowl's wall.
+// A gate of Bowl. The robbery spots below lie outside Bowl's wall, north of the gate: one within guard range and one
+// past it.
 const GATE = { x: 106.2, y: 460.2 };
+const GUARDED = RULES.guards.range / 2;
+const UNGUARDED = RULES.guards.range + 4;
 
 function addScumbag(w: World, pos: Vec, parts = ['mg', 'stockEngine'], traits: TraitId[] = ['scavenger', 'scumbag']): Vehicle {
   const v = addVehicle(w, 'scavengers', 'scout', parts, pos);
@@ -70,11 +74,11 @@ const JUDGED: Record<string, Setup> = {
   },
   robberAtGate: () => {
     const w = emptyWorld({ x: 200, y: 200 });
-    return { w, robber: addScumbag(w, { x: GATE.x, y: GATE.y - 6 }), target: addPrey(w, { x: GATE.x, y: GATE.y - 12 }) };
+    return { w, robber: addScumbag(w, { x: GATE.x, y: GATE.y - GUARDED }), target: addPrey(w, { x: GATE.x, y: GATE.y - UNGUARDED }) };
   },
   targetAtGate: () => {
     const w = emptyWorld({ x: 200, y: 200 });
-    return { w, robber: addScumbag(w, { x: GATE.x, y: GATE.y - 12 }), target: addPrey(w, { x: GATE.x, y: GATE.y - 6 }) };
+    return { w, robber: addScumbag(w, { x: GATE.x, y: GATE.y - UNGUARDED }), target: addPrey(w, { x: GATE.x, y: GATE.y - GUARDED }) };
   },
 };
 
@@ -92,9 +96,9 @@ describe('robbery checks', () => {
   it('a weaker truck with loot in sight away from towns gets the full rob weight', () => {
     const { w, robber, target } = passing();
     expect(robWeight(w, robber, target, vehicleDanger(w, target))).toBe(FULL_ROB);
-    // The same spot beside the gate, but one gate range further out, passes too.
+    // Beside the gate, but both past guard range, passes too.
     const far = emptyWorld({ x: 200, y: 200 });
-    expect(robWeight(far, addScumbag(far, { x: GATE.x, y: GATE.y - 12 }), addPrey(far, { x: GATE.x, y: GATE.y - 17 }), 0)).toBe(FULL_ROB);
+    expect(robWeight(far, addScumbag(far, { x: GATE.x, y: GATE.y - UNGUARDED }), addPrey(far, { x: GATE.x, y: GATE.y - UNGUARDED - 5 }), 0)).toBe(FULL_ROB);
   });
 
   for (const [name, make] of Object.entries(UNAVAILABLE)) {

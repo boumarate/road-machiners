@@ -1,10 +1,10 @@
 // Time of day and the sun. Pure functions of the turn number.
 
-import { TIME } from '../data/time';
-import { weatherAt } from './weather';
-import type { World } from './types';
-import { heightAt } from './terrain';
-import { clamp, dist, type Vec } from './vec';
+import { TIME } from "../data/time";
+import { weatherAt } from "./weather";
+import type { World } from "./types";
+import { heightAt } from "./terrain";
+import { clamp, dist, type Vec } from "./vec";
 
 // dir is the unit map direction toward the sun. elevation is its height above the horizon in radians.
 export type Sun = { dir: Vec; elevation: number };
@@ -14,13 +14,18 @@ export function clockOf(turn: number): { day: number; hour: number } {
   return { day: Math.floor(hours / 24) + 1, hour: hours % 24 };
 }
 
-// The sun rises in the east (+x), crosses the south (+y) at noon and sets in the west. Null at night.
+// The sun rises in the east (+x), crosses the north (-y) at noon and sets in the west. Null at night.
+// North is the far side from the camera, so terrain shadows fall toward the viewer.
 export function sunAt(turn: number): Sun | null {
   const { hour } = clockOf(turn);
   if (hour <= TIME.sunrise || hour >= TIME.sunset) return null;
   const t = (hour - TIME.sunrise) / (TIME.sunset - TIME.sunrise);
-  const elevation = Math.sin(Math.PI * t) * TIME.noonElevation * (Math.PI / 180);
-  return { dir: { x: Math.cos(Math.PI * t), y: Math.sin(Math.PI * t) }, elevation };
+  const elevation =
+    Math.sin(Math.PI * t) * TIME.noonElevation * (Math.PI / 180);
+  return {
+    dir: { x: Math.cos(Math.PI * t), y: -Math.sin(Math.PI * t) },
+    elevation,
+  };
 }
 
 // Whether pos sits in shade: steps toward the sun and checks the terrain and blocking obstacles
@@ -40,7 +45,11 @@ export function inShade(world: World, pos: Vec, sun: Sun): boolean {
     if (heightAt(world.terrain, p.x, p.y) > rayHeight) return true;
     for (const o of near) {
       if (dist(p, o.pos) > o.r) continue;
-      if (heightAt(world.terrain, o.pos.x, o.pos.y) + TIME.obstacleShade[o.kind] > rayHeight) return true;
+      if (
+        heightAt(world.terrain, o.pos.x, o.pos.y) + TIME.obstacleShade[o.kind] >
+        rayHeight
+      )
+        return true;
     }
   }
   return false;

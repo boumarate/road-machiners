@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import type { World } from '../../sim/types';
 import { FogView } from './fog';
+import { SightLimit } from './scope';
 import { TERRAIN_CHUNK, type TerrainChunk } from './terrain';
 
 const SIZE = 70; // two full chunks and a partial one per side
@@ -43,7 +44,7 @@ function looks(ground: TerrainChunk[]): number[][] {
 
 function fresh(world: World): number[][] {
   const ground = groundChunks();
-  new FogView(world, ground);
+  new FogView(world, ground, new SightLimit(SIZE));
   return looks(ground);
 }
 
@@ -58,7 +59,7 @@ describe('fog diff update', () => {
     const rnd = random(3);
     const explored = new Array<boolean>(SIZE * SIZE).fill(false);
     const ground = groundChunks();
-    const view = new FogView(fogWorld([], explored), ground);
+    const view = new FogView(fogWorld([], explored), ground, new SightLimit(SIZE));
     for (let step = 0; step < 40; step++) {
       const visible = disk(rnd() * SIZE, rnd() * SIZE, 1 + rnd() * 12);
       for (const t of visible) explored[t] = true;
@@ -73,7 +74,7 @@ describe('fog diff update', () => {
   it('dirties neighbouring chunks when a tile on a chunk border changes', () => {
     const explored = new Array<boolean>(SIZE * SIZE).fill(false);
     const ground = groundChunks();
-    const view = new FogView(fogWorld([], explored), ground);
+    const view = new FogView(fogWorld([], explored), ground, new SightLimit(SIZE));
     for (const [x, y] of [[31, 31], [32, 32], [31, 32], [63, 0], [64, 69], [0, 31]]) {
       const world = fogWorld([y * SIZE + x], explored);
       view.update(world);
@@ -84,7 +85,7 @@ describe('fog diff update', () => {
   it('leaves chunks without changed tiles untouched', () => {
     const explored = new Array<boolean>(SIZE * SIZE).fill(false);
     const ground = groundChunks();
-    const view = new FogView(fogWorld([], explored), ground);
+    const view = new FogView(fogWorld([], explored), ground, new SightLimit(SIZE));
     const before = lookAttributes(ground).map((a) => a.version);
     view.update(fogWorld(disk(5, 5, 3), explored));
     const changed = lookAttributes(ground).map((a, i) => a.version !== before[i]);

@@ -1,11 +1,8 @@
 // Simultaneous movement of all vehicles in substeps, with collisions.
 
 import { RULES } from '../data/rules';
-import { skillBonus } from '../data/skills';
+import { applyContactCrash, estimateCrashGeometry } from './crash-contact';
 import { burnFuel, getResources } from './resources';
-import { laneCount, ramMult, sideToward, walkLane, type PartHit } from './armor';
-import { noteCollision } from './combat';
-import { vehicleMass } from './mass';
 import { isDriveObstacle } from './mapgen';
 import { vehicleStats, type VehicleStats } from './stats';
 import { advanceOn, nextOrder, reached, steerWithFuel, type Steer } from './steering';
@@ -113,29 +110,7 @@ function relativeSpeed(a: Mover, b: Mover): number {
 // obstacles, cliffs and the map edge; what names the thing hit. from is the other body's center, or the
 // point of the obstacle or edge, and picks a's struck side. impact is the closing speed in tiles per turn.
 export function applyCrash(world: World, a: Vehicle, b: Vehicle | null, what: string, from: Vec, impact: number): void {
-  if (!(impact >= 0)) throw new Error(`Bad crash impact ${impact}`);
-  // An obstacle counts as infinite mass, so a takes the whole energy.
-  const shareA = b ? vehicleMass(b) / (vehicleMass(a) + vehicleMass(b)) : 1;
-  const hitsA = crashHits(world, a, from, impact, shareA, b);
-  const hitsB = b ? crashHits(world, b, a.pos, impact, 1 - shareA, a) : [];
-  if (b) {
-    noteCollision(world, a, b, hitsA, hitsB);
-  }
-  world.events.push({ t: 'collision', a: a.id, b: what, hitsA, hitsB });
-}
-
-// The energy spreads evenly over every lane of v's side facing from. A ram on the striker's side facing v
-// multiplies both the energy and its penetration. share is the other body's share of both masses.
-function crashHits(world: World, v: Vehicle, from: Vec, impact: number, share: number, striker: Vehicle | null): PartHit[] {
-  if (impact < RULES.collisionMinImpact) return [];
-  const mech = v.faction === 'player' ? skillBonus('mechanics', world.player.skills.mechanics) : 0;
-  const mult = striker ? ramMult(striker, sideToward(striker, v.pos)) : 1;
-  const energy = RULES.ramDamage * impact * impact * share * mult * Math.max(0, 1 - mech);
-  const side = sideToward(v, from);
-  const lanes = laneCount(v, side);
-  const hits: PartHit[] = [];
-  for (let lane = 0; lane < lanes; lane++) hits.push(...walkLane(world, v, side, lane, { damage: energy / lanes, pen: RULES.crashPen * mult }));
-  return hits;
+  applyContactCrash(world, a, b, what, impact, estimateCrashGeometry(a, b, from));
 }
 
 // The point on the map border closest to p.

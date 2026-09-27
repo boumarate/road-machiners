@@ -5,10 +5,9 @@ import { getActivityDestination, thinkNpc, topGoal } from "./npc-activities";
 import { towData } from "./states";
 import { vehicleStats } from "./stats";
 import { playerTow } from "./tow";
+import { shouldRam } from "./crash-contact";
 import type { Vehicle, World } from "./types";
 import { angleDiff, bearing, dist, type Vec } from "./vec";
-
-const STRAFE_ANGLE = Math.PI / 3;
 
 export function planNpcOrders(world: World): void {
   for (const v of world.vehicles) {
@@ -16,6 +15,7 @@ export function planNpcOrders(world: World): void {
     const tpl = NPCS[v.brain.templateId];
     if (!tpl) throw new Error(`Unknown NPC template ${v.brain.templateId}`);
     const b = v.brain;
+    delete b.ramTarget;
     if (b.recovery) b.recovery--;
     const activity = thinkNpc(world, v);
     const yielding =
@@ -61,13 +61,13 @@ export function planNpcOrders(world: World): void {
       goal = computeFightGoal(world, v, preferredRange, target);
     }
     v.order =
-      yielding || !goal
+      vehicleAhead(world, v) || !goal
         ? { kind: "brake" }
         : b.recovery
           ? { kind: "stopAt", dest: b.recoveryGoal! }
           : {
               kind:
-                activity.kind === "fight" || activity.kind === "flee"
+                b.ramTarget || activity.kind === "flee"
                   ? "through"
                   : "stopAt",
               dest: goal,
@@ -82,32 +82,26 @@ function computeFightGoal(
   preferredRange: number,
   target: Vehicle,
 ): Vec {
-  const d = dist(v.pos, target.pos);
   const lead = {
     x: target.pos.x + Math.cos(target.heading) * target.speed,
     y: target.pos.y + Math.sin(target.heading) * target.speed,
   };
-  if (d > preferredRange) return lead;
-  const hasTurret = vehicleStats(world, v).weapons.some(
-    (w) => w.def.arc >= 360,
-  );
-  if (hasTurret) {
-    const a = bearing(target.pos, v.pos) + STRAFE_ANGLE;
-    return {
-      x: target.pos.x + Math.cos(a) * preferredRange,
-      y: target.pos.y + Math.sin(a) * preferredRange,
-    };
+  if (shouldRam(world, v, target)) {
+    v.brain!.ramTarget = target.id;
+    return lead;
   }
-  const a = bearing(v.pos, target.pos);
-  const step = RULES.arriveRadius + 0.2;
-  return { x: v.pos.x + Math.cos(a) * step, y: v.pos.y + Math.sin(a) * step };
+  const clearance = vehicleStats(world, v).radius + vehicleStats(world, target).radius + RULES.yieldDistance;
+  const range = Math.max(preferredRange, clearance);
+  const a = bearing(target.pos, v.pos);
+  return { x: target.pos.x + Math.cos(a) * range, y: target.pos.y + Math.sin(a) * range };
 }
 
 // A driver brakes for any moving vehicle close ahead, so two trucks meeting head-on both brake. A parked vehicle
-// is routed around instead, unless the two face off.
+// is routed around instead, unless the two face off. A driver never brakes for the truck it rams.
 function vehicleAhead(world: World, v: Vehicle): boolean {
-  return world.vehicles.some((x) => {
-    if (x.id === v.id || onOwnRope(world, v, x)) return false;
+  const others = world.vehicles.filter((x) => x.id !== v.id && x.id !== v.brain?.ramTarget);
+  return others.some((x) => {
+    if (onOwnRope(world, v, x)) return false;
     const gap = gapAhead(world, v, x);
     if (gap === null) return false;
     if (x.speed >= RULES.parkedSpeed) return gap < brakingReach(world, v, x);

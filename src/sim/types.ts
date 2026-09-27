@@ -137,6 +137,7 @@ export type NpcBrain = {
     stalled?: number; // consecutive turns without forward progress
     recovery?: number; // turns left backing away from a blockage
     recoveryGoal?: Vec;
+    ramTarget?: string; // the fight target this driver drives through this turn, set by the fight planner
     farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
 };
 
@@ -207,6 +208,7 @@ export type Player = {
   knockouts: number;
   state: "active" | "knockedOut" | "dead";
   knockoutTurns: number; // turns spent in the current knockout
+  god: boolean; // debug god mode: parts, health, fuel and supplies refill every turn; see src/sim/cheats.ts
   beacon: boolean; // the emergency beacon calls every vehicle within BEACON.range; see src/sim/tow.ts
   explored: Uint8Array; // fog of war: tile y * world.size + x, 1 once seen
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision

@@ -17,9 +17,10 @@ import { BRIDGE_AXIS, BRIDGE_LENGTH } from '../sim/bridge';
 import { deckEnds, heightAt } from '../sim/terrain';
 import { TERRAIN } from '../data/terrain';
 import type { MoveOrder, Vehicle, World } from '../sim/types';
-import { angleDiff, clamp, DEG, dist, type Vec } from '../sim/vec';
+import { angleDiff, bearing, clamp, DEG, dist, type Vec } from '../sim/vec';
 import { bodyOf, type Body } from '../sim/body';
 import { wheelMounts } from './body';
+import { computeClosingSpeed, locateCrashContact, type CrashGeometry } from '../sim/crash-contact';
 import { headingOf, headingQuat, type TurnFrames, type VehicleFrame } from './frames';
 
 const S = PHYSICS.metersPerTile;
@@ -55,7 +56,7 @@ export type Drive = {
 // Collider handles of the Canyon Bridge deck and its two rails.
 export type Bridge = { deck: number; rails: number[] };
 
-export type Crash = { a: string; b: string; impact: number }; // b is a vehicle id, an obstacle id, 'edge' or 'rail'; impact in m/s
+export type Crash = { a: string; b: string; impact: number; contact: CrashGeometry }; // b is a vehicle id, an obstacle id, 'edge' or 'rail'; impact in m/s
 export type VehicleResult = { passed: boolean; arrived: boolean };
 export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; results: Record<string, VehicleResult> };
 
@@ -187,13 +188,13 @@ function run(d: Drive, w: World, steps: number): TurnResult {
   const crashes: Crash[] = [];
   const crashed = new Set<string>(); // one crash per pair per turn
   for (let i = 0; i < steps; i++) {
-    const before = new Map(cars.map((c) => [c.v.id, c.body.linvel()]));
+    const before = new Map(cars.map((c) => [c.v.id, captureImpactMotion(c.body)]));
     for (const c of cars) driveStep(c);
     for (const c of cars) c.ctl.updateVehicle(DT);
     world.step(events);
     events.drainCollisionEvents((h1, h2, started) => {
       if (!started) return;
-      const crash = crashOf(h1, h2, owner, obstacleOf, d, before);
+      const crash = crashOf(h1, h2, owner, obstacleOf, d, before, world, w);
       if (!crash) return;
       const key = [crash.a, crash.b].sort().join('|');
       if (crashed.has(key)) return;
@@ -208,7 +209,7 @@ function run(d: Drive, w: World, steps: number): TurnResult {
   return { next: { world, bodies: { ...d.bodies }, obstacles: { ...d.obstacles }, memory, terrain: d.terrain, bridge: d.bridge }, frames, crashes, results };
 }
 
-function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf: Map<number, string>, d: Drive, before: Map<string, RAPIER.Vector>): Crash | null {
+function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf: Map<number, string>, d: Drive, before: Map<string, ImpactMotion>, physics: RAPIER.World, state: World): Crash | null {
   const a = owner.get(h1) ?? owner.get(h2);
   if (a === undefined) return null;
   const other = owner.get(h1) === a ? h2 : h1;
@@ -216,8 +217,62 @@ function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf:
   if (other === d.terrain || other === d.bridge.deck) return null;
   const va = before.get(a)!;
   const b = owner.get(other) ?? obstacleOf.get(other) ?? (d.bridge.rails.includes(other) ? RAIL : EDGE);
-  const vb = owner.has(other) ? before.get(b)! : { x: 0, y: 0, z: 0 };
-  return { a, b, impact: Math.hypot(va.x - vb.x, va.z - vb.z) };
+  return captureCrash(physics, state, before, { a, b, first: owner.get(h1) === a ? h1 : h2, other }, va);
+}
+
+function captureCrash(physics: RAPIER.World, state: World, before: Map<string, ImpactMotion>, pair: { a: string; b: string; first: number; other: number }, va: ImpactMotion): Crash | null {
+  const vb = before.get(pair.b) ?? { velocity: { x: 0, y: 0, z: 0 }, heading: 0 };
+  const vehicle = state.vehicles.find((v) => v.id === pair.a);
+  if (!vehicle) throw new Error(`Unknown crash vehicle ${pair.a}`);
+  const target = state.vehicles.find((v) => v.id === pair.b) ?? null;
+  const hit = readCrashContact(physics, physics.getCollider(pair.first), physics.getCollider(pair.other), vehicle, target, va, vb);
+  return hit ? { a: pair.a, b: pair.b, ...hit } : null;
+}
+
+type ImpactMotion = { velocity: RAPIER.Vector; heading: number };
+
+function rotateToBody(vector: Vec, heading: number): Vec {
+  const c = Math.cos(heading);
+  const s = Math.sin(heading);
+  return { x: vector.x * c + vector.y * s, y: vector.y * c - vector.x * s };
+}
+
+function readManifoldPoints(manifold: RAPIER.TempContactManifold, flipped: boolean): { a: Vec[]; b: Vec[] } {
+  const points = { a: [] as Vec[], b: [] as Vec[] };
+  for (let i = 0; i < manifold.numContacts(); i++) {
+    const first = manifold.localContactPoint1(i);
+    const second = manifold.localContactPoint2(i);
+    if (!first || !second) throw new Error('Missing collision contact point');
+    const pair = [{ x: first.x, y: first.z }, { x: second.x, y: second.z }];
+    if (flipped) pair.reverse();
+    points.a.push(pair[0]);
+    points.b.push(pair[1]);
+  }
+  return points;
+}
+
+function readCrashContact(world: RAPIER.World, first: RAPIER.Collider, second: RAPIER.Collider, a: Vehicle, b: Vehicle | null, motionA: ImpactMotion, motionB: ImpactMotion): { impact: number; contact: CrashGeometry } | null {
+  const hits: { impact: number; contact: CrashGeometry }[] = [];
+  world.contactPair(first, second, (manifold, flipped) => {
+    const raw = manifold.normal();
+    const sign = flipped ? -1 : 1;
+    const normal = { x: raw.x * sign, y: raw.z * sign };
+    if (Math.hypot(normal.x, normal.y) === 0) return;
+    const impact = computeClosingSpeed({ x: motionA.velocity.x - motionB.velocity.x, y: motionA.velocity.z - motionB.velocity.z }, normal);
+    const points = readManifoldPoints(manifold, flipped);
+    if (points.a.length === 0) return;
+    const contact = {
+      a: locateCrashContact(a.chassisId, points.a, rotateToBody(normal, motionA.heading)),
+      b: b ? locateCrashContact(b.chassisId, points.b, rotateToBody({ x: -normal.x, y: -normal.y }, motionB.heading)) : null,
+    };
+    hits.push({ impact, contact });
+  });
+  hits.sort((a, b) => b.impact - a.impact);
+  return hits[0] ?? null;
+}
+
+function captureImpactMotion(body: RAPIER.RigidBody): ImpactMotion {
+  return { velocity: body.linvel(), heading: headingOf(body.rotation()) };
 }
 
 function makeCar(world: RAPIER.World, body: RAPIER.RigidBody, b: Body, mass: number): RAPIER.DynamicRayCastVehicleController {
@@ -305,6 +360,8 @@ function driveStep(c: Car): void {
         steerTo = clamp(-turnAngle * D.steerGain, -plan.maxSteer, plan.maxSteer);
       } else {
         steerTo = clamp(ang * D.steerGain, -plan.maxSteer, plan.maxSteer);
+        target = Math.min(target, cornerSpeed(Math.hypot(dx, dz), ang));
+        target = Math.min(target, routeCornerSpeed(plan.route, { x: p.x / S, y: p.z / S }, Math.abs(speed), plan.stopDecel));
       }
     }
   }
@@ -321,6 +378,47 @@ function driveStep(c: Car): void {
   const brake = pushing ? 0 : Math.abs(u) * plan.brakeForce + (target === 0 ? plan.brakeForce : 0);
   for (let i = 0; i < 4; i++) ctl.setWheelBrake(i, brake);
   for (const i of [2, 3]) ctl.setWheelEngineForce(i, pushing ? u * plan.engineForce : 0);
+}
+
+// The fastest speed that still curves onto a point `aimDist` meters away, `ang` off the nose. The arc
+// that leaves along the nose and ends on the point has radius aimDist / (2 sin ang). Without this cap a
+// fast truck circles a point inside its turning circle forever.
+function cornerSpeed(aimDist: number, ang: number): number {
+  const sin = Math.abs(Math.sin(ang));
+  return sin === 0 ? Infinity : Math.sqrt((D.cornerAccel * aimDist) / (2 * sin));
+}
+
+// The fastest speed now that still brakes in time for every route corner ahead. A corner turned by
+// theta is driven as an arc that starts cornerCut before it, of radius cornerCut / tan(theta / 2).
+// Theta runs to the route point cornerCut past the corner, so a sharp turn split into small steps counts whole.
+// Corners past the braking distance at the current speed cannot limit it, so the scan stops there.
+// A driver without a route drives straight and has no corners.
+function routeCornerSpeed(route: Vec[] | null, at: Vec, speed: number, decel: number): number {
+  if (!route) return Infinity;
+  const reach = (speed * speed) / (2 * decel) + D.cornerCut;
+  let limit = Infinity;
+  let along = dist(at, route[0]) * S;
+  let prev = at;
+  for (let k = 0; k + 1 < route.length && along <= reach; k++) {
+    const theta = Math.abs(angleDiff(bearing(prev, route[k]), bearing(route[k], pointAfter(route, k, D.cornerCut / S))));
+    if (theta > 0) {
+      const corner = Math.sqrt((D.cornerAccel * D.cornerCut) / Math.tan(theta / 2));
+      limit = Math.min(limit, Math.sqrt(corner * corner + 2 * decel * Math.max(0, along - D.cornerCut)));
+    }
+    along += dist(route[k], route[k + 1]) * S;
+    prev = route[k];
+  }
+  return limit;
+}
+
+// The route point at least `d` tiles along the route after point k, or the last one.
+function pointAfter(route: Vec[], k: number, d: number): Vec {
+  let along = 0;
+  for (let i = k + 1; i < route.length; i++) {
+    along += dist(route[i - 1], route[i]);
+    if (along >= d) return route[i];
+  }
+  return route[route.length - 1];
 }
 
 // The truck covers several route points in one turn. Points it has come close to or driven past

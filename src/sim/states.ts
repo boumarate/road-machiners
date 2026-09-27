@@ -109,13 +109,20 @@ export function advanceStates(w: World): void {
 
 // Ends the state by its kind's check or a missing party, or else runs its timer.
 function advanceState(w: World, s: NpcState): void {
-  const kind = kindOf(s.kind);
-  const ending = kind.check(w, s) ?? (partyMissing(w, s) ? 'broken' : null);
-  if (ending) {
-    endState(w, s, ending);
-    return;
-  }
-  runTimer(w, s, kind);
+  if (!settleState(w, s)) runTimer(w, s, kindOf(s.kind));
+}
+
+// Ends every state whose kind's check or a missing party calls for it, with no timers run. Commands outside the
+// turn that remove a vehicle call it, so the next turn never meets a state with a missing party.
+export function settleStates(w: World): void {
+  for (const s of [...w.states]) if (w.states.includes(s)) settleState(w, s);
+}
+
+// True when the state ended.
+function settleState(w: World, s: NpcState): boolean {
+  const ending = kindOf(s.kind).check(w, s) ?? (partyMissing(w, s) ? 'broken' : null);
+  if (ending) endState(w, s, ending);
+  return ending !== null;
 }
 
 // A state without a timer waits. This turn's events refresh a timer to its full length. Otherwise it counts down

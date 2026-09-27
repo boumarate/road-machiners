@@ -2,6 +2,7 @@ import { partDef } from '../data/parts';
 import { describe, expect, it } from 'vitest';
 import { corePart, mountedItems, mountedParts } from './grid';
 import { applyCrash } from './movement';
+import { applyContactCrash, shouldRam } from './crash-contact';
 import { RULES } from '../data/rules';
 import { thinkNpc } from './npc-activities';
 import { addState, stateOf } from './states';
@@ -122,6 +123,29 @@ describe('rams as attacks', () => {
     expect(victim.brain!.attackers).toEqual({ [trader.id]: false });
     thinkNpc(w, victim);
     expect(victim.brain!.attackers).toEqual({ [trader.id]: true });
+  });
+
+  it('a physics contact crash is an attack like a 2D crash', () => {
+    const { w, trader, victim, mate } = ramSetup();
+    applyContactCrash(w, trader, victim, victim.id, FULL_SPEED, { a: { side: 'front', lanes: [1, 2] }, b: { side: 'left', lanes: [2, 3] } });
+    expect(total(crashOf(w).hitsB)).toBeGreaterThan(0);
+    expect(stateOf(w, 'feud', victim.id, trader.id)).not.toBeNull();
+    expect(stateOf(w, 'feud', mate.id, trader.id)).not.toBeNull();
+    expect(victim.brain!.attackers).toEqual({ [trader.id]: false });
+    expect(victim.lastHitBy).toBe(trader.id);
+  });
+
+  it('a ram forecast damages nothing and attacks no one', () => {
+    const { w, victim, mate } = ramSetup();
+    const raider = addVehicle(w, 'raiders', 'hauler', ['mg', 'stockEngine', 'plowRam'], { x: 38, y: 40 }, 0);
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    raider.speed = 5;
+    const before = JSON.stringify(w.vehicles);
+    shouldRam(w, raider, victim);
+    expect(JSON.stringify(w.vehicles)).toBe(before);
+    expect(w.states).toEqual([]);
+    expect(w.events).toEqual([]);
+    expect(mate.brain!.attackers).toEqual({});
   });
 
   it('the player ramming an NPC is an attack too', () => {
