@@ -1,6 +1,6 @@
 # NPC behavior: traits, goals and states
 
-**Status:** executing
+**Status:** validating
 **Branch:** npc-traits (from defeat-rescue at 6619d53)
 **Worktree:** .worktrees/npc-traits
 **Goal:** In the running game, NPCs show traits in the hover panel. NPCs with the same traits make different choices. A scumbag scavenger scavenges, sometimes attacks a weaker player or NPC who has loot, and returns to scavenging after interruptions. A feud that goes quiet ends, and its hook runs. Tows run as states. Confirming needs a Playwright run and user sign-off.
@@ -316,3 +316,31 @@ Notes:
 - `src/sim/npc-activities.ts` `onPreySeen` and `src/sim/npc-decisions.ts` `robFactor` both run `isRobberyTarget`, a double guard for IV6.
 
 ## Conclusion
+
+Outcome: traits, the goal stack, weighted decisions with a 1% floor, states with hooks, robbery and loot, and the hover panel are built and verified at c2e170e. The goal waits on two things: user playtest sign-off, and integration with main's `npc-restraint` work, which rewrote the same NPC code after this branch last merged main.
+
+Invariants:
+- IV1–IV5, IV8–IV13 — held under the CK checks in Verify.
+- IV6, IV7 — changed by the chance floor. Tests in `robbery.test.ts` and `npc-decisions.test.ts` cover the new rules.
+
+### Assumptions check
+- AS1 — held after the fix: a `loot` goal sends the winner to the wreck or knockout stock. Plain scavenging alone did not.
+- AS2 — held: `hasLoot()` reads the grid. Mounted guns and armor count as loot.
+- AS3 — held: 33 far NPCs changed goals 731 times in 500 turns.
+
+### Unknowns outcome
+- UK1 — still-open: starting weights are set. On the default seed, 1000 turns gave 1 robbery and 22 fight-backs. Playtest decides the rest.
+- UK2 — resolved: `noteHurt()` reads the turn's shot, guard and collision events at the end of the turn.
+- UK3 — resolved: the tow code was ported through three merges, including beacon and tow promises.
+
+Plan adherence: see the deviation list under Plan. Later additions were the danger score, the `loot` goal, `towPromise`, the chance floor with availability checks, fight back, and save version 10.
+
+Review findings:
+- Critical and important: none. The reviewer flagged task-file drift, fixed in 5efaf6f.
+
+Future work:
+- Integrate main's `npc-restraint` (field repairs, restraint around unrelated hostiles, group force assessment, attack observations) into the decision system before merge.
+- `forceOption` no longer makes a choice certain because of the 1% floor. Tests rely on fixed seeds.
+- Heard contacts churn: about 1300 contactHeard rolls per 1000 turns.
+
+Verified by: staged browser robbery with the hover panel, beacon tow in the browser, playtest, and perf compared with main.
