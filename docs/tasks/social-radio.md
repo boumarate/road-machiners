@@ -1,6 +1,6 @@
 # Social radio and dialogue
 
-**Status:** executing
+**Status:** reviewing
 **Blocked:** none. Defeat-rescue and npc-traits are merged into this branch. PH1, PH5 and most of PH6 are done.
 **Branch:** social
 **Worktree:** .worktrees/social
@@ -299,14 +299,26 @@ npc-traits merged into this branch at 25cedab. Its states replace agreements, an
 
 ## Verify
 
-Result: incomplete. Verification stopped at the usage limit and must resume.
+Result: passed
 
+Happy-path:
+- CK1 — a trader answers directions, a honk is answered, a tow is offered and accepted, a patch is asked and done, a raider demand is handed over — held in the browser.
+
+Negative:
+- CK2 — options not on offer, calls out of sight, and calls to a truck in a feud are refused — held in unit tests.
+- CK13 — an NPC client that loses its money before the work ends — broke, then fixed in e9cd4db. It paid into the negative, to -38. Now the deal breaks for free, and a regression test covers it.
+
+Invariants / assumptions:
 - CK3 (IV8) — a world with an open call and a patch state saves and loads intact — held.
 - CK4 — a call ends when the NPC on the line is gone — held.
-- CK6 — a patch breaks when the NPC patcher is destroyed — not run: the probe called a trader 20 tiles away, out of sight. Rerun with the trader in sight.
-- CK13 — an NPC client with no money pays for a paid patch — inconclusive: the patch never started in 20 turns, because the player did not drive into reach. Rerun with the player parked beside the client.
-- CK18 (AS2) — NPC drive parts break often enough for patch requests — held: over 1000 turns, 25 NPCs had a broken engine or gearbox, 5509 NPC-turns in total. The probe timed out at 30 s before it finished its assertions, so counts are from its log.
-- Still to run: the travel worker with a call opened at the end of a turn (RK5), the independent review, and the docs update.
+- CK6 — a patch breaks for free when either party is destroyed — held, patcher and client both.
+- CK7 (IV1, RK5) — an NPC raises a call during automatic travel, prepared in the turn worker — held: turns stop, and no page error.
+- CK8 (IV5, IV6) — a demand is made once, and a truce stops shots until a feud — held in unit tests.
+- CK9 (AS2) — NPC drive parts break often enough for patch requests — held: over 1000 turns, 25 NPCs had a broken engine or gearbox.
+- CK10 (AS1) — calls happen often enough on roads — deferred to the user's play test. It needs play over real routes, which the goal already requires.
+
+Smoke: the five browser scripts in `tmp/` (dialogue, tow, patch, demand, travel call) and `npm run playtest` pass on e9cd4db. 703 unit tests pass.
+Goal: the user confirms the loop in play.
 
 ## Conclusion
 
