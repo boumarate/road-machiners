@@ -193,6 +193,12 @@ describe('physics turns', () => {
     expect(turned).toBeLessThan(Math.PI / 2);
   });
 
+  it('from rest, a close drive-through click is reached instead of stopping short', () => {
+    const { w, d } = play(ordered({ kind: 'through', dest: { x: 33, y: 30.5 } }), 5);
+    expect(me(w).order).toBeNull();
+    freeDrive(d);
+  });
+
   it('a fast truck brakes before a sharp route corner instead of running into the wall past it', () => {
     let w = ordered({ kind: 'stopAt', dest: { x: 45, y: 48 } }, 7.8);
     // A wall on the right forces the route east to a corner, and a wall past the corner catches overshoot.
