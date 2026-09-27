@@ -5,7 +5,7 @@ import { rollTraits } from './spawn';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 
 describe('NPC traits', () => {
-  it('unions the sites of two traits and takes the widest contact radius', () => {
+  it('unions the sites of two traits, takes the widest contact radius and multiplies boldness', () => {
     const w = emptyWorld();
     const npc = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 10, y: 10 });
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger', 'raider']);
@@ -15,7 +15,8 @@ describe('NPC traits', () => {
     expect(profile.salvageSites).toEqual(TRAITS.scavenger.salvageSites);
     expect(profile.supplySites).toEqual(TRAITS.scavenger.supplySites);
     expect(profile.contactReactRadius).toBe(Infinity);
-    expect(profileOf(['trader'])).toEqual({ towns: TRAITS.trader.towns, bases: [], salvageSites: [], supplySites: TRAITS.trader.supplySites, contactReactRadius: TRAITS.trader.contactReactRadius });
+    expect(profileOf(['trader'])).toEqual({ towns: TRAITS.trader.towns, bases: [], salvageSites: [], supplySites: TRAITS.trader.supplySites, contactReactRadius: TRAITS.trader.contactReactRadius, boldness: 1 });
+    expect(profileOf(['scavenger', 'scumbag', 'coward']).boldness).toBeCloseTo(TRAITS.scumbag.boldness * TRAITS.coward.boldness);
   });
 
   it('throws on an unknown trait or a brain without traits', () => {

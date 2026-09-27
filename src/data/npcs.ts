@@ -170,6 +170,9 @@ export type Trait = {
   // A hostile contact reacts only while its circle is at most this many tiles wide. Beyond it the
   // noise is too vague to act on. Raiders have no limit: they hear as far as the player does.
   contactReactRadius: number;
+  // Multiplies the driver's own danger when it judges another truck, for robbing and for fight or flee.
+  // Traits multiply together. 1 judges trucks as they are.
+  boldness: number;
   weights: TraitWeights;
 };
 
@@ -177,24 +180,26 @@ export type Trait = {
 export const TRAITS: Record<TraitId, Trait> = {
   // Scavenging a known site beats waiting a hundredfold. Nine in ten scavengers help a stranded truck.
   scavenger: {
-    towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12,
+    towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
     weights: { idle: { scavenge: { add: 10 } }, strandedSeen: { tow: { add: 9 } } },
   },
   // Traders never pick a fight. Trading beats salvage in sight 3 to 1. Nine in ten traders help a stranded truck.
   trader: {
-    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12,
+    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
     weights: { idle: { trade: { add: 30 } }, strandedSeen: { tow: { add: 9 } }, hostileSeen: { fight: { mul: 0 } } },
   },
   // Raiders fight most hostiles they see and close in on most they hear. A raid ties with salvage in sight.
   raider: {
-    towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], contactReactRadius: Infinity,
+    towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], contactReactRadius: Infinity, boldness: 1,
     weights: { idle: { raid: { add: 10 } }, contactHeard: { investigate: { add: 12 } }, hostileSeen: { fight: { add: 8 } } },
   },
-  // A scumbag robs about one weaker loaded truck in three it comes across.
-  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, weights: { preySeen: { rob: { add: 0.5 } } } },
-  // A coward runs three times as often from a new hostile or a hit, and picks a fight half as often.
+  // A scumbag robs about one target in three it comes across. Boldness 1.3 lets it rob a truck that looks as
+  // dangerous as its own, and stand against one up to 30% stronger.
+  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, boldness: 1.3, weights: { preySeen: { rob: { add: 0.5 } } } },
+  // A coward runs three times as often from a new hostile or a hit, and picks a fight half as often. Boldness 0.6
+  // makes a truck that looks as dangerous as its own a threat, even at the lowest misjudgment.
   coward: {
-    towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0,
+    towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, boldness: 0.6,
     weights: { hostileSeen: { flee: { mul: 3 }, fight: { mul: 0.5 } }, hurt: { flee: { mul: 3 } } },
   },
 };
@@ -203,8 +208,11 @@ export const NPC_BEHAVIOR = {
   // Cab warnings begin at 30%. Recovery to half cab health prevents fight/flee oscillation.
   fleeCondition: 0.3,
   recoverCondition: 0.5,
-  // An enemy is a threat when its visible guns outweigh the driver's own times this.
+  // An enemy is a threat when its perceived danger beats the driver's own times this and its boldness.
   threatRatio: 1,
+  // A sighting misjudges a truck's danger by up to a quarter either way, rolled once per sighting. Damage shows,
+  // but only roughly.
+  dangerSpread: 0.25,
   // Flee weight times this against a threat, and again when the cab or driver is at the flee condition.
   // 20 makes an outgunned raider run about two times in three, and an outgunned scavenger nearly always.
   threatFlee: 20,

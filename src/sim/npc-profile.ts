@@ -9,6 +9,7 @@ export type NpcProfile = {
   salvageSites: string[];
   supplySites: string[];
   contactReactRadius: number;
+  boldness: number;
 };
 
 export function npcTraits(v: Vehicle): TraitId[] {
@@ -23,7 +24,7 @@ export function hasTrait(v: Vehicle, id: TraitId): boolean {
   return npcTraits(v).includes(id);
 }
 
-// Known sites are the union over traits, in trait order. The widest contact radius wins.
+// Known sites are the union over traits, in trait order. The widest contact radius wins. Boldness multiplies.
 export function profileOf(traits: TraitId[]): NpcProfile {
   if (traits.length === 0) throw new Error('A profile needs at least one trait');
   const defs = traits.map((id) => {
@@ -37,6 +38,7 @@ export function profileOf(traits: TraitId[]): NpcProfile {
     salvageSites: union('salvageSites'),
     supplySites: union('supplySites'),
     contactReactRadius: Math.max(...defs.map((t) => t.contactReactRadius)),
+    boldness: defs.reduce((product, t) => product * t.boldness, 1),
   };
 }
 

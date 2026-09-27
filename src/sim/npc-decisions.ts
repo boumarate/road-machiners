@@ -22,7 +22,8 @@ import { npcProfile, npcTraits } from './npc-profile';
 import { topGoal } from './npc-goals';
 import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
-import { isRobberyTarget } from './robbery';
+import { isRobberyCandidate, isRobberyTarget } from './robbery';
+import { randRange } from './rng';
 import { canReachSalvage, hasSalvage } from './salvage';
 import { canUseSite } from './sites';
 import { statesHeld } from './states';
@@ -44,18 +45,18 @@ export function getCabCondition(vehicle: Vehicle): number {
   return cab.hp / partDef(cab.defId).hp;
 }
 
-// Weapon definitions are public shapes. Enemy reload and part HP are not observations.
-export function computeVisibleStrength(vehicle: Vehicle): number {
-  return mountedParts(vehicle, 'weapon').reduce((sum, part) => {
-    const def = partDef(part.defId);
-    if (def.kind !== 'weapon') throw new Error('Non-weapon in weapon mounts');
-    return sum + def.round.damage * def.rounds;
-  }, 0);
+// How dangerous a truck is as it stands now: firepower times toughness. Firepower sums damage times rounds over
+// working guns. Toughness is the current HP of the chassis core parts and the mounted armor.
+export function vehicleDanger(world: World, vehicle: Vehicle): number {
+  const firepower = vehicleStats(world, vehicle).weapons.filter((weapon) => weapon.part.hp > 0).reduce((sum, weapon) => sum + weapon.def.round.damage * weapon.def.rounds, 0);
+  const toughness = [...mountedParts(vehicle, 'core'), ...mountedParts(vehicle, 'armor')].reduce((sum, part) => sum + part.hp, 0);
+  return firepower * toughness;
 }
 
-// The NPC's own working guns. It knows its part HP.
-export function ownStrength(world: World, vehicle: Vehicle): number {
-  return vehicleStats(world, vehicle).weapons.filter((weapon) => weapon.part.hp > 0).reduce((sum, weapon) => sum + weapon.def.round.damage * weapon.def.rounds, 0);
+// Another truck's danger as one sighting judges it: off by a factor rolled with world RNG.
+export function perceiveDanger(world: World, other: Vehicle): number {
+  const spread = NPC_BEHAVIOR.dangerSpread;
+  return vehicleDanger(world, other) * randRange(world, 1 - spread, 1 + spread);
 }
 
 // At or below the flee condition, or below the higher recover condition while already fleeing.
@@ -133,18 +134,20 @@ function keepFactor(): number {
   return 1;
 }
 
-// A driver fights only with a working gun.
+// A driver fights only with a working gun. A truck without one has no danger.
 function fightFactor(world: World, vehicle: Vehicle): number {
-  return ownStrength(world, vehicle) > 0 ? 1 : 0;
+  return vehicleDanger(world, vehicle) > 0 ? 1 : 0;
 }
 
-// A seen enemy is judged by its visible guns. A heard one only by the driver's own state. A hit weighs by its
-// damage against the cab, and needs a hostile in sight to run from.
-function fleeFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): number {
+// A seen enemy is a threat when its perceived danger beats the driver's own, scaled by threat ratio and boldness.
+// A heard one is judged only by the driver's own state. A hit weighs by its damage against the cab, and needs a
+// hostile in sight to run from.
+function fleeFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
   const weak = isWeak(world, vehicle) ? NPC_BEHAVIOR.weakFlee : 1;
   if (decision === 'hostileSeen') {
     if (subject === null) throw new Error('hostileSeen needs a subject');
-    const threat = computeVisibleStrength(vehicleById(world, subject)) > ownStrength(world, vehicle) * NPC_BEHAVIOR.threatRatio;
+    if (danger === null) return weak;
+    const threat = danger > vehicleDanger(world, vehicle) * NPC_BEHAVIOR.threatRatio * npcProfile(vehicle).boldness;
     return (threat ? NPC_BEHAVIOR.threatFlee : 1) * weak;
   }
   if (decision === 'contactHeard') return weak;
@@ -161,9 +164,11 @@ function investigateFactor(): number {
 }
 
 // Rob carries weight only through a trait, and only against a target that passes every robbery check.
-function robFactor(world: World, vehicle: Vehicle, subject: string | null): number {
+function robFactor(world: World, vehicle: Vehicle, subject: string | null, danger: number | null): number {
   if (subject === null) throw new Error('preySeen needs a subject');
-  return isRobberyTarget(world, vehicle, vehicleById(world, subject)) ? 1 : 0;
+  const target = vehicleById(world, subject);
+  if (danger === null) return isRobberyCandidate(world, vehicle, target) ? 1 : 0;
+  return isRobberyTarget(world, vehicle, target, danger) ? 1 : 0;
 }
 
 // The subject already passed the tow checks: stranded, in sight, not hostile.
@@ -199,13 +204,13 @@ function waitFactor(): number {
 
 type OptionName = DecisionOptions[DecisionId];
 
-function situation(world: World, vehicle: Vehicle, decision: DecisionId, option: OptionName, subject: string | null): number {
+function situation(world: World, vehicle: Vehicle, decision: DecisionId, option: OptionName, subject: string | null, danger: number | null): number {
   switch (option) {
     case 'keep': return keepFactor();
     case 'fight': return fightFactor(world, vehicle);
-    case 'flee': return fleeFactor(world, vehicle, decision, subject);
+    case 'flee': return fleeFactor(world, vehicle, decision, subject, danger);
     case 'investigate': return investigateFactor();
-    case 'rob': return robFactor(world, vehicle, subject);
+    case 'rob': return robFactor(world, vehicle, subject, danger);
     case 'tow': return towFactor();
     case 'resume': return resumeFactor();
     case 'new': return newFactor();
@@ -231,7 +236,10 @@ function changeTables(world: World, vehicle: Vehicle, subject: string | null): T
   return tables;
 }
 
-export function optionWeights<D extends DecisionId>(world: World, vehicle: Vehicle, decision: D, subject: string | null): Record<DecisionOptions[D], number> {
+// `danger` is the subject's danger as this sighting perceived it. It is null for decisions without a seen vehicle,
+// and before the sighting's roll. Then the danger checks do not apply, and the weights only tell whether the
+// decision offers a choice.
+export function optionWeights<D extends DecisionId>(world: World, vehicle: Vehicle, decision: D, subject: string | null, danger: number | null): Record<DecisionOptions[D], number> {
   const base = DECISIONS[decision] as Record<OptionName, number>;
   const tables = changeTables(world, vehicle, subject);
   const out = {} as Record<OptionName, number>;
@@ -244,7 +252,7 @@ export function optionWeights<D extends DecisionId>(world: World, vehicle: Vehic
       if (change.add !== undefined) add += change.add;
       if (change.mul !== undefined) mul *= change.mul;
     }
-    out[option] = (base[option] + add) * mul * situation(world, vehicle, decision, option, subject);
+    out[option] = (base[option] + add) * mul * situation(world, vehicle, decision, option, subject, danger);
   }
   return out as Record<DecisionOptions[D], number>;
 }
@@ -255,8 +263,8 @@ export function hasChoice(weights: Partial<Record<OptionName, number>>): boolean
   return !('keep' in weights) || Object.entries(weights).some(([option, weight]) => option !== 'keep' && weight! > 0);
 }
 
-export function decide<D extends DecisionId>(world: World, vehicle: Vehicle, decision: D, subject: string | null): DecisionOptions[D] {
-  const weights = optionWeights(world, vehicle, decision, subject);
+export function decide<D extends DecisionId>(world: World, vehicle: Vehicle, decision: D, subject: string | null, danger: number | null): DecisionOptions[D] {
+  const weights = optionWeights(world, vehicle, decision, subject, danger);
   const pool: { value: DecisionOptions[D]; weight: number }[] = [];
   for (const [option, weight] of Object.entries(weights) as [DecisionOptions[D], number][]) {
     if (!Number.isFinite(weight) || weight < 0) throw new Error(`${vehicle.id} has weight ${weight} for ${option} at ${decision}`);

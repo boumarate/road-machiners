@@ -2,7 +2,8 @@
 // top of it. A new goal replaces any goal of its kind, so the stack never holds two goals of one kind. Every change
 // logs an `activity` event.
 
-import type { NpcActivity, Vehicle, World } from './types';
+import { cancelJob } from './jobs';
+import type { Job, NpcActivity, Vehicle, World } from './types';
 
 // Goals that interrupt a long-term goal. Popping one that uncovers the long-term goal fires the resume decision.
 export const INTERRUPTIONS: readonly NpcActivity['kind'][] = ['fight', 'flee', 'investigate', 'resupply', 'tow', 'loot'];
@@ -18,8 +19,16 @@ export function topGoal(v: Vehicle): NpcActivity | null {
   return goals[goals.length - 1] ?? null;
 }
 
+// A search belongs to a scavenge or loot goal on its stock.
+function jobBelongs(job: Job, goal: NpcActivity | null): boolean {
+  return job.kind === 'search' && (goal?.kind === 'scavenge' || goal?.kind === 'loot') && goal.targetId === job.stockId;
+}
+
+// Logs the change. A new top goal cancels a running job that is not its own, since the driver moves off.
 function logChange(w: World, v: Vehicle, previous: NpcActivity | null, reason: string): void {
-  w.events.push({ t: 'activity', vehicle: v.id, previous: previous?.kind ?? null, activity: topGoal(v)?.kind ?? null, reason });
+  const top = topGoal(v);
+  w.events.push({ t: 'activity', vehicle: v.id, previous: previous?.kind ?? null, activity: top?.kind ?? null, reason });
+  if (top !== previous && v.job && !jobBelongs(v.job, top)) cancelJob(w, v);
 }
 
 export function pushGoal(w: World, v: Vehicle, goal: NpcActivity): void {

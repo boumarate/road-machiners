@@ -18,6 +18,19 @@ const goal = (kind: NpcActivity['kind'], targetId: string | null, reason = 'test
 const activityEvents = (w: World) => w.events.filter((e) => e.t === 'activity');
 
 describe('goal stack', () => {
+  it('a goal change cancels a job that does not belong to the new top goal', () => {
+    const { w, npc } = scavengerWorld();
+    pushGoal(w, npc, goal('scavenge', 'podfield'));
+    npc.job = { kind: 'search', stockId: 'podfield', turnsLeft: 3, total: 3 };
+    // A goal on the same stock keeps the search.
+    pushGoal(w, npc, goal('loot', 'podfield'));
+    expect(npc.job).not.toBeNull();
+    pushGoal(w, npc, goal('resupply', 'bowl'));
+    expect(npc.job).toBeNull();
+    expect(w.events).toContainEqual(expect.objectContaining({ t: 'job', vehicle: npc.id, outcome: 'cancelled' }));
+  });
+
+
   it('pushes on top, replaces a goal of the same kind, and pops back to the one below', () => {
     const { w, npc } = scavengerWorld();
     pushGoal(w, npc, goal('scavenge', 'podfield'));

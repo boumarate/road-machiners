@@ -12,17 +12,17 @@ import { isHostile } from './combat';
 import { getTradePrice, sellVehicleCargo, serviceAtCamp, serviceVehicle, tradeGoods } from './economy';
 import { corePart, freeCells, goodsCount, mountedParts } from './grid';
 import {
-  bestTrade, decide, getCabCondition, hasChoice, optionWeights, getKnownSite, getUpkeepReserve, huntingGroundsAway, isHostileContact, isWeak,
+  bestTrade, decide, getCabCondition, hasChoice, optionWeights, perceiveDanger, getKnownSite, getUpkeepReserve, huntingGroundsAway, isHostileContact, isWeak,
   salvageSitesAway, trustedContacts, visibleHostiles, visibleSalvage,
 } from './npc-decisions';
 import { INTERRUPTIONS, popGoal, pushGoal, replaceBase, topGoal } from './npc-goals';
 import { npcProfile, type NpcProfile } from './npc-profile';
 import { getResources } from './resources';
-import { cancelJob } from './jobs';
 import { randInt } from './rng';
 import { canReachSalvage, hasSalvage } from './salvage';
 import { beginSearch } from './search';
-import { isRobberyTarget } from './robbery';
+import { isRobberyCandidate } from './robbery';
+import { vehicleById } from './damage';
 import { addState, stateOf } from './states';
 import { vehicleStats } from './stats';
 import type { Contact, NpcActivity, NpcState, Vehicle, World } from './types';
@@ -114,7 +114,7 @@ function raidGoal(world: World, vehicle: Vehicle): NpcActivity {
 }
 
 function idleGoal(world: World, vehicle: Vehicle): NpcActivity {
-  const option = decide(world, vehicle, 'idle', null);
+  const option = decide(world, vehicle, 'idle', null, null);
   if (option === 'trade') return tradeGoal(world, vehicle);
   if (option === 'scavenge') return scavengeGoal(world, vehicle);
   if (option === 'raid') return raidGoal(world, vehicle);
@@ -129,7 +129,7 @@ export function finishGoal(world: World, vehicle: Vehicle, reason: string): void
   const done = popGoal(world, vehicle, reason);
   const goals = vehicle.brain!.goals;
   if (!INTERRUPTIONS.includes(done.kind) || goals.length !== 1 || INTERRUPTIONS.includes(goals[0].kind)) return;
-  if (decide(world, vehicle, 'resume', null) === 'new') popGoal(world, vehicle, 'chose something new');
+  if (decide(world, vehicle, 'resume', null, null) === 'new') popGoal(world, vehicle, 'chose something new');
 }
 
 function heldTow(world: World, vehicle: Vehicle): NpcState | null {
@@ -192,17 +192,18 @@ type NoticedDecision = 'hostileSeen' | 'contactHeard' | 'preySeen' | 'strandedSe
 
 // Rolls a decision about a subject once while the subject stays noticed. Null when it already is. When only keep
 // has weight, the driver keeps without a roll and without noticing, so the decision fires once a choice appears.
+// Otherwise it notices the subject, judges a seen truck's danger once for this sighting, then rolls.
 function react<D extends NoticedDecision>(world: World, vehicle: Vehicle, decision: D, id: string): DecisionOptions[D] | null {
   const key = `${decision}:${id}`;
   if (key in vehicle.brain!.noticed) return null;
-  if (!hasChoice(optionWeights(world, vehicle, decision, id))) return 'keep' as DecisionOptions[D];
+  if (!hasChoice(optionWeights(world, vehicle, decision, id, null))) return 'keep' as DecisionOptions[D];
   vehicle.brain!.noticed[key] = world.turn;
-  return decide(world, vehicle, decision, id);
+  const seen = decision === 'hostileSeen' || decision === 'preySeen';
+  return decide(world, vehicle, decision, id, seen ? perceiveDanger(world, vehicleById(world, id)) : null);
 }
 
-// Pushes a danger goal. The driver drops its search or repair to react, and a tower in danger drops its tow for free.
+// Pushes a danger goal. A tower in danger drops its tow for free.
 function interrupt(world: World, vehicle: Vehicle, goal: NpcActivity): void {
-  cancelJob(world, vehicle);
   const tow = heldTow(world, vehicle);
   if (tow) {
     dropTow(world, tow, 'danger');
@@ -240,16 +241,17 @@ function onContactsHeard(world: World, vehicle: Vehicle, profile: NpcProfile, co
 
 // Fires every turn after damage. Flee runs from the nearest hostile in sight.
 function onHurt(world: World, vehicle: Vehicle, profile: NpcProfile): void {
-  if (vehicle.brain!.hurt <= 0 || decide(world, vehicle, 'hurt', null) === 'keep') return;
+  if (vehicle.brain!.hurt <= 0 || decide(world, vehicle, 'hurt', null, null) === 'keep') return;
   const enemy = visibleHostiles(world, vehicle)[0];
   if (!enemy) throw new Error(`${vehicle.id} chose to flee a hit with no hostile in sight`);
   interrupt(world, vehicle, fleeFrom(world, vehicle, profile, enemy.id, enemy.pos, 'hurt and threatened'));
 }
 
-// One roll per new robbery target in sight, nearest first. Rob starts a feud with the target and fights it.
+// One roll per new robbery candidate in sight, nearest first. The sighting's perceived danger decides whether it is
+// a target. Rob starts a feud with the target and fights it.
 function onPreySeen(world: World, vehicle: Vehicle): void {
   const prey = world.vehicles
-    .filter((other) => isRobberyTarget(world, vehicle, other))
+    .filter((other) => isRobberyCandidate(world, vehicle, other))
     .sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   for (const target of prey) {
     if (react(world, vehicle, 'preySeen', target.id) !== 'rob') continue;

@@ -3,11 +3,12 @@ import { STATE_TURNS } from '../data/states';
 import type { TraitId } from '../data/npcs';
 import { addGoods } from './inventory';
 import { thinkNpc } from './npc-activities';
-import { optionWeights } from './npc-decisions';
+import { optionWeights, vehicleDanger } from './npc-decisions';
+import { NPC_BEHAVIOR } from '../data/npcs';
 import { isRobberyTarget } from './robbery';
 import { resolveDestroyed } from './combat';
 import { checkKnockout } from './defeat';
-import { corePart } from './grid';
+import { corePart, mountedParts } from './grid';
 import { addState, advanceStates, stateOf } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import type { NpcActivity, Vehicle, World } from './types';
@@ -22,6 +23,9 @@ function addScumbag(w: World, pos: Vec, parts = ['mg', 'stockEngine'], traits: T
   v.brain = npcBrain('scavenger', pos, traits);
   return v;
 }
+
+// The lowest danger a sighting can perceive.
+const lowest = (w: World, v: Vehicle) => vehicleDanger(w, v) * (1 - NPC_BEHAVIOR.dangerSpread);
 
 // A truck with no gun and goods on its grid.
 function addPrey(w: World, pos: Vec, parts: string[] = [], goods = 2): Vehicle {
@@ -53,9 +57,11 @@ const FAILING: Record<string, () => { w: World; robber: Vehicle; target: Vehicle
     const w = emptyWorld({ x: 200, y: 200 });
     return { w, robber: addScumbag(w, { x: 10, y: 10 }), target: addPrey(w, { x: 15, y: 10 }, [], 0) };
   },
-  asStrong: () => {
+  // Heavier guns and far more HP than the robber's scout.
+  strong: () => {
     const w = emptyWorld({ x: 200, y: 200 });
-    return { w, robber: addScumbag(w, { x: 10, y: 10 }), target: addPrey(w, { x: 15, y: 10 }, ['mg']) };
+    const target = addVehicle(w, 'traders', 'carrier', ['tankGun', 'plates'], { x: 15, y: 10 });
+    return { w, robber: addScumbag(w, { x: 10, y: 10 }), target };
   },
   robberAtGate: () => {
     const w = emptyWorld({ x: 200, y: 200 });
@@ -75,17 +81,17 @@ function passing() {
 describe('robbery checks', () => {
   it('a weaker truck with loot in sight away from towns is a target', () => {
     const { w, robber, target } = passing();
-    expect(isRobberyTarget(w, robber, target)).toBe(true);
+    expect(isRobberyTarget(w, robber, target, vehicleDanger(w, target))).toBe(true);
     // The same spot beside the gate, but one gate range further out, passes too.
     const far = emptyWorld({ x: 200, y: 200 });
-    expect(isRobberyTarget(far, addScumbag(far, { x: GATE.x, y: GATE.y - 12 }), addPrey(far, { x: GATE.x, y: GATE.y - 17 }))).toBe(true);
+    expect(isRobberyTarget(far, addScumbag(far, { x: GATE.x, y: GATE.y - 12 }), addPrey(far, { x: GATE.x, y: GATE.y - 17 }), 0)).toBe(true);
   });
 
   for (const [name, make] of Object.entries(FAILING)) {
     it(`blocks a robbery when only ${name} fails`, () => {
       const { w, robber, target } = make();
-      expect(isRobberyTarget(w, robber, target)).toBe(false);
-      expect(optionWeights(w, robber, 'preySeen', target.id).rob).toBe(0);
+      expect(isRobberyTarget(w, robber, target, lowest(w, target))).toBe(false);
+      expect(optionWeights(w, robber, 'preySeen', target.id, lowest(w, target)).rob).toBe(0);
     });
   }
 
@@ -93,13 +99,57 @@ describe('robbery checks', () => {
     const w = emptyWorld({ x: 15, y: 10 });
     const me = w.vehicles[0];
     const robber = addScumbag(w, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
-    expect(isRobberyTarget(w, robber, me)).toBe(true);
-    const even = addScumbag(w, { x: 10, y: 12 });
-    expect(isRobberyTarget(w, even, me)).toBe(false);
+    expect(isRobberyTarget(w, robber, me, vehicleDanger(w, me))).toBe(true);
+    const bare = addScumbag(w, { x: 10, y: 12 }, ['stockEngine']);
+    expect(isRobberyTarget(w, bare, me, lowest(w, me))).toBe(false);
+  });
+});
+
+describe('danger', () => {
+  it('a tank outscores a scout', () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const tank = addVehicle(w, 'raiders', 'carrier', ['tankGun', 'plates'], { x: 10, y: 10 });
+    const scout = addVehicle(w, 'raiders', 'scout', ['mg'], { x: 20, y: 10 });
+    expect(vehicleDanger(w, tank)).toBeGreaterThan(vehicleDanger(w, scout) * 3);
+  });
+
+  it('a half-HP tank scores about half', () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const tank = addVehicle(w, 'raiders', 'carrier', ['tankGun', 'plates'], { x: 10, y: 10 });
+    const full = vehicleDanger(w, tank);
+    for (const part of [...mountedParts(tank, 'core'), ...mountedParts(tank, 'armor')]) part.hp = Math.ceil(part.hp / 2);
+    expect(vehicleDanger(w, tank) / full).toBeGreaterThan(0.45);
+    expect(vehicleDanger(w, tank) / full).toBeLessThan(0.55);
+  });
+
+  it('a truck with no working gun has no danger', () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const scout = addVehicle(w, 'raiders', 'scout', ['mg'], { x: 10, y: 10 });
+    mountedParts(scout, 'weapon')[0].hp = 0;
+    expect(vehicleDanger(w, scout)).toBe(0);
   });
 });
 
 describe('scumbag robbery', () => {
+  it('a scumbag robs an equal truck on some seeds, and never a clearly stronger one', () => {
+    const count = (make: (w: World) => Vehicle) => {
+      const w = emptyWorld({ x: 200, y: 200 });
+      const robber = addScumbag(w, { x: 10, y: 10 });
+      const target = make(w);
+      let robs = 0;
+      for (let seed = 0; seed < 60; seed++) {
+        const x = cloneWorld(w);
+        x.rngState = seed;
+        const r = find(x, robber.id);
+        thinkNpc(x, r);
+        if (isRob(r.brain!.goals.at(-1), target.id)) robs++;
+      }
+      return robs;
+    };
+    expect(count((w) => addPrey(w, { x: 15, y: 10 }, ['mg', 'stockEngine']))).toBeGreaterThan(0);
+    expect(count((w) => addVehicle(w, 'traders', 'carrier', ['tankGun', 'plates'], { x: 15, y: 10 }))).toBe(0);
+  });
+
   it('a scumbag robs a weak loaded truck on some seeds, and never when a check fails', () => {
     const { w, robber, target } = passing();
     let robs = 0;
@@ -132,7 +182,7 @@ describe('scumbag robbery', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const robber = addScumbag(w, { x: 10, y: 10 }, ['mg', 'stockEngine'], ['scavenger']);
     const target = addPrey(w, { x: 15, y: 10 });
-    expect(optionWeights(w, robber, 'preySeen', target.id).rob).toBe(0);
+    expect(optionWeights(w, robber, 'preySeen', target.id, vehicleDanger(w, target)).rob).toBe(0);
   });
 
   it('a scumbag scavenger with no prey still scavenges', () => {
@@ -193,9 +243,9 @@ describe('scumbag robbery', () => {
     advanceStates(w);
     expect(stateOf(w, 'backedOff', robber.id, target.id)?.turnsLeft).toBe(STATE_TURNS.backedOff! - 1);
     target.pos = { x: 15, y: 10 };
-    expect(isRobberyTarget(w, robber, target)).toBe(true);
-    expect(optionWeights(w, robber, 'preySeen', target.id).rob).toBe(0);
-    expect(optionWeights(w, robber, 'preySeen', other.id).rob).toBeGreaterThan(0);
+    expect(isRobberyTarget(w, robber, target, vehicleDanger(w, target))).toBe(true);
+    expect(optionWeights(w, robber, 'preySeen', target.id, vehicleDanger(w, target)).rob).toBe(0);
+    expect(optionWeights(w, robber, 'preySeen', other.id, vehicleDanger(w, other)).rob).toBeGreaterThan(0);
   });
 });
 
@@ -205,7 +255,7 @@ describe('no-choice decisions', () => {
     const scav = addScumbag(w, { x: 10, y: 10 }, ['mg', 'stockEngine'], ['scavenger']);
     scav.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' }];
     const target = addPrey(w, { x: 15, y: 10 });
-    expect(isRobberyTarget(w, scav, target)).toBe(true);
+    expect(isRobberyTarget(w, scav, target, vehicleDanger(w, target))).toBe(true);
     const rng = w.rngState;
     thinkNpc(w, scav);
     expect(w.rngState).toBe(rng);
