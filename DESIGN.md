@@ -132,7 +132,7 @@ Talk is built from topics. A topic is lines and replies in data, and its logic i
 
 - Directions: traders and scavengers name the nearest town they know, with direction and distance. The town counts as found.
 - Tow: see Defeat.
-- Patch: a patch gets a broken engine or gearbox going again at a quarter of its HP. A stranded player asks a trader or scavenger, and a stranded NPC asks the player once. The NPC's traits roll the terms: paid, bring your own parts, or free. Only terms the payer can cover come up. The work runs while both trucks stay parked side by side, and the payment moves once when it ends. A deal nobody works on lapses for free.
+- Patch: a patch gets a broken engine or gearbox going again at a quarter of its HP. A stranded player asks a trader or scavenger. A stranded NPC asks the player once, unless it carries the parts to fix its own truck. The NPC's traits roll the terms: paid, bring your own parts, or free. Only terms the payer can cover come up. The work runs while both trucks stay parked side by side, and the payment moves once when it ends. A deal nobody works on lapses for free.
 - Demand: a raider or robber about to attack radios first, once, and asks for the cargo. Handing it over drops the goods and loose parts beside the truck, and the attacker and its mates nearby keep a truce for a while. Shots break the truce. Refusing keeps the fight.
 
 H honks. Traders and scavengers in earshot that are not hostile honk back.
