@@ -73,7 +73,7 @@ describe('calls', () => {
   it('opens on the hub with the greeting when the player sees the truck', () => {
     const { w, npc } = withNpc('trader', 'traders');
     const next = callVehicle(w, npc.id);
-    expect(next.player.call).toEqual({ with: npc.id, topic: null, node: HUB, vars: {}, line: { text: TRAIT_TALK.trader.voice!.greeting, vars: {} } });
+    expect(next.player.call).toEqual({ with: npc.id, topic: null, node: HUB, vars: {}, line: { text: TRAIT_TALK.trader.voice!.greeting, vars: {} }, discussed: false });
     expect(next.events).toContainEqual({ t: 'call', with: npc.id, outcome: 'opened' });
     expect(next.events).toContainEqual({ t: 'say', speaker: npc.id, text: TRAIT_TALK.trader.voice!.greeting, vars: {} });
   });
@@ -323,12 +323,18 @@ describe('demand', () => {
 });
 
 describe('call practice', () => {
-  it('pays the player once when a call ends', () => {
+  it('pays the player once when a call that took up a topic ends', () => {
     const { w, npc } = withNpc('trader', 'traders');
     const open = callVehicle(w, npc.id);
     expect(practiceOf(open, 'call')).toEqual([]);
-    const closed = hangUp(open);
+    const asked = chooseOption(open, optionIndex(open, 'Where is the nearest town?'));
+    const closed = chooseOption(asked, optionIndex(asked, 'Thanks. Over and out.'));
     expect(practiceOf(closed, 'call')).toMatchObject([{ amount: 1, difficulty: null }]);
+  });
+
+  it('pays nothing for a call hung up without a topic', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    expect(practiceOf(hangUp(callVehicle(w, npc.id)), 'call')).toEqual([]);
   });
 
   it('pays nothing for a refused call', () => {

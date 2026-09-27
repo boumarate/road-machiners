@@ -58,24 +58,36 @@ function difficultyMult(source: XpSource, scaled: boolean, difficulty: number | 
 export function practice(world: World, source: XpSource, amount: number, difficulty: number | null): void {
   const p = world.player;
   const skill = XP_SOURCES[source].skill;
-  const day = clockOf(world.turn).day;
+  const before = levelOf(p.skills[skill]);
+  const xp = accrueXp(p, source, amount, difficulty, clockOf(world.turn).day);
+  p.xpBySource[source] += xp;
+  world.events.push({ t: 'practice', source, amount, difficulty, xp });
+  announceLevels(world, skill, before);
+}
+
+// The bookkeeping of one practice event, shared with the progression replay: a new day clears today's XP, and the
+// XP counts toward today and the skill. Returns the XP earned.
+export function accrueXp(p: SkillProgress, source: XpSource, amount: number, difficulty: number | null, day: number): number {
+  const skill = XP_SOURCES[source].skill;
   const xp = xpFor(p, source, amount, difficulty, day);
   if (p.xpDay !== day) {
     p.xpDay = day;
     for (const id of Object.keys(p.xpToday) as SkillId[]) p.xpToday[id] = 0;
   }
   p.xpToday[skill] += xp;
-  p.xpBySource[source] += xp;
-  world.events.push({ t: 'practice', source, amount, difficulty, xp });
-  grantXp(world, skill, xp);
+  p.skills[skill] += xp;
+  return xp;
 }
 
 // Adds XP to a skill with no cap or source, and announces each level it reaches.
 export function grantXp(world: World, skill: SkillId, xp: number): void {
-  const p = world.player;
-  const before = levelOf(p.skills[skill]);
-  p.skills[skill] += xp;
-  for (let level = before + 1; level <= levelOf(p.skills[skill]); level++) world.events.push({ t: 'skillUp', skill, level });
+  const before = levelOf(world.player.skills[skill]);
+  world.player.skills[skill] += xp;
+  announceLevels(world, skill, before);
+}
+
+function announceLevels(world: World, skill: SkillId, before: number): void {
+  for (let level = before + 1; level <= levelOf(world.player.skills[skill]); level++) world.events.push({ t: 'skillUp', skill, level });
 }
 
 // ---- Perks.

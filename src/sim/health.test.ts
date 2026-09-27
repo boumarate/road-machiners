@@ -99,13 +99,4 @@ describe('toughness on health', () => {
     for (let i = 0; i < 20; i++) healPlayer(w);
     expect(w.player.health).toBe(maxHealthOf(w));
   });
-
-  it('heals faster at level 5', () => {
-    const w = emptyWorld({ x: 30, y: 30 });
-    Object.assign(w.player, { health: 50, supplies: 5 });
-    w.vehicles[0].speed = 0;
-    w.player.skills.toughness = XP_TO_REACH[5];
-    healPlayer(w);
-    expect(w.player.health).toBe(50 + Math.round(RULES.healPerTurn * (1 + 5 * SKILL_EFFECTS.toughness.heal)));
-  });
 });

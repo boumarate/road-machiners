@@ -3,7 +3,7 @@
 
 import { TIME } from '../../data/time';
 import { MAX_SKILL_LEVEL, SKILL_IDS, XP_SOURCES } from '../../data/skills';
-import { levelOf, xpFor, type SkillProgress } from '../progress';
+import { accrueXp, levelOf, type SkillProgress } from '../progress';
 import { clockOf } from '../sun';
 import type { SkillId, XpSource } from '../types';
 import type { RunEnd, TraceLine } from './record';
@@ -21,7 +21,7 @@ export function replay(trace: readonly TraceLine[], turns: number): Curve {
   for (const line of trace) {
     const skill = XP_SOURCES[line.source].skill;
     const before = levelOf(progress.skills[skill]);
-    addXp(progress, line);
+    accrueXp(progress, line.source, line.amount, line.difficulty, clockOf(line.turn).day);
     for (let level = before + 1; level <= levelOf(progress.skills[skill]); level++) levels[skill][level - 1] = line.turn;
   }
   const days = turns / TIME.turnsPerDay;
@@ -41,19 +41,6 @@ function requireTurnOrder(trace: readonly TraceLine[], turns: number): void {
 function freshProgress(): SkillProgress {
   const zero = (): Record<SkillId, number> => ({ driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 });
   return { skills: zero(), xpToday: zero(), xpDay: 1 };
-}
-
-// The same bookkeeping as practice(): a new day clears today's XP, and the XP counts toward today and the skill.
-function addXp(progress: SkillProgress, line: TraceLine): void {
-  const day = clockOf(line.turn).day;
-  const skill = XP_SOURCES[line.source].skill;
-  const xp = xpFor(progress, line.source, line.amount, line.difficulty, day);
-  if (progress.xpDay !== day) {
-    progress.xpDay = day;
-    for (const id of SKILL_IDS) progress.xpToday[id] = 0;
-  }
-  progress.xpToday[skill] += xp;
-  progress.skills[skill] += xp;
 }
 
 // A trace line read from a trace file. Throws on anything that is not a valid line.

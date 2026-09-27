@@ -38,7 +38,6 @@ const EFFECTS = {
   toughness: {
     supplies: 0.12, // supplies use -12% per level
     maxHealth: 0.06, // max health +6% per level
-    heal: 0.1, // health healed per turn +10% per level
     cabShare: 0.08, // health lost from cab damage -8% per level
     heatDrain: 0.08, // extra supplies use from heat -8% per level
   },

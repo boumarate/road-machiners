@@ -19,9 +19,7 @@ export function healPlayer(world: World): void {
   if (p.state === 'dead' || p.health <= 0 || p.supplies <= 0 || p.health >= max) return;
   const me = playerVehicle(world);
   if (me.speed > RULES.parkedSpeed) return;
-  const base = townNear(world) ? RULES.healPerTurn * RULES.townHealMult : RULES.healPerTurn;
-  // Health stays whole, like every other health change.
-  const rate = Math.round(base * (1 + skillEffect(world, me, 'toughness', 'heal')));
+  const rate = townNear(world) ? RULES.healPerTurn * RULES.townHealMult : RULES.healPerTurn;
   p.health = Math.min(max, p.health + rate);
   p.supplies = Math.max(0, p.supplies - RULES.healSupplies);
 }
