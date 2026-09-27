@@ -29,8 +29,8 @@ import { corePart, mountedParts } from "../sim/grid";
 import { canScavenge, scavenge } from "../sim/locations";
 import { locationAt, townAt } from "../sim/sites";
 import { maxTurn, vehicleStats } from "../sim/stats";
-import { clickOrder, throttleFor } from "../sim/steering";
-import { warmRoutes } from "../sim/path";
+import { clickOrder, parkedVehicles, throttleFor } from "../sim/steering";
+import { route, warmRoutes } from "../sim/path";
 import { CHASSIS } from "../data/chassis";
 import type { ShotRound, Vehicle, World } from "../sim/types";
 import type { Vec } from "../sim/vec";
@@ -813,6 +813,7 @@ export class Game {
     const turns: VehicleFrame[][] = [];
     let w = cloneWorld(this.world);
     let d = this.drive;
+    let v = me;
     for (let i = 0; i < PLAN_TURNS; i++) {
       const r = simulateTurn(d, w);
       turns.push(r.frames[me.id]);
@@ -820,10 +821,17 @@ export class Game {
       applyTurn(w, r);
       if (d !== this.drive) freeDrive(d);
       d = r.next;
-      const v = w.vehicles.find((x) => x.id === me.id)!;
+      v = w.vehicles.find((x) => x.id === me.id)!;
       if (!v.order && v.speed < 0.05) break;
     }
     if (d !== this.drive) freeDrive(d);
+    // A course longer than the simulated turns continues as the route the driver will take.
+    const order = v.order?.kind === "brake" ? null : v.order;
+    const course = !order
+      ? null
+      : v.direct
+        ? [v.pos, order.dest]
+        : [v.pos, ...route(w, v.pos, order.dest, vehicleStats(w, v).radius, parkedVehicles(w, v.id))];
     const first =
       me.order?.kind === "through"
         ? PAL.throttle[
@@ -836,7 +844,7 @@ export class Game {
             )
           ]
         : PAL.plan;
-    this.path.set(turns, first);
+    this.path.set(turns, first, course);
   }
 
   private tick(now: number): void {
