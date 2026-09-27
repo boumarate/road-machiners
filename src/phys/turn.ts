@@ -104,16 +104,7 @@ export function physicsMove(d: Drive, done: (r: TurnResult) => void): (w: World)
 export function applyTurn(w: World, r: TurnResult): void {
   for (const v of w.vehicles) {
     const frames = r.frames[v.id];
-    if (!frames) continue;
-    if (v.brain) delete v.brain.farRoute;
-    const s = bodyState(r.next, v.id);
-    const start: Pose = { x: v.pos.x, y: v.pos.y, heading: v.heading };
-    v.pos = s.pos;
-    v.heading = s.heading;
-    v.speed = Math.max(0, toTilesPerTurn(s.speed));
-    v.trail = trailOf(start, frames);
-    burnFuel(w, v, pathLength(v.trail));
-    settleOrder(w, v, r.results[v.id]);
+    if (frames) applyDriven(w, r, v, frames);
   }
   for (const c of r.crashes) {
     const a = w.vehicles.find((v) => v.id === c.a);
@@ -121,6 +112,19 @@ export function applyTurn(w: World, r: TurnResult): void {
     const b = w.vehicles.find((v) => v.id === c.b) ?? null;
     applyContactCrash(w, a, b, c.b, toTilesPerTurn(c.impact), c.contact);
   }
+}
+
+function applyDriven(w: World, r: TurnResult, v: Vehicle, frames: TurnResult['frames'][string]): void {
+  if (v.brain) delete v.brain.farRoute;
+  const s = bodyState(r.next, v.id);
+  const start: Pose = { x: v.pos.x, y: v.pos.y, heading: v.heading };
+  v.pos = s.pos;
+  v.heading = s.heading;
+  v.speed = Math.max(0, toTilesPerTurn(s.speed));
+  v.flippedTurns = s.upright ? 0 : (v.flippedTurns ?? 0) + 1;
+  v.trail = trailOf(start, frames);
+  burnFuel(w, v, pathLength(v.trail));
+  settleOrder(w, v, r.results[v.id]);
 }
 
 // Clears an order the turn completed. A stop order holds until the truck stands still,
