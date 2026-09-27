@@ -207,7 +207,7 @@ export function steerTo(
 
 // An empty tank still permits careful steering at limp speed. Speed already above the cap brakes normally.
 export function steerWithFuel(world: World, s: VehicleStats, v: Pick<Vehicle, 'id' | 'pos' | 'heading' | 'speed'>, order: MoveOrder | null, direct: boolean, fuel: number): Steer {
-  const low = fuel > 0 && fuel < chassisDef(world.vehicles.find((x) => x.id === v.id)!.chassisId).fuelCap * RULES.lowFuelThreshold;
+  const low = s.fuelPerTile > 0 && fuel > 0 && fuel < chassisDef(world.vehicles.find((x) => x.id === v.id)!.chassisId).fuelCap * RULES.lowFuelThreshold;
   const limit = low ? Math.max(s.maxSpeed * RULES.lowFuelSpeedFactor, v.speed - s.brake) : s.maxSpeed;
   const stats = low ? { ...s, maxSpeed: limit, turnFast: maxTurn(s, limit) } : s;
   const steer = steerTo(world, stats, v, order, direct);

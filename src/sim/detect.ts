@@ -9,6 +9,7 @@ import { partDef } from '../data/parts';
 import { mountedParts } from './grid';
 import { hashRandom } from './rng';
 import { heightAt, tileAt } from './terrain';
+import { hasWorkingEngine } from './stats';
 import { sunAt } from './sun';
 import type { Contact, DustCloud, Vehicle, World } from './types';
 import { WEATHER } from '../data/weather';
@@ -16,11 +17,10 @@ import { dist, type Vec } from './vec';
 import { weatherAt } from './weather';
 import { canVehicleSee, sightRadius } from './vision';
 
-// Range a moving vehicle's engine is heard from, ignoring hills. Zero while parked.
+// Range a moving vehicle's engine is heard from, ignoring hills. Zero while parked or without a working engine.
 export function soundRange(world: World, v: Vehicle): number {
-  if (v.speed <= RULES.parkedSpeed) return 0;
-  const engines = mountedParts(v, 'engine');
-  const noise = engines.length > 0 ? (partDef(engines[0].defId) as EngineDef).noise : 1;
+  if (v.speed <= RULES.parkedSpeed || !hasWorkingEngine(v)) return 0;
+  const noise = (partDef(mountedParts(v, 'engine')[0].defId) as EngineDef).noise;
   return (DETECT.sound.limp + DETECT.sound.perSpeed * Math.max(0, v.speed - RULES.limpSpeed)) * noise;
 }
 

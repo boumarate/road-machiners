@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
 import { makeVehicle } from '../sim/factory';
 import { addGoods, removeAllGoods } from '../sim/inventory';
@@ -236,6 +237,17 @@ describe('physics turns', () => {
     expect(hits).toContain('site-test');
     expect(hits).not.toContain('bld-test-0');
     expect(dist(me(w).pos, { x: 40, y: 30 })).toBeGreaterThan(3);
+  });
+
+  it('a truck without an engine is pushed toward the click at limp speed and burns no fuel', () => {
+    const w0 = ordered({ kind: 'stopAt', dest: { x: 38, y: 30 } });
+    w0.vehicles[0].items = w0.vehicles[0].items.filter((it) => it.kind !== 'part' || partDef(it.part.defId).kind !== 'engine');
+    const fuel = w0.player.fuel;
+    const { w, d } = play(w0, 3);
+    expect(me(w).pos.x).toBeGreaterThan(30 + RULES.limpSpeed);
+    expect(me(w).speed).toBeLessThanOrEqual(RULES.limpSpeed + 0.3);
+    expect(w.player.fuel).toBe(fuel);
+    freeDrive(d);
   });
 
   it('an empty tank still crawls toward the click', () => {
