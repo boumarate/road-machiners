@@ -11,7 +11,6 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import type { VehicleFrame } from '../../phys/frames';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
-import { RULES } from '../../data/rules';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import type { MoveOrder, World } from '../../sim/types';
 import { bearing, type Vec } from '../../sim/vec';
@@ -27,7 +26,7 @@ const OPACITY = { first: 0.75, later: 0.35, course: 0.3 };
 const COURSE_STEP = 0.5; // tiles between ground samples, so the course line follows hills
 const MARKER_OUTER = 1.2; // meters, matches the driving physics test's order marker
 const MARKER_INNER = 0.8;
-const ORDER_R = RULES.reclickRadius * S; // meters; the order icon covers the area where a click switches the order
+const ORDER_R = 1.5; // meters; half the radius where a click switches the order, so the icon stays small next to the truck
 const ORDER_LIFT = LIFT + 0.02; // just over the preview line
 const ORDER_OPACITY = 0.85;
 const ORDER_RING_INNER = 0.85; // share of ORDER_R
