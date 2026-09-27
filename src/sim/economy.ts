@@ -407,6 +407,14 @@ function repairableParts(v: Vehicle): PartInstance[] {
 // Swap chassis: the old built-in parts go with the old chassis and the new one brings its own.
 // Mounted parts move to free mounts, spares and goods to free cells, and parts that do not fit go to
 // garage storage. Goods that do not fit block the swap. The old chassis is traded in.
+// Pays the new chassis's price less the trade-in. A trade-in that beats the price refunds the
+// difference instead of charging nothing.
+function payChassisCost(world: World, chassisId: string): void {
+  const cost = chassisDef(chassisId).value - chassisTradeIn(world);
+  if (cost >= 0) pay(world, cost, chassisDef(chassisId).name);
+  else world.player.money -= cost;
+}
+
 export function buyChassis(world: World, chassisId: string): World {
   return playerCommand(world, (w) => {
     requireTown(w);
@@ -415,8 +423,7 @@ export function buyChassis(world: World, chassisId: string): World {
     const me = playerVehicle(w);
     if (me.chassisId === chassisId)
       throw new Error("You already drive this chassis");
-    const cost = chassisDef(chassisId).value - chassisTradeIn(w);
-    pay(w, Math.max(0, cost), chassisDef(chassisId).name);
+    payChassisCost(w, chassisId);
     const mounted = new Set(mountedParts(me).map((p) => p.id));
     const goods = goodsCount(me);
     const old = me.items;

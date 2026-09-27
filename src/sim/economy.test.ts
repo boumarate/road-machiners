@@ -258,6 +258,17 @@ describe("garage", () => {
     expect(w.player.storage.length).toBe(0);
   });
 
+  it("refunds the difference when the trade-in beats the new chassis price", () => {
+    let w = startAtBowl();
+    w.player.money = 5000;
+    w = buyChassis(w, "carrier");
+    const tradeIn = chassisTradeIn(w);
+    expect(tradeIn).toBeGreaterThan(CHASSIS.scout.value);
+    const before = w.player.money;
+    w = buyChassis(w, "scout");
+    expect(w.player.money).toBe(before + (tradeIn - CHASSIS.scout.value));
+  });
+
   it("trade-in drops with built-in part damage", () => {
     const w = startAtBowl();
     const whole = chassisTradeIn(w);
