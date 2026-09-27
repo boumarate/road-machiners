@@ -190,7 +190,7 @@ UK3 resolved: `Game.tick()` in `src/three/game.ts` calls `endTurn()` when `autoR
 - 4.7 `src/sim/stats.ts` (modify) — A hitched tower's `maxSpeed` is multiplied by `TOW.speedShare`.
 - 4.8 `src/sim/world.ts:137-165` (modify)
   - The pipeline runs `followTower` after `move`.
-  - `autoRuns(world): boolean` is true while knocked out or hitched.
+  - `autoRuns(world): boolean` is true while knocked out or hitched, and while the beacon is on with the truck parked and no offer open. A beacon wait lasts 150 to 270 turns, too many to end by hand.
   - Driving the player out of reach clears an open offer and counts as refusing it.
 - 4.9 `src/sim/economy.ts:135-160` (modify) — `refuelAndRepair()` buys nothing on negative money, instead of flooring a negative count.
 - Tests:
@@ -269,4 +269,5 @@ Added after PH4b, since pickup still took 150 to 190 turns on the busiest road a
 - `src/phys/drive.ts:271` — Physics reversing starts only past 90 degrees off, and the player truck has no stuck recovery, so a truck pressed nose first against an obstacle stays there.
 - `src/sim/salvage.ts` — Player knockout stocks are never cleared, because `clearOldWrecks` only clears stocks with a matching obstacle.
 - `src/sim/nav/layer.ts` — Route planning prices ground type but not slope, so traders climb a scree slope near (451, 260) at 0.24 speed and lose hundreds of turns there.
+- `src/sim/npc-activities.ts:95` — The contact trust limit filters by distance, not circle size, so a trader with a grudge ignores a far, tight beacon contact.
 - `src/sim/ai.ts:28-35` — Very slow uphill motion counts as stuck, and the back-out recovery undoes the climb.
