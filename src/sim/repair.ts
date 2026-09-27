@@ -1,10 +1,11 @@
 // Field repair: a parked job that spends parts to restore one part's HP up to a field cap.
-// Parts are spent only when the job finishes. Mechanics shortens the job and cuts parts use.
+// Parts are spent only when the job finishes. Machining shortens the job and cuts parts use.
 
 import { partDef } from '../data/parts';
 import { PERK_NUMBERS } from '../data/skills';
 import { skillEffect, vehicleHasPerk } from './progress';
 import { REPAIR } from '../data/wear';
+import { isJunk, maxHp, restorePart } from './wear';
 import { goodsCount, mountedParts } from './grid';
 import { removeGoods } from './inventory';
 import type { Job, PartInstance, Vehicle, World } from './types';
@@ -36,13 +37,15 @@ function fieldCapShare(world: World, v: Vehicle): number {
 }
 
 // The repair math for one part: lift it to `capShare` of max HP, spending at most the parts held and maxParts.
-// `mult` is the repairer's Mechanics multiplier.
+// `mult` is the repairer's Machining multiplier.
+// Throws for a junk part, which no repair rebuilds.
 export function planPartRepair(part: PartInstance, capShare: number, mult: number, partsHeld: number, maxParts: number): RepairPlan {
-  const def = partDef(part.defId);
-  const cap = Math.min(def.hp, def.hp * capShare);
+  if (isJunk(part)) throw new Error(`${partDef(part.defId).name} is junk and cannot be rebuilt`);
+  const max = maxHp(part);
+  const cap = Math.min(max, max * capShare);
   const gap = Math.max(0, cap - part.hp);
   if (gap === 0) return { turns: 0, parts: 0, hp: 0, needed: 0 };
-  const hpPerPart = mult > 0 ? (def.hp * REPAIR.sharePerPart) / mult : Infinity;
+  const hpPerPart = mult > 0 ? (max * REPAIR.sharePerPart) / mult : Infinity;
   const needed = Math.max(1, Math.ceil(gap / hpPerPart - 1e-9)); // float slack keeps an exact 2 from rounding to 3
   const parts = Math.min(needed, maxParts, partsHeld);
   if (parts === 0) return { turns: 0, parts: 0, hp: 0, needed };
@@ -58,6 +61,6 @@ export function repairTurn(world: World, v: Vehicle, job: Extract<Job, { kind: '
   if (plan.needed === 0) return true;
   removeGoods(v, 'parts', plan.parts);
   const part = findRepairPart(v, job.partId);
-  part.hp = Math.min(partDef(part.defId).hp, part.hp + plan.hp);
+  restorePart(part, part.hp + plan.hp);
   return true;
 }

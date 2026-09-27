@@ -4,7 +4,8 @@ import { TERRAIN } from '../data/terrain';
 import { elevationAt } from './elevation';
 import { ROAD_INDEX } from './road-index';
 import { BRIDGE_LENGTH, bridgeCut } from './bridge';
-import { buildTerrain, deckEnds, heightFromElevation } from './terrain';
+import { deckEnds, heightFromElevation } from './terrain';
+import { terrainFor } from './testkit';
 import { dist, type Vec } from './vec';
 
 // Points every quarter tile along a road.
@@ -22,7 +23,7 @@ function walk(road: readonly Vec[]): Vec[] {
 // Steepest height change per tile between the corners of the tiles a road crosses. Tiles over the
 // canyon under Canyon Bridge are skipped, since the road runs on the deck there.
 function steepest(seed: number, road: readonly Vec[]): number {
-  const t = buildTerrain(seed, REGION.size);
+  const t = terrainFor(seed);
   const n = t.size + 1;
   let max = 0;
   for (const p of walk(road)) {
@@ -45,12 +46,12 @@ describe('road grades', () => {
   }, 30_000);
 
   it.each([1337, 1, 7])('keeps the Canyon Bridge deck of seed %s within the road grade', (seed) => {
-    const [from, to] = deckEnds(buildTerrain(seed, REGION.size));
+    const [from, to] = deckEnds(terrainFor(seed));
     expect(Math.abs(to - from) / BRIDGE_LENGTH).toBeLessThanOrEqual(TERRAIN.roadGrade);
   });
 
   it('leaves ground beyond the road margin untouched', () => {
-    const t = buildTerrain(1337, REGION.size);
+    const t = terrainFor(1337);
     const reach = REGION.roadWidth / 2 + TERRAIN.flattenMargin;
     let checked = 0;
     for (let j = 0; j <= t.size; j += 7) for (let i = 0; i <= t.size; i += 7) {

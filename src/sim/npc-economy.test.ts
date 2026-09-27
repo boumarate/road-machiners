@@ -1,3 +1,4 @@
+import { maxHp, partValue } from './wear';
 import { describe, expect, it } from 'vitest';
 import * as economy from './economy';
 import { addVehicle, emptyWorld } from './testkit';
@@ -15,10 +16,10 @@ describe('NPC transactions', () => {
     const npc = addVehicle(w, 'scavengers', 'scout', [], sitePads(REGION.towns[0])[0]);
     const cab = corePart(npc, 'cab');
     cab.hp -= 2;
-    npc.resources!.money = ECONOMY.partRepairPerHp * 2;
+    npc.resources!.money = Math.ceil((2 * ECONOMY.repairShare * partValue(cab)) / maxHp(cab));
     npc.resources!.fuel = chassisDef(npc.chassisId).fuelCap;
     npc.resources!.supplies = RULES.suppliesCap;
-    economy.serviceVehicle(w, npc, 'bowl');
+    economy.serviceVehicle(w, npc, 'bowl', 0);
     expect(corePart(npc, 'cab').id).toBe(cab.id);
     expect(cab.hp).toBe(partDef(cab.defId).hp);
     expect(npc.resources!.money).toBe(0);
@@ -39,12 +40,14 @@ describe('NPC transactions', () => {
     const money = npc.resources!.money;
     const playerMoney = w.player.money;
     expect(economy.tradeGoods).toBeTypeOf('function');
+    const buy = economy.getTradePrice(w, npc, 'bowl', 'scrap', 'buy');
     economy.tradeGoods(w, npc, 'bowl', 'scrap', 2, 'buy');
     expect(goodsCount(npc).scrap).toBe(2);
-    expect(npc.resources!.money).toBe(money - 24);
+    expect(npc.resources!.money).toBe(money - 2 * buy);
+    const sell = economy.getTradePrice(w, npc, 'bowl', 'scrap', 'sell');
     economy.tradeGoods(w, npc, 'bowl', 'scrap', 2, 'sell');
     expect(goodsCount(npc).scrap ?? 0).toBe(0);
-    expect(npc.resources!.money).toBe(money - 8);
+    expect(npc.resources!.money).toBe(money - 2 * buy + 2 * sell);
     expect(w.player.money).toBe(playerMoney);
   });
 
@@ -53,7 +56,7 @@ describe('NPC transactions', () => {
     const npc = addVehicle(w, 'traders', 'hauler', [], { x: 30, y: 30 });
     expect(economy.tradeGoods).toBeTypeOf('function');
     const before = structuredClone(npc);
-    expect(() => economy.tradeGoods(w, npc, 'bowl', 'scrap', 1, 'buy')).toThrow('town');
+    expect(() => economy.tradeGoods(w, npc, 'bowl', 'scrap', 1, 'buy')).toThrow('gate');
     expect(npc).toEqual(before);
   });
 
@@ -64,7 +67,7 @@ describe('NPC transactions', () => {
     npc.resources!.supplies = 0;
     npc.resources!.money = ECONOMY.supplyPrice.fuel * 2;
     expect(economy.serviceVehicle).toBeTypeOf('function');
-    economy.serviceVehicle(w, npc, 'bowl');
+    economy.serviceVehicle(w, npc, 'bowl', 0);
     expect(npc.resources!.fuel).toBe(2);
     expect(npc.resources!.money).toBe(0);
     expect(npc.resources!.supplies).toBe(0);

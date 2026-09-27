@@ -15,6 +15,11 @@ import { editableTerrain, emptyWorld, npcBrain } from './testkit';
 import { dist, polylineDist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
 
+// Shared read-only across every test below that needs a real generated map on this seed: newWorld
+// repeats obstacle generation, NPC spawns and vision on top of the terrain build, so building it once
+// saves that work everywhere it is only read, never mutated.
+const w1337 = newWorld(1337, START_KITS.standard);
+
 describe("route", () => {
   it("goes straight when nothing is in the way", () => {
     const w = emptyWorld();
@@ -49,8 +54,44 @@ describe("route", () => {
     expect(dist(end, center)).toBeLessThan(6 + 1 + 0.6 + 2);
   });
 
+  it("stops short of parked trucks that fence in the goal instead of driving through them", () => {
+    const w = emptyWorld();
+    const center = { x: 50, y: 30 };
+    const parked: Blocker[] = Array.from({ length: 12 }, (_, i) => {
+      const a = (i / 12) * 2 * Math.PI;
+      return { pos: { x: center.x + 3 * Math.cos(a), y: center.y + 3 * Math.sin(a) }, r: 0.7 };
+    });
+    const from = { x: 30, y: 30 };
+    const pts = route(w, from, center, 0.6, parked);
+    expect(dist(pts.at(-1)!, center)).toBeGreaterThan(3 + 0.7 + 0.6);
+    let prev = from;
+    for (const p of pts) {
+      for (const o of parked) expect(segmentDist(o.pos, prev, p)).toBeGreaterThanOrEqual(o.r + 0.6);
+      prev = p;
+    }
+  });
+
+  // A ring of thin rocks holds a small closed pocket. The truck stands in the ring's clearance, nearer the pocket.
+  function pocketWorld(): { w: World; center: Vec } {
+    const w = emptyWorld();
+    const center = { x: 50, y: 30 };
+    w.obstacles = Array.from({ length: 40 }, (_, i) => {
+      const a = (i / 40) * 2 * Math.PI;
+      return { id: `ring-${i}`, pos: { x: center.x + 3 * Math.cos(a), y: center.y + 3 * Math.sin(a) }, r: 0.2, kind: "rock" as const };
+    });
+    return { w, center };
+  }
+
+  it("a truck on blocked ground next to a closed pocket drives out toward the goal's side", () => {
+    const { w, center } = pocketWorld();
+    const pts = route(w, { x: center.x + 2.8, y: center.y }, { x: 70, y: 30 }, 0.6, []);
+    expect(dist(pts[0], center)).toBeGreaterThan(3);
+    expect(dist(pts.at(-1)!, { x: 70, y: 30 })).toBeLessThan(0.01);
+  });
+
+
   it('town buildings fit inside the blocked site instead of the road', () => {
-    const w = newWorld(1337, START_KITS.standard);
+    const w = w1337;
     for (const town of REGION.towns) {
       const buildings = w.obstacles.filter((o) => o.kind === 'building' && o.id.startsWith(`bld-${town.id}-`));
       expect(buildings.length).toBeGreaterThan(0);
@@ -64,7 +105,7 @@ describe('driver taste', () => {
   const [bowl, nose] = REGION.towns;
   const from = siteGates(nose)[0];
   const to = siteGates(bowl)[0];
-  const w = newWorld(1337, START_KITS.standard);
+  const w = w1337;
   // Largest distance of either route's corners from the other route.
   const apart = (p: Vec[], q: Vec[]) => Math.max(...p.map((x) => polylineDist(x, q)), ...q.map((x) => polylineDist(x, p)));
 
@@ -288,14 +329,15 @@ namespace Ref {
     return out;
   }
 
-  export function nearestFree(g: Grid, c: number, allowed: Uint8Array | null = null): number | null {
+  export function nearestFree(g: Grid, c: number, allowed: Uint8Array | null = null, maxRing = Infinity): number | null {
     const seen = new Uint8Array(g.n * g.n);
     const queue = [c];
     seen[c] = 1;
+    const ring = (a: number) => Math.max(Math.abs((a % g.n) - (c % g.n)), Math.abs(Math.floor(a / g.n) - Math.floor(c / g.n)));
     for (let i = 0; i < queue.length; i++) {
       if (!g.blocked[queue[i]] && (!allowed || allowed[queue[i]])) return queue[i];
       for (const nb of neighbors(g, queue[i]))
-        if (!seen[nb]) {
+        if (!seen[nb] && ring(nb) <= maxRing) {
           seen[nb] = 1;
           queue.push(nb);
         }
@@ -457,22 +499,33 @@ namespace Ref {
     const g = grid(layer, all, radius);
     const start = cellOf(g, from);
     const statics = grid(layer, blockers(w, []), radius);
-    // A start with no free neighbour first drives out to the nearest free cell.
+    // A start with no free neighbour first drives out to a free cell. One on the target's side within its reach
+    // wins, else the nearest.
     let exit: number | null = start;
     let reach = reachable(statics, start);
-    if (!reach.includes(1)) {
-      exit = nearestFree(g, start);
-      if (exit === null) return [to];
+    if (![start, ...neighbors(g, start)].some((c) => !g.blocked[c])) {
+      const ring = Math.ceil((radius + CLEARANCE) / CELL) + 1;
+      const targetSide = nearestFree(g, cellOf(g, to));
+      const side = targetSide === null ? null : reachable(statics, targetSide);
+      exit = (side && nearestFree(g, start, side, ring)) ?? nearestFree(g, start)!;
       reach = reachable(statics, exit);
     }
-    // Reachability follows static blockers only; parked vehicles can still cut the route.
-    const goal = nearestFree(g, cellOf(g, to), reach);
-    if (goal === null) return [to];
-    const found = astar(g, exit, goal);
-    if (!found) return [to];
+    // Reachability follows static blockers only. Parked vehicles can still wall the goal off, and then the
+    // route ends at the reachable cell nearest it.
+    const goal = nearestFree(g, cellOf(g, to), reach)!;
+    const found = astar(g, exit, goal) ?? astar(g, exit, nearestReachable(g, exit, goal))!;
     const cells = exit === start ? found : [start, ...found];
-    const end = goal === cellOf(g, to) ? to : centerOf(g, goal);
+    const last = found[found.length - 1];
+    const end = last === cellOf(g, to) ? to : centerOf(g, last);
     return shortcut(w.terrain, all, from, [...cells.slice(1, -1).map((c) => centerOf(g, c)), end], radius + CLEARANCE);
+  }
+
+  // The free cell joined to start, counting parked vehicles, nearest to goal.
+  function nearestReachable(g: Grid, start: number, goal: number): number {
+    const reach = reachable(g, start);
+    let best = start;
+    for (let c = 0; c < reach.length; c++) if (reach[c] && heuristic(g, c, goal) < heuristic(g, best, goal)) best = c;
+    return best;
   }
 
   export function blockers(w: World, extra: Blocker[]): Blocker[] {
@@ -559,12 +612,12 @@ describe('nav layers match the old grid rules', () => {
   it('routes equal the reference and repeat routes come from the cache', () => {
     resetPerf();
     for (const { from, to, extra, radius } of pairs) {
+      const ref = Ref.route(w, refLayer(radius), from, to, radius, extra);
       const first = route(w, from, to, radius, extra);
       const again = route(w, from, to, radius, extra);
       expect(again).toEqual(first);
       first[0] = { x: -1, y: -1 };
       expect(route(w, from, to, radius, extra)).toEqual(again);
-      const ref = Ref.route(w, refLayer(radius), from, to, radius, extra);
       const n = refLayer(radius).n;
       const cell = (p: Vec) => Math.min(n - 1, Math.floor(p.y / Ref.CELL)) * n + Math.min(n - 1, Math.floor(p.x / Ref.CELL));
       if (cellSpan(n, cell(from), cell(to)) <= LONG_CELLS) {
@@ -593,8 +646,12 @@ describe('nav layers match the old grid rules', () => {
 });
 
 describe('long routes search a coarse corridor', () => {
+  // Shared across this describe's tests: newWorld repeats obstacle generation, NPC spawns and vision
+  // on top of the terrain build, none of which these tests exercise. Tests that reshape obstacles copy
+  // the array first, so they never mutate this shared world.
+  const w = newWorld(1, START_KITS.standard);
+
   it('coarse regions are the connected pieces of each block, linked where their cells touch', () => {
-    const w = newWorld(1, START_KITS.standard);
     const layer = navLayer(w.terrain, w.obstacles, 0.6);
     const n = layer.n;
     const { n: bn, region, block, slow, edgeStart, edges } = layer.coarse;
@@ -655,7 +712,6 @@ describe('long routes search a coarse corridor', () => {
   });
 
   it('unreachable goals return null in under 5 ms, like the full search', () => {
-    const w = newWorld(1, START_KITS.standard);
     // A spot with no cliff tile near it, so the ring alone decides reachability.
     const flatAround = (p: Vec) => {
       for (let y = p.y - 14; y <= p.y + 14; y++) for (let x = p.x - 14; x <= p.x + 14; x++) if (isCliff(w.terrain, tileAt(w.terrain, { x, y }))) return false;
@@ -668,11 +724,12 @@ describe('long routes search a coarse corridor', () => {
       const a = (i / 64) * 2 * Math.PI;
       obstacles.push({ id: `ring-${i}`, pos: { x: center.x + 10 * Math.cos(a), y: center.y + 10 * Math.sin(a) }, r: 1, kind: 'rock' });
     }
-    w.obstacles = obstacles;
+    // A local copy: the shared world's own obstacles stay untouched for the other tests here.
+    const local = { ...w, obstacles };
     const radius = 0.6;
-    const layer = navLayer(w.terrain, w.obstacles, radius);
-    const overlay = stampOverlay(layer, dynamicBlockers(w.obstacles, []), radius);
-    const g = Ref.grid(Ref.terrainLayer(w.terrain, radius), Ref.blockers(w, []), radius);
+    const layer = navLayer(local.terrain, local.obstacles, radius);
+    const overlay = stampOverlay(layer, dynamicBlockers(local.obstacles, []), radius);
+    const g = Ref.grid(Ref.terrainLayer(local.terrain, radius), Ref.blockers(local, []), radius);
     const goal = Ref.cellOf(g, center);
     const from = { x: 40, y: 40 };
     const start = nearestFreeCell(layer, overlay, Ref.cellOf(g, from))!;
@@ -706,7 +763,6 @@ describe('long routes search a coarse corridor', () => {
   });
 
   it('long routes with no dynamic blockers never miss the corridor', () => {
-    const w = newWorld(1, START_KITS.standard);
     const rand = mulberry(11);
     const radius = 0.8;
     const layer = navLayer(w.terrain, w.obstacles, radius);

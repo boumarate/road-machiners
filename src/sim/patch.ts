@@ -1,13 +1,13 @@
 // Roadside patches between two trucks. A patch lifts the broken engine and transmission that strand a truck to
-// PATCH.share of their max HP, with the repair math of src/sim/repair.ts and the patcher's Mechanics. The terms are
+// PATCH.share of their max HP, with the repair math of src/sim/repair.ts and the patcher's Machining. The terms are
 // the NPC's `patchDeal` decision, so traits and states shape them. A deal is a `patch` state held by the patcher
 // toward the client. Work runs while both trucks stay parked in reach, and the fulfilled hook pays for it once.
 
-import { partDef } from '../data/parts';
 import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { PATCH } from '../data/wear';
+import { isJunk, maxHp, restorePart } from './wear';
 import { playerVehicle, vehicleById } from './damage';
 import { getTradePrice } from './economy';
 import { corePart, goodsCount, mountedParts } from './grid';
@@ -23,10 +23,10 @@ import { dist } from './vec';
 export type PatchPlan = { parts: number; turns: number };
 type Roles = { patcher: Vehicle; client: Vehicle };
 
-// The broken parts that strand a truck and a patch can fix: the first engine and the transmission.
+// The broken parts that strand a truck and a patch can fix: the first engine and the transmission, unless junk.
 function brokenDriveParts(v: Vehicle): PartInstance[] {
   const engine = mountedParts(v, 'engine')[0];
-  return [engine, corePart(v, 'transmission')].filter((p): p is PartInstance => p !== undefined && p.hp === 0);
+  return [engine, corePart(v, 'transmission')].filter((p): p is PartInstance => p !== undefined && p.hp === 0 && !isJunk(p));
 }
 
 export function needsPatch(v: Vehicle): boolean {
@@ -165,7 +165,7 @@ export function settlePatch(world: World, s: NpcState): void {
   removeGoods(partsPayer(data.deal, roles), 'parts', data.parts);
   getResources(world, roles.client).money -= data.price;
   getResources(world, roles.patcher).money += data.price;
-  for (const part of brokenDriveParts(roles.client)) part.hp = Math.max(1, Math.round(partDef(part.defId).hp * PATCH.share));
+  for (const part of brokenDriveParts(roles.client)) restorePart(part, Math.max(1, Math.round(maxHp(part) * PATCH.share)));
   world.events.push({ t: 'patch', patcher: s.holder, client: s.other, outcome: 'done' });
   if (s.holder === world.player.vehicleId) practice(world, 'patch', 1, null, s.other);
   if (s.holder === world.player.vehicleId) practice(world, 'deal', 1, null, s.other);

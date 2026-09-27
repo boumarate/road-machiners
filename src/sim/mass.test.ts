@@ -21,7 +21,7 @@ describe('vehicle mass', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'hauler', ['mg', 'stockEngine'], { x: 40, y: 40 });
     expect(vehicleMass(v)).toBe(CHASSIS.hauler.mass + coreMass('hauler') + PARTS.mg.mass + PARTS.stockEngine.mass);
-    expect(stowPart(w, v, makePart(w, 'plates'))).toBe(true);
+    expect(stowPart(w, v, makePart(w, 'plates', 0))).toBe(true);
     expect(addGoods(w, v, 'scrap', 3)).toBe(3);
     expect(vehicleMass(v)).toBe(CHASSIS.hauler.mass + coreMass('hauler') + PARTS.mg.mass + PARTS.stockEngine.mass + PARTS.plates.mass + 3 * GOODS.scrap.mass);
   });

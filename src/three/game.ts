@@ -24,11 +24,12 @@ import {
   type VehicleFrame,
 } from "../phys/frames";
 import { applyTurn, type PreparedTurn } from "../phys/turn";
+import { maxHp } from "../sim/wear";
 import { playerVehicle, vehicleById } from "../sim/damage";
 import { corePart, mountedParts } from "../sim/grid";
 import { applySiteAction, canLoot, salvageHere } from "../sim/locations";
 import { getContextAction } from "../ui/hud-readout";
-import { townAt } from "../sim/sites";
+import { shopAt } from "../sim/market";
 import { isStranded, maxTurn, vehicleStats } from "../sim/stats";
 import { clickOrder, parkedVehicles, throttleFor } from "../sim/steering";
 import { route, warmRoutes } from "../sim/path";
@@ -225,7 +226,7 @@ export class Game {
     const groundScope = new RenderScope(this.ground, this.world.size, this.sightLimit, false);
     const propScope = new RenderScope(this.props, this.world.size, this.sightLimit, true);
     this.scopes = [groundScope, propScope];
-    const groundChunks = terrainMesh(this.world, groundScope, propScope);
+    const groundChunks = terrainMesh(this.world, groundScope);
     addSites(this.world.terrain, propScope);
     this.obstacles = new ObstacleViews(propScope, this.world.terrain);
     this.obstacles.sync(this.world.obstacles, this.world.salvage);
@@ -395,7 +396,7 @@ export class Game {
 
   private useContext(): void {
     if (this.anim || !playerCanAct(this.world)) return;
-    if (townAt(this.world)) return this.town.open();
+    if (shopAt(this.world)) return this.town.open();
     if (isBusy(playerVehicle(this.world))) return;
     const after = applySiteAction(this.world);
     if (after) {
@@ -1098,9 +1099,7 @@ export class Game {
     if (moving && v.speed > 0.5 && Math.random() < DUST_CHANCE * ground.dust)
       this.fx.dust(this.dustPoint(v, f));
     const cab = corePart(v, "cab");
-    const hurt =
-      cab.hp < partDef(cab.defId).hp * HURT_CAB ||
-      mountedParts(v).some((p) => p.hp === 0);
+    const hurt = cab.hp < maxHp(cab) * HURT_CAB || mountedParts(v).some((p) => p.hp === 0);
     if (hurt && Math.random() < SMOKE_CHANCE) this.fx.smoke(f.pos);
   }
 

@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
-import { REPAIR } from '../data/wear';
+import { STRIP } from '../data/salvage';
+import { CONDITION, REPAIR } from '../data/wear';
+import { damagePart, partValue } from './wear';
+import { makePart } from './factory';
 import { addVehicle, emptyWorld, practiceOf } from './testkit';
 import { corePart, goodsCount, gridOf, mountedParts } from './grid';
-import { addGoods, moveItem, removeGoods } from './inventory';
-import { advanceJobs, startAutoRepair, startJob, startRepair } from './jobs';
+import { addGoods, moveItem, removeGoods, stowPart } from './inventory';
+import { advanceJobs, startAutoRepair, startJob, startRepair, startStrip } from './jobs';
 import { repairPlan } from './repair';
 
 function armorPart(v: ReturnType<typeof emptyWorld>['vehicles'][0]) {
@@ -126,6 +130,33 @@ describe('field repair job', () => {
   });
 });
 
+describe('junk parts', () => {
+  it('refuses a field repair of a junk part', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const cage = armorPart(me);
+    cage.hp = 0;
+    cage.wear = CONDITION.maxWear + 1;
+    addGoods(w, me, 'parts', 20);
+    expect(() => startRepair(w, cage.id)).toThrow(/junk/);
+  });
+
+  it('cancels a field repair once its part breaks into junk', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const cage = armorPart(me);
+    cage.hp = 1;
+    cage.wear = CONDITION.maxWear;
+    addGoods(w, me, 'parts', 20);
+    const next = startRepair(w, cage.id);
+    damagePart(armorPart(next.vehicles[0]), 1, 0);
+    advanceJobs(next);
+    expect(next.vehicles[0].job).toBeNull();
+    expect(armorPart(next.vehicles[0]).hp).toBe(0);
+    expect(next.events.some((e) => e.t === 'job' && e.outcome === 'cancelled')).toBe(true);
+  });
+});
+
 describe('repair without parts', () => {
   it('cancels once the parts leave the grid mid-job', () => {
     const w = emptyWorld();
@@ -160,6 +191,18 @@ describe('auto patch', () => {
     expect(engine.hp).toBe(1 + plan.hp);
   });
 
+  it('skips a junk part', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    me.speed = 0;
+    const cage = armorPart(me);
+    cage.hp = 0;
+    cage.wear = CONDITION.maxWear + 1;
+    addGoods(w, me, 'parts', 5);
+    startAutoRepair(w);
+    expect(me.job).toBeNull();
+  });
+
   it('waits while off, moving, busy or out of parts', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
@@ -177,6 +220,67 @@ describe('auto patch', () => {
     removeGoods(me, 'parts', goodsCount(me).parts ?? 0);
     startAutoRepair(w);
     expect(me.job).toBeNull();
+  });
+});
+
+describe('strip job', () => {
+  it('yields parts good units from the part\'s value, removes the part and adds the goods', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const spare = makePart(w, 'mg', 0);
+    stowPart(w, me, spare);
+    const held = goodsCount(me).parts ?? 0;
+    const units = Math.max(1, Math.round((partValue(spare) * STRIP.yieldShare) / GOODS.parts.value));
+
+    const next = startStrip(w, spare.id);
+    for (let i = 0; i < STRIP.turns; i++) advanceJobs(next);
+
+    const truck = next.vehicles[0];
+    expect(truck.job).toBeNull();
+    expect(truck.items.some((it) => it.kind === 'part' && it.part.id === spare.id)).toBe(false);
+    expect((goodsCount(truck).parts ?? 0) - held).toBe(units);
+  });
+
+  it('strips a broken, junk part too', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const spare = makePart(w, 'mg', 0);
+    spare.hp = 0;
+    spare.wear = CONDITION.maxWear + 1;
+    stowPart(w, me, spare);
+
+    const next = startStrip(w, spare.id);
+    for (let i = 0; i < STRIP.turns; i++) advanceJobs(next);
+
+    const truck = next.vehicles[0];
+    expect(truck.items.some((it) => it.kind === 'part' && it.part.id === spare.id)).toBe(false);
+    expect(goodsCount(truck).parts ?? 0).toBeGreaterThan(0);
+  });
+
+  it('cancels on a turn the truck ends above parked speed, leaving the part in place', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const spare = makePart(w, 'mg', 0);
+    stowPart(w, me, spare);
+
+    const next = startStrip(w, spare.id);
+    advanceJobs(next);
+    next.vehicles[0].speed = 5;
+    advanceJobs(next);
+
+    const truck = next.vehicles[0];
+    expect(truck.job).toBeNull();
+    expect(truck.items.some((it) => it.kind === 'part' && it.part.id === spare.id)).toBe(true);
+    expect(next.events.some((e) => e.t === 'job' && e.outcome === 'cancelled')).toBe(true);
+  });
+
+  it('refuses a mounted part and a built-in part', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const mounted = mountedParts(me).find((p) => partDef(p.defId).kind === 'armor')!;
+    expect(() => startStrip(w, mounted.id)).toThrow(/spare/);
+    const cab = corePart(me, 'cab');
+    expect(() => startStrip(w, cab.id)).toThrow(/spare/);
   });
 });
 

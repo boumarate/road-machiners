@@ -1,5 +1,19 @@
 // Wear and field repair numbers. All survival-loop wear and repair rule numbers live here, not in rules.ts.
 
+// Part condition. A part gains one wear step each time it drops to 0 HP. See src/sim/condition.ts.
+export const CONDITION = {
+  maxWear: 4, // last wear step a broken part can be rebuilt from; one more makes it junk
+  hpLoss: 0.1, // share of def max HP lost per wear step, for every part kind
+  // Job stat loss per wear step. Cargo and core parts lose max HP only.
+  statLoss: {
+    spread: 0.15, // share of weapon spread added
+    speedBonus: 0.26, // engine top speed bonus lost, in tiles per turn, a fifth of the smallest engine step
+    accelBonus: 0.1, // engine acceleration bonus lost, in the chassis accel unit
+    armor: 0.12, // share of an armor part's armor lost
+    scannerRange: 0.1, // share of scanner range lost
+  },
+};
+
 export const WEAR = {
   // A scout at top speed covers about 22,000 off-road tiles per hour of play, at about 1.25 s per turn.
   // At these rates each part then loses about 30% of its max HP, one field repair's worth,

@@ -7,6 +7,8 @@ import type { Vec } from "./vec";
 import type { LandmarkLook } from "../data/region";
 import type { TopicId } from "../data/dialogue";
 import type { DecisionOptions } from "../data/npcs";
+import type { Contract, ShopState } from "./market";
+import type { Rng } from "./rng";
 import type { PerkId } from "../data/skills";
 
 export type PatchDeal = DecisionOptions["patchDeal"];
@@ -18,13 +20,14 @@ export type XpSource =
   | "hit" | "contact" | "discover"
   | "fieldJob" | "patch" | "search"
   | "heat" | "damage" | "knockout"
-  | "profit" | "deal" | "call" | "honk";
+  | "profit" | "deal" | "call" | "honk" | "contract";
 
 export type PartInstance = {
   id: string;
   defId: string;
   hp: number;
   reload: number;
+  wear: number; // wear steps from breaking, 0 for pristine. See src/sim/condition.ts.
 };
 
 // An item in a vehicle's inventory grid. x and y are the top-left cell. rot 1 swaps width and height.
@@ -68,6 +71,7 @@ export type SalvageStock = {
   fuel?: number; // fuel units that pour into a tank, not the grid
   supplies?: number; // supply units that go to driver stores, not the grid
   pile?: Pile; // loot lying loose on the ground, drawn as a heap. Sites and wrecks draw their own stock.
+  emptySince?: number; // turn a daily check first found a road wreck looted; see renewSalvage in src/sim/salvage.ts
 };
 
 // A pile is gone at turn `until`. The player's items and other trucks' items never share a pile. A player pile counts
@@ -100,6 +104,7 @@ export type Job =
       auto?: true;
     } // parts: the most this job spends. auto: started by auto patch, so any player job replaces it
   | { kind: "search"; stockId: string; turnsLeft: number; total: number }
+  | { kind: "strip"; partId: string; turnsLeft: number; total: number }
   | RefitJob;
 
 // A vehicle detected beyond sight. The circle always holds the true position, which it never reveals.
@@ -261,6 +266,7 @@ export type Player = {
   discovered: string[];
   scavenged: string[]; // stocks the player finished searching; their loot can be taken
   storage: PartInstance[]; // spare parts kept in town garages, usable in any town
+  contracts: Contract[]; // contracts taken and not yet ended; see src/sim/market.ts
   costBasis: Record<string, number>; // average paid per unit of each good, for trade XP
   knockouts: number;
   state: "active" | "knockedOut" | "dead";
@@ -300,6 +306,7 @@ export type GameEvent =
   | { t: 'practice'; source: XpSource; amount: number; difficulty: number | null; target: string; xp: number }
   | { t: 'skillUp'; skill: SkillId; level: number }
   | { t: 'money'; amount: number; reason: string }
+  | { t: 'contract'; contract: Contract; outcome: 'accepted' | 'done' | 'failed' | 'lapsed' }
   | { t: 'discover'; location: string }
   | { t: 'supply'; what: string; text: string }
   | { t: 'death' }
@@ -323,12 +330,14 @@ export type GameEvent =
 export type World = {
   seed: number;
   rngState: number;
+  marketRng: Rng; // the market's own random stream; see src/sim/market.ts
   turn: number;
   size: number;
   nextId: number;
   vehicles: Vehicle[];
   obstacles: Obstacle[];
   salvage: SalvageStock[];
+  shops: Record<string, ShopState>; // shop id -> prices, stock and contract board; see src/sim/market.ts
   terrain: Terrain; // corner heights and tile types, built from the seed
   player: Player;
   events: GameEvent[]; // events of the last resolved turn or action

@@ -1,3 +1,5 @@
+import { PRESSURE_MAX } from '../../data/market';
+import type { World } from '../types';
 import { describe, expect, it } from 'vitest';
 import { HUNTING_GROUNDS } from '../../data/npcs';
 import { REGION } from '../../data/region';
@@ -26,6 +28,13 @@ function parkedAt(id: string) {
   return w;
 }
 
+// Salt flooded at Nose and short at Bowl, so it is the clear best haul whatever the tuned prices.
+function saltGlut(w: World): World {
+  w.shops.nose.pressure.salt = -PRESSURE_MAX;
+  w.shops.bowl.pressure.salt = PRESSURE_MAX;
+  return w;
+}
+
 describe('botOrders', () => {
   it('gives a knocked-out player no commands', () => {
     const w = parkedAt('bowl');
@@ -39,7 +48,7 @@ describe('botOrders', () => {
 
   // Nose sells salt cheap, and Bowl pays well for it.
   it('has a trader buy the most profitable good in the town it stands at', () => {
-    const w = parkedAt('nose');
+    const w = saltGlut(parkedAt('nose'));
 
     const turn = botOrders(w, 'trader');
 
@@ -60,13 +69,27 @@ describe('botOrders', () => {
   });
 
   it('has a scavenger with no salvage left and every site found trade instead', () => {
-    const w = parkedAt('nose');
+    const w = saltGlut(parkedAt('nose'));
     w.salvage = [];
     w.player.discovered = [...REGION.towns, ...REGION.locations].map((site) => site.id);
 
     const turn = botOrders(w, 'scavenger');
 
     expect(Object.keys(goodsCount(playerVehicle(turn.world)))).toEqual(['salt']);
+  });
+
+  it('has a scavenger with no salvage left, every site found and no load it can afford wait in the nearest town', () => {
+    const w = emptyWorld({ x: 60, y: 60 });
+    const me = playerVehicle(w);
+    removeAllGoods(me);
+    w.salvage = [];
+    w.player.discovered = [...REGION.towns, ...REGION.locations].map((site) => site.id);
+    w.player.money = 0;
+
+    const turn = botOrders(w, 'scavenger');
+
+    const home = nearestTown(w);
+    expect(playerVehicle(turn.world).order).toEqual({ kind: 'stopAt', dest: nearestPad(home, me.pos) });
   });
 
   // A knockout strips the engine, and the stranded truck is stuck until it gets one.

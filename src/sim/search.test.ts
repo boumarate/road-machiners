@@ -120,10 +120,15 @@ describe('timed scavenging search', () => {
     const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
     npc.pos = { x: convoy.pos.x + convoy.radius + 1, y: convoy.pos.y };
     npc.heading = Math.PI;
+    // Spawns with a part-full tank so the convoy's own leftover fuel can pour into it right away.
+    // A spawn at a full tank cannot accept that fuel, so the stock never empties and the NPC restarts
+    // a one-turn search forever until its own supplies happen to run out hundreds of turns later.
+    npc.resources!.fuel = 20;
     let cur = w;
     let sawJob = false;
     let finished = false;
-    for (let t = 0; t < w.size * 5; t++) {
+    // Observed completion is well under 500 turns; keep a generous cap so a stalled NPC fails fast.
+    for (let t = 0; t < 800; t++) {
       cur = endTurn(cur, testDrive);
       const actor = cur.vehicles.find((v) => v.id === npc.id)!;
       if (actor.job?.kind === 'search') sawJob = true;

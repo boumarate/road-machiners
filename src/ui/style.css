@@ -1,5 +1,12 @@
+@import "@fontsource/barlow-semi-condensed/400.css";
+@import "@fontsource/barlow-semi-condensed/700.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/700.css";
+
 html,
 body {
+  --font-ui: "Barlow Semi Condensed", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
   margin: 0;
   height: 100%;
   background: #1b1c1d;
@@ -20,9 +27,7 @@ body {
   inset: 0;
   pointer-events: none;
   color: var(--ink);
-  font:
-    14px / 1.4 Georgia,
-    serif;
+  font: 14px / 1.4 var(--font-ui);
 }
 #ui .panel {
   position: absolute;
@@ -168,9 +173,7 @@ body {
   left: 0;
   right: 0;
   text-align: center;
-  font:
-    15px ui-monospace,
-    monospace;
+  font: 15px var(--font-mono);
 }
 .speed-unit {
   position: absolute;
@@ -178,9 +181,7 @@ body {
   left: 0;
   right: 0;
   text-align: center;
-  font:
-    9px ui-monospace,
-    monospace;
+  font: 9px var(--font-mono);
   color: var(--muted);
 }
 .truck-instrument > .icon {
@@ -208,16 +209,12 @@ body {
 }
 .resource small {
   display: block;
-  font:
-    10px / 1.2 Georgia,
-    serif;
+  font: 10px / 1.2 var(--font-ui);
   color: var(--muted);
 }
 .resource strong {
   display: block;
-  font:
-    12px / 1.5 ui-monospace,
-    monospace;
+  font: 12px / 1.5 var(--font-mono);
   font-weight: normal;
 }
 .resource.bad .icon svg {
@@ -267,9 +264,7 @@ body {
 #ui .weapon-tools button,
 #ui .weapon-toggle {
   padding: 3px 7px;
-  font:
-    10px Georgia,
-    serif;
+  font: 10px var(--font-ui);
 }
 #ui .weapon-toggle {
   position: absolute;
@@ -302,15 +297,11 @@ body {
   position: absolute;
   top: 3px;
   left: 5px;
-  font:
-    11px ui-monospace,
-    monospace;
+  font: 11px var(--font-mono);
   color: #e5c47c;
 }
 .weapon-pick [data-status] {
-  font:
-    10px / 1.2 ui-monospace,
-    monospace;
+  font: 10px / 1.2 var(--font-mono);
 }
 .weapon-target {
   font-size: 10px;
@@ -379,9 +370,7 @@ body {
   height: 43px;
 }
 .end-turn span:last-child {
-  font:
-    10px ui-monospace,
-    monospace;
+  font: 10px var(--font-mono);
 }
 
 #ui .log {
@@ -395,6 +384,25 @@ body {
   border: 0;
   border-left: 2px solid #777e81;
   font-size: 12px;
+}
+#ui .contracts {
+  right: 16px;
+  bottom: 246px;
+  width: 282px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  background: #202529e8;
+  border: 0;
+  border-left: 2px solid #777e81;
+  font-size: 12px;
+}
+.contracts h3 {
+  font-size: 12px !important;
+  margin-bottom: 4px !important;
+}
+.contract-line {
+  padding: 2px 0;
+  color: var(--muted);
 }
 .log h3 {
   font-size: 12px !important;
@@ -423,10 +431,7 @@ body {
   width: 442px;
   max-width: calc(100vw - 58px);
   padding: 6px 8px;
-  font:
-    12px / 1.35 ui-monospace,
-    Menlo,
-    monospace;
+  font: 12px / 1.35 var(--font-mono);
 }
 .debug-console-log {
   max-height: 180px;
@@ -589,8 +594,8 @@ body {
   top: 16px;
   transform: translateX(-50%);
   box-sizing: border-box;
-  width: min(880px, calc(100vw - 32px));
-  height: min(760px, calc(100dvh - 270px));
+  width: min(1360px, calc(100vw - 32px));
+  height: min(760px, calc(100dvh - 250px));
   overflow: auto;
   padding: 24px 28px;
   background: #272d31;
@@ -607,6 +612,10 @@ body {
 #ui:has(.modal:not([style*="display: none"])) > .instruments,
 #ui:has(.modal:not([style*="display: none"])) > .log {
   z-index: 21;
+}
+/* The wide modal reaches under the condition panel, which stands above the instruments. */
+#ui:has(.modal:not([style*="display: none"])) .truck-condition {
+  display: none;
 }
 #ui .modal > h3 {
   font-size: 26px;
@@ -650,12 +659,83 @@ body {
   top: 23px;
   font-size: 12px;
 }
+/* Town screen: the truck stays on the left and the shop tabs on the right. Each column scrolls on its own. */
+#ui .modal.town-screen {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#ui .town-screen > h3 {
+  margin-bottom: 4px;
+}
+/* One line per stock part. The cell title holds the full line. */
+.town-shop td.stock-line {
+  max-width: 0;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#ui .town-screen > h3 .dim {
+  margin-left: 18px;
+  font-size: 14px;
+}
+.town-shop table {
+  margin: 2px 0;
+}
+.town-shop td,
+.town-shop th {
+  padding: 2px 7px;
+}
+.town-shop td button {
+  margin: 0;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.town-shop h3 {
+  margin: 10px 0 0;
+}
+.town-split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(420px, 1fr);
+  gap: 28px;
+  margin-top: 8px;
+}
+.town-truck,
+.town-shop {
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.town-truck {
+  padding-right: 24px;
+  border-right: 1px solid #4b555b;
+}
+.town-truck .inv-wrap {
+  margin-top: 0;
+  justify-content: flex-start;
+  gap: 24px;
+}
+.town-shop > .tabs {
+  padding: 0 0 8px;
+  margin-bottom: 8px;
+}
+.modal .tabs.sub {
+  border-bottom: none;
+  padding: 0 0 4px;
+  margin-bottom: 0;
+}
+.modal .tabs.sub button {
+  min-width: 0;
+  padding: 3px 8px;
+  font-size: 12px;
+}
 .inv-summary {
   color: var(--muted);
   margin: -4px 0 22px;
-  font:
-    12px ui-monospace,
-    monospace;
+  font: 12px var(--font-mono);
 }
 .inv-wrap {
   display: flex;
@@ -697,9 +777,7 @@ body {
   position: absolute;
   box-sizing: border-box;
   border: 1px solid #58656b;
-  font:
-    10px ui-monospace,
-    monospace;
+  font: 10px var(--font-mono);
   color: #a0adb2;
   display: flex;
   align-items: center;
@@ -865,6 +943,9 @@ body {
 .inv-legend > div {
   margin-top: 7px;
 }
+.inv-item.refitting {
+  border: 2px dashed #eac779;
+}
 .inv-ghost {
   position: fixed;
   pointer-events: none;
@@ -873,9 +954,7 @@ body {
   border: 2px solid #e7d6a0;
   background: #b5bc7955;
   color: #f0e0b8;
-  font:
-    11px ui-monospace,
-    monospace;
+  font: 11px var(--font-mono);
   padding: 3px;
 }
 .inv-ghost.ok {
@@ -950,6 +1029,18 @@ body {
   .inv-side {
     width: 100%;
   }
+  .town-split {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+  .town-truck,
+  .town-shop {
+    overflow: visible;
+  }
+  .town-truck {
+    padding-right: 0;
+    border-right: none;
+  }
   .modal td,
   .modal th {
     padding: 7px 4px;
@@ -957,10 +1048,21 @@ body {
 }
 
 /* Color grade on the 3D view: a little more saturation and contrast after tone mapping. */
-canvas.view { filter: saturate(1.12) contrast(1.06); }
+canvas.view {
+  filter: saturate(1.12) contrast(1.06);
+}
 
 /* Darkens the screen corners, so the eye rests on the middle of the view. */
-.vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 55%, rgba(20, 12, 6, 0.38) 100%); }
+.vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0) 55%,
+    rgba(20, 12, 6, 0.38) 100%
+  );
+}
 
 /* Dust haze over the view while the player truck is inside a storm. */
 .storm-tint {

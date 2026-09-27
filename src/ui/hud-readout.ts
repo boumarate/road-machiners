@@ -1,6 +1,7 @@
 import { chassisDef } from "../data/chassis";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
+import { maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
 import { maxHealthOf } from "../sim/health";
 import { corePart, mountedParts, mountedItems, itemSize } from "../sim/grid";
@@ -17,15 +18,25 @@ import { celsius, engineCelsius, fuelLiters, hp, kph } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./icons";
 import type { ContextAction } from './hud';
+import { SHOPS } from '../data/market';
+import { canUseSite, locationAt } from '../sim/sites';
+import { shopAt } from '../sim/market';
 import { canUseOasis, emptySalvageNear, salvageHere, salvageNear } from '../sim/locations';
-import { locationAt, townAt, townNear } from '../sim/sites';
 import { playerCanAct } from '../sim/world';
 import { isBusy } from '../sim/jobs';
 
+// The shop in reach of the player truck at any speed, or null. Moving trucks must stop to use it.
+function shopNear(world: World): { id: string; name: string } | null {
+  const pos = playerVehicle(world).pos;
+  const sites = [...REGION.towns, ...REGION.locations].filter((s) => s.id in SHOPS);
+  const site = sites.find((s) => canUseSite(pos, s));
+  return site ? { id: site.id, name: site.name } : null;
+}
+
 export function getContextAction(world: World, playing: boolean): ContextAction | null {
   if (playing || !playerCanAct(world)) return null;
-  const town = townNear(world);
-  if (town) return { label: `Enter ${town.name}`, ready: townAt(world) !== null };
+  const shop = shopNear(world);
+  if (shop) return { label: `Enter ${shop.name}`, ready: shopAt(world) === shop.id };
   if (isBusy(playerVehicle(world))) return null;
   return getSiteAction(world);
 }
@@ -77,7 +88,7 @@ export class TruckConditionReadout {
         const hp = item.part.hp;
         this.health.set(item.part.id, hp);
         const before = previous.get(item.part.id);
-        const ratio = hp / def.hp;
+        const ratio = hp / maxHp(item.part);
         return {
           id: item.part.id,
           name: def.name,
@@ -155,7 +166,7 @@ function townName(id: string): string {
 export function getHudReadout(w: World) {
   const me = playerVehicle(w);
   const cab = corePart(me, "cab");
-  const cabMax = partDef(cab.defId).hp;
+  const cabMax = maxHp(cab);
   const capacity = chassisDef(me.chassisId).fuelCap;
   const p = w.player;
   const maxHealth = maxHealthOf(w);

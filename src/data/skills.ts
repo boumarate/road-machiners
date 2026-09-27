@@ -12,7 +12,7 @@ export const SKILL_INFO: Record<SkillId, { name: string; grows: string }> = {
   perception: { name: 'Perception', grows: 'hits, contacts, discoveries' },
   machining: { name: 'Machining', grows: 'field jobs, patches, searches' },
   toughness: { name: 'Toughness', grows: 'heat, damage taken, knockouts' },
-  social: { name: 'Social', grows: 'trade profit, deals, calls, honks' },
+  social: { name: 'Social', grows: 'trade profit, deals, contracts, calls, honks' },
 };
 
 // Fraction each level adds to an effect. Every reader names its effect, so a missing key fails typecheck.
@@ -83,6 +83,7 @@ export const XP_SOURCES: Record<XpSource, XpSourceDef> = {
   deal: { skill: 'social', weight: 30, scaled: false, repeat: 0.5 }, // per finished patch deal, and per handover or threat that ends agreed; target: the other driver
   call: { skill: 'social', weight: 8, scaled: false, repeat: 0 }, // per topic taken up on a radio call; target: driver and topic
   honk: { skill: 'social', weight: 2, scaled: false, repeat: 0 }, // per driver in sight that honks back; target: that driver
+  contract: { skill: 'social', weight: 1, scaled: false, repeat: 0.8 }, // per XP a finished contract names; target: the shop that posted it
 };
 
 export const XP_RULES = {

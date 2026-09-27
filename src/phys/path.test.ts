@@ -14,17 +14,22 @@ beforeAll(async () => {
   await initPhysics();
 });
 
-// Plays n turns through the real turn pipeline with physics movement.
-function play(w: World, n: number): { w: World } {
+// Plays up to `max` turns through the real turn pipeline with physics movement, building the physics
+// world once and reusing the driver's own synced copy every turn after, exactly as the game does:
+// physicsMove() already calls syncDrive() on every turn to add or drop vehicles and obstacles, so
+// rebuilding the whole terrain and obstacle colliders from scratch each turn only duplicates that
+// sync. `afterTurn` runs after each turn on the drafted world and can stop the loop early.
+function play(w: World, max: number, afterTurn: (w: World) => boolean = () => false): World {
   let d = buildDrive(w);
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < max; i++) {
     let next: Drive | null = null;
     w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
     freeDrive(d);
     d = next!;
+    if (afterTurn(w)) break;
   }
   freeDrive(d);
-  return { w };
+  return w;
 }
 
 it('the player drives from Bowl to Nose without a serious hit on a static obstacle', () => {
@@ -34,15 +39,15 @@ it('the player drives from Bowl to Nose without a serious hit on a static obstac
   w.player.fuel = 100;
   const me = w.player.vehicleId;
   let staticDamage = 0;
-  for (let i = 0; i < w.size && dist(w.vehicles[0].pos, nose.pos) > nose.radius + 1.5; i++) {
-    ({ w } = play(w, 1));
-    w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
-    w.player.engineHeat = 0; // this drive never stops to cool down
-    for (const e of w.events)
+  w = play(w, w.size, (world) => {
+    world.vehicles = world.vehicles.filter((v) => v.faction === 'player');
+    world.player.engineHeat = 0; // this drive never stops to cool down
+    for (const e of world.events)
       // A route can graze a site's edge, which the game allows; a rock or building should not touch it.
       if (e.t === 'collision' && e.a === me && !e.b.startsWith('v') && !e.b.startsWith('site-'))
         staticDamage += e.hitsA.reduce((sum, h) => sum + h.damage, 0);
-  }
+    return dist(world.vehicles[0].pos, nose.pos) <= nose.radius + 1.5;
+  });
   expect(staticDamage).toBeLessThan(5);
   // Physics brakes for corners a little differently turn to turn than the deleted 2D model did, so
   // give the arrival distance some slack instead of the tight tolerance that model allowed.
@@ -67,10 +72,10 @@ it('a truck following a road into a blocking rock stops on the corner without a 
   w.vehicles[0].pos = { x: 22, y: 30 };
   w = setMoveOrder(w, { kind: 'stopAt', dest: { x: 60, y: 8 } });
   let damage = 0;
-  for (let i = 0; i < 40 && w.vehicles[0].order; i++) {
-    ({ w } = play(w, 1));
-    for (const e of w.events) if (e.t === 'collision') damage += e.hitsA.reduce((sum, h) => sum + h.damage, 0);
-  }
+  w = play(w, 40, (world) => {
+    for (const e of world.events) if (e.t === 'collision') damage += e.hitsA.reduce((sum, h) => sum + h.damage, 0);
+    return !world.vehicles[0].order;
+  });
   expect(damage).toBeLessThan(5);
   expect(dist(w.vehicles[0].pos, { x: 60, y: 8 })).toBeLessThan(0.5);
 });

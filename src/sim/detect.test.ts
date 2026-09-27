@@ -103,11 +103,23 @@ describe('hills and the scanner', () => {
     expect(scannerRange(observer)).toBe(0);
     const before = contactsOf(w, observer, Infinity);
     expect(before.find((c) => c.vehicleId === target.id)).toBeUndefined();
-    if (!mountPart(w, observer, makePart(w, 'scanner'))) throw new Error('No free mount for the test scanner');
+    if (!mountPart(w, observer, makePart(w, 'scanner', 0))) throw new Error('No free mount for the test scanner');
     target.speed = 4;
     expect(scannerRange(observer)).toBeGreaterThan(0);
     const after = contactsOf(w, observer, Infinity);
     expect(after.find((c) => c.vehicleId === target.id)?.sources).toContain('radio');
+  });
+});
+
+describe('a worn scanner', () => {
+  it('reaches less far', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const observer = w.vehicles[0];
+    const scanner = makePart(w, 'scanner', 0);
+    if (!mountPart(w, observer, scanner)) throw new Error('No free mount for the test scanner');
+    const fresh = scannerRange(observer);
+    scanner.wear = 2;
+    expect(scannerRange(observer)).toBeLessThan(fresh);
   });
 });
 

@@ -1,9 +1,9 @@
 // A lost fight knocks the player out: the truck is stripped into a stock that anyone can loot,
 // and the driver wakes once no foe is watching. Health at 0 ends the run.
 
-import { partDef } from "../data/parts";
 import { PERK_NUMBERS } from "../data/skills";
 import { RULES } from "../data/rules";
+import { isJunk, maxHp, restorePart } from "./wear";
 import { playerVehicle } from "./damage";
 import { isFoe, isHostile } from "./combat";
 import { corePart, mountedParts } from "./grid";
@@ -56,9 +56,7 @@ export function advanceKnockout(world: World): void {
   p.knockoutTurns++;
   const me = playerVehicle(world);
   if (foeWatches(world, me) && p.knockoutTurns < knockoutLimit(world)) return;
-  for (const part of mountedParts(me, "core"))
-    if (part.hp === 0)
-      part.hp = Math.max(1, Math.round(partDef(part.defId).hp * RULES.defeatPatch));
+  patchBrokenCore(me);
   p.state = "active";
   world.events.push({ t: "wake" });
 }
@@ -69,4 +67,12 @@ function foeWatches(world: World, me: Vehicle): boolean {
 
 function hostileWatches(world: World, me: Vehicle): boolean {
   return world.vehicles.some((v) => isHostile(world, v, me) && canVehicleSee(world, v, me.pos));
+}
+
+// Other junk core parts stay broken. A junk cab cannot wake, so restorePart stops the game with the reason.
+function patchBrokenCore(me: Vehicle): void {
+  const cab = corePart(me, "cab");
+  const broken = mountedParts(me, "core").filter((part) => part.hp === 0 && (part === cab || !isJunk(part)));
+  for (const part of broken)
+    restorePart(part, Math.max(1, Math.round(maxHp(part) * RULES.defeatPatch)));
 }

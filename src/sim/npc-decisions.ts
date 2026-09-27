@@ -14,7 +14,6 @@ import {
   DECISIONS, HUNTING_GROUNDS, MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, STATE_WEIGHTS, TRAITS,
   type DecisionId, type DecisionOptions, type TraitId, type TraitWeights, type WeightChange,
 } from '../data/npcs';
-import { partDef } from '../data/parts';
 import { PERK_NUMBERS } from '../data/skills';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
@@ -23,6 +22,7 @@ import { isRamGainful, ramImpact } from './crash-contact';
 import { playerVehicle, vehicleById } from './damage';
 import { contactsOf } from './detect';
 import { getTradePrice } from './economy';
+import { maxHp } from './wear';
 import { corePart, freeCells, hasLoot, mountedParts } from './grid';
 import { isTownGuarded } from './guards';
 import { topGoal } from './npc-activities';
@@ -96,7 +96,7 @@ export function getKnownSite(id: string) {
 // on, however sound its cab.
 function getCombatCondition(vehicle: Vehicle): number {
   const cab = corePart(vehicle, 'cab');
-  return Math.min(cab.hp / partDef(cab.defId).hp, getMobilityCondition(vehicle));
+  return Math.min(cab.hp / maxHp(cab), getMobilityCondition(vehicle));
 }
 
 // Damage times rounds summed over working guns.
@@ -221,8 +221,12 @@ function offerGoods(world: World, vehicle: Vehicle, route: { source: string; sel
 
 // Salvage in sight that still holds something, or that is too far to inspect. Nearest first.
 export function visibleSalvage(world: World, vehicle: Vehicle): SalvageStock[] {
-  const visible = world.salvage.filter((stock) => canVehicleSee(world, vehicle, stock.pos) && (!canReachSalvage(vehicle, stock) || hasSalvage(stock)));
+  const visible = world.salvage.filter((stock) => seesSalvage(world, vehicle, stock));
   return visible.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
+}
+
+function seesSalvage(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
+  return canVehicleSee(world, vehicle, stock.pos) && (!canReachSalvage(vehicle, stock) || hasSalvage(stock));
 }
 
 // Known salvage sites other than the one the NPC stands at.
@@ -265,8 +269,9 @@ function canDrive(world: World, vehicle: Vehicle): boolean {
   return getResources(world, vehicle).fuel > 0;
 }
 
+// A robbery is a fight, so it also needs a working gun.
 function canRobSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
-  return canRob(world, vehicle, subjectOf(world, decision, subject));
+  return firepower(world, vehicle) > 0 && canRob(world, vehicle, subjectOf(world, decision, subject));
 }
 
 // A ram needs the subject as the fight target on top of the goals, within reach of a damaging ram.
@@ -293,6 +298,13 @@ function canScavenge(world: World, vehicle: Vehicle): boolean {
   return visibleSalvage(world, vehicle).length > 0 || salvageSitesAway(vehicle).length > 0;
 }
 
+// Looting salvage on the way needs cargo room and the stock in sight.
+function canLootSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  if (subject === null) throw new Error(`${decision} needs a subject`);
+  const stock = world.salvage.find((entry) => entry.id === subject);
+  return stock !== undefined && freeCells(vehicle) > 0 && seesSalvage(world, vehicle, stock);
+}
+
 function canRaid(_world: World, vehicle: Vehicle): boolean {
   return huntingGroundsAway(vehicle).length > 0;
 }
@@ -313,6 +325,7 @@ const AVAILABLE: Record<OptionName, Availability> = {
   trade: canTrade,
   scavenge: canScavenge,
   raid: canRaid,
+  loot: canLootSubject,
   wait: always,
   paid: dealAvailable('paid'),
   ownParts: dealAvailable('ownParts'),
@@ -356,7 +369,7 @@ function fleeHeardFactor(world: World, vehicle: Vehicle): number {
 
 // A miss counts a little, and damage taken last turn adds by its share of the cab.
 function fleeAttackedFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
-  const cabMax = partDef(corePart(vehicle, 'cab').defId).hp;
+  const cabMax = maxHp(corePart(vehicle, 'cab'));
   const hit = NPC_BEHAVIOR.missFlee + vehicle.brain!.hurt / cabMax / NPC_BEHAVIOR.hurtFullFlee;
   return hit * weakFlee(world, vehicle) * threatFlee(world, vehicle, danger);
 }
@@ -470,6 +483,7 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   trade: neutral,
   scavenge: scavengeFactor,
   raid: neutral,
+  loot: neutral,
   wait: neutral,
   paid: neutral,
   ownParts: neutral,

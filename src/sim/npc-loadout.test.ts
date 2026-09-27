@@ -1,7 +1,11 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { NPCS, type NpcTemplate } from '../data/npcs';
-import { PARTS } from '../data/parts';
+import { PARTS, partDef } from '../data/parts';
+import { START_KITS } from '../data/start';
+import { newWorld } from './world';
+import { CONDITION } from '../data/wear';
+import { partValue } from './wear';
 import { makeVehicle } from './factory';
 import { goodsCount, gridOf, isMounted, mountedParts, placementError } from './grid';
 import { vehicleMass } from './mass';
@@ -40,13 +44,12 @@ describe('NPC equipment generation', () => {
       const v = makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
       expect(mountedParts(v, 'engine')).toHaveLength(1);
       expect(mountedParts(v, 'weapon')).toHaveLength(1);
-      for (const item of v.items) {
-        expect(placementError(gridOf(v), v.items, item, item.id)).toBeNull();
-        if (item.kind === 'part') expect(isMounted(v.chassisId, item)).toBe(true);
-      }
+      for (const item of v.items) expect(placementError(gridOf(v), v.items, item, item.id)).toBeNull();
+      const loose = v.items.filter((item) => item.kind === 'part' && !isMounted(v.chassisId, item));
+      expect(loose).toHaveLength(loadout.spares.length);
       expect(goodsCount(v)).toEqual(loadout.cargo);
       expect(vehicleMass(v)).toBeLessThanOrEqual(CHASSIS[v.chassisId].ratedMass);
-      const cost = CHASSIS[v.chassisId].price + loadout.parts.reduce((sum, id) => sum + PARTS[id].price, 0);
+      const cost = CHASSIS[v.chassisId].value + loadout.parts.reduce((sum, p) => sum + PARTS[p.defId].value, 0);
       expect(cost).toBeLessThanOrEqual(template.loadout.budget);
       expect(v.resources?.money).toBe(fixture.player.money);
     }
@@ -58,18 +61,18 @@ describe('NPC equipment generation', () => {
     template.loadout.engine = [{ value: 'stockEngine', weight: 1 }];
     template.loadout.weapon = [{ value: 'cannon', weight: 1000 }, { value: 'mg', weight: 1 }];
     const loadout = generateNpcLoadout({ ...fixture }, template);
-    expect(loadout.parts).toContain('mg');
-    expect(loadout.parts).not.toContain('cannon');
+    expect(loadout.parts.map((p) => p.defId)).toContain('mg');
+    expect(loadout.parts.map((p) => p.defId)).not.toContain('cannon');
   });
 
   it('reserves the budget for both required parts before choosing an engine', () => {
     const template = structuredClone(NPCS.trader);
-    template.loadout.budget = CHASSIS.hauler.price + PARTS.stockEngine.price + PARTS.mg.price;
+    template.loadout.budget = CHASSIS.hauler.value + PARTS.stockEngine.value + PARTS.mg.value;
     template.loadout.chassis = [{ value: 'hauler', weight: 1 }];
     template.loadout.engine = [{ value: 'turbine', weight: 1000 }, { value: 'stockEngine', weight: 1 }];
     template.loadout.weapon = [{ value: 'mg', weight: 1 }];
     const loadout = generateNpcLoadout({ ...fixture }, template);
-    expect(loadout.parts).toEqual(['stockEngine', 'mg']);
+    expect(loadout.parts.map((p) => p.defId)).toEqual(['stockEngine', 'mg']);
   });
 
   it('rejects impossible required equipment without consuming RNG or IDs', () => {
@@ -91,6 +94,10 @@ describe('NPC equipment generation', () => {
     ['invalid optional weight', (t: NpcTemplate) => { t.loadout.armor = [{ value: null, weight: 0 }]; }],
     ['impossible optional part', (t: NpcTemplate) => { t.loadout.chassis = [{ value: 'buggy', weight: 1 }]; t.loadout.cargoPart = [{ value: 'heavyFrame', weight: 1 }]; }],
     ['impossible cargo', (t: NpcTemplate) => { t.loadout.goods = [{ value: { good: 'scrap', count: 1000 }, weight: 1 }]; }],
+    ['wear step past the last rebuildable step', (t: NpcTemplate) => { t.loadout.wear = [{ value: CONDITION.maxWear + 1, weight: 1 }]; }],
+    ['negative wear step', (t: NpcTemplate) => { t.loadout.wear = [{ value: -1, weight: 1 }]; }],
+    ['a core part in the spare pool', (t: NpcTemplate) => { t.loadout.spares = { pool: [{ value: 'cab', weight: 1 }], count: [{ value: 1, weight: 1 }] }; }],
+    ['a negative spare count', (t: NpcTemplate) => { t.loadout.spares = { pool: [{ value: null, weight: 1 }], count: [{ value: -1, weight: 1 }] }; }],
   ] as const)('fails loudly on %s without changing the input world', (_name, invalidate) => {
     const world = { ...fixture };
     const template = structuredClone(NPCS.buggy);
@@ -122,6 +129,80 @@ describe('NPC equipment generation', () => {
   });
 });
 
+describe('part wear', () => {
+  it.each(Object.values(NPCS))('rolls a wear step within $id\'s table for every mounted, non-core part', (template) => {
+    const rolled = new Set<number>();
+    const allowed = new Set(template.loadout.wear.map((entry) => entry.value));
+    for (let seed = 1; seed <= 40; seed++) {
+      const loadout = generateNpcLoadout({ ...fixture, rngState: seed }, template);
+      for (const { defId: id, wear } of loadout.parts) {
+        expect(wear, id).toBeGreaterThanOrEqual(0);
+        expect(wear, id).toBeLessThanOrEqual(CONDITION.maxWear);
+        expect(allowed, id).toContain(wear);
+        rolled.add(wear);
+      }
+    }
+    expect(rolled.size, `${template.id} wear variety`).toBeGreaterThan(1);
+  });
+
+  it('rolls the same wear for the same seed', () => {
+    const loadoutA = generateNpcLoadout({ ...fixture, rngState: 7 }, NPCS.trader);
+    const loadoutB = generateNpcLoadout({ ...fixture, rngState: 7 }, NPCS.trader);
+    expect(loadoutA.parts).toEqual(loadoutB.parts);
+    expect(loadoutA.spares).toEqual(loadoutB.spares);
+  });
+
+  it('a wear roll frees enough budget to fit an optional part that would not fit pristine', () => {
+    const world = { ...fixture, rngState: 1 };
+    const template = structuredClone(NPCS.buggy);
+    const wornWear = CONDITION.maxWear - 1;
+    template.loadout.chassis = [{ value: 'van', weight: 1 }];
+    template.loadout.engine = [{ value: 'stockEngine', weight: 1 }];
+    template.loadout.weapon = [{ value: 'mg', weight: 1 }];
+    template.loadout.cargoPart = [{ value: null, weight: 1 }];
+    template.loadout.armor = [{ value: 'scrapPanels', weight: 1 }];
+    template.loadout.wear = [{ value: wornWear, weight: 1 }];
+    const armorValue = partValue({ id: 'p', defId: 'scrapPanels', hp: 0, reload: 0, wear: wornWear });
+    const requiredCost = CHASSIS.van.value + PARTS.stockEngine.value + PARTS.mg.value;
+    template.loadout.budget = requiredCost + armorValue;
+    expect(requiredCost + PARTS.scrapPanels.value).toBeGreaterThan(template.loadout.budget);
+    const loadout = generateNpcLoadout(world, template);
+    expect(loadout.parts).toContainEqual({ defId: 'scrapPanels', wear: wornWear });
+  });
+});
+
+describe('trader spare parts', () => {
+  it('carries rolled spares when it has grid room and rated mass to spare', () => {
+    const template = structuredClone(NPCS.trader);
+    template.loadout.chassis = [{ value: 'hauler', weight: 1 }];
+    template.loadout.cargoPart = [{ value: null, weight: 1 }];
+    template.loadout.goods = [{ value: null, weight: 1 }];
+    template.loadout.spares = { pool: [{ value: 'mg', weight: 1 }], count: [{ value: 2, weight: 1 }] };
+    const loadout = generateNpcLoadout({ ...fixture, rngState: 3 }, template);
+    expect(loadout.spares.length).toBeGreaterThan(0);
+    for (const spare of loadout.spares) {
+      expect(spare.defId).toBe('mg');
+      expect(spare.wear).toBeGreaterThanOrEqual(0);
+      expect(spare.wear).toBeLessThanOrEqual(CONDITION.maxWear);
+    }
+  });
+
+  it('carries no spares once cargo and repair parts already fill the grid', () => {
+    const template = structuredClone(NPCS.trader);
+    template.loadout.chassis = [{ value: 'buggy', weight: 1 }];
+    template.loadout.cargoPart = [{ value: null, weight: 1 }];
+    template.loadout.goods = [{ value: { good: 'grain', count: 20 }, weight: 4 }, { value: null, weight: 1 }];
+    template.loadout.spares = { pool: [{ value: 'mg', weight: 1 }], count: [{ value: 3, weight: 1 }] };
+    const loadout = generateNpcLoadout({ ...fixture, rngState: 3 }, template);
+    expect(loadout.spares).toEqual([]);
+  });
+
+  it('never rolls spares for a template with no spare table', () => {
+    const loadout = generateNpcLoadout({ ...fixture, rngState: 3 }, NPCS.buggy);
+    expect(loadout.spares).toEqual([]);
+  });
+});
+
 describe('weighted equipment rolls', () => {
   it('draws rare equipment less often than common equipment', () => {
     const rng = { rngState: 42 };
@@ -143,5 +224,16 @@ describe('weighted equipment rolls', () => {
     expect(() => sampleWeighted(rng, [])).toThrow(/Empty/);
     expect(() => sampleWeighted(rng, [{ value: 'a', weight: Number.MAX_VALUE }, { value: 'b', weight: Number.MAX_VALUE }])).toThrow(/total/);
     expect(rng.rngState).toBe(42);
+  });
+});
+
+describe('spawned NPCs', () => {
+  it('carry the rolled wear and spares into the world', () => {
+    const world = newWorld(1, START_KITS.standard);
+    const npcs = world.vehicles.filter((v) => v.brain !== null);
+    const parts = npcs.flatMap((v) => v.items.flatMap((it) => (it.kind === 'part' && partDef(it.part.defId).kind !== 'core' ? [it.part] : [])));
+    expect(parts.some((p) => p.wear > 0)).toBe(true);
+    const traders = npcs.filter((v) => v.brain!.templateId === 'trader');
+    expect(traders.some((v) => v.items.some((it) => it.kind === 'part' && !isMounted(v.chassisId, it)))).toBe(true);
   });
 });

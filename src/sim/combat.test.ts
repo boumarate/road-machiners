@@ -50,8 +50,8 @@ describe('combat', () => {
     const me = w.vehicles[0];
     me.chassisId = 'hauler';
     me.items = [
-      { id: 'i1', x: 0, y: 0, rot: 0, kind: 'part', part: { id: 'c1', defId: 'cannon', hp: 30, reload: 0 } },
-      { id: 'i2', x: 4, y: 0, rot: 0, kind: 'part', part: { id: 'e1', defId: 'stockEngine', hp: 25, reload: 0 } },
+      { id: 'i1', x: 0, y: 0, rot: 0, kind: 'part', part: { id: 'c1', defId: 'cannon', hp: 30, reload: 0, wear: 0 } },
+      { id: 'i2', x: 4, y: 0, rot: 0, kind: 'part', part: { id: 'e1', defId: 'stockEngine', hp: 25, reload: 0, wear: 0 } },
     ];
     const side = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 35 });
     order(me, 'c1', side.id);
@@ -64,7 +64,7 @@ describe('combat', () => {
     const me = w.vehicles[0];
     const gun = me.items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
     me.items = me.items.filter((it) => it !== gun);
-    me.items.push({ id: 'i1', x: gun.x, y: gun.y, rot: 0, kind: 'part', part: { id: 'c1', defId: 'cannon', hp: 30, reload: 0 } });
+    me.items.push({ id: 'i1', x: gun.x, y: gun.y, rot: 0, kind: 'part', part: { id: 'c1', defId: 'cannon', hp: 30, reload: 0, wear: 0 } });
     const t = addVehicle(w, 'raiders', 'wagon', ['cannon', 'stockEngine', 'plates'], { x: 35, y: 30 }, Math.PI);
     order(me, 'c1', t.id);
     let shots = 0;
@@ -134,6 +134,23 @@ describe('combat', () => {
       resolveDestroyed(w);
     }
     expect(w.obstacles.filter((o) => o.id.startsWith('wreck-'))).toHaveLength(RULES.maxKillWrecks);
+  });
+
+  it('clearing an old kill wreck stops a search of it', () => {
+    const { w } = duel();
+    const kill = () => {
+      const b = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 10 + w.obstacles.length * 2, y: 10 });
+      b.brain = npcBrain('buggy', b.pos, ['raider']);
+      corePart(b, 'cab').hp = 0;
+      resolveDestroyed(w);
+      return b.id;
+    };
+    const oldest = kill();
+    const searcher = addVehicle(w, 'scavengers', 'scout', [], { x: 10, y: 14 });
+    searcher.job = { kind: 'search', stockId: `wreck-${oldest}`, turnsLeft: 3, total: 3 };
+    for (let i = 0; i < RULES.maxKillWrecks; i++) kill();
+    expect(w.salvage.some((s) => s.id === `wreck-${oldest}`)).toBe(false);
+    expect(searcher.job).toBeNull();
   });
 
   it('shooting a neutral makes it and its nearby mates hostile', () => {
@@ -360,7 +377,7 @@ describe('rounds', () => {
     const me = w.vehicles[0];
     const gun = me.items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
     me.items = me.items.filter((it) => it !== gun);
-    me.items.push({ id: 'i1', x: gun.x, y: gun.y, rot: 0, kind: 'part', part: { id: 'c1', defId: 'cannon', hp: 30, reload: 0 } });
+    me.items.push({ id: 'i1', x: gun.x, y: gun.y, rot: 0, kind: 'part', part: { id: 'c1', defId: 'cannon', hp: 30, reload: 0, wear: 0 } });
     const t = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 }, Math.PI / 2);
     for (const p of mountedParts(t)) p.hp = 1e9;
     t.speed = 3;

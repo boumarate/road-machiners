@@ -1,230 +1,137 @@
-// Roads drawn as strips laid on the ground. Each strip has a worn edge, an uneven width, two ruts that
-// wander a little and patches of lighter and darker dirt. Where roads meet, one worn patch covers the
-// crossing, and the ruts fade out before it. Strips end at site edges, where pads take over, and at the
-// ends of Canyon Bridge, whose deck is its own model.
+// Roads and site pads are drawn by the ground shader, so they lie exactly on the ground that wheels touch.
+// The shader splits the ground into road pixels a third the size of the ground paint pixels. A road pixel
+// takes the road look where the road mask covers its center, and the slow tone and a per-pixel dither fray
+// the edge. A pad is a paler floor of the same dirt inside a worn orange outline, where the road ends.
 
-import * as THREE from 'three';
-import { PHYSICS } from '../../data/physics';
-import { REGION } from '../../data/region';
-import { PAL, mix, shade } from '../../render/palette';
-import { valueNoise } from '../../render/noise';
-import { bridgeCut, deckAlong } from '../../sim/bridge';
-import type { Terrain } from '../../sim/terrain';
-import { INDEX_CELL, RoadIndex } from '../../sim/road-index';
-import { dist, type Vec } from '../../sim/vec';
-import type { RenderScope } from './scope';
-import { meshHeightAt } from './terrain';
+import * as THREE from "three";
+import { PHYSICS } from "../../data/physics";
+import { REGION } from "../../data/region";
+import { TERRAIN_TYPES } from "../../data/terrain";
+import type { PaintCanvas } from "../../render/groundPaint";
+import { sitePads } from "../../sim/sites";
+import { mix, PAL } from "../../render/palette";
+import { paintRoadDetail, paintRoadMask, paintRoadTone, ROAD_DETAIL_SIDE, ROAD_TONE_PIXELS, ROAD_TONE_SIDE, type RoadImage } from "../../render/roadPaint";
 
 const S = PHYSICS.metersPerTile;
-const SITES = [...REGION.towns, ...REGION.locations];
-const HALF = REGION.roadWidth / 2;
-const STEP = 0.5; // tiles between strip rows
-const PIECE = 32; // rows per mesh, so a road draws only where the camera looks
-const LIFT = 0.02; // tiles above the drawn ground; the material's depth offset does the rest
-const JUNCTION_RADIUS = REGION.roadWidth * 0.62;
-const RUT_FADE = 4; // tiles past a crossing patch over which ruts come back
+const PIXEL_SPLIT = 3; // road pixels across one ground paint pixel
+// The ground paint under a road, before hillshade. The road takes the ground's shade relative to it.
+const GROUND_UNDER = mix(TERRAIN_TYPES.hardpan.color, PAL.sand[3], 0.1);
+const PAD_BORDER = 2; // road pixels across the pad outline
 
-// Across the strip, as shares of its half-width. Ruts shift sideways together with the wander.
-type Column = { at: number; rut: boolean; edge: boolean; color: number };
-const EDGE = shade(PAL.road, 1.05);
-// Loose dust that drifts over the road in blotches.
-const DUST = PAL.sand[3];
-const CROWN = shade(PAL.road, 1.04);
-const COLUMNS: Column[] = [
-  { at: -1, rut: false, edge: true, color: EDGE },
-  { at: -0.86, rut: false, edge: false, color: PAL.road },
-  { at: -0.52, rut: false, edge: false, color: PAL.road },
-  { at: -0.44, rut: true, edge: false, color: PAL.roadRut },
-  { at: -0.36, rut: false, edge: false, color: PAL.road },
-  { at: 0, rut: false, edge: false, color: CROWN },
-  { at: 0.36, rut: false, edge: false, color: PAL.road },
-  { at: 0.44, rut: true, edge: false, color: PAL.roadRut },
-  { at: 0.52, rut: false, edge: false, color: PAL.road },
-  { at: 0.86, rut: false, edge: false, color: PAL.road },
-  { at: 1, rut: false, edge: true, color: EDGE },
-];
-
-type Row = { pos: Vec; side: Vec; half: number; fray: [number, number]; wander: number; tone: number; ruts: number };
-
-export function addRoads(t: Terrain, scope: RenderScope): void {
-  const material = new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
-  const patchMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
-  const crossings = junctions(REGION.roads);
-  REGION.roads.forEach((road, r) => {
-    for (const run of drawnRuns(rows(road, r, crossings))) {
-      for (let first = 0; first < run.length - 1; first += PIECE) {
-        const piece = run.slice(first, first + PIECE + 1);
-        scope.add(new THREE.Mesh(stripGeometry(t, piece, r), material), piece[Math.floor(piece.length / 2)].pos, (piece.length * STEP) / 2 + HALF * 1.3);
-      }
-    }
-  });
-  crossings.forEach((c, k) => scope.add(new THREE.Mesh(patchGeometry(t, c, k), patchMaterial), c, JUNCTION_RADIUS * 1.3));
+// Paints the road mask on `mask`, which must map the map like the ground canvas, and draws roads and
+// pads on the ground material.
+export function drawRoads(material: THREE.MeshLambertMaterial, mask: PaintCanvas): void {
+  paintRoadMask(mask);
+  const pixel = S / mask.res / PIXEL_SPLIT;
+  const uniforms = {
+    roadMask: { value: maskTexture(mask) },
+    roadDetail: { value: imageTexture(paintRoadDetail(), THREE.NearestFilter, THREE.SRGBColorSpace) },
+    roadTone: { value: imageTexture(paintRoadTone(), THREE.LinearFilter, THREE.NoColorSpace) },
+    roadPixel: { value: pixel },
+    roadOrigin: { value: mask.from * S },
+    roadMaskMeters: { value: (mask.size / mask.res) * S },
+    roadDetailMeters: { value: ROAD_DETAIL_SIDE * pixel },
+    roadToneMeters: { value: ROAD_TONE_SIDE * ROAD_TONE_PIXELS * pixel },
+    roadGroundLuma: { value: luma(new THREE.Color(GROUND_UNDER)) },
+    ...padUniforms(pixel),
+  };
+  const before = material.onBeforeCompile.bind(material);
+  const key = material.customProgramCacheKey.bind(material);
+  material.onBeforeCompile = (shader, renderer) => {
+    before(shader, renderer);
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec2 vRoadXZ;")
+      .replace("#include <project_vertex>", "#include <project_vertex>\nvRoadXZ = (modelMatrix * vec4(transformed, 1.0)).xz;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", `#include <common>\n#define PAD_COUNT ${uniforms.padCenters.value.length}\n${ROAD_UNIFORMS}`)
+      .replace("#include <map_fragment>", `#include <map_fragment>\n${ROAD_FRAGMENT}`);
+  };
+  material.customProgramCacheKey = () => `${key()}|roads`;
+  material.needsUpdate = true;
 }
 
-// Rows every STEP tiles along the road, with the look noise sampled along its length.
-function rows(road: readonly Vec[], r: number, crossings: Vec[]): Row[] {
-  const points = evenPoints(road);
-  // Rows this many steps apart set the direction, so small kinks in the line do not twist the strip.
-  const reach = 3;
-  return points.map((pos, k) => {
-    const ahead = points[Math.min(points.length - 1, k + reach)];
-    const behind = points[Math.max(0, k - reach)];
-    const d = dist(behind, ahead);
-    const s = k * STEP;
-    const near = Math.min(Infinity, ...crossings.map((c) => dist(c, pos)));
-    return {
-      pos,
-      side: { x: -(ahead.y - behind.y) / d, y: (ahead.x - behind.x) / d },
-      half: HALF * (0.78 + 0.22 * valueNoise(s / 23, r * 17.3)),
-      fray: [1 + 0.3 * (valueNoise(s / 3.5, r * 5 + 3) - 0.5), 1 + 0.3 * (valueNoise(s / 3.5, r * 5 + 40) - 0.5)],
-      wander: 0.14 * (valueNoise(s / 9, r * 3 + 1) - 0.5),
-      tone: 0.9 + 0.16 * valueNoise(s / 11, r * 7 + 2),
-      ruts: Math.min(1, Math.max(0, (near - JUNCTION_RADIUS) / RUT_FADE)),
-    };
-  });
-}
+const ROAD_UNIFORMS = `varying vec2 vRoadXZ;
+uniform sampler2D roadMask;
+uniform sampler2D roadDetail;
+uniform sampler2D roadTone;
+uniform float roadPixel;
+uniform float roadOrigin;
+uniform float roadMaskMeters;
+uniform float roadDetailMeters;
+uniform float roadToneMeters;
+uniform float roadGroundLuma;
+uniform vec2 padCenters[PAD_COUNT];
+uniform vec2 padAxes[PAD_COUNT];
+uniform vec2 padHalf;
+uniform float padBorder;
+uniform vec3 padDust;
+uniform vec3 padMark;`;
 
-// Stretches of rows off sites and off the bridge gap.
-function drawnRuns(all: Row[]): Row[][] {
-  const runs: Row[][] = [];
-  let run: Row[] = [];
-  for (const row of all) {
-    if (drawn(row.pos)) {
-      run.push(row);
-      continue;
-    }
-    if (run.length > 1) runs.push(run);
-    run = [];
+// Samples everything at the road pixel center, so edges step in whole road pixels like the ground
+// paint. Under 0.5 the mask is off the road. The tone moves that line by meters and the dither frays it.
+// A pad covers the road under it. Its outline skips a few pixels, like worn paint.
+const ROAD_FRAGMENT = `{
+  vec2 roadAt = roadOrigin + (floor((vRoadXZ - roadOrigin) / roadPixel) + 0.5) * roadPixel;
+  float roadCover = texture2D(roadMask, (roadAt - roadOrigin) / roadMaskMeters).r;
+  vec4 roadLook = texture2D(roadDetail, (roadAt - roadOrigin) / roadDetailMeters);
+  float roadWander = texture2D(roadTone, (roadAt - roadOrigin) / roadToneMeters).r;
+  float groundShade = clamp(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)) / roadGroundLuma, 0.7, 1.2);
+  vec3 roadColor = roadLook.rgb * (0.94 + 0.12 * roadWander) * groundShade;
+  float roadEdge = 0.5 + (roadWander - 0.5) * 0.4 + (roadLook.a - 0.5) * 0.1;
+  if (roadCover > roadEdge) diffuseColor.rgb = roadColor * (roadCover < roadEdge + 0.1 ? 0.92 : 1.0);
+  for (int i = 0; i < PAD_COUNT; i++) {
+    vec2 padOff = roadAt - padCenters[i];
+    vec2 padIn = padHalf - abs(vec2(dot(padOff, padAxes[i]), dot(padOff, vec2(-padAxes[i].y, padAxes[i].x))));
+    float padDepth = min(padIn.x, padIn.y);
+    if (padDepth <= 0.0) continue;
+    diffuseColor.rgb = mix(roadColor, padDust * groundShade, 0.35);
+    if (padDepth < padBorder && roadLook.a > 0.12) diffuseColor.rgb = padMark * groundShade;
   }
-  if (run.length > 1) runs.push(run);
-  return runs;
-}
+}`;
 
-function drawn(p: Vec): boolean {
-  if (deckAlong(p.x, p.y) !== null || bridgeCut(p.x, p.y) > 0) return false;
-  return !SITES.some((site) => dist(site.pos, p) < site.radius);
-}
-
-function stripGeometry(t: Terrain, piece: Row[], r: number): THREE.BufferGeometry {
-  const positions: number[] = [];
-  const colors: number[] = [];
-  const color = new THREE.Color();
-  for (const row of piece) {
-    for (const col of COLUMNS) {
-      const across = row.half * columnAt(row, col);
-      const x = row.pos.x + row.side.x * across;
-      const y = row.pos.y + row.side.y * across;
-      positions.push(x * S, (meshHeightAt(t, x, y) + LIFT + r * 0.002) * S, y * S);
-      color.setHex(mix(col.rut ? mix(PAL.road, col.color, row.ruts) : col.color, DUST, dustAt(x, y))).multiplyScalar(row.tone);
-      colors.push(color.r, color.g, color.b);
+// Pad centers and their axes out from the site, in meters. Pads are the same size everywhere.
+function padUniforms(pixel: number) {
+  const centers: THREE.Vector2[] = [];
+  const axes: THREE.Vector2[] = [];
+  for (const site of [...REGION.towns, ...REGION.locations])
+    for (const pad of sitePads(site)) {
+      centers.push(new THREE.Vector2(pad.x * S, pad.y * S));
+      axes.push(new THREE.Vector2(pad.x - site.pos.x, pad.y - site.pos.y).normalize());
     }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  geo.setIndex(gridIndex(piece.length, COLUMNS.length));
-  geo.computeVertexNormals();
-  return geo;
+  const { length, width } = REGION.sites.pad;
+  return {
+    padCenters: { value: centers },
+    padAxes: { value: axes },
+    padHalf: { value: new THREE.Vector2((length / 2) * S, (width / 2) * S) },
+    padBorder: { value: PAD_BORDER * pixel },
+    padDust: { value: new THREE.Color(PAL.sand[3]) },
+    padMark: { value: new THREE.Color(PAL.padMark) },
+  };
 }
 
-// Share of dust over the road at a map point: none on most of it, up to a half in blotches.
-function dustAt(x: number, y: number): number {
-  return Math.max(0, valueNoise(x / 3.5, y / 3.5) - 0.55);
+function maskTexture(c: PaintCanvas): THREE.DataTexture {
+  const rgba = c.ctx.getImageData(0, 0, c.size, c.size).data;
+  const cover = new Uint8Array(c.size * c.size);
+  for (let i = 0; i < cover.length; i++) cover[i] = rgba[i * 4];
+  const texture = new THREE.DataTexture(cover, c.size, c.size, THREE.RedFormat);
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearFilter;
+  texture.needsUpdate = true;
+  return texture;
 }
 
-function columnAt(row: Row, col: Column): number {
-  if (col.edge) return col.at * row.fray[col.at < 0 ? 0 : 1];
-  if (col.at === 0 || Math.abs(col.at) > 0.8) return col.at;
-  return col.at + row.wander;
+function imageTexture(image: RoadImage, filter: THREE.MagnificationTextureFilter, colorSpace: THREE.ColorSpace): THREE.DataTexture {
+  const texture = new THREE.DataTexture(image.pixels, image.side, image.side, THREE.RGBAFormat);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.magFilter = filter;
+  texture.minFilter = filter === THREE.NearestFilter ? THREE.NearestMipmapNearestFilter : THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.colorSpace = colorSpace;
+  texture.needsUpdate = true;
+  return texture;
 }
 
-// Two triangles per cell of a rows x cols vertex grid, facing up for a strip whose columns run from
-// its left side to its right side.
-function gridIndex(rowCount: number, cols: number): number[] {
-  const index: number[] = [];
-  for (let i = 0; i + 1 < rowCount; i++)
-    for (let j = 0; j + 1 < cols; j++) {
-      const a = i * cols + j;
-      const b = a + cols;
-      index.push(a, a + 1, b, a + 1, b + 1, b);
-    }
-  return index;
-}
-
-// A worn disc over a crossing: rings of vertices out to a ragged rim.
-function patchGeometry(t: Terrain, c: Vec, k: number): THREE.BufferGeometry {
-  const spokes = 24;
-  const rings = [0, 0.5, 0.85, 1];
-  const ringColor = [shade(PAL.road, 1.03), PAL.road, PAL.road, EDGE];
-  const positions: number[] = [];
-  const colors: number[] = [];
-  const color = new THREE.Color();
-  rings.forEach((ring, i) => {
-    for (let a = 0; a < spokes; a++) {
-      const angle = (a / spokes) * Math.PI * 2;
-      const rim = JUNCTION_RADIUS * (1 + 0.3 * (valueNoise(a * 0.7, k * 11 + 5) - 0.5));
-      const x = c.x + Math.cos(angle) * rim * ring;
-      const y = c.y + Math.sin(angle) * rim * ring;
-      positions.push(x * S, (meshHeightAt(t, x, y) + LIFT * 1.5) * S, y * S);
-      color.setHex(ringColor[i]);
-      colors.push(color.r, color.g, color.b);
-    }
-  });
-  const index: number[] = [];
-  for (let i = 0; i + 1 < rings.length; i++)
-    for (let a = 0; a < spokes; a++) {
-      const p = i * spokes + a;
-      const q = i * spokes + ((a + 1) % spokes);
-      index.push(p, q, p + spokes, q, q + spokes, p + spokes);
-    }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  geo.setIndex(index);
-  geo.computeVertexNormals();
-  return geo;
-}
-
-// Points where two roads touch outside sites: crossings and junctions. Touching stretches along one road
-// count once, at their middle.
-export function junctions(roads: Vec[][]): Vec[] {
-  const found: Vec[] = [];
-  const indexes = roads.map((road) => new RoadIndex([road], INDEX_CELL));
-  roads.forEach((road, r) => {
-    indexes.forEach((other, o) => {
-      if (o <= r) return;
-      for (const p of touching(road, other)) if (!found.some((f) => dist(f, p) < REGION.roadWidth)) found.push(p);
-    });
-  });
-  return found.filter((p) => drawn(p));
-}
-
-function touching(road: readonly Vec[], other: RoadIndex): Vec[] {
-  const out: Vec[] = [];
-  let stretch: Vec[] = [];
-  for (const p of evenPoints(road)) {
-    if (other.nearestWithin(p.x, p.y, 1) < 1) {
-      stretch.push(p);
-      continue;
-    }
-    if (stretch.length > 0) out.push(stretch[Math.floor(stretch.length / 2)]);
-    stretch = [];
-  }
-  if (stretch.length > 0) out.push(stretch[Math.floor(stretch.length / 2)]);
-  return out;
-}
-
-// Points every STEP tiles along a road from its start, and its end.
-function evenPoints(road: readonly Vec[]): Vec[] {
-  const out: Vec[] = [road[0]];
-  let carry = 0;
-  for (let i = 1; i < road.length; i++) {
-    const a = road[i - 1];
-    const b = road[i];
-    const d = dist(a, b);
-    for (let s = STEP - carry; s <= d; s += STEP) out.push({ x: a.x + ((b.x - a.x) * s) / d, y: a.y + ((b.y - a.y) * s) / d });
-    carry = (carry + d) % STEP;
-  }
-  if (dist(out[out.length - 1], road[road.length - 1]) > 1e-6) out.push(road[road.length - 1]);
-  return out;
+function luma(c: THREE.Color): number {
+  return c.r * 0.299 + c.g * 0.587 + c.b * 0.114;
 }

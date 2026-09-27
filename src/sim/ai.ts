@@ -1,7 +1,7 @@
 // Activity execution uses the same steering and route planner as the player.
 import { NPCS } from "../data/npcs";
 import { RULES } from "../data/rules";
-import { getActivityDestination, thinkNpc, topGoal } from "./npc-activities";
+import { getActivityDestination, goalHolds, thinkNpc, topGoal } from "./npc-activities";
 import { towData } from "./states";
 import { vehicleStats } from "./stats";
 import { isOnRope, playerTow } from "./tow";
@@ -55,13 +55,7 @@ export function planNpcOrders(world: World): void {
       );
       if (!target) throw new Error("Fight activity missing visible target");
       const preferredRange =
-        tpl.preferredRange > 0
-          ? tpl.preferredRange
-          : Math.min(
-              ...vehicleStats(world, v).weapons.map(
-                (weapon) => weapon.def.range,
-              ),
-            );
+        tpl.preferredRange > 0 ? tpl.preferredRange : shortestRange(world, v);
       goal = computeFightGoal(world, v, preferredRange, target);
     }
     v.order =
@@ -160,9 +154,10 @@ function facesOff(world: World, v: Vehicle, x: Vehicle, gap: number): boolean {
 }
 
 // An NPC whose goal lies farther than the reach rule, so it sets off again. A driver parked at its work does not.
+// x may not have thought yet this turn, so a goal that no longer holds counts as none.
 function wantsToDrive(world: World, x: Vehicle): boolean {
   const top = topGoal(x);
-  const dest = top && getActivityDestination(world, x, top);
+  const dest = top && goalHolds(world, x, top) && getActivityDestination(world, x, top);
   return !!dest && dist(x.pos, dest) > RULES.arriveRadius * 2;
 }
 
@@ -171,4 +166,11 @@ function givesWay(x: Vehicle): boolean {
   if (!x.brain) return false;
   const kind = topGoal(x)?.kind;
   return kind !== "fight" && kind !== "flee";
+}
+
+// A fighter keeps to its shortest gun range. A fight without a gun is a decision bug, so it throws.
+function shortestRange(world: World, v: Vehicle): number {
+  const weapons = vehicleStats(world, v).weapons;
+  if (weapons.length === 0) throw new Error(`${v.name} is fighting without a gun`);
+  return Math.min(...weapons.map((weapon) => weapon.def.range));
 }
