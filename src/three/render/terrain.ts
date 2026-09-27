@@ -5,17 +5,18 @@ import type { World } from '../../sim/types';
 import type { RenderScope } from './scope';
 
 const S = PHYSICS.metersPerTile;
-const TEXTURE_SIDE = 2048; // 16 MiB RGBA before mipmaps, independent of region area.
+const TEXTURE_RES = 6; // texture pixels per tile side, so every tile is a clean block and roads stay smooth
 export const TERRAIN_CHUNK = 32; // Roughly two normal camera widths, allowing offscreen terrain culling.
 
 function paintTexture(w: World): THREE.CanvasTexture {
   const from = -TERRAIN_MARGIN;
-  const res = TEXTURE_SIDE / (w.size + 2 * TERRAIN_MARGIN);
+  const res = TEXTURE_RES;
+  const side = res * (w.size + 2 * TERRAIN_MARGIN);
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = TEXTURE_SIDE;
+  canvas.width = canvas.height = side;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Could not get terrain canvas context');
-  const c: PaintCanvas = { ctx, size: TEXTURE_SIDE, res, from, toPx: (tile) => (tile - from) * res };
+  const c: PaintCanvas = { ctx, size: side, res, from, toPx: (tile) => (tile - from) * res };
   paintGroundCanvas(c, w.terrain, { hillshade: 0.35 });
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;

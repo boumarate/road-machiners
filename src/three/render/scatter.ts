@@ -19,7 +19,7 @@ const OBSTACLE_GAP = 0.5; // tiles past an obstacle's radius kept free of scatte
 const PEBBLE_CHANCE = 0.3; // share of tiles with a pebble cluster
 const SCRUB_CHANCE = 0.14; // share of tiles with a scrub tuft
 const PEBBLE_RADIUS = { min: 0.025, max: 0.045 }; // tiles
-const SCRUB_RADIUS = { min: 0.22, max: 0.4 }; // tiles
+const SCRUB_RADIUS = { min: 0.07, max: 0.12 }; // tiles
 const TINT = { min: 0.85, max: 1.15 };
 
 type Placed = { matrix: THREE.Matrix4; tint: number };
