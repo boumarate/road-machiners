@@ -1,7 +1,7 @@
 # Social radio and dialogue
 
 **Status:** planning
-**Blocked:** PH2 onward waits for defeat-rescue and then npc-traits to merge. The user approved that order. Then PH2 onward is re-planned against `docs/tasks/npc-traits.md`, section "Changes needed in social radio".
+**Blocked:** PH2 onward waits for npc-traits to merge. Defeat-rescue merged into main, and main merged into this branch. The user approved that order. Then PH2 onward is re-planned against `docs/tasks/npc-traits.md`, section "Changes needed in social radio".
 **Branch:** social
 **Worktree:** .worktrees/social
 **Goal:** All player and NPC talk runs through one dialogue system, where new talk is a new topic in data. In the browser, the player calls a truck in sight and gets directions to a town, honks and hears friendly trucks honk back, patches a stranded NPC and gets patched, and receives a tow offer and a raider demand as dialogues. The user confirms the loop in play.
@@ -9,7 +9,7 @@
 
 ## Context
 
-- This branch starts from `defeat-rescue` at 6619d53. Another agent owns that task and still works on its PH4b, the road lanes, and PH5, the game loop, HUD and saves.
+- Defeat-rescue merged into main and then into this branch. It added an emergency beacon, `Player.beacon`, that calls every vehicle within `BEACON.range` to a stranded player. The tow topic in PH2 must fit it.
 - The tow offer in `src/sim/tow.ts` is the only social act. The tower drives up to the stranded player, then the offer sits in `world.player.tow` with no UI yet.
 - `NpcBrain.refusedTow` stops a driver from offering a tow twice. No other per-driver memory of the player exists.
 - The only way to act on another truck is to click it, which aims weapons at it. Hovering shows an info card.
