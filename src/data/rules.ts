@@ -17,8 +17,7 @@ export const RULES = {
   // shares in that order. A click's distance picks the zone.
   throttleZones: { reach: 10, brake: 0.25, hold: 0.5, accelerate: 0.25 },
   reclickRadius: 0.75, // tiles; a click this close to the order's point switches its kind
-  passRadius: 1, // a drive-through order clears once the trail passes this close to its point
-  passSpeedShare: 0.5, // ...or once its point is nearer than this share of the current speed
+  passRadius: 1, // a drive-through order clears once the truck passes this close to its point, or drives past it
   minAimDistance: 1.5, // tiles; steering ignores route points closer than this
   cornerSlack: 2, // tiles past a route corner the brake plan allows
   parkedSpeed: 0.5, // vehicles slower than this are routed around like obstacles
@@ -85,4 +84,12 @@ export const RULES = {
   // Knockout
   defeatPatch: 0.25, // share of max hp broken core parts get back when the player wakes from a knockout
   knockoutMaxTurns: 30, // a knockout ends after this many turns even if a hostile idles in sight
+};
+
+// Debug console numbers. Distances are in tiles.
+export const CHEATS = {
+  spawnDistance: 10, // a spawned vehicle appears this far from the truck, inside sight range
+  spawnAngles: 12, // points tried on the spawn circle before the ring search
+  searchStep: 1, // spacing between rings and between points on a ring, in the free spot search
+  searchRings: 20, // rings searched around a target before giving up
 };

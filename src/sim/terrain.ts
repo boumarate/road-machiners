@@ -3,7 +3,7 @@
 // drawing all read this grid. On Canyon Bridge, heights and slopes are the deck's (see bridge.ts).
 
 import { REGION } from '../data/region';
-import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from '../data/terrain';
+import { TERRAIN, type TerrainTypeId } from '../data/terrain';
 import { BRIDGE_AXIS, BRIDGE_LENGTH, deckAlong } from './bridge';
 import { elevationAt, noiseAt } from './elevation';
 import { clamp, type Vec } from './vec';
@@ -137,13 +137,4 @@ export function groundSlope(t: Terrain, tile: number): Vec {
 export function isCliff(t: Terrain, tile: number): boolean {
   const s = tileSlope(t, tile);
   return Math.hypot(s.x, s.y) > T.drive.maxSlope;
-}
-
-// Distance multiplier for driving across a map point in a direction: terrain type times slope.
-export function driveFactor(t: Terrain, p: Vec, heading: number): number {
-  const tile = tileAt(t, p);
-  const s = tileSlope(t, tile);
-  const grade = s.x * Math.cos(heading) + s.y * Math.sin(heading);
-  const slope = grade > 0 ? 1 / (1 + T.drive.uphill * grade) : 1 + Math.min(T.drive.downhillCap, T.drive.downhill * -grade);
-  return TERRAIN_TYPES[t.types[tile]].speed * slope;
 }

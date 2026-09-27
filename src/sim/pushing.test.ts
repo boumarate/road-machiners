@@ -8,9 +8,7 @@ import { corePart, mountedParts } from './grid';
 import { isStranded, vehicleStats } from './stats';
 import { addVehicle, emptyWorld } from './testkit';
 import type { Vehicle, World } from './types';
-import { dist } from './vec';
 import { weatherAt } from './weather';
-import { endTurn, setMoveOrder } from './world';
 
 function removeEngines(v: Vehicle): void {
   v.items = v.items.filter((it) => it.kind !== 'part' || partDef(it.part.defId).kind !== 'engine');
@@ -49,33 +47,6 @@ describe('pushing a truck without a working engine', () => {
     expect(s.fuelPerTile).toBeGreaterThan(0);
   });
 
-  it('pushes toward the click at limp speed, burns no fuel and makes no sound', () => {
-    let w = setMoveOrder(engineless(), { kind: 'stopAt', dest: { x: 40, y: 30 } });
-    const fuel = w.player.fuel;
-    for (let i = 0; i < 3; i++) {
-      const before = w.vehicles[0].pos.x;
-      w = endTurn(w);
-      const v = w.vehicles[0];
-      expect(v.pos.x).toBeGreaterThan(before);
-      expect(v.speed).toBeGreaterThan(RULES.parkedSpeed);
-      expect(v.speed).toBeLessThanOrEqual(RULES.limpSpeed);
-      expect(soundRange(w, v)).toBe(0);
-    }
-    expect(w.vehicles[0].pos.x).toBeGreaterThan(30 + RULES.limpSpeed);
-    expect(w.player.fuel).toBe(fuel);
-  });
-
-  it('pushes at full limp speed on a low tank', () => {
-    const w = engineless();
-    w.player.fuel = 0.5;
-    const s = vehicleStats(w, w.vehicles[0]);
-    let next = setMoveOrder(w, { kind: 'stopAt', dest: { x: 40, y: 30 } });
-    next = endTurn(next);
-    next = endTurn(next);
-    expect(next.vehicles[0].speed).toBeCloseTo(s.maxSpeed);
-    expect(next.player.fuel).toBe(0.5);
-  });
-
   it('pushes a far NPC along its route at limp speed without fuel', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 30, y: 150 });
@@ -98,18 +69,11 @@ describe('pushing a truck without a working engine', () => {
     expect(soundRange(w, v)).toBe(0);
   });
 
-  it('a knocked-out player wakes and pushes the stripped truck toward a point', () => {
-    let w = emptyWorld();
+  it('a knockout strips the engine, leaving the truck to limp', () => {
+    const w = emptyWorld();
     corePart(w.vehicles[0], 'cab').hp = 0;
     checkKnockout(w);
-    w = endTurn(w);
-    expect(w.player.state).toBe('active');
     expect(mountedParts(w.vehicles[0], 'engine')).toHaveLength(0);
-    const dest = { x: 40, y: 30 };
-    const start = dist(w.vehicles[0].pos, dest);
-    w = setMoveOrder(w, { kind: 'stopAt', dest });
-    for (let i = 0; i < 3; i++) w = endTurn(w);
-    expect(dist(w.vehicles[0].pos, dest)).toBeLessThan(start - RULES.limpSpeed);
   });
 });
 

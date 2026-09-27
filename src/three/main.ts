@@ -6,6 +6,8 @@ import { SoundPlayer } from '../audio/player';
 import { MIX, SOUNDS } from '../data/sounds';
 import { initPhysics } from '../phys/drive';
 import { perfSnapshot, resetPerf } from '../perf';
+import { DebugConsole } from '../ui/console';
+import { uiRoot } from '../ui/dom';
 import { mountPerfPanel } from '../ui/perf-panel';
 import { SoundSettings } from '../ui/sound';
 import { installCrashScreen } from './crash';
@@ -26,6 +28,7 @@ const bank = await loadBank(mixer.ctx, SOUNDS);
 const soundSettings = new SoundSettings(mixer, window.localStorage);
 const overlay = element('overlay');
 const game = new Game(element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute());
+new DebugConsole(uiRoot(), game);
 performance.mark('korovan:ready');
 if (import.meta.env.DEV) {
   (window as any).__KOROVAN__ = game;

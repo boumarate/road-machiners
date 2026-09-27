@@ -1,7 +1,7 @@
 import { TERRAIN } from "../data/terrain";
 import { describe, expect, it } from "vitest";
 import { contactsOf } from "./detect";
-import { emptyWorld, addVehicle, editableTerrain } from "./testkit";
+import { emptyWorld, addVehicle, editableTerrain, testDrive } from "./testkit";
 import { planNpcOrders } from "./ai";
 import { getResources } from "./resources";
 import { REGION } from "../data/region";
@@ -160,7 +160,7 @@ describe("NPC activities", () => {
     let sold = false;
     let serviced = false;
     for (let turn = 0; turn < w.size * 5; turn++) {
-      w = endTurn(w);
+      w = endTurn(w, testDrive);
       npc = w.vehicles.find((v) => v.id === id)!;
       if ((goodsCount(npc).scrap ?? 0) > 0) collected = true;
       if (collected && npc.resources!.money > initialMoney && !sold) {
@@ -237,7 +237,7 @@ describe("NPC activities", () => {
     let looted = false;
     let sold = false;
     for (let turn = 0; turn < w.size * 5; turn++) {
-      w = endTurn(w);
+      w = endTurn(w, testDrive);
       const actor = w.vehicles.find((v) => v.id === raider.id)!;
       if ((goodsCount(actor).scrap ?? 0) > 0) {
         looted = true;

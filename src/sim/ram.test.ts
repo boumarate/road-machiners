@@ -1,11 +1,17 @@
 import { partDef } from '../data/parts';
 import { describe, expect, it } from 'vitest';
+import { applyContactCrash, estimateCrashGeometry } from './crash-contact';
 import { corePart, mountedItems, mountedParts } from './grid';
-import { applyCrash } from './movement';
 import { addVehicle, emptyWorld } from './testkit';
 import type { GameEvent, Vehicle, World } from './types';
+import type { Vec } from './vec';
 
 const FULL_SPEED = 6; // tiles per turn, a scout at top speed
+
+// from is the point the blow comes from, which picks the struck side.
+function applyCrash(world: World, a: Vehicle, b: Vehicle | null, what: string, from: Vec, impact: number): void {
+  applyContactCrash(world, a, b, what, impact, estimateCrashGeometry(a, b, from));
+}
 
 function crashOf(w: World): Extract<GameEvent, { t: 'collision' }> {
   const e = w.events.find((x) => x.t === 'collision');

@@ -415,6 +415,37 @@ body {
   padding: 0;
   border: 0;
 }
+#ui .debug-console {
+  left: 50%;
+  top: 112px;
+  transform: translateX(-50%);
+  z-index: 40;
+  width: 442px;
+  max-width: calc(100vw - 58px);
+  padding: 6px 8px;
+  font:
+    12px / 1.35 ui-monospace,
+    Menlo,
+    monospace;
+}
+.debug-console-log {
+  max-height: 180px;
+  overflow: auto;
+  scrollbar-width: thin;
+  white-space: pre-wrap;
+}
+.debug-console-input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 4px;
+  font: inherit;
+  color: var(--ink);
+  background: #202529;
+  border: 1px solid var(--edge);
+  padding: 3px 5px;
+  outline: none;
+}
 #ui .help {
   left: 14px;
   top: 14px;

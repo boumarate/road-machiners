@@ -129,7 +129,7 @@ const ROUND_STAGGER = 0.4; // share of the shot time over which a burst's rounds
 export class Game {
   private world: World;
   private drive: Drive;
-  private readonly renderer = new THREE.WebGLRenderer({ antialias: true });
+  private readonly renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true });
   private readonly scene = new THREE.Scene();
   private readonly sun = sunLight();
   private readonly sky = new THREE.HemisphereLight();
@@ -349,9 +349,10 @@ export class Game {
     this.rig.follow(null);
   }
 
-  get state(): World {
-    return this.world;
-  }
+  get state(): World { return this.world; }
+
+  // Whether a turn is playing, so the debug console waits instead of changing the world under it.
+  get busy(): boolean { return this.anim !== null; }
 
   apply(next: World): void {
     this.travel.pause();
@@ -1133,11 +1134,11 @@ export class Game {
       ids.add(v.id);
       let view = this.views.get(v.id);
       if (!view) {
-        view = new VehicleView(v);
+        view = new VehicleView(v, seen);
         this.views.set(v.id, view);
         this.scene.add(view.root);
       }
-      view.update(display);
+      view.update(display, seen);
       view.lamps(night);
       view.pose(f);
       view.aim(this.turretAim(v, f));

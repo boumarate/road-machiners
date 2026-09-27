@@ -33,7 +33,7 @@ import { vehicleStats } from "./stats";
 import { consumeSupplies } from "./supplies";
 import { heatAt } from "./sun";
 import { locationAt, siteGates, townAt, townNear } from "./sites";
-import { addVehicle, emptyWorld } from "./testkit";
+import { addVehicle, emptyWorld, testDrive } from "./testkit";
 import { endTurn, newWorld } from "./world";
 
 const bowl = REGION.towns.find((t) => t.id === "bowl")!;
@@ -293,12 +293,12 @@ describe("locations", () => {
       x: convoy.pos.x + 3.5,
       y: convoy.pos.y + 3.5,
     };
-    w = endTurn(w);
+    w = endTurn(w, testDrive);
     expect(w.player.discovered).toContain("burnt-convoy");
     expect(
       w.events.filter((e) => e.t === "discover" && e.location === convoy.id),
     ).toHaveLength(1);
-    w = endTurn(w);
+    w = endTurn(w, testDrive);
     expect(
       w.events.filter((e) => e.t === "discover" && e.location === convoy.id),
     ).toHaveLength(0);
