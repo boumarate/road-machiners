@@ -276,6 +276,6 @@ UK2 resolved: `update()` clears `world.events` at the start of each turn. So `no
 
 ## Code smells
 - `src/sim/search.ts` `searchTurn` — throws when another collector or `clearOldWrecks` removes the stock during a search.
-- `src/data/npcs.ts` robbery — `onPreySeen` and `robFactor` both run `isRobberyTarget`, a double guard for IV6.
+- `src/sim/npc-activities.ts` `onPreySeen` and `src/sim/npc-decisions.ts` `robFactor` both run `isRobberyTarget`, a double guard for IV6.
 
 ## Conclusion
