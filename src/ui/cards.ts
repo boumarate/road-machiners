@@ -65,7 +65,6 @@ const ART = {
   cells: '<path d="M5 5h30v30H5zM5 20h30M20 5v30"/>',
   load: '<path d="M3 27h34v6H3zM9 27V13h22v14M9 33v3M31 33v3"/>',
   recoil: '<path d="M16 20h20M16 14v12M4 20l8-6v12z"/>',
-  shake: '<path d="M4 14q4-6 8 0t8 0 8 0 8 0M4 26q4-6 8 0t8 0 8 0 8 0"/>',
   blast: '<path d="M20 4l3 9 9-4-4 9 9 2-9 3 4 9-9-4-3 9-3-9-9 4 4-9-9-3 9-2-4-9 9 4z"/>',
   heat: '<path d="M16 25V7a4 4 0 0 1 8 0v18a7 7 0 1 1-8 0zM20 13v15"/>',
   patch: '<path d="M8 14l14-9 11 17-14 9zM15 15l3 5M20 12l3 5M18 22l3 5"/>',
@@ -117,9 +116,8 @@ const ICON_NAMES: Record<IconName, string> = {
   cells: "Cargo cells",
   load: "Rated load",
   recoil: "Recoil",
-  shake: "Shake",
-  blast: "Blast",
-  heat: "Engine heat",
+  blast: "Blast armor",
+  heat: "Heat",
   patch: "Field repair",
   tall: "Tall",
   clock: "Time left",
@@ -167,7 +165,7 @@ export function partIcon(part: PartInstance): IconName {
   return def.kind;
 }
 
-// One icon cell per stat. A stat with a change shows it below the value, colored by whether it helps.
+// One row per stat: icon, name, value, and the change against the player's own, colored by whether it helps.
 export function statGrid(diffs: StatDiff[]): HTMLElement {
   return el(
     "div",
@@ -177,8 +175,9 @@ export function statGrid(diffs: StatDiff[]): HTMLElement {
         "div",
         { class: "stat", title: d.stat.label },
         createIcon(d.stat.icon),
+        el("span", { class: "stat-name" }, ICON_NAMES[d.stat.icon]),
         el("span", { class: "stat-val" }, d.stat.text, el("small", {}, d.stat.unit)),
-        d.delta === null ? null : el("span", { class: `delta ${d.verdict}` }, d.delta === 0 ? "=" : d.text),
+        d.delta === null ? el("span") : el("span", { class: `delta ${d.verdict}` }, d.delta === 0 ? "=" : d.text),
       ),
     ),
   );
@@ -286,7 +285,6 @@ export type StatIcon =
   | "load"
   | "scanner"
   | "recoil"
-  | "shake"
   | "blast"
   | "heat"
   | "patch"
@@ -319,10 +317,11 @@ function signed(value: number, decimals: number): string {
   return `${value < 0 ? "−" : "+"}${formatNumber(Math.abs(value), decimals)}`;
 }
 
-// The stats a part shows, with its wear applied.
+// The few stats that decide a part's job and weakness, most important first, with its wear applied.
+// The condition meter already shows HP.
 export function partStats(part: PartInstance): Stat[] {
   const def = partDef(part.defId);
-  return [...KIND_STATS[def.kind](part), stat("hp", "Max HP", hp(maxHp(part)), "", "more"), stat("mass", "Mass", def.mass, "kg", "less")];
+  return [...KIND_STATS[def.kind](part), stat("mass", "Mass: every kilogram costs speed", def.mass, "kg", "less")];
 }
 
 const KIND_STATS: Record<PartKind, (part: PartInstance) => Stat[]> = {
@@ -337,6 +336,11 @@ const KIND_STATS: Record<PartKind, (part: PartInstance) => Stat[]> = {
 function cargoStats(part: PartInstance): Stat[] {
   const d = partDefOf<CargoDef>(part);
   return [{ ...stat("rows", "Extra cargo rows", d.extraRows, d.extraRows === 1 ? "row" : "rows", "more"), text: `+${d.extraRows}` }, tallStat(d)];
+}
+
+// Blast rounds meet an armor part's blast armor instead of its plain armor.
+function penStat(d: WeaponDef): Stat {
+  return { ...stat("pen", "Penetration: the armor a round gets through", d.round.pen, "", "more"), unit: d.round.blast ? "blast" : "" };
 }
 
 // Tall parts stand higher than a gun, so guns cannot fire across them.
@@ -354,15 +358,11 @@ function weaponStats(part: PartInstance): Stat[] {
   if (d.rounds > 1) shot.text = `${d.rounds}×${d.round.damage}`;
   return [
     shot,
-    stat("pen", "Penetration", d.round.pen, "", "more"),
+    penStat(d),
     stat("range", "Range", meters(d.range), "m", "more"),
     stat("reload", "Turns between shots", d.reload, "t", "less"),
-    stat("spread", "Spread", d.spread, "°", "less", 1),
     stat("arc", "Firing arc", d.arc, "°", "more"),
     stat("recoil", "Recoil: spread added on a 1 t truck, less on a heavier one", d.recoil, "°", "less", 1),
-    stat("shake", "Shake: how much the truck's own speed spoils aim", d.shake, "×", "less", 1),
-    { ...stat("blast", "Round: blast rounds meet blast armor", d.round.blast ? 1 : 0, "", null), text: d.round.blast ? "blast" : "kinetic" },
-    tallStat(d),
   ];
 }
 
@@ -374,7 +374,6 @@ function engineStats(part: PartInstance): Stat[] {
     { ...speed, text: signed(speed.value, 0) },
     { ...accel, text: signed(accel.value, 1) },
     stat("fuel", "Fuel use", d.fuelMult, "×", "less", 1),
-    stat("noise", "Engine noise", d.noise, "×", "less", 1),
     stat("heat", "Heat: how fast the sun heats it", d.heat, "×", "less", 1),
   ];
 }

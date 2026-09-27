@@ -1324,21 +1324,28 @@ canvas.view {
 /* Stat cells: icon, value and the change against the player's own. */
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-  gap: 6px 8px;
+  grid-template-columns: 18px 1fr auto 52px;
+  gap: 3px 8px;
+  align-items: center;
 }
 .stat {
-  display: grid;
-  grid-template-columns: 18px 1fr;
-  grid-template-rows: auto auto;
-  column-gap: 4px;
-  align-items: center;
+  display: contents;
   font: 13px/1.15 var(--font-mono);
 }
 .stat .icon {
-  grid-row: span 2;
   width: 18px;
   height: 18px;
+}
+.stat-name {
+  font-size: 13px;
+  color: var(--muted);
+}
+.stat-val {
+  font: 13px var(--font-mono);
+  text-align: right;
+}
+.stat .delta {
+  text-align: right;
 }
 .stat .icon svg,
 .chip .icon svg,
