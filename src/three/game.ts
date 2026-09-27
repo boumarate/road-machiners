@@ -56,7 +56,7 @@ import { Hud, type ContextAction } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
 import { TownScreen } from "../ui/town";
 import { getWeaponReadout, WeaponPanel, weaponsForClick } from "../ui/weapons";
-import { CAMERA_DISTANCE, CameraRig } from "./render/camera";
+import { CameraRig } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
 import { Fx3D } from "./render/fx";
@@ -106,10 +106,6 @@ const SMOKE_CHANCE = 0.05; // per hurt vehicle per frame
 const HURT_CAB = 0.35; // cab hp share under which a vehicle smokes
 const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is recomputed during a turn
 const SUN_RADIUS = 150; // meters from the focus to the sun light
-// Distance haze: clear at the focus, thickening toward the top of the screen. Meters past the focus.
-const HAZE_SPAN = 200;
-const HAZE_SUN_MIX = 0.5; // haze color from sky color toward sun color
-const HAZE_FULL_LIGHT = 3; // sun plus sky intensity at which the haze color is at full brightness
 // The circle under the hovered vehicle, which a click targets. Sizes are in tiles.
 const PICK_RING = { gap: 0.45, width: 0.06, alpha: 0.9, lift: 0.02 };
 
@@ -165,7 +161,6 @@ export class Game {
   private readonly sun = new THREE.DirectionalLight();
   private readonly sky = new THREE.HemisphereLight();
   private readonly beams: THREE.SpotLight[] = [];
-  private readonly haze = new THREE.Fog(0, CAMERA_DISTANCE, CAMERA_DISTANCE + HAZE_SPAN);
   private readonly vignette = Object.assign(document.createElement('div'), { className: 'vignette' });
   private readonly stormTint = Object.assign(document.createElement('div'), { className: 'storm-tint' }); // dust haze while inside a storm
   private readonly rig: CameraRig;
@@ -233,7 +228,6 @@ export class Game {
     this.rig = new CameraRig(container);
 
     this.scene.background = new THREE.Color(PAL.bg);
-    this.scene.fog = this.haze;
     this.renderer.domElement.classList.add('view');
     this.scene.add(this.sky);
     this.sun.castShadow = true;
@@ -891,7 +885,6 @@ export class Game {
     this.sky.color.copy(light.sky);
     this.sky.groundColor.copy(light.ground);
     this.sky.intensity = light.skyIntensity;
-    this.haze.color.copy(light.sky).lerp(light.sun, HAZE_SUN_MIX).multiplyScalar(Math.min(1, (light.sunIntensity + light.skyIntensity) / HAZE_FULL_LIGHT));
     this.aimBeams(!sunAt(this.world.turn));
     const at = playerVehicle(this.world).pos;
     this.stormTint.style.display = this.world.weather.some((e) => e.kind === 'storm' && dist(at, e.pos) <= e.radius) ? '' : 'none';
