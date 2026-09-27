@@ -25,7 +25,7 @@ export type NpcLoadoutTable = {
   armor: Weighted<string | null>[];
   cargoPart: Weighted<string | null>[];
   goods: Weighted<CargoRoll | null>[];
-  spareParts: Weighted<number>[]; // units of the parts good carried for roadside patches, on top of the cargo
+  spareParts: Weighted<number>[] | null; // units of the parts good carried for roadside patches, on top of the cargo; null carries none and rolls nothing
 };
 
 export type NpcTemplate = {
@@ -83,7 +83,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
-    spareParts: [{ value: 0, weight: 1 }],
+    spareParts: null,
   },
   gunwagon: {
     budget: 3500,
@@ -128,7 +128,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "batteries", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 2 }, weight: 1 },
     ],
-    spareParts: [{ value: 0, weight: 1 }],
+    spareParts: null,
   },
   trader: {
     budget: 3000,

@@ -58,7 +58,8 @@ function validateTable(table: NpcLoadoutTable): void {
   validateSpareParts(table.spareParts);
 }
 
-function validateSpareParts(pool: Weighted<number>[]): void {
+function validateSpareParts(pool: Weighted<number>[] | null): void {
+  if (pool === null) return;
   validateWeights(pool);
   if (pool.some(({ value }) => !Number.isInteger(value) || value < 0)) throw new Error('NPC spare parts must be whole counts');
 }
@@ -151,10 +152,10 @@ function withSpareParts(cargo: CargoRoll | null, spare: number): Record<string, 
   return goods;
 }
 
-// Spare parts that fit the room left after the cargo. Zero always fits.
+// Spare parts that fit the room left after the cargo. A table without spare parts rolls nothing.
 function sampleSpareParts(rng: Rng, table: NpcLoadoutTable, room: number, massRoom: number): number {
+  if (table.spareParts === null) return 0;
   const fitting = table.spareParts.filter(({ value }) => value <= room && GOODS.parts.mass * value <= massRoom);
   if (!fitting.length) throw new Error('No fitting spare parts outcome; a table needs a zero entry');
-  // A single outcome needs no roll, so tables without spare parts leave the RNG untouched.
-  return fitting.length === 1 ? fitting[0].value : sampleWeighted(rng, fitting);
+  return sampleWeighted(rng, fitting);
 }
