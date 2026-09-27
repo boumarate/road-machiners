@@ -84,6 +84,13 @@ describe('NPC activities', () => {
     expect(w.events).toEqual([expect.objectContaining({ previous: 'scavenge', activity: null, reason: 'salvage no longer available' })]);
   });
 
+  it('drops a scavenge goal on a cargo pile once the pile is gone, before it drives', () => {
+    const { w, npc } = createScavenger();
+    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'cargo-v9-1', destination: { x: npc.pos.x + 8, y: npc.pos.y }, phase: 'travel', reason: 'collect visible salvage' }];
+    expect(() => planNpcOrders(w)).not.toThrow();
+    expect(npc.brain!.goals.some((goal) => goal.targetId === 'cargo-v9-1')).toBe(false);
+  });
+
   it('completes a collect-sell-upkeep loop through actual turns', () => {
     let { w, npc } = createScavenger();
     const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;

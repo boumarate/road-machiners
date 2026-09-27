@@ -253,10 +253,10 @@ function investigateInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): 
   return target && isHostile(world, vehicle, target) ? null : 'the contact is gone';
 }
 
-// A wreck is an opportunity only while it remains observable.
+// A wreck or a loot pile is an opportunity only while it remains observable. A known site stays one.
 function scavengeInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
-  if (!goal.targetId?.startsWith('wreck-')) return null;
-  return world.salvage.some((stock) => stock.id === goal.targetId && canVehicleSee(world, vehicle, stock.pos)) ? null : 'lost sight of the wreck';
+  if (goal.targetId === null || [...REGION.towns, ...REGION.locations].some((site) => site.id === goal.targetId)) return null;
+  return world.salvage.some((stock) => stock.id === goal.targetId && canVehicleSee(world, vehicle, stock.pos)) ? null : 'lost sight of the salvage';
 }
 
 function lootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
