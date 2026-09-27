@@ -13,6 +13,7 @@ import { hasLoot } from './grid';
 import { thinkNpc, topGoal } from './npc-activities';
 import { addState, stateOf, towData } from './states';
 import { acceptTow, dropTow, isTowed, playerTow, refuseTow, setBeacon, unhitch } from './tow';
+import { sunAt } from './sun';
 import { canVehicleSee } from './vision';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
@@ -285,6 +286,29 @@ describe('emergency beacon', () => {
     const r = runUntil(w, 150, (x) => playerTow(x) !== null);
     expect(playerTow(r.w)?.holder).toBe(s.trader.id);
     expect(activitiesOf(r.events, s.trader.id)[0]).toMatchObject({ activity: 'tow', reason: 'help a stranded truck' });
+  });
+
+  it('a tower re-aims at a player who crawled off at night, then reaches and offers', () => {
+    const s = stranded(player, { x: 90, y: 30 });
+    let w = s.w;
+    while (sunAt(w.turn + 1)) w.turn++;
+    w = runUntil(setBeacon(w, true), 5, (x) => topGoal(find(x, s.trader.id))?.kind === 'tow').w;
+    expect(topGoal(find(w, s.trader.id))?.kind).toBe('tow');
+    w = setMoveOrder(w, { kind: 'stopAt', dest: { x: 30, y: 44 } });
+    const r = runUntil(w, 60, (x) => playerTow(x) !== null);
+    expect(sunAt(r.w.turn)).toBeNull();
+    expect(playerVehicle(r.w).pos.y).toBeGreaterThan(40);
+    expect(playerTow(r.w)?.holder).toBe(s.trader.id);
+  });
+
+  it('a tower beyond sight heads for the newest beacon circle', () => {
+    const s = stranded(player, { x: 90, y: 30 });
+    let w = runUntil(setBeacon(s.w, true), 5, (x) => topGoal(find(x, s.trader.id))?.kind === 'tow').w;
+    playerVehicle(w).pos = { x: 30, y: 60 };
+    w = endTurn(w);
+    const trader = find(w, s.trader.id);
+    expect(canVehicleSee(w, trader, playerVehicle(w).pos)).toBe(false);
+    expect(dist(topGoal(trader)!.destination!, playerVehicle(w).pos)).toBeLessThanOrEqual(BEACON.radius);
   });
 
   it('a tower that set out for a beacon does not roll to rob its client on arrival', () => {

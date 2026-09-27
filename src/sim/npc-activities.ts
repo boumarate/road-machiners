@@ -431,6 +431,15 @@ function startTow(world: World, vehicle: Vehicle, at: Vec): void {
 function steer(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[]): void {
   const top = topGoal(vehicle);
   if (top?.kind === 'flee') steerFlee(world, vehicle, profile, contacts, top);
+  else if (top?.kind === 'tow' && !heldTow(world, vehicle)) steerToStranded(world, vehicle, top);
+}
+
+// A tower on its way re-aims every turn: at the truck once it sees it, else at the newest beacon circle. A stale
+// point can leave it parked out of tow reach, since the player may crawl and a beacon circle is off by its radius.
+function steerToStranded(world: World, vehicle: Vehicle, goal: NpcActivity): void {
+  const at = strandedPlayerAt(world, vehicle);
+  if (!at) throw new Error(`${vehicle.id} heads for a tow with no stranded player perceived`);
+  goal.destination = { ...at };
 }
 
 function steerFlee(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[], goal: NpcActivity): void {
