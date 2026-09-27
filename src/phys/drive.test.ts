@@ -8,7 +8,7 @@ import type { MoveOrder, World } from '../sim/types';
 import { angleDiff, dist } from '../sim/vec';
 import { endTurn, setDirect, setMoveOrder } from '../sim/world';
 import { PHYSICS } from '../data/physics';
-import { buildDrive, freeDrive, initPhysics, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
+import { buildDrive, freeDrive, initPhysics, routeAim, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
 import { physicsMove } from './turn';
 
 beforeAll(async () => {
@@ -92,6 +92,21 @@ describe('physics turns', () => {
     const { w } = play(ordered({ kind: 'stopAt', dest: { x: 38, y: 31 } }), 8);
     expect(dist(me(w).pos, { x: 38, y: 31 })).toBeLessThan(RULES.arriveRadius + 0.3);
     expect(me(w).order).toBeNull();
+  });
+
+  it('a course point behind, beyond throttle reach, turns the truck around', () => {
+    const dest = { x: 30 - RULES.throttleZones.reach * 2, y: 31 };
+    const { w, d } = play(ordered({ kind: 'through', dest }), 4);
+    expect(Math.abs(angleDiff(me(w).heading, Math.PI))).toBeLessThan(Math.PI / 4);
+    expect(me(w).speed).toBeGreaterThan(0);
+    freeDrive(d);
+  });
+
+  it('route aiming drops points the truck has passed, even ones still far away', () => {
+    const route = [{ x: 5, y: 0 }, { x: 10, y: 2 }, { x: 20, y: 2 }];
+    expect(routeAim(route, { x: 7, y: -1 })).toEqual({ x: 10, y: 2 });
+    expect(routeAim(route, { x: 3, y: 0 })).toEqual({ x: 10, y: 2 });
+    expect(routeAim(route, { x: 25, y: 2 })).toEqual({ x: 20, y: 2 });
   });
 
   it('from rest, a click behind backs toward it rear first', () => {

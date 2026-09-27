@@ -45,7 +45,8 @@ function begin(size: number): number {
 }
 
 // Breadth-first search to the closest cell free in both the layer and the overlay.
-export function nearestFreeCell(layer: NavLayer, ov: Overlay, c: number): number | null {
+// With a component, only cells in that connected component count.
+export function nearestFreeCell(layer: NavLayer, ov: Overlay, c: number, component: number | null = null): number | null {
   const n = layer.n;
   const g = begin(n * n);
   const blocked = layer.blocked;
@@ -56,7 +57,7 @@ export function nearestFreeCell(layer: NavLayer, ov: Overlay, c: number): number
   seen[c] = g;
   for (let i = 0; i < tail; i++) {
     const cur = queue[i];
-    if (!blocked[cur] && stamp[cur] !== og) return cur;
+    if (!blocked[cur] && stamp[cur] !== og && (component === null || componentOf(layer, cur) === component)) return cur;
     const x = cur % n;
     const y = Math.floor(cur / n);
     for (let dx = -1; dx <= 1; dx++)
@@ -152,12 +153,16 @@ export function findCells(layer: NavLayer, ov: Overlay, start: number, goal: num
   return fineSearch(layer, ov, start, goal, false);
 }
 
-// Whether a free goal shares a component with the start, or with a free neighbour of a blocked start.
+// Whether a free goal shares a component with the start.
 function connected(layer: NavLayer, start: number, goal: number): boolean {
   const target = componentOf(layer, goal);
-  if (target === 0) return false;
+  return target !== 0 && target === startComponent(layer, start);
+}
+
+// The start's connected component, or a free neighbour's for a blocked start. 0 when none is free.
+export function startComponent(layer: NavLayer, start: number): number {
   const own = componentOf(layer, start);
-  if (own !== 0) return own === target;
+  if (own !== 0) return own;
   const n = layer.n;
   const x = start % n;
   const y = Math.floor(start / n);
@@ -166,9 +171,10 @@ function connected(layer: NavLayer, start: number, goal: number): boolean {
       const nx = x + dx;
       const ny = y + dy;
       if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
-      if (componentOf(layer, ny * n + nx) === target) return true;
+      const c = componentOf(layer, ny * n + nx);
+      if (c !== 0) return c;
     }
-  return false;
+  return 0;
 }
 
 // Coarse search scratch, sized to the last region count. inCorridor[b] === corridorGen marks the

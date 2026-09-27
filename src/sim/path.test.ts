@@ -38,6 +38,18 @@ describe("route", () => {
     }
   });
 
+  it("routes to the closest reachable point when the goal is walled in", () => {
+    const w = emptyWorld();
+    const center = { x: 50, y: 30 };
+    w.obstacles = Array.from({ length: 40 }, (_, i) => {
+      const a = (i / 40) * 2 * Math.PI;
+      return { id: `ring-${i}`, pos: { x: center.x + 6 * Math.cos(a), y: center.y + 6 * Math.sin(a) }, r: 1, kind: "rock" as const };
+    });
+    const end = route(w, { x: 30, y: 30 }, center, 0.6, []).at(-1)!;
+    expect(dist(end, center)).toBeGreaterThan(6 + 1 + 0.6);
+    expect(dist(end, center)).toBeLessThan(6 + 1 + 0.6 + 2);
+  });
+
   it("a truck drives around a rock wall without crashing", () => {
     const w = emptyWorld();
     w.obstacles = [0, 1, 2, 3].map((i) => ({
@@ -158,12 +170,12 @@ namespace Ref {
     return out;
   }
 
-  export function nearestFree(g: Grid, c: number): number | null {
+  export function nearestFree(g: Grid, c: number, allowed: Uint8Array | null = null): number | null {
     const seen = new Uint8Array(g.n * g.n);
     const queue = [c];
     seen[c] = 1;
     for (let i = 0; i < queue.length; i++) {
-      if (!g.blocked[queue[i]]) return queue[i];
+      if (!g.blocked[queue[i]] && (!allowed || allowed[queue[i]])) return queue[i];
       for (const nb of neighbors(g, queue[i]))
         if (!seen[nb]) {
           seen[nb] = 1;
@@ -171,6 +183,22 @@ namespace Ref {
         }
     }
     return null;
+  }
+
+  // Free cells joined to the start by 8-neighbour steps. A blocked start joins through a free neighbour.
+  export function reachable(g: Grid, start: number): Uint8Array {
+    const out = new Uint8Array(g.n * g.n);
+    const seed = g.blocked[start] ? neighbors(g, start).find((c) => !g.blocked[c]) : start;
+    if (seed === undefined) return out;
+    const queue = [seed];
+    out[seed] = 1;
+    for (let i = 0; i < queue.length; i++)
+      for (const nb of neighbors(g, queue[i]))
+        if (!out[nb] && !g.blocked[nb]) {
+          out[nb] = 1;
+          queue.push(nb);
+        }
+    return out;
   }
 
   function heuristic(g: Grid, a: number, b: number): number {
@@ -291,7 +319,8 @@ namespace Ref {
     if (clearLine(w.terrain, all, from, to, radius + CLEARANCE, 1)) return [to];
     const g = grid(layer, all, radius);
     const start = cellOf(g, from);
-    const goal = nearestFree(g, cellOf(g, to));
+    // Reachability follows static blockers only; parked vehicles can still cut the route.
+    const goal = nearestFree(g, cellOf(g, to), reachable(grid(layer, blockers(w, []), radius), start));
     if (goal === null) return [to];
     const cells = astar(g, start, goal);
     if (!cells) return [to];

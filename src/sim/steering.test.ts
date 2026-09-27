@@ -244,7 +244,7 @@ describe("backing up", () => {
       w,
       s,
       v,
-      { kind: "through", dest: { x: 20, y: 31 } },
+      { kind: "through", dest: { x: 22, y: 31 } },
       false,
     );
     expect(st.speed).toBe(-RULES.reverse.distance);
