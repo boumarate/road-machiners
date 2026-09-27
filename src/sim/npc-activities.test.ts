@@ -97,6 +97,10 @@ describe('NPC activities', () => {
     const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
     npc.pos = { x: convoy.pos.x + convoy.radius + 1, y: convoy.pos.y };
     npc.heading = Math.PI;
+    // Spawns with a part-full tank so the convoy's own leftover fuel can pour into it right away.
+    // A spawn at a full tank cannot accept that fuel, so hasSalvage() stays true and the NPC restarts
+    // a one-turn search forever until its own supplies happen to run out hundreds of turns later.
+    npc.resources!.fuel = 20;
     for (const key of Object.keys(w.spawnTimer)) w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
     // Spawn timers are initialized lazily, so disable every template explicitly.
     for (const key of ['buggy', 'gunwagon', 'trader', 'scavenger']) w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
@@ -105,7 +109,8 @@ describe('NPC activities', () => {
     let collected = false;
     let sold = false;
     let serviced = false;
-    for (let turn = 0; turn < w.size * 5; turn++) {
+    // Observed completion is well under 500 turns; keep a generous cap so a stalled NPC fails fast.
+    for (let turn = 0; turn < 800; turn++) {
       w = endTurn(w, testDrive);
       npc = w.vehicles.find((v) => v.id === id)!;
       if ((goodsCount(npc).scrap ?? 0) > 0) collected = true;

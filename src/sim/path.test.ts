@@ -15,6 +15,11 @@ import { editableTerrain, emptyWorld, npcBrain } from './testkit';
 import { dist, polylineDist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
 
+// Shared read-only across every test below that needs a real generated map on this seed: newWorld
+// repeats obstacle generation, NPC spawns and vision on top of the terrain build, so building it once
+// saves that work everywhere it is only read, never mutated.
+const w1337 = newWorld(1337, START_KITS.standard);
+
 describe("route", () => {
   it("goes straight when nothing is in the way", () => {
     const w = emptyWorld();
@@ -86,7 +91,7 @@ describe("route", () => {
 
 
   it('town buildings fit inside the blocked site instead of the road', () => {
-    const w = newWorld(1337, START_KITS.standard);
+    const w = w1337;
     for (const town of REGION.towns) {
       const buildings = w.obstacles.filter((o) => o.kind === 'building' && o.id.startsWith(`bld-${town.id}-`));
       expect(buildings.length).toBeGreaterThan(0);
@@ -100,7 +105,7 @@ describe('driver taste', () => {
   const [bowl, nose] = REGION.towns;
   const from = siteGates(nose)[0];
   const to = siteGates(bowl)[0];
-  const w = newWorld(1337, START_KITS.standard);
+  const w = w1337;
   // Largest distance of either route's corners from the other route.
   const apart = (p: Vec[], q: Vec[]) => Math.max(...p.map((x) => polylineDist(x, q)), ...q.map((x) => polylineDist(x, p)));
 
@@ -641,8 +646,12 @@ describe('nav layers match the old grid rules', () => {
 });
 
 describe('long routes search a coarse corridor', () => {
+  // Shared across this describe's tests: newWorld repeats obstacle generation, NPC spawns and vision
+  // on top of the terrain build, none of which these tests exercise. Tests that reshape obstacles copy
+  // the array first, so they never mutate this shared world.
+  const w = newWorld(1, START_KITS.standard);
+
   it('coarse regions are the connected pieces of each block, linked where their cells touch', () => {
-    const w = newWorld(1, START_KITS.standard);
     const layer = navLayer(w.terrain, w.obstacles, 0.6);
     const n = layer.n;
     const { n: bn, region, block, slow, edgeStart, edges } = layer.coarse;
@@ -703,7 +712,6 @@ describe('long routes search a coarse corridor', () => {
   });
 
   it('unreachable goals return null in under 5 ms, like the full search', () => {
-    const w = newWorld(1, START_KITS.standard);
     // A spot with no cliff tile near it, so the ring alone decides reachability.
     const flatAround = (p: Vec) => {
       for (let y = p.y - 14; y <= p.y + 14; y++) for (let x = p.x - 14; x <= p.x + 14; x++) if (isCliff(w.terrain, tileAt(w.terrain, { x, y }))) return false;
@@ -716,11 +724,12 @@ describe('long routes search a coarse corridor', () => {
       const a = (i / 64) * 2 * Math.PI;
       obstacles.push({ id: `ring-${i}`, pos: { x: center.x + 10 * Math.cos(a), y: center.y + 10 * Math.sin(a) }, r: 1, kind: 'rock' });
     }
-    w.obstacles = obstacles;
+    // A local copy: the shared world's own obstacles stay untouched for the other tests here.
+    const local = { ...w, obstacles };
     const radius = 0.6;
-    const layer = navLayer(w.terrain, w.obstacles, radius);
-    const overlay = stampOverlay(layer, dynamicBlockers(w.obstacles, []), radius);
-    const g = Ref.grid(Ref.terrainLayer(w.terrain, radius), Ref.blockers(w, []), radius);
+    const layer = navLayer(local.terrain, local.obstacles, radius);
+    const overlay = stampOverlay(layer, dynamicBlockers(local.obstacles, []), radius);
+    const g = Ref.grid(Ref.terrainLayer(local.terrain, radius), Ref.blockers(local, []), radius);
     const goal = Ref.cellOf(g, center);
     const from = { x: 40, y: 40 };
     const start = nearestFreeCell(layer, overlay, Ref.cellOf(g, from))!;
@@ -754,7 +763,6 @@ describe('long routes search a coarse corridor', () => {
   });
 
   it('long routes with no dynamic blockers never miss the corridor', () => {
-    const w = newWorld(1, START_KITS.standard);
     const rand = mulberry(11);
     const radius = 0.8;
     const layer = navLayer(w.terrain, w.obstacles, radius);
