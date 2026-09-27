@@ -8,8 +8,10 @@ import { REGION } from '../data/region';
 import { mountedParts } from '../sim/grid';
 import { playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
+import { npcTraits } from '../sim/npc-decisions';
+import { statesHeld, towData } from '../sim/states';
 import type { PartHit } from '../sim/armor';
-import type { GameEvent, Vehicle, World } from '../sim/types';
+import type { GameEvent, NpcState, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 
 export function vehicleName(world: World, id: string): string {
   if (id === world.player.vehicleId) return 'You';
@@ -36,6 +38,47 @@ export function formatNpcActivity(world: World, vehicle: Vehicle): string | null
   return `${activity.kind}${label ? `: ${label}` : ''} — ${activity.reason}`;
 }
 
+// "Traits: scavenger, scumbag" for an NPC. The hover panel shows it as one line.
+export function formatNpcTraits(vehicle: Vehicle): string {
+  return `Traits: ${npcTraits(vehicle).join(', ')}`;
+}
+
+// How a state the NPC holds reads from the player's side.
+const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
+  feud: () => 'Feud with you',
+  backedOff: () => 'Backing off from you',
+  tow: (s) => (towData(s).hitched ? 'Towing you' : 'Tow offer to you'),
+  spurned: () => 'You turned down its tow',
+  towPromise: () => 'Promised you a tow',
+};
+
+// One line per state the NPC holds toward the player, with turns left when the state has a timer.
+export function formatNpcStates(world: World, vehicle: Vehicle): string[] {
+  return statesHeld(world, vehicle.id)
+    .filter((s) => s.other === world.player.vehicleId)
+    .map((s) => (s.turnsLeft === null ? STATE_LABELS[s.kind](s) : `${STATE_LABELS[s.kind](s)}, ${s.turnsLeft} turn${s.turnsLeft === 1 ? '' : 's'}`));
+}
+
+// Log lines for the end of a state an NPC holds toward the player. Tow states log through the tow events.
+const STATE_ENDED_TEXT: Partial<Record<StateKindId, Record<StateEnding, ((holder: string) => { text: string; cls: string }) | null>>> = {
+  feud: {
+    expired: (holder) => ({ text: `${holder} gives up the feud with you.`, cls: 'good' }),
+    fulfilled: (holder) => ({ text: `${holder} ends the feud: you are beaten.`, cls: 'bad' }),
+    broken: (holder) => ({ text: `The feud with ${holder} is over.`, cls: 'dim' }),
+  },
+  backedOff: {
+    expired: (holder) => ({ text: `${holder} stops backing off from you.`, cls: 'dim' }),
+    fulfilled: null,
+    broken: null,
+  },
+};
+
+function stateEndedText(world: World, e: Extract<GameEvent, { t: 'stateEnded' }>): { text: string; cls: string } | null {
+  if (e.state.other !== world.player.vehicleId) return null;
+  const line = STATE_ENDED_TEXT[e.state.kind]?.[e.ending];
+  return line ? line(vehicleName(world, e.state.holder)) : null;
+}
+
 // Damage summed per part, parts with no damage left out.
 function partDamage(hits: PartHit[]): Map<string, number> {
   const dealt = new Map<string, number>();
@@ -50,7 +93,6 @@ function damageList(world: World, vehicleId: string, hits: PartHit[]): string {
   return `; ${vehicleName(world, vehicleId)}: ${[...dealt].map(([id, d]) => `${partName(world, vehicleId, id)} −${d}`).join(', ')}`;
 }
 
-// Returns null for events not worth a log line.
 function towDroppedText(by: string, reason: Extract<GameEvent, { t: 'towDropped' }>['reason']): { text: string; cls: string } {
   const text = reason === 'refused' ? `You turn down the tow from ${by}.`
     : reason === 'unhitched' ? `You unhitch from ${by}.`
@@ -59,6 +101,7 @@ function towDroppedText(by: string, reason: Extract<GameEvent, { t: 'towDropped'
   return { text, cls: reason === 'refused' || reason === 'unhitched' ? 'dim' : 'bad' };
 }
 
+// Returns null for events not worth a log line.
 export function eventText(world: World, e: GameEvent): { text: string; cls: string } | null {
   const n = (id: string) => vehicleName(world, id);
   const me = world.player.vehicleId;
@@ -125,8 +168,7 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
     case 'towDropped':
       return towDroppedText(n(e.by), e.reason);
     case 'stateEnded':
-      // Tow endings log through the tow events above.
-      return null;
+      return stateEndedText(world, e);
     case 'info':
       return { text: e.text, cls: 'dim' };
     case 'job': {
