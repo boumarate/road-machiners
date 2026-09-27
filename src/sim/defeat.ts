@@ -8,6 +8,7 @@ import { isFoe } from "./combat";
 import { corePart, mountedParts } from "./grid";
 import { cancelJob } from "./jobs";
 import { createKnockoutSalvage } from "./salvage";
+import { endState } from "./states";
 import type { World } from "./types";
 import { canVehicleSee } from "./vision";
 
@@ -31,8 +32,9 @@ export function checkKnockout(world: World): void {
   me.weaponOrders = {};
   me.trail = [];
   cancelJob(world, me);
-  for (const v of world.vehicles)
-    v.grudges = v.grudges.filter((id) => id !== me.id);
+  // Whoever fought the player got what the feud was for.
+  for (const s of world.states.filter((x) => x.kind === "feud" && x.other === me.id))
+    endState(world, s, "fulfilled");
   world.events.push({ t: "knockout" });
 }
 
@@ -43,7 +45,7 @@ export function advanceKnockout(world: World): void {
   p.knockoutTurns++;
   const me = playerVehicle(world);
   const watched = world.vehicles.some(
-    (v) => isFoe(v, me) && canVehicleSee(world, v, me.pos),
+    (v) => isFoe(world, v, me) && canVehicleSee(world, v, me.pos),
   );
   if (watched && p.knockoutTurns < RULES.knockoutMaxTurns) return;
   for (const part of mountedParts(me, "core"))

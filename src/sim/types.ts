@@ -109,7 +109,6 @@ export type NpcBrain = {
     recovery?: number; // turns left backing away from a blockage
     recoveryGoal?: Vec;
     farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
-    refusedTow: boolean; // the player turned down this driver's tow, so it never offers again
 };
 
 export type Vehicle = {
@@ -124,7 +123,6 @@ export type Vehicle = {
   order: MoveOrder | null; // null: coast, keeping speed and heading
   direct: boolean; // drive straight at the order's point instead of routing around obstacles; the player's manual mode
   weaponOrders: Record<string, WeaponOrder>; // key: weapon part id
-  grudges: string[]; // vehicle ids this vehicle treats as hostile
   trail: Pose[]; // poses through the last turn, for animation
   brain: NpcBrain | null;
   resources: DriverResources | null;
@@ -139,9 +137,20 @@ export type Obstacle = {
     kind: "rock" | "wreck" | "building" | "water" | "site";
 };
 
-// A tow to town by the NPC `by`. The fee is paid on arrival.
-export type Tow = { by: string; town: string; fee: number; hitched: boolean };
-export type TowDropReason = 'refused' | 'unhitched' | 'danger' | 'gone';
+// A timed relation one vehicle holds toward another. src/sim/states.ts owns them.
+export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'spurned';
+export type StateEnding = 'expired' | 'fulfilled' | 'broken';
+// A tow state: the holder tows the other party to `town` for `fee`, paid on arrival. hitched is false while the offer is open.
+export type StateData = { kind: 'tow'; town: string; fee: number; hitched: boolean } | { kind: 'none' };
+export type NpcState = {
+  id: string;
+  kind: StateKindId;
+  holder: string; // vehicle id
+  other: string; // vehicle id
+  turnsLeft: number | null; // null: no timer
+  born: number; // turn it was added; it cannot end in that turn
+  data: StateData;
+};
 
 export type Player = {
   vehicleId: string;
@@ -163,7 +172,6 @@ export type Player = {
   knockouts: number;
   state: 'active' | 'knockedOut' | 'dead';
   knockoutTurns: number; // turns spent in the current knockout
-  tow: Tow | null; // an open tow offer, or the tow in progress once hitched
   explored: Uint8Array; // fog of war: tile y * world.size + x, 1 once seen
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision
   contacts: Contact[]; // vehicles detected beyond sight; refreshed by refreshVision
@@ -200,7 +208,8 @@ export type GameEvent =
   | { t: 'wake' }
   | { t: 'towOffer'; by: string; town: string; fee: number }
   | { t: 'towDone'; by: string; fee: number }
-  | { t: 'towDropped'; by: string; reason: TowDropReason }
+  | { t: 'towDropped'; by: string; reason: 'refused' | 'unhitched' | 'danger' | 'gone' }
+  | { t: 'stateEnded'; state: NpcState; ending: StateEnding }
   | { t: 'job'; vehicle: string; job: Job; outcome: 'started' | 'done' | 'cancelled' }
   | { t: 'breakdown'; vehicle: string; part: string }
   | { t: 'searched'; stock: string } // the player finished searching a stock; its loot can now be taken
@@ -223,4 +232,5 @@ export type World = {
   spawnTimer: Record<string, number>; // template id -> turns until next spawn check
   weather: WeatherEvent[];
   dustClouds: DustCloud[];
+  states: NpcState[];
 };

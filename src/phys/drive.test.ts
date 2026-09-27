@@ -11,7 +11,7 @@ import { endTurn, setDirect, setMoveOrder } from '../sim/world';
 import { PHYSICS } from '../data/physics';
 import { buildDrive, freeDrive, initPhysics, routeAim, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
 import { physicsMove } from './turn';
-import { acceptTow, unhitch } from '../sim/tow';
+import { acceptTow, playerTow, unhitch } from '../sim/tow';
 
 beforeAll(async () => {
   await initPhysics();
@@ -330,8 +330,8 @@ describe('physics turns', () => {
       d = r!.next;
       return r!;
     };
-    for (let i = 0; i < 30 && !w.player.tow; i++) turn();
-    expect(w.player.tow).not.toBeNull();
+    for (let i = 0; i < 30 && !playerTow(w); i++) turn();
+    expect(playerTow(w)).not.toBeNull();
     w = acceptTow(w);
     const start = { ...me(w).pos };
     for (let i = 0; i < 10; i++) {

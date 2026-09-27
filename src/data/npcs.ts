@@ -108,7 +108,7 @@ export const SPAWN = {
   campSpread: 6, // distance beyond a camp gate for raider spawns; room for a full camp to spawn at once
   campAngle: 0.3, // radians either side of the track leaving a camp gate
   tries: 40,
-  neighborHelp: 10, // same-faction vehicles in this range join a grudge
+  neighborHelp: 10, // same-faction vehicles in this range join a feud
 };
 
 // Decision weights per trait. Empty until decisions read them.

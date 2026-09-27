@@ -56,7 +56,7 @@ function isWorld(value: unknown): value is Omit<World, 'terrain'> {
     && !!world.spawnTimer && typeof world.spawnTimer === 'object' && !Array.isArray(world.spawnTimer)
     && Array.isArray(world.vehicles) && Array.isArray(world.obstacles)
     && Array.isArray(world.salvage) && Array.isArray(world.events) && Array.isArray(world.removed)
-    && Array.isArray(world.weather) && Array.isArray(world.dustClouds)
+    && Array.isArray(world.weather) && Array.isArray(world.dustClouds) && Array.isArray(world.states)
     && !!world.player && typeof world.player === 'object'
     && typeof world.player.vehicleId === 'string' && Array.isArray(world.player.contacts) && Array.isArray(world.player.clouds);
 }

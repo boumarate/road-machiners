@@ -50,7 +50,7 @@ export function addVehicle(w: World, faction: Faction, chassisId: string, parts:
 
 // A fresh NPC brain with no activity.
 export function npcBrain(templateId: string, home: Vec, traits: TraitId[]): NpcBrain {
-  return { templateId, traits, activity: null, goal: null, home: { ...home }, stepIndex: 0, refusedTow: false };
+  return { templateId, traits, activity: null, goal: null, home: { ...home }, stepIndex: 0 };
 }
 
 // Total hit points of the mounted parts, for checking that damage landed.

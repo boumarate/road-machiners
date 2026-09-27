@@ -20,7 +20,8 @@ import { spawnInitial, spawnNpcs } from './spawn';
 import { initializeSalvage } from './salvage';
 import { timed } from '../perf';
 import { resolveNpcActivities } from './npc-activities';
-import { checkTower, followTower } from './tow';
+import { advanceStates } from './states';
+import { followTower, isTowed } from './tow';
 import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
 import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
@@ -64,7 +65,6 @@ export function newWorld(seed: number, kit: StartKit): World {
       knockouts: 0,
       state: 'active',
       knockoutTurns: 0,
-      tow: null,
       explored: new Uint8Array(REGION.size * REGION.size),
       visible: [],
       contacts: [],
@@ -75,6 +75,7 @@ export function newWorld(seed: number, kit: StartKit): World {
     spawnTimer: {},
     weather: [],
     dustClouds: [],
+    states: [],
   };
   world.obstacles = generateObstacles(world);
   const town = REGION.towns.find((t) => t.id === REGION.playerStart.town)!;
@@ -126,12 +127,12 @@ export function update(world: World, fn: (draft: World) => void): World {
 // Player commands need an awake, living driver who is not on a tow rope. Unhitch checks the rope itself.
 export function requireActivePlayer(world: World): void {
   if (world.player.state !== 'active') throw new Error(`Player is ${world.player.state}`);
-  if (world.player.tow?.hitched) throw new Error('Player is towed');
+  if (isTowed(world)) throw new Error('Player is towed');
 }
 
 // Turns run on their own while the player cannot act: knocked out, or towed.
 export function autoRuns(world: World): boolean {
-  return world.player.state === 'knockedOut' || world.player.tow?.hitched === true;
+  return world.player.state === 'knockedOut' || isTowed(world);
 }
 
 // A player command: rejected unless the player is active and not towed, then applied like any update.
@@ -180,7 +181,7 @@ export function endTurn(
     healPlayer(w);
     leakFuel(w);
     resolveDestroyed(w);
-    checkTower(w);
+    advanceStates(w);
     resolveNpcActivities(w);
     discoverSites(w);
     useOasis(w);
@@ -236,5 +237,5 @@ export function setAutoFire(world: World, on: boolean): World {
 }
 
 export function hostileToPlayer(world: World, v: Vehicle): boolean {
-  return isHostile(playerVehicle(world), v);
+  return isHostile(world, playerVehicle(world), v);
 }

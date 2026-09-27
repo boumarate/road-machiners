@@ -18,7 +18,7 @@ import type { NpcActivity, Vehicle, World } from './types';
 import { canUseSite, isWalled, siteGates } from './sites';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
-import { chooseTowActivity, dropTow, runTow } from './tow';
+import { chooseTowActivity, dropTow, playerTow, runTow } from './tow';
 import { DETECT } from '../data/detect';
 
 function createActivity(kind: NpcActivity['kind'], targetId: string | null, destination: Vec | null, reason: string): NpcActivity {
@@ -73,7 +73,7 @@ function fleeDestination(world: World, vehicle: Vehicle, profile: NpcProfile, th
 }
 
 function chooseDangerActivity(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity | null {
-  const enemies = world.vehicles.filter((other) => isHostile(vehicle, other) && canVehicleSee(world, vehicle, other.pos));
+  const enemies = world.vehicles.filter((other) => isHostile(world, vehicle, other) && canVehicleSee(world, vehicle, other.pos));
   enemies.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   const enemy = enemies[0];
   if (enemy) {
@@ -91,7 +91,7 @@ function chooseDangerActivity(world: World, vehicle: Vehicle, profile: NpcProfil
   // circle stays tight enough to trust. Raiders close in on it; everyone else steers away from it.
   const trusted = (profile.contactReactRadius - DETECT.fuzz.base) / DETECT.fuzz.perTile; // farther circles are too loose
   const contacts = contactsOf(world, vehicle, trusted)
-    .filter((c) => world.vehicles.some((other) => other.id === c.vehicleId && isHostile(vehicle, other)));
+    .filter((c) => world.vehicles.some((other) => other.id === c.vehicleId && isHostile(world, vehicle, other)));
   contacts.sort((a, b) => dist(vehicle.pos, a.center) - dist(vehicle.pos, b.center));
   const contact = contacts[0];
   if (!contact) return null;
@@ -163,7 +163,8 @@ export function chooseNpcActivity(world: World, vehicle: Vehicle): NpcActivity {
   const profile = npcProfile(vehicle);
   const danger = chooseDangerActivity(world, vehicle, profile);
   if (danger) {
-    if (world.player.tow?.by === vehicle.id) dropTow(world, 'danger');
+    const tow = playerTow(world);
+    if (tow?.holder === vehicle.id) dropTow(world, tow, 'danger');
     return danger;
   }
   const tow = chooseTowActivity(world, vehicle);

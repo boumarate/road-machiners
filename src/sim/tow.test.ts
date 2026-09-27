@@ -8,7 +8,8 @@ import { route, routeLength } from './path';
 import { canUseSite, siteGates } from './sites';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
-import { acceptTow, refuseTow, unhitch } from './tow';
+import { stateOf, towData } from './states';
+import { acceptTow, isTowed, playerTow, refuseTow, unhitch } from './tow';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { autoRuns, endTurn, setDirect, setMoveOrder } from './world';
@@ -41,20 +42,21 @@ function runUntil(w: World, max: number, done: (w: World) => boolean): { w: Worl
 }
 
 const find = (w: World, id: string) => w.vehicles.find((v) => v.id === id)!;
+const feeOf = (w: World) => towData(playerTow(w)!).fee;
 
 function offered(s: Setup): World {
-  const r = runUntil(s.w, 30, (w) => w.player.tow !== null);
-  expect(r.w.player.tow).not.toBeNull();
+  const r = runUntil(s.w, 30, (w) => playerTow(w) !== null);
+  expect(playerTow(r.w)).not.toBeNull();
   return r.w;
 }
 
 describe('tow offer', () => {
   it('a trader that sees a stranded player drives over and offers a tow', () => {
     const s = stranded();
-    const r = runUntil(s.w, 30, (w) => w.player.tow !== null);
-    expect(r.w.player.tow).toEqual({ by: s.trader.id, town: 'bowl', fee: expect.any(Number), hitched: false });
-    expect(r.w.player.tow!.fee).toBeGreaterThan(TOW.base);
-    expect(r.events.filter((e) => e.t === 'towOffer')).toEqual([{ t: 'towOffer', by: s.trader.id, town: 'bowl', fee: r.w.player.tow!.fee }]);
+    const r = runUntil(s.w, 30, (w) => playerTow(w) !== null);
+    expect(playerTow(r.w)).toMatchObject({ kind: 'tow', holder: s.trader.id, other: r.w.player.vehicleId, data: { kind: 'tow', town: 'bowl', fee: expect.any(Number), hitched: false } });
+    expect(feeOf(r.w)).toBeGreaterThan(TOW.base);
+    expect(r.events.filter((e) => e.t === 'towOffer')).toEqual([{ t: 'towOffer', by: s.trader.id, town: 'bowl', fee: feeOf(r.w) }]);
     const trader = find(r.w, s.trader.id);
     expect(dist(trader.pos, playerVehicle(r.w).pos)).toBeLessThan(10 - 1);
     expect(trader.brain!.activity?.kind).toBe('tow');
@@ -67,17 +69,17 @@ describe('tow offer', () => {
     const town = REGION.towns.find((t) => t.id === 'bowl')!;
     const gate = siteGates(town).reduce((a, b) => (dist(me.pos, a) <= dist(me.pos, b) ? a : b));
     const length = routeLength(me.pos, route(w, me.pos, gate, vehicleStats(w, find(w, s.trader.id)).radius, []));
-    expect(w.player.tow!.fee).toBe(Math.round(TOW.base + TOW.perTile * length));
+    expect(feeOf(w)).toBe(Math.round(TOW.base + TOW.perTile * length));
   });
 
   it('refusing stops that NPC from offering again', () => {
     const s = stranded();
     let w = refuseTow(offered(s));
-    expect(w.player.tow).toBeNull();
-    expect(find(w, s.trader.id).brain!.refusedTow).toBe(true);
-    const r = runUntil(w, 15, (x) => x.player.tow !== null);
+    expect(playerTow(w)).toBeNull();
+    expect(stateOf(w, 'spurned', s.trader.id, w.player.vehicleId)).not.toBeNull();
+    const r = runUntil(w, 15, (x) => playerTow(x) !== null);
     w = r.w;
-    expect(w.player.tow).toBeNull();
+    expect(playerTow(w)).toBeNull();
     expect(r.events.some((e) => e.t === 'towOffer')).toBe(false);
   });
 
@@ -85,11 +87,11 @@ describe('tow offer', () => {
     const s = stranded();
     let w = offered(s);
     w = setMoveOrder(w, { kind: 'stopAt', dest: { x: 30, y: 60 } });
-    const r = runUntil(w, 15, (x) => x.player.tow === null);
-    expect(r.w.player.tow).toBeNull();
+    const r = runUntil(w, 15, (x) => playerTow(x) === null);
+    expect(playerTow(r.w)).toBeNull();
     expect(r.events).toContainEqual({ t: 'towDropped', by: s.trader.id, reason: 'refused' });
-    expect(find(r.w, s.trader.id).brain!.refusedTow).toBe(true);
-    const later = runUntil(r.w, 15, (x) => x.player.tow !== null);
+    expect(stateOf(r.w, 'spurned', s.trader.id, r.w.player.vehicleId)).not.toBeNull();
+    const later = runUntil(r.w, 15, (x) => playerTow(x) !== null);
     expect(later.events.some((e) => e.t === 'towOffer')).toBe(false);
   });
 
@@ -100,8 +102,8 @@ describe('tow offer', () => {
     const me = w.vehicles[0];
     me.items = me.items.filter((it) => it.kind === 'part' && partDef(it.part.defId).kind === 'core');
     const raider = withTower(w, 'buggy', 'raiders', 'buggy', { x: 40, y: 30 });
-    const r = runUntil(w, 20, (x) => x.player.tow !== null);
-    expect(r.w.player.tow).toBeNull();
+    const r = runUntil(w, 20, (x) => playerTow(x) !== null);
+    expect(playerTow(r.w)).toBeNull();
     expect(r.events.some((e) => e.t === 'activity' && e.vehicle === raider.id && e.activity === 'tow')).toBe(false);
   });
 
@@ -109,15 +111,15 @@ describe('tow offer', () => {
     const w = emptyWorld();
     w.player.fuel = 0;
     const scav = withTower(w, 'scavenger', 'scavengers', 'scout', { x: 40, y: 30 });
-    const r = runUntil(w, 30, (x) => x.player.tow !== null);
-    expect(r.w.player.tow?.by).toBe(scav.id);
+    const r = runUntil(w, 30, (x) => playerTow(x) !== null);
+    expect(playerTow(r.w)?.holder).toBe(scav.id);
   });
 
   it('a player who can drive gets no offer', () => {
     const s = stranded();
     s.w.player.fuel = 30;
-    const r = runUntil(s.w, 15, (x) => x.player.tow !== null);
-    expect(r.w.player.tow).toBeNull();
+    const r = runUntil(s.w, 15, (x) => playerTow(x) !== null);
+    expect(playerTow(r.w)).toBeNull();
   });
 });
 
@@ -125,7 +127,7 @@ describe('towing', () => {
   it('accepting hitches the player, and the player follows the tower', () => {
     const s = stranded();
     let w = acceptTow(offered(s));
-    expect(w.player.tow!.hitched).toBe(true);
+    expect(isTowed(w)).toBe(true);
     expect(playerVehicle(w).order).toBeNull();
     expect(playerVehicle(w).speed).toBe(0);
     expect(autoRuns(w)).toBe(true);
@@ -145,7 +147,7 @@ describe('towing', () => {
     expect(dist(me.pos, tower.pos)).toBeGreaterThan(TOW.gap * 0.9);
     // The tower drives slower while towing, and the towed player burns no fuel.
     const free = structuredClone(w);
-    free.player.tow = null;
+    free.states = [];
     expect(vehicleStats(w, tower).maxSpeed).toBeCloseTo(vehicleStats(free, find(free, s.trader.id)).maxSpeed * TOW.speedShare);
     expect(w.player.fuel).toBe(0);
   });
@@ -172,13 +174,13 @@ describe('towing', () => {
     for (let i = 0; i < 4; i++) w = endTurn(w);
     const money = w.player.money;
     w = unhitch(w);
-    expect(w.player.tow).toBeNull();
+    expect(playerTow(w)).toBeNull();
     expect(w.player.money).toBe(money);
     expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, reason: 'unhitched' });
     expect(find(w, s.trader.id).brain!.activity).toBeNull();
     expect(autoRuns(w)).toBe(false);
     expect(() => setMoveOrder(w, { kind: 'stopAt', dest: { x: 0, y: 0 } })).not.toThrow();
-    const r = runUntil(w, 10, (x) => x.player.tow !== null);
+    const r = runUntil(w, 10, (x) => playerTow(x) !== null);
     expect(r.w.player.money).toBe(money);
     expect(r.events.some((e) => e.t === 'towOffer')).toBe(false);
   });
@@ -191,7 +193,7 @@ describe('towing', () => {
     const tower = find(w, s.trader.id);
     const raider = withTower(w, 'buggy', 'raiders', 'buggy', { x: tower.pos.x + 8, y: tower.pos.y });
     w = endTurn(w);
-    expect(w.player.tow).toBeNull();
+    expect(playerTow(w)).toBeNull();
     expect(w.player.money).toBe(money);
     expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, reason: 'danger' });
     expect(find(w, s.trader.id).brain!.activity?.kind).toBe('flee');
@@ -204,7 +206,7 @@ describe('towing', () => {
     const tower = find(w, s.trader.id);
     tower.resources!.health = 0;
     w = endTurn(w);
-    expect(w.player.tow).toBeNull();
+    expect(playerTow(w)).toBeNull();
     expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, reason: 'gone' });
   });
 
@@ -215,13 +217,14 @@ describe('towing', () => {
     const at = (d: number) => ({ x: gate.x + out.x * d, y: gate.y + out.y * d });
     const s = stranded(at(20), at(30));
     let w = offered(s);
-    const fee = w.player.tow!.fee;
+    const fee = feeOf(w);
     w.player.money = 10;
     const traderMoney = find(w, s.trader.id).resources!.money;
     w = acceptTow(w);
-    const r = runUntil(w, 120, (x) => x.player.tow === null);
+    const r = runUntil(w, 120, (x) => playerTow(x) === null);
     w = r.w;
     expect(r.events.filter((e) => e.t === 'towDone')).toEqual([{ t: 'towDone', by: s.trader.id, fee }]);
+    expect(r.events.filter((e) => e.t === 'stateEnded').map((e) => e.t === 'stateEnded' && e.ending)).toEqual(['fulfilled']);
     expect(w.player.money).toBe(10 - fee);
     expect(w.player.money).toBeLessThan(0);
     expect(find(w, s.trader.id).resources!.money).toBe(traderMoney + fee);

@@ -9,6 +9,7 @@ import { isDriveObstacle } from './mapgen';
 import { vehicleStats, type VehicleStats } from './stats';
 import { advanceOn, nextOrder, reached, steerWithFuel, type Steer } from './steering';
 import { isCliff, tileAt } from './terrain';
+import { isTowed } from './tow';
 import type { Pose, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 
@@ -18,7 +19,7 @@ type Mover = { v: Vehicle; s: VehicleStats; steer: Steer; stopped: boolean; prev
 
 // The towed player does not drive: its tower places it after this step.
 export function resolveMovement(world: World): void {
-  const drivers = world.vehicles.filter((v) => !(v.id === world.player.vehicleId && world.player.tow?.hitched));
+  const drivers = world.vehicles.filter((v) => !(v.id === world.player.vehicleId && isTowed(world)));
   const movers: Mover[] = drivers.map((v) => {
     const s = vehicleStats(world, v);
     return { v, s, steer: moveSteer(world, v, s), stopped: false, prev: { x: v.pos.x, y: v.pos.y, heading: v.heading } };

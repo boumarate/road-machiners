@@ -57,7 +57,6 @@ export function makeVehicle(world: World, spec: VehicleSpec): Vehicle {
     order: null,
     direct: false,
     weaponOrders: {},
-    grudges: [],
     trail: [],
     brain: spec.brain,
     resources: spec.faction === 'player' ? null : { ...NPC_RESOURCES, fuel: Math.min(NPC_RESOURCES.fuel, chassisDef(spec.chassisId).fuelCap), health: RULES.maxHealth },

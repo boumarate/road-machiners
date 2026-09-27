@@ -120,6 +120,9 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
         : `${n(e.by)} is gone. The tow is off.`;
       return { text, cls: e.reason === 'refused' || e.reason === 'unhitched' ? 'dim' : 'bad' };
     }
+    case 'stateEnded':
+      // Tow endings log through the tow events above.
+      return null;
     case 'info':
       return { text: e.text, cls: 'dim' };
     case 'job': {
