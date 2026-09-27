@@ -52,6 +52,8 @@ describe('NPC driving', () => {
     let closest = Infinity;
     for (let i = 0; i < w.size && closest >= nose.radius + 2; i++) {
       ({ w } = play(w, 1));
+      // NPCs that spawn along the way would pick fights, so only the route is under test.
+      w.vehicles = w.vehicles.filter((v) => v.faction === 'player' || v.id === npc.id);
       const actor = w.vehicles.find((v) => v.id === npc.id)!;
       closest = Math.min(closest, dist(actor.pos, nose.pos));
       expect(dist(actor.pos, nose.pos)).toBeGreaterThanOrEqual(nose.radius + 0.8 - 0.5);
