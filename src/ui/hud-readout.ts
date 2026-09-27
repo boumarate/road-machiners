@@ -16,7 +16,7 @@ import { celsius, engineCelsius, fuelLiters, kph } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./icons";
 import type { ContextAction } from './hud';
-import { canUseOasis, salvageHere, salvageNear } from '../sim/locations';
+import { canUseOasis, emptySalvageNear, salvageHere, salvageNear } from '../sim/locations';
 import { locationAt, townAt, townNear } from '../sim/sites';
 import { playerCanAct } from '../sim/world';
 import { isBusy } from '../sim/jobs';
@@ -34,7 +34,10 @@ function getSiteAction(world: World): ContextAction | null {
   if (oasis?.kind === 'oasis')
     return { label: `Refill supplies at ${oasis.name}`, ready: canUseOasis(world) };
   const stock = salvageNear(world);
-  if (!stock) return null;
+  if (!stock) {
+    const empty = emptySalvageNear(world);
+    return empty && { label: `${getSalvageName(empty.id)} is picked clean`, ready: false, hint: 'No loot left' };
+  }
   const verb = world.player.scavenged.includes(stock.id) ? 'Loot' : 'Search';
   return { label: `${verb} ${getSalvageName(stock.id)}`, ready: salvageHere(world) !== null };
 }

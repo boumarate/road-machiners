@@ -83,7 +83,8 @@ class TruckConditionView {
 }
 
 // The E key action. ready is false while the truck must stop first.
-export type ContextAction = { label: string; ready: boolean };
+// A hint marks an action that can never run here, and says why.
+export type ContextAction = { label: string; ready: boolean; hint?: string };
 
 type HudActions = {
   openInventory: () => void;
@@ -253,9 +254,9 @@ export class Hud {
         {
           onclick: onUse,
           disabled: !action.ready,
-          title: action.ready ? "" : "Stop to use",
+          title: action.hint ?? (action.ready ? "" : "Stop to use"),
         },
-        `[E] ${action.label}`,
+        action.hint ? action.label : `[E] ${action.label}`,
       ),
     );
   }
@@ -529,7 +530,7 @@ function npcLines(w: World, v: Vehicle): HTMLElement[] {
   ];
 }
 
-// A running auto patch gives way to any context action, so the player can still act.
+// A running auto patch gives way to any usable context action, so the player can still act.
 function shownJob(action: ContextAction | null, job: Job | null): Job | null {
-  return action && isAutoPatch(job) ? null : job;
+  return action && !action.hint && isAutoPatch(job) ? null : job;
 }
