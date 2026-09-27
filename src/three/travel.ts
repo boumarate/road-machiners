@@ -69,7 +69,7 @@ export function overshoots(world: World, next: Pick<World, "events" | "vehicles"
 
 export function canTravel(world: World): boolean {
   const me = playerVehicle(world);
-  if (!playerCanAct(world) || me.direct || world.player.fuel <= 0) return false;
+  if (!playerCanAct(world) || me.direct) return false;
   if (
     world.vehicles.some(
       (v) => hostileToPlayer(world, v) && playerSees(world, v.pos),

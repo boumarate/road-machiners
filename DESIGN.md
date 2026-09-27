@@ -40,7 +40,7 @@ The truck stays critical to progression, like the ship in Space Rangers 2.
 
 Movement and combat happen on the same map, in Space Rangers 2 style. Travel and fights use the same turns.
 
-Planning does not advance time. Clicks set or change the waypoint and show the route preview. Outside combat, Space starts automatic turns until the waypoint is reached. Space pauses after the current turn without clearing the waypoint, and another press resumes the route. Visible hostiles, player combat, collisions, breakdowns, an empty tank, panels and loss of browser focus pause automatic travel. Without a waypoint, or in combat or direct-drive mode, Space advances one turn. Holding Space fast-forwards turns, including combat, until released. Loading a save starts paused. In combat or direct-drive mode, the player sets movement and weapon orders, then ends the turn. All vehicles move at the same time, then all weapons fire at the same time.
+Planning does not advance time. Clicks set or change the waypoint and show the route preview. Outside combat, Space starts automatic turns until the waypoint is reached. Space pauses after the current turn without clearing the waypoint, and another press resumes the route. Visible hostiles, player combat, collisions, breakdowns, panels and loss of browser focus pause automatic travel. Without a waypoint, or in combat or direct-drive mode, Space advances one turn. Holding Space fast-forwards turns, including combat, until released. Loading a save starts paused. In combat or direct-drive mode, the player sets movement and weapon orders, then ends the turn. All vehicles move at the same time, then all weapons fire at the same time.
 
 Each chassis has max speed, acceleration, braking and turn rates. Momentum carries over: the speed you have is a committed distance for next turn. Faster trucks turn less per turn. Vehicles are physics bodies with suspension. Time only runs while a turn plays: each turn simulates one second of driving. Automatic travel and held Space start the next turn after playback finishes. Slopes, bumps and collisions come from the physics.
 
@@ -66,7 +66,7 @@ While knocked out, turns run on their own and the player gives no orders. Looter
 
 Raiders ignore a truck with nothing to take. A truck has loot when it holds goods, spare parts or mounted parts beyond the built-in ones. A feud still makes a raider fight a stripped truck.
 
-A truck with no working engine, a broken transmission or an empty tank still moves at a crawl. The driver pushes it. Pushing burns no fuel, and a truck without a working engine makes no sound. A player truck that can only crawl is stranded.
+A truck with no working engine, a broken transmission or an empty tank still moves at a crawl. The driver pushes it. Pushing burns no fuel, and a truck without a working engine makes no sound. A player truck that can only crawl is stranded. It can still travel automatically to a waypoint.
 
 Traders and scavengers help a stranded player. One that sees the truck may drive over, if it is not hostile and not in danger. It parks beside the truck and radios a tow offer to the nearest town it knows. The fee is a base price plus a price per tile of the route. The player accepts, refuses or hangs up. A driver the player turned down rarely offers again. A stranded player can also radio a passing trader or scavenger and ask for a tow.
 

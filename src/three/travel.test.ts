@@ -167,13 +167,16 @@ describe("automatic travel safety", () => {
     expect(canTravel(world)).toBe(true);
   });
 
-  it("keeps direct driving and an empty tank manual", () => {
+  it("keeps direct driving manual", () => {
     const world = makeSafeWorld();
     playerVehicle(world).direct = true;
     expect(canTravel(world)).toBe(false);
-    playerVehicle(world).direct = false;
+  });
+
+  it("travels on an empty tank at a crawl", () => {
+    const world = makeSafeWorld();
     world.player.fuel = 0;
-    expect(canTravel(world)).toBe(false);
+    expect(canTravel(world)).toBe(true);
   });
 
   it.each([
