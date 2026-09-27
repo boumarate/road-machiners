@@ -8,7 +8,7 @@
 
 ## Context
 
-- This branch starts from `defeat-rescue`. That task still has PH4b, the road lanes, and PH5, the game loop, HUD and saves, open. PH4b finishes on `defeat-rescue` first and merges in here.
+- This branch starts from `defeat-rescue` at 6619d53. Another agent owns that task and still works on its PH4b, the road lanes, and PH5, the game loop, HUD and saves.
 - The tow offer in `src/sim/tow.ts` is the only social act. The tower drives up to the stranded player, then the offer sits in `world.player.tow` with no UI yet.
 - `NpcBrain.refusedTow` stops a driver from offering a tow twice. No other per-driver memory of the player exists.
 - The only way to act on another truck is to click it, which aims weapons at it. Hovering shows an info card.
@@ -90,9 +90,9 @@ The tow becomes the first agreement kind. `world.player.tow` and its offer state
 
 A honk is a signal, not a call. H honks, as a command that ends no turn. Every NPC within `SOCIAL.honkRange` whose class honks back and that is not hostile honks back. Each honk plays a positional horn sound and writes a log line.
 
-### Remaining defeat-rescue work
+### Relation to defeat-rescue
 
-Defeat-rescue PH5 moves here: auto turns with `VITE_AUTO_TURN_MS`, the knocked-out banner, the Unhitch button, debt display, the death screen, the save migration and the DESIGN.md update. The dialogue panel replaces the planned tow offer panel. Saves go to version 8, and the version 7 migration also sets the call, agreements, `talked` and truce fields. The tow code on this branch has never shipped, so it changes without compatibility.
+Defeat-rescue stays with its own agent, and this task never edits its worktree. Its PH5 work stays there: auto turns, the knocked-out banner, the Unhitch button, debt display, the death screen and the save migration for its fields. The tow code on this branch has never shipped, so it changes without compatibility. The user merges `defeat-rescue` into `social` when it is ready, and the tow UI and save version are reconciled then.
 
 ### Out of scope
 
@@ -135,18 +135,13 @@ TDD: yes. Each rule is a sim rule with a Vitest test. The panel and keys get a P
 
 ## Plan
 
-Approach: finish the road lanes on `defeat-rescue` and merge them in. Then build the system bottom up in the sim, each layer with its first content: calls and topics with directions, agreements with the tow, the patch, the raider demand, and the honk. The browser work comes last, on top of a finished sim.
+Approach: build the system bottom up in the sim, each layer with its first content: calls and topics with directions, agreements with the tow, the patch, the raider demand, and the honk. The browser work comes last, on top of a finished sim. Defeat-rescue work is out of scope.
 
 UK3 resolved: an agreement kind supplies `destination()`, where its NPC provider drives now, and `advance()`, run every turn for every live agreement. `advance()` returns ongoing, complete or a cancel reason. The tow uses two destinations, the client and then the town. The patch uses one. A player provider drives on their own, so only `advance()` runs for them.
 
 UK2 resolved: an NPC client of a live agreement waits parked, as a `wait` activity chosen after danger. An agreement still in the agreed state after `SOCIAL.agreedMaxTurns` turns is cancelled, so a client stops waiting for a provider who never comes.
 
 Deviation from PC3: raising a topic is a turn step, `raiseCalls()`, not an activity. A call stops the turns, so talking takes no turn and needs no activity. Carrying out an agreement stays an activity.
-
-### PH0 — Road lanes on defeat-rescue
-- 0.1 Run PH4b of `docs/tasks/defeat-and-rescue.md` in `.worktrees/defeat-rescue`, as planned there.
-- 0.2 Merge `defeat-rescue` into `social`.
-- Commit: Make roads twice as wide and preferred by route planning
 
 ### PH1 — Calls, topics and directions
 - 1.1 `src/sim/testkit.ts` (modify) — `npcBrain(templateId: string, home: Vec): NpcBrain`. Every test that writes a brain literal switches to it, so later brain fields touch one place.
@@ -259,26 +254,18 @@ Deviation from PC3: raising a topic is a turn step, `raiseCalls()`, not an activ
 - Tests: a trader in range honks back. A raider, a hostile trader and a trader out of range do not.
 - Commit: Honk, and friendly trucks honk back
 
-### PH6 — Game loop, dialogue panel, sounds and saves
+### PH6 — Dialogue panel, honk keys, sounds and saves
 - 6.1 Ask the user about UK1 before this phase: where the `horn` and `radio` sound files come from.
-- 6.2 `.env.example`, `.env`, `src/config.ts:24-36` and the `CLAUDE.md` Config section (modify) — `VITE_AUTO_TURN_MS`.
-- 6.3 `src/ui/dialogue.ts` (create) — The dialogue panel shows the speaker's name in faction color, the NPC line, and numbered options, with keys 1 to 9 while open. Lines format call values through `src/ui/units.ts`.
-- 6.4 `src/three/game.ts` (modify)
+- 6.2 `src/ui/dialogue.ts` (create) — The dialogue panel shows the speaker's name in faction color, the NPC line, and numbered options, with keys 1 to 9 while open. Lines format call values through `src/ui/units.ts`.
+- 6.3 `src/three/game.ts` (modify)
   - T calls the hovered truck in sight, and H honks.
   - While a call is open, the weapon keys and End Turn are off.
-  - `tick()` runs auto turns when `autoRuns()` holds.
-  - The Unhitch button runs `unhitch`.
-  - The death screen actions follow defeat-rescue 5.2.
-- 6.5 `src/ui/hud.ts`, `src/ui/hud-readout.ts` and `src/ui/format.ts` (modify) — The knocked-out banner, the Unhitch button and debt display. Log lines cover `say`, `call`, `agreement` and `honk`, and the old tow lines go.
-- 6.6 `src/ui/death.ts` (create) — As in defeat-rescue 5.4.
-- 6.7 `src/data/sounds.ts` and `src/three/sound.ts` (modify) — A positional `horn` cue on `honk` and a `radio` cue on an opened call.
-- 6.8 `src/three/save.ts:17-48` (modify)
-  - `SAVE_VERSION` becomes 8.
-  - `migrateFrom7` sets the player state, `knockoutTurns`, `call`, `agreements`, `talked` and `truce`.
-  - Version 6 migrates through version 7. Respects IV8.
-- 6.9 `DESIGN.md` (modify) — Rewrite Defeat and add a Social section. `CLAUDE.md` Architecture gains one line on dialogue topics and agreements.
+- 6.4 `src/ui/format.ts` (modify) — Log lines cover `say`, `call`, `agreement` and `honk`, and the old tow lines go.
+- 6.5 `src/data/sounds.ts` and `src/three/sound.ts` (modify) — A positional `horn` cue on `honk` and a `radio` cue on an opened call.
+- 6.6 `src/three/save.ts:17-48` (modify) — `SAVE_VERSION` becomes 8. `migrateFrom7` sets `call`, `agreements`, `talked` and `truce`. Respects IV8.
+- 6.7 `DESIGN.md` (modify) — Add a Social section. `CLAUDE.md` Architecture gains one line on dialogue topics and agreements.
 - Tests: the save migration from version 7, and a round trip of a world with an open call and a live agreement.
-- Commit: Show dialogue, honks and auto turns in the game, and save calls and agreements
+- Commit: Show dialogue and honks in the game, and save calls and agreements
 
 ### Test strategy
 - Every sim rule gets a failing Vitest test first, per phase.
@@ -287,17 +274,18 @@ Deviation from PC3: raising a topic is a turn step, `raiseCalls()`, not an activ
   - A honk answered.
   - A raider demand.
   - A stranded NPC asking for a patch, with the patch done.
-  - A stranded player patched and towed.
+  - A stranded player patched and towed, driven with plain turns since auto turns belong to defeat-rescue.
 - `npm run playtest` runs after PH6.
 - AS1 and AS2 are measured in a sim test during verify. It counts calls and NPC patch requests on the Bowl to Nose road over 1000 turns.
 
 ### Order & dependencies
-- PH0 to PH6 run in order.
+- PH1 to PH6 run in order.
 - Each phase edits `src/sim/types.ts` and `src/data/dialogue.ts`, so none run in parallel.
 
 ### Risks / rollback
 - RK1 — The raider fires before its demand opens, in the same turn. 1.8 blocks shots between the parties on the line, and a PH4 test covers the first contact.
 - RK2 — Removing `player.tow` touches the physics detach path from defeat-rescue. The `drive.test.ts` hitch case guards it.
+- RK4 — Defeat-rescue keeps changing the tow code, `world.ts` and the save version. Merging it later will conflict in those places. Keep tow changes inside `src/sim/tow.ts` and the agreement files where possible, so the merge stays small.
 - RK3 — Many open calls could make turns feel slow. `once` limits repeats, and verify counts calls per 100 turns.
 
 ### Interfaces
