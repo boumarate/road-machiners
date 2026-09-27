@@ -327,10 +327,14 @@ export function acceptContract(world: World, contractId: string): World {
   });
 }
 
+// Hauled goods count as paid at the value a missed deadline charges, so selling them teaches no trade.
 function loadHaul(world: World, c: Extract<Contract, { kind: 'haul' }>): void {
   const v = playerVehicle(world);
   if (freeCells(v) < c.units) throw new Error(`Needs ${c.units} free cells for the cargo`);
+  const held = goodsCount(v)[c.good] ?? 0;
   if (addGoods(world, v, c.good, c.units) !== c.units) throw new Error('Cargo capacity invariant failed');
+  const paid = world.player.costBasis[c.good] ?? 0;
+  world.player.costBasis[c.good] = (paid * held + goodValue(c.good) * c.units) / (held + c.units);
 }
 
 // Hands in a haul at its destination or a fetch at the shop that posted it. Bounties pay on the kill.

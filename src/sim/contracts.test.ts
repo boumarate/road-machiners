@@ -186,6 +186,13 @@ describe('contract boards and delivery', () => {
     expect(w.player.contracts).toHaveLength(0);
   });
 
+  it('counts haul cargo as paid at its value, so selling it pays no trade XP', () => {
+    const w = atBowlWithOffer(haul('nose', 3));
+    w.vehicles[0].items = w.vehicles[0].items.filter((it) => it.kind !== 'good' || it.good !== 'salt');
+    const next = acceptContract(w, 'ct-haul');
+    expect(next.player.costBasis.salt).toBeCloseTo(goodValue('salt'));
+  });
+
   it('pays the contract XP to social, targeting the posting shop', () => {
     let w = acceptContract(atBowlWithOffer(haul('nose', 3)), 'ct-haul');
     w.vehicles[0].pos = { ...sitePads(nose)[0] };
