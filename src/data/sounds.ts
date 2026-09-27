@@ -92,7 +92,7 @@ export const MIX = {
   // Engine over a turn: playback rate and level follow speed in m/s, plus a load term from the speed change,
   // so speeding up revs and slowing drops audibly. Load is full at loadMs of change in one turn. Under movingMs
   // at both ends it stays silent; a speed drop of brakeMs or more adds the air brake. 24 m/s is the fastest chassis.
-  engine: { idleRate: 0.8, topRate: 1.3, topSpeedMs: 24, idleGain: 0.5, loadMs: 3, revUp: 0.3, revDown: 0.2, loadGain: 0.3, movingMs: 0.5, brakeMs: 4, fadeSeconds: 0.12 },
+  engine: { idleRate: 0.8, topRate: 1.3, topSpeedMs: 31.2, idleGain: 0.5, loadMs: 3, revUp: 0.3, revDown: 0.2, loadGain: 0.3, movingMs: 0.5, brakeMs: 4, fadeSeconds: 0.12 },
   // Wind bed: a base level, rising near dust storms.
   wind: { baseGain: 0.4, stormGain: 1, stormReachTiles: 12, fadeSeconds: 1 },
   // Music crossfades to combat while a hostile is in sight, and back after the last one leaves.

@@ -2,7 +2,7 @@
 
 export const RULES = {
   // Movement
-  substeps: 20, // per turn; step length must stay below the smallest collision radius
+  substeps: 26, // per turn; step length must stay below the smallest collision radius
   crawlSpeed: 1, // below this speed turning slows toward a standstill
   lowFuelThreshold: 0.2, // share of tank remaining when speed is limited
   lowFuelSpeedFactor: 0.5, // share of normal top speed below the threshold

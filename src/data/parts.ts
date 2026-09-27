@@ -98,27 +98,27 @@ export const PARTS: Record<string, PartDef> = {
   },
   tunedEngine: {
     id: 'tunedEngine', kind: 'engine', name: 'Tuned V8', hp: 20, price: 380, w: 2, h: 2, mass: 380, armor: 4,
-    speedBonus: 1, accelBonus: 1, fuelMult: 1.4, noise: 1.3,
+    speedBonus: 1.3, accelBonus: 1, fuelMult: 1.4, noise: 1.3,
   },
   flatFour: {
     id: 'flatFour', kind: 'engine', name: 'Light flat-four', hp: 18, price: 100, w: 2, h: 1, mass: 150, armor: 2,
-    speedBonus: -1, accelBonus: 0, fuelMult: 0.75, noise: 0.7,
+    speedBonus: -1.3, accelBonus: 0, fuelMult: 0.75, noise: 0.7,
   },
   workhorseDiesel: {
     id: 'workhorseDiesel', kind: 'engine', name: 'Workhorse diesel', hp: 40, price: 290, w: 2, h: 2, mass: 420, armor: 6,
-    speedBonus: -0.5, accelBonus: 0.5, fuelMult: 0.7, noise: 1.2,
+    speedBonus: -0.65, accelBonus: 0.5, fuelMult: 0.7, noise: 1.2,
   },
   racingV6: {
     id: 'racingV6', kind: 'engine', name: 'Racing V6', hp: 16, price: 460, w: 2, h: 2, mass: 240, armor: 2,
-    speedBonus: 1.5, accelBonus: 0.5, fuelMult: 1.25, noise: 1.4,
+    speedBonus: 1.95, accelBonus: 0.5, fuelMult: 1.25, noise: 1.4,
   },
   heavyDiesel: {
     id: 'heavyDiesel', kind: 'engine', name: 'Heavy diesel', hp: 55, price: 520, w: 2, h: 2, mass: 600, armor: 8,
-    speedBonus: -1, accelBonus: 1.5, fuelMult: 1.1, noise: 1.5,
+    speedBonus: -1.3, accelBonus: 1.5, fuelMult: 1.1, noise: 1.5,
   },
   turbine: {
     id: 'turbine', kind: 'engine', name: 'Turbine', hp: 22, price: 850, w: 2, h: 2, mass: 310, armor: 3,
-    speedBonus: 2, accelBonus: 2, fuelMult: 2.2, noise: 1.8,
+    speedBonus: 2.6, accelBonus: 2, fuelMult: 2.2, noise: 1.8,
   },
   plates: {
     id: 'plates', kind: 'armor', name: 'Steel plates', hp: 40, price: 260, w: 1, h: 3, mass: 350, armor: 12,
