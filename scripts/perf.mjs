@@ -82,7 +82,11 @@ const towns = await page.evaluate(async () => {
 const frameP95 = [];
 for (const t of towns) {
   frameP95.push(await page.evaluate(async ({ x, y, zoom, settle, sample }) => {
-    window.__KOROVAN__.debugView(x, y, zoom);
+    // The camera cannot pan past gray vision, so the truck moves to the town first.
+    const g = window.__KOROVAN__;
+    const w = { ...g.state, vehicles: g.state.vehicles.map((v) => (v.id === g.state.player.vehicleId ? { ...v, pos: { x, y } } : v)) };
+    g.apply(w);
+    g.debugView(x, y, zoom);
     await new Promise((r) => setTimeout(r, settle));
     const ts = await new Promise((done) => {
       const out = [];

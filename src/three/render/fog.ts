@@ -91,8 +91,12 @@ export class FogView {
 }
 
 // Mixes the lit ground color toward its own grey, then scales its brightness, by the fogLook attribute.
+// Chains any shader patch the material already has, like the sight limit.
 function greyOut(mat: THREE.MeshLambertMaterial): void {
-  mat.onBeforeCompile = (shader) => {
+  const before = mat.onBeforeCompile.bind(mat);
+  const key = mat.customProgramCacheKey.bind(mat);
+  mat.onBeforeCompile = (shader, renderer) => {
+    before(shader, renderer);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec2 fogLook;\nvarying vec2 vFogLook;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFogLook = fogLook;');
@@ -105,5 +109,6 @@ function greyOut(mat: THREE.MeshLambertMaterial): void {
         #include <opaque_fragment>`,
       );
   };
+  mat.customProgramCacheKey = () => `${key()}|fog`;
   mat.needsUpdate = true;
 }

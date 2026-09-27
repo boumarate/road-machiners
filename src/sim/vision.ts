@@ -19,6 +19,11 @@ export function sightRadius(world: World, pos: Vec): number {
   return TERRAIN.vision.radius * weatherAt(world, pos).sight * night;
 }
 
+// Reach of gray vision. It ignores rocks and hills, and it shows places but never vehicles.
+export function grayRadius(world: World, pos: Vec): number {
+  return sightRadius(world, pos) * TERRAIN.vision.grayFactor;
+}
+
 // Tile indices (y * world.size + x) visible from a point, within vision radius and line of sight.
 export function visibleTiles(world: World, from: Vec): Set<number> {
   const size = world.size;

@@ -408,6 +408,13 @@ body {
 .log-lines > div {
   padding: 2px 0;
 }
+#ui .recenter {
+  left: 50%;
+  bottom: 124px;
+  transform: translateX(-50%);
+  padding: 0;
+  border: 0;
+}
 #ui .help {
   left: 14px;
   top: 14px;
