@@ -15,7 +15,9 @@ import { corePart, mountedParts } from './grid';
 import { addGoods, stowPart } from './inventory';
 import { generateNpcLoadout } from './npc-loadout';
 import { gainXp } from './progress';
+import { isWalled, siteGates, type Site } from './sites';
 import { isFree, spawnAt } from './spawn';
+import { checkTower } from './tow';
 import { clockOf } from './sun';
 import type { Faction, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
@@ -167,13 +169,18 @@ export function teleport(world: World, target: Vec): World {
   });
 }
 
-export function locationPos(id: string): Vec {
-  const place = [...REGION.towns, ...REGION.locations].find((p) => p.id === id);
-  if (!place) {
-    const ids = [...REGION.towns, ...REGION.locations].map((p) => p.id).join(', ');
-    throw new CheatError(`Unknown place ${id}. Places: ${ids}`);
-  }
-  return { ...place.pos };
+// Where a place's services work, nearest the truck: a gate of a walled site, or the edge of an open one.
+// A place's center lies inside its own obstacle, so teleport cannot land there.
+export function placeSpot(world: World, id: string): Vec {
+  const places: Site[] = [...REGION.towns, ...REGION.locations];
+  const place = places.find((p) => p.id === id);
+  if (!place) throw new CheatError(`Unknown place ${id}. Places: ${places.map((p) => p.id).join(', ')}`);
+  const from = playerVehicle(world).pos;
+  if (isWalled(place)) return { ...siteGates(place).reduce((a, b) => (dist(a, from) <= dist(b, from) ? a : b)) };
+  const d = dist(place.pos, from);
+  if (d === 0) return { x: place.pos.x + place.radius, y: place.pos.y };
+  const k = place.radius / d;
+  return { x: place.pos.x + (from.x - place.pos.x) * k, y: place.pos.y + (from.y - place.pos.y) * k };
 }
 
 export function skipToHour(world: World, hour: number): World {
@@ -249,6 +256,7 @@ function killTargets(w: World, target: string): Vehicle[] {
 }
 
 // Zeroes each target's cab and lets the normal destruction make wrecks and salvage. No kill is credited.
+// A killed tower drops its tow, as it does after destruction in a turn.
 export function killVehicles(world: World, target: string): World {
   return update(world, (w) => {
     for (const v of killTargets(w, target)) {
@@ -256,6 +264,7 @@ export function killVehicles(world: World, target: string): World {
       v.lastHitBy = null;
     }
     resolveDestroyed(w);
+    checkTower(w);
   });
 }
 

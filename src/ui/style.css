@@ -416,8 +416,9 @@ body {
   border: 0;
 }
 #ui .debug-console {
-  left: 14px;
-  bottom: 124px;
+  left: 50%;
+  top: 112px;
+  transform: translateX(-50%);
   z-index: 40;
   width: 442px;
   max-width: calc(100vw - 58px);

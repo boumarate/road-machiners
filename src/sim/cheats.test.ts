@@ -3,8 +3,9 @@ import { chassisDef } from '../data/chassis';
 import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { CHEATS, RULES } from '../data/rules';
+import { START_KITS } from '../data/start';
 import {
-  addXp, applyGodMode, CheatError, damagePartTo, give, killVehicles, locationPos, makeHostile, nearbyVehicles,
+  addXp, applyGodMode, CheatError, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
   repairAll, revealMap, setFuel, setHealth, setMoney, setSkillPoints, setSupplies, skipToHour, spawnNear,
   startWeather, teleport, toggleGod,
 } from './cheats';
@@ -15,7 +16,8 @@ import { clockOf } from './sun';
 import { addVehicle, emptyWorld } from './testkit';
 import type { World } from './types';
 import { dist } from './vec';
-import { endTurn, hostileToPlayer } from './world';
+import { canUseSite } from './sites';
+import { endTurn, hostileToPlayer, newWorld } from './world';
 
 function withSpawned(w: World, templateId: string, hostile: boolean): { w: World; id: string } {
   const next = spawnNear(w, templateId, hostile);
@@ -182,10 +184,13 @@ describe('teleport', () => {
 });
 
 describe('places and time', () => {
-  it('returns town and location centers', () => {
-    expect(locationPos(REGION.towns[0].id)).toEqual(REGION.towns[0].pos);
-    expect(locationPos(REGION.locations[0].id)).toEqual(REGION.locations[0].pos);
-    expect(() => locationPos('atlantis')).toThrow(new RegExp(REGION.towns[0].id));
+  it('teleports to a spot where every town and location can be used', () => {
+    const w = newWorld(1, START_KITS.standard);
+    for (const place of [...REGION.towns, ...REGION.locations]) {
+      const next = teleport(w, placeSpot(w, place.id));
+      expect(canUseSite(playerVehicle(next).pos, place), place.id).toBe(true);
+    }
+    expect(() => placeSpot(w, 'atlantis')).toThrow(new RegExp(REGION.towns[0].id));
   });
 
   it('skips to the first later turn at the hour', () => {
@@ -268,6 +273,15 @@ describe('vehicle cheats', () => {
     const w = emptyWorld();
     expect(() => killVehicles(w, w.player.vehicleId)).toThrow(CheatError);
     expect(() => killVehicles(w, 'v999999')).toThrow(CheatError);
+  });
+
+  it('drops the tow when the tower is killed, so the next turn runs', () => {
+    const w = emptyWorld();
+    const tower = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 40, y: 30 });
+    w.player.tow = { by: tower.id, town: REGION.towns[0].id, fee: 10, hitched: true };
+    const next = killVehicles(w, tower.id);
+    expect(next.player.tow).toBeNull();
+    expect(() => endTurn(next)).not.toThrow();
   });
 
   it('lists other vehicles by distance', () => {

@@ -8,9 +8,9 @@ import {
   damagePartTo,
   give,
   killVehicles,
-  locationPos,
   makeHostile,
   nearbyVehicles,
+  placeSpot,
   repairAll,
   revealMap,
   setFuel,
@@ -106,7 +106,7 @@ export const COMMANDS: readonly Command[] = [
   }),
 
   command("tp <location id> | tp <x> <y>", "Move the truck to a location or map point.", { min: 1, max: 2 }, (world, args, usage) => {
-    if (args.length === 1) return changed(teleport(world, locationPos(args[0])), `teleported to ${args[0]}`);
+    if (args.length === 1) return changed(teleport(world, placeSpot(world, args[0])), `teleported to ${args[0]}`);
     const target = { x: parseNumber(args[0], usage), y: parseNumber(args[1], usage) };
     return changed(teleport(world, target), `teleported to ${target.x}, ${target.y}`);
   }),
