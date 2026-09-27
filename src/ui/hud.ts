@@ -14,7 +14,7 @@ import {
   formatNpcTraits,
 } from "./format";
 import { getHudReadout, getRescueReadout, moneyLabel, TruckConditionReadout } from "./hud-readout";
-import { createIcon, createSpeedDial, type IconName } from "./icons";
+import { createIcon, createSpeedDial, type IconName } from "./cards";
 import { hp, kph } from "./units";
 import { maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
