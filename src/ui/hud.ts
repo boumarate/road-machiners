@@ -2,12 +2,12 @@
 
 import { partDef } from "../data/parts";
 import { corePart, coreParts, mountedParts } from "../sim/grid";
-import type { Vehicle, World } from "../sim/types";
+import type { Job, Vehicle, World } from "../sim/types";
 import { el, panel } from "./dom";
 import { eventText, formatNpcActivity } from "./format";
-import { getHudReadout } from './hud-readout';
-import { createIcon, createSpeedDial, type IconName } from './icons';
-import { kph } from './units';
+import { getHudReadout } from "./hud-readout";
+import { createIcon, createSpeedDial, type IconName } from "./icons";
+import { kph } from "./units";
 
 // The E key action. ready is false while the truck must stop first.
 export type ContextAction = { label: string; ready: boolean };
@@ -19,7 +19,13 @@ type HudActions = {
   toggleAutoRepair: () => void;
   isBusy: () => boolean;
 };
-const RESOURCE_ICONS: IconName[] = ['money', 'fuel', 'supplies', 'cab', 'driver'];
+const RESOURCE_ICONS: IconName[] = [
+  "money",
+  "fuel",
+  "supplies",
+  "cab",
+  "driver",
+];
 
 const LOG_LINES = 14;
 const TOAST_MS = 3500;
@@ -39,7 +45,7 @@ export class Hud {
   private top = panel("instruments");
   private log = panel("log");
   private info = panel("info");
-  private infoBody = el('div');
+  private infoBody = el("div");
   private help = panel("help");
   private action = panel("action");
   private toastBox = panel("toast");
@@ -54,8 +60,12 @@ export class Hud {
       el("h3", {}, "Log"),
       el("div", { class: "dim" }, "Drive out. Watch for raiders."),
     );
-    this.log.setAttribute('aria-label', 'Event log');
-    const guide = el('details', {}, el('summary', { title: 'Driving and combat controls' }, '?'));
+    this.log.setAttribute("aria-label", "Event log");
+    const guide = el(
+      "details",
+      {},
+      el("summary", { title: "Driving and combat controls" }, "?"),
+    );
     this.help.append(guide);
     guide.append(
       el("div", {}, "Click: drive through. Shift-click: stop there."),
@@ -90,44 +100,174 @@ export class Hud {
   }
 
   // The context action for the E key, or hidden. An action that needs a stop first shows disabled.
-  renderAction(action: ContextAction | null, onUse: () => void): void {
-    this.action.style.display = action ? "" : "none";
-    if (action)
+  renderAction(
+    action: ContextAction | null,
+    job: Job | null,
+    onUse: () => void,
+  ): void {
+    this.action.style.display = action || job ? "" : "none";
+    if (job) {
+      const progress = Math.round((1 - job.turnsLeft / job.total) * 100);
       this.action.replaceChildren(
-        el("button", { onclick: onUse, disabled: !action.ready, title: action.ready ? "" : "Stop to use" }, `[E] ${action.label}`),
+        el(
+          "span",
+          { class: "job-label" },
+          `${job.kind === "search" ? "Search" : "Repair"} · ${job.turnsLeft} turns left`,
+        ),
+        el(
+          "span",
+          {
+            class: "job-bar",
+            role: "progressbar",
+            "aria-label": `${job.kind === "search" ? "Search" : "Repair"} progress`,
+            "aria-valuemin": "0",
+            "aria-valuemax": "100",
+            "aria-valuenow": String(progress),
+          },
+          el("span", { style: `width:${progress}%` }),
+        ),
       );
+    } else if (action) {
+      this.action.replaceChildren(
+        el(
+          "button",
+          {
+            onclick: onUse,
+            disabled: !action.ready,
+            title: action.ready ? "" : "Stop to use",
+          },
+          `[E] ${action.label}`,
+        ),
+      );
+    }
   }
 
   renderTop(w: World): void {
     const readout = getHudReadout(w);
     const busy = this.actions.isBusy();
     this.top.replaceChildren(
-      el('button', {
-        class: 'truck-instrument', title: 'Truck inventory [I]', 'aria-label': 'Open truck inventory',
-        disabled: busy, onclick: () => this.actions.openInventory(),
-      }, createSpeedDial(Number(readout.speed), Number(readout.maxSpeed)),
-      el('span', { class: 'speed-value' }, readout.speed),
-      el('span', { class: 'speed-unit' }, `km/h · max ${readout.maxSpeed}`), createIcon('truck')),
-      el('div', { class: 'resource-bank' },
-        ...readout.resources.map((resource, i) => el('span', {
-          class: `resource ${resource.warning ? 'bad' : ''}`, title: resource.label,
-          'aria-label': `${resource.label}: ${resource.value}${resource.warning ? ', warning' : ''}`,
-          'data-resource': resource.label,
-        }, createIcon(RESOURCE_ICONS[i]), el('span', {},
-          el('small', {}, resource.label), el('strong', {}, `${resource.warning ? '! ' : ''}${resource.value}`)))),
+      el(
+        "button",
+        {
+          class: "truck-instrument",
+          title: "Truck inventory [I]",
+          "aria-label": "Open truck inventory",
+          disabled: busy,
+          onclick: () => this.actions.openInventory(),
+        },
+        createSpeedDial(Number(readout.speed), Number(readout.maxSpeed)),
+        el("span", { class: "speed-value" }, readout.speed),
+        el("span", { class: "speed-unit" }, `km/h · max ${readout.maxSpeed}`),
+        createIcon("truck"),
       ),
-      el('div', { class: 'instrument-actions' },
-        el('button', { class: readout.manual ? 'on' : '', disabled: busy, 'aria-pressed': String(readout.manual), onclick: () => this.actions.toggleManual(), title: 'Toggle manual driving [R]' }, readout.manual ? 'Manual [R]' : 'Route [R]'),
-        el('button', { class: w.player.autoRepair ? 'on' : '', disabled: busy, 'aria-pressed': String(w.player.autoRepair), onclick: () => this.actions.toggleAutoRepair(), title: 'Patch the worst part with one unit of parts whenever the truck is parked [P]' }, w.player.autoRepair ? 'Auto patch [P]' : 'No patch [P]'),
-        el('button', { disabled: busy, onclick: () => this.actions.openCharacter(), title: 'Driver and skills [C]' }, createIcon('driver'), w.player.skillPoints > 0 ? `+${w.player.skillPoints} [C]` : '[C]'),
-        ...(readout.broken ? [el('span', { class: 'bad', role: 'status' }, `! ${readout.broken} broken`)] : []),
+      el(
+        "div",
+        { class: "resource-bank" },
+        ...readout.resources.map((resource, i) =>
+          el(
+            "span",
+            {
+              class: `resource ${resource.warning ? "bad" : ""}`,
+              title: resource.label,
+              "aria-label": `${resource.label}: ${resource.value}${resource.warning ? ", warning" : ""}`,
+              "data-resource": resource.label,
+            },
+            createIcon(RESOURCE_ICONS[i]),
+            el(
+              "span",
+              {},
+              el("small", {}, resource.label),
+              el(
+                "strong",
+                {},
+                `${resource.warning ? "! " : ""}${resource.value}`,
+              ),
+            ),
+          ),
+        ),
       ),
-      el('div', { class: 'resource-bank survival-bank' },
-        ...readout.survival.map((entry) => el('span', {
-          class: `resource ${entry.warning ? 'bad' : ''}`, title: entry.label, 'data-resource': entry.label,
-        }, el('span', {}, el('small', {}, entry.label), el('strong', {}, entry.value),
-          ...('progress' in entry && entry.progress !== undefined ? [el('span', { class: 'job-bar', role: 'progressbar', 'aria-valuenow': String(Math.round(entry.progress * 100)) },
-            el('span', { style: `width:${Math.round(entry.progress * 100)}%` }))] : [])))),
+      el(
+        "div",
+        { class: "instrument-actions" },
+        el(
+          "button",
+          {
+            class: readout.manual ? "on" : "",
+            disabled: busy,
+            "aria-pressed": String(readout.manual),
+            onclick: () => this.actions.toggleManual(),
+            title: "Toggle manual driving [R]",
+          },
+          readout.manual ? "Manual [R]" : "Route [R]",
+        ),
+        el(
+          "button",
+          {
+            class: w.player.autoRepair ? "on" : "",
+            disabled: busy,
+            "aria-pressed": String(w.player.autoRepair),
+            onclick: () => this.actions.toggleAutoRepair(),
+            title:
+              "Patch the worst part with one unit of parts whenever the truck is parked [P]",
+          },
+          w.player.autoRepair ? "Auto patch [P]" : "No patch [P]",
+        ),
+        el(
+          "button",
+          {
+            disabled: busy,
+            onclick: () => this.actions.openCharacter(),
+            title: "Driver and skills [C]",
+          },
+          createIcon("driver"),
+          w.player.skillPoints > 0 ? `+${w.player.skillPoints} [C]` : "[C]",
+        ),
+        ...(readout.broken
+          ? [
+              el(
+                "span",
+                { class: "bad", role: "status" },
+                `! ${readout.broken} broken`,
+              ),
+            ]
+          : []),
+      ),
+      el(
+        "div",
+        { class: "resource-bank survival-bank" },
+        ...readout.survival.map((entry) =>
+          el(
+            "span",
+            {
+              class: `resource ${entry.warning ? "bad" : ""}`,
+              title: entry.label,
+              "data-resource": entry.label,
+            },
+            el(
+              "span",
+              {},
+              el("small", {}, entry.label),
+              el("strong", {}, entry.value),
+              ...("progress" in entry && entry.progress !== undefined
+                ? [
+                    el(
+                      "span",
+                      {
+                        class: "job-bar",
+                        role: "progressbar",
+                        "aria-valuenow": String(
+                          Math.round(entry.progress * 100),
+                        ),
+                      },
+                      el("span", {
+                        style: `width:${Math.round(entry.progress * 100)}%`,
+                      }),
+                    ),
+                  ]
+                : []),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -144,7 +284,11 @@ export class Hud {
     if (this.lines.length === 0) return;
     this.log.replaceChildren(
       el("h3", {}, "Log"),
-      el('div', { class: 'log-lines', tabindex: 0 }, ...this.lines.map((l) => el("div", { class: l.cls }, l.text))),
+      el(
+        "div",
+        { class: "log-lines", tabindex: 0 },
+        ...this.lines.map((l) => el("div", { class: l.cls }, l.text)),
+      ),
     );
   }
 
@@ -186,11 +330,7 @@ export class Hud {
         { class: hostile ? "bad" : "dim" },
         `${v.faction} ${stance}`.trim(),
       ),
-      el(
-        "div",
-        {},
-        `Cab ${pct}%   Speed ${kph(v.speed)} km/h`,
-      ),
+      el("div", {}, `Cab ${pct}%   Speed ${kph(v.speed)} km/h`),
       el("div", { class: "bar" }, el("div", { style: `width:${pct}%` })),
       ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),
       ...parts,
