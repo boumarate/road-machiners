@@ -11,11 +11,11 @@ import type { VehicleFrame } from '../../phys/frames';
 const SWAY = {
   hz: 1.6,
   damping: 0.5, // fraction of critical damping; lower bounces longer
-  pitchPerAccel: 0.005,
-  rollPerAccel: 0.006,
+  pitchPerAccel: 0.007,
+  rollPerAccel: 0.0085,
   liftPerAccel: 0.004,
-  maxPitch: 0.06,
-  maxRoll: 0.07,
+  maxPitch: 0.085,
+  maxRoll: 0.1,
   maxLift: 0.06,
 };
 // A physics step on a bump gives short acceleration spikes far above what driving gives. Clamping them keeps the lean readable.
@@ -27,12 +27,12 @@ const MAX_SUBSTEP = 1 / 120; // seconds
 // A frame gap longer than this, like a hidden tab, restarts the springs from rest.
 const MAX_GAP = 0.25; // seconds
 
-// perAccel: radians of swing per m/s^2 of acceleration. A hanging part swings about atan(a / g), so the chain uses 1/g.
+// perAccel: radians of swing per m/s^2 of acceleration. A real hanging part swings about atan(a / g). The chain swings a bit more, so it reads at game zoom.
 // up: the part stands up from its hinge, like an antenna, instead of hanging down, like a chain.
 export type WhipKind = { hz: number; damping: number; perAccel: number; max: number; up: boolean };
 export const WHIPS = {
-  antenna: { hz: 2.2, damping: 0.2, perAccel: 0.02, max: 0.35, up: true },
-  chain: { hz: 0.9, damping: 0.2, perAccel: 0.1, max: 0.9, up: false },
+  antenna: { hz: 2.2, damping: 0.2, perAccel: 0.028, max: 0.5, up: true },
+  chain: { hz: 0.9, damping: 0.2, perAccel: 0.14, max: 1.1, up: false },
 } satisfies Record<string, WhipKind>;
 
 class Spring {
