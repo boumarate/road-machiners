@@ -5,11 +5,13 @@ import { REGION } from '../data/region';
 import { CHEATS, RULES } from '../data/rules';
 import { START_KITS } from '../data/start';
 import {
-  addXp, applyGodMode, CheatError, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
-  repairAll, revealMap, setFuel, setHealth, setMoney, setSkillPoints, setSupplies, skipToHour, spawnNear,
+  addSkillXp, applyGodMode, CheatError, grantPerk, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
+  repairAll, revealMap, setFuel, setHealth, setMoney, setSupplies, skipToHour, spawnNear,
   startWeather, teleport, toggleFullLog, toggleGod,
 } from './cheats';
 import { playerVehicle } from './damage';
+import { maxHealthOf } from './health';
+import { XP_TO_REACH } from '../data/skills';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { spareParts } from './inventory';
 import { clockOf } from './sun';
@@ -27,17 +29,15 @@ function withSpawned(w: World, templateId: string, hostile: boolean): { w: World
 }
 
 describe('resource cheats', () => {
-  it('sets money and skill points', () => {
-    const w = setSkillPoints(setMoney(emptyWorld(), 12345), 4);
-    expect(w.player.money).toBe(12345);
-    expect(w.player.skillPoints).toBe(4);
+  it('sets money', () => {
+    expect(setMoney(emptyWorld(), 12345).player.money).toBe(12345);
   });
 
   it('rejects negative, fractional and NaN counts', () => {
     const w = emptyWorld();
     expect(() => setMoney(w, -1)).toThrow(CheatError);
     expect(() => setMoney(w, 1.5)).toThrow(CheatError);
-    expect(() => setSkillPoints(w, Number.NaN)).toThrow(CheatError);
+    expect(() => addSkillXp(w, 'driving', Number.NaN)).toThrow(CheatError);
     expect(() => setHealth(w, 50.5)).toThrow(CheatError);
     expect(() => setFuel(w, Number.NaN)).toThrow(CheatError);
   });
@@ -65,12 +65,24 @@ describe('resource cheats', () => {
     expect(next).not.toBe(w);
   });
 
-  it('adds xp through levels', () => {
-    const w = addXp(emptyWorld(), 10_000);
-    expect(w.player.xp).toBe(10_000);
-    expect(w.player.level).toBeGreaterThan(1);
-    expect(w.events.some((e) => e.t === 'levelUp')).toBe(true);
-    expect(() => addXp(emptyWorld(), 0)).toThrow(CheatError);
+  it('adds skill xp through levels', () => {
+    const w = addSkillXp(emptyWorld(), 'social', 10_000);
+    expect(w.player.skills.social).toBe(10_000);
+    expect(w.events.some((e) => e.t === 'skillUp' && e.skill === 'social')).toBe(true);
+    expect(() => addSkillXp(emptyWorld(), 'social', 0)).toThrow(CheatError);
+    expect(() => addSkillXp(emptyWorld(), 'trade', 10)).toThrow(CheatError);
+  });
+
+  it('grants a perk below its skill level', () => {
+    const w = grantPerk(emptyWorld(), 'goodwill');
+    expect(w.player.perks).toEqual(['goodwill']);
+  });
+
+  it('refuses an unknown perk and a second perk from one pair', () => {
+    expect(() => grantPerk(emptyWorld(), 'flying')).toThrow(CheatError);
+    const w = grantPerk(emptyWorld(), 'goodwill');
+    expect(() => grantPerk(w, 'bluff')).toThrow(CheatError);
+    expect(() => grantPerk(w, 'goodwill')).toThrow(CheatError);
   });
 });
 
@@ -275,7 +287,7 @@ describe('vehicle cheats', () => {
     expect(next.vehicles.some((v) => v.id === id)).toBe(false);
     expect(next.obstacles.some((o) => o.id === `wreck-${id}`)).toBe(true);
     expect(next.player.money).toBe(w.player.money);
-    expect(next.player.xp).toBe(w.player.xp);
+    expect(next.player.skills).toEqual(w.player.skills);
   });
 
   it('kills hostiles or all other vehicles', () => {
@@ -327,5 +339,22 @@ describe('vehicle cheats', () => {
       { id: near.id, name: near.name, templateId: null, faction: 'raiders', distance: 5, hostile: true },
       { id: far.id, name: far.name, templateId: null, faction: 'traders', distance: 20, hostile: false },
     ]);
+  });
+});
+
+describe('cheats and toughness', () => {
+  it('lets health reach the raised max health at toughness level 5', () => {
+    const w = emptyWorld();
+    w.player.skills.toughness = XP_TO_REACH[5];
+    expect(setHealth(w, maxHealthOf(w)).player.health).toBe(maxHealthOf(w));
+    expect(() => setHealth(w, maxHealthOf(w) + 1)).toThrow(new RegExp(`${maxHealthOf(w)}`));
+  });
+
+  it('god mode fills health to the raised max health', () => {
+    const w = toggleGod(emptyWorld());
+    w.player.skills.toughness = XP_TO_REACH[5];
+    w.player.health = 1;
+    applyGodMode(w);
+    expect(w.player.health).toBe(maxHealthOf(w));
   });
 });

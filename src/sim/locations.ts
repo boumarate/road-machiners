@@ -4,13 +4,13 @@ import { SALVAGE } from '../data/salvage';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
-import { canReachSalvage, collectSalvage, hasSalvage, pourStores, salvageInRange } from './salvage';
+import { canReachSalvage, collectSalvage, hasSalvage, pourStores, salvageInRange, stripPart } from './salvage';
 import { newId } from './factory';
 import { isMounted, type Spot } from './grid';
-import { getLayoutError, requireIdleRefit } from './inventory';
+import { getLayoutError, refitTurns, requireIdleRefit } from './inventory';
 import { startJob } from './jobs';
 import { beginSearch } from './search';
-import { gainXp } from './progress';
+import { practice } from './progress';
 import { locationAt, townAt } from './sites';
 import type { GridItem, PartInstance, SalvageStock, World } from './types';
 import { tileCenter } from './vision';
@@ -34,7 +34,7 @@ export function discoverSite(world: World, s: { id: string; name: string }): voi
   if (world.player.discovered.includes(s.id)) throw new Error(`${s.id} is already discovered`);
   world.player.discovered.push(s.id);
   world.events.push({ t: "discover", location: s.id });
-  gainXp(world, RULES.discoverXp, `found ${s.name}`);
+  practice(world, 'discover', 1, null);
 }
 
 export function applySiteAction(world: World): World | null {
@@ -123,16 +123,27 @@ export function takeLoot(world: World, stockId: string, pick: LootPick, to: Spot
 function transferLoot(world: World, stock: SalvageStock, item: GridItem, to: Spot): void {
   const me = playerVehicle(world);
   if (item.kind === 'part' && isMounted(me.chassisId, item) && !townAt(world)) {
+    const work = refitTurns(world, me, RULES.refitTurnsPerPart);
     startJob(world, me, {
       kind: 'refit', moves: [],
       pickup: { stockId: stock.id, partId: item.part.id, itemId: item.id, to },
-      turnsLeft: RULES.refitTurnsPerPart, total: RULES.refitTurnsPerPart,
+      turnsLeft: work, total: work,
     });
     return;
   }
+  placeLoot(world, stock, item);
+}
+
+// Moves a loot item from the stock straight into the grid. A part mounted from a wreck gets careful stripping.
+function placeLoot(world: World, stock: SalvageStock, item: GridItem): void {
+  const me = playerVehicle(world);
   me.items.push(item);
-  if (item.kind === 'part') stock.parts = stock.parts.filter((part) => part.id !== item.part.id);
-  else stock.goods[item.good] -= 1;
+  if (item.kind === 'good') {
+    stock.goods[item.good] -= 1;
+    return;
+  }
+  if (isMounted(me.chassisId, item)) stripPart(world, me, stock, item.part);
+  stock.parts = stock.parts.filter((part) => part.id !== item.part.id);
 }
 
 // Moves everything that fits from a searched stock into the grid. The rest stays behind.

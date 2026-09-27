@@ -1,5 +1,6 @@
 import { START_KITS } from "../data/start";
 import { describe, expect, it } from "vitest";
+import { XP_TO_REACH } from "../data/skills";
 import { CHASSIS } from "../data/chassis";
 import { ECONOMY, GOOD_IDS } from "../data/goods";
 import { SHOPS } from "../data/market";
@@ -34,8 +35,6 @@ import { makePart } from "./factory";
 import { maxHp, partValue } from "./wear";
 import { spareParts } from "./inventory";
 import { applySiteAction, canScavenge, salvageNear, scavenge, useOasis } from "./locations";
-import { gainXp, spendSkillPoint, xpForLevel } from "./progress";
-import { vehicleStats } from "./stats";
 import { consumeSupplies } from "./supplies";
 import { heatAt } from "./sun";
 import { sitePads, townAt, townNear } from "./sites";
@@ -65,7 +64,7 @@ describe("trade", () => {
     expect(() => buyGood(w, "meds", 10)).toThrow(/money/);
   });
 
-  it("the scrap route pays and gives XP", () => {
+  it("the scrap route pays and trains Social", () => {
     const start = startAtBowl();
     const bought = buyPrice(start, "bowl", "scrap");
     let w = buyGood(start, "scrap", 8);
@@ -75,7 +74,7 @@ describe("trade", () => {
     expect(sold).toBeGreaterThan(bought);
     w = sellGood(w, "scrap", 10);
     expect(w.player.money - money).toBe(10 * sold);
-    expect(w.player.xp).toBeGreaterThan(0);
+    expect(w.player.skills.social).toBeGreaterThan(0);
   });
 
   it("buying raises the local price and selling lowers it", () => {
@@ -87,10 +86,10 @@ describe("trade", () => {
     expect(buyPrice(sold, "bowl", "scrap")).toBeLessThan(buyPrice(after, "bowl", "scrap"));
   });
 
-  it("trade skill narrows the spread", () => {
+  it("social narrows the spread", () => {
     const w = startAtBowl();
     const before = buyPrice(w, "bowl", "salt") - sellPrice(w, "bowl", "salt");
-    w.player.skills.trade = 3;
+    w.player.skills.social = XP_TO_REACH[3];
     expect(
       buyPrice(w, "bowl", "salt") - sellPrice(w, "bowl", "salt"),
     ).toBeLessThan(before);
@@ -297,10 +296,10 @@ describe("supplies", () => {
     );
   });
 
-  it("survival cuts use", () => {
+  it("toughness cuts use", () => {
     const w = emptyWorld();
     const heat = heatAt(w, w.vehicles[0].pos);
-    w.player.skills.survival = 2;
+    w.player.skills.toughness = XP_TO_REACH[2];
     const before = w.player.supplies;
     consumeSupplies(w);
     expect(before - w.player.supplies).toBeLessThan(RULES.suppliesPerTurn * heat);
@@ -392,26 +391,6 @@ describe("locations", () => {
     expect(
       w.events.filter((e) => e.t === "discover" && e.location === convoy.id),
     ).toHaveLength(0);
-  });
-});
-
-describe("progress", () => {
-  it("levels grant skill points", () => {
-    const w = emptyWorld();
-    const points = w.player.skillPoints;
-    gainXp(w, xpForLevel(3), "test");
-    expect(w.player.level).toBe(3);
-    expect(w.player.skillPoints).toBe(points + 2);
-  });
-
-  it("spending a point raises the skill and each skill changes its number", () => {
-    const w = emptyWorld();
-    const me = w.vehicles[0];
-    const turn = vehicleStats(w, me).turnSlow;
-    spendSkillPoint(w, "driving");
-    expect(vehicleStats(w, me).turnSlow).toBeGreaterThan(turn);
-    w.player.skillPoints = 0;
-    expect(() => spendSkillPoint(w, "gunnery")).toThrow();
   });
 });
 

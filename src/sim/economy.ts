@@ -9,11 +9,10 @@ import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { REGION } from "../data/region";
 import { getResources } from "./resources";
-import { skillBonus } from "../data/skills";
 import { isJunk, maxHp, partValue, restorePart, scrapValue, wearFactor } from "./wear";
 import { playerVehicle } from "./damage";
 import { addCoreParts } from "./factory";
-import { gainXp } from "./progress";
+import { practice, skillEffect } from "./progress";
 import { addStockPart, goodPrice, recordTrade, shopAt, shopState, siteOf, takeStockPart } from "./market";
 import { canUseSite, requireTown } from "./sites";
 import { freeCells, goodsCount, mountedParts } from "./grid";
@@ -87,16 +86,15 @@ export function tradeGoods(
       throw new Error(`Cannot sell ${count} ${good}, holding ${held}`);
     removeGoods(vehicle, good, count);
     resources.money += price * count;
-    if (vehicle.id === world.player.vehicleId)
-      gainXp(
-        world,
-        (price - (world.player.costBasis[good] ?? 0)) *
-          count *
-          RULES.tradeXpPerProfit,
-        `sold ${count} ${GOODS[good].name}`,
-      );
+    if (vehicle.id === world.player.vehicleId) practiceSale(world, good, price, count);
   }
   recordTrade(shopId, shopState(world, shopId), good, count, direction);
+}
+
+// Social grows from profit over the average price paid. A sale at a loss teaches nothing.
+function practiceSale(world: World, good: string, price: number, count: number): void {
+  const profit = (price - (world.player.costBasis[good] ?? 0)) * count;
+  if (profit > 0) practice(world, "profit", profit, null);
 }
 
 // Sells every good the shop trades, keeping `retainedParts` units of the parts good, and every
@@ -185,7 +183,7 @@ function refuelAndRepair(world: World, vehicle: Vehicle): void {
 function spread(world: World): number {
   return Math.max(
     0,
-    ECONOMY.spread - skillBonus("trade", world.player.skills.trade),
+    ECONOMY.spread - skillEffect(world, playerVehicle(world), "social", "priceSpread"),
   );
 }
 
@@ -207,7 +205,7 @@ export function requireShop(world: World): string {
 function repairMult(world: World): number {
   return Math.max(
     0,
-    1 - skillBonus("mechanics", world.player.skills.mechanics),
+    1 - skillEffect(world, playerVehicle(world), "machining", "repair"),
   );
 }
 

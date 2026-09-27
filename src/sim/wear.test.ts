@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { partDef, type ArmorDef, type CargoDef, type EngineDef, type ScannerDef, type WeaponDef } from '../data/parts';
 import { CONDITION } from '../data/wear';
-import type { TerrainTypeId } from '../data/terrain';
-import { addVehicle, emptyWorld, editableTerrain } from './testkit';
+import { REGION } from '../data/region';
+import { TERRAIN_TYPES, type TerrainTypeId } from '../data/terrain';
+import { addVehicle, emptyWorld, editableTerrain, practiceOf } from './testkit';
 import { corePart, mountedParts } from './grid';
+import { addState } from './states';
 import { tileAt } from './terrain';
 import type { PartInstance, Vehicle, World } from './types';
 import { applyWear, damagePart, isJunk, maxHp, restorePart, wornDef } from './wear';
@@ -260,5 +262,49 @@ describe('HP ownership', () => {
       .map(([path]) => path);
     expect(Object.keys(SIM_SOURCES).length).toBeGreaterThan(20);
     expect(writers).toEqual([]);
+  });
+});
+
+describe('rough ground practice', () => {
+  const wears = Object.values(TERRAIN_TYPES).map((t) => t.wear);
+  const roughness = (type: TerrainTypeId) => (TERRAIN_TYPES[type].wear - Math.min(...wears)) / (Math.max(...wears) - Math.min(...wears));
+
+  it('pays the player for tiles driven off the road, harder on rougher ground', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    setTerrainUnder(w, me, 6, 'hardpan');
+    drive(me, 6);
+    applyWear(w);
+    const [event] = practiceOf(w, 'roughTiles');
+    expect(event.amount).toBeCloseTo(6);
+    expect(event.difficulty).toBeCloseTo(roughness('hardpan'));
+  });
+
+  it('pays nothing on the road', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    drive(me, 6);
+    applyWear(w);
+    expect(practiceOf(w, 'roughTiles')).toEqual([]);
+  });
+
+  it('pays nothing while the player is towed', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const tower = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 50, y: 50 });
+    addState(w, 'tow', tower.id, me.id, { kind: 'tow', town: REGION.towns[0].id, fee: 10, hitched: true });
+    setTerrainUnder(w, me, 6, 'hardpan');
+    drive(me, 6);
+    applyWear(w);
+    expect(practiceOf(w, 'roughTiles')).toEqual([]);
+  });
+
+  it('pays nothing for an NPC driving rough ground', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 50, y: 50 });
+    setTerrainUnder(w, npc, 6, 'scree');
+    drive(npc, 6);
+    applyWear(w);
+    expect(practiceOf(w, 'roughTiles')).toEqual([]);
   });
 });

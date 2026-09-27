@@ -9,16 +9,18 @@ import type { TopicId } from "../data/dialogue";
 import type { DecisionOptions } from "../data/npcs";
 import type { Contract, ShopState } from "./market";
 import type { Rng } from "./rng";
+import type { PerkId } from "../data/skills";
 
 export type PatchDeal = DecisionOptions["patchDeal"];
 
 export type Faction = "player" | "raiders" | "traders" | "scavengers";
-export type SkillId =
-  | "driving"
-  | "gunnery"
-  | "mechanics"
-  | "trade"
-  | "survival";
+export type SkillId = "driving" | "perception" | "machining" | "toughness" | "social";
+export type XpSource =
+  | "roughTiles" | "ram" | "escape"
+  | "hit" | "contact" | "discover"
+  | "fieldJob" | "patch" | "search"
+  | "heat" | "damage" | "knockout"
+  | "profit" | "deal" | "call";
 
 export type PartInstance = {
   id: string;
@@ -234,16 +236,18 @@ export type CallVars = Record<string, CallVar>;
 
 // An open radio call with the NPC `with`. A null topic means the hub of topics. `line` is what the NPC said
 // last, which is the node's line or an answer that kept the call on the hub.
-export type Call = { with: string; topic: TopicId | null; node: string; vars: CallVars; line: { text: string; vars: CallVars } };
+// `discussed` turns true once the call takes up a topic; only such a call practices social when it ends.
+export type Call = { with: string; topic: TopicId | null; node: string; vars: CallVars; line: { text: string; vars: CallVars }; discussed: boolean };
 export type TopicOutcome = "agreed" | "refused" | "done";
 
 export type Player = {
   vehicleId: string;
   money: number;
-  xp: number;
-  level: number;
-  skillPoints: number;
-  skills: Record<SkillId, number>;
+  skills: Record<SkillId, number>; // XP per skill; the level follows from XP_TO_REACH
+  xpToday: Record<SkillId, number>; // XP per skill earned on day xpDay, for the daily soft cap
+  xpDay: number;
+  xpBySource: Record<XpSource, number>; // lifetime XP per source, for the debug console
+  perks: PerkId[]; // picked perks, at most one per pair; see src/sim/progress.ts
   health: number;
   fuel: number;
   supplies: number;
@@ -267,6 +271,7 @@ export type Player = {
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision
   contacts: Contact[]; // vehicles detected beyond sight; refreshed by refreshVision
   clouds: string[]; // ids of dust clouds the player sees right now; refreshed by refreshVision
+  hostilesSeen: string[]; // ids of hostile trucks in sight at the end of the last turn, for escapes; see src/sim/escape.ts
 };
 
 // One round of a shot. offset is where it crossed the target in meters from its center, across the line
@@ -289,8 +294,8 @@ export type GameEvent =
   | { t: 'spawn'; vehicle: string }
   | { t: 'despawn'; vehicle: string }
   | { t: 'hostile'; vehicle: string; against: string }
-  | { t: 'xp'; amount: number; reason: string }
-  | { t: 'levelUp'; level: number }
+  | { t: 'practice'; source: XpSource; amount: number; difficulty: number | null; xp: number }
+  | { t: 'skillUp'; skill: SkillId; level: number }
   | { t: 'money'; amount: number; reason: string }
   | { t: 'contract'; contract: Contract; outcome: 'accepted' | 'done' | 'failed' | 'lapsed' }
   | { t: 'discover'; location: string }

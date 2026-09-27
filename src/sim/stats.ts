@@ -4,7 +4,8 @@
 import { chassisDef } from '../data/chassis';
 import type { EngineDef, WeaponDef } from '../data/parts';
 import { RULES } from '../data/rules';
-import { skillBonus } from '../data/skills';
+import { PERK_NUMBERS } from '../data/skills';
+import { skillEffect, vehicleHasPerk } from './progress';
 import { TOW } from '../data/tow';
 import { maxHp, wornDef } from './wear';
 import { corePart, coreParts, mountedParts } from './grid';
@@ -25,6 +26,8 @@ export type VehicleStats = {
   turnFast: number;
   reverseTurn: number; // radians over one turn of backing up
   fuelPerTile: number;
+  limpSpeed: number; // top speed with no working engine, a broken transmission or an empty tank
+  roughSkill: number; // share of the speed penalty of slow ground the driver cancels
   mass: number; // kilograms
   radius: number;
   weapons: MountedWeapon[];
@@ -63,10 +66,11 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   const force = ch.ratedMass / mass;
   // Each broken wheel cuts top speed and turning by the same share.
   const wheels = (1 - RULES.wheelLoss) ** coreParts(v, 'wheel').filter((p) => !isWorking(p)).length;
-  const turnMult = (v.faction === 'player' ? 1 + skillBonus('driving', world.player.skills.driving) : 1) * load * wheels;
+  const turnMult = (1 + skillEffect(world, v, 'driving', 'turnRate')) * load * wheels;
+  const limpSpeed = limpSpeedOf(world, v);
 
-  let maxSpeed = RULES.limpSpeed;
-  let accel = RULES.limpSpeed;
+  let maxSpeed = limpSpeed;
+  let accel = limpSpeed;
   let fuelMult = 0;
   // Without a working engine the driver pushes the truck at limp speed and burns no fuel.
   if (hasWorkingEngine(v)) {
@@ -75,7 +79,7 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     accel = (ch.accel + e.accelBonus) * force;
     fuelMult = e.fuelMult;
     // A broken transmission leaves only a crawl to limp home.
-    if (!isWorking(corePart(v, 'transmission'))) maxSpeed = Math.min(maxSpeed, RULES.limpSpeed);
+    if (!isWorking(corePart(v, 'transmission'))) maxSpeed = Math.min(maxSpeed, limpSpeed);
   }
   maxSpeed *= weatherAt(world, v.pos).speed;
   // A tower drives with care while a truck hangs on its rope.
@@ -89,10 +93,23 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     turnFast: ch.turnFast * DEG * turnMult,
     reverseTurn: ch.reverseTurn * DEG * turnMult,
     fuelPerTile: ch.fuelPerTile * fuelMult * RULES.fuelUseFactor,
+    limpSpeed,
+    roughSkill: skillEffect(world, v, 'driving', 'roughSpeed'),
     mass,
     radius: ch.radius,
     weapons: mountedParts(v, 'weapon').map((part) => ({ part, def: wornDef<WeaponDef>(part) })),
   };
+}
+
+// Top speed of a stranded truck, raised by the player's driving and the pusher perk.
+function limpSpeedOf(world: World, v: Vehicle): number {
+  const pusher = vehicleHasPerk(world, v, 'pusher') ? PERK_NUMBERS.pusher.crawl : 1;
+  return RULES.limpSpeed * (1 + skillEffect(world, v, 'driving', 'crawl')) * pusher;
+}
+
+// Speed factor of ground with base factor `factor`, after the driver's skill cuts part of its penalty.
+export function groundSpeed(s: VehicleStats, factor: number): number {
+  return 1 - (1 - factor) * (1 - s.roughSkill);
 }
 
 // Turn limit for a given speed this turn. Below crawl speed the limit shrinks with the distance driven,

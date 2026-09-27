@@ -3,10 +3,9 @@ import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
 import { STRIP } from '../data/salvage';
 import { CONDITION, REPAIR } from '../data/wear';
-import { damagePart } from './wear';
-import { partValue } from './wear';
+import { damagePart, partValue } from './wear';
 import { makePart } from './factory';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, practiceOf } from './testkit';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { addGoods, removeGoods, stowPart } from './inventory';
 import { advanceJobs, startAutoRepair, startJob, startRepair, startStrip } from './jobs';
@@ -282,5 +281,41 @@ describe('strip job', () => {
     expect(() => startStrip(w, mounted.id)).toThrow(/spare/);
     const cab = corePart(me, 'cab');
     expect(() => startStrip(w, cab.id)).toThrow(/spare/);
+  });
+});
+
+describe('field job practice', () => {
+  it('pays the player the job turns when a repair finishes', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    armorPart(me).hp = 1;
+    addGoods(w, me, 'parts', 20);
+    const next = startRepair(w, armorPart(me).id);
+    const total = next.vehicles[0].job!.total;
+    for (let i = 0; i < total; i++) advanceJobs(next);
+    expect(practiceOf(next, 'fieldJob')).toMatchObject([{ amount: total, difficulty: null }]);
+  });
+
+  it('pays nothing for a cancelled repair', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    armorPart(me).hp = 1;
+    addGoods(w, me, 'parts', 20);
+    const next = startRepair(w, armorPart(me).id);
+    next.vehicles[0].speed = 5;
+    advanceJobs(next);
+    expect(practiceOf(next, 'fieldJob')).toEqual([]);
+  });
+
+  it('pays nothing for an NPC repair', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine', 'cage'], { x: 50, y: 50 });
+    armorPart(npc).hp = 1;
+    addGoods(w, npc, 'parts', 20);
+    const plan = repairPlan(w, npc, armorPart(npc).id);
+    startJob(w, npc, { kind: 'repair', partId: armorPart(npc).id, parts: plan.parts, turnsLeft: plan.turns, total: plan.turns });
+    for (let i = 0; i < plan.turns; i++) advanceJobs(w);
+    expect(npc.job).toBeNull();
+    expect(practiceOf(w, 'fieldJob')).toEqual([]);
   });
 });

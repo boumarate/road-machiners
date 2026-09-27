@@ -7,21 +7,23 @@ import { NPCS } from '../data/npcs';
 import { PARTS, partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { CHEATS, RULES } from '../data/rules';
+import { PERK_IDS, PERKS, SKILL_IDS } from '../data/skills';
 import { TIME } from '../data/time';
 import { resolveDestroyed } from './combat';
 import { damagePart, isJunk, maxHp, restorePart } from './wear';
 import { playerVehicle } from './damage';
 import { makePart } from './factory';
+import { maxHealthOf } from './health';
 import { corePart, mountedParts } from './grid';
 import { addGoods, stowPart } from './inventory';
 import { generateNpcLoadout } from './npc-loadout';
-import { gainXp } from './progress';
+import { grantXp, isPerkId, pickedFromPair } from './progress';
 import { nearestPad, type Site } from './sites';
 import { isFree, spawnAt } from './spawn';
 import { addState, settleStates, stateOf } from './states';
 import { isTowed } from './tow';
 import { clockOf } from './sun';
-import type { Faction, Vehicle, World } from './types';
+import type { Faction, SkillId, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { refreshVision } from './vision';
 import { makeWeather } from './weather';
@@ -68,18 +70,26 @@ export function setSupplies(world: World, n: number): World {
 }
 
 export function setHealth(world: World, n: number): World {
-  requireInteger('Health', n, 0, RULES.maxHealth);
+  requireInteger('Health', n, 0, maxHealthOf(world));
   return update(world, (w) => { w.player.health = n; });
 }
 
-export function setSkillPoints(world: World, n: number): World {
-  requireInteger('Skill points', n, 0, Number.MAX_SAFE_INTEGER);
-  return update(world, (w) => { w.player.skillPoints = n; });
+export function addSkillXp(world: World, skill: string, n: number): World {
+  if (!isSkillId(skill)) throw new CheatError(`No skill ${skill}. Skills: ${SKILL_IDS.join(', ')}`);
+  requireInteger('XP', n, 1, Number.MAX_SAFE_INTEGER);
+  return update(world, (w) => grantXp(w, skill, n));
 }
 
-export function addXp(world: World, n: number): World {
-  requireInteger('XP', n, 1, Number.MAX_SAFE_INTEGER);
-  return update(world, (w) => gainXp(w, n, 'cheat'));
+// Grants a perk whatever the skill level. A pair still holds one pick.
+export function grantPerk(world: World, id: string): World {
+  if (!isPerkId(id)) throw new CheatError(`No perk ${id}. Perks: ${PERK_IDS.join(', ')}`);
+  const picked = pickedFromPair(world, id);
+  if (picked) throw new CheatError(`${PERKS[picked].name} is already picked from the pair of ${PERKS[id].name}`);
+  return update(world, (w) => { w.player.perks.push(id); });
+}
+
+function isSkillId(id: string): id is SkillId {
+  return (SKILL_IDS as readonly string[]).includes(id);
 }
 
 // Mounted and spare parts alike. Junk parts stay broken, since no repair rebuilds them.
@@ -137,7 +147,7 @@ export function applyGodMode(world: World): void {
   if (!world.player.god) return;
   const me = playerVehicle(world);
   repairParts(me);
-  world.player.health = RULES.maxHealth;
+  world.player.health = maxHealthOf(world);
   world.player.fuel = chassisDef(me.chassisId).fuelCap;
   world.player.supplies = RULES.suppliesCap;
 }

@@ -17,7 +17,7 @@ import { sampleWeighted } from './npc-loadout';
 import { playerVehicle } from './damage';
 import { freeCells, goodsCount } from './grid';
 import { addGoods, removeGoods, spareParts } from './inventory';
-import { gainXp } from './progress';
+import { practice } from './progress';
 import { randInt, type Rng } from './rng';
 import { canUseSite, type Site } from './sites';
 import { playerCommand } from './world';
@@ -372,7 +372,7 @@ function finishContract(world: World, c: Contract, outcome: 'done' | 'failed' | 
   if (outcome === 'done') {
     world.player.money += c.reward;
     world.events.push({ t: 'money', amount: c.reward, reason: 'contract' });
-    gainXp(world, c.xp, 'contract');
+    practice(world, 'deal', 1, null);
   }
   if (outcome === 'failed' && c.kind === 'haul') {
     const penalty = haulPenalty(c, goodValue(c.good));

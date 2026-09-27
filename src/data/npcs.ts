@@ -81,7 +81,6 @@ export type NpcTemplate = {
   aggroRange: number; // raiders pick targets inside this range
   preferredRange: number; // distance a raider tries to hold while fighting
   bounty: number; // money the player gets for the kill
-  xp: number;
   cap: number; // max alive at once
   interval: number; // turns between spawn attempts
   spawn: "camp" | "town";
@@ -277,7 +276,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     aggroRange: 11,
     preferredRange: 3,
     bounty: 60,
-    xp: 40,
     cap: 6,
     interval: 8,
     spawn: "camp",
@@ -288,7 +286,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     aggroRange: 12,
     preferredRange: 6,
     bounty: 150,
-    xp: 90,
     cap: 2,
     interval: 20,
     spawn: "camp",
@@ -301,7 +298,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     aggroRange: 0,
     preferredRange: 0,
     bounty: 0,
-    xp: 60,
     cap: 5,
     interval: 12,
     spawn: "town",
@@ -314,7 +310,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     aggroRange: 0,
     preferredRange: 0,
     bounty: 0,
-    xp: 40,
     cap: 4,
     interval: 12,
     spawn: "town",

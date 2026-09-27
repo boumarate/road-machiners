@@ -13,6 +13,7 @@ import { spareParts } from './inventory';
 import type { Call, CallVars, PartInstance, Vehicle, World } from './types';
 import { dist } from './vec';
 import { npcTraits } from './npc-decisions';
+import { practice } from './progress';
 import { canVehicleSee } from './vision';
 import { playerCommand, requireActivePlayer, update } from './world';
 
@@ -113,17 +114,20 @@ function enter(world: World, call: Call, topic: TopicId | null, node: string): v
 
 function enterTopic(world: World, npc: Vehicle, call: Call, topic: Topic): void {
   call.vars = topic.prepare ? PREPARES[topic.prepare](world, npc) : {};
+  call.discussed = true;
   enter(world, call, topic.id, topic.start);
 }
 
+// An ended call that took up a topic practices social. Hanging up at once teaches nothing.
 function endCall(world: World, call: Call): void {
   world.player.call = null;
   world.events.push({ t: 'call', with: call.with, outcome: 'ended' });
+  if (call.discussed) practice(world, 'call', 1, null);
 }
 
 function begin(world: World, npc: Vehicle): Call {
   if (world.player.call) throw new Error('A call is already open');
-  const call: Call = { with: npc.id, topic: null, node: HUB, vars: {}, line: { text: '', vars: {} } };
+  const call: Call = { with: npc.id, topic: null, node: HUB, vars: {}, line: { text: '', vars: {} }, discussed: false };
   world.player.call = call;
   world.events.push({ t: 'call', with: npc.id, outcome: 'opened' });
   return call;

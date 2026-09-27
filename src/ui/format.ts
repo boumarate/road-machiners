@@ -3,6 +3,7 @@
 import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
 import type { Contract } from '../sim/market';
+import { PERK_LEVELS, SKILL_INFO } from '../data/skills';
 import { TERRAIN } from '../data/terrain';
 import { playerVehicle } from '../sim/damage';
 import { dist, type Vec } from '../sim/vec';
@@ -11,10 +12,11 @@ import { mountedParts } from '../sim/grid';
 import { playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
 import { npcTraits } from '../sim/npc-decisions';
+import { hasPerk } from '../sim/progress';
 import { pleaData, statesHeld, towData } from '../sim/states';
 import { isJunk } from '../sim/wear';
 import type { PartHit } from '../sim/armor';
-import type { GameEvent, NpcState, PartInstance, ShotRound, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
+import type { GameEvent, NpcState, PartInstance, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
 import { damage } from './units';
 
@@ -51,9 +53,11 @@ export function formatNpcActivity(world: World, vehicle: Vehicle): string | null
   return `${activity.kind}${label ? `: ${label}` : ''} — ${activity.reason}`;
 }
 
-// "Traits: scavenger, scumbag" for an NPC. The hover panel shows it as one line.
-export function formatNpcTraits(vehicle: Vehicle): string {
-  return `Traits: ${npcTraits(vehicle).join(', ')}`;
+// "Traits: scavenger, scumbag" for an NPC. The hover panel shows it as one line. Traits stay hidden, so null,
+// until the player picks the read the driver perk.
+export function formatNpcTraits(world: World, vehicle: Vehicle): string | null {
+  const traits = npcTraits(vehicle);
+  return hasPerk(world, 'readDriver') ? `Traits: ${traits.join(', ')}` : null;
 }
 
 // How a state the NPC holds reads from the player's side.
@@ -232,6 +236,12 @@ function siteName(id: string): string {
   return site.name;
 }
 
+// A level that opens a perk pair says so, since the pick waits on the character screen.
+function skillUpText(skill: SkillId, level: number): string {
+  const reached = `${SKILL_INFO[skill].name} reached level ${level}.`;
+  return (PERK_LEVELS as readonly number[]).includes(level) ? `${reached} Pick a perk on the character screen [C].` : reached;
+}
+
 // Pleas between two NPCs. The player's own pleas show as radio lines.
 function pleaText(world: World, e: Extract<GameEvent, { t: 'plea' }>): LogLine | null {
   const me = world.player.vehicleId;
@@ -294,10 +304,10 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       return { text: `${n(e.vehicle)} destroyed`, cls: 'good' };
     case 'hostile':
       return e.against === me ? { text: `${n(e.vehicle)} turns hostile to you`, cls: 'bad' } : null;
-    case 'xp':
-      return { text: `+${e.amount} XP: ${e.reason}`, cls: 'good' };
-    case 'levelUp':
-      return { text: `Level ${e.level}! Skill point gained. Press C.`, cls: 'good' };
+    case 'practice':
+      return null;
+    case 'skillUp':
+      return { text: skillUpText(e.skill, e.level), cls: 'good' };
     case 'money':
       return { text: `${e.amount > 0 ? '+' : ''}${e.amount} money: ${e.reason}`, cls: e.amount > 0 ? 'good' : 'bad' };
     case 'discover': {

@@ -9,7 +9,7 @@ import { vehicleStats } from './stats';
 import type { Terrain } from './terrain';
 import { onTestFinished } from 'vitest';
 import { DECISIONS, STATE_WEIGHTS, TRAITS, type DecisionId, type DecisionOptions, type TraitId } from '../data/npcs';
-import type { Faction, NpcBrain, Vehicle, World } from './types';
+import type { Faction, GameEvent, NpcBrain, Vehicle, World, XpSource } from './types';
 import { dist, type Vec } from './vec';
 import { refreshVision } from './vision';
 import { cloneWorld, newWorld } from './world';
@@ -50,6 +50,11 @@ export function addVehicle(w: World, faction: Faction, chassisId: string, parts:
   const v = makeVehicle(w, { name: chassisId, faction, chassisId, parts: parts.map((defId) => ({ defId, wear: 0 })), spares: [], cargo: {}, pos, heading, brain: null });
   w.vehicles.push(v);
   return v;
+}
+
+// The practice events a source logged in the world's current events.
+export function practiceOf(w: World, source: XpSource): Extract<GameEvent, { t: 'practice' }>[] {
+  return w.events.filter((e): e is Extract<GameEvent, { t: 'practice' }> => e.t === 'practice' && e.source === source);
 }
 
 // A fresh NPC brain with no goals.

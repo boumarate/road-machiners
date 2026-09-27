@@ -4,9 +4,10 @@
 
 import {
   CheatError,
-  addXp,
+  addSkillXp,
   damagePartTo,
   give,
+  grantPerk,
   killVehicles,
   makeHostile,
   nearbyVehicles,
@@ -16,7 +17,6 @@ import {
   setFuel,
   setHealth,
   setMoney,
-  setSkillPoints,
   setSupplies,
   skipToHour,
   spawnNear,
@@ -25,7 +25,9 @@ import {
   toggleFullLog,
   toggleGod,
 } from "../sim/cheats";
-import type { World } from "../sim/types";
+import { PERKS, SKILL_IDS, XP_RULES } from "../data/skills";
+import { levelOf, xpTodayOf } from "../sim/progress";
+import type { World, XpSource } from "../sim/types";
 import { el, panel } from "./dom";
 
 export type CommandResult = { world: World | null; lines: string[] };
@@ -87,8 +89,19 @@ export const COMMANDS: readonly Command[] = [
   setter("fuel", "Set fuel, capped by the tanks.", setFuel),
   setter("supplies", "Set supplies, capped by the storage.", setSupplies),
   setter("health", "Set driver health.", setHealth),
-  setter("xp", "Add experience points.", addXp, "added:"),
-  setter("skillpoints", "Set unspent skill points.", setSkillPoints),
+  command("xp <skill> <n>", "Add XP to a skill.", { min: 2, max: 2 }, (world, [skill, text], usage) => {
+    const n = parseNumber(text, usage);
+    return changed(addSkillXp(world, skill, n), `${skill} XP added: ${n}`);
+  }),
+  command("perk <perk id>", "Grant a perk at any skill level.", { min: 1, max: 1 }, (world, [id]) => {
+    const next = grantPerk(world, id);
+    const granted = next.player.perks[next.player.perks.length - 1];
+    return changed(next, `perk granted: ${PERKS[granted].name}`);
+  }),
+  command("skills", "Show skill XP, levels, today's XP and XP per source.", { min: 0, max: 0 }, (world) => ({
+    world: null,
+    lines: skillLines(world),
+  })),
 
   command("repair", "Restore every part to full.", { min: 0, max: 0 }, (world) =>
     changed(repairAll(world), "all parts repaired"),
@@ -153,6 +166,15 @@ export const COMMANDS: readonly Command[] = [
     lines: COMMANDS.map((c) => `${c.usage}  ${c.help}`),
   })),
 ];
+
+function skillLines(world: World): string[] {
+  const p = world.player;
+  const skills = SKILL_IDS.map(
+    (id) => `${id}  level ${levelOf(p.skills[id])}  xp ${Math.round(p.skills[id])}  today ${Math.round(xpTodayOf(world, id))}/${XP_RULES.dailyCap}`,
+  );
+  const sources = (Object.keys(p.xpBySource) as XpSource[]).map((s) => `${s}  ${Math.round(p.xpBySource[s])} xp`);
+  return [...skills, ...sources];
+}
 
 export function runCommand(world: World, line: string): CommandResult {
   const [name, ...args] = line.trim().split(/\s+/);

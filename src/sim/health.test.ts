@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
-import { healPlayer } from './health';
+import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { healPlayer, maxHealthOf } from './health';
 import { sitePads } from './sites';
 import { emptyWorld } from './testkit';
 
@@ -77,5 +78,25 @@ describe('healing', () => {
     Object.assign(w.player, { health: 0, state: 'dead' });
     healPlayer(w);
     expect(w.player.health).toBe(0);
+  });
+});
+
+describe('toughness on health', () => {
+  it('raises max health for the player at level 5', () => {
+    const w = emptyWorld();
+    expect(maxHealthOf(w)).toBe(RULES.maxHealth);
+    w.player.skills.toughness = XP_TO_REACH[5];
+    expect(maxHealthOf(w)).toBe(Math.round(RULES.maxHealth * (1 + 5 * SKILL_EFFECTS.toughness.maxHealth)));
+  });
+
+  it('heals past the base max health at level 5', () => {
+    const w = emptyWorld(gate);
+    Object.assign(w.player, { health: RULES.maxHealth, supplies: 5 });
+    w.vehicles[0].speed = 0;
+    w.player.skills.toughness = XP_TO_REACH[5];
+    healPlayer(w);
+    expect(w.player.health).toBeGreaterThan(RULES.maxHealth);
+    for (let i = 0; i < 20; i++) healPlayer(w);
+    expect(w.player.health).toBe(maxHealthOf(w));
   });
 });

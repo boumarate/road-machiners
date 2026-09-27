@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { PERK_NUMBERS } from '../data/skills';
 import { TRAIT_TALK, END, HONK_RANGE, HUB, TOPICS, type Topic } from '../data/dialogue';
 import { PARTS } from '../data/parts';
 import { REGION } from '../data/region';
@@ -8,13 +9,13 @@ import { fireBlock, isHostile } from './combat';
 import { partTradePrice } from './economy';
 import { makePart } from './factory';
 import { NPCS } from '../data/npcs';
-import { freeCells, isMounted } from './grid';
+import { freeCells, goodsCount, isMounted } from './grid';
 import { addGoods, spareParts, stowPart } from './inventory';
 import { hasCargo } from './salvage';
 import { vehicleStats } from './stats';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
 import { addState, endState, stateOf } from './states';
-import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
 import type { TraitId } from '../data/npcs';
 import type { Vehicle, World } from './types';
 import { dist } from './vec';
@@ -75,7 +76,7 @@ describe('calls', () => {
   it('opens on the hub with the greeting when the player sees the truck', () => {
     const { w, npc } = withNpc('trader', 'traders');
     const next = callVehicle(w, npc.id);
-    expect(next.player.call).toEqual({ with: npc.id, topic: null, node: HUB, vars: {}, line: { text: TRAIT_TALK.trader.voice!.greeting, vars: {} } });
+    expect(next.player.call).toEqual({ with: npc.id, topic: null, node: HUB, vars: {}, line: { text: TRAIT_TALK.trader.voice!.greeting, vars: {} }, discussed: false });
     expect(next.events).toContainEqual({ t: 'call', with: npc.id, outcome: 'opened' });
     expect(next.events).toContainEqual({ t: 'say', speaker: npc.id, text: TRAIT_TALK.trader.voice!.greeting, vars: {} });
   });
@@ -282,6 +283,20 @@ describe('demand', () => {
     }
   });
 
+  it('handing over pays the player for a closed deal', () => {
+    const { w: start } = ambush();
+    const w = endTurn(start, testDrive);
+    const next = chooseOption(w, optionIndex(w, 'Fine. Take it.'));
+    expect(practiceOf(next, 'deal')).toMatchObject([{ amount: 1, difficulty: null }]);
+  });
+
+  it('refusing pays nothing for a deal', () => {
+    const { w: start } = ambush();
+    const w = endTurn(start, testDrive);
+    const next = chooseOption(w, optionIndex(w, 'Come and get it.'));
+    expect(practiceOf(next, 'deal')).toEqual([]);
+  });
+
   it('refusing keeps the fight, and the demand is not made twice', () => {
     const { w: start, raider } = ambush();
     let w = endTurn(start, testDrive);
@@ -384,5 +399,51 @@ describe('trade', () => {
     const { w, npc } = withSpare('scavenger', 'scavengers', 'scrapPanels');
     const next = openTrade(w, npc.id);
     expect(currentOptions(next).some((o) => o.text.startsWith(PARTS.scrapPanels.name))).toBe(true);
+  });
+});
+
+describe('call practice', () => {
+  it('pays the player once when a call that took up a topic ends', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    const open = callVehicle(w, npc.id);
+    expect(practiceOf(open, 'call')).toEqual([]);
+    const asked = chooseOption(open, optionIndex(open, 'Where is the nearest town?'));
+    const closed = chooseOption(asked, optionIndex(asked, 'Thanks. Over and out.'));
+    expect(practiceOf(closed, 'call')).toMatchObject([{ amount: 1, difficulty: null }]);
+  });
+
+  it('pays nothing for a call hung up without a topic', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    expect(practiceOf(hangUp(callVehicle(w, npc.id)), 'call')).toEqual([]);
+  });
+
+  it('pays nothing for a refused call', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    addState(w, 'feud', npc.id, w.player.vehicleId, { kind: 'feud', robbery: false });
+    expect(practiceOf(callVehicle(w, npc.id), 'call')).toEqual([]);
+  });
+});
+
+describe('smooth talker perk', () => {
+  it('hands over half of each good, rounded down, and every loose part', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    w.player.perks.push('smoothTalker');
+    const me = playerVehicle(w);
+    addGoods(w, me, 'scrap', 3);
+    const raider = addVehicle(w, 'raiders', 'buggy', ['stockEngine', 'mg'], { x: 40, y: 30 }, Math.PI);
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    forceOption('hostileSeen', 'fight');
+    let next = endTurn(w, testDrive);
+    const held = goodsCount(playerVehicle(next));
+    const loose = playerVehicle(next).items.filter((i) => i.kind === 'part' && !isMounted(me.chassisId, i)).length;
+    next = chooseOption(next, currentOptions(next).findIndex((o) => o.text === 'Fine. Take it.'));
+    const stock = next.salvage.find((s) => s.id.startsWith(`cargo-${me.id}`))!;
+    for (const [good, count] of Object.entries(held)) {
+      const dropped = Math.floor(count * PERK_NUMBERS.smoothTalker.cargo);
+      expect(stock.goods[good] ?? 0).toBe(dropped);
+      expect(goodsCount(playerVehicle(next))[good] ?? 0).toBe(count - dropped);
+    }
+    expect(stock.parts).toHaveLength(loose);
   });
 });

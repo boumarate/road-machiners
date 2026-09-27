@@ -3,16 +3,17 @@
 // the NPC's `patchDeal` decision, so traits and states shape them. A deal is a `patch` state held by the patcher
 // toward the client. Work runs while both trucks stay parked in reach, and the fulfilled hook pays for it once.
 
+import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { PATCH } from '../data/wear';
 import { isJunk, maxHp, restorePart } from './wear';
 import { playerVehicle, vehicleById } from './damage';
-import { buyPrice } from './economy';
+import { getTradePrice } from './economy';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { removeGoods } from './inventory';
 import { decide, optionWeights } from './npc-decisions';
-import { mechanicsMult, planPartRepair } from './repair';
+import { machiningMult, planPartRepair } from './repair';
 import { getResources } from './resources';
 import { addState } from './states';
 import { inTowReach } from './tow';
@@ -38,7 +39,7 @@ export function canFixItself(world: World, v: Vehicle): boolean {
 }
 
 export function patchPlan(world: World, { patcher, client }: Roles): PatchPlan {
-  const mult = mechanicsMult(world, patcher);
+  const mult = machiningMult(world, patcher);
   const plans = brokenDriveParts(client).map((p) => planPartRepair(p, PATCH.share, mult, Infinity, Infinity));
   return { parts: plans.reduce((sum, p) => sum + p.parts, 0), turns: plans.reduce((sum, p) => sum + p.turns, 0) };
 }
@@ -53,16 +54,18 @@ function partsHeld(v: Vehicle): number {
   return goodsCount(v).parts ?? 0;
 }
 
-// Parts are priced as the client's nearest town sells them.
+// Parts are priced as the client's nearest town sells them to the client.
 function partsValue(world: World, client: Vehicle, parts: number): number {
   const town = REGION.towns.reduce((a, b) => (dist(client.pos, a.pos) <= dist(client.pos, b.pos) ? a : b));
-  return parts * buyPrice(world, town.id, 'parts');
+  return parts * getTradePrice(world, client, town.id, 'parts', 'buy');
 }
 
+// The client's price. A player client's social skill talks it down, and the goodwill perk makes it free.
 function priceOf(world: World, deal: PatchDeal, roles: Roles, plan: PatchPlan): number {
   const labor = plan.turns * PATCH.laborPerTurn;
-  if (deal === 'free') return 0;
-  return deal === 'ownParts' ? labor : labor + partsValue(world, roles.client, plan.parts);
+  if (deal === 'free' || vehicleHasPerk(world, roles.client, 'goodwill')) return 0;
+  const full = deal === 'ownParts' ? labor : labor + partsValue(world, roles.client, plan.parts);
+  return Math.round(full * (1 - skillEffect(world, roles.client, 'social', 'patchPrice')));
 }
 
 // Who spends the parts on a deal.
@@ -90,11 +93,17 @@ export function dealAvailable(deal: PatchDeal): (world: World, npc: Vehicle) => 
 export function patchTerms(world: World, npc: Vehicle): CallVar | null {
   const subject = world.player.vehicleId;
   if (Object.keys(optionWeights(world, npc, 'patchDeal', subject, null)).length === 0) return null;
-  const deal = decide(world, npc, 'patchDeal', subject, null);
   const roles = rolesWith(world, npc);
+  const deal = goodwillDeal(world, npc, roles) ?? decide(world, npc, 'patchDeal', subject, null);
   const plan = patchPlan(world, roles);
   const patcher = roles.patcher.id === subject ? 'player' : 'npc';
   return { kind: 'deal', deal, patcher, price: priceOf(world, deal, roles, plan), parts: plan.parts, turns: plan.turns };
+}
+
+// A player client with the goodwill perk gets the free deal whenever the patcher holds the parts, with no roll.
+function goodwillDeal(world: World, npc: Vehicle, roles: Roles): PatchDeal | null {
+  if (!vehicleHasPerk(world, roles.client, 'goodwill')) return null;
+  return dealAvailable('free')(world, npc) ? 'free' : null;
 }
 
 // Both sides agreed on the terms over the radio.
@@ -158,6 +167,7 @@ export function settlePatch(world: World, s: NpcState): void {
   getResources(world, roles.patcher).money += data.price;
   for (const part of brokenDriveParts(roles.client)) restorePart(part, Math.max(1, Math.round(maxHp(part) * PATCH.share)));
   world.events.push({ t: 'patch', patcher: s.holder, client: s.other, outcome: 'done' });
+  if (s.holder === world.player.vehicleId) practice(world, 'patch', 1, null);
 }
 
 // A patch nobody worked on for its whole timer lapses for free.

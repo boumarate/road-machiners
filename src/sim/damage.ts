@@ -1,8 +1,10 @@
 // Applying damage. Hit points clamp at zero. Damage reaches parts only through walkLane in armor.ts.
 
 import { partDef } from "../data/parts";
+import { PERK_NUMBERS } from "../data/skills";
 import { RULES } from "../data/rules";
 import * as wear from "./wear";
+import { practice, skillEffect, vehicleHasPerk } from "./progress";
 import { mountedParts } from "./grid";
 import type { PartInstance, Vehicle, World } from "./types";
 
@@ -24,12 +26,19 @@ export function damagePart(
     def.kind === "core" &&
     def.role === "cab"
   ) {
-    world.player.health = Math.max(
-      0,
-      world.player.health - Math.round(dealt * RULES.cabHealthShare),
-    );
+    hurtDriver(world, v, dealt);
   }
   return dealt;
+}
+
+// The player's character takes a share of cab damage, cut by toughness and the hard head perk, and the health lost
+// practices toughness.
+function hurtDriver(world: World, v: Vehicle, dealt: number): void {
+  const health = world.player.health;
+  const hardHead = vehicleHasPerk(world, v, "hardHead") ? PERK_NUMBERS.hardHead.cabShare : 1;
+  const share = RULES.cabHealthShare * (1 - skillEffect(world, v, "toughness", "cabShare")) * hardHead;
+  world.player.health = Math.max(0, health - Math.round(dealt * share));
+  if (world.player.health < health) practice(world, "damage", health - world.player.health, null);
 }
 
 // Mounted parts only: spares in the cargo grid cannot be shot or crashed.

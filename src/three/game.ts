@@ -78,7 +78,7 @@ import { TERRAIN_TYPES } from "../data/terrain";
 import { bodyOf } from "../sim/body";
 import { headingOf } from "../phys/frames";
 import { isBusy } from "../sim/jobs";
-import { daylightAt, lightScene, NightLights, sunLight } from "./render/daylight";
+import { daylightAt, lampsOn, lightScene, NightLights, sunLight } from "./render/daylight";
 import { sunAt } from "../sim/sun";
 import { tileAt } from "../sim/terrain";
 import { ContactsView } from "./render/contacts";
@@ -962,8 +962,11 @@ export class Game {
     this.follow.update(truck, this.hud.cameraMode === "auto" ? this.orderPoint() : null, this.anim !== null, dt);
     this.hud.showRecenter(!this.follow.isFollowing());
     lightScene(this.sun, this.sky, truck, daylightAt(this.lightTurn()));
-    const lit = this.world.vehicles.filter((v) => this.frames[v.id] && this.sightLimit.reaches(this.frames[v.id].pos));
-    this.nightLights.update(!sunAt(this.world.turn), truck, lit.map((v) => ({ chassisId: v.chassisId, frame: this.frames[v.id] })));
+    const lit = this.world.vehicles
+      .filter((v) => this.frames[v.id] && this.sightLimit.reaches(this.frames[v.id].pos))
+      .map((v) => ({ chassisId: v.chassisId, frame: this.frames[v.id], on: lampsOn(v.id, this.lightTurn()) }));
+    // At dawn lamps switch off one by one, so the night lights stay until the last one is off.
+    this.nightLights.update(!sunAt(this.world.turn) || lit.some((v) => v.on), truck, lit);
     const at = playerVehicle(this.world).pos;
     this.stormTint.style.display = this.world.weather.some(
       (e) => e.kind === "storm" && dist(at, e.pos) <= e.radius,
@@ -1030,32 +1033,22 @@ export class Game {
 
   // dt: seconds since the last drawn frame.
   private syncVehicles(step: number | null, dt: number): void {
-    const frames: TurnFrames | null =
-      step === null || !this.anim ? null : this.anim.result.frames;
+    const frames: TurnFrames | null = step === null || !this.anim ? null : this.anim.result.frames;
     const landed = !this.anim || this.anim.impacts;
-    const night = !sunAt(this.world.turn);
     const glass = daylightAt(this.lightTurn()).glass;
-    const shown = [
-      ...this.world.vehicles,
-      ...(landed ? [] : this.world.removed),
-    ];
+    const shown = [...this.world.vehicles, ...(landed ? [] : this.world.removed)];
     const ids = new Set<string>();
     for (const v of shown) {
       const kept = this.frames[v.id];
       // Between turns, a vehicle moved outside a turn, such as by a debug script, jumps to its new spot.
-      const stale =
-        !this.anim && kept && dist(toMap(kept.pos), v.pos) > MOVED_BY_RULES;
-      const f =
-        frames?.[v.id]?.[step!] ??
-        (kept && !stale ? kept : restFrame(this.world, v));
+      const stale = !this.anim && kept && dist(toMap(kept.pos), v.pos) > MOVED_BY_RULES;
+      const f = frames?.[v.id]?.[step!] ?? (kept && !stale ? kept : restFrame(this.world, v));
       this.frames[v.id] = f;
-      const seen = landed
-        ? this.isVehicleVisible(v)
-        : this.canShowCombatVehicle(v);
+      const seen = landed ? this.isVehicleVisible(v) : this.canShowCombatVehicle(v);
       if (seen) this.lastSeen.set(v.id, this.world.turn);
-      if (!seen && !this.lingers(v)) continue;
-      const before =
-        !landed && this.anim!.before.vehicles.find((x) => x.id === v.id);
+      const look = this.lookOf(v, f, seen);
+      if (!look) continue;
+      const before = !landed && this.anim!.before.vehicles.find((x) => x.id === v.id);
       const display = before ? { ...v, items: before.items } : v;
       ids.add(v.id);
       let view = this.views.get(v.id);
@@ -1065,7 +1058,8 @@ export class Game {
         this.scene.add(view.root);
       }
       view.update(display, seen);
-      view.lamps(night);
+      view.lamps(lampsOn(v.id, this.lightTurn()));
+      view.outline(look === "dark");
       view.windows(glass);
       view.pose(f, dt);
       view.aim(this.turretAim(v, f));
@@ -1077,6 +1071,12 @@ export class Game {
       view.dispose();
       this.views.delete(id);
     }
+  }
+
+  // Out of sight at night, a truck in gray vision shows its lit lamps on a black shape.
+  private lookOf(v: Vehicle, f: VehicleFrame, seen: boolean): "full" | "dark" | null {
+    if (seen || this.lingers(v)) return "full";
+    return lampsOn(v.id, this.lightTurn()) && this.sightLimit.reaches(f.pos) ? "dark" : null;
   }
 
   // Wheel dust rises from the ground just behind the rear wheels, so it never reads as exhaust.

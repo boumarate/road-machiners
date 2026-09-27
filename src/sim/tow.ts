@@ -17,6 +17,7 @@ import { playerVehicle, vehicleById } from './damage';
 import { contactsOf, hearsBeacon } from './detect';
 import { route, routeLength } from './path';
 import { npcProfile } from './npc-decisions';
+import { skillEffect } from './progress';
 import { canUseSite, nearestPad } from './sites';
 import { addState, endState, stateOf, towData, towPromiseData } from './states';
 import { isStranded, vehicleStats } from './stats';
@@ -230,11 +231,13 @@ function nearestKnownTown(world: World, vehicle: Vehicle): TownDef {
   return known.sort((a, b) => dist(me.pos, a.pos) - dist(me.pos, b.pos))[0];
 }
 
-// The fee follows the route the tower would drive from the player to the town's nearest pad.
+// The fee follows the route the tower would drive from the player to the town's nearest pad. The player's social
+// skill talks it down.
 function towFee(world: World, tower: Vehicle, from: Vec, town: TownDef): number {
   const pad = nearestPad(town, from);
   const length = routeLength(from, route(world, from, pad, vehicleStats(world, tower).radius, [], tower));
-  return Math.round(TOW.base + TOW.perTile * length);
+  const cut = 1 - skillEffect(world, playerVehicle(world), 'social', 'towFee');
+  return Math.round((TOW.base + TOW.perTile * length) * cut);
 }
 
 // The player turned the tower down, so the tower rarely offers again.

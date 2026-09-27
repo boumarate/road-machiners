@@ -1,7 +1,9 @@
 import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { TERRAIN } from '../data/terrain';
-import { emptyWorld } from './testkit';
+import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { addVehicle, emptyWorld, practiceOf } from './testkit';
+import { contactsOf, soundRange } from './detect';
 import { TIME } from '../data/time';
 import { sunAt } from './sun';
 import { canVehicleSee, grayRadius, playerVisible, refreshVision, sightRadius, visibleTiles } from './vision';
@@ -94,7 +96,96 @@ describe('terrain line of sight', () => {
   it('shrinks gray vision at night with sight', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
-    expect(grayRadius(w, { x: 30, y: 30 })).toBe(sightRadius(w, { x: 30, y: 30 }) * TERRAIN.vision.grayFactor);
+    expect(grayRadius(w, { x: 30, y: 30 })).toBe(sightRadius(w, w.vehicles[0], { x: 30, y: 30 }) * TERRAIN.vision.grayFactor);
     expect(grayRadius(w, { x: 30, y: 30 })).toBeLessThan(TERRAIN.vision.radius * TERRAIN.vision.grayFactor);
+  });
+});
+
+describe('contact practice', () => {
+  // Night hides dust, so a moving buggy past sight is heard and nothing else.
+  function heardBuggy() {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
+    const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 45, y: 30 });
+    buggy.speed = 6;
+    return { w, buggy };
+  }
+
+  it('pays the player once for a newly heard truck, harder near the edge of hearing', () => {
+    const { w, buggy } = heardBuggy();
+    refreshVision(w);
+    const [event] = practiceOf(w, 'contact');
+    expect(event.amount).toBe(1);
+    expect(event.difficulty).toBeCloseTo(15 / soundRange(w, buggy));
+    refreshVision(w);
+    expect(practiceOf(w, 'contact')).toHaveLength(1);
+  });
+
+  it('pays nothing for a truck in sight', () => {
+    const { w, buggy } = heardBuggy();
+    buggy.pos = { x: 34, y: 30 };
+    refreshVision(w);
+    expect(practiceOf(w, 'contact')).toEqual([]);
+  });
+
+  it('pays nothing when an NPC hears a truck', () => {
+    const { w, buggy } = heardBuggy();
+    const trader = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 60, y: 30 });
+    expect(contactsOf(w, trader, Infinity).map((c) => c.vehicleId)).toContain(buggy.id);
+    expect(practiceOf(w, 'contact')).toEqual([]);
+  });
+});
+
+describe('perception sight', () => {
+  it('reaches farther for the player at level 5', () => {
+    const w = emptyWorld({ x: 60, y: 60 });
+    const me = w.vehicles[0];
+    const base = sightRadius(w, me);
+    w.player.skills.perception = XP_TO_REACH[5];
+    expect(sightRadius(w, me)).toBeCloseTo(base * (1 + 5 * SKILL_EFFECTS.perception.sight));
+  });
+
+  it('shows the player more tiles at level 5', () => {
+    const w = emptyWorld({ x: 60, y: 60 });
+    const base = visibleTiles(w, { x: 60, y: 60 }).size;
+    w.player.skills.perception = XP_TO_REACH[5];
+    expect(visibleTiles(w, { x: 60, y: 60 }).size).toBeGreaterThan(base);
+  });
+
+  it('leaves NPC sight alone', () => {
+    const w = emptyWorld({ x: 60, y: 60 });
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
+    const base = sightRadius(w, npc);
+    w.player.skills.perception = XP_TO_REACH[5];
+    expect(sightRadius(w, npc)).toBe(base);
+  });
+});
+
+describe('lookout perk', () => {
+  it('widens sight of the parked player truck', () => {
+    const w = emptyWorld({ x: 60, y: 60 });
+    const me = w.vehicles[0];
+    me.speed = 0;
+    const base = sightRadius(w, me);
+    w.player.perks.push('lookout');
+    expect(sightRadius(w, me)).toBeCloseTo(base * PERK_NUMBERS.lookout.sight);
+  });
+
+  it('leaves sight of the moving player truck alone', () => {
+    const w = emptyWorld({ x: 60, y: 60 });
+    const me = w.vehicles[0];
+    me.speed = 3;
+    const base = sightRadius(w, me);
+    w.player.perks.push('lookout');
+    expect(sightRadius(w, me)).toBe(base);
+  });
+
+  it('leaves sight of a parked NPC alone', () => {
+    const w = emptyWorld({ x: 60, y: 60 });
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
+    npc.speed = 0;
+    const base = sightRadius(w, npc);
+    w.player.perks.push('lookout');
+    expect(sightRadius(w, npc)).toBe(base);
   });
 });

@@ -33,7 +33,7 @@ import { corePart, freeCells, goodsCount, mountedParts } from '../sim/grid';
 import { mountPart, spareParts } from '../sim/inventory';
 import { startStrip, stripYield } from '../sim/jobs';
 import { generateNpcLoadout } from '../sim/npc-loadout';
-import { spendSkillPoint } from '../sim/progress';
+import { skillLevel } from '../sim/progress';
 import { chance, randInt } from '../sim/rng';
 import {
   acceptContract,
@@ -676,7 +676,6 @@ const WISHLIST_ORDER: { item: string; kind: ItemKind; tier: Tier }[] = [
 ];
 
 function maybeMaintain(world: World, telemetry: Telemetry, wishlist: WishlistHit[], day: number): World {
-  if (world.player.skillPoints > 0) spendSkillPoint(world, pickSkill(world));
   world = maybeRepairAndUpgrade(world, telemetry);
   world = maybeStripSpares(world, telemetry);
   recordWishlist(world, wishlist, day);
@@ -690,8 +689,9 @@ function maybeRepairAndUpgrade(world: World, telemetry: Telemetry): World {
   return maybeUpgrade(world, shopId, telemetry);
 }
 
-function pickSkill(world: World): SkillId {
-  return world.player.skills.mechanics < world.player.skills.trade ? 'mechanics' : 'trade';
+// Skills grow by practice, so the report tracks the sum of skill levels as the player's level.
+function playerLevel(world: World): number {
+  return (Object.keys(world.player.skills) as SkillId[]).reduce((sum, skill) => sum + skillLevel(world, skill), 0);
 }
 
 function haveTier(v: Vehicle, kind: ItemKind): Tier {
@@ -708,7 +708,7 @@ function recordWishlist(world: World, wishlist: WishlistHit[], day: number): voi
     if (wishlist.some((h) => h.item === entry.item)) continue;
     if (haveTier(v, entry.kind) >= entry.tier) wishlist.push({ item: entry.item, day, turn: world.turn });
   }
-  for (let lvl = 2; lvl <= world.player.level; lvl++) {
+  for (let lvl = 1; lvl <= playerLevel(world); lvl++) {
     const item = `level ${lvl}`;
     if (!wishlist.some((h) => h.item === item)) wishlist.push({ item, day, turn: world.turn });
   }
@@ -847,7 +847,7 @@ export function runPolicy(seed: number, policy: PolicyName, days: number): RunRe
       tierAccum[tier].delta += worth - lastWorth;
       tierAccum[tier].turns += TIME.turnsPerDay;
       lastWorth = worth;
-      perDay.push({ day, money: world.player.money, netWorth: worth, level: world.player.level, tier });
+      perDay.push({ day, money: world.player.money, netWorth: worth, level: playerLevel(world), tier });
       nextDayAt += TIME.turnsPerDay;
     }
   }

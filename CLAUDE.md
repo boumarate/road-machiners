@@ -21,6 +21,8 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 - `npm run sfx:import -- <cue> <file...>` imports files as variants of a cue in `src/data/sounds.ts`.
 - `npm run sfx:gen -- <cue> <count>` generates variants with ElevenLabs. It costs credits, so ask before running it.
 - `npm run sfx:reimport` rebuilds every sound file from its raw source in `tmp/sfx-raw/` after an import change.
+- `npm run progression:record -- --archetypes trader,scavenger,fighter,mixed --seeds 1,2,3 --turns 2000` plays a bot per archetype and seed and writes each trace to `tmp/progression/`. Runs go in parallel. It is slow: about 75 seconds per 2000 turns per run.
+- `npm run progression:report` replays every trace in `tmp/progression/` with the current XP rules. It prints the turns to each skill level and the XP per day per archetype.
 
 ## Config
 
@@ -50,6 +52,7 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 - `src/audio/` plays sound through Web Audio. `src/data/sounds.ts` lists every cue and its files in `public/sfx/`, and a test keeps both in sync. Every file goes through `scripts/sfx-lib.mjs`, which sets loudness per sound group and one format. Generated prompts start with the shared `SOUND_STYLE`, so sounds stay consistent.
 - Any uncaught error shows a fullscreen crash screen with the message.
 - The backquote or § key opens the debug console in every build. Type `help` for its cheat commands. `src/ui/console.ts` parses the commands and calls one pure function per cheat in `src/sim/cheats.ts`. Bad input throws `CheatError`, which the console prints. Any other error reaches the crash screen. God mode is a saved player flag. It restores the truck in `endTurn` before the destruction and defeat checks.
+- `src/sim/progress.ts` owns skills and perks. `practice()` is the only way to gain XP, and `xpFor()` is its pure rule. `skillEffect()` and `vehicleHasPerk()` return nothing for any truck but the player's. XP sources, costs, caps, effects and perks live in `src/data/skills.ts`. `src/sim/progression/` holds the bots, the recorder and the replay behind the `progression:` commands. Replay reuses `xpFor()`, so tuning XP numbers needs no new recording.
 - All randomness goes through `src/sim/rng.ts` with state in the world. Render-only noise lives in `src/render/noise.ts`.
 - `src/sim/sites.ts` owns site gates and pads. Trucks never enter a site. Gates lie where roads cross the site edge. Towns and small locations keep one gate, and large locations keep one per road. Each gate has a pad outside it. Services, salvage, NPC visits and site clicks all use pads.
 - `src/sim/bridge.ts` holds Canyon Bridge. The map stays one level. `heightAt` returns the deck height on the deck, and `groundAt` returns the canyon floor under it. Both rails block routes and physics, so trucks get on only over the ends.

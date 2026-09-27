@@ -10,7 +10,7 @@ import { RULES } from '../data/rules';
 import { fuelLimited, isNear } from '../sim/far';
 import { isDriveObstacle } from '../sim/mapgen';
 import { vehicleMass } from '../sim/mass';
-import { vehicleStats, type VehicleStats } from '../sim/stats';
+import { groundSpeed, vehicleStats, type VehicleStats } from '../sim/stats';
 import { continueRoute, keepRoute, route, type KeptRoute } from '../sim/path';
 import { backsToDestination, parkedVehicles, zoneSpeed } from '../sim/steering';
 import { BRIDGE_AXIS, BRIDGE_LENGTH } from '../sim/bridge';
@@ -333,20 +333,21 @@ function idleTarget(speed: number): number {
   return speed <= RULES.parkedSpeed ? 0 : toMps(speed);
 }
 
-// Loose ground gives less grip, so wheels spin instead of converting engine force to speed. Slope
-// needs no separate handling: it already slows or speeds the climb through gravity on the heightfield.
-function applyTerrainGrip(ctl: RAPIER.DynamicRayCastVehicleController, body: RAPIER.RigidBody, terrain: Terrain): void {
-  const p = body.translation();
+// Loose ground gives less grip, so wheels spin instead of converting engine force to speed. A skilled driver
+// loses less of it. Slope needs no separate handling: it already slows or speeds the climb through gravity on
+// the heightfield.
+function applyTerrainGrip(c: Car, terrain: Terrain): void {
+  const p = c.body.translation();
   const type = terrain.types[tileAt(terrain, { x: p.x / S, y: p.z / S })];
-  const grip = T.frictionSlip * TERRAIN_TYPES[type].speed;
-  for (let i = 0; i < 4; i++) ctl.setWheelFrictionSlip(i, grip);
+  const grip = T.frictionSlip * groundSpeed(c.s, TERRAIN_TYPES[type].speed);
+  for (let i = 0; i < 4; i++) c.ctl.setWheelFrictionSlip(i, grip);
 }
 
 // One physics step of driving. Steer at the destination and hold the turn's speed. A stop order slows
 // to arrive. A drive-through point counts as passed once close, or once the truck drives forward past
 // it on the last leg, so a wide miss does not circle back. A side click behind the truck still steers.
 function driveStep(c: Car, terrain: Terrain): void {
-  applyTerrainGrip(c.ctl, c.body, terrain);
+  applyTerrainGrip(c, terrain);
   const speed = forwardSpeed(c.body);
   const command = c.plan.dest && !reached(c) ? commandToward(c, c.plan.dest, speed) : { target: c.plan.target, steerTo: 0 };
   if (c.result.arrived) command.target = 0;

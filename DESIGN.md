@@ -4,7 +4,17 @@ A post-apocalyptic wasteland RPG where you drive a truck. 3D world seen from an 
 
 ## Character
 
-The character has stats and skills. These are the durable upgrades that persist across trucks.
+The character has five skills. These are the durable upgrades that persist across trucks. Each skill is broad: it touches several activities and grows from several activities.
+
+- Driving improves handling, crash damage, rough ground and crawling. It grows from driving off the road, rams and escapes from hostiles.
+- Perception improves aim, sight, hearing and contact circles. It grows from hits, new contacts and discovered places.
+- Machining improves repair and refit time, the field repair cap, search time and engine heat. It grows from field jobs, patches for other trucks and searches.
+- Toughness raises max health, and cuts health lost to cab damage, supply use and heat drain. It grows from turns in heat, health lost and knockouts survived.
+- Social improves prices, tow fees and patch prices, and makes scumbags see the truck as stronger. It grows from trade profit, agreed deals and radio calls.
+
+Skills grow from use. Each skill has its own XP and five levels, and each level costs more XP. A hard action pays more than an easy one: a hit at a low chance pays more than a sure hit. Each skill earns full XP up to a daily cap, and much less after it until the next day. So grinding one easy action does not pay.
+
+At level 2 and level 4 of each skill the player picks one of two perks. A perk changes a rule instead of a number, like crashes doing half damage or aimed shots scattering less. A pick is permanent.
 
 Personal items grant special abilities and modifiers. They stay with the character, not the truck.
 
@@ -40,7 +50,7 @@ The truck stays critical to progression, like the ship in Space Rangers 2.
 
 Movement and combat happen on the same map, in Space Rangers 2 style. Travel and fights use the same turns.
 
-Planning does not advance time. Clicks set or change the waypoint and show the route preview. Outside combat, Space starts automatic turns until the waypoint is reached. Space pauses after the current turn without clearing the waypoint, and another press resumes the route. Visible hostiles, player combat, collisions, breakdowns, an empty tank, panels and loss of browser focus pause automatic travel. Without a waypoint, or in combat or direct-drive mode, Space advances one turn. Holding Space fast-forwards turns, including combat, until released. Loading a save starts paused. In combat or direct-drive mode, the player sets movement and weapon orders, then ends the turn. All vehicles move at the same time, then all weapons fire at the same time.
+Planning does not advance time. Clicks set or change the waypoint and show the route preview. Outside combat, Space starts automatic turns until the waypoint is reached. Space pauses after the current turn without clearing the waypoint, and another press resumes the route. Visible hostiles, player combat, collisions, breakdowns, panels and loss of browser focus pause automatic travel. Without a waypoint, or in combat or direct-drive mode, Space advances one turn. Holding Space fast-forwards turns, including combat, until released. Loading a save starts paused. In combat or direct-drive mode, the player sets movement and weapon orders, then ends the turn. All vehicles move at the same time, then all weapons fire at the same time.
 
 Each chassis has max speed, acceleration, braking and turn rates. Momentum carries over: the speed you have is a committed distance for next turn. Faster trucks turn less per turn. Vehicles are physics bodies with suspension. Time only runs while a turn plays: each turn simulates one second of driving. Automatic travel and held Space start the next turn after playback finishes. Slopes, bumps and collisions come from the physics.
 
@@ -66,7 +76,7 @@ While knocked out, turns run on their own and the player gives no orders. Looter
 
 Raiders ignore a truck with nothing to take. A truck has loot when it holds goods, spare parts or mounted parts beyond the built-in ones. A feud still makes a raider fight a stripped truck.
 
-A truck with no working engine, a broken transmission or an empty tank still moves at a crawl. The driver pushes it. Pushing burns no fuel, and a truck without a working engine makes no sound. A player truck that can only crawl is stranded.
+A truck with no working engine, a broken transmission or an empty tank still moves at a crawl. The driver pushes it. Pushing burns no fuel, and a truck without a working engine makes no sound. A player truck that can only crawl is stranded. It can still travel automatically to a waypoint.
 
 Traders and scavengers help a stranded player. One that sees the truck may drive over, if it is not hostile and not in danger. It parks beside the truck and radios a tow offer to the nearest town it knows. The fee is a base price plus a price per tile of the route. The player accepts, refuses or hangs up. A driver the player turned down rarely offers again. A stranded player can also radio a passing trader or scavenger and ask for a tow.
 
@@ -126,7 +136,7 @@ Shops have unlimited money. Goods prices move with trade, and part stock is fini
 
 ## NPC traits and states
 
-Every NPC carries a set of traits instead of one class. Each trait adds activities and shifts chances. A scavenger with the scumbag trait still scavenges, and it also robs. Traits roll at spawn: every scavenger scavenges, and some are also scumbags or cowards. For now the hover panel shows traits. In the final game they stay hidden, so the player learns a driver is a scumbag only when it starts acting like one.
+Every NPC carries a set of traits instead of one class. Each trait adds activities and shifts chances. A scavenger with the scumbag trait still scavenges, and it also robs. Traits roll at spawn: every scavenger scavenges, and some are also scumbags or cowards. Traits stay hidden, so the player learns a driver is a scumbag only when it starts acting like one. The Perception perk Read the driver shows traits in the hover panel.
 
 - Scavenger collects salvage and helps stranded trucks.
 - Trader buys and sells between towns, rarely starts a fight, and sometimes fights back.
@@ -196,7 +206,7 @@ Fuel and supplies limit range. Fuel burns at 0.075 of the chassis fuel-per-tile 
 - Region: Icarus, a 600-tile basin with Bowl and Nose as hubs, 13 other destinations, two raider camps, two canyon crossings, and the Fallen Sun. Winding roads cross rolling grades between distinct landmarks. Sight is twenty tiles. See [landmark visuals](VISUAL_DESIGN.md).
 - Enemies: raider outriders and gunwagons with sampled chassis and equipment.
 - Neutrals: trader caravans and scavengers. Shooting one makes it and its nearby mates hostile.
-- Skills: Driving, Gunnery, Mechanics, Trade, Survival.
+- Skills: Driving, Perception, Machining, Toughness, Social.
 
 ## Out of scope for now
 

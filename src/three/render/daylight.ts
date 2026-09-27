@@ -4,7 +4,8 @@
 import * as THREE from "three";
 import { TERRAIN } from "../../data/terrain";
 import { TIME } from "../../data/time";
-import { clockOf } from "../../sim/sun";
+import { clockOf, sunAt } from "../../sim/sun";
+import { hashStr } from "../../render/noise";
 import type { V3, VehicleFrame } from "../../phys/frames";
 import { PAL } from "../../render/palette";
 import { bodyOf } from "../../sim/body";
@@ -218,7 +219,16 @@ const GLOW_RANGE = 4.5; // meters where the glow fades to nothing
 const GLOW_DECAY = 1; // below the physical 2, so the roof under the light does not burn white
 const GLOW_HEIGHT = 3; // meters above the truck center
 
-export type LitVehicle = { chassisId: string; frame: VehicleFrame };
+// on: the vehicle's lamps shine now. Beams of vehicles with lamps off stay in the pool at zero.
+// Each vehicle switches its lamps at its own moment within the turn that dusk or dawn falls on.
+// lightTurn: the clock the light shows, fractional while a turn plays.
+export function lampsOn(id: string, lightTurn: number): boolean {
+  // The share of the movement that plays before the switch, in (0, 1]. A vehicle at rest shows its turn's state.
+  const delay = 1 - hashStr(id);
+  return !sunAt(Math.floor(lightTurn + 1 - delay));
+}
+
+export type LitVehicle = { chassisId: string; frame: VehicleFrame; on: boolean };
 
 // A change in light count recompiles every material. So the lights exist only at night, and through the night
 // the beam pool only grows, to the most vehicles seen at once. Unused beams stay at zero until dawn.
@@ -228,7 +238,7 @@ export class NightLights {
 
   constructor(private readonly scene: THREE.Scene) {}
 
-  // truck: the drawn player truck position. lit: vehicles that shine their headlights.
+  // truck: the drawn player truck position. lit: vehicles within gray vision.
   update(night: boolean, truck: V3, lit: LitVehicle[]): void {
     if (!night) {
       this.clear();
@@ -261,8 +271,8 @@ export class NightLights {
     }
     this.beams.forEach((beam, i) => {
       const v = lit[i];
-      beam.intensity = v ? BEAM_INTENSITY : 0;
-      if (!v) return;
+      beam.intensity = v?.on ? BEAM_INTENSITY : 0;
+      if (!v?.on) return;
       const f = v.frame;
       const rot = new THREE.Quaternion(f.rot.x, f.rot.y, f.rot.z, f.rot.w);
       const at = new THREE.Vector3(f.pos.x, f.pos.y, f.pos.z);

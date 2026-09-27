@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { NPCS } from '../data/npcs';
 import { REGION } from '../data/region';
 import { BEACON, TOW } from '../data/tow';
+import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { partDef } from '../data/parts';
 import { playerVehicle } from './damage';
 import { route, routeLength } from './path';
@@ -499,6 +500,20 @@ describe('emergency beacon', () => {
     expect(autoRuns(setMoveOrder(w, { kind: 'stopAt', dest: { x: 40, y: 40 } }))).toBe(false);
     addState(w, 'tow', s.trader.id, w.player.vehicleId, { kind: 'tow', town: 'bowl', fee: 10, hitched: false });
     expect(autoRuns(w)).toBe(false);
+  });
+});
+
+describe('social on tow fees', () => {
+  it('prices the tow lower for a player at level 5', () => {
+    const s = stranded();
+    s.w.player.skills.social = XP_TO_REACH[5];
+    const w = offered(s);
+    const me = playerVehicle(w);
+    const town = REGION.towns.find((t) => t.id === 'bowl')!;
+    const pad = sitePads(town).reduce((a, b) => (dist(me.pos, a) <= dist(me.pos, b) ? a : b));
+    const length = routeLength(me.pos, route(w, me.pos, pad, vehicleStats(w, find(w, s.trader.id)).radius, []));
+    const cut = 1 - 5 * SKILL_EFFECTS.social.towFee;
+    expect(feeOf(w)).toBe(Math.round((TOW.base + TOW.perTile * length) * cut));
   });
 });
 

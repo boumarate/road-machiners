@@ -3,6 +3,7 @@ import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
+import { maxHealthOf } from "../sim/health";
 import { corePart, mountedParts, mountedItems, itemSize } from "../sim/grid";
 import { isStranded, vehicleStats } from "../sim/stats";
 import { towData } from "../sim/states";
@@ -168,6 +169,7 @@ export function getHudReadout(w: World) {
   const cabMax = maxHp(cab);
   const capacity = chassisDef(me.chassisId).fuelCap;
   const p = w.player;
+  const maxHealth = maxHealthOf(w);
   const heat = heatAt(w, me.pos);
   const weather = weatherLabel(w, me.pos);
   return {
@@ -198,8 +200,8 @@ export function getHudReadout(w: World) {
       },
       {
         label: "Driver",
-        value: `${hp(p.health)} / ${RULES.maxHealth}`,
-        warning: p.health < RULES.maxHealth,
+        value: `${hp(p.health)} / ${maxHealth}`,
+        warning: p.health < maxHealth,
       },
     ],
     survival: [

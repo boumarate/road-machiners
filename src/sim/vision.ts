@@ -9,25 +9,33 @@ import { heightAt, type Terrain } from './terrain';
 import { sunAt } from './sun';
 import { weatherAt } from './weather';
 import { dist, segmentDist, type Vec } from './vec';
-import { cloudsSeenBy, contactsOf } from './detect';
+import { playerVehicle } from './damage';
+import { cloudsSeenBy, contactDifficulty, contactsOf } from './detect';
+import { PERK_NUMBERS } from '../data/skills';
+import { RULES } from '../data/rules';
+import { practice, skillEffect, vehicleHasPerk } from './progress';
 
 const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building', 'landmark'];
 
-// Base vision radius, shrunk by weather and at night.
-export function sightRadius(world: World, pos: Vec): number {
+// A viewer's vision radius at a point: the base radius, shrunk by weather and at night, and widened by the
+// player's perception and, while parked, the lookout perk.
+export function sightRadius(world: World, viewer: Vehicle, at: Vec = viewer.pos): number {
   const night = sunAt(world.turn) ? 1 : TIME.nightSight;
-  return TERRAIN.vision.radius * weatherAt(world, pos).sight * night;
+  const skill = 1 + skillEffect(world, viewer, 'perception', 'sight');
+  const parked = viewer.speed <= RULES.parkedSpeed;
+  const lookout = parked && vehicleHasPerk(world, viewer, 'lookout') ? PERK_NUMBERS.lookout.sight : 1;
+  return TERRAIN.vision.radius * weatherAt(world, at).sight * night * skill * lookout;
 }
 
-// Reach of gray vision. It ignores rocks and hills, and it shows places but never vehicles.
-export function grayRadius(world: World, pos: Vec): number {
-  return sightRadius(world, pos) * TERRAIN.vision.grayFactor;
+// Reach of the player's gray vision at a point. It ignores rocks and hills, and it shows places but never vehicles.
+export function grayRadius(world: World, at: Vec): number {
+  return sightRadius(world, playerVehicle(world), at) * TERRAIN.vision.grayFactor;
 }
 
-// Tile indices (y * world.size + x) visible from a point, within vision radius and line of sight.
+// Tile indices (y * world.size + x) the player would see from a point, within vision radius and line of sight.
 export function visibleTiles(world: World, from: Vec): Set<number> {
   const size = world.size;
-  const r = sightRadius(world, from);
+  const r = sightRadius(world, playerVehicle(world), from);
   // Every sight line lies within r of the viewer, so blockers beyond r plus their radius cannot touch it.
   const blockers = world.obstacles.filter((o) => BLOCKING.includes(o.kind) && dist(from, o.pos) < r + o.r);
   const out = new Set<number>();
@@ -46,7 +54,7 @@ export function visibleTiles(world: World, from: Vec): Set<number> {
 export function canVehicleSee(world: World, observer: Vehicle, position: Vec): boolean {
   if (observer.id === world.player.vehicleId) return playerSees(world, position);
   const target = position;
-  return dist(observer.pos, target) <= sightRadius(world, observer.pos) &&
+  return dist(observer.pos, target) <= sightRadius(world, observer) &&
     inPlainView(world, observer.pos, target, world.obstacles.filter((o) => BLOCKING.includes(o.kind)));
 }
 
@@ -92,8 +100,17 @@ export function refreshVision(world: World): void {
   world.player.visible = [...seen].sort((a, b) => a - b);
   for (const idx of seen) world.player.explored[idx] = 1;
   const me = world.vehicles.find((x) => x.id === world.player.vehicleId);
+  const known = new Set(world.player.contacts.map((c) => c.vehicleId));
   world.player.contacts = me ? contactsOf(world, me, Infinity) : [];
   world.player.clouds = me ? cloudsSeenBy(world, me).map((c) => c.id) : [];
+  if (me) practiceNewContacts(world, me, known);
+}
+
+// The player practices perception once per vehicle that becomes a contact, harder near the edge of reach.
+function practiceNewContacts(world: World, me: Vehicle, known: Set<string>): void {
+  for (const c of world.player.contacts) {
+    if (!known.has(c.vehicleId)) practice(world, 'contact', 1, contactDifficulty(world, me, c));
+  }
 }
 
 export function tileCenter(world: World, idx: number): Vec {

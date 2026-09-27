@@ -9,6 +9,7 @@ import { stowPart } from './inventory';
 import { discoverSite } from './locations';
 import { isHostile } from './combat';
 import { patchGoal, startTow, topGoal } from './npc-activities';
+import { practice } from './progress';
 import { answerPlea, answersPlea, answersThreat, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, yieldTo, type ThreatAnswer } from './parley';
 import { hasCargo } from './salvage';
 import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
@@ -43,6 +44,7 @@ function nearestKnownTown(world: World, npc: Vehicle): TownDef {
 function settle(world: World, npc: Vehicle, call: Call, outcome: TopicOutcome): void {
   if (!call.topic) throw new Error('Only a topic can be settled');
   world.player.talked[npc.id] = { ...world.player.talked[npc.id], [call.topic]: outcome };
+  if (outcome === 'agreed') practice(world, 'deal', 1, null);
 }
 
 // The rolled answer a line waits on, or null before the topic's prepare step.

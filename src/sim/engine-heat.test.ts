@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { partDef } from '../data/parts';
 import { TIME } from '../data/time';
 import { ENGINE_HEAT } from '../data/wear';
+import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { advanceEngineHeat } from './engine-heat';
 import { mountedParts } from './grid';
 import { vehicleStats } from './stats';
-import { emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, practiceOf } from './testkit';
+import { heatAt } from './sun';
 
 const NOON = 1 + (((TIME.sunrise + TIME.sunset) / 2 - TIME.startHour) * TIME.turnsPerDay) / 24;
 const NIGHT = 1 + ((23 - TIME.startHour) * TIME.turnsPerDay) / 24;
@@ -58,5 +60,54 @@ describe('engine heat', () => {
     expect(1 - w.player.engineHeat).toBeCloseTo(ENGINE_HEAT.coolParked);
     expect(1 - w.player.engineHeat).toBeGreaterThan(sunCooled);
     expect(engine(w).hp).toBe(hp);
+  });
+});
+
+describe('heat practice', () => {
+  it('pays the player per turn driven in heat, harder in hotter sun', () => {
+    const w = emptyWorld();
+    w.turn = NOON;
+    const me = w.vehicles[0];
+    me.speed = vehicleStats(w, me).maxSpeed;
+    advanceEngineHeat(w);
+    const [event] = practiceOf(w, 'heat');
+    expect(event.amount).toBe(1);
+    expect(event.difficulty).toBeCloseTo((heatAt(w, me.pos) - 1) / (TIME.sunHeat - 1));
+  });
+
+  it('pays nothing while parked or at night', () => {
+    const w = emptyWorld();
+    w.turn = NOON;
+    advanceEngineHeat(w);
+    w.turn = NIGHT;
+    w.vehicles[0].speed = vehicleStats(w, w.vehicles[0]).maxSpeed;
+    advanceEngineHeat(w);
+    expect(practiceOf(w, 'heat')).toEqual([]);
+  });
+
+  it('pays nothing for an NPC driving in the noon sun', () => {
+    const w = emptyWorld();
+    w.turn = NOON;
+    const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 50, y: 30 });
+    npc.speed = vehicleStats(w, npc).maxSpeed;
+    advanceEngineHeat(w);
+    expect(practiceOf(w, 'heat')).toEqual([]);
+  });
+});
+
+describe('machining on engine heat', () => {
+  // Heat one turn of top speed in the noon sun adds, before driving cools it.
+  function heating(machining: number): number {
+    const w = emptyWorld();
+    w.turn = NOON;
+    w.player.skills.machining = machining;
+    const me = w.vehicles[0];
+    me.speed = vehicleStats(w, me).maxSpeed;
+    advanceEngineHeat(w);
+    return w.player.engineHeat + ENGINE_HEAT.coolDriving;
+  }
+
+  it('heats the player engine slower at level 5', () => {
+    expect(heating(XP_TO_REACH[5])).toBeCloseTo(heating(0) * (1 - 5 * SKILL_EFFECTS.machining.engineHeat));
   });
 });

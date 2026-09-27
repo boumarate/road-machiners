@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { PERK_NUMBERS } from '../data/skills';
 import { applyContactCrash, computeClosingSpeed, locateCrashContact } from './crash-contact';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, practiceOf } from './testkit';
+import { vehicleMass } from './mass';
 import { mountedParts } from './grid';
 
 describe('crash contacts', () => {
@@ -53,5 +55,67 @@ describe('crash contacts', () => {
   it('rejects missing geometry', () => {
     expect(() => locateCrashContact('scout', [], { x: 1, y: 0 })).toThrow('no contact points');
     expect(() => computeClosingSpeed({ x: 2, y: 0 }, { x: 0, y: 0 })).toThrow('no horizontal direction');
+  });
+});
+
+describe('ram practice', () => {
+  const geometry = { a: { side: 'front' as const, lanes: [1, 2] }, b: { side: 'left' as const, lanes: [1, 2] } };
+
+  it('pays the player for damage dealt, harder against a heavier truck', () => {
+    const world = emptyWorld();
+    const me = world.vehicles[0];
+    const other = addVehicle(world, 'raiders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
+    applyContactCrash(world, me, other, other.id, 6, geometry);
+    const collision = world.events.find((e) => e.t === 'collision');
+    if (collision?.t !== 'collision') throw new Error('No collision');
+    const dealt = collision.hitsB.reduce((sum, hit) => sum + hit.damage, 0);
+    expect(dealt).toBeGreaterThan(0);
+    const [event] = practiceOf(world, 'ram');
+    expect(event.amount).toBe(dealt);
+    expect(event.difficulty).toBeCloseTo(vehicleMass(other) / (vehicleMass(other) + vehicleMass(me)));
+  });
+
+  it('pays the player as the second body of a crash', () => {
+    const world = emptyWorld();
+    const me = world.vehicles[0];
+    const other = addVehicle(world, 'raiders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
+    applyContactCrash(world, other, me, me.id, 6, geometry);
+    expect(practiceOf(world, 'ram')).toHaveLength(1);
+  });
+
+  it('pays nothing for a crash into a rock', () => {
+    const world = emptyWorld();
+    applyContactCrash(world, world.vehicles[0], null, 'rock', 6, { a: { side: 'front', lanes: [2] }, b: null });
+    expect(practiceOf(world, 'ram')).toEqual([]);
+  });
+
+  it('pays nothing for a crash between two NPCs', () => {
+    const world = emptyWorld();
+    const a = addVehicle(world, 'raiders', 'scout', ['stockEngine', 'ram'], { x: 40, y: 40 });
+    const b = addVehicle(world, 'traders', 'hauler', ['stockEngine'], { x: 42, y: 40 });
+    applyContactCrash(world, a, b, b.id, 6, geometry);
+    expect(practiceOf(world, 'ram')).toEqual([]);
+  });
+});
+
+describe('ram guard perk', () => {
+  // Total damage a truck takes from a head-on crash into a rock. Crash damage grows with the square of the impact.
+  function crashDamage(perk: boolean, npc: boolean, impact = 8): number {
+    const world = emptyWorld();
+    if (perk) world.player.perks.push('ramGuard');
+    const vehicle = npc ? addVehicle(world, 'raiders', 'scout', ['stockEngine', 'ram'], { x: 40, y: 40 }) : world.vehicles[0];
+    const before = mountedParts(vehicle).reduce((sum, part) => sum + part.hp, 0);
+    applyContactCrash(world, vehicle, null, 'rock', impact, { a: { side: 'front', lanes: [1, 2, 3] }, b: null });
+    return before - mountedParts(vehicle).reduce((sum, part) => sum + part.hp, 0);
+  }
+
+  it('makes a crash hurt the player truck like one with half the energy', () => {
+    const halfEnergy = crashDamage(false, false, 8 * Math.sqrt(PERK_NUMBERS.ramGuard.crashTaken));
+    expect(crashDamage(true, false)).toBe(halfEnergy);
+    expect(halfEnergy).toBeLessThan(crashDamage(false, false));
+  });
+
+  it('leaves NPC crash damage unchanged', () => {
+    expect(crashDamage(true, true)).toBe(crashDamage(false, true));
   });
 });

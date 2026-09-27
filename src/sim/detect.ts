@@ -9,6 +9,8 @@ import type { EngineDef, ScannerDef } from '../data/parts';
 import { partDef } from '../data/parts';
 import { wornDef } from './wear';
 import { mountedParts } from './grid';
+import { PERK_NUMBERS } from '../data/skills';
+import { skillEffect, vehicleHasPerk } from './progress';
 import { hashRandom } from './rng';
 import { heightAt, tileAt } from './terrain';
 import { hasWorkingEngine } from './stats';
@@ -32,12 +34,22 @@ function ownHearingPenalty(observer: Vehicle): number {
   return observer.speed <= RULES.parkedSpeed ? 0 : DETECT.sound.ownPenalty * observer.speed;
 }
 
-// Range a moving vehicle's dust trail is seen from. Zero at limp speed or below, at night, or fully hidden
-// by weather (storms shrink it through weatherAt's sight multiplier).
+// Range an observer hears a vehicle's engine from: the sound's reach, widened by the player's perception and, while
+// parked, the listener perk, less what the observer's own engine drowns out.
+function hearingRange(world: World, observer: Vehicle, v: Vehicle): number {
+  const parked = observer.speed <= RULES.parkedSpeed;
+  const listener = parked && vehicleHasPerk(world, observer, 'listener') ? PERK_NUMBERS.listener.hearing : 1;
+  const reach = soundRange(world, v) * (1 + skillEffect(world, observer, 'perception', 'hearing')) * listener;
+  return reach - ownHearingPenalty(observer);
+}
+
+// Range a moving vehicle's dust trail is seen from. Zero at limp speed or below, at night, on a road under the road
+// ghost perk, or fully hidden by weather (storms shrink it through weatherAt's sight multiplier).
 export function dustRange(world: World, v: Vehicle): number {
   if (v.speed <= RULES.limpSpeed) return 0;
   if (!sunAt(world.turn)) return 0;
   const terrainType = TERRAIN_TYPES[world.terrain.types[tileAt(world.terrain, v.pos)]];
+  if (terrainType.id === 'road' && vehicleHasPerk(world, v, 'roadGhost')) return 0;
   const weather = weatherAt(world, v.pos);
   return DETECT.dust.perSpeed * v.speed * terrainType.dust * weather.sight;
 }
@@ -74,8 +86,7 @@ function idKey(id: string): number {
 export function contactsOf(world: World, observer: Vehicle, within: number): Contact[] {
   const out: Contact[] = [];
   const scanned = scannerRange(observer); // the observer's own scanner, the same for every target below
-  const ownPenalty = ownHearingPenalty(observer);
-  const sight = sightRadius(world, observer.pos);
+  const sight = sightRadius(world, observer);
   const clouds = cloudsSeenBy(world, observer).filter((c) => dist(observer.pos, c.pos) <= within);
   for (const v of world.vehicles) {
     if (v.id === observer.id) continue;
@@ -84,16 +95,44 @@ export function contactsOf(world: World, observer: Vehicle, within: number): Con
     if (d <= sight && canVehicleSee(world, observer, v.pos)) continue;
     const moving = v.speed > RULES.parkedSpeed; // a parked truck makes no sound and no radio signal
     const sources: Contact['sources'] = [];
-    const heard = Math.max(0, soundRange(world, v) - ownPenalty);
+    const heard = Math.max(0, hearingRange(world, observer, v));
     if (moving && heard > 0 && d <= heard) sources.push('sound');
     const dust = newestCloud(clouds, v.id);
     if (dust) sources.push('dust');
     if (moving && scanned > 0 && d <= scanned) sources.push('radio');
     if (hearsBeacon(world, observer, v)) sources.push('beacon');
     if (sources.length === 0) continue;
-    out.push({ vehicleId: v.id, ...contactCircle(world, v, sources, d, dust), sources, loudness: sources.includes('sound') ? soundRange(world, v) : null });
+    out.push({ vehicleId: v.id, ...contactCircle(world, observer, v, sources, d, dust), sources, loudness: sources.includes('sound') ? soundRange(world, v) : null });
   }
   return out;
+}
+
+// How hard a contact was to pick up, from 0 at the observer to 1 at the edge of reach. Each channel that detects the
+// vehicle gives its distance over its reach, and the easiest channel counts. Dust counts from its cloud.
+export function contactDifficulty(world: World, observer: Vehicle, contact: Contact): number {
+  const v = world.vehicles.find((x) => x.id === contact.vehicleId);
+  if (!v) throw new Error(`Contact with unknown vehicle ${contact.vehicleId}`);
+  const shares = contact.sources.map((source) => channelShare(world, observer, v, source));
+  return Math.min(1, ...shares);
+}
+
+function channelShare(world: World, observer: Vehicle, v: Vehicle, source: Contact['sources'][number]): number {
+  const d = dist(observer.pos, v.pos);
+  switch (source) {
+    case 'sound': return reachShare(d, hearingRange(world, observer, v), source);
+    case 'radio': return reachShare(d, scannerRange(observer), source);
+    case 'beacon': return reachShare(d, BEACON.range, source);
+    case 'dust': {
+      const cloud = newestCloud(cloudsSeenBy(world, observer), v.id);
+      if (!cloud) throw new Error(`Dust contact on ${v.id} has no seen cloud`);
+      return reachShare(dist(observer.pos, cloud.pos), cloud.range, source);
+    }
+  }
+}
+
+function reachShare(distance: number, reach: number, source: string): number {
+  if (!(reach > 0)) throw new Error(`A ${source} contact has reach ${reach}`);
+  return distance / reach;
 }
 
 // Whether the player's emergency beacon reaches the observer. Hills do not block it.
@@ -101,11 +140,13 @@ export function hearsBeacon(world: World, observer: Vehicle, v: Vehicle): boolea
   return world.player.beacon && v.id === world.player.vehicleId && dist(observer.pos, v.pos) <= BEACON.range;
 }
 
-// Sound, radio and the beacon give a circle around a jittered center, as tight as the best source allows.
-// Dust alone points at its newest seen cloud, with a circle wide enough to reach where the truck has driven since.
-function contactCircle(world: World, v: Vehicle, sources: Contact['sources'], d: number, dust: DustCloud | null): { center: Vec; radius: number } {
+// Sound, radio and the beacon give a circle around a jittered center, as tight as the best source allows and the
+// player's perception tightens. Dust alone points at its newest seen cloud, with a circle wide enough to reach where
+// the truck has driven since.
+function contactCircle(world: World, observer: Vehicle, v: Vehicle, sources: Contact['sources'], d: number, dust: DustCloud | null): { center: Vec; radius: number } {
   if (sources.length === 1 && dust) return { center: { ...dust.pos }, radius: DETECT.fuzz.base + dist(dust.pos, v.pos) };
-  const sensed = DETECT.fuzz.base + (sources.includes('radio') ? DETECT.fuzz.radioPerTile : DETECT.fuzz.perTile) * d;
+  const fix = 1 - skillEffect(world, observer, 'perception', 'contactFix');
+  const sensed = (DETECT.fuzz.base + (sources.includes('radio') ? DETECT.fuzz.radioPerTile : DETECT.fuzz.perTile) * d) * fix;
   const radius = sources.includes('beacon') ? Math.min(BEACON.radius, sensed) : sensed;
   const key = idKey(v.id);
   const angle = hashRandom(world.seed, world.turn, key, 1) * Math.PI * 2;
@@ -139,7 +180,7 @@ export function advanceDust(world: World): void {
 
 // Clouds an observer sees: any in plain sight, plus risen ones within their range whose tops clear the hills.
 export function cloudsSeenBy(world: World, observer: Vehicle): DustCloud[] {
-  const sight = sightRadius(world, observer.pos);
+  const sight = sightRadius(world, observer);
   return world.dustClouds.filter((c) => {
     if (c.source === observer.id) return false;
     const d = dist(observer.pos, c.pos);

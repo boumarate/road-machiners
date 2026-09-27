@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
-import { moveItem, dumpItem, removeAllGoods } from './inventory';
+import { RULES } from '../data/rules';
+import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { moveItem, dumpItem, refitTurns, removeAllGoods } from './inventory';
 import { advanceJobs, startJob } from './jobs';
-import { emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, practiceOf } from './testkit';
 import { findSpot, gridOf, MOUNT_CELLS } from './grid';
 import { planItemMove } from './inventory';
 import type { GridItem, World } from './types';
@@ -32,6 +34,7 @@ describe('field refits', () => {
     expect(getWeapon(next).y).toBe(weapon.y);
     advanceJobs(next);
     expect(getWeapon(next)).toMatchObject(target);
+    expect(practiceOf(next, 'fieldJob')).toMatchObject([{ amount: 5, difficulty: null }]);
   });
 
   it('charges removal and installation for relocation between mounts', () => {
@@ -159,5 +162,42 @@ describe('field refits', () => {
     w.vehicles[0].items.push({ id: 'cargo', kind: 'good', good: 'scrap', x: 0, y: CHASSIS.scout.layout.length, rot: 0 });
     const result = planItemMove(w.vehicles[0], rack.id, { x: 2, y: CHASSIS.scout.layout.length, rot: 0 });
     expect(result.error).toMatch(/fit|fall off/);
+  });
+});
+
+describe('machining on refits', () => {
+  it('takes fewer refit turns for the player at level 5', () => {
+    const w = emptyWorld();
+    w.player.skills.machining = XP_TO_REACH[5];
+    const weapon = getWeapon(w);
+    const next = moveItem(w, weapon.id, { x: 1, y: CHASSIS.scout.layout.length, rot: 0 });
+    const turns = Math.ceil(RULES.refitTurnsPerPart * (1 - 5 * SKILL_EFFECTS.machining.refit));
+    expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: turns, total: turns });
+    expect(turns).toBeLessThan(RULES.refitTurnsPerPart);
+  });
+});
+
+describe('quick refit perk', () => {
+  it('halves the field refit turns of the player', () => {
+    const w = emptyWorld();
+    w.player.perks.push('quickRefit');
+    const weapon = getWeapon(w);
+    const next = moveItem(w, weapon.id, { x: 1, y: CHASSIS.scout.layout.length, rot: 0 });
+    const turns = Math.max(1, Math.ceil(RULES.refitTurnsPerPart * PERK_NUMBERS.quickRefit.refit));
+    expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: turns, total: turns });
+    expect(turns).toBeLessThan(RULES.refitTurnsPerPart);
+  });
+
+  it('keeps at least one turn', () => {
+    const w = emptyWorld();
+    w.player.perks.push('quickRefit');
+    expect(refitTurns(w, w.vehicles[0], 1)).toBe(1);
+  });
+
+  it('leaves NPC refit turns alone', () => {
+    const w = emptyWorld();
+    w.player.perks.push('quickRefit');
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    expect(refitTurns(w, npc, RULES.refitTurnsPerPart)).toBe(RULES.refitTurnsPerPart);
   });
 });

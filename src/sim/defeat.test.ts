@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PERK_NUMBERS } from '../data/skills';
 import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
 import { CONDITION } from '../data/wear';
@@ -8,11 +9,10 @@ import { advanceKnockout, checkDeath, checkKnockout } from './defeat';
 import { corePart, coreParts, goodsCount, hasLoot, mountedParts } from './grid';
 import { addGoods, dumpItem, moveItem, spareParts } from './inventory';
 import { scavenge } from './locations';
-import { spendSkillPoint } from './progress';
 import { startSearch } from './search';
 import { addState, endState, stateOf } from './states';
 import { startRepair } from './jobs';
-import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
 import type { SalvageStock, Vehicle, World } from './types';
 import { endTurn, setDirect, setMoveOrder, setWeaponOrder } from './world';
 
@@ -308,7 +308,6 @@ describe('commands while knocked out', () => {
       () => dumpItem(w, me.items[0].id),
       () => buyGood(w, 'scrap', 1),
       () => scavenge(w),
-      () => spendSkillPoint(w, 'driving'),
     ];
     for (const command of commands) expect(command).toThrow('Player is knockedOut');
   });
@@ -321,5 +320,46 @@ describe('commands while knocked out', () => {
     addState(w, 'feud', raider.id, w.vehicles[0].id, { kind: 'feud', robbery: false });
     w = endTurn(w, testDrive);
     expect(w.vehicles[0].job).toBeNull();
+  });
+});
+
+describe('knockout practice', () => {
+  it('pays the player on coming to after a knockout', () => {
+    const { w } = knockedOut();
+    advanceKnockout(w);
+    expect(w.player.state).toBe('active');
+    expect(practiceOf(w, 'knockout')).toMatchObject([{ amount: 1, difficulty: null }]);
+  });
+
+  it('pays nothing while the driver is still out', () => {
+    const { w } = knockedOut();
+    addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
+    advanceKnockout(w);
+    expect(practiceOf(w, 'knockout')).toEqual([]);
+  });
+
+  it('pays nothing for an NPC whose cab breaks', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    corePart(npc, 'cab').hp = 0;
+    checkKnockout(w);
+    advanceKnockout(w);
+    expect(practiceOf(w, 'knockout')).toEqual([]);
+  });
+});
+
+describe('quick wake perk', () => {
+  it('wakes the player at a shorter turn limit with a raider idling in sight', () => {
+    let { w } = knockedOut();
+    w.player.perks.push('quickWake');
+    addVehicle(w, 'raiders', 'buggy', [], { x: 36, y: 30 });
+    const limit = Math.ceil(RULES.knockoutMaxTurns * PERK_NUMBERS.quickWake.knockoutTurns);
+    let turns = 0;
+    while (w.player.state === 'knockedOut') {
+      w = endTurn(w, testDrive);
+      turns++;
+      expect(turns).toBeLessThanOrEqual(limit);
+    }
+    expect(turns).toBe(limit);
   });
 });

@@ -13,7 +13,6 @@ export type LootTable = {
 
 export const SALVAGE = {
   unitsPerTurn: 2, // stock units, goods or parts, a search gets through per turn
-  xp: 50, // xp for a site's first finished search
   pileTurns: 400, // two days a dropped pile lies on the ground, time for a road crossing and back
   coreScrapPerHp: 0.5, // parts good units salvaged per HP of a wrecked built-in part
   landmark: {

@@ -12,6 +12,8 @@ import { freeCells, goodsCount, isMounted, itemSize, mountedParts } from "./grid
 import { addGoods, applyRefitLayout, getRefitLayout } from "./inventory";
 import { isJunk, maxHp } from "./wear";
 import { repairPlan, repairTurn } from "./repair";
+import { practice } from "./progress";
+import { stripPart } from "./salvage";
 import { searchTurn } from "./search";
 import type { GridItem, Job, PartInstance, RefitJob, Vehicle, World } from "./types";
 import { playerCommand } from "./world";
@@ -184,13 +186,17 @@ function advanceRefit(world: World, v: Vehicle, job: RefitJob): void {
   job.turnsLeft -= 1;
   if (job.turnsLeft > 0) return;
   applyRefitLayout(world, v, result.items);
-  const pickup = job.pickup;
-  if (pickup) {
-    const stock = world.salvage.find((entry) => entry.id === pickup.stockId);
-    if (!stock) throw new Error('Refit stock disappeared after validation');
-    stock.parts = stock.parts.filter((part) => part.id !== pickup.partId);
-  }
+  if (job.pickup) takePickup(world, v, job.pickup);
   endJob(world, v, job, 'done');
+}
+
+// The part a finished refit mounted leaves its stock. A part from a wreck gets careful stripping.
+function takePickup(world: World, v: Vehicle, pickup: NonNullable<RefitJob['pickup']>): void {
+  const stock = world.salvage.find((entry) => entry.id === pickup.stockId);
+  const part = stock?.parts.find((entry) => entry.id === pickup.partId);
+  if (!stock || !part) throw new Error('Refit stock part disappeared after validation');
+  stripPart(world, v, stock, part);
+  stock.parts = stock.parts.filter((entry) => entry.id !== pickup.partId);
 }
 
 export function cancelJob(world: World, v: Vehicle): void {
@@ -205,4 +211,11 @@ function endJob(
 ): void {
   v.job = null;
   world.events.push({ t: "job", vehicle: v.id, job: { ...job }, outcome });
+  if (outcome === "done") practiceFieldJob(world, v, job);
+}
+
+// The player practices machining from each finished repair or refit, by its total turns.
+function practiceFieldJob(world: World, v: Vehicle, job: Job): void {
+  if (v.id !== world.player.vehicleId || job.kind === "search") return;
+  practice(world, "fieldJob", job.total, null);
 }

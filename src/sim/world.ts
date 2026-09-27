@@ -27,6 +27,7 @@ import { advancePatches } from './patch';
 import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
 import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
+import { noteEscape } from './escape';
 import { advanceWeather } from './weather';
 import { advanceContracts, advanceShops, initializeShops, marketStream } from './market';
 import { applyWear } from './wear';
@@ -53,10 +54,17 @@ export function newWorld(seed: number, kit: StartKit): World {
     player: {
       vehicleId: "",
       money: kit.money,
-      xp: 0,
-      level: 1,
-      skillPoints: RULES.startSkillPoints,
-      skills: { driving: 0, gunnery: 0, mechanics: 0, trade: 0, survival: 0 },
+      skills: { driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 },
+      xpToday: { driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 },
+      xpDay: 1,
+      xpBySource: {
+        roughTiles: 0, ram: 0, escape: 0,
+        hit: 0, contact: 0, discover: 0,
+        fieldJob: 0, patch: 0, search: 0,
+        heat: 0, damage: 0, knockout: 0,
+        profit: 0, deal: 0, call: 0,
+      },
+      perks: [],
       health: RULES.maxHealth,
       fuel: kit.fuel,
       supplies: kit.supplies,
@@ -80,6 +88,7 @@ export function newWorld(seed: number, kit: StartKit): World {
       visible: [],
       contacts: [],
       clouds: [],
+      hostilesSeen: [],
     },
     events: [],
     removed: [],
@@ -229,6 +238,7 @@ export function endTurn(
     spawnNpcs(w);
     advanceShops(w);
     refreshVision(w);
+    noteEscape(w);
     noteHurt(w);
     endCallIfOut(w);
     raiseCalls(w);

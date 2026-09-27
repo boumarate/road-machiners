@@ -1,12 +1,14 @@
 // A lost fight knocks the player out: the truck is stripped into a stock that anyone can loot,
 // and the driver wakes once no foe is watching. Health at 0 ends the run.
 
+import { PERK_NUMBERS } from "../data/skills";
 import { RULES } from "../data/rules";
 import { isJunk, maxHp, restorePart } from "./wear";
 import { playerVehicle } from "./damage";
 import { isFoe } from "./combat";
 import { corePart, mountedParts } from "./grid";
 import { cancelJob } from "./jobs";
+import { hasPerk, practice } from "./progress";
 import { createKnockoutSalvage } from "./salvage";
 import { endState } from "./states";
 import type { Vehicle, World } from "./types";
@@ -38,6 +40,12 @@ export function checkKnockout(world: World): void {
   world.events.push({ t: "knockout" });
 }
 
+// Turns a watched knockout lasts at most. The quick wake perk cuts it.
+function knockoutLimit(world: World): number {
+  const quick = hasPerk(world, "quickWake") ? PERK_NUMBERS.quickWake.knockoutTurns : 1;
+  return Math.ceil(RULES.knockoutMaxTurns * quick);
+}
+
 // A foe counts even when it ignores the stripped truck, so the driver lies still until the looters leave.
 export function advanceKnockout(world: World): void {
   const p = world.player;
@@ -47,10 +55,11 @@ export function advanceKnockout(world: World): void {
   const watched = world.vehicles.some(
     (v) => isFoe(world, v, me) && canVehicleSee(world, v, me.pos),
   );
-  if (watched && p.knockoutTurns < RULES.knockoutMaxTurns) return;
+  if (watched && p.knockoutTurns < knockoutLimit(world)) return;
   patchBrokenCore(me);
   p.state = "active";
   world.events.push({ t: "wake" });
+  practice(world, "knockout", 1, null);
 }
 
 // Other junk core parts stay broken. A junk cab cannot wake, so restorePart stops the game with the reason.

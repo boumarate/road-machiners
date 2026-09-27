@@ -4,13 +4,13 @@
 import { onCall } from "./dialogue";
 import { NPCS, SPAWN } from '../data/npcs';
 import { RULES } from '../data/rules';
-import { skillBonus } from '../data/skills';
 import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
 import { laneCount, partLane, sideToward, walkLane, type PartHit, type Side } from './armor';
 import { bodyOf } from './body';
 import { corePart, hasLoot, itemSize, mountedItems, mountedParts } from './grid';
-import { gainXp } from './progress';
+import { PERK_NUMBERS } from '../data/skills';
+import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { canVehicleSee, hasLineOfFire } from './vision';
 import { createWreckSalvage } from './salvage';
 import { addState, stateOf } from './states';
@@ -106,6 +106,7 @@ export type HitOdds = {
     own: number;
     skill: number;
     weather: number;
+    calledShot: number; // the called shot perk's cut of an aimed shot's spread, zero or negative
   }; // radians
 };
 
@@ -252,35 +253,8 @@ export function hitOdds(
   const a = aiming(shooter, target, aim);
   const width = a.width;
   const halfAngle = width / (2 * distance);
-  const gunnery =
-    shooter.faction === "player"
-      ? skillBonus("gunnery", world.player.skills.gunnery)
-      : 0;
-  const weapon = mw.def.spread * DEG;
-  const n = across(shooter, target);
-  const rel = {
-    x:
-      mps(target.speed) * Math.cos(target.heading) -
-      mps(shooter.speed) * Math.cos(shooter.heading),
-    y:
-      mps(target.speed) * Math.sin(target.heading) -
-      mps(shooter.speed) * Math.sin(shooter.heading),
-  };
-  const causes = {
-    weapon,
-    skill: -weapon * gunnery,
-    crossing:
-      (RULES.leadError * Math.abs(rel.x * n.x + rel.y * n.y)) /
-      mw.def.round.speed,
-    own: RULES.shake * mps(Math.abs(shooter.speed)),
-    weather: weatherAt(world, shooter.pos).spread,
-  };
-  const spread =
-    causes.weapon +
-    causes.skill +
-    causes.crossing +
-    causes.own +
-    causes.weather;
+  const causes = spreadCauses(world, shooter, mw, target, aim);
+  const spread = Object.values(causes).reduce((sum, cause) => sum + cause, 0);
   if (!(spread > 0))
     throw new Error(`Spread ${spread} of ${mw.def.id} is not positive`);
   const chance = clamp(
@@ -290,6 +264,28 @@ export function hitOdds(
   );
   const bodyChance = bodyChanceOf(a, { chance, halfAngle, spread, distance });
   return { chance, bodyChance, distance, width, halfAngle, spread, causes };
+}
+
+// Each cause of a shot's spread. The steady aim perk takes the shake of the player's own speed away, and the called
+// shot perk cuts the player's aimed shots.
+function spreadCauses(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle, aim: Aim): HitOdds["causes"] {
+  const weapon = mw.def.spread * DEG;
+  const n = across(shooter, target);
+  const rel = {
+    x: mps(target.speed) * Math.cos(target.heading) - mps(shooter.speed) * Math.cos(shooter.heading),
+    y: mps(target.speed) * Math.sin(target.heading) - mps(shooter.speed) * Math.sin(shooter.heading),
+  };
+  const steady = vehicleHasPerk(world, shooter, "steadyAim");
+  const base = {
+    weapon,
+    skill: -weapon * skillEffect(world, shooter, "perception", "spread"),
+    crossing: (RULES.leadError * Math.abs(rel.x * n.x + rel.y * n.y)) / mw.def.round.speed,
+    own: steady ? 0 : RULES.shake * mps(Math.abs(shooter.speed)),
+    weather: weatherAt(world, shooter.pos).spread,
+  };
+  const called = aim !== "body" && vehicleHasPerk(world, shooter, "calledShot");
+  const sum = base.weapon + base.skill + base.crossing + base.own + base.weather;
+  return { ...base, calledShot: called ? -sum * (1 - PERK_NUMBERS.calledShot.spread) : 0 };
 }
 
 // One round's angular error in radians and whether it hit the aimed part or, for a body shot, the truck. The
@@ -409,6 +405,7 @@ function applyShot(world: World, s: Shot): void {
     return { hit: false, crit: false, offset, hits };
   });
   if (rounds.some((x) => x.hits.length > 0)) s.target.lastHitBy = s.shooter.id;
+  practiceHits(world, s);
   world.events.push({
     t: "shot",
     shooter: s.shooter.id,
@@ -419,6 +416,14 @@ function applyShot(world: World, s: Shot): void {
     side,
     rounds,
   });
+}
+
+// The player practices perception from each round that hits as rolled, harder at a lower hit chance. A miss
+// that lands on the truck anyway does not count.
+function practiceHits(world: World, s: Shot): void {
+  if (s.shooter.id !== world.player.vehicleId) return;
+  const hits = s.rolls.filter((roll) => roll.hit).length;
+  if (hits > 0) practice(world, 'hit', hits, 1 - s.odds.chance);
 }
 
 function witnessesAttack(world: World, observer: Vehicle, shooter: Vehicle, target: Vehicle): boolean {
@@ -538,7 +543,6 @@ function rewardKill(world: World, v: Vehicle): void {
       reason: `bounty for ${v.name}`,
     });
   }
-  gainXp(world, tpl.xp, `destroyed ${v.name}`);
 }
 
 // An NPC fires back at any attacker, fleeing or not. It opens fire only on the target of the fight on top of its

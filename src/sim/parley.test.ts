@@ -4,7 +4,7 @@ import { isHostile, noteCollision } from './combat';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions, hangUp, raiseCalls } from './dialogue';
 import { addGoods } from './inventory';
-import { thinkNpc, topGoal } from './npc-activities';
+import { pushGoal, thinkNpc, topGoal } from './npc-activities';
 import { makePeace, plead } from './parley';
 import { hasCargo } from './salvage';
 import { addState, stateOf } from './states';
@@ -156,6 +156,23 @@ describe('NPC pleas to NPCs', () => {
     thinkNpc(w, a);
     expect(stateOf(w, 'plea', a.id, b.id)).not.toBeNull();
     expect(isHostile(w, a, b)).toBe(false);
+  });
+
+  it('a truce with the last hostile in sight ends a flee from a truck out of sight', () => {
+    forceOption('parley', 'truce');
+    forceOption('truceOffered', 'accept');
+    const w = quietWorld();
+    const a = npcAt(w, 'traders', ['trader'], 34);
+    const b = npcAt(w, 'raiders', ['raider'], 40);
+    const gone = npcAt(w, 'raiders', ['raider'], 200, 200);
+    feud(w, a, b);
+    feud(w, a, gone);
+    pushGoal(w, a, { kind: 'flee', targetId: gone.id, destination: { x: 10, y: 10 }, phase: 'travel', reason: 'damaged and threatened' });
+    a.brain!.hurt = 5;
+    a.lastHitBy = b.id;
+    thinkNpc(w, a);
+    expect(isHostile(w, a, b)).toBe(false);
+    expect(topGoal(a)?.kind).not.toBe('flee');
   });
 
   it('an unhurt driver does not plead', () => {

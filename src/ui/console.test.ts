@@ -130,9 +130,10 @@ describe("queries", () => {
         "list",
         "log",
         "money",
+        "perk",
         "repair",
         "reveal",
-        "skillpoints",
+        "skills",
         "spawn",
         "supplies",
         "tp",
@@ -140,6 +141,13 @@ describe("queries", () => {
         "xp",
       ].sort(),
     );
+  });
+
+  it("perk grants the perk and names it", () => {
+    const result = runCommand(emptyWorld(), "perk bluff");
+    expect(result.world?.player.perks).toEqual(["bluff"]);
+    expect(result.lines).toEqual(["perk granted: Bluff"]);
+    expect(() => runCommand(emptyWorld(), "perk flying")).toThrow(CheatError);
   });
 
   it("list returns no world", () => {

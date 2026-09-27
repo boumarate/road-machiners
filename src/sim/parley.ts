@@ -3,9 +3,11 @@
 // decision. Radio talk with the player lives in src/sim/dialogue.ts, and this module owns what the answers do.
 
 import { SPAWN } from '../data/npcs';
+import { PERK_NUMBERS } from '../data/skills';
 import { playerVehicle } from './damage';
 import { defyThreat, pushGoal } from './npc-activities';
 import { decide, perceiveDanger } from './npc-decisions';
+import { vehicleHasPerk } from './progress';
 import { createCargoSalvage, hasCargo } from './salvage';
 import { addState, endState, pleaData, stateOf } from './states';
 import type { DecisionOptions } from '../data/npcs';
@@ -40,9 +42,11 @@ function holdFire(v: Vehicle, target: Vehicle): void {
   if (v.brain) delete v.brain.attackers[target.id];
 }
 
-// The loser drops its cargo beside its truck, and both sides make peace. An NPC winner goes to take the cargo.
+// The loser drops its cargo beside its truck, only half of each good for a player with the smooth talker perk, and
+// both sides make peace. An NPC winner goes to take the cargo.
 export function yieldTo(world: World, loser: Vehicle, winner: Vehicle): void {
-  const stock = hasCargo(loser) ? createCargoSalvage(world, loser) : null;
+  const share = vehicleHasPerk(world, loser, 'smoothTalker') ? PERK_NUMBERS.smoothTalker.cargo : 1;
+  const stock = hasCargo(loser) ? createCargoSalvage(world, loser, share) : null;
   makePeace(world, loser, winner);
   if (stock && winner.brain) pushGoal(world, winner, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'take the handed-over cargo' });
 }
