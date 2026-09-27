@@ -160,6 +160,12 @@ describe('physics turns', () => {
     freeDrive(result.d);
   });
 
+  it('a fast truck slows to curve onto a drive-through point inside its turning circle', () => {
+    const { w, d } = play(ordered({ kind: 'through', dest: { x: 36, y: 35 } }, 7.8), 2);
+    expect(me(w).order).toBeNull();
+    freeDrive(d);
+  });
+
   it('a stop order stops on the point', () => {
     const { w } = play(ordered({ kind: 'stopAt', dest: { x: 38, y: 31 } }), 8);
     expect(dist(me(w).pos, { x: 38, y: 31 })).toBeLessThan(RULES.arriveRadius + 0.3);

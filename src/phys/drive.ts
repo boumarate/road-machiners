@@ -360,6 +360,7 @@ function driveStep(c: Car): void {
         steerTo = clamp(-turnAngle * D.steerGain, -plan.maxSteer, plan.maxSteer);
       } else {
         steerTo = clamp(ang * D.steerGain, -plan.maxSteer, plan.maxSteer);
+        target = Math.min(target, cornerSpeed(Math.hypot(dx, dz), ang));
       }
     }
   }
@@ -376,6 +377,14 @@ function driveStep(c: Car): void {
   const brake = pushing ? 0 : Math.abs(u) * plan.brakeForce + (target === 0 ? plan.brakeForce : 0);
   for (let i = 0; i < 4; i++) ctl.setWheelBrake(i, brake);
   for (const i of [2, 3]) ctl.setWheelEngineForce(i, pushing ? u * plan.engineForce : 0);
+}
+
+// The fastest speed that still curves onto a point `aimDist` meters away, `ang` off the nose. The arc
+// that leaves along the nose and ends on the point has radius aimDist / (2 sin ang). Without this cap a
+// fast truck circles a point inside its turning circle forever.
+function cornerSpeed(aimDist: number, ang: number): number {
+  const sin = Math.abs(Math.sin(ang));
+  return sin === 0 ? Infinity : Math.sqrt((D.cornerAccel * aimDist) / (2 * sin));
 }
 
 // The truck covers several route points in one turn. Points it has come close to or driven past
