@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { addVehicle, emptyWorld, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import { corePart, mountedParts } from './grid';
 import { planNpcOrders } from './ai';
-import { NPC_BEHAVIOR } from '../data/npcs';
+import { DECISIONS, NPC_BEHAVIOR, TRAITS } from '../data/npcs';
 import { thinkNpc } from './npc-activities';
 import { isWeak, optionWeights } from './npc-decisions';
 import type { Vehicle, World } from './types';
@@ -22,31 +22,106 @@ function createFight() {
   return { world, raider };
 }
 
-describe('ram safety', () => {
-  it('chooses an armored rear ram against a lighter target', () => {
+describe('ram chances', () => {
+  const BASE_RAM = DECISIONS.ramChance.ram;
+  const ramWeight = (world: World, v: Vehicle) => optionWeights(world, v, 'ramChance', world.player.vehicleId, null).ram;
+
+  it('offers a ram only on the fight target ahead within reach', () => {
     const { world, raider } = createFight();
     raider.speed = 5;
-    planNpcOrders(world);
-    expect(raider.brain?.ramTarget).toBe(world.player.vehicleId);
-    expect(raider.order?.kind).toBe('through');
+    expect(ramWeight(world, raider)).toBeDefined();
+    raider.heading = Math.PI;
+    expect(ramWeight(world, raider)).toBeUndefined();
+    raider.heading = 0;
+    raider.brain!.goals = [];
+    expect(ramWeight(world, raider)).toBeUndefined();
   });
 
-  // A parked target is routed around, not braked for.
-  it('holds its range instead of ramming a heavier armored target at close range', () => {
+  it('weighs a gainful ram at its full weight against a lighter target', () => {
+    const { world, raider } = createFight();
+    raider.speed = 5;
+    expect(ramWeight(world, raider)).toBe(BASE_RAM);
+  });
+
+  it('makes a costly ram rare against a heavier armored target', () => {
     const world = emptyWorld({ x: 35, y: 30 });
     const raider = fighting(world, addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 }));
     raider.speed = 5;
+    expect(ramWeight(world, raider)).toBeCloseTo(BASE_RAM * NPC_BEHAVIOR.riskyRam);
+  });
+
+  it('makes a ram rare with a nearly broken engine', () => {
+    const { world, raider } = createFight();
+    raider.speed = 5;
+    mountedParts(raider, 'engine')[0].hp = 1;
+    expect(ramWeight(world, raider)).toBeCloseTo(BASE_RAM * NPC_BEHAVIOR.riskyRam);
+    expect(corePart(raider, 'cab').hp).toBeGreaterThan(0);
+  });
+
+  it('makes a trader ram rarely even when the ram looks gainful', () => {
+    const { world, raider } = createFight();
+    raider.speed = 5;
+    raider.brain!.traits = ['trader'];
+    expect(ramWeight(world, raider)).toBeCloseTo(BASE_RAM * TRAITS.trader.weights.ramChance!.ram!.mul!);
+  });
+
+  it('rolls once per ram chance and drives through while it chose to ram', () => {
+    const { world, raider } = createFight();
+    const me = world.player.vehicleId;
+    raider.speed = 5;
+    forceOption('ramChance', 'ram');
     planNpcOrders(world);
+    expect(raider.brain!.noticed[`ramChance:${me}`]).toBe(world.turn);
+    expect(raider.brain!.ramChoice).toBe(me);
+    expect(raider.brain!.ramTarget).toBe(me);
+    expect(raider.order?.kind).toBe('through');
+    const rng = world.rngState;
+    planNpcOrders(world);
+    expect(world.rngState).toBe(rng);
+    expect(raider.brain!.ramChoice).toBe(me);
+  });
+
+  // A parked target is routed around, not braked for.
+  it('holds its range when it chose to keep', () => {
+    const { world, raider } = createFight();
+    raider.speed = 5;
+    forceOption('ramChance', 'keep');
+    planNpcOrders(world);
+    expect(raider.brain!.ramChoice).toBeUndefined();
     expect(raider.brain!.ramTarget).toBeUndefined();
     expect(raider.order?.kind).toBe('stopAt');
   });
 
-  it('does not commit to a ram with a nearly broken engine', () => {
+  it('rams only while the target stays within reach', () => {
     const { world, raider } = createFight();
-    mountedParts(raider, 'engine')[0].hp = 1;
+    const me = world.player.vehicleId;
+    raider.brain!.ramChoice = me;
+    raider.brain!.noticed[`ramChance:${me}`] = world.turn;
+    raider.heading = Math.PI;
     planNpcOrders(world);
-    expect(raider.brain?.ramTarget).toBeUndefined();
-    expect(corePart(raider, 'cab').hp).toBeGreaterThan(0);
+    expect(raider.brain!.ramChoice).toBe(me);
+    expect(raider.brain!.ramTarget).toBeUndefined();
+  });
+
+  it('forgets the choice once the chance is gone past the notice memory, so a new chance rolls again', () => {
+    const { world, raider } = createFight();
+    const me = world.player.vehicleId;
+    raider.brain!.ramChoice = me;
+    raider.brain!.noticed[`ramChance:${me}`] = world.turn;
+    raider.heading = Math.PI;
+    world.turn += NPC_BEHAVIOR.noticeMemory + 1;
+    thinkNpc(world, raider);
+    expect(raider.brain!.noticed).not.toHaveProperty(`ramChance:${me}`);
+    expect(raider.brain!.ramChoice).toBeUndefined();
+  });
+
+  it('drops the choice when the fight ends', () => {
+    const { world, raider } = createFight();
+    const me = world.player.vehicleId;
+    raider.brain!.ramChoice = me;
+    raider.brain!.goals = [];
+    thinkNpc(world, raider);
+    expect(raider.brain!.ramChoice).toBeUndefined();
   });
 });
 

@@ -17,6 +17,7 @@ import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { isHostile } from './combat';
+import { isRamGainful, ramImpact } from './crash-contact';
 import { vehicleById } from './damage';
 import { contactsOf } from './detect';
 import { getTradePrice } from './economy';
@@ -265,6 +266,13 @@ function canRobSubject(world: World, vehicle: Vehicle, decision: DecisionId, sub
   return canRob(world, vehicle, subjectOf(world, decision, subject));
 }
 
+// A ram needs the subject as the fight target on top of the goals, within reach of a damaging ram.
+function canRamSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  const target = subjectOf(world, decision, subject);
+  const top = topGoal(vehicle);
+  return top?.kind === 'fight' && top.targetId === target.id && ramImpact(world, vehicle, target) !== null;
+}
+
 function canTow(world: World, vehicle: Vehicle): boolean {
   return strandedPlayerAt(world, vehicle) !== null;
 }
@@ -295,6 +303,7 @@ const AVAILABLE: Record<OptionName, Availability> = {
   flee: canDrive,
   investigate: canDrive,
   rob: canRobSubject,
+  ram: canRamSubject,
   tow: canTow,
   resume: canResume,
   new: always,
@@ -378,6 +387,11 @@ function keepFactor(world: World, vehicle: Vehicle, decision: DecisionId, subjec
   return restrained ? NPC_BEHAVIOR.keepWork : 1;
 }
 
+// A ram the forecast calls costly is rare.
+function ramFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): number {
+  return isRamGainful(world, vehicle, subjectOf(world, decision, subject)) ? 1 : NPC_BEHAVIOR.riskyRam;
+}
+
 // A stranded truck that can crawl to a town gate mostly gets no tow. The factor rises from NPC_BEHAVIOR.towNearTown
 // at a short crawl to 1 far out, measured from where the driver perceives the truck.
 function towFactor(world: World, vehicle: Vehicle): number {
@@ -404,6 +418,7 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   flee: fleeFactor,
   investigate: investigateFactor,
   rob: robFactor,
+  ram: ramFactor,
   tow: towFactor,
   resume: neutral,
   new: neutral,

@@ -5,7 +5,7 @@ import { getActivityDestination, thinkNpc, topGoal } from "./npc-activities";
 import { towData } from "./states";
 import { vehicleStats } from "./stats";
 import { playerTow } from "./tow";
-import { shouldRam } from "./crash-contact";
+import { ramImpact } from "./crash-contact";
 import type { Vehicle, World } from "./types";
 import { angleDiff, bearing, dist, type Vec } from "./vec";
 
@@ -86,7 +86,7 @@ function computeFightGoal(
     x: target.pos.x + Math.cos(target.heading) * target.speed,
     y: target.pos.y + Math.sin(target.heading) * target.speed,
   };
-  if (shouldRam(world, v, target)) {
+  if (v.brain!.ramChoice === target.id && ramImpact(world, v, target) !== null) {
     v.brain!.ramTarget = target.id;
     return lead;
   }

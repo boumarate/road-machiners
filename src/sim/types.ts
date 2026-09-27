@@ -137,7 +137,8 @@ export type NpcBrain = {
     stalled?: number; // consecutive turns without forward progress
     recovery?: number; // turns left backing away from a blockage
     recoveryGoal?: Vec;
-    ramTarget?: string; // the fight target this driver drives through this turn, set by the fight planner
+    ramChoice?: string; // the fight target this driver chose to ram while its ram chance lasts
+    ramTarget?: string; // the fight target this driver drives through this turn
     farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
 };
 

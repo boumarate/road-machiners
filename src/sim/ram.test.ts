@@ -2,7 +2,7 @@ import { partDef } from '../data/parts';
 import { describe, expect, it } from 'vitest';
 import { corePart, mountedItems, mountedParts } from './grid';
 import { applyCrash } from './movement';
-import { applyContactCrash, shouldRam } from './crash-contact';
+import { applyContactCrash, isRamGainful } from './crash-contact';
 import { RULES } from '../data/rules';
 import { thinkNpc } from './npc-activities';
 import { addState, stateOf } from './states';
@@ -141,7 +141,7 @@ describe('rams as attacks', () => {
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     raider.speed = 5;
     const before = JSON.stringify(w.vehicles);
-    shouldRam(w, raider, victim);
+    isRamGainful(w, raider, victim);
     expect(JSON.stringify(w.vehicles)).toBe(before);
     expect(w.states).toEqual([]);
     expect(w.events).toEqual([]);

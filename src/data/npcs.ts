@@ -297,6 +297,7 @@ export type DecisionOptions = {
   attacked: 'keep' | 'flee' | 'fightBack'; // a shot at the driver or a nearby visible faction mate, hit or miss
   preySeen: 'keep' | 'rob'; // a new robbery target comes in sight
   strandedSeen: 'keep' | 'tow'; // a stranded player comes in sight
+  ramChance: 'keep' | 'ram'; // the fight target lies ahead within reach of a damaging ram
   resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal
   idle: 'trade' | 'scavenge' | 'raid' | 'wait'; // the goal stack is empty
 };
@@ -321,6 +322,8 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   preySeen: { keep: 1, rob: 0 },
   // Towing more than rarely needs a trait.
   strandedSeen: { keep: 1, tow: 0 },
+  // A fighter takes 9 in 10 rams that look worth it. Otherwise it keeps shooting from its range.
+  ramChance: { keep: 1, ram: 9 },
   // After an interruption a driver goes back to its work 9 times in 10.
   resume: { resume: 9, new: 1 },
   // Anyone collects salvage in sight. Trading and raiding more than rarely need a trait. Waiting is the small
@@ -389,13 +392,14 @@ export const TRAITS: Record<TraitId, Trait> = {
     weights: { idle: { scavenge: { add: 10 } }, strandedSeen: { tow: { add: 9 } }, hostileSeen: { fight: { add: 2 } } },
   },
   // Traders rarely pick a fight: a fight weight of 2 drops to 0.004, about 1%, and to 0.02, about 2%, against a
-  // manageable hostile. A shot trader returns fire at a tenth of the usual weight, and mostly runs. Trading beats
+  // manageable hostile. A shot trader returns fire at a tenth of the usual weight, and mostly runs. A trader in a
+  // fight rams about 1 time in 100: a ram weight of 9 drops to 0.009. Trading beats
   // salvage in sight 3 to 1. Nine in ten traders help a stranded truck.
   trader: {
     towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
     weights: {
       idle: { trade: { add: 30 } }, strandedSeen: { tow: { add: 9 } },
-      hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } },
+      hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } }, ramChance: { ram: { mul: 0.001 } },
     },
   },
   // Raiders fight most hostiles they see and close in on most useful contacts. A raid ties with salvage in sight.
@@ -445,6 +449,9 @@ export const NPC_BEHAVIOR = {
   // Investigate weight times this when the cab or a driving part is at or below the recover condition. A raider's
   // investigate weight of 12 drops to 0.12, so a crippled raider closes in on a contact 1 to 4 times in 100.
   crippledInvestigate: 0.01,
+  // Ram weight times this when the forecast says the ram costs the driver more than the target, or breaks one of
+  // its working parts. A ram weight of 9 drops to 0.009, about 1%.
+  riskyRam: 0.001,
   // Salvage in sight weighs 10 times a known site out of sight.
   visibleSalvage: 10,
   // A robber mostly picks targets weaker than itself, away from town guards. Rob weight times this when the
