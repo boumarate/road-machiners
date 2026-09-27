@@ -147,3 +147,38 @@ function laneToEdge(g: Grid, start: { x: number; y: number }, side: Side): { x: 
 function inGrid(g: Grid, c: { x: number; y: number }): boolean {
   return c.x >= 0 && c.y >= 0 && c.x < g.w && c.y < g.h;
 }
+
+// Angle span in degrees off the heading. Positive angles lie to the right, as in sideToward().
+export type FireSpan = { from: number; to: number };
+
+const SIDE_CENTER: Record<Side, number> = { front: 0, right: 90, rear: 180, left: -90 };
+
+// Where a gun can fire: its own arc cut to its open sides, merged into spans. One span of 360 degrees is a full circle.
+export function fireSpans(arc: number, sides: readonly Side[]): FireSpan[] {
+  const half = Math.min(arc, 360) / 2;
+  const pieces = sides
+    .flatMap((side) => splitAtBack(SIDE_CENTER[side] - 45, SIDE_CENTER[side] + 45))
+    .map((p) => ({ from: Math.max(p.from, -half), to: Math.min(p.to, half) }))
+    .filter((p) => p.to > p.from)
+    .sort((a, b) => a.from - b.from);
+  const merged: FireSpan[] = [];
+  for (const p of pieces) {
+    const last = merged.at(-1);
+    if (last && p.from <= last.to) last.to = Math.max(last.to, p.to);
+    else merged.push({ ...p });
+  }
+  return joinAcrossBack(merged);
+}
+
+// The rear quarter crosses 180 degrees, so it splits into its right and left halves.
+function splitAtBack(from: number, to: number): FireSpan[] {
+  return to <= 180 ? [{ from, to }] : [{ from, to: 180 }, { from: -180, to: to - 360 }];
+}
+
+// A span ending at 180 and one starting at -180 are one span through the rear.
+function joinAcrossBack(spans: FireSpan[]): FireSpan[] {
+  const first = spans[0];
+  const last = spans.at(-1);
+  if (spans.length < 2 || !first || !last || first.from !== -180 || last.to !== 180) return spans;
+  return [{ from: last.from, to: first.to + 360 }, ...spans.slice(1, -1)];
+}

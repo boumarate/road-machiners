@@ -1,13 +1,14 @@
-// The selected weapon's reach on the ground: a circle for turrets, a forward sector for fixed guns,
-// like the 2D src/render/weaponRange.ts. Draped over the terrain.
+// The selected weapon's reach on the ground: a circle for a turret with every side open, and sectors where a
+// forward arc or tall parts on the truck limit it. Draped over the terrain.
 
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
-import type { WeaponDef } from '../../data/parts';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
+import { fireSpans, type FireSpan } from '../../sim/armor';
+import type { MountedWeapon } from '../../sim/stats';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import { DEG, type Vec } from '../../sim/vec';
 
@@ -21,38 +22,57 @@ const LINE_ALPHA = 0.8;
 export class WeaponRangeView {
   readonly root = new THREE.Group();
   private fill = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: PAL.select, transparent: true, opacity: FILL_ALPHA, depthTest: false, side: THREE.DoubleSide }));
-  private edge = new Line2(new LineGeometry(), new LineMaterial({ color: PAL.select, linewidth: LINE_WIDTH_PX, transparent: true, opacity: LINE_ALPHA, depthTest: false }));
+  private edges: Line2[] = [];
 
   constructor() {
     this.fill.renderOrder = 810;
-    this.edge.renderOrder = 811;
-    this.root.add(this.fill, this.edge);
+    this.root.add(this.fill);
     this.root.visible = false;
   }
 
-  // weapon null hides the shape.
-  set(terrain: Terrain, pos: Vec, heading: number, weapon: WeaponDef | null): void {
+  // weapon null hides the shape. Sides a tall part blocks are left out, so the shape shows where the gun can fire.
+  set(terrain: Terrain, pos: Vec, heading: number, weapon: MountedWeapon | null): void {
     this.root.visible = weapon !== null;
     if (!weapon) return;
-    const full = weapon.arc >= 360;
-    const half = full ? Math.PI : (weapon.arc * DEG) / 2;
-    const steps = Math.ceil((2 * half) / DEG / DEG_PER_STEP);
+    const spans = fireSpans(weapon.def.arc, weapon.sides);
+    const full = spans.length === 1 && spans[0].to - spans[0].from >= 360;
     const at = (x: number, y: number) => new THREE.Vector3(x * S, heightAt(terrain, x, y) * S + LIFT, y * S);
-    const rim: THREE.Vector3[] = [];
-    for (let i = 0; i <= steps; i++) {
-      const a = heading - half + (2 * half * i) / steps;
-      rim.push(at(pos.x + Math.cos(a) * weapon.range, pos.y + Math.sin(a) * weapon.range));
-    }
     const center = at(pos.x, pos.y);
-    const fan = [center, ...rim];
+    const points: THREE.Vector3[] = [center];
     const idx: number[] = [];
-    for (let i = 1; i <= steps; i++) idx.push(0, i, i + 1);
+    const outlines = spans.map((span) => {
+      const rim = rimPoints(span, heading, (a) => at(pos.x + Math.cos(a) * weapon.def.range, pos.y + Math.sin(a) * weapon.def.range));
+      const first = points.length;
+      points.push(...rim);
+      for (let i = 0; i < rim.length - 1; i++) idx.push(0, first + i, first + i + 1);
+      return full ? rim : [center, ...rim, center];
+    });
     this.fill.geometry.dispose();
-    this.fill.geometry = new THREE.BufferGeometry().setFromPoints(fan).setIndex(idx);
+    this.fill.geometry = new THREE.BufferGeometry().setFromPoints(points).setIndex(idx);
     this.fill.visible = !full;
-    const outline = full ? rim : [center, ...rim, center];
-    this.edge.geometry.dispose();
-    this.edge.geometry = new LineGeometry().setPositions(outline.flatMap((p) => [p.x, p.y, p.z]));
-    this.edge.material.resolution.set(window.innerWidth, window.innerHeight);
+    this.drawEdges(outlines);
   }
+
+  private drawEdges(outlines: THREE.Vector3[][]): void {
+    while (this.edges.length < outlines.length) {
+      const edge = new Line2(new LineGeometry(), new LineMaterial({ color: PAL.select, linewidth: LINE_WIDTH_PX, transparent: true, opacity: LINE_ALPHA, depthTest: false }));
+      edge.renderOrder = 811;
+      this.edges.push(edge);
+      this.root.add(edge);
+    }
+    this.edges.forEach((edge, i) => {
+      const outline = outlines[i];
+      edge.visible = outline !== undefined;
+      if (!outline) return;
+      edge.geometry.dispose();
+      edge.geometry = new LineGeometry().setPositions(outline.flatMap((p) => [p.x, p.y, p.z]));
+      edge.material.resolution.set(window.innerWidth, window.innerHeight);
+    });
+  }
+}
+
+// Points along the rim of one span, at most DEG_PER_STEP degrees apart.
+function rimPoints(span: FireSpan, heading: number, point: (angle: number) => THREE.Vector3): THREE.Vector3[] {
+  const steps = Math.max(1, Math.ceil((span.to - span.from) / DEG_PER_STEP));
+  return Array.from({ length: steps + 1 }, (_, i) => point(heading + (span.from + ((span.to - span.from) * i) / steps) * DEG));
 }

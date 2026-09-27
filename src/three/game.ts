@@ -1171,7 +1171,7 @@ export class Game {
       this.world.terrain,
       me.pos,
       me.heading,
-      sel ? sel.def : null,
+      sel ?? null,
     );
     this.zones.update(
       this.world.terrain,

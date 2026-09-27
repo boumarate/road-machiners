@@ -1,7 +1,7 @@
 import { partDef } from '../data/parts';
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
-import { laneCount, openSides, partLane, sideToward, walkLane } from './armor';
+import { fireSpans, laneCount, openSides, partLane, sideToward, walkLane } from './armor';
 import { fireBlock, inArc, resolveDestroyed } from './combat';
 import { makePart } from './factory';
 import { advanceKnockout, checkKnockout } from './defeat';
@@ -290,5 +290,31 @@ describe('firing past tall parts', () => {
     const beside = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 40, y: 45 });
     const gun = vehicleStats(w, me).weapons[0];
     expect(inArc(me, gun, beside)).toBe(true);
+  });
+});
+
+describe('fire spans', () => {
+  it('a turret with every side open fires all around', () => {
+    expect(fireSpans(360, ['front', 'rear', 'left', 'right'])).toEqual([{ from: -180, to: 180 }]);
+  });
+
+  it('a turret blocked in front fires from one flank around the rear to the other', () => {
+    expect(fireSpans(360, ['rear', 'left', 'right'])).toEqual([{ from: 45, to: 315 }]);
+  });
+
+  it('a turret blocked at the rear fires across the front half and the flanks', () => {
+    expect(fireSpans(360, ['front', 'left', 'right'])).toEqual([{ from: -135, to: 135 }]);
+  });
+
+  it('a forward gun keeps its own arc when the front is open', () => {
+    expect(fireSpans(60, ['front', 'rear'])).toEqual([{ from: -30, to: 30 }]);
+  });
+
+  it('a forward gun blocked in front cannot fire at all', () => {
+    expect(fireSpans(60, ['rear', 'left', 'right'])).toEqual([]);
+  });
+
+  it('a gun open only on both flanks fires in two spans', () => {
+    expect(fireSpans(360, ['left', 'right'])).toEqual([{ from: -135, to: -45 }, { from: 45, to: 135 }]);
   });
 });
