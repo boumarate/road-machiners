@@ -7,17 +7,19 @@ import type { VehicleStats } from "./stats";
 import type { Blocker } from "./path";
 import { nearestPad, siteUnder } from "./sites";
 import type { MoveOrder, Vehicle, World } from "./types";
-import { clamp, dist, type Vec } from "./vec";
+import { clamp, DEG, dist, type Vec } from "./vec";
 
-// The player backs only to points within throttle reach. A farther point is a course, so the truck turns around.
-export function shouldBackToDestination(
+// Whether a slow truck backs up to its destination instead of turning around nose first.
+// rearAngle is the angle between straight behind and the destination, in radians.
+// The player backs only to a click inside a tight cone behind and within throttle reach.
+// NPCs back up only to recover from a blockage.
+export function backsToDestination(
   vehicle: Pick<Vehicle, "faction" | "brain">,
   distance: number,
+  rearAngle: number,
 ): boolean {
-  return (
-    (vehicle.faction === "player" && distance < RULES.throttleZones.reach) ||
-    (vehicle.brain?.recovery ?? 0) > 0
-  );
+  if ((vehicle.brain?.recovery ?? 0) > 0) return true;
+  return vehicle.faction === "player" && distance < RULES.throttleZones.reach && Math.abs(rearAngle) < RULES.reverse.cone * DEG;
 }
 
 export type Throttle = "brake" | "hold" | "accelerate";

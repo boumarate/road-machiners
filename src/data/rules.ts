@@ -9,9 +9,9 @@ export const RULES = {
   fuelUseFactor: 0.075, // share of the chassis fuel rate burned per tile; a daytime Bowl to Nose road trip uses under 60% of the starting fuel, leaving room for detours and fights
   npcStuckTurns: 2, // failed drive attempts before backing out
   npcRecoveryTurns: 2, // turns spent backing out before resuming the route
-  // At or below `below` speed, a truck more than `angle` degrees off its destination backs up
-  // `distance` tiles in a turn, swinging its nose by up to the chassis reverseTurn. It stops after.
-  reverse: { below: 1, angle: 45, distance: 1 },
+  // A player click within throttle reach and less than `cone` degrees off straight behind backs the truck up.
+  // Any other point behind turns the truck around nose first. A stuck NPC backs out `distance` tiles.
+  reverse: { cone: 20, distance: 1 },
   arriveRadius: 0.5, // a stop order clears inside this distance
   // Throttle zones ahead of the truck. They span `reach` tiles, split into brake, hold and accelerate
   // shares in that order. A click's distance picks the zone.
