@@ -4,6 +4,7 @@ import type { PartHit, Side } from "./armor";
 import type { TraitId } from "../data/npcs";
 import type { Terrain } from "./terrain";
 import type { Vec } from "./vec";
+import type { LandmarkLook } from "../data/region";
 import type { TopicId } from "../data/dialogue";
 import type { DecisionOptions } from "../data/npcs";
 
@@ -62,6 +63,9 @@ export type SalvageStock = {
   radius: number;
   goods: Record<string, number>;
   parts: PartInstance[];
+  fuel?: number; // fuel units that pour into a tank, not the grid
+  supplies?: number; // supply units that go to driver stores, not the grid
+  pile?: { until: number }; // loot lying loose on the ground, drawn as a heap, gone at turn `until`. Sites and wrecks draw their own stock.
 };
 
 export type RefitMove = {
@@ -181,12 +185,10 @@ export type Vehicle = {
   job: Job | null;
 };
 
-export type Obstacle = {
-  id: string;
-  pos: Vec;
-  r: number;
-  kind: "rock" | "wreck" | "building" | "water" | "site";
-};
+export type Obstacle =
+  | { id: string; pos: Vec; r: number; kind: "rock" | "wreck" | "building" | "water" | "site" }
+  // yaw is the direction a landmark faces, toward its road, in radians from map +x toward +y.
+  | { id: string; pos: Vec; r: number; kind: "landmark"; look: LandmarkLook; yaw: number };
 
 // A timed relation one vehicle holds toward another. src/sim/states.ts owns them.
 export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce' | 'grievance' | 'plea';

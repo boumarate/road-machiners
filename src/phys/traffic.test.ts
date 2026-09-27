@@ -4,6 +4,7 @@
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { START_KITS } from '../data/start';
+import { hangUp } from '../sim/dialogue';
 import { mountedParts } from '../sim/grid';
 import type { World } from '../sim/types';
 import { endTurn, newWorld, setMoveOrder } from '../sim/world';
@@ -31,6 +32,8 @@ describe('invariants under AI traffic', () => {
   it('no negative HP, fuel, supplies, health or money over 80 turns', () => {
     let w = setMoveOrder(newWorld(11, START_KITS.standard), { kind: 'stopAt', dest: { x: 45, y: 15 } });
     for (let i = 0; i < 80; i++) {
+      // The player hangs up on drivers who radio in, since an open call holds the turn.
+      if (w.player.call) w = hangUp(w);
       ({ w } = play(w, 1));
       for (const v of w.vehicles) for (const p of mountedParts(v)) expect(p.hp).toBeGreaterThanOrEqual(0);
       for (const k of ['fuel', 'supplies', 'health', 'money'] as const) expect(w.player[k]).toBeGreaterThanOrEqual(0);

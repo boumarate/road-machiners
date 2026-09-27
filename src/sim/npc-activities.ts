@@ -19,7 +19,7 @@ import {
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
 import { hashRandom, randInt } from './rng';
-import { canReachSalvage, hasSalvage, knockoutStockId, wreckStockId } from './salvage';
+import { canReachSalvage, hasSalvage, pileInReach, wreckStockId } from './salvage';
 import { beginSearch } from './search';
 import { vehicleById } from './damage';
 import { plead } from './parley';
@@ -862,13 +862,13 @@ export function resolveNpcActivities(world: World): void {
   }
 }
 
-// Sends a robber that won to search the stock its victim left: an NPC's wreck, or the stock a knocked-out player
-// dropped this turn. A robber that died in the same fight loots nothing.
+// Sends a robber that won to search the stock its victim left: an NPC's wreck, or the pile a knocked-out player
+// dropped where it stands. A robber that died in the same fight loots nothing.
 export function lootRobbed(w: World, robberId: string, victimId: string): void {
   const robber = w.vehicles.find((v) => v.id === robberId);
   if (!robber) return;
-  const ids = [wreckStockId(victimId), knockoutStockId(victimId, w.turn)];
-  const stock = w.salvage.find((s) => ids.includes(s.id));
+  const victim = w.vehicles.find((v) => v.id === victimId);
+  const stock = w.salvage.find((s) => s.id === wreckStockId(victimId)) ?? (victim && pileInReach(w, victim));
   if (!stock) throw new Error(`${robberId} won a robbery, but ${victimId} left no stock`);
   pushGoal(w, robber, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'loot the robbed truck' });
 }

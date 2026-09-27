@@ -13,6 +13,17 @@ export type LocationDef = {
 };
 // What closes a location on its collision edge. Towns always have a town wall.
 export type SiteEdge = "palisade" | "camp" | "stone" | "fence" | "wrecks";
+// What stands beside the roads of one area of the map.
+export type LandmarkLook = "pole" | "billboard" | "crag" | "tank";
+export type LandmarkDef = {
+  look: LandmarkLook;
+  center: Vec; // the area is a circle
+  radius: number;
+  spacing: number; // tiles along a road between two landmarks
+  gap: number; // tiles between the road edge and the landmark's footprint
+  r: [number, number]; // footprint radius range
+  sides: "right" | "both"; // a power line keeps to one side, other landmarks pick a side each
+};
 
 export const MAP_SCALE = 5;
 
@@ -20,8 +31,39 @@ export function scalePoint(p: Vec): Vec {
   return { x: p.x * MAP_SCALE, y: p.y * MAP_SCALE };
 }
 
-function scaleRoad(points: Vec[]): Vec[] {
-  return points.map(scalePoint);
+// Road bends. Between its given points a road sways sideways, so long stretches are not ruled lines.
+// The given points stay on the road, so junctions and site entries keep their places.
+const BEND = {
+  step: 6, // tiles between points of a bent stretch
+  amplitude: 0.07, // largest sway as a share of the stretch length
+  maxSway: 4, // tiles of sway at most, so a road keeps well inside its old graded corridor
+  wavelength: 45, // tiles per sway to one side and back
+};
+
+function scaleRoad(points: Vec[], straight: number[] = []): Vec[] {
+  const scaled = points.map(scalePoint);
+  const out: Vec[] = [scaled[0]];
+  for (let i = 1; i < scaled.length; i++) out.push(...(straight.includes(i - 1) ? [scaled[i]] : bend(scaled[i - 1], scaled[i])));
+  return out;
+}
+
+// Points after a along a sideways sway to b, ending at b. The sway is zero at both ends. Its phase
+// comes from the stretch's own points, so every stretch sways its own way.
+function bend(a: Vec, b: Vec): Vec[] {
+  const length = Math.hypot(b.x - a.x, b.y - a.y);
+  const count = Math.max(1, Math.round(length / BEND.step));
+  const sway = Math.min(BEND.maxSway, length * BEND.amplitude);
+  const waves = Math.max(1, Math.round(length / BEND.wavelength));
+  const phase = (a.x * 12.9898 + a.y * 78.233 + b.x * 37.719 + b.y * 4.581) % (2 * Math.PI);
+  const nx = -(b.y - a.y) / length;
+  const ny = (b.x - a.x) / length;
+  const points: Vec[] = [];
+  for (let k = 1; k <= count; k++) {
+    const t = k / count;
+    const side = sway * Math.sin(Math.PI * t) * Math.sin(Math.PI * waves * t + phase);
+    points.push({ x: a.x + (b.x - a.x) * t + nx * side, y: a.y + (b.y - a.y) * t + ny * side });
+  }
+  return points;
 }
 
 const FALLEN_SUN_POS = scalePoint({ x: 64, y: 54 });
@@ -214,7 +256,7 @@ export const REGION = {
       { x: 103, y: 70 },
       { x: 105, y: 58 },
       { x: 102, y: 35 },
-    ]),
+    ], [9]), // the stretch over Canyon Bridge stays straight
     scaleRoad([
       { x: 28, y: 64 },
       { x: 36, y: 61 },
@@ -275,6 +317,17 @@ export const REGION = {
     ],
   ] as Vec[][],
   roadWidth: 6,
+  // Each area lines its roads with its own landmark, so a driver can tell where on the map they are.
+  landmarks: [
+    // A power line runs along the northern roads between Scrapjaw, Dustwell, Granary and Burnt Convoy.
+    { look: "pole", center: scalePoint({ x: 42, y: 26 }), radius: 120, spacing: 14, gap: 1, r: [0.3, 0.3], sides: "right" },
+    // Old billboards stand on the way from Podfield to Nose.
+    { look: "billboard", center: scalePoint({ x: 90, y: 28 }), radius: 80, spacing: 40, gap: 1.5, r: [1.6, 1.6], sides: "both" },
+    // Rock spires rise along the canyon roads east of Salvage Yard.
+    { look: "crag", center: scalePoint({ x: 95, y: 66 }), radius: 110, spacing: 30, gap: 1.5, r: [1.6, 2.6], sides: "both" },
+    // Dead tanks lie along the southern road from Bowl past South Lock.
+    { look: "tank", center: scalePoint({ x: 48, y: 90 }), radius: 120, spacing: 55, gap: 1.2, r: [1.5, 1.5], sides: "both" },
+  ] as LandmarkDef[],
   obstacles: {
     clusters: 220,
     rocksPerCluster: [2, 6] as [number, number],

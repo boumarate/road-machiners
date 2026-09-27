@@ -26,6 +26,7 @@ type PartItem = Extract<GridItem, { kind: 'part' }>;
 // Material name that takes the faction color.
 const PAINT = 'paint';
 const LAMP = 'light'; // the headlight face material in the nose and base models
+const GLASS = 'glass'; // the cab window material in the base models, tinted by the daylight
 const TRIM = 'trim'; // base material that takes the faction cab color
 const FIT_SLACK = 1e-3; // meters a base may pass its footprint by float noise
 
@@ -88,6 +89,8 @@ export class VehicleView {
   private turrets: THREE.Group[] = [];
   private heading = 0;
   private lampMat = new THREE.MeshBasicMaterial({ color: PAL.lamp.off });
+  private glassMat = new THREE.MeshLambertMaterial({ flatShading: true });
+  private readonly glassGlow = new THREE.Color(0); // kept across rebuilds, which replace the glass material
   private silhouetteMat!: THREE.MeshBasicMaterial; // set by rebuild
 
   constructor(v: Vehicle, seen: boolean) {
@@ -135,6 +138,12 @@ export class VehicleView {
     this.lampMat.color.setHex(on ? PAL.lamp.on : PAL.lamp.off);
   }
 
+  // glow: the color cab windows add over their lit color.
+  windows(glow: THREE.Color): void {
+    this.glassGlow.copy(glow);
+    this.glassMat.emissive.copy(glow);
+  }
+
   // yaw is a map-space heading (radians, 0 = +x). null points turrets forward.
   aim(yaw: number | null): void {
     const delta = yaw === null ? 0 : yaw - this.heading;
@@ -160,6 +169,7 @@ export class VehicleView {
     // disposeChildren disposed the lamp material, so a new one keeps the lamp state.
     const on = this.lampMat.color.getHex() === PAL.lamp.on;
     this.lampMat = new THREE.MeshBasicMaterial({ color: on ? PAL.lamp.on : PAL.lamp.off });
+    this.glassMat = new THREE.MeshLambertMaterial({ flatShading: true, emissive: this.glassGlow });
 
     const still = new THREE.Group();
     const onBody = v.items.filter((item) => onChassis(v, item));
@@ -211,12 +221,18 @@ export class VehicleView {
     }
   }
 
-  // Headlight faces share the lamp material, so lamps() switches them all.
+  // Headlight faces share the lamp material, so lamps() switches them all. Cab windows share the glass material, so windows() tints them all.
   private useLamp(obj: THREE.Object3D): void {
     obj.traverse((o) => {
-      if (o instanceof THREE.Mesh && o.material.name === LAMP) {
+      if (!(o instanceof THREE.Mesh)) return;
+      if (o.material.name === LAMP) {
         o.material.dispose();
         o.material = this.lampMat;
+        o.userData.lamp = true;
+      } else if (o.material.name === GLASS) {
+        this.glassMat.color.copy(o.material.color);
+        o.material.dispose();
+        o.material = this.glassMat;
         o.userData.lamp = true;
       }
     });
@@ -595,7 +611,7 @@ function mergeStatic(group: THREE.Group): THREE.Group {
     mesh.receiveShadow = true;
     out.add(mesh);
   }
-  // Lamp meshes keep their shared material, so they stay separate meshes.
+  // Lamp and window meshes keep their shared material, so they stay separate meshes.
   for (const lamp of lamps) {
     const toHere = toGroup.clone().multiply(lamp.matrixWorld);
     const geo = lamp.geometry.clone().applyMatrix4(toHere);

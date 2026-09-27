@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
-import { moveItem, dumpGood, removeAllGoods } from './inventory';
+import { moveItem, dumpItem, removeAllGoods } from './inventory';
 import { advanceJobs, startJob } from './jobs';
 import { emptyWorld } from './testkit';
 import { findSpot, gridOf, MOUNT_CELLS } from './grid';
@@ -77,7 +77,7 @@ describe('field refits', () => {
     const good = next.vehicles[0].items.find((item) => item.kind === 'good');
     if (!good) throw new Error('Expected goods');
     expect(() => moveItem(next, weapon.id, weapon)).toThrow('Finish the refit');
-    expect(() => dumpGood(next, good.id)).toThrow('Finish the refit');
+    expect(() => dumpItem(next, good.id)).toThrow('Finish the refit');
   });
 
   it('cancels if a required item disappears', () => {

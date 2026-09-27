@@ -36,7 +36,7 @@ import { CHASSIS } from "../data/chassis";
 import type { ShotRound, Vehicle, World } from "../sim/types";
 import type { Vec } from "../sim/vec";
 import { grayRadius, playerSees, tileOf, visibleTiles } from "../sim/vision";
-import { DEG, dist } from "../sim/vec";
+import { dist } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
 import { isTowed, setBeacon, unhitch } from "../sim/tow";
 import {
@@ -77,7 +77,7 @@ import { TERRAIN_TYPES } from "../data/terrain";
 import { bodyOf } from "../sim/body";
 import { headingOf } from "../phys/frames";
 import { isBusy } from "../sim/jobs";
-import { daylightAt, lightScene, sunLight } from "./render/daylight";
+import { daylightAt, lightScene, NightLights, sunLight } from "./render/daylight";
 import { sunAt } from "../sim/sun";
 import { tileAt } from "../sim/terrain";
 import { ContactsView } from "./render/contacts";
@@ -107,16 +107,6 @@ const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is reco
 // The circle under the hovered vehicle, which a click targets. Sizes are in tiles.
 const PICK_RING = { gap: 0.45, width: 0.06, alpha: 0.9, lift: 0.02 };
 
-// Headlight beams at night for every vehicle within gray vision, also one the player cannot see.
-const BEAM_COLOR = 0xfff2c8;
-const BEAM_INTENSITY = 25; // lit only at night
-const BEAM_DECAY = 0.4; // below the physical 2, so the ground by the nose does not burn white
-const BEAM_RANGE = 70; // meters where the light fades to nothing
-const BEAM_ANGLE = 42 * DEG; // half-angle of the cone
-const BEAM_PENUMBRA = 0.6; // soft share of the cone edge
-const BEAM_HEIGHT = 4; // meters above the truck center where the beam starts
-const BEAM_AIM = { ahead: 30, down: 6 }; // meters ahead of the nose and below the truck center the beam points at
-
 type TurnPhase = ReturnType<UiHost["getTurnPhase"]>;
 
 const MOVE_MS = (TURN_STEPS / PHYSICS.stepsPerSecond) * 1000; // real time the movement plays over
@@ -132,7 +122,7 @@ export class Game {
   private readonly scene = new THREE.Scene();
   private readonly sun = sunLight();
   private readonly sky = new THREE.HemisphereLight();
-  private readonly beams: THREE.SpotLight[] = [];
+  private readonly nightLights = new NightLights(this.scene);
   private readonly vignette = Object.assign(document.createElement("div"), {
     className: "vignette",
   });
@@ -234,10 +224,10 @@ export class Game {
     const groundScope = new RenderScope(this.ground, this.world.size, this.sightLimit, false);
     const propScope = new RenderScope(this.props, this.world.size, this.sightLimit, true);
     this.scopes = [groundScope, propScope];
-    const groundChunks = terrainMesh(this.world, groundScope);
+    const groundChunks = terrainMesh(this.world, groundScope, propScope);
     addSites(this.world.terrain, propScope);
     this.obstacles = new ObstacleViews(propScope, this.world.terrain);
-    this.obstacles.sync(this.world.obstacles);
+    this.obstacles.sync(this.world.obstacles, this.world.salvage);
     addScatter(this.world.terrain, this.world.obstacles, propScope);
     this.fog = new FogView(this.world, groundChunks, this.sightLimit);
     this.path = new PathView(this.world.terrain);
@@ -385,7 +375,7 @@ export class Game {
       this.shade.update(this.world);
     }
     if (!this.anim || this.anim.impacts)
-      this.obstacles.sync(this.world.obstacles);
+      this.obstacles.sync(this.world.obstacles, this.world.salvage);
     this.hud.renderTop(this.displayWorld());
     this.hud.renderRescue(this.displayWorld());
     if (!this.anim && this.world.player.state === "dead") this.death.show();
@@ -940,7 +930,7 @@ export class Game {
             )
           ]
         : PAL.plan;
-    this.path.set(turns, first, course);
+    this.path.set(turns, first, course, !v.direct);
   }
 
   private advanceTurn(now: number): { step: number | null; speed: number } {
@@ -978,7 +968,8 @@ export class Game {
     this.follow.update(truck, this.hud.cameraMode === "auto" ? this.orderPoint() : null, this.anim !== null, dt);
     this.hud.showRecenter(!this.follow.isFollowing());
     lightScene(this.sun, this.sky, truck, daylightAt(this.lightTurn()));
-    this.aimBeams(!sunAt(this.world.turn));
+    const lit = this.world.vehicles.filter((v) => this.frames[v.id] && this.sightLimit.reaches(this.frames[v.id].pos));
+    this.nightLights.update(!sunAt(this.world.turn), truck, lit.map((v) => ({ chassisId: v.chassisId, frame: this.frames[v.id] })));
     const at = playerVehicle(this.world).pos;
     this.stormTint.style.display = this.world.weather.some(
       (e) => e.kind === "storm" && dist(at, e.pos) <= e.radius,
@@ -1049,6 +1040,7 @@ export class Game {
       step === null || !this.anim ? null : this.anim.result.frames;
     const landed = !this.anim || this.anim.impacts;
     const night = !sunAt(this.world.turn);
+    const glass = daylightAt(this.lightTurn()).glass;
     const shown = [
       ...this.world.vehicles,
       ...(landed ? [] : this.world.removed),
@@ -1080,6 +1072,7 @@ export class Game {
       }
       view.update(display, seen);
       view.lamps(night);
+      view.windows(glass);
       view.pose(f, dt);
       view.aim(this.turretAim(v, f));
       this.vehicleParticles(display, f, frames !== null);
@@ -1090,48 +1083,6 @@ export class Game {
       view.dispose();
       this.views.delete(id);
     }
-  }
-
-  // A change in light count recompiles every material. So beams exist only at night, and through the night
-  // the pool only grows, to the most vehicles seen at once. Unused beams stay at zero until dawn.
-  private aimBeams(night: boolean): void {
-    if (!night) {
-      for (const beam of this.beams.splice(0)) {
-        this.scene.remove(beam, beam.target);
-        beam.dispose();
-      }
-      return;
-    }
-    const lit = this.world.vehicles.filter((v) => this.frames[v.id] && this.sightLimit.reaches(this.frames[v.id].pos));
-    while (this.beams.length < lit.length) {
-      const beam = new THREE.SpotLight(
-        BEAM_COLOR,
-        0,
-        BEAM_RANGE,
-        BEAM_ANGLE,
-        BEAM_PENUMBRA,
-        BEAM_DECAY,
-      );
-      this.beams.push(beam);
-      this.scene.add(beam, beam.target);
-    }
-    this.beams.forEach((beam, i) => {
-      const v = lit[i];
-      const f = v && this.frames[v.id];
-      beam.intensity = f ? BEAM_INTENSITY : 0;
-      if (!f) return;
-      const rot = new THREE.Quaternion(f.rot.x, f.rot.y, f.rot.z, f.rot.w);
-      const at = new THREE.Vector3(f.pos.x, f.pos.y, f.pos.z);
-      const nose = bodyOf(v.chassisId).half.x;
-      beam.position.copy(
-        new THREE.Vector3(nose, BEAM_HEIGHT, 0).applyQuaternion(rot).add(at),
-      );
-      beam.target.position.copy(
-        new THREE.Vector3(nose + BEAM_AIM.ahead, -BEAM_AIM.down, 0)
-          .applyQuaternion(rot)
-          .add(at),
-      );
-    });
   }
 
   // Wheel dust rises from the ground just behind the rear wheels, so it never reads as exhaust.

@@ -18,7 +18,7 @@ import {
   type Spot,
 } from "../sim/grid";
 import {
-  dumpGood,
+  dumpItem,
   moveItem,
   planItemMove,
   storePart,
@@ -27,14 +27,21 @@ import {
 import { startRepair } from "../sim/jobs";
 import { repairPlan } from "../sim/repair";
 import { townAt } from "../sim/sites";
-import { takeAllLoot, takeLoot } from "../sim/locations";
+import { takeAllLoot, takeLoot, takeStores } from "../sim/locations";
+import { hasStores } from "../sim/salvage";
 import { REGION } from "../data/region";
-import type { GridItem, PartInstance, Vehicle, World } from "../sim/types";
+import type {
+  GridItem,
+  PartInstance,
+  SalvageStock,
+  Vehicle,
+  World,
+} from "../sim/types";
 import { el, panel } from "./dom";
 import type { UiHost } from "./host";
 import { createIcon, type IconName } from "./icons";
 import { vehicleMass } from "../sim/mass";
-import { kg, liters } from "./units";
+import { fuelLiters, kg, liters } from "./units";
 
 const CELL_PX = 42;
 
@@ -173,7 +180,7 @@ export class InventoryView {
           el(
             "div",
             { class: "inv-dump", "data-drop": "dump" },
-            "Drop goods here to dump them",
+            "Drop goods or loose parts here to dump them",
           ),
         ),
       ),
@@ -224,8 +231,8 @@ export class InventoryView {
       "div",
       {
         class: `inv-item ${cls}`,
-        'aria-pressed': String(this.selectedItem === it.id),
-        'data-item-id': it.id,
+        "aria-pressed": String(this.selectedItem === it.id),
+        "data-item-id": it.id,
         style: pos(x, y, wd, ht),
         title: itemTitle(it, mounted),
         tabindex: 0,
@@ -235,7 +242,7 @@ export class InventoryView {
       createIcon(getItemIcon(it)),
       el("span", { class: "inv-item-name" }, label.short),
     );
-    node.classList.toggle('selected', this.selectedItem === it.id);
+    node.classList.toggle("selected", this.selectedItem === it.id);
     const inspect = () => this.showItem(w, it, mounted);
     node.addEventListener("click", (e) => {
       if (core || e.detail === 0) this.activateItem(it);
@@ -257,9 +264,13 @@ export class InventoryView {
   }
 
   private activateItem(item: GridItem): void {
-    const selected = playerVehicle(this.host.world()).items.find((entry) => entry.id === this.selectedItem);
+    const selected = playerVehicle(this.host.world()).items.find(
+      (entry) => entry.id === this.selectedItem,
+    );
     if (selected && selected.id !== item.id) {
-      this.run((w) => moveItem(w, selected.id, { x: item.x, y: item.y, rot: selected.rot }));
+      this.run((w) =>
+        moveItem(w, selected.id, { x: item.x, y: item.y, rot: selected.rot }),
+      );
       return;
     }
     this.selectedItem = selected ? null : item.id;
@@ -376,11 +387,7 @@ export class InventoryView {
     );
   }
 
-  // What a finished search turned up. Drag a chip onto the grid to take it; the rest stays here.
-  private lootEl(w: World, stockId: string): HTMLElement {
-    const stock = w.salvage.find((s) => s.id === stockId);
-    if (!stock) throw new Error(`Unknown salvage ${stockId}`);
-    const site = REGION.locations.find((l) => l.id === stockId);
+  private lootPartChips(stock: SalvageStock): HTMLElement[] {
     const chips: HTMLElement[] = [];
     for (const p of stock.parts) {
       const d = partDef(p.defId);
@@ -402,6 +409,11 @@ export class InventoryView {
       );
       chips.push(chip);
     }
+    return chips;
+  }
+
+  private lootGoodChips(stock: SalvageStock): HTMLElement[] {
+    const chips: HTMLElement[] = [];
     for (const [good, count] of Object.entries(stock.goods)) {
       if (count <= 0) continue;
       const item: GridItem = {
@@ -426,6 +438,34 @@ export class InventoryView {
       );
       chips.push(chip);
     }
+    return chips;
+  }
+
+  // Fuel and supplies pour into the tank and stores instead of the grid.
+  private lootStoresButton(stock: SalvageStock): HTMLElement[] {
+    if (!hasStores(stock)) return [];
+    return [
+      el(
+        "button",
+        {
+          title: "Pour into the tank and stores up to their caps",
+          onclick: () => this.run((world) => takeStores(world, stock.id)),
+        },
+        `Take fuel ${fuelLiters(stock.fuel ?? 0)} L, supplies ${(stock.supplies ?? 0).toFixed(1)}`,
+      ),
+    ];
+  }
+
+  // What a finished search turned up. Drag a chip onto the grid to take it; the rest stays here.
+  private lootEl(w: World, stockId: string): HTMLElement {
+    const stock = w.salvage.find((s) => s.id === stockId);
+    if (!stock) throw new Error(`Unknown salvage ${stockId}`);
+    const site = REGION.locations.find((l) => l.id === stockId);
+    const chips = [
+      ...this.lootPartChips(stock),
+      ...this.lootGoodChips(stock),
+      ...this.lootStoresButton(stock),
+    ];
     return el(
       "div",
       { class: "inv-storage inv-loot" },
@@ -464,7 +504,15 @@ export class InventoryView {
     e.stopPropagation();
     const ghost = el("div", { class: "inv-ghost" });
     document.body.append(ghost);
-    this.drag = { source, id, item: { ...item }, grab, ghost, start: { x: e.clientX, y: e.clientY }, moved: false };
+    this.drag = {
+      source,
+      id,
+      item: { ...item },
+      grab,
+      ghost,
+      start: { x: e.clientX, y: e.clientY },
+      moved: false,
+    };
     this.error = "";
     this.onMove(e);
   }
@@ -497,7 +545,14 @@ export class InventoryView {
     this.lastPointer = e;
     if (!this.drag) return;
     // A quarter-cell motion separates dragging from pointer jitter during a click.
-    if (Math.hypot(e.clientX - this.drag.start.x, e.clientY - this.drag.start.y) >= CELL_PX / 4) this.drag.moved = true;
+    if (
+      Math.hypot(
+        e.clientX - this.drag.start.x,
+        e.clientY - this.drag.start.y,
+      ) >=
+      CELL_PX / 4
+    )
+      this.drag.moved = true;
     const spot = this.spotAt(e.clientX, e.clientY);
     if (spot) this.drag.item = { ...this.drag.item, x: spot.x, y: spot.y };
     this.paintGhost(e, spot !== null);
@@ -524,7 +579,12 @@ export class InventoryView {
 
   private placementProblem(d: Drag): string | null {
     const me = playerVehicle(this.host.world());
-    if (d.source === 'grid') return planItemMove(me, d.id, { x: d.item.x, y: d.item.y, rot: d.item.rot }).error;
+    if (d.source === "grid")
+      return planItemMove(me, d.id, {
+        x: d.item.x,
+        y: d.item.y,
+        rot: d.item.rot,
+      }).error;
     const others = me.items.filter((it) => it.id !== d.id);
     return placementError(
       gridOf({ ...me, items: [...others, d.item] }),
@@ -572,14 +632,16 @@ export class InventoryView {
       }
       if (target === "storage" && d.source === "grid")
         return storePart(w, d.id);
-      if (target === "dump" && d.source === "grid") return dumpGood(w, d.id);
+      if (target === "dump" && d.source === "grid") return dumpItem(w, d.id);
       return w;
     });
   }
 
   private finishSelection(drag: Drag): boolean {
-    if (drag.source !== 'grid' || drag.moved) return false;
-    const item = playerVehicle(this.host.world()).items.find((entry) => entry.id === drag.id);
+    if (drag.source !== "grid" || drag.moved) return false;
+    const item = playerVehicle(this.host.world()).items.find(
+      (entry) => entry.id === drag.id,
+    );
     if (item) this.activateItem(item);
     return true;
   }

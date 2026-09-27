@@ -9,7 +9,7 @@ import { playerTow } from "../sim/tow";
 import { clockOf, heatAt } from "../sim/sun";
 import { TERRAIN } from "../data/terrain";
 import { dist, type Vec } from "../sim/vec";
-import type { Vehicle, World } from "../sim/types";
+import type { SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
 import { vehicleName } from "./format";
 import { celsius, engineCelsius, fuelLiters, kph } from "./units";
@@ -36,14 +36,15 @@ function getSiteAction(world: World): ContextAction | null {
   const stock = salvageNear(world);
   if (!stock) {
     const empty = emptySalvageNear(world);
-    return empty && { label: `${getSalvageName(empty.id)} is picked clean`, ready: false, hint: 'No loot left' };
+    return empty && { label: `${getSalvageName(empty)} is picked clean`, ready: false, hint: 'No loot left' };
   }
   const verb = world.player.scavenged.includes(stock.id) ? 'Loot' : 'Search';
-  return { label: `${verb} ${getSalvageName(stock.id)}`, ready: salvageHere(world) !== null };
+  return { label: `${verb} ${getSalvageName(stock)}`, ready: salvageHere(world) !== null };
 }
 
-function getSalvageName(id: string): string {
-  return REGION.locations.find((site) => site.id === id)?.name ?? 'the wreck';
+function getSalvageName(stock: SalvageStock): string {
+  if (stock.pile) return 'the pile';
+  return REGION.locations.find((site) => site.id === stock.id)?.name ?? 'the wreck';
 }
 
 function getConditionIcon(def: ReturnType<typeof partDef>): IconName {

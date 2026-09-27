@@ -202,6 +202,9 @@ describe('a stranded driver asking the player', () => {
     forceOption('patchDeal', 'paid');
     let w = endTurn(start, testDrive);
     w = answer(answer(w, 'What are you offering?'), 'Deal. Stay where you are.');
+    // The forced roll is only likely, so the deal is set to a paid one here.
+    const deal = patchData(stateOf(w, 'patch', w.player.vehicleId, npc.id)!);
+    Object.assign(deal, { deal: 'paid', price: Math.max(deal.price, 1) });
     find(w, npc.id).resources!.money = 0;
     w = setMoveOrder(w, { kind: 'stopAt', dest: { x: 38, y: 30 } });
     w = runUntil(w, 40, (x) => stateOf(x, 'patch', x.player.vehicleId, npc.id) === null).w;

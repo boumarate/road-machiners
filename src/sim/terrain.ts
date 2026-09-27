@@ -7,6 +7,7 @@ import { TERRAIN, type TerrainTypeId } from '../data/terrain';
 import { BRIDGE_AXIS, BRIDGE_LENGTH, deckAlong } from './bridge';
 import { elevationAt, noiseAt } from './elevation';
 import { clamp, type Vec } from './vec';
+import { gradeRoads } from './road-grade';
 import { ROAD_INDEX } from './road-index';
 
 const SITES = [...REGION.towns, ...REGION.locations];
@@ -27,8 +28,9 @@ let lastTerrain: { seed: number; size: number; terrain: Terrain } | undefined;
 
 export function buildTerrain(seed: number, size: number): Terrain {
   if (lastTerrain?.seed === seed && lastTerrain.size === size) return lastTerrain.terrain;
-  const heights: number[] = [];
-  for (let j = 0; j <= size; j++) for (let i = 0; i <= size; i++) heights.push(heightFromElevation(elevationAt(seed, i, j)));
+  const raw: Terrain = { size, heights: [], types: [] };
+  for (let j = 0; j <= size; j++) for (let i = 0; i <= size; i++) raw.heights.push(heightFromElevation(elevationAt(seed, i, j)));
+  const heights = gradeRoads(raw);
   const t: Terrain = { size, heights, types: [] };
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) t.types.push(pickType(seed, t, x, y));
   Object.freeze(t.heights);
