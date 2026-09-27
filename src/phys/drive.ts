@@ -11,7 +11,7 @@ import { fuelLimited, isNear } from '../sim/far';
 import { isDriveObstacle } from '../sim/mapgen';
 import { vehicleMass } from '../sim/mass';
 import { vehicleStats, type VehicleStats } from '../sim/stats';
-import { route } from '../sim/path';
+import { continueRoute, keepRoute, route, type KeptRoute } from '../sim/path';
 import { parkedVehicles, shouldBackToDestination, zoneSpeed } from '../sim/steering';
 import { heightAt } from '../sim/terrain';
 import type { MoveOrder, Vehicle, World } from '../sim/types';
@@ -34,7 +34,9 @@ export const toMps = (tilesPerTurn: number) => (tilesPerTurn * S) / PHYSICS.turn
 export const toTilesPerTurn = (mps: number) => (mps * PHYSICS.turnSeconds) / S;
 
 // The driver's memory between turns: current wheel angle, and whether it is backing toward its point.
-type Memory = { steer: number; reverse: boolean };
+// route is the rest of the route driven last turn, so a driver keeps following it instead of planning
+// the whole way again every turn.
+type Memory = { steer: number; reverse: boolean; route: (KeptRoute & { radius: number }) | null };
 
 // Everything a turn needs to start: the physics world, which body and collider belongs to which
 // vehicle or obstacle, and each driver's memory.
@@ -82,7 +84,7 @@ export function syncDrive(d: Drive, w: World): void {
     const handle = d.bodies[v.id];
     if (handle === undefined) {
       d.bodies[v.id] = addVehicle(d.world, w, v);
-      d.memory[v.id] = { steer: 0, reverse: false };
+      d.memory[v.id] = { steer: 0, reverse: false, route: null };
       continue;
     }
     const body = d.world.getRigidBody(handle);
@@ -156,7 +158,7 @@ function run(d: Drive, w: World, steps: number): TurnResult {
     const s = vehicleStats(w, v);
     const b = bodyOf(v.chassisId);
     const mem = memory[v.id];
-    return { v, s, b, body, ctl: makeCar(world, body, b, s.mass), mem, plan: planTurn(w, v, s, body, v.order), result: { passed: false, arrived: false } };
+    return { v, s, b, body, ctl: makeCar(world, body, b, s.mass), mem, plan: planTurn(w, v, s, body, v.order, mem), result: { passed: false, arrived: false } };
   });
   const owner = new Map<number, string>(); // collider handle to vehicle id
   for (const c of cars) owner.set(c.body.collider(0).handle, c.v.id);
@@ -219,7 +221,7 @@ function makeCar(world: RAPIER.World, body: RAPIER.RigidBody, b: Body, mass: num
 // route holds the planner's waypoints to dest, or null for a careless driver who drives straight.
 type Plan = { dest: Vec | null; route: Vec[] | null; target: number; stopAt: boolean; engine: boolean; maxSteer: number; engineForce: number; brakeForce: number; stopDecel: number };
 
-function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBody, order: MoveOrder | null): Plan {
+function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBody, order: MoveOrder | null, mem: Memory): Plan {
   const ch = chassisDef(v.chassisId);
   const speed = Math.max(0, toTilesPerTurn(forwardSpeed(body)));
   const s = fuelLimited(w, v, full, speed, order);
@@ -237,7 +239,10 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   if (order.kind === 'brake') return { ...base, dest: null, route: null, target: 0, stopAt: false };
   // Careful drivers follow the route planner, which keeps to roads and goes around obstacles; careless ones drive straight.
   const parked = parkedVehicles(w, v.id);
-  const path = v.direct ? null : [...route(w, v.pos, order.dest, s.radius, parked)]; // copied, since driving consumes it
+  // A point that moved less than the arrival radius, like the stop point of a town seen from a new angle, is the same place.
+  const stored = mem.route && dist(mem.route.dest, order.dest) < RULES.arriveRadius && mem.route.radius === s.radius ? continueRoute(w, v.pos, mem.route, order.dest, s.radius, parked) : null;
+  const path = v.direct ? null : stored ?? [...route(w, v.pos, order.dest, s.radius, parked)]; // copied, since driving consumes it
+  mem.route = path ? { ...keepRoute(w, order.dest, path, parked), radius: s.radius } : null;
   if (order.kind === 'stopAt') return { ...base, dest: order.dest, route: path, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
   const next = zoneSpeed(s, speed, dist(v.pos, order.dest));
   return { ...base, dest: order.dest, route: path, target: toMps(next), stopAt: false };

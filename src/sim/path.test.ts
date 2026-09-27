@@ -7,7 +7,7 @@ import { resetPerf, perfSnapshot } from '../perf';
 import { isDriveObstacle } from './mapgen';
 import { findCells, nearestFreeCell, stampOverlay } from './nav/astar';
 import { COARSE, componentOf, dynamicBlockers, navLayer, terrainNav, tileIndex } from './nav/layer';
-import { route, routeLength, straightClear, type Blocker } from './path';
+import { continueRoute, keepRoute, route, routeLength, straightClear, type Blocker } from './path';
 import { nextRandom } from './rng';
 import { isCliff, tileAt, type Terrain } from './terrain';
 import type { World } from './types';
@@ -110,6 +110,43 @@ describe("route", () => {
     expect(dist(w.vehicles[0].pos, nose.pos)).toBeGreaterThanOrEqual(nose.radius + 0.6 - 0.02);
     expect(dist(w.vehicles[0].pos, nose.pos)).toBeLessThanOrEqual(nose.radius + 1.5);
   }, 120_000);
+});
+
+describe('kept routes', () => {
+  // A rock forces a bend, so the route has a corner before its end.
+  function bent(): { w: World; from: Vec; to: Vec; points: Vec[] } {
+    const w = emptyWorld();
+    w.obstacles = [{ id: 'r', pos: { x: 40, y: 30 }, r: 2, kind: 'rock' }];
+    const from = { x: 30, y: 30 };
+    const to = { x: 50, y: 30 };
+    return { w, from, to, points: route(w, from, to, 0.6, []) };
+  }
+
+  it('continues from a later position, dropping the corners driven past', () => {
+    const { w, from, to, points } = bent();
+    expect(points.length).toBeGreaterThan(2);
+    const kept = keepRoute(w, to, points, []);
+    const again = continueRoute(w, from, kept, to, 0.6, [])!;
+    expect(again[0]).toEqual(points[0]);
+    for (const p of again) expect(points).toContainEqual(p);
+    const past = { x: points[0].x + (points[1].x - points[0].x) * 0.1, y: points[0].y + (points[1].y - points[0].y) * 0.1 };
+    // From there it may shortcut past later corners too, but only to corners of the kept route.
+    const rest = continueRoute(w, past, kept, to, 0.6, [])!;
+    expect(rest.length).toBeGreaterThan(0);
+    for (const p of rest) expect(points.slice(1)).toContainEqual(p);
+    expect(rest.at(-1)).toEqual(to);
+  });
+
+  it('ends on a destination that moved, and drops the route for a vehicle parked on a later leg', () => {
+    const { w, from, to, points } = bent();
+    const kept = keepRoute(w, to, points, []);
+    const near = { x: to.x, y: to.y + 0.3 };
+    expect(continueRoute(w, from, kept, near, 0.6, [])!.at(-1)).toEqual(near);
+    const onLeg = { x: (points[1].x + points[2].x) / 2, y: (points[1].y + points[2].y) / 2 };
+    expect(continueRoute(w, from, kept, to, 0.6, [{ pos: onLeg, r: 0.8 }])).toBeNull();
+    // The same vehicle parked there when the route was planned is part of the plan.
+    expect(continueRoute(w, from, keepRoute(w, to, points, [{ pos: onLeg, r: 0.8 }]), to, 0.6, [{ pos: onLeg, r: 0.8 }])).not.toBeNull();
+  });
 });
 
 describe('routes prefer roads', () => {
