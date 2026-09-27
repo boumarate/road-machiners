@@ -72,6 +72,7 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   truce: () => 'Truce with you',
   grievance: () => 'Angry at your crash',
   plea: (s) => (pleaData(s).plea === 'truce' ? 'Asked you for a truce' : 'Begged you for mercy'),
+  trade: () => 'Pulling over to trade with you',
 };
 
 // One line per state the NPC holds toward the player, with turns left when the state has a timer.

@@ -8,6 +8,7 @@ import { newId } from './factory';
 import { lootRobbed } from './npc-activities';
 import { checkPatch, isPatching, lapsePatch, settlePatch } from './patch';
 import { checkPlayerTow } from './tow';
+import { checkTrade, isMeeting } from './economy';
 import { getResources } from './resources';
 import type { NpcState, StateData, StateEnding, StateKindId, World } from './types';
 import { canVehicleSee } from './vision';
@@ -73,6 +74,9 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
     check: checkPatch,
     hooks: { fulfilled: settlePatch, expired: lapsePatch },
   },
+  // The holder pulls over to trade with the player. See src/sim/truck-trade.ts. Being parked in reach keeps it
+  // going. The player ends it when done trading, and a feud between the two breaks it.
+  trade: { refresh: isMeeting, check: checkTrade, hooks: {} },
 };
 
 // A missing holder is left to the missing-party rule.
@@ -92,7 +96,7 @@ function turnsOf(kind: StateKindId): number | null {
 }
 
 // The data kind each state kind carries.
-const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none', grievance: 'none', plea: 'plea' };
+const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none', grievance: 'none', plea: 'plea', trade: 'none' };
 
 export function addState(w: World, kind: StateKindId, holder: string, other: string, data: StateData): NpcState {
   kindOf(kind);

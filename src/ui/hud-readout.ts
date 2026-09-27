@@ -1,4 +1,5 @@
 import { chassisDef } from "../data/chassis";
+import { tradePartner, tradeReady } from "../sim/economy";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { maxHp } from "../sim/wear";
@@ -37,6 +38,8 @@ export function getContextAction(world: World, playing: boolean): ContextAction 
   if (playing || !playerCanAct(world)) return null;
   const shop = shopNear(world);
   if (shop) return { label: `Enter ${shop.name}`, ready: shopAt(world) === shop.id };
+  const partner = tradePartner(world);
+  if (partner) return { label: `Trade with ${partner.name}`, ready: tradeReady(world) !== null };
   if (isBusy(playerVehicle(world))) return null;
   return getSiteAction(world);
 }
