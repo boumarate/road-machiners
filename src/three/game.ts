@@ -1014,7 +1014,7 @@ export class Game {
     const sightRadius = grayRadius(this.world, playerVehicle(this.world).pos) * PHYSICS.metersPerTile;
     this.sightLimit.set(truck, sightRadius);
     this.rig.leash(truck, sightRadius);
-    if (this.following) this.rig.follow(truck);
+    if (this.following) this.rig.follow(truck, this.hud.cameraMode === "auto" ? headingOf(this.frames[playerVehicle(this.world).id].rot) : null);
     this.hud.showRecenter(!this.following);
     this.rig.tick(dt);
     lightScene(this.sun, this.sky, truck, daylightAt(this.lightTurn()));

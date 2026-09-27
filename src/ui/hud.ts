@@ -3,7 +3,7 @@
 import { partDef } from "../data/parts";
 import { baseGrid, corePart, coreParts, mountedParts } from "../sim/grid";
 import type { Job, Vehicle, World } from "../sim/types";
-import { el, panel } from "./dom";
+import { el, panel, topRight } from "./dom";
 import {
   eventText,
   formatNpcActivity,
@@ -103,6 +103,9 @@ const RESOURCE_ICONS: IconName[] = [
   "driver",
 ];
 
+// Centered keeps the truck in the middle of the screen. Auto shifts the view ahead of it.
+export type CameraMode = "centered" | "auto";
+
 const LOG_LINES = 14;
 const TOAST_MS = 3500;
 
@@ -129,6 +132,8 @@ export class Hud {
   private rescue = panel("rescue");
   // Shows only while a pan has left the truck.
   private recenter = panel("recenter");
+  private cameraButton = el("button", { onclick: () => this.toggleCameraMode(), title: "Switch between a centered camera and one that looks ahead of the truck" });
+  cameraMode: CameraMode = "auto";
   private toastTimer: number | null = null;
   private lines: { text: string; cls: string }[] = [];
 
@@ -139,6 +144,11 @@ export class Hud {
     this.rescue.style.display = "none";
     this.recenter.style.display = "none";
     this.recenter.append(el("button", { onclick: () => actions.recenter(), title: "Center the camera on your truck" }, "Center on truck (F)"));
+    panel("camera-mode", topRight()).append(this.cameraButton);
+    this.showCameraMode();
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "KeyV" && !document.activeElement?.matches("input, select, textarea")) this.toggleCameraMode();
+    });
     this.log.replaceChildren(
       el("h3", {}, "Log"),
       el("div", { class: "dim" }, "Drive out. Watch for raiders."),
@@ -164,8 +174,17 @@ export class Hud {
         "Space: start / pause travel. In combat: one turn. Hold: fast-forward. A: auto fire. P: auto patch. C: character. I: inventory.",
       ),
       el("div", {}, "R: manual driving, straight through anything."),
-      el("div", {}, "Right-drag: pan. F: center on truck. Wheel: zoom. M: mute."),
+      el("div", {}, "Right-drag: pan. F: center on truck. Wheel: zoom. V: camera mode. M: mute."),
     );
+  }
+
+  private toggleCameraMode(): void {
+    this.cameraMode = this.cameraMode === "auto" ? "centered" : "auto";
+    this.showCameraMode();
+  }
+
+  private showCameraMode(): void {
+    this.cameraButton.textContent = this.cameraMode === "auto" ? "Camera: auto [V]" : "Camera: centered [V]";
   }
 
   showRecenter(on: boolean): void {
