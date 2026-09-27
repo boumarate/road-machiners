@@ -67,7 +67,8 @@ export type SalvageStock = {
   parts: PartInstance[];
   fuel?: number; // fuel units that pour into a tank, not the grid
   supplies?: number; // supply units that go to driver stores, not the grid
-  pile?: { until: number }; // loot lying loose on the ground, drawn as a heap, gone at turn `until`. Sites and wrecks draw their own stock.
+  pile?: { until: number; fromPlayer: boolean }; // loot lying loose on the ground, drawn as a heap, gone at turn `until`. Sites and wrecks draw their own stock.
+  // `fromPlayer` is true once the player drops anything on the pile. Its goods keep their cost basis, and its search pays no XP.
 };
 
 export type RefitMove = {
@@ -270,6 +271,7 @@ export type Player = {
   contacts: Contact[]; // vehicles detected beyond sight; refreshed by refreshVision
   clouds: string[]; // ids of dust clouds the player sees right now; refreshed by refreshVision
   hostilesSeen: string[]; // ids of hostile trucks in sight at the end of the last turn, for escapes; see src/sim/escape.ts
+  escapedFrom: Record<string, number>; // hostile truck id to the day of the last escape from it, today only
 };
 
 // One round of a shot. offset is where it crossed the target in meters from its center, across the line

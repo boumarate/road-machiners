@@ -76,7 +76,7 @@ export const XP_SOURCES: Record<XpSource, XpSourceDef> = {
   damage: { skill: 'toughness', weight: 1.5, scaled: false }, // per point of health lost to cab damage
   knockout: { skill: 'toughness', weight: 100, scaled: false }, // per knockout with a foe in sight
   profit: { skill: 'social', weight: 0.8, scaled: false }, // per money unit of profit on a sale
-  deal: { skill: 'social', weight: 30, scaled: false }, // per talk topic that ends agreed
+  deal: { skill: 'social', weight: 30, scaled: false }, // per finished patch deal, and per handover or threat that ends agreed
   call: { skill: 'social', weight: 8, scaled: false }, // per radio call that ends after taking up a topic new with that driver
   honk: { skill: 'social', weight: 2, scaled: false }, // per driver in sight that honks back for the first time
 };

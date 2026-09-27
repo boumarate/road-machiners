@@ -41,7 +41,6 @@ function nearestKnownTown(world: World, npc: Vehicle): TownDef {
 function settle(world: World, npc: Vehicle, call: Call, outcome: TopicOutcome): void {
   if (!call.topic) throw new Error('Only a topic can be settled');
   world.player.talked[npc.id] = { ...world.player.talked[npc.id], [call.topic]: outcome };
-  if (outcome === 'agreed') practice(world, 'deal', 1, null);
 }
 
 // The rolled answer a line waits on, or null before the topic's prepare step.
@@ -122,9 +121,11 @@ export const EFFECTS: Record<EffectId, Effect> = {
     patchGoal(world, npc, playerVehicle(world), deal.holder === npc.id);
     settle(world, npc, call, 'agreed');
   },
+  // A handover and a threat end at once, so they practice social now. A patch practices when it is done.
   handOver: (world, npc, call) => {
     yieldTo(world, playerVehicle(world), npc);
     settle(world, npc, call, 'agreed');
+    practice(world, 'deal', 1, null);
   },
   acceptPlea: (world, npc) => answerPlea(world, npc, true),
   refusePlea: (world, npc) => answerPlea(world, npc, false),
@@ -140,6 +141,7 @@ export const EFFECTS: Record<EffectId, Effect> = {
     const answer = threatAnswer(call);
     settleThreat(world, npc, answer);
     settle(world, npc, call, answer === 'comply' ? 'agreed' : 'refused');
+    if (answer === 'comply') practice(world, 'deal', 1, null);
   },
   settleDone: (world, npc, call) => settle(world, npc, call, 'done'),
   settleRefused: (world, npc, call) => settle(world, npc, call, 'refused'),

@@ -1,11 +1,13 @@
 // Escapes: the player gets away from hostile trucks. At each turn's end the player keeps the ids of the hostile
 // trucks in sight. A turn that ends with none of them in sight and no hostile seen practices driving, unless one
-// of them was destroyed, which is a win and not an escape.
+// of them was destroyed, which is a win and not an escape. Each hostile pays for one escape a day, so slipping in and
+// out of sight of the same truck pays once.
 
 import { isHostile } from './combat';
 import { playerVehicle } from './damage';
 import { vehicleDanger } from './npc-decisions';
 import { practice } from './progress';
+import { clockOf } from './sun';
 import type { Vehicle, World } from './types';
 import { playerSees } from './vision';
 
@@ -17,7 +19,17 @@ export function noteEscape(world: World): void {
   p.hostilesSeen = p.state === 'active' ? hostilesInSight(world, me) : [];
   if (p.state !== 'active' || p.hostilesSeen.length > 0) return;
   const escaped = escapedFrom(world, before);
-  if (escaped) practice(world, 'escape', 1, escapeDifficulty(world, me, escaped));
+  if (escaped) payEscape(world, me, escaped);
+}
+
+// Practices driving for the escaped trucks not yet escaped from today. The record keeps today's escapes only.
+function payEscape(world: World, me: Vehicle, escaped: Vehicle[]): void {
+  const p = world.player;
+  const day = clockOf(world.turn).day;
+  const fresh = escaped.filter((v) => p.escapedFrom[v.id] !== day);
+  p.escapedFrom = Object.fromEntries(Object.entries(p.escapedFrom).filter(([, d]) => d === day));
+  for (const v of escaped) p.escapedFrom[v.id] = day;
+  if (fresh.length > 0) practice(world, 'escape', 1, escapeDifficulty(world, me, fresh));
 }
 
 // The trucks seen last turn when all of them still exist and are out of sight, or null.

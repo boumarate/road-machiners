@@ -6,7 +6,7 @@ A post-apocalyptic wasteland RPG where you drive a truck. 3D world seen from an 
 
 The character has five skills. These are the durable upgrades that persist across trucks. Each skill is broad: it touches several activities and grows from several activities.
 
-- Driving improves handling, crash damage, rough ground and crawling. It grows from driving off the road, rams and escapes from hostiles.
+- Driving improves handling, crash damage, rough ground and crawling. It grows from driving off the road, rams and escapes from hostiles. Each hostile truck pays for one escape a day.
 - Perception improves aim, sight, hearing and contact circles. It grows from hits, new contacts and discovered places.
 - Machining improves repair and refit time, the field repair cap, search time and engine heat. It grows from field repairs, patches for other trucks and searches. Refits teach nothing, because a part can move back and forth forever.
 - Toughness raises max health, and cuts health lost to cab damage, supply use and heat drain. It grows from turns in heat, health lost and knockouts with a foe in sight.

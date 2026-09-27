@@ -9,10 +9,44 @@ import { partDef } from '../data/parts';
 import { chassisDef } from '../data/chassis';
 import { RULES } from '../data/rules';
 import { takeAllLoot, takeStores, canScavenge, scavenge } from './locations';
-import { clearPiles, collectSalvage, createKnockoutSalvage, hasSalvage, salvageUnits } from './salvage';
+import { clearPiles, collectSalvage, createCargoSalvage, createKnockoutSalvage, hasSalvage, salvageUnits } from './salvage';
 import { sitePads } from './sites';
 import { freeCells } from './grid';
 import { endTurn } from './world';
+
+describe('player piles', () => {
+  it('goods the player dumps and takes back keep their cost basis', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    addGoods(w, me, 'scrap', 2);
+    const held = goodsCount(me).scrap;
+    w.player.costBasis.scrap = 12;
+    let next = w;
+    for (const item of me.items.filter((it) => it.kind === 'good' && it.good === 'scrap')) next = dumpItem(next, item.id);
+    const pile = next.salvage.find((s) => s.pile)!;
+    collectSalvage(next, next.vehicles[0], pile.id, 100);
+    expect(goodsCount(next.vehicles[0]).scrap).toBe(held);
+    expect(next.player.costBasis.scrap).toBe(12);
+  });
+
+  it('goods from a pile another truck dropped count as free', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'traders', 'scout', [], { x: 31, y: 30 });
+    addGoods(w, npc, 'scrap', 2);
+    const pile = createCargoSalvage(w, npc, 1);
+    const held = goodsCount(w.vehicles[0]).scrap ?? 0;
+    w.player.costBasis.scrap = 12;
+    collectSalvage(w, w.vehicles[0], pile.id, 100);
+    expect(w.player.costBasis.scrap).toBeCloseTo((12 * held) / (held + 2));
+    expect(w.player.scavenged).not.toContain(pile.id);
+  });
+
+  it('the player knockout pile counts as searched, so it pays no search XP', () => {
+    const w = emptyWorld();
+    const pile = createKnockoutSalvage(w, w.vehicles[0]);
+    expect(w.player.scavenged).toContain(pile.id);
+  });
+});
 
 describe('finite salvage', () => {
   it('leaves overflow for another collector and never duplicates it', () => {

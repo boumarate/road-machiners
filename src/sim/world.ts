@@ -87,6 +87,7 @@ export function newWorld(seed: number, kit: StartKit): World {
       contacts: [],
       clouds: [],
       hostilesSeen: [],
+      escapedFrom: {},
     },
     events: [],
     removed: [],

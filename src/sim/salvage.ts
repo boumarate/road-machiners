@@ -85,9 +85,16 @@ export function collectSalvage(world: World, vehicle: Vehicle, stockId: string, 
     stock.goods[good] -= took;
     if (took === 0) continue;
     moved += took;
-    if (vehicle.id === world.player.vehicleId) world.player.costBasis[good] = ((world.player.costBasis[good] ?? 0) * held) / (held + took);
+    countFreeGoods(world, vehicle, stock, good, held, took);
   }
   return moved;
+}
+
+// Goods the player takes from a stock cost nothing, so they lower the average paid. Goods the player dropped
+// on a pile keep the average they had.
+function countFreeGoods(world: World, vehicle: Vehicle, stock: SalvageStock, good: string, held: number, took: number): void {
+  if (vehicle.id !== world.player.vehicleId || stock.pile?.fromPlayer) return;
+  world.player.costBasis[good] = ((world.player.costBasis[good] ?? 0) * held) / (held + took);
 }
 
 // Pours the stock's fuel and supplies into the driver's tank and stores up to their caps.
@@ -191,13 +198,21 @@ export function pileInReach(world: World, vehicle: Vehicle): SalvageStock | null
 // pile starts where the vehicle stands under the given id. Each drop restarts the pile's clock.
 function dropOnPile(world: World, vehicle: Vehicle, items: GridItem[], id: string): SalvageStock {
   const pile = pileInReach(world, vehicle) ?? addVehicleStock(world, vehicle, id, {}, []);
-  pile.pile = { until: world.turn + SALVAGE.pileTurns };
+  stampPile(world, vehicle, pile);
   for (const item of items) {
     if (item.kind === 'good') pile.goods[item.good] = (pile.goods[item.good] ?? 0) + 1;
     else pile.parts.push(item.part);
   }
   vehicle.items = vehicle.items.filter((item) => !items.includes(item));
   return pile;
+}
+
+// Each drop restarts the pile timer. A pile the player drops onto holds the player's own items, so it counts as
+// searched and pays no search XP.
+function stampPile(world: World, vehicle: Vehicle, pile: SalvageStock): void {
+  const byPlayer = vehicle.id === world.player.vehicleId;
+  pile.pile = { until: world.turn + SALVAGE.pileTurns, fromPlayer: byPlayer || pile.pile?.fromPlayer === true };
+  if (byPlayer && !world.player.scavenged.includes(pile.id)) world.player.scavenged.push(pile.id);
 }
 
 // Piles that ran out of time or loot leave the ground. Searches of them stop, and the player forgets them.

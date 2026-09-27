@@ -120,8 +120,7 @@ export function dumpItem(world: World, itemId: string): World {
     requireIdleRefit(me);
     const item = findItem(me, itemId);
     if (isMounted(me.chassisId, item)) throw new Error('Remove an installed part before dumping it');
-    const pile = dumpOnPile(w, me, item);
-    if (!w.player.scavenged.includes(pile.id)) w.player.scavenged.push(pile.id);
+    dumpOnPile(w, me, item);
   });
 }
 
