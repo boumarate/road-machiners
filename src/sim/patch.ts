@@ -130,13 +130,18 @@ function partiesPresent(world: World, s: NpcState): boolean {
   return world.vehicles.some((v) => v.id === s.holder) && world.vehicles.some((v) => v.id === s.other);
 }
 
-// The patch ends as fulfilled when its work is done. It breaks when the payer no longer holds the parts.
+// The patch ends as fulfilled when its work is done. It breaks when the payer no longer holds the parts or an NPC
+// client no longer holds the price.
 export function checkPatch(world: World, s: NpcState): 'fulfilled' | 'broken' | null {
   if (!partiesPresent(world, s)) return null;
   const data = patchData(s);
   const roles = { patcher: vehicleById(world, s.holder), client: vehicleById(world, s.other) };
-  if (partsHeld(partsPayer(data.deal, roles)) < data.parts) return 'broken';
+  if (!canStillPay(world, data, roles)) return 'broken';
   return data.workLeft <= 0 ? 'fulfilled' : null;
+}
+
+function canStillPay(world: World, data: Extract<StateData, { kind: 'patch' }>, roles: Roles): boolean {
+  return partsHeld(partsPayer(data.deal, roles)) >= data.parts && canPay(world, roles.client, data.price);
 }
 
 // The one place a patch pays: parts leave the payer, money moves from client to patcher, and the parts work again.

@@ -172,6 +172,19 @@ describe('a stranded driver asking the player', () => {
     expect(w.player.talked[npc.id]).toEqual({ patchRequest: 'refused' });
   });
 
+  it('a client that can no longer pay breaks the deal for free', () => {
+    const { w: start, npc } = brokenNpc();
+    forceOption('patchDeal', 'paid');
+    let w = endTurn(start);
+    w = answer(answer(w, 'What are you offering?'), 'Deal. Stay where you are.');
+    find(w, npc.id).resources!.money = 0;
+    w = setMoveOrder(w, { kind: 'stopAt', dest: { x: 38, y: 30 } });
+    w = runUntil(w, 40, (x) => stateOf(x, 'patch', x.player.vehicleId, npc.id) === null).w;
+    expect(find(w, npc.id).resources!.money).toBe(0);
+    expect(isStranded(w, find(w, npc.id))).toBe(true);
+    expect(parts(playerVehicle(w))).toBe(4);
+  });
+
   it('a deal nobody works on lapses for free', () => {
     const { w: start, npc } = brokenNpc();
     let w = endTurn(start);
