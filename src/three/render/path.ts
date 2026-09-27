@@ -1,5 +1,6 @@
 // Multi-turn plan preview: thick lines lying on the ground, first turn in the caller's color, later turns
-// fainter in PAL.plan, with a marker at each turn's end. Depth-tested, so trucks drive over them.
+// fainter in PAL.plan, with a marker at each turn's end. A thin faint line continues along the rest of
+// the course to its point. Depth-tested, so trucks drive over them.
 
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
@@ -9,12 +10,15 @@ import type { VehicleFrame } from '../../phys/frames';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { heightAt, type Terrain } from '../../sim/terrain';
+import type { Vec } from '../../sim/vec';
 
 const S = PHYSICS.metersPerTile;
 
 const LINE_WIDTH_PX = 4;
 const LIFT = 0.12; // meters above the ground, so bumps between samples do not swallow the line
-const OPACITY = { first: 0.75, later: 0.35 };
+const COURSE_WIDTH_PX = 2;
+const OPACITY = { first: 0.75, later: 0.35, course: 0.3 };
+const COURSE_STEP = 0.5; // tiles between ground samples, so the course line follows hills
 const MARKER_OUTER = 1.2; // meters, matches the driving physics test's order marker
 const MARKER_INNER = 0.8;
 
@@ -30,8 +34,10 @@ export class PathView {
     return [p.x, heightAt(this.terrain, p.x / S, p.z / S) * S + LIFT, p.z];
   }
 
-  set(turns: VehicleFrame[][], firstColor: number): void {
+  // course: map points from the end of the last turn to the order's point, or null without one.
+  set(turns: VehicleFrame[][], firstColor: number, course: Vec[] | null): void {
     this.clear();
+    if (course) this.addCourse(course);
     turns.forEach((frames, i) => {
       if (frames.length === 0) return;
       const solid = i === 0;
@@ -56,6 +62,34 @@ export class PathView {
       this.root.add(marker);
       this.markers.push(marker);
     });
+  }
+
+  private addCourse(points: Vec[]): void {
+    const positions: number[] = [];
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1];
+      const b = points[i];
+      const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / COURSE_STEP));
+      for (let k = i === 1 ? 0 : 1; k <= n; k++) positions.push(...this.ground({ x: (a.x + ((b.x - a.x) * k) / n) * S, z: (a.y + ((b.y - a.y) * k) / n) * S }));
+    }
+    const line = new Line2(
+      new LineGeometry().setPositions(positions),
+      new LineMaterial({ color: PAL.plan, linewidth: COURSE_WIDTH_PX, transparent: true, opacity: OPACITY.course, depthWrite: false }),
+    );
+    line.material.resolution.set(window.innerWidth, window.innerHeight);
+    line.computeLineDistances();
+    line.renderOrder = 820;
+    this.root.add(line);
+    this.lines.push(line);
+    const end = points[points.length - 1];
+    const marker = new THREE.Mesh(
+      new THREE.RingGeometry(MARKER_INNER, MARKER_OUTER, 24).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: PAL.plan, transparent: true, opacity: OPACITY.later, depthWrite: false, side: THREE.DoubleSide }),
+    );
+    marker.position.set(...this.ground({ x: end.x * S, z: end.y * S }));
+    marker.renderOrder = 820;
+    this.root.add(marker);
+    this.markers.push(marker);
   }
 
   clear(): void {

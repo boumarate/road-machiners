@@ -3,7 +3,7 @@
 // grid, so ramming and blocking still happen. The grid itself lives in ./nav.
 
 import { count, timed } from '../perf';
-import { findCells, nearestFreeCell, stampOverlay } from './nav/astar';
+import { findCells, nearestFreeCell, stampOverlay, startComponent } from './nav/astar';
 import type { Blocker } from './nav/buckets';
 import { CELL, CLEARANCE, blockerKey, dynamicBlockers, navLayer, nearCliff, staticSet, terrainNav, tileIndex, type NavLayer, type StaticSet, type TerrainNav } from './nav/layer';
 import type { World } from './types';
@@ -55,7 +55,9 @@ function search(layer: NavLayer, dynamic: Blocker[], radius: number, start: numb
     return hit;
   }
   const overlay = stampOverlay(layer, dynamic, radius);
-  const goal = nearestFreeCell(layer, overlay, target);
+  // An unreachable point, such as one beyond a cliff, routes to the closest point the truck can reach.
+  const component = startComponent(layer, start);
+  const goal = component === 0 ? null : nearestFreeCell(layer, overlay, target, component);
   const result = { goal, cells: goal === null ? null : findCells(layer, overlay, start, goal) };
   if (routeCache.size >= ROUTE_CACHE_MAX) routeCache.delete(routeCache.keys().next().value!);
   routeCache.set(key, result);

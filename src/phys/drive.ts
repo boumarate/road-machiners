@@ -12,7 +12,7 @@ import { isDriveObstacle } from '../sim/mapgen';
 import { vehicleMass } from '../sim/mass';
 import { vehicleStats, type VehicleStats } from '../sim/stats';
 import { route, straightClear } from '../sim/path';
-import { aimPoint, parkedVehicles, shouldBackToDestination, zoneSpeed } from '../sim/steering';
+import { parkedVehicles, shouldBackToDestination, zoneSpeed } from '../sim/steering';
 import { heightAt } from '../sim/terrain';
 import type { MoveOrder, Vehicle, World } from '../sim/types';
 import { angleDiff, clamp, DEG, dist, type Vec } from '../sim/vec';
@@ -237,7 +237,7 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   if (order.kind === 'brake') return { ...base, dest: null, route: null, target: 0, stopAt: false };
   // Careful drivers follow the route planner around obstacles; careless ones drive straight.
   const parked = parkedVehicles(w, v.id);
-  const path = v.direct || straightClear(w, v.pos, order.dest, s.radius, parked) ? null : route(w, v.pos, order.dest, s.radius, parked);
+  const path = v.direct || straightClear(w, v.pos, order.dest, s.radius, parked) ? null : [...route(w, v.pos, order.dest, s.radius, parked)]; // copied, since driving consumes it
   if (order.kind === 'stopAt') return { ...base, dest: order.dest, route: path, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
   const next = zoneSpeed(s, speed, dist(v.pos, order.dest));
   return { ...base, dest: order.dest, route: path, target: toMps(next), stopAt: false };
@@ -255,7 +255,7 @@ function driveStep(c: Car): void {
     const p = body.translation();
     const far = Math.hypot(plan.dest.x * S - p.x, plan.dest.y * S - p.z);
     // Steer at the next route point far enough ahead, or at the destination.
-    const aim = plan.route ? aimPoint({ x: p.x / S, y: p.z / S }, plan.route) : plan.dest;
+    const aim = plan.route ? routeAim(plan.route, { x: p.x / S, y: p.z / S }) : plan.dest;
     const dx = aim.x * S - p.x;
     const dz = aim.y * S - p.z;
     const heading = headingOf(body.rotation());
@@ -276,7 +276,7 @@ function driveStep(c: Car): void {
         target = -Math.min(D.reverseSpeed, plan.target);
         // Backing up turns the truck the opposite way from the wheels.
         const rearAng = angleDiff(heading + Math.PI, Math.atan2(dz, dx));
-        const turnAngle = shouldBackToDestination(c.v) ? rearAng : ang;
+        const turnAngle = shouldBackToDestination(c.v, far / S) ? rearAng : ang;
         steerTo = clamp(-turnAngle * D.steerGain, -plan.maxSteer, plan.maxSteer);
       } else {
         steerTo = clamp(ang * D.steerGain, -plan.maxSteer, plan.maxSteer);
@@ -296,6 +296,18 @@ function driveStep(c: Car): void {
   const brake = pushing ? 0 : Math.abs(u) * plan.brakeForce + (target === 0 ? plan.brakeForce : 0);
   for (let i = 0; i < 4; i++) ctl.setWheelBrake(i, brake);
   for (const i of [2, 3]) ctl.setWheelEngineForce(i, pushing ? u * plan.engineForce : 0);
+}
+
+// The truck covers several route points in one turn. Points it has come close to or driven past
+// drop off the front of the route, so it never turns back for one behind it.
+export function routeAim(route: Vec[], at: Vec): Vec {
+  while (route.length > 1 && (dist(at, route[0]) < RULES.minAimDistance || passed(at, route[0], route[1]))) route.shift();
+  return route[0];
+}
+
+// Whether the truck is beyond point a along the segment from a to b.
+function passed(at: Vec, a: Vec, b: Vec): boolean {
+  return (at.x - a.x) * (b.x - a.x) + (at.y - a.y) * (b.y - a.y) > 0;
 }
 
 // Speed along the truck's nose, m/s; negative when backing up.

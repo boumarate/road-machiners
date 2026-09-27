@@ -217,8 +217,9 @@ export function steerWithFuel(world: World, s: VehicleStats, v: Pick<Vehicle, 'i
   return steerTo(world, { ...s, maxSpeed: cap, turnFast: maxTurn(s, cap), accel: Math.min(s.accel, RULES.limpSpeed) }, v, order, direct);
 }
 
-export function shouldBackToDestination(vehicle: Pick<Vehicle, 'faction' | 'brain'>): boolean {
-  return vehicle.faction === 'player' || (vehicle.brain?.recovery ?? 0) > 0;
+// The player backs only to points within throttle reach. A farther point is a course, so the truck turns around.
+export function shouldBackToDestination(vehicle: Pick<Vehicle, 'faction' | 'brain'>, distance: number): boolean {
+  return (vehicle.faction === 'player' && distance < RULES.throttleZones.reach) || (vehicle.brain?.recovery ?? 0) > 0;
 }
 
 // Players and blockage recovery back toward a point rear-first. Other NPC driving turns the
@@ -249,7 +250,7 @@ function reverseStep(
     Math.abs(angleDiff(v.heading, bearing(v.pos, order.dest))) > Math.PI / 2;
   const driver = world.vehicles.find((vehicle) => vehicle.id === v.id);
   if (!driver) throw new Error(`Missing driver ${v.id}`);
-  const turn = behind && shouldBackToDestination(driver)
+  const turn = behind && shouldBackToDestination(driver, distance)
     ? angleDiff(v.heading + Math.PI, bearing(v.pos, order.dest))
     : ang;
   const back = {
