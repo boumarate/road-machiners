@@ -349,9 +349,10 @@ export class Game {
     this.rig.follow(null);
   }
 
-  get state(): World {
-    return this.world;
-  }
+  get state(): World { return this.world; }
+
+  // Whether a turn is playing, so the debug console waits instead of changing the world under it.
+  get busy(): boolean { return this.anim !== null; }
 
   apply(next: World): void {
     this.travel.pause();
