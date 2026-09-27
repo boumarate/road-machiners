@@ -1,6 +1,6 @@
 # NPC behavior: traits, goals and states
 
-**Status:** validating
+**Status:** executing
 **Branch:** npc-traits (from defeat-rescue at 6619d53)
 **Worktree:** .worktrees/npc-traits
 **Goal:** In the running game, NPCs show traits in the hover panel. NPCs with the same traits make different choices. A scumbag scavenger scavenges, sometimes attacks a weaker player or NPC who has loot, and returns to scavenging after interruptions. A feud that goes quiet ends, and its hook runs. Tows run as states. Confirming needs a Playwright run and user sign-off.
@@ -258,6 +258,20 @@ UK2 resolved: `update()` clears `world.events` at the start of each turn. So `no
 - 5.3 `src/three/save.ts:21-47` (modify) — `SAVE_VERSION` goes up by one. Only the new version loads. `migrateFrom6` leaves. Old saves stop boot, as designed.
 - 5.4 `src/ui/npc-info.test.ts` (modify) — The traits line and a feud line.
 - Commit: Show NPC traits and states in the hover panel
+
+### PH6 — Port main's npc-restraint into the decision system
+Main merged `npc-restraint` (docs/tasks/npc-restraint.md) after this branch last merged main. It rewrote `src/sim/npc-activities.ts` in the ordered-chooser style. Its gameplay contract is ported, not its code:
+- Healthy civilians keep work around unrelated hostiles: a hostileSeen keep factor when the hostile is not a threat to this NPC.
+- Idle scavengers can start manageable fights: a scavenger hostileSeen fight weight when idle and the fight looks manageable.
+- Shots, misses included, at the NPC or a nearby visible faction mate start a decision: `hurt` becomes `attacked` and fires on any shot. Fleeing never disables defensive fire.
+- Local force assessment: danger compares visible groups near each side, not single trucks.
+- Raider contacts investigate a fixed destination, and a continuous contact does not restart it. Scanners and beacons stay useful at long range.
+- Guard caution lowers initiating, never defense.
+- Field repairs from `src/sim/npc-repair.ts` become a `repair` service goal under the fixed service rule. Danger and urgent supplies come first, and with no fuel the repair happens in place.
+- One interrupted work activity resumes: the goal stack already covers this, so main's single-slot field leaves.
+- Towing and "raiders ignore stripped trucks" rules stay.
+- main's `npc-restraint.test.ts` and `npc-recovery.test.ts` port to the new system. Choices become chance assertions where the floor applies.
+- Commit: Port NPC restraint and field repairs into traits and decisions
 
 ### Test strategy
 - TDD: each phase writes its failing tests first.
