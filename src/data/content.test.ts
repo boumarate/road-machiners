@@ -82,6 +82,7 @@ describe("equipment variety", () => {
             faction: "player",
             chassisId,
             parts: [],
+            spares: [],
             cargo: {},
             pos: { x: 20, y: 20 },
             heading: 0,

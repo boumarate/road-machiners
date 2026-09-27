@@ -8,10 +8,9 @@ import { shopDef } from "../data/market";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { REGION } from "../data/region";
-import { dist } from "./vec";
 import { getResources } from "./resources";
 import { skillBonus } from "../data/skills";
-import { isJunk, maxHp, restorePart } from "./wear";
+import { isJunk, maxHp, partValue, restorePart, scrapValue, wearFactor } from "./wear";
 import { playerVehicle } from "./damage";
 import { addCoreParts } from "./factory";
 import { gainXp } from "./progress";
@@ -280,22 +279,6 @@ export function repairAll(world: World): World {
     pay(w, cost, "repairs");
     for (const p of parts) restorePart(p, maxHp(p));
   });
-}
-
-// The wear factor applied to a part's base value: 1 at pristine, falling one wearValueLoss per step.
-function wearFactor(wear: number): number {
-  return 1 - ECONOMY.wearValueLoss * wear;
-}
-
-// Scrap value from mass alone, the sell floor for any part and the whole value of a junk part.
-function scrapValue(part: PartInstance): number {
-  return ECONOMY.scrapPerKg * partDef(part.defId).mass;
-}
-
-// A part's current worth: base value times the wear factor. Junk is worth its scrap value only.
-export function partValue(part: PartInstance): number {
-  if (isJunk(part)) return scrapValue(part);
-  return partDef(part.defId).value * wearFactor(part.wear);
 }
 
 // Buy or sell price at one place. Buy adds the spread to partValue. Sell scales partValue by

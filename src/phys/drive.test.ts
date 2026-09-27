@@ -435,7 +435,7 @@ describe('physics turns', () => {
     w0.terrain = structuredClone(w0.terrain);
     const n = w0.terrain.size;
     for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) w0.terrain.heights[j * (n + 1) + i] = Math.max(0, i - 28) * HILL_GRADE;
-    const hauler = makeVehicle(w0, { name: 'hauler', faction: 'player', chassisId: 'hauler', parts: ['mg', 'stockEngine', 'plates', 'trailerBox'], cargo: {}, pos: { x: 26, y: 30 }, heading: 0, brain: null });
+    const hauler = makeVehicle(w0, { name: 'hauler', faction: 'player', chassisId: 'hauler', parts: ['mg', 'stockEngine', 'plates', 'trailerBox'].map((defId) => ({ defId, wear: 0 })), spares: [], cargo: {}, pos: { x: 26, y: 30 }, heading: 0, brain: null });
     w0.vehicles[0] = { ...hauler, id: me(w0).id };
     addGoods(w0, me(w0), 'scrap', 999);
     expect(loadFactor(me(w0))).toBeLessThan(1);

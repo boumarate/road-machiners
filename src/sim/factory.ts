@@ -7,15 +7,19 @@ import { RULES } from '../data/rules';
 import { CONDITION } from '../data/wear';
 import { maxHp } from './wear';
 import { gridOf, isMounted, placementError } from './grid';
-import { addGoods, mountPart } from './inventory';
+import { addGoods, mountPart, stowPart } from './inventory';
 import type { Faction, GridItem, NpcBrain, PartInstance, Vehicle, World } from './types';
 import type { Vec } from './vec';
+
+// A part to create, with its wear step.
+export type PartSpec = { defId: string; wear: number };
 
 export type VehicleSpec = {
   name: string;
   faction: Faction;
   chassisId: string;
-  parts: string[]; // mounted in order on the first free fitting mount
+  parts: PartSpec[]; // mounted in order on the first free fitting mount
+  spares: PartSpec[]; // loose parts stowed in the grid after the cargo
   cargo: Record<string, number>;
   pos: Vec;
   heading: number;
@@ -68,11 +72,23 @@ export function makeVehicle(world: World, spec: VehicleSpec): Vehicle {
     job: null,
   };
   addCoreParts(world, v);
-  for (const defId of spec.parts) {
-    if (!mountPart(world, v, makePart(world, defId, 0))) throw new Error(`No free mount for ${defId} on ${spec.chassisId}`);
+  loadVehicle(world, v, spec);
+  return v;
+}
+
+// Mounts the parts, then adds cargo, then stows the spares. Throws when any of them does not fit.
+function loadVehicle(world: World, v: Vehicle, spec: VehicleSpec): void {
+  for (const { defId, wear } of spec.parts) {
+    if (!mountPart(world, v, makePart(world, defId, wear))) throw new Error(`No free mount for ${defId} on ${spec.chassisId}`);
   }
+  loadCargo(world, v, spec);
+}
+
+function loadCargo(world: World, v: Vehicle, spec: VehicleSpec): void {
   for (const [good, n] of Object.entries(spec.cargo)) {
     if (addGoods(world, v, good, n) < n) throw new Error(`No room for ${n} ${good} on ${spec.chassisId}`);
   }
-  return v;
+  for (const { defId, wear } of spec.spares) {
+    if (!stowPart(world, v, makePart(world, defId, wear))) throw new Error(`No room for spare ${defId} on ${spec.chassisId}`);
+  }
 }

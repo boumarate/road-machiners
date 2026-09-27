@@ -1,21 +1,20 @@
 import { chassisDef } from '../data/chassis';
-import { ECONOMY, GOODS } from '../data/goods';
+import { GOODS } from '../data/goods';
 import { NPC_UPKEEP, type CargoRoll, type NpcLoadoutTable, type NpcTemplate, type Weighted } from '../data/npcs';
 import { partDef, type PartKind } from '../data/parts';
 import { CONDITION } from '../data/wear';
-import { makePart, makeVehicle } from './factory';
+import { makePart, makeVehicle, type PartSpec } from './factory';
 import { freeCells } from './grid';
 import { mountPart } from './inventory';
 import { vehicleMass } from './mass';
 import { nextRandom, type Rng } from './rng';
-import type { PartInstance, Vehicle, World } from './types';
-import { isJunk } from './wear';
+import type { Vehicle, World } from './types';
+import { partValue } from './wear';
 
 export type NpcLoadout = {
   chassisId: string;
-  parts: string[];
-  partWear: Record<string, number>; // wear rolled for each mounted, non-core defId in `parts`
-  spares: { defId: string; wear: number }[]; // loose parts carried but not mounted, traders only
+  parts: PartSpec[]; // mounted, non-core, with rolled wear
+  spares: PartSpec[]; // loose parts carried but not mounted, traders only
   cargo: Record<string, number>;
 };
 type ArmedChoice = { engine: string; weapon: string; vehicle: Vehicle };
@@ -94,20 +93,11 @@ function validateTable(table: NpcLoadoutTable): void {
   validateSpareTable(table.spares);
 }
 
-// Mirrors src/sim/economy.ts's partValue formula (PC1, IV1). Loadout building cannot import economy.ts
-// itself: economy.ts reaches back here through world.ts and spawn.ts, and that import cycle left
-// `sampleWeighted` undefined for src/sim/npc-decisions.ts at load time, silently breaking every
-// weighted NPC decision, including whether a driver ever offers a tow.
-function equipmentValue(part: PartInstance): number {
-  if (isJunk(part)) return ECONOMY.scrapPerKg * partDef(part.defId).mass;
-  return partDef(part.defId).value * (1 - ECONOMY.wearValueLoss * part.wear);
-}
-
 // The vehicle's chassis and mounted, non-core gear at its current, wear-discounted value (PC1, IV1).
 function computeEquipmentCost(v: Vehicle): number {
   return chassisDef(v.chassisId).value + v.items.reduce((sum, item) => {
     if (item.kind !== 'part' || partDef(item.part.defId).kind === 'core') return sum;
-    return sum + equipmentValue(item.part);
+    return sum + partValue(item.part);
   }, 0);
 }
 
@@ -153,7 +143,7 @@ function addSpareParts(rng: Rng, table: NpcLoadoutTable, room: number, massRoom:
 
 function buildArmedChoices(world: World, template: NpcTemplate, chassisId: string): ArmedChoice[] {
   const table = template.loadout;
-  const bare = makeVehicle(world, { name: template.name, faction: template.faction, chassisId, parts: [], cargo: {}, pos: { x: 0, y: 0 }, heading: 0, brain: null });
+  const bare = makeVehicle(world, { name: template.name, faction: template.faction, chassisId, parts: [], spares: [], cargo: {}, pos: { x: 0, y: 0 }, heading: 0, brain: null });
   const choices: ArmedChoice[] = [];
   for (const engine of table.engine) {
     const powered = tryMountChoice(world, bare, engine.value, table.budget);
@@ -186,16 +176,11 @@ function chooseOptionalPart(world: World, rng: Rng, v: Vehicle, budget: number, 
   return sampleWeighted(rng, choices);
 }
 
-// Non-core mounted defIds, and the wear rolled onto each (parts differ in kind, so a defId names one at most).
-function mountedNonCore(v: Vehicle): { parts: string[]; partWear: Record<string, number> } {
-  const parts: string[] = [];
-  const partWear: Record<string, number> = {};
-  for (const item of v.items) {
-    if (item.kind !== 'part' || partDef(item.part.defId).kind === 'core') continue;
-    parts.push(item.part.defId);
-    partWear[item.part.defId] = item.part.wear;
-  }
-  return { parts, partWear };
+// Non-core mounted parts with the wear rolled onto each.
+function mountedNonCore(v: Vehicle): PartSpec[] {
+  return v.items.flatMap((item) =>
+    item.kind === 'part' && partDef(item.part.defId).kind !== 'core' ? [{ defId: item.part.defId, wear: item.part.wear }] : [],
+  );
 }
 
 type Room = { cells: number; mass: number };
@@ -256,7 +241,7 @@ export function generateNpcLoadout(world: World, template: NpcTemplate): NpcLoad
   const rng = { rngState: world.rngState };
   const v = chooseVehicle(probe, rng, template);
   const { spares, carried } = chooseCargo(rng, table, v);
-  const { parts, partWear } = mountedNonCore(v);
+  const parts = mountedNonCore(v);
   world.rngState = rng.rngState;
-  return { chassisId: v.chassisId, parts, partWear, spares, cargo: carried };
+  return { chassisId: v.chassisId, parts, spares, cargo: carried };
 }

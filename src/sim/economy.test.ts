@@ -17,7 +17,6 @@ import {
   chassisTradeIn,
   partRepairCost,
   partTradePrice,
-  partValue,
   repairAll,
   repairPart,
   sellGood,
@@ -32,7 +31,7 @@ import {
   mountedParts,
 } from "./grid";
 import { makePart } from "./factory";
-import { maxHp } from "./wear";
+import { maxHp, partValue } from "./wear";
 import { spareParts } from "./inventory";
 import { applySiteAction, canScavenge, salvageNear, scavenge, useOasis } from "./locations";
 import { gainXp, spendSkillPoint, xpForLevel } from "./progress";

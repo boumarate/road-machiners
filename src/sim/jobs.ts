@@ -7,7 +7,7 @@ import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { STRIP } from "../data/salvage";
 import { playerVehicle } from "./damage";
-import { partValue } from "./economy";
+import { partValue } from "./wear";
 import { freeCells, goodsCount, isMounted, itemSize, mountedParts } from "./grid";
 import { addGoods } from "./inventory";
 import { isJunk, maxHp } from "./wear";

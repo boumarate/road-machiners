@@ -58,6 +58,12 @@ const UNAVAILABLE: Record<string, Setup> = {
     addState(w, 'feud', target.id, robber.id, { kind: 'feud', robbery: false });
     return { w, robber, target };
   },
+  unarmed: () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const robber = addScumbag(w, { x: 10, y: 10 });
+    robber.items = robber.items.filter((it) => it.kind !== 'part' || it.part.defId !== 'mg');
+    return { w, robber, target: addPrey(w, { x: 15, y: 10 }) };
+  },
   noLoot: () => {
     const w = emptyWorld({ x: 200, y: 200 });
     return { w, robber: addScumbag(w, { x: 10, y: 10 }), target: addPrey(w, { x: 15, y: 10 }, [], 0) };
@@ -122,9 +128,9 @@ describe('robbery checks', () => {
     const me = w.vehicles[0];
     const robber = addScumbag(w, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
     expect(robWeight(w, robber, me, vehicleDanger(w, me))).toBe(FULL_ROB);
-    // Out of the armed scumbag's group, so the bare one judges by its own guns alone.
+    // Out of the armed scumbag's group, so the bare one judges by its own guns alone. With none, it cannot rob.
     const bare = addScumbag(w, { x: 15, y: 25 }, ['stockEngine']);
-    expect(robWeight(w, bare, me, lowest(w, me))).toBeLessThanOrEqual(FULL_ROB * 0.1);
+    expect(optionWeights(w, bare, 'preySeen', me.id, lowest(w, me))).not.toHaveProperty('rob');
   });
 });
 

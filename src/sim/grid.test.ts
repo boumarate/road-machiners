@@ -54,7 +54,7 @@ describe('built-in parts', () => {
       const loadout = generateNpcLoadout(w, tpl);
       const v = makeVehicle(w, { name: tpl.name, faction: tpl.faction, ...loadout, pos: { x: 40, y: 40 }, heading: 0, brain: null });
       const mounted = mountedParts(v).map((p) => p.defId).filter((id) => PARTS[id].kind !== 'core');
-      expect(mounted.sort()).toEqual([...loadout.parts].sort());
+      expect(mounted.sort()).toEqual(loadout.parts.map((p) => p.defId).sort());
     }
   });
 

@@ -4,7 +4,7 @@ import { partDef } from '../data/parts';
 import { STRIP } from '../data/salvage';
 import { CONDITION, REPAIR } from '../data/wear';
 import { damagePart } from './wear';
-import { partValue } from './economy';
+import { partValue } from './wear';
 import { makePart } from './factory';
 import { addVehicle, emptyWorld } from './testkit';
 import { corePart, goodsCount, mountedParts } from './grid';

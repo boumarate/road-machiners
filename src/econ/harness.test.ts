@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { runPolicy, type PolicyName } from './harness';
+import { exploratoryRatio, runMany, runPolicy, type PolicyName } from './harness';
 
-const POLICIES: PolicyName[] = ['haulOnly', 'salvageOnly', 'contractsOnly', 'greedy'];
+const POLICIES: PolicyName[] = ['idle', 'haulOnly', 'salvageOnly', 'contractsOnly', 'greedy'];
 
 describe('runPolicy', () => {
   it('gives the same report for the same seed and policy (IV6: world RNG only)', () => {
@@ -48,5 +48,20 @@ describe('runPolicy', () => {
   it('reports one day per requested day, in order', () => {
     const r = runPolicy(1, 'haulOnly', 3);
     expect(r.perDay.map((d) => d.day)).toEqual([1, 2, 3]);
+  });
+
+  it('greedy buys at least one upgrade within a few days on seed 1', () => {
+    const r = runPolicy(1, 'greedy', 3);
+    expect(r.telemetry.upgradesBought).toBeGreaterThan(0);
+  });
+
+  it('idle never trades, fights or accepts a contract', () => {
+    const r = runPolicy(1, 'idle', 1);
+    expect(r.telemetry.trades + r.telemetry.fights + r.telemetry.contractsAccepted).toBe(0);
+  });
+
+  it('computes an exploratory_ratio from greedy and monotonous runs', () => {
+    const reports = runMany([1, 2, 3], ['idle', 'haulOnly', 'greedy'], 1);
+    expect(exploratoryRatio(reports)).not.toBeNull();
   });
 });

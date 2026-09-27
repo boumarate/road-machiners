@@ -4,6 +4,7 @@
 // 0 HP to 0 HP. Each step lowers its max HP and its job stat. A part past the last wear step is junk,
 // and no repair rebuilds it from 0 HP.
 
+import { ECONOMY } from '../data/goods';
 import { partDef, type PartDef } from '../data/parts';
 import { TERRAIN_TYPES } from '../data/terrain';
 import { CONDITION, WEAR } from '../data/wear';
@@ -102,4 +103,20 @@ export function restorePart(part: PartInstance, hp: number): void {
   if (next < part.hp) throw new Error(`Restore of ${part.id} to ${hp} HP would lower it from ${part.hp}`);
   if (part.hp === 0 && next > 0 && isJunk(part)) throw new Error(`${partDef(part.defId).name} is junk and cannot be rebuilt`);
   part.hp = next;
+}
+
+// The wear factor applied to a part's base value: 1 at pristine, falling one wearValueLoss per step.
+export function wearFactor(wear: number): number {
+  return 1 - ECONOMY.wearValueLoss * wear;
+}
+
+// Scrap value from mass alone, the sell floor for any part and the whole value of a junk part.
+export function scrapValue(part: PartInstance): number {
+  return ECONOMY.scrapPerKg * partDef(part.defId).mass;
+}
+
+// A part's current worth: base value times the wear factor. Junk is worth its scrap value only.
+export function partValue(part: PartInstance): number {
+  if (isJunk(part)) return scrapValue(part);
+  return partDef(part.defId).value * wearFactor(part.wear);
 }

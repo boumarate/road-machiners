@@ -263,8 +263,9 @@ function canDrive(world: World, vehicle: Vehicle): boolean {
   return getResources(world, vehicle).fuel > 0;
 }
 
+// A robbery is a fight, so it also needs a working gun.
 function canRobSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
-  return canRob(world, vehicle, subjectOf(world, decision, subject));
+  return firepower(world, vehicle) > 0 && canRob(world, vehicle, subjectOf(world, decision, subject));
 }
 
 // A ram needs the subject as the fight target on top of the goals, within reach of a damaging ram.

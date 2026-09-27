@@ -94,7 +94,8 @@ export function newWorld(seed: number, kit: StartKit): World {
     name: kit.name,
     faction: "player",
     chassisId: kit.chassis,
-    parts: kit.parts,
+    parts: kit.parts.map((defId) => ({ defId, wear: 0 })),
+    spares: [],
     cargo: kit.cargo,
     pos: {
       x: town.pos.x + REGION.playerStart.offset.x,

@@ -51,13 +51,7 @@ export function planNpcOrders(world: World): void {
       );
       if (!target) throw new Error("Fight activity missing visible target");
       const preferredRange =
-        tpl.preferredRange > 0
-          ? tpl.preferredRange
-          : Math.min(
-              ...vehicleStats(world, v).weapons.map(
-                (weapon) => weapon.def.range,
-              ),
-            );
+        tpl.preferredRange > 0 ? tpl.preferredRange : shortestRange(world, v);
       goal = computeFightGoal(world, v, preferredRange, target);
     }
     v.order =
@@ -153,4 +147,11 @@ function givesWay(x: Vehicle): boolean {
   if (!x.brain) return false;
   const kind = topGoal(x)?.kind;
   return kind !== "fight" && kind !== "flee";
+}
+
+// A fighter keeps to its shortest gun range. A fight without a gun is a decision bug, so it throws.
+function shortestRange(world: World, v: Vehicle): number {
+  const weapons = vehicleStats(world, v).weapons;
+  if (weapons.length === 0) throw new Error(`${v.name} is fighting without a gun`);
+  return Math.min(...weapons.map((weapon) => weapon.def.range));
 }
