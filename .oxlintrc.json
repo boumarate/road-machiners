@@ -1,0 +1,33 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "oxc"],
+  "categories": { "correctness": "error" },
+  "env": { "browser": true, "node": true },
+  "ignorePatterns": ["node_modules/**", "dist/**", "tmp/**", ".worktrees/**", ".pi/**", ".playtest/**", ".agents/**", ".claude/**"],
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "typescript/consistent-type-imports": "error",
+    "no-debugger": "error",
+    "complexity": ["error", 6],
+    "max-depth": ["error", 4],
+    "max-lines-per-function": ["error", { "max": 300, "skipBlankLines": true, "skipComments": true }],
+    "max-lines": ["error", { "max": 1000, "skipBlankLines": true, "skipComments": true }]
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.*", "**/*.spec.*", "**/tests/**", "**/test/**"],
+      "rules": { "complexity": "off", "max-depth": "off", "max-lines-per-function": "off", "max-lines": "off" }
+    },
+    {
+      "files": ["src/sim/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
+      "rules": {
+        "no-restricted-imports": ["error", {
+          "patterns": [{
+            "group": ["three", "three/*", "@dimforge/*", "**/three/**", "**/phys/**", "**/render/**", "**/ui/**", "**/audio/**"],
+            "message": "Simulation rules must not depend on rendering, physics, UI or audio."
+          }]
+        }]
+      }
+    }
+  ]
+}
