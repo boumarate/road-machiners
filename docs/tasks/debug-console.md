@@ -183,7 +183,7 @@ Invariants:
 
 ### Unknowns outcome
 - UK1 — resolved: `killVehicles` reuses `resolveDestroyed`, then `checkTower` drops a killed tower's tow.
-- UK2 — still-open: the key check uses `e.code`, which follows the physical key on any layout. The user must try it.
+- UK2 — resolved: the user asked for § as a second key. It matches by character, because Mac ISO keyboards report that key under another code.
 
 Plan adherence: see Deviations from plan.
 

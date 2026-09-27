@@ -1,4 +1,4 @@
-// Debug console: Backquote opens a command line that runs cheat commands on the live world.
+// Debug console: Backquote or § opens a command line that runs cheat commands on the live world.
 // The command table parses typed text into arguments for the sim cheats. Every user-input problem
 // throws CheatError, so the console can tell it from a bug.
 
@@ -168,6 +168,11 @@ export type ConsoleGame = {
   apply(w: World): void;
 };
 
+// The backquote key, or § by its character, since Mac ISO keyboards report that key under another code.
+function isToggleKey(e: KeyboardEvent): boolean {
+  return e.code === "Backquote" || e.key === "§";
+}
+
 export class DebugConsole {
   private readonly root: HTMLElement;
   private readonly log: HTMLElement;
@@ -189,7 +194,7 @@ export class DebugConsole {
   }
 
   private onWindowKey(e: KeyboardEvent): void {
-    if (e.code !== "Backquote" || !this.root.hidden) return;
+    if (!isToggleKey(e) || !this.root.hidden) return;
     if (document.activeElement?.matches("input, select, textarea")) return;
     // Without this the keystroke types a backquote into the input focused below.
     e.preventDefault();
@@ -199,7 +204,7 @@ export class DebugConsole {
   // Keys typed in the console never reach the game's window key handler.
   private onInputKey(e: KeyboardEvent): void {
     e.stopPropagation();
-    if (e.code === "Backquote" || e.code === "Escape") {
+    if (isToggleKey(e) || e.code === "Escape") {
       e.preventDefault();
       this.close();
     } else if (e.code === "Enter") {
