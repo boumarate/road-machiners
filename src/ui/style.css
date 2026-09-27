@@ -668,17 +668,31 @@ body {
 #ui .town-screen > h3 {
   margin-bottom: 4px;
 }
-/* One line per stock part. The cell title holds the full line. */
-.town-shop td.stock-line {
-  max-width: 0;
-  width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* Header chips: truck, money, free cells and load. */
+#ui .town-screen > h3 {
+  display: flex;
+  align-items: center;
+  gap: 22px;
 }
-#ui .town-screen > h3 .dim {
-  margin-left: 18px;
-  font-size: 14px;
+.chips {
+  display: flex;
+  gap: 8px;
+  font: 13px var(--font-mono);
+  color: var(--ink);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px 2px 5px;
+  background: #20272b;
+  border: 1px solid #4b555b;
+}
+.chip .icon,
+.price .icon,
+.note > .icon {
+  width: 18px;
+  height: 18px;
 }
 .town-shop table {
   margin: 2px 0;
@@ -922,11 +936,29 @@ body {
   padding: 10px;
 }
 .inv-chip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 5px 0;
-  padding: 6px 8px;
+  padding: 5px 8px 7px;
   cursor: grab;
   user-select: none;
-  font-size: 12px;
+  font-size: 13px;
+}
+.inv-chip > span {
+  flex: 1;
+}
+.inv-chip > .icon {
+  width: 22px;
+  height: 22px;
+}
+.inv-chip > .meter {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: 2px;
+  height: 3px;
 }
 .inv-dump {
   border: 1px dashed #a4835b;
@@ -942,6 +974,9 @@ body {
 }
 .inv-legend > div {
   margin-top: 7px;
+}
+.inv-item.refitting {
+  border: 2px dashed #eac779;
 }
 .inv-ghost {
   position: fixed;
@@ -1140,4 +1175,367 @@ canvas.view {
 }
 .dialogue .dialogue-option {
   text-align: left;
+}
+
+/* Shop tabs carry an icon beside the label. */
+.town-shop > .tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 8px;
+}
+.town-shop > .tabs .icon {
+  width: 20px;
+  height: 20px;
+}
+.modal .tabs.sub button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+}
+.modal .tabs.sub .icon {
+  width: 20px;
+  height: 20px;
+}
+.tabs.sub .count {
+  font: 11px var(--font-mono);
+  color: var(--muted);
+}
+
+/* Cards: one part or truck with its icon stats. */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #22292d;
+  border: 1px solid #4b555b;
+  border-left: 4px solid #4b555b;
+}
+.card:hover {
+  border-color: #8e8a73;
+}
+.card.k-weapon,
+.card.k-scanner {
+  border-left-color: #a07a5e;
+}
+.card.k-engine {
+  border-left-color: #6f8a96;
+}
+.card.k-armor {
+  border-left-color: #8d9ca3;
+}
+.card.k-cargo {
+  border-left-color: #a08c68;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.card-head > .icon {
+  width: 36px;
+  height: 36px;
+}
+.card-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.card-name b {
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-name .dim {
+  font-size: 12px;
+}
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  font-size: 12px;
+}
+#ui .card-foot button {
+  padding: 3px 12px;
+  font-size: 13px;
+}
+.footprint {
+  display: grid;
+  gap: 2px;
+  flex: none;
+}
+.footprint i {
+  width: 9px;
+  height: 9px;
+  background: #8d9296;
+}
+.meter {
+  height: 4px;
+  background: #182111;
+  overflow: hidden;
+}
+.meter > div {
+  height: 100%;
+  background: #b5c78c;
+}
+.meter.broken {
+  background: #f0a080;
+}
+
+/* Stat cells: icon, value and the change against the player's own. */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 6px 8px;
+}
+.stat {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 4px;
+  align-items: center;
+  font: 13px/1.15 var(--font-mono);
+}
+.stat .icon {
+  grid-row: span 2;
+  width: 18px;
+  height: 18px;
+}
+.stat .icon svg,
+.chip .icon svg,
+.price .icon svg {
+  fill: none;
+}
+.stat-val small {
+  margin-left: 2px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.delta {
+  font: 11px var(--font-mono);
+}
+.delta.better {
+  color: #b9d27f;
+}
+.delta.worse {
+  color: #f0957a;
+}
+.delta.same {
+  color: var(--muted);
+}
+
+/* Market: one row per good, buy and sell each beside their price. */
+.goods {
+  display: flex;
+  flex-direction: column;
+}
+.goods-head,
+.good-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) 1fr 1fr 0.9fr;
+  gap: 10px;
+  align-items: center;
+  padding: 4px 6px;
+  border-bottom: 1px solid #3b454b;
+}
+.goods-head {
+  font-size: 12px;
+}
+.good-row:hover {
+  background: #2c3438;
+}
+.good-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.good-name .icon {
+  width: 26px;
+  height: 26px;
+}
+.trade {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+#ui .trade button {
+  padding: 2px 8px;
+  font: 12px var(--font-mono);
+}
+.price {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 52px;
+  font: 13px var(--font-mono);
+}
+.tag {
+  padding: 0 6px;
+  font-size: 11px;
+  border: 1px solid;
+}
+.tag.buy {
+  color: #b9d27f;
+}
+.tag.sell {
+  color: #e8b86a;
+}
+.held {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font: 13px var(--font-mono);
+}
+
+/* Garage services: fuel, supplies and repair, each a meter and its buttons. */
+.services {
+  display: grid;
+  grid-template-columns: 30px minmax(140px, 1fr) auto auto auto;
+  gap: 8px 10px;
+  align-items: center;
+  padding: 6px 0 10px;
+  border-bottom: 1px solid #3b454b;
+}
+.service {
+  display: contents;
+}
+.service-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font: 13px var(--font-mono);
+}
+.service-meter .meter {
+  height: 6px;
+}
+#ui .service button {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+.note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+/* Trucks: the layout map beside the stats. */
+.cards.trucks {
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+}
+.truck-card {
+  flex-direction: row;
+  gap: 12px;
+}
+.truck-card.own {
+  border-color: #a4a074;
+}
+.truck-body .card-name {
+  flex: none;
+}
+.truck-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.chassis-map {
+  display: grid;
+  gap: 1px;
+  align-self: flex-start;
+  width: max-content;
+  padding: 3px;
+  background: #1a2125;
+}
+.chassis-map i {
+  width: 10px;
+  height: 10px;
+}
+.chassis-map .hole {
+  background: none;
+}
+.chassis-map .c-plain {
+  background: #3a4a52;
+}
+.chassis-map .c-W {
+  background: #b0775a;
+}
+.chassis-map .c-E {
+  background: #6f9aac;
+}
+.chassis-map .c-C {
+  background: #b09a6a;
+}
+.chassis-map .c-X {
+  background: #26313a;
+}
+.chassis-map .c-F,
+.chassis-map .c-B,
+.chassis-map .c-L,
+.chassis-map .c-R {
+  background: #8d9ca3;
+}
+
+/* Contracts: one row per job. */
+.jobs {
+  display: flex;
+  flex-direction: column;
+}
+.job {
+  display: grid;
+  grid-template-columns: 26px 1fr auto auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 5px 4px;
+  border-bottom: 1px solid #3b454b;
+}
+.job > .icon {
+  width: 24px;
+  height: 24px;
+}
+#ui .job button {
+  padding: 3px 12px;
+  font-size: 12px;
+}
+
+/* A hovered shop card lights its mount cells on the truck grid and dims the items over them. */
+.inv-grid[data-hint] .inv-item {
+  opacity: 0.35;
+}
+.inv-grid[data-hint~="W"] .c-W,
+.inv-grid[data-hint~="E"] .c-E,
+.inv-grid[data-hint~="C"] .c-C,
+.inv-grid[data-hint~="F"] .c-F,
+.inv-grid[data-hint~="B"] .c-B,
+.inv-grid[data-hint~="L"] .c-L,
+.inv-grid[data-hint~="R"] .c-R {
+  box-shadow: inset 0 0 0 2px #eac779;
+  color: #eac779;
+}
+
+/* The inspection panel reuses the card parts. */
+.inv-inspection .card-head {
+  margin-bottom: 6px;
+}
+.inv-inspection .stat-grid {
+  margin: 8px 0;
+}
+.inv-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }

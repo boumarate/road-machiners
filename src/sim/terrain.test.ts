@@ -15,6 +15,20 @@ import { emptyWorld } from "./testkit";
 import { ROAD_INDEX } from "./road-index";
 import { dist, polylineDist, segmentDist } from "./vec";
 import { newWorld } from "./world";
+import type { World } from "./types";
+
+// Several tests below read a seed's world without changing it (destinations, canyon shape,
+// cliff checks). newWorld rebuilds a fresh 600-tile terrain each call, so share one world per
+// seed across those read-only checks instead of rebuilding it per test.
+const worldsBySeed = new Map<number, World>();
+function worldFor(seed: number): World {
+  let w = worldsBySeed.get(seed);
+  if (!w) {
+    w = newWorld(seed, START_KITS.standard);
+    worldsBySeed.set(seed, w);
+  }
+  return w;
+}
 
 // Flat terrain with a raised block of cliff tiles over x in [cx0, cx1).
 function flatWith(
@@ -80,7 +94,7 @@ describe('terrain variety', () => {
 
 describe("terrain grid", () => {
   it('has seventeen distinct Icarus destinations with road access', () => {
-    const w = newWorld(1337, START_KITS.standard);
+    const w = worldFor(1337);
     expect(w.size).toBe(600);
     expect(w.terrain.heights).toHaveLength(601 * 601);
     expect(REGION.name).toBe('Icarus');
@@ -128,7 +142,7 @@ describe("terrain grid", () => {
   });
 
   it('carves a canyon and a dry river below the surrounding hills', () => {
-    const t = newWorld(1337, START_KITS.standard).terrain;
+    const t = worldFor(1337).terrain;
     const canyon = TERRAIN.features.canyon;
     const river = TERRAIN.features.dryRiver;
     const pickMiddle = (line: { x: number; y: number }[]) => line[Math.floor(line.length / 2)];
@@ -142,7 +156,7 @@ describe("terrain grid", () => {
   });
 
   it("neighboring tiles share corners, so height is continuous across edges", () => {
-    const t = newWorld(1337, START_KITS.standard).terrain;
+    const t = worldFor(1337).terrain;
     for (const x of [10, 23, 41])
       expect(heightAt(t, x - 1e-9, 20.3)).toBeCloseTo(
         heightAt(t, x + 1e-9, 20.3),
@@ -152,7 +166,7 @@ describe("terrain grid", () => {
 
   it("roads, towns and the player start are drivable for several seeds", () => {
     for (const seed of [0, 1, 5, 100, 1337, 2024]) {
-      const w = newWorld(seed, START_KITS.standard);
+      const w = worldFor(seed);
       const t = w.terrain;
       for (const road of REGION.roads)
         for (const p of road) expect(isCliff(t, tileAt(t, p))).toBe(false);
@@ -162,7 +176,7 @@ describe("terrain grid", () => {
   }, 30_000);
 
   it("mountains produce cliff tiles", () => {
-    const t = newWorld(1337, START_KITS.standard).terrain;
+    const t = worldFor(1337).terrain;
     expect(t.types.filter((_, i) => isCliff(t, i)).length).toBeGreaterThan(20);
   });
 

@@ -256,7 +256,7 @@ export function buySupply(world: World, kind: Supply, n: number): World {
   });
 }
 
-// A share of the part's value per HP share restored, times Mechanics. A broken part (0 HP) pays
+// A share of the part's value per HP share restored, times Machining. A broken part (0 HP) pays
 // the same formula for a full rebuild. Throws for a junk part, which no repair rebuilds.
 export function partRepairCost(world: World, part: PartInstance): number {
   if (isJunk(part))
@@ -289,7 +289,7 @@ export function repairAll(world: World): World {
 }
 
 // Buy or sell price at one place. Buy adds the spread to partValue. Sell scales partValue by
-// condition and cuts the spread, floored at the scrap value (IV4). The Trade skill narrows the
+// condition and cuts the spread, floored at the scrap value (IV4). The Social skill narrows the
 // spread for the player, like the goods spread above.
 export function partTradePrice(world: World, vehicle: Vehicle, part: PartInstance, direction: 'buy' | 'sell'): number {
   const margin = vehicle.id === world.player.vehicleId ? spread(world) : ECONOMY.spread;

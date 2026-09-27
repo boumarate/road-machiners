@@ -360,7 +360,7 @@ export const REGION = {
   },
   settlement: {
     streetSpacing: 5, // 20 m blocks, with houses separated by alleys
-    houseWidth: 2.7, // 10.8 m, against the pickup's 4.4 m length
+    houseWidth: 2.7, // 10.8 m, against the pickup's 5.2 m length
     houseDepth: 2.1,
     houseHeights: [1.1, 1.8],
     wallHeight: 1.6, // 6.4 m, well over a truck roof

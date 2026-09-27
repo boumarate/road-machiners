@@ -17,31 +17,29 @@ beforeAll(async () => {
   await initPhysics();
 });
 
-// Plays n turns through the real turn pipeline with physics movement.
-function play(w: World, n: number): { w: World } {
-  let d = buildDrive(w);
-  for (let i = 0; i < n; i++) {
-    let next: Drive | null = null;
-    w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
-    freeDrive(d);
-    d = next!;
-  }
+// Runs one turn through the real turn pipeline with physics movement, carrying the same Drive
+// forward. physicsMove's own syncDrive keeps it in step with spawns, despawns and repositioning,
+// so nothing here needs a fresh physics world per turn.
+function turn(w: World, d: Drive): { w: World; d: Drive } {
+  let next: Drive | null = null;
+  w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
   freeDrive(d);
-  return { w };
+  return { w, d: next! };
 }
 
 describe('NPC driving', () => {
   it('backs out after repeated failed drive attempts', () => {
-    const w = emptyWorld({ x: 40, y: 30 });
+    let w = emptyWorld({ x: 40, y: 30 });
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
     npc.brain = npcBrain('buggy', npc.pos, ['raider']);
     w.obstacles = [{ id: 'rock', pos: { x: 31.4, y: 30 }, r: 0.8, kind: 'rock' }];
     const startX = npc.pos.x;
-    let { w: result } = play(w, RULES.npcStuckTurns + 1);
-    const actor = result.vehicles.find((v) => v.id === npc.id)!;
-    expect(actor.brain!.recovery).toBeGreaterThan(0);
-    ({ w: result } = play(result, 1));
-    expect(result.vehicles.find((v) => v.id === npc.id)!.pos.x).toBeLessThan(startX);
+    let d = buildDrive(w);
+    for (let i = 0; i < RULES.npcStuckTurns + 1; i++) ({ w, d } = turn(w, d));
+    expect(w.vehicles.find((v) => v.id === npc.id)!.brain!.recovery).toBeGreaterThan(0);
+    ({ w, d } = turn(w, d));
+    expect(w.vehicles.find((v) => v.id === npc.id)!.pos.x).toBeLessThan(startX);
+    freeDrive(d);
   });
 
   it('travels between towns without entering either site', () => {
@@ -55,14 +53,16 @@ describe('NPC driving', () => {
     npc.brain = npcBrain('trader', npc.pos, ['trader']);
     // The trader parks on the Nose pad, outside the gate.
     let arrived = false;
+    let d = buildDrive(w);
     for (let i = 0; i < w.size && !arrived; i++) {
-      ({ w } = play(w, 1));
+      ({ w, d } = turn(w, d));
       // NPCs that spawn along the way would pick fights, so only the route is under test.
       w.vehicles = w.vehicles.filter((v) => v.faction === 'player' || v.id === npc.id);
       const actor = w.vehicles.find((v) => v.id === npc.id)!;
       arrived = canUseSite(actor.pos, nose);
       expect(dist(actor.pos, nose.pos)).toBeGreaterThanOrEqual(nose.radius + 0.8 - 0.5);
     }
+    freeDrive(d);
     expect(arrived).toBe(true);
   }, 120_000);
 });
