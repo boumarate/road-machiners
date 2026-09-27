@@ -9,6 +9,7 @@ export const PAL = {
   road: 0xa8865a,
   roadRut: 0x937450,
   roadCrack: 0x86684a, // cracks and potholes in the road texture
+  padMark: 0xd86a2a, // worn orange paint around site pads, where trucks stop to use a site
   pebble: 0x9c7c54,
   scrub: [0x6f6a3a, 0x5d5a32, 0x7c7442],
   rock: { top: 0x9a8a78, side: 0x6e6254, dark: 0x4e453c },
