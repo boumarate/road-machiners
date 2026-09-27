@@ -13,6 +13,17 @@ export type LocationDef = {
 };
 // What closes a location on its collision edge. Towns always have a town wall.
 export type SiteEdge = "palisade" | "camp" | "stone" | "fence" | "wrecks";
+// What stands beside the roads of one area of the map.
+export type LandmarkLook = "pole" | "billboard" | "crag" | "tank";
+export type LandmarkDef = {
+  look: LandmarkLook;
+  center: Vec; // the area is a circle
+  radius: number;
+  spacing: number; // tiles along a road between two landmarks
+  gap: number; // tiles between the road edge and the landmark's footprint
+  r: [number, number]; // footprint radius range
+  sides: "right" | "both"; // a power line keeps to one side, other landmarks pick a side each
+};
 
 export const MAP_SCALE = 5;
 
@@ -306,6 +317,17 @@ export const REGION = {
     ],
   ] as Vec[][],
   roadWidth: 6,
+  // Each area lines its roads with its own landmark, so a driver can tell where on the map they are.
+  landmarks: [
+    // A power line runs along the northern roads between Scrapjaw, Dustwell, Granary and Burnt Convoy.
+    { look: "pole", center: scalePoint({ x: 42, y: 26 }), radius: 120, spacing: 14, gap: 1, r: [0.3, 0.3], sides: "right" },
+    // Old billboards stand on the way from Podfield to Nose.
+    { look: "billboard", center: scalePoint({ x: 90, y: 28 }), radius: 80, spacing: 40, gap: 1.5, r: [1.6, 1.6], sides: "both" },
+    // Rock spires rise along the canyon roads east of Salvage Yard.
+    { look: "crag", center: scalePoint({ x: 95, y: 66 }), radius: 110, spacing: 30, gap: 1.5, r: [1.6, 2.6], sides: "both" },
+    // Dead tanks lie along the southern road from Bowl past South Lock.
+    { look: "tank", center: scalePoint({ x: 48, y: 90 }), radius: 120, spacing: 55, gap: 1.2, r: [1.5, 1.5], sides: "both" },
+  ] as LandmarkDef[],
   obstacles: {
     clusters: 220,
     rocksPerCluster: [2, 6] as [number, number],

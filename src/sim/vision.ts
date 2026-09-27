@@ -11,7 +11,7 @@ import { weatherAt } from './weather';
 import { dist, segmentDist, type Vec } from './vec';
 import { cloudsSeenBy, contactsOf } from './detect';
 
-const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building'];
+const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building', 'landmark'];
 
 // Base vision radius, shrunk by weather and at night.
 export function sightRadius(world: World, pos: Vec): number {

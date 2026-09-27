@@ -19,7 +19,7 @@ Roads are drawn as meshes laid on the ground, like pads, with uneven width, worn
 
 A crossing is one worn patch. Ruts end at its edge.
 
-Landmarks differ by area. Power-line poles run along the roads of one area. Other areas get old billboards, special wrecks or crags. There are no signposts. Every landmark stands beside the road and blocks trucks.
+Landmarks differ by area. `REGION.landmarks` names each area as a circle with its landmark, spacing and footprint. A power line runs along the northern roads between Scrapjaw, Dustwell, Granary and Burnt Convoy. Old billboards stand between Podfield and Nose. Rock spires rise along the canyon roads east of Salvage Yard. Dead tanks lie along the southern roads around South Lock. There are no signposts. Every landmark is an obstacle of kind `landmark`, so it blocks trucks, routes and sight. Placement reads only the fixed roads, not the world seed, so every map has the same landmarks. `src/sim/mapgen.ts` places them after rocks and road wrecks and skips spots that would overlap anything.
 
 ### Invariants
 - IV1 — No two corners of a tile a road crosses differ by more than `roadGrade` per tile, except under Canyon Bridge. The deck holds the same grade.
@@ -30,8 +30,9 @@ Landmarks differ by area. Power-line poles run along the roads of one area. Othe
 - PH1 — Road grading. `src/sim/road-grade.ts`.
 - PH2 — Road meshes with uneven width, worn edges, ruts and bends. Done: `src/three/render/roads.ts` draws the strips, and `scaleRoad` in `src/data/region.ts` bends each stretch between its given points.
 - PH3 — Crossing patches. Done in `src/three/render/roads.ts`.
-- PH4 — Landmarks per area.
+- PH4 — Landmarks per area. Done: placement in `src/sim/mapgen.ts`, views in `src/three/render/obstacles.ts`, and models from `tools/blender/power_pole.py`, `billboard.py`, `crag.py` and `tank_hulk.py`.
 
 ## Verify
-- PH1: `src/sim/road-grade.test.ts` checks IV1 and IV2 for three seeds. Road grades were up to 1.5 before and are at most 0.12 now. Terrain building takes about 250 ms longer. With cheap graded roads, fewer drivers leave the road, so the route variety test in `src/sim/path.test.ts` now plans 20 drivers instead of 10 to find three ways.
+- PH1: `src/sim/road-grade.test.ts` checks IV1 and IV2 for three seeds. Road grades were up to 1.5 before and are at most 0.12 now. Terrain building takes about 250 ms longer. With cheap graded roads, fewer drivers leave the road. The route variety test in `src/sim/path.test.ts` now plans from Nose to Bowl, where ten drivers still take three ways.
 - PH2 and PH3: road strips end at site edges and at the Canyon Bridge gap. Strip heights follow the drawn ground triangles, not the bilinear sim height, so strips do not sink into tile creases. `src/three/render/roads.test.ts` checks crossing detection. Bends every 3 tiles slowed terrain building, since the road index held 886 segments, so bends now place a point every 6 tiles. Under the same machine load, boot is 2.94 s against 2.87 s on main. The new map changed which random rolls some NPC tests got, so those tests now force the decisions they depend on. One corridor route in `src/sim/path.test.ts` became 9% longer than the reference while its cost stays within 5%, so its length tolerance is 10%.
+- PH4: `src/sim/mapgen.test.ts` checks each area has its landmarks, none reaches a road surface or site, all block trucks, none overlaps another obstacle, each faces its road, and places match across seeds. Billboards carry paint on both faces, since the camera sees about half of them from behind. At the default zoom a billboard still reads weakly, which needs the user's review.
