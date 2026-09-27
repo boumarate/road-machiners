@@ -81,30 +81,30 @@ export const NPCS: Record<string, NpcTemplate> = {
   buggy: {
     id: 'buggy', name: 'Raider outrider', faction: 'raiders', brain: 'raider',
     loadout: LOADOUTS.outrider,
-    aggroRange: 11, preferredRange: 3, bounty: 60, xp: 40, cap: 3, interval: 12, spawn: 'camp',
+    aggroRange: 11, preferredRange: 3, bounty: 60, xp: 40, cap: 6, interval: 8, spawn: 'camp',
   },
   gunwagon: {
     id: 'gunwagon', name: 'Raider gunwagon', faction: 'raiders', brain: 'raider',
     loadout: LOADOUTS.gunwagon,
-    aggroRange: 12, preferredRange: 6, bounty: 150, xp: 90, cap: 1, interval: 25, spawn: 'camp',
+    aggroRange: 12, preferredRange: 6, bounty: 150, xp: 90, cap: 2, interval: 20, spawn: 'camp',
   },
   trader: {
     id: 'trader', name: 'Trader caravan', faction: 'traders', brain: 'trader',
     loadout: LOADOUTS.trader,
-    aggroRange: 0, preferredRange: 0, bounty: 0, xp: 60, cap: 2, interval: 20, spawn: 'town',
+    aggroRange: 0, preferredRange: 0, bounty: 0, xp: 60, cap: 5, interval: 12, spawn: 'town',
   },
   scavenger: {
     id: 'scavenger', name: 'Scavenger', faction: 'scavengers', brain: 'scavenger',
     loadout: LOADOUTS.scavenger,
-    aggroRange: 0, preferredRange: 0, bounty: 0, xp: 40, cap: 2, interval: 18, spawn: 'town',
+    aggroRange: 0, preferredRange: 0, bounty: 0, xp: 40, cap: 4, interval: 12, spawn: 'town',
   },
 };
 
 export const SPAWN = {
-  initial: ['buggy', 'buggy', 'gunwagon', 'trader', 'scavenger'],
+  initial: ['buggy', 'buggy', 'buggy', 'buggy', 'gunwagon', 'trader', 'trader', 'trader', 'scavenger', 'scavenger'],
   campMinPlayerDist: 16, // raiders never spawn closer to the player than this
   townSpread: 1, // distance beyond the site boundary for neutral spawns
-  campSpread: 3, // distance beyond a camp gate for raider spawns
+  campSpread: 6, // distance beyond a camp gate for raider spawns; room for a full camp to spawn at once
   campAngle: 0.3, // radians either side of the track leaving a camp gate
   tries: 40,
   neighborHelp: 10, // same-faction vehicles in this range join a grudge
@@ -120,7 +120,7 @@ export type NpcClass = {
   threatRatio: number;
   defensive: boolean;
   // A hostile contact reacts only while its circle is at most this many tiles wide. Beyond it the
-  // noise is too vague to act on. Raiders press further than traders and scavengers will flee from.
+  // noise is too vague to act on. Raiders have no limit: they hear as far as the player does.
   contactReactRadius: number;
 };
 
@@ -128,7 +128,7 @@ export type NpcClass = {
 export const NPC_CLASSES: Record<Brain, NpcClass> = {
   scavenger: { towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: 12 },
   trader: { towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: true, contactReactRadius: 12 },
-  raider: { towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: 14 },
+  raider: { towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: Infinity },
 };
 
 export const NPC_UPKEEP = {

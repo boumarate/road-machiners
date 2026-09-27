@@ -49,8 +49,23 @@ describe('local game save', () => {
     const storage = makeStorage();
     storage.setItem('korovan.save', JSON.stringify({ version: 4, world: { turn: 21 } }));
     expect(() => loadWorld(storage)).toThrow(/version/);
-    storage.setItem('korovan.save', JSON.stringify({ version: 5, world: { turn: 21 } }));
+    storage.setItem('korovan.save', JSON.stringify({ version: 6, world: { turn: 21 } }));
     expect(() => loadWorld(storage)).toThrow(/world/);
+  });
+
+  it('migrates a version 5 save to a cold engine with auto patch on', () => {
+    const storage = makeStorage();
+    const world = newWorld(1337, startKit('standard'));
+    const { terrain: _terrain, ...saved } = world;
+    const player: Record<string, unknown> = { ...saved.player, explored: Array.from(saved.player.explored) };
+    delete player.engineHeat;
+    delete player.autoRepair;
+    const vehicles = saved.vehicles.map((v, i) => (i === 0 ? { ...v, job: { kind: 'repair', partId: 'x', turnsLeft: 2, total: 4 } } : v));
+    storage.setItem('korovan.save', JSON.stringify({ version: 5, world: { ...saved, player, vehicles } }));
+    const loaded = loadWorld(storage)!;
+    expect(loaded.player.engineHeat).toBe(0);
+    expect(loaded.player.autoRepair).toBe(true);
+    expect(loaded.vehicles[0].job).toEqual({ kind: 'repair', partId: 'x', parts: Number.MAX_SAFE_INTEGER, turnsLeft: 2, total: 4 });
   });
 
   it('rejects a save missing a field required for future turns', () => {
@@ -60,7 +75,7 @@ describe('local game save', () => {
       const incomplete = { ...world };
       delete (incomplete as Partial<typeof world>)[field];
       const { terrain: _terrain, ...saved } = incomplete;
-      storage.setItem('korovan.save', JSON.stringify({ version: 5, world: saved }));
+      storage.setItem('korovan.save', JSON.stringify({ version: 6, world: saved }));
       expect(() => loadWorld(storage)).toThrow(/world/);
     }
   });

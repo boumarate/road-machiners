@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NPC_CLASSES, SPAWN } from '../data/npcs';
+import { NPC_CLASSES, NPCS, SPAWN } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { planNpcOrders } from './ai';
@@ -39,7 +39,7 @@ describe('raider camps', () => {
     const w = emptyWorld({ x: 300, y: 300 });
     spawnInitial(w);
     const raiders = w.vehicles.filter((v) => v.faction === 'raiders');
-    expect(raiders).toHaveLength(3);
+    expect(raiders).toHaveLength(SPAWN.initial.filter((id) => NPCS[id].faction === 'raiders').length);
     for (const r of raiders) {
       const near = camps.flatMap((c) => siteGates(c)).some((g) => dist(g, r.pos) <= SPAWN.campSpread + 2);
       expect(near, `raider at ${r.pos.x},${r.pos.y}`).toBe(true);

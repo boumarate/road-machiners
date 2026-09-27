@@ -13,6 +13,7 @@ type HudActions = {
   openInventory: () => void;
   openCharacter: () => void;
   toggleManual: () => void;
+  toggleAutoRepair: () => void;
   isBusy: () => boolean;
 };
 const RESOURCE_ICONS: IconName[] = ['money', 'fuel', 'supplies', 'cab', 'driver'];
@@ -64,7 +65,7 @@ export class Hud {
       el(
         "div",
         {},
-        "Space: end turn. A: auto fire. C: character. I: inventory.",
+        "Space: end turn. A: auto fire. P: auto patch. C: character. I: inventory.",
       ),
       el("div", {}, "R: manual driving, straight through anything."),
       el("div", {}, "Right-drag: pan. F: follow. Wheel: zoom. M: mute."),
@@ -114,6 +115,7 @@ export class Hud {
       ),
       el('div', { class: 'instrument-actions' },
         el('button', { class: readout.manual ? 'on' : '', disabled: busy, 'aria-pressed': String(readout.manual), onclick: () => this.actions.toggleManual(), title: 'Toggle manual driving [R]' }, readout.manual ? 'Manual [R]' : 'Route [R]'),
+        el('button', { class: w.player.autoRepair ? 'on' : '', disabled: busy, 'aria-pressed': String(w.player.autoRepair), onclick: () => this.actions.toggleAutoRepair(), title: 'Patch the worst part with one unit of parts whenever the truck is parked [P]' }, w.player.autoRepair ? 'Auto patch [P]' : 'No patch [P]'),
         el('button', { disabled: busy, onclick: () => this.actions.openCharacter(), title: 'Driver and skills [C]' }, createIcon('driver'), w.player.skillPoints > 0 ? `+${w.player.skillPoints} [C]` : '[C]'),
         ...(readout.broken ? [el('span', { class: 'bad', role: 'status' }, `! ${readout.broken} broken`)] : []),
       ),

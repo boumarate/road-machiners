@@ -8,7 +8,8 @@ import { clockOf, heatAt } from '../sim/sun';
 import { TERRAIN } from '../data/terrain';
 import { dist, type Vec } from '../sim/vec';
 import type { World } from '../sim/types';
-import { celsius, fuelLiters, kph } from './units';
+import { celsius, engineCelsius, fuelLiters, kph } from './units';
+import { ENGINE_HEAT } from '../data/wear';
 
 const REGION_WEATHER: Record<'heatwave' | 'overcast', string> = { heatwave: 'Heat wave', overcast: 'Overcast' };
 const HOT = 2; // heat at or above this shows as a warning
@@ -54,6 +55,7 @@ export function getHudReadout(w: World) {
     survival: [
       { label: 'Time', value: clockLabel(w.turn), warning: false },
       { label: 'Heat', value: `${celsius(heat)} °C`, warning: heat >= HOT },
+      { label: 'Engine', value: `${engineCelsius(p.engineHeat)} °C`, warning: p.engineHeat >= ENGINE_HEAT.warnAt, progress: p.engineHeat },
       { label: 'Weather', value: weather, warning: weather !== 'Clear' && w.weather.some((e) => e.kind === 'storm' && dist(me.pos, e.pos) - e.radius <= TERRAIN.vision.radius) },
       ...(me.job ? [{ label: me.job.kind === 'search' ? 'Search' : 'Repair', value: `${me.job.turnsLeft} turns left`, warning: false, progress: 1 - me.job.turnsLeft / me.job.total }] : []),
     ],
