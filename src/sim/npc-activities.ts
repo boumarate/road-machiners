@@ -154,7 +154,7 @@ function serviceNeed(world: World, vehicle: Vehicle): ServiceNeed | null {
 }
 
 function isBroke(world: World, vehicle: Vehicle): boolean {
-  return getResources(world, vehicle).money < Math.min(ECONOMY.supplyPrice.fuel, ECONOMY.supplyPrice.supplies, ECONOMY.partRepairPerHp);
+  return getResources(world, vehicle).money < Math.min(ECONOMY.supplyPrice.fuel, ECONOMY.supplyPrice.supplies);
 }
 
 // The fixed survival rule. Null when no service is needed. A wait means the NPC needs service but cannot get it.

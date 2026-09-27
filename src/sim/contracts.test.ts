@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
+import { CONTRACTS, SHOPS } from '../data/market';
+import { REGION } from '../data/region';
+import { playerVehicle } from './damage';
+import { makePart } from './factory';
+import { goodsCount } from './grid';
+import { siteGates } from './sites';
 import { addVehicle, emptyWorld } from './testkit';
+import type { World } from './types';
+import { update } from './world';
 import {
+  acceptContract,
+  advanceContracts,
   bountyFulfilled,
+  deliverContract,
+  goodValue,
   bountyLapsed,
   contractReward,
   estimateTurns,
@@ -55,8 +67,8 @@ describe('rollContract', () => {
   it('is deterministic for the same rng state', () => {
     const w1 = emptyWorld();
     const w2 = emptyWorld();
-    w1.rngState = 42;
-    w2.rngState = 42;
+    w1.marketRng.rngState = 42;
+    w2.marketRng.rngState = 42;
     const raider = addVehicle(w1, 'raiders', 'buggy', [], { x: 5, y: 5 });
     addVehicle(w2, 'raiders', 'buggy', [], { x: 5, y: 5 });
     const c1 = rollContract(w1, shop, places, goods, partDefIds, [raider]);
@@ -141,5 +153,96 @@ describe('haulPenalty', () => {
   it('owes the full value of the hauled units', () => {
     const c = { kind: 'haul', units: 5 } as Extract<Contract, { kind: 'haul' }>;
     expect(haulPenalty(c, 20)).toBe(100);
+  });
+});
+
+describe('contract boards and delivery', () => {
+  const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
+  const nose = REGION.towns.find((t) => t.id === 'nose')!;
+  const haul = (to: string, units: number): Contract => ({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'salt', units, to, reward: 300, xp: 30, deadline: 500, tier: 1 });
+  const fetch = (): Contract => ({ id: 'ct-fetch', shop: 'bowl', kind: 'fetch', defId: 'mg', reward: 200, xp: 20, deadline: 500, tier: 1 });
+
+  function atBowlWithOffer(c: Contract): World {
+    const w = emptyWorld(siteGates(bowl)[0]);
+    w.shops.bowl.contracts = [c];
+    return w;
+  }
+
+  it('posts contracts on every shop board at world creation', () => {
+    const w = emptyWorld();
+    for (const id of Object.keys(SHOPS)) expect(w.shops[id].contracts.length).toBeGreaterThan(0);
+  });
+
+  it('loads haul cargo on acceptance and pays on delivery at the destination', () => {
+    let w = atBowlWithOffer(haul('nose', 3));
+    w = acceptContract(w, 'ct-haul');
+    expect(goodsCount(playerVehicle(w)).salt).toBe(3);
+    expect(w.shops.bowl.contracts).toHaveLength(0);
+    w.vehicles[0].pos = { ...siteGates(nose)[0] };
+    const money = w.player.money;
+    w = deliverContract(w, 'ct-haul');
+    expect(w.player.money).toBe(money + 300);
+    expect(goodsCount(playerVehicle(w)).salt ?? 0).toBe(0);
+    expect(w.player.contracts).toHaveLength(0);
+  });
+
+  it('refuses a haul delivery away from its destination', () => {
+    const w = acceptContract(atBowlWithOffer(haul('nose', 3)), 'ct-haul');
+    expect(() => deliverContract(w, 'ct-haul')).toThrow(/Not parked at nose/);
+  });
+
+  it('refuses a haul that does not fit the grid and leaves the board unchanged', () => {
+    const w = atBowlWithOffer(haul('nose', 999));
+    expect(() => acceptContract(w, 'ct-haul')).toThrow(/free cells/);
+    expect(w.shops.bowl.contracts).toHaveLength(1);
+  });
+
+  it('takes a fetch part from garage storage', () => {
+    let w = acceptContract(atBowlWithOffer(fetch()), 'ct-fetch');
+    w = update(w, (d) => { d.player.storage.push(makePart(d, 'mg', 3)); });
+    const money = w.player.money;
+    w = deliverContract(w, 'ct-fetch');
+    expect(w.player.storage).toHaveLength(0);
+    expect(w.player.money).toBe(money + 200);
+  });
+
+  it('refuses a fetch with no spare part of that type', () => {
+    const w = acceptContract(atBowlWithOffer(fetch()), 'ct-fetch');
+    expect(() => deliverContract(w, 'ct-fetch')).toThrow(/spare/);
+  });
+
+  it('holds at most the active limit', () => {
+    let w = atBowlWithOffer(fetch());
+    w = update(w, (d) => {
+      d.player.contracts = Array.from({ length: CONTRACTS.maxActive }, (_, i) => ({ ...fetch(), id: `held${i}` }));
+    });
+    expect(() => acceptContract(w, 'ct-fetch')).toThrow(/already hold/);
+  });
+
+  it('charges the goods value when a haul expires', () => {
+    let w = acceptContract(atBowlWithOffer(haul('nose', 3)), 'ct-haul');
+    const money = w.player.money;
+    w = update(w, (d) => { d.turn = 501; advanceContracts(d); });
+    expect(w.player.contracts).toHaveLength(0);
+    expect(w.player.money).toBe(money - haulPenalty(haul('nose', 3) as Extract<Contract, { kind: 'haul' }>, goodValue('salt')));
+  });
+
+  it('pays a bounty on the player kill and lapses when the target leaves', () => {
+    const base = emptyWorld();
+    const raider = addVehicle(base, 'raiders', 'scout', [], { x: 50, y: 50 });
+    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', target: raider.id, targetName: raider.name, reward: 400, xp: 40, deadline: 900, tier: 2 };
+    const paid = update(base, (d) => {
+      d.player.contracts = [bounty];
+      d.events = [{ t: 'destroyed', vehicle: raider.id, by: d.player.vehicleId }];
+      advanceContracts(d);
+    });
+    expect(paid.player.money).toBe(base.player.money + 400);
+    const lapsed = update(base, (d) => {
+      d.player.contracts = [bounty];
+      d.vehicles = d.vehicles.filter((v) => v.id !== raider.id);
+      advanceContracts(d);
+    });
+    expect(lapsed.player.money).toBe(base.player.money);
+    expect(lapsed.player.contracts).toHaveLength(0);
   });
 });

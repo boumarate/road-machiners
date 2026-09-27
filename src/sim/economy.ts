@@ -105,7 +105,7 @@ export function sellVehicleCargo(
   const resources = getResources(world, vehicle);
   vehicle.items = vehicle.items.filter((item) => {
     if (item.kind !== "part" || mounted.has(item.part.id)) return true;
-    resources.money += partSellPrice(item.part);
+    resources.money += partTradePrice(world, vehicle, item.part, "sell");
     return false;
   });
 }
@@ -159,7 +159,8 @@ function refuelAndRepair(world: World, vehicle: Vehicle): void {
   const multiplier =
     vehicle.id === world.player.vehicleId ? repairMult(world) : 1;
   for (const part of repairableParts(vehicle)) {
-    const unitCost = ECONOMY.partRepairPerHp * multiplier;
+    // Same formula as partRepairCost: a share of the part's value per HP share restored.
+    const unitCost = (ECONOMY.repairShare * partValue(part) * multiplier) / maxHp(part);
     const hp = Math.min(
       maxHp(part) - part.hp,
       Math.floor(resources.money / unitCost),
@@ -239,14 +240,14 @@ export function buySupply(world: World, kind: Supply, n: number): World {
   });
 }
 
-// Throws for a junk part, which no repair rebuilds.
+// A share of the part's value per HP share restored, times Mechanics. A broken part (0 HP) pays
+// the same formula for a full rebuild. Throws for a junk part, which no repair rebuilds.
 export function partRepairCost(world: World, part: PartInstance): number {
   if (isJunk(part))
     throw new Error(`${partDef(part.defId).name} is junk and cannot be rebuilt`);
+  const missingShare = 1 - part.hp / maxHp(part);
   return Math.ceil(
-    (maxHp(part) - part.hp) *
-      ECONOMY.partRepairPerHp *
-      repairMult(world),
+    ECONOMY.repairShare * partValue(part) * missingShare * repairMult(world),
   );
 }
 
@@ -271,11 +272,42 @@ export function repairAll(world: World): World {
   });
 }
 
-export function partSellPrice(part: PartInstance): number {
-  const def = partDef(part.defId);
-  return Math.floor(def.value * ECONOMY.partSellFactor * (part.hp / maxHp(part)));
+// The wear factor applied to a part's base value: 1 at pristine, falling one wearValueLoss per step.
+function wearFactor(wear: number): number {
+  return 1 - ECONOMY.wearValueLoss * wear;
 }
 
+// Scrap value from mass alone, the sell floor for any part and the whole value of a junk part.
+function scrapValue(part: PartInstance): number {
+  return ECONOMY.scrapPerKg * partDef(part.defId).mass;
+}
+
+// A part's current worth: base value times the wear factor. Junk is worth its scrap value only.
+export function partValue(part: PartInstance): number {
+  if (isJunk(part)) return scrapValue(part);
+  return partDef(part.defId).value * wearFactor(part.wear);
+}
+
+// Buy or sell price at one place. Buy adds the spread to partValue. Sell scales partValue by
+// condition and cuts the spread, floored at the scrap value (IV4). The Trade skill narrows the
+// spread for the player, like the goods spread above.
+export function partTradePrice(world: World, vehicle: Vehicle, part: PartInstance, direction: 'buy' | 'sell'): number {
+  const margin = vehicle.id === world.player.vehicleId ? spread(world) : ECONOMY.spread;
+  const value = partValue(part);
+  if (direction === 'buy') return Math.round(value * (1 + margin));
+  const conditionShare = part.hp / maxHp(part);
+  return Math.max(Math.round(scrapValue(part)), Math.round(value * conditionShare * (1 - margin)));
+}
+
+// A world-free, skill-free sell quote for garage storage listings, which have no vehicle context.
+export function partSellPrice(part: PartInstance): number {
+  return Math.max(
+    Math.round(scrapValue(part)),
+    Math.round(partValue(part) * (part.hp / maxHp(part)) * (1 - ECONOMY.spread)),
+  );
+}
+
+// Buys a new, pristine part at partTradePrice buy. Which shop stock this draws from is PH3's wiring.
 export function buyPart(world: World, defId: string): World {
   return playerCommand(world, (w) => {
     requireTown(w);
@@ -283,7 +315,8 @@ export function buyPart(world: World, defId: string): World {
       throw new Error(
         `${partDef(defId).name} is built in. It is not for sale.`,
       );
-    pay(w, partDef(defId).value, partDef(defId).name);
+    const pristine: PartInstance = { id: "", defId, hp: partDef(defId).hp, reload: 0, wear: 0 };
+    pay(w, partTradePrice(w, playerVehicle(w), pristine, "buy"), partDef(defId).name);
     w.player.storage.push(makePart(w, defId, 0));
   });
 }
@@ -293,19 +326,23 @@ export function sellPart(world: World, partId: string): World {
     requireTown(w);
     const i = w.player.storage.findIndex((p) => p.id === partId);
     if (i < 0) throw new Error(`No stored part ${partId}`);
-    w.player.money += partSellPrice(w.player.storage[i]);
+    w.player.money += partTradePrice(w, playerVehicle(w), w.player.storage[i], "sell");
     w.player.storage.splice(i, 1);
   });
 }
 
-// The trade-in scales by the mean health of the built-in parts.
+// The trade-in scales by the mean health and the mean wear of the built-in parts.
 export function chassisTradeIn(world: World): number {
   const me = playerVehicle(world);
   const core = mountedParts(me, "core");
   const health =
     core.reduce((a, p) => a + p.hp / maxHp(p), 0) / core.length;
+  const meanWear = core.reduce((a, p) => a + p.wear, 0) / core.length;
   return Math.floor(
-    chassisDef(me.chassisId).value * ECONOMY.chassisSellFactor * health,
+    chassisDef(me.chassisId).value *
+      ECONOMY.chassisSellFactor *
+      health *
+      wearFactor(meanWear),
   );
 }
 

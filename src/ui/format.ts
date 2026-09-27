@@ -1,6 +1,8 @@
 // Event log lines.
 
+import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
+import type { Contract } from '../sim/market';
 import { TERRAIN } from '../data/terrain';
 import { playerVehicle } from '../sim/damage';
 import { dist, type Vec } from '../sim/vec';
@@ -181,6 +183,31 @@ function unnoticed(world: World, e: GameEvent): boolean {
   return vehicles !== undefined && !playerNotices(world, ...vehicles(e));
 }
 
+function searchedText(stock: string): { text: string; cls: string } {
+  const site = [...REGION.towns, ...REGION.locations].find((l) => l.id === stock);
+  return { text: `Search done${site ? ` at ${site.name}` : ''}. Drag what you want into the truck.`, cls: 'good' };
+}
+
+const CONTRACT_OUTCOME = { accepted: ['Contract taken', ''], done: ['Contract done', 'good'], failed: ['Contract failed', 'bad'], lapsed: ['Contract lapsed', 'dim'] } as const;
+
+function contractText(c: Contract, outcome: keyof typeof CONTRACT_OUTCOME): { text: string; cls: string } {
+  const [label, cls] = CONTRACT_OUTCOME[outcome];
+  return { text: `${label}: ${contractSummary(c)}, pays ${c.reward}`, cls };
+}
+
+// One line naming what a contract asks for.
+export function contractSummary(c: Contract): string {
+  if (c.kind === 'haul') return `haul ${c.units} ${GOODS[c.good].name} to ${siteName(c.to)}`;
+  if (c.kind === 'fetch') return `bring a ${partDef(c.defId).name} to ${siteName(c.shop)}`;
+  return `destroy ${c.targetName}`;
+}
+
+function siteName(id: string): string {
+  const site = [...REGION.towns, ...REGION.locations].find((l) => l.id === id);
+  if (!site) throw new Error(`Unknown site ${id}`);
+  return site.name;
+}
+
 // Returns null for events not worth a log line.
 export function eventText(world: World, e: GameEvent): { text: string; cls: string } | null {
   if (unnoticed(world, e)) return null;
@@ -256,10 +283,10 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       return { text: e.text, cls: 'dim' };
     case 'job':
       return jobText(world, e);
-    case 'searched': {
-      const site = [...REGION.towns, ...REGION.locations].find((l) => l.id === e.stock);
-      return { text: `Search done${site ? ` at ${site.name}` : ''}. Drag what you want into the truck.`, cls: 'good' };
-    }
+    case 'searched':
+      return searchedText(e.stock);
+    case 'contract':
+      return contractText(e.contract, e.outcome);
     case 'breakdown':
       return e.vehicle === me ? { text: `${partName(world, e.vehicle, e.part)} broke down`, cls: 'bad' } : null;
     case 'weather':

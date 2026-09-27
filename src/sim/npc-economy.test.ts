@@ -1,3 +1,4 @@
+import { maxHp } from './wear';
 import { describe, expect, it } from 'vitest';
 import * as economy from './economy';
 import { addVehicle, emptyWorld } from './testkit';
@@ -15,7 +16,7 @@ describe('NPC transactions', () => {
     const npc = addVehicle(w, 'scavengers', 'scout', [], siteGates(REGION.towns[0])[0]);
     const cab = corePart(npc, 'cab');
     cab.hp -= 2;
-    npc.resources!.money = ECONOMY.partRepairPerHp * 2;
+    npc.resources!.money = Math.ceil((2 * ECONOMY.repairShare * economy.partValue(cab)) / maxHp(cab));
     npc.resources!.fuel = chassisDef(npc.chassisId).fuelCap;
     npc.resources!.supplies = RULES.suppliesCap;
     economy.serviceVehicle(w, npc, 'bowl');

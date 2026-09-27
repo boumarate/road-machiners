@@ -14,6 +14,8 @@ import {
   buySupply,
   chassisTradeIn,
   partRepairCost,
+  partTradePrice,
+  partValue,
   repairAll,
   repairPart,
   sellGood,
@@ -27,6 +29,7 @@ import {
   goodsCount,
   mountedParts,
 } from "./grid";
+import { makePart } from "./factory";
 import { maxHp } from "./wear";
 import { spareParts } from "./inventory";
 import { applySiteAction, canScavenge, salvageNear, scavenge, useOasis } from "./locations";
@@ -202,6 +205,65 @@ describe("garage", () => {
     const whole = chassisTradeIn(w);
     coreParts(w.vehicles[0], "wheel")[0].hp = 0;
     expect(chassisTradeIn(w)).toBeLessThan(whole);
+  });
+
+  it("trade-in drops with worn built-in parts, even at full health", () => {
+    const w = startAtBowl();
+    const whole = chassisTradeIn(w);
+    for (const wheel of coreParts(w.vehicles[0], "wheel")) wheel.wear = 2;
+    expect(chassisTradeIn(w)).toBeLessThan(whole);
+  });
+});
+
+describe("part value and trade price", () => {
+  it("wear lowers value", () => {
+    const pristine = makePart(startAtBowl(), "mg", 0);
+    const worn = makePart(startAtBowl(), "mg", 2);
+    expect(partValue(worn)).toBeLessThan(partValue(pristine));
+  });
+
+  it("sells a broken part for its scrap floor", () => {
+    const w = startAtBowl();
+    const part = makePart(w, "mg", 0);
+    part.hp = 0;
+    const floor = Math.round(ECONOMY.scrapPerKg * partDef("mg").mass);
+    expect(partTradePrice(w, w.vehicles[0], part, "sell")).toBe(floor);
+  });
+
+  it("sell is always below buy at the same place", () => {
+    const w = startAtBowl();
+    const part = makePart(w, "mg", 1);
+    part.hp = Math.floor(maxHp(part) * 0.6);
+    expect(partTradePrice(w, w.vehicles[0], part, "sell")).toBeLessThan(
+      partTradePrice(w, w.vehicles[0], part, "buy"),
+    );
+  });
+
+  it("repair cost scales with the part's value", () => {
+    const w = startAtBowl();
+    const mg = makePart(w, "mg", 0);
+    const rack = makePart(w, "rocketRack", 0);
+    mg.hp = 0;
+    rack.hp = 0;
+    expect(partRepairCost(w, rack)).toBeGreaterThan(partRepairCost(w, mg));
+    expect(partDef(rack.defId).value).toBeGreaterThan(partDef(mg.defId).value);
+  });
+
+  it("rebuild cost at 0 HP pays the full repair share of value", () => {
+    const w = startAtBowl();
+    const part = makePart(w, "mg", 0);
+    part.hp = 0;
+    expect(partRepairCost(w, part)).toBe(
+      Math.ceil(ECONOMY.repairShare * partValue(part)),
+    );
+  });
+
+  it("refuses to price a rebuild for a junk part", () => {
+    const w = startAtBowl();
+    const part = makePart(w, "mg", 0);
+    part.hp = 0;
+    part.wear = CONDITION.maxWear + 1;
+    expect(() => partRepairCost(w, part)).toThrow(/junk/);
   });
 });
 

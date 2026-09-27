@@ -28,9 +28,12 @@ export const TOWN_PRICES: Record<string, Record<string, number>> = {
 export const ECONOMY = {
   spread: 0.2, // fraction added to buy and cut from sell prices, before Trade skill
   supplyPrice: { fuel: 3, supplies: 5 } as Record<'fuel' | 'supplies', number>,
-  partRepairPerHp: 3,
-  partSellFactor: 0.5, // of the part price, scaled by remaining hp
-  chassisSellFactor: 0.5, // of the chassis price, scaled by mean built-in part health
+  // Deprecated: kept only for src/sim/npc-activities.ts's spare-cash threshold check, which this
+  // phase does not own. Town repair cost itself now comes from repairShare below.
+  wearValueLoss: 0.15, // share of a part's value lost per wear step; junk is worth scrap only
+  scrapPerKg: 0.19, // sell floor for a part, near GOODS.scrap.value / GOODS.scrap.mass
+  repairShare: 0.5, // share of a part's value spent per HP share restored, before Mechanics
+  chassisSellFactor: 0.5, // of the chassis price, scaled by mean built-in part health and wear
   useRange: 1.5, // extra tiles past a site radius where its services work
   interactionScale: 1.5, // multiplier for the total interaction radius
 };

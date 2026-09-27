@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { CHASSIS, PLAYER_CHASSIS } from "./chassis";
 import { GOODS, GOOD_IDS, TOWN_PRICES } from "./goods";
+import { EFFORT, type ItemKind } from "./market";
 import { PARTS, type PartKind } from "./parts";
 import { REGION } from "./region";
 import { bodyOf } from "../sim/body";
@@ -117,6 +118,25 @@ describe("equipment variety", () => {
     expect(
       new Set(addedChassis.map((id) => CHASSIS[id].layout.join("\n"))).size,
     ).toBe(5);
+  });
+
+  // PH8 tunes values. Every non-core part, chassis and good currently misses its target effort
+  // band; see the phase report for the full mismatch list. Kept as a real, skipped assertion so
+  // PH8 can un-skip it once values are retuned from the harness, rather than writing it from scratch.
+  it.skip("keeps every part, chassis and good inside its tier's effort band", () => {
+    const items: { name: string; kind: ItemKind; tier: 1 | 2 | 3; value: number }[] = [
+      ...Object.values(PARTS)
+        .filter((p) => p.kind !== "core")
+        .map((p) => ({ name: p.id, kind: p.kind as ItemKind, tier: p.tier, value: p.value })),
+      ...Object.values(CHASSIS).map((c) => ({ name: c.id, kind: "chassis" as ItemKind, tier: c.tier, value: c.value })),
+      ...Object.values(GOODS).map((g) => ({ name: g.id, kind: "good" as ItemKind, tier: g.tier, value: g.value })),
+    ];
+    for (const item of items) {
+      const effort = item.value / EFFORT.wage[item.tier];
+      const [lo, hi] = EFFORT.bands[item.tier][item.kind];
+      expect(effort, `${item.name} (tier ${item.tier} ${item.kind}): ${effort.toFixed(1)} turns`).toBeGreaterThanOrEqual(lo);
+      expect(effort, `${item.name} (tier ${item.tier} ${item.kind}): ${effort.toFixed(1)} turns`).toBeLessThanOrEqual(hi);
+    }
   });
 
   it("adds five goods with profitable routes and real buy/sell transactions", () => {

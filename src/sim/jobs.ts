@@ -2,13 +2,18 @@
 // A job is cancelled on any turn its truck ends above parked speed, and its finished turns are lost.
 // A repair is also cancelled once the grid holds no parts for it.
 
+import { GOODS } from "../data/goods";
+import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
+import { STRIP } from "../data/salvage";
 import { playerVehicle } from "./damage";
-import { goodsCount, mountedParts } from "./grid";
+import { partValue } from "./economy";
+import { goodsCount, isMounted, mountedParts } from "./grid";
+import { addGoods } from "./inventory";
 import { isJunk, maxHp } from "./wear";
 import { repairPlan, repairTurn } from "./repair";
 import { searchTurn } from "./search";
-import type { Job, Vehicle, World } from "./types";
+import type { Job, PartInstance, Vehicle, World } from "./types";
 import { playerCommand } from "./world";
 
 export { repairPlan };
@@ -65,6 +70,30 @@ export function startAutoRepair(world: World): void {
   });
 }
 
+// The player command that starts stripping a spare, non-core part for units of the parts good.
+// Strip works on broken and junk parts too: that is its purpose.
+export function startStrip(world: World, partId: string): World {
+  return playerCommand(world, (w) => {
+    const v = playerVehicle(w);
+    findStripPart(v, partId);
+    startJob(w, v, {
+      kind: "strip",
+      partId,
+      turnsLeft: STRIP.turns,
+      total: STRIP.turns,
+    });
+  });
+}
+
+// Throws unless the id names a spare, non-core part on the grid.
+function findStripPart(v: Vehicle, partId: string): PartInstance {
+  const item = v.items.find((it) => it.kind === "part" && it.part.id === partId);
+  if (!item || item.kind !== "part") throw new Error(`No spare part ${partId} on ${v.name}`);
+  if (isMounted(v.chassisId, item)) throw new Error("Only a spare part can be stripped, not a mounted one");
+  if (partDef(item.part.defId).kind === "core") throw new Error("A built-in part cannot be stripped");
+  return item.part;
+}
+
 export function advanceJobs(world: World): void {
   for (const v of world.vehicles) if (v.job) advanceJob(world, v, v.job);
 }
@@ -74,11 +103,30 @@ function advanceJob(world: World, v: Vehicle, job: Job): void {
   if (v.speed > RULES.parkedSpeed) return endJob(world, v, job, "cancelled");
   if (job.kind === "repair" && isRepairStalled(world, v, job.partId, job.parts))
     return endJob(world, v, job, "cancelled");
-  const done =
-    job.kind === "repair"
-      ? repairTurn(world, v, job)
-      : searchTurn(world, v, job);
-  if (done) endJob(world, v, job, "done");
+  if (jobTurn(world, v, job)) endJob(world, v, job, "done");
+}
+
+function jobTurn(world: World, v: Vehicle, job: Job): boolean {
+  if (job.kind === "repair") return repairTurn(world, v, job);
+  if (job.kind === "search") return searchTurn(world, v, job);
+  return stripTurn(world, v, job);
+}
+
+function stripTurn(world: World, v: Vehicle, job: Extract<Job, { kind: "strip" }>): boolean {
+  job.turnsLeft = Math.max(0, job.turnsLeft - 1);
+  if (job.turnsLeft > 0) return false;
+  finishStrip(world, v, job.partId);
+  return true;
+}
+
+// The part's own cells free up first, so the parts good gets first claim on the room it made.
+// Only if the grid filled up elsewhere during the job does the yield still not fit, which throws.
+function finishStrip(world: World, v: Vehicle, partId: string): void {
+  const part = findStripPart(v, partId);
+  const units = Math.max(1, Math.round((partValue(part) * STRIP.yieldShare) / GOODS.parts.value));
+  v.items = v.items.filter((it) => !(it.kind === "part" && it.part.id === partId));
+  const added = addGoods(world, v, "parts", units);
+  if (added < units) throw new Error(`Stripped parts would not fit on ${v.name}`);
 }
 
 // Parts can leave the grid mid-job, by a sale, a knockout or a destroyed cargo part.

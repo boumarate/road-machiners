@@ -6,6 +6,8 @@ import type { Terrain } from "./terrain";
 import type { Vec } from "./vec";
 import type { TopicId } from "../data/dialogue";
 import type { DecisionOptions } from "../data/npcs";
+import type { Contract, ShopState } from "./market";
+import type { Rng } from "./rng";
 
 export type PatchDeal = DecisionOptions["patchDeal"];
 
@@ -74,7 +76,8 @@ export type Job =
       turnsLeft: number;
       total: number;
     } // parts: the most this job spends
-  | { kind: "search"; stockId: string; turnsLeft: number; total: number };
+  | { kind: "search"; stockId: string; turnsLeft: number; total: number }
+  | { kind: "strip"; partId: string; turnsLeft: number; total: number };
 
 // A vehicle detected beyond sight. The circle always holds the true position, which it never reveals.
 // The circle always holds the vehicle's true position. loudness is how far the engine carries, in tiles,
@@ -226,6 +229,7 @@ export type Player = {
   discovered: string[];
   scavenged: string[]; // stocks the player finished searching; their loot can be taken
   storage: PartInstance[]; // spare parts kept in town garages, usable in any town
+  contracts: Contract[]; // contracts taken and not yet ended; see src/sim/market.ts
   costBasis: Record<string, number>; // average paid per unit of each good, for trade XP
   knockouts: number;
   state: "active" | "knockedOut" | "dead";
@@ -264,6 +268,7 @@ export type GameEvent =
   | { t: 'xp'; amount: number; reason: string }
   | { t: 'levelUp'; level: number }
   | { t: 'money'; amount: number; reason: string }
+  | { t: 'contract'; contract: Contract; outcome: 'accepted' | 'done' | 'failed' | 'lapsed' }
   | { t: 'discover'; location: string }
   | { t: 'supply'; what: string; text: string }
   | { t: 'death' }
@@ -286,12 +291,14 @@ export type GameEvent =
 export type World = {
   seed: number;
   rngState: number;
+  marketRng: Rng; // the market's own random stream; see src/sim/market.ts
   turn: number;
   size: number;
   nextId: number;
   vehicles: Vehicle[];
   obstacles: Obstacle[];
   salvage: SalvageStock[];
+  shops: Record<string, ShopState>; // shop id -> prices, stock and contract board; see src/sim/market.ts
   terrain: Terrain; // corner heights and tile types, built from the seed
   player: Player;
   events: GameEvent[]; // events of the last resolved turn or action
