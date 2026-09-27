@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { CHASSIS } from '../data/chassis';
 import { GOOD_IDS } from '../data/goods';
 import { PARTS } from '../data/parts';
-import { BODY_PARTS, PART_MODELS, WEAPON_POOLS, partModel, weaponLook } from './partLooks';
+import { BODY_PARTS, PART_MODELS, WEAPON_POOLS, baseModel, partModel, weaponLook } from './partLooks';
 
 const weaponIds = Object.values(PARTS).filter((d) => d.kind === 'weapon').map((d) => d.id);
 const otherIds = Object.values(PARTS).filter((d) => d.kind !== 'weapon' && !BODY_PARTS.has(d.id)).map((d) => d.id);
@@ -20,6 +21,11 @@ describe('part looks', () => {
       expect(pool.receiver.length, id).toBeGreaterThan(0);
       expect(pool.barrel.length, id).toBeGreaterThan(0);
     }
+  });
+
+  it('gives every chassis a base model', () => {
+    for (const id of Object.keys(CHASSIS)) expect(baseModel(id), id).toBe(`base_${id}`);
+    expect(() => baseModel('nope')).toThrow();
   });
 
   it('throws on an unknown id', () => {

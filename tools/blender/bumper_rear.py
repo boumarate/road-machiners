@@ -1,7 +1,7 @@
 """The rear bumper for one back edge cell: a steel beam with a step on top.
 
 Footprint is one cell: 0.65 m along (Blender X) by 0.484 m across (Blender Y). The origin is the cell center on the deck top.
-It is authored facing +X like tail.py, and the view turns it 180 degrees onto the back edge.
+It is authored facing +X, and the view turns it 180 degrees onto the back edge.
 It hangs below the deck from Z = 0 to Z = -1, and the view stretches Z to the chassis box height.
 It sticks out BUMPER_OUT past the edge. The view leaves it off cells that carry a ram.
 Run: blender --background --python tools/blender/bumper_rear.py -- public/models/bumper_rear.glb [tmp/bumper_rear.png]
