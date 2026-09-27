@@ -10,8 +10,7 @@ import { TOW } from '../data/tow';
 import { corePart, coreParts, mountedParts } from './grid';
 import { loadFactor, vehicleMass } from './mass';
 import { getResources } from './resources';
-import { towData } from './states';
-import { playerTow } from './tow';
+import { isTowing } from './tow';
 import type { PartInstance, Vehicle, World } from './types';
 import { DEG } from './vec';
 import { weatherAt } from './weather';
@@ -83,8 +82,7 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   }
   maxSpeed *= weatherAt(world, v.pos).speed;
   // A tower drives with care while a truck hangs on its rope.
-  const tow = playerTow(world);
-  if (tow && towData(tow).hitched && tow.holder === v.id) maxSpeed *= TOW.speedShare;
+  if (isTowing(world, v.id)) maxSpeed *= TOW.speedShare;
 
   return {
     maxSpeed,

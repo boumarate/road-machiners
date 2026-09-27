@@ -4,6 +4,7 @@ import type { PartHit, Side } from "./armor";
 import type { TraitId } from "../data/npcs";
 import type { Terrain } from "./terrain";
 import type { Vec } from "./vec";
+import type { LandmarkLook } from "../data/region";
 import type { TopicId } from "../data/dialogue";
 import type { DecisionOptions } from "../data/npcs";
 import type { PerkId } from "../data/skills";
@@ -64,6 +65,9 @@ export type SalvageStock = {
   radius: number;
   goods: Record<string, number>;
   parts: PartInstance[];
+  fuel?: number; // fuel units that pour into a tank, not the grid
+  supplies?: number; // supply units that go to driver stores, not the grid
+  pile?: { until: number }; // loot lying loose on the ground, drawn as a heap, gone at turn `until`. Sites and wrecks draw their own stock.
 };
 
 export type RefitMove = {
@@ -88,7 +92,8 @@ export type Job =
       parts: number;
       turnsLeft: number;
       total: number;
-    } // parts: the most this job spends
+      auto?: true;
+    } // parts: the most this job spends. auto: started by auto patch, so any player job replaces it
   | { kind: "search"; stockId: string; turnsLeft: number; total: number }
   | RefitJob;
 
@@ -172,6 +177,7 @@ export type Vehicle = {
   pos: Vec;
   heading: number; // radians, 0 = +x
   speed: number; // tiles per turn at the end of the last turn
+  flippedTurns?: number; // consecutive turns that ended with the truck flipped
   order: MoveOrder | null; // null: coast, keeping speed and heading
   direct: boolean; // drive straight at the order's point instead of routing around obstacles; the player's manual mode
   weaponOrders: Record<string, WeaponOrder>; // key: weapon part id
@@ -182,23 +188,25 @@ export type Vehicle = {
   job: Job | null;
 };
 
-export type Obstacle = {
-  id: string;
-  pos: Vec;
-  r: number;
-  kind: "rock" | "wreck" | "building" | "water" | "site";
-};
+export type Obstacle =
+  | { id: string; pos: Vec; r: number; kind: "rock" | "wreck" | "building" | "water" | "site" }
+  // yaw is the direction a landmark faces, toward its road, in radians from map +x toward +y.
+  | { id: string; pos: Vec; r: number; kind: "landmark"; look: LandmarkLook; yaw: number };
 
 // A timed relation one vehicle holds toward another. src/sim/states.ts owns them.
-export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce';
+export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce' | 'grievance' | 'plea';
 export type StateEnding = 'expired' | 'fulfilled' | 'broken';
+export type Plea = 'truce' | 'mercy';
 // A tow state: the holder tows the other party to `town` for `fee`, paid on arrival. hitched is false while the offer is open.
 // A tow promise: the terms of a tow the holder dropped for danger, which its next offer keeps.
 // A feud: robbery is true when the holder started it to rob the other party, so a win sends it to loot.
+// A plea: the holder asked the other party for a truce or for mercy. answered is false while the player has not
+// answered yet.
 export type StateData =
   | { kind: 'tow'; town: string; fee: number; hitched: boolean }
   | { kind: 'feud'; robbery: boolean }
   | { kind: 'towPromise'; town: string; fee: number }
+  | { kind: 'plea'; plea: Plea; answered: boolean }
   | { kind: 'patch'; deal: PatchDeal; parts: number; price: number; work: number; workLeft: number } // holder patches other
   | { kind: 'none' };
 export type NpcState = {
@@ -218,7 +226,8 @@ export type CallVar =
   | { kind: "distance"; tiles: number }
   | { kind: "bearing"; rad: number }
   | { kind: "count"; n: number; unit: string } // shown as "1 part" or "2 parts"
-  | { kind: "deal"; deal: PatchDeal; patcher: "player" | "npc"; price: number; parts: number; turns: number };
+  | { kind: "deal"; deal: PatchDeal; patcher: "player" | "npc"; price: number; parts: number; turns: number }
+  | { kind: "answer"; option: string }; // a driver's rolled answer, which picks the next line; never shown
 export type CallVars = Record<string, CallVar>;
 
 // An open radio call with the NPC `with`. A null topic means the hub of topics. `line` is what the NPC said
@@ -233,7 +242,7 @@ export type Player = {
   xpToday: Record<SkillId, number>; // XP per skill earned on day xpDay, for the daily soft cap
   xpDay: number;
   xpBySource: Record<XpSource, number>; // lifetime XP per source, for the debug console
-  perks: PerkId[]; // picked perks, at most one per pair; see src/sim/perks.ts
+  perks: PerkId[]; // picked perks, at most one per pair; see src/sim/progress.ts
   health: number;
   fuel: number;
   supplies: number;
@@ -299,6 +308,7 @@ export type GameEvent =
   | { t: 'call'; with: string; outcome: 'opened' | 'ended' }
   | { t: 'honk'; vehicle: string }
   | { t: 'patch'; patcher: string; client: string; outcome: 'started' | 'done' | 'lapsed' }
+  | { t: 'plea'; from: string; to: string; plea: Plea; accepted: boolean | null } // null while the player has to answer
   | { t: 'info'; text: string };
 
 export type World = {

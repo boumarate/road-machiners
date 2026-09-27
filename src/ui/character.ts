@@ -7,6 +7,7 @@ import { choosePerk, hasPerk, levelOf, pendingPerkPairs, perkPair, type PerkPair
 import type { SkillId, World } from '../sim/types';
 import { el, panel } from './dom';
 import type { UiHost } from './host';
+import { hp } from './units';
 
 export class CharacterScreen {
   private root = panel('modal');
@@ -38,7 +39,7 @@ export class CharacterScreen {
     this.root.replaceChildren(
       el('button', { class: 'close', onclick: () => this.close() }, 'Close [C]'),
       el('h3', {}, 'Character'),
-      el('div', { class: 'dim' }, `Health ${p.health}/${maxHealthOf(world)}   Knockouts ${p.knockouts}`),
+      el('div', { class: 'dim' }, `Health ${hp(p.health)}/${maxHealthOf(world)}   Knockouts ${p.knockouts}`),
       el('table', {}, ...SKILL_IDS.flatMap((id) => [this.row(id, p.skills[id], xpTodayOf(world, id)), this.perkRow(world, id)])),
     );
   }

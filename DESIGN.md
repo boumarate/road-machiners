@@ -50,7 +50,7 @@ The truck stays critical to progression, like the ship in Space Rangers 2.
 
 Movement and combat happen on the same map, in Space Rangers 2 style. Travel and fights use the same turns.
 
-Planning does not advance time. Clicks set or change the waypoint and show the route preview. Outside combat, Space starts automatic turns until the waypoint is reached. Space pauses after the current turn without clearing the waypoint, and another press resumes the route. Visible hostiles, player combat, collisions, breakdowns, an empty tank, panels and loss of browser focus pause automatic travel. Without a waypoint, or in combat or direct-drive mode, Space advances one turn. Holding Space fast-forwards turns, including combat, until released. Loading a save starts paused. In combat or direct-drive mode, the player sets movement and weapon orders, then ends the turn. All vehicles move at the same time, then all weapons fire at the same time.
+Planning does not advance time. Clicks set or change the waypoint and show the route preview. Outside combat, Space starts automatic turns until the waypoint is reached. Space pauses after the current turn without clearing the waypoint, and another press resumes the route. Visible hostiles, player combat, collisions, breakdowns, panels and loss of browser focus pause automatic travel. Without a waypoint, or in combat or direct-drive mode, Space advances one turn. Holding Space fast-forwards turns, including combat, until released. Loading a save starts paused. In combat or direct-drive mode, the player sets movement and weapon orders, then ends the turn. All vehicles move at the same time, then all weapons fire at the same time.
 
 Each chassis has max speed, acceleration, braking and turn rates. Momentum carries over: the speed you have is a committed distance for next turn. Faster trucks turn less per turn. Vehicles are physics bodies with suspension. Time only runs while a turn plays: each turn simulates one second of driving. Automatic travel and held Space start the next turn after playback finishes. Slopes, bumps and collisions come from the physics.
 
@@ -76,7 +76,7 @@ While knocked out, turns run on their own and the player gives no orders. Looter
 
 Raiders ignore a truck with nothing to take. A truck has loot when it holds goods, spare parts or mounted parts beyond the built-in ones. A feud still makes a raider fight a stripped truck.
 
-A truck with no working engine, a broken transmission or an empty tank still moves at a crawl. The driver pushes it. Pushing burns no fuel, and a truck without a working engine makes no sound. A player truck that can only crawl is stranded.
+A truck with no working engine, a broken transmission or an empty tank still moves at a crawl. The driver pushes it. Pushing burns no fuel, and a truck without a working engine makes no sound. A player truck that can only crawl is stranded. It can still travel automatically to a waypoint.
 
 Traders and scavengers help a stranded player. One that sees the truck may drive over, if it is not hostile and not in danger. It parks beside the truck and radios a tow offer to the nearest town it knows. The fee is a base price plus a price per tile of the route. The player accepts, refuses or hangs up. A driver the player turned down rarely offers again. A stranded player can also radio a passing trader or scavenger and ask for a tow.
 
@@ -152,7 +152,11 @@ A robbery is an attack. The winner searches the wreck or the knockout stock the 
 
 In a fight, each chance to ram the target is a decision. A ram that the driver expects to hurt itself more than the target is rare, and traders almost never ram.
 
-Damage from one vehicle to another is an attack, whether it comes from a shot or a crash. A missed shot counts too. The victim and its nearby faction mates that see it start a feud with the attacker. A slow bump that does no damage is not an attack, and neither is contact with the truck on a tow rope.
+A shot at another vehicle is an attack, hit or miss. The victim and its nearby faction mates that see it start a feud with the attacker. A damaging crash between hostile trucks is an attack too.
+
+A damaging crash between trucks at peace is most likely an accident. Each damaged NPC decides once whether to forgive it or retaliate. Most drivers forgive. Raiders and scumbags retaliate more often, and a crash with a faction mate is nearly always forgiven. A retaliating driver starts a feud as if it was attacked. A slow bump that does no damage counts for nothing, and neither does contact with the truck on a tow rope.
+
+A driver hurt by a hostile may plead with it. It asks for a truce, or it begs for mercy when it is weak. Traders and cowards plead most, and raiders seldom. The other side decides whether to accept. A truce ends the feuds between both sides and their nearby faction mates. Mercy is a truce the beggar pays for with its cargo, which it drops for the winner to take. A driver rarely pleads with the same foe again soon.
 
 States are timed relations between two trucks. Each ends as expired, fulfilled or broken, and each ending can start other states.
 
@@ -172,6 +176,10 @@ Talk is built from topics. A topic is lines and replies in data, and its logic i
 - Tow: see Defeat.
 - Patch: a patch gets a broken engine or gearbox going again at a quarter of its HP. A stranded player asks a trader or scavenger. A stranded NPC asks the player once, unless it carries the parts to fix its own truck. The NPC's traits roll the terms: paid, bring your own parts, or free. Only terms the payer can cover come up. The work runs while both trucks stay parked side by side, and the payment moves once when it ends. A deal nobody works on lapses for free.
 - Demand: a raider or robber about to attack radios first, once, and asks for the cargo. Handing it over drops the goods and loose parts beside the truck, and the attacker and its mates nearby keep a truce for a while. Shots break the truce. Refusing keeps the fight.
+- Truce and mercy: the player can call a hostile truck and ask for a truce or give up. Mercy costs the player's cargo. The driver's answer is rolled like an NPC plea. After an answer, the player cannot ask the same driver again for a while. A driver in a feud takes up only these topics. A hurt NPC calls the player with its own truce or plea for mercy. Sparing a beggar leaves its cargo on the ground.
+- Towing an NPC: the player can offer a tow to a stranded driver at peace parked within reach. The driver names its nearest known town and pays the tow fee, up to the money it holds, when the player reaches that town. The towed truck trails the player, and the player drives slower. The player can let it off the rope by radio for free. Hostility breaks the tow.
+- Patching an NPC: the player can offer a patch to a driver stranded by a broken engine or gearbox. The driver names its terms as it does when it asks.
+- Robbery: the player can demand the cargo of a truck at peace, once per driver. The driver gives it up, fights or runs. Traders and cowards give up more, raiders fight more, and every driver gives up to a much stronger player. Giving up drops the cargo beside the truck and holds a truce with the player. Fighting or running starts a feud.
 
 H honks. Traders and scavengers in earshot that are not hostile honk back.
 

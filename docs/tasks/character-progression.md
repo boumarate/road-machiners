@@ -157,6 +157,28 @@ Approach: replace the XP pool with per-skill practice first, then widen effects 
 - RK2 — Bots may stall on terrain or dialogue. The recorder fails loud when the player truck makes no progress for a day.
 - RK3 — Hiding traits changes NPC inspection for all players. It follows DESIGN.md, which already plans hidden traits.
 
+## Verify
+
+Result: passed for the game; the recorder has open stalls (see Notes).
+
+Happy-path:
+- CK1 — character screen shows five skills, perk buttons at level 2 and 4, and `! [C]` while a pick waits — held (screenshot).
+- CK2 — `npm run playtest` plays 12 turns without errors — held, 60 fps.
+
+Negative:
+- CK3 — today's XP shows a stale count after midnight — broke, fixed in f1a3a08 with `xpTodayOf()`.
+- CK4 — a towed player earns Driving XP from rough ground — broke, fixed in f6082c6.
+- CK5 — a scaled source gets NaN difficulty from a zero reach — held, `reachShare` throws on reach 0 and radio contacts need a scanner.
+
+Invariants / assumptions:
+- CK6 (IV1) — code outside `progress.ts` writes skill XP — held; only the replay copy and the recorder reset write it.
+- CK7 (IV3) — the same seed and archetype give different traces — held (record test).
+- CK8 (AS1) — far travel is close enough for XP rates — partly held; `ram` never fires and `roughSpeed` never applies in recordings.
+
+Smoke: `npm run progression:record` for 4 archetypes and seeds 1 to 3, 2000 turns each. 4 of 12 runs finished; 8 stalled on the stall check.
+Goal: proxy only — the user confirms the feel in play, and the curves need a full recording to judge.
+Notes: 4 stalls sit near map point (476 to 480, 150 to 175) on different seeds, so one bot cause is likely. The fix is in progress and does not touch game code.
+
 ## Code smells
 
 - src/sim/patch.ts:partsValue — prices an NPC client's parts with the player's buy price, so the player's Social skill lowers what an NPC pays (IV2).
@@ -180,3 +202,16 @@ Approach: replace the XP pool with per-skill practice first, then widen effects 
 - PH5 bots fire back, stop to cool the engine, work patch deals and use the beacon when stranded. Without these, bots broke down or went broke within a day. All bots use auto fire, not only the fighter.
 - PH5 a broke trader scavenges, and a scavenger with no stock left trades. Death ends a recording with a marker, and the report counts deaths per archetype.
 - PH5 `ram` never fires in recordings, because far travel has no crashes (AS1).
+
+### Hands-off decisions
+- make: mode switched to hands-off after PH5 on the user's request.
+- uexecute: merged main into the branch so it can merge cleanly. Smooth talker moved into main's new `parley.yieldTo`, so it also halves the goods a player gives up on a mercy plea.
+- uexecute: merged the game features before the recorder stalls are fixed. The stalls affect only dev tooling.
+- uexecute: kept the starting XP numbers. Perception reaches level 5 in 8 to 9 days for every archetype in the finished runs, likely from contact XP.
+
+### Deferred (needs user input)
+- PH6 target bands — the targets are a design choice. Decide how many days each level should take per play style, then I tune and lock them.
+- Toughness `heal` — it rounds to nothing at levels 1 to 4 outside town. Choose between fractional health and dropping the effect.
+- Radio `call` XP — calling and hanging up pays Social up to the daily cap. Choose whether a call must discuss a topic to pay.
+- Perception pace — contact XP likely dominates. Choose whether to cut the contact weight now or after the full recording.
+

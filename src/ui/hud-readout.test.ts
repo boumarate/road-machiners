@@ -27,6 +27,17 @@ describe('oasis interaction', () => {
   });
 });
 
+describe('salvage interaction', () => {
+  it('says a site is picked clean when its stock is empty', () => {
+    const site = REGION.locations.find((site) => site.id === 'podfield')!;
+    const w = emptyWorld({ ...sitePads(site)[0] });
+    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [] }];
+    expect(getContextAction(w, false)).toEqual({ label: `Search ${site.name}`, ready: true });
+    w.salvage[0].goods.scrap = 0;
+    expect(getContextAction(w, false)).toEqual({ label: `${site.name} is picked clean`, ready: false, hint: 'No loot left' });
+  });
+});
+
 describe("critical vehicle readout", () => {
   it("keeps money, survival resources, cab and driver condition visible", () => {
     const w = emptyWorld();
@@ -45,6 +56,15 @@ describe("critical vehicle readout", () => {
         .resources.slice(0, 3)
         .map((r) => r.value),
     ).toEqual(["1,234", "93 / 200 L", "7.3"]);
+  });
+  it("shows fractional cab HP and driver health as whole numbers", () => {
+    const w = emptyWorld();
+    const cab = corePart(w.vehicles[0], "cab");
+    cab.hp = 0.2;
+    w.player.health = 41.123456789;
+    const [, , , cabValue, driver] = getHudReadout(w).resources.map((r) => r.value);
+    expect(cabValue).toMatch(/^1 \/ \d+$/);
+    expect(driver).toBe(`42 / ${RULES.maxHealth}`);
   });
   it("warns at the actual fuel speed-limit threshold", () => {
     const w = emptyWorld();

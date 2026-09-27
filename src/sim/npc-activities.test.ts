@@ -219,6 +219,40 @@ describe('NPC activities', () => {
     expect(away.x * toThreat.x + away.y * toThreat.y).toBeLessThan(0);
   });
 
+  it('flees to a pad of a safe town, since trucks never enter a site', () => {
+    const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
+    const w = emptyWorld({ x: bowl.pos.x + 150, y: bowl.pos.y + 150 });
+    const pad = sitePads(bowl)[0];
+    const out = { x: pad.x - bowl.pos.x, y: pad.y - bowl.pos.y };
+    const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: pad.x + out.x * 0.3, y: pad.y + out.y * 0.3 });
+    trader.brain = npcBrain('trader', trader.pos, ['trader']);
+    addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: trader.pos.x + out.x * 0.2, y: trader.pos.y + out.y * 0.2 });
+    forceOption('hostileSeen', 'flee');
+    planNpcOrders(w);
+    const flee = topGoal(trader)!;
+    expect(flee.kind).toBe('flee');
+    expect(canUseSite(flee.destination!, bowl)).toBe(true);
+    expect(trader.order?.kind).toBe('stopAt');
+  });
+
+  it('a fleeing driver parked on its flee point stops fleeing', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 30, y: 30 });
+    trader.brain = npcBrain('trader', trader.pos, ['trader']);
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 });
+    raider.speed = 4;
+    forceOption('contactHeard', 'flee');
+    planNpcOrders(w);
+    expect(topGoal(trader)?.kind).toBe('flee');
+    resolveNpcActivities(w);
+    expect(topGoal(trader)?.kind).toBe('flee');
+    trader.pos = { ...topGoal(trader)!.destination! };
+    resolveNpcActivities(w);
+    expect(topGoal(trader)?.kind).not.toBe('flee');
+    planNpcOrders(w);
+    expect(topGoal(trader)?.kind).not.toBe('flee');
+  });
+
   it('a raider investigates a nearby heard player', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const player = w.vehicles[0];
@@ -229,6 +263,21 @@ describe('NPC activities', () => {
     planNpcOrders(w);
     expect(topGoal(raider)?.kind).toBe('investigate');
     expect(topGoal(raider)?.targetId).toBe(player.id);
+  });
+
+  it('a raider fighting a hostile in sight ignores a heard contact beyond sight', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const player = w.vehicles[0];
+    player.speed = 4;
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 }); // hears the player just past sight
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: raider.pos.x + 5, y: 30 });
+    trader.brain = npcBrain('trader', trader.pos, ['trader']);
+    forceOption('hostileSeen', 'fight');
+    forceOption('contactHeard', 'investigate');
+    planNpcOrders(w);
+    expect(topGoal(raider)?.kind).toBe('fight');
+    expect(topGoal(raider)?.targetId).toBe(trader.id);
   });
 
   it('a distant contact remains audible without redirecting a raider', () => {

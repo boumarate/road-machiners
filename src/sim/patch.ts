@@ -9,7 +9,7 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { PATCH } from '../data/wear';
 import { playerVehicle, vehicleById } from './damage';
-import { buyPrice } from './economy';
+import { getTradePrice } from './economy';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { removeGoods } from './inventory';
 import { decide, optionWeights } from './npc-decisions';
@@ -54,10 +54,10 @@ function partsHeld(v: Vehicle): number {
   return goodsCount(v).parts ?? 0;
 }
 
-// Parts are priced as the client's nearest town sells them.
+// Parts are priced as the client's nearest town sells them to the client.
 function partsValue(world: World, client: Vehicle, parts: number): number {
   const town = REGION.towns.reduce((a, b) => (dist(client.pos, a.pos) <= dist(client.pos, b.pos) ? a : b));
-  return parts * buyPrice(world, town.id, 'parts');
+  return parts * getTradePrice(world, client, town.id, 'parts', 'buy');
 }
 
 // The client's price. A player client's social skill talks it down, and the goodwill perk makes it free.

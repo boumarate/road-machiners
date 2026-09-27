@@ -9,7 +9,7 @@ import { findSpot, gridOf, isMounted, itemCells, MOUNT_CELLS, placementError, ty
 import { requireTown, townAt } from './sites';
 import { startJob } from './jobs';
 import { RULES } from '../data/rules';
-import { canReachSalvage } from './salvage';
+import { canReachSalvage, dumpOnPile } from './salvage';
 import { vehicleStats } from './stats';
 import type { GridItem, PartInstance, RefitJob, RefitMove, Vehicle, World } from './types';
 import { playerCommand } from './world';
@@ -112,13 +112,16 @@ export function takeFromStorage(world: World, partId: string, to: Spot): World {
   });
 }
 
-// Throw goods out to make room. Parts are never dumped; store or sell them in town.
-export function dumpGood(world: World, itemId: string): World {
+// Throw goods and loose parts onto a pile on the ground to make room. Installed parts must be removed first.
+// The player knows what lies on its own pile, so it needs no search.
+export function dumpItem(world: World, itemId: string): World {
   return playerCommand(world, (w) => {
     const me = playerVehicle(w);
     requireIdleRefit(me);
-    if (findItem(me, itemId).kind !== 'good') throw new Error('Only goods can be dumped');
-    me.items = me.items.filter((it) => it.id !== itemId);
+    const item = findItem(me, itemId);
+    if (isMounted(me.chassisId, item)) throw new Error('Remove an installed part before dumping it');
+    const pile = dumpOnPile(w, me, item);
+    if (!w.player.scavenged.includes(pile.id)) w.player.scavenged.push(pile.id);
   });
 }
 

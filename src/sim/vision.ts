@@ -15,7 +15,7 @@ import { PERK_NUMBERS } from '../data/skills';
 import { RULES } from '../data/rules';
 import { practice, skillEffect, vehicleHasPerk } from './progress';
 
-const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building'];
+const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building', 'landmark'];
 
 // A viewer's vision radius at a point: the base radius, shrunk by weather and at night, and widened by the
 // player's perception and, while parked, the lookout perk.

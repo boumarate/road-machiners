@@ -33,6 +33,7 @@ export const PAL = {
   radio: 0x8fe0c8, // crisp scanner blip
   flash: 0xfff0a0,
   lamp: { on: 0xfff2c8, off: 0x8a8470 }, // headlight glass, lit at night
+  truckGlow: 0xffffff, // faint white light over the player truck at night
   text: '#f0e0b8',
   textDim: '#b8a888',
 };

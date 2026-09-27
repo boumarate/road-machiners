@@ -280,7 +280,7 @@ describe('decision points', () => {
     w.vehicles[0].speed = 4; // loud enough to be heard past sight range
     const beyond = 30 + TERRAIN.vision.radius + 5; // just past sight
     const raider = addNpc(w, 'raiders', 'buggy', ['raider'], { x: beyond, y: 30 });
-    const scav = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: beyond, y: 31 });
+    const scav = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 60 - beyond, y: 30 }); // the other side, out of the raider's sight
     // The player is hostile to the scavenger through a feud, so both hear a hostile contact.
     addState(w, 'feud', scav.id, w.player.vehicleId, { kind: 'feud', robbery: false });
     expect(optionWeights(w, raider, 'contactHeard', w.player.vehicleId, null).investigate).toBeGreaterThan(0);

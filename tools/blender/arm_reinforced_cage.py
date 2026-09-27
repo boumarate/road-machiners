@@ -1,8 +1,9 @@
 """Reinforced cage for the 'reinforcedCage' armor.
 
-A front-edge row of 3 cells: 1.45 m across, 0.65 m deep, outer face at +X. Heavy box-section bars fill the row and
-rise to 1.6 m, with cross-bracing in every bay of the outer face and both sides. The top front rail and corner gussets take the
-faction paint.
+A front-edge row of 3 cells: 1.45 m across, 0.65 m deep, outer face at +X. A flat grille of heavy box-section bars,
+0.9 m tall, with cross-bracing in every bay. It stands STANDOFF past the outer edge on brackets, so it clears the body
+sides. The view leaves the bumper off its cells.
+The top rail and corner gussets take the faction paint.
 Run: blender --background --python tools/blender/arm_reinforced_cage.py -- public/models/arm_reinforced_cage.glb [tmp/arm_reinforced_cage.png]
 """
 
@@ -18,34 +19,29 @@ from shapes import strut  # noqa: E402
 
 N = 3
 SEED = 37
-TOP = 1.6
+HEIGHT = 0.9
 BAR = 0.07
-FRONT_X = OUTER_X - 0.06
-BACK_X = -OUTER_X + 0.05
+STANDOFF = 0.125
+GRILLE_X = OUTER_X + STANDOFF
+BRACKET_X = OUTER_X - 0.15
 
 
 def build(kit: Kit) -> None:
     edge = half_span(N) - 0.045
-    front_ys = (-edge, 0.0, edge)
-    for y in front_ys:
-        kit.box(f"post_front{y:.2f}", (BAR, BAR, TOP), (FRONT_X, y, TOP / 2), "metal", dent_by=0.004)
+    posts = (-edge, 0.0, edge)
+    for y in posts:
+        kit.box(f"post{y:.2f}", (BAR, BAR, HEIGHT), (GRILLE_X, y, HEIGHT / 2), "metal", dent_by=0.004)
+        for z in (0.12, HEIGHT - 0.1):
+            kit.box(f"bracket{y:.2f}_{z:.2f}", (GRILLE_X - BRACKET_X, 0.05, 0.05), ((GRILLE_X + BRACKET_X) / 2, y, z), "metal")
+    kit.box("low_rail", (BAR, edge * 2, BAR), (GRILLE_X, 0, 0.12), "metal")
+    kit.box("top_rail", (BAR + 0.01, edge * 2 + BAR, BAR + 0.01), (GRILLE_X, 0, HEIGHT - BAR / 2), "paint")
     for y in (-edge, edge):
-        kit.box(f"post_back{y:.2f}", (BAR, BAR, TOP), (BACK_X, y, TOP / 2), "metal", dent_by=0.004)
-        kit.box(f"top_side{y:.2f}", (FRONT_X - BACK_X, BAR, BAR), (0, y, TOP - BAR / 2), "metal")
-        kit.box(f"low_side{y:.2f}", (FRONT_X - BACK_X, BAR, BAR), (0, y, 0.12), "metal")
-        strut(kit, f"side_diag{y:.2f}", (FRONT_X, y, 0.15), (BACK_X, y, TOP - 0.08), 0.05, "rust_side")
-        strut(kit, f"side_diag_b{y:.2f}", (BACK_X, y, 0.15), (FRONT_X, y, TOP - 0.08), 0.05, "rust_side")
-        kit.box(f"gusset{y:.2f}", (0.02, 0.2, 0.2), (FRONT_X + BAR / 2 + 0.01, y - 0.08 * (y / edge), TOP - 0.12), "paint")
-    for z in (0.12, 0.8):
-        kit.box(f"front_rail{z:.2f}", (BAR, edge * 2, BAR), (FRONT_X, 0, z), "metal")
-    kit.box("front_top", (BAR + 0.01, edge * 2 + BAR, BAR + 0.01), (FRONT_X, 0, TOP - BAR / 2), "paint")
-    kit.box("back_rail", (BAR, edge * 2, BAR), (BACK_X, 0, TOP - BAR / 2), "metal")
-    x = FRONT_X + 0.02
+        kit.box(f"gusset{y:.2f}", (0.02, 0.16, 0.16), (GRILLE_X + BAR / 2 + 0.01, y - 0.06 * (y / edge), HEIGHT - 0.14), "paint")
+    x = GRILLE_X + 0.02
     for a, b in ((-edge, 0.0), (0.0, edge)):
-        for z0, z1 in ((0.15, 0.78), (0.82, TOP - 0.06)):
-            strut(kit, f"x_{a:.2f}_{z0:.2f}", (x, a, z0), (x, b, z1), 0.045, "rust")
-            strut(kit, f"x_{b:.2f}_{z0:.2f}", (x, b, z0), (x, a, z1), 0.045, "rust")
+        strut(kit, f"x_{a:.2f}", (x, a, 0.15), (x, b, HEIGHT - 0.08), 0.045, "rust")
+        strut(kit, f"x_{b:.2f}", (x, b, 0.15), (x, a, HEIGHT - 0.08), 0.045, "rust")
 
 
 if __name__ == "__main__":
-    run("arm_reinforced_cage", build, SEED, N, preview_m=3.6)
+    run("arm_reinforced_cage", build, SEED, N, reach=GRILLE_X + 0.06)

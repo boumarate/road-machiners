@@ -3,11 +3,13 @@ import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
 import { addVehicle, emptyWorld, testDrive } from './testkit';
 import { resolveDestroyed } from './combat';
-import { addGoods } from './inventory';
-import { corePart, goodsCount, mountedParts } from './grid';
+import { addGoods, dumpItem } from './inventory';
+import { corePart, goodsCount, isLoot, mountedParts } from './grid';
 import { partDef } from '../data/parts';
-import { takeAllLoot, canScavenge, scavenge } from './locations';
-import { collectSalvage, hasSalvage } from './salvage';
+import { chassisDef } from '../data/chassis';
+import { RULES } from '../data/rules';
+import { takeAllLoot, takeStores, canScavenge, scavenge } from './locations';
+import { clearPiles, collectSalvage, createKnockoutSalvage, hasSalvage, salvageUnits } from './salvage';
 import { sitePads } from './sites';
 import { freeCells } from './grid';
 import { endTurn } from './world';
@@ -26,6 +28,35 @@ describe('finite salvage', () => {
     expect(collectSalvage(w, b, 'test-stock', 100)).toBe(0);
   });
 
+  it('pours fuel and supplies up to the caps and leaves the rest', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = w.vehicles[0];
+    const cap = chassisDef(me.chassisId).fuelCap;
+    w.player.fuel = cap - 3;
+    w.player.supplies = RULES.suppliesCap - 1;
+    w.salvage.push({ id: 'test-stock', pos: { x: 30, y: 30 }, radius: 1, goods: {}, parts: [], fuel: 5, supplies: 4 });
+    expect(() => takeStores(w, 'test-stock')).toThrow(/Search/);
+    w.player.scavenged.push('test-stock');
+    const next = takeStores(w, 'test-stock');
+    const stock = next.salvage.find((s) => s.id === 'test-stock')!;
+    expect(next.player.fuel).toBe(cap);
+    expect(next.player.supplies).toBe(RULES.suppliesCap);
+    expect(stock.fuel).toBe(2);
+    expect(stock.supplies).toBe(3);
+    expect(hasSalvage(stock)).toBe(true);
+  });
+
+  it('lets an NPC collector take fuel and supplies', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 10, y: 10 });
+    npc.resources!.fuel = 0;
+    npc.resources!.supplies = 0;
+    w.salvage.push({ id: 'test-stock', pos: { x: 10, y: 10 }, radius: 1, goods: {}, parts: [], fuel: 5, supplies: 2 });
+    collectSalvage(w, npc, 'test-stock', 100);
+    expect(npc.resources).toEqual(expect.objectContaining({ fuel: 5, supplies: 2 }));
+    expect(hasSalvage(w.salvage.find((s) => s.id === 'test-stock')!)).toBe(false);
+  });
+
   it('never moves more than a stock holds, even asked for more', () => {
     const w = emptyWorld();
     w.salvage.push({ id: 'test-stock', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [] });
@@ -39,6 +70,9 @@ describe('finite salvage', () => {
     const w = emptyWorld({ ...sitePads(convoy)[0] });
     // Keep the built-ins so the truck still runs, but clear cargo so the search has room to fill.
     w.vehicles[0].items = w.vehicles[0].items.filter((item) => item.kind === 'part' && partDef(item.part.defId).kind === 'core');
+    // Empty the tank and stores so the convoy's fuel and supplies fit.
+    w.player.fuel = 0;
+    w.player.supplies = 0;
     const totalScrap = w.salvage.find((s) => s.id === convoy.id)!.goods.scrap;
     let next = scavenge(w);
     let turns = 0;
@@ -58,6 +92,8 @@ describe('finite salvage', () => {
     const stock = w.salvage.find((s) => s.id === landmark.id)!;
     expect(hasSalvage(stock)).toBe(true);
     expect(stock.goods.parts).toBeGreaterThan(0);
+    expect(stock.fuel).toBeGreaterThanOrEqual(SALVAGE.landmark.fuel[0]);
+    expect(stock.supplies).toBeGreaterThanOrEqual(SALVAGE.landmark.supplies[0]);
   });
 
   it('gives a wreck its mounted parts at their hp, and turns built-in parts into the parts good', () => {
@@ -90,4 +126,61 @@ describe('road wreck salvage', () => {
       expect(hasSalvage(stock!)).toBe(true);
     }
   }, 30_000);
+});
+
+describe('loot piles', () => {
+  const goodItem = (w: ReturnType<typeof emptyWorld>) => w.vehicles[0].items.find((it) => it.kind === 'good')!;
+  const piles = (w: ReturnType<typeof emptyWorld>) => w.salvage.filter((stock) => stock.pile);
+
+  it('merges drops in reach into one pile and starts a new one out of reach', () => {
+    let w = emptyWorld({ x: 30, y: 30 });
+    w.salvage = [];
+    w = dumpItem(w, goodItem(w).id);
+    w.turn += 5;
+    w = dumpItem(w, goodItem(w).id);
+    expect(piles(w)).toHaveLength(1);
+    expect(salvageUnits(piles(w)[0])).toBe(2);
+    expect(piles(w)[0].pile!.until).toBe(w.turn + SALVAGE.pileTurns);
+    expect(w.player.scavenged).toContain(piles(w)[0].id);
+    w.vehicles[0].pos = { x: 60, y: 30 };
+    w = dumpItem(w, goodItem(w).id);
+    expect(piles(w)).toHaveLength(2);
+  });
+
+  it('adds a knockout drop to the pile already in reach', () => {
+    let w = emptyWorld({ x: 30, y: 30 });
+    w.salvage = [];
+    w = dumpItem(w, goodItem(w).id);
+    const loot = w.vehicles[0].items.filter((it) => isLoot(w.vehicles[0].chassisId, it)).length;
+    createKnockoutSalvage(w, w.vehicles[0]);
+    expect(piles(w)).toHaveLength(1);
+    expect(salvageUnits(piles(w)[0])).toBe(loot + 1);
+  });
+
+  it('clears a pile when it expires and stops searches of it', () => {
+    let w = emptyWorld({ x: 30, y: 30 });
+    w.salvage = [];
+    w = dumpItem(w, goodItem(w).id);
+    const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 30, y: 31 });
+    const id = piles(w)[0].id;
+    npc.job = { kind: 'search', stockId: id, turnsLeft: 3, total: 3 };
+    w.turn = piles(w)[0].pile!.until - 1;
+    clearPiles(w);
+    expect(piles(w)).toHaveLength(1);
+    w.turn += 1;
+    clearPiles(w);
+    expect(piles(w)).toHaveLength(0);
+    expect(npc.job).toBeNull();
+    expect(w.player.scavenged).not.toContain(id);
+  });
+
+  it('clears a pile once it is empty', () => {
+    let w = emptyWorld({ x: 30, y: 30 });
+    w.salvage = [];
+    w = dumpItem(w, goodItem(w).id);
+    const pile = piles(w)[0];
+    pile.goods = {};
+    clearPiles(w);
+    expect(piles(w)).toHaveLength(0);
+  });
 });

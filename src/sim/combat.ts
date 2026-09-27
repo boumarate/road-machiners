@@ -451,16 +451,18 @@ export function noteAttack(world: World, attacker: Vehicle, victim: Vehicle, cal
   if (calm) startFeuds(world, attacker, victim);
 }
 
-// A crash damages both sides, so each side that took damage was attacked by the other. The event does not name a
-// striker. A slow bump deals no damage and is no attack. A tower and the truck it tows or offers to tow never
-// attack each other by contact.
+// A crash damages both sides, and the event does not name a striker. A slow bump deals no damage and counts for
+// nothing. Between hostiles, each damaged side was attacked by the other. Between trucks at peace, a crash is
+// most likely an accident: each damaged NPC holds a grievance and decides later whether to forgive it. A tower and
+// the truck it tows or offers to tow never attack each other by contact.
 export function noteCollision(world: World, a: Vehicle, b: Vehicle, hitsA: PartHit[], hitsB: PartHit[]): void {
   if (towPair(world, a, b)) return;
   const calm = !isHostile(world, a, b);
   const attacks = ([[b, a, hitsA], [a, b, hitsB]] as const).filter(([, , hits]) => hits.some((h) => h.damage > 0));
   for (const [attacker, victim] of attacks) {
     victim.lastHitBy = attacker.id;
-    noteAttack(world, attacker, victim, calm);
+    if (!calm) recordAttack(world, attacker, victim);
+    else if (victim.brain) addState(world, 'grievance', victim.id, attacker.id, { kind: 'none' });
   }
 }
 
@@ -468,7 +470,8 @@ function towPair(world: World, a: Vehicle, b: Vehicle): boolean {
   return stateOf(world, 'tow', a.id, b.id) !== null || stateOf(world, 'tow', b.id, a.id) !== null;
 }
 
-function startFeuds(world: World, shooter: Vehicle, target: Vehicle): void {
+// The target and its faction mates nearby that see the shooter start a feud with it.
+export function startFeuds(world: World, shooter: Vehicle, target: Vehicle): void {
   for (const v of world.vehicles) {
     if (!joinsFeud(world, v, shooter, target) || stateOf(world, "feud", v.id, shooter.id)) continue;
     addState(world, "feud", v.id, shooter.id, { kind: "feud", robbery: false });

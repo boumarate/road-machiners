@@ -50,6 +50,11 @@ export const TERRAIN = {
   // Tiles of falloff from a road edge, town edge or location edge down to zero elevation.
   // Keeps bends and junction approaches drivable without flattening remote landforms.
   flattenMargin: 15,
+  // Steepest height change per tile along any road. A loaded hauler still gains speed on 0.2, and
+  // blends at junctions add a little across the road.
+  roadGrade: 0.12,
+  // Steepest height change per tile of a cutting or bank beside a road: below the scree slope.
+  bankGrade: 0.3,
   // Noise elevation e (about -1..1) becomes height: e * hill, plus (e - mountainFrom) * mountain above
   // mountainFrom. The steep extra term makes mountain faces too steep to drive.
   height: { hill: 2.1, mountainFrom: 0.32, mountain: 11 },

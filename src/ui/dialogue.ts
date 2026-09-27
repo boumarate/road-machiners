@@ -49,6 +49,7 @@ const VAR_TEXT: VarText = {
   bearing: (v) => compass(v.rad),
   count: (v) => `${v.n} ${v.n === 1 ? v.unit : `${v.unit}s`}`,
   deal: dealText,
+  answer: () => { throw new Error('A rolled answer is never shown in a line'); },
 };
 
 function formatVar<K extends CallVar['kind']>(v: Extract<CallVar, { kind: K }>): string {

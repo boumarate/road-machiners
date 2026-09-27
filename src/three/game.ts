@@ -26,7 +26,7 @@ import {
 import { applyTurn, type PreparedTurn } from "../phys/turn";
 import { playerVehicle, vehicleById } from "../sim/damage";
 import { corePart, mountedParts } from "../sim/grid";
-import { applySiteAction } from "../sim/locations";
+import { applySiteAction, canLoot, salvageHere } from "../sim/locations";
 import { getContextAction } from "../ui/hud-readout";
 import { townAt } from "../sim/sites";
 import { isStranded, maxTurn, vehicleStats } from "../sim/stats";
@@ -36,7 +36,7 @@ import { CHASSIS } from "../data/chassis";
 import type { ShotRound, Vehicle, World } from "../sim/types";
 import type { Vec } from "../sim/vec";
 import { grayRadius, playerSees, tileOf, visibleTiles } from "../sim/vision";
-import { DEG, dist } from "../sim/vec";
+import { dist } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
 import { isTowed, setBeacon, unhitch } from "../sim/tow";
 import {
@@ -45,11 +45,9 @@ import {
   hostileToPlayer,
   newWorld,
   playerCanAct,
-  setAutoFire,
   setAutoRepair,
   setDirect,
   setMoveOrder,
-  setWeaponOrder,
 } from "../sim/world";
 import { PAL } from "../render/palette";
 import { timed } from "../perf";
@@ -59,8 +57,8 @@ import type { UiHost } from "../ui/host";
 import { Hud } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
 import { TownScreen } from "../ui/town";
-import { markerLines, WeaponPanel, weaponsForClick } from "../ui/weapons";
-import { CameraRig, KeyPan } from "./render/camera";
+import { toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
+import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
 import { Fx3D } from "./render/fx";
@@ -78,8 +76,8 @@ import { REGION } from "../data/region";
 import { TERRAIN_TYPES } from "../data/terrain";
 import { bodyOf } from "../sim/body";
 import { headingOf } from "../phys/frames";
-import { canLoot, salvageHere } from "../sim/locations";
-import { daylightAt, lightScene, sunLight } from "./render/daylight";
+import { isBusy } from "../sim/jobs";
+import { daylightAt, lightScene, NightLights, sunLight } from "./render/daylight";
 import { sunAt } from "../sim/sun";
 import { tileAt } from "../sim/terrain";
 import { ContactsView } from "./render/contacts";
@@ -88,6 +86,7 @@ import { ShadeView } from "./render/shade";
 import { SoundRingView } from "./render/soundRing";
 import { clearSave, hasSave, loadWorld, saveWorld, writeSave } from "./save";
 import { GameMenu } from "../ui/game-menu";
+import { volleyTally } from "../ui/format";
 import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
 import { computeEngineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
@@ -109,16 +108,6 @@ const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is reco
 // The circle under the hovered vehicle, which a click targets. Sizes are in tiles.
 const PICK_RING = { gap: 0.45, width: 0.06, alpha: 0.9, lift: 0.02 };
 
-// Headlight beams for every vehicle the player sees at night. Sight bounds the range.
-const BEAM_COLOR = 0xfff2c8;
-const BEAM_INTENSITY = 25; // lit only at night
-const BEAM_DECAY = 0.4; // below the physical 2, so the ground by the nose does not burn white
-const BEAM_RANGE = 70; // meters where the light fades to nothing
-const BEAM_ANGLE = 42 * DEG; // half-angle of the cone
-const BEAM_PENUMBRA = 0.6; // soft share of the cone edge
-const BEAM_HEIGHT = 4; // meters above the truck center where the beam starts
-const BEAM_AIM = { ahead: 30, down: 6 }; // meters ahead of the nose and below the truck center the beam points at
-
 type TurnPhase = ReturnType<UiHost["getTurnPhase"]>;
 
 const MOVE_MS = (TURN_STEPS / PHYSICS.stepsPerSecond) * 1000; // real time the movement plays over
@@ -134,7 +123,7 @@ export class Game {
   private readonly scene = new THREE.Scene();
   private readonly sun = sunLight();
   private readonly sky = new THREE.HemisphereLight();
-  private readonly beams: THREE.SpotLight[] = [];
+  private readonly nightLights = new NightLights(this.scene);
   private readonly vignette = Object.assign(document.createElement("div"), {
     className: "vignette",
   });
@@ -184,10 +173,8 @@ export class Game {
     }),
   );
   private selected: string | null = null;
-  private following = true;
   private readonly sightLimit: SightLimit;
-  private panFrom: { x: number; y: number } | null = null;
-  private keyPan = new KeyPan(() => this.isEditingControl());
+  private readonly follow: TruckFollow;
   private planFor: World | null = null;
   private last = performance.now();
   private idleSince = performance.now(); // when the last turn's playback ended, for the auto turn pace
@@ -224,6 +211,7 @@ export class Game {
     this.renderer.toneMappingExposure = 1.05;
     container.appendChild(this.renderer.domElement);
     this.rig = new CameraRig(container);
+    this.follow = new TruckFollow(this.rig, new KeyPan(() => this.isEditingControl()), this.renderer.domElement);
 
     this.scene.background = new THREE.Color(PAL.bg);
     this.renderer.domElement.classList.add("view");
@@ -237,10 +225,10 @@ export class Game {
     const groundScope = new RenderScope(this.ground, this.world.size, this.sightLimit, false);
     const propScope = new RenderScope(this.props, this.world.size, this.sightLimit, true);
     this.scopes = [groundScope, propScope];
-    const groundChunks = terrainMesh(this.world, groundScope);
+    const groundChunks = terrainMesh(this.world, groundScope, propScope);
     addSites(this.world.terrain, propScope);
     this.obstacles = new ObstacleViews(propScope, this.world.terrain);
-    this.obstacles.sync(this.world.obstacles);
+    this.obstacles.sync(this.world.obstacles, this.world.salvage);
     addScatter(this.world.terrain, this.world.obstacles, propScope);
     this.fog = new FogView(this.world, groundChunks, this.sightLimit);
     this.path = new PathView(this.world.terrain);
@@ -296,7 +284,7 @@ export class Game {
         ),
       isBusy: () => this.anim !== null,
       dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), honked: () => this.playHonks() },
-      recenter: () => (this.following = true),
+      recenter: () => this.follow.recenter(),
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.menu = new GameMenu({
@@ -339,7 +327,7 @@ export class Game {
 
   // Centers the camera on map point x, y at the given zoom and stops following, for browser scripts.
   debugView(x: number, y: number, zoom: number): void {
-    this.following = false;
+    this.follow.release();
     this.rig.setZoom(zoom);
     // An infinite step moves the smoothed follow all the way in one tick.
     this.rig.follow(groundPoint(this.world.terrain, { x, y }));
@@ -388,7 +376,7 @@ export class Game {
       this.shade.update(this.world);
     }
     if (!this.anim || this.anim.impacts)
-      this.obstacles.sync(this.world.obstacles);
+      this.obstacles.sync(this.world.obstacles, this.world.salvage);
     this.hud.renderTop(this.displayWorld());
     this.hud.renderRescue(this.displayWorld());
     if (!this.anim && this.world.player.state === "dead") this.death.show();
@@ -408,7 +396,7 @@ export class Game {
   private useContext(): void {
     if (this.anim || !playerCanAct(this.world)) return;
     if (townAt(this.world)) return this.town.open();
-    if (playerVehicle(this.world).job) return;
+    if (isBusy(playerVehicle(this.world))) return;
     const after = applySiteAction(this.world);
     if (after) {
       this.apply(after);
@@ -437,31 +425,31 @@ export class Game {
     this.hitCard.show();
   }
 
+  // Ground point of the order the truck drives, or null without one. While a turn plays, the order
+  // is the one the turn started with, since the turn may have finished it.
+  private orderPoint(): V3 | null {
+    const order = playerVehicle(this.anim ? this.anim.before : this.world).order;
+    return order === null || order.kind === "brake" ? null : groundPoint(this.world.terrain, order.dest);
+  }
+
   private refreshTargetMarkers(): void {
-    this.markers.refresh(this.anim ? null : markerLines(this.world, this.hovered));
+    this.markers.refresh(this.anim ? null : vehicleMarks(this.world, this.hovered));
   }
 
   private isEditingControl(): boolean {
     return document.activeElement?.matches("input, select, textarea") ?? false;
   }
 
-  // Input: left click orders or targets, right drag pans, wheel zooms, keys like the 2D game.
+  // Input: left click orders or targets, wheel zooms, keys like the 2D game.
   private bindInput(): void {
     const canvas = this.renderer.domElement;
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
     canvas.addEventListener("pointerdown", (e) => {
-      if (e.button === 2) this.panFrom = { x: e.clientX, y: e.clientY };
       if (e.button === 0) this.onLeftClick(e);
     });
     window.addEventListener("pointermove", (e) => {
-      if (this.panFrom) {
-        this.rig.panBy(e.clientX - this.panFrom.x, e.clientY - this.panFrom.y);
-        this.panFrom = { x: e.clientX, y: e.clientY };
-        this.following = false;
-      }
       if (e.target === canvas) this.onHover(e);
     });
-    window.addEventListener("pointerup", () => (this.panFrom = null));
     canvas.addEventListener("wheel", (e) => this.rig.zoomBy(e.deltaY), { passive: true });
     window.addEventListener("keyup", (e) => {
       if (e.code === "Space") this.travel.release();
@@ -477,7 +465,7 @@ export class Game {
       if (e.code === "Space") {
         if (!modal && this.travel.handleSpace(e, playing, this.world)) this.endTurn();
       }
-      if (e.code === "KeyF") this.following = true;
+      if (e.code === "KeyF") this.follow.recenter();
       if (e.code === "KeyM") this.toggleMute();
       if (e.code === "KeyQ" && !modal) this.weapons.toggleAuto();
       if (e.code === "KeyX" && !modal) this.weapons.toggleVisible();
@@ -548,11 +536,7 @@ export class Game {
   }
 
   private targetVehicle(target: Vehicle): void {
-    let w = this.world;
-    if (w.player.autoFire) w = setAutoFire(w, false);
-    for (const mw of weaponsForClick(w, this.selected))
-      w = setWeaponOrder(w, mw.part.id, { targetId: target.id, aim: "body" });
-    this.apply(w);
+    this.apply(toggleTarget(this.world, weaponsForClick(this.world, this.selected), target));
   }
 
   // While a turn plays, visibility follows the truck's current spot, not the end of the turn.
@@ -621,9 +605,11 @@ export class Game {
   }
 
   private updateTravel(): void {
-    this.travel.updateWorld(this.world, this.world.vehicles.some(
+    const danger = this.world.vehicles.some(
       (v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v),
-    ));
+    );
+    this.follow.noteDanger(danger);
+    this.travel.updateWorld(this.world, danger);
   }
 
   private beginTurn(
@@ -634,7 +620,6 @@ export class Game {
     const { world, playback, towed } = this.travel.beginPlayback(this.world, prepared, now, elapsed);
     this.world = world;
     this.anim = playback;
-    this.following = true;
     this.live = {
       visible: new Set(this.world.player.visible),
       explored: playback.before.player.explored.slice(),
@@ -725,12 +710,11 @@ export class Game {
   }
 
   // Explosions and broken parts where they happen, then one result sting for the turn.
-  // The player's horn at once, then each answer a beat later, nearest first. Fog silences unseen trucks.
+  // The player's horn at once, then each answer a beat later, nearest first. Answers come only from earshot, so unseen trucks are heard.
   private playHonks(): void {
-    const honks = this.world.events.filter((e) => e.t === "honk");
-    honks.forEach((e, i) => {
-      const p = this.eventPoint(e.vehicle);
-      if (p) this.sound.honk(p, i * HONK_REPLY_MS, vehicleById(this.world, e.vehicle).chassisId);
+    this.world.events.filter((e) => e.t === "honk").forEach((e, i) => {
+      const v = vehicleById(this.world, e.vehicle), f = this.frames[v.id] ?? restFrame(this.world, v);
+      this.sound.honk({ x: f.pos.x, y: f.pos.y + GUN_HEIGHT, z: f.pos.z }, i * HONK_REPLY_MS, v.chassisId);
     });
   }
 
@@ -818,11 +802,7 @@ export class Game {
         const def = gun && partDef(gun.defId);
         const heavy = def?.kind === "weapon" && def.look === "cannon";
         const slot = mine.findIndex((mw) => mw.part.id === e.weapon);
-        const hits = e.rounds.filter((r) => r.hit).length;
-        const dealt = e.rounds
-          .flatMap((r) => r.hits)
-          .reduce((sum, h) => sum + h.damage, 0);
-        const label = `${slot >= 0 ? `[${slot + 1}] ` : ""}${heavy ? "Cannon" : "MG"} ${hits}/${e.rounds.length}${e.rounds.some((r) => r.crit) ? " crit" : ""}${dealt > 0 ? ` −${dealt}` : ""}`;
+        const label = `${slot >= 0 ? `[${slot + 1}] ` : ""}${heavy ? "Cannon" : "MG"} ${volleyTally(e.rounds)}`;
         this.playVolley(a, b, e.rounds, heavy, label, e.target, rows);
       }
       if (e.t === "guardShot") {
@@ -836,16 +816,12 @@ export class Game {
             (REGION.settlement.guardTowerHeight + 0.2) * PHYSICS.metersPerTile,
           z: g.z,
         };
-        const hits = e.rounds.filter((r) => r.hit).length;
-        const dealt = e.rounds
-          .flatMap((r) => r.hits)
-          .reduce((sum, h) => sum + h.damage, 0);
         this.playVolley(
           a,
           b,
           e.rounds,
           false,
-          `Guards ${hits}/${e.rounds.length}${dealt > 0 ? ` −${dealt}` : ""}`,
+          `Guards ${volleyTally(e.rounds)}`,
           e.target,
           rows,
         );
@@ -947,7 +923,7 @@ export class Game {
             )
           ]
         : PAL.plan;
-    this.path.set(turns, first, course);
+    this.path.set(turns, first, course, !v.direct);
   }
 
   private advanceTurn(now: number): { step: number | null; speed: number } {
@@ -982,12 +958,11 @@ export class Game {
     const sightRadius = grayRadius(this.world, playerVehicle(this.world).pos) * PHYSICS.metersPerTile;
     this.sightLimit.set(truck, sightRadius);
     this.rig.leash(truck, sightRadius);
-    if (this.keyPan.pan(this.rig, dt)) this.following = false;
-    if (this.following) this.rig.follow(truck, this.hud.cameraMode === "auto" ? headingOf(this.frames[playerVehicle(this.world).id].rot) : null);
-    this.hud.showRecenter(!this.following);
-    this.rig.tick(dt);
+    this.follow.update(truck, this.hud.cameraMode === "auto" ? this.orderPoint() : null, this.anim !== null, dt);
+    this.hud.showRecenter(!this.follow.isFollowing());
     lightScene(this.sun, this.sky, truck, daylightAt(this.lightTurn()));
-    this.aimBeams(!sunAt(this.world.turn));
+    const lit = this.world.vehicles.filter((v) => this.frames[v.id] && this.sightLimit.reaches(this.frames[v.id].pos));
+    this.nightLights.update(!sunAt(this.world.turn), truck, lit.map((v) => ({ chassisId: v.chassisId, frame: this.frames[v.id] })));
     const at = playerVehicle(this.world).pos;
     this.stormTint.style.display = this.world.weather.some(
       (e) => e.kind === "storm" && dist(at, e.pos) <= e.radius,
@@ -1058,6 +1033,7 @@ export class Game {
       step === null || !this.anim ? null : this.anim.result.frames;
     const landed = !this.anim || this.anim.impacts;
     const night = !sunAt(this.world.turn);
+    const glass = daylightAt(this.lightTurn()).glass;
     const shown = [
       ...this.world.vehicles,
       ...(landed ? [] : this.world.removed),
@@ -1089,6 +1065,7 @@ export class Game {
       }
       view.update(display, seen);
       view.lamps(night);
+      view.windows(glass);
       view.pose(f, dt);
       view.aim(this.turretAim(v, f));
       this.vehicleParticles(display, f, frames !== null);
@@ -1099,50 +1076,6 @@ export class Game {
       view.dispose();
       this.views.delete(id);
     }
-  }
-
-  // A change in light count recompiles every material. So beams exist only at night, and through the night
-  // the pool only grows, to the most vehicles seen at once. Unused beams stay at zero until dawn.
-  private aimBeams(night: boolean): void {
-    if (!night) {
-      for (const beam of this.beams.splice(0)) {
-        this.scene.remove(beam, beam.target);
-        beam.dispose();
-      }
-      return;
-    }
-    const lit = this.world.vehicles.filter(
-      (v) => this.frames[v.id] && this.isVehicleVisible(v),
-    );
-    while (this.beams.length < lit.length) {
-      const beam = new THREE.SpotLight(
-        BEAM_COLOR,
-        0,
-        BEAM_RANGE,
-        BEAM_ANGLE,
-        BEAM_PENUMBRA,
-        BEAM_DECAY,
-      );
-      this.beams.push(beam);
-      this.scene.add(beam, beam.target);
-    }
-    this.beams.forEach((beam, i) => {
-      const v = lit[i];
-      const f = v && this.frames[v.id];
-      beam.intensity = f ? BEAM_INTENSITY : 0;
-      if (!f) return;
-      const rot = new THREE.Quaternion(f.rot.x, f.rot.y, f.rot.z, f.rot.w);
-      const at = new THREE.Vector3(f.pos.x, f.pos.y, f.pos.z);
-      const nose = bodyOf(v.chassisId).half.x;
-      beam.position.copy(
-        new THREE.Vector3(nose, BEAM_HEIGHT, 0).applyQuaternion(rot).add(at),
-      );
-      beam.target.position.copy(
-        new THREE.Vector3(nose + BEAM_AIM.ahead, -BEAM_AIM.down, 0)
-          .applyQuaternion(rot)
-          .add(at),
-      );
-    });
   }
 
   // Wheel dust rises from the ground just behind the rear wheels, so it never reads as exhaust.

@@ -116,6 +116,9 @@ describe('emergency beacon', () => {
 
   it('a trader out of sight but in range drives over and offers', () => {
     const s = stranded(player, { x: 130, y: 30 });
+    // The trader's first goal is the answer, not an idle roll of its own.
+    forceOption('idle', 'wait');
+    forceOption('strandedSeen', 'tow');
     const w = setBeacon(s.w, true);
     expect(w.player.beacon).toBe(true);
     expect(canVehicleSee(w, find(w, s.trader.id), playerVehicle(w).pos)).toBe(false);

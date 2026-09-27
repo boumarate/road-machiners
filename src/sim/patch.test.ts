@@ -163,6 +163,24 @@ describe('a stranded driver asking the player', () => {
     expect(w.player.talked[npc.id]).toEqual({ patchRequest: 'agreed' });
   });
 
+  it('the player can offer the patch over the radio before the driver asks', () => {
+    const { w: start, npc } = brokenNpc();
+    forceOption('patchDeal', 'paid');
+    let w = callVehicle(start, npc.id);
+    w = answer(w, 'Your truck looks dead. Want me to patch it?');
+    w = answer(w, 'What can you offer?');
+    w = answer(w, 'Deal. Stay where you are.');
+    expect(stateOf(w, 'patch', w.player.vehicleId, npc.id)).not.toBeNull();
+    expect(topGoal(find(w, npc.id))?.reason).toBe('wait for a patch');
+  });
+
+  it('a driver with a sound truck gets no patch offer', () => {
+    const { w: start, npc } = brokenNpc();
+    mountedParts(npc, 'engine')[0].hp = partDef('stockEngine').hp;
+    const w = callVehicle(start, npc.id);
+    expect(currentOptions(w).map((o) => o.text)).not.toContain('Your truck looks dead. Want me to patch it?');
+  });
+
   it('a driver carrying the parts fixes its own truck instead of asking', () => {
     const { w: start, npc } = brokenNpc();
     addGoods(start, npc, 'parts', 2);
@@ -185,6 +203,9 @@ describe('a stranded driver asking the player', () => {
     forceOption('patchDeal', 'paid');
     let w = endTurn(start, testDrive);
     w = answer(answer(w, 'What are you offering?'), 'Deal. Stay where you are.');
+    // The forced roll is only likely, so the deal is set to a paid one here.
+    const deal = patchData(stateOf(w, 'patch', w.player.vehicleId, npc.id)!);
+    Object.assign(deal, { deal: 'paid', price: Math.max(deal.price, 1) });
     find(w, npc.id).resources!.money = 0;
     w = setMoveOrder(w, { kind: 'stopAt', dest: { x: 38, y: 30 } });
     w = runUntil(w, 40, (x) => stateOf(x, 'patch', x.player.vehicleId, npc.id) === null).w;
@@ -268,6 +289,24 @@ describe('social on patch prices', () => {
     addGoods(w, npc, 'parts', 3);
     breakEngine(npc);
     expect(laborPrice(w, npc.id, XP_TO_REACH[5])).toBe(laborPrice(w, npc.id, 0));
+  });
+
+  it("an NPC client pays for the player's parts at the base price", () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 40, y: 30 }, Math.PI);
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    npc.resources!.money = 10000;
+    breakEngine(npc);
+    setParts(w, playerVehicle(w), 3);
+    const paidPrice = (social: number): number => {
+      const copy = cloneWorld(w);
+      copy.player.skills.social = social;
+      forceOption('patchDeal', 'paid');
+      const terms = patchTerms(copy, find(copy, npc.id));
+      if (terms?.kind !== 'deal' || terms.deal !== 'paid') throw new Error(`Expected paid terms, got ${JSON.stringify(terms)}`);
+      return terms.price;
+    };
+    expect(paidPrice(XP_TO_REACH[5])).toBe(paidPrice(0));
   });
 });
 

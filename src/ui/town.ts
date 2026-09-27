@@ -33,7 +33,7 @@ import type { PartInstance, Vehicle, World } from "../sim/types";
 import { el, panel } from "./dom";
 import { InventoryView } from "./inventory";
 import type { UiHost } from "./host";
-import { fuelLiters, kg, kph, liters, meters, mps2 } from "./units";
+import { fuelLiters, hp, kg, kph, liters, meters, mps2 } from "./units";
 
 type Tab = "trade" | "supplies" | "garage" | "trucks";
 
@@ -355,12 +355,12 @@ export class TownScreen {
 function cabLine(v: Vehicle): string {
   const cab = corePart(v, "cab");
   const broken = mountedParts(v).filter((p) => p.hp === 0).length;
-  return `Cab ${cab.hp}/${partDef(cab.defId).hp}, ${broken} broken ${broken === 1 ? "part" : "parts"}`;
+  return `Cab ${hp(cab.hp)}/${partDef(cab.defId).hp}, ${broken} broken ${broken === 1 ? "part" : "parts"}`;
 }
 
 function partLabel(p: PartInstance): string {
   const d = partDef(p.defId);
-  return `${d.name} ${p.hp}/${d.hp}${p.hp === 0 ? " BROKEN" : ""}`;
+  return `${d.name} ${hp(p.hp)}/${d.hp}${p.hp === 0 ? " BROKEN" : ""}`;
 }
 
 function partStats(d: PartDef): string {

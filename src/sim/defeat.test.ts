@@ -6,7 +6,7 @@ import { autoOrders, isHostile } from './combat';
 import { buyGood } from './economy';
 import { advanceKnockout, checkDeath, checkKnockout } from './defeat';
 import { corePart, coreParts, goodsCount, hasLoot, mountedParts } from './grid';
-import { addGoods, dumpGood, moveItem, spareParts } from './inventory';
+import { addGoods, dumpItem, moveItem, spareParts } from './inventory';
 import { scavenge } from './locations';
 import { startSearch } from './search';
 import { addState, endState, stateOf } from './states';
@@ -158,18 +158,20 @@ describe('knockout', () => {
     expect(w.events).toEqual([]);
   });
 
-  it('gives each knockout its own stock', () => {
+  it('adds a second knockout in the same place to the first pile', () => {
     let w = emptyWorld({ x: 30, y: 30 });
     w.salvage = [];
     corePart(w.vehicles[0], 'cab').hp = 0;
     w = endTurn(w, testDrive);
     w = endTurn(w, testDrive);
     expect(w.player.state).toBe('active');
+    const scrap = w.salvage[0].goods.scrap ?? 0;
     expect(addGoods(w, w.vehicles[0], 'scrap', 1)).toBe(1);
     corePart(w.vehicles[0], 'cab').hp = 0;
     w = endTurn(w, testDrive);
     expect(w.player.state).toBe('knockedOut');
-    expect(new Set(w.salvage.map((s) => s.id)).size).toBe(2);
+    expect(w.salvage).toHaveLength(1);
+    expect(w.salvage[0].goods.scrap).toBe(scrap + 1);
   });
 
   it('keeps the knocked-out truck in place over turns', () => {
@@ -286,7 +288,7 @@ describe('commands while knocked out', () => {
       () => startRepair(w, corePart(me, 'cab').id),
       () => startSearch(w, w.salvage[0].id),
       () => moveItem(w, me.items[0].id, { x: 0, y: 0, rot: 0 }),
-      () => dumpGood(w, me.items[0].id),
+      () => dumpItem(w, me.items[0].id),
       () => buyGood(w, 'scrap', 1),
       () => scavenge(w),
     ];

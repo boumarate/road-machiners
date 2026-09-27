@@ -16,7 +16,18 @@ import { playerCommand } from "./world";
 
 export { repairPlan };
 
+// An auto patch job yields to any job the player starts.
+export function isAutoPatch(job: Job | null): boolean {
+  return job?.kind === "repair" && job.auto === true;
+}
+
+// The truck runs a job that blocks other jobs.
+export function isBusy(v: Vehicle): boolean {
+  return v.job !== null && !isAutoPatch(v.job);
+}
+
 export function startJob(world: World, v: Vehicle, job: Job): void {
+  if (isAutoPatch(v.job)) cancelJob(world, v);
   if (v.job)
     throw new Error(`${v.name} is already busy with a ${v.job.kind} job`);
   if (v.speed > RULES.parkedSpeed) throw new Error("Stop the truck first");
@@ -65,6 +76,7 @@ export function startAutoRepair(world: World): void {
     parts: plan.parts,
     turnsLeft: plan.turns,
     total: plan.turns,
+    auto: true,
   });
 }
 

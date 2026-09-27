@@ -249,7 +249,7 @@ describe('NPC field repairs', () => {
     const next = turn(seed);
     const actor = actorIn(next);
     expect(actor.brain!.goals.map((g) => g.kind)).toEqual(['repair', 'flee']);
-    expect(actor.order?.kind).toBe('through');
+    expect(actor.order?.kind).toBe('stopAt');
     expect(goodsCount(actor).parts).toBe(2);
     if (pinned) {
       expect(actor.speed).toBe(0);
