@@ -8,7 +8,8 @@ import { goodsCount, mountedParts } from "./grid";
 import { partDef } from "../data/parts";
 import { repairPlan, repairTurn } from "./repair";
 import { searchTurn } from "./search";
-import type { Job, Vehicle, World } from "./types";
+import { applyRefitLayout, getRefitLayout } from './inventory';
+import type { Job, RefitJob, Vehicle, World } from "./types";
 import { playerCommand } from "./world";
 
 export { repairPlan };
@@ -72,17 +73,33 @@ export function advanceJobs(world: World): void {
 // A turn handler does one turn of work and returns true once the job is finished.
 function advanceJob(world: World, v: Vehicle, job: Job): void {
   if (v.speed > RULES.parkedSpeed) return endJob(world, v, job, "cancelled");
-  // Parts can leave the grid mid-job, by a sale, a knockout or a destroyed cargo part.
-  if (
-    job.kind === "repair" &&
-    repairPlan(world, v, job.partId, job.parts).parts === 0
-  )
-    return endJob(world, v, job, "cancelled");
-  const done =
-    job.kind === "repair"
-      ? repairTurn(world, v, job)
-      : searchTurn(world, v, job);
-  if (done) endJob(world, v, job, "done");
+  switch (job.kind) {
+    case 'refit': return advanceRefit(world, v, job);
+    case 'repair': return advanceRepair(world, v, job);
+    case 'search':
+      if (searchTurn(world, v, job)) endJob(world, v, job, 'done');
+  }
+}
+
+function advanceRepair(world: World, v: Vehicle, job: Extract<Job, { kind: 'repair' }>): void {
+  // Parts can leave the grid mid-job through damage, trade or a knockout.
+  if (repairPlan(world, v, job.partId, job.parts).parts === 0) return endJob(world, v, job, 'cancelled');
+  if (repairTurn(world, v, job)) endJob(world, v, job, 'done');
+}
+
+function advanceRefit(world: World, v: Vehicle, job: RefitJob): void {
+  const result = getRefitLayout(world, v, job);
+  if (result.error !== null) return endJob(world, v, job, 'cancelled');
+  job.turnsLeft -= 1;
+  if (job.turnsLeft > 0) return;
+  applyRefitLayout(world, v, result.items);
+  const pickup = job.pickup;
+  if (pickup) {
+    const stock = world.salvage.find((entry) => entry.id === pickup.stockId);
+    if (!stock) throw new Error('Refit stock disappeared after validation');
+    stock.parts = stock.parts.filter((part) => part.id !== pickup.partId);
+  }
+  endJob(world, v, job, 'done');
 }
 
 export function cancelJob(world: World, v: Vehicle): void {

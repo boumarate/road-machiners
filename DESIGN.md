@@ -18,7 +18,7 @@ The grid is a top view of the truck with the nose up. Each chassis marks some ce
 
 Cargo parts add full-width rows to the grid while mounted. A roof rack adds one row, a cargo box adds three.
 
-Goods take one cell per unit and can be moved or dumped anywhere. Mounting and unmounting parts needs a town garage. Spare parts ride in the grid or wait in garage storage.
+Goods take one cell per unit and can be moved or dumped anywhere. Select an inventory item, then click another to swap their positions if both fit. Dragging onto another item also swaps them. Spare parts ride in the grid or wait in garage storage. Garage equipment changes are instant. Outside town, installing or removing a part takes 5 parked turns per operation. Replacing an installed part with a spare takes 10 turns. Moving an installed part to another mount also takes 10 turns. The old layout remains active until the whole job finishes. Driving cancels the job and loses its progress. Rearranging, storing, dumping or collecting items is blocked during a refit. Missing items or invalid space cancel it. Installing a salvaged part takes 5 turns and leaves it in the stock until completion. Moving goods or spare parts without installing them stays instant.
 
 Every part and good has a mass. A heavier truck accelerates, brakes, steers and tops out worse. Trucks make tradeoffs: cargo vs armor vs fuel use. No truck is best at everything.
 

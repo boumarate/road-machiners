@@ -64,6 +64,20 @@ export type SalvageStock = {
   parts: PartInstance[];
 };
 
+export type RefitMove = {
+  itemId: string;
+  from: { x: number; y: number; rot: 0 | 1 };
+  to: { x: number; y: number; rot: 0 | 1 };
+};
+
+export type RefitJob = {
+  kind: 'refit';
+  moves: RefitMove[];
+  pickup: { stockId: string; partId: string; itemId: string; to: RefitMove['to'] } | null;
+  turnsLeft: number;
+  total: number;
+};
+
 // Work that needs the truck parked. Moving above parked speed cancels it, and finished turns are lost.
 export type Job =
   | {
@@ -73,7 +87,8 @@ export type Job =
       turnsLeft: number;
       total: number;
     } // parts: the most this job spends
-  | { kind: "search"; stockId: string; turnsLeft: number; total: number };
+  | { kind: "search"; stockId: string; turnsLeft: number; total: number }
+  | RefitJob;
 
 // A vehicle detected beyond sight. The circle always holds the true position, which it never reveals.
 // The circle always holds the vehicle's true position. loudness is how far the engine carries, in tiles,

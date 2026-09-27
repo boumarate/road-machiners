@@ -217,18 +217,19 @@ export class Hud {
     this.action.style.display = action || job ? "" : "none";
     if (job) {
       const progress = Math.round((1 - job.turnsLeft / job.total) * 100);
+      const label = { search: 'Search', repair: 'Repair', refit: 'Refit' }[job.kind];
       this.action.replaceChildren(
         el(
           "span",
           { class: "job-label" },
-          `${job.kind === "search" ? "Search" : "Repair"} · ${job.turnsLeft} turns left`,
+          `${label} · ${job.turnsLeft} turns left`,
         ),
         el(
           "span",
           {
             class: "job-bar",
             role: "progressbar",
-            "aria-label": `${job.kind === "search" ? "Search" : "Repair"} progress`,
+            "aria-label": `${label} progress`,
             "aria-valuemin": "0",
             "aria-valuemax": "100",
             "aria-valuenow": String(progress),
