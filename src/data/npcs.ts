@@ -439,6 +439,8 @@ export const NPC_BEHAVIOR = {
 };
 
 export const NPC_UPKEEP = {
+  repairParts: 2, // two field patches, kept out of sale cargo
+  shadeSearchRadius: 6, // a short local detour, rather than a journey while damaged
   lowFuel: RULES.lowFuelThreshold,
   lowSupplies: RULES.lowFuelThreshold,
   // Reserve one full tank and supply load before buying trade cargo.

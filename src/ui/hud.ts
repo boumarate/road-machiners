@@ -1,7 +1,7 @@
 // Vehicle instruments, critical resources, event history and inspection.
 
 import { partDef } from "../data/parts";
-import { corePart, coreParts, mountedParts } from "../sim/grid";
+import { baseGrid, corePart, coreParts, mountedParts } from "../sim/grid";
 import type { Job, Vehicle, World } from "../sim/types";
 import { el, panel } from "./dom";
 import {
@@ -10,9 +10,65 @@ import {
   formatNpcStates,
   formatNpcTraits,
 } from "./format";
-import { getHudReadout, getRescueReadout, moneyLabel } from "./hud-readout";
+import { getHudReadout, getRescueReadout, moneyLabel, TruckConditionReadout } from "./hud-readout";
 import { createIcon, createSpeedDial, type IconName } from "./icons";
 import { kph } from "./units";
+import { playerVehicle } from "../sim/damage";
+import "./truck-condition.css";
+
+type ConditionPart = ReturnType<TruckConditionReadout["update"]>[number];
+
+class TruckConditionView {
+  readonly root = el("div", { class: "truck-condition", "aria-label": "Truck part condition, nose up" });
+  private body = el("div", { class: "condition-chassis" });
+  private readout = new TruckConditionReadout();
+  private nodes = new Map<string, HTMLElement>();
+
+  constructor() {
+    this.root.append(this.body);
+  }
+
+  render(vehicle: Vehicle): void {
+    const grid = baseGrid(vehicle.chassisId);
+    this.body.style.width = `${grid.w * 30}px`;
+    this.body.style.height = `${grid.h * 30}px`;
+    const parts = this.readout.update(vehicle);
+    const ids = new Set(parts.map((part) => part.id));
+    for (const [id, node] of this.nodes) {
+      if (ids.has(id)) continue;
+      node.remove();
+      this.nodes.delete(id);
+    }
+    for (const part of parts) this.renderPart(part);
+  }
+
+  private renderPart(part: ConditionPart): void {
+    let node = this.nodes.get(part.id);
+    if (!node) {
+      node = el("div", { class: "condition-part", "data-part-id": part.id },
+        createIcon(part.icon), el("span", { class: "condition-percent" }));
+      this.nodes.set(part.id, node);
+      this.body.append(node);
+    }
+    node.dataset.condition = part.state;
+    node.title = `${part.name}: ${part.percent}%${part.percent === 0 ? " (broken)" : ""}`;
+    node.setAttribute("aria-label", node.title);
+    node.style.cssText = `left:${part.x * 30}px;top:${part.y * 30}px;width:${part.w * 30}px;height:${part.h * 30}px`;
+    const label = node.querySelector(".condition-percent");
+    if (!label) throw new Error("Condition percentage missing");
+    label.textContent = `${part.percent}%`;
+    if (part.hit) this.flashDamage(node);
+  }
+
+  private flashDamage(node: HTMLElement): void {
+    for (const animation of node.getAnimations()) animation.cancel();
+    node.animate([
+      { background: "#fa3934", borderColor: "#ffd1bd", offset: 0 },
+      { background: "#fa3934", borderColor: "#ffd1bd", offset: 0.65 },
+      { background: "#613b35", borderColor: "#de8e7d", offset: 1 },
+    ], { duration: 300, iterations: 2 });
+  }
+}
 
 // The E key action. ready is false while the truck must stop first.
 export type ContextAction = { label: string; ready: boolean };
@@ -52,6 +108,7 @@ function weatherLabel(w: World): string {
 
 export class Hud {
   private top = panel("instruments");
+  private condition = new TruckConditionView();
   private log = panel("log");
   private info = panel("info");
   private infoBody = el("div");
@@ -79,7 +136,7 @@ export class Hud {
     );
     this.help.append(guide);
     guide.append(
-      el("div", {}, "Click: drive through. Shift-click: stop there."),
+      el("div", {}, "Click: plan drive-through. Shift-click: plan stop there."),
       el("div", {}, "Click your truck: brake. No order: coast on."),
       el(
         "div",
@@ -89,7 +146,7 @@ export class Hud {
       el(
         "div",
         {},
-        "Space: end turn. A: auto fire. P: auto patch. C: character. I: inventory.",
+        "Space: start / pause travel. In combat: one turn. Hold: fast-forward. A: auto fire. P: auto patch. C: character. I: inventory.",
       ),
       el("div", {}, "R: manual driving, straight through anything."),
       el("div", {}, "Right-drag: pan. F: follow. Wheel: zoom. M: mute."),
@@ -210,7 +267,9 @@ export class Hud {
   renderTop(w: World): void {
     const readout = getHudReadout(w);
     const busy = this.actions.isBusy();
+    this.condition.render(playerVehicle(w));
     this.top.replaceChildren(
+      this.condition.root,
       el(
         "button",
         {

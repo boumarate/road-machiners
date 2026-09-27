@@ -3,6 +3,10 @@
 // Vehicles far from the player have no body and travel through advanceFar.
 
 import { RULES } from '../data/rules';
+import { CHASSIS } from '../data/chassis';
+import { warmRoutes } from '../sim/path';
+import { endTurn } from '../sim/world';
+import { perfSnapshot, resetPerf, type PerfStat } from '../perf';
 import { playerVehicle } from '../sim/damage';
 import { BRIDGE_RAILS } from '../sim/bridge';
 import { advanceFar } from '../sim/far';
@@ -12,8 +16,68 @@ import { isTowed } from '../sim/tow';
 import type { Pose, Vehicle, World } from '../sim/types';
 import { clamp, dist, type Vec } from '../sim/vec';
 import { visibleTiles } from '../sim/vision';
-import { bodyState, EDGE, RAIL, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type TurnResult } from './drive';
+import { bodyState, captureDrive, freeDrive, initPhysics, restoreDrive, EDGE, RAIL, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type DriveSnapshot, type TurnResult } from './drive';
 import { headingOf, toMap } from './frames';
+
+export type TurnState = Omit<World, 'terrain'>;
+export type TurnTask = { world: TurnState; drive: DriveSnapshot };
+export type PreparedTurn = {
+  world: TurnState;
+  result: Omit<TurnResult, 'next'> & { next: DriveSnapshot };
+};
+export type TurnRequest = TurnTask & { id: number; terrain: World['terrain'] | null };
+export type TurnResponse =
+  | { id: number; turn: PreparedTurn; perf: Record<string, PerfStat> }
+  | { id: number; error: string };
+
+export function computeTurn(task: TurnTask, terrain: World['terrain']): PreparedTurn {
+  // Worker messages drop frozen flags. Turn clones must keep the terrain and its route cache.
+  Object.freeze(terrain.heights);
+  Object.freeze(terrain.types);
+  Object.freeze(terrain);
+  const drive = restoreDrive(task.drive);
+  let result: TurnResult | null = null;
+  try {
+    const world = endTurn({ ...task.world, terrain }, physicsMove(drive, (next) => { result = next; }));
+    if (!result) throw new Error('Turn ran without physics');
+    const { terrain: _terrain, ...state } = world;
+    const { next, ...motion } = result as TurnResult;
+    return { world: state, result: { ...motion, next: captureDrive(next) } };
+  } finally {
+    freeDrive(drive);
+    if (result) freeDrive((result as TurnResult).next);
+  }
+}
+
+function startTurnWorker(): void {
+  let terrain: World['terrain'] | null = null;
+  const ready = initPhysics();
+  self.onmessage = async (event: MessageEvent<TurnRequest>) => {
+    const request = event.data;
+    try {
+      await ready;
+      if (request.terrain) {
+        terrain = request.terrain;
+        warmRoutes({ ...request.world, terrain }, [...new Set(Object.values(CHASSIS).map((chassis) => chassis.radius))]);
+      }
+      if (!terrain) throw new Error('Turn worker has no terrain');
+      resetPerf();
+      const turn = computeTurn(request, terrain);
+      self.postMessage({ id: request.id, turn, perf: perfSnapshot() } satisfies TurnResponse, {
+        transfer: [turn.result.next.snapshot.buffer as ArrayBuffer],
+      });
+    } catch (error) {
+      self.postMessage({ id: request.id, error: describeWorkerError(error) } satisfies TurnResponse);
+    }
+  };
+}
+
+function describeWorkerError(error: unknown): string {
+  return error instanceof Error ? error.stack ?? error.message : String(error);
+}
+
+// The same turn pipeline is importable by the game and is the dedicated worker entry point.
+if (typeof self !== 'undefined' && !('document' in self)) startTurnWorker();
 
 const EXPLORE_EVERY = 4; // trail poses between sight checks while exploring along a turn
 const STOPPED = 0.05; // tiles per turn; slower than this a braking truck counts as stopped

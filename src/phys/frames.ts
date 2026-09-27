@@ -11,6 +11,15 @@ export type WheelFrame = { steer: number; spin: number; suspension: number }; //
 export type VehicleFrame = { pos: V3; rot: Quat; wheels: WheelFrame[] }; // wheels follow wheelMounts order
 export type TurnFrames = Record<string, VehicleFrame[]>; // by vehicle id
 
+// Offsets a round across the line of fire in meters, positive to the shooter's right.
+export function computeRoundPoint(a: V3, b: V3, offset: number): V3 {
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const len = Math.hypot(dx, dz);
+  if (!(len > 0)) throw new Error("Shot from its own target point");
+  return { x: b.x - (dz / len) * offset, y: b.y, z: b.z + (dx / len) * offset };
+}
+
 const S = PHYSICS.metersPerTile;
 
 export function toPhys(p: Vec, height: number): V3 {

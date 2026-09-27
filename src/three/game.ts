@@ -12,7 +12,6 @@ import {
   restFrame,
   simulateTurn,
   syncDrive,
-  trailFrames,
   TURN_STEPS,
   type Drive,
   type TurnResult,
@@ -24,7 +23,7 @@ import {
   type V3,
   type VehicleFrame,
 } from "../phys/frames";
-import { applyTurn, physicsMove } from "../phys/turn";
+import { applyTurn, type PreparedTurn } from "../phys/turn";
 import { playerVehicle } from "../sim/damage";
 import { corePart, mountedParts } from "../sim/grid";
 import { canScavenge, salvageNear, scavenge } from "../sim/locations";
@@ -42,7 +41,6 @@ import { acceptTow, isTowed, playerTow, refuseTow, setBeacon, unhitch } from "..
 import {
   autoRuns,
   cloneWorld,
-  endTurn,
   hostileToPlayer,
   newWorld,
   playerCanAct,
@@ -91,19 +89,14 @@ import { clearSave, hasSave, loadWorld, saveWorld, writeSave } from "./save";
 import { GameMenu } from "../ui/game-menu";
 import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
-import { engineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
+import { computeEngineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
 import type { SoundPlayer } from "../audio/player";
 import { uiRoot } from "../ui/dom";
+import { Travel, type Playback, type LiveVision } from "./travel";
+import { computeRoundPoint } from "../phys/frames";
 
 const PLAN_TURNS = 3; // turns of path preview
 
-// Ground speed in m/s at one physics step of a vehicle's turn frames.
-function stepSpeed(frames: VehicleFrame[] | undefined, step: number): number {
-  if (!frames || step < 1 || step >= frames.length) return 0;
-  const a = frames[step - 1].pos;
-  const b = frames[step].pos;
-  return Math.hypot(b.x - a.x, b.z - a.z) * PHYSICS.stepsPerSecond;
-}
 const PICK_PX = 30; // click radius around a vehicle's screen position
 const MIN_ZONE_HALF_ANGLE = Math.PI / 12; // zones stay visible for trucks that barely turn
 const DUST_CHANCE = 0.3; // per moving vehicle per frame while a turn plays, times the ground's dust value
@@ -125,21 +118,7 @@ const BEAM_PENUMBRA = 0.6; // soft share of the cone edge
 const BEAM_HEIGHT = 4; // meters above the truck center where the beam starts
 const BEAM_AIM = { ahead: 30, down: 6 }; // meters ahead of the nose and below the truck center the beam points at
 
-type LiveVision = {
-  visible: Set<number>;
-  explored: Uint8Array;
-  from: Vec | null;
-};
 type TurnPhase = ReturnType<UiHost["getTurnPhase"]>;
-// before is the world at the turn's start: panels and vehicles show it until the shots land.
-type Playback = {
-  result: TurnResult;
-  before: World;
-  start: number | null;
-  moved: boolean;
-  impacts: boolean;
-  combat: boolean;
-};
 
 const MOVE_MS = (TURN_STEPS / PHYSICS.stepsPerSecond) * 1000; // real time the movement plays over
 const MOVED_BY_RULES = 0.5; // tiles between a vehicle's drawn spot and its sim spot that mean the rules moved it
@@ -147,17 +126,6 @@ const MARKER_LIFT = 3.5; // meters above a target where its weapon marker sits
 
 const GUN_HEIGHT = 1.6; // meters above the body center where shots start and land
 const ROUND_STAGGER = 0.4; // share of the shot time over which a burst's rounds leave the gun
-
-// Where a round lands: `offset` meters from target point b, across the line of fire from a, positive to the
-// shooter's right. A hit lands on the target at its offset, a miss beside it.
-// 3D x is map x and 3D z is map y, so the right-hand normal matches the sim's.
-function besideTarget(a: V3, b: V3, offset: number): V3 {
-  const dx = b.x - a.x;
-  const dz = b.z - a.z;
-  const len = Math.hypot(dx, dz);
-  if (!(len > 0)) throw new Error("Shot from its own target point");
-  return { x: b.x - (dz / len) * offset, y: b.y, z: b.z + (dx / len) * offset };
-}
 
 export class Game {
   private world: World;
@@ -197,6 +165,7 @@ export class Game {
   private frames: Record<string, VehicleFrame> = {}; // last shown pose per vehicle
   // A played turn: physics movement, then shots in flight when there was combat, then time to read results.
   private anim: Playback | null = null;
+  private readonly travel = new Travel(CONFIG.travelHoldMs);
   private phase: TurnPhase = null;
   private readonly weaponRange = new WeaponRangeView();
   private readonly markers = new Map<string, HTMLDivElement>(); // weapon markers above targets, by target id
@@ -391,6 +360,7 @@ export class Game {
   }
 
   apply(next: World): void {
+    this.travel.pause();
     this.world = next;
     syncDrive(this.drive, this.world);
     this.refreshUi();
@@ -562,13 +532,19 @@ export class Game {
     canvas.addEventListener("wheel", (e) => this.rig.zoomBy(e.deltaY), {
       passive: true,
     });
+    window.addEventListener("keyup", (e) => {
+      if (e.code === "Space") this.travel.release();
+    });
+    window.addEventListener("blur", () => this.travel.pause());
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) this.travel.pause();
+    });
     window.addEventListener("keydown", (e) => {
       if (this.isEditingControl() || this.death.isShown()) return;
       const modal = this.modalOpen();
-      const playing = this.anim !== null;
+      const playing = this.travel.isPlaying(this.anim);
       if (e.code === "Space") {
-        e.preventDefault();
-        if (!e.repeat && !modal) this.endTurn();
+        if (!modal && this.travel.handleSpace(e, playing, this.world)) this.endTurn();
       }
       if (e.code === "KeyF") this.following = true;
       if (e.code === "KeyM") this.toggleMute();
@@ -708,42 +684,38 @@ export class Game {
   }
 
   endTurn(): void {
-    if (this.anim || this.modalOpen() || this.world.player.state === "dead")
-      return;
-    const before = this.world;
-    let ran: TurnResult | null = null;
-    this.world = endTurn(
-      this.world,
-      physicsMove(this.drive, (r) => (ran = r)),
-    );
-    if (!ran) throw new Error("Turn ran without physics");
-    const result: TurnResult = ran;
-    // A towed truck has no physics body. Its tower placed it along a trail, which the playback follows.
-    const me = playerVehicle(this.world);
-    const towed = !result.frames[me.id];
-    if (towed) result.frames[me.id] = trailFrames(this.world, me);
+    if (this.travel.isPlaying(this.anim) || this.modalOpen() || this.world.player.state === "dead") return;
+    this.travel.request(this.world, this.drive);
+  }
+
+  private updateTravel(): void {
+    this.travel.updateWorld(this.world, this.world.vehicles.some(
+      (v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v),
+    ));
+  }
+
+  private beginTurn(
+    prepared: PreparedTurn,
+    now: number,
+    elapsed: number,
+  ): void {
+    const { world, playback, towed } = this.travel.beginPlayback(this.world, prepared, now, elapsed);
+    this.world = world;
+    this.anim = playback;
     this.live = {
       visible: new Set(this.world.player.visible),
-      explored: before.player.explored.slice(),
+      explored: playback.before.player.explored.slice(),
       from: null,
     };
-    const combat = this.world.events.some(
+    playback.combat = this.world.events.some(
       (e) =>
         (e.t === "shot" &&
           this.eventPoint(e.shooter) !== null &&
           this.eventPoint(e.target) !== null) ||
         (e.t === "guardShot" && this.eventPoint(e.target) !== null),
     );
-    this.anim = {
-      result,
-      before,
-      start: null,
-      moved: false,
-      impacts: false,
-      combat,
-    };
     // A towed truck's engine is off.
-    if (!towed) this.playDriveSound(result);
+    if (!towed) this.playDriveSound(playback.result);
     this.phase = "Moving";
     this.path.clear();
     this.refreshUi();
@@ -834,12 +806,7 @@ export class Game {
 
   private playDriveSound(result: TurnResult): void {
     const frames = result.frames[playerVehicle(this.world).id];
-    const g = engineGlide(
-      stepSpeed(frames, 1),
-      stepSpeed(frames, frames.length - 1),
-      MOVE_MS / 1000,
-      MIX,
-    );
+    const g = computeEngineGlide(frames, MOVE_MS / 1000, MIX);
     if (!g) return;
     this.loops.drive(g);
     if (g.brake) this.sound.at("air-brake", frames[0].pos, 0);
@@ -969,7 +936,7 @@ export class Game {
         rounds.length > 1
           ? (k / (rounds.length - 1)) * CONFIG.combatShotMs * ROUND_STAGGER
           : 0;
-      const land = besideTarget(a, b, r.offset);
+      const land = computeRoundPoint(a, b, r.offset);
       const struck = r.hit || r.hits.length > 0;
       this.fx.shot(a, land, struck, heavy, delay, flight);
       this.sound.at(heavy ? "cannon-fire" : "mg-fire", a, delay);
@@ -987,7 +954,11 @@ export class Game {
 
   // The path preview chains physics turns from the current state, so it shows what will happen.
   private refreshPlan(): void {
-    if (this.anim || this.planFor === this.world) return;
+    if (
+      this.travel.isAdvancing(this.anim, this.last) ||
+      this.planFor === this.world
+    )
+      return;
     this.planFor = this.world;
     // A knocked-out or towed truck takes no orders, and a towed one has no body to preview.
     if (!playerCanAct(this.world)) return this.path.clear();
@@ -1043,11 +1014,28 @@ export class Game {
     this.path.set(turns, first, course);
   }
 
+  private advanceTurn(now: number): { step: number | null; speed: number } {
+    if (this.modalOpen() || this.isEditingControl() || document.hidden)
+      this.travel.pause();
+    const speed = this.travel.getSpeed(now, CONFIG.travelFastSpeed);
+    const wasPlaying = this.anim !== null;
+    let step = this.animStep(now, speed);
+    this.updateLiveVision();
+    this.updateTravel();
+    const prepared = this.anim ? null : this.travel.takeReady(this.world, this.drive, now);
+    if (prepared) {
+      this.beginTurn(prepared, now, this.travel.getRemainder(wasPlaying));
+      step = this.animStep(now, speed);
+      this.updateTravel();
+    }
+    this.travel.prepareNext(this.world, this.anim, now);
+    return { step, speed };
+  }
+
   private tick(now: number): void {
     const dt = now - this.last;
     this.last = now;
-    const step = this.animStep(now);
-    this.updateLiveVision();
+    const { step, speed } = this.advanceTurn(now);
     this.syncVehicles(step);
     this.drawOverlays();
     const me = this.frames[playerVehicle(this.world).id];
@@ -1057,7 +1045,7 @@ export class Game {
     this.sun.target.position.copy(
       me ? new THREE.Vector3(me.pos.x, me.pos.y, me.pos.z) : focus,
     );
-    const light = daylightAt(this.lightTurn(now));
+    const light = daylightAt(this.lightTurn());
     const horiz = Math.cos(light.elevation) * SUN_RADIUS;
     this.sun.position
       .copy(this.sun.target.position)
@@ -1080,7 +1068,7 @@ export class Game {
     )
       ? ""
       : "none";
-    this.fx.tick(dt);
+    this.fx.tick(dt * speed);
     this.playPanelSounds();
     this.updateLoops();
     this.weather.advance(dt);
@@ -1114,25 +1102,27 @@ export class Game {
 
   // The clock the light shows. While a turn's movement plays it glides from the previous turn to this one,
   // so the sun moves and changes color continuously instead of once per turn.
-  private lightTurn(now: number): number {
+  private lightTurn(): number {
     const a = this.anim;
-    if (!a || a.start === null) return this.world.turn - (a ? 1 : 0);
-    return this.world.turn - 1 + Math.min(1, (now - a.start) / MOVE_MS);
+    if (!a) return this.world.turn;
+    return this.world.turn - 1 + Math.min(1, a.elapsed / MOVE_MS);
   }
 
   // Physics step shown now while the movement plays, or null otherwise. Advances the playback phases.
-  private animStep(now: number): number | null {
+  private animStep(now: number, speed: number): number | null {
     const a = this.anim;
     if (!a) return null;
-    if (a.start === null) a.start = now;
-    const elapsed = now - a.start;
+    const elapsed = this.travel.advanceClock(a, now, speed);
     if (elapsed < MOVE_MS)
       return Math.floor((elapsed / 1000) * PHYSICS.stepsPerSecond);
     if (!a.moved) this.finishMovement(a);
     const impactAt = MOVE_MS + (a.combat ? CONFIG.combatShotMs : 0);
     if (elapsed >= impactAt && !a.impacts) this.landImpacts(a);
-    if (elapsed >= impactAt + (a.combat ? CONFIG.combatReadMs : 0))
+    const finishAt = impactAt + (a.combat ? CONFIG.combatReadMs : 0);
+    if (elapsed >= finishAt) {
+      this.travel.finishClock(elapsed, finishAt);
       this.finishPlayback();
+    }
     return null;
   }
 
@@ -1288,7 +1278,8 @@ export class Game {
   }
 
   private drawOverlays(): void {
-    const hide = this.anim !== null || this.modalOpen();
+    const hide =
+      this.travel.isAdvancing(this.anim, this.last) || this.modalOpen();
     // Steering zones and the path preview only help a driver who can give orders.
     const steer = !hide && playerCanAct(this.world);
     this.zones.root.visible = steer;

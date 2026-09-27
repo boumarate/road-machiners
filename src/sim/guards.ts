@@ -9,7 +9,11 @@ import { corePart } from './grid';
 import { chance, randInt, randRange } from './rng';
 import { siteGates, type Site } from './sites';
 import type { ShotRound, Vehicle, World } from './types';
-import { dist } from './vec';
+import { dist, type Vec } from './vec';
+
+export function isTownGuarded(pos: Vec): boolean {
+  return REGION.towns.some((town) => siteGates(town).some((gate) => dist(gate, pos) <= RULES.guards.range));
+}
 
 export function fireGuards(world: World): void {
   const fired = new Set(world.events.flatMap((e) => (e.t === 'shot' ? [e.shooter] : [])));
