@@ -3,6 +3,7 @@
 // grid, so ramming and blocking still happen. The grid itself lives in ./nav. An NPC driver weighs the cost by
 // its own taste, so drivers between the same points take different ways.
 
+import { REGION } from '../data/region';
 import { crossesRail } from './bridge';
 import { count, timed } from '../perf';
 import { findCells, nearestFreeCell, stampOverlay, startComponent } from './nav/astar';
@@ -95,31 +96,71 @@ export function keepRoute(world: World, dest: Vec, points: Vec[], extra: Blocker
 // touch. A kill wreck or parked vehicle the route was not planned around must keep full clearance
 // from every leg. Static obstacles, cliffs and the known blockers are as the planner checked them.
 export function continueRoute(world: World, from: Vec, kept: KeptRoute, to: Vec, radius: number, extra: Blocker[], driver?: Pick<Vehicle, "id" | "brain">): Vec[] | null {
+  return timed('route-continue', () => continueKept(world, from, kept, to, radius, extra, driver));
+}
+
+function continueKept(world: World, from: Vec, kept: KeptRoute, to: Vec, radius: number, extra: Blocker[], driver: Pick<Vehicle, "id" | "brain"> | undefined): Vec[] | null {
+  const c = legCheck(world, kept, radius, extra);
+  const { rest, moved } = remainingPoints(from, kept, to);
+  if (lastBrokenLeg(c, from, rest, moved) >= 0) return null;
+  // Shortcuts from the new position, as a fresh plan takes them, so the truck does not hold to a corner
+  // chosen from where it was a turn ago.
+  return straightenAhead(c.nav, c.statics, c.dynamic, from, rest, c.reach, tasteOf(world, driver));
+}
+
+// What the legs of a kept route are checked against. `fresh` holds the dynamic blockers the route was
+// not planned around.
+type LegCheck = { nav: TerrainNav; statics: StaticSet; dynamic: Blocker[]; fresh: Blocker[]; radius: number; reach: number };
+
+function legCheck(world: World, kept: KeptRoute, radius: number, extra: Blocker[]): LegCheck {
   const dynamic = dynamicBlockers(world.obstacles, extra);
   const known = new Set(kept.blockers);
   const fresh = dynamic.filter((o) => !known.has(blockerKey([o])));
-  const nav = terrainNav(world.terrain);
-  const statics = staticSet(world.obstacles, world.terrain.size);
-  const reach = radius + CLEARANCE;
+  return { nav: terrainNav(world.terrain), statics: staticSet(world.obstacles, world.terrain.size), dynamic, fresh, radius, reach: radius + CLEARANCE };
+}
+
+// The kept points still ahead of the vehicle. A route that ended on its old point now ends on `to`,
+// and `moved` tells so.
+function remainingPoints(from: Vec, kept: KeptRoute, to: Vec): { rest: Vec[]; moved: boolean } {
   const points = kept.points;
   let k = 0;
   while (k < points.length - 1 && passed(from, points[k], points[k + 1])) k++;
-  const last = points[points.length - 1];
-  const moved = last.x === kept.dest.x && last.y === kept.dest.y && (last.x !== to.x || last.y !== to.y);
-  const rest = moved ? [...points.slice(k, -1), to] : points.slice(k);
-  const leg = (a: Vec, b: Vec) => lineCost(nav, statics, dynamic, a, b, radius, costliestTile(nav, a, [b], 0, 0), null) < Infinity;
-  if (!leg(from, rest[0])) return null;
-  if (moved && rest.length > 1 && !leg(rest[rest.length - 2], to)) return null;
-  for (const o of fresh) {
-    let prev = from;
-    for (const p of rest) {
-      if (segmentDist(o.pos, prev, p) < o.r + reach) return null;
-      prev = p;
-    }
+  const moved = endMoved(kept, to);
+  return { rest: moved ? [...points.slice(k, -1), to] : points.slice(k), moved };
+}
+
+// Whether the route ended on its old point and that point moved to `to`. A route that ended at the
+// closest reachable spot keeps its end.
+function endMoved(kept: KeptRoute, to: Vec): boolean {
+  const last = kept.points[kept.points.length - 1];
+  return last.x === kept.dest.x && last.y === kept.dest.y && (last.x !== to.x || last.y !== to.y);
+}
+
+// Index into `rest` of the end point of the last leg that no longer holds, or -1 when all hold. Leg i
+// runs from the previous point, or from the vehicle for i = 0, to rest[i].
+function lastBrokenLeg(c: LegCheck, from: Vec, rest: Vec[], moved: boolean): number {
+  const touches = (a: Vec, b: Vec) => lineCost(c.nav, c.statics, c.dynamic, a, b, c.radius, costliestTile(c.nav, a, [b], 0, 0), null) === Infinity;
+  let broken = lastFreshHit(c, from, rest);
+  if (moved && rest.length > 1 && touches(rest[rest.length - 2], rest[rest.length - 1])) broken = rest.length - 1;
+  if (broken < 0 && touches(from, rest[0])) broken = 0;
+  return broken;
+}
+
+// Index of the last leg that passes within clearance of a fresh blocker, or -1.
+function lastFreshHit(c: LegCheck, from: Vec, rest: Vec[]): number {
+  for (let i = rest.length - 1; i >= 0; i--) {
+    const a = i === 0 ? from : rest[i - 1];
+    if (c.fresh.some((o) => segmentDist(o.pos, a, rest[i]) < o.r + c.reach)) return i;
   }
-  // Shortcuts from the new position, as a fresh plan takes them, so the truck does not hold to a corner
-  // chosen from where it was a turn ago.
-  return shortcut(nav, statics, dynamic, from, rest, reach, tasteOf(world, driver));
+  return -1;
+}
+
+// Shortcuts over the points up to the first one past REGION.navigation.lookahead tiles along the route.
+// Later points stay as planned, so reuse costs the same on a long trip as on a short one.
+function straightenAhead(nav: TerrainNav, statics: StaticSet, dynamic: Blocker[], from: Vec, points: Vec[], reach: number, taste: Taste | null): Vec[] {
+  let end = 0;
+  for (let length = dist(from, points[0]); end < points.length - 1 && length <= REGION.navigation.lookahead; end++) length += dist(points[end], points[end + 1]);
+  return [...shortcut(nav, statics, dynamic, from, points.slice(0, end + 1), reach, taste), ...points.slice(end + 1)];
 }
 
 // Whether at is beyond point a along the leg from a to b.

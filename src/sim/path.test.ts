@@ -162,6 +162,18 @@ describe('kept routes', () => {
     expect(rest.at(-1)).toEqual(to);
   });
 
+  it('straightens only the road ahead and keeps the corners past the lookahead', () => {
+    const w = emptyWorld();
+    // A zigzag over open ground: a fresh plan would drive straight, so every kept corner is removable.
+    const points = Array.from({ length: 40 }, (_, i) => ({ x: 32 + i * 4, y: i % 2 === 0 ? 30 : 32 }));
+    const from = { x: 30, y: 30 };
+    const again = continueRoute(w, from, keepRoute(w, points.at(-1)!, points, []), points.at(-1)!, 0.6, [])!;
+    const far = points.filter((p) => routeLength(from, points.slice(0, points.indexOf(p) + 1)) > REGION.navigation.lookahead + 8);
+    expect(far.length).toBeGreaterThan(10);
+    expect(again.slice(-far.length)).toEqual(far);
+    expect(again.length).toBeLessThan(points.length);
+  });
+
   it('ends on a destination that moved, and drops the route for a vehicle parked on a later leg', () => {
     const { w, from, to, points } = bent();
     const kept = keepRoute(w, to, points, []);

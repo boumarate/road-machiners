@@ -43,6 +43,10 @@ export const REGION = {
     // so a driver can prefer a road up to 67% longer. A road on the worst taste costs 1.25, below
     // hardpan beside it on the best taste at 0.75 x 1.75 / 0.9, so drivers keep to roads where they have one.
     taste: { scale: 40, strength: 0.5 },
+    // Tiles of a kept route a driver re-straightens each time it reuses the route. The rest stays as
+    // planned. It covers 4 turns, a real turn plus 3 preview turns, at the top speed of 11.7 tiles per
+    // turn: the fastest chassis with the strongest engine.
+    lookahead: 48,
   },
   towns: [
     { id: "bowl", name: "Bowl", pos: scalePoint({ x: 16, y: 94 }), radius: 28 },
