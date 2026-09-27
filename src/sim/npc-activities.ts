@@ -24,7 +24,7 @@ import { getResources } from "./resources";
 import { randInt } from "./rng";
 import { canReachSalvage, hasSalvage } from "./salvage";
 import { beginSearch } from "./search";
-import { vehicleStats } from "./stats";
+import { getMobilityCondition, vehicleStats } from "./stats";
 import type { NpcActivity, Vehicle, World } from "./types";
 import { canUseSite, isWalled, siteGates } from "./sites";
 import { clamp, dist, type Vec } from "./vec";
@@ -90,9 +90,9 @@ function hasSaleCargo(vehicle: Vehicle): boolean {
   );
 }
 
-function getCabCondition(vehicle: Vehicle): number {
+function getCombatCondition(vehicle: Vehicle): number {
   const cab = corePart(vehicle, "cab");
-  return cab.hp / partDef(cab.defId).hp;
+  return Math.min(cab.hp / partDef(cab.defId).hp, getMobilityCondition(vehicle));
 }
 
 function computeVisibleStrength(vehicle: Vehicle): number {
@@ -150,7 +150,7 @@ function chooseDangerActivity(
         ? profile.recoverCondition
         : profile.fleeCondition;
     const weak =
-      getCabCondition(vehicle) <= conditionThreshold ||
+      getCombatCondition(vehicle) <= conditionThreshold ||
       getResources(world, vehicle).health / RULES.maxHealth <=
         conditionThreshold;
     if (
@@ -187,8 +187,13 @@ function chooseDangerActivity(
   );
   const contact = contacts[0];
   if (!contact) return null;
+  return chooseContactActivity(world, vehicle, profile, contact);
+}
+
+function chooseContactActivity(world: World, vehicle: Vehicle, profile: NpcClass, contact: ReturnType<typeof contactsOf>[number]): NpcActivity | null {
+  if (getCombatCondition(vehicle) <= profile.recoverCondition) return null;
   const template = NPCS[vehicle.brain!.templateId];
-  if (template.brain === "raider")
+  if (canInvestigateContact(vehicle, template.brain, profile))
     return createActivity(
       "investigate",
       contact.vehicleId,
@@ -203,6 +208,10 @@ function chooseDangerActivity(
   );
 }
 
+function canInvestigateContact(vehicle: Vehicle, brain: string, profile: NpcClass): boolean {
+  return brain === 'raider' && getCombatCondition(vehicle) > profile.recoverCondition;
+}
+
 function chooseServiceActivity(
   world: World,
   vehicle: Vehicle,
@@ -215,7 +224,7 @@ function chooseServiceActivity(
   const lowSupplies =
     resources.supplies <= RULES.suppliesCap * NPC_UPKEEP.lowSupplies;
   const damaged =
-    getCabCondition(vehicle) <= profile.fleeCondition ||
+    getCombatCondition(vehicle) <= profile.fleeCondition ||
     mountedParts(vehicle).some((part) => part.hp === 0);
   if (!lowFuel && !lowSupplies && !damaged) return null;
   const reason = lowFuel

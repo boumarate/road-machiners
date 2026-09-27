@@ -8,14 +8,13 @@ import { warmRoutes } from '../sim/path';
 import { endTurn } from '../sim/world';
 import { perfSnapshot, resetPerf, type PerfStat } from '../perf';
 import { playerVehicle } from '../sim/damage';
-import { BRIDGE_RAILS } from '../sim/bridge';
 import { advanceFar } from '../sim/far';
-import { applyCrash, nearestEdge } from '../sim/movement';
+import { applyContactCrash } from '../sim/crash-contact';
 import { burnFuel } from '../sim/resources';
-import type { Pose, Vehicle, World } from '../sim/types';
-import { clamp, dist, type Vec } from '../sim/vec';
+import type { Pose, World } from '../sim/types';
+import { dist } from '../sim/vec';
 import { visibleTiles } from '../sim/vision';
-import { bodyState, captureDrive, freeDrive, initPhysics, restoreDrive, EDGE, RAIL, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type DriveSnapshot, type TurnResult } from './drive';
+import { bodyState, captureDrive, freeDrive, initPhysics, restoreDrive, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type DriveSnapshot, type TurnResult } from './drive';
 import { headingOf, toMap } from './frames';
 
 export type TurnState = Omit<World, 'terrain'>;
@@ -122,30 +121,8 @@ export function applyTurn(w: World, r: TurnResult): void {
     const a = w.vehicles.find((v) => v.id === c.a);
     if (!a) throw new Error(`Crash with unknown vehicle ${c.a}`);
     const b = w.vehicles.find((v) => v.id === c.b) ?? null;
-    applyCrash(w, a, b, c.b, crashPoint(w, a, b, c.b), toTilesPerTurn(c.impact));
+    applyContactCrash(w, a, b, c.b, toTilesPerTurn(c.impact), c.contact);
   }
-}
-
-// Where the blow on a comes from: the other vehicle's center, the obstacle's center or the nearest map edge point.
-function crashPoint(w: World, a: Vehicle, b: Vehicle | null, what: string): Vec {
-  if (b) return b.pos;
-  if (what === EDGE) return nearestEdge(w, a.pos);
-  if (what === RAIL) return nearestRailPoint(a.pos);
-  const o = w.obstacles.find((x) => x.id === what);
-  if (!o) throw new Error(`Crash with unknown obstacle ${what}`);
-  return o.pos;
-}
-
-function nearestRailPoint(p: Vec): Vec {
-  let best: Vec | null = null;
-  for (const [a, b] of BRIDGE_RAILS) {
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const t = clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy), 0, 1);
-    const q = { x: a.x + dx * t, y: a.y + dy * t };
-    if (!best || dist(p, q) < dist(p, best)) best = q;
-  }
-  return best!;
 }
 
 // Tiles the player saw while driving count as explored, not only those seen at the turn's end.

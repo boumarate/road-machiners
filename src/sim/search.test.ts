@@ -54,7 +54,7 @@ describe('timed scavenging search', () => {
 
   it('lets an NPC scavenger finish a search job', () => {
     const w = emptyWorld({ x: 60, y: 60 });
-    const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 10, y: 10 });
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });
     npc.brain = { templateId: 'scavenger', activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0, refusedTow: false };
     for (const key of ['buggy', 'gunwagon', 'trader', 'scavenger']) w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
     const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;

@@ -20,6 +20,7 @@ import type { MoveOrder, Vehicle, World } from '../sim/types';
 import { angleDiff, clamp, DEG, dist, type Vec } from '../sim/vec';
 import { bodyOf, type Body } from '../sim/body';
 import { wheelMounts } from './body';
+import { computeClosingSpeed, locateCrashContact, type CrashGeometry } from '../sim/crash-contact';
 import { headingOf, headingQuat, type TurnFrames, type VehicleFrame } from './frames';
 
 const S = PHYSICS.metersPerTile;
@@ -55,7 +56,7 @@ export type Drive = {
 // Collider handles of the Canyon Bridge deck and its two rails.
 export type Bridge = { deck: number; rails: number[] };
 
-export type Crash = { a: string; b: string; impact: number }; // b is a vehicle id, an obstacle id, 'edge' or 'rail'; impact in m/s
+export type Crash = { a: string; b: string; impact: number; contact: CrashGeometry }; // b is a vehicle id, an obstacle id, 'edge' or 'rail'; impact in m/s
 export type VehicleResult = { passed: boolean; arrived: boolean };
 export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; results: Record<string, VehicleResult> };
 
@@ -187,13 +188,13 @@ function run(d: Drive, w: World, steps: number): TurnResult {
   const crashes: Crash[] = [];
   const crashed = new Set<string>(); // one crash per pair per turn
   for (let i = 0; i < steps; i++) {
-    const before = new Map(cars.map((c) => [c.v.id, c.body.linvel()]));
+    const before = new Map(cars.map((c) => [c.v.id, captureImpactMotion(c.body)]));
     for (const c of cars) driveStep(c);
     for (const c of cars) c.ctl.updateVehicle(DT);
     world.step(events);
     events.drainCollisionEvents((h1, h2, started) => {
       if (!started) return;
-      const crash = crashOf(h1, h2, owner, obstacleOf, d, before);
+      const crash = crashOf(h1, h2, owner, obstacleOf, d, before, world, w);
       if (!crash) return;
       const key = [crash.a, crash.b].sort().join('|');
       if (crashed.has(key)) return;
@@ -208,7 +209,7 @@ function run(d: Drive, w: World, steps: number): TurnResult {
   return { next: { world, bodies: { ...d.bodies }, obstacles: { ...d.obstacles }, memory, terrain: d.terrain, bridge: d.bridge }, frames, crashes, results };
 }
 
-function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf: Map<number, string>, d: Drive, before: Map<string, RAPIER.Vector>): Crash | null {
+function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf: Map<number, string>, d: Drive, before: Map<string, ImpactMotion>, physics: RAPIER.World, state: World): Crash | null {
   const a = owner.get(h1) ?? owner.get(h2);
   if (a === undefined) return null;
   const other = owner.get(h1) === a ? h2 : h1;
@@ -216,8 +217,62 @@ function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf:
   if (other === d.terrain || other === d.bridge.deck) return null;
   const va = before.get(a)!;
   const b = owner.get(other) ?? obstacleOf.get(other) ?? (d.bridge.rails.includes(other) ? RAIL : EDGE);
-  const vb = owner.has(other) ? before.get(b)! : { x: 0, y: 0, z: 0 };
-  return { a, b, impact: Math.hypot(va.x - vb.x, va.z - vb.z) };
+  return captureCrash(physics, state, before, { a, b, first: owner.get(h1) === a ? h1 : h2, other }, va);
+}
+
+function captureCrash(physics: RAPIER.World, state: World, before: Map<string, ImpactMotion>, pair: { a: string; b: string; first: number; other: number }, va: ImpactMotion): Crash | null {
+  const vb = before.get(pair.b) ?? { velocity: { x: 0, y: 0, z: 0 }, heading: 0 };
+  const vehicle = state.vehicles.find((v) => v.id === pair.a);
+  if (!vehicle) throw new Error(`Unknown crash vehicle ${pair.a}`);
+  const target = state.vehicles.find((v) => v.id === pair.b) ?? null;
+  const hit = readCrashContact(physics, physics.getCollider(pair.first), physics.getCollider(pair.other), vehicle, target, va, vb);
+  return hit ? { a: pair.a, b: pair.b, ...hit } : null;
+}
+
+type ImpactMotion = { velocity: RAPIER.Vector; heading: number };
+
+function rotateToBody(vector: Vec, heading: number): Vec {
+  const c = Math.cos(heading);
+  const s = Math.sin(heading);
+  return { x: vector.x * c + vector.y * s, y: vector.y * c - vector.x * s };
+}
+
+function readManifoldPoints(manifold: RAPIER.TempContactManifold, flipped: boolean): { a: Vec[]; b: Vec[] } {
+  const points = { a: [] as Vec[], b: [] as Vec[] };
+  for (let i = 0; i < manifold.numContacts(); i++) {
+    const first = manifold.localContactPoint1(i);
+    const second = manifold.localContactPoint2(i);
+    if (!first || !second) throw new Error('Missing collision contact point');
+    const pair = [{ x: first.x, y: first.z }, { x: second.x, y: second.z }];
+    if (flipped) pair.reverse();
+    points.a.push(pair[0]);
+    points.b.push(pair[1]);
+  }
+  return points;
+}
+
+function readCrashContact(world: RAPIER.World, first: RAPIER.Collider, second: RAPIER.Collider, a: Vehicle, b: Vehicle | null, motionA: ImpactMotion, motionB: ImpactMotion): { impact: number; contact: CrashGeometry } | null {
+  const hits: { impact: number; contact: CrashGeometry }[] = [];
+  world.contactPair(first, second, (manifold, flipped) => {
+    const raw = manifold.normal();
+    const sign = flipped ? -1 : 1;
+    const normal = { x: raw.x * sign, y: raw.z * sign };
+    if (Math.hypot(normal.x, normal.y) === 0) return;
+    const impact = computeClosingSpeed({ x: motionA.velocity.x - motionB.velocity.x, y: motionA.velocity.z - motionB.velocity.z }, normal);
+    const points = readManifoldPoints(manifold, flipped);
+    if (points.a.length === 0) return;
+    const contact = {
+      a: locateCrashContact(a.chassisId, points.a, rotateToBody(normal, motionA.heading)),
+      b: b ? locateCrashContact(b.chassisId, points.b, rotateToBody({ x: -normal.x, y: -normal.y }, motionB.heading)) : null,
+    };
+    hits.push({ impact, contact });
+  });
+  hits.sort((a, b) => b.impact - a.impact);
+  return hits[0] ?? null;
+}
+
+function captureImpactMotion(body: RAPIER.RigidBody): ImpactMotion {
+  return { velocity: body.linvel(), heading: headingOf(body.rotation()) };
 }
 
 function makeCar(world: RAPIER.World, body: RAPIER.RigidBody, b: Body, mass: number): RAPIER.DynamicRayCastVehicleController {

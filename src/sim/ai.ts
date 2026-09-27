@@ -7,10 +7,9 @@ import {
   setNpcActivity,
 } from "./npc-activities";
 import { vehicleStats } from "./stats";
+import { shouldRam } from './crash-contact';
 import type { Vehicle, World } from "./types";
 import { angleDiff, bearing, dist, type Vec } from "./vec";
-
-const STRAFE_ANGLE = Math.PI / 3;
 
 export function planNpcOrders(world: World): void {
   for (const v of world.vehicles) {
@@ -18,6 +17,7 @@ export function planNpcOrders(world: World): void {
     const tpl = NPCS[v.brain.templateId];
     if (!tpl) throw new Error(`Unknown NPC template ${v.brain.templateId}`);
     const b = v.brain;
+    delete b.ramTarget;
     if (b.recovery) b.recovery--;
     const activity = chooseNpcActivity(world, v);
     setNpcActivity(world, v, activity, activity.reason);
@@ -64,13 +64,13 @@ export function planNpcOrders(world: World): void {
       goal = computeFightGoal(world, v, preferredRange, target);
     }
     v.order =
-      yielding || !goal
+      vehicleAhead(world, v) || !goal
         ? { kind: "brake" }
         : b.recovery
           ? { kind: "stopAt", dest: b.recoveryGoal! }
           : {
               kind:
-                activity.kind === "fight" || activity.kind === "flee"
+                b.ramTarget || activity.kind === "flee"
                   ? "through"
                   : "stopAt",
               dest: goal,
@@ -85,33 +85,26 @@ function computeFightGoal(
   preferredRange: number,
   target: Vehicle,
 ): Vec {
-  const d = dist(v.pos, target.pos);
   const lead = {
     x: target.pos.x + Math.cos(target.heading) * target.speed,
     y: target.pos.y + Math.sin(target.heading) * target.speed,
   };
-  if (d > preferredRange) return lead;
-  const hasTurret = vehicleStats(world, v).weapons.some(
-    (w) => w.def.arc >= 360,
-  );
-  if (hasTurret) {
-    const a = bearing(target.pos, v.pos) + STRAFE_ANGLE;
-    return {
-      x: target.pos.x + Math.cos(a) * preferredRange,
-      y: target.pos.y + Math.sin(a) * preferredRange,
-    };
+  if (shouldRam(world, v, target)) {
+    v.brain!.ramTarget = target.id;
+    return lead;
   }
-  const a = bearing(v.pos, target.pos);
-  const step = RULES.arriveRadius + 0.2;
-  return { x: v.pos.x + Math.cos(a) * step, y: v.pos.y + Math.sin(a) * step };
+  const clearance = vehicleStats(world, v).radius + vehicleStats(world, target).radius + RULES.yieldDistance;
+  const range = Math.max(preferredRange, clearance);
+  const a = bearing(target.pos, v.pos);
+  return { x: target.pos.x + Math.cos(a) * range, y: target.pos.y + Math.sin(a) * range };
 }
 
 // Two NPCs that give way to each other would both wait forever. Only the one whose id sorts first waits.
 // Stopped, it counts as parked, so the other one's route goes around it.
 function vehicleAhead(world: World, v: Vehicle): boolean {
   const tow = world.player.tow;
-  return world.vehicles.some((x) => {
-    if (x.id === v.id) return false;
+  const others = world.vehicles.filter((x) => x.id !== v.id && x.id !== v.brain?.ramTarget);
+  return others.some((x) => {
     // A tower never yields to the truck on its own rope.
     if (tow?.hitched && tow.by === v.id && x.id === world.player.vehicleId)
       return false;

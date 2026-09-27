@@ -472,8 +472,9 @@ export function nextOrder(
 }
 
 export function parkedVehicles(world: World, selfId: string): Blocker[] {
+  const target = world.vehicles.find((v) => v.id === selfId)?.brain?.ramTarget;
   return world.vehicles
-    .filter((x) => x.id !== selfId && x.speed < RULES.parkedSpeed)
+    .filter((x) => x.id !== selfId && x.id !== target && x.speed < RULES.parkedSpeed)
     .map((x) => ({ pos: x.pos, r: chassisDef(x.chassisId).radius }));
 }
 

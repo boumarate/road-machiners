@@ -140,6 +140,7 @@ export type NpcBrain = {
   stalled?: number; // consecutive turns without forward progress
   recovery?: number; // turns left backing away from a blockage
   recoveryGoal?: Vec;
+  ramTarget?: string;
   farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
   refusedTow: boolean; // the player turned down this driver's tow, so it never offers again
   brokenTow?: { town: string; fee: number }; // a tow this driver dropped for danger; it offers the same deal again
