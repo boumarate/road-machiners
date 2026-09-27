@@ -158,7 +158,7 @@ function nearestKnownTown(world: World, vehicle: Vehicle): TownDef {
 // The fee follows the route the tower would drive from the player to the town's nearest gate.
 function towFee(world: World, tower: Vehicle, from: Vec, town: TownDef): number {
   const gate = siteGates(town).reduce((a, b) => (dist(from, a) <= dist(from, b) ? a : b));
-  const length = routeLength(from, route(world, from, gate, vehicleStats(world, tower).radius, []));
+  const length = routeLength(from, route(world, from, gate, vehicleStats(world, tower).radius, [], tower));
   return Math.round(TOW.base + TOW.perTile * length);
 }
 

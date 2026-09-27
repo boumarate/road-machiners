@@ -933,13 +933,7 @@ export class Game {
         ? [v.pos, order.dest]
         : [
             v.pos,
-            ...route(
-              w,
-              v.pos,
-              order.dest,
-              vehicleStats(w, v).radius,
-              parkedVehicles(w, v.id),
-            ),
+            ...route(w, v.pos, order.dest, vehicleStats(w, v).radius, parkedVehicles(w, v.id), v),
           ]
       : null;
     const first =

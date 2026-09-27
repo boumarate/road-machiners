@@ -316,8 +316,8 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   // Careful drivers follow the route planner, which keeps to roads and goes around obstacles; careless ones drive straight.
   const parked = parkedVehicles(w, v.id);
   // A point that moved less than the arrival radius, like the stop point of a town seen from a new angle, is the same place.
-  const stored = mem.route && dist(mem.route.dest, order.dest) < RULES.arriveRadius && mem.route.radius === s.radius ? continueRoute(w, v.pos, mem.route, order.dest, s.radius, parked) : null;
-  const path = v.direct ? null : stored ?? [...route(w, v.pos, order.dest, s.radius, parked)]; // copied, since driving consumes it
+  const stored = mem.route && dist(mem.route.dest, order.dest) < RULES.arriveRadius && mem.route.radius === s.radius ? continueRoute(w, v.pos, mem.route, order.dest, s.radius, parked, v) : null;
+  const path = v.direct ? null : stored ?? [...route(w, v.pos, order.dest, s.radius, parked, v)]; // copied, since driving consumes it
   mem.route = path ? { ...keepRoute(w, order.dest, path, parked), radius: s.radius } : null;
   if (order.kind === 'stopAt') return { ...base, dest: order.dest, route: path, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
   const next = zoneSpeed(s, speed, dist(v.pos, order.dest));

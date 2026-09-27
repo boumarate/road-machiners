@@ -3,6 +3,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { START_KITS } from '../data/start';
 import { RULES } from '../data/rules';
+import { NPCS } from '../data/npcs';
 import { REGION } from '../data/region';
 import { addVehicle, emptyWorld, npcBrain } from '../sim/testkit';
 import type { World } from '../sim/types';
@@ -45,6 +46,8 @@ describe('NPC driving', () => {
   it('travels between towns without entering either site', () => {
     let w = newWorld(1337, START_KITS.standard);
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
+    // No spawns, so no raider can end the trip before it reaches Nose.
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
     const bowl = REGION.towns[0];
     const nose = REGION.towns[1];
     const npc = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: bowl.pos.x + bowl.radius + 2, y: bowl.pos.y });

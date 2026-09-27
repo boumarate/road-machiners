@@ -37,6 +37,16 @@ export const REGION = {
     // detours up to about 60% longer, like the Bowl to Nose roads, are still followed. A road twice as
     // long as the straight line loses to open ground.
     offRoadCost: 1.75,
+    // Per-driver route taste. Each NPC driver sees route cost multiplied by its own smooth noise field,
+    // so drivers between the same points take different roads and shortcuts. Lattice points lie `scale`
+    // tiles apart, about the size of a hill or a road bend. `strength` 0.5 scales cost from 0.75 to 1.25,
+    // so a driver can prefer a road up to 67% longer. A road on the worst taste costs 1.25, below
+    // hardpan beside it on the best taste at 0.75 x 1.75 / 0.9, so drivers keep to roads where they have one.
+    taste: { scale: 40, strength: 0.5 },
+    // Tiles of a kept route a driver re-straightens each time it reuses the route. The rest stays as
+    // planned. It covers 4 turns, a real turn plus 3 preview turns, at the top speed of 11.7 tiles per
+    // turn: the fastest chassis with the strongest engine.
+    lookahead: 48,
     // Route cost multiplier on sloped tiles: 1 + slopeCost * (slope / cliff slope)^2. Gentle rolling
     // ground stays close to 1, and ground at the cliff slope costs 4 times flat. A loaded hauler stalls
     // from rest on slopes well below the cliff slope, so routes go around hills when that is not much longer.

@@ -18,7 +18,7 @@ import {
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
-import { randInt } from './rng';
+import { hashRandom, randInt } from './rng';
 import { canReachSalvage, hasSalvage, knockoutStockId, wreckStockId } from './salvage';
 import { beginSearch } from './search';
 import { vehicleById } from './damage';
@@ -645,15 +645,37 @@ export function getActivityDestination(world: World, vehicle: Vehicle, activity:
   return siteStop(world, vehicle, activity, activity.destination);
 }
 
-// Where a driver stops for a site, a stock or a truck it tows: just outside its radius, at the nearest gate of a
-// walled site.
+// Where a driver stops for a site, a stock or a truck it tows: just outside its radius.
 function siteStop(world: World, vehicle: Vehicle, activity: NpcActivity, destination: Vec): Vec {
+  const out = vehicleStats(world, vehicle).radius + RULES.arriveRadius;
   const site = [...REGION.towns, ...REGION.locations].find((entry) => entry.id === activity.targetId);
-  const radius = site?.radius ?? stockRadius(world, activity) ?? towedRadius(world, activity);
+  if (site) return siteSpot(world, vehicle, site, out);
+  const radius = stockRadius(world, activity) ?? towedRadius(world, activity);
   if (radius === undefined) throw new Error(`Missing activity destination ${activity.targetId}`);
-  const stopRadius = radius + vehicleStats(world, vehicle).radius + RULES.arriveRadius;
-  const angle = stopAngle(vehicle, site, destination);
-  return { x: destination.x + Math.cos(angle) * stopRadius, y: destination.y + Math.sin(angle) * stopRadius };
+  // A stock or a towed truck is met on the side the vehicle comes from.
+  const angle = Math.atan2(vehicle.pos.y - destination.y, vehicle.pos.x - destination.x);
+  return { x: destination.x + Math.cos(angle) * (radius + out), y: destination.y + Math.sin(angle) * (radius + out) };
+}
+
+// Each driver keeps its own spot at each site, so drivers bound for one site do not all stop on one point and
+// queue for it. `out` is how far outside the site edge the vehicle stops.
+function siteSpot(world: World, vehicle: Vehicle, site: ReturnType<typeof getKnownSite>, out: number): Vec {
+  const spot = hashRandom(world.seed, ...charCodes(vehicle.id), ...charCodes(site.id));
+  if (!isWalled(site)) {
+    // An open site is used from any side, so the spot lies anywhere on its edge.
+    const angle = 2 * Math.PI * spot;
+    return { x: site.pos.x + Math.cos(angle) * (site.radius + out), y: site.pos.y + Math.sin(angle) * (site.radius + out) };
+  }
+  // A walled site is used from its gate nearest the vehicle, so the stop lies just outside that gate, shifted
+  // along the wall as far as the gate's reach allows.
+  const gate = siteGates(site).reduce((a, b) => (dist(vehicle.pos, a) <= dist(vehicle.pos, b) ? a : b));
+  const angle = Math.atan2(gate.y - site.pos.y, gate.x - site.pos.x);
+  const side = Math.sqrt((REGION.settlement.gateReach - RULES.arriveRadius) ** 2 - out ** 2) * (2 * spot - 1);
+  return { x: gate.x + Math.cos(angle) * out - Math.sin(angle) * side, y: gate.y + Math.sin(angle) * out + Math.cos(angle) * side };
+}
+
+function charCodes(text: string): number[] {
+  return Array.from(text, (ch) => ch.charCodeAt(0));
 }
 
 function stockRadius(world: World, activity: NpcActivity): number | undefined {
@@ -666,13 +688,6 @@ function towedRadius(world: World, activity: NpcActivity): number | undefined {
   if (activity.kind !== 'tow' && activity.kind !== 'patch') return undefined;
   const towed = world.vehicles.find((entry) => entry.id === activity.targetId);
   return towed && chassisDef(towed.chassisId).radius;
-}
-
-// A walled site is used from its gate nearest the vehicle, so the stop lies just outside that gate.
-function stopAngle(vehicle: Vehicle, site: ReturnType<typeof getKnownSite> | undefined, destination: Vec): number {
-  if (!site || !isWalled(site)) return Math.atan2(vehicle.pos.y - destination.y, vehicle.pos.x - destination.x);
-  const gate = siteGates(site).reduce((a, b) => (dist(vehicle.pos, a) <= dist(vehicle.pos, b) ? a : b));
-  return Math.atan2(gate.y - site.pos.y, gate.x - site.pos.x);
 }
 
 // Each goal kind's work once the NPC is parked. Kinds without work only drive.

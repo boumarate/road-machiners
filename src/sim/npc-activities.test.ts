@@ -40,6 +40,30 @@ describe('NPC activities', () => {
     expect(Math.hypot(stop.x - town.pos.x, stop.y - town.pos.y)).toBeGreaterThan(town.radius);
   });
 
+  it('gives drivers bound for one town their own usable spots at its gate', () => {
+    const { w, npc } = createScavenger();
+    const town = REGION.towns[0];
+    const gate = siteGates(town)[0];
+    npc.pos = { x: gate.x + (gate.x - town.pos.x), y: gate.y + (gate.y - town.pos.y) };
+    const stops = ['v101', 'v102', 'v103', 'v104'].map((id) =>
+      getActivityDestination(w, { ...npc, id }, { kind: 'sell', targetId: town.id, destination: { ...town.pos }, phase: 'travel', reason: 'test activity' })!,
+    );
+    for (const stop of stops) expect(canUseSite(stop, town)).toBe(true);
+    const gaps = stops.flatMap((a, i) => stops.slice(i + 1).map((b) => Math.hypot(a.x - b.x, a.y - b.y)));
+    expect(Math.min(...gaps)).toBeGreaterThan(0);
+    expect(Math.max(...gaps)).toBeGreaterThan(REGION.settlement.gateReach);
+  });
+
+  it('gives drivers bound for an open site their own usable spots on its edge', () => {
+    const { w, npc } = createScavenger();
+    const site = REGION.locations.find((l) => !l.walled)!;
+    const stops = ['v101', 'v102', 'v103', 'v104'].map((id) =>
+      getActivityDestination(w, { ...npc, id }, { kind: 'resupply', targetId: site.id, destination: { ...site.pos }, phase: 'travel', reason: 'test activity' })!,
+    );
+    for (const stop of stops) expect(canUseSite(stop, site)).toBe(true);
+    expect(new Set(stops.map((p) => `${p.x},${p.y}`)).size).toBe(stops.length);
+  });
+
   it.each(['sell', 'resupply', 'raid'] as const)('records completion of %s once', (kind) => {
     const { w, npc } = createScavenger();
     npc.pos = { ...siteGates(REGION.towns[0])[0] };

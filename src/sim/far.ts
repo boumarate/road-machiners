@@ -58,7 +58,7 @@ export function advanceFar(w: World, v: Vehicle): void {
   // Vehicles without a brain have nowhere to store the route, so they plan it every turn.
   const stored = v.brain?.farRoute;
   // A new route steers around parked vehicles, like the physics driver's.
-  const points = stored && stored.dest.x === order.dest.x && stored.dest.y === order.dest.y ? stored.points : route(w, v.pos, order.dest, full.radius, parkedVehicles(w, v.id));
+  const points = stored && stored.dest.x === order.dest.x && stored.dest.y === order.dest.y ? stored.points : route(w, v.pos, order.dest, full.radius, parkedVehicles(w, v.id), v);
 
   const planned = follow(v.pos, points, (v.speed + next) / 2);
   const block = firstContact(w, v, planned.path, full.radius);
