@@ -1,6 +1,6 @@
 # Stylized truck bodies
 
-**Status:** validating
+**Status:** done
 **Branch:** stylized-trucks
 **Worktree:** .worktrees/stylized-trucks
 **Goal:** At the default game zoom, the user can tell each chassis apart by its silhouette, and the scout reads as a stylized Hilux. The user signs off on screenshots.
@@ -116,7 +116,7 @@ Notes: `npm run playtest` fails on FPS: 19 to 19.5 against a 20 floor, with load
 
 ## Conclusion
 
-Outcome: all nine chassis draw from their own stylized base model with the shared kit on top, at a7f39d0. The goal needs the user to sign off on `tmp/lineup-merged.png`.
+Outcome: all nine chassis draw from their own stylized base model with the shared kit on top, at a7f39d0. The user signed off on the lineup of all nine.
 
 Invariants:
 - IV1 — `check_base` in Blender and `checkBaseFits` in the view both enforce the footprint.
