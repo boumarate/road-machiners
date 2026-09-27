@@ -5,7 +5,7 @@
 import { REGION } from '../../data/region';
 import { count } from '../../perf';
 import type { Blocker } from './buckets';
-import { COARSE, componentOf, stampCircles, type NavLayer } from './layer';
+import { CELL, COARSE, componentOf, stampCircles, tasted, type NavLayer, type Taste } from './layer';
 
 // Cells blocked by kill wrecks and parked vehicles: stamp[c] === gen. Valid until the next stampOverlay.
 export type Overlay = { stamp: Uint32Array; gen: number };
@@ -137,20 +137,20 @@ const LONG_CELLS = 32;
 // Cells from start to goal, both included. The start cell may be blocked when a vehicle hugs an
 // obstacle; it is allowed as a start. Long searches stay inside the corridor of a coarse path plus
 // one ring of blocks. Kill wrecks and parked vehicles are not in the coarse grid, so when they cut
-// the corridor the full search runs.
-export function findCells(layer: NavLayer, ov: Overlay, start: number, goal: number): Int32Array | null {
+// the corridor the full search runs. A taste multiplies step costs in both searches.
+export function findCells(layer: NavLayer, ov: Overlay, start: number, goal: number, taste: Taste | null): Int32Array | null {
   if (start === goal) return Int32Array.of(start);
   // The overlay only blocks more cells, so separate static components can never join.
   if (!connected(layer, start, goal)) return null;
   const n = layer.n;
   if (heuristic(start % n, Math.floor(start / n), goal % n, Math.floor(goal / n)) > LONG_CELLS) {
-    if (markCorridor(layer, start, goal)) {
-      const cells = fineSearch(layer, ov, start, goal, true);
+    if (markCorridor(layer, start, goal, taste)) {
+      const cells = fineSearch(layer, ov, start, goal, true, taste);
       if (cells) return cells;
     }
     count('route-corridor-miss');
   }
-  return fineSearch(layer, ov, start, goal, false);
+  return fineSearch(layer, ov, start, goal, false, taste);
 }
 
 // Whether a free goal shares a component with the start.
@@ -189,7 +189,7 @@ let corridorGen = 0;
 
 // A* over coarse regions from the start's region to the goal's. Marks the blocks of the path's
 // regions and one ring of blocks around them. False when no coarse path exists.
-function markCorridor(layer: NavLayer, start: number, goal: number): boolean {
+function markCorridor(layer: NavLayer, start: number, goal: number, taste: Taste | null): boolean {
   const { n: bn, region, block, x: rx, y: ry, slow, edgeStart, edges } = layer.coarse;
   const regions = block.length;
   if (coarseSeen.length !== regions || coarseGen === 0xffffffff) {
@@ -236,7 +236,8 @@ function markCorridor(layer: NavLayer, start: number, goal: number): boolean {
     for (let e = edgeStart[cur]; e < edgeStart[cur + 1]; e++) {
       const next = edges[e];
       if (coarseClosed[next] === g) continue;
-      const c = base + Math.hypot(rx[next] - rx[cur], ry[next] - ry[cur]) * ((slow[cur] + slow[next]) / 2);
+      const step = Math.hypot(rx[next] - rx[cur], ry[next] - ry[cur]) * ((slow[cur] + slow[next]) / 2);
+      const c = base + tasted(taste, step, ((rx[cur] + rx[next]) / 2) * CELL, ((ry[cur] + ry[next]) / 2) * CELL);
       if (coarseSeen[next] === g && c >= coarseCost[next]) continue;
       coarseSeen[next] = g;
       coarseCost[next] = c;
@@ -266,7 +267,7 @@ function startRegion(layer: NavLayer, start: number, goal: number): number {
 }
 
 // Weighted A* over the fine cells. With `corridor` set it enters only blocks the last markCorridor marked.
-function fineSearch(layer: NavLayer, ov: Overlay, start: number, goal: number, corridor: boolean): Int32Array | null {
+function fineSearch(layer: NavLayer, ov: Overlay, start: number, goal: number, corridor: boolean, taste: Taste | null): Int32Array | null {
   const n = layer.n;
   const g = begin(n * n);
   const blocked = layer.blocked;
@@ -300,7 +301,8 @@ function fineSearch(layer: NavLayer, ov: Overlay, start: number, goal: number, c
         const next = ny * n + nx;
         if (blocked[next] || stamp[next] === og || closed[next] === g) continue;
         if (corridor && inCorridor[Math.floor(ny / COARSE) * bn + Math.floor(nx / COARSE)] !== cg) continue;
-        const c = base + (dx !== 0 && dy !== 0 ? Math.SQRT2 : 1) * slow[next];
+        const step = (dx !== 0 && dy !== 0 ? Math.SQRT2 : 1) * slow[next];
+        const c = base + tasted(taste, step, (nx + 0.5) * CELL, (ny + 0.5) * CELL);
         if (seen[next] === g && c >= cost[next]) continue;
         seen[next] = g;
         cost[next] = c;

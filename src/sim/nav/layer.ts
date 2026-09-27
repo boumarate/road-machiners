@@ -1,13 +1,14 @@
 // Static navigation layers: per-tile cliff flags and route costs, and per-cell blocked flags and step
 // costs for one vehicle radius. Kill wrecks and parked vehicles are not in here; the A* overlay
-// stamps them per query.
+// stamps them per query. Per-driver route taste scales these costs.
 
 import { REGION } from '../../data/region';
 import { TERRAIN_TYPES, type TerrainTypeId } from '../../data/terrain';
 import { nearRail } from '../bridge';
 import { isDriveObstacle } from '../mapgen';
 import { isCliff, type Terrain } from '../terrain';
-import type { Obstacle } from '../types';
+import { hashRandom } from '../rng';
+import type { Obstacle, Vehicle, World } from '../types';
 import { dist } from '../vec';
 import { ObstacleBuckets, type Blocker } from './buckets';
 
@@ -323,4 +324,57 @@ function components(count: number, edgeStart: Int32Array, edges: Int32Array): In
     }
   }
   return comp;
+}
+
+// A driver's route taste: a smooth cost field over the map that differs per driver, so drivers
+// between the same points take different ways. Value noise on a lattice of points
+// REGION.navigation.taste.scale tiles apart, smoothly blended between them. It multiplies route cost
+// by 1 - taste.strength / 2 to 1 + taste.strength / 2. Centering it on 1 keeps the A* estimate as tight
+// as for a plain route, so a tasted search visits about as many cells.
+export type Taste = { seed: number; side: number; values: Float32Array };
+
+// The taste of an NPC driver, fixed for its life by the world seed and its id. No driver, the player
+// and vehicles without a brain plan plain routes.
+export function tasteOf(world: World, v: Pick<Vehicle, "id" | "brain"> | undefined): Taste | null {
+  if (!v?.brain) return null;
+  const chars = Array.from(v.id, (ch) => ch.charCodeAt(0));
+  return makeTaste(Math.floor(hashRandom(world.seed, ...chars) * 0x100000000) | 0, world.size);
+}
+
+export function makeTaste(seed: number, size: number): Taste {
+  const { scale, strength } = REGION.navigation.taste;
+  const side = Math.ceil(size / scale) + 2;
+  const values = new Float32Array(side * side);
+  for (let y = 0; y < side; y++) for (let x = 0; x < side; x++) values[y * side + x] = 1 + strength * (hashRandom(seed, x, y) - 0.5);
+  return { seed, side, values };
+}
+
+// Cost multiplier at map point (x, y) in tiles.
+export function tasteAt(t: Taste, x: number, y: number): number {
+  const scale = REGION.navigation.taste.scale;
+  const gx = Math.max(0, x / scale);
+  const gy = Math.max(0, y / scale);
+  const ix = Math.min(t.side - 2, Math.floor(gx));
+  const iy = Math.min(t.side - 2, Math.floor(gy));
+  const fx = smooth(Math.min(1, gx - ix));
+  const fy = smooth(Math.min(1, gy - iy));
+  const i = iy * t.side + ix;
+  const v = t.values;
+  const top = v[i] + (v[i + 1] - v[i]) * fx;
+  const bottom = v[i + t.side] + (v[i + t.side + 1] - v[i + t.side]) * fx;
+  return top + (bottom - top) * fy;
+}
+
+// A step cost scaled by the taste at map point (x, y), or unchanged without a taste.
+export function tasted(t: Taste | null, cost: number, x: number, y: number): number {
+  return t ? cost * tasteAt(t, x, y) : cost;
+}
+
+// The part of a route cache key that tells tastes apart.
+export function tasteKey(t: Taste | null): string {
+  return t ? String(t.seed) : 'plain';
+}
+
+function smooth(f: number): number {
+  return f * f * (3 - 2 * f);
 }

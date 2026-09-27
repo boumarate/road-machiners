@@ -1,13 +1,14 @@
 // Route planning around static obstacles and cliffs: A* on a grid weighted by terrain speed and a
 // cost for leaving the road, so routes prefer roads, then shortcut to visible corners. Moving vehicles are not in the
-// grid, so ramming and blocking still happen. The grid itself lives in ./nav.
+// grid, so ramming and blocking still happen. The grid itself lives in ./nav. An NPC driver weighs the cost by
+// its own taste, so drivers between the same points take different ways.
 
 import { crossesRail } from './bridge';
 import { count, timed } from '../perf';
 import { findCells, nearestFreeCell, stampOverlay, startComponent } from './nav/astar';
 import type { Blocker } from './nav/buckets';
-import { CELL, CLEARANCE, blockerKey, componentOf, dynamicBlockers, navLayer, nearCliff, staticSet, terrainNav, tileIndex, type NavLayer, type StaticSet, type TerrainNav } from './nav/layer';
-import type { World } from './types';
+import { CELL, CLEARANCE, blockerKey, componentOf, dynamicBlockers, navLayer, nearCliff, staticSet, tasted, tasteKey, tasteOf, terrainNav, tileIndex, type NavLayer, type StaticSet, type Taste, type TerrainNav } from './nav/layer';
+import type { Vehicle, World } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 
 export type { Blocker };
@@ -17,24 +18,26 @@ export type { Blocker };
 const ROUTE_CACHE_MAX = 64;
 const routeCache = new Map<string, { goal: number | null; cells: Int32Array | null }>();
 
-export function route(world: World, from: Vec, to: Vec, radius: number, extra: Blocker[]): Vec[] {
+// `driver` plans with its taste; without one the route is the plain cheapest.
+export function route(world: World, from: Vec, to: Vec, radius: number, extra: Blocker[], driver?: Pick<Vehicle, "id" | "brain">): Vec[] {
   return timed('route', () => {
+    const taste = tasteOf(world, driver);
     const nav = terrainNav(world.terrain);
     const statics = staticSet(world.obstacles, world.terrain.size);
     const dynamic = dynamicBlockers(world.obstacles, extra);
     const reach = radius + CLEARANCE;
     // An unobstructed line all on road is already the shortest, cheapest route.
-    if (lineCost(nav, statics, dynamic, from, to, reach, 1) < Infinity) return [to];
+    if (lineCost(nav, statics, dynamic, from, to, reach, 1, null) < Infinity) return [to];
     const layer = navLayer(world.terrain, world.obstacles, radius);
     const start = cellOf(layer, from);
     const target = cellOf(layer, to);
-    const { goal, cells } = search(layer, dynamic, radius, start, target);
+    const { goal, cells } = search(layer, dynamic, radius, start, target, taste);
     if (goal === null || !cells) return [to];
     const end = goal === target ? to : centerOf(layer, goal);
     const points: Vec[] = [];
     for (let i = 1; i < cells.length - 1; i++) points.push(centerOf(layer, cells[i]));
     points.push(end);
-    return shortcut(nav, statics, dynamic, from, points, reach);
+    return shortcut(nav, statics, dynamic, from, points, reach, taste);
   });
 }
 
@@ -46,8 +49,8 @@ export function warmRoutes(world: World, radii: number[]): void {
 }
 
 // Cached cells are shared between calls and never handed out, so callers cannot mutate them.
-function search(layer: NavLayer, dynamic: Blocker[], radius: number, start: number, target: number): { goal: number | null; cells: Int32Array | null } {
-  const key = `${layer.id}:${radius}:${start}:${target}:${blockerKey(dynamic)}`;
+function search(layer: NavLayer, dynamic: Blocker[], radius: number, start: number, target: number, taste: Taste | null): { goal: number | null; cells: Int32Array | null } {
+  const key = `${layer.id}:${radius}:${start}:${target}:${tasteKey(taste)}:${blockerKey(dynamic)}`;
   const hit = routeCache.get(key);
   if (hit) {
     count('route-cache-hit');
@@ -63,7 +66,7 @@ function search(layer: NavLayer, dynamic: Blocker[], radius: number, start: numb
   const component = exit === null ? 0 : own === 0 ? componentOf(layer, exit) : own;
   // An unreachable point, such as one beyond a cliff, routes to the closest point the truck can reach.
   const goal = exit === null || component === 0 ? null : nearestFreeCell(layer, overlay, target, component);
-  const found = goal === null ? null : findCells(layer, overlay, exit!, goal);
+  const found = goal === null ? null : findCells(layer, overlay, exit!, goal, taste);
   const result = { goal, cells: found && exit !== start ? Int32Array.of(start, ...found) : found };
   if (routeCache.size >= ROUTE_CACHE_MAX) routeCache.delete(routeCache.keys().next().value!);
   routeCache.set(key, result);
@@ -73,7 +76,7 @@ function search(layer: NavLayer, dynamic: Blocker[], radius: number, start: numb
 // Whether a vehicle can drive straight from a to b without touching an obstacle or a cliff.
 export function straightClear(world: World, a: Vec, b: Vec, radius: number, extra: Blocker[]): boolean {
   const statics = staticSet(world.obstacles, world.terrain.size);
-  return lineCost(terrainNav(world.terrain), statics, dynamicBlockers(world.obstacles, extra), a, b, radius + CLEARANCE, Infinity) < Infinity;
+  return lineCost(terrainNav(world.terrain), statics, dynamicBlockers(world.obstacles, extra), a, b, radius + CLEARANCE, Infinity, null) < Infinity;
 }
 
 // A route kept from an earlier turn: its point, its waypoints, and the keys of the blockers that
@@ -91,7 +94,7 @@ export function keepRoute(world: World, dest: Vec, points: Vec[], extra: Blocker
 // drive inside the CLEARANCE margin, which only absorbs steering bulge, so these legs must just not
 // touch. A kill wreck or parked vehicle the route was not planned around must keep full clearance
 // from every leg. Static obstacles, cliffs and the known blockers are as the planner checked them.
-export function continueRoute(world: World, from: Vec, kept: KeptRoute, to: Vec, radius: number, extra: Blocker[]): Vec[] | null {
+export function continueRoute(world: World, from: Vec, kept: KeptRoute, to: Vec, radius: number, extra: Blocker[], driver?: Pick<Vehicle, "id" | "brain">): Vec[] | null {
   const dynamic = dynamicBlockers(world.obstacles, extra);
   const known = new Set(kept.blockers);
   const fresh = dynamic.filter((o) => !known.has(blockerKey([o])));
@@ -104,7 +107,7 @@ export function continueRoute(world: World, from: Vec, kept: KeptRoute, to: Vec,
   const last = points[points.length - 1];
   const moved = last.x === kept.dest.x && last.y === kept.dest.y && (last.x !== to.x || last.y !== to.y);
   const rest = moved ? [...points.slice(k, -1), to] : points.slice(k);
-  const leg = (a: Vec, b: Vec) => lineCost(nav, statics, dynamic, a, b, radius, costliestTile(nav, a, [b], 0, 0)) < Infinity;
+  const leg = (a: Vec, b: Vec) => lineCost(nav, statics, dynamic, a, b, radius, costliestTile(nav, a, [b], 0, 0), null) < Infinity;
   if (!leg(from, rest[0])) return null;
   if (moved && rest.length > 1 && !leg(rest[rest.length - 2], to)) return null;
   for (const o of fresh) {
@@ -116,7 +119,7 @@ export function continueRoute(world: World, from: Vec, kept: KeptRoute, to: Vec,
   }
   // Shortcuts from the new position, as a fresh plan takes them, so the truck does not hold to a corner
   // chosen from where it was a turn ago.
-  return shortcut(nav, statics, dynamic, from, rest, reach);
+  return shortcut(nav, statics, dynamic, from, rest, reach, tasteOf(world, driver));
 }
 
 // Whether at is beyond point a along the leg from a to b.
@@ -146,15 +149,16 @@ function centerOf(l: NavLayer, c: number): Vec {
 
 // Probe progressively longer shortcuts instead of rescanning the entire remaining route at every bend.
 // Each accepted segment still avoids obstacles, cliffs and costlier ground than its original path, and
-// costs no more than the path it replaces, so a shortcut never trades the road for open ground.
-function shortcut(nav: TerrainNav, statics: StaticSet, dynamic: Blocker[], from: Vec, points: Vec[], reach: number): Vec[] {
+// costs no more than the path it replaces, so a shortcut never trades the road for open ground. Costs
+// include the taste, so a shortcut keeps the way the driver chose.
+function shortcut(nav: TerrainNav, statics: StaticSet, dynamic: Blocker[], from: Vec, points: Vec[], reach: number, taste: Taste | null): Vec[] {
   // along[j] is the route cost from `from` to points[j - 1]; along[0] is `from` itself.
   const along = new Float64Array(points.length + 1);
-  for (let j = 0; j < points.length; j++) along[j + 1] = along[j] + groundCost(nav, j === 0 ? from : points[j - 1], points[j], null, Infinity);
+  for (let j = 0; j < points.length; j++) along[j + 1] = along[j] + groundCost(nav, j === 0 ? from : points[j - 1], points[j], null, Infinity, taste);
   const out: Vec[] = [];
   let cur = from;
   let i = 0;
-  const fits = (candidate: number) => lineCost(nav, statics, dynamic, cur, points[candidate], reach, costliestTile(nav, cur, points, i, candidate)) <= (along[candidate + 1] - along[i]) * (1 + COST_ROUNDING);
+  const fits = (candidate: number) => lineCost(nav, statics, dynamic, cur, points[candidate], reach, costliestTile(nav, cur, points, i, candidate), taste) <= (along[candidate + 1] - along[i]) * (1 + COST_ROUNDING);
   while (i < points.length) {
     let best = i;
     let step = 1;
@@ -194,16 +198,16 @@ function costliestTile(nav: TerrainNav, cur: Vec, points: Vec[], i: number, last
 
 // Route cost of the straight line from a to b, or Infinity when it touches an obstacle or a cliff or
 // crosses a tile costlier than maxCost.
-function lineCost(nav: TerrainNav, statics: StaticSet, dynamic: Blocker[], a: Vec, b: Vec, reach: number, maxCost: number): number {
+function lineCost(nav: TerrainNav, statics: StaticSet, dynamic: Blocker[], a: Vec, b: Vec, reach: number, maxCost: number, taste: Taste | null): number {
   for (const o of dynamic) if (segmentDist(o.pos, a, b) < o.r + reach) return Infinity;
   if (crossesRail(a, b, reach)) return Infinity;
   for (const o of statics.buckets.alongSegment(a, b, reach)) if (segmentDist(o.pos, a, b) < o.r + reach) return Infinity;
-  return groundCost(nav, a, b, reach, maxCost);
+  return groundCost(nav, a, b, reach, maxCost, taste);
 }
 
 // Length of the line times the mean tile cost of its samples. With a reach, a sample near a cliff
-// makes it Infinity; so does a tile costlier than maxCost.
-function groundCost(nav: TerrainNav, a: Vec, b: Vec, reach: number | null, maxCost: number): number {
+// makes it Infinity; so does a tile costlier than maxCost. maxCost limits the tile cost before taste.
+function groundCost(nav: TerrainNav, a: Vec, b: Vec, reach: number | null, maxCost: number, taste: Taste | null): number {
   const length = dist(a, b);
   const n = Math.ceil(length * LINE_SAMPLES_PER_TILE);
   const steps = Math.max(1, n);
@@ -214,7 +218,7 @@ function groundCost(nav: TerrainNav, a: Vec, b: Vec, reach: number | null, maxCo
     if (reach !== null && nearCliff(nav, x, y, reach)) return Infinity;
     const cost = nav.tileCost[tileIndex(nav.size, x, y)];
     if (cost > maxCost) return Infinity;
-    sum += cost;
+    sum += tasted(taste, cost, x, y);
   }
   return (length * sum) / (n + 1);
 }

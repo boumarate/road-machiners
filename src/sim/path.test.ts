@@ -11,7 +11,7 @@ import { continueRoute, keepRoute, route, routeLength, straightClear, type Block
 import { nextRandom } from './rng';
 import { isCliff, tileAt, type Terrain } from './terrain';
 import type { World } from './types';
-import { locationAt } from './sites';
+import { locationAt, siteGates } from './sites';
 import { editableTerrain, emptyWorld } from './testkit';
 import { dist, polylineDist, segmentDist, type Vec } from './vec';
 import { endTurn, newWorld, setMoveOrder } from './world';
@@ -110,6 +110,31 @@ describe("route", () => {
     expect(dist(w.vehicles[0].pos, nose.pos)).toBeGreaterThanOrEqual(nose.radius + 0.6 - 0.02);
     expect(dist(w.vehicles[0].pos, nose.pos)).toBeLessThanOrEqual(nose.radius + 1.5);
   }, 120_000);
+});
+
+describe('driver taste', () => {
+  const brain = { templateId: 'trader', activity: null, goal: null, home: { x: 0, y: 0 }, stepIndex: 0, refusedTow: false };
+  const [bowl, nose] = REGION.towns;
+  const from = siteGates(bowl)[0];
+  const to = siteGates(nose)[0];
+  const w = newWorld(1337, START_KITS.standard);
+  // Largest distance of either route's corners from the other route.
+  const apart = (p: Vec[], q: Vec[]) => Math.max(...p.map((x) => polylineDist(x, q)), ...q.map((x) => polylineDist(x, p)));
+
+  it('sends drivers between the same towns along different ways', () => {
+    const routes = Array.from({ length: 10 }, (_, i) => [from, ...route(w, from, to, 0.8, [], { id: `v${100 + i}`, brain })]);
+    const ways = routes.filter((r, i) => routes.slice(0, i).every((q) => apart(r, q) > 10));
+    expect(ways.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('gives one driver the same route every time', () => {
+    const driver = { id: 'v100', brain };
+    expect(route(w, from, to, 0.8, [], driver)).toEqual(route(w, from, to, 0.8, [], { ...driver }));
+  });
+
+  it('plans the plain route for the player', () => {
+    expect(route(w, from, to, 0.8, [], { id: w.player.vehicleId, brain: null })).toEqual(route(w, from, to, 0.8, []));
+  });
 });
 
 describe('kept routes', () => {
@@ -545,7 +570,7 @@ describe('nav layers match the old grid rules', () => {
       expect(nearestFreeCell(layer, overlay, Ref.cellOf(g, to))).toBe(goal);
       if (goal === null) continue;
       const ref = Ref.astar(g, start, goal);
-      const got = findCells(layer, overlay, start, goal);
+      const got = findCells(layer, overlay, start, goal, null);
       expect(got === null).toBe(ref === null);
       if (!ref || !got) continue;
       searched++;
@@ -696,7 +721,7 @@ describe('long routes search a coarse corridor', () => {
     expect(g.blocked[goal]).toBe(0);
     expect(Ref.astar(g, start, goal)).toBeNull();
     const t = performance.now();
-    const got = findCells(layer, overlay, start, goal);
+    const got = findCells(layer, overlay, start, goal, null);
     const ms = performance.now() - t;
     expect(got).toBeNull();
     expect(ms).toBeLessThan(5);
@@ -713,7 +738,7 @@ describe('long routes search a coarse corridor', () => {
     const start = 200 * n + 60;
     const goal = 200 * n + 260;
     resetPerf();
-    const got = findCells(layer, overlay, start, goal);
+    const got = findCells(layer, overlay, start, goal, null);
     expect(perfSnapshot()['route-corridor-miss']?.calls).toBe(1);
     expect(got).not.toBeNull();
     expect(got![got!.length - 1]).toBe(goal);
@@ -735,7 +760,7 @@ describe('long routes search a coarse corridor', () => {
       const a = nearestFreeCell(layer, overlay, Math.floor(rand() * n * n))!;
       const b = nearestFreeCell(layer, overlay, Math.floor(rand() * n * n))!;
       if (componentOf(layer, a) !== componentOf(layer, b) || cellSpan(n, a, b) <= LONG_CELLS) continue;
-      expect(findCells(layer, overlay, a, b)).not.toBeNull();
+      expect(findCells(layer, overlay, a, b, null)).not.toBeNull();
       found++;
     }
     expect(found).toBeGreaterThanOrEqual(5);

@@ -165,7 +165,7 @@ export function advance(p: Pose, steer: Steer, steps: number): Pose {
 export function steerTo(
   world: World,
   s: VehicleStats,
-  v: Pick<Vehicle, "id" | "pos" | "heading" | "speed">,
+  v: Pick<Vehicle, "id" | "brain" | "pos" | "heading" | "speed">,
   order: MoveOrder | null,
   direct: boolean,
 ): Steer {
@@ -187,14 +187,14 @@ export function steerTo(
     return steerStep(
       s,
       v,
-      aimPoint(v.pos, route(world, v.pos, order.dest, s.radius, parked)),
+      aimPoint(v.pos, route(world, v.pos, order.dest, s.radius, parked, v)),
       Infinity,
     );
   }
   // The planner returns the straight line itself when that is the cheapest way.
   const points = direct
     ? [order.dest]
-    : route(world, v.pos, order.dest, s.radius, parked);
+    : route(world, v.pos, order.dest, s.radius, parked, v);
   const aim = aimPoint(v.pos, points);
   const remaining = Math.min(
     routeLength(v.pos, points),
@@ -248,7 +248,7 @@ function stopReach(
 export function steerWithFuel(
   world: World,
   s: VehicleStats,
-  v: Pick<Vehicle, "id" | "pos" | "heading" | "speed">,
+  v: Pick<Vehicle, "id" | "brain" | "pos" | "heading" | "speed">,
   order: MoveOrder | null,
   direct: boolean,
   fuel: number,
@@ -300,7 +300,7 @@ export function shouldBackToDestination(
 function reverseStep(
   world: World,
   s: VehicleStats,
-  v: Pick<Vehicle, "id" | "pos" | "heading" | "speed">,
+  v: Pick<Vehicle, "id" | "brain" | "pos" | "heading" | "speed">,
   order: Exclude<MoveOrder, { kind: "brake" }>,
   direct: boolean,
   parked: Blocker[],
@@ -314,7 +314,7 @@ function reverseStep(
     return null;
   const aim = direct
     ? order.dest
-    : aimPoint(v.pos, route(world, v.pos, order.dest, s.radius, parked));
+    : aimPoint(v.pos, route(world, v.pos, order.dest, s.radius, parked, v));
   const ang = angleDiff(v.heading, bearing(v.pos, aim));
   if (Math.abs(ang) <= RULES.reverse.angle * DEG) return null;
   const behind =
@@ -487,13 +487,14 @@ export function parkedVehicles(world: World, selfId: string): Blocker[] {
 export function planPath(
   world: World,
   s: VehicleStats,
-  v: Pick<Vehicle, "id" | "pos" | "heading" | "speed">,
+  v: Pick<Vehicle, "id" | "brain" | "pos" | "heading" | "speed">,
   order: MoveOrder | null,
   turns: number,
 ): TurnPlan[] {
   const plans: TurnPlan[] = [];
   let state = {
     id: v.id,
+    brain: v.brain,
     pos: { ...v.pos },
     heading: v.heading,
     speed: v.speed,
@@ -523,6 +524,7 @@ export function planPath(
     if (steer.speed === 0 && current === null) break;
     state = {
       id: v.id,
+      brain: v.brain,
       pos: { x: pose.x, y: pose.y },
       heading: pose.heading,
       speed: Math.max(0, steer.speed),

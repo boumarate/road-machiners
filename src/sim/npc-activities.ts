@@ -22,12 +22,12 @@ import {
 } from "./economy";
 import { corePart, freeCells, goodsCount, mountedParts } from "./grid";
 import { getResources } from "./resources";
-import { randInt } from "./rng";
+import { hashRandom, randInt } from "./rng";
 import { canReachSalvage, hasSalvage } from "./salvage";
 import { beginSearch } from "./search";
 import { getMobilityCondition, vehicleStats } from "./stats";
 import type { Contact, NpcActivity, NpcBrain, Vehicle, World } from "./types";
-import { canUseSite, isWalled, siteGates } from "./sites";
+import { canUseSite, isWalled, siteGates, type Site } from "./sites";
 import { clamp, dist, type Vec } from "./vec";
 import { canVehicleSee } from "./vision";
 import { chooseTowActivity, dropTow, runTow } from "./tow";
@@ -676,25 +676,46 @@ export function getActivityDestination(
     (towed && chassisDef(towed.chassisId).radius);
   if (radius === undefined)
     throw new Error(`Missing activity destination ${activity.targetId}`);
-  const stopRadius =
-    radius + vehicleStats(world, vehicle).radius + RULES.arriveRadius;
-  // A walled site is used from its gate nearest the vehicle, so the stop lies just outside that gate.
-  const gate =
-    site && isWalled(site)
-      ? siteGates(site).reduce((a, b) =>
-          dist(vehicle.pos, a) <= dist(vehicle.pos, b) ? a : b,
-        )
-      : null;
-  const angle = gate
-    ? Math.atan2(gate.y - site!.pos.y, gate.x - site!.pos.x)
-    : Math.atan2(
-        vehicle.pos.y - activity.destination.y,
-        vehicle.pos.x - activity.destination.x,
-      );
+  const out = vehicleStats(world, vehicle).radius + RULES.arriveRadius;
+  if (site) return getSiteStop(world, vehicle, site, out);
+  // A stock or a towed truck is met on the side the vehicle comes from.
+  const angle = Math.atan2(
+    vehicle.pos.y - activity.destination.y,
+    vehicle.pos.x - activity.destination.x,
+  );
   return {
-    x: activity.destination.x + Math.cos(angle) * stopRadius,
-    y: activity.destination.y + Math.sin(angle) * stopRadius,
+    x: activity.destination.x + Math.cos(angle) * (radius + out),
+    y: activity.destination.y + Math.sin(angle) * (radius + out),
   };
+}
+
+// Each driver keeps its own spot at each site, so drivers bound for one site do not all stop on one
+// point and queue for it. `out` is how far outside the site edge the vehicle stops.
+function getSiteStop(world: World, vehicle: Vehicle, site: Site, out: number): Vec {
+  const spot = hashRandom(world.seed, ...charCodes(vehicle.id), ...charCodes(site.id));
+  if (!isWalled(site)) {
+    // An open site is used from any side, so the spot lies anywhere on its edge.
+    const angle = 2 * Math.PI * spot;
+    return {
+      x: site.pos.x + Math.cos(angle) * (site.radius + out),
+      y: site.pos.y + Math.sin(angle) * (site.radius + out),
+    };
+  }
+  // A walled site is used from its gate nearest the vehicle, so the stop lies just outside that gate,
+  // shifted along the wall as far as the gate's reach allows.
+  const gate = siteGates(site).reduce((a, b) =>
+    dist(vehicle.pos, a) <= dist(vehicle.pos, b) ? a : b,
+  );
+  const angle = Math.atan2(gate.y - site.pos.y, gate.x - site.pos.x);
+  const side = Math.sqrt((REGION.settlement.gateReach - RULES.arriveRadius) ** 2 - out ** 2) * (2 * spot - 1);
+  return {
+    x: gate.x + Math.cos(angle) * out - Math.sin(angle) * side,
+    y: gate.y + Math.sin(angle) * out + Math.cos(angle) * side,
+  };
+}
+
+function charCodes(text: string): number[] {
+  return Array.from(text, (ch) => ch.charCodeAt(0));
 }
 
 function resolveActivity(
