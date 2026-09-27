@@ -11,8 +11,8 @@ import type { Vec } from '../../sim/vec';
 
 const S = PHYSICS.metersPerTile;
 const ZONE_ALPHA: Record<Throttle, number> = { brake: 0.16, hold: 0.28, accelerate: 0.18 };
-const SAMPLE_TILES = 0.5; // most tiles between ground samples, so a band follows the per-tile ground mesh
-const LIFT = 0.1; // meters above the ground, so bumps between samples do not swallow a band
+const ARC_STEPS = 16;
+const LIFT = 0.04; // meters above the ground, avoids z-fighting
 const HOVER_RADIUS_TILES = 0.6; // matches the 2D hover ring radius
 const HOVER_WIDTH_TILES = 0.08;
 const HOVER_SEGMENTS = 32;
@@ -68,16 +68,15 @@ export class ZonesView {
       return;
     }
     mesh.visible = true;
-    const arcSteps = Math.ceil((2 * half * r1) / SAMPLE_TILES);
-    const radialSteps = Math.ceil((r1 - r0) / SAMPLE_TILES);
     const positions: number[] = [];
-    for (let i = 0; i <= arcSteps; i++) {
-      const a = heading - half + (2 * half * i) / arcSteps;
-      for (let j = 0; j <= radialSteps; j++) pushPoint(positions, terrain, pos, a, r0 + ((r1 - r0) * j) / radialSteps);
+    for (let i = 0; i <= ARC_STEPS; i++) {
+      const a = heading - half + (2 * half * i) / ARC_STEPS;
+      pushPoint(positions, terrain, pos, a, r0);
+      pushPoint(positions, terrain, pos, a, r1);
     }
     mesh.geometry.dispose();
     mesh.geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    mesh.geometry.setIndex(gridIndices(arcSteps, radialSteps));
+    mesh.geometry.setIndex(stripIndices(ARC_STEPS));
   }
 
   hover(terrain: Terrain, p: Vec | null, color: number): void {
@@ -99,17 +98,15 @@ function pushPoint(out: number[], terrain: Terrain, pos: Vec, a: number, r: numb
   out.push(x * S, h, y * S);
 }
 
-// Two triangles per grid cell. Points run outward along each arc step.
-function gridIndices(arcSteps: number, radialSteps: number): number[] {
+// Two triangles per arc segment, between the inner and outer ring of points.
+function stripIndices(steps: number): number[] {
   const idx: number[] = [];
-  const row = radialSteps + 1;
-  for (let i = 0; i < arcSteps; i++)
-    for (let j = 0; j < radialSteps; j++) {
-      const a = i * row + j;
-      const b = a + 1;
-      const c = a + row;
-      const d = c + 1;
-      idx.push(a, b, c, b, d, c);
-    }
+  for (let i = 0; i < steps; i++) {
+    const a = i * 2;
+    const b = a + 1;
+    const c = a + 2;
+    const d = a + 3;
+    idx.push(a, b, c, b, d, c);
+  }
   return idx;
 }

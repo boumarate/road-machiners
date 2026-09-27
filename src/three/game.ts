@@ -940,7 +940,7 @@ export class Game {
             )
           ]
         : PAL.plan;
-    this.path.set(turns, first, course, !v.direct);
+    this.path.set(turns, first, course);
   }
 
   private advanceTurn(now: number): { step: number | null; speed: number } {

@@ -31,8 +31,6 @@ const ORDER_LIFT = LIFT + 0.02; // just over the preview line
 const ORDER_OPACITY = 0.85;
 const ORDER_RING_INNER = 0.85; // share of ORDER_R
 const ORDER_SIGN = 0.55; // share of ORDER_R the arrow and the stop sign reach from the center
-const SLOPE_STEP = 0.25; // tiles to each side where the ground is sampled for its tilt under an icon
-const UP = new THREE.Vector3(0, 1, 0);
 
 // An arrowhead pointing along +X, with its tip ORDER_SIGN * ORDER_R from the center.
 function arrowShape(): THREE.Shape {
@@ -48,13 +46,6 @@ function flatIcon(geometry: THREE.BufferGeometry, color: number): THREE.Mesh {
   );
   mesh.renderOrder = 821;
   return mesh;
-}
-
-// The player's order to mark on the ground. Manual driving shows no waypoint, only the line to the click.
-function waypointOf(world: World): Exclude<MoveOrder, { kind: 'brake' }> | null {
-  const me = playerVehicle(world);
-  if (me.direct || !playerCanAct(world) || !me.order || me.order.kind === 'brake') return null;
-  return me.order;
 }
 
 export class PathView {
@@ -83,12 +74,11 @@ export class PathView {
   show(preview: boolean, world: World, orderHidden: boolean): void {
     this.preview.visible = preview;
     const me = playerVehicle(world);
-    const order = orderHidden ? null : waypointOf(world);
-    this.order.visible = order !== null;
-    if (!order) return;
+    const order: MoveOrder | null = orderHidden || !playerCanAct(world) ? null : me.order;
+    this.order.visible = order !== null && order.kind !== 'brake';
+    if (!order || order.kind === 'brake') return;
     const { dest } = order;
     this.order.position.set(dest.x * S, heightAt(this.terrain, dest.x, dest.y) * S + ORDER_LIFT, dest.y * S);
-    this.order.quaternion.copy(this.tilt(dest.x, dest.y));
     this.through.visible = order.kind === 'through';
     this.stop.visible = order.kind === 'stopAt';
     // The arrow points the way the truck goes. Map y is 3D z, so a map bearing turns the other way around Y.
@@ -100,32 +90,10 @@ export class PathView {
     return [p.x, heightAt(this.terrain, p.x / S, p.z / S) * S + LIFT, p.z];
   }
 
-  // Turns a flat icon at a map point so it lies along the ground's slope there.
-  private tilt(x: number, y: number): THREE.Quaternion {
-    const dx = heightAt(this.terrain, x + SLOPE_STEP, y) - heightAt(this.terrain, x - SLOPE_STEP, y);
-    const dy = heightAt(this.terrain, x, y + SLOPE_STEP) - heightAt(this.terrain, x, y - SLOPE_STEP);
-    const normal = new THREE.Vector3(-dx, 2 * SLOPE_STEP, -dy).normalize();
-    return new THREE.Quaternion().setFromUnitVectors(UP, normal);
-  }
-
-  // A marker ring lying on the ground at a point in 3D meters.
-  private marker(at: { x: number; z: number }, color: number, opacity: number): void {
-    const marker = new THREE.Mesh(
-      new THREE.RingGeometry(MARKER_INNER, MARKER_OUTER, 24).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide }),
-    );
-    marker.position.set(...this.ground(at));
-    marker.quaternion.copy(this.tilt(at.x / S, at.z / S));
-    marker.renderOrder = 820;
-    this.preview.add(marker);
-    this.markers.push(marker);
-  }
-
   // course: map points from the end of the last turn to the order's point, or null without one.
-  // waypoint: whether a marker ring shows at the course's end.
-  set(turns: VehicleFrame[][], firstColor: number, course: Vec[] | null, waypoint: boolean): void {
+  set(turns: VehicleFrame[][], firstColor: number, course: Vec[] | null): void {
     this.clear();
-    if (course) this.addCourse(course, waypoint);
+    if (course) this.addCourse(course);
     turns.forEach((frames, i) => {
       if (frames.length === 0) return;
       const solid = i === 0;
@@ -140,11 +108,19 @@ export class PathView {
       this.preview.add(line);
       this.lines.push(line);
 
-      this.marker(frames[frames.length - 1].pos, color, solid ? OPACITY.first : OPACITY.later);
+      const end = frames[frames.length - 1].pos;
+      const marker = new THREE.Mesh(
+        new THREE.RingGeometry(MARKER_INNER, MARKER_OUTER, 24).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: solid ? OPACITY.first : OPACITY.later, depthWrite: false, side: THREE.DoubleSide }),
+      );
+      marker.position.set(...this.ground(end));
+      marker.renderOrder = 820;
+      this.preview.add(marker);
+      this.markers.push(marker);
     });
   }
 
-  private addCourse(points: Vec[], waypoint: boolean): void {
+  private addCourse(points: Vec[]): void {
     const positions: number[] = [];
     for (let i = 1; i < points.length; i++) {
       const a = points[i - 1];
@@ -161,9 +137,15 @@ export class PathView {
     line.renderOrder = 820;
     this.preview.add(line);
     this.lines.push(line);
-    if (!waypoint) return;
     const end = points[points.length - 1];
-    this.marker({ x: end.x * S, z: end.y * S }, PAL.plan, OPACITY.later);
+    const marker = new THREE.Mesh(
+      new THREE.RingGeometry(MARKER_INNER, MARKER_OUTER, 24).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: PAL.plan, transparent: true, opacity: OPACITY.later, depthWrite: false, side: THREE.DoubleSide }),
+    );
+    marker.position.set(...this.ground({ x: end.x * S, z: end.y * S }));
+    marker.renderOrder = 820;
+    this.preview.add(marker);
+    this.markers.push(marker);
   }
 
   clear(): void {
