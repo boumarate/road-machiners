@@ -60,7 +60,7 @@ import type { UiHost } from "../ui/host";
 import { Hud, type ContextAction } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
 import { TownScreen } from "../ui/town";
-import { getWeaponReadout, WeaponPanel, weaponsForClick } from "../ui/weapons";
+import { markerLines, WeaponPanel, weaponsForClick } from "../ui/weapons";
 import { CameraRig } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
@@ -497,24 +497,12 @@ export class Game {
     this.hitCard.show();
   }
 
-  // Numbered labels above each target listing the weapons aimed at it and whether they can fire now.
+  // Labels above vehicles: the weapons aimed at each target, and the radio key on the hovered truck.
   private refreshTargetMarkers(): void {
     for (const el of this.markers.values()) el.remove();
     this.markers.clear();
     if (this.anim) return;
-    const lines = new Map<string, string[]>();
-    vehicleStats(this.world, playerVehicle(this.world)).weapons.forEach(
-      (mw, i) => {
-        const readout = getWeaponReadout(this.world, mw);
-        if (!readout.target) return;
-        const list = lines.get(readout.target.id) ?? [];
-        list.push(
-          `[${i + 1}] ${mw.def.look === "cannon" ? "Cannon" : "MG"} · ${readout.status}`,
-        );
-        lines.set(readout.target.id, list);
-      },
-    );
-    for (const [id, list] of lines) {
+    for (const [id, list] of markerLines(this.world, this.hovered)) {
       const el = document.createElement("div");
       el.className = "weapon-marker";
       el.textContent = list.join("\n");
@@ -706,6 +694,7 @@ export class Game {
     if (id === this.hovered) return;
     this.hovered = id;
     this.refreshInfo();
+    this.refreshTargetMarkers();
   }
 
   endTurn(): void {

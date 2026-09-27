@@ -47,11 +47,6 @@ function weatherLabel(w: World): string {
   return [...new Set(w.weather.map((e) => WEATHER_NAMES[e.kind]))].join(", ");
 }
 
-// NPC drivers can be called by radio.
-function radioHint(v: Vehicle): HTMLElement[] {
-  return v.brain ? [el("div", { class: "dim" }, "T: call by radio")] : [];
-}
-
 export class Hud {
   private top = panel("instruments");
   private log = panel("log");
@@ -405,7 +400,6 @@ export class Hud {
       el("div", {}, `Cab ${pct}%   Speed ${kph(v.speed)} km/h`),
       el("div", { class: "bar" }, el("div", { style: `width:${pct}%` })),
       ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),
-      ...radioHint(v),
       ...parts,
     );
   }

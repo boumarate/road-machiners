@@ -54,6 +54,12 @@ function isTyping(): boolean {
   return document.activeElement?.matches('input, select, textarea') ?? false;
 }
 
+// Whether T would call this vehicle now: an NPC driver the player sees, while the player can act.
+export function canCall(w: World, id: string): boolean {
+  const v = w.vehicles.find((x) => x.id === id);
+  return !!v?.brain && playerCanAct(w) && playerSees(w, v.pos);
+}
+
 export type DialogueHost = {
   world(): World;
   talk(next: World): void; // apply a dialogue command and log its lines
@@ -108,12 +114,11 @@ export class DialoguePanel {
     this.host.talk(chooseOption(this.host.world(), index));
   }
 
-  // Calls the hovered truck when the player sees it and can act. Returns whether a call was made.
+  // Calls the hovered truck when it can take a call. Returns whether a call was made.
   private callHovered(): boolean {
-    const w = this.host.world();
-    const v = w.vehicles.find((x) => x.id === this.host.hovered());
-    if (!v?.brain || !playerCanAct(w) || !playerSees(w, v.pos)) return false;
-    this.host.talk(callVehicle(w, v.id));
+    const id = this.host.hovered();
+    if (!id || !canCall(this.host.world(), id)) return false;
+    this.host.talk(callVehicle(this.host.world(), id));
     return true;
   }
 }
