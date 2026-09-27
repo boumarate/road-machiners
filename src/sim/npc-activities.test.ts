@@ -1,5 +1,6 @@
 import { TERRAIN } from '../data/terrain';
 import { describe, expect, it } from 'vitest';
+import { contactsOf } from './detect';
 import { emptyWorld, addVehicle, editableTerrain } from './testkit';
 import { planNpcOrders } from './ai';
 import { getResources } from './resources';
@@ -180,6 +181,18 @@ describe('NPC activities', () => {
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + TERRAIN.vision.radius + 5, y: 30 }); // just past sight
     raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0 };
     planNpcOrders(w);
+    expect(raider.brain!.activity?.kind).toBe('investigate');
+    expect(raider.brain!.activity?.targetId).toBe(player.id);
+  });
+
+  it('a raider hears the player as far as the player hears it', () => {
+    const w = emptyWorld({ x: 100, y: 300 });
+    const player = w.vehicles[0];
+    player.speed = 4;
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 220, y: 300 }); // 120 tiles, far past the old 34-tile limit
+    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0 };
+    planNpcOrders(w);
+    expect(contactsOf(w, raider, Infinity).some((c) => c.vehicleId === player.id)).toBe(true);
     expect(raider.brain!.activity?.kind).toBe('investigate');
     expect(raider.brain!.activity?.targetId).toBe(player.id);
   });

@@ -61,7 +61,7 @@ export type SalvageStock = {
 
 // Work that needs the truck parked. Moving above parked speed cancels it, and finished turns are lost.
 export type Job =
-  | { kind: 'repair'; partId: string; turnsLeft: number; total: number }
+  | { kind: 'repair'; partId: string; parts: number; turnsLeft: number; total: number } // parts: the most this job spends
   | { kind: 'search'; stockId: string; turnsLeft: number; total: number };
 
 // A vehicle detected beyond sight. The circle always holds the true position, which it never reveals.
@@ -147,6 +147,8 @@ export type Player = {
   fuel: number;
   supplies: number;
   autoFire: boolean;
+  autoRepair: boolean; // patch the most damaged part whenever the truck is parked
+  engineHeat: number; // 0 cold to 1 overheated; see src/sim/engine-heat.ts
   discovered: string[];
   scavenged: string[]; // stocks the player finished searching; their loot can be taken
   storage: PartInstance[]; // spare parts kept in town garages, usable in any town

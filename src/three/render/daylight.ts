@@ -16,12 +16,12 @@ const MOON_DIR = TERRAIN.light;
 // Keyed by the sun's height in degrees, highest first. Negative is below the horizon.
 type Key = { h: number; sun: number; sunI: number; sky: number; ground: number; skyI: number };
 const KEYS: Key[] = [
-  { h: 45, sun: 0xfff0d0, sunI: 2.2, sky: 0xfff0d8, ground: 0x6a5038, skyI: 1.4 },
-  { h: 20, sun: 0xffe0b0, sunI: 2.1, sky: 0xffe8cc, ground: 0x6a5038, skyI: 1.3 },
-  { h: 8, sun: 0xffa860, sunI: 1.9, sky: 0xf0b890, ground: 0x5a4030, skyI: 1.1 },
-  { h: 1, sun: 0xff5030, sunI: 1.5, sky: 0xc07868, ground: 0x3a2a28, skyI: 0.85 },
-  { h: -4, sun: 0xa04050, sunI: 0.6, sky: 0x7a6080, ground: 0x241e2a, skyI: 0.55 },
-  { h: -TWILIGHT, sun: 0x8090c0, sunI: 0.12, sky: 0x5a6c9c, ground: 0x1c1e2a, skyI: 0.2 },
+  { h: 45, sun: 0xffecd0, sunI: 2.0, sky: 0xb0c0dc, ground: 0x6a5038, skyI: 1.0 },
+  { h: 20, sun: 0xffdcaa, sunI: 2.15, sky: 0xb8bcd4, ground: 0x6a5038, skyI: 0.95 },
+  { h: 8, sun: 0xffa050, sunI: 2.2, sky: 0xa8a0c0, ground: 0x5a4030, skyI: 0.85 },
+  { h: 1, sun: 0xff5a30, sunI: 1.8, sky: 0x9070a0, ground: 0x3a2a28, skyI: 0.7 },
+  { h: -4, sun: 0xa04050, sunI: 0.8, sky: 0x6a5c88, ground: 0x241e2a, skyI: 0.75 },
+  { h: -TWILIGHT, sun: 0x8090c0, sunI: 0.5, sky: 0x5a6c9c, ground: 0x1c1e2a, skyI: 0.65 },
 ];
 
 export type Daylight = {

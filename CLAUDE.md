@@ -11,7 +11,7 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 - `npm run dev` starts the game at http://localhost:5173.
 - `npm test` runs the sim unit tests.
 - `npm run typecheck` runs tsc.
-- `npm run playtest -- --url <dev server>` boots the game in headless Chromium, plays turns, and fails on page errors, the crash screen or low FPS. It needs the dev server running. Screenshots go to `.playtest/`.
+- `npm run playtest -- --url <dev server>` boots the game in headless Chromium on the Metal GPU, plays turns, and fails on page errors, the crash screen or low FPS. It needs the dev server running. Screenshots go to `.playtest/`.
 - `npm run perf -- --url <dev server>` boots the game in Chromium with the Metal GPU and times boot, turns, move previews and frames. It fails on any miss against `scripts/perf-budgets.json`.
 - `npm run sfx:board` opens the dev sound board for auditioning every cue.
 - `npm run sfx:import -- <cue> <file...>` imports files as variants of a cue in `src/data/sounds.ts`.
@@ -47,12 +47,12 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 
 - Every sim rule change gets a Vitest test.
 - After render or game changes, run `npm run playtest`.
-- For behavior checks, drive the game with a Playwright script in `tmp/`. Launch Chromium with `--use-gl=angle --use-angle=swiftshader`. The game is on `window.__KOROVAN__` in dev. Its world is `__KOROVAN__.state`. To set up a situation, clone that world, edit it, and pass it to `apply()`. `debugScreenOf(x, y)` gives the screen point of a map point on the ground, for clicks.
+- For behavior checks, drive the game with a Playwright script in `tmp/`. Launch Chromium with `--use-angle=metal --enable-gpu --ignore-gpu-blocklist`, so it renders on the real GPU. SwiftShader renders on the CPU at 10 to 20 fps, so its frame rate says nothing about the game. The game is on `window.__KOROVAN__` in dev. Its world is `__KOROVAN__.state`. To set up a situation, clone that world, edit it, and pass it to `apply()`. `debugScreenOf(x, y)` gives the screen point of a map point on the ground, for clicks.
 - Look at screenshots after visual changes. The user confirms small visual details.
 
 ## Art
 
-Static props, obstacles, landmarks and truck parts are low-poly Blender models. Settlement houses, ruins and water are built from Three.js shapes in code. Models placed many times, like rocks and orchard trees, are drawn as instanced meshes. The ground is a per-tile painted canvas texture.
+Static props, obstacles, landmarks and truck parts are low-poly Blender models. Settlement houses, ruins and water are built from Three.js shapes in code. Models placed many times, like rocks and orchard trees, are drawn as instanced meshes. The ground is a per-tile painted canvas texture. Pebbles and scrub are instanced 3D models from `src/three/render/scatter.ts`.
 
 Some models come from Blender scripts in `tools/blender/`. Blender is installed with `brew install --cask blender`. Each script writes a `.glb` into `public/models/`, and both are committed. Rebuild one with `blender --background --python tools/blender/<name>.py -- public/models/<name>.glb tmp/<name>.png`. The second path is an optional preview render from the game camera angle.
 

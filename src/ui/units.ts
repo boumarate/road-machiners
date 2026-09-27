@@ -33,3 +33,7 @@ export function celsius(heat: number): number {
 export function kg(mass: number): string {
   return `${Math.round(mass).toLocaleString('en-US')} kg`;
 }
+
+export function engineCelsius(engineHeat: number): number {
+  return Math.round(UNITS.engineColdCelsius + engineHeat * (UNITS.engineHotCelsius - UNITS.engineColdCelsius));
+}

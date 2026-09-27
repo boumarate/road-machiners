@@ -5,4 +5,6 @@ export const UNITS = {
   cellDepth: 0.5, // meters of cargo height over one grid cell, the same as its width, so a cell holds 125 L
   shadeCelsius: 22, // air temperature at heat 1: night, shade or the sun at the horizon
   celsiusPerHeat: 12, // degrees per heat above 1; full noon sun at heat 2.5 reads 40 °C
+  engineColdCelsius: 80, // engine gauge at heat 0
+  engineHotCelsius: 120, // engine gauge at heat 1, overheated
 };

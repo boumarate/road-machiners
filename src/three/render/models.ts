@@ -19,6 +19,8 @@ const NAMES = [
   'wmount_riser',
   'wreck',
   'rock',
+  'pebbles',
+  'scrub',
   'building',
   'crates',
   'water_tower',

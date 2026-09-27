@@ -1,9 +1,11 @@
 // Parked jobs: work that needs the truck to stay parked for several turns. One rule for every driver.
 // A job is cancelled on any turn its truck ends above parked speed, and its finished turns are lost.
+// A repair is also cancelled once the grid holds no parts for it.
 
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
-import { goodsCount } from './grid';
+import { goodsCount, mountedParts } from './grid';
+import { partDef } from '../data/parts';
 import { repairPlan, repairTurn } from './repair';
 import { searchTurn } from './search';
 import type { Job, Vehicle, World } from './types';
@@ -26,8 +28,22 @@ export function startRepair(world: World, partId: string): World {
     const plan = repairPlan(w, v, partId);
     if (plan.needed === 0) throw new Error('Already at the field repair cap');
     if (plan.parts === 0) throw new Error('No parts to patch with');
-    startJob(w, v, { kind: 'repair', partId, turnsLeft: plan.turns, total: plan.turns });
+    startJob(w, v, { kind: 'repair', partId, parts: plan.parts, turnsLeft: plan.turns, total: plan.turns });
   });
+}
+
+// Auto patch: a parked, idle player truck patches its most damaged part with one unit of parts at a
+// time, so driving off loses at most one short job.
+export function startAutoRepair(world: World): void {
+  if (!world.player.autoRepair) return;
+  const v = playerVehicle(world);
+  if (v.job || v.speed > RULES.parkedSpeed || (goodsCount(v).parts ?? 0) === 0) return;
+  const worst = mountedParts(v)
+    .filter((p) => repairPlan(world, v, p.id).needed > 0)
+    .sort((a, b) => a.hp / partDef(a.defId).hp - b.hp / partDef(b.defId).hp)[0];
+  if (!worst) return;
+  const plan = repairPlan(world, v, worst.id, 1);
+  startJob(world, v, { kind: 'repair', partId: worst.id, parts: plan.parts, turnsLeft: plan.turns, total: plan.turns });
 }
 
 export function advanceJobs(world: World): void {
@@ -37,6 +53,8 @@ export function advanceJobs(world: World): void {
 // A turn handler does one turn of work and returns true once the job is finished.
 function advanceJob(world: World, v: Vehicle, job: Job): void {
   if (v.speed > RULES.parkedSpeed) return endJob(world, v, job, 'cancelled');
+  // Parts can leave the grid mid-job, by a sale, a defeat or a destroyed cargo part.
+  if (job.kind === 'repair' && repairPlan(world, v, job.partId, job.parts).parts === 0) return endJob(world, v, job, 'cancelled');
   const done = job.kind === 'repair' ? repairTurn(world, v, job) : searchTurn(world, v, job);
   if (done) endJob(world, v, job, 'done');
 }

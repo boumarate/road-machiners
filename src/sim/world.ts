@@ -25,7 +25,8 @@ import { playerSees, refreshVision } from './vision';
 import { advanceWeather } from './weather';
 import { applyWear } from './wear';
 import { advanceDust } from './detect';
-import { advanceJobs } from './jobs';
+import { advanceJobs, startAutoRepair } from './jobs';
+import { advanceEngineHeat } from './engine-heat';
 import { clamp, dist, type Vec } from './vec';
 
 export function newWorld(seed: number, kit: StartKit): World {
@@ -52,6 +53,8 @@ export function newWorld(seed: number, kit: StartKit): World {
       fuel: kit.fuel,
       supplies: kit.supplies,
       autoFire: false,
+      autoRepair: true,
+      engineHeat: 0,
       discovered: [REGION.playerStart.town],
       scavenged: [],
       storage: [],
@@ -141,8 +144,10 @@ export function endTurn(
     planNpcOrders(w);
     move(w);
     applyWear(w);
+    advanceEngineHeat(w);
     advanceDust(w);
     advanceJobs(w);
+    startAutoRepair(w);
     refreshVision(w);
     assignAutoOrders(w);
     fireWeapons(w);
@@ -187,6 +192,12 @@ export function setWeaponOrder(
 export function setDirect(world: World, on: boolean): World {
   return update(world, (w) => {
     playerVehicle(w).direct = on;
+  });
+}
+
+export function setAutoRepair(world: World, on: boolean): World {
+  return update(world, (w) => {
+    w.player.autoRepair = on;
   });
 }
 

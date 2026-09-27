@@ -6,3 +6,4 @@ tmp/
 .env
 .claude/scheduled_tasks.lock
 __pycache__/
+.pi/

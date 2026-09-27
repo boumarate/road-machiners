@@ -101,7 +101,7 @@ describe('NPC equipment generation', () => {
 
   it('uses the same generator for periodic spawns without exceeding existing caps', () => {
     const world = structuredClone(fixture);
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < Math.max(...Object.values(NPCS).map((t) => t.cap)) + 2; attempt++) {
       for (const template of Object.values(NPCS)) world.spawnTimer[template.id] = 1;
       spawnNpcs(world);
     }
