@@ -14,7 +14,7 @@ import { inShade, sunAt } from './sun';
 import { straightClear } from './path';
 import { vehicleStats } from './stats';
 import { cloneWorld, endTurn } from './world';
-import { addVehicle, emptyWorld, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import { siteGates } from './sites';
 import type { NpcActivity, Vehicle, World } from './types';
 
@@ -293,7 +293,7 @@ describe('NPC field repairs', () => {
     let started = false;
     let completed = false;
     for (let turn = 0; turn < 8; turn++) {
-      world = endTurn(world);
+      world = endTurn(world, testDrive);
       npc = world.vehicles.find((v) => v.id === npcId)!;
       started ||= world.events.some((e) => e.t === 'job' && e.vehicle === npcId && e.outcome === 'started');
       completed ||= world.events.some((e) => e.t === 'job' && e.vehicle === npcId && e.outcome === 'done');

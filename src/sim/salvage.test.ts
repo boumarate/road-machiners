@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, testDrive } from './testkit';
 import { resolveDestroyed } from './combat';
 import { addGoods } from './inventory';
 import { corePart, goodsCount, mountedParts } from './grid';
@@ -42,7 +42,7 @@ describe('finite salvage', () => {
     let next = scavenge(w);
     let turns = 0;
     while (next.vehicles[0].job) {
-      next = endTurn(next);
+      next = endTurn(next, testDrive);
       if (++turns > 50) throw new Error('search never finished');
     }
     next = takeAllLoot(next, convoy.id);

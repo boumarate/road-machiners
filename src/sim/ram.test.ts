@@ -1,15 +1,20 @@
 import { partDef } from '../data/parts';
 import { describe, expect, it } from 'vitest';
 import { corePart, mountedItems, mountedParts } from './grid';
-import { applyCrash } from './movement';
-import { applyContactCrash, isRamGainful } from './crash-contact';
+import { applyContactCrash, estimateCrashGeometry, isRamGainful } from './crash-contact';
 import { RULES } from '../data/rules';
 import { thinkNpc } from './npc-activities';
 import { addState, stateOf } from './states';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { GameEvent, Vehicle, World } from './types';
+import type { Vec } from './vec';
 
 const FULL_SPEED = 6; // tiles per turn, a scout at top speed
+
+// from is the point the blow comes from, which picks the struck side.
+function applyCrash(world: World, a: Vehicle, b: Vehicle | null, what: string, from: Vec, impact: number): void {
+  applyContactCrash(world, a, b, what, impact, estimateCrashGeometry(a, b, from));
+}
 
 function crashOf(w: World): Extract<GameEvent, { t: 'collision' }> {
   const e = w.events.find((x) => x.t === 'collision');
@@ -125,7 +130,7 @@ describe('rams as attacks', () => {
     expect(victim.brain!.attackers).toEqual({ [trader.id]: true });
   });
 
-  it('a physics contact crash is an attack like a 2D crash', () => {
+  it('a crash with measured physics contact geometry is an attack too', () => {
     const { w, trader, victim, mate } = ramSetup();
     applyContactCrash(w, trader, victim, victim.id, FULL_SPEED, { a: { side: 'front', lanes: [1, 2] }, b: { side: 'left', lanes: [2, 3] } });
     expect(total(crashOf(w).hitsB)).toBeGreaterThan(0);
