@@ -63,17 +63,3 @@ describe("town guards", () => {
   });
 });
 
-describe("walled sites", () => {
-  it("put a gate on the wall line at every road into each town and palisade", () => {
-    for (const site of [
-      ...REGION.towns,
-      ...REGION.locations.filter((l) => l.walled),
-    ]) {
-      expect(siteGates(site).length).toBeGreaterThan(0);
-      for (const g of siteGates(site))
-        expect(Math.hypot(g.x - site.pos.x, g.y - site.pos.y)).toBeCloseTo(
-          site.radius,
-        );
-    }
-  });
-});

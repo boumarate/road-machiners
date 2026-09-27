@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { Box3, Vector3 } from 'three';
+import { Box3, InstancedMesh, Matrix4, Mesh, Vector3, type Object3D } from 'three';
 import { loadModels } from './models';
 import { buildSites } from './sites';
+import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
+import { siteGates } from '../../sim/sites';
 
 // The model files as base64 data URLs, since tests run without a server.
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
@@ -17,6 +19,12 @@ function measureSite(id: string): Vector3 {
   const site = sites.getObjectByName(`landmark-${id}`);
   if (!site) throw new Error(`Missing site ${id}`);
   return new Box3().setFromObject(site).getSize(new Vector3());
+}
+
+// Pieces marked outsideEdge, like Canyon Bridge, lie outside their site on purpose.
+function outsideEdge(o: Object3D): boolean {
+  for (let p: Object3D | null = o; p; p = p.parent) if (p.userData.outsideEdge) return true;
+  return false;
 }
 
 describe('landmark scale', () => {
@@ -37,11 +45,47 @@ describe('landmark scale', () => {
     }
   });
 
-  it('closes palisaded sites with a gate per road', () => {
-    for (const site of REGION.locations.filter((l) => l.walled)) {
+  it('closes every site with an edge and shut doors at each gate', () => {
+    for (const site of [...REGION.towns, ...REGION.locations]) {
       const group = sites.getObjectByName(`landmark-${site.id}`)!;
-      expect(group.userData.wallSections).toBeGreaterThan(5);
-      expect(group.userData.gates).toBeGreaterThan(0);
+      expect(group.userData.wallSections, site.id).toBeGreaterThan(5);
+      expect(group.userData.gates, site.id).toBe(siteGates(site).length);
+      expect(group.userData.doors, site.id).toBe(2 * siteGates(site).length);
+    }
+  });
+
+  it('draws each edge within its wall thickness of the collision edge', () => {
+    for (const site of [...REGION.towns, ...REGION.locations]) {
+      const group = sites.getObjectByName(`landmark-${site.id}`)!;
+      const reach = group.userData.edgeReach as [number, number];
+      expect(reach[0], site.id).toBeGreaterThan(site.radius - 1);
+      expect(reach[1], site.id).toBeLessThanOrEqual(site.radius + 0.01);
+    }
+  });
+
+  it('keeps everything a truck could touch inside the site edge', () => {
+    const S = PHYSICS.metersPerTile;
+    const reach = 1; // tiles above the ground a truck body reaches
+    const v = new Vector3();
+    const m = new Matrix4();
+    for (const site of [...REGION.towns, ...REGION.locations]) {
+      let worst = 0;
+      sites.getObjectByName(`landmark-${site.id}`)!.traverse((o) => {
+        if (!(o instanceof Mesh) || outsideEdge(o)) return;
+        o.updateWorldMatrix(true, false);
+        const pos = o.geometry.getAttribute('position');
+        const copies = o instanceof InstancedMesh ? o.count : 1;
+        for (let k = 0; k < copies; k++) {
+          const at = o.matrixWorld.clone();
+          if (o instanceof InstancedMesh) at.multiply(o.getMatrixAt(k, m));
+          for (let i = 0; i < pos.count; i++) {
+            v.fromBufferAttribute(pos, i).applyMatrix4(at);
+            if (v.y > reach * S) continue;
+            worst = Math.max(worst, Math.hypot(v.x / S - site.pos.x, v.z / S - site.pos.y) - site.radius);
+          }
+        }
+      });
+      expect.soft(worst, site.id).toBeLessThanOrEqual(0.05);
     }
   });
 

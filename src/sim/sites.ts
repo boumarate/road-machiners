@@ -17,8 +17,8 @@ export function siteGates(site: Site): Vec[] {
   let gates = GATES.get(site.id);
   if (!gates) {
     const crossings = REGION.roads.flatMap((road) => road.slice(1).flatMap((b, i) => edgeCrossings(road[i], b, site.pos, site.radius)));
-    // Roads that meet at the edge cross it at one gate.
-    gates = crossings.filter((p, i) => !crossings.slice(0, i).some((q) => dist(q, p) < REGION.roadWidth));
+    // Roads that cross the edge close together share one gate.
+    gates = crossings.filter((p, i) => !crossings.slice(0, i).some((q) => dist(q, p) < REGION.sites.gateSpacing));
     if (gates.length === 0) throw new Error(`Site ${site.id} has no road into it`);
     GATES.set(site.id, gates);
   }

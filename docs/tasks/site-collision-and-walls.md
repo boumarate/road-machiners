@@ -60,7 +60,7 @@ Landmarks like Canyon Bridge and Fallen Sun keep their own shapes. The bridge st
 
 ## Plan
 - PH1 — Use spots: every site gets gates and pads. `canUseSite` works on pads only. A click on a site stops at its nearest pad. Tests cover use from a pad and refusal elsewhere. Done.
-- PH2 — Boundaries: each site draws a boundary on its collision edge. Radii are tuned so models fill the shape.
+- PH2 — Boundaries: each site draws a boundary on its collision edge. Radii are tuned so models fill the shape. Done: every location names its edge in `src/data/region.ts`, and doors close every gate. Models are fitted to the radii instead.
 - PH3 — Wall kit: Blender slab, post, gatehouse with doors and scrap panel. The user reviews each preview.
 - PH4 — Gate animation: doors open, the truck drives in and hides, and the reverse on leave.
 - PH5 — Site props per site, one site at a time, each reviewed in game.
@@ -68,3 +68,4 @@ Landmarks like Canyon Bridge and Fallen Sun keep their own shapes. The bridge st
 ## Verify
 - PH1: `src/sim/sites.test.ts` covers gates on every site edge, pads outside each gate, use only on a pad, and site clicks. `tmp/pad-check.mjs dustwell` clicks the Dustwell center, and the truck stops and stays on the pad. `tmp/bowl-pad.mjs` shows the Bowl pad with the enter action.
 - PH1 found two bugs. A truck without an order held its current speed, so a parked truck rolled faster down a slope into the site. It now brakes below parking speed. On a steep 0.2 grade the brakes still slip about 0.06 tiles per turn. The terrain canvas texture was flipped north to south, so roads, pads and ground colors drew on the mirrored half of the map. It now sets `flipY` false.
+- PH2: `src/three/render/sites.test.ts` checks that every site has an edge with shut doors at each gate, that the edge lies on the collision circle, and that nothing below truck height pokes past it. The Fallen Sun hull overflowed its edge by 7 tiles, and the orchard's old fence line by 1. Both now fit. Canyon Bridge stays outside its site on purpose. Road crossings closer than `gateSpacing` share one gate, so door gaps never overlap.
