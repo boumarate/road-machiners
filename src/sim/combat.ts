@@ -423,7 +423,7 @@ function applyShot(world: World, s: Shot): void {
 function practiceHits(world: World, s: Shot): void {
   if (s.shooter.id !== world.player.vehicleId) return;
   const hits = s.rolls.filter((roll) => roll.hit).length;
-  if (hits > 0) practice(world, 'hit', hits, 1 - s.odds.chance);
+  if (hits > 0) practice(world, 'hit', hits, 1 - s.odds.chance, s.target.id);
 }
 
 function witnessesAttack(world: World, observer: Vehicle, shooter: Vehicle, target: Vehicle): boolean {

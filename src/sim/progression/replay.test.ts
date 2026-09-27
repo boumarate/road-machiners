@@ -18,7 +18,7 @@ function simpleSearchXp(): void {
   });
 }
 
-const search = (turn: number, amount: number): TraceLine => ({ turn, source: 'search', amount, difficulty: null });
+const search = (turn: number, amount: number): TraceLine => ({ turn, source: 'search', amount, difficulty: null, target: `stock-${turn}` });
 
 describe('replay', () => {
   it('reaches each level on the turn its running XP crosses the level cost, with the daily cap per day', () => {
@@ -45,9 +45,16 @@ describe('replay', () => {
   });
 
   it('scales a scaled source by its difficulty', () => {
-    const curve = replay([{ turn: 5, source: 'hit', amount: 1, difficulty: 1 }], 200);
+    const curve = replay([{ turn: 5, source: 'hit', amount: 1, difficulty: 1, target: 'v2' }], 200);
 
     expect(curve.perception.total).toBe(Math.min(XP_SOURCES.hit.weight * XP_RULES.hard, XP_RULES.dailyCap));
+  });
+
+  it('pays less for repeats on one target, and a once-only target pays once', () => {
+    const hits = replay([1, 2].map((turn) => ({ turn, source: 'hit' as const, amount: 1, difficulty: 1, target: 'v2' })), 200);
+    expect(hits.perception.total).toBeCloseTo(XP_SOURCES.hit.weight * XP_RULES.hard * (1 + XP_SOURCES.hit.repeat ** 1));
+    const found = replay([1, 2].map((turn) => ({ turn, source: 'discover' as const, amount: 1, difficulty: null, target: 'bowl' })), 200);
+    expect(found.perception.total).toBe(XP_SOURCES.discover.weight);
   });
 
   it('rejects a trace out of turn order', () => {

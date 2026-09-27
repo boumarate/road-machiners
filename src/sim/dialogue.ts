@@ -83,30 +83,21 @@ function enter(world: World, call: Call, topic: TopicId | null, node: string): v
   say(world, call.with, currentLine(world), call.vars);
 }
 
+// Taking up a topic practices social. The same topic with the same driver pays only the first time.
 function enterTopic(world: World, npc: Vehicle, call: Call, topic: Topic): void {
   call.vars = topic.prepare ? PREPARES[topic.prepare](world, npc) : {};
-  learnTopic(world, npc, call, topic.id);
+  practice(world, 'call', 1, null, `${npc.id}:${topic.id}`);
   enter(world, call, topic.id, topic.start);
 }
 
-// A topic counts once per driver, so asking the same driver the same question again teaches nothing.
-function learnTopic(world: World, npc: Vehicle, call: Call, topic: TopicId): void {
-  const asked = world.player.asked[npc.id] ?? [];
-  if (asked.includes(topic)) return;
-  world.player.asked[npc.id] = [...asked, topic];
-  call.learned = true;
-}
-
-// An ended call that took up a new topic practices social. Hanging up at once teaches nothing.
 function endCall(world: World, call: Call): void {
   world.player.call = null;
   world.events.push({ t: 'call', with: call.with, outcome: 'ended' });
-  if (call.learned) practice(world, 'call', 1, null);
 }
 
 function begin(world: World, npc: Vehicle): Call {
   if (world.player.call) throw new Error('A call is already open');
-  const call: Call = { with: npc.id, topic: null, node: HUB, vars: {}, line: { text: '', vars: {} }, learned: false };
+  const call: Call = { with: npc.id, topic: null, node: HUB, vars: {}, line: { text: '', vars: {} } };
   world.player.call = call;
   world.events.push({ t: 'call', with: npc.id, outcome: 'opened' });
   return call;
@@ -223,12 +214,9 @@ export function honk(world: World): World {
   });
 }
 
-// A driver in sight that honks back for the first time practices social a little. Honking takes no turn, so each
-// driver counts once.
+// A driver in sight that honks back practices social a little.
 function practiceHonk(world: World, me: Vehicle, npc: Vehicle): void {
-  if (world.player.honkedBack.includes(npc.id) || !canVehicleSee(world, me, npc.pos)) return;
-  world.player.honkedBack.push(npc.id);
-  practice(world, 'honk', 1, null);
+  if (canVehicleSee(world, me, npc.pos)) practice(world, 'honk', 1, null, npc.id);
 }
 
 function answering(world: World, me: Vehicle): Vehicle[] {

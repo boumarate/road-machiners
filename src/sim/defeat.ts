@@ -27,7 +27,7 @@ export function checkKnockout(world: World): void {
   if (p.state !== "active" || corePart(me, "cab").hp > 0) return;
   // Only a knockout with a hostile truck in sight teaches toughness, judged before the truck is stripped. A cab
   // broken on purpose next to a foe that ignores a stripped truck does not.
-  if (hostileWatches(world, me)) practice(world, "knockout", 1, null);
+  if (hostileWatches(world, me)) practice(world, "knockout", 1, null, "driver");
   createKnockoutSalvage(world, me);
   p.state = "knockedOut";
   p.knockoutTurns = 0;

@@ -125,7 +125,7 @@ export const EFFECTS: Record<EffectId, Effect> = {
   handOver: (world, npc, call) => {
     yieldTo(world, playerVehicle(world), npc);
     settle(world, npc, call, 'agreed');
-    practice(world, 'deal', 1, null);
+    practice(world, 'deal', 1, null, npc.id);
   },
   acceptPlea: (world, npc) => answerPlea(world, npc, true),
   refusePlea: (world, npc) => answerPlea(world, npc, false),
@@ -141,7 +141,7 @@ export const EFFECTS: Record<EffectId, Effect> = {
     const answer = threatAnswer(call);
     settleThreat(world, npc, answer);
     settle(world, npc, call, answer === 'comply' ? 'agreed' : 'refused');
-    if (answer === 'comply') practice(world, 'deal', 1, null);
+    if (answer === 'comply') practice(world, 'deal', 1, null, npc.id);
   },
   settleDone: (world, npc, call) => settle(world, npc, call, 'done'),
   settleRefused: (world, npc, call) => settle(world, npc, call, 'refused'),

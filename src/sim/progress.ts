@@ -8,10 +8,11 @@ import {
   XP_RULES, XP_SOURCES, XP_TO_REACH,
 } from '../data/skills';
 import { clockOf } from './sun';
-import type { Player, SkillId, Vehicle, World, XpSource } from './types';
+import type { Player, Repeat, SkillId, Vehicle, World, XpSource } from './types';
+import type { Vec } from './vec';
 import { update } from './world';
 
-export type SkillProgress = Pick<Player, 'skills' | 'xpToday' | 'xpDay'>;
+export type SkillProgress = Pick<Player, 'skills' | 'xpToday' | 'xpDay' | 'repeats'>;
 
 export function levelOf(xp: number): number {
   let level = 0;
@@ -35,15 +36,37 @@ export function xpTodayOf(world: World, skill: SkillId): number {
   return world.player.xpDay === clockOf(world.turn).day ? world.player.xpToday[skill] : 0;
 }
 
-// XP one practice event earns. Difficulty runs from 0 for a sure thing to 1 for a long shot, and is null
-// for an unscaled source. XP past the skill's daily cap pays at the over-cap rate.
-export function xpFor(p: SkillProgress, source: XpSource, amount: number, difficulty: number | null, day: number): number {
+// XP one practice event earns on turn `turn`. Difficulty runs from 0 for a sure thing to 1 for a long shot, and is
+// null for an unscaled source. Earlier events on the same target cut the pay; see XP_SOURCES. XP past the skill's
+// daily cap pays at the over-cap rate.
+export function xpFor(p: SkillProgress, source: XpSource, amount: number, difficulty: number | null, target: string, turn: number): number {
   const def = XP_SOURCES[source];
   if (!(amount >= 0)) throw new Error(`Practice amount ${amount} for ${source} is not a non-negative number`);
-  const full = def.weight * amount * difficultyMult(source, def.scaled, difficulty);
-  const today = p.xpDay === day ? p.xpToday[def.skill] : 0;
+  const full = def.weight * amount * difficultyMult(source, def.scaled, difficulty) * def.repeat ** repeatsOf(p, source, target, turn);
+  const today = p.xpDay === clockOf(turn).day ? p.xpToday[def.skill] : 0;
   const underCap = Math.min(full, Math.max(0, XP_RULES.dailyCap - today));
   return underCap + (full - underCap) * XP_RULES.overCap;
+}
+
+// Earlier practice events on a target as of `turn`, halved every repeatHalfLife turns.
+function repeatsOf(p: SkillProgress, source: XpSource, target: string, turn: number): number {
+  const seen = p.repeats[repeatKey(source, target)];
+  return seen ? faded(seen, turn) : 0;
+}
+
+function faded(seen: Repeat, turn: number): number {
+  if (turn < seen.turn) throw new Error(`Practice on turn ${turn} is before the last one on turn ${seen.turn}`);
+  return seen.count * 0.5 ** ((turn - seen.turn) / XP_RULES.repeatHalfLife);
+}
+
+// The map region around a point, the target of practice that happens anywhere, like driving.
+export function regionOf(pos: Vec): string {
+  return `${Math.floor(pos.x / XP_RULES.regionTiles)},${Math.floor(pos.y / XP_RULES.regionTiles)}`;
+}
+
+function repeatKey(source: XpSource, target: string): string {
+  if (target === '') throw new Error(`Practice of ${source} names no target`);
+  return `${source}:${target}`;
 }
 
 function difficultyMult(source: XpSource, scaled: boolean, difficulty: number | null): number {
@@ -55,28 +78,39 @@ function difficultyMult(source: XpSource, scaled: boolean, difficulty: number | 
   return XP_RULES.easy + (XP_RULES.hard - XP_RULES.easy) * difficulty;
 }
 
-export function practice(world: World, source: XpSource, amount: number, difficulty: number | null): void {
+// The one way to gain XP. `target` names what the player practiced on; see XP_SOURCES.
+export function practice(world: World, source: XpSource, amount: number, difficulty: number | null, target: string): void {
   const p = world.player;
   const skill = XP_SOURCES[source].skill;
   const before = levelOf(p.skills[skill]);
-  const xp = accrueXp(p, source, amount, difficulty, clockOf(world.turn).day);
+  const xp = accrueXp(p, source, amount, difficulty, target, world.turn);
   p.xpBySource[source] += xp;
-  world.events.push({ t: 'practice', source, amount, difficulty, xp });
+  world.events.push({ t: 'practice', source, amount, difficulty, target, xp });
   announceLevels(world, skill, before);
 }
 
-// The bookkeeping of one practice event, shared with the progression replay: a new day clears today's XP, and the
-// XP counts toward today and the skill. Returns the XP earned.
-export function accrueXp(p: SkillProgress, source: XpSource, amount: number, difficulty: number | null, day: number): number {
+// The bookkeeping of one practice event, shared with the progression replay: a new day clears today's XP and
+// forgets faded targets, the XP counts toward today and the skill, and the target counts one more event. Returns
+// the XP earned.
+export function accrueXp(p: SkillProgress, source: XpSource, amount: number, difficulty: number | null, target: string, turn: number): number {
   const skill = XP_SOURCES[source].skill;
-  const xp = xpFor(p, source, amount, difficulty, day);
-  if (p.xpDay !== day) {
-    p.xpDay = day;
-    for (const id of Object.keys(p.xpToday) as SkillId[]) p.xpToday[id] = 0;
-  }
+  const xp = xpFor(p, source, amount, difficulty, target, turn);
+  const day = clockOf(turn).day;
+  if (p.xpDay !== day) startDay(p, day, turn);
+  p.repeats[repeatKey(source, target)] = { count: repeatsOf(p, source, target, turn) + 1, turn };
   p.xpToday[skill] += xp;
   p.skills[skill] += xp;
   return xp;
+}
+
+// Clears today's XP and forgets decaying targets whose earlier events have faded. Targets that pay once stay.
+function startDay(p: SkillProgress, day: number, turn: number): void {
+  p.xpDay = day;
+  for (const id of Object.keys(p.xpToday) as SkillId[]) p.xpToday[id] = 0;
+  p.repeats = Object.fromEntries(Object.entries(p.repeats).filter(([key, seen]) => {
+    const source = key.slice(0, key.indexOf(':')) as XpSource;
+    return XP_SOURCES[source].repeat === 0 || faded(seen, turn) >= XP_RULES.forgetBelow;
+  }));
 }
 
 // Adds XP to a skill with no cap or source, and announces each level it reaches.

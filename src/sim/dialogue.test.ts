@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { PERK_NUMBERS } from '../data/skills';
+import { PERK_NUMBERS, XP_SOURCES } from '../data/skills';
 import { TRAIT_TALK, END, HONK_RANGE, HUB, TOPICS, type Topic } from '../data/dialogue';
 import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
@@ -73,7 +73,7 @@ describe('calls', () => {
   it('opens on the hub with the greeting when the player sees the truck', () => {
     const { w, npc } = withNpc('trader', 'traders');
     const next = callVehicle(w, npc.id);
-    expect(next.player.call).toEqual({ with: npc.id, topic: null, node: HUB, vars: {}, line: { text: TRAIT_TALK.trader.voice!.greeting, vars: {} }, learned: false });
+    expect(next.player.call).toEqual({ with: npc.id, topic: null, node: HUB, vars: {}, line: { text: TRAIT_TALK.trader.voice!.greeting, vars: {} } });
     expect(next.events).toContainEqual({ t: 'call', with: npc.id, outcome: 'opened' });
     expect(next.events).toContainEqual({ t: 'say', speaker: npc.id, text: TRAIT_TALK.trader.voice!.greeting, vars: {} });
   });
@@ -215,8 +215,8 @@ describe('honk', () => {
     npcAt(w, 'trader', 'traders', 36);
     refreshVision(w);
     const once = honk(w);
-    expect(practiceOf(once, 'honk')).toMatchObject([{ amount: 1, difficulty: null }]);
-    expect(practiceOf(honk(once), 'honk')).toEqual([]);
+    expect(practiceOf(once, 'honk')).toMatchObject([{ amount: 1, difficulty: null, xp: XP_SOURCES.honk.weight }]);
+    expect(practiceOf(honk(once), 'honk')).toMatchObject([{ xp: 0 }]);
   });
 
   it('a truck honking back out of sight pays nothing', () => {
@@ -340,30 +340,28 @@ describe('demand', () => {
 });
 
 describe('call practice', () => {
-  it('pays the player once when a call that took up a topic ends', () => {
+  it('pays the player when a call takes up a topic, targeting the driver and topic', () => {
     const { w, npc } = withNpc('trader', 'traders');
     const open = callVehicle(w, npc.id);
     expect(practiceOf(open, 'call')).toEqual([]);
     const asked = chooseOption(open, optionIndex(open, 'Where is the nearest town?'));
-    const closed = chooseOption(asked, optionIndex(asked, 'Thanks. Over and out.'));
-    expect(practiceOf(closed, 'call')).toMatchObject([{ amount: 1, difficulty: null }]);
+    expect(practiceOf(asked, 'call')).toMatchObject([{ amount: 1, difficulty: null, target: `${npc.id}:directions`, xp: XP_SOURCES.call.weight }]);
   });
 
-  it('pays nothing for a topic already taken up with the same driver', () => {
+  it('pays nothing for a topic already taken up with the same driver, and in full with another driver', () => {
     const { w, npc } = withNpc('trader', 'traders');
-    const ask = (from: World): World => {
-      const open = callVehicle(from, npc.id);
+    const ask = (from: World, id: string): World => {
+      const open = callVehicle(from, id);
       const asked = chooseOption(open, optionIndex(open, 'Where is the nearest town?'));
       return chooseOption(asked, optionIndex(asked, 'Thanks. Over and out.'));
     };
-    const again = ask(ask(w));
-    expect(practiceOf(again, 'call')).toEqual([]);
+    const once = ask(w, npc.id);
+    const again = ask(once, npc.id);
+    expect(again.player.skills.social).toBeCloseTo(once.player.skills.social);
     const other = addVehicle(again, 'traders', 'scout', [], { x: 30, y: 36 });
     other.brain = npcBrain('trader', other.pos, ['trader']);
     refreshVision(again);
-    const open = callVehicle(again, other.id);
-    const asked = chooseOption(open, optionIndex(open, 'Where is the nearest town?'));
-    expect(practiceOf(chooseOption(asked, optionIndex(asked, 'Thanks. Over and out.')), 'call')).toHaveLength(1);
+    expect(ask(again, other.id).player.skills.social).toBeCloseTo(once.player.skills.social + XP_SOURCES.call.weight);
   });
 
   it('pays nothing for a call hung up without a topic', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TIME } from '../data/time';
+import { XP_SOURCES } from '../data/skills';
 import { isHostile } from './combat';
 import { noteEscape } from './escape';
 import { vehicleDanger } from './npc-decisions';
@@ -38,7 +38,7 @@ describe('escape practice', () => {
     expect(w.player.hostilesSeen).toEqual([]);
   });
 
-  it('pays once a day for slipping in and out of sight of the same truck', () => {
+  it('pays less for each time the player slips in and out of sight of the same truck', () => {
     const { w, raider } = raiderInSight();
     const flicker = () => {
       raider.pos = { x: 36, y: 30 };
@@ -50,10 +50,9 @@ describe('escape practice', () => {
     };
     flicker();
     flicker();
-    expect(practiceOf(w, 'escape')).toHaveLength(1);
-    w.turn += TIME.turnsPerDay;
-    flicker();
-    expect(practiceOf(w, 'escape')).toHaveLength(2);
+    const [first, second] = practiceOf(w, 'escape');
+    expect(first.target).toBe(raider.id);
+    expect(second.xp / first.xp).toBeCloseTo(XP_SOURCES.escape.repeat);
   });
 
   it('pays nothing while a hostile is still in sight', () => {

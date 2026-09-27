@@ -139,5 +139,5 @@ function endJob(
 // only moves parts, and a part can move back and forth forever, so it teaches nothing.
 function practiceFieldJob(world: World, v: Vehicle, job: Job): void {
   if (v.id !== world.player.vehicleId || job.kind !== "repair") return;
-  practice(world, "fieldJob", job.total, null);
+  practice(world, "fieldJob", job.total, null, job.partId);
 }

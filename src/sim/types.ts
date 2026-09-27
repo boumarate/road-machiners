@@ -237,9 +237,10 @@ export type CallVars = Record<string, CallVar>;
 
 // An open radio call with the NPC `with`. A null topic means the hub of topics. `line` is what the NPC said
 // last, which is the node's line or an answer that kept the call on the hub.
-// `learned` turns true once the call takes up a topic the player never took up with this driver; only such a call
-// practices social when it ends.
-export type Call = { with: string; topic: TopicId | null; node: string; vars: CallVars; line: { text: string; vars: CallVars }; learned: boolean };
+// Earlier practice events on one target: `count` of them as of turn `turn`.
+export type Repeat = { count: number; turn: number };
+
+export type Call = { with: string; topic: TopicId | null; node: string; vars: CallVars; line: { text: string; vars: CallVars } };
 export type TopicOutcome = "agreed" | "refused" | "done";
 
 export type Player = {
@@ -248,6 +249,7 @@ export type Player = {
   skills: Record<SkillId, number>; // XP per skill; the level follows from XP_TO_REACH
   xpToday: Record<SkillId, number>; // XP per skill earned on day xpDay, for the daily soft cap
   xpDay: number;
+  repeats: Record<string, Repeat>; // "source:target" to the earlier practice on that target; see XP_SOURCES
   xpBySource: Record<XpSource, number>; // lifetime XP per source, for the debug console
   perks: PerkId[]; // picked perks, at most one per pair; see src/sim/progress.ts
   health: number;
@@ -268,14 +270,11 @@ export type Player = {
   beacon: boolean; // the emergency beacon calls every vehicle within BEACON.range; see src/sim/tow.ts
   call: Call | null;
   talked: Record<string, Partial<Record<TopicId, TopicOutcome>>>; // NPC id to how each topic with it ended
-  asked: Record<string, TopicId[]>; // NPC id to every topic ever taken up with it, for call XP
-  honkedBack: string[]; // ids of NPCs that ever honked back in sight, for honk XP
   explored: Uint8Array; // fog of war: tile y * world.size + x, 1 once seen
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision
   contacts: Contact[]; // vehicles detected beyond sight; refreshed by refreshVision
   clouds: string[]; // ids of dust clouds the player sees right now; refreshed by refreshVision
   hostilesSeen: string[]; // ids of hostile trucks in sight at the end of the last turn, for escapes; see src/sim/escape.ts
-  escapedFrom: Record<string, number>; // hostile truck id to the day of the last escape from it, today only
 };
 
 // One round of a shot. offset is where it crossed the target in meters from its center, across the line
@@ -298,7 +297,7 @@ export type GameEvent =
   | { t: 'spawn'; vehicle: string }
   | { t: 'despawn'; vehicle: string }
   | { t: 'hostile'; vehicle: string; against: string }
-  | { t: 'practice'; source: XpSource; amount: number; difficulty: number | null; xp: number }
+  | { t: 'practice'; source: XpSource; amount: number; difficulty: number | null; target: string; xp: number }
   | { t: 'skillUp'; skill: SkillId; level: number }
   | { t: 'money'; amount: number; reason: string }
   | { t: 'discover'; location: string }

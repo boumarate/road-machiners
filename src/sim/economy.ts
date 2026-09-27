@@ -77,14 +77,14 @@ export function tradeGoods(
       throw new Error(`Cannot sell ${count} ${good}, holding ${held}`);
     removeGoods(vehicle, good, count);
     resources.money += price * count;
-    if (vehicle.id === world.player.vehicleId) practiceSale(world, good, price, count);
+    if (vehicle.id === world.player.vehicleId) practiceSale(world, townId, good, price, count);
   }
 }
 
 // Social grows from profit over the average price paid. A sale at a loss teaches nothing.
-function practiceSale(world: World, good: string, price: number, count: number): void {
+function practiceSale(world: World, townId: string, good: string, price: number, count: number): void {
   const profit = (price - (world.player.costBasis[good] ?? 0)) * count;
-  if (profit > 0) practice(world, "profit", profit, null);
+  if (profit > 0) practice(world, "profit", profit, null, `${townId}:${good}`);
 }
 
 export function sellVehicleCargo(

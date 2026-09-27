@@ -34,7 +34,7 @@ export function discoverSite(world: World, s: { id: string; name: string }): voi
   if (world.player.discovered.includes(s.id)) throw new Error(`${s.id} is already discovered`);
   world.player.discovered.push(s.id);
   world.events.push({ t: "discover", location: s.id });
-  practice(world, 'discover', 1, null);
+  practice(world, 'discover', 1, null, s.id);
 }
 
 export function applySiteAction(world: World): World | null {

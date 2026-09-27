@@ -167,8 +167,9 @@ export function settlePatch(world: World, s: NpcState): void {
   getResources(world, roles.patcher).money += data.price;
   for (const part of brokenDriveParts(roles.client)) part.hp = Math.max(1, Math.round(partDef(part.defId).hp * PATCH.share));
   world.events.push({ t: 'patch', patcher: s.holder, client: s.other, outcome: 'done' });
-  if (s.holder === world.player.vehicleId) practice(world, 'patch', 1, null);
-  if (s.holder === world.player.vehicleId || s.other === world.player.vehicleId) practice(world, 'deal', 1, null);
+  if (s.holder === world.player.vehicleId) practice(world, 'patch', 1, null, s.other);
+  if (s.holder === world.player.vehicleId) practice(world, 'deal', 1, null, s.other);
+  if (s.other === world.player.vehicleId) practice(world, 'deal', 1, null, s.holder);
 }
 
 // A patch nobody worked on for its whole timer lapses for free.
