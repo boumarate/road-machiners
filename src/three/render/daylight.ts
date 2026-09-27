@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { TERRAIN } from "../../data/terrain";
 import { TIME } from "../../data/time";
 import { clockOf } from "../../sim/sun";
+import type { V3 } from "../../phys/frames";
 import type { Vec } from "../../sim/vec";
 
 const DEG = Math.PI / 180;
@@ -141,6 +142,20 @@ export function daylightAt(turn: number): Daylight {
     dir: { x: x / len, y: y / len },
     elevation: elevation * DEG,
   };
+}
+
+const SUN_RADIUS = 150; // meters from the focus to the sun light
+
+// Puts the sun above focus in the light's direction and colors both lights.
+export function lightScene(sun: THREE.DirectionalLight, sky: THREE.HemisphereLight, focus: V3, light: Daylight): void {
+  const horiz = Math.cos(light.elevation) * SUN_RADIUS;
+  sun.target.position.set(focus.x, focus.y, focus.z);
+  sun.position.set(focus.x + light.dir.x * horiz, focus.y + Math.sin(light.elevation) * SUN_RADIUS, focus.z + light.dir.y * horiz);
+  sun.color.copy(light.sun);
+  sun.intensity = light.sunIntensity;
+  sky.color.copy(light.sky);
+  sky.groundColor.copy(light.ground);
+  sky.intensity = light.skyIntensity;
 }
 
 // The sun light with its shadow box. The box follows the player, so shadows draw near the truck.

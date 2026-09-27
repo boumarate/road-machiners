@@ -93,6 +93,7 @@ type HudActions = {
   unhitch: () => void;
   setBeacon: (on: boolean) => void;
   isBusy: () => boolean;
+  recenter: () => void;
 };
 const RESOURCE_ICONS: IconName[] = [
   "money",
@@ -126,6 +127,8 @@ export class Hud {
   private action = panel("action");
   private toastBox = panel("toast");
   private rescue = panel("rescue");
+  // Shows only while a pan has left the truck.
+  private recenter = panel("recenter");
   private toastTimer: number | null = null;
   private lines: { text: string; cls: string }[] = [];
 
@@ -134,6 +137,8 @@ export class Hud {
     this.info.append(this.infoBody);
     this.toastBox.style.display = "none";
     this.rescue.style.display = "none";
+    this.recenter.style.display = "none";
+    this.recenter.append(el("button", { onclick: () => actions.recenter(), title: "Center the camera on your truck" }, "Center on truck (F)"));
     this.log.replaceChildren(
       el("h3", {}, "Log"),
       el("div", { class: "dim" }, "Drive out. Watch for raiders."),
@@ -159,8 +164,12 @@ export class Hud {
         "Space: start / pause travel. In combat: one turn. Hold: fast-forward. A: auto fire. P: auto patch. C: character. I: inventory.",
       ),
       el("div", {}, "R: manual driving, straight through anything."),
-      el("div", {}, "Right-drag: pan. F: follow. Wheel: zoom. M: mute."),
+      el("div", {}, "Right-drag: pan. F: center on truck. Wheel: zoom. M: mute."),
     );
+  }
+
+  showRecenter(on: boolean): void {
+    this.recenter.style.display = on ? "" : "none";
   }
 
   getInspectionRoot(): HTMLElement {

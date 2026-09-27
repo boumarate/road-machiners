@@ -1,5 +1,5 @@
 // Orthographic iso camera. Same angle as the physics test in main.ts used to validate the view.
-// Owns pan, zoom and follow, plus the pixel <-> world conversions labels, fx and picking need.
+// Owns pan, zoom, follow and the pan leash, plus the pixel <-> world conversions labels, fx and picking need.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
@@ -17,6 +17,7 @@ export class CameraRig {
   readonly camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 2000);
   private center = new THREE.Vector3();
   private target: V3 | null = null;
+  private tether: { at: V3; radius: number } | null = null;
   private zoom = 1;
   private ray = new THREE.Raycaster();
 
@@ -43,6 +44,13 @@ export class CameraRig {
     this.target = p;
   }
 
+  // Keeps the look point within radius meters of a ground point, on the ground plane. Call every tick.
+  leash(at: V3, radius: number): void {
+    if (!(radius > 0 && Number.isFinite(radius))) throw new Error(`Camera leash radius must be a finite positive number, got ${radius}`);
+    this.tether = { at, radius };
+    this.clampToLeash();
+  }
+
   // Drags the view by a pixel delta on the ground plane, along the camera's screen axes. Stops
   // following until follow() is called again.
   panBy(dxPx: number, dyPx: number): void {
@@ -56,6 +64,18 @@ export class CameraRig {
     up.normalize();
     // Content follows the cursor: dragging right or down moves the look point the other way.
     this.center.addScaledVector(right, -dxPx * metersPerPixel).addScaledVector(up, -dyPx * metersPerPixel);
+    this.clampToLeash();
+  }
+
+  private clampToLeash(): void {
+    if (!this.tether) return;
+    const { at, radius } = this.tether;
+    const dx = this.center.x - at.x;
+    const dz = this.center.z - at.z;
+    const d = Math.hypot(dx, dz);
+    if (d <= radius) return;
+    this.center.x = at.x + (dx / d) * radius;
+    this.center.z = at.z + (dz / d) * radius;
   }
 
   zoomBy(wheelDeltaY: number): void {

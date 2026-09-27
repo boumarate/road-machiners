@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { PHYSICS } from '../../data/physics';
 import { CameraRig } from './camera';
-import { RenderScope } from './scope';
+import { RenderScope, SightLimit } from './scope';
 
 const S = PHYSICS.metersPerTile;
 const SIZE = 600;
@@ -85,7 +85,7 @@ describe('render scope', () => {
   for (const zoom of [1, 0.35]) for (const spot of spots) {
     it(`keeps every object in view attached at zoom ${zoom} over ${spot.x},${spot.y}`, () => {
       const root = new THREE.Group();
-      const scope = new RenderScope(root, SIZE);
+      const scope = new RenderScope(root, SIZE, new SightLimit(SIZE), true);
       const objects = populate(scope);
       const rig = rigAt(spot.x, spot.y, zoom);
       scope.update(rig.camera);
@@ -99,7 +99,7 @@ describe('render scope', () => {
 
   it('follows the camera and detaches removed objects', () => {
     const root = new THREE.Group();
-    const scope = new RenderScope(root, SIZE);
+    const scope = new RenderScope(root, SIZE, new SightLimit(SIZE), true);
     const objects = populate(scope);
     const first = rigAt(100, 100, 1);
     scope.update(first.camera);
@@ -114,8 +114,61 @@ describe('render scope', () => {
   });
 
   it('rejects objects outside the map', () => {
-    const scope = new RenderScope(new THREE.Group(), SIZE);
+    const scope = new RenderScope(new THREE.Group(), SIZE, new SightLimit(SIZE), true);
     expect(() => scope.add(new THREE.Object3D(), { x: -5, y: 10 }, 1)).toThrow();
     expect(() => scope.add(new THREE.Object3D(), { x: 10, y: SIZE + 1 }, 1)).toThrow();
+  });
+
+  it('detaches chunks beyond gray vision and keeps those inside it', () => {
+    const root = new THREE.Group();
+    const limit = new SightLimit(SIZE);
+    const scope = new RenderScope(root, SIZE, limit, true);
+    const objects = populate(scope);
+    const rig = rigAt(SIZE / 2, SIZE / 2, 0.35);
+    const center = { x: (SIZE / 2) * S, y: 0, z: (SIZE / 2) * S };
+    limit.set(center, 20 * S);
+    scope.update(rig.camera);
+    const near = objects.filter((o) => inView(o, rig.camera) && limit.covers(o.position));
+    const far = objects.filter((o) => Math.hypot(o.position.x - center.x, o.position.z - center.z) > 200 * S);
+    expect(near.length).toBeGreaterThan(0);
+    expect(far.length).toBeGreaterThan(0);
+    for (const o of near) expect(attached(o, root)).toBe(true);
+    for (const o of far) expect(attached(o, root)).toBe(false);
+  });
+});
+
+describe('sight limit', () => {
+  function compiled(material: THREE.Material): string {
+    const shader = { uniforms: {}, vertexShader: THREE.ShaderLib.lambert.vertexShader, fragmentShader: THREE.ShaderLib.lambert.fragmentShader };
+    material.onBeforeCompile(shader as unknown as THREE.WebGLProgramParametersWithUniforms, {} as THREE.WebGLRenderer);
+    return shader.fragmentShader;
+  }
+
+  it('discards fragments beyond the edge and greys only when asked', () => {
+    const limit = new SightLimit(SIZE);
+    const prop = new THREE.MeshLambertMaterial();
+    const ground = new THREE.MeshLambertMaterial();
+    limit.patch(new THREE.Mesh(new THREE.BoxGeometry(), prop), true);
+    limit.patch(new THREE.Mesh(new THREE.BoxGeometry(), ground), false);
+
+    const propShader = compiled(prop);
+    const groundShader = compiled(ground);
+
+    expect(propShader).toContain('discard');
+    expect(propShader).toContain('sightSeen');
+    expect(groundShader).toContain('discard');
+    expect(groundShader).not.toContain('sightSeen');
+    expect(prop.customProgramCacheKey()).not.toBe(ground.customProgramCacheKey());
+  });
+
+  it('rejects a visible tile outside the map', () => {
+    const limit = new SightLimit(SIZE);
+    expect(() => limit.showVisible([SIZE * SIZE])).toThrow();
+  });
+
+  it('rejects a radius that is not a finite positive number', () => {
+    const limit = new SightLimit(SIZE);
+    expect(() => limit.set({ x: 0, y: 0, z: 0 }, 0)).toThrow();
+    expect(() => limit.set({ x: 0, y: 0, z: 0 }, Number.NaN)).toThrow();
   });
 });

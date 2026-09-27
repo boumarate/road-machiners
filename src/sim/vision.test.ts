@@ -2,7 +2,9 @@ import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { TERRAIN } from '../data/terrain';
 import { emptyWorld } from './testkit';
-import { canVehicleSee, playerVisible, refreshVision, visibleTiles } from './vision';
+import { TIME } from '../data/time';
+import { sunAt } from './sun';
+import { canVehicleSee, grayRadius, playerVisible, refreshVision, sightRadius, visibleTiles } from './vision';
 
 describe('vision', () => {
   it('sees an unblocked tile within radius', () => {
@@ -81,5 +83,18 @@ describe('terrain line of sight', () => {
     w.obstacles = [];
     const vis = visibleTiles(w, found!.a);
     expect(vis.has(Math.floor(found!.b.y) * w.size + Math.floor(found!.b.x))).toBe(false);
+  });
+
+  it('reaches gray vision a fixed number of sight radii out', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => sunAt(t))!;
+    expect(grayRadius(w, { x: 30, y: 30 })).toBe(TERRAIN.vision.radius * TERRAIN.vision.grayFactor);
+  });
+
+  it('shrinks gray vision at night with sight', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
+    expect(grayRadius(w, { x: 30, y: 30 })).toBe(sightRadius(w, { x: 30, y: 30 }) * TERRAIN.vision.grayFactor);
+    expect(grayRadius(w, { x: 30, y: 30 })).toBeLessThan(TERRAIN.vision.radius * TERRAIN.vision.grayFactor);
   });
 });

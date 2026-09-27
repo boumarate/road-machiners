@@ -34,7 +34,7 @@ import { route, warmRoutes } from "../sim/path";
 import { CHASSIS } from "../data/chassis";
 import type { SalvageStock, ShotRound, Vehicle, World } from "../sim/types";
 import type { Vec } from "../sim/vec";
-import { playerSees, tileOf, visibleTiles } from "../sim/vision";
+import { grayRadius, playerSees, tileOf, visibleTiles } from "../sim/vision";
 import { DEG, dist } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
 import { acceptTow, refuseTow, setBeacon, unhitch } from "../sim/tow";
@@ -66,7 +66,7 @@ import { Fx3D } from "./render/fx";
 import { Labels } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
 import { PathView } from "./render/path";
-import { RenderScope } from "./render/scope";
+import { RenderScope, SightLimit } from "./render/scope";
 import { addSites } from "./render/sites";
 import { terrainMesh } from "./render/terrain";
 import { VehicleView } from "./render/vehicle";
@@ -78,7 +78,7 @@ import { TERRAIN_TYPES } from "../data/terrain";
 import { bodyOf } from "../sim/body";
 import { headingOf } from "../phys/frames";
 import { canLoot, salvageHere } from "../sim/locations";
-import { daylightAt, sunLight } from "./render/daylight";
+import { daylightAt, lightScene, sunLight } from "./render/daylight";
 import { sunAt } from "../sim/sun";
 import { tileAt } from "../sim/terrain";
 import { ContactsView } from "./render/contacts";
@@ -104,7 +104,6 @@ const DUST_BEHIND_M = 0.4; // meters behind the body's rear where wheel dust ris
 const SMOKE_CHANCE = 0.05; // per hurt vehicle per frame
 const HURT_CAB = 0.35; // cab hp share under which a vehicle smokes
 const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is recomputed during a turn
-const SUN_RADIUS = 150; // meters from the focus to the sun light
 // The circle under the hovered vehicle, which a click targets. Sizes are in tiles.
 const PICK_RING = { gap: 0.45, width: 0.06, alpha: 0.9, lift: 0.02 };
 
@@ -185,6 +184,7 @@ export class Game {
   );
   private selected: string | null = null;
   private following = true;
+  private readonly sightLimit: SightLimit;
   private panFrom: { x: number; y: number } | null = null;
   private planFor: World | null = null;
   private last = performance.now();
@@ -231,15 +231,16 @@ export class Game {
     this.scene.add(this.pickRing);
 
     // Ground and props cull separately, so ground picking only hits terrain.
-    const groundScope = new RenderScope(this.ground, this.world.size);
-    const propScope = new RenderScope(this.props, this.world.size);
+    this.sightLimit = new SightLimit(this.world.size);
+    const groundScope = new RenderScope(this.ground, this.world.size, this.sightLimit, false);
+    const propScope = new RenderScope(this.props, this.world.size, this.sightLimit, true);
     this.scopes = [groundScope, propScope];
     const groundChunks = terrainMesh(this.world, groundScope);
     addSites(this.world.terrain, propScope);
     this.obstacles = new ObstacleViews(propScope, this.world.terrain);
     this.obstacles.sync(this.world.obstacles);
     addScatter(this.world.terrain, this.world.obstacles, propScope);
-    this.fog = new FogView(this.world, groundChunks);
+    this.fog = new FogView(this.world, groundChunks, this.sightLimit);
     this.path = new PathView(this.world.terrain);
     this.shade = new ShadeView(this.world);
     this.weather = new WeatherView(this.world);
@@ -297,6 +298,7 @@ export class Game {
             : null,
         ),
       isBusy: () => this.anim !== null,
+      recenter: () => (this.following = true),
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.menu = new GameMenu({
@@ -694,6 +696,7 @@ export class Game {
     const { world, playback, towed } = this.travel.beginPlayback(this.world, prepared, now, elapsed);
     this.world = world;
     this.anim = playback;
+    this.following = true;
     this.live = {
       visible: new Set(this.world.player.visible),
       explored: playback.before.player.explored.slice(),
@@ -1030,29 +1033,17 @@ export class Game {
     const { step, speed } = this.advanceTurn(now);
     this.syncVehicles(step);
     this.drawOverlays();
-    const me = this.frames[playerVehicle(this.world).id];
-    if (this.following && me) this.rig.follow(me.pos);
+    // syncVehicles gives every vehicle a frame, the player's included.
+    const truck = this.frames[playerVehicle(this.world).id].pos;
+    // Gray vision centers on the drawn truck, so its edge moves with the truck while a turn plays. The
+    // camera cannot pan past it.
+    const sightRadius = grayRadius(this.world, playerVehicle(this.world).pos) * PHYSICS.metersPerTile;
+    this.sightLimit.set(truck, sightRadius);
+    this.rig.leash(truck, sightRadius);
+    if (this.following) this.rig.follow(truck);
+    this.hud.showRecenter(!this.following);
     this.rig.tick(dt);
-    const focus = this.rig.camera.position.clone();
-    this.sun.target.position.copy(
-      me ? new THREE.Vector3(me.pos.x, me.pos.y, me.pos.z) : focus,
-    );
-    const light = daylightAt(this.lightTurn());
-    const horiz = Math.cos(light.elevation) * SUN_RADIUS;
-    this.sun.position
-      .copy(this.sun.target.position)
-      .add(
-        new THREE.Vector3(
-          light.dir.x * horiz,
-          Math.sin(light.elevation) * SUN_RADIUS,
-          light.dir.y * horiz,
-        ),
-      );
-    this.sun.color.copy(light.sun);
-    this.sun.intensity = light.sunIntensity;
-    this.sky.color.copy(light.sky);
-    this.sky.groundColor.copy(light.ground);
-    this.sky.intensity = light.skyIntensity;
+    lightScene(this.sun, this.sky, truck, daylightAt(this.lightTurn()));
     this.aimBeams(!sunAt(this.world.turn));
     const at = playerVehicle(this.world).pos;
     this.stormTint.style.display = this.world.weather.some(
@@ -1065,7 +1056,7 @@ export class Game {
     this.updateLoops();
     this.weather.advance(dt);
     this.weather.sync(this.world);
-    this.labels.update(this.world, this.rig);
+    this.labels.update(this.world, this.rig, this.sightLimit);
     for (const scope of this.scopes) scope.update(this.rig.camera);
     this.renderer.render(this.scene, this.rig.camera);
     // The preview runs after the frame is drawn, so a click shows at once.
