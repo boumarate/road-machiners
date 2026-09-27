@@ -47,6 +47,9 @@ export const PART_MODELS: Record<string, ModelName> = {
   spacedArmor: 'arm_spaced',
   reinforcedCage: 'arm_reinforced_cage',
   plowRam: 'arm_plow_ram',
+  steelPlate: 'arm_plate',
+  scrapSheet: 'arm_scrap_sheet',
+  ceramicTile: 'arm_ceramic_tile',
 
   rack: 'cargo_rack',
   trailerBox: 'cargo_trailer_box',
