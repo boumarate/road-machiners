@@ -1,8 +1,9 @@
 import { RULES } from "../data/rules";
 import { describe, expect, it } from "vitest";
 import { vehicleStats } from "./stats";
-import { clickOrder, throttleFor, zoneEdges, zoneSpeed } from "./steering";
-import { emptyWorld } from "./testkit";
+import { backsToDestination, clickOrder, throttleFor, zoneEdges, zoneSpeed } from "./steering";
+import { DEG } from "./vec";
+import { emptyWorld, npcBrain } from "./testkit";
 
 function setup(speed: number) {
   const w = emptyWorld();
@@ -60,5 +61,24 @@ describe("click orders", () => {
     const far = { x: 31 + RULES.reclickRadius * 2, y: 30 };
     expect(clickOrder(far, false, { kind: "stopAt", dest: { x: 31, y: 30 } })).toEqual({ kind: "through", dest: far });
     expect(clickOrder(far, false, { kind: "brake" })).toEqual({ kind: "through", dest: far });
+  });
+});
+
+describe("backing up", () => {
+  const player = { faction: "player" as const, brain: null };
+  const cone = RULES.reverse.cone * DEG;
+
+  it("the player backs only to a click inside the cone behind and within reach", () => {
+    expect(backsToDestination(player, 5, cone * 0.5)).toBe(true);
+    expect(backsToDestination(player, 5, -cone * 0.5)).toBe(true);
+    expect(backsToDestination(player, 5, cone * 1.5)).toBe(false);
+    expect(backsToDestination(player, RULES.throttleZones.reach + 1, 0)).toBe(false);
+  });
+
+  it("an NPC backs up only while recovering", () => {
+    const npc = { faction: "raiders" as const, brain: npcBrain("buggy", { x: 0, y: 0 }, ["raider"]) };
+    expect(backsToDestination(npc, 5, 0)).toBe(false);
+    npc.brain.recovery = 1;
+    expect(backsToDestination(npc, 5, Math.PI / 2)).toBe(true);
   });
 });

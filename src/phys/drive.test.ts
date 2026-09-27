@@ -118,7 +118,7 @@ describe('physics turns', () => {
     const w = emptyWorld({ x: 20, y: 50 });
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 30, y: 30 });
     npc.order = { kind: 'stopAt', dest: { x: 10, y: 30 } };
-    // Six seconds allow a pickup to reverse-steer through a half turn on flat ground.
+    // Six seconds allow a pickup to turn around nose first on flat ground.
     const result = play(w, 6);
     const actor = result.w.vehicles.find((v) => v.id === npc.id)!;
     expect(Math.abs(angleDiff(actor.heading, Math.PI))).toBeLessThan(Math.PI / 2);
@@ -230,6 +230,16 @@ describe('physics turns', () => {
     const { w, d } = play(ordered({ kind: 'through', dest }), 4);
     expect(Math.abs(angleDiff(me(w).heading, Math.PI))).toBeLessThan(Math.PI / 4);
     expect(me(w).speed).toBeGreaterThan(0);
+    freeDrive(d);
+  });
+
+  it('a click behind outside the reverse cone turns the truck around nose first', () => {
+    const dest = { x: 26, y: 33 };
+    const first = play(ordered({ kind: 'through', dest }), 1);
+    expect(me(first.w).pos.x).toBeGreaterThan(30);
+    freeDrive(first.d);
+    const { w, d } = play(ordered({ kind: 'through', dest }), 8);
+    expect(me(w).order).toBeNull();
     freeDrive(d);
   });
 
@@ -444,6 +454,26 @@ describe('physics turns', () => {
     // Well up the slope, which starts at x 28, and still gaining speed rather than stalling.
     expect(me(w).pos.x).toBeGreaterThan(34);
     expect(me(w).speed).toBeGreaterThan(2);
+  });
+
+  it('a click in the hold zone keeps its speed up a hill', () => {
+    let w = emptyWorld({ x: 29, y: 30 });
+    const t = editableTerrain(w);
+    const n = t.size;
+    for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) t.heights[j * (n + 1) + i] = Math.max(0, i - 28) * HILL_GRADE;
+    let d = buildDrive(w);
+    const speeds: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      // Each turn the player clicks the middle of the hold zone again.
+      w = setMoveOrder(w, { kind: 'through', dest: { x: me(w).pos.x + RULES.throttleZones.reach / 2, y: 30 } });
+      let next: Drive | null = null;
+      w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+      freeDrive(d);
+      d = next!;
+      speeds.push(me(w).speed);
+    }
+    freeDrive(d);
+    expect(speeds[7]).toBeGreaterThan(speeds[1] * 0.95);
   });
 
   it('new vehicles and obstacles join the physics world', () => {
