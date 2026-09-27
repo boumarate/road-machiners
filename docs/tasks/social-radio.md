@@ -287,6 +287,7 @@ Deviation from PC3: raising a topic is a turn step, `raiseCalls()`, not an activ
 - RK1 — The raider fires before its demand opens, in the same turn. 1.8 blocks shots between the parties on the line, and a PH4 test covers the first contact.
 - RK2 — Removing `player.tow` touches the physics detach path from defeat-rescue. The `drive.test.ts` hitch case guards it.
 - RK4 — Defeat-rescue keeps changing the tow code, `world.ts` and the save version. Merging it later will conflict in those places. Keep tow changes inside `src/sim/tow.ts` and the agreement files where possible, so the merge stays small.
+- RK5 — Main now prepares travel turns in a worker, `src/three/travel.ts`. PH2 adds the first topics NPCs raise, so a turn can end with a call open. The next prepared turn would then throw in the worker. The travel pause on `playerCanAct()` covers it today, and a PH2 test must hold turns while travel is fast or automatic.
 - RK3 — Many open calls could make turns feel slow. `once` limits repeats, and verify counts calls per 100 turns.
 
 ### Interfaces
