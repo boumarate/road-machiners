@@ -37,7 +37,7 @@ describe('inventory grid', () => {
   it('items cannot overlap or leave the grid', () => {
     const w = emptyWorld();
     const g = good(w);
-    expect(() => moveItem(w, g.id, { x: 0, y: 0, rot: 0 })).toThrow(/in the way/);
+    expect(() => moveItem(w, g.id, { x: 0, y: 1, rot: 0 })).toThrow(/in the way/);
     expect(() => moveItem(w, g.id, { x: 9, y: 0, rot: 0 })).toThrow(/fit/);
   });
 

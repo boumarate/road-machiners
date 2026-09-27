@@ -48,11 +48,11 @@ describe('walkLane', () => {
   it('enters each side from its own edge', () => {
     const { w, v } = plated();
     const last = gridOf(v).h - 1;
-    const round = { damage: 1, pen: 1 };
-    expect(walkLane(w, v, 'front', 0, round)[0].part).toBe(partAt(v, 0, 0).id);
-    expect(walkLane(w, v, 'left', 0, round)[0].part).toBe(partAt(v, 0, 0).id);
-    expect(walkLane(w, v, 'right', 0, round)[0].part).toBe(partAt(v, 4, 0).id);
-    expect(walkLane(w, v, 'rear', 4, round)[0].part).toBe(partAt(v, 4, last).id);
+    const round = { damage: 1, pen: 2 }; // the scout's corner cells are empty, so a round needs to pass one cell
+    expect(walkLane(w, v, 'front', 0, round)[0].part).toBe(partAt(v, 0, 1).id);
+    expect(walkLane(w, v, 'left', 1, round)[0].part).toBe(partAt(v, 0, 1).id);
+    expect(walkLane(w, v, 'right', 1, round)[0].part).toBe(partAt(v, 4, 1).id);
+    expect(walkLane(w, v, 'rear', 4, round)[0].part).toBe(partAt(v, 4, last - 1).id);
   });
 
   it('a plate absorbs a weak round', () => {

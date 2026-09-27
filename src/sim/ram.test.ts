@@ -72,9 +72,9 @@ describe('rams', () => {
       return { v, part: crashOf(w).hitsB[0].part };
     };
     const rear = firstHit(38.5);
-    expect(rear.part).toBe(partAt(rear.v, 0, 7).id);
+    expect(rear.part).toBe(partAt(rear.v, 0, 6).id);
     const front = firstHit(41.5);
-    expect(front.part).toBe(partAt(front.v, 0, 0).id);
+    expect(front.part).toBe(partAt(front.v, 0, 1).id);
   });
 
   it('an obstacle hit lands on the side facing it at full share', () => {

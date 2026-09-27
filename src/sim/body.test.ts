@@ -10,10 +10,10 @@ describe('body from the chassis grid', () => {
     expect(b.half.z).toBeCloseTo(1.21);
   });
 
-  it('puts the scout wheel mounts at the centers of its corner wheel cells', () => {
+  it('puts the scout wheel mounts at the centers of its wheel cells', () => {
     const b = bodyOf('scout');
-    const front = cellCenter('scout', 0, 0);
-    const rear = cellCenter('scout', 4, 7);
+    const front = cellCenter('scout', 0, 1);
+    const rear = cellCenter('scout', 4, 6);
     expect(b.wheelX).toBeCloseTo(front.x);
     expect(b.wheelZ).toBeCloseTo(-front.z);
     expect(-b.wheelX).toBeCloseTo(rear.x);
