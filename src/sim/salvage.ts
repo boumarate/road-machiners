@@ -13,7 +13,7 @@ import { chance, randInt } from './rng';
 import { getResources } from './resources';
 import { vehicleStats } from './stats';
 import { cancelJob } from './jobs';
-import type { GridItem, PartInstance, SalvageStock, Vehicle, World } from './types';
+import type { GridItem, PartInstance, Pile, SalvageStock, Vehicle, World } from './types';
 import { canUseSite } from './sites';
 import { dist, type Vec } from './vec';
 
@@ -77,24 +77,37 @@ export function collectSalvage(world: World, vehicle: Vehicle, stockId: string, 
     moved++;
     return false;
   });
+  return collectGoods(world, vehicle, stock, units - moved) + moved;
+}
+
+// Moves up to `units` goods from a stock into the grid and returns how many moved.
+function collectGoods(world: World, vehicle: Vehicle, stock: SalvageStock, units: number): number {
+  let moved = 0;
   for (const [good, count] of Object.entries(stock.goods)) {
     if (moved >= units || count <= 0) continue;
     const want = Math.min(count, units - moved);
     const held = goodsCount(vehicle)[good] ?? 0;
     const took = addGoods(world, vehicle, good, want);
     stock.goods[good] -= took;
-    if (took === 0) continue;
     moved += took;
-    countFreeGoods(world, vehicle, stock, good, held, took);
+    if (vehicle.id === world.player.vehicleId) takeBasis(world, stock, good, held, took);
   }
   return moved;
 }
 
-// Goods the player takes from a stock cost nothing, so they lower the average paid. Goods the player dropped
-// on a pile keep the average they had.
-function countFreeGoods(world: World, vehicle: Vehicle, stock: SalvageStock, good: string, held: number, took: number): void {
-  if (vehicle.id !== world.player.vehicleId || stock.pile?.fromPlayer) return;
-  world.player.costBasis[good] = ((world.player.costBasis[good] ?? 0) * held) / (held + took);
+// The player's average paid for a good after taking `took` units from a stock while holding `held`.
+export function takeBasis(world: World, stock: SalvageStock, good: string, held: number, took: number): void {
+  if (took === 0) return;
+  const paid = world.player.costBasis[good] ?? 0;
+  world.player.costBasis[good] = (paid * held + stockBasis(stock, good) * took) / (held + took);
+}
+
+// What the player paid per unit of a good in a stock: the recorded average on the player's own pile, else nothing.
+function stockBasis(stock: SalvageStock, good: string): number {
+  if (!stock.pile?.fromPlayer) return 0;
+  const basis = stock.pile.basis[good];
+  if (basis === undefined) throw new Error(`Player pile ${stock.id} has no cost basis for ${good}`);
+  return basis;
 }
 
 // Pours the stock's fuel and supplies into the driver's tank and stores up to their caps.
@@ -197,22 +210,34 @@ export function pileInReach(world: World, vehicle: Vehicle): SalvageStock | null
 // Moves items from the vehicle onto the pile in its reach, so nearby drops make one heap. Without one, a new
 // pile starts where the vehicle stands under the given id. Each drop restarts the pile's clock.
 function dropOnPile(world: World, vehicle: Vehicle, items: GridItem[], id: string): SalvageStock {
-  const pile = pileInReach(world, vehicle) ?? addVehicleStock(world, vehicle, id, {}, []);
-  stampPile(world, vehicle, pile);
+  const byPlayer = vehicle.id === world.player.vehicleId;
+  const pile = world.salvage.find((stock) => stock.pile?.fromPlayer === byPlayer && salvageInRange(vehicle, stock))
+    ?? addVehicleStock(world, vehicle, id, {}, []);
+  const held = stampPile(world, byPlayer, pile);
   for (const item of items) {
-    if (item.kind === 'good') pile.goods[item.good] = (pile.goods[item.good] ?? 0) + 1;
+    if (item.kind === 'good') dropGood(world, held, item.good);
     else pile.parts.push(item.part);
   }
   vehicle.items = vehicle.items.filter((item) => !items.includes(item));
   return pile;
 }
 
-// Each drop restarts the pile timer. A pile the player drops onto holds the player's own items, so it counts as
-// searched and pays no search XP.
-function stampPile(world: World, vehicle: Vehicle, pile: SalvageStock): void {
-  const byPlayer = vehicle.id === world.player.vehicleId;
-  pile.pile = { until: world.turn + SALVAGE.pileTurns, fromPlayer: byPlayer || pile.pile?.fromPlayer === true };
-  if (byPlayer && !world.player.scavenged.includes(pile.id)) world.player.scavenged.push(pile.id);
+// Each drop restarts the pile timer. A player pile holds the player's own items, so it counts as searched and pays
+// no search XP.
+function stampPile(world: World, byPlayer: boolean, stock: SalvageStock): { stock: SalvageStock; pile: Pile } {
+  const pile: Pile = { until: world.turn + SALVAGE.pileTurns, fromPlayer: byPlayer, basis: stock.pile?.basis ?? {} };
+  stock.pile = pile;
+  if (byPlayer && !world.player.scavenged.includes(stock.id)) world.player.scavenged.push(stock.id);
+  return { stock, pile };
+}
+
+// One unit of a good onto a pile. On a player pile it carries the player's average paid into the pile's average.
+function dropGood(world: World, { stock, pile }: { stock: SalvageStock; pile: Pile }, good: string): void {
+  const count = stock.goods[good] ?? 0;
+  stock.goods[good] = count + 1;
+  if (!pile.fromPlayer) return;
+  const paid = world.player.costBasis[good] ?? 0;
+  pile.basis[good] = ((pile.basis[good] ?? 0) * count + paid) / (count + 1);
 }
 
 // Piles that ran out of time or loot leave the ground. Searches of them stop, and the player forgets them.

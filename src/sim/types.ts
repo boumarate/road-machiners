@@ -67,9 +67,13 @@ export type SalvageStock = {
   parts: PartInstance[];
   fuel?: number; // fuel units that pour into a tank, not the grid
   supplies?: number; // supply units that go to driver stores, not the grid
-  pile?: { until: number; fromPlayer: boolean }; // loot lying loose on the ground, drawn as a heap, gone at turn `until`. Sites and wrecks draw their own stock.
-  // `fromPlayer` is true once the player drops anything on the pile. Its goods keep their cost basis, and its search pays no XP.
+  pile?: Pile; // loot lying loose on the ground, drawn as a heap. Sites and wrecks draw their own stock.
 };
+
+// A pile is gone at turn `until`. The player's items and other trucks' items never share a pile. A player pile counts
+// as searched, and `basis` keeps the average paid per unit of each good on it, so taking them back restores their
+// cost. Goods on any other pile cost nothing.
+export type Pile = { until: number; fromPlayer: boolean; basis: Record<string, number> };
 
 export type RefitMove = {
   itemId: string;

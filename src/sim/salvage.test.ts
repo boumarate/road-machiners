@@ -4,12 +4,12 @@ import { SALVAGE } from '../data/salvage';
 import { addVehicle, emptyWorld, testDrive } from './testkit';
 import { resolveDestroyed } from './combat';
 import { addGoods, dumpItem } from './inventory';
-import { corePart, goodsCount, isLoot, mountedParts } from './grid';
+import { corePart, findSpot, goodsCount, gridOf, isLoot, mountedParts } from './grid';
 import { partDef } from '../data/parts';
 import { chassisDef } from '../data/chassis';
 import { RULES } from '../data/rules';
-import { takeAllLoot, takeStores, canScavenge, scavenge } from './locations';
-import { clearPiles, collectSalvage, createCargoSalvage, createKnockoutSalvage, hasSalvage, salvageUnits } from './salvage';
+import { takeAllLoot, takeLoot, takeStores, canScavenge, scavenge } from './locations';
+import { clearPiles, collectSalvage, createCargoSalvage, createKnockoutSalvage, hasSalvage, salvageInRange, salvageUnits } from './salvage';
 import { sitePads } from './sites';
 import { freeCells } from './grid';
 import { endTurn } from './world';
@@ -39,6 +39,49 @@ describe('player piles', () => {
     collectSalvage(w, w.vehicles[0], pile.id, 100);
     expect(w.player.costBasis.scrap).toBeCloseTo((12 * held) / (held + 2));
     expect(w.player.scavenged).not.toContain(pile.id);
+  });
+
+  it('a free unit taken first does not wipe the paid basis of goods taken back from the player pile', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    me.items = me.items.filter((it) => it.kind === 'part');
+    addGoods(w, me, 'tools', 6);
+    w.player.costBasis.tools = 180;
+    let next = w;
+    for (const item of me.items.filter((it) => it.kind === 'good')) next = dumpItem(next, item.id);
+    next.salvage.push({ id: 'free', pos: { x: 30, y: 30 }, radius: 1, goods: { tools: 1 }, parts: [] });
+    next.player.scavenged.push('free');
+    collectSalvage(next, next.vehicles[0], 'free', 100);
+    expect(next.player.costBasis.tools).toBe(0);
+    collectSalvage(next, next.vehicles[0], next.salvage.find((s) => s.pile?.fromPlayer)!.id, 100);
+    expect(goodsCount(next.vehicles[0]).tools).toBe(7);
+    expect(next.player.costBasis.tools).toBeCloseTo((180 * 6) / 7);
+  });
+
+  it('one free good taken by hand lowers the basis like taking all', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    me.items = me.items.filter((it) => it.kind === 'part');
+    addGoods(w, me, 'scrap', 2);
+    w.player.costBasis.scrap = 12;
+    w.salvage.push({ id: 'free', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: 1 }, parts: [] });
+    w.player.scavenged.push('free');
+    const spot = findSpot(gridOf(me), me.items, { id: 'x', kind: 'good', good: 'scrap', x: 0, y: 0, rot: 0 }, null, null)!;
+    expect(takeLoot(w, 'free', { kind: 'good', good: 'scrap' }, spot).player.costBasis.scrap).toBe(8);
+  });
+
+  it('the player dumping beside another truck pile starts its own pile and leaves that one unsearched', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'traders', 'scout', [], { x: 30.5, y: 30 });
+    addGoods(w, npc, 'scrap', 2);
+    const theirs = createCargoSalvage(w, npc, 1);
+    expect(salvageInRange(w.vehicles[0], theirs)).toBe(true);
+    const good = w.vehicles[0].items.find((it) => it.kind === 'good')!;
+    const next = dumpItem(w, good.id);
+    const mine = next.salvage.find((s) => s.pile?.fromPlayer)!;
+    expect(mine.id).not.toBe(theirs.id);
+    expect(next.player.scavenged).not.toContain(theirs.id);
+    expect(next.salvage.find((s) => s.id === theirs.id)!.goods.scrap).toBe(2);
   });
 
   it('the player knockout pile counts as searched, so it pays no search XP', () => {
