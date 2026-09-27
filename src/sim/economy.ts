@@ -318,15 +318,16 @@ export function repairAll(world: World): World {
   });
 }
 
-// Buy or sell price at one place. Buy adds the spread to partValue. Sell scales partValue by
-// condition and cuts the spread, floored at the scrap value (IV4). The Trade skill narrows the
-// spread for the player, like the goods spread above.
+// Buy or sell price at one place, both scaled by the part's current condition (HP share), not only
+// its wear. The spread is added on top for buy and cut for sell, so buy always rounds to strictly
+// above sell (IV4), even at the narrowest Trade skill spread. Both are floored at the scrap value.
 export function partTradePrice(world: World, vehicle: Vehicle, part: PartInstance, direction: 'buy' | 'sell'): number {
   const margin = vehicle.id === world.player.vehicleId ? spread(world) : ECONOMY.spread;
-  const value = partValue(part);
-  if (direction === 'buy') return Math.round(value * (1 + margin));
-  const conditionShare = part.hp / maxHp(part);
-  return Math.max(Math.round(scrapValue(part)), Math.round(value * conditionShare * (1 - margin)));
+  const pressured = partValue(part) * (part.hp / maxHp(part));
+  const floor = Math.round(scrapValue(part));
+  const buy = Math.max(floor + 1, Math.ceil(pressured * (1 + margin)));
+  if (direction === 'buy') return buy;
+  return Math.max(floor, Math.min(buy - 1, Math.floor(pressured * (1 - margin))));
 }
 
 // A world-free, skill-free sell quote for garage storage listings, which have no vehicle context.

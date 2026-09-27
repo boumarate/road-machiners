@@ -5,7 +5,7 @@ import { CHASSIS } from "../data/chassis";
 import { ECONOMY, GOOD_IDS } from "../data/goods";
 import { SHOPS } from "../data/market";
 import { goodBasePrice, lotPrice, shopState } from "./market";
-import { partDef } from "../data/parts";
+import { PARTS, partDef } from "../data/parts";
 import { REGION } from "../data/region";
 import { RULES } from "../data/rules";
 import { CONDITION } from "../data/wear";
@@ -295,6 +295,42 @@ describe("part value and trade price", () => {
     expect(partTradePrice(w, w.vehicles[0], part, "sell")).toBeLessThan(
       partTradePrice(w, w.vehicles[0], part, "buy"),
     );
+  });
+
+  it("a 0 HP part buys back strictly above its sell price", () => {
+    const w = startAtBowl();
+    const part = makePart(w, "turbine", 0);
+    part.hp = 0;
+    expect(partTradePrice(w, w.vehicles[0], part, "buy")).toBeGreaterThan(
+      partTradePrice(w, w.vehicles[0], part, "sell"),
+    );
+  });
+
+  it("a half-HP part buys back strictly above its sell price", () => {
+    const w = startAtBowl();
+    const part = makePart(w, "turbine", 0);
+    part.hp = Math.floor(maxHp(part) / 2);
+    expect(partTradePrice(w, w.vehicles[0], part, "buy")).toBeGreaterThan(
+      partTradePrice(w, w.vehicles[0], part, "sell"),
+    );
+  });
+
+  it("buy price is strictly above sell price for every part def and wear step, at any Social level", () => {
+    const w = startAtBowl();
+    for (const social of [0, XP_TO_REACH[3]]) {
+      w.player.skills.social = social;
+      for (const defId of Object.keys(PARTS)) {
+        for (let wear = 0; wear <= CONDITION.maxWear; wear++) {
+          const part = makePart(w, defId, wear);
+          for (const hpShare of [0, 0.5, 1]) {
+            part.hp = Math.floor(maxHp(part) * hpShare);
+            expect(partTradePrice(w, w.vehicles[0], part, "buy")).toBeGreaterThan(
+              partTradePrice(w, w.vehicles[0], part, "sell"),
+            );
+          }
+        }
+      }
+    }
   });
 
   it("repair cost scales with the part's value", () => {
