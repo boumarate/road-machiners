@@ -5,6 +5,7 @@ import { makeVehicle } from '../sim/factory';
 import { addGoods, removeAllGoods } from '../sim/inventory';
 import { loadFactor, vehicleMass } from '../sim/mass';
 import { addVehicle, emptyWorld, partHp } from '../sim/testkit';
+import { corePart } from '../sim/grid';
 import type { MoveOrder, World } from '../sim/types';
 import { angleDiff, bearing, dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
@@ -41,6 +42,29 @@ const me = (w: World) => w.vehicles[0];
 const HILL_GRADE = 0.2; // height per tile, steeper than 90% of the generated map's slopes
 
 describe('physics turns', () => {
+  it('a truck knocked out while driving brakes to a stop', () => {
+    // One drive carried from turn to turn, as in the game, so the body keeps its speed.
+    let w = ordered({ kind: 'stopAt', dest: { x: 200, y: 30 } });
+    let d = buildDrive(w);
+    const turn = () => {
+      let next: Drive | null = null;
+      w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+      freeDrive(d);
+      d = next!;
+    };
+    for (let i = 0; i < 3; i++) turn();
+    expect(me(w).speed).toBeGreaterThan(1);
+    corePart(me(w), 'cab').hp = 0;
+    turn();
+    expect(w.player.state).toBe('knockedOut');
+    // A few turns of braking, then the truck stands still.
+    for (let i = 0; i < 3; i++) turn();
+    const at = { ...me(w).pos };
+    turn();
+    freeDrive(d);
+    expect(dist(me(w).pos, at)).toBeLessThan(0.05);
+  });
+
   it('two traders meeting head-on on a road both get past', () => {
     const bowl = REGION.towns[0];
     const nose = REGION.towns[1];

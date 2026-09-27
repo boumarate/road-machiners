@@ -108,6 +108,7 @@ export type NpcBrain = {
     recoveryGoal?: Vec;
     farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
     refusedTow: boolean; // the player turned down this driver's tow, so it never offers again
+    brokenTow?: { town: string; fee: number }; // a tow this driver dropped for danger; it offers the same deal again
 };
 
 export type Vehicle = {

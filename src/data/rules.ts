@@ -23,7 +23,7 @@ export const RULES = {
   parkedSpeed: 0.5, // vehicles slower than this are routed around like obstacles
   yieldDistance: 1.5, // neutral drivers brake when another vehicle is this close past both radii ahead
   maxBulge: 0.25, // tiles a steering arc may stray from the straight route line
-  limpSpeed: 2, // top speed with an empty tank or a dead engine or transmission; a truck this slow raises no dust
+  limpSpeed: 1.04, // 15 km/h, top speed with an empty tank or a dead engine or transmission; a truck this slow raises no dust
   minSpeedCap: 1, // a heavy load never pushes max speed below this
   collisionMinImpact: 1.5, // slower bumps deal no damage
   // A crash gives each truck ramDamage × impact² in tiles per turn × the other body's share of both masses,

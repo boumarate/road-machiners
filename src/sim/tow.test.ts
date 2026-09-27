@@ -6,9 +6,10 @@ import { partDef } from '../data/parts';
 import { playerVehicle } from './damage';
 import { route, routeLength } from './path';
 import { canUseSite, siteGates } from './sites';
+import { getResources } from './resources';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld } from './testkit';
-import { acceptTow, refuseTow, setBeacon, unhitch } from './tow';
+import { acceptTow, dropTow, refuseTow, setBeacon, unhitch } from './tow';
 import { canVehicleSee } from './vision';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
@@ -117,6 +118,14 @@ describe('tow offer', () => {
     expect(r.w.player.tow?.by).toBe(scav.id);
   });
 
+  it('a trader that is crawling itself does not offer a tow', () => {
+    const s = stranded();
+    getResources(s.w, s.trader).fuel = 0;
+    const r = runUntil(s.w, 15, (x) => x.player.tow !== null);
+    expect(r.w.player.tow).toBeNull();
+    expect(r.events.some((e) => e.t === 'activity' && e.vehicle === s.trader.id && e.activity === 'tow')).toBe(false);
+  });
+
   it('a player who can drive gets no offer', () => {
     const s = stranded();
     s.w.player.fuel = 30;
@@ -126,6 +135,18 @@ describe('tow offer', () => {
 });
 
 describe('towing', () => {
+  it('a tower that dropped the tow for danger offers the same deal again', () => {
+    const s = stranded();
+    let w = acceptTow(offered(s));
+    const deal = { ...w.player.tow! };
+    // A few turns of towing shorten the way, so a new price would be lower.
+    for (let i = 0; i < 5; i++) w = endTurn(w);
+    expect(w.player.tow?.hitched).toBe(true);
+    dropTow(w, 'danger');
+    const r = runUntil(w, 30, (x) => x.player.tow !== null);
+    expect(r.w.player.tow).toEqual({ by: deal.by, town: deal.town, fee: deal.fee, hitched: false });
+  });
+
   it('accepting hitches the player, and the player follows the tower', () => {
     const s = stranded();
     let w = acceptTow(offered(s));
@@ -290,8 +311,12 @@ describe('emergency beacon', () => {
     w.player.fuel = 0;
     onlyCore(w.vehicles[0]);
     const raider = withTower(w, 'buggy', 'raiders', 'buggy', { x: 130, y: 30 });
-    const r = runUntil(setBeacon(w, true), 30, () => false);
-    expect(r.events.some((e) => e.t === 'activity' && e.vehicle === raider.id && ['investigate', 'fight'].includes(e.activity!))).toBe(false);
+    // Other NPCs spawn during the run and the raider may hunt them, so only its target is checked.
+    let now = setBeacon(w, true);
+    for (let i = 0; i < 30; i++) {
+      now = endTurn(now);
+      expect(find(now, raider.id).brain!.activity?.targetId).not.toBe(now.player.vehicleId);
+    }
   });
 
   it('needs a stranded, active and unhitched truck', () => {

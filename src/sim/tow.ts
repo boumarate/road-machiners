@@ -33,8 +33,8 @@ function inTowReach(tower: Vehicle, towed: Vehicle): boolean {
 }
 
 // The tow activity for this turn. A driver with an open offer waits for the answer, and a hitched one heads for
-// the town. Otherwise a towing class starts one when it sees the stranded player or gets its beacon, is not hostile
-// to it, and has not been turned down before. Danger is chosen before this, so a driver in danger never starts a tow.
+// the town. Otherwise a towing class starts one when it sees the stranded player or gets its beacon, can drive
+// itself, is not hostile to it, and has not been turned down before. Danger is chosen before this, so a driver in danger never starts a tow.
 // Once another driver holds the offer, the rest return null here and drop their tow.
 export function chooseTowActivity(world: World, vehicle: Vehicle, profile: NpcClass): NpcActivity | null {
   const tow = world.player.tow;
@@ -45,7 +45,8 @@ export function chooseTowActivity(world: World, vehicle: Vehicle, profile: NpcCl
     return { kind: 'tow', targetId: town.id, destination: { ...town.pos }, phase: 'travel', reason: 'tow the player to town' };
   }
   if (!profile.tows || tow || vehicle.brain!.refusedTow || world.player.state !== 'active') return null;
-  if (!isStranded(world, me) || isHostile(vehicle, me)) return null;
+  // A driver that can only crawl itself cannot pull another truck.
+  if (!isStranded(world, me) || isStranded(world, vehicle) || isHostile(vehicle, me)) return null;
   const seen = canVehicleSee(world, vehicle, me.pos) ? me.pos : beaconCenter(world, vehicle, me);
   if (!seen) return null;
   return { kind: 'tow', targetId: me.id, destination: { ...seen }, phase: 'travel', reason: 'help a stranded truck' };
@@ -95,10 +96,13 @@ export function runTow(world: World, vehicle: Vehicle, activity: NpcActivity): s
   return null;
 }
 
+// A driver that broke off a tow for danger keeps its word: the same town and fee as the deal it dropped.
 function offer(world: World, vehicle: Vehicle): void {
   const me = playerVehicle(world);
-  const town = nearestKnownTown(world, vehicle);
-  const fee = towFee(world, vehicle, me.pos, town);
+  const kept = vehicle.brain!.brokenTow;
+  const town = kept ? townById(kept.town) : nearestKnownTown(world, vehicle);
+  const fee = kept ? kept.fee : towFee(world, vehicle, me.pos, town);
+  delete vehicle.brain!.brokenTow;
   world.player.tow = { by: vehicle.id, town: town.id, fee, hitched: false };
   world.events.push({ t: 'towOffer', by: vehicle.id, town: town.id, fee });
 }
@@ -136,12 +140,14 @@ function refuse(world: World, tower: Vehicle): void {
   dropTow(world, 'refused');
 }
 
-// Ends an offer or a tow for free. A released truck brakes to a stop.
+// Ends an offer or a tow for free. A released truck brakes to a stop. A tower that leaves a hitched truck for
+// danger remembers the deal, so its next offer holds the same terms.
 export function dropTow(world: World, reason: TowDropReason): void {
   const tow = world.player.tow;
   if (!tow) throw new Error('No tow to drop');
   world.player.tow = null;
   if (tow.hitched) playerVehicle(world).order = { kind: 'brake' };
+  if (tow.hitched && reason === 'danger') vehicleById(world, tow.by).brain!.brokenTow = { town: tow.town, fee: tow.fee };
   world.events.push({ t: 'towDropped', by: tow.by, reason });
 }
 
