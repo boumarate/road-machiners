@@ -15,7 +15,7 @@ import { straightClear } from './path';
 import { vehicleStats } from './stats';
 import { endTurn } from './world';
 import { addVehicle, emptyWorld, testDrive } from './testkit';
-import { siteGates } from './sites';
+import { siteGates, sitePads } from './sites';
 
 function createNpc(templateId = 'scavenger') {
   const world = emptyWorld({ x: 200, y: 200 });
@@ -186,7 +186,7 @@ describe('NPC field repairs', () => {
     const { world, npc } = createNpc();
     addGoods(world, npc, 'parts', 2);
     npc.resources!.fuel = 0;
-    npc.pos = { ...siteGates(REGION.towns[0])[0] };
+    npc.pos = { ...sitePads(REGION.towns[0])[0] };
     planNpcOrders(world);
     expect(npc.brain!.activity!.kind).toBe('resupply');
     resolveNpcActivities(world);
@@ -222,7 +222,7 @@ describe('NPC field repairs', () => {
     addGoods(world, npc, 'parts', 2);
     expect(chooseNpcActivity(world, npc).kind).toBe('scavenge');
     addGoods(world, npc, 'scrap', 1);
-    npc.pos = { ...siteGates(REGION.towns[0])[0] };
+    npc.pos = { ...sitePads(REGION.towns[0])[0] };
     npc.brain!.activity = { kind: 'sell', targetId: REGION.towns[0].id, destination: REGION.towns[0].pos, phase: 'act', reason: 'sell loot' };
     resolveNpcActivities(world);
     expect(goodsCount(npc).scrap ?? 0).toBe(0);

@@ -273,6 +273,7 @@ export const REGION = {
       { x: -0.8, y: 2.8 },
     ] as Vec[],
     pondRadius: 2.2,
+    padRadius: 3, // tiles; a pad lies outside each gate and touches it, and site services work only on a pad
   },
   settlement: {
     streetSpacing: 5, // 20 m blocks, with houses separated by alleys
@@ -284,7 +285,6 @@ export const REGION = {
     wallSegment: 3, // tiles per straight wall section around the curve
     wallTowerEvery: 5, // wall sections between towers
     gateWidth: 13, // tiles of open wall where a road enters, over twice the road width
-    gateReach: 5, // tiles from a gate on the wall line where a walled site's services work
     palisadeHeight: 0.55, // 2.2 m of scrap and posts, below a truck roof
     palisadeThickness: 0.25,
     palisadeSegment: 1.5,

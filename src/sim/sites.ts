@@ -1,35 +1,55 @@
-// Which town or location the player is at. Walled sites are used only from a gate.
+// Which town or location the player is at. Trucks never enter a site: each is used from a pad outside one of its gates.
 
-import { ECONOMY } from '../data/goods';
 import { REGION, type LocationDef, type TownDef } from '../data/region';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
-import { roadExits } from './mapgen';
 import type { World } from './types';
 import { dist, type Vec } from './vec';
 
 export type Site = TownDef | LocationDef;
 
-export function isWalled(site: Site): boolean {
-  return !('kind' in site) || site.walled === true;
-}
-
+const SITES: readonly Site[] = [...REGION.towns, ...REGION.locations];
 const GATES = new Map<string, Vec[]>();
+const PADS = new Map<string, Vec[]>();
 
-// Gates lie on the wall line where each road enters the site.
+// Gates lie on the site edge where roads cross it, in road order.
 export function siteGates(site: Site): Vec[] {
   let gates = GATES.get(site.id);
   if (!gates) {
-    gates = roadExits(site.pos).map((a) => ({ x: site.pos.x + Math.cos(a) * site.radius, y: site.pos.y + Math.sin(a) * site.radius }));
-    if (gates.length === 0) throw new Error(`Walled site ${site.id} has no road into it`);
+    const crossings = REGION.roads.flatMap((road) => road.slice(1).flatMap((b, i) => edgeCrossings(road[i], b, site.pos, site.radius)));
+    // Roads that meet at the edge cross it at one gate.
+    gates = crossings.filter((p, i) => !crossings.slice(0, i).some((q) => dist(q, p) < REGION.roadWidth));
+    if (gates.length === 0) throw new Error(`Site ${site.id} has no road into it`);
     GATES.set(site.id, gates);
   }
   return gates;
 }
 
+// One pad per gate, in gate order. Each lies outside the site and touches its gate.
+export function sitePads(site: Site): Vec[] {
+  let pads = PADS.get(site.id);
+  if (!pads) {
+    const out = site.radius + REGION.sites.padRadius;
+    pads = siteGates(site).map((g) => {
+      const a = Math.atan2(g.y - site.pos.y, g.x - site.pos.x);
+      return { x: site.pos.x + Math.cos(a) * out, y: site.pos.y + Math.sin(a) * out };
+    });
+    PADS.set(site.id, pads);
+  }
+  return pads;
+}
+
+export function nearestPad(site: Site, from: Vec): Vec {
+  return sitePads(site).reduce((a, b) => (dist(from, a) <= dist(from, b) ? a : b));
+}
+
 export function canUseSite(pos: Vec, site: Site): boolean {
-  if (!isWalled(site)) return dist(pos, site.pos) <= (site.radius + ECONOMY.useRange) * ECONOMY.interactionScale;
-  return siteGates(site).some((gate) => dist(pos, gate) <= REGION.settlement.gateReach);
+  return sitePads(site).some((pad) => dist(pos, pad) <= REGION.sites.padRadius);
+}
+
+// The site whose edge encloses a point, or null.
+export function siteUnder(pos: Vec): Site | null {
+  return SITES.find((s) => dist(pos, s.pos) < s.radius) ?? null;
 }
 
 // The town the parked player truck can use, or null.
@@ -57,4 +77,19 @@ export function requireTown(world: World): TownDef {
 export function nearestTown(world: World): TownDef {
   const pos = playerVehicle(world).pos;
   return [...REGION.towns].sort((a, b) => dist(pos, a.pos) - dist(pos, b.pos))[0];
+}
+
+// Points where segment a-b crosses the circle, ordered from a to b.
+function edgeCrossings(a: Vec, b: Vec, c: Vec, r: number): Vec[] {
+  const d = { x: b.x - a.x, y: b.y - a.y };
+  const f = { x: a.x - c.x, y: a.y - c.y };
+  const A = d.x * d.x + d.y * d.y;
+  const B = 2 * (f.x * d.x + f.y * d.y);
+  const C = f.x * f.x + f.y * f.y - r * r;
+  const disc = B * B - 4 * A * C;
+  if (A === 0 || disc < 0) return [];
+  const root = Math.sqrt(disc);
+  return [(-B - root) / (2 * A), (-B + root) / (2 * A)]
+    .filter((t) => t >= 0 && t <= 1)
+    .map((t) => ({ x: a.x + d.x * t, y: a.y + d.y * t }));
 }

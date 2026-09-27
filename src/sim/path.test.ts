@@ -1,6 +1,5 @@
 import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
-import { ECONOMY } from '../data/goods';
 import { REGION } from '../data/region';
 import { TERRAIN_TYPES } from '../data/terrain';
 import { resetPerf, perfSnapshot } from '../perf';
@@ -11,7 +10,6 @@ import { continueRoute, keepRoute, route, routeLength, straightClear, type Block
 import { nextRandom } from './rng';
 import { isCliff, tileAt, type Terrain } from './terrain';
 import type { World } from './types';
-import { locationAt } from './sites';
 import { editableTerrain, emptyWorld } from './testkit';
 import { dist, polylineDist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
@@ -57,18 +55,6 @@ describe("route", () => {
       expect(buildings.length).toBeGreaterThan(0);
       for (const building of buildings) expect(dist(building.pos, town.pos) + building.r).toBeLessThanOrEqual(town.radius);
     }
-  });
-
-  it('a truck at a site edge can interact with it', () => {
-    const w = newWorld(1337, START_KITS.standard);
-    w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
-    const site = REGION.locations.find((l) => l.kind === 'oasis')!;
-    const reach = (site.radius + ECONOMY.useRange) * ECONOMY.interactionScale;
-    const v = w.vehicles[0];
-    v.pos = { x: site.pos.x + reach - 0.5, y: site.pos.y };
-    expect(locationAt(w)?.id).toBe(site.id);
-    v.pos = { x: site.pos.x + reach + 0.5, y: site.pos.y };
-    expect(locationAt(w)).toBeNull();
   });
 });
 

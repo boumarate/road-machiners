@@ -14,7 +14,7 @@ import {
   chooseNpcActivity,
   getActivityDestination,
 } from "./npc-activities";
-import { canUseSite, siteGates } from "./sites";
+import { canUseSite, sitePads } from "./sites";
 
 function createScavenger() {
   const w = emptyWorld({ x: 50, y: 50 });
@@ -54,7 +54,7 @@ describe("NPC activities", () => {
   it("stops at the town gate nearest to it, even from the far side of the wall", () => {
     const { w, npc } = createScavenger();
     const town = REGION.towns[0];
-    const gate = siteGates(town)[0];
+    const gate = sitePads(town)[0];
     npc.pos = {
       x: town.pos.x - (gate.x - town.pos.x) * 1.3,
       y: town.pos.y - (gate.y - town.pos.y) * 1.3,
@@ -77,7 +77,7 @@ describe("NPC activities", () => {
     "records completion of %s once",
     (kind) => {
       const { w, npc } = createScavenger();
-      npc.pos = { ...siteGates(REGION.towns[0])[0] };
+      npc.pos = { ...sitePads(REGION.towns[0])[0] };
       npc.brain!.activity = {
         kind,
         targetId: REGION.towns[0].id,
@@ -173,7 +173,7 @@ describe("NPC activities", () => {
   it("keeps upkeep money when buying trade cargo", () => {
     const { w, npc } = createScavenger();
     npc.brain!.templateId = "trader";
-    npc.pos = { ...siteGates(REGION.towns[0])[0] };
+    npc.pos = { ...sitePads(REGION.towns[0])[0] };
     planNpcOrders(w);
     resolveNpcActivities(w);
     expect(npc.resources!.money).toBeGreaterThan(0);

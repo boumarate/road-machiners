@@ -8,6 +8,7 @@ import { corePart, goodsCount, mountedParts } from './grid';
 import { partDef } from '../data/parts';
 import { takeAllLoot, canScavenge, scavenge } from './locations';
 import { collectSalvage, hasSalvage } from './salvage';
+import { sitePads } from './sites';
 import { freeCells } from './grid';
 import { endTurn } from './world';
 
@@ -35,7 +36,7 @@ describe('finite salvage', () => {
 
   it('cannot recreate convoy loot by clearing player discovery state', () => {
     const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
-    const w = emptyWorld(convoy.pos);
+    const w = emptyWorld({ ...sitePads(convoy)[0] });
     // Keep the built-ins so the truck still runs, but clear cargo so the search has room to fill.
     w.vehicles[0].items = w.vehicles[0].items.filter((item) => item.kind === 'part' && partDef(item.part.defId).kind === 'core');
     const totalScrap = w.salvage.find((s) => s.id === convoy.id)!.goods.scrap;

@@ -6,7 +6,7 @@ import { assignAutoOrders, fireWeapons } from './combat';
 import { corePart, mountedParts } from './grid';
 import { addGoods } from './inventory';
 import { chooseNpcActivity, resolveNpcActivities } from './npc-activities';
-import { siteGates } from './sites';
+import { sitePads } from './sites';
 import { addVehicle, emptyWorld } from './testkit';
 import type { Vehicle, World } from './types';
 
@@ -86,7 +86,7 @@ describe('NPC gameplay recovery', () => {
 
   it('does not use guard protection to silence a victim defending itself', () => {
     const { world, npc } = createScenario();
-    const gate = siteGates(REGION.towns[0])[0];
+    const gate = sitePads(REGION.towns[0])[0];
     npc.pos = { ...gate };
     const enemy = addVehicle(world, 'raiders', 'buggy', ['mg'], { x: gate.x + 3, y: gate.y });
     fireAt(world, enemy, npc);

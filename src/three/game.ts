@@ -608,7 +608,7 @@ export class Game {
     )
       return this.apply(setMoveOrder(this.world, { kind: "brake" }));
     const p = this.rig.groundUnder(e.clientX, e.clientY, this.ground);
-    if (p) this.apply(setMoveOrder(this.world, clickOrder(p, e.shiftKey, playerVehicle(this.world).order)));
+    if (p) this.apply(setMoveOrder(this.world, clickOrder(p, e.shiftKey, playerVehicle(this.world))));
   }
 
   private targetVehicle(target: Vehicle): void {

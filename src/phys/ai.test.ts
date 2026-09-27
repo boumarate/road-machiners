@@ -3,6 +3,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { START_KITS } from '../data/start';
 import { RULES } from '../data/rules';
+import { NPCS } from '../data/npcs';
 import { REGION } from '../data/region';
 import { addVehicle, emptyWorld } from '../sim/testkit';
 import type { World } from '../sim/types';
@@ -49,13 +50,17 @@ describe('NPC driving', () => {
     const nose = REGION.towns[1];
     const npc = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: bowl.pos.x + bowl.radius + 2, y: bowl.pos.y });
     npc.brain = { templateId: 'trader', activity: null, goal: null, home: { ...npc.pos }, stepIndex: 0, refusedTow: false };
+    // No spawns, so no raider cuts the trip short.
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Infinity;
+    // The trader parks on a pad outside the gate.
+    const arrived = nose.radius + REGION.sites.padRadius + RULES.arriveRadius;
     let closest = Infinity;
-    for (let i = 0; i < w.size && closest >= nose.radius + 2; i++) {
+    for (let i = 0; i < w.size && closest >= arrived; i++) {
       ({ w } = play(w, 1));
       const actor = w.vehicles.find((v) => v.id === npc.id)!;
       closest = Math.min(closest, dist(actor.pos, nose.pos));
       expect(dist(actor.pos, nose.pos)).toBeGreaterThanOrEqual(nose.radius + 0.8 - 0.5);
     }
-    expect(closest).toBeLessThan(nose.radius + 2);
+    expect(closest).toBeLessThan(arrived);
   }, 120_000);
 });

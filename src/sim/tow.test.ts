@@ -5,7 +5,7 @@ import { BEACON, TOW } from '../data/tow';
 import { partDef } from '../data/parts';
 import { playerVehicle } from './damage';
 import { route, routeLength } from './path';
-import { canUseSite, siteGates } from './sites';
+import { canUseSite, siteGates, sitePads } from './sites';
 import { getResources } from './resources';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, testDrive } from './testkit';
@@ -61,13 +61,13 @@ describe('tow offer', () => {
     expect(trader.brain!.activity?.kind).toBe('tow');
   });
 
-  it('prices the tow by the route length to the nearest gate of the town', () => {
+  it('prices the tow by the route length to the nearest pad of the town', () => {
     const s = stranded();
     const w = offered(s);
     const me = playerVehicle(w);
     const town = REGION.towns.find((t) => t.id === 'bowl')!;
-    const gate = siteGates(town).reduce((a, b) => (dist(me.pos, a) <= dist(me.pos, b) ? a : b));
-    const length = routeLength(me.pos, route(w, me.pos, gate, vehicleStats(w, find(w, s.trader.id)).radius, []));
+    const pad = sitePads(town).reduce((a, b) => (dist(me.pos, a) <= dist(me.pos, b) ? a : b));
+    const length = routeLength(me.pos, route(w, me.pos, pad, vehicleStats(w, find(w, s.trader.id)).radius, []));
     expect(w.player.tow!.fee).toBe(Math.round(TOW.base + TOW.perTile * length));
   });
 

@@ -10,7 +10,7 @@ import { moveItem, storePart } from './inventory';
 import { generateNpcLoadout } from './npc-loadout';
 import { addVehicle, emptyWorld } from './testkit';
 import type { GridItem, Vehicle, World } from './types';
-import { siteGates } from './sites';
+import { sitePads } from './sites';
 
 const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
 
@@ -58,19 +58,19 @@ describe('built-in parts', () => {
   });
 
   it('moving or storing a core part throws', () => {
-    const w = emptyWorld(siteGates(bowl)[0]);
+    const w = emptyWorld(sitePads(bowl)[0]);
     const cab = coreItem(w, 'cab');
     expect(() => moveItem(w, cab.id, { x: cab.x, y: cab.y, rot: 1 })).toThrow(/built in/);
     expect(() => storePart(w, cab.id)).toThrow(/built in/);
   });
 
   it('core parts are not for sale', () => {
-    const w = emptyWorld(siteGates(bowl)[0]);
+    const w = emptyWorld(sitePads(bowl)[0]);
     expect(() => buyPart(w, 'cab')).toThrow(/built in/);
   });
 
   it('a chassis swap replaces the core parts with the new chassis ones', () => {
-    let w = emptyWorld(siteGates(bowl)[0]);
+    let w = emptyWorld(sitePads(bowl)[0]);
     w.player.money = 2000;
     w.vehicles[0].items.forEach((it) => { if (it.kind === 'part' && it.part.defId === 'cab') it.part.hp = 1; });
     w = buyChassis(w, 'hauler');

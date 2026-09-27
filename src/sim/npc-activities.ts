@@ -27,7 +27,7 @@ import { canReachSalvage, hasSalvage } from "./salvage";
 import { beginSearch } from "./search";
 import { getMobilityCondition, vehicleStats } from "./stats";
 import type { Contact, NpcActivity, NpcBrain, Vehicle, World } from "./types";
-import { canUseSite, isWalled, siteGates } from "./sites";
+import { canUseSite, nearestPad } from "./sites";
 import { clamp, dist, type Vec } from "./vec";
 import { canVehicleSee } from "./vision";
 import { chooseTowActivity, dropTow, runTow } from "./tow";
@@ -661,6 +661,8 @@ export function getActivityDestination(
   const site = [...REGION.towns, ...REGION.locations].find(
     (entry) => entry.id === activity.targetId,
   );
+  // Sites are used from the pad nearest the vehicle.
+  if (site) return nearestPad(site, vehicle.pos);
   const stock =
     activity.kind === "scavenge"
       ? world.salvage.find((entry) => entry.id === activity.targetId)
@@ -670,27 +672,15 @@ export function getActivityDestination(
     activity.kind === "tow"
       ? world.vehicles.find((entry) => entry.id === activity.targetId)
       : undefined;
-  const radius =
-    site?.radius ??
-    stock?.radius ??
-    (towed && chassisDef(towed.chassisId).radius);
+  const radius = stock?.radius ?? (towed && chassisDef(towed.chassisId).radius);
   if (radius === undefined)
     throw new Error(`Missing activity destination ${activity.targetId}`);
   const stopRadius =
     radius + vehicleStats(world, vehicle).radius + RULES.arriveRadius;
-  // A walled site is used from its gate nearest the vehicle, so the stop lies just outside that gate.
-  const gate =
-    site && isWalled(site)
-      ? siteGates(site).reduce((a, b) =>
-          dist(vehicle.pos, a) <= dist(vehicle.pos, b) ? a : b,
-        )
-      : null;
-  const angle = gate
-    ? Math.atan2(gate.y - site!.pos.y, gate.x - site!.pos.x)
-    : Math.atan2(
-        vehicle.pos.y - activity.destination.y,
-        vehicle.pos.x - activity.destination.x,
-      );
+  const angle = Math.atan2(
+    vehicle.pos.y - activity.destination.y,
+    vehicle.pos.x - activity.destination.x,
+  );
   return {
     x: activity.destination.x + Math.cos(angle) * stopRadius,
     y: activity.destination.y + Math.sin(angle) * stopRadius,

@@ -146,6 +146,19 @@ describe('physics turns', () => {
     expect(me(w).speed).toBeLessThan(0.1);
   });
 
+  it('a parked truck without an order brakes instead of rolling faster down a slope', () => {
+    const w = emptyWorld({ x: 40, y: 30 });
+    w.terrain = structuredClone(w.terrain);
+    const n = w.terrain.size;
+    for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) w.terrain.heights[j * (n + 1) + i] = i * HILL_GRADE;
+    me(w).heading = Math.PI; // facing downhill
+    const { w: after, d } = play(w, 8);
+    freeDrive(d);
+    // Brakes slip a little on this steep grade, but the truck never picks up speed.
+    expect(me(after).speed).toBeLessThan(0.05);
+    expect(dist(me(after).pos, { x: 40, y: 30 })).toBeLessThan(0.6);
+  });
+
   it('mud covers less ground than road at the same order', () => {
     const w = emptyWorld();
     editableTerrain(w).types.fill('mud');

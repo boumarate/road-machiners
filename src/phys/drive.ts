@@ -311,7 +311,7 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
     brakeForce: T.brakeForce * (ch.ratedMass / 1000),
     stopDecel: D.stopDecel * (ch.ratedMass / full.mass), // the stop plan brakes as hard as this load allows
   };
-  if (!order) return { ...base, dest: null, route: null, target: toMps(speed), stopAt: false };
+  if (!order) return { ...base, dest: null, route: null, target: idleTarget(speed), stopAt: false };
   if (order.kind === 'brake') return { ...base, dest: null, route: null, target: 0, stopAt: false };
   // Careful drivers follow the route planner, which keeps to roads and goes around obstacles; careless ones drive straight.
   const parked = parkedVehicles(w, v.id);
@@ -322,6 +322,11 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   if (order.kind === 'stopAt') return { ...base, dest: order.dest, route: path, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
   const next = zoneSpeed(s, speed, dist(v.pos, order.dest));
   return { ...base, dest: order.dest, route: path, target: toMps(next), stopAt: false };
+}
+
+// Without an order a moving truck coasts on, and a parked one holds its brakes, so it does not roll down a slope.
+function idleTarget(speed: number): number {
+  return speed <= RULES.parkedSpeed ? 0 : toMps(speed);
 }
 
 // Loose ground gives less grip, so wheels spin instead of converting engine force to speed. Slope
