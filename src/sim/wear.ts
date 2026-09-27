@@ -26,7 +26,7 @@ function wearVehicle(world: World, v: Vehicle): void {
   const floor = (id: string): number => (id === cab ? 1 : 0);
 
   for (const p of mountedParts(v).filter((p) => p.hp > 0)) {
-    if (chance(world, Math.min(1, WEAR.chancePerTile * oddsScale))) p.hp = Math.max(floor(p.id), p.hp - WEAR.hpLoss);
+    if (chance(world, Math.min(1, WEAR.chancePerTile * oddsScale))) p.hp = Math.max(floor(p.id), p.hp - partDef(p.defId).hp * WEAR.hpShare);
   }
 
   const working = mountedParts(v).filter((p) => p.hp > 0);
