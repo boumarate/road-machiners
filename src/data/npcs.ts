@@ -294,7 +294,7 @@ export const SPAWN = {
 export type DecisionOptions = {
   hostileSeen: 'keep' | 'fight' | 'flee'; // a new hostile comes in sight
   contactHeard: 'keep' | 'investigate' | 'flee'; // a new hostile contact beyond sight
-  hurt: 'keep' | 'flee'; // damage taken last turn
+  hurt: 'keep' | 'flee' | 'fightBack'; // damage taken last turn
   preySeen: 'keep' | 'rob'; // a new robbery target comes in sight
   strandedSeen: 'keep' | 'tow'; // a stranded player comes in sight
   resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal
@@ -303,26 +303,32 @@ export type DecisionOptions = {
 export type DecisionId = keyof DecisionOptions;
 export type OptionId = DecisionOptions[DecisionId];
 
-// Base weight per option. The final weight is (base + adds) x muls x situation factor.
+// The user's rule: "0 only for can't. For something you physically can, never go below 1% probability."
+// Every option a driver can take now gets at least this chance, and shares the rest by its weight.
+export const MIN_CHANCE = 0.01;
+
+// Base weight per option. The final weight is (base + adds) x muls x situation factor. A base of 0 leaves an
+// available option at MIN_CHANCE unless a trait adds weight.
 export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> } = {
   // Without traits a driver ignores, fights or avoids a new hostile about equally, fighting a bit more.
   hostileSeen: { keep: 1, fight: 2, flee: 1 },
-  // Most drivers steer away from a hostile they only hear. Investigating needs a trait.
+  // Most drivers steer away from a hostile they only hear. Investigating more than rarely needs a trait.
   contactHeard: { keep: 1, investigate: 0, flee: 3 },
-  // Even odds to run from a hit worth NPC_BEHAVIOR.hurtFullFlee of the cab.
-  hurt: { keep: 1, flee: 1 },
-  // Robbing needs a trait.
+  // Even odds to run from a hit worth NPC_BEHAVIOR.hurtFullFlee of the cab, keep going, or shoot back.
+  hurt: { keep: 1, flee: 1, fightBack: 1 },
+  // Robbing more than rarely needs a trait.
   preySeen: { keep: 1, rob: 0 },
-  // Towing needs a trait.
+  // Towing more than rarely needs a trait.
   strandedSeen: { keep: 1, tow: 0 },
   // After an interruption a driver goes back to its work 9 times in 10.
   resume: { resume: 9, new: 1 },
-  // Anyone collects salvage in sight. Trading and raiding need a trait. Waiting is the small fallback, so the
-  // roll always has an option.
+  // Anyone collects salvage in sight. Trading and raiding more than rarely need a trait. Waiting is the small
+  // fallback.
   idle: { trade: 0, scavenge: 1, raid: 0, wait: 0.1 },
 };
 
-// A weight change: `add` enables an option with zero base weight, and `mul` tunes an option.
+// A weight change: `add` raises an option with zero base weight above MIN_CHANCE, and `mul` tunes an option.
+// A mul is always above 0. A small mul makes an option rare, never impossible.
 export type WeightChange = { add?: number; mul?: number };
 export type TraitWeights = { [D in DecisionId]?: Partial<Record<DecisionOptions[D], WeightChange>> };
 
@@ -330,11 +336,12 @@ export type TraitWeights = { [D in DecisionId]?: Partial<Record<DecisionOptions[
 export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   // A driver in a feud mostly fights that party when it comes into sight.
   feud: { hostileSeen: { fight: { add: 4 } } },
-  // A failed robber leaves the same target alone.
-  backedOff: { preySeen: { rob: { mul: 0 } } },
+  // A failed robber mostly leaves the same target alone. A scumbag's rob weight of 2 drops to 0.01, about 2%.
+  backedOff: { preySeen: { rob: { mul: 0.005 } } },
   tow: {},
-  // A driver the player turned down never offers that player a tow again.
-  spurned: { strandedSeen: { tow: { mul: 0 } } },
+  // A driver the player turned down rarely offers that player a tow again. A tow weight of 9 drops to 0.009,
+  // about 2%.
+  turnedDown: { strandedSeen: { tow: { mul: 0.001 } } },
   // A driver that dropped a tow for danger comes back for the player: tow outweighs keep 20 to 1.
   towPromise: { strandedSeen: { tow: { add: 20 } } },
 };
@@ -349,8 +356,8 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   backedOff: 30,
   // A tow lasts until the tower reaches town, the player lets go, or the tower is gone or in danger.
   tow: null,
-  // A driver the player turned down never offers a tow to that player again.
-  spurned: null,
+  // A driver the player turned down holds it until it offers that player a tow again.
+  turnedDown: null,
   // A tower that dropped a hitched tow for danger keeps its terms until its next offer to that player.
   towPromise: null,
 };
@@ -376,24 +383,30 @@ export const TRAITS: Record<TraitId, Trait> = {
     towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
     weights: { idle: { scavenge: { add: 10 } }, strandedSeen: { tow: { add: 9 } } },
   },
-  // Traders never pick a fight. Trading beats salvage in sight 3 to 1. Nine in ten traders help a stranded truck.
+  // Traders rarely pick a fight: a fight weight of 2 drops to 0.01, about 1.5%. A shot trader returns fire at half
+  // the usual weight, and mostly runs. Trading beats salvage in sight 3 to 1. Nine in ten traders help a stranded
+  // truck.
   trader: {
     towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
-    weights: { idle: { trade: { add: 30 } }, strandedSeen: { tow: { add: 9 } }, hostileSeen: { fight: { mul: 0 } } },
+    weights: {
+      idle: { trade: { add: 30 } }, strandedSeen: { tow: { add: 9 } },
+      hostileSeen: { fight: { mul: 0.005 } }, hurt: { fightBack: { mul: 0.5 } },
+    },
   },
   // Raiders fight most hostiles they see and close in on most they hear. A raid ties with salvage in sight.
   raider: {
     towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], contactReactRadius: Infinity, boldness: 1,
     weights: { idle: { raid: { add: 10 } }, contactHeard: { investigate: { add: 12 } }, hostileSeen: { fight: { add: 8 } } },
   },
-  // A scumbag robs about one target in three it comes across. Boldness 1.3 lets it rob a truck that looks as
-  // dangerous as its own, and stand against one up to 30% stronger.
-  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, boldness: 1.3, weights: { preySeen: { rob: { add: 0.5 } } } },
-  // A coward runs three times as often from a new hostile or a hit, and picks a fight half as often. Boldness 0.6
-  // makes a truck that looks as dangerous as its own a threat, even at the lowest misjudgment.
+  // A scumbag robs about two targets in three it comes across: rob 2 against keep 1. Boldness 1.3 lets it rob a
+  // truck that looks as dangerous as its own, and stand against one up to 30% stronger.
+  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, boldness: 1.3, weights: { preySeen: { rob: { add: 2 } } } },
+  // A coward runs three times as often from a new hostile or a hit, picks a fight half as often, and shoots back
+  // at a third of the weight. Boldness 0.6 makes a truck that looks as dangerous as its own a threat, even at the
+  // lowest misjudgment.
   coward: {
     towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, boldness: 0.6,
-    weights: { hostileSeen: { flee: { mul: 3 }, fight: { mul: 0.5 } }, hurt: { flee: { mul: 3 } } },
+    weights: { hostileSeen: { flee: { mul: 3 }, fight: { mul: 0.5 } }, hurt: { flee: { mul: 3 }, fightBack: { mul: 0.3 } } },
   },
 };
 
@@ -417,6 +430,12 @@ export const NPC_BEHAVIOR = {
   noticeMemory: 3,
   // Salvage in sight weighs 10 times a known site out of sight.
   visibleSalvage: 10,
+  // A robber mostly picks targets weaker than itself, away from town guards. Rob weight times this when the
+  // target looks as strong as the robber times its boldness or stronger. A scumbag's rob weight of 2 drops to 0.03,
+  // so it robs at about 4%, not 66%.
+  robStronger: 0.015,
+  // Rob weight times this when the robber or target is within guard range of a town gate. Same drop as above.
+  robNearGuards: 0.015,
 };
 
 export const NPC_UPKEEP = {

@@ -48,7 +48,7 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   feud: () => 'Feud with you',
   backedOff: () => 'Backing off from you',
   tow: (s) => (towData(s).hitched ? 'Towing you' : 'Tow offer to you'),
-  spurned: () => 'You turned down its tow',
+  turnedDown: () => 'You turned down its tow',
   towPromise: () => 'Promised you a tow',
 };
 

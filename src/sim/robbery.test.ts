@@ -3,8 +3,8 @@ import { STATE_TURNS } from '../data/npcs';
 import type { TraitId } from '../data/npcs';
 import { addGoods } from './inventory';
 import { thinkNpc } from './npc-activities';
-import { isRobberyTarget, optionWeights, vehicleDanger } from './npc-decisions';
-import { NPC_BEHAVIOR } from '../data/npcs';
+import { optionWeights, vehicleDanger } from './npc-decisions';
+import { NPC_BEHAVIOR, TRAITS } from '../data/npcs';
 import { resolveDestroyed } from './combat';
 import { checkKnockout } from './defeat';
 import { corePart, mountedParts } from './grid';
@@ -39,8 +39,10 @@ function isRob(goal: NpcActivity | undefined, target: string): boolean {
   return goal?.kind === 'fight' && goal.targetId === target && goal.reason === 'rob cargo';
 }
 
-// Worlds where one robbery check fails and the others pass.
-const FAILING: Record<string, () => { w: World; robber: Vehicle; target: Vehicle }> = {
+type Setup = () => { w: World; robber: Vehicle; target: Vehicle };
+
+// Worlds where rob is unavailable for one reason, and everything else would allow it.
+const UNAVAILABLE: Record<string, Setup> = {
   unseen: () => {
     const w = emptyWorld({ x: 200, y: 200 });
     return { w, robber: addScumbag(w, { x: 10, y: 10 }), target: addPrey(w, { x: 60, y: 10 }) };
@@ -56,6 +58,10 @@ const FAILING: Record<string, () => { w: World; robber: Vehicle; target: Vehicle
     const w = emptyWorld({ x: 200, y: 200 });
     return { w, robber: addScumbag(w, { x: 10, y: 10 }), target: addPrey(w, { x: 15, y: 10 }, [], 0) };
   },
+};
+
+// Worlds where one robbery judgment fails and the others pass.
+const JUDGED: Record<string, Setup> = {
   // Heavier guns and far more HP than the robber's scout.
   strong: () => {
     const w = emptyWorld({ x: 200, y: 200 });
@@ -77,30 +83,43 @@ function passing() {
   return { w, robber: addScumbag(w, { x: 10, y: 10 }), target: addPrey(w, { x: 15, y: 10 }) };
 }
 
+// The rob weight a scumbag gives the target when every judgment passes.
+const FULL_ROB = TRAITS.scumbag.weights.preySeen!.rob!.add!;
+
+const robWeight = (w: World, robber: Vehicle, target: Vehicle, danger: number) => optionWeights(w, robber, 'preySeen', target.id, danger).rob;
+
 describe('robbery checks', () => {
-  it('a weaker truck with loot in sight away from towns is a target', () => {
+  it('a weaker truck with loot in sight away from towns gets the full rob weight', () => {
     const { w, robber, target } = passing();
-    expect(isRobberyTarget(w, robber, target, vehicleDanger(w, target))).toBe(true);
+    expect(robWeight(w, robber, target, vehicleDanger(w, target))).toBe(FULL_ROB);
     // The same spot beside the gate, but one gate range further out, passes too.
     const far = emptyWorld({ x: 200, y: 200 });
-    expect(isRobberyTarget(far, addScumbag(far, { x: GATE.x, y: GATE.y - 12 }), addPrey(far, { x: GATE.x, y: GATE.y - 17 }), 0)).toBe(true);
+    expect(robWeight(far, addScumbag(far, { x: GATE.x, y: GATE.y - 12 }), addPrey(far, { x: GATE.x, y: GATE.y - 17 }), 0)).toBe(FULL_ROB);
   });
 
-  for (const [name, make] of Object.entries(FAILING)) {
-    it(`blocks a robbery when only ${name} fails`, () => {
+  for (const [name, make] of Object.entries(UNAVAILABLE)) {
+    it(`makes rob unavailable when only ${name} fails`, () => {
       const { w, robber, target } = make();
-      expect(isRobberyTarget(w, robber, target, lowest(w, target))).toBe(false);
-      expect(optionWeights(w, robber, 'preySeen', target.id, lowest(w, target)).rob).toBe(0);
+      expect(optionWeights(w, robber, 'preySeen', target.id, lowest(w, target))).not.toHaveProperty('rob');
     });
   }
 
-  it('a player truck with loot is a target when its guns are weaker', () => {
+  for (const [name, make] of Object.entries(JUDGED)) {
+    it(`lowers the rob weight when only ${name} fails`, () => {
+      const { w, robber, target } = make();
+      const weight = robWeight(w, robber, target, lowest(w, target))!;
+      expect(weight).toBeGreaterThan(0);
+      expect(weight).toBeLessThanOrEqual(FULL_ROB * 0.1);
+    });
+  }
+
+  it('a player truck with loot gets the full rob weight only when its guns are weaker', () => {
     const w = emptyWorld({ x: 15, y: 10 });
     const me = w.vehicles[0];
     const robber = addScumbag(w, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
-    expect(isRobberyTarget(w, robber, me, vehicleDanger(w, me))).toBe(true);
+    expect(robWeight(w, robber, me, vehicleDanger(w, me))).toBe(FULL_ROB);
     const bare = addScumbag(w, { x: 10, y: 12 }, ['stockEngine']);
-    expect(isRobberyTarget(w, bare, me, lowest(w, me))).toBe(false);
+    expect(robWeight(w, bare, me, lowest(w, me))).toBeLessThanOrEqual(FULL_ROB * 0.1);
   });
 });
 
@@ -130,13 +149,13 @@ describe('danger', () => {
 });
 
 describe('scumbag robbery', () => {
-  it('a scumbag robs an equal truck on some seeds, and never a clearly stronger one', () => {
+  it('a scumbag robs an equal truck on some seeds, and rarely a clearly stronger one', () => {
     const count = (make: (w: World) => Vehicle) => {
       const w = emptyWorld({ x: 200, y: 200 });
       const robber = addScumbag(w, { x: 10, y: 10 });
       const target = make(w);
       let robs = 0;
-      for (let seed = 0; seed < 60; seed++) {
+      for (let seed = 0; seed < 200; seed++) {
         const x = cloneWorld(w);
         x.rngState = seed;
         const r = find(x, robber.id);
@@ -145,11 +164,14 @@ describe('scumbag robbery', () => {
       }
       return robs;
     };
-    expect(count((w) => addPrey(w, { x: 15, y: 10 }, ['mg', 'stockEngine']))).toBeGreaterThan(0);
-    expect(count((w) => addVehicle(w, 'traders', 'carrier', ['tankGun', 'plates'], { x: 15, y: 10 }))).toBe(0);
+    const equal = count((w) => addPrey(w, { x: 15, y: 10 }, ['mg', 'stockEngine']));
+    const strong = count((w) => addVehicle(w, 'traders', 'carrier', ['tankGun', 'plates'], { x: 15, y: 10 }));
+    expect(equal).toBeGreaterThan(0);
+    expect(strong).toBeLessThan(20);
+    expect(strong).toBeLessThan(equal);
   });
 
-  it('a scumbag robs a weak loaded truck on some seeds, and never when a check fails', () => {
+  it('a scumbag robs a weak loaded truck on some seeds, never when rob is unavailable, and rarely when a judgment fails', () => {
     const { w, robber, target } = passing();
     let robs = 0;
     const seeds = 60;
@@ -165,7 +187,7 @@ describe('scumbag robbery', () => {
     }
     expect(robs).toBeGreaterThan(0);
     expect(robs).toBeLessThan(seeds);
-    for (const make of Object.values(FAILING)) {
+    for (const make of Object.values(UNAVAILABLE)) {
       const bad = make();
       for (let seed = 0; seed < 20; seed++) {
         const x = cloneWorld(bad.w);
@@ -175,13 +197,36 @@ describe('scumbag robbery', () => {
         expect(isRob(r.brain!.goals.at(-1), bad.target.id)).toBe(false);
       }
     }
+    for (const make of Object.values(JUDGED)) {
+      const judged = make();
+      let rare = 0;
+      for (let seed = 0; seed < 100; seed++) {
+        const x = cloneWorld(judged.w);
+        x.rngState = seed;
+        const r = find(x, judged.robber.id);
+        thinkNpc(x, r);
+        if (isRob(r.brain!.goals.at(-1), judged.target.id)) rare++;
+      }
+      expect(rare).toBeLessThan(10);
+    }
   });
 
-  it('a scavenger without scumbag never robs', () => {
+  it('a scavenger without scumbag robs a weak loaded truck at about 1%', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const robber = addScumbag(w, { x: 10, y: 10 }, ['mg', 'stockEngine'], ['scavenger']);
     const target = addPrey(w, { x: 15, y: 10 });
-    expect(optionWeights(w, robber, 'preySeen', target.id, vehicleDanger(w, target)).rob).toBe(0);
+    expect(robWeight(w, robber, target, vehicleDanger(w, target))).toBe(0);
+    const seeds = 2000;
+    let robs = 0;
+    for (let seed = 0; seed < seeds; seed++) {
+      const x = cloneWorld(w);
+      x.rngState = seed;
+      const r = find(x, robber.id);
+      thinkNpc(x, r);
+      if (isRob(r.brain!.goals.at(-1), target.id)) robs++;
+    }
+    expect(robs / seeds).toBeGreaterThan(0.003);
+    expect(robs / seeds).toBeLessThan(0.02);
   });
 
   it('a scumbag scavenger with no prey still scavenges', () => {
@@ -221,7 +266,7 @@ describe('scumbag robbery', () => {
     expect(w.events).toContainEqual(expect.objectContaining({ t: 'job', vehicle: robber.id, outcome: 'cancelled' }));
   });
 
-  it('a failed robbery blocks a new rob roll against the same target', () => {
+  it('a failed robbery lowers the rob weight against the same target', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const robber = addScumbag(w, { x: 10, y: 10 });
     const target = addPrey(w, { x: 80, y: 10 });
@@ -242,23 +287,22 @@ describe('scumbag robbery', () => {
     advanceStates(w);
     expect(stateOf(w, 'backedOff', robber.id, target.id)?.turnsLeft).toBe(STATE_TURNS.backedOff! - 1);
     target.pos = { x: 15, y: 10 };
-    expect(isRobberyTarget(w, robber, target, vehicleDanger(w, target))).toBe(true);
-    expect(optionWeights(w, robber, 'preySeen', target.id, vehicleDanger(w, target)).rob).toBe(0);
-    expect(optionWeights(w, robber, 'preySeen', other.id, vehicleDanger(w, other)).rob).toBeGreaterThan(0);
+    const again = robWeight(w, robber, target, vehicleDanger(w, target))!;
+    expect(again).toBeGreaterThan(0);
+    expect(again).toBeLessThan(robWeight(w, robber, other, vehicleDanger(w, other))! * 0.05);
   });
 });
 
-describe('no-choice decisions', () => {
-  it('a scavenger without scumbag seeing a weak loaded truck draws no RNG and notices nothing', () => {
+describe('prey rolls', () => {
+  it('a scavenger without scumbag rolls once on a weak loaded truck', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const scav = addScumbag(w, { x: 10, y: 10 }, ['mg', 'stockEngine'], ['scavenger']);
     scav.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' }];
     const target = addPrey(w, { x: 15, y: 10 });
-    expect(isRobberyTarget(w, scav, target, vehicleDanger(w, target))).toBe(true);
     const rng = w.rngState;
     thinkNpc(w, scav);
-    expect(w.rngState).toBe(rng);
-    expect(Object.keys(scav.brain!.noticed)).toEqual([]);
+    expect(w.rngState).not.toBe(rng);
+    expect(scav.brain!.noticed).toHaveProperty([`preySeen:${target.id}`]);
   });
 });
 

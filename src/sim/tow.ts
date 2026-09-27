@@ -2,7 +2,7 @@
 // decision. It drives over and offers a tow for a fee. The offer is a `tow` state held by the tower toward the
 // player. Once the player accepts, the truck leaves physics and trails the tower along its path. Arrival fulfils
 // the state, and its hook in src/sim/states.ts takes the fee, even into debt. Refusing, driving away or unhitching
-// breaks it for free, and the tower holds `spurned` toward the player, so it never offers again.
+// breaks it for free, and the tower holds `turnedDown` toward the player, so it rarely offers again.
 // A stranded player can switch on an emergency beacon, which calls towers from beyond sight, and raiders too.
 
 import { chassisDef } from '../data/chassis';
@@ -144,9 +144,9 @@ function towFee(world: World, tower: Vehicle, from: Vec, town: TownDef): number 
   return Math.round(TOW.base + TOW.perTile * length);
 }
 
-// The player turned the tower down, so the tower does not offer again.
+// The player turned the tower down, so the tower rarely offers again.
 function refuse(world: World, tow: NpcState): void {
-  addState(world, 'spurned', tow.holder, tow.other, { kind: 'none' });
+  addState(world, 'turnedDown', tow.holder, tow.other, { kind: 'none' });
   dropTow(world, tow, 'refused');
 }
 
@@ -214,13 +214,13 @@ export function refuseTow(world: World): World {
   });
 }
 
-// The one command allowed while towed. It is free, and that driver does not offer again.
+// The one command allowed while towed. It is free, and that driver rarely offers again.
 export function unhitch(world: World): World {
   return update(world, (w) => {
     if (w.player.state !== 'active') throw new Error(`Player is ${w.player.state}`);
     const tow = playerTow(w);
     if (!tow || !towData(tow).hitched) throw new Error('Player is not towed');
-    addState(w, 'spurned', tow.holder, tow.other, { kind: 'none' });
+    addState(w, 'turnedDown', tow.holder, tow.other, { kind: 'none' });
     dropTow(w, tow, 'unhitched');
   });
 }

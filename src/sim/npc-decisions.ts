@@ -1,14 +1,15 @@
-// Weighted NPC decisions. A decision point offers options. Each option's final weight is
-// (base + adds) x muls x situation factor. Bases live in DECISIONS. Adds and muls come from the NPC's traits, and
-// from the states it holds toward the decision's subject. The situation factor reads what the NPC perceives.
-// A roll with world RNG picks one option with weight above zero. Traits also give the NPC's profile: the sites it
-// knows and how bold it is. Robbery is a fight against a target that passes the robbery checks.
+// Weighted NPC decisions. A decision point offers options. An option is available when the driver physically can
+// take it now. Each available option's final weight is (base + adds) x muls x situation factor. Bases live in
+// DECISIONS. Adds and muls come from the NPC's traits, and from the states it holds toward the decision's subject.
+// The situation factor reads what the NPC perceives. Every available option gets at least MIN_CHANCE and shares
+// the rest by weight. A roll with world RNG picks one. Traits also give the NPC's profile: the sites it knows and
+// how bold it is. Robbery is a fight against a truck the robber can rob, mostly a weaker one away from guards.
 
 import { chassisDef } from '../data/chassis';
 import { DETECT } from '../data/detect';
 import { ECONOMY, GOOD_IDS } from '../data/goods';
 import {
-  DECISIONS, HUNTING_GROUNDS, NPC_BEHAVIOR, NPC_UPKEEP, STATE_WEIGHTS, TRAITS,
+  DECISIONS, HUNTING_GROUNDS, MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, STATE_WEIGHTS, TRAITS,
   type DecisionId, type DecisionOptions, type TraitId, type TraitWeights, type WeightChange,
 } from '../data/npcs';
 import { partDef } from '../data/parts';
@@ -27,6 +28,7 @@ import { canReachSalvage, hasSalvage } from './salvage';
 import { canUseSite, siteGates } from './sites';
 import { statesHeld } from './states';
 import { vehicleStats } from './stats';
+import { strandedPlayerAt } from './tow';
 import type { Contact, SalvageStock, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
@@ -89,12 +91,16 @@ export function getCabCondition(vehicle: Vehicle): number {
   return cab.hp / partDef(cab.defId).hp;
 }
 
-// How dangerous a truck is as it stands now: firepower times toughness. Firepower sums damage times rounds over
-// working guns. Toughness is the current HP of the chassis core parts and the mounted armor.
+// Damage times rounds summed over working guns.
+function firepower(world: World, vehicle: Vehicle): number {
+  return vehicleStats(world, vehicle).weapons.filter((weapon) => weapon.part.hp > 0).reduce((sum, weapon) => sum + weapon.def.round.damage * weapon.def.rounds, 0);
+}
+
+// How dangerous a truck is as it stands now: firepower times toughness. Toughness is the current HP of the chassis
+// core parts and the mounted armor.
 export function vehicleDanger(world: World, vehicle: Vehicle): number {
-  const firepower = vehicleStats(world, vehicle).weapons.filter((weapon) => weapon.part.hp > 0).reduce((sum, weapon) => sum + weapon.def.round.damage * weapon.def.rounds, 0);
   const toughness = [...mountedParts(vehicle, 'core'), ...mountedParts(vehicle, 'armor')].reduce((sum, part) => sum + part.hp, 0);
-  return firepower * toughness;
+  return firepower(world, vehicle) * toughness;
 }
 
 // Another truck's danger as one sighting judges it: off by a factor rolled with world RNG.
@@ -120,6 +126,18 @@ export function visibleHostiles(world: World, vehicle: Vehicle): Vehicle[] {
 export function trustedContacts(world: World, vehicle: Vehicle): Contact[] {
   const trusted = (npcProfile(vehicle).contactReactRadius - DETECT.fuzz.base) / DETECT.fuzz.perTile;
   return contactsOf(world, vehicle, trusted).sort((a, b) => dist(vehicle.pos, a.center) - dist(vehicle.pos, b.center));
+}
+
+// The vehicle that hurt this driver most last turn, while it is in sight. Null otherwise.
+export function attackerInSight(world: World, vehicle: Vehicle): Vehicle | null {
+  const id = vehicle.brain!.attacker;
+  const attacker = world.vehicles.find((other) => other.id === id);
+  return attacker && canVehicleSee(world, vehicle, attacker.pos) ? attacker : null;
+}
+
+// What a hurt driver runs from: the nearest hostile in sight, else its attacker in sight. Null when neither is.
+export function hurtThreat(world: World, vehicle: Vehicle): Vehicle | null {
+  return visibleHostiles(world, vehicle)[0] ?? attackerInSight(world, vehicle);
 }
 
 export function isHostileContact(world: World, vehicle: Vehicle, contact: Contact): boolean {
@@ -174,40 +192,95 @@ export function huntingGroundsAway(vehicle: Vehicle): Vec[] {
   return HUNTING_GROUNDS.filter((point) => dist(vehicle.pos, point) > RULES.arriveRadius * 2);
 }
 
-// ---- Robbery checks.
+// ---- Robbery.
 
 function nearTownGate(pos: Vec): boolean {
   return REGION.towns.some((town) => siteGates(town).some((gate) => dist(pos, gate) <= RULES.guards.range));
 }
 
-// The checks that need no judgment of danger: the robber sees the target, they are not hostile yet, the target
-// carries loot, and both are out of reach of every town gate gun.
-export function isRobberyCandidate(w: World, robber: Vehicle, target: Vehicle): boolean {
+// A robber can rob a truck it sees, that is not hostile yet, and that carries loot.
+export function canRob(w: World, robber: Vehicle, target: Vehicle): boolean {
   if (robber.id === target.id) return false;
   if (!canVehicleSee(w, robber, target.pos)) return false;
   if (isHostile(w, robber, target)) return false;
-  if (!hasLoot(target)) return false;
-  return !nearTownGate(robber.pos) && !nearTownGate(target.pos);
+  return hasLoot(target);
 }
 
-// A candidate whose perceived danger is below the robber's own danger times its boldness.
-export function isRobberyTarget(w: World, robber: Vehicle, target: Vehicle, perceived: number): boolean {
-  return isRobberyCandidate(w, robber, target) && perceived < vehicleDanger(w, robber) * npcProfile(robber).boldness;
+// ---- Availability, one check per option. An option is available when the driver physically can take it now.
+
+type Availability = (world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null) => boolean;
+
+const always = (): boolean => true;
+
+function subjectOf(world: World, decision: DecisionId, subject: string | null): Vehicle {
+  if (subject === null) throw new Error(`${decision} needs a subject`);
+  return vehicleById(world, subject);
 }
 
-// ---- Situation factors, one per option. Each returns a plain number.
-
-function keepFactor(): number {
-  return 1;
+// A fight needs a working gun and the subject in sight.
+function canFight(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  return firepower(world, vehicle) > 0 && canVehicleSee(world, vehicle, subjectOf(world, decision, subject).pos);
 }
 
-// A driver fights only with a working gun. A truck without one has no danger.
-function fightFactor(world: World, vehicle: Vehicle): number {
-  return vehicleDanger(world, vehicle) > 0 ? 1 : 0;
+// Fighting back needs a working gun and the attacker in sight. Guards and rams are no attacker.
+function canFightBack(world: World, vehicle: Vehicle): boolean {
+  return firepower(world, vehicle) > 0 && attackerInSight(world, vehicle) !== null;
 }
+
+// A driver can always drive off. A hurt driver needs something in sight to run from.
+function canFlee(world: World, vehicle: Vehicle, decision: DecisionId): boolean {
+  return decision !== 'hurt' || hurtThreat(world, vehicle) !== null;
+}
+
+function canRobSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  return canRob(world, vehicle, subjectOf(world, decision, subject));
+}
+
+function canTow(world: World, vehicle: Vehicle): boolean {
+  return strandedPlayerAt(world, vehicle) !== null;
+}
+
+function canResume(_world: World, vehicle: Vehicle): boolean {
+  return topGoal(vehicle) !== null;
+}
+
+function canTrade(world: World, vehicle: Vehicle): boolean {
+  return bestTrade(world, vehicle) !== null;
+}
+
+function canScavenge(world: World, vehicle: Vehicle): boolean {
+  if (freeCells(vehicle) === 0) return false;
+  return visibleSalvage(world, vehicle).length > 0 || salvageSitesAway(vehicle).length > 0;
+}
+
+function canRaid(_world: World, vehicle: Vehicle): boolean {
+  return huntingGroundsAway(vehicle).length > 0;
+}
+
+type OptionName = DecisionOptions[DecisionId];
+
+const AVAILABLE: Record<OptionName, Availability> = {
+  keep: always,
+  fight: canFight,
+  fightBack: canFightBack,
+  flee: canFlee,
+  investigate: always,
+  rob: canRobSubject,
+  tow: canTow,
+  resume: canResume,
+  new: always,
+  trade: canTrade,
+  scavenge: canScavenge,
+  raid: canRaid,
+  wait: always,
+};
+
+// ---- Situation factors, one per option. Each returns a number above 0.
 
 // Every factor takes the same arguments. `danger` is the subject's perceived danger, as in optionWeights.
 type SituationFactor = (world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null) => number;
+
+const neutral = (): number => 1;
 
 function weakFlee(world: World, vehicle: Vehicle): number {
   return isWeak(world, vehicle) ? NPC_BEHAVIOR.weakFlee : 1;
@@ -227,9 +300,8 @@ function fleeHeardFactor(world: World, vehicle: Vehicle): number {
   return weakFlee(world, vehicle);
 }
 
-// A hit weighs by its damage against the cab, and needs a hostile in sight to run from.
-function fleeHurtFactor(world: World, vehicle: Vehicle): number {
-  if (visibleHostiles(world, vehicle).length === 0) return 0;
+// A hit weighs by its damage against the cab.
+function fleeHurtFactor(_world: World, vehicle: Vehicle): number {
   const cabMax = partDef(corePart(vehicle, 'cab').defId).hp;
   return vehicle.brain!.hurt / cabMax / NPC_BEHAVIOR.hurtFullFlee;
 }
@@ -242,64 +314,36 @@ function fleeFactor(world: World, vehicle: Vehicle, decision: DecisionId, subjec
   return factor(world, vehicle, decision, subject, danger);
 }
 
-function investigateFactor(): number {
-  return 1;
+// A robber mostly picks a target that looks weaker than itself times its boldness, away from town guards. Each
+// failed judgment scales rob down. Before the sighting's danger roll, `danger` is null and only guards count.
+function robFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
+  const target = subjectOf(world, decision, subject);
+  const stronger = danger !== null && danger >= vehicleDanger(world, vehicle) * npcProfile(vehicle).boldness;
+  return (stronger ? NPC_BEHAVIOR.robStronger : 1) * guardFactor(vehicle, target);
 }
 
-// Rob carries weight only through a trait, and only against a target that passes every robbery check.
-function robFactor(world: World, vehicle: Vehicle, _decision: DecisionId, subject: string | null, danger: number | null): number {
-  if (subject === null) throw new Error('preySeen needs a subject');
-  const target = vehicleById(world, subject);
-  if (danger === null) return isRobberyCandidate(world, vehicle, target) ? 1 : 0;
-  return isRobberyTarget(world, vehicle, target, danger) ? 1 : 0;
-}
-
-// The subject already passed the tow checks: stranded, in sight, not hostile.
-function towFactor(): number {
-  return 1;
-}
-
-function resumeFactor(): number {
-  return 1;
-}
-
-function newFactor(): number {
-  return 1;
-}
-
-function tradeFactor(world: World, vehicle: Vehicle): number {
-  return bestTrade(world, vehicle) ? 1 : 0;
+function guardFactor(robber: Vehicle, target: Vehicle): number {
+  return nearTownGate(robber.pos) || nearTownGate(target.pos) ? NPC_BEHAVIOR.robNearGuards : 1;
 }
 
 function scavengeFactor(world: World, vehicle: Vehicle): number {
-  if (freeCells(vehicle) === 0) return 0;
-  if (visibleSalvage(world, vehicle).length > 0) return NPC_BEHAVIOR.visibleSalvage;
-  return salvageSitesAway(vehicle).length > 0 ? 1 : 0;
+  return visibleSalvage(world, vehicle).length > 0 ? NPC_BEHAVIOR.visibleSalvage : 1;
 }
-
-function raidFactor(_world: World, vehicle: Vehicle): number {
-  return huntingGroundsAway(vehicle).length > 0 ? 1 : 0;
-}
-
-function waitFactor(): number {
-  return 1;
-}
-
-type OptionName = DecisionOptions[DecisionId];
 
 const SITUATION: Record<OptionName, SituationFactor> = {
-  keep: keepFactor,
-  fight: fightFactor,
+  keep: neutral,
+  fight: neutral,
+  fightBack: neutral,
   flee: fleeFactor,
-  investigate: investigateFactor,
+  investigate: neutral,
   rob: robFactor,
-  tow: towFactor,
-  resume: resumeFactor,
-  new: newFactor,
-  trade: tradeFactor,
+  tow: neutral,
+  resume: neutral,
+  new: neutral,
+  trade: neutral,
   scavenge: scavengeFactor,
-  raid: raidFactor,
-  wait: waitFactor,
+  raid: neutral,
+  wait: neutral,
 };
 
 // ---- Weights and the roll.
@@ -317,53 +361,70 @@ function changeTables(world: World, vehicle: Vehicle, subject: string | null): T
   return tables;
 }
 
-// `danger` is the subject's danger as this sighting perceived it. It is null for decisions without a seen vehicle,
-// and before the sighting's roll. Then the danger checks do not apply, and the weights only tell whether the
-// decision offers a choice.
-export function optionWeights<D extends DecisionId>(world: World, vehicle: Vehicle, decision: D, subject: string | null, danger: number | null): Record<DecisionOptions[D], number> {
+// The final weight of each available option. Unavailable options are left out. `danger` is the subject's danger
+// as this sighting perceived it. It is null for decisions without a seen vehicle, and before the sighting's roll.
+// Then the danger judgments do not apply.
+export function optionWeights<D extends DecisionId>(world: World, vehicle: Vehicle, decision: D, subject: string | null, danger: number | null): Partial<Record<DecisionOptions[D], number>> {
   const base = DECISIONS[decision] as Record<OptionName, number>;
   const tables = changeTables(world, vehicle, subject);
-  const out = {} as Record<OptionName, number>;
+  const out: Partial<Record<OptionName, number>> = {};
   for (const option of Object.keys(base) as OptionName[]) {
+    if (!AVAILABLE[option](world, vehicle, decision, subject)) continue;
     const { add, mul } = sumChanges(tables, decision, option);
-    out[option] = (base[option] + add) * mul * SITUATION[option](world, vehicle, decision, subject, danger);
+    const factor = SITUATION[option](world, vehicle, decision, subject, danger);
+    if (!(factor > 0)) throw new Error(`${vehicle.id} has situation factor ${factor} for ${option} at ${decision}`);
+    out[option] = (base[option] + add) * mul * factor;
   }
-  return out as Record<DecisionOptions[D], number>;
+  return out as Partial<Record<DecisionOptions[D], number>>;
 }
 
-// The summed adds and the product of muls the tables set for one option.
+// The summed adds and the product of muls the tables set for one option. A mul at or below 0 throws.
 function sumChanges(tables: TraitWeights[], decision: DecisionId, option: OptionName): Required<WeightChange> {
   let add = 0;
   let mul = 1;
   for (const table of tables) {
     const change = (table[decision] as Partial<Record<OptionName, WeightChange>> | undefined)?.[option];
     if (!change) continue;
-    if (change.add !== undefined) add += change.add;
-    if (change.mul !== undefined) mul *= change.mul;
+    add += change.add ?? 0;
+    mul *= positiveMul(change, decision, option);
   }
   return { add, mul };
 }
 
-// A decision with a keep option offers a choice only while another option has weight. Without one, the driver
+function positiveMul(change: WeightChange, decision: DecisionId, option: OptionName): number {
+  if (change.mul === undefined) return 1;
+  if (!(change.mul > 0)) throw new Error(`Multiplier ${change.mul} for ${option} at ${decision} must be above 0`);
+  return change.mul;
+}
+
+// A decision with a keep option offers a choice only while another option is available. Without one, the driver
 // keeps what it does with no roll.
 export function hasChoice(weights: Partial<Record<OptionName, number>>): boolean {
-  return !('keep' in weights) || Object.entries(weights).some(([option, weight]) => option !== 'keep' && weight! > 0);
+  return !('keep' in weights) || Object.keys(weights).some((option) => option !== 'keep');
+}
+
+// Each option's chance: MIN_CHANCE plus its weighted share of the rest. With no weight at all, equal shares.
+export function optionChances<O extends string>(weights: Partial<Record<O, number>>): Partial<Record<O, number>> {
+  const entries = Object.entries(weights) as [O, number][];
+  const rest = 1 - entries.length * MIN_CHANCE;
+  if (entries.length === 0 || rest < 0) throw new Error(`Cannot give ${entries.length} options their chances`);
+  const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
+  const out: Partial<Record<O, number>> = {};
+  for (const [option, weight] of entries) out[option] = MIN_CHANCE + rest * (total > 0 ? weight / total : 1 / entries.length);
+  return out;
 }
 
 export function decide<D extends DecisionId>(world: World, vehicle: Vehicle, decision: D, subject: string | null, danger: number | null): DecisionOptions[D] {
   const weights = optionWeights(world, vehicle, decision, subject, danger);
-  const pool = weightPool(vehicle, decision, weights);
-  if (!hasChoice(weights)) return pool[0].value;
-  return sampleWeighted(world, pool);
+  checkWeights(vehicle, decision, weights);
+  if (!hasChoice(weights)) return 'keep' as DecisionOptions[D];
+  const chances = Object.entries(optionChances(weights)) as [DecisionOptions[D], number][];
+  return sampleWeighted(world, chances.map(([value, weight]) => ({ value, weight })));
 }
 
-// The options with weight above zero. A negative or non-finite weight, or no option with weight, throws.
-function weightPool<D extends DecisionId>(vehicle: Vehicle, decision: D, weights: Record<DecisionOptions[D], number>): { value: DecisionOptions[D]; weight: number }[] {
-  const pool: { value: DecisionOptions[D]; weight: number }[] = [];
-  for (const [option, weight] of Object.entries(weights) as [DecisionOptions[D], number][]) {
+// A negative or non-finite weight throws.
+function checkWeights(vehicle: Vehicle, decision: DecisionId, weights: Partial<Record<OptionName, number>>): void {
+  for (const [option, weight] of Object.entries(weights) as [OptionName, number][]) {
     if (!Number.isFinite(weight) || weight < 0) throw new Error(`${vehicle.id} has weight ${weight} for ${option} at ${decision}`);
-    if (weight > 0) pool.push({ value: option, weight });
   }
-  if (pool.length === 0) throw new Error(`${vehicle.id} has no option with weight at ${decision}`);
-  return pool;
 }

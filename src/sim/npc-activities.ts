@@ -12,15 +12,15 @@ import { getTradePrice, sellVehicleCargo, serviceAtCamp, serviceVehicle, tradeGo
 import { corePart, freeCells, goodsCount, mountedParts } from './grid';
 import { cancelJob } from './jobs';
 import {
-  bestTrade, decide, getCabCondition, hasChoice, isRobberyCandidate, optionWeights, perceiveDanger, getKnownSite, getUpkeepReserve, huntingGroundsAway,
-  isHostileContact, isWeak, npcProfile, salvageSitesAway, trustedContacts, visibleHostiles, visibleSalvage, type NpcProfile,
+  attackerInSight, bestTrade, canRob, decide, getCabCondition, hasChoice, hurtThreat, optionWeights, perceiveDanger, getKnownSite, getUpkeepReserve,
+  huntingGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, trustedContacts, visibleHostiles, visibleSalvage, type NpcProfile,
 } from './npc-decisions';
 import { getResources } from './resources';
 import { randInt } from './rng';
 import { canReachSalvage, hasSalvage, knockoutStockId, wreckStockId } from './salvage';
 import { beginSearch } from './search';
 import { vehicleById } from './damage';
-import { addState, stateOf } from './states';
+import { addState, endState, stateOf } from './states';
 import { vehicleStats } from './stats';
 import type { Contact, GameEvent, Job, NpcActivity, NpcState, SalvageStock, Vehicle, World } from './types';
 import { canUseSite, isWalled, siteGates } from './sites';
@@ -252,7 +252,7 @@ function lootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string 
 
 function towInvalid(world: World, vehicle: Vehicle): string | null {
   if (heldTow(world, vehicle)) return null;
-  return strandedPlayerAt(world, vehicle) && !stateOf(world, 'spurned', vehicle.id, world.player.vehicleId) ? null : 'the tow is off';
+  return strandedPlayerAt(world, vehicle) && !stateOf(world, 'turnedDown', vehicle.id, world.player.vehicleId) ? null : 'the tow is off';
 }
 
 const GOAL_CHECKS: Partial<Record<NpcActivity['kind'], GoalCheck>> = {
@@ -340,19 +340,32 @@ function onContactsHeard(world: World, vehicle: Vehicle, profile: NpcProfile, co
   }
 }
 
-// Fires every turn after damage. Flee runs from the nearest hostile in sight.
+// Fires every turn after damage. Flee runs from the nearest hostile in sight, else from the attacker. Fight back
+// turns on the attacker.
 function onHurt(world: World, vehicle: Vehicle, profile: NpcProfile): void {
-  if (vehicle.brain!.hurt <= 0 || decide(world, vehicle, 'hurt', null, null) === 'keep') return;
-  const enemy = visibleHostiles(world, vehicle)[0];
-  if (!enemy) throw new Error(`${vehicle.id} chose to flee a hit with no hostile in sight`);
-  interrupt(world, vehicle, fleeFrom(world, vehicle, profile, enemy.id, enemy.pos, 'hurt and threatened'));
+  if (vehicle.brain!.hurt <= 0) return;
+  const option = decide(world, vehicle, 'hurt', null, null);
+  if (option === 'keep') return;
+  if (option === 'fightBack') {
+    fightBack(world, vehicle);
+    return;
+  }
+  const threat = hurtThreat(world, vehicle);
+  if (!threat) throw new Error(`${vehicle.id} chose to flee a hit with nothing in sight`);
+  interrupt(world, vehicle, fleeFrom(world, vehicle, profile, threat.id, threat.pos, 'hurt and threatened'));
 }
 
-// One roll per new robbery candidate in sight, nearest first. The sighting's perceived danger decides whether it is
-// a target. Rob starts a feud with the target and fights it.
+function fightBack(world: World, vehicle: Vehicle): void {
+  const attacker = attackerInSight(world, vehicle);
+  if (!attacker) throw new Error(`${vehicle.id} chose to fight back with no attacker in sight`);
+  interrupt(world, vehicle, createActivity('fight', attacker.id, { ...attacker.pos }, 'fight back'));
+}
+
+// One roll per new truck in sight the NPC can rob, nearest first. The sighting's perceived danger weighs the roll.
+// Rob starts a feud with the target and fights it.
 function onPreySeen(world: World, vehicle: Vehicle): void {
   const prey = world.vehicles
-    .filter((other) => isRobberyCandidate(world, vehicle, other))
+    .filter((other) => canRob(world, vehicle, other))
     .sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   for (const target of prey) {
     if (react(world, vehicle, 'preySeen', target.id) !== 'rob') continue;
@@ -368,8 +381,15 @@ function onStrandedSeen(world: World, vehicle: Vehicle): void {
   const top = topGoal(vehicle)?.kind;
   if (top === 'fight' || top === 'flee') return;
   const at = strandedPlayerAt(world, vehicle);
+  if (at && react(world, vehicle, 'strandedSeen', world.player.vehicleId) === 'tow') startTow(world, vehicle, at);
+}
+
+// A driver the player turned down that picks tow again is over it: its turnedDown state ends, so the tow goal holds.
+function startTow(world: World, vehicle: Vehicle, at: Vec): void {
   const me = world.player.vehicleId;
-  if (at && react(world, vehicle, 'strandedSeen', me) === 'tow') pushGoal(world, vehicle, createActivity('tow', me, { ...at }, 'help a stranded truck'));
+  const turnedDown = stateOf(world, 'turnedDown', vehicle.id, me);
+  if (turnedDown) endState(world, turnedDown, 'fulfilled');
+  pushGoal(world, vehicle, createActivity('tow', me, { ...at }, 'help a stranded truck'));
 }
 
 // A flee keeps running from where its threat is now, and an investigation heads for the contact's newest circle.
@@ -462,15 +482,22 @@ function nextGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActiv
   return next;
 }
 
-// Sums the part damage each NPC took this turn into brain.hurt. It runs last in the turn, before events clear.
+// Sums the part damage each NPC took this turn into brain.hurt, and keeps the shooter that did the most of it as
+// brain.attacker. Guards and collisions hurt but give no attacker. It runs last in the turn, before events clear.
 export function noteHurt(world: World): void {
   const hurt = new Map<string, number>();
-  for (const e of world.events) addEventHurt(hurt, e);
-  for (const v of world.vehicles) if (v.brain) v.brain.hurt = hurt.get(v.id) ?? 0;
+  const shooters = new Map<string, Map<string, number>>();
+  for (const e of world.events) addEventHurt(hurt, shooters, e);
+  for (const v of world.vehicles) {
+    if (!v.brain) continue;
+    v.brain.hurt = hurt.get(v.id) ?? 0;
+    v.brain.attacker = topShooter(shooters.get(v.id));
+  }
 }
 
-function addEventHurt(hurt: Map<string, number>, e: GameEvent): void {
-  if (e.t === 'shot' || e.t === 'guardShot') for (const round of e.rounds) addHurt(hurt, e.target, round.hits);
+function addEventHurt(hurt: Map<string, number>, shooters: Map<string, Map<string, number>>, e: GameEvent): void {
+  if (e.t === 'shot') addShot(hurt, shooters, e);
+  else if (e.t === 'guardShot') for (const round of e.rounds) addHurt(hurt, e.target, round.hits);
   else if (e.t === 'collision') {
     addHurt(hurt, e.a, e.hitsA);
     addHurt(hurt, e.b, e.hitsB);
@@ -479,6 +506,26 @@ function addEventHurt(hurt: Map<string, number>, e: GameEvent): void {
 
 function addHurt(hurt: Map<string, number>, id: string, hits: PartHit[]): void {
   hurt.set(id, (hurt.get(id) ?? 0) + hits.reduce((sum, hit) => sum + hit.damage, 0));
+}
+
+// Adds the shot's damage to its target's hurt and to its shooter's tally against that target.
+function addShot(hurt: Map<string, number>, shooters: Map<string, Map<string, number>>, e: Extract<GameEvent, { t: 'shot' }>): void {
+  for (const round of e.rounds) addHurt(hurt, e.target, round.hits);
+  const tally = shooters.get(e.target) ?? new Map<string, number>();
+  addHurt(tally, e.shooter, e.rounds.flatMap((round) => round.hits));
+  shooters.set(e.target, tally);
+}
+
+// The shooter with the most damage, or null when no shot did damage.
+function topShooter(tally: Map<string, number> | undefined): string | null {
+  let top: string | null = null;
+  let most = 0;
+  for (const [id, damage] of tally ?? []) {
+    if (damage <= most) continue;
+    top = id;
+    most = damage;
+  }
+  return top;
 }
 
 export function getActivityDestination(world: World, vehicle: Vehicle, activity: NpcActivity): Vec | null {

@@ -17,8 +17,9 @@ export function hasSave(storage: Storage): boolean {
 // Saves leave out the terrain, which buildTerrain rebuilds from the seed. The 600-tile terrain alone is
 // about 10 MB of JSON, past the browser's local storage quota. 4 adds weather, jobs, contacts and dust.
 // 6 moves wheel cells. 7 adds engine heat, auto patch and a parts limit on repair jobs. 8 adds the
-// player state, tows and the beacon. 9 adds NPC traits, goal stacks and states. Older saves do not load.
-const SAVE_VERSION = 9;
+// player state, tows and the beacon. 9 adds NPC traits, goal stacks and states. 10 adds the NPC's last
+// attacker and renames spurned to turnedDown. Older saves do not load.
+const SAVE_VERSION = 10;
 
 export function loadWorld(storage: Storage): World | null {
   const raw = storage.getItem(SAVE_KEY);

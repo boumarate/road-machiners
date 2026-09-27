@@ -55,6 +55,7 @@ function spawnOne(world: World, tpl: NpcTemplate): boolean {
         goals: [],
         noticed: {},
         hurt: 0,
+        attacker: null,
         goal: null,
         home: { ...pos },
         stepIndex: 0,

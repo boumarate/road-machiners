@@ -59,7 +59,7 @@ describe('states', () => {
     const { w, a, b } = apart();
     const s = addState(w, 'feud', a, b, FEUD);
     expect(s).toMatchObject({ kind: 'feud', holder: a, other: b, turnsLeft: STATE_TURNS.feud, born: w.turn, data: FEUD });
-    expect(addState(w, 'spurned', a, b, NONE).turnsLeft).toBeNull();
+    expect(addState(w, 'turnedDown', a, b, NONE).turnsLeft).toBeNull();
   });
 
   it('an unknown state kind throws', () => {

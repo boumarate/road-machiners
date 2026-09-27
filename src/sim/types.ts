@@ -127,6 +127,7 @@ export type NpcBrain = {
     goals: NpcActivity[]; // goal stack, top last: a long-term goal at the bottom, interruptions above it
     noticed: Record<string, number>; // `<decision>:<vehicle id>` for subjects already decided on, to the turn last perceived
     hurt: number; // part damage taken last turn
+    attacker: string | null; // the vehicle whose shots did the most damage last turn, for fighting back
     goal: Vec | null;
     home: Vec;
     stepIndex: number; // route progress for traders and scavengers
@@ -164,7 +165,7 @@ export type Obstacle = {
 };
 
 // A timed relation one vehicle holds toward another. src/sim/states.ts owns them.
-export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'spurned' | 'towPromise';
+export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise';
 export type StateEnding = 'expired' | 'fulfilled' | 'broken';
 // A tow state: the holder tows the other party to `town` for `fee`, paid on arrival. hitched is false while the offer is open.
 // A tow promise: the terms of a tow the holder dropped for danger, which its next offer keeps.

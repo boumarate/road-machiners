@@ -37,7 +37,7 @@ it('lists states toward the player with turns left', () => {
   const other = addVehicle(w, 'raiders', 'buggy', [], { x: 40, y: 40 });
   npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
   addState(w, 'feud', npc.id, me.id, { kind: 'feud', robbery: true }).turnsLeft = 7;
-  addState(w, 'spurned', npc.id, me.id, { kind: 'none' });
+  addState(w, 'turnedDown', npc.id, me.id, { kind: 'none' });
   addState(w, 'feud', npc.id, other.id, { kind: 'feud', robbery: false });
   expect(formatNpcStates(w, npc)).toEqual(['Feud with you, 7 turns', 'You turned down its tow']);
 });

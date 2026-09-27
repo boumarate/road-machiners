@@ -75,11 +75,11 @@ describe('tow offer', () => {
     expect(feeOf(w)).toBe(Math.round(TOW.base + TOW.perTile * length));
   });
 
-  it('refusing stops that NPC from offering again', () => {
+  it('refusing stops that NPC from offering again while the player stays in sight', () => {
     const s = stranded();
     let w = refuseTow(offered(s));
     expect(playerTow(w)).toBeNull();
-    expect(stateOf(w, 'spurned', s.trader.id, w.player.vehicleId)).not.toBeNull();
+    expect(stateOf(w, 'turnedDown', s.trader.id, w.player.vehicleId)).not.toBeNull();
     const r = runUntil(w, 15, (x) => playerTow(x) !== null);
     w = r.w;
     expect(playerTow(w)).toBeNull();
@@ -93,7 +93,7 @@ describe('tow offer', () => {
     const r = runUntil(w, 15, (x) => playerTow(x) === null);
     expect(playerTow(r.w)).toBeNull();
     expect(r.events).toContainEqual({ t: 'towDropped', by: s.trader.id, reason: 'refused' });
-    expect(stateOf(r.w, 'spurned', s.trader.id, r.w.player.vehicleId)).not.toBeNull();
+    expect(stateOf(r.w, 'turnedDown', s.trader.id, r.w.player.vehicleId)).not.toBeNull();
     const later = runUntil(r.w, 15, (x) => playerTow(x) !== null);
     expect(later.events.some((e) => e.t === 'towOffer')).toBe(false);
   });

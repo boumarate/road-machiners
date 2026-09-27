@@ -50,7 +50,7 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
     check: noCheck,
     hooks: { fulfilled: payTow, broken: releaseTow },
   },
-  spurned: { refresh: never, check: noCheck, hooks: {} },
+  turnedDown: { refresh: never, check: noCheck, hooks: {} },
   towPromise: { refresh: never, check: noCheck, hooks: {} },
 };
 
@@ -65,7 +65,7 @@ function turnsOf(kind: StateKindId): number | null {
 }
 
 // The data kind each state kind carries.
-const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', spurned: 'none', towPromise: 'towPromise' };
+const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise' };
 
 export function addState(w: World, kind: StateKindId, holder: string, other: string, data: StateData): NpcState {
   kindOf(kind);
