@@ -37,7 +37,13 @@ export const RULES = {
 
   // Town guards. Each town gate has one gun. Every turn it shoots the nearest vehicle within range that fired.
   // Each round hits with a flat chance and enters a random lane of the side facing the gate.
-  guards: { range: 8, rounds: 4, hitChance: 0.5, missOffset: 1.5, round: { damage: 6, pen: 10 } },
+  guards: {
+    range: 12,
+    rounds: 4,
+    hitChance: 0.5,
+    missOffset: 1.5,
+    round: { damage: 6, pen: 10 },
+  },
 
   // Combat
   // A round that lands on the truck is a crit with this chance. A crit multiplies its damage and pen, so a few

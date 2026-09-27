@@ -1,5 +1,11 @@
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
-import { buildDrive, captureDrive, freeDrive, initPhysics, type Drive } from "../phys/drive";
+import {
+  buildDrive,
+  captureDrive,
+  freeDrive,
+  initPhysics,
+  type Drive,
+} from "../phys/drive";
 import type { PreparedTurn, TurnRequest, TurnResponse } from "../phys/turn";
 import { emptyWorld } from "../sim/testkit";
 import { setMoveOrder } from "../sim/world";
@@ -12,8 +18,12 @@ class TestWorker {
   onmessage: ((event: MessageEvent<TurnResponse>) => void) | null = null;
   onerror: ((event: ErrorEvent) => void) | null = null;
   onmessageerror: (() => void) | null = null;
-  constructor() { TestWorker.latest = this; }
-  postMessage(request: TurnRequest): void { this.requests.push(request); }
+  constructor() {
+    TestWorker.latest = this;
+  }
+  postMessage(request: TurnRequest): void {
+    this.requests.push(request);
+  }
   respond(response: TurnResponse): void {
     if (!this.onmessage) throw new Error("Missing worker response handler");
     this.onmessage({ data: response } as MessageEvent<TurnResponse>);
@@ -29,9 +39,15 @@ beforeEach(() => {
   world = emptyWorld();
   drive = buildDrive(world);
   const { terrain: _terrain, ...state } = world;
-  reply = { world: state, result: { next: captureDrive(drive), frames: {}, crashes: [], results: {} } };
+  reply = {
+    world: state,
+    result: { next: captureDrive(drive), frames: {}, crashes: [], results: {} },
+  };
 });
-afterEach(() => { freeDrive(drive); vi.unstubAllGlobals(); });
+afterEach(() => {
+  freeDrive(drive);
+  vi.unstubAllGlobals();
+});
 
 it("prepares once and exposes a result only when ready for the same world", () => {
   const turns = new TurnPreparation();
@@ -48,7 +64,10 @@ it("prepares once and exposes a result only when ready for the same world", () =
 it("discards a stale result after replanning and sends stable terrain only once", () => {
   const turns = new TurnPreparation();
   turns.prepare(world, drive);
-  const changed = setMoveOrder(world, { kind: "stopAt", dest: { x: 38, y: 31 } });
+  const changed = setMoveOrder(world, {
+    kind: "stopAt",
+    dest: { x: 38, y: 31 },
+  });
   turns.prepare(changed, drive);
   const worker = TestWorker.latest;
   expect(worker?.requests).toHaveLength(2);
@@ -66,5 +85,7 @@ it("reports calculation failures instead of continuing with stale results", () =
   turns.prepare(world, drive);
   const worker = TestWorker.latest;
   expect(worker?.requests).toHaveLength(1);
-  expect(() => worker.respond({ id: worker.requests[0].id, error: "physics failed" })).toThrow("physics failed");
+  expect(() =>
+    worker.respond({ id: worker.requests[0].id, error: "physics failed" }),
+  ).toThrow("physics failed");
 });

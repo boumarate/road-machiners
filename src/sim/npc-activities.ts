@@ -31,8 +31,8 @@ import { canUseSite, isWalled, siteGates } from "./sites";
 import { clamp, dist, type Vec } from "./vec";
 import { canVehicleSee } from "./vision";
 import { chooseTowActivity, dropTow, runTow } from "./tow";
-import { isTownGuarded } from './guards';
-import { chooseNpcRepair, resolveNpcRepair } from './npc-repair';
+import { isTownGuarded } from "./guards";
+import { chooseNpcRepair, resolveNpcRepair } from "./npc-repair";
 
 function getNpcClass(vehicle: Vehicle): NpcClass {
   const template = vehicle.brain && NPCS[vehicle.brain.templateId];
@@ -88,7 +88,15 @@ export function getUpkeepReserve(vehicle: Vehicle): number {
 function hasSaleCargo(vehicle: Vehicle): boolean {
   const mounted = new Set(mountedParts(vehicle).map((part) => part.id));
   const goods = goodsCount(vehicle);
-  return Object.entries(goods).some(([good, count]) => count > (good === 'parts' ? NPC_UPKEEP.repairParts : 0)) || vehicle.items.some((item) => item.kind === 'part' && !mounted.has(item.part.id));
+  return (
+    Object.entries(goods).some(
+      ([good, count]) =>
+        count > (good === "parts" ? NPC_UPKEEP.repairParts : 0),
+    ) ||
+    vehicle.items.some(
+      (item) => item.kind === "part" && !mounted.has(item.part.id),
+    )
+  );
 }
 
 function getCabCondition(vehicle: Vehicle): number {
@@ -135,32 +143,52 @@ function requireBrain(vehicle: Vehicle): NpcBrain {
 
 function isBusyWithWork(brain: NpcBrain): boolean {
   const kind = brain.activity?.kind;
-  if (kind === 'tow') return false;
+  if (kind === "tow") return false;
   if (brain.interruptedWork) return true;
-  return kind !== undefined && !['wait', 'raid', 'fight', 'flee', 'investigate'].includes(kind);
+  return (
+    kind !== undefined &&
+    !["wait", "raid", "fight", "flee", "investigate"].includes(kind)
+  );
 }
 
 function isObservedAttacker(brain: NpcBrain, id: string): boolean {
   return brain.attackers?.includes(id) === true;
 }
 
-function isTooDamagedToFight(world: World, vehicle: Vehicle, profile: NpcClass): boolean {
-  const threshold = requireBrain(vehicle).activity?.kind === 'flee' ? profile.recoverCondition : profile.fleeCondition;
-  return getCabCondition(vehicle) <= threshold || getResources(world, vehicle).health / RULES.maxHealth <= threshold;
+function isTooDamagedToFight(
+  world: World,
+  vehicle: Vehicle,
+  profile: NpcClass,
+): boolean {
+  const threshold =
+    requireBrain(vehicle).activity?.kind === "flee"
+      ? profile.recoverCondition
+      : profile.fleeCondition;
+  return (
+    getCabCondition(vehicle) <= threshold ||
+    getResources(world, vehicle).health / RULES.maxHealth <= threshold
+  );
 }
 
 function canAffordPursuit(world: World, vehicle: Vehicle): boolean {
   const resources = getResources(world, vehicle);
-  return resources.fuel > chassisDef(vehicle.chassisId).fuelCap * NPC_UPKEEP.lowFuel
-    && resources.supplies > RULES.suppliesCap * NPC_UPKEEP.lowSupplies;
+  return (
+    resources.fuel >
+      chassisDef(vehicle.chassisId).fuelCap * NPC_UPKEEP.lowFuel &&
+    resources.supplies > RULES.suppliesCap * NPC_UPKEEP.lowSupplies
+  );
 }
 
 function isCurrentOpponent(brain: NpcBrain, enemy: Vehicle): boolean {
   const activity = brain.activity;
-  return activity?.kind === 'fight' && activity.targetId === enemy.id;
+  return activity?.kind === "fight" && activity.targetId === enemy.id;
 }
 
-function canInitiateAgainst(world: World, vehicle: Vehicle, enemy: Vehicle): boolean {
+function canInitiateAgainst(
+  world: World,
+  vehicle: Vehicle,
+  enemy: Vehicle,
+): boolean {
   if (!canAffordPursuit(world, vehicle)) return false;
   if (isTownGuarded(vehicle.pos) || isTownGuarded(enemy.pos)) return false;
   const brain = requireBrain(vehicle);
@@ -168,75 +196,162 @@ function canInitiateAgainst(world: World, vehicle: Vehicle, enemy: Vehicle): boo
 }
 
 function computeSupportStrength(world: World, vehicle: Vehicle): number {
-  const allies = world.vehicles.filter((other) => other.id !== vehicle.id
-    && other.faction === vehicle.faction && !isHostile(vehicle, other)
-    && dist(vehicle.pos, other.pos) <= SPAWN.neighborHelp
-    && canVehicleSee(world, vehicle, other.pos));
+  const allies = world.vehicles.filter(
+    (other) =>
+      other.id !== vehicle.id &&
+      other.faction === vehicle.faction &&
+      !isHostile(vehicle, other) &&
+      dist(vehicle.pos, other.pos) <= SPAWN.neighborHelp &&
+      canVehicleSee(world, vehicle, other.pos),
+  );
   return allies.reduce((sum, other) => sum + computeVisibleStrength(other), 0);
 }
 
-function computeOppositionStrength(enemies: Vehicle[], target: Vehicle): number {
-  const group = enemies.filter((other) => other.id === target.id
-    || (other.faction === target.faction && dist(target.pos, other.pos) <= SPAWN.neighborHelp));
+function computeOppositionStrength(
+  enemies: Vehicle[],
+  target: Vehicle,
+): number {
+  const group = enemies.filter(
+    (other) =>
+      other.id === target.id ||
+      (other.faction === target.faction &&
+        dist(target.pos, other.pos) <= SPAWN.neighborHelp),
+  );
   return group.reduce((sum, other) => sum + computeVisibleStrength(other), 0);
 }
 
-function shouldRetreat(profile: NpcClass, weak: boolean, ownStrength: number, outmatched: boolean): boolean {
+function shouldRetreat(
+  profile: NpcClass,
+  weak: boolean,
+  ownStrength: number,
+  outmatched: boolean,
+): boolean {
   return profile.defensive || weak || ownStrength === 0 || outmatched;
 }
 
-function chooseDangerActivity(world: World, vehicle: Vehicle, profile: NpcClass): NpcActivity | null {
+function chooseDangerActivity(
+  world: World,
+  vehicle: Vehicle,
+  profile: NpcClass,
+): NpcActivity | null {
   const brain = requireBrain(vehicle);
-  const enemies = world.vehicles.filter((other) => isHostile(vehicle, other) && canVehicleSee(world, vehicle, other.pos));
-  brain.attackers = brain.attackers?.filter((id) => enemies.some((other) => other.id === id));
+  const enemies = world.vehicles.filter(
+    (other) =>
+      isHostile(vehicle, other) && canVehicleSee(world, vehicle, other.pos),
+  );
+  brain.attackers = brain.attackers?.filter((id) =>
+    enemies.some((other) => other.id === id),
+  );
   const weak = isTooDamagedToFight(world, vehicle, profile);
-  const relevant = enemies.filter((other) => isObservedAttacker(brain, other.id) || weak || canInitiateAgainst(world, vehicle, other));
-  relevant.sort((a, b) => Number(isObservedAttacker(brain, b.id)) - Number(isObservedAttacker(brain, a.id))
-    || dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
+  const relevant = enemies.filter(
+    (other) =>
+      isObservedAttacker(brain, other.id) ||
+      weak ||
+      canInitiateAgainst(world, vehicle, other),
+  );
+  relevant.sort(
+    (a, b) =>
+      Number(isObservedAttacker(brain, b.id)) -
+        Number(isObservedAttacker(brain, a.id)) ||
+      dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos),
+  );
   const enemy = relevant[0];
   if (!enemy) return null;
-  const ownStrength = vehicleStats(world, vehicle).weapons
-    .filter((weapon) => weapon.part.hp > 0)
-    .reduce((sum, weapon) => sum + weapon.def.round.damage * weapon.def.rounds, 0);
+  const ownStrength = vehicleStats(world, vehicle)
+    .weapons.filter((weapon) => weapon.part.hp > 0)
+    .reduce(
+      (sum, weapon) => sum + weapon.def.round.damage * weapon.def.rounds,
+      0,
+    );
   const available = ownStrength + computeSupportStrength(world, vehicle);
-  const outmatched = computeOppositionStrength(enemies, enemy) > available * profile.threatRatio;
+  const outmatched =
+    computeOppositionStrength(enemies, enemy) > available * profile.threatRatio;
   if (shouldRetreat(profile, weak, ownStrength, outmatched)) {
-    return createActivity('flee', enemy.id, fleeDestination(world, vehicle, profile, enemy.pos), weak ? 'damaged and threatened' : 'avoid a costly fight');
+    return createActivity(
+      "flee",
+      enemy.id,
+      fleeDestination(world, vehicle, profile, enemy.pos),
+      weak ? "damaged and threatened" : "avoid a costly fight",
+    );
   }
-  return createActivity('fight', enemy.id, { ...enemy.pos }, isObservedAttacker(brain, enemy.id) ? 'defend against an observed attacker' : 'manageable visible hostile');
+  return createActivity(
+    "fight",
+    enemy.id,
+    { ...enemy.pos },
+    isObservedAttacker(brain, enemy.id)
+      ? "defend against an observed attacker"
+      : "manageable visible hostile",
+  );
 }
 
-function getUsefulContacts(world: World, vehicle: Vehicle, profile: NpcClass): Contact[] {
+function getUsefulContacts(
+  world: World,
+  vehicle: Vehicle,
+  profile: NpcClass,
+): Contact[] {
   return contactsOf(world, vehicle, Infinity)
     .filter((contact) => contact.radius <= profile.contactReactRadius)
-    .filter((contact) => world.vehicles.some((other) => other.id === contact.vehicleId && isHostile(vehicle, other)))
+    .filter((contact) =>
+      world.vehicles.some(
+        (other) => other.id === contact.vehicleId && isHostile(vehicle, other),
+      ),
+    )
     .sort((a, b) => dist(vehicle.pos, a.center) - dist(vehicle.pos, b.center));
 }
 
-function getOngoingInvestigation(brain: NpcBrain, contacts: Contact[]): NpcActivity | null {
+function getOngoingInvestigation(
+  brain: NpcBrain,
+  contacts: Contact[],
+): NpcActivity | null {
   const current = brain.activity;
-  if (current?.kind !== 'investigate') return null;
-  return contacts.some((contact) => contact.vehicleId === current.targetId) ? current : null;
+  if (current?.kind !== "investigate") return null;
+  return contacts.some((contact) => contact.vehicleId === current.targetId)
+    ? current
+    : null;
 }
 
-function chooseContactActivity(world: World, vehicle: Vehicle, profile: NpcClass): NpcActivity | null {
+function chooseContactActivity(
+  world: World,
+  vehicle: Vehicle,
+  profile: NpcClass,
+): NpcActivity | null {
   const brain = requireBrain(vehicle);
   const contacts = getUsefulContacts(world, vehicle, profile);
-  brain.investigatedContacts = brain.investigatedContacts?.filter((id) => contacts.some((contact) => contact.vehicleId === id));
+  brain.investigatedContacts = brain.investigatedContacts?.filter((id) =>
+    contacts.some((contact) => contact.vehicleId === id),
+  );
   const ongoing = getOngoingInvestigation(brain, contacts);
   if (ongoing) return ongoing;
   if (isBusyWithWork(brain)) return null;
-  const raider = NPCS[brain.templateId].brain === 'raider';
-  const contact = contacts.find((entry) => !raider || !brain.investigatedContacts?.includes(entry.vehicleId));
+  const raider = NPCS[brain.templateId].brain === "raider";
+  const contact = contacts.find(
+    (entry) =>
+      !raider || !brain.investigatedContacts?.includes(entry.vehicleId),
+  );
   if (!contact) return null;
   return createContactActivity(world, vehicle, profile, contact);
 }
 
-function createContactActivity(world: World, vehicle: Vehicle, profile: NpcClass, contact: Contact): NpcActivity {
-  if (NPCS[requireBrain(vehicle).templateId].brain === 'raider') {
-    return createActivity('investigate', contact.vehicleId, { ...contact.center }, 'investigate a useful contact');
+function createContactActivity(
+  world: World,
+  vehicle: Vehicle,
+  profile: NpcClass,
+  contact: Contact,
+): NpcActivity {
+  if (NPCS[requireBrain(vehicle).templateId].brain === "raider") {
+    return createActivity(
+      "investigate",
+      contact.vehicleId,
+      { ...contact.center },
+      "investigate a useful contact",
+    );
   }
-  return createActivity('flee', contact.vehicleId, fleeDestination(world, vehicle, profile, contact.center), 'heard a hostile beyond sight');
+  return createActivity(
+    "flee",
+    contact.vehicleId,
+    fleeDestination(world, vehicle, profile, contact.center),
+    "heard a hostile beyond sight",
+  );
 }
 
 function chooseServiceActivity(
@@ -245,9 +360,14 @@ function chooseServiceActivity(
   profile: NpcClass,
 ): NpcActivity | null {
   const resources = getResources(world, vehicle);
-  const lowFuel = resources.fuel <= chassisDef(vehicle.chassisId).fuelCap * NPC_UPKEEP.lowFuel;
-  const lowSupplies = resources.supplies <= RULES.suppliesCap * NPC_UPKEEP.lowSupplies;
-  const damaged = mountedParts(vehicle).some((part) => part.hp / partDef(part.defId).hp <= profile.fleeCondition);
+  const lowFuel =
+    resources.fuel <=
+    chassisDef(vehicle.chassisId).fuelCap * NPC_UPKEEP.lowFuel;
+  const lowSupplies =
+    resources.supplies <= RULES.suppliesCap * NPC_UPKEEP.lowSupplies;
+  const damaged = mountedParts(vehicle).some(
+    (part) => part.hp / partDef(part.defId).hp <= profile.fleeCondition,
+  );
   if (!lowFuel && !lowSupplies && !damaged) return null;
   const reason = lowFuel
     ? "low fuel"
@@ -284,9 +404,18 @@ function chooseServiceActivity(
   return createSiteActivity("resupply", town.id, reason);
 }
 
-function canContinueActivity(world: World, vehicle: Vehicle, activity: NpcActivity): boolean {
-  if (['wait', 'fight', 'flee', 'tow', 'repair', 'investigate'].includes(activity.kind)) return false;
-  if (activity.kind === 'scavenge' && activity.targetId?.startsWith('wreck-')) {
+function canContinueActivity(
+  world: World,
+  vehicle: Vehicle,
+  activity: NpcActivity,
+): boolean {
+  if (
+    ["wait", "fight", "flee", "tow", "repair", "investigate"].includes(
+      activity.kind,
+    )
+  )
+    return false;
+  if (activity.kind === "scavenge" && activity.targetId?.startsWith("wreck-")) {
     // A wreck is an opportunity only while it remains observable.
     return world.salvage.some(
       (stock) =>
@@ -350,11 +479,19 @@ function chooseTradeActivity(
 
 function needsUrgentSupplies(world: World, vehicle: Vehicle): boolean {
   const resources = getResources(world, vehicle);
-  return resources.supplies <= RULES.suppliesCap * NPC_UPKEEP.lowSupplies
-    || (resources.fuel > 0 && resources.fuel <= chassisDef(vehicle.chassisId).fuelCap * NPC_UPKEEP.lowFuel);
+  return (
+    resources.supplies <= RULES.suppliesCap * NPC_UPKEEP.lowSupplies ||
+    (resources.fuel > 0 &&
+      resources.fuel <=
+        chassisDef(vehicle.chassisId).fuelCap * NPC_UPKEEP.lowFuel)
+  );
 }
 
-function chooseMaintenanceActivity(world: World, vehicle: Vehicle, profile: NpcClass): NpcActivity | null {
+function chooseMaintenanceActivity(
+  world: World,
+  vehicle: Vehicle,
+  profile: NpcClass,
+): NpcActivity | null {
   const service = chooseServiceActivity(world, vehicle, profile);
   if (service && needsUrgentSupplies(world, vehicle)) return service;
   return chooseNpcRepair(world, vehicle, profile.recoverCondition) ?? service;
@@ -365,7 +502,8 @@ function continueNpcWork(world: World, vehicle: Vehicle): NpcActivity | null {
   const current = brain.activity;
   if (current && canContinueActivity(world, vehicle, current)) return current;
   const interrupted = brain.interruptedWork;
-  if (interrupted && canContinueActivity(world, vehicle, interrupted)) return interrupted;
+  if (interrupted && canContinueActivity(world, vehicle, interrupted))
+    return interrupted;
   delete brain.interruptedWork;
   return null;
 }
@@ -426,11 +564,19 @@ export function chooseNpcActivity(world: World, vehicle: Vehicle): NpcActivity {
   return createActivity("wait", null, null, "no salvage here");
 }
 
-function isWorkActivity(activity: NpcActivity | null): activity is NpcActivity & { kind: 'scavenge' | 'sell' | 'trade' | 'raid' } {
-  return activity !== null && ['scavenge', 'sell', 'trade', 'raid'].includes(activity.kind);
+function isWorkActivity(
+  activity: NpcActivity | null,
+): activity is NpcActivity & { kind: "scavenge" | "sell" | "trade" | "raid" } {
+  return (
+    activity !== null &&
+    ["scavenge", "sell", "trade", "raid"].includes(activity.kind)
+  );
 }
 
-function rememberInterruptedWork(brain: NpcBrain, activity: NpcActivity | null): void {
+function rememberInterruptedWork(
+  brain: NpcBrain,
+  activity: NpcActivity | null,
+): void {
   if (activity === brain.interruptedWork) {
     delete brain.interruptedWork;
     return;
@@ -442,35 +588,64 @@ function rememberInterruptedWork(brain: NpcBrain, activity: NpcActivity | null):
   brain.interruptedWork = previous;
 }
 
-function rememberInvestigation(brain: NpcBrain, activity: NpcActivity | null): void {
-  if (activity?.kind !== 'investigate') return;
-  if (!activity.targetId) throw new Error('Investigation requires a contact');
-  const investigated = brain.investigatedContacts ??= [];
-  if (!investigated.includes(activity.targetId)) investigated.push(activity.targetId);
+function rememberInvestigation(
+  brain: NpcBrain,
+  activity: NpcActivity | null,
+): void {
+  if (activity?.kind !== "investigate") return;
+  if (!activity.targetId) throw new Error("Investigation requires a contact");
+  const investigated = (brain.investigatedContacts ??= []);
+  if (!investigated.includes(activity.targetId))
+    investigated.push(activity.targetId);
 }
 
-function didActivityChange(previous: NpcActivity | null, activity: NpcActivity | null): boolean {
+function didActivityChange(
+  previous: NpcActivity | null,
+  activity: NpcActivity | null,
+): boolean {
   if (previous === activity) return false;
   if (!previous || !activity) return true;
-  return previous.kind !== activity.kind || previous.targetId !== activity.targetId || previous.reason !== activity.reason;
+  return (
+    previous.kind !== activity.kind ||
+    previous.targetId !== activity.targetId ||
+    previous.reason !== activity.reason
+  );
 }
 
-export function setNpcActivity(world: World, vehicle: Vehicle, activity: NpcActivity | null, reason: string): void {
+export function setNpcActivity(
+  world: World,
+  vehicle: Vehicle,
+  activity: NpcActivity | null,
+  reason: string,
+): void {
   const brain = requireBrain(vehicle);
   const previous = brain.activity;
   rememberInterruptedWork(brain, activity);
   rememberInvestigation(brain, activity);
   if (didActivityChange(previous, activity)) {
-    world.events.push({ t: 'activity', vehicle: vehicle.id, previous: previous?.kind ?? null, activity: activity?.kind ?? null, reason });
+    world.events.push({
+      t: "activity",
+      vehicle: vehicle.id,
+      previous: previous?.kind ?? null,
+      activity: activity?.kind ?? null,
+      reason,
+    });
   }
   brain.activity = activity;
 }
 
-function getDirectDestination(vehicle: Vehicle, activity: NpcActivity): Vec | null | undefined {
+function getDirectDestination(
+  vehicle: Vehicle,
+  activity: NpcActivity,
+): Vec | null | undefined {
   const destination = activity.destination;
   if (!destination) return null;
-  if (activity.kind === 'repair') return dist(vehicle.pos, destination) <= RULES.arriveRadius ? null : destination;
-  if (['fight', 'flee', 'raid', 'investigate'].includes(activity.kind)) return destination;
+  if (activity.kind === "repair")
+    return dist(vehicle.pos, destination) <= RULES.arriveRadius
+      ? null
+      : destination;
+  if (["fight", "flee", "raid", "investigate"].includes(activity.kind))
+    return destination;
   return undefined;
 }
 
@@ -575,12 +750,15 @@ function resolveActivity(
   if (!["sell", "trade", "resupply"].includes(activity.kind)) return;
   const site = getKnownSite(activity.targetId!);
   if (!canUseSite(vehicle.pos, site)) return;
-  activity.phase = 'act';
-  if (activity.kind === 'resupply') {
-    if ('kind' in site && site.kind === 'oasis') getResources(world, vehicle).supplies = RULES.suppliesCap;
-    else if ('kind' in site && site.kind === 'camp') serviceAtCamp(world, vehicle, site.id);
+  activity.phase = "act";
+  if (activity.kind === "resupply") {
+    if ("kind" in site && site.kind === "oasis")
+      getResources(world, vehicle).supplies = RULES.suppliesCap;
+    else if ("kind" in site && site.kind === "camp")
+      serviceAtCamp(world, vehicle, site.id);
     else serviceVehicle(world, vehicle, site.id, NPC_UPKEEP.repairParts);
-  } else if (activity.kind === 'sell') sellVehicleCargo(world, vehicle, site.id, NPC_UPKEEP.repairParts);
+  } else if (activity.kind === "sell")
+    sellVehicleCargo(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   else {
     if (!activity.purchase) throw new Error("Trade activity missing purchase");
     const price = getTradePrice(
@@ -624,12 +802,17 @@ function resolveActivity(
   );
 }
 
-function resolveCurrentActivity(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  if (activity.kind !== 'repair') {
+function resolveCurrentActivity(
+  world: World,
+  vehicle: Vehicle,
+  activity: NpcActivity,
+): void {
+  if (activity.kind !== "repair") {
     resolveActivity(world, vehicle, activity);
     return;
   }
-  if (resolveNpcRepair(world, vehicle)) setNpcActivity(world, vehicle, null, 'finished field repairs');
+  if (resolveNpcRepair(world, vehicle))
+    setNpcActivity(world, vehicle, null, "finished field repairs");
 }
 
 export function resolveNpcActivities(world: World): void {

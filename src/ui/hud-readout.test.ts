@@ -69,7 +69,10 @@ describe("rescue readout", () => {
   it("shows negative money as debt with a warning", () => {
     const w = emptyWorld();
     w.player.money = -1200;
-    expect(getHudReadout(w).resources[0]).toMatchObject({ value: "Debt 1,200", warning: true });
+    expect(getHudReadout(w).resources[0]).toMatchObject({
+      value: "Debt 1,200",
+      warning: true,
+    });
   });
   it("follows the player from stranded to offer to tow", () => {
     const w = emptyWorld();
@@ -79,8 +82,18 @@ describe("rescue readout", () => {
     w.player.beacon = true;
     expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: true });
     w.player.money = 10;
-    w.player.tow = { by: w.vehicles[0].id, town: "bowl", fee: 50, hitched: false };
-    expect(getRescueReadout(w)).toMatchObject({ kind: "offer", fee: 50, debt: true, beacon: true });
+    w.player.tow = {
+      by: w.vehicles[0].id,
+      town: "bowl",
+      fee: 50,
+      hitched: false,
+    };
+    expect(getRescueReadout(w)).toMatchObject({
+      kind: "offer",
+      fee: 50,
+      debt: true,
+      beacon: true,
+    });
     w.player.tow.hitched = true;
     expect(getRescueReadout(w)).toMatchObject({ kind: "towed", fee: 50 });
     w.player.state = "knockedOut";

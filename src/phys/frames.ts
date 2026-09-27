@@ -1,9 +1,9 @@
 // What a played turn hands to the renderer: one pose per physics step for every vehicle.
 // Physics space is meters: map x is physics x, map y is physics z, height is physics y.
 
-import { PHYSICS } from '../data/physics';
-import { heightAt, type Terrain } from '../sim/terrain';
-import type { Vec } from '../sim/vec';
+import { PHYSICS } from "../data/physics";
+import { heightAt, type Terrain } from "../sim/terrain";
+import type { Vec } from "../sim/vec";
 
 export type V3 = { x: number; y: number; z: number };
 export type Quat = { x: number; y: number; z: number; w: number };

@@ -35,7 +35,9 @@ export class TruckConditionReadout {
     const previous = this.health;
     this.health = new Map();
     return mountedItems(vehicle)
-      .filter((item) => ["core", "engine", "weapon"].includes(partDef(item.part.defId).kind))
+      .filter((item) =>
+        ["core", "engine", "weapon"].includes(partDef(item.part.defId).kind),
+      )
       .map((item) => {
         const def = partDef(item.part.defId);
         const hp = item.part.hp;
@@ -43,8 +45,12 @@ export class TruckConditionReadout {
         const before = previous.get(item.part.id);
         const ratio = hp / def.hp;
         return {
-          id: item.part.id, name: def.name, icon: getConditionIcon(def),
-          x: item.x, y: item.y, ...itemSize(item),
+          id: item.part.id,
+          name: def.name,
+          icon: getConditionIcon(def),
+          x: item.x,
+          y: item.y,
+          ...itemSize(item),
           percent: hp > 0 ? Math.max(1, Math.floor(ratio * 100)) : 0,
           state: getConditionState(ratio),
           hit: before !== undefined && hp < before,
@@ -89,7 +95,14 @@ export function moneyLabel(money: number): string {
 // beacon switch. Null when none applies, and for a dead player, whom the death screen covers.
 export type RescueReadout =
   | { kind: "knockedOut" }
-  | { kind: "offer"; tower: string; town: string; fee: number; debt: boolean; beacon: boolean }
+  | {
+      kind: "offer";
+      tower: string;
+      town: string;
+      fee: number;
+      debt: boolean;
+      beacon: boolean;
+    }
   | { kind: "towed"; tower: string; town: string; fee: number }
   | { kind: "stranded"; beacon: boolean };
 
@@ -98,11 +111,21 @@ export function getRescueReadout(w: World): RescueReadout | null {
   if (p.state === "knockedOut") return { kind: "knockedOut" };
   if (p.state === "dead") return null;
   if (p.tow) {
-    const tow = { tower: vehicleName(w, p.tow.by), town: townName(p.tow.town), fee: p.tow.fee };
+    const tow = {
+      tower: vehicleName(w, p.tow.by),
+      town: townName(p.tow.town),
+      fee: p.tow.fee,
+    };
     if (p.tow.hitched) return { kind: "towed", ...tow };
-    return { kind: "offer", ...tow, debt: p.money < p.tow.fee, beacon: p.beacon };
+    return {
+      kind: "offer",
+      ...tow,
+      debt: p.money < p.tow.fee,
+      beacon: p.beacon,
+    };
   }
-  if (p.beacon || isStranded(w, playerVehicle(w))) return { kind: "stranded", beacon: p.beacon };
+  if (p.beacon || isStranded(w, playerVehicle(w)))
+    return { kind: "stranded", beacon: p.beacon };
   return null;
 }
 

@@ -5,7 +5,12 @@ import { baseGrid, corePart, coreParts, mountedParts } from "../sim/grid";
 import type { Job, Vehicle, World } from "../sim/types";
 import { el, panel } from "./dom";
 import { eventText, formatNpcActivity } from "./format";
-import { getHudReadout, getRescueReadout, moneyLabel, TruckConditionReadout } from "./hud-readout";
+import {
+  getHudReadout,
+  getRescueReadout,
+  moneyLabel,
+  TruckConditionReadout,
+} from "./hud-readout";
 import { createIcon, createSpeedDial, type IconName } from "./icons";
 import { kph } from "./units";
 import { playerVehicle } from "../sim/damage";
@@ -14,7 +19,10 @@ import "./truck-condition.css";
 type ConditionPart = ReturnType<TruckConditionReadout["update"]>[number];
 
 class TruckConditionView {
-  readonly root = el("div", { class: "truck-condition", "aria-label": "Truck part condition, nose up" });
+  readonly root = el("div", {
+    class: "truck-condition",
+    "aria-label": "Truck part condition, nose up",
+  });
   private body = el("div", { class: "condition-chassis" });
   private readout = new TruckConditionReadout();
   private nodes = new Map<string, HTMLElement>();
@@ -40,8 +48,12 @@ class TruckConditionView {
   private renderPart(part: ConditionPart): void {
     let node = this.nodes.get(part.id);
     if (!node) {
-      node = el("div", { class: "condition-part", "data-part-id": part.id },
-        createIcon(part.icon), el("span", { class: "condition-percent" }));
+      node = el(
+        "div",
+        { class: "condition-part", "data-part-id": part.id },
+        createIcon(part.icon),
+        el("span", { class: "condition-percent" }),
+      );
       this.nodes.set(part.id, node);
       this.body.append(node);
     }
@@ -57,11 +69,14 @@ class TruckConditionView {
 
   private flashDamage(node: HTMLElement): void {
     for (const animation of node.getAnimations()) animation.cancel();
-    node.animate([
-      { background: "#fa3934", borderColor: "#ffd1bd", offset: 0 },
-      { background: "#fa3934", borderColor: "#ffd1bd", offset: 0.65 },
-      { background: "#613b35", borderColor: "#de8e7d", offset: 1 },
-    ], { duration: 300, iterations: 2 });
+    node.animate(
+      [
+        { background: "#fa3934", borderColor: "#ffd1bd", offset: 0 },
+        { background: "#fa3934", borderColor: "#ffd1bd", offset: 0.65 },
+        { background: "#613b35", borderColor: "#de8e7d", offset: 1 },
+      ],
+      { duration: 300, iterations: 2 },
+    );
   }
 }
 
@@ -226,7 +241,11 @@ export class Hud {
     if (r.kind === "knockedOut")
       this.rescue.replaceChildren(
         el("h3", { class: "bad" }, "Knocked out"),
-        el("div", { class: "dim" }, "Looters strip the truck. You come to when they leave."),
+        el(
+          "div",
+          { class: "dim" },
+          "Looters strip the truck. You come to when they leave.",
+        ),
       );
     if (r.kind === "offer")
       this.rescue.replaceChildren(
@@ -244,8 +263,14 @@ export class Hud {
       this.rescue.replaceChildren(
         el("h3", {}, "Under tow"),
         el("div", {}, `${r.tower} tows you to ${r.town}.`),
-        el("div", { class: "dim" }, `Fee ${moneyLabel(r.fee)} on arrival. Unhitching is free.`),
-        buttons(el("button", { onclick: () => this.actions.unhitch() }, "Unhitch")),
+        el(
+          "div",
+          { class: "dim" },
+          `Fee ${moneyLabel(r.fee)} on arrival. Unhitching is free.`,
+        ),
+        buttons(
+          el("button", { onclick: () => this.actions.unhitch() }, "Unhitch"),
+        ),
       );
     if (r.kind === "stranded")
       this.rescue.replaceChildren(
@@ -253,7 +278,9 @@ export class Hud {
         el(
           "div",
           { class: "dim" },
-          r.beacon ? "Calling for a tow. Raiders hear it too." : "The truck can only crawl.",
+          r.beacon
+            ? "Calling for a tow. Raiders hear it too."
+            : "The truck can only crawl.",
         ),
         buttons(beacon(r.beacon)),
       );
@@ -396,7 +423,10 @@ export class Hud {
       const line = eventText(w, e);
       if (line)
         this.lines.unshift({ text: `T${w.turn} ${line.text}`, cls: line.cls });
-      if (line && (e.t === "knockout" || e.t === "levelUp" || e.t === "discover"))
+      if (
+        line &&
+        (e.t === "knockout" || e.t === "levelUp" || e.t === "discover")
+      )
         this.toast(line.text);
     }
     this.lines = this.lines.slice(0, LOG_LINES);

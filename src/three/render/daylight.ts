@@ -150,6 +150,13 @@ export function sunLight(): THREE.DirectionalLight {
   sun.shadow.mapSize.set(2048, 2048);
   // The terrain shadows itself. Without a normal offset its lit slopes show striped shadow acne.
   sun.shadow.normalBias = 0.3;
-  Object.assign(sun.shadow.camera, { left: -80, right: 80, top: 80, bottom: -80, near: 1, far: 500 });
+  Object.assign(sun.shadow.camera, {
+    left: -80,
+    right: 80,
+    top: 80,
+    bottom: -80,
+    near: 1,
+    far: 500,
+  });
   return sun;
 }

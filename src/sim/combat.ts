@@ -31,8 +31,7 @@ import { vehicleStats, type MountedWeapon } from "./stats";
 import type { Aim, ShotRound, Vehicle, World } from "./types";
 import { weatherAt } from "./weather";
 import { angleDiff, bearing, clamp, dist, DEG, type Vec } from "./vec";
-import { isTownGuarded } from './guards';
-
+import { isTownGuarded } from "./guards";
 
 export type FireBlock =
   | "disabled"
@@ -414,24 +413,40 @@ function applyShot(world: World, s: Shot): void {
   });
 }
 
-function witnessesAllyAttack(world: World, observer: Vehicle, shooter: Vehicle, target: Vehicle): boolean {
+function witnessesAllyAttack(
+  world: World,
+  observer: Vehicle,
+  shooter: Vehicle,
+  target: Vehicle,
+): boolean {
   if (observer.faction !== target.faction) return false;
   if (dist(observer.pos, target.pos) > SPAWN.neighborHelp) return false;
-  return canVehicleSee(world, observer, target.pos) && canVehicleSee(world, observer, shooter.pos);
+  return (
+    canVehicleSee(world, observer, target.pos) &&
+    canVehicleSee(world, observer, shooter.pos)
+  );
 }
 
 // Shots, including misses, establish a local threat without broadcasting hidden targets.
-function recordNpcAttack(world: World, shooter: Vehicle, target: Vehicle): void {
+function recordNpcAttack(
+  world: World,
+  shooter: Vehicle,
+  target: Vehicle,
+): void {
   for (const observer of world.vehicles) {
     if (observer.id === shooter.id) continue;
-    if (observer.id === target.id || witnessesAllyAttack(world, observer, shooter, target)) rememberNpcAttacker(observer, shooter.id);
+    if (
+      observer.id === target.id ||
+      witnessesAllyAttack(world, observer, shooter, target)
+    )
+      rememberNpcAttacker(observer, shooter.id);
   }
 }
 
 function rememberNpcAttacker(observer: Vehicle, attackerId: string): void {
   const brain = observer.brain;
   if (!brain) return;
-  const attackers = brain.attackers ??= [];
+  const attackers = (brain.attackers ??= []);
   if (!attackers.includes(attackerId)) attackers.push(attackerId);
 }
 
@@ -518,12 +533,20 @@ function canNpcEngage(vehicle: Vehicle, target: Vehicle): boolean {
   const brain = vehicle.brain;
   if (!brain) return true;
   if (brain.attackers?.includes(target.id)) return true;
-  if (brain.activity?.kind !== 'fight') return false;
+  if (brain.activity?.kind !== "fight") return false;
   return canInitiateFire(vehicle, target, brain.activity.targetId);
 }
 
-function canInitiateFire(vehicle: Vehicle, target: Vehicle, targetId: string | null): boolean {
-  return target.id === targetId && !isTownGuarded(vehicle.pos) && !isTownGuarded(target.pos);
+function canInitiateFire(
+  vehicle: Vehicle,
+  target: Vehicle,
+  targetId: string | null,
+): boolean {
+  return (
+    target.id === targetId &&
+    !isTownGuarded(vehicle.pos) &&
+    !isTownGuarded(target.pos)
+  );
 }
 
 // Defensive fire is independent of movement. Guard caution limits initiative, not self-defense.
