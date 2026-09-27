@@ -117,7 +117,7 @@ const BEAM_AIM = { ahead: 30, down: 6 }; // meters ahead of the nose and below t
 
 type LiveVision = {
   visible: Set<number>;
-  explored: boolean[];
+  explored: Uint8Array;
   from: Vec | null;
 };
 type TurnPhase = ReturnType<UiHost["getTurnPhase"]>;
@@ -177,6 +177,7 @@ export class Game {
   readonly sound: SoundDirector;
   private panelOpen = false; // last frame's panel state, for open and close sounds
   private readonly loops: SoundLoops;
+  private lastDangerTurn = -Infinity; // last turn a hostile was in sight, for the combat music hold
   private readonly views = new Map<string, VehicleView>();
   private frames: Record<string, VehicleFrame> = {}; // last shown pose per vehicle
   // A played turn: physics movement, then shots in flight when there was combat, then time to read results.
@@ -608,7 +609,7 @@ export class Game {
     if (!result) throw new Error("Turn ran without physics");
     this.live = {
       visible: new Set(this.world.player.visible),
-      explored: [...before.player.explored],
+      explored: before.player.explored.slice(),
       from: null,
     };
     const combat = this.world.events.some(
@@ -692,9 +693,10 @@ export class Game {
     const me = playerVehicle(this.world);
     const f = this.frames[me.id];
     const at = f ? toMap(f.pos) : me.pos;
+    if (this.world.vehicles.some((v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v))) this.lastDangerTurn = this.world.turn;
     this.loops.update({
       stormTiles: this.weather.stormTilesFrom(at.x, at.y),
-      danger: this.world.vehicles.some((v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v)),
+      turnsSinceDanger: this.world.turn - this.lastDangerTurn,
     });
   }
 
@@ -884,7 +886,7 @@ export class Game {
     if (live.from && dist(live.from, at) < LIVE_VISION_STEP) return;
     live.from = at;
     live.visible = visibleTiles(this.world, at);
-    for (const t of live.visible) live.explored[t] = true;
+    for (const t of live.visible) live.explored[t] = 1;
     const player = { ...this.world.player, visible: [...live.visible].sort((a, b) => a - b), explored: live.explored };
     timed('fog', () => this.fog.update({ ...this.world, player }));
   }

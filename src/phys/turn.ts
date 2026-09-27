@@ -73,7 +73,7 @@ function crashPoint(w: World, a: Vehicle, b: Vehicle | null, what: string): Vec 
 function exploreAlong(w: World): void {
   const me = playerVehicle(w);
   for (let i = 0; i < me.trail.length; i += EXPLORE_EVERY) {
-    for (const t of visibleTiles(w, me.trail[i])) w.player.explored[t] = true;
+    for (const t of visibleTiles(w, me.trail[i])) w.player.explored[t] = 1;
   }
 }
 

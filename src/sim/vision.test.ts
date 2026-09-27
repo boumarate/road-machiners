@@ -54,11 +54,11 @@ describe('vision', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     refreshVision(w);
     const idx = 30 * w.size + 30;
-    expect(w.player.explored[idx]).toBe(true);
+    expect(w.player.explored[idx]).toBe(1);
     w.vehicles.find((v) => v.id === w.player.vehicleId)!.pos = { x: 55, y: 55 };
     refreshVision(w);
     expect(playerVisible(w).has(idx)).toBe(false);
-    expect(w.player.explored[idx]).toBe(true); // stays explored even though no longer visible
+    expect(w.player.explored[idx]).toBe(1); // stays explored even though no longer visible
   });
 });
 

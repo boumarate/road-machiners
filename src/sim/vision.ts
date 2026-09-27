@@ -23,7 +23,8 @@ export function sightRadius(world: World, pos: Vec): number {
 export function visibleTiles(world: World, from: Vec): Set<number> {
   const size = world.size;
   const r = sightRadius(world, from);
-  const blockers = world.obstacles.filter((o) => BLOCKING.includes(o.kind));
+  // Every sight line lies within r of the viewer, so blockers beyond r plus their radius cannot touch it.
+  const blockers = world.obstacles.filter((o) => BLOCKING.includes(o.kind) && dist(from, o.pos) < r + o.r);
   const out = new Set<number>();
   const lo = { x: Math.max(0, Math.floor(from.x - r)), y: Math.max(0, Math.floor(from.y - r)) };
   const hi = { x: Math.min(size - 1, Math.ceil(from.x + r)), y: Math.min(size - 1, Math.ceil(from.y + r)) };
@@ -84,7 +85,7 @@ export function playerVisible(world: World): Set<number> {
 export function refreshVision(world: World): void {
   const seen = playerVisible(world);
   world.player.visible = [...seen].sort((a, b) => a - b);
-  for (const idx of seen) world.player.explored[idx] = true;
+  for (const idx of seen) world.player.explored[idx] = 1;
   const me = world.vehicles.find((x) => x.id === world.player.vehicleId);
   world.player.contacts = me ? contactsOf(world, me, Infinity) : [];
   world.player.clouds = me ? cloudsSeenBy(world, me).map((c) => c.id) : [];
@@ -106,5 +107,5 @@ export function playerSees(world: World, p: Vec): boolean {
 }
 
 export function playerExplored(world: World, p: Vec): boolean {
-  return world.player.explored[tileOf(world, p)];
+  return world.player.explored[tileOf(world, p)] === 1;
 }

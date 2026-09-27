@@ -57,7 +57,7 @@ export function newWorld(seed: number, kit: StartKit): World {
       storage: [],
       costBasis: { ...kit.costBasis },
       knockouts: 0,
-      explored: new Array(REGION.size * REGION.size).fill(false),
+      explored: new Uint8Array(REGION.size * REGION.size),
       visible: [],
       contacts: [],
       clouds: [],

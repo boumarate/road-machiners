@@ -102,11 +102,11 @@ describe('physics turns', () => {
 
   it('tiles seen while driving stay explored', () => {
     const w0 = ordered({ kind: 'through', dest: { x: 50, y: 30 } }, 6);
-    w0.player.explored.fill(false);
+    w0.player.explored.fill(0);
     const { w } = play(w0, 1);
     const mid = Math.round((30 + me(w).pos.x) / 2);
-    expect(w.player.explored[30 * w.size + mid]).toBe(true);
-    expect(w.player.explored[30 * w.size + mid + 12]).toBe(me(w).pos.x + 10 >= mid + 12);
+    expect(w.player.explored[30 * w.size + mid]).toBe(1);
+    expect(w.player.explored[30 * w.size + mid + 12]).toBe(Number(me(w).pos.x + 10 >= mid + 12));
   });
 
   it('a brake order stops the truck and clears', () => {

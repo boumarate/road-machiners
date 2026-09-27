@@ -152,7 +152,7 @@ export type Player = {
   storage: PartInstance[]; // spare parts kept in town garages, usable in any town
   costBasis: Record<string, number>; // average paid per unit of each good, for trade XP
   knockouts: number;
-  explored: boolean[]; // fog of war: tile y * world.size + x, true once seen
+  explored: Uint8Array; // fog of war: tile y * world.size + x, 1 once seen
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision
   contacts: Contact[]; // vehicles detected beyond sight; refreshed by refreshVision
   clouds: string[]; // ids of dust clouds the player sees right now; refreshed by refreshVision

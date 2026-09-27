@@ -26,7 +26,11 @@ export function loadWorld(storage: Storage): World | null {
     throw new SaveError('Incompatible game save version');
   }
   if (!('world' in save) || !isWorld(save.world)) throw new SaveError('Invalid saved world');
-  return { ...save.world, terrain: buildTerrain(save.world.seed, save.world.size) };
+  const explored: unknown = save.world.player.explored;
+  const tiles = save.world.size * save.world.size;
+  if (!Array.isArray(explored) || explored.length !== tiles) throw new SaveError('Invalid saved explored tiles');
+  const player = { ...save.world.player, explored: Uint8Array.from(explored) };
+  return { ...save.world, player, terrain: buildTerrain(save.world.seed, save.world.size) };
 }
 
 function isWorld(value: unknown): value is Omit<World, 'terrain'> {
@@ -52,5 +56,7 @@ export function saveWorld(storage: Storage, world: World, interval: number): voi
 
 export function writeSave(storage: Storage, world: World): void {
   const { terrain: _terrain, ...saved } = world;
-  storage.setItem(SAVE_KEY, JSON.stringify({ version: SAVE_VERSION, world: saved }));
+  // JSON writes a typed array as an object keyed by index, so explored goes out as a plain list.
+  const player = { ...saved.player, explored: Array.from(saved.player.explored) };
+  storage.setItem(SAVE_KEY, JSON.stringify({ version: SAVE_VERSION, world: { ...saved, player } }));
 }
