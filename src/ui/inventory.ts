@@ -35,6 +35,8 @@ import { REGION } from "../data/region";
 import type {
   GridItem,
   PartInstance,
+  RefitJob,
+  RefitMove,
   SalvageStock,
   Vehicle,
   World,
@@ -166,7 +168,7 @@ export class InventoryView {
         );
       }
     }
-    for (const it of me.items) grid.append(this.itemEl(w, it));
+    grid.append(...this.gridItems(w, me));
     this.gridEl = grid;
     const inTown = townAt(w) !== null;
     this.root.replaceChildren(
@@ -275,11 +277,30 @@ export class InventoryView {
     if (!core)
       node.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
+        // The grab uses the same grid math as spotAt, so a drop where the drag began lands on the item's own spot.
+        if (!this.gridEl) throw new Error("Grid item pressed without a grid");
+        const r = this.gridEl.getBoundingClientRect();
         this.startDrag(e, "grid", it.id, it, {
-          x: Math.floor(e.offsetX / this.cell),
-          y: Math.floor(e.offsetY / this.cell),
+          x: Math.floor((e.clientX - r.left) / this.cell) - it.x,
+          y: Math.floor((e.clientY - r.top) / this.cell) - it.y,
         });
       });
+    return node;
+  }
+
+  // Every item on the grid. Parts in a running refit show at the spots they go to.
+  private gridItems(w: World, v: Vehicle): HTMLElement[] {
+    const moving = refitItems(w, v);
+    const staying = v.items.filter((it) => !moving.some((m) => m.id === it.id));
+    return [...staying.map((it) => this.itemEl(w, it)), ...moving.map((it) => this.refittingEl(w, v, it))];
+  }
+
+  // A part in a running refit, drawn where it goes with a dashed outline. Hover shows the turns left.
+  private refittingEl(w: World, v: Vehicle, item: GridItem): HTMLElement {
+    const node = this.itemEl(w, item);
+    const left = v.job?.kind === "refit" ? v.job.turnsLeft : 0;
+    node.classList.add("refitting");
+    node.title = `Refit: ${left === 1 ? "1 turn" : `${left} turns`} left. Driving cancels it.`;
     return node;
   }
 
@@ -787,6 +808,26 @@ export function getItemIcon(item: GridItem): IconName {
 
 function pos(x: number, y: number, w: number, h: number, cell: number): string {
   return `left:${x * cell}px;top:${y * cell}px;width:${w * cell}px;height:${h * cell}px`;
+}
+
+// The parts a running refit moves, at the spots they go to.
+function refitItems(w: World, v: Vehicle): GridItem[] {
+  if (v.job?.kind !== "refit") return [];
+  return [...v.job.moves.map((move) => movedItem(v, move)), ...pickupItem(w, v.job)];
+}
+
+function movedItem(v: Vehicle, move: RefitMove): GridItem {
+  const item = v.items.find((it) => it.id === move.itemId);
+  if (!item) throw new Error(`Refit moves missing item ${move.itemId}`);
+  return { ...item, ...move.to };
+}
+
+// The salvage part a refit mounts, at its target. A part gone from the stock is not drawn.
+function pickupItem(w: World, job: RefitJob): GridItem[] {
+  const pickup = job.pickup;
+  if (!pickup) return [];
+  const part = w.salvage.find((stock) => stock.id === pickup.stockId)?.parts.find((p) => p.id === pickup.partId);
+  return part ? [{ kind: "part", id: pickup.itemId, part, ...pickup.to }] : [];
 }
 
 function footprint(it: GridItem): { w: number; h: number } {

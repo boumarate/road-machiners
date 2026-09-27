@@ -943,6 +943,9 @@ body {
 .inv-legend > div {
   margin-top: 7px;
 }
+.inv-item.refitting {
+  border: 2px dashed #eac779;
+}
 .inv-ghost {
   position: fixed;
   pointer-events: none;
