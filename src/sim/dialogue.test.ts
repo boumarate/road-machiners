@@ -73,7 +73,7 @@ describe('calls', () => {
   it('opens on the hub with the greeting when the player sees the truck', () => {
     const { w, npc } = withNpc('trader', 'traders');
     const next = callVehicle(w, npc.id);
-    expect(next.player.call).toEqual({ with: npc.id, topic: null, node: HUB, vars: {}, line: { text: TRAIT_TALK.trader.voice!.greeting, vars: {} }, discussed: false });
+    expect(next.player.call).toEqual({ with: npc.id, topic: null, node: HUB, vars: {}, line: { text: TRAIT_TALK.trader.voice!.greeting, vars: {} }, learned: false });
     expect(next.events).toContainEqual({ t: 'call', with: npc.id, outcome: 'opened' });
     expect(next.events).toContainEqual({ t: 'say', speaker: npc.id, text: TRAIT_TALK.trader.voice!.greeting, vars: {} });
   });
@@ -210,6 +210,23 @@ describe('honk', () => {
     expect(honkers(honk(w))).toEqual([w.player.vehicleId]);
   });
 
+  it('a truck in sight that honks back pays the player once', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    npcAt(w, 'trader', 'traders', 36);
+    refreshVision(w);
+    const once = honk(w);
+    expect(practiceOf(once, 'honk')).toMatchObject([{ amount: 1, difficulty: null }]);
+    expect(practiceOf(honk(once), 'honk')).toEqual([]);
+  });
+
+  it('a truck honking back out of sight pays nothing', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const npc = npcAt(w, 'trader', 'traders', 36);
+    w.player.visible = [];
+    expect(honkers(honk(w))).toContain(npc.id);
+    expect(practiceOf(honk(w), 'honk')).toEqual([]);
+  });
+
   it('cannot honk during a call', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const npc = npcAt(w, 'trader', 'traders', 36);
@@ -330,6 +347,23 @@ describe('call practice', () => {
     const asked = chooseOption(open, optionIndex(open, 'Where is the nearest town?'));
     const closed = chooseOption(asked, optionIndex(asked, 'Thanks. Over and out.'));
     expect(practiceOf(closed, 'call')).toMatchObject([{ amount: 1, difficulty: null }]);
+  });
+
+  it('pays nothing for a topic already taken up with the same driver', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    const ask = (from: World): World => {
+      const open = callVehicle(from, npc.id);
+      const asked = chooseOption(open, optionIndex(open, 'Where is the nearest town?'));
+      return chooseOption(asked, optionIndex(asked, 'Thanks. Over and out.'));
+    };
+    const again = ask(ask(w));
+    expect(practiceOf(again, 'call')).toEqual([]);
+    const other = addVehicle(again, 'traders', 'scout', [], { x: 30, y: 36 });
+    other.brain = npcBrain('trader', other.pos, ['trader']);
+    refreshVision(again);
+    const open = callVehicle(again, other.id);
+    const asked = chooseOption(open, optionIndex(open, 'Where is the nearest town?'));
+    expect(practiceOf(chooseOption(asked, optionIndex(asked, 'Thanks. Over and out.')), 'call')).toHaveLength(1);
   });
 
   it('pays nothing for a call hung up without a topic', () => {

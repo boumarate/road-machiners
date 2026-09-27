@@ -18,7 +18,7 @@ export type XpSource =
   | "hit" | "contact" | "discover"
   | "fieldJob" | "patch" | "search"
   | "heat" | "damage" | "knockout"
-  | "profit" | "deal" | "call";
+  | "profit" | "deal" | "call" | "honk";
 
 export type PartInstance = {
   id: string;
@@ -232,8 +232,9 @@ export type CallVars = Record<string, CallVar>;
 
 // An open radio call with the NPC `with`. A null topic means the hub of topics. `line` is what the NPC said
 // last, which is the node's line or an answer that kept the call on the hub.
-// `discussed` turns true once the call takes up a topic; only such a call practices social when it ends.
-export type Call = { with: string; topic: TopicId | null; node: string; vars: CallVars; line: { text: string; vars: CallVars }; discussed: boolean };
+// `learned` turns true once the call takes up a topic the player never took up with this driver; only such a call
+// practices social when it ends.
+export type Call = { with: string; topic: TopicId | null; node: string; vars: CallVars; line: { text: string; vars: CallVars }; learned: boolean };
 export type TopicOutcome = "agreed" | "refused" | "done";
 
 export type Player = {
@@ -262,6 +263,8 @@ export type Player = {
   beacon: boolean; // the emergency beacon calls every vehicle within BEACON.range; see src/sim/tow.ts
   call: Call | null;
   talked: Record<string, Partial<Record<TopicId, TopicOutcome>>>; // NPC id to how each topic with it ended
+  asked: Record<string, TopicId[]>; // NPC id to every topic ever taken up with it, for call XP
+  honkedBack: string[]; // ids of NPCs that ever honked back in sight, for honk XP
   explored: Uint8Array; // fog of war: tile y * world.size + x, 1 once seen
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision
   contacts: Contact[]; // vehicles detected beyond sight; refreshed by refreshVision

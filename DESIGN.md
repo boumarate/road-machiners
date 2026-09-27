@@ -8,9 +8,9 @@ The character has five skills. These are the durable upgrades that persist acros
 
 - Driving improves handling, crash damage, rough ground and crawling. It grows from driving off the road, rams and escapes from hostiles.
 - Perception improves aim, sight, hearing and contact circles. It grows from hits, new contacts and discovered places.
-- Machining improves repair and refit time, the field repair cap, search time and engine heat. It grows from field jobs, patches for other trucks and searches.
-- Toughness raises max health, and cuts health lost to cab damage, supply use and heat drain. It grows from turns in heat, health lost and knockouts survived.
-- Social improves prices, tow fees and patch prices, and makes scumbags see the truck as stronger. It grows from trade profit, agreed deals and radio calls.
+- Machining improves repair and refit time, the field repair cap, search time and engine heat. It grows from field repairs, patches for other trucks and searches. Refits teach nothing, because a part can move back and forth forever.
+- Toughness raises max health, and cuts health lost to cab damage, supply use and heat drain. It grows from turns in heat, health lost and knockouts with a foe in sight.
+- Social improves prices, tow fees and patch prices, and makes scumbags see the truck as stronger. It grows from trade profit, agreed deals, radio calls and honks. A call pays only for a topic new with that driver, and a honk back in sight pays once per driver.
 
 Skills grow from use. Each skill has its own XP and five levels, and each level costs more XP. A hard action pays more than an easy one: a hit at a low chance pays more than a sure hit. Each skill earns full XP up to a daily cap, and much less after it until the next day. So grinding one easy action does not pay.
 

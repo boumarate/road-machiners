@@ -12,6 +12,7 @@ import { startSearch } from './search';
 import { addState, endState, stateOf } from './states';
 import { startRepair } from './jobs';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
+import { refreshVision } from './vision';
 import type { SalvageStock, Vehicle, World } from './types';
 import { endTurn, setDirect, setMoveOrder, setWeaponOrder } from './world';
 
@@ -307,17 +308,19 @@ describe('commands while knocked out', () => {
 });
 
 describe('knockout practice', () => {
-  it('pays the player on coming to after a knockout', () => {
-    const { w } = knockedOut();
-    advanceKnockout(w);
-    expect(w.player.state).toBe('active');
+  it('pays the player for a knockout with a foe in sight', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
+    refreshVision(w);
+    corePart(w.vehicles[0], 'cab').hp = 0;
+    checkKnockout(w);
     expect(practiceOf(w, 'knockout')).toMatchObject([{ amount: 1, difficulty: null }]);
   });
 
-  it('pays nothing while the driver is still out', () => {
+  it('pays nothing for a knockout with nobody around', () => {
     const { w } = knockedOut();
-    addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
     advanceKnockout(w);
+    expect(w.player.state).toBe('active');
     expect(practiceOf(w, 'knockout')).toEqual([]);
   });
 

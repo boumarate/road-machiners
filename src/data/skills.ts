@@ -12,7 +12,7 @@ export const SKILL_INFO: Record<SkillId, { name: string; grows: string }> = {
   perception: { name: 'Perception', grows: 'hits, contacts, discoveries' },
   machining: { name: 'Machining', grows: 'field jobs, patches, searches' },
   toughness: { name: 'Toughness', grows: 'heat, damage taken, knockouts' },
-  social: { name: 'Social', grows: 'trade profit, deals, calls' },
+  social: { name: 'Social', grows: 'trade profit, deals, calls, honks' },
 };
 
 // Fraction each level adds to an effect. Every reader names its effect, so a missing key fails typecheck.
@@ -54,7 +54,7 @@ export type SkillEffect<S extends SkillId> = keyof (typeof EFFECTS)[S] & string;
 export const SKILL_EFFECTS: { [S in SkillId]: Record<SkillEffect<S>, number> } = EFFECTS;
 
 // Total XP a skill needs to reach each level; index is the level. Each step costs more than the last.
-export const XP_TO_REACH: readonly number[] = [0, 100, 300, 600, 1000, 1500];
+export const XP_TO_REACH: readonly number[] = [0, 200, 600, 1200, 2000, 3000];
 export const MAX_SKILL_LEVEL = XP_TO_REACH.length - 1;
 
 // weight is XP per unit of amount. A scaled source multiplies by the difficulty curve in XP_RULES;
@@ -69,15 +69,16 @@ export const XP_SOURCES: Record<XpSource, XpSourceDef> = {
   hit: { skill: 'perception', weight: 6, scaled: true }, // per round of the player's that hits
   contact: { skill: 'perception', weight: 0.25, scaled: true }, // per truck newly detected beyond sight
   discover: { skill: 'perception', weight: 10, scaled: false }, // per place found
-  fieldJob: { skill: 'machining', weight: 0.75, scaled: false }, // per turn of a finished repair or refit job
+  fieldJob: { skill: 'machining', weight: 0.75, scaled: false }, // per turn of a finished repair
   patch: { skill: 'machining', weight: 75, scaled: false }, // per finished roadside patch on another truck
   search: { skill: 'machining', weight: 80, scaled: false }, // per first finished search of a stock
   heat: { skill: 'toughness', weight: 0.3, scaled: true }, // per turn driven in heat above shade
   damage: { skill: 'toughness', weight: 1.5, scaled: false }, // per point of health lost to cab damage
-  knockout: { skill: 'toughness', weight: 100, scaled: false }, // per knockout the player wakes from
+  knockout: { skill: 'toughness', weight: 100, scaled: false }, // per knockout with a foe in sight
   profit: { skill: 'social', weight: 0.8, scaled: false }, // per money unit of profit on a sale
   deal: { skill: 'social', weight: 30, scaled: false }, // per talk topic that ends agreed
-  call: { skill: 'social', weight: 8, scaled: false }, // per radio call that ends
+  call: { skill: 'social', weight: 8, scaled: false }, // per radio call that ends after taking up a topic new with that driver
+  honk: { skill: 'social', weight: 2, scaled: false }, // per driver in sight that honks back for the first time
 };
 
 export const XP_RULES = {
@@ -160,8 +161,8 @@ export const MAIN_SKILL: Record<Archetype, SkillId | null> = {
 
 // In-game day by which a skill reaches a level, keyed by level. A level missing from a table is not checked.
 export const TARGET_DAYS = {
-  main: { 2: 2, 4: 8, 5: 15 },
-  off: { 2: 5 },
+  main: { 2: 4, 4: 16, 5: 30 },
+  off: { 2: 10 },
 } as const satisfies Record<'main' | 'off', Partial<Record<number, number>>>;
 
 // A curve passes when it reaches a level within this share of the target day, either way.

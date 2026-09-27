@@ -85,20 +85,28 @@ function enter(world: World, call: Call, topic: TopicId | null, node: string): v
 
 function enterTopic(world: World, npc: Vehicle, call: Call, topic: Topic): void {
   call.vars = topic.prepare ? PREPARES[topic.prepare](world, npc) : {};
-  call.discussed = true;
+  learnTopic(world, npc, call, topic.id);
   enter(world, call, topic.id, topic.start);
 }
 
-// An ended call that took up a topic practices social. Hanging up at once teaches nothing.
+// A topic counts once per driver, so asking the same driver the same question again teaches nothing.
+function learnTopic(world: World, npc: Vehicle, call: Call, topic: TopicId): void {
+  const asked = world.player.asked[npc.id] ?? [];
+  if (asked.includes(topic)) return;
+  world.player.asked[npc.id] = [...asked, topic];
+  call.learned = true;
+}
+
+// An ended call that took up a new topic practices social. Hanging up at once teaches nothing.
 function endCall(world: World, call: Call): void {
   world.player.call = null;
   world.events.push({ t: 'call', with: call.with, outcome: 'ended' });
-  if (call.discussed) practice(world, 'call', 1, null);
+  if (call.learned) practice(world, 'call', 1, null);
 }
 
 function begin(world: World, npc: Vehicle): Call {
   if (world.player.call) throw new Error('A call is already open');
-  const call: Call = { with: npc.id, topic: null, node: HUB, vars: {}, line: { text: '', vars: {} }, discussed: false };
+  const call: Call = { with: npc.id, topic: null, node: HUB, vars: {}, line: { text: '', vars: {} }, learned: false };
   world.player.call = call;
   world.events.push({ t: 'call', with: npc.id, outcome: 'opened' });
   return call;
@@ -208,8 +216,19 @@ export function honk(world: World): World {
   return playerCommand(world, (w) => {
     const me = playerVehicle(w);
     w.events.push({ t: 'honk', vehicle: me.id });
-    for (const npc of answering(w, me)) w.events.push({ t: 'honk', vehicle: npc.id });
+    for (const npc of answering(w, me)) {
+      w.events.push({ t: 'honk', vehicle: npc.id });
+      practiceHonk(w, me, npc);
+    }
   });
+}
+
+// A driver in sight that honks back for the first time practices social a little. Honking takes no turn, so each
+// driver counts once.
+function practiceHonk(world: World, me: Vehicle, npc: Vehicle): void {
+  if (world.player.honkedBack.includes(npc.id) || !canVehicleSee(world, me, npc.pos)) return;
+  world.player.honkedBack.push(npc.id);
+  practice(world, 'honk', 1, null);
 }
 
 function answering(world: World, me: Vehicle): Vehicle[] {

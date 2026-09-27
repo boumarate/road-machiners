@@ -135,8 +135,9 @@ function endJob(
   if (outcome === "done") practiceFieldJob(world, v, job);
 }
 
-// The player practices machining from each finished repair or refit, by its total turns.
+// The player practices machining from each finished repair, by its total turns. A repair uses up parts. A refit
+// only moves parts, and a part can move back and forth forever, so it teaches nothing.
 function practiceFieldJob(world: World, v: Vehicle, job: Job): void {
-  if (v.id !== world.player.vehicleId || job.kind === "search") return;
+  if (v.id !== world.player.vehicleId || job.kind !== "repair") return;
   practice(world, "fieldJob", job.total, null);
 }

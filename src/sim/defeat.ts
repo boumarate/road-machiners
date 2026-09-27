@@ -11,7 +11,7 @@ import { cancelJob } from "./jobs";
 import { hasPerk, practice } from "./progress";
 import { createKnockoutSalvage } from "./salvage";
 import { endState } from "./states";
-import type { World } from "./types";
+import type { Vehicle, World } from "./types";
 import { canVehicleSee } from "./vision";
 
 export function checkDeath(world: World): void {
@@ -30,6 +30,8 @@ export function checkKnockout(world: World): void {
   p.knockoutTurns = 0;
   p.knockouts++;
   // The driver is out, so the truck brakes to a stop instead of coasting on.
+  // Only a knockout with a foe in sight teaches toughness. A cab broken on purpose with nobody around does not.
+  if (foeWatches(world, me)) practice(world, "knockout", 1, null);
   me.order = { kind: "brake" };
   me.weaponOrders = {};
   me.trail = [];
@@ -52,14 +54,14 @@ export function advanceKnockout(world: World): void {
   if (p.state !== "knockedOut") return;
   p.knockoutTurns++;
   const me = playerVehicle(world);
-  const watched = world.vehicles.some(
-    (v) => isFoe(world, v, me) && canVehicleSee(world, v, me.pos),
-  );
-  if (watched && p.knockoutTurns < knockoutLimit(world)) return;
+  if (foeWatches(world, me) && p.knockoutTurns < knockoutLimit(world)) return;
   for (const part of mountedParts(me, "core"))
     if (part.hp === 0)
       part.hp = Math.max(1, Math.round(partDef(part.defId).hp * RULES.defeatPatch));
   p.state = "active";
   world.events.push({ t: "wake" });
-  practice(world, "knockout", 1, null);
+}
+
+function foeWatches(world: World, me: Vehicle): boolean {
+  return world.vehicles.some((v) => isFoe(world, v, me) && canVehicleSee(world, v, me.pos));
 }

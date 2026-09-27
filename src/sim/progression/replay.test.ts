@@ -1,5 +1,5 @@
 import { describe, expect, it, onTestFinished } from 'vitest';
-import { SKILL_IDS, TARGET_DAYS, XP_RULES, XP_SOURCES, XP_TO_REACH } from '../../data/skills';
+import { SKILL_IDS, TARGET_DAYS, TARGET_TOLERANCE, XP_RULES, XP_SOURCES, XP_TO_REACH } from '../../data/skills';
 import { TIME } from '../../data/time';
 import { clockOf } from '../sun';
 import type { SkillId } from '../types';
@@ -85,6 +85,7 @@ describe('targetMisses', () => {
   };
   const day = (d: number) => d * TIME.turnsPerDay;
   const offOnly = (misses: string[]) => misses.filter((m) => !m.startsWith('social'));
+  const pastWindow = (target: number) => day(Math.ceil(target * (1 + TARGET_TOLERANCE)) + 1);
 
   it('passes a main skill that reaches each level on its target day', () => {
     const levels = [day(1), day(TARGET_DAYS.main[2]), day(5), day(TARGET_DAYS.main[4]), null];
@@ -95,12 +96,12 @@ describe('targetMisses', () => {
   it('flags a level reached too early or too late', () => {
     const early = targetMisses(curveWith('social', [1, 2, 3, day(TARGET_DAYS.main[4]), null]), 'trader', day(10));
     expect(early).toContain(`social level 2: day 0.0, target day ${TARGET_DAYS.main[2]}, too early`);
-    const late = targetMisses(curveWith('social', [day(1), day(TARGET_DAYS.main[2]), day(5), null, null]), 'trader', day(11));
+    const late = targetMisses(curveWith('social', [day(1), day(TARGET_DAYS.main[2]), day(5), null, null]), 'trader', pastWindow(TARGET_DAYS.main[4]));
     expect(late).toContain(`social level 4: never, target day ${TARGET_DAYS.main[4]}, too late`);
   });
 
   it('does not flag an unreached level whose window starts after the run', () => {
-    const misses = targetMisses(curveWith('social', [day(1), day(TARGET_DAYS.main[2]), day(5), day(TARGET_DAYS.main[4]), null]), 'trader', day(10));
+    const misses = targetMisses(curveWith('social', [day(1), day(TARGET_DAYS.main[2]), day(5), day(TARGET_DAYS.main[4]), null]), 'trader', pastWindow(TARGET_DAYS.off[2]));
     expect(misses.some((m) => m.startsWith('social level 5'))).toBe(false);
     expect(offOnly(misses).length).toBeGreaterThan(0); // off skills that never level still miss
   });
