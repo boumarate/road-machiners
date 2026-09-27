@@ -100,8 +100,10 @@ Robbery works by attack and loot. A robbery target passes all of these checks:
 - The scumbag sees it.
 - It is not already hostile.
 - It has loot by `hasLoot()`.
-- Its visible weapon strength is below the scumbag's own.
+- Its perceived danger is below the scumbag's own danger times its boldness.
 - Both are outside guard range of every town gate.
+
+Danger is firepower times toughness, as the truck looks now. Firepower is the sum of its working guns. Toughness is the current HP of its cab, chassis and armor. So a tank scores above a scout, and a half-beaten tank scores about half. Damage is visible, but only roughly: perceived danger is the true danger times a random factor, rolled once per sighting with world RNG. Boldness comes from traits. Scumbag raises it, and coward lowers it. The same danger score drives the threat check in fight or flee.
 
 Rob pushes a fight goal with the reason "rob cargo" and starts a feud with the target. Both sides then run the fight rules. A beaten player is knocked out, and the loot drops into a stock. A beaten NPC becomes a wreck. Whoever reaches the stock first scavenges it. The rob goal pops when the target is gone or the feud ends, and the resume decision follows. The scumbag keeps its faction, so town guards and other NPCs judge it by its actions.
 
