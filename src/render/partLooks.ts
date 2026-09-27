@@ -4,10 +4,26 @@
 import type { ModelName } from '../three/render/models';
 import { hashStr } from './noise';
 
-// Parts with no model of their own. The truck body draws them: the cab zone is the cab.
-// Chassis drawn from one base model, with kit parts on its row surfaces. The rest still use the zone cell pieces.
-export const BASE_MODELS: Partial<Record<string, ModelName>> = { scout: 'base_scout', van: 'base_van', longbed: 'base_longbed', hauler: 'base_hauler', tractor: 'base_tractor', wagon: 'base_wagon', carrier: 'base_carrier', buggy: 'base_buggy', courier: 'base_courier' };
+// The base model each chassis is drawn from. Kit parts stand on its row surfaces.
+const BASE_MODELS: Record<string, ModelName> = {
+  scout: 'base_scout',
+  hauler: 'base_hauler',
+  buggy: 'base_buggy',
+  wagon: 'base_wagon',
+  courier: 'base_courier',
+  van: 'base_van',
+  longbed: 'base_longbed',
+  carrier: 'base_carrier',
+  tractor: 'base_tractor',
+};
 
+export function baseModel(chassisId: string): ModelName {
+  const base = BASE_MODELS[chassisId];
+  if (!base) throw new Error(`Chassis ${chassisId} has no base model in BASE_MODELS`);
+  return base;
+}
+
+// Parts with no model of their own. The base model draws them: the cab.
 export const BODY_PARTS: ReadonlySet<string> = new Set(['cab']);
 
 export const PART_MODELS: Record<string, ModelName> = {
