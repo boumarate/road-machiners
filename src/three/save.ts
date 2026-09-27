@@ -64,10 +64,13 @@ function isWorld(value: unknown): value is Omit<World, 'terrain'> {
 export function saveWorld(storage: Storage, world: World, interval: number): void {
   if (!Number.isInteger(interval) || interval <= 0) throw new Error('Invalid save interval');
   if ((world.turn - 1) % interval !== 0) return;
+  // A dead run keeps its last save, so the player can load it.
+  if (world.player.state === 'dead') return;
   writeSave(storage, world);
 }
 
 export function writeSave(storage: Storage, world: World): void {
+  if (world.player.state === 'dead') throw new Error('Cannot save a world whose player is dead');
   const { terrain: _terrain, ...saved } = world;
   // JSON writes a typed array as an object keyed by index, so explored goes out as a plain list.
   const player = { ...saved.player, explored: Array.from(saved.player.explored) };

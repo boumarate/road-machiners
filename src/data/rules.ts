@@ -58,10 +58,14 @@ export const RULES = {
   maxKillWrecks: 12, // oldest wrecks from kills are cleared past this, so obstacles do not pile up
 
   // Supplies, per turn
-  suppliesPerTurn: 0.03, // at base heat; a daytime Bowl to Nose crossing uses under 60% of the starting supplies, leaving room for stops
+  suppliesPerTurn: 0.015, // at base heat; a full load lasts about 550 daytime turns, enough to explore off the roads
   suppliesCap: 20,
   starveDamage: 5, // character health lost per turn without supplies
+  starveFloor: 30, // starving stops here, so only cab damage can kill
   maxHealth: 100,
+  healPerTurn: 1, // health a parked player with supplies regains per turn; from the starve floor to full in 70 turns
+  healSupplies: 0.01, // supplies spent per turn of healing, on top of the normal drain
+  townHealMult: 5, // healing multiplier at a town, where the driver rests in a bed
 
   // Progress
   xpPerLevel: 100, // level n needs n * xpPerLevel more
@@ -76,4 +80,5 @@ export const RULES = {
   defeatHealth: 50,
   defeatClearRadius: 15, // robbers leave the truck after the fight
   defeatSupplies: 4, // enough to survive the walk back after patching up
+  knockoutMaxTurns: 30, // a knockout ends after this many turns even if a hostile idles in sight
 };

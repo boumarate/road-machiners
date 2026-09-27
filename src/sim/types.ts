@@ -154,6 +154,8 @@ export type Player = {
   storage: PartInstance[]; // spare parts kept in town garages, usable in any town
   costBasis: Record<string, number>; // average paid per unit of each good, for trade XP
   knockouts: number;
+  state: 'active' | 'knockedOut' | 'dead';
+  knockoutTurns: number; // turns spent in the current knockout
   explored: Uint8Array; // fog of war: tile y * world.size + x, 1 once seen
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision
   contacts: Contact[]; // vehicles detected beyond sight; refreshed by refreshVision
@@ -186,6 +188,9 @@ export type GameEvent =
   | { t: 'discover'; location: string }
   | { t: 'supply'; what: string; text: string }
   | { t: 'defeat' }
+  | { t: 'death' }
+  | { t: 'knockout' }
+  | { t: 'wake' }
   | { t: 'job'; vehicle: string; job: Job; outcome: 'started' | 'done' | 'cancelled' }
   | { t: 'breakdown'; vehicle: string; part: string }
   | { t: 'searched'; stock: string } // the player finished searching a stock; its loot can now be taken

@@ -66,7 +66,9 @@ describe('trade', () => {
 
 describe('garage', () => {
   it('buys supplies up to the cap', () => {
-    const w = buySupply(startAtBowl(), 'supplies', RULES.suppliesCap - 12);
+    const start = startAtBowl();
+    start.player.supplies = 12;
+    const w = buySupply(start, 'supplies', RULES.suppliesCap - 12);
     expect(w.player.supplies).toBe(RULES.suppliesCap);
     expect(() => buySupply(w, 'supplies', 1)).toThrow();
   });
@@ -114,16 +116,18 @@ describe('supplies', () => {
   it('drains suppliesPerTurn times heat over ten turns', () => {
     const w = emptyWorld();
     const heat = heatAt(w, w.vehicles[0].pos);
+    const before = w.player.supplies;
     for (let i = 0; i < 10; i++) consumeSupplies(w);
-    expect(w.player.supplies).toBeCloseTo(12 - 10 * RULES.suppliesPerTurn * heat);
+    expect(w.player.supplies).toBeCloseTo(before - 10 * RULES.suppliesPerTurn * heat);
   });
 
   it('survival cuts use', () => {
     const w = emptyWorld();
     const heat = heatAt(w, w.vehicles[0].pos);
     w.player.skills.survival = 2;
+    const before = w.player.supplies;
     consumeSupplies(w);
-    expect(12 - w.player.supplies).toBeLessThan(RULES.suppliesPerTurn * heat);
+    expect(before - w.player.supplies).toBeLessThan(RULES.suppliesPerTurn * heat);
   });
 });
 
@@ -225,12 +229,13 @@ describe('defeat', () => {
     expect(w.events.some((e) => e.t === 'defeat')).toBe(true);
   });
 
-  it('a broke, starving player can recover without fuel', () => {
+  it('a broke, starving player weakens to the starve floor without a knockout', () => {
     let w = emptyWorld({ x: 30, y: 30 });
     Object.assign(w.player, { fuel: 0, supplies: 0, money: 0 });
     for (let i = 0; i < 20; i++) w = endTurn(w);
-    expect(w.player.knockouts).toBe(1);
-    expect(w.player.fuel).toBe(0);
+    expect(w.player.health).toBe(RULES.starveFloor);
+    expect(w.player.state).toBe('active');
+    expect(w.player.knockouts).toBe(0);
     expect(corePart(w.vehicles[0], 'cab').hp).toBeGreaterThan(0);
   });
 

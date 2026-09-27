@@ -1,6 +1,6 @@
 # Defeat and rescue
 
-**Status:** planning
+**Status:** executing
 **Branch:** defeat-rescue
 **Worktree:** .worktrees/defeat-rescue
 **Goal:** In the browser, a lost fight shows raiders looting the player's truck, the stripped truck crawls, and a passing trader or scavenger tows it to town for a fee on debt. Health at 0 ends the run. The user confirms the loop in play.

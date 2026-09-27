@@ -1,5 +1,7 @@
 // New game setup for the player. VITE_START_KIT in .env picks the kit.
 
+import { RULES } from './rules';
+
 export type StartKit = {
   name: string;
   chassis: string;
@@ -21,7 +23,7 @@ export const START_KITS: Record<string, StartKit> = {
     storage: [],
     money: 1500,
     fuel: 30,
-    supplies: 12,
+    supplies: RULES.suppliesCap,
     cargo: { scrap: 2, parts: 2 },
     costBasis: { scrap: 10 },
   },
@@ -33,7 +35,7 @@ export const START_KITS: Record<string, StartKit> = {
     storage: ['plates', 'cage', 'mg'],
     money: 1500,
     fuel: 60,
-    supplies: 12,
+    supplies: RULES.suppliesCap,
     cargo: { scrap: 2 },
     costBasis: { scrap: 10 },
   },

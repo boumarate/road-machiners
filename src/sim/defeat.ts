@@ -9,9 +9,17 @@ import { removeAllGoods, removeSpareParts } from "./inventory";
 import type { World } from "./types";
 import { dist } from "./vec";
 
+// Health at 0 ends the run.
+export function checkDeath(world: World): void {
+  const p = world.player;
+  if (p.health > 0 || p.state === "dead") return;
+  p.state = "dead";
+  world.events.push({ t: "death" });
+}
+
 export function checkDefeat(world: World): void {
   const me = playerVehicle(world);
-  if (corePart(me, "cab").hp > 0 && world.player.health > 0) return;
+  if (world.player.state === "dead" || corePart(me, "cab").hp > 0) return;
   const p = world.player;
   const lost = Math.floor(p.money * RULES.defeatMoneyLoss);
   p.money -= lost;

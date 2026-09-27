@@ -23,6 +23,9 @@ export function consumeVehicleSupplies(world: World, vehicle: Vehicle): void {
   const heat = heatAt(world, vehicle.pos);
   resources.supplies = Math.max(0, resources.supplies - RULES.suppliesPerTurn * use * heat);
   if (resources.supplies > 0) return;
-  resources.health = Math.max(0, resources.health - RULES.starveDamage);
-  if (vehicle.id === world.player.vehicleId) world.events.push({ t: 'supply', what: 'supplies', text: `Out of supplies: health -${RULES.starveDamage}` });
+  // Starving only weakens a driver down to the floor. Health already below it stays as it is.
+  const lost = Math.max(0, Math.min(RULES.starveDamage, resources.health - RULES.starveFloor));
+  if (lost === 0) return;
+  resources.health -= lost;
+  if (vehicle.id === world.player.vehicleId) world.events.push({ t: 'supply', what: 'supplies', text: `Out of supplies: health -${lost}` });
 }

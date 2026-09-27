@@ -10,7 +10,8 @@ import { generateObstacles } from './mapgen';
 import { buildTerrain } from './terrain';
 import { planNpcOrders } from './ai';
 import { assignAutoOrders, fireWeapons, isHostile, resolveDestroyed } from './combat';
-import { checkDefeat } from './defeat';
+import { checkDeath, checkDefeat } from './defeat';
+import { healPlayer } from './health';
 import { fireGuards } from './guards';
 import { discoverSites, useOasis } from './locations';
 import { resolveMovement } from './movement';
@@ -60,6 +61,8 @@ export function newWorld(seed: number, kit: StartKit): World {
       storage: [],
       costBasis: { ...kit.costBasis },
       knockouts: 0,
+      state: 'active',
+      knockoutTurns: 0,
       explored: new Uint8Array(REGION.size * REGION.size),
       visible: [],
       contacts: [],
@@ -138,6 +141,7 @@ export function endTurn(
   world: World,
   move: (w: World) => void = resolveMovement,
 ): World {
+  if (world.player.state === 'dead') throw new Error('The player is dead; no more turns run');
   return timed('turn', () => update(world, (w) => {
     w.turn++;
     advanceWeather(w);
@@ -153,11 +157,13 @@ export function endTurn(
     fireWeapons(w);
     fireGuards(w);
     consumeSupplies(w);
+    healPlayer(w);
     leakFuel(w);
     resolveDestroyed(w);
     resolveNpcActivities(w);
     discoverSites(w);
     useOasis(w);
+    checkDeath(w);
     checkDefeat(w);
     spawnNpcs(w);
     refreshVision(w);

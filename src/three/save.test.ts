@@ -93,6 +93,18 @@ describe('local game save', () => {
     expect(loadWorld(storage)?.turn).toBe(41);
   });
 
+  it('never saves a dead world', () => {
+    const storage = makeStorage();
+    const world = newWorld(1337, startKit('standard'));
+    saveWorld(storage, { ...world, turn: 21 }, 20);
+    const previous = storage.getItem('korovan.save');
+    const dead = { ...world, turn: 41, player: { ...world.player, health: 0, state: 'dead' as const } };
+    saveWorld(storage, dead, 20);
+    expect(storage.getItem('korovan.save')).toBe(previous);
+    expect(() => writeSave(storage, dead)).toThrow(/dead/);
+    expect(storage.getItem('korovan.save')).toBe(previous);
+  });
+
   it('rejects an invalid interval instead of skipping saves', () => {
     const storage = makeStorage();
     const world = newWorld(1337, startKit('standard'));

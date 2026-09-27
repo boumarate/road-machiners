@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TerrainTypeId } from '../data/terrain';
 import { addVehicle, emptyWorld, editableTerrain } from './testkit';
-import { mountedParts } from './grid';
+import { corePart, mountedParts } from './grid';
 import { tileAt } from './terrain';
 import type { Vehicle, World } from './types';
 import { applyWear } from './wear';
@@ -81,6 +81,18 @@ describe('wear', () => {
     expect(a.events).toEqual(b.events);
     expect(mountedParts(a.vehicles[0])).toEqual(mountedParts(b.vehicles[0]));
     expect(a.events.some((e) => e.t === 'breakdown')).toBe(true);
+  });
+
+  it('never wears or breaks the cab below 1 HP', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const w = emptyWorld();
+      w.rngState = seed;
+      const me = w.vehicles[0];
+      for (const p of mountedParts(me)) p.hp = 1;
+      drive(me, 2000); // pushes wear and breakdown odds to their clamp
+      applyWear(w);
+      expect(corePart(me, 'cab').hp).toBe(1);
+    }
   });
 
   it('wears NPCs too', () => {

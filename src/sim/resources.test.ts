@@ -28,6 +28,22 @@ describe('NPC upkeep', () => {
     expect(w.player.health).toBe(RULES.maxHealth);
   });
 
+  it('starves the player down to the floor and no lower', () => {
+    const w = emptyWorld();
+    Object.assign(w.player, { supplies: 0, health: RULES.starveFloor + 1 });
+    consumeSupplies(w);
+    expect(w.player.health).toBe(RULES.starveFloor);
+    consumeSupplies(w);
+    expect(w.player.health).toBe(RULES.starveFloor);
+  });
+
+  it('never raises health that is already below the starve floor', () => {
+    const w = emptyWorld();
+    Object.assign(w.player, { supplies: 0, health: RULES.starveFloor - 10 });
+    consumeSupplies(w);
+    expect(w.player.health).toBe(RULES.starveFloor - 10);
+  });
+
   it('consumes supplies on NPCs as well as the player', () => {
     const w = emptyWorld();
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });
