@@ -591,6 +591,11 @@ function baseLevel(base: ModelName, item: GridItem, level: 'row' | 'floor'): num
   return Math.max(...itemCells(item).map((c) => socket(base, `${level}${c.y}`).y));
 }
 
+// The front edge of the surface under an item: the rearmost row socket x over its rows, in body meters.
+function baseFront(base: ModelName, item: GridItem): number {
+  return Math.min(...itemCells(item).map((c) => socket(base, `row${c.y}`).x));
+}
+
 // The highest row surface of a base, in body meters: the cab roof on a pickup.
 function baseTop(v: Vehicle, base: ModelName): number {
   return Math.max(...baseGrid(v.chassisId).cells.map((_, y) => socket(base, `row${y}`).y));
@@ -617,13 +622,16 @@ function toneOf(item: GridItem): number {
 }
 
 // Center of an item's cells at height y, with the turn and base stretch for its rotation.
-// An item standing on the cab roof moves back until its front edge is on the roof, behind the raked windshield.
+// An item standing on a row surface moves back until its front edge is behind the surface's front edge, so it never overhangs a raked windshield.
 function footprint(v: Vehicle, item: GridItem, y: number): Placement {
   const cells = itemCells(item);
   const first = cellCenter(v.chassisId, cells[0].x, cells[0].y);
   const last = cellCenter(v.chassisId, cells[cells.length - 1].x, cells[cells.length - 1].y);
   const pos = new THREE.Vector3((first.x + last.x) / 2, y, (first.z + last.z) / 2);
-  if (!BASE_MODELS[v.chassisId] && y === bodyOf(v.chassisId).half.y + zoneTop('cab')) pos.x -= Math.max(0, pos.x + (itemSize(item).h * CELL.along) / 2 - roofFrontEdge(v));
+  const base = BASE_MODELS[v.chassisId];
+  const halfLength = (itemSize(item).h * CELL.along) / 2;
+  if (base && y === baseLevel(base, item, 'row')) pos.x -= Math.max(0, pos.x + halfLength - baseFront(base, item));
+  if (!base && y === bodyOf(v.chassisId).half.y + zoneTop('cab')) pos.x -= Math.max(0, pos.x + halfLength - roofFrontEdge(v));
   if (item.rot === 0) return { pos, yaw: 0, scale: new THREE.Vector3(1, 1, 1) };
   return { pos, yaw: ROT_YAW, scale: new THREE.Vector3(CELL.across / CELL.along, 1, CELL.along / CELL.across) };
 }

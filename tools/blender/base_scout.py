@@ -36,6 +36,8 @@ CAB_BACK = G.row_x(4.5)
 BAY_FRONT = G.row_x(0.5)  # the engine cutout covers rows 1 and 2, columns 1 and 2
 BAY_LEFT = G.col_y(0.5)
 BAY_RIGHT = G.col_y(2.5)
+RAKE_TOP = CAB_FRONT - 0.36  # the windshield top
+ROOF_FRONT = RAKE_TOP - 0.04  # the roof's flat top ends here, so items on the roof stay behind it
 BED_WALL = 0.1
 LAMP_Y = (0.68, 1.12)  # headlight span across, from the center line
 
@@ -76,13 +78,13 @@ def cab(kit: Kit) -> None:
     """A boxy regular cab: painted doors to the beltline, one dark glass band, a raked windshield and a trim roof."""
     kit.box("doors", (CAB_FRONT - CAB_BACK, 2 * SIDE, G.top - FLOOR), ((CAB_FRONT + CAB_BACK) / 2, 0, (G.top + FLOOR) / 2), "paint")
     under_roof = ROOF - ROOF_T
-    rake_top = CAB_FRONT - 0.36
+    rake_top = RAKE_TOP
     prism(kit, "glass", [(CAB_BACK + 0.04, G.top), (CAB_FRONT - 0.02, G.top), (rake_top, under_roof), (CAB_BACK + 0.04, under_roof)], -SIDE + 0.04, SIDE - 0.04, "glass")
     for s, (y0, y1) in (("l", (SIDE - 0.06, SIDE)), ("r", (-SIDE, -SIDE + 0.06))):
         prism(kit, f"a_pillar_{s}", [(CAB_FRONT - 0.1, G.top), (CAB_FRONT, G.top), (rake_top, under_roof), (rake_top - 0.1, under_roof)], y0, y1, "paint")
         prism(kit, f"c_pillar_{s}", [(CAB_BACK, G.top), (CAB_BACK + 0.22, G.top), (CAB_BACK + 0.18, under_roof), (CAB_BACK, under_roof)], y0, y1, "paint")
     kit.box("back_wall", (0.06, 2 * SIDE, under_roof - G.top), (CAB_BACK + 0.03, 0, (G.top + under_roof) / 2), "paint")
-    prism(kit, "roof", [(CAB_BACK, under_roof), (rake_top + 0.02, under_roof), (rake_top - 0.04, ROOF), (CAB_BACK, ROOF)], -SIDE, SIDE, "trim")
+    prism(kit, "roof", [(CAB_BACK, under_roof), (rake_top + 0.02, under_roof), (ROOF_FRONT, ROOF), (CAB_BACK, ROOF)], -SIDE, SIDE, "trim")
 
 
 def bed(kit: Kit) -> None:
@@ -104,7 +106,7 @@ def main() -> None:
     hood(kit)
     cab(kit)
     bed(kit)
-    level_sockets(kit, G, "row", [HOOD_TOP] * 3 + [ROOF] * 2 + [FLOOR] * 3)
+    level_sockets(kit, G, "row", [HOOD_TOP] * 3 + [ROOF] * 2 + [FLOOR] * 3, fronts={3: ROOF_FRONT})
     level_sockets(kit, G, "floor", [FLOOR] * 3 + [G.top] * 2 + [FLOOR] * 3)
     check_base(kit, "base_scout", G)
     kit.export("base_scout", args, view_size=6.5)

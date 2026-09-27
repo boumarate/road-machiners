@@ -82,12 +82,16 @@ def flare(kit: Kit, name: str, g: Grid, wx: float, hub_z: float, radius: float, 
     prism(kit, name, outer + list(reversed(inner)), y0, y1, "under")
 
 
-def level_sockets(kit: Kit, g: Grid, prefix: str, heights: list[float]) -> None:
-    """One <prefix><y> socket per grid row at heights[y]: row for where kit parts stand, floor for core parts and mounted engines."""
+def level_sockets(kit: Kit, g: Grid, prefix: str, heights: list[float], fronts: dict[int, float] | None = None) -> None:
+    """One <prefix><y> socket per grid row at heights[y]: row for where kit parts stand, floor for core parts and mounted engines.
+
+    The socket's X is the front edge of the surface on that row, the row's own front edge unless fronts gives a lower one.
+    The view moves an item back until its front edge is behind it, so nothing overhangs a raked windshield.
+    """
     if len(heights) != g.rows:
         raise ValueError(f"{len(heights)} {prefix} heights for {g.rows} rows")
     for y, z in enumerate(heights):
-        kit.socket(f"{prefix}{y}", (g.row_x(y), 0, z))
+        kit.socket(f"{prefix}{y}", ((fronts or {}).get(y, g.row_x(y - 0.5)), 0, z))
 
 
 def check_base(kit: Kit, name: str, g: Grid) -> None:
