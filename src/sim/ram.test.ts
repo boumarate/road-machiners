@@ -2,7 +2,10 @@ import { partDef } from '../data/parts';
 import { describe, expect, it } from 'vitest';
 import { corePart, mountedItems, mountedParts } from './grid';
 import { applyCrash } from './movement';
-import { addVehicle, emptyWorld } from './testkit';
+import { RULES } from '../data/rules';
+import { thinkNpc } from './npc-activities';
+import { addState, stateOf } from './states';
+import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { GameEvent, Vehicle, World } from './types';
 
 const FULL_SPEED = 6; // tiles per turn, a scout at top speed
@@ -94,5 +97,58 @@ describe('slow bumps', () => {
     const before = new Map(mountedParts(me).map((p) => [p.id, p.hp]));
     applyCrash(w, me, null, 'rock', { x: me.pos.x + 1, y: me.pos.y }, 2);
     for (const p of mountedParts(me)) expect(p.hp).toBeGreaterThan(before.get(p.id)! * 0.8);
+  });
+});
+
+describe('rams as attacks', () => {
+  // A trader rams a scavenger nose first, with a scavenger mate watching from nearby.
+  function ramSetup(): { w: World; trader: Vehicle; victim: Vehicle; mate: Vehicle } {
+    const w = emptyWorld({ x: 80, y: 80 });
+    const trader = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 40, y: 40 }, 0);
+    trader.brain = npcBrain('trader', trader.pos, ['trader']);
+    const victim = addVehicle(w, 'scavengers', 'hauler', ['stockEngine'], { x: 41.6, y: 40 }, Math.PI / 2);
+    victim.brain = npcBrain('scavenger', victim.pos, ['scavenger']);
+    const mate = addVehicle(w, 'scavengers', 'hauler', ['stockEngine'], { x: 44, y: 44 }, 0);
+    mate.brain = npcBrain('scavenger', mate.pos, ['scavenger']);
+    return { w, trader, victim, mate };
+  }
+
+  it('a damaging ram gives the victim and its mate a feud and an attacked decision on the rammer', () => {
+    const { w, trader, victim, mate } = ramSetup();
+    applyCrash(w, trader, victim, victim.id, victim.pos, FULL_SPEED);
+    expect(total(crashOf(w).hitsB)).toBeGreaterThan(0);
+    expect(stateOf(w, 'feud', victim.id, trader.id)).not.toBeNull();
+    expect(stateOf(w, 'feud', mate.id, trader.id)).not.toBeNull();
+    expect(victim.brain!.attackers).toEqual({ [trader.id]: false });
+    thinkNpc(w, victim);
+    expect(victim.brain!.attackers).toEqual({ [trader.id]: true });
+  });
+
+  it('the player ramming an NPC is an attack too', () => {
+    const { w, victim } = ramSetup();
+    const me = w.vehicles[0];
+    me.pos = { x: 41.6, y: 38.4 };
+    applyCrash(w, me, victim, victim.id, victim.pos, FULL_SPEED);
+    expect(stateOf(w, 'feud', victim.id, me.id)).not.toBeNull();
+    expect(victim.brain!.attackers).toEqual({ [me.id]: false });
+  });
+
+  it('a slow bump with no damage is no attack', () => {
+    const { w, trader, victim } = ramSetup();
+    applyCrash(w, trader, victim, victim.id, victim.pos, RULES.collisionMinImpact * 0.9);
+    expect(crashOf(w).hitsB).toEqual([]);
+    expect(w.states).toEqual([]);
+    expect(victim.brain!.attackers).toEqual({});
+  });
+
+  it('a tower and the player it tows never attack each other by contact', () => {
+    const { w, trader } = ramSetup();
+    const me = w.vehicles[0];
+    me.pos = { x: 38.4, y: 40 };
+    addState(w, 'tow', trader.id, me.id, { kind: 'tow', town: 'bowl', fee: 50, hitched: true });
+    applyCrash(w, me, trader, trader.id, trader.pos, FULL_SPEED);
+    expect(total(crashOf(w).hitsB)).toBeGreaterThan(0);
+    expect(stateOf(w, 'feud', trader.id, me.id)).toBeNull();
+    expect(trader.brain!.attackers).toEqual({});
   });
 });

@@ -4,6 +4,7 @@ import { RULES } from '../data/rules';
 import { skillBonus } from '../data/skills';
 import { burnFuel, getResources } from './resources';
 import { laneCount, ramMult, sideToward, walkLane, type PartHit } from './armor';
+import { noteCollision } from './combat';
 import { vehicleMass } from './mass';
 import { isDriveObstacle } from './mapgen';
 import { vehicleStats, type VehicleStats } from './stats';
@@ -120,6 +121,7 @@ export function applyCrash(world: World, a: Vehicle, b: Vehicle | null, what: st
   if (b) {
     a.lastHitBy = b.id;
     b.lastHitBy = a.id;
+    noteCollision(world, a, b, hitsA, hitsB);
   }
   world.events.push({ t: 'collision', a: a.id, b: what, hitsA, hitsB });
 }

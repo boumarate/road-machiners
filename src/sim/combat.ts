@@ -420,20 +420,40 @@ function recordAttack(world: World, shooter: Vehicle, target: Vehicle): void {
   }
 }
 
+// A collision that damages a vehicle is an attack on it by the other vehicle, like a shot. The event does not
+// name a striker, so when both take damage each attacked the other, and both feuds start from the hostility
+// before the crash. A slow bump deals no damage and is no attack. A tower and the truck it tows or offers to tow
+// never attack each other by contact.
+export function noteCollision(world: World, a: Vehicle, b: Vehicle, hitsA: PartHit[], hitsB: PartHit[]): void {
+  if (towPair(world, a, b)) return;
+  const attacks = ([[b, a, hitsA], [a, b, hitsB]] as const).filter(([, , hits]) => hits.some((h) => h.damage > 0));
+  const calm = !isHostile(world, a, b);
+  for (const [rammer, victim] of attacks) recordAttack(world, rammer, victim);
+  if (calm) for (const [rammer, victim] of attacks) startFeuds(world, rammer, victim);
+}
+
+function towPair(world: World, a: Vehicle, b: Vehicle): boolean {
+  return stateOf(world, 'tow', a.id, b.id) !== null || stateOf(world, 'tow', b.id, a.id) !== null;
+}
+
 // A shot at a vehicle that was not hostile starts a feud with it and its nearby faction mates.
 function provoke(world: World, shooter: Vehicle, target: Vehicle): void {
-  if (isHostile(world, target, shooter)) return;
+  if (!isHostile(world, target, shooter)) startFeuds(world, shooter, target);
+}
+
+function startFeuds(world: World, shooter: Vehicle, target: Vehicle): void {
   for (const v of world.vehicles) {
-    const joins =
-      v.id === target.id ||
-      (v.faction === target.faction &&
-        dist(v.pos, target.pos) <= SPAWN.neighborHelp &&
-        canVehicleSee(world, v, shooter.pos));
-    if (joins && v.faction !== "player" && !stateOf(world, "feud", v.id, shooter.id)) {
-      addState(world, "feud", v.id, shooter.id, { kind: "feud", robbery: false });
-      world.events.push({ t: "hostile", vehicle: v.id, against: shooter.id });
-    }
+    if (!joinsFeud(world, v, shooter, target) || stateOf(world, "feud", v.id, shooter.id)) continue;
+    addState(world, "feud", v.id, shooter.id, { kind: "feud", robbery: false });
+    world.events.push({ t: "hostile", vehicle: v.id, against: shooter.id });
   }
+}
+
+// The target and its faction mates nearby that see the shooter. The player decides its own hostility.
+function joinsFeud(world: World, v: Vehicle, shooter: Vehicle, target: Vehicle): boolean {
+  if (v.faction === "player") return false;
+  if (v.id === target.id) return true;
+  return v.faction === target.faction && dist(v.pos, target.pos) <= SPAWN.neighborHelp && canVehicleSee(world, v, shooter.pos);
 }
 
 // NPCs with a broken cab turn into wreck obstacles. The player's broken cab is a knockout.
