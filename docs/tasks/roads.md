@@ -15,7 +15,7 @@
 ## Design
 Road grading sets the ground on the road surface and in its margin after elevation. The surface holds `TERRAIN.roadGrade` between corners. The margin holds `TERRAIN.bankGrade`, so hills become cuttings and dips become banks. The graded ground stays as close to the ungraded ground as those grades allow. Crossings, junctions and sites share one graded surface.
 
-Roads are drawn as meshes laid on the ground, like pads, with uneven width, worn edges and wandering ruts. Road shapes gain gentle bends.
+Roads are drawn as meshes laid on the ground, like pads, with uneven width, worn edges and wandering ruts. The ground texture no longer paints roads. Road shapes gain gentle bends. A bend sways sideways between two given road points and is zero at both, so junctions and site entries stay put. The stretch over Canyon Bridge stays straight.
 
 A crossing is one worn patch. Ruts end at its edge.
 
@@ -28,9 +28,10 @@ Landmarks differ by area. Power-line poles run along the roads of one area. Othe
 
 ## Plan
 - PH1 — Road grading. `src/sim/road-grade.ts`.
-- PH2 — Road meshes with uneven width, worn edges, ruts and bends.
-- PH3 — Crossing patches.
+- PH2 — Road meshes with uneven width, worn edges, ruts and bends. Done: `src/three/render/roads.ts` draws the strips, and `scaleRoad` in `src/data/region.ts` bends each stretch between its given points.
+- PH3 — Crossing patches. Done in `src/three/render/roads.ts`.
 - PH4 — Landmarks per area.
 
 ## Verify
 - PH1: `src/sim/road-grade.test.ts` checks IV1 and IV2 for three seeds. Road grades were up to 1.5 before and are at most 0.12 now. Terrain building takes about 250 ms longer. With cheap graded roads, fewer drivers leave the road, so the route variety test in `src/sim/path.test.ts` now plans 20 drivers instead of 10 to find three ways.
+- PH2 and PH3: road strips end at site edges and at the Canyon Bridge gap. Strip heights follow the drawn ground triangles, not the bilinear sim height, so strips do not sink into tile creases. `src/three/render/roads.test.ts` checks crossing detection. Bends every 3 tiles slowed terrain building, since the road index held 886 segments, so bends now place a point every 6 tiles. Under the same machine load, boot is 2.94 s against 2.87 s on main. The new map changed which random rolls some NPC tests got, so those tests now force the decisions they depend on. One corridor route in `src/sim/path.test.ts` became 9% longer than the reference while its cost stays within 5%, so its length tolerance is 10%.

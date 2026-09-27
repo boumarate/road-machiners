@@ -5,7 +5,9 @@ import {
   TERRAIN_MARGIN,
   type PaintCanvas,
 } from "../../render/groundPaint";
+import type { Terrain } from "../../sim/terrain";
 import type { World } from "../../sim/types";
+import { addRoads } from "./roads";
 import type { RenderScope } from "./scope";
 
 const S = PHYSICS.metersPerTile;
@@ -35,6 +37,23 @@ function paintTexture(w: World): THREE.CanvasTexture {
   return texture;
 }
 
+// Height of the drawn ground at a map point. Each tile is two triangles split on the diagonal from its
+// (x, y + 1) corner to its (x + 1, y) corner, as the chunk planes are built. Meshes laid on the ground use
+// this rather than the sim's bilinear height, so they neither float over nor sink under a tile's crease.
+export function meshHeightAt(t: Terrain, x: number, y: number): number {
+  const i = Math.min(Math.max(Math.floor(x), 0), t.size - 1);
+  const j = Math.min(Math.max(Math.floor(y), 0), t.size - 1);
+  const fx = Math.min(Math.max(x - i, 0), 1);
+  const fy = Math.min(Math.max(y - j, 0), 1);
+  const n = t.size + 1;
+  const a = t.heights[j * n + i];
+  const b = t.heights[(j + 1) * n + i];
+  const c = t.heights[(j + 1) * n + i + 1];
+  const d = t.heights[j * n + i + 1];
+  if (fx + fy <= 1) return a + (d - a) * fx + (b - a) * fy;
+  return c + (b - c) * (1 - fx) + (d - c) * (1 - fy);
+}
+
 export type TerrainChunk = {
   x: number;
   y: number;
@@ -44,8 +63,10 @@ export type TerrainChunk = {
 };
 
 // Terrain chunks register with the scope, so only chunks near the view are drawn. Returned for the fog,
-// which greys out the ground per corner.
-export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
+// which greys out the ground per corner. Roads lie on the ground but grey like props, so they go to the
+// prop scope.
+export function terrainMesh(w: World, scope: RenderScope, props: RenderScope): TerrainChunk[] {
+  addRoads(w.terrain, props);
   const chunks: TerrainChunk[] = [];
   const material = new THREE.MeshLambertMaterial({ map: paintTexture(w) });
   for (let y = 0; y < w.size; y += TERRAIN_CHUNK)

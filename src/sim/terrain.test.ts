@@ -42,8 +42,8 @@ function terrainHash(t: Terrain): string {
 
 describe("terrain generation", () => {
   it("keeps the exact heights and types of known seeds", () => {
-    expect(terrainHash(buildTerrain(1, REGION.size))).toBe("36fef6bd");
-    expect(terrainHash(buildTerrain(7, REGION.size))).toBe("b8fd88cd");
+    expect(terrainHash(buildTerrain(1, REGION.size))).toBe("952b4c67");
+    expect(terrainHash(buildTerrain(7, REGION.size))).toBe("f4ac495f");
   }, 30_000);
 
   it("finds the same road distance through the road index as over every road", () => {
@@ -67,7 +67,7 @@ describe('terrain variety', () => {
     for (let y = 0; y < t.size; y++) for (let x = 0; x < t.size; x++) {
       const point = { x: x + 0.5, y: y + 0.5 };
       const kind = t.types[y * t.size + x];
-      if (REGION.roads.some((r) => polylineDist(point, r) < REGION.roadWidth / 2)) expect(kind).toBe('road');
+      if (ROAD_INDEX.nearestWithin(point.x, point.y, REGION.roadWidth / 2) < REGION.roadWidth / 2) expect(kind).toBe('road');
       else if ([...REGION.towns, ...REGION.locations].some((s) => dist(point, s.pos) < s.radius + TERRAIN.types.siteMargin)) expect(kind).toBe('hardpan');
     }
   });
