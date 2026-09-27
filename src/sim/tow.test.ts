@@ -326,4 +326,18 @@ describe('emergency beacon', () => {
   it('starts off in a new world', () => {
     expect(emptyWorld().player.beacon).toBe(false);
   });
+
+  it('runs turns on its own while the beacon is on, the truck is parked and no offer is open', () => {
+    const s = stranded();
+    expect(autoRuns(s.w)).toBe(false);
+    const w = setBeacon(s.w, true);
+    playerVehicle(w).speed = 0;
+    expect(autoRuns(w)).toBe(true);
+    playerVehicle(w).speed = 1;
+    expect(autoRuns(w)).toBe(false);
+    playerVehicle(w).speed = 0;
+    expect(autoRuns(setMoveOrder(w, { kind: 'stopAt', dest: { x: 40, y: 40 } }))).toBe(false);
+    w.player.tow = { by: s.trader.id, town: 'bowl', fee: 10, hitched: false };
+    expect(autoRuns(w)).toBe(false);
+  });
 });

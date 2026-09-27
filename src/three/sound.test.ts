@@ -20,6 +20,9 @@ describe("stingOf", () => {
     expect(stingOf(events, "p")).toBeNull();
     expect(stingOf([{ t: "arrived", vehicle: "p" }], "p")).toBe("air-brake");
   });
+  it("plays the defeat cue on a knockout", () => {
+    expect(stingOf([{ t: "levelUp", level: 2 }, { t: "knockout" }], "p")).toBe("defeat");
+  });
 });
 
 describe("loopLevels", () => {

@@ -124,15 +124,25 @@ export function update(world: World, fn: (draft: World) => void): World {
   return draft;
 }
 
+// Whether player commands are allowed now. The UI checks it before issuing one.
+export function playerCanAct(world: World): boolean {
+  return world.player.state === 'active' && !world.player.tow?.hitched;
+}
+
 // Player commands need an awake, living driver who is not on a tow rope. Unhitch checks the rope itself.
 export function requireActivePlayer(world: World): void {
   if (world.player.state !== 'active') throw new Error(`Player is ${world.player.state}`);
   if (world.player.tow?.hitched) throw new Error('Player is towed');
 }
 
-// Turns run on their own while the player cannot act: knocked out, or towed.
+// Turns run on their own while the player cannot act, knocked out or towed. They also run while the player waits
+// on the beacon: parked with no move order and no offer open. A beacon wait is too many turns to end by hand.
 export function autoRuns(world: World): boolean {
-  return world.player.state === 'knockedOut' || world.player.tow?.hitched === true;
+  const p = world.player;
+  if (p.state === 'knockedOut' || p.tow?.hitched === true) return true;
+  const me = playerVehicle(world);
+  const parked = me.speed <= RULES.parkedSpeed && (me.order === null || me.order.kind === 'brake');
+  return p.state === 'active' && p.beacon && parked && p.tow === null;
 }
 
 // A player command: rejected unless the player is active and not towed, then applied like any update.

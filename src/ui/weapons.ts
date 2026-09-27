@@ -5,7 +5,7 @@ import { mountedParts } from "../sim/grid";
 import { vehicleStats, type MountedWeapon } from "../sim/stats";
 import type { Vehicle, World } from "../sim/types";
 import { playerSees } from "../sim/vision";
-import { setAutoFire, setWeaponOrder } from "../sim/world";
+import { playerCanAct, setAutoFire, setWeaponOrder } from "../sim/world";
 import { el, panel } from "./dom";
 import { meters } from "./units";
 import type { UiHost } from "./host";
@@ -61,7 +61,7 @@ export class WeaponPanel {
     const selected = this.host.selectedWeapon();
     const controls = el(
       "fieldset",
-      { disabled: phase !== null },
+      { disabled: phase !== null || !playerCanAct(w) },
       el(
         "div",
         { class: "weapon-tools" },

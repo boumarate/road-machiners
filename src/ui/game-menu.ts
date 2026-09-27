@@ -9,6 +9,16 @@ export type GameMenuActions = {
   isBusy: () => boolean;
 };
 
+// Boot loads the last save, so loading is a page reload.
+export function loadLastSave(): void {
+  window.location.reload();
+}
+
+export function startNewGame(clearSave: () => void): void {
+  clearSave();
+  window.location.reload();
+}
+
 export class GameMenu {
   private root = panel("game-menu", topRight());
   private saveButton = el("button", { onclick: () => this.save(), title: "Save the game now" }, "Save") as HTMLButtonElement;
@@ -36,12 +46,11 @@ export class GameMenu {
 
   private load(): void {
     if (!window.confirm("Load the last save? Progress since then is lost.")) return;
-    window.location.reload();
+    loadLastSave();
   }
 
   private newGame(): void {
     if (!window.confirm("Start a new game? The current save is deleted.")) return;
-    this.actions.clearSave();
-    window.location.reload();
+    startNewGame(this.actions.clearSave);
   }
 }

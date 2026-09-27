@@ -46,7 +46,7 @@ Each chassis has max speed, acceleration, braking and turn rates. Momentum carri
 
 A click is a waypoint to drive through. While moving, a close click brakes, a click about one turn of travel away holds speed, and a far click accelerates. From rest, a nearby click starts the truck slowly. A click behind it within throttle reach backs toward that point. A farther click is a course: the truck turns around and follows a route around obstacles over as many turns as it takes, so Space alone carries it there. A point it cannot reach sends it to the closest point it can reach. At rest the colored zones show one third red and two thirds green. Steering bends the path as far as the turn limit allows, without slowing down. After the waypoint, or with no order, the truck coasts on. Clicking your own truck brakes it. Shift-click stops on the point, driving carefully around corners.
 
-The truck plans a route around rocks, wrecks, parked vehicles and cliffs, preferring roads. The screen shows the planned path for the next turns.
+The truck plans a route around rocks, wrecks, parked vehicles and cliffs, preferring roads. Roads are six tiles wide. Every route planner weighs a road above its speed, since a road puts a driver where others can help. A far longer road detour still loses to open ground. The screen shows the planned path for the next turns.
 
 Crash damage grows with the square of impact speed, so a slow bump only scratches parts. The lighter truck takes the bigger share, so heavy trucks win rams. A ram part on the striking side takes the blow and hits harder. R toggles manual driving, which skips the route planner so the truck can ram. NPC drivers use the same steering and obstacle routing as the player. A stuck driver backs away before trying the route again. During normal travel, NPCs use reversing to turn their nose toward the route instead of following it rear-first.
 
@@ -58,11 +58,25 @@ An auto mode assigns every weapon a body shot at the nearest hostile.
 
 ## Defeat
 
-Losing a fight does not end the game, in Kenshi style.
+Losing a fight does not end the game, in Kenshi style. A loss starts a new story on real turns the player watches. There are no fade screens.
 
-The character is knocked out. Enemies loot the cargo and half the money. The character stays with the truck and keeps stats, skills and mounted parts. The robbers leave. The character patches the broken built-in parts and engine to barely working condition and must crawl back with no fuel.
+A broken cab knocks the player out while health is above 0. Every mounted part except the built-in ones, all goods and all spare parts drop into a wreck stock beside the truck. Money, fuel and supplies stay. Grudges against the player end.
 
-Later the enemies may also take or wreck the truck.
+While knocked out, turns run on their own and the player gives no orders. Looters search the stock. The player comes to when no hostile sees the truck, or after 30 turns. Broken built-in parts are patched to a quarter of their HP. What the looters left stays in the stock beside the truck.
+
+Raiders ignore a truck with nothing to take. A truck has loot when it holds goods, spare parts or mounted parts beyond the built-in ones. A grudge still makes a raider fight a stripped truck.
+
+A truck with no working engine, a broken transmission or an empty tank still moves at a crawl. The driver pushes it. Pushing burns no fuel, and a truck without a working engine makes no sound. A player truck that can only crawl is stranded.
+
+Traders and scavengers help a stranded player. One that sees the truck drives over, if it is not hostile and not in danger. It parks beside the truck and offers a tow to the nearest town it knows. The fee is a base price plus a price per tile of the route. The player accepts or refuses. Refusing, or driving away, ends the offer, and that driver never offers again.
+
+A towed truck hangs behind its tower and follows its path. The tower drives slower than its top speed. Turns run on their own while towed. The player can unhitch at any time for free. A tower that enters a fight or flees drops the tow for free. On arrival in town the tower takes the fee. Money can go below zero, and the HUD shows it as debt. A player in debt cannot buy anything, and sales pay the debt off.
+
+A stranded player can switch on an emergency beacon. Every vehicle within 250 tiles hears it, through hills. Traders and scavengers come as if they saw the truck, and the first to arrive makes the offer. Raiders hear it too, so a stripped truck calls safely and a truck with cargo draws raiders. Turns run on their own while the beacon calls and the truck is parked. The beacon switches off when the truck can drive again or gets towed.
+
+Health at 0 kills the player. The death screen offers Load last save and New game. A dead world is never saved. Cab damage costs health at half its amount, so a lost fight costs at most 30 health. A healthy driver dies on the fourth knockout without rest.
+
+A parked driver with supplies heals each turn, five times as fast in a town. Healing spends extra supplies. Starving takes health down to 30 and no lower, so only cab damage can kill. Wear and breakdowns never take the cab below 1 HP, so no knockout comes without an enemy.
 
 Losing a truck is one natural way to change trucks.
 
@@ -108,20 +122,20 @@ Scavengers collect finite salvage, sell cargo, and fight manageable hostiles or 
 
 Scavenging is a timed search: the truck parks at a stock and searches for turns in proportion to what the stock holds, with a progress bar. Moving the truck cancels the search. A finished search opens the stock beside the truck's grid, and the player drags in what they want. What they leave stays at the site for later. NPC scavengers take everything that fits. Landmark and convoy sites hold finite stock rolled at world creation: goods, parts and sometimes a spare mountable part. Destroyed NPCs leave a wreck with the same kind of stock. Their mounted parts join it at the HP they had; their built-in parts turn into the parts good instead. Collection takes only what fits and leaves the rest. Old wreck retirement removes their remaining stock. Empty sites do not regenerate.
 
-Town markets have fixed prices and unlimited stock and money. Initial NPC resources and the oasis are explicit sources. No offscreen catch-up grants are used. Player defeat retains its separate cargo-loss and enemy-despawn rules.
+Town markets have fixed prices and unlimited stock and money. Initial NPC resources and the oasis are explicit sources. No offscreen catch-up grants are used. A knocked-out player's parts and cargo go into a wreck stock that any collector can take.
 
 ## Trade
 
 Each town produces and needs fixed goods. Profit comes from knowing routes, as in Dustland Delivery.
 
-Fuel and supplies limit range. Fuel burns at 0.075 of the chassis fuel-per-tile rate, times heat. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn at 0.03 per turn, times heat. Without supplies the character loses health. Oases refill supplies.
+Fuel and supplies limit range. Fuel burns at 0.075 of the chassis fuel-per-tile rate, times heat. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn at 0.015 per turn, times heat. Start kits carry a full load of 20, which lasts about 550 daytime turns. Healing spends extra supplies. Without supplies the character loses health down to 30. Oases refill supplies.
 
 ## Prototype v0.001 content
 
 - Buyable chassis: Scout pickup, Hauler, Courier, Utility van, Longbed truck, Armored carrier and Heavy tractor. Raiders can also use the buggy and gunwagon chassis.
 - Parts: seven weapons, seven engines, eight armor parts and seven cargo parts. Cheap, light, durable, fuel-efficient and high-output variants have different costs and footprints. Cargo frames extend the inventory grid, without articulated trailer physics.
 - Goods: scrap metal, salt, meds, grain, textiles, machine tools, batteries and electronics. Bowl and Nose price every good.
-- Defeat takes all goods and spare parts from the grid. Mounted parts stay.
+- A knockout drops all goods, spare parts and mounted non-core parts into a wreck stock. Built-in parts stay.
 - Region: Icarus, a 600-tile basin with Bowl and Nose as hubs, 13 other destinations, two raider camps, two canyon crossings, and the Fallen Sun. Winding roads cross rolling grades between distinct landmarks. Sight is twenty tiles. See [landmark visuals](VISUAL_DESIGN.md).
 - Enemies: raider outriders and gunwagons with sampled chassis and equipment.
 - Neutrals: trader caravans and scavengers. Shooting one makes it and its nearby mates hostile.

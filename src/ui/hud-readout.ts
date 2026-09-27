@@ -3,11 +3,13 @@ import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { playerVehicle } from "../sim/damage";
 import { corePart, mountedParts } from "../sim/grid";
-import { vehicleStats } from "../sim/stats";
+import { isStranded, vehicleStats } from "../sim/stats";
 import { clockOf, heatAt } from "../sim/sun";
 import { TERRAIN } from "../data/terrain";
 import { dist, type Vec } from "../sim/vec";
 import type { World } from "../sim/types";
+import { REGION } from "../data/region";
+import { vehicleName } from "./format";
 import { celsius, engineCelsius, fuelLiters, kph } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 
@@ -36,6 +38,40 @@ function clockLabel(turn: number): string {
   return `Day ${day} ${hh}:${String(mm).padStart(2, "0")}`;
 }
 
+// Negative money is debt. It shows as a positive amount owed.
+export function moneyLabel(money: number): string {
+  return money < 0
+    ? `Debt ${(-money).toLocaleString("en-US")}`
+    : money.toLocaleString("en-US");
+}
+
+// What the rescue panel shows: the knockout, an open tow offer, the tow in progress, or a stranded truck with its
+// beacon switch. Null when none applies, and for a dead player, whom the death screen covers.
+export type RescueReadout =
+  | { kind: "knockedOut" }
+  | { kind: "offer"; tower: string; town: string; fee: number; debt: boolean; beacon: boolean }
+  | { kind: "towed"; tower: string; town: string; fee: number }
+  | { kind: "stranded"; beacon: boolean };
+
+export function getRescueReadout(w: World): RescueReadout | null {
+  const p = w.player;
+  if (p.state === "knockedOut") return { kind: "knockedOut" };
+  if (p.state === "dead") return null;
+  if (p.tow) {
+    const tow = { tower: vehicleName(w, p.tow.by), town: townName(p.tow.town), fee: p.tow.fee };
+    if (p.tow.hitched) return { kind: "towed", ...tow };
+    return { kind: "offer", ...tow, debt: p.money < p.tow.fee, beacon: p.beacon };
+  }
+  if (p.beacon || isStranded(w, playerVehicle(w))) return { kind: "stranded", beacon: p.beacon };
+  return null;
+}
+
+function townName(id: string): string {
+  const town = REGION.towns.find((t) => t.id === id);
+  if (!town) throw new Error(`Unknown town ${id}`);
+  return town.name;
+}
+
 export function getHudReadout(w: World) {
   const me = playerVehicle(w);
   const cab = corePart(me, "cab");
@@ -52,8 +88,8 @@ export function getHudReadout(w: World) {
     resources: [
       {
         label: "Money",
-        value: p.money.toLocaleString("en-US"),
-        warning: false,
+        value: moneyLabel(p.money),
+        warning: p.money < 0,
       },
       {
         label: "Fuel",

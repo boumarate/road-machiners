@@ -66,7 +66,7 @@ export function freeDrive(d: Drive): void {
 }
 
 // Brings the physics world in line with the sim: new and removed vehicles and obstacles, vehicle
-// masses after loadout changes, and vehicles the rules moved, such as a defeated player waking up in town.
+// masses after loadout changes, and vehicles moved outside physics, such as by a debug script.
 // Only near vehicles keep a body. A far vehicle loses its body and driver memory, and gets a new body
 // at its sim pose once it comes near again.
 export function syncDrive(d: Drive, w: World): void {
