@@ -1,6 +1,6 @@
 # Social radio and dialogue
 
-**Status:** reviewing
+**Status:** validating
 **Blocked:** none. Defeat-rescue and npc-traits are merged into this branch. PH1, PH5 and most of PH6 are done.
 **Branch:** social
 **Worktree:** .worktrees/social
@@ -321,6 +321,32 @@ Smoke: the five browser scripts in `tmp/` (dialogue, tow, patch, demand, travel 
 Goal: the user confirms the loop in play.
 
 ## Conclusion
+
+Outcome: built and verified at 148b337. The goal waits for the user to confirm the loop in play.
+
+Invariants:
+- IV1 — `endTurn()` and `autoRuns()` tests, and the travel-call browser check.
+- IV2 — sight and single-call tests in `src/sim/dialogue.test.ts`.
+- IV3 — the topic walk test.
+- IV4 — patch settlement tests, including breaks for missing parts or money.
+- IV5 — once-topic tests for the patch request and the demand.
+- IV6 — truce tests.
+- IV7 — effects run only inside `chooseOption()` and `hangUp()`, which go through `update()`.
+- IV8 — save round trip probe, CK3.
+- IV9 — `addState()` keeps one state per kind and pair, and `inPatch()` blocks a second patch deal.
+
+### Assumptions check
+- AS1 — unverifiable yet — call frequency on real routes needs the user's play test.
+- AS2 — held — 25 NPCs broke an engine or gearbox over 1000 turns.
+
+### Unknowns outcome
+- UK1 — resolved — ElevenLabs for both cues. Horns needed ffmpeg processing, recorded next to the cue.
+- UK2 — resolved — a waiting client holds a `patch` goal, and the state timer ends the wait.
+- UK3 — resolved — deal kinds are states in `src/sim/states.ts`.
+
+Review findings:
+- Important: the spare parts roll skipped the RNG for a one-outcome table, unlike every other loadout roll. Fixed in 397fd9d: raider tables say `spareParts: null` and roll nothing.
+
 
 ### Deviations from plan
 - PH1: the topic memory is `Player.talked`, keyed by NPC id, not `NpcBrain.talked`, and `refusedTow` stays. So PH1 edits no brain literal and none of the tow code the defeat-rescue agent still owns. 1.1 was dropped with it.
