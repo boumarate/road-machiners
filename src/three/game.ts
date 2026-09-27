@@ -338,6 +338,7 @@ export class Game {
             : null,
         ),
       isBusy: () => this.anim !== null,
+      dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next) },
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.menu = new GameMenu({
@@ -404,9 +405,7 @@ export class Game {
   }
 
   private modalOpen(): boolean {
-    return (
-      this.town.isOpen() || this.character.isOpen() || this.inventory.isOpen()
-    );
+    return this.town.isOpen() || this.character.isOpen() || this.inventory.isOpen() || this.world.player.call !== null;
   }
 
   // Until a turn's shots land, the panels show the world as it was when the turn began.

@@ -302,6 +302,8 @@ Deviation from PC3: raising a topic is a turn step, `raiseCalls()`, not an activ
 - PH1: `discoverSite()` was split out of `discoverSites()` in `src/sim/locations.ts`. A town learned by directions pays the discovery XP once, like a town found by sight.
 - PH1: `src/ui/dialogue-text.ts` and the `say` and `call` log lines in `src/ui/format.ts` came forward from PH6. The event switch must cover every event.
 
+- PH6 items 6.2 and 6.3 came forward at the user's request: the dialogue panel and the T key. The panel lives in `src/ui/dialogue.ts` with the line formatting, and the HUD owns it, because `src/three/game.ts` is over the file length limit. The panel takes keys in the capture phase, so an open call gets 1 to 9 and Escape before the game's key handler.
+
 ### Known risks
 - Saves from before PH1 have no `call` or `talked`. A missing `talked` throws on the first `once` topic lookup. PH6 adds the migration.
 

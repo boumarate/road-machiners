@@ -65,6 +65,7 @@ function say(world: World, speaker: string, text: string, vars: CallVars): void 
     if (!vars[name]) throw new Error(`Line "${text}" needs the call value ${name}`);
   }
   world.events.push({ t: 'say', speaker, text, vars });
+  if (world.player.call?.with === speaker) world.player.call.line = { text, vars };
 }
 
 export function placeholders(text: string): string[] {
@@ -91,7 +92,7 @@ function endCall(world: World, call: Call): void {
 
 function begin(world: World, npc: Vehicle): Call {
   if (world.player.call) throw new Error('A call is already open');
-  const call: Call = { with: npc.id, topic: null, node: HUB, vars: {} };
+  const call: Call = { with: npc.id, topic: null, node: HUB, vars: {}, line: { text: '', vars: {} } };
   world.player.call = call;
   world.events.push({ t: 'call', with: npc.id, outcome: 'opened' });
   return call;

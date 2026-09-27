@@ -62,7 +62,7 @@ describe('calls', () => {
   it('opens on the hub with the greeting when the player sees the truck', () => {
     const { w, npc } = withNpc('trader', 'traders');
     const next = callVehicle(w, npc.id);
-    expect(next.player.call).toEqual({ with: npc.id, topic: null, node: HUB, vars: {} });
+    expect(next.player.call).toEqual({ with: npc.id, topic: null, node: HUB, vars: {}, line: { text: CLASS_TALK.trader.greeting, vars: {} } });
     expect(next.events).toContainEqual({ t: 'call', with: npc.id, outcome: 'opened' });
     expect(next.events).toContainEqual({ t: 'say', speaker: npc.id, text: CLASS_TALK.trader.greeting, vars: {} });
   });
@@ -169,5 +169,6 @@ describe('NPC calls', () => {
     next = chooseOption(next, optionIndex(next, TOPICS.directions.ask!.text));
     expect(next.player.call?.topic).toBeNull();
     expect(next.events).toContainEqual({ t: 'say', speaker: npc.id, text: CLASS_TALK.trader.repeatLine, vars: {} });
+    expect(next.player.call?.line).toEqual({ text: CLASS_TALK.trader.repeatLine, vars: {} });
   });
 });

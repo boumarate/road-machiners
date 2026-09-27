@@ -186,8 +186,9 @@ export type CallVar =
   | { kind: "count"; n: number };
 export type CallVars = Record<string, CallVar>;
 
-// An open radio call with the NPC `with`. A null topic means the hub of topics.
-export type Call = { with: string; topic: TopicId | null; node: string; vars: CallVars };
+// An open radio call with the NPC `with`. A null topic means the hub of topics. `line` is what the NPC said
+// last, which is the node's line or an answer that kept the call on the hub.
+export type Call = { with: string; topic: TopicId | null; node: string; vars: CallVars; line: { text: string; vars: CallVars } };
 export type TopicOutcome = "agreed" | "refused" | "done";
 
 export type Player = {

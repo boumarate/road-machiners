@@ -9,7 +9,7 @@ import { mountedParts } from '../sim/grid';
 import { playerSees } from '../sim/vision';
 import type { PartHit } from '../sim/armor';
 import type { GameEvent, Vehicle, World } from '../sim/types';
-import { fillLine } from './dialogue-text';
+import { fillLine } from './dialogue';
 
 export function vehicleName(world: World, id: string): string {
   if (id === world.player.vehicleId) return 'You';

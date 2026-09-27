@@ -1,5 +1,6 @@
 // Vehicle instruments, critical resources, event history and inspection.
 
+import { DialoguePanel, type DialogueHost } from "./dialogue";
 import { partDef } from "../data/parts";
 import { corePart, coreParts, mountedParts } from "../sim/grid";
 import type { Job, Vehicle, World } from "../sim/types";
@@ -22,6 +23,7 @@ type HudActions = {
   unhitch: () => void;
   setBeacon: (on: boolean) => void;
   isBusy: () => boolean;
+  dialogue: DialogueHost;
 };
 const RESOURCE_ICONS: IconName[] = [
   "money",
@@ -45,6 +47,11 @@ function weatherLabel(w: World): string {
   return [...new Set(w.weather.map((e) => WEATHER_NAMES[e.kind]))].join(", ");
 }
 
+// NPC drivers can be called by radio.
+function radioHint(v: Vehicle): HTMLElement[] {
+  return v.brain ? [el("div", { class: "dim" }, "T: call by radio")] : [];
+}
+
 export class Hud {
   private top = panel("instruments");
   private log = panel("log");
@@ -57,7 +64,10 @@ export class Hud {
   private toastTimer: number | null = null;
   private lines: { text: string; cls: string }[] = [];
 
+  private readonly dialogue: DialoguePanel;
+
   constructor(private actions: HudActions) {
+    this.dialogue = new DialoguePanel(actions.dialogue);
     this.info.style.display = "none";
     this.info.append(this.infoBody);
     this.toastBox.style.display = "none";
@@ -149,7 +159,9 @@ export class Hud {
   }
 
   // The knockout banner, a tow offer, the tow in progress, or the beacon switch of a stranded truck.
+  // The prompts in the middle of the screen: an open radio call, and the rescue state.
   renderRescue(w: World): void {
+    this.dialogue.render(w);
     const r = getRescueReadout(w);
     this.rescue.style.display = r ? "" : "none";
     if (!r) return this.rescue.replaceChildren();
@@ -393,6 +405,7 @@ export class Hud {
       el("div", {}, `Cab ${pct}%   Speed ${kph(v.speed)} km/h`),
       el("div", { class: "bar" }, el("div", { style: `width:${pct}%` })),
       ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),
+      ...radioHint(v),
       ...parts,
     );
   }
