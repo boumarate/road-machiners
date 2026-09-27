@@ -1,7 +1,7 @@
 """One framed block of ceramic tiles for the 'ceramicTile' armor.
 
 A front-edge row of 1 cell: 0.484 m across, 0.65 m deep, outer face at +X. A steel frame on the outer edge holds a
-2 by 4 grid of pale ceramic tiles, 0.9 m tall. It is the one-cell cut of arm_ceramic_plates.py and shares its build.
+2 by 4 grid of gray ceramic tiles, 0.9 m tall. It is the one-cell cut of arm_ceramic_plates.py and shares its build.
 Run: blender --background --python tools/blender/arm_ceramic_tile.py -- public/models/arm_ceramic_tile.glb [tmp/arm_ceramic_tile.png]
 """
 
@@ -20,7 +20,7 @@ SEED = 39
 
 
 def build(kit: Kit) -> None:
-    build_row(kit, N)
+    build_row(kit, N, ("metal_light", "metal_light"))
 
 
 if __name__ == "__main__":

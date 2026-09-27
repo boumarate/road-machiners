@@ -25,8 +25,8 @@ GAP = 0.018
 MISSING = (2, 1)  # (column, row) of the cracked-out tile.
 
 
-def build_row(kit: Kit, n: int) -> None:
-    """A frame of tiles COLS_PER_CELL wide per cell. arm_ceramic_tile.py builds the one-cell cut."""
+def build_row(kit: Kit, n: int, tiles: tuple[str, str]) -> None:
+    """A frame of tiles COLS_PER_CELL wide per cell, alternating the two tile materials. arm_ceramic_tile.py builds the one-cell cut."""
     half = half_span(n)
     cols = COLS_PER_CELL * n
     kit.box("backing", (0.05, half * 2, HEIGHT), (BACK_X, 0, HEIGHT / 2), "metal")
@@ -43,12 +43,12 @@ def build_row(kit: Kit, n: int) -> None:
             if (c, r) == MISSING:
                 kit.box("tile_shard", (0.03, tile_w * 0.45, tile_h * 0.5), (BACK_X + 0.035, y - tile_w * 0.2, z - tile_h * 0.2), "ceramic_dim", dent_by=0.01)
                 continue
-            mat = "ceramic" if (c + r) % 2 == 0 else "ceramic_dim"
+            mat = tiles[(c + r) % 2]
             kit.box(f"tile{c}_{r}", (0.05, tile_w, tile_h), (BACK_X + 0.045, y, z), mat, dent_by=0.003)
 
 
 def build(kit: Kit) -> None:
-    build_row(kit, N)
+    build_row(kit, N, ("ceramic", "ceramic_dim"))
 
 
 if __name__ == "__main__":
