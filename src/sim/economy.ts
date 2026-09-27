@@ -239,6 +239,16 @@ export function partRepairCost(world: World, part: PartInstance): number {
   );
 }
 
+export function repairPart(world: World, partId: string): World {
+  return update(world, (w) => {
+    requireTown(w);
+    const part = allParts(playerVehicle(w)).find((p) => p.id === partId);
+    if (!part) throw new Error(`No truck part ${partId}`);
+    pay(w, partRepairCost(w, part), "repairs");
+    part.hp = partDef(part.defId).hp;
+  });
+}
+
 export function repairAll(world: World): World {
   return update(world, (w) => {
     requireTown(w);
