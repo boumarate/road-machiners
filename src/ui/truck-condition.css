@@ -54,7 +54,7 @@
   position: absolute;
   bottom: 1px;
   color: #f3efde;
-  font: 10px ui-monospace, monospace;
+  font: 10px var(--font-mono);
   text-shadow: 1px 1px 1px #141a1c, -1px -1px 1px #141a1c;
 }
 @media (max-width: 1100px) {
