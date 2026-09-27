@@ -40,4 +40,12 @@ export const CONFIG = {
     "VITE_AUTO_TURN_MS",
     import.meta.env.VITE_AUTO_TURN_MS,
   ),
+  travelHoldMs: requirePositiveInt(
+    "VITE_TRAVEL_HOLD_MS",
+    import.meta.env.VITE_TRAVEL_HOLD_MS,
+  ),
+  travelFastSpeed: requirePositiveInt(
+    "VITE_TRAVEL_FAST_SPEED",
+    import.meta.env.VITE_TRAVEL_FAST_SPEED,
+  ),
 };

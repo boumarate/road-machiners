@@ -8,7 +8,7 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 
 ## Commands
 
-- `npm run dev` starts the game at http://localhost:5173.
+- `npm run dev` starts the game at <http://localhost:5173>.
 - `npm test` runs the sim unit tests.
 - `npm run typecheck` runs tsc.
 - `npm run quality` checks working-tree JavaScript and TypeScript for new lint and architecture debt against HEAD, then runs tsc.
@@ -23,7 +23,7 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 
 ## Config
 
-`.env` holds `VITE_SEED`, the world seed, `VITE_START_KIT`, the player start kit from `src/data/start.ts`, `VITE_COMBAT_SHOT_MS` and `VITE_COMBAT_READ_MS` for projectile travel and result-reading time, `VITE_SAVE_TURNS` for the number of completed turns between local saves, and `VITE_AUTO_TURN_MS` for the pause between turns that run on their own. `ELEVENLABS_API_KEY` and `SFX_MAX_GENERATIONS` are read only by the sound generation script. Durations and the save interval must be positive integers. Copy `.env.example` to `.env` on a fresh checkout. Existing checkouts must add any values missing from `.env.example`. Missing or invalid values stop the boot.
+`.env` holds `VITE_SEED`, the world seed, `VITE_START_KIT`, the player start kit from `src/data/start.ts`, `VITE_COMBAT_SHOT_MS` and `VITE_COMBAT_READ_MS` for projectile travel and result-reading time, `VITE_SAVE_TURNS` for the number of completed turns between local saves, and `VITE_AUTO_TURN_MS` for the pause between turns that run on their own while knocked out, towed or waiting on the beacon. `VITE_TRAVEL_HOLD_MS` sets the Space hold delay and `VITE_TRAVEL_FAST_SPEED` multiplies playback speed while held. `ELEVENLABS_API_KEY` and `SFX_MAX_GENERATIONS` are read only by the sound generation script. Durations, the save interval and the speed multiplier must be positive integers. Copy `.env.example` to `.env` on a fresh checkout. Existing checkouts must add any values missing from `.env.example`. Missing or invalid values stop the boot.
 
 ## Architecture
 
@@ -35,10 +35,11 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 - `src/sim/resources.ts` accesses driver resources. NPC fuel and supplies use the player base rules. `src/sim/economy.ts` owns paid transactions, and `src/sim/salvage.ts` owns finite site and wreck stock shared by all collectors. Town markets remain unlimited.
 - `src/phys/` runs vehicle movement in Rapier. `endTurn(world, physicsMove(...))` plugs it into the turn pipeline in place of the sim's 2D movement. A turn restores the physics world from a snapshot and simulates one second, so the path preview runs the same physics as the turn. Physics numbers live in `src/data/physics.ts`.
 - `src/three/` holds the 3D game: `game.ts` wires input to sim, sim and physics to the view, and the HTML UI. `src/three/render/` holds the 3D views. `src/render/` holds the palette and the ground painter. `src/ui/` holds the HTML overlay panels.
+- `src/three/travel.ts` owns automatic waypoint advancement and held-Space state. Route planning stays paused. Click and Shift-click retain drive-through and stop-at orders. Space starts automatic travel outside combat. The same module prepares a turn in the dedicated worker entry point in `src/phys/turn.ts` while the current turn plays. The worker uses the same turn pipeline and portable physics snapshots. `game.ts` commits a prepared turn only after playback finishes and while advancement is still requested. Replanning invalidates stale results. Travel pauses on Space, danger, arrival, panels and focus loss. Travel state is not saved.
 - `src/sim/nav/` holds route planning data. Grids are built once per terrain and vehicle radius, and `warmRoutes` builds them at boot. Wrecks and parked vehicles are stamped per query. Long routes search a coarse corridor first.
 - NPCs farther than sight radius plus `PERF.liveMargin` from the player have no physics body. `src/sim/far.ts` moves them along stored routes. They never crash or ram, but they stop short of any other vehicle, so two trucks never share a point.
 - `src/three/render/scope.ts` detaches map chunks outside the camera view. Static views register with a scope instead of adding to the scene.
-- `src/perf.ts` holds named timers for seams, never hot loops. In dev, a panel in the top left shows them.
+- `src/perf.ts` holds named timers for seams, never hot loops, and merges worker measurements into the main counters. In dev, a panel in the top left shows them.
 - `src/three/save.ts` stores the whole world except the terrain in browser local storage after each configured number of completed turns and restores it on boot. The terrain is rebuilt from the seed on load. The Save button in the top right saves at once. Load and New game reload the page, and New game deletes the save first. Later unsaved changes are lost on reload. Invalid or incompatible saves stop boot with the crash screen. New world fields enter new saves automatically, but old saves can need migration.
 - `src/audio/` plays sound through Web Audio. `src/data/sounds.ts` lists every cue and its files in `public/sfx/`, and a test keeps both in sync. Every file goes through `scripts/sfx-lib.mjs`, which sets loudness per sound group and one format. Generated prompts start with the shared `SOUND_STYLE`, so sounds stay consistent.
 - Any uncaught error shows a fullscreen crash screen with the message.
