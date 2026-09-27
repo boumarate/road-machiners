@@ -9,8 +9,10 @@ export type LocationDef = {
   kind: "oasis" | "convoy" | "landmark" | "camp";
   pos: Vec;
   radius: number;
-  walled?: boolean; // a palisade closes the site, so it is used only from a gate
+  edge: SiteEdge;
 };
+// What closes a location on its collision edge. Towns always have a town wall.
+export type SiteEdge = "palisade" | "camp" | "stone" | "fence" | "wrecks";
 
 export const MAP_SCALE = 5;
 
@@ -59,13 +61,15 @@ export const REGION = {
   locations: [
     {
       id: "orchard",
+      edge: "fence",
       name: "Old Orchard",
       kind: "landmark",
       pos: scalePoint({ x: 28, y: 64 }),
-      radius: 16, // the ruin on the far edge reaches 16 tiles; the trees stop at 10
+      radius: 16, // the ruin on the far edge reaches 14.5 tiles; the trees stop at 10
     },
     {
       id: "dustwell",
+      edge: "stone",
       name: "Dustwell",
       kind: "oasis",
       pos: scalePoint({ x: 37, y: 32 }),
@@ -73,14 +77,15 @@ export const REGION = {
     },
     {
       id: "granary",
+      edge: "palisade",
       name: "The Granary",
       kind: "landmark",
       pos: scalePoint({ x: 50, y: 36 }),
       radius: 6,
-      walled: true,
     },
     {
       id: "burnt-convoy",
+      edge: "wrecks",
       name: "Burnt Convoy",
       kind: "convoy",
       pos: scalePoint({ x: 63, y: 20 }),
@@ -88,6 +93,7 @@ export const REGION = {
     },
     {
       id: "podfield",
+      edge: "wrecks",
       name: "Podfield",
       kind: "convoy",
       pos: scalePoint({ x: 77, y: 24 }),
@@ -95,6 +101,7 @@ export const REGION = {
     },
     {
       id: "canyon-bridge",
+      edge: "fence",
       name: "Canyon Bridge",
       kind: "landmark",
       pos: scalePoint({ x: 103, y: 70 }),
@@ -102,6 +109,7 @@ export const REGION = {
     },
     {
       id: "glass-flats",
+      edge: "fence",
       name: "Glass Flats",
       kind: "landmark",
       pos: scalePoint({ x: 88, y: 84 }),
@@ -109,6 +117,7 @@ export const REGION = {
     },
     {
       id: "green-pit",
+      edge: "stone",
       name: "Green Pit",
       kind: "oasis",
       pos: scalePoint({ x: 73, y: 92 }),
@@ -116,6 +125,7 @@ export const REGION = {
     },
     {
       id: "south-lock",
+      edge: "fence",
       name: "South Lock",
       kind: "landmark",
       pos: scalePoint({ x: 58, y: 91 }),
@@ -123,6 +133,7 @@ export const REGION = {
     },
     {
       id: "ridge-wrecks",
+      edge: "wrecks",
       name: "Ridge Wrecks",
       kind: "convoy",
       pos: scalePoint({ x: 41, y: 87 }),
@@ -130,6 +141,7 @@ export const REGION = {
     },
     {
       id: "pump-station",
+      edge: "fence",
       name: "Pump Station",
       kind: "landmark",
       pos: scalePoint({ x: 43, y: 54 }),
@@ -137,6 +149,7 @@ export const REGION = {
     },
     {
       id: "fallen-sun",
+      edge: "fence",
       name: "Fallen Sun",
       kind: "landmark",
       pos: FALLEN_SUN_POS,
@@ -144,28 +157,28 @@ export const REGION = {
     },
     {
       id: "salvage-yard",
+      edge: "palisade",
       name: "Salvage Yard",
       kind: "convoy",
       pos: scalePoint({ x: 82, y: 49 }),
       radius: 6,
-      walled: true,
     },
     // Raider camps. Raiders spawn at their gates and service there. Their gate guns shoot every outsider in range.
     {
       id: "scrapjaw",
+      edge: "camp",
       name: "Scrapjaw Camp",
       kind: "camp",
       pos: scalePoint({ x: 22, y: 14 }),
       radius: 6,
-      walled: true,
     },
     {
       id: "kiln",
+      edge: "camp",
       name: "Kiln Camp",
       kind: "camp",
       pos: scalePoint({ x: 66, y: 76 }),
       radius: 6,
-      walled: true,
     },
   ] as LocationDef[],
   roads: [
@@ -287,24 +300,36 @@ export const REGION = {
       { x: -0.8, y: 2.8 },
     ] as Vec[],
     pondRadius: 2.2,
+    // Tiles. A rectangular pad lies outside each gate, its inner edge on the site edge. Site services work only on a pad.
+    pad: { length: 5, width: 7 }, // length runs out from the gate, width along the site edge
+    gateSpacing: 7, // tiles; road crossings closer than this share one gate, so door gaps never overlap
+    multiGateRadius: 12, // tiles; locations at least this large get a gate per road, towns and smaller sites get one
   },
   settlement: {
     streetSpacing: 5, // 20 m blocks, with houses separated by alleys
     houseWidth: 2.7, // 10.8 m, against the pickup's 4.4 m length
     houseDepth: 2.1,
     houseHeights: [1.1, 1.8],
-    wallHeight: 0.9, // 3.6 m, taller than a truck
-    wallThickness: 0.5,
+    wallHeight: 1.6, // 6.4 m, well over a truck roof
+    wallThickness: 1.2,
     wallSegment: 3, // tiles per straight wall section around the curve
     wallTowerEvery: 5, // wall sections between towers
-    gateWidth: 13, // tiles of open wall where a road enters, over twice the road width
-    gateReach: 5, // tiles from a gate on the wall line where a walled site's services work
-    palisadeHeight: 0.55, // 2.2 m of scrap and posts, below a truck roof
-    palisadeThickness: 0.25,
+    gateWidth: 5, // tiles of shut doors where a road meets any site edge
+    palisadeHeight: 1, // 4 m of scrap and posts
+    palisadeThickness: 0.6,
     palisadeSegment: 1.5,
-    palisadeGateWidth: 7, // a road width plus half a tile each side
-    guardTowerHeight: 1.8, // gate towers stand twice the wall height
-    gatePoleHeight: 4.5, // 18 m, so a gate shows from across the fog edge
+    stoneHeight: 0.6, // 2.4 m of piled stone around an oasis
+    stoneThickness: 0.9,
+    stoneSegment: 1.2,
+    fenceHeight: 0.8, // 3.2 m of posts and rails
+    fenceThickness: 0.15,
+    fenceSegment: 1.5,
+    wreckHeight: 0.9, // 3.6 m of piled car wrecks
+    wreckThickness: 1,
+    wreckSegment: 1.1, // about one car length
+    guardTowerHeight: 2.6, // gate towers stand a full floor over the town wall
+    gatePoleHeight: 5.5, // 22 m, so a gate shows from across the fog edge
+    lampHeight: 1.6, // 6.4 m gate lamp posts, lower on the higher walls and towers
     orchardRows: 11,
     orchardSpacing: 2,
   },

@@ -47,7 +47,7 @@ export function canReachSalvage(vehicle: Vehicle, stock: SalvageStock): boolean 
   return vehicle.speed <= RULES.parkedSpeed && salvageInRange(vehicle, stock);
 }
 
-// Site stock follows its site's reach, so a walled site is searched from a gate. Wreck stock has no site.
+// Site stock follows its site's reach, so a site is searched from a pad. Wreck stock has no site.
 export function salvageInRange(vehicle: Vehicle, stock: SalvageStock): boolean {
   const site = REGION.locations.find((l) => l.id === stock.id);
   return site ? canUseSite(vehicle.pos, site) : dist(vehicle.pos, stock.pos) <= (stock.radius + ECONOMY.useRange) * ECONOMY.interactionScale;

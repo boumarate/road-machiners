@@ -15,7 +15,7 @@ import { straightClear } from './path';
 import { vehicleStats } from './stats';
 import { cloneWorld, endTurn } from './world';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
-import { siteGates } from './sites';
+import { siteGates, sitePads } from './sites';
 import type { NpcActivity, Vehicle, World } from './types';
 
 const TRAITS_OF: Record<string, TraitId[]> = { scavenger: ['scavenger'], buggy: ['raider'], trader: ['trader'] };
@@ -273,7 +273,7 @@ describe('NPC field repairs', () => {
     const { world, npc } = createNpc();
     addGoods(world, npc, 'parts', 2);
     npc.resources!.fuel = 0;
-    npc.pos = { ...siteGates(REGION.towns[0])[0] };
+    npc.pos = { ...sitePads(REGION.towns[0])[0] };
     planNpcOrders(world);
     expect(topGoal(npc)!.kind).toBe('resupply');
     resolveNpcActivities(world);
@@ -310,7 +310,7 @@ describe('NPC field repairs', () => {
     addGoods(world, npc, 'parts', 2);
     expect(thinkNpc(world, npc).kind).not.toBe('sell');
     addGoods(world, npc, 'scrap', 1);
-    npc.pos = { ...siteGates(REGION.towns[0])[0] };
+    npc.pos = { ...sitePads(REGION.towns[0])[0] };
     npc.brain!.goals = [{ kind: 'sell', targetId: REGION.towns[0].id, destination: REGION.towns[0].pos, phase: 'act', reason: 'sell loot' }];
     resolveNpcActivities(world);
     expect(goodsCount(npc).scrap ?? 0).toBe(0);

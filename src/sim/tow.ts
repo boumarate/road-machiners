@@ -14,7 +14,7 @@ import { playerVehicle, vehicleById } from './damage';
 import { contactsOf, hearsBeacon } from './detect';
 import { route, routeLength } from './path';
 import { npcProfile } from './npc-decisions';
-import { canUseSite, siteGates } from './sites';
+import { canUseSite, nearestPad } from './sites';
 import { addState, endState, stateOf, towData, towPromiseData } from './states';
 import { isStranded, vehicleStats } from './stats';
 import type { GameEvent, NpcActivity, NpcState, Pose, Vehicle, World } from './types';
@@ -155,10 +155,10 @@ function nearestKnownTown(world: World, vehicle: Vehicle): TownDef {
   return known.sort((a, b) => dist(me.pos, a.pos) - dist(me.pos, b.pos))[0];
 }
 
-// The fee follows the route the tower would drive from the player to the town's nearest gate.
+// The fee follows the route the tower would drive from the player to the town's nearest pad.
 function towFee(world: World, tower: Vehicle, from: Vec, town: TownDef): number {
-  const gate = siteGates(town).reduce((a, b) => (dist(from, a) <= dist(from, b) ? a : b));
-  const length = routeLength(from, route(world, from, gate, vehicleStats(world, tower).radius, [], tower));
+  const pad = nearestPad(town, from);
+  const length = routeLength(from, route(world, from, pad, vehicleStats(world, tower).radius, [], tower));
   return Math.round(TOW.base + TOW.perTile * length);
 }
 

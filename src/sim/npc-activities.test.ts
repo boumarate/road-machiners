@@ -11,7 +11,7 @@ import { corePart, goodsCount } from './grid';
 import { addGoods } from './inventory';
 import { getActivityDestination, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { cloneWorld } from './world';
-import { canUseSite, siteGates } from './sites';
+import { canUseSite, siteGates, sitePads } from './sites';
 
 function createScavenger() {
   const w = emptyWorld({ x: 50, y: 50 });
@@ -40,7 +40,7 @@ describe('NPC activities', () => {
     expect(Math.hypot(stop.x - town.pos.x, stop.y - town.pos.y)).toBeGreaterThan(town.radius);
   });
 
-  it('gives drivers bound for one town their own usable spots at its gate', () => {
+  it('gives drivers bound for one town their own usable spots on its pad', () => {
     const { w, npc } = createScavenger();
     const town = REGION.towns[0];
     const gate = siteGates(town)[0];
@@ -51,12 +51,12 @@ describe('NPC activities', () => {
     for (const stop of stops) expect(canUseSite(stop, town)).toBe(true);
     const gaps = stops.flatMap((a, i) => stops.slice(i + 1).map((b) => Math.hypot(a.x - b.x, a.y - b.y)));
     expect(Math.min(...gaps)).toBeGreaterThan(0);
-    expect(Math.max(...gaps)).toBeGreaterThan(REGION.settlement.gateReach);
+    expect(Math.max(...gaps)).toBeGreaterThan(REGION.sites.pad.width / 4);
   });
 
-  it('gives drivers bound for an open site their own usable spots on its edge', () => {
+  it('gives drivers bound for a location their own usable spots on its pad', () => {
     const { w, npc } = createScavenger();
-    const site = REGION.locations.find((l) => !l.walled)!;
+    const site = REGION.locations.find((l) => l.kind === 'oasis')!;
     const stops = ['v101', 'v102', 'v103', 'v104'].map((id) =>
       getActivityDestination(w, { ...npc, id }, { kind: 'resupply', targetId: site.id, destination: { ...site.pos }, phase: 'travel', reason: 'test activity' })!,
     );
@@ -66,7 +66,7 @@ describe('NPC activities', () => {
 
   it.each(['sell', 'resupply', 'raid'] as const)('records completion of %s once', (kind) => {
     const { w, npc } = createScavenger();
-    npc.pos = { ...siteGates(REGION.towns[0])[0] };
+    npc.pos = { ...sitePads(REGION.towns[0])[0] };
     npc.brain!.goals = [{ kind, targetId: REGION.towns[0].id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
     w.events = [];
     resolveNpcActivities(w);
@@ -131,7 +131,7 @@ describe('NPC activities', () => {
     const { w, npc } = createScavenger();
     npc.brain!.templateId = 'trader';
     npc.brain!.traits = ['trader'];
-    npc.pos = { ...siteGates(REGION.towns[0])[0] };
+    npc.pos = { ...sitePads(REGION.towns[0])[0] };
     forceOption('idle', 'trade');
     planNpcOrders(w);
     resolveNpcActivities(w);

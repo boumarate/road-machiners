@@ -9,7 +9,7 @@ import { dumpGood, moveItem, removeAllGoods, spareParts, storePart, takeFromStor
 import { vehicleStats } from './stats';
 import { emptyWorld } from './testkit';
 import type { World } from './types';
-import { siteGates } from './sites';
+import { sitePads } from './sites';
 import { advanceJobs } from './jobs';
 
 const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
@@ -63,7 +63,7 @@ describe('inventory grid', () => {
     advanceJobs(field);
     expect(field.vehicles[0].job).toBeNull();
     expect(vehicleStats(field, field.vehicles[0]).weapons).toHaveLength(0);
-    const inTown = emptyWorld(siteGates(bowl)[0]);
+    const inTown = emptyWorld(sitePads(bowl)[0]);
     const off = moveItem(inTown, item(inTown, 'mg').id, { x: 1, y: rackRow, rot: 0 });
     expect(vehicleStats(off, off.vehicles[0]).weapons).toHaveLength(0);
     expect(spareParts(off.vehicles[0]).map((p) => p.defId)).toEqual(['mg']);
@@ -85,7 +85,7 @@ describe('inventory grid', () => {
   });
 
   it('swaps a spare with installed equipment instantly in a garage', () => {
-    const w = emptyWorld(siteGates(bowl)[0]);
+    const w = emptyWorld(sitePads(bowl)[0]);
     const mg = item(w, 'mg');
     if (mg.kind !== 'part') throw new Error('Expected weapon');
     w.vehicles[0].items.push({ ...mg, id: 'spare-item', part: { ...mg.part, id: 'spare-part' }, x: 1, y: rackRow });
@@ -96,7 +96,7 @@ describe('inventory grid', () => {
   });
 
   it('a cannon works only lying along the weapon mount', () => {
-    let w = emptyWorld(siteGates(bowl)[0]);
+    let w = emptyWorld(sitePads(bowl)[0]);
     w.player.money = 2000;
     removeAllGoods(w.vehicles[0]); // free the plain cells the cannon test claims, regardless of start cargo
     const mg = item(w, 'mg');
@@ -111,13 +111,13 @@ describe('inventory grid', () => {
   });
 
   it('removing the rack is blocked while its row holds items', () => {
-    let w = emptyWorld(siteGates(bowl)[0]);
+    let w = emptyWorld(sitePads(bowl)[0]);
     w = moveItem(w, good(w).id, { x: 0, y: rackRow, rot: 0 });
     expect(() => storePart(w, item(w, 'rack').id)).toThrow(/fall off/);
   });
 
   it('more parts mean less cargo room', () => {
-    let w = emptyWorld(siteGates(bowl)[0]);
+    let w = emptyWorld(sitePads(bowl)[0]);
     w.player.money = 2000;
     const free = freeCells(w.vehicles[0]);
     const mg = item(w, 'mg');

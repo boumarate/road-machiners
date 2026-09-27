@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { corePart } from './grid';
 import { noteHurt, popGoal, pushGoal, replaceBase, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
-import { siteGates } from './sites';
+import { sitePads } from './sites';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import type { NpcActivity, World } from './types';
 
@@ -70,7 +70,7 @@ describe('goal stack', () => {
     w.obstacles.push({ id: 'cover', kind: 'rock', pos: { x: 12, y: 10 }, r: 1 });
     expect(thinkNpc(w, npc).kind).toBe('resupply');
     const town = REGION.towns.find((t) => t.id === topGoal(npc)!.targetId)!;
-    npc.pos = { ...siteGates(town)[0] };
+    npc.pos = { ...sitePads(town)[0] };
     npc.speed = 0;
     resolveNpcActivities(w);
     expect(corePart(npc, 'cab').hp).toBeGreaterThan(1);

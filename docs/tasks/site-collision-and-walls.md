@@ -1,6 +1,6 @@
 # Site Collision and Walls
 
-**Status:** proposed
+**Status:** done
 **Branch:** site-collision-and-walls
 **Worktree:** .worktrees/site-collision-and-walls
 **Goal:** Sites are closed, static places. A truck approaches a site's gate and uses it from there, and it never drives inside. Each site's blocking shape is its visible outer edge. Walls, gates and site props look like worn places in the style of Ex Machina. The user confirms the look in game.
@@ -59,8 +59,15 @@ Landmarks like Canyon Bridge and Fallen Sun keep their own shapes. The bridge st
 - UK2 — Whether the drive-in animation should skip during combat or automatic travel.
 
 ## Plan
-- PH1 — Use spots: every site gets gates and pads. `canUseSite` works on pads only. A click on a site stops at its nearest pad. Tests cover use from a pad and refusal elsewhere.
-- PH2 — Boundaries: each site draws a boundary on its collision edge. Radii are tuned so models fill the shape.
-- PH3 — Wall kit: Blender slab, post, gatehouse with doors and scrap panel. The user reviews each preview.
-- PH4 — Gate animation: doors open, the truck drives in and hides, and the reverse on leave.
-- PH5 — Site props per site, one site at a time, each reviewed in game.
+- PH1 — Use spots: every site gets gates and pads. `canUseSite` works on pads only. A click on a site stops at its nearest pad. Tests cover use from a pad and refusal elsewhere. Done.
+- PH2 — Boundaries: each site draws a boundary on its collision edge. Radii are tuned so models fill the shape. Done: every location names its edge in `src/data/region.ts`, and doors close every gate. Models are fitted to the radii instead.
+- PH3 — Wall kit: Blender slab, post, gatehouse with doors and scrap panel. Dropped: the user finds the code-built edges good enough.
+- PH4 — Gate animation: doors open, the truck drives in and hides, and the reverse on leave. Dropped for now.
+- PH5 — Site props per site, one site at a time, each reviewed in game. Dropped for now.
+
+## Verify
+- PH1: `src/sim/sites.test.ts` covers gates on every site edge, pads outside each gate, use only on a pad, and site clicks. `tmp/pad-check.mjs dustwell` clicks the Dustwell center, and the truck stops and stays on the pad. `tmp/bowl-pad.mjs` shows the Bowl pad with the enter action.
+- PH1 found two bugs. A truck without an order held its current speed, so a parked truck rolled faster down a slope into the site. It now brakes below parking speed. On a steep 0.2 grade the brakes still slip about 0.06 tiles per turn. The terrain canvas texture was flipped north to south, so roads, pads and ground colors drew on the mirrored half of the map. It now sets `flipY` false.
+- PH2: `src/three/render/sites.test.ts` checks that every site has an edge with shut doors at each gate, that the edge lies on the collision circle, and that nothing below truck height pokes past it. The Fallen Sun hull overflowed its edge by 7 tiles, and the orchard's old fence line by 1. Both now fit. Canyon Bridge stays outside its site on purpose. Road crossings closer than `gateSpacing` share one gate, so door gaps never overlap.
+- User review of PH2: walls grew about twice as tall and thick. Pads were painted into the ground texture, which has about 3 pixels per tile, so they looked pixelated. Pads are now crisp flat rectangles laid over the ground, and the use area is the same rectangle. Lamps on the gate posts mark each stop. They stand inside the edge, so trucks cannot drive through them.
+- User review: towns and small locations get one pad, on the first road into them. Locations of at least `multiGateRadius` keep a gate per road. These are Old Orchard and Fallen Sun.

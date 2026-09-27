@@ -5,6 +5,7 @@ import { RULES } from "../data/rules";
 import { chassisDef } from "../data/chassis";
 import type { VehicleStats } from "./stats";
 import type { Blocker } from "./path";
+import { nearestPad, siteUnder } from "./sites";
 import type { MoveOrder, Vehicle, World } from "./types";
 import { clamp, dist, type Vec } from "./vec";
 
@@ -68,9 +69,15 @@ export function zoneSpeed(s: VehicleStats, speed: number, d: number): number {
   );
 }
 
-// A ground click always orders a course. Shift stops at the point.
+// A click inside a site stops at the site's pad nearest the truck, since trucks never enter sites.
+// Elsewhere a ground click always orders a course, and Shift stops at the point.
 // A plain click on the current point switches it between driving through and stopping.
-export function clickOrder(dest: Vec, shift: boolean, current: MoveOrder | null): MoveOrder {
+export function clickOrder(dest: Vec, shift: boolean, me: Pick<Vehicle, "pos" | "order">): MoveOrder {
+  const site = siteUnder(dest);
+  return site ? { kind: "stopAt", dest: nearestPad(site, me.pos) } : groundOrder(dest, shift, me.order);
+}
+
+function groundOrder(dest: Vec, shift: boolean, current: MoveOrder | null): MoveOrder {
   if (shift) return { kind: "stopAt", dest };
   if (current && current.kind !== "brake" && dist(dest, current.dest) < RULES.reclickRadius)
     return { kind: current.kind === "through" ? "stopAt" : "through", dest: current.dest };

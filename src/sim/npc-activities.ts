@@ -25,7 +25,7 @@ import { vehicleById } from './damage';
 import { addState, endState, stateOf } from './states';
 import { vehicleStats } from './stats';
 import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, SalvageStock, Vehicle, World } from './types';
-import { canUseSite, isWalled, siteGates } from './sites';
+import { canUseSite, nearestPad } from './sites';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 import { dropTow, playerTow, runTow, strandedPlayerAt, towGoal } from './tow';
@@ -645,7 +645,7 @@ export function getActivityDestination(world: World, vehicle: Vehicle, activity:
   return siteStop(world, vehicle, activity, activity.destination);
 }
 
-// Where a driver stops for a site, a stock or a truck it tows: just outside its radius.
+// Where a driver stops for a site, a stock or a truck it tows: on a site pad, or just outside the radius.
 function siteStop(world: World, vehicle: Vehicle, activity: NpcActivity, destination: Vec): Vec {
   const out = vehicleStats(world, vehicle).radius + RULES.arriveRadius;
   const site = [...REGION.towns, ...REGION.locations].find((entry) => entry.id === activity.targetId);
@@ -657,21 +657,14 @@ function siteStop(world: World, vehicle: Vehicle, activity: NpcActivity, destina
   return { x: destination.x + Math.cos(angle) * (radius + out), y: destination.y + Math.sin(angle) * (radius + out) };
 }
 
-// Each driver keeps its own spot at each site, so drivers bound for one site do not all stop on one point and
-// queue for it. `out` is how far outside the site edge the vehicle stops.
+// Each driver keeps its own spot across the pad nearest it, so drivers bound for one site do not all stop on one
+// point and queue for it. `out` keeps the vehicle clear of the pad's side edges.
 function siteSpot(world: World, vehicle: Vehicle, site: ReturnType<typeof getKnownSite>, out: number): Vec {
   const spot = hashRandom(world.seed, ...charCodes(vehicle.id), ...charCodes(site.id));
-  if (!isWalled(site)) {
-    // An open site is used from any side, so the spot lies anywhere on its edge.
-    const angle = 2 * Math.PI * spot;
-    return { x: site.pos.x + Math.cos(angle) * (site.radius + out), y: site.pos.y + Math.sin(angle) * (site.radius + out) };
-  }
-  // A walled site is used from its gate nearest the vehicle, so the stop lies just outside that gate, shifted
-  // along the wall as far as the gate's reach allows.
-  const gate = siteGates(site).reduce((a, b) => (dist(vehicle.pos, a) <= dist(vehicle.pos, b) ? a : b));
-  const angle = Math.atan2(gate.y - site.pos.y, gate.x - site.pos.x);
-  const side = Math.sqrt((REGION.settlement.gateReach - RULES.arriveRadius) ** 2 - out ** 2) * (2 * spot - 1);
-  return { x: gate.x + Math.cos(angle) * out - Math.sin(angle) * side, y: gate.y + Math.sin(angle) * out + Math.cos(angle) * side };
+  const pad = nearestPad(site, vehicle.pos);
+  const angle = Math.atan2(pad.y - site.pos.y, pad.x - site.pos.x);
+  const side = (REGION.sites.pad.width / 2 - out) * (2 * spot - 1);
+  return { x: pad.x - Math.sin(angle) * side, y: pad.y + Math.cos(angle) * side };
 }
 
 function charCodes(text: string): number[] {

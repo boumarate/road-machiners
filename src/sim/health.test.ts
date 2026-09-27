@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { healPlayer } from './health';
-import { siteGates } from './sites';
+import { sitePads } from './sites';
 import { emptyWorld } from './testkit';
 
-const gate = siteGates(REGION.towns[0])[0];
+const gate = sitePads(REGION.towns[0])[0];
 
 describe('healing', () => {
   it('heals a parked player with supplies and spends supplies', () => {

@@ -49,6 +49,7 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 - Any uncaught error shows a fullscreen crash screen with the message.
 - The backquote or § key opens the debug console in every build. Type `help` for its cheat commands. `src/ui/console.ts` parses the commands and calls one pure function per cheat in `src/sim/cheats.ts`. Bad input throws `CheatError`, which the console prints. Any other error reaches the crash screen. God mode is a saved player flag. It restores the truck in `endTurn` before the destruction and defeat checks.
 - All randomness goes through `src/sim/rng.ts` with state in the world. Render-only noise lives in `src/render/noise.ts`.
+- `src/sim/sites.ts` owns site gates and pads. Trucks never enter a site. Gates lie where roads cross the site edge. Towns and small locations keep one gate, and large locations keep one per road. Each gate has a pad outside it. Services, salvage, NPC visits and site clicks all use pads.
 - `src/sim/bridge.ts` holds Canyon Bridge. The map stays one level. `heightAt` returns the deck height on the deck, and `groundAt` returns the canyon floor under it. Both rails block routes and physics, so trucks get on only over the ends.
 - Map coordinates are in tiles. Physics and 3D space are in meters: map x is 3D x, map y is 3D z, height is 3D y. `src/phys/frames.ts` converts.
 - The UI shows real units: km/h, meters, kg, liters and °C. `src/ui/units.ts` converts from sim units, with display numbers in `src/data/units.ts`.

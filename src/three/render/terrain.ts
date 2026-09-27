@@ -29,6 +29,8 @@ function paintTexture(w: World): THREE.CanvasTexture {
   paintGroundCanvas(c, w.terrain, { hillshade: 0.35 });
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
+  // Canvas row 0 is map y at the top edge, and the UVs grow with map y, so the image must not be flipped.
+  texture.flipY = false;
   texture.magFilter = THREE.NearestFilter;
   return texture;
 }

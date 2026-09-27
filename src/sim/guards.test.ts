@@ -4,7 +4,7 @@ import { RULES } from "../data/rules";
 import { fireWeapons } from "./combat";
 import { mountedParts } from "./grid";
 import { fireGuards } from "./guards";
-import { canUseSite, siteGates } from "./sites";
+import { siteGates } from "./sites";
 import { addVehicle, emptyWorld } from "./testkit";
 import type { Vec } from "./vec";
 
@@ -63,37 +63,3 @@ describe("town guards", () => {
   });
 });
 
-describe("walled sites", () => {
-  it("put a gate on the wall line at every road into each town and palisade", () => {
-    for (const site of [
-      ...REGION.towns,
-      ...REGION.locations.filter((l) => l.walled),
-    ]) {
-      expect(siteGates(site).length).toBeGreaterThan(0);
-      for (const g of siteGates(site))
-        expect(Math.hypot(g.x - site.pos.x, g.y - site.pos.y)).toBeCloseTo(
-          site.radius,
-        );
-    }
-  });
-
-  it("are searched only from a gate, while open sites use their radius", () => {
-    const yard = REGION.locations.find((l) => l.id === "salvage-yard")!;
-    const yardGate = siteGates(yard)[0];
-    expect(canUseSite({ x: yardGate.x, y: yardGate.y }, yard)).toBe(true);
-    // The spot just outside the wall that lies farthest from every gate.
-    const wall = Array.from({ length: 72 }, (_, i) => ({
-      x: yard.pos.x + Math.cos((i * 5 * Math.PI) / 180) * (yard.radius + 1),
-      y: yard.pos.y + Math.sin((i * 5 * Math.PI) / 180) * (yard.radius + 1),
-    }));
-    const gap = (p: Vec) =>
-      Math.min(...siteGates(yard).map((g) => Math.hypot(g.x - p.x, g.y - p.y)));
-    const back = wall.reduce((a, b) => (gap(a) >= gap(b) ? a : b));
-    expect(gap(back)).toBeGreaterThan(REGION.settlement.gateReach);
-    expect(canUseSite(back, yard)).toBe(false);
-    const well = REGION.locations.find((l) => l.id === "dustwell")!;
-    expect(
-      canUseSite({ x: well.pos.x + well.radius + 1, y: well.pos.y }, well),
-    ).toBe(true);
-  });
-});
