@@ -1,6 +1,7 @@
 # Social radio and dialogue
 
 **Status:** planning
+**Blocked:** PH2 onward waits for defeat-rescue and then npc-traits to merge. The user approved that order. Then PH2 onward is re-planned against `docs/tasks/npc-traits.md`, section "Changes needed in social radio".
 **Branch:** social
 **Worktree:** .worktrees/social
 **Goal:** All player and NPC talk runs through one dialogue system, where new talk is a new topic in data. In the browser, the player calls a truck in sight and gets directions to a town, honks and hears friendly trucks honk back, patches a stranded NPC and gets patched, and receives a tow offer and a raider demand as dialogues. The user confirms the loop in play.
@@ -135,7 +136,7 @@ TDD: yes. Each rule is a sim rule with a Vitest test. The panel and keys get a P
 
 ## Plan
 
-Approach: build the system bottom up in the sim, each layer with its first content: calls and topics with directions, agreements with the tow, the patch, the raider demand, and the honk. The browser work comes last, on top of a finished sim. Defeat-rescue work is out of scope.
+Approach: PH1 runs now. PH2 onward is blocked, see the header. Build the system bottom up in the sim, each layer with its first content: calls and topics with directions, agreements with the tow, the patch, the raider demand, and the honk. The browser work comes last, on top of a finished sim. Defeat-rescue work is out of scope.
 
 UK3 resolved: an agreement kind supplies `destination()`, where its NPC provider drives now, and `advance()`, run every turn for every live agreement. `advance()` returns ongoing, complete or a cancel reason. The tow uses two destinations, the client and then the town. The patch uses one. A player provider drives on their own, so only `advance()` runs for them.
 
@@ -154,7 +155,7 @@ Deviation from PC3: raising a topic is a turn step, `raiseCalls()`, not an activ
   - Types `TopicId`, `ConditionId`, `EffectId`, `PrepareId` as string unions.
   - `Topic` is `{ id; once; ask: { text; when: ConditionId[] } | null; raise: { when: ConditionId[]; priority: number } | null; prepare: PrepareId | null; hangUp: EffectId[]; start: string; nodes: Record<string, DialogueNode> }`.
   - `DialogueNode` is `{ line: string; options: DialogueOption[] }`. `DialogueOption` is `{ text; when: ConditionId[]; effects: EffectId[]; go: string | 'hub' | 'end' }`.
-  - `CLASS_TALK: Record<Brain, { greeting: string; topics: TopicId[]; repeatLine: string }>`.
+  - `CLASS_TALK: Record<Brain, { greeting: string; topics: TopicId[]; repeatLine: string }>`. Only `talkOf(npc)` in `src/sim/dialogue.ts` reads it, so traits replace one lookup.
   - `TOPICS` with `directions` as the first topic.
 - 1.4 `src/data/social.ts` (create) — `SOCIAL` numbers with comments. This phase adds only what it uses.
 - 1.5 `src/sim/dialogue-rules.ts` (create) — `CONDITIONS: Record<ConditionId, (w, npc) => boolean>`, `EFFECTS: Record<EffectId, (w, npc, vars) => void>` and `PREPARES: Record<PrepareId, (w, npc) => CallVars>`. The records are typed complete, so a name in data without a function fails typecheck. Directions adds `prepareDirections` and `revealTown`.
