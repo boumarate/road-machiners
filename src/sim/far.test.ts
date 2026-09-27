@@ -8,7 +8,7 @@ import { physicsMove } from '../phys/turn';
 import { advanceFar, isNear } from './far';
 import { getResources } from './resources';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { Pose, World } from './types';
 import { dist } from './vec';
 import { endTurn } from './world';
@@ -158,7 +158,7 @@ describe('far NPC travel', () => {
     const w = emptyWorld();
     w.obstacles = [{ id: 'rock1', pos: { x: 135, y: 120 }, r: 3, kind: 'rock' }];
     const far = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });
-    far.brain = { templateId: 'trader', activity: null, goal: null, home: { x: 0, y: 0 }, stepIndex: 0, refusedTow: false };
+    far.brain = npcBrain('trader', { x: 0, y: 0 }, ['trader']);
     far.order = { kind: 'stopAt', dest: { x: 150, y: 120 } };
     advanceFar(w, far);
     const stored = far.brain.farRoute!;

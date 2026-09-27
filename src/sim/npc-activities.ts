@@ -1,6 +1,6 @@
 import { chassisDef } from '../data/chassis';
 import { ECONOMY, GOOD_IDS } from '../data/goods';
-import { HUNTING_GROUNDS, NPC_CLASSES, NPC_UPKEEP, NPCS, type NpcClass } from '../data/npcs';
+import { HUNTING_GROUNDS, NPC_BEHAVIOR, NPC_UPKEEP } from '../data/npcs';
 import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
@@ -8,6 +8,7 @@ import { isHostile } from './combat';
 import { contactsOf } from './detect';
 import { getTradePrice, sellVehicleCargo, serviceAtCamp, serviceVehicle, tradeGoods } from './economy';
 import { corePart, freeCells, goodsCount, mountedParts } from './grid';
+import { hasTrait, npcProfile, type NpcProfile } from './npc-profile';
 import { getResources } from './resources';
 import { randInt } from './rng';
 import { canReachSalvage, hasSalvage } from './salvage';
@@ -20,19 +21,13 @@ import { canVehicleSee } from './vision';
 import { chooseTowActivity, dropTow, runTow } from './tow';
 import { DETECT } from '../data/detect';
 
-function getNpcClass(vehicle: Vehicle): NpcClass {
-  const template = vehicle.brain && NPCS[vehicle.brain.templateId];
-  if (!template) throw new Error(`Missing NPC template for ${vehicle.id}`);
-  return NPC_CLASSES[template.brain];
-}
-
 function createActivity(kind: NpcActivity['kind'], targetId: string | null, destination: Vec | null, reason: string): NpcActivity {
   return { kind, targetId, destination, reason, phase: destination ? 'travel' : 'act' };
 }
 
 function getKnownSite(id: string) {
   const site = [...REGION.towns, ...REGION.locations].find((entry) => entry.id === id);
-  if (!site) throw new Error(`Unknown class site ${id}`);
+  if (!site) throw new Error(`Unknown site ${id}`);
   return site;
 }
 
@@ -67,9 +62,9 @@ function computeVisibleStrength(vehicle: Vehicle): number {
   }, 0);
 }
 
-// Where a class flees to, away from a threat at `threatPos`: the nearest known town or own camp further from the
+// Where an NPC flees to, away from a threat at `threatPos`: the nearest known town or own camp further from the
 // threat than the vehicle already is, or straight away from it if no such site is known.
-function fleeDestination(world: World, vehicle: Vehicle, profile: NpcClass, threatPos: Vec): Vec {
+function fleeDestination(world: World, vehicle: Vehicle, profile: NpcProfile, threatPos: Vec): Vec {
   const safe = [...profile.towns, ...profile.bases].map(getKnownSite).filter((site) => dist(site.pos, threatPos) > dist(vehicle.pos, threatPos));
   safe.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   const away = { x: vehicle.pos.x + (vehicle.pos.x - threatPos.x), y: vehicle.pos.y + (vehicle.pos.y - threatPos.y) };
@@ -77,15 +72,17 @@ function fleeDestination(world: World, vehicle: Vehicle, profile: NpcClass, thre
   return { x: clamp(destination.x, 1, world.size - 1), y: clamp(destination.y, 1, world.size - 1) };
 }
 
-function chooseDangerActivity(world: World, vehicle: Vehicle, profile: NpcClass): NpcActivity | null {
+function chooseDangerActivity(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity | null {
   const enemies = world.vehicles.filter((other) => isHostile(vehicle, other) && canVehicleSee(world, vehicle, other.pos));
   enemies.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   const enemy = enemies[0];
   if (enemy) {
     const ownStrength = vehicleStats(world, vehicle).weapons.filter((weapon) => weapon.part.hp > 0).reduce((sum, weapon) => sum + weapon.def.round.damage * weapon.def.rounds, 0);
-    const conditionThreshold = vehicle.brain!.activity?.kind === 'flee' ? profile.recoverCondition : profile.fleeCondition;
+    const conditionThreshold = vehicle.brain!.activity?.kind === 'flee' ? NPC_BEHAVIOR.recoverCondition : NPC_BEHAVIOR.fleeCondition;
     const weak = getCabCondition(vehicle) <= conditionThreshold || getResources(world, vehicle).health / RULES.maxHealth <= conditionThreshold;
-    if (profile.defensive || weak || ownStrength === 0 || computeVisibleStrength(enemy) > ownStrength * profile.threatRatio) {
+    // Traders never pick a fight.
+    const defensive = hasTrait(vehicle, 'trader');
+    if (defensive || weak || ownStrength === 0 || computeVisibleStrength(enemy) > ownStrength * NPC_BEHAVIOR.threatRatio) {
       return createActivity('flee', enemy.id, fleeDestination(world, vehicle, profile, enemy.pos), weak ? 'damaged and threatened' : 'avoid a costly fight');
     }
     return createActivity('fight', enemy.id, { ...enemy.pos }, 'manageable visible hostile');
@@ -98,16 +95,15 @@ function chooseDangerActivity(world: World, vehicle: Vehicle, profile: NpcClass)
   contacts.sort((a, b) => dist(vehicle.pos, a.center) - dist(vehicle.pos, b.center));
   const contact = contacts[0];
   if (!contact) return null;
-  const template = NPCS[vehicle.brain!.templateId];
-  if (template.brain === 'raider') return createActivity('investigate', contact.vehicleId, { ...contact.center }, 'heard a hostile beyond sight');
+  if (hasTrait(vehicle, 'raider')) return createActivity('investigate', contact.vehicleId, { ...contact.center }, 'heard a hostile beyond sight');
   return createActivity('flee', contact.vehicleId, fleeDestination(world, vehicle, profile, contact.center), 'heard a hostile beyond sight');
 }
 
-function chooseServiceActivity(world: World, vehicle: Vehicle, profile: NpcClass): NpcActivity | null {
+function chooseServiceActivity(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity | null {
   const resources = getResources(world, vehicle);
   const lowFuel = resources.fuel <= chassisDef(vehicle.chassisId).fuelCap * NPC_UPKEEP.lowFuel;
   const lowSupplies = resources.supplies <= RULES.suppliesCap * NPC_UPKEEP.lowSupplies;
-  const damaged = getCabCondition(vehicle) <= profile.fleeCondition || mountedParts(vehicle).some((part) => part.hp === 0);
+  const damaged = getCabCondition(vehicle) <= NPC_BEHAVIOR.fleeCondition || mountedParts(vehicle).some((part) => part.hp === 0);
   if (!lowFuel && !lowSupplies && !damaged) return null;
   const reason = lowFuel ? 'low fuel' : lowSupplies ? 'low supplies' : 'needs repairs';
   const broke = resources.money < Math.min(ECONOMY.supplyPrice.fuel, ECONOMY.supplyPrice.supplies, ECONOMY.partRepairPerHp);
@@ -136,7 +132,7 @@ function canContinueActivity(world: World, vehicle: Vehicle, activity: NpcActivi
   return true;
 }
 
-function chooseSaleActivity(world: World, vehicle: Vehicle, profile: NpcClass): NpcActivity {
+function chooseSaleActivity(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity {
   const goods = goodsCount(vehicle);
   const towns = profile.towns.map(getKnownSite);
   const getValue = (id: string) => Object.entries(goods).reduce((sum, [good, count]) => sum + count * getTradePrice(world, vehicle, id, good, 'sell'), 0);
@@ -144,7 +140,7 @@ function chooseSaleActivity(world: World, vehicle: Vehicle, profile: NpcClass): 
   return towns[0] ? createSiteActivity('sell', towns[0].id, 'sell carried cargo') : createActivity('wait', null, null, 'no known buyer');
 }
 
-function chooseTradeActivity(world: World, vehicle: Vehicle, profile: NpcClass): NpcActivity {
+function chooseTradeActivity(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity {
   const source = chooseNearestSite(vehicle, profile.towns);
   if (!source) return createActivity('wait', null, null, 'no known market');
   const spend = getResources(world, vehicle).money - getUpkeepReserve(vehicle);
@@ -164,25 +160,24 @@ function chooseTradeActivity(world: World, vehicle: Vehicle, profile: NpcClass):
 }
 
 export function chooseNpcActivity(world: World, vehicle: Vehicle): NpcActivity {
-  const profile = getNpcClass(vehicle);
+  const profile = npcProfile(vehicle);
   const danger = chooseDangerActivity(world, vehicle, profile);
   if (danger) {
     if (world.player.tow?.by === vehicle.id) dropTow(world, 'danger');
     return danger;
   }
-  const tow = chooseTowActivity(world, vehicle, profile);
+  const tow = chooseTowActivity(world, vehicle);
   if (tow) return tow;
   const service = chooseServiceActivity(world, vehicle, profile);
   if (service) return service;
   const current = vehicle.brain!.activity;
   if (current && canContinueActivity(world, vehicle, current)) return current;
   if (hasSaleCargo(vehicle)) return chooseSaleActivity(world, vehicle, profile);
-  const template = NPCS[vehicle.brain!.templateId];
-  if (template.brain === 'trader') return chooseTradeActivity(world, vehicle, profile);
+  if (hasTrait(vehicle, 'trader')) return chooseTradeActivity(world, vehicle, profile);
   const visible = world.salvage.filter((stock) => canVehicleSee(world, vehicle, stock.pos) && (!canReachSalvage(vehicle, stock) || hasSalvage(stock)));
   visible.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   if (visible[0] && freeCells(vehicle) > 0) return createActivity('scavenge', visible[0].id, { ...visible[0].pos }, 'collect visible salvage');
-  if (template.brain === 'raider') {
+  if (hasTrait(vehicle, 'raider')) {
     const places = HUNTING_GROUNDS.filter((point) => dist(vehicle.pos, point) > RULES.arriveRadius * 2);
     const destination = places[randInt(world, 0, places.length - 1)];
     return createActivity('raid', null, { ...destination }, 'look for prey at known hunting grounds');

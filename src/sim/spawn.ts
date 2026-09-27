@@ -1,13 +1,14 @@
 // NPC spawning up to per-template caps. Raiders appear at their camp gates, neutrals at towns.
 
-import { NPC_CLASSES, NPCS, SPAWN, type NpcTemplate } from "../data/npcs";
+import { NPCS, SPAWN, type NpcTemplate, type TraitId } from "../data/npcs";
 import { chassisDef } from "../data/chassis";
 import { REGION } from "../data/region";
 import { playerVehicle } from "./damage";
 import { makeVehicle } from "./factory";
 import { isDriveObstacle } from "./mapgen";
 import { generateNpcLoadout } from "./npc-loadout";
-import { randInt, randRange } from "./rng";
+import { profileOf } from "./npc-profile";
+import { chance, randInt, randRange, type Rng } from "./rng";
 import { siteGates } from "./sites";
 import type { World } from "./types";
 import { dist, type Vec } from "./vec";
@@ -30,6 +31,11 @@ export function spawnInitial(world: World): void {
 }
 
 // Returns false when no free spot was found this time; the next interval tries again.
+// The template's base traits plus each extra that wins its roll.
+export function rollTraits(world: Rng, tpl: NpcTemplate): TraitId[] {
+  return [...tpl.traits, ...tpl.extraTraits.filter((extra) => chance(world, extra.chance)).map((extra) => extra.trait)];
+}
+
 function spawnOne(world: World, tpl: NpcTemplate): boolean {
   const loadout = generateNpcLoadout(world, tpl);
   const radius = chassisDef(loadout.chassisId).radius;
@@ -45,6 +51,7 @@ function spawnOne(world: World, tpl: NpcTemplate): boolean {
       heading: randRange(world, -Math.PI, Math.PI),
       brain: {
         templateId: tpl.id,
+        traits: rollTraits(world, tpl),
         activity: null,
         goal: null,
         home: { ...pos },
@@ -62,8 +69,8 @@ function spawnOne(world: World, tpl: NpcTemplate): boolean {
 
 // A point on the track just outside a random gate of one of the template's camps.
 function campSpot(world: World, tpl: NpcTemplate, radius: number): Vec | null {
-  const bases = NPC_CLASSES[tpl.brain].bases;
-  if (bases.length === 0) throw new Error(`${tpl.id} spawns at a camp but its class has none`);
+  const bases = profileOf(tpl.traits).bases;
+  if (bases.length === 0) throw new Error(`${tpl.id} spawns at a camp but its traits know none`);
   const id = bases[randInt(world, 0, bases.length - 1)];
   const camp = REGION.locations.find((l) => l.id === id);
   if (!camp) throw new Error(`Unknown camp ${id}`);

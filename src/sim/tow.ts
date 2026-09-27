@@ -4,12 +4,12 @@
 
 import { chassisDef } from '../data/chassis';
 import { ECONOMY } from '../data/goods';
-import { NPC_CLASSES, NPCS, type NpcClass } from '../data/npcs';
 import { REGION, type TownDef } from '../data/region';
 import { TOW } from '../data/tow';
 import { isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
 import { route, routeLength } from './path';
+import { hasTrait, npcProfile } from './npc-profile';
 import { getResources } from './resources';
 import { canUseSite, siteGates } from './sites';
 import { isStranded, vehicleStats } from './stats';
@@ -31,9 +31,9 @@ function inTowReach(tower: Vehicle, towed: Vehicle): boolean {
 }
 
 // The tow activity for this turn. A driver with an open offer waits for the answer, and a hitched one heads for
-// the town. Otherwise a towing class starts one when it sees the stranded player, is not hostile to it, and has
+// the town. Otherwise a trader or scavenger starts one when it sees the stranded player, is not hostile to it, and has
 // not been turned down before. Danger is chosen before this, so a driver in danger never starts a tow.
-export function chooseTowActivity(world: World, vehicle: Vehicle, profile: NpcClass): NpcActivity | null {
+export function chooseTowActivity(world: World, vehicle: Vehicle): NpcActivity | null {
   const tow = world.player.tow;
   const me = playerVehicle(world);
   if (tow?.by === vehicle.id) {
@@ -41,7 +41,8 @@ export function chooseTowActivity(world: World, vehicle: Vehicle, profile: NpcCl
     const town = townById(tow.town);
     return { kind: 'tow', targetId: town.id, destination: { ...town.pos }, phase: 'travel', reason: 'tow the player to town' };
   }
-  if (!profile.tows || tow || vehicle.brain!.refusedTow || world.player.state !== 'active') return null;
+  const tows = hasTrait(vehicle, 'trader') || hasTrait(vehicle, 'scavenger');
+  if (!tows || tow || vehicle.brain!.refusedTow || world.player.state !== 'active') return null;
   if (!isStranded(world, me) || isHostile(vehicle, me) || !canVehicleSee(world, vehicle, me.pos)) return null;
   return { kind: 'tow', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'help a stranded truck' };
 }
@@ -76,12 +77,10 @@ function offer(world: World, vehicle: Vehicle): void {
   world.events.push({ t: 'towOffer', by: vehicle.id, town: town.id, fee });
 }
 
-// The town the tower's class knows that lies nearest the player.
+// The town the tower knows that lies nearest the player.
 function nearestKnownTown(world: World, vehicle: Vehicle): TownDef {
   const me = playerVehicle(world);
-  const template = vehicle.brain && NPCS[vehicle.brain.templateId];
-  if (!template) throw new Error(`Missing NPC template for ${vehicle.id}`);
-  const known = NPC_CLASSES[template.brain].towns.map(townById);
+  const known = npcProfile(vehicle).towns.map(townById);
   if (known.length === 0) throw new Error(`${vehicle.id} tows but knows no town`);
   return known.sort((a, b) => dist(me.pos, a.pos) - dist(me.pos, b.pos))[0];
 }

@@ -9,7 +9,7 @@ import { RULES } from './rules';
 // NPCs begin with the player's upkeep budget. Their fuel is capped by their chassis.
 export const NPC_RESOURCES = { money: START_KITS.standard.money, fuel: START_KITS.standard.fuel, supplies: START_KITS.standard.supplies };
 
-export type Brain = 'raider' | 'trader' | 'scavenger';
+export type TraitId = 'trader' | 'scavenger' | 'raider' | 'scumbag' | 'coward';
 
 export type Weighted<T> = { value: T; weight: number };
 export type CargoRoll = { good: string; count: number };
@@ -27,7 +27,8 @@ export type NpcTemplate = {
   id: string;
   name: string;
   faction: Faction;
-  brain: Brain;
+  traits: TraitId[]; // every NPC of the template has these
+  extraTraits: { trait: TraitId; chance: number }[]; // each rolled once at spawn
   loadout: NpcLoadoutTable;
   aggroRange: number; // raiders pick targets inside this range
   preferredRange: number; // distance a raider tries to hold while fighting
@@ -79,22 +80,22 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
 
 export const NPCS: Record<string, NpcTemplate> = {
   buggy: {
-    id: 'buggy', name: 'Raider outrider', faction: 'raiders', brain: 'raider',
+    id: 'buggy', name: 'Raider outrider', faction: 'raiders', traits: ['raider'], extraTraits: [],
     loadout: LOADOUTS.outrider,
     aggroRange: 11, preferredRange: 3, bounty: 60, xp: 40, cap: 6, interval: 8, spawn: 'camp',
   },
   gunwagon: {
-    id: 'gunwagon', name: 'Raider gunwagon', faction: 'raiders', brain: 'raider',
+    id: 'gunwagon', name: 'Raider gunwagon', faction: 'raiders', traits: ['raider'], extraTraits: [],
     loadout: LOADOUTS.gunwagon,
     aggroRange: 12, preferredRange: 6, bounty: 150, xp: 90, cap: 2, interval: 20, spawn: 'camp',
   },
   trader: {
-    id: 'trader', name: 'Trader caravan', faction: 'traders', brain: 'trader',
+    id: 'trader', name: 'Trader caravan', faction: 'traders', traits: ['trader'], extraTraits: [],
     loadout: LOADOUTS.trader,
     aggroRange: 0, preferredRange: 0, bounty: 0, xp: 60, cap: 5, interval: 12, spawn: 'town',
   },
   scavenger: {
-    id: 'scavenger', name: 'Scavenger', faction: 'scavengers', brain: 'scavenger',
+    id: 'scavenger', name: 'Scavenger', faction: 'scavengers', traits: ['scavenger'], extraTraits: [],
     loadout: LOADOUTS.scavenger,
     aggroRange: 0, preferredRange: 0, bounty: 0, xp: 40, cap: 4, interval: 12, spawn: 'town',
   },
@@ -110,27 +111,31 @@ export const SPAWN = {
   neighborHelp: 10, // same-faction vehicles in this range join a grudge
 };
 
-export type NpcClass = {
+// Decision weights per trait. Empty until decisions read them.
+export type TraitWeights = Record<string, never>;
+
+export type Trait = {
   towns: string[];
   bases: string[]; // own camps that give fuel, supplies and repairs instead of towns
   salvageSites: string[];
   supplySites: string[];
-  fleeCondition: number;
-  recoverCondition: number;
-  threatRatio: number;
-  defensive: boolean;
   // A hostile contact reacts only while its circle is at most this many tiles wide. Beyond it the
   // noise is too vague to act on. Raiders have no limit: they hear as far as the player does.
   contactReactRadius: number;
-  tows: boolean; // offers to tow a stranded player to town
+  weights: TraitWeights;
+};
+
+// An NPC knows the union of its traits' sites.
+export const TRAITS: Record<TraitId, Trait> = {
+  scavenger: { towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, weights: {} },
+  trader: { towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, weights: {} },
+  raider: { towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], contactReactRadius: Infinity, weights: {} },
+  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, weights: {} },
+  coward: { towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, weights: {} },
 };
 
 // Cab warnings begin at 30%. Recovery to half cab health prevents fight/flee oscillation.
-export const NPC_CLASSES: Record<Brain, NpcClass> = {
-  scavenger: { towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: 12, tows: true },
-  trader: { towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: true, contactReactRadius: 12, tows: true },
-  raider: { towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1, defensive: false, contactReactRadius: Infinity, tows: false },
-};
+export const NPC_BEHAVIOR = { fleeCondition: 0.3, recoverCondition: 0.5, threatRatio: 1 };
 
 export const NPC_UPKEEP = {
   lowFuel: RULES.lowFuelThreshold,

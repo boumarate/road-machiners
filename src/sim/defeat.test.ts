@@ -10,7 +10,7 @@ import { scavenge } from './locations';
 import { spendSkillPoint } from './progress';
 import { startSearch } from './search';
 import { startRepair } from './jobs';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { SalvageStock, Vehicle, World } from './types';
 import { endTurn, setDirect, setMoveOrder, setWeaponOrder } from './world';
 
@@ -252,7 +252,7 @@ describe('the loot rule', () => {
     const { w: w0, me, stock } = knockedOut();
     const before = inventory(w0, me);
     const raider = addVehicle(w0, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 42, y: 30 });
-    raider.brain = { templateId: 'buggy', activity: null, goal: null, home: { ...raider.pos }, stepIndex: 0, refusedTow: false };
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     for (const key of ['buggy', 'gunwagon', 'trader', 'scavenger']) w0.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
     const units = (s: SalvageStock) => s.parts.length + Object.values(s.goods).reduce((a, n) => a + n, 0);
     const full = units(stock);

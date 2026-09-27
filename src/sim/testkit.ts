@@ -4,7 +4,8 @@ import { START_KITS } from '../data/start';
 import { makeVehicle } from './factory';
 import { mountedParts } from './grid';
 import type { Terrain } from './terrain';
-import type { Faction, Vehicle, World } from './types';
+import type { TraitId } from '../data/npcs';
+import type { Faction, NpcBrain, Vehicle, World } from './types';
 import type { Vec } from './vec';
 import { refreshVision } from './vision';
 import { cloneWorld, newWorld } from './world';
@@ -45,6 +46,11 @@ export function addVehicle(w: World, faction: Faction, chassisId: string, parts:
   const v = makeVehicle(w, { name: chassisId, faction, chassisId, parts, cargo: {}, pos, heading, brain: null });
   w.vehicles.push(v);
   return v;
+}
+
+// A fresh NPC brain with no activity.
+export function npcBrain(templateId: string, home: Vec, traits: TraitId[]): NpcBrain {
+  return { templateId, traits, activity: null, goal: null, home: { ...home }, stepIndex: 0, refusedTow: false };
 }
 
 // Total hit points of the mounted parts, for checking that damage landed.

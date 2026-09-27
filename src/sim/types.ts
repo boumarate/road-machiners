@@ -1,6 +1,7 @@
 // World state. Plain data only, so it clones and serializes.
 
 import type { PartHit, Side } from "./armor";
+import type { TraitId } from "../data/npcs";
 import type { Terrain } from "./terrain";
 import type { Vec } from "./vec";
 
@@ -98,6 +99,7 @@ export type NpcActivity = {
 
 export type NpcBrain = {
     templateId: string;
+    traits: TraitId[]; // base traits of the template plus the extras rolled at spawn
     activity: NpcActivity | null;
     goal: Vec | null;
     home: Vec;

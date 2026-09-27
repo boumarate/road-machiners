@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NPC_CLASSES } from '../data/npcs';
+import { NPCS } from '../data/npcs';
 import { REGION } from '../data/region';
 import { TOW } from '../data/tow';
 import { partDef } from '../data/parts';
@@ -7,7 +7,7 @@ import { playerVehicle } from './damage';
 import { route, routeLength } from './path';
 import { canUseSite, siteGates } from './sites';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import { acceptTow, refuseTow, unhitch } from './tow';
 import type { GameEvent, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
@@ -17,7 +17,7 @@ type Setup = { w: World; trader: Vehicle };
 
 function withTower(w: World, templateId: string, faction: Vehicle['faction'], chassis: string, pos: Vec): Vehicle {
   const v = addVehicle(w, faction, chassis, ['stockEngine'], pos, Math.PI);
-  v.brain = { templateId, activity: null, goal: null, home: { ...pos }, stepIndex: 0, refusedTow: false };
+  v.brain = npcBrain(templateId, pos, NPCS[templateId].traits);
   return v;
 }
 
@@ -94,9 +94,6 @@ describe('tow offer', () => {
   });
 
   it('raiders never tow', () => {
-    expect(NPC_CLASSES.raider.tows).toBe(false);
-    expect(NPC_CLASSES.trader.tows).toBe(true);
-    expect(NPC_CLASSES.scavenger.tows).toBe(true);
     const w = emptyWorld();
     w.player.fuel = 0;
     // Nothing to take, so the raider leaves the player alone.

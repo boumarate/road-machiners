@@ -7,7 +7,7 @@ import { advanceKnockout, checkKnockout } from './defeat';
 import { corePart, coreParts, gridOf, mountedItems, mountedParts } from './grid';
 import { vehicleStats } from './stats';
 import { leakFuel } from './supplies';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { Vehicle } from './types';
 
 const partAt = (v: Vehicle, x: number, y: number) =>
@@ -124,7 +124,7 @@ describe('knockout', () => {
   it('an NPC with a dead cab becomes a wreck', () => {
     const w = emptyWorld();
     const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 34, y: 30 });
-    buggy.brain = { templateId: 'buggy', activity: null, goal: null, home: buggy.pos, stepIndex: 0, refusedTow: false };
+    buggy.brain = npcBrain('buggy', buggy.pos, ['raider']);
     resolveDestroyed(w);
     expect(w.vehicles.some((v) => v.id === buggy.id)).toBe(true);
     corePart(buggy, 'cab').hp = 0;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NPC_CLASSES, NPCS, SPAWN } from '../data/npcs';
+import { NPCS, SPAWN, TRAITS } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { planNpcOrders } from './ai';
@@ -11,7 +11,7 @@ import { resolveNpcActivities } from './npc-activities';
 import { getResources } from './resources';
 import { canUseSite, siteGates } from './sites';
 import { spawnInitial } from './spawn';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { Faction, World } from './types';
 import { dist, type Vec } from './vec';
 
@@ -25,13 +25,13 @@ function outside(d: number): Vec {
 
 function addNpc(w: World, faction: Faction, templateId: string, pos: Vec) {
   const v = addVehicle(w, faction, 'buggy', ['mg', 'stockEngine'], pos);
-  v.brain = { templateId, activity: null, goal: null, home: { ...pos }, stepIndex: 0, refusedTow: false };
+  v.brain = npcBrain(templateId, pos, NPCS[templateId].traits);
   return v;
 }
 
 describe('raider camps', () => {
   it('are the raider bases, each with a road into its gate', () => {
-    expect(camps.map((c) => c.id).sort()).toEqual([...NPC_CLASSES.raider.bases].sort());
+    expect(camps.map((c) => c.id).sort()).toEqual([...TRAITS.raider.bases].sort());
     for (const camp of camps) expect(siteGates(camp).length).toBeGreaterThan(0);
   });
 
@@ -80,7 +80,7 @@ describe('raider camps', () => {
     addGoods(w, raider, 'scrap', 1);
     planNpcOrders(w);
     expect(raider.brain!.activity?.kind).toBe('sell');
-    expect(NPC_CLASSES.raider.towns).toContain(raider.brain!.activity?.targetId);
+    expect(TRAITS.raider.towns).toContain(raider.brain!.activity?.targetId);
   });
 
   it('serve only raiders at a gate', () => {

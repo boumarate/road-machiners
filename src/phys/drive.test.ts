@@ -4,7 +4,7 @@ import { RULES } from '../data/rules';
 import { makeVehicle } from '../sim/factory';
 import { addGoods, removeAllGoods } from '../sim/inventory';
 import { loadFactor, vehicleMass } from '../sim/mass';
-import { addVehicle, emptyWorld, partHp } from '../sim/testkit';
+import { addVehicle, emptyWorld, npcBrain, partHp } from '../sim/testkit';
 import type { MoveOrder, World } from '../sim/types';
 import { angleDiff, dist } from '../sim/vec';
 import { endTurn, setDirect, setMoveOrder } from '../sim/world';
@@ -321,7 +321,7 @@ describe('physics turns', () => {
     let w = emptyWorld();
     w.player.fuel = 0;
     const trader = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 40, y: 30 }, Math.PI);
-    trader.brain = { templateId: 'trader', activity: null, goal: null, home: { ...trader.pos }, stepIndex: 0, refusedTow: false };
+    trader.brain = npcBrain('trader', trader.pos, ['trader']);
     let d = buildDrive(w);
     const turn = () => {
       let r: TurnResult | null = null;
