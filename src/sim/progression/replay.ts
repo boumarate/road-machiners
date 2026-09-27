@@ -2,10 +2,11 @@
 // recording. Perks and the feedback of skills into behavior are ignored.
 
 import { TIME } from '../../data/time';
-import { MAX_SKILL_LEVEL, SKILL_IDS, XP_SOURCES } from '../../data/skills';
+import { MAIN_SKILL, MAX_SKILL_LEVEL, SKILL_IDS, TARGET_DAYS, TARGET_TOLERANCE, XP_SOURCES } from '../../data/skills';
 import { accrueXp, levelOf, type SkillProgress } from '../progress';
 import { clockOf } from '../sun';
 import type { SkillId, XpSource } from '../types';
+import { isArchetype, type Archetype } from './bot';
 import type { RunEnd, TraceLine } from './record';
 
 // levels[i] is the first turn the skill reaches level i + 1, or null if it never does.
@@ -71,4 +72,51 @@ export function parseRunEnd(value: unknown): RunEnd | null {
   if (!('end' in entry)) return null;
   if (entry.end !== 'death' || !Number.isInteger(entry.turn)) throw new Error(`Bad run end ${JSON.stringify(value)}`);
   return { end: 'death', turn: entry.turn as number };
+}
+
+// Each way a curve misses its targets in TARGET_DAYS, as one readable line. `turns` is the run length: a level whose
+// target window starts after the run ends only needs to stay unreached.
+export function targetMisses(curve: Curve, archetype: Archetype, turns: number): string[] {
+  return SKILL_IDS.flatMap((skill) => {
+    const table: Partial<Record<number, number>> = MAIN_SKILL[archetype] === skill ? TARGET_DAYS.main : TARGET_DAYS.off;
+    return Object.entries(table).flatMap(([level, day]) => levelMiss(skill, Number(level), day!, curve[skill].levels[Number(level) - 1], turns));
+  });
+}
+
+function levelMiss(skill: SkillId, level: number, day: number, reached: number | null, turns: number): string[] {
+  const at = reached === null ? 'never' : `day ${(reached / TIME.turnsPerDay).toFixed(1)}`;
+  const verdict = missVerdict(day * TIME.turnsPerDay, reached, turns);
+  return verdict ? [`${skill} level ${level}: ${at}, target day ${day}, ${verdict}`] : [];
+}
+
+// A level reached before its window is too early. One reached after it, or unreached once the window closed within
+// the run, is too late.
+function missVerdict(target: number, reached: number | null, turns: number): 'too early' | 'too late' | null {
+  const late = target * (1 + TARGET_TOLERANCE);
+  if (reached === null) return late <= turns ? 'too late' : null;
+  if (reached < target * (1 - TARGET_TOLERANCE)) return 'too early';
+  return reached > late ? 'too late' : null;
+}
+
+// A recorded run read back from a trace file's parsed lines: a header, the trace lines, and a death marker last if
+// the player died. `turns` is the death turn for a run the player did not survive.
+export type Run = { archetype: Archetype; seed: number; turns: number; death: number | null; trace: TraceLine[] };
+
+export function parseRun(values: readonly unknown[], label: string): Run {
+  const [first, ...rest] = values;
+  if (first === undefined) throw new Error(`${label} is empty`);
+  const header = parseHeader(first, label);
+  const end = rest.length > 0 ? parseRunEnd(rest[rest.length - 1]) : null;
+  const body = end ? rest.slice(0, -1) : rest;
+  const trace = body.map((value) => {
+    if (parseRunEnd(value)) throw new Error(`${label} has lines after its death marker`);
+    return parseTraceLine(value);
+  });
+  return { ...header, turns: end ? end.turn : header.turns, death: end ? end.turn : null, trace };
+}
+
+function parseHeader(value: unknown, label: string): Pick<Run, 'archetype' | 'seed' | 'turns'> {
+  const { archetype, seed, turns } = asRecord(value);
+  if (typeof archetype !== 'string' || !isArchetype(archetype) || !Number.isInteger(seed) || !Number.isInteger(turns)) throw new Error(`${label} has a bad header ${JSON.stringify(value)}`);
+  return { archetype, seed: seed as number, turns: turns as number };
 }

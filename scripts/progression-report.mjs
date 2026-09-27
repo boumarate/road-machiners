@@ -1,13 +1,12 @@
-// Replays every trace in tmp/progression/ through the current XP rules and prints, per archetype, the turns each
-// skill takes to reach each level and its XP per day. Turns show the median over seeds and the min-max range.
-// A level some seeds never reach shows how many seeds reached it.
+// Replays every trace in tmp/progression/ through the current XP rules and prints, per archetype, the in-game day
+// each skill reaches each level, its XP per day, and each miss against the targets in src/data/skills.ts.
+// Days show the median over seeds and the min-max range. A level some seeds never reach shows how many seeds reached it.
 // Usage: npm run progression:report
 import { createReadStream, readdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { MAX_SKILL_LEVEL, SKILL_IDS } from '../src/data/skills.ts';
 import { TIME } from '../src/data/time.ts';
-import { isArchetype } from '../src/sim/progression/bot.ts';
-import { parseRunEnd, parseTraceLine, replay } from '../src/sim/progression/replay.ts';
+import { parseRun, replay, targetMisses } from '../src/sim/progression/replay.ts';
 
 const DIR = 'tmp/progression';
 
@@ -19,39 +18,17 @@ for (const file of files) runs.push(await readRun(`${DIR}/${file}`));
 const archetypes = [...new Set(runs.map((r) => r.archetype))];
 for (const archetype of archetypes) printArchetype(archetype, runs.filter((r) => r.archetype === archetype));
 
-// A trace file: a header line with the run, then one trace line per practice event, and a death marker last if the
-// player died. XP per day counts the days up to the death.
+// A trace file, replayed with the current XP rules.
 async function readRun(path) {
-  const [first, ...rest] = await readValues(path);
-  if (!first) throw new Error(`${path} is empty`);
-  const header = parseHeader(first, path);
-  const { trace, death } = parseBody(rest, path);
-  const turns = death ?? header.turns;
-  return { ...header, death, curve: replay(trace, turns) };
-}
-
-// The trace lines and the death turn, or null when the player lived to the end.
-function parseBody(values, path) {
-  const end = values.length > 0 ? parseRunEnd(values[values.length - 1]) : null;
-  const lines = end ? values.slice(0, -1) : values;
-  return { trace: lines.map((value) => parseBodyLine(value, path)), death: end ? end.turn : null };
+  const run = parseRun(await readValues(path), path);
+  const curve = replay(run.trace, run.turns);
+  return { ...run, curve, misses: targetMisses(curve, run.archetype, run.turns) };
 }
 
 async function readValues(path) {
   const values = [];
   for await (const text of createInterface({ input: createReadStream(path), crlfDelay: Infinity })) if (text) values.push(JSON.parse(text));
   return values;
-}
-
-function parseBodyLine(value, path) {
-  if (parseRunEnd(value)) throw new Error(`${path} has lines after its death marker`);
-  return parseTraceLine(value);
-}
-
-function parseHeader(value, path) {
-  const { archetype, seed, turns } = value;
-  if (!isArchetype(archetype) || !Number.isInteger(seed) || !Number.isInteger(turns)) throw new Error(`${path} has a bad header ${JSON.stringify(value)}`);
-  return { archetype, seed, turns };
 }
 
 function printArchetype(archetype, group) {
@@ -61,20 +38,22 @@ function printArchetype(archetype, group) {
   const deaths = group.map((r) => r.death).filter((turn) => turn !== null);
   console.log(deaths.length === 0 ? 'No deaths' : `Died in ${deaths.length} of ${group.length} seeds, on turn ${spread(deaths, String)}`);
   const levels = Array.from({ length: MAX_SKILL_LEVEL }, (_, i) => `L${i + 1}`);
-  const rows = [['skill', ...levels, 'XP/day']];
+  const rows = [['skill', ...levels.map((l) => `${l} day`), 'XP/day']];
   for (const skill of SKILL_IDS) {
     const curves = group.map((r) => r.curve[skill]);
     const cells = levels.map((_, i) => levelCell(curves.map((c) => c.levels[i]), group.length));
     rows.push([skill, ...cells, spread(curves.map((c) => c.perDay), (n) => n.toFixed(0))]);
   }
   printTable(rows);
+  for (const run of group) for (const miss of run.misses) console.log(`  seed ${run.seed}: ${miss}`);
+  if (group.every((run) => run.misses.length === 0)) console.log('  all targets met');
 }
 
 // The turns to a level over seeds. Seeds that never reach it are counted, not averaged in.
 function levelCell(turns, seeds) {
   const reached = turns.filter((t) => t !== null);
   if (reached.length === 0) return 'never';
-  const cell = spread(reached, String);
+  const cell = spread(reached, (t) => (t / TIME.turnsPerDay).toFixed(1));
   return reached.length === seeds ? cell : `${cell} [${reached.length}/${seeds}]`;
 }
 

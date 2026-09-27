@@ -1,6 +1,7 @@
 // Character skills. Each skill grows from its own XP sources, and each level adds `perLevel` of every
 // effect in SKILL_EFFECTS. XP numbers are starting values for the progression simulator to tune.
 
+import type { Archetype } from '../sim/progression/bot';
 import type { SkillId, XpSource } from '../sim/types';
 
 export const SKILL_IDS: readonly SkillId[] = ['driving', 'perception', 'machining', 'toughness', 'social'];
@@ -145,3 +146,23 @@ export const PERK_NUMBERS = {
   smoothTalker: { cargo: 0.5 }, // share of each good the player drops to a demand, rounded down
   bluff: { danger: 2 }, // danger a robber sees in the player truck, times this
 };
+
+// ---- Progression targets, checked by the progression band test and printed by npm run progression:report.
+// Edit these days to change the curve, then tune XP_SOURCES until the report passes.
+
+// The skill each archetype mostly practices. The mixed bot has none; all its skills count as off skills.
+export const MAIN_SKILL: Record<Archetype, SkillId | null> = {
+  trader: 'social',
+  scavenger: 'machining',
+  fighter: 'perception',
+  mixed: null,
+};
+
+// In-game day by which a skill reaches a level, keyed by level. A level missing from a table is not checked.
+export const TARGET_DAYS = {
+  main: { 2: 2, 4: 8, 5: 15 },
+  off: { 2: 5 },
+} as const satisfies Record<'main' | 'off', Partial<Record<number, number>>>;
+
+// A curve passes when it reaches a level within this share of the target day, either way.
+export const TARGET_TOLERANCE = 0.3;
