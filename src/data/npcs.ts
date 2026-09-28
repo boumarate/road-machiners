@@ -414,7 +414,8 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   tow: {},
   patch: {},
   trade: {},
-  truce: {},
+  // A driver rarely robs a truck it holds a truce with. A scumbag's rob weight of 2 drops to 0.01, about 2%.
+  truce: { preySeen: { rob: { mul: 0.005 } } },
   grievance: {},
   // A driver that pleaded with a foe rarely pleads with it again soon. A truce weight of 2.5 drops to 0.025.
   plea: { parley: { truce: { mul: 0.01 }, beg: { mul: 0.01 } } },
@@ -496,8 +497,9 @@ export const TRAITS: Record<TraitId, Trait> = {
     },
   },
   // Raiders fight most hostiles they see and close in on most useful contacts. A raid ties with salvage in sight.
-  // A raider answers half the crashes with a fight, seldom asks for peace and refuses a truce more often than not.
-  // Threatened, it mostly fights. Nine in ten raiders help a stranded raider, the only truck they tow.
+  // A raider answers half the crashes with a fight, seldom asks for peace and refuses a truce more often than not,
+  // and nearly always from prey it expects to beat. Threatened, it mostly fights. Nine in ten raiders help a stranded
+  // raider, the only truck they tow.
   raider: {
     towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], contactReactRadius: 12, boldness: 1,
     weights: {
@@ -581,6 +583,13 @@ export const NPC_BEHAVIOR = {
   weakBeg: 40,
   // Accept weight times this when the pleading foe's group is a threat or the answering driver is weak.
   threatAccept: 5,
+  // Refuse weight times this when the driver is robbing the pleading foe and neither faces a threat nor is weak.
+  // A raider hunting a truck with loot counts as robbing it. A scumbag's 2 to 1 for accept becomes 2 to 20, so a
+  // confident robber takes a truce about one time in ten. A raider's 2 to 3 becomes 2 to 60, about one in twenty.
+  robberRefuse: 20,
+  // Truce weight times this when a hurt driver is robbing the foe and is not weak. A scumbag's truce weight of 0.5
+  // drops to 0.05 against keep 8, so it offers its prey a truce about two hurt turns in a hundred.
+  robberTruce: 0.1,
   // Comply weight times this when the player's local group is a threat. It then beats fight back and flee by far.
   threatComply: 20,
 };

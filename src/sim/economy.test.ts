@@ -95,6 +95,15 @@ describe("trade", () => {
     ).toBeLessThan(before);
   });
 
+  it("social at max level cuts the spread by at most half", () => {
+    const w = startAtBowl();
+    w.player.skills.social = XP_TO_REACH[5];
+    const spreadAtMax = buyPrice(w, "bowl", "salt") - sellPrice(w, "bowl", "salt");
+    const w0 = startAtBowl();
+    const spreadAtZero = buyPrice(w0, "bowl", "salt") - sellPrice(w0, "bowl", "salt");
+    expect(spreadAtMax).toBeCloseTo(spreadAtZero / 2, 0);
+  });
+
   it("trade needs a shop", () => {
     expect(() => buyGood(emptyWorld({ x: 30, y: 30 }), "scrap", 1)).toThrow(
       /shop/,
