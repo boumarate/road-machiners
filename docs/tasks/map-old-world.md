@@ -130,3 +130,15 @@ PH1, PH2 and PH3 own disjoint paths and run together. PH2 leaves the `bake.ts` h
 ## Code smells
 
 ## Conclusion
+
+### Deviations from plan
+- Broken road bridges are no prop kind of their own. A broken bridge on today's road stood on the road surface, where it would either block traffic or be driven through. Instead its two broken ends stand on the banks beside the road, and the road dips through the wash.
+- Two road bridges where roads meet on one wash overlapped. The first one now serves both.
+- `src/sim/tow.test.ts` "offers the same deal again" relied on a lucky roll. A forced option still leaves keep its minimum chance. The test now pins that roll, as `robbery.test.ts` does.
+
+### Hands-off decisions
+- udesign: approved by the user. Hands-off runs from planning until the bake pictures.
+- uplan: plan auto-approved on "go go go".
+- uexecute: old roads break with spans only across washes 24 m or wider. Narrower gullies just cut the asphalt, because every gully breaking the road read as dashes.
+- uexecute: road bridges span 16 to 36 m. Longer wet stretches are roads running along a wash.
+- uexecute: perf misses its budgets on the pre-old-world commit too, with boot about 2.5 s and first turn 380 to 450 ms under current machine load. The old world adds about 5 to 10% turn time and about 5 ms per move preview.
