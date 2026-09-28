@@ -30,10 +30,11 @@ Goods take one cell per unit and can be moved or dumped anywhere. Dragging an it
 
 Garage equipment changes are instant. Outside town, a change is a refit job:
 
-- Installing or removing a part takes 5 turns.
-- Replacing an installed part with a spare takes 10 turns.
-- Moving an installed part to another mount takes 10 turns.
-- Installing a salvaged part takes 5 turns. The part stays in the stock until the job ends.
+- Installing or removing a part takes 3 turns.
+- Replacing an installed part with a spare takes 5 turns.
+- Moving an installed part to another mount takes 5 turns.
+- Installing a salvaged part takes 3 turns. The part stays in the stock until the job ends.
+- Removing a part from a knocked-out truck takes 3 turns, and 5 when it goes straight onto a mount.
 
 Machining and a perk shorten these times. The old layout stays active until the whole job finishes. Rearranging, storing, dumping or collecting items is blocked during a refit. Moving goods or spare parts without installing them stays instant.
 
@@ -75,11 +76,11 @@ Weapons have range, reload time, scatter, a firing arc and a number of rounds pe
 
 Heavy guns kick. Recoil adds scatter that falls with truck mass, so a tank gun sprays on a scout and holds steady on a tractor. Each gun also has its own shake from the truck's speed. A stabilized MG fires well on the move, and a sniper cannon needs a parked truck. Each round rolls on its own. It hits when its scatter is smaller than the target's width as seen from the gun. So distance, target size, facing, crossing speed, the shooter's own speed and round speed all matter. Hovering a truck shows both sides' chances and their causes.
 
-There is no hull. A round enters from the side facing the shooter and walks the grid cell by cell. Each working part it meets takes damage, and the part's armor uses up the round's penetration. Rounds are kinetic or blast. Rockets, cannon shells and all splash are blast. Armor has a separate number against blast: a rebar cage stops rockets but lets bullets through, and ceramic stops bullets but cracks under blast. An aimed shot targets one part's lane, and a near miss still hits where it lands. A part at 0 HP stops working. A dead weapon cannot fire. A dead engine or transmission limits speed to a crawl. Dead wheels cut speed and steering, and a holed tank leaks fuel. A destroyed cab ends the fight: an NPC truck becomes a wreck, and the player is knocked out.
+There is no hull. A round enters from the side facing the shooter and walks the grid cell by cell. Each working part it meets takes damage, and the part's armor uses up the round's penetration. Rounds are kinetic or blast. Rockets, cannon shells and all splash are blast. Armor has a separate number against blast: a rebar cage stops rockets but lets bullets through, and ceramic stops bullets but cracks under blast. An aimed shot targets one part's lane, and a near miss still hits where it lands. A part at 0 HP stops working. A dead weapon cannot fire. A dead engine or transmission limits speed to a crawl. Dead wheels cut speed and steering, and a holed tank leaks fuel. A destroyed cab ends the fight: the truck is knocked out.
 
 Q toggles weapon auto mode. It gives every weapon a body shot at the nearest hostile it can hit. Clicking a target switches it off. NPC weapons target their chosen opponent or a visible attacker that shot at them or a nearby faction mate. Retreat does not disable defensive fire. NPCs avoid starting attacks in town guard range, but defend themselves there.
 
-Every raider kill pays the player a bounty by raider type. A wreck leaves parts worth a share of its chassis value, scaled by its HP left, so a kill pays well but not more than trading. Camps refill their raiders over about a day.
+Beating a truck pays nothing by itself. The loot is on the truck. A wreck leaves parts worth a share of its chassis value, scaled by its HP left, so a kill pays well but not more than trading. Camps refill their raiders over about a day.
 
 ## Defeat
 
@@ -88,6 +89,14 @@ Losing a fight does not end the game, in Kenshi style. A loss starts a new story
 A broken cab knocks the player out while health is above 0. Every mounted part except the built-in ones, all goods and all spare parts drop into a pile beside the truck. Money, fuel and supplies stay. Feuds against the player end.
 
 While knocked out, turns run on their own and the player gives no orders. Looters search the pile. The player comes to when no hostile sees the truck, or after 30 turns. Broken built-in parts that are not junk are patched to a quarter of their HP. What the looters left stays in the pile.
+
+A broken cab knocks an NPC out too. One in twenty dies at once instead, and its truck becomes a wreck. Health at 0 also kills an NPC. A knocked-out truck keeps everything it carries, with no pile. A truck parked beside it loots it on a second grid beside its own. Goods and spare parts move at once. An installed part takes a field refit to remove, and built-in parts stay. NPC looters follow the same rules, and passing drivers stop for a knocked-out truck as often as for a wreck. The job bar names the part being worked on.
+
+A knocked-out NPC is nobody's foe. No gun aims at it on its own, and knockout clears every order aimed at it. The player can still target it by hand, and any damaging shot finishes it into a wreck. Feuds against it end.
+
+A knocked-out NPC comes to once the trucks that attacked it no longer see it, or after 30 turns. Broken built-in parts that are not junk are patched to a quarter of their HP. It then retreats to its nearest own camp, else its nearest known town. It drives or crawls there, and towers can tow it. After a quarter of a day beyond the player's gray vision it appears at a free home pad instead. At home it gets fresh gear for its type on the same chassis and returns to its work.
+
+One in three NPCs the player knocks out holds a grudge for 10 days. Every hostile choice about the player gets more likely: fighting, robbing, ramming, closing in, refusing a truce and finishing a beggar. The grudge ends when that driver knocks the player out or the player hands it cargo.
 
 Raiders ignore a truck with nothing to take. A truck has loot when it holds goods, spare parts or mounted parts beyond the built-in ones. A feud still makes a raider fight a stripped truck.
 
@@ -147,7 +156,7 @@ The sun also heats the player's running engine, faster at higher speed. Airflow,
 
 NPC behavior has three layers. Traits are permanent and set the chances of choices. A goal stack keeps long-term work under interruptions like fights, flight, service and repairs. The driver usually resumes that work once an interruption ends. Decision points pick reactions by weighted chance when a new hostile, contact, attack, prey, stranded truck or passed wreck appears. Traits give fixed knowledge of towns, salvage sites and hunting grounds. Each NPC remembers the subjects it already decided on and the attackers still in sight. There is no live shared intelligence. Inspection shows its activity and reason.
 
-NPCs spawn with equipment sampled from weighted tables for their role: a chassis, a fitting engine and weapon, then optional cargo parts, armor and goods. It respects mount space, rated mass and an equipment budget separate from the driver's wallet. Rare equipment has a lower weight. The same world seed and actions produce the same equipment. There is no separate loot roll on death.
+NPCs spawn with equipment sampled from weighted tables for their role: a chassis, a fitting engine and weapon, then optional cargo parts, armor and goods. It respects mount space, rated mass and an equipment budget separate from the driver's wallet. Rare equipment has a lower weight. The same world seed and actions produce the same equipment. There is no separate loot roll on defeat.
 
 - Scavengers collect salvage and sell cargo. A scavenger on a trip stops for three in four wrecks it passes, then mostly goes back to its trip.
 - Traders buy profitable cargo, keep money for upkeep and flee from threats.
@@ -178,7 +187,7 @@ A chance is 0 only when an option is physically impossible. A driver with no wor
 
 Drivers judge each other by danger: the firepower of working guns times the current toughness of the cab, chassis and armor. A tank looks more dangerous than a scout, and a half-beaten tank looks about half as dangerous. Danger counts nearby visible faction mates on each side. A driver misjudges another truck's danger by up to a quarter each time it first sees it. A scumbag robs a truck whose danger looks below its own times its boldness. Scumbags are bold, and cowards are timid. A stronger target, or one near a town gate, is robbed only rarely.
 
-A robbery is an attack. The winner searches the wreck or the pile the loser left. A robber whose target escapes backs off that target for a while.
+A robbery is an attack. The winner loots the knocked-out truck, the wreck or the pile the loser left. A robber whose target escapes backs off that target for a while.
 
 In a fight, each chance to ram the target is a decision. A ram that the driver expects to hurt itself more than the target is rare, and traders almost never ram.
 
@@ -222,7 +231,7 @@ Shops trade in Bowl and Nose garages and in stalls at the Salvage Yard, the Gran
 
 Each shop holds a random, finite part stock with rolled wear, and restocks on a timer. Garages hold more and fresher parts, and stalls hold a few worn ones. Spare parts found in the field are mostly worn too. A part sold to a shop joins its stock. Mounting, full repairs, garage storage and chassis need a town garage.
 
-Shops post contracts, and each shows the game time it is due. A haul loads goods for another shop by a deadline, and a missed deadline charges their value. A player in debt cannot take a haul. A fetch asks for a working part of one type, rebuilt at most once, that the shop does not stock. It pays the part's price plus a search fee. A bounty names a raider type, and any truck of that type counts. It pays half the target's value, and one kill fulfils one bounty. Contracts pay money, and a finished one trains Social from the work, not from a part's price. The player holds a few at once.
+Shops post contracts, and each shows the game time it is due. A haul loads goods for another shop by a deadline, and a missed deadline charges their value. A player in debt cannot take a haul. A fetch asks for a working part of one type, rebuilt at most once, that the shop does not stock. It pays the part's price plus a search fee. A bounty names a raider type, and any truck of that type counts. It pays half the target's value, and one knockout or kill fulfils one bounty. Contracts pay money, and a finished one trains Social from the work, not from a part's price. The player holds a few at once.
 
 The unit of effort is one turn of play. The wage is the net money per turn a player earns at a tier. An item's effort is its value divided by its tier's wage, and data keeps each item inside a target band. Contract rewards are estimated turns of work times the wage. `npm run econ` plays the sim economy with bot policies and reports wages and the day each upgrade is reached.
 

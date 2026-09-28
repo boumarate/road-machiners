@@ -23,8 +23,9 @@ export function hasSave(storage: Storage): boolean {
 // 16 replaces the XP pool with per-skill XP. 17 adds the hostile trucks seen last turn and more XP sources.
 // 18 adds perks. 19 marks calls that took up a topic. 20 adds part wear. 21 adds player tows of NPCs with waived fees.
 // 22 adds XP targets and player piles. 23 adds shop stock, contracts, upkeep and bounty templates. 24 adds deck
-// mounts and built-in parts sized to the truck models. Older saves do not load.
-const SAVE_VERSION = 24;
+// mounts and built-in parts sized to the truck models. 25 adds NPC knockouts, truck pickups on refits and revenge.
+// Older saves do not load.
+const SAVE_VERSION = 25;
 
 export function loadWorld(storage: Storage): World | null {
   const raw = storage.getItem(SAVE_KEY);
