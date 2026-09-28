@@ -85,7 +85,7 @@ import { GameMenu } from "../ui/game-menu";
 import { volleyTally } from "../ui/format";
 import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
-import { computeEngineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
+import { CombatScore, CombatWatch, computeEngineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
 import type { SoundPlayer } from "../audio/player";
 import { uiRoot } from "../ui/dom";
 import { Travel, type Playback, type LiveVision } from "./travel";
@@ -139,7 +139,7 @@ export class Game {
   readonly sound: SoundDirector;
   private panelOpen = false; // last frame's panel state, for open and close sounds
   private readonly loops: SoundLoops;
-  private lastDangerTurn = -Infinity; // last turn a hostile was in sight, for the combat music hold
+  private readonly combatWatch = new CombatWatch();
   private readonly views = new Map<string, VehicleView>();
   private frames: Record<string, VehicleFrame> = {}; // last shown pose per vehicle
   // A played turn: physics movement, then shots in flight when there was combat, then time to read results.
@@ -243,8 +243,9 @@ export class Game {
     this.labels = new Labels(overlay);
     this.fx = new Fx3D(this.scene, overlay, this.rig);
     this.truckFx = new TruckFx(this.fx);
-    this.sound = new SoundDirector(player, this.rig);
-    this.loops = new SoundLoops(player);
+    const score = new CombatScore(player, Math.random);
+    this.sound = new SoundDirector(player, this.rig, score);
+    this.loops = new SoundLoops(player, score);
     uiRoot().addEventListener("click", (e) => {
       if ((e.target as HTMLElement).closest("button"))
         this.sound.ui("ui-click");
@@ -622,6 +623,8 @@ export class Game {
           this.eventPoint(e.target) !== null) ||
         (e.t === "guardShot" && this.eventPoint(e.target) !== null),
     );
+    // Crashes are known now, so the score can time its accent's peak onto the impact at the end of movement.
+    this.sound.accents(world.events, world.player.vehicleId, (e) => (e.t === "collision" ? Math.max(0, MOVE_MS - elapsed) : null));
     // A towed truck's engine is off.
     if (!towed) this.playDriveSound(playback.result);
     this.phase = "Moving";
@@ -730,16 +733,9 @@ export class Game {
     const me = playerVehicle(this.world);
     const f = this.frames[me.id];
     const at = f ? toMap(f.pos) : me.pos;
-    if (
-      this.world.vehicles.some(
-        (v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v),
-      )
-    )
-      this.lastDangerTurn = this.world.turn;
-    this.loops.update({
-      stormTiles: this.weather.stormTilesFrom(at.x, at.y),
-      turnsSinceDanger: this.world.turn - this.lastDangerTurn,
-    });
+    const signs = this.combatWatch.observe(this.world.turn, this.world.vehicles.filter((v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v)).map((v) => v.id));
+    this.loops.update({ stormTiles: this.weather.stormTilesFrom(at.x, at.y), ...signs, paused: !this.anim && performance.now() - this.idleSince > MIX.music.pauseDelayMs });
+    if (signs.sighted) this.sound.accent("accent-sighted", 0);
   }
 
   private playPanelSounds(): void {
@@ -792,7 +788,8 @@ export class Game {
         const slot = mine.findIndex((mw) => mw.part.id === e.weapon);
         const label = `${slot >= 0 ? `[${slot + 1}] ` : ""}${heavy ? "Cannon" : "MG"} ${volleyTally(e.rounds)}`;
         const view = viewOf(this.views, e.shooter);
-        this.playVolley(a, () => view.muzzle(e.weapon), b, e.rounds, gun.defId, label, e.target, rows);
+        const landMs = this.playVolley(a, () => view.muzzle(e.weapon), b, e.rounds, gun.defId, label, e.target, rows);
+        this.sound.accents([e], w.player.vehicleId, () => landMs);
       }
       if (e.t === "guardShot") {
         const b = this.eventPoint(e.target);
@@ -805,16 +802,8 @@ export class Game {
             (REGION.settlement.guardTowerHeight + 0.2) * PHYSICS.metersPerTile,
           z: g.z,
         };
-        this.playVolley(
-          a,
-          () => towardFrom(a, b),
-          b,
-          e.rounds,
-          "guard",
-          `Guards ${volleyTally(e.rounds)}`,
-          e.target,
-          rows,
-        );
+        const landMs = this.playVolley(a, () => towardFrom(a, b), b, e.rounds, "guard", `Guards ${volleyTally(e.rounds)}`, e.target, rows);
+        this.sound.accents([e], w.player.vehicleId, () => landMs);
       }
       if (e.t === "collision") {
         const p = this.eventPoint(e.a);
@@ -834,14 +823,15 @@ export class Game {
     label: string,
     targetId: string,
     rows: Map<string, number>,
-  ): void {
+  ): number {
     const hits = rounds.filter((r) => r.hit).length;
     const row = rows.get(targetId) ?? 0;
     rows.set(targetId, row + 1);
     // Every round lands within the shot time, before the results show.
     const spec = projectileOf(weapon);
     const ground = (p: V3) => groundPoint(this.world.terrain, toMap(p)).y;
-    for (const plan of planVolley(spec, a, b, rounds, CONFIG.combatShotMs, ground)) {
+    const plans = planVolley(spec, a, b, rounds, CONFIG.combatShotMs, ground);
+    for (const plan of plans) {
       this.fx.shot(spec, muzzle, plan);
       this.sound.at(spec.look === "tracer" ? "mg-fire" : "cannon-fire", a, plan.delayMs);
       this.sound.at(plan.struck ? "hit-metal" : "miss", plan.land, plan.delayMs + plan.flightMs);
@@ -854,6 +844,7 @@ export class Game {
       CONFIG.combatShotMs,
       CONFIG.combatReadMs,
     );
+    return Math.min(...plans.map((plan) => plan.delayMs + plan.flightMs)); // when the first round lands
   }
 
   // The path preview chains physics turns from the current state, so it shows what will happen.

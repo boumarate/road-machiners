@@ -3,7 +3,7 @@
 
 import { chassisDef } from '../data/chassis';
 import { GOOD_IDS, GOODS } from '../data/goods';
-import { NPCS } from '../data/npcs';
+import { NPCS, type NpcTemplate } from '../data/npcs';
 import { PARTS, partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { CHEATS } from '../data/rules';
@@ -25,6 +25,7 @@ import { isTowed } from './tow';
 import { clockOf } from './sun';
 import type { Faction, SkillId, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
+import { randInt } from './rng';
 import { refreshVision } from './vision';
 import { makeWeather } from './weather';
 import { hostileToPlayer, playerCanAct, update } from './world';
@@ -233,16 +234,25 @@ export function revealMap(world: World): World {
 export function spawnNear(world: World, templateId: string, hostile: boolean): World {
   const tpl = NPCS[templateId];
   if (!tpl) throw new CheatError(`Unknown template ${templateId}. Templates: ${Object.keys(NPCS).join(', ')}`);
-  return update(world, (w) => {
-    const loadout = generateNpcLoadout(w, tpl);
-    const radius = chassisDef(loadout.chassisId).radius;
-    const center = playerVehicle(w).pos;
-    const circle = circlePoints(center, CHEATS.spawnDistance, CHEATS.spawnAngles);
-    const spot = firstFree(w, circle, radius, null) ?? freeSpotNear(w, center, radius, null);
-    if (!spot) throw new CheatError(`No free spot to spawn ${tpl.name}`);
-    const v = spawnAt(w, tpl, loadout, spot);
-    if (hostile) turnHostile(w, v);
-  });
+  return update(world, (w) => spawnInDraft(w, tpl, hostile));
+}
+
+// Spawns a hostile NPC of a raiders template, picked with the world RNG.
+export function startBattle(world: World): World {
+  const raiders = Object.values(NPCS).filter((t) => t.faction === 'raiders');
+  if (raiders.length === 0) throw new Error('NPCS has no raiders template');
+  return update(world, (w) => spawnInDraft(w, raiders[randInt(w, 0, raiders.length - 1)], true));
+}
+
+function spawnInDraft(w: World, tpl: NpcTemplate, hostile: boolean): void {
+  const loadout = generateNpcLoadout(w, tpl);
+  const radius = chassisDef(loadout.chassisId).radius;
+  const center = playerVehicle(w).pos;
+  const circle = circlePoints(center, CHEATS.spawnDistance, CHEATS.spawnAngles);
+  const spot = firstFree(w, circle, radius, null) ?? freeSpotNear(w, center, radius, null);
+  if (!spot) throw new CheatError(`No free spot to spawn ${tpl.name}`);
+  const v = spawnAt(w, tpl, loadout, spot);
+  if (hostile) turnHostile(w, v);
 }
 
 // The vehicle starts a feud with the player and counts the player as its attacker, so it decides at once whether
