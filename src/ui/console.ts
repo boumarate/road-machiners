@@ -20,6 +20,7 @@ import {
   setSupplies,
   skipToHour,
   spawnNear,
+  startBattle,
   startWeather,
   teleport,
   toggleFullLog,
@@ -145,6 +146,10 @@ export const COMMANDS: readonly Command[] = [
     }
     const hostile = flag === "hostile";
     return changed(spawnNear(world, templateId, hostile), `spawned ${hostile ? "hostile " : ""}${templateId}`);
+  }),
+  command("battle", "Place a random hostile raider near the truck.", { min: 0, max: 0 }, (world) => {
+    const next = startBattle(world);
+    return changed(next, `battle: ${next.vehicles[next.vehicles.length - 1].name} is hostile`);
   }),
   command("hostile <vehicle id>", "Make a vehicle hostile to the player.", { min: 1, max: 1 }, (world, [id]) =>
     changed(makeHostile(world, id), `${id} is hostile`),

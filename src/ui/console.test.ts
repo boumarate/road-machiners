@@ -118,6 +118,7 @@ describe("queries", () => {
   it("help covers the whole command set", () => {
     expect(COMMANDS.map((c) => c.name).sort()).toEqual(
       [
+        "battle",
         "damage",
         "fuel",
         "give",

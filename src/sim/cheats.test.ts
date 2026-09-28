@@ -7,7 +7,7 @@ import { START_KITS } from '../data/start';
 import {
   addSkillXp, applyGodMode, CheatError, grantPerk, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
   repairAll, revealMap, setFuel, setHealth, setMoney, setSupplies, skipToHour, spawnNear,
-  startWeather, teleport, toggleFullLog, toggleGod,
+  startBattle, startWeather, teleport, toggleFullLog, toggleGod,
 } from './cheats';
 import { playerVehicle } from './damage';
 import { maxHealthOf } from './health';
@@ -264,6 +264,26 @@ describe('vehicle cheats', () => {
     expect(hostileToPlayer(w, v)).toBe(true);
     expect(stateOf(w, 'feud', id, w.player.vehicleId)).not.toBeNull();
     expect(v.brain!.attackers).toEqual({ [w.player.vehicleId]: false });
+  });
+
+  it('starts a battle with one hostile raider near the truck', () => {
+    const w = emptyWorld();
+    const next = startBattle(w);
+    const added = next.vehicles.filter((v) => !w.vehicles.some((x) => x.id === v.id));
+    expect(added).toHaveLength(1);
+    expect(added[0].faction).toBe('raiders');
+    expect(hostileToPlayer(next, added[0])).toBe(true);
+    expect(dist(added[0].pos, playerVehicle(next).pos)).toBeLessThan(CHEATS.spawnDistance * 2);
+  });
+
+  it('picks raider templates with the world RNG', () => {
+    const picks = new Set<string>();
+    let w = emptyWorld();
+    for (let i = 0; i < 12; i++) {
+      w = startBattle(w);
+      picks.add(w.vehicles[w.vehicles.length - 1].brain!.templateId);
+    }
+    expect(picks.size).toBeGreaterThan(1);
   });
 
   it('rejects an unknown template', () => {
