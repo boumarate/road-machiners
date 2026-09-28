@@ -3,10 +3,11 @@ import { addVehicle, emptyWorld } from './testkit';
 import { autoOrders, fireWeapons } from './combat';
 import { canVehicleSee } from './vision';
 
-it('can see a wreck itself without seeing through it', () => {
+// A rock spire stands taller than eye height, unlike a low wreck, which trucks see over.
+it('can see a rock spire itself without seeing through it', () => {
   const w = emptyWorld();
   const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 13, y: 12 });
-  w.obstacles.push({ id: 'wreck', pos: { x: 16, y: 12 }, r: 0.6, kind: 'wreck' });
+  w.obstacles.push({ id: 'crag-0', pos: { x: 16, y: 12 }, r: 1.2, kind: 'landmark', look: 'crag', yaw: 0 });
   expect(canVehicleSee(w, npc, { x: 16, y: 12 })).toBe(true);
   expect(canVehicleSee(w, npc, { x: 18, y: 12 })).toBe(false);
 });

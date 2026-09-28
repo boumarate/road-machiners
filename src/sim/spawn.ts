@@ -6,7 +6,7 @@ import { chassisDef } from "../data/chassis";
 import { REGION } from "../data/region";
 import { playerVehicle } from "./damage";
 import { makeVehicle } from "./factory";
-import { isDriveObstacle } from "./mapgen";
+import { isDriveObstacle, obstacleReach } from "./mapgen";
 import { generateNpcLoadout, type NpcLoadout } from "./npc-loadout";
 import { getKnownSite, profileOf } from "./npc-decisions";
 import { chance, randInt, randRange, type Rng } from "./rng";
@@ -178,7 +178,7 @@ export function isFree(world: World, pos: Vec, radius: number, ignoreId: string 
   if (
     world.obstacles
       .filter(isDriveObstacle)
-      .some((o) => dist(o.pos, pos) < o.r + radius + margin)
+      .some((o) => dist(o.pos, pos) < obstacleReach(o) + radius + margin)
   )
     return false;
   return world.vehicles.every(

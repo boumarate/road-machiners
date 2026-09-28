@@ -106,7 +106,7 @@ export class ObstacleViews {
       const placed = list.map((o) => rockPlacement(this.terrain, o));
       const group = instancedModel('rock', placed.map((p) => p.matrix), placed.map((p) => p.tint));
       const center = list.reduce((c, o) => ({ x: c.x + o.pos.x / list.length, y: c.y + o.pos.y / list.length }), { x: 0, y: 0 });
-      const reach = Math.max(...list.map((o) => dist(center, o.pos) + o.r));
+      const reach = Math.max(...list.map((o) => dist(center, o.pos) + propReach(o)));
       this.scope.add(group, center, reach);
     }
     return new Set(rocks.map((o) => o.id));

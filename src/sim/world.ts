@@ -6,7 +6,7 @@ import { RULES } from '../data/rules';
 import type { StartKit } from '../data/start';
 import { findPart, playerVehicle } from './damage';
 import { makePart, makeVehicle } from './factory';
-import { generateObstacles } from './mapgen';
+import { generateObstacles, obstacleReach } from './mapgen';
 import type { BakedMap } from './terrain';
 import { planNpcOrders } from './ai';
 import { applyGodMode } from './cheats';
@@ -121,7 +121,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap): World {
     brain: null,
   });
   const blocked = world.obstacles.filter(
-    (o) => dist(o.pos, truck.pos) < o.r + vehicleStats(world, truck).radius,
+    (o) => dist(o.pos, truck.pos) < obstacleReach(o) + vehicleStats(world, truck).radius,
   );
   if (blocked.length > 0)
     throw new Error(

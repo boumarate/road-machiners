@@ -241,6 +241,12 @@ export function propReach(o: Obstacle): number {
   return posedShape(o).reach;
 }
 
+// Tiles within which an obstacle can touch anything: its shape's reach for a prop, its radius for a site or a
+// pond, which have no model.
+export function obstacleReach(o: Obstacle): number {
+  return o.kind === 'site' || o.kind === 'water' ? o.r : propReach(o);
+}
+
 // Names a prop's model, turn, scale and position: two props with one key have the same boxes.
 export function propKey(o: Obstacle): string {
   return posedShape(o).key;

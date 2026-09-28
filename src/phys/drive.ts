@@ -9,7 +9,7 @@ import { PERF } from '../data/perf';
 import { PHYSICS } from '../data/physics';
 import { RULES } from '../data/rules';
 import { fuelLimited, isNear } from '../sim/far';
-import { isDriveObstacle, propPose, propReach, propShape } from '../sim/mapgen';
+import { isDriveObstacle, obstacleReach, propBoxes } from '../sim/mapgen';
 import { playerVehicle } from '../sim/damage';
 import { vehicleMass } from '../sim/mass';
 import { groundSpeed, vehicleStats, type VehicleStats } from '../sim/stats';
@@ -118,7 +118,7 @@ export function syncDrive(d: Drive, w: World): void {
 function syncObstacles(d: Drive, w: World): void {
   const center = playerVehicle(w).pos;
   const range = TERRAIN.vision.radius + PERF.liveMargin + PHYSICS.propLiveMargin;
-  const live = w.obstacles.filter((o) => isDriveObstacle(o) && dist(o.pos, center) <= range + reachOf(o));
+  const live = w.obstacles.filter((o) => isDriveObstacle(o) && dist(o.pos, center) <= range + obstacleReach(o));
   const liveIds = new Set(live.map((o) => o.id));
   for (const [id, handles] of Object.entries(d.obstacles)) {
     if (liveIds.has(id)) continue;
@@ -128,11 +128,6 @@ function syncObstacles(d: Drive, w: World): void {
   for (const o of live) {
     if (d.obstacles[o.id] === undefined) d.obstacles[o.id] = obstacleColliders(w.terrain, o).map((desc) => d.world.createCollider(desc).handle);
   }
-}
-
-// Tiles from an obstacle's position to the farthest point of its colliders.
-function reachOf(o: Obstacle): number {
-  return o.kind === 'site' ? o.r : propReach(o);
 }
 
 // A site's boundary blocks as a cylinder of its radius. A prop blocks by its model's boxes at the pose the view
@@ -145,19 +140,11 @@ function obstacleColliders(t: Terrain, o: Obstacle): RAPIER.ColliderDesc[] {
     const half = PHYSICS.rockHeight / 2;
     return [RAPIER.ColliderDesc.cylinder(half, o.r * S).setTranslation(o.pos.x * S, ground + half - PHYSICS.rockSink, o.pos.y * S)];
   }
-  const pose = propPose(o);
-  const k = pose.scale;
-  const cos = Math.cos(pose.yaw);
-  const sin = Math.sin(pose.yaw);
-  return propShape(pose.model).filter((b) => b.z0 * k.z < PHYSICS.truckClearance).map((b) => {
-    const bottom = b.z0 * k.z < PHYSICS.rockSink ? Math.min(b.z0 * k.z, -PHYSICS.rockSink) : b.z0 * k.z;
-    const top = b.z1 * k.z;
-    // Box center in scaled model meters: forward and sideways, where model sideways +y is the model's left.
-    const fwd = ((b.x0 + b.x1) / 2) * k.x;
-    const side = ((b.y0 + b.y1) / 2) * k.y;
-    const desc = RAPIER.ColliderDesc.cuboid(((b.x1 - b.x0) / 2) * k.x, (top - bottom) / 2, ((b.y1 - b.y0) / 2) * k.y);
-    desc.setTranslation(pose.pos.x * S + fwd * cos + side * sin, ground + (top + bottom) / 2, pose.pos.y * S + fwd * sin - side * cos);
-    return desc.setRotation(headingQuat(pose.yaw));
+  return propBoxes(o).filter((b) => b.z0 < PHYSICS.truckClearance).map((b) => {
+    const bottom = b.z0 < PHYSICS.rockSink ? Math.min(b.z0, -PHYSICS.rockSink) : b.z0;
+    const desc = RAPIER.ColliderDesc.cuboid(b.half.x * S, (b.z1 - bottom) / 2, b.half.y * S);
+    desc.setTranslation(b.center.x * S, ground + (b.z1 + bottom) / 2, b.center.y * S);
+    return desc.setRotation(headingQuat(Math.atan2(b.axis.y, b.axis.x)));
   });
 }
 
