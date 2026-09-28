@@ -60,7 +60,8 @@ import { toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/
 import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
-import { Fx3D, TruckFx, towardFrom, type Muzzle } from "./render/fx";
+import { Fx3D, TruckFx } from "./render/fx";
+import { planVolley, projectileOf, towardFrom, type Muzzle } from "./render/projectiles";
 import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
 import { PathView } from "./render/path";
@@ -88,7 +89,6 @@ import { computeEngineGlide, SoundDirector, SoundLoops, stingOf } from "./sound"
 import type { SoundPlayer } from "../audio/player";
 import { uiRoot } from "../ui/dom";
 import { Travel, type Playback, type LiveVision } from "./travel";
-import { computeRoundPoint } from "../phys/frames";
 
 const PLAN_TURNS = 3; // turns of path preview
 
@@ -104,7 +104,6 @@ const MOVE_MS = (TURN_STEPS / PHYSICS.stepsPerSecond) * 1000; // real time the m
 const MOVED_BY_RULES = 0.5; // tiles between a vehicle's drawn spot and its sim spot that mean the rules moved it
 
 const GUN_HEIGHT = 1.6; // meters above the body center where shots start and land
-const ROUND_STAGGER = 0.4; // share of the shot time over which a burst's rounds leave the gun
 
 export class Game {
   private world: World;
@@ -786,14 +785,14 @@ export class Game {
         const shooter =
           w.vehicles.find((x) => x.id === e.shooter) ??
           w.removed.find((x) => x.id === e.shooter);
-        const gun =
-          shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
-        const def = gun && partDef(gun.defId);
-        const heavy = def?.kind === "weapon" && def.look === "cannon";
+        const gun = shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
+        if (!gun) throw new Error(`Shot from ${e.shooter} names no mounted weapon ${e.weapon}`);
+        const def = partDef(gun.defId);
+        const heavy = def.kind === "weapon" && def.look === "cannon";
         const slot = mine.findIndex((mw) => mw.part.id === e.weapon);
         const label = `${slot >= 0 ? `[${slot + 1}] ` : ""}${heavy ? "Cannon" : "MG"} ${volleyTally(e.rounds)}`;
         const view = viewOf(this.views, e.shooter);
-        this.playVolley(a, () => view.muzzle(e.weapon), b, e.rounds, heavy, label, e.target, rows);
+        this.playVolley(a, () => view.muzzle(e.weapon), b, e.rounds, gun.defId, label, e.target, rows);
       }
       if (e.t === "guardShot") {
         const b = this.eventPoint(e.target);
@@ -811,7 +810,7 @@ export class Game {
           () => towardFrom(a, b),
           b,
           e.rounds,
-          false,
+          "guard",
           `Guards ${volleyTally(e.rounds)}`,
           e.target,
           rows,
@@ -831,7 +830,7 @@ export class Game {
     muzzle: () => Muzzle,
     b: V3,
     rounds: ShotRound[],
-    heavy: boolean,
+    weapon: string,
     label: string,
     targetId: string,
     rows: Map<string, number>,
@@ -839,19 +838,14 @@ export class Game {
     const hits = rounds.filter((r) => r.hit).length;
     const row = rows.get(targetId) ?? 0;
     rows.set(targetId, row + 1);
-    // Round starts spread over the first part of the shot time, so every bolt lands before the results show.
-    const flight = CONFIG.combatShotMs * (1 - ROUND_STAGGER);
-    rounds.forEach((r, k) => {
-      const delay =
-        rounds.length > 1
-          ? (k / (rounds.length - 1)) * CONFIG.combatShotMs * ROUND_STAGGER
-          : 0;
-      const land = computeRoundPoint(a, b, r.offset);
-      const struck = r.hit || r.hits.length > 0;
-      this.fx.shot(muzzle, land, struck, heavy, delay, flight);
-      this.sound.at(heavy ? "cannon-fire" : "mg-fire", a, delay);
-      this.sound.at(struck ? "hit-metal" : "miss", land, delay + flight);
-    });
+    // Every round lands within the shot time, before the results show.
+    const spec = projectileOf(weapon);
+    const ground = (p: V3) => groundPoint(this.world.terrain, toMap(p)).y;
+    for (const plan of planVolley(spec, a, b, rounds, CONFIG.combatShotMs, ground)) {
+      this.fx.shot(spec, muzzle, plan);
+      this.sound.at(spec.look === "tracer" ? "mg-fire" : "cannon-fire", a, plan.delayMs);
+      this.sound.at(plan.struck ? "hit-metal" : "miss", plan.land, plan.delayMs + plan.flightMs);
+    }
     this.fx.label(
       b,
       label,
@@ -1135,7 +1129,7 @@ export class Game {
     const me = playerVehicle(this.world);
     const s = vehicleStats(this.world, me);
     const sel = s.weapons.filter((m) => m.part.id === this.selected);
-    this.weaponRange.set(this.world.terrain, me.pos, me.heading, this.selected ? sel : s.weapons, !this.selected);
+    this.weaponRange.set(this.world.terrain, me.pos, me.heading, sel);
     this.zones.update(
       this.world.terrain,
       me.pos,

@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { partDef, type PartKind } from '../../data/parts';
+import { partDef, type PartDef, type PartKind } from '../../data/parts';
 import { PHYSICS } from '../../data/physics';
 import { wheelMounts } from '../../phys/body';
 import { bodyOf, cellCenter, type Body } from '../../sim/body';
@@ -227,8 +227,9 @@ export class VehicleView {
       const mounted = isMounted(v.chassisId, item);
       // The cab core has no model: the base draws the cab.
       if (BODY_PARTS.has(def.id)) continue;
-      if (def.id === 'wheel' && mounted) wheelItems.push(item);
-      else if (def.id === 'wheel') still.add(this.spareWheel(v, body, item, paint, surface));
+      const wheel = isWheel(def);
+      if (wheel && mounted) wheelItems.push(item);
+      else if (wheel) still.add(this.spareWheel(v, body, item, paint, surface));
       else if (def.kind === 'weapon') this.buildWeapon(v, item, mounted, still, paint, this.riser(v, item, baseTop(v, base), surface, paint, still));
       else if (def.kind === 'armor') still.add(this.placeArmor(v, body, item, paint, mounted, surface));
       // Core parts sit on the floor. An engine on its mount stands in the engine bay and shows through the cutout.
@@ -684,4 +685,9 @@ function disposeChildren(group: THREE.Group): void {
       }
     });
   }
+}
+
+// Every wheel part, whatever its size, hangs on a wheel mount.
+function isWheel(def: PartDef): boolean {
+  return def.kind === 'core' && def.role === 'wheel';
 }
