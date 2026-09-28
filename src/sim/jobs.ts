@@ -219,12 +219,11 @@ function finishStrip(world: World, v: Vehicle, partId: string): void {
   if (added < units) throw new Error(`Stripped parts would not fit on ${v.name}`);
 }
 
-// Parts can leave the grid mid-job, by a sale, a knockout or a destroyed cargo part.
+// Parts can leave the mounts mid-job, by a sale, a move to cargo or storage, a new chassis or a knockout.
 // The part can also break into junk while the truck stands.
 function isRepairStalled(world: World, v: Vehicle, partId: string, parts: number): boolean {
   const part = mountedParts(v).find((p) => p.id === partId);
-  if (!part) throw new Error(`${partId} is not a mounted part on ${v.name}`);
-  return isJunk(part) || repairPlan(world, v, partId, parts).parts === 0;
+  return !part || isJunk(part) || repairPlan(world, v, partId, parts).parts === 0;
 }
 
 function advanceRefit(world: World, v: Vehicle, job: RefitJob): void {
