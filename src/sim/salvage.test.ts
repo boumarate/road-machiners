@@ -4,7 +4,7 @@ import { SALVAGE } from '../data/salvage';
 import { GOODS } from '../data/goods';
 import { TIME } from '../data/time';
 import { addVehicle, emptyWorld, testDrive } from './testkit';
-import { resolveDestroyed } from './combat';
+import { resolveDestroyed, wreckVehicle } from './combat';
 import { addGoods, dumpItem, removeGoods } from './inventory';
 import { corePart, findSpot, goodsCount, gridOf, isLoot, mountedParts } from './grid';
 import { partDef } from '../data/parts';
@@ -196,7 +196,7 @@ describe('finite salvage', () => {
     const core = mountedParts(npc, 'core');
     const hpShare = core.reduce((sum, p) => sum + p.hp / maxHp(p), 0) / core.length;
     const coreScrap = Math.round((chassisDef(npc.chassisId).value * SALVAGE.coreValueShare * hpShare) / GOODS.parts.value);
-    resolveDestroyed(w);
+    wreckVehicle(w, npc);
     const stock = w.salvage.find((s) => s.id === `wreck-${npc.id}`)!;
     expect(stock.goods.scrap).toBe(3);
     expect(stock.parts).toEqual([engine]);
@@ -209,7 +209,7 @@ describe('finite salvage', () => {
     const w = emptyWorld();
     const npc = addVehicle(w, 'raiders', 'buggy', [], { x: 10, y: 10 });
     corePart(npc, 'cab').hp = 0;
-    resolveDestroyed(w);
+    wreckVehicle(w, npc);
     const stock = w.salvage.find((s) => s.id === `wreck-${npc.id}`)!;
     const lootValue = (stock.goods.parts ?? 0) * GOODS.parts.value;
     expect(lootValue).toBeLessThan(chassisDef('buggy').value * 0.5);

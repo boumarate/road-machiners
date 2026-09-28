@@ -374,7 +374,7 @@ export class TownScreen {
   }
 
   private deliverCell(w: World, shopId: string, c: Contract): HTMLElement {
-    if (c.kind === "bounty") return el("span", { class: "dim" }, "Pays when the target is destroyed");
+    if (c.kind === "bounty") return el("span", { class: "dim" }, "Pays when you knock out or destroy the target");
     const destination = c.kind === "haul" ? c.to : c.shop;
     if (destination !== shopId) return el("span", { class: "dim" }, `Deliver at ${siteName(destination)}`);
     if (!canDeliver(w, c)) return el("span", { class: "dim" }, c.kind === "haul" ? "Not enough cargo yet" : "Needs the part");

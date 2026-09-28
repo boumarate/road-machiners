@@ -9,7 +9,7 @@ import { REGION } from '../data/region';
 import { CHEATS, RULES } from '../data/rules';
 import { PERK_IDS, PERKS, SKILL_IDS } from '../data/skills';
 import { TIME } from '../data/time';
-import { resolveDestroyed } from './combat';
+import { resolveDestroyed, wreckVehicle } from './combat';
 import { damagePart, isJunk, maxHp, restorePart } from './wear';
 import { playerVehicle } from './damage';
 import { makePart } from './factory';
@@ -273,7 +273,7 @@ function killTargets(w: World, target: string): Vehicle[] {
   return [otherVehicle(w, target)];
 }
 
-// Zeroes each target's cab and lets the normal destruction make wrecks and salvage. No kill is credited.
+// Zeroes each target's cab and turns it into a wreck with salvage, never a knockout. No kill is credited.
 // States with a killed party end at once, as they do after destruction in a turn. So a killed tower drops its tow.
 export function killVehicles(world: World, target: string): World {
   return update(world, (w) => {
@@ -281,7 +281,9 @@ export function killVehicles(world: World, target: string): World {
       const cab = corePart(v, 'cab');
       damagePart(cab, cab.hp, 0);
       v.lastHitBy = null;
+      wreckVehicle(w, v);
     }
+    // Clears old wrecks and orders at the dead.
     resolveDestroyed(w);
     settleStates(w);
   });

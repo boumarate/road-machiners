@@ -55,12 +55,12 @@ describe('inventory grid', () => {
     expect(() => moveItem(w, g.id, { x: 9, y: 0, rot: 0 })).toThrow(/fit/);
   });
 
-  it('unmounting takes five turns in the field and is instant in town', () => {
+  it('unmounting takes three turns in the field and is instant in town', () => {
     const w = emptyWorld();
     const mg = item(w, 'mg');
     const field = moveItem(w, mg.id, { x: 1, y: rackRow, rot: 0 });
-    expect(field.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: 5 });
-    for (let turn = 0; turn < 4; turn++) advanceJobs(field);
+    expect(field.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: 3 });
+    for (let turn = 0; turn < 2; turn++) advanceJobs(field);
     expect(vehicleStats(field, field.vehicles[0]).weapons).toHaveLength(1);
     advanceJobs(field);
     expect(field.vehicles[0].job).toBeNull();
@@ -71,14 +71,14 @@ describe('inventory grid', () => {
     expect(spareParts(off.vehicles[0]).map((p) => p.defId)).toEqual(['mg']);
   });
 
-  it('swaps a spare with a mounted weapon after ten turns', () => {
+  it('swaps a spare with a mounted weapon after five turns', () => {
     const w = emptyWorld();
     const mg = item(w, 'mg');
     if (mg.kind !== 'part') throw new Error('Expected weapon');
     w.vehicles[0].items.push({ ...mg, id: 'spare-item', part: { ...mg.part, id: 'spare-part' }, x: 1, y: rackRow });
     const next = moveItem(w, 'spare-item', { x: mg.x, y: mg.y, rot: 0 });
-    expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', total: 10 });
-    for (let turn = 0; turn < 9; turn++) advanceJobs(next);
+    expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', total: 5 });
+    for (let turn = 0; turn < 4; turn++) advanceJobs(next);
     expect(next.vehicles[0].items.find((it) => it.id === mg.id)).toMatchObject({ x: mg.x, y: mg.y });
     advanceJobs(next);
     expect(next.vehicles[0].items.find((it) => it.id === mg.id)).toMatchObject({ x: 1, y: rackRow });

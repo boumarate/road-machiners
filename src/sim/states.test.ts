@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { STATE_TURNS } from '../data/npcs';
-import { corePart } from './grid';
-import { resolveDestroyed } from './combat';
+import { wreckVehicle } from './combat';
 import { addState, advanceStates, endState, STATE_KINDS, stateOf, statesHeld } from './states';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { NpcState, StateKindId, World } from './types';
@@ -88,12 +87,20 @@ describe('states', () => {
     addState(w, 'feud', b, a, FEUD);
     w.turn++;
     w.events = [];
-    corePart(w.vehicles.find((v) => v.id === b)!, 'cab').hp = 0;
-    resolveDestroyed(w);
+    wreckVehicle(w, w.vehicles.find((v) => v.id === b)!);
     advanceStates(w);
     expect(w.states).toEqual([]);
     const ended = w.events.flatMap((e) => (e.t === 'stateEnded' ? [[e.state.holder, e.ending]] : []));
     expect(ended.sort()).toEqual([[a, 'fulfilled'], [b, 'broken']].sort());
+  });
+
+  it('a feud whose other party was knocked out this turn ends fulfilled', () => {
+    const { w, a, b } = apart();
+    addState(w, 'feud', a, b, FEUD);
+    w.turn++;
+    w.events = [{ t: 'npcKnockout', vehicle: b, by: a }];
+    advanceStates(w);
+    expect(w.events.some((e) => e.t === 'stateEnded' && e.state.holder === a && e.ending === 'fulfilled')).toBe(true);
   });
 
   it('a timer expires once and runs its hook once', () => {

@@ -1,6 +1,7 @@
 // Activity execution uses the same steering and route planner as the player.
 import { NPCS } from "../data/npcs";
 import { RULES } from "../data/rules";
+import { isKnockedOut } from "./defeat";
 import { getActivityDestination, goalHolds, thinkNpc, topGoal } from "./npc-activities";
 import { towData } from "./states";
 import { vehicleStats } from "./stats";
@@ -10,8 +11,9 @@ import type { Vehicle, World } from "./types";
 import { angleDiff, bearing, dist, type Vec } from "./vec";
 
 // NPC drivers that plan this turn. A truck on a tow rope only trails its tower, so it keeps no order.
+// A knocked-out driver keeps its brake order until it wakes.
 function planners(world: World): Vehicle[] {
-  return world.vehicles.filter((v) => v.brain && !isOnRope(world, v.id));
+  return world.vehicles.filter((v) => v.brain && !isOnRope(world, v.id) && !isKnockedOut(v));
 }
 
 export function planNpcOrders(world: World): void {

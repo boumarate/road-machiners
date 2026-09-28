@@ -8,7 +8,7 @@ import { advanceKnockout, checkKnockout } from './defeat';
 import { corePart, coreParts, gridOf, mountedItems, mountedParts } from './grid';
 import { vehicleStats } from './stats';
 import { leakFuel } from './supplies';
-import { addVehicle, emptyWorld, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, npcBrain, rngStateWhere } from './testkit';
 import type { GridItem, Vehicle, World } from './types';
 
 const partAt = (v: Vehicle, x: number, y: number) =>
@@ -132,16 +132,17 @@ describe('walkLane', () => {
 });
 
 describe('knockout', () => {
-  it('an NPC with a dead cab becomes a wreck', () => {
+  it('an NPC with a dead cab is knocked out and stays in the world', () => {
     const w = emptyWorld();
     const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 34, y: 30 });
     buggy.brain = npcBrain('buggy', buggy.pos, ['raider']);
     resolveDestroyed(w);
-    expect(w.vehicles.some((v) => v.id === buggy.id)).toBe(true);
+    expect(buggy.defeat).toBeUndefined();
     corePart(buggy, 'cab').hp = 0;
+    w.rngState = rngStateWhere((roll) => roll >= RULES.npcDeathChance);
     resolveDestroyed(w);
-    expect(w.vehicles.some((v) => v.id === buggy.id)).toBe(false);
-    expect(w.obstacles.some((o) => o.id === `wreck-${buggy.id}`)).toBe(true);
+    expect(w.vehicles.some((v) => v.id === buggy.id)).toBe(true);
+    expect(buggy.defeat?.phase).toBe('out');
   });
 
   it('player cab death knocks the player out, and waking patches broken core parts', () => {

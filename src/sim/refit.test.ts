@@ -23,14 +23,14 @@ function startUnmount() {
 }
 
 describe('field refits', () => {
-  it('installs a spare on turn five', () => {
+  it('installs a spare on turn three', () => {
     const w = emptyWorld();
     const weapon = getWeapon(w);
     const target = { x: weapon.x, y: weapon.y, rot: weapon.rot };
     weapon.x = 1;
     weapon.y = CHASSIS.scout.layout.length;
     const next = moveItem(w, weapon.id, target);
-    for (let turn = 0; turn < 4; turn++) advanceJobs(next);
+    for (let turn = 0; turn < 2; turn++) advanceJobs(next);
     expect(getWeapon(next).y).toBe(weapon.y);
     advanceJobs(next);
     expect(getWeapon(next)).toMatchObject(target);
@@ -43,7 +43,7 @@ describe('field refits', () => {
     const to = findSpot(gridOf(w.vehicles[0]), w.vehicles[0].items, { ...weapon, id: 'probe' }, MOUNT_CELLS.weapon, null);
     if (!to) throw new Error('Expected spare mount');
     const next = moveItem(w, weapon.id, to);
-    expect(next.vehicles[0].job).toMatchObject({ total: 10 });
+    expect(next.vehicles[0].job).toMatchObject({ total: 5 });
   });
 
   it('does not start work for the unchanged position', () => {
@@ -198,6 +198,6 @@ describe('quick refit perk', () => {
     const w = emptyWorld();
     w.player.perks.push('quickRefit');
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
-    expect(refitTurns(w, npc, RULES.refitTurnsPerPart)).toBe(RULES.refitTurnsPerPart);
+    expect(refitTurns(w, npc, RULES.refitTurnsPerPart)).toBe(Math.ceil(RULES.refitTurnsPerPart));
   });
 });

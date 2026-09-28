@@ -230,6 +230,8 @@ const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => st
   guardShot: (e) => [e.target],
   partDisabled: (e) => [e.vehicle],
   destroyed: (e) => [e.vehicle],
+  npcKnockout: (e) => [e.vehicle],
+  npcWake: (e) => [e.vehicle],
   plea: (e) => [e.from, e.to],
   towHitched: (e) => [e.by, e.client],
   towDone: (e) => [e.by, e.client],
@@ -260,7 +262,7 @@ export function contractSummary(c: Contract): string {
     const rebuilt = CONTRACTS.fetch.maxWear === 1 ? 'rebuilt at most once' : `rebuilt at most ${CONTRACTS.fetch.maxWear} times`;
     return `find ${article(partDef(c.defId).name)} ${partDef(c.defId).name} anywhere, working and ${rebuilt}, bring it to ${siteName(c.shop)}`;
   }
-  return `destroy any ${c.targetName}`;
+  return `defeat any ${c.targetName}`;
 }
 
 // The game time a contract is due. It fails at the end of its deadline turn.
@@ -302,6 +304,8 @@ function pleaText(world: World, e: Extract<GameEvent, { t: 'plea' }>): LogLine |
 
 // Events whose log line has its own function.
 const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent, { t: K }>) => LogLine | null } = {
+  npcKnockout: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} knocked out`, cls: 'good' }),
+  npcWake: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} comes to`, cls: 'dim' }),
   stateEnded: stateEndedText,
   say: sayText,
   call: callText,

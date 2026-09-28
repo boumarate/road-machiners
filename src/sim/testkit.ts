@@ -4,6 +4,7 @@ import { START_KITS } from '../data/start';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { makeVehicle } from './factory';
+import { nextRandom } from './rng';
 import { mountedParts } from './grid';
 import { burnFuel } from './resources';
 import { vehicleStats } from './stats';
@@ -98,6 +99,13 @@ export function forceOption<D extends DecisionId>(decision: D, option: DecisionO
       else table[decision] = saved[i];
     });
   });
+}
+
+// The first RNG state from 1 whose next roll passes `test`, so a test can make one world roll land a given way.
+// Rolls spread evenly, so any test that passes 1 in 100 rolls finds a state within a few hundred tries.
+export function rngStateWhere(test: (roll: number) => boolean): number {
+  for (let state = 1; state <= 100_000; state++) if (test(nextRandom({ rngState: state }))) return state;
+  throw new Error('No RNG state passes the test');
 }
 
 // Total hit points of the mounted parts, for checking that damage landed.

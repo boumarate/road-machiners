@@ -11,7 +11,7 @@ import { buildTerrain } from './terrain';
 import { planNpcOrders } from './ai';
 import { applyGodMode } from './cheats';
 import { assignAutoOrders, fireWeapons, isHostile, resolveDestroyed } from './combat';
-import { advanceKnockout, checkDeath, checkKnockout } from './defeat';
+import { advanceKnockout, advanceNpcKnockouts, checkDeath, checkKnockout } from './defeat';
 import { healPlayer } from './health';
 import { fireGuards } from './guards';
 import { discoverSites } from './locations';
@@ -239,6 +239,7 @@ export function endTurn(
     checkDeath(w);
     advanceKnockout(w);
     checkKnockout(w);
+    advanceNpcKnockouts(w);
     spawnNpcs(w);
     advanceShops(w);
     refreshVision(w);

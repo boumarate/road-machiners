@@ -7,7 +7,7 @@ import { REGION } from '../data/region';
 import { getResources } from './resources';
 import { siteGates } from './sites';
 import { autoOrders, fireWeapons, hitOdds, laneOfOffset, resolveDestroyed } from './combat';
-import { corePart, mountedItems, mountedParts } from './grid';
+import { mountedItems, mountedParts } from './grid';
 import { stateOf } from './states';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
@@ -119,15 +119,15 @@ describe('combat', () => {
     expect(vehicleStats(w, me).maxSpeed).toBe(RULES.limpSpeed);
   });
 
-  it('a kill leaves a wreck obstacle and pays the player', () => {
+  it('a kill leaves a wreck obstacle and pays the player nothing', () => {
     const { w, me, buggy } = duel();
-    corePart(buggy, 'cab').hp = 0;
+    getResources(w, buggy).health = 0;
     buggy.lastHitBy = me.id;
     const money = w.player.money;
     resolveDestroyed(w);
     expect(w.vehicles.find((v) => v.id === buggy.id)).toBeUndefined();
     expect(w.obstacles.some((o) => o.kind === 'wreck' && dist(o.pos, buggy.pos) === 0)).toBe(true);
-    expect(w.player.money).toBeGreaterThan(money);
+    expect(w.player.money).toBe(money);
   });
 
   it('old kill wrecks are cleared past the cap', () => {
@@ -135,7 +135,7 @@ describe('combat', () => {
     for (let i = 0; i < RULES.maxKillWrecks + 3; i++) {
       const b = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 10 + i * 2, y: 10 });
       b.brain = npcBrain('buggy', b.pos, ['raider']);
-      corePart(b, 'cab').hp = 0;
+      getResources(w, b).health = 0;
       b.lastHitBy = me.id;
       resolveDestroyed(w);
     }
@@ -147,7 +147,7 @@ describe('combat', () => {
     const kill = () => {
       const b = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 10 + w.obstacles.length * 2, y: 10 });
       b.brain = npcBrain('buggy', b.pos, ['raider']);
-      corePart(b, 'cab').hp = 0;
+      getResources(w, b).health = 0;
       resolveDestroyed(w);
       return b.id;
     };

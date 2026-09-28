@@ -285,11 +285,11 @@ export function isExpired(world: World, c: Contract): boolean {
   return world.turn > c.deadline;
 }
 
-// True when this turn the player destroyed a truck of the bounty's template. Any such truck counts.
+// True when this turn the player destroyed or knocked out a truck of the bounty's template. Any such truck counts.
 export function bountyFulfilled(world: World, c: Contract): boolean {
   if (c.kind !== 'bounty') throw new Error(`${c.kind} contract has no bounty target`);
-  const killedByPlayer = (id: string) => world.events.some((e) => e.t === 'destroyed' && e.vehicle === id && e.by === world.player.vehicleId);
-  return world.removed.some((v) => v.brain?.templateId === c.template && killedByPlayer(v.id));
+  const beaten = world.events.flatMap((e) => ((e.t === 'destroyed' || e.t === 'npcKnockout') && e.by === world.player.vehicleId ? [e.vehicle] : []));
+  return [...world.removed, ...world.vehicles].some((v) => v.brain?.templateId === c.template && beaten.includes(v.id));
 }
 
 // True once no truck of the bounty's template is left in the world. Check bountyFulfilled for the
@@ -420,7 +420,7 @@ export function deliverContract(world: World, contractId: string): World {
   return playerCommand(world, (w) => {
     const contract = w.player.contracts.find((c) => c.id === contractId);
     if (!contract) throw new Error(`No active contract ${contractId}`);
-    if (contract.kind === 'bounty') throw new Error('A bounty pays when the target is destroyed');
+    if (contract.kind === 'bounty') throw new Error('A bounty pays when you knock out or destroy the target');
     if (contract.kind === 'haul') handInHaul(w, contract);
     else handInFetch(w, contract);
     finishContract(w, contract, 'done');

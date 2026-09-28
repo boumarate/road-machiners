@@ -2,7 +2,8 @@
 // so fire is simultaneous: a vehicle killed this turn still gets its shots off.
 
 import { onCall } from "./dialogue";
-import { NPCS, SPAWN } from '../data/npcs';
+import { SPAWN } from '../data/npcs';
+import { isDefeated, knockOutNpc } from './defeat';
 import { RULES } from '../data/rules';
 import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
@@ -39,8 +40,9 @@ export function inFeud(world: World, a: Vehicle, b: Vehicle): boolean {
 }
 
 // Sides at odds: a feud either way, or a raider against anyone else outside a truce.
+// A defeated NPC is nobody's foe until it refits at home.
 export function isFoe(world: World, a: Vehicle, b: Vehicle): boolean {
-  if (a.id === b.id) return false;
+  if (a.id === b.id || isDefeated(a) || isDefeated(b)) return false;
   if (inFeud(world, a, b)) return true;
   if (inTruce(world, a, b)) return false;
   return (a.faction === "raiders") !== (b.faction === "raiders");
@@ -499,29 +501,14 @@ function joinsFeud(world: World, v: Vehicle, shooter: Vehicle, target: Vehicle):
   return v.faction === target.faction && dist(v.pos, target.pos) <= SPAWN.neighborHelp && canVehicleSee(world, v, shooter.pos);
 }
 
-// NPCs with a broken cab turn into wreck obstacles. The player's broken cab is a knockout.
+// An NPC whose cab breaks is knocked out, or dies into a wreck at the death chance. Health at 0 kills it, and so
+// does a shot that damages it while it is defeated. The player's broken cab is a knockout in src/sim/defeat.ts.
 export function resolveDestroyed(world: World): void {
-  const dead = world.vehicles.filter(
-    (v) =>
-      v.faction !== "player" &&
-      (corePart(v, "cab").hp <= 0 || getResources(world, v).health <= 0),
-  );
-  for (const v of dead) {
-    createWreckSalvage(world, v);
-    world.vehicles = world.vehicles.filter((x) => x.id !== v.id);
-    world.removed.push(v);
-    world.obstacles.push({
-      id: `wreck-${v.id}`,
-      pos: { ...v.pos },
-      r: vehicleStats(world, v).radius * RULES.wreckRadiusScale,
-      kind: "wreck",
-    });
-    world.events.push({
-      t: "destroyed",
-      vehicle: v.id,
-      by: v.lastHitBy ?? "unknown",
-    });
-    if (v.lastHitBy === world.player.vehicleId) rewardKill(world, v);
+  const shot = damagedByShots(world);
+  for (const v of world.vehicles.filter((x) => x.faction !== "player")) {
+    const fate = npcFate(world, v, shot);
+    if (fate === "dies") wreckVehicle(world, v);
+    else if (fate === "knockedOut") knockOutNpc(world, v);
   }
   clearOldWrecks(world);
   for (const v of world.vehicles) {
@@ -529,6 +516,42 @@ export function resolveDestroyed(world: World): void {
       if (!world.vehicles.some((x) => x.id === order.targetId))
         delete v.weaponOrders[wid];
   }
+}
+
+// The defeated state is checked before the cab, since a knocked-out truck lies with a broken cab.
+function npcFate(world: World, v: Vehicle, shot: Set<string>): "dies" | "knockedOut" | null {
+  if (getResources(world, v).health <= 0) return "dies";
+  if (isDefeated(v)) return shot.has(v.id) ? "dies" : null;
+  if (corePart(v, "cab").hp > 0) return null;
+  return chance(world, RULES.npcDeathChance) ? "dies" : "knockedOut";
+}
+
+// Vehicles that took damage from a gun this turn.
+function damagedByShots(world: World): Set<string> {
+  const hurt = new Set<string>();
+  for (const e of world.events) {
+    if (e.t !== "shot" && e.t !== "guardShot") continue;
+    if (e.rounds.some((r) => r.hits.some((h) => h.damage > 0))) hurt.add(e.target);
+  }
+  return hurt;
+}
+
+// The truck leaves the world as a wreck obstacle with a stock of what it carried.
+export function wreckVehicle(world: World, v: Vehicle): void {
+  createWreckSalvage(world, v);
+  world.vehicles = world.vehicles.filter((x) => x.id !== v.id);
+  world.removed.push(v);
+  world.obstacles.push({
+    id: `wreck-${v.id}`,
+    pos: { ...v.pos },
+    r: vehicleStats(world, v).radius * RULES.wreckRadiusScale,
+    kind: "wreck",
+  });
+  world.events.push({
+    t: "destroyed",
+    vehicle: v.id,
+    by: v.lastHitBy ?? "unknown",
+  });
 }
 
 // Kill wrecks are pushed in order, so the first ones found are the oldest.
@@ -542,19 +565,6 @@ function clearOldWrecks(world: World): void {
   if (drop.size > 0) {
     world.obstacles = world.obstacles.filter((o) => !drop.has(o.id));
     removeStocks(world, drop);
-  }
-}
-
-function rewardKill(world: World, v: Vehicle): void {
-  if (!v.brain) throw new Error(`Killed vehicle ${v.id} has no brain`);
-  const tpl = NPCS[v.brain.templateId];
-  if (tpl.bounty > 0) {
-    world.player.money += tpl.bounty;
-    world.events.push({
-      t: "money",
-      amount: tpl.bounty,
-      reason: `bounty for ${v.name}`,
-    });
   }
 }
 

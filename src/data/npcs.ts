@@ -80,7 +80,6 @@ export type NpcTemplate = {
   loadout: NpcLoadoutTable;
   aggroRange: number; // raiders pick targets inside this range
   preferredRange: number; // distance a raider tries to hold while fighting
-  bounty: number; // money the player gets for the kill
   cap: number; // max alive at once
   interval: number; // turns between spawn attempts
   spawn: "camp" | "town";
@@ -275,7 +274,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     loadout: LOADOUTS.outrider,
     aggroRange: 11,
     preferredRange: 3,
-    bounty: 60,
     cap: 6,
     // A camp regains one buggy every 34 turns, so a fully cleared camp is back to its cap of 6 in
     // about 200 turns, one full day (TIME.turnsPerDay), not the few minutes 8 turns gave.
@@ -287,7 +285,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     loadout: LOADOUTS.gunwagon,
     aggroRange: 12,
     preferredRange: 6,
-    bounty: 150,
     cap: 2,
     // Same day-long refill as the outrider camp: cap 2 at 100 turns apart is back to full in 200 turns.
     interval: 100,
@@ -300,7 +297,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     loadout: LOADOUTS.trader,
     aggroRange: 0,
     preferredRange: 0,
-    bounty: 0,
     cap: 5,
     interval: 12,
     spawn: "town",
@@ -312,7 +308,6 @@ export const NPCS: Record<string, NpcTemplate> = {
     loadout: LOADOUTS.scavenger,
     aggroRange: 0,
     preferredRange: 0,
-    bounty: 0,
     cap: 4,
     interval: 12,
     spawn: "town",

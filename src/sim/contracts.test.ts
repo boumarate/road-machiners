@@ -263,6 +263,17 @@ describe('bountyFulfilled', () => {
     expect(kill(outrider, 'other-npc')).toBe(false);
     expect(kill(other, w.player.vehicleId)).toBe(false);
   });
+
+  it('is true for the player\'s knockout of a truck of the template, which stays in the world', () => {
+    const w = emptyWorld();
+    const outrider = addRaider(w, 'buggy');
+    const c = { kind: 'bounty', template: 'buggy' } as Contract;
+    w.removed = [];
+    w.events = [{ t: 'npcKnockout', vehicle: outrider.id, by: 'other-npc' }];
+    expect(bountyFulfilled(w, c)).toBe(false);
+    w.events = [{ t: 'npcKnockout', vehicle: outrider.id, by: w.player.vehicleId }];
+    expect(bountyFulfilled(w, c)).toBe(true);
+  });
 });
 
 describe('bountyLapsed', () => {

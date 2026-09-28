@@ -69,7 +69,7 @@ describe('timed scavenging search', () => {
     expect(() => takeLoot(next, 'rich', { kind: 'good', good: 'scrap' }, spot)).toThrow();
   });
 
-  it('takes five turns to install salvage and leaves the part in stock until completion', () => {
+  it('takes three turns to install salvage and leaves the part in stock until completion', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = w.vehicles[0];
     const weapon = me.items.find((item) => item.kind === 'part' && item.part.defId === 'mg');
@@ -78,8 +78,8 @@ describe('timed scavenging search', () => {
     w.salvage.push({ id: 'weapon-stock', pos: { ...me.pos }, radius: 1, goods: {}, parts: [weapon.part] });
     w.player.scavenged.push('weapon-stock');
     const next = takeLoot(w, 'weapon-stock', { kind: 'part', partId: weapon.part.id }, { x: weapon.x, y: weapon.y, rot: weapon.rot });
-    expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: 5 });
-    for (let turn = 0; turn < 4; turn++) advanceJobs(next);
+    expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: 3 });
+    for (let turn = 0; turn < 2; turn++) advanceJobs(next);
     expect(next.salvage.find((stock) => stock.id === 'weapon-stock')?.parts).toHaveLength(1);
     advanceJobs(next);
     expect(next.salvage.find((stock) => stock.id === 'weapon-stock')?.parts).toHaveLength(0);

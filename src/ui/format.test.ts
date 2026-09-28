@@ -32,7 +32,7 @@ describe("contract text", () => {
   });
 
   it("names any truck of the bounty's type", () => {
-    expect(contractSummary(bounty)).toBe("destroy any Raider outrider");
+    expect(contractSummary(bounty)).toBe("defeat any Raider outrider");
   });
 
   it("says the hand-in part must still work and be rebuilt at most once", () => {

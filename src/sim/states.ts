@@ -28,7 +28,7 @@ const noCheck = (): StateEnding | null => null;
 
 export const STATE_KINDS: Record<StateKindId, StateKind> = {
   // Both parties are hostile while it lasts. Shots between them or either one seeing the other keep it going.
-  // It is fulfilled when the other party is destroyed. A holder that is gone breaks it.
+  // It is fulfilled when the other party is destroyed or knocked out. A holder that is gone breaks it.
   feud: {
     refresh: (w, s) => {
       const shot = w.events.some((e) => e.t === 'shot'
@@ -38,7 +38,7 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
       const other = vehicleById(w, s.other);
       return canVehicleSee(w, holder, other.pos) || canVehicleSee(w, other, holder.pos);
     },
-    check: (w, s) => (w.events.some((e) => e.t === 'destroyed' && e.vehicle === s.other) ? 'fulfilled' : null),
+    check: (w, s) => (w.events.some((e) => (e.t === 'destroyed' || e.t === 'npcKnockout') && e.vehicle === s.other) ? 'fulfilled' : null),
     hooks: {
       // A feud that went quiet failed. Hostility ends, and the holder backs off from the other party.
       expired: (w, s) => { addState(w, 'backedOff', s.holder, s.other, { kind: 'none' }); },

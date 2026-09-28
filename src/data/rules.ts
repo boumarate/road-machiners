@@ -21,7 +21,7 @@ export const RULES = {
   passRadius: 1, // a drive-through order clears once the truck passes this close to its point, or drives past it
   minAimDistance: 1.5, // tiles; steering ignores route points closer than this
   cornerSlack: 2, // tiles past a route corner the brake plan allows
-  refitTurnsPerPart: 5,
+  refitTurnsPerPart: 2.5, // turns to take a part off a mount or put one on; a job rounds its total up
   parkedSpeed: 0.5, // vehicles slower than this are routed around like obstacles
   yieldDistance: 1.5, // tiles neutral drivers keep past both radii from a vehicle ahead, beyond what both close before they stop; see src/sim/ai.ts
   maxBulge: 0.25, // tiles a steering arc may stray from the straight route line
@@ -82,8 +82,9 @@ export const RULES = {
   townHealMult: 5, // healing multiplier at a town, where the driver rests in a bed
 
   // Knockout
-  defeatPatch: 0.25, // share of max hp broken core parts get back when the player wakes from a knockout
+  defeatPatch: 0.25, // share of max hp broken core parts get back when a driver wakes from a knockout
   knockoutMaxTurns: 30, // a knockout ends after this many turns even if a hostile idles in sight
+  npcDeathChance: 0.05, // an NPC whose cab breaks dies into a wreck instead of a knockout
 };
 
 // Daily upkeep: a share of the truck's value, paid once per game day. A start truck (chassis 400 plus
