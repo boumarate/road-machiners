@@ -28,6 +28,12 @@ describe('NPC spawns', () => {
     for (const v of npcs) expect(later.vehicles.find((x) => x.id === v.id)?.brain?.driver).toBe(v.brain!.driver);
   }, 15_000);
 
+  it('places the first drivers by the world seed', () => {
+    const spots = (seed: number) => newWorld(seed, START_KITS.standard, TEST_MAP).vehicles.filter((v) => v.brain).map((v) => v.pos);
+    expect(spots(1337)).toEqual(spots(1337));
+    expect(spots(1337)).not.toEqual(spots(42));
+  }, 15_000);
+
   it('spreads the first neutral drivers over several sites', () => {
     const w = newWorld(1337, START_KITS.standard, TEST_MAP);
     const neutrals = w.vehicles.filter((v) => v.brain && NPCS[v.brain.templateId].spawn.kind === 'town');

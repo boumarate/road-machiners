@@ -154,7 +154,7 @@ describe('engine heat on the road', () => {
   }
 
   it('overheats every engine on the shortest Bowl to Nose trip at top speed from 10:00', () => {
-    const base = newWorld(CONFIG.seed, START_KITS[CONFIG.startKit], TEST_MAP);
+    const base = newWorld(1337, START_KITS[CONFIG.startKit], TEST_MAP);
     base.weather = [];
     const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
     const nose = REGION.towns.find((t) => t.id === 'nose')!;

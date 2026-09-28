@@ -2,7 +2,8 @@
 
 export const CONFIG = {
   startKit: 'standard',
-  seed: 1337,
+  // A fixed world seed replays the same game. Null rolls a new seed for each new game.
+  seed: null as number | null,
   combatShotMs: 450,
   combatReadMs: 1100,
   saveTurns: 20,

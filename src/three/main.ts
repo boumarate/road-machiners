@@ -46,7 +46,7 @@ mixer.unlockOn(window);
 const loading = Promise.all([initPhysics(), loadModels(), loadBank(mixer.ctx, SOUNDS)]);
 const map = await fetchMap();
 // The world and its ground build while physics, models and sounds load, since those wait mostly on the network and decoders.
-const world = loadWorld(window.localStorage, map) ?? newWorld(CONFIG.seed, startKit(CONFIG.startKit), map);
+const world = loadWorld(window.localStorage, map) ?? newWorld(CONFIG.seed ?? freshSeed(), startKit(CONFIG.startKit), map);
 groundTexture(world);
 const [, , bank] = await loading;
 const soundSettings = new SoundSettings(mixer, window.localStorage);
@@ -68,6 +68,11 @@ function warmAfterBoot(radii: number[]): void {
   if (radius === undefined) return;
   warmRoutes(game.state, [radius]);
   setTimeout(() => warmAfterBoot(radii));
+}
+
+// A random 32-bit integer. Boot is outside the sim, so it may use Math.random().
+function freshSeed(): number {
+  return Math.floor(Math.random() * 2 ** 32) | 0;
 }
 
 function routeRadii(world: World): number[] {
