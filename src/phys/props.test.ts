@@ -196,7 +196,7 @@ describe('breakable props', () => {
   it('a fast truck breaks a fence and drives on through it', () => {
     const { w, crashes, breaks } = play(paced({ x: 34, y: 30 }, { x: 60, y: 30 }, fast, [fence]), 8);
 
-    expect(breaks).toEqual([{ prop: 'fence1', vehicle: me(w).id }]);
+    expect(breaks).toEqual([{ prop: 'fence1', vehicle: me(w).id, step: expect.any(Number) }]);
     expect(crashes).toEqual([]);
     expect(w.obstacles).toEqual([]);
     expect(w.broken.map((b) => b.obstacle)).toEqual([fence]);

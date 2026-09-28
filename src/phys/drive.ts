@@ -62,7 +62,7 @@ export type Drive = {
 export type Bridge = { deck: number; rails: number[] };
 
 export type Crash = { a: string; b: string; impact: number; contact: CrashGeometry }; // b is a vehicle id, an obstacle id, 'edge' or 'rail'; impact in m/s
-export type Break = { prop: string; vehicle: string }; // a breakable prop the vehicle smashed through
+export type Break = { prop: string; vehicle: string; step: number }; // a breakable prop the vehicle smashed through at this physics step
 export type VehicleResult = { passed: boolean; arrived: boolean };
 export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; breaks: Break[]; results: Record<string, VehicleResult> };
 
@@ -135,7 +135,7 @@ function syncObstacles(d: Drive, w: World): void {
 // draws it: turned by yaw and scaled on the ground height at its position. Boxes that start above truck roofs are
 // left out, so trucks pass under canopies. A box that starts lower than PHYSICS.rockSink reaches that far below the
 // ground, so slopes leave no gap under it.
-function obstacleColliders(t: Terrain, o: Obstacle): RAPIER.ColliderDesc[] {
+export function obstacleColliders(t: Terrain, o: Obstacle): RAPIER.ColliderDesc[] {
   const ground = heightAt(t, o.pos.x, o.pos.y) * S;
   if (o.kind === 'site') {
     const half = PHYSICS.rockHeight / 2;
@@ -225,7 +225,7 @@ function run(d: Drive, w: World, steps: number): TurnResult {
     for (const c of cars) c.ctl.updateVehicle(DT);
     world.step(events);
     events.drainCollisionEvents((h1, h2, started) => {
-      if (started) contacts.add(crashOf(h1, h2, owner, obstacleOf, d, before, world, w));
+      if (started) contacts.add(crashOf(h1, h2, owner, obstacleOf, d, before, world, w), i);
     });
     smash(world, d, contacts.takeNewBreaks(), cars, before);
     for (const c of cars) frames[c.v.id].push(frameOf(c.ctl, c.body, before.get(c.v.id)!.velocity));
@@ -250,10 +250,10 @@ class Contacts {
     this.breakable = new Set(w.obstacles.filter(isBreakable).map((o) => o.id));
   }
 
-  add(crash: Crash | null): void {
+  add(crash: Crash | null, step: number): void {
     if (!crash || this.isBroken(crash.b)) return;
     if (this.breakable.has(crash.b) && crash.impact >= BREAKABLE.breakSpeed) {
-      const b = { prop: crash.b, vehicle: crash.a };
+      const b = { prop: crash.b, vehicle: crash.a, step };
       this.breaks.push(b);
       this.fresh.push(b);
       return;
