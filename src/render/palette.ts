@@ -63,6 +63,9 @@ export function shade(color: number, k: number): number {
 }
 
 export function mix(a: number, b: number, t: number): number {
-  const ch = (s: number) => Math.round(((a >> s) & 0xff) * (1 - t) + ((b >> s) & 0xff) * t);
-  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+  const u = 1 - t;
+  const r = Math.round(((a >> 16) & 0xff) * u + ((b >> 16) & 0xff) * t);
+  const g = Math.round(((a >> 8) & 0xff) * u + ((b >> 8) & 0xff) * t);
+  const bl = Math.round((a & 0xff) * u + (b & 0xff) * t);
+  return (r << 16) | (g << 8) | bl;
 }
