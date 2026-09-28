@@ -43,7 +43,7 @@ const EFFECTS = {
     heatDrain: 0.08, // extra supplies use from heat -8% per level
   },
   social: {
-    priceSpread: 0.04, // trade price spread -4% per level
+    priceSpread: 0.02, // trade price spread -2% per level, so level 5 cuts at most half of ECONOMY.spread
     towFee: 0.06, // tow fees -6% per level
     patchPrice: 0.06, // paid patch prices -6% per level
     robberyDanger: 0.08, // danger a robber sees in the truck +8% per level

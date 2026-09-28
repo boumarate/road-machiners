@@ -6,18 +6,23 @@ import { chassisDef, PLAYER_CHASSIS } from "../data/chassis";
 import { ECONOMY, GOODS } from "../data/goods";
 import { shopDef } from "../data/market";
 import { partDef } from "../data/parts";
+import { NPC_UPKEEP } from "../data/npcs";
 import { RULES } from "../data/rules";
 import { REGION } from "../data/region";
 import { getResources } from "./resources";
 import { isJunk, maxHp, partValue, restorePart, scrapValue, wearFactor } from "./wear";
-import { playerVehicle } from "./damage";
+import { playerVehicle, vehicleById } from "./damage";
+import { inFeud } from "./combat";
+import { meetGoal } from "./npc-activities";
+import { addState, endState, stateOf } from "./states";
+import { inTowReach } from "./tow";
 import { addCoreParts } from "./factory";
 import { practice, skillEffect } from "./progress";
 import { addStockPart, goodPrice, recordTrade, shopAt, shopState, siteOf, takeStockPart } from "./market";
 import { canUseSite, requireTown } from "./sites";
 import { freeCells, goodsCount, mountedParts } from "./grid";
 import { addGoods, mountPart, removeGoods, spareParts, stowPart } from "./inventory";
-import type { PartInstance, Vehicle, World } from "./types";
+import type { NpcState, PartInstance, Vehicle, World } from "./types";
 import { playerCommand } from "./world";
 
 export type Supply = "fuel" | "supplies";
@@ -74,13 +79,10 @@ export function tradeGoods(
   if (direction === "buy") {
     if (resources.money < price * count) throw new Error("Not enough money");
     if (freeCells(vehicle) < count) throw new Error("Not enough cargo space");
+    if (vehicle.id === world.player.vehicleId) noteCostBasis(world, good, price, count);
     const added = addGoods(world, vehicle, good, count);
     if (added !== count) throw new Error("Cargo capacity invariant failed");
     resources.money -= price * count;
-    if (vehicle.id === world.player.vehicleId)
-      world.player.costBasis[good] =
-        ((world.player.costBasis[good] ?? 0) * held + price * count) /
-        (held + count);
   } else {
     if (count > held)
       throw new Error(`Cannot sell ${count} ${good}, holding ${held}`);
@@ -91,10 +93,17 @@ export function tradeGoods(
   recordTrade(shopId, shopState(world, shopId), good, count, direction);
 }
 
-// Social grows from profit over the average price paid. A sale at a loss teaches nothing.
-function practiceSale(world: World, shopId: string, good: string, price: number, count: number): void {
+// The player's average price paid per unit of a good, counting units already held. Call it before adding them.
+export function noteCostBasis(world: World, good: string, price: number, count: number): void {
+  const held = goodsCount(playerVehicle(world))[good] ?? 0;
+  world.player.costBasis[good] = ((world.player.costBasis[good] ?? 0) * held + price * count) / (held + count);
+}
+
+// Social grows from profit over the average price paid. A sale at a loss teaches nothing. The target is the buyer, a
+// shop or a truck, and the good.
+function practiceSale(world: World, buyer: string, good: string, price: number, count: number): void {
   const profit = (price - (world.player.costBasis[good] ?? 0)) * count;
-  if (profit > 0) practice(world, "profit", profit, null, `${shopId}:${good}`);
+  if (profit > 0) practice(world, "profit", profit, null, `${buyer}:${good}`);
 }
 
 // Sells every good the shop trades, keeping `retainedParts` units of the parts good, and every
@@ -180,7 +189,8 @@ function refuelAndRepair(world: World, vehicle: Vehicle): void {
   }
 }
 
-function spread(world: World): number {
+// The player's trade margin: the base spread narrowed by the Social skill.
+export function spread(world: World): number {
   return Math.max(
     0,
     ECONOMY.spread - skillEffect(world, playerVehicle(world), "social", "priceSpread"),
@@ -408,5 +418,171 @@ export function buyChassis(world: World, chassisId: string): World {
     }
     me.weaponOrders = {};
     w.player.fuel = Math.min(w.player.fuel, chassisDef(chassisId).fuelCap);
+  });
+}
+
+// Trade with an NPC truck. A radio call starts a `trade` state held by the NPC toward the player, and the NPC's
+// meet goal brings it alongside. Trades run only while both trucks are parked in reach.
+
+function isParked(v: Vehicle): boolean {
+  return v.speed <= RULES.parkedSpeed;
+}
+
+// The trade meeting this driver holds with the player, or null.
+export function tradeWith(world: World, npc: Vehicle): NpcState | null {
+  return stateOf(world, "trade", npc.id, world.player.vehicleId);
+}
+
+export function startTrade(world: World, npc: Vehicle): void {
+  addState(world, "trade", npc.id, world.player.vehicleId, { kind: "none" });
+  meetGoal(world, npc, playerVehicle(world));
+}
+
+// Both trucks of the meeting are parked in reach. It keeps the meeting from lapsing.
+export function isMeeting(world: World, s: NpcState): boolean {
+  const npc = vehicleById(world, s.holder);
+  const me = vehicleById(world, s.other);
+  return isParked(npc) && isParked(me) && inTowReach(npc, me);
+}
+
+// A feud between the two calls the meeting off. A missing party is left to the missing-party rule.
+export function checkTrade(world: World, s: NpcState): "broken" | null {
+  const npc = world.vehicles.find((v) => v.id === s.holder);
+  const me = world.vehicles.find((v) => v.id === s.other);
+  return npc && me && inFeud(world, npc, me) ? "broken" : null;
+}
+
+// The NPC with an agreed trade, met or still on its way, or null.
+export function tradePartner(world: World): Vehicle | null {
+  const s = world.states.find((x) => x.kind === "trade" && x.other === world.player.vehicleId);
+  return s ? vehicleById(world, s.holder) : null;
+}
+
+// The NPC the player can trade with now, or null.
+export function tradeReady(world: World): Vehicle | null {
+  const s = world.states.find((x) => x.kind === "trade" && x.other === world.player.vehicleId && isMeeting(world, x));
+  return s ? vehicleById(world, s.holder) : null;
+}
+
+// The meeting with this NPC, which must be under way now. Every trade command checks it first.
+function requireMeeting(world: World, npcId: string): { npc: Vehicle; state: NpcState } {
+  const npc = vehicleById(world, npcId);
+  const state = tradeWith(world, npc);
+  if (!state) throw new Error(`No trade agreed with ${npc.name}`);
+  if (!isMeeting(world, state)) throw new Error("Both trucks must be parked side by side");
+  return { npc, state };
+}
+
+// The player is done trading. The NPC drops its meet goal on its next think.
+export function endTrade(world: World, npcId: string): World {
+  return playerCommand(world, (w) => endState(w, requireMeeting(w, npcId).state, "fulfilled"));
+}
+
+// Trucks keep no price pressure, so a good trades at its base value with the player's spread either way.
+export function truckGoodPrice(world: World, good: string, direction: "buy" | "sell"): number {
+  const def = GOODS[good];
+  if (!def) throw new Error(`Unknown good ${good}`);
+  const margin = spread(world);
+  const buy = Math.max(1, Math.ceil(def.value * (1 + margin)));
+  return direction === "buy" ? buy : Math.max(0, Math.min(buy - 1, Math.floor(def.value * (1 - margin))));
+}
+
+// A truck charges the town price plus the player's spread, since it sells from its own tank.
+export function truckSupplyPrice(world: World, kind: Supply): number {
+  return Math.ceil(ECONOMY.supplyPrice[kind] * (1 + spread(world)));
+}
+
+// Whole units the driver will sell: what it holds above its reserve share of its cap.
+export function truckSupplyForSale(npc: Vehicle, kind: Supply): number {
+  const cap = kind === "fuel" ? chassisDef(npc.chassisId).fuelCap : RULES.suppliesCap;
+  const held = npc.resources![kind];
+  return Math.max(0, Math.floor(held - cap * NPC_UPKEEP.tradeReserve));
+}
+
+// Units of a good the driver will sell. It keeps its field repair parts.
+export function truckGoodsForSale(npc: Vehicle, good: string): number {
+  const held = goodsCount(npc)[good] ?? 0;
+  return good === "parts" ? Math.max(0, held - NPC_UPKEEP.repairParts) : held;
+}
+
+function requireCount(n: number): void {
+  if (!Number.isInteger(n) || n <= 0) throw new Error(`Bad trade count ${n}`);
+}
+
+// Moves money from payer to payee. A payer in debt or short of the amount throws.
+function transfer(world: World, payer: Vehicle, payee: Vehicle, amount: number): void {
+  const from = getResources(world, payer);
+  if (from.money < 0 || from.money < amount) throw new Error(payer.id === world.player.vehicleId ? 'Not enough money' : `${payer.name} cannot pay that much`);
+  from.money -= amount;
+  getResources(world, payee).money += amount;
+}
+
+export function buyTruckGood(world: World, npcId: string, good: string, n: number): World {
+  return playerCommand(world, (w) => {
+    const { npc } = requireMeeting(w, npcId);
+    const me = playerVehicle(w);
+    requireCount(n);
+    if (truckGoodsForSale(npc, good) < n) throw new Error(`${npc.name} will not sell ${n} ${GOODS[good].name}`);
+    if (freeCells(me) < n) throw new Error("Not enough cargo space");
+    const price = truckGoodPrice(w, good, "buy");
+    transfer(w, me, npc, price * n);
+    noteCostBasis(w, good, price, n);
+    removeGoods(npc, good, n);
+    if (addGoods(w, me, good, n) !== n) throw new Error("Cargo capacity invariant failed");
+  });
+}
+
+export function sellTruckGood(world: World, npcId: string, good: string, n: number): World {
+  return playerCommand(world, (w) => {
+    const { npc } = requireMeeting(w, npcId);
+    const me = playerVehicle(w);
+    requireCount(n);
+    if ((goodsCount(me)[good] ?? 0) < n) throw new Error(`Cannot sell ${n} ${GOODS[good].name}`);
+    if (freeCells(npc) < n) throw new Error(`No room on ${npc.name}'s truck`);
+    const price = truckGoodPrice(w, good, "sell");
+    transfer(w, npc, me, price * n);
+    removeGoods(me, good, n);
+    if (addGoods(w, npc, good, n) !== n) throw new Error("Cargo capacity invariant failed");
+    practiceSale(w, npc.id, good, price, n);
+  });
+}
+
+function takeSpare(v: Vehicle, partId: string): PartInstance {
+  const part = spareParts(v).find((p) => p.id === partId);
+  if (!part) throw new Error(`${v.name} has no spare part ${partId}`);
+  v.items = v.items.filter((it) => it.kind !== "part" || it.part.id !== partId);
+  return part;
+}
+
+// Part prices are the player's own buy and sell prices, as at a shop.
+export function buyTruckPart(world: World, npcId: string, partId: string): World {
+  return playerCommand(world, (w) => {
+    const { npc } = requireMeeting(w, npcId);
+    const me = playerVehicle(w);
+    const part = takeSpare(npc, partId);
+    transfer(w, me, npc, partTradePrice(w, me, part, "buy"));
+    if (!stowPart(w, me, part)) throw new Error(`No room in the truck for ${partDef(part.defId).name}`);
+  });
+}
+
+export function sellTruckPart(world: World, npcId: string, partId: string): World {
+  return playerCommand(world, (w) => {
+    const { npc } = requireMeeting(w, npcId);
+    const me = playerVehicle(w);
+    const part = takeSpare(me, partId);
+    transfer(w, npc, me, partTradePrice(w, me, part, "sell"));
+    if (!stowPart(w, npc, part)) throw new Error(`No room on ${npc.name}'s truck for ${partDef(part.defId).name}`);
+  });
+}
+
+export function buyTruckSupply(world: World, npcId: string, kind: Supply, n: number): World {
+  return playerCommand(world, (w) => {
+    const { npc } = requireMeeting(w, npcId);
+    requireCount(n);
+    if (n > truckSupplyForSale(npc, kind)) throw new Error(`${npc.name} will not sell that much ${kind}`);
+    if (n > supplyRoom(w, kind)) throw new Error(`No room for ${n} ${kind}`);
+    transfer(w, playerVehicle(w), npc, truckSupplyPrice(w, kind) * n);
+    npc.resources![kind] -= n;
+    w.player[kind] += n;
   });
 }

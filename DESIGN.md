@@ -178,7 +178,7 @@ A shot at another vehicle is an attack, hit or miss. The victim and its nearby f
 
 A damaging crash between trucks at peace is most likely an accident. Each damaged NPC decides once whether to forgive it or retaliate. Most drivers forgive. Raiders and scumbags retaliate more often, and a crash with a faction mate is nearly always forgiven. A retaliating driver starts a feud as if it was attacked. Contact with the truck on a tow rope counts for nothing.
 
-A driver hurt by a hostile may plead with it. It asks for a truce, or it begs for mercy when it is weak. Traders and cowards plead most, and raiders seldom. The other side decides whether to accept. A truce ends the feuds between both sides and their nearby faction mates. Mercy is a truce the beggar pays for with its cargo, which it drops for the winner to take. A driver rarely pleads with the same foe again soon.
+A driver hurt by a hostile may plead with it. It asks for a truce, or it begs for mercy when it is weak. Traders and cowards plead most, and raiders seldom. The other side decides whether to accept. A robber or raider after the other truck's cargo seldom pleads or accepts, unless it is weak or outgunned. It also rarely robs a truck it holds a truce with. A truce ends the feuds between both sides and their nearby faction mates. Mercy is a truce the beggar pays for with its cargo, which it drops for the winner to take. A driver rarely pleads with the same foe again soon.
 
 States are timed relations between two trucks. Each ends as expired, fulfilled or broken, and each ending can start other states.
 

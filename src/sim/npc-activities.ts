@@ -19,7 +19,7 @@ import {
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
 import { hashRandom, randInt } from './rng';
-import { canReachSalvage, hasSalvage, isSiteStock, pileInReach, wreckStockId } from './salvage';
+import { canReachSalvage, canTakeAny, hasSalvage, isSiteStock, pileInReach, wreckStockId } from './salvage';
 import { beginSearch } from './search';
 import { vehicleById } from './damage';
 import { plead } from './parley';
@@ -36,7 +36,7 @@ import { dropTow, isOnRope, playerTow, runTow, strandedPlayerAt, towGoal } from 
 // an `activity` event.
 
 // Goals that interrupt a long-term goal. Popping one that uncovers the long-term goal fires the resume decision.
-export const INTERRUPTIONS: readonly NpcActivity['kind'][] = ['fight', 'flee', 'investigate', 'resupply', 'tow', 'loot', 'repair', 'patch'];
+export const INTERRUPTIONS: readonly NpcActivity['kind'][] = ['fight', 'flee', 'investigate', 'resupply', 'tow', 'loot', 'repair', 'patch', 'meet'];
 
 function goalsOf(v: Vehicle): NpcActivity[] {
   if (!v.brain) throw new Error(`${v.id} has no NPC brain`);
@@ -264,8 +264,9 @@ function scavengeInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): str
 function lootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   const stock = world.salvage.find((s) => s.id === goal.targetId);
   if (!stock) return 'the loot is gone';
-  if (canReachSalvage(vehicle, stock) && !hasSalvage(stock)) return 'nothing left to loot';
-  return freeCells(vehicle) === 0 ? 'cargo cannot hold the loot' : null;
+  if (!canReachSalvage(vehicle, stock)) return freeCells(vehicle) === 0 ? 'cargo cannot hold the loot' : null;
+  if (!hasSalvage(stock)) return 'nothing left to loot';
+  return canTakeAny(world, vehicle, stock) ? null : 'cargo cannot hold the loot';
 }
 
 function towInvalid(world: World, vehicle: Vehicle): string | null {
@@ -288,6 +289,16 @@ export function patchGoal(world: World, npc: Vehicle, other: Vehicle, patcher: b
   pushGoal(world, npc, goal);
 }
 
+// A meet goal holds while the driver's trade meeting with its target does.
+function meetInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
+  return goal.targetId && stateOf(world, 'trade', vehicle.id, goal.targetId) ? null : 'the trade is off';
+}
+
+// The goal a trade meeting gives the driver: it drives up to the other truck and parks beside it.
+export function meetGoal(world: World, npc: Vehicle, other: Vehicle): void {
+  pushGoal(world, npc, createActivity('meet', other.id, { ...other.pos }, 'pull over to trade'));
+}
+
 const GOAL_CHECKS: Partial<Record<NpcActivity['kind'], GoalCheck>> = {
   fight: fightInvalid,
   flee: fleeInvalid,
@@ -296,6 +307,7 @@ const GOAL_CHECKS: Partial<Record<NpcActivity['kind'], GoalCheck>> = {
   loot: lootInvalid,
   tow: towInvalid,
   patch: patchInvalid,
+  meet: meetInvalid,
 };
 
 // Whether a goal still holds, for a driver that has not thought yet this turn. Its stock, tow or target may be
@@ -570,8 +582,21 @@ export function startTow(world: World, vehicle: Vehicle, at: Vec): void {
 // A flee keeps running from where its threat is now. An investigation keeps the destination it started with.
 function steer(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[]): void {
   const top = topGoal(vehicle);
-  if (top?.kind === 'flee') steerFlee(world, vehicle, profile, contacts, top);
-  else if (top?.kind === 'tow' && !heldTow(world, vehicle)) steerToStranded(world, vehicle, top);
+  if (top) STEERS[top.kind]?.(world, vehicle, top, profile, contacts);
+}
+
+type Steer = (world: World, vehicle: Vehicle, goal: NpcActivity, profile: NpcProfile, contacts: Contact[]) => void;
+
+const STEERS: Partial<Record<NpcActivity['kind'], Steer>> = {
+  flee: (world, vehicle, goal, profile, contacts) => steerFlee(world, vehicle, profile, contacts, goal),
+  tow: (world, vehicle, goal) => { if (!heldTow(world, vehicle)) steerToStranded(world, vehicle, goal); },
+  meet: (world, _vehicle, goal) => steerToMeet(world, goal),
+};
+
+// A driver on its way to trade re-aims at the other truck every turn. The two keep in touch on the radio, so it
+// knows where the other truck is without sight.
+function steerToMeet(world: World, goal: NpcActivity): void {
+  goal.destination = { ...vehicleById(world, goal.targetId!).pos };
 }
 
 // A tower on its way re-aims every turn: at the truck once it sees it, else at the newest beacon circle. A stale
@@ -638,7 +663,7 @@ function applyFixedRules(world: World, vehicle: Vehicle, profile: NpcProfile): N
     return null;
   }
   const top = topGoal(vehicle)?.kind;
-  if (top === 'tow' || top === 'patch') return null;
+  if (top === 'tow' || top === 'patch' || top === 'meet') return null;
   return pushService(world, vehicle, profile);
 }
 
@@ -757,9 +782,9 @@ function stockRadius(world: World, activity: NpcActivity): number | undefined {
   return world.salvage.find((entry) => entry.id === activity.targetId)?.radius;
 }
 
-// A tower or a patcher drives up to its client, and parks beside it like beside a stock.
+// A tower, a patcher or a trader drives up to the other truck, and parks beside it like beside a stock.
 function towedRadius(world: World, activity: NpcActivity): number | undefined {
-  if (activity.kind !== 'tow' && activity.kind !== 'patch') return undefined;
+  if (activity.kind !== 'tow' && activity.kind !== 'patch' && activity.kind !== 'meet') return undefined;
   const towed = world.vehicles.find((entry) => entry.id === activity.targetId);
   return towed && chassisDef(towed.chassisId).radius;
 }
@@ -788,7 +813,7 @@ function isSearching(vehicle: Vehicle, stock: SalvageStock): boolean {
 }
 
 function searchStock(world: World, vehicle: Vehicle, stock: SalvageStock): void {
-  if (!hasSalvage(stock) || freeCells(vehicle) === 0) {
+  if (!canTakeAny(world, vehicle, stock)) {
     finishGoal(world, vehicle, !hasSalvage(stock) ? 'salvage exhausted' : 'cargo cannot hold salvage');
     return;
   }

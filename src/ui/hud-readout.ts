@@ -1,4 +1,5 @@
 import { chassisDef } from "../data/chassis";
+import { tradePartner, tradeReady } from "../sim/economy";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { maxHp } from "../sim/wear";
@@ -35,6 +36,17 @@ function shopNear(world: World): { id: string; name: string } | null {
 
 export function getContextAction(world: World, playing: boolean): ContextAction | null {
   if (playing || !playerCanAct(world)) return null;
+  // A trade the player arranged wins over the place once both trucks are parked side by side.
+  const trade = getTradeAction(world);
+  return trade?.ready ? trade : (getPlaceAction(world) ?? trade);
+}
+
+function getTradeAction(world: World): ContextAction | null {
+  const partner = tradePartner(world);
+  return partner && { label: `Trade with ${partner.name}`, ready: tradeReady(world) !== null };
+}
+
+function getPlaceAction(world: World): ContextAction | null {
   const shop = shopNear(world);
   if (shop) return { label: `Enter ${shop.name}`, ready: shopAt(world) === shop.id };
   if (isBusy(playerVehicle(world))) return null;
