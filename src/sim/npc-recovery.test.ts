@@ -231,6 +231,23 @@ describe('NPC gameplay recovery', () => {
     expect(shareOfSeeds(world, npc.id, (x, me) => thinkNpc(x, me).kind === 'investigate')).toBeGreaterThan(0.6);
   });
 
+  it('drops a field repair and starts none while a hostile in sight shoots at it', () => {
+    const { world, npc } = createScenario();
+    npc.brain!.goals = [workGoal('scavenger')];
+    addGoods(world, npc, 'parts', 4);
+    corePart(npc, 'cab').hp = 1;
+    const calm = cloneWorld(world);
+    expect(thinkNpc(calm, byId(calm, npc.id)).kind).toBe('repair');
+    npc.brain!.goals.push({ kind: 'repair', targetId: null, destination: null, phase: 'act', reason: 'patch damaged parts' });
+    const raider = addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
+    fireAt(world, raider, npc);
+    const repairs = shareOfSeeds(world, npc.id, (x, me) => {
+      thinkNpc(x, me);
+      return me.brain!.goals.some((g) => g.kind === 'repair');
+    });
+    expect(repairs).toBe(0);
+  });
+
   it('services low fuel instead of pursuing a contact or taking a shade detour', () => {
     const { world, npc } = createScenario('buggy');
     npc.resources!.fuel = 0;

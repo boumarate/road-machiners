@@ -11,7 +11,7 @@ export type TopicId = 'directions' | 'tow' | 'askTow' | 'patch' | 'patchRequest'
 export type ConditionId =
   | 'knowsTown' | 'offersTow' | 'canTowPlayer' | 'playerNeedsPatch' | 'npcNeedsPatch' | 'hasDeal' | 'noDeal' | 'demandsCargo'
   | 'atOdds' | 'atPeace' | 'noPlayerPlea' | 'npcHasCargo' | 'offersTruce' | 'begsMercy'
-  | 'accepts' | 'refuses' | 'complies' | 'resists' | 'runs' | 'canTowNpc' | 'towedByPlayer' | 'noTrade';
+  | 'accepts' | 'refuses' | 'complies' | 'resists' | 'runs' | 'canTowNpc' | 'towedByPlayer' | 'noTrade' | 'npcCalm';
 export type EffectId =
   | 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow' | 'agreePatch' | 'handOver'
   | 'acceptPlea' | 'refusePlea' | 'settlePlea' | 'withdrawPlea' | 'settleThreat' | 'hitchNpc' | 'hitchNpcFree' | 'releaseNpc' | 'startTrade';
@@ -85,7 +85,7 @@ export const TOPICS: Record<TopicId, Topic> = {
   askTow: {
     id: 'askTow',
     once: false,
-    ask: { text: 'I am stranded. Can you tow me?', when: ['canTowPlayer'], duringFeud: false },
+    ask: { text: 'I am stranded. Can you tow me?', when: ['canTowPlayer', 'npcCalm'], duringFeud: false },
     raise: null,
     prepare: null,
     hangUp: [],
@@ -101,7 +101,7 @@ export const TOPICS: Record<TopicId, Topic> = {
   patch: {
     id: 'patch',
     once: false,
-    ask: { text: 'My truck is broken down. Can you patch it?', when: ['playerNeedsPatch'], duringFeud: false },
+    ask: { text: 'My truck is broken down. Can you patch it?', when: ['playerNeedsPatch', 'npcCalm'], duringFeud: false },
     raise: null,
     prepare: 'patchTerms',
     hangUp: [],
@@ -132,7 +132,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     id: 'patchRequest',
     once: true,
     ask: null,
-    raise: { when: ['npcNeedsPatch'], priority: 1, duringFeud: false, duringCombat: false },
+    raise: { when: ['npcNeedsPatch', 'npcCalm'], priority: 1, duringFeud: false, duringCombat: false },
     prepare: 'patchTerms',
     hangUp: ['settleRefused'],
     start: 'ask',
@@ -176,7 +176,7 @@ export const TOPICS: Record<TopicId, Topic> = {
   trade: {
     id: 'trade',
     once: false,
-    ask: { text: 'Want to trade?', when: ['noTrade'], duringFeud: false },
+    ask: { text: 'Want to trade?', when: ['noTrade', 'npcCalm'], duringFeud: false },
     raise: null,
     prepare: null,
     hangUp: [],
