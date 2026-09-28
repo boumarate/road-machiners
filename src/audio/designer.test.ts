@@ -4,7 +4,7 @@ import { SoundDesigner, type SlotTiming } from "./designer";
 // One beat per second, four beats per bar, two slots per beat: slots every half second from time 10,
 // bars starting at 10, 14, 18.
 const GRID = { start: 10, beat: 1, beatsPerBar: 4 };
-const TIMING: SlotTiming = { subdivision: 2, spreadSlots: 2, humanizeMs: 20 };
+const TIMING: SlotTiming = { subdivision: 2, spreadSlots: 2, minGapSlots: 1, humanizeMs: 20 };
 
 function designer(): SoundDesigner {
   return new SoundDesigner(GRID, TIMING);
@@ -49,6 +49,14 @@ describe("SoundDesigner", () => {
     expect(d.claim(11)).toBe(false);
     expect(d.claim(12)).toBe(true);
     expect(d.claim(12)).toBe(false);
+  });
+
+  it("keeps accents minGapSlots apart", () => {
+    const d = new SoundDesigner(GRID, { ...TIMING, minGapSlots: 2 });
+    expect(d.schedule(12, 0, 0, 0)).toBe(11);
+    expect(d.schedule(12, 0, 0, 0)).toBe(12);
+    expect(d.claim(12.5)).toBe(false);
+    expect(d.claim(13)).toBe(true);
   });
 
   it("keeps a slot taken after a request for a later time", () => {

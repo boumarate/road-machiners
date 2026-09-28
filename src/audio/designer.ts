@@ -9,6 +9,7 @@ export type Grid = { start: number; beat: number; beatsPerBar: number };
 export type SlotTiming = {
   subdivision: number; // slots per beat
   spreadSlots: number; // slots an accent may land before or after its wanted slot
+  minGapSlots: number; // slots between accent starts, so sounds never stack on one another
   humanizeMs: number; // largest random delay after the slot
 };
 
@@ -44,7 +45,7 @@ export class SoundDesigner {
   // Takes the slot at time if it is free. Returns whether it did.
   claim(time: number): boolean {
     const slot = Math.round((time - this.grid.start) / this.slotLength());
-    if (this.taken.has(slot)) return false;
+    if (!this.isFree(slot)) return false;
     this.taken.add(slot);
     return true;
   }
@@ -74,8 +75,14 @@ export class SoundDesigner {
     const wanted = Math.round((at - this.grid.start) / this.slotLength());
     const first = Math.max(wanted - this.timing.spreadSlots, this.slotAtOrAfter(earliest));
     const out: number[] = [];
-    for (let s = first; s <= wanted + this.timing.spreadSlots; s++) if (!this.taken.has(s)) out.push(s);
+    for (let s = first; s <= wanted + this.timing.spreadSlots; s++) if (this.isFree(s)) out.push(s);
     return out;
+  }
+
+  // Free when no accent starts within minGapSlots of it.
+  private isFree(slot: number): boolean {
+    for (let d = -this.timing.minGapSlots + 1; d < this.timing.minGapSlots; d++) if (this.taken.has(slot + d)) return false;
+    return true;
   }
 
   private forgetBefore(slot: number): void {

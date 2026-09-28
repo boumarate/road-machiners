@@ -81,7 +81,7 @@ function shapeFilters(src, cue) {
 }
 
 const STINGER_MAX_S = 1.5; // longest score stinger; longer ones drag past the moment they answer
-const STINGER_EDGES = [0.02, 0.3]; // fade in and fade out seconds for stingers
+const STINGER_EDGES = [0.02, 0.6]; // fade in and fade out seconds for stingers; a long fade-out lets them melt into the base
 
 // Generated loops miss their requested length by a few milliseconds. A tiny tempo change fits the loop, and the
 // pad and trim make the sample count exact.

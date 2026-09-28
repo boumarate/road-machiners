@@ -49,7 +49,7 @@ const ACCENT_LEAD_SECONDS = 0.02; // earliest accent start from now, so Web Audi
 const MOTIF_LOOKAHEAD_SECONDS = 0.1; // a motif repeat is scheduled once it is this close, several frames ahead
 
 // The accent repeating now. Only one motif leads at a time, so repeats never pile up.
-type Motif = { cue: AccentCue; weight: number; next: number; every: number; k: number; repeats: number };
+type Motif = { cue: AccentCue; next: number; every: number; k: number; repeats: number };
 
 // What the score did with one accent request, for the sound log.
 export type AccentResult = { cue: AccentCue; chance: number; heat: number; mode: Mode; played: boolean; repeats: number };
@@ -62,6 +62,7 @@ export class CombatScore {
   private lastBar = -Infinity;
   private motif: Motif | null = null;
   private paused = false;
+  private side = 1; // stereo side of the last accent sound; each next one takes the other
 
   constructor(
     private player: Pick<SoundPlayer, "beatLoop" | "now" | "play">,
@@ -124,16 +125,13 @@ export class CombatScore {
     return this.designer.schedule(now + delayMs / 1000, now + ACCENT_LEAD_SECONDS, this.conductor.emphasis(cue), this.roll());
   }
 
-  // Plays the accent. It becomes the lead motif unless a heavier one is still repeating, in which case it plays
-  // once. Returns the repeats planned.
+  // Plays the accent, which takes the lead motif from any older one. Returns the repeats planned.
   private play(cue: AccentCue, now: number, time: number): number {
     this.conductor.played(cue, time);
     this.sound(cue, now, time, 1);
-    const weight = this.conductor.weight(cue);
-    if (this.motif && this.motif.weight > weight) return 0;
     const repeats = this.conductor.repeats(now);
     const every = this.designer.beat() * MIX.score.repeatBeats;
-    this.motif = repeats > 0 ? { cue, weight, next: time + every, every, k: 1, repeats } : null;
+    this.motif = repeats > 0 ? { cue, next: time + every, every, k: 1, repeats } : null;
     return repeats;
   }
 
@@ -151,10 +149,12 @@ export class CombatScore {
     if (m.k > m.repeats) this.motif = null;
   }
 
+  // Successive accent sounds sit a little left and right in turn, so overlapping tails stay apart.
   private sound(cue: AccentCue, now: number, time: number, gain: number): void {
-    this.player.play(cue, { pan: 0, gain }, (time - now) * 1000);
     const s = MIX.score;
-    this.active?.loop.duck(time, s.duckGain, s.duckAttackSeconds, this.active.grid.beat);
+    this.side = -this.side;
+    this.player.play(cue, { pan: this.side * s.panSpread, gain }, (time - now) * 1000);
+    this.active?.loop.duck(time, s.duckGain, s.duckAttackSeconds, this.active.grid.beat * s.duckReleaseBeats);
   }
 
   private barAt(base: Base, time: number): number {

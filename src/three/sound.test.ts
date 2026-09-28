@@ -283,21 +283,30 @@ describe("CombatScore", () => {
     expect(new Set(gains)).toEqual(new Set([MIX.score.repeatGain]));
   });
 
-  it("plays a lighter accent once while a heavier motif leads, and lets a heavier one take over", () => {
+  it("lets the newest played accent take the lead, so only one motif repeats", () => {
     const { player, plays, clock } = fakePlayer();
     const score = new CombatScore(player, () => 0);
     score.setCombat(true, 3);
     score.accent("accent-crit", 0);
-    expect(score.accent("accent-hit", 500).repeats).toBe(0);
-    expect(score.accent("accent-crash", 900).repeats).toBeGreaterThan(0);
+    expect(score.accent("accent-hit", 900).played).toBe(true);
     for (let t = 0; t < 120; t++) {
       clock.now += 0.05;
       score.tick();
     }
     const cues = (plays as Play[]).map((p) => p[0]);
-    expect(cues.slice(0, 3)).toEqual(["accent-crit", "accent-hit", "accent-crash"]);
-    expect(cues.length).toBeGreaterThan(3);
-    expect(cues.slice(3).every((c) => c === "accent-crash")).toBe(true);
+    expect(cues.slice(0, 2)).toEqual(["accent-crit", "accent-hit"]);
+    expect(cues.length).toBeGreaterThan(2);
+    expect(cues.slice(2).every((c) => c === "accent-hit")).toBe(true);
+  });
+
+  it("alternates accent sounds left and right", () => {
+    const { player, plays } = fakePlayer();
+    const score = new CombatScore(player, () => 0);
+    score.setCombat(true, 3);
+    score.accent("accent-crit", 0);
+    score.accent("accent-hit", 900);
+    const pans = (plays as [string, { pan: number }][]).map((p) => p[1].pan);
+    expect(pans).toEqual([-MIX.score.panSpread, MIX.score.panSpread]);
   });
 
   it("skips an accent when the roll misses its chance", () => {

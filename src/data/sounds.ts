@@ -174,20 +174,23 @@ export const MIX = {
   // leaves, so a hostile at the edge of sight does not flip the music every turn.
   // Between turns, once no turn has played for pauseDelayMs, music is muffled to pauseCutoffHz over toneSeconds.
   // The delay keeps the short gaps between automatic turns clear.
-  music: { fadeSeconds: 3, holdTurns: 5, pauseDelayMs: 300, pauseCutoffHz: 2500, openCutoffHz: 20000, toneSeconds: 0.6 },
+  music: { fadeSeconds: 3, holdTurns: 5, pauseDelayMs: 300, pauseCutoffHz: 4000, openCutoffHz: 20000, toneSeconds: 0.6 },
   // Combat score. One random base plays while a hostile is in sight, as combat music did. Each beat of the base has
   // subdivision slots, and an accent lands on a free slot up to spreadSlots before or after its moment. The base
   // dips to duckGain under an accent and recovers over one beat. See Conductor for heat, modes and chances.
   // A busy fight adds about 1 heat per turn, so heat settles near 4; the mode thresholds sit around that.
-  // A played accent leads as the motif and repeats round(heat * repeatsPerHeat) times, up to maxRepeats, every
-  // repeatBeats beats, each repeat at repeatGain times the one before. A heavier motif still repeating keeps the
-  // lead, and a lighter accent then plays once.
+  // The newest played accent leads as the motif and repeats round(heat * repeatsPerHeat) times, up to maxRepeats,
+  // every repeatBeats beats, each repeat at repeatGain times the one before. Only the lead repeats.
+  // lead. Accents start at least minGapSlots apart and alternate panSpread left and right.
   score: {
     subdivision: 2,
     spreadSlots: 2,
+    minGapSlots: 2,
     humanizeMs: 15,
+    panSpread: 0.25,
     duckGain: 0.55,
     duckAttackSeconds: 0.05,
+    duckReleaseBeats: 2,
     heatHalfLifeSeconds: 8,
     fatigueHalfLifeSeconds: 6,
     crowdHalfLifeSeconds: 4,
