@@ -84,3 +84,18 @@ Work in `.worktrees/tiny-gameplay-tweaks`.
 - Manual try, stranded: drain the fuel with the console. Black smoke starts. Refuel, and it stops.
 - Manual try, haze: at noon, open ground shimmers and shaded ground beside a rock does not. At night nothing shimmers.
 - Manual try, negative: set engine heat to 0.74 with the console. There is no steam. At 0.8 steam shows. Watch spawns for 50 turns with the player at a site. No NPC spawns within `campMinPlayerDist`.
+
+## Result
+- All six phases are done, one commit each, on branch `tiny-gameplay-tweaks`.
+- Phase 1 moved 12 locations beside the roads on straight spurs. Dustwell sits west of its junction, so every pair of sites stays over 60 tiles apart. Driver taste strength went from 0.5 to 0.6. At 0.5 every Bowl to Nose driver took the same middle road. Now two roads get used, and drivers still keep to roads.
+- Phase 2 put the start 54 tiles past the Bowl wall, on the trunk road. The player starts knowing no site. The progression bot now sells at the first town it finds.
+- Phase 3 spawns neutrals at any non-camp site gate. Hunting grounds are 11 lonely road points and 8 salvage pads.
+- Phase 4 moved particles to instanced billboards, one draw call per pool. It adds per-wheel dust streams, exhaust, overheat steam and breakdown smoke.
+- Phase 5 added heat haze in the ground shader, from sun heat 1.7 up.
+- Phase 6 rewrote the help panel.
+- Two salvage restock tests passed only by RNG luck. They now run enough days to be certain.
+- Checks: `npm test` gave 1411 passed. `npm run quality` passed. `npm run playtest` passed at 60 fps.
+- `npm run perf` fails boot time and the first turn. Main fails the same checks with worse numbers: boot 3173 ms against 2824 ms here, first turn 247 ms against 214 ms here.
+- Manual try, positive: the start is on the road with nothing discovered. The first NPCs spread over 8 sites. Screenshots show dust streams, black exhaust, white steam at heat 0.95 and black smoke when stranded. They also show haze at noon in a heat wave.
+- Manual try, finding: a truck parked at the start first sees a neutral driver on turn 45. Traffic is not busy at the start, because no initial spawn lands near it.
+- Open: the user confirms the look of dust, exhaust, steam, smoke and haze in motion.
