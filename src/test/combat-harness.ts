@@ -37,9 +37,11 @@ export type Fight = {
   maxTurns: number;
 };
 
-export type Side = { rounds: number; hits: number; odds: number; damage: number }; // odds sums each round's hit chance
+// odds sums each round's hit chance. speed sums the side's speed each turn, averaged over its awake trucks.
+export type Side = { rounds: number; hits: number; odds: number; damage: number; speed: number };
 export type Outcome = 'won' | 'lost' | 'fled' | 'timeout';
-export type FightReport = { fight: Fight; outcome: Outcome; turns: number; speed: number; me: Side; them: Side };
+// crashes counts collisions between the player and an enemy, rams included.
+export type FightReport = { fight: Fight; outcome: Outcome; turns: number; crashes: number; me: Side; them: Side };
 
 const CENTER: Vec = { x: 60, y: 60 };
 const FLED_RANGE = 40; // tiles from the start; an enemy this far has left the fight
@@ -134,9 +136,9 @@ export function turnLine(w: World, turn: number): string {
 }
 
 const partHp = (v: Vehicle) => mountedParts(v).reduce((sum, p) => sum + p.hp, 0);
-const side = (): Side => ({ rounds: 0, hits: 0, odds: 0, damage: 0 });
+const side = (): Side => ({ rounds: 0, hits: 0, odds: 0, damage: 0, speed: 0 });
 
-type Count = { meId: string; enemyIds: Set<string>; me: Side; them: Side };
+type Count = { meId: string; enemyIds: Set<string>; me: Side; them: Side; crashes: number };
 
 function nearestFoe(w: World, c: Count): Vehicle {
   const me = w.vehicles.find((v) => v.id === c.meId)!;
@@ -153,6 +155,14 @@ function countShots(w: World, c: Count): void {
     s.hits += ev.rounds.filter((r) => r.hit).length;
     s.odds += ev.chance * ev.rounds.length;
   }
+}
+
+function countMoves(w: World, c: Count): void {
+  c.me.speed += Math.abs(w.vehicles.find((v) => v.id === c.meId)!.speed);
+  const awake = w.vehicles.filter((v) => c.enemyIds.has(v.id) && !isDefeated(v));
+  if (awake.length > 0) c.them.speed += awake.reduce((sum, v) => sum + Math.abs(v.speed), 0) / awake.length;
+  const fighters = (id: string) => id === c.meId || c.enemyIds.has(id);
+  c.crashes += w.events.filter((e) => e.t === 'collision' && fighters(e.a) && fighters(e.b) && (e.a === c.meId || e.b === c.meId)).length;
 }
 
 // Part HP each truck lost this turn goes to the side that shot it.
@@ -180,15 +190,15 @@ function playTurn(w: World, d: Drive, c: Count): { w: World; d: Drive } {
   freeDrive(d);
   countShots(w, c);
   countDamage(w, c, before);
+  countMoves(w, c);
   return { w, d: next! };
 }
 
 // watch, when given, sees the world after every turn, for traces and custom counts.
 export function runFight(fight: Fight, watch?: (w: World, turn: number) => void): FightReport {
   let w = setup(fight);
-  const c: Count = { meId: w.player.vehicleId, enemyIds: new Set(w.vehicles.slice(1).map((v) => v.id)), me: side(), them: side() };
+  const c: Count = { meId: w.player.vehicleId, enemyIds: new Set(w.vehicles.slice(1).map((v) => v.id)), me: side(), them: side(), crashes: 0 };
   let d = buildDrive(w);
-  let speed = 0;
   let outcome: Outcome | null = null;
   let turns = 0;
   while (outcome === null && turns < fight.maxTurns) {
@@ -196,13 +206,11 @@ export function runFight(fight: Fight, watch?: (w: World, turn: number) => void)
     w = orders(w, fight, nearestFoe(w, c));
     ({ w, d } = playTurn(w, d, c));
     turns++;
-    const me = w.vehicles.find((v) => v.id === c.meId)!;
-    speed += Math.abs(me.speed);
     watch?.(w, turns);
     outcome = outcomeOf(w, c);
   }
   freeDrive(d);
-  return { fight, outcome: outcome ?? 'timeout', turns, speed: speed / turns, me: c.me, them: c.them };
+  return { fight, outcome: outcome ?? 'timeout', turns, crashes: c.crashes, me: c.me, them: c.them };
 }
 
 export type Group = { enemies: string; policy: Policy; reports: FightReport[] };
@@ -226,22 +234,24 @@ export function formatReport(reports: FightReport[], sets: string[]): string {
     `# Combat harness`,
     '',
     `Kit ${kit}. ${reports.length} fights. Changed numbers: ${sets.length ? sets.join(', ') : 'none'}.`,
-    'Hit is rounds that hit. Odds is the mean hit chance shown for those rounds. Damage is part HP lost per turn.',
+    'Speed is tiles per turn. Hit is rounds that hit. Odds is the mean hit chance shown for those rounds. Damage is part HP lost per turn. Crashes are per fight.',
     '',
-    '| enemies | policy | won | lost | fled | timeout | turns | my speed | my hit | my odds | my dmg/turn | their hit | their odds | their dmg/turn |',
-    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+    '| enemies | policy | won | lost | fled | timeout | turns | crashes | my speed | my hit | my odds | my dmg/turn | their speed | their hit | their odds | their dmg/turn |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
   ];
-  for (const g of groups(reports)) {
-    const rs = g.reports;
-    const sum = (f: (r: FightReport) => number) => rs.reduce((a, r) => a + f(r), 0);
-    const count = (o: Outcome) => rs.filter((r) => r.outcome === o).length;
-    const turns = sum((r) => r.turns);
-    lines.push(
-      `| ${g.enemies} | ${g.policy} | ${count('won')} | ${count('lost')} | ${count('fled')} | ${count('timeout')} | ${(turns / rs.length).toFixed(1)}` +
-        ` | ${(sum((r) => r.speed) / rs.length).toFixed(1)}` +
-        ` | ${pct(sum((r) => r.me.hits), sum((r) => r.me.rounds))} | ${pct(sum((r) => r.me.odds), sum((r) => r.me.rounds))} | ${(sum((r) => r.me.damage) / turns).toFixed(1)}` +
-        ` | ${pct(sum((r) => r.them.hits), sum((r) => r.them.rounds))} | ${pct(sum((r) => r.them.odds), sum((r) => r.them.rounds))} | ${(sum((r) => r.them.damage) / turns).toFixed(1)} |`,
-    );
-  }
+  for (const g of groups(reports)) lines.push(groupRow(g));
   return lines.join('\n') + '\n';
+}
+
+function groupRow(g: Group): string {
+  const rs = g.reports;
+  const sum = (f: (r: FightReport) => number) => rs.reduce((a, r) => a + f(r), 0);
+  const count = (o: Outcome) => rs.filter((r) => r.outcome === o).length;
+  const turns = sum((r) => r.turns);
+  const sideCells = (pick: (r: FightReport) => Side) => {
+    const rounds = sum((r) => pick(r).rounds);
+    return [(sum((r) => pick(r).speed) / turns).toFixed(1), pct(sum((r) => pick(r).hits), rounds), pct(sum((r) => pick(r).odds), rounds), (sum((r) => pick(r).damage) / turns).toFixed(1)];
+  };
+  const cells = [g.enemies, g.policy, ...(['won', 'lost', 'fled', 'timeout'] as Outcome[]).map(count), (turns / rs.length).toFixed(1), (sum((r) => r.crashes) / rs.length).toFixed(1), ...sideCells((r) => r.me), ...sideCells((r) => r.them)];
+  return `| ${cells.join(' | ')} |`;
 }

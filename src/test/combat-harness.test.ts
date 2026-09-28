@@ -22,7 +22,7 @@ describe('combat harness', () => {
   });
 
   it('a standing player never moves', () => {
-    expect(runFight(FIGHT).speed).toBe(0);
+    expect(runFight(FIGHT).me.speed).toBe(0);
   });
 
   it('sets an existing balance number', () => {
