@@ -26,6 +26,7 @@ export const FIELD_SPARE_WEAR: Weighted<number>[] = [
 export const SALVAGE = {
   unitsPerTurn: 2, // stock units, goods or parts, a search gets through per turn
   pileTurns: 400, // two days a dropped pile lies on the ground, time for a road crossing and back
+  pileSearchTurns: 1, // loot lying loose takes one look, whatever its size
   // Share of a wrecked chassis's value that its destroyed built-in parts leave as the parts good, scaled by
   // their remaining HP share. Keeps a wreck's loot well under the truck's own value, so a kill is not a windfall.
   coreValueShare: 0.03,
