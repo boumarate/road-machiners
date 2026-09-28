@@ -12,6 +12,8 @@ export type LoopHandle = {
   setGain(gain: number, rampSeconds: number): void;
   // Fades in, moves rate and gain in a straight line over the span, and fades out at its end.
   glide(g: Glide): void;
+  // Plays the loop through the points once, moving rate and gain in straight lines between them, then stops.
+  once(points: readonly EnvelopePoint[]): void;
   stop(fadeMs: number): void;
 };
 
@@ -25,6 +27,8 @@ export type BeatLoopHandle = LoopHandle & {
 
 const PEAK_WINDOW_SECONDS = 0.02; // short enough to find a hit's attack, long enough to skip single-sample spikes
 
+// One point of a loop played once: playback rate and level, seconds from the start.
+export type EnvelopePoint = { at: number; rate: number; gain: number };
 export type Glide = { rateFrom: number; rateTo: number; gainFrom: number; gainTo: number; seconds: number; fadeSeconds: number };
 
 
@@ -118,6 +122,17 @@ export class SoundPlayer {
         level.linearRampToValueAtTime(cue.volume * g.gainFrom, t + g.fadeSeconds);
         level.linearRampToValueAtTime(cue.volume * g.gainTo, t + g.seconds - g.fadeSeconds);
         level.linearRampToValueAtTime(0, t + g.seconds);
+      },
+      once: (points) => {
+        const t = ctx.currentTime;
+        const [first, ...rest] = points;
+        src.playbackRate.setValueAtTime(first.rate, t + first.at);
+        gain.gain.setValueAtTime(cue.volume * first.gain, t + first.at);
+        for (const p of rest) {
+          src.playbackRate.linearRampToValueAtTime(p.rate, t + p.at);
+          gain.gain.linearRampToValueAtTime(cue.volume * p.gain, t + p.at);
+        }
+        src.stop(t + points[points.length - 1].at);
       },
       stop: (fadeMs) => {
         gain.gain.setTargetAtTime(0, ctx.currentTime, fadeMs / 1000 / 3);

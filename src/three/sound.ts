@@ -267,12 +267,14 @@ export function computeEngineGlide(
   frames: VehicleFrame[],
   seconds: number,
   mix: typeof MIX,
+  overdrive: boolean,
 ): ReturnType<typeof engineGlide> {
   return engineGlide(
     computeStepSpeed(frames, 1),
     computeStepSpeed(frames, frames.length - 1),
     seconds,
     mix,
+    overdrive,
   );
 }
 
@@ -291,6 +293,7 @@ export function engineGlide(
   to: number,
   seconds: number,
   mix: typeof MIX,
+  overdrive: boolean,
 ): (Glide & { brake: boolean }) | null {
   const e = mix.engine;
   if (Math.max(from, to) < e.movingMs) return null;
@@ -298,11 +301,12 @@ export function engineGlide(
   const rate = (v: number) => e.idleRate + (e.topRate - e.idleRate) * share(v);
   const gain = (v: number) => e.idleGain + (1 - e.idleGain) * share(v);
   const load = Math.max(-1, Math.min(1, (to - from) / e.loadMs));
+  const loud = overdrive ? e.overdriveGain : 1;
   return {
     rateFrom: rate(from),
     rateTo: rate(to) + load * (load > 0 ? e.revUp : e.revDown),
-    gainFrom: gain(from),
-    gainTo: gain(to) + load * e.loadGain,
+    gainFrom: gain(from) * loud,
+    gainTo: (gain(to) + load * e.loadGain) * loud,
     seconds,
     fadeSeconds: e.fadeSeconds,
     brake: from - to >= e.brakeMs,
@@ -336,6 +340,11 @@ export class SoundLoops {
       this.engineChassis = chassisId;
     }
     engine.glide(g);
+  }
+
+  // A throttle blip on the chassis's own engine note when overdrive comes on.
+  rev(chassisId: string): void {
+    this.player.loop("engine", { pan: 0, gain: 0 }, engineFileFor(chassisId)).once(MIX.rev);
   }
 
   // Sends only changed targets, so ramps are not restarted every frame.

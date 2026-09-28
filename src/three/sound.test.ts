@@ -91,11 +91,11 @@ describe("engine sound assignment", () => {
     const player = {
       loop: (id: string, _at: unknown, file?: string) => {
         if (id === "engine") started.push(file ?? "random");
-        return { glide: () => {}, setGain: () => {}, stop: (ms: number) => stopped.push(ms) };
+        return { glide: () => {}, once: () => {}, setGain: () => {}, stop: (ms: number) => stopped.push(ms) };
       },
     } as unknown as SoundPlayer;
     const loops = new SoundLoops(player, { setCombat: () => {}, setPaused: () => {}, tick: () => {} });
-    const glide = engineGlide(0, 10, 1, MIX)!;
+    const glide = engineGlide(0, 10, 1, MIX, false)!;
 
     loops.drive(glide, "scout");
     loops.drive(glide, "scout");
@@ -137,23 +137,30 @@ describe("horn sound assignment", () => {
 describe("engineGlide", () => {
   const e = MIX.engine;
   it("stays silent while standing still", () => {
-    expect(engineGlide(0, 0, 1, MIX)).toBeNull();
+    expect(engineGlide(0, 0, 1, MIX, false)).toBeNull();
   });
   it("revs up while speeding up and holds while cruising", () => {
-    const up = engineGlide(0, e.topSpeedMs * 2, 1, MIX)!;
+    const up = engineGlide(0, e.topSpeedMs * 2, 1, MIX, false)!;
     expect([up.rateFrom, up.rateTo]).toEqual([e.idleRate, e.topRate + e.revUp]);
     expect([up.gainFrom, up.gainTo]).toEqual([e.idleGain, 1 + e.loadGain]);
     expect(up.brake).toBe(false);
-    const cruise = engineGlide(10, 10, 1, MIX)!;
+    const cruise = engineGlide(10, 10, 1, MIX, false)!;
     expect(cruise.rateTo).toBe(cruise.rateFrom);
   });
   it("drops revs while slowing", () => {
-    const g = engineGlide(10, 10 - e.loadMs, 1, MIX)!;
+    const g = engineGlide(10, 10 - e.loadMs, 1, MIX, false)!;
     expect(g.rateFrom - g.rateTo).toBeGreaterThan(e.revDown);
   });
   it("adds the air brake on a hard slowdown only", () => {
-    expect(engineGlide(10, 10 - e.brakeMs, 1, MIX)!.brake).toBe(true);
-    expect(engineGlide(10, 10 - e.brakeMs / 2, 1, MIX)!.brake).toBe(false);
+    expect(engineGlide(10, 10 - e.brakeMs, 1, MIX, false)!.brake).toBe(true);
+    expect(engineGlide(10, 10 - e.brakeMs / 2, 1, MIX, false)!.brake).toBe(false);
+  });
+  it("is louder in overdrive at the same revs", () => {
+    const normal = engineGlide(5, 10, 1, MIX, false)!;
+    const over = engineGlide(5, 10, 1, MIX, true)!;
+    expect(over.rateTo).toBe(normal.rateTo);
+    expect(over.gainFrom).toBeCloseTo(normal.gainFrom * e.overdriveGain);
+    expect(over.gainTo).toBeCloseTo(normal.gainTo * e.overdriveGain);
   });
 });
 
@@ -203,6 +210,7 @@ describe("CombatScore", () => {
           setGain: (g: number) => call.gains.push(g),
           setTone: (hz: number) => call.tones.push(hz),
           glide: () => {},
+          once: () => {},
           stop: () => {},
           duck: (t: number) => call.ducks.push(t),
         };
