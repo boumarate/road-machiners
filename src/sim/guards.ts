@@ -32,7 +32,7 @@ function fireSite(world: World, site: Site, isTarget: (v: Vehicle) => boolean): 
     const lanes = laneCount(target, side);
     const rounds: ShotRound[] = Array.from({ length: G.rounds }, () =>
       chance(world, G.hitChance)
-        ? { hit: true, crit: false, offset: 0, hits: walkLane(world, target, side, randInt(world, 0, lanes - 1), G.round) }
+        ? { hit: true, crit: false, offset: 0, hits: walkLane(world, target, side, randInt(world, 0, lanes - 1), { ...G.round, damage: G.round.damage * RULES.weaponDamage }) }
         : { hit: false, crit: false, offset: randRange(world, -G.missOffset, G.missOffset), hits: [] },
     );
     if (rounds.some((r) => r.hits.length > 0)) target.lastHitBy = `guard-${site.id}`;

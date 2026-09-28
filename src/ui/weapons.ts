@@ -1,4 +1,5 @@
 import { partDef } from "../data/parts";
+import { RULES } from "../data/rules";
 import { fireBlock, hitOdds, type FireBlock } from "../sim/combat";
 import { playerVehicle } from "../sim/damage";
 import { mountedParts } from "../sim/grid";
@@ -182,7 +183,7 @@ export class WeaponPanel {
           class: `weapon-pick ${selected ? "on" : ""}`,
           "aria-pressed": String(selected),
           'aria-label': `${mw.def.name}: ${readout.status}, ${target}`,
-          title: `${mw.def.name}: ${mw.def.rounds} × ${mw.def.round.damage} damage, pen ${mw.def.round.pen}, range ${meters(mw.def.range)} m, arc ${mw.def.arc}°, fires every ${mw.def.reload} turn(s)`,
+          title: `${mw.def.name}: ${mw.def.rounds} × ${mw.def.round.damage * RULES.weaponDamage} damage, pen ${mw.def.round.pen}, range ${meters(mw.def.range)} m, arc ${mw.def.arc}°, fires every ${mw.def.reload} turn(s)`,
           onclick: () => this.selectWeapon(selected ? null : mw.part.id),
         },
         el('span', { class: 'weapon-number' }, `${i + 1}`),

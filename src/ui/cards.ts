@@ -2,6 +2,7 @@
 // and the change against the player's own.
 // Stat values are in display units, so a difference reads the same as the value.
 
+import { RULES } from "../data/rules";
 import { chassisDef } from "../data/chassis";
 import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type FieldRepair } from "../data/parts";
 import { baseGrid, cellCount, mountedParts, type Cell } from "../sim/grid";
@@ -364,8 +365,9 @@ function partDefOf<T>(part: PartInstance): T {
 
 function weaponStats(part: PartInstance): Stat[] {
   const d = wornDef<WeaponDef>(part);
-  const shot = { ...stat("damage", "Damage per shot", d.rounds * d.round.damage, "", "more") };
-  if (d.rounds > 1) shot.text = `${d.rounds}×${d.round.damage}`;
+  const round = d.round.damage * RULES.weaponDamage;
+  const shot = { ...stat("damage", "Damage per shot", d.rounds * round, "", "more", 1) };
+  if (d.rounds > 1) shot.text = `${d.rounds}×${formatNumber(round, 1)}`;
   return [
     shot,
     penStat(d),

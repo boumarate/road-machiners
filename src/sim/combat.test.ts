@@ -592,3 +592,31 @@ describe('recoil and shake', () => {
     expect(hitOdds(w, shooter, mg, target, 'body').causes.own).toBeLessThan(hitOdds(w, shooter, sniper, target, 'body').causes.own);
   });
 });
+
+describe('weapon damage multiplier', () => {
+  // A cannon on a hauler fires at a sturdy buggy. Returns the damage of each part hit.
+  function dealt(mult: number): number[] {
+    const saved = RULES.weaponDamage;
+    (RULES as { weaponDamage: number }).weaponDamage = mult;
+    try {
+      const w = emptyWorld();
+      const me = cannonHauler(w);
+      const t = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: me.pos.x + 4, y: me.pos.y }, Math.PI / 2);
+      for (const p of mountedParts(t)) p.hp = 1e9;
+      order(me, vehicleStats(w, me).weapons[0].part.id, t.id);
+      fireWeapons(w);
+      return shotsBy(w.events, me.id).flatMap((s) => s.rounds).flatMap((r) => r.hits).map((h) => h.damage);
+    } finally {
+      (RULES as { weaponDamage: number }).weaponDamage = saved;
+    }
+  }
+
+  // Each hit rounds to whole HP, so each can differ from the exact half by up to 0.5.
+  it('scales every hit by the one multiplier', () => {
+    const full = dealt(1);
+    const half = dealt(0.5);
+    expect(full.length).toBeGreaterThan(0);
+    expect(half).toHaveLength(full.length);
+    half.forEach((d, i) => expect(Math.abs(d - full[i] / 2)).toBeLessThanOrEqual(0.5));
+  });
+});

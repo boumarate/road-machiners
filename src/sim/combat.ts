@@ -395,7 +395,7 @@ function applyShot(world: World, s: Shot): void {
         crit: roll.crit,
         offset,
         hits: walkLane(world, s.target, side, lane, {
-          damage: r.damage * k.damage,
+          damage: r.damage * k.damage * RULES.weaponDamage,
           pen: r.pen * k.pen,
           blast: r.blast,
         }),
@@ -409,7 +409,7 @@ function applyShot(world: World, s: Shot): void {
         continue;
       hits.push(
         ...walkLane(world, s.target, side, lane, {
-          damage: r.splashDamage,
+          damage: r.splashDamage * RULES.weaponDamage,
           pen: r.splashPen,
           blast: true,
         }),
