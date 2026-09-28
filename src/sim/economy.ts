@@ -6,7 +6,7 @@ import { chassisDef, PLAYER_CHASSIS } from "../data/chassis";
 import { ECONOMY, GOODS } from "../data/goods";
 import { shopDef } from "../data/market";
 import { partDef } from "../data/parts";
-import { RULES } from "../data/rules";
+import { RULES, UPKEEP } from "../data/rules";
 import { REGION } from "../data/region";
 import { getResources } from "./resources";
 import { isJunk, maxHp, partValue, restorePart, scrapValue, wearFactor } from "./wear";
@@ -17,6 +17,7 @@ import { addStockPart, goodPrice, lotPrice, recordTrade, shopAt, shopState, site
 import { canUseSite, requireTown } from "./sites";
 import { freeCells, goodsCount, mountedParts } from "./grid";
 import { addGoods, mountPart, removeGoods, spareParts, stowPart } from "./inventory";
+import { clockOf } from "./sun";
 import type { PartInstance, Vehicle, World } from "./types";
 import { playerCommand } from "./world";
 
@@ -459,3 +460,19 @@ export function buyChassis(world: World, chassisId: string): World {
     w.player.fuel = Math.min(w.player.fuel, chassisDef(chassisId).fuelCap);
   });
 }
+
+// The truck's value: the chassis plus every mounted part but the built-in core ones.
+function truckValue(vehicle: Vehicle): number {
+  const parts = mountedParts(vehicle).filter((p) => partDef(p.defId).kind !== "core");
+  return chassisDef(vehicle.chassisId).value + parts.reduce((sum, p) => sum + partValue(p), 0);
+}
+
+// Once per game day, the player pays upkeep: a share of their truck's current value. It can push
+// money into debt, like any other cost. Called once from the turn pipeline at the day boundary.
+export function chargeUpkeep(world: World): void {
+  if (clockOf(world.turn).day === clockOf(world.turn - 1).day) return;
+  const amount = Math.round(truckValue(playerVehicle(world)) * UPKEEP.dailyShare);
+  world.player.money -= amount;
+  world.events.push({ t: "money", amount: -amount, reason: "upkeep" });
+}
+

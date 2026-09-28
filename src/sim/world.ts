@@ -16,6 +16,7 @@ import { healPlayer } from './health';
 import { fireGuards } from './guards';
 import { discoverSites } from './locations';
 import { consumeSupplies, leakFuel } from './supplies';
+import { chargeUpkeep } from './economy';
 import { spawnInitial, spawnNpcs } from './spawn';
 import { clearPiles, initializeSalvage } from './salvage';
 import { timed } from '../perf';
@@ -223,6 +224,7 @@ export function endTurn(
     fireWeapons(w);
     fireGuards(w);
     consumeSupplies(w);
+    chargeUpkeep(w);
     healPlayer(w);
     leakFuel(w);
     applyGodMode(w);
