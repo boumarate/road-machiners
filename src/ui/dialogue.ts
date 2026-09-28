@@ -3,6 +3,7 @@
 // hovered truck and H honks.
 
 import { DEAL_LINES } from '../data/dialogue';
+import { GOODS } from '../data/goods';
 import { REGION } from '../data/region';
 import { FACTION_COLORS } from '../render/palette';
 import { playerVehicle, vehicleById } from '../sim/damage';
@@ -46,6 +47,11 @@ function dealText(v: Extract<CallVar, { kind: 'deal' }>): string {
   return fillLine(line, { price: { kind: 'money', amount: v.price }, parts: { kind: 'count', n: v.parts, unit: 'part' }, turns: { kind: 'count', n: v.turns, unit: 'turn' } });
 }
 
+// A town's goods prices in words: "salt buy 14 sell 9, grain buy 6 sell 4".
+function pricesText(v: Extract<CallVar, { kind: 'prices' }>): string {
+  return v.goods.map((g) => `${GOODS[g.good].name.toLowerCase()} buy ${g.buy} sell ${g.sell}`).join(', ');
+}
+
 type VarText = { [K in CallVar['kind']]: (v: Extract<CallVar, { kind: K }>) => string };
 
 const VAR_TEXT: VarText = {
@@ -56,6 +62,7 @@ const VAR_TEXT: VarText = {
   bearing: (v) => compass(v.rad),
   count: (v) => `${v.n} ${v.n === 1 ? v.unit : `${v.unit}s`}`,
   deal: dealText,
+  prices: pricesText,
   answer: () => { throw new Error('A rolled answer is never shown in a line'); },
 };
 

@@ -6,7 +6,7 @@ import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
 import { isKnockedOut } from './defeat';
 import { inTowReach } from './tow';
-import { canLootTruck, canReachSalvage, collectSalvage, hasSalvage, pourStores, salvageInRange, stripPart, takeBasis } from './salvage';
+import { canLootTruck, canReachSalvage, collectSalvage, hasSalvage, pourStores, salvageInRange, takeBasis } from './salvage';
 import { newId } from './factory';
 import { goodsCount, isMounted, type Spot } from './grid';
 import { getLayoutError, refitTurns, requireIdleRefit } from './inventory';
@@ -159,7 +159,6 @@ function placeLoot(world: World, stock: SalvageStock, item: GridItem): void {
     return;
   }
   me.items.push(item);
-  if (isMounted(me.chassisId, item)) stripPart(world, me, stock, item.part);
   stock.parts = stock.parts.filter((part) => part.id !== item.part.id);
 }
 

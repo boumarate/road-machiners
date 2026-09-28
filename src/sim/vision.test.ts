@@ -1,7 +1,7 @@
 import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { TERRAIN } from '../data/terrain';
-import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { addVehicle, emptyWorld, practiceOf } from './testkit';
 import { contactsOf, soundRange } from './detect';
 import { TIME } from '../data/time';
@@ -161,31 +161,3 @@ describe('perception sight', () => {
   });
 });
 
-describe('lookout perk', () => {
-  it('widens sight of the parked player truck', () => {
-    const w = emptyWorld({ x: 60, y: 60 });
-    const me = w.vehicles[0];
-    me.speed = 0;
-    const base = sightRadius(w, me);
-    w.player.perks.push('lookout');
-    expect(sightRadius(w, me)).toBeCloseTo(base * PERK_NUMBERS.lookout.sight);
-  });
-
-  it('leaves sight of the moving player truck alone', () => {
-    const w = emptyWorld({ x: 60, y: 60 });
-    const me = w.vehicles[0];
-    me.speed = 3;
-    const base = sightRadius(w, me);
-    w.player.perks.push('lookout');
-    expect(sightRadius(w, me)).toBe(base);
-  });
-
-  it('leaves sight of a parked NPC alone', () => {
-    const w = emptyWorld({ x: 60, y: 60 });
-    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
-    npc.speed = 0;
-    const base = sightRadius(w, npc);
-    w.player.perks.push('lookout');
-    expect(sightRadius(w, npc)).toBe(base);
-  });
-});

@@ -8,8 +8,7 @@ import { laneCount, ramMult, walkLane, type PartHit, type Side } from './armor';
 import { isJunk, maxHp, restorePart } from './wear';
 import { damagePart } from './damage';
 import { RULES } from '../data/rules';
-import { PERK_NUMBERS } from '../data/skills';
-import { practice, skillEffect, vehicleHasPerk } from './progress';
+import { practice, skillEffect } from './progress';
 import { vehicleMass } from './mass';
 import { bodyOf } from './body';
 import type { Vehicle, World } from './types';
@@ -71,11 +70,10 @@ function applyContactDamage(world: World, vehicle: Vehicle, contact: CrashContac
   return applyCrashHits(world, vehicle, hits);
 }
 
-// The player's driving and the ram guard perk cut the crash damage the player truck takes.
+// The player's driving cuts the crash damage the player truck takes.
 function computeCrashEnergy(world: World, vehicle: Vehicle, impact: number, share: number, mult: number): number {
   const driving = skillEffect(world, vehicle, 'driving', 'crashDamage');
-  const guard = vehicleHasPerk(world, vehicle, 'ramGuard') ? PERK_NUMBERS.ramGuard.crashTaken : 1;
-  return RULES.ramDamage * RULES.crashDamage * impact * impact * share * mult * Math.max(0, 1 - driving) * guard;
+  return RULES.ramDamage * RULES.crashDamage * impact * impact * share * mult * Math.max(0, 1 - driving);
 }
 
 function applyCrashHits(world: World, vehicle: Vehicle, hits: Map<string, number>): PartHit[] {

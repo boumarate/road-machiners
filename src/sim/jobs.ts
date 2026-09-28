@@ -16,7 +16,7 @@ import { addGoods, applyRefitLayout, getRefitLayout } from "./inventory";
 import { isJunk, maxHp } from "./wear";
 import { repairPlan, repairTurn } from "./repair";
 import { practice } from "./progress";
-import { finishTruckPickup, stripPart } from "./salvage";
+import { finishTruckPickup } from "./salvage";
 import { searchTurn } from "./search";
 import type { GridItem, Job, PartInstance, RefitJob, RefitPickup, Vehicle, World } from "./types";
 import { playerCommand } from "./world";
@@ -166,6 +166,7 @@ function jobTurn(world: World, v: Vehicle, job: Job): boolean {
   if (job.kind === "repair") return repairTurn(world, v, job);
   if (job.kind === "search") return searchTurn(world, v, job);
   if (job.kind === "strip") return stripTurn(world, v, job);
+  if (job.kind === "weld") throw new Error("Weld jobs are not wired yet");
   throw new Error(`Unhandled job kind ${job.kind}`);
 }
 
@@ -203,13 +204,12 @@ function advanceRefit(world: World, v: Vehicle, job: RefitJob): void {
   endJob(world, v, job, 'done');
 }
 
-// The part a finished refit mounted leaves its stock or truck. A part from a wreck gets careful stripping.
+// The part a finished refit mounted leaves its stock or truck.
 function takePickup(world: World, v: Vehicle, pickup: RefitPickup): void {
   if (pickup.from === 'truck') return finishTruckPickup(world, v, pickup);
   const stock = world.salvage.find((entry) => entry.id === pickup.stockId);
   const part = stock?.parts.find((entry) => entry.id === pickup.partId);
   if (!stock || !part) throw new Error('Refit stock part disappeared after validation');
-  stripPart(world, v, stock, part);
   stock.parts = stock.parts.filter((entry) => entry.id !== pickup.partId);
 }
 

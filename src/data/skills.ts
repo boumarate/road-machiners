@@ -3,6 +3,7 @@
 
 import type { Archetype } from '../sim/progression/bot';
 import type { SkillId, XpSource } from '../sim/types';
+import { TIME } from './time';
 
 export const SKILL_IDS: readonly SkillId[] = ['driving', 'perception', 'machining', 'toughness', 'social'];
 
@@ -108,11 +109,11 @@ export const XP_RULES = {
 // player can see in play. `rule` is the player-facing line on the character screen.
 
 export type PerkId =
-  | 'ramGuard' | 'pusher' | 'steadyAim' | 'roadGhost'
-  | 'lookout' | 'listener' | 'readDriver' | 'calledShot'
-  | 'juryRig' | 'scrounger' | 'quickRefit' | 'carefulStrip'
-  | 'ironGut' | 'hardHead' | 'quickWake' | 'desertBorn'
-  | 'knownFace' | 'smoothTalker' | 'bluff' | 'goodwill';
+  | 'rammer' | 'coldRunning' | 'steadyAim' | 'dustScreen'
+  | 'readDriver' | 'spotter' | 'cargoEye' | 'nightEyes'
+  | 'welder' | 'cannibal' | 'rebuild' | 'roadMechanic'
+  | 'desertRat' | 'stormRider' | 'fightThrough' | 'longHaul'
+  | 'marketEars' | 'rumorMill' | 'paidTruce' | 'bountyTalk';
 
 // Skill levels that open a pair of perks.
 export const PERK_LEVELS = [2, 4] as const;
@@ -120,47 +121,51 @@ export type PerkLevel = (typeof PERK_LEVELS)[number];
 
 export type PerkDef = { skill: SkillId; level: PerkLevel; name: string; rule: string };
 
+// Each pair splits its skill into two playstyles. A perk adds an action, breaks a rule or shows hidden information.
 export const PERKS: Record<PerkId, PerkDef> = {
-  ramGuard: { skill: 'driving', level: 2, name: 'Ram guard', rule: 'Crashes do half damage to your truck.' },
-  pusher: { skill: 'driving', level: 2, name: 'Pusher', rule: 'You crawl twice as fast when stranded.' },
+  rammer: { skill: 'driving', level: 2, name: 'Rammer', rule: 'A ram on a hostile truck stalls its engine for one turn.' },
+  coldRunning: { skill: 'driving', level: 2, name: 'Cold running', rule: 'Below half speed, your engine is heard only inside sight.' },
   steadyAim: { skill: 'driving', level: 4, name: 'Steady aim', rule: 'Your own speed adds no scatter to your shots.' },
-  roadGhost: { skill: 'driving', level: 4, name: 'Road ghost', rule: 'Your truck raises no dust on roads.' },
-  lookout: { skill: 'perception', level: 2, name: 'Lookout', rule: 'You see farther while parked.' },
-  listener: { skill: 'perception', level: 2, name: 'Listener', rule: 'You hear engines from farther while parked.' },
-  readDriver: { skill: 'perception', level: 4, name: 'Read the driver', rule: 'You see the traits of other drivers.' },
-  calledShot: { skill: 'perception', level: 4, name: 'Called shot', rule: 'Shots aimed at a part scatter less.' },
-  juryRig: { skill: 'machining', level: 2, name: 'Jury rig', rule: 'Field repairs lift parts closer to full HP.' },
-  scrounger: { skill: 'machining', level: 2, name: 'Scrounger', rule: 'Your first search of a stock turns up extra parts.' },
-  quickRefit: { skill: 'machining', level: 4, name: 'Quick refit', rule: 'Field refits take half the turns.' },
-  carefulStrip: { skill: 'machining', level: 4, name: 'Careful strip', rule: 'Parts you mount from a wreck come off with more HP.' },
-  ironGut: { skill: 'toughness', level: 2, name: 'Iron gut', rule: 'Running out of supplies costs you no health.' },
-  hardHead: { skill: 'toughness', level: 2, name: 'Hard head', rule: 'Cab hits cost you half the health.' },
-  quickWake: { skill: 'toughness', level: 4, name: 'Quick wake', rule: 'You come to from a knockout in half the time.' },
-  desertBorn: { skill: 'toughness', level: 4, name: 'Desert born', rule: 'Heat does not raise your supply use.' },
-  knownFace: { skill: 'social', level: 2, name: 'Known face', rule: 'Drivers offer you a tow more often when stranded.' },
-  smoothTalker: { skill: 'social', level: 2, name: 'Smooth talker', rule: 'Handing over cargo to a demand drops only half your goods.' },
-  bluff: { skill: 'social', level: 4, name: 'Bluff', rule: 'Robbers see your truck as twice as dangerous.' },
-  goodwill: { skill: 'social', level: 4, name: 'Goodwill', rule: 'Drivers patch your truck for free.' },
+  dustScreen: { skill: 'driving', level: 4, name: 'Dust screen', rule: 'At top speed on dusty ground, your dust blocks sight like a hill.' },
+  readDriver: { skill: 'perception', level: 2, name: 'Read the driver', rule: 'You see the traits of other drivers.' },
+  spotter: { skill: 'perception', level: 2, name: 'Spotter', rule: 'Mark a seen truck, and it stays tracked for a day.' },
+  cargoEye: { skill: 'perception', level: 4, name: 'Cargo eye', rule: 'You see the goods and spare parts in any seen truck.' },
+  nightEyes: { skill: 'perception', level: 4, name: 'Night eyes', rule: 'Night does not halve your sight.' },
+  welder: { skill: 'machining', level: 2, name: 'Welder', rule: 'A field job turns 3 scrap metal into a scrap armor sheet.' },
+  cannibal: { skill: 'machining', level: 2, name: 'Cannibal', rule: 'Taking a part from a wreck or a knocked-out truck takes one turn.' },
+  rebuild: { skill: 'machining', level: 4, name: 'Rebuild', rule: 'A town garage can repair a junk part to its last wear step, once per part.' },
+  roadMechanic: { skill: 'machining', level: 4, name: 'Road mechanic', rule: 'Drivers pay double for the patches you do.' },
+  desertRat: { skill: 'toughness', level: 2, name: 'Desert rat', rule: 'Noon sun heats your engine like morning sun.' },
+  stormRider: { skill: 'toughness', level: 2, name: 'Storm rider', rule: 'Dust storms do not cut your sight or aim.' },
+  fightThrough: { skill: 'toughness', level: 4, name: 'Fight through', rule: 'A broken cab does not knock you out while health is above half.' },
+  longHaul: { skill: 'toughness', level: 4, name: 'Long haul', rule: 'You heal while driving, not only while parked.' },
+  marketEars: { skill: 'social', level: 2, name: 'Market ears', rule: 'A trader you call tells you the prices of the last town it left.' },
+  rumorMill: { skill: 'social', level: 2, name: 'Rumor mill', rule: 'A driver you call marks a wreck or site it passed.' },
+  paidTruce: { skill: 'social', level: 4, name: 'Paid truce', rule: 'You can pay a hostile driver to end its feud with you.' },
+  bountyTalk: { skill: 'social', level: 4, name: 'Bounty talk', rule: 'A raider that gives up to you counts for bounty contracts.' },
 };
 
 export const PERK_IDS = Object.keys(PERKS) as PerkId[];
 
 export const PERK_NUMBERS = {
-  ramGuard: { crashTaken: 0.5 }, // crash damage the player truck takes, times this
-  pusher: { crawl: 2 }, // limp speed of the stranded player truck, times this
-  lookout: { sight: 1.25 }, // sight radius of the parked player truck, times this
-  listener: { hearing: 1.5 }, // range the parked player truck hears engines from, times this
-  calledShot: { spread: 0.7 }, // spread of the player's shots aimed at a part, times this
-  juryRig: { fieldCap: 0.15 }, // share of max HP added to the field repair cap, up to full HP
-  scrounger: { parts: 1 }, // units of the parts good added to a stock on the player's first finished search of it
-  quickRefit: { refit: 0.5 }, // field refit turns of the player, times this, at least 1
-  carefulStrip: { hp: 0.25 }, // share of max HP a part mounted from a wreck stock gains, up to full HP
-  hardHead: { cabShare: 0.5 }, // share of cab damage the player loses as health, times this
-  quickWake: { knockoutTurns: 0.5 }, // turn limit of a watched knockout, times this
-  knownFace: { tow: 2 }, // tow offer weight toward the stranded player, times this
-  smoothTalker: { cargo: 0.5 }, // share of each good the player drops to a demand, rounded up
-  bluff: { danger: 2 }, // danger a robber sees in the player truck, times this
-};
+  rammer: { stallTurns: 1 }, // turns a rammed hostile truck's engine stays stalled
+  dustScreen: {
+    topShare: 0.9, // share of top speed that counts as top speed, since fuel and slopes keep a truck just under it
+    radius: 2, // tiles from a screening cloud within which it blocks a sight line
+  },
+  spotter: { turns: TIME.turnsPerDay }, // turns a mark tracks its truck
+  welder: {
+    scrap: 3, // units of scrap metal one weld spends
+    turns: 3, // parked turns of a weld, like installing a part
+    part: 'scrapSheet', // the part a weld makes, pristine
+  },
+  cannibal: { turns: 1 }, // job turns to take one part from a wreck stock or a knocked-out truck
+  roadMechanic: { price: 2 }, // paid patch price when the player patches, times this
+  desertRat: { sunShare: 0.62 }, // cap on the sun height share that heats the engine: the 9:00 sun, sin(pi * 3 / 14)
+  fightThrough: { health: 0.5 }, // share of max health above which a broken cab does not knock the player out
+  rumorMill: { radius: 60 }, // tiles around the driver in which it knows a wreck or site
+  paidTruce: { share: 0.1 }, // truce price as a share of the driver's truck value
+} as const;
 
 // ---- Progression targets, checked by the progression band test and printed by npm run progression:report.
 // Edit these days to change the curve, then tune XP_SOURCES until the report passes.

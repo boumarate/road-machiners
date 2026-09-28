@@ -326,34 +326,3 @@ describe('social on patch prices', () => {
   });
 });
 
-describe('goodwill perk', () => {
-  it('a driver with parts patches the player for free', () => {
-    const { w, trader } = brokenPlayer(10);
-    w.player.perks.push('goodwill');
-    forceOption('patchDeal', 'paid');
-    const terms = patchTerms(w, find(w, trader.id));
-    expect(terms).toMatchObject({ kind: 'deal', deal: 'free', price: 0 });
-  });
-
-  it('own-parts terms charge the player nothing', () => {
-    const { w, trader } = brokenPlayer(0);
-    setParts(w, playerVehicle(w), 3);
-    w.player.perks.push('goodwill');
-    forceOption('patchDeal', 'ownParts');
-    expect(patchTerms(w, find(w, trader.id))).toMatchObject({ kind: 'deal', deal: 'ownParts', price: 0 });
-  });
-
-  it('an NPC client still pays the player', () => {
-    const w = emptyWorld({ x: 30, y: 30 });
-    w.player.perks.push('goodwill');
-    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 40, y: 30 }, Math.PI);
-    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
-    npc.resources!.money = 10000;
-    addGoods(w, npc, 'parts', 3);
-    breakEngine(npc);
-    forceOption('patchDeal', 'ownParts');
-    const terms = patchTerms(w, find(w, npc.id));
-    expect(terms).toMatchObject({ kind: 'deal', deal: 'ownParts' });
-    expect(terms?.kind === 'deal' && terms.price).toBeGreaterThan(0);
-  });
-});

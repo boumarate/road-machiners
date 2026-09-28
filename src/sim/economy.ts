@@ -585,7 +585,7 @@ function requireCount(n: number): void {
 }
 
 // Moves money from payer to payee. A payer in debt or short of the amount throws.
-function transfer(world: World, payer: Vehicle, payee: Vehicle, amount: number): void {
+export function transfer(world: World, payer: Vehicle, payee: Vehicle, amount: number): void {
   const from = getResources(world, payer);
   if (from.money < 0 || from.money < amount) throw new Error(payer.id === world.player.vehicleId ? 'Not enough money' : `${payer.name} cannot pay that much`);
   from.money -= amount;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
-import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { damagePart } from './damage';
 import { corePart } from './grid';
 import { consumeVehicleSupplies } from './resources';
@@ -54,15 +54,3 @@ describe('toughness on cab damage', () => {
   });
 });
 
-describe('hard head perk', () => {
-  it('halves the health the player loses from a cab hit', () => {
-    const w = emptyWorld();
-    const me = w.vehicles[0];
-    w.player.perks.push('hardHead');
-    const health = w.player.health;
-    const dealt = damagePart(w, me, corePart(me, 'cab'), 20);
-    const share = RULES.cabHealthShare * PERK_NUMBERS.hardHead.cabShare;
-    expect(health - w.player.health).toBe(Math.round(dealt * share));
-    expect(health - w.player.health).toBeLessThan(Math.round(dealt * RULES.cabHealthShare));
-  });
-});

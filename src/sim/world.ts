@@ -68,6 +68,8 @@ export function newWorld(seed: number, kit: StartKit): World {
         profit: 0, deal: 0, call: 0, honk: 0, contract: 0, freeTow: 0,
       },
       perks: [],
+      marked: [],
+      rumored: [],
       health: RULES.maxHealth,
       fuel: kit.fuel,
       supplies: kit.supplies,

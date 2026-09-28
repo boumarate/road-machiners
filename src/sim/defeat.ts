@@ -2,7 +2,6 @@
 // it strip it, and nobody is its foe while it lies out. It wakes once the trucks that fought it look away. Health
 // at 0 ends the player's run. A woken NPC retreats home, and nobody is its foe until it refits there.
 
-import { PERK_NUMBERS } from "../data/skills";
 import { NPC_BEHAVIOR, NPCS } from "../data/npcs";
 import { chassisDef } from "../data/chassis";
 import { RULES } from "../data/rules";
@@ -11,7 +10,7 @@ import { playerVehicle } from "./damage";
 import { isHostile } from "./combat";
 import { corePart, mountedParts } from "./grid";
 import { cancelJob } from "./jobs";
-import { hasPerk, practice } from "./progress";
+import { practice } from "./progress";
 import { addState, endState, stateOf } from "./states";
 import { makeVehicle } from "./factory";
 import { generateNpcLoadout } from "./npc-loadout";
@@ -53,12 +52,6 @@ export function checkKnockout(world: World): void {
   world.events.push({ t: "knockout" });
 }
 
-// Turns a watched knockout lasts at most. The quick wake perk cuts it.
-function knockoutLimit(world: World): number {
-  const quick = hasPerk(world, "quickWake") ? PERK_NUMBERS.quickWake.knockoutTurns : 1;
-  return Math.ceil(RULES.knockoutMaxTurns * quick);
-}
-
 // The trucks that fought the player keep the driver down while they watch, so a robber strips the truck in peace.
 export function advanceKnockout(world: World): void {
   const p = world.player;
@@ -66,7 +59,7 @@ export function advanceKnockout(world: World): void {
   p.knockoutTurns++;
   const me = playerVehicle(world);
   if (!me.defeat) throw new Error("A knocked-out player truck has no defeat");
-  if (attackerWatches(world, me, me.defeat.foes) && p.knockoutTurns < knockoutLimit(world)) return;
+  if (attackerWatches(world, me, me.defeat.foes) && p.knockoutTurns < RULES.knockoutMaxTurns) return;
   patchBrokenCore(me);
   delete me.defeat;
   p.state = "active";

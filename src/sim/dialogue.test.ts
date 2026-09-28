@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { PERK_NUMBERS, XP_SOURCES } from '../data/skills';
+import { XP_SOURCES } from '../data/skills';
 import { BUSY_LINE, TRAIT_TALK, END, HONK_RANGE, HUB, REFUSED, TOPICS, type Topic } from '../data/dialogue';
 import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, honk, placeholders, raiseCalls } from './dialogue';
 import { fireBlock, isHostile } from './combat';
 import { NPCS } from '../data/npcs';
-import { goodsCount, isMounted } from './grid';
+import { isMounted } from './grid';
 import { addGoods } from './inventory';
 import { hasCargo } from './salvage';
 import { vehicleStats } from './stats';
@@ -485,26 +485,3 @@ describe('call practice', () => {
   });
 });
 
-describe('smooth talker perk', () => {
-  it('hands over half of each good, rounded up, and every loose part', () => {
-    const w = emptyWorld({ x: 30, y: 30 });
-    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
-    w.player.perks.push('smoothTalker');
-    const me = playerVehicle(w);
-    addGoods(w, me, 'scrap', 3);
-    const raider = addVehicle(w, 'raiders', 'buggy', ['stockEngine', 'mg'], { x: 40, y: 30 }, Math.PI);
-    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
-    forceOption('hostileSeen', 'fight');
-    let next = endTurn(w, testDrive);
-    const held = goodsCount(playerVehicle(next));
-    const loose = playerVehicle(next).items.filter((i) => i.kind === 'part' && !isMounted(me.chassisId, i)).length;
-    next = chooseOption(next, currentOptions(next).findIndex((o) => o.text === 'Fine. Take it.'));
-    const stock = next.salvage.find((s) => s.id.startsWith(`cargo-${me.id}`))!;
-    for (const [good, count] of Object.entries(held)) {
-      const dropped = Math.ceil(count * PERK_NUMBERS.smoothTalker.cargo);
-      expect(stock.goods[good] ?? 0).toBe(dropped);
-      expect(goodsCount(playerVehicle(next))[good] ?? 0).toBe(count - dropped);
-    }
-    expect(stock.parts).toHaveLength(loose);
-  });
-});

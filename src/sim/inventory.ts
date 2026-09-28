@@ -1,8 +1,7 @@
 // Inventory commands. Field equipment changes use parked refit jobs.
 
 import { partDef } from '../data/parts';
-import { PERK_NUMBERS } from '../data/skills';
-import { skillEffect, vehicleHasPerk } from './progress';
+import { skillEffect } from './progress';
 import { playerVehicle } from './damage';
 import { newId } from './factory';
 import { openSideCount } from './armor';
@@ -90,10 +89,9 @@ export function moveItem(world: World, itemId: string, to: Spot): World {
   });
 }
 
-// Turns a field refit takes: the planned turns cut by the player's machining and the quick refit perk, at least 1.
+// Turns a field refit takes: the planned turns cut by the player's machining, at least 1.
 export function refitTurns(world: World, v: Vehicle, planned: number): number {
-  const quick = vehicleHasPerk(world, v, 'quickRefit') ? PERK_NUMBERS.quickRefit.refit : 1;
-  return Math.max(1, Math.ceil(planned * (1 - skillEffect(world, v, 'machining', 'refit')) * quick));
+  return Math.max(1, Math.ceil(planned * (1 - skillEffect(world, v, 'machining', 'refit'))));
 }
 
 // Town garage storage holds spare parts between trips.

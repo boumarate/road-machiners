@@ -3,8 +3,7 @@
 
 import { partDef } from '../data/parts';
 import { GOODS } from '../data/goods';
-import { PERK_NUMBERS } from '../data/skills';
-import { skillEffect, vehicleHasPerk } from './progress';
+import { skillEffect } from './progress';
 import { REPAIR } from '../data/wear';
 import { isJunk, maxHp, partValue, restorePart } from './wear';
 import { goodsCount, mountedParts } from './grid';
@@ -38,10 +37,9 @@ function partFieldCap(world: World, v: Vehicle, part: PartInstance): number {
   return def.fieldRepair === 'full' ? 1 : 0;
 }
 
-// Share of max HP a field repair lifts a part to. The player's machining and the jury rig perk raise it, up to full HP.
+// Share of max HP a field repair lifts a part to. The player's machining raises it, up to full HP.
 function fieldCapShare(world: World, v: Vehicle): number {
-  const juryRig = vehicleHasPerk(world, v, 'juryRig') ? PERK_NUMBERS.juryRig.fieldCap : 0;
-  return Math.min(1, REPAIR.fieldCapShare + skillEffect(world, v, 'machining', 'fieldCap') + juryRig);
+  return Math.min(1, REPAIR.fieldCapShare + skillEffect(world, v, 'machining', 'fieldCap'));
 }
 
 // The repair math for one part: lift it to `capShare` of max HP, spending at most the parts held and maxParts.

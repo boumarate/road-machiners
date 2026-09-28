@@ -24,6 +24,7 @@ import { fillLine } from './dialogue';
 // What a job works on, in words: "Repair Autocannon", "Remove Autocannon from Raider outrider".
 export function jobLabel(world: World, v: Vehicle, job: Job): string {
   if (job.kind === 'search') return 'Search';
+  if (job.kind === 'weld') return 'Weld scrap armor';
   if (job.kind === 'refit') return refitLabel(world, v, job);
   const part = v.items.find((it) => it.kind === 'part' && it.part.id === job.partId);
   return `${job.kind === 'repair' ? 'Repair' : 'Strip'} ${part ? itemName(part) : 'part'}`;

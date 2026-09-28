@@ -1,6 +1,5 @@
 import { NPCS } from '../data/npcs';
 import { describe, expect, it } from 'vitest';
-import { PERK_NUMBERS } from '../data/skills';
 import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
 import { CONDITION } from '../data/wear';
@@ -367,17 +366,3 @@ describe('knockout practice', () => {
   });
 });
 
-describe('quick wake perk', () => {
-  it('wakes the player at a shorter turn limit with a raider idling in sight', () => {
-    let { w } = knockedOutByRaider();
-    w.player.perks.push('quickWake');
-    const limit = Math.ceil(RULES.knockoutMaxTurns * PERK_NUMBERS.quickWake.knockoutTurns);
-    let turns = 0;
-    while (w.player.state === 'knockedOut') {
-      w = endTurn(w, testDrive);
-      turns++;
-      expect(turns).toBeLessThanOrEqual(limit);
-    }
-    expect(turns).toBe(limit);
-  });
-});

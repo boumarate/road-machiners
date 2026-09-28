@@ -9,8 +9,7 @@ import type { EngineDef, ScannerDef } from '../data/parts';
 import { partDef } from '../data/parts';
 import { wornDef } from './wear';
 import { mountedParts } from './grid';
-import { PERK_NUMBERS } from '../data/skills';
-import { skillEffect, vehicleHasPerk } from './progress';
+import { skillEffect } from './progress';
 import { hashRandom } from './rng';
 import { heightAt, tileAt } from './terrain';
 import { hasWorkingEngine } from './stats';
@@ -34,22 +33,18 @@ function ownHearingPenalty(observer: Vehicle): number {
   return observer.speed <= RULES.parkedSpeed ? 0 : DETECT.sound.ownPenalty * observer.speed;
 }
 
-// Range an observer hears a vehicle's engine from: the sound's reach, widened by the player's perception and, while
-// parked, the listener perk, less what the observer's own engine drowns out.
+// Range an observer hears a vehicle's engine from: the sound's reach, widened by the player's perception, less what
+// the observer's own engine drowns out.
 function hearingRange(world: World, observer: Vehicle, v: Vehicle): number {
-  const parked = observer.speed <= RULES.parkedSpeed;
-  const listener = parked && vehicleHasPerk(world, observer, 'listener') ? PERK_NUMBERS.listener.hearing : 1;
-  const reach = soundRange(world, v) * (1 + skillEffect(world, observer, 'perception', 'hearing')) * listener;
+  const reach = soundRange(world, v) * (1 + skillEffect(world, observer, 'perception', 'hearing'));
   return reach - ownHearingPenalty(observer);
 }
 
-// Range a moving vehicle's dust trail is seen from. Zero at limp speed or below, at night, on a road under the road
-// ghost perk, or fully hidden by weather (storms shrink it through weatherAt's sight multiplier).
+// Range a moving vehicle's dust trail is seen from. Zero at limp speed or below, at night, or fully hidden by weather (storms shrink it through weatherAt's sight multiplier).
 export function dustRange(world: World, v: Vehicle): number {
   if (v.speed <= RULES.limpSpeed) return 0;
   if (!sunAt(world.turn)) return 0;
   const terrainType = TERRAIN_TYPES[world.terrain.types[tileAt(world.terrain, v.pos)]];
-  if (terrainType.id === 'road' && vehicleHasPerk(world, v, 'roadGhost')) return 0;
   const weather = weatherAt(world, v.pos);
   return DETECT.dust.perSpeed * v.speed * terrainType.dust * weather.sight;
 }
@@ -117,16 +112,21 @@ export function contactDifficulty(world: World, observer: Vehicle, contact: Cont
 }
 
 function channelShare(world: World, observer: Vehicle, v: Vehicle, source: Contact['sources'][number]): number {
-  const d = dist(observer.pos, v.pos);
+  if (source === 'dust') {
+    const cloud = newestCloud(cloudsSeenBy(world, observer), v.id);
+    if (!cloud) throw new Error(`Dust contact on ${v.id} has no seen cloud`);
+    return reachShare(dist(observer.pos, cloud.pos), cloud.range, source);
+  }
+  return reachShare(dist(observer.pos, v.pos), sourceReach(world, observer, v, source), source);
+}
+
+// Reach of a channel that detects the vehicle itself rather than its dust. A mark tracks like a scanner.
+function sourceReach(world: World, observer: Vehicle, v: Vehicle, source: Exclude<Contact['sources'][number], 'dust'>): number {
   switch (source) {
-    case 'sound': return reachShare(d, hearingRange(world, observer, v), source);
-    case 'radio': return reachShare(d, scannerRange(observer), source);
-    case 'beacon': return reachShare(d, BEACON.range, source);
-    case 'dust': {
-      const cloud = newestCloud(cloudsSeenBy(world, observer), v.id);
-      if (!cloud) throw new Error(`Dust contact on ${v.id} has no seen cloud`);
-      return reachShare(dist(observer.pos, cloud.pos), cloud.range, source);
-    }
+    case 'sound': return hearingRange(world, observer, v);
+    case 'radio':
+    case 'mark': return scannerRange(observer);
+    case 'beacon': return BEACON.range;
   }
 }
 

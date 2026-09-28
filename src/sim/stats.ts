@@ -4,8 +4,7 @@
 import { chassisDef } from '../data/chassis';
 import { partDef, type EngineDef, type StoreDef, type WeaponDef } from '../data/parts';
 import { RULES } from '../data/rules';
-import { PERK_NUMBERS } from '../data/skills';
-import { skillEffect, vehicleHasPerk } from './progress';
+import { skillEffect } from './progress';
 import { TOW } from '../data/tow';
 import { maxHp, wornDef } from './wear';
 import { openSides, type Side } from './armor';
@@ -127,10 +126,9 @@ function storeRoom(v: Vehicle, holds: StoreDef['holds']): number {
   return stores.filter((def) => def.holds === holds).reduce((sum, def) => sum + def.amount, 0);
 }
 
-// Top speed of a stranded truck, raised by the player's driving and the pusher perk.
+// Top speed of a stranded truck, raised by the player's driving.
 function limpSpeedOf(world: World, v: Vehicle): number {
-  const pusher = vehicleHasPerk(world, v, 'pusher') ? PERK_NUMBERS.pusher.crawl : 1;
-  return RULES.limpSpeed * (1 + skillEffect(world, v, 'driving', 'crawl')) * pusher;
+  return RULES.limpSpeed * (1 + skillEffect(world, v, 'driving', 'crawl'));
 }
 
 // Speed factor of ground with base factor `factor`, after the driver's skill cuts part of its penalty.

@@ -3,11 +3,9 @@
 // decision. Radio talk with the player lives in src/sim/dialogue.ts, and this module owns what the answers do.
 
 import { SPAWN } from '../data/npcs';
-import { PERK_NUMBERS } from '../data/skills';
 import { playerVehicle } from './damage';
 import { defyThreat, pushGoal } from './npc-activities';
 import { decide, perceiveDanger } from './npc-decisions';
-import { vehicleHasPerk } from './progress';
 import { createCargoSalvage, hasCargo } from './salvage';
 import { addState, endState, pleaData, stateOf } from './states';
 import type { DecisionOptions } from '../data/npcs';
@@ -42,11 +40,9 @@ function holdFire(v: Vehicle, target: Vehicle): void {
   if (v.brain) delete v.brain.attackers[target.id];
 }
 
-// The loser drops its cargo beside its truck, only half of each good for a player with the smooth talker perk, and
-// both sides make peace. An NPC winner goes to take the cargo, and its grudge against the loser is settled.
+// The loser drops its cargo beside its truck, and both sides make peace. An NPC winner goes to take the cargo, and its grudge against the loser is settled.
 export function yieldTo(world: World, loser: Vehicle, winner: Vehicle): void {
-  const share = vehicleHasPerk(world, loser, 'smoothTalker') ? PERK_NUMBERS.smoothTalker.cargo : 1;
-  const stock = hasCargo(loser) ? createCargoSalvage(world, loser, share) : null;
+  const stock = hasCargo(loser) ? createCargoSalvage(world, loser, 1) : null;
   makePeace(world, loser, winner);
   const grudge = stateOf(world, 'revenge', winner.id, loser.id);
   if (grudge) endState(world, grudge, 'fulfilled');

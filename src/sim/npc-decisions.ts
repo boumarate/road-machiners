@@ -14,7 +14,6 @@ import {
   DECISIONS, HUNT, MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, STATE_WEIGHTS, TRAITS,
   type DecisionId, type DecisionOptions, type TraitId, type TraitWeights, type WeightChange,
 } from '../data/npcs';
-import { PERK_NUMBERS } from '../data/skills';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { isHostile } from './combat';
@@ -29,7 +28,7 @@ import { isTownGuarded } from './guards';
 import { topGoal } from './npc-activities';
 import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
-import { skillEffect, vehicleHasPerk } from './progress';
+import { skillEffect } from './progress';
 import { randRange } from './rng';
 import { canReachSalvage, canTakeAny, canTakeFromTruck, siteLootTable } from './salvage';
 import { canUseSite, siteGates, sitePads, siteUnder, type Site } from './sites';
@@ -518,11 +517,10 @@ function fleeFactor(world: World, vehicle: Vehicle, decision: DecisionId, subjec
 
 // A robber mostly picks a target that looks weaker than itself times its boldness, away from town guards. Each
 // failed judgment scales rob down. Before the sighting's danger roll, `danger` is null and only guards count. The
-// player's social skill and the bluff perk make the player truck look more dangerous.
+// player's social skill makes the player truck look more dangerous.
 function robFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
   const target = subjectOf(world, decision, subject);
-  const bluff = vehicleHasPerk(world, target, 'bluff') ? PERK_NUMBERS.bluff.danger : 1;
-  const seen = danger === null ? null : danger * (1 + skillEffect(world, target, 'social', 'robberyDanger')) * bluff;
+  const seen = danger === null ? null : danger * (1 + skillEffect(world, target, 'social', 'robberyDanger'));
   const stronger = seen !== null && seen >= ownDanger(world, vehicle) * npcProfile(vehicle).boldness;
   return (stronger ? NPC_BEHAVIOR.robStronger : 1) * guardFactor(vehicle, target, NPC_BEHAVIOR.robNearGuards);
 }
@@ -619,8 +617,7 @@ function towFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject
   const sites = player ? REGION.towns : [towSite(world, vehicle, client)];
   const { factor, crawl, far } = NPC_BEHAVIOR.towNearTown;
   const gate = Math.min(...sites.flatMap((site) => siteGates(site).map((g) => dist(at, g))));
-  const known = player && vehicleHasPerk(world, client, 'knownFace') ? PERK_NUMBERS.knownFace.tow : 1;
-  return (factor + (1 - factor) * clamp((gate - crawl) / (far - crawl), 0, 1)) * known;
+  return factor + (1 - factor) * clamp((gate - crawl) / (far - crawl), 0, 1);
 }
 
 // A driver below the recover condition rarely closes in on a contact. It needs repairs first.

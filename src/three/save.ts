@@ -26,8 +26,9 @@ export function hasSave(storage: Storage): boolean {
 // 22 adds XP targets and player piles. 23 adds shop stock, contracts, upkeep and bounty templates. 24 adds deck
 // mounts and built-in parts sized to the truck models. 25 moves locations beside their roads and the start
 // onto the road. 26 adds NPC knockouts, truck pickups on refits and revenge. 27 adds NPC driver names and their random stream. 28 adds new NPC
-// types, escorts and two goods. 30 adds engine overdrive. Older saves do not load.
-const SAVE_VERSION = 30;
+// types, escorts and two goods. 30 adds engine overdrive. 31 replaces the perks and adds
+// their state: marks, rumors, stalls, dust screens, welds, rebuilt parts and NPC last towns. Older saves do not load.
+const SAVE_VERSION = 31;
 
 export function loadWorld(storage: Storage): World | null {
   const raw = storage.getItem(SAVE_KEY);

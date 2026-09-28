@@ -1,6 +1,5 @@
 import { HUNT, MIN_CHANCE, NPC_BEHAVIOR } from '../data/npcs';
 import { REGION } from '../data/region';
-import { PERK_NUMBERS } from '../data/skills';
 import { describe, expect, it, onTestFinished } from 'vitest';
 import { TERRAIN } from '../data/terrain';
 import { corePart, coreParts, mountedParts } from './grid';
@@ -360,19 +359,6 @@ describe('decision points', () => {
   });
 });
 
-describe('known face perk', () => {
-  it('doubles the tow weight toward the stranded player', () => {
-    const w = emptyWorld({ x: 30, y: 30 });
-    const trader = addNpc(w, 'traders', 'trader', ['trader'], { x: 36, y: 30 });
-    const me = w.player.vehicleId;
-    w.player.fuel = 0;
-    const base = optionWeights(w, trader, 'strandedSeen', me, null);
-    w.player.perks.push('knownFace');
-    const known = optionWeights(w, trader, 'strandedSeen', me, null);
-    expect(known.tow).toBeCloseTo(base.tow! * PERK_NUMBERS.knownFace.tow, 9);
-    expect(known.keep).toBe(base.keep);
-  });
-});
 
 describe('truce answers', () => {
   const setup = (robbery: boolean) => {
