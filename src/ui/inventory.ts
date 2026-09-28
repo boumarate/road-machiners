@@ -317,7 +317,7 @@ export class InventoryView {
     this.inspection.replaceChildren(
       el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, mounted) : []),
-      el("p", { class: "dim" }, inspectionHint(w, item)),
+      ...(item.kind === "part" && !townAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
       el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
     );
   }
@@ -495,10 +495,7 @@ export class InventoryView {
       };
       const chip = el(
         "div",
-        {
-          class: "inv-chip k-good",
-          title: `${GOODS[good].name}: drag one unit at a time`,
-        },
+        { class: "inv-chip k-good" },
         createIcon(getItemIcon(item)),
         `${GOODS[good].name} x${count}`,
       );
@@ -593,7 +590,6 @@ export class InventoryView {
     this.inspection.replaceChildren(
       el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, false) : []),
-      el("p", { class: "dim" }, "Drag onto your grid to take it."),
     );
   }
 
@@ -931,14 +927,6 @@ function itemTitle(it: GridItem, mounted: boolean): string {
   if (partDef(it.part.defId).kind === "core")
     return `${partTitle(it.part)}\nBuilt in`;
   return `${partTitle(it.part)}\n${mounted ? "Mounted" : "Spare"}`;
-}
-
-// What the inspection panel says under an item's title: how to move it.
-function inspectionHint(w: World, item: GridItem): string {
-  if (item.kind === "good")
-    return "Drag to rearrange cargo.";
-  if (townAt(w)) return "Drag onto a mount or into storage.";
-  return "Drag onto a mount or off it to start a refit.";
 }
 
 // Why a Patch button is disabled, or null when the patch can start.
