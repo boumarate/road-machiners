@@ -302,7 +302,7 @@ function spreadCauses(world: World, shooter: Vehicle, mw: MountedWeapon, target:
     crossing: (RULES.leadError * Math.abs(rel.x * n.x + rel.y * n.y)) / mw.def.round.speed,
     own: steady ? 0 : RULES.shake * mw.def.shake * mps(Math.abs(shooter.speed)),
     recoil: (mw.def.recoil * DEG) / (vehicleMass(shooter) / KG_PER_TONNE),
-    weather: weatherAt(world, shooter.pos).spread,
+    weather: vehicleHasPerk(world, shooter, "stormRider") ? 0 : weatherAt(world, shooter.pos).spread,
   };
   return base;
 }

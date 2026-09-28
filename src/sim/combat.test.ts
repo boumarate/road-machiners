@@ -539,6 +539,27 @@ describe('aim perks', () => {
     expect(hitOdds(w, buggy, gun, me, 'body').causes.own).toBe(before.causes.own);
   });
 
+  // A storm over both trucks.
+  const storm = (w: World) => {
+    w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 32, y: 30 }, radius: 10, vel: { x: 0, y: 0 }, turnsLeft: 10 }];
+  };
+
+  it('storm rider takes the storm scatter away from the player', () => {
+    const { w, me, buggy, mg } = range(5, broadside);
+    storm(w);
+    const blown = hitOdds(w, me, mg, buggy, 'body');
+    w.player.perks.push('stormRider');
+    expect(blown.causes.weather).toBeGreaterThan(0);
+    expect(hitOdds(w, me, mg, buggy, 'body').causes.weather).toBe(0);
+  });
+
+  it('storm rider leaves an NPC shooter blown off aim', () => {
+    const { w, me, buggy } = range(5, broadside);
+    storm(w);
+    w.player.perks.push('stormRider');
+    const gun = vehicleStats(w, buggy).weapons[0];
+    expect(hitOdds(w, buggy, gun, me, 'body').causes.weather).toBeGreaterThan(0);
+  });
 
 });
 

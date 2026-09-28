@@ -44,6 +44,11 @@ export function hasWorkingEngine(v: Vehicle): boolean {
   return engines.length > 0 && isWorking(engines[0]);
 }
 
+// A rammed engine stalls through the turn in stalledUntil. It does not strand the truck.
+export function isStalled(world: World, v: Vehicle): boolean {
+  return v.stalledUntil !== undefined && world.turn <= v.stalledUntil;
+}
+
 // The weakest installed driving part limits the truck's ability to survive another fight.
 export function getMobilityCondition(v: Vehicle): number {
   const engine = mountedParts(v, 'engine')[0];
@@ -73,8 +78,8 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   let maxSpeed = limpSpeed;
   let accel = limpSpeed;
   let fuelMult = 0;
-  // Without a working engine the driver pushes the truck at limp speed and burns no fuel.
-  if (hasWorkingEngine(v)) {
+  // Without a working engine, or with a stalled one, the driver pushes the truck at limp speed and burns no fuel.
+  if (hasWorkingEngine(v) && !isStalled(world, v)) {
     const e = wornDef<EngineDef>(engines[0]);
     maxSpeed = Math.max(RULES.minSpeedCap, (ch.maxSpeed + e.speedBonus) * load * wheels);
     accel = (ch.accel + e.accelBonus) * force * RULES.accelScale;

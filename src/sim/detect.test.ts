@@ -5,13 +5,16 @@ import { sunAt } from './sun';
 import { TIME } from '../data/time';
 import { describe, expect, it } from 'vitest';
 import { addVehicle, editableTerrain, emptyWorld } from './testkit';
-import { advanceDust, cloudsSeenBy, contactsOf, dustRange, scannerRange, soundRange } from './detect';
+import { advanceDust, cloudsSeenBy, contactsOf, dustRange, markVehicle, scannerRange, soundRange } from './detect';
 import { makePart } from './factory';
 import { mountPart } from './inventory';
 import { TERRAIN } from '../data/terrain';
-import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { dist } from './vec';
-import { refreshVision } from './vision';
+import { refreshVision, sightRadius } from './vision';
+import { vehicleStats } from './stats';
+import { playerVehicle } from './damage';
+import type { World } from './types';
 
 // Raises a small hill between x=32 and x=36 at y=30, tall enough to block a plain sight line
 // but not the wider systems (sound, radio) that ignore hills.
@@ -301,3 +304,205 @@ describe('perception hearing and contact fix', () => {
 });
 
 
+
+describe('a stalled engine', () => {
+  it('is silent while stalled and heard again after', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    v.speed = 4;
+    v.stalledUntil = w.turn;
+    expect(soundRange(w, v)).toBe(0);
+    v.stalledUntil = w.turn - 1;
+    expect(soundRange(w, v)).toBeGreaterThan(0);
+  });
+});
+
+describe('the cold running perk', () => {
+  const night = () => Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
+
+  // The player driving at `share` of its top speed, at night so it raises no dust, and a parked NPC listener past its
+  // sight but inside the player's plain sound range.
+  function coldWorld(share: number) {
+    const w = emptyWorld({ x: 10, y: 30 });
+    w.turn = night();
+    const me = playerVehicle(w);
+    me.speed = vehicleStats(w, me).maxSpeed * share;
+    const listener = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 10, y: 30 });
+    listener.speed = 0;
+    const sight = sightRadius(w, listener);
+    expect(soundRange(w, me)).toBeGreaterThan(sight + 2);
+    listener.pos = { x: 10 + sight + 1, y: 30 };
+    return { w, me, listener };
+  }
+
+  const heard = (w: World, listener: ReturnType<typeof addVehicle>, id: string) =>
+    contactsOf(w, listener, Infinity).find((c) => c.vehicleId === id)?.sources.includes('sound') === true;
+
+  it('keeps the player engine unheard past sight below half speed', () => {
+    const { w, me, listener } = coldWorld(0.4);
+    expect(heard(w, listener, me.id)).toBe(true);
+    w.player.perks.push('coldRunning');
+    expect(heard(w, listener, me.id)).toBe(false);
+  });
+
+  it('lets the engine be heard at half speed or more', () => {
+    const { w, me, listener } = coldWorld(0.6);
+    w.player.perks.push('coldRunning');
+    expect(heard(w, listener, me.id)).toBe(true);
+  });
+
+  it('leaves NPC engines heard past sight', () => {
+    const w = emptyWorld({ x: 10, y: 30 });
+    w.turn = night();
+    w.player.perks.push('coldRunning');
+    const me = playerVehicle(w);
+    me.speed = 0;
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 10, y: 30 });
+    npc.speed = vehicleStats(w, npc).maxSpeed * 0.4;
+    npc.pos = { x: 10 + sightRadius(w, me) + 1, y: 30 };
+    expect(soundRange(w, npc)).toBeGreaterThan(sightRadius(w, me) + 2);
+    expect(heard(w, me, npc.id)).toBe(true);
+  });
+});
+
+describe('the dust screen perk', () => {
+  // A daylight world on sand with a truck driving east at `share` of its top speed.
+  function screenWorld(share: number, npc = false) {
+    const w = emptyWorld({ x: 40, y: 30 });
+    w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => sunAt(t))!;
+    editableTerrain(w).types.fill('sand');
+    const v = npc ? addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 60 }) : playerVehicle(w);
+    v.speed = vehicleStats(w, v).maxSpeed * share;
+    v.trail = [0, 1, 2, 3, 4].map((i) => ({ x: v.pos.x - 4 + i, y: v.pos.y, heading: 0 }));
+    return { w, v };
+  }
+
+  it('makes the player cloud a screen at top speed', () => {
+    const { w, v } = screenWorld(PERK_NUMBERS.dustScreen.topShare);
+    w.player.perks.push('dustScreen');
+    advanceDust(w);
+    expect(w.dustClouds.find((c) => c.source === v.id)?.screen).toBe(true);
+  });
+
+  it('raises a plain cloud below top speed', () => {
+    const { w, v } = screenWorld(PERK_NUMBERS.dustScreen.topShare * 0.8);
+    w.player.perks.push('dustScreen');
+    advanceDust(w);
+    const cloud = w.dustClouds.find((c) => c.source === v.id);
+    expect(cloud).toBeDefined();
+    expect(cloud?.screen).toBeUndefined();
+  });
+
+  it('raises a plain cloud without the perk', () => {
+    const { w, v } = screenWorld(1);
+    advanceDust(w);
+    expect(w.dustClouds.find((c) => c.source === v.id)?.screen).toBeUndefined();
+  });
+
+  it('leaves NPC clouds plain', () => {
+    const { w, v } = screenWorld(1, true);
+    w.player.perks.push('dustScreen');
+    advanceDust(w);
+    expect(w.dustClouds.find((c) => c.source === v.id)?.screen).toBeUndefined();
+  });
+});
+
+describe('the spotter perk', () => {
+  // A seen, parked raider next to the player, which has no scanner.
+  function spotterWorld() {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 35, y: 30 });
+    target.speed = 0;
+    refreshVision(w);
+    expect(scannerRange(playerVehicle(w))).toBe(0);
+    return { w, target };
+  }
+
+  // Moves the marked truck far out of the player's sight, parked and silent.
+  function driveOff(w: World, id: string): void {
+    w.vehicles.find((v) => v.id === id)!.pos = { x: 90, y: 90 };
+    refreshVision(w);
+  }
+
+  it('marks a seen truck for a day', () => {
+    const { w, target } = spotterWorld();
+    w.player.perks.push('spotter');
+    const after = markVehicle(w, target.id);
+    expect(after.player.marked).toEqual([{ vehicleId: target.id, until: w.turn + PERK_NUMBERS.spotter.turns }]);
+    expect(w.player.marked).toEqual([]);
+  });
+
+  it('replaces an older mark on the same truck', () => {
+    const { w, target } = spotterWorld();
+    w.player.perks.push('spotter');
+    const first = markVehicle(w, target.id);
+    first.turn += 5;
+    const second = markVehicle(first, target.id);
+    expect(second.player.marked).toEqual([{ vehicleId: target.id, until: first.turn + PERK_NUMBERS.spotter.turns }]);
+  });
+
+  it('refuses to mark without the perk', () => {
+    const { w, target } = spotterWorld();
+    expect(() => markVehicle(w, target.id)).toThrow('spotter');
+  });
+
+  it('refuses to mark an unseen truck', () => {
+    const { w, target } = spotterWorld();
+    w.player.perks.push('spotter');
+    driveOff(w, target.id);
+    expect(() => markVehicle(w, target.id)).toThrow('does not see');
+  });
+
+  it('refuses to mark an unknown truck', () => {
+    const { w } = spotterWorld();
+    w.player.perks.push('spotter');
+    expect(() => markVehicle(w, 'ghost')).toThrow('ghost');
+  });
+
+  it('tracks a marked truck out of sight with a scanner-tight circle', () => {
+    const { w, target } = spotterWorld();
+    w.player.perks.push('spotter');
+    const marked = markVehicle(w, target.id);
+    driveOff(marked, target.id);
+    const contact = marked.player.contacts.find((c) => c.vehicleId === target.id);
+    const d = dist(playerVehicle(marked).pos, { x: 90, y: 90 });
+    expect(contact?.sources).toEqual(['mark']);
+    expect(contact?.radius).toBeCloseTo(DETECT.fuzz.base + DETECT.fuzz.radioPerTile * d);
+  });
+
+  it('gives no contact on an unmarked truck out of sight', () => {
+    const { w, target } = spotterWorld();
+    driveOff(w, target.id);
+    expect(w.player.contacts.find((c) => c.vehicleId === target.id)).toBeUndefined();
+  });
+
+  it('adds the mark to a contact the truck already gives', () => {
+    const { w, target } = spotterWorld();
+    w.player.perks.push('spotter');
+    const marked = markVehicle(w, target.id);
+    const v = marked.vehicles.find((x) => x.id === target.id)!;
+    v.pos = { x: 30 + sightRadius(marked, playerVehicle(marked)) + 2, y: 30 };
+    v.speed = 4; // heard, and no dust cloud rises outside a turn
+    refreshVision(marked);
+    expect(marked.player.contacts.find((c) => c.vehicleId === target.id)?.sources).toEqual(['sound', 'mark']);
+  });
+
+  it('drops the mark after its last turn', () => {
+    const { w, target } = spotterWorld();
+    w.player.perks.push('spotter');
+    const marked = markVehicle(w, target.id);
+    marked.turn += PERK_NUMBERS.spotter.turns + 1;
+    driveOff(marked, target.id);
+    expect(marked.player.marked).toEqual([]);
+    expect(marked.player.contacts.find((c) => c.vehicleId === target.id)).toBeUndefined();
+  });
+
+  it('gives an NPC observer no mark contacts', () => {
+    const { w, target } = spotterWorld();
+    w.player.perks.push('spotter');
+    const marked = markVehicle(w, target.id);
+    const npc = addVehicle(marked, 'traders', 'scout', ['stockEngine'], { x: 30, y: 30 });
+    driveOff(marked, target.id);
+    expect(contactsOf(marked, npc, Infinity).find((c) => c.vehicleId === target.id)).toBeUndefined();
+  });
+});

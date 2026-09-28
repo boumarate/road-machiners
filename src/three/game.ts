@@ -34,18 +34,11 @@ import { clickOrder, parkedVehicles, throttleFor } from "../sim/steering";
 import { route, warmRoutes } from "../sim/path";
 import { CHASSIS } from "../data/chassis";
 import type { ShotRound, Vehicle, World } from "../sim/types";
-import type { Vec } from "../sim/vec";
 import { grayRadius, playerSees, tileOf, visibleTiles } from "../sim/vision";
-import { dist } from "../sim/vec";
+import { dist, type Vec } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
 import { isTowed, setBeacon, unhitch } from "../sim/tow";
-import {
-  cloneWorld,
-  hostileToPlayer,
-  newWorld,
-  playerCanAct,
-  setMoveOrder,
-} from "../sim/world";
+import { cloneWorld, hostileToPlayer, newWorld, playerCanAct, setMoveOrder } from "../sim/world";
 import { TruckControls } from "./truck-controls";
 import { PAL } from "../render/palette";
 import { timed } from "../perf";
@@ -75,6 +68,7 @@ import { REGION } from "../data/region";
 import { isBusy } from "../sim/jobs";
 import { daylightAt, lampsOn, lightScene, NightLights, sunLight } from "./render/daylight";
 import { sunAt } from "../sim/sun";
+import { markError, markVehicle } from "../sim/detect";
 import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
 import { ShadeView } from "./render/shade";
@@ -482,6 +476,7 @@ export class Game {
     KeyP: { run: () => this.controls.toggleAutoRepair(), noModal: true, idle: true },
     KeyO: { run: () => this.controls.toggleOverdrive(), noModal: true, idle: true },
     KeyG: { run: () => this.controls.douseEngine(), noModal: true, idle: true },
+    KeyN: { run: () => this.hovered && !markError(this.world, this.hovered) && this.apply(markVehicle(this.world, this.hovered)), noModal: true, idle: true },
     KeyC: { run: () => this.toggleScreen(this.character), idle: true },
     KeyI: { run: () => this.toggleScreen(this.inventory), idle: true },
     Escape: { run: () => this.closeScreens(null) },

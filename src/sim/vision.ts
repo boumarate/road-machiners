@@ -11,16 +11,21 @@ import { weatherAt } from './weather';
 import { dist, segmentDist, type Vec } from './vec';
 import { playerVehicle } from './damage';
 import { cloudsSeenBy, contactDifficulty, contactsOf } from './detect';
-import { practice, skillEffect } from './progress';
+import { practice, skillEffect, vehicleHasPerk } from './progress';
+import { PERK_NUMBERS } from '../data/skills';
 
 const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building', 'landmark'];
 
+// A circle that blocks sight lines through it.
+type Blocker = { pos: Vec; r: number };
+
 // A viewer's vision radius at a point: the base radius, shrunk by weather and at night, and widened by the
-// player's perception.
+// player's perception. Night eyes keeps it at night, and storm rider keeps it in weather.
 export function sightRadius(world: World, viewer: Vehicle, at: Vec = viewer.pos): number {
-  const night = sunAt(world.turn) ? 1 : TIME.nightSight;
+  const night = sunAt(world.turn) || vehicleHasPerk(world, viewer, 'nightEyes') ? 1 : TIME.nightSight;
+  const weather = vehicleHasPerk(world, viewer, 'stormRider') ? 1 : weatherAt(world, at).sight;
   const skill = 1 + skillEffect(world, viewer, 'perception', 'sight');
-  return TERRAIN.vision.radius * weatherAt(world, at).sight * night * skill;
+  return TERRAIN.vision.radius * weather * night * skill;
 }
 
 // Reach of the player's gray vision at a point. It ignores rocks and hills, and it shows places but never vehicles.
@@ -51,11 +56,16 @@ export function canVehicleSee(world: World, observer: Vehicle, position: Vec): b
   if (observer.id === world.player.vehicleId) return playerSees(world, position);
   const target = position;
   return dist(observer.pos, target) <= sightRadius(world, observer) &&
-    inPlainView(world, observer.pos, target, world.obstacles.filter((o) => BLOCKING.includes(o.kind)));
+    inPlainView(world, observer.pos, target, [...world.obstacles.filter((o) => BLOCKING.includes(o.kind)), ...dustScreens(world)]);
+}
+
+// Dust screen clouds block sight like rocks, for NPCs only. The player's view never counts them.
+function dustScreens(world: World): Blocker[] {
+  return world.dustClouds.filter((c) => c.screen).map((c) => ({ pos: c.pos, r: PERK_NUMBERS.dustScreen.radius }));
 }
 
 // Within the close radius, rocks and hills do not hide anything.
-function inPlainView(world: World, a: Vec, b: Vec, blockers: Obstacle[]): boolean {
+function inPlainView(world: World, a: Vec, b: Vec, blockers: readonly Blocker[]): boolean {
   return dist(a, b) <= TERRAIN.vision.closeRadius || (hasLineOfSight(a, b, blockers) && clearOverTerrain(world.terrain, a, b));
 }
 
@@ -65,7 +75,7 @@ export function hasLineOfFire(world: World, a: Vec, b: Vec): boolean {
 }
 
 // An obstacle blocks sight only if it sits between the viewer and the tile.
-function hasLineOfSight(a: Vec, b: Vec, blockers: Obstacle[]): boolean {
+function hasLineOfSight(a: Vec, b: Vec, blockers: readonly Blocker[]): boolean {
   const targetDist = dist(a, b);
   return blockers.every((o) => dist(a, o.pos) >= targetDist || segmentDist(o.pos, a, b) >= o.r);
 }
@@ -95,6 +105,7 @@ export function refreshVision(world: World): void {
   const seen = playerVisible(world);
   world.player.visible = [...seen].sort((a, b) => a - b);
   for (const idx of seen) world.player.explored[idx] = 1;
+  world.player.marked = world.player.marked.filter((m) => world.turn <= m.until);
   const me = world.vehicles.find((x) => x.id === world.player.vehicleId);
   const known = new Set(world.player.contacts.map((c) => c.vehicleId));
   world.player.contacts = me ? contactsOf(world, me, Infinity) : [];

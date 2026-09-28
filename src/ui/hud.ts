@@ -13,6 +13,8 @@ import {
   formatNpcActivity,
   jobLabel,
   jobProgress,
+  formatNpcCargo,
+  formatNpcMark,
   formatNpcStates,
   formatNpcTraits,
 } from "./format";
@@ -586,13 +588,17 @@ function infoHeading(w: World, v: Vehicle): HTMLElement[] {
   ];
 }
 
-// The NPC's traits once the player can read them, and the states it holds toward the player. The player's own truck
-// has none.
+// The NPC's traits, cargo and mark once perks show them, and the states it holds toward the player. The player's own
+// truck has none.
 function npcLines(w: World, v: Vehicle): HTMLElement[] {
   if (!v.brain) return [];
   const traits = formatNpcTraits(w, v);
+  const cargo = formatNpcCargo(w, v);
+  const mark = formatNpcMark(w, v);
   return [
     ...(traits ? [el("div", { class: "npc-traits" }, traits)] : []),
+    ...(cargo ? [el("div", { class: "npc-cargo" }, cargo)] : []),
+    ...(mark ? [el("div", { class: "npc-mark" }, mark)] : []),
     ...formatNpcStates(w, v).map((line) =>
       el("div", { class: "npc-state" }, line),
     ),
