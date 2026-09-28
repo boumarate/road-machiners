@@ -2,6 +2,7 @@
 // Weapons are assembled from sub-part models. Each slot picks from its def's pool, seeded by the part id.
 
 import type { ModelName } from '../three/render/models';
+import { PARTS } from '../data/parts';
 import { hashStr } from './noise';
 
 // The base model each chassis is drawn from. Kit parts stand on its row surfaces.
@@ -23,13 +24,16 @@ export function baseModel(chassisId: string): ModelName {
   return base;
 }
 
-// Parts with no model of their own. The base model draws them: the cab.
-export const BODY_PARTS: ReadonlySet<string> = new Set(['cab']);
+// Parts with no model of their own. The base model draws them: every cab.
+export const BODY_PARTS: ReadonlySet<string> = new Set(
+  Object.values(PARTS).flatMap((p) => (p.kind === 'core' && p.role === 'cab' ? [p.id] : [])),
+);
 
 export const PART_MODELS: Record<string, ModelName> = {
   transmission: 'transmission',
   wheel: 'wheel',
   tank: 'fuel_tank',
+  tankLong: 'fuel_tank',
 
   stockEngine: 'eng_stock',
   tunedEngine: 'eng_tuned_v8',

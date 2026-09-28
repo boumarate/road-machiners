@@ -212,6 +212,8 @@ function partNote(part: PartInstance): string {
 export type PartCardOptions = {
   part: PartInstance;
   base: PartInstance | null; // the part it is weighed against, or null for no comparison
+  baseCount: number; // mounted parts of its kind the player can step through
+  onNextBase: (() => void) | null; // steps to the next mounted part of its kind
   action: HTMLElement | null;
   onHover?: (on: boolean) => void;
 };
@@ -229,9 +231,10 @@ export function partCard(o: PartCardOptions): HTMLElement {
       el("div", { class: "card-name" }, el("b", {}, def.name), el("span", { class: "dim" }, partNote(o.part))),
       footprint(def.w, def.h),
     ),
+    compareLine(o),
     conditionMeter(o.part),
     statGrid(diffs),
-    el("div", { class: "card-foot" }, el("span", { class: "dim" }, baseNote(o)), o.action),
+    el("div", { class: "card-foot" }, el("span"), o.action),
   );
   if (o.onHover) {
     const hover = o.onHover;
@@ -241,10 +244,17 @@ export function partCard(o: PartCardOptions): HTMLElement {
   return card;
 }
 
-function baseNote(o: PartCardOptions): string {
-  if (!o.base) return `No ${partDef(o.part.defId).kind} mounted`;
-  if (o.base === o.part) return "Mounted";
-  return `vs ${partDef(o.base.defId).name}`;
+// What the changes in the stat table are against. With several mounted parts of the kind, a click steps to the next.
+function compareLine(o: PartCardOptions): HTMLElement {
+  if (!o.base) return el("div", { class: "card-compare dim" }, "Nothing to compare");
+  const name = partDef(o.base.defId).name;
+  if (o.baseCount < 2 || !o.onNextBase) return el("div", { class: "card-compare" }, `Compared with ${name}`);
+  const next = o.onNextBase;
+  return el(
+    "button",
+    { class: "card-compare", title: "Compare with your next part of this kind", onclick: () => next() },
+    `Compared with ${name}. Click for your next one.`,
+  );
 }
 
 // A truck's grid seen from above, nose up, one colored square per cell.
@@ -429,7 +439,11 @@ function verdictOf(delta: number, better: Stat["better"]): Verdict {
 
 // The mounted part a new part of this kind is weighed against: the most valuable one on the truck.
 export function baselinePart(v: Vehicle, kind: PartKind): PartInstance | null {
-  const mounted = mountedParts(v, kind);
-  if (mounted.length === 0) return null;
-  return mounted.reduce((best, p) => (partValue(p) > partValue(best) ? p : best));
+  return comparePart(v, kind, 0);
+}
+
+// The mounted parts of a kind, most valuable first. The player steps through them to pick what a card compares with.
+export function comparePart(v: Vehicle, kind: PartKind, index: number): PartInstance | null {
+  const mounted = [...mountedParts(v, kind)].sort((a, b) => partValue(b) - partValue(a));
+  return mounted.length === 0 ? null : mounted[index % mounted.length];
 }

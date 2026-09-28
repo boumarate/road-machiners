@@ -3,7 +3,7 @@ import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { partDef } from '../data/parts';
 import { REPAIR } from '../data/wear';
 import { addVehicle, emptyWorld } from './testkit';
-import { mountedParts } from './grid';
+import { corePart, mountedParts } from './grid';
 import { repairPlan } from './repair';
 
 function armorPart(v: ReturnType<typeof emptyWorld>['vehicles'][0]) {
@@ -43,7 +43,7 @@ describe('repairPlan', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
     const wheel = mountedParts(me).find((p) => p.defId === 'wheel')!;
-    const cab = mountedParts(me).find((p) => p.defId === 'cab')!;
+    const cab = corePart(me, 'cab');
     wheel.hp = 0;
     cab.hp = 0;
     expect(repairPlan(w, me, wheel.id).parts).toBe(2);

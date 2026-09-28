@@ -1166,13 +1166,8 @@ export class Game {
     if (hide) return;
     const me = playerVehicle(this.world);
     const s = vehicleStats(this.world, me);
-    const sel = s.weapons.find((m) => m.part.id === this.selected);
-    this.weaponRange.set(
-      this.world.terrain,
-      me.pos,
-      me.heading,
-      sel ?? null,
-    );
+    const sel = s.weapons.filter((m) => m.part.id === this.selected);
+    this.weaponRange.set(this.world.terrain, me.pos, me.heading, this.selected ? sel : s.weapons, !this.selected);
     this.zones.update(
       this.world.terrain,
       me.pos,

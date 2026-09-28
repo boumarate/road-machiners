@@ -860,33 +860,24 @@ body {
   cursor: pointer;
   border-color: #707f86;
 }
-.inv-blocked {
+.inv-fan {
   position: absolute;
-  background: #c8553d;
-}
-.inv-blocked.s-front {
-  top: 0;
   left: 0;
-  right: 0;
-  height: 4px;
-}
-.inv-blocked.s-rear {
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-}
-.inv-blocked.s-left {
   top: 0;
-  bottom: 0;
-  left: 0;
-  width: 4px;
+  pointer-events: none;
+  overflow: hidden;
 }
-.inv-blocked.s-right {
-  top: 0;
-  bottom: 0;
-  right: 0;
-  width: 4px;
+.inv-fan path {
+  fill: rgba(234, 199, 121, 0.16);
+  stroke: #eac779;
+  stroke-width: 2;
+}
+.inv-item.blocking {
+  outline: 2px solid #e0674c;
+  outline-offset: -2px;
+}
+.inv-fire {
+  margin: 6px 0;
 }
 .inv-item.selected {
   outline: 2px solid #eac779;
@@ -1284,6 +1275,15 @@ canvas.view {
   text-overflow: ellipsis;
 }
 .card-name .dim {
+  font-size: 12px;
+}
+.card-compare {
+  margin: 4px 0 6px;
+  font-size: 12px;
+  text-align: left;
+}
+#ui button.card-compare {
+  padding: 2px 6px;
   font-size: 12px;
 }
 .card-foot {

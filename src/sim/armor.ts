@@ -109,28 +109,45 @@ const STEP: Record<Side, { dx: number; dy: number }> = {
 
 // The sides a mounted gun can fire toward past the tall parts on its truck.
 export function openSides(v: Vehicle, item: GridItem): Side[] {
-  const tall = new Set<string>();
-  for (const it of v.items) {
-    if (it.id === item.id || it.kind !== 'part' || !partDef(it.part.defId).tall) continue;
-    for (const c of itemCells(it)) tall.add(`${c.x},${c.y}`);
-  }
+  const blocked = sideBlockers(v, item);
+  return SIDES.filter((side) => !blocked[side]);
+}
+
+// The nearest tall item in the gun's lane toward each blocked side. An open side has no entry.
+export function sideBlockers(v: Vehicle, item: GridItem): Partial<Record<Side, GridItem>> {
+  const tall = tallCells(v, item.id);
   const g = gridOf(v);
   const { w, h } = itemSize(item);
   const center = { x: item.x + Math.floor(w / 2), y: item.y + Math.floor(h / 2) };
-  return SIDES.filter((side) => !laneToEdge(g, center, side).some((c) => tall.has(`${c.x},${c.y}`)));
+  const out: Partial<Record<Side, GridItem>> = {};
+  for (const side of SIDES) {
+    const blocker = laneToEdge(g, center, side).map((c) => tall.get(`${c.x},${c.y}`)).find((it) => it !== undefined);
+    if (blocker) out[side] = blocker;
+  }
+  return out;
+}
+
+// The item on each cell covered by a tall part, leaving out one item.
+function tallCells(v: Vehicle, exceptId: string): Map<string, GridItem> {
+  const tall = new Map<string, GridItem>();
+  for (const it of v.items) {
+    if (it.id === exceptId || it.kind !== 'part' || !partDef(it.part.defId).tall) continue;
+    for (const c of itemCells(it)) tall.set(`${c.x},${c.y}`, it);
+  }
+  return tall;
 }
 
 // Open sides summed over every mounted weapon, to compare layouts. Only sides the gun's own arc reaches count.
 export function openSideCount(v: Vehicle): number {
   return mountedItems(v, 'weapon').reduce((sum, item) => {
-    const reach = arcSides(partDef(item.part.defId) as WeaponDef);
+    const reach = reachedSides(partDef(item.part.defId) as WeaponDef);
     return sum + openSides(v, item).filter((side) => reach.includes(side)).length;
   }, 0);
 }
 
 // The sides a centered arc reaches. The front quarter spans 90 degrees, so a wider arc reaches the flanks, and one
 // wider than 270 degrees also reaches the rear.
-function arcSides(def: WeaponDef): Side[] {
+export function reachedSides(def: WeaponDef): Side[] {
   if (def.arc > 270) return [...SIDES];
   if (def.arc > 90) return ['front', 'left', 'right'];
   return ['front'];

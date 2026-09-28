@@ -27,9 +27,9 @@ import { spareParts } from "../sim/inventory";
 import { vehicleMass } from "../sim/mass";
 import { acceptContract, deliverContract, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
 import { REGION } from "../data/region";
-import type { PartInstance, World } from "../sim/types";
+import type { PartInstance, Vehicle, World } from "../sim/types";
 import { maxHp } from "../sim/wear";
-import { baselinePart, chassisMap, chassisStats, createIcon, diffStats, goodIcon, partCard, statGrid, type IconName } from "./cards";
+import { chassisMap, chassisStats, comparePart, createIcon, diffStats, goodIcon, partCard, statGrid, type IconName, type PartCardOptions } from "./cards";
 import { el, panel } from "./dom";
 import { contractSummary } from "./format";
 import { InventoryView } from "./inventory";
@@ -53,6 +53,7 @@ export class TownScreen {
   private root = panel("modal");
   private tab: Tab = "market";
   private stockFilter: StockFilter = "all";
+  private compareIndex = new Map<PartKind, number>();
   private error = "";
 
   private inventory: InventoryView;
@@ -196,6 +197,19 @@ export class TownScreen {
     );
   }
 
+  // Which mounted part the cards of a kind compare with. Stepping it moves every card of the kind together.
+  private comparison(me: Vehicle, kind: PartKind): Pick<PartCardOptions, "base" | "baseCount" | "onNextBase"> {
+    const index = this.compareIndex.get(kind) ?? 0;
+    return {
+      base: comparePart(me, kind, index),
+      baseCount: mountedParts(me, kind).length,
+      onNextBase: () => {
+        this.compareIndex.set(kind, index + 1);
+        this.render();
+      },
+    };
+  }
+
   private parts(w: World, shopId: string): HTMLElement {
     const me = playerVehicle(w);
     const stock = shopState(w, shopId).stock;
@@ -205,7 +219,7 @@ export class TownScreen {
       const price = partTradePrice(w, me, p, "buy");
       return partCard({
         part: p,
-        base: baselinePart(me, kind),
+        ...this.comparison(me, kind),
         action: this.button(`Buy ${price}`, (x) => buyStockPart(x, p.id), w.player.money < price),
         onHover: this.hintMounts(kind),
       });
@@ -248,7 +262,7 @@ export class TownScreen {
       const kind = partDef(p.defId).kind;
       return partCard({
         part: p,
-        base: baselinePart(me, kind),
+        ...this.comparison(me, kind),
         action: this.button(`Sell ${partTradePrice(w, me, p, "sell")}`, (x) => sellPart(x, p.id)),
         onHover: this.hintMounts(kind),
       });

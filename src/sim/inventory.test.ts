@@ -101,14 +101,14 @@ describe('inventory grid', () => {
     let w = emptyWorld(sitePads(bowl)[0]);
     w.player.money = 2000;
     removeAllGoods(w.vehicles[0]); // free the plain cells the cannon test claims, regardless of start cargo
-    const mg = item(w, 'mg');
-    w = storePart(w, mg.id);
+    w = storePart(w, item(w, 'mg').id);
+    w = storePart(w, item(w, 'rack').id);
     w = update(w, (d) => { d.player.storage.push(makePart(d, 'cannon', 0)); });
     const id = w.player.storage.find((p) => p.defId === 'cannon')!.id;
-    // The scout bed row 5 is three deck cells wide. Row 4 above it is plain cab storage.
+    // The scout bed row 5 is three deck cells wide. Upright, the cannon reaches down onto the back armor edge.
     const flat = takeFromStorage(w, id, { x: 1, y: 5, rot: 0 });
     expect(vehicleStats(flat, flat.vehicles[0]).weapons.map((m) => m.def.id)).toEqual(['cannon']);
-    const upright = takeFromStorage(w, id, { x: 1, y: 4, rot: 1 });
+    const upright = takeFromStorage(w, id, { x: 1, y: 5, rot: 1 });
     expect(vehicleStats(upright, upright.vehicles[0]).weapons).toHaveLength(0);
   });
 
@@ -123,7 +123,7 @@ describe('inventory grid', () => {
     w.player.money = 2000;
     const free = freeCells(w.vehicles[0]);
     w = update(w, (d) => { d.player.storage.push(makePart(d, 'mg', 0)); });
-    w = takeFromStorage(w, w.player.storage[0].id, { x: 1, y: 5, rot: 0 });
+    w = takeFromStorage(w, w.player.storage[0].id, { x: 3, y: 5, rot: 0 });
     expect(freeCells(w.vehicles[0])).toBe(free - 1);
     expect(vehicleStats(w, w.vehicles[0]).weapons).toHaveLength(2);
   });
@@ -146,7 +146,7 @@ function mountedItemOf(v: Vehicle, defId: string): GridItem {
 describe('auto mounting on the deck', () => {
   it('places a turret where no tall part blocks it', () => {
     const w = emptyWorld();
-    const v = addVehicle(w, 'raiders', 'scout', ['stockEngine'], { x: 40, y: 40 });
+    const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine'], { x: 40, y: 40 });
     expect(mountPart(w, v, makePart(w, 'mg', 0))).toBe(true);
     expect(openSides(v, mountedItemOf(v, 'mg'))).toHaveLength(4);
   });

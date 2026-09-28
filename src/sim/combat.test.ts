@@ -12,7 +12,7 @@ import { stateOf } from './states';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
-import type { GameEvent, Vehicle } from './types';
+import type { GameEvent, Vehicle, World } from './types';
 import { dist } from './vec';
 import { endTurn } from './world';
 
@@ -23,6 +23,15 @@ function duel(targetPos = { x: 33, y: 30 }) {
   buggy.brain = npcBrain('buggy', targetPos, ['raider']);
   const mg = vehicleStats(w, me).weapons[0];
   return { w, me, buggy, mg };
+}
+
+// The player's scout swapped for a hauler with a forward cannon on deck beside its cab, where the cannon can fire forward.
+function cannonHauler(w: World): Vehicle {
+  const old = w.vehicles[0];
+  const v = addVehicle(w, 'player', 'hauler', ['stockEngine', 'cannon'], old.pos, old.heading);
+  v.id = old.id;
+  w.vehicles = [v, ...w.vehicles.slice(1, -1)];
+  return v;
 }
 
 function order(me: Vehicle, weaponId: string, targetId: string, aim = 'body') {
@@ -61,12 +70,9 @@ describe('combat', () => {
 
   it('cannon reloads for several turns', () => {
     const w = emptyWorld();
-    const me = w.vehicles[0];
-    const gun = me.items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
-    me.items = me.items.filter((it) => it !== gun);
-    me.items.push({ id: 'i1', x: gun.x, y: gun.y, rot: 0, kind: 'part', part: { id: 'c1', defId: 'cannon', hp: 30, reload: 0, wear: 0 } });
+    const me = cannonHauler(w);
     const t = addVehicle(w, 'raiders', 'wagon', ['cannon', 'stockEngine', 'plates'], { x: 35, y: 30 }, Math.PI);
-    order(me, 'c1', t.id);
+    order(me, vehicleStats(w, me).weapons[0].part.id, t.id);
     let shots = 0;
     for (let i = 0; i < 6; i++) {
       w.events = [];
@@ -374,15 +380,12 @@ describe('rounds', () => {
 
   it('a cannon miss within splash radius damages a part', () => {
     const w = emptyWorld();
-    const me = w.vehicles[0];
-    const gun = me.items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
-    me.items = me.items.filter((it) => it !== gun);
-    me.items.push({ id: 'i1', x: gun.x, y: gun.y, rot: 0, kind: 'part', part: { id: 'c1', defId: 'cannon', hp: 30, reload: 0, wear: 0 } });
+    const me = cannonHauler(w);
     const t = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 }, Math.PI / 2);
     for (const p of mountedParts(t)) p.hp = 1e9;
     t.speed = 3;
     me.speed = 4;
-    order(me, 'c1', t.id);
+    order(me, vehicleStats(w, me).weapons[0].part.id, t.id);
     const cannon = vehicleStats(w, me).weapons[0];
     let splashed = false;
     for (let i = 0; i < 60 && !splashed; i++) {
