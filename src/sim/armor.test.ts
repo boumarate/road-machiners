@@ -7,6 +7,7 @@ import { makePart } from './factory';
 import { advanceKnockout, checkKnockout } from './defeat';
 import { corePart, coreParts, gridOf, mountedItems, mountedParts } from './grid';
 import { vehicleStats } from './stats';
+import { maxHp } from './wear';
 import { leakFuel } from './supplies';
 import { addVehicle, emptyWorld, npcBrain, rngStateWhere } from './testkit';
 import type { GridItem, Vehicle, World } from './types';
@@ -60,8 +61,8 @@ describe('walkLane', () => {
     const { w, v, plate, engine } = plated();
     const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 3, blast: false });
     expect(hits.map((h) => h.part)).toEqual([plate.id]);
-    expect(plate.hp).toBeLessThan(40);
-    expect(engine.hp).toBe(25);
+    expect(plate.hp).toBeLessThan(maxHp(plate));
+    expect(engine.hp).toBe(maxHp(engine));
   });
 
   it('a worn plate lets more of a round through to the part behind', () => {
@@ -78,7 +79,7 @@ describe('walkLane', () => {
     const { w, v, plate, engine } = plated();
     const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 20, blast: false });
     expect(hits.map((h) => h.part).slice(0, 2)).toEqual([plate.id, engine.id]);
-    expect(engine.hp).toBeLessThan(25);
+    expect(engine.hp).toBeLessThan(maxHp(engine));
   });
 
   it('a round loses damage with the pen each part takes from it', () => {
@@ -91,7 +92,7 @@ describe('walkLane', () => {
   it('armor scales damage down when pen is below it', () => {
     const { w, v, plate } = plated();
     const weak = walkLane(w, v, 'front', 1, { damage: 12, pen: 6, blast: false })[0].damage;
-    plate.hp = 40;
+    plate.hp = maxHp(plate);
     const full = walkLane(w, v, 'front', 1, { damage: 12, pen: 100, blast: false })[0].damage;
     expect(weak).toBeLessThan(full);
     expect(full).toBe(12);
@@ -109,7 +110,7 @@ describe('walkLane', () => {
     const { w, v, plate, engine } = plated();
     const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 12, blast: false });
     expect(hits.map((h) => h.part)).toEqual([plate.id]);
-    expect(engine.hp).toBe(25);
+    expect(engine.hp).toBe(maxHp(engine));
   });
 
   it('a part spanning several cells of the lane is hit once', () => {

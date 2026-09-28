@@ -57,7 +57,7 @@ describe('rams', () => {
     const h2 = addVehicle(w, 'traders', 'hauler', [], { x: 41.5, y: 40 }, Math.PI);
     applyCrash(w, h2, rammed, rammed.id, rammed.pos, FULL_SPEED);
     expect(corePart(rammed, 'cab').hp).toBe(partDef('cab').hp);
-    expect(partOf(rammed, 'ram').hp).toBeLessThan(50);
+    expect(partOf(rammed, 'ram').hp).toBeLessThan(partDef('ram').hp);
   });
 
   it('a ram on the striking side raises damage to the other truck', () => {

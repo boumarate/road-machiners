@@ -48,7 +48,7 @@ export const ENGINE_HEAT = {
   coolDriving: 0.02, // heat lost per turn to airflow while driving
   coolParked: 0.15, // heat lost per turn while parked, divided by the sun heat at the spot
   warnAt: 0.75, // heat at which the log warns once and the gauge turns red
-  overheatDamage: 1, // HP each working engine loses per turn driven while overheated
+  overheatDamage: 2, // HP each working engine loses per turn driven while overheated
 };
 
 // Sun heat from which the ground shimmers in heat haze. Above it airflow no longer cools a truck at top

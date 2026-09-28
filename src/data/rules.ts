@@ -40,7 +40,7 @@ export const RULES = {
 
   // Global damage multipliers. Tune these to make every fight faster or slower.
   weaponDamage: 0.5625, // every weapon round and splash, guard guns included
-  crashDamage: 0.5625, // every crash and ram, into trucks and obstacles alike
+  crashDamage: 1.125, // every crash and ram, into trucks and obstacles alike
 
   // Town guards. Each town gate has one gun. Every turn it shoots the nearest vehicle within range that fired.
   // Each round hits with a flat chance and enters a random lane of the side facing the gate.
@@ -49,7 +49,7 @@ export const RULES = {
     rounds: 4,
     hitChance: 0.5,
     missOffset: 1.5,
-    round: { damage: 6, pen: 10, blast: false },
+    round: { damage: 6, pen: 8, blast: false },
   },
 
   // Combat
@@ -68,7 +68,7 @@ export const RULES = {
   leadError: 4.5, // share of the lead angle the gunner misjudges
   shake: 0.002, // radians of spread per m/s of the shooter's own speed
   cellMeters: 0.5, // width of one grid cell, for the size of an aimed part
-  cabHealthShare: 0.5, // share of cab damage the player's character takes as health loss
+  cabHealthShare: 0.25, // share of cab damage the player's character takes as health loss
   minHit: 0.05,
   maxHit: 0.95,
   killXp: 40,

@@ -1,3 +1,4 @@
+import { partDef } from '../data/parts';
 import { describe, expect, it } from 'vitest';
 import { PERK_NUMBERS } from '../data/skills';
 import { RULES } from '../data/rules';
@@ -36,7 +37,7 @@ describe('crash contacts', () => {
     const before = wheels.map((part) => part.hp);
     applyContactCrash(world, vehicle, null, 'rock', 6, { a: { side: 'front', lanes: [2] }, b: null });
     expect(wheels.map((part) => part.hp)).toEqual(before);
-    expect(mountedParts(vehicle).find((part) => part.defId === 'ram')?.hp).toBeLessThan(50);
+    expect(mountedParts(vehicle).find((part) => part.defId === 'ram')?.hp).toBeLessThan(partDef('ram').hp);
   });
 
   it('keeps armor protection across simultaneous contact lanes', () => {
