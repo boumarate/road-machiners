@@ -27,7 +27,7 @@ Route grids stamp each box's ground outline at the pose, for boxes that reach be
 
 Sight checks test each box whose height span covers eye height. So low fences, junk and wreck gaps leave sight open, and walls block it.
 
-The obstacle radius stays as a bounding circle for cheap tests: overlap during placement, spawning and which chunk draws a prop.
+The obstacle radius stays the placement footprint. Cheap tests that must not miss a collision, like sight prefilters and which chunk draws a prop, use `propReach(o)`, the farthest corner of its posed boxes.
 
 TDD: yes.
 
@@ -36,7 +36,7 @@ TDD: yes.
 - IV1 — The view and every collision user read one pose per obstacle from `propPose()`.
 - IV2 — Every prop model in use has a shape in `src/data/prop-shapes.json`, and the shape matches the current `.glb`.
 - IV3 — Every town and location stays reachable by route from every other.
-- IV4 — Each box lies inside its obstacle's bounding radius, so cheap radius tests never miss a collision.
+- IV4 — Every cheap radius test on a prop uses `propReach(o)`, the farthest posed box corner, so it never misses a collision. The obstacle radius stays the placement footprint.
 
 ### Principles
 
