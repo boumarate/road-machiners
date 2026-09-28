@@ -97,5 +97,5 @@ Work in `.worktrees/tiny-gameplay-tweaks`.
 - Checks: `npm test` gave 1411 passed. `npm run quality` passed. `npm run playtest` passed at 60 fps.
 - `npm run perf` fails boot time and the first turn. Main fails the same checks with worse numbers: boot 3173 ms against 2824 ms here, first turn 247 ms against 214 ms here.
 - Manual try, positive: the start is on the road with nothing discovered. The first NPCs spread over 8 sites. Screenshots show dust streams, black exhaust, white steam at heat 0.95 and black smoke when stranded. They also show haze at noon in a heat wave.
-- Manual try, finding: a truck parked at the start first sees a neutral driver on turn 45. Traffic is not busy at the start, because no initial spawn lands near it.
+- Manual try, finding: a truck parked at the start first saw a neutral driver on turn 45. The fix spawns two start traders at the Bowl gate, `SPAWN.startTraffic`. In 5 of 6 cases over seeds 1337, 1 and 7, their planned route passes within 4 tiles of the start. The sixth sells at Bowl first. The `testDrive` harness ignores routes, so the fix was measured on planned routes, not on turns.
 - Open: the user confirms the look of dust, exhaust, steam, smoke and haze in motion.

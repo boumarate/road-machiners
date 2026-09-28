@@ -233,7 +233,7 @@ Fuel and supplies limit range. Fuel burns per tile by chassis, times heat. Below
 - Goods: parts, scrap metal, salt, meds, grain, textiles, machine tools, batteries and electronics. Bowl and Nose trade every good. Each stall trades a few.
 - Region: Icarus, a 600-tile basin with Bowl and Nose as hubs, other destinations and two raider camps. The destinations include two canyon crossings and the Fallen Sun. Winding roads cross rolling grades between distinct landmarks. Towns lie on the roads, and other locations sit beside them on short spurs, so through traffic passes by. The player starts on the road out of Bowl, out of sight of every site and knowing none, so the first step is to ask a passing driver the way. See [landmark visuals](VISUAL_DESIGN.md).
 - Enemies: raider outriders and gunwagons with sampled chassis and equipment.
-- Neutrals: trader caravans and scavengers. Shooting one makes it and its nearby mates hostile. They spawn outside the gate of a random town or location, never close to the player.
+- Neutrals: trader caravans and scavengers. Shooting one makes it and its nearby mates hostile. They spawn outside the gate of a random town or location, never close to the player. Two traders start at the Bowl gate, so drivers soon pass the player on the start road.
 
 ## Out of scope for now
 

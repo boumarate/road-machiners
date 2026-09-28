@@ -23,12 +23,16 @@ export function spawnNpcs(world: World): void {
     const alive = world.vehicles.filter(
       (v) => v.brain?.templateId === tpl.id,
     ).length;
-    if (alive < tpl.cap) spawnOne(world, tpl, true);
+    if (alive < tpl.cap) spawnOne(world, tpl, () => siteFor(world, tpl), true);
   }
 }
 
+// The first drivers, plus start traffic at the town the player's road leaves, so drivers soon pass the player.
 export function spawnInitial(world: World): void {
-  for (const id of SPAWN.initial) spawnOne(world, NPCS[id], false);
+  for (const id of SPAWN.initial) spawnOne(world, NPCS[id], () => siteFor(world, NPCS[id]), false);
+  const town = REGION.towns.find((t) => t.id === SPAWN.startTraffic.town);
+  if (!town) throw new Error(`Unknown start traffic town ${SPAWN.startTraffic.town}`);
+  for (const id of SPAWN.startTraffic.templates) spawnOne(world, NPCS[id], () => town, false);
 }
 
 // Returns false when no free spot was found this time; the next interval tries again.
@@ -37,13 +41,12 @@ export function rollTraits(world: Rng, tpl: NpcTemplate): TraitId[] {
   return [...tpl.traits, ...tpl.extraTraits.filter((extra) => chance(world, extra.chance)).map((extra) => extra.trait)];
 }
 
-// A respawn keeps SPAWN.minPlayerDist from the player. Initial spawns do not.
-function spawnOne(world: World, tpl: NpcTemplate, respawn: boolean): boolean {
+// pick chooses the site for each try. A respawn keeps SPAWN.minPlayerDist from the player. Initial spawns do not.
+function spawnOne(world: World, tpl: NpcTemplate, pick: () => Site, respawn: boolean): boolean {
   const loadout = generateNpcLoadout(world, tpl);
   const radius = chassisDef(loadout.chassisId).radius;
   for (let i = 0; i < SPAWN.tries; i++) {
-    const site = tpl.spawn === "camp" ? campOf(world, tpl) : NEUTRAL_SITES[randInt(world, 0, NEUTRAL_SITES.length - 1)];
-    const pos = gateSpot(world, site, radius);
+    const pos = gateSpot(world, pick(), radius);
     if (respawn && dist(pos, playerVehicle(world).pos) < SPAWN.minPlayerDist) continue;
     if (!isFree(world, pos, radius, null)) continue;
     spawnAt(world, tpl, loadout, pos);
@@ -79,6 +82,11 @@ export function spawnAt(world: World, tpl: NpcTemplate, loadout: NpcLoadout, pos
 }
 
 const NEUTRAL_SITES: readonly Site[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== "camp")];
+
+// Raiders spawn at one of their camps, neutrals at any town or other location.
+function siteFor(world: World, tpl: NpcTemplate): Site {
+  return tpl.spawn === "camp" ? campOf(world, tpl) : NEUTRAL_SITES[randInt(world, 0, NEUTRAL_SITES.length - 1)];
+}
 
 // A random camp among the template's bases.
 function campOf(world: World, tpl: NpcTemplate): Site {

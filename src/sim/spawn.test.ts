@@ -3,7 +3,7 @@ import { NPCS, SPAWN } from '../data/npcs';
 import { REGION } from '../data/region';
 import { START_KITS } from '../data/start';
 import { playerVehicle } from './damage';
-import { sitePads } from './sites';
+import { siteGates, sitePads } from './sites';
 import { spawnNpcs } from './spawn';
 import { emptyWorld } from './testkit';
 import { dist } from './vec';
@@ -19,6 +19,14 @@ describe('NPC spawns', () => {
     const neutrals = w.vehicles.filter((v) => v.brain && NPCS[v.brain.templateId].spawn === 'town');
     const sites = new Set(neutrals.map((v) => nearestSite(v.pos).id));
     expect(sites.size).toBeGreaterThanOrEqual(3);
+  }, 15_000);
+
+  it('starts traders at the gate of the town the start road leaves', () => {
+    const w = newWorld(1337, START_KITS.standard);
+    const town = REGION.towns.find((t) => t.id === SPAWN.startTraffic.town)!;
+    const gate = siteGates(town)[0];
+    const atGate = w.vehicles.filter((v) => v.brain?.templateId === 'trader' && dist(v.pos, gate) <= SPAWN.gateSpread + 3);
+    expect(atGate.length).toBeGreaterThanOrEqual(SPAWN.startTraffic.templates.length);
   }, 15_000);
 
   it('never respawns a driver close to the player', () => {
