@@ -301,3 +301,65 @@ describe('convoy guards', () => {
     expect(optionWeights(w, orphan, 'idle', null, null)).not.toHaveProperty('escort');
   });
 });
+
+describe('hiring a merc', () => {
+  const NOSE = REGION.towns.find((t) => t.id === 'nose')!;
+
+  // A trader on its way to Nose with a free merc in sight beside it.
+  function onTrip(money: number): { w: World; trader: Vehicle; merc: Vehicle } {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const trader = createNpc(w, 'trader', ['trader'], 'hauler', ['mg', 'workhorseDiesel', 'trailerBox'], { x: 60, y: 60 });
+    trader.brain!.goals = [{ kind: 'sell', targetId: 'nose', destination: { ...NOSE.pos }, phase: 'travel', reason: 'test trip' }];
+    trader.resources!.money = money;
+    const merc = createNpc(w, 'merc', ['merc'], 'scout', ['mg', 'stockEngine'], { x: 66, y: 60 });
+    refreshVision(w);
+    return { w, trader, merc };
+  }
+
+  it('a client that hires a merc that takes the job gets an escort to its destination for the fee', () => {
+    const { w, trader, merc } = onTrip(5000);
+    forceOption('escortSeen', 'hire');
+    forceOption('hireOffered', 'take');
+    thinkNpc(w, trader);
+    const escort = escortOf(w, merc, trader);
+    expect(escort?.data).toEqual({ kind: 'escort', site: 'nose', fee: Math.round(dist(trader.pos, NOSE.pos) * NPC_BEHAVIOR.escortFeePerTile) });
+    expect(merc.brain!.goals[0].kind).toBe('follow');
+    expect(w.events.some((e) => e.t === 'escortHired' && e.by === merc.id && e.client === trader.id)).toBe(true);
+  });
+
+  it('a merc that declines leaves both drivers as they were', () => {
+    const { w, trader, merc } = onTrip(5000);
+    forceOption('escortSeen', 'hire');
+    forceOption('hireOffered', 'decline');
+    thinkNpc(w, trader);
+    expect(escortOf(w, merc, trader)).toBeNull();
+    expect(trader.brain!.goals[0].kind).toBe('sell');
+    expect(w.events.some((e) => e.t === 'escortRefused' && e.by === merc.id)).toBe(true);
+  });
+
+  it('a merc already on a job cannot take another', () => {
+    const { w, trader, merc } = onTrip(5000);
+    startEscort(w, merc, convoyAt(w, { x: 120, y: 120 }), null, 0);
+    expect(optionWeights(w, trader, 'escortSeen', merc.id, null)).not.toHaveProperty('hire');
+  });
+
+  it('a client that cannot pay the fee above its upkeep reserve cannot hire', () => {
+    const { w, trader, merc } = onTrip(0);
+    expect(optionWeights(w, trader, 'escortSeen', merc.id, null)).not.toHaveProperty('hire');
+  });
+
+  it('a client with no trip cannot hire', () => {
+    const { w, trader, merc } = onTrip(5000);
+    trader.brain!.goals = [];
+    expect(optionWeights(w, trader, 'escortSeen', merc.id, null)).not.toHaveProperty('hire');
+  });
+
+  it('a weak merc declines far more often', () => {
+    const { w, trader, merc } = onTrip(5000);
+    const healthy = optionChances(optionWeights(w, merc, 'hireOffered', trader.id, null)).decline!;
+    merc.resources!.health = 1;
+    const weak = optionChances(optionWeights(w, merc, 'hireOffered', trader.id, null)).decline!;
+    expect(healthy).toBeCloseTo(0.25, 1);
+    expect(weak).toBeGreaterThan(0.8);
+  });
+});

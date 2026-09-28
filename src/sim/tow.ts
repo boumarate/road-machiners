@@ -25,7 +25,7 @@ import { playerVehicle, vehicleById } from './damage';
 import { isDefeated, isKnockedOut } from './defeat';
 import { contactsOf, hearsBeacon } from './detect';
 import { route, routeLength } from './path';
-import { getKnownSite, npcProfile } from './npc-decisions';
+import { decide, getKnownSite, getUpkeepReserve, isWeak, npcProfile } from './npc-decisions';
 import { placeBase } from './npc-activities';
 import { skillEffect } from './progress';
 import { canUseSite, nearestPad, type Site } from './sites';
@@ -487,4 +487,63 @@ export function payEscort(w: World, s: NpcState): void {
   leader.money -= fee;
   getResources(w, vehicleById(w, s.holder)).money += fee;
   w.events.push({ t: 'escortPaid', by: s.holder, client: s.other, fee });
+}
+
+// ---- Hiring a merc.
+
+// Long-term goals that take a client to a site, so an escort knows where the job ends.
+const TRIPS: readonly NpcActivity['kind'][] = ['trade', 'sell', 'travel'];
+
+// The site at the bottom of the client's stack when it is a trip, else null.
+export function tripSite(client: Vehicle): string | null {
+  const base = client.brain?.goals[0];
+  return base && TRIPS.includes(base.kind) ? base.targetId : null;
+}
+
+// The fee grows with the straight distance from the client to its destination.
+export function escortFee(client: Vehicle, site: string): number {
+  return Math.round(dist(client.pos, getKnownSite(site).pos) * NPC_BEHAVIOR.escortFeePerTile);
+}
+
+// A merc that is awake and holds no escort.
+export function isFreeMerc(world: World, v: Vehicle): boolean {
+  if (!v.brain?.traits.includes('merc') || isDefeated(v)) return false;
+  return !world.states.some((s) => s.kind === 'escort' && s.holder === v.id);
+}
+
+// Free mercs the client sees and is at peace with, nearest first.
+export function mercsInSight(world: World, client: Vehicle): Vehicle[] {
+  const mercs = world.vehicles.filter((v) => v.id !== client.id && isFreeMerc(world, v) && !isHostile(world, client, v) && canVehicleSee(world, client, v.pos));
+  return mercs.sort((a, b) => dist(client.pos, a.pos) - dist(client.pos, b.pos));
+}
+
+// A client can hire a merc it sees while on a trip, with no escort yet and the fee above its upkeep reserve.
+export function canHire(world: World, client: Vehicle, merc: Vehicle): boolean {
+  const site = tripSite(client);
+  if (site === null || escortsOf(world, client.id).length > 0) return false;
+  if (getResources(world, client).money - getUpkeepReserve(client) < escortFee(client, site)) return false;
+  return mercsInSight(world, client).some((v) => v.id === merc.id);
+}
+
+// The merc rolls its answer. Taking the job starts the escort to the client's destination for the fee.
+export function offerEscort(world: World, client: Vehicle, merc: Vehicle): void {
+  const site = tripSite(client);
+  if (site === null) throw new Error(`${client.id} offers an escort with no trip`);
+  if (decide(world, merc, 'hireOffered', client.id, null) === 'decline') {
+    world.events.push({ t: 'escortRefused', by: merc.id, client: client.id });
+    return;
+  }
+  const fee = escortFee(client, site);
+  startEscort(world, merc, client, site, fee);
+  world.events.push({ t: 'escortHired', by: merc.id, client: client.id, site, fee });
+}
+
+// A merc takes a job only while free and at peace with the client.
+export function canTakeEscort(world: World, merc: Vehicle, client: Vehicle): boolean {
+  return isFreeMerc(world, merc) && !isHostile(world, merc, client);
+}
+
+// A weak merc mostly declines.
+export function declineFactor(world: World, merc: Vehicle): number {
+  return isWeak(world, merc) ? NPC_BEHAVIOR.weakDecline : 1;
 }

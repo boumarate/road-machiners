@@ -31,7 +31,7 @@ import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, RefitJob
 import { canUseSite, nearestPad } from './sites';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
-import { dropTow, follows, inTowReach, isOnRope, joinLeader, npcHomeSite, runTow, steerFollow, strandedAt, towGoal, towHeldBy } from './tow';
+import { dropTow, follows, inTowReach, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut, refitAtHome } from './defeat';
 
 // ---- The goal stack. The top goal drives the NPC. A long-term goal sits at the bottom, and interruptions go on top
@@ -430,7 +430,7 @@ function perceives(world: World, vehicle: Vehicle, decision: string, id: string,
   return PERCEIVES[decision as NoticedDecision](world, vehicle, id, contacts);
 }
 
-type NoticedDecision = 'hostileSeen' | 'contactHeard' | 'preySeen' | 'strandedSeen' | 'salvageSeen' | 'ramChance';
+type NoticedDecision = 'hostileSeen' | 'contactHeard' | 'preySeen' | 'strandedSeen' | 'salvageSeen' | 'ramChance' | 'escortSeen';
 
 type Perception = (world: World, vehicle: Vehicle, id: string, contacts: Contact[]) => boolean;
 
@@ -461,6 +461,7 @@ const PERCEIVES: Record<NoticedDecision, Perception> = {
   strandedSeen: seesVehicle,
   salvageSeen: seesStock,
   ramChance: hasRamChance,
+  escortSeen: seesVehicle,
 };
 
 // Rolls a decision about a subject once while the subject stays noticed. Null when it already is. When only keep
@@ -637,6 +638,14 @@ function onSalvageSeen(world: World, vehicle: Vehicle): void {
   if (loot) pushGoal(world, vehicle, createActivity('loot', loot.id, { ...loot.pos }, 'loot salvage on the way'));
 }
 
+// One roll per free merc in sight, nearest first, while the driver is out of danger. Hire asks the merc, who takes
+// the job or declines. Either way the driver has decided on that merc while it stays in sight.
+function onEscortSeen(world: World, vehicle: Vehicle): void {
+  if (inDanger(vehicle)) return;
+  const merc = mercsInSight(world, vehicle).find((m) => react(world, vehicle, 'escortSeen', m.id) === 'hire');
+  if (merc) offerEscort(world, vehicle, merc);
+}
+
 // One roll per ram chance on the fight target on top. The choice holds while the chance lasts, and the fight
 // planner rams only while the target stays within reach. A driver that keeps fights from its range.
 function onRamChance(world: World, vehicle: Vehicle): void {
@@ -732,6 +741,7 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   onPreySeen(world, vehicle);
   onStrandedSeen(world, vehicle);
   onSalvageSeen(world, vehicle);
+  onEscortSeen(world, vehicle);
   onRamChance(world, vehicle);
   steer(world, vehicle, profile, contacts);
   return currentActivity(world, vehicle, profile, hold);

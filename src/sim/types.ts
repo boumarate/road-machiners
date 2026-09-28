@@ -337,6 +337,8 @@ export type GameEvent =
   | { t: 'towHitched'; by: string; client: string; site: string }
   | { t: 'towDone'; by: string; client: string; fee: number }
   | { t: 'escortPaid'; by: string; client: string; fee: number }
+  | { t: 'escortHired'; by: string; client: string; site: string; fee: number }
+  | { t: 'escortRefused'; by: string; client: string }
   | { t: 'towDropped'; by: string; client: string; reason: 'refused' | 'unhitched' | 'danger' | 'gone' }
   | { t: 'stateEnded'; state: NpcState; ending: StateEnding }
   | { t: 'job'; vehicle: string; job: Job; outcome: 'started' | 'done' | 'cancelled' }

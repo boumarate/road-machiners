@@ -235,6 +235,14 @@ function escortPaidText(world: World, e: Extract<GameEvent, { t: 'escortPaid' }>
   return { text: `${vehicleName(world, e.client)} pays ${vehicleName(world, e.by)} ${e.fee} for the escort.`, cls: 'dim' };
 }
 
+function escortHiredText(world: World, e: Extract<GameEvent, { t: 'escortHired' }>): LogLine {
+  return { text: `${vehicleName(world, e.client)} hires ${vehicleName(world, e.by)} as escort to ${siteName(e.site)} for ${e.fee}.`, cls: 'dim' };
+}
+
+function escortRefusedText(world: World, e: Extract<GameEvent, { t: 'escortRefused' }>): LogLine {
+  return { text: `${vehicleName(world, e.by)} turns down an escort job from ${vehicleName(world, e.client)}.`, cls: 'dim' };
+}
+
 function towDroppedText(world: World, e: Extract<GameEvent, { t: 'towDropped' }>): LogLine {
   const by = vehicleName(world, e.by);
   if (e.client === world.player.vehicleId) return playerTowDroppedText(by, e.reason);
@@ -274,6 +282,8 @@ const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => st
   towHitched: (e) => [e.by, e.client],
   towDone: (e) => [e.by, e.client],
   escortPaid: (e) => [e.by, e.client],
+  escortHired: (e) => [e.by, e.client],
+  escortRefused: (e) => [e.by, e.client],
   towDropped: (e) => [e.by, e.client],
 };
 
@@ -357,6 +367,8 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   towHitched: towHitchedText,
   towDone: towDoneText,
   escortPaid: escortPaidText,
+  escortHired: escortHiredText,
+  escortRefused: escortRefusedText,
   towDropped: towDroppedText,
 };
 

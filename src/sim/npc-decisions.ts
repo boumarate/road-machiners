@@ -36,7 +36,7 @@ import { canReachSalvage, canTakeAny, canTakeFromTruck, siteLootTable } from './
 import { canUseSite, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { stateOf, statesHeld } from './states';
 import { getMobilityCondition, vehicleStats } from './stats';
-import { inTowReach, strandedAt, towSite, unguardedLeader } from './tow';
+import { canHire, canTakeEscort, declineFactor, inTowReach, strandedAt, towSite, unguardedLeader } from './tow';
 import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
@@ -337,6 +337,16 @@ type Availability = (world: World, vehicle: Vehicle, decision: DecisionId, subje
 
 const always = (): boolean => true;
 
+// A client hires a free merc it sees while on a trip, with the fee above its upkeep reserve.
+function canHireSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  return canHire(world, vehicle, subjectOf(world, decision, subject));
+}
+
+// A merc takes the job while free and at peace with the client.
+function canTakeSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  return canTakeEscort(world, vehicle, subjectOf(world, decision, subject));
+}
+
 function subjectOf(world: World, decision: DecisionId, subject: string | null): Vehicle {
   if (subject === null) throw new Error(`${decision} needs a subject`);
   return vehicleById(world, subject);
@@ -448,6 +458,9 @@ const AVAILABLE: Record<OptionName, Availability> = {
   spare: always,
   finish: always,
   comply: always,
+  hire: canHireSubject,
+  take: canTakeSubject,
+  decline: always,
 };
 
 // ---- Situation factors, one per option. Each returns a number above 0.
@@ -640,6 +653,9 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   spare: neutral,
   finish: neutral,
   comply: complyFactor,
+  hire: neutral,
+  take: neutral,
+  decline: (world, vehicle) => declineFactor(world, vehicle),
 };
 
 // ---- Weights and the roll.

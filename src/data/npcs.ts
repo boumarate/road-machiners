@@ -682,6 +682,8 @@ export type DecisionOptions = {
   resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal
   // The goal stack is empty. Escort joins a leader that no escort guards yet.
   idle: 'trade' | 'scavenge' | 'raid' | 'wait' | 'patrol' | 'travel' | 'explore' | 'haul' | 'escort';
+  escortSeen: 'keep' | 'hire'; // a free merc comes in sight while the driver travels to a site
+  hireOffered: 'take' | 'decline'; // a driver asks this merc to escort it for a fee
 };
 export type DecisionId = keyof DecisionOptions;
 export type OptionId = DecisionOptions[DecisionId];
@@ -726,6 +728,10 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   // Anyone collects salvage in sight. Trading, raiding, patrols, trips, exploring, hauls and escorts more than
   // rarely need a trait. Waiting is the small fallback.
   idle: { trade: 0, scavenge: 1, raid: 0, wait: 0.1, patrol: 0, travel: 0, explore: 0, haul: 0, escort: 0 },
+  // Hiring a merc more than rarely needs a trait.
+  escortSeen: { keep: 1, hire: 0 },
+  // Three mercs in four take a job they are offered. A weak merc mostly declines.
+  hireOffered: { take: 3, decline: 1 },
 };
 
 // A weight change: `add` raises an option with zero base weight above MIN_CHANCE, and `mul` tunes an option.
@@ -838,6 +844,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // fight rams about 1 time in 100: a ram weight of 9 drops to 0.009. Trading beats
   // salvage in sight 3 to 1. Nine in ten traders help a stranded truck. Traders want peace: they shrug off 19
   // crashes in 20, ask for truces, take nearly every truce and spare a beaten foe. Threatened, they mostly pay.
+  // A trader on its way hires about one free merc in two it sees.
   trader: {
     towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1,
     weights: {
@@ -845,6 +852,7 @@ export const TRAITS: Record<TraitId, Trait> = {
       hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } }, ramChance: { ram: { mul: 0.001 } },
       crashed: { retaliate: { mul: 0.2 } }, parley: { truce: { add: 2 } }, truceOffered: { accept: { add: 4 } },
       mercyBegged: { spare: { add: 3 } }, threatened: { comply: { add: 1 }, fightBack: { mul: 0.1 } },
+      escortSeen: { hire: { add: 1 } },
     },
   },
   // Raiders fight most hostiles they see and close in on most useful contacts. A raid ties with salvage in sight.
@@ -866,12 +874,13 @@ export const TRAITS: Record<TraitId, Trait> = {
   // A coward runs three times as often from a new hostile or a shot, picks a fight half as often, and shoots back
   // at a third of the weight. Boldness 0.6 makes a truck that looks as dangerous as its own a threat, even at the
   // lowest misjudgment. It asks for a truce twice as often and begs three times as often. Threatened, it runs or
-  // pays.
+  // pays. It hires a merc three times as readily.
   coward: {
     towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 0.6,
     weights: {
       hostileSeen: { flee: { mul: 3 }, fight: { mul: 0.5 } }, attacked: { flee: { mul: 3 }, fightBack: { mul: 0.3 } },
       parley: { truce: { mul: 2 }, beg: { mul: 3 } }, threatened: { flee: { mul: 3 }, comply: { add: 1 } },
+      escortSeen: { hire: { mul: 3 } },
     },
   },
   // Lawmen patrol their town and hunt raiders and first shooters at neutral NPCs. They fight most hostiles they
@@ -888,21 +897,22 @@ export const TRAITS: Record<TraitId, Trait> = {
   },
   // Couriers carry small loads between every town and location. An idle courier sets out on a trip nearly always.
   // Stopping for salvage on the way or at all stays at about the minimum chance: a scavenge weight of 1 drops to
-  // 0.001. Two in three couriers help a stranded truck.
+  // 0.001. Two in three couriers help a stranded truck. A courier hires about one free merc in three it sees.
   courier: {
     towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'],
     travelSites: ['bowl', 'nose', 'orchard', 'dustwell', 'granary', 'burnt-convoy', 'podfield', 'canyon-bridge', 'glass-flats', 'green-pit', 'south-lock', 'ridge-wrecks', 'pump-station', 'fallen-sun', 'salvage-yard'],
     haulSites: [], contactReactRadius: 12, boldness: 1,
     weights: {
       idle: { travel: { add: 20 }, scavenge: { mul: 0.001 } }, strandedSeen: { tow: { add: 2 } },
-      hostileSeen: { fight: { mul: 0.1 } }, threatened: { comply: { add: 1 } },
+      hostileSeen: { fight: { mul: 0.1 } }, threatened: { comply: { add: 1 } }, escortSeen: { hire: { add: 0.5 } },
     },
   },
   // Roamers go where nobody goes. An idle roamer explores about three times in five, and trades or scavenges about
-  // one time in five each. Three in four roamers stop for salvage they pass, like scavengers.
+  // one time in five each. Three in four roamers stop for salvage they pass, like scavengers. A roamer hires about
+  // one free merc in six it sees.
   roamer: {
     towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1,
-    weights: { idle: { explore: { add: 10 }, trade: { add: 3 }, scavenge: { add: 2 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 3 } } },
+    weights: { idle: { explore: { add: 10 }, trade: { add: 3 }, scavenge: { add: 2 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 3 } }, escortSeen: { hire: { add: 0.2 } } },
   },
   // Supply convoys haul fuel drums from the Pump Station and water from the oases to the towns. An idle convoy
   // hauls nearly always, and stops for salvage only at about the minimum chance. Like traders, convoys avoid
@@ -935,6 +945,12 @@ export const TRAITS: Record<TraitId, Trait> = {
 };
 
 export const NPC_BEHAVIOR = {
+  // Escort fee per tile of straight distance from the client to its destination. Bowl and Nose lie about 520 tiles
+  // apart. A trader load of about 8 units earns about 50 a unit there, so about 400. 0.15 a tile makes that escort
+  // cost about 78, a fifth of the load's profit.
+  escortFeePerTile: 0.15,
+  // Decline weight times this when the merc is weak. A decline weight of 1 against take 3 then wins about 7 to 1.
+  weakDecline: 20,
   // Tiles from a town gate a patrol drives out to: the gate guns' range plus one sight radius, so a patrol covers
   // the road just past the guns.
   patrolRadius: RULES.guards.range + TERRAIN.vision.radius,
