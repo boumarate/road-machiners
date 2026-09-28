@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { START_KITS } from '../data/start';
 import { PHYSICS } from '../data/physics';
-import { boxDistance, boxSegmentDistance, isBakedObstacle, isDriveObstacle, mapObstacles, propBoxes, propPose, propReach, propShape, segmentCrossesBox } from './mapgen';
+import { boxDistance, boxSegmentDistance, isBakedObstacle, isBreakable, isDriveObstacle, mapObstacles, propBoxes, propPose, propReach, propShape, segmentCrossesBox } from './mapgen';
 import { ROAD_INDEX } from './road-index';
 import type { Obstacle } from './types';
 import { dist } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
-import type { BakedMap, BakedProp } from './terrain';
+import { PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
 
@@ -63,6 +63,22 @@ describe('baked map obstacles', () => {
     const blocking = mapObstacles(mapWith(kinds.map((kind, k) => prop(kind, k * 10))));
 
     for (const o of blocking) expect(isDriveObstacle(o)).toBe(true);
+  });
+});
+
+describe('breakable props', () => {
+  it('only fences and junk piles break', () => {
+    const landmarks = mapObstacles(mapWith(PROP_KINDS.filter((k) => k !== 'rock').map((kind, i) => prop(kind, 10 + i * 10))));
+    const others: Obstacle[] = [
+      { id: 'rock0', pos: { x: 10, y: 50 }, r: 1, kind: 'rock' },
+      { id: 'wreck0', pos: { x: 10, y: 50 }, r: 1, kind: 'wreck' },
+      { id: 'bld-a-0', pos: { x: 10, y: 50 }, r: 1, kind: 'building' },
+      { id: 'pond-a', pos: { x: 10, y: 50 }, r: 1, kind: 'water' },
+      { id: 'site-a', pos: { x: 10, y: 50 }, r: 1, kind: 'site' },
+    ];
+
+    expect(landmarks.filter(isBreakable).map((o) => (o as Landmark).look).sort()).toEqual(['fence', 'junk']);
+    expect(others.filter(isBreakable)).toEqual([]);
   });
 });
 

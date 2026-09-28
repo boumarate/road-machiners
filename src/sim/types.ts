@@ -227,6 +227,10 @@ export type Obstacle =
   // yaw is the direction a landmark faces, in radians from map +x toward +y.
   | { id: string; pos: Vec; r: number; kind: "landmark"; look: LandmarkLook; yaw: number };
 
+// A prop a truck broke on `turn`. It keeps the whole obstacle, so it grows back unchanged. See breakProp() in
+// src/sim/salvage.ts.
+export type BrokenProp = { obstacle: Obstacle; turn: number };
+
 // A timed relation one vehicle holds toward another. src/sim/states.ts owns them.
 export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce' | 'grievance' | 'plea' | 'trade' | 'revenge' | 'escort';
 export type StateEnding = 'expired' | 'fulfilled' | 'broken';
@@ -376,6 +380,7 @@ export type World = {
   nextId: number;
   vehicles: Vehicle[];
   obstacles: Obstacle[];
+  broken: BrokenProp[]; // props out of obstacles until they grow back; a prop is in one list or the other
   salvage: SalvageStock[];
   shops: Record<string, ShopState>; // shop id -> prices, stock and contract board; see src/sim/market.ts
   terrain: Terrain; // corner heights and tile types, from the baked map file

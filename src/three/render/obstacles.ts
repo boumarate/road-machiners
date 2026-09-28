@@ -1,6 +1,6 @@
 // Static map obstacles: rocks, wrecks, buildings, water and baked landmarks. Map rocks are drawn once
 // as an instanced model per terrain chunk. Other obstacles are synced by id, so wrecks that appear mid-game (a vehicle dying)
-// get added without touching the rest. Loose loot piles are synced the same way.
+// get added without touching the rest. Loose loot piles and the debris of broken props are synced the same way.
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -10,7 +10,7 @@ import { PHYSICS } from '../../data/physics';
 import { propPose, propReach, type PropPose } from '../../sim/mapgen';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import { hasSalvage, salvageUnits } from '../../sim/salvage';
-import type { Obstacle, SalvageStock } from '../../sim/types';
+import type { BrokenProp, Obstacle, SalvageStock } from '../../sim/types';
 import { dist } from '../../sim/vec';
 import { instancedModel, model, socket } from './models';
 import type { RenderScope } from './scope';
@@ -20,11 +20,14 @@ const S = PHYSICS.metersPerTile;
 const CRATES_RADIUS = 1.5; // meters, the reference radius of tools/blender/crates.py
 const PILE_FULL_UNITS = 20; // loot units at which a pile reaches the crates model's full size, about a full pickup bed
 const PILE_MIN_SIZE = 0.5; // share of full size for a small pile, so it still reads at the default zoom
+const DEBRIS_SCATTER = 0.3; // meters a debris piece lies at most from where it stood, so the pieces read as one wreckage
+const DEBRIS_TURN = 0.4; // radians a debris piece turns at most, so the pieces do not line up like the standing prop
 
 export class ObstacleViews {
   private readonly byId = new Map<string, THREE.Object3D>();
   private rockIds: Set<string> | null = null; // map rocks, fixed at the first sync with the power lines
   private readonly piles = new Map<string, { obj: THREE.Object3D; units: number }>();
+  private readonly debris = new Map<string, THREE.Object3D>();
 
   constructor(private readonly scope: RenderScope, private readonly terrain: Terrain) {}
 
@@ -59,6 +62,27 @@ export class ObstacleViews {
       this.scope.remove(obj);
       disposeTree(obj);
       this.byId.delete(id);
+    }
+  }
+
+  // Each broken prop lies as debris where it stood until it grows back. Debris blocks nothing.
+  syncDebris(broken: readonly BrokenProp[]): void {
+    const ids = new Set(broken.map((b) => b.obstacle.id));
+    for (const [id, obj] of this.debris) {
+      if (ids.has(id)) continue;
+      this.scope.remove(obj);
+      disposeTree(obj);
+      this.debris.delete(id);
+    }
+    for (const { obstacle } of broken) {
+      if (this.debris.has(obstacle.id)) continue;
+      const obj = buildDebris(this.terrain, obstacle);
+      obj.traverse((m) => {
+        m.updateMatrix();
+        m.matrixAutoUpdate = false;
+      });
+      this.scope.add(obj, obstacle.pos, propReach(obstacle) + DEBRIS_SCATTER / S);
+      this.debris.set(obstacle.id, obj);
     }
   }
 
@@ -166,6 +190,45 @@ function buildProp(t: Terrain, o: Obstacle): THREE.Object3D {
   if (pose.model === 'building') paintRoof(obj, o.id);
   g.add(obj);
   return g;
+}
+
+// A broken prop's model at its pose, each piece tipped over flat onto the ground, pushed and turned a little.
+function buildDebris(t: Terrain, o: Obstacle): THREE.Object3D {
+  const pose = propPose(o);
+  const g = posed(t, pose);
+  const obj = model(pose.model);
+  obj.updateMatrixWorld(true);
+  const pieces: THREE.Mesh[] = [];
+  obj.traverse((m) => {
+    if (m instanceof THREE.Mesh) pieces.push(m);
+  });
+  pieces.forEach((mesh, i) => g.add(tipPiece(mesh, `${o.id}:${i}`)));
+  return g;
+}
+
+// A copy of one model piece in a pivot at its ground point below its center. The pivot turns a quarter about the
+// model's forward axis, so the piece lies on its side, and rises until the piece's lowest point rests on the ground.
+// The key seeds its side, push and turn.
+function tipPiece(mesh: THREE.Mesh, key: string): THREE.Object3D {
+  const piece = new THREE.Mesh(mesh.geometry, mesh.material);
+  piece.castShadow = mesh.castShadow;
+  piece.receiveShadow = mesh.receiveShadow;
+  mesh.matrixWorld.decompose(piece.position, piece.quaternion, piece.scale);
+  const center = new THREE.Box3().setFromObject(piece).getCenter(new THREE.Vector3());
+  piece.position.x -= center.x;
+  piece.position.z -= center.z;
+  const pivot = new THREE.Group();
+  pivot.add(piece);
+  const side = hashStr(`${key}:side`) < 0.5 ? 1 : -1;
+  pivot.rotation.set((side * Math.PI) / 2, (hashStr(`${key}:turn`) * 2 - 1) * DEBRIS_TURN, 0, 'YXZ');
+  pivot.position.set(center.x + jitter(`${key}:x`), 0, center.z + jitter(`${key}:z`));
+  pivot.updateMatrixWorld(true);
+  pivot.position.y = -new THREE.Box3().setFromObject(pivot).min.y;
+  return pivot;
+}
+
+function jitter(key: string): number {
+  return (hashStr(key) * 2 - 1) * DEBRIS_SCATTER;
 }
 
 function paintRoof(house: THREE.Object3D, id: string): void {

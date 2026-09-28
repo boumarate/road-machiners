@@ -2,12 +2,12 @@ import { FIELD_SPARE_WEAR, SALVAGE, type LootRange, type LootTable } from '../da
 import { SHOPS } from '../data/market';
 import { ECONOMY, GOODS } from '../data/goods';
 import { REGION, type LocationDef } from '../data/region';
-import { RULES } from '../data/rules';
+import { BREAKABLE, RULES } from '../data/rules';
 import { TIME } from '../data/time';
 import { chassisDef } from '../data/chassis';
 import { partDef } from '../data/parts';
 import { makePart, newId } from './factory';
-import { findRoadWreckSpot } from './mapgen';
+import { findRoadWreckSpot, isBreakable, propReach } from './mapgen';
 import { playerVehicle, vehicleById } from './damage';
 import { isKnockedOut } from './defeat';
 import { grayRadius } from './vision';
@@ -18,7 +18,9 @@ import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import { cancelJob, inCombat, startJob } from './jobs';
-import type { GridItem, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
+import type { GridItem, Obstacle, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
+import { estimateCrashGeometry } from './crash-contact';
+import { walkLane } from './armor';
 import { canUseSite, townAt } from './sites';
 import { inTowReach } from './tow';
 import { playerCommand } from './world';
@@ -305,6 +307,7 @@ export function renewSalvage(world: World): void {
     if (table) restockSite(world, siteStock(world, site.id), table);
   }
   turnOverRoadWrecks(world);
+  regrowBroken(world);
 }
 
 function siteStock(world: World, id: string): SalvageStock {
@@ -351,6 +354,39 @@ function replaceRoadWreck(world: World, old: SalvageStock): void {
   if (world.obstacles.some((o) => o.id === id)) throw new Error(`Duplicate road wreck ${id}`);
   world.obstacles.push({ id, ...spot, kind: 'wreck' });
   world.salvage.push(rollStock(world, SALVAGE.roadWreck, id, spot.pos, spot.r * RULES.wreckRadiusScale));
+}
+
+// ---- Breakable props. A fence or junk pile a truck breaks leaves the obstacles until it grows back out of sight.
+
+// The truck breaks through the prop: the prop leaves the obstacles for the broken props, the truck loses a share of
+// its speed, and the part that hit takes a scrape. Runs on a draft, like every turn step.
+export function breakProp(world: World, id: string, vehicleId: string): void {
+  const prop = world.obstacles.find((o) => o.id === id);
+  if (!prop || !isBreakable(prop)) throw new Error(`No standing breakable prop ${id}`);
+  const vehicle = vehicleById(world, vehicleId);
+  world.obstacles = world.obstacles.filter((o) => o !== prop);
+  world.broken.push({ obstacle: prop, turn: world.turn });
+  vehicle.speed *= 1 - BREAKABLE.slowdown;
+  // The lane in the middle of the side facing the prop takes the scrape, through the crash damage path.
+  const contact = estimateCrashGeometry(vehicle, null, prop.pos).a;
+  const lane = contact.lanes[Math.floor(contact.lanes.length / 2)];
+  const hitsA = walkLane(world, vehicle, contact.side, lane, { damage: BREAKABLE.damage, pen: RULES.crashPen, blast: false });
+  world.events.push({ t: 'collision', a: vehicle.id, b: id, hitsA, hitsB: [] });
+}
+
+// A broken prop grows back once its days have passed, when no part of it lies in the player's gray vision and no
+// truck stands in its way.
+function regrowBroken(world: World): void {
+  const due = world.broken.filter((b) => world.turn - b.turn >= BREAKABLE.regrowDays * TIME.turnsPerDay);
+  const back = due.filter(({ obstacle }) => canRegrow(world, obstacle));
+  if (back.length === 0) return;
+  world.broken = world.broken.filter((b) => !back.includes(b));
+  world.obstacles.push(...back.map((b) => b.obstacle));
+}
+
+function canRegrow(world: World, o: Obstacle): boolean {
+  const reach = propReach(o);
+  return dist(playerVehicle(world).pos, o.pos) > grayRadius(world, o.pos) + reach && clearOfVehicles(world, o.pos, reach);
 }
 
 function inPlayerView(world: World, pos: Vec): boolean {

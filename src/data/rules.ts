@@ -1,4 +1,5 @@
 import type { Tier } from './market';
+import type { LandmarkLook } from '../sim/types';
 // Global rule numbers. Tuned by playing.
 
 export const RULES = {
@@ -120,4 +121,15 @@ export const CHEATS = {
   spawnAngles: 12, // points tried on the spawn circle before the ring search
   searchStep: 1, // spacing between rings and between points on a ring, in the free spot search
   searchRings: 20, // rings searched around a target before giving up
+};
+
+// Props a truck smashes through: fences and junk piles. Every other prop holds like a wall. See breakProp() in
+// src/sim/salvage.ts.
+export const BREAKABLE = {
+  kinds: ['fence', 'junk'] as readonly LandmarkLook[], // landmark looks that break; a fence is planks and a junk pile loose scrap
+  breakSpeed: 3, // m/s, about 11 km/h: a truck rolling faster than walking pace breaks through, a creeping one stops
+  slowdown: 0.3, // share of its speed a truck loses breaking through, so smashing a fence costs time
+  damage: 2, // HP a break deals to the part that hit before armor: a scrape, a third of the softest wall crash (ramDamage × crashDamage × collisionMinImpact², about 6)
+  regrowDays: 3, // game days before a broken prop may grow back, like a looted road wreck's wreckClearDays
+  routeCost: 8, // step cost multiplier of a route cell under a breakable prop, so a detour of a few cells beats smashing through
 };

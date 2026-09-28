@@ -9,11 +9,12 @@ import { addGoods, dumpItem, removeGoods } from './inventory';
 import { corePart, findSpot, goodsCount, gridOf, mountedParts } from './grid';
 import { partDef } from '../data/parts';
 import { chassisDef } from '../data/chassis';
-import { RULES } from '../data/rules';
+import { BREAKABLE, RULES } from '../data/rules';
 import { takeAllLoot, takeLoot, takeStores, canScavenge, scavenge } from './locations';
-import { clearPiles, collectSalvage, createCargoSalvage, hasSalvage, initializeSalvage, isRoadWreck, renewSalvage, salvageInRange, salvageUnits, siteLootTable } from './salvage';
+import { breakProp, clearPiles, collectSalvage, createCargoSalvage, hasSalvage, initializeSalvage, isRoadWreck, renewSalvage, salvageInRange, salvageUnits, siteLootTable } from './salvage';
 import { SHOPS } from '../data/market';
-import type { SalvageStock, World } from './types';
+import type { Obstacle, SalvageStock, World } from './types';
+import { propReach } from './mapgen';
 import { dist, type Vec } from './vec';
 import { maxHp } from './wear';
 import { grayRadius } from './vision';
@@ -423,5 +424,97 @@ describe('road wreck turnover', () => {
     npc.job = { kind: 'search', stockId: 'wreck0', turnsLeft: 3, total: 3 };
     runDays(w, SALVAGE.wreckClearDays + 1);
     expect(npc.job).toBeNull();
+  });
+});
+
+describe('breakable props', () => {
+  const near = { x: 30, y: 30 };
+  const far = { x: REGION.size - 20, y: REGION.size - 20 };
+  const fenceAt = (pos: Vec): Obstacle => ({ id: 'fence-7', pos, r: 0.5, kind: 'landmark', look: 'fence', yaw: Math.PI / 2 });
+
+  function worldWithFence(pos: Vec): World {
+    const w = emptyWorld(near);
+    w.obstacles = [fenceAt(pos)];
+    return w;
+  }
+
+  it('moves a broken prop from the obstacles to the broken props', () => {
+    const w = worldWithFence({ x: 30.6, y: 30 });
+    w.turn = 42;
+
+    breakProp(w, 'fence-7', w.vehicles[0].id);
+
+    expect(w.obstacles).toEqual([]);
+    expect(w.broken).toEqual([{ obstacle: fenceAt({ x: 30.6, y: 30 }), turn: 42 }]);
+  });
+
+  it('slows the truck and scrapes the part that hit', () => {
+    const w = worldWithFence({ x: 30.6, y: 30 });
+    const me = w.vehicles[0];
+    me.speed = 3;
+
+    breakProp(w, 'fence-7', me.id);
+
+    const crash = w.events.find((e) => e.t === 'collision');
+    if (crash?.t !== 'collision') throw new Error('Expected a collision event');
+    const dealt = crash.hitsA.reduce((sum, hit) => sum + hit.damage, 0);
+    expect(me.speed).toBeCloseTo(3 * (1 - BREAKABLE.slowdown));
+    expect(crash).toMatchObject({ a: me.id, b: 'fence-7', hitsB: [] });
+    expect(dealt).toBeGreaterThan(0);
+    expect(dealt).toBeLessThanOrEqual(BREAKABLE.damage);
+  });
+
+  it('refuses a prop that does not break, or one not standing', () => {
+    const w = worldWithFence({ x: 30.6, y: 30 });
+    w.obstacles.push({ id: 'rock3', pos: { x: 32, y: 30 }, r: 0.5, kind: 'rock' });
+    const before = structuredClone(w.obstacles);
+
+    expect(() => breakProp(w, 'rock3', w.vehicles[0].id)).toThrow(/rock3/);
+    expect(() => breakProp(w, 'fence-9', w.vehicles[0].id)).toThrow(/fence-9/);
+    expect(w.obstacles).toEqual(before);
+    expect(w.broken).toEqual([]);
+  });
+
+  it('grows back beyond gray vision once its days have passed', () => {
+    const w = worldWithFence(far);
+    w.turn = TIME.turnsPerDay;
+    breakProp(w, 'fence-7', w.vehicles[0].id);
+
+    runDays(w, BREAKABLE.regrowDays - 1);
+    expect(w.obstacles).toEqual([]);
+    runDays(w, 1);
+    expect(w.obstacles).toEqual([fenceAt(far)]);
+    expect(w.broken).toEqual([]);
+  });
+
+  it('stays broken while its spot lies in gray vision', () => {
+    const w = worldWithFence({ x: 40, y: 30 });
+    breakProp(w, 'fence-7', w.vehicles[0].id);
+
+    runDays(w, BREAKABLE.regrowDays + 2);
+
+    expect(w.obstacles).toEqual([]);
+    expect(w.broken.map((b) => b.obstacle.id)).toEqual(['fence-7']);
+  });
+
+  it('stays broken while any part of the prop reaches into gray vision', () => {
+    const w = emptyWorld(near);
+    const pos = { x: near.x + grayRadius(w, near) + propReach(fenceAt(near)) / 2, y: near.y };
+    w.obstacles = [fenceAt(pos)];
+    breakProp(w, 'fence-7', w.vehicles[0].id);
+
+    runDays(w, BREAKABLE.regrowDays + 2);
+
+    expect(w.obstacles).toEqual([]);
+  });
+
+  it('waits while a truck stands on its spot', () => {
+    const w = worldWithFence(far);
+    breakProp(w, 'fence-7', w.vehicles[0].id);
+    addVehicle(w, 'scavengers', 'scout', [], far);
+
+    runDays(w, BREAKABLE.regrowDays + 2);
+
+    expect(w.obstacles).toEqual([]);
   });
 });

@@ -3,6 +3,7 @@
 import { PHYSICS } from '../data/physics';
 import SHAPES from '../data/prop-shapes.json';
 import { REGION } from '../data/region';
+import { BREAKABLE } from '../data/rules';
 import { PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
 import { randInt, randRange } from './rng';
 import { TERRAIN } from '../data/terrain';
@@ -115,6 +116,11 @@ function overlapsAny(out: Obstacle[], pos: Vec, r: number): boolean {
 // Site props are scenery. The whole site boundary blocks traffic instead.
 export function isDriveObstacle(o: Obstacle): boolean {
   return o.kind !== 'building' && o.kind !== 'water' && !o.id.startsWith('cw-');
+}
+
+// Fences and junk piles break when a truck drives into them fast enough. See breakProp() in src/sim/salvage.ts.
+export function isBreakable(o: Obstacle): boolean {
+  return o.kind === 'landmark' && BREAKABLE.kinds.includes(o.look);
 }
 
 // A prop on the narrow bridge deck would close the crossing.

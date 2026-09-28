@@ -1,7 +1,7 @@
 import type { BakedMap } from '../sim/terrain';
-import { isBakedObstacle, mapObstacles } from '../sim/mapgen';
+import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
-import type { World } from '../sim/types';
+import type { BrokenProp, Obstacle, World } from '../sim/types';
 
 const SAVE_KEY = 'roam.save';
 
@@ -16,7 +16,7 @@ export function hasSave(storage: Storage): boolean {
   return storage.getItem(SAVE_KEY) !== null;
 }
 
-// Saves leave out the terrain and the baked props, which come from the map file the save names by hash. The 600-tile terrain alone is
+// Saves leave out the terrain and the baked props, which come from the map file the save names by hash. Broken props are saved whole. The 600-tile terrain alone is
 // about 10 MB of JSON, past the browser's local storage quota. 4 adds weather, jobs, contacts and dust.
 // 6 moves wheel cells. 7 adds engine heat, auto patch and a parts limit on repair jobs. 8 adds the
 // player state, tows and the beacon. 9 adds NPC traits, goal stacks and states. 10 renames spurned to
@@ -29,8 +29,9 @@ export function hasSave(storage: Storage): boolean {
 // onto the road. 26 adds NPC knockouts, truck pickups on refits and revenge. 27 adds NPC driver names and their random stream. 28 adds new NPC
 // types, escorts and two goods. 30 adds engine overdrive. 31 replaces the perks and adds
 // their state: marks, rumors, stalls, dust screens, welds, rebuilt parts and NPC last towns. 32 adds the map
-// file hash and leaves out baked props. Older saves do not load.
-const SAVE_VERSION = 32;
+// file hash and leaves out baked props. 33 adds broken props, which a load leaves out of the baked ones. Older
+// saves do not load.
+const SAVE_VERSION = 33;
 
 // The saved world on the given map. A save made on another map fails, since its terrain is gone.
 export function loadWorld(storage: Storage, map: BakedMap): World | null {
@@ -42,7 +43,17 @@ export function loadWorld(storage: Storage, map: BakedMap): World | null {
   if (!Array.isArray(explored) || explored.length !== world.size * world.size) throw new SaveError('Invalid saved explored tiles');
   if (world.obstacles.some(isBakedObstacle)) throw new SaveError('Game save holds baked map props, which come from the map file');
   const player = { ...world.player, explored: Uint8Array.from(explored) };
-  return { ...world, player, obstacles: [...mapObstacles(map), ...world.obstacles], terrain: map.terrain };
+  return { ...world, player, obstacles: [...standingBaked(map, world.broken), ...world.obstacles], terrain: map.terrain };
+}
+
+// The map's baked props but the broken ones. Every broken prop must be a breakable prop of this map.
+function standingBaked(map: BakedMap, broken: readonly BrokenProp[]): Obstacle[] {
+  const baked = mapObstacles(map);
+  const ids = new Set(baked.map((o) => o.id));
+  const bad = broken.find(({ obstacle }) => !isBreakable(obstacle) || !ids.has(obstacle.id));
+  if (bad) throw new SaveError(`Game save holds broken prop ${bad.obstacle.id}, which is no breakable prop of the map`);
+  const gone = new Set(broken.map(({ obstacle }) => obstacle.id));
+  return baked.filter((o) => !gone.has(o.id));
 }
 
 function savedWorld(save: unknown): Omit<World, 'terrain'> {
@@ -56,7 +67,7 @@ function isCurrentSave(save: unknown): save is { version: number } {
 }
 
 // World fields a save must hold as arrays.
-const WORLD_LISTS = ['vehicles', 'obstacles', 'salvage', 'events', 'removed', 'weather', 'dustClouds', 'states'] as const;
+const WORLD_LISTS = ['vehicles', 'obstacles', 'broken', 'salvage', 'events', 'removed', 'weather', 'dustClouds', 'states'] as const;
 
 function isWorld(value: unknown): value is Omit<World, 'terrain'> {
   if (!value || typeof value !== 'object') return false;

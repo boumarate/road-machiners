@@ -53,6 +53,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap): World {
     nextId: 0,
     vehicles: [],
     obstacles: [],
+    broken: [],
     salvage: [],
     shops: {},
     terrain: map.terrain,

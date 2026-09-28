@@ -9,7 +9,8 @@ import { clearSave, hasSave, loadWorld, SaveError, saveInTown, saveWorld, writeS
 import { REGION } from '../data/region';
 import { sitePads } from '../sim/sites';
 import { TEST_MAP } from '../test/map';
-import { mapObstacles } from '../sim/mapgen';
+import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
+import { breakProp } from '../sim/salvage';
 
 function makeStorage(): Storage {
   const values = new Map<string, string>();
@@ -129,17 +130,19 @@ describe('local game save', () => {
     storage.setItem('roam.save', JSON.stringify({ version: 31, world: { turn: 21 } }));
     expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
     storage.setItem('roam.save', JSON.stringify({ version: 32, world: { turn: 21 } }));
+    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
+    storage.setItem('roam.save', JSON.stringify({ version: 33, world: { turn: 21 } }));
     expect(() => loadWorld(storage, TEST_MAP)).toThrow(/world/);
   });
 
   it('rejects a save missing a field required for future turns', () => {
     const storage = makeStorage();
     const world = newWorld(1337, startKit('standard'), TEST_MAP);
-    for (const field of ['nextId', 'rngState', 'spawnTimer', 'weather'] as const) {
+    for (const field of ['nextId', 'rngState', 'spawnTimer', 'weather', 'broken'] as const) {
       const incomplete = { ...world };
       delete (incomplete as Partial<typeof world>)[field];
       const { terrain: _terrain, ...saved } = incomplete;
-      storage.setItem('roam.save', JSON.stringify({ version: 32, world: saved }));
+      storage.setItem('roam.save', JSON.stringify({ version: 33, world: saved }));
       expect(() => loadWorld(storage, TEST_MAP)).toThrow(/world/);
     }
   });
@@ -167,6 +170,35 @@ describe('local game save', () => {
 
     expect(() => loadWorld(storage, TEST_MAP)).toThrow(SaveError);
     expect(() => loadWorld(storage, TEST_MAP)).toThrow(/baked/);
+  });
+
+  it('keeps a broken baked fence broken across a save and a load', () => {
+    const storage = makeStorage();
+    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const fence = world.obstacles.find(isBreakable);
+    if (!fence || !isBakedObstacle(fence)) throw new Error('The map needs a baked fence or junk pile');
+    breakProp(world, fence.id, world.player.vehicleId);
+    writeSave(storage, world);
+
+    const loaded = loadWorld(storage, TEST_MAP)!;
+
+    expect(loaded.obstacles.map((o) => o.id)).not.toContain(fence.id);
+    expect(loaded.obstacles).toEqual(world.obstacles);
+    expect(loaded.broken).toEqual(world.broken);
+  });
+
+  it('rejects a save whose broken props do not match the map', () => {
+    const storage = makeStorage();
+    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const rock = mapObstacles(TEST_MAP).find((o) => o.kind === 'rock')!;
+    const fence = world.obstacles.find(isBreakable)!;
+    const stranger = { ...fence, id: 'fence-999999' };
+
+    for (const obstacle of [rock, stranger]) {
+      writeSave(storage, { ...world, broken: [{ obstacle, turn: 1 }] });
+      expect(() => loadWorld(storage, TEST_MAP)).toThrow(SaveError);
+      expect(() => loadWorld(storage, TEST_MAP)).toThrow(/broken/);
+    }
   });
 
   it('rejects a save made on another map', () => {
