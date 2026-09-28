@@ -6,26 +6,24 @@ import { RULES } from '../data/rules';
 import { TIME } from '../data/time';
 import { chassisDef } from '../data/chassis';
 import { partDef } from '../data/parts';
-import { PERK_NUMBERS } from '../data/skills';
 import { makePart, newId } from './factory';
 import { findRoadWreckSpot } from './mapgen';
 import { playerVehicle, vehicleById } from './damage';
 import { isKnockedOut } from './defeat';
 import { grayRadius } from './vision';
 import { findSpot, goodsCount, gridOf, isMounted, MOUNT_CELLS, type Spot } from './grid';
-import { addGoods, getLayoutError, refitTurns, requireIdleRefit, stowPart } from './inventory';
-import { vehicleHasPerk } from './progress';
+import { addGoods, getLayoutError, lootRefitTurns, requireIdleRefit, stowPart } from './inventory';
 import { chance, randInt } from './rng';
 import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
-import { vehicleStats } from './stats';
-import { cancelJob, startJob } from './jobs';
+import { fuelCap, suppliesCap, vehicleStats } from './stats';
+import { cancelJob, inCombat, startJob } from './jobs';
 import type { GridItem, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
 import { canUseSite, townAt } from './sites';
 import { inTowReach } from './tow';
 import { playerCommand } from './world';
 import { dist, type Vec } from './vec';
-import { isJunk, maxHp, restorePart } from './wear';
+import { maxHp } from './wear';
 
 // Landmark and convoy sites, and the wrecks placed on roads, get stock at world creation,
 // drawn from their loot table. A road wreck's stock shares its obstacle id.
@@ -178,8 +176,8 @@ export function pourStores(world: World, vehicle: Vehicle, stock: SalvageStock):
 function storesRoom(world: World, vehicle: Vehicle): { fuel: number; supplies: number } {
   const resources = getResources(world, vehicle);
   return {
-    fuel: Math.max(0, chassisDef(vehicle.chassisId).fuelCap - resources.fuel),
-    supplies: Math.max(0, RULES.suppliesCap - resources.supplies),
+    fuel: Math.max(0, fuelCap(vehicle) - resources.fuel),
+    supplies: Math.max(0, suppliesCap(vehicle) - resources.supplies),
   };
 }
 
@@ -188,23 +186,6 @@ function storesRoom(world: World, vehicle: Vehicle): { fuel: number; supplies: n
 // The stock a destroyed NPC leaves.
 export function wreckStockId(vehicleId: string): string {
   return `wreck-${vehicleId}`;
-}
-
-// A wreck stock: a road wreck or a destroyed truck.
-function isWreckStock(stock: SalvageStock): boolean {
-  return stock.id.startsWith('wreck');
-}
-
-// The careful strip perk: a part the player mounts from a wreck stock gains a share of its max HP, up to full. A
-// pile is no wreck, or dumping a part back on it would repair it for free.
-export function stripPart(world: World, vehicle: Vehicle, stock: SalvageStock, part: PartInstance): void {
-  if (isWreckStock(stock)) carefulStrip(world, vehicle, part);
-}
-
-// The careful strip perk on a part taken off a wreck or a knocked-out truck.
-export function carefulStrip(world: World, vehicle: Vehicle, part: PartInstance): void {
-  if (!vehicleHasPerk(world, vehicle, 'carefulStrip') || isJunk(part)) return;
-  restorePart(part, part.hp + Math.round(maxHp(part) * PERK_NUMBERS.carefulStrip.hp));
 }
 
 export function createWreckSalvage(world: World, vehicle: Vehicle): void {
@@ -343,7 +324,7 @@ function restockSite(world: World, stock: SalvageStock, table: LootTable): void 
 }
 
 // Each unit of a fresh roll comes back with chance restockShare. The high caps the gain, but a count already
-// above it, such as one the scrounger perk raised, stays.
+// above it stays.
 function refill(world: World, count: number | undefined, [lo, hi]: LootRange): number {
   const current = count ?? 0;
   let gain = 0;
@@ -402,7 +383,7 @@ export function takeError(target: Vehicle, item: GridItem): string | null {
 function takeTurns(world: World, looter: Vehicle, target: Vehicle, item: GridItem, placed: GridItem): number {
   const planned = RULES.refitTurnsPerPart * (Number(isMounted(target.chassisId, item)) + Number(isMounted(looter.chassisId, placed)));
   const garage = looter.id === world.player.vehicleId && townAt(world) !== null;
-  return planned > 0 && !garage ? refitTurns(world, looter, planned) : 0;
+  return planned > 0 && !garage ? lootRefitTurns(world, looter, planned) : 0;
 }
 
 // Moves one item off the truck onto the looter's grid at `to`. Loose items move at once. An installed part, or a
@@ -452,7 +433,6 @@ export function finishTruckPickup(world: World, looter: Vehicle, pickup: TruckPi
   const item = target.items.find((it) => it.kind === 'part' && it.part.id === pickup.partId);
   if (item?.kind !== 'part') throw new Error('Truck part disappeared after validation');
   target.items = target.items.filter((it) => it.id !== item.id);
-  if (isMounted(looter.chassisId, { ...item, ...pickup.to })) carefulStrip(world, looter, item.part);
 }
 
 // ---- NPC looters
@@ -462,6 +442,7 @@ export function finishTruckPickup(world: World, looter: Vehicle, pickup: TruckPi
 export function lootTruckTurn(world: World, looter: Vehicle, target: Vehicle): string | null {
   if (looter.job?.kind === 'refit') return null;
   takeLooseItems(world, looter, target);
+  if (inCombat(world, looter)) return null;
   const next = nextInstalled(looter, target);
   if (!next) return target.items.some((it) => takeError(target, it) === null) ? 'cargo cannot hold the loot' : 'nothing left to loot';
   takeItem(world, looter, target, next.item, next.spot);

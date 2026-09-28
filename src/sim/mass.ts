@@ -3,6 +3,7 @@
 import { chassisDef } from '../data/chassis';
 import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
+import { RULES } from '../data/rules';
 import type { Vehicle } from './types';
 
 export function vehicleMass(v: Vehicle): number {
@@ -11,10 +12,14 @@ export function vehicleMass(v: Vehicle): number {
   return mass;
 }
 
-// Top speed and turning scale by this. 1 at the chassis rated mass, above 1 when lighter and below 1 when heavier,
-// so every kilogram of armor, guns and cargo costs speed.
+// Top speed and turning scale by this. 1 at the chassis handling mass, above 1 when lighter and below 1 when heavier,
+// so every kilogram of armor, guns and cargo costs speed. It follows the square root of handling mass over mass.
+// Past the rated mass it also takes (rated / mass) to the power RULES.overloadExponent, so an overloaded truck slows hard.
 export function loadFactor(v: Vehicle): number {
-  return Math.sqrt(chassisDef(v.chassisId).ratedMass / vehicleMass(v));
+  const ch = chassisDef(v.chassisId);
+  const mass = vehicleMass(v);
+  const overload = mass > ch.ratedMass ? (ch.ratedMass / mass) ** RULES.overloadExponent : 1;
+  return Math.sqrt(ch.handlingMass / mass) * overload;
 }
 
 function goodMass(id: string): number {

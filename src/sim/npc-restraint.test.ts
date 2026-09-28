@@ -43,9 +43,13 @@ function shareOfSeeds(world: World, npcId: string, check: (x: World, npc: Vehicl
 
 describe('NPC restraint', () => {
   it('preserves normal raider cargo alongside available repair supplies', () => {
-    const world = emptyWorld();
-    spawnInitial(world);
-    const raiders = world.vehicles.filter((v) => v.faction === 'raiders');
+    // Loadouts are random, so look across a few spawns.
+    const raiders = [0, 1, 2, 3, 4].flatMap((seed) => {
+      const world = emptyWorld();
+      world.rngState = seed;
+      spawnInitial(world);
+      return world.vehicles.filter((v) => v.faction === 'raiders');
+    });
     expect(raiders.some((npc) => Object.entries(goodsCount(npc)).some(([good, count]) => good !== 'parts' && count > 0))).toBe(true);
     expect(raiders.some((npc) => (goodsCount(npc).parts ?? 0) > 0)).toBe(true);
   });
@@ -226,7 +230,6 @@ describe('NPC field repairs', () => {
     planNpcOrders(world);
     resolveNpcActivities(world);
     expect(npc.job?.kind).toBe('repair');
-    const remaining = npc.job!.turnsLeft;
     addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
 
     // Exercise both movement outcomes at the public turn boundary, without depending on steering startup.
@@ -251,14 +254,11 @@ describe('NPC field repairs', () => {
     expect(actor.brain!.goals.map((g) => g.kind)).toEqual(['repair', 'flee']);
     expect(actor.order?.kind).toBe('stopAt');
     expect(goodsCount(actor).parts).toBe(2);
-    if (pinned) {
-      expect(actor.speed).toBe(0);
-      expect(actor.job?.turnsLeft).toBe(remaining - 1);
-    } else {
-      expect(actor.speed).toBeGreaterThan(0);
-      expect(actor.job).toBeNull();
-      expect(next.events.some((event) => event.t === 'job' && event.vehicle === actor.id && event.outcome === 'cancelled')).toBe(true);
-    }
+    // A hostile in sight cancels the repair, parked or not.
+    if (pinned) expect(actor.speed).toBe(0);
+    else expect(actor.speed).toBeGreaterThan(0);
+    expect(actor.job).toBeNull();
+    expect(next.events.some((event) => event.t === 'job' && event.vehicle === actor.id && event.outcome === 'cancelled')).toBe(true);
   });
 
   it('seeks service for a badly damaged mounted part without repair supplies', () => {

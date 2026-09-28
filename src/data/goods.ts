@@ -27,13 +27,15 @@ export const GOOD_IDS = Object.keys(GOODS);
 
 export const ECONOMY = {
   spread: 0.2, // fraction added to buy and cut from sell prices, before Social skill
+  // Added to the spread when trading with a truck on the road. A driver out in the waste has no market to answer
+  // to, so at Trade 0 it sells at 1.5 times a good's value and buys at half of it.
+  roadSpread: 0.3,
   supplyPrice: { fuel: 3, supplies: 5 } as Record<'fuel' | 'supplies', number>,
   scrapPerKg: 0.19, // sell floor for a part, near GOODS.scrap.value / GOODS.scrap.mass
   // Share of a part's value spent per HP share restored, before Mechanics. Kept above the sale price's
   // (1 - spread) share of value at Trade 0, 0.8, so repairing a part and then selling it always loses
   // money: a repair is for driving on, not for flipping.
   repairShare: 0.85,
-  chassisSellFactor: 0.5, // of the chassis price, scaled by mean built-in part health and wear
   useRange: 1.5, // extra tiles past a site radius where its services work
   interactionScale: 1.5, // multiplier for the total interaction radius
 };

@@ -7,6 +7,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { canVehicleSee } from '../sim/vision';
 import { playerVehicle } from '../sim/damage';
 import { NPCS } from '../data/npcs';
+import { REGION } from '../data/region';
+import { siteGates } from '../sim/sites';
 import { partDef } from '../data/parts';
 import { topGoal } from '../sim/npc-activities';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from '../sim/testkit';
@@ -103,10 +105,10 @@ describe('hitched tower traffic', () => {
     const other = withTower(w, 'scavenger', 'scavengers', 'hauler', start);
     other.heading = Math.atan2(behind.y - start.y, behind.x - start.x);
     other.brain!.goals = [{ kind: 'raid', targetId: null, destination: behind, phase: 'travel', reason: 'drive past the tower' }];
-    const r = runUntil(w, 20, () => false);
+    const passed = (x: World) => progress(find(x, other.id).pos) < 0 && progress(find(x, tower.id).pos) > 10;
+    const r = runUntil(w, 20, passed);
     expect(crashes(r.events, tower.id)).toEqual([]);
-    expect(progress(find(r.w, other.id).pos)).toBeLessThan(0);
-    expect(progress(find(r.w, tower.id).pos)).toBeGreaterThan(10);
+    expect(passed(r.w)).toBe(true);
   });
 });
 
@@ -137,3 +139,31 @@ describe('emergency beacon', () => {
     expect(activitiesOf(r.events, raider.id)[0]).toMatchObject({ activity: 'investigate' });
   });
 });
+
+describe('after a tow into town', () => {
+  it('the tower, parked on the pad, starts its next goal for that town there and does not ram the truck it towed', () => {
+    const town = REGION.towns.find((t) => t.id === 'bowl')!;
+    const gate = siteGates(town)[0];
+    const out = { x: (gate.x - town.pos.x) / town.radius, y: (gate.y - town.pos.y) / town.radius };
+    const at = (d: number) => ({ x: gate.x + out.x * d, y: gate.y + out.y * d });
+    const s = stranded(at(20), at(30));
+    for (const id of Object.keys(NPCS)) s.w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    forceOption('idle', 'wait');
+    forceOption('strandedSeen', 'tow');
+    const offer = runUntil(s.w, 30, (x) => playerTow(x) !== null);
+    const hitched = chooseOption(offer.w, currentOptions(offer.w).findIndex((o) => o.text === 'Deal. Hitch me up.'));
+    const arrived = runUntil(hitched, 120, (x) => playerTow(x) === null).w;
+    expect(playerTow(arrived)).toBeNull();
+    find(arrived, s.trader.id).brain!.goals = [{ kind: 'travel', targetId: town.id, destination: { ...town.pos }, phase: 'travel', reason: 'go on to town' }];
+    const parkedAt = { ...playerVehicle(arrived).pos };
+
+    const r = runUntil(arrived, 15, () => false);
+
+    expect(crashesBetween(r.events, s.trader.id, r.w.player.vehicleId)).toEqual([]);
+    expect(dist(playerVehicle(r.w).pos, parkedAt)).toBeLessThan(0.05);
+    expect(r.events.some((e) => e.t === 'activity' && e.vehicle === s.trader.id && e.reason === 'arrived')).toBe(true);
+  });
+});
+
+const crashesBetween = (events: GameEvent[], a: string, b: string) =>
+  events.filter((e) => e.t === 'collision' && ((e.a === a && e.b === b) || (e.a === b && e.b === a)));

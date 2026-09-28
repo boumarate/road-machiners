@@ -1,8 +1,11 @@
+import { partDef } from '../data/parts';
 import { describe, expect, it } from 'vitest';
-import { PERK_NUMBERS } from '../data/skills';
 import { RULES } from '../data/rules';
 import { applyContactCrash, computeClosingSpeed, locateCrashContact } from './crash-contact';
-import { addVehicle, emptyWorld, practiceOf } from './testkit';
+import { addVehicle, emptyWorld, npcBrain, practiceOf } from './testkit';
+import { PERK_NUMBERS } from '../data/skills';
+import { isHostile } from './combat';
+import { addState } from './states';
 import { vehicleMass } from './mass';
 import { mountedParts } from './grid';
 
@@ -36,7 +39,7 @@ describe('crash contacts', () => {
     const before = wheels.map((part) => part.hp);
     applyContactCrash(world, vehicle, null, 'rock', 6, { a: { side: 'front', lanes: [2] }, b: null });
     expect(wheels.map((part) => part.hp)).toEqual(before);
-    expect(mountedParts(vehicle).find((part) => part.defId === 'ram')?.hp).toBeLessThan(50);
+    expect(mountedParts(vehicle).find((part) => part.defId === 'ram')?.hp).toBeLessThan(partDef('ram').hp);
   });
 
   it('keeps armor protection across simultaneous contact lanes', () => {
@@ -99,27 +102,6 @@ describe('ram practice', () => {
   });
 });
 
-describe('ram guard perk', () => {
-  // Total damage a truck takes from a head-on crash into a rock. Crash damage grows with the square of the impact.
-  function crashDamage(perk: boolean, npc: boolean, impact = 8): number {
-    const world = emptyWorld();
-    if (perk) world.player.perks.push('ramGuard');
-    const vehicle = npc ? addVehicle(world, 'raiders', 'scout', ['stockEngine', 'ram'], { x: 40, y: 40 }) : world.vehicles[0];
-    const before = mountedParts(vehicle).reduce((sum, part) => sum + part.hp, 0);
-    applyContactCrash(world, vehicle, null, 'rock', impact, { a: { side: 'front', lanes: [1, 2, 3] }, b: null });
-    return before - mountedParts(vehicle).reduce((sum, part) => sum + part.hp, 0);
-  }
-
-  it('makes a crash hurt the player truck like one with half the energy', () => {
-    const halfEnergy = crashDamage(false, false, 8 * Math.sqrt(PERK_NUMBERS.ramGuard.crashTaken));
-    expect(crashDamage(true, false)).toBe(halfEnergy);
-    expect(halfEnergy).toBeLessThan(crashDamage(false, false));
-  });
-
-  it('leaves NPC crash damage unchanged', () => {
-    expect(crashDamage(true, true)).toBe(crashDamage(false, true));
-  });
-});
 
 describe('crash damage multiplier', () => {
   // Total damage a scout takes from a head-on crash into a rock with the given multiplier.
@@ -141,5 +123,59 @@ describe('crash damage multiplier', () => {
   it('acts on crash energy like a slower impact', () => {
     expect(rockCrash(0.5, 8)).toBe(rockCrash(1, 8 / Math.SQRT2));
     expect(rockCrash(0.5, 8)).toBeLessThan(rockCrash(1, 8));
+  });
+});
+
+describe('the rammer perk', () => {
+  const geometry = { a: { side: 'front' as const, lanes: [1, 2] }, b: { side: 'left' as const, lanes: [1, 2] } };
+
+  // The player truck and a raider it feuds with, side by side.
+  function rammerWorld() {
+    const world = emptyWorld();
+    const me = world.vehicles[0];
+    const foe = addVehicle(world, 'raiders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
+    foe.brain = npcBrain('hauler', foe.pos, ['raider']);
+    addState(world, 'feud', foe.id, me.id, { kind: 'feud', robbery: false });
+    expect(isHostile(world, me, foe)).toBe(true);
+    return { world, me, foe };
+  }
+
+  it('stalls a hostile truck the player damages through the next turn', () => {
+    const { world, me, foe } = rammerWorld();
+    world.player.perks.push('rammer');
+    applyContactCrash(world, me, foe, foe.id, 6, geometry);
+    expect(foe.stalledUntil).toBe(world.turn + PERK_NUMBERS.rammer.stallTurns);
+  });
+
+  it('stalls the hostile truck when the player is the second body of the crash', () => {
+    const { world, me, foe } = rammerWorld();
+    world.player.perks.push('rammer');
+    applyContactCrash(world, foe, me, me.id, 6, geometry);
+    expect(foe.stalledUntil).toBe(world.turn + PERK_NUMBERS.rammer.stallTurns);
+    expect(me.stalledUntil).toBeUndefined();
+  });
+
+  it('stalls nothing without the perk', () => {
+    const { world, me, foe } = rammerWorld();
+    applyContactCrash(world, me, foe, foe.id, 6, geometry);
+    expect(foe.stalledUntil).toBeUndefined();
+  });
+
+  it('stalls nothing when the rammed truck is not hostile', () => {
+    const world = emptyWorld();
+    world.player.perks.push('rammer');
+    const me = world.vehicles[0];
+    const trader = addVehicle(world, 'traders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
+    trader.brain = npcBrain('hauler', trader.pos, ['trader']);
+    applyContactCrash(world, me, trader, trader.id, 6, geometry);
+    expect(trader.stalledUntil).toBeUndefined();
+  });
+
+  it('stalls nothing in a crash between two NPCs', () => {
+    const { world, foe } = rammerWorld();
+    world.player.perks.push('rammer');
+    const other = addVehicle(world, 'traders', 'scout', ['stockEngine', 'ram'], { x: 34, y: 30 });
+    applyContactCrash(world, other, foe, foe.id, 6, geometry);
+    expect(foe.stalledUntil).toBeUndefined();
   });
 });

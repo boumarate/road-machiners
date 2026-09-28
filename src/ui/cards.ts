@@ -4,7 +4,7 @@
 
 import { RULES } from "../data/rules";
 import { chassisDef } from "../data/chassis";
-import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type FieldRepair } from "../data/parts";
+import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type StoreDef, type FieldRepair } from "../data/parts";
 import { baseGrid, cellCount, mountedParts, type Cell } from "../sim/grid";
 import { isJunk, maxHp, partValue, wornDef } from "../sim/wear";
 import type { PartInstance, Vehicle } from "../sim/types";
@@ -170,6 +170,7 @@ export function partIcon(part: PartInstance): IconName {
   const def = partDef(part.defId);
   if (def.kind === "weapon") return def.look;
   if (def.kind === "core") return def.role === "tank" ? "fuel" : def.role;
+  if (def.kind === "store") return def.holds;
   return def.kind;
 }
 
@@ -309,6 +310,7 @@ export type StatIcon =
   | "speed"
   | "accel"
   | "fuel"
+  | "supplies"
   | "noise"
   | "armor"
   | "ram"
@@ -365,8 +367,15 @@ const KIND_STATS: Record<PartKind, (part: PartInstance) => Stat[]> = {
   armor: armorStats,
   cargo: cargoStats,
   scanner: (part) => [stat("scanner", "Detection range", meters(wornDef<ScannerDef>(part).range), "m", "more")],
+  store: storeStats,
   core: () => [],
 };
+
+function storeStats(part: PartInstance): Stat[] {
+  const d = partDefOf<StoreDef>(part);
+  if (d.holds === "fuel") return [{ ...stat("fuel", "Extra fuel", fuelLiters(d.amount), "L", "more"), text: `+${fuelLiters(d.amount)}` }];
+  return [{ ...stat("supplies", "Extra supplies", d.amount, "", "more"), text: `+${d.amount}` }];
+}
 
 function cargoStats(part: PartInstance): Stat[] {
   const d = partDefOf<CargoDef>(part);

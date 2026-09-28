@@ -3,7 +3,7 @@ import { TERRAIN } from '../data/terrain';
 import { START_KITS } from '../data/start';
 import { BRIDGE_AXIS, BRIDGE_LENGTH, crossesRail, deckAlong } from './bridge';
 import { route, routeLength } from './path';
-import { deckEnds, groundAt, heightAt, isCliff, tileAt } from './terrain';
+import { deckEnds, groundAt, heightAt, isCliff, markHeightAt, tileAt } from './terrain';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
 
@@ -35,6 +35,17 @@ describe('Canyon Bridge', () => {
       const end = at(along, 0);
       expect(Math.abs(groundAt(t, end.x, end.y) - heightAt(t, end.x, end.y))).toBeLessThan(1e-9);
     }
+  });
+
+  it('keeps marks beside the deck level with it for a truck up on the deck, not for one in the canyon', () => {
+    const onDeck = at(BRIDGE_LENGTH / 2, 0);
+    const floor = at(BRIDGE_LENGTH / 2, B.width + 4);
+    const deck = heightAt(t, onDeck.x, onDeck.y);
+    expect(markHeightAt(t, onDeck, floor.x, floor.y)).toBe(deck);
+    expect(markHeightAt(t, floor, floor.x, floor.y)).toBe(groundAt(t, floor.x, floor.y));
+    // Past the deck ends a mark lies on the ground.
+    const past = at(-3, 0);
+    expect(markHeightAt(t, onDeck, past.x, past.y)).toBe(heightAt(t, past.x, past.y));
   });
 
   it('makes deck tiles drivable road', () => {

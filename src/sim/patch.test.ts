@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { NPCS } from '../data/npcs';
 import { partDef } from '../data/parts';
 import { CONDITION, PATCH } from '../data/wear';
-import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions } from './dialogue';
 import { goodsCount, mountedParts } from './grid';
 import { addGoods, removeGoods } from './inventory';
-import { topGoal } from './npc-activities';
-import { needsPatch, patchData, patchTerms, settlePatch } from './patch';
+import { thinkNpc, topGoal } from './npc-activities';
+import { dealAvailable, needsPatch, patchData, patchTerms, settlePatch } from './patch';
 import { addState, stateOf } from './states';
 import { isStranded } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
@@ -133,6 +133,18 @@ describe('asking a driver for a patch', () => {
     w = runUntil(w, 40, (x) => stateOf(x, 'patch', trader.id, x.player.vehicleId) === null).w;
     expect(parts(playerVehicle(w))).toBe(3 - needed);
     expect(isStranded(w, playerVehicle(w))).toBe(false);
+  });
+
+  it('a driver under attack takes no patch and calls off an agreed one', () => {
+    const { w: start, trader } = brokenPlayer(4);
+    let w = agreedTerms(start, trader.id, 'free');
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 38, y: 34 });
+    find(w, trader.id).brain!.attackers[raider.id] = true;
+    const open = callVehicle(cloneWorld(w), trader.id);
+    expect(currentOptions(open).map((o) => o.text)).not.toContain('My truck is broken down. Can you patch it?');
+    thinkNpc(w, find(w, trader.id));
+    expect(stateOf(w, 'patch', trader.id, w.player.vehicleId)).toBeNull();
+    expect(find(w, trader.id).brain!.goals.some((g) => g.kind === 'patch')).toBe(false);
   });
 
   it('never rolls a deal its payer cannot cover', () => {
@@ -326,34 +338,46 @@ describe('social on patch prices', () => {
   });
 });
 
-describe('goodwill perk', () => {
-  it('a driver with parts patches the player for free', () => {
-    const { w, trader } = brokenPlayer(10);
-    w.player.perks.push('goodwill');
-    forceOption('patchDeal', 'paid');
-    const terms = patchTerms(w, find(w, trader.id));
-    expect(terms).toMatchObject({ kind: 'deal', deal: 'free', price: 0 });
-  });
 
-  it('own-parts terms charge the player nothing', () => {
-    const { w, trader } = brokenPlayer(0);
-    setParts(w, playerVehicle(w), 3);
-    w.player.perks.push('goodwill');
-    forceOption('patchDeal', 'ownParts');
-    expect(patchTerms(w, find(w, trader.id))).toMatchObject({ kind: 'deal', deal: 'ownParts', price: 0 });
-  });
-
-  it('an NPC client still pays the player', () => {
+describe('road mechanic', () => {
+  // A scavenger with a dead engine beside a player who carries parts.
+  function brokenNpc(money: number): { w: World; npc: Vehicle } {
     const w = emptyWorld({ x: 30, y: 30 });
-    w.player.perks.push('goodwill');
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 40, y: 30 }, Math.PI);
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
-    npc.resources!.money = 10000;
-    addGoods(w, npc, 'parts', 3);
+    npc.resources!.money = money;
     breakEngine(npc);
-    forceOption('patchDeal', 'ownParts');
-    const terms = patchTerms(w, find(w, npc.id));
-    expect(terms).toMatchObject({ kind: 'deal', deal: 'ownParts' });
-    expect(terms?.kind === 'deal' && terms.price).toBeGreaterThan(0);
+    setParts(w, playerVehicle(w), 3);
+    return { w, npc };
+  }
+
+  // The price an NPC names for a deal, rolled on a copy with the given perks.
+  function priceWith(w: World, npcId: string, deal: PatchDeal, perks: World['player']['perks']): number {
+    const copy = cloneWorld(w);
+    copy.player.perks = perks;
+    forceOption('patchDeal', deal);
+    const terms = patchTerms(copy, find(copy, npcId));
+    if (terms?.kind !== 'deal' || terms.deal !== deal) throw new Error(`Expected ${deal} terms, got ${JSON.stringify(terms)}`);
+    return terms.price;
+  }
+
+  it('an NPC client pays the perk multiple for a patch by the player', () => {
+    const { w, npc } = brokenNpc(10000);
+    const base = priceWith(w, npc.id, 'paid', []);
+    expect(base).toBeGreaterThan(0);
+    expect(priceWith(w, npc.id, 'paid', ['roadMechanic'])).toBe(Math.round(base * PERK_NUMBERS.roadMechanic.price));
+  });
+
+  it('an NPC that cannot pay the raised price gets no paid deal', () => {
+    const { w, npc } = brokenNpc(10000);
+    npc.resources!.money = priceWith(w, npc.id, 'paid', []);
+    expect(dealAvailable('paid')(w, npc)).toBe(true);
+    w.player.perks = ['roadMechanic'];
+    expect(dealAvailable('paid')(w, npc)).toBe(false);
+  });
+
+  it('does not change the price the player pays an NPC patcher', () => {
+    const { w, trader } = brokenPlayer(3);
+    expect(priceWith(w, trader.id, 'paid', ['roadMechanic'])).toBe(priceWith(w, trader.id, 'paid', []));
   });
 });

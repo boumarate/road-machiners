@@ -8,7 +8,7 @@ import { update } from './world';
 import { openSides } from './armor';
 import { freeCells, goodsCount, gridOf, mountedItems, mountedParts } from './grid';
 import { dumpItem, mountPart, moveItem, removeAllGoods, spareParts, storePart, stowPart, takeFromStorage } from './inventory';
-import { vehicleStats } from './stats';
+import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import { addVehicle, emptyWorld } from './testkit';
 import type { GridItem, Vehicle, World } from './types';
 import { sitePads } from './sites';
@@ -27,7 +27,7 @@ describe('inventory grid', () => {
     expect(w.player.money).toBe(1000);
     expect(goodsCount(w.vehicles[0]).parts).toBe(2);
     expect(w.player.fuel).toBe(CHASSIS.scout.fuelCap);
-    expect(w.player.supplies).toBe(RULES.suppliesCap);
+    expect(w.player.supplies).toBe(RULES.baseSupplies);
   });
 
   it('the start kit is mounted and working', () => {
@@ -165,5 +165,32 @@ describe('auto mounting on the deck', () => {
     v.items.push({ id: 'i-mg', x: 3, y: 5, rot: 0, kind: 'part', part: makePart(w, 'mg', 0) });
     expect(mountedItems(v, 'cargo').map((it) => it.id)).toEqual(['i-rack']);
     expect(mountedItems(v, 'weapon').map((it) => it.id)).toEqual(['i-mg']);
+  });
+});
+
+describe('stores', () => {
+  it('unmounting a full store in town spills what no longer fits and logs it', () => {
+    const w = emptyWorld(sitePads(bowl)[0]);
+    const me = w.vehicles[0];
+    expect(mountPart(w, me, makePart(w, 'jerrycans', 0))).toBe(true);
+    expect(mountPart(w, me, makePart(w, 'supplyLocker', 0))).toBe(true);
+    w.player.fuel = fuelCap(me);
+    w.player.supplies = suppliesCap(me);
+    const noCans = storePart(w, item(w, 'jerrycans').id);
+    expect(noCans.player.fuel).toBe(CHASSIS.scout.fuelCap);
+    expect(noCans.events.filter((e) => e.t === 'supply').map((e) => e.text)).toEqual(['No room for fuel: fuel -12.0']);
+    const noLocker = storePart(noCans, item(noCans, 'supplyLocker').id);
+    expect(noLocker.player.supplies).toBe(RULES.baseSupplies);
+    expect(noLocker.events.filter((e) => e.t === 'supply').map((e) => e.text)).toEqual(['No room for supplies: supplies -10.0']);
+  });
+
+  it('unmounting a store with room to spare keeps every drop', () => {
+    const w = emptyWorld(sitePads(bowl)[0]);
+    const me = w.vehicles[0];
+    expect(mountPart(w, me, makePart(w, 'jerrycans', 0))).toBe(true);
+    w.player.fuel = CHASSIS.scout.fuelCap - 1;
+    const off = storePart(w, item(w, 'jerrycans').id);
+    expect(off.player.fuel).toBe(CHASSIS.scout.fuelCap - 1);
+    expect(off.events.some((e) => e.t === 'supply')).toBe(false);
   });
 });

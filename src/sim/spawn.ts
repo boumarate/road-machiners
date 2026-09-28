@@ -1,7 +1,7 @@
 // NPC spawning up to per-template caps. Raiders appear at their camp gates, neutrals at the gates of any
 // town or other location.
 
-import { FIRST_NAMES, NPCS, SPAWN, SURNAMES, type NpcTemplate, type TraitId } from "../data/npcs";
+import { FIRST_NAMES, NPCS, OPPOSED_TRAITS, SPAWN, SURNAMES, type NpcTemplate, type TraitId } from "../data/npcs";
 import { chassisDef } from "../data/chassis";
 import { REGION } from "../data/region";
 import { playerVehicle } from "./damage";
@@ -69,9 +69,15 @@ function spawnBeside(world: World, tpl: NpcTemplate, leader: Vehicle): Vehicle |
   return null;
 }
 
-// The template's base traits plus each extra that wins its roll.
+// The template's base traits plus each extra that wins its roll and opposes no trait held already. Every extra
+// rolls, so the RNG draws stay the same whatever wins.
 export function rollTraits(world: Rng, tpl: NpcTemplate): TraitId[] {
-  return [...tpl.traits, ...tpl.extraTraits.filter((extra) => chance(world, extra.chance)).map((extra) => extra.trait)];
+  const won = tpl.extraTraits.filter((extra) => chance(world, extra.chance)).map((extra) => extra.trait);
+  return won.reduce((held, trait) => (opposesAny(trait, held) ? held : [...held, trait]), [...tpl.traits]);
+}
+
+function opposesAny(trait: TraitId, held: TraitId[]): boolean {
+  return OPPOSED_TRAITS.some(([a, b]) => (a === trait && held.includes(b)) || (b === trait && held.includes(a)));
 }
 
 // pick chooses the site for each try. A respawn keeps SPAWN.minPlayerDist from the player. Initial spawns do not.

@@ -36,6 +36,15 @@ describe('NPC traits', () => {
     expect(() => npcTraits(npc)).toThrow();
   });
 
+  it('never rolls brave onto a coward', () => {
+    const tpl: NpcTemplate = { ...NPCS.scavenger, extraTraits: [{ trait: 'coward', chance: 1 }, { trait: 'brave', chance: 1 }] };
+    expect(rollTraits({ rngState: 1 }, tpl)).toEqual(['scavenger', 'coward']);
+  });
+
+  it('makes every lawman and convoy guard brave', () => {
+    for (const id of ['bowlFarmer', 'noseArmy', 'convoyGuard']) expect(NPCS[id].traits).toContain('brave');
+  });
+
   it('rolls the same extra traits from the same seed', () => {
     const tpl: NpcTemplate = { ...NPCS.scavenger, extraTraits: [{ trait: 'scumbag', chance: 0.5 }, { trait: 'coward', chance: 0.5 }] };
     const rolls = new Set<string>();

@@ -27,6 +27,7 @@ def build(kit: Kit) -> None:
             taper(head, 0.25)
     for x in (0.08, 0.4):
         kit.box(f"strap{x:.2f}", (0.04, 0.35, 0.35), (x, 0, 0), "rust_side", dent_by=0.003)
+    kit.socket("tip", (0.54, 0, 0))
 
 
 if __name__ == "__main__":

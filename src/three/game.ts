@@ -4,7 +4,6 @@ import { startKit } from "../data/start";
 
 import * as THREE from "three";
 import { CONFIG } from "../config";
-import { partDef } from "../data/parts";
 import { PHYSICS } from "../data/physics";
 import {
   buildDrive,
@@ -34,21 +33,12 @@ import { clickOrder, parkedVehicles, throttleFor } from "../sim/steering";
 import { route, warmRoutes } from "../sim/path";
 import { CHASSIS } from "../data/chassis";
 import type { ShotRound, Vehicle, World } from "../sim/types";
-import type { Vec } from "../sim/vec";
 import { grayRadius, playerSees, tileOf, visibleTiles } from "../sim/vision";
-import { dist } from "../sim/vec";
+import { dist, type Vec } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
 import { isTowed, setBeacon, unhitch } from "../sim/tow";
-import {
-  autoRuns,
-  cloneWorld,
-  hostileToPlayer,
-  newWorld,
-  playerCanAct,
-  setAutoRepair,
-  setDirect,
-  setMoveOrder,
-} from "../sim/world";
+import { cloneWorld, hostileToPlayer, newWorld, playerCanAct, setMoveOrder } from "../sim/world";
+import { TruckControls } from "./truck-controls";
 import { PAL } from "../render/palette";
 import { timed } from "../perf";
 import { CharacterScreen } from "../ui/character";
@@ -62,13 +52,14 @@ import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
 import { Fx3D, TruckFx } from "./render/fx";
+import { planVolley, projectileOf, towardFrom, type Muzzle } from "./render/projectiles";
 import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
 import { PathView } from "./render/path";
 import { RenderScope, SightLimit } from "./render/scope";
 import { addSites } from "./render/sites";
 import { terrainMesh } from "./render/terrain";
-import { VehicleView } from "./render/vehicle";
+import { VehicleView, viewOf } from "./render/vehicle";
 import { WeaponRangeView } from "./render/weaponRange";
 import { WeatherView } from "./render/weather";
 import { ZonesView } from "./render/zones";
@@ -76,6 +67,7 @@ import { REGION } from "../data/region";
 import { isBusy } from "../sim/jobs";
 import { daylightAt, lampsOn, lightScene, NightLights, sunLight } from "./render/daylight";
 import { sunAt } from "../sim/sun";
+import { markError, markVehicle } from "../sim/detect";
 import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
 import { ShadeView } from "./render/shade";
@@ -83,18 +75,16 @@ import { SoundRingView } from "./render/soundRing";
 import { clearSave, hasSave, loadWorld, saveInTown, saveWorld, writeSave } from "./save";
 import type { BakedMap } from "../sim/terrain";
 import { GameMenu } from "../ui/game-menu";
-import { volleyTally } from "../ui/format";
+import { roundLabel } from "../ui/format";
 import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
-import { computeEngineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
+import { CombatScore, CombatWatch, computeEngineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
 import type { SoundPlayer } from "../audio/player";
 import { uiRoot } from "../ui/dom";
 import { Travel, type Playback, type LiveVision } from "./travel";
-import { computeRoundPoint } from "../phys/frames";
 
 const PLAN_TURNS = 3; // turns of path preview
 
-const HONK_REPLY_MS = 500; // a driver takes a moment to answer a horn
 const PICK_PX = 30; // click radius around a vehicle's screen position
 const MIN_ZONE_HALF_ANGLE = Math.PI / 12; // zones stay visible for trucks that barely turn
 const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is recomputed during a turn
@@ -107,7 +97,6 @@ const MOVE_MS = (TURN_STEPS / PHYSICS.stepsPerSecond) * 1000; // real time the m
 const MOVED_BY_RULES = 0.5; // tiles between a vehicle's drawn spot and its sim spot that mean the rules moved it
 
 const GUN_HEIGHT = 1.6; // meters above the body center where shots start and land
-const ROUND_STAGGER = 0.4; // share of the shot time over which a burst's rounds leave the gun
 
 export class Game {
   private world: World;
@@ -140,10 +129,11 @@ export class Game {
   private readonly path: PathView;
   private readonly fx: Fx3D;
   private readonly truckFx: TruckFx;
+  private readonly controls: TruckControls;
   readonly sound: SoundDirector;
   private panelOpen = false; // last frame's panel state, for open and close sounds
   private readonly loops: SoundLoops;
-  private lastDangerTurn = -Infinity; // last turn a hostile was in sight, for the combat music hold
+  private readonly combatWatch = new CombatWatch();
   private readonly views = new Map<string, VehicleView>();
   private frames: Record<string, VehicleFrame> = {}; // last shown pose per vehicle
   // A played turn: physics movement, then shots in flight when there was combat, then time to read results.
@@ -214,7 +204,7 @@ export class Game {
     this.pickRing.renderOrder = 5;
     this.scene.add(this.pickRing);
 
-    // Ground and props cull separately, so ground picking only hits terrain.
+    // Ground and props cull separately, so ground picking only hits terrain and the bridge deck.
     this.sightLimit = new SightLimit(this.world.size);
     const groundScope = new RenderScope(this.ground, this.world.size, this.sightLimit, false);
     const propScope = new RenderScope(this.props, this.world.size, this.sightLimit, true);
@@ -246,8 +236,10 @@ export class Game {
     this.labels = new Labels(overlay);
     this.fx = new Fx3D(this.scene, overlay, this.rig);
     this.truckFx = new TruckFx(this.fx);
-    this.sound = new SoundDirector(player, this.rig);
-    this.loops = new SoundLoops(player);
+    this.controls = new TruckControls({ world: () => this.world, apply: (next) => this.apply(next), refreshPlan: () => this.refreshPlan(), doused: () => { this.truckFx.douse(); this.hud.pushEvents(this.world); }, revved: () => this.loops.rev(playerVehicle(this.world).chassisId) });
+    const score = new CombatScore(player, Math.random);
+    this.sound = new SoundDirector(player, this.rig, score);
+    this.loops = new SoundLoops(player, score);
     uiRoot().addEventListener("click", (e) => {
       if ((e.target as HTMLElement).closest("button"))
         this.sound.ui("ui-click");
@@ -262,12 +254,10 @@ export class Game {
     this.hud = new Hud({
       openInventory: () => this.toggleScreen(this.inventory),
       openCharacter: () => this.toggleScreen(this.character),
-      toggleManual: () => {
-        if (!this.anim && !this.modalOpen()) this.toggleManual();
-      },
-      toggleAutoRepair: () => {
-        if (!this.anim && !this.modalOpen()) this.toggleAutoRepair();
-      },
+      toggleManual: this.whenIdle(() => this.controls.toggleManual()),
+      toggleAutoRepair: this.whenIdle(() => this.controls.toggleAutoRepair()),
+      toggleOverdrive: this.whenIdle(() => this.controls.toggleOverdrive()),
+      douseEngine: this.whenIdle(() => this.controls.douseEngine()),
       unhitch: () =>
         this.rescueCommand((w) =>
           w.player.state === "active" && isTowed(w) ? unhitch(w) : null,
@@ -279,7 +269,7 @@ export class Game {
             : null,
         ),
       isBusy: () => this.anim !== null,
-      dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), honked: () => this.playHonks() },
+      dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
       recenter: () => this.follow.recenter(),
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
@@ -466,21 +456,30 @@ export class Game {
       if (e.code === "Space") {
         if (!modal && this.travel.handleSpace(e, playing, this.world)) this.endTurn();
       }
-      if (e.code === "KeyF") this.follow.recenter();
-      if (e.code === "KeyM") this.toggleMute();
-      if (e.code === "KeyQ" && !modal) this.weapons.toggleAuto();
-      if (e.code === "KeyX" && !modal) this.weapons.toggleVisible();
-      if (e.code === "Digit0" && !modal) this.weapons.selectWeapon(null);
-      if (e.code === "KeyE" && !modal) this.useContext();
-      if (e.code === "KeyR" && !modal && !playing) this.toggleManual();
-      if (e.code === "KeyP" && !modal && !playing) this.toggleAutoRepair();
-      if (e.code === "KeyC" && !playing) this.toggleScreen(this.character);
-      if (e.code === "KeyI" && !playing) this.toggleScreen(this.inventory);
-      if (e.code === "Escape") this.closeScreens(null);
+      const key = this.keys[e.code];
+      if (key && !(key.noModal && modal) && !(key.idle && playing)) key.run();
       const digit = ["Digit1", "Digit2", "Digit3", "Digit4"].indexOf(e.code);
       if (digit >= 0) this.selectWeaponIndex(digit);
     });
   }
+
+  // Single-key actions. noModal keys wait for panels and calls to close, idle keys wait for the turn to finish playing.
+  private readonly keys: Record<string, { run: () => void; noModal?: true; idle?: true }> = {
+    KeyF: { run: () => this.follow.recenter() },
+    KeyM: { run: () => this.toggleMute() },
+    KeyQ: { run: () => this.weapons.toggleAuto(), noModal: true },
+    KeyX: { run: () => this.weapons.toggleVisible(), noModal: true },
+    Digit0: { run: () => this.weapons.selectWeapon(null), noModal: true },
+    KeyE: { run: () => this.useContext(), noModal: true },
+    KeyR: { run: () => this.controls.toggleManual(), noModal: true, idle: true },
+    KeyP: { run: () => this.controls.toggleAutoRepair(), noModal: true, idle: true },
+    KeyO: { run: () => this.controls.toggleOverdrive(), noModal: true, idle: true },
+    KeyG: { run: () => this.controls.douseEngine(), noModal: true, idle: true },
+    KeyN: { run: () => this.hovered && !markError(this.world, this.hovered) && this.apply(markVehicle(this.world, this.hovered)), noModal: true, idle: true },
+    KeyC: { run: () => this.toggleScreen(this.character), idle: true },
+    KeyI: { run: () => this.toggleScreen(this.inventory), idle: true },
+    Escape: { run: () => this.closeScreens(null) },
+  };
 
   private closeScreens(keep: CharacterScreen | InventoryScreen | null): void {
     for (const s of [this.town, this.trade, this.character, this.inventory]) if (s !== keep) s.close();
@@ -492,15 +491,9 @@ export class Game {
     screen.toggle();
   }
 
-  // Manual mode drives straight at the click, so the preview must rerun with the new driver.
-  private toggleManual(): void {
-    if (!playerCanAct(this.world)) return;
-    this.apply(setDirect(this.world, !playerVehicle(this.world).direct));
-    this.refreshPlan();
-  }
-
-  private toggleAutoRepair(): void {
-    this.apply(setAutoRepair(this.world, !this.world.player.autoRepair));
+  // A HUD button action that waits for the turn to finish playing and for panels and calls to close.
+  private whenIdle(run: () => void): () => void {
+    return () => void (!this.anim && !this.modalOpen() && run());
   }
 
   private selectWeaponIndex(i: number): void {
@@ -625,6 +618,8 @@ export class Game {
           this.eventPoint(e.target) !== null) ||
         (e.t === "guardShot" && this.eventPoint(e.target) !== null),
     );
+    // Crashes are known now, so the score can time its accent's peak onto the impact at the end of movement.
+    this.sound.accents(world.events, world.player.vehicleId, (e) => (e.t === "collision" ? Math.max(0, MOVE_MS - elapsed) : null));
     // A towed truck's engine is off.
     if (!towed) this.playDriveSound(playback.result);
     this.phase = "Moving";
@@ -672,6 +667,7 @@ export class Game {
     const pending = this.pending;
     this.pending = null;
     if (pending) this.runRescue(pending);
+    this.hud.flushHorn();
     this.refreshUi();
   }
 
@@ -697,20 +693,17 @@ export class Game {
   private autoTurn(now: number): void {
     if (this.anim || this.modalOpen() || this.world.player.state === "dead")
       return;
-    if (!autoRuns(this.world) || now - this.idleSince < CONFIG.autoTurnMs)
+    if (!this.travel.autoAllowed(this.world) || now - this.idleSince < CONFIG.autoTurnMs)
       return;
     this.endTurn();
   }
 
-  // Explosions and broken parts where they happen, then one result sting for the turn.
-  // The player's horn at once, then each answer a beat later, nearest first. Answers come only from earshot, so unseen trucks are heard.
-  private playHonks(): void {
-    this.world.events.filter((e) => e.t === "honk").forEach((e, i) => {
-      const v = vehicleById(this.world, e.vehicle), f = this.frames[v.id] ?? restFrame(this.world, v);
-      this.sound.honk({ x: f.pos.x, y: f.pos.y + GUN_HEIGHT, z: f.pos.z }, i * HONK_REPLY_MS, v.chassisId);
-    });
+  private playHorn(id: string, delayMs: number): void {
+    const v = vehicleById(this.world, id), f = this.frames[v.id] ?? restFrame(this.world, v);
+    this.sound.honk({ x: f.pos.x, y: f.pos.y + GUN_HEIGHT, z: f.pos.z }, delayMs, v.chassisId);
   }
 
+  // Explosions and broken parts where they happen, then one result sting for the turn.
   private playImpactSounds(): void {
     for (const e of this.world.events) {
       const id =
@@ -725,7 +718,7 @@ export class Game {
 
   private playDriveSound(result: TurnResult): void {
     const frames = result.frames[playerVehicle(this.world).id];
-    const g = computeEngineGlide(frames, MOVE_MS / 1000, MIX);
+    const g = computeEngineGlide(frames, MOVE_MS / 1000, MIX, this.world.player.overdrive);
     if (!g) return;
     this.loops.drive(g, playerVehicle(this.world).chassisId);
     if (g.brake) this.sound.at("air-brake", frames[0].pos, 0);
@@ -735,16 +728,9 @@ export class Game {
     const me = playerVehicle(this.world);
     const f = this.frames[me.id];
     const at = f ? toMap(f.pos) : me.pos;
-    if (
-      this.world.vehicles.some(
-        (v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v),
-      )
-    )
-      this.lastDangerTurn = this.world.turn;
-    this.loops.update({
-      stormTiles: this.weather.stormTilesFrom(at.x, at.y),
-      turnsSinceDanger: this.world.turn - this.lastDangerTurn,
-    });
+    const signs = this.combatWatch.observe(this.world.turn, this.world.vehicles.filter((v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v)).map((v) => v.id));
+    this.loops.update({ stormTiles: this.weather.stormTilesFrom(at.x, at.y), ...signs, paused: !this.anim && performance.now() - this.idleSince > MIX.music.pauseDelayMs });
+    if (signs.sighted) this.sound.accent("accent-sighted", 0);
   }
 
   private playPanelSounds(): void {
@@ -781,7 +767,6 @@ export class Game {
   private playShotFx(): void {
     const w = this.world;
     const rows = new Map<string, number>();
-    const mine = vehicleStats(w, playerVehicle(w)).weapons;
     for (const e of w.events) {
       if (e.t === "shot") {
         const a = this.eventPoint(e.shooter);
@@ -790,13 +775,11 @@ export class Game {
         const shooter =
           w.vehicles.find((x) => x.id === e.shooter) ??
           w.removed.find((x) => x.id === e.shooter);
-        const gun =
-          shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
-        const def = gun && partDef(gun.defId);
-        const heavy = def?.kind === "weapon" && def.look === "cannon";
-        const slot = mine.findIndex((mw) => mw.part.id === e.weapon);
-        const label = `${slot >= 0 ? `[${slot + 1}] ` : ""}${heavy ? "Cannon" : "MG"} ${volleyTally(e.rounds)}`;
-        this.playVolley(a, b, e.rounds, heavy, label, e.target, rows);
+        const gun = shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
+        if (!gun) throw new Error(`Shot from ${e.shooter} names no mounted weapon ${e.weapon}`);
+        const view = viewOf(this.views, e.shooter);
+        const landMs = this.playVolley(a, () => view.muzzle(e.weapon), b, e.rounds, gun.defId, e.target, rows);
+        this.sound.accents([e], w.player.vehicleId, () => landMs);
       }
       if (e.t === "guardShot") {
         const b = this.eventPoint(e.target);
@@ -809,15 +792,8 @@ export class Game {
             (REGION.settlement.guardTowerHeight + 0.2) * PHYSICS.metersPerTile,
           z: g.z,
         };
-        this.playVolley(
-          a,
-          b,
-          e.rounds,
-          false,
-          `Guards ${volleyTally(e.rounds)}`,
-          e.target,
-          rows,
-        );
+        const landMs = this.playVolley(a, () => towardFrom(a, b), b, e.rounds, "guard", e.target, rows);
+        this.sound.accents([e], w.player.vehicleId, () => landMs);
       }
       if (e.t === "collision") {
         const p = this.eventPoint(e.a);
@@ -827,40 +803,32 @@ export class Game {
     }
   }
 
-  // Plays one volley's bolts and sounds from a to b, then its result label over the target.
+  // Plays one volley's bolts from the muzzle and sounds from a to b. Each round that damages parts shows its
+  // damage over the target as it lands.
   private playVolley(
     a: V3,
+    muzzle: () => Muzzle,
     b: V3,
     rounds: ShotRound[],
-    heavy: boolean,
-    label: string,
+    weapon: string,
     targetId: string,
     rows: Map<string, number>,
-  ): void {
-    const hits = rounds.filter((r) => r.hit).length;
-    const row = rows.get(targetId) ?? 0;
-    rows.set(targetId, row + 1);
-    // Round starts spread over the first part of the shot time, so every bolt lands before the results show.
-    const flight = CONFIG.combatShotMs * (1 - ROUND_STAGGER);
-    rounds.forEach((r, k) => {
-      const delay =
-        rounds.length > 1
-          ? (k / (rounds.length - 1)) * CONFIG.combatShotMs * ROUND_STAGGER
-          : 0;
-      const land = computeRoundPoint(a, b, r.offset);
-      const struck = r.hit || r.hits.length > 0;
-      this.fx.shot(a, land, struck, heavy, delay, flight);
-      this.sound.at(heavy ? "cannon-fire" : "mg-fire", a, delay);
-      this.sound.at(struck ? "hit-metal" : "miss", land, delay + flight);
+  ): number {
+    // Every round lands within the shot time, before the results show.
+    const spec = projectileOf(weapon);
+    const ground = (p: V3) => groundPoint(this.world.terrain, toMap(p)).y;
+    const plans = planVolley(spec, a, b, rounds, CONFIG.combatShotMs, ground);
+    plans.forEach((plan, k) => {
+      this.fx.shot(spec, muzzle, plan);
+      this.sound.at(spec.look === "tracer" ? "mg-fire" : "cannon-fire", a, plan.delayMs);
+      this.sound.at(plan.struck ? "hit-metal" : "miss", plan.land, plan.delayMs + plan.flightMs);
+      const label = roundLabel(this.world, targetId, rounds[k]);
+      if (!label) return;
+      const row = rows.get(targetId) ?? 0;
+      rows.set(targetId, row + 1);
+      this.fx.label(b, label, PAL.damageText, row, plan.delayMs + plan.flightMs, CONFIG.combatReadMs);
     });
-    this.fx.label(
-      b,
-      label,
-      hits > 0 ? "#ffb070" : "#c8b898",
-      row,
-      CONFIG.combatShotMs,
-      CONFIG.combatReadMs,
-    );
+    return Math.min(...plans.map((plan) => plan.delayMs + plan.flightMs)); // when the first round lands
   }
 
   // The path preview chains physics turns from the current state, so it shows what will happen.
@@ -1054,7 +1022,7 @@ export class Game {
       view.outline(look === "dark");
       view.windows(glass);
       view.pose(f, dt);
-      view.aim(this.turretAim(v, f));
+      view.aim((partId) => this.turretAim((before || v).weaponOrders, f, partId));
       this.truckFx.emit(this.world, display, f, frames !== null, dt);
     }
     for (const [id, view] of this.views) {
@@ -1071,9 +1039,10 @@ export class Game {
     return lampsOn(v.id, this.lightTurn()) && this.sightLimit.reaches(f.pos) ? "dark" : null;
   }
 
-  // Turrets point at their first ordered target.
-  private turretAim(v: Vehicle, f: VehicleFrame): number | null {
-    const order = Object.values(v.weaponOrders)[0];
+  // A turret points at its own ordered target, else at the first ordered target. While a turn plays,
+  // orders come from the turn's start, so turrets keep aim at what they fire on.
+  private turretAim(orders: Vehicle["weaponOrders"], f: VehicleFrame, partId: string): number | null {
+    const order = orders[partId] ?? Object.values(orders)[0];
     const target = order && this.frames[order.targetId];
     return target
       ? Math.atan2(target.pos.z - f.pos.z, target.pos.x - f.pos.x)
@@ -1135,7 +1104,7 @@ export class Game {
     const me = playerVehicle(this.world);
     const s = vehicleStats(this.world, me);
     const sel = s.weapons.filter((m) => m.part.id === this.selected);
-    this.weaponRange.set(this.world.terrain, me.pos, me.heading, this.selected ? sel : s.weapons, !this.selected);
+    this.weaponRange.set(this.world.terrain, me.pos, me.heading, sel);
     this.zones.update(
       this.world.terrain,
       me.pos,

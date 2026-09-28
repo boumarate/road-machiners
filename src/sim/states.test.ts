@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { STATE_TURNS } from '../data/npcs';
 import { wreckVehicle } from './combat';
-import { addState, advanceStates, endState, STATE_KINDS, stateOf, statesHeld } from './states';
+import { addState, advanceStates, endState, STATE_KINDS, stateOf, statesHeld, workOf } from './states';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { NpcState, StateKindId, World } from './types';
 import { canVehicleSee } from './vision';
@@ -168,5 +168,43 @@ describe('states', () => {
     turn(w);
     turn(w);
     expect(stateOf(w, 'feud', a, b)?.turnsLeft).toBe(feudTurns() - 2);
+  });
+});
+
+const PATCH_DATA = { kind: 'patch', deal: 'free', parts: 1, price: 0, work: 4, workLeft: 3 } as const;
+
+function parkedPair(gap: number) {
+  const world = emptyWorld({ x: 30, y: 30 });
+  const me = world.vehicles[0];
+  const npc = addVehicle(world, 'traders', 'buggy', ['stockEngine'], { x: 30 + gap, y: 30 });
+  me.speed = 0;
+  npc.speed = 0;
+  return { world, me, npc };
+}
+
+describe('work of a truck', () => {
+  it('is its parked job first', () => {
+    const { world, me } = parkedPair(1);
+    me.job = { kind: 'search', stockId: 'wreck-1', turnsLeft: 1, total: 2 };
+    expect(workOf(world, me)).toMatchObject({ from: 'job', turnsLeft: 1, total: 2 });
+  });
+
+  it('counts a patch under way for both the patcher and the client', () => {
+    const { world, me, npc } = parkedPair(1);
+    const state = addState(world, 'patch', npc.id, me.id, { ...PATCH_DATA });
+    expect(workOf(world, npc)).toEqual({ from: 'state', state, turnsLeft: 3, total: 4 });
+    expect(workOf(world, me)).toEqual({ from: 'state', state, turnsLeft: 3, total: 4 });
+  });
+
+  it('counts no patch while the trucks are out of reach', () => {
+    const { world, me, npc } = parkedPair(8);
+    addState(world, 'patch', npc.id, me.id, { ...PATCH_DATA });
+    expect(workOf(world, npc)).toBeNull();
+  });
+
+  it('counts no state without work', () => {
+    const { world, me, npc } = parkedPair(1);
+    addState(world, 'truce', npc.id, me.id, { kind: 'none' });
+    expect(workOf(world, npc)).toBeNull();
   });
 });

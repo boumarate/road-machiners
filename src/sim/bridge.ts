@@ -34,9 +34,16 @@ function across(x: number, y: number): number {
 
 // Distance along the deck from its from end, or null off the deck outline.
 export function deckAlong(x: number, y: number): number | null {
-  const a = along(x, y);
-  if (a < 0 || a > BRIDGE_LENGTH || Math.abs(across(x, y)) > HALF_WIDTH) return null;
+  const a = spanAlong(x, y);
+  if (a === null || Math.abs(across(x, y)) > HALF_WIDTH) return null;
   return a;
+}
+
+// Distance along the deck for any point between the two deck ends, however far to the side, or null
+// past either end.
+export function spanAlong(x: number, y: number): number | null {
+  const a = along(x, y);
+  return a < 0 || a > BRIDGE_LENGTH ? null : a;
 }
 
 // Share of the road and site flattening removed at a map point: 1 in the gap under the deck, 0 on

@@ -7,7 +7,7 @@ import { newWorld } from './world';
 import { CONDITION } from '../data/wear';
 import { partValue } from './wear';
 import { makeVehicle } from './factory';
-import { goodsCount, gridOf, isMounted, mountedParts, placementError } from './grid';
+import { freeCells, goodsCount, gridOf, isMounted, mountedParts, placementError } from './grid';
 import { vehicleMass } from './mass';
 import { generateNpcLoadout, sampleWeighted } from './npc-loadout';
 import { spawnInitial, spawnNpcs } from './spawn';
@@ -194,9 +194,14 @@ describe('trader spare parts', () => {
     const template = structuredClone(NPCS.trader);
     template.loadout.chassis = [{ value: 'buggy', weight: 1 }];
     template.loadout.cargoPart = [{ value: null, weight: 1 }];
-    template.loadout.goods = [{ value: { good: 'grain', count: 20 }, weight: 4 }, { value: null, weight: 1 }];
+    template.loadout.goods = [{ value: null, weight: 1 }];
+    template.loadout.spares = { pool: [{ value: 'mg', weight: 1 }], count: [{ value: 0, weight: 1 }] };
+    const bare = generateNpcLoadout({ ...fixture, rngState: 3 }, template);
+    const free = freeCells(makeVehicle(fixture, { ...bare, name: 'probe', faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 }));
+    template.loadout.goods = [{ value: { good: 'textiles', count: free }, weight: 1 }];
     template.loadout.spares = { pool: [{ value: 'mg', weight: 1 }], count: [{ value: 3, weight: 1 }] };
     const loadout = generateNpcLoadout({ ...fixture, rngState: 3 }, template);
+    expect(loadout.cargo.textiles).toBe(free);
     expect(loadout.spares).toEqual([]);
   });
 

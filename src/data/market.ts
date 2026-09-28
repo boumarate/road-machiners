@@ -11,50 +11,57 @@ import type { Weighted } from './npcs';
 
 export type Tier = 1 | 2 | 3;
 
-export type ItemKind = 'weapon' | 'engine' | 'armor' | 'cargo' | 'scanner' | 'chassis' | 'good';
+export type ItemKind = 'weapon' | 'engine' | 'armor' | 'cargo' | 'scanner' | 'store' | 'chassis' | 'good';
 
 export const EFFORT = {
-  // Net money per turn at each tier. First guesses only: the start kit gives 1000 money and a
-  // scout, a day is TIME.turnsPerDay (300) turns, and a new player should clear a tier 1 item in
-  // about half a day to a day of play. PH8 replaces these with wages measured by the harness.
+  // Net money per turn at each tier. Tier 1 is the salvage bot's wage from `npm run econ` over seeds
+  // 1, 2 and 3 for 30 days. It was the only bot that earned money, so it stands in for the player.
+  // No bot reached tier 2 or 3 gear, so those keep the old guessed ratio to tier 1.
   wage: {
-    1: 1.5,
-    2: 4,
-    3: 9,
+    1: 0.37,
+    2: 1,
+    3: 2.2,
   } as Record<Tier, number>,
 
   // Target effort in turns per tier and item kind: value / wage[tier] should land in this range.
-  // Chassis cost more turns than a part of the same tier because they carry the whole truck.
+  // They hold chassis from 2000, 3000 and 4500 money per tier, and parts from 100, 200 and 450.
   // Goods are priced far below parts, since a haul is many units, not one purchase.
   bands: {
     1: {
-      weapon: [20, 60],
-      engine: [15, 45],
-      armor: [15, 45],
-      cargo: [10, 30],
-      scanner: [10, 30],
-      chassis: [40, 120],
-      good: [1, 5],
+      weapon: [250, 700],
+      engine: [250, 700],
+      armor: [250, 700],
+      cargo: [250, 700],
+      scanner: [250, 700],
+      store: [250, 700],
+      chassis: [5000, 7500],
+      good: [40, 100],
     },
     2: {
-      weapon: [60, 150],
-      engine: [50, 130],
-      armor: [45, 110],
-      cargo: [30, 80],
-      scanner: [30, 80],
-      chassis: [120, 300],
-      good: [3, 10],
+      weapon: [180, 480],
+      engine: [180, 480],
+      armor: [180, 480],
+      cargo: [180, 480],
+      scanner: [180, 480],
+      store: [180, 480],
+      chassis: [2800, 4200],
+      good: [50, 100],
     },
     3: {
-      weapon: [150, 400],
-      engine: [130, 350],
-      armor: [110, 300],
-      cargo: [80, 220],
-      scanner: [80, 220],
-      chassis: [300, 700],
-      good: [8, 25],
+      weapon: [180, 380],
+      engine: [180, 380],
+      armor: [180, 380],
+      cargo: [180, 380],
+      scanner: [180, 380],
+      store: [180, 380],
+      chassis: [1900, 2800],
+      good: [40, 80],
     },
   } as Record<Tier, Record<ItemKind, [number, number]>>,
+
+  // Tier wages per trip turn a full truckload of goods earns on a long haul. Goods pay above salvage,
+  // since a haul risks money on the cargo.
+  haulWages: 4,
 
   // Tiles per turn a truck cruises for effort and contract-travel estimates. Chassis top speeds
   // (src/data/chassis.ts) run 3.9 to 9.75 tiles per turn, but real travel loses time to routing,
@@ -81,8 +88,9 @@ export const CONTRACTS = {
     // The deadline is the estimated travel turns times this factor, so a normal detour, a stop for
     // fuel or a fight does not expire the contract on its own.
     durationFactor: 3,
-    // Hauling risks only the trip, not a fight or a search, so it pays under a full tier wage.
-    rewardFactor: 0.8,
+    // A tier wage is what salvage earns. A haul pays about three of them, so a contract beats
+    // scavenging along the same road.
+    rewardFactor: 3.2,
     // On top of the wage, the client pays a small cut of the hauled goods' value, since carrying
     // something worth money is worth more to the client than empty road time.
     valueShare: 0.05,
@@ -100,7 +108,7 @@ export const CONTRACTS = {
     durationTurns: [150, 400] as [number, number],
     // The reward is the part's own pristine buy price plus this search fee: turns of effort spent
     // finding a part of a named type, in any condition, at the fetch's own tier wage.
-    searchFeeTurns: 60,
+    searchFeeTurns: 240,
     // Worst wear a hand-in part may carry. One rebuild keeps the fetch honest: the client wants a
     // part that still does its job, not a part on its last legs.
     maxWear: 1,
@@ -112,9 +120,9 @@ export const CONTRACTS = {
     // Long enough that a raider's own patrol or camp turns do not expire the contract before the
     // player can reach and fight it. The window only sets the deadline: it does not change the pay.
     durationTurns: [200, 500] as [number, number],
-    // Share of the target's own total worth, chassis plus every part, paid for the kill. Half its
-    // worth pays for the risk of the fight without outpricing the wreck's own salvage.
-    valueShare: 0.5,
+    // Share of the target's own total worth, chassis plus every part, paid for the kill. A fifth of
+    // its worth pays for the risk of the fight without outpricing the wreck's own salvage.
+    valueShare: 0.2,
     // Social XP per money of the reward, all of which pays for the fight.
     xpPerEffort: 0.25,
   },
@@ -132,8 +140,8 @@ export const PRICE_FACTOR = { make: 0.75 };
 
 // Fraction of a good's value added to its price per tile of straight distance to the nearest shop
 // that makes it. Picked so a single-source good hauled the length of the Bowl-Nose road (about 520
-// tiles) sells for close to double its make price, which pays a full truckload about a tier's wage
-// for the trip's estimated turns.
+// tiles) sells for close to double its make price, which pays a full truckload about
+// EFFORT.haulWages tier wages for the trip's estimated turns.
 export const DISTANCE_PREMIUM = { perTile: 0.0021 };
 
 // Sites that give out a good with no shop that makes it. Supply convoys haul these goods from the
@@ -259,7 +267,7 @@ export const SHOPS: Record<string, ShopDef> = {
     goods: ['grain', 'salt', 'textiles'],
     priceFactor: PRICE_FACTOR,
     partStock: {
-      parts: (['rack', 'panniers', 'flatbed', 'scrapPanels', 'scrapSheet', 'cage'] as const).map((id) => ({ value: id, weight: 1 })),
+      parts: (['rack', 'panniers', 'flatbed', 'scrapPanels', 'scrapSheet', 'cage', 'supplyLocker'] as const).map((id) => ({ value: id, weight: 1 })),
       wear: STALL_WEAR,
     },
     stockSize: [2, 4],
@@ -279,7 +287,7 @@ export const SHOPS: Record<string, ShopDef> = {
     goods: ['batteries', 'scrap', 'parts'],
     priceFactor: PRICE_FACTOR,
     partStock: {
-      parts: (['stockEngine', 'flatFour', 'workhorseDiesel', 'scanner', 'plates'] as const).map((id) => ({ value: id, weight: 1 })),
+      parts: (['stockEngine', 'flatFour', 'workhorseDiesel', 'scanner', 'plates', 'jerrycans'] as const).map((id) => ({ value: id, weight: 1 })),
       wear: STALL_WEAR,
     },
     stockSize: [2, 4],

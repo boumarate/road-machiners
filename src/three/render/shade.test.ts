@@ -20,6 +20,15 @@ describe('heat haze', () => {
     expect(cornerLook(w, x, y, sunAt(w.turn)!).haze).toBe(255);
   });
 
+  it('shimmers harder the hotter the ground', () => {
+    const w = emptyWorld();
+    const { x, y } = w.vehicles[0].pos;
+    const plainNoon = cornerLook(w, x, y, sunAt(turnFor(noon))!).haze;
+    expect(cornerLook(w, x, y, sunAt(turnFor(noon - 2))!).haze).toBeLessThan(plainNoon);
+    w.weather = [{ id: 'hw', kind: 'heatwave', turnsLeft: 10 }];
+    expect(cornerLook(w, x, y, sunAt(turnFor(noon))!).haze).toBeGreaterThan(plainNoon);
+  });
+
   it('does not shimmer in sun too weak to heat a driving engine', () => {
     const w = emptyWorld();
     w.turn = turnFor(TIME.sunrise + 1);

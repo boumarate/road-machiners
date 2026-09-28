@@ -6,10 +6,13 @@ import { partDef } from '../data/parts';
 import type { Contract } from '../sim/market';
 import { PERK_LEVELS, SKILL_INFO } from '../data/skills';
 import { TERRAIN } from '../data/terrain';
-import { playerVehicle } from '../sim/damage';
+import { playerVehicle, vehicleById } from '../sim/damage';
+import { isKnockedOut } from '../sim/defeat';
+import type { Work, WorkLeft } from '../sim/states';
 import { dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
-import { mountedParts } from '../sim/grid';
+import { goodsCount, mountedParts } from '../sim/grid';
+import { spareParts } from '../sim/inventory';
 import { playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
 import { npcTraits } from '../sim/npc-decisions';
@@ -24,6 +27,7 @@ import { fillLine } from './dialogue';
 // What a job works on, in words: "Repair Autocannon", "Remove Autocannon from Raider outrider".
 export function jobLabel(world: World, v: Vehicle, job: Job): string {
   if (job.kind === 'search') return 'Search';
+  if (job.kind === 'weld') return 'Weld scrap armor';
   if (job.kind === 'refit') return refitLabel(world, v, job);
   const part = v.items.find((it) => it.kind === 'part' && it.part.id === job.partId);
   return `${job.kind === 'repair' ? 'Repair' : 'Strip'} ${part ? itemName(part) : 'part'}`;
@@ -55,9 +59,17 @@ function itemName(it: GridItem): string {
   return it.kind === 'part' ? partDef(it.part.defId).name : GOODS[it.good].name;
 }
 
-// The share of a job's turns already worked, from 0 to 1.
-export function jobProgress(job: Job): number {
-  return 1 - job.turnsLeft / job.total;
+// What timed work does, in words, for the truck `v` doing it.
+export function workLabel(world: World, v: Vehicle, work: Work): string {
+  if (work.from === 'job') return jobLabel(world, v, work.job);
+  const s = work.state;
+  if (s.kind !== 'patch') throw new Error(`No work label for a ${s.kind} state`);
+  return s.holder === v.id ? `Patch ${vehicleById(world, s.other).name}` : `Patched by ${vehicleById(world, s.holder).name}`;
+}
+
+// The share of the work's turns already done, from 0 to 1.
+export function workProgress(work: WorkLeft): number {
+  return 1 - work.turnsLeft / work.total;
 }
 import { damage } from './units';
 
@@ -85,18 +97,22 @@ function partName(world: World, vehicleId: string, partId: string): string {
   return p ? partDef(p.defId).name : 'part';
 }
 
-// An NPC's goal and its reason, for the full log debug flag only. Players read intent from what a driver does.
-export function npcActivityLine(world: World, vehicle: Vehicle): string | null {
-  return world.player.fullLog ? formatNpcActivity(world, vehicle) : null;
+// A seen NPC's top goal and its reason, shown under its driver's name. A knocked-out driver pursues no goal.
+export function formatNpcActivity(world: World, vehicle: Vehicle): string | null {
+  if (!vehicle.brain || !playerSees(world, vehicle.pos)) return null;
+  if (isKnockedOut(vehicle)) return 'Knocked out';
+  const activity = topGoal(vehicle);
+  if (!activity) return null;
+  const label = targetLabel(world, activity.targetId);
+  return `${activity.kind}${label ? `: ${label}` : ''} — ${activity.reason}`;
 }
 
-export function formatNpcActivity(world: World, vehicle: Vehicle): string | null {
-  const activity = vehicle.brain ? topGoal(vehicle) : null;
-  if (!activity || !playerSees(world, vehicle.pos)) return null;
-  const target = world.vehicles.find((v) => v.id === activity.targetId);
-  const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === activity.targetId);
-  const label = target && playerSees(world, target.pos) ? target.name : site && world.player.discovered.includes(site.id) ? site.name : null;
-  return `${activity.kind}${label ? `: ${label}` : ''} — ${activity.reason}`;
+// A goal target's name once the player sees the truck or has discovered the site.
+function targetLabel(world: World, targetId: string | null): string | null {
+  const target = world.vehicles.find((v) => v.id === targetId);
+  if (target) return playerSees(world, target.pos) ? target.name : null;
+  const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === targetId);
+  return site && world.player.discovered.includes(site.id) ? site.name : null;
 }
 
 // "Traits: scavenger, scumbag" for an NPC. The hover panel shows it as one line. Traits stay hidden, so null,
@@ -106,41 +122,59 @@ export function formatNpcTraits(world: World, vehicle: Vehicle): string | null {
   return hasPerk(world, 'readDriver') ? `Traits: ${traits.join(', ')}` : null;
 }
 
+// "Cargo: Salt ×2, Scrap metal ×1. Spares: MG turret" for a truck. The hover panel shows it as one line. Cargo stays
+// hidden, so null, until the player picks the cargo eye perk.
+export function formatNpcCargo(world: World, vehicle: Vehicle): string | null {
+  if (!hasPerk(world, 'cargoEye')) return null;
+  const goods = Object.entries(goodsCount(vehicle)).map(([good, n]) => `${GOODS[good].name} ×${n}`);
+  const spares = spareParts(vehicle).map((part) => partDef(part.defId).name);
+  if (goods.length === 0 && spares.length === 0) return 'Cargo: empty';
+  const lines = [...(goods.length > 0 ? [`Cargo: ${goods.join(', ')}`] : []), ...(spares.length > 0 ? [`Spares: ${spares.join(', ')}`] : [])];
+  return lines.join('. ');
+}
+
+// The spotter mark on a truck: the key that marks it, or the turns its mark has left. Null without the spotter perk.
+export function formatNpcMark(world: World, vehicle: Vehicle): string | null {
+  if (!hasPerk(world, 'spotter')) return null;
+  const mark = world.player.marked.find((m) => m.vehicleId === vehicle.id && world.turn <= m.until);
+  return mark ? `Marked: ${mark.until - world.turn} turns left` : '[N] Mark';
+}
+
 // How a state the NPC holds reads from the player's side. A null label keeps the driver's intent hidden.
-const STATE_LABELS: Record<StateKindId, ((s: NpcState) => string) | null> = {
+const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   feud: () => 'Feud with you',
-  backedOff: null,
+  backedOff: () => 'Backing off from you',
   tow: (s) => (towData(s).hitched ? 'Towing you' : 'Tow offer to you'),
   turnedDown: () => 'You turned down its tow',
   towPromise: () => 'Promised you a tow',
   answering: () => 'Coming to tow you',
   patch: () => 'Patching your truck',
   truce: () => 'Truce with you',
-  grievance: null,
+  grievance: () => 'Angry at your crash',
   plea: (s) => (pleaData(s).plea === 'truce' ? 'Asked you for a truce' : 'Begged you for mercy'),
   trade: () => 'Pulling over to trade with you',
-  revenge: null,
+  revenge: () => 'Wants revenge on you',
   escort: () => 'Escorting you',
 };
 
-// One line per shown state the NPC holds toward the player, with turns left when a deal has a timer.
-// A feud hides its timer, so the player does not know when the driver gives up.
+// One line per state the NPC holds toward the player, with turns left when the state has a timer.
 export function formatNpcStates(world: World, vehicle: Vehicle): string[] {
   return statesHeld(world, vehicle.id)
     .filter((s) => s.other === world.player.vehicleId)
-    .flatMap((s) => {
-      const label = STATE_LABELS[s.kind]?.(s);
-      if (!label) return [];
-      return s.turnsLeft === null || s.kind === 'feud' ? [label] : [`${label}, ${s.turnsLeft} turn${s.turnsLeft === 1 ? '' : 's'}`];
-    });
+    .map((s) => (s.turnsLeft === null ? STATE_LABELS[s.kind](s) : `${STATE_LABELS[s.kind](s)}, ${s.turnsLeft} turn${s.turnsLeft === 1 ? '' : 's'}`));
 }
 
 // Log lines for the end of a state an NPC holds toward the player. Tow states log through the tow events.
 const STATE_ENDED_TEXT: Partial<Record<StateKindId, Record<StateEnding, ((holder: string) => { text: string; cls: string }) | null>>> = {
   feud: {
     expired: (holder) => ({ text: `${holder} gives up the feud with you.`, cls: 'good' }),
-    fulfilled: (holder) => ({ text: `${holder} ends the feud.`, cls: 'bad' }),
+    fulfilled: (holder) => ({ text: `${holder} ends the feud: you are beaten.`, cls: 'bad' }),
     broken: (holder) => ({ text: `The feud with ${holder} is over.`, cls: 'dim' }),
+  },
+  backedOff: {
+    expired: (holder) => ({ text: `${holder} stops backing off from you.`, cls: 'dim' }),
+    fulfilled: null,
+    broken: null,
   },
 };
 
@@ -164,11 +198,26 @@ function damageList(world: World, vehicleId: string, hits: PartHit[]): string {
   return `; ${vehicleName(world, vehicleId)}: ${[...dealt].map(([id, d]) => `${partName(world, vehicleId, id)} −${damage(d)}`).join(', ')}`;
 }
 
-// "3/5 crit −12" over a volley: hits, crits and damage dealt.
-export function volleyTally(rounds: ShotRound[]): string {
-  const hits = rounds.filter((r) => r.hit).length;
-  const dealt = rounds.flatMap((r) => r.hits).reduce((sum, h) => sum + h.damage, 0);
-  return `${hits}/${rounds.length}${rounds.some((r) => r.crit) ? ' crit' : ''}${dealt > 0 ? ` −${damage(dealt)}` : ''}`;
+// Short part names for damage popups, by part kind and core role.
+const PART_SHORT = {
+  weapon: 'Gun', engine: 'Eng', armor: 'Arm', cargo: 'Cargo', scanner: 'Scan', store: 'Store',
+  cab: 'Cab', transmission: 'Trans', wheel: 'Whl', tank: 'Tank',
+} as const;
+
+function partShort(world: World, vehicleId: string, partId: string): string {
+  const v = findAny(world, vehicleId);
+  const p = v && mountedParts(v).find((x) => x.id === partId);
+  if (!p) throw new Error(`Round hit part ${partId}, which ${vehicleId} does not carry`);
+  const def = partDef(p.defId);
+  return PART_SHORT[def.kind === 'core' ? def.role : def.kind];
+}
+
+// "Crit! Eng: 5, Arm: 2" for the parts one round damaged, or null when it damaged none.
+export function roundLabel(world: World, vehicleId: string, round: ShotRound): string | null {
+  const dealt = partDamage(round.hits);
+  if (dealt.size === 0) return null;
+  const parts = [...dealt].map(([id, d]) => `${partShort(world, vehicleId, id)}: ${damage(d)}`).join(', ');
+  return `${round.crit ? 'Crit! ' : ''}${parts}`;
 }
 
 type LogLine = { text: string; cls: string };
@@ -178,8 +227,8 @@ function jobText(world: World, e: Extract<GameEvent, { t: 'job' }>): LogLine | n
   if (e.vehicle !== world.player.vehicleId) return null;
   const what = jobLabel(world, playerVehicle(world), e.job);
   const lines = {
-    started: { text: `${what} started, about ${e.job.turnsLeft} turns parked`, cls: '' },
-    cancelled: { text: `${what} cancelled`, cls: 'bad' },
+    started: { text: `${what} started: stay parked about ${e.job.turnsLeft} turns.`, cls: '' },
+    cancelled: { text: `${what} cancelled: the truck moved, a hostile came in sight, or required items changed`, cls: 'bad' },
     done: { text: `${what} done`, cls: 'good' },
   };
   return lines[e.outcome];
@@ -205,9 +254,9 @@ function patchText(world: World, e: Extract<GameEvent, { t: 'patch' }>): LogLine
   const me = world.player.vehicleId;
   const other = vehicleName(world, e.patcher === me ? e.client : e.patcher);
   const lines = {
-    started: e.patcher === me ? `You start patching ${other}.` : `${other} starts patching your truck.`,
+    started: e.patcher === me ? `You start patching ${other}. Stay parked beside it.` : `${other} starts patching your truck. Stay parked.`,
     done: e.patcher === me ? `You patched ${other}.` : `${other} patched your truck.`,
-    lapsed: `The patch with ${other} is off.`,
+    lapsed: `The patch with ${other} is off: nobody worked on it.`,
   };
   return { text: lines[e.outcome], cls: e.outcome === 'lapsed' ? 'dim' : e.outcome === 'done' ? 'good' : '' };
 }
@@ -222,14 +271,34 @@ function towOfferText(world: World, e: Extract<GameEvent, { t: 'towOffer' }>): L
 }
 
 function towHitchedText(world: World, e: Extract<GameEvent, { t: 'towHitched' }>): LogLine {
-  return { text: `${vehicleName(world, e.by)} takes ${vehicleName(world, e.client)} in tow.`, cls: 'dim' };
+  return { text: `${vehicleName(world, e.by)} takes ${vehicleName(world, e.client)} in tow to ${siteName(e.site)}.`, cls: 'dim' };
 }
 
-// The player sees a tow between NPCs, but not what it costs.
 function towDoneText(world: World, e: Extract<GameEvent, { t: 'towDone' }>): LogLine {
   const by = vehicleName(world, e.by);
   if (e.client === world.player.vehicleId) return { text: `${by} tows you into town and takes ${e.fee}.`, cls: 'bad' };
-  return { text: `${by} tows ${vehicleName(world, e.client)} in.`, cls: 'dim' };
+  return { text: `${by} tows ${vehicleName(world, e.client)} in and takes ${e.fee}.`, cls: 'dim' };
+}
+
+function escortPaidText(world: World, e: Extract<GameEvent, { t: 'escortPaid' }>): LogLine {
+  return { text: `${vehicleName(world, e.client)} pays ${vehicleName(world, e.by)} ${e.fee} for the escort.`, cls: 'dim' };
+}
+
+function escortHiredText(world: World, e: Extract<GameEvent, { t: 'escortHired' }>): LogLine {
+  return { text: `${vehicleName(world, e.client)} hires ${vehicleName(world, e.by)} as escort to ${siteName(e.site)} for ${e.fee}.`, cls: 'dim' };
+}
+
+function escortRefusedText(world: World, e: Extract<GameEvent, { t: 'escortRefused' }>): LogLine {
+  return { text: `${vehicleName(world, e.by)} turns down an escort job from ${vehicleName(world, e.client)}.`, cls: 'dim' };
+}
+
+// Pleas between two NPCs. The player's own pleas show as radio lines.
+function pleaText(world: World, e: Extract<GameEvent, { t: 'plea' }>): LogLine | null {
+  const me = world.player.vehicleId;
+  if (e.from === me || e.to === me) return null;
+  const asks = e.plea === 'truce' ? 'asks for a truce' : 'begs for mercy';
+  const answer = e.accepted ? 'granted' : 'refused';
+  return { text: `${vehicleName(world, e.from)} ${asks} from ${vehicleName(world, e.to)}: ${answer}`, cls: 'dim' };
 }
 
 function towDroppedText(world: World, e: Extract<GameEvent, { t: 'towDropped' }>): LogLine {
@@ -242,7 +311,7 @@ function towDroppedText(world: World, e: Extract<GameEvent, { t: 'towDropped' }>
 function playerTowDroppedText(by: string, reason: Extract<GameEvent, { t: 'towDropped' }>['reason']): LogLine {
   const text = reason === 'refused' ? `You turn down the tow from ${by}.`
     : reason === 'unhitched' ? `You unhitch from ${by}.`
-    : reason === 'danger' ? `${by} drops the tow.`
+    : reason === 'danger' ? `${by} drops the tow. There is danger.`
     : `${by} is gone. The tow is off.`;
   return { text, cls: reason === 'refused' || reason === 'unhitched' ? 'dim' : 'bad' };
 }
@@ -270,6 +339,10 @@ const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => st
   towHitched: (e) => [e.by, e.client],
   towDone: (e) => [e.by, e.client],
   towDropped: (e) => [e.by, e.client],
+  plea: (e) => [e.from, e.to],
+  escortPaid: (e) => [e.by, e.client],
+  escortHired: (e) => [e.by, e.client],
+  escortRefused: (e) => [e.by, e.client],
 };
 
 function unnoticed(world: World, e: GameEvent): boolean {
@@ -350,12 +423,12 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   towHitched: towHitchedText,
   towDone: towDoneText,
   towDropped: towDroppedText,
-  // The dialogue panel shows the call and the player's own pleas. Radio deals between NPCs stay unheard.
+  // The dialogue panel shows the player's calls.
   call: () => null,
-  plea: () => null,
-  escortPaid: () => null,
-  escortHired: () => null,
-  escortRefused: () => null,
+  plea: pleaText,
+  escortPaid: escortPaidText,
+  escortHired: escortHiredText,
+  escortRefused: escortRefusedText,
 };
 
 // Returns null for events not worth a log line.

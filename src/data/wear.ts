@@ -41,14 +41,20 @@ export const REPAIR = {
 };
 
 // Engine heat for the player truck. 0 is a cold engine and 1 is overheated. The sun heats a running
-// engine; shade, night and parking cool it. Full noon sun overheats a cold stock engine in about 44 turns
-// at top speed and 74 at 70% of it. Morning and evening sun barely warm it. Each engine's heat scales the gain.
+// engine; shade, night and parking cool it. Full noon sun overheats a cold stock engine in about 36 turns
+// at top speed and 82 at 70% of it. Morning and evening sun barely warm it. Each engine's heat scales both the
+// gain and the airflow cooling. Every engine overheats on the shortest Bowl to Nose trip at top speed from 10:00.
 export const ENGINE_HEAT = {
-  gain: 0.02875, // heat per turn per unit of sun heat above 1, at top speed; scales with speed share
-  coolDriving: 0.02, // heat lost per turn to airflow while driving
+  gain: 0.0345, // heat per turn per unit of sun heat above 1, at top speed; scales with speed share
+  coolDriving: 0.024, // heat lost per turn to airflow while driving
   coolParked: 0.15, // heat lost per turn while parked, divided by the sun heat at the spot
   warnAt: 0.75, // heat at which the log warns once and the gauge turns red
-  overheatDamage: 1, // HP each working engine loses per turn driven while overheated
+  overheatDamage: 2, // HP each working engine loses per turn driven while overheated
+  // Extra heat per turn driven in overdrive, in any sun. Overheats a cold stock engine in about 28 turns at night
+  // and 12 in full noon sun.
+  overdriveGain: 0.06,
+  douseSupplies: 1, // supplies poured over the engine to cool it at once
+  douseCool: 0.5, // heat one douse takes away
 };
 
 // Sun heat from which the ground shimmers in heat haze. Above it airflow no longer cools a truck at top

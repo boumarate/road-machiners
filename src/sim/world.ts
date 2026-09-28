@@ -15,7 +15,7 @@ import { advanceKnockout, advanceNpcKnockouts, checkDeath, checkKnockout } from 
 import { healPlayer } from './health';
 import { fireGuards } from './guards';
 import { discoverSites } from './locations';
-import { consumeSupplies, leakFuel } from './supplies';
+import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
 import { chargeUpkeep } from './economy';
 import { nameStream, spawnInitial, spawnNpcs } from './spawn';
 import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
@@ -72,12 +72,15 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap): World {
         profit: 0, deal: 0, call: 0, honk: 0, contract: 0, freeTow: 0,
       },
       perks: [],
+      marked: [],
+      rumored: [],
       health: RULES.maxHealth,
       fuel: kit.fuel,
       supplies: kit.supplies,
       autoFire: false,
       autoRepair: true,
       engineHeat: 0,
+      overdrive: false,
       discovered: [],
       scavenged: [],
       storage: [],
@@ -135,10 +138,10 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap): World {
   return world;
 }
 
-// The player's start: REGION.playerStart.distance tiles along its road from the road's first point,
-// moved to the right shoulder and facing along the road.
+// The player's start: REGION.playerStart.offset tiles to the right of the point REGION.playerStart.distance tiles
+// along its road, facing back toward that point.
 export function startPose(): { pos: Vec; heading: number } {
-  const { road, distance, shoulder } = REGION.playerStart;
+  const { road, distance, offset } = REGION.playerStart;
   const points = REGION.roads[road];
   let left = distance;
   for (let i = 1; i < points.length; i++) {
@@ -149,12 +152,12 @@ export function startPose(): { pos: Vec; heading: number } {
       left -= length;
       continue;
     }
-    const heading = Math.atan2(b.y - a.y, b.x - a.x);
+    const along = Math.atan2(b.y - a.y, b.x - a.x);
     const t = left / length;
     // Map y points down, so (-sin, cos) of the heading points to the right of travel.
     return {
-      pos: { x: a.x + (b.x - a.x) * t - Math.sin(heading) * shoulder, y: a.y + (b.y - a.y) * t + Math.cos(heading) * shoulder },
-      heading,
+      pos: { x: a.x + (b.x - a.x) * t - Math.sin(along) * offset, y: a.y + (b.y - a.y) * t + Math.cos(along) * offset },
+      heading: along - Math.PI / 2,
     };
   }
   throw new Error(`Player start lies ${distance} tiles along road ${road}, past its end`);
@@ -255,6 +258,7 @@ export function endTurn(
     chargeUpkeep(w);
     healPlayer(w);
     leakFuel(w);
+    fitAllStores(w);
     applyGodMode(w);
     resolveDestroyed(w);
     advanceContracts(w);
@@ -311,6 +315,12 @@ export function setDirect(world: World, on: boolean): World {
 export function setAutoRepair(world: World, on: boolean): World {
   return update(world, (w) => {
     w.player.autoRepair = on;
+  });
+}
+
+export function setOverdrive(world: World, on: boolean): World {
+  return update(world, (w) => {
+    w.player.overdrive = on;
   });
 }
 

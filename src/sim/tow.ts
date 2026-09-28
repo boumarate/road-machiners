@@ -24,6 +24,7 @@ import { isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
 import { isDefeated, isKnockedOut } from './defeat';
 import { contactsOf, hearsBeacon } from './detect';
+import { inCombat } from './jobs';
 import { route, routeLength } from './path';
 import { busyWithFight, decide, getKnownSite, getUpkeepReserve, isWeak, npcProfile } from './npc-decisions';
 import { placeBase } from './npc-activities';
@@ -143,12 +144,11 @@ function answeredByOther(world: World, tower: Vehicle, client: Vehicle): boolean
 }
 
 // Where the tow goes, or null when there is nowhere to go. A player client rides to the tower's known town nearest
-// it. An NPC client names its nearest own camp, else its nearest known town, and needs a tow only away from it.
+// it. An NPC client names its nearest own camp, else its nearest known town. Either needs a tow only away from it.
 function towDestination(world: World, tower: Vehicle, client: Vehicle): Site | null {
-  if (isPlayer(world, client)) return nearestSite(npcProfile(tower).towns, client.pos);
   // A truck without a driver names no destination.
-  if (!client.brain) return null;
-  const site = npcHomeSite(client);
+  if (!isPlayer(world, client) && !client.brain) return null;
+  const site = isPlayer(world, client) ? nearestSite(npcProfile(tower).towns, client.pos) : npcHomeSite(client);
   return site && !canUseSite(client.pos, site) ? site : null;
 }
 
@@ -270,8 +270,7 @@ export function runTow(world: World, vehicle: Vehicle, activity: NpcActivity): s
     return held.other === world.player.vehicleId ? 'towed the player to town' : 'towed a stranded truck';
   }
   const client = vehicleById(world, activity.targetId!);
-  // Another driver got there first this turn. Next turn this one's tow goal pops.
-  if (towOf(world, client.id) || !inTowReach(vehicle, client)) return null;
+  if (!readyToTow(world, vehicle, client)) return null;
   activity.phase = 'act';
   if (isPlayer(world, client)) offer(world, vehicle, client);
   else hitch(world, vehicle, client);
@@ -288,6 +287,13 @@ function towerTerms(world: World, tower: Vehicle, client: Vehicle): { site: stri
   }
   const site = towSite(world, tower, client);
   return { site: site.id, fee: towFee(world, tower, client, site) };
+}
+
+// The tower can hitch or offer now. When another driver got there first this turn, this one's tow goal pops next
+// turn. A player in combat gets the offer once the fight ends, and the tower waits beside the truck.
+function readyToTow(world: World, tower: Vehicle, client: Vehicle): boolean {
+  if (towOf(world, client.id) || !inTowReach(tower, client)) return false;
+  return !isPlayer(world, client) || !inCombat(world, client);
 }
 
 // Ends the tower's claim on the client, which the tow now replaces.
@@ -429,12 +435,27 @@ export function startEscort(world: World, escort: Vehicle, leader: Vehicle, site
   return goal;
 }
 
-// The follower re-aims every turn at a spot behind the leader, past both radii and the follow gap. The two keep in
-// touch on the radio, so it knows where the leader is without sight.
+// The follower re-aims every turn at a spot beside the leader's tail, out of its dust and its path. Escorts take
+// turns on the two sides, and each further pair rides one row back. The spot leads by the leader's travel this
+// turn, so the follower keeps pace instead of chasing where the leader was. The two keep in touch on the radio,
+// so it knows where the leader is without sight.
 export function steerFollow(world: World, vehicle: Vehicle, goal: NpcActivity): void {
   const leader = vehicleById(world, goal.targetId!);
-  const gap = vehicleStats(world, leader).radius + vehicleStats(world, vehicle).radius + NPC_BEHAVIOR.followGap;
-  goal.destination = { x: leader.pos.x - Math.cos(leader.heading) * gap, y: leader.pos.y - Math.sin(leader.heading) * gap };
+  const rank = escortsOf(world, leader.id).findIndex((e) => e.id === vehicle.id);
+  if (rank < 0) throw new Error(`${vehicle.id} follows ${leader.id} without escorting it`);
+  const radii = vehicleStats(world, leader).radius + vehicleStats(world, vehicle).radius;
+  const side = (rank % 2 === 0 ? 1 : -1) * (radii + NPC_BEHAVIOR.followGap);
+  const back = radii * (1 + 2 * Math.floor(rank / 2)) - leader.speed;
+  const fx = Math.cos(leader.heading);
+  const fy = Math.sin(leader.heading);
+  goal.destination = { x: leader.pos.x - fx * back - fy * side, y: leader.pos.y - fy * back + fx * side };
+}
+
+// The speed in tiles per turn that brings the follower level with its spot by the end of the turn: how far the
+// spot lies ahead of it along the leader's heading. A follower past its spot drops back.
+export function followPace(follower: Vehicle, leader: Vehicle, spot: Vec): number {
+  const ahead = (spot.x - follower.pos.x) * Math.cos(leader.heading) + (spot.y - follower.pos.y) * Math.sin(leader.heading);
+  return Math.max(0, ahead);
 }
 
 // The vehicles that escort the leader. An escort gone this turn is left out. The missing-party rule in

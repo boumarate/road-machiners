@@ -1,5 +1,4 @@
-// Gun reach on the ground: the selected gun bright, or every gun faint when none is selected. A turret with every
-// side open covers a circle. A forward arc or tall parts on the truck cut it to sectors. Draped over the terrain.
+// Gun reach on the ground, shown only for the selected gun. A turret with every side open covers a circle. A forward arc or tall parts on the truck cut it to sectors. Draped over the terrain, level with Canyon Bridge beside its deck.
 
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
@@ -9,7 +8,7 @@ import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { fireSpans, type FireSpan } from '../../sim/armor';
 import type { MountedWeapon } from '../../sim/stats';
-import { heightAt, type Terrain } from '../../sim/terrain';
+import { markHeightAt, type Terrain } from '../../sim/terrain';
 import { DEG, type Vec } from '../../sim/vec';
 
 const S = PHYSICS.metersPerTile;
@@ -18,7 +17,6 @@ const DEG_PER_STEP = 5; // at most this many degrees per edge segment keeps the 
 const LINE_WIDTH_PX = 2;
 const FILL_ALPHA = 0.1;
 const LINE_ALPHA = 0.8;
-const FAINT = 0.4; // share of the fill and line opacity when every gun shows at once
 
 export class WeaponRangeView {
   readonly root = new THREE.Group();
@@ -31,11 +29,10 @@ export class WeaponRangeView {
     this.root.visible = false;
   }
 
-  // One selected gun shows bright. Several guns, for the All selection, show faint. Sides a tall part blocks are
-  // left out, so each shape shows where its gun can fire. No guns hides the view.
-  set(terrain: Terrain, pos: Vec, heading: number, weapons: MountedWeapon[], faint: boolean): void {
+  // Sides a tall part blocks are left out, so each shape shows where its gun can fire. No guns hides the view.
+  set(terrain: Terrain, pos: Vec, heading: number, weapons: MountedWeapon[]): void {
     this.root.visible = weapons.length > 0;
-    const at = (x: number, y: number) => new THREE.Vector3(x * S, heightAt(terrain, x, y) * S + LIFT, y * S);
+    const at = (x: number, y: number) => new THREE.Vector3(x * S, markHeightAt(terrain, pos, x, y) * S + LIFT, y * S);
     const center = at(pos.x, pos.y);
     const points: THREE.Vector3[] = [center];
     const idx: number[] = [];
@@ -50,8 +47,8 @@ export class WeaponRangeView {
     );
     this.fill.geometry.dispose();
     this.fill.geometry = new THREE.BufferGeometry().setFromPoints(points).setIndex(idx);
-    this.fill.material.opacity = FILL_ALPHA * (faint ? FAINT : 1);
-    this.drawEdges(outlines, LINE_ALPHA * (faint ? FAINT : 1));
+    this.fill.material.opacity = FILL_ALPHA;
+    this.drawEdges(outlines, LINE_ALPHA);
   }
 
   private drawEdges(outlines: THREE.Vector3[][], opacity: number): void {

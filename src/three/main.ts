@@ -39,10 +39,9 @@ const soundSettings = new SoundSettings(mixer, window.localStorage);
 const overlay = element('overlay');
 const game = new Game(element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute(), map);
 const view = { focus: () => game.rig.focus(), setSpeed: (factor: number) => game.follow.keyPan.setSpeed(factor) };
-new DebugConsole(uiRoot(), game, new Noclip(game, view, PHYSICS.metersPerTile));
+new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
 performance.mark('korovan:ready');
 if (import.meta.env.DEV) {
   (window as any).__KOROVAN__ = game;
   (window as any).__KOROVAN_PERF__ = { snapshot: perfSnapshot, reset: resetPerf };
-  mountPerfPanel(overlay);
 }

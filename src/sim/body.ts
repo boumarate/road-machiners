@@ -2,6 +2,7 @@
 // Body space: +x is the nose, +z the truck's right, +y up, origin at the box center. Grid row 0 is the nose, column 0 the left.
 
 import { chassisDef } from '../data/chassis';
+import { partDef } from '../data/parts';
 import { PHYSICS } from '../data/physics';
 import { baseGrid } from './grid';
 
@@ -19,7 +20,7 @@ export type Body = {
 export function bodyOf(chassisId: string): Body {
   const def = chassisDef(chassisId);
   const look = PHYSICS.bodies[def.look];
-  const wheels = def.core.filter((c) => c.defId === 'wheel');
+  const wheels = def.core.filter((c) => { const part = partDef(c.defId); return part.kind === 'core' && part.role === 'wheel'; });
   if (wheels.length !== 4) throw new Error(`Chassis ${chassisId} has ${wheels.length} wheel cores, needs 4`);
   const { w, h } = baseGrid(chassisId);
   const cols = [...new Set(wheels.map((c) => c.x))].sort((a, b) => a - b);

@@ -58,14 +58,27 @@ export function inShade(world: World, pos: Vec, sun: Sun): boolean {
 // 1 in shade and at night, above 1 in full sun. Weather multiplies the sun-driven share above 1:
 // overcast cancels it, a heat wave amplifies it.
 export function heatAt(world: World, pos: Vec): number {
+  return cappedHeatAt(world, pos, 1);
+}
+
+// Heat at pos with the sun height share capped at `cap`, so a high sun heats like a lower one.
+export function cappedHeatAt(world: World, pos: Vec, cap: number): number {
   const sun = sunAt(world.turn);
   if (!sun || inShade(world, pos, sun)) return 1;
-  return sunHeatAt(world, pos, sun);
+  return heatOfShare(world, pos, Math.min(cap, sunShare(sun)));
 }
 
 // Heat at pos if it stands in the sun. For callers that already know pos is not in shade.
 export function sunHeatAt(world: World, pos: Vec, sun: Sun): number {
-  const t = clamp(sun.elevation / (TIME.noonElevation * (Math.PI / 180)), 0, 1);
+  return heatOfShare(world, pos, sunShare(sun));
+}
+
+// The sun height as a share of its noon height, 0 to 1.
+function sunShare(sun: Sun): number {
+  return clamp(sun.elevation / (TIME.noonElevation * (Math.PI / 180)), 0, 1);
+}
+
+function heatOfShare(world: World, pos: Vec, t: number): number {
   const excess = (TIME.sunHeat - 1) * t;
   return 1 + excess * weatherAt(world, pos).heat;
 }

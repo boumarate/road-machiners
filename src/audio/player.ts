@@ -1,9 +1,9 @@
 // Plays catalog cues: one-shots with a variant, pitch jitter and voice limit, and loops with live controls.
 
-import type { Cue } from "../data/sounds";
+import type { Bus, Cue } from "../data/sounds";
 import type { Bank } from "./bank";
 import type { Mixer } from "./mixer";
-import { pickVariant, VoiceLimiter } from "./pick";
+import { loudestAt, pickVariant, VoiceLimiter } from "./pick";
 
 export type Placement = { pan: number; gain: number };
 export type SoundSelection = { file: string; rate: number };
@@ -12,14 +12,29 @@ export type LoopHandle = {
   setGain(gain: number, rampSeconds: number): void;
   // Fades in, moves rate and gain in a straight line over the span, and fades out at its end.
   glide(g: Glide): void;
+  // Plays the loop through the points once, moving rate and gain in straight lines between them, then stops.
+  once(points: readonly EnvelopePoint[]): void;
   stop(fadeMs: number): void;
 };
 
+// A loop started on its beat. Duck dips it under an accent at an audio time and recovers over the release.
+// Tone moves its low-pass cutoff, which muffles it when low.
+export type BeatLoopHandle = LoopHandle & {
+  readonly duration: number; // seconds of one pass
+  duck(time: number, gain: number, attackSeconds: number, releaseSeconds: number): void;
+  setTone(cutoffHz: number, rampSeconds: number): void;
+};
+
+const PEAK_WINDOW_SECONDS = 0.02; // short enough to find a hit's attack, long enough to skip single-sample spikes
+
+// One point of a loop played once: playback rate and level, seconds from the start.
+export type EnvelopePoint = { at: number; rate: number; gain: number };
 export type Glide = { rateFrom: number; rateTo: number; gainFrom: number; gainTo: number; seconds: number; fadeSeconds: number };
 
 
 export class SoundPlayer {
   private last = new Map<string, number>();
+  private peaks = new Map<string, number>(); // loudest moment per file, measured on first use
   private voices = new VoiceLimiter();
 
   constructor(private mixer: Mixer, private bank: Bank, private sounds: Record<string, Cue>) {}
@@ -39,15 +54,60 @@ export class SoundPlayer {
     src.start(start);
   }
 
+  setBusTone(bus: Bus, cutoffHz: number, rampSeconds: number): void {
+    this.mixer.setBusTone(bus, cutoffHz, rampSeconds);
+  }
+
+  // Audio time in seconds, the clock every scheduled play uses.
+  now(): number {
+    return this.mixer.ctx.currentTime;
+  }
+
   loop(id: string, at: Placement, file?: string): LoopHandle {
-    const cue = this.cue(id);
-    if (!cue.loop) throw new Error(`Sound ${id} is not a loop`);
-    const ctx = this.mixer.ctx;
-    const src = ctx.createBufferSource();
-    src.buffer = file === undefined ? this.variant(id, cue) : this.getBuffer(id, cue, file);
-    src.loop = true;
+    const cue = this.loopCue(id);
+    const src = this.loopSource(file === undefined ? this.variant(id, cue) : this.getBuffer(id, cue, file));
     const gain = this.chain(src, cue, at);
     src.start();
+    return this.loopHandle(src, gain, cue);
+  }
+
+  // Starts silent at audio time when, offset seconds into the file, so layers started together share a beat.
+  beatLoop(id: string, file: string, when: number, offset: number): BeatLoopHandle {
+    const cue = this.loopCue(id);
+    const buffer = this.getBuffer(id, cue, file);
+    const src = this.loopSource(buffer);
+    const duck = this.mixer.ctx.createGain();
+    const tone = this.mixer.ctx.createBiquadFilter();
+    tone.type = "lowpass";
+    src.connect(duck).connect(tone);
+    const gain = this.chain(tone, cue, { pan: 0, gain: 0 });
+    src.start(when, offset);
+    return {
+      ...this.loopHandle(src, gain, cue),
+      duration: buffer.duration,
+      duck: (time, level, attack, release) => {
+        duck.gain.setTargetAtTime(level, time, attack / 3);
+        duck.gain.setTargetAtTime(1, time + attack, release / 3);
+      },
+      setTone: (cutoff, ramp) => tone.frequency.setTargetAtTime(cutoff, this.mixer.ctx.currentTime, ramp / 3),
+    };
+  }
+
+  private loopCue(id: string): Cue {
+    const cue = this.cue(id);
+    if (!cue.loop) throw new Error(`Sound ${id} is not a loop`);
+    return cue;
+  }
+
+  private loopSource(buffer: AudioBuffer): AudioBufferSourceNode {
+    const src = this.mixer.ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    return src;
+  }
+
+  private loopHandle(src: AudioBufferSourceNode, gain: GainNode, cue: Cue): LoopHandle {
+    const ctx = this.mixer.ctx;
     return {
       setGain: (g, ramp) => gain.gain.setTargetAtTime(cue.volume * g, ctx.currentTime, ramp / 3),
       glide: (g) => {
@@ -62,6 +122,17 @@ export class SoundPlayer {
         level.linearRampToValueAtTime(cue.volume * g.gainFrom, t + g.fadeSeconds);
         level.linearRampToValueAtTime(cue.volume * g.gainTo, t + g.seconds - g.fadeSeconds);
         level.linearRampToValueAtTime(0, t + g.seconds);
+      },
+      once: (points) => {
+        const t = ctx.currentTime;
+        const [first, ...rest] = points;
+        src.playbackRate.setValueAtTime(first.rate, t + first.at);
+        gain.gain.setValueAtTime(cue.volume * first.gain, t + first.at);
+        for (const p of rest) {
+          src.playbackRate.linearRampToValueAtTime(p.rate, t + p.at);
+          gain.gain.linearRampToValueAtTime(cue.volume * p.gain, t + p.at);
+        }
+        src.stop(t + points[points.length - 1].at);
       },
       stop: (fadeMs) => {
         gain.gain.setTargetAtTime(0, ctx.currentTime, fadeMs / 1000 / 3);
@@ -88,16 +159,33 @@ export class SoundPlayer {
     return cue;
   }
 
-  private variant(id: string, cue: Cue): AudioBuffer {
+  // The file for a cue's next play, never the last one when there is a choice, and the seconds to its loudest
+  // moment, so a caller can land that moment on a beat or an event.
+  chooseWithPeak(id: string): { file: string; peak: number } {
+    const file = this.cue(id).files[this.nextIndex(id, this.cue(id))];
+    let peak = this.peaks.get(file);
+    if (peak === undefined) {
+      peak = loudestAt(this.getBuffer(id, this.cue(id), file).getChannelData(0), this.mixer.ctx.sampleRate, PEAK_WINDOW_SECONDS);
+      this.peaks.set(file, peak);
+    }
+    return { file, peak };
+  }
+
+  private nextIndex(id: string, cue: Cue): number {
     const i = pickVariant(cue.files.length, this.last.get(id) ?? null, Math.random());
     this.last.set(id, i);
-    const buf = this.bank.get(cue.files[i]);
-    if (!buf) throw new Error(`Sound file ${cue.files[i]} was not loaded`);
+    return i;
+  }
+
+  private variant(id: string, cue: Cue): AudioBuffer {
+    const file = cue.files[this.nextIndex(id, cue)];
+    const buf = this.bank.get(file);
+    if (!buf) throw new Error(`Sound file ${file} was not loaded`);
     return buf;
   }
 
   // Source -> gain -> pan -> bus. Returns the gain for live changes.
-  private chain(src: AudioBufferSourceNode, cue: Cue, at: Placement): GainNode {
+  private chain(src: AudioNode, cue: Cue, at: Placement): GainNode {
     const ctx = this.mixer.ctx;
     const gain = ctx.createGain();
     gain.gain.value = cue.volume * at.gain;

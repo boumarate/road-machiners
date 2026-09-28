@@ -3,8 +3,8 @@
 // decision. Radio talk with the player lives in src/sim/dialogue.ts, and this module owns what the answers do.
 
 import { SPAWN } from '../data/npcs';
-import { PERK_NUMBERS } from '../data/skills';
 import { playerVehicle } from './damage';
+import { creditBounty } from './market';
 import { defyThreat, pushGoal } from './npc-activities';
 import { decide, perceiveDanger } from './npc-decisions';
 import { vehicleHasPerk } from './progress';
@@ -42,15 +42,19 @@ function holdFire(v: Vehicle, target: Vehicle): void {
   if (v.brain) delete v.brain.attackers[target.id];
 }
 
-// The loser drops its cargo beside its truck, only half of each good for a player with the smooth talker perk, and
-// both sides make peace. An NPC winner goes to take the cargo, and its grudge against the loser is settled.
+// The loser drops its cargo beside its truck, and both sides make peace. An NPC winner goes to take the cargo, and its grudge against the loser is settled.
 export function yieldTo(world: World, loser: Vehicle, winner: Vehicle): void {
-  const share = vehicleHasPerk(world, loser, 'smoothTalker') ? PERK_NUMBERS.smoothTalker.cargo : 1;
-  const stock = hasCargo(loser) ? createCargoSalvage(world, loser, share) : null;
+  const stock = hasCargo(loser) ? createCargoSalvage(world, loser, 1) : null;
   makePeace(world, loser, winner);
   const grudge = stateOf(world, 'revenge', winner.id, loser.id);
   if (grudge) endState(world, grudge, 'fulfilled');
   if (stock && winner.brain) pushGoal(world, winner, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'take the handed-over cargo' });
+  creditYield(world, loser, winner);
+}
+
+// With Bounty talk, an NPC that gives up to the player counts for a bounty on its template.
+function creditYield(world: World, loser: Vehicle, winner: Vehicle): void {
+  if (loser.brain && vehicleHasPerk(world, winner, 'bountyTalk')) creditBounty(world, loser);
 }
 
 // An NPC's answer to a plea, rolled once.

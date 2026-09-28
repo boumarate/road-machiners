@@ -4,7 +4,9 @@ import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { TIME } from '../data/time';
 import { consumeVehicleSupplies } from './resources';
 import { addVehicle, emptyWorld } from './testkit';
-import { consumeSupplies, leakFuel } from './supplies';
+import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
+import { CHASSIS } from '../data/chassis';
+import { fuelCap } from './stats';
 import { corePart } from './grid';
 import { heatAt } from './sun';
 
@@ -85,51 +87,18 @@ describe('toughness on heat drain', () => {
   });
 });
 
-describe('iron gut perk', () => {
-  it('keeps the starving player from losing health', () => {
-    const w = emptyWorld();
-    const me = w.vehicles[0];
-    w.player.supplies = 0;
-    const health = w.player.health;
-    consumeVehicleSupplies(w, me);
-    expect(w.player.health).toBe(health - RULES.starveDamage);
-    w.player.perks.push('ironGut');
-    consumeVehicleSupplies(w, me);
-    expect(w.player.health).toBe(health - RULES.starveDamage);
-  });
 
-  it('still starves an NPC', () => {
-    const w = emptyWorld();
-    w.player.perks.push('ironGut');
-    const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 10, y: 10 });
-    npc.resources!.supplies = 0;
-    const health = npc.resources!.health;
-    consumeVehicleSupplies(w, npc);
-    expect(npc.resources!.health).toBe(health - RULES.starveDamage);
-  });
-});
 
-describe('desert born perk', () => {
-  const NOON = 1 + (((TIME.sunrise + TIME.sunset) / 2 - TIME.startHour) * TIME.turnsPerDay) / 24;
-
-  it('keeps heat from raising player supply use', () => {
+describe('store overflow', () => {
+  it('an NPC that loses a mounted store spills the fuel above its cap at the turn step', () => {
     const w = emptyWorld();
-    w.turn = NOON;
-    const me = w.vehicles[0];
-    expect(heatAt(w, me.pos)).toBeGreaterThan(1);
-    w.player.perks.push('desertBorn');
-    const before = w.player.supplies;
-    consumeVehicleSupplies(w, me);
-    expect(before - w.player.supplies).toBeCloseTo(RULES.suppliesPerTurn, 9);
-  });
-
-  it('leaves NPC heat drain alone', () => {
-    const w = emptyWorld();
-    w.turn = NOON;
-    w.player.perks.push('desertBorn');
-    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });
-    const before = npc.resources!.supplies;
-    consumeVehicleSupplies(w, npc);
-    expect(before - npc.resources!.supplies).toBeCloseTo(RULES.suppliesPerTurn * heatAt(w, npc.pos), 9);
+    const npc = addVehicle(w, 'scavengers', 'scout', ['jerrycans'], { x: 10, y: 10 });
+    npc.resources!.fuel = fuelCap(npc);
+    npc.items = npc.items.filter((it) => it.kind !== 'part' || it.part.defId !== 'jerrycans');
+    const playerFuel = w.player.fuel;
+    fitAllStores(w);
+    expect(npc.resources!.fuel).toBe(CHASSIS.scout.fuelCap);
+    expect(w.player.fuel).toBe(playerFuel);
+    expect(w.events.some((e) => e.t === 'supply')).toBe(false);
   });
 });

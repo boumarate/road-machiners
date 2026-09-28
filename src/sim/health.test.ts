@@ -35,6 +35,16 @@ describe('healing', () => {
     expect(w.player.supplies).toBe(5);
   });
 
+  it('heals while driving with the Long haul perk', () => {
+    const w = emptyWorld();
+    w.player.perks = ['longHaul'];
+    Object.assign(w.player, { health: 50, supplies: 5 });
+    w.vehicles[0].speed = RULES.parkedSpeed + 1;
+    healPlayer(w);
+    expect(w.player.health).toBe(50 + RULES.healPerTurn);
+    expect(w.player.supplies).toBeCloseTo(5 - RULES.healSupplies);
+  });
+
   it('does not heal without supplies', () => {
     const w = emptyWorld();
     Object.assign(w.player, { health: 50, supplies: 0 });

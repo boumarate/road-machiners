@@ -7,7 +7,7 @@ import { START_KITS } from '../data/start';
 import {
   addSkillXp, applyGodMode, CheatError, grantPerk, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
   repairAll, revealMap, setFuel, setHealth, setMoney, setSupplies, skipToHour, spawnNear,
-  noclipMove, startWeather, teleport, toggleFullLog, toggleGod,
+  noclipMove, startBattle, startWeather, teleport, toggleFullLog, toggleGod,
 } from './cheats';
 import { playerVehicle } from './damage';
 import { maxHealthOf } from './health';
@@ -54,7 +54,7 @@ describe('resource cheats', () => {
     const w = emptyWorld();
     const cap = chassisDef(playerVehicle(w).chassisId).fuelCap;
     expect(() => setFuel(w, cap + 1)).toThrow(new RegExp(`${cap}`));
-    expect(() => setSupplies(w, RULES.suppliesCap + 1)).toThrow(new RegExp(`${RULES.suppliesCap}`));
+    expect(() => setSupplies(w, RULES.baseSupplies + 1)).toThrow(new RegExp(`${RULES.baseSupplies}`));
     expect(() => setHealth(w, RULES.maxHealth + 1)).toThrow(new RegExp(`${RULES.maxHealth}`));
     expect(() => setFuel(w, -1)).toThrow(CheatError);
   });
@@ -75,15 +75,15 @@ describe('resource cheats', () => {
   });
 
   it('grants a perk below its skill level', () => {
-    const w = grantPerk(emptyWorld(), 'goodwill');
-    expect(w.player.perks).toEqual(['goodwill']);
+    const w = grantPerk(emptyWorld(), 'bountyTalk');
+    expect(w.player.perks).toEqual(['bountyTalk']);
   });
 
   it('refuses an unknown perk and a second perk from one pair', () => {
     expect(() => grantPerk(emptyWorld(), 'flying')).toThrow(CheatError);
-    const w = grantPerk(emptyWorld(), 'goodwill');
-    expect(() => grantPerk(w, 'bluff')).toThrow(CheatError);
-    expect(() => grantPerk(w, 'goodwill')).toThrow(CheatError);
+    const w = grantPerk(emptyWorld(), 'bountyTalk');
+    expect(() => grantPerk(w, 'paidTruce')).toThrow(CheatError);
+    expect(() => grantPerk(w, 'bountyTalk')).toThrow(CheatError);
   });
 });
 
@@ -150,7 +150,7 @@ describe('god mode', () => {
     Object.assign(w.player, { health: 1, fuel: 0, supplies: 0 });
     applyGodMode(w);
     expect(corePart(me, 'cab').hp).toBe(partDef(corePart(me, 'cab').defId).hp);
-    expect(w.player).toMatchObject({ health: RULES.maxHealth, fuel: chassisDef(me.chassisId).fuelCap, supplies: RULES.suppliesCap });
+    expect(w.player).toMatchObject({ health: RULES.maxHealth, fuel: chassisDef(me.chassisId).fuelCap, supplies: RULES.baseSupplies });
   });
 
   it('does nothing while off', () => {
@@ -283,6 +283,26 @@ describe('vehicle cheats', () => {
     expect(hostileToPlayer(w, v)).toBe(true);
     expect(stateOf(w, 'feud', id, w.player.vehicleId)).not.toBeNull();
     expect(v.brain!.attackers).toEqual({ [w.player.vehicleId]: false });
+  });
+
+  it('starts a battle with one hostile raider near the truck', () => {
+    const w = emptyWorld();
+    const next = startBattle(w);
+    const added = next.vehicles.filter((v) => !w.vehicles.some((x) => x.id === v.id));
+    expect(added).toHaveLength(1);
+    expect(added[0].faction).toBe('raiders');
+    expect(hostileToPlayer(next, added[0])).toBe(true);
+    expect(dist(added[0].pos, playerVehicle(next).pos)).toBeLessThan(CHEATS.spawnDistance * 2);
+  });
+
+  it('picks raider templates with the world RNG', () => {
+    const picks = new Set<string>();
+    let w = emptyWorld();
+    for (let i = 0; i < 12; i++) {
+      w = startBattle(w);
+      picks.add(w.vehicles[w.vehicles.length - 1].brain!.templateId);
+    }
+    expect(picks.size).toBeGreaterThan(1);
   });
 
   it('rejects an unknown template', () => {

@@ -1,7 +1,6 @@
 // Inventory commands. Field equipment changes use parked refit jobs.
 
 import { partDef } from '../data/parts';
-import { PERK_NUMBERS } from '../data/skills';
 import { skillEffect, vehicleHasPerk } from './progress';
 import { playerVehicle } from './damage';
 import { newId } from './factory';
@@ -10,7 +9,9 @@ import { findSpot, gridOf, isMounted, itemCells, MOUNT_CELLS, mountSpots, placem
 import { requireTown, townAt } from './sites';
 import { startJob } from './jobs';
 import { RULES } from '../data/rules';
+import { PERK_NUMBERS } from '../data/skills';
 import { canReachSalvage, dumpOnPile, truckPickupItem } from './salvage';
+import { fitStores } from './resources';
 import { vehicleStats } from './stats';
 import type { GridItem, PartInstance, RefitJob, RefitMove, RefitPickup, Vehicle, World } from './types';
 import { playerCommand } from './world';
@@ -89,10 +90,15 @@ export function moveItem(world: World, itemId: string, to: Spot): World {
   });
 }
 
-// Turns a field refit takes: the planned turns cut by the player's machining and the quick refit perk, at least 1.
+// Turns a field refit takes: the planned turns cut by the player's machining, at least 1.
 export function refitTurns(world: World, v: Vehicle, planned: number): number {
-  const quick = vehicleHasPerk(world, v, 'quickRefit') ? PERK_NUMBERS.quickRefit.refit : 1;
-  return Math.max(1, Math.ceil(planned * (1 - skillEffect(world, v, 'machining', 'refit')) * quick));
+  return Math.max(1, Math.ceil(planned * (1 - skillEffect(world, v, 'machining', 'refit'))));
+}
+
+// Turns a field refit takes to move a part off a wreck stock or a knocked-out truck. The Cannibal perk sets the
+// whole job, however many mounts it crosses.
+export function lootRefitTurns(world: World, v: Vehicle, planned: number): number {
+  return vehicleHasPerk(world, v, 'cannibal') ? PERK_NUMBERS.cannibal.turns : refitTurns(world, v, planned);
 }
 
 // Town garage storage holds spare parts between trips.
@@ -238,6 +244,7 @@ export function applyRefitLayout(world: World, v: Vehicle, items: GridItem[]): v
   for (const id of Object.keys(v.weaponOrders)) {
     if (!stats.weapons.some((mount) => mount.part.id === id)) delete v.weaponOrders[id];
   }
+  fitStores(world, v);
 }
 
 function getSpot(item: Spot): Spot {

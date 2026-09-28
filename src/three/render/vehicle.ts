@@ -4,11 +4,11 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { partDef, type PartKind } from '../../data/parts';
+import { partDef, type PartDef, type PartKind } from '../../data/parts';
 import { PHYSICS } from '../../data/physics';
 import { wheelMounts } from '../../phys/body';
 import { bodyOf, cellCenter, type Body } from '../../sim/body';
-import { headingOf, headingQuat, type VehicleFrame } from '../../phys/frames';
+import { headingOf, headingQuat, type V3, type VehicleFrame } from '../../phys/frames';
 import { FACTION_COLORS, PAL } from '../../render/palette';
 import { BODY_PARTS, baseModel, partModel, weaponLook } from '../../render/partLooks';
 import { baseGrid, isMounted, itemCells, itemSize, sideOf, type SideLetter } from '../../sim/grid';
@@ -31,7 +31,7 @@ const TRIM = 'trim'; // base material that takes the faction cab color
 const FIT_SLACK = 1e-3; // meters a base may pass its footprint by float noise
 
 // Color factor for every material of a broken part.
-const BROKEN_TONE: Record<PartKind, number> = { weapon: 0.5, armor: 0.6, engine: 0.6, cargo: 0.6, core: 0.6, scanner: 0.6 };
+const BROKEN_TONE: Record<PartKind, number> = { weapon: 0.5, armor: 0.6, engine: 0.6, cargo: 0.6, core: 0.6, scanner: 0.6, store: 0.6 };
 
 // Yaw for rotation 1. Local +x, the model's front, turns to the truck's left.
 const ROT_YAW = Math.PI / 2;
@@ -61,6 +61,9 @@ const UP = new THREE.Vector3(0, 1, 0);
 const ANTENNA_INSET = 0.12; // meters from the body side and the cab's back edge
 const CHAIN_SIDE = 0.4; // fraction of the half width from the center line to the chain
 
+// A turning weapon head, and its barrel tip in head space.
+type Turret = { head: THREE.Group; tip: THREE.Vector3 };
+
 // Where a model goes in body space.
 type Placement = { pos: THREE.Vector3; yaw: number; scale: THREE.Vector3 };
 
@@ -75,6 +78,13 @@ function signatureOf(v: Vehicle): string {
   return `${v.chassisId}|${v.faction}|${items}`;
 }
 
+// The view of a vehicle that must be drawn.
+export function viewOf(views: Map<string, VehicleView>, id: string): VehicleView {
+  const view = views.get(id);
+  if (!view) throw new Error(`Vehicle ${id} has no view`);
+  return view;
+}
+
 export class VehicleView {
   readonly root = new THREE.Group();
   // The leaning part of the truck. Wheels, shocks and axles stay on the root with the physics pose.
@@ -86,7 +96,7 @@ export class VehicleView {
   private axles: Axle[] = [];
   private motion!: TruckMotion; // set by rebuild
   private running = false;
-  private turrets: THREE.Group[] = [];
+  private turrets = new Map<string, Turret>(); // key: weapon part id
   private heading = 0;
   private lampMat = new THREE.MeshBasicMaterial({ color: PAL.lamp.off });
   private glassMat = new THREE.MeshLambertMaterial({ flatShading: true });
@@ -162,11 +172,24 @@ export class VehicleView {
     this.glassMat.emissive.copy(glow);
   }
 
-  // yaw is a map-space heading (radians, 0 = +x). null points turrets forward.
-  aim(yaw: number | null): void {
-    const delta = yaw === null ? 0 : yaw - this.heading;
-    const q = headingQuat(delta);
-    for (const turret of this.turrets) turret.quaternion.set(q.x, q.y, q.z, q.w);
+  // yawOf gives each weapon part's map-space heading (radians, 0 = +x). null points its turret forward.
+  aim(yawOf: (partId: string) => number | null): void {
+    for (const [id, turret] of this.turrets) {
+      const yaw = yawOf(id);
+      const q = headingQuat(yaw === null ? 0 : yaw - this.heading);
+      turret.head.quaternion.set(q.x, q.y, q.z, q.w);
+    }
+  }
+
+  // The world point where a mounted weapon's rounds leave its barrel, and the unit direction they leave in.
+  // Read it after pose() and aim() for the frame.
+  muzzle(partId: string): { pos: V3; dir: V3 } {
+    const turret = this.turrets.get(partId);
+    if (!turret) throw new Error(`Vehicle view has no mounted weapon ${partId}`);
+    turret.head.updateWorldMatrix(true, false);
+    const pos = turret.tip.clone().applyMatrix4(turret.head.matrixWorld);
+    const dir = new THREE.Vector3(1, 0, 0).transformDirection(turret.head.matrixWorld);
+    return { pos: { x: pos.x, y: pos.y, z: pos.z }, dir: { x: dir.x, y: dir.y, z: dir.z } };
   }
 
   dispose(): void {
@@ -180,7 +203,7 @@ export class VehicleView {
     this.wheels = [];
     this.shocks = [];
     this.axles = [];
-    this.turrets = [];
+    this.turrets.clear();
     const body = bodyOf(v.chassisId);
     this.motion = new TruckMotion(this.body, new THREE.Vector3(0, body.wheelY, 0), hashStr(v.id));
     const paint = FACTION_COLORS[v.faction].top;
@@ -204,8 +227,9 @@ export class VehicleView {
       const mounted = isMounted(v.chassisId, item);
       // The cab core has no model: the base draws the cab.
       if (BODY_PARTS.has(def.id)) continue;
-      if (def.id === 'wheel' && mounted) wheelItems.push(item);
-      else if (def.id === 'wheel') still.add(this.spareWheel(v, body, item, paint, surface));
+      const wheel = isWheel(def);
+      if (wheel && mounted) wheelItems.push(item);
+      else if (wheel) still.add(this.spareWheel(v, body, item, paint, surface));
       else if (def.kind === 'weapon') this.buildWeapon(v, item, mounted, still, paint, this.riser(v, item, baseTop(v, base), surface, paint, still));
       else if (def.kind === 'armor') still.add(this.placeArmor(v, body, item, paint, mounted, surface));
       // Core parts sit on the floor. An engine on its mount stands in the engine bay and shows through the cutout.
@@ -345,6 +369,7 @@ export class VehicleView {
     parts.add(receiver);
     const barrel = model(look.barrel);
     barrel.position.copy(socket(look.receiver, 'muzzle'));
+    const tip = socket(look.barrel, 'tip').add(barrel.position);
     parts.add(barrel);
     if (look.extra) {
       const extra = model(look.extra);
@@ -360,7 +385,7 @@ export class VehicleView {
       return;
     }
     this.body.add(head);
-    this.turrets.push(head);
+    this.turrets.set(item.part.id, { head, tip });
   }
 
   // Wheels hang at the physics wheel mounts, scaled from the 1 m model to the look's radius and width.
@@ -420,7 +445,7 @@ export class VehicleView {
     const row = Math.max(...itemCells(cab).map((c) => c.y));
     const back = cellCenter(v.chassisId, 0, row).x - CELL.along / 2;
     const antenna = mergeStatic(wrapped(model('antenna')));
-    antenna.position.set(back + ANTENNA_INSET, socket(base, `row${row}`).y, -body.half.z + ANTENNA_INSET);
+    antenna.position.set(back + ANTENNA_INSET, socket(base, `row${row}_${cab.x}`).y, -body.half.z + ANTENNA_INSET);
     this.body.add(antenna);
     this.motion.addWhip(antenna, WHIPS.antenna);
     if (!bareRear) return;
@@ -517,19 +542,19 @@ function bumperlessCells(v: Vehicle, items: GridItem[]): Set<string> {
   return cells;
 }
 
-// A base model's level under an item: the highest row or floor socket over its rows, in body meters.
+// A base model's level under an item: the highest row or floor socket over its cells, in body meters.
 function baseLevel(base: ModelName, item: GridItem, level: 'row' | 'floor'): number {
-  return Math.max(...itemCells(item).map((c) => socket(base, `${level}${c.y}`).y));
+  return Math.max(...itemCells(item).map((c) => socket(base, `${level}${c.y}_${c.x}`).y));
 }
 
 // The front edge of the surface under an item: the rearmost row socket x over its rows, in body meters.
 function baseFront(base: ModelName, item: GridItem): number {
-  return Math.min(...itemCells(item).map((c) => socket(base, `row${c.y}`).x));
+  return Math.min(...itemCells(item).map((c) => socket(base, `row${c.y}_${c.x}`).x));
 }
 
 // The highest row surface of a base, in body meters: the cab roof on a pickup.
 function baseTop(v: Vehicle, base: ModelName): number {
-  return Math.max(...baseGrid(v.chassisId).cells.map((_, y) => socket(base, `row${y}`).y));
+  return Math.max(...baseGrid(v.chassisId).cells.flatMap((row, y) => row.map((_, x) => socket(base, `row${y}_${x}`).y)));
 }
 
 // A base fills its chassis footprint in length and width, so the drawn truck matches its collider.
@@ -660,4 +685,9 @@ function disposeChildren(group: THREE.Group): void {
       }
     });
   }
+}
+
+// Every wheel part, whatever its size, hangs on a wheel mount.
+function isWheel(def: PartDef): boolean {
+  return def.kind === 'core' && def.role === 'wheel';
 }

@@ -1,4 +1,3 @@
-import { chassisDef } from "../data/chassis";
 import { tradePartner, tradeReady } from "../sim/economy";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
@@ -6,7 +5,7 @@ import { maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
 import { maxHealthOf } from "../sim/health";
 import { corePart, mountedParts, mountedItems, itemSize } from "../sim/grid";
-import { hasWorkingEngine, isStranded, isWorking, vehicleStats } from "../sim/stats";
+import { fuelCap, hasWorkingEngine, isStranded, isWorking, vehicleStats } from "../sim/stats";
 import { spareParts } from "../sim/inventory";
 import { towData } from "../sim/states";
 import { playerTow } from "../sim/tow";
@@ -188,7 +187,7 @@ export function getHudReadout(w: World) {
   const me = playerVehicle(w);
   const cab = corePart(me, "cab");
   const cabMax = maxHp(cab);
-  const capacity = chassisDef(me.chassisId).fuelCap;
+  const capacity = fuelCap(me);
   const p = w.player;
   const maxHealth = maxHealthOf(w);
   const heat = heatAt(w, me.pos);

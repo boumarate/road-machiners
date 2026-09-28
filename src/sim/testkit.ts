@@ -95,6 +95,21 @@ export function rngStateWhere(test: (roll: number) => boolean): number {
   throw new Error('No RNG state passes the test');
 }
 
+// The first RNG state from 1 whose next `count` rolls all land mid-range. A forced option holds all but
+// MIN_CHANCE per other option, so a mid-range roll picks it wherever it sits in the option order.
+export function rngStateForForcedRolls(count: number): number {
+  for (let state = 1; state <= 1_000_000; state++) {
+    const rng = { rngState: state };
+    let ok = true;
+    for (let k = 0; k < count && ok; k++) {
+      const roll = nextRandom(rng);
+      ok = roll > 0.3 && roll < 0.7;
+    }
+    if (ok) return state;
+  }
+  throw new Error(`No RNG state gives ${count} mid-range rolls`);
+}
+
 // Total hit points of the mounted parts, for checking that damage landed.
 export function partHp(v: Vehicle): number {
   return mountedParts(v).reduce((a, p) => a + p.hp, 0);

@@ -10,7 +10,7 @@ import { siteGates, sitePads, type Site } from './sites';
 import { spawnNpcs } from './spawn';
 import { addState, advanceStates, endState, settleStates, stateOf } from './states';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive, rngStateForForcedRolls } from './testkit';
 import { escortsOf, isOnRope, startEscort, towOf } from './tow';
 import type { GameEvent, NpcState, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
@@ -55,26 +55,48 @@ function runUntil(w: World, max: number, done: (w: World) => boolean): { w: Worl
 }
 
 describe('the follow goal', () => {
-  it('re-aims behind its leader every turn', () => {
+  it('re-aims beside its leader\'s tail every turn', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const convoy = convoyAt(w, { x: 60, y: 60 });
     const guard = guardAt(w, { x: 50, y: 60 });
     startEscort(w, guard, convoy, null, 0);
-    const gap = vehicleStats(w, convoy).radius + vehicleStats(w, guard).radius + NPC_BEHAVIOR.followGap;
+    const radii = vehicleStats(w, convoy).radius + vehicleStats(w, guard).radius;
+    const side = radii + NPC_BEHAVIOR.followGap;
 
     const first = thinkNpc(w, guard);
     expect(first.kind).toBe('follow');
-    expect(first.destination!.x).toBeCloseTo(60 - gap);
-    expect(first.destination!.y).toBeCloseTo(60);
+    expect(first.destination!.x).toBeCloseTo(60 - radii);
+    expect(first.destination!.y).toBeCloseTo(60 + side);
 
     convoy.pos = { x: 70, y: 65 };
     convoy.heading = Math.PI / 2;
     const second = thinkNpc(w, guard);
-    expect(second.destination!.x).toBeCloseTo(70);
-    expect(second.destination!.y).toBeCloseTo(65 - gap);
+    expect(second.destination!.x).toBeCloseTo(70 - side);
+    expect(second.destination!.y).toBeCloseTo(65 - radii);
   });
 
-  it('stops outside the braking distance of its leader', () => {
+  it('leads by the leader\'s travel this turn', () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const convoy = convoyAt(w, { x: 60, y: 60 });
+    const guard = guardAt(w, { x: 50, y: 60 });
+    startEscort(w, guard, convoy, null, 0);
+    const parked = thinkNpc(w, guard).destination!.x;
+    convoy.speed = 3;
+    expect(thinkNpc(w, guard).destination!.x).toBeCloseTo(parked + 3);
+  });
+
+  it('puts a second escort on the other side', () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const convoy = convoyAt(w, { x: 60, y: 60 });
+    const first = guardAt(w, { x: 50, y: 60 });
+    const second = guardAt(w, { x: 50, y: 64 });
+    startEscort(w, first, convoy, null, 0);
+    startEscort(w, second, convoy, null, 0);
+    expect(thinkNpc(w, first).destination!.y).toBeGreaterThan(60);
+    expect(thinkNpc(w, second).destination!.y).toBeLessThan(60);
+  });
+
+  it('rides outside the collision check of traffic', () => {
     expect(NPC_BEHAVIOR.followGap).toBeGreaterThan(RULES.yieldDistance);
   });
 
@@ -321,6 +343,7 @@ describe('hiring a merc', () => {
     const { w, trader, merc } = onTrip(5000);
     forceOption('escortSeen', 'hire');
     forceOption('hireOffered', 'take');
+    w.rngState = rngStateForForcedRolls(6);
     thinkNpc(w, trader);
     const escort = escortOf(w, merc, trader);
     expect(escort?.data).toEqual({ kind: 'escort', site: 'nose', fee: Math.round(dist(trader.pos, NOSE.pos) * NPC_BEHAVIOR.escortFeePerTile) });
@@ -332,6 +355,7 @@ describe('hiring a merc', () => {
     const { w, trader, merc } = onTrip(5000);
     forceOption('escortSeen', 'hire');
     forceOption('hireOffered', 'decline');
+    w.rngState = rngStateForForcedRolls(6);
     thinkNpc(w, trader);
     expect(escortOf(w, merc, trader)).toBeNull();
     expect(trader.brain!.goals[0].kind).toBe('sell');

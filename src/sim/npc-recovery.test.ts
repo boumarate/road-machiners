@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NPCS, SPAWN, type TraitId } from '../data/npcs';
+import { NPC_BEHAVIOR, NPCS, SPAWN, type TraitId } from '../data/npcs';
 import { REGION } from '../data/region';
 import { planNpcOrders } from './ai';
 import { assignAutoOrders, fireWeapons } from './combat';
@@ -115,6 +115,8 @@ describe('NPC gameplay recovery', () => {
     expectReturnFire(world, npc, enemy);
     enemy.pos = { x: 200, y: 100 };
     enemy.speed = 0;
+    // The driver hunts a lost foe for a while before it gives up.
+    world.turn += NPC_BEHAVIOR.fightSearchTurns + 1;
     // The resume roll goes back to the interrupted work about nine times in ten.
     const resumed = shareOfSeeds(world, npc.id, (x, me) => {
       planNpcOrders(x);
@@ -227,6 +229,23 @@ describe('NPC gameplay recovery', () => {
     const prey = addVehicle(world, 'traders', 'scout', ['stockEngine'], { x: 150, y: 30 });
     prey.speed = 4;
     expect(shareOfSeeds(world, npc.id, (x, me) => thinkNpc(x, me).kind === 'investigate')).toBeGreaterThan(0.6);
+  });
+
+  it('drops a field repair and starts none while a hostile in sight shoots at it', () => {
+    const { world, npc } = createScenario();
+    npc.brain!.goals = [workGoal('scavenger')];
+    addGoods(world, npc, 'parts', 4);
+    corePart(npc, 'cab').hp = 1;
+    const calm = cloneWorld(world);
+    expect(thinkNpc(calm, byId(calm, npc.id)).kind).toBe('repair');
+    npc.brain!.goals.push({ kind: 'repair', targetId: null, destination: null, phase: 'act', reason: 'patch damaged parts' });
+    const raider = addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
+    fireAt(world, raider, npc);
+    const repairs = shareOfSeeds(world, npc.id, (x, me) => {
+      thinkNpc(x, me);
+      return me.brain!.goals.some((g) => g.kind === 'repair');
+    });
+    expect(repairs).toBe(0);
   });
 
   it('services low fuel instead of pursuing a contact or taking a shade detour', () => {

@@ -3,14 +3,13 @@
 
 import { onCall } from "./dialogue";
 import { SPAWN } from '../data/npcs';
-import { isDefeated, knockOutNpc } from './defeat';
+import { isDefeated, isKnockedOut, knockOutNpc } from './defeat';
 import { RULES } from '../data/rules';
 import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
 import { laneCount, partLane, sideToward, walkLane, type PartHit, type Side } from './armor';
 import { bodyOf } from './body';
 import { corePart, hasLoot, itemSize, mountedItems, mountedParts } from './grid';
-import { PERK_NUMBERS } from '../data/skills';
 import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { canVehicleSee, hasLineOfFire } from './vision';
 import { createWreckSalvage, removeStocks } from './salvage';
@@ -33,7 +32,8 @@ export type FireBlock =
   | "noTarget"
   | "unseen"
   | "covered"
-  | "talking";
+  | "talking"
+  | "out";
 
 export function inFeud(world: World, a: Vehicle, b: Vehicle): boolean {
   return stateOf(world, "feud", a.id, b.id) !== null || stateOf(world, "feud", b.id, a.id) !== null;
@@ -82,13 +82,14 @@ function sideOpen(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): boolean
   return mw.sides.includes(sideToward(shooter, target.pos));
 }
 
-// Why a weapon cannot fire at a target right now, or null if it can. The player only shoots what it sees.
+// Why a weapon cannot fire at a target right now, or null if it can. A knocked-out driver fires nothing. The player only shoots what it sees.
 export function fireBlock(
   world: World,
   shooter: Vehicle,
   mw: MountedWeapon,
   target: Vehicle | null,
 ): FireBlock | null {
+  if (isKnockedOut(shooter)) return "out";
   return weaponBlock(mw) ?? (target ? targetBlock(world, shooter, mw, target) : "noTarget");
 }
 
@@ -121,12 +122,12 @@ export type HitOdds = {
   spread: number; // radians; standard deviation of a round's angular error, the sum of the causes
   causes: {
     weapon: number;
+    range: number;
     crossing: number;
     own: number;
     recoil: number; // the gun's kick, smaller on a heavier truck
     skill: number;
     weather: number;
-    calledShot: number; // the called shot perk's cut of an aimed shot's spread, zero or negative
   }; // radians
 };
 
@@ -274,7 +275,7 @@ export function hitOdds(
   const a = aiming(shooter, target, aim);
   const width = a.width;
   const halfAngle = width / (2 * distance);
-  const causes = spreadCauses(world, shooter, mw, target, aim);
+  const causes = spreadCauses(world, shooter, mw, target);
   const spread = Object.values(causes).reduce((sum, cause) => sum + cause, 0);
   if (!(spread > 0))
     throw new Error(`Spread ${spread} of ${mw.def.id} is not positive`);
@@ -287,9 +288,8 @@ export function hitOdds(
   return { chance, bodyChance, distance, width, halfAngle, spread, causes };
 }
 
-// Each cause of a shot's spread. The steady aim perk takes the shake of the player's own speed away, and the called
-// shot perk cuts the player's aimed shots.
-function spreadCauses(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle, aim: Aim): HitOdds["causes"] {
+// Each cause of a shot's spread. The steady aim perk takes the shake of the player's own speed away.
+function spreadCauses(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle): HitOdds["causes"] {
   const weapon = mw.def.spread * DEG;
   const n = across(shooter, target);
   const rel = {
@@ -299,15 +299,14 @@ function spreadCauses(world: World, shooter: Vehicle, mw: MountedWeapon, target:
   const steady = vehicleHasPerk(world, shooter, "steadyAim");
   const base = {
     weapon,
+    range: weapon * RULES.rangeFalloff[mw.def.tier] * (dist(shooter.pos, target.pos) / mw.def.range) ** 2,
     skill: -weapon * skillEffect(world, shooter, "perception", "spread"),
     crossing: (RULES.leadError * Math.abs(rel.x * n.x + rel.y * n.y)) / mw.def.round.speed,
     own: steady ? 0 : RULES.shake * mw.def.shake * mps(Math.abs(shooter.speed)),
     recoil: (mw.def.recoil * DEG) / (vehicleMass(shooter) / KG_PER_TONNE),
-    weather: weatherAt(world, shooter.pos).spread,
+    weather: vehicleHasPerk(world, shooter, "stormRider") ? 0 : weatherAt(world, shooter.pos).spread,
   };
-  const called = aim !== "body" && vehicleHasPerk(world, shooter, "calledShot");
-  const sum = base.weapon + base.skill + base.crossing + base.own + base.recoil + base.weather;
-  return { ...base, calledShot: called ? -sum * (1 - PERK_NUMBERS.calledShot.spread) : 0 };
+  return base;
 }
 
 // One round's angular error in radians and whether it hit the aimed part or, for a body shot, the truck. The

@@ -19,7 +19,7 @@ function deg(r: number): string {
 // "18 m · shows 4.1 m wide · scatter 2.0° weapon +1.1° crossing +0.4° own speed −0.3° gunnery".
 // Extra causes that round to zero are left out.
 function causeLine(o: HitOdds): string {
-  const extra = ([[o.causes.crossing, 'crossing'], [o.causes.own, 'own speed'], [o.causes.recoil, 'recoil'], [o.causes.skill, 'perception'], [o.causes.weather, 'weather'], [o.causes.calledShot, 'called shot']] as const)
+  const extra = ([[o.causes.range, 'range'], [o.causes.crossing, 'crossing'], [o.causes.own, 'own speed'], [o.causes.recoil, 'recoil'], [o.causes.skill, 'perception'], [o.causes.weather, 'weather']] as const)
     .filter(([r]) => deg(r) !== '0.0')
     .map(([r, name]) => ` ${r < 0 ? '−' : '+'}${deg(r)}° ${name}`)
     .join('');

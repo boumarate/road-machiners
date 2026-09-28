@@ -47,6 +47,7 @@ BAY_LEFT = G.col_y(1.5)
 BAY_RIGHT = G.col_y(3.5)
 BAY_FLOOR = HOOD_TOP - 0.25  # a 0.45 m engine shows 0.2 m above the hood
 FENDER_TOP = HOOD_BOTTOM + 0.2
+AIR_CLEANER_TOP = HOOD_TOP + 0.1
 
 BELT = G.top + 0.3  # the cab beltline, above the hood
 ROOF = G.top + 1.1
@@ -127,7 +128,7 @@ def front_end(kit: Kit) -> None:
         kit.cylinder(f"lamp_{s}", 0.16, INSET, (FRONT + INSET / 2, y, FENDER_TOP - 0.55), "light", rot=(0, math.pi / 2, 0), vertices=8)
     # Tall chrome air cleaners stand on the fenders by the cowl, a classic long-hood cue.
     for s, y in (("l", SIDE - 0.2), ("r", -SIDE + 0.2)):
-        kit.cylinder(f"air_cleaner_{s}", 0.18, HOOD_TOP + 0.1 - FENDER_TOP, (CAB_FRONT + 0.3, y, (HOOD_TOP + 0.1 + FENDER_TOP) / 2), "metal_light", vertices=8)
+        kit.cylinder(f"air_cleaner_{s}", 0.18, AIR_CLEANER_TOP - FENDER_TOP, (CAB_FRONT + 0.3, y, (AIR_CLEANER_TOP + FENDER_TOP) / 2), "metal_light", vertices=8)
 
 
 def hood(kit: Kit) -> None:
@@ -201,7 +202,10 @@ def main() -> None:
     hood(kit)
     cab(kit)
     deck(kit)
-    level_sockets(kit, G, "row", [HOOD_TOP] * 3 + [ROOF] * 2 + [DECK] * 4, fronts={3: ROOF_FRONT})
+    # The outer hood columns are the low fenders, with the air cleaners on row 2. The engine cells are the bay under the cutout.
+    fenders = {(x, y): FENDER_TOP for x in (0, 6) for y in (0, 1)} | {(x, 2): AIR_CLEANER_TOP for x in (0, 6)}
+    bay = {(x, y): BAY_FLOOR for x in (2, 3) for y in (1, 2)}
+    level_sockets(kit, G, "row", [HOOD_TOP] * 3 + [ROOF] * 2 + [DECK] * 4, fronts={3: ROOF_FRONT}, cells=fenders | bay)
     level_sockets(kit, G, "floor", [HOOD_TOP] + [BAY_FLOOR] * 2 + [BELT] * 2 + [DECK] * 4)
     check_base(kit, "base_tractor", G)
     kit.export("base_tractor", args, view_size=7.5)

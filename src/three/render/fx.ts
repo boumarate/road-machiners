@@ -12,11 +12,12 @@ import { groundPoint, headingOf, toMap, type V3, type VehicleFrame } from '../..
 import { PAL } from '../../render/palette';
 import { bodyOf } from '../../sim/body';
 import { corePart, mountedParts } from '../../sim/grid';
-import { isStranded, vehicleStats } from '../../sim/stats';
+import { inOverdrive, isStranded, vehicleStats } from '../../sim/stats';
 import { tileAt } from '../../sim/terrain';
 import type { Vehicle, World } from '../../sim/types';
 import { maxHp } from '../../sim/wear';
 import type { CameraRig } from './camera';
+import { Projectiles, type Muzzle, type ProjectileSpec, type RoundPlan } from './projectiles';
 
 // Pool sizes; effects beyond them are dropped rather than growing the pools. Wheel dust dominates: at the
 // top speed of 31 m/s on hardpan a truck throws 31 x DUST.perMeter x 3 wheel shares, about
@@ -27,14 +28,18 @@ const MAX_GLOWS = 256;
 const MAX_TEXTS = 24;
 const GRAVITY = 2; // m/s^2 pulling sparks and dust down; a soft fraction of real gravity, for looks
 const RISE_METERS = 1.5; // how far a floating number drifts up over its life
-const CANNON_COLOR = 0xffad50;
-const MG_BOLT = 0.04; // bolt length as a share of the flight
-const CANNON_BOLT = 0.06;
 const LABEL_ROW_PX = 22; // screen spacing between stacked shot labels
 
+// Muzzle flash: a flat star of additive triangles at the barrel tip, pointing where the round goes. It pops at full
+// size and shrinks over its life. Its length per weapon is in PROJECTILES.
+const FLASH = {
+  life: 0.07, // seconds; about four frames at 60 fps
+  endScale: 0.3, // share of the full size left at the end of the life
+  max: 48, // flashes alive at once; a long MG burst overlaps a few, extra flashes are dropped
+};
+
 type FloatText = { el: HTMLDivElement; pos: V3; rowPx: number; age: number; life: number; used: boolean };
-// A round in flight: after its delay a bolt runs from muzzle to landing point over its life, then the impact plays.
-type Tracer = { line: THREE.LineSegments; from: THREE.Vector3; to: THREE.Vector3; heavy: boolean; age: number; life: number; fire: () => void; land: () => void };
+type Flash = { mesh: THREE.Mesh; size: number; age: number };
 type Pending = { left: number; run: () => void }; // seconds until run
 
 // ---- Particle pools.
@@ -170,6 +175,80 @@ class ParticlePool {
   }
 }
 
+// ---- Muzzle flashes.
+
+// The flash shape for a length of 1 along +X: a long spike in two crossed planes, and a six-point star across the barrel.
+function flashGeometry(): THREE.BufferGeometry {
+  const pts: number[] = [];
+  const tri = (a: number[], b: number[], c: number[]) => pts.push(...a, ...b, ...c);
+  const half = 0.18; // half width of the long spike
+  tri([0, 0, 0], [0.3, half, 0], [1, 0, 0]);
+  tri([0, 0, 0], [1, 0, 0], [0.3, -half, 0]);
+  tri([0, 0, 0], [0.3, 0, half], [1, 0, 0]);
+  tri([0, 0, 0], [1, 0, 0], [0.3, 0, -half]);
+  const points = 6;
+  const outer = 0.32; // star point radius
+  const inner = 0.1; // star notch radius
+  const x = 0.06; // the star stands just past the tip
+  for (let i = 0; i < points * 2; i++) {
+    const a0 = (i / (points * 2)) * Math.PI * 2;
+    const a1 = ((i + 1) / (points * 2)) * Math.PI * 2;
+    const r0 = i % 2 === 0 ? outer : inner;
+    const r1 = i % 2 === 0 ? inner : outer;
+    tri([x, 0, 0], [x, Math.cos(a0) * r0, Math.sin(a0) * r0], [x, Math.cos(a1) * r1, Math.sin(a1) * r1]);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  return geo;
+}
+
+const X_AXIS = new THREE.Vector3(1, 0, 0);
+
+// A fixed pool of flash meshes sharing one geometry and material.
+class MuzzleFlashes {
+  private flashes: Flash[] = [];
+  private turn = new THREE.Quaternion();
+  private roll = new THREE.Quaternion();
+  private dir = new THREE.Vector3();
+
+  constructor(scene: THREE.Scene) {
+    const geo = flashGeometry();
+    const mat = new THREE.MeshBasicMaterial({ color: PAL.flash, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+    for (let i = 0; i < FLASH.max; i++) {
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.visible = false;
+      mesh.frustumCulled = false;
+      scene.add(mesh);
+      this.flashes.push({ mesh, size: 0, age: 0 });
+    }
+  }
+
+  show(m: Muzzle, length: number): void {
+    const f = this.flashes.find((x) => !x.mesh.visible);
+    if (!f) return;
+    f.size = length;
+    f.age = 0;
+    f.mesh.visible = true;
+    f.mesh.position.set(m.pos.x, m.pos.y, m.pos.z);
+    this.turn.setFromUnitVectors(X_AXIS, this.dir.set(m.dir.x, m.dir.y, m.dir.z).normalize());
+    this.roll.setFromAxisAngle(X_AXIS, Math.random() * Math.PI * 2);
+    f.mesh.quaternion.copy(this.turn).multiply(this.roll);
+    f.mesh.scale.setScalar(f.size);
+  }
+
+  tick(dt: number): void {
+    for (const f of this.flashes) {
+      if (!f.mesh.visible) continue;
+      f.age += dt;
+      if (f.age >= FLASH.life) {
+        f.mesh.visible = false;
+        continue;
+      }
+      f.mesh.scale.setScalar(f.size * (1 - (1 - FLASH.endScale) * (f.age / FLASH.life)));
+    }
+  }
+}
+
 // ---- Effects.
 
 // Wheel dust: a narrow, dense jet from the tire that slows, widens and fades into a trailing cloud.
@@ -181,11 +260,14 @@ export class Fx3D {
   private puffs = new ParticlePool(MAX_PUFFS, false);
   private glows = new ParticlePool(MAX_GLOWS, true);
   private texts: FloatText[] = [];
-  private tracers: Tracer[] = [];
+  private projectiles: Projectiles;
   private pending: Pending[] = [];
+  private flashes: MuzzleFlashes;
 
   constructor(private scene: THREE.Scene, private overlay: HTMLElement, private rig: CameraRig) {
     scene.add(this.puffs.mesh, this.glows.mesh);
+    this.flashes = new MuzzleFlashes(scene);
+    this.projectiles = new Projectiles(scene, (p) => this.missileSmoke(p));
     for (let i = 0; i < MAX_TEXTS; i++) {
       const el = document.createElement('div');
       el.style.position = 'absolute';
@@ -212,23 +294,35 @@ export class Fx3D {
     }
   }
 
-  // One round leaves `from` after delayMs and reaches its landing point after flightMs more. It lands with sparks
-  // when it struck something, else with dust.
-  shot(from: V3, land: V3, sparks: boolean, heavy: boolean, delayMs: number, flightMs: number): void {
-    const color = heavy ? CANNON_COLOR : PAL.flash;
-    const line = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 1 }));
-    line.visible = false;
-    this.scene.add(line);
-    const fire = () => {
-      line.visible = true;
-      this.puff(from, PAL.flash, 1, { speed: 0, life: flightMs / 2000, scale: heavy ? 0.9 : 0.5, grow: 1.6, additive: true });
+  // One round leaves the muzzle after its delay and flies to its landing point. muzzle is read when the round
+  // fires, so it starts at the barrel tip as the turret points then. It lands with sparks when it struck something,
+  // else with dust.
+  shot(spec: ProjectileSpec, muzzle: () => Muzzle, plan: RoundPlan): void {
+    const onFire = (m: Muzzle) => {
+      this.flashes.show(m, spec.flash);
+      this.puff(m.pos, PAL.flash, 1, { speed: 0, life: 0.12, scale: spec.flash * 0.6, grow: 1.6, additive: true });
     };
-    const impact = () => {
-      if (sparks) this.puff(land, 0xffa040, heavy ? 14 : 6, { speed: 4, life: 0.35, scale: 0.35, grow: 0.3, additive: true });
-      else this.puff(land, 0xd8c098, 4, { speed: 1.5, life: 0.9, scale: 0.5, grow: 1.4 });
-    };
-    const tracer: Tracer = { line, from: new THREE.Vector3(from.x, from.y, from.z), to: new THREE.Vector3(land.x, land.y, land.z), heavy, age: -delayMs / 1000, life: flightMs / 1000, fire, land: impact };
-    this.tracers.push(tracer);
+    const onLand = () => (spec.look === 'missile' ? this.blast(plan.land) : this.impact(plan, spec.look === 'shell'));
+    this.projectiles.launch({ spec, muzzle, plan, onFire, onLand });
+  }
+
+  // A bullet or shell landing: sparks on metal, dust in the dirt. Shells throw more.
+  private impact(plan: RoundPlan, big: boolean): void {
+    if (plan.struck) this.puff(plan.land, 0xffa040, big ? 14 : 6, { speed: 4, life: 0.35, scale: 0.35, grow: 0.3, additive: true });
+    else this.puff(plan.land, DUST.color, big ? 10 : 4, { speed: big ? 3 : 1.5, life: 0.9, scale: big ? 0.8 : 0.5, grow: 1.4 });
+  }
+
+  // A small rocket blast: a fireball, sparks and a smoke ball.
+  private blast(p: V3): void {
+    this.puff(p, 0xffa040, 16, { speed: 5, life: 0.35, scale: 0.35, grow: 0.3, additive: true });
+    this.puff(p, 0x3a3028, 8, { speed: 2, life: 1.2, scale: 0.8, grow: 2.2 });
+    this.puff(p, 0xffc060, 1, { speed: 0, life: 0.3, scale: 1.8, grow: 1.5, additive: true });
+  }
+
+  // Gray smoke left behind a flying missile.
+  private missileSmoke(p: V3): void {
+    const vel = { x: (Math.random() - 0.5) * 0.5, y: 0.3 + Math.random() * 0.3, z: (Math.random() - 0.5) * 0.5 };
+    this.puffs.spawn(p, { vel, life: 0.9, fromScale: 0.15, toScale: 0.7 + Math.random() * 0.3, color: 0x8a8278, opacity: 0.6, drag: 2, gravity: -0.2 });
   }
 
   // A floating label that appears at p after delayMs and reads for readMs. row stacks labels at the same point.
@@ -277,6 +371,12 @@ export class Fx3D {
     this.puffs.spawn(p, { vel, life: 1.8, fromScale: 0.3, toScale: 1.4 + Math.random() * 0.6, color: 0xf2efe8, opacity: 0.55, drag: 1, gravity: -0.3 });
   }
 
+  // A billow of steam from water boiling off a hot engine, thrown out and up.
+  douseSteam(p: V3): void {
+    const vel = { x: (Math.random() - 0.5) * 2.4, y: 1.6 + Math.random() * 1.2, z: (Math.random() - 0.5) * 2.4 };
+    this.puffs.spawn(p, { vel, life: 2.2, fromScale: 0.6, toScale: 2.4 + Math.random() * 1.0, color: 0xf2efe8, opacity: 0.75, drag: 1.2, gravity: -0.25 });
+  }
+
   // Thick black smoke from a stranded truck.
   breakdownSmoke(p: V3): void {
     const vel = { x: (Math.random() - 0.5) * 0.4, y: 0.8 + Math.random() * 0.6, z: (Math.random() - 0.5) * 0.4 };
@@ -300,6 +400,7 @@ export class Fx3D {
     const dt = dtMs / 1000;
     this.puffs.tick(dt);
     this.glows.tick(dt);
+    this.flashes.tick(dt);
     for (let i = this.pending.length - 1; i >= 0; i--) {
       const job = this.pending[i];
       job.left -= dt;
@@ -307,26 +408,7 @@ export class Fx3D {
       this.pending.splice(i, 1);
       job.run();
     }
-    for (let i = this.tracers.length - 1; i >= 0; i--) {
-      const tr = this.tracers[i];
-      const before = tr.age;
-      tr.age += dt;
-      if (tr.age < 0) continue;
-      if (before <= 0) tr.fire(); // the delay ran out this frame
-      if (tr.age >= tr.life) {
-        this.scene.remove(tr.line);
-        tr.line.geometry.dispose();
-        (tr.line.material as THREE.Material).dispose();
-        this.tracers.splice(i, 1);
-        tr.land();
-        continue;
-      }
-      const head = tr.age / tr.life;
-      const tail = Math.max(0, head - (tr.heavy ? CANNON_BOLT : MG_BOLT));
-      const points = [tr.from.clone().lerp(tr.to, tail), tr.from.clone().lerp(tr.to, head)];
-      tr.line.geometry.dispose();
-      tr.line.geometry = new THREE.BufferGeometry().setFromPoints(points);
-    }
+    this.projectiles.tick(dt);
     for (const slot of this.texts) {
       if (!slot.used) continue;
       slot.age += dt;
@@ -354,8 +436,11 @@ const EXHAUST_RATE = 14;
 const EXHAUST_FULL_ACCEL = 3;
 const CRUISE_SHARE = 0.8; // above this share of top speed, an engine at full revs puffs now and then
 const CRUISE_RATE = 1.5; // puffs per second at cruise
+const OVERDRIVE_RATE = 10; // puffs per second from an engine in overdrive, moving or not
 const EXHAUST_SIDE = 0.6; // the pipe sits this share of the half width off center, on the left
 const STEAM_RATE = 10; // puffs per second at full engine heat; a third of it at the warning heat
+const DOUSE_RATE = 60; // puffs per second while water boils off a doused engine
+const DOUSE_SECONDS = 1.2; // how long a doused engine throws its steam cloud
 const BREAKDOWN_RATE = 5; // puffs per second from a stranded truck
 const DAMAGE_RATE = 3; // puffs per second from a hurt truck
 const HURT_CAB = 0.35; // cab hp share under which a truck smokes
@@ -366,6 +451,7 @@ type Pose = { f: VehicleFrame; h: number; half: { x: number; y: number; z: numbe
 export class TruckFx {
   private world: World | null = null;
   private traits = new Map<string, Traits>();
+  private douseLeft = 0; // seconds of steam cloud left over the player's doused engine
 
   constructor(private fx: Fx3D) {}
 
@@ -374,7 +460,11 @@ export class TruckFx {
     const traits = this.traitsOf(world, v);
     const pose: Pose = { f, h: headingOf(f.rot), half: bodyOf(v.chassisId).half };
     if (moving) this.driving(world, v, pose, traits, dt);
-    if (v.id === world.player.vehicleId) this.steam(world.player.engineHeat, pose, dt);
+    if (v.id === world.player.vehicleId) {
+      this.overdriveExhaust(world, v, traits, pose, dt);
+      this.steam(world.player.engineHeat, pose, dt);
+      this.douseCloud(pose, dt);
+    }
     if (traits.stranded) this.puffs(BREAKDOWN_RATE, dt, () => this.fx.breakdownSmoke(onBody(pose, 0.5, 1, 0)));
     else if (traits.hurt) this.puffs(DAMAGE_RATE, dt, () => this.fx.smoke(f.pos));
   }
@@ -391,11 +481,30 @@ export class TruckFx {
     this.puffs(rate, dt, () => this.fx.exhaust(onBody(pose, -1, 1, -EXHAUST_SIDE), back));
   }
 
+  // An engine in overdrive smokes black all the time, on top of its load puffs.
+  private overdriveExhaust(world: World, v: Vehicle, traits: Traits, pose: Pose, dt: number): void {
+    if (!inOverdrive(world, v) || traits.stranded) return;
+    const back = { x: -Math.cos(pose.h), y: 0, z: -Math.sin(pose.h) };
+    this.puffs(OVERDRIVE_RATE, dt, () => this.fx.exhaust(onBody(pose, -1, 1, -EXHAUST_SIDE), back));
+  }
+
   // White steam over the hood from the warning heat on, thicker as the engine nears overheating.
   private steam(heat: number, pose: Pose, dt: number): void {
     if (heat < ENGINE_HEAT.warnAt) return;
     const share = (heat - ENGINE_HEAT.warnAt) / (1 - ENGINE_HEAT.warnAt);
     this.puffs((STEAM_RATE * (1 + 2 * share)) / 3, dt, () => this.fx.steam(onBody(pose, 0.7, 1, 0)));
+  }
+
+  // Starts the steam cloud of water boiling off the player's engine.
+  douse(): void {
+    this.douseLeft = DOUSE_SECONDS;
+  }
+
+  // A thick cloud over the whole hood, spread to both sides, while the water boils off.
+  private douseCloud(pose: Pose, dt: number): void {
+    if (this.douseLeft <= 0) return;
+    this.douseLeft -= dt;
+    this.puffs(DOUSE_RATE, dt, () => this.fx.douseSteam(onBody(pose, 0.3 + Math.random() * 0.8, 0.8, Math.random() * 2.4 - 1.2)));
   }
 
   // Dust from each tire's ground contact, thrown back and out to the tire's side.

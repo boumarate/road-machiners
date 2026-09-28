@@ -1,11 +1,13 @@
 // HTML labels floating over the map: site labels for towns and locations, and vehicle markers. Site labels
 // follow the old 2D WorldScene rules: sites under never-explored fog or past gray vision show nothing, explored but
-// undiscovered sites show ???, discovered sites show their name.
+// undiscovered sites show ???, discovered sites show their name. A wreck a driver told of shows a rumor label,
+// also under fog, until its stock is gone.
 
 import { REGION } from '../../data/region';
 import { groundPoint, type VehicleFrame } from '../../phys/frames';
 import { PAL } from '../../render/palette';
 import type { World } from '../../sim/types';
+import type { Vec } from '../../sim/vec';
 import { el } from '../../ui/dom';
 import { createIcon } from '../../ui/cards';
 import type { JobMark, VehicleMark, WeaponMark } from '../../ui/weapons';
@@ -14,40 +16,68 @@ import type { CameraRig } from './camera';
 import type { SightLimit } from './scope';
 
 const LABEL_LIFT_PX = 90; // pixels above the ground point, matches the old 2D label offset
+const RUMOR_TEXT = 'Wreck (rumor)';
 
 type Site = { id: string; name: string; pos: { x: number; y: number } };
 
+function labelEl(container: HTMLElement): HTMLDivElement {
+  const el = document.createElement('div');
+  el.style.position = 'absolute';
+  el.style.transform = 'translate(-50%, -100%)';
+  el.style.font = '15px var(--font-mono)';
+  el.style.color = PAL.text;
+  el.style.background = '#1a1410aa'; // PAL.bg with alpha, matches the old 2D label backing
+  el.style.padding = '3px 6px';
+  el.style.whiteSpace = 'nowrap';
+  el.style.pointerEvents = 'none';
+  container.appendChild(el);
+  return el;
+}
+
+// Shows the label at a map point, or hides it past gray vision.
+function place(el: HTMLDivElement, world: World, pos: Vec, rig: CameraRig, limit: SightLimit, explored: boolean): void {
+  const ground = groundPoint(world.terrain, pos);
+  const seen = explored && limit.covers(ground);
+  el.style.display = seen ? 'block' : 'none';
+  if (!seen) return;
+  const screen = rig.screenOf(ground);
+  el.style.left = `${screen.x}px`;
+  el.style.top = `${screen.y - LABEL_LIFT_PX}px`;
+}
+
 export class Labels {
   private els = new Map<string, HTMLDivElement>();
+  private rumors = new Map<string, HTMLDivElement>(); // by salvage stock id
 
-  constructor(container: HTMLElement) {
-    for (const s of sites()) {
-      const el = document.createElement('div');
-      el.style.position = 'absolute';
-      el.style.transform = 'translate(-50%, -100%)';
-      el.style.font = '15px var(--font-mono)';
-      el.style.color = PAL.text;
-      el.style.background = '#1a1410aa'; // PAL.bg with alpha, matches the old 2D label backing
-      el.style.padding = '3px 6px';
-      el.style.whiteSpace = 'nowrap';
-      el.style.pointerEvents = 'none';
-      container.appendChild(el);
-      this.els.set(s.id, el);
-    }
+  constructor(private readonly container: HTMLElement) {
+    for (const s of sites()) this.els.set(s.id, labelEl(container));
   }
 
   update(world: World, rig: CameraRig, limit: SightLimit): void {
     for (const s of sites()) {
       const el = this.els.get(s.id)!;
-      const ground = groundPoint(world.terrain, s.pos);
-      const seen = playerExplored(world, s.pos) && limit.covers(ground);
-      el.style.display = seen ? 'block' : 'none';
-      if (!seen) continue;
-      const known = world.player.discovered.includes(s.id);
-      el.textContent = known ? s.name : '???';
-      const screen = rig.screenOf(ground);
-      el.style.left = `${screen.x}px`;
-      el.style.top = `${screen.y - LABEL_LIFT_PX}px`;
+      el.textContent = world.player.discovered.includes(s.id) ? s.name : '???';
+      place(el, world, s.pos, rig, limit, playerExplored(world, s.pos));
+    }
+    this.updateRumors(world, rig, limit);
+  }
+
+  private updateRumors(world: World, rig: CameraRig, limit: SightLimit): void {
+    const stocks = world.salvage.filter((s) => world.player.rumored.includes(s.id));
+    const ids = new Set(stocks.map((s) => s.id));
+    for (const [id, el] of this.rumors) {
+      if (ids.has(id)) continue;
+      el.remove();
+      this.rumors.delete(id);
+    }
+    for (const stock of stocks) {
+      let el = this.rumors.get(stock.id);
+      if (!el) {
+        el = labelEl(this.container);
+        el.textContent = RUMOR_TEXT;
+        this.rumors.set(stock.id, el);
+      }
+      place(el, world, stock.pos, rig, limit, true);
     }
   }
 }
@@ -75,6 +105,7 @@ function markerNode(mark: VehicleMark): HTMLElement {
   return el('div', { class: 'vehicle-marker' },
     mark.weapons.length > 0 ? el('div', { class: 'marker-weapons' }, ...mark.weapons.map(weaponChip)) : null,
     mark.radio ? el('div', { class: 'marker-radio' }, '[T] Radio') : null,
+    mark.out ? el('div', { class: 'marker-out' }, 'Knocked out') : null,
     mark.job ? jobChip(mark.job) : null,
   );
 }
@@ -82,7 +113,7 @@ function markerNode(mark: VehicleMark): HTMLElement {
 const MARKER_LIFT = 3.5; // meters above a vehicle where its label sits
 
 // Markers above vehicles: an icon per player weapon aimed at the vehicle, the radio key on the hovered
-// truck, and the job an NPC works on. The content comes from vehicleMarks() in src/ui/weapons.ts.
+// truck, a knocked-out driver, and the job an NPC works on. The content comes from vehicleMarks() in src/ui/weapons.ts.
 export class VehicleMarkers {
   private readonly els = new Map<string, HTMLElement>(); // by vehicle id
 

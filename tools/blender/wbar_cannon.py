@@ -26,6 +26,7 @@ def build(kit: Kit) -> None:
     kit.box("brake", (0.18, 0.15, 0.11), (1.71, 0, 0), "dark", dent_by=0.004)
     for x in (1.66, 1.76):
         kit.box(f"brake_fin{x:.2f}", (0.03, 0.18, 0.12), (x, 0, 0), "metal")
+    kit.socket("tip", (1.8, 0, 0))
 
 
 if __name__ == "__main__":

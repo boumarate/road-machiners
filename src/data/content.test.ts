@@ -27,6 +27,7 @@ beforeAll(() => {
 });
 
 const addedParts: Record<Exclude<PartKind, "core" | "scanner">, string[]> = {
+  store: ["jerrycans", "supplyLocker"],
   weapon: ["shotgun", "autocannon", "tankGun", "rocketRack", "sniperCannon"],
   engine: ["flatFour", "workhorseDiesel", "racingV6", "heavyDiesel", "turbine"],
   armor: [
@@ -42,7 +43,8 @@ const addedParts: Record<Exclude<PartKind, "core" | "scanner">, string[]> = {
   cargo: ["panniers", "flatbed", "lightFrame", "enclosedFrame", "heavyFrame"],
 };
 const addedGoods = ["grain", "textiles", "tools", "batteries", "electronics"];
-const addedChassis = ["courier", "van", "longbed", "carrier", "tractor"];
+const addedChassis = ["courier", "van", "longbed", "carrier", "tractor", "jeep", "convertible", "bus", "loader"];
+const rearEngineChassis = ["jeep", "convertible", "bus", "loader"];
 
 describe("equipment variety", () => {
   it("gives every mounted weapon its extended range", () => {
@@ -52,13 +54,13 @@ describe("equipment variety", () => {
         .map((weapon) => [weapon.id, weapon.range]),
     );
     expect(ranges).toEqual({
-      mg: 9,
-      cannon: 13.5,
-      shotgun: 4.5,
-      autocannon: 10.5,
-      tankGun: 12,
-      rocketRack: 15,
-      sniperCannon: 18,
+      mg: 18,
+      cannon: 27,
+      shotgun: 9,
+      autocannon: 21,
+      tankGun: 24,
+      rocketRack: 30,
+      sniperCannon: 36,
     });
   });
 
@@ -70,6 +72,7 @@ describe("equipment variety", () => {
         engine: 2,
         armor: 3,
         cargo: 2,
+        store: 0,
       };
       expect(Object.values(PARTS).filter((p) => p.kind === kind)).toHaveLength(
         originalCounts[kind] + ids.length,
@@ -98,9 +101,9 @@ describe("equipment variety", () => {
     },
   );
 
-  it("adds five buyable chassis with valid built-in parts and physics bodies", () => {
-    expect(Object.keys(CHASSIS)).toHaveLength(9);
-    expect(PLAYER_CHASSIS).toHaveLength(7);
+  it("adds buyable chassis with valid built-in parts and physics bodies", () => {
+    expect(Object.keys(CHASSIS)).toHaveLength(13);
+    expect(PLAYER_CHASSIS).toHaveLength(11);
     for (const id of addedChassis) {
       expect(PLAYER_CHASSIS).toContain(id);
       const w = buyChassis(world, id);
@@ -121,13 +124,19 @@ describe("equipment variety", () => {
     }
     expect(
       new Set(addedChassis.map((id) => CHASSIS[id].layout.join("\n"))).size,
-    ).toBe(5);
+    ).toBe(addedChassis.length);
   });
 
-  // PH8 tunes values. Every non-core part, chassis and good currently misses its target effort
-  // band; see the phase report for the full mismatch list. Kept as a real, skipped assertion so
-  // PH8 can un-skip it once values are retuned from the harness, rather than writing it from scratch.
-  it.skip("keeps every part, chassis and good inside its tier's effort band", () => {
+  it.each(rearEngineChassis)("puts the %s engine bay behind the cab", (id) => {
+    const def = CHASSIS[id];
+    const cab = def.core.find((core) => { const part = PARTS[core.defId]; return part.kind === "core" && part.role === "cab"; })!;
+    const cabEnd = cab.y + PARTS[cab.defId].h;
+    const bayRows = def.layout.flatMap((row, y) => (row.includes("E") ? [y] : []));
+    expect(bayRows.length).toBeGreaterThan(0);
+    expect(Math.min(...bayRows)).toBeGreaterThanOrEqual(cabEnd);
+  });
+
+  it("keeps every part, chassis and good inside its tier's effort band", () => {
     const items: { name: string; kind: ItemKind; tier: 1 | 2 | 3; value: number }[] = [
       ...Object.values(PARTS)
         .filter((p) => p.kind !== "core")
@@ -214,6 +223,18 @@ function dominates(a: PartDef, b: PartDef): boolean {
   return x.every((v, i) => v >= y[i]) && x.some((v, i) => v > y[i]);
 }
 
+describe("part weight by tier", () => {
+  // Armor, weapons and engines weigh per cell. Cargo parts weigh per extra row they add.
+  const perUnit = (def: PartDef): number => (def.kind === "cargo" ? def.mass / def.extraRows : def.mass / (def.w * def.h));
+  const mean = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+  it.each(["armor", "weapon", "engine", "cargo"])("%s parts weigh less on average at each higher tier", (kind) => {
+    const byTier = [1, 2, 3].map((tier) => mean(Object.values(PARTS).filter((p) => p.kind === kind && p.tier === tier).map(perUnit)));
+    expect(byTier[1]).toBeLessThan(byTier[0]);
+    expect(byTier[2]).toBeLessThan(byTier[1]);
+  });
+});
+
 describe("part trade-offs", () => {
   it("no part matches or beats another of its kind on every stat but price", () => {
     const parts = Object.values(PARTS).filter((p) => p.kind !== "core");
@@ -225,5 +246,23 @@ describe("part trade-offs", () => {
     const worse = { ...PARTS.mg, id: "worseMg", hp: PARTS.mg.hp - 1 } as PartDef;
     expect(dominates(PARTS.mg, worse)).toBe(true);
     expect(dominates(worse, PARTS.mg)).toBe(false);
+  });
+});
+
+describe("chassis drive parts", () => {
+  const hpOf = (chassisId: string, role: "wheel" | "transmission" | "tank"): number => {
+    const core = CHASSIS[chassisId].core.find((c) => {
+      const def = PARTS[c.defId];
+      return def.kind === "core" && def.role === role;
+    });
+    if (!core) throw new Error(`${chassisId} has no ${role}`);
+    return PARTS[core.defId].hp;
+  };
+
+  it("gives heavier chassis tougher wheels, transmissions and fuel tanks", () => {
+    for (const role of ["wheel", "transmission", "tank"] as const) {
+      expect(hpOf("hauler", role)).toBeGreaterThan(hpOf("scout", role));
+      expect(hpOf("wagon", role)).toBeGreaterThan(hpOf("hauler", role));
+    }
   });
 });

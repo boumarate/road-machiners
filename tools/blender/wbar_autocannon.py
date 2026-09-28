@@ -25,6 +25,7 @@ def build(kit: Kit) -> None:
     tube(kit, "barrel", 0.036, 0.62, 1.18, "metal")
     kit.box("brake", (0.12, 0.11, 0.09), (1.24, 0, 0), "metal_light", dent_by=0.003)
     kit.box("brake_port", (0.05, 0.115, 0.05), (1.24, 0, 0), "dark")
+    kit.socket("tip", (1.3, 0, 0))
 
 
 if __name__ == "__main__":

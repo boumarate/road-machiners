@@ -1,19 +1,24 @@
 // Parked jobs: work that needs the truck to stay parked for several turns. One rule for every driver.
 // A job is cancelled on any turn its truck ends above parked speed, and its finished turns are lost.
+// No driver works with a hostile in sight: no job starts then, and a running job is cancelled.
 // A repair is also cancelled once the grid holds no parts for it.
 
 import { GOODS } from "../data/goods";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { STRIP } from "../data/salvage";
+import { PERK_NUMBERS } from "../data/skills";
+import { isHostile } from "./combat";
 import { playerVehicle } from "./damage";
+import { canVehicleSee } from "./vision";
 import { partValue } from "./wear";
 import { freeCells, goodsCount, isMounted, itemSize, mountedParts } from "./grid";
-import { addGoods, applyRefitLayout, getRefitLayout } from "./inventory";
+import { addGoods, applyRefitLayout, getRefitLayout, removeGoods, stowPart } from "./inventory";
+import { makePart } from "./factory";
 import { isJunk, maxHp } from "./wear";
 import { repairPlan, repairTurn } from "./repair";
-import { practice } from "./progress";
-import { finishTruckPickup, stripPart } from "./salvage";
+import { practice, vehicleHasPerk } from "./progress";
+import { finishTruckPickup } from "./salvage";
 import { searchTurn } from "./search";
 import type { GridItem, Job, PartInstance, RefitJob, RefitPickup, Vehicle, World } from "./types";
 import { playerCommand } from "./world";
@@ -30,7 +35,13 @@ export function isBusy(v: Vehicle): boolean {
   return v.job !== null && !isAutoPatch(v.job);
 }
 
+// A hostile the driver sees.
+export function inCombat(world: World, v: Vehicle): boolean {
+  return world.vehicles.some((other) => isHostile(world, v, other) && canVehicleSee(world, v, other.pos));
+}
+
 export function startJob(world: World, v: Vehicle, job: Job): void {
+  if (inCombat(world, v)) throw new Error("Not with a hostile in sight");
   if (isAutoPatch(v.job)) cancelJob(world, v);
   if (v.job)
     throw new Error(`${v.name} is already busy with a ${v.job.kind} job`);
@@ -67,8 +78,7 @@ export function startRepair(world: World, partId: string): World {
 export function startAutoRepair(world: World): void {
   if (!world.player.autoRepair || world.player.state !== "active") return;
   const v = playerVehicle(world);
-  if (v.job || v.speed > RULES.parkedSpeed || (goodsCount(v).parts ?? 0) === 0)
-    return;
+  if (!canAutoPatch(world, v)) return;
   const worst = mountedParts(v)
     .filter((p) => !isJunk(p) && repairPlan(world, v, p.id).needed > 0)
     .sort((a, b) => a.hp / maxHp(a) - b.hp / maxHp(b))[0];
@@ -82,6 +92,11 @@ export function startAutoRepair(world: World): void {
     total: plan.turns,
     auto: true,
   });
+}
+
+// Idle, parked, out of combat, with parts to patch with.
+function canAutoPatch(world: World, v: Vehicle): boolean {
+  return !v.job && v.speed <= RULES.parkedSpeed && (goodsCount(v).parts ?? 0) > 0 && !inCombat(world, v);
 }
 
 // The player command that starts stripping a spare, non-core part for units of the parts good.
@@ -132,13 +147,43 @@ function isStripStalled(v: Vehicle, partId: string): boolean {
   return !item || isMounted(v.chassisId, item) || !stripFits(v, item);
 }
 
+// The Welder perk command: a parked job that turns scrap metal into one pristine scrap armor part.
+export function startWeld(world: World): World {
+  return playerCommand(world, (w) => {
+    const v = playerVehicle(w);
+    if (!vehicleHasPerk(w, v, "welder")) throw new Error("Welding needs the Welder perk");
+    if (!hasWeldScrap(v)) throw new Error(`Welding needs ${PERK_NUMBERS.welder.scrap} scrap metal`);
+    if (!weldFits(v)) throw new Error("No room for the welded part");
+    const turns = PERK_NUMBERS.welder.turns;
+    startJob(w, v, { kind: "weld", turnsLeft: turns, total: turns });
+  });
+}
+
+function hasWeldScrap(v: Vehicle): boolean {
+  return (goodsCount(v).scrap ?? 0) >= PERK_NUMBERS.welder.scrap;
+}
+
+// The scrap cells free up first, so they count as room for the part.
+function weldFits(v: Vehicle): boolean {
+  const def = partDef(PERK_NUMBERS.welder.part);
+  return freeCells(v) + PERK_NUMBERS.welder.scrap >= def.w * def.h;
+}
+
+function weldTurn(world: World, v: Vehicle, job: Extract<Job, { kind: "weld" }>): boolean {
+  job.turnsLeft = Math.max(0, job.turnsLeft - 1);
+  if (job.turnsLeft > 0) return false;
+  removeGoods(v, "scrap", PERK_NUMBERS.welder.scrap);
+  if (!stowPart(world, v, makePart(world, PERK_NUMBERS.welder.part, 0))) throw new Error(`Welded part would not fit on ${v.name}`);
+  return true;
+}
+
 export function advanceJobs(world: World): void {
   for (const v of world.vehicles) if (v.job) advanceJob(world, v, v.job);
 }
 
 // A turn handler does one turn of work and returns true once the job is finished.
 function advanceJob(world: World, v: Vehicle, job: Job): void {
-  if (v.speed > RULES.parkedSpeed) return endJob(world, v, job, "cancelled");
+  if (v.speed > RULES.parkedSpeed || inCombat(world, v)) return endJob(world, v, job, "cancelled");
   if (job.kind === "refit") return advanceRefit(world, v, job);
   if (isStalled(world, v, job)) return endJob(world, v, job, "cancelled");
   if (jobTurn(world, v, job)) endJob(world, v, job, "done");
@@ -146,6 +191,7 @@ function advanceJob(world: World, v: Vehicle, job: Job): void {
 
 function isStalled(world: World, v: Vehicle, job: Job): boolean {
   if (job.kind === "repair") return isRepairStalled(world, v, job.partId, job.parts);
+  if (job.kind === "weld") return !hasWeldScrap(v) || !weldFits(v);
   return job.kind === "strip" && isStripStalled(v, job.partId);
 }
 
@@ -153,6 +199,7 @@ function jobTurn(world: World, v: Vehicle, job: Job): boolean {
   if (job.kind === "repair") return repairTurn(world, v, job);
   if (job.kind === "search") return searchTurn(world, v, job);
   if (job.kind === "strip") return stripTurn(world, v, job);
+  if (job.kind === "weld") return weldTurn(world, v, job);
   throw new Error(`Unhandled job kind ${job.kind}`);
 }
 
@@ -190,13 +237,12 @@ function advanceRefit(world: World, v: Vehicle, job: RefitJob): void {
   endJob(world, v, job, 'done');
 }
 
-// The part a finished refit mounted leaves its stock or truck. A part from a wreck gets careful stripping.
+// The part a finished refit mounted leaves its stock or truck.
 function takePickup(world: World, v: Vehicle, pickup: RefitPickup): void {
   if (pickup.from === 'truck') return finishTruckPickup(world, v, pickup);
   const stock = world.salvage.find((entry) => entry.id === pickup.stockId);
   const part = stock?.parts.find((entry) => entry.id === pickup.partId);
   if (!stock || !part) throw new Error('Refit stock part disappeared after validation');
-  stripPart(world, v, stock, part);
   stock.parts = stock.parts.filter((entry) => entry.id !== pickup.partId);
 }
 

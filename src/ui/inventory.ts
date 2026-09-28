@@ -8,7 +8,7 @@ import { RULES } from "../data/rules";
 import { STRIP } from "../data/salvage";
 import { isJunk, maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
-import { partRepairCost, repairPart } from "../sim/economy";
+import { canRebuild, partRepairCost, repairPart } from "../sim/economy";
 import {
   freeCells,
   goodsCount,
@@ -27,7 +27,9 @@ import {
   storePart,
   takeFromStorage,
 } from "../sim/inventory";
-import { startRepair, startStrip, stripYield } from "../sim/jobs";
+import { startRepair, startStrip, startWeld, stripYield } from "../sim/jobs";
+import { vehicleHasPerk } from "../sim/progress";
+import { PERK_NUMBERS } from "../data/skills";
 import { repairPlan, type RepairPlan } from "../sim/repair";
 import { townAt } from "../sim/sites";
 import { downedHere, takeAllLoot, takeLoot, takeStores } from "../sim/locations";
@@ -49,7 +51,7 @@ import type { UiHost } from "./host";
 import { baselinePart, conditionMeter, createIcon, type IconName, diffStats, footprint as footprintEl, goodIcon, partIcon, partStats, statGrid } from "./cards";
 import { vehicleMass } from "../sim/mass";
 import { fireSpans, reachedSides, sideBlockers, SIDES, type FireSpan } from "../sim/armor";
-import { fuelLiters, hp, kg, liters } from "./units";
+import { fuelLiters, hp, kg } from "./units";
 import { moneyLabel } from "./hud-readout";
 
 const CELL_PX = 42;
@@ -57,7 +59,7 @@ const CELL_PX = 42;
 const MIN_CELL_PX = 28;
 
 const CELL_TITLE: Record<Cell, string> = {
-  D: "deck mount for a weapon, scanner or cargo frame",
+  D: "deck mount for a weapon, scanner, cargo frame or store",
   E: "engine mount",
   F: "front armor mount",
   B: "back armor mount",
@@ -73,6 +75,7 @@ const KIND_CLASS: Record<PartKind, string> = {
   cargo: "k-cargo",
   core: "k-core",
   scanner: "k-weapon",
+  store: "k-cargo",
 };
 
 type Drag = {
@@ -317,7 +320,7 @@ export class InventoryView {
     this.inspection.replaceChildren(
       el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, mounted) : []),
-      el("p", { class: "dim" }, inspectionHint(w, item)),
+      ...(item.kind === "part" && !townAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
       el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
     );
   }
@@ -330,9 +333,9 @@ export class InventoryView {
   }
 
   // The action buttons an inspected item offers: patch when mounted and damaged, repair in town,
-  // and strip when it is a spare. A good offers none.
+  // and strip when it is a spare. Scrap metal offers a weld with the Welder perk. Other goods offer none.
   private itemActions(w: World, item: GridItem, mounted: boolean): HTMLElement[] {
-    if (item.kind !== "part") return [];
+    if (item.kind !== "part") return this.goodActions(w, item.good);
     const buttons: (HTMLElement | null)[] = [
       mounted ? this.patchButton(w, playerVehicle(w), item.part) : null,
       townAt(w) ? this.repairButton(w, item.part) : null,
@@ -372,9 +375,13 @@ export class InventoryView {
     );
   }
 
-  // Junk parts get no button, since no repair rebuilds them.
+  // A junk part gets a Rebuild button only while the Rebuild perk can rebuild it.
   private repairButton(w: World, part: PartInstance): HTMLElement | null {
-    if (isJunk(part)) return null;
+    if (!isJunk(part)) return this.garageButton(w, part, "Repair", `Restore to ${maxHp(part)} HP`);
+    return canRebuild(w, part) ? this.garageButton(w, part, "Rebuild", "Rebuild to the last wear step, once per part") : null;
+  }
+
+  private garageButton(w: World, part: PartInstance, action: string, title: string): HTMLElement | null {
     const cost = partRepairCost(w, part);
     if (cost === 0) return null;
     return el(
@@ -382,17 +389,14 @@ export class InventoryView {
       {
         class: "inv-patch",
         disabled: w.player.money < cost,
-        title:
-          w.player.money < cost
-            ? "Not enough money"
-            : `Restore to ${maxHp(part)} HP`,
+        title: w.player.money < cost ? "Not enough money" : title,
         onpointerdown: (e: Event) => e.stopPropagation(),
         onclick: (e: Event) => {
           e.stopPropagation();
           this.run((world) => repairPart(world, part.id));
         },
       },
-      `Repair ${cost}`,
+      `${action} ${cost}`,
     );
   }
 
@@ -416,6 +420,32 @@ export class InventoryView {
         },
       },
       reason ? "Strip" : `Strip ${STRIP.turns}t/${stripYield(part)}p`,
+    );
+  }
+
+  // Scrap metal offers a weld with the Welder perk. Other goods offer nothing.
+  private goodActions(w: World, good: string): HTMLElement[] {
+    const me = playerVehicle(w);
+    return good === "scrap" && vehicleHasPerk(w, me, "welder") ? [this.weldButton(me)] : [];
+  }
+
+  // Welds scrap metal into a scrap armor part.
+  private weldButton(me: Vehicle): HTMLElement {
+    const { scrap, turns } = PERK_NUMBERS.welder;
+    const reason = weldBlocker(me);
+    return el(
+      "button",
+      {
+        class: "inv-patch",
+        disabled: reason !== null,
+        title: reason ?? `Weld: ${turns} turns for a ${partDef(PERK_NUMBERS.welder.part).name}, spends ${scrap} scrap metal`,
+        onpointerdown: (e: Event) => e.stopPropagation(),
+        onclick: (e: Event) => {
+          e.stopPropagation();
+          this.run((world) => startWeld(world));
+        },
+      },
+      reason ? `Weld (${reason})` : `Weld ${turns}t`,
     );
   }
 
@@ -495,10 +525,7 @@ export class InventoryView {
       };
       const chip = el(
         "div",
-        {
-          class: "inv-chip k-good",
-          title: `${GOODS[good].name}: drag one unit at a time`,
-        },
+        { class: "inv-chip k-good" },
         createIcon(getItemIcon(item)),
         `${GOODS[good].name} x${count}`,
       );
@@ -593,7 +620,6 @@ export class InventoryView {
     this.inspection.replaceChildren(
       el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, false) : []),
-      el("p", { class: "dim" }, "Drag onto your grid to take it."),
     );
   }
 
@@ -784,6 +810,8 @@ export class InventoryScreen {
   constructor(private host: UiHost) {
     this.root.classList.add("inventory-screen");
     this.root.style.display = "none";
+    // The truck grid fits its cells to the window height, so a resize lays the screen out again.
+    window.addEventListener("resize", () => this.render());
     this.view = new InventoryView(host, () => this.render());
   }
 
@@ -823,21 +851,34 @@ export class InventoryScreen {
 
   render(): void {
     if (!this.isOpen()) return;
+    const truck = el("div", { class: "inv-body" }, this.view.render());
     this.root.replaceChildren(
-      el(
-        "button",
-        { class: "close", onclick: () => this.close() },
-        "Close [I]",
-      ),
-      el("h3", {}, chassisDef(playerVehicle(this.host.world()).chassisId).name),
-      el(
-        "div",
-        { class: "inv-summary" },
-        `Equipment & cargo · ${liters(freeCells(playerVehicle(this.host.world())))} L free · Mass ${kg(vehicleMass(playerVehicle(this.host.world())))} of ${kg(chassisDef(playerVehicle(this.host.world()).chassisId).ratedMass)} rated · Money ${moneyLabel(this.host.world().player.money)}`,
-      ),
-      this.view.render(),
+      el("button", { class: "close", onclick: () => this.close() }, "Close [I]"),
+      el("h3", {}, "Inventory", truckChips(this.host.world())),
+      truck,
     );
+    this.view.fitTo(truck);
   }
+}
+
+// Header chips for the player's truck: chassis, money, free cells and load.
+export function truckChips(w: World): HTMLElement {
+  const me = playerVehicle(w);
+  const mass = vehicleMass(me);
+  const rated = chassisDef(me.chassisId).ratedMass;
+  return el(
+    "span",
+    { class: "chips" },
+    el("span", { class: "chip" }, createIcon("truck"), chassisDef(me.chassisId).name),
+    el("span", { class: `chip${w.player.money < 0 ? " bad" : ""}`, title: "Money" }, createIcon("money"), moneyLabel(w.player.money)),
+    el("span", { class: "chip", title: "Free cargo cells" }, createIcon("cells"), `${freeCells(me)} free`),
+    el(
+      "span",
+      { class: `chip${mass > rated ? " bad" : ""}`, title: "Mass against rated load" },
+      createIcon("load"),
+      `${kg(mass)} / ${kg(rated)}`,
+    ),
+  );
 }
 
 export function getItemIcon(item: GridItem): IconName {
@@ -933,14 +974,6 @@ function itemTitle(it: GridItem, mounted: boolean): string {
   return `${partTitle(it.part)}\n${mounted ? "Mounted" : "Spare"}`;
 }
 
-// What the inspection panel says under an item's title: how to move it.
-function inspectionHint(w: World, item: GridItem): string {
-  if (item.kind === "good")
-    return "Drag to rearrange cargo.";
-  if (townAt(w)) return "Drag onto a mount or into storage.";
-  return "Drag onto a mount or off it to start a refit.";
-}
-
 // Why a Patch button is disabled, or null when the patch can start.
 function patchBlocker(me: Vehicle, plan: RepairPlan): string | null {
   if (me.speed > RULES.parkedSpeed) return "Stop to patch";
@@ -952,6 +985,14 @@ function stripBlocker(me: Vehicle): string | null {
   if (me.speed > RULES.parkedSpeed) return "Stop to strip";
   if (me.job) return "Busy";
   return null;
+}
+
+// Why a Weld button is disabled, or null when welding can start.
+function weldBlocker(me: Vehicle): string | null {
+  if (me.speed > RULES.parkedSpeed) return "Stop to weld";
+  if (me.job) return "Busy";
+  const scrap = PERK_NUMBERS.welder.scrap;
+  return (goodsCount(me).scrap ?? 0) < scrap ? `Needs ${scrap} scrap` : null;
 }
 
 // Thin bar along the bottom of a part: its width is hp over max hp. A broken part shows a red bar.

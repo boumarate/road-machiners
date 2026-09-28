@@ -1,3 +1,4 @@
+import type { Tier } from './market';
 // Global rule numbers. Tuned by playing.
 
 export const RULES = {
@@ -9,7 +10,10 @@ export const RULES = {
   fuelUseFactor: 0.075, // share of the chassis fuel rate burned per tile; a daytime Bowl to Nose road trip uses under 60% of the starting fuel, leaving room for detours and fights
   npcStuckTurns: 2, // failed drive attempts before backing out
   npcRecoveryTurns: 2, // turns spent backing out before resuming the route
-  flipBackTurns: 3, // turns a vehicle can end flipped before it is set back on its wheels
+  // A truck that ends `turns` turns in a row flipped or lifted off the ground, like on top of another truck, is set down
+  // on its wheels. It lands on the nearest free spot, searched in rings `step` tiles apart out to `reach` tiles. The step
+  // is below the smallest vehicle radius. The reach fits two of the largest trucks side by side with clearance.
+  stranded: { turns: 3, step: 0.25, reach: 4 },
   // A player click within throttle reach and less than `cone` degrees off straight behind backs the truck up.
   // Any other point behind turns the truck around nose first. A stuck NPC backs out `distance` tiles.
   reverse: { cone: 20, distance: 1 },
@@ -38,8 +42,8 @@ export const RULES = {
   tankLeak: 1, // fuel lost per turn with a broken tank
 
   // Global damage multipliers. Tune these to make every fight faster or slower.
-  weaponDamage: 0.75, // every weapon round and splash, guard guns included
-  crashDamage: 0.75, // every crash and ram, into trucks and obstacles alike
+  weaponDamage: 0.5625, // every weapon round and splash, guard guns included
+  crashDamage: 1.125, // every crash and ram, into trucks and obstacles alike
 
   // Town guards. Each town gate has one gun. Every turn it shoots the nearest vehicle within range that fired.
   // Each round hits with a flat chance and enters a random lane of the side facing the gate.
@@ -48,22 +52,36 @@ export const RULES = {
     rounds: 4,
     hitChance: 0.5,
     missOffset: 1.5,
-    round: { damage: 6, pen: 10, blast: false },
+    round: { damage: 6, pen: 8, blast: false },
   },
+
+  // Every truck's acceleration, in the sim and in physics, times this. Tune here to make all trucks livelier or
+  // heavier at once.
+  accelScale: 0.67,
+  // Engine overdrive multiplies the player's top speed and acceleration by this. It heats the engine; see
+  // ENGINE_HEAT.overdriveGain.
+  overdriveBoost: 1.33,
+  // Past the rated mass, top speed and turning also scale by (rated / mass) to this power. 500 kg over a 3000 kg rating
+  // cuts them to about 54%, and 1000 kg over to about 32%.
+  overloadExponent: 4,
 
   // Combat
   // A round that lands on the truck is a crit with this chance. A crit multiplies its damage and pen, so a few
-  // lucky rounds can swing a fight that many small rolls would otherwise average out.
-  critChance: 0.1,
+  // lucky rounds can swing a fight that many small rolls would otherwise average out. A machine gun lands several
+  // rounds a turn, so 0.04 gives it about one crit every few turns of hits, not one every turn.
+  critChance: 0.04,
   critDamage: 2,
   critPen: 2,
   // A round's angular error has a spread in radians: weapon spread × (1 − gunnery), plus
   // leadError × crossing speed / round speed, plus shake × the gun's shake × own speed in m/s,
   // plus the gun's recoil over the truck mass in tonnes.
+  // Range adds weapon spread × rangeFalloff[tier] × (distance / range)², on top of the target looking smaller far
+  // away. At full range a tier 1 gun scatters four times as wide as up close, a tier 3 gun twice as wide.
+  rangeFalloff: { 1: 3, 2: 2, 3: 1 } as Record<Tier, number>,
   leadError: 4.5, // share of the lead angle the gunner misjudges
   shake: 0.002, // radians of spread per m/s of the shooter's own speed
   cellMeters: 0.5, // width of one grid cell, for the size of an aimed part
-  cabHealthShare: 0.5, // share of cab damage the player's character takes as health loss
+  cabHealthShare: 0.25, // share of cab damage the player's character takes as health loss
   minHit: 0.05,
   maxHit: 0.95,
   killXp: 40,
@@ -72,7 +90,7 @@ export const RULES = {
 
   // Supplies, per turn
   suppliesPerTurn: 0.015, // at base heat; a full load lasts about 550 daytime turns, enough to explore off the roads
-  suppliesCap: 20,
+  baseSupplies: 20, // supply cap before mounted supply stores
   suppliesLow: 4, // the HUD warns at or below this, about 110 daytime turns before running out
   starveDamage: 5, // character health lost per turn without supplies
   starveFloor: 30, // starving stops here, so only cab damage can kill
@@ -90,11 +108,10 @@ export const RULES = {
   retreatTeleportTurns: 50,
 };
 
-// Daily upkeep: a share of the truck's value, paid once per game day. A start truck (chassis 400 plus
-// four cheap parts, about 980 value) pays about 29 a day, and a maxed carrier build (about 5300 value)
-// pays about 160 a day, both inside the target bands.
+// Daily upkeep: a share of the truck's value, paid once per game day. A start truck (a scout plus
+// four cheap parts, about 3200 value) pays about 29 a day. A salvage run earns about 110 a day.
 export const UPKEEP = {
-  dailyShare: 0.03,
+  dailyShare: 0.009,
 };
 
 // Debug console numbers. Distances are in tiles.

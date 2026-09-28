@@ -21,6 +21,7 @@ import {
   setSupplies,
   skipToHour,
   spawnNear,
+  startBattle,
   startWeather,
   teleport,
   toggleFullLog,
@@ -33,8 +34,9 @@ import { dist } from "../sim/vec";
 import type { World, XpSource } from "../sim/types";
 import { el, panel } from "./dom";
 
-// noclip asks the game to switch noclip flight, which lives in the view, not in the world.
-export type CommandResult = { world: World | null; lines: string[]; noclip?: true };
+// `toggleFps` asks the console to show or hide the frame rate panel, and `noclip` to switch noclip flight.
+// Both live outside the world.
+export type CommandResult = { world: World | null; lines: string[]; toggleFps?: true; noclip?: true };
 
 export type Command = {
   name: string;
@@ -127,6 +129,8 @@ export const COMMANDS: readonly Command[] = [
     return changed(next, `full log ${next.player.fullLog ? "on" : "off"}`);
   }),
 
+  command("fps", "Toggle the frame rate panel.", { min: 0, max: 0 }, () => ({ world: null, lines: [], toggleFps: true })),
+
   command("tp <location id> | tp <x> <y>", "Move the truck to a location or map point.", { min: 1, max: 2 }, (world, args, usage) => {
     if (args.length === 1) return changed(teleport(world, placeSpot(world, args[0])), `teleported to ${args[0]}`);
     const target = { x: parseNumber(args[0], usage), y: parseNumber(args[1], usage) };
@@ -149,6 +153,10 @@ export const COMMANDS: readonly Command[] = [
     }
     const hostile = flag === "hostile";
     return changed(spawnNear(world, templateId, hostile), `spawned ${hostile ? "hostile " : ""}${templateId}`);
+  }),
+  command("battle", "Place a random hostile raider near the truck.", { min: 0, max: 0 }, (world) => {
+    const next = startBattle(world);
+    return changed(next, `battle: ${next.vehicles[next.vehicles.length - 1].name} is hostile`);
   }),
   command("hostile <vehicle id>", "Make a vehicle hostile to the player.", { min: 1, max: 1 }, (world, [id]) =>
     changed(makeHostile(world, id), `${id} is hostile`),
@@ -261,7 +269,12 @@ export class DebugConsole {
   private readonly history: string[] = [];
   private cursor = 0; // history index shown in the input; history.length is the fresh line
 
-  constructor(host: HTMLElement, private readonly game: ConsoleGame, private readonly noclip: Noclip) {
+  constructor(
+    host: HTMLElement,
+    private readonly game: ConsoleGame,
+    private readonly fps: { toggle(): boolean },
+    private readonly noclip: Noclip,
+  ) {
     this.root = panel("debug-console", host);
     this.root.hidden = true;
     this.log = el("div", { class: "debug-console-log" });
@@ -328,8 +341,12 @@ export class DebugConsole {
       return;
     }
     const result = this.run(line);
-    if (result === null) return;
+    if (result !== null) this.show(result);
+  }
+
+  private show(result: CommandResult): void {
     if (result.world !== null) this.game.apply(result.world);
+    if (result.toggleFps) this.print(`fps panel ${this.fps.toggle() ? "on" : "off"}`);
     for (const text of result.lines) this.print(text);
   }
 

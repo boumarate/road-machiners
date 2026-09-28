@@ -24,6 +24,7 @@ def build(kit: Kit) -> None:
     kit.box("pump", (0.16, 0.08, 0.06), (0.26, 0, -0.065), "rust_side", dent_by=0.003)
     kit.box("mag_clamp", (0.03, 0.04, 0.09), (0.46, 0, -0.03), "metal")
     kit.box("bead", (0.015, 0.012, 0.02), (0.57, 0, 0.05), "brass")
+    kit.socket("tip", (0.6, 0, 0))
 
 
 if __name__ == "__main__":

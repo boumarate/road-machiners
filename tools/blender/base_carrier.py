@@ -15,12 +15,11 @@ import math
 import sys
 from pathlib import Path
 
-import bmesh
 import bpy
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit import Kit, Vec3, parse_args  # noqa: E402
-from parts_common_base import ARCH_CLEARANCE, ARCH_SEGMENTS, BASE_COLORS, INSET, SUSPENSION_REST, Grid, check_base, level_sockets  # noqa: E402
+from parts_common_base import cut_boxes, hull_mesh, ARCH_CLEARANCE, ARCH_SEGMENTS, BASE_COLORS, INSET, SUSPENSION_REST, Grid, check_base, level_sockets, surface_z  # noqa: E402
 from shapes import prism  # noqa: E402
 
 SEED = 303
@@ -49,36 +48,8 @@ BAY_FLOOR = ROOF - 0.3  # a 0.45 m engine pokes 0.15 m out of the cutout
 BAY_T = 0.05  # the dark bay floor plate
 
 
-def hull_mesh(name: str, points: list[Vec3]) -> bpy.types.Object:
-    """A convex hull of points as an unregistered object, with coplanar triangles merged into flat faces."""
-    mesh = bpy.data.meshes.new(name)
-    bm = bmesh.new()
-    verts = [bm.verts.new(p) for p in points]
-    result = bmesh.ops.convex_hull(bm, input=verts)
-    bmesh.ops.delete(bm, geom=result["geom_interior"] + result["geom_unused"], context="VERTS")
-    bmesh.ops.dissolve_limit(bm, angle_limit=0.01, verts=bm.verts, edges=bm.edges)
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    bm.to_mesh(mesh)
-    bm.free()
-    obj = bpy.data.objects.new(name, mesh)
-    bpy.context.scene.collection.objects.link(obj)
-    return obj
 
 
-def cut(obj: bpy.types.Object, boxes: list[tuple[Vec3, Vec3]]) -> None:
-    """Subtracts axis-aligned boxes, each given as (min corner, max corner), from obj."""
-    for i, (lo, hi) in enumerate(boxes):
-        corners = [(x, y, z) for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])]
-        cutter = hull_mesh(f"{obj.name}_cutter{i}", corners)
-        mod = obj.modifiers.new(f"cut{i}", "BOOLEAN")
-        mod.operation = "DIFFERENCE"
-        mod.solver = "EXACT"
-        mod.object = cutter
-        bpy.ops.object.select_all(action="DESELECT")
-        bpy.context.view_layer.objects.active = obj
-        obj.select_set(True)
-        bpy.ops.object.modifier_apply(modifier=mod.name)
-        bpy.data.objects.remove(cutter)
 
 
 def mirrored(kit: Kit, name: str, size: Vec3, x: float, y: float, z: float, mat: str, rot: Vec3 = (0, 0, 0)) -> None:
@@ -113,7 +84,7 @@ def upper_hull(kit: Kit) -> None:
     obj = hull_mesh("upper", pts)
     engine = ((G.row_x(4.5), G.col_y(2.5), BAY_FLOOR - BAY_T), (G.row_x(2.5), G.col_y(0.5), ROOF + 0.1))
     transmission = ((G.row_x(4.5), G.col_y(3.5), BAY_FLOOR - BAY_T), (G.row_x(3.5), G.col_y(2.5) + 0.01, ROOF + 0.1))
-    cut(obj, [engine, transmission])
+    cut_boxes(obj, [engine, transmission])
     obj.data.materials.clear()  # the boolean leaves an empty slot, which would take the faces off the paint
     kit._add(obj, "upper", "paint", 0.0)
     for i, (lo, hi) in enumerate((engine, transmission)):
@@ -155,7 +126,11 @@ def main() -> None:
     upper_hull(kit)
     grille_deck(kit)
     armor_details(kit)
-    level_sockets(kit, G, "row", [ROOF] * G.rows, fronts={0: ROOF_FRONT})
+    # Items on the engine and transmission cells stand on the bay floor under the cutout.
+    bay = {(x, y): BAY_FLOOR for x in (1, 2) for y in (3, 4)} | {(3, 4): BAY_FLOOR}
+    # The outer columns lie on the sloped hull sides below the roof edge.
+    flanks = {(x, y): surface_z(G, x, y) for x in (0, G.cols - 1) for y in range(G.rows)}
+    level_sockets(kit, G, "row", [ROOF] * G.rows, fronts={0: ROOF_FRONT}, cells=bay | flanks)
     level_sockets(kit, G, "floor", [ROOF] * 3 + [BAY_FLOOR] * 2 + [ROOF] * 4)
     check_base(kit, "base_carrier", G)
     kit.export("base_carrier", args, view_size=7.0)

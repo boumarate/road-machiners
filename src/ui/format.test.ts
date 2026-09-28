@@ -4,7 +4,8 @@ import type { Contract } from "../sim/market";
 import { partDef } from "../data/parts";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import type { Job, PartInstance } from "../sim/types";
-import { contractDue, contractSummary, jobLabel, wearLabel } from "./format";
+import { contractDue, contractSummary, jobLabel, roundLabel, wearLabel } from "./format";
+import { mountedParts } from "../sim/grid";
 
 function part(wear: number): PartInstance {
   return { id: "p1", defId: "mg", hp: 10, reload: 0, wear };
@@ -66,5 +67,24 @@ describe("jobLabel", () => {
     const gun = me.items.find((it) => it.kind === "part" && partDef(it.part.defId).kind === "weapon")!;
     const job: Job = { kind: "refit", moves: [{ itemId: gun.id, from: { x: gun.x, y: gun.y, rot: gun.rot }, to: { x: 0, y: 0, rot: 0 } }], pickup: null, turnsLeft: 3, total: 3 };
     expect(jobLabel(w, me, job)).toBe(`Refit ${partDef(gun.kind === "part" ? gun.part.defId : "").name}`);
+  });
+});
+
+describe("roundLabel", () => {
+  const w = emptyWorld();
+  const v = addVehicle(w, "raiders", "buggy", ["mg"], { x: 10, y: 10 });
+  const idOf = (kind: string) => mountedParts(v).find((p) => partDef(p.defId).kind === kind || (partDef(p.defId) as { role?: string }).role === kind)!.id;
+  const hit = (crit: boolean, hits: { part: string; damage: number }[]) => ({ hit: true, crit, offset: 0, hits });
+
+  it("names each damaged part short with its damage", () => {
+    expect(roundLabel(w, v.id, hit(false, [{ part: idOf("weapon"), damage: 3 }, { part: idOf("cab"), damage: 4.2 }]))).toBe("Gun: 3, Cab: 5");
+  });
+
+  it("marks a crit", () => {
+    expect(roundLabel(w, v.id, hit(true, [{ part: idOf("wheel"), damage: 5 }]))).toBe("Crit! Whl: 5");
+  });
+
+  it("shows nothing for a round that damaged no part", () => {
+    expect(roundLabel(w, v.id, hit(false, [{ part: idOf("wheel"), damage: 0 }]))).toBeNull();
   });
 });

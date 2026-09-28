@@ -4,7 +4,7 @@
 import { NPC_UPKEEP } from '../data/npcs';
 import { isJunk, maxHp } from './wear';
 import { mountedParts } from './grid';
-import { startJob } from './jobs';
+import { inCombat, startJob } from './jobs';
 import { reachedDestination } from './npc-activities';
 import { straightClear } from './path';
 import { repairPlan } from './repair';
@@ -94,6 +94,7 @@ export function resolveNpcRepair(world: World, vehicle: Vehicle, activity: NpcAc
 }
 
 function startNpcRepair(world: World, vehicle: Vehicle): boolean {
+  if (inCombat(world, vehicle)) return false;
   const part = chooseRepairPart(world, vehicle);
   if (!part) return true;
   const plan = repairPlan(world, vehicle, part.id, 1);

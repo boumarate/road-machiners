@@ -27,8 +27,10 @@ export function hasSave(storage: Storage): boolean {
 // 22 adds XP targets and player piles. 23 adds shop stock, contracts, upkeep and bounty templates. 24 adds deck
 // mounts and built-in parts sized to the truck models. 25 moves locations beside their roads and the start
 // onto the road. 26 adds NPC knockouts, truck pickups on refits and revenge. 27 adds NPC driver names and their random stream. 28 adds new NPC
-// types, escorts and two goods. 29 adds the map file hash. 30 leaves out baked props. Older saves do not load.
-const SAVE_VERSION = 30;
+// types, escorts and two goods. 30 adds engine overdrive. 31 replaces the perks and adds
+// their state: marks, rumors, stalls, dust screens, welds, rebuilt parts and NPC last towns. 32 adds the map
+// file hash and leaves out baked props. Older saves do not load.
+const SAVE_VERSION = 32;
 
 // The saved world on the given map. A save made on another map fails, since its terrain is gone.
 export function loadWorld(storage: Storage, map: BakedMap): World | null {

@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { REFUSED } from '../data/dialogue';
 import { NPCS, type TraitId } from '../data/npcs';
 import { isHostile, noteCollision } from './combat';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions, hangUp, raiseCalls } from './dialogue';
 import { addGoods } from './inventory';
 import { pushGoal, thinkNpc, topGoal } from './npc-activities';
-import { makePeace, plead } from './parley';
+import { makePeace, plead, yieldTo } from './parley';
 import { hasCargo } from './salvage';
 import { addState, stateOf } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
+import type { Contract } from './market';
 import type { Faction, Vehicle, World } from './types';
 import { refreshVision } from './vision';
 
@@ -213,6 +215,16 @@ describe('NPC pleas to the player', () => {
     expect(w.player.call).toBeNull();
   });
 
+  it('a pleading foe calls even while it flees another truck', () => {
+    const w = quietWorld();
+    const npc = npcAt(w, 'traders', ['trader'], 36);
+    feud(w, npc, playerVehicle(w));
+    npc.brain!.goals.push({ kind: 'flee', targetId: 'someone-else', destination: { x: 60, y: 30 }, reason: 'escape an attacker', phase: 'travel' });
+    plead(w, npc, playerVehicle(w), 'mercy');
+    raiseCalls(w);
+    expect(w.player.call).toMatchObject({ with: npc.id, topic: 'mercyPlea' });
+  });
+
   it('hanging up refuses the plea', () => {
     const { w: start, npc } = pleading('truce');
     const w = hangUp(start);
@@ -243,6 +255,15 @@ describe('player pleas', () => {
     expect(currentOptions(w).map((o) => o.text)).toEqual(['Enough shooting. Can we call a truce?', 'I give up. Let me go.', 'Hang up.']);
   });
 
+  it('a foe busy fighting another truck takes the call, and the player can offer a truce', () => {
+    forceOption('truceOffered', 'accept');
+    const { w: start, npc } = atWar();
+    npc.brain!.goals.push({ kind: 'fight', targetId: 'someone-else', destination: { x: 40, y: 30 }, reason: 'fight back', phase: 'travel' });
+    let w = pick(callVehicle(start, npc.id), 'Enough shooting. Can we call a truce?');
+    w = pick(w, 'We both drive away.');
+    expect(isHostile(w, w.vehicles.find((v) => v.id === npc.id)!, playerVehicle(w))).toBe(false);
+  });
+
   it('an accepted truce makes peace', () => {
     forceOption('truceOffered', 'accept');
     const { w: start, npc } = atWar();
@@ -260,7 +281,7 @@ describe('player pleas', () => {
     w = pick(w, 'Then we finish this.');
     expect(isHostile(w, w.vehicles.find((v) => v.id === npc.id)!, playerVehicle(w))).toBe(true);
     w = callVehicle(w, npc.id);
-    expect(w.player.call).toBeNull();
+    expect(w.player.call?.node).toBe(REFUSED);
   });
 
   it('spared mercy costs the player the cargo', () => {
@@ -323,5 +344,45 @@ describe('player robbery', () => {
     w = hangUp(w);
     w = pick(callVehicle(w, npc.id), DEMAND);
     expect(w.player.call?.topic).toBeNull();
+  });
+});
+
+describe('bounty talk', () => {
+  const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'trader', targetName: 'Test Driver', reward: 400, deadline: 900, tier: 2 };
+
+  function beggar(perks: World['player']['perks']): { w: World; npc: Vehicle } {
+    const w = quietWorld();
+    const npc = npcAt(w, 'raiders', ['raider'], 36);
+    feud(w, npc, playerVehicle(w));
+    w.player.perks = perks;
+    w.player.contracts = [{ ...bounty }];
+    w.player.money = 0;
+    plead(w, npc, playerVehicle(w), 'mercy');
+    raiseCalls(w);
+    return { w, npc };
+  }
+
+  it('a driver of the bounty template that gives up to the player pays the bounty', () => {
+    const { w: start } = beggar(['bountyTalk']);
+    const w = pick(start, 'Dump your cargo and drive off.');
+    expect(w.player.contracts).toEqual([]);
+    expect(w.player.money).toBe(bounty.reward);
+    expect(w.events).toContainEqual({ t: 'contract', contract: bounty, outcome: 'done' });
+  });
+
+  it('pays nothing without the perk', () => {
+    const { w: start } = beggar([]);
+    const w = pick(start, 'Dump your cargo and drive off.');
+    expect(w.player.contracts).toEqual([bounty]);
+    expect(w.player.money).toBe(0);
+  });
+
+  it('pays nothing when the player gives up', () => {
+    const w = quietWorld();
+    const npc = npcAt(w, 'raiders', ['raider'], 36);
+    w.player.perks = ['bountyTalk'];
+    w.player.contracts = [{ ...bounty }];
+    yieldTo(w, playerVehicle(w), npc);
+    expect(w.player.contracts).toEqual([bounty]);
   });
 });

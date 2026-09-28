@@ -16,6 +16,10 @@ const NAMES = [
   'base_carrier',
   'base_buggy',
   'base_courier',
+  'base_jeep',
+  'base_convertible',
+  'base_bus',
+  'base_loader',
   'wmount_riser',
   'wreck',
   'rock',
@@ -51,6 +55,8 @@ const NAMES = [
   'transmission',
   'fuel_tank',
   'scanner',
+  'store_jerrycans',
+  'store_locker',
 
   'eng_stock',
   'eng_tuned_v8',
@@ -167,10 +173,11 @@ function takeSockets(name: ModelName, root: THREE.Object3D): Map<string, THREE.V
   return out;
 }
 
-// Mounts carry the head. Receivers carry the barrel and the extra.
+// Mounts carry the head. Receivers carry the barrel and the extra. Barrels mark the tip rounds leave from.
 function checkWeaponSockets(): void {
   for (const pool of Object.values(WEAPON_POOLS)) {
     for (const m of pool.mount) socket(m, 'head');
+    for (const b of pool.barrel) socket(b, 'tip');
     for (const r of pool.receiver) {
       socket(r, 'muzzle');
       socket(r, 'extra');

@@ -6,7 +6,7 @@ import { planNpcOrders } from './ai';
 import { getResources } from './resources';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
-import { MIN_CHANCE, NPCS, TRAITS, type TraitId } from '../data/npcs';
+import { MIN_CHANCE, NPC_BEHAVIOR, NPCS, TRAITS, type TraitId } from '../data/npcs';
 import { SHOPS } from '../data/market';
 import { optionChances, optionWeights, visibleSalvage } from './npc-decisions';
 import { endTurn } from './world';
@@ -84,6 +84,25 @@ describe('NPC activities', () => {
     expect(w.events.filter((event) => event.t === 'activity')).toEqual([
       expect.objectContaining({ previous: kind, activity: null }),
     ]);
+  });
+
+  it.each(['sell', 'resupply'] as const)('remembers the town where it finished %s', (kind) => {
+    const { w, npc } = createScavenger();
+    npc.pos = { ...sitePads(REGION.towns[1])[0] };
+    npc.brain!.goals = [{ kind, targetId: REGION.towns[1].id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
+    resolveNpcActivities(w);
+    expect(npc.brain!.lastTown).toBe(REGION.towns[1].id);
+  });
+
+  it('does not remember a site that is not a town', () => {
+    const { w, npc } = createScavenger();
+    const oasis = REGION.locations.find((l) => l.kind === 'oasis')!;
+    npc.pos = { ...sitePads(oasis)[0] };
+    npc.brain!.goals = [{ kind: 'resupply', targetId: oasis.id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
+    w.events = [];
+    resolveNpcActivities(w);
+    expect(w.events).toContainEqual(expect.objectContaining({ previous: 'resupply', activity: null }));
+    expect(npc.brain!.lastTown).toBeUndefined();
   });
 
   it('records failure when a salvage target disappears', () => {
@@ -362,6 +381,53 @@ describe('NPC activities', () => {
     expect(topGoal(raider)?.kind).not.toBe('investigate');
     expect(topGoal(raider)?.kind).not.toBe('fight');
     expect(topGoal(raider)?.kind).not.toBe('flee');
+  });
+});
+
+describe('hunting a lost fight target', () => {
+  // A raider 15 tiles from the player sees it and fights it. The player then parks 25 tiles from the raider, out of
+  // sight and silent.
+  function raiderLosesPlayer() {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const player = w.vehicles[0];
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 45, y: 30 });
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    forceOption('hostileSeen', 'fight');
+    planNpcOrders(w);
+    expect(topGoal(raider)).toMatchObject({ kind: 'fight', targetId: player.id });
+    player.pos = { x: 20, y: 30 };
+    player.speed = 0;
+    return { w, player, raider };
+  }
+
+  it('keeps the fight and drives to the point where it last saw the target', () => {
+    const { w, player, raider } = raiderLosesPlayer();
+    w.turn++;
+    planNpcOrders(w);
+    expect(topGoal(raider)).toMatchObject({ kind: 'fight', targetId: player.id, destination: { x: 30, y: 30 } });
+    expect(raider.order).toEqual({ kind: 'stopAt', dest: { x: 30, y: 30 } });
+  });
+
+  it('re-aims at the heard engine of the target and restarts the search', () => {
+    const { w, player, raider } = raiderLosesPlayer();
+    player.speed = 4;
+    w.turn += NPC_BEHAVIOR.fightSearchTurns;
+    const contact = contactsOf(w, raider, Infinity).find((c) => c.vehicleId === player.id)!;
+    expect(contact.sources).toContain('sound');
+    planNpcOrders(w);
+    expect(topGoal(raider)).toMatchObject({ kind: 'fight', destination: contact.center, perceived: w.turn });
+  });
+
+  it('gives up once the search turns pass with no sight or contact', () => {
+    const { w, raider } = raiderLosesPlayer();
+    for (let i = 0; i < NPC_BEHAVIOR.fightSearchTurns; i++) {
+      w.turn++;
+      planNpcOrders(w);
+      expect(topGoal(raider)?.kind).toBe('fight');
+    }
+    w.turn++;
+    planNpcOrders(w);
+    expect(topGoal(raider)?.kind).not.toBe('fight');
   });
 });
 

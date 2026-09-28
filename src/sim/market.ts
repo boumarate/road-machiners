@@ -294,6 +294,15 @@ export function bountyFulfilled(world: World, c: Contract): boolean {
   return [...world.removed, ...world.vehicles].some((v) => v.brain?.templateId === c.template && beaten.includes(v.id));
 }
 
+// A truck that gives up to the player counts as beaten: it finishes one held bounty on its template, as a knockout
+// does. Called outside the turn's event scan, since a dialogue command clears the events.
+export function creditBounty(world: World, npc: Vehicle): void {
+  if (!npc.brain) throw new Error(`${npc.id} has no driver to name in a bounty`);
+  const template = npc.brain.templateId;
+  const c = world.player.contracts.find((x) => x.kind === 'bounty' && x.template === template);
+  if (c) finishContract(world, c, 'done');
+}
+
 // True once no truck of the bounty's template is left in the world. Check bountyFulfilled for the
 // same turn first: once a bounty is fulfilled, the completed contract is removed, so this never runs on it.
 export function bountyLapsed(world: World, c: Contract): boolean {

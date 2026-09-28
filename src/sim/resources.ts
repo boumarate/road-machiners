@@ -1,7 +1,7 @@
 import { RULES } from '../data/rules';
-import { skillEffect, vehicleHasPerk } from './progress';
+import { skillEffect } from './progress';
 import { heatAt } from './sun';
-import { vehicleStats } from './stats';
+import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import type { DriverResources, Vehicle, World } from './types';
 
 export function getResources(world: World, vehicle: Vehicle): DriverResources {
@@ -17,11 +17,10 @@ export function burnFuel(world: World, vehicle: Vehicle, tiles: number): void {
   resources.fuel = Math.max(0, resources.fuel - tiles * vehicleStats(world, vehicle).fuelPerTile * heat);
 }
 
-// Supply use multiplier from heat at the vehicle's spot. Toughness cuts only the extra use above 1, and the desert
-// born perk removes it.
+// Supply use multiplier from heat at the vehicle's spot. Toughness cuts only the extra use above 1.
 function heatDrain(world: World, vehicle: Vehicle): number {
   const heat = heatAt(world, vehicle.pos);
-  const cut = vehicleHasPerk(world, vehicle, 'desertBorn') ? 1 : skillEffect(world, vehicle, 'toughness', 'heatDrain');
+  const cut = skillEffect(world, vehicle, 'toughness', 'heatDrain');
   return heat - Math.max(0, heat - 1) * cut;
 }
 
@@ -29,10 +28,22 @@ export function consumeVehicleSupplies(world: World, vehicle: Vehicle): void {
   const resources = getResources(world, vehicle);
   const use = Math.max(0, 1 - skillEffect(world, vehicle, 'toughness', 'supplies'));
   resources.supplies = Math.max(0, resources.supplies - RULES.suppliesPerTurn * use * heatDrain(world, vehicle));
-  if (resources.supplies > 0 || vehicleHasPerk(world, vehicle, 'ironGut')) return;
+  if (resources.supplies > 0) return;
   // Starving only weakens a driver down to the floor. Health already below it stays as it is.
   const lost = Math.max(0, Math.min(RULES.starveDamage, resources.health - RULES.starveFloor));
   if (lost === 0) return;
   resources.health -= lost;
   if (vehicle.id === world.player.vehicleId) world.events.push({ t: 'supply', what: 'supplies', text: `Out of supplies: health -${lost}` });
+}
+
+// Fuel and supplies above the caps spill out, after a refit or a looter takes a store off.
+export function fitStores(world: World, vehicle: Vehicle): void {
+  const resources = getResources(world, vehicle);
+  const fuel = resources.fuel - fuelCap(vehicle);
+  const supplies = resources.supplies - suppliesCap(vehicle);
+  if (fuel > 0) resources.fuel -= fuel;
+  if (supplies > 0) resources.supplies -= supplies;
+  if (vehicle.id !== world.player.vehicleId) return;
+  if (fuel > 0) world.events.push({ t: 'supply', what: 'fuel', text: `No room for fuel: fuel -${fuel.toFixed(1)}` });
+  if (supplies > 0) world.events.push({ t: 'supply', what: 'supplies', text: `No room for supplies: supplies -${supplies.toFixed(1)}` });
 }

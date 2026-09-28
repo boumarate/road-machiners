@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit import Kit, parse_args  # noqa: E402
-from parts_common_base import ARCH_CLEARANCE, ARCH_SEGMENTS, BASE_COLORS, INSET, SUSPENSION_REST, Grid, check_base, level_sockets  # noqa: E402
+from parts_common_base import ARCH_CLEARANCE, ARCH_SEGMENTS, BASE_COLORS, INSET, SUSPENSION_REST, Grid, check_base, level_sockets, surface_z  # noqa: E402
 from shapes import prism, strut  # noqa: E402
 
 SEED = 302
@@ -141,7 +141,11 @@ def main() -> None:
     seats(kit)
     cage(kit)
     deck_front = CAGE_FRONT + 0.03
-    level_sockets(kit, G, "row", [NOSE_TOP] + [HOOD_TOP] * 2 + [ROOF] * 2 + [TAIL_TOP], fronts={3: deck_front})
+    # Items on the engine cells stand on the bay floor.
+    bay = {(x, y): FLOOR for x in (1, 2) for y in (1, 2)}
+    # The outer cells beside the gun deck stand on the side panels, and the rear corners on the tub floor behind the wheels.
+    flanks = {(x, y): surface_z(G, x, y) for x in (0, 3) for y in (3, 5)}
+    level_sockets(kit, G, "row", [NOSE_TOP] + [HOOD_TOP] * 2 + [ROOF] * 2 + [TAIL_TOP], fronts={3: deck_front}, cells=bay | flanks)
     level_sockets(kit, G, "floor", [FLOOR] * 6)
     check_base(kit, "base_buggy", G)
     kit.export("base_buggy", args, view_size=5.0)

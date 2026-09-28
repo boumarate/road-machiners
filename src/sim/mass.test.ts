@@ -1,8 +1,10 @@
+import { RULES } from '../data/rules';
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { GOODS } from '../data/goods';
 import { PARTS } from '../data/parts';
 import { makePart } from './factory';
+import { mountedParts } from './grid';
 import { addGoods, stowPart } from './inventory';
 import { loadFactor, vehicleMass } from './mass';
 import { vehicleStats } from './stats';
@@ -26,16 +28,29 @@ describe('vehicle mass', () => {
     expect(vehicleMass(v)).toBe(CHASSIS.hauler.mass + coreMass('hauler') + PARTS.mg.mass + PARTS.stockEngine.mass + PARTS.plates.mass + 3 * GOODS.scrap.mass);
   });
 
-  it('load factor is sqrt(rated / mass) on both sides of the rated mass', () => {
+  it('load factor is sqrt(handling / mass) up to the rated mass, and falls hard over it', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine', 'trailerBox'], { x: 40, y: 40 });
-    expect(vehicleMass(v)).toBeLessThan(CHASSIS.hauler.ratedMass);
-    expect(loadFactor(v)).toBeCloseTo(Math.sqrt(CHASSIS.hauler.ratedMass / vehicleMass(v)), 10);
+    const ch = CHASSIS.hauler;
+    expect(vehicleMass(v)).toBeLessThan(ch.handlingMass);
+    expect(loadFactor(v)).toBeCloseTo(Math.sqrt(ch.handlingMass / vehicleMass(v)), 10);
     expect(loadFactor(v)).toBeGreaterThan(1);
     addGoods(w, v, 'scrap', 999);
     const m = vehicleMass(v);
-    expect(m).toBeGreaterThan(CHASSIS.hauler.ratedMass);
-    expect(loadFactor(v)).toBeCloseTo(Math.sqrt(CHASSIS.hauler.ratedMass / m), 10);
+    expect(m).toBeGreaterThan(ch.ratedMass);
+    expect(loadFactor(v)).toBeCloseTo(Math.sqrt(ch.handlingMass / m) * (ch.ratedMass / m) ** RULES.overloadExponent, 10);
+  });
+
+  it.each(Object.keys(CHASSIS))('a %s with armor on every armor cell and guns on half the deck is not overloaded', (id) => {
+    const w = emptyWorld();
+    const layout = CHASSIS[id].layout.join('');
+    const armorCells = [...layout].filter((c) => 'FBLR'.includes(c)).length;
+    const guns = Math.ceil([...layout].filter((c) => c === 'D').length / 2);
+    const kit = ['stockEngine', ...Array<string>(armorCells).fill('scrapSheet'), ...Array<string>(guns).fill('mg')];
+    const v = addVehicle(w, 'raiders', id, kit, { x: 40, y: 40 });
+    expect(mountedParts(v, 'armor')).toHaveLength(armorCells);
+    expect(mountedParts(v, 'weapon')).toHaveLength(guns);
+    expect(vehicleMass(v)).toBeLessThanOrEqual(CHASSIS[id].ratedMass);
   });
 
   it('every chassis, part and good states a positive mass', () => {

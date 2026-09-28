@@ -12,7 +12,8 @@ import { isDriveObstacle } from '../sim/mapgen';
 import { vehicleMass } from '../sim/mass';
 import { groundSpeed, vehicleStats, type VehicleStats } from '../sim/stats';
 import { continueRoute, keepRoute, route, type KeptRoute } from '../sim/path';
-import { backsToDestination, parkedVehicles, zoneSpeed } from '../sim/steering';
+import { backsToDestination, throughSpeed } from '../sim/steering';
+import { routeBlockers } from '../sim/ai';
 import { BRIDGE_AXIS, BRIDGE_LENGTH } from '../sim/bridge';
 import { deckEnds, heightAt, tileAt, type Terrain } from '../sim/terrain';
 import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
@@ -122,7 +123,7 @@ export function syncDrive(d: Drive, w: World): void {
   }
 }
 
-// A truck flipped for RULES.flipBackTurns turns is set back on its wheels at its sim pose.
+// A stranded truck is set back on its wheels at its sim pose, which applyTurn has moved to free ground.
 function syncVehicle(d: Drive, w: World, v: Vehicle): void {
   const handle = d.bodies[v.id];
   if (handle === undefined) {
@@ -134,7 +135,7 @@ function syncVehicle(d: Drive, w: World, v: Vehicle): void {
   setMass(body, v);
   const t = body.translation();
   const moved = dist({ x: t.x / S, y: t.z / S }, v.pos) > TELEPORT_TILES;
-  if (moved || (v.flippedTurns ?? 0) >= RULES.flipBackTurns) placeBody(body, w, v);
+  if (moved || (v.strandedTurns ?? 0) >= RULES.stranded.turns) placeBody(body, w, v);
 }
 
 function addVehicle(world: RAPIER.World, w: World, v: Vehicle): number {
@@ -308,24 +309,24 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   const s = fuelLimited(w, v, full, speed, order);
   const engine = s.maxSpeed > 0;
   // The stats accel already falls with load, so the engine force stays fixed as mass grows.
-  // Brakes grip with a force sized for the rated mass, so a heavy truck brakes worse.
+  // Brakes grip with a force sized for the handling mass, so a heavy truck brakes worse.
   const base = {
     engine,
     maxSteer: T.maxSteer * (s.turnSlow / (ch.turnSlow * DEG)),
     engineForce: (full.mass * T.engineAccel * (s.accel / ch.accel)) / 2,
-    brakeForce: T.brakeForce * (ch.ratedMass / 1000),
-    stopDecel: D.stopDecel * (ch.ratedMass / full.mass), // the stop plan brakes as hard as this load allows
+    brakeForce: T.brakeForce * (ch.handlingMass / 1000),
+    stopDecel: D.stopDecel * (ch.handlingMass / full.mass), // the stop plan brakes as hard as this load allows
   };
   if (!order) return { ...base, dest: null, route: null, target: idleTarget(speed), stopAt: false };
   if (order.kind === 'brake') return { ...base, dest: null, route: null, target: 0, stopAt: false };
-  // Careful drivers follow the route planner, which keeps to roads and goes around obstacles; careless ones drive straight.
-  const parked = parkedVehicles(w, v.id);
+  // Careful drivers follow the route planner, which keeps to roads and goes around obstacles and traffic; careless ones drive straight.
+  const blockers = routeBlockers(w, v);
   // A point that moved less than the arrival radius, like the stop point of a town seen from a new angle, is the same place.
-  const stored = mem.route && dist(mem.route.dest, order.dest) < RULES.arriveRadius && mem.route.radius === s.radius ? continueRoute(w, v.pos, mem.route, order.dest, s.radius, parked, v) : null;
-  const path = v.direct ? null : stored ?? [...route(w, v.pos, order.dest, s.radius, parked, v)]; // copied, since driving consumes it
-  mem.route = path ? { ...keepRoute(w, order.dest, path, parked), radius: s.radius } : null;
+  const stored = mem.route && dist(mem.route.dest, order.dest) < RULES.arriveRadius && mem.route.radius === s.radius ? continueRoute(w, v.pos, mem.route, order.dest, s.radius, blockers, v) : null;
+  const path = v.direct ? null : stored ?? [...route(w, v.pos, order.dest, s.radius, blockers, v)]; // copied, since driving consumes it
+  mem.route = path ? { ...keepRoute(w, order.dest, path, blockers), radius: s.radius } : null;
   if (order.kind === 'stopAt') return { ...base, dest: order.dest, route: path, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
-  const next = zoneSpeed(s, speed, dist(v.pos, order.dest));
+  const next = throughSpeed(s, speed, dist(v.pos, order.dest), order.pace);
   return { ...base, dest: order.dest, route: path, target: toMps(next), stopAt: false };
 }
 
@@ -574,6 +575,13 @@ export function trailFrames(w: World, v: Vehicle): VehicleFrame[] {
 function rideHeight(w: World, v: Vehicle): number {
   const b = bodyOf(v.chassisId);
   return heightAt(w.terrain, v.pos.x, v.pos.y) * S + b.wheelRadius + T.suspensionRest - b.wheelY;
+}
+
+// Whether the vehicle's body rests high above the ground at its sim position, so its wheels hang in the air.
+export function isLifted(d: Drive, w: World, v: Vehicle): boolean {
+  const handle = d.bodies[v.id];
+  if (handle === undefined) throw new Error(`No physics body for ${v.id}`);
+  return d.world.getRigidBody(handle).translation().y > rideHeight(w, v) + T.liftedRise;
 }
 
 // Map pose and speed of a vehicle's body, and whether it stands on its wheels.

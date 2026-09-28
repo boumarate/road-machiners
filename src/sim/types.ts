@@ -27,6 +27,7 @@ export type PartInstance = {
   hp: number;
   reload: number;
   wear: number; // wear steps from breaking, 0 for pristine. See src/sim/condition.ts.
+  rebuilt?: true; // a junk part rebuilt to the last wear step, which cannot be rebuilt again; see src/sim/wear.ts
 };
 
 // An item in a vehicle's inventory grid. x and y are the top-left cell. rot 1 swaps width and height.
@@ -57,7 +58,7 @@ export type Pose = { x: number; y: number; heading: number };
 
 // Momentum carries over between turns. A vehicle without an order coasts.
 export type MoveOrder =
-  | { kind: "through"; dest: Vec } // drive through the point at pace, then coast on
+  | { kind: "through"; dest: Vec; pace?: number } // drive through the point, then coast on; a follower's pace in tiles per turn replaces the throttle zones
   | { kind: "stopAt"; dest: Vec } // brake in time to stop on the point
   | { kind: "brake" }; // slow to a halt where you are
 
@@ -109,6 +110,7 @@ export type Job =
     } // parts: the most this job spends. auto: started by auto patch, so any player job replaces it
   | { kind: "search"; stockId: string; turnsLeft: number; total: number }
   | { kind: "strip"; partId: string; turnsLeft: number; total: number }
+  | { kind: "weld"; turnsLeft: number; total: number } // the welder perk: scrap metal into a scrap armor part
   | RefitJob;
 
 // A vehicle detected beyond sight. The circle always holds the true position, which it never reveals.
@@ -118,7 +120,7 @@ export type Contact = {
   vehicleId: string;
   center: Vec;
   radius: number;
-  sources: ("sound" | "dust" | "radio" | "beacon")[];
+  sources: ("sound" | "dust" | "radio" | "beacon" | "mark")[]; // mark: the spotter perk tracks the vehicle
   loudness: number | null;
 };
 
@@ -131,6 +133,7 @@ export type DustCloud = {
   vel: Vec; // tiles per turn
   age: number; // turns since it was raised
   range: number; // tiles it can be seen from once risen, set by the speed and ground that raised it
+  screen?: true; // raised under the dust screen perk, so it blocks sight lines; see src/sim/vision.ts
 };
 
 // Weather that changes the rules. Storms are moving areas; heat waves and overcast cover the region.
@@ -162,6 +165,8 @@ export type NpcActivity = {
   reason: string;
   purchase?: { good: string; sellTown: string };
   load?: { good: string }; // the good a haul loads free at its source site
+  perceived?: number; // the turn a fight last saw or detected its target
+  demands?: boolean; // a fight on the player radios for the cargo before the first shot
 };
 
 export type NpcBrain = {
@@ -184,6 +189,7 @@ export type NpcBrain = {
     ramChoice?: string; // the fight target this driver chose to ram while its ram chance lasts
     ramTarget?: string; // the fight target this driver drives through this turn
     farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
+    lastTown?: string; // id of the last town where this driver finished a service or trade
 };
 
 export type Vehicle = {
@@ -195,7 +201,8 @@ export type Vehicle = {
   pos: Vec;
   heading: number; // radians, 0 = +x
   speed: number; // tiles per turn at the end of the last turn
-  flippedTurns?: number; // consecutive turns that ended with the truck flipped
+  strandedTurns?: number; // consecutive turns that ended with the truck flipped or lifted off the ground
+  stalledUntil?: number; // last turn the engine stays stalled after a ram; see src/sim/crash-contact.ts
   order: MoveOrder | null; // null: coast, keeping speed and heading
   direct: boolean; // drive straight at the order's point instead of routing around obstacles; the player's manual mode
   weaponOrders: Record<string, WeaponOrder>; // key: weapon part id
@@ -259,6 +266,7 @@ export type CallVar =
   | { kind: "bearing"; rad: number }
   | { kind: "count"; n: number; unit: string } // shown as "1 part" or "2 parts"
   | { kind: "deal"; deal: PatchDeal; patcher: "player" | "npc"; price: number; parts: number; turns: number }
+  | { kind: "prices"; town: string; goods: { good: string; buy: number; sell: number }[] } // a town's goods prices
   | { kind: "answer"; option: string }; // a driver's rolled answer, which picks the next line; never shown
 export type CallVars = Record<string, CallVar>;
 
@@ -285,6 +293,7 @@ export type Player = {
   autoFire: boolean;
   autoRepair: boolean; // patch the most damaged part whenever the truck is parked
   engineHeat: number; // 0 cold to 1 overheated; see src/sim/engine-heat.ts
+  overdrive: boolean; // engine overdrive: faster and quicker, but heats the engine; see src/sim/engine-heat.ts
   discovered: string[];
   scavenged: string[]; // stocks the player finished searching; their loot can be taken
   storage: PartInstance[]; // spare parts kept in town garages, usable in any town
@@ -302,6 +311,8 @@ export type Player = {
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision
   contacts: Contact[]; // vehicles detected beyond sight; refreshed by refreshVision
   clouds: string[]; // ids of dust clouds the player sees right now; refreshed by refreshVision
+  marked: { vehicleId: string; until: number }[]; // trucks the spotter perk tracks, to the last turn of each mark
+  rumored: string[]; // salvage stock ids a driver told the player about; see the rumor topic
   hostilesSeen: string[]; // ids of hostile trucks in sight at the end of the last turn, for escapes; see src/sim/escape.ts
 };
 

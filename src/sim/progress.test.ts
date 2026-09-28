@@ -169,9 +169,9 @@ describe('choosing a perk', () => {
   it('adds a perk once the skill reaches its level', () => {
     const w = emptyWorld();
     w.player.skills.driving = XP_TO_REACH[2];
-    const next = choosePerk(w, 'ramGuard');
-    expect(hasPerk(next, 'ramGuard')).toBe(true);
-    expect(hasPerk(w, 'ramGuard')).toBe(false);
+    const next = choosePerk(w, 'rammer');
+    expect(hasPerk(next, 'rammer')).toBe(true);
+    expect(hasPerk(w, 'rammer')).toBe(false);
   });
 
   it('refuses a perk above the skill level', () => {
@@ -183,9 +183,9 @@ describe('choosing a perk', () => {
   it('refuses a second perk from the same pair', () => {
     const w = emptyWorld();
     w.player.skills.driving = XP_TO_REACH[2];
-    const next = choosePerk(w, 'ramGuard');
-    expect(() => choosePerk(next, 'pusher')).toThrow(/Ram guard/);
-    expect(() => choosePerk(next, 'ramGuard')).toThrow(/Ram guard/);
+    const next = choosePerk(w, 'rammer');
+    expect(() => choosePerk(next, 'coldRunning')).toThrow(/Rammer/);
+    expect(() => choosePerk(next, 'rammer')).toThrow(/Rammer/);
   });
 
   it('refuses an unknown perk', () => {
@@ -197,7 +197,7 @@ describe('choosing a perk', () => {
     const w = emptyWorld();
     w.player.skills.driving = XP_TO_REACH[2];
     w.player.state = 'knockedOut';
-    expect(() => choosePerk(w, 'ramGuard')).toThrow();
+    expect(() => choosePerk(w, 'rammer')).toThrow();
   });
 });
 
@@ -210,21 +210,21 @@ describe('open perk pairs', () => {
     const w = emptyWorld();
     w.player.skills.social = XP_TO_REACH[4];
     expect(pendingPerkPairs(w)).toEqual([
-      { skill: 'social', level: 2, perks: ['knownFace', 'smoothTalker'] },
-      { skill: 'social', level: 4, perks: ['bluff', 'goodwill'] },
+      { skill: 'social', level: 2, perks: ['marketEars', 'rumorMill'] },
+      { skill: 'social', level: 4, perks: ['paidTruce', 'bountyTalk'] },
     ]);
-    const next = choosePerk(w, 'bluff');
-    expect(pendingPerkPairs(next)).toEqual([{ skill: 'social', level: 2, perks: ['knownFace', 'smoothTalker'] }]);
+    const next = choosePerk(w, 'paidTruce');
+    expect(pendingPerkPairs(next)).toEqual([{ skill: 'social', level: 2, perks: ['marketEars', 'rumorMill'] }]);
   });
 });
 
 describe('perks on vehicles', () => {
   it('apply to the player truck only', () => {
     const w = emptyWorld();
-    w.player.perks.push('ramGuard');
+    w.player.perks.push('rammer');
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
-    expect(vehicleHasPerk(w, w.vehicles[0], 'ramGuard')).toBe(true);
-    expect(vehicleHasPerk(w, npc, 'ramGuard')).toBe(false);
+    expect(vehicleHasPerk(w, w.vehicles[0], 'rammer')).toBe(true);
+    expect(vehicleHasPerk(w, npc, 'rammer')).toBe(false);
   });
 });
 

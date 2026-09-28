@@ -9,8 +9,8 @@ import { TERRAIN } from '../data/terrain';
 import { playerVehicle } from './damage';
 import { route } from './path';
 import { getResources } from './resources';
-import { vehicleStats, type VehicleStats } from './stats';
-import { parkedVehicles, zoneSpeed } from './steering';
+import { fuelCap, vehicleStats, type VehicleStats } from './stats';
+import { parkedVehicles, throughSpeed } from './steering';
 import { isOnRope } from './tow';
 import type { MoveOrder, Pose, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
@@ -29,10 +29,10 @@ export function isNear(w: World, v: Vehicle): boolean {
 // Shared by the physics driver and far travel, so both plan the same speed.
 export function fuelLimited(w: World, v: Vehicle, s: VehicleStats, speed: number, order: MoveOrder | null): VehicleStats {
   const fuel = getResources(w, v).fuel;
-  const low = s.fuelPerTile > 0 && fuel > 0 && fuel < chassisDef(v.chassisId).fuelCap * RULES.lowFuelThreshold;
+  const low = s.fuelPerTile > 0 && fuel > 0 && fuel < fuelCap(v) * RULES.lowFuelThreshold;
   const limit = low ? Math.max(s.maxSpeed * RULES.lowFuelSpeedFactor, speed - s.brake) : s.maxSpeed;
   const capped = low ? { ...s, maxSpeed: limit } : s;
-  const wanted = order?.kind === 'through' ? zoneSpeed(capped, speed, dist(v.pos, order.dest)) : Math.min(capped.maxSpeed, speed + capped.accel);
+  const wanted = order?.kind === 'through' ? throughSpeed(capped, speed, dist(v.pos, order.dest), order.pace) : Math.min(capped.maxSpeed, speed + capped.accel);
   if (wanted * s.fuelPerTile <= fuel) return capped;
   const cap = Math.max(s.limpSpeed, speed - s.brake);
   return { ...s, maxSpeed: cap, accel: Math.min(s.accel, s.limpSpeed) };
@@ -55,7 +55,7 @@ export function advanceFar(w: World, v: Vehicle): void {
   }
 
   const s = fuelLimited(w, v, full, v.speed, order);
-  const next = order.kind === 'through' ? zoneSpeed(s, v.speed, dist(v.pos, order.dest)) : Math.min(s.maxSpeed, v.speed + s.accel);
+  const next = order.kind === 'through' ? throughSpeed(s, v.speed, dist(v.pos, order.dest), order.pace) : Math.min(s.maxSpeed, v.speed + s.accel);
   // Vehicles without a brain have nowhere to store the route, so they plan it every turn.
   const stored = v.brain?.farRoute;
   // A new route steers around parked vehicles, like the physics driver's.

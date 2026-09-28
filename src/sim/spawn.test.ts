@@ -37,7 +37,7 @@ describe('NPC spawns', () => {
 
   it('starts traders at the gate of the town the start road leaves', () => {
     // On some world seeds the first drivers crowd the gate and a start trader finds no free spot.
-    const w = newWorld(2024, START_KITS.standard, TEST_MAP);
+    const w = newWorld(2, START_KITS.standard, TEST_MAP);
     const town = REGION.towns.find((t) => t.id === SPAWN.startTraffic.town)!;
     const gate = siteGates(town)[0];
     const atGate = w.vehicles.filter((v) => v.brain?.templateId === 'trader' && dist(v.pos, gate) <= SPAWN.gateSpread + 3);

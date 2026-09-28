@@ -227,8 +227,8 @@ describe("garage", () => {
   it("buys supplies up to the cap", () => {
     const start = startAtBowl();
     start.player.supplies = 12;
-    const w = buySupply(start, "supplies", RULES.suppliesCap - 12);
-    expect(w.player.supplies).toBe(RULES.suppliesCap);
+    const w = buySupply(start, "supplies", RULES.baseSupplies - 12);
+    expect(w.player.supplies).toBe(RULES.baseSupplies);
     expect(() => buySupply(w, "supplies", 1)).toThrow();
   });
 
@@ -270,6 +270,39 @@ describe("garage", () => {
 
     expect(mountedParts(r.vehicles[0])[0].hp).toBe(0);
     expect(corePart(r.vehicles[0], "cab").hp).toBe(partDef("cab").hp);
+  });
+
+  it("rebuilds a junk part with the Rebuild perk at the full repair price of its last wear step", () => {
+    const w = startAtBowl();
+    w.player.perks = ["rebuild"];
+    const junk = mountedParts(w.vehicles[0])[0];
+    junk.hp = 0;
+    junk.wear = CONDITION.maxWear + 1;
+    const price = partRepairCost(w, { ...junk, wear: CONDITION.maxWear });
+
+    expect(partRepairCost(w, junk)).toBe(price);
+    const r = repairPart(w, junk.id);
+
+    const rebuilt = mountedParts(r.vehicles[0])[0];
+    expect(rebuilt).toMatchObject({ wear: CONDITION.maxWear, hp: maxHp(rebuilt), rebuilt: true });
+    expect(r.player.money).toBe(w.player.money - price);
+  });
+
+  it("rebuilds junk in repair all with the Rebuild perk, but a rebuilt part only once", () => {
+    const w = startAtBowl();
+    w.player.perks = ["rebuild"];
+    const [first, second] = mountedParts(w.vehicles[0]);
+    for (const p of [first, second]) {
+      p.hp = 0;
+      p.wear = CONDITION.maxWear + 1;
+    }
+    second.rebuilt = true;
+
+    const r = repairAll(w);
+
+    expect(mountedParts(r.vehicles[0])[0]).toMatchObject({ wear: CONDITION.maxWear, rebuilt: true });
+    expect(mountedParts(r.vehicles[0])[1].hp).toBe(0);
+    expect(() => repairPart(r, second.id)).toThrow(/junk/);
   });
 
   it("repairs a worn part up to its worn max HP", () => {
@@ -336,7 +369,7 @@ describe("garage", () => {
     expect(w.player.money).toBe(
       2000 -
         (CHASSIS.hauler.value -
-          Math.floor(CHASSIS.scout.value * ECONOMY.chassisSellFactor)),
+          Math.floor(CHASSIS.scout.value * (1 - ECONOMY.spread))),
     );
     w = buyChassis(w, "scout");
     expect(w.player.storage.length).toBe(0);
@@ -504,7 +537,7 @@ describe("locations", () => {
     const w = emptyWorld({ ...sitePads(oasis)[0] });
     w.player.supplies = 1;
     const after = useOasis(w);
-    expect(after.player.supplies).toBe(RULES.suppliesCap);
+    expect(after.player.supplies).toBe(RULES.baseSupplies);
     expect(w.player.supplies).toBe(1);
   });
 
@@ -532,7 +565,7 @@ describe("locations", () => {
     expect(w.player.supplies).toBe(1);
     w.vehicles[0].speed = 0;
     const after = applySiteAction(w);
-    expect(after?.player.supplies).toBe(RULES.suppliesCap);
+    expect(after?.player.supplies).toBe(RULES.baseSupplies);
     expect(after?.events).toContainEqual({ t: "info", text: `Filled supplies at ${oasis.name}` });
   });
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { REGION } from "../data/region";
 import { RULES } from "../data/rules";
 import { fireWeapons } from "./combat";
-import { mountedParts } from "./grid";
+import { corePart, mountedParts } from "./grid";
 import { fireGuards } from "./guards";
 import { siteGates } from "./sites";
 import { addVehicle, emptyWorld } from "./testkit";
@@ -49,6 +49,17 @@ describe("town guards", () => {
     expect(rounds).toHaveLength(RULES.guards.rounds);
   });
 
+  it("leave alone a truck that fires at a raider", () => {
+    const { w, raider } = raiderFiringAt(outside(4));
+    raider.weaponOrders = {};
+    const shooter = addVehicle(w, "traders", "hauler", ["mg"], { x: raider.pos.x - 1.5, y: raider.pos.y });
+    shooter.weaponOrders[mountedParts(shooter, "weapon")[0].id] = { targetId: raider.id, aim: "body" };
+    fireWeapons(w);
+    expect(w.events.some((e) => e.t === "shot" && e.shooter === shooter.id)).toBe(true);
+    fireGuards(w);
+    expect(w.events.some((e) => e.t === "guardShot")).toBe(false);
+  });
+
   it("leave alone vehicles that do not fire, and fights out of range", () => {
     const near = raiderFiringAt(outside(3));
     near.raider.weaponOrders = {};
@@ -61,5 +72,16 @@ describe("town guards", () => {
     fireGuards(far.w);
     expect(far.w.events.some((e) => e.t === "guardShot")).toBe(false);
   });
-});
 
+  it("shoot a player fighting through on a broken cab", () => {
+    const w = emptyWorld(outside(4));
+    const me = w.vehicles[0];
+    w.player.perks.push("fightThrough");
+    corePart(me, "cab").hp = 0;
+    const victim = addVehicle(w, "traders", "hauler", [], { x: me.pos.x + 1.5, y: me.pos.y });
+    me.weaponOrders[mountedParts(me, "weapon")[0].id] = { targetId: victim.id, aim: "body" };
+    fireWeapons(w);
+    fireGuards(w);
+    expect(w.events.some((e) => e.t === "guardShot" && e.target === me.id)).toBe(true);
+  });
+});

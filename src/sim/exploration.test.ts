@@ -25,13 +25,19 @@ describe('Icarus exploration distances', () => {
     }
   });
 
-  it('starts on the trunk road out of clear sight of every site, knowing none', () => {
+  it('starts off the trunk road facing it, the road in grey vision past clear sight, out of clear sight of every site', () => {
     const world = cloneWorld(newWorld(1337, START_KITS.standard, TEST_MAP));
     const player = world.vehicles.find((v) => v.id === world.player.vehicleId)!;
     refreshVision(world);
     discoverSites(world);
     expect(world.player.discovered).toEqual([]);
-    expect(polylineDist(player.pos, REGION.roads[REGION.playerStart.road])).toBeLessThan(REGION.roadWidth / 2);
+    const gray = TERRAIN.vision.radius * TERRAIN.vision.grayFactor;
+    const toRoad = polylineDist(player.pos, REGION.roads[REGION.playerStart.road]);
+    expect(toRoad).toBeLessThan(gray);
+    expect(toRoad).toBeGreaterThan(TERRAIN.vision.radius * 2);
+    // Driving straight ahead crosses the road.
+    const ahead = { x: player.pos.x + Math.cos(player.heading) * gray, y: player.pos.y + Math.sin(player.heading) * gray };
+    expect(polylineDist(ahead, REGION.roads[REGION.playerStart.road])).toBeLessThan(gray - toRoad + REGION.roadWidth);
     for (const site of [...REGION.towns, ...REGION.locations]) expect(dist(player.pos, site.pos) - site.radius).toBeGreaterThan(TERRAIN.vision.radius);
   }, 15_000);
 

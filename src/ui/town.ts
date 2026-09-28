@@ -5,7 +5,6 @@ import { chassisDef, PLAYER_CHASSIS } from "../data/chassis";
 import { ECONOMY, GOOD_IDS, GOODS } from "../data/goods";
 import { CONTRACTS, shopDef, type ShopDef } from "../data/market";
 import { partDef, type PartKind } from "../data/parts";
-import { RULES } from "../data/rules";
 import { playerVehicle } from "../sim/damage";
 import {
   buyChassis,
@@ -30,14 +29,15 @@ import {
   supplyRoom,
   tradeReady,
   truckGoodPrice,
+  truckPartPrice,
   truckGoodsForSale,
   truckSupplyForSale,
   truckSupplyPrice,
   type Supply,
 } from "../sim/economy";
 import { corePart, freeCells, goodsCount, MOUNT_CELLS, mountedParts } from "../sim/grid";
+import { moneyLabel } from "./hud-readout";
 import { spareParts } from "../sim/inventory";
-import { vehicleMass } from "../sim/mass";
 import { acceptContract, deliverContract, fitsFetch, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
 import { REGION } from "../data/region";
 import type { PartInstance, Vehicle, World } from "../sim/types";
@@ -45,16 +45,17 @@ import { maxHp } from "../sim/wear";
 import { chassisMap, chassisStats, CompareSteps, createIcon, diffStats, goodIcon, partCard, statGrid, type IconName } from "./cards";
 import { el, panel } from "./dom";
 import { contractDue, contractSummary } from "./format";
-import { InventoryView } from "./inventory";
+import { InventoryView, truckChips } from "./inventory";
 import type { UiHost } from "./host";
-import { fuelLiters, hp, kg } from "./units";
+import { fuelLiters, hp } from "./units";
+import { fuelCap, suppliesCap } from "../sim/stats";
 
 type Tab = "market" | "parts" | "garage" | "trucks" | "contracts";
 
 // The part stock filter. Core parts are built in, so no shop sells them.
 type StockFilter = "all" | Exclude<PartKind, "core">;
 
-const STOCK_FILTERS: StockFilter[] = ["all", "weapon", "engine", "armor", "cargo", "scanner"];
+const STOCK_FILTERS: StockFilter[] = ["all", "weapon", "engine", "armor", "cargo", "scanner", "store"];
 
 const GARAGE_ONLY: Tab[] = ["garage", "trucks"];
 
@@ -108,7 +109,7 @@ export class TownScreen {
     const truck = el("div", { class: "town-truck" }, this.inventory.render());
     this.root.replaceChildren(
       el("button", { class: "close", onclick: () => this.close() }, "Leave [Esc]"),
-      el("h3", {}, siteName(shopId), headerChips(w)),
+      el("h3", {}, siteName(shopId), truckChips(w)),
       el("div", { class: "town-split" }, truck, el("div", { class: "town-shop" }, ...shop)),
     );
     this.inventory.fitTo(truck);
@@ -287,7 +288,7 @@ export class TownScreen {
     const afford = Math.min(room, Math.floor(w.player.money / price));
     const fuel = k === "fuel";
     const have = w.player[k];
-    const cap = fuel ? chassisDef(playerVehicle(w).chassisId).fuelCap : RULES.suppliesCap;
+    const cap = fuel ? fuelCap(playerVehicle(w)) : suppliesCap(playerVehicle(w));
     const amount = (n: number) => (fuel ? `${fuelLiters(n)} L` : `${Math.round(n * 10) / 10}`);
     return el(
       "div",
@@ -389,6 +390,7 @@ const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
   armor: "Armor",
   cargo: "Cargo",
   scanner: "Scanners",
+  store: "Stores",
 };
 
 const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
@@ -397,6 +399,7 @@ const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
   armor: "armor",
   cargo: "cargo",
   scanner: "scanner",
+  store: "supplies",
 };
 
 const TAB_LABEL: Record<Tab, string> = {
@@ -420,25 +423,6 @@ const CONTRACT_ICON: Record<Contract["kind"], IconName> = {
   fetch: "parts",
   bounty: "cannon",
 };
-
-function headerChips(w: World): HTMLElement {
-  const me = playerVehicle(w);
-  const mass = vehicleMass(me);
-  const rated = chassisDef(me.chassisId).ratedMass;
-  return el(
-    "span",
-    { class: "chips" },
-    el("span", { class: "chip" }, createIcon("truck"), chassisDef(me.chassisId).name),
-    el("span", { class: `chip${w.player.money < 0 ? " bad" : ""}`, title: "Money" }, createIcon("money"), `${w.player.money}`),
-    el("span", { class: "chip", title: "Free cargo cells" }, createIcon("cells"), `${freeCells(me)} free`),
-    el(
-      "span",
-      { class: `chip${mass > rated ? " bad" : ""}`, title: "Mass against rated load" },
-      createIcon("load"),
-      `${kg(mass)} / ${kg(rated)}`,
-    ),
-  );
-}
 
 function priceEl(price: number): HTMLElement {
   return el("span", { class: "price" }, createIcon("money"), `${price}`);
@@ -560,7 +544,7 @@ export class TruckTradeScreen {
     const truck = el("div", { class: "town-truck" }, this.inventory.render());
     this.root.replaceChildren(
       el("button", { class: "close", onclick: () => this.close() }, "Leave [Esc]"),
-      el("h3", {}, npc.name, headerChips(w), partnerChips(npc)),
+      el("h3", {}, npc.name, truckChips(w), partnerChips(npc)),
       el("div", { class: "town-split" }, truck, el("div", { class: "town-shop" }, ...side)),
     );
     this.inventory.fitTo(truck);
@@ -653,11 +637,11 @@ export class TruckTradeScreen {
       return partCard({ part: p, ...this.compare.options(me, kind, () => this.render()), action, onHover: this.hintMounts(kind) });
     };
     const theirs = spareParts(npc).map((p) => {
-      const price = partTradePrice(w, me, p, "buy");
+      const price = truckPartPrice(w, p, "buy");
       return card(p, this.button(`Buy ${price}`, (x) => buyTruckPart(x, npc.id, p.id), w.player.money < price));
     });
     const mine = spareParts(me).map((p) => {
-      const price = partTradePrice(w, me, p, "sell");
+      const price = truckPartPrice(w, p, "sell");
       return card(p, this.button(`Sell ${price}`, (x) => sellTruckPart(x, npc.id, p.id), npc.resources!.money < price));
     });
     return el(
@@ -676,7 +660,7 @@ export class TruckTradeScreen {
     const most = Math.min(offer, supplyRoom(w, k), Math.floor(w.player.money / price));
     const fuel = k === "fuel";
     const have = w.player[k];
-    const cap = fuel ? chassisDef(playerVehicle(w).chassisId).fuelCap : RULES.suppliesCap;
+    const cap = fuel ? fuelCap(playerVehicle(w)) : suppliesCap(playerVehicle(w));
     const amount = (n: number) => (fuel ? `${fuelLiters(n)} L` : `${Math.round(n * 10) / 10}`);
     return el(
       "div",
@@ -695,7 +679,7 @@ function partnerChips(npc: Vehicle): HTMLElement {
     "span",
     { class: "chips" },
     el("span", { class: "dim" }, "Them"),
-    el("span", { class: "chip", title: "Their money" }, createIcon("money"), `${npc.resources!.money}`),
+    el("span", { class: "chip", title: "Their money" }, createIcon("money"), moneyLabel(npc.resources!.money)),
     el("span", { class: "chip", title: "Their free cargo cells" }, createIcon("cells"), `${freeCells(npc)} free`),
   );
 }

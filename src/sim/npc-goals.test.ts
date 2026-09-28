@@ -3,7 +3,7 @@ import { REGION } from '../data/region';
 import { corePart } from './grid';
 import { noteHurt, popGoal, pushGoal, replaceBase, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { sitePads } from './sites';
-import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls } from './testkit';
 import type { NpcActivity, World } from './types';
 
 function scavengerWorld() {
@@ -88,6 +88,7 @@ describe('goal stack', () => {
     expect(npc.brain!.goals.map((g) => g.kind)).toEqual(['raid', 'flee']);
     raider.pos = { x: 70, y: 10 };
     raider.speed = 0;
+    w.rngState = rngStateForForcedRolls(6);
     expect(thinkNpc(w, npc).kind).not.toBe('raid');
     expect(npc.brain!.goals.some((g) => g.kind === 'raid')).toBe(false);
   });

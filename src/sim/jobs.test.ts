@@ -8,8 +8,10 @@ import { makePart } from './factory';
 import { addVehicle, emptyWorld, practiceOf } from './testkit';
 import { corePart, goodsCount, gridOf, mountedParts } from './grid';
 import { addGoods, moveItem, removeGoods, stowPart } from './inventory';
-import { advanceJobs, startAutoRepair, startJob, startRepair, startStrip } from './jobs';
+import { advanceJobs, startAutoRepair, startJob, startRepair, startStrip, startWeld } from './jobs';
+import { PERK_NUMBERS } from '../data/skills';
 import { repairPlan } from './repair';
+import { addState } from './states';
 
 function armorPart(v: ReturnType<typeof emptyWorld>['vehicles'][0]) {
   const part = mountedParts(v).find((p) => partDef(p.defId).kind === 'armor')!;
@@ -325,5 +327,110 @@ describe('field job practice', () => {
     for (let i = 0; i < plan.turns; i++) advanceJobs(w);
     expect(npc.job).toBeNull();
     expect(practiceOf(w, 'fieldJob')).toEqual([]);
+  });
+});
+
+describe('jobs in combat', () => {
+  // A player with a damaged part, spare parts, and a feuding raider parked in sight.
+  function underFire() {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = w.vehicles[0];
+    me.speed = 0;
+    const cage = armorPart(me);
+    cage.hp = 1;
+    addGoods(w, me, 'parts', 20);
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 35, y: 30 });
+    addState(w, 'feud', raider.id, me.id, { kind: 'feud', robbery: false });
+    return { w, me, cage, raider };
+  }
+
+  it('starts no job with a hostile in sight', () => {
+    const { w, me, cage } = underFire();
+    expect(() => startRepair(w, cage.id)).toThrow(/hostile in sight/);
+    startAutoRepair(w);
+    expect(me.job).toBeNull();
+  });
+
+  it('cancels a running job once a hostile comes in sight', () => {
+    const { w, me, cage, raider } = underFire();
+    w.vehicles = w.vehicles.filter((v) => v.id !== raider.id);
+    const next = startRepair(w, cage.id);
+    next.vehicles.push(raider);
+    next.events = [];
+    advanceJobs(next);
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.events).toContainEqual(expect.objectContaining({ t: 'job', vehicle: me.id, outcome: 'cancelled' }));
+  });
+});
+
+describe('weld job', () => {
+  const { scrap, turns, part } = PERK_NUMBERS.welder;
+
+  // Sets the truck's scrap metal to exactly n units.
+  function holdScrap(w: ReturnType<typeof emptyWorld>, n: number): void {
+    const me = w.vehicles[0];
+    removeGoods(me, 'scrap', goodsCount(me).scrap ?? 0);
+    addGoods(w, me, 'scrap', n);
+  }
+
+  function sheets(v: ReturnType<typeof emptyWorld>['vehicles'][0]): number {
+    return v.items.filter((it) => it.kind === 'part' && it.part.defId === part).length;
+  }
+
+  it('spends the scrap and stows a pristine scrap sheet after its turns', () => {
+    const w = emptyWorld();
+    w.player.perks = ['welder'];
+    const me = w.vehicles[0];
+    holdScrap(w, scrap + 1);
+    const before = sheets(me);
+
+    const next = startWeld(w);
+    expect(next.vehicles[0].job).toEqual({ kind: 'weld', turnsLeft: turns, total: turns });
+    for (let i = 0; i < turns - 1; i++) advanceJobs(next);
+    expect(goodsCount(next.vehicles[0]).scrap).toBe(scrap + 1);
+    advanceJobs(next);
+
+    const truck = next.vehicles[0];
+    expect(truck.job).toBeNull();
+    expect(goodsCount(truck).scrap).toBe(1);
+    expect(sheets(truck)).toBe(before + 1);
+    const sheet = truck.items.find((it) => it.kind === 'part' && it.part.defId === part && it.part.wear === 0);
+    expect(sheet?.kind === 'part' && sheet.part.hp).toBe(partDef(part).hp);
+  });
+
+  it('refuses without the perk', () => {
+    const w = emptyWorld();
+    holdScrap(w, scrap);
+    expect(() => startWeld(w)).toThrow(/Welder/);
+  });
+
+  it('refuses with too little scrap', () => {
+    const w = emptyWorld();
+    w.player.perks = ['welder'];
+    holdScrap(w, scrap - 1);
+    expect(() => startWeld(w)).toThrow(/scrap/);
+  });
+
+  it('cancels when the scrap leaves the grid mid-job, making nothing', () => {
+    const w = emptyWorld();
+    w.player.perks = ['welder'];
+    holdScrap(w, scrap);
+    const next = startWeld(w);
+    const before = sheets(next.vehicles[0]);
+    advanceJobs(next);
+    removeGoods(next.vehicles[0], 'scrap', 1);
+    advanceJobs(next);
+    expect(next.vehicles[0].job).toBeNull();
+    expect(sheets(next.vehicles[0])).toBe(before);
+    expect(next.events.some((e) => e.t === 'job' && e.outcome === 'cancelled')).toBe(true);
+  });
+
+  it('teaches no machining', () => {
+    const w = emptyWorld();
+    w.player.perks = ['welder'];
+    holdScrap(w, scrap);
+    const next = startWeld(w);
+    for (let i = 0; i < turns; i++) advanceJobs(next);
+    expect(practiceOf(next, 'fieldJob')).toEqual([]);
   });
 });

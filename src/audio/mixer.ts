@@ -1,4 +1,4 @@
-// Web Audio graph: one bus per sound group into a master gain. The effects bus runs through a compressor
+// Web Audio graph: one bus per sound group, each through a low-pass tone filter, into a master gain. The effects bus runs through a compressor
 // and a short reverb, so sounds from different sources sit in one space.
 
 import { MIX, type Bus } from "../data/sounds";
@@ -9,14 +9,15 @@ export class Mixer {
   readonly ctx = new AudioContext();
   private master = this.ctx.createGain();
   private buses: Record<Bus, GainNode>;
+  private tones = new Map<Bus, BiquadFilterNode>();
 
   constructor(mix: Mix) {
     this.master.connect(this.ctx.destination);
     this.buses = {
-      ui: this.bus(mix.busVolume.ui, this.master),
-      sfx: this.bus(mix.busVolume.sfx, this.effectsChain(mix)),
-      ambient: this.bus(mix.busVolume.ambient, this.master),
-      music: this.bus(mix.busVolume.music, this.master),
+      ui: this.bus("ui", mix.busVolume.ui, this.master),
+      sfx: this.bus("sfx", mix.busVolume.sfx, this.effectsChain(mix)),
+      ambient: this.bus("ambient", mix.busVolume.ambient, this.master),
+      music: this.bus("music", mix.busVolume.music, this.master),
     };
   }
 
@@ -26,6 +27,13 @@ export class Mixer {
 
   setBusVolume(bus: Bus, volume: number): void {
     this.buses[bus].gain.value = volume;
+  }
+
+  // Muffles a whole bus by lowering its low-pass cutoff over rampSeconds.
+  setBusTone(bus: Bus, cutoffHz: number, rampSeconds: number): void {
+    const tone = this.tones.get(bus);
+    if (!tone) throw new Error(`Bus ${bus} has no tone filter`);
+    tone.frequency.setTargetAtTime(cutoffHz, this.ctx.currentTime, rampSeconds / 3);
   }
 
   setMuted(muted: boolean): void {
@@ -39,10 +47,14 @@ export class Mixer {
     target.addEventListener("keydown", resume, { once: true });
   }
 
-  private bus(volume: number, out: AudioNode): GainNode {
+  private bus(bus: Bus, volume: number, out: AudioNode): GainNode {
     const g = this.ctx.createGain();
     g.gain.value = volume;
-    g.connect(out);
+    const tone = this.ctx.createBiquadFilter();
+    tone.type = "lowpass";
+    tone.frequency.value = this.ctx.sampleRate / 2;
+    g.connect(tone).connect(out);
+    this.tones.set(bus, tone);
     return g;
   }
 
