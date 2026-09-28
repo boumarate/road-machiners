@@ -85,7 +85,7 @@ describe('render scope', () => {
   for (const zoom of [1, 0.35]) for (const spot of spots) {
     it(`keeps every object in view attached at zoom ${zoom} over ${spot.x},${spot.y}`, () => {
       const root = new THREE.Group();
-      const scope = new RenderScope(root, SIZE, new SightLimit(SIZE), true);
+      const scope = new RenderScope(root, SIZE, new SightLimit(SIZE), true, false);
       const objects = populate(scope);
       const rig = rigAt(spot.x, spot.y, zoom);
       scope.update(rig.camera);
@@ -99,7 +99,7 @@ describe('render scope', () => {
 
   it('follows the camera and detaches removed objects', () => {
     const root = new THREE.Group();
-    const scope = new RenderScope(root, SIZE, new SightLimit(SIZE), true);
+    const scope = new RenderScope(root, SIZE, new SightLimit(SIZE), true, false);
     const objects = populate(scope);
     const first = rigAt(100, 100, 1);
     scope.update(first.camera);
@@ -114,7 +114,7 @@ describe('render scope', () => {
   });
 
   it('rejects objects outside the map', () => {
-    const scope = new RenderScope(new THREE.Group(), SIZE, new SightLimit(SIZE), true);
+    const scope = new RenderScope(new THREE.Group(), SIZE, new SightLimit(SIZE), true, false);
     expect(() => scope.add(new THREE.Object3D(), { x: -5, y: 10 }, 1)).toThrow();
     expect(() => scope.add(new THREE.Object3D(), { x: 10, y: SIZE + 1 }, 1)).toThrow();
   });
@@ -122,7 +122,7 @@ describe('render scope', () => {
   it('detaches chunks beyond gray vision and keeps those inside it', () => {
     const root = new THREE.Group();
     const limit = new SightLimit(SIZE);
-    const scope = new RenderScope(root, SIZE, limit, true);
+    const scope = new RenderScope(root, SIZE, limit, true, false);
     const objects = populate(scope);
     const rig = rigAt(SIZE / 2, SIZE / 2, 0.35);
     const center = { x: (SIZE / 2) * S, y: 0, z: (SIZE / 2) * S };

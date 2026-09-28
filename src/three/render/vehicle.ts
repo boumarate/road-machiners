@@ -13,7 +13,7 @@ import { FACTION_COLORS, PAL } from '../../render/palette';
 import { BODY_PARTS, baseModel, partModel, weaponLook } from '../../render/partLooks';
 import { baseGrid, isMounted, itemCells, itemSize, sideOf, type SideLetter } from '../../sim/grid';
 import type { GridItem, Vehicle } from '../../sim/types';
-import { model, socket, type ModelName } from './models';
+import { model, outlineOf, socket, TRUCK_BIT, type ModelName } from './models';
 import { hashStr } from '../../render/noise';
 import { TruckMotion, WHIPS } from './truckMotion';
 
@@ -46,7 +46,7 @@ const SKIRT = 0.22; // meters a base hangs below the collider, SKIRT in tools/bl
 // A truck behind terrain or props shows through as a flat faction-color silhouette.
 const SILHOUETTE_OPACITY = 0.5;
 const SILHOUETTE_ORDER = 810; // after opaque ground, props and trucks; below the path (820) and zones (850)
-const TRUCK_STENCIL = 1; // stencil value marking pixels where a truck or its silhouette is already drawn
+const TRUCK_STENCIL = TRUCK_BIT; // stencil bit marking pixels where a truck or its silhouette is already drawn
 
 type Wheel = { mount: THREE.Group; spin: THREE.Object3D; restY: number };
 // A shock stretches from its body mount, which leans with the body, down to its wheel's hub.
@@ -155,7 +155,7 @@ export class VehicleView {
     if (dark === this.dark) return;
     this.dark = dark;
     this.root.traverse((o) => {
-      if (!(o instanceof THREE.Mesh) || o.material === this.silhouetteMat || o.material === this.lampMat) return;
+      if (!(o instanceof THREE.Mesh) || o.material === this.silhouetteMat || o.material === this.lampMat || o.userData.outline) return;
       if (dark) {
         o.userData.litMat = o.material;
         o.material = this.darkMat;
@@ -253,7 +253,7 @@ export class VehicleView {
     this.silhouetteMat = silhouetteMaterial(paint);
     const meshes: THREE.Mesh[] = [];
     this.root.traverse((o) => {
-      if (o instanceof THREE.Mesh) meshes.push(o);
+      if (o instanceof THREE.Mesh && !o.userData.outline) meshes.push(o);
     });
     for (const mesh of meshes) {
       markStencil(mesh.material as THREE.Material);
@@ -504,6 +504,8 @@ function silhouetteMaterial(color: number): THREE.MeshBasicMaterial {
     depthFunc: THREE.GreaterDepth,
     stencilWrite: true,
     stencilRef: TRUCK_STENCIL,
+    stencilFuncMask: TRUCK_STENCIL,
+    stencilWriteMask: TRUCK_STENCIL,
     stencilFunc: THREE.NotEqualStencilFunc,
     stencilZPass: THREE.ReplaceStencilOp,
   });
@@ -512,6 +514,7 @@ function silhouetteMaterial(color: number): THREE.MeshBasicMaterial {
 function markStencil(mat: THREE.Material): void {
   mat.stencilWrite = true;
   mat.stencilRef = TRUCK_STENCIL;
+  mat.stencilWriteMask = TRUCK_STENCIL;
   mat.stencilFunc = THREE.AlwaysStencilFunc;
   mat.stencilZPass = THREE.ReplaceStencilOp;
 }
@@ -648,6 +651,7 @@ function mergeStatic(group: THREE.Group): THREE.Group {
     used.push(o);
   });
   const out = new THREE.Group();
+  out.add(...outlineOf([...byColor.values()].flat()));
   for (const [hex, geos] of byColor) {
     const merged = mergeGeometries(geos);
     if (!merged) throw new Error(`Could not merge ${geos.length} truck meshes of color ${hex.toString(16)}`);
