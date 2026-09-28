@@ -32,6 +32,16 @@ describe('advanceWeather', () => {
     expect(w.events.some((e) => e.t === 'weather' && e.outcome === 'ended')).toBe(true);
   });
 
+  it('never has a heat wave and overcast at once', () => {
+    const w = emptyWorld();
+    for (let i = 0; i < 20000; i++) {
+      advanceWeather(w);
+      const kinds = w.weather.map((e) => e.kind);
+      expect(kinds.includes('heatwave') && kinds.includes('overcast')).toBe(false);
+    }
+    expect(w.events.length).toBeGreaterThan(0);
+  });
+
   it('replays the same weather for the same seed and turn count', () => {
     const w1 = emptyWorld();
     const w2 = emptyWorld();

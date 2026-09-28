@@ -510,6 +510,12 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
   },
 };
 
+// Traits rolled on top of a template's own. One neutral driver in four is a scumbag, and one in four a coward. Both
+// can meet in one driver. A lawman can be a coward but never a scumbag, since it keeps the peace. Raiders roll none:
+// they rob anyway.
+const NEUTRAL_EXTRAS: NpcTemplate['extraTraits'] = [{ trait: 'scumbag', chance: 0.25 }, { trait: 'coward', chance: 0.25 }];
+const LAWMAN_EXTRAS: NpcTemplate['extraTraits'] = [{ trait: 'coward', chance: 0.25 }];
+
 export const NPCS: Record<string, NpcTemplate> = {
   buggy: {
     id: 'buggy', name: 'Raider outrider', faction: 'raiders', traits: ['raider'], extraTraits: [],
@@ -534,8 +540,8 @@ export const NPCS: Record<string, NpcTemplate> = {
   },
   trader: {
     id: 'trader', name: 'Trader caravan', faction: 'traders', traits: ['trader'],
-    // One trader in four is a coward.
-    extraTraits: [{ trait: 'coward', chance: 0.25 }],
+    // One trader in four is a scumbag, and one in four a coward, as with every neutral driver.
+    extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.trader,
     aggroRange: 0,
     preferredRange: 0,
@@ -545,8 +551,7 @@ export const NPCS: Record<string, NpcTemplate> = {
   },
   scavenger: {
     id: 'scavenger', name: 'Scavenger', faction: 'scavengers', traits: ['scavenger'],
-    // One scavenger in four is a scumbag, and one in four a coward. Both can meet in one driver.
-    extraTraits: [{ trait: 'scumbag', chance: 0.25 }, { trait: 'coward', chance: 0.25 }],
+    extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.scavenger,
     aggroRange: 0,
     preferredRange: 0,
@@ -555,7 +560,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "town" },
   },
   bowlFarmer: {
-    id: 'bowlFarmer', name: 'Bowl Farmers patrol', faction: 'bowl', traits: ['lawman'], extraTraits: [],
+    id: 'bowlFarmer', name: 'Bowl Farmers patrol', faction: 'bowl', traits: ['lawman'], extraTraits: LAWMAN_EXTRAS,
     loadout: LOADOUTS.bowlPatrol,
     aggroRange: 0,
     preferredRange: 0,
@@ -566,7 +571,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "sites", ids: ["bowl"] },
   },
   noseArmy: {
-    id: 'noseArmy', name: 'Nose Army patrol', faction: 'nose', traits: ['lawman'], extraTraits: [],
+    id: 'noseArmy', name: 'Nose Army patrol', faction: 'nose', traits: ['lawman'], extraTraits: LAWMAN_EXTRAS,
     loadout: LOADOUTS.nosePatrol,
     aggroRange: 0,
     preferredRange: 0,
@@ -577,8 +582,7 @@ export const NPCS: Record<string, NpcTemplate> = {
   },
   courier: {
     id: 'courier', name: 'Courier', faction: 'couriers', traits: ['courier'],
-    // One courier in four is a coward.
-    extraTraits: [{ trait: 'coward', chance: 0.25 }],
+    extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.courier,
     aggroRange: 0,
     preferredRange: 0,
@@ -589,8 +593,7 @@ export const NPCS: Record<string, NpcTemplate> = {
   },
   roamer: {
     id: 'roamer', name: 'Roamer', faction: 'roamers', traits: ['roamer'],
-    // One roamer in five is a scumbag.
-    extraTraits: [{ trait: 'scumbag', chance: 0.2 }],
+    extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.roamer,
     aggroRange: 0,
     preferredRange: 0,
@@ -600,7 +603,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "town" },
   },
   convoy: {
-    id: 'convoy', name: 'Supply convoy', faction: 'convoys', traits: ['supplier'], extraTraits: [],
+    id: 'convoy', name: 'Supply convoy', faction: 'convoys', traits: ['supplier'], extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.convoy,
     aggroRange: 0,
     preferredRange: 0,
@@ -610,7 +613,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "sites", ids: ["bowl", "nose"] },
   },
   convoyGuard: {
-    id: 'convoyGuard', name: 'Convoy guard', faction: 'convoys', traits: ['guard'], extraTraits: [],
+    id: 'convoyGuard', name: 'Convoy guard', faction: 'convoys', traits: ['guard'], extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.convoyGuard,
     aggroRange: 0,
     preferredRange: 0,
@@ -620,7 +623,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "escort", of: "convoy" },
   },
   merc: {
-    id: 'merc', name: 'Merc', faction: 'mercs', traits: ['merc'], extraTraits: [],
+    id: 'merc', name: 'Merc', faction: 'mercs', traits: ['merc'], extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.merc,
     aggroRange: 0,
     preferredRange: 0,
@@ -679,6 +682,7 @@ export type DecisionOptions = {
   truceOffered: 'accept' | 'refuse'; // a foe asks for a truce
   mercyBegged: 'spare' | 'finish'; // a foe gives up and asks to be let go
   threatened: 'comply' | 'fightBack' | 'flee'; // the player demands the driver's cargo
+  mugging: 'demand' | 'attack'; // the driver sets out to fight the player: radio for the cargo first, or just open fire
   resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal
   // The goal stack is empty. Escort joins a leader that no escort guards yet.
   idle: 'trade' | 'scavenge' | 'raid' | 'wait' | 'patrol' | 'travel' | 'explore' | 'haul' | 'escort';
@@ -723,6 +727,8 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   mercyBegged: { spare: 3, finish: 1 },
   // A threatened driver gives up its cargo, fights or runs about equally. The two sides' strength decides most.
   threatened: { comply: 1, fightBack: 1, flee: 1 },
+  // A driver about to attack the player radios for the cargo first a bit more often than it opens fire unwarned.
+  mugging: { demand: 3, attack: 2 },
   // After an interruption a driver goes back to its work 9 times in 10.
   resume: { resume: 9, new: 1 },
   // Anyone collects salvage in sight. Trading, raiding, patrols, trips, exploring, hauls and escorts more than
@@ -962,7 +968,7 @@ export const NPC_BEHAVIOR = {
   // Tiles a follower keeps behind its leader past both radii: the yield distance plus one, so it stops outside
   // the braking check of src/sim/ai.ts.
   followGap: RULES.yieldDistance + 1,
-  // Cab warnings begin at 30%. Recovery to half cab health prevents fight/flee oscillation.
+  // A driver whose cab, whole truck or own health is at 30% is weak. Recovery to half prevents fight/flee oscillation.
   fleeCondition: 0.3,
   // One driver in three the player knocks out holds a grudge. See the revenge state.
   revengeChance: 0.33,
@@ -990,6 +996,10 @@ export const NPC_BEHAVIOR = {
   // Turns a noticed subject stays remembered after it was last perceived. A heard engine drops out for a turn or
   // two when the truck slows or crosses behind the listener, and 3 turns bridges that without a fresh roll.
   noticeMemory: 3,
+  // Turns a fighter hunts a target it lost from sight, counted from the last turn it saw it or picked up its sound
+  // or dust. A truck cruises about 3.4 tiles a turn on a road, so 6 turns carry the hunter about 20 tiles, one sight
+  // radius past the last point. A player who goes quiet behind a hill gets away, and a noisy one stays hunted.
+  fightSearchTurns: 6,
   // Investigate weight times this when the cab or a driving part is at or below the recover condition. A raider's
   // investigate weight of 12 drops to 0.12, so a crippled raider closes in on a contact 1 to 4 times in 100.
   crippledInvestigate: 0.01,

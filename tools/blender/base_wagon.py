@@ -163,7 +163,10 @@ def main() -> None:
     rear_body(kit)
     windshield(kit)
     seats(kit)
-    level_sockets(kit, G, "row", [DECK] * 2 + [HOOD_TOP] * 2 + [TUB_FLOOR] * 3)
+    # The outer columns beside the deck and hood are the front fenders, then the running boards. The engine cells are the bay.
+    low = {(x, y): FENDER_TOP for x in (0, 4) for y in (0, 1, 2)} | {(x, 3): BOARD[1] for x in (0, 4)}
+    bay = {(x, y): BAY_FLOOR for x in (1, 2) for y in (2, 3)}
+    level_sockets(kit, G, "row", [DECK] * 2 + [HOOD_TOP] * 2 + [TUB_FLOOR] * 3, cells=low | bay)
     level_sockets(kit, G, "floor", [DECK] * 2 + [BAY_FLOOR] * 2 + [TUB_FLOOR] * 3)
     check_base(kit, "base_wagon", G)
     kit.export("base_wagon", args, view_size=6.0)

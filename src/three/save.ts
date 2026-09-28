@@ -1,4 +1,5 @@
 import { buildTerrain } from '../sim/terrain';
+import { townAt } from '../sim/sites';
 import type { World } from '../sim/types';
 
 const SAVE_KEY = 'korovan.save';
@@ -26,7 +27,7 @@ export function hasSave(storage: Storage): boolean {
 // mounts and built-in parts sized to the truck models. 25 moves locations beside their roads and the start
 // onto the road. 26 adds NPC knockouts, truck pickups on refits and revenge. 27 adds NPC driver names and their random stream. 28 adds new NPC
 // types, escorts and two goods. Older saves do not load.
-const SAVE_VERSION = 28;
+const SAVE_VERSION = 29;
 
 export function loadWorld(storage: Storage): World | null {
   const raw = storage.getItem(SAVE_KEY);
@@ -65,6 +66,11 @@ export function saveWorld(storage: Storage, world: World, interval: number): voi
   // A dead run keeps its last save, so the player can load it.
   if (world.player.state === 'dead') return;
   writeSave(storage, world);
+}
+
+// A UI command in town, like a purchase, saves at once, so a reload does not undo it.
+export function saveInTown(storage: Storage, world: World): void {
+  if (world.player.state === 'active' && townAt(world)) writeSave(storage, world);
 }
 
 export function writeSave(storage: Storage, world: World): void {

@@ -330,7 +330,15 @@ export function repairAll(world: World): World {
 // its wear. The spread is added on top for buy and cut for sell, so buy always rounds to strictly
 // above sell (IV4), even at the narrowest Social skill spread. Both are floored at the scrap value.
 export function partTradePrice(world: World, vehicle: Vehicle, part: PartInstance, direction: 'buy' | 'sell'): number {
-  const margin = vehicle.id === world.player.vehicleId ? spread(world) : ECONOMY.spread;
+  return partPriceAt(part, vehicle.id === world.player.vehicleId ? spread(world) : ECONOMY.spread, direction);
+}
+
+// The player's price for a part traded with a truck on the road, at the road spread.
+export function truckPartPrice(world: World, part: PartInstance, direction: 'buy' | 'sell'): number {
+  return partPriceAt(part, roadSpread(world), direction);
+}
+
+function partPriceAt(part: PartInstance, margin: number, direction: 'buy' | 'sell'): number {
   const pressured = partValue(part) * (part.hp / maxHp(part));
   const floor = Math.round(scrapValue(part));
   const buy = Math.max(floor + 1, Math.ceil(pressured * (1 + margin)));
@@ -538,18 +546,23 @@ export function endTrade(world: World, npcId: string): World {
   return playerCommand(world, (w) => endState(w, requireMeeting(w, npcId).state, "fulfilled"));
 }
 
-// Trucks keep no price pressure, so a good trades at its base value with the player's spread either way.
+// A truck on the road trades at the player's spread plus the road spread. Social skill narrows it as in town.
+function roadSpread(world: World): number {
+  return spread(world) + ECONOMY.roadSpread;
+}
+
+// Trucks keep no price pressure, so a good trades at its base value with the road spread either way.
 export function truckGoodPrice(world: World, good: string, direction: "buy" | "sell"): number {
   const def = GOODS[good];
   if (!def) throw new Error(`Unknown good ${good}`);
-  const margin = spread(world);
+  const margin = roadSpread(world);
   const buy = Math.max(1, Math.ceil(def.value * (1 + margin)));
   return direction === "buy" ? buy : Math.max(0, Math.min(buy - 1, Math.floor(def.value * (1 - margin))));
 }
 
-// A truck charges the town price plus the player's spread, since it sells from its own tank.
+// A truck charges the town price plus the road spread, since it sells from its own tank.
 export function truckSupplyPrice(world: World, kind: Supply): number {
-  return Math.ceil(ECONOMY.supplyPrice[kind] * (1 + spread(world)));
+  return Math.ceil(ECONOMY.supplyPrice[kind] * (1 + roadSpread(world)));
 }
 
 // Whole units the driver will sell: what it holds above its reserve share of its cap.
@@ -614,13 +627,12 @@ function takeSpare(v: Vehicle, partId: string): PartInstance {
   return part;
 }
 
-// Part prices are the player's own buy and sell prices, as at a shop.
 export function buyTruckPart(world: World, npcId: string, partId: string): World {
   return playerCommand(world, (w) => {
     const { npc } = requireMeeting(w, npcId);
     const me = playerVehicle(w);
     const part = takeSpare(npc, partId);
-    transfer(w, me, npc, partTradePrice(w, me, part, "buy"));
+    transfer(w, me, npc, truckPartPrice(w, part, "buy"));
     if (!stowPart(w, me, part)) throw new Error(`No room in the truck for ${partDef(part.defId).name}`);
   });
 }
@@ -630,7 +642,7 @@ export function sellTruckPart(world: World, npcId: string, partId: string): Worl
     const { npc } = requireMeeting(w, npcId);
     const me = playerVehicle(w);
     const part = takeSpare(me, partId);
-    transfer(w, npc, me, partTradePrice(w, me, part, "sell"));
+    transfer(w, npc, me, truckPartPrice(w, part, "sell"));
     if (!stowPart(w, npc, part)) throw new Error(`No room on ${npc.name}'s truck for ${partDef(part.defId).name}`);
   });
 }

@@ -24,6 +24,7 @@ def build(kit: Kit) -> None:
         tube(kit, f"sleeve_band{i}", 0.078, x, x + 0.06, "dark")
     tube(kit, "extractor", 0.1, 1.3, 1.56, "paint", dent_by=0.004)
     tube(kit, "muzzle", 0.08, 1.92, 2.0, "dark")
+    kit.socket("tip", (2.0, 0, 0))
 
 
 if __name__ == "__main__":

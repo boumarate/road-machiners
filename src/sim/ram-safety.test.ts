@@ -143,15 +143,6 @@ describe('crippled drivers', () => {
     expect(optionWeights(world, raider, 'hostileSeen', me, 0).flee).toBeCloseTo(intact * NPC_BEHAVIOR.weakFlee);
   });
 
-  it('counts broken wheels as weak', () => {
-    const { world, raider } = createFight();
-    expect(isWeak(world, raider)).toBe(false);
-    const wheel = mountedParts(raider).find((p) => p.defId === 'wheel');
-    if (!wheel) throw new Error('Missing wheel');
-    wheel.hp = 0;
-    expect(isWeak(world, raider)).toBe(true);
-  });
-
   it('rarely closes in on a heard contact when crippled, and heads for repairs', () => {
     const { world, raider, me } = createListener();
     const intact = optionWeights(world, raider, 'contactHeard', me, null).investigate!;

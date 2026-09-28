@@ -21,9 +21,9 @@ export function startNewGame(clearSave: () => void): void {
 
 export class GameMenu {
   private root = panel("game-menu", topRight());
-  private saveButton = el("button", { onclick: () => this.save(), title: "Save the game now" }, "Save") as HTMLButtonElement;
-  private loadButton = el("button", { onclick: () => this.load(), title: "Load the last save" }, "Load") as HTMLButtonElement;
-  private newButton = el("button", { onclick: () => this.newGame(), title: "Delete the save and start over" }, "New game") as HTMLButtonElement;
+  private saveButton = el("button", { onclick: () => this.save() }, "Save") as HTMLButtonElement;
+  private loadButton = el("button", { onclick: () => this.load() }, "Load") as HTMLButtonElement;
+  private newButton = el("button", { onclick: () => this.newGame() }, "New game") as HTMLButtonElement;
 
   constructor(private actions: GameMenuActions) {
     this.root.append(this.saveButton, this.loadButton, this.newButton);

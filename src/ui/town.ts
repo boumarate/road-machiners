@@ -30,6 +30,7 @@ import {
   supplyRoom,
   tradeReady,
   truckGoodPrice,
+  truckPartPrice,
   truckGoodsForSale,
   truckSupplyForSale,
   truckSupplyPrice,
@@ -189,7 +190,7 @@ export class TownScreen {
     const hint = pressureHint(def, state, g);
     return el(
       "div",
-      { class: "good-row", title: goodPriceTitle(def, state, g) },
+      { class: "good-row" },
       el(
         "div",
         { class: "good-name" },
@@ -235,7 +236,7 @@ export class TownScreen {
       el("div", { class: "tabs sub" }, ...this.stockFilterButtons(stock)),
       cards.length
         ? el("div", { class: "cards" }, ...cards)
-        : el("div", { class: "dim" }, stock.length ? "No parts of this kind in stock." : "No parts in stock right now."),
+        : el("div", { class: "dim" }, stock.length ? "No parts of this kind in stock." : "No parts in stock."),
     );
   }
 
@@ -348,7 +349,7 @@ export class TownScreen {
         "div",
         { class: "note" },
         createIcon("money"),
-        `Your truck trades in for ${tradeIn}. Parts and goods move over. Parts that do not fit go to storage.`,
+        `Your truck trades in for ${tradeIn}.`,
       ),
       el("div", { class: "cards trucks" }, ...cards),
     );
@@ -365,7 +366,7 @@ export class TownScreen {
       el("h3", {}, "Contract board"),
       board.length
         ? el("div", { class: "jobs" }, ...board.map((c) => contractRow(w, c, accept(c))))
-        : el("div", { class: "dim" }, "No offers right now."),
+        : el("div", { class: "dim" }, "No offers."),
       el("h3", {}, `Your contracts ${w.player.contracts.length} / ${CONTRACTS.maxActive}`),
       w.player.contracts.length
         ? el("div", { class: "jobs" }, ...w.player.contracts.map((c) => contractRow(w, c, this.deliverCell(w, shopId, c))))
@@ -374,7 +375,7 @@ export class TownScreen {
   }
 
   private deliverCell(w: World, shopId: string, c: Contract): HTMLElement {
-    if (c.kind === "bounty") return el("span", { class: "dim" }, "Pays when you knock out or destroy the target");
+    if (c.kind === "bounty") return el("span", { class: "dim" }, "Pays on defeat");
     const destination = c.kind === "haul" ? c.to : c.shop;
     if (destination !== shopId) return el("span", { class: "dim" }, `Deliver at ${siteName(destination)}`);
     if (!canDeliver(w, c)) return el("span", { class: "dim" }, c.kind === "haul" ? "Not enough cargo yet" : "Needs the part");
@@ -433,7 +434,7 @@ function headerChips(w: World): HTMLElement {
     el("span", { class: "chip", title: "Free cargo cells" }, createIcon("cells"), `${freeCells(me)} free`),
     el(
       "span",
-      { class: `chip${mass > rated ? " bad" : ""}`, title: "Mass against rated load. Over it, the truck slows and turns wider." },
+      { class: `chip${mass > rated ? " bad" : ""}`, title: "Mass against rated load" },
       createIcon("load"),
       `${kg(mass)} / ${kg(rated)}`,
     ),
@@ -483,11 +484,6 @@ function pressureHint(def: ShopDef, state: ShopState, good: string): { text: str
   return null;
 }
 
-function goodPriceTitle(def: ShopDef, state: ShopState, good: string): string {
-  const factor = def.makes.includes(good) ? "Made here" : "Priced by the distance to the nearest maker";
-  const pressure = Math.round((state.pressure[good] ?? 0) * 100);
-  return `Base value ${GOODS[good].value}. ${factor}. Local pressure ${pressure >= 0 ? "+" : ""}${pressure}%.`;
-}
 
 // True when the player already holds what a haul or fetch contract needs to hand in.
 function canDeliver(w: World, c: Contract): boolean {
@@ -625,7 +621,7 @@ export class TruckTradeScreen {
     const sell = truckGoodPrice(w, g, "sell");
     return el(
       "div",
-      { class: "good-row", title: `Base value ${GOODS[g].value}. Trucks trade at base value.` },
+      { class: "good-row" },
       el(
         "div",
         { class: "good-name" },
@@ -658,11 +654,11 @@ export class TruckTradeScreen {
       return partCard({ part: p, ...this.compare.options(me, kind, () => this.render()), action, onHover: this.hintMounts(kind) });
     };
     const theirs = spareParts(npc).map((p) => {
-      const price = partTradePrice(w, me, p, "buy");
+      const price = truckPartPrice(w, p, "buy");
       return card(p, this.button(`Buy ${price}`, (x) => buyTruckPart(x, npc.id, p.id), w.player.money < price));
     });
     const mine = spareParts(me).map((p) => {
-      const price = partTradePrice(w, me, p, "sell");
+      const price = truckPartPrice(w, p, "sell");
       return card(p, this.button(`Sell ${price}`, (x) => sellTruckPart(x, npc.id, p.id), npc.resources!.money < price));
     });
     return el(

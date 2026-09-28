@@ -164,10 +164,11 @@ function takeSockets(name: ModelName, root: THREE.Object3D): Map<string, THREE.V
   return out;
 }
 
-// Mounts carry the head. Receivers carry the barrel and the extra.
+// Mounts carry the head. Receivers carry the barrel and the extra. Barrels mark the tip rounds leave from.
 function checkWeaponSockets(): void {
   for (const pool of Object.values(WEAPON_POOLS)) {
     for (const m of pool.mount) socket(m, 'head');
+    for (const b of pool.barrel) socket(b, 'tip');
     for (const r of pool.receiver) {
       socket(r, 'muzzle');
       socket(r, 'extra');

@@ -8,7 +8,8 @@ import { startKit } from "../data/start";
 import { playerVehicle } from "../sim/damage";
 import type { GameEvent } from "../sim/types";
 import { endTurn, newWorld, setMoveOrder } from "../sim/world";
-import { canTravel, overshoots, Travel } from "./travel";
+import { addRopeFrames, canTravel, overshoots, Travel } from "./travel";
+import { addState } from "../sim/states";
 
 function makeSafeWorld() {
   const world = newWorld(1337, startKit("standard"));
@@ -77,6 +78,34 @@ describe("turn advancement", () => {
     travel.pause();
     expect(travel.isFast(1000)).toBe(false);
     expect(travel.shouldAdvance(1000)).toBe(false);
+  });
+});
+
+describe("turns that run on their own", () => {
+  const space = (repeat = false) => ({ repeat, preventDefault: () => {} }) as KeyboardEvent;
+
+  it("Space stops them, and the next Space restarts them", () => {
+    const world = makeSafeWorld();
+    world.player.state = "knockedOut";
+    const travel = new Travel(250);
+    expect(travel.autoAllowed(world)).toBe(true);
+    travel.handleSpace(space(), false, world);
+    expect(travel.autoAllowed(world)).toBe(false);
+    travel.handleSpace(space(true), false, world);
+    expect(travel.autoAllowed(world)).toBe(false);
+    travel.handleSpace(space(), false, world);
+    expect(travel.autoAllowed(world)).toBe(true);
+  });
+
+  it("a stop ends with the stranded spell", () => {
+    const world = makeSafeWorld();
+    world.player.state = "knockedOut";
+    const travel = new Travel(250);
+    travel.handleSpace(space(), false, world);
+    world.player.state = "active";
+    expect(travel.autoAllowed(world)).toBe(false);
+    world.player.state = "knockedOut";
+    expect(travel.autoAllowed(world)).toBe(true);
   });
 });
 
@@ -216,5 +245,24 @@ describe("automatic travel safety", () => {
     };
     world.events = [events[kind]];
     expect(canTravel(world)).toBe(false);
+  });
+});
+
+describe("rope frames", () => {
+  it("frames a truck let off the rope at the end of the turn along its trail", () => {
+    const before = makeSafeWorld();
+    const me = playerVehicle(before);
+    const tower = { ...me, id: "tower", pos: { x: me.pos.x + 3, y: me.pos.y } };
+    before.vehicles.push(tower);
+    addState(before, "tow", tower.id, me.id, { kind: "tow", site: "bowl", fee: 0, waived: 0, hitched: true });
+    const after = structuredClone(before);
+    after.states = [];
+    playerVehicle(after).trail = [{ ...me.pos, heading: 0 }, { x: me.pos.x + 1, y: me.pos.y, heading: 0 }];
+    const frames: Parameters<typeof addRopeFrames>[2] = {};
+
+    addRopeFrames(before, after, frames);
+
+    expect(frames[me.id]?.length).toBeGreaterThan(0);
+    expect(frames[tower.id]).toBeUndefined();
   });
 });

@@ -50,6 +50,7 @@ import { baselinePart, conditionMeter, createIcon, type IconName, diffStats, foo
 import { vehicleMass } from "../sim/mass";
 import { fireSpans, reachedSides, sideBlockers, SIDES, type FireSpan } from "../sim/armor";
 import { fuelLiters, hp, kg, liters } from "./units";
+import { moneyLabel } from "./hud-readout";
 
 const CELL_PX = 42;
 // Below this the part icons and condition bars stop being readable, so a taller grid scrolls instead.
@@ -187,12 +188,12 @@ export class InventoryView {
               : el(
                   "div",
                   { class: "dim" },
-                  `Park to install or remove parts: ${Math.ceil(RULES.refitTurnsPerPart)} turns each, ${Math.ceil(2 * RULES.refitTurnsPerPart)} to replace. Driving cancels the work. Goods and spares move instantly.`,
+                  "Park to install or remove parts.",
                 ),
           el(
             "div",
             { class: "inv-dump", "data-drop": "dump" },
-            "Drop goods or loose parts here to dump them",
+            "Drop here to dump",
           ),
         ),
         ...(this.truck ? [this.truckEl(w, this.truck)] : []),
@@ -215,12 +216,12 @@ export class InventoryView {
       el(
         "div",
         {},
-        "A part works only when it lies fully on one of its letters. Built-in parts are fixed and can only be repaired. A gun cannot fire across the cab, big guns or cargo boxes. The marks on a gun show its blocked sides.",
+        "A part works only when it lies fully on one of its letters. The marks on a gun show its blocked sides.",
       ),
       el(
         "div",
         {},
-        "Select an item, then click another to swap. Drag to move or swap. R turns the selected part, or the dragged item. Right click also turns it while dragging.",
+        "Drag to move or swap. R or right click turns an item.",
       ),
     );
   }
@@ -267,7 +268,7 @@ export class InventoryView {
     const node = this.itemEl(w, item);
     const left = v.job?.kind === "refit" ? v.job.turnsLeft : 0;
     node.classList.add("refitting");
-    node.title = `Refit: ${left === 1 ? "1 turn" : `${left} turns`} left. Driving cancels it.`;
+    node.title = `Refit: ${left === 1 ? "1 turn" : `${left} turns`} left`;
     return node;
   }
 
@@ -316,7 +317,7 @@ export class InventoryView {
     this.inspection.replaceChildren(
       el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, mounted) : []),
-      el("p", { class: "dim" }, inspectionHint(w, item)),
+      ...(item.kind === "part" && !townAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
       el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
     );
   }
@@ -494,10 +495,7 @@ export class InventoryView {
       };
       const chip = el(
         "div",
-        {
-          class: "inv-chip k-good",
-          title: `${GOODS[good].name}: drag one unit at a time`,
-        },
+        { class: "inv-chip k-good" },
         createIcon(getItemIcon(item)),
         `${GOODS[good].name} x${count}`,
       );
@@ -515,10 +513,7 @@ export class InventoryView {
     return [
       el(
         "button",
-        {
-          title: "Pour into the tank and stores up to their caps",
-          onclick: () => this.run((world) => takeStores(world, stock.id)),
-        },
+        { onclick: () => this.run((world) => takeStores(world, stock.id)) },
         `Take fuel ${fuelLiters(stock.fuel ?? 0)} L, supplies ${(stock.supplies ?? 0).toFixed(1)}`,
       ),
     ];
@@ -555,7 +550,7 @@ export class InventoryView {
       el(
         "div",
         { class: "dim" },
-        "Drag items onto the grid. What you leave stays here.",
+        "Drag items onto the grid.",
       ),
     );
   }
@@ -573,7 +568,7 @@ export class InventoryView {
       { class: "inv-truck inv-target" },
       el("h3", {}, `${target.name}, knocked out`),
       el("div", { class: "truck-shell" }, el("div", { class: "truck-nose", "aria-hidden": "true" }), grid),
-      el("div", { class: "dim" }, "Drag items onto your grid. Goods and spares move at once. An installed part takes a refit to remove."),
+      el("div", { class: "dim" }, "Drag items onto your grid."),
     );
   }
 
@@ -595,7 +590,6 @@ export class InventoryView {
     this.inspection.replaceChildren(
       el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, false) : []),
-      el("p", { class: "dim" }, mounted ? "Drag onto your grid to remove it in a field refit." : "Drag onto your grid to take it."),
     );
   }
 
@@ -835,7 +829,7 @@ export class InventoryScreen {
       el(
         "div",
         { class: "inv-summary" },
-        `Equipment & cargo · ${liters(freeCells(playerVehicle(this.host.world())))} L free · Mass ${kg(vehicleMass(playerVehicle(this.host.world())))} of ${kg(chassisDef(playerVehicle(this.host.world()).chassisId).ratedMass)} rated · Money ${this.host.world().player.money}`,
+        `Equipment & cargo · ${liters(freeCells(playerVehicle(this.host.world())))} L free · Mass ${kg(vehicleMass(playerVehicle(this.host.world())))} of ${kg(chassisDef(playerVehicle(this.host.world()).chassisId).ratedMass)} rated · Money ${moneyLabel(this.host.world().player.money)}`,
       ),
       this.view.render(),
     );
@@ -931,16 +925,8 @@ function itemLabel(it: GridItem): { short: string } {
 function itemTitle(it: GridItem, mounted: boolean): string {
   if (it.kind === "good") return GOODS[it.good].name;
   if (partDef(it.part.defId).kind === "core")
-    return `${partTitle(it.part)}\nBuilt in: cannot be moved, only repaired`;
-  return `${partTitle(it.part)}\n${mounted ? "Mounted and working" : "Spare: not on a matching mount"}`;
-}
-
-// What the inspection panel says under an item's title: how to move it.
-function inspectionHint(w: World, item: GridItem): string {
-  if (item.kind === "good")
-    return "Drag to rearrange cargo. Dropping in the dump area discards it.";
-  if (townAt(w)) return "Garage: drag movable parts onto matching mounts or into storage.";
-  return "Drag onto a mount or off it to start a refit. It runs while the truck stays parked.";
+    return `${partTitle(it.part)}\nBuilt in`;
+  return `${partTitle(it.part)}\n${mounted ? "Mounted" : "Spare"}`;
 }
 
 // Why a Patch button is disabled, or null when the patch can start.

@@ -4,7 +4,7 @@ import type { Cue } from "../data/sounds";
 
 export type Bank = Map<string, AudioBuffer>; // by file name
 
-export const SFX_DIR = "/sfx/";
+export const SFX_DIR = `${import.meta.env.BASE_URL}sfx/`;
 
 export async function loadBank(ctx: BaseAudioContext, sounds: Record<string, Cue>): Promise<Bank> {
   const files = Object.values(sounds).flatMap((c) => c.files);

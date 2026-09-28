@@ -49,6 +49,17 @@ describe("town guards", () => {
     expect(rounds).toHaveLength(RULES.guards.rounds);
   });
 
+  it("leave alone a truck that fires at a raider", () => {
+    const { w, raider } = raiderFiringAt(outside(4));
+    raider.weaponOrders = {};
+    const shooter = addVehicle(w, "traders", "hauler", ["mg"], { x: raider.pos.x - 1.5, y: raider.pos.y });
+    shooter.weaponOrders[mountedParts(shooter, "weapon")[0].id] = { targetId: raider.id, aim: "body" };
+    fireWeapons(w);
+    expect(w.events.some((e) => e.t === "shot" && e.shooter === shooter.id)).toBe(true);
+    fireGuards(w);
+    expect(w.events.some((e) => e.t === "guardShot")).toBe(false);
+  });
+
   it("leave alone vehicles that do not fire, and fights out of range", () => {
     const near = raiderFiringAt(outside(3));
     near.raider.weaponOrders = {};

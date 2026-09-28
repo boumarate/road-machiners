@@ -35,7 +35,7 @@ import { randRange } from './rng';
 import { canReachSalvage, canTakeAny, canTakeFromTruck, siteLootTable } from './salvage';
 import { canUseSite, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { stateOf, statesHeld } from './states';
-import { getMobilityCondition, vehicleStats } from './stats';
+import { isStranded, vehicleStats } from './stats';
 import { canHire, canTakeEscort, declineFactor, inTowReach, strandedAt, towSite, unguardedLeader } from './tow';
 import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
@@ -98,11 +98,14 @@ export function getKnownSite(id: string) {
   return site;
 }
 
-// The share left of the cab or the weakest driving part, whichever is lower. A truck that cannot drive cannot fight
-// on, however sound its cab.
-function getCombatCondition(vehicle: Vehicle): number {
+// The share left of the cab or the average share left over every mounted part, whichever is lower, and 0 for a
+// truck that cannot drive. One damaged wheel barely counts, but a truck broken up all around gives up.
+function getCombatCondition(world: World, vehicle: Vehicle): number {
+  if (isStranded(world, vehicle)) return 0;
   const cab = corePart(vehicle, 'cab');
-  return Math.min(cab.hp / maxHp(cab), getMobilityCondition(vehicle));
+  const parts = mountedParts(vehicle);
+  const overall = parts.reduce((sum, part) => sum + part.hp / maxHp(part), 0) / parts.length;
+  return Math.min(cab.hp / maxHp(cab), overall);
 }
 
 // Damage times rounds summed over working guns.
@@ -145,7 +148,7 @@ function isManageable(world: World, vehicle: Vehicle, danger: number): boolean {
 // already fleeing.
 export function isWeak(world: World, vehicle: Vehicle): boolean {
   const threshold = topGoal(vehicle)?.kind === 'flee' ? NPC_BEHAVIOR.recoverCondition : NPC_BEHAVIOR.fleeCondition;
-  return getCombatCondition(vehicle) <= threshold || getResources(world, vehicle).health / RULES.maxHealth <= threshold;
+  return getCombatCondition(world, vehicle) <= threshold || getResources(world, vehicle).health / RULES.maxHealth <= threshold;
 }
 
 // Hostile vehicles in sight, nearest first.
@@ -330,10 +333,10 @@ export function busyWithFight(vehicle: Vehicle, otherId: string): boolean {
 
 // ---- Robbery.
 
-// A robber can rob a truck it sees, that is not hostile yet, that is not busy fighting another, and that carries
-// loot. Cheap checks run before the sight line.
+// A robber can rob a truck it sees, that is not hostile yet, that is not busy fighting another, that is not
+// knocked out, since that one is looted instead, and that carries loot. Cheap checks run before the sight line.
 export function canRob(w: World, robber: Vehicle, target: Vehicle): boolean {
-  if (robber.id === target.id || !hasLoot(target) || busyWithFight(target, robber.id)) return false;
+  if (robber.id === target.id || !hasLoot(target) || busyWithFight(target, robber.id) || isKnockedOut(target)) return false;
   if (isHostile(w, robber, target)) return false;
   return canVehicleSee(w, robber, target.pos);
 }
@@ -408,8 +411,9 @@ function canLootSubject(world: World, vehicle: Vehicle, decision: DecisionId, su
   return truck !== undefined && seesDowned(world, vehicle, truck);
 }
 
+// Only raiders are hostile to trucks with loot, so only they have prey to hunt.
 function canRaid(_world: World, vehicle: Vehicle): boolean {
-  return huntingGroundsAway(vehicle).length > 0;
+  return vehicle.faction === 'raiders' && huntingGroundsAway(vehicle).length > 0;
 }
 
 function canPatrol(_world: World, vehicle: Vehicle): boolean {
@@ -465,6 +469,8 @@ const AVAILABLE: Record<OptionName, Availability> = {
   spare: always,
   finish: always,
   comply: always,
+  demand: always,
+  attack: always,
   hire: canHireSubject,
   take: canTakeSubject,
   decline: always,
@@ -619,8 +625,8 @@ function towFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject
 }
 
 // A driver below the recover condition rarely closes in on a contact. It needs repairs first.
-function investigateFactor(_world: World, vehicle: Vehicle): number {
-  return getCombatCondition(vehicle) <= NPC_BEHAVIOR.recoverCondition ? NPC_BEHAVIOR.crippledInvestigate : 1;
+function investigateFactor(world: World, vehicle: Vehicle): number {
+  return getCombatCondition(world, vehicle) <= NPC_BEHAVIOR.recoverCondition ? NPC_BEHAVIOR.crippledInvestigate : 1;
 }
 
 function scavengeFactor(world: World, vehicle: Vehicle): number {
@@ -636,6 +642,8 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   rob: robFactor,
   ram: ramFactor,
   tow: towFactor,
+  demand: neutral,
+  attack: neutral,
   resume: neutral,
   new: neutral,
   trade: neutral,

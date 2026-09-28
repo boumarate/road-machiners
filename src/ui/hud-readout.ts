@@ -6,7 +6,8 @@ import { maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
 import { maxHealthOf } from "../sim/health";
 import { corePart, mountedParts, mountedItems, itemSize } from "../sim/grid";
-import { isStranded, vehicleStats } from "../sim/stats";
+import { hasWorkingEngine, isStranded, isWorking, vehicleStats } from "../sim/stats";
+import { spareParts } from "../sim/inventory";
 import { towData } from "../sim/states";
 import { playerTow } from "../sim/tow";
 import { heatAt } from "../sim/sun";
@@ -149,7 +150,7 @@ export function moneyLabel(money: number): string {
 export type RescueReadout =
   | { kind: "knockedOut" }
   | { kind: "towed"; tower: string; town: string; fee: number }
-  | { kind: "stranded"; beacon: boolean };
+  | { kind: "stranded"; beacon: boolean; reason: string };
 
 export function getRescueReadout(w: World): RescueReadout | null {
   const p = w.player;
@@ -161,8 +162,20 @@ export function getRescueReadout(w: World): RescueReadout | null {
     return { kind: "towed", tower: vehicleName(w, state.holder), town: townName(data.site), fee: data.fee };
   }
   if (p.beacon || isStranded(w, playerVehicle(w)))
-    return { kind: "stranded", beacon: p.beacon };
+    return { kind: "stranded", beacon: p.beacon, reason: strandedReason(w) };
   return null;
+}
+
+// What stops the truck, and what the player can do about it.
+function strandedReason(w: World): string {
+  const me = playerVehicle(w);
+  if (!hasWorkingEngine(me)) {
+    const spare = spareParts(me).some((part) => partDef(part.defId).kind === "engine");
+    return spare ? "No working engine. Install the spare [I]." : "No working engine.";
+  }
+  if (!isWorking(corePart(me, "transmission"))) return "The transmission is broken.";
+  if (w.player.fuel <= 0) return "Out of fuel.";
+  return "";
 }
 
 function townName(id: string): string {

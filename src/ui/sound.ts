@@ -38,6 +38,9 @@ export class SoundSettings {
       el("div", { class: "row" }, el("button", { onclick: () => (this.body.hidden = !this.body.hidden) }, "Sound"), this.muteButton),
       this.body,
     );
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "Escape") this.body.hidden = true;
+    });
     this.apply();
   }
 

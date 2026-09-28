@@ -1,7 +1,6 @@
-// A lost fight knocks the player out: the truck is stripped into a stock that anyone can loot,
-// and the driver wakes once no foe is watching. Health at 0 ends the run.
-// A lost fight knocks an NPC out too. Its truck keeps every item, and trucks parked beside it strip it. It wakes
-// once the trucks that attacked it look away, then retreats home. Nobody is its foe until it refits there.
+// A lost fight knocks a driver out, the player or an NPC alike. The truck keeps every item, trucks parked beside
+// it strip it, and nobody is its foe while it lies out. It wakes once the trucks that fought it look away. Health
+// at 0 ends the player's run. A woken NPC retreats home, and nobody is its foe until it refits there.
 
 import { PERK_NUMBERS } from "../data/skills";
 import { NPC_BEHAVIOR, NPCS } from "../data/npcs";
@@ -9,11 +8,10 @@ import { chassisDef } from "../data/chassis";
 import { RULES } from "../data/rules";
 import { isJunk, maxHp, restorePart } from "./wear";
 import { playerVehicle } from "./damage";
-import { isFoe, isHostile } from "./combat";
+import { isHostile } from "./combat";
 import { corePart, mountedParts } from "./grid";
 import { cancelJob } from "./jobs";
 import { hasPerk, practice } from "./progress";
-import { createKnockoutSalvage } from "./salvage";
 import { addState, endState, stateOf } from "./states";
 import { makeVehicle } from "./factory";
 import { generateNpcLoadout } from "./npc-loadout";
@@ -22,6 +20,7 @@ import { chance } from "./rng";
 import { sitePads, type Site } from "./sites";
 import { isFree } from "./spawn";
 import { npcHomeSite, towOf } from "./tow";
+import { lootRobbed } from "./npc-activities";
 import type { Vehicle, World } from "./types";
 import { dist, type Vec } from "./vec";
 import { canVehicleSee, grayRadius } from "./vision";
@@ -37,21 +36,19 @@ export function checkKnockout(world: World): void {
   const p = world.player;
   const me = playerVehicle(world);
   if (p.state !== "active" || corePart(me, "cab").hp > 0) return;
-  // Only a knockout with a hostile truck in sight teaches toughness, judged before the truck is stripped. A cab
-  // broken on purpose next to a foe that ignores a stripped truck does not.
-  if (hostileWatches(world, me)) practice(world, "knockout", 1, null, "driver");
-  createKnockoutSalvage(world, me);
+  // Only a knockout with a hostile truck in sight teaches toughness. A cab broken on purpose does not.
+  const watchers = world.vehicles.filter((v) => isHostile(world, v, me) && canVehicleSee(world, v, me.pos));
+  if (watchers.length > 0) practice(world, "knockout", 1, null, "driver");
+  me.defeat = { phase: "out", turns: 0, unseen: 0, foes: withLastHitter(world, me, watchers.map((v) => v.id)) };
   p.state = "knockedOut";
   p.knockoutTurns = 0;
   p.knockouts++;
-  // The driver is out, so the truck brakes to a stop instead of coasting on.
-  me.order = { kind: "brake" };
-  me.weaponOrders = {};
+  stopKnockedOut(world, me);
   me.trail = [];
-  cancelJob(world, me);
   // Whoever fought the player got what the feud was for.
   for (const s of world.states.filter((x) => x.kind === "feud" && x.other === me.id))
     endState(world, s, "fulfilled");
+  sendRaidersToLoot(world, me);
   settleRevenge(world, me);
   world.events.push({ t: "knockout" });
 }
@@ -62,24 +59,18 @@ function knockoutLimit(world: World): number {
   return Math.ceil(RULES.knockoutMaxTurns * quick);
 }
 
-// A foe counts even when it ignores the stripped truck, so the driver lies still until the looters leave.
+// The trucks that fought the player keep the driver down while they watch, so a robber strips the truck in peace.
 export function advanceKnockout(world: World): void {
   const p = world.player;
   if (p.state !== "knockedOut") return;
   p.knockoutTurns++;
   const me = playerVehicle(world);
-  if (foeWatches(world, me) && p.knockoutTurns < knockoutLimit(world)) return;
+  if (!me.defeat) throw new Error("A knocked-out player truck has no defeat");
+  if (attackerWatches(world, me, me.defeat.foes) && p.knockoutTurns < knockoutLimit(world)) return;
   patchBrokenCore(me);
+  delete me.defeat;
   p.state = "active";
   world.events.push({ t: "wake" });
-}
-
-function foeWatches(world: World, me: Vehicle): boolean {
-  return world.vehicles.some((v) => isFoe(world, v, me) && canVehicleSee(world, v, me.pos));
-}
-
-function hostileWatches(world: World, me: Vehicle): boolean {
-  return world.vehicles.some((v) => isHostile(world, v, me) && canVehicleSee(world, v, me.pos));
 }
 
 // Other junk core parts stay broken. A junk cab cannot wake, so restorePart stops the game with the reason.
@@ -90,34 +81,55 @@ export function patchBrokenCore(me: Vehicle): void {
     restorePart(part, Math.max(1, Math.round(maxHp(part) * RULES.defeatPatch)));
 }
 
-// The NPC lost a fight and has not refitted at home yet.
+// The truck lost a fight: its driver lies out, or an NPC has not refitted at home yet.
 export function isDefeated(v: Vehicle): boolean {
   return v.defeat !== undefined;
 }
 
-// The NPC lies knocked out, so trucks beside it can strip it.
+// The driver lies knocked out, so trucks beside it can strip it.
 export function isKnockedOut(v: Vehicle): boolean {
   return v.defeat?.phase === "out";
 }
 
-// The truck brakes to a stop and every gun aimed at it drops its order, so finishing it off takes a new manual order.
 export function knockOutNpc(world: World, v: Vehicle): void {
   v.defeat = { phase: "out", turns: 0, unseen: 0, foes: foesOf(world, v) };
-  v.order = { kind: "brake" };
-  v.weaponOrders = {};
-  cancelJob(world, v);
-  for (const other of world.vehicles) dropOrdersAt(other, v.id);
+  stopKnockedOut(world, v);
   world.events.push({ t: "npcKnockout", vehicle: v.id, by: v.lastHitBy ?? "unknown" });
   if (v.lastHitBy === world.player.vehicleId && chance(world, NPC_BEHAVIOR.revengeChance))
     addState(world, "revenge", v.id, world.player.vehicleId, { kind: "none" });
 }
 
+// The driver is out, so the truck brakes to a stop instead of coasting on. Every gun aimed at it drops its order,
+// so finishing it off takes a new manual order.
+function stopKnockedOut(world: World, v: Vehicle): void {
+  v.order = { kind: "brake" };
+  v.weaponOrders = {};
+  cancelJob(world, v);
+  for (const other of world.vehicles) dropOrdersAt(other, v.id);
+}
+
 // The trucks that attacked the NPC, and the one that dealt the last blow.
 function foesOf(world: World, v: Vehicle): string[] {
   if (!v.brain) throw new Error(`${v.id} has no NPC brain to knock out`);
-  const foes = new Set(Object.keys(v.brain.attackers));
+  return withLastHitter(world, v, Object.keys(v.brain.attackers));
+}
+
+// The given foes and the truck that dealt the last blow, while it is still in the world.
+function withLastHitter(world: World, v: Vehicle, ids: string[]): string[] {
+  const foes = new Set(ids);
   if (v.lastHitBy && world.vehicles.some((x) => x.id === v.lastHitBy)) foes.add(v.lastHitBy);
   return [...foes];
+}
+
+// A raider that fought the player loots the truck, as a robber does. A won robbery already sent its robber.
+function sendRaidersToLoot(world: World, me: Vehicle): void {
+  const raiders = world.vehicles.filter((v) => v.brain && v.faction === "raiders" && me.defeat!.foes.includes(v.id));
+  for (const raider of raiders.filter((v) => !isLooting(v, me.id))) lootRobbed(world, raider.id, me.id);
+}
+
+function isLooting(v: Vehicle, targetId: string): boolean {
+  const top = v.brain!.goals.at(-1);
+  return top?.kind === "loot" && top.targetId === targetId;
 }
 
 // The truck that knocked the player out settles any grudge it held.
@@ -131,8 +143,9 @@ function dropOrdersAt(shooter: Vehicle, targetId: string): void {
     if (order.targetId === targetId) delete shooter.weaponOrders[weaponId];
 }
 
+// The player's knockout runs in advanceKnockout.
 export function advanceNpcKnockouts(world: World): void {
-  for (const v of world.vehicles) {
+  for (const v of world.vehicles.filter((x) => x.id !== world.player.vehicleId)) {
     if (v.defeat?.phase === "out") advanceNpcKnockout(world, v);
     else if (v.defeat?.phase === "retreat") advanceRetreat(world, v);
   }

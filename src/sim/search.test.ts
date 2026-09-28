@@ -1,6 +1,5 @@
 import { NPCS } from '../data/npcs';
 import { describe, expect, it } from 'vitest';
-import { knockoutStockId } from './salvage';
 import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
 import { RULES } from '../data/rules';
@@ -249,7 +248,7 @@ describe('careful strip perk', () => {
     expect(mountFromStock('weapon-stock', true)).toBe(10);
   });
 
-  it('leaves a part from the player own knockout pile as it is', () => {
-    expect(mountFromStock(knockoutStockId('v1', 5), true, true)).toBe(10);
+  it('leaves a part from a pile the player dumped as it is', () => {
+    expect(mountFromStock('dump-v1-5', true, true)).toBe(10);
   });
 });

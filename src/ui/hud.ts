@@ -141,7 +141,7 @@ export class Hud {
   private rescue = panel("rescue");
   // Shows only while a pan has left the truck.
   private recenter = panel("recenter");
-  private cameraButton = el("button", { onclick: () => this.toggleCameraMode(), title: "Switch between a centered camera and one that looks ahead of the truck" });
+  private cameraButton = el("button", { onclick: () => this.toggleCameraMode(), title: "Camera mode" });
   cameraMode: CameraMode = "auto";
   private toastTimer: number | null = null;
   private lines: { text: string; cls: string }[] = [];
@@ -156,7 +156,7 @@ export class Hud {
     this.toastBox.style.display = "none";
     this.rescue.style.display = "none";
     this.recenter.style.display = "none";
-    this.recenter.append(el("button", { onclick: () => actions.recenter(), title: "Center the camera on your truck" }, "Center on truck (F)"));
+    this.recenter.append(el("button", { onclick: () => actions.recenter() }, "Center on truck (F)"));
     panel("camera-mode", topRight()).append(this.cameraButton);
     this.showCameraMode();
     window.addEventListener("keydown", (e) => {
@@ -164,7 +164,6 @@ export class Hud {
     });
     this.log.replaceChildren(
       el("h3", {}, "Log"),
-      el("div", { class: "dim" }, "Drive out. Watch for raiders."),
     );
     this.log.setAttribute("aria-label", "Event log");
     const guide = el(
@@ -173,12 +172,15 @@ export class Hud {
       el("summary", { title: "Driving and combat controls" }, "?"),
     );
     this.help.append(guide);
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "Escape") guide.removeAttribute("open");
+    });
     guide.append(
       el("div", {}, "Click the ground: drive there by road. Shift-click: stop there."),
       el("div", {}, "Space: drive on or pause. Hold Space: fast-forward. Click your truck: brake."),
-      el("div", {}, "R: manual mode. Drive straight at the point, through anything. Space plays one turn."),
+      el("div", {}, "R: manual driving, straight at the point."),
       el("div", {}, "Click a town or site: stop at its pad. E on a pad: trade, repair or loot."),
-      el("div", {}, "T: radio the truck under the cursor. Ask drivers the way. 1-9: reply. H: honk."),
+      el("div", {}, "T: radio the truck under the cursor. 1-9: reply. H: honk."),
       el("div", {}, "Click a truck: target it. 1-4: pick a weapon. 0: all. Q: auto fire. X: show weapons."),
       el("div", {}, "P: auto patch. C: character. I: inventory. Esc: close."),
       el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
@@ -232,7 +234,7 @@ export class Hud {
       el(
         "span",
         { class: "job-label" },
-        `${label} · ${job.turnsLeft} turns left`,
+        `${label} · ${job.turnsLeft} ${job.turnsLeft === 1 ? 'turn' : 'turns'} left`,
       ),
       el(
         "span",
@@ -277,21 +279,14 @@ export class Hud {
           class: on ? "on" : "",
           "aria-pressed": String(on),
           onclick: () => this.actions.setBeacon(!on),
-          title: "Call for a tow by radio. Raiders hear it too.",
+          title: "Call for a tow by radio.",
         },
         on ? "Beacon on" : "Beacon off",
       );
     const buttons = (...children: HTMLElement[]) =>
       el("div", { class: "rescue-buttons" }, ...children);
     if (r.kind === "knockedOut")
-      this.rescue.replaceChildren(
-        el("h3", { class: "bad" }, "Knocked out"),
-        el(
-          "div",
-          { class: "dim" },
-          "Looters strip the truck. You come to when they leave.",
-        ),
-      );
+      this.rescue.replaceChildren(el("h3", { class: "bad" }, "Knocked out"));
     if (r.kind === "towed")
       this.rescue.replaceChildren(
         el("h3", {}, "Under tow"),
@@ -299,7 +294,7 @@ export class Hud {
         el(
           "div",
           { class: "dim" },
-          `Fee ${moneyLabel(r.fee)} on arrival. Unhitching is free.`,
+          `Fee ${moneyLabel(r.fee)} on arrival.`,
         ),
         buttons(
           el("button", { onclick: () => this.actions.unhitch() }, "Unhitch"),
@@ -312,8 +307,8 @@ export class Hud {
           "div",
           { class: "dim" },
           r.beacon
-            ? "Calling for a tow. Raiders hear it too."
-            : "The truck can only crawl.",
+            ? "Calling for a tow."
+            : r.reason,
         ),
         buttons(beacon(r.beacon)),
       );
@@ -421,8 +416,7 @@ export class Hud {
             disabled: busy,
             "aria-pressed": String(w.player.autoRepair),
             onclick: () => this.actions.toggleAutoRepair(),
-            title:
-              "Patch the worst part with one unit of parts whenever the truck is parked [P]",
+            title: "Patch damaged parts while parked [P]",
           },
           w.player.autoRepair ? "Auto patch [P]" : "No patch [P]",
         ),
@@ -475,6 +469,11 @@ export class Hud {
         ),
       ),
     );
+  }
+
+  // Sends a horn pressed during the turn that just ended.
+  flushHorn(): void {
+    this.dialogue.flushHorn();
   }
 
   pushEvents(w: World): void {
@@ -531,7 +530,7 @@ export class Hud {
       v.faction === "player" ? "" : hostile ? "hostile" : "neutral";
     this.info.style.display = "";
     this.infoBody.replaceChildren(
-      ...infoHeading(v),
+      ...infoHeading(w, v),
       el(
         "div",
         { class: hostile ? "bad" : "dim" },
@@ -545,20 +544,25 @@ export class Hud {
   }
 }
 
-// The NPC's traits once the player can read them, top goal and the states it holds toward the player. The player's own truck has none.
-// An NPC reads as its driver's name over its template name. The player's truck keeps its own name.
-function infoHeading(v: Vehicle): HTMLElement[] {
+// An NPC reads as its driver's name, what it is doing now, then its template name. The player's truck keeps its own
+// name.
+function infoHeading(w: World, v: Vehicle): HTMLElement[] {
   if (!v.brain) return [el("h3", {}, v.name)];
-  return [el("h3", {}, v.brain.driver), el("div", { class: "dim" }, v.name)];
+  const activity = formatNpcActivity(w, v);
+  return [
+    el("h3", {}, v.brain.driver),
+    ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),
+    el("div", { class: "dim" }, v.name),
+  ];
 }
 
+// The NPC's traits once the player can read them, and the states it holds toward the player. The player's own truck
+// has none.
 function npcLines(w: World, v: Vehicle): HTMLElement[] {
   if (!v.brain) return [];
-  const activity = formatNpcActivity(w, v);
   const traits = formatNpcTraits(w, v);
   return [
     ...(traits ? [el("div", { class: "npc-traits" }, traits)] : []),
-    ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),
     ...formatNpcStates(w, v).map((line) =>
       el("div", { class: "npc-state" }, line),
     ),

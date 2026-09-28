@@ -65,7 +65,7 @@ function spawnBeside(world: World, tpl: NpcTemplate, leader: Vehicle): Vehicle |
     if (!isFree(world, pos, radius, null)) continue;
     return spawnAt(world, tpl, loadout, pos);
   }
-  world.events.push({ t: "info", text: `No free spot to spawn ${tpl.name}` });
+  world.events.push({ t: "info", text: `No free spot to spawn ${tpl.name}`, debug: true });
   return null;
 }
 
@@ -85,7 +85,7 @@ function spawnOne(world: World, tpl: NpcTemplate, pick: () => Site, respawn: boo
     if (!isFree(world, pos, radius, null)) continue;
     return spawnAt(world, tpl, loadout, pos);
   }
-  world.events.push({ t: "info", text: `No free spot to spawn ${tpl.name}` });
+  world.events.push({ t: "info", text: `No free spot to spawn ${tpl.name}`, debug: true });
   return null;
 }
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { STATE_TURNS } from '../data/npcs';
 import { addVehicle, emptyWorld, npcBrain } from '../sim/testkit';
 import { playerVehicle } from '../sim/damage';
 import { corePart } from '../sim/grid';
@@ -17,7 +18,18 @@ it('shows a visible NPC reason without naming its unseen target', () => {
   expect(formatNpcActivity(w, npc)).toBe('flee — avoid a costly fight');
   npc.pos = { x: 58, y: 55 };
   expect(formatNpcActivity(w, npc)).toBeNull();
-  expect(eventText(w, { t: 'activity', vehicle: npc.id, previous: null, activity: 'flee', reason: 'avoid a costly fight' })).toBeNull();
+});
+
+it('shows a seen NPC goal and its reason, and logs goal changes only with the full log flag', () => {
+  const w = emptyWorld();
+  const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 32, y: 30 });
+  npc.brain = { ...npcBrain('scavenger', npc.pos, ['scavenger']), goals: [{ kind: 'flee', targetId: null, destination: null, phase: 'act', reason: 'avoid a costly fight' }] };
+  refreshVision(w);
+  const event: GameEvent = { t: 'activity', vehicle: npc.id, previous: null, activity: 'flee', reason: 'avoid a costly fight' };
+  expect(formatNpcActivity(w, npc)).toBe('flee — avoid a costly fight');
+  expect(eventText(w, event)).toBeNull();
+  w.player.fullLog = true;
+  expect(eventText(w, event)?.text).toContain('flee — avoid a costly fight');
 });
 
 it('shows NPC traits as one line with the read the driver perk', () => {
@@ -40,7 +52,7 @@ it('fails loudly for a vehicle with no NPC brain', () => {
   expect(() => formatNpcTraits(w, playerVehicle(w))).toThrow('has no NPC brain');
 });
 
-it('lists states toward the player with turns left', () => {
+it('lists every state toward the player, with turns left', () => {
   const w = emptyWorld();
   const me = playerVehicle(w);
   const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 32, y: 30 });
@@ -48,8 +60,10 @@ it('lists states toward the player with turns left', () => {
   npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
   addState(w, 'feud', npc.id, me.id, { kind: 'feud', robbery: true }).turnsLeft = 7;
   addState(w, 'turnedDown', npc.id, me.id, { kind: 'none' });
+  addState(w, 'revenge', npc.id, me.id, { kind: 'none' });
+  addState(w, 'truce', npc.id, me.id, { kind: 'none' }).turnsLeft = 3;
   addState(w, 'feud', npc.id, other.id, { kind: 'feud', robbery: false });
-  expect(formatNpcStates(w, npc)).toEqual(['Feud with you, 7 turns', 'You turned down its tow']);
+  expect(formatNpcStates(w, npc)).toEqual(['Feud with you, 7 turns', 'You turned down its tow', `Wants revenge on you, ${STATE_TURNS.revenge} turns`, 'Truce with you, 3 turns']);
 });
 
 it('tells a tow offer from a running tow', () => {
@@ -129,11 +143,11 @@ describe('events far from the player', () => {
 
 it('says a perk can be picked when a skill reaches a perk level', () => {
   const w = emptyWorld();
-  expect(eventText(w, { t: 'skillUp', skill: 'driving', level: 2 })?.text).toBe('Driving reached level 2. Pick a perk on the character screen [C].');
+  expect(eventText(w, { t: 'skillUp', skill: 'driving', level: 2 })?.text).toBe('Driving reached level 2. Perk ready [C].');
   expect(eventText(w, { t: 'skillUp', skill: 'driving', level: 3 })?.text).toBe('Driving reached level 3.');
 });
 
-it('names both trucks in a tow between NPCs', () => {
+it('names both trucks, the destination and the fee in a tow between NPCs', () => {
   const w = emptyWorld();
   const tower = addVehicle(w, 'scavengers', 'scout', [], { x: 32, y: 30 });
   const client = addVehicle(w, 'traders', 'hauler', [], { x: 34, y: 30 });

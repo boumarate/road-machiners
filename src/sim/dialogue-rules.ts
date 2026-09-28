@@ -86,10 +86,10 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   noTrade: (world, npc) => tradeWith(world, npc) === null,
   hasDeal: (_world, _npc, vars) => vars.deal !== undefined,
   noDeal: (_world, _npc, vars) => vars.deal === undefined,
-  // About to attack the player, who carries something worth taking.
+  // About to attack the player, who carries something worth taking, and chose to call first.
   demandsCargo: (world, npc) => {
     const top = topGoal(npc);
-    return top?.kind === 'fight' && top.targetId === world.player.vehicleId && hasCargo(playerVehicle(world));
+    return top?.kind === 'fight' && top.targetId === world.player.vehicleId && top.demands === true && hasCargo(playerVehicle(world));
   },
   atOdds: (world, npc) => isHostile(world, npc, playerVehicle(world)),
   atPeace: (world, npc) => !isHostile(world, npc, playerVehicle(world)),

@@ -20,7 +20,7 @@ import bpy
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit import Kit, Vec3, parse_args  # noqa: E402
-from parts_common_base import ARCH_CLEARANCE, ARCH_SEGMENTS, BASE_COLORS, INSET, SUSPENSION_REST, Grid, check_base, level_sockets  # noqa: E402
+from parts_common_base import ARCH_CLEARANCE, ARCH_SEGMENTS, BASE_COLORS, INSET, SUSPENSION_REST, Grid, check_base, level_sockets, surface_z  # noqa: E402
 from shapes import prism  # noqa: E402
 
 SEED = 303
@@ -155,7 +155,11 @@ def main() -> None:
     upper_hull(kit)
     grille_deck(kit)
     armor_details(kit)
-    level_sockets(kit, G, "row", [ROOF] * G.rows, fronts={0: ROOF_FRONT})
+    # Items on the engine and transmission cells stand on the bay floor under the cutout.
+    bay = {(x, y): BAY_FLOOR for x in (1, 2) for y in (3, 4)} | {(3, 4): BAY_FLOOR}
+    # The outer columns lie on the sloped hull sides below the roof edge.
+    flanks = {(x, y): surface_z(G, x, y) for x in (0, G.cols - 1) for y in range(G.rows)}
+    level_sockets(kit, G, "row", [ROOF] * G.rows, fronts={0: ROOF_FRONT}, cells=bay | flanks)
     level_sockets(kit, G, "floor", [ROOF] * 3 + [BAY_FLOOR] * 2 + [ROOF] * 4)
     check_base(kit, "base_carrier", G)
     kit.export("base_carrier", args, view_size=7.0)

@@ -401,7 +401,7 @@ export const REGION = {
     orchardSpacing: 2,
   },
   // The player starts on the right shoulder of the north trunk road, which leaves Bowl toward Old Orchard.
-  // 83 tiles along the road from Bowl's center is 55 tiles past its wall. Bowl is then out of clear sight
-  // and shows only grey, so a new player asks a passing driver for the way.
-  playerStart: { road: 0, distance: 83, shoulder: 1.5 },
+  // 125 tiles along the road from Bowl's center is about 90 tiles past its wall, halfway to Old Orchard. Bowl
+  // is then past grey vision, so a new player asks a passing driver for the way.
+  playerStart: { road: 0, distance: 125, shoulder: 1.5 },
 };

@@ -40,7 +40,7 @@ function order(me: Vehicle, weaponId: string, targetId: string, aim = 'body') {
 
 describe('combat', () => {
   it('does not fire out of range', () => {
-    const { w, me, buggy, mg } = duel({ x: 45, y: 30 });
+    const { w, me, buggy, mg } = duel({ x: 49, y: 30 }) // 19 tiles: past the gun's 18, still in sight;
     order(me, mg.part.id, buggy.id);
     fireWeapons(w);
     expect(w.events.filter((e) => e.t === 'shot')).toHaveLength(0);
@@ -260,7 +260,7 @@ describe('hit odds', () => {
     const { w, me, buggy, mg } = range(4, broadside, 3);
     me.speed = 2;
     const o = hitOdds(w, me, mg, buggy, 'body');
-    expect(o.spread).toBeCloseTo(o.causes.weapon + o.causes.skill + o.causes.crossing + o.causes.own + o.causes.recoil, 12);
+    expect(o.spread).toBeCloseTo(o.causes.weapon + o.causes.range + o.causes.skill + o.causes.crossing + o.causes.own + o.causes.recoil, 12);
     expect(o.halfAngle).toBeCloseTo(o.width / (2 * o.distance), 12);
   });
 });

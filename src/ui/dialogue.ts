@@ -5,9 +5,9 @@
 import { DEAL_LINES } from '../data/dialogue';
 import { REGION } from '../data/region';
 import { FACTION_COLORS } from '../render/palette';
-import { vehicleById } from '../sim/damage';
+import { playerVehicle, vehicleById } from '../sim/damage';
 import { callVehicle, chooseOption, currentOptions, hangUp, honk } from '../sim/dialogue';
-import type { CallVar, CallVars, World } from '../sim/types';
+import type { CallVar, CallVars, GameEvent, World } from '../sim/types';
 import { playerSees } from '../sim/vision';
 import { playerCanAct } from '../sim/world';
 import { el, panel } from './dom';
@@ -86,16 +86,59 @@ export type DialogueHost = {
   talk(next: World): void; // apply a dialogue command and log its lines
   hovered(): string | null; // the vehicle under the cursor
   busy(): boolean; // a turn plays
-  honked(): void; // play the horns of the honk just applied
+  commit(next: World): void; // take a honked world without pausing travel
+  log(next: World): void; // log the events of a command
+  playHorn(vehicleId: string, delayMs: number): void; // sound one truck's horn where it is drawn
 };
+
+const HONK_REPLY_MS = 500; // a driver takes a moment to answer a horn
+
+// The player's horn. It sounds at once, also while a turn plays. A command clears the world's turn events, which a
+// playing turn still shows, so a horn during playback sends its command once the playback ends. The finished turn's
+// events stay after a honk, so travel still sees what stopped the truck. Travel goes on either way.
+class Horn {
+  private queued = false;
+
+  constructor(private readonly host: DialogueHost) {}
+
+  sound(): void {
+    if (!this.host.busy()) return this.send(false);
+    if (this.queued) return;
+    this.queued = true;
+    this.host.playHorn(playerVehicle(this.host.world()).id, 0);
+  }
+
+  // Sends a horn pressed during the turn that just ended. A rescue command run at that end may have put the truck on
+  // a rope, and a towed driver cannot honk.
+  flush(): void {
+    if (this.queued && playerCanAct(this.host.world())) this.send(true);
+    this.queued = false;
+  }
+
+  // The player's horn at once, then each answer a beat later, nearest first. Answers come only from earshot, so
+  // unseen trucks are heard.
+  private send(ownHornPlayed: boolean): void {
+    const before = this.host.world();
+    const next = honk(before);
+    this.host.log(next);
+    this.host.commit({ ...next, events: [...before.events, ...next.events], removed: before.removed });
+    const honks = next.events.filter((e): e is Extract<GameEvent, { t: "honk" }> => e.t === "honk");
+    honks.forEach((e, i) => {
+      if (i > 0 || !ownHornPlayed) this.host.playHorn(e.vehicle, i * HONK_REPLY_MS);
+    });
+  }
+}
+
 
 const KEY_DIGITS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9'];
 
 export class DialoguePanel {
   private readonly root = panel('dialogue');
+  private readonly horn: Horn;
 
   // Keys go through the capture phase, so an open call takes 1 to 9 and Escape before the game sees them.
   constructor(private readonly host: DialogueHost) {
+    this.horn = new Horn(host);
     this.root.style.display = 'none';
     window.addEventListener('keydown', (e) => this.onKey(e), true);
   }
@@ -117,7 +160,8 @@ export class DialoguePanel {
   }
 
   private onKey(e: KeyboardEvent): void {
-    if (this.host.busy() || isTyping()) return;
+    if (isTyping()) return;
+    if (this.host.busy()) return this.onBusyKey(e);
     const handled = this.host.world().player.call ? this.onCallKey(e.code) : this.onFreeKey(e.code);
     if (handled) e.stopImmediatePropagation();
   }
@@ -127,10 +171,19 @@ export class DialoguePanel {
     return code === 'KeyH' && this.honk();
   }
 
+  // While a turn plays, only the horn works.
+  // Sends a horn pressed during the turn that just ended.
+  flushHorn(): void {
+    this.horn.flush();
+  }
+
+  private onBusyKey(e: KeyboardEvent): void {
+    if (e.code === 'KeyH' && this.honk()) e.stopImmediatePropagation();
+  }
+
   private honk(): boolean {
     if (!playerCanAct(this.host.world())) return false;
-    this.host.talk(honk(this.host.world()));
-    this.host.honked();
+    this.horn.sound();
     return true;
   }
 

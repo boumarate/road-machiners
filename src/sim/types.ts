@@ -163,6 +163,8 @@ export type NpcActivity = {
   reason: string;
   purchase?: { good: string; sellTown: string };
   load?: { good: string }; // the good a haul loads free at its source site
+  perceived?: number; // the turn a fight last saw or detected its target
+  demands?: boolean; // a fight on the player radios for the cargo before the first shot
 };
 
 export type NpcBrain = {
@@ -205,13 +207,13 @@ export type Vehicle = {
   resources: DriverResources | null;
   lastHitBy: string | null; // vehicle id or `guard-<site>` of the last damage source, for kill credit
   job: Job | null;
-  defeat?: NpcDefeat; // set on an NPC from its knockout until it refits at home; see src/sim/defeat.ts
+  defeat?: Defeat; // set from a knockout until an NPC refits at home or the player wakes; see src/sim/defeat.ts
 };
 
-// An NPC's defeat. It lies 'out' until the trucks that attacked it look away, then retreats home.
+// A lost fight. The driver lies 'out' until the trucks that attacked it look away. An NPC then retreats home.
 // turns: turns spent out. unseen: turns in a row the retreating truck spent beyond the player's gray vision.
 // foes: the vehicles that attacked it before the knockout.
-export type NpcDefeat = { phase: 'out' | 'retreat'; turns: number; unseen: number; foes: string[] };
+export type Defeat = { phase: 'out' | 'retreat'; turns: number; unseen: number; foes: string[] };
 
 export type Obstacle =
   | { id: string; pos: Vec; r: number; kind: "rock" | "wreck" | "building" | "water" | "site" }
@@ -351,7 +353,7 @@ export type GameEvent =
   | { t: 'honk'; vehicle: string }
   | { t: 'patch'; patcher: string; client: string; outcome: 'started' | 'done' | 'lapsed' }
   | { t: 'plea'; from: string; to: string; plea: Plea; accepted: boolean | null } // null while the player has to answer
-  | { t: 'info'; text: string };
+  | { t: 'info'; text: string; debug?: true }; // a debug line shows only with the full log flag
 
 export type World = {
   seed: number;

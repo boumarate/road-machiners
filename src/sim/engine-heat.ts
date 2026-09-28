@@ -30,7 +30,7 @@ export function advanceEngineHeat(world: World): void {
   practiceHeat(world, me.speed, heat);
 
   if (before < ENGINE_HEAT.warnAt && world.player.engineHeat >= ENGINE_HEAT.warnAt) {
-    world.events.push({ t: 'info', text: 'Engine running hot. Stop in the shade to cool it.' });
+    world.events.push({ t: 'info', text: 'Engine running hot.' });
   }
   if (world.player.engineHeat < 1 || me.speed <= RULES.parkedSpeed) return;
   const engines = mountedParts(me).filter((p) => partDef(p.defId).kind === 'engine' && p.hp > 0);

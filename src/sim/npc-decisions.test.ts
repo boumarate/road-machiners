@@ -3,9 +3,10 @@ import { REGION } from '../data/region';
 import { PERK_NUMBERS } from '../data/skills';
 import { describe, expect, it, onTestFinished } from 'vitest';
 import { TERRAIN } from '../data/terrain';
-import { corePart } from './grid';
+import { corePart, coreParts, mountedParts } from './grid';
+import { maxHp } from './wear';
 import { addGoods } from './inventory';
-import { decide, huntingGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
+import { decide, huntingGrounds, isWeak, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
 import { siteLootTable } from './salvage';
 import { sitePads } from './sites';
 import { noteHurt, thinkNpc, topGoal } from './npc-activities';
@@ -59,6 +60,14 @@ describe('decision weights', () => {
     expect(picked / draws).toBeLessThan(0.018);
   });
 
+  it('offers a raid only to raiders', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const raider = addNpc(w, 'raiders', 'buggy', ['raider'], { x: 60, y: 30 });
+    const merc = addNpc(w, 'mercs', 'merc', ['merc'], { x: 70, y: 30 });
+    expect(optionWeights(w, raider, 'idle', null, null)).toHaveProperty('raid');
+    expect(optionWeights(w, merc, 'idle', null, null)).not.toHaveProperty('raid');
+  });
+
   it('keeps with no roll when keep is the only available option', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const raider = addNpc(w, 'raiders', 'buggy', ['raider'], { x: 60, y: 30 });
@@ -98,6 +107,28 @@ describe('decision weights', () => {
     expect(optionWeights(w, npc, 'hostileSeen', strong.id, vehicleDanger(w, strong)).flee).toBeGreaterThan(calm);
     corePart(npc, 'cab').hp = 1;
     expect(optionWeights(w, npc, 'hostileSeen', weak.id, vehicleDanger(w, weak)).flee).toBeGreaterThan(calm);
+  });
+
+  it('does not count a truck weak for one broken wheel', () => {
+    const w = emptyWorld({ x: 80, y: 80 });
+    const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 });
+    coreParts(npc, 'wheel')[0].hp = 0;
+    expect(isWeak(w, npc)).toBe(false);
+  });
+
+  it('counts a truck weak when it cannot drive', () => {
+    const w = emptyWorld({ x: 80, y: 80 });
+    const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 });
+    corePart(npc, 'transmission').hp = 0;
+    expect(isWeak(w, npc)).toBe(true);
+  });
+
+  it('counts a truck weak when most of it is broken, even with a sound cab', () => {
+    const w = emptyWorld({ x: 80, y: 80 });
+    const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 }, ['mg', 'stockEngine', 'plates']);
+    const cab = corePart(npc, 'cab');
+    for (const part of mountedParts(npc)) if (part !== cab) part.hp = Math.floor(maxHp(part) * 0.2);
+    expect(isWeak(w, npc)).toBe(true);
   });
 
   it('a coward flees from an equal truck more often than a plain scavenger', () => {

@@ -299,10 +299,11 @@ type Memory = {
   visited: Set<string>;
   prices: Record<string, Record<string, { buy: number; sell: number }>>;
   haul: { good: string; sellShop: string } | null;
+  full: Set<string>; // stocks whose leftovers did not fit the truck, skipped until the next sale empties it
 };
 
 function newMemory(): Memory {
-  return { visited: new Set(), prices: {}, haul: null };
+  return { visited: new Set(), prices: {}, haul: null, full: new Set() };
 }
 
 function recordShopVisit(world: World, mem: Memory, shopId: string): void {
@@ -343,8 +344,8 @@ function salvageReachable(stockId: string): boolean {
   }
 }
 
-function nearestStock(world: World): string | null {
-  const ids = world.salvage.filter((s) => hasLoot(s.id, world) && salvageReachable(s.id)).map((s) => s.id);
+function nearestStock(world: World, mem: Memory): string | null {
+  const ids = world.salvage.filter((s) => !mem.full.has(s.id) && hasLoot(s.id, world) && salvageReachable(s.id)).map((s) => s.id);
   if (ids.length === 0) return null;
   const pos = playerVehicle(world).pos;
   const stocks = ids.map((id) => world.salvage.find((s) => s.id === id)!);
@@ -359,12 +360,14 @@ function driveToSalvage(world: World, telemetry: Telemetry, stockId: string): vo
   else driveToPoint(world, telemetry, world.salvage.find((s) => s.id === stockId)!.pos);
 }
 
-function searchStock(world: World, telemetry: Telemetry, stockId: string): void {
+function searchStock(world: World, telemetry: Telemetry, mem: Memory, stockId: string): void {
   driveToSalvage(world, telemetry, stockId);
   while (hasLoot(stockId, world) && freeCells(playerVehicle(world)) > 0) {
     const took = collectSalvage(world, playerVehicle(world), stockId, Math.min(HARNESS.searchRate, freeCells(playerVehicle(world))));
     passTurns(world, telemetry, 1, 0);
-    if (took === 0) return;
+    if (took > 0) continue;
+    mem.full.add(stockId);
+    return;
   }
 }
 
@@ -478,10 +481,10 @@ function runSell(world: World, telemetry: Telemetry, mem: Memory): World {
   return world;
 }
 
-function salvageOnlyAction(world: World): Action {
-  const target = nearestStock(world);
-  if (target && freeCells(playerVehicle(world)) > 0) return { site: null, run: (w, t) => { searchStock(w, t, target); return w; } };
-  return { site: SHOP_IDS[0], run: (w, t, m) => { recordShopVisit(w, m, SHOP_IDS[0]); return sellEverything(w, t); } };
+function salvageOnlyAction(world: World, mem: Memory): Action {
+  const target = nearestStock(world, mem);
+  if (target && freeCells(playerVehicle(world)) > 0) return { site: null, run: (w, t, m) => { searchStock(w, t, m, target); return w; } };
+  return { site: SHOP_IDS[0], run: (w, t, m) => { recordShopVisit(w, m, SHOP_IDS[0]); m.full.clear(); return sellEverything(w, t); } };
 }
 
 // contractsOnly pursues whichever contract it already holds: a haul drives to its drop, a fetch
@@ -658,7 +661,7 @@ function chooseGreedy(world: World, mem: Memory): Action {
   if (bestContractShop(world, mem)) return contractsOnlyAction(world, mem);
   if (bestHaul(mem)) return haulOnlyAction(world, mem);
   if (unvisitedShop(world, mem)) return haulOnlyAction(world, mem);
-  return salvageOnlyAction(world);
+  return salvageOnlyAction(world, mem);
 }
 
 function withMaintenance(action: Action, wishlist: WishlistHit[], day: number): Action {
@@ -808,7 +811,7 @@ function maybeStripSpares(world: World, telemetry: Telemetry): World {
 const POLICIES: Record<PolicyName, (world: World, mem: Memory, wishlist: WishlistHit[], day: number) => Action> = {
   idle: () => ({ site: null, run: (w) => w }),
   haulOnly: (w, m) => haulOnlyAction(w, m),
-  salvageOnly: (w) => salvageOnlyAction(w),
+  salvageOnly: (w, m) => salvageOnlyAction(w, m),
   contractsOnly: (w, m) => contractsOnlyAction(w, m),
   greedy: (w, m, wl, d) => greedyAction(w, m, wl, d),
 };

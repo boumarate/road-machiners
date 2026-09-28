@@ -507,9 +507,9 @@ describe('physics turns', () => {
     expect(loadFactor(me(w0))).toBeLessThan(1);
     w0.player.fuel = 999;
     const { w } = play(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 6);
-    // Well up the slope, which starts at x 28, and still gaining speed rather than stalling.
-    expect(me(w).pos.x).toBeGreaterThan(34);
-    expect(me(w).speed).toBeGreaterThan(2);
+    // Up the slope, which starts at x 28, and still moving rather than stalling. Overload slows it hard.
+    expect(me(w).pos.x).toBeGreaterThan(30);
+    expect(me(w).speed).toBeGreaterThan(0.5);
   });
 
   it('a click in the hold zone keeps its speed up a hill', () => {

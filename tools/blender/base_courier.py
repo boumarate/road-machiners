@@ -19,7 +19,7 @@ import bpy
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit import Kit, parse_args  # noqa: E402
-from parts_common_base import ARCH_CLEARANCE, ARCH_SEGMENTS, BASE_COLORS, INSET, SUSPENSION_REST, Grid, check_base, level_sockets  # noqa: E402
+from parts_common_base import ARCH_CLEARANCE, ARCH_SEGMENTS, BASE_COLORS, INSET, SUSPENSION_REST, Grid, check_base, level_sockets, surface_z  # noqa: E402
 from shapes import prism, strut  # noqa: E402
 
 SEED = 303
@@ -174,7 +174,12 @@ def main() -> None:
     fenders(kit)
     cabin(kit)
     rack(kit)
-    level_sockets(kit, G, "row", [HOOD_TOP] * 3 + [ROOF] * 2 + [G.top, TAIL_TOP], fronts={3: ROOF_FRONT})
+    # The outer hood columns are the front fenders, which stand proud of the hood. The engine cells are the bay.
+    wings = {(x, y): FRONT_FENDER_TOP for x in (0, 3) for y in (0, 1, 2)}
+    bay = {(x, y): FLOOR for x in (1, 2) for y in (1, 2)}
+    # The outer cells beside the cabin and the tail hold the running boards and fender slopes, the tail cells its top.
+    flanks = {(x, y): surface_z(G, x, y) for x in (0, 3) for y in (3, 4, 6)} | {(x, 6): surface_z(G, x, 6) for x in (1, 2)}
+    level_sockets(kit, G, "row", [HOOD_TOP] * 3 + [ROOF] * 2 + [G.top, TAIL_TOP], fronts={3: ROOF_FRONT}, cells=wings | bay | flanks)
     level_sockets(kit, G, "floor", [FLOOR] * 5 + [G.top] * 2)
     check_base(kit, "base_courier", G)
     kit.export("base_courier", args, view_size=5.5)

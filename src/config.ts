@@ -3,7 +3,7 @@
 export const CONFIG = {
   startKit: 'standard',
   seed: 1337,
-  combatShotMs: 320,
+  combatShotMs: 450,
   combatReadMs: 1100,
   saveTurns: 20,
   autoTurnMs: 250,

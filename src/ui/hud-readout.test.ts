@@ -10,6 +10,11 @@ import { addState, towData } from "../sim/states";
 import { getContextAction, getHudReadout, getRescueReadout } from "./hud-readout";
 import { REGION } from '../data/region';
 import { sitePads } from '../sim/sites';
+import { partDef } from "../data/parts";
+import { startKit } from "../data/start";
+import { newWorld } from "../sim/world";
+import { playerVehicle } from "../sim/damage";
+import { stowPart } from "../sim/inventory";
 
 describe('knocked-out truck interaction', () => {
   it('offers looting a knocked-out truck in reach only while stopped', () => {
@@ -140,16 +145,27 @@ describe("rescue readout", () => {
       warning: true,
     });
   });
+  it("tells a stranded player to install a spare engine it carries", () => {
+    const w = newWorld(1337, startKit("standard"));
+    const me = playerVehicle(w);
+    const engine = me.items.find((it) => it.kind === "part" && partDef(it.part.defId).kind === "engine");
+    if (!engine || engine.kind !== "part") throw new Error("Expected an engine");
+    // Without the cargo and the cage, the roof row has room for the engine.
+    me.items = me.items.filter((it) => it !== engine && it.kind === "part" && it.part.defId !== "cage");
+    expect(getRescueReadout(w)).toMatchObject({ kind: "stranded", reason: "No working engine." });
+    expect(stowPart(w, me, engine.part)).toBe(true);
+    expect(getRescueReadout(w)).toMatchObject({ kind: "stranded", reason: "No working engine. Install the spare [I]." });
+  });
   it("follows the player from stranded to tow, and leaves an open offer to the radio", () => {
     const w = emptyWorld();
     expect(getRescueReadout(w)).toBeNull();
     w.player.fuel = 0;
-    expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: false });
+    expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: false, reason: "Out of fuel." });
     w.player.beacon = true;
-    expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: true });
+    expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: true, reason: "Out of fuel." });
     w.player.money = 10;
     const tow = addState(w, "tow", w.vehicles[0].id, w.player.vehicleId, { kind: "tow", site: "bowl", fee: 50, waived: 0, hitched: false });
-    expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: true });
+    expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: true, reason: "Out of fuel." });
     towData(tow).hitched = true;
     expect(getRescueReadout(w)).toMatchObject({ kind: "towed", fee: 50 });
     w.player.state = "knockedOut";

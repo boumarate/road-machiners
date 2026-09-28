@@ -121,6 +121,7 @@ export type HitOdds = {
   spread: number; // radians; standard deviation of a round's angular error, the sum of the causes
   causes: {
     weapon: number;
+    range: number;
     crossing: number;
     own: number;
     recoil: number; // the gun's kick, smaller on a heavier truck
@@ -299,6 +300,7 @@ function spreadCauses(world: World, shooter: Vehicle, mw: MountedWeapon, target:
   const steady = vehicleHasPerk(world, shooter, "steadyAim");
   const base = {
     weapon,
+    range: weapon * RULES.rangeFalloff[mw.def.tier] * (dist(shooter.pos, target.pos) / mw.def.range) ** 2,
     skill: -weapon * skillEffect(world, shooter, "perception", "spread"),
     crossing: (RULES.leadError * Math.abs(rel.x * n.x + rel.y * n.y)) / mw.def.round.speed,
     own: steady ? 0 : RULES.shake * mw.def.shake * mps(Math.abs(shooter.speed)),
@@ -306,7 +308,7 @@ function spreadCauses(world: World, shooter: Vehicle, mw: MountedWeapon, target:
     weather: weatherAt(world, shooter.pos).spread,
   };
   const called = aim !== "body" && vehicleHasPerk(world, shooter, "calledShot");
-  const sum = base.weapon + base.skill + base.crossing + base.own + base.recoil + base.weather;
+  const sum = base.weapon + base.range + base.skill + base.crossing + base.own + base.recoil + base.weather;
   return { ...base, calledShot: called ? -sum * (1 - PERK_NUMBERS.calledShot.spread) : 0 };
 }
 

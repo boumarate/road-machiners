@@ -10,7 +10,7 @@ import { canLootTruck, canReachSalvage, collectSalvage, hasSalvage, pourStores, 
 import { newId } from './factory';
 import { goodsCount, isMounted, type Spot } from './grid';
 import { getLayoutError, refitTurns, requireIdleRefit } from './inventory';
-import { startJob } from './jobs';
+import { inCombat, startJob } from './jobs';
 import { beginSearch } from './search';
 import { practice } from './progress';
 import { locationAt, townAt } from './sites';
@@ -99,7 +99,7 @@ export function emptySalvageNear(world: World): SalvageStock | null {
 // An unsearched stock is in reach: the player can start a search.
 export function canScavenge(world: World): boolean {
   const stock = salvageHere(world);
-  return stock !== null && !world.player.scavenged.includes(stock.id);
+  return stock !== null && !world.player.scavenged.includes(stock.id) && !inCombat(world, playerVehicle(world));
 }
 
 // A searched stock is in reach: the player can take its loot.

@@ -1,3 +1,4 @@
+import type { Tier } from './market';
 // Global rule numbers. Tuned by playing.
 
 export const RULES = {
@@ -38,8 +39,8 @@ export const RULES = {
   tankLeak: 1, // fuel lost per turn with a broken tank
 
   // Global damage multipliers. Tune these to make every fight faster or slower.
-  weaponDamage: 0.75, // every weapon round and splash, guard guns included
-  crashDamage: 0.75, // every crash and ram, into trucks and obstacles alike
+  weaponDamage: 0.5625, // every weapon round and splash, guard guns included
+  crashDamage: 1.125, // every crash and ram, into trucks and obstacles alike
 
   // Town guards. Each town gate has one gun. Every turn it shoots the nearest vehicle within range that fired.
   // Each round hits with a flat chance and enters a random lane of the side facing the gate.
@@ -48,22 +49,30 @@ export const RULES = {
     rounds: 4,
     hitChance: 0.5,
     missOffset: 1.5,
-    round: { damage: 6, pen: 10, blast: false },
+    round: { damage: 6, pen: 8, blast: false },
   },
+
+  // Over the rated mass, top speed and turning scale by (rated / mass) to this power. 500 kg over a 3000 kg rating
+  // leaves about 54% of the speed, and 1000 kg over leaves about 32%.
+  overloadExponent: 4,
 
   // Combat
   // A round that lands on the truck is a crit with this chance. A crit multiplies its damage and pen, so a few
-  // lucky rounds can swing a fight that many small rolls would otherwise average out.
-  critChance: 0.1,
+  // lucky rounds can swing a fight that many small rolls would otherwise average out. A machine gun lands several
+  // rounds a turn, so 0.04 gives it about one crit every few turns of hits, not one every turn.
+  critChance: 0.04,
   critDamage: 2,
   critPen: 2,
   // A round's angular error has a spread in radians: weapon spread × (1 − gunnery), plus
   // leadError × crossing speed / round speed, plus shake × the gun's shake × own speed in m/s,
   // plus the gun's recoil over the truck mass in tonnes.
+  // Range adds weapon spread × rangeFalloff[tier] × (distance / range)², on top of the target looking smaller far
+  // away. At full range a tier 1 gun scatters four times as wide as up close, a tier 3 gun twice as wide.
+  rangeFalloff: { 1: 3, 2: 2, 3: 1 } as Record<Tier, number>,
   leadError: 4.5, // share of the lead angle the gunner misjudges
   shake: 0.002, // radians of spread per m/s of the shooter's own speed
   cellMeters: 0.5, // width of one grid cell, for the size of an aimed part
-  cabHealthShare: 0.5, // share of cab damage the player's character takes as health loss
+  cabHealthShare: 0.25, // share of cab damage the player's character takes as health loss
   minHit: 0.05,
   maxHit: 0.95,
   killXp: 40,

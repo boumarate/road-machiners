@@ -271,6 +271,10 @@ body {
   top: 0;
   right: 0;
 }
+/* Collapsed, the toggle is the only child, so it takes up space and stays on screen. */
+#ui .weapon-toggle[aria-expanded="false"] {
+  position: static;
+}
 .weapons .weapon-slots {
   display: flex;
   gap: 6px;
@@ -1018,13 +1022,20 @@ body {
   background: #cc775555;
 }
 @media (max-width: 1100px) {
+  /* Room between the instruments and the narrower log. */
   #ui .weapons {
-    left: 14px;
-    bottom: 144px;
-    max-width: calc(100vw - 350px);
+    max-width: calc(100vw - 752px);
   }
   #ui .log {
     width: 246px;
+  }
+}
+@media (max-width: 900px) {
+  /* Too narrow beside the instruments, so the weapons sit above them. */
+  #ui .weapons {
+    left: 14px;
+    bottom: 224px;
+    max-width: calc(100vw - 30px);
   }
 }
 @media (max-width: 720px) {
