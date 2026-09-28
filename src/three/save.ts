@@ -24,7 +24,7 @@ export function hasSave(storage: Storage): boolean {
 // 18 adds perks. 19 marks calls that took up a topic. 20 adds part wear. 21 adds player tows of NPCs with waived fees.
 // 22 adds XP targets and player piles. 23 adds shop stock, contracts, upkeep and bounty templates. Older saves
 // do not load.
-const SAVE_VERSION = 23;
+const SAVE_VERSION = 24;
 
 export function loadWorld(storage: Storage): World | null {
   const raw = storage.getItem(SAVE_KEY);

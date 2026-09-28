@@ -112,7 +112,8 @@ describe('driver taste', () => {
   it('sends drivers between the same towns along different ways', () => {
     const routes = Array.from({ length: 10 }, (_, i) => [from, ...route(w, from, to, 0.8, [], { id: `v${100 + i}`, brain })]);
     const ways = routes.filter((r, i) => routes.slice(0, i).every((q) => apart(r, q) > 10));
-    expect(ways.length).toBeGreaterThanOrEqual(3);
+    // Bowl and Nose have two roads of close length, the north trunk and the middle road past Pump Station.
+    expect(ways.length).toBeGreaterThanOrEqual(2);
   });
 
   it('gives one driver the same route every time', () => {
