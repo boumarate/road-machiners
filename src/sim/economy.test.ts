@@ -443,6 +443,19 @@ describe("part value and trade price", () => {
     part.wear = CONDITION.maxWear + 1;
     expect(() => partRepairCost(w, part)).toThrow(/junk/);
   });
+
+  it("loses money on a full rebuild then sale, for every part def, at Social 0", () => {
+    const w = startAtBowl();
+    for (const defId of Object.keys(PARTS)) {
+      const part = makePart(w, defId, 0);
+      part.hp = 0;
+      const cost = partRepairCost(w, part);
+      const saleBefore = partTradePrice(w, w.vehicles[0], part, "sell");
+      part.hp = partDef(defId).hp;
+      const saleAfter = partTradePrice(w, w.vehicles[0], part, "sell");
+      expect(cost).toBeGreaterThan(saleAfter - saleBefore);
+    }
+  });
 });
 
 describe("supplies", () => {

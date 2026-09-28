@@ -2,10 +2,11 @@
 // Parts are spent only when the job finishes. Mechanics shortens the job and cuts parts use.
 
 import { partDef } from '../data/parts';
+import { GOODS } from '../data/goods';
 import { PERK_NUMBERS } from '../data/skills';
 import { skillEffect, vehicleHasPerk } from './progress';
 import { REPAIR } from '../data/wear';
-import { isJunk, maxHp, restorePart } from './wear';
+import { isJunk, maxHp, partValue, restorePart } from './wear';
 import { goodsCount, mountedParts } from './grid';
 import { removeGoods } from './inventory';
 import type { Job, PartInstance, Vehicle, World } from './types';
@@ -45,7 +46,9 @@ export function planPartRepair(part: PartInstance, capShare: number, mult: numbe
   const cap = Math.min(max, max * capShare);
   const gap = Math.max(0, cap - part.hp);
   if (gap === 0) return { turns: 0, parts: 0, hp: 0, needed: 0 };
-  const hpPerPart = mult > 0 ? (max * REPAIR.sharePerPart) / mult : Infinity;
+  // A unit of the parts good restores about its own money value in part value, so a field repair is a fair
+  // trade rather than a discount: cheap parts patch to a large HP share per unit, costly parts to a small one.
+  const hpPerPart = mult > 0 ? (max * GOODS.parts.value) / (partValue(part) * mult) : Infinity;
   const needed = Math.max(1, Math.ceil(gap / hpPerPart - 1e-9)); // float slack keeps an exact 2 from rounding to 3
   const parts = Math.min(needed, maxParts, partsHeld);
   if (parts === 0) return { turns: 0, parts: 0, hp: 0, needed };

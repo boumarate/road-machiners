@@ -89,7 +89,7 @@ describe('field repair job', () => {
     const plan = repairPlan(w, me, cage.id);
     expect(plan.needed).toBeGreaterThan(1);
     expect(plan.parts).toBe(1);
-    expect(plan.hp).toBeCloseTo(partDef(cage.defId).hp * REPAIR.sharePerPart, 5);
+    expect(plan.hp).toBeCloseTo((partDef(cage.defId).hp * GOODS.parts.value) / partValue(cage), 5);
     let next = startRepair(w, cage.id);
     for (let i = 0; i < plan.turns; i++) advanceJobs(next);
     const after = next.vehicles[0];

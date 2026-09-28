@@ -142,9 +142,14 @@ export function restorePart(part: PartInstance, hp: number): void {
   part.hp = next;
 }
 
-// The wear factor applied to a part's base value: 1 at pristine, falling one wearValueLoss per step.
+// The wear factor applied to a part's base value, read off CONDITION.valueFactor. A fractional wear, as
+// from averaging several parts' wear steps, interpolates between the two steps it falls between.
 export function wearFactor(wear: number): number {
-  return 1 - ECONOMY.wearValueLoss * wear;
+  const table = CONDITION.valueFactor;
+  const lo = Math.min(Math.floor(wear), table.length - 1);
+  const hi = Math.min(lo + 1, table.length - 1);
+  const frac = Math.min(1, wear - lo);
+  return table[lo] * (1 - frac) + table[hi] * frac;
 }
 
 // Scrap value from mass alone, the sell floor for any part and the whole value of a junk part.

@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
-import { partDef } from '../data/parts';
+import { PARTS, partDef } from '../data/parts';
+import { GOODS } from '../data/goods';
 import { REPAIR } from '../data/wear';
 import { addVehicle, emptyWorld } from './testkit';
 import { mountedParts } from './grid';
-import { repairPlan } from './repair';
+import { addGoods } from './inventory';
+import { makePart } from './factory';
+import { partValue } from './wear';
+import { planPartRepair, repairPlan } from './repair';
 
 function armorPart(v: ReturnType<typeof emptyWorld>['vehicles'][0]) {
   return mountedParts(v).find((p) => partDef(p.defId).kind === 'armor')!;
@@ -32,6 +36,7 @@ describe('repairPlan', () => {
     const me = w.vehicles[0];
     const cage = armorPart(me);
     cage.hp = 1;
+    addGoods(w, me, 'parts', 20);
     const plan = repairPlan(w, me, cage.id);
     const cap = partDef(cage.defId).hp * REPAIR.fieldCapShare;
     expect(plan.hp).toBeCloseTo(cap - 1, 5);
@@ -39,15 +44,29 @@ describe('repairPlan', () => {
     expect(plan.turns).toBeGreaterThan(0);
   });
 
-  it('costs the same parts for a broken small part and a broken large part', () => {
+  it('spends fewer parts on a cheap small part than on a costly large one', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
     const wheel = mountedParts(me).find((p) => p.defId === 'wheel')!;
     const cab = mountedParts(me).find((p) => p.defId === 'cab')!;
     wheel.hp = 0;
     cab.hp = 0;
-    expect(repairPlan(w, me, wheel.id).parts).toBe(2);
-    expect(repairPlan(w, me, cab.id).parts).toBe(2);
+    addGoods(w, me, 'parts', 20);
+    expect(partDef(cab.defId).value).toBeGreaterThan(partDef(wheel.defId).value);
+    expect(repairPlan(w, me, cab.id).parts).toBeGreaterThan(repairPlan(w, me, wheel.id).parts);
+  });
+
+  it('spends parts good worth about the value it restores, for every part def', () => {
+    const w = emptyWorld();
+    for (const defId of Object.keys(PARTS)) {
+      const part = makePart(w, defId, 0);
+      part.hp = 0;
+      const plan = planPartRepair(part, 1, 1, Infinity, Infinity);
+      const valueRestored = (plan.hp / partDef(defId).hp) * partValue(part);
+      const partsCost = plan.parts * GOODS.parts.value;
+      expect(partsCost).toBeGreaterThanOrEqual(valueRestored);
+      expect(partsCost - valueRestored).toBeLessThan(GOODS.parts.value);
+    }
   });
 
   it('machining shortens the job and cuts parts use for the player', () => {
