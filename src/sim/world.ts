@@ -82,6 +82,7 @@ export function newWorld(seed: number, kit: StartKit): World {
       beacon: false,
       call: null,
       talked: {},
+      socialCallDay: {},
       god: false,
       fullLog: false,
       explored: new Uint8Array(REGION.size * REGION.size),

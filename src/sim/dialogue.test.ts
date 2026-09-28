@@ -422,6 +422,33 @@ describe('call practice', () => {
     addState(w, 'feud', npc.id, w.player.vehicleId, { kind: 'feud', robbery: false });
     expect(practiceOf(callVehicle(w, npc.id), 'call')).toEqual([]);
   });
+
+  it('pays nothing for a second call to the same NPC on the same day', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    const first = callVehicle(w, npc.id);
+    const asked1 = chooseOption(first, optionIndex(first, 'Where is the nearest town?'));
+    const closed1 = chooseOption(asked1, optionIndex(asked1, 'Thanks. Over and out.'));
+    expect(practiceOf(closed1, 'call')).toMatchObject([{ amount: 1, difficulty: null }]);
+
+    const second = callVehicle(closed1, npc.id);
+    const asked2 = chooseOption(second, optionIndex(second, 'Where is the nearest town?'));
+    const closed2 = chooseOption(asked2, optionIndex(asked2, 'Thanks. Over and out.'));
+    expect(practiceOf(closed2, 'call')).toEqual([]);
+  });
+
+  it('pays again for a call to the same NPC on the next day', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    const first = callVehicle(w, npc.id);
+    const asked1 = chooseOption(first, optionIndex(first, 'Where is the nearest town?'));
+    const closed1 = chooseOption(asked1, optionIndex(asked1, 'Thanks. Over and out.'));
+    expect(practiceOf(closed1, 'call')).toMatchObject([{ amount: 1, difficulty: null }]);
+
+    const nextDay = { ...closed1, turn: closed1.turn + 200 };
+    const second = callVehicle(nextDay, npc.id);
+    const asked2 = chooseOption(second, optionIndex(second, 'Where is the nearest town?'));
+    const closed2 = chooseOption(asked2, optionIndex(asked2, 'Thanks. Over and out.'));
+    expect(practiceOf(closed2, 'call')).toMatchObject([{ amount: 1, difficulty: null }]);
+  });
 });
 
 describe('smooth talker perk', () => {

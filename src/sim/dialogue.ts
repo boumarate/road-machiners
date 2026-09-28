@@ -14,6 +14,7 @@ import type { Call, CallVars, PartInstance, Vehicle, World } from './types';
 import { dist } from './vec';
 import { npcTraits } from './npc-decisions';
 import { practice } from './progress';
+import { clockOf } from './sun';
 import { canVehicleSee } from './vision';
 import { playerCommand, requireActivePlayer, update } from './world';
 
@@ -118,11 +119,16 @@ function enterTopic(world: World, npc: Vehicle, call: Call, topic: Topic): void 
   enter(world, call, topic.id, topic.start);
 }
 
-// An ended call that took up a topic practices social. Hanging up at once teaches nothing.
+// An ended call that took up a topic practices social, once per NPC per day. Hanging up at once teaches
+// nothing, and a same-day repeat call to the same NPC farms no more XP.
 function endCall(world: World, call: Call): void {
   world.player.call = null;
   world.events.push({ t: 'call', with: call.with, outcome: 'ended' });
-  if (call.discussed) practice(world, 'call', 1, null);
+  const today = clockOf(world.turn).day;
+  if (call.discussed && world.player.socialCallDay[call.with] !== today) {
+    world.player.socialCallDay[call.with] = today;
+    practice(world, 'call', 1, null);
+  }
 }
 
 function begin(world: World, npc: Vehicle): Call {

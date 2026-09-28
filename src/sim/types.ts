@@ -267,6 +267,7 @@ export type Player = {
   beacon: boolean; // the emergency beacon calls every vehicle within BEACON.range; see src/sim/tow.ts
   call: Call | null;
   talked: Record<string, Partial<Record<TopicId, TopicOutcome>>>; // NPC id to how each topic with it ended
+  socialCallDay: Record<string, number>; // NPC id to the day a call with it last practiced social
   explored: Uint8Array; // fog of war: tile y * world.size + x, 1 once seen
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision
   contacts: Contact[]; // vehicles detected beyond sight; refreshed by refreshVision
