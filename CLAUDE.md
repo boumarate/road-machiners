@@ -23,10 +23,11 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 - `npm run sfx:reimport` rebuilds every sound file from the raw source path stored in its tags, after an import change.
 - `npm run progression:record -- --archetypes trader,scavenger,fighter,mixed --seeds 1,2,3 --turns 2000` plays a bot per archetype and seed and writes each trace to `tmp/progression/`. Runs go in parallel. It is slow: about 75 seconds per 2000 turns per run.
 - `npm run progression:report` replays every trace in `tmp/progression/` with the current XP rules. It prints the days to each skill level, the XP per day per archetype and misses against the targets in `src/data/skills.ts`.
+- `npm run itch` builds the game and uploads it to itch.io with butler. It needs a clean tree and names the upload after the commit. [Publishing](docs/publishing.md) has the one-time setup.
 
 ## Config
 
-`src/config.ts` holds the world seed, start kit, combat playback times, save interval, automatic turn delay, Space hold delay and travel speed multiplier. Change these values to adjust game settings. `.env` holds only `ELEVENLABS_API_KEY` and `SFX_MAX_GENERATIONS` for sound generation. Copy `.env.example` to `.env` before using sound generation.
+`src/config.ts` holds the world seed, start kit, combat playback times, save interval, automatic turn delay, Space hold delay and travel speed multiplier. Change these values to adjust game settings. `.env` holds `ELEVENLABS_API_KEY` and `SFX_MAX_GENERATIONS` for sound generation and `ITCH_TARGET` for publishing. Copy `.env.example` to `.env` first.
 
 ## Architecture
 
