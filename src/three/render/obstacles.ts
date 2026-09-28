@@ -10,8 +10,11 @@ import { PHYSICS } from '../../data/physics';
 import { propPose, propReach, type PropPose } from '../../sim/mapgen';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import { hasSalvage, salvageUnits } from '../../sim/salvage';
-import type { BrokenProp, Obstacle, SalvageStock } from '../../sim/types';
+import type { BrokenProp, Obstacle, SalvageStock, World } from '../../sim/types';
 import { dist } from '../../sim/vec';
+import type { V3, VehicleFrame } from '../../phys/frames';
+import type { TurnResult } from '../../phys/drive';
+import { DebrisSim, FLY_REACH } from './debris';
 import { instancedModel, model, socket } from './models';
 import type { RenderScope } from './scope';
 import { TERRAIN_CHUNK } from './terrain';
@@ -20,18 +23,21 @@ const S = PHYSICS.metersPerTile;
 const CRATES_RADIUS = 1.5; // meters, the reference radius of tools/blender/crates.py
 const PILE_FULL_UNITS = 20; // loot units at which a pile reaches the crates model's full size, about a full pickup bed
 const PILE_MIN_SIZE = 0.5; // share of full size for a small pile, so it still reads at the default zoom
-const DEBRIS_SCATTER = 0.3; // meters a debris piece lies at most from where it stood, so the pieces read as one wreckage
-const DEBRIS_TURN = 0.4; // radians a debris piece turns at most, so the pieces do not line up like the standing prop
 
 export class ObstacleViews {
   private readonly byId = new Map<string, THREE.Object3D>();
   private rockIds: Set<string> | null = null; // map rocks, fixed at the first sync with the power lines
   private readonly piles = new Map<string, { obj: THREE.Object3D; units: number }>();
   private readonly debris = new Map<string, THREE.Object3D>();
+  private readonly flying: DebrisSim;
+  private obstacles: readonly Obstacle[] = [];
 
-  constructor(private readonly scope: RenderScope, private readonly terrain: Terrain) {}
+  constructor(private readonly scope: RenderScope, private readonly terrain: Terrain) {
+    this.flying = new DebrisSim(terrain);
+  }
 
   sync(obstacles: Obstacle[], salvage: SalvageStock[], broken: readonly BrokenProp[]): void {
+    this.obstacles = obstacles;
     this.syncDebris(broken);
     this.syncPiles(salvage);
     if (!this.rockIds) {
@@ -66,7 +72,33 @@ export class ObstacleViews {
     }
   }
 
-  // Each broken prop lies as debris where it stood until it grows back. Debris blocks nothing.
+  // Props break at the step their truck hits them, and once the movement is over every break of the turn has come.
+  // Pieces fly against the trucks at their drawn poses. step: the physics step shown, or null after the movement.
+  // dt: seconds since the last drawn frame.
+  play(anim: { result: TurnResult } | null, step: number | null, world: World, frames: Record<string, VehicleFrame>, dt: number): void {
+    if (anim) this.smash(anim.result, step ?? Infinity, world.broken);
+    this.flying.moveTrucks(world.vehicles.filter((v) => frames[v.id]).map((v) => ({ id: v.id, chassisId: v.chassisId, ...frames[v.id] })));
+    this.flying.step(dt);
+  }
+
+  // Each prop broken this turn bursts into flying pieces at its hit step. The standing view goes.
+  private smash(result: TurnResult, step: number, broken: readonly BrokenProp[]): void {
+    for (const b of result.breaks) {
+      if (b.step > step || this.debris.has(b.prop)) continue;
+      const found = broken.find((p) => p.obstacle.id === b.prop);
+      if (!found) throw new Error(`Prop ${b.prop} broke this turn but is not broken`);
+      const standing = this.byId.get(b.prop);
+      if (standing) {
+        this.scope.remove(standing);
+        disposeTree(standing);
+        this.byId.delete(b.prop);
+      }
+      this.addDebris(found.obstacle, this.flying.burst(found.obstacle, velocityAt(result.frames[b.vehicle], b.step), this.obstacles));
+    }
+  }
+
+  // Each broken prop lies as pieces where they came to rest until it grows back. Pieces block nothing. A prop broken
+  // out of view, or before a load, topples over at once.
   private syncDebris(broken: readonly BrokenProp[]): void {
     const ids = new Set(broken.map((b) => b.obstacle.id));
     for (const [id, obj] of this.debris) {
@@ -75,16 +107,18 @@ export class ObstacleViews {
       disposeTree(obj);
       this.debris.delete(id);
     }
-    for (const { obstacle } of broken) {
-      if (this.debris.has(obstacle.id)) continue;
-      const obj = buildDebris(this.terrain, obstacle);
-      obj.traverse((m) => {
-        m.updateMatrix();
-        m.matrixAutoUpdate = false;
-      });
-      this.scope.add(obj, obstacle.pos, propReach(obstacle) + DEBRIS_SCATTER / S);
-      this.debris.set(obstacle.id, obj);
-    }
+    const fresh = broken.filter(({ obstacle }) => !this.debris.has(obstacle.id));
+    if (fresh.length === 0) return;
+    const sim = new DebrisSim(this.terrain);
+    for (const { obstacle } of fresh) this.addDebris(obstacle, sim.burst(obstacle, null, this.obstacles));
+    sim.settle();
+    sim.free();
+  }
+
+  private addDebris(o: Obstacle, pieces: THREE.Group): void {
+    pieces.matrixAutoUpdate = false;
+    this.scope.add(pieces, o.pos, propReach(o) + FLY_REACH / S);
+    this.debris.set(o.id, pieces);
   }
 
   // A pile is drawn while it holds loot. Its footprint grows with its loot, so its size follows the square root of the units.
@@ -143,6 +177,15 @@ function viewReach(o: Obstacle): number {
   return o.kind === 'water' || o.kind === 'site' ? o.r : propReach(o);
 }
 
+// The truck's velocity in m/s around a physics step of its turn frames.
+function velocityAt(frames: VehicleFrame[] | undefined, step: number): V3 {
+  if (!frames || frames.length < 2) throw new Error(`Break at step ${step} by a truck with no turn frames`);
+  const a = frames[Math.max(0, step - 1)].pos;
+  const b = frames[Math.min(frames.length - 1, step + 1)].pos;
+  const k = PHYSICS.stepsPerSecond / (Math.min(frames.length - 1, step + 1) - Math.max(0, step - 1));
+  return { x: (b.x - a.x) * k, y: (b.y - a.y) * k, z: (b.z - a.z) * k };
+}
+
 function disposeTree(obj: THREE.Object3D): void {
   obj.traverse((o) => {
     if (o instanceof THREE.Mesh) {
@@ -191,45 +234,6 @@ function buildProp(t: Terrain, o: Obstacle): THREE.Object3D {
   if (pose.model === 'building') paintRoof(obj, o.id);
   g.add(obj);
   return g;
-}
-
-// A broken prop's model at its pose, each piece tipped over flat onto the ground, pushed and turned a little.
-function buildDebris(t: Terrain, o: Obstacle): THREE.Object3D {
-  const pose = propPose(o);
-  const g = posed(t, pose);
-  const obj = model(pose.model);
-  obj.updateMatrixWorld(true);
-  const pieces: THREE.Mesh[] = [];
-  obj.traverse((m) => {
-    if (m instanceof THREE.Mesh) pieces.push(m);
-  });
-  pieces.forEach((mesh, i) => g.add(tipPiece(mesh, `${o.id}:${i}`)));
-  return g;
-}
-
-// A copy of one model piece in a pivot at its ground point below its center. The pivot turns a quarter about the
-// model's forward axis, so the piece lies on its side, and rises until the piece's lowest point rests on the ground.
-// The key seeds its side, push and turn.
-function tipPiece(mesh: THREE.Mesh, key: string): THREE.Object3D {
-  const piece = new THREE.Mesh(mesh.geometry, mesh.material);
-  piece.castShadow = mesh.castShadow;
-  piece.receiveShadow = mesh.receiveShadow;
-  mesh.matrixWorld.decompose(piece.position, piece.quaternion, piece.scale);
-  const center = new THREE.Box3().setFromObject(piece).getCenter(new THREE.Vector3());
-  piece.position.x -= center.x;
-  piece.position.z -= center.z;
-  const pivot = new THREE.Group();
-  pivot.add(piece);
-  const side = hashStr(`${key}:side`) < 0.5 ? 1 : -1;
-  pivot.rotation.set((side * Math.PI) / 2, (hashStr(`${key}:turn`) * 2 - 1) * DEBRIS_TURN, 0, 'YXZ');
-  pivot.position.set(center.x + jitter(`${key}:x`), 0, center.z + jitter(`${key}:z`));
-  pivot.updateMatrixWorld(true);
-  pivot.position.y = -new THREE.Box3().setFromObject(pivot).min.y;
-  return pivot;
-}
-
-function jitter(key: string): number {
-  return (hashStr(key) * 2 - 1) * DEBRIS_SCATTER;
 }
 
 function paintRoof(house: THREE.Object3D, id: string): void {

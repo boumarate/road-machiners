@@ -600,11 +600,7 @@ export class Game {
     this.travel.updateWorld(this.world, danger);
   }
 
-  private beginTurn(
-    prepared: PreparedTurn,
-    now: number,
-    elapsed: number,
-  ): void {
+  private beginTurn(prepared: PreparedTurn, now: number, elapsed: number): void {
     const { world, playback, towed } = this.travel.beginPlayback(this.world, prepared, now, elapsed);
     this.world = world;
     this.anim = playback;
@@ -920,6 +916,7 @@ export class Game {
     const { step, speed } = this.advanceTurn(now);
     // The first frame's rAF time can come before the performance.now() the clock started from.
     this.syncVehicles(step, Math.max(0, dt) / 1000);
+    this.obstacles.play(this.anim, step, this.world, this.frames, Math.max(0, dt) / 1000);
     this.drawOverlays();
     // syncVehicles gives every vehicle a frame, the player's included.
     const truck = this.frames[playerVehicle(this.world).id].pos;
