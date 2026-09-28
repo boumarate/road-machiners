@@ -111,61 +111,71 @@ export class WeaponPanel {
 
   render(): void {
     const w = this.host.world();
-    const weapons = vehicleStats(w, playerVehicle(w)).weapons;
     const phase = this.host.getTurnPhase();
-    const selected = this.host.selectedWeapon();
-    const controls = el(
+    const locked = phase !== null || !playerCanAct(w);
+    const head = el(
+      "div",
+      { class: "weapon-head" },
+      el("h3", {}, "Weapons"),
+      this.expanded ? this.renderAllButton(locked) : null,
+      el("button", { class: "weapon-toggle", "aria-expanded": String(this.expanded), onclick: () => this.toggleVisible(), title: "Show or hide weapons [X]" }, this.expanded ? "Hide [X]" : "Show [X]"),
+    );
+    this.root.replaceChildren(head, ...(this.expanded ? [this.renderControls(w, locked)] : []));
+    this.turn.replaceChildren(el('button', {
+      class: 'end-turn', disabled: phase !== null, title: 'End turn [Space]',
+      'aria-label': phase ? `${phase} in progress` : 'End turn', onclick: () => this.host.endTurn(),
+    }, createIcon('turn'), el('span', {}, phase ? `${phase}…` : 'Space')));
+  }
+
+  private renderAllButton(locked: boolean): HTMLElement {
+    const all = this.host.selectedWeapon() === null;
+    return el(
+      "button",
+      {
+        class: all ? "on" : "",
+        "aria-pressed": String(all),
+        disabled: locked,
+        title: "Aim all weapons with the next click [0]",
+        onclick: () => this.selectWeapon(null),
+      },
+      "All [0]",
+    );
+  }
+
+  private renderControls(w: World, locked: boolean): HTMLElement {
+    const weapons = vehicleStats(w, playerVehicle(w)).weapons;
+    const chosen = weapons.find((mw) => mw.part.id === this.host.selectedWeapon());
+    return el(
       "fieldset",
-      { disabled: phase !== null || !playerCanAct(w) },
-      el(
-        "div",
-        { class: "weapon-tools" },
-        el(
-          "button",
-          {
-            class: selected === null ? "on" : "",
-            "aria-pressed": String(selected === null),
-            onclick: () => this.selectWeapon(null),
-          },
-          "All [0]",
-        ),
-        createSwitch({
-          on: "Auto fire",
-          off: "Auto fire off",
-          checked: w.player.autoFire,
-          key: "Q",
-          title: "Auto fire: guns shoot at hostiles on their own [Q]",
-          onclick: () => this.toggleAuto(),
-        }),
-      ),
+      { disabled: locked },
+      createSwitch({
+        on: "Auto fire",
+        off: "Auto fire off",
+        checked: w.player.autoFire,
+        key: "Q",
+        title: "Auto fire: guns shoot at hostiles on their own [Q]",
+        onclick: () => this.toggleAuto(),
+      }),
       el(
         "div",
         { class: "weapon-slots" },
         ...weapons.map((mw, i) => this.renderSlot(w, mw, i)),
       ),
+      weapons.length === 0 ? el("div", { class: "dim" }, "No weapons installed") : null,
+      chosen ? this.renderDetail(w, chosen) : null,
     );
-    const chosen = weapons.find((mw) => mw.part.id === selected);
-    if (weapons.length === 0)
-      controls.append(el("div", { class: "dim" }, "No weapons installed"));
-    if (chosen) {
-      const readout = getWeaponReadout(w, chosen);
-      const order = playerVehicle(w).weaponOrders[chosen.part.id];
-      controls.append(el('div', { class: 'weapon-detail' },
-        el('strong', {}, chosen.def.name),
-        el('span', {}, readout.target?.name ?? 'No visible target'),
-        el('span', {}, readout.status),
-        readout.target && order ? this.createAimSelect(readout.target, chosen.part.id, order.aim) : null,
-        el('button', { class: 'weapon-hold', onclick: () => this.holdWeapon(chosen.part.id) }, 'Hold fire'),
-      ));
-    }
-    this.root.replaceChildren(
-      el('button', { class: 'weapon-toggle', 'aria-expanded': String(this.expanded), onclick: () => this.toggleVisible(), title: 'Show or hide weapons [X]' }, this.expanded ? '− [X]' : 'Weapons [X]'),
-      ...(this.expanded ? [controls] : []),
+  }
+
+  private renderDetail(w: World, chosen: MountedWeapon): HTMLElement {
+    const readout = getWeaponReadout(w, chosen);
+    const order = playerVehicle(w).weaponOrders[chosen.part.id];
+    return el('div', { class: 'weapon-detail' },
+      el('strong', {}, chosen.def.name),
+      el('span', {}, readout.target?.name ?? 'No visible target'),
+      el('span', {}, readout.status),
+      readout.target && order ? this.createAimSelect(readout.target, chosen.part.id, order.aim) : null,
+      el('button', { class: 'weapon-hold', onclick: () => this.holdWeapon(chosen.part.id) }, 'Hold fire'),
     );
-    this.turn.replaceChildren(el('button', {
-      class: 'end-turn', disabled: phase !== null, title: 'End turn [Space]',
-      'aria-label': phase ? `${phase} in progress` : 'End turn', onclick: () => this.host.endTurn(),
-    }, createIcon('turn'), el('span', {}, phase ? `${phase}…` : 'Space')));
   }
 
   private renderSlot(w: World, mw: MountedWeapon, i: number): HTMLElement {

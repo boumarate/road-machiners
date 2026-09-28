@@ -61,7 +61,7 @@ describe('salvage interaction', () => {
 });
 
 describe("critical vehicle readout", () => {
-  it("keeps money, survival resources, cab and driver condition visible", () => {
+  it("keeps money, survival resources and driver condition visible", () => {
     const w = emptyWorld();
     w.player.money = 1234;
     w.player.fuel = 18.5;
@@ -70,7 +70,6 @@ describe("critical vehicle readout", () => {
       "Money",
       "Fuel",
       "Supplies",
-      "Cab",
       "Driver",
     ]);
     expect(
@@ -79,13 +78,10 @@ describe("critical vehicle readout", () => {
         .map((r) => r.value),
     ).toEqual(["1,234", "93 / 200 L", "7.3"]);
   });
-  it("shows fractional cab HP and driver health as whole numbers", () => {
+  it("shows fractional driver health as a whole number", () => {
     const w = emptyWorld();
-    const cab = corePart(w.vehicles[0], "cab");
-    cab.hp = 0.2;
     w.player.health = 41.123456789;
-    const [, , , cabValue, driver] = getHudReadout(w).resources.map((r) => r.value);
-    expect(cabValue).toMatch(/^1 \/ \d+$/);
+    const [, , , driver] = getHudReadout(w).resources.map((r) => r.value);
     expect(driver).toBe(`42 / ${RULES.maxHealth}`);
   });
   it("warns at the actual fuel speed-limit threshold", () => {

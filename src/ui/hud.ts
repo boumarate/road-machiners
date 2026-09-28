@@ -20,7 +20,7 @@ import {
   formatNpcTraits,
 } from "./format";
 import { getHudReadout, getRescueReadout, moneyLabel, TruckConditionReadout } from "./hud-readout";
-import { conditionMeter, createIcon, createSpeedDial, partIcon, type IconName } from "./cards";
+import { conditionMeter, createIcon, createSpeedDial, partIcon } from "./cards";
 import { createSwitch } from "./switch";
 import { hp, kph } from "./units";
 import { maxHp } from "../sim/wear";
@@ -111,14 +111,6 @@ type HudActions = {
   dialogue: DialogueHost;
   recenter: () => void;
 };
-const RESOURCE_ICONS: IconName[] = [
-  "money",
-  "fuel",
-  "supplies",
-  "cab",
-  "driver",
-];
-
 // Centered keeps the truck in the middle of the screen. Auto shifts the view ahead of it.
 export type CameraMode = "centered" | "auto";
 
@@ -406,8 +398,8 @@ export class Hud {
       ),
       el(
         "div",
-        { class: "resource-bank" },
-        ...readout.resources.map((resource, i) =>
+        { class: "readouts" },
+        ...readout.resources.map((resource) =>
           el(
             "span",
             {
@@ -416,17 +408,31 @@ export class Hud {
               "aria-label": `${resource.label}: ${resource.value}${resource.warning ? ", warning" : ""}`,
               "data-resource": resource.label,
             },
-            createIcon(RESOURCE_ICONS[i]),
-            el(
-              "span",
-              {},
-              el("small", {}, resource.label),
-              el(
-                "strong",
-                {},
-                `${resource.warning ? "! " : ""}${resource.value}`,
-              ),
-            ),
+            el("small", {}, resource.label),
+            el("strong", {}, `${resource.warning ? "! " : ""}${resource.value}`),
+          ),
+        ),
+        ...readout.survival.map((entry) =>
+          el(
+            "span",
+            {
+              class: `resource ${entry.warning ? "bad" : ""}`,
+              title: entry.label,
+              "data-resource": entry.label,
+            },
+            el("small", {}, entry.label),
+            el("strong", {}, entry.value),
+            "progress" in entry && entry.progress !== undefined
+              ? el(
+                  "span",
+                  {
+                    class: "job-bar",
+                    role: "progressbar",
+                    "aria-valuenow": String(Math.round(entry.progress * 100)),
+                  },
+                  el("span", { style: `width:${Math.round(entry.progress * 100)}%` }),
+                )
+              : null,
           ),
         ),
       ),
@@ -462,43 +468,6 @@ export class Hud {
               ),
             ]
           : []),
-      ),
-      el(
-        "div",
-        { class: "resource-bank survival-bank" },
-        ...readout.survival.map((entry) =>
-          el(
-            "span",
-            {
-              class: `resource ${entry.warning ? "bad" : ""}`,
-              title: entry.label,
-              "data-resource": entry.label,
-            },
-            el(
-              "span",
-              {},
-              el("small", {}, entry.label),
-              el("strong", {}, entry.value),
-              ...("progress" in entry && entry.progress !== undefined
-                ? [
-                    el(
-                      "span",
-                      {
-                        class: "job-bar",
-                        role: "progressbar",
-                        "aria-valuenow": String(
-                          Math.round(entry.progress * 100),
-                        ),
-                      },
-                      el("span", {
-                        style: `width:${Math.round(entry.progress * 100)}%`,
-                      }),
-                    ),
-                  ]
-                : []),
-            ),
-          ),
-        ),
       ),
     );
   }
