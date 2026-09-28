@@ -143,19 +143,19 @@ describe('events far from the player', () => {
 
 it('says a perk can be picked when a skill reaches a perk level', () => {
   const w = emptyWorld();
-  expect(eventText(w, { t: 'skillUp', skill: 'driving', level: 2 })?.text).toBe('Driving reached level 2. Pick a perk on the character screen [C].');
+  expect(eventText(w, { t: 'skillUp', skill: 'driving', level: 2 })?.text).toBe('Driving reached level 2. Perk ready [C].');
   expect(eventText(w, { t: 'skillUp', skill: 'driving', level: 3 })?.text).toBe('Driving reached level 3.');
 });
 
-it('names both trucks in a tow between NPCs', () => {
+it('names both trucks in a tow between NPCs, without its destination or fee', () => {
   const w = emptyWorld();
   const tower = addVehicle(w, 'scavengers', 'scout', [], { x: 32, y: 30 });
   const client = addVehicle(w, 'traders', 'hauler', [], { x: 34, y: 30 });
   tower.name = 'Tower';
   client.name = 'Client';
   refreshVision(w);
-  expect(eventText(w, { t: 'towHitched', by: tower.id, client: client.id, site: 'kiln' })).toEqual({ text: 'Tower takes Client in tow to Kiln Camp.', cls: 'dim' });
-  expect(eventText(w, { t: 'towDone', by: tower.id, client: client.id, fee: 12 })).toEqual({ text: 'Tower tows Client in and takes 12.', cls: 'dim' });
+  expect(eventText(w, { t: 'towHitched', by: tower.id, client: client.id, site: 'kiln' })).toEqual({ text: 'Tower takes Client in tow.', cls: 'dim' });
+  expect(eventText(w, { t: 'towDone', by: tower.id, client: client.id, fee: 12 })).toEqual({ text: 'Tower tows Client in.', cls: 'dim' });
   expect(eventText(w, { t: 'towDropped', by: tower.id, client: client.id, reason: 'danger' })).toEqual({ text: 'Tower drops the tow of Client.', cls: 'dim' });
   expect(eventText(w, { t: 'towDone', by: tower.id, client: w.player.vehicleId, fee: 12 })).toEqual({ text: 'Tower tows you into town and takes 12.', cls: 'bad' });
 });

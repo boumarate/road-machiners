@@ -141,7 +141,7 @@ export class Hud {
   private rescue = panel("rescue");
   // Shows only while a pan has left the truck.
   private recenter = panel("recenter");
-  private cameraButton = el("button", { onclick: () => this.toggleCameraMode(), title: "Switch between a centered camera and one that looks ahead of the truck" });
+  private cameraButton = el("button", { onclick: () => this.toggleCameraMode(), title: "Camera mode" });
   cameraMode: CameraMode = "auto";
   private toastTimer: number | null = null;
   private lines: { text: string; cls: string }[] = [];
@@ -156,7 +156,7 @@ export class Hud {
     this.toastBox.style.display = "none";
     this.rescue.style.display = "none";
     this.recenter.style.display = "none";
-    this.recenter.append(el("button", { onclick: () => actions.recenter(), title: "Center the camera on your truck" }, "Center on truck (F)"));
+    this.recenter.append(el("button", { onclick: () => actions.recenter() }, "Center on truck (F)"));
     panel("camera-mode", topRight()).append(this.cameraButton);
     this.showCameraMode();
     window.addEventListener("keydown", (e) => {
@@ -178,7 +178,7 @@ export class Hud {
     guide.append(
       el("div", {}, "Click the ground: drive there by road. Shift-click: stop there."),
       el("div", {}, "Space: drive on or pause. Hold Space: fast-forward. Click your truck: brake."),
-      el("div", {}, "R: manual mode. Drive straight at the point, through anything. Space plays one turn."),
+      el("div", {}, "R: manual driving, straight at the point."),
       el("div", {}, "Click a town or site: stop at its pad. E on a pad: trade, repair or loot."),
       el("div", {}, "T: radio the truck under the cursor. 1-9: reply. H: honk."),
       el("div", {}, "Click a truck: target it. 1-4: pick a weapon. 0: all. Q: auto fire. X: show weapons."),
@@ -308,7 +308,7 @@ export class Hud {
           { class: "dim" },
           r.beacon
             ? "Calling for a tow."
-            : `${r.reason} The truck can only crawl.`.trim(),
+            : r.reason,
         ),
         buttons(beacon(r.beacon)),
       );

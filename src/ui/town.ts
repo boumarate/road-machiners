@@ -235,7 +235,7 @@ export class TownScreen {
       el("div", { class: "tabs sub" }, ...this.stockFilterButtons(stock)),
       cards.length
         ? el("div", { class: "cards" }, ...cards)
-        : el("div", { class: "dim" }, stock.length ? "No parts of this kind in stock." : "No parts in stock right now."),
+        : el("div", { class: "dim" }, stock.length ? "No parts of this kind in stock." : "No parts in stock."),
     );
   }
 
@@ -348,7 +348,7 @@ export class TownScreen {
         "div",
         { class: "note" },
         createIcon("money"),
-        `Your truck trades in for ${tradeIn}. Parts and goods move over. Parts that do not fit go to storage.`,
+        `Your truck trades in for ${tradeIn}.`,
       ),
       el("div", { class: "cards trucks" }, ...cards),
     );
@@ -365,7 +365,7 @@ export class TownScreen {
       el("h3", {}, "Contract board"),
       board.length
         ? el("div", { class: "jobs" }, ...board.map((c) => contractRow(w, c, accept(c))))
-        : el("div", { class: "dim" }, "No offers right now."),
+        : el("div", { class: "dim" }, "No offers."),
       el("h3", {}, `Your contracts ${w.player.contracts.length} / ${CONTRACTS.maxActive}`),
       w.player.contracts.length
         ? el("div", { class: "jobs" }, ...w.player.contracts.map((c) => contractRow(w, c, this.deliverCell(w, shopId, c))))
@@ -374,7 +374,7 @@ export class TownScreen {
   }
 
   private deliverCell(w: World, shopId: string, c: Contract): HTMLElement {
-    if (c.kind === "bounty") return el("span", { class: "dim" }, "Pays when you knock out or destroy the target");
+    if (c.kind === "bounty") return el("span", { class: "dim" }, "Pays on defeat");
     const destination = c.kind === "haul" ? c.to : c.shop;
     if (destination !== shopId) return el("span", { class: "dim" }, `Deliver at ${siteName(destination)}`);
     if (!canDeliver(w, c)) return el("span", { class: "dim" }, c.kind === "haul" ? "Not enough cargo yet" : "Needs the part");

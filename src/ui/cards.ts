@@ -278,7 +278,7 @@ function compareLine(o: PartCardOptions): HTMLElement {
   return el(
     "button",
     { class: "card-compare", title: "Compare with your next part of this kind", onclick: () => next() },
-    `Compared with ${name}. Click for your next one.`,
+    `Compared with ${name}`,
   );
 }
 

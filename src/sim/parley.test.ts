@@ -247,7 +247,7 @@ describe('player pleas', () => {
     forceOption('truceOffered', 'accept');
     const { w: start, npc } = atWar();
     let w = pick(callVehicle(start, npc.id), 'Enough shooting. Can we call a truce?');
-    w = pick(w, 'We both drive away, and nobody else gets hurt.');
+    w = pick(w, 'We both drive away.');
     expect(w.player.call?.node).toBe('agreed');
     expect(isHostile(w, w.vehicles.find((v) => v.id === npc.id)!, playerVehicle(w))).toBe(false);
   });
@@ -256,7 +256,7 @@ describe('player pleas', () => {
     forceOption('truceOffered', 'refuse');
     const { w: start, npc } = atWar();
     let w = pick(callVehicle(start, npc.id), 'Enough shooting. Can we call a truce?');
-    w = pick(w, 'We both drive away, and nobody else gets hurt.');
+    w = pick(w, 'We both drive away.');
     w = pick(w, 'Then we finish this.');
     expect(isHostile(w, w.vehicles.find((v) => v.id === npc.id)!, playerVehicle(w))).toBe(true);
     w = callVehicle(w, npc.id);

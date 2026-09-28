@@ -193,7 +193,7 @@ export class InventoryView {
           el(
             "div",
             { class: "inv-dump", "data-drop": "dump" },
-            "Drop goods or loose parts here to dump them",
+            "Drop here to dump",
           ),
         ),
         ...(this.truck ? [this.truckEl(w, this.truck)] : []),
@@ -221,7 +221,7 @@ export class InventoryView {
       el(
         "div",
         {},
-        "Select an item, then click another to swap. Drag to move or swap. R turns the selected part, or the dragged item. Right click also turns it while dragging.",
+        "Drag to move or swap. R or right click turns an item.",
       ),
     );
   }
@@ -593,7 +593,7 @@ export class InventoryView {
     this.inspection.replaceChildren(
       el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, false) : []),
-      el("p", { class: "dim" }, mounted ? "Drag onto your grid to remove it in a field refit." : "Drag onto your grid to take it."),
+      el("p", { class: "dim" }, "Drag onto your grid to take it."),
     );
   }
 
@@ -929,15 +929,15 @@ function itemLabel(it: GridItem): { short: string } {
 function itemTitle(it: GridItem, mounted: boolean): string {
   if (it.kind === "good") return GOODS[it.good].name;
   if (partDef(it.part.defId).kind === "core")
-    return `${partTitle(it.part)}\nBuilt in: cannot be moved, only repaired`;
-  return `${partTitle(it.part)}\n${mounted ? "Mounted and working" : "Spare: not on a matching mount"}`;
+    return `${partTitle(it.part)}\nBuilt in`;
+  return `${partTitle(it.part)}\n${mounted ? "Mounted" : "Spare"}`;
 }
 
 // What the inspection panel says under an item's title: how to move it.
 function inspectionHint(w: World, item: GridItem): string {
   if (item.kind === "good")
     return "Drag to rearrange cargo.";
-  if (townAt(w)) return "Garage: drag movable parts onto matching mounts or into storage.";
+  if (townAt(w)) return "Drag onto a mount or into storage.";
   return "Drag onto a mount or off it to start a refit.";
 }
 

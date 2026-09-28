@@ -202,8 +202,8 @@ export const TOPICS: Record<TopicId, Topic> = {
       listen: {
         line: 'I am listening.',
         options: [
-          { text: 'We both drive away, and nobody else gets hurt.', when: ['accepts'], effects: ['settlePlea'], go: 'agreed' },
-          { text: 'We both drive away, and nobody else gets hurt.', when: ['refuses'], effects: ['settlePlea'], go: 'refused' },
+          { text: 'We both drive away.', when: ['accepts'], effects: ['settlePlea'], go: 'agreed' },
+          { text: 'We both drive away.', when: ['refuses'], effects: ['settlePlea'], go: 'refused' },
         ],
       },
       agreed: { line: 'Fine. Keep your guns down.', options: [{ text: 'Over and out.', when: [], effects: [], go: END }] },
@@ -265,7 +265,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     start: 'offer',
     nodes: {
       offer: {
-        line: 'Enough of this. We both drive away, and nobody else gets hurt.',
+        line: 'Enough of this. We both drive away.',
         options: [
           { text: 'Agreed. Guns down.', when: [], effects: ['acceptPlea'], go: END },
           { text: 'No. We finish this.', when: [], effects: ['refusePlea'], go: END },
@@ -389,15 +389,15 @@ export const HONK_RANGE = DETECT.sound.limp;
 const PARLEY: TopicId[] = ['truce', 'mercy', 'rob', 'truceOffer', 'mercyPlea', 'offerTow', 'releaseTow', 'offerPatch'];
 
 export const TRAIT_TALK: Record<TraitId, TraitTalk> = {
-  trader: { voice: { greeting: 'Caravan here. Go ahead.', repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'patch', 'patchRequest', 'trade', ...PARLEY] },
+  trader: { voice: { greeting: 'Go ahead.', repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'patch', 'patchRequest', 'trade', ...PARLEY] },
   scavenger: { voice: { greeting: 'Yeah? Make it quick.', repeatLine: 'I told you already.', refusal: 'Get off my channel.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'patch', 'patchRequest', 'trade', ...PARLEY] },
   raider: { voice: { greeting: 'Get lost.', repeatLine: 'Get lost.', refusal: 'Heh. No.', honksBack: false }, topics: ['demand', ...PARLEY] },
   scumbag: { voice: null, topics: ['demand', ...PARLEY] },
   coward: { voice: null, topics: PARLEY },
-  lawman: { voice: { greeting: 'Patrol here. Go ahead.', repeatLine: 'Heard you the first time.', refusal: 'Clear the channel.', honksBack: true }, topics: ['directions', 'tow', 'askTow', ...PARLEY] },
-  courier: { voice: { greeting: 'Courier. Make it short, I am on a run.', repeatLine: 'Said that already.', refusal: 'No time. Out.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'trade', ...PARLEY] },
-  roamer: { voice: { greeting: 'Roamer here. What do you want?', repeatLine: 'Old news, friend.', refusal: 'Not talking.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'patch', 'patchRequest', 'trade', ...PARLEY] },
-  supplier: { voice: { greeting: 'Supply convoy. Go ahead.', repeatLine: 'We covered that.', refusal: 'Keep off this channel.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'trade', ...PARLEY] },
-  guard: { voice: { greeting: 'Convoy guard. State your business.', repeatLine: 'Heard you.', refusal: 'Move along.', honksBack: false }, topics: ['directions', ...PARLEY] },
-  merc: { voice: { greeting: 'Guns for hire. Talk.', repeatLine: 'You said that.', refusal: 'Not interested.', honksBack: false }, topics: ['directions', ...PARLEY] },
+  lawman: { voice: { greeting: 'Speak up.', repeatLine: 'Heard you the first time.', refusal: 'Clear the channel.', honksBack: true }, topics: ['directions', 'tow', 'askTow', ...PARLEY] },
+  courier: { voice: { greeting: 'Make it short.', repeatLine: 'Said that already.', refusal: 'No time. Out.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'trade', ...PARLEY] },
+  roamer: { voice: { greeting: 'What do you want?', repeatLine: 'Old news, friend.', refusal: 'Not talking.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'patch', 'patchRequest', 'trade', ...PARLEY] },
+  supplier: { voice: { greeting: 'Listening.', repeatLine: 'We covered that.', refusal: 'Keep off this channel.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'trade', ...PARLEY] },
+  guard: { voice: { greeting: 'State your business.', repeatLine: 'Heard you.', refusal: 'Move along.', honksBack: false }, topics: ['directions', ...PARLEY] },
+  merc: { voice: { greeting: 'Talk.', repeatLine: 'You said that.', refusal: 'Not interested.', honksBack: false }, topics: ['directions', ...PARLEY] },
 };

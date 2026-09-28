@@ -12,7 +12,7 @@ export const SKILL_INFO: Record<SkillId, { name: string; grows: string }> = {
   perception: { name: 'Perception', grows: 'hits, contacts, discoveries' },
   machining: { name: 'Machining', grows: 'field jobs, patches, searches' },
   toughness: { name: 'Toughness', grows: 'heat, damage taken, knockouts' },
-  social: { name: 'Social', grows: 'trade profit, deals, contracts, calls, honks' },
+  social: { name: 'Social', grows: 'trade profit, deals, contracts, radio' },
 };
 
 // Fraction each level adds to an effect. Every reader names its effect, so a missing key fails typecheck.

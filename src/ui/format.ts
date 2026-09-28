@@ -217,35 +217,19 @@ function sayText(world: World, e: Extract<GameEvent, { t: 'say' }>): LogLine {
   return { text: `${vehicleName(world, e.speaker)}: “${fillLine(e.text, e.vars)}”`, cls };
 }
 
-function callText(world: World, e: Extract<GameEvent, { t: 'call' }>): LogLine {
-  const who = vehicleName(world, e.with);
-  return { text: e.outcome === 'opened' ? `Radio: ${who} on the line.` : `Radio: call with ${who} ended.`, cls: 'dim' };
-}
-
 function towOfferText(world: World, e: Extract<GameEvent, { t: 'towOffer' }>): LogLine {
   return { text: `${vehicleName(world, e.by)} offers to tow you to ${siteName(e.town)} for ${e.fee}.`, cls: '' };
 }
 
 function towHitchedText(world: World, e: Extract<GameEvent, { t: 'towHitched' }>): LogLine {
-  return { text: `${vehicleName(world, e.by)} takes ${vehicleName(world, e.client)} in tow to ${siteName(e.site)}.`, cls: 'dim' };
+  return { text: `${vehicleName(world, e.by)} takes ${vehicleName(world, e.client)} in tow.`, cls: 'dim' };
 }
 
+// The player sees a tow between NPCs, but not what it costs.
 function towDoneText(world: World, e: Extract<GameEvent, { t: 'towDone' }>): LogLine {
   const by = vehicleName(world, e.by);
   if (e.client === world.player.vehicleId) return { text: `${by} tows you into town and takes ${e.fee}.`, cls: 'bad' };
-  return { text: `${by} tows ${vehicleName(world, e.client)} in and takes ${e.fee}.`, cls: 'dim' };
-}
-
-function escortPaidText(world: World, e: Extract<GameEvent, { t: 'escortPaid' }>): LogLine {
-  return { text: `${vehicleName(world, e.client)} pays ${vehicleName(world, e.by)} ${e.fee} for the escort.`, cls: 'dim' };
-}
-
-function escortHiredText(world: World, e: Extract<GameEvent, { t: 'escortHired' }>): LogLine {
-  return { text: `${vehicleName(world, e.client)} hires ${vehicleName(world, e.by)} as escort to ${siteName(e.site)} for ${e.fee}.`, cls: 'dim' };
-}
-
-function escortRefusedText(world: World, e: Extract<GameEvent, { t: 'escortRefused' }>): LogLine {
-  return { text: `${vehicleName(world, e.by)} turns down an escort job from ${vehicleName(world, e.client)}.`, cls: 'dim' };
+  return { text: `${by} tows ${vehicleName(world, e.client)} in.`, cls: 'dim' };
 }
 
 function towDroppedText(world: World, e: Extract<GameEvent, { t: 'towDropped' }>): LogLine {
@@ -283,12 +267,8 @@ const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => st
   destroyed: (e) => [e.vehicle],
   npcKnockout: (e) => [e.vehicle],
   npcWake: (e) => [e.vehicle],
-  plea: (e) => [e.from, e.to],
   towHitched: (e) => [e.by, e.client],
   towDone: (e) => [e.by, e.client],
-  escortPaid: (e) => [e.by, e.client],
-  escortHired: (e) => [e.by, e.client],
-  escortRefused: (e) => [e.by, e.client],
   towDropped: (e) => [e.by, e.client],
 };
 
@@ -341,16 +321,7 @@ function siteName(id: string): string {
 // A level that opens a perk pair says so, since the pick waits on the character screen.
 function skillUpText(skill: SkillId, level: number): string {
   const reached = `${SKILL_INFO[skill].name} reached level ${level}.`;
-  return (PERK_LEVELS as readonly number[]).includes(level) ? `${reached} Pick a perk on the character screen [C].` : reached;
-}
-
-// Pleas between two NPCs. The player's own pleas show as radio lines.
-function pleaText(world: World, e: Extract<GameEvent, { t: 'plea' }>): LogLine | null {
-  const me = world.player.vehicleId;
-  if (e.from === me || e.to === me) return null;
-  const asks = e.plea === 'truce' ? 'asks for a truce' : 'begs for mercy';
-  const answer = e.accepted ? 'granted' : 'refused';
-  return { text: `${vehicleName(world, e.from)} ${asks} from ${vehicleName(world, e.to)}: ${answer}`, cls: 'dim' };
+  return (PERK_LEVELS as readonly number[]).includes(level) ? `${reached} Perk ready [C].` : reached;
 }
 
 // NPC goals are debug lines. Players read intent from what a driver does.
@@ -371,19 +342,20 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   npcWake: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} comes to`, cls: 'dim' }),
   stateEnded: stateEndedText,
   say: sayText,
-  call: callText,
   job: jobText,
   weather: weatherText,
   honk: honkText,
   patch: patchText,
-  plea: pleaText,
   towOffer: towOfferText,
   towHitched: towHitchedText,
   towDone: towDoneText,
-  escortPaid: escortPaidText,
-  escortHired: escortHiredText,
-  escortRefused: escortRefusedText,
   towDropped: towDroppedText,
+  // The dialogue panel shows the call and the player's own pleas. Radio deals between NPCs stay unheard.
+  call: () => null,
+  plea: () => null,
+  escortPaid: () => null,
+  escortHired: () => null,
+  escortRefused: () => null,
 };
 
 // Returns null for events not worth a log line.

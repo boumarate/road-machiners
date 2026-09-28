@@ -440,7 +440,7 @@ export function takeFromTruck(world: World, targetId: string, itemId: string, to
 // The part a running refit takes off the truck, at its new spot, or why the refit cannot go on.
 export function truckPickupItem(world: World, looter: Vehicle, pickup: TruckPickup): GridItem | string {
   const target = world.vehicles.find((v) => v.id === pickup.vehicleId);
-  if (!target || !canLootTruck(looter, target)) return 'The truck is no longer knocked out in reach';
+  if (!target || !canLootTruck(looter, target)) return 'The truck is out of reach';
   const item = target.items.find((it) => it.kind === 'part' && it.part.id === pickup.partId);
   if (item?.kind !== 'part') return 'The part is no longer on the truck';
   return { kind: 'part', id: pickup.itemId, part: item.part, ...pickup.to };
