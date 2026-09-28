@@ -60,3 +60,24 @@
 - `npm run playtest` passes with the dev server running.
 - Manual try, positive: in the game, the `battle` console command spawns a raider. The buggy circles and shoots, and the gunwagon turns to keep its cannon on the truck.
 - Manual try, negative: a player parked beside a gunwagon's rear gets approached from a side where the gunwagon's cannon bears. The gunwagon does not park with the player outside its arc.
+
+## Result
+- Done. Fighters score spots by gun arcs, threat, range, travel and circling. Buggies circle, and every other template holds. Fighters roll a whim every 4 turns.
+- Arcs are judged where the fighter is after this turn's drive, since guns fire after the move. Judging them at the far spot sent trucks past their target.
+- Fight driving lives in `src/sim/ai.ts`, since a new file broke the fragmentation limit of `src/sim/`.
+- Found and fixed a loadout bug: NPC loadouts could mount a forward gun behind a tall cab, where it could never fire. `tryMountChoice()` in `src/sim/npc-loadout.ts` now rejects such a fit. No template rolls a truck without a gun over 150 seeds.
+- Harness, 20 seeds, 120 turns. Against the buggy, circling wins 10 and loses 7, and standing wins 8 and loses 10. Before the AI, circling won 15 and lost 3. Buggies average 2 tiles a turn in a fight, and fights have about 1 crash each.
+- Against the gunwagon, standing now loses 14 of 20, since every gunwagon gun can fire.
+- Checks: `npm test` passes, 2002 tests. `npm run quality` passes. `npm run playtest` passes at 60 fps.
+- Manual try, positive: a spawned hostile buggy circled the truck all the way round at 2 to 4 tiles a turn and fired every turn.
+- Manual try, negative: a gunwagon with the truck parked behind it drove round, fired when its gun bore, and never parked with the truck out of its arc.
+
+### Hands-off decisions
+- uexecute: moved fight driving into `src/sim/ai.ts` instead of a new file — the quality gate's fragmentation limit rejected the new file.
+- uexecute: fixed the NPC loadout rule for blocked guns — it made gunwagon cannons useless and blocked the plan's negative check.
+- uexecute: kept the starting weights — the harness met the tuning goal without changes.
+- uexecute: the circling direction is picked once per driver, not once per fight — simpler, and no test needs a new direction per fight.
+
+### Deferred (needs user input)
+- Buggies sometimes brush the truck while circling at their 3-tile range. That counts as a crash. Widening `preferredRange` for buggies is a balance call.
+- Gunwagons circle wide to bring a forward gun round, so they fire in about one turn in four against a parked truck. A smarter turn-in plan is a follow-up.
