@@ -1,6 +1,6 @@
 # Old world map layer
 
-**Status:** executing
+**Status:** done
 **Branch:** procedural-map
 **Worktree:** .worktrees/procedural-map
 **Goal:** The baked map carries an old world placed by rules from terrain, sites and roads: ruined settlements on flat ground, buildings on overlooks and road bends, faded old roads with broken bridges where washes cut them, bridges on today's roads over washes, power lines, billboards, tank hulks and dead fields. The fixed landmark rows are gone. The user confirms the look from the bake pictures and in play.
@@ -129,7 +129,25 @@ PH1, PH2 and PH3 own disjoint paths and run together. PH2 leaves the `bake.ts` h
 
 ## Code smells
 
+## Verify
+
+Result: passed
+
+- CK1 (IV1) — two bakes differ — held: identical sha1 `520db590`.
+- CK2 (IV2, IV5) — a prop or old-road tile lands on built ground — held: the placement tests and the baked-map clearance tests pass.
+- CK3 (IV3) — a site becomes unreachable — held: the route tests pass on the baked map.
+- CK4 (IV4) — a baked prop enters a save — held: the save round-trip test passes.
+- CK5 (AS1) — props push perf past budget — held relative to the baseline: turn time rises 5 to 10% and move preview about 5 ms, while the budgets miss on the pre-old-world commit too.
+
+Smoke: `npm run playtest` passed at 60 fps, and the user reviewed the ruins and broken highway bridges in play.
+
 ## Conclusion
+
+Outcome: goal achieved at 66aff93, merged to main. The user approved the ruins and the broken highway bridges in play.
+
+Review findings:
+- Important: saves recognize baked props by id pattern (`isBakedObstacle()` in `src/sim/mapgen.ts`), so a broken baked prop would be stripped from saves. Deferred to `docs/tasks/breakable-props.md`, the first task that must save baked prop state. That task should replace the id pattern with an explicit record of broken baked props.
+
 
 ### Deviations from plan
 - Broken road bridges are no prop kind of their own. A broken bridge on today's road stood on the road surface, where it would either block traffic or be driven through. Instead its two broken ends stand on the banks beside the road, and the road dips through the wash.
