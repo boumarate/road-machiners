@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { ECONOMY, GOODS } from '../data/goods';
 import { DISTANCE_PREMIUM, EFFORT, GOOD_SOURCES, PRICE_FACTOR, PRESSURE_MAX, SHOPS } from '../data/market';
 import { dist } from './vec';
-import { emptyWorld, addVehicle } from './testkit';
+import { emptyWorld, addVehicle, npcBrain } from './testkit';
+import type { Vehicle, World } from './types';
 import { freeCells } from './grid';
 import {
   addStockPart,
+  creditBounty,
   advanceShop,
   estimateTurns,
   goodBasePrice,
@@ -15,6 +17,7 @@ import {
   recordTrade,
   siteOf,
   takeStockPart,
+  type Contract,
   type ShopState,
 } from './market';
 
@@ -205,5 +208,33 @@ describe('market', () => {
     expect(long.turns).toBeGreaterThan(short.turns);
     expect(long.profit).toBeGreaterThan(short.profit);
     expect(long.profit / long.turns).toBeGreaterThanOrEqual(short.profit / short.turns);
+  });
+});
+
+describe('creditBounty', () => {
+  const bounty = (id: string, template: string): Contract => ({ id, shop: 'bowl', kind: 'bounty', template, targetName: 'Target', reward: 300, deadline: 900, tier: 2 });
+
+  function withTarget(): { w: World; npc: Vehicle } {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'raiders', 'scout', [], { x: 36, y: 30 });
+    npc.brain = npcBrain('buggy', npc.pos, ['raider']);
+    w.player.money = 0;
+    return { w, npc };
+  }
+
+  it('finishes one held bounty on the template, as a knockout does', () => {
+    const { w, npc } = withTarget();
+    w.player.contracts = [bounty('a', 'buggy'), bounty('b', 'buggy'), bounty('c', 'truck')];
+    creditBounty(w, npc);
+    expect(w.player.contracts.map((c) => c.id)).toEqual(['b', 'c']);
+    expect(w.player.money).toBe(300);
+  });
+
+  it('does nothing without a bounty on the template', () => {
+    const { w, npc } = withTarget();
+    w.player.contracts = [bounty('c', 'truck')];
+    creditBounty(w, npc);
+    expect(w.player.contracts.map((c) => c.id)).toEqual(['c']);
+    expect(w.player.money).toBe(0);
   });
 });

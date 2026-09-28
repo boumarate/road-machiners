@@ -1013,9 +1013,15 @@ function reachSite(vehicle: Vehicle, activity: NpcActivity): ReturnType<typeof g
   return site;
 }
 
+// A driver remembers the last town it did business in, and tells its prices on the radio.
+function noteTown(vehicle: Vehicle, siteId: string): void {
+  if (REGION.towns.some((t) => t.id === siteId)) vehicle.brain!.lastTown = siteId;
+}
+
 function resolveResupply(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
   if (!site) return;
+  noteTown(vehicle, site.id);
   if ('kind' in site && site.kind === 'oasis') getResources(world, vehicle).supplies = suppliesCap(vehicle);
   else if ('kind' in site && site.kind === 'camp') serviceAtCamp(world, vehicle, site.id);
   else serviceVehicle(world, vehicle, site.id, NPC_UPKEEP.repairParts);
@@ -1026,6 +1032,7 @@ function resolveSell(world: World, vehicle: Vehicle, activity: NpcActivity): voi
   const site = reachSite(vehicle, activity);
   if (!site) return;
   sellVehicleCargo(world, vehicle, site.id, NPC_UPKEEP.repairParts);
+  noteTown(vehicle, site.id);
   finishGoal(world, vehicle, 'sold cargo');
 }
 
@@ -1034,6 +1041,7 @@ function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): vo
   const site = reachSite(vehicle, activity);
   if (!site) return;
   if (!activity.purchase) throw new Error('Trade activity missing purchase');
+  noteTown(vehicle, site.id);
   const budget = getResources(world, vehicle).money - getUpkeepReserve(vehicle);
   const count = affordableBuyCount(world, vehicle, site.id, activity.purchase.good, freeCells(vehicle), budget);
   if (count > 0) {

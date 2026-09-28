@@ -2,21 +2,24 @@
 // refers to. The records are typed complete, so a name in the data without a function fails typecheck.
 
 import type { ConditionId, EffectId, PrepareId } from '../data/dialogue';
+import { shopDef } from '../data/market';
+import { PERK_NUMBERS } from '../data/skills';
 import { REGION, type TownDef } from '../data/region';
 import { playerVehicle } from './damage';
 import { discoverSite } from './locations';
 import { isHostile } from './combat';
 import { patchGoal, startTow, topGoal } from './npc-activities';
-import { practice } from './progress';
-import { answerPlea, answersPlea, answersThreat, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, yieldTo, type ThreatAnswer } from './parley';
-import { hasCargo } from './salvage';
+import { vehicleValue } from './market';
+import { hasPerk, practice } from './progress';
+import { answerPlea, answersPlea, answersThreat, makePeace, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, yieldTo, type ThreatAnswer } from './parley';
+import { hasCargo, hasSalvage } from './salvage';
 import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
 import { npcProfile } from './npc-decisions';
 import { towData } from './states';
-import { startTrade, tradeWith } from './economy';
+import { buyPrice, sellPrice, startTrade, tradeWith, transfer } from './economy';
 import { acceptOffer, canTowNpc, hitchNpc, npcTowTerms, playerTow, playerTowing, refuseOffer, releaseNpc, strandedPlayerAt } from './tow';
-import type { Call, CallVars, Plea, TopicOutcome, Vehicle, World } from './types';
-import { bearing, dist } from './vec';
+import type { Call, CallVars, Plea, SalvageStock, TopicOutcome, Vehicle, World } from './types';
+import { bearing, dist, type Vec } from './vec';
 
 // `vars` are the call values, empty on the hub and before a topic's prepare step.
 export type Condition = (world: World, npc: Vehicle, vars: CallVars) => boolean;
@@ -76,6 +79,28 @@ function offerBy(world: World, npc: Vehicle) {
   return tow?.holder === npc.id && !towData(tow).hitched ? tow : null;
 }
 
+// Something a driver can tell of with the Rumor mill perk: an undiscovered site, or a wreck stock the player has not
+// searched or heard of that still holds loot. `site` is null for a wreck.
+type Rumor = { id: string; pos: Vec; site: { id: string; name: string } | null };
+
+function isRumorWreck(world: World, stock: SalvageStock): boolean {
+  const { scavenged, rumored } = world.player;
+  return stock.id.startsWith('wreck') && !scavenged.includes(stock.id) && !rumored.includes(stock.id) && hasSalvage(stock);
+}
+
+// The rumor nearest the driver within its radius, ties broken by id, or null. Nothing here rolls.
+function heardRumor(world: World, npc: Vehicle): Rumor | null {
+  const sites = [...REGION.towns, ...REGION.locations].filter((s) => !world.player.discovered.includes(s.id)).map((s) => ({ id: s.id, pos: s.pos, site: s }));
+  const wrecks = world.salvage.filter((s) => isRumorWreck(world, s)).map((s) => ({ id: s.id, pos: s.pos, site: null }));
+  const near = [...sites, ...wrecks].filter((r) => dist(npc.pos, r.pos) <= PERK_NUMBERS.rumorMill.radius);
+  near.sort((a, b) => dist(npc.pos, a.pos) - dist(npc.pos, b.pos) || (a.id < b.id ? -1 : 1));
+  return near[0] ?? null;
+}
+
+function trucePrice(npc: Vehicle): number {
+  return Math.round(vehicleValue(npc) * PERK_NUMBERS.paidTruce.share);
+}
+
 export const CONDITIONS: Record<ConditionId, Condition> = {
   knowsTown: (_world, npc) => knownTowns(npc).length > 0,
   offersTow: (world, npc) => offerBy(world, npc) !== null,
@@ -104,6 +129,11 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   runs: (_world, _npc, vars) => answerOf(vars) === 'flee',
   canTowNpc: (world, npc) => canTowNpc(world, npc),
   towedByPlayer: (world, npc) => playerTowing(world)?.other === npc.id,
+  knowsLastTown: (world, npc) => hasPerk(world, 'marketEars') && npc.brain?.lastTown !== undefined,
+  hearsRumor: (world, npc) => hasPerk(world, 'rumorMill') && heardRumor(world, npc) !== null,
+  rumorOfSite: (_world, _npc, vars) => vars.site !== undefined,
+  rumorOfWreck: (_world, _npc, vars) => vars.site === undefined,
+  canPayTruce: (world, npc) => hasPerk(world, 'paidTruce') && world.player.money >= trucePrice(npc),
 };
 
 export const EFFECTS: Record<EffectId, Effect> = {
@@ -143,6 +173,19 @@ export const EFFECTS: Record<EffectId, Effect> = {
     settle(world, npc, call, answer === 'comply' ? 'agreed' : 'refused');
     if (answer === 'comply') practice(world, 'deal', 1, null, npc.id);
   },
+  // The call holds no turn, so the rumor is the one the prepare step told.
+  revealRumor: (world, npc, call) => {
+    const rumor = heardRumor(world, npc);
+    if (!rumor || (rumor.site !== null) !== (call.vars.site !== undefined)) throw new Error(`${npc.id} has no rumor to reveal`);
+    if (rumor.site) discoverSite(world, rumor.site);
+    else world.player.rumored.push(rumor.id);
+  },
+  payTruce: (world, npc, call) => {
+    const price = call.vars.price;
+    if (price?.kind !== 'money') throw new Error('payTruce needs a price');
+    transfer(world, playerVehicle(world), npc, price.amount);
+    makePeace(world, playerVehicle(world), npc);
+  },
   settleDone: (world, npc, call) => settle(world, npc, call, 'done'),
   settleRefused: (world, npc, call) => settle(world, npc, call, 'refused'),
 };
@@ -166,6 +209,21 @@ export const PREPARES: Record<PrepareId, Prepare> = {
     const { site, fee } = towData(tow);
     return { town: { kind: 'town', id: site }, fee: { kind: 'money', amount: fee } };
   },
+  lastTownPrices: (world, npc) => {
+    const town = npc.brain?.lastTown;
+    if (!town) throw new Error(`${npc.id} has been to no town`);
+    const goods = shopDef(town).goods.map((good) => ({ good, buy: buyPrice(world, town, good), sell: sellPrice(world, town, good) }));
+    return { town: { kind: 'town', id: town }, prices: { kind: 'prices', town, goods } };
+  },
+  // Bearing and distance are from the player, like directions.
+  nearestRumor: (world, npc): CallVars => {
+    const rumor = heardRumor(world, npc);
+    if (!rumor) throw new Error(`${npc.id} knows no rumor`);
+    const me = playerVehicle(world).pos;
+    const where: CallVars = { bearing: { kind: 'bearing', rad: bearing(me, rumor.pos) }, distance: { kind: 'distance', tiles: dist(me, rumor.pos) } };
+    return rumor.site ? { site: { kind: 'site', id: rumor.id }, ...where } : where;
+  },
+  trucePrice: (_world, npc) => ({ price: { kind: 'money', amount: trucePrice(npc) } }),
   nearestTown: (world, npc) => {
     const me = playerVehicle(world).pos;
     const town = nearestKnownTown(world, npc);

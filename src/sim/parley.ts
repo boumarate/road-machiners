@@ -4,8 +4,10 @@
 
 import { SPAWN } from '../data/npcs';
 import { playerVehicle } from './damage';
+import { creditBounty } from './market';
 import { defyThreat, pushGoal } from './npc-activities';
 import { decide, perceiveDanger } from './npc-decisions';
+import { vehicleHasPerk } from './progress';
 import { createCargoSalvage, hasCargo } from './salvage';
 import { addState, endState, pleaData, stateOf } from './states';
 import type { DecisionOptions } from '../data/npcs';
@@ -47,6 +49,12 @@ export function yieldTo(world: World, loser: Vehicle, winner: Vehicle): void {
   const grudge = stateOf(world, 'revenge', winner.id, loser.id);
   if (grudge) endState(world, grudge, 'fulfilled');
   if (stock && winner.brain) pushGoal(world, winner, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'take the handed-over cargo' });
+  creditYield(world, loser, winner);
+}
+
+// With Bounty talk, an NPC that gives up to the player counts for a bounty on its template.
+function creditYield(world: World, loser: Vehicle, winner: Vehicle): void {
+  if (loser.brain && vehicleHasPerk(world, winner, 'bountyTalk')) creditBounty(world, loser);
 }
 
 // An NPC's answer to a plea, rolled once.
