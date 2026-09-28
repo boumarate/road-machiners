@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SHOPS } from '../data/market';
 import { NPCS, SPAWN, TRAITS } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
@@ -72,7 +73,7 @@ describe('raider camps', () => {
     expect(topGoal(raider)).toBeNull();
   });
 
-  it('send a broke raider with cargo to sell in town before its camp', () => {
+  it('send a broke raider with cargo to sell at a shop before its camp', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const raider = addNpc(w, 'raiders', 'buggy', outside(20));
     getResources(w, raider).fuel = 0;
@@ -80,7 +81,7 @@ describe('raider camps', () => {
     addGoods(w, raider, 'scrap', 1);
     planNpcOrders(w);
     expect(topGoal(raider)?.kind).toBe('sell');
-    expect(TRAITS.raider.towns).toContain(topGoal(raider)?.targetId);
+    expect(Object.keys(SHOPS)).toContain(topGoal(raider)?.targetId);
   });
 
   it('serve only raiders at a gate', () => {

@@ -193,11 +193,42 @@ export function serviceAtCamp(
   refuelAndRepair(world, vehicle);
 }
 
+// A roadside stall buys an NPC's cargo that it trades and sells the fuel or supplies it stocks. It does no repairs.
+export function serviceAtStall(
+  world: World,
+  vehicle: Vehicle,
+  shopId: string,
+  retainedParts: number,
+): void {
+  if (shopDef(shopId).kind !== "stall") throw new Error(`${shopId} is no stall`);
+  sellVehicleCargo(world, vehicle, shopId, retainedParts);
+  topUp(world, vehicle, shopDef(shopId).supplies);
+}
+
 // A driver in debt buys nothing.
 function refuelAndRepair(world: World, vehicle: Vehicle): void {
+  topUp(world, vehicle, ["fuel", "supplies"]);
   const resources = getResources(world, vehicle);
   if (resources.money < 0) return;
-  for (const kind of ["fuel", "supplies"] as const) {
+  const multiplier =
+    vehicle.id === world.player.vehicleId ? repairMult(world) : 1;
+  for (const part of repairableParts(vehicle)) {
+    // Same formula as partRepairCost: a share of the part's value per HP share restored.
+    const unitCost = (ECONOMY.repairShare * partValue(part) * multiplier) / maxHp(part);
+    const hp = Math.min(
+      maxHp(part) - part.hp,
+      Math.floor(resources.money / unitCost),
+    );
+    restorePart(part, part.hp + hp);
+    resources.money -= Math.ceil(hp * unitCost);
+  }
+}
+
+// Fills each kind up to its cap, as far as the money goes. A driver in debt buys nothing.
+function topUp(world: World, vehicle: Vehicle, kinds: readonly Supply[]): void {
+  const resources = getResources(world, vehicle);
+  if (resources.money < 0) return;
+  for (const kind of kinds) {
     const cap =
       kind === "fuel"
         ? fuelCap(vehicle)
@@ -211,18 +242,6 @@ function refuelAndRepair(world: World, vehicle: Vehicle): void {
     );
     resources[kind] += count;
     resources.money -= count * ECONOMY.supplyPrice[kind];
-  }
-  const multiplier =
-    vehicle.id === world.player.vehicleId ? repairMult(world) : 1;
-  for (const part of repairableParts(vehicle)) {
-    // Same formula as partRepairCost: a share of the part's value per HP share restored.
-    const unitCost = (ECONOMY.repairShare * partValue(part) * multiplier) / maxHp(part);
-    const hp = Math.min(
-      maxHp(part) - part.hp,
-      Math.floor(resources.money / unitCost),
-    );
-    restorePart(part, part.hp + hp);
-    resources.money -= Math.ceil(hp * unitCost);
   }
 }
 
