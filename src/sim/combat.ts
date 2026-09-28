@@ -14,6 +14,7 @@ import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { canVehicleSee, hasLineOfFire } from './vision';
 import { createWreckSalvage, removeStocks } from './salvage';
 import { addState, stateOf } from './states';
+import { isOnRope, towHeldBy } from './tow';
 import { isTownGuarded } from './guards';
 import { getResources } from './resources';
 import { chance, gauss, randRange } from './rng';
@@ -40,12 +41,21 @@ export function inFeud(world: World, a: Vehicle, b: Vehicle): boolean {
 }
 
 // Sides at odds: a feud either way, or a raider against anyone else outside a truce.
-// A defeated NPC is nobody's foe until it refits at home.
+// A defeated NPC is nobody's foe until it refits at home. A truck on a tow rope is a foe only to its own tower.
 export function isFoe(world: World, a: Vehicle, b: Vehicle): boolean {
-  if (a.id === b.id || isDefeated(a) || isDefeated(b)) return false;
+  if (a.id === b.id || isOutOfFight(world, a, b)) return false;
   if (inFeud(world, a, b)) return true;
   if (inTruce(world, a, b)) return false;
   return (a.faction === "raiders") !== (b.faction === "raiders");
+}
+
+function isOutOfFight(world: World, a: Vehicle, b: Vehicle): boolean {
+  return isDefeated(a) || isDefeated(b) || isRopeShielded(world, a, b);
+}
+
+function isRopeShielded(world: World, a: Vehicle, b: Vehicle): boolean {
+  if (!isOnRope(world, a.id) && !isOnRope(world, b.id)) return false;
+  return towHeldBy(world, a.id)?.other !== b.id && towHeldBy(world, b.id)?.other !== a.id;
 }
 
 function inTruce(world: World, a: Vehicle, b: Vehicle): boolean {

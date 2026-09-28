@@ -6,9 +6,9 @@ import { SPAWN } from '../data/npcs';
 import { REGION } from '../data/region';
 import { getResources } from './resources';
 import { siteGates } from './sites';
-import { autoOrders, fireWeapons, hitOdds, laneOfOffset, resolveDestroyed } from './combat';
+import { autoOrders, fireWeapons, hitOdds, isHostile, laneOfOffset, resolveDestroyed } from './combat';
 import { mountedItems, mountedParts } from './grid';
-import { stateOf } from './states';
+import { addState, stateOf } from './states';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
@@ -199,6 +199,23 @@ function range(d: number, heading: number, speed = 0) {
   buggy.speed = speed;
   return { w, me, buggy, mg };
 }
+
+describe('towed trucks', () => {
+  it('a truck on a tow rope is nobody\'s foe, but its tower stays one', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    const tower = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 30, y: 36 });
+    addState(w, 'tow', tower.id, me.id, { kind: 'tow', site: REGION.towns[0].id, fee: 10, waived: 0, hitched: false });
+    expect(isHostile(w, raider, me)).toBe(true);
+    w.states[w.states.length - 1].data = { kind: 'tow', site: REGION.towns[0].id, fee: 10, waived: 0, hitched: true };
+    expect(isHostile(w, raider, me)).toBe(false);
+    expect(isHostile(w, me, raider)).toBe(false);
+    expect(isHostile(w, raider, tower)).toBe(true);
+    addState(w, 'feud', raider.id, me.id, { kind: 'feud', robbery: true });
+    expect(isHostile(w, raider, me)).toBe(false);
+  });
+});
 
 describe('hit odds', () => {
   const broadside = Math.PI / 2;

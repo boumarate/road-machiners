@@ -34,7 +34,7 @@ import { canReachSalvage, canTakeAny, canTakeFromTruck, siteLootTable } from './
 import { canUseSite, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
-import { canHire, canTakeEscort, declineFactor, inTowReach, strandedAt, towSite, unguardedLeader } from './tow';
+import { canHire, canTakeEscort, declineFactor, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
 import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
@@ -335,11 +335,15 @@ export function busyWithFight(vehicle: Vehicle, otherId: string): boolean {
 // ---- Robbery.
 
 // A robber can rob a truck it sees, that is not hostile yet, that is not busy fighting another, that is not
-// knocked out, since that one is looted instead, and that carries loot. Cheap checks run before the sight line.
+// knocked out, since that one is looted instead, that is not on a tow rope, and that carries loot. Cheap checks run before the sight line.
 export function canRob(w: World, robber: Vehicle, target: Vehicle): boolean {
-  if (robber.id === target.id || !hasLoot(target) || busyWithFight(target, robber.id) || isKnockedOut(target)) return false;
+  if (robber.id === target.id || !isRobbable(w, target) || busyWithFight(target, robber.id)) return false;
   if (isHostile(w, robber, target)) return false;
   return canVehicleSee(w, robber, target.pos);
+}
+
+function isRobbable(w: World, target: Vehicle): boolean {
+  return hasLoot(target) && !isKnockedOut(target) && !isOnRope(w, target.id);
 }
 
 // ---- Availability, one check per option. An option is available when the driver physically can take it now.

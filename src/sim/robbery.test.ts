@@ -83,6 +83,14 @@ const UNAVAILABLE: Record<string, Setup> = {
     target.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
     return { w, robber: addScumbag(w, { x: 10, y: 10 }), target };
   },
+  towed: () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const robber = addScumbag(w, { x: 10, y: 10 });
+    const target = addPrey(w, { x: 15, y: 10 });
+    const tower = addVehicle(w, 'traders', 'scout', [], { x: 17, y: 10 });
+    addState(w, 'tow', tower.id, target.id, { kind: 'tow', site: 'bowl', fee: 10, waived: 0, hitched: true });
+    return { w, robber, target };
+  },
   busyFighting: () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const robber = addScumbag(w, { x: 10, y: 10 });
