@@ -3,6 +3,7 @@ import { PERK_NUMBERS } from '../data/skills';
 import { describe, expect, it, onTestFinished } from 'vitest';
 import { TERRAIN } from '../data/terrain';
 import { corePart } from './grid';
+import { addGoods } from './inventory';
 import { decide, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
 import { noteHurt, thinkNpc, topGoal } from './npc-activities';
 import { addState, stateOf } from './states';
@@ -10,6 +11,7 @@ import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import type { TraitId } from '../data/npcs';
 import type { Faction, Vehicle, World } from './types';
 import type { Vec } from './vec';
+import { refreshVision } from './vision';
 import { cloneWorld } from './world';
 
 function addNpc(w: World, faction: Faction, templateId: string, traits: TraitId[], pos: Vec, parts = ['mg', 'stockEngine']): Vehicle {
@@ -357,5 +359,45 @@ describe('truce answers', () => {
     const { robber, accept } = setup(true);
     corePart(robber, 'cab').hp = 1;
     expect(accept()).toBeGreaterThan(0.5);
+  });
+
+  it('a confident raider rarely takes a truce from prey with loot', () => {
+    const w = emptyWorld({ x: 80, y: 80 });
+    const me = find(w, w.player.vehicleId);
+    const raider = addNpc(w, 'raiders', 'raider', ['raider'], { x: 14, y: 10 }, ['autocannon', 'stockEngine']);
+    const accept = () => optionChances(optionWeights(w, raider, 'truceOffered', me.id, vehicleDanger(w, me))).accept!;
+    addGoods(w, me, 'scrap', 2);
+    expect(accept()).toBeLessThan(0.1);
+    corePart(raider, 'cab').hp = 1;
+    expect(accept()).toBeGreaterThan(0.5);
+  });
+});
+
+describe('truce offers', () => {
+  it('a robber that is not weak rarely offers its prey a truce', () => {
+    const truce = (robbery: boolean, cab: number | null) => {
+      const w = emptyWorld({ x: 80, y: 80 });
+      const me = w.player.vehicleId;
+      const robber = addNpc(w, 'scavengers', 'scavenger', ['scavenger', 'scumbag'], { x: 14, y: 10 }, ['autocannon', 'stockEngine']);
+      addState(w, 'feud', robber.id, me, { kind: 'feud', robbery });
+      if (cab !== null) corePart(robber, 'cab').hp = cab;
+      return optionWeights(w, robber, 'parley', me, vehicleDanger(w, find(w, me))).truce!;
+    };
+    expect(truce(true, null)).toBeLessThan(truce(false, null) / 5);
+    expect(truce(true, 1)).toBe(truce(false, 1));
+  });
+});
+
+describe('robbery after a truce', () => {
+  it('a robber rarely robs a truck it holds a truce with', () => {
+    const w = emptyWorld({ x: 10, y: 10 });
+    const me = find(w, w.player.vehicleId);
+    addGoods(w, me, 'scrap', 2);
+    const robber = addNpc(w, 'scavengers', 'scavenger', ['scavenger', 'scumbag'], { x: 14, y: 10 }, ['autocannon', 'stockEngine']);
+    refreshVision(w);
+    const rob = () => optionWeights(w, robber, 'preySeen', me.id, vehicleDanger(w, me)).rob!;
+    const before = rob();
+    addState(w, 'truce', robber.id, me.id, { kind: 'none' });
+    expect(rob()).toBeLessThan(before / 100);
   });
 });

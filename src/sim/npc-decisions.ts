@@ -428,9 +428,10 @@ function retaliateFactor(world: World, vehicle: Vehicle, decision: DecisionId, s
   return subjectOf(world, decision, subject).faction === vehicle.faction ? NPC_BEHAVIOR.mateRetaliate : 1;
 }
 
-// A driver facing a threat asks for a truce more often.
-function truceFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
-  return danger !== null && !isManageable(world, vehicle, danger) ? NPC_BEHAVIOR.threatTruce : 1;
+// A driver facing a threat asks for a truce more often. A robber that is not weak rarely asks its prey.
+function truceFactor(world: World, vehicle: Vehicle, _decision: DecisionId, subject: string | null, danger: number | null): number {
+  if (danger !== null && !isManageable(world, vehicle, danger)) return NPC_BEHAVIOR.threatTruce;
+  return robs(world, vehicle, subject) && !isWeak(world, vehicle) ? NPC_BEHAVIOR.robberTruce : 1;
 }
 
 // A weak driver begs.
@@ -450,9 +451,20 @@ function acceptFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _su
 
 // A robber that still expects to win refuses its prey's truce.
 function refuseFactor(world: World, vehicle: Vehicle, _decision: DecisionId, subject: string | null, danger: number | null): number {
-  const feud = subject === null ? null : stateOf(world, 'feud', vehicle.id, subject);
-  const robbing = feud?.data.kind === 'feud' && feud.data.robbery;
-  return robbing && !wantsPeace(world, vehicle, danger) ? NPC_BEHAVIOR.robberRefuse : 1;
+  return robs(world, vehicle, subject) && !wantsPeace(world, vehicle, danger) ? NPC_BEHAVIOR.robberRefuse : 1;
+}
+
+// Whether the driver is after the subject's cargo: it started a robbery feud, or it is a raider and the subject a
+// non-raider with loot, which is what makes raiders hostile.
+function robs(world: World, vehicle: Vehicle, subject: string | null): boolean {
+  if (subject === null) return false;
+  const target = vehicleById(world, subject);
+  return robbingFeud(world, vehicle, target) || (vehicle.faction === 'raiders' && target.faction !== 'raiders' && hasLoot(target));
+}
+
+function robbingFeud(world: World, vehicle: Vehicle, target: Vehicle): boolean {
+  const feud = stateOf(world, 'feud', vehicle.id, target.id);
+  return feud?.data.kind === 'feud' && feud.data.robbery;
 }
 
 // A driver hands its cargo to a threat.
