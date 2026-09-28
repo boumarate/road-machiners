@@ -103,7 +103,7 @@ describe('death', () => {
     const w = emptyWorld();
     expect(w.player.state).toBe('active');
     expect(w.player.knockoutTurns).toBe(0);
-    expect(w.player.supplies).toBe(RULES.suppliesCap);
+    expect(w.player.supplies).toBe(RULES.baseSupplies);
   });
 });
 

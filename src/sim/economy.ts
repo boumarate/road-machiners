@@ -9,7 +9,7 @@ import { partDef } from "../data/parts";
 import { RULES, UPKEEP } from "../data/rules";
 import { NPC_UPKEEP } from "../data/npcs";
 import { REGION } from "../data/region";
-import { getResources } from "./resources";
+import { fitStores, getResources } from "./resources";
 import { isJunk, maxHp, partValue, restorePart, scrapValue, wearFactor } from "./wear";
 import { playerVehicle, vehicleById } from "./damage";
 import { inFeud } from "./combat";
@@ -25,6 +25,7 @@ import { addGoods, mountPart, removeGoods, spareParts, stowPart } from "./invent
 import { clockOf } from "./sun";
 import type { NpcState, PartInstance, Vehicle, World } from "./types";
 import { playerCommand } from "./world";
+import { fuelCap, suppliesCap } from "./stats";
 
 export type Supply = "fuel" | "supplies";
 
@@ -198,8 +199,8 @@ function refuelAndRepair(world: World, vehicle: Vehicle): void {
   for (const kind of ["fuel", "supplies"] as const) {
     const cap =
       kind === "fuel"
-        ? chassisDef(vehicle.chassisId).fuelCap
-        : RULES.suppliesCap;
+        ? fuelCap(vehicle)
+        : suppliesCap(vehicle);
     const count = Math.max(
       0,
       Math.min(
@@ -277,8 +278,8 @@ export function supplyRoom(world: World, kind: Supply): number {
   const p = world.player;
   const cap =
     kind === "fuel"
-      ? chassisDef(playerVehicle(world).chassisId).fuelCap
-      : RULES.suppliesCap;
+      ? fuelCap(playerVehicle(world))
+      : suppliesCap(playerVehicle(world));
   return Math.max(0, Math.floor(cap - p[kind]));
 }
 
@@ -462,7 +463,7 @@ export function buyChassis(world: World, chassisId: string): World {
         );
     }
     me.weaponOrders = {};
-    w.player.fuel = Math.min(w.player.fuel, chassisDef(chassisId).fuelCap);
+    fitStores(w, me);
   });
 }
 
@@ -554,7 +555,7 @@ export function truckSupplyPrice(world: World, kind: Supply): number {
 
 // Whole units the driver will sell: what it holds above its reserve share of its cap.
 export function truckSupplyForSale(npc: Vehicle, kind: Supply): number {
-  const cap = kind === "fuel" ? chassisDef(npc.chassisId).fuelCap : RULES.suppliesCap;
+  const cap = kind === "fuel" ? fuelCap(npc) : suppliesCap(npc);
   const held = npc.resources![kind];
   return Math.max(0, Math.floor(held - cap * NPC_UPKEEP.tradeReserve));
 }

@@ -53,7 +53,7 @@ describe('resource cheats', () => {
     const w = emptyWorld();
     const cap = chassisDef(playerVehicle(w).chassisId).fuelCap;
     expect(() => setFuel(w, cap + 1)).toThrow(new RegExp(`${cap}`));
-    expect(() => setSupplies(w, RULES.suppliesCap + 1)).toThrow(new RegExp(`${RULES.suppliesCap}`));
+    expect(() => setSupplies(w, RULES.baseSupplies + 1)).toThrow(new RegExp(`${RULES.baseSupplies}`));
     expect(() => setHealth(w, RULES.maxHealth + 1)).toThrow(new RegExp(`${RULES.maxHealth}`));
     expect(() => setFuel(w, -1)).toThrow(CheatError);
   });
@@ -149,7 +149,7 @@ describe('god mode', () => {
     Object.assign(w.player, { health: 1, fuel: 0, supplies: 0 });
     applyGodMode(w);
     expect(corePart(me, 'cab').hp).toBe(partDef(corePart(me, 'cab').defId).hp);
-    expect(w.player).toMatchObject({ health: RULES.maxHealth, fuel: chassisDef(me.chassisId).fuelCap, supplies: RULES.suppliesCap });
+    expect(w.player).toMatchObject({ health: RULES.maxHealth, fuel: chassisDef(me.chassisId).fuelCap, supplies: RULES.baseSupplies });
   });
 
   it('does nothing while off', () => {

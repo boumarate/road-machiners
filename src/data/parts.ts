@@ -8,7 +8,8 @@ export type PartKind =
   | "armor"
   | "cargo"
   | "core"
-  | "scanner";
+  | "scanner"
+  | "store";
 
 // w and h are the part's footprint in inventory cells before rotation. mass in kilograms.
 // armor is the penetration the part stops when a round passes through it.
@@ -92,13 +93,21 @@ export type ScannerDef = PartBase & {
   range: number; // tiles
 };
 
+// Adds room for fuel or supplies while mounted. The room stays while the part is broken.
+export type StoreDef = PartBase & {
+  kind: "store";
+  holds: "fuel" | "supplies";
+  amount: number; // fuel units or supply units added to the cap
+};
+
 export type PartDef =
   | WeaponDef
   | EngineDef
   | ArmorDef
   | CargoDef
   | CoreDef
-  | ScannerDef;
+  | ScannerDef
+  | StoreDef;
 
 export const PARTS: Record<string, PartDef> = {
   mg: {
@@ -730,6 +739,36 @@ export const PARTS: Record<string, PartDef> = {
     tall: true,
     extraRows: 5,
     look: "box",
+  },
+  jerrycans: {
+    id: "jerrycans",
+    kind: "store",
+    name: "Jerrycan rack",
+    hp: 30,
+    value: 120,
+    tier: 1,
+    w: 1,
+    h: 1,
+    mass: 70, // with full cans
+    armor: 1,
+    tall: false,
+    holds: "fuel",
+    amount: 12, // 60 L
+  },
+  supplyLocker: {
+    id: "supplyLocker",
+    kind: "store",
+    name: "Supply locker",
+    hp: 30,
+    value: 120,
+    tier: 1,
+    w: 1,
+    h: 1,
+    mass: 60,
+    armor: 2,
+    tall: false,
+    holds: "supplies",
+    amount: 10, // half the base supplies
   },
   // Each chassis has one cab. It fills the cells where its base model draws the cab or the driver's seat. A closed
   // cab is tall, so guns cannot fire across it. An open seat is not.

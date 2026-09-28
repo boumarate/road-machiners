@@ -126,14 +126,14 @@ describe('finite salvage', () => {
     const me = w.vehicles[0];
     const cap = chassisDef(me.chassisId).fuelCap;
     w.player.fuel = cap - 3;
-    w.player.supplies = RULES.suppliesCap - 1;
+    w.player.supplies = RULES.baseSupplies - 1;
     w.salvage.push({ id: 'test-stock', pos: { x: 30, y: 30 }, radius: 1, goods: {}, parts: [], fuel: 5, supplies: 4 });
     expect(() => takeStores(w, 'test-stock')).toThrow(/Search/);
     w.player.scavenged.push('test-stock');
     const next = takeStores(w, 'test-stock');
     const stock = next.salvage.find((s) => s.id === 'test-stock')!;
     expect(next.player.fuel).toBe(cap);
-    expect(next.player.supplies).toBe(RULES.suppliesCap);
+    expect(next.player.supplies).toBe(RULES.baseSupplies);
     expect(stock.fuel).toBe(2);
     expect(stock.supplies).toBe(3);
     expect(hasSalvage(stock)).toBe(true);

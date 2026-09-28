@@ -2,7 +2,7 @@
 // Every rule that needs speed, turning or capacity reads it from here.
 
 import { chassisDef } from '../data/chassis';
-import type { EngineDef, WeaponDef } from '../data/parts';
+import { partDef, type EngineDef, type StoreDef, type WeaponDef } from '../data/parts';
 import { RULES } from '../data/rules';
 import { PERK_NUMBERS } from '../data/skills';
 import { skillEffect, vehicleHasPerk } from './progress';
@@ -101,6 +101,21 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     radius: ch.radius,
     weapons: mountedItems(v, 'weapon').map((item) => ({ part: item.part, def: wornDef<WeaponDef>(item.part), sides: openSides(v, item) })),
   };
+}
+
+// The chassis tank plus every mounted fuel store.
+export function fuelCap(v: Vehicle): number {
+  return chassisDef(v.chassisId).fuelCap + storeRoom(v, 'fuel');
+}
+
+// The base supply load plus every mounted supply store.
+export function suppliesCap(v: Vehicle): number {
+  return RULES.baseSupplies + storeRoom(v, 'supplies');
+}
+
+function storeRoom(v: Vehicle, holds: StoreDef['holds']): number {
+  const stores = mountedParts(v, 'store').map((part) => partDef(part.defId) as StoreDef);
+  return stores.filter((def) => def.holds === holds).reduce((sum, def) => sum + def.amount, 0);
 }
 
 // Top speed of a stranded truck, raised by the player's driving and the pusher perk.

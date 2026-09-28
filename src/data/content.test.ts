@@ -27,6 +27,7 @@ beforeAll(() => {
 });
 
 const addedParts: Record<Exclude<PartKind, "core" | "scanner">, string[]> = {
+  store: ["jerrycans", "supplyLocker"],
   weapon: ["shotgun", "autocannon", "tankGun", "rocketRack", "sniperCannon"],
   engine: ["flatFour", "workhorseDiesel", "racingV6", "heavyDiesel", "turbine"],
   armor: [
@@ -70,6 +71,7 @@ describe("equipment variety", () => {
         engine: 2,
         armor: 3,
         cargo: 2,
+        store: 0,
       };
       expect(Object.values(PARTS).filter((p) => p.kind === kind)).toHaveLength(
         originalCounts[kind] + ids.length,

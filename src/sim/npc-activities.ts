@@ -27,7 +27,7 @@ import { beginSearch } from './search';
 import { vehicleById } from './damage';
 import { plead } from './parley';
 import { addState, endState, stateOf, statesHeld } from './states';
-import { vehicleStats } from './stats';
+import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Vehicle, World } from './types';
 import { canUseSite, nearestPad, type Site } from './sites';
 import { clamp, dist, type Vec } from './vec';
@@ -168,8 +168,8 @@ function serviceReason(lowFuel: boolean, lowSupplies: boolean): string {
 // Low fuel, low supplies or a damaged cab or part needs service. Null when none is needed.
 function serviceNeed(world: World, vehicle: Vehicle): ServiceNeed | null {
   const resources = getResources(world, vehicle);
-  const lowFuel = resources.fuel <= chassisDef(vehicle.chassisId).fuelCap * NPC_UPKEEP.lowFuel;
-  const lowSupplies = resources.supplies <= RULES.suppliesCap * NPC_UPKEEP.lowSupplies;
+  const lowFuel = resources.fuel <= fuelCap(vehicle) * NPC_UPKEEP.lowFuel;
+  const lowSupplies = resources.supplies <= suppliesCap(vehicle) * NPC_UPKEEP.lowSupplies;
   const damaged = isDamaged(vehicle);
   if (!lowFuel && !lowSupplies && !damaged) return null;
   return { reason: serviceReason(lowFuel, lowSupplies), suppliesOnly: lowSupplies && !lowFuel && !damaged };
@@ -833,8 +833,8 @@ function holdOrPush(world: World, vehicle: Vehicle, service: NpcActivity | null)
 // Low supplies, or a low tank that still has fuel to reach service.
 function needsUrgentSupplies(world: World, vehicle: Vehicle): boolean {
   const resources = getResources(world, vehicle);
-  if (resources.supplies <= RULES.suppliesCap * NPC_UPKEEP.lowSupplies) return true;
-  return resources.fuel > 0 && resources.fuel <= chassisDef(vehicle.chassisId).fuelCap * NPC_UPKEEP.lowFuel;
+  if (resources.supplies <= suppliesCap(vehicle) * NPC_UPKEEP.lowSupplies) return true;
+  return resources.fuel > 0 && resources.fuel <= fuelCap(vehicle) * NPC_UPKEEP.lowFuel;
 }
 
 // A repair goal in the stack holds, in place once the tank is empty. A new one starts at the recover condition,
@@ -1016,7 +1016,7 @@ function reachSite(vehicle: Vehicle, activity: NpcActivity): ReturnType<typeof g
 function resolveResupply(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
   if (!site) return;
-  if ('kind' in site && site.kind === 'oasis') getResources(world, vehicle).supplies = RULES.suppliesCap;
+  if ('kind' in site && site.kind === 'oasis') getResources(world, vehicle).supplies = suppliesCap(vehicle);
   else if ('kind' in site && site.kind === 'camp') serviceAtCamp(world, vehicle, site.id);
   else serviceVehicle(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   finishGoal(world, vehicle, 'finished service');

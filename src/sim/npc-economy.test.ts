@@ -18,7 +18,7 @@ describe('NPC transactions', () => {
     cab.hp -= 2;
     npc.resources!.money = Math.ceil((2 * ECONOMY.repairShare * partValue(cab)) / maxHp(cab));
     npc.resources!.fuel = chassisDef(npc.chassisId).fuelCap;
-    npc.resources!.supplies = RULES.suppliesCap;
+    npc.resources!.supplies = RULES.baseSupplies;
     economy.serviceVehicle(w, npc, 'bowl', 0);
     expect(corePart(npc, 'cab').id).toBe(cab.id);
     expect(cab.hp).toBe(partDef(cab.defId).hp);

@@ -4,7 +4,9 @@ import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { TIME } from '../data/time';
 import { consumeVehicleSupplies } from './resources';
 import { addVehicle, emptyWorld } from './testkit';
-import { consumeSupplies, leakFuel } from './supplies';
+import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
+import { CHASSIS } from '../data/chassis';
+import { fuelCap } from './stats';
 import { corePart } from './grid';
 import { heatAt } from './sun';
 
@@ -131,5 +133,19 @@ describe('desert born perk', () => {
     const before = npc.resources!.supplies;
     consumeVehicleSupplies(w, npc);
     expect(before - npc.resources!.supplies).toBeCloseTo(RULES.suppliesPerTurn * heatAt(w, npc.pos), 9);
+  });
+});
+
+describe('store overflow', () => {
+  it('an NPC that loses a mounted store spills the fuel above its cap at the turn step', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'scavengers', 'scout', ['jerrycans'], { x: 10, y: 10 });
+    npc.resources!.fuel = fuelCap(npc);
+    npc.items = npc.items.filter((it) => it.kind !== 'part' || it.part.defId !== 'jerrycans');
+    const playerFuel = w.player.fuel;
+    fitAllStores(w);
+    expect(npc.resources!.fuel).toBe(CHASSIS.scout.fuelCap);
+    expect(w.player.fuel).toBe(playerFuel);
+    expect(w.events.some((e) => e.t === 'supply')).toBe(false);
   });
 });

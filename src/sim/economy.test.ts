@@ -226,8 +226,8 @@ describe("garage", () => {
   it("buys supplies up to the cap", () => {
     const start = startAtBowl();
     start.player.supplies = 12;
-    const w = buySupply(start, "supplies", RULES.suppliesCap - 12);
-    expect(w.player.supplies).toBe(RULES.suppliesCap);
+    const w = buySupply(start, "supplies", RULES.baseSupplies - 12);
+    expect(w.player.supplies).toBe(RULES.baseSupplies);
     expect(() => buySupply(w, "supplies", 1)).toThrow();
   });
 
@@ -503,7 +503,7 @@ describe("locations", () => {
     const w = emptyWorld({ ...sitePads(oasis)[0] });
     w.player.supplies = 1;
     const after = useOasis(w);
-    expect(after.player.supplies).toBe(RULES.suppliesCap);
+    expect(after.player.supplies).toBe(RULES.baseSupplies);
     expect(w.player.supplies).toBe(1);
   });
 
@@ -531,7 +531,7 @@ describe("locations", () => {
     expect(w.player.supplies).toBe(1);
     w.vehicles[0].speed = 0;
     const after = applySiteAction(w);
-    expect(after?.player.supplies).toBe(RULES.suppliesCap);
+    expect(after?.player.supplies).toBe(RULES.baseSupplies);
     expect(after?.events).toContainEqual({ t: "info", text: `Filled supplies at ${oasis.name}` });
   });
 

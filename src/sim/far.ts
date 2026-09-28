@@ -9,7 +9,7 @@ import { TERRAIN } from '../data/terrain';
 import { playerVehicle } from './damage';
 import { route } from './path';
 import { getResources } from './resources';
-import { vehicleStats, type VehicleStats } from './stats';
+import { fuelCap, vehicleStats, type VehicleStats } from './stats';
 import { parkedVehicles, zoneSpeed } from './steering';
 import { isOnRope } from './tow';
 import type { MoveOrder, Pose, Vehicle, World } from './types';
@@ -29,7 +29,7 @@ export function isNear(w: World, v: Vehicle): boolean {
 // Shared by the physics driver and far travel, so both plan the same speed.
 export function fuelLimited(w: World, v: Vehicle, s: VehicleStats, speed: number, order: MoveOrder | null): VehicleStats {
   const fuel = getResources(w, v).fuel;
-  const low = s.fuelPerTile > 0 && fuel > 0 && fuel < chassisDef(v.chassisId).fuelCap * RULES.lowFuelThreshold;
+  const low = s.fuelPerTile > 0 && fuel > 0 && fuel < fuelCap(v) * RULES.lowFuelThreshold;
   const limit = low ? Math.max(s.maxSpeed * RULES.lowFuelSpeedFactor, speed - s.brake) : s.maxSpeed;
   const capped = low ? { ...s, maxSpeed: limit } : s;
   const wanted = order?.kind === 'through' ? zoneSpeed(capped, speed, dist(v.pos, order.dest)) : Math.min(capped.maxSpeed, speed + capped.accel);

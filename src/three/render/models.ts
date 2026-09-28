@@ -48,6 +48,8 @@ const NAMES = [
   'transmission',
   'fuel_tank',
   'scanner',
+  'store_jerrycans',
+  'store_locker',
 
   'eng_stock',
   'eng_tuned_v8',

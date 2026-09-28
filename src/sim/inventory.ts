@@ -11,6 +11,7 @@ import { requireTown, townAt } from './sites';
 import { startJob } from './jobs';
 import { RULES } from '../data/rules';
 import { canReachSalvage, dumpOnPile, truckPickupItem } from './salvage';
+import { fitStores } from './resources';
 import { vehicleStats } from './stats';
 import type { GridItem, PartInstance, RefitJob, RefitMove, RefitPickup, Vehicle, World } from './types';
 import { playerCommand } from './world';
@@ -238,6 +239,7 @@ export function applyRefitLayout(world: World, v: Vehicle, items: GridItem[]): v
   for (const id of Object.keys(v.weaponOrders)) {
     if (!stats.weapons.some((mount) => mount.part.id === id)) delete v.weaponOrders[id];
   }
+  fitStores(world, v);
 }
 
 function getSpot(item: Spot): Spot {

@@ -11,7 +11,7 @@ import type { Weighted } from './npcs';
 
 export type Tier = 1 | 2 | 3;
 
-export type ItemKind = 'weapon' | 'engine' | 'armor' | 'cargo' | 'scanner' | 'chassis' | 'good';
+export type ItemKind = 'weapon' | 'engine' | 'armor' | 'cargo' | 'scanner' | 'store' | 'chassis' | 'good';
 
 export const EFFORT = {
   // Net money per turn at each tier. First guesses only: the start kit gives 1000 money and a
@@ -33,6 +33,7 @@ export const EFFORT = {
       armor: [15, 45],
       cargo: [10, 30],
       scanner: [10, 30],
+      store: [10, 30],
       chassis: [40, 120],
       good: [1, 5],
     },
@@ -42,6 +43,7 @@ export const EFFORT = {
       armor: [45, 110],
       cargo: [30, 80],
       scanner: [30, 80],
+      store: [30, 80],
       chassis: [120, 300],
       good: [3, 10],
     },
@@ -51,6 +53,7 @@ export const EFFORT = {
       armor: [110, 300],
       cargo: [80, 220],
       scanner: [80, 220],
+      store: [80, 220],
       chassis: [300, 700],
       good: [8, 25],
     },
@@ -259,7 +262,7 @@ export const SHOPS: Record<string, ShopDef> = {
     goods: ['grain', 'salt', 'textiles'],
     priceFactor: PRICE_FACTOR,
     partStock: {
-      parts: (['rack', 'panniers', 'flatbed', 'scrapPanels', 'scrapSheet', 'cage'] as const).map((id) => ({ value: id, weight: 1 })),
+      parts: (['rack', 'panniers', 'flatbed', 'scrapPanels', 'scrapSheet', 'cage', 'supplyLocker'] as const).map((id) => ({ value: id, weight: 1 })),
       wear: STALL_WEAR,
     },
     stockSize: [2, 4],
@@ -279,7 +282,7 @@ export const SHOPS: Record<string, ShopDef> = {
     goods: ['batteries', 'scrap', 'parts'],
     priceFactor: PRICE_FACTOR,
     partStock: {
-      parts: (['stockEngine', 'flatFour', 'workhorseDiesel', 'scanner', 'plates'] as const).map((id) => ({ value: id, weight: 1 })),
+      parts: (['stockEngine', 'flatFour', 'workhorseDiesel', 'scanner', 'plates', 'jerrycans'] as const).map((id) => ({ value: id, weight: 1 })),
       wear: STALL_WEAR,
     },
     stockSize: [2, 4],

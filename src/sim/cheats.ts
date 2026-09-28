@@ -6,7 +6,7 @@ import { GOOD_IDS, GOODS } from '../data/goods';
 import { NPCS } from '../data/npcs';
 import { PARTS, partDef } from '../data/parts';
 import { REGION } from '../data/region';
-import { CHEATS, RULES } from '../data/rules';
+import { CHEATS } from '../data/rules';
 import { PERK_IDS, PERKS, SKILL_IDS } from '../data/skills';
 import { TIME } from '../data/time';
 import { resolveDestroyed, wreckVehicle } from './combat';
@@ -28,6 +28,7 @@ import { dist, type Vec } from './vec';
 import { refreshVision } from './vision';
 import { makeWeather } from './weather';
 import { hostileToPlayer, playerCanAct, update } from './world';
+import { fuelCap, suppliesCap } from './stats';
 
 // Bad user input to a cheat. Any other error from a cheat is a bug.
 export class CheatError extends Error {}
@@ -60,12 +61,12 @@ export function setMoney(world: World, n: number): World {
 }
 
 export function setFuel(world: World, n: number): World {
-  requireRange('Fuel', n, 0, chassisDef(playerVehicle(world).chassisId).fuelCap);
+  requireRange('Fuel', n, 0, fuelCap(playerVehicle(world)));
   return update(world, (w) => { w.player.fuel = n; });
 }
 
 export function setSupplies(world: World, n: number): World {
-  requireRange('Supplies', n, 0, RULES.suppliesCap);
+  requireRange('Supplies', n, 0, suppliesCap(playerVehicle(world)));
   return update(world, (w) => { w.player.supplies = n; });
 }
 
@@ -148,8 +149,8 @@ export function applyGodMode(world: World): void {
   const me = playerVehicle(world);
   repairParts(me);
   world.player.health = maxHealthOf(world);
-  world.player.fuel = chassisDef(me.chassisId).fuelCap;
-  world.player.supplies = RULES.suppliesCap;
+  world.player.fuel = fuelCap(me);
+  world.player.supplies = suppliesCap(me);
 }
 
 // The first free point on rings around center, nearest ring first. Null when all rings are blocked.

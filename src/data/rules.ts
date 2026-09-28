@@ -77,7 +77,7 @@ export const RULES = {
 
   // Supplies, per turn
   suppliesPerTurn: 0.015, // at base heat; a full load lasts about 550 daytime turns, enough to explore off the roads
-  suppliesCap: 20,
+  baseSupplies: 20, // supply cap before mounted supply stores
   suppliesLow: 4, // the HUD warns at or below this, about 110 daytime turns before running out
   starveDamage: 5, // character health lost per turn without supplies
   starveFloor: 30, // starving stops here, so only cab damage can kill

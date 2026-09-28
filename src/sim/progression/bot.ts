@@ -23,7 +23,7 @@ import { getUpkeepReserve, huntingGrounds } from '../npc-decisions';
 import { canReachSalvage, hasSalvage } from '../salvage';
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, townAt, type Site } from '../sites';
-import { isStranded, vehicleStats } from '../stats';
+import { fuelCap, isStranded, suppliesCap, vehicleStats } from '../stats';
 import { clockOf } from '../sun';
 import { inTowReach, setBeacon } from '../tow';
 import type { GameEvent, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
@@ -213,8 +213,8 @@ function engineSpot(v: Vehicle, defId: string): Spot | null {
 function needsService(world: World): boolean {
   const p = world.player;
   const me = playerVehicle(world);
-  const lowFuel = p.fuel <= chassisDef(me.chassisId).fuelCap * NPC_UPKEEP.lowFuel && p.money >= ECONOMY.supplyPrice.fuel;
-  const lowSupplies = p.supplies <= RULES.suppliesCap * NPC_UPKEEP.lowSupplies && p.money >= ECONOMY.supplyPrice.supplies;
+  const lowFuel = p.fuel <= fuelCap(me) * NPC_UPKEEP.lowFuel && p.money >= ECONOMY.supplyPrice.fuel;
+  const lowSupplies = p.supplies <= suppliesCap(me) * NPC_UPKEEP.lowSupplies && p.money >= ECONOMY.supplyPrice.supplies;
   const damaged = mountedParts(me).some(isBadlyDamaged) && repairCost(world) <= p.money;
   return lowFuel || lowSupplies || damaged;
 }

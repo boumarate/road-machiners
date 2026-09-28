@@ -15,7 +15,7 @@ import { advanceKnockout, advanceNpcKnockouts, checkDeath, checkKnockout } from 
 import { healPlayer } from './health';
 import { fireGuards } from './guards';
 import { discoverSites } from './locations';
-import { consumeSupplies, leakFuel } from './supplies';
+import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
 import { chargeUpkeep } from './economy';
 import { nameStream, spawnInitial, spawnNpcs } from './spawn';
 import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
@@ -251,6 +251,7 @@ export function endTurn(
     chargeUpkeep(w);
     healPlayer(w);
     leakFuel(w);
+    fitAllStores(w);
     applyGodMode(w);
     resolveDestroyed(w);
     advanceContracts(w);

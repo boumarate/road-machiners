@@ -18,7 +18,7 @@ import { vehicleHasPerk } from './progress';
 import { chance, randInt } from './rng';
 import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
-import { vehicleStats } from './stats';
+import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import { cancelJob, inCombat, startJob } from './jobs';
 import type { GridItem, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
 import { canUseSite, townAt } from './sites';
@@ -178,8 +178,8 @@ export function pourStores(world: World, vehicle: Vehicle, stock: SalvageStock):
 function storesRoom(world: World, vehicle: Vehicle): { fuel: number; supplies: number } {
   const resources = getResources(world, vehicle);
   return {
-    fuel: Math.max(0, chassisDef(vehicle.chassisId).fuelCap - resources.fuel),
-    supplies: Math.max(0, RULES.suppliesCap - resources.supplies),
+    fuel: Math.max(0, fuelCap(vehicle) - resources.fuel),
+    supplies: Math.max(0, suppliesCap(vehicle) - resources.supplies),
   };
 }
 

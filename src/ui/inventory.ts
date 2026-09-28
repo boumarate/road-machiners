@@ -57,7 +57,7 @@ const CELL_PX = 42;
 const MIN_CELL_PX = 28;
 
 const CELL_TITLE: Record<Cell, string> = {
-  D: "deck mount for a weapon, scanner or cargo frame",
+  D: "deck mount for a weapon, scanner, cargo frame or store",
   E: "engine mount",
   F: "front armor mount",
   B: "back armor mount",
@@ -73,6 +73,7 @@ const KIND_CLASS: Record<PartKind, string> = {
   cargo: "k-cargo",
   core: "k-core",
   scanner: "k-weapon",
+  store: "k-cargo",
 };
 
 type Drag = {

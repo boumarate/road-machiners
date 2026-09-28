@@ -5,7 +5,6 @@ import { chassisDef, PLAYER_CHASSIS } from "../data/chassis";
 import { ECONOMY, GOOD_IDS, GOODS } from "../data/goods";
 import { CONTRACTS, shopDef, type ShopDef } from "../data/market";
 import { partDef, type PartKind } from "../data/parts";
-import { RULES } from "../data/rules";
 import { playerVehicle } from "../sim/damage";
 import {
   buyChassis,
@@ -48,13 +47,14 @@ import { contractDue, contractSummary } from "./format";
 import { InventoryView } from "./inventory";
 import type { UiHost } from "./host";
 import { fuelLiters, hp, kg } from "./units";
+import { fuelCap, suppliesCap } from "../sim/stats";
 
 type Tab = "market" | "parts" | "garage" | "trucks" | "contracts";
 
 // The part stock filter. Core parts are built in, so no shop sells them.
 type StockFilter = "all" | Exclude<PartKind, "core">;
 
-const STOCK_FILTERS: StockFilter[] = ["all", "weapon", "engine", "armor", "cargo", "scanner"];
+const STOCK_FILTERS: StockFilter[] = ["all", "weapon", "engine", "armor", "cargo", "scanner", "store"];
 
 const GARAGE_ONLY: Tab[] = ["garage", "trucks"];
 
@@ -287,7 +287,7 @@ export class TownScreen {
     const afford = Math.min(room, Math.floor(w.player.money / price));
     const fuel = k === "fuel";
     const have = w.player[k];
-    const cap = fuel ? chassisDef(playerVehicle(w).chassisId).fuelCap : RULES.suppliesCap;
+    const cap = fuel ? fuelCap(playerVehicle(w)) : suppliesCap(playerVehicle(w));
     const amount = (n: number) => (fuel ? `${fuelLiters(n)} L` : `${Math.round(n * 10) / 10}`);
     return el(
       "div",
@@ -389,6 +389,7 @@ const STOCK_FILTER_LABEL: Record<StockFilter, string> = {
   armor: "Armor",
   cargo: "Cargo",
   scanner: "Scanners",
+  store: "Stores",
 };
 
 const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
@@ -397,6 +398,7 @@ const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
   armor: "armor",
   cargo: "cargo",
   scanner: "scanner",
+  store: "supplies",
 };
 
 const TAB_LABEL: Record<Tab, string> = {
@@ -676,7 +678,7 @@ export class TruckTradeScreen {
     const most = Math.min(offer, supplyRoom(w, k), Math.floor(w.player.money / price));
     const fuel = k === "fuel";
     const have = w.player[k];
-    const cap = fuel ? chassisDef(playerVehicle(w).chassisId).fuelCap : RULES.suppliesCap;
+    const cap = fuel ? fuelCap(playerVehicle(w)) : suppliesCap(playerVehicle(w));
     const amount = (n: number) => (fuel ? `${fuelLiters(n)} L` : `${Math.round(n * 10) / 10}`);
     return el(
       "div",

@@ -8,7 +8,6 @@
 // can rob, mostly a weaker one away from guards.
 
 import { dealAvailable } from './patch';
-import { chassisDef } from '../data/chassis';
 import { ECONOMY, GOOD_IDS } from '../data/goods';
 import { GOOD_SOURCES } from '../data/market';
 import {
@@ -35,7 +34,7 @@ import { randRange } from './rng';
 import { canReachSalvage, canTakeAny, canTakeFromTruck, siteLootTable } from './salvage';
 import { canUseSite, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { stateOf, statesHeld } from './states';
-import { isStranded, vehicleStats } from './stats';
+import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
 import { canHire, canTakeEscort, declineFactor, inTowReach, strandedAt, towSite, unguardedLeader } from './tow';
 import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
@@ -196,7 +195,7 @@ export function isHostileContact(world: World, vehicle: Vehicle, contact: Contac
 }
 
 export function getUpkeepReserve(vehicle: Vehicle): number {
-  return (chassisDef(vehicle.chassisId).fuelCap * ECONOMY.supplyPrice.fuel + RULES.suppliesCap * ECONOMY.supplyPrice.supplies) * NPC_UPKEEP.reserveLoads;
+  return (fuelCap(vehicle) * ECONOMY.supplyPrice.fuel + suppliesCap(vehicle) * ECONOMY.supplyPrice.supplies) * NPC_UPKEEP.reserveLoads;
 }
 
 function nearestSite(vehicle: Vehicle, ids: string[]) {

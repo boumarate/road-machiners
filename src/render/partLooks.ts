@@ -71,6 +71,9 @@ export const PART_MODELS: Record<string, ModelName> = {
 
   scanner: 'scanner',
 
+  jerrycans: 'store_jerrycans',
+  supplyLocker: 'store_locker',
+
   scrap: 'good_scrap',
   salt: 'good_salt',
   meds: 'good_meds',

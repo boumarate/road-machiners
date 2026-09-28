@@ -1,7 +1,7 @@
 import { RULES } from '../data/rules';
 import { skillEffect, vehicleHasPerk } from './progress';
 import { heatAt } from './sun';
-import { vehicleStats } from './stats';
+import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import type { DriverResources, Vehicle, World } from './types';
 
 export function getResources(world: World, vehicle: Vehicle): DriverResources {
@@ -35,4 +35,16 @@ export function consumeVehicleSupplies(world: World, vehicle: Vehicle): void {
   if (lost === 0) return;
   resources.health -= lost;
   if (vehicle.id === world.player.vehicleId) world.events.push({ t: 'supply', what: 'supplies', text: `Out of supplies: health -${lost}` });
+}
+
+// Fuel and supplies above the caps spill out, after a refit or a looter takes a store off.
+export function fitStores(world: World, vehicle: Vehicle): void {
+  const resources = getResources(world, vehicle);
+  const fuel = resources.fuel - fuelCap(vehicle);
+  const supplies = resources.supplies - suppliesCap(vehicle);
+  if (fuel > 0) resources.fuel -= fuel;
+  if (supplies > 0) resources.supplies -= supplies;
+  if (vehicle.id !== world.player.vehicleId) return;
+  if (fuel > 0) world.events.push({ t: 'supply', what: 'fuel', text: `No room for fuel: fuel -${fuel.toFixed(1)}` });
+  if (supplies > 0) world.events.push({ t: 'supply', what: 'supplies', text: `No room for supplies: supplies -${supplies.toFixed(1)}` });
 }
