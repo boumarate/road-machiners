@@ -3,9 +3,9 @@
 import { REGION, type LandmarkDef } from '../data/region';
 import { isCliff, tileAt, type Rock } from './terrain';
 import { randInt, randRange } from './rng';
-import { clearOfSites, onBridge } from '../mapgen/bake';
+import { TERRAIN } from '../data/terrain';
 import type { Obstacle, World } from './types';
-import { angleDiff, bearing, dist, type Vec } from './vec';
+import { angleDiff, bearing, dist, segmentDist, type Vec } from './vec';
 import { ROAD_INDEX } from './road-index';
 
 const O = REGION.obstacles;
@@ -151,4 +151,15 @@ function unit(key: string): number {
   for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619);
   h = Math.imul(h ^ (h >>> 15), 2246822519);
   return ((h ^ (h >>> 13)) >>> 0) / 4294967296;
+}
+
+// A prop on the narrow bridge deck would close the crossing.
+export function onBridge(pos: Vec, r: number): boolean {
+  const bridge = TERRAIN.features.bridge;
+  return segmentDist(pos, bridge.from, bridge.to) < bridge.width / 2 + r;
+}
+
+// Whether a prop keeps the extra site clearance from every town and location.
+export function clearOfSites(pos: Vec, r: number): boolean {
+  return [...REGION.towns, ...REGION.locations].every((s) => dist(pos, s.pos) > s.radius + O.siteClearance + r);
 }

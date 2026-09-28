@@ -10,7 +10,8 @@ import { gradeRoads } from '../sim/road-grade';
 import { ROAD_INDEX } from '../sim/road-index';
 import { chance, randRange, type Rng } from '../sim/rng';
 import { heightFromElevation, TYPE_IDS, type Rock } from '../sim/terrain';
-import { dist, polylineDist, segmentDist, type Vec } from '../sim/vec';
+import { clearOfSites, onBridge } from '../sim/mapgen';
+import { dist, polylineDist, type Vec } from '../sim/vec';
 import { cornerNeighbors, geologyLayer, pondDepths, type Neighbors } from './geology';
 
 export function bakeMap(seed: number): MapDraft {
@@ -259,14 +260,4 @@ function fitsOffRoad(size: number, heights: ArrayLike<number>, placed: Rock[], r
   const tile = Math.floor(pos.y) * size + Math.floor(pos.x);
   if (tileSteepness(heights, size, tile) > BOULDER_SLOPE_LIMIT) return false;
   return !onBridge(pos, r) && clearOfSites(pos, r) && placed.every((o) => dist(pos, o.pos) >= o.r + r + O.gap);
-}
-
-// A prop on the narrow bridge deck would close the crossing.
-export function onBridge(pos: Vec, r: number): boolean {
-  const bridge = TERRAIN.features.bridge;
-  return segmentDist(pos, bridge.from, bridge.to) < bridge.width / 2 + r;
-}
-
-export function clearOfSites(pos: Vec, r: number): boolean {
-  return SITES.every((s) => dist(pos, s.pos) > s.radius + O.siteClearance + r);
 }
