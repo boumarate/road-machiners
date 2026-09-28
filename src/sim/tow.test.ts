@@ -6,7 +6,7 @@ import { SKILL_EFFECTS, XP_SOURCES, XP_TO_REACH } from '../data/skills';
 import { partDef } from '../data/parts';
 import { playerVehicle } from './damage';
 import { route, routeLength } from './path';
-import { canUseSite, siteGates, sitePads, type Site } from './sites';
+import { canUseSite, nearestPad, siteGates, sitePads, type Site } from './sites';
 import { getResources } from './resources';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
@@ -272,6 +272,8 @@ describe('towing', () => {
     const me = playerVehicle(w);
     expect(me.speed).toBe(0);
     expect(dist(me.pos, find(w, s.trader.id).pos)).toBeLessThanOrEqual(TOW.gap + 1e-6);
+    // The tower stops inward of the pad center, so the truck it trails stands well on the pad and not at its edge.
+    expect(dist(me.pos, nearestPad(town, me.pos))).toBeLessThan(REGION.sites.pad.length / 2 - 0.5);
     expect(autoRuns(w)).toBe(false);
     const after = runUntil(w, 5, () => false);
     expect(after.events.some((e) => e.t === 'towDone')).toBe(false);

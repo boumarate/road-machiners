@@ -6,6 +6,7 @@ import { ECONOMY } from '../data/goods';
 import { NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, type DecisionOptions } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
+import { TOW } from '../data/tow';
 import type { PartHit } from './armor';
 import { callLawmen, isHostile, startFeuds } from './combat';
 import { affordableBuyCount, getTradePrice, sellVehicleCargo, serviceAtCamp, serviceVehicle, tradeGoods } from './economy';
@@ -142,7 +143,7 @@ function fleeDestination(world: World, vehicle: Vehicle, profile: NpcProfile, th
   const safe = [...profile.towns, ...profile.bases].map(getKnownSite).filter((site) => pointsAway(vehicle.pos, site.pos, threatPos));
   safe.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   const away = { x: vehicle.pos.x + (vehicle.pos.x - threatPos.x), y: vehicle.pos.y + (vehicle.pos.y - threatPos.y) };
-  const destination = safe[0] ? siteSpot(world, vehicle, safe[0], vehicleStats(world, vehicle).radius + RULES.arriveRadius) : away;
+  const destination = safe[0] ? siteSpot(world, vehicle, safe[0], vehicleStats(world, vehicle).radius + RULES.arriveRadius, 0) : away;
   return { x: clamp(destination.x, 1, world.size - 1), y: clamp(destination.y, 1, world.size - 1) };
 }
 
@@ -874,7 +875,7 @@ export function getActivityDestination(world: World, vehicle: Vehicle, activity:
 function siteStop(world: World, vehicle: Vehicle, activity: NpcActivity, destination: Vec): Vec {
   const out = vehicleStats(world, vehicle).radius + RULES.arriveRadius;
   const site = [...REGION.towns, ...REGION.locations].find((entry) => entry.id === activity.targetId);
-  if (site) return siteSpot(world, vehicle, site, out);
+  if (site) return siteSpot(world, vehicle, site, out, activity.kind === 'tow' ? TOW.gap / 2 : 0);
   const radius = stockRadius(world, activity) ?? towedRadius(world, activity);
   if (radius === undefined) throw new Error(`Missing activity destination ${activity.targetId}`);
   // A stock or a towed truck is met on the side the vehicle comes from.
@@ -883,13 +884,14 @@ function siteStop(world: World, vehicle: Vehicle, activity: NpcActivity, destina
 }
 
 // Each driver keeps its own spot across the pad nearest it, so drivers bound for one site do not all stop on one
-// point and queue for it. `out` keeps the vehicle clear of the pad's side edges.
-function siteSpot(world: World, vehicle: Vehicle, site: ReturnType<typeof getKnownSite>, out: number): Vec {
+// point and queue for it. `out` keeps the vehicle clear of the pad's side edges. `inward` moves the spot toward
+// the gate, so a tower stops far enough in for the truck it trails to stand on the pad too.
+function siteSpot(world: World, vehicle: Vehicle, site: ReturnType<typeof getKnownSite>, out: number, inward: number): Vec {
   const spot = hashRandom(world.seed, ...charCodes(vehicle.id), ...charCodes(site.id));
   const pad = nearestPad(site, vehicle.pos);
   const angle = Math.atan2(pad.y - site.pos.y, pad.x - site.pos.x);
   const side = (REGION.sites.pad.width / 2 - out) * (2 * spot - 1);
-  return { x: pad.x - Math.sin(angle) * side, y: pad.y + Math.cos(angle) * side };
+  return { x: pad.x - Math.sin(angle) * side - Math.cos(angle) * inward, y: pad.y + Math.cos(angle) * side - Math.sin(angle) * inward };
 }
 
 function charCodes(text: string): number[] {
