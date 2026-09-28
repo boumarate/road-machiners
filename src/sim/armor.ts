@@ -137,6 +137,14 @@ function tallCells(v: Vehicle, exceptId: string): Map<string, GridItem> {
   return tall;
 }
 
+// True when every mounted gun has at least one open side inside its own arc.
+export function everyGunFires(v: Vehicle): boolean {
+  return mountedItems(v, 'weapon').every((item) => {
+    const reach = reachedSides(partDef(item.part.defId) as WeaponDef);
+    return openSides(v, item).some((side) => reach.includes(side));
+  });
+}
+
 // Open sides summed over every mounted weapon, to compare layouts. Only sides the gun's own arc reaches count.
 export function openSideCount(v: Vehicle): number {
   return mountedItems(v, 'weapon').reduce((sum, item) => {

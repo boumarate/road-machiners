@@ -3,6 +3,7 @@ import { GOODS } from '../data/goods';
 import { NPC_UPKEEP, type CargoRoll, type NpcLoadoutTable, type NpcTemplate, type Weighted } from '../data/npcs';
 import { partDef, type PartKind } from '../data/parts';
 import { CONDITION } from '../data/wear';
+import { everyGunFires } from './armor';
 import { makePart, makeVehicle, type PartSpec } from './factory';
 import { freeCells } from './grid';
 import { mountPart } from './inventory';
@@ -101,6 +102,7 @@ function computeEquipmentCost(v: Vehicle): number {
   }, 0);
 }
 
+// A part is refused when it leaves any gun with no open side in its arc, like a front gun behind the cab.
 // Probing checks feasibility at pristine wear, the most expensive and heaviest case a part can be. Any
 // wear later rolled onto the mounted part only lowers its value, so a feasible pristine fit stays feasible.
 function tryMountChoice(world: World, v: Vehicle, id: string, budget: number): Vehicle | null {
@@ -108,6 +110,7 @@ function tryMountChoice(world: World, v: Vehicle, id: string, budget: number): V
   if (vehicleMass(v) + partDef(id).mass > chassisDef(v.chassisId).ratedMass) return null;
   const candidate = { ...v, items: [...v.items] };
   if (!mountPart(world, candidate, makePart(world, id, 0))) return null;
+  if (!everyGunFires(candidate)) return null;
   return candidate;
 }
 
