@@ -22,7 +22,7 @@ import type { ContextAction } from './hud';
 import { SHOPS } from '../data/market';
 import { canUseSite, locationAt } from '../sim/sites';
 import { shopAt } from '../sim/market';
-import { canUseOasis, emptySalvageNear, salvageHere, salvageNear } from '../sim/locations';
+import { canUseOasis, downedHere, downedNear, emptySalvageNear, salvageHere, salvageNear } from '../sim/locations';
 import { playerCanAct } from '../sim/world';
 import { isBusy } from '../sim/jobs';
 
@@ -49,6 +49,9 @@ function getTradeAction(world: World): ContextAction | null {
 function getPlaceAction(world: World): ContextAction | null {
   const shop = shopNear(world);
   if (shop) return { label: `Enter ${shop.name}`, ready: shopAt(world) === shop.id };
+  // A knocked-out truck stays open to looting while a removal from it runs.
+  const downed = downedNear(world);
+  if (downed) return { label: `Loot ${downed.name}`, ready: downedHere(world) !== null };
   if (isBusy(playerVehicle(world))) return null;
   return getSiteAction(world);
 }

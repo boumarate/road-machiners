@@ -11,7 +11,7 @@ import {
   contractSummary,
   eventText,
   formatNpcActivity,
-  JOB_LABELS,
+  jobLabel,
   jobProgress,
   formatNpcStates,
   formatNpcTraits,
@@ -222,18 +222,18 @@ export class Hud {
   // A job shows its progress instead, except an auto patch, which yields to any action.
   renderAction(
     action: ContextAction | null,
-    job: Job | null,
+    world: World,
     onUse: () => void,
   ): void {
-    const shown = shownJob(action, job);
+    const me = playerVehicle(world);
+    const shown = shownJob(action, me.job);
     this.action.style.display = action || shown ? "" : "none";
-    if (shown) this.renderJob(shown);
+    if (shown) this.renderJob(shown, jobLabel(world, me, shown));
     else if (action) this.renderActionButton(action, onUse);
   }
 
-  private renderJob(job: Job): void {
+  private renderJob(job: Job, label: string): void {
     const progress = Math.round(jobProgress(job) * 100);
-    const label = JOB_LABELS[job.kind];
     this.action.replaceChildren(
       el(
         "span",

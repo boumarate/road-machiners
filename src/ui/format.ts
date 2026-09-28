@@ -18,10 +18,42 @@ import { pleaData, statesHeld, towData } from '../sim/states';
 import { isJunk } from '../sim/wear';
 import { clockOf } from '../sim/sun';
 import type { PartHit } from '../sim/armor';
-import type { GameEvent, Job, NpcState, PartInstance, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
+import type { GameEvent, GridItem, Job, NpcState, PartInstance, RefitJob, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
 
-export const JOB_LABELS: Record<Job['kind'], string> = { search: 'Search', repair: 'Repair', refit: 'Refit', strip: 'Strip' };
+// What a job works on, in words: "Repair Autocannon", "Remove Autocannon from Raider outrider".
+export function jobLabel(world: World, v: Vehicle, job: Job): string {
+  if (job.kind === 'search') return 'Search';
+  if (job.kind === 'refit') return refitLabel(world, v, job);
+  const part = v.items.find((it) => it.kind === 'part' && it.part.id === job.partId);
+  return `${job.kind === 'repair' ? 'Repair' : 'Strip'} ${part ? itemName(part) : 'part'}`;
+}
+
+// A refit names its part while it runs and after it is done, so the part is looked up where it lies now.
+function refitLabel(world: World, v: Vehicle, job: RefitJob): string {
+  const pickup = job.pickup;
+  if (pickup?.from === 'truck') {
+    const truck = world.vehicles.find((x) => x.id === pickup.vehicleId);
+    return `Remove ${partNameIn([v, truck], [], pickup.partId)} from ${truck?.name ?? 'the truck'}`;
+  }
+  const moved = job.moves.flatMap((m) => v.items.filter((it) => it.id === m.itemId).map(itemName));
+  return `Refit ${[...stockPickupName(world, v, pickup), ...moved].join(', ')}`.trim();
+}
+
+function stockPickupName(world: World, v: Vehicle, pickup: RefitJob['pickup']): string[] {
+  if (pickup?.from !== 'stock') return [];
+  return [partNameIn([v], world.salvage.find((s) => s.id === pickup.stockId)?.parts ?? [], pickup.partId)];
+}
+
+function partNameIn(vehicles: (Vehicle | undefined)[], loose: PartInstance[], partId: string): string {
+  const parts = [...loose, ...vehicles.flatMap((v) => (v?.items ?? []).flatMap((it) => (it.kind === 'part' ? [it.part] : [])))];
+  const part = parts.find((p) => p.id === partId);
+  return part ? partDef(part.defId).name : 'part';
+}
+
+function itemName(it: GridItem): string {
+  return it.kind === 'part' ? partDef(it.part.defId).name : GOODS[it.good].name;
+}
 
 // The share of a job's turns already worked, from 0 to 1.
 export function jobProgress(job: Job): number {
@@ -137,7 +169,7 @@ type LogLine = { text: string; cls: string };
 // Only the player's own jobs are logged.
 function jobText(world: World, e: Extract<GameEvent, { t: 'job' }>): LogLine | null {
   if (e.vehicle !== world.player.vehicleId) return null;
-  const what = e.job.kind === 'repair' ? `Repair (${partName(world, e.vehicle, e.job.partId)})` : e.job.kind === 'refit' ? 'Refit' : 'Search';
+  const what = jobLabel(world, playerVehicle(world), e.job);
   const lines = {
     started: { text: `${what} started: stay parked about ${e.job.turnsLeft} turns. End turns with Space.`, cls: '' },
     cancelled: { text: `${what} cancelled: the truck moved or required items changed`, cls: 'bad' },

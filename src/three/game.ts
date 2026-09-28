@@ -390,7 +390,7 @@ export class Game {
     this.inventory.render();
     this.hud.renderAction(
       getContextAction(this.world, this.anim !== null),
-      playerVehicle(this.displayWorld()).job,
+      this.displayWorld(),
       () => this.useContext(),
     );
     this.refreshInfo();
@@ -404,7 +404,7 @@ export class Game {
   }
 
   private useSite(): void {
-    if (isBusy(playerVehicle(this.world))) return;
+    if (this.inventory.openDowned(this.world) || isBusy(playerVehicle(this.world))) return;
     const after = applySiteAction(this.world);
     if (after) {
       this.apply(after);

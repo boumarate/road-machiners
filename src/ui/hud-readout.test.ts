@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { chassisDef } from "../data/chassis";
 import { RULES } from "../data/rules";
 import { corePart } from "../sim/grid";
+import { knockOutNpc } from "../sim/defeat";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import { maxHealthOf } from "../sim/health";
 import { XP_TO_REACH } from "../data/skills";
@@ -9,6 +10,21 @@ import { addState, towData } from "../sim/states";
 import { getContextAction, getHudReadout, getRescueReadout } from "./hud-readout";
 import { REGION } from '../data/region';
 import { sitePads } from '../sim/sites';
+
+describe('knocked-out truck interaction', () => {
+  it('offers looting a knocked-out truck in reach only while stopped', () => {
+    const w = emptyWorld();
+    const gap = chassisDef('scout').radius + chassisDef('buggy').radius + 0.2;
+    const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + gap, y: 30 });
+    buggy.brain = npcBrain('buggy', buggy.pos, ['raider']);
+    expect(getContextAction(w, false)).toBeNull();
+    corePart(buggy, 'cab').hp = 0;
+    knockOutNpc(w, buggy);
+    expect(getContextAction(w, false)).toEqual({ label: `Loot ${buggy.name}`, ready: true });
+    w.vehicles[0].speed = RULES.parkedSpeed + 1;
+    expect(getContextAction(w, false)).toEqual({ label: `Loot ${buggy.name}`, ready: false });
+  });
+});
 
 describe('oasis interaction', () => {
   it.each(REGION.locations.filter((site) => site.kind === 'oasis'))('offers refilling at $name only while stopped', (site) => {

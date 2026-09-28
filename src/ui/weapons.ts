@@ -12,7 +12,7 @@ import { meters } from "./units";
 import type { UiHost } from "./host";
 import { createIcon } from './cards';
 import { canCall } from "./dialogue";
-import { JOB_LABELS, jobProgress } from "./format";
+import { jobLabel, jobProgress } from "./format";
 
 export const BLOCK_TEXT: Record<FireBlock, string> = {
   disabled: "disabled",
@@ -51,7 +51,7 @@ export function vehicleMarks(w: World, hovered: string | null): Map<string, Vehi
   if (hovered && canCall(w, hovered)) markOf(hovered).radio = true;
   for (const v of w.vehicles) {
     const job = seenNpcJob(w, v);
-    if (job) markOf(v.id).job = { label: JOB_LABELS[job.kind], progress: jobProgress(job) };
+    if (job) markOf(v.id).job = { label: jobLabel(w, v, job), progress: jobProgress(job) };
   }
   return marks;
 }

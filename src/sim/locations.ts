@@ -4,7 +4,9 @@ import { SALVAGE } from '../data/salvage';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
-import { canReachSalvage, collectSalvage, hasSalvage, pourStores, salvageInRange, stripPart, takeBasis } from './salvage';
+import { isKnockedOut } from './defeat';
+import { inTowReach } from './tow';
+import { canLootTruck, canReachSalvage, collectSalvage, hasSalvage, pourStores, salvageInRange, stripPart, takeBasis } from './salvage';
 import { newId } from './factory';
 import { goodsCount, isMounted, type Spot } from './grid';
 import { getLayoutError, refitTurns, requireIdleRefit } from './inventory';
@@ -12,7 +14,7 @@ import { startJob } from './jobs';
 import { beginSearch } from './search';
 import { practice } from './progress';
 import { locationAt, townAt } from './sites';
-import type { GridItem, PartInstance, SalvageStock, World } from './types';
+import type { GridItem, PartInstance, SalvageStock, Vehicle, World } from './types';
 import { tileCenter } from './vision';
 import { dist, type Vec } from './vec';
 import { playerCommand } from './world';
@@ -73,6 +75,18 @@ export function salvageHere(world: World): SalvageStock | null {
 export function salvageNear(world: World): SalvageStock | null {
   const me = playerVehicle(world);
   return world.salvage.find((stock) => hasSalvage(stock) && salvageInRange(me, stock)) ?? null;
+}
+
+// A knocked-out truck in reach of the player truck at any speed, or null. Moving trucks must stop to loot it.
+export function downedNear(world: World): Vehicle | null {
+  const me = playerVehicle(world);
+  return world.vehicles.find((v) => v.id !== me.id && isKnockedOut(v) && inTowReach(me, v)) ?? null;
+}
+
+// A knocked-out truck the parked player truck can loot now, or null.
+export function downedHere(world: World): Vehicle | null {
+  const me = playerVehicle(world);
+  return world.vehicles.find((v) => canLootTruck(me, v)) ?? null;
 }
 
 // A site or wreck stock in range of the player truck with no loot left, or null. Collectors emptied it.

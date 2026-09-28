@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { CONDITION } from "../data/wear";
 import type { Contract } from "../sim/market";
-import type { PartInstance } from "../sim/types";
-import { contractDue, contractSummary, wearLabel } from "./format";
+import { partDef } from "../data/parts";
+import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
+import type { Job, PartInstance } from "../sim/types";
+import { contractDue, contractSummary, jobLabel, wearLabel } from "./format";
 
 function part(wear: number): PartInstance {
   return { id: "p1", defId: "mg", hp: 10, reload: 0, wear };
@@ -37,5 +39,32 @@ describe("contract text", () => {
 
   it("says the hand-in part must still work and be rebuilt at most once", () => {
     expect(contractSummary(fetch)).toBe("find a MG turret anywhere, working and rebuilt at most once, bring it to Bowl");
+  });
+});
+
+describe("jobLabel", () => {
+  function downedBuggy() {
+    const w = emptyWorld();
+    const buggy = addVehicle(w, "raiders", "buggy", ["mg", "stockEngine"], { x: 33, y: 30 });
+    buggy.brain = npcBrain("buggy", buggy.pos, ["raider"]);
+    const gun = buggy.items.find((it) => it.kind === "part" && it.part.defId === "mg");
+    if (gun?.kind !== "part") throw new Error("Expected a gun");
+    return { w, me: w.vehicles[0], buggy, gun };
+  }
+
+  it("names the part and the truck of a removal, before and after it is done", () => {
+    const { w, me, buggy, gun } = downedBuggy();
+    const job: Job = { kind: "refit", moves: [], pickup: { from: "truck", vehicleId: buggy.id, partId: gun.part.id, itemId: "new", to: { x: 0, y: 0, rot: 0 } }, turnsLeft: 3, total: 3 };
+    expect(jobLabel(w, me, job)).toBe(`Remove ${partDef("mg").name} from ${buggy.name}`);
+    buggy.items = buggy.items.filter((it) => it.id !== gun.id);
+    me.items.push({ ...gun, id: "new" });
+    expect(jobLabel(w, me, job)).toBe(`Remove ${partDef("mg").name} from ${buggy.name}`);
+  });
+
+  it("names the parts a refit moves on the player's own grid", () => {
+    const { w, me } = downedBuggy();
+    const gun = me.items.find((it) => it.kind === "part" && partDef(it.part.defId).kind === "weapon")!;
+    const job: Job = { kind: "refit", moves: [{ itemId: gun.id, from: { x: gun.x, y: gun.y, rot: gun.rot }, to: { x: 0, y: 0, rot: 0 } }], pickup: null, turnsLeft: 3, total: 3 };
+    expect(jobLabel(w, me, job)).toBe(`Refit ${partDef(gun.kind === "part" ? gun.part.defId : "").name}`);
   });
 });

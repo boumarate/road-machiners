@@ -761,6 +761,13 @@ body {
 .inv-truck {
   flex: none;
 }
+.inv-target h3 {
+  margin: 0 0 12px;
+}
+.inv-target > .dim {
+  max-width: 260px;
+  margin-top: 30px;
+}
 .truck-shell {
   position: relative;
   padding: 45px 18px 18px;
