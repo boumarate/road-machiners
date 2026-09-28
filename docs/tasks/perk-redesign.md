@@ -1,6 +1,6 @@
 # Perk redesign
 
-**Status:** planning
+**Status:** executing
 **Branch:** perks
 **Worktree:** .worktrees/perks
 **Goal:** The 20 perks listed in DESIGN.md under Character replace the old 20 in code, each with a Vitest test of its rule, the character screen offers the new pairs, `npm test`, `npm run quality` and `npm run playtest` pass.
@@ -67,6 +67,66 @@ TDD: yes. Each perk is a deterministic sim rule with a test that fails before th
 
 ## Plan
 
+Approach: PH1 swaps the perk data, removes every old reader and adds all new state types, so later phases only add hooks. PH2, PH3 and PH4 own disjoint files and can run in parallel. Each hook follows the old perk pattern: `vehicleHasPerk()` at the rule's owner and a number in `PERK_NUMBERS` (IV1, IV2). Tests come first per perk (TDD: yes).
+
+### PH1 — Perk data, old readers out, new state types [blocks]
+- 1.1 `src/data/skills.ts:104-163` (modify)
+  - `PerkId`, `PERKS`, `PERK_NUMBERS` — the 20 new ids: `rammer, coldRunning, steadyAim, dustScreen, readDriver, spotter, cargoEye, nightEyes, welder, cannibal, rebuild, roadMechanic, desertRat, stormRider, fightThrough, longHaul, marketEars, rumorMill, paidTruce, bountyTalk`. Names and rules copy DESIGN.md. Numbers: `rammer.stallTurns 1`, `dustScreen {topShare 0.9, radius 2}`, `spotter.turns` = one day from `TIME`, `welder {scrap 3, turns 3, part 'scrapSheet'}`, `cannibal.turns 1`, `roadMechanic.price 2`, `desertRat.sunShare` = elevation share at 9:00, `rumorMill.radius 60`, `paidTruce.share 0.1`, `fightThrough.health 0.5`.
+- 1.2 Remove old readers and their tests: `crash-contact.ts:77`, `stats.ts:132`, `detect.ts:41,52`, `vision.ts:26`, `combat.ts:310-312`, `repair.ts:43`, `inventory.ts:95`, `search.ts:43-54`, `salvage.ts:206-207`, `resources.ts:24,32`, `damage.ts:38`, `defeat.ts:58`, `parley.ts:48`, `npc-decisions.ts:524,622`, `patch.ts:66,105`; matching blocks in their `*.test.ts`. `progress.test.ts`, `cheats.test.ts`, `console.test.ts` and `npc-info.test.ts` switch to new ids. Respects IV5.
+- 1.3 `src/sim/types.ts` (modify) — `Vehicle.stalledUntil?: number`, `DustCloud.screen?: true`, `Contact.sources` adds `'mark'`, `Player.marked: {vehicleId: string; until: number}[]`, `Player.rumored: string[]`, `PartInstance.rebuilt?: true`, `Job` adds `{kind: 'weld'; turnsLeft: number; total: number}`, `NpcBrain.lastTown?: string`, `CallVar` adds `{kind: 'prices'; town: string; goods: {good: GoodId; buy: number; sell: number}[]}`. `src/sim/world.ts:70` inits `marked: []`, `rumored: []`. `detect.ts:119-131` `channelShare` gets a `mark` case. `jobs.ts:163` `jobTurn` throws a clear "weld not wired" until PH3. `src/ui/format.ts:26-29` job label `Weld`.
+- 1.4 `src/three/save.ts:18-30` — `SAVE_VERSION` 31 with changelog line. Respects IV6.
+- Commit: Replace the perk set with the redesigned perks and add their state
+
+### PH2 — Driving and Perception hooks
+- 2.1 `src/sim/crash-contact.ts:20-29` `applyContactCrash` — player damaging a hostile truck (`isHostile`) sets `victim.stalledUntil = world.turn + stallTurns` (AS1 checked by test). `src/sim/stats.ts:61-108` `vehicleStats` — engine counts as not working while `world.turn <= stalledUntil`; `isStranded` untouched. `detect.ts:26-30` `soundRange` silent while stalled.
+- 2.2 `detect.ts:39-44` `hearingRange` — Cold running cap at `sightRadius(world, observer)` when the emitter has the perk and `speed < maxSpeed / 2`.
+- 2.3 `detect.ts:158-179` `advanceDust` sets `screen`; `vision.ts:257-267` `inPlainView(world, observer, target)` — a screen cloud within `radius` of the segment blocks sight unless the observer is the player.
+- 2.4 `vision.ts:225-231` `sightRadius` — Night eyes skips the night factor, Storm rider skips `weatherAt().sight`. `combat.ts:308` `spreadCauses` — Storm rider weather spread 0.
+- 2.5 Spotter: `markVehicle(world, vehicleId) -> World` command in `detect.ts`, throws unless the perk is held and the truck is seen. `contactsOf` adds a `mark` contact at scanner radius for a marked truck out of sight until `until`; `refreshVision` drops expired marks. Key on hovered truck in `src/three/game.ts` keymap near `:476` — a free key picked in execute (UK1).
+- 2.6 Cargo eye: `formatNpcCargo(world, v): string | null` in `src/ui/format.ts:100-103`; a line in `src/ui/hud.ts:588-598` `npcLines`.
+- Tests: `crash-contact.test.ts`, `stats.test.ts`, `detect.test.ts`, `vision.test.ts`, `combat.test.ts`, `npc-info.test.ts`.
+- Commit: one per perk group.
+
+### PH3 — Machining and Toughness hooks
+- 3.1 Welder: `startWeld(world) -> World` and `weldTurn`/`finishWeld` in `src/sim/jobs.ts:98-184` modeled on strip; spends scrap with `removeGoods`, makes the part with `makePart(world, 'scrapSheet', 0)`, stows it with `stowPart`; start throws without perk, scrap or room. Weld button in `src/ui/inventory.ts:400-419` beside Strip.
+- 3.2 Cannibal: `src/sim/locations.ts:138-148` `transferLoot` and `src/sim/salvage.ts:402-406` `takeTurns` — plan `cannibal.turns` for the player with the perk.
+- 3.3 Rebuild: `rebuildJunk(part)` in `src/sim/wear.ts` (IV3). `src/sim/economy.ts:309,421` town repair accepts a junk part without `rebuilt` for the perk holder at the full repair price. `src/ui/inventory.ts:376-377` and the town repair list show it (UK2, AS2).
+- 3.4 Road mechanic: `src/sim/patch.ts:62-67` `priceOf` doubles when the patcher is the player with the perk.
+- 3.5 Desert rat: `src/sim/engine-heat.ts:18-31` — engine heat input uses `min(t, sunShare)` via a new `sunShareAt` query in `src/sim/sun.ts:59-71`.
+- 3.6 Fight through: `src/sim/defeat.ts:35-54` `checkKnockout` skips while health > `maxHealthOf * health`.
+- 3.7 Long haul: `src/sim/health.ts:21` skips the parked check.
+- Tests: `jobs`/`refit`/`search`/`wear`/`economy`/`patch`/`engine-heat`/`defeat`/`health` tests.
+- Commit: one per perk group.
+
+### PH4 — Social hooks
+- 4.1 Market ears: set `brain.lastTown` in `src/sim/npc-activities.ts:1016-1040` resolvers for town sites. Topic `marketNews` in `src/data/dialogue.ts` for trader talk, condition `knowsLastTown` and prepare `lastTownPrices` in `src/sim/dialogue-rules.ts`, both gated on the perk. The call panel renders a `prices` var as a list (UK3).
+- 4.2 Rumor mill: topic `rumor`, once per driver; prepare `nearestRumor` picks the nearest undiscovered site or unsearched stock within radius of the driver; effect `revealRumor` calls `discoverSite` or pushes to `player.rumored`. `src/three/render/labels.ts:46` labels rumored wrecks (AS3).
+- 4.3 Paid truce: topic `buyTruce` with `duringFeud`, condition `canPayTruce`, effect `payTruce` that calls an exported `transfer` from `src/sim/economy.ts:588` and `makePeace` from `src/sim/parley.ts:26`. Price from `vehicleValue`.
+- 4.4 Bounty talk: `creditBounty(world, npc)` in `src/sim/market.ts` near `:291`; called from `yieldTo` in `src/sim/parley.ts:47` when the winner has the perk.
+- Tests: `dialogue.test.ts`, `npc-activities` test for `lastTown`, `market.test.ts`.
+- Commit: one per perk.
+
+### Test strategy
+- Each perk: one test with the perk showing the rule, one without or for an NPC showing the old rule (IV1).
+- Seed replay: an existing world-step determinism test must still pass (IV4).
+- After PH2 to PH4: `npm test`, `npm run quality`, `npm run playtest`.
+
+### Order & dependencies
+- PH1 blocks all. PH2, PH3 and PH4 run in parallel on disjoint files.
+
+### Risks / rollback
+- RK1 — `src/ui/format.ts` and `src/ui/inventory.ts` are touched by two phases; PH1 owns the job label so PH2 owns format.ts and PH3 owns inventory.ts.
+- RK2 — The main checkout has an unresolved merge in `engine-heat.ts`. The branch is based on HEAD, so the merge back may conflict there.
+
+### Interfaces
+- IF1 [blocks] — PH1's `PerkId` union, `PERK_NUMBERS` keys and new type fields; every hook phase compiles against them.
+
+### Interface graph
+- PH1 -> IF1 @ src/data/skills.ts, src/sim/types.ts, src/three/save.ts, old reader lines and tests
+- PH2 IF1 -> @ src/sim/crash-contact.ts, src/sim/stats.ts, src/sim/detect.ts, src/sim/vision.ts, src/sim/combat.ts, src/ui/format.ts, src/ui/hud.ts, src/three/game.ts
+- PH3 IF1 -> @ src/sim/jobs.ts, src/sim/locations.ts, src/sim/salvage.ts, src/sim/wear.ts, src/sim/economy.ts, src/sim/patch.ts, src/sim/engine-heat.ts, src/sim/sun.ts, src/sim/defeat.ts, src/sim/health.ts, src/ui/inventory.ts, src/ui/town.ts
+- PH4 IF1 -> @ src/data/dialogue.ts, src/sim/dialogue-rules.ts, src/sim/npc-activities.ts, src/sim/parley.ts, src/sim/market.ts, src/three/render/labels.ts, call panel in src/ui/
+
 ## Verify
 
 ## Conclusion
@@ -77,4 +137,6 @@ TDD: yes. Each perk is a deterministic sim rule with a test that fails before th
 - udesign: Market ears shows current prices, not a snapshot from when the driver left — simpler and close enough.
 - udesign: Paid truce always succeeds when paid — the perk is the price, no roll.
 - udesign: SAVE_VERSION bump, no migration — no backwards-compat per CLAUDE.md.
+- uplan: plan auto-approved (hands-off).
+- uplan: PH3 Economy `transfer` export is used by PH4 — PH4 owns that one-line export in economy.ts.
 - make: reuse the existing branch `perks` and worktree `.worktrees/perks` — the user named them.
