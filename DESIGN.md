@@ -18,14 +18,14 @@ At level 2 and level 4 of each skill the player picks one of two perks. A pick i
 
 - Driving 2, rammer or ghost. Rammer: a ram on a hostile truck stalls its engine for one turn. Cold running: below half speed, your engine is heard only inside sight.
 - Driving 4, run and gun or run away. Steady aim: your own speed adds no scatter to your shots. Dust screen: at top speed on dusty ground, your dust blocks sight like a hill.
-- Perception 2, read people or track trucks. Read the driver: you see the traits of other drivers. Spotter: mark a contact, and it stays tracked for a day.
+- Perception 2, read people or track trucks. Read the driver: you see the traits of other drivers. Spotter: the N key marks a seen truck, and it stays tracked for a day.
 - Perception 4, loot sight or night sight. Cargo eye: you see the goods and spare parts in any seen truck. Night eyes: night does not halve your sight.
 - Machining 2, builder or scrapper. Welder: a field job turns 3 scrap metal into a scrap armor plate. Cannibal: removing a part from a wreck or a knocked-out truck takes one turn.
-- Machining 4, pristine hunter or hired mechanic. Rebuild: you can repair a junk part back to its last wear step, once per part. Road mechanic: stranded drivers radio you for patches and pay double.
+- Machining 4, pristine hunter or hired mechanic. Rebuild: a town garage can repair a junk part back to its last wear step, once per part. Road mechanic: stranded drivers radio you for patches and pay double.
 - Toughness 2, heat runner or storm runner. Desert rat: noon sun heats your engine like morning sun. Storm rider: dust storms do not cut your sight or aim.
-- Toughness 4, brawler or long hauler. Fight through: a broken cab does not knock you out while health is above half. Long haul: you heal while driving, not only while parked.
+- Toughness 4, brawler or long hauler. Fight through: a broken cab does not knock you out while health is above half. Hits on any part then hurt you. Long haul: you heal while driving, not only while parked.
 - Social 2, trader or explorer. Market ears: a trader you call tells you the prices of the last town it left. Rumor mill: a driver you call marks a wreck or site it passed on your map.
-- Social 4, peacemaker or bounty hunter. Paid truce: you can pay a hostile driver to end its feud with you. Bounty talk: a raider that gives up to your demand counts for bounty contracts.
+- Social 4, peacemaker or bounty hunter. Paid truce: you can pay a hostile driver a tenth of its truck's value to end its feud with you. Bounty talk: a raider that gives up to your demand counts for bounty contracts.
 
 ## Truck
 

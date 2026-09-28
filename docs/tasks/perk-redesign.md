@@ -132,6 +132,16 @@ Approach: PH1 swaps the perk data, removes every old reader and adds all new sta
 
 ## Conclusion
 
+### Deviations from plan
+- Spotter mark contacts have difficulty 0 in `channelShare`, not scanner reach — scanner reach throws for a player with no scanner. The circle keeps the scanner's tightness.
+- Spotter adds a hover line "[N] Mark" or turns left, so the key has an on-screen hint.
+- Welder button sits on scrap metal in the inventory panel, since a weld belongs to no spare part. Welding gives no machining XP.
+- Cannibal truck-loot tests went to `src/sim/salvage-truck.test.ts`, outside PH3's owned paths but testing its `salvage.ts`.
+- `creditBounty` pays one matching bounty per surrender, like a knockout.
+- The rumor topic branches into a site answer or a wreck answer, and `revealRumor` recomputes the rumor instead of reading an id from the call. It throws if the result differs.
+- Fight through: rounds skip a broken cab, so health never fell and the perk never ended. Added: with the perk and a broken cab, damage to any part hurts the driver, and town guards still target the awake player (commit 90d7b76).
+- Cold running speed share moved into `PERK_NUMBERS.coldRunning`.
+
 ### Hands-off decisions
 - make: size Large — 20 perks across combat, detection, vision, jobs, dialogue, healing and knockout rules.
 - udesign: tuning numbers for Welder, Dust screen, Desert rat, Rumor mill and Paid truce are picked in data and flagged for your tuning — no numbers were given.
@@ -139,5 +149,8 @@ Approach: PH1 swaps the perk data, removes every old reader and adds all new sta
 - udesign: Paid truce always succeeds when paid — the perk is the price, no roll.
 - udesign: SAVE_VERSION bump, no migration — no backwards-compat per CLAUDE.md.
 - uplan: plan auto-approved (hands-off).
+- uexecute: Spotter key is N — M is mute.
+- uexecute: Market ears goes to traders, suppliers and couriers; Rumor mill to every non-raider talker; Paid truce to every driver, raiders included.
+- uexecute: Fight through fix added without asking — without it the perk made the player unkillable while above half health.
 - uplan: PH1 exports `transfer` from economy.ts, so PH3 and PH4 stay on disjoint files.
 - make: reuse the existing branch `perks` and worktree `.worktrees/perks` — the user named them.
