@@ -60,6 +60,16 @@ describe("rain", () => {
     expect(total(d.heights) + outflow).toBeCloseTo(before, 2);
   });
 
+  it("keeps all soil on rough ground, where erosion lowers corners below neighbors that already drained", () => {
+    const d = newDraft(64);
+    for (let k = 0; k < d.heights.length; k++) d.heights[k] = hashRandom(7, k) * 3;
+    const before = total(d.heights);
+
+    const outflow = rain(d, { ...RAIN_RULES, steps: 20, capacity: 8, pickupRate: 0.3, maxDig: 1 });
+
+    expect(total(d.heights) + outflow).toBeCloseTo(before, 3);
+  });
+
   it("cuts a channel down a tilted plane", () => {
     const d = tiltedPlane(48);
     const row = 36;

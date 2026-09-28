@@ -91,6 +91,7 @@ export function rain(d: MapDraft, rules: RainRules): number {
     g.soil.fill(0);
     g.before.set(g.height);
     for (const k of g.order) route(g, k, rules);
+    settleLateSoil(g);
     spreadCuts(g, rules);
   }
   for (let k = 0; k < g.height.length; k++) d.heights[k] = g.height[k];
@@ -152,17 +153,20 @@ function sortByHeight(g: RainGrid): void {
 
 function route(g: RainGrid, k: number, rules: RainRules): void {
   g.flow[k] += g.water[k];
+  const carried = g.soil[k];
+  // Soil that reaches this corner after its turn stays in g.soil and settles at the end of the pass.
+  g.soil[k] = 0;
   if (!isInterior(k, g.n)) {
-    g.outflow += g.soil[k];
+    g.outflow += carried;
     return;
   }
   const total = weighLowerNeighbors(g, k, rules.focusSquarings);
   if (total === 0) {
-    g.height[k] += g.soil[k];
+    g.height[k] += carried;
     return;
   }
   const water = g.water[k] * (1 - rules.evaporation);
-  const soil = erode(g, k, water, rules);
+  const soil = erode(g, k, water, rules, carried);
   const { offsets } = g.nb;
   for (let q = 0; q < 8; q++) {
     const share = g.weights[q] / total;
@@ -191,12 +195,22 @@ function weighLowerNeighbors(g: RainGrid, k: number, squarings: number): number 
 
 // Picks up or drops soil at corner k and returns the soil the water carries on. A pickup never takes
 // more than a share of the drop to the steepest neighbor, so water cannot dig a pit.
-function erode(g: RainGrid, k: number, water: number, rules: RainRules): number {
+function erode(g: RainGrid, k: number, water: number, rules: RainRules, carried: number): number {
   const slope = g.steepest;
-  const free = rules.capacity * Math.max(slope, rules.minSlope) * water - g.soil[k];
+  const free = rules.capacity * Math.max(slope, rules.minSlope) * water - carried;
   const moved = free > 0 ? Math.min(rules.pickupRate * free, rules.maxDig * slope) : rules.dropRate * free;
   g.height[k] -= moved;
-  return g.soil[k] + moved;
+  return carried + moved;
+}
+
+// Erosion can lower a corner below a neighbor that already took its turn, so water from it reaches that
+// neighbor late. The soil it carries settles there, at the edge it leaves the map.
+function settleLateSoil(g: RainGrid): void {
+  for (let k = 0; k < g.height.length; k++) {
+    if (g.soil[k] === 0) continue;
+    if (isInterior(k, g.n)) g.height[k] += g.soil[k];
+    else g.outflow += g.soil[k];
+  }
 }
 
 // Slump: thermal erosion. Soil on a corner steeper than the rest slope toward its steepest lower neighbor
