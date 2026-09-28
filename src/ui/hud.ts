@@ -17,7 +17,7 @@ import {
   formatNpcTraits,
 } from "./format";
 import { getHudReadout, getRescueReadout, moneyLabel, TruckConditionReadout } from "./hud-readout";
-import { createIcon, createSpeedDial, type IconName } from "./cards";
+import { conditionMeter, createIcon, createSpeedDial, partIcon, type IconName } from "./cards";
 import { hp, kph } from "./units";
 import { maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
@@ -541,19 +541,23 @@ export class Hud {
     const working = wheels.filter((p) => p.hp > 0).length;
     const parts = mountedParts(v)
       .filter((p) => !wheels.includes(p))
-      .map((p) => {
-        const def = partDef(p.defId);
-        return el(
+      .map((p) =>
+        el(
           "div",
-          { class: p.hp > 0 ? "" : "bad" },
-          `${def.name}: ${hp(p.hp)}/${hp(maxHp(p))}`,
-        );
-      });
+          { class: `info-part${p.hp > 0 ? "" : " bad"}` },
+          createIcon(partIcon(p)),
+          el("span", {}, partDef(p.defId).name),
+          el("span", { class: "info-hp" }, `${hp(p.hp)} / ${hp(maxHp(p))}`),
+          conditionMeter(p),
+        ),
+      );
     parts.push(
       el(
         "div",
-        { class: working === wheels.length ? "" : "bad" },
-        `Wheels ${working}/${wheels.length} working`,
+        { class: `info-part${working === wheels.length ? "" : " bad"}` },
+        createIcon("wheel"),
+        el("span", {}, "Wheels"),
+        el("span", { class: "info-hp" }, `${working} / ${wheels.length} working`),
       ),
     );
     const stance =
