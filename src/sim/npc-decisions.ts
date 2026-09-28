@@ -12,7 +12,7 @@ import { ECONOMY, GOOD_IDS } from '../data/goods';
 import { GOOD_SOURCES } from '../data/market';
 import {
   DECISIONS, HUNT, MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, STATE_WEIGHTS, TRAITS,
-  type DecisionId, type DecisionOptions, type TraitId, type TraitWeights, type WeightChange,
+  type DecisionId, type DecisionOptions, type Trait, type TraitId, type TraitWeights, type WeightChange,
 } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
@@ -51,6 +51,7 @@ export type NpcProfile = {
   contactReactRadius: number;
   boldness: number;
   fuelMargin: number;
+  robs: Trait['robs'];
 };
 
 export function npcTraits(v: Vehicle): TraitId[] {
@@ -66,7 +67,7 @@ export function hasTrait(v: Vehicle, id: TraitId): boolean {
 }
 
 // Known sites are the union over traits, in trait order. The widest contact radius wins. Boldness and fuel margin
-// multiply.
+// multiply. One trait that never robs makes the driver never rob.
 export function profileOf(traits: TraitId[]): NpcProfile {
   if (traits.length === 0) throw new Error('A profile needs at least one trait');
   const defs = traits.map((id) => {
@@ -84,6 +85,7 @@ export function profileOf(traits: TraitId[]): NpcProfile {
     contactReactRadius: Math.max(...defs.map((t) => t.contactReactRadius)),
     boldness: defs.reduce((product, t) => product * t.boldness, 1),
     fuelMargin: defs.reduce((product, t) => product * t.fuelMargin, 1),
+    robs: defs.some((t) => t.robs === 'never') ? 'never' : 'offDuty',
   };
 }
 
@@ -377,9 +379,17 @@ function canDrive(world: World, vehicle: Vehicle): boolean {
   return getResources(world, vehicle).fuel > 0;
 }
 
-// A robbery is a fight, so it also needs a working gun.
+// A robbery is a fight, so it also needs a working gun. The driver's traits must allow it too.
 function canRobSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  if (!traitsAllowRobbing(vehicle)) return false;
   return firepower(world, vehicle) > 0 && canRob(world, vehicle, subjectOf(world, decision, subject));
+}
+
+// A follow goal stays at the base of the stack while the driver follows a leader, so the driver stays on duty
+// through fights.
+function traitsAllowRobbing(vehicle: Vehicle): boolean {
+  const robs = npcProfile(vehicle).robs;
+  return robs === 'offDuty' && !vehicle.brain!.goals.some((goal) => goal.kind === 'follow');
 }
 
 // A ram needs the subject as the fight target on top of the goals, within reach of a damaging ram.

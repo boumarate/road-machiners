@@ -17,6 +17,7 @@ import type { Vec } from './vec';
 import { cloneWorld } from './world';
 import { REGION } from '../data/region';
 import { siteGates } from './sites';
+import { startEscort } from './tow';
 
 // A gate of Bowl. The robbery spots below lie outside Bowl's wall, north of the gate: one within guard range and one
 // past it.
@@ -54,8 +55,34 @@ function isRob(goal: NpcActivity | undefined, target: string): boolean {
 
 type Setup = () => { w: World; robber: Vehicle; target: Vehicle };
 
+// A scumbag leader with loot in sight away from towns, and a scumbag merc escorting it.
+function escorted() {
+  const w = emptyWorld({ x: 200, y: 200 });
+  const leader = addScumbag(w, { x: 10, y: 10 });
+  const merc = addScumbag(w, { x: 10, y: 12 }, ['mg', 'stockEngine'], ['merc', 'scumbag']);
+  startEscort(w, merc, leader, null, 0);
+  return { w, leader, merc, target: addPrey(w, { x: 15, y: 10 }) };
+}
+
+// A scumbag robber of a template whose trait forbids robbing.
+function forbidden(templateId: string, trait: TraitId): Setup {
+  return () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const robber = addScumbag(w, { x: 10, y: 10 });
+    robber.brain = npcBrain(templateId, robber.pos, [trait, 'scumbag']);
+    return { w, robber, target: addPrey(w, { x: 15, y: 10 }) };
+  };
+}
+
 // Worlds where rob is unavailable for one reason, and everything else would allow it.
 const UNAVAILABLE: Record<string, Setup> = {
+  supplier: forbidden('convoy', 'supplier'),
+  guard: forbidden('convoyGuard', 'guard'),
+  lawman: forbidden('bowlFarmer', 'lawman'),
+  following: () => {
+    const { w, merc, target } = escorted();
+    return { w, robber: merc, target };
+  },
   unseen: () => {
     const w = emptyWorld({ x: 200, y: 200 });
     return { w, robber: addScumbag(w, { x: 10, y: 10 }), target: addPrey(w, { x: 60, y: 10 }) };
@@ -136,6 +163,11 @@ describe('robbery checks', () => {
     // Beside the gate, but both past guard range, passes too.
     const far = emptyWorld({ x: 200, y: 200 });
     expect(robWeight(far, addScumbag(far, outFromGate(UNGUARDED)), addPrey(far, outFromGate(UNGUARDED + 5)), 0)).toBe(FULL_ROB);
+  });
+
+  it('the leader of an escort still gets the full rob weight', () => {
+    const { w, leader, target } = escorted();
+    expect(robWeight(w, leader, target, vehicleDanger(w, target))).toBe(FULL_ROB);
   });
 
   for (const [name, make] of Object.entries(UNAVAILABLE)) {

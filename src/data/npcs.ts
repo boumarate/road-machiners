@@ -521,7 +521,8 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
 
 // Traits rolled on top of a template's own. One neutral driver in four is a scumbag, and one in four a coward. Both
 // can meet in one driver. One neutral driver or raider in seven is brave, unless it rolled coward. Lawmen and
-// convoy guards are always brave. A convoy guard can be a scumbag. Lawmen roll no extras, since they keep the peace.
+// convoy guards are always brave. A convoy or its guard can be a scumbag, which makes it bold and quick to retaliate,
+// but its trait still forbids robbing. Lawmen roll no extras, since they keep the peace.
 const NEUTRAL_EXTRAS: NpcTemplate['extraTraits'] = [{ trait: 'scumbag', chance: 0.25 }, { trait: 'coward', chance: 0.25 }, { trait: 'brave', chance: 0.15 }];
 const RAIDER_EXTRAS: NpcTemplate['extraTraits'] = [{ trait: 'brave', chance: 0.15 }];
 const GUARD_EXTRAS: NpcTemplate['extraTraits'] = [{ trait: 'scumbag', chance: 0.25 }];
@@ -779,9 +780,8 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   // A driver that dropped a tow for danger comes back for the player: tow outweighs keep 20 to 1.
   towPromise: { strandedSeen: { tow: { add: 20 } } },
   answering: {},
-  // An escort tows its stranded leader: tow outweighs keep 99 to 1. It robs the truck it guards as rarely as a
-  // truce partner.
-  escort: { strandedSeen: { tow: { add: 99 } }, preySeen: { rob: { mul: 0.005 } } },
+  // An escort tows its stranded leader: tow outweighs keep 99 to 1.
+  escort: { strandedSeen: { tow: { add: 99 } } },
   // A driver the player knocked out wants revenge: every hostile choice about the player gets more likely.
   // Robbing and closing in on a heard contact no longer need a trait.
   revenge: {
@@ -850,6 +850,9 @@ export type Trait = {
   // Multiplies the fuel reserve the driver keeps for the way to a pump. Traits multiply together. See
   // NPC_UPKEEP.fuelReserve.
   fuelMargin: number;
+  // When the driver may rob. 'never' wins over 'offDuty' across traits. 'offDuty' forbids robbing while the
+  // driver follows a leader, so a follower on duty never robs and its leader still can.
+  robs: 'offDuty' | 'never';
   weights: TraitWeights;
 };
 
@@ -859,7 +862,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // in ten scavengers help a stranded truck. An idle scavenger takes on a manageable hostile about nine times in
   // ten: fight 4, times NPC_BEHAVIOR.manageableFight.
   scavenger: {
-    towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1,
+    towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: { idle: { scavenge: { add: 10 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 9 } }, hostileSeen: { fight: { add: 2 } } },
   },
   // Traders rarely pick a fight: a fight weight of 2 drops to 0.004, about 1%, and to 0.02, about 2%, against a
@@ -870,7 +873,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // A trader on its way hires about one free merc in two it sees. Traders push on for one more deal, so they keep
   // a quarter less fuel for the way to a pump.
   trader: {
-    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 0.75,
+    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 0.75, robs: 'offDuty',
     weights: {
       idle: { trade: { add: 30 } }, strandedSeen: { tow: { add: 9 } },
       hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } }, ramChance: { ram: { mul: 0.001 } },
@@ -884,7 +887,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // and nearly always from prey it expects to beat. Threatened, it mostly fights. Nine in ten raiders help a stranded
   // raider, the only truck they tow.
   raider: {
-    towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1,
+    towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: {
       idle: { raid: { add: 10 } }, contactHeard: { investigate: { add: 12 } }, hostileSeen: { fight: { add: 8 } }, strandedSeen: { tow: { add: 9 } },
       crashed: { retaliate: { add: 3 } }, parley: { truce: { mul: 0.3 }, beg: { mul: 0.3 } }, truceOffered: { refuse: { add: 2 } },
@@ -894,13 +897,13 @@ export const TRAITS: Record<TraitId, Trait> = {
   // A scumbag robs about two targets in three it comes across: rob 2 against keep 1. Boldness 1.3 lets it rob a
   // truck that looks as dangerous as its own, and stand against one up to 30% stronger. It answers a crash with a
   // fight twice as often as most drivers.
-  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 1.3, fuelMargin: 1, weights: { preySeen: { rob: { add: 2 } }, crashed: { retaliate: { add: 1 } } } },
+  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 1.3, fuelMargin: 1, robs: 'offDuty', weights: { preySeen: { rob: { add: 2 } }, crashed: { retaliate: { add: 1 } } } },
   // A coward runs three times as often from a new hostile or a shot, picks a fight half as often, and shoots back
   // at a third of the weight. Boldness 0.6 makes a truck that looks as dangerous as its own a threat, even at the
   // lowest misjudgment. It asks for a truce twice as often and begs three times as often. Threatened, it runs or
   // pays. It hires a merc three times as readily. It keeps 40% more fuel for the way home.
   coward: {
-    towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 0.6, fuelMargin: 1.4,
+    towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 0.6, fuelMargin: 1.4, robs: 'offDuty',
     weights: {
       hostileSeen: { flee: { mul: 3 }, fight: { mul: 0.5 } }, attacked: { flee: { mul: 3 }, fightBack: { mul: 0.3 } },
       parley: { truce: { mul: 2 }, beg: { mul: 3 } }, threatened: { flee: { mul: 3 }, comply: { add: 1 } },
@@ -910,9 +913,10 @@ export const TRAITS: Record<TraitId, Trait> = {
   // Lawmen patrol their town and hunt raiders and first shooters at neutral NPCs. They fight most hostiles they
   // see, as eager as raiders, and shoot back twice as often as most drivers. They seldom ask for a truce or beg.
   // Threatened, they mostly fight. Nine in ten lawmen help a stranded truck, like traders. An idle lawman patrols
-  // about nine times in ten and waits a turn otherwise. Salvage in sight tempts it about one time in fifty.
+  // about nine times in ten and waits a turn otherwise. Salvage in sight tempts it about one time in fifty. A lawman
+  // never robs.
   lawman: {
-    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1,
+    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'never',
     weights: {
       idle: { patrol: { add: 20 }, wait: { add: 2 }, scavenge: { mul: 0.05 } },
       hostileSeen: { fight: { add: 8 } }, attacked: { fightBack: { mul: 2 } }, strandedSeen: { tow: { add: 9 } },
@@ -925,7 +929,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   courier: {
     towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'],
     travelSites: ['bowl', 'nose', 'orchard', 'dustwell', 'granary', 'burnt-convoy', 'podfield', 'canyon-bridge', 'glass-flats', 'green-pit', 'south-lock', 'ridge-wrecks', 'pump-station', 'fallen-sun', 'salvage-yard'],
-    haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1,
+    haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: {
       idle: { travel: { add: 20 }, scavenge: { mul: 0.001 } }, strandedSeen: { tow: { add: 2 } },
       hostileSeen: { fight: { mul: 0.1 } }, threatened: { comply: { add: 1 } }, escortSeen: { hire: { add: 0.5 } },
@@ -935,22 +939,23 @@ export const TRAITS: Record<TraitId, Trait> = {
   // one time in five each. Three in four roamers stop for salvage they pass, like scavengers. A roamer hires about
   // one free merc in six it sees.
   roamer: {
-    towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1,
+    towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: { idle: { explore: { add: 10 }, trade: { add: 3 }, scavenge: { add: 2 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 3 } }, escortSeen: { hire: { add: 0.2 } } },
   },
   // Supply convoys haul fuel drums from the Pump Station and water from the oases to the towns. An idle convoy
   // hauls nearly always, and stops for salvage only at about the minimum chance. Like traders, convoys avoid
-  // fights and leave them to their guard, and mostly pay when threatened.
+  // fights and leave them to their guard, and mostly pay when threatened. A convoy never robs.
   supplier: {
-    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: ['pump-station', 'dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1, fuelMargin: 1,
+    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: ['pump-station', 'dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'never',
     weights: {
       idle: { haul: { add: 30 }, scavenge: { mul: 0.001 } }, strandedSeen: { tow: { add: 9 } },
       hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } }, threatened: { comply: { add: 1 }, fightBack: { mul: 0.1 } },
     },
   },
-  // A convoy guard takes up an escort nearly always when it can. Otherwise it mostly waits. It fights like a lawman.
+  // A convoy guard takes up an escort nearly always when it can. Otherwise it mostly waits. It fights like a lawman
+  // and never robs.
   guard: {
-    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1,
+    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'never',
     weights: {
       idle: { escort: { add: 30 }, wait: { add: 5 }, scavenge: { mul: 0.001 } },
       hostileSeen: { fight: { add: 8 } }, attacked: { fightBack: { mul: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
@@ -960,7 +965,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // turns, a quarter of a day, before it tries the other town. It trades and scavenges only at about the minimum
   // chance. It fights most hostiles it sees and shoots back twice as often as most drivers.
   merc: {
-    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: ['bowl', 'nose'], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1,
+    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: ['bowl', 'nose'], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: {
       idle: { wait: { add: 50 }, travel: { add: 1 }, scavenge: { mul: 0.001 } },
       hostileSeen: { fight: { add: 4 } }, attacked: { fightBack: { mul: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
@@ -969,7 +974,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // A brave driver almost never runs or gives up: flee, truce, beg and paying up drop to a twentieth of their
   // weight. Boldness 1.5 lets it stand against a group half again as strong as its own.
   brave: {
-    towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 1.5, fuelMargin: 1,
+    towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 1.5, fuelMargin: 1, robs: 'offDuty',
     weights: {
       hostileSeen: { flee: { mul: 0.05 } }, contactHeard: { flee: { mul: 0.05 } }, attacked: { flee: { mul: 0.05 } },
       parley: { truce: { mul: 0.05 }, beg: { mul: 0.05 } }, threatened: { flee: { mul: 0.05 }, comply: { mul: 0.05 } },

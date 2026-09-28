@@ -208,7 +208,7 @@ Every NPC carries a set of traits instead of one class. Each trait adds activiti
 - Guard follows a supply convoy and protects it.
 - Merc waits at a town for hire, then escorts its client.
 
-A chance is 0 only when an option is physically impossible. A driver with no working gun cannot fight, and a truck with no loot cannot be robbed. Anything a driver can do keeps at least a 1% chance. So an ordinary scavenger robs about once in a hundred chances, and a trader sometimes starts a fight.
+A chance is 0 only when an option is physically impossible or a trait forbids it. A driver with no working gun cannot fight, and a truck with no loot cannot be robbed. Supply convoys, convoy guards and lawmen never rob. A driver following a leader never robs, but its leader can. Anything a driver can do keeps at least a 1% chance. So an ordinary scavenger robs about once in a hundred chances, and a trader sometimes starts a fight.
 
 Drivers judge each other by danger: the firepower of working guns times the current toughness of the cab, chassis and armor. A tank looks more dangerous than a scout, and a half-beaten tank looks about half as dangerous. Danger counts nearby visible faction mates on each side. A driver misjudges another truck's danger by up to a quarter each time it first sees it. A scumbag robs a truck whose danger looks below its own times its boldness. Scumbags and brave drivers are bold, and cowards are timid. A stronger target, or one near a town gate, is robbed only rarely.
 
