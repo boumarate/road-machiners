@@ -102,7 +102,7 @@ export const RULES = {
 
   // Knockout
   defeatPatch: 0.25, // share of max hp broken core parts get back when a driver wakes from a knockout
-  scrapPatch: 0.4, // share of max hp drive parts get back when a stranded, broke player with nothing to sell reaches a town
+  scrapPatch: 0.4, // share of max hp drive parts and of the tank a stranded, broke player with nothing to sell gets at a town
   knockoutMaxTurns: 30, // a knockout ends after this many turns even if a hostile idles in sight
   npcDeathChance: 0.05, // an NPC whose cab breaks dies into a wreck instead of a knockout
   // A defeated NPC that spent this many turns in a row beyond the player's gray vision appears at its home pad, so

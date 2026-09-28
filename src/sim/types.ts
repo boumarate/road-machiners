@@ -351,7 +351,7 @@ export type GameEvent =
   | { t: 'death' }
   | { t: 'knockout' }
   | { t: 'wake' }
-  | { t: 'scrapPatch' }
+  | { t: 'scrapPatch'; fuel: number } // fuel: units put into an empty tank
   | { t: 'towOffer'; by: string; town: string; fee: number }
   | { t: 'towHitched'; by: string; client: string; site: string }
   | { t: 'towDone'; by: string; client: string; fee: number }

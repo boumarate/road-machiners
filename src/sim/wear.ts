@@ -168,6 +168,12 @@ export function rebuildJunk(part: PartInstance): void {
   part.hp = maxHp(part);
 }
 
+// The scrap patch raises a part to `share` of max HP. A junk part first goes back to the last wear step.
+export function scrapPatchPart(part: PartInstance, share: number): void {
+  if (isJunk(part)) part.wear = CONDITION.maxWear;
+  part.hp = Math.max(part.hp, Math.ceil(maxHp(part) * share));
+}
+
 // The wear factor applied to a part's base value, read off CONDITION.valueFactor. A fractional wear, as
 // from averaging several parts' wear steps, interpolates between the two steps it falls between.
 export function wearFactor(wear: number): number {
