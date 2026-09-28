@@ -12,10 +12,11 @@ import { advanceFar } from '../sim/far';
 import { applyContactCrash } from '../sim/crash-contact';
 import { isOnRope } from '../sim/tow';
 import { burnFuel } from '../sim/resources';
+import { setDownSpot } from '../sim/steering';
 import type { MoveOrder, Pose, Vehicle, World } from '../sim/types';
 import { dist } from '../sim/vec';
 import { visibleTiles } from '../sim/vision';
-import { bodyState, captureDrive, freeDrive, initPhysics, restoreDrive, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type DriveSnapshot, type TurnResult, type VehicleResult } from './drive';
+import { bodyState, isLifted, captureDrive, freeDrive, initPhysics, restoreDrive, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type DriveSnapshot, type TurnResult, type VehicleResult } from './drive';
 import { headingOf, toMap } from './frames';
 
 export type TurnState = Omit<World, 'terrain'>;
@@ -114,6 +115,12 @@ export function applyTurn(w: World, r: TurnResult): void {
   }
 }
 
+// Moves a stranded truck to free ground and stops it. syncDrive then sets its body there on its wheels.
+function setDown(w: World, v: Vehicle): void {
+  v.pos = setDownSpot(w, v);
+  v.speed = 0;
+}
+
 function applyDriven(w: World, r: TurnResult, v: Vehicle, frames: TurnResult['frames'][string]): void {
   if (v.brain) delete v.brain.farRoute;
   const s = bodyState(r.next, v.id);
@@ -121,7 +128,8 @@ function applyDriven(w: World, r: TurnResult, v: Vehicle, frames: TurnResult['fr
   v.pos = s.pos;
   v.heading = s.heading;
   v.speed = Math.max(0, toTilesPerTurn(s.speed));
-  v.flippedTurns = s.upright ? 0 : (v.flippedTurns ?? 0) + 1;
+  v.strandedTurns = s.upright && !isLifted(r.next, w, v) ? 0 : (v.strandedTurns ?? 0) + 1;
+  if (v.strandedTurns >= RULES.stranded.turns) setDown(w, v);
   v.trail = trailOf(start, frames);
   burnFuel(w, v, pathLength(v.trail));
   settleOrder(w, v, r.results[v.id]);

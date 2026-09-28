@@ -46,6 +46,15 @@ describe('timed scavenging search', () => {
     expect(canScavenge(next)).toBe(false);
   });
 
+  it('searches a pile in one turn, however big', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const pile = { until: w.turn + SALVAGE.pileTurns, fromPlayer: false, basis: {} };
+    w.salvage.push({ id: 'pile', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn * 5 }, parts: [], pile });
+    const next = endTurn(scavenge(w), testDrive);
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.events).toContainEqual({ t: 'searched', stock: 'pile' });
+  });
+
   it('a move cancels the search, and the stock stays closed', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.salvage.push({ id: 'rich', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn * 5 }, parts: [] });

@@ -51,7 +51,7 @@ import type { UiHost } from "./host";
 import { baselinePart, conditionMeter, createIcon, type IconName, diffStats, footprint as footprintEl, goodIcon, partIcon, partStats, statGrid } from "./cards";
 import { vehicleMass } from "../sim/mass";
 import { fireSpans, reachedSides, sideBlockers, SIDES, type FireSpan } from "../sim/armor";
-import { fuelLiters, hp, kg, liters } from "./units";
+import { fuelLiters, hp, kg } from "./units";
 import { moneyLabel } from "./hud-readout";
 
 const CELL_PX = 42;
@@ -810,6 +810,8 @@ export class InventoryScreen {
   constructor(private host: UiHost) {
     this.root.classList.add("inventory-screen");
     this.root.style.display = "none";
+    // The truck grid fits its cells to the window height, so a resize lays the screen out again.
+    window.addEventListener("resize", () => this.render());
     this.view = new InventoryView(host, () => this.render());
   }
 
@@ -849,21 +851,34 @@ export class InventoryScreen {
 
   render(): void {
     if (!this.isOpen()) return;
+    const truck = el("div", { class: "inv-body" }, this.view.render());
     this.root.replaceChildren(
-      el(
-        "button",
-        { class: "close", onclick: () => this.close() },
-        "Close [I]",
-      ),
-      el("h3", {}, chassisDef(playerVehicle(this.host.world()).chassisId).name),
-      el(
-        "div",
-        { class: "inv-summary" },
-        `Equipment & cargo · ${liters(freeCells(playerVehicle(this.host.world())))} L free · Mass ${kg(vehicleMass(playerVehicle(this.host.world())))} of ${kg(chassisDef(playerVehicle(this.host.world()).chassisId).ratedMass)} rated · Money ${moneyLabel(this.host.world().player.money)}`,
-      ),
-      this.view.render(),
+      el("button", { class: "close", onclick: () => this.close() }, "Close [I]"),
+      el("h3", {}, "Inventory", truckChips(this.host.world())),
+      truck,
     );
+    this.view.fitTo(truck);
   }
+}
+
+// Header chips for the player's truck: chassis, money, free cells and load.
+export function truckChips(w: World): HTMLElement {
+  const me = playerVehicle(w);
+  const mass = vehicleMass(me);
+  const rated = chassisDef(me.chassisId).ratedMass;
+  return el(
+    "span",
+    { class: "chips" },
+    el("span", { class: "chip" }, createIcon("truck"), chassisDef(me.chassisId).name),
+    el("span", { class: `chip${w.player.money < 0 ? " bad" : ""}`, title: "Money" }, createIcon("money"), moneyLabel(w.player.money)),
+    el("span", { class: "chip", title: "Free cargo cells" }, createIcon("cells"), `${freeCells(me)} free`),
+    el(
+      "span",
+      { class: `chip${mass > rated ? " bad" : ""}`, title: "Mass against rated load" },
+      createIcon("load"),
+      `${kg(mass)} / ${kg(rated)}`,
+    ),
+  );
 }
 
 export function getItemIcon(item: GridItem): IconName {

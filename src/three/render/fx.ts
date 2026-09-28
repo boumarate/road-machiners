@@ -12,7 +12,7 @@ import { groundPoint, headingOf, toMap, type V3, type VehicleFrame } from '../..
 import { PAL } from '../../render/palette';
 import { bodyOf } from '../../sim/body';
 import { corePart, mountedParts } from '../../sim/grid';
-import { isStranded, vehicleStats } from '../../sim/stats';
+import { inOverdrive, isStranded, vehicleStats } from '../../sim/stats';
 import { tileAt } from '../../sim/terrain';
 import type { Vehicle, World } from '../../sim/types';
 import { maxHp } from '../../sim/wear';
@@ -436,6 +436,7 @@ const EXHAUST_RATE = 14;
 const EXHAUST_FULL_ACCEL = 3;
 const CRUISE_SHARE = 0.8; // above this share of top speed, an engine at full revs puffs now and then
 const CRUISE_RATE = 1.5; // puffs per second at cruise
+const OVERDRIVE_RATE = 10; // puffs per second from an engine in overdrive, moving or not
 const EXHAUST_SIDE = 0.6; // the pipe sits this share of the half width off center, on the left
 const STEAM_RATE = 10; // puffs per second at full engine heat; a third of it at the warning heat
 const DOUSE_RATE = 60; // puffs per second while water boils off a doused engine
@@ -460,6 +461,7 @@ export class TruckFx {
     const pose: Pose = { f, h: headingOf(f.rot), half: bodyOf(v.chassisId).half };
     if (moving) this.driving(world, v, pose, traits, dt);
     if (v.id === world.player.vehicleId) {
+      this.overdriveExhaust(world, v, traits, pose, dt);
       this.steam(world.player.engineHeat, pose, dt);
       this.douseCloud(pose, dt);
     }
@@ -477,6 +479,13 @@ export class TruckFx {
     const cruise = v.speed > traits.maxSpeed * CRUISE_SHARE ? CRUISE_RATE : 0;
     const rate = EXHAUST_RATE * Math.min(1, Math.max(0, along / EXHAUST_FULL_ACCEL)) + cruise;
     this.puffs(rate, dt, () => this.fx.exhaust(onBody(pose, -1, 1, -EXHAUST_SIDE), back));
+  }
+
+  // An engine in overdrive smokes black all the time, on top of its load puffs.
+  private overdriveExhaust(world: World, v: Vehicle, traits: Traits, pose: Pose, dt: number): void {
+    if (!inOverdrive(world, v) || traits.stranded) return;
+    const back = { x: -Math.cos(pose.h), y: 0, z: -Math.sin(pose.h) };
+    this.puffs(OVERDRIVE_RATE, dt, () => this.fx.exhaust(onBody(pose, -1, 1, -EXHAUST_SIDE), back));
   }
 
   // White steam over the hood from the warning heat on, thicker as the engine nears overheating.

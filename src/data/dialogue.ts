@@ -11,7 +11,7 @@ export type TopicId = 'directions' | 'tow' | 'askTow' | 'patch' | 'patchRequest'
 export type ConditionId =
   | 'knowsTown' | 'offersTow' | 'canTowPlayer' | 'playerNeedsPatch' | 'npcNeedsPatch' | 'hasDeal' | 'noDeal' | 'demandsCargo'
   | 'atOdds' | 'atPeace' | 'noPlayerPlea' | 'npcHasCargo' | 'offersTruce' | 'begsMercy'
-  | 'accepts' | 'refuses' | 'complies' | 'resists' | 'runs' | 'canTowNpc' | 'towedByPlayer' | 'noTrade'
+  | 'accepts' | 'refuses' | 'complies' | 'resists' | 'runs' | 'canTowNpc' | 'towedByPlayer' | 'noTrade' | 'npcCalm'
   | 'knowsLastTown' | 'hearsRumor' | 'rumorOfSite' | 'rumorOfWreck' | 'canPayTruce';
 export type EffectId =
   | 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow' | 'agreePatch' | 'handOver'
@@ -87,7 +87,7 @@ export const TOPICS: Record<TopicId, Topic> = {
   askTow: {
     id: 'askTow',
     once: false,
-    ask: { text: 'I am stranded. Can you tow me?', when: ['canTowPlayer'], duringFeud: false },
+    ask: { text: 'I am stranded. Can you tow me?', when: ['canTowPlayer', 'npcCalm'], duringFeud: false },
     raise: null,
     prepare: null,
     hangUp: [],
@@ -103,7 +103,7 @@ export const TOPICS: Record<TopicId, Topic> = {
   patch: {
     id: 'patch',
     once: false,
-    ask: { text: 'My truck is broken down. Can you patch it?', when: ['playerNeedsPatch'], duringFeud: false },
+    ask: { text: 'My truck is broken down. Can you patch it?', when: ['playerNeedsPatch', 'npcCalm'], duringFeud: false },
     raise: null,
     prepare: 'patchTerms',
     hangUp: [],
@@ -134,7 +134,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     id: 'patchRequest',
     once: true,
     ask: null,
-    raise: { when: ['npcNeedsPatch'], priority: 1, duringFeud: false, duringCombat: false },
+    raise: { when: ['npcNeedsPatch', 'npcCalm'], priority: 1, duringFeud: false, duringCombat: false },
     prepare: 'patchTerms',
     hangUp: ['settleRefused'],
     start: 'ask',
@@ -178,7 +178,7 @@ export const TOPICS: Record<TopicId, Topic> = {
   trade: {
     id: 'trade',
     once: false,
-    ask: { text: 'Want to trade?', when: ['noTrade'], duringFeud: false },
+    ask: { text: 'Want to trade?', when: ['noTrade', 'npcCalm'], duringFeud: false },
     raise: null,
     prepare: null,
     hangUp: [],
@@ -471,6 +471,7 @@ export const TRAIT_TALK: Record<TraitId, TraitTalk> = {
   raider: { voice: { greeting: 'Get lost.', repeatLine: 'Get lost.', refusal: 'Heh. No.', honksBack: false }, topics: ['demand', ...PARLEY] },
   scumbag: { voice: null, topics: ['demand', ...PARLEY] },
   coward: { voice: null, topics: PARLEY },
+  brave: { voice: null, topics: PARLEY },
   lawman: { voice: { greeting: 'Speak up.', repeatLine: 'Heard you the first time.', refusal: 'Clear the channel.', honksBack: true }, topics: ['directions', 'tow', 'askTow', ...PARLEY] },
   courier: { voice: { greeting: 'Make it short.', repeatLine: 'Said that already.', refusal: 'No time. Out.', honksBack: true }, topics: ['directions', 'marketNews', 'rumor', 'tow', 'askTow', 'trade', ...PARLEY] },
   roamer: { voice: { greeting: 'What do you want?', repeatLine: 'Old news, friend.', refusal: 'Not talking.', honksBack: true }, topics: ['directions', 'rumor', 'tow', 'askTow', 'patch', 'patchRequest', 'trade', ...PARLEY] },

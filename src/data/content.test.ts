@@ -43,7 +43,8 @@ const addedParts: Record<Exclude<PartKind, "core" | "scanner">, string[]> = {
   cargo: ["panniers", "flatbed", "lightFrame", "enclosedFrame", "heavyFrame"],
 };
 const addedGoods = ["grain", "textiles", "tools", "batteries", "electronics"];
-const addedChassis = ["courier", "van", "longbed", "carrier", "tractor"];
+const addedChassis = ["courier", "van", "longbed", "carrier", "tractor", "jeep", "convertible", "bus", "loader"];
+const rearEngineChassis = ["jeep", "convertible", "bus", "loader"];
 
 describe("equipment variety", () => {
   it("gives every mounted weapon its extended range", () => {
@@ -100,9 +101,9 @@ describe("equipment variety", () => {
     },
   );
 
-  it("adds five buyable chassis with valid built-in parts and physics bodies", () => {
-    expect(Object.keys(CHASSIS)).toHaveLength(9);
-    expect(PLAYER_CHASSIS).toHaveLength(7);
+  it("adds buyable chassis with valid built-in parts and physics bodies", () => {
+    expect(Object.keys(CHASSIS)).toHaveLength(13);
+    expect(PLAYER_CHASSIS).toHaveLength(11);
     for (const id of addedChassis) {
       expect(PLAYER_CHASSIS).toContain(id);
       const w = buyChassis(world, id);
@@ -123,7 +124,16 @@ describe("equipment variety", () => {
     }
     expect(
       new Set(addedChassis.map((id) => CHASSIS[id].layout.join("\n"))).size,
-    ).toBe(5);
+    ).toBe(addedChassis.length);
+  });
+
+  it.each(rearEngineChassis)("puts the %s engine bay behind the cab", (id) => {
+    const def = CHASSIS[id];
+    const cab = def.core.find((core) => { const part = PARTS[core.defId]; return part.kind === "core" && part.role === "cab"; })!;
+    const cabEnd = cab.y + PARTS[cab.defId].h;
+    const bayRows = def.layout.flatMap((row, y) => (row.includes("E") ? [y] : []));
+    expect(bayRows.length).toBeGreaterThan(0);
+    expect(Math.min(...bayRows)).toBeGreaterThanOrEqual(cabEnd);
   });
 
   it("keeps every part, chassis and good inside its tier's effort band", () => {
@@ -212,6 +222,18 @@ function dominates(a: PartDef, b: PartDef): boolean {
   const y = partAxes(b);
   return x.every((v, i) => v >= y[i]) && x.some((v, i) => v > y[i]);
 }
+
+describe("part weight by tier", () => {
+  // Armor, weapons and engines weigh per cell. Cargo parts weigh per extra row they add.
+  const perUnit = (def: PartDef): number => (def.kind === "cargo" ? def.mass / def.extraRows : def.mass / (def.w * def.h));
+  const mean = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+  it.each(["armor", "weapon", "engine", "cargo"])("%s parts weigh less on average at each higher tier", (kind) => {
+    const byTier = [1, 2, 3].map((tier) => mean(Object.values(PARTS).filter((p) => p.kind === kind && p.tier === tier).map(perUnit)));
+    expect(byTier[1]).toBeLessThan(byTier[0]);
+    expect(byTier[2]).toBeLessThan(byTier[1]);
+  });
+});
 
 describe("part trade-offs", () => {
   it("no part matches or beats another of its kind on every stat but price", () => {

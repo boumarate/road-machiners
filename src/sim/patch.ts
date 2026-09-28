@@ -16,7 +16,7 @@ import { removeGoods } from './inventory';
 import { decide, optionWeights } from './npc-decisions';
 import { machiningMult, planPartRepair } from './repair';
 import { getResources } from './resources';
-import { addState } from './states';
+import { addState, type WorkLeft } from './states';
 import { inTowReach } from './tow';
 import type { CallVar, NpcState, PartInstance, PatchDeal, StateData, Vehicle, World } from './types';
 import { dist } from './vec';
@@ -130,11 +130,22 @@ export function isPatching(world: World, s: NpcState): boolean {
 // fulfils a finished patch.
 export function advancePatches(world: World): void {
   for (const s of world.states) {
-    if (s.kind !== 'patch' || !partiesPresent(world, s) || !isPatching(world, s)) continue;
+    if (s.kind !== 'patch' || !workUnderWay(world, s)) continue;
     const data = patchData(s);
     if (data.workLeft === data.work) world.events.push({ t: 'patch', patcher: s.holder, client: s.other, outcome: 'started' });
     data.workLeft--;
   }
+}
+
+function workUnderWay(world: World, s: NpcState): boolean {
+  return partiesPresent(world, s) && isPatching(world, s);
+}
+
+// The work left while both trucks are present and work on the patch.
+export function patchWork(world: World, s: NpcState): WorkLeft | null {
+  if (!workUnderWay(world, s)) return null;
+  const data = patchData(s);
+  return { turnsLeft: data.workLeft, total: data.work };
 }
 
 function partiesPresent(world: World, s: NpcState): boolean {

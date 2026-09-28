@@ -5,7 +5,8 @@ import {
   TERRAIN_MARGIN,
   type PaintCanvas,
 } from "../../render/groundPaint";
-import type { Terrain } from "../../sim/terrain";
+import { BRIDGE_LENGTH, BRIDGE_RAILS } from "../../sim/bridge";
+import { deckEnds, type Terrain } from "../../sim/terrain";
 import type { World } from "../../sim/types";
 import { drawRoads } from "./roads";
 import type { RenderScope } from "./scope";
@@ -119,5 +120,22 @@ export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
       );
       chunks.push({ x, y, width, depth, mesh });
     }
+  deckPick(w.terrain, scope);
   return chunks;
+}
+
+// An unseen flat quad on the Canyon Bridge deck, so a click on the deck picks the deck, not the canyon
+// floor under it. The bridge model draws the deck.
+function deckPick(t: Terrain, scope: RenderScope): void {
+  const [h0, h1] = deckEnds(t);
+  const [[a0, a1], [b0, b1]] = BRIDGE_RAILS;
+  const corners = [[a0, h0], [a1, h1], [b1, h1], [b0, h0]] as const;
+  const geo = new THREE.BufferGeometry()
+    .setAttribute("position", new THREE.Float32BufferAttribute(corners.flatMap(([p, h]) => [p.x * S, h * S, p.y * S]), 3))
+    .setIndex([0, 1, 2, 0, 2, 3]);
+  geo.computeBoundingSphere();
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+  mesh.visible = false;
+  const mid = { x: (a0.x + b1.x) / 2, y: (a0.y + b1.y) / 2 };
+  scope.add(mesh, mid, BRIDGE_LENGTH / 2);
 }

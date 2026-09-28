@@ -51,7 +51,7 @@ Garage equipment changes are instant. Outside town, a change is a refit job:
 
 Machining shortens these times. The old layout stays active until the whole job finishes. Rearranging, storing, dumping or collecting items is blocked during a refit. Moving goods or spare parts without installing them stays instant.
 
-Every part and good has a mass. A heavier truck accelerates, brakes, steers and tops out worse. Every kilogram counts: a truck lighter than its rated mass beats the listed speed, and a heavier one falls short. Past the rated mass the loss is severe: 500 kg over a 3000 kg rating leaves about half the speed. Trucks make tradeoffs: cargo vs armor vs fuel use. No truck is best at everything.
+Every part and good has a mass. A heavier truck accelerates, brakes, steers and tops out worse. Every kilogram counts: a truck lighter than its handling mass beats the listed speed, and a heavier one falls short. The rated mass is the load limit. Every truck can put tier 1 armor on all its armor cells and guns on half its deck and stay at or under it. Cargo and heavier gear use the rest of the room. Past the rated mass the loss is severe: 500 kg over a 3000 kg rating leaves about half the speed. For the same job a higher tier part weighs less, so better gear leaves more room. Trucks make tradeoffs: cargo vs armor vs fuel use. No truck is best at everything.
 
 No part is better than another of its kind at everything but price. Each has one job and one weakness, and a content test enforces it.
 
@@ -192,14 +192,15 @@ Shops have unlimited money. Goods prices move with trade, and part stock is fini
 
 ## NPC traits and states
 
-Every NPC carries a set of traits instead of one class. Each trait adds activities and shifts chances. A scavenger with the scumbag trait still scavenges, and it also robs. Traits roll at spawn: every scavenger scavenges, and some are also scumbags or cowards. One neutral driver in four is a scumbag and one in four a coward, whatever its kind. Lawmen can be cowards but never scumbags, and raiders roll neither. Traits stay hidden, so the player learns a driver is a scumbag only when it starts acting like one. The Perception perk Read the driver shows traits in the hover panel.
+Every NPC carries a set of traits instead of one class. Each trait adds activities and shifts chances. A scavenger with the scumbag trait still scavenges, and it also robs. Traits roll at spawn: every scavenger scavenges, and some are also scumbags or cowards. One neutral driver in four is a scumbag and one in four a coward, whatever its kind. One neutral driver or raider in seven is brave, unless it is a coward. Lawmen and convoy guards are always brave. Lawmen roll no other traits. Traits stay hidden, so the player learns a driver is a scumbag only when it starts acting like one. The Perception perk Read the driver shows traits in the hover panel.
 
 - Scavenger collects salvage and helps stranded trucks.
 - Trader buys and sells between towns, rarely starts a fight, and sometimes fights back.
 - Raider hunts at hunting grounds, investigates distant engines and knows the raider camps.
 - Scumbag robs trucks that carry loot and look weaker than it.
 - Coward flees more often and fights back less.
-- Lawman patrols the roads near its town and fights raiders on sight. It attacks whoever fires the first shot at a neutral NPC or starts robbing one, the player included.
+- Brave almost never runs, pleads or gives up its cargo.
+- Lawman patrols the roads out to about a sixth of the way to the other town and fights raiders on sight. It attacks whoever fires the first shot at a neutral NPC or starts robbing one, the player included.
 - Courier travels between towns and locations, and almost never stops for salvage.
 - Roamer mostly explores random places, off road too, and trades and scavenges when it finds a chance.
 - Supplier hauls fuel drums from the Pump Station and water from the oases to the towns.
@@ -208,7 +209,7 @@ Every NPC carries a set of traits instead of one class. Each trait adds activiti
 
 A chance is 0 only when an option is physically impossible. A driver with no working gun cannot fight, and a truck with no loot cannot be robbed. Anything a driver can do keeps at least a 1% chance. So an ordinary scavenger robs about once in a hundred chances, and a trader sometimes starts a fight.
 
-Drivers judge each other by danger: the firepower of working guns times the current toughness of the cab, chassis and armor. A tank looks more dangerous than a scout, and a half-beaten tank looks about half as dangerous. Danger counts nearby visible faction mates on each side. A driver misjudges another truck's danger by up to a quarter each time it first sees it. A scumbag robs a truck whose danger looks below its own times its boldness. Scumbags are bold, and cowards are timid. A stronger target, or one near a town gate, is robbed only rarely.
+Drivers judge each other by danger: the firepower of working guns times the current toughness of the cab, chassis and armor. A tank looks more dangerous than a scout, and a half-beaten tank looks about half as dangerous. Danger counts nearby visible faction mates on each side. A driver misjudges another truck's danger by up to a quarter each time it first sees it. A scumbag robs a truck whose danger looks below its own times its boldness. Scumbags and brave drivers are bold, and cowards are timid. A stronger target, or one near a town gate, is robbed only rarely.
 
 A robbery is an attack. The winner loots the knocked-out truck or the wreck the loser left. A robber whose target escapes backs off that target for a while.
 
@@ -264,7 +265,7 @@ Fuel and supplies limit range. Fuel burns per tile by chassis, times heat. Below
 
 ## Prototype v0.001 content
 
-- Buyable chassis: Scout pickup, Hauler, Courier, Utility van, Longbed truck, Armored carrier and Heavy tractor. Raiders can also use the buggy and gunwagon chassis.
+- Buyable chassis: Scout pickup, Hauler, Courier, Utility van, Longbed truck, Armored carrier, Heavy tractor, Jeep, Convertible, Bus and Wheel loader. The last four carry the engine behind the driver. Raiders can also use the buggy and gunwagon chassis.
 - Parts: weapons, engines, armor, cargo parts, stores and the radio scanner. Cheap, light, durable, fuel-efficient and high-output variants have different costs and footprints. Cargo parts extend the inventory grid, without trailer physics.
 - Goods: parts, scrap metal, salt, meds, grain, textiles, machine tools, batteries, electronics, fuel drums and water. Bowl and Nose trade every good. Each stall trades a few. No shop makes fuel drums or water. Supply convoys load them for free at the Pump Station and the oases, and towns price them by the distance to those sources.
 - Region: Icarus, a 600-tile basin with Bowl and Nose as hubs, other destinations and two raider camps. The destinations include two canyon crossings and the Fallen Sun. Winding roads cross rolling grades between distinct landmarks. Towns lie on the roads, and other locations sit beside them on short spurs, so through traffic passes by. The player starts off the road out of Bowl, facing it, with the road in grey vision ahead. It is out of sight of every site and knows none, so the first step is to reach the road and ask a passing driver the way. See [landmark visuals](VISUAL_DESIGN.md).

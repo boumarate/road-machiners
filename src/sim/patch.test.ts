@@ -7,7 +7,7 @@ import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions } from './dialogue';
 import { goodsCount, mountedParts } from './grid';
 import { addGoods, removeGoods } from './inventory';
-import { topGoal } from './npc-activities';
+import { thinkNpc, topGoal } from './npc-activities';
 import { dealAvailable, needsPatch, patchData, patchTerms, settlePatch } from './patch';
 import { addState, stateOf } from './states';
 import { isStranded } from './stats';
@@ -133,6 +133,18 @@ describe('asking a driver for a patch', () => {
     w = runUntil(w, 40, (x) => stateOf(x, 'patch', trader.id, x.player.vehicleId) === null).w;
     expect(parts(playerVehicle(w))).toBe(3 - needed);
     expect(isStranded(w, playerVehicle(w))).toBe(false);
+  });
+
+  it('a driver under attack takes no patch and calls off an agreed one', () => {
+    const { w: start, trader } = brokenPlayer(4);
+    let w = agreedTerms(start, trader.id, 'free');
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 38, y: 34 });
+    find(w, trader.id).brain!.attackers[raider.id] = true;
+    const open = callVehicle(cloneWorld(w), trader.id);
+    expect(currentOptions(open).map((o) => o.text)).not.toContain('My truck is broken down. Can you patch it?');
+    thinkNpc(w, find(w, trader.id));
+    expect(stateOf(w, 'patch', trader.id, w.player.vehicleId)).toBeNull();
+    expect(find(w, trader.id).brain!.goals.some((g) => g.kind === 'patch')).toBe(false);
   });
 
   it('never rolls a deal its payer cannot cover', () => {

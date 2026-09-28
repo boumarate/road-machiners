@@ -9,6 +9,7 @@ export const PHYSICS = {
     gravityScale: 2, // trucks fall faster than the world's gravity, so bumps do not throw them in the air
     comBelow: 0.7, // meters the center of mass sits below the chassis box center, near the axles, so trucks rarely flip
     flipTilt: 60, // degrees of body tilt from upright past which a truck counts as flipped
+    liftedRise: 0.5, // meters above its ride height past which a truck counts as lifted off the ground; above suspensionTravel, so no wheel reaches
     inertiaScale: 2, // rotational inertia relative to a plain box of the same mass, so trucks resist rolling
     suspensionRest: 0.4,
     suspensionTravel: 0.3,
@@ -19,7 +20,7 @@ export const PHYSICS = {
     frictionSlip: 2,
     sideFrictionStiffness: 1,
     engineAccel: 12, // m/s^2 the engine can give at full throttle, before damage
-    brakeForce: 60, // per wheel per ton of chassis rated mass, at full brake
+    brakeForce: 60, // per wheel per ton of chassis handling mass, at full brake
     maxSteer: 0.6, // radians of front wheel angle
     steerRate: 3, // radians per second the wheels can turn
   },
@@ -37,11 +38,15 @@ export const PHYSICS = {
     longbed: { halfHeight: 0.55, wheelY: -0.35, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
     carrier: { halfHeight: 0.6, wheelY: -0.4, wheelRadius: 0.65, wheelHalfWidth: 0.28 },
     tractor: { halfHeight: 0.65, wheelY: -0.45, wheelRadius: 0.7, wheelHalfWidth: 0.3 },
+    jeep: { halfHeight: 0.4, wheelY: -0.25, wheelRadius: 0.45, wheelHalfWidth: 0.18 },
+    convertible: { halfHeight: 0.35, wheelY: -0.2, wheelRadius: 0.42, wheelHalfWidth: 0.17 },
+    bus: { halfHeight: 0.8, wheelY: -0.55, wheelRadius: 0.55, wheelHalfWidth: 0.22 },
+    loader: { halfHeight: 0.65, wheelY: -0.45, wheelRadius: 0.8, wheelHalfWidth: 0.32 },
   },
   driver: {
     steerGain: 1.6, // wheel angle per radian of heading error
     throttleGain: 0.5, // throttle per m/s of speed error
-    stopDecel: 8, // m/s^2 a driver plans to brake at when stopping on a point, at rated mass
+    stopDecel: 8, // m/s^2 a driver plans to brake at when stopping on a point, at handling mass
     cornerAccel: 15, // m/s^2 sideways a driver plans to corner at; trucks orbit a missed point at about 30 on flat ground
     cornerCut: 8, // meters before a route corner where the driver starts its turn, and after it where the turn ends
     reverseBelow: 4, // m/s; only a truck slower than this starts backing up

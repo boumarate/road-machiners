@@ -1,4 +1,5 @@
-// Dev corner readout: frame rate, frame time p95 and the last times of the timed seams.
+// Corner readout: frame rate, frame time p95 and the last times of the timed seams.
+// It starts hidden. The console command fps toggles it.
 
 import { perfSnapshot } from "../perf";
 import { el } from "./dom";
@@ -22,8 +23,9 @@ const STYLE = [
   "white-space: pre",
 ].join("; ");
 
-export function mountPerfPanel(host: HTMLElement): void {
+export function mountPerfPanel(host: HTMLElement): { toggle(): boolean } {
   const box = el("div", { class: "perf-panel", style: STYLE });
+  box.hidden = true;
   host.append(box);
 
   const frames: number[] = [];
@@ -36,22 +38,34 @@ export function mountPerfPanel(host: HTMLElement): void {
   };
   requestAnimationFrame(sample);
 
-  const ms = (x: number) => x.toFixed(1).padStart(6);
   window.setInterval(() => {
-    const lines: string[] = [];
-    if (frames.length > 0) {
-      const sorted = [...frames].sort((a, b) => a - b);
-      const mean = frames.reduce((a, b) => a + b, 0) / frames.length;
-      const p95 = sorted[Math.floor(sorted.length * 0.95)];
-      lines.push(`fps     ${(1000 / mean).toFixed(0).padStart(6)}`);
-      lines.push(`p95 ms  ${ms(p95)}`);
-    }
-    const snap = perfSnapshot();
-    for (const name of TIMERS) {
-      const s = snap[name];
-      lines.push(`${name.padEnd(8)}${s ? ms(s.last) : "     -"}`);
-    }
-    lines.push(`routes  ${String(snap.route?.calls ?? 0).padStart(6)}`);
-    box.textContent = lines.join("\n");
+    if (!box.hidden) box.textContent = readout(frames).join("\n");
   }, REFRESH_MS);
+
+  return {
+    toggle() {
+      box.hidden = !box.hidden;
+      return !box.hidden;
+    },
+  };
+}
+
+const ms = (x: number) => x.toFixed(1).padStart(6);
+
+function readout(frames: number[]): string[] {
+  const lines: string[] = [];
+  if (frames.length > 0) {
+    const sorted = [...frames].sort((a, b) => a - b);
+    const mean = frames.reduce((a, b) => a + b, 0) / frames.length;
+    const p95 = sorted[Math.floor(sorted.length * 0.95)];
+    lines.push(`fps     ${(1000 / mean).toFixed(0).padStart(6)}`);
+    lines.push(`p95 ms  ${ms(p95)}`);
+  }
+  const snap = perfSnapshot();
+  for (const name of TIMERS) {
+    const s = snap[name];
+    lines.push(`${name.padEnd(8)}${s ? ms(s.last) : "     -"}`);
+  }
+  lines.push(`routes  ${String(snap.route?.calls ?? 0).padStart(6)}`);
+  return lines;
 }

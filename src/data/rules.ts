@@ -10,7 +10,10 @@ export const RULES = {
   fuelUseFactor: 0.075, // share of the chassis fuel rate burned per tile; a daytime Bowl to Nose road trip uses under 60% of the starting fuel, leaving room for detours and fights
   npcStuckTurns: 2, // failed drive attempts before backing out
   npcRecoveryTurns: 2, // turns spent backing out before resuming the route
-  flipBackTurns: 3, // turns a vehicle can end flipped before it is set back on its wheels
+  // A truck that ends `turns` turns in a row flipped or lifted off the ground, like on top of another truck, is set down
+  // on its wheels. It lands on the nearest free spot, searched in rings `step` tiles apart out to `reach` tiles. The step
+  // is below the smallest vehicle radius. The reach fits two of the largest trucks side by side with clearance.
+  stranded: { turns: 3, step: 0.25, reach: 4 },
   // A player click within throttle reach and less than `cone` degrees off straight behind backs the truck up.
   // Any other point behind turns the truck around nose first. A stuck NPC backs out `distance` tiles.
   reverse: { cone: 20, distance: 1 },
@@ -58,8 +61,8 @@ export const RULES = {
   // Engine overdrive multiplies the player's top speed and acceleration by this. It heats the engine; see
   // ENGINE_HEAT.overdriveGain.
   overdriveBoost: 1.33,
-  // Over the rated mass, top speed and turning scale by (rated / mass) to this power. 500 kg over a 3000 kg rating
-  // leaves about 54% of the speed, and 1000 kg over leaves about 32%.
+  // Past the rated mass, top speed and turning also scale by (rated / mass) to this power. 500 kg over a 3000 kg rating
+  // cuts them to about 54%, and 1000 kg over to about 32%.
   overloadExponent: 4,
 
   // Combat

@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { zoneEdges, type Throttle } from '../../sim/steering';
-import { heightAt, type Terrain } from '../../sim/terrain';
+import { heightAt, markHeightAt, type Terrain } from '../../sim/terrain';
 import type { Vec } from '../../sim/vec';
 
 const S = PHYSICS.metersPerTile;
@@ -95,7 +95,7 @@ export class ZonesView {
 function pushPoint(out: number[], terrain: Terrain, pos: Vec, a: number, r: number): void {
   const x = pos.x + Math.cos(a) * r;
   const y = pos.y + Math.sin(a) * r;
-  const h = heightAt(terrain, x, y) * S + LIFT;
+  const h = markHeightAt(terrain, pos, x, y) * S + LIFT;
   out.push(x * S, h, y * S);
 }
 

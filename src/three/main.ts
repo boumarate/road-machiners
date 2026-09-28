@@ -28,10 +28,9 @@ const bank = await loadBank(mixer.ctx, SOUNDS);
 const soundSettings = new SoundSettings(mixer, window.localStorage);
 const overlay = element('overlay');
 const game = new Game(element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute());
-new DebugConsole(uiRoot(), game);
+new DebugConsole(uiRoot(), game, mountPerfPanel(overlay));
 performance.mark('korovan:ready');
 if (import.meta.env.DEV) {
   (window as any).__KOROVAN__ = game;
   (window as any).__KOROVAN_PERF__ = { snapshot: perfSnapshot, reset: resetPerf };
-  mountPerfPanel(overlay);
 }

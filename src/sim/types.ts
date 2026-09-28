@@ -202,7 +202,7 @@ export type Vehicle = {
   pos: Vec;
   heading: number; // radians, 0 = +x
   speed: number; // tiles per turn at the end of the last turn
-  flippedTurns?: number; // consecutive turns that ended with the truck flipped
+  strandedTurns?: number; // consecutive turns that ended with the truck flipped or lifted off the ground
   stalledUntil?: number; // last turn the engine stays stalled after a ram; see src/sim/crash-contact.ts
   order: MoveOrder | null; // null: coast, keeping speed and heading
   direct: boolean; // drive straight at the order's point instead of routing around obstacles; the player's manual mode

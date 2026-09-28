@@ -16,6 +16,10 @@ const BASE_MODELS: Record<string, ModelName> = {
   longbed: 'base_longbed',
   carrier: 'base_carrier',
   tractor: 'base_tractor',
+  jeep: 'base_jeep',
+  convertible: 'base_convertible',
+  bus: 'base_bus',
+  loader: 'base_loader',
 };
 
 export function baseModel(chassisId: string): ModelName {

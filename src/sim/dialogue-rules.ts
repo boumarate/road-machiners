@@ -8,7 +8,7 @@ import { REGION, type TownDef } from '../data/region';
 import { playerVehicle } from './damage';
 import { discoverSite } from './locations';
 import { isHostile } from './combat';
-import { patchGoal, startTow, topGoal } from './npc-activities';
+import { patchGoal, startTow, topGoal, underAttack } from './npc-activities';
 import { vehicleValue } from './market';
 import { hasPerk, practice } from './progress';
 import { answerPlea, answersPlea, answersThreat, makePeace, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, yieldTo, type ThreatAnswer } from './parley';
@@ -109,6 +109,8 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   playerNeedsPatch: (world) => needsPatch(playerVehicle(world)) && !inPatch(world, world.player.vehicleId),
   npcNeedsPatch: (world, npc) => needsPatch(npc) && !canFixItself(world, npc) && !inPatch(world, npc.id),
   noTrade: (world, npc) => tradeWith(world, npc) === null,
+  // A driver under attack takes on no tow, patch or trade.
+  npcCalm: (_world, npc) => !underAttack(npc),
   hasDeal: (_world, _npc, vars) => vars.deal !== undefined,
   noDeal: (_world, _npc, vars) => vars.deal === undefined,
   // About to attack the player, who carries something worth taking, and chose to call first.

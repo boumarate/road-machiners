@@ -10,6 +10,7 @@ export type ControlsHost = {
   apply: (next: World) => void;
   refreshPlan: () => void;
   doused: () => void; // plays the steam cloud and logs the douse
+  revved: () => void; // plays the engine rev when overdrive comes on
 };
 
 export class TruckControls {
@@ -32,8 +33,10 @@ export class TruckControls {
   toggleOverdrive(): void {
     const w = this.host.world();
     if (!playerCanAct(w)) return;
-    this.host.apply(setOverdrive(w, !w.player.overdrive));
+    const on = !w.player.overdrive;
+    this.host.apply(setOverdrive(w, on));
     this.host.refreshPlan();
+    if (on) this.host.revved();
   }
 
   douseEngine(): void {

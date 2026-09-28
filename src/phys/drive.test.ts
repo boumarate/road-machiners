@@ -12,6 +12,8 @@ import { angleDiff, bearing, dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
 import { endTurn, setDirect, setMoveOrder } from '../sim/world';
 import { PHYSICS } from '../data/physics';
+import { chassisDef } from '../data/chassis';
+import { bodyOf } from '../sim/body';
 import { buildDrive, freeDrive, initPhysics, routeAim, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
 import { physicsMove } from './turn';
 import { playerTow, unhitch } from '../sim/tow';
@@ -307,7 +309,7 @@ describe('physics turns', () => {
   });
 
   it('from rest, a click behind backs toward it rear first', () => {
-    const { w } = play(ordered({ kind: 'through', dest: { x: 24, y: 31 } }), 8);
+    const { w } = play(ordered({ kind: 'through', dest: { x: 24, y: 31 } }), 9);
     expect(dist(me(w).pos, { x: 24, y: 31 })).toBeLessThan(RULES.passRadius + 0.5);
     expect(Math.abs(angleDiff(me(w).heading, 0))).toBeLessThan(Math.PI / 4);
   });
@@ -612,22 +614,42 @@ describe('physics turns', () => {
   });
 });
 
-describe('flipped trucks', () => {
-  it('sets a truck back on its wheels after it ends flipBackTurns turns flipped', () => {
-    let w = emptyWorld();
-    const id = w.vehicles[0].id;
-    let d = buildDrive(w);
-    const body = d.world.getRigidBody(d.bodies[id]);
-    body.setRotation({ x: 1, y: 0, z: 0, w: 0 }, true); // upside down
-    const flipped: number[] = [];
-    for (let i = 0; i <= RULES.flipBackTurns; i++) {
+describe('stranded trucks', () => {
+  // Plays turns from d and collects each turn's strandedTurns of the player truck.
+  function strandedRun(w: World, d: Drive, turns: number): { w: World; counts: number[] } {
+    const counts: number[] = [];
+    for (let i = 0; i < turns; i++) {
       let next: Drive | null = null;
       w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
       freeDrive(d);
       d = next!;
-      flipped.push(w.vehicles[0].flippedTurns!);
+      counts.push(w.vehicles[0].strandedTurns!);
     }
     freeDrive(d);
-    expect(flipped).toEqual([...Array.from({ length: RULES.flipBackTurns }, (_, i) => i + 1), 0]);
+    return { w, counts };
+  }
+
+  const expected = [...Array.from({ length: RULES.stranded.turns }, (_, i) => i + 1), 0];
+
+  it('sets a truck back on its wheels after it ends the stranded turns flipped', () => {
+    const w = emptyWorld();
+    const d = buildDrive(w);
+    d.world.getRigidBody(d.bodies[w.vehicles[0].id]).setRotation({ x: 1, y: 0, z: 0, w: 0 }, true); // upside down
+    expect(strandedRun(w, d, RULES.stranded.turns + 1).counts).toEqual(expected);
+  });
+
+  it('sets a truck lying on top of another truck down on free ground beside it', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 30, y: 30 });
+    const d = buildDrive(w);
+    // The player truck rests level on the hauler's roof, with its wheels in the air.
+    const under = d.world.getRigidBody(d.bodies[npc.id]).translation();
+    const top = d.world.getRigidBody(d.bodies[w.vehicles[0].id]);
+    top.setTranslation({ x: under.x, y: under.y + bodyOf('hauler').half.y + bodyOf(w.vehicles[0].chassisId).half.y * 2, z: under.z }, true);
+    const { w: after, counts } = strandedRun(w, d, RULES.stranded.turns + 1);
+    expect(counts).toEqual(expected);
+    const me = after.vehicles[0];
+    const hauler = after.vehicles.find((v) => v.id === npc.id)!;
+    expect(dist(me.pos, hauler.pos)).toBeGreaterThan(chassisDef(me.chassisId).radius + chassisDef('hauler').radius);
   });
 });

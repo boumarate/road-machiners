@@ -15,11 +15,12 @@ function estimateTurns(world: World, v: Vehicle, units: number): number {
   return Math.max(1, Math.ceil((units / SALVAGE.unitsPerTurn) * cut));
 }
 
-// Mutates a draft world: starts a search job at the given stock. Shared by the player command and NPCs.
+// Mutates a draft world: starts a search job at the given stock. Shared by the player command and NPCs. A pile
+// takes a fixed number of turns.
 export function beginSearch(world: World, v: Vehicle, stockId: string): void {
   const stock = world.salvage.find((entry) => entry.id === stockId);
   if (!stock) throw new Error(`Unknown salvage ${stockId}`);
-  const turns = estimateTurns(world, v, salvageUnits(stock));
+  const turns = stock.pile ? SALVAGE.pileSearchTurns : estimateTurns(world, v, salvageUnits(stock));
   startJob(world, v, { kind: 'search', stockId, turnsLeft: turns, total: turns });
 }
 

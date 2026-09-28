@@ -1,9 +1,10 @@
 import { RULES } from "../data/rules";
 import { describe, expect, it } from "vitest";
 import { vehicleStats } from "./stats";
-import { backsToDestination, clickOrder, throttleFor, zoneEdges, zoneSpeed } from "./steering";
-import { DEG } from "./vec";
-import { emptyWorld, npcBrain } from "./testkit";
+import { chassisDef } from "../data/chassis";
+import { backsToDestination, clickOrder, setDownSpot, throttleFor, zoneEdges, zoneSpeed } from "./steering";
+import { DEG, dist } from "./vec";
+import { addVehicle, emptyWorld, npcBrain } from "./testkit";
 
 function setup(speed: number) {
   const w = emptyWorld();
@@ -80,5 +81,21 @@ describe("backing up", () => {
     expect(backsToDestination(npc, 5, 0)).toBe(false);
     npc.brain.recovery = 1;
     expect(backsToDestination(npc, 5, Math.PI / 2)).toBe(true);
+  });
+});
+
+describe("setting a stranded truck down", () => {
+  it("keeps the truck's own spot when it is free", () => {
+    const w = emptyWorld();
+    expect(setDownSpot(w, w.vehicles[0])).toEqual(w.vehicles[0].pos);
+  });
+
+  it("moves the truck just clear of a truck under it", () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const under = addVehicle(w, "traders", "hauler", ["stockEngine"], { ...me.pos });
+    const gap = dist(setDownSpot(w, me), under.pos) - chassisDef(me.chassisId).radius - chassisDef("hauler").radius;
+    expect(gap).toBeGreaterThan(0);
+    expect(gap).toBeLessThan(1);
   });
 });

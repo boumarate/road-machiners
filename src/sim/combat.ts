@@ -3,7 +3,7 @@
 
 import { onCall } from "./dialogue";
 import { SPAWN } from '../data/npcs';
-import { isDefeated, knockOutNpc } from './defeat';
+import { isDefeated, isKnockedOut, knockOutNpc } from './defeat';
 import { RULES } from '../data/rules';
 import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
@@ -32,7 +32,8 @@ export type FireBlock =
   | "noTarget"
   | "unseen"
   | "covered"
-  | "talking";
+  | "talking"
+  | "out";
 
 export function inFeud(world: World, a: Vehicle, b: Vehicle): boolean {
   return stateOf(world, "feud", a.id, b.id) !== null || stateOf(world, "feud", b.id, a.id) !== null;
@@ -81,13 +82,14 @@ function sideOpen(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): boolean
   return mw.sides.includes(sideToward(shooter, target.pos));
 }
 
-// Why a weapon cannot fire at a target right now, or null if it can. The player only shoots what it sees.
+// Why a weapon cannot fire at a target right now, or null if it can. A knocked-out driver fires nothing. The player only shoots what it sees.
 export function fireBlock(
   world: World,
   shooter: Vehicle,
   mw: MountedWeapon,
   target: Vehicle | null,
 ): FireBlock | null {
+  if (isKnockedOut(shooter)) return "out";
   return weaponBlock(mw) ?? (target ? targetBlock(world, shooter, mw, target) : "noTarget");
 }
 

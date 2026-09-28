@@ -124,11 +124,13 @@ function shortestRange(world: World, v: Vehicle): number {
 // faces off with a parked NPC.
 
 // What an NPC routes around: parked vehicles, and the swept path of each moving vehicle on a collision course.
-// The player routes around parked vehicles only, since the player steers for itself.
+// A swerve takes a turn to show, and orders are set once per turn, so drivers route around a moving vehicle one
+// turn of closing before it could make them stop. The player routes around parked vehicles only, since the player
+// steers for itself.
 export function routeBlockers(world: World, v: Vehicle): Blocker[] {
   const parked = parkedVehicles(world, v.id);
   if (!v.brain) return parked;
-  return [...parked, ...conflicts(world, v).flatMap((x) => sweptPath(world, v, x))];
+  return [...parked, ...conflicts(world, v, 1).flatMap((x) => sweptPath(world, v, x))];
 }
 
 // Whether v must stop short of `dest` for another vehicle. A moving vehicle stops v only when the route around
@@ -136,7 +138,7 @@ export function routeBlockers(world: World, v: Vehicle): Blocker[] {
 // more than v drives within its horizon. The swept path clears within that time, so waiting is shorter then.
 export function trafficStops(world: World, v: Vehicle, dest: Vec): boolean {
   if (facesParked(world, v)) return true;
-  const moving = conflicts(world, v);
+  const moving = conflicts(world, v, 0);
   if (moving.length === 0) return false;
   const parked = parkedVehicles(world, v.id);
   const radius = vehicleStats(world, v).radius;
@@ -152,12 +154,13 @@ function others(world: World, v: Vehicle): Vehicle[] {
   return world.vehicles.filter((x) => x.id !== v.id && x.id !== v.brain?.ramTarget && !onOwnRope(world, v, x));
 }
 
-// Moving vehicles close ahead whose path meets v's.
-function conflicts(world: World, v: Vehicle): Vehicle[] {
+// Moving vehicles close ahead whose path meets v's. leadTurns adds turns of closing at both current speeds to the
+// braking reach.
+function conflicts(world: World, v: Vehicle, leadTurns: 0 | 1): Vehicle[] {
   return others(world, v).filter((x) => {
     if (x.speed < RULES.parkedSpeed) return false;
     const gap = gapAhead(world, v, x);
-    return gap !== null && gap < brakingReach(world, v, x) && pathsMeet(world, v, x);
+    return gap !== null && gap < brakingReach(world, v, x) + leadTurns * (v.speed + x.speed) && pathsMeet(world, v, x);
   });
 }
 
@@ -180,18 +183,20 @@ function horizon(world: World, v: Vehicle): { vs: number; t: number } {
 
 // Circles along the line x covers on its heading within v's horizon. They are spaced one radius apart, so
 // together they close the strip. A circle is left out when v cannot get there before x does, so a truck driving
-// away at v's pace blocks only where it is now.
+// away at v's pace blocks only where it is now. x may speed up this turn, as in brakingReach.
 function sweptPath(world: World, v: Vehicle, x: Vehicle): Blocker[] {
-  const r = vehicleStats(world, x).radius;
+  const sx = vehicleStats(world, x);
+  const r = sx.radius;
   const radii = vehicleStats(world, v).radius + r;
   const { vs, t } = horizon(world, v);
-  const reach = x.speed * t;
+  const xs = Math.min(sx.maxSpeed, x.speed + sx.accel);
+  const reach = xs * t;
   const steps = Math.ceil(reach / r);
   const circles: Blocker[] = [];
   for (let i = 0; i <= steps; i++) {
     const d = (reach * i) / steps;
     const pos = { x: x.pos.x + Math.cos(x.heading) * d, y: x.pos.y + Math.sin(x.heading) * d };
-    if (i === 0 || dist(v.pos, pos) - radii <= (vs * d) / x.speed) circles.push({ pos, r });
+    if (i === 0 || dist(v.pos, pos) - radii <= (vs * d) / xs) circles.push({ pos, r });
   }
   return circles;
 }

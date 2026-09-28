@@ -11,7 +11,7 @@ const arg = (name, fallback) => {
 const url = arg('url', 'http://localhost:5173');
 const turns = Number(arg('turns', '12'));
 const MIN_FPS = 50; // headless Chromium caps frames at 60 Hz
-const TURN_WAIT_MS = 2600; // movement plus combat playback, with margin
+const TURN_LIMIT_MS = 10000; // a turn plays in about 1.3 s, and the first, while the game warms up, in about 3.2 s
 
 mkdirSync('.playtest', { recursive: true });
 const browser = await chromium.launch({ args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
@@ -34,7 +34,12 @@ for (let i = 0; i < turns; i++) {
     g.apply({ ...w, vehicles: w.vehicles.map((x) => (x.id === v.id ? { ...x, order: { kind: 'through', dest: { x: clamp(v.pos.x + Math.cos(a) * 9.5), y: clamp(v.pos.y + Math.sin(a) * 9.5) } } } : x)) });
     g.endTurn();
   }, i);
-  await page.waitForTimeout(TURN_WAIT_MS);
+  // The turn counts once it is committed and has played back, since endTurn() ignores requests during playback.
+  // travel and anim are private in TypeScript, and endTurn() checks the same call.
+  await page.waitForFunction((turn) => {
+    const g = window.__KOROVAN__;
+    return g.state.turn === turn && !g.travel.isPlaying(g.anim);
+  }, i + 2, { timeout: TURN_LIMIT_MS, polling: 50 }).catch(() => { throw new Error(`Turn ${i + 1} did not finish playing within ${TURN_LIMIT_MS} ms`); });
 }
 await page.screenshot({ path: '.playtest/end.png' });
 
