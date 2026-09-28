@@ -133,13 +133,14 @@ Approach: a new `src/mapgen/` folder holds the bake pipeline as pure functions o
 - IF1 — `BakedMap = { hash: string; seed: number; terrain: Terrain; rocks: Rock[] }`. File bytes: magic `KMAP`, format version, size, map seed, height scale, Int16 corner heights, Uint8 tile types in `TERRAIN_TYPES` key order, rock count, then x, y and r as Float32 per rock. Hash is FNV-1a over the bytes in hex.
 - IF2 [blocks] — `public/maps/icarus.bin` written by `npm run map:bake`. PH2 tests read it, so it must exist first.
 - IF3 — `MapDraft` and `Rock` from `src/mapgen/draft.ts`.
+- IF5 [blocks] — The files `src/mapgen/{pipeline,ground,rocks}.ts` as PH1 creates them. PH4 edits them, so PH1 must finish first.
 - IF4 — `geologyLayer(seed: number, d: MapDraft): MapDraft`, which fills `d.flow`, `d.slumped` and `d.sand`.
 
 ### Interface graph
-- PH1 -> IF1, IF2, IF3 @ src/data/mapgen.ts, src/mapgen/{draft,base,finish,ground,rocks,pipeline,format,preview}.ts, src/sim/elevation.ts, scripts/png.mjs, scripts/map-bake.mjs, package.json
+- PH1 -> IF1, IF2, IF3, IF5 @ src/data/mapgen.ts, src/mapgen/{draft,base,finish,ground,rocks,pipeline,format,preview}.ts, src/sim/elevation.ts, scripts/png.mjs, scripts/map-bake.mjs, package.json
 - PH2 IF1, IF2 -> @ src/sim/{terrain,types,world,mapgen,testkit}.ts, src/three/{map-file,main,game,save}.ts, src/test-map.ts, src/econ/harness.ts, src/sim/progression/record.ts, src/**/*.test.ts outside src/mapgen
 - PH3 IF3 -> IF4 @ src/data/geology.ts, src/mapgen/geology/*
-- PH4 IF3, IF4 -> @ src/mapgen/{pipeline,ground,rocks}.ts, src/data/region.ts
+- PH4 IF3, IF4, IF5 -> @ src/mapgen/{pipeline,ground,rocks}.ts, src/data/region.ts
 - PH5 -> @ public/maps/icarus.bin, DESIGN.md, CLAUDE.md
 
 ### Risks / rollback
