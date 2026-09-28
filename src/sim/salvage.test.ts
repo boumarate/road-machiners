@@ -351,7 +351,9 @@ describe('site restock', () => {
     emptyStock(stock);
     runDays(w, 1);
     const firstDay = stock.goods.scrap;
-    runDays(w, 29);
+    // A unit comes back at SALVAGE.restockShare a day, so a year of days fills every range but for
+    // odds far below one in a million.
+    runDays(w, 365);
     expect(firstDay).toBeLessThan(SALVAGE.convoy.goods.scrap[1]);
     expect(stock.goods.scrap).toBe(SALVAGE.convoy.goods.scrap[1]);
     expect(stock.goods.parts).toBe(SALVAGE.convoy.parts[1]);

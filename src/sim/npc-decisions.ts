@@ -11,7 +11,7 @@ import { dealAvailable } from './patch';
 import { chassisDef } from '../data/chassis';
 import { ECONOMY, GOOD_IDS } from '../data/goods';
 import {
-  DECISIONS, HUNTING_GROUNDS, MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, STATE_WEIGHTS, TRAITS,
+  DECISIONS, HUNT, MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, STATE_WEIGHTS, TRAITS,
   type DecisionId, type DecisionOptions, type TraitId, type TraitWeights, type WeightChange,
 } from '../data/npcs';
 import { PERK_NUMBERS } from '../data/skills';
@@ -30,8 +30,8 @@ import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
 import { skillEffect, vehicleHasPerk } from './progress';
 import { randRange } from './rng';
-import { canReachSalvage, canTakeAny } from './salvage';
-import { canUseSite, siteGates } from './sites';
+import { canReachSalvage, canTakeAny, siteLootTable } from './salvage';
+import { canUseSite, siteGates, sitePads } from './sites';
 import { stateOf, statesHeld } from './states';
 import { getMobilityCondition, vehicleStats } from './stats';
 import { strandedAt, towSite } from './tow';
@@ -234,8 +234,40 @@ export function salvageSitesAway(vehicle: Vehicle) {
   return npcProfile(vehicle).salvageSites.map(getKnownSite).filter((site) => !canUseSite(vehicle.pos, site));
 }
 
+let grounds: readonly Vec[] | null = null;
+
+// Where raiders look for prey: points every HUNT.roadSpacing tiles along the roads, kept only far from every
+// site, and the pads of every location with salvage. Built once from the region.
+export function huntingGrounds(): readonly Vec[] {
+  if (grounds) return grounds;
+  const sites = [...REGION.towns, ...REGION.locations];
+  const lonely = (p: Vec) => sites.every((site) => dist(p, site.pos) - site.radius >= HUNT.siteDistance);
+  const roadPoints = REGION.roads.flatMap((road) => pointsAlong(road, HUNT.roadSpacing)).filter(lonely);
+  const lootPads = REGION.locations.filter((site) => site.kind !== 'camp' && siteLootTable(site)).flatMap((site) => sitePads(site));
+  grounds = [...roadPoints, ...lootPads];
+  return grounds;
+}
+
+// Points every `spacing` tiles along a polyline, the first half a spacing from its start.
+function pointsAlong(line: readonly Vec[], spacing: number): Vec[] {
+  const points: Vec[] = [];
+  let next = spacing / 2;
+  let walked = 0;
+  for (let i = 1; i < line.length; i++) {
+    const a = line[i - 1];
+    const b = line[i];
+    const length = dist(a, b);
+    for (; next <= walked + length; next += spacing) {
+      const t = (next - walked) / length;
+      points.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+    }
+    walked += length;
+  }
+  return points;
+}
+
 export function huntingGroundsAway(vehicle: Vehicle): Vec[] {
-  return HUNTING_GROUNDS.filter((point) => dist(vehicle.pos, point) > RULES.arriveRadius * 2);
+  return huntingGrounds().filter((point) => dist(vehicle.pos, point) > RULES.arriveRadius * 2);
 }
 
 // ---- Robbery.

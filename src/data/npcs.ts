@@ -1,8 +1,6 @@
 // NPC vehicle templates and how often they appear.
 
 import type { Faction, StateKindId } from '../sim/types';
-import type { Vec } from '../sim/vec';
-import { scalePoint } from './region';
 import { START_KITS } from './start';
 import { RULES } from './rules';
 
@@ -332,10 +330,11 @@ export const SPAWN = {
     "scavenger",
     "scavenger",
   ],
-  campMinPlayerDist: 16, // raiders never spawn closer to the player than this
-  townSpread: 1, // distance beyond the site boundary for neutral spawns
-  campSpread: 6, // distance beyond a camp gate for raider spawns; room for a full camp to spawn at once
-  campAngle: 0.3, // radians either side of the track leaving a camp gate
+  // A respawn never lands closer to the player than this, so no truck pops up beside them. Initial spawns
+  // skip it, so the start road has traffic.
+  minPlayerDist: 16,
+  gateSpread: 6, // distance beyond a gate for spawns; room for a full camp to spawn at once
+  gateAngle: 0.3, // radians either side of the track leaving a gate
   tries: 40,
   neighborHelp: 10, // same-faction vehicles in this range join a feud, witness attacks and count as one group in danger
 };
@@ -609,13 +608,10 @@ export const NPC_UPKEEP = {
   tradeReserve: 0.5,
 };
 
-// Raiders drive between these points to look for prey.
-export const HUNTING_GROUNDS: Vec[] = [
-  ...[
-    { x: 30, y: 8 },
-    { x: 110, y: 13 },
-    { x: 8, y: 28 },
-    { x: 111, y: 105 },
-    { x: 62, y: 73 },
-  ].map(scalePoint),
-];
+// Raiders look for prey on lonely road stretches and at the pads of salvage sites, where scavengers stop.
+export const HUNT = {
+  roadSpacing: 60, // tiles along a road between two hunting points: three sight radii, so views do not overlap
+  // Tiles from any site edge to a road hunting point: two sight radii. Prey there has left a town or site
+  // behind and is alone on the road.
+  siteDistance: 40,
+};

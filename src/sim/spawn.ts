@@ -1,4 +1,5 @@
-// NPC spawning up to per-template caps. Raiders appear at their camp gates, neutrals at towns.
+// NPC spawning up to per-template caps. Raiders appear at their camp gates, neutrals at the gates of any
+// town or other location.
 
 import { NPCS, SPAWN, type NpcTemplate, type TraitId } from "../data/npcs";
 import { chassisDef } from "../data/chassis";
@@ -9,7 +10,7 @@ import { isDriveObstacle } from "./mapgen";
 import { generateNpcLoadout, type NpcLoadout } from "./npc-loadout";
 import { profileOf } from "./npc-decisions";
 import { chance, randInt, randRange, type Rng } from "./rng";
-import { siteGates } from "./sites";
+import { siteGates, type Site } from "./sites";
 import type { Vehicle, World } from "./types";
 import { dist, type Vec } from "./vec";
 
@@ -22,12 +23,12 @@ export function spawnNpcs(world: World): void {
     const alive = world.vehicles.filter(
       (v) => v.brain?.templateId === tpl.id,
     ).length;
-    if (alive < tpl.cap) spawnOne(world, tpl);
+    if (alive < tpl.cap) spawnOne(world, tpl, true);
   }
 }
 
 export function spawnInitial(world: World): void {
-  for (const id of SPAWN.initial) spawnOne(world, NPCS[id]);
+  for (const id of SPAWN.initial) spawnOne(world, NPCS[id], false);
 }
 
 // Returns false when no free spot was found this time; the next interval tries again.
@@ -36,13 +37,15 @@ export function rollTraits(world: Rng, tpl: NpcTemplate): TraitId[] {
   return [...tpl.traits, ...tpl.extraTraits.filter((extra) => chance(world, extra.chance)).map((extra) => extra.trait)];
 }
 
-function spawnOne(world: World, tpl: NpcTemplate): boolean {
+// A respawn keeps SPAWN.minPlayerDist from the player. Initial spawns do not.
+function spawnOne(world: World, tpl: NpcTemplate, respawn: boolean): boolean {
   const loadout = generateNpcLoadout(world, tpl);
   const radius = chassisDef(loadout.chassisId).radius;
   for (let i = 0; i < SPAWN.tries; i++) {
-    const pos =
-      tpl.spawn === "camp" ? campSpot(world, tpl, radius) : townSpot(world, radius);
-    if (!pos || !isFree(world, pos, radius, null)) continue;
+    const site = tpl.spawn === "camp" ? campOf(world, tpl) : NEUTRAL_SITES[randInt(world, 0, NEUTRAL_SITES.length - 1)];
+    const pos = gateSpot(world, site, radius);
+    if (respawn && dist(pos, playerVehicle(world).pos) < SPAWN.minPlayerDist) continue;
+    if (!isFree(world, pos, radius, null)) continue;
     spawnAt(world, tpl, loadout, pos);
     return true;
   }
@@ -75,27 +78,25 @@ export function spawnAt(world: World, tpl: NpcTemplate, loadout: NpcLoadout, pos
   return v;
 }
 
-// A point on the track just outside a random gate of one of the template's camps.
-function campSpot(world: World, tpl: NpcTemplate, radius: number): Vec | null {
+const NEUTRAL_SITES: readonly Site[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== "camp")];
+
+// A random camp among the template's bases.
+function campOf(world: World, tpl: NpcTemplate): Site {
   const bases = profileOf(tpl.traits).bases;
   if (bases.length === 0) throw new Error(`${tpl.id} spawns at a camp but its traits know none`);
   const id = bases[randInt(world, 0, bases.length - 1)];
   const camp = REGION.locations.find((l) => l.id === id);
   if (!camp) throw new Error(`Unknown camp ${id}`);
-  const gates = siteGates(camp);
-  const gate = gates[randInt(world, 0, gates.length - 1)];
-  const a = Math.atan2(gate.y - camp.pos.y, gate.x - camp.pos.x) + randRange(world, -SPAWN.campAngle, SPAWN.campAngle);
-  const d = radius + 0.3 + randRange(world, 0, SPAWN.campSpread);
-  const pos = { x: gate.x + Math.cos(a) * d, y: gate.y + Math.sin(a) * d };
-  if (dist(pos, playerVehicle(world).pos) < SPAWN.campMinPlayerDist) return null;
-  return pos;
+  return camp;
 }
 
-function townSpot(world: World, radius: number): Vec {
-  const town = REGION.towns[randInt(world, 0, REGION.towns.length - 1)];
-  const a = randRange(world, -Math.PI, Math.PI);
-  const d = town.radius + radius + 0.3 + randRange(world, 0, SPAWN.townSpread);
-  return { x: town.pos.x + Math.cos(a) * d, y: town.pos.y + Math.sin(a) * d };
+// A point on the track just outside a random gate of the site.
+function gateSpot(world: World, site: Site, radius: number): Vec {
+  const gates = siteGates(site);
+  const gate = gates[randInt(world, 0, gates.length - 1)];
+  const a = Math.atan2(gate.y - site.pos.y, gate.x - site.pos.x) + randRange(world, -SPAWN.gateAngle, SPAWN.gateAngle);
+  const d = radius + 0.3 + randRange(world, 0, SPAWN.gateSpread);
+  return { x: gate.x + Math.cos(a) * d, y: gate.y + Math.sin(a) * d };
 }
 
 // Whether a vehicle of radius fits at pos, on the map and clear of obstacles and other vehicles.

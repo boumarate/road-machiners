@@ -147,7 +147,7 @@ NPCs spawn with equipment sampled from weighted tables for their role: a chassis
 
 - Scavengers collect salvage and sell cargo. A scavenger on a trip stops for three in four wrecks it passes, then mostly goes back to its trip.
 - Traders buy profitable cargo, keep money for upkeep and flee from threats.
-- Raiders search hunting grounds, fight, collect wreck cargo, and sell it in towns. They buy fuel, supplies and repairs at their nearest camp, and flee to a camp or a town. A camp buys no cargo, so a raider without money sells its cargo in town first.
+- Raiders search hunting grounds, fight, collect wreck cargo, and sell it in towns. They buy fuel, supplies and repairs at their nearest camp, and flee to a camp or a town. A camp buys no cargo, so a raider without money sells its cargo in town first. Hunting grounds are lonely road stretches far from any site and the pads of salvage sites.
 - Each NPC pays for fuel, supplies and repairs from its own wallet.
 
 Idle drivers mostly fight manageable hostiles and flee stronger ones. A healthy driver busy with work mostly keeps on when a hostile appears that is not aimed at it or a nearby faction mate. A shot at a driver or a nearby faction mate, hit or miss, prompts a decision to fight back, flee or rarely keep on. Damaged NPCs react to visible hostiles before starting repairs. A driver judges force by the target's nearby visible group against its own nearby visible group.
@@ -231,9 +231,9 @@ Fuel and supplies limit range. Fuel burns per tile by chassis, times heat. Below
 - Buyable chassis: Scout pickup, Hauler, Courier, Utility van, Longbed truck, Armored carrier and Heavy tractor. Raiders can also use the buggy and gunwagon chassis.
 - Parts: weapons, engines, armor, cargo parts and the radio scanner. Cheap, light, durable, fuel-efficient and high-output variants have different costs and footprints. Cargo parts extend the inventory grid, without trailer physics.
 - Goods: parts, scrap metal, salt, meds, grain, textiles, machine tools, batteries and electronics. Bowl and Nose trade every good. Each stall trades a few.
-- Region: Icarus, a 600-tile basin with Bowl and Nose as hubs, other destinations and two raider camps. The destinations include two canyon crossings and the Fallen Sun. Winding roads cross rolling grades between distinct landmarks. See [landmark visuals](VISUAL_DESIGN.md).
+- Region: Icarus, a 600-tile basin with Bowl and Nose as hubs, other destinations and two raider camps. The destinations include two canyon crossings and the Fallen Sun. Winding roads cross rolling grades between distinct landmarks. Towns lie on the roads, and other locations sit beside them on short spurs, so through traffic passes by. The player starts on the road out of Bowl, out of sight of every site and knowing none, so the first step is to ask a passing driver the way. See [landmark visuals](VISUAL_DESIGN.md).
 - Enemies: raider outriders and gunwagons with sampled chassis and equipment.
-- Neutrals: trader caravans and scavengers. Shooting one makes it and its nearby mates hostile.
+- Neutrals: trader caravans and scavengers. Shooting one makes it and its nearby mates hostile. They spawn outside the gate of a random town or location, never close to the player.
 
 ## Out of scope for now
 

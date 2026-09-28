@@ -1,7 +1,7 @@
 import { PRESSURE_MAX } from '../../data/market';
 import type { World } from '../types';
 import { describe, expect, it } from 'vitest';
-import { HUNTING_GROUNDS } from '../../data/npcs';
+import { huntingGrounds } from '../npc-decisions';
 import { REGION } from '../../data/region';
 import { playerVehicle } from '../damage';
 import { goodsCount, mountedParts } from '../grid';
@@ -133,7 +133,7 @@ describe('botOrders', () => {
 
   // A parked raider can hold the exact point of a ground, so the stop order ends a little short of it.
   it('has a fighter whose stop ended near a hunting ground go on to the next one', () => {
-    const ground = HUNTING_GROUNDS[1];
+    const ground = huntingGrounds()[1];
     const w = parkedAt('bowl');
     const me = playerVehicle(w);
     me.pos = { x: ground.x + 1.5, y: ground.y };
@@ -141,6 +141,6 @@ describe('botOrders', () => {
 
     const turn = botOrders(w, 'fighter');
 
-    expect(playerVehicle(turn.world).order).toEqual({ kind: 'stopAt', dest: HUNTING_GROUNDS[2] });
+    expect(playerVehicle(turn.world).order).toEqual({ kind: 'stopAt', dest: huntingGrounds()[2] });
   });
 });

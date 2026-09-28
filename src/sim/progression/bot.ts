@@ -5,7 +5,7 @@
 
 import { chassisDef } from '../../data/chassis';
 import { ECONOMY, GOOD_IDS } from '../../data/goods';
-import { HUNTING_GROUNDS, NPC_BEHAVIOR, NPC_UPKEEP } from '../../data/npcs';
+import { NPC_BEHAVIOR, NPC_UPKEEP } from '../../data/npcs';
 import { PARTS, partDef } from '../../data/parts';
 import { REGION, type TownDef } from '../../data/region';
 import { RULES } from '../../data/rules';
@@ -19,7 +19,7 @@ import { findSpot, freeCells, goodsCount, gridOf, isMounted, MOUNT_CELLS, mounte
 import { moveItem, storePart, takeFromStorage } from '../inventory';
 import { shopAt, shopState } from '../market';
 import { canLoot, salvageHere, takeAllLoot } from '../locations';
-import { getUpkeepReserve } from '../npc-decisions';
+import { getUpkeepReserve, huntingGrounds } from '../npc-decisions';
 import { canReachSalvage, hasSalvage } from '../salvage';
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, townAt, type Site } from '../sites';
@@ -349,9 +349,10 @@ function collectOrHunt(o: Orders): void {
 // visited once its stop order ends.
 function hunt(o: Orders): void {
   const order = o.me.order;
-  if (order?.kind === 'stopAt' && HUNTING_GROUNDS.some((g) => g.x === order.dest.x && g.y === order.dest.y)) return;
-  const here = HUNTING_GROUNDS.indexOf(nearest(o.me.pos, HUNTING_GROUNDS) ?? HUNTING_GROUNDS[0]);
-  driveTo(o, HUNTING_GROUNDS[(here + 1) % HUNTING_GROUNDS.length]);
+  const grounds = huntingGrounds();
+  if (order?.kind === 'stopAt' && grounds.some((g) => g.x === order.dest.x && g.y === order.dest.y)) return;
+  const here = grounds.indexOf(nearest(o.me.pos, grounds) ?? grounds[0]);
+  driveTo(o, grounds[(here + 1) % grounds.length]);
 }
 
 // Where a hostile truck is: in sight, or at the center of its contact circle. Nearest first.
@@ -432,7 +433,7 @@ function byDistance<T extends Site>(world: World, sites: T[]): T[] {
   return [...sites].sort((a, b) => dist(pos, a.pos) - dist(pos, b.pos));
 }
 
-function nearest(from: Vec, points: Vec[]): Vec | null {
+function nearest(from: Vec, points: readonly Vec[]): Vec | null {
   return points.reduce<Vec | null>((best, p) => (!best || dist(from, p) < dist(from, best) ? p : best), null);
 }
 
