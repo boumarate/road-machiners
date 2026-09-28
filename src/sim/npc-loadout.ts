@@ -1,10 +1,11 @@
 import { chassisDef } from '../data/chassis';
 import { GOODS } from '../data/goods';
 import { NPC_UPKEEP, type CargoRoll, type NpcLoadoutTable, type NpcTemplate, type Weighted } from '../data/npcs';
-import { partDef, type PartKind } from '../data/parts';
+import { partDef, type PartKind, type WeaponDef } from '../data/parts';
 import { CONDITION } from '../data/wear';
 import { makePart, makeVehicle, type PartSpec } from './factory';
-import { freeCells } from './grid';
+import { freeCells, mountedItems } from './grid';
+import { openSides, reachedSides } from './armor';
 import { mountPart } from './inventory';
 import { vehicleMass } from './mass';
 import { nextRandom, type Rng } from './rng';
@@ -103,12 +104,20 @@ function computeEquipmentCost(v: Vehicle): number {
 
 // Probing checks feasibility at pristine wear, the most expensive and heaviest case a part can be. Any
 // wear later rolled onto the mounted part only lowers its value, so a feasible pristine fit stays feasible.
+// A fit that leaves any gun with no open side its arc reaches does not count, since that gun could never fire.
 function tryMountChoice(world: World, v: Vehicle, id: string, budget: number): Vehicle | null {
   if (computeEquipmentCost(v) + partDef(id).value > budget) return null;
   if (vehicleMass(v) + partDef(id).mass > chassisDef(v.chassisId).ratedMass) return null;
   const candidate = { ...v, items: [...v.items] };
   if (!mountPart(world, candidate, makePart(world, id, 0))) return null;
-  return candidate;
+  return everyGunFires(candidate) ? candidate : null;
+}
+
+function everyGunFires(v: Vehicle): boolean {
+  return mountedItems(v, 'weapon').every((item) => {
+    const reach = reachedSides(partDef(item.part.defId) as WeaponDef);
+    return openSides(v, item).some((side) => reach.includes(side));
+  });
 }
 
 // Rolls wear onto every item in `v.items` not already present in `before`, so a part gets exactly one

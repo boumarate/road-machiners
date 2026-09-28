@@ -1,5 +1,6 @@
 # Combat AI
 
+**Mode:** hands-off
 ## Context
 - `computeFightGoal()` in `src/sim/ai.ts` puts a fighter on the line from the target to itself, at `preferredRange` or its shortest gun range. `driveOrder()` gives it a `stopAt` order, so it parks there and shoots.
 - It ignores weapon arcs on both sides. A gunwagon with a 60° cannon can park with the target outside its arc. It never avoids the target's arcs.

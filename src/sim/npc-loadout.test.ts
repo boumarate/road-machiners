@@ -10,7 +10,10 @@ import { makeVehicle } from './factory';
 import { freeCells, goodsCount, gridOf, isMounted, mountedParts, placementError } from './grid';
 import { vehicleMass } from './mass';
 import { generateNpcLoadout, sampleWeighted } from './npc-loadout';
-import { spawnInitial, spawnNpcs } from './spawn';
+import { spawnAt, spawnInitial, spawnNpcs } from './spawn';
+import { openSides, reachedSides } from './armor';
+import { mountedItems } from './grid';
+import type { WeaponDef } from '../data/parts';
 import { emptyWorld } from './testkit';
 import type { Vehicle, World } from './types';
 import { TEST_MAP } from '../test/map';
@@ -243,5 +246,21 @@ describe('spawned NPCs', () => {
     expect(parts.some((p) => p.wear > 0)).toBe(true);
     const traders = npcs.filter((v) => v.brain!.templateId === 'trader');
     expect(traders.some((v) => v.items.some((it) => it.kind === 'part' && !isMounted(v.chassisId, it)))).toBe(true);
+  });
+});
+
+describe('NPC gun placement', () => {
+  it('never mounts a gun where no open side lets its arc fire', () => {
+    for (const id of ['gunwagon', 'buggy', 'noseArmy', 'merc']) {
+      for (let seed = 1; seed <= 40; seed++) {
+        const w = emptyWorld();
+        w.rngState = seed * 7919;
+        const v = spawnAt(w, NPCS[id], generateNpcLoadout(w, NPCS[id]), { x: 40, y: 30 });
+        for (const item of mountedItems(v, 'weapon')) {
+          const reach = reachedSides(partDef(item.part.defId) as WeaponDef);
+          expect(openSides(v, item).some((side) => reach.includes(side)), `${id} seed ${seed} ${item.part.defId}`).toBe(true);
+        }
+      }
+    }
   });
 });
