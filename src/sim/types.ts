@@ -13,7 +13,7 @@ import type { PerkId } from "../data/skills";
 
 export type PatchDeal = DecisionOptions["patchDeal"];
 
-export type Faction = "player" | "raiders" | "traders" | "scavengers";
+export type Faction = "player" | "raiders" | "traders" | "scavengers" | "bowl" | "nose" | "couriers" | "roamers" | "convoys" | "mercs";
 export type SkillId = "driving" | "perception" | "machining" | "toughness" | "social";
 export type XpSource =
   | "roughTiles" | "ram" | "escape"

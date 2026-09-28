@@ -7,7 +7,7 @@ import { NPC_BEHAVIOR, NPC_UPKEEP, type DecisionOptions } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import type { PartHit } from './armor';
-import { isHostile, startFeuds } from './combat';
+import { callLawmen, isHostile, startFeuds } from './combat';
 import { affordableBuyCount, getTradePrice, sellVehicleCargo, serviceAtCamp, serviceVehicle, tradeGoods } from './economy';
 import { isJunk, maxHp } from './wear';
 import { corePart, freeCells, goodsCount, mountedParts } from './grid';
@@ -550,6 +550,7 @@ function onPreySeen(world: World, vehicle: Vehicle): void {
     addState(world, 'feud', vehicle.id, target.id, { kind: 'feud', robbery: true });
     vehicle.brain!.noticed[`hostileSeen:${target.id}`] = world.turn;
     world.events.push({ t: 'hostile', vehicle: vehicle.id, against: target.id });
+    callLawmen(world, vehicle, target);
     interrupt(world, vehicle, createActivity('fight', target.id, { ...target.pos }, 'rob cargo'));
     return;
   }

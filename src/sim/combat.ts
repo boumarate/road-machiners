@@ -52,11 +52,20 @@ function inTruce(world: World, a: Vehicle, b: Vehicle): boolean {
   return stateOf(world, "truce", a.id, b.id) !== null || stateOf(world, "truce", b.id, a.id) !== null;
 }
 
-// Foes fight, but a raider leaves a vehicle with nothing to take unless a feud is held.
+// Foes fight, but a raider leaves a vehicle with nothing to take unless a feud is held or the vehicle is a lawman.
 export function isHostile(world: World, a: Vehicle, b: Vehicle): boolean {
   if (!isFoe(world, a, b)) return false;
-  if (inFeud(world, a, b)) return true;
+  if (inFeud(world, a, b) || isLawPair(a, b)) return true;
   return hasLoot(a.faction === "raiders" ? b : a);
+}
+
+// A lawman and a raider, either way round.
+function isLawPair(a: Vehicle, b: Vehicle): boolean {
+  return (isLawman(a) && b.faction === "raiders") || (isLawman(b) && a.faction === "raiders");
+}
+
+function isLawman(v: Vehicle): boolean {
+  return v.brain?.traits.includes("lawman") === true;
 }
 
 // The target lies in the gun's own arc and on a side that no tall part blocks.
@@ -463,7 +472,25 @@ function recordAttack(world: World, shooter: Vehicle, target: Vehicle): void {
 // and a feud starts when the two were at peace before the blow. calm is that peace, read before any damage lands.
 export function noteAttack(world: World, attacker: Vehicle, victim: Vehicle, calm: boolean): void {
   recordAttack(world, attacker, victim);
-  if (calm) startFeuds(world, attacker, victim);
+  if (!calm) return;
+  startFeuds(world, attacker, victim);
+  callLawmen(world, attacker, victim);
+}
+
+// Aggression against a neutral NPC, one outside the raiders, calls every lawman that sees both trucks. Each starts
+// a feud with the aggressor. Lawmen do not protect the player.
+export function callLawmen(world: World, aggressor: Vehicle, victim: Vehicle): void {
+  if (!victim.brain || victim.faction === "raiders") return;
+  for (const v of world.vehicles) {
+    if (!answersCall(world, v, aggressor, victim) || stateOf(world, "feud", v.id, aggressor.id)) continue;
+    addState(world, "feud", v.id, aggressor.id, { kind: "feud", robbery: false });
+    world.events.push({ t: "hostile", vehicle: v.id, against: aggressor.id });
+  }
+}
+
+function answersCall(world: World, v: Vehicle, aggressor: Vehicle, victim: Vehicle): boolean {
+  if (v.id === aggressor.id || !isLawman(v)) return false;
+  return canVehicleSee(world, v, aggressor.pos) && canVehicleSee(world, v, victim.pos);
 }
 
 // A crash damages both sides, and the event does not name a striker. A slow bump deals no damage and counts for

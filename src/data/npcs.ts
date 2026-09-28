@@ -11,7 +11,7 @@ export const NPC_RESOURCES = {
   supplies: START_KITS.standard.supplies,
 };
 
-export type TraitId = 'trader' | 'scavenger' | 'raider' | 'scumbag' | 'coward';
+export type TraitId = 'trader' | 'scavenger' | 'raider' | 'scumbag' | 'coward' | 'lawman';
 
 export type Weighted<T> = { value: T; weight: number };
 export type CargoRoll = { good: string; count: number };
@@ -537,6 +537,16 @@ export const TRAITS: Record<TraitId, Trait> = {
     weights: {
       hostileSeen: { flee: { mul: 3 }, fight: { mul: 0.5 } }, attacked: { flee: { mul: 3 }, fightBack: { mul: 0.3 } },
       parley: { truce: { mul: 2 }, beg: { mul: 3 } }, threatened: { flee: { mul: 3 }, comply: { add: 1 } },
+    },
+  },
+  // Lawmen patrol their town and hunt raiders and first shooters at neutral NPCs. They fight most hostiles they
+  // see, as eager as raiders, and shoot back twice as often as most drivers. They seldom ask for a truce or beg.
+  // Threatened, they mostly fight. Nine in ten lawmen help a stranded truck, like traders.
+  lawman: {
+    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 12, boldness: 1,
+    weights: {
+      hostileSeen: { fight: { add: 8 } }, attacked: { fightBack: { mul: 2 } }, strandedSeen: { tow: { add: 9 } },
+      parley: { truce: { mul: 0.3 }, beg: { mul: 0.3 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
     },
   },
 };

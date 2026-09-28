@@ -392,4 +392,5 @@ export const TRAIT_TALK: Record<TraitId, TraitTalk> = {
   raider: { voice: { greeting: 'Get lost.', repeatLine: 'Get lost.', refusal: 'Heh. No.', honksBack: false }, topics: ['demand', ...PARLEY] },
   scumbag: { voice: null, topics: ['demand', ...PARLEY] },
   coward: { voice: null, topics: PARLEY },
+  lawman: { voice: { greeting: 'Patrol here. Go ahead.', repeatLine: 'Heard you the first time.', refusal: 'Clear the channel.', honksBack: true }, topics: ['directions', 'tow', 'askTow', ...PARLEY] },
 };

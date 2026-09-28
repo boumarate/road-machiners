@@ -440,8 +440,10 @@ function robFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject
   return (stronger ? NPC_BEHAVIOR.robStronger : 1) * guardFactor(vehicle, target, NPC_BEHAVIOR.robNearGuards);
 }
 
-// Guard caution: starting a fight or a robbery near a town gate is rare. It never lowers fighting back.
+// Guard caution: starting a fight or a robbery near a town gate is rare. It never lowers fighting back. Lawmen
+// keep the peace at the gates, so they skip it.
 function guardFactor(vehicle: Vehicle, subject: Vehicle, nearGuards: number): number {
+  if (hasTrait(vehicle, 'lawman')) return 1;
   return isTownGuarded(vehicle.pos) || isTownGuarded(subject.pos) ? nearGuards : 1;
 }
 
