@@ -10,6 +10,11 @@ export const RULES = {
   fuelUseFactor: 0.075, // share of the chassis fuel rate burned per tile; a daytime Bowl to Nose road trip uses under 60% of the starting fuel, leaving room for detours and fights
   npcStuckTurns: 2, // failed drive attempts before backing out
   npcRecoveryTurns: 2, // turns spent backing out before resuming the route
+  // An NPC that stays put `turns` turns in a row while its goal point is out of reach, for any reason, drives `driveTurns`
+  // turns to a random free spot `reach` tiles away or closer, then takes up its goal again. A wait for traffic or an
+  // escort lasts a few turns, so 20 turns catches only waits that do not end. 6 tiles is a few truck lengths: off a
+  // blocked lane, still near the goal.
+  unstick: { turns: 20, reach: 6, driveTurns: 3 },
   // A truck that ends `turns` turns in a row flipped or lifted off the ground, like on top of another truck, is set down
   // on its wheels. It lands on the nearest free spot, searched in rings `step` tiles apart out to `reach` tiles. The step
   // is below the smallest vehicle radius. The reach fits two of the largest trucks side by side with clearance.

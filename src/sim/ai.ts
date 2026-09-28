@@ -1,11 +1,13 @@
 // Activity execution uses the same steering and route planner as the player.
-import { NPC_BEHAVIOR, NPCS } from "../data/npcs";
+import { NPC_BEHAVIOR, NPCS, SPAWN } from "../data/npcs";
 import { RULES } from "../data/rules";
 import { isKnockedOut } from "./defeat";
 import { isNear } from "./far";
-import { getActivityDestination, goalHolds, thinkNpc, topGoal } from "./npc-activities";
+import { getActivityDestination, thinkNpc, topGoal } from "./npc-activities";
 import { route, routeLength, type Blocker } from "./path";
 import { towData } from "./states";
+import { randRange } from "./rng";
+import { isFree } from "./spawn";
 import { parkedVehicles } from "./steering";
 import { vehicleStats } from "./stats";
 import { escortsOf, followPace, isOnRope, towHeldBy } from "./tow";
@@ -20,20 +22,65 @@ function planners(world: World): Vehicle[] {
   return world.vehicles.filter((v) => v.brain && !isOnRope(world, v.id) && !isKnockedOut(v));
 }
 
+type Plan = { v: Vehicle; activity: NpcActivity; goal: Vec | null };
+
+// Every driver thinks first, in world order, so claims like answering a beacon go to the first in line. Then orders
+// are set from the highest id down: in a face off the lower id waits, so the truck it waits for already holds this
+// turn's order.
 export function planNpcOrders(world: World): void {
-  for (const v of planners(world)) {
-    const tpl = NPCS[v.brain!.templateId];
-    if (!tpl) throw new Error(`Unknown NPC template ${v.brain!.templateId}`);
-    const b = v.brain!;
-    delete b.ramTarget;
-    if (b.recovery) b.recovery--;
-    const activity = thinkNpc(world, v);
-    const goal = orderPoint(world, v, activity, tpl.preferredRange);
-    const stops = goal !== null && trafficStops(world, v, goal);
-    noteStall(v, stops && activity.kind !== "fight" && activity.kind !== "flee");
-    v.order = nextOrder(world, v, activity, stops ? null : goal);
-    v.direct = false;
+  const plans = planners(world).map((v) => thinkOrderPoint(world, v));
+  plans.sort((a, b) => (a.v.id < b.v.id ? 1 : -1));
+  for (const plan of plans) setOrder(world, plan);
+}
+
+function thinkOrderPoint(world: World, v: Vehicle): Plan {
+  const tpl = NPCS[v.brain!.templateId];
+  if (!tpl) throw new Error(`Unknown NPC template ${v.brain!.templateId}`);
+  const b = v.brain!;
+  delete b.ramTarget;
+  if (b.recovery) b.recovery--;
+  const activity = thinkNpc(world, v);
+  return { v, activity, goal: orderPoint(world, v, activity, tpl.preferredRange) };
+}
+
+function setOrder(world: World, { v, activity, goal }: Plan): void {
+  noteStuck(world, v, goal);
+  const stops = goal !== null && trafficStops(world, v, goal);
+  noteStall(v, stops && activity.kind !== "fight" && activity.kind !== "flee");
+  v.order = nextOrder(world, v, activity, goal, stops);
+  v.direct = false;
+}
+
+// The catch-all for every jam: a driver that stayed put RULES.unstick.turns turns in a row while its goal point is
+// out of reach drives to a random free spot nearby, whatever held it. It reads the position before noteStall moves
+// it on. With no free spot found it tries again next turn.
+function noteStuck(world: World, v: Vehicle, goal: Vec | null): void {
+  const b = v.brain!;
+  b.stuck = heldAway(v, goal) ? (b.stuck ?? 0) + 1 : 0;
+  if (b.stuck < RULES.unstick.turns) return;
+  const spot = freeSpotNear(world, v);
+  if (!spot) return;
+  b.recovery = RULES.unstick.driveTurns;
+  b.recoveryGoal = spot;
+  b.stuck = 0;
+}
+
+// Standing where it stood last turn, not recovering, with its goal point out of reach.
+function heldAway(v: Vehicle, goal: Vec | null): boolean {
+  const b = v.brain!;
+  if (!goal || !b.lastPos || b.recovery) return false;
+  return dist(v.pos, b.lastPos) < RULES.arriveRadius / 2 && dist(v.pos, goal) > RULES.arriveRadius * 2;
+}
+
+function freeSpotNear(world: World, v: Vehicle): Vec | null {
+  const radius = vehicleStats(world, v).radius;
+  for (let i = 0; i < SPAWN.tries; i++) {
+    const angle = randRange(world, 0, Math.PI * 2);
+    const d = randRange(world, radius * 2, RULES.unstick.reach);
+    const spot = { x: v.pos.x + Math.cos(angle) * d, y: v.pos.y + Math.sin(angle) * d };
+    if (isFree(world, spot, radius, v.id)) return spot;
   }
+  return null;
 }
 
 // A driver that barely moved on a move order for RULES.npcStuckTurns turns in a row backs out. Waiting for traffic
@@ -58,10 +105,13 @@ function startRecovery(v: Vehicle): void {
   b.stalled = 0;
 }
 
-// A driver with no point, or one stopped by traffic, brakes, and so does a leader waiting for its escort.
-function nextOrder(world: World, v: Vehicle, activity: NpcActivity, goal: Vec | null): MoveOrder {
-  if (!goal || waitsForEscort(world, v, activity)) return { kind: "brake" };
+// A driver with no point brakes. A recovering driver drives to its recovery point, even past traffic or a lagging
+// escort, since waiting is what got it stuck. Otherwise a driver stopped by traffic brakes, and so does a leader
+// waiting for its escort.
+function nextOrder(world: World, v: Vehicle, activity: NpcActivity, goal: Vec | null, stops: boolean): MoveOrder {
+  if (!goal) return { kind: "brake" };
   if (v.brain!.recovery) return { kind: "stopAt", dest: v.brain!.recoveryGoal! };
+  if (stops || waitsForEscort(world, v, activity)) return { kind: "brake" };
   return driveOrder(world, v, activity, goal);
 }
 
@@ -247,16 +297,16 @@ function brakingReach(world: World, v: Vehicle, x: Vehicle): number {
 // Two drivers stopped nose to nose that both set off would each go around the other and meet again. Within what
 // both close in their first turn of driving, the one whose id sorts first waits, and the other goes around it.
 function facesOff(world: World, v: Vehicle, x: Vehicle, gap: number): boolean {
-  if (!givesWay(x) || !wantsToDrive(world, x) || gapAhead(world, x, v) === null) return false;
+  if (!givesWay(x) || !wantsToDrive(x) || gapAhead(world, x, v) === null) return false;
   return gap < RULES.yieldDistance + vehicleStats(world, v).accel + vehicleStats(world, x).accel;
 }
 
-// An NPC whose goal lies farther than the reach rule, so it sets off again. A driver parked at its work does not.
-// x may not have thought yet this turn, so a goal that no longer holds counts as none.
-function wantsToDrive(world: World, x: Vehicle): boolean {
-  const top = topGoal(x);
-  const dest = top && goalHolds(world, x, top) && getActivityDestination(world, x, top);
-  return !!dest && dist(x.pos, dest) > RULES.arriveRadius * 2;
+// A truck that holds a move order to a point beyond the reach rule, so it sets off again. Its order is what it
+// will do: a truck parked at its work, stranded or waiting itself holds none. x has the higher id, so it holds this
+// turn's order already. See planNpcOrders().
+function wantsToDrive(x: Vehicle): boolean {
+  const order = x.order;
+  return !!order && order.kind !== "brake" && dist(x.pos, order.dest) > RULES.arriveRadius * 2;
 }
 
 // NPCs give way unless they fight or flee; the player never does.

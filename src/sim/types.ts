@@ -184,7 +184,8 @@ export type NpcBrain = {
     stepIndex: number; // route progress for traders and scavengers
     lastPos?: Vec; // position before the last drive attempt
     stalled?: number; // consecutive turns without forward progress
-    recovery?: number; // turns left backing away from a blockage
+    stuck?: number; // consecutive turns standing still with the goal point out of reach
+    recovery?: number; // turns left backing away from a blockage or driving to a spot that unsticks the driver
     recoveryGoal?: Vec;
     ramChoice?: string; // the fight target this driver chose to ram while its ram chance lasts
     ramTarget?: string; // the fight target this driver drives through this turn

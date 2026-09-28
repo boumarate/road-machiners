@@ -267,6 +267,16 @@ describe('physics turns', () => {
     expect(me(w).order).toBeNull();
   });
 
+  it('a stop order at a point no truck can reach arrives at the closest point the route reaches', () => {
+    const dest = { x: 40, y: 31 };
+    const start = ordered({ kind: 'stopAt', dest });
+    start.obstacles.push({ id: 'boulder', kind: 'rock', pos: dest, r: 3 });
+    const { w, d } = play(start, 12);
+    expect(me(w).order).toBeNull();
+    expect(dist(me(w).pos, dest)).toBeLessThan(6);
+    freeDrive(d);
+  });
+
   it('a course point behind, beyond throttle reach, turns the truck around', () => {
     const dest = { x: 30 - RULES.throttleZones.reach * 2, y: 31 };
     const { w, d } = play(ordered({ kind: 'through', dest }), 4);
