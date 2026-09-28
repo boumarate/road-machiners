@@ -3,11 +3,12 @@ import { PARTS, partDef } from '../data/parts';
 import { CONFIG } from '../config';
 import { REGION } from '../data/region';
 import { START_KITS } from '../data/start';
+import { RULES } from '../data/rules';
 import { TIME } from '../data/time';
 import { ENGINE_HEAT } from '../data/wear';
 import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { playerVehicle } from './damage';
-import { advanceEngineHeat } from './engine-heat';
+import { advanceEngineHeat, douseEngine } from './engine-heat';
 import { mountedParts } from './grid';
 import { route } from './path';
 import { nearestPad } from './sites';
@@ -175,5 +176,85 @@ describe('engine heat on the road', () => {
       return w.player.engineHeat < 1;
     });
     expect(cool.map((e) => e.id)).toEqual([]);
+  });
+});
+
+describe('engine overdrive', () => {
+  it('raises top speed and acceleration for the player only', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 50, y: 30 });
+    const normal = vehicleStats(w, me);
+    const npcNormal = vehicleStats(w, npc);
+    w.player.overdrive = true;
+    expect(vehicleStats(w, me).maxSpeed).toBeCloseTo(normal.maxSpeed * RULES.overdriveBoost);
+    expect(vehicleStats(w, me).accel).toBeCloseTo(normal.accel * RULES.overdriveBoost);
+    expect(vehicleStats(w, npc)).toEqual(npcNormal);
+  });
+
+  it('overheats a driving engine even at night', () => {
+    const w = emptyWorld();
+    w.turn = NIGHT;
+    w.player.overdrive = true;
+    const me = w.vehicles[0];
+    me.speed = vehicleStats(w, me).maxSpeed;
+    let turns = 0;
+    while (w.player.engineHeat < 1) {
+      advanceEngineHeat(w);
+      turns++;
+      expect(turns).toBeLessThan(40);
+    }
+    expect(turns).toBeGreaterThan(15);
+  });
+
+  it('heats much faster than normal driving in the noon sun', () => {
+    const turnsToOverheat = (overdrive: boolean) => {
+      const w = emptyWorld();
+      w.turn = NOON;
+      w.player.overdrive = overdrive;
+      const me = w.vehicles[0];
+      me.speed = vehicleStats(w, me).maxSpeed;
+      let turns = 0;
+      while (w.player.engineHeat < 1) {
+        advanceEngineHeat(w);
+        turns++;
+      }
+      return turns;
+    };
+    expect(turnsToOverheat(true)).toBeLessThan(turnsToOverheat(false) / 3);
+  });
+
+  it('adds no heat while parked', () => {
+    const w = emptyWorld();
+    w.turn = NIGHT;
+    w.player.overdrive = true;
+    w.player.engineHeat = 0.5;
+    w.vehicles[0].speed = 0;
+    advanceEngineHeat(w);
+    expect(w.player.engineHeat).toBeCloseTo(0.5 - ENGINE_HEAT.coolParked);
+  });
+});
+
+describe('dousing the engine', () => {
+  it('spends supplies to cool the engine at once', () => {
+    const w = emptyWorld();
+    w.player.engineHeat = 0.9;
+    const supplies = w.player.supplies;
+    const next = douseEngine(w);
+    expect(next.player.engineHeat).toBeCloseTo(0.9 - ENGINE_HEAT.douseCool);
+    expect(next.player.supplies).toBeCloseTo(supplies - ENGINE_HEAT.douseSupplies);
+  });
+
+  it('never cools below cold', () => {
+    const w = emptyWorld();
+    w.player.engineHeat = 0.1;
+    expect(douseEngine(w).player.engineHeat).toBe(0);
+  });
+
+  it('refuses without enough supplies', () => {
+    const w = emptyWorld();
+    w.player.engineHeat = 0.9;
+    w.player.supplies = ENGINE_HEAT.douseSupplies / 2;
+    expect(() => douseEngine(w)).toThrow(/supplies/);
   });
 });

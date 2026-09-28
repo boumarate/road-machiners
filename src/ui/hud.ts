@@ -22,6 +22,8 @@ import { hp, kph } from "./units";
 import { maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
 import { pendingPerkPairs } from "../sim/progress";
+import { canDouse } from "../sim/engine-heat";
+import { ENGINE_HEAT } from "../data/wear";
 import "./truck-condition.css";
 
 type ConditionPart = ReturnType<TruckConditionReadout["update"]>[number];
@@ -97,6 +99,8 @@ type HudActions = {
   openCharacter: () => void;
   toggleManual: () => void;
   toggleAutoRepair: () => void;
+  toggleOverdrive: () => void;
+  douseEngine: () => void;
   unhitch: () => void;
   setBeacon: (on: boolean) => void;
   isBusy: () => boolean;
@@ -334,6 +338,31 @@ export class Hud {
   }
 
   // The character button, marked while a perk pair waits for a pick.
+  private engineButtons(w: World, busy: boolean): HTMLElement[] {
+    const on = w.player.overdrive;
+    const overdrive = el(
+      "button",
+      {
+        class: on ? "on" : "",
+        disabled: busy,
+        "aria-pressed": String(on),
+        onclick: () => this.actions.toggleOverdrive(),
+        title: "Engine overdrive: faster, but the engine heats fast [O]",
+      },
+      on ? "Overdrive [O]" : "Normal [O]",
+    );
+    const douse = el(
+      "button",
+      {
+        disabled: busy || !canDouse(w),
+        onclick: () => this.actions.douseEngine(),
+        title: `Pour ${ENGINE_HEAT.douseSupplies} supplies of water over the engine to cool it [G]`,
+      },
+      "Cool engine [G]",
+    );
+    return [overdrive, douse];
+  }
+
   private characterButton(w: World, busy: boolean): HTMLElement {
     const perkOpen = pendingPerkPairs(w).length > 0;
     return el(
@@ -420,6 +449,7 @@ export class Hud {
           },
           w.player.autoRepair ? "Auto patch [P]" : "No patch [P]",
         ),
+        ...this.engineButtons(w, busy),
         this.characterButton(w, busy),
         ...(readout.broken
           ? [

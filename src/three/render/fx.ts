@@ -371,6 +371,12 @@ export class Fx3D {
     this.puffs.spawn(p, { vel, life: 1.8, fromScale: 0.3, toScale: 1.4 + Math.random() * 0.6, color: 0xf2efe8, opacity: 0.55, drag: 1, gravity: -0.3 });
   }
 
+  // A billow of steam from water boiling off a hot engine, thrown out and up.
+  douseSteam(p: V3): void {
+    const vel = { x: (Math.random() - 0.5) * 2.4, y: 1.6 + Math.random() * 1.2, z: (Math.random() - 0.5) * 2.4 };
+    this.puffs.spawn(p, { vel, life: 2.2, fromScale: 0.6, toScale: 2.4 + Math.random() * 1.0, color: 0xf2efe8, opacity: 0.75, drag: 1.2, gravity: -0.25 });
+  }
+
   // Thick black smoke from a stranded truck.
   breakdownSmoke(p: V3): void {
     const vel = { x: (Math.random() - 0.5) * 0.4, y: 0.8 + Math.random() * 0.6, z: (Math.random() - 0.5) * 0.4 };
@@ -432,6 +438,8 @@ const CRUISE_SHARE = 0.8; // above this share of top speed, an engine at full re
 const CRUISE_RATE = 1.5; // puffs per second at cruise
 const EXHAUST_SIDE = 0.6; // the pipe sits this share of the half width off center, on the left
 const STEAM_RATE = 10; // puffs per second at full engine heat; a third of it at the warning heat
+const DOUSE_RATE = 60; // puffs per second while water boils off a doused engine
+const DOUSE_SECONDS = 1.2; // how long a doused engine throws its steam cloud
 const BREAKDOWN_RATE = 5; // puffs per second from a stranded truck
 const DAMAGE_RATE = 3; // puffs per second from a hurt truck
 const HURT_CAB = 0.35; // cab hp share under which a truck smokes
@@ -442,6 +450,7 @@ type Pose = { f: VehicleFrame; h: number; half: { x: number; y: number; z: numbe
 export class TruckFx {
   private world: World | null = null;
   private traits = new Map<string, Traits>();
+  private douseLeft = 0; // seconds of steam cloud left over the player's doused engine
 
   constructor(private fx: Fx3D) {}
 
@@ -450,7 +459,10 @@ export class TruckFx {
     const traits = this.traitsOf(world, v);
     const pose: Pose = { f, h: headingOf(f.rot), half: bodyOf(v.chassisId).half };
     if (moving) this.driving(world, v, pose, traits, dt);
-    if (v.id === world.player.vehicleId) this.steam(world.player.engineHeat, pose, dt);
+    if (v.id === world.player.vehicleId) {
+      this.steam(world.player.engineHeat, pose, dt);
+      this.douseCloud(pose, dt);
+    }
     if (traits.stranded) this.puffs(BREAKDOWN_RATE, dt, () => this.fx.breakdownSmoke(onBody(pose, 0.5, 1, 0)));
     else if (traits.hurt) this.puffs(DAMAGE_RATE, dt, () => this.fx.smoke(f.pos));
   }
@@ -472,6 +484,18 @@ export class TruckFx {
     if (heat < ENGINE_HEAT.warnAt) return;
     const share = (heat - ENGINE_HEAT.warnAt) / (1 - ENGINE_HEAT.warnAt);
     this.puffs((STEAM_RATE * (1 + 2 * share)) / 3, dt, () => this.fx.steam(onBody(pose, 0.7, 1, 0)));
+  }
+
+  // Starts the steam cloud of water boiling off the player's engine.
+  douse(): void {
+    this.douseLeft = DOUSE_SECONDS;
+  }
+
+  // A thick cloud over the whole hood, spread to both sides, while the water boils off.
+  private douseCloud(pose: Pose, dt: number): void {
+    if (this.douseLeft <= 0) return;
+    this.douseLeft -= dt;
+    this.puffs(DOUSE_RATE, dt, () => this.fx.douseSteam(onBody(pose, 0.3 + Math.random() * 0.8, 0.8, Math.random() * 2.4 - 1.2)));
   }
 
   // Dust from each tire's ground contact, thrown back and out to the tire's side.

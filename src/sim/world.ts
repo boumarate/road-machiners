@@ -74,6 +74,7 @@ export function newWorld(seed: number, kit: StartKit): World {
       autoFire: false,
       autoRepair: true,
       engineHeat: 0,
+      overdrive: false,
       discovered: [],
       scavenged: [],
       storage: [],
@@ -308,6 +309,12 @@ export function setDirect(world: World, on: boolean): World {
 export function setAutoRepair(world: World, on: boolean): World {
   return update(world, (w) => {
     w.player.autoRepair = on;
+  });
+}
+
+export function setOverdrive(world: World, on: boolean): World {
+  return update(world, (w) => {
+    w.player.overdrive = on;
   });
 }
 

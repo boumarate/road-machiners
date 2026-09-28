@@ -80,6 +80,10 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     maxSpeed = Math.max(RULES.minSpeedCap, (ch.maxSpeed + e.speedBonus) * load * wheels);
     accel = (ch.accel + e.accelBonus) * force * RULES.accelScale;
     fuelMult = e.fuelMult;
+    if (inOverdrive(world, v)) {
+      maxSpeed *= RULES.overdriveBoost;
+      accel *= RULES.overdriveBoost;
+    }
     // A broken transmission leaves only a crawl to limp home.
     if (!isWorking(corePart(v, 'transmission'))) maxSpeed = Math.min(maxSpeed, limpSpeed);
   }
@@ -101,6 +105,11 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     radius: ch.radius,
     weapons: mountedItems(v, 'weapon').map((item) => ({ part: item.part, def: wornDef<WeaponDef>(item.part), sides: openSides(v, item) })),
   };
+}
+
+// Only the player's truck has engine overdrive.
+export function inOverdrive(world: World, v: Vehicle): boolean {
+  return v.id === world.player.vehicleId && world.player.overdrive;
 }
 
 // The chassis tank plus every mounted fuel store.
