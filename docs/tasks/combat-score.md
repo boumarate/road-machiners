@@ -1,9 +1,9 @@
 # Combat score
 
-**Status:** validating
+**Status:** done
 **Branch:** combat-score
 **Worktree:** .worktrees/combat-score
-**Goal:** In a battle, the player hears a warm drum loop that a slow bass loop joins once shots fly, with soft musical accents on the beat for enemy sighted, player shot, full miss, player hit, crit and crash, and repeats do not spam. The console command `battle` starts such a battle. Confirming the sound needs the user to play a battle.
+**Goal:** In a battle, the player hears a combat base loop with musical accents tied to sighting, being shot, misses, hits, crits and crashes, sparse enough to feel like one song. The console command `battle` starts such a battle. The user confirmed it by playing.
 **Mode:** hands-off
 
 ## Context
@@ -128,7 +128,9 @@ Revised after the user's first listen:
 - A chance-driven conductor with song modes and recall was tried and dropped: the user found it too random.
 - `SoundDesigner` is now a sequencer of two accent lines over the base. Heavy events queue phrases on the lead, on strong beats. Light events join the secondary, on weak beats, by a chance that falls when it is busy. Phrases are fixed rhythms from a small pool, start on bar lines, and merge repeat events into a denser rhythm. A crash cuts in on the next beat. Heat, a fading sum of events, sets the base level and muffle each bar. IV1 to IV3 no longer apply.
 - Calm music picks a new random track each time a fight ends.
-- In a scripted fight against one outrider, heat reached about 2.4. Peak mode needs 3, so it may be rare.
+- Queued bar-line phrases felt late and hard to tie to events. The final design plays each accent as a stab whose measured peak lands on its event, then a sparse tail on the grid. Tails are one hit when calm and two when hot, stabs keep 1.5 s apart per line, and light accents sound by chance.
+- Heat-driven tempo copies of the bases were tried and reverted as too chaotic; commit `b5e3686` holds them.
+- The user confirmed the final version by playing: "Its perfect!"
 
 - Review: merge-ready. One finding fixed: sight flickers from frame to frame during playback, so `CombatWatch` now counts a hostile as sighted only after a whole turn out of sight.
 - Review scope flag: `CombatScore` and `CombatWatch` sit in `src/three/sound.ts` because the quality gate blocks a new `src/three` file. That file now holds event mapping, encounter memory and Web Audio wiring. A later sound feature may need a split that the fragmentation rule allows.
