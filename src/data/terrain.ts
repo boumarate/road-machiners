@@ -1,7 +1,7 @@
 // Terrain: corner heights, tile types, driving costs and fog of war.
 // Heights are in height units; one unit rises reliefPx screen pixels. Slopes are height units per tile.
 
-import { MAP_SCALE, scalePoint } from "./region";
+import { MAP_SCALE, REGION, scalePoint } from "./region";
 import type { Vec } from "../sim/vec";
 
 export type TerrainTypeId =
@@ -152,3 +152,102 @@ export const TERRAIN = {
     unseen: { grey: 1, bright: 0.55 }, // never seen
   },
 } as const;
+
+// Geology rules for the map bake. Heights and water are in height units. A slope is height units per
+// tile, and a unit and a tile are both 4 m, so a slope is also the tangent of the ground angle.
+export type RainRules = {
+  steps: number;
+  rainPerStep: number;
+  focusSquarings: number;
+  evaporation: number;
+  capacity: number;
+  minSlope: number;
+  pickupRate: number;
+  dropRate: number;
+  maxDig: number;
+};
+
+export type SlumpRules = {
+  steps: number;
+  restSlope: number;
+  slideShare: number;
+};
+
+export type WindRules = {
+  direction: number;
+  slab: number;
+  hop: number;
+  depositOnSand: number;
+  depositOnBare: number;
+  shadowSlope: number;
+  shadowReach: number;
+  sandSlope: number;
+  stepsPerCell: number;
+};
+
+export type SandStart = {
+  below: number;
+  fade: number;
+  depth: number;
+};
+
+export const GEOLOGY: { rain: RainRules; slump: SlumpRules; wind: WindRules; sandStart: SandStart } = {
+  rain: {
+    steps: 80, // rain passes over the whole map; each pass routes all water to the edge or a pool, so more passes cut deeper
+    rainPerStep: 0.01, // units of water falling on every corner per pass, so a gully's water is 0.01 per corner draining into it
+    focusSquarings: 3, // water splits between lower neighbors by slope squared this many times, slope^8; mostly down the steepest, so it gathers into gullies
+    evaporation: 0.04, // share of water lost at each corner it passes, so a wash dries out about 25 tiles below its sources
+    capacity: 2, // soil units carried per unit of water per unit of slope, so steep wet corners cut hardest
+    minSlope: 0.02, // slope floor for capacity, so water on near-flats still carries a little soil
+    pickupRate: 0.02, // share of the free capacity picked up at each corner; low keeps water hungry, so cuts deepen where water gathers
+    dropRate: 0.3, // share of the soil above capacity dropped at each corner, so fans spread over a few tiles below gully mouths
+    maxDig: 0.5, // share of the steepest slope down that one corner may dig per pass, so water never digs a pit
+  },
+  slump: {
+    steps: 40, // passes over the map; enough for fresh steps to settle into scree slopes
+    restSlope: 0.9, // steepest stable slope, about 42 degrees; above cliffs at 0.6, so cliffs stay
+    slideShare: 0.5, // share of the excess over the rest slope that slides per pass, so slopes settle smoothly
+  },
+  wind: {
+    direction: 30, // degrees the wind blows toward, 0 = +x on the map, 90 = +y
+    slab: 0.04, // units of sand in one slab, 16 cm, the smallest dune step
+    hop: 2, // tiles a lifted slab travels before it may land; sets dune spacing with the shadow
+    depositOnSand: 0.6, // chance a slab lands on a corner with sand, so sand gathers into ridges
+    depositOnBare: 0.4, // chance a slab lands on bare ground, lower so bare ground stays bare
+    shadowSlope: 0.03, // units per tile below an upwind crest that count as wind shadow; the Werner 15 degrees in slab steps, so ridges form at this grid size
+    shadowReach: 8, // tiles upwind checked for shadow, a few dune spacings
+    sandSlope: 0.12, // steepest sand face before it avalanches, 3 slabs per tile; keeps dunes 0.1 to 0.5 units tall on 4 m tiles
+    stepsPerCell: 40, // slab lifts per starting sand corner; more steps give longer ridges and carry sand farther downwind
+  },
+  sandStart: {
+    below: -2.5, // units; corners lower than this start with sand, since basins collect blown sand; about the lowest tenth of the map
+    fade: 1, // units below `below` over which the start sand thickens to full depth
+    depth: 0.2, // units of start sand at full depth, 80 cm
+  },
+};
+
+// Map bake settings: the map seed, the map file and the pictures each bake writes.
+// A square close-up picture: its name, its center and its side, in tiles.
+export type MapSpot = { name: string; center: Vec; side: number };
+
+// Tiles of ground shown around a site in its close-up.
+const SITE_SURROUND = 20;
+
+export const MAPGEN = {
+  // Drives heights, ground types and rocks. The world seed drives all other randomness.
+  seed: 1337,
+  // Map file path, under public/ on disk and at the site root in the browser.
+  file: 'maps/icarus.bin',
+  // Stored height steps per height unit. Heights are 16-bit integers, so they reach +-32767 / heightScale.
+  heightScale: 1000,
+  // Pixels per tile in the whole-map picture: 600 tiles give a 1200 px picture.
+  overviewPxPerTile: 2,
+  closeUpPxPerTile: 8,
+  closeUps: [
+    ...[...REGION.towns, ...REGION.locations].map((site) => ({ name: site.id, center: site.pos, side: 2 * (site.radius + SITE_SURROUND) })),
+    { name: 'bridge', center: { x: (TERRAIN.features.bridge.from.x + TERRAIN.features.bridge.to.x) / 2, y: (TERRAIN.features.bridge.from.y + TERRAIN.features.bridge.to.y) / 2 }, side: 60 },
+    { name: 'dry-river', center: scalePoint({ x: 48, y: 87 }), side: 120 },
+    // The 100-tile window with the most loose sand on the seed-1337 map.
+    { name: 'sand', center: { x: 375, y: 350 }, side: 100 },
+  ] as MapSpot[],
+};

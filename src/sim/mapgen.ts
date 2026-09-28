@@ -1,29 +1,18 @@
 // Seeded obstacle placement: rock clusters off the roads, a few wrecks on them, then the fixed roadside landmarks.
 
 import { REGION, type LandmarkDef } from '../data/region';
-import { TERRAIN } from '../data/terrain';
 import { isCliff, tileAt } from './terrain';
 import { randInt, randRange } from './rng';
+import { clearOfSites, onBridge, scatterRocks } from '../mapgen/bake';
 import type { Obstacle, World } from './types';
-import { angleDiff, bearing, dist, segmentDist, type Vec } from './vec';
+import { angleDiff, bearing, dist, type Vec } from './vec';
 import { ROAD_INDEX } from './road-index';
 
 const O = REGION.obstacles;
 
 export function generateObstacles(world: World): Obstacle[] {
   const out: Obstacle[] = placeSites(world);
-  let tries = 0;
-  for (let c = 0; c < O.clusters; c++) {
-    const center = { x: randRange(world, O.edgeMargin, world.size - O.edgeMargin), y: randRange(world, O.edgeMargin, world.size - O.edgeMargin) };
-    const count = randInt(world, O.rocksPerCluster[0], O.rocksPerCluster[1]);
-    for (let i = 0; i < count; i++) {
-      tries++;
-      if (tries > O.maxTries) throw new Error('Obstacle generation ran out of tries');
-      const pos = { x: center.x + randRange(world, -O.clusterSpread, O.clusterSpread), y: center.y + randRange(world, -O.clusterSpread, O.clusterSpread) };
-      const r = randRange(world, O.radius[0], O.radius[1]);
-      if (fitsOffRoad(world, out, pos, r)) out.push({ id: `rock${out.length}`, pos, r, kind: 'rock' });
-    }
-  }
+  for (const rock of scatterRocks(world, world.size, world.terrain.heights)) out.push({ id: `rock${out.length}`, ...rock, kind: 'rock' });
   placeRoadWrecks(world, out);
   return [...out, ...placeLandmarks(world, out)];
 }
@@ -88,25 +77,6 @@ export function findRoadWreckSpot(world: World, obstacles: Obstacle[], allowed: 
     if (clearOfSites(pos, r) && !overlapsAny(obstacles, pos, r) && !onBridge(pos, r) && allowed(pos, r)) return { pos, r };
   }
   throw new Error('Road wreck placement ran out of tries');
-}
-
-function fitsOffRoad(world: World, out: Obstacle[], pos: Vec, r: number): boolean {
-  if (pos.x < O.edgeMargin || pos.y < O.edgeMargin || pos.x > world.size - O.edgeMargin || pos.y > world.size - O.edgeMargin) return false;
-  const roadGap = REGION.roadWidth / 2 + O.roadClearance + r;
-  if (ROAD_INDEX.nearestWithin(pos.x, pos.y, roadGap) < roadGap) return false;
-  if (isCliff(world.terrain, tileAt(world.terrain, pos))) return false;
-  return clearOfSites(pos, r) && !overlapsAny(out, pos, r);
-}
-
-// A wreck on the narrow bridge deck would close the crossing.
-function onBridge(pos: Vec, r: number): boolean {
-  const bridge = TERRAIN.features.bridge;
-  return segmentDist(pos, bridge.from, bridge.to) < bridge.width / 2 + r;
-}
-
-function clearOfSites(pos: Vec, r: number): boolean {
-  const sites = [...REGION.towns, ...REGION.locations];
-  return sites.every((s) => dist(pos, s.pos) > s.radius + O.siteClearance + r);
 }
 
 function overlapsAny(out: Obstacle[], pos: Vec, r: number): boolean {

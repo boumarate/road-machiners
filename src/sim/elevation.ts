@@ -1,5 +1,5 @@
-// Deterministic elevation noise derived from the world seed, not the seeded rng. It only seeds the
-// terrain grid in sim/terrain.ts; everything else reads that grid.
+// Deterministic elevation noise derived from a seed, not the seeded rng. It only seeds the
+// terrain grid in sim/terrain.ts and the map bake in mapgen/; everything else reads that grid.
 // Flattened near roads, towns and locations so they stay drivable, except in the gap under Canyon Bridge.
 
 import { TERRAIN } from '../data/terrain';
@@ -96,7 +96,33 @@ function siteLevels(seed: number): number[] {
   return levels.values;
 }
 
+// Terrain elevation as the game builds it today: relief flattened near roads and sites, plus the broad
+// rolling height with its craters.
 export function elevationAt(seed: number, x: number, y: number): number {
+  const height = reliefAt(seed, x, y) * (1 - flattenFactor(x, y) * (1 - bridgeCut(x, y)));
+  // Roads retain broad grades; only their small bumps and channel crossings are smoothed.
+  return cratered(height + rollingAt(seed, x, y), x, y);
+}
+
+// Unflattened elevation noise, ridges and the canyon and dry river channels.
+export function reliefAt(seed: number, x: number, y: number): number {
+  const relief = TERRAIN.relief;
+  const ridges = Math.abs(noise2(x * relief.ridgeFrequency, y * relief.ridgeFrequency, seed + 5000) - 0.5) * relief.ridgeAmplitude;
+  let height = rawElevation(seed, x, y) + ridges;
+  for (const { feature, index, reach } of FEATURES) {
+    const gap = index.nearestWithin(x, y, reach) - feature.width;
+    if (gap < feature.bank) height -= feature.depth * (gap <= 0 ? 1 : 1 - smooth(gap / feature.bank));
+  }
+  return height;
+}
+
+// Broad rolling elevation, held at each site's own level near the site, with the craters cut in.
+// Flattening never touches it.
+export function broadAt(seed: number, x: number, y: number): number {
+  return cratered(rollingAt(seed, x, y), x, y);
+}
+
+function rollingAt(seed: number, x: number, y: number): number {
   const relief = TERRAIN.relief;
   let rolling = (noise2(x * relief.broadFrequency, y * relief.broadFrequency, seed + 4000) - 0.5) * relief.broadAmplitude;
   for (let k = 0; k < SITES.length; k++) {
@@ -110,22 +136,19 @@ export function elevationAt(seed: number, x: number, y: number): number {
     const blend = gap <= 0 ? 1 : 1 - smooth(gap / TERRAIN.flattenMargin);
     rolling += (level - rolling) * blend;
   }
-  const ridges = Math.abs(noise2(x * relief.ridgeFrequency, y * relief.ridgeFrequency, seed + 5000) - 0.5) * relief.ridgeAmplitude;
-  let height = rawElevation(seed, x, y) + ridges;
-  for (const { feature, index, reach } of FEATURES) {
-    const gap = index.nearestWithin(x, y, reach) - feature.width;
-    if (gap < feature.bank) height -= feature.depth * (gap <= 0 ? 1 : 1 - smooth(gap / feature.bank));
-  }
-  height *= 1 - flattenFactor(x, y) * (1 - bridgeCut(x, y));
-  // Roads retain broad grades; only their small bumps and channel crossings are smoothed.
-  height += rolling;
+  return rolling;
+}
+
+// The height with every crater bowl cut into it.
+function cratered(height: number, x: number, y: number): number {
+  let out = height;
   for (const crater of TERRAIN.features.craters) {
     const dx = crater.center.x - x;
     const dy = crater.center.y - y;
     // One tile past the bank keeps this cheap skip clear of rounding.
     if (dx * dx + dy * dy > (crater.radius + crater.bank + 1) ** 2) continue;
     const gap = Math.hypot(dx, dy) - crater.radius;
-    if (gap < crater.bank) height -= crater.depth * (gap <= 0 ? 1 : 1 - smooth(gap / crater.bank));
+    if (gap < crater.bank) out -= crater.depth * (gap <= 0 ? 1 : 1 - smooth(gap / crater.bank));
   }
-  return height;
+  return out;
 }
