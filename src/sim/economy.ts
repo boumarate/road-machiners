@@ -8,10 +8,10 @@ import { shopDef } from "../data/market";
 import { partDef } from "../data/parts";
 import { RULES, UPKEEP } from "../data/rules";
 import { NPC_UPKEEP } from "../data/npcs";
-import { REGION } from "../data/region";
+import { REGION, type TownDef } from "../data/region";
 import { CONDITION } from "../data/wear";
 import { fitStores, getResources } from "./resources";
-import { isJunk, maxHp, partValue, rebuildJunk, restorePart, scrapValue, wearFactor } from "./wear";
+import { isJunk, maxHp, partValue, rebuildJunk, restorePart, scrapPatchPart, scrapValue, wearFactor } from "./wear";
 import { playerVehicle, vehicleById } from "./damage";
 import { inFeud } from "./combat";
 import { meetGoal } from "./npc-activities";
@@ -20,13 +20,13 @@ import { inTowReach } from "./tow";
 import { addCoreParts } from "./factory";
 import { practice, skillEffect, vehicleHasPerk } from "./progress";
 import { addStockPart, goodPrice, lotPrice, recordTrade, shopAt, shopState, siteOf, takeStockPart } from "./market";
-import { canUseSite, requireTown } from "./sites";
-import { freeCells, goodsCount, mountedParts } from "./grid";
+import { canUseSite, requireTown, townNear } from "./sites";
+import { corePart, coreParts, freeCells, goodsCount, mountedParts } from "./grid";
 import { addGoods, mountPart, removeGoods, spareParts, stowPart } from "./inventory";
 import { clockOf } from "./sun";
 import type { NpcState, PartInstance, Vehicle, World } from "./types";
 import { playerCommand } from "./world";
-import { fuelCap, suppliesCap } from "./stats";
+import { fuelCap, isStranded, isWorking, suppliesCap } from "./stats";
 
 export type Supply = "fuel" | "supplies";
 
@@ -224,6 +224,57 @@ function refuelAndRepair(world: World, vehicle: Vehicle): void {
     restorePart(part, part.hp + hp);
     resources.money -= Math.ceil(hp * unitCost);
   }
+}
+
+// ---- Scrap patch: a broke player stranded at a town gets going again, so the run never locks up.
+
+// Runs each turn. It fires when the player is stranded at a town, cannot pay for the fix and has nothing to sell
+// there. The engine, transmission, wheels and tank rise to RULES.scrapPatch of max HP, a junk engine included. An
+// empty tank gets RULES.scrapPatch of its room in fuel. A truck with no engine gets nothing, as no patch makes one.
+export function scrapPatch(world: World): void {
+  const town = strandedInTown(world);
+  if (!town) return;
+  const me = playerVehicle(world);
+  if (canPayFix(world, me) || hasSellable(world, me, town.id)) return;
+  const fuel = patchFuel(world, me);
+  world.player.fuel += fuel;
+  for (const part of driveParts(me)) scrapPatchPart(part, RULES.scrapPatch);
+  world.events.push({ t: 'scrapPatch', fuel });
+}
+
+function strandedInTown(world: World): TownDef | null {
+  const me = playerVehicle(world);
+  if (world.player.state !== 'active' || !isStranded(world, me) || mountedParts(me, 'engine').length === 0) return null;
+  return townNear(world);
+}
+
+// Whether the player can buy the fix: garage repair of each broken drive part and the patch fuel at the pump.
+// A junk engine the garage cannot rebuild has no price.
+function canPayFix(world: World, v: Vehicle): boolean {
+  const broken = driveParts(v).filter((p) => !isWorking(p));
+  if (broken.some((p) => isJunk(p) && !canRebuild(world, p))) return false;
+  const repairs = broken.reduce((sum, p) => sum + partRepairCost(world, p), 0);
+  return world.player.money >= repairs + Math.ceil(patchFuel(world, v)) * ECONOMY.supplyPrice.fuel;
+}
+
+function patchFuel(world: World, v: Vehicle): number {
+  return world.player.fuel > 0 ? 0 : fuelCap(v) * RULES.scrapPatch;
+}
+
+// The first engine, the transmission, the wheels and the tank.
+function driveParts(v: Vehicle): PartInstance[] {
+  const engine = mountedParts(v, 'engine').slice(0, 1);
+  return [...engine, corePart(v, 'transmission'), ...coreParts(v, 'wheel'), corePart(v, 'tank')];
+}
+
+// Goods the town buys, spare parts, mounted parts other than the engine, or parts in garage storage at a garage.
+function hasSellable(world: World, v: Vehicle, shopId: string): boolean {
+  const shop = shopDef(shopId);
+  const goods = Object.entries(goodsCount(v)).some(([good, count]) => count > 0 && shop.goods.includes(good));
+  const engine = mountedParts(v, 'engine')[0];
+  const mounted = mountedParts(v).some((p) => p !== engine && partDef(p.defId).kind !== 'core');
+  const storage = shop.kind === 'garage' && world.player.storage.length > 0;
+  return goods || mounted || spareParts(v).length > 0 || storage;
 }
 
 // The player's trade margin: the base spread narrowed by the Social skill.

@@ -1,3 +1,4 @@
+import { chassisDef } from '../data/chassis';
 import { describe, expect, it } from 'vitest';
 import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
@@ -25,7 +26,7 @@ describe('pushing a truck without a working engine', () => {
     const w = engineless();
     const s = vehicleStats(w, w.vehicles[0]);
     expect(s.maxSpeed).toBe(RULES.limpSpeed * weatherAt(w, w.vehicles[0].pos).speed);
-    expect(s.accel).toBe(RULES.limpSpeed);
+    expect(s.accel).toBe(RULES.limpSpeed * chassisDef(w.vehicles[0].chassisId).accel);
     expect(s.fuelPerTile).toBe(0);
   });
 
@@ -34,7 +35,7 @@ describe('pushing a truck without a working engine', () => {
     mountedParts(w.vehicles[0], 'engine')[0].hp = 0;
     const s = vehicleStats(w, w.vehicles[0]);
     expect(s.maxSpeed).toBe(RULES.limpSpeed * weatherAt(w, w.vehicles[0].pos).speed);
-    expect(s.accel).toBe(RULES.limpSpeed);
+    expect(s.accel).toBe(RULES.limpSpeed * chassisDef(w.vehicles[0].chassisId).accel);
     expect(s.fuelPerTile).toBe(0);
   });
 

@@ -17,9 +17,9 @@ export const RULES = {
   // blocked lane, still near the goal.
   unstick: { turns: 20, reach: 6, driveTurns: 3 },
   // A truck that ends `turns` turns in a row flipped or lifted off the ground, like on top of another truck, is set down
-  // on its wheels. It lands on the nearest free spot, searched in rings `step` tiles apart out to `reach` tiles. The step
-  // is below the smallest vehicle radius. The reach fits two of the largest trucks side by side with clearance.
-  stranded: { turns: 3, step: 0.25, reach: 4 },
+  // on its wheels. It lands on the nearest free spot, searched in rings `step` tiles apart. The step is below the
+  // smallest vehicle radius.
+  stranded: { turns: 3, step: 0.25 },
   // A player click within throttle reach and less than `cone` degrees off straight behind backs the truck up.
   // Any other point behind turns the truck around nose first. A stuck NPC backs out `distance` tiles.
   reverse: { cone: 20, distance: 1 },
@@ -107,6 +107,7 @@ export const RULES = {
 
   // Knockout
   defeatPatch: 0.25, // share of max hp broken core parts get back when a driver wakes from a knockout
+  scrapPatch: 0.4, // share of max hp drive parts and of the tank a stranded, broke player with nothing to sell gets at a town
   knockoutMaxTurns: 30, // a knockout ends after this many turns even if a hostile idles in sight
   npcDeathChance: 0.05, // an NPC whose cab breaks dies into a wreck instead of a knockout
   // A defeated NPC that spent this many turns in a row beyond the player's gray vision appears at its home pad, so

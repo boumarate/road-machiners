@@ -193,6 +193,23 @@ describe('auto patch', () => {
     expect(engine.hp).toBe(1 + plan.hp);
   });
 
+  it('cancels when its part leaves the mounts, as when stored at a garage', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    me.speed = 0;
+    const engine = mountedParts(me).find((p) => partDef(p.defId).kind === 'engine')!;
+    engine.hp = 1;
+    addGoods(w, me, 'parts', 5);
+    startAutoRepair(w);
+    me.items = me.items.filter((it) => !(it.kind === 'part' && it.part.id === engine.id));
+    w.player.storage.push(engine);
+
+    advanceJobs(w);
+
+    expect(me.job).toBeNull();
+    expect(engine.hp).toBe(1);
+  });
+
   it('skips a junk part', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];

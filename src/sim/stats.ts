@@ -28,6 +28,7 @@ export type VehicleStats = {
   reverseTurn: number; // radians over one turn of backing up
   fuelPerTile: number;
   limpSpeed: number; // top speed with no working engine, a broken transmission or an empty tank
+  limpAccel: number; // acceleration of a truck pushed with no working engine or fuel
   roughSkill: number; // share of the speed penalty of slow ground the driver cancels
   mass: number; // kilograms
   radius: number;
@@ -74,9 +75,11 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   const wheels = (1 - RULES.wheelLoss) ** coreParts(v, 'wheel').filter((p) => !isWorking(p)).length;
   const turnMult = (1 + skillEffect(world, v, 'driving', 'turnRate')) * load * wheels;
   const limpSpeed = limpSpeedOf(world, v);
+  // Physics scales push force by accel over the chassis accel, so this gives every chassis the same limp push up hills.
+  const limpAccel = limpSpeed * ch.accel;
 
   let maxSpeed = limpSpeed;
-  let accel = limpSpeed;
+  let accel = limpAccel;
   let fuelMult = 0;
   // Without a working engine, or with a stalled one, the driver pushes the truck at limp speed and burns no fuel.
   if (hasWorkingEngine(v) && !isStalled(world, v)) {
@@ -104,6 +107,7 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     reverseTurn: ch.reverseTurn * DEG * turnMult,
     fuelPerTile: ch.fuelPerTile * fuelMult * RULES.fuelUseFactor,
     limpSpeed,
+    limpAccel,
     roughSkill: skillEffect(world, v, 'driving', 'roughSpeed'),
     mass,
     radius: ch.radius,

@@ -1,3 +1,4 @@
+import { chassisDef } from '../data/chassis';
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
 import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
@@ -98,7 +99,7 @@ describe('a stalled engine', () => {
     v.stalledUntil = w.turn;
     const stats = vehicleStats(w, v);
     expect(stats.maxSpeed).toBeCloseTo(RULES.limpSpeed);
-    expect(stats.accel).toBeCloseTo(RULES.limpSpeed);
+    expect(stats.accel).toBeCloseTo(RULES.limpSpeed * chassisDef('scout').accel);
     expect(stats.fuelPerTile).toBe(0);
     expect(isStranded(w, v)).toBe(false);
   });
