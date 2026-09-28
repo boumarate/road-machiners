@@ -50,6 +50,7 @@ import { baselinePart, conditionMeter, createIcon, type IconName, diffStats, foo
 import { vehicleMass } from "../sim/mass";
 import { fireSpans, reachedSides, sideBlockers, SIDES, type FireSpan } from "../sim/armor";
 import { fuelLiters, hp, kg, liters } from "./units";
+import { moneyLabel } from "./hud-readout";
 
 const CELL_PX = 42;
 // Below this the part icons and condition bars stop being readable, so a taller grid scrolls instead.
@@ -835,7 +836,7 @@ export class InventoryScreen {
       el(
         "div",
         { class: "inv-summary" },
-        `Equipment & cargo · ${liters(freeCells(playerVehicle(this.host.world())))} L free · Mass ${kg(vehicleMass(playerVehicle(this.host.world())))} of ${kg(chassisDef(playerVehicle(this.host.world()).chassisId).ratedMass)} rated · Money ${this.host.world().player.money}`,
+        `Equipment & cargo · ${liters(freeCells(playerVehicle(this.host.world())))} L free · Mass ${kg(vehicleMass(playerVehicle(this.host.world())))} of ${kg(chassisDef(playerVehicle(this.host.world()).chassisId).ratedMass)} rated · Money ${moneyLabel(this.host.world().player.money)}`,
       ),
       this.view.render(),
     );
