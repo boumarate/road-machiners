@@ -36,7 +36,6 @@ export const ECONOMY = {
   // (1 - spread) share of value at Trade 0, 0.8, so repairing a part and then selling it always loses
   // money: a repair is for driving on, not for flipping.
   repairShare: 0.85,
-  chassisSellFactor: 0.5, // of the chassis price, scaled by mean built-in part health and wear
   useRange: 1.5, // extra tiles past a site radius where its services work
   interactionScale: 1.5, // multiplier for the total interaction radius
 };

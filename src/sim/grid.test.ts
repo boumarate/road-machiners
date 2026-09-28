@@ -75,7 +75,7 @@ describe('built-in parts', () => {
 
   it('a chassis swap replaces the core parts with the new chassis ones', () => {
     let w = emptyWorld(sitePads(bowl)[0]);
-    w.player.money = 2000;
+    w.player.money = CHASSIS.hauler.value;
     w.vehicles[0].items.forEach((it) => { if (it.kind === 'part' && roleOf(it.part.defId) === 'cab') it.part.hp = 1; });
     w = buyChassis(w, 'hauler');
     const me = w.vehicles[0];

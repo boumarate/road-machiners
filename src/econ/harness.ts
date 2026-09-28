@@ -377,7 +377,7 @@ function sellEverything(world: World, telemetry: Telemetry): World {
   const shopId = shopAt(world);
   if (!shopId) throw new Error('sellEverything needs a parked shop');
   world = sellGoodsHeld(world, telemetry, shopId);
-  return sellSpareParts(world, telemetry);
+  return sellSpareParts(world, telemetry, shopId);
 }
 
 function sellGoodsHeld(world: World, telemetry: Telemetry, shopId: string): World {
@@ -391,10 +391,12 @@ function sellGoodsHeld(world: World, telemetry: Telemetry, shopId: string): Worl
   return world;
 }
 
-function sellSpareParts(world: World, telemetry: Telemetry): World {
+// Stored parts wait in garage storage, so only a garage can sell them.
+function sellSpareParts(world: World, telemetry: Telemetry, shopId: string): World {
+  const stored = shopDef(shopId).kind === 'garage' ? world.player.storage.map((p) => p.id) : [];
   const ids = spareParts(playerVehicle(world))
     .map((p) => p.id)
-    .concat(world.player.storage.map((p) => p.id));
+    .concat(stored);
   for (const id of ids) {
     world = sellPart(world, id);
     telemetry.trades++;

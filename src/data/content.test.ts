@@ -126,10 +126,7 @@ describe("equipment variety", () => {
     ).toBe(5);
   });
 
-  // PH8 tunes values. Every non-core part, chassis and good currently misses its target effort
-  // band; see the phase report for the full mismatch list. Kept as a real, skipped assertion so
-  // PH8 can un-skip it once values are retuned from the harness, rather than writing it from scratch.
-  it.skip("keeps every part, chassis and good inside its tier's effort band", () => {
+  it("keeps every part, chassis and good inside its tier's effort band", () => {
     const items: { name: string; kind: ItemKind; tier: 1 | 2 | 3; value: number }[] = [
       ...Object.values(PARTS)
         .filter((p) => p.kind !== "core")

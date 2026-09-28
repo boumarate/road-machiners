@@ -175,7 +175,7 @@ describe('market', () => {
     }
   });
 
-  it('pays a full truck load of a haul about a tier wage times the trip turns, lot pressure included', () => {
+  it('pays a full truck load of a haul about haulWages tier wages times the trip turns, lot pressure included', () => {
     // Salt is made only at Nose. A full scout load bought there and sold at Bowl, the farthest point
     // that trades it, is the design's own worked example for what distance should pay.
     const w = emptyWorld();
@@ -183,7 +183,7 @@ describe('market', () => {
     const buy = lotPrice('nose', initShop(w, 'nose'), 'salt', 'buy', ECONOMY.spread, units);
     const sell = lotPrice('bowl', initShop(w, 'bowl'), 'salt', 'sell', ECONOMY.spread, units);
     const turns = estimateTurns(siteOf('nose').pos, siteOf('bowl').pos);
-    const target = turns * EFFORT.wage[1]; // salt is tier 1
+    const target = turns * EFFORT.wage[1] * EFFORT.haulWages; // salt is tier 1
     expect(sell - buy).toBeGreaterThan(target * 0.7);
     expect(sell - buy).toBeLessThan(target * 1.3);
   });

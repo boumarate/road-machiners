@@ -335,7 +335,7 @@ describe("garage", () => {
     expect(w.player.money).toBe(
       2000 -
         (CHASSIS.hauler.value -
-          Math.floor(CHASSIS.scout.value * ECONOMY.chassisSellFactor)),
+          Math.floor(CHASSIS.scout.value * (1 - ECONOMY.spread))),
     );
     w = buyChassis(w, "scout");
     expect(w.player.storage.length).toBe(0);

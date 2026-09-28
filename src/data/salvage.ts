@@ -28,7 +28,7 @@ export const SALVAGE = {
   pileTurns: 400, // two days a dropped pile lies on the ground, time for a road crossing and back
   // Share of a wrecked chassis's value that its destroyed built-in parts leave as the parts good, scaled by
   // their remaining HP share. Keeps a wreck's loot well under the truck's own value, so a kill is not a windfall.
-  coreValueShare: 0.15,
+  coreValueShare: 0.03,
   // Each day a site regains this share of a fresh roll from its loot table, up to the table's highs. An emptied
   // site takes about two weeks to fill back up: a slow trickle, not a reset.
   restockShare: 0.08,
