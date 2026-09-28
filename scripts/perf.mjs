@@ -77,14 +77,15 @@ results.previewMs = Math.max(...previewMs);
 const towns = await page.evaluate(async () => {
   if (typeof window.__KOROVAN__.debugView !== 'function') throw new Error('Game.debugView is missing, so frame time cannot be measured over the towns');
   const { REGION } = await import('/src/data/region.ts');
-  return REGION.towns.map((t) => ({ name: t.name, x: t.pos.x, y: t.pos.y }));
+  const { sitePads } = await import('/src/sim/sites.ts');
+  return REGION.towns.map((t) => ({ name: t.name, x: t.pos.x, y: t.pos.y, pad: sitePads(t)[0] }));
 });
 const frameP95 = [];
 for (const t of towns) {
-  frameP95.push(await page.evaluate(async ({ x, y, zoom, settle, sample }) => {
-    // The camera cannot pan past gray vision, so the truck moves to the town first.
+  frameP95.push(await page.evaluate(async ({ x, y, pad, zoom, settle, sample }) => {
+    // The camera cannot pan past gray vision, so the truck moves to the town's pad first. Trucks never enter a site.
     const g = window.__KOROVAN__;
-    const w = { ...g.state, vehicles: g.state.vehicles.map((v) => (v.id === g.state.player.vehicleId ? { ...v, pos: { x, y } } : v)) };
+    const w = { ...g.state, vehicles: g.state.vehicles.map((v) => (v.id === g.state.player.vehicleId ? { ...v, pos: pad, order: null } : v)) };
     g.apply(w);
     g.debugView(x, y, zoom);
     await new Promise((r) => setTimeout(r, settle));
@@ -99,7 +100,7 @@ for (const t of towns) {
     });
     const d = ts.slice(1).map((t, i) => t - ts[i]).sort((a, b) => a - b);
     return d[Math.floor(d.length * 0.95)];
-  }, { x: t.x, y: t.y, zoom: VIEW_ZOOM, settle: SETTLE_MS, sample: SAMPLE_MS }));
+  }, { x: t.x, y: t.y, pad: t.pad, zoom: VIEW_ZOOM, settle: SETTLE_MS, sample: SAMPLE_MS }));
 }
 results.frameP95Ms = Math.max(...frameP95);
 
