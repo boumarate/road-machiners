@@ -5,7 +5,7 @@ import { rollTraits } from './spawn';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 
 describe('NPC traits', () => {
-  it('unions the sites of two traits, takes the widest contact radius and multiplies boldness', () => {
+  it('unions the sites of two traits, takes the widest contact radius and multiplies boldness and fuel margin', () => {
     const w = emptyWorld();
     const npc = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 10, y: 10 });
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger', 'raider']);
@@ -16,10 +16,11 @@ describe('NPC traits', () => {
     expect(profile.supplySites).toEqual(TRAITS.scavenger.supplySites);
     expect(profile.contactReactRadius).toBe(TRAITS.raider.contactReactRadius);
     expect(profileOf(['scumbag', 'scavenger']).contactReactRadius).toBe(TRAITS.scavenger.contactReactRadius);
-    expect(profileOf(['trader'])).toEqual({ towns: TRAITS.trader.towns, bases: [], salvageSites: [], supplySites: TRAITS.trader.supplySites, travelSites: [], haulSites: [], contactReactRadius: TRAITS.trader.contactReactRadius, boldness: 1 });
+    expect(profileOf(['trader'])).toEqual({ towns: TRAITS.trader.towns, bases: [], salvageSites: [], supplySites: TRAITS.trader.supplySites, travelSites: [], haulSites: [], contactReactRadius: TRAITS.trader.contactReactRadius, boldness: 1, fuelMargin: TRAITS.trader.fuelMargin });
     expect(profileOf(['courier', 'supplier']).travelSites).toEqual(TRAITS.courier.travelSites);
     expect(profileOf(['courier', 'supplier']).haulSites).toEqual(TRAITS.supplier.haulSites);
     expect(profileOf(['scavenger', 'scumbag', 'coward']).boldness).toBeCloseTo(TRAITS.scumbag.boldness * TRAITS.coward.boldness);
+    expect(profileOf(['trader', 'coward']).fuelMargin).toBeCloseTo(TRAITS.trader.fuelMargin * TRAITS.coward.fuelMargin);
   });
 
   it('throws on an unknown trait or a brain without traits', () => {

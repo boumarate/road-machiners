@@ -27,6 +27,9 @@ export const WEAR = {
   speedWeight: 0.03, // extra chance per tile of speed, as a multiplier on the base chance
   breakdownChancePerTile: 0.0001, // per vehicle, per tile driven
   breakdownHpShare: 0.15, // share of max HP a breakdown takes off the chosen part
+  // A failure breaks the engine or the transmission outright, so the truck strands. At these rates a scout at
+  // top speed fails about once in two hours of play. A driver without parts for a field repair needs help.
+  failureChancePerTile: 0.000017, // per vehicle, per tile driven
 };
 
 // A roadside patch between two trucks. See src/sim/patch.ts.

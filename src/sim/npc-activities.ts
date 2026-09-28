@@ -27,10 +27,11 @@ import { beginSearch } from './search';
 import { vehicleById } from './damage';
 import { plead } from './parley';
 import { addState, endState, stateOf, statesHeld } from './states';
-import { fuelCap, suppliesCap, vehicleStats } from './stats';
+import { suppliesCap, vehicleStats } from './stats';
 import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Vehicle, World } from './types';
 import { canUseSite, nearestPad, type Site } from './sites';
 import { clamp, dist, type Vec } from './vec';
+import { heatAt } from './sun';
 import { canVehicleSee } from './vision';
 import { dropTow, follows, inTowReach, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut, refitAtHome } from './defeat';
@@ -165,10 +166,30 @@ function serviceReason(lowFuel: boolean, lowSupplies: boolean): string {
   return lowFuel ? 'low fuel' : lowSupplies ? 'low supplies' : 'needs repairs';
 }
 
+// The fuel a driver thinks the way to its nearest pump takes: the straight line at the heat where it stands. A raider
+// fuels at its camps, any other driver in its towns.
+function fuelToPump(world: World, vehicle: Vehicle, profile: NpcProfile): number {
+  const pumps = profile.bases.length > 0 ? profile.bases : profile.towns;
+  if (pumps.length === 0) throw new Error(`${vehicle.id} knows no pump`);
+  const pump = chooseNearestSite(vehicle, pumps);
+  return dist(vehicle.pos, pump.pos) * vehicleStats(world, vehicle).fuelPerTile * heatAt(world, vehicle.pos);
+}
+
+// The driver's own fixed misjudgment of fuel, from 1 - NPC_UPKEEP.fuelSense to 1 + NPC_UPKEEP.fuelSense.
+function fuelSense(world: World, vehicle: Vehicle): number {
+  const roll = hashRandom(world.seed, ...charCodes(vehicle.id), ...charCodes('fuel'));
+  return 1 + NPC_UPKEEP.fuelSense * (2 * roll - 1);
+}
+
+function isLowOnFuel(world: World, vehicle: Vehicle, profile: NpcProfile): boolean {
+  const reserve = NPC_UPKEEP.fuelReserve * profile.fuelMargin * fuelSense(world, vehicle);
+  return getResources(world, vehicle).fuel <= fuelToPump(world, vehicle, profile) * reserve;
+}
+
 // Low fuel, low supplies or a damaged cab or part needs service. Null when none is needed.
-function serviceNeed(world: World, vehicle: Vehicle): ServiceNeed | null {
+function serviceNeed(world: World, vehicle: Vehicle, profile: NpcProfile): ServiceNeed | null {
   const resources = getResources(world, vehicle);
-  const lowFuel = resources.fuel <= fuelCap(vehicle) * NPC_UPKEEP.lowFuel;
+  const lowFuel = isLowOnFuel(world, vehicle, profile);
   const lowSupplies = resources.supplies <= suppliesCap(vehicle) * NPC_UPKEEP.lowSupplies;
   const damaged = isDamaged(vehicle);
   if (!lowFuel && !lowSupplies && !damaged) return null;
@@ -181,7 +202,7 @@ function isBroke(world: World, vehicle: Vehicle): boolean {
 
 // The fixed survival rule. Null when no service is needed. A wait means the NPC needs service but cannot get it.
 function serviceGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity | null {
-  const need = serviceNeed(world, vehicle);
+  const need = serviceNeed(world, vehicle, profile);
   if (!need) return null;
   const broke = isBroke(world, vehicle);
   if (profile.bases.length > 0) return campServiceGoal(world, vehicle, profile, need, broke);
@@ -838,7 +859,7 @@ function keepTowGoal(world: World, vehicle: Vehicle): void {
 // Urgent supplies come first. Otherwise a field repair with carried parts comes before a service trip.
 function pushService(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity | null {
   const service = serviceGoal(world, vehicle, profile);
-  const urgent = service !== null && needsUrgentSupplies(world, vehicle);
+  const urgent = service !== null && needsUrgentSupplies(world, vehicle, profile);
   if (!urgent && keepRepairing(world, vehicle)) return null;
   return holdOrPush(world, vehicle, service);
 }
@@ -851,10 +872,10 @@ function holdOrPush(world: World, vehicle: Vehicle, service: NpcActivity | null)
 }
 
 // Low supplies, or a low tank that still has fuel to reach service.
-function needsUrgentSupplies(world: World, vehicle: Vehicle): boolean {
+function needsUrgentSupplies(world: World, vehicle: Vehicle, profile: NpcProfile): boolean {
   const resources = getResources(world, vehicle);
   if (resources.supplies <= suppliesCap(vehicle) * NPC_UPKEEP.lowSupplies) return true;
-  return resources.fuel > 0 && resources.fuel <= fuelCap(vehicle) * NPC_UPKEEP.lowFuel;
+  return resources.fuel > 0 && isLowOnFuel(world, vehicle, profile);
 }
 
 // A repair goal in the stack holds, in place once the tank is empty. A new one starts at the recover condition,
