@@ -72,4 +72,26 @@ describe('NPC transactions', () => {
     expect(npc.resources!.money).toBe(0);
     expect(npc.resources!.supplies).toBe(0);
   });
+
+  it('fuels at a fuel stall without buying supplies or repairs', () => {
+    const w = emptyWorld();
+    const pump = REGION.locations.find((l) => l.id === 'pump-station')!;
+    const npc = addVehicle(w, 'scavengers', 'scout', [], sitePads(pump)[0]);
+    const cab = corePart(npc, 'cab');
+    cab.hp -= 2;
+    npc.resources!.fuel = 0;
+    npc.resources!.supplies = 0;
+    npc.resources!.money = 10_000;
+    economy.serviceAtStall(w, npc, 'pump-station', 0);
+    expect(npc.resources!.fuel).toBe(chassisDef(npc.chassisId).fuelCap);
+    expect(npc.resources!.supplies).toBe(0);
+    expect(cab.hp).toBe(partDef(cab.defId).hp - 2);
+    expect(npc.resources!.money).toBe(10_000 - chassisDef(npc.chassisId).fuelCap * ECONOMY.supplyPrice.fuel);
+  });
+
+  it('refuses stall service at a town garage', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'scavengers', 'scout', [], sitePads(REGION.towns[0])[0]);
+    expect(() => economy.serviceAtStall(w, npc, 'bowl', 0)).toThrow('no stall');
+  });
 });

@@ -8,11 +8,11 @@
 // can rob, mostly a weaker one away from guards.
 
 import { dealAvailable } from './patch';
-import { ECONOMY, GOOD_IDS } from '../data/goods';
-import { GOOD_SOURCES } from '../data/market';
+import { ECONOMY } from '../data/goods';
+import { GOOD_SOURCES, SHOPS, type ShopDef } from '../data/market';
 import {
   DECISIONS, HUNT, MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, STATE_WEIGHTS, TRAITS,
-  type DecisionId, type DecisionOptions, type Trait, type TraitId, type TraitWeights, type WeightChange,
+  type DecisionId, type DecisionOptions, type Trait, type TraitId, type TraitWeights, type Weighted, type WeightChange,
 } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
@@ -202,33 +202,26 @@ export function getUpkeepReserve(vehicle: Vehicle): number {
   return (fuelCap(vehicle) * ECONOMY.supplyPrice.fuel + suppliesCap(vehicle) * ECONOMY.supplyPrice.supplies) * NPC_UPKEEP.reserveLoads;
 }
 
-function nearestSite(vehicle: Vehicle, ids: string[]) {
-  return ids.map(getKnownSite).sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos))[0];
-}
+export type TradePlan = { source: string; good: string; sellShop: string };
 
-export type TradePlan = { source: string; good: string; sellTown: string };
-type TradeOffer = { plan: TradePlan | null; profit: number };
-
-// The most profitable affordable good to buy in the nearest known town and sell in another, or null.
-export function bestTrade(world: World, vehicle: Vehicle): TradePlan | null {
-  const towns = npcProfile(vehicle).towns;
-  const source = nearestSite(vehicle, towns);
-  if (!source) return null;
+// Every affordable profitable run: a good bought at one shop and sold at another. Its weight is the profit per unit
+// over the tiles of the trip, from the driver to the source and on to the buyer. Near runs win most rolls, but not
+// all, so traders spread over every shop pair instead of all taking the one best run.
+export function tradeOffers(world: World, vehicle: Vehicle): Weighted<TradePlan>[] {
   const spend = getResources(world, vehicle).money - getUpkeepReserve(vehicle);
-  const best: TradeOffer = { plan: null, profit: 0 };
-  for (const town of towns) if (town !== source.id) offerGoods(world, vehicle, { source: source.id, sellTown: town, spend }, best);
-  return best.plan;
+  const shops = Object.values(SHOPS);
+  return shops.flatMap((source) => shops.filter((buyer) => buyer.id !== source.id).flatMap((buyer) => runOffers(world, vehicle, source, buyer, spend)));
 }
 
-// Keeps in `best` any good bought at the source and sold in the town that beats its profit within `spend`.
-function offerGoods(world: World, vehicle: Vehicle, route: { source: string; sellTown: string; spend: number }, best: TradeOffer): void {
-  for (const good of GOOD_IDS) {
-    const buy = getTradePrice(world, vehicle, route.source, good, 'buy');
-    const profit = getTradePrice(world, vehicle, route.sellTown, good, 'sell') - buy;
-    if (route.spend < buy || profit <= best.profit) continue;
-    best.profit = profit;
-    best.plan = { source: route.source, good, sellTown: route.sellTown };
-  }
+// The runs from source to buyer, one per good both trade that pays and costs no more than `spend` a unit.
+function runOffers(world: World, vehicle: Vehicle, source: ShopDef, buyer: ShopDef, spend: number): Weighted<TradePlan>[] {
+  const sourcePos = getKnownSite(source.id).pos;
+  const trip = dist(vehicle.pos, sourcePos) + dist(sourcePos, getKnownSite(buyer.id).pos);
+  return source.goods.filter((good) => buyer.goods.includes(good)).flatMap((good) => {
+    const buy = getTradePrice(world, vehicle, source.id, good, 'buy');
+    const profit = getTradePrice(world, vehicle, buyer.id, good, 'sell') - buy;
+    return spend >= buy && profit > 0 ? [{ value: { source: source.id, good, sellShop: buyer.id }, weight: profit / trip }] : [];
+  });
 }
 
 // Salvage in sight that still holds something, or that is too far to inspect. Nearest first.
@@ -412,7 +405,7 @@ function canResume(_world: World, vehicle: Vehicle): boolean {
 }
 
 function canTrade(world: World, vehicle: Vehicle): boolean {
-  return bestTrade(world, vehicle) !== null;
+  return tradeOffers(world, vehicle).length > 0;
 }
 
 function canScavenge(world: World, vehicle: Vehicle): boolean {

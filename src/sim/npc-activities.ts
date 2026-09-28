@@ -4,24 +4,26 @@
 import { chassisDef } from '../data/chassis';
 import { ECONOMY } from '../data/goods';
 import { NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, type DecisionOptions } from '../data/npcs';
+import { SHOPS, shopDef } from '../data/market';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
 import type { PartHit } from './armor';
 import { callLawmen, isHostile, startFeuds } from './combat';
-import { affordableBuyCount, getTradePrice, sellVehicleCargo, serviceAtCamp, serviceVehicle, tradeGoods } from './economy';
+import { affordableBuyCount, getTradePrice, sellVehicleCargo, serviceAtCamp, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
 import { isJunk, maxHp } from './wear';
 import { corePart, freeCells, goodsCount, mountedParts } from './grid';
 import { addGoods } from './inventory';
 import { cancelJob, inCombat } from './jobs';
 import { isFree } from './spawn';
 import {
-  bestTrade, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolTown, travelSitesAway,
+  tradeOffers, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolTown, travelSitesAway,
   huntingGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
 import { hashRandom, randInt, randRange } from './rng';
+import { sampleWeighted } from './npc-loadout';
 import { canLootTruck, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, isSiteStock, lootTruckTurn, wreckStockId } from './salvage';
 import { beginSearch } from './search';
 import { vehicleById } from './damage';
@@ -154,8 +156,8 @@ function pointsAway(from: Vec, to: Vec, threat: Vec): boolean {
 
 // ---- Goal builders.
 
-// Why an NPC needs service, and whether low supplies are its only need.
-type ServiceNeed = { reason: string; suppliesOnly: boolean };
+// Why an NPC needs service, whether low supplies are its only need, and whether it needs repairs.
+type ServiceNeed = { reason: string; suppliesOnly: boolean; damaged: boolean };
 
 // Junk parts do not count, since no service rebuilds them.
 function isDamaged(vehicle: Vehicle): boolean {
@@ -166,12 +168,18 @@ function serviceReason(lowFuel: boolean, lowSupplies: boolean): string {
   return lowFuel ? 'low fuel' : lowSupplies ? 'low supplies' : 'needs repairs';
 }
 
-// The fuel a driver thinks the way to its nearest pump takes: the straight line at the heat where it stands. A raider
-// fuels at its camps, any other driver in its towns.
+// Where a driver buys fuel. A raider fuels at its camps, any other driver in its towns or at a stall that sells fuel.
+function pumpsOf(vehicle: Vehicle, profile: NpcProfile): string[] {
+  if (profile.bases.length > 0) return profile.bases;
+  if (profile.towns.length === 0) throw new Error(`${vehicle.id} knows no pump`);
+  return [...profile.towns, ...FUEL_STALLS];
+}
+
+const FUEL_STALLS: readonly string[] = Object.values(SHOPS).filter((s) => s.kind === 'stall' && s.supplies.includes('fuel')).map((s) => s.id);
+
+// The fuel a driver thinks the way to its nearest pump takes: the straight line at the heat where it stands.
 function fuelToPump(world: World, vehicle: Vehicle, profile: NpcProfile): number {
-  const pumps = profile.bases.length > 0 ? profile.bases : profile.towns;
-  if (pumps.length === 0) throw new Error(`${vehicle.id} knows no pump`);
-  const pump = chooseNearestSite(vehicle, pumps);
+  const pump = chooseNearestSite(vehicle, pumpsOf(vehicle, profile));
   return dist(vehicle.pos, pump.pos) * vehicleStats(world, vehicle).fuelPerTile * heatAt(world, vehicle.pos);
 }
 
@@ -193,7 +201,7 @@ function serviceNeed(world: World, vehicle: Vehicle, profile: NpcProfile): Servi
   const lowSupplies = resources.supplies <= suppliesCap(vehicle) * NPC_UPKEEP.lowSupplies;
   const damaged = isDamaged(vehicle);
   if (!lowFuel && !lowSupplies && !damaged) return null;
-  return { reason: serviceReason(lowFuel, lowSupplies), suppliesOnly: lowSupplies && !lowFuel && !damaged };
+  return { reason: serviceReason(lowFuel, lowSupplies), suppliesOnly: lowSupplies && !lowFuel && !damaged, damaged };
 }
 
 function isBroke(world: World, vehicle: Vehicle): boolean {
@@ -221,23 +229,32 @@ function townServiceGoal(vehicle: Vehicle, profile: NpcProfile, need: ServiceNee
     if (oasis) return createSiteActivity('resupply', oasis.id, 'low supplies');
   }
   if (broke && !hasSaleCargo(vehicle)) return createActivity('wait', null, null, 'cannot afford upkeep');
-  const town = chooseNearestSite(vehicle, profile.towns);
-  if (!town) return createActivity('wait', null, null, 'no known service town');
-  return createSiteActivity('resupply', town.id, need.reason);
+  const stop = chooseNearestSite(vehicle, serviceStops(vehicle, profile, need));
+  if (!stop) return createActivity('wait', null, null, 'no known service town');
+  return createSiteActivity('resupply', stop.id, need.reason);
 }
 
-function saleGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity {
-  const goods = goodsCount(vehicle);
-  const towns = profile.towns.map(getKnownSite);
-  const getValue = (id: string) => Object.entries(goods).reduce((sum, [good, count]) => sum + count * getTradePrice(world, vehicle, id, good, 'sell'), 0);
-  towns.sort((a, b) => getValue(b.id) - getValue(a.id) || dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
-  return towns[0] ? createSiteActivity('sell', towns[0].id, 'sell carried cargo') : createActivity('wait', null, null, 'no known buyer');
+// Only a town repairs. Fuel alone also comes from a fuel stall.
+function serviceStops(vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed): string[] {
+  return need.damaged ? profile.towns : pumpsOf(vehicle, profile);
 }
+
+// The shop that pays most for the carried cargo, of the driver's towns and every stall. Nearest wins a tie.
+function saleGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity {
+  const goods = Object.entries(goodsCount(vehicle));
+  const shops = [...new Set([...profile.towns, ...STALLS])].map(getKnownSite);
+  const getValue = (id: string) => goods.reduce((sum, [good, count]) => sum + (shopDef(id).goods.includes(good) ? count * getTradePrice(world, vehicle, id, good, 'sell') : 0), 0);
+  shops.sort((a, b) => getValue(b.id) - getValue(a.id) || dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
+  return shops[0] ? createSiteActivity('sell', shops[0].id, 'sell carried cargo') : createActivity('wait', null, null, 'no known buyer');
+}
+
+const STALLS: readonly string[] = Object.values(SHOPS).filter((s) => s.kind === 'stall').map((s) => s.id);
 
 function tradeGoal(world: World, vehicle: Vehicle): NpcActivity {
-  const plan = bestTrade(world, vehicle);
-  if (!plan) throw new Error(`${vehicle.id} chose to trade with no affordable profitable trade`);
-  return { ...createSiteActivity('trade', plan.source, 'buy profitable cargo'), purchase: { good: plan.good, sellTown: plan.sellTown } };
+  const offers = tradeOffers(world, vehicle);
+  if (offers.length === 0) throw new Error(`${vehicle.id} chose to trade with no affordable profitable trade`);
+  const plan = sampleWeighted(world, offers);
+  return { ...createSiteActivity('trade', plan.source, 'buy profitable cargo'), purchase: { good: plan.good, sellShop: plan.sellShop } };
 }
 
 // Salvage or a knocked-out truck in sight comes first, nearest first.
@@ -1068,10 +1085,17 @@ function resolveResupply(world: World, vehicle: Vehicle, activity: NpcActivity):
   const site = reachSite(vehicle, activity);
   if (!site) return;
   noteTown(vehicle, site.id);
-  if ('kind' in site && site.kind === 'oasis') getResources(world, vehicle).supplies = suppliesCap(vehicle);
-  else if ('kind' in site && site.kind === 'camp') serviceAtCamp(world, vehicle, site.id);
-  else serviceVehicle(world, vehicle, site.id, NPC_UPKEEP.repairParts);
+  serviceAt(world, vehicle, site);
   finishGoal(world, vehicle, 'finished service');
+}
+
+// An oasis fills supplies, a camp serves raiders, a stall sells what it stocks and a town garage serves in full.
+function serviceAt(world: World, vehicle: Vehicle, site: Site): void {
+  const kind = 'kind' in site ? site.kind : null;
+  if (kind === 'oasis') getResources(world, vehicle).supplies = suppliesCap(vehicle);
+  else if (kind === 'camp') serviceAtCamp(world, vehicle, site.id);
+  else if (shopDef(site.id).kind === 'stall') serviceAtStall(world, vehicle, site.id, NPC_UPKEEP.repairParts);
+  else serviceVehicle(world, vehicle, site.id, NPC_UPKEEP.repairParts);
 }
 
 function resolveSell(world: World, vehicle: Vehicle, activity: NpcActivity): void {
@@ -1093,7 +1117,7 @@ function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): vo
   if (count > 0) {
     tradeGoods(world, vehicle, site.id, activity.purchase.good, count, 'buy');
     if (vehicle.brain!.goals[0] !== activity) throw new Error(`${vehicle.id} trades above its long-term goal`);
-    replaceBase(world, vehicle, createSiteActivity('sell', activity.purchase.sellTown, 'deliver purchased cargo'));
+    replaceBase(world, vehicle, createSiteActivity('sell', activity.purchase.sellShop, 'deliver purchased cargo'));
     return;
   }
   finishGoal(world, vehicle, 'cannot afford trade cargo');
