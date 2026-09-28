@@ -134,7 +134,7 @@ NPCs detect the player and each other with the same rules. A contact makes an NP
 
 ## World
 
-The map is a grid of tiles with a height on every tile corner, so the ground is smooth hills and valleys. Each tile has a terrain type: road, hardpan, loose sand, scrub, scree, mud, gravel, salt crust, cracked asphalt or ash. Each type has its own driving speed. Uphill slows a truck, downhill speeds it up a little. Tiles too steep to climb are cliffs, and routes go around them. Hills and obstacles block sight, and the fog of war shows only what the truck sees.
+The map is a grid of tiles with a height on every tile corner, so the ground is smooth hills and valleys. Rain cut gullies and dry washes into it, slopes slid into scree, dry lakes left salt crust and mud, and wind piled deep sand into dune ridges up to about 3 m tall. Boulders lie at cliff feet and on ridges. Each tile has a terrain type: road, hardpan, loose sand, scrub, scree, mud, gravel, salt crust, cracked asphalt or ash. Each type has its own driving speed. Uphill slows a truck, downhill speeds it up a little. Tiles too steep to climb are cliffs, and routes go around them. Hills and obstacles block sight, and the fog of war shows only what the truck sees.
 
 Danger is set by region, not by player level.
 
