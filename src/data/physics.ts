@@ -20,7 +20,7 @@ export const PHYSICS = {
     frictionSlip: 2,
     sideFrictionStiffness: 1,
     engineAccel: 12, // m/s^2 the engine can give at full throttle, before damage
-    brakeForce: 60, // per wheel per ton of chassis rated mass, at full brake
+    brakeForce: 60, // per wheel per ton of chassis handling mass, at full brake
     maxSteer: 0.6, // radians of front wheel angle
     steerRate: 3, // radians per second the wheels can turn
   },
@@ -46,7 +46,7 @@ export const PHYSICS = {
   driver: {
     steerGain: 1.6, // wheel angle per radian of heading error
     throttleGain: 0.5, // throttle per m/s of speed error
-    stopDecel: 8, // m/s^2 a driver plans to brake at when stopping on a point, at rated mass
+    stopDecel: 8, // m/s^2 a driver plans to brake at when stopping on a point, at handling mass
     cornerAccel: 15, // m/s^2 sideways a driver plans to corner at; trucks orbit a missed point at about 30 on flat ground
     cornerCut: 8, // meters before a route corner where the driver starts its turn, and after it where the turn ends
     reverseBelow: 4, // m/s; only a truck slower than this starts backing up

@@ -65,7 +65,7 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   // Top speed and turning follow loadFactor(), which drops hard past the rated mass. The engine and brakes give fixed forces,
   // so acceleration and braking fall with mass.
   const load = loadFactor(v);
-  const force = ch.ratedMass / mass;
+  const force = ch.handlingMass / mass;
   // Each broken wheel cuts top speed and turning by the same share.
   const wheels = (1 - RULES.wheelLoss) ** coreParts(v, 'wheel').filter((p) => !isWorking(p)).length;
   const turnMult = (1 + skillEffect(world, v, 'driving', 'turnRate')) * load * wheels;

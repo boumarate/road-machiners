@@ -309,7 +309,7 @@ describe('physics turns', () => {
   });
 
   it('from rest, a click behind backs toward it rear first', () => {
-    const { w } = play(ordered({ kind: 'through', dest: { x: 24, y: 31 } }), 8);
+    const { w } = play(ordered({ kind: 'through', dest: { x: 24, y: 31 } }), 9);
     expect(dist(me(w).pos, { x: 24, y: 31 })).toBeLessThan(RULES.passRadius + 0.5);
     expect(Math.abs(angleDiff(me(w).heading, 0))).toBeLessThan(Math.PI / 4);
   });

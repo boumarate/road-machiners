@@ -223,6 +223,18 @@ function dominates(a: PartDef, b: PartDef): boolean {
   return x.every((v, i) => v >= y[i]) && x.some((v, i) => v > y[i]);
 }
 
+describe("part weight by tier", () => {
+  // Armor, weapons and engines weigh per cell. Cargo parts weigh per extra row they add.
+  const perUnit = (def: PartDef): number => (def.kind === "cargo" ? def.mass / def.extraRows : def.mass / (def.w * def.h));
+  const mean = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+  it.each(["armor", "weapon", "engine", "cargo"])("%s parts weigh less on average at each higher tier", (kind) => {
+    const byTier = [1, 2, 3].map((tier) => mean(Object.values(PARTS).filter((p) => p.kind === kind && p.tier === tier).map(perUnit)));
+    expect(byTier[1]).toBeLessThan(byTier[0]);
+    expect(byTier[2]).toBeLessThan(byTier[1]);
+  });
+});
+
 describe("part trade-offs", () => {
   it("no part matches or beats another of its kind on every stat but price", () => {
     const parts = Object.values(PARTS).filter((p) => p.kind !== "core");

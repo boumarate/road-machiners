@@ -36,8 +36,8 @@ import {
   type Supply,
 } from "../sim/economy";
 import { corePart, freeCells, goodsCount, MOUNT_CELLS, mountedParts } from "../sim/grid";
+import { moneyLabel } from "./hud-readout";
 import { spareParts } from "../sim/inventory";
-import { vehicleMass } from "../sim/mass";
 import { acceptContract, deliverContract, fitsFetch, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
 import { REGION } from "../data/region";
 import type { PartInstance, Vehicle, World } from "../sim/types";
@@ -45,9 +45,9 @@ import { maxHp } from "../sim/wear";
 import { chassisMap, chassisStats, CompareSteps, createIcon, diffStats, goodIcon, partCard, statGrid, type IconName } from "./cards";
 import { el, panel } from "./dom";
 import { contractDue, contractSummary } from "./format";
-import { InventoryView } from "./inventory";
+import { InventoryView, truckChips } from "./inventory";
 import type { UiHost } from "./host";
-import { fuelLiters, hp, kg } from "./units";
+import { fuelLiters, hp } from "./units";
 import { fuelCap, suppliesCap } from "../sim/stats";
 
 type Tab = "market" | "parts" | "garage" | "trucks" | "contracts";
@@ -109,7 +109,7 @@ export class TownScreen {
     const truck = el("div", { class: "town-truck" }, this.inventory.render());
     this.root.replaceChildren(
       el("button", { class: "close", onclick: () => this.close() }, "Leave [Esc]"),
-      el("h3", {}, siteName(shopId), headerChips(w)),
+      el("h3", {}, siteName(shopId), truckChips(w)),
       el("div", { class: "town-split" }, truck, el("div", { class: "town-shop" }, ...shop)),
     );
     this.inventory.fitTo(truck);
@@ -424,25 +424,6 @@ const CONTRACT_ICON: Record<Contract["kind"], IconName> = {
   bounty: "cannon",
 };
 
-function headerChips(w: World): HTMLElement {
-  const me = playerVehicle(w);
-  const mass = vehicleMass(me);
-  const rated = chassisDef(me.chassisId).ratedMass;
-  return el(
-    "span",
-    { class: "chips" },
-    el("span", { class: "chip" }, createIcon("truck"), chassisDef(me.chassisId).name),
-    el("span", { class: `chip${w.player.money < 0 ? " bad" : ""}`, title: "Money" }, createIcon("money"), `${w.player.money}`),
-    el("span", { class: "chip", title: "Free cargo cells" }, createIcon("cells"), `${freeCells(me)} free`),
-    el(
-      "span",
-      { class: `chip${mass > rated ? " bad" : ""}`, title: "Mass against rated load" },
-      createIcon("load"),
-      `${kg(mass)} / ${kg(rated)}`,
-    ),
-  );
-}
-
 function priceEl(price: number): HTMLElement {
   return el("span", { class: "price" }, createIcon("money"), `${price}`);
 }
@@ -563,7 +544,7 @@ export class TruckTradeScreen {
     const truck = el("div", { class: "town-truck" }, this.inventory.render());
     this.root.replaceChildren(
       el("button", { class: "close", onclick: () => this.close() }, "Leave [Esc]"),
-      el("h3", {}, npc.name, headerChips(w), partnerChips(npc)),
+      el("h3", {}, npc.name, truckChips(w), partnerChips(npc)),
       el("div", { class: "town-split" }, truck, el("div", { class: "town-shop" }, ...side)),
     );
     this.inventory.fitTo(truck);
@@ -698,7 +679,7 @@ function partnerChips(npc: Vehicle): HTMLElement {
     "span",
     { class: "chips" },
     el("span", { class: "dim" }, "Them"),
-    el("span", { class: "chip", title: "Their money" }, createIcon("money"), `${npc.resources!.money}`),
+    el("span", { class: "chip", title: "Their money" }, createIcon("money"), moneyLabel(npc.resources!.money)),
     el("span", { class: "chip", title: "Their free cargo cells" }, createIcon("cells"), `${freeCells(npc)} free`),
   );
 }

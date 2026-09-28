@@ -5,6 +5,7 @@ import { MAX_SKILL_LEVEL, PERK_LEVELS, PERKS, type PerkId, SKILL_IDS, SKILL_INFO
 import { maxHealthOf } from '../sim/health';
 import { choosePerk, hasPerk, levelOf, pendingPerkPairs, perkPair, type PerkPair, xpTodayOf } from '../sim/progress';
 import type { SkillId, World } from '../sim/types';
+import { createIcon, type IconName } from './cards';
 import { el, panel } from './dom';
 import type { UiHost } from './host';
 import { hp } from './units';
@@ -13,6 +14,7 @@ export class CharacterScreen {
   private root = panel('modal');
 
   constructor(private host: UiHost) {
+    this.root.classList.add('character-screen');
     this.root.style.display = 'none';
   }
 
@@ -38,43 +40,61 @@ export class CharacterScreen {
     const p = world.player;
     this.root.replaceChildren(
       el('button', { class: 'close', onclick: () => this.close() }, 'Close [C]'),
-      el('h3', {}, 'Character'),
-      el('div', { class: 'dim' }, `Health ${hp(p.health)}/${maxHealthOf(world)}   Knockouts ${p.knockouts}`),
-      el('table', {}, ...SKILL_IDS.flatMap((id) => [this.row(id, p.skills[id], xpTodayOf(world, id)), this.perkRow(world, id)])),
+      el('h3', {}, 'Character', el('span', { class: 'chips' },
+        el('span', { class: 'chip', title: 'Health' }, createIcon('driver'), `${hp(p.health)} / ${maxHealthOf(world)}`),
+        el('span', { class: 'chip', title: 'Knockouts' }, createIcon('damage'), `${p.knockouts} knockouts`),
+      )),
+      el('div', { class: 'cards skill-cards' }, ...SKILL_IDS.map((id) => this.card(world, id))),
     );
   }
 
-  // One cell per perk pair the skill has reached: the picked perk, or both perks as buttons.
-  private perkRow(world: World, skill: SkillId): HTMLElement | null {
+  private card(world: World, id: SkillId): HTMLElement {
+    const xp = world.player.skills[id];
+    const lvl = levelOf(xp);
+    const today = xpTodayOf(world, id);
+    const max = lvl === MAX_SKILL_LEVEL;
+    const into = max ? 1 : (xp - XP_TO_REACH[lvl]) / (XP_TO_REACH[lvl + 1] - XP_TO_REACH[lvl]);
+    return el('div', { class: 'card skill-card' },
+      el('div', { class: 'card-head' },
+        createIcon(SKILL_ICON[id]),
+        el('div', { class: 'card-name' }, el('b', {}, SKILL_INFO[id].name), el('span', { class: 'dim' }, `Grows from ${SKILL_INFO[id].grows}`)),
+        el('div', { class: 'skill-level', title: `Level ${lvl} of ${MAX_SKILL_LEVEL}` },
+          ...Array.from({ length: MAX_SKILL_LEVEL }, (_, i) => el('i', { class: i < lvl ? 'on' : '' }))),
+      ),
+      el('div', { class: 'skill-line' }, el('span', {}, `Level ${lvl}`), el('span', {}, max ? 'max' : `${Math.floor(xp)} / ${XP_TO_REACH[lvl + 1]} XP`)),
+      el('div', { class: 'meter' }, el('div', { style: `width:${into * 100}%` })),
+      el('div', { class: 'skill-line dim' }, el('span', {}, 'Today'), el('span', {}, `${Math.floor(today)} / ${XP_RULES.dailyCap} XP`)),
+      el('div', { class: 'meter today' }, el('div', { style: `width:${Math.min(today / XP_RULES.dailyCap, 1) * 100}%` })),
+      ...this.perks(world, id),
+    );
+  }
+
+  // One line per perk pair the skill has reached: the picked perk, or both perks as buttons.
+  private perks(world: World, skill: SkillId): HTMLElement[] {
     const open = pendingPerkPairs(world);
-    const cells = PERK_LEVELS.map((level) => perkPair(skill, level)).flatMap((pair) => {
+    return PERK_LEVELS.map((level) => perkPair(skill, level)).flatMap((pair) => {
       const picked = pair.perks.find((id) => hasPerk(world, id));
-      if (picked) return [el('div', {}, `${PERKS[picked].name}: ${PERKS[picked].rule}`)];
+      if (picked) return [el('div', { class: 'perk picked' }, el('b', {}, PERKS[picked].name), el('span', {}, PERKS[picked].rule))];
       if (!open.some((o) => o.skill === pair.skill && o.level === pair.level)) return [];
       return [this.choice(world, pair)];
     });
-    return cells.length === 0 ? null : el('tr', {}, el('td', {}), el('td', { colspan: 4 }, ...cells));
   }
 
   private choice(world: World, pair: PerkPair): HTMLElement {
     const canPick = world.player.state === 'active';
     const button = (id: PerkId) => el('button', {
+      class: 'perk',
       disabled: !canPick,
       onclick: () => this.host.apply(choosePerk(this.host.world(), id)),
-      title: PERKS[id].rule,
-    }, `${PERKS[id].name}: ${PERKS[id].rule}`);
-    return el('div', {}, el('span', { class: 'good' }, `Level ${pair.level} perk: `), ...pair.perks.map(button));
-  }
-
-  private row(id: SkillId, xp: number, today: number): HTMLElement {
-    const lvl = levelOf(xp);
-    const next = lvl < MAX_SKILL_LEVEL ? `${Math.floor(xp)}/${XP_TO_REACH[lvl + 1]} XP` : 'max';
-    return el('tr', {},
-      el('td', {}, SKILL_INFO[id].name),
-      el('td', {}, `${'#'.repeat(lvl)}${'.'.repeat(MAX_SKILL_LEVEL - lvl)}`),
-      el('td', {}, next),
-      el('td', { class: 'dim' }, `today ${Math.floor(today)}/${XP_RULES.dailyCap}`),
-      el('td', { class: 'dim' }, `grows from ${SKILL_INFO[id].grows}`),
-    );
+    }, el('b', {}, PERKS[id].name), el('span', {}, PERKS[id].rule));
+    return el('div', { class: 'perk-choice' }, el('span', { class: 'good' }, `Level ${pair.level} perk: pick one`), ...pair.perks.map(button));
   }
 }
+
+const SKILL_ICON: Record<SkillId, IconName> = {
+  driving: 'wheel',
+  perception: 'scanner',
+  machining: 'tools',
+  toughness: 'armor',
+  social: 'money',
+};

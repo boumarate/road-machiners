@@ -105,10 +105,10 @@ describe('hitched tower traffic', () => {
     const other = withTower(w, 'scavenger', 'scavengers', 'hauler', start);
     other.heading = Math.atan2(behind.y - start.y, behind.x - start.x);
     other.brain!.goals = [{ kind: 'raid', targetId: null, destination: behind, phase: 'travel', reason: 'drive past the tower' }];
-    const r = runUntil(w, 20, () => false);
+    const passed = (x: World) => progress(find(x, other.id).pos) < 0 && progress(find(x, tower.id).pos) > 10;
+    const r = runUntil(w, 20, passed);
     expect(crashes(r.events, tower.id)).toEqual([]);
-    expect(progress(find(r.w, other.id).pos)).toBeLessThan(0);
-    expect(progress(find(r.w, tower.id).pos)).toBeGreaterThan(10);
+    expect(passed(r.w)).toBe(true);
   });
 });
 

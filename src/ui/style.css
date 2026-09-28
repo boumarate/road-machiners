@@ -119,7 +119,7 @@ body {
 #ui .instruments {
   left: 14px;
   bottom: 14px;
-  width: 486px;
+  min-width: 442px;
   min-height: 98px;
   padding: 0;
   display: grid;
@@ -196,6 +196,11 @@ body {
   display: grid;
   grid-template-columns: 1fr 1.2fr 1fr;
   gap: 6px 8px;
+}
+.survival-bank {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(4, 1fr);
+  padding-left: 10px;
 }
 .resource {
   display: flex;
@@ -585,11 +590,13 @@ body {
   margin: 4px 0;
   color: var(--muted);
 }
+/* The hover panel grows with the hit table down to the log, since the mouse stays on the truck and cannot scroll it. */
 .info {
   right: 14px;
   top: 64px;
   width: var(--inspection-width);
-  height: var(--inspection-height);
+  min-height: var(--inspection-height);
+  max-height: calc(100dvh - 64px - 234px - 8px);
   max-width: calc(100vw - 28px);
   box-sizing: border-box;
   overflow: auto;
@@ -603,6 +610,27 @@ body {
 .info .bar > div {
   height: 100%;
   background: #bdc6ae;
+}
+/* One row per part: icon, name, HP and a condition bar under the name. */
+.info-part {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  column-gap: 7px;
+  align-items: center;
+  margin: 3px 0;
+}
+.info-part .icon {
+  grid-row: span 2;
+  width: 18px;
+  height: 18px;
+}
+.info-hp {
+  font: 11px var(--font-mono);
+}
+.info-part .meter {
+  grid-column: 2 / 4;
+  height: 3px;
+  margin-top: 2px;
 }
 #ui .hitcard {
   border-top: 1px solid var(--edge);
@@ -769,20 +797,32 @@ body {
   top: 23px;
   font-size: 12px;
 }
-/* Town screen: the truck stays on the left and the shop tabs on the right. Each column scrolls on its own. */
-#ui .modal.town-screen {
+/* Town screen: the truck stays on the left and the shop tabs on the right. Each column scrolls on its own.
+   The inventory screen shares the header and the column that fits the truck to the window height. */
+#ui .modal.town-screen,
+#ui .modal.inventory-screen {
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
-#ui .town-screen > h3 {
-  margin-bottom: 4px;
-}
 /* Header chips: truck, money, free cells and load. */
-#ui .town-screen > h3 {
+#ui .town-screen > h3,
+#ui .inventory-screen > h3,
+#ui .character-screen > h3 {
   display: flex;
   align-items: center;
   gap: 22px;
+  margin-bottom: 4px;
+}
+.inv-body {
+  flex: 1;
+  min-height: 0;
+  margin-top: 8px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.inv-body .inv-wrap {
+  margin-top: 0;
 }
 .chips {
   display: flex;
@@ -855,11 +895,6 @@ body {
   min-width: 0;
   padding: 3px 8px;
   font-size: 12px;
-}
-.inv-summary {
-  color: var(--muted);
-  margin: -4px 0 22px;
-  font: 12px var(--font-mono);
 }
 .inv-wrap {
   display: flex;
@@ -1146,6 +1181,7 @@ body {
 }
 @media (max-width: 720px) {
   #ui .instruments {
+    min-width: 0;
     width: calc(100vw - 116px);
     grid-template-columns: 82px 1fr;
   }
@@ -1185,6 +1221,7 @@ body {
   }
   .info {
     top: 190px;
+    max-height: calc(100dvh - 190px - 256px - 8px);
   }
   #ui .modal {
     padding: 20px 16px;
@@ -1418,6 +1455,51 @@ canvas.view {
 #ui .card-foot button {
   padding: 3px 12px;
   font-size: 13px;
+}
+/* Character screen: one card per skill with its level pips, XP bars and perks. */
+.skill-level {
+  display: flex;
+  gap: 3px;
+}
+.skill-level i {
+  width: 10px;
+  height: 10px;
+  background: #3a4246;
+  border: 1px solid #5b6468;
+}
+.skill-level i.on {
+  background: #e0c070;
+  border-color: #e0c070;
+}
+.skill-line {
+  display: flex;
+  justify-content: space-between;
+  font: 12px var(--font-mono);
+}
+.meter.today > div {
+  background: #8d9296;
+}
+.perk {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  text-align: left;
+}
+.perk.picked {
+  margin-top: 4px;
+  padding: 5px 8px;
+  border-left: 2px solid #e0c070;
+}
+.perk-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 4px;
+  font-size: 12px;
+}
+#ui button.perk {
+  padding: 5px 8px;
 }
 .footprint {
   display: grid;
