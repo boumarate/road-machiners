@@ -119,6 +119,8 @@ Traders and scavengers help a stranded player. Raiders never do. One that sees t
 
 A towed truck hangs behind its tower and follows its path. The tower drives slower than its top speed. Turns run on their own while towed. The player can unhitch at any time for free. On arrival in town the tower takes the fee. Money can go below zero, and the HUD shows it as debt. A player in debt cannot buy anything, and sales pay the debt off.
 
+A stranded player at a town who cannot pay for the fix and has nothing to sell there gets patched with scrap. Mounted parts count as things to sell. The engine, transmission, wheels and tank rise to 40% of their max HP. A junk engine goes back to its last wear step first. An empty tank gets 40% of its room in fuel. A truck with no engine gets nothing.
+
 A stranded player can switch on an emergency beacon. Every vehicle within 250 tiles hears it, through hills. Traders and scavengers come as if they saw the truck, and one of them answers. Raiders hear it too, so a stripped truck calls safely and a truck with cargo draws raiders. Turns run on their own while the beacon calls and no offer is open. The beacon switches off when the truck can drive again or gets towed.
 
 Space stops turns that run on their own, while knocked out, towed or on the beacon. The next Space starts them again.
