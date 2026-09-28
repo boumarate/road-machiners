@@ -24,7 +24,7 @@ import { canUseSite, locationAt } from '../sim/sites';
 import { shopAt } from '../sim/market';
 import { canUseOasis, downedHere, downedNear, emptySalvageNear, salvageHere, salvageNear } from '../sim/locations';
 import { playerCanAct } from '../sim/world';
-import { isBusy } from '../sim/jobs';
+import { inCombat, isBusy } from '../sim/jobs';
 
 // The shop in reach of the player truck at any speed, or null. Moving trucks must stop to use it.
 function shopNear(world: World): { id: string; name: string } | null {
@@ -65,8 +65,14 @@ function getSiteAction(world: World): ContextAction | null {
     const empty = emptySalvageNear(world);
     return empty && { label: `${getSalvageName(empty)} is picked clean`, ready: false, hint: 'No loot left' };
   }
-  const verb = world.player.scavenged.includes(stock.id) ? 'Loot' : 'Search';
-  return { label: `${verb} ${getSalvageName(stock)}`, ready: salvageHere(world) !== null };
+  return getStockAction(world, stock);
+}
+
+// A search needs no hostile in sight. Looting a searched stock does not.
+function getStockAction(world: World, stock: SalvageStock): ContextAction {
+  if (world.player.scavenged.includes(stock.id)) return { label: `Loot ${getSalvageName(stock)}`, ready: salvageHere(world) !== null };
+  const combat = inCombat(world, playerVehicle(world));
+  return { label: `Search ${getSalvageName(stock)}`, ready: !combat && salvageHere(world) !== null, combat };
 }
 
 function getSalvageName(stock: SalvageStock): string {

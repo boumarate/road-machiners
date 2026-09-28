@@ -95,8 +95,10 @@ class TruckConditionView {
 }
 
 // The E key action. ready is false while the truck must stop first.
-// A hint marks an action that can never run here, and says why.
-export type ContextAction = { label: string; ready: boolean; hint?: string };
+// A hint marks an action that can never run here, and says why. combat marks an action a hostile in sight blocks.
+export type ContextAction = { label: string; ready: boolean; hint?: string; combat?: boolean };
+
+export const COMBAT_BLOCKED = "Can't do this while in combat";
 
 type HudActions = {
   openInventory: () => void;
@@ -266,7 +268,8 @@ export class Hud {
         {
           onclick: onUse,
           disabled: !action.ready,
-          title: action.hint ?? (action.ready ? "" : "Stop to use"),
+          class: action.combat ? "combat" : "",
+          title: action.hint ?? (action.combat ? COMBAT_BLOCKED : action.ready ? "" : "Stop to use"),
         },
         action.hint ? action.label : `[E] ${action.label}`,
       ),
@@ -488,6 +491,16 @@ export class Hud {
       )
         this.toast(line.text);
     }
+    this.renderLog();
+  }
+
+  // A log line from the UI itself, not from a sim event.
+  note(w: World, text: string, cls: string): void {
+    this.lines.unshift({ text: `T${w.turn} ${text}`, cls });
+    this.renderLog();
+  }
+
+  private renderLog(): void {
     this.lines = this.lines.slice(0, LOG_LINES);
     if (this.lines.length === 0) return;
     this.log.replaceChildren(

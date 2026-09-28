@@ -662,6 +662,10 @@ body {
 .action button {
   font-size: 14px;
 }
+#ui .action button.combat {
+  color: #ff5a40;
+  border-color: #ff5a40;
+}
 #ui .action:has(.job-bar) {
   padding: 8px 14px;
   text-align: center;
