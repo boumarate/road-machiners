@@ -6,16 +6,16 @@ import { RULES } from '../data/rules';
 import { CONDITION } from '../data/wear';
 import { autoOrders, isHostile } from './combat';
 import { buyGood } from './economy';
-import { advanceKnockout, checkDeath, checkKnockout } from './defeat';
-import { corePart, coreParts, goodsCount, hasLoot, isLoot, mountedParts } from './grid';
-import { addGoods, dumpItem, moveItem, spareParts } from './inventory';
+import { advanceKnockout, checkDeath, checkKnockout, isKnockedOut } from './defeat';
+import { corePart, coreParts, goodsCount, hasLoot, isLoot } from './grid';
+import { addGoods, dumpItem, moveItem } from './inventory';
 import { scavenge } from './locations';
 import { startSearch } from './search';
 import { addState, endState, stateOf } from './states';
 import { startRepair } from './jobs';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
 import { refreshVision } from './vision';
-import type { SalvageStock, Vehicle, World } from './types';
+import type { Vehicle, World } from './types';
 import { endTurn, setDirect, setMoveOrder, setWeaponOrder } from './world';
 
 // Every goods unit and part id a vehicle and the stocks hold, for checking that nothing is lost or copied.
@@ -30,13 +30,25 @@ function inventory(w: World, v: Vehicle): { goods: Record<string, number>; parts
   return { goods, parts: parts.sort() };
 }
 
-function knockedOut(): { w: World; me: Vehicle; stock: SalvageStock } {
+function knockedOut(): { w: World; me: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
   w.salvage = [];
   const me = w.vehicles[0];
   corePart(me, 'cab').hp = 0;
   checkKnockout(w);
-  return { w, me, stock: w.salvage[0] };
+  return { w, me };
+}
+
+// A raider that dealt the knockout blow and watches the truck, so it keeps the driver down.
+function knockedOutByRaider(parts: string[] = []): { w: World; me: Vehicle; raider: Vehicle } {
+  const w = emptyWorld({ x: 30, y: 30 });
+  w.salvage = [];
+  const me = w.vehicles[0];
+  const raider = addVehicle(w, 'raiders', 'buggy', parts, { x: 36, y: 30 });
+  me.lastHitBy = raider.id;
+  corePart(me, 'cab').hp = 0;
+  checkKnockout(w);
+  return { w, me, raider };
 }
 
 describe('death', () => {
@@ -108,25 +120,22 @@ describe('loot', () => {
 });
 
 describe('knockout', () => {
-  it('moves every non-core item into a stock at the truck and loses nothing', () => {
+  it('keeps every item on the truck, drops no pile, and makes the truck nobody’s foe', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.salvage = [];
     const me = w.vehicles[0];
-    expect(spareParts(me).length + mountedParts(me).filter((p) => partDef(p.defId).kind !== 'core').length).toBeGreaterThan(0);
-    const before = inventory(w, me);
-    const core = mountedParts(me, 'core').map((p) => p.id).sort();
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
+    expect(isHostile(w, raider, me)).toBe(true);
+    corePart(me, 'cab').hp = 0;
+    const items = structuredClone(me.items);
     const money = w.player.money;
     const fuel = w.player.fuel;
     const supplies = w.player.supplies;
-    corePart(me, 'cab').hp = 0;
     checkKnockout(w);
-    expect(inventory(w, me)).toEqual(before);
-    expect(me.items.map((it) => (it.kind === 'part' ? it.part.id : it.good)).sort()).toEqual(core);
-    expect(hasLoot(me)).toBe(false);
-    expect(w.salvage).toHaveLength(1);
-    expect(w.salvage[0].pos).toEqual(me.pos);
-    expect(w.salvage[0].id.startsWith('wreck-')).toBe(true);
-    expect(w.obstacles.some((o) => o.id === w.salvage[0].id)).toBe(false);
+    expect(me.items).toEqual(items);
+    expect(w.salvage).toEqual([]);
+    expect(isKnockedOut(me)).toBe(true);
+    expect(isHostile(w, raider, me)).toBe(false);
     expect(w.player).toMatchObject({ money, fuel, supplies, state: 'knockedOut', knockoutTurns: 0, knockouts: 1 });
     expect(w.events).toContainEqual({ t: 'knockout' });
   });
@@ -161,28 +170,8 @@ describe('knockout', () => {
     expect(w.events).toEqual([]);
   });
 
-  it('adds a second knockout in the same place to the first pile', () => {
-    let w = emptyWorld({ x: 30, y: 30 });
-    w.salvage = [];
-    corePart(w.vehicles[0], 'cab').hp = 0;
-    w = endTurn(w, testDrive);
-    w = endTurn(w, testDrive);
-    expect(w.player.state).toBe('active');
-    const scrap = w.salvage[0].goods.scrap ?? 0;
-    expect(addGoods(w, w.vehicles[0], 'scrap', 1)).toBe(1);
-    corePart(w.vehicles[0], 'cab').hp = 0;
-    w = endTurn(w, testDrive);
-    expect(w.player.state).toBe('knockedOut');
-    expect(w.salvage).toHaveLength(1);
-    expect(w.salvage[0].goods.scrap).toBe(scrap + 1);
-  });
-
   it('keeps the knocked-out truck in place over turns', () => {
-    let w = emptyWorld({ x: 30, y: 30 });
-    const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 36, y: 30 });
-    corePart(w.vehicles[0], 'cab').hp = 0;
-    checkKnockout(w);
-    addState(w, 'feud', raider.id, w.vehicles[0].id, { kind: 'feud', robbery: false }); // keeps the player knocked out
+    let { w } = knockedOutByRaider();
     const at = { ...w.vehicles[0].pos };
     for (let i = 0; i < 5; i++) {
       w = endTurn(w, testDrive);
@@ -222,18 +211,23 @@ describe('waking', () => {
     expect(() => advanceKnockout(w)).toThrow(/junk/);
   });
 
-  it('stays knocked out while a raider sees the truck, even one ignoring it', () => {
-    const { w, me } = knockedOut();
-    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
-    expect(isHostile(w, raider, me)).toBe(false);
+  it('stays knocked out while the truck that fought it sees it', () => {
+    const { w } = knockedOutByRaider(['mg', 'stockEngine']);
     advanceKnockout(w);
     expect(w.player.state).toBe('knockedOut');
     expect(w.player.knockoutTurns).toBe(1);
   });
 
-  it('wakes at the turn limit with a raider idling in sight', () => {
-    let { w } = knockedOut();
-    addVehicle(w, 'raiders', 'buggy', [], { x: 36, y: 30 });
+  it('wakes with a truck in sight that did not fight it, and ends the defeat', () => {
+    const { w, me } = knockedOut();
+    addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
+    advanceKnockout(w);
+    expect(w.player.state).toBe('active');
+    expect(me.defeat).toBeUndefined();
+  });
+
+  it('wakes at the turn limit with the raider that fought it idling in sight', () => {
+    let { w } = knockedOutByRaider();
     let turns = 0;
     while (w.player.state === 'knockedOut') {
       w = endTurn(w, testDrive);
@@ -272,25 +266,37 @@ describe('the loot rule', () => {
     expect(isHostile(w, trader, bare)).toBe(false);
   });
 
-  it('a raider with free cargo searches the knocked-out truck', () => {
-    const { w: w0, me, stock } = knockedOut();
+  it('a raider that fought the player without a robbery sets out to loot the truck', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = w.vehicles[0];
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    me.lastHitBy = raider.id;
+    corePart(me, 'cab').hp = 0;
+    checkKnockout(w);
+    expect(raider.brain.goals.at(-1)).toMatchObject({ kind: 'loot', targetId: me.id });
+  });
+
+  it('a raider that knocked the player out loots goods straight off the truck', () => {
+    const { w: w0, me, raider } = knockedOutByRaider(['mg', 'stockEngine']);
     const before = inventory(w0, me);
-    const raider = addVehicle(w0, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 42, y: 30 });
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     forceOption('idle', 'scavenge');
     for (const key of Object.keys(NPCS)) w0.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
-    const units = (s: SalvageStock) => s.parts.length + Object.values(s.goods).reduce((a, n) => a + n, 0);
-    const full = units(stock);
+    const units = (v: Vehicle) => Object.values(goodsCount(v)).reduce((a, n) => a + n, 0);
+    const full = units(me);
+    expect(full).toBeGreaterThan(0);
     let w = w0;
     let took = false;
-    for (let turn = 0; turn < 60 && !took; turn++) {
+    for (let turn = 0; turn < 20 && !took; turn++) {
       w = endTurn(w, testDrive);
-      took = units(w.salvage.find((s) => s.id === stock.id)!) < full;
+      took = units(w.vehicles[0]) < full;
     }
     expect(took).toBe(true);
+    expect(w.salvage).toEqual([]);
     const actor = w.vehicles.find((v) => v.id === raider.id)!;
     const after = inventory(w, w.vehicles[0]);
-    const carried = inventory({ ...w, salvage: [] }, actor);
+    const carried = inventory(w, actor);
     for (const [good, n] of Object.entries(before.goods)) expect((after.goods[good] ?? 0) + (carried.goods[good] ?? 0)).toBe(n);
   });
 });
@@ -298,14 +304,12 @@ describe('the loot rule', () => {
 describe('commands while knocked out', () => {
   it('reject every player command', () => {
     const { w, me } = knockedOut();
-    const good = me.items.find((it) => it.kind === 'good');
-    expect(good).toBeUndefined();
     const commands: (() => unknown)[] = [
       () => setMoveOrder(w, { kind: 'stopAt', dest: { x: 40, y: 30 } }),
       () => setWeaponOrder(w, 'x', null),
       () => setDirect(w, true),
       () => startRepair(w, corePart(me, 'cab').id),
-      () => startSearch(w, w.salvage[0].id),
+      () => startSearch(w, 'bowl'),
       () => moveItem(w, me.items[0].id, { x: 0, y: 0, rot: 0 }),
       () => dumpItem(w, me.items[0].id),
       () => buyGood(w, 'scrap', 1),
@@ -315,12 +319,11 @@ describe('commands while knocked out', () => {
   });
 
   it('does not start an auto repair', () => {
-    let { w } = knockedOut();
+    let { w } = knockedOutByRaider();
     expect(addGoods(w, w.vehicles[0], 'parts', 1)).toBe(1);
     w.player.autoRepair = true;
-    const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 36, y: 30 });
-    addState(w, 'feud', raider.id, w.vehicles[0].id, { kind: 'feud', robbery: false });
     w = endTurn(w, testDrive);
+    expect(w.player.state).toBe('knockedOut');
     expect(w.vehicles[0].job).toBeNull();
   });
 });
@@ -366,9 +369,8 @@ describe('knockout practice', () => {
 
 describe('quick wake perk', () => {
   it('wakes the player at a shorter turn limit with a raider idling in sight', () => {
-    let { w } = knockedOut();
+    let { w } = knockedOutByRaider();
     w.player.perks.push('quickWake');
-    addVehicle(w, 'raiders', 'buggy', [], { x: 36, y: 30 });
     const limit = Math.ceil(RULES.knockoutMaxTurns * PERK_NUMBERS.quickWake.knockoutTurns);
     let turns = 0;
     while (w.player.state === 'knockedOut') {

@@ -86,9 +86,9 @@ Beating a truck pays nothing by itself. The loot is on the truck. A wreck leaves
 
 Losing a fight does not end the game, in Kenshi style. A loss starts a new story on real turns the player watches. There are no fade screens.
 
-A broken cab knocks the player out while health is above 0. Every mounted part except the built-in ones, all goods and all spare parts drop into a pile beside the truck. Money, fuel and supplies stay. Feuds against the player end.
+A broken cab knocks the player out while health is above 0. The truck keeps everything it carries, with no pile. Money, fuel and supplies stay. Feuds against the player end, and the knocked-out truck is nobody's foe.
 
-While knocked out, turns run on their own and the player gives no orders. Looters search the pile. The player comes to when no hostile sees the truck, or after 30 turns. Broken built-in parts that are not junk are patched to a quarter of their HP. What the looters left stays in the pile.
+While knocked out, turns run on their own and the player gives no orders. Looters strip the truck by the same rules as a knocked-out NPC truck, below. The player comes to when the trucks that fought it no longer see it, or after 30 turns. Broken built-in parts that are not junk are patched to a quarter of their HP.
 
 A broken cab knocks an NPC out too. One in twenty dies at once instead, and its truck becomes a wreck. Health at 0 also kills an NPC. A knocked-out truck keeps everything it carries, with no pile. A truck parked beside it loots it on a second grid beside its own. Goods and spare parts move at once. An installed part takes a field refit to remove, and built-in parts stay. NPC looters follow the same rules, and passing drivers stop for a knocked-out truck as often as for a wreck. The job bar names the part being worked on.
 
@@ -169,7 +169,7 @@ Scavenging is a timed search. The truck parks at a stock and searches for turns 
 
 Landmark and convoy sites hold finite stock rolled at world creation: goods, parts and sometimes a spare mountable part. The whole map holds loot worth well under the upgrade ladder. Each day a site regains a small share of a fresh roll, up to its table's highs, so an emptied site takes about two weeks to fill. Destroyed NPCs leave a wreck with the same kind of stock. Their mounted parts join it at the HP they had, and their built-in parts turn into parts good worth a share of the chassis value. A looted road wreck goes after a few days, and a new road wreck appears elsewhere on a road. Both happen beyond the player's gray vision, so the road wreck count stays the same.
 
-Knockout drops, handed-over cargo and dumped items go on a ground pile. Drops close together join one pile. A pile disappears when empty or after two days. Any collector can take from it.
+Handed-over cargo and dumped items go on a ground pile. Drops close together join one pile. A pile disappears when empty or after two days. Any collector can take from it.
 
 Shops have unlimited money. Goods prices move with trade, and part stock is finite. Initial NPC resources and the oasis are explicit sources. There are no offscreen catch-up grants.
 
@@ -193,7 +193,7 @@ A chance is 0 only when an option is physically impossible. A driver with no wor
 
 Drivers judge each other by danger: the firepower of working guns times the current toughness of the cab, chassis and armor. A tank looks more dangerous than a scout, and a half-beaten tank looks about half as dangerous. Danger counts nearby visible faction mates on each side. A driver misjudges another truck's danger by up to a quarter each time it first sees it. A scumbag robs a truck whose danger looks below its own times its boldness. Scumbags are bold, and cowards are timid. A stronger target, or one near a town gate, is robbed only rarely.
 
-A robbery is an attack. The winner loots the knocked-out truck, the wreck or the pile the loser left. A robber whose target escapes backs off that target for a while.
+A robbery is an attack. The winner loots the knocked-out truck or the wreck the loser left. A robber whose target escapes backs off that target for a while.
 
 In a fight, each chance to ram the target is a decision. A ram that the driver expects to hurt itself more than the target is rare, and traders almost never ram.
 

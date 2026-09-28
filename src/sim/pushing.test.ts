@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
-import { checkKnockout } from './defeat';
 import { soundRange } from './detect';
 import { advanceFar, isNear } from './far';
 import { corePart, mountedParts } from './grid';
@@ -67,13 +66,6 @@ describe('pushing a truck without a working engine', () => {
     expect(soundRange(w, v)).toBeGreaterThan(0);
     mountedParts(v, 'engine')[0].hp = 0;
     expect(soundRange(w, v)).toBe(0);
-  });
-
-  it('a knockout strips the engine, leaving the truck to limp', () => {
-    const w = emptyWorld();
-    corePart(w.vehicles[0], 'cab').hp = 0;
-    checkKnockout(w);
-    expect(mountedParts(w.vehicles[0], 'engine')).toHaveLength(0);
   });
 });
 

@@ -22,7 +22,7 @@ import {
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
 import { hashRandom, randInt, randRange } from './rng';
-import { canLootTruck, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, isSiteStock, lootTruckTurn, pileInReach, wreckStockId } from './salvage';
+import { canLootTruck, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, isSiteStock, lootTruckTurn, wreckStockId } from './salvage';
 import { beginSearch } from './search';
 import { vehicleById } from './damage';
 import { plead } from './parley';
@@ -1079,15 +1079,15 @@ export function resolveNpcActivities(world: World): void {
   }
 }
 
-// The victim's truck while it lies knocked out, else its wreck, else the pile it dropped.
+// The victim's truck while it lies knocked out, else its wreck.
 function robbedLoot(w: World, victimId: string): Vehicle | SalvageStock | undefined {
   const victim = w.vehicles.find((v) => v.id === victimId);
   if (victim && isKnockedOut(victim)) return victim;
-  return w.salvage.find((s) => s.id === wreckStockId(victimId)) ?? (victim && pileInReach(w, victim)) ?? undefined;
+  return w.salvage.find((s) => s.id === wreckStockId(victimId));
 }
 
-// Sends a robber that won to loot its victim: a knocked-out NPC truck, an NPC's wreck, or the pile a knocked-out
-// player dropped where it stands. A robber that died in the same fight loots nothing.
+// Sends a robber that won to loot its victim: a knocked-out truck or an NPC's wreck. A robber that died in the same
+// fight loots nothing.
 export function lootRobbed(w: World, robberId: string, victimId: string): void {
   const robber = w.vehicles.find((v) => v.id === robberId);
   if (!robber) return;

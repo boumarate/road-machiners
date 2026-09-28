@@ -77,6 +77,12 @@ const UNAVAILABLE: Record<string, Setup> = {
     const w = emptyWorld({ x: 200, y: 200 });
     return { w, robber: addScumbag(w, { x: 10, y: 10 }), target: addPrey(w, { x: 15, y: 10 }, [], 0) };
   },
+  knockedOut: () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const target = addPrey(w, { x: 15, y: 10 });
+    target.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+    return { w, robber: addScumbag(w, { x: 10, y: 10 }), target };
+  },
   busyFighting: () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const robber = addScumbag(w, { x: 10, y: 10 });
@@ -383,7 +389,7 @@ describe('looting', () => {
     expect(thinkNpc(w, robber)).toMatchObject({ kind: 'scavenge', targetId: 'salvage-yard' });
   });
 
-  it('a scumbag that knocks out the player loots the knockout stock', () => {
+  it('a scumbag that knocks out the player loots the player truck', () => {
     const w = emptyWorld({ x: 15, y: 10 });
     const me = w.vehicles[0];
     const robber = addScumbag(w, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
@@ -392,10 +398,9 @@ describe('looting', () => {
     w.turn++;
     corePart(me, 'cab').hp = 0;
     checkKnockout(w);
-    const stock = w.salvage.find((s) => s.id.startsWith(`wreck-${me.id}-`));
-    expect(stock).toBeDefined();
+    expect(w.salvage.some((s) => s.id.startsWith(`wreck-${me.id}`))).toBe(false);
     expect(robber.brain!.goals.map((g) => g.kind)).toEqual(['scavenge', 'loot']);
-    expect(robber.brain!.goals[1].targetId).toBe(stock!.id);
+    expect(robber.brain!.goals[1].targetId).toBe(me.id);
   });
 
   it('a provoked feud that is fulfilled pushes no loot goal', () => {

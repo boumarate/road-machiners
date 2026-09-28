@@ -6,12 +6,12 @@ import { TIME } from '../data/time';
 import { addVehicle, emptyWorld, testDrive } from './testkit';
 import { resolveDestroyed, wreckVehicle } from './combat';
 import { addGoods, dumpItem, removeGoods } from './inventory';
-import { corePart, findSpot, goodsCount, gridOf, isLoot, mountedParts } from './grid';
+import { corePart, findSpot, goodsCount, gridOf, mountedParts } from './grid';
 import { partDef } from '../data/parts';
 import { chassisDef } from '../data/chassis';
 import { RULES } from '../data/rules';
 import { takeAllLoot, takeLoot, takeStores, canScavenge, scavenge } from './locations';
-import { clearPiles, collectSalvage, createCargoSalvage, createKnockoutSalvage, hasSalvage, initializeSalvage, isRoadWreck, renewSalvage, salvageInRange, salvageUnits, siteLootTable } from './salvage';
+import { clearPiles, collectSalvage, createCargoSalvage, hasSalvage, initializeSalvage, isRoadWreck, renewSalvage, salvageInRange, salvageUnits, siteLootTable } from './salvage';
 import { SHOPS } from '../data/market';
 import type { SalvageStock, World } from './types';
 import { dist, type Vec } from './vec';
@@ -91,10 +91,12 @@ describe('player piles', () => {
     expect(next.salvage.find((s) => s.id === theirs.id)!.goods.scrap).toBe(2);
   });
 
-  it('the player knockout pile counts as searched, so it pays no search XP', () => {
+  it('a pile the player dumped counts as searched, so it pays no search XP', () => {
     const w = emptyWorld();
-    const pile = createKnockoutSalvage(w, w.vehicles[0]);
-    expect(w.player.scavenged).toContain(pile.id);
+    const good = w.vehicles[0].items.find((it) => it.kind === 'good')!;
+    const next = dumpItem(w, good.id);
+    const pile = next.salvage.find((s) => s.pile?.fromPlayer)!;
+    expect(next.player.scavenged).toContain(pile.id);
   });
 });
 
@@ -274,16 +276,6 @@ describe('loot piles', () => {
     w.vehicles[0].pos = { x: 60, y: 30 };
     w = dumpItem(w, goodItem(w).id);
     expect(piles(w)).toHaveLength(2);
-  });
-
-  it('adds a knockout drop to the pile already in reach', () => {
-    let w = emptyWorld({ x: 30, y: 30 });
-    w.salvage = [];
-    w = dumpItem(w, goodItem(w).id);
-    const loot = w.vehicles[0].items.filter((it) => isLoot(w.vehicles[0].chassisId, it)).length;
-    createKnockoutSalvage(w, w.vehicles[0]);
-    expect(piles(w)).toHaveLength(1);
-    expect(salvageUnits(piles(w)[0])).toBe(loot + 1);
   });
 
   it('clears a pile when it expires and stops searches of it', () => {

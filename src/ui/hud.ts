@@ -292,7 +292,7 @@ export class Hud {
         el(
           "div",
           { class: "dim" },
-          "Looters strip the truck. You come to when they leave.",
+          "Looters may strip the truck. You come to when the trucks that beat you look away.",
         ),
       );
     if (r.kind === "towed")

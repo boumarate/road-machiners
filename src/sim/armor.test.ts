@@ -154,7 +154,7 @@ describe('knockout', () => {
     wheel.hp = 0;
     checkKnockout(w);
     expect(w.events.some((e) => e.t === 'knockout')).toBe(true);
-    expect(mountedParts(me, 'engine')).toEqual([]);
+    expect(mountedParts(me, 'engine')).toHaveLength(1);
     advanceKnockout(w);
     expect(w.events.some((e) => e.t === 'wake')).toBe(true);
     expect(cab.hp).toBe(Math.max(1, Math.round(partDef('cab').hp * RULES.defeatPatch)));

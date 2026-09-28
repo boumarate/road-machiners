@@ -12,7 +12,7 @@ import { findRoadWreckSpot } from './mapgen';
 import { playerVehicle, vehicleById } from './damage';
 import { isKnockedOut } from './defeat';
 import { grayRadius } from './vision';
-import { findSpot, goodsCount, gridOf, isLoot, isMounted, MOUNT_CELLS, type Spot } from './grid';
+import { findSpot, goodsCount, gridOf, isMounted, MOUNT_CELLS, type Spot } from './grid';
 import { addGoods, getLayoutError, refitTurns, requireIdleRefit, stowPart } from './inventory';
 import { vehicleHasPerk } from './progress';
 import { chance, randInt } from './rng';
@@ -185,24 +185,20 @@ function storesRoom(world: World, vehicle: Vehicle): { fuel: number; supplies: n
 
 // A wreck keeps its mounted non-core parts at their current HP. Built-in core parts are wrecked
 // beyond mounting, so they turn into the parts good instead, at a data rate off their remaining HP.
-// The stock a destroyed NPC leaves, and the stock a knocked-out player truck drops on a given turn.
+// The stock a destroyed NPC leaves.
 export function wreckStockId(vehicleId: string): string {
   return `wreck-${vehicleId}`;
 }
 
-export function knockoutStockId(vehicleId: string, turn: number): string {
-  return `wreck-${vehicleId}-${turn}`;
-}
-
-// A wreck stock: a road wreck, a destroyed truck or a knocked-out player truck.
+// A wreck stock: a road wreck or a destroyed truck.
 function isWreckStock(stock: SalvageStock): boolean {
   return stock.id.startsWith('wreck');
 }
 
-// The careful strip perk: a part the player mounts from a wreck stock gains a share of its max HP, up to full. The
-// player's own knockout pile is no wreck, or dumping a part back on it would repair it for free.
+// The careful strip perk: a part the player mounts from a wreck stock gains a share of its max HP, up to full. A
+// pile is no wreck, or dumping a part back on it would repair it for free.
 export function stripPart(world: World, vehicle: Vehicle, stock: SalvageStock, part: PartInstance): void {
-  if (isWreckStock(stock) && !stock.pile?.fromPlayer) carefulStrip(world, vehicle, part);
+  if (isWreckStock(stock)) carefulStrip(world, vehicle, part);
 }
 
 // The careful strip perk on a part taken off a wreck or a knocked-out truck.
@@ -233,12 +229,6 @@ function coreWreckScrap(vehicle: Vehicle, core: PartInstance[]): number {
   const hpShare = core.reduce((sum, part) => sum + part.hp / maxHp(part), 0) / core.length;
   const value = chassisDef(vehicle.chassisId).value * SALVAGE.coreValueShare * hpShare;
   return Math.round(value / GOODS.parts.value);
-}
-
-// A knocked-out truck is stripped where it stands. Every loot item moves to a pile, and the
-// built-in core parts stay mounted. The turn keeps a new pile's id unique over repeated knockouts.
-export function createKnockoutSalvage(world: World, vehicle: Vehicle): SalvageStock {
-  return dropOnPile(world, vehicle, vehicle.items.filter((item) => isLoot(vehicle.chassisId, item)), knockoutStockId(vehicle.id, world.turn));
 }
 
 // A truck that hands over its cargo drops `goodsShare` of each good, rounded up, and every loose part where it
@@ -275,11 +265,6 @@ function addVehicleStock(world: World, vehicle: Vehicle, id: string, goods: Reco
   const stock: SalvageStock = { id, pos: { ...vehicle.pos }, radius: vehicleStats(world, vehicle).radius * RULES.wreckRadiusScale, goods, parts };
   world.salvage.push(stock);
   return stock;
-}
-
-// The pile a vehicle can reach, or null.
-export function pileInReach(world: World, vehicle: Vehicle): SalvageStock | null {
-  return world.salvage.find((stock) => stock.pile && salvageInRange(vehicle, stock)) ?? null;
 }
 
 // Moves items from the vehicle onto the pile in its reach, so nearby drops make one heap. Without one, a new
