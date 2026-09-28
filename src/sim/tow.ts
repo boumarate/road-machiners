@@ -435,12 +435,27 @@ export function startEscort(world: World, escort: Vehicle, leader: Vehicle, site
   return goal;
 }
 
-// The follower re-aims every turn at a spot behind the leader, past both radii and the follow gap. The two keep in
-// touch on the radio, so it knows where the leader is without sight.
+// The follower re-aims every turn at a spot beside the leader's tail, out of its dust and its path. Escorts take
+// turns on the two sides, and each further pair rides one row back. The spot leads by the leader's travel this
+// turn, so the follower keeps pace instead of chasing where the leader was. The two keep in touch on the radio,
+// so it knows where the leader is without sight.
 export function steerFollow(world: World, vehicle: Vehicle, goal: NpcActivity): void {
   const leader = vehicleById(world, goal.targetId!);
-  const gap = vehicleStats(world, leader).radius + vehicleStats(world, vehicle).radius + NPC_BEHAVIOR.followGap;
-  goal.destination = { x: leader.pos.x - Math.cos(leader.heading) * gap, y: leader.pos.y - Math.sin(leader.heading) * gap };
+  const rank = escortsOf(world, leader.id).findIndex((e) => e.id === vehicle.id);
+  if (rank < 0) throw new Error(`${vehicle.id} follows ${leader.id} without escorting it`);
+  const radii = vehicleStats(world, leader).radius + vehicleStats(world, vehicle).radius;
+  const side = (rank % 2 === 0 ? 1 : -1) * (radii + NPC_BEHAVIOR.followGap);
+  const back = radii * (1 + 2 * Math.floor(rank / 2)) - leader.speed;
+  const fx = Math.cos(leader.heading);
+  const fy = Math.sin(leader.heading);
+  goal.destination = { x: leader.pos.x - fx * back - fy * side, y: leader.pos.y - fy * back + fx * side };
+}
+
+// The speed in tiles per turn that brings the follower level with its spot by the end of the turn: how far the
+// spot lies ahead of it along the leader's heading. A follower past its spot drops back.
+export function followPace(follower: Vehicle, leader: Vehicle, spot: Vec): number {
+  const ahead = (spot.x - follower.pos.x) * Math.cos(leader.heading) + (spot.y - follower.pos.y) * Math.sin(leader.heading);
+  return Math.max(0, ahead);
 }
 
 // The vehicles that escort the leader. An escort gone this turn is left out. The missing-party rule in

@@ -12,7 +12,8 @@ import { isDriveObstacle } from '../sim/mapgen';
 import { vehicleMass } from '../sim/mass';
 import { groundSpeed, vehicleStats, type VehicleStats } from '../sim/stats';
 import { continueRoute, keepRoute, route, type KeptRoute } from '../sim/path';
-import { backsToDestination, parkedVehicles, zoneSpeed } from '../sim/steering';
+import { backsToDestination, throughSpeed } from '../sim/steering';
+import { routeBlockers } from '../sim/ai';
 import { BRIDGE_AXIS, BRIDGE_LENGTH } from '../sim/bridge';
 import { deckEnds, heightAt, tileAt, type Terrain } from '../sim/terrain';
 import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
@@ -318,14 +319,14 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   };
   if (!order) return { ...base, dest: null, route: null, target: idleTarget(speed), stopAt: false };
   if (order.kind === 'brake') return { ...base, dest: null, route: null, target: 0, stopAt: false };
-  // Careful drivers follow the route planner, which keeps to roads and goes around obstacles; careless ones drive straight.
-  const parked = parkedVehicles(w, v.id);
+  // Careful drivers follow the route planner, which keeps to roads and goes around obstacles and traffic; careless ones drive straight.
+  const blockers = routeBlockers(w, v);
   // A point that moved less than the arrival radius, like the stop point of a town seen from a new angle, is the same place.
-  const stored = mem.route && dist(mem.route.dest, order.dest) < RULES.arriveRadius && mem.route.radius === s.radius ? continueRoute(w, v.pos, mem.route, order.dest, s.radius, parked, v) : null;
-  const path = v.direct ? null : stored ?? [...route(w, v.pos, order.dest, s.radius, parked, v)]; // copied, since driving consumes it
-  mem.route = path ? { ...keepRoute(w, order.dest, path, parked), radius: s.radius } : null;
+  const stored = mem.route && dist(mem.route.dest, order.dest) < RULES.arriveRadius && mem.route.radius === s.radius ? continueRoute(w, v.pos, mem.route, order.dest, s.radius, blockers, v) : null;
+  const path = v.direct ? null : stored ?? [...route(w, v.pos, order.dest, s.radius, blockers, v)]; // copied, since driving consumes it
+  mem.route = path ? { ...keepRoute(w, order.dest, path, blockers), radius: s.radius } : null;
   if (order.kind === 'stopAt') return { ...base, dest: order.dest, route: path, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
-  const next = zoneSpeed(s, speed, dist(v.pos, order.dest));
+  const next = throughSpeed(s, speed, dist(v.pos, order.dest), order.pace);
   return { ...base, dest: order.dest, route: path, target: toMps(next), stopAt: false };
 }
 
