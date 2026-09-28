@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { playerVehicle } from "../sim/damage";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import { refreshVision } from "../sim/vision";
+import { startPose } from "../sim/world";
 import { doneTips, tipToShow, type TipId } from "./tips";
 
 describe("driving tips", () => {
@@ -76,5 +77,25 @@ describe("horn tip", () => {
     npc.brain = npcBrain("scavenger", npc.pos, ["scavenger"]);
     refreshVision(w);
     expect(tipToShow(w, false, new Set(["waypoint"]), null)).toBeNull();
+  });
+});
+
+describe("farewell tip", () => {
+  const allButFarewell: TipId[] = ["waypoint", "drive", "autoStop", "stop", "manual", "zones", "honk"];
+
+  it("shows once the player drives well past where traders first show up", () => {
+    const w = emptyWorld();
+    const spawn = startPose().pos;
+    playerVehicle(w).pos = { x: spawn.x + 60, y: spawn.y };
+    expect(tipToShow(w, false, new Set(allButFarewell), null)).toBeNull();
+    playerVehicle(w).pos = { x: spawn.x + 80, y: spawn.y };
+    expect(tipToShow(w, false, new Set(allButFarewell), null)).toBe("farewell");
+  });
+
+  it("waits for the horn tip", () => {
+    const w = emptyWorld();
+    const spawn = startPose().pos;
+    playerVehicle(w).pos = { x: spawn.x + 80, y: spawn.y };
+    expect(tipToShow(w, false, new Set(allButFarewell.filter((id) => id !== "honk")), null)).toBeNull();
   });
 });

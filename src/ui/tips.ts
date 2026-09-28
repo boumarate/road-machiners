@@ -1,16 +1,17 @@
-// First-time tips for driving and the horn. A tip shows while its moment lasts, one at a time. It goes away for good
+// First-time tips for driving and the horn, and a farewell once the player heads out. A tip shows while its moment lasts, one at a time. It goes away for good
 // once the player closes it or does what it says. Seen tips stay in browser storage across saves, and a new game clears them.
 
 import { isKnockedOut } from "../sim/defeat";
 import { playerVehicle } from "../sim/damage";
 import type { World } from "../sim/types";
 import { playerSees } from "../sim/vision";
-import { playerCanAct } from "../sim/world";
+import { dist } from "../sim/vec";
+import { playerCanAct, startPose } from "../sim/world";
 import { el, panel } from "./dom";
 
 const TIPS_KEY = "roam.tips";
 
-export type TipId = "waypoint" | "drive" | "autoStop" | "stop" | "manual" | "zones" | "honk";
+export type TipId = "waypoint" | "drive" | "autoStop" | "stop" | "manual" | "zones" | "honk" | "farewell";
 
 type Tip = {
   id: TipId;
@@ -20,6 +21,11 @@ type Tip = {
   when: (w: World, auto: boolean) => boolean; // auto: turns follow each other without a key press
   done: (w: World) => boolean;
 };
+
+// Tiles from spawn for the farewell. Bots first see a trader 43 to 61 tiles from spawn, so this is the farthest of
+// those plus one sight radius.
+const FAREWELL_DISTANCE = 80;
+const spawn = startPose().pos;
 
 const npcInSight = (w: World): boolean =>
   w.vehicles.some((v) => v.brain && !isKnockedOut(v) && playerSees(w, v.pos));
@@ -77,6 +83,13 @@ const TIPS: readonly Tip[] = [
     text: "[H] to honk.",
     when: npcInSight,
     done: (w) => w.events.some((e) => e.t === "honk" && e.vehicle === w.player.vehicleId),
+  },
+  {
+    id: "farewell",
+    text: "That's it, good luck.",
+    after: "honk",
+    when: (w) => dist(playerVehicle(w).pos, spawn) >= FAREWELL_DISTANCE,
+    done: () => false,
   },
 ];
 
