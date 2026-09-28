@@ -74,15 +74,15 @@ describe('resource cheats', () => {
   });
 
   it('grants a perk below its skill level', () => {
-    const w = grantPerk(emptyWorld(), 'goodwill');
-    expect(w.player.perks).toEqual(['goodwill']);
+    const w = grantPerk(emptyWorld(), 'bountyTalk');
+    expect(w.player.perks).toEqual(['bountyTalk']);
   });
 
   it('refuses an unknown perk and a second perk from one pair', () => {
     expect(() => grantPerk(emptyWorld(), 'flying')).toThrow(CheatError);
-    const w = grantPerk(emptyWorld(), 'goodwill');
-    expect(() => grantPerk(w, 'bluff')).toThrow(CheatError);
-    expect(() => grantPerk(w, 'goodwill')).toThrow(CheatError);
+    const w = grantPerk(emptyWorld(), 'bountyTalk');
+    expect(() => grantPerk(w, 'paidTruce')).toThrow(CheatError);
+    expect(() => grantPerk(w, 'bountyTalk')).toThrow(CheatError);
   });
 });
 

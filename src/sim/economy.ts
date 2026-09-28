@@ -9,15 +9,16 @@ import { partDef } from "../data/parts";
 import { RULES, UPKEEP } from "../data/rules";
 import { NPC_UPKEEP } from "../data/npcs";
 import { REGION } from "../data/region";
+import { CONDITION } from "../data/wear";
 import { fitStores, getResources } from "./resources";
-import { isJunk, maxHp, partValue, restorePart, scrapValue, wearFactor } from "./wear";
+import { isJunk, maxHp, partValue, rebuildJunk, restorePart, scrapValue, wearFactor } from "./wear";
 import { playerVehicle, vehicleById } from "./damage";
 import { inFeud } from "./combat";
 import { meetGoal } from "./npc-activities";
 import { addState, endState, stateOf } from "./states";
 import { inTowReach } from "./tow";
 import { addCoreParts } from "./factory";
-import { practice, skillEffect } from "./progress";
+import { practice, skillEffect, vehicleHasPerk } from "./progress";
 import { addStockPart, goodPrice, lotPrice, recordTrade, shopAt, shopState, siteOf, takeStockPart } from "./market";
 import { canUseSite, requireTown } from "./sites";
 import { freeCells, goodsCount, mountedParts } from "./grid";
@@ -296,10 +297,14 @@ export function buySupply(world: World, kind: Supply, n: number): World {
 }
 
 // A share of the part's value per HP share restored, times Machining. A broken part (0 HP) pays
-// the same formula for a full rebuild. Throws for a junk part, which no repair rebuilds.
+// the same formula for a full rebuild. A junk part the Rebuild perk can rebuild pays a full repair at
+// the last wear step. Throws for any other junk part.
 export function partRepairCost(world: World, part: PartInstance): number {
-  if (isJunk(part))
-    throw new Error(`${partDef(part.defId).name} is junk and cannot be rebuilt`);
+  if (isJunk(part)) {
+    if (!canRebuild(world, part))
+      throw new Error(`${partDef(part.defId).name} is junk and cannot be rebuilt`);
+    return partRepairCost(world, { ...part, wear: CONDITION.maxWear, hp: 0 });
+  }
   const missingShare = 1 - part.hp / maxHp(part);
   return Math.ceil(
     ECONOMY.repairShare * partValue(part) * missingShare * repairMult(world),
@@ -312,18 +317,29 @@ export function repairPart(world: World, partId: string): World {
     const part = allParts(playerVehicle(w)).find((p) => p.id === partId);
     if (!part) throw new Error(`No truck part ${partId}`);
     pay(w, partRepairCost(w, part), "repairs");
-    restorePart(part, maxHp(part));
+    garageRepair(part);
   });
+}
+
+// The Rebuild perk lets the town garage rebuild a player's junk part once.
+export function canRebuild(world: World, part: PartInstance): boolean {
+  return isJunk(part) && !part.rebuilt && vehicleHasPerk(world, playerVehicle(world), "rebuild");
+}
+
+// Full HP for a repairable part, or a rebuild for junk. partRepairCost already refused junk that cannot be rebuilt.
+function garageRepair(part: PartInstance): void {
+  if (isJunk(part)) rebuildJunk(part);
+  else restorePart(part, maxHp(part));
 }
 
 export function repairAll(world: World): World {
   return playerCommand(world, (w) => {
     requireTown(w);
     const me = playerVehicle(w);
-    const parts = repairableParts(me);
+    const parts = garageParts(w, me);
     const cost = parts.reduce((a, p) => a + partRepairCost(w, p), 0);
     pay(w, cost, "repairs");
-    for (const p of parts) restorePart(p, maxHp(p));
+    for (const p of parts) garageRepair(p);
   });
 }
 
@@ -407,7 +423,7 @@ export function chassisTradeIn(world: World): number {
 }
 
 export function repairCost(world: World): number {
-  return repairableParts(playerVehicle(world)).reduce(
+  return garageParts(world, playerVehicle(world)).reduce(
     (a, p) => a + partRepairCost(world, p),
     0,
   );
@@ -417,9 +433,14 @@ function allParts(v: Vehicle): PartInstance[] {
   return v.items.flatMap((it) => (it.kind === "part" ? [it.part] : []));
 }
 
-// Town repairs skip junk parts, which no repair rebuilds.
+// Repairs skip junk parts, which no repair rebuilds.
 function repairableParts(v: Vehicle): PartInstance[] {
   return allParts(v).filter((p) => !isJunk(p));
+}
+
+// The player's town garage also takes junk parts the Rebuild perk can rebuild.
+function garageParts(world: World, v: Vehicle): PartInstance[] {
+  return allParts(v).filter((p) => !isJunk(p) || canRebuild(world, p));
 }
 
 // Swap chassis: the old built-in parts go with the old chassis and the new one brings its own.
@@ -585,7 +606,7 @@ function requireCount(n: number): void {
 }
 
 // Moves money from payer to payee. A payer in debt or short of the amount throws.
-function transfer(world: World, payer: Vehicle, payee: Vehicle, amount: number): void {
+export function transfer(world: World, payer: Vehicle, payee: Vehicle, amount: number): void {
   const from = getResources(world, payer);
   if (from.money < 0 || from.money < amount) throw new Error(payer.id === world.player.vehicleId ? 'Not enough money' : `${payer.name} cannot pay that much`);
   from.money -= amount;

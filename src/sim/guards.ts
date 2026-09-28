@@ -27,11 +27,17 @@ export function fireGuards(world: World): void {
   for (const camp of REGION.locations) if (camp.kind === 'camp') fireSite(world, camp, (v) => v.faction !== 'raiders');
 }
 
+// Guards spare a knocked-out driver. A player fighting through on a broken cab is still awake.
+function isAwake(world: World, v: Vehicle): boolean {
+  if (v.id === world.player.vehicleId) return world.player.state === 'active';
+  return corePart(v, 'cab').hp > 0;
+}
+
 function fireSite(world: World, site: Site, isTarget: (v: Vehicle) => boolean): void {
   const G = RULES.guards;
   for (const gate of siteGates(site)) {
     const target = world.vehicles
-      .filter((v) => isTarget(v) && corePart(v, 'cab').hp > 0 && dist(v.pos, gate) <= G.range)
+      .filter((v) => isTarget(v) && isAwake(world, v) && dist(v.pos, gate) <= G.range)
       .sort((a, b) => dist(a.pos, gate) - dist(b.pos, gate))[0];
     if (!target) continue;
     const side = sideToward(target, gate);

@@ -2,11 +2,12 @@ import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { TERRAIN } from '../data/terrain';
 import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { WEATHER } from '../data/weather';
 import { addVehicle, emptyWorld, practiceOf } from './testkit';
 import { contactsOf, soundRange } from './detect';
 import { TIME } from '../data/time';
 import { sunAt } from './sun';
-import { canVehicleSee, grayRadius, playerVisible, refreshVision, sightRadius, visibleTiles } from './vision';
+import { canVehicleSee, grayRadius, hasLineOfFire, playerVisible, refreshVision, sightRadius, visibleTiles } from './vision';
 
 describe('vision', () => {
   it('sees an unblocked tile within radius', () => {
@@ -161,31 +162,92 @@ describe('perception sight', () => {
   });
 });
 
-describe('lookout perk', () => {
-  it('widens sight of the parked player truck', () => {
+
+describe('the night eyes perk', () => {
+  const night = () => Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
+
+  it('keeps the player full sight at night', () => {
     const w = emptyWorld({ x: 60, y: 60 });
     const me = w.vehicles[0];
-    me.speed = 0;
-    const base = sightRadius(w, me);
-    w.player.perks.push('lookout');
-    expect(sightRadius(w, me)).toBeCloseTo(base * PERK_NUMBERS.lookout.sight);
+    w.turn = night();
+    expect(sightRadius(w, me)).toBeCloseTo(TERRAIN.vision.radius * TIME.nightSight);
+    w.player.perks.push('nightEyes');
+    expect(sightRadius(w, me)).toBeCloseTo(TERRAIN.vision.radius);
   });
 
-  it('leaves sight of the moving player truck alone', () => {
+  it('leaves NPC sight halved at night', () => {
     const w = emptyWorld({ x: 60, y: 60 });
-    const me = w.vehicles[0];
-    me.speed = 3;
-    const base = sightRadius(w, me);
-    w.player.perks.push('lookout');
-    expect(sightRadius(w, me)).toBe(base);
-  });
-
-  it('leaves sight of a parked NPC alone', () => {
-    const w = emptyWorld({ x: 60, y: 60 });
+    w.turn = night();
+    w.player.perks.push('nightEyes');
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
-    npc.speed = 0;
-    const base = sightRadius(w, npc);
-    w.player.perks.push('lookout');
-    expect(sightRadius(w, npc)).toBe(base);
+    expect(sightRadius(w, npc)).toBeCloseTo(TERRAIN.vision.radius * TIME.nightSight);
+  });
+});
+
+describe('the storm rider perk', () => {
+  const day = () => Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => sunAt(t))!;
+
+  // A daylight world with a storm over the player truck and an NPC beside it.
+  function stormWorld() {
+    const w = emptyWorld({ x: 60, y: 60 });
+    w.turn = day();
+    w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 60, y: 60 }, radius: 10, vel: { x: 0, y: 0 }, turnsLeft: 10 }];
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 62, y: 60 });
+    return { w, me: w.vehicles[0], npc };
+  }
+
+  it('keeps the player full sight in a storm', () => {
+    const { w, me } = stormWorld();
+    expect(sightRadius(w, me)).toBeCloseTo(TERRAIN.vision.radius * WEATHER.sim.effects.storm.sight);
+    w.player.perks.push('stormRider');
+    expect(sightRadius(w, me)).toBeCloseTo(TERRAIN.vision.radius);
+  });
+
+  it('leaves NPC sight cut in a storm', () => {
+    const { w, npc } = stormWorld();
+    w.player.perks.push('stormRider');
+    expect(sightRadius(w, npc)).toBeCloseTo(TERRAIN.vision.radius * WEATHER.sim.effects.storm.sight);
+  });
+});
+
+describe('a dust screen', () => {
+  // An NPC at x=20 looking at the player truck at x=30, with a cloud raised at `pos`.
+  function screenWorld(pos: { x: number; y: number }, screen: boolean) {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 20, y: 30 });
+    const me = w.vehicles[0];
+    w.dustClouds = [{ id: 'dust', source: me.id, pos, vel: { x: 0, y: 0 }, age: 0, range: 50, ...(screen ? { screen: true as const } : {}) }];
+    refreshVision(w);
+    return { w, npc, me };
+  }
+
+  it('hides the player from an NPC behind it', () => {
+    const { w, npc, me } = screenWorld({ x: 26, y: 30 + PERK_NUMBERS.dustScreen.radius * 0.9 }, true);
+    expect(canVehicleSee(w, npc, me.pos)).toBe(false);
+  });
+
+  it('hides nothing as a plain cloud', () => {
+    const { w, npc, me } = screenWorld({ x: 26, y: 30 }, false);
+    expect(canVehicleSee(w, npc, me.pos)).toBe(true);
+  });
+
+  it('hides nothing off the sight line', () => {
+    const { w, npc, me } = screenWorld({ x: 26, y: 30 + PERK_NUMBERS.dustScreen.radius * 1.1 }, true);
+    expect(canVehicleSee(w, npc, me.pos)).toBe(true);
+  });
+
+  it('hides nothing beyond the target', () => {
+    const { w, npc, me } = screenWorld({ x: 32, y: 30 }, true);
+    expect(canVehicleSee(w, npc, me.pos)).toBe(true);
+  });
+
+  it('never blocks the player sight', () => {
+    const { w, npc, me } = screenWorld({ x: 26, y: 30 }, true);
+    expect(canVehicleSee(w, me, npc.pos)).toBe(true);
+  });
+
+  it('leaves the line of fire open', () => {
+    const { w, npc, me } = screenWorld({ x: 26, y: 30 }, true);
+    expect(hasLineOfFire(w, npc.pos, me.pos)).toBe(true);
   });
 });

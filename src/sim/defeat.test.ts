@@ -1,6 +1,5 @@
 import { NPCS } from '../data/npcs';
 import { describe, expect, it } from 'vitest';
-import { PERK_NUMBERS } from '../data/skills';
 import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
 import { CONDITION } from '../data/wear';
@@ -14,6 +13,8 @@ import { startSearch } from './search';
 import { addState, endState, stateOf } from './states';
 import { startRepair } from './jobs';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
+import { maxHealthOf } from './health';
+import { PERK_NUMBERS } from '../data/skills';
 import { refreshVision } from './vision';
 import type { Vehicle, World } from './types';
 import { endTurn, setDirect, setMoveOrder, setWeaponOrder } from './world';
@@ -178,6 +179,36 @@ describe('knockout', () => {
       expect(w.player.state).toBe('knockedOut');
       expect(w.vehicles[0].pos).toEqual(at);
     }
+  });
+});
+
+describe('fight through', () => {
+  // The player truck with a broken cab and health at a share of max health.
+  function brokenCab(healthShare: number, perks: World['player']['perks']): World {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.player.perks = perks;
+    w.player.health = maxHealthOf(w) * healthShare;
+    corePart(w.vehicles[0], 'cab').hp = 0;
+    return w;
+  }
+
+  it('keeps the player driving on a broken cab while health is above the perk share', () => {
+    const w = brokenCab(PERK_NUMBERS.fightThrough.health + 0.01, ['fightThrough']);
+    checkKnockout(w);
+    expect(w.player.state).toBe('active');
+    expect(isKnockedOut(w.vehicles[0])).toBe(false);
+  });
+
+  it('knocks the player out once health falls to the perk share', () => {
+    const w = brokenCab(PERK_NUMBERS.fightThrough.health, ['fightThrough']);
+    checkKnockout(w);
+    expect(w.player.state).toBe('knockedOut');
+  });
+
+  it('knocks out a player without the perk at full health', () => {
+    const w = brokenCab(1, []);
+    checkKnockout(w);
+    expect(w.player.state).toBe('knockedOut');
   });
 });
 
@@ -367,17 +398,3 @@ describe('knockout practice', () => {
   });
 });
 
-describe('quick wake perk', () => {
-  it('wakes the player at a shorter turn limit with a raider idling in sight', () => {
-    let { w } = knockedOutByRaider();
-    w.player.perks.push('quickWake');
-    const limit = Math.ceil(RULES.knockoutMaxTurns * PERK_NUMBERS.quickWake.knockoutTurns);
-    let turns = 0;
-    while (w.player.state === 'knockedOut') {
-      w = endTurn(w, testDrive);
-      turns++;
-      expect(turns).toBeLessThanOrEqual(limit);
-    }
-    expect(turns).toBe(limit);
-  });
-});

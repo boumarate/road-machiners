@@ -8,7 +8,7 @@ import { corePart, mountedParts } from './grid';
 import { addState } from './states';
 import { tileAt } from './terrain';
 import type { PartInstance, Vehicle, World } from './types';
-import { applyWear, damagePart, isJunk, maxHp, restorePart, wornDef } from './wear';
+import { applyWear, damagePart, isJunk, maxHp, rebuildJunk, restorePart, wornDef } from './wear';
 
 // Sets a vehicle's trail to a single straight segment of the given length, and its end-of-turn speed.
 function drive(v: Vehicle, len: number): void {
@@ -246,6 +246,20 @@ describe('junk', () => {
     const p = part('mg', CONDITION.maxWear, 0);
     restorePart(p, 999);
     expect(p.hp).toBe(maxHp(p));
+  });
+
+  it('rebuilds a junk part once to the last wear step at full HP', () => {
+    const p = part('mg', CONDITION.maxWear + 1, 0);
+    rebuildJunk(p);
+    expect(p).toMatchObject({ wear: CONDITION.maxWear, hp: maxHp(p), rebuilt: true });
+    expect(isJunk(p)).toBe(false);
+  });
+
+  it('refuses to rebuild a part that is not junk or was rebuilt before', () => {
+    expect(() => rebuildJunk(part('mg', CONDITION.maxWear, 0))).toThrow(/not junk/);
+    const again = { ...part('mg', CONDITION.maxWear + 1, 0), rebuilt: true as const };
+    expect(() => rebuildJunk(again)).toThrow(/rebuilt/);
+    expect(again.hp).toBe(0);
   });
 
   it('refuses to lower HP through a restore', () => {

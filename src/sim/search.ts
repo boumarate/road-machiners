@@ -1,11 +1,10 @@
 // Scavenging search: a parked job that takes turns in proportion to the stock. A finished search
 // opens the stock to the player, who takes what they want from it. An NPC takes everything that fits.
 
-import { PERK_NUMBERS } from '../data/skills';
 import { SALVAGE } from '../data/salvage';
 import { playerVehicle } from './damage';
 import { startJob } from './jobs';
-import { practice, skillEffect, vehicleHasPerk } from './progress';
+import { practice, skillEffect } from './progress';
 import { collectSalvage, salvageUnits } from './salvage';
 import type { Job, Vehicle, World } from './types';
 import { playerCommand } from './world';
@@ -37,13 +36,6 @@ export function searchTurn(world: World, v: Vehicle, job: Extract<Job, { kind: '
   return true;
 }
 
-// The scrounger perk: the player's first finished search of a stock turns up extra parts in the stock.
-function scrounge(world: World, stockId: string): void {
-  const stock = world.salvage.find((entry) => entry.id === stockId);
-  if (!stock) throw new Error(`Unknown salvage ${stockId}`);
-  stock.goods.parts = (stock.goods.parts ?? 0) + PERK_NUMBERS.scrounger.parts;
-}
-
 function finishSearch(world: World, v: Vehicle, stockId: string): void {
   if (v.id !== world.player.vehicleId) {
     collectSalvage(world, v, stockId, Infinity);
@@ -52,7 +44,6 @@ function finishSearch(world: World, v: Vehicle, stockId: string): void {
   if (!world.player.scavenged.includes(stockId)) {
     world.player.scavenged.push(stockId);
     practice(world, 'search', 1, null, stockId);
-    if (vehicleHasPerk(world, v, 'scrounger')) scrounge(world, stockId);
   }
   world.events.push({ t: 'searched', stock: stockId });
 }

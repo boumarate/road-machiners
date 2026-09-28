@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
 import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { corePart, mountedParts } from './grid';
-import { fuelCap, groundSpeed, suppliesCap, vehicleStats } from './stats';
+import { fuelCap, groundSpeed, isStranded, suppliesCap, vehicleStats } from './stats';
+import { endTurn } from './world';
 import { CHASSIS } from '../data/chassis';
 import { PARTS, type StoreDef } from '../data/parts';
 import { makePart } from './factory';
@@ -89,23 +90,42 @@ describe('crawling when stranded', () => {
   });
 });
 
-describe('pusher perk', () => {
-  it('doubles the crawl speed of the stranded player truck', () => {
+
+describe('a stalled engine', () => {
+  it('crawls at limp speed while stalled, but is not stranded', () => {
     const w = emptyWorld();
-    const me = w.vehicles[0];
-    mountedParts(me, 'engine')[0].hp = 0;
-    w.player.perks.push('pusher');
-    expect(vehicleStats(w, me).maxSpeed).toBeCloseTo(RULES.limpSpeed * PERK_NUMBERS.pusher.crawl);
+    const v = addVehicle(w, 'raiders', 'scout', ['stockEngine'], { x: 40, y: 40 });
+    v.stalledUntil = w.turn;
+    const stats = vehicleStats(w, v);
+    expect(stats.maxSpeed).toBeCloseTo(RULES.limpSpeed);
+    expect(stats.accel).toBeCloseTo(RULES.limpSpeed);
+    expect(stats.fuelPerTile).toBe(0);
+    expect(isStranded(w, v)).toBe(false);
   });
 
-  it('leaves a stranded NPC truck at limp speed', () => {
+  it('drives again after its last stalled turn', () => {
     const w = emptyWorld();
-    w.player.perks.push('pusher');
-    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
-    mountedParts(npc, 'engine')[0].hp = 0;
-    expect(vehicleStats(w, npc).maxSpeed).toBeCloseTo(RULES.limpSpeed);
+    const v = addVehicle(w, 'raiders', 'scout', ['stockEngine'], { x: 40, y: 40 });
+    const fresh = vehicleStats(w, v).maxSpeed;
+    v.stalledUntil = w.turn - 1;
+    expect(vehicleStats(w, v).maxSpeed).toBe(fresh);
+  });
+
+  // A ram stalls through world.turn + stallTurns. The pipeline counts the turn up before it moves, so that is the
+  // next turn's drive, and the one after runs free.
+  it('stalls the drive of exactly the turn after the ram', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'scout', ['stockEngine'], { x: 40, y: 40 });
+    const fresh = vehicleStats(w, v).maxSpeed;
+    v.stalledUntil = w.turn + PERK_NUMBERS.rammer.stallTurns;
+    const speeds: number[] = [];
+    const drive = (d: typeof w) => void speeds.push(vehicleStats(d, d.vehicles.find((x) => x.id === v.id)!).maxSpeed);
+    endTurn(endTurn(w, drive), drive);
+    expect(speeds[0]).toBeCloseTo(RULES.limpSpeed);
+    expect(speeds[1]).toBe(fresh);
   });
 });
+
 
 describe('store capacity', () => {
   const jerrycans = PARTS.jerrycans as StoreDef;

@@ -4,6 +4,7 @@
 // toward the client. Work runs while both trucks stay parked in reach, and the fulfilled hook pays for it once.
 
 import { practice, skillEffect, vehicleHasPerk } from './progress';
+import { PERK_NUMBERS } from '../data/skills';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { PATCH } from '../data/wear';
@@ -60,12 +61,14 @@ function partsValue(world: World, client: Vehicle, parts: number): number {
   return parts * getTradePrice(world, client, town.id, 'parts', 'buy');
 }
 
-// The client's price. A player client's social skill talks it down, and the goodwill perk makes it free.
+// The client's price. A player client's social skill talks it down, and the Road mechanic perk raises what a
+// player patcher charges.
 function priceOf(world: World, deal: PatchDeal, roles: Roles, plan: PatchPlan): number {
   const labor = plan.turns * PATCH.laborPerTurn;
-  if (deal === 'free' || vehicleHasPerk(world, roles.client, 'goodwill')) return 0;
+  if (deal === 'free') return 0;
   const full = deal === 'ownParts' ? labor : labor + partsValue(world, roles.client, plan.parts);
-  return Math.round(full * (1 - skillEffect(world, roles.client, 'social', 'patchPrice')));
+  const mechanic = vehicleHasPerk(world, roles.patcher, 'roadMechanic') ? PERK_NUMBERS.roadMechanic.price : 1;
+  return Math.round(full * mechanic * (1 - skillEffect(world, roles.client, 'social', 'patchPrice')));
 }
 
 // Who spends the parts on a deal.
@@ -94,16 +97,10 @@ export function patchTerms(world: World, npc: Vehicle): CallVar | null {
   const subject = world.player.vehicleId;
   if (Object.keys(optionWeights(world, npc, 'patchDeal', subject, null)).length === 0) return null;
   const roles = rolesWith(world, npc);
-  const deal = goodwillDeal(world, npc, roles) ?? decide(world, npc, 'patchDeal', subject, null);
+  const deal = decide(world, npc, 'patchDeal', subject, null);
   const plan = patchPlan(world, roles);
   const patcher = roles.patcher.id === subject ? 'player' : 'npc';
   return { kind: 'deal', deal, patcher, price: priceOf(world, deal, roles, plan), parts: plan.parts, turns: plan.turns };
-}
-
-// A player client with the goodwill perk gets the free deal whenever the patcher holds the parts, with no roll.
-function goodwillDeal(world: World, npc: Vehicle, roles: Roles): PatchDeal | null {
-  if (!vehicleHasPerk(world, roles.client, 'goodwill')) return null;
-  return dealAvailable('free')(world, npc) ? 'free' : null;
 }
 
 // Both sides agreed on the terms over the radio.

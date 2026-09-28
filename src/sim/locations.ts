@@ -6,10 +6,10 @@ import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
 import { isKnockedOut } from './defeat';
 import { inTowReach } from './tow';
-import { canLootTruck, canReachSalvage, collectSalvage, hasSalvage, pourStores, salvageInRange, stripPart, takeBasis } from './salvage';
+import { canLootTruck, canReachSalvage, collectSalvage, hasSalvage, pourStores, salvageInRange, takeBasis } from './salvage';
 import { newId } from './factory';
 import { goodsCount, isMounted, type Spot } from './grid';
-import { getLayoutError, refitTurns, requireIdleRefit } from './inventory';
+import { getLayoutError, lootRefitTurns, requireIdleRefit } from './inventory';
 import { inCombat, startJob } from './jobs';
 import { beginSearch } from './search';
 import { practice } from './progress';
@@ -138,7 +138,7 @@ export function takeLoot(world: World, stockId: string, pick: LootPick, to: Spot
 function transferLoot(world: World, stock: SalvageStock, item: GridItem, to: Spot): void {
   const me = playerVehicle(world);
   if (item.kind === 'part' && isMounted(me.chassisId, item) && !townAt(world)) {
-    const work = refitTurns(world, me, RULES.refitTurnsPerPart);
+    const work = lootRefitTurns(world, me, RULES.refitTurnsPerPart);
     startJob(world, me, {
       kind: 'refit', moves: [],
       pickup: { from: 'stock', stockId: stock.id, partId: item.part.id, itemId: item.id, to },
@@ -159,7 +159,6 @@ function placeLoot(world: World, stock: SalvageStock, item: GridItem): void {
     return;
   }
   me.items.push(item);
-  if (isMounted(me.chassisId, item)) stripPart(world, me, stock, item.part);
   stock.parts = stock.parts.filter((part) => part.id !== item.part.id);
 }
 

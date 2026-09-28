@@ -10,7 +10,6 @@ import { PHYSICS } from '../data/physics';
 import { laneCount, partLane, sideToward, walkLane, type PartHit, type Side } from './armor';
 import { bodyOf } from './body';
 import { corePart, hasLoot, itemSize, mountedItems, mountedParts } from './grid';
-import { PERK_NUMBERS } from '../data/skills';
 import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { canVehicleSee, hasLineOfFire } from './vision';
 import { createWreckSalvage, removeStocks } from './salvage';
@@ -129,7 +128,6 @@ export type HitOdds = {
     recoil: number; // the gun's kick, smaller on a heavier truck
     skill: number;
     weather: number;
-    calledShot: number; // the called shot perk's cut of an aimed shot's spread, zero or negative
   }; // radians
 };
 
@@ -277,7 +275,7 @@ export function hitOdds(
   const a = aiming(shooter, target, aim);
   const width = a.width;
   const halfAngle = width / (2 * distance);
-  const causes = spreadCauses(world, shooter, mw, target, aim);
+  const causes = spreadCauses(world, shooter, mw, target);
   const spread = Object.values(causes).reduce((sum, cause) => sum + cause, 0);
   if (!(spread > 0))
     throw new Error(`Spread ${spread} of ${mw.def.id} is not positive`);
@@ -290,9 +288,8 @@ export function hitOdds(
   return { chance, bodyChance, distance, width, halfAngle, spread, causes };
 }
 
-// Each cause of a shot's spread. The steady aim perk takes the shake of the player's own speed away, and the called
-// shot perk cuts the player's aimed shots.
-function spreadCauses(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle, aim: Aim): HitOdds["causes"] {
+// Each cause of a shot's spread. The steady aim perk takes the shake of the player's own speed away.
+function spreadCauses(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle): HitOdds["causes"] {
   const weapon = mw.def.spread * DEG;
   const n = across(shooter, target);
   const rel = {
@@ -307,11 +304,9 @@ function spreadCauses(world: World, shooter: Vehicle, mw: MountedWeapon, target:
     crossing: (RULES.leadError * Math.abs(rel.x * n.x + rel.y * n.y)) / mw.def.round.speed,
     own: steady ? 0 : RULES.shake * mw.def.shake * mps(Math.abs(shooter.speed)),
     recoil: (mw.def.recoil * DEG) / (vehicleMass(shooter) / KG_PER_TONNE),
-    weather: weatherAt(world, shooter.pos).spread,
+    weather: vehicleHasPerk(world, shooter, "stormRider") ? 0 : weatherAt(world, shooter.pos).spread,
   };
-  const called = aim !== "body" && vehicleHasPerk(world, shooter, "calledShot");
-  const sum = base.weapon + base.range + base.skill + base.crossing + base.own + base.recoil + base.weather;
-  return { ...base, calledShot: called ? -sum * (1 - PERK_NUMBERS.calledShot.spread) : 0 };
+  return base;
 }
 
 // One round's angular error in radians and whether it hit the aimed part or, for a body shot, the truck. The

@@ -1,15 +1,15 @@
 import { PHYSICS } from '../data/physics';
 import { baseGrid, corePart, mountedParts } from './grid';
 import { NPC_BEHAVIOR } from '../data/npcs';
-import { noteCollision } from './combat';
+import { isHostile, noteCollision } from './combat';
 import { getMobilityCondition, isStranded, vehicleStats } from './stats';
 import { angleDiff, bearing, clamp, type Vec } from './vec';
 import { laneCount, ramMult, walkLane, type PartHit, type Side } from './armor';
 import { isJunk, maxHp, restorePart } from './wear';
 import { damagePart } from './damage';
 import { RULES } from '../data/rules';
-import { PERK_NUMBERS } from '../data/skills';
 import { practice, skillEffect, vehicleHasPerk } from './progress';
+import { PERK_NUMBERS } from '../data/skills';
 import { vehicleMass } from './mass';
 import { bodyOf } from './body';
 import type { Vehicle, World } from './types';
@@ -22,6 +22,7 @@ export function applyContactCrash(world: World, a: Vehicle, b: Vehicle | null, w
   if (Boolean(b) !== Boolean(contact.b)) throw new Error('Crash geometry does not match the bodies');
   if (b) {
     const { hitsA, hitsB } = damageVehicleCrash(world, a, b, impact, contact);
+    stallRammed(world, a, b, hitsA, hitsB); // before the crash itself makes the trucks hostile
     noteCollision(world, a, b, hitsA, hitsB);
     world.events.push({ t: 'collision', a: a.id, b: b.id, hitsA, hitsB });
     practiceRam(world, a, b, hitsA, hitsB);
@@ -34,12 +35,27 @@ export function applyContactCrash(world: World, a: Vehicle, b: Vehicle | null, w
 // The player practices driving from the damage its truck deals in a crash with another vehicle. A heavier
 // vehicle is harder to hurt.
 function practiceRam(world: World, a: Vehicle, b: Vehicle, hitsA: PartHit[], hitsB: PartHit[]): void {
+  const ram = playerRam(world, a, b, hitsA, hitsB);
+  if (!ram) return;
+  const { own, other, damage } = ram;
+  practice(world, 'ram', damage, vehicleMass(other) / (vehicleMass(other) + vehicleMass(own)), other.id);
+}
+
+// Rammer: the player truck damaging a hostile truck in a crash stalls that truck's engine.
+function stallRammed(world: World, a: Vehicle, b: Vehicle, hitsA: PartHit[], hitsB: PartHit[]): void {
+  const ram = playerRam(world, a, b, hitsA, hitsB);
+  if (!ram || !vehicleHasPerk(world, ram.own, 'rammer') || !isHostile(world, ram.own, ram.other)) return;
+  ram.other.stalledUntil = world.turn + PERK_NUMBERS.rammer.stallTurns;
+}
+
+// The player truck, the other truck and the damage the player dealt it, or null when the player is not in the crash
+// or dealt no damage.
+function playerRam(world: World, a: Vehicle, b: Vehicle, hitsA: PartHit[], hitsB: PartHit[]): { own: Vehicle; other: Vehicle; damage: number } | null {
   const me = world.player.vehicleId;
-  if (a.id !== me && b.id !== me) return;
+  if (a.id !== me && b.id !== me) return null;
   const [own, other, dealt] = a.id === me ? [a, b, hitsB] : [b, a, hitsA];
   const damage = dealt.reduce((sum, hit) => sum + hit.damage, 0);
-  if (damage === 0) return;
-  practice(world, 'ram', damage, vehicleMass(other) / (vehicleMass(other) + vehicleMass(own)), other.id);
+  return damage === 0 ? null : { own, other, damage };
 }
 
 // Damage only. The real crash also notes the attacks, which a ram forecast must not.
@@ -71,11 +87,10 @@ function applyContactDamage(world: World, vehicle: Vehicle, contact: CrashContac
   return applyCrashHits(world, vehicle, hits);
 }
 
-// The player's driving and the ram guard perk cut the crash damage the player truck takes.
+// The player's driving cuts the crash damage the player truck takes.
 function computeCrashEnergy(world: World, vehicle: Vehicle, impact: number, share: number, mult: number): number {
   const driving = skillEffect(world, vehicle, 'driving', 'crashDamage');
-  const guard = vehicleHasPerk(world, vehicle, 'ramGuard') ? PERK_NUMBERS.ramGuard.crashTaken : 1;
-  return RULES.ramDamage * RULES.crashDamage * impact * impact * share * mult * Math.max(0, 1 - driving) * guard;
+  return RULES.ramDamage * RULES.crashDamage * impact * impact * share * mult * Math.max(0, 1 - driving);
 }
 
 function applyCrashHits(world: World, vehicle: Vehicle, hits: Map<string, number>): PartHit[] {

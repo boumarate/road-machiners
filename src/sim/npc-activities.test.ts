@@ -85,6 +85,25 @@ describe('NPC activities', () => {
     ]);
   });
 
+  it.each(['sell', 'resupply'] as const)('remembers the town where it finished %s', (kind) => {
+    const { w, npc } = createScavenger();
+    npc.pos = { ...sitePads(REGION.towns[1])[0] };
+    npc.brain!.goals = [{ kind, targetId: REGION.towns[1].id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
+    resolveNpcActivities(w);
+    expect(npc.brain!.lastTown).toBe(REGION.towns[1].id);
+  });
+
+  it('does not remember a site that is not a town', () => {
+    const { w, npc } = createScavenger();
+    const oasis = REGION.locations.find((l) => l.kind === 'oasis')!;
+    npc.pos = { ...sitePads(oasis)[0] };
+    npc.brain!.goals = [{ kind: 'resupply', targetId: oasis.id, destination: { ...npc.pos }, phase: 'travel', reason: 'test activity' }];
+    w.events = [];
+    resolveNpcActivities(w);
+    expect(w.events).toContainEqual(expect.objectContaining({ previous: 'resupply', activity: null }));
+    expect(npc.brain!.lastTown).toBeUndefined();
+  });
+
   it('records failure when a salvage target disappears', () => {
     const { w, npc } = createScavenger();
     npc.brain!.goals = [{ kind: 'scavenge', targetId: 'retired-wreck', destination: { ...npc.pos }, phase: 'travel', reason: 'collect visible salvage' }];

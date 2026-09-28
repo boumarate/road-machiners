@@ -146,9 +146,9 @@ describe("queries", () => {
   });
 
   it("perk grants the perk and names it", () => {
-    const result = runCommand(emptyWorld(), "perk bluff");
-    expect(result.world?.player.perks).toEqual(["bluff"]);
-    expect(result.lines).toEqual(["perk granted: Bluff"]);
+    const result = runCommand(emptyWorld(), "perk paidTruce");
+    expect(result.world?.player.perks).toEqual(["paidTruce"]);
+    expect(result.lines).toEqual(["perk granted: Paid truce"]);
     expect(() => runCommand(emptyWorld(), "perk flying")).toThrow(CheatError);
   });
 

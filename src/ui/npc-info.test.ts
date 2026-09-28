@@ -6,7 +6,10 @@ import { corePart } from '../sim/grid';
 import type { GameEvent } from '../sim/types';
 import { addState } from '../sim/states';
 import { refreshVision } from '../sim/vision';
-import { eventText, formatNpcActivity, formatNpcStates, formatNpcTraits } from './format';
+import { eventText, formatNpcActivity, formatNpcCargo, formatNpcMark, formatNpcStates, formatNpcTraits } from './format';
+import { PERK_NUMBERS } from '../data/skills';
+import { makePart } from '../sim/factory';
+import { addGoods, stowPart } from '../sim/inventory';
 
 it('shows a visible NPC reason without naming its unseen target', () => {
   const w = emptyWorld();
@@ -54,6 +57,55 @@ it('hides NPC traits without the read the driver perk', () => {
   const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 32, y: 30 });
   npc.brain = npcBrain('scavenger', npc.pos, ['scavenger', 'scumbag']);
   expect(formatNpcTraits(w, npc)).toBeNull();
+});
+
+// A seen hauler carrying two salt, one scrap and a spare machine gun.
+function loadedHauler() {
+  const w = emptyWorld();
+  const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
+  npc.brain = npcBrain('hauler', npc.pos, ['trader']);
+  expect(addGoods(w, npc, 'salt', 2) + addGoods(w, npc, 'scrap', 1)).toBe(3);
+  if (!stowPart(w, npc, makePart(w, 'mg', 0))) throw new Error('No room for the spare gun');
+  return { w, npc };
+}
+
+it('shows the goods and spare parts of an NPC truck with the cargo eye perk', () => {
+  const { w, npc } = loadedHauler();
+  w.player.perks.push('cargoEye');
+  expect(formatNpcCargo(w, npc)).toBe('Cargo: Salt ×2, Scrap metal ×1. Spares: MG turret');
+});
+
+it('shows an empty NPC truck as empty with the cargo eye perk', () => {
+  const w = emptyWorld();
+  w.player.perks.push('cargoEye');
+  const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
+  expect(formatNpcCargo(w, npc)).toBe('Cargo: empty');
+});
+
+it('hides NPC cargo without the cargo eye perk', () => {
+  const { w, npc } = loadedHauler();
+  expect(formatNpcCargo(w, npc)).toBeNull();
+});
+
+it('offers the mark key on an unmarked truck with the spotter perk', () => {
+  const w = emptyWorld();
+  w.player.perks.push('spotter');
+  const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
+  expect(formatNpcMark(w, npc)).toBe('[N] Mark');
+});
+
+it('shows the turns a mark has left', () => {
+  const w = emptyWorld();
+  w.player.perks.push('spotter');
+  const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
+  w.player.marked = [{ vehicleId: npc.id, until: w.turn + PERK_NUMBERS.spotter.turns }];
+  expect(formatNpcMark(w, npc)).toBe(`Marked: ${PERK_NUMBERS.spotter.turns} turns left`);
+});
+
+it('shows no mark line without the spotter perk', () => {
+  const w = emptyWorld();
+  const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
+  expect(formatNpcMark(w, npc)).toBeNull();
 });
 
 it('fails loudly for a vehicle with no NPC brain', () => {

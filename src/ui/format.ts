@@ -11,7 +11,8 @@ import { isKnockedOut } from '../sim/defeat';
 import type { Work, WorkLeft } from '../sim/states';
 import { dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
-import { mountedParts } from '../sim/grid';
+import { goodsCount, mountedParts } from '../sim/grid';
+import { spareParts } from '../sim/inventory';
 import { playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
 import { npcTraits } from '../sim/npc-decisions';
@@ -26,6 +27,7 @@ import { fillLine } from './dialogue';
 // What a job works on, in words: "Repair Autocannon", "Remove Autocannon from Raider outrider".
 export function jobLabel(world: World, v: Vehicle, job: Job): string {
   if (job.kind === 'search') return 'Search';
+  if (job.kind === 'weld') return 'Weld scrap armor';
   if (job.kind === 'refit') return refitLabel(world, v, job);
   const part = v.items.find((it) => it.kind === 'part' && it.part.id === job.partId);
   return `${job.kind === 'repair' ? 'Repair' : 'Strip'} ${part ? itemName(part) : 'part'}`;
@@ -118,6 +120,24 @@ function targetLabel(world: World, targetId: string | null): string | null {
 export function formatNpcTraits(world: World, vehicle: Vehicle): string | null {
   const traits = npcTraits(vehicle);
   return hasPerk(world, 'readDriver') ? `Traits: ${traits.join(', ')}` : null;
+}
+
+// "Cargo: Salt ×2, Scrap metal ×1. Spares: MG turret" for a truck. The hover panel shows it as one line. Cargo stays
+// hidden, so null, until the player picks the cargo eye perk.
+export function formatNpcCargo(world: World, vehicle: Vehicle): string | null {
+  if (!hasPerk(world, 'cargoEye')) return null;
+  const goods = Object.entries(goodsCount(vehicle)).map(([good, n]) => `${GOODS[good].name} ×${n}`);
+  const spares = spareParts(vehicle).map((part) => partDef(part.defId).name);
+  if (goods.length === 0 && spares.length === 0) return 'Cargo: empty';
+  const lines = [...(goods.length > 0 ? [`Cargo: ${goods.join(', ')}`] : []), ...(spares.length > 0 ? [`Spares: ${spares.join(', ')}`] : [])];
+  return lines.join('. ');
+}
+
+// The spotter mark on a truck: the key that marks it, or the turns its mark has left. Null without the spotter perk.
+export function formatNpcMark(world: World, vehicle: Vehicle): string | null {
+  if (!hasPerk(world, 'spotter')) return null;
+  const mark = world.player.marked.find((m) => m.vehicleId === vehicle.id && world.turn <= m.until);
+  return mark ? `Marked: ${mark.until - world.turn} turns left` : '[N] Mark';
 }
 
 // How a state the NPC holds reads from the player's side. A null label keeps the driver's intent hidden.

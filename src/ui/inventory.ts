@@ -8,7 +8,7 @@ import { RULES } from "../data/rules";
 import { STRIP } from "../data/salvage";
 import { isJunk, maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
-import { partRepairCost, repairPart } from "../sim/economy";
+import { canRebuild, partRepairCost, repairPart } from "../sim/economy";
 import {
   freeCells,
   goodsCount,
@@ -27,7 +27,9 @@ import {
   storePart,
   takeFromStorage,
 } from "../sim/inventory";
-import { startRepair, startStrip, stripYield } from "../sim/jobs";
+import { startRepair, startStrip, startWeld, stripYield } from "../sim/jobs";
+import { vehicleHasPerk } from "../sim/progress";
+import { PERK_NUMBERS } from "../data/skills";
 import { repairPlan, type RepairPlan } from "../sim/repair";
 import { townAt } from "../sim/sites";
 import { downedHere, takeAllLoot, takeLoot, takeStores } from "../sim/locations";
@@ -331,9 +333,9 @@ export class InventoryView {
   }
 
   // The action buttons an inspected item offers: patch when mounted and damaged, repair in town,
-  // and strip when it is a spare. A good offers none.
+  // and strip when it is a spare. Scrap metal offers a weld with the Welder perk. Other goods offer none.
   private itemActions(w: World, item: GridItem, mounted: boolean): HTMLElement[] {
-    if (item.kind !== "part") return [];
+    if (item.kind !== "part") return this.goodActions(w, item.good);
     const buttons: (HTMLElement | null)[] = [
       mounted ? this.patchButton(w, playerVehicle(w), item.part) : null,
       townAt(w) ? this.repairButton(w, item.part) : null,
@@ -373,9 +375,13 @@ export class InventoryView {
     );
   }
 
-  // Junk parts get no button, since no repair rebuilds them.
+  // A junk part gets a Rebuild button only while the Rebuild perk can rebuild it.
   private repairButton(w: World, part: PartInstance): HTMLElement | null {
-    if (isJunk(part)) return null;
+    if (!isJunk(part)) return this.garageButton(w, part, "Repair", `Restore to ${maxHp(part)} HP`);
+    return canRebuild(w, part) ? this.garageButton(w, part, "Rebuild", "Rebuild to the last wear step, once per part") : null;
+  }
+
+  private garageButton(w: World, part: PartInstance, action: string, title: string): HTMLElement | null {
     const cost = partRepairCost(w, part);
     if (cost === 0) return null;
     return el(
@@ -383,17 +389,14 @@ export class InventoryView {
       {
         class: "inv-patch",
         disabled: w.player.money < cost,
-        title:
-          w.player.money < cost
-            ? "Not enough money"
-            : `Restore to ${maxHp(part)} HP`,
+        title: w.player.money < cost ? "Not enough money" : title,
         onpointerdown: (e: Event) => e.stopPropagation(),
         onclick: (e: Event) => {
           e.stopPropagation();
           this.run((world) => repairPart(world, part.id));
         },
       },
-      `Repair ${cost}`,
+      `${action} ${cost}`,
     );
   }
 
@@ -417,6 +420,32 @@ export class InventoryView {
         },
       },
       reason ? "Strip" : `Strip ${STRIP.turns}t/${stripYield(part)}p`,
+    );
+  }
+
+  // Scrap metal offers a weld with the Welder perk. Other goods offer nothing.
+  private goodActions(w: World, good: string): HTMLElement[] {
+    const me = playerVehicle(w);
+    return good === "scrap" && vehicleHasPerk(w, me, "welder") ? [this.weldButton(me)] : [];
+  }
+
+  // Welds scrap metal into a scrap armor part.
+  private weldButton(me: Vehicle): HTMLElement {
+    const { scrap, turns } = PERK_NUMBERS.welder;
+    const reason = weldBlocker(me);
+    return el(
+      "button",
+      {
+        class: "inv-patch",
+        disabled: reason !== null,
+        title: reason ?? `Weld: ${turns} turns for a ${partDef(PERK_NUMBERS.welder.part).name}, spends ${scrap} scrap metal`,
+        onpointerdown: (e: Event) => e.stopPropagation(),
+        onclick: (e: Event) => {
+          e.stopPropagation();
+          this.run((world) => startWeld(world));
+        },
+      },
+      reason ? `Weld (${reason})` : `Weld ${turns}t`,
     );
   }
 
@@ -956,6 +985,14 @@ function stripBlocker(me: Vehicle): string | null {
   if (me.speed > RULES.parkedSpeed) return "Stop to strip";
   if (me.job) return "Busy";
   return null;
+}
+
+// Why a Weld button is disabled, or null when welding can start.
+function weldBlocker(me: Vehicle): string | null {
+  if (me.speed > RULES.parkedSpeed) return "Stop to weld";
+  if (me.job) return "Busy";
+  const scrap = PERK_NUMBERS.welder.scrap;
+  return (goodsCount(me).scrap ?? 0) < scrap ? `Needs ${scrap} scrap` : null;
 }
 
 // Thin bar along the bottom of a part: its width is hp over max hp. A broken part shows a red bar.

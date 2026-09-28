@@ -1,6 +1,6 @@
 import { chooseOption, currentOptions } from './dialogue';
 import { describe, expect, it } from 'vitest';
-import { PERK_NUMBERS, XP_TO_REACH } from '../data/skills';
+import { XP_TO_REACH } from '../data/skills';
 import { RULES } from '../data/rules';
 import { SPAWN } from '../data/npcs';
 import { REGION } from '../data/region';
@@ -539,24 +539,28 @@ describe('aim perks', () => {
     expect(hitOdds(w, buggy, gun, me, 'body').causes.own).toBe(before.causes.own);
   });
 
-  it('called shot cuts the spread of the player aimed shots only', () => {
+  // A storm over both trucks.
+  const storm = (w: World) => {
+    w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 32, y: 30 }, radius: 10, vel: { x: 0, y: 0 }, turnsLeft: 10 }];
+  };
+
+  it('storm rider takes the storm scatter away from the player', () => {
     const { w, me, buggy, mg } = range(5, broadside);
-    const part = mountedParts(buggy, 'weapon')[0].id;
-    const aimed = hitOdds(w, me, mg, buggy, part);
-    const body = hitOdds(w, me, mg, buggy, 'body');
-    w.player.perks.push('calledShot');
-    expect(hitOdds(w, me, mg, buggy, part).spread).toBeCloseTo(aimed.spread * PERK_NUMBERS.calledShot.spread, 12);
-    expect(hitOdds(w, me, mg, buggy, 'body').spread).toBe(body.spread);
+    storm(w);
+    const blown = hitOdds(w, me, mg, buggy, 'body');
+    w.player.perks.push('stormRider');
+    expect(blown.causes.weather).toBeGreaterThan(0);
+    expect(hitOdds(w, me, mg, buggy, 'body').causes.weather).toBe(0);
   });
 
-  it('called shot leaves NPC aimed shots alone', () => {
+  it('storm rider leaves an NPC shooter blown off aim', () => {
     const { w, me, buggy } = range(5, broadside);
+    storm(w);
+    w.player.perks.push('stormRider');
     const gun = vehicleStats(w, buggy).weapons[0];
-    const part = mountedParts(me, 'weapon')[0].id;
-    const before = hitOdds(w, buggy, gun, me, part);
-    w.player.perks.push('calledShot');
-    expect(hitOdds(w, buggy, gun, me, part).spread).toBe(before.spread);
+    expect(hitOdds(w, buggy, gun, me, 'body').causes.weather).toBeGreaterThan(0);
   });
+
 });
 
 describe('recoil and shake', () => {

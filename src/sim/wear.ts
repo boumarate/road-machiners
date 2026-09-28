@@ -3,7 +3,7 @@
 // practices from the rough ground it crosses.
 // This file is the only place that writes part HP. A part gains one wear step each time it drops from above
 // 0 HP to 0 HP. Each step lowers its max HP and its job stat. A part past the last wear step is junk,
-// and no repair rebuilds it from 0 HP.
+// and no repair rebuilds it from 0 HP. Only the Rebuild perk's garage work brings it back, once per part.
 
 import { ECONOMY } from '../data/goods';
 import { partDef, type PartDef } from '../data/parts';
@@ -140,6 +140,16 @@ export function restorePart(part: PartInstance, hp: number): void {
   if (next < part.hp) throw new Error(`Restore of ${part.id} to ${hp} HP would lower it from ${part.hp}`);
   if (part.hp === 0 && next > 0 && isJunk(part)) throw new Error(`${partDef(part.defId).name} is junk and cannot be rebuilt`);
   part.hp = next;
+}
+
+// A junk part goes back to the last wear step at full HP, once per part. The Rebuild perk's town garage work.
+export function rebuildJunk(part: PartInstance): void {
+  const name = partDef(part.defId).name;
+  if (!isJunk(part)) throw new Error(`${name} is not junk`);
+  if (part.rebuilt) throw new Error(`${name} was rebuilt before`);
+  part.wear = CONDITION.maxWear;
+  part.rebuilt = true;
+  part.hp = maxHp(part);
 }
 
 // The wear factor applied to a part's base value, read off CONDITION.valueFactor. A fractional wear, as

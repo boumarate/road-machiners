@@ -6,18 +6,20 @@ import { partDef, type EngineDef } from '../data/parts';
 import { RULES } from '../data/rules';
 import { TIME } from '../data/time';
 import { ENGINE_HEAT } from '../data/wear';
+import { PERK_NUMBERS } from '../data/skills';
 import { damagePart } from './wear';
 import { playerVehicle } from './damage';
 import { mountedParts } from './grid';
-import { practice, regionOf, skillEffect } from './progress';
+import { practice, regionOf, skillEffect, vehicleHasPerk } from './progress';
 import { inOverdrive, vehicleStats } from './stats';
-import { heatAt } from './sun';
+import { cappedHeatAt, heatAt } from './sun';
 import type { Vehicle, World } from './types';
 import { playerCommand } from './world';
 
 export function advanceEngineHeat(world: World): void {
   const me = playerVehicle(world);
-  const heat = heatAt(world, me.pos);
+  const sunHeat = heatAt(world, me.pos);
+  const heat = engineSunHeat(world, me, sunHeat);
   const before = world.player.engineHeat;
   let next: number;
   if (me.speed > RULES.parkedSpeed) {
@@ -30,7 +32,7 @@ export function advanceEngineHeat(world: World): void {
     next = before - ENGINE_HEAT.coolParked / heat;
   }
   world.player.engineHeat = Math.min(1, Math.max(0, next));
-  practiceHeat(world, me.speed, heat);
+  practiceHeat(world, me.speed, sunHeat);
 
   if (before < ENGINE_HEAT.warnAt && world.player.engineHeat >= ENGINE_HEAT.warnAt) {
     world.events.push({ t: 'info', text: 'Engine running hot.' });
@@ -61,6 +63,11 @@ export function douseEngine(world: World): World {
 function practiceHeat(world: World, speed: number, heat: number): void {
   if (speed <= RULES.parkedSpeed || heat <= 1) return;
   practice(world, 'heat', 1, Math.min(1, (heat - 1) / (TIME.sunHeat - 1)), regionOf(playerVehicle(world).pos));
+}
+
+// The sun heat the engine feels. The Desert rat perk caps the sun height, while practice still reads the real heat.
+function engineSunHeat(world: World, me: Vehicle, sunHeat: number): number {
+  return vehicleHasPerk(world, me, 'desertRat') ? cappedHeatAt(world, me.pos, PERK_NUMBERS.desertRat.sunShare) : sunHeat;
 }
 
 function overdriveGain(world: World, v: Vehicle): number {
