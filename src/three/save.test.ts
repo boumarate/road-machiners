@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { GAME_VERSION } from '../config';
 import { startKit } from '../data/start';
 import { newWorld } from '../sim/world';
 import { emptyWorld } from '../sim/testkit';
@@ -92,57 +93,9 @@ describe('local game save', () => {
 
   it('rejects incompatible versions and incomplete worlds', () => {
     const storage = makeStorage();
-    storage.setItem('roam.save', JSON.stringify({ version: 5, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 8, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 9, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 10, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 11, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 12, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 13, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 14, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 15, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 16, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 17, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 18, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 19, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 20, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 21, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 22, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 23, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 24, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 25, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 26, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 27, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 28, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 31, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 32, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 33, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
     storage.setItem('roam.save', JSON.stringify({ version: 34, world: { turn: 21 } }));
+    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
+    storage.setItem('roam.save', JSON.stringify({ version: GAME_VERSION, world: { turn: 21 } }));
     expect(() => loadWorld(storage, TEST_MAP)).toThrow(/world/);
   });
 
@@ -153,7 +106,7 @@ describe('local game save', () => {
       const incomplete = { ...world };
       delete (incomplete as Partial<typeof world>)[field];
       const { terrain: _terrain, ...saved } = incomplete;
-      storage.setItem('roam.save', JSON.stringify({ version: 34, world: saved }));
+      storage.setItem('roam.save', JSON.stringify({ version: GAME_VERSION, world: saved }));
       expect(() => loadWorld(storage, TEST_MAP)).toThrow(/world/);
     }
   });

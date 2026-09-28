@@ -1,3 +1,4 @@
+import { GAME_VERSION } from '../config';
 import type { BakedMap } from '../sim/terrain';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
@@ -25,21 +26,9 @@ export function hasSave(storage: Storage): boolean {
 }
 
 // Saves leave out the terrain and the baked props, which come from the map file the save names by hash. Broken props are saved whole. The 600-tile terrain alone is
-// about 10 MB of JSON, past the browser's local storage quota. 4 adds weather, jobs, contacts and dust.
-// 6 moves wheel cells. 7 adds engine heat, auto patch and a parts limit on repair jobs. 8 adds the
-// player state, tows and the beacon. 9 adds NPC traits, goal stacks and states. 10 renames spurned to
-// turnedDown. 11 replaces the NPC's last attacker with its attack records and adds repair goals. 12 adds the
-// answering claim on a tow job. 13 adds god mode. 14 adds the full log flag. 15 adds radio calls, topic memory, and patch and truce states.
-// 16 replaces the XP pool with per-skill XP. 17 adds the hostile trucks seen last turn and more XP sources.
-// 18 adds perks. 19 marks calls that took up a topic. 20 adds part wear. 21 adds player tows of NPCs with waived fees.
-// 22 adds XP targets and player piles. 23 adds shop stock, contracts, upkeep and bounty templates. 24 adds deck
-// mounts and built-in parts sized to the truck models. 25 moves locations beside their roads and the start
-// onto the road. 26 adds NPC knockouts, truck pickups on refits and revenge. 27 adds NPC driver names and their random stream. 28 adds new NPC
-// types, escorts and two goods. 30 adds engine overdrive. 31 replaces the perks and adds
-// their state: marks, rumors, stalls, dust screens, welds, rebuilt parts and NPC last towns. 32 adds the map
-// file hash and leaves out baked props. 33 adds broken props, which a load leaves out of the baked ones. 34 names
-// the shop an NPC trade sells at, since trades now run through stalls too. Older saves do not load.
-const SAVE_VERSION = 34;
+// about 10 MB of JSON, past the browser's local storage quota. A save loads only in the game version that wrote it,
+// so any change to the saved shape needs a new version in package.json.
+const SAVE_VERSION = GAME_VERSION;
 
 // The saved world on the given map. A save made on another map fails, since its terrain is gone.
 export function loadWorld(storage: Storage, map: BakedMap): World | null {
@@ -70,7 +59,7 @@ function savedWorld(save: unknown): Omit<World, 'terrain'> {
   return save.world;
 }
 
-function isCurrentSave(save: unknown): save is { version: number } {
+function isCurrentSave(save: unknown): save is { version: string } {
   return !!save && typeof save === 'object' && 'version' in save && save.version === SAVE_VERSION;
 }
 

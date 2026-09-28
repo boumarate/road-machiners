@@ -583,6 +583,10 @@ body {
   margin: 4px 0;
   color: var(--muted);
 }
+.help .version {
+  margin-top: 8px;
+  opacity: 0.6;
+}
 /* The hover panel grows with the hit table down to the log, since the mouse stays on the truck and cannot scroll it. */
 .info {
   right: 14px;

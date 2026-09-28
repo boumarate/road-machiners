@@ -6,6 +6,7 @@ import { baseGrid, corePart, coreParts, mountedParts } from "../sim/grid";
 import type { Vehicle, World } from "../sim/types";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
+import { GAME_VERSION } from "../config";
 import { el, panel, topRight } from "./dom";
 import {
   contractDue,
@@ -188,6 +189,7 @@ export class Hud {
       el("div", {}, "Click a truck: target it. 1-4: pick a weapon. 0: all. Q: auto fire. X: show weapons."),
       el("div", {}, "P: auto patch. C: character. I: inventory. Esc: close."),
       el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
+      el("div", { class: "version" }, `v${GAME_VERSION}`),
     );
   }
 
