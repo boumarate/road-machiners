@@ -17,12 +17,11 @@ import math
 import sys
 from pathlib import Path
 
-import bmesh
 import bpy
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit import Kit, Vec3, parse_args  # noqa: E402
-from parts_common_base import BASE_COLORS, INSET, SUSPENSION_REST, Grid, check_base, flare, level_sockets  # noqa: E402
+from parts_common_base import cut_hulls, hull_mesh, BASE_COLORS, INSET, SUSPENSION_REST, Grid, check_base, flare, level_sockets  # noqa: E402
 from shapes import prism  # noqa: E402
 
 SEED = 306
@@ -62,41 +61,14 @@ PILLAR_W = 0.1
 LAMP_Z = -0.14  # above the bumper, which hangs from -0.33 down
 
 
-def hull_mesh(name: str, points: list[Vec3]) -> bpy.types.Object:
-    """A convex hull of points as an unregistered object, with coplanar triangles merged into flat faces."""
-    mesh = bpy.data.meshes.new(name)
-    bm = bmesh.new()
-    verts = [bm.verts.new(p) for p in points]
-    result = bmesh.ops.convex_hull(bm, input=verts)
-    bmesh.ops.delete(bm, geom=result["geom_interior"] + result["geom_unused"], context="VERTS")
-    bmesh.ops.dissolve_limit(bm, angle_limit=0.01, verts=bm.verts, edges=bm.edges)
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    bm.to_mesh(mesh)
-    bm.free()
-    obj = bpy.data.objects.new(name, mesh)
-    bpy.context.scene.collection.objects.link(obj)
-    return obj
 
 
-def cut(obj: bpy.types.Object, cutters: list[list[Vec3]]) -> None:
-    """Subtracts the convex hull of each point list from obj."""
-    for i, points in enumerate(cutters):
-        cutter = hull_mesh(f"{obj.name}_cutter{i}", points)
-        mod = obj.modifiers.new(f"cut{i}", "BOOLEAN")
-        mod.operation = "DIFFERENCE"
-        mod.solver = "EXACT"
-        mod.object = cutter
-        bpy.ops.object.select_all(action="DESELECT")
-        bpy.context.view_layer.objects.active = obj
-        obj.select_set(True)
-        bpy.ops.object.modifier_apply(modifier=mod.name)
-        bpy.data.objects.remove(cutter)
 
 
 def add_hull(kit: Kit, name: str, points: list[Vec3], mat: str, cutters: list[list[Vec3]] | None = None) -> None:
     obj = hull_mesh(name, points)
     if cutters:
-        cut(obj, cutters)
+        cut_hulls(obj, cutters)
         obj.data.materials.clear()  # the boolean leaves an empty slot, which would take the faces off the material
     kit._add(obj, name, mat, 0.0)
 
