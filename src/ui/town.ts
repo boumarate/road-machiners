@@ -29,6 +29,7 @@ import {
   supplyRoom,
   tradeReady,
   truckGoodPrice,
+  truckPartPrice,
   truckGoodsForSale,
   truckSupplyForSale,
   truckSupplyPrice,
@@ -655,11 +656,11 @@ export class TruckTradeScreen {
       return partCard({ part: p, ...this.compare.options(me, kind, () => this.render()), action, onHover: this.hintMounts(kind) });
     };
     const theirs = spareParts(npc).map((p) => {
-      const price = partTradePrice(w, me, p, "buy");
+      const price = truckPartPrice(w, p, "buy");
       return card(p, this.button(`Buy ${price}`, (x) => buyTruckPart(x, npc.id, p.id), w.player.money < price));
     });
     const mine = spareParts(me).map((p) => {
-      const price = partTradePrice(w, me, p, "sell");
+      const price = truckPartPrice(w, p, "sell");
       return card(p, this.button(`Sell ${price}`, (x) => sellTruckPart(x, npc.id, p.id), npc.resources!.money < price));
     });
     return el(
