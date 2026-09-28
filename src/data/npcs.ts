@@ -764,12 +764,12 @@ export type TraitWeights = { [D in DecisionId]?: Partial<Record<DecisionOptions[
 export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   // A driver in a feud mostly fights that party when it comes into sight.
   feud: { hostileSeen: { fight: { add: 4 } } },
-  // A failed robber mostly leaves the same target alone. A scumbag's rob weight of 2 drops to 0.01, about 2%.
+  // A failed robber mostly leaves the same target alone. A scumbag's rob weight of 0.5 drops to 0.0025, about 1%.
   backedOff: { preySeen: { rob: { mul: 0.005 } } },
   tow: {},
   patch: {},
   trade: {},
-  // A driver rarely robs a truck it holds a truce with. A scumbag's rob weight of 2 drops to 0.01, about 2%.
+  // A driver rarely robs a truck it holds a truce with. A scumbag's rob weight of 0.5 drops to 0.0025, about 1%.
   truce: { preySeen: { rob: { mul: 0.005 } } },
   grievance: {},
   // A driver that pleaded with a foe rarely pleads with it again soon. A truce weight of 2.5 drops to 0.025.
@@ -895,10 +895,10 @@ export const TRAITS: Record<TraitId, Trait> = {
       mercyBegged: { finish: { add: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
     },
   },
-  // A scumbag robs about two targets in three it comes across: rob 2 against keep 1. Boldness 1.3 lets it rob a
+  // A scumbag robs about one target in three it comes across: rob 0.5 against keep 1. Boldness 1.3 lets it rob a
   // truck that looks as dangerous as its own, and stand against one up to 30% stronger. It answers a crash with a
   // fight twice as often as most drivers.
-  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 1.3, fuelMargin: 1, robs: 'offDuty', weights: { preySeen: { rob: { add: 2 } }, crashed: { retaliate: { add: 1 } } } },
+  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 1.3, fuelMargin: 1, robs: 'offDuty', weights: { preySeen: { rob: { add: 0.5 } }, crashed: { retaliate: { add: 1 } } } },
   // A coward runs three times as often from a new hostile or a shot, picks a fight half as often, and shoots back
   // at a third of the weight. Boldness 0.6 makes a truck that looks as dangerous as its own a threat, even at the
   // lowest misjudgment. It asks for a truce twice as often and begs three times as often. Threatened, it runs or
@@ -1042,8 +1042,8 @@ export const NPC_BEHAVIOR = {
   // Salvage in sight weighs 10 times a known site out of sight.
   visibleSalvage: 10,
   // A robber mostly picks targets weaker than itself, away from town guards. Rob weight times this when the
-  // target looks as strong as the robber times its boldness or stronger. A scumbag's rob weight of 2 drops to 0.03,
-  // so it robs at about 4%, not 66%.
+  // target looks as strong as the robber times its boldness or stronger. A scumbag's rob weight of 0.5 drops to
+  // 0.0075, so it robs at about 2%, not 34%.
   robStronger: 0.015,
   // Rob weight times this when the robber or target is within guard range of a town gate. Same drop as above.
   robNearGuards: 0.015,
