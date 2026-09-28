@@ -1,6 +1,6 @@
 # Map pipeline and geology layer
 
-**Status:** reviewing
+**Status:** done
 **Branch:** procedural-map
 **Worktree:** .worktrees/procedural-map
 **Goal:** The map is built offline from the rough base of noise heights, roads and sites, then changed by a rule-based geology layer. The result is saved to a file and loaded at boot. Hills, washes and dunes read as varied landscape in-game. The user confirms the look from in-game screenshots.
@@ -173,10 +173,36 @@ Goal: the user reviewed the pictures and played the map, and called it "incredib
 
 ## Code smells
 - `src/sim/spawn.ts:79-90` — start traffic can drop a start trader when the first drivers crowd the Bowl gate. 3 of 10 seeds fail on main, and the only sign is a debug event.
-- `src/sim/mapgen.ts:6` — sim code imports `clearOfSites` and `onBridge` from the bake module in `src/mapgen/bake.ts`.
 - `src/sim/bridge.ts` with `finishLayer` — the bridge cut edge draws as a sawtooth, as on main.
 
 ## Conclusion
+
+Outcome: goal achieved at 7bb5659. The game loads a baked map shaped by rain, slump, wind and dune rules, and the user approved the look in pictures and in play.
+
+Invariants:
+- IV1 — two bakes give the same sha1.
+- IV2 — road steps stay within the grade limit plus one stored height step, except the intended ramp into the bridge cut.
+- IV3 — a missing map file stops boot with the crash screen.
+- IV4 — rain and slump conserve soil on the full map after 116396d. A rough-ground test guards it.
+- IV5 — `src/sim` and `src/mapgen` have no file or network access.
+- IV6 — no boulder sits on a cliff tile, road, site or bridge deck, checked on the baked file.
+
+### Assumptions check
+- AS1 — held: the file is 1.1 MB.
+- AS2 — held with a tolerance: 16-bit heights add up to 0.0002 to road steps, so road tests allow one stored height step.
+- AS3 — held: no test needed different maps per seed. `spawn.test.ts` moved seed because of the spawn defect in Code smells.
+
+### Unknowns outcome
+- UK1 — resolved: `newWorld()` takes the map. Boot fetches it, and tests read `TEST_MAP`.
+- UK2 — resolved: the pictures use their own painter in `scripts/map-preview.mjs`, since the game painter needs a browser canvas.
+- UK3 — resolved: 160 rain passes with cut spreading. The bake with pictures takes about 16 s.
+
+Plan adherence: see Deviations from plan. The dune ridge rule was added during tuning, because Werner slabs formed no visible dunes on sloped terrain.
+
+Review findings:
+- Important: `src/sim` and `src/mapgen` imported each other. Fixed in 7bb5659 by moving the clearance checks into `src/sim/mapgen.ts`.
+
+Verified by: the user reviewed the pictures and played the map with the `noclip` command added in 989121a.
 
 ### Deviations from plan
 - File layout: the quality gate allows a new component 5 production files per 1,000 code lines, and `src/data` was over its ceiling. So the bake layers live in `src/mapgen/bake.ts`, the rules in `src/mapgen/geology.ts`, the file format in `src/sim/terrain.ts`, `MAPGEN` and `GEOLOGY` in `src/data/terrain.ts`, and the picture painter in `scripts/map-preview.mjs`.
