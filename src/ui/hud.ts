@@ -316,7 +316,7 @@ export class Hud {
           { class: "dim" },
           r.beacon
             ? "Calling for a tow. Raiders hear it too."
-            : "The truck can only crawl.",
+            : `${r.reason} The truck can only crawl.`.trim(),
         ),
         buttons(beacon(r.beacon)),
       );
