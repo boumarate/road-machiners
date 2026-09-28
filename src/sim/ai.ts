@@ -1,13 +1,13 @@
 // Activity execution uses the same steering and route planner as the player.
-import { NPCS } from "../data/npcs";
+import { NPC_BEHAVIOR, NPCS } from "../data/npcs";
 import { RULES } from "../data/rules";
 import { isKnockedOut } from "./defeat";
 import { getActivityDestination, goalHolds, thinkNpc, topGoal } from "./npc-activities";
 import { towData } from "./states";
 import { vehicleStats } from "./stats";
-import { isOnRope, towHeldBy } from "./tow";
+import { escortsOf, isOnRope, towHeldBy } from "./tow";
 import { ramImpact } from "./crash-contact";
-import type { Vehicle, World } from "./types";
+import type { NpcActivity, Vehicle, World } from "./types";
 import { angleDiff, bearing, dist, type Vec } from "./vec";
 
 // NPC drivers that plan this turn. A truck on a tow rope only trails its tower, so it keeps no order.
@@ -61,16 +61,36 @@ export function planNpcOrders(world: World): void {
       goal = computeFightGoal(world, v, preferredRange, target);
     }
     v.order =
-      vehicleAhead(world, v) || !goal
+      holds(world, v, activity) || !goal
         ? { kind: "brake" }
         : b.recovery
           ? { kind: "stopAt", dest: b.recoveryGoal! }
           : {
-              kind: b.ramTarget ? "through" : "stopAt",
+              kind: driveKind(world, v, activity),
               dest: goal,
             };
     v.direct = false;
   }
+}
+
+// A driver brakes for a vehicle close ahead, or while it waits for an escort.
+function holds(world: World, v: Vehicle, activity: NpcActivity): boolean {
+  return vehicleAhead(world, v) || waitsForEscort(world, v, activity);
+}
+
+// A leader out of danger waits while an escort lags more than NPC_BEHAVIOR.escortWaitGap behind, so a slower
+// escort keeps up. A fight or a flight does not wait.
+function waitsForEscort(world: World, v: Vehicle, activity: NpcActivity): boolean {
+  if (activity.kind === "fight" || activity.kind === "flee") return false;
+  return escortsOf(world, v.id).some((e) => dist(e.pos, v.pos) > NPC_BEHAVIOR.escortWaitGap);
+}
+
+// A rammer drives through its target. A follower drives through its spot while the leader moves, so it keeps
+// pace instead of braking for a point that runs ahead of it. Any other goal stops on its point.
+function driveKind(world: World, v: Vehicle, activity: NpcActivity): "through" | "stopAt" {
+  if (v.brain!.ramTarget) return "through";
+  const leader = activity.kind === "follow" ? world.vehicles.find((x) => x.id === activity.targetId) : undefined;
+  return leader && leader.speed > RULES.parkedSpeed ? "through" : "stopAt";
 }
 
 function computeFightGoal(

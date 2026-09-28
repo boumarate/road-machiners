@@ -951,6 +951,9 @@ export const NPC_BEHAVIOR = {
   escortFeePerTile: 0.15,
   // Decline weight times this when the merc is weak. A decline weight of 1 against take 3 then wins about 7 to 1.
   weakDecline: 20,
+  // A leader waits while an escort lags farther than this many tiles behind. A truck cruises about 3.4 tiles a
+  // turn on a road, so 12 tiles is three to four turns of driving, still well inside sight.
+  escortWaitGap: 12,
   // Tiles from a town gate a patrol drives out to: the gate guns' range plus one sight radius, so a patrol covers
   // the road just past the guns.
   patrolRadius: RULES.guards.range + TERRAIN.vision.radius,

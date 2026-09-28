@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { NPC_BEHAVIOR, NPCS, type TraitId } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
+import { planNpcOrders } from './ai';
 import { fireWeapons } from './combat';
 import { goalHolds, thinkNpc, topGoal } from './npc-activities';
 import { optionChances, optionWeights } from './npc-decisions';
@@ -361,5 +362,28 @@ describe('hiring a merc', () => {
     const weak = optionChances(optionWeights(w, merc, 'hireOffered', trader.id, null)).decline!;
     expect(healthy).toBeCloseTo(0.25, 1);
     expect(weak).toBeGreaterThan(0.8);
+  });
+});
+
+describe('a leader with escorts', () => {
+  function pair(escortX: number): { w: World; convoy: Vehicle } {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const convoy = convoyAt(w, { x: 60, y: 60 });
+    convoy.brain!.goals = [{ kind: 'sell', targetId: 'nose', destination: { x: 150, y: 60 }, phase: 'travel', reason: 'test trip' }];
+    const guard = guardAt(w, { x: escortX, y: 60 });
+    startEscort(w, guard, convoy, null, 0);
+    return { w, convoy };
+  }
+
+  it('waits while an escort lags farther than the wait gap', () => {
+    const { w, convoy } = pair(60 - NPC_BEHAVIOR.escortWaitGap - 1);
+    planNpcOrders(w);
+    expect(convoy.order?.kind).toBe('brake');
+  });
+
+  it('drives on while its escort keeps up', () => {
+    const { w, convoy } = pair(60 - NPC_BEHAVIOR.escortWaitGap + 4);
+    planNpcOrders(w);
+    expect(convoy.order?.kind).not.toBe('brake');
   });
 });
