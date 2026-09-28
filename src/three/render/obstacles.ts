@@ -31,7 +31,8 @@ export class ObstacleViews {
 
   constructor(private readonly scope: RenderScope, private readonly terrain: Terrain) {}
 
-  sync(obstacles: Obstacle[], salvage: SalvageStock[]): void {
+  sync(obstacles: Obstacle[], salvage: SalvageStock[], broken: readonly BrokenProp[]): void {
+    this.syncDebris(broken);
     this.syncPiles(salvage);
     if (!this.rockIds) {
       this.rockIds = this.addRocks(obstacles.filter((o) => o.kind === 'rock'));
@@ -66,7 +67,7 @@ export class ObstacleViews {
   }
 
   // Each broken prop lies as debris where it stood until it grows back. Debris blocks nothing.
-  syncDebris(broken: readonly BrokenProp[]): void {
+  private syncDebris(broken: readonly BrokenProp[]): void {
     const ids = new Set(broken.map((b) => b.obstacle.id));
     for (const [id, obj] of this.debris) {
       if (ids.has(id)) continue;
