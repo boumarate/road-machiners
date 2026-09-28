@@ -187,6 +187,12 @@ describe('noclipMove', () => {
     const w = emptyWorld();
     expect(playerVehicle(noclipMove(w, { x: -5, y: w.size + 5 })).pos).toEqual({ x: 0, y: w.size });
   });
+
+  it('names an open radio call as what blocks the flight', () => {
+    const w = emptyWorld();
+    w.player.call = { with: 'v9', topic: null, node: 'demand', vars: {}, line: { text: 'Dump your cargo.', vars: {} } };
+    expect(() => noclipMove(w, { x: 80, y: 90 })).toThrow('Cannot fly while a radio call is open');
+  });
 });
 
 describe('teleport', () => {

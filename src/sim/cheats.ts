@@ -179,7 +179,7 @@ function firstFree(w: World, points: Vec[], radius: number, ignoreId: string | n
 
 export function teleport(world: World, target: Vec): World {
   if (!Number.isFinite(target.x) || !Number.isFinite(target.y)) throw new CheatError(`Bad target ${target.x}, ${target.y}`);
-  if (!playerCanAct(world)) throw new CheatError(`Cannot teleport while the player is ${isTowed(world) ? 'towed' : world.player.state}`);
+  if (!playerCanAct(world)) throw new CheatError(`Cannot teleport while ${whyPlayerCannotAct(world)}`);
   return update(world, (w) => {
     const me = playerVehicle(w);
     const spot = freeSpotNear(w, target, chassisDef(me.chassisId).radius, me.id);
@@ -192,10 +192,17 @@ export function teleport(world: World, target: Vec): World {
   });
 }
 
+// What keeps the player from acting: a tow rope, an open radio call or a driver who is not active.
+function whyPlayerCannotAct(world: World): string {
+  if (isTowed(world)) return 'the player is towed';
+  if (world.player.call) return 'a radio call is open';
+  return `the player is ${world.player.state}`;
+}
+
 // Noclip flight: puts the player truck at a map point, clamped to the map, without checking obstacles.
 export function noclipMove(world: World, target: Vec): World {
   if (!Number.isFinite(target.x) || !Number.isFinite(target.y)) throw new CheatError(`Bad target ${target.x}, ${target.y}`);
-  if (!playerCanAct(world)) throw new CheatError(`Cannot fly while the player is ${isTowed(world) ? 'towed' : world.player.state}`);
+  if (!playerCanAct(world)) throw new CheatError(`Cannot fly while ${whyPlayerCannotAct(world)}`);
   return update(world, (w) => {
     const me = playerVehicle(w);
     me.pos = { x: Math.min(Math.max(target.x, 0), w.size), y: Math.min(Math.max(target.y, 0), w.size) };
