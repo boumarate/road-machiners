@@ -531,7 +531,7 @@ export class Hud {
       v.faction === "player" ? "" : hostile ? "hostile" : "neutral";
     this.info.style.display = "";
     this.infoBody.replaceChildren(
-      el("h3", {}, v.name),
+      ...infoHeading(v),
       el(
         "div",
         { class: hostile ? "bad" : "dim" },
@@ -546,6 +546,12 @@ export class Hud {
 }
 
 // The NPC's traits once the player can read them, top goal and the states it holds toward the player. The player's own truck has none.
+// An NPC reads as its driver's name over its template name. The player's truck keeps its own name.
+function infoHeading(v: Vehicle): HTMLElement[] {
+  if (!v.brain) return [el("h3", {}, v.name)];
+  return [el("h3", {}, v.brain.driver), el("div", { class: "dim" }, v.name)];
+}
+
 function npcLines(w: World, v: Vehicle): HTMLElement[] {
   if (!v.brain) return [];
   const activity = formatNpcActivity(w, v);
