@@ -5,7 +5,7 @@ import { deckAlong } from '../sim/bridge';
 import { ROAD_INDEX } from '../sim/road-index';
 import { hashRandom } from '../sim/rng';
 import type { BakedProp } from '../sim/terrain';
-import { bearing, dist, segmentDist, type Vec } from '../sim/vec';
+import { bearing, dist, polylineDist, segmentDist, type Vec } from '../sim/vec';
 import { newDraft, tileSteepness, type MapDraft } from './bake';
 import {
   BUILT_FIELD,
@@ -15,6 +15,7 @@ import {
   billboards,
   bendBuildings,
   fields,
+  highway,
   oldRoads,
   oldWorldLayer,
   overlooks,
@@ -212,15 +213,46 @@ describe('old roads', () => {
     expect(d.props).toEqual([]);
   });
 
-  it('lays an unbroken road with no spans over dry ground', () => {
+  it('lays an unbroken road with no spans over dry, flat ground', () => {
     const { d, towns } = washDraft();
     d.flow.fill(0);
+    d.heights.fill(0);
 
     oldRoads(d, towns, OLD_WORLD.oldRoads);
 
     expect(d.props).toEqual([]);
     const columns = new Set(tilesMarked(d, BUILT_OLD_ROAD).map((t) => Math.floor(t.x)));
     for (let x = 14; x < 66; x++) expect(columns.has(x)).toBe(true);
+  });
+});
+
+describe('old highway', () => {
+  // A trench 3 units deep along the dry river's middle stretches, and one settlement on each side of it.
+  function riverDraft(): { d: MapDraft; towns: OldSettlement[] } {
+    const d = newDraft(REGION.size);
+    const river = TERRAIN.features.dryRiver.path;
+    setCorners(d, 'heights', (i, j) => (polylineDist({ x: i, y: j }, river) < 8 ? -3 : 0));
+    const [a, b] = [river[2], river[3]];
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const town = (dy: number): OldSettlement => ({ pos: { x: mid.x, y: mid.y + dy }, radius: 5, farm: false, ground: 0 });
+    return { d, towns: [town(-40), town(40)] };
+  }
+
+  it('bridges the dry river between settlements on its two sides, with a span on each bank', () => {
+    const { d, towns } = riverDraft();
+
+    const [road] = highway(d, towns, OLD_WORLD.oldRoads, OLD_WORLD.highway);
+
+    expect(road.bridges.length).toBeGreaterThan(0);
+    const spans = d.props.filter((p) => p.kind === 'bridgeSpan');
+    expect(spans).toHaveLength(2);
+    for (const p of spans) expect(polylineDist(p.pos, TERRAIN.features.dryRiver.path)).toBeGreaterThanOrEqual(8);
+  });
+
+  it('builds no highway when no two settlements face each other across the river', () => {
+    const { d, towns } = riverDraft();
+
+    expect(highway(d, [towns[0]], OLD_WORLD.oldRoads, OLD_WORLD.highway)).toEqual([]);
   });
 });
 
@@ -303,7 +335,7 @@ describe('billboards', () => {
 describe('tank hulks', () => {
   it('lie in a small group beside an old road near the settlement it leaves', () => {
     const d = newDraft(80);
-    const road = { line: new RoadLine([{ x: 12, y: 40 }, { x: 70, y: 40 }]), width: OLD_WORLD.oldRoads.width };
+    const road = { line: new RoadLine([{ x: 12, y: 40 }, { x: 70, y: 40 }]), width: OLD_WORLD.oldRoads.width, bridges: [] };
     const rules = { ...OLD_WORLD.tanks, chance: 1 };
 
     tankHulks(SEED, d, [road], rules);

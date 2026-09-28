@@ -10,6 +10,7 @@ import {
   type BendRules,
   type BillboardRules,
   type FieldRules,
+  type HighwayRules,
   type OldRoadRules,
   type OverlookRules,
   type PowerLineRules,
@@ -21,7 +22,7 @@ import { clearOfSites, onBridge } from '../sim/mapgen';
 import { ROAD_INDEX } from '../sim/road-index';
 import { chance, hashRandom, randInt, randRange, type Rng } from '../sim/rng';
 import type { BakedProp, PropKind } from '../sim/terrain';
-import { angleDiff, bearing, clamp, DEG, dist, polylineDist, type Vec } from '../sim/vec';
+import { angleDiff, bearing, clamp, DEG, dist, polylineDist, segmentDist, type Vec } from '../sim/vec';
 import { tileSteepness, type MapDraft } from './bake';
 
 // Codes in d.built, per tile.
@@ -32,14 +33,15 @@ export const BUILT_FIELD = 2;
 // An old settlement. ground is the height at its center, so fields can keep to lower land.
 export type OldSettlement = { pos: Vec; radius: number; farm: boolean; ground: number };
 // An old road, starting at the settlement it leaves.
-export type OldRoad = { line: RoadLine; width: number };
+// bridges holds each bridge jump of the road as its two bank points.
+export type OldRoad = { line: RoadLine; width: number; bridges: [Vec, Vec][] };
 
 export function oldWorldLayer(seed: number, d: MapDraft): MapDraft {
   const W = OLD_WORLD;
   const towns = settlements(seed, d, W.settlements);
   overlooks(seed, d, W.overlooks);
   bendBuildings(seed, d, W.bends);
-  const roads = oldRoads(d, towns, W.oldRoads);
+  const roads = [...oldRoads(d, towns, W.oldRoads), ...highway(d, towns, W.oldRoads, W.highway)];
   powerLines(seed, d, W.powerLines);
   billboards(seed, d, W.billboards);
   tankHulks(seed, d, roads, W.tanks);
@@ -351,11 +353,39 @@ export function oldRoads(d: MapDraft, towns: OldSettlement[], rules: OldRoadRule
   for (const link of [...townLinks(towns, rules), ...roadLinks(d, towns, rules)]) {
     const path = grid.route(link.from, link.to);
     if (!path) continue;
-    const road = { line: new RoadLine(path), width: rules.width };
+    const road = { line: new RoadLine(path.points), width: rules.width, bridges: path.bridges };
     layOldRoad(d, road, rules);
     out.push(road);
   }
   return out;
+}
+
+// The old highway: the nearest two settlements whose straight line crosses the dry river, joined by a road that
+// bridges the riverbed rather than driving through it. Empty when no pair lies within reach.
+export function highway(d: MapDraft, towns: OldSettlement[], roads: OldRoadRules, rules: HighwayRules): OldRoad[] {
+  // The river's end stretches are shallow, so a road there drives around the head instead of bridging it.
+  const river = TERRAIN.features.dryRiver.path.slice(1, -1);
+  const pairs = towns.flatMap((a, k) => towns.slice(k + 1).map((b) => ({ a, b, d: dist(a.pos, b.pos) })));
+  const across = pairs.filter((p) => p.d <= rules.maxLength && crossesLine(river, p.a.pos, p.b.pos));
+  if (across.length === 0) return [];
+  const { a, b } = across.reduce((x, y) => (y.d < x.d ? y : x));
+  const bridgeRules = { ...roads, bridgeCost: rules.bridgeCost, maxBridge: rules.maxBridge };
+  const path = new RouteGrid(d, bridgeRules).route(a.pos, b.pos);
+  if (!path) return [];
+  const road = { line: new RoadLine(path.points), width: roads.width, bridges: path.bridges };
+  layOldRoad(d, road, roads);
+  return [road];
+}
+
+// Whether the segment from p to q crosses the polyline.
+function crossesLine(line: readonly Vec[], p: Vec, q: Vec): boolean {
+  for (let k = 1; k < line.length; k++) if (segmentsCross(p, q, line[k - 1], line[k])) return true;
+  return false;
+}
+
+function segmentsCross(a: Vec, b: Vec, c: Vec, d: Vec): boolean {
+  const turn = (p: Vec, q: Vec, r: Vec) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
+  return turn(a, b, c) !== turn(a, b, d) && turn(c, d, a) !== turn(c, d, b);
 }
 
 // Each settlement to its nearest neighbor within reach, each pair once.
@@ -405,6 +435,8 @@ const STEPS: [number, number, number][] = [
   [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2],
 ];
 
+type SearchState = { cost: Float64Array; parent: Int32Array; bridged: Uint8Array; open: NodeHeap };
+
 // Nodes on every cell-th corner. A node inside a site is closed. Costs are in tiles.
 class RouteGrid {
   private readonly n: number;
@@ -428,38 +460,45 @@ class RouteGrid {
 
   // Corner points from the node nearest from to the node nearest to, both replaced by the exact ends, with
   // only every smoothEvery-th node kept between them. Null when no route exists.
-  route(from: Vec, to: Vec): Vec[] | null {
+  // Both ends of every bridge jump stay, so the road runs straight over each bridge.
+  route(from: Vec, to: Vec): { points: Vec[]; bridges: [Vec, Vec][] } | null {
     const goal = this.nodeNear(to);
-    const parent = this.search(this.nodeNear(from), goal);
-    if (!parent) return null;
+    const found = this.search(this.nodeNear(from), goal);
+    if (!found) return null;
+    const { parent, bridged } = found;
     const nodes: number[] = [goal];
     while (parent[nodes[nodes.length - 1]] >= 0) nodes.push(parent[nodes[nodes.length - 1]]);
-    const inner = nodes.reverse().slice(1, -1).filter((_, k) => (k + 1) % this.rules.smoothEvery === 0);
-    return [from, ...inner.map((node) => this.posOf(node)), to];
+    nodes.reverse();
+    const bridgeEnd = (k: number) => bridged[nodes[k]] === 1 || (k + 1 < nodes.length && bridged[nodes[k + 1]] === 1);
+    const inner = nodes.slice(1, -1).filter((_, k) => (k + 1) % this.rules.smoothEvery === 0 || bridgeEnd(k + 1));
+    const bridges = nodes.slice(1).flatMap((node, k): [Vec, Vec][] => (bridged[node] ? [[this.posOf(nodes[k]), this.posOf(node)]] : []));
+    return { points: [from, ...inner.map((node) => this.posOf(node)), to], bridges };
   }
 
-  // A* over the nodes. The parent of each reached node, -1 at the start, or null when goal is out of reach.
-  private search(start: number, goal: number): Int32Array | null {
+  // A* over the nodes. The parent of each reached node, -1 at the start, and whether a bridge led there, or
+  // null when goal is out of reach.
+  private search(start: number, goal: number): { parent: Int32Array; bridged: Uint8Array } | null {
     const cost = new Float64Array(this.n * this.n).fill(Infinity);
     const parent = new Int32Array(this.n * this.n).fill(-1);
+    const bridged = new Uint8Array(this.n * this.n);
     const done = new Uint8Array(this.n * this.n);
     const open = new NodeHeap();
     cost[start] = 0;
     open.push(start, 0);
     while (open.size > 0) {
       const a = open.pop();
-      if (a === goal) return parent;
+      if (a === goal) return { parent, bridged };
       if (done[a]) continue;
       done[a] = 1;
-      this.relax(a, goal, { cost, parent, open });
-      this.relaxBridges(a, goal, { cost, parent, open });
+      this.relax(a, goal, { cost, parent, bridged, open });
+      this.relaxBridges(a, goal, { cost, parent, bridged, open });
     }
     return null;
   }
 
-  // Old roads crossed deep gullies on bridges: a straight jump over sunken nodes to a bank of about the
-  // same height, costlier per tile than a road on the ground.
-  private relaxBridges(a: number, goal: number, s: { cost: Float64Array; parent: Int32Array; open: NodeHeap }): void {
+  // Old roads crossed deep gullies on bridges: a straight jump over sunken ground to a bank of about the
+  // same height, at bridgeCost per tile.
+  private relaxBridges(a: number, goal: number, s: SearchState): void {
     for (const [di, dj, len] of STEPS) {
       const b = this.bridgeEnd(a, di, dj);
       if (b < 0) continue;
@@ -468,6 +507,7 @@ class RouteGrid {
       if (through >= s.cost[b]) continue;
       s.cost[b] = through;
       s.parent[b] = a;
+      s.bridged[b] = 1;
       s.open.push(b, through + this.guess(b, goal));
     }
   }
@@ -475,13 +515,21 @@ class RouteGrid {
   // The first node past a run of nodes at least minDrop below node a along a direction, when it is open and
   // within the slope limit of a, or -1. The run must start next to a and stay within the longest bridge.
   private bridgeEnd(a: number, di: number, dj: number): number {
-    const floor = this.heights[a] - this.rules.minDrop;
+    let low = Infinity;
     for (let k = 1; k * this.rules.cell <= this.rules.maxBridge; k++) {
       const b = this.openNode((a % this.n) + di * k, Math.floor(a / this.n) + dj * k);
       if (b < 0) return -1;
-      if (this.heights[b] > floor) return k > 1 && this.reachable(a, b, k * Math.hypot(di, dj)) ? b : -1;
+      if (this.spansGap(a, b, low, k * Math.hypot(di, dj))) return b;
+      low = Math.min(low, this.heights[b]);
     }
     return -1;
+  }
+
+  // Whether a bridge from a to b, over ground whose lowest point is low, spans a real gap: the floor lies
+  // minDrop below a, b rises minDrop above the floor again, and a and b are within the slope limit.
+  private spansGap(a: number, b: number, low: number, cells: number): boolean {
+    const drop = this.rules.minDrop;
+    return low <= this.heights[a] - drop && this.heights[b] >= low + drop && this.reachable(a, b, cells);
   }
 
   // The node at (i, j) when it is on the grid and open, or -1.
@@ -495,7 +543,7 @@ class RouteGrid {
     return this.stepCost(a, b, cells * this.rules.cell) < Infinity;
   }
 
-  private relax(a: number, goal: number, s: { cost: Float64Array; parent: Int32Array; open: NodeHeap }): void {
+  private relax(a: number, goal: number, s: SearchState): void {
     const ai = a % this.n;
     const aj = Math.floor(a / this.n);
     for (const [di, dj, len] of STEPS) {
@@ -505,6 +553,7 @@ class RouteGrid {
       if (through >= s.cost[b]) continue;
       s.cost[b] = through;
       s.parent[b] = a;
+      s.bridged[b] = 0;
       s.open.push(b, through + this.guess(b, goal));
     }
   }
@@ -585,17 +634,24 @@ class NodeHeap {
 
 function layOldRoad(d: MapDraft, road: OldRoad, rules: OldRoadRules): void {
   const along = stations(road.line.length, rules.sample);
-  const points = along.map((s) => road.line.pointAt(s));
-  const cut = points.map((p) => isCutTile(d, tileOf(d.size, p)));
-  points.forEach((p, k) => {
-    if (!cut[k]) markTiles(d, tilesWithin(d.size, p, road.width / 2), BUILT_OLD_ROAD);
-  });
-  for (const [a, b] of crossings(cut)) {
-    // A narrow or shallow gully only cuts the asphalt. A wide, deep wash took a bridge, whose broken ends
-    // stand on the banks over the drop.
-    if ((b - a) * rules.sample < rules.minBridge || washDrop(d, points, a, b, Math.round(rules.bankBack / rules.sample)) < rules.minDrop) continue;
-    place(d, prop('bridgeSpan', points[a], rules.spanRadius, bearing(points[a], points[b])), rules.spanRoadGap);
-    place(d, prop('bridgeSpan', points[b], rules.spanRadius, bearing(points[b], points[a])), rules.spanRoadGap);
+  for (const p of along.map((s) => road.line.pointAt(s))) {
+    // Water cuts the asphalt on the ground. A bridge fell, so its span leaves no road.
+    if (isCutTile(d, tileOf(d.size, p)) || road.bridges.some(([x, y]) => segmentDist(p, x, y) < road.width / 2)) continue;
+    markTiles(d, tilesWithin(d.size, p, road.width / 2), BUILT_OLD_ROAD);
+  }
+  for (const [x, y] of road.bridges) {
+    placeSpan(d, x, y, rules);
+    placeSpan(d, y, x, rules);
+  }
+}
+
+// A broken span on the bank at `bank`, facing the far bank. Where the bank point itself is taken or too
+// steep, the span steps back from the gap along the bridge line, up to spanBack tiles.
+function placeSpan(d: MapDraft, bank: Vec, far: Vec, rules: OldRoadRules): void {
+  const yaw = bearing(bank, far);
+  for (let back = 0; back <= rules.spanBack; back++) {
+    const at = { x: bank.x - Math.cos(yaw) * back, y: bank.y - Math.sin(yaw) * back };
+    if (place(d, prop('bridgeSpan', at, rules.spanRadius, yaw), rules.spanRoadGap)) return;
   }
 }
 
@@ -608,33 +664,8 @@ function markable(d: MapDraft, tile: number): boolean {
   return d.built[tile] === BUILT_NONE && !isCutTile(d, tile) && !builtGround(tileCenter(d.size, tile));
 }
 
-// How far the lowest ground between two banks lies below the lower bank, in height units. Each bank is read
-// a few tiles back from the cut edge, since the cut edge often lies part way down the gully side.
-function washDrop(d: MapDraft, points: Vec[], a: number, b: number, back: number): number {
-  const at = (p: Vec) => groundOf(d, p);
-  let low = Infinity;
-  for (let k = a + 1; k < b; k++) low = Math.min(low, at(points[k]));
-  const banks = [points[Math.max(0, a - back)], points[Math.min(points.length - 1, b + back)]];
-  return Math.min(...banks.map(at)) - low;
-}
 
-// Ground height of the draft at a map point, from its nearest corner.
-function groundOf(d: MapDraft, p: Vec): number {
-  const n = d.size + 1;
-  return d.heights[Math.round(p.y) * n + Math.round(p.x)];
-}
 
-// Each run of cut points with an uncut bank on both sides, as the indexes of those two banks.
-function crossings(cut: boolean[]): [number, number][] {
-  const out: [number, number][] = [];
-  let bank = -1;
-  cut.forEach((isCut, k) => {
-    if (isCut) return;
-    if (bank >= 0 && k > bank + 1) out.push([bank, k]);
-    bank = k;
-  });
-  return out;
-}
 
 // Power lines: poles at even steps along one side of a share of the long roads. Each line is its own
 // group, the road index plus 1, and steps count every spot, so a missing pole leaves a gap in the steps.

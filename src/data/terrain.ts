@@ -331,6 +331,13 @@ export type BendRules = {
   gasShare: number;
 };
 
+// The old highway across the dry river. See highway() in src/mapgen/oldworld.ts.
+export type HighwayRules = {
+  maxLength: number;
+  bridgeCost: number;
+  maxBridge: number;
+};
+
 export type OldRoadRules = {
   cell: number;
   maxLink: number;
@@ -342,6 +349,7 @@ export type OldRoadRules = {
   width: number;
   spanRadius: number;
   spanRoadGap: number;
+  spanBack: number;
   minBridge: number;
   minDrop: number;
   maxBridge: number;
@@ -399,6 +407,7 @@ export const OLD_WORLD: {
   overlooks: OverlookRules;
   bends: BendRules;
   oldRoads: OldRoadRules;
+  highway: HighwayRules;
   powerLines: PowerLineRules;
   billboards: BillboardRules;
   tanks: TankRules;
@@ -458,11 +467,17 @@ export const OLD_WORLD: {
     width: 3, // tiles, 12 m, of cracked asphalt
     spanRadius: 1.5, // tiles of footprint of a broken bridge span
     spanRoadGap: 1, // tiles between a span and a road edge
+    spanBack: 12, // tiles a span may step back from its bank point to find open, gentle ground
     minBridge: 6, // tiles, 24 m, across a wash where the old road had a bridge; narrower gullies just cut the asphalt
     minDrop: 1, // height units, 4 m, from the lower bank to the wash floor; the broken span model hangs over a drop this deep
     maxBridge: 40, // tiles, 160 m, the longest bridge an old road jumps a gully on
     bridgeCost: 1.5, // cost per tile of a bridge over a road on flat ground; a bridge beats a detour 50% longer
     bankBack: 3, // tiles back from a cut edge where a bank's height is read, past the gully side
+  },
+  highway: {
+    maxLength: 260, // tiles, 1 km, the longest highway between two settlements across the riverbed
+    bridgeCost: 0.8, // cost per tile of highway bridge over road on flat ground; highways kept level over valleys
+    maxBridge: 80, // tiles, 320 m, the longest highway bridge; enough for the riverbed and its banks
   },
   powerLines: {
     seedOffset: 7005,
