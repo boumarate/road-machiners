@@ -39,6 +39,10 @@ export type MapDraft = {
   sand: Float32Array;
   flow: Float32Array;
   slumped: Uint8Array;
+  // Old-world ground marks per tile, as the BUILT_ codes in ./oldworld.
+  built: Uint8Array;
+  // Points where a current road crosses a wash under a broken road bridge.
+  dips: Vec[];
 };
 
 export function newDraft(size: number): MapDraft {
@@ -52,6 +56,8 @@ export function newDraft(size: number): MapDraft {
     sand: new Float32Array(corners),
     flow: new Float32Array(corners),
     slumped: new Uint8Array(corners),
+    built: new Uint8Array(size * size),
+    dips: [],
   };
 }
 

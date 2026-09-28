@@ -1,5 +1,5 @@
 // Top-down pictures of a map draft for tuning the bake: ground type colors under hillshade, site edges
-// as rings and rocks as dark discs. An area is a rectangle of the map in tiles, { x, y, w, h } from its
+// as rings and props in a color and shape per kind. An area is a rectangle of the map in tiles, { x, y, w, h } from its
 // top-left corner. Pixel (px, py) covers the map point (area.x + (px + 0.5) / pxPerTile, area.y + (py + 0.5) / pxPerTile).
 
 import { REGION } from '../src/data/region.ts';
@@ -8,7 +8,24 @@ import { TYPE_IDS } from '../src/sim/terrain.ts';
 
 const OUTSIDE = 0x202020;
 const SITE_EDGE = 0x8a1e14;
-const ROCK = 0x3a3028;
+// Round props are discs of their radius. Long props are boxes along their facing, half as wide as long.
+// Road bridge decks are as wide as the road. Billboards are boards across their facing. Road bridges go first, since other props never overlap them.
+const PROP_LOOKS = {
+  roadBridge: { color: 0x3a4a8a, shape: 'deck' },
+  roadBridgeBroken: { color: 0xc02a80, shape: 'deck' },
+  rock: { color: 0x3a3028, shape: 'disc' },
+  crag: { color: 0x6a5a48, shape: 'disc' },
+  ruin: { color: 0x6e2a1e, shape: 'box' },
+  house: { color: 0xc0502a, shape: 'box' },
+  gasStation: { color: 0xe8b820, shape: 'box' },
+  silo: { color: 0xe8e0c8, shape: 'disc' },
+  waterTower: { color: 0x2a6ab8, shape: 'disc' },
+  bridgeSpan: { color: 0x8a2aa8, shape: 'long' },
+  pole: { color: 0x101010, shape: 'disc' },
+  billboard: { color: 0x20b0b0, shape: 'board' },
+  tank: { color: 0x3e5a22, shape: 'disc' },
+};
+const DRAW_ORDER = Object.keys(PROP_LOOKS);
 const COLORS = TYPE_IDS.map((id) => TERRAIN_TYPES[id].color);
 
 export function paintMap(d, area, pxPerTile) {
@@ -20,8 +37,21 @@ export function paintMap(d, area, pxPerTile) {
     put(pic, px, py, groundColor(d, x, y));
   }
   for (const site of [...REGION.towns, ...REGION.locations]) paintDisc(pic, area, pxPerTile, site.pos, site.radius, SITE_EDGE, site.radius - 1 / pxPerTile);
-  for (const rock of d.rocks) paintDisc(pic, area, pxPerTile, rock.pos, rock.r, ROCK, 0);
+  const props = [...d.props].sort((a, b) => DRAW_ORDER.indexOf(a.kind) - DRAW_ORDER.indexOf(b.kind));
+  for (const prop of props) paintProp(pic, area, pxPerTile, prop);
   return pic;
+}
+
+function paintProp(pic, area, pxPerTile, prop) {
+  const look = PROP_LOOKS[prop.kind];
+  if (!look) throw new Error(`No preview look for prop kind ${prop.kind}`);
+  // Half a pixel at least, so a thin pole still covers one pixel.
+  const r = Math.max(prop.r, 0.5 / pxPerTile);
+  if (look.shape === 'disc') return paintDisc(pic, area, pxPerTile, prop.pos, r, look.color, 0);
+  if (look.shape === 'box') return paintBox(pic, area, pxPerTile, prop.pos, prop.yaw, r * Math.SQRT1_2, r * Math.SQRT1_2, look.color);
+  if (look.shape === 'long') return paintBox(pic, area, pxPerTile, prop.pos, prop.yaw, r, r / 2, look.color);
+  if (look.shape === 'deck') return paintBox(pic, area, pxPerTile, prop.pos, prop.yaw, r, REGION.roadWidth / 2, look.color);
+  return paintBox(pic, area, pxPerTile, prop.pos, prop.yaw, Math.max(r / 5, 0.5 / pxPerTile), r, look.color);
 }
 
 function groundColor(d, x, y) {
@@ -49,6 +79,23 @@ function paintDisc(pic, area, pxPerTile, center, radius, color, inner) {
   for (let py = y0; py <= y1; py++) for (let px = x0; px <= x1; px++) {
     const r = Math.hypot(area.x + (px + 0.5) / pxPerTile - center.x, area.y + (py + 0.5) / pxPerTile - center.y);
     if (r <= radius && r >= inner) put(pic, px, py, color);
+  }
+}
+
+// Fills the pixels whose centers lie in the box around center, halfAlong tiles along the facing yaw and
+// halfAcross tiles across it.
+function paintBox(pic, area, pxPerTile, center, yaw, halfAlong, halfAcross, color) {
+  const cos = Math.cos(yaw);
+  const sin = Math.sin(yaw);
+  const reach = Math.hypot(halfAlong, halfAcross);
+  const x0 = Math.max(0, Math.floor((center.x - reach - area.x) * pxPerTile));
+  const x1 = Math.min(pic.width - 1, Math.ceil((center.x + reach - area.x) * pxPerTile));
+  const y0 = Math.max(0, Math.floor((center.y - reach - area.y) * pxPerTile));
+  const y1 = Math.min(pic.height - 1, Math.ceil((center.y + reach - area.y) * pxPerTile));
+  for (let py = y0; py <= y1; py++) for (let px = x0; px <= x1; px++) {
+    const dx = area.x + (px + 0.5) / pxPerTile - center.x;
+    const dy = area.y + (py + 0.5) / pxPerTile - center.y;
+    if (Math.abs(dx * cos + dy * sin) <= halfAlong && Math.abs(dy * cos - dx * sin) <= halfAcross) put(pic, px, py, color);
   }
 }
 

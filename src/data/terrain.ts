@@ -14,7 +14,8 @@ export type TerrainTypeId =
   | "gravel"
   | "saltCrust"
   | "asphalt"
-  | "ash";
+  | "ash"
+  | "field";
 
 export type TerrainType = {
   id: TerrainTypeId;
@@ -36,6 +37,9 @@ export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
   saltCrust: { id: "saltCrust", name: "Salt crust", speed: 0.95, wear: 0.8, dust: 1.2, color: 0xe0d8ba },
   asphalt: { id: "asphalt", name: "Cracked asphalt", speed: 0.98, wear: 0.6, dust: 0.3, color: 0x55565b },
   ash: { id: "ash", name: "Ash", speed: 0.6, wear: 1, dust: 1.6, color: 0x77737a },
+  // Dead fields: dry furrowed dirt. Furrows slow a truck like scrub and shake it a little more than
+  // hardpan, and the tilled dirt throws more dust than hardpan. Last, so earlier type codes keep their values.
+  field: { id: "field", name: "Dead field", speed: 0.8, wear: 1.1, dust: 1.4, color: 0x8e6e4a },
 };
 
 export const TERRAIN = {
@@ -275,6 +279,239 @@ export const GEOLOGY: { rain: RainRules; slump: SlumpRules; wind: WindRules; dun
       above: 12.5, // height units, 50 m; ridge tops this high are about the top tenth of all ridge tops, so only mountain crests carry spires
       radius: [1.6, 2.6], // tiles of radius, 6.4 to 10.4 m; a spire stands out above the boulders around it
     },
+  },
+};
+
+// Old-world rules for the map bake: what stood here before, placed from terrain, sites and roads. See
+// src/mapgen/oldworld.ts. Distances are in tiles of 4 m, heights in units of 4 m, slopes in units per tile.
+// Each rule draws its randomness from the map seed and its own seedOffset, so rules never shift each other.
+export type SettlementRules = {
+  seedOffset: number;
+  candidateStep: number;
+  count: number;
+  spacing: number;
+  anchorGap: [number, number];
+  jitter: number;
+  radius: number;
+  roadGap: number;
+  flatSlope: number;
+  houses: [number, number];
+  houseRadius: [number, number];
+  intactShare: number;
+  farmShare: number;
+  towerShare: number;
+  towerRadius: number;
+  placeTries: number;
+};
+
+export type OverlookRules = {
+  seedOffset: number;
+  step: number;
+  reach: number;
+  drop: number;
+  rise: number;
+  directions: number;
+  flatSlope: number;
+  count: number;
+  spacing: number;
+  roadGap: number;
+  radius: [number, number];
+  intactShare: number;
+};
+
+export type BendRules = {
+  seedOffset: number;
+  sample: number;
+  reach: number;
+  angle: number;
+  spacing: number;
+  chance: number;
+  gap: number;
+  radius: [number, number];
+  gasShare: number;
+};
+
+export type OldRoadRules = {
+  cell: number;
+  maxLink: number;
+  maxSlope: number;
+  slopeCost: number;
+  washCost: number;
+  smoothEvery: number;
+  sample: number;
+  width: number;
+  spanRadius: number;
+  spanRoadGap: number;
+};
+
+export type RoadBridgeRules = {
+  seedOffset: number;
+  sample: number;
+  minSpan: number;
+  maxSpan: number;
+  overhang: number;
+  brokenShare: number;
+};
+
+export type PowerLineRules = {
+  seedOffset: number;
+  roadShare: number;
+  minLength: number;
+  spacing: number;
+  gap: number;
+  radius: number;
+  missingShare: number;
+};
+
+export type BillboardRules = {
+  seedOffset: number;
+  approach: number[];
+  straightStep: number;
+  straightReach: number;
+  straightness: number;
+  straightChance: number;
+  spacing: number;
+  gap: number;
+  radius: number;
+};
+
+export type TankRules = {
+  seedOffset: number;
+  chance: number;
+  along: [number, number];
+  group: [number, number];
+  spread: number;
+  gap: number;
+  radius: number;
+  placeTries: number;
+};
+
+export type FieldRules = {
+  seedOffset: number;
+  perFarm: [number, number];
+  side: [number, number];
+  gap: number;
+  reach: number;
+  flatSlope: number;
+  lowRise: number;
+  minShare: number;
+  tries: number;
+};
+
+export const OLD_WORLD: {
+  settlements: SettlementRules;
+  overlooks: OverlookRules;
+  bends: BendRules;
+  oldRoads: OldRoadRules;
+  roadBridges: RoadBridgeRules;
+  powerLines: PowerLineRules;
+  billboards: BillboardRules;
+  tanks: TankRules;
+  fields: FieldRules;
+} = {
+  settlements: {
+    seedOffset: 7001,
+    candidateStep: 4, // tiles between candidate spots; finer than the settlement radius, so no flat spot is missed
+    count: 14, // old settlements on the map, a little under today's 17 sites, so ruins stay a find, not a carpet
+    spacing: 45, // tiles, 180 m, between settlement centers; two never read as one town
+    anchorGap: [12, 80], // tiles from a site edge or road junction; people settle near where people still go, but not on top of it
+    jitter: 0.5, // share of the score from seeded noise, so the best spots do not always win
+    radius: 5, // tiles, 20 m; houses stand within this of the center
+    roadGap: 3, // tiles between a settlement's edge and a road edge
+    flatSlope: 0.12, // steepest tile under a settlement, about 7 degrees; people built on gentle ground
+    houses: [3, 7], // houses per settlement, a hamlet
+    houseRadius: [0.9, 1.3], // tiles, like today's town buildings
+    intactShare: 0.25, // share of houses that still stand whole; the rest are ruined shells
+    farmShare: 0.4, // share of settlements that farmed, with fields and a silo or water tower
+    towerShare: 0.5, // share of farms with a water tower instead of a silo
+    towerRadius: 1.2, // tiles of footprint for a silo or water tower
+    placeTries: 12, // tries to fit each house before it is left out
+  },
+  overlooks: {
+    seedOffset: 7002,
+    step: 3, // tiles between checked corners
+    reach: 10, // tiles out to where the drop is measured, 40 m
+    drop: 2, // units, 8 m; the ground this far below the spot counts as a view
+    rise: 0.5, // units, 2 m; ground at reach may stand this far above the spot, so plateau edges with small bumps count as hilltops
+    directions: 3, // of 8 compass directions that must drop, so the view is wide, not down one gully
+    flatSlope: 0.15, // steepest tile the building stands on
+    count: 10, // lone buildings on overlooks
+    spacing: 60, // tiles between overlook buildings
+    roadGap: 3, // tiles between the footprint and a road edge
+    radius: [1, 1.4], // tiles of footprint
+    intactShare: 0.4, // share that still stand whole
+  },
+  bends: {
+    seedOffset: 7003,
+    sample: 2, // tiles between checked road points
+    reach: 8, // tiles back and ahead along the road over which the turn is measured
+    angle: 35, // degrees of turn over that stretch that make a sharp bend
+    spacing: 40, // tiles between bend buildings
+    chance: 0.6, // chance a sharp bend has a building
+    gap: 2, // tiles between the footprint and the road edge
+    radius: [1, 1.4], // tiles of footprint
+    gasShare: 0.4, // share of bend buildings that are gas stations
+  },
+  oldRoads: {
+    cell: 4, // tiles between nodes of the route grid; old roads need no finer line
+    maxLink: 120, // tiles, the longest old road from a settlement to its neighbor or to a road of today
+    maxSlope: 0.35, // steepest step between nodes; old roads kept to grades below scree
+    slopeCost: 6, // cost multiplier 1 + slopeCost * (slope / maxSlope)^2; old roads went around hills
+    washCost: 4, // extra cost per tile of a step onto a wash bed, so old roads cross washes only where the way around is long
+    smoothEvery: 3, // route nodes per kept point, so the road runs straight between them instead of zigzagging
+    sample: 0.5, // tiles between points walked along an old road
+    width: 3, // tiles, 12 m, of cracked asphalt
+    spanRadius: 1.5, // tiles of footprint of a broken bridge span
+    spanRoadGap: 1, // tiles between a span and a road edge
+  },
+  roadBridges: {
+    seedOffset: 7004,
+    sample: 0.5, // tiles between points walked along a road
+    minSpan: 2, // tiles, 8 m, of wash bed along the road that need a bridge; narrower gullies pass under the road in a culvert
+    maxSpan: 16, // tiles, 64 m; a longer wet stretch is the road running along a wash, not across it, so it gets no bridge
+    overhang: 2, // tiles the bridge reaches past each edge of the wash bed
+    brokenShare: 0.35, // share of road bridges that are broken, where the road dips through the wash
+  },
+  powerLines: {
+    seedOffset: 7005,
+    roadShare: 0.6, // share of long roads with a power line beside them
+    minLength: 60, // tiles; shorter roads are spurs and tracks with no line
+    spacing: 14, // tiles, 56 m, between poles
+    gap: 1, // tiles between a pole and the road edge
+    radius: 0.3, // tiles of pole footprint
+    missingShare: 0.15, // share of poles that fell or were taken, left as gaps in the line
+  },
+  billboards: {
+    seedOffset: 7006,
+    approach: [25, 50], // tiles past a town edge along each road leaving it
+    straightStep: 20, // tiles between checked road points for straights
+    straightReach: 30, // tiles back and ahead measured for a straight
+    straightness: 0.985, // shortest share of the road length the chord keeps on a straight
+    straightChance: 0.3, // chance a straight point gets a billboard, so straights are not lined with them
+    spacing: 70, // tiles between billboards
+    gap: 1.5, // tiles between the footprint and the road edge
+    radius: 1.6, // tiles of footprint, as the old landmark billboards
+  },
+  tanks: {
+    seedOffset: 7007,
+    chance: 0.5, // chance an old road leaving a settlement has a group of hulks
+    along: [10, 30], // tiles along the old road from the settlement to the group
+    group: [2, 4], // hulks per group
+    spread: 4, // tiles a hulk lies from the group point, along and beside the road
+    gap: 1, // tiles between a hulk and the old road edge
+    radius: 1.5, // tiles of footprint, as the old landmark hulks
+    placeTries: 6, // tries to fit each hulk before it is left out
+  },
+  fields: {
+    seedOffset: 7008,
+    perFarm: [2, 4], // fields per farm
+    side: [6, 14], // tiles along each side of a field rectangle, 24 to 56 m
+    gap: 2, // tiles between the settlement edge and the nearest field
+    reach: 12, // tiles farther out a field may lie
+    flatSlope: 0.1, // steepest tile that was ploughed
+    lowRise: 0.5, // units, 2 m; fields lie no higher than this above the settlement ground, on the low land
+    minShare: 0.6, // share of a rectangle's tiles that must be good ground, or the field goes elsewhere
+    tries: 8, // tries to fit each field
   },
 };
 
