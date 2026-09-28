@@ -115,7 +115,7 @@ export const EFFECTS: Record<EffectId, Effect> = {
   },
   acceptTow: (world) => acceptOffer(world),
   refuseTow: (world) => refuseOffer(world),
-  askTow: (world, npc) => startTow(world, npc, strandedPlayerAt(world, npc)!),
+  askTow: (world, npc) => startTow(world, npc, playerVehicle(world), strandedPlayerAt(world, npc)!),
   startTrade: (world, npc) => startTrade(world, npc),
   agreePatch: (world, npc, call) => {
     const terms = call.vars.deal;
@@ -134,11 +134,8 @@ export const EFFECTS: Record<EffectId, Effect> = {
   refusePlea: (world, npc) => answerPlea(world, npc, false),
   settlePlea: (world, npc, call) => settlePlayerPlea(world, npc, playerPlea(call), answerOf(call.vars) === 'yes'),
   withdrawPlea: (world, npc, call) => settlePlayerPlea(world, npc, playerPlea(call), false),
-  hitchNpc: (world, npc, call) => {
-    const { town, fee } = call.vars;
-    if (town?.kind !== 'town' || fee?.kind !== 'money') throw new Error('hitchNpc needs a town and a fee');
-    hitchNpc(world, npc, town.id, fee.amount);
-  },
+  hitchNpc: (world, npc) => hitchNpc(world, npc, false),
+  hitchNpcFree: (world, npc) => hitchNpc(world, npc, true),
   releaseNpc: (world, npc) => releaseNpc(world, npc),
   settleThreat: (world, npc, call) => {
     const answer = threatAnswer(call);
@@ -155,8 +152,8 @@ export const PREPARES: Record<PrepareId, Prepare> = {
   mercyAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'mercy') ? 'yes' : 'no' } }),
   threatAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersThreat(world, npc) } }),
   npcTowTerms: (world, npc) => {
-    const { town, fee } = npcTowTerms(world, npc);
-    return { town: { kind: 'town', id: town.id }, fee: { kind: 'money', amount: fee } };
+    const { site, fee } = npcTowTerms(world, npc);
+    return { site: { kind: 'site', id: site.id }, fee: { kind: 'money', amount: fee } };
   },
   // No `deal` value means the driver cannot offer a patch.
   patchTerms: (world, npc): CallVars => {
@@ -166,8 +163,8 @@ export const PREPARES: Record<PrepareId, Prepare> = {
   towOffer: (world, npc) => {
     const tow = offerBy(world, npc);
     if (!tow) throw new Error(`${npc.id} made no tow offer`);
-    const { town, fee } = towData(tow);
-    return { town: { kind: 'town', id: town }, fee: { kind: 'money', amount: fee } };
+    const { site, fee } = towData(tow);
+    return { town: { kind: 'town', id: site }, fee: { kind: 'money', amount: fee } };
   },
   nearestTown: (world, npc) => {
     const me = playerVehicle(world).pos;

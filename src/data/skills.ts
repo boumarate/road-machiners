@@ -84,6 +84,9 @@ export const XP_SOURCES: Record<XpSource, XpSourceDef> = {
   call: { skill: 'social', weight: 8, scaled: false, repeat: 0 }, // per topic taken up on a radio call; target: driver and topic
   honk: { skill: 'social', weight: 2, scaled: false, repeat: 0 }, // per driver in sight that honks back; target: that driver
   contract: { skill: 'social', weight: 1, scaled: false, repeat: 0.8 }, // per XP a finished contract names; target: the shop that posted it
+  // Per money unit of tow fee the player waives, paid on arrival. The profit weight, so kindness teaches as much as
+  // earning that money would. Target: the towed driver.
+  freeTow: { skill: 'social', weight: 0.8, scaled: false, repeat: 0.5 },
 };
 
 export const XP_RULES = {

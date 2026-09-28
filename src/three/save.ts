@@ -21,9 +21,9 @@ export function hasSave(storage: Storage): boolean {
 // turnedDown. 11 replaces the NPC's last attacker with its attack records and adds repair goals. 12 adds the
 // answering claim on a tow job. 13 adds god mode. 14 adds the full log flag. 15 adds radio calls, topic memory, and patch and truce states.
 // 16 replaces the XP pool with per-skill XP. 17 adds the hostile trucks seen last turn and more XP sources.
-// 18 adds perks. 19 marks calls that took up a topic. 20 adds part wear. 21 adds XP targets and player piles.
-// Older saves do not load.
-const SAVE_VERSION = 21;
+// 18 adds perks. 19 marks calls that took up a topic. 20 adds part wear. 21 adds player tows of NPCs with waived fees.
+// 22 adds XP targets and player piles. Older saves do not load.
+const SAVE_VERSION = 22;
 
 export function loadWorld(storage: Storage): World | null {
   const raw = storage.getItem(SAVE_KEY);
