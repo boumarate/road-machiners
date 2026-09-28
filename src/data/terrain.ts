@@ -122,12 +122,10 @@ export const TERRAIN = {
     ] as { center: Vec; radius: number; bank: number; depth: number }[],
   },
   reliefPx: 45, // screen pixels per height unit
-  // Tile types. Roads and sites first, then steep ground and the geology marks in GEOLOGY.ground, then
-  // scrub or hardpan.
+  // Tile types. Roads and sites first, then old-world and new-world marks, then steep ground and the
+  // geology marks in GEOLOGY.ground, then hardpan.
   types: {
     screeSlope: 0.35, // slope from which ground is scree
-    scrubFreq: 1 / 5, // scrub patch noise frequency, cycles per tile
-    scrubAbove: 0.62, // patch noise above which ground is scrub
     siteMargin: 1, // tiles around towns and locations that count as hardpan
   },
   // Driving: grade is the slope along the driving direction.

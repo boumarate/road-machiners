@@ -5,13 +5,14 @@
 import { REGION } from '../data/region';
 import { GEOLOGY, MAPGEN, TERRAIN, type TerrainTypeId } from '../data/terrain';
 import { bridgeCut, deckAlong } from '../sim/bridge';
-import { broadAt, flattenFactor, noiseAt, reliefAt } from '../sim/elevation';
+import { broadAt, flattenFactor, reliefAt } from '../sim/elevation';
 import { gradeRoads } from '../sim/road-grade';
 import { ROAD_INDEX } from '../sim/road-index';
 import { chance, randRange, type Rng } from '../sim/rng';
 import { heightFromElevation, TYPE_IDS, type BakedProp } from '../sim/terrain';
 import { clearOfSites, onBridge } from '../sim/mapgen';
 import { dist, polylineDist, type Vec } from '../sim/vec';
+import { BUILT_DIRTY_WATER, BUILT_SCRUB, BUILT_TOXIC, newWorldLayer } from './newworld';
 import { BUILT_FIELD, BUILT_OLD_ROAD, oldWorldLayer } from './oldworld';
 import { cornerNeighbors, geologyLayer, pondDepths, type Neighbors } from './geology';
 
@@ -20,6 +21,7 @@ export function bakeMap(seed: number): MapDraft {
   d = timed('geology', () => geologyLayer(seed, d));
   d = timed('finish', () => finishLayer(seed, d));
   d = timed('old world', () => oldWorldLayer(seed, d));
+  d = timed('new world', () => newWorldLayer(seed, d));
   d = timed('ground', () => groundLayer(seed, d));
   return timed('rocks', () => rockLayer(seed, d));
 }
@@ -41,7 +43,7 @@ export type MapDraft = {
   sand: Float32Array;
   flow: Float32Array;
   slumped: Uint8Array;
-  // Old-world ground marks per tile, as the BUILT_ codes in ./oldworld.
+  // Ground marks per tile, as the BUILT_ codes in ./oldworld and ./newworld.
   built: Uint8Array;
   // Points where a current road crosses a wash under a broken road bridge.
 };
@@ -102,8 +104,8 @@ export function finishLayer(seed: number, d: MapDraft): MapDraft {
   return d;
 }
 
-// Ground layer. Built ground first: roads, the bridge deck and site ground. Then the first geology rule
-// that holds for the tile, then scrub or hardpan. Geology marks live on
+// Ground layer. Built ground first: roads, the bridge deck and site ground. Then old-world and new-world
+// tile marks, then the first geology rule that holds for the tile, then hardpan. Geology marks live on
 // corners, so each rule reads the tile's four corners.
 
 const SITES = [...REGION.towns, ...REGION.locations];
@@ -122,7 +124,13 @@ export function groundLayer(seed: number, d: MapDraft): MapDraft {
 }
 
 // Ground types for old-world tile marks.
-const MARKED_TYPES: Record<number, TerrainTypeId> = { [BUILT_OLD_ROAD]: 'asphalt', [BUILT_FIELD]: 'field' };
+const MARKED_TYPES: Record<number, TerrainTypeId> = {
+  [BUILT_OLD_ROAD]: 'asphalt',
+  [BUILT_FIELD]: 'field',
+  [BUILT_SCRUB]: 'scrub',
+  [BUILT_DIRTY_WATER]: 'dirtyWater',
+  [BUILT_TOXIC]: 'toxic',
+};
 
 function pickType(g: GroundInput, x: number, y: number): TerrainTypeId {
   const c = { x: x + 0.5, y: y + 0.5 };
@@ -136,7 +144,8 @@ function pickType(g: GroundInput, x: number, y: number): TerrainTypeId {
     const type = rule(g, tile, k);
     if (type) return type;
   }
-  return plainType(g.seed, c);
+  // Scrub grows only where the new-world layer let it spread, so the rest is bare hardpan.
+  return 'hardpan';
 }
 
 // The canyon and the dry river are water courses: their floors and lower banks are wash beds, never lakes,
@@ -203,9 +212,6 @@ function cornerMean(a: ArrayLike<number>, size: number, k: number): number {
   return (a[k] + a[k + 1] + a[k + w] + a[k + w + 1]) / 4;
 }
 
-function plainType(seed: number, c: Vec): TerrainTypeId {
-  return noiseAt(seed, c.x * T.scrubFreq, c.y * T.scrubFreq) > T.scrubAbove ? 'scrub' : 'hardpan';
-}
 
 // Rock layer: boulders on corners at the foot of cliffs and on ridge tops, each by its own chance from
 // the map seed, off the roads, sites, the bridge deck, cliffs, the map margin and earlier props. A boulder

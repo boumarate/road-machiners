@@ -115,13 +115,13 @@ describe('ground types from geology marks', () => {
     expect(['mud', 'saltCrust']).not.toContain(typeAt(d, at.x, at.y));
   });
 
-  it('lays only hardpan, scrub and built ground on flat ground with no marks', () => {
+  it('lays only hardpan and built ground on flat ground with no marks', () => {
     const d = newDraft(REGION.size);
 
     groundLayer(SEED, d);
 
     const kinds = new Set(Array.from(d.types, (code) => TYPE_IDS[code]));
-    expect([...kinds].sort()).toEqual(['hardpan', 'road', 'scrub']);
+    expect([...kinds].sort()).toEqual(['hardpan', 'road']);
   });
 });
 

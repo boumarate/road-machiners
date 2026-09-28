@@ -51,8 +51,8 @@ describe("road index", () => {
 
 describe('terrain variety', () => {
   it('has every type with a bake rule on the baked map, with road/site priority', () => {
-    // Ash has no bake rule yet. Dirty water and toxic pools wait for the new-world layer.
-    const unruled = ['ash', 'dirtyWater', 'toxic'];
+    // Ash has no bake rule yet.
+    const unruled = ['ash'];
     const ruled = Object.keys(TERRAIN_TYPES).filter((id) => !unruled.includes(id));
     const t = TEST_MAP.terrain;
     expect(new Set(t.types)).toEqual(new Set(ruled));
