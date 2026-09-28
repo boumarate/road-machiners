@@ -16,8 +16,15 @@ import { hasPerk } from '../sim/progress';
 import { pleaData, statesHeld, towData } from '../sim/states';
 import { isJunk } from '../sim/wear';
 import type { PartHit } from '../sim/armor';
-import type { GameEvent, NpcState, PartInstance, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
+import type { GameEvent, Job, NpcState, PartInstance, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
+
+export const JOB_LABELS: Record<Job['kind'], string> = { search: 'Search', repair: 'Repair', refit: 'Refit', strip: 'Strip' };
+
+// The share of a job's turns already worked, from 0 to 1.
+export function jobProgress(job: Job): number {
+  return 1 - job.turnsLeft / job.total;
+}
 import { damage } from './units';
 
 // A part's condition in one word: junk, pristine, or a rebuild count for a part that has broken and
@@ -72,6 +79,7 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   truce: () => 'Truce with you',
   grievance: () => 'Angry at your crash',
   plea: (s) => (pleaData(s).plea === 'truce' ? 'Asked you for a truce' : 'Begged you for mercy'),
+  trade: () => 'Pulling over to trade with you',
 };
 
 // One line per state the NPC holds toward the player, with turns left when the state has a timer.

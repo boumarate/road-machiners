@@ -413,6 +413,7 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   backedOff: { preySeen: { rob: { mul: 0.005 } } },
   tow: {},
   patch: {},
+  trade: {},
   truce: {},
   grievance: {},
   // A driver that pleaded with a foe rarely pleads with it again soon. A truce weight of 2.5 drops to 0.025.
@@ -438,6 +439,9 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   // Work on a patch keeps it going. Without work it lapses after 40 turns, a fifth of a day, so a client
   // stops waiting for a patcher who never comes.
   patch: 40,
+  // Being parked in reach keeps a trade meeting going. Without that it lapses after 20 turns, so a driver stops
+  // chasing a player who drove off, and the player stops waiting for a driver who cannot get through.
+  trade: 20,
   // A truck that handed over its cargo is left alone for 60 turns: time for the raiders to search the stock and the
   // truck to drive well away. Shots start a feud, which ends the truce's effect at once.
   truce: 60,
@@ -474,7 +478,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // in ten scavengers help a stranded truck. An idle scavenger takes on a manageable hostile about nine times in
   // ten: fight 4, times NPC_BEHAVIOR.manageableFight.
   scavenger: {
-    towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
+    towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks'], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
     weights: { idle: { scavenge: { add: 10 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 9 } }, hostileSeen: { fight: { add: 2 } } },
   },
   // Traders rarely pick a fight: a fight weight of 2 drops to 0.004, about 1%, and to 0.02, about 2%, against a
@@ -588,6 +592,9 @@ export const NPC_UPKEEP = {
   lowSupplies: RULES.lowFuelThreshold,
   // Reserve one full tank and supply load before buying trade cargo.
   reserveLoads: 1,
+  // A driver sells fuel and supplies to the player only above this share of its caps. It sits well above the low
+  // thresholds, so a sale never sends the driver off to resupply at once.
+  tradeReserve: 0.5,
 };
 
 // Raiders drive between these points to look for prey.

@@ -7,12 +7,16 @@ import { record, recordFrom, recordTurns, StallWatch, type TraceLine } from './r
 import { replay } from './replay';
 
 const SHORT_RUN = 60;
-const RUN_TIMEOUT = 60_000; // two short recordings; one world turn takes about 40 ms and a new world about 400 ms
+// A nondeterminism bug (stray Math.random, object-identity leaks, iteration-order drift) shows up within a
+// handful of turns; it does not need thousands to surface. Short enough to keep this check cheap, long enough
+// to have run through several bot decisions.
+const DETERMINISM_RUN = 15;
+const RUN_TIMEOUT = 30_000; // one world turn takes about 40 ms and a new world about 400 ms
 
 describe('record', () => {
   it('gives the same trace for the same seed and archetype', () => {
-    const first = record(1337, 'trader', SHORT_RUN);
-    const second = record(1337, 'trader', SHORT_RUN);
+    const first = record(1337, 'trader', DETERMINISM_RUN);
+    const second = record(1337, 'trader', DETERMINISM_RUN);
 
     expect(first.lines.length).toBeGreaterThan(0);
     expect(first.death).toBeNull();

@@ -6,9 +6,11 @@ import { planNpcOrders } from './ai';
 import { getResources } from './resources';
 import { REGION } from '../data/region';
 import { MIN_CHANCE, TRAITS, type TraitId } from '../data/npcs';
-import { optionChances, optionWeights } from './npc-decisions';
+import { SHOPS } from '../data/market';
+import { optionChances, optionWeights, visibleSalvage } from './npc-decisions';
 import { endTurn } from './world';
-import { corePart, goodsCount } from './grid';
+import { corePart, freeCells, goodsCount } from './grid';
+import { makePart } from './factory';
 import { addGoods } from './inventory';
 import { getActivityDestination, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { cloneWorld } from './world';
@@ -28,6 +30,12 @@ describe('NPC activities', () => {
       for (const id of [...profile.towns, ...profile.bases, ...profile.salvageSites, ...profile.supplySites]) {
         expect(sites.find((site) => site.id === id), `missing site ${id}`).toBeDefined();
       }
+    }
+  });
+
+  it('sends no trait to search a site that trades', () => {
+    for (const profile of Object.values(TRAITS)) {
+      for (const id of profile.salvageSites) expect(id in SHOPS, `${id} is a shop`).toBe(false);
     }
   });
 
@@ -85,6 +93,35 @@ describe('NPC activities', () => {
     expect(w.events).toEqual([expect.objectContaining({ previous: 'scavenge', activity: null, reason: 'salvage no longer available' })]);
   });
 
+  it('drops a scavenge goal when nothing left in the stock fits its cargo', () => {
+    const { w, npc } = createScavenger();
+    addGoods(w, npc, 'scrap', freeCells(npc) - 1);
+    w.salvage = [{ id: 'wreck-test', pos: { x: 10.5, y: 10 }, radius: 0.6, goods: {}, parts: [makePart(w, 'plates', 0)] }];
+    npc.speed = 0;
+    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'wreck-test', destination: { ...npc.pos }, phase: 'travel', reason: 'collect visible salvage' }];
+    w.events = [];
+    resolveNpcActivities(w);
+    expect(npc.job).toBeNull();
+    expect(w.events).toEqual([expect.objectContaining({ previous: 'scavenge', activity: null, reason: 'cargo cannot hold salvage' })]);
+  });
+
+  it('does not see a reachable stock as salvage when nothing in it fits', () => {
+    const { w, npc } = createScavenger();
+    addGoods(w, npc, 'scrap', freeCells(npc) - 1);
+    w.salvage = [{ id: 'wreck-test', pos: { x: 10.5, y: 10 }, radius: 0.6, goods: {}, parts: [makePart(w, 'plates', 0)] }];
+    npc.speed = 0;
+    expect(visibleSalvage(w, npc)).toEqual([]);
+    w.salvage[0].goods.scrap = 1;
+    expect(visibleSalvage(w, npc).map((s) => s.id)).toEqual(['wreck-test']);
+  });
+
+  it('drops a scavenge goal on a cargo pile once the pile is gone, before it drives', () => {
+    const { w, npc } = createScavenger();
+    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'cargo-v9-1', destination: { x: npc.pos.x + 8, y: npc.pos.y }, phase: 'travel', reason: 'collect visible salvage' }];
+    expect(() => planNpcOrders(w)).not.toThrow();
+    expect(npc.brain!.goals.some((goal) => goal.targetId === 'cargo-v9-1')).toBe(false);
+  });
+
   it('completes a collect-sell-upkeep loop through actual turns', () => {
     let { w, npc } = createScavenger();
     const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
@@ -98,7 +135,8 @@ describe('NPC activities', () => {
     let collected = false;
     let sold = false;
     let serviced = false;
-    for (let turn = 0; turn < w.size * 5; turn++) {
+    // Observed completion is well under 500 turns; keep a generous cap so a stalled NPC fails fast.
+    for (let turn = 0; turn < 800; turn++) {
       w = endTurn(w, testDrive);
       npc = w.vehicles.find((v) => v.id === id)!;
       if ((goodsCount(npc).scrap ?? 0) > 0) collected = true;

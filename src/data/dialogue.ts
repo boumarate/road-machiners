@@ -11,10 +11,10 @@ export type TopicId = 'directions' | 'tow' | 'askTow' | 'patch' | 'patchRequest'
 export type ConditionId =
   | 'knowsTown' | 'offersTow' | 'canTowPlayer' | 'playerNeedsPatch' | 'npcNeedsPatch' | 'hasDeal' | 'noDeal' | 'demandsCargo'
   | 'atOdds' | 'atPeace' | 'noPlayerPlea' | 'npcHasCargo' | 'offersTruce' | 'begsMercy'
-  | 'accepts' | 'refuses' | 'complies' | 'resists' | 'runs' | 'canTowNpc' | 'towedByPlayer';
+  | 'accepts' | 'refuses' | 'complies' | 'resists' | 'runs' | 'canTowNpc' | 'towedByPlayer' | 'noTrade';
 export type EffectId =
   | 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow' | 'agreePatch' | 'handOver'
-  | 'acceptPlea' | 'refusePlea' | 'settlePlea' | 'withdrawPlea' | 'settleThreat' | 'hitchNpc' | 'hitchNpcFree' | 'releaseNpc';
+  | 'acceptPlea' | 'refusePlea' | 'settlePlea' | 'withdrawPlea' | 'settleThreat' | 'hitchNpc' | 'hitchNpcFree' | 'releaseNpc' | 'startTrade';
 export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms' | 'truceAnswer' | 'mercyAnswer' | 'threatAnswer' | 'npcTowTerms';
 
 // `go` is a node of the same topic, the hub of topics, or the end of the call.
@@ -167,19 +167,23 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // Lists a driver's loose, unmounted parts with a buy price each. src/sim/dialogue.ts builds this node's
-  // line and options live from the NPC's current spares, since the list shrinks as the player buys, so
-  // the static line and empty options below are never read.
+  // Both trucks pull over side by side, and E opens the trade screen once both are parked. See src/sim/economy.ts.
   trade: {
     id: 'trade',
     once: false,
-    ask: { text: 'Got any spares to sell?', when: [], duringFeud: false },
+    ask: { text: 'Want to trade?', when: ['noTrade'], duringFeud: false },
     raise: null,
     prepare: null,
     hangUp: [],
-    start: 'offers',
+    start: 'offer',
     nodes: {
-      offers: { line: 'Have a look.', options: [] },
+      offer: {
+        line: 'Sure. Pull over and I will come alongside.',
+        options: [
+          { text: 'Pulling over.', when: [], effects: ['startTrade'], go: END },
+          { text: 'Never mind.', when: [], effects: [], go: HUB },
+        ],
+      },
     },
   },
   // The player asks a foe for a truce. The driver's answer is rolled when the topic opens. The player asks the same
