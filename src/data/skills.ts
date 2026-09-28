@@ -78,6 +78,9 @@ export const XP_SOURCES: Record<XpSource, XpSourceDef> = {
   profit: { skill: 'social', weight: 0.8, scaled: false }, // per money unit of profit on a sale
   deal: { skill: 'social', weight: 30, scaled: false }, // per talk topic that ends agreed
   call: { skill: 'social', weight: 8, scaled: false }, // per radio call that ends
+  // Per money unit of tow fee the player waives, paid on arrival. The profit weight, so kindness teaches as much as
+  // earning that money would.
+  freeTow: { skill: 'social', weight: 0.8, scaled: false },
 };
 
 export const XP_RULES = {

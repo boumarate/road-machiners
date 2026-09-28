@@ -20,7 +20,7 @@ export type XpSource =
   | "hit" | "contact" | "discover"
   | "fieldJob" | "patch" | "search"
   | "heat" | "damage" | "knockout"
-  | "profit" | "deal" | "call";
+  | "profit" | "deal" | "call" | "freeTow";
 
 export type PartInstance = {
   id: string;
@@ -202,15 +202,16 @@ export type Obstacle =
 export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce' | 'grievance' | 'plea' | 'trade';
 export type StateEnding = 'expired' | 'fulfilled' | 'broken';
 export type Plea = 'truce' | 'mercy';
-// A tow state: the holder tows the other party to `town` for `fee`, paid on arrival. hitched is false while the offer is open.
+// A tow state: the holder tows the other party to the town or camp `site` for `fee`, paid on arrival. `waived` is
+// the fee a player tower let go, which pays Social XP on arrival. hitched is false while an offer to the player is open.
 // A tow promise: the terms of a tow the holder dropped for danger, which its next offer keeps.
 // A feud: robbery is true when the holder started it to rob the other party, so a win sends it to loot.
 // A plea: the holder asked the other party for a truce or for mercy. answered is false while the player has not
 // answered yet.
 export type StateData =
-  | { kind: 'tow'; town: string; fee: number; hitched: boolean }
+  | { kind: 'tow'; site: string; fee: number; waived: number; hitched: boolean }
   | { kind: 'feud'; robbery: boolean }
-  | { kind: 'towPromise'; town: string; fee: number }
+  | { kind: 'towPromise'; site: string; fee: number }
   | { kind: 'plea'; plea: Plea; answered: boolean }
   | { kind: 'patch'; deal: PatchDeal; parts: number; price: number; work: number; workLeft: number } // holder patches other
   | { kind: 'none' };
@@ -227,6 +228,7 @@ export type NpcState = {
 // A value a dialogue line shows. The sim keeps raw values, and the UI formats them.
 export type CallVar =
   | { kind: "town"; id: string }
+  | { kind: "site"; id: string } // a town or a location
   | { kind: "money"; amount: number }
   | { kind: "distance"; tiles: number }
   | { kind: "bearing"; rad: number }
@@ -305,8 +307,9 @@ export type GameEvent =
   | { t: 'knockout' }
   | { t: 'wake' }
   | { t: 'towOffer'; by: string; town: string; fee: number }
-  | { t: 'towDone'; by: string; fee: number }
-  | { t: 'towDropped'; by: string; reason: 'refused' | 'unhitched' | 'danger' | 'gone' }
+  | { t: 'towHitched'; by: string; client: string; site: string }
+  | { t: 'towDone'; by: string; client: string; fee: number }
+  | { t: 'towDropped'; by: string; client: string; reason: 'refused' | 'unhitched' | 'danger' | 'gone' }
   | { t: 'stateEnded'; state: NpcState; ending: StateEnding }
   | { t: 'job'; vehicle: string; job: Job; outcome: 'started' | 'done' | 'cancelled' }
   | { t: 'breakdown'; vehicle: string; part: string }
