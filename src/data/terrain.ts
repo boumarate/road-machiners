@@ -209,6 +209,7 @@ export type BoulderRules = {
   ridgeTop: number;
   ridgeCurvature: number;
   radius: [number, number];
+  crag: { above: number; radius: [number, number] };
 };
 
 export const GEOLOGY: { rain: RainRules; slump: SlumpRules; wind: WindRules; dunes: DuneRules; sandStart: SandStart; ground: GroundRules; boulders: BoulderRules } = {
@@ -270,6 +271,10 @@ export const GEOLOGY: { rain: RainRules; slump: SlumpRules; wind: WindRules; dun
     ridgeTop: 0.05, // chance a ridge-top corner gets a boulder; bare ridges hold weathered rock
     ridgeCurvature: 0.08, // units per tile squared; a corner this far above the middle of two opposite neighbors is a ridge top
     radius: [0.6, 1.6], // tiles of radius, 2.4 to 6.4 m
+    crag: {
+      above: 12.5, // height units, 50 m; ridge tops this high are about the top tenth of all ridge tops, so only mountain crests carry spires
+      radius: [1.6, 2.6], // tiles of radius, 6.4 to 10.4 m; a spire stands out above the boulders around it
+    },
   },
 };
 

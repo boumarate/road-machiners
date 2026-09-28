@@ -37,7 +37,7 @@ import { advanceJobs, startAutoRepair } from './jobs';
 import { advanceEngineHeat } from './engine-heat';
 import { clamp, dist, type Vec } from './vec';
 
-// A new game on the baked map. The map gives terrain and rocks; the world seed drives all other randomness.
+// A new game on the baked map. The map gives terrain and props; the world seed drives all other randomness.
 export function newWorld(seed: number, kit: StartKit, map: BakedMap): World {
   if (!Number.isInteger(seed))
     throw new Error(`Seed must be an integer, got ${seed}`);
@@ -104,7 +104,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap): World {
     dustClouds: [],
     states: [],
   };
-  world.obstacles = generateObstacles(world, map.rocks);
+  world.obstacles = generateObstacles(world, map);
   const start = startPose();
   const truck = makeVehicle(world, {
     name: kit.name,

@@ -9,6 +9,7 @@ import { clearSave, hasSave, loadWorld, SaveError, saveInTown, saveWorld, writeS
 import { REGION } from '../data/region';
 import { sitePads } from '../sim/sites';
 import { TEST_MAP } from '../test/map';
+import { mapObstacles } from '../sim/mapgen';
 
 function makeStorage(): Storage {
   const values = new Map<string, string>();
@@ -126,6 +127,8 @@ describe('local game save', () => {
     storage.setItem('korovan.save', JSON.stringify({ version: 28, world: { turn: 21 } }));
     expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
     storage.setItem('korovan.save', JSON.stringify({ version: 29, world: { turn: 21 } }));
+    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
+    storage.setItem('korovan.save', JSON.stringify({ version: 30, world: { turn: 21 } }));
     expect(() => loadWorld(storage, TEST_MAP)).toThrow(/world/);
   });
 
@@ -136,9 +139,34 @@ describe('local game save', () => {
       const incomplete = { ...world };
       delete (incomplete as Partial<typeof world>)[field];
       const { terrain: _terrain, ...saved } = incomplete;
-      storage.setItem('korovan.save', JSON.stringify({ version: 29, world: saved }));
+      storage.setItem('korovan.save', JSON.stringify({ version: 30, world: saved }));
       expect(() => loadWorld(storage, TEST_MAP)).toThrow(/world/);
     }
+  });
+
+  it('keeps baked props out of the save and rebuilds them from the map', () => {
+    const storage = makeStorage();
+    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const baked = new Set(mapObstacles(TEST_MAP).map((o) => o.id));
+    writeSave(storage, world);
+    const saved: { id: string }[] = JSON.parse(storage.getItem('korovan.save')!).world.obstacles;
+
+    expect(baked.size).toBeGreaterThan(0);
+    expect(saved.filter((o) => baked.has(o.id))).toEqual([]);
+    expect(saved.length).toBe(world.obstacles.length - baked.size);
+    expect(loadWorld(storage, TEST_MAP)!.obstacles).toEqual(world.obstacles);
+  });
+
+  it('rejects a save that holds a baked prop', () => {
+    const storage = makeStorage();
+    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    writeSave(storage, world);
+    const raw = JSON.parse(storage.getItem('korovan.save')!);
+    raw.world.obstacles.push(mapObstacles(TEST_MAP)[0]);
+    storage.setItem('korovan.save', JSON.stringify(raw));
+
+    expect(() => loadWorld(storage, TEST_MAP)).toThrow(SaveError);
+    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/baked/);
   });
 
   it('rejects a save made on another map', () => {

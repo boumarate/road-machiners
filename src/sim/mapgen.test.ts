@@ -1,30 +1,92 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { START_KITS } from '../data/start';
-import { isDriveObstacle } from './mapgen';
+import { isBakedObstacle, isDriveObstacle, mapObstacles } from './mapgen';
 import { ROAD_INDEX } from './road-index';
 import type { Obstacle } from './types';
 import { dist } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
-import type { BakedMap } from './terrain';
+import type { BakedMap, BakedProp } from './terrain';
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
-const landmarksOf = (seed: number): Landmark[] => newWorld(seed, START_KITS.standard, TEST_MAP).obstacles.filter((o): o is Landmark => o.kind === 'landmark');
 
-describe('roadside landmarks', () => {
-  const landmarks = landmarksOf(1337);
+const prop = (kind: BakedProp['kind'], x: number, extra: Partial<BakedProp> = {}): BakedProp => ({ kind, pos: { x, y: 50 }, r: 1, yaw: 0.5, group: 0, step: 0, ...extra });
 
-  it('lines the roads of every area with its own landmark', () => {
-    for (const def of REGION.landmarks) {
-      const own = landmarks.filter((o) => o.look === def.look);
-      expect(own.length).toBeGreaterThanOrEqual(3);
-      for (const o of own) expect(dist(o.pos, def.center)).toBeLessThan(def.radius + REGION.roadWidth + o.r);
-    }
+// A map with the test terrain and a short list of props of several kinds.
+function mapWith(props: BakedProp[]): BakedMap {
+  return { ...TEST_MAP, props };
+}
+
+describe('baked map obstacles', () => {
+  it('turns rocks into rock obstacles and other props into landmarks, with ids by prop order', () => {
+    const map = mapWith([prop('rock', 10), prop('crag', 20, { yaw: 1.25 }), prop('rock', 30), prop('ruin', 40, { yaw: -2 })]);
+
+    expect(mapObstacles(map)).toEqual([
+      { id: 'rock0', pos: { x: 10, y: 50 }, r: 1, kind: 'rock' },
+      { id: 'crag-1', pos: { x: 20, y: 50 }, r: 1, kind: 'landmark', look: 'crag', yaw: 1.25 },
+      { id: 'rock2', pos: { x: 30, y: 50 }, r: 1, kind: 'rock' },
+      { id: 'ruin-3', pos: { x: 40, y: 50 }, r: 1, kind: 'landmark', look: 'ruin', yaw: -2 },
+    ]);
   });
 
-  it('keeps every landmark off every road surface and out of every site', () => {
+  it('names a pole by its power line and its step along it', () => {
+    const map = mapWith([prop('rock', 10), prop('pole', 20, { group: 2, step: 0 }), prop('pole', 30, { group: 2, step: 1 })]);
+
+    expect(mapObstacles(map).map((o) => o.id)).toEqual(['rock0', 'pole-2-0', 'pole-2-1']);
+  });
+
+  it('refuses two poles with the same line and step', () => {
+    const map = mapWith([prop('pole', 20, { group: 2, step: 1 }), prop('pole', 30, { group: 2, step: 1 })]);
+
+    expect(() => mapObstacles(map)).toThrow(/pole-2-1/);
+  });
+
+  it('gives the same obstacles for the same map', () => {
+    expect(mapObstacles(TEST_MAP)).toEqual(mapObstacles(TEST_MAP));
+  });
+
+  it('knows every obstacle it makes as baked, and no other', () => {
+    const baked = mapObstacles(mapWith([prop('rock', 10), prop('pole', 20, { group: 4, step: 7 }), prop('tank', 30), prop('roadBridgeBroken', 40)]));
+    const world = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const others = world.obstacles.filter((o) => !mapObstacles(TEST_MAP).some((b) => b.id === o.id));
+    const runtimeWrecks: Obstacle[] = [{ id: 'wreck-v12', pos: { x: 1, y: 1 }, r: 1, kind: 'wreck' }, { id: 'wreck31', pos: { x: 1, y: 1 }, r: 1, kind: 'wreck' }];
+
+    expect(baked.every(isBakedObstacle)).toBe(true);
+    expect(others.length).toBeGreaterThan(0);
+    expect([...others, ...runtimeWrecks].some(isBakedObstacle)).toBe(false);
+  });
+
+  it('blocks trucks with every landmark but a road bridge, which trucks drive over', () => {
+    const kinds = ['crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'roadBridgeBroken', 'pole', 'billboard', 'tank'] as const;
+    const blocking = mapObstacles(mapWith(kinds.map((kind, k) => prop(kind, k * 10))));
+    const [bridge] = mapObstacles(mapWith([prop('roadBridge', 10)]));
+
+    for (const o of blocking) expect(isDriveObstacle(o)).toBe(true);
+    expect(isDriveObstacle(bridge)).toBe(false);
+  });
+});
+
+describe('world from the baked map', () => {
+  const world = newWorld(1337, START_KITS.standard, TEST_MAP);
+  const baked = world.obstacles.filter(isBakedObstacle);
+
+  it('takes its terrain, hash and baked props from the map', () => {
+    expect(world.terrain).toBe(TEST_MAP.terrain);
+    expect(world.mapHash).toBe(TEST_MAP.hash);
+    expect(baked).toEqual(mapObstacles(TEST_MAP));
+    expect(baked.length).toBe(TEST_MAP.props.length);
+  });
+
+  it('places the same baked props for every world seed', () => {
+    const bakedOf = (seed: number) => newWorld(seed, START_KITS.standard, TEST_MAP).obstacles.filter(isBakedObstacle);
+    expect(bakedOf(7)).toEqual(bakedOf(1337));
+  });
+
+  it('keeps every baked landmark but road bridges off every road surface and out of every site', () => {
     const sites = [...REGION.towns, ...REGION.locations];
+    const landmarks = baked.filter((o): o is Landmark => o.kind === 'landmark' && o.look !== 'roadBridge');
+    expect(landmarks.length).toBeGreaterThan(0);
     for (const o of landmarks) {
       const reach = REGION.roadWidth / 2 + o.r;
       expect(ROAD_INDEX.nearestWithin(o.pos.x, o.pos.y, reach)).toBe(Infinity);
@@ -32,45 +94,10 @@ describe('roadside landmarks', () => {
     }
   });
 
-  it('blocks trucks with every landmark', () => {
-    for (const o of landmarks) expect(isDriveObstacle(o)).toBe(true);
-  });
-
-  it('overlaps no other obstacle', () => {
-    const all = newWorld(1337, START_KITS.standard, TEST_MAP).obstacles.filter((o) => o.kind !== 'site');
-    for (const o of landmarks) for (const other of all) if (other.id !== o.id) expect(dist(o.pos, other.pos)).toBeGreaterThan(o.r + other.r);
-  });
-
-  it('faces its road', () => {
-    for (const o of landmarks) {
-      const ahead = { x: o.pos.x + Math.cos(o.yaw) * (o.r + REGION.roadWidth / 2 + 3), y: o.pos.y + Math.sin(o.yaw) * (o.r + REGION.roadWidth / 2 + 3) };
-      expect(ROAD_INDEX.nearestWithin(ahead.x, ahead.y, REGION.roadWidth)).toBeLessThan(REGION.roadWidth);
-    }
-  });
-
-  it('stands in the same places on every map, since roads are the same', () => {
-    const other = landmarksOf(7);
-    const places = (list: Landmark[]) => new Map(list.map((o) => [o.id, o.pos]));
-    const a = places(landmarks);
-    const b = places(other);
-    const shared = [...a.keys()].filter((id) => b.has(id));
-    expect(shared.length).toBeGreaterThan(landmarks.length * 0.8);
-    for (const id of shared) expect(b.get(id)).toEqual(a.get(id));
-  });
-});
-
-describe('world from the baked map', () => {
-  it('takes its terrain, hash and rocks from the map', () => {
-    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
-    expect(w.terrain).toBe(TEST_MAP.terrain);
-    expect(w.mapHash).toBe(TEST_MAP.hash);
-    const rocks = w.obstacles.filter((o) => o.kind === 'rock');
-    expect(rocks).toEqual(TEST_MAP.rocks.map((rock, k) => ({ id: `rock${k}`, pos: rock.pos, r: rock.r, kind: 'rock' })));
-  });
-
-  it('places the same rocks for every world seed', () => {
-    const rocksOf = (seed: number) => newWorld(seed, START_KITS.standard, TEST_MAP).obstacles.filter((o) => o.kind === 'rock');
-    expect(rocksOf(7)).toEqual(rocksOf(1337));
+  it('overlaps no baked prop with any other obstacle', () => {
+    const all = world.obstacles.filter((o) => o.kind !== 'site');
+    const overlaps = baked.flatMap((o) => all.filter((other) => other.id !== o.id && dist(o.pos, other.pos) <= o.r + other.r).map((other) => `${o.id} ${other.id}`));
+    expect(overlaps).toEqual([]);
   });
 
   it('rejects a map of another size than the region', () => {

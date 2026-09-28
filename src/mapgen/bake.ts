@@ -1,4 +1,4 @@
-// The map bake: a fixed order of layers over one draft, from base relief to rocks. Heights, sand, flow and
+// The map bake: a fixed order of layers over one draft, from base relief to rocks and crags. Heights, sand, flow and
 // slumped marks live on tile corners, (size + 1) x (size + 1), corner (i, j) at j * (size + 1) + i. Types
 // live on tiles, tile (x, y) at y * size + x, as an index into TYPE_IDS.
 
@@ -9,7 +9,7 @@ import { broadAt, flattenFactor, noiseAt, reliefAt } from '../sim/elevation';
 import { gradeRoads } from '../sim/road-grade';
 import { ROAD_INDEX } from '../sim/road-index';
 import { chance, randRange, type Rng } from '../sim/rng';
-import { heightFromElevation, TYPE_IDS, type Rock } from '../sim/terrain';
+import { heightFromElevation, TYPE_IDS, type BakedProp } from '../sim/terrain';
 import { clearOfSites, onBridge } from '../sim/mapgen';
 import { dist, polylineDist, type Vec } from '../sim/vec';
 import { cornerNeighbors, geologyLayer, pondDepths, type Neighbors } from './geology';
@@ -35,7 +35,7 @@ export type MapDraft = {
   size: number;
   heights: Float32Array;
   types: Uint8Array;
-  rocks: Rock[];
+  props: BakedProp[];
   sand: Float32Array;
   flow: Float32Array;
   slumped: Uint8Array;
@@ -48,7 +48,7 @@ export function newDraft(size: number): MapDraft {
     size,
     heights: new Float32Array(corners),
     types: new Uint8Array(size * size),
-    rocks: [],
+    props: [],
     sand: new Float32Array(corners),
     flow: new Float32Array(corners),
     slumped: new Uint8Array(corners),
@@ -197,7 +197,8 @@ function plainType(seed: number, c: Vec): TerrainTypeId {
 }
 
 // Rock layer: boulders on corners at the foot of cliffs and on ridge tops, each by its own chance from
-// the map seed, off the roads, sites, the bridge deck, cliffs and the map margin.
+// the map seed, off the roads, sites, the bridge deck, cliffs, the map margin and earlier props. A boulder
+// on a ridge top as high as the crag height is a crag, a larger rock spire.
 
 const O = REGION.obstacles;
 const B = GEOLOGY.boulders;
@@ -209,18 +210,21 @@ export function rockLayer(seed: number, d: MapDraft): MapDraft {
   const rng: Rng = { rngState: seed };
   const n = d.size + 1;
   const nb = cornerNeighbors(n);
-  d.rocks = [];
+  d.props = d.props.filter((p) => p.kind !== 'rock' && p.kind !== 'crag');
   for (let j = 1; j < d.size; j++) for (let i = 1; i < d.size; i++) {
     // Sand buries rock, and dune crests are not rock ridges.
-    const odds = d.sand[j * n + i] >= G.looseSand ? 0 : boulderChance(d.heights, nb, n, j * n + i);
-    if (odds > 0 && chance(rng, odds)) placeBoulder(d, rng, i, j);
+    const spot = d.sand[j * n + i] >= G.looseSand ? null : boulderSpot(d.heights, nb, n, j * n + i);
+    if (spot && chance(rng, spot.odds)) placeBoulder(d, rng, i, j, spot.kind);
   }
   return d;
 }
 
-function boulderChance(h: ArrayLike<number>, nb: Neighbors, n: number, k: number): number {
-  if (isCliffBase(h, nb, k)) return B.cliffBase;
-  return isRidgeTop(h, n, k) ? B.ridgeTop : 0;
+type BoulderSpot = { odds: number; kind: 'rock' | 'crag' };
+
+function boulderSpot(h: ArrayLike<number>, nb: Neighbors, n: number, k: number): BoulderSpot | null {
+  if (isCliffBase(h, nb, k)) return { odds: B.cliffBase, kind: 'rock' };
+  if (!isRidgeTop(h, n, k)) return null;
+  return { odds: B.ridgeTop, kind: h[k] >= B.crag.above ? 'crag' : 'rock' };
 }
 
 // A corner at the foot of a cliff: some neighbor rises from it steeper than a truck can climb.
@@ -245,15 +249,16 @@ function bulges(h: ArrayLike<number>, k: number, o: number, spanSq: number): boo
   return (h[k] - (a + b) / 2) / spanSq >= B.ridgeCurvature;
 }
 
-// A boulder somewhere within half a tile of corner (i, j), kept only where it fits.
-function placeBoulder(d: MapDraft, rng: Rng, i: number, j: number): void {
+// A boulder somewhere within half a tile of corner (i, j), kept only where it fits. A crag gets its own facing.
+function placeBoulder(d: MapDraft, rng: Rng, i: number, j: number, kind: 'rock' | 'crag'): void {
   const pos = { x: i + randRange(rng, -0.5, 0.5), y: j + randRange(rng, -0.5, 0.5) };
-  const r = randRange(rng, B.radius[0], B.radius[1]);
-  if (fitsOffRoad(d.size, d.heights, d.rocks, { pos, r })) d.rocks.push({ pos, r });
+  const [low, high] = kind === 'crag' ? B.crag.radius : B.radius;
+  const r = randRange(rng, low, high);
+  const yaw = kind === 'crag' ? randRange(rng, 0, Math.PI * 2) : 0;
+  if (fitsOffRoad(d.size, d.heights, d.props, pos, r)) d.props.push({ kind, pos, r, yaw, group: 0, step: 0 });
 }
 
-function fitsOffRoad(size: number, heights: ArrayLike<number>, placed: Rock[], rock: Rock): boolean {
-  const { pos, r } = rock;
+function fitsOffRoad(size: number, heights: ArrayLike<number>, placed: BakedProp[], pos: Vec, r: number): boolean {
   if (Math.min(pos.x, pos.y, size - pos.x, size - pos.y) < O.edgeMargin) return false;
   const roadGap = REGION.roadWidth / 2 + O.roadClearance + r;
   if (ROAD_INDEX.nearestWithin(pos.x, pos.y, roadGap) < roadGap) return false;

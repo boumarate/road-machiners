@@ -93,28 +93,34 @@ export function isCliff(t: Terrain, tile: number): boolean {
 //   'KMAP', format version u32, size u32, map seed u32, height scale u32,
 //   corner heights i16 as height * scale, (size + 1)^2 of them in corner order,
 //   tile types u8 as indexes into TYPE_IDS, size^2 of them in tile order,
-//   rock count u32, then x, y and r as f32 per rock.
+//   prop count u32, then per prop: kind u8 as an index into PROP_KINDS, x, y, r and yaw as f32, group and step as u16.
 // The hash is FNV-1a over every byte, so any change to the file changes it.
 
-export type Rock = { pos: Vec; r: number };
-export type BakedMap = { hash: string; seed: number; terrain: Terrain; rocks: Rock[] };
-// What the map file stores of a bake: corner heights, tile type indexes into TYPE_IDS and rocks.
-export type MapGrid = { size: number; heights: Float32Array; types: Uint8Array; rocks: Rock[] };
+// Kinds of baked props, in their stored order: the map file keeps a kind as its index here.
+export const PROP_KINDS = ['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'roadBridge', 'roadBridgeBroken', 'pole', 'billboard', 'tank'] as const;
+export type PropKind = (typeof PROP_KINDS)[number];
+// A prop the bake placed. yaw is in radians from map +x toward +y. group and step order the poles of one
+// power line, and are 0 for other props.
+export type BakedProp = { kind: PropKind; pos: Vec; r: number; yaw: number; group: number; step: number };
+export type BakedMap = { hash: string; seed: number; terrain: Terrain; props: BakedProp[] };
+// What the map file stores of a bake: corner heights, tile type indexes into TYPE_IDS and props.
+export type MapGrid = { size: number; heights: Float32Array; types: Uint8Array; props: BakedProp[] };
 
 // Ground types in their stored order: the map file keeps a type as its index here.
 export const TYPE_IDS = Object.keys(TERRAIN_TYPES) as TerrainTypeId[];
 
 const MAGIC = 'KMAP';
-const VERSION = 1;
+const VERSION = 2;
 const HEADER = 20;
-const ROCK_BYTES = 12;
+const PROP_BYTES = 1 + 4 * 4 + 2 * 2;
 const INT16_MAX = 32767;
+const UINT16_MAX = 65535;
 
 export function encodeMap(d: MapGrid, seed: number): Uint8Array {
   if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new Error(`Map seed must be a 32-bit unsigned integer, got ${seed}`);
   const corners = (d.size + 1) ** 2;
   const tiles = d.size * d.size;
-  const bytes = new Uint8Array(HEADER + corners * 2 + tiles + 4 + d.rocks.length * ROCK_BYTES);
+  const bytes = new Uint8Array(HEADER + corners * 2 + tiles + 4 + d.props.length * PROP_BYTES);
   const view = new DataView(bytes.buffer);
   for (let k = 0; k < MAGIC.length; k++) bytes[k] = MAGIC.charCodeAt(k);
   view.setUint32(4, VERSION, true);
@@ -123,7 +129,7 @@ export function encodeMap(d: MapGrid, seed: number): Uint8Array {
   view.setUint32(16, MAPGEN.heightScale, true);
   writeHeights(view, d.heights, MAPGEN.heightScale);
   bytes.set(d.types, HEADER + corners * 2);
-  writeRocks(view, HEADER + corners * 2 + tiles, d.rocks);
+  writeProps(view, HEADER + corners * 2 + tiles, d.props);
   return bytes;
 }
 
@@ -135,36 +141,58 @@ function writeHeights(view: DataView, heights: Float32Array, scale: number): voi
   });
 }
 
-function writeRocks(view: DataView, from: number, rocks: Rock[]): void {
-  view.setUint32(from, rocks.length, true);
-  rocks.forEach((rock, k) => {
-    const at = from + 4 + k * ROCK_BYTES;
-    view.setFloat32(at, rock.pos.x, true);
-    view.setFloat32(at + 4, rock.pos.y, true);
-    view.setFloat32(at + 8, rock.r, true);
+function writeProps(view: DataView, from: number, props: BakedProp[]): void {
+  view.setUint32(from, props.length, true);
+  props.forEach((p, k) => {
+    const at = from + 4 + k * PROP_BYTES;
+    const code = PROP_KINDS.indexOf(p.kind);
+    if (code < 0) throw new Error(`Prop ${k} has unknown kind ${p.kind}`);
+    view.setUint8(at, code);
+    view.setFloat32(at + 1, p.pos.x, true);
+    view.setFloat32(at + 5, p.pos.y, true);
+    view.setFloat32(at + 9, p.r, true);
+    view.setFloat32(at + 13, p.yaw, true);
+    view.setUint16(at + 17, u16(p.group, `Prop ${k} group`), true);
+    view.setUint16(at + 19, u16(p.step, `Prop ${k} step`), true);
   });
+}
+
+function u16(value: number, what: string): number {
+  if (!Number.isInteger(value) || value < 0 || value > UINT16_MAX) throw new Error(`${what} ${value} does not fit the map file`);
+  return value;
 }
 
 export function decodeMap(bytes: Uint8Array): BakedMap {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const { size, seed, scale } = readHeader(bytes, view);
   const corners = (size + 1) ** 2;
-  const rocksAt = HEADER + corners * 2 + size * size;
-  if (bytes.length < rocksAt + 4) throw new Error(`Map file length ${bytes.length} is too short for size ${size}`);
-  const rockCount = view.getUint32(rocksAt, true);
-  if (bytes.length !== rocksAt + 4 + rockCount * ROCK_BYTES) throw new Error(`Map file length ${bytes.length} does not match size ${size} and ${rockCount} rocks`);
+  const propsAt = HEADER + corners * 2 + size * size;
+  if (bytes.length < propsAt + 4) throw new Error(`Map file length ${bytes.length} is too short for size ${size}`);
+  const propCount = view.getUint32(propsAt, true);
+  if (bytes.length !== propsAt + 4 + propCount * PROP_BYTES) throw new Error(`Map file length ${bytes.length} does not match size ${size} and ${propCount} props`);
   const heights: number[] = new Array(corners);
   for (let k = 0; k < corners; k++) heights[k] = view.getInt16(HEADER + k * 2, true) / scale;
-  const types = Array.from(bytes.subarray(HEADER + corners * 2, rocksAt), readType);
-  const rocks: Rock[] = [];
-  for (let k = 0, at = rocksAt + 4; k < rockCount; k++, at += ROCK_BYTES) {
-    rocks.push({ pos: { x: view.getFloat32(at, true), y: view.getFloat32(at + 4, true) }, r: view.getFloat32(at + 8, true) });
-  }
+  const types = Array.from(bytes.subarray(HEADER + corners * 2, propsAt), readType);
+  const props: BakedProp[] = [];
+  for (let k = 0, at = propsAt + 4; k < propCount; k++, at += PROP_BYTES) props.push(readProp(view, at, k));
   const terrain: Terrain = { size, heights, types };
   Object.freeze(heights);
   Object.freeze(types);
   Object.freeze(terrain);
-  return { hash: fnv1a(bytes), seed, terrain, rocks };
+  return { hash: fnv1a(bytes), seed, terrain, props };
+}
+
+function readProp(view: DataView, at: number, k: number): BakedProp {
+  const kind = PROP_KINDS[view.getUint8(at)];
+  if (kind === undefined) throw new Error(`Map file prop ${k} has unknown prop kind ${view.getUint8(at)}`);
+  return {
+    kind,
+    pos: { x: view.getFloat32(at + 1, true), y: view.getFloat32(at + 5, true) },
+    r: view.getFloat32(at + 9, true),
+    yaw: view.getFloat32(at + 13, true),
+    group: view.getUint16(at + 17, true),
+    step: view.getUint16(at + 19, true),
+  };
 }
 
 function readHeader(bytes: Uint8Array, view: DataView): { size: number; seed: number; scale: number } {

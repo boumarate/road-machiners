@@ -19,7 +19,8 @@ const file = join('public', MAPGEN.file);
 mkdirSync(dirname(file), { recursive: true });
 writeFileSync(`${file}.tmp`, bytes);
 renameSync(`${file}.tmp`, file);
-console.log(`${file}: ${bytes.length} bytes, hash ${hash}, ${draft.rocks.length} rocks, ${Math.round(performance.now() - start)} ms`);
+const kinds = Object.entries(Object.groupBy(draft.props, (p) => p.kind)).map(([kind, list]) => `${list.length} ${kind}`);
+console.log(`${file}: ${bytes.length} bytes, hash ${hash}, props: ${kinds.join(', ')}, ${Math.round(performance.now() - start)} ms`);
 
 mkdirSync(PICTURES, { recursive: true });
 writePicture('overview', { x: 0, y: 0, w: draft.size, h: draft.size }, MAPGEN.overviewPxPerTile);

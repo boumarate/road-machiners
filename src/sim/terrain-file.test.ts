@@ -1,26 +1,67 @@
 import { describe, expect, it } from 'vitest';
 import { MAPGEN } from '../data/terrain';
 import { newDraft, typeCode, type MapDraft } from '../mapgen/bake';
-import { decodeMap, encodeMap } from './terrain';
+import { decodeMap, encodeMap, PROP_KINDS, type BakedProp } from './terrain';
 
-// A 3 x 3 tile draft with distinct heights, types and two rocks.
+const PROP_BYTES = 1 + 4 * 4 + 2 * 2;
+
+// A 3 x 3 tile draft with distinct heights, types and three props: a rock, a crag and a pole of a power line.
 function smallDraft(): MapDraft {
   const d = newDraft(3);
   d.heights.forEach((_, k) => (d.heights[k] = k * 0.25 - 2));
   d.types.set([typeCode('road'), typeCode('sand'), typeCode('ash'), typeCode('scree'), typeCode('mud'), typeCode('hardpan'), typeCode('gravel'), typeCode('scrub'), typeCode('asphalt')]);
-  d.rocks = [{ pos: { x: 1.5, y: 2.25 }, r: 0.75 }, { pos: { x: 0.5, y: 0.5 }, r: 1.25 }];
+  d.props = [
+    { kind: 'rock', pos: { x: 1.5, y: 2.25 }, r: 0.75, yaw: 0, group: 0, step: 0 },
+    { kind: 'crag', pos: { x: 0.5, y: 0.5 }, r: 1.25, yaw: 2.5, group: 0, step: 0 },
+    { kind: 'pole', pos: { x: 2.75, y: 1.5 }, r: 0.25, yaw: -1.5, group: 3, step: 65535 },
+  ];
   return d;
 }
 
 describe('map file', () => {
-  it('round-trips heights, types, rocks and the map seed', () => {
+  it('round-trips heights, types, props and the map seed', () => {
     const map = decodeMap(encodeMap(smallDraft(), 42));
 
     expect(map.seed).toBe(42);
     expect(map.terrain.size).toBe(3);
     expect(map.terrain.heights).toEqual(Array.from(smallDraft().heights));
     expect(map.terrain.types).toEqual(['road', 'sand', 'ash', 'scree', 'mud', 'hardpan', 'gravel', 'scrub', 'asphalt']);
-    expect(map.rocks).toEqual(smallDraft().rocks);
+    expect(map.props).toEqual(smallDraft().props);
+  });
+
+  it('round-trips every prop kind', () => {
+    const d = smallDraft();
+    d.props = PROP_KINDS.map((kind, k): BakedProp => ({ kind, pos: { x: k * 0.125, y: 1 }, r: 0.5, yaw: k * 0.25, group: k, step: k + 1 }));
+
+    expect(decodeMap(encodeMap(d, 1)).props).toEqual(d.props);
+  });
+
+  it('refuses a prop the file cannot store', () => {
+    const unknownKind = smallDraft();
+    unknownKind.props[0] = { ...unknownKind.props[0], kind: 'castle' as BakedProp['kind'] };
+    const bigStep = smallDraft();
+    bigStep.props[2] = { ...bigStep.props[2], step: 65536 };
+    const badGroup = smallDraft();
+    badGroup.props[2] = { ...badGroup.props[2], group: -1 };
+
+    expect(() => encodeMap(unknownKind, 1)).toThrow(/kind/i);
+    expect(() => encodeMap(bigStep, 1)).toThrow(/step/i);
+    expect(() => encodeMap(badGroup, 1)).toThrow(/group/i);
+  });
+
+  it('refuses a file with an unknown prop kind', () => {
+    const d = smallDraft();
+    const bytes = encodeMap(d, 1);
+    bytes[bytes.length - PROP_BYTES] = PROP_KINDS.length;
+
+    expect(() => decodeMap(bytes)).toThrow(/prop kind/i);
+  });
+
+  it('refuses a version 1 file, which stored only rocks', () => {
+    const bytes = encodeMap(smallDraft(), 1);
+    new DataView(bytes.buffer).setUint32(4, 1, true);
+
+    expect(() => decodeMap(bytes)).toThrow(/version 1\b/i);
   });
 
   it('rounds heights to the stored step', () => {
@@ -70,7 +111,7 @@ describe('map file', () => {
   it('refuses a file with an unknown ground type', () => {
     const d = smallDraft();
     const bytes = encodeMap(d, 1);
-    const heightsEnd = bytes.length - 4 - d.rocks.length * 12;
+    const heightsEnd = bytes.length - 4 - d.props.length * PROP_BYTES;
     bytes[heightsEnd - 1] = 250;
 
     expect(() => decodeMap(bytes)).toThrow(/ground type/i);

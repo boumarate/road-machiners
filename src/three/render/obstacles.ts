@@ -1,4 +1,4 @@
-// Static map obstacles: rocks, wrecks, buildings, water and roadside landmarks. Map rocks are drawn once
+// Static map obstacles: rocks, wrecks, buildings, water and baked landmarks. Map rocks are drawn once
 // as an instanced model per terrain chunk. Other obstacles are synced by id, so wrecks that appear mid-game (a vehicle dying)
 // get added without touching the rest. Loose loot piles are synced the same way.
 
@@ -7,10 +7,9 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { hashStr } from '../../render/noise';
 import { PAL } from '../../render/palette';
 import { PHYSICS } from '../../data/physics';
-import { REGION } from '../../data/region';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import { hasSalvage, salvageUnits } from '../../sim/salvage';
-import type { Obstacle, SalvageStock } from '../../sim/types';
+import type { LandmarkLook, Obstacle, SalvageStock } from '../../sim/types';
 import { dist } from '../../sim/vec';
 import { instancedModel, model, socket, type ModelName } from './models';
 import type { RenderScope } from './scope';
@@ -162,19 +161,24 @@ function buildWreck(t: Terrain, o: Obstacle): THREE.Object3D {
 // A building from tools/blender/building.py, modeled with a 1 by 0.85 m footprint and 1 m walls, stretched to
 // each footprint and height. Random roof color per id.
 function buildBuilding(t: Terrain, o: Obstacle): THREE.Object3D {
+  const g = seat(t, o);
+  g.rotation.y = -hashStr(o.id) * Math.PI;
+  g.add(buildingShell(o));
+  return g;
+}
+
+// The building model stretched to an obstacle's footprint, at a height and roof color from its id.
+function buildingShell(o: Obstacle): THREE.Object3D {
   const seed = hashStr(o.id);
   const size = o.r * 0.78 * 2 * S; // full footprint, in meters
   const height = (16 + seed * 20) * (S / 45); // 45px per height unit in the 2D relief scale
   const roof = PAL.roof[Math.floor(seed * 97) % PAL.roof.length];
-  const g = seat(t, o);
-  g.rotation.y = -seed * Math.PI;
-  g.scale.set(size, height, size);
   const house = model('building');
+  house.scale.set(size, height, size);
   eachMaterial(house, (m) => {
     if (m.name === 'roof') m.color.setHex(roof);
   });
-  g.add(house);
-  return g;
+  return house;
 }
 
 function eachMaterial(obj: THREE.Object3D, fn: (m: THREE.MeshLambertMaterial) => void): void {
@@ -195,44 +199,61 @@ function buildWater(t: Terrain, o: Obstacle): THREE.Object3D {
   return g;
 }
 
-// Roadside landmarks from src/sim/mapgen.ts: power poles with sagging wires between them, billboards,
-// rock spires and dead tanks. Billboards face their road. A pole's crossbar lies across its road, so the
-// wires run along it. Spires and tanks take a yaw from their id.
+// Baked landmarks from the map file: power poles with sagging wires between them, billboards, rock spires,
+// tank hulks, old buildings, silos, water towers and bridges. Each faces its baked yaw. A pole's crossbar
+// lies across its line, so the wires run along it. Ruins, houses and gas stations use the building model,
+// and every bridge the Canyon Bridge model.
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
 
-const MODELS: Record<Landmark['look'], ModelName> = { pole: 'power_pole', billboard: 'billboard', crag: 'crag', tank: 'tank_hulk' };
-// Reference footprint radius in tiles of the models that scale with their obstacle. The others are built
-// at their real size for their fixed radius.
-const CRAG_RADIUS = 1 / S;
+const MODELS: Record<LandmarkLook, ModelName> = {
+  crag: 'crag',
+  ruin: 'building',
+  house: 'building',
+  silo: 'silo',
+  waterTower: 'water_tower',
+  gasStation: 'building',
+  bridgeSpan: 'bridge',
+  roadBridge: 'bridge',
+  roadBridgeBroken: 'bridge',
+  pole: 'power_pole',
+  billboard: 'billboard',
+  tank: 'tank_hulk',
+};
+// Footprint radius in meters each model is built at, for models that scale evenly to their obstacle radius:
+// the crag spire, the silo body, the water tower tank and half the bridge deck length. The building model
+// stretches to its footprint instead. The others stand at their real size.
+const MODEL_RADIUS: Partial<Record<ModelName, number>> = { crag: 1, silo: 2.5, water_tower: 2, bridge: 16 };
 const WIRES = ['wire0', 'wire1', 'wire2'];
 const SAG = 0.7; // meters a wire hangs below its ends at mid-span
 const WIRE_POINTS = 8;
 
 function buildLandmark(t: Terrain, o: Landmark): THREE.Object3D {
-  const g = new THREE.Group();
-  g.position.set(o.pos.x * S, heightAt(t, o.pos.x, o.pos.y) * S, o.pos.y * S);
+  const g = seat(t, o);
   g.rotation.y = -yawOf(o);
-  if (o.look === 'crag') g.scale.setScalar(o.r / CRAG_RADIUS);
-  g.add(model(MODELS[o.look]));
+  const name = MODELS[o.look];
+  if (name === 'building') {
+    g.add(buildingShell(o));
+    return g;
+  }
+  const radius = MODEL_RADIUS[name];
+  if (radius !== undefined) g.scale.setScalar((o.r * S) / radius);
+  g.add(model(name));
   return g;
 }
 
 // Map yaw of the model's +X. A three.js turn by -yaw about y points +X at map direction yaw.
 function yawOf(o: Landmark): number {
-  if (o.look === 'pole') return o.yaw + Math.PI / 2;
-  if (o.look === 'billboard') return o.yaw;
-  return hashStr(o.id) * Math.PI * 2;
+  return o.look === 'pole' ? o.yaw + Math.PI / 2 : o.yaw;
 }
 
-// Wires between neighboring poles of one line: poles of the same road whose steps follow each other.
+// Wires between neighboring poles of one line: poles whose ids name the same line and following steps.
 export function addPowerLines(t: Terrain, obstacles: Obstacle[], scope: RenderScope): void {
-  const poles = obstacles.filter((o): o is Landmark => o.kind === 'landmark' && o.look === 'pole');
+  const poles = new Map(obstacles.filter((o): o is Landmark => o.kind === 'landmark' && o.look === 'pole').map((o) => [o.id, o]));
   const material = new THREE.MeshLambertMaterial({ color: PAL.wheel });
-  const spacing = REGION.landmarks.find((d) => d.look === 'pole')!.spacing;
-  for (const a of poles) {
-    const b = poles.find((p) => p.id === nextId(a.id));
-    if (!b || dist(a.pos, b.pos) > spacing * 1.5) continue;
+  for (const a of poles.values()) {
+    const b = poles.get(nextId(a.id));
+    if (!b) continue;
     const ends = [a, b].map((p) => buildLandmark(t, p));
     for (const e of ends) e.updateMatrixWorld(true);
     const spans = WIRES.map((w) => span(socket('power_pole', w).applyMatrix4(ends[0].matrixWorld), socket('power_pole', w).applyMatrix4(ends[1].matrixWorld)));
@@ -241,7 +262,7 @@ export function addPowerLines(t: Terrain, obstacles: Obstacle[], scope: RenderSc
   }
 }
 
-// Pole ids end in their step along the road.
+// Pole ids end in their step along the line.
 function nextId(id: string): string {
   const cut = id.lastIndexOf('-');
   return `${id.slice(0, cut)}-${Number(id.slice(cut + 1)) + 1}`;

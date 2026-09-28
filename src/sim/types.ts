@@ -2,9 +2,8 @@
 
 import type { PartHit, Side } from "./armor";
 import type { TraitId } from "../data/npcs";
-import type { Terrain } from "./terrain";
+import type { PropKind, Terrain } from "./terrain";
 import type { Vec } from "./vec";
-import type { LandmarkLook } from "../data/region";
 import type { TopicId } from "../data/dialogue";
 import type { DecisionOptions } from "../data/npcs";
 import type { Contract, ShopState } from "./market";
@@ -213,9 +212,12 @@ export type Vehicle = {
 // foes: the vehicles that attacked it before the knockout.
 export type Defeat = { phase: 'out' | 'retreat'; turns: number; unseen: number; foes: string[] };
 
+// Every baked prop but a rock is a landmark of its prop kind.
+export type LandmarkLook = Exclude<PropKind, "rock">;
+
 export type Obstacle =
   | { id: string; pos: Vec; r: number; kind: "rock" | "wreck" | "building" | "water" | "site" }
-  // yaw is the direction a landmark faces, toward its road, in radians from map +x toward +y.
+  // yaw is the direction a landmark faces, in radians from map +x toward +y.
   | { id: string; pos: Vec; r: number; kind: "landmark"; look: LandmarkLook; yaw: number };
 
 // A timed relation one vehicle holds toward another. src/sim/states.ts owns them.

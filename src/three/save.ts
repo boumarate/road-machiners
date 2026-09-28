@@ -1,4 +1,5 @@
 import type { BakedMap } from '../sim/terrain';
+import { isBakedObstacle, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
 import type { World } from '../sim/types';
 
@@ -15,7 +16,7 @@ export function hasSave(storage: Storage): boolean {
   return storage.getItem(SAVE_KEY) !== null;
 }
 
-// Saves leave out the terrain, which comes from the map file the save names by hash. The 600-tile terrain alone is
+// Saves leave out the terrain and the baked props, which come from the map file the save names by hash. The 600-tile terrain alone is
 // about 10 MB of JSON, past the browser's local storage quota. 4 adds weather, jobs, contacts and dust.
 // 6 moves wheel cells. 7 adds engine heat, auto patch and a parts limit on repair jobs. 8 adds the
 // player state, tows and the beacon. 9 adds NPC traits, goal stacks and states. 10 renames spurned to
@@ -26,8 +27,8 @@ export function hasSave(storage: Storage): boolean {
 // 22 adds XP targets and player piles. 23 adds shop stock, contracts, upkeep and bounty templates. 24 adds deck
 // mounts and built-in parts sized to the truck models. 25 moves locations beside their roads and the start
 // onto the road. 26 adds NPC knockouts, truck pickups on refits and revenge. 27 adds NPC driver names and their random stream. 28 adds new NPC
-// types, escorts and two goods. 29 adds the map file hash. Older saves do not load.
-const SAVE_VERSION = 29;
+// types, escorts and two goods. 29 adds the map file hash. 30 leaves out baked props. Older saves do not load.
+const SAVE_VERSION = 30;
 
 // The saved world on the given map. A save made on another map fails, since its terrain is gone.
 export function loadWorld(storage: Storage, map: BakedMap): World | null {
@@ -37,8 +38,9 @@ export function loadWorld(storage: Storage, map: BakedMap): World | null {
   if (world.mapHash !== map.hash) throw new SaveError(`Game save was made on map ${world.mapHash}, not on the current map ${map.hash}`);
   const explored: unknown = world.player.explored;
   if (!Array.isArray(explored) || explored.length !== world.size * world.size) throw new SaveError('Invalid saved explored tiles');
+  if (world.obstacles.some(isBakedObstacle)) throw new SaveError('Game save holds baked map props, which come from the map file');
   const player = { ...world.player, explored: Uint8Array.from(explored) };
-  return { ...world, player, terrain: map.terrain };
+  return { ...world, player, obstacles: [...mapObstacles(map), ...world.obstacles], terrain: map.terrain };
 }
 
 function savedWorld(save: unknown): Omit<World, 'terrain'> {
@@ -85,5 +87,6 @@ export function writeSave(storage: Storage, world: World): void {
   const { terrain: _terrain, ...saved } = world;
   // JSON writes a typed array as an object keyed by index, so explored goes out as a plain list.
   const player = { ...saved.player, explored: Array.from(saved.player.explored) };
-  storage.setItem(SAVE_KEY, JSON.stringify({ version: SAVE_VERSION, world: { ...saved, player } }));
+  const obstacles = saved.obstacles.filter((o) => !isBakedObstacle(o));
+  storage.setItem(SAVE_KEY, JSON.stringify({ version: SAVE_VERSION, world: { ...saved, player, obstacles } }));
 }
