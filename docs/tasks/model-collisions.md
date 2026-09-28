@@ -1,6 +1,6 @@
 # Collisions by model shape
 
-**Status:** executing
+**Status:** done
 **Branch:** procedural-map
 **Worktree:** .worktrees/procedural-map
 **Goal:** Every static prop collides, blocks routes and blocks sight by its model's shape, not by a disc of its radius. A truck hits a fence along its rails, drives between a gas station's posts under its canopy, and stops against a ruin's walls. The user confirms in play.
@@ -86,3 +86,14 @@ TDD: yes.
 ## Code smells
 
 ## Conclusion
+
+Outcome: goal achieved. Props collide, route and block sight by model shape, and the user approved it in play.
+
+### Assumptions check
+- AS1 — violated: Rapier step time grows with every collider, static ones included: about 3.5 ms per step for 23,000 boxes. Physics now builds colliders only for props in one turn's reach of a truck, which cut a turn step from 23.5 ms to 15.1 ms.
+
+### Unknowns outcome
+- UK1 — resolved: up to 32 boxes per model. At 24, the gas station and ruin shapes filled gaps visibly.
+- UK2 — resolved: road and kill wrecks take their pose from `propPose()` like other props.
+
+Deviations: `PropPose.scale` is per axis, since settlement buildings stretch unevenly. Low wrecks, junk and small rocks no longer block sight, by the eye-height rule.

@@ -1,6 +1,6 @@
 # New world map layer
 
-**Status:** executing
+**Status:** done
 **Branch:** procedural-map
 **Worktree:** .worktrees/procedural-map
 **Goal:** The baked map carries a new world placed by rules on top of the old one: shack camps with fences and junk, car wrecks, scrub that spreads from moist ground, and dirty water and toxic pools. The user confirms the look from the bake pictures and in play.
@@ -101,3 +101,5 @@ Approach: the same shape as the old world. Plumbing for the new kinds and ground
 ## Code smells
 
 ## Conclusion
+
+Outcome: goal achieved. The user approved the camps, fences and wrecks in play.
