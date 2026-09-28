@@ -80,7 +80,7 @@ import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
 import { ShadeView } from "./render/shade";
 import { SoundRingView } from "./render/soundRing";
-import { clearSave, hasSave, loadWorld, saveWorld, writeSave } from "./save";
+import { clearSave, hasSave, loadWorld, saveInTown, saveWorld, writeSave } from "./save";
 import { GameMenu } from "../ui/game-menu";
 import { volleyTally } from "../ui/format";
 import { DeathScreen } from "../ui/death";
@@ -304,7 +304,7 @@ export class Game {
   private uiHost(): UiHost {
     return {
       world: () => this.displayWorld(),
-      apply: (next) => this.apply(next),
+      apply: (next) => { this.apply(next); saveInTown(window.localStorage, next); },
       selectedWeapon: () => this.selected,
       selectWeapon: (id) => {
         if (this.anim) return;

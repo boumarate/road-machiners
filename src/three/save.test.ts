@@ -5,7 +5,9 @@ import { emptyWorld } from '../sim/testkit';
 import { moveItem } from '../sim/inventory';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
-import { clearSave, hasSave, loadWorld, saveWorld, writeSave } from './save';
+import { clearSave, hasSave, loadWorld, saveInTown, saveWorld, writeSave } from './save';
+import { REGION } from '../data/region';
+import { sitePads } from '../sim/sites';
 
 function makeStorage(): Storage {
   const values = new Map<string, string>();
@@ -28,6 +30,16 @@ describe('local game save', () => {
     expect(loadWorld(storage)).toEqual(world);
     clearSave(storage);
     expect(hasSave(storage)).toBe(false);
+  });
+
+  it('saves a command on a town pad at once, and not out in the open', () => {
+    const storage = makeStorage();
+    const open = emptyWorld({ x: 30, y: 30 });
+    saveInTown(storage, open);
+    expect(hasSave(storage)).toBe(false);
+    const inTown = emptyWorld(sitePads(REGION.towns[0])[0]);
+    saveInTown(storage, inTown);
+    expect(hasSave(storage)).toBe(true);
   });
 
   it('resumes a pending refit after loading without losing progress', () => {

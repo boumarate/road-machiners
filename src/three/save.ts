@@ -1,4 +1,5 @@
 import { buildTerrain } from '../sim/terrain';
+import { townAt } from '../sim/sites';
 import type { World } from '../sim/types';
 
 const SAVE_KEY = 'korovan.save';
@@ -65,6 +66,11 @@ export function saveWorld(storage: Storage, world: World, interval: number): voi
   // A dead run keeps its last save, so the player can load it.
   if (world.player.state === 'dead') return;
   writeSave(storage, world);
+}
+
+// A UI command in town, like a purchase, saves at once, so a reload does not undo it.
+export function saveInTown(storage: Storage, world: World): void {
+  if (world.player.state === 'active' && townAt(world)) writeSave(storage, world);
 }
 
 export function writeSave(storage: Storage, world: World): void {
