@@ -1,4 +1,4 @@
-// Gun reach on the ground, shown only for the selected gun. A turret with every side open covers a circle. A forward arc or tall parts on the truck cut it to sectors. Draped over the terrain.
+// Gun reach on the ground, shown only for the selected gun. A turret with every side open covers a circle. A forward arc or tall parts on the truck cut it to sectors. Draped over the terrain, level with Canyon Bridge beside its deck.
 
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
@@ -8,7 +8,7 @@ import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { fireSpans, type FireSpan } from '../../sim/armor';
 import type { MountedWeapon } from '../../sim/stats';
-import { heightAt, type Terrain } from '../../sim/terrain';
+import { markHeightAt, type Terrain } from '../../sim/terrain';
 import { DEG, type Vec } from '../../sim/vec';
 
 const S = PHYSICS.metersPerTile;
@@ -32,7 +32,7 @@ export class WeaponRangeView {
   // Sides a tall part blocks are left out, so each shape shows where its gun can fire. No guns hides the view.
   set(terrain: Terrain, pos: Vec, heading: number, weapons: MountedWeapon[]): void {
     this.root.visible = weapons.length > 0;
-    const at = (x: number, y: number) => new THREE.Vector3(x * S, heightAt(terrain, x, y) * S + LIFT, y * S);
+    const at = (x: number, y: number) => new THREE.Vector3(x * S, markHeightAt(terrain, pos, x, y) * S + LIFT, y * S);
     const center = at(pos.x, pos.y);
     const points: THREE.Vector3[] = [center];
     const idx: number[] = [];
