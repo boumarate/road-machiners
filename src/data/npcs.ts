@@ -277,7 +277,9 @@ export const NPCS: Record<string, NpcTemplate> = {
     preferredRange: 3,
     bounty: 60,
     cap: 6,
-    interval: 8,
+    // A camp regains one buggy every 34 turns, so a fully cleared camp is back to its cap of 6 in
+    // about 200 turns, one full day (TIME.turnsPerDay), not the few minutes 8 turns gave.
+    interval: 34,
     spawn: "camp",
   },
   gunwagon: {
@@ -287,7 +289,8 @@ export const NPCS: Record<string, NpcTemplate> = {
     preferredRange: 6,
     bounty: 150,
     cap: 2,
-    interval: 20,
+    // Same day-long refill as the outrider camp: cap 2 at 100 turns apart is back to full in 200 turns.
+    interval: 100,
     spawn: "camp",
   },
   trader: {
