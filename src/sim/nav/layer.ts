@@ -55,7 +55,7 @@ export type NavLayer = TerrainNav & {
 // The static drive obstacles of one obstacles array as blockers, and a bucket index over all of them. Solid
 // blockers block cells. Breakable ones make cells costly, and straight line checks treat them as solid, so only
 // the grid search decides to drive through one.
-export type StaticSet = { key: string; solid: Blocker[]; costly: Blocker[]; buckets: ObstacleBuckets };
+export type StaticSet = { key: string; solidKey: string; solid: Blocker[]; costly: Blocker[]; buckets: ObstacleBuckets };
 
 // Road and kill wrecks come and go in play. Every other drive obstacle is fixed at map generation.
 export function isTransientWreck(o: Obstacle): boolean {
@@ -63,7 +63,11 @@ export function isTransientWreck(o: Obstacle): boolean {
 }
 
 // Terrains are frozen and shared by world clones, so identity is the key. Dropped terrains free their layers.
-const terrains = new WeakMap<Terrain, { nav: TerrainNav; cellCliff: Map<number, Uint8Array>; layers: Map<string, NavLayer> }>();
+// solidGrids: cliff cells plus solid props, and the coarse grid over them, per radius and solid set. Layers share
+// them and never write to them.
+type SolidGrid = { blocked: Uint8Array; coarse: CoarseGrid };
+type TerrainEntry = { nav: TerrainNav; cellCliff: Map<number, Uint8Array>; solidGrids: Map<string, SolidGrid>; layers: Map<string, NavLayer> };
+const terrains = new WeakMap<Terrain, TerrainEntry>();
 // Per terrain: a few chassis radii times the current static obstacle set. Tests build more sets, so clear when full.
 const LAYERS_MAX = 16;
 let nextLayerId = 1;
@@ -80,7 +84,7 @@ function terrainEntry(t: Terrain) {
     }
     const slow = new Float32Array(n * n);
     for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) slow[y * n + x] = tileCost[tileIndex(t.size, (x + 0.5) * CELL, (y + 0.5) * CELL)];
-    e = { nav: { size: t.size, n, cliffTile, tileCost, slow }, cellCliff: new Map(), layers: new Map() };
+    e = { nav: { size: t.size, n, cliffTile, tileCost, slow }, cellCliff: new Map(), solidGrids: new Map(), layers: new Map() };
     terrains.set(t, e);
   }
   return e;
@@ -135,9 +139,11 @@ export function staticSet(obstacles: Obstacle[], size: number): StaticSet {
   const statics = obstacles.filter((o) => isDriveObstacle(o) && !isTransientWreck(o));
   const all = statics.map(driveBlocker);
   const breakable = statics.map(isBreakable);
+  const solid = all.filter((_, i) => !breakable[i]);
   const set = {
     key: blockerKey(all),
-    solid: all.filter((_, i) => !breakable[i]),
+    solidKey: blockerKey(solid),
+    solid,
     costly: all.filter((_, i) => breakable[i]),
     buckets: new ObstacleBuckets(all, size),
   };
@@ -188,25 +194,63 @@ export function navLayer(terrain: Terrain, obstacles: Obstacle[], radius: number
   if (hit) return hit;
   if (e.layers.size >= LAYERS_MAX) e.layers.clear();
   const nav = e.nav;
-  const n = nav.n;
-  let cliff = e.cellCliff.get(radius);
-  if (!cliff) {
-    if (e.cellCliff.size >= LAYERS_MAX) e.cellCliff.clear();
-    cliff = new Uint8Array(n * n);
-    const reach = radius + CLEARANCE;
-    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
-      const cx = (x + 0.5) * CELL;
-      const cy = (y + 0.5) * CELL;
-      if (nearCliff(nav, cx, cy, reach) || nearRail(cx, cy, reach)) cliff[y * n + x] = 1;
-    }
-    e.cellCliff.set(radius, cliff);
-  }
-  const blocked = cliff.slice();
-  stampBlockers(n, statics.solid, radius, (c) => (blocked[c] = 1));
+  const cliff = cliffCells(e, radius);
+  const solid = solidGrid(e, cliff, statics, radius);
   const slow = costlySlow(nav, statics.costly, radius);
-  const layer: NavLayer = { ...nav, slow, id: nextLayerId++, radius, blocked, coarse: coarseGrid(n, blocked, slow) };
+  const coarse = statics.costly.length === 0 ? solid.coarse : withRegionSlow(solid.coarse, slow);
+  const layer: NavLayer = { ...nav, slow, id: nextLayerId++, radius, blocked: solid.blocked, coarse };
   e.layers.set(key, layer);
   return layer;
+}
+
+// Cells too close to a cliff or a bridge rail for a truck of this radius, per radius.
+function cliffCells(e: TerrainEntry, radius: number): Uint8Array {
+  const cached = e.cellCliff.get(radius);
+  if (cached) return cached;
+  if (e.cellCliff.size >= LAYERS_MAX) e.cellCliff.clear();
+  const cliff = markCliffCells(e.nav, radius + CLEARANCE);
+  e.cellCliff.set(radius, cliff);
+  return cliff;
+}
+
+function markCliffCells(nav: TerrainNav, reach: number): Uint8Array {
+  const n = nav.n;
+  const cliff = new Uint8Array(n * n);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const cx = (x + 0.5) * CELL;
+    const cy = (y + 0.5) * CELL;
+    if (nearCliff(nav, cx, cy, reach) || nearRail(cx, cy, reach)) cliff[y * n + x] = 1;
+  }
+  return cliff;
+}
+
+// Blocked cells and the coarse grid over them, per radius and solid set, with the terrain's step costs. Breakable
+// props never block, so a prop breaking or growing back keeps this grid and only changes region costs.
+function solidGrid(e: TerrainEntry, cliff: Uint8Array, statics: StaticSet, radius: number): SolidGrid {
+  const key = `${radius}:${statics.solidKey}`;
+  let grid = e.solidGrids.get(key);
+  if (!grid) {
+    if (e.solidGrids.size >= LAYERS_MAX) e.solidGrids.clear();
+    const blocked = cliff.slice();
+    stampBlockers(e.nav.n, statics.solid, radius, (c) => (blocked[c] = 1));
+    grid = { blocked, coarse: coarseGrid(e.nav.n, blocked, e.nav.slow) };
+    e.solidGrids.set(key, grid);
+  }
+  return grid;
+}
+
+// The same coarse grid with each region's mean step cost taken from slow.
+function withRegionSlow(coarse: CoarseGrid, slow: Float32Array): CoarseGrid {
+  const sum = new Float64Array(coarse.slow.length);
+  const count = new Uint32Array(coarse.slow.length);
+  for (let c = 0; c < coarse.region.length; c++) {
+    const r = coarse.region[c];
+    sum[r] += slow[c];
+    count[r]++;
+  }
+  const mean = new Float32Array(coarse.slow.length);
+  for (let r = 1; r < mean.length; r++) mean[r] = sum[r] / count[r];
+  return { ...coarse, slow: mean };
 }
 
 // The terrain's step costs, times BREAKABLE.routeCost on cells a breakable prop would block. A cell near two
