@@ -151,6 +151,26 @@ Approach: a new `src/mapgen/` folder holds the bake pipeline as pure functions o
 
 ## Verify
 
+Result: passed
+
+Happy-path:
+- CK1 (IV1) — two bakes differ — held: identical sha1 `9cd9fbe5`.
+- CK2 (PC1, AS1) — bake too slow or file too big — held: 15 s, 1.1 MB.
+
+Negative:
+- CK3 (IV3) — a missing map file boots a broken game — held: a 404 stops boot with the crash screen, naming the file.
+- CK4 — a save from another map loads — held: boot stops with the crash screen and its new-game button.
+- CK5 (IF1) — a short, truncated or bad-magic file decodes — held: each throws with the reason.
+
+Invariants / assumptions:
+- CK6 (IV2) — a road step on the decoded file beats the grade limit — held off the deck. The only steeper step, 2.84 at (504, 357), is the ramp into the canyon cut under Canyon Bridge, as on main.
+- CK7 (IV4) — rain destroys soil on the full map — broke, then fixed in 116396d. 188 units vanished over 160 passes. Soil that reached a corner after its turn was dropped at the next pass. A rough-ground test now fails without the fix.
+- CK8 (IV5) — sim or bake code reads files or the network — held: no `node:` import, `readFileSync` or `fetch` in `src/sim` or `src/mapgen`.
+- CK9 (IV6) — a boulder lands on a cliff tile, road, site or bridge deck — held: 0 of 1301 on cliff tiles, and the clearance tests pass on the baked file.
+
+Smoke: `npm run playtest` on the baked map passed, 12 turns at 60 fps.
+Goal: the user reviewed the pictures and played the map, and called it "incredible".
+
 ## Code smells
 - `src/sim/spawn.ts:79-90` — start traffic can drop a start trader when the first drivers crowd the Bowl gate. 3 of 10 seeds fail on main, and the only sign is a debug event.
 - `src/sim/mapgen.ts:6` — sim code imports `clearOfSites` and `onBridge` from the bake module in `src/mapgen/bake.ts`.
