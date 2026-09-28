@@ -191,13 +191,6 @@ function partDamage(hits: PartHit[]): Map<string, number> {
   return dealt;
 }
 
-// "; Buggy: Engine −12, Wheel −5" for the parts one vehicle lost in a crash, or empty.
-function damageList(world: World, vehicleId: string, hits: PartHit[]): string {
-  const dealt = partDamage(hits);
-  if (dealt.size === 0) return '';
-  return `; ${vehicleName(world, vehicleId)}: ${[...dealt].map(([id, d]) => `${partName(world, vehicleId, id)} −${damage(d)}`).join(', ')}`;
-}
-
 // Short part names for damage popups, by part kind and core role.
 const PART_SHORT = {
   weapon: 'Gun', engine: 'Eng', armor: 'Arm', cargo: 'Cargo', scanner: 'Scan', store: 'Store',
@@ -439,13 +432,9 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
   const n = (id: string) => vehicleName(world, id);
   const me = world.player.vehicleId;
   switch (e.t) {
-    case 'collision': {
-      const b = e.b === 'edge' ? 'the map edge' : e.b === 'rail' ? 'the bridge rail' : e.b.startsWith('v') ? n(e.b) : 'an obstacle';
-      const dealt = [...e.hitsA, ...e.hitsB].reduce((sum, h) => sum + h.damage, 0);
-      if (e.a !== me && e.b !== me && dealt < 1) return null;
-      const text = `${n(e.a)} crashed into ${b}${damageList(world, e.a, e.hitsA)}${damageList(world, e.b, e.hitsB)}`;
-      return { text, cls: e.a === me || e.b === me ? 'bad' : 'dim' };
-    }
+    // Crashes are shown by the hit truck and its part damage, not logged.
+    case 'collision':
+      return null;
     case 'shot': {
       if (e.shooter !== me && e.target !== me) return null;
       const aim = e.aim === 'body' ? '' : ` at ${partName(world, e.target, e.aim)}`;

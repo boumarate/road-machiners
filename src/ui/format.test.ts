@@ -4,7 +4,7 @@ import type { Contract } from "../sim/market";
 import { partDef } from "../data/parts";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import type { Job, PartInstance } from "../sim/types";
-import { contractDue, contractSummary, jobLabel, roundLabel, wearLabel } from "./format";
+import { contractDue, contractSummary, eventText, jobLabel, roundLabel, wearLabel } from "./format";
 import { mountedParts } from "../sim/grid";
 
 function part(wear: number): PartInstance {
@@ -86,5 +86,16 @@ describe("roundLabel", () => {
 
   it("shows nothing for a round that damaged no part", () => {
     expect(roundLabel(w, v.id, hit(false, [{ part: idOf("wheel"), damage: 0 }]))).toBeNull();
+  });
+});
+
+describe("collision log", () => {
+  it("logs no crash, whether into a standing obstacle or through a fence", () => {
+    const w = emptyWorld();
+    const me = w.player.vehicleId;
+    const fence = { id: "fence-3", pos: { x: 33, y: 30 }, r: 0.5, kind: "landmark" as const, look: "fence" as const, yaw: 0 };
+    w.broken = [{ obstacle: fence, turn: w.turn }];
+    expect(eventText(w, { t: "collision", a: me, b: "fence-3", hitsA: [], hitsB: [] })).toBeNull();
+    expect(eventText(w, { t: "collision", a: me, b: "rock7", hitsA: [{ part: "x", damage: 4 }], hitsB: [] })).toBeNull();
   });
 });

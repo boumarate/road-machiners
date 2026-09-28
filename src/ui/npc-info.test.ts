@@ -168,7 +168,6 @@ describe('events far from the player', () => {
     w.player.contacts = [];
     const cab = corePart(a, 'cab');
     const events: GameEvent[] = [
-      { t: 'collision', a: a.id, b: b.id, hitsA: [{ part: cab.id, damage: 5 }], hitsB: [] },
       { t: 'partDisabled', vehicle: a.id, part: cab.id },
       { t: 'destroyed', vehicle: a.id, by: b.id },
       { t: 'towHitched', by: a.id, client: b.id, site: 'kiln' },
