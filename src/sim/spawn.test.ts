@@ -16,7 +16,7 @@ const nearestSite = (pos: { x: number; y: number }) =>
 describe('NPC spawns', () => {
   it('spreads the first neutral drivers over several sites', () => {
     const w = newWorld(1337, START_KITS.standard);
-    const neutrals = w.vehicles.filter((v) => v.brain && NPCS[v.brain.templateId].spawn === 'town');
+    const neutrals = w.vehicles.filter((v) => v.brain && NPCS[v.brain.templateId].spawn.kind === 'town');
     const sites = new Set(neutrals.map((v) => nearestSite(v.pos).id));
     expect(sites.size).toBeGreaterThanOrEqual(3);
   }, 15_000);

@@ -5,7 +5,7 @@ import { emptyWorld, addVehicle, editableTerrain, forceOption, npcBrain, testDri
 import { planNpcOrders } from './ai';
 import { getResources } from './resources';
 import { REGION } from '../data/region';
-import { MIN_CHANCE, TRAITS, type TraitId } from '../data/npcs';
+import { MIN_CHANCE, NPCS, TRAITS, type TraitId } from '../data/npcs';
 import { SHOPS } from '../data/market';
 import { optionChances, optionWeights, visibleSalvage } from './npc-decisions';
 import { endTurn } from './world';
@@ -27,7 +27,7 @@ describe('NPC activities', () => {
   it('uses Icarus sites for every trait destination', () => {
     const sites = [...REGION.towns, ...REGION.locations];
     for (const profile of Object.values(TRAITS)) {
-      for (const id of [...profile.towns, ...profile.bases, ...profile.salvageSites, ...profile.supplySites]) {
+      for (const id of [...profile.towns, ...profile.bases, ...profile.salvageSites, ...profile.supplySites, ...profile.travelSites, ...profile.haulSites]) {
         expect(sites.find((site) => site.id === id), `missing site ${id}`).toBeDefined();
       }
     }
@@ -129,7 +129,7 @@ describe('NPC activities', () => {
     npc.heading = Math.PI;
     for (const key of Object.keys(w.spawnTimer)) w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
     // Spawn timers are initialized lazily, so disable every template explicitly.
-    for (const key of ['buggy', 'gunwagon', 'trader', 'scavenger']) w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
+    for (const key of Object.keys(NPCS)) w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
     const id = npc.id;
     const initialMoney = npc.resources!.money;
     let collected = false;
@@ -189,7 +189,7 @@ describe('NPC activities', () => {
     victim.brain = npcBrain('scavenger', victim.pos, ['scavenger']);
     corePart(victim, 'cab').hp = 1;
     addGoods(w0, victim, 'scrap', 3);
-    for (const key of ['buggy', 'gunwagon', 'trader', 'scavenger']) w0.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
+    for (const key of Object.keys(NPCS)) w0.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
     const money = raider.resources!.money;
     let w = w0;
     let looted = false;

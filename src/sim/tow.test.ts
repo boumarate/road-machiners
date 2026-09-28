@@ -680,12 +680,13 @@ describe('NPCs towing each other', () => {
 
   // A client with an empty tank and a tower 8 tiles further out, both 30 tiles out from the site. The player drives
   // and watches from 10 tiles closer in, or stays at the Bowl, out of sight of raiders it carries loot past. Idle
-  // drivers wait and nobody spawns.
+  // drivers wait, the tower chooses to tow, and nobody spawns.
   function roadside(site: Site, client: Driver, tower: Driver): { w: World; client: Vehicle; tower: Vehicle } {
     const raiders = client[1] === 'raiders' || tower[1] === 'raiders';
     const w = emptyWorld(raiders ? bowl.pos : outFrom(site, 20));
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
     forceOption('idle', 'wait');
+    forceOption('strandedSeen', 'tow');
     const c = withTower(w, ...client, outFrom(site, 30));
     c.resources!.fuel = 0;
     c.resources!.money = 1000;

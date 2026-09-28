@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { huntingGrounds } from '../npc-decisions';
 import { REGION } from '../../data/region';
 import { playerVehicle } from '../damage';
+import { makePart } from '../factory';
 import { goodsCount, mountedParts } from '../grid';
 import { addGoods, removeAllGoods } from '../inventory';
 import { nearestPad, nearestTown } from '../sites';
@@ -113,6 +114,7 @@ describe('botOrders', () => {
 
   it('has a stranded truck without an engine buy and mount one in town', () => {
     const w = withoutEngine(parkedAt('bowl'));
+    w.shops.bowl.stock.push(makePart(w, 'stockEngine', 0));
     expect(isStranded(w, playerVehicle(w))).toBe(true);
 
     const turn = botOrders(w, 'fighter');

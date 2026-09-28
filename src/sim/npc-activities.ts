@@ -3,7 +3,7 @@
 
 import { chassisDef } from '../data/chassis';
 import { ECONOMY } from '../data/goods';
-import { NPC_BEHAVIOR, NPC_UPKEEP, type DecisionOptions } from '../data/npcs';
+import { NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, type DecisionOptions } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import type { PartHit } from './armor';
@@ -11,14 +11,16 @@ import { callLawmen, isHostile, startFeuds } from './combat';
 import { affordableBuyCount, getTradePrice, sellVehicleCargo, serviceAtCamp, serviceVehicle, tradeGoods } from './economy';
 import { isJunk, maxHp } from './wear';
 import { corePart, freeCells, goodsCount, mountedParts } from './grid';
+import { addGoods } from './inventory';
 import { cancelJob } from './jobs';
+import { isFree } from './spawn';
 import {
-  bestTrade, canRob, decide, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve,
+  bestTrade, canRob, decide, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolTown, travelSitesAway,
   huntingGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
-import { hashRandom, randInt } from './rng';
+import { hashRandom, randInt, randRange } from './rng';
 import { canLootTruck, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, isSiteStock, lootTruckTurn, pileInReach, wreckStockId } from './salvage';
 import { beginSearch } from './search';
 import { vehicleById } from './damage';
@@ -222,12 +224,56 @@ function raidGoal(world: World, vehicle: Vehicle): NpcActivity {
   return createActivity('raid', null, { ...places[randInt(world, 0, places.length - 1)] }, 'look for prey at known hunting grounds');
 }
 
+// A patrol drives to a road point near the town it guards.
+function patrolGoal(world: World, vehicle: Vehicle): NpcActivity {
+  const town = patrolTown(vehicle);
+  const points = patrolPoints(town);
+  if (points.length === 0) throw new Error(`${vehicle.id} chose to patrol ${town.id} with no road near it`);
+  return createActivity('patrol', town.id, { ...points[randInt(world, 0, points.length - 1)] }, 'patrol the roads near town');
+}
+
+function travelGoal(world: World, vehicle: Vehicle): NpcActivity {
+  const sites = travelSitesAway(vehicle);
+  if (sites.length === 0) throw new Error(`${vehicle.id} chose a trip with no known site away`);
+  return createSiteActivity('travel', sites[randInt(world, 0, sites.length - 1)].id, 'make a trip to another site');
+}
+
+// A random free point anywhere on the map, off road included. Rare bad luck on every try gives a wait this turn.
+function exploreGoal(world: World, vehicle: Vehicle): NpcActivity {
+  const radius = vehicleStats(world, vehicle).radius;
+  for (let i = 0; i < SPAWN.tries; i++) {
+    const point = { x: randRange(world, radius, world.size - radius), y: randRange(world, radius, world.size - radius) };
+    if (isFree(world, point, radius, vehicle.id)) return createActivity('explore', null, point, 'explore the open map');
+  }
+  return createActivity('wait', null, null, 'no free point to explore');
+}
+
+// A haul loads free cargo at a random known source, then sells it in a town.
+function haulGoal(world: World, vehicle: Vehicle): NpcActivity {
+  const sites = npcProfile(vehicle).haulSites;
+  if (sites.length === 0) throw new Error(`${vehicle.id} chose to haul with no known source`);
+  const site = sites[randInt(world, 0, sites.length - 1)];
+  const goods = haulGoods(site);
+  return { ...createSiteActivity('haul', site, 'load cargo at its source'), load: { good: goods[randInt(world, 0, goods.length - 1)] } };
+}
+
+type IdleGoal = (world: World, vehicle: Vehicle) => NpcActivity;
+
+const IDLE_GOALS: Record<Exclude<DecisionOptions['idle'], 'wait' | 'escort'>, IdleGoal> = {
+  trade: tradeGoal,
+  scavenge: scavengeGoal,
+  raid: raidGoal,
+  patrol: patrolGoal,
+  travel: travelGoal,
+  explore: exploreGoal,
+  haul: haulGoal,
+};
+
 function idleGoal(world: World, vehicle: Vehicle): NpcActivity {
   const option = decide(world, vehicle, 'idle', null, null);
-  if (option === 'trade') return tradeGoal(world, vehicle);
-  if (option === 'scavenge') return scavengeGoal(world, vehicle);
-  if (option === 'raid') return raidGoal(world, vehicle);
-  return createActivity('wait', null, null, 'nothing worth doing');
+  if (option === 'wait') return createActivity('wait', null, null, 'nothing worth doing');
+  if (option === 'escort') throw new Error(`${vehicle.id} chose an escort, which no driver can take up`);
+  return IDLE_GOALS[option](world, vehicle);
 }
 
 // ---- Popping goals.
@@ -796,7 +842,7 @@ function addHurt(hurt: Map<string, number>, id: string, hits: PartHit[]): void {
 export function getActivityDestination(world: World, vehicle: Vehicle, activity: NpcActivity): Vec | null {
   if (!activity.destination) return null;
   if (activity.kind === 'repair') return repairsHere(vehicle, activity) ? null : activity.destination;
-  if (['fight', 'flee', 'raid', 'investigate'].includes(activity.kind)) return activity.destination;
+  if (['fight', 'flee', 'raid', 'investigate', 'patrol', 'explore'].includes(activity.kind)) return activity.destination;
   return siteStop(world, vehicle, activity, activity.destination);
 }
 
@@ -937,6 +983,30 @@ function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): vo
   finishGoal(world, vehicle, 'cannot afford trade cargo');
 }
 
+// Loads free cargo up to the free cells, then delivers it as the long-term goal.
+function resolveHaul(world: World, vehicle: Vehicle, activity: NpcActivity): void {
+  const site = reachSite(vehicle, activity);
+  if (!site) return;
+  if (!activity.load) throw new Error('Haul activity missing load');
+  if (addGoods(world, vehicle, activity.load.good, freeCells(vehicle)) === 0) {
+    finishGoal(world, vehicle, 'cargo cannot hold the load');
+    return;
+  }
+  if (vehicle.brain!.goals[0] !== activity) throw new Error(`${vehicle.id} hauls above its long-term goal`);
+  replaceBase(world, vehicle, saleGoal(world, vehicle, npcProfile(vehicle)));
+}
+
+function resolveTravel(world: World, vehicle: Vehicle, activity: NpcActivity): void {
+  if (reachSite(vehicle, activity)) finishGoal(world, vehicle, 'arrived');
+}
+
+// A goal that only drives to a point ends parked on it.
+function arrivalResolver(reason: string): Resolver {
+  return (world, vehicle, activity) => {
+    if (reachedDestination(vehicle, activity)) finishGoal(world, vehicle, reason);
+  };
+}
+
 function resolveRetreat(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   if (!reachSite(vehicle, activity)) return;
   refitAtHome(world, vehicle);
@@ -959,6 +1029,10 @@ const RESOLVERS: Partial<Record<NpcActivity['kind'], Resolver>> = {
   resupply: resolveResupply,
   sell: resolveSell,
   trade: resolveTrade,
+  haul: resolveHaul,
+  travel: resolveTravel,
+  patrol: arrivalResolver('patrolled the road'),
+  explore: arrivalResolver('explored the spot'),
 };
 
 function resolveActivity(world: World, vehicle: Vehicle, activity: NpcActivity): void {

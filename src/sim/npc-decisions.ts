@@ -10,6 +10,7 @@
 import { dealAvailable } from './patch';
 import { chassisDef } from '../data/chassis';
 import { ECONOMY, GOOD_IDS } from '../data/goods';
+import { GOOD_SOURCES } from '../data/market';
 import {
   DECISIONS, HUNT, MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, STATE_WEIGHTS, TRAITS,
   type DecisionId, type DecisionOptions, type TraitId, type TraitWeights, type WeightChange,
@@ -32,7 +33,7 @@ import { getResources } from './resources';
 import { skillEffect, vehicleHasPerk } from './progress';
 import { randRange } from './rng';
 import { canReachSalvage, canTakeAny, canTakeFromTruck, siteLootTable } from './salvage';
-import { canUseSite, siteGates, sitePads } from './sites';
+import { canUseSite, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { stateOf, statesHeld } from './states';
 import { getMobilityCondition, vehicleStats } from './stats';
 import { inTowReach, strandedAt, towSite } from './tow';
@@ -47,6 +48,8 @@ export type NpcProfile = {
   bases: string[];
   salvageSites: string[];
   supplySites: string[];
+  travelSites: string[];
+  haulSites: string[];
   contactReactRadius: number;
   boldness: number;
 };
@@ -70,12 +73,14 @@ export function profileOf(traits: TraitId[]): NpcProfile {
     if (!Object.hasOwn(TRAITS, id)) throw new Error(`Unknown trait ${id}`);
     return TRAITS[id];
   });
-  const union = (key: 'towns' | 'bases' | 'salvageSites' | 'supplySites') => [...new Set(defs.flatMap((t) => t[key]))];
+  const union = (key: 'towns' | 'bases' | 'salvageSites' | 'supplySites' | 'travelSites' | 'haulSites') => [...new Set(defs.flatMap((t) => t[key]))];
   return {
     towns: union('towns'),
     bases: union('bases'),
     salvageSites: union('salvageSites'),
     supplySites: union('supplySites'),
+    travelSites: union('travelSites'),
+    haulSites: union('haulSites'),
     contactReactRadius: Math.max(...defs.map((t) => t.contactReactRadius)),
     boldness: defs.reduce((product, t) => product * t.boldness, 1),
   };
@@ -158,7 +163,7 @@ export function usefulContacts(world: World, vehicle: Vehicle): Contact[] {
 }
 
 // Goals that are work a driver would lose by leaving. Raiding, waiting, towing and danger goals are not.
-const WORK: readonly NpcActivity['kind'][] = ['scavenge', 'sell', 'trade', 'resupply', 'loot', 'repair'];
+const WORK: readonly NpcActivity['kind'][] = ['scavenge', 'sell', 'trade', 'resupply', 'loot', 'repair', 'travel', 'haul'];
 
 function isBusy(vehicle: Vehicle): boolean {
   const kind = topGoal(vehicle)?.kind;
@@ -282,6 +287,40 @@ export function huntingGroundsAway(vehicle: Vehicle): Vec[] {
   return huntingGrounds().filter((point) => dist(vehicle.pos, point) > RULES.arriveRadius * 2);
 }
 
+// ---- Patrols, trips and hauls.
+
+// The known town nearest the driver's home, which its patrols circle.
+export function patrolTown(vehicle: Vehicle) {
+  const home = vehicle.brain!.home;
+  return npcProfile(vehicle).towns.map(getKnownSite).sort((a, b) => dist(home, a.pos) - dist(home, b.pos))[0];
+}
+
+const patrolStops = new Map<string, readonly Vec[]>();
+
+// Where a patrol of a town drives: points every NPC_BEHAVIOR.patrolSpacing tiles along the roads, within
+// NPC_BEHAVIOR.patrolRadius of a town gate and outside every site. Built once per town from the region.
+export function patrolPoints(town: Site): readonly Vec[] {
+  const cached = patrolStops.get(town.id);
+  if (cached) return cached;
+  const gates = siteGates(town);
+  const near = (p: Vec) => gates.some((gate) => dist(gate, p) <= NPC_BEHAVIOR.patrolRadius);
+  const points = REGION.roads.flatMap((road) => pointsAlong(road, NPC_BEHAVIOR.patrolSpacing)).filter((p) => near(p) && siteUnder(p) === null);
+  patrolStops.set(town.id, points);
+  return points;
+}
+
+// Known trip destinations other than the one the driver stands at.
+export function travelSitesAway(vehicle: Vehicle) {
+  return npcProfile(vehicle).travelSites.map(getKnownSite).filter((site) => !canUseSite(vehicle.pos, site));
+}
+
+// The goods a source site gives for free.
+export function haulGoods(siteId: string): string[] {
+  const goods = Object.entries(GOOD_SOURCES).flatMap(([good, sites]) => (sites.includes(siteId) ? [good] : []));
+  if (goods.length === 0) throw new Error(`${siteId} is no source of any good`);
+  return goods;
+}
+
 // ---- Robbery.
 
 // A robber can rob a truck it sees, that is not hostile yet, and that carries loot.
@@ -356,6 +395,22 @@ function canRaid(_world: World, vehicle: Vehicle): boolean {
   return huntingGroundsAway(vehicle).length > 0;
 }
 
+function canPatrol(_world: World, vehicle: Vehicle): boolean {
+  return hasTrait(vehicle, 'lawman') && patrolPoints(patrolTown(vehicle)).length > 0;
+}
+
+function canTravel(_world: World, vehicle: Vehicle): boolean {
+  return travelSitesAway(vehicle).length > 0;
+}
+
+// A haul needs cargo room and a known source.
+function canHaul(_world: World, vehicle: Vehicle): boolean {
+  return freeCells(vehicle) > 0 && npcProfile(vehicle).haulSites.length > 0;
+}
+
+// Taking up an escort needs the escort state, which does not exist yet.
+const never = (): boolean => false;
+
 type OptionName = DecisionOptions[DecisionId];
 
 const AVAILABLE: Record<OptionName, Availability> = {
@@ -374,6 +429,11 @@ const AVAILABLE: Record<OptionName, Availability> = {
   raid: canRaid,
   loot: canLootSubject,
   wait: always,
+  patrol: canPatrol,
+  travel: canTravel,
+  explore: canDrive,
+  haul: canHaul,
+  escort: never,
   paid: dealAvailable('paid'),
   ownParts: dealAvailable('ownParts'),
   free: dealAvailable('free'),
@@ -561,6 +621,11 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   raid: neutral,
   loot: neutral,
   wait: neutral,
+  patrol: neutral,
+  travel: neutral,
+  explore: neutral,
+  haul: neutral,
+  escort: neutral,
   paid: neutral,
   ownParts: neutral,
   free: neutral,

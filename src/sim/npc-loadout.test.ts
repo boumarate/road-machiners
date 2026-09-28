@@ -23,7 +23,7 @@ function describeLoadout(v: Vehicle): string {
 
 describe('NPC equipment generation', () => {
   it('spawns at least five equipment combinations for each base trait', () => {
-    const seen: Record<string, Set<string>> = { raider: new Set(), trader: new Set(), scavenger: new Set() };
+    const seen: Record<string, Set<string>> = Object.fromEntries(Object.values(NPCS).map((t) => [t.traits[0], new Set<string>()]));
     for (let seed = 1; seed <= 40; seed++) {
       const world = structuredClone(fixture);
       world.rngState = seed;
@@ -111,6 +111,8 @@ describe('NPC equipment generation', () => {
     for (let attempt = 0; attempt < Math.max(...Object.values(NPCS).map((t) => t.cap)) + 2; attempt++) {
       for (const template of Object.values(NPCS)) world.spawnTimer[template.id] = 1;
       spawnNpcs(world);
+      // Spawned drivers leave the gates before the next round, as they drive off in play.
+      world.vehicles.filter((v) => v.brain).forEach((v, i) => { v.pos = { x: 5 + (i % 40) * 4, y: world.size - 5 - Math.floor(i / 40) * 4 }; });
     }
     for (const template of Object.values(NPCS)) {
       const vehicles = world.vehicles.filter((v) => v.brain?.templateId === template.id);

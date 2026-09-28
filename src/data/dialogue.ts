@@ -393,4 +393,9 @@ export const TRAIT_TALK: Record<TraitId, TraitTalk> = {
   scumbag: { voice: null, topics: ['demand', ...PARLEY] },
   coward: { voice: null, topics: PARLEY },
   lawman: { voice: { greeting: 'Patrol here. Go ahead.', repeatLine: 'Heard you the first time.', refusal: 'Clear the channel.', honksBack: true }, topics: ['directions', 'tow', 'askTow', ...PARLEY] },
+  courier: { voice: { greeting: 'Courier. Make it short, I am on a run.', repeatLine: 'Said that already.', refusal: 'No time. Out.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'trade', ...PARLEY] },
+  roamer: { voice: { greeting: 'Roamer here. What do you want?', repeatLine: 'Old news, friend.', refusal: 'Not talking.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'patch', 'patchRequest', 'trade', ...PARLEY] },
+  supplier: { voice: { greeting: 'Supply convoy. Go ahead.', repeatLine: 'We covered that.', refusal: 'Keep off this channel.', honksBack: true }, topics: ['directions', 'tow', 'askTow', 'trade', ...PARLEY] },
+  guard: { voice: { greeting: 'Convoy guard. State your business.', repeatLine: 'Heard you.', refusal: 'Move along.', honksBack: false }, topics: ['directions', ...PARLEY] },
+  merc: { voice: { greeting: 'Guns for hire. Talk.', repeatLine: 'You said that.', refusal: 'Not interested.', honksBack: false }, topics: ['directions', ...PARLEY] },
 };

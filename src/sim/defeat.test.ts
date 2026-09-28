@@ -1,3 +1,4 @@
+import { NPCS } from '../data/npcs';
 import { describe, expect, it } from 'vitest';
 import { PERK_NUMBERS } from '../data/skills';
 import { partDef } from '../data/parts';
@@ -277,7 +278,7 @@ describe('the loot rule', () => {
     const raider = addVehicle(w0, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 42, y: 30 });
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     forceOption('idle', 'scavenge');
-    for (const key of ['buggy', 'gunwagon', 'trader', 'scavenger']) w0.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
+    for (const key of Object.keys(NPCS)) w0.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
     const units = (s: SalvageStock) => s.parts.length + Object.values(s.goods).reduce((a, n) => a + n, 0);
     const full = units(stock);
     let w = w0;

@@ -8,52 +8,80 @@ import { playerVehicle } from "./damage";
 import { makeVehicle } from "./factory";
 import { isDriveObstacle } from "./mapgen";
 import { generateNpcLoadout, type NpcLoadout } from "./npc-loadout";
-import { profileOf } from "./npc-decisions";
+import { getKnownSite, profileOf } from "./npc-decisions";
 import { chance, randInt, randRange, type Rng } from "./rng";
 import { siteGates, type Site } from "./sites";
 import type { Vehicle, World } from "./types";
 import { dist, type Vec } from "./vec";
 
+// Escort templates never spawn on their own timer. They come with their leader.
 export function spawnNpcs(world: World): void {
   for (const tpl of Object.values(NPCS)) {
+    if (tpl.spawn.kind === "escort") continue;
     const left = (world.spawnTimer[tpl.id] ?? tpl.interval) - 1;
     world.spawnTimer[tpl.id] = left;
     if (left > 0) continue;
     world.spawnTimer[tpl.id] = tpl.interval;
-    const alive = world.vehicles.filter(
-      (v) => v.brain?.templateId === tpl.id,
-    ).length;
-    if (alive < tpl.cap) spawnOne(world, tpl, () => siteFor(world, tpl), true);
+    if (aliveOf(world, tpl) < tpl.cap) spawnWithEscorts(world, tpl, () => siteFor(world, tpl), true);
   }
 }
 
 // The first drivers, plus start traffic at the town the player's road leaves, so drivers soon pass the player.
 export function spawnInitial(world: World): void {
-  for (const id of SPAWN.initial) spawnOne(world, NPCS[id], () => siteFor(world, NPCS[id]), false);
+  for (const id of SPAWN.initial) spawnWithEscorts(world, NPCS[id], () => siteFor(world, NPCS[id]), false);
   const town = REGION.towns.find((t) => t.id === SPAWN.startTraffic.town);
   if (!town) throw new Error(`Unknown start traffic town ${SPAWN.startTraffic.town}`);
-  for (const id of SPAWN.startTraffic.templates) spawnOne(world, NPCS[id], () => town, false);
+  for (const id of SPAWN.startTraffic.templates) spawnWithEscorts(world, NPCS[id], () => town, false);
 }
 
-// Returns false when no free spot was found this time; the next interval tries again.
+function aliveOf(world: World, tpl: NpcTemplate): number {
+  return world.vehicles.filter((v) => v.brain?.templateId === tpl.id).length;
+}
+
+// Spawns a driver, then one of each escort template that follows its template, while the escort is under its cap.
+function spawnWithEscorts(world: World, tpl: NpcTemplate, pick: () => Site, respawn: boolean): void {
+  const leader = spawnOne(world, tpl, pick, respawn);
+  if (!leader) return;
+  for (const escort of escortsOf(tpl)) if (aliveOf(world, escort) < escort.cap) spawnBeside(world, escort, leader);
+}
+
+function escortsOf(tpl: NpcTemplate): NpcTemplate[] {
+  return Object.values(NPCS).filter((e) => e.spawn.kind === "escort" && e.spawn.of === tpl.id);
+}
+
+// An escort spawns SPAWN.escortGap tiles from its leader's side, at a random free angle.
+function spawnBeside(world: World, tpl: NpcTemplate, leader: Vehicle): void {
+  const loadout = generateNpcLoadout(world, tpl);
+  const radius = chassisDef(loadout.chassisId).radius;
+  const d = chassisDef(leader.chassisId).radius + radius + SPAWN.escortGap;
+  for (let i = 0; i < SPAWN.tries; i++) {
+    const a = randRange(world, -Math.PI, Math.PI);
+    const pos = { x: leader.pos.x + Math.cos(a) * d, y: leader.pos.y + Math.sin(a) * d };
+    if (!isFree(world, pos, radius, null)) continue;
+    spawnAt(world, tpl, loadout, pos);
+    return;
+  }
+  world.events.push({ t: "info", text: `No free spot to spawn ${tpl.name}` });
+}
+
 // The template's base traits plus each extra that wins its roll.
 export function rollTraits(world: Rng, tpl: NpcTemplate): TraitId[] {
   return [...tpl.traits, ...tpl.extraTraits.filter((extra) => chance(world, extra.chance)).map((extra) => extra.trait)];
 }
 
 // pick chooses the site for each try. A respawn keeps SPAWN.minPlayerDist from the player. Initial spawns do not.
-function spawnOne(world: World, tpl: NpcTemplate, pick: () => Site, respawn: boolean): boolean {
+// Returns null when no free spot was found this time. The next interval tries again.
+function spawnOne(world: World, tpl: NpcTemplate, pick: () => Site, respawn: boolean): Vehicle | null {
   const loadout = generateNpcLoadout(world, tpl);
   const radius = chassisDef(loadout.chassisId).radius;
   for (let i = 0; i < SPAWN.tries; i++) {
     const pos = gateSpot(world, pick(), radius);
     if (respawn && dist(pos, playerVehicle(world).pos) < SPAWN.minPlayerDist) continue;
     if (!isFree(world, pos, radius, null)) continue;
-    spawnAt(world, tpl, loadout, pos);
-    return true;
+    return spawnAt(world, tpl, loadout, pos);
   }
   world.events.push({ t: "info", text: `No free spot to spawn ${tpl.name}` });
-  return false;
+  return null;
 }
 
 // Adds a template's vehicle with a sampled loadout at pos. The caller checks that pos is free.
@@ -83,9 +111,13 @@ export function spawnAt(world: World, tpl: NpcTemplate, loadout: NpcLoadout, pos
 
 const NEUTRAL_SITES: readonly Site[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== "camp")];
 
-// Raiders spawn at one of their camps, neutrals at any town or other location.
+// Raiders spawn at one of their camps, neutrals at any town or other location, and others at their listed sites.
 function siteFor(world: World, tpl: NpcTemplate): Site {
-  return tpl.spawn === "camp" ? campOf(world, tpl) : NEUTRAL_SITES[randInt(world, 0, NEUTRAL_SITES.length - 1)];
+  const place = tpl.spawn;
+  if (place.kind === "camp") return campOf(world, tpl);
+  if (place.kind === "town") return NEUTRAL_SITES[randInt(world, 0, NEUTRAL_SITES.length - 1)];
+  if (place.kind === "sites") return getKnownSite(place.ids[randInt(world, 0, place.ids.length - 1)]);
+  throw new Error(`${tpl.id} spawns only beside a new ${place.of}`);
 }
 
 // A random camp among the template's bases.

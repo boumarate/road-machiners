@@ -154,12 +154,15 @@ export type DriverResources = {
 };
 
 export type NpcActivity = {
-  kind: 'scavenge' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate' | 'tow' | 'loot' | 'repair' | 'patch' | 'meet' | 'retreat';
+  kind:
+    | 'scavenge' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate' | 'tow' | 'loot' | 'repair' | 'patch'
+    | 'meet' | 'retreat' | 'patrol' | 'travel' | 'explore' | 'haul' | 'follow';
   targetId: string | null;
   destination: Vec | null;
   phase: "travel" | "act";
   reason: string;
   purchase?: { good: string; sellTown: string };
+  load?: { good: string }; // the good a haul loads free at its source site
 };
 
 export type NpcBrain = {

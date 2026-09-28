@@ -3,6 +3,7 @@
 import type { Faction, StateKindId } from '../sim/types';
 import { START_KITS } from './start';
 import { RULES } from './rules';
+import { TERRAIN } from './terrain';
 
 // NPCs begin with the player's upkeep budget. Their fuel is capped by their chassis.
 export const NPC_RESOURCES = {
@@ -11,7 +12,7 @@ export const NPC_RESOURCES = {
   supplies: START_KITS.standard.supplies,
 };
 
-export type TraitId = 'trader' | 'scavenger' | 'raider' | 'scumbag' | 'coward' | 'lawman';
+export type TraitId = 'trader' | 'scavenger' | 'raider' | 'scumbag' | 'coward' | 'lawman' | 'courier' | 'roamer' | 'supplier' | 'guard' | 'merc';
 
 export type Weighted<T> = { value: T; weight: number };
 export type CargoRoll = { good: string; count: number };
@@ -69,6 +70,11 @@ const TRADER_SPARES: SpareTable = {
   ],
 };
 
+// Where a template's drivers appear. camp: a gate of a camp its traits know. town: a gate of any town or non-camp
+// location. sites: a gate of one of the listed sites. escort: beside a new driver of the template `of`, never on
+// its own timer.
+export type SpawnPlace = { kind: 'camp' } | { kind: 'town' } | { kind: 'sites'; ids: string[] } | { kind: 'escort'; of: string };
+
 export type NpcTemplate = {
   id: string;
   name: string;
@@ -80,8 +86,34 @@ export type NpcTemplate = {
   preferredRange: number; // distance a raider tries to hold while fighting
   cap: number; // max alive at once
   interval: number; // turns between spawn attempts
-  spawn: "camp" | "town";
+  spawn: SpawnPlace;
 };
+
+// Patrol cars carry heavy guns and always some armor, a step above traders and close to a raider gunwagon.
+const LAW_ENGINES: Weighted<string>[] = [
+  { value: "workhorseDiesel", weight: 5 },
+  { value: "heavyDiesel", weight: 4 },
+  { value: "stockEngine", weight: 2 },
+];
+const LAW_WEAPONS: Weighted<string>[] = [
+  { value: "cannon", weight: 5 },
+  { value: "autocannon", weight: 4 },
+  { value: "tankGun", weight: 2 },
+  { value: "rocketRack", weight: 1 },
+];
+// The rare empty outcome covers a wagon whose heavy gun leaves no rated mass for plates.
+const LAW_ARMOR: Weighted<string | null>[] = [
+  { value: null, weight: 1 },
+  { value: "plates", weight: 6 },
+  { value: "spacedArmor", weight: 3 },
+  { value: "reinforcedCage", weight: 2 },
+  { value: "ceramicPlates", weight: 1 },
+];
+const NO_GOODS: Weighted<CargoRoll | null>[] = [{ value: null, weight: 1 }];
+const MOSTLY_NO_CARGO_PART: Weighted<string | null>[] = [
+  { value: null, weight: 6 },
+  { value: "rack", weight: 1 },
+];
 
 const LOADOUTS: Record<string, NpcLoadoutTable> = {
   outrider: {
@@ -264,6 +296,218 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     wear: WEAR_SCAVENGER,
     spares: null,
   },
+  // Bowl Farmers drive farm chassis.
+  bowlPatrol: {
+    budget: 4500,
+    chassis: [
+      { value: "tractor", weight: 5 },
+      { value: "hauler", weight: 4 },
+    ],
+    engine: LAW_ENGINES,
+    weapon: LAW_WEAPONS,
+    armor: LAW_ARMOR,
+    cargoPart: MOSTLY_NO_CARGO_PART,
+    goods: NO_GOODS,
+    wear: WEAR_TRADER,
+    spares: null,
+  },
+  // The Nose Army drives wagons and carriers.
+  nosePatrol: {
+    budget: 4500,
+    chassis: [
+      { value: "wagon", weight: 5 },
+      { value: "carrier", weight: 4 },
+    ],
+    engine: LAW_ENGINES,
+    weapon: LAW_WEAPONS,
+    armor: LAW_ARMOR,
+    cargoPart: MOSTLY_NO_CARGO_PART,
+    goods: NO_GOODS,
+    wear: WEAR_TRADER,
+    spares: null,
+  },
+  // Light and fast. A courier carries a few small valuables and little armor.
+  courier: {
+    budget: 1800,
+    chassis: [
+      { value: "courier", weight: 5 },
+      { value: "buggy", weight: 4 },
+      { value: "scout", weight: 3 },
+    ],
+    engine: [
+      { value: "flatFour", weight: 5 },
+      { value: "tunedEngine", weight: 3 },
+      { value: "stockEngine", weight: 3 },
+      { value: "racingV6", weight: 1 },
+    ],
+    weapon: [
+      { value: "mg", weight: 6 },
+      { value: "shotgun", weight: 3 },
+    ],
+    armor: [
+      { value: null, weight: 5 },
+      { value: "scrapPanels", weight: 3 },
+      { value: "cage", weight: 2 },
+    ],
+    cargoPart: [
+      { value: null, weight: 2 },
+      { value: "panniers", weight: 4 },
+      { value: "rack", weight: 2 },
+    ],
+    goods: [
+      { value: null, weight: 3 },
+      { value: { good: "electronics", count: 2 }, weight: 2 },
+      { value: { good: "meds", count: 2 }, weight: 2 },
+    ],
+    wear: WEAR_TRADER,
+    spares: null,
+  },
+  // A roamer's rig is a scavenger's, a bit better kept.
+  roamer: {
+    budget: 2000,
+    chassis: [
+      { value: "scout", weight: 5 },
+      { value: "van", weight: 3 },
+      { value: "buggy", weight: 2 },
+      { value: "courier", weight: 1 },
+    ],
+    engine: [
+      { value: "stockEngine", weight: 5 },
+      { value: "flatFour", weight: 4 },
+      { value: "workhorseDiesel", weight: 2 },
+    ],
+    weapon: [
+      { value: "mg", weight: 5 },
+      { value: "shotgun", weight: 5 },
+      { value: "autocannon", weight: 1 },
+    ],
+    armor: [
+      { value: null, weight: 3 },
+      { value: "scrapPanels", weight: 4 },
+      { value: "cage", weight: 3 },
+    ],
+    cargoPart: [
+      { value: null, weight: 1 },
+      { value: "rack", weight: 4 },
+      { value: "panniers", weight: 3 },
+      { value: "flatbed", weight: 2 },
+    ],
+    goods: [
+      { value: null, weight: 3 },
+      { value: { good: "scrap", count: 2 }, weight: 4 },
+      { value: { good: "textiles", count: 2 }, weight: 2 },
+      { value: { good: "tools", count: 1 }, weight: 1 },
+    ],
+    wear: WEAR_SCAVENGER,
+    spares: null,
+  },
+  // A convoy is a big truck that always carries a cargo part, since it hauls for a living. Its guard does the
+  // fighting, so its own gun stays light.
+  convoy: {
+    budget: 3200,
+    chassis: [
+      { value: "hauler", weight: 6 },
+      { value: "longbed", weight: 3 },
+    ],
+    engine: [
+      { value: "workhorseDiesel", weight: 6 },
+      { value: "heavyDiesel", weight: 3 },
+      { value: "stockEngine", weight: 2 },
+    ],
+    weapon: [
+      { value: "mg", weight: 6 },
+      { value: "shotgun", weight: 3 },
+    ],
+    armor: [
+      { value: null, weight: 2 },
+      { value: "plates", weight: 3 },
+      { value: "cage", weight: 2 },
+      { value: "scrapPanels", weight: 2 },
+    ],
+    cargoPart: [
+      { value: "trailerBox", weight: 5 },
+      { value: "flatbed", weight: 3 },
+      { value: "enclosedFrame", weight: 2 },
+      { value: "heavyFrame", weight: 1 },
+    ],
+    goods: [
+      { value: null, weight: 3 },
+      { value: { good: "fuelDrums", count: 6 }, weight: 1 },
+      { value: { good: "water", count: 6 }, weight: 1 },
+    ],
+    wear: WEAR_TRADER,
+    spares: null,
+  },
+  // A guard is quick enough to keep up with its convoy and armed to fight for it.
+  convoyGuard: {
+    budget: 2600,
+    chassis: [
+      { value: "scout", weight: 4 },
+      { value: "van", weight: 3 },
+      { value: "wagon", weight: 2 },
+      { value: "buggy", weight: 2 },
+    ],
+    engine: [
+      { value: "stockEngine", weight: 4 },
+      { value: "tunedEngine", weight: 3 },
+      { value: "workhorseDiesel", weight: 2 },
+      { value: "flatFour", weight: 2 },
+    ],
+    weapon: [
+      { value: "autocannon", weight: 4 },
+      { value: "mg", weight: 4 },
+      { value: "cannon", weight: 2 },
+      { value: "shotgun", weight: 2 },
+    ],
+    armor: [
+      { value: null, weight: 1 },
+      { value: "plates", weight: 4 },
+      { value: "cage", weight: 3 },
+      { value: "scrapPanels", weight: 2 },
+      { value: "reinforcedCage", weight: 1 },
+    ],
+    cargoPart: MOSTLY_NO_CARGO_PART,
+    goods: NO_GOODS,
+    wear: WEAR_TRADER,
+    spares: null,
+  },
+  // A merc sells its guns, so it spends its budget on weapons and armor, not cargo.
+  merc: {
+    budget: 3500,
+    chassis: [
+      { value: "wagon", weight: 4 },
+      { value: "scout", weight: 3 },
+      { value: "van", weight: 2 },
+      { value: "carrier", weight: 1 },
+    ],
+    engine: [
+      { value: "tunedEngine", weight: 3 },
+      { value: "workhorseDiesel", weight: 3 },
+      { value: "heavyDiesel", weight: 2 },
+      { value: "stockEngine", weight: 2 },
+      { value: "racingV6", weight: 1 },
+    ],
+    weapon: [
+      { value: "cannon", weight: 4 },
+      { value: "autocannon", weight: 4 },
+      { value: "rocketRack", weight: 2 },
+      { value: "sniperCannon", weight: 1 },
+      { value: "tankGun", weight: 1 },
+    ],
+    // The rare empty outcome covers a wagon whose heavy gun leaves no rated mass for plates.
+    armor: [
+      { value: null, weight: 1 },
+      { value: "plates", weight: 5 },
+      { value: "spacedArmor", weight: 3 },
+      { value: "reinforcedCage", weight: 3 },
+      { value: "ram", weight: 1 },
+      { value: "ceramicPlates", weight: 1 },
+    ],
+    cargoPart: MOSTLY_NO_CARGO_PART,
+    goods: NO_GOODS,
+    wear: WEAR_SCAVENGER,
+    spares: null,
+  },
 };
 
 export const NPCS: Record<string, NpcTemplate> = {
@@ -276,7 +520,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     // A camp regains one buggy every 34 turns, so a fully cleared camp is back to its cap of 6 in
     // about 200 turns, one full day (TIME.turnsPerDay), not the few minutes 8 turns gave.
     interval: 34,
-    spawn: "camp",
+    spawn: { kind: "camp" },
   },
   gunwagon: {
     id: 'gunwagon', name: 'Raider gunwagon', faction: 'raiders', traits: ['raider'], extraTraits: [],
@@ -286,7 +530,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     cap: 2,
     // Same day-long refill as the outrider camp: cap 2 at 100 turns apart is back to full in 200 turns.
     interval: 100,
-    spawn: "camp",
+    spawn: { kind: "camp" },
   },
   trader: {
     id: 'trader', name: 'Trader caravan', faction: 'traders', traits: ['trader'],
@@ -297,7 +541,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     preferredRange: 0,
     cap: 5,
     interval: 12,
-    spawn: "town",
+    spawn: { kind: "town" },
   },
   scavenger: {
     id: 'scavenger', name: 'Scavenger', faction: 'scavengers', traits: ['scavenger'],
@@ -308,7 +552,82 @@ export const NPCS: Record<string, NpcTemplate> = {
     preferredRange: 0,
     cap: 4,
     interval: 12,
-    spawn: "town",
+    spawn: { kind: "town" },
+  },
+  bowlFarmer: {
+    id: 'bowlFarmer', name: 'Bowl Farmers patrol', faction: 'bowl', traits: ['lawman'], extraTraits: [],
+    loadout: LOADOUTS.bowlPatrol,
+    aggroRange: 0,
+    preferredRange: 0,
+    // Three cars keep the Bowl approaches watched. A lost car comes back in 70 turns, so a full patrol is back in
+    // about one day.
+    cap: 3,
+    interval: 70,
+    spawn: { kind: "sites", ids: ["bowl"] },
+  },
+  noseArmy: {
+    id: 'noseArmy', name: 'Nose Army patrol', faction: 'nose', traits: ['lawman'], extraTraits: [],
+    loadout: LOADOUTS.nosePatrol,
+    aggroRange: 0,
+    preferredRange: 0,
+    // Same size and refill as the Bowl patrol.
+    cap: 3,
+    interval: 70,
+    spawn: { kind: "sites", ids: ["nose"] },
+  },
+  courier: {
+    id: 'courier', name: 'Courier', faction: 'couriers', traits: ['courier'],
+    // One courier in four is a coward.
+    extraTraits: [{ trait: 'coward', chance: 0.25 }],
+    loadout: LOADOUTS.courier,
+    aggroRange: 0,
+    preferredRange: 0,
+    // Couriers are cheap, fast traffic. A lost one is replaced in 30 turns, a few hours of the day.
+    cap: 3,
+    interval: 30,
+    spawn: { kind: "town" },
+  },
+  roamer: {
+    id: 'roamer', name: 'Roamer', faction: 'roamers', traits: ['roamer'],
+    // One roamer in five is a scumbag.
+    extraTraits: [{ trait: 'scumbag', chance: 0.2 }],
+    loadout: LOADOUTS.roamer,
+    aggroRange: 0,
+    preferredRange: 0,
+    // Same count and refill as couriers.
+    cap: 3,
+    interval: 30,
+    spawn: { kind: "town" },
+  },
+  convoy: {
+    id: 'convoy', name: 'Supply convoy', faction: 'convoys', traits: ['supplier'], extraTraits: [],
+    loadout: LOADOUTS.convoy,
+    aggroRange: 0,
+    preferredRange: 0,
+    // Two big trucks with a guard each. A lost convoy is replaced in 100 turns, half a day.
+    cap: 2,
+    interval: 100,
+    spawn: { kind: "sites", ids: ["bowl", "nose"] },
+  },
+  convoyGuard: {
+    id: 'convoyGuard', name: 'Convoy guard', faction: 'convoys', traits: ['guard'], extraTraits: [],
+    loadout: LOADOUTS.convoyGuard,
+    aggroRange: 0,
+    preferredRange: 0,
+    // One guard per convoy. It spawns only beside a new convoy, so its interval never runs.
+    cap: 2,
+    interval: 100,
+    spawn: { kind: "escort", of: "convoy" },
+  },
+  merc: {
+    id: 'merc', name: 'Merc', faction: 'mercs', traits: ['merc'], extraTraits: [],
+    loadout: LOADOUTS.merc,
+    aggroRange: 0,
+    preferredRange: 0,
+    // A few mercs wait for hire at the towns. A lost one comes back in 70 turns, like a patrol car.
+    cap: 3,
+    interval: 70,
+    spawn: { kind: "sites", ids: ["bowl", "nose"] },
   },
 };
 
@@ -324,6 +643,13 @@ export const SPAWN = {
     "trader",
     "scavenger",
     "scavenger",
+    "bowlFarmer",
+    "noseArmy",
+    "courier",
+    "roamer",
+    "convoy",
+    "merc",
+    "merc",
   ],
   // Two traders start at the gate of the town the player's start road leaves. Traders head out to other
   // towns and sites, and every way out of that gate but the south road passes the player's start.
@@ -334,6 +660,7 @@ export const SPAWN = {
   gateSpread: 6, // distance beyond a gate for spawns; room for a full camp to spawn at once
   gateAngle: 0.3, // radians either side of the track leaving a gate
   tries: 40,
+  escortGap: 1, // tiles between an escort and its leader at spawn; room to pull away without a crash
   neighborHelp: 10, // same-faction vehicles in this range join a feud, witness attacks and count as one group in danger
 };
 
@@ -353,7 +680,8 @@ export type DecisionOptions = {
   mercyBegged: 'spare' | 'finish'; // a foe gives up and asks to be let go
   threatened: 'comply' | 'fightBack' | 'flee'; // the player demands the driver's cargo
   resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal
-  idle: 'trade' | 'scavenge' | 'raid' | 'wait'; // the goal stack is empty
+  // The goal stack is empty. Escort needs the escort state, which does not exist yet, so no driver can take it.
+  idle: 'trade' | 'scavenge' | 'raid' | 'wait' | 'patrol' | 'travel' | 'explore' | 'haul' | 'escort';
 };
 export type DecisionId = keyof DecisionOptions;
 export type OptionId = DecisionOptions[DecisionId];
@@ -395,9 +723,9 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   threatened: { comply: 1, fightBack: 1, flee: 1 },
   // After an interruption a driver goes back to its work 9 times in 10.
   resume: { resume: 9, new: 1 },
-  // Anyone collects salvage in sight. Trading and raiding more than rarely need a trait. Waiting is the small
-  // fallback.
-  idle: { trade: 0, scavenge: 1, raid: 0, wait: 0.1 },
+  // Anyone collects salvage in sight. Trading, raiding, patrols, trips, exploring, hauls and escorts more than
+  // rarely need a trait. Waiting is the small fallback.
+  idle: { trade: 0, scavenge: 1, raid: 0, wait: 0.1, patrol: 0, travel: 0, explore: 0, haul: 0, escort: 0 },
 };
 
 // A weight change: `add` raises an option with zero base weight above MIN_CHANCE, and `mul` tunes an option.
@@ -480,6 +808,8 @@ export type Trait = {
   bases: string[]; // own camps that give fuel, supplies and repairs instead of towns
   salvageSites: string[];
   supplySites: string[];
+  travelSites: string[]; // sites the driver makes trips between
+  haulSites: string[]; // sources in GOOD_SOURCES where the driver loads free cargo
   // A contact is useful only while its circle is at most this many tiles wide. A vague distant sound stays audible
   // without redirecting the driver. Scanner and beacon circles stay tight, so they stay useful from farther away.
   contactReactRadius: number;
@@ -495,7 +825,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // in ten scavengers help a stranded truck. An idle scavenger takes on a manageable hostile about nine times in
   // ten: fight 4, times NPC_BEHAVIOR.manageableFight.
   scavenger: {
-    towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks'], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
+    towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1,
     weights: { idle: { scavenge: { add: 10 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 9 } }, hostileSeen: { fight: { add: 2 } } },
   },
   // Traders rarely pick a fight: a fight weight of 2 drops to 0.004, about 1%, and to 0.02, about 2%, against a
@@ -504,7 +834,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // salvage in sight 3 to 1. Nine in ten traders help a stranded truck. Traders want peace: they shrug off 19
   // crashes in 20, ask for truces, take nearly every truce and spare a beaten foe. Threatened, they mostly pay.
   trader: {
-    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
+    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1,
     weights: {
       idle: { trade: { add: 30 } }, strandedSeen: { tow: { add: 9 } },
       hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } }, ramChance: { ram: { mul: 0.001 } },
@@ -517,7 +847,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // and nearly always from prey it expects to beat. Threatened, it mostly fights. Nine in ten raiders help a stranded
   // raider, the only truck they tow.
   raider: {
-    towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], contactReactRadius: 12, boldness: 1,
+    towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1,
     weights: {
       idle: { raid: { add: 10 } }, contactHeard: { investigate: { add: 12 } }, hostileSeen: { fight: { add: 8 } }, strandedSeen: { tow: { add: 9 } },
       crashed: { retaliate: { add: 3 } }, parley: { truce: { mul: 0.3 }, beg: { mul: 0.3 } }, truceOffered: { refuse: { add: 2 } },
@@ -527,13 +857,13 @@ export const TRAITS: Record<TraitId, Trait> = {
   // A scumbag robs about two targets in three it comes across: rob 2 against keep 1. Boldness 1.3 lets it rob a
   // truck that looks as dangerous as its own, and stand against one up to 30% stronger. It answers a crash with a
   // fight twice as often as most drivers.
-  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, boldness: 1.3, weights: { preySeen: { rob: { add: 2 } }, crashed: { retaliate: { add: 1 } } } },
+  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 1.3, weights: { preySeen: { rob: { add: 2 } }, crashed: { retaliate: { add: 1 } } } },
   // A coward runs three times as often from a new hostile or a shot, picks a fight half as often, and shoots back
   // at a third of the weight. Boldness 0.6 makes a truck that looks as dangerous as its own a threat, even at the
   // lowest misjudgment. It asks for a truce twice as often and begs three times as often. Threatened, it runs or
   // pays.
   coward: {
-    towns: [], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 0, boldness: 0.6,
+    towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 0.6,
     weights: {
       hostileSeen: { flee: { mul: 3 }, fight: { mul: 0.5 } }, attacked: { flee: { mul: 3 }, fightBack: { mul: 0.3 } },
       parley: { truce: { mul: 2 }, beg: { mul: 3 } }, threatened: { flee: { mul: 3 }, comply: { add: 1 } },
@@ -541,17 +871,70 @@ export const TRAITS: Record<TraitId, Trait> = {
   },
   // Lawmen patrol their town and hunt raiders and first shooters at neutral NPCs. They fight most hostiles they
   // see, as eager as raiders, and shoot back twice as often as most drivers. They seldom ask for a truce or beg.
-  // Threatened, they mostly fight. Nine in ten lawmen help a stranded truck, like traders.
+  // Threatened, they mostly fight. Nine in ten lawmen help a stranded truck, like traders. An idle lawman patrols
+  // about nine times in ten and waits a turn otherwise. Salvage in sight tempts it about one time in fifty.
   lawman: {
-    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: [], contactReactRadius: 12, boldness: 1,
+    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1,
     weights: {
+      idle: { patrol: { add: 20 }, wait: { add: 2 }, scavenge: { mul: 0.05 } },
       hostileSeen: { fight: { add: 8 } }, attacked: { fightBack: { mul: 2 } }, strandedSeen: { tow: { add: 9 } },
       parley: { truce: { mul: 0.3 }, beg: { mul: 0.3 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
+    },
+  },
+  // Couriers carry small loads between every town and location. An idle courier sets out on a trip nearly always.
+  // Stopping for salvage on the way or at all stays at about the minimum chance: a scavenge weight of 1 drops to
+  // 0.001. Two in three couriers help a stranded truck.
+  courier: {
+    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'],
+    travelSites: ['bowl', 'nose', 'orchard', 'dustwell', 'granary', 'burnt-convoy', 'podfield', 'canyon-bridge', 'glass-flats', 'green-pit', 'south-lock', 'ridge-wrecks', 'pump-station', 'fallen-sun', 'salvage-yard'],
+    haulSites: [], contactReactRadius: 12, boldness: 1,
+    weights: {
+      idle: { travel: { add: 20 }, scavenge: { mul: 0.001 } }, strandedSeen: { tow: { add: 2 } },
+      hostileSeen: { fight: { mul: 0.1 } }, threatened: { comply: { add: 1 } },
+    },
+  },
+  // Roamers go where nobody goes. An idle roamer explores about three times in five, and trades or scavenges about
+  // one time in five each. Three in four roamers stop for salvage they pass, like scavengers.
+  roamer: {
+    towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1,
+    weights: { idle: { explore: { add: 10 }, trade: { add: 3 }, scavenge: { add: 2 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 3 } } },
+  },
+  // Supply convoys haul fuel drums from the Pump Station and water from the oases to the towns. An idle convoy
+  // hauls nearly always, and stops for salvage only at about the minimum chance. Like traders, convoys avoid
+  // fights and leave them to their guard, and mostly pay when threatened.
+  supplier: {
+    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: ['pump-station', 'dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
+    weights: {
+      idle: { haul: { add: 30 }, scavenge: { mul: 0.001 } }, strandedSeen: { tow: { add: 9 } },
+      hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } }, threatened: { comply: { add: 1 }, fightBack: { mul: 0.1 } },
+    },
+  },
+  // A convoy guard takes up an escort nearly always when it can. Otherwise it mostly waits. It fights like a lawman.
+  guard: {
+    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1,
+    weights: {
+      idle: { escort: { add: 30 }, wait: { add: 5 }, scavenge: { mul: 0.001 } },
+      hostileSeen: { fight: { add: 8 } }, attacked: { fightBack: { mul: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
+    },
+  },
+  // A merc waits at a town pad for hire. A wait weight of 50 against a trip weight of 1 keeps it parked about 50
+  // turns, a quarter of a day, before it tries the other town. It trades and scavenges only at about the minimum
+  // chance. It fights most hostiles it sees and shoots back twice as often as most drivers.
+  merc: {
+    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: ['bowl', 'nose'], haulSites: [], contactReactRadius: 12, boldness: 1,
+    weights: {
+      idle: { wait: { add: 50 }, travel: { add: 1 }, scavenge: { mul: 0.001 } },
+      hostileSeen: { fight: { add: 4 } }, attacked: { fightBack: { mul: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
     },
   },
 };
 
 export const NPC_BEHAVIOR = {
+  // Tiles from a town gate a patrol drives out to: the gate guns' range plus one sight radius, so a patrol covers
+  // the road just past the guns.
+  patrolRadius: RULES.guards.range + TERRAIN.vision.radius,
+  // Tiles along a road between two patrol stops. Close enough that stops spread over every approach.
+  patrolSpacing: 4,
   // Cab warnings begin at 30%. Recovery to half cab health prevents fight/flee oscillation.
   fleeCondition: 0.3,
   // One driver in three the player knocks out holds a grudge. See the revenge state.

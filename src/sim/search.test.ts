@@ -1,3 +1,4 @@
+import { NPCS } from '../data/npcs';
 import { describe, expect, it } from 'vitest';
 import { knockoutStockId } from './salvage';
 import { REGION } from '../data/region';
@@ -116,7 +117,7 @@ describe('timed scavenging search', () => {
     const w = emptyWorld({ x: 60, y: 60 });
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
-    for (const key of ['buggy', 'gunwagon', 'trader', 'scavenger']) w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
+    for (const key of Object.keys(NPCS)) w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
     const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
     npc.pos = { x: convoy.pos.x + convoy.radius + 1, y: convoy.pos.y };
     npc.heading = Math.PI;
