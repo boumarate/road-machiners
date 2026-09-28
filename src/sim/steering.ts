@@ -52,6 +52,13 @@ export function throttleFor(d: number, speed: number): Throttle {
   return "accelerate";
 }
 
+// Next turn's speed for a drive-through order at distance d. A paced order heads for its pace as fast as the
+// engine and brakes allow. Other orders follow the throttle zones.
+export function throughSpeed(s: VehicleStats, speed: number, d: number, pace: number | undefined): number {
+  if (pace === undefined) return zoneSpeed(s, speed, d);
+  return clamp(pace, Math.max(0, speed - s.brake), Math.min(s.maxSpeed, speed + s.accel));
+}
+
 // Next turn's speed for a drive-through click at distance d. From rest, speed grows with distance.
 // In motion, brake eases toward its edge and acceleration builds from the hold zone to full reach.
 // Braking stops at the speed from rest, so the truck creeps onto a close point instead of stopping short.

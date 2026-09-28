@@ -55,26 +55,48 @@ function runUntil(w: World, max: number, done: (w: World) => boolean): { w: Worl
 }
 
 describe('the follow goal', () => {
-  it('re-aims behind its leader every turn', () => {
+  it('re-aims beside its leader\'s tail every turn', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const convoy = convoyAt(w, { x: 60, y: 60 });
     const guard = guardAt(w, { x: 50, y: 60 });
     startEscort(w, guard, convoy, null, 0);
-    const gap = vehicleStats(w, convoy).radius + vehicleStats(w, guard).radius + NPC_BEHAVIOR.followGap;
+    const radii = vehicleStats(w, convoy).radius + vehicleStats(w, guard).radius;
+    const side = radii + NPC_BEHAVIOR.followGap;
 
     const first = thinkNpc(w, guard);
     expect(first.kind).toBe('follow');
-    expect(first.destination!.x).toBeCloseTo(60 - gap);
-    expect(first.destination!.y).toBeCloseTo(60);
+    expect(first.destination!.x).toBeCloseTo(60 - radii);
+    expect(first.destination!.y).toBeCloseTo(60 + side);
 
     convoy.pos = { x: 70, y: 65 };
     convoy.heading = Math.PI / 2;
     const second = thinkNpc(w, guard);
-    expect(second.destination!.x).toBeCloseTo(70);
-    expect(second.destination!.y).toBeCloseTo(65 - gap);
+    expect(second.destination!.x).toBeCloseTo(70 - side);
+    expect(second.destination!.y).toBeCloseTo(65 - radii);
   });
 
-  it('stops outside the braking distance of its leader', () => {
+  it('leads by the leader\'s travel this turn', () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const convoy = convoyAt(w, { x: 60, y: 60 });
+    const guard = guardAt(w, { x: 50, y: 60 });
+    startEscort(w, guard, convoy, null, 0);
+    const parked = thinkNpc(w, guard).destination!.x;
+    convoy.speed = 3;
+    expect(thinkNpc(w, guard).destination!.x).toBeCloseTo(parked + 3);
+  });
+
+  it('puts a second escort on the other side', () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const convoy = convoyAt(w, { x: 60, y: 60 });
+    const first = guardAt(w, { x: 50, y: 60 });
+    const second = guardAt(w, { x: 50, y: 64 });
+    startEscort(w, first, convoy, null, 0);
+    startEscort(w, second, convoy, null, 0);
+    expect(thinkNpc(w, first).destination!.y).toBeGreaterThan(60);
+    expect(thinkNpc(w, second).destination!.y).toBeLessThan(60);
+  });
+
+  it('rides outside the collision check of traffic', () => {
     expect(NPC_BEHAVIOR.followGap).toBeGreaterThan(RULES.yieldDistance);
   });
 

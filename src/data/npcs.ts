@@ -965,8 +965,8 @@ export const NPC_BEHAVIOR = {
   patrolRadius: RULES.guards.range + TERRAIN.vision.radius,
   // Tiles along a road between two patrol stops. Close enough that stops spread over every approach.
   patrolSpacing: 4,
-  // Tiles a follower keeps behind its leader past both radii: the yield distance plus one, so it stops outside
-  // the braking check of src/sim/ai.ts.
+  // Tiles a follower keeps to the side of its leader past both radii: the yield distance plus one, so it rides
+  // outside the collision check of src/sim/ai.ts.
   followGap: RULES.yieldDistance + 1,
   // A driver whose cab, whole truck or own health is at 30% is weak. Recovery to half prevents fight/flee oscillation.
   fleeCondition: 0.3,

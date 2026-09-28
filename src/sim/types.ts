@@ -58,7 +58,7 @@ export type Pose = { x: number; y: number; heading: number };
 
 // Momentum carries over between turns. A vehicle without an order coasts.
 export type MoveOrder =
-  | { kind: "through"; dest: Vec } // drive through the point at pace, then coast on
+  | { kind: "through"; dest: Vec; pace?: number } // drive through the point, then coast on; a follower's pace in tiles per turn replaces the throttle zones
   | { kind: "stopAt"; dest: Vec } // brake in time to stop on the point
   | { kind: "brake" }; // slow to a halt where you are
 
