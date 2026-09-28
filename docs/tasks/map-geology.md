@@ -1,6 +1,6 @@
 # Map pipeline and geology layer
 
-**Status:** executing
+**Status:** reviewing
 **Branch:** procedural-map
 **Worktree:** .worktrees/procedural-map
 **Goal:** The map is built offline from the rough base of noise heights, roads and sites, then changed by a rule-based geology layer. The result is saved to a file and loaded at boot. Hills, washes and dunes read as varied landscape in-game. The user confirms the look from in-game screenshots.
