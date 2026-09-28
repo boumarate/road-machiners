@@ -438,7 +438,7 @@ export function chassisStats(chassisId: string): Stat[] {
   const c = chassisDef(chassisId);
   const turning = stat("turning", "Turn limit at speed and at a crawl", (c.turnFast + c.turnSlow) / 2, "°", "more");
   return [
-    stat("speed", "Top speed", kph(c.maxSpeed), "km/h", "more"),
+    stat("speed", "Base top speed, before the engine and load", kph(c.maxSpeed), "km/h", "more"),
     stat("accel", "Acceleration", mps2(c.accel), "m/s²", "more", 1),
     { ...turning, text: `${c.turnFast}–${c.turnSlow}` },
     stat("cells", "Cargo cells", cellCount(baseGrid(chassisId)), "", "more"),

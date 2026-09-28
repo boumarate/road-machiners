@@ -235,7 +235,7 @@ export class Hud {
       el(
         "span",
         { class: "job-label" },
-        `${label} · ${job.turnsLeft} turns left`,
+        `${label} · ${job.turnsLeft} ${job.turnsLeft === 1 ? 'turn' : 'turns'} left`,
       ),
       el(
         "span",

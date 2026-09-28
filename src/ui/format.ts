@@ -306,12 +306,12 @@ function contractText(c: Contract, outcome: keyof typeof CONTRACT_OUTCOME): { te
 
 // One line naming what a contract asks for.
 export function contractSummary(c: Contract): string {
-  if (c.kind === 'haul') return `haul ${c.units} ${GOODS[c.good].name} to ${siteName(c.to)}`;
+  if (c.kind === 'haul') return `Haul ${c.units} ${GOODS[c.good].name} to ${siteName(c.to)}`;
   if (c.kind === 'fetch') {
     const rebuilt = CONTRACTS.fetch.maxWear === 1 ? 'rebuilt at most once' : `rebuilt at most ${CONTRACTS.fetch.maxWear} times`;
-    return `find ${article(partDef(c.defId).name)} ${partDef(c.defId).name} anywhere, working and ${rebuilt}, bring it to ${siteName(c.shop)}`;
+    return `Bring ${partDef(c.defId).name} to ${siteName(c.shop)}: working, ${rebuilt}, found anywhere`;
   }
-  return `defeat any ${c.targetName}`;
+  return `Defeat any ${c.targetName}`;
 }
 
 // The game time a contract is due. It fails at the end of its deadline turn.
@@ -326,9 +326,6 @@ export function clockLabel(turn: number): string {
   return `Day ${day} ${hh}:${String(mm).padStart(2, "0")}`;
 }
 
-function article(word: string): string {
-  return /^[aeiou]/i.test(word) ? 'an' : 'a';
-}
 
 function siteName(id: string): string {
   const site = [...REGION.towns, ...REGION.locations].find((l) => l.id === id);
