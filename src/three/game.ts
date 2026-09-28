@@ -242,7 +242,7 @@ export class Game {
     this.labels = new Labels(overlay);
     this.fx = new Fx3D(this.scene, overlay, this.rig);
     this.truckFx = new TruckFx(this.fx);
-    this.controls = new TruckControls({ world: () => this.world, apply: (next) => this.apply(next), refreshPlan: () => this.refreshPlan(), doused: () => { this.truckFx.douse(); this.hud.pushEvents(this.world); } });
+    this.controls = new TruckControls({ world: () => this.world, apply: (next) => this.apply(next), refreshPlan: () => this.refreshPlan(), doused: () => { this.truckFx.douse(); this.hud.pushEvents(this.world); }, revved: () => this.loops.rev(playerVehicle(this.world).chassisId) });
     const score = new CombatScore(player, Math.random);
     this.sound = new SoundDirector(player, this.rig, score);
     this.loops = new SoundLoops(player, score);
@@ -723,7 +723,7 @@ export class Game {
 
   private playDriveSound(result: TurnResult): void {
     const frames = result.frames[playerVehicle(this.world).id];
-    const g = computeEngineGlide(frames, MOVE_MS / 1000, MIX);
+    const g = computeEngineGlide(frames, MOVE_MS / 1000, MIX, this.world.player.overdrive);
     if (!g) return;
     this.loops.drive(g, playerVehicle(this.world).chassisId);
     if (g.brake) this.sound.at("air-brake", frames[0].pos, 0);
