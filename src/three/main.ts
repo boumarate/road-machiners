@@ -4,8 +4,10 @@ import { loadBank } from '../audio/bank';
 import { Mixer } from '../audio/mixer';
 import { SoundPlayer } from '../audio/player';
 import { MIX, SOUNDS } from '../data/sounds';
+import { MAPGEN } from '../data/terrain';
 import { initPhysics } from '../phys/drive';
 import { perfSnapshot, resetPerf } from '../perf';
+import { decodeMap, type BakedMap } from '../sim/terrain';
 import { DebugConsole } from '../ui/console';
 import { uiRoot } from '../ui/dom';
 import { mountPerfPanel } from '../ui/perf-panel';
@@ -20,14 +22,21 @@ function element(id: string): HTMLElement {
   return el;
 }
 
+// The baked map, fetched relative to the page. A missing or broken file stops boot with the crash screen.
+async function fetchMap(): Promise<BakedMap> {
+  const response = await fetch(MAPGEN.file);
+  if (!response.ok) throw new Error(`Map file ${MAPGEN.file} failed to load: ${response.status} ${response.statusText}`);
+  return decodeMap(new Uint8Array(await response.arrayBuffer()));
+}
+
 installCrashScreen();
-await Promise.all([initPhysics(), loadModels()]);
+const [map] = await Promise.all([fetchMap(), initPhysics(), loadModels()]);
 const mixer = new Mixer(MIX);
 mixer.unlockOn(window);
 const bank = await loadBank(mixer.ctx, SOUNDS);
 const soundSettings = new SoundSettings(mixer, window.localStorage);
 const overlay = element('overlay');
-const game = new Game(element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute());
+const game = new Game(element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute(), map);
 new DebugConsole(uiRoot(), game);
 performance.mark('korovan:ready');
 if (import.meta.env.DEV) {

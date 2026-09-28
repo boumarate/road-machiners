@@ -594,12 +594,13 @@ describe('recoil and shake', () => {
 });
 
 describe('weapon damage multiplier', () => {
-  // A cannon on a hauler fires at a sturdy buggy. Returns the damage of each part hit.
-  function dealt(mult: number): number[] {
+  // A cannon on a hauler fires at a sturdy buggy from the given RNG state. Returns the damage of each part hit.
+  function dealt(mult: number, rngState: number): number[] {
     const saved = RULES.weaponDamage;
     (RULES as { weaponDamage: number }).weaponDamage = mult;
     try {
       const w = emptyWorld();
+      w.rngState = rngState;
       const me = cannonHauler(w);
       const t = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: me.pos.x + 4, y: me.pos.y }, Math.PI / 2);
       for (const p of mountedParts(t)) p.hp = 1e9;
@@ -613,8 +614,12 @@ describe('weapon damage multiplier', () => {
 
   // Each hit rounds to whole HP, so each can differ from the exact half by up to 0.5.
   it('scales every hit by the one multiplier', () => {
-    const full = dealt(1);
-    const half = dealt(0.5);
+    // The first RNG state from 1 whose shot lands, so both multipliers roll the same hits. A shot that
+    // misses a sturdy buggy at 4 tiles in a thousand states in a row fails the length check below.
+    let state = 1;
+    while (state < 1000 && dealt(1, state).length === 0) state++;
+    const full = dealt(1, state);
+    const half = dealt(0.5, state);
     expect(full.length).toBeGreaterThan(0);
     expect(half).toHaveLength(full.length);
     half.forEach((d, i) => expect(Math.abs(d - full[i] / 2)).toBeLessThanOrEqual(0.5));

@@ -21,6 +21,7 @@ import type { World } from './types';
 import { dist } from './vec';
 import { canUseSite } from './sites';
 import { endTurn, hostileToPlayer, newWorld } from './world';
+import { TEST_MAP } from '../test/map';
 
 function withSpawned(w: World, templateId: string, hostile: boolean): { w: World; id: string } {
   const next = spawnNear(w, templateId, hostile);
@@ -213,7 +214,7 @@ describe('teleport', () => {
 
 describe('places and time', () => {
   it('teleports to a spot where every town and location can be used', () => {
-    const w = newWorld(1, START_KITS.standard);
+    const w = newWorld(1, START_KITS.standard, TEST_MAP);
     for (const place of [...REGION.towns, ...REGION.locations]) {
       const next = teleport(w, placeSpot(w, place.id));
       expect(canUseSite(playerVehicle(next).pos, place), place.id).toBe(true);

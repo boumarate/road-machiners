@@ -11,6 +11,7 @@ import type { GameEvent, World, XpSource } from '../types';
 import { dist, type Vec } from '../vec';
 import { endTurn, newWorld, update } from '../world';
 import { botOrders, parkedOnPurpose, type Archetype } from './bot';
+import { TEST_MAP } from '../../test/map';
 
 // One practice event. turn is the world turn it happened on; a run of N turns ends on world turn N + 1.
 export type TraceLine = { turn: number; source: XpSource; amount: number; difficulty: number | null; target: string };
@@ -61,7 +62,7 @@ function* stepsFrom(start: World, label: string, archetype: Archetype, turns: nu
 }
 
 function startWorld(seed: number): World {
-  return update(newWorld(seed, startKit('standard')), (w) => {
+  return update(newWorld(seed, startKit('standard'), TEST_MAP), (w) => {
     const p = w.player;
     for (const skill of Object.keys(p.skills) as (keyof typeof p.skills)[]) {
       p.skills[skill] = 0;

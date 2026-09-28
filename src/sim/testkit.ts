@@ -1,14 +1,14 @@
 import { START_KITS } from '../data/start';
 // Helpers for sim tests.
 
-import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { makeVehicle } from './factory';
 import { nextRandom } from './rng';
 import { mountedParts } from './grid';
 import { burnFuel } from './resources';
 import { vehicleStats } from './stats';
-import { buildTerrain, type Terrain } from './terrain';
+import type { Terrain } from './terrain';
+import { TEST_MAP } from '../test/map';
 import { onTestFinished } from 'vitest';
 import { DECISIONS, STATE_WEIGHTS, TRAITS, type DecisionId, type DecisionOptions, type TraitId } from '../data/npcs';
 import type { Faction, GameEvent, NpcBrain, Vehicle, World, XpSource } from './types';
@@ -27,26 +27,12 @@ export function editableTerrain(w: World): Terrain {
   return w.terrain;
 }
 
-const terrainsBySeed = new Map<string, Terrain>();
-
-// Cached buildTerrain, for tests that read the same seed's terrain many times (once per road,
-// once per seed case). buildTerrain freezes its result, so every caller only ever reads it.
-export function terrainFor(seed: number, size: number = REGION.size): Terrain {
-  const key = `${seed}:${size}`;
-  let t = terrainsBySeed.get(key);
-  if (!t) {
-    t = buildTerrain(seed, size);
-    terrainsBySeed.set(key, t);
-  }
-  return t;
-}
-
 let emptyTemplate: World | undefined;
 
 // A world on flat ground with no obstacles and no NPCs, the player truck at `pos` facing +x.
 export function emptyWorld(pos: Vec = { x: 30, y: 30 }): World {
   if (!emptyTemplate) {
-    emptyTemplate = newWorld(1, START_KITS.standard);
+    emptyTemplate = newWorld(1, START_KITS.standard, TEST_MAP);
     emptyTemplate.obstacles = [];
     emptyTemplate.terrain = flatTerrain(emptyTemplate.size);
     Object.freeze(emptyTemplate.terrain.heights);

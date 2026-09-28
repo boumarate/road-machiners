@@ -1,13 +1,11 @@
 // The terrain grid. Heights live on tile corners, (size + 1) x (size + 1), so neighboring tiles share
 // edges. Each tile reads its four corners for slope, and has a type. Driving, sight, routing and
 // drawing all read this grid. On Canyon Bridge, heights and slopes are the deck's (see bridge.ts).
+// The grid comes from the baked map file, decoded below. The game never builds it.
 
 import { MAPGEN, TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from '../data/terrain';
-import { pickType } from '../mapgen/bake';
 import { BRIDGE_AXIS, BRIDGE_LENGTH, deckAlong } from './bridge';
-import { elevationAt } from './elevation';
 import { clamp, type Vec } from './vec';
-import { gradeRoads } from './road-grade';
 
 export type Terrain = {
   size: number;
@@ -19,22 +17,6 @@ const T = TERRAIN;
 
 export function heightFromElevation(e: number): number {
   return e * T.height.hill + Math.max(0, e - T.height.mountainFrom) * T.height.mountain;
-}
-
-let lastTerrain: { seed: number; size: number; terrain: Terrain } | undefined;
-
-export function buildTerrain(seed: number, size: number): Terrain {
-  if (lastTerrain?.seed === seed && lastTerrain.size === size) return lastTerrain.terrain;
-  const raw: Terrain = { size, heights: [], types: [] };
-  for (let j = 0; j <= size; j++) for (let i = 0; i <= size; i++) raw.heights.push(heightFromElevation(elevationAt(seed, i, j)));
-  const heights = gradeRoads(raw);
-  const t: Terrain = { size, heights, types: [] };
-  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) t.types.push(pickType(seed, heights, size, x, y));
-  Object.freeze(t.heights);
-  Object.freeze(t.types);
-  Object.freeze(t);
-  lastTerrain = { seed, size, terrain: t };
-  return t;
 }
 
 function corner(t: Terrain, i: number, j: number): number {

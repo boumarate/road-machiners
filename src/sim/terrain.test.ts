@@ -4,7 +4,6 @@ import { REGION } from "../data/region";
 import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from "../data/terrain";
 import { route } from "./path";
 import {
-  buildTerrain,
   heightAt,
   isCliff,
   tileAt,
@@ -16,18 +15,14 @@ import { ROAD_INDEX } from "./road-index";
 import { dist, polylineDist, segmentDist } from "./vec";
 import { newWorld } from "./world";
 import type { World } from "./types";
+import { TEST_MAP } from "../test/map";
 
-// Several tests below read a seed's world without changing it (destinations, canyon shape,
-// cliff checks). newWorld rebuilds a fresh 600-tile terrain each call, so share one world per
-// seed across those read-only checks instead of rebuilding it per test.
-const worldsBySeed = new Map<number, World>();
-function worldFor(seed: number): World {
-  let w = worldsBySeed.get(seed);
-  if (!w) {
-    w = newWorld(seed, START_KITS.standard);
-    worldsBySeed.set(seed, w);
-  }
-  return w;
+// Several tests below read the start world without changing it (destinations, canyon shape,
+// cliff checks), so they share one.
+let startWorld: World | undefined;
+function worldOnMap(): World {
+  startWorld ??= newWorld(1337, START_KITS.standard, TEST_MAP);
+  return startWorld;
 }
 
 // Flat terrain with a raised block of cliff tiles over x in [cx0, cx1).
@@ -41,25 +36,7 @@ function flatWith(
   return { size, heights, types: new Array(size * size).fill("hardpan") };
 }
 
-// FNV-1a over the exact float bits of every corner height, then the type of every tile.
-function terrainHash(t: Terrain): string {
-  const bits = new Uint32Array(new Float64Array(t.heights).buffer);
-  let h = 0x811c9dc5;
-  const mix = (v: number) => {
-    h = Math.imul(h ^ v, 0x01000193);
-  };
-  for (const v of bits) mix(v);
-  const typeIds = Object.keys(TERRAIN_TYPES);
-  for (const type of t.types) mix(typeIds.indexOf(type));
-  return (h >>> 0).toString(16).padStart(8, "0");
-}
-
-describe("terrain generation", () => {
-  it("keeps the exact heights and types of known seeds", () => {
-    expect(terrainHash(buildTerrain(1, REGION.size))).toBe("a2b87e1e");
-    expect(terrainHash(buildTerrain(7, REGION.size))).toBe("48f890cf");
-  }, 30_000);
-
+describe("road index", () => {
   it("finds the same road distance through the road index as over every road", () => {
     for (const reach of [REGION.roadWidth / 2, REGION.roadWidth / 2 + TERRAIN.flattenMargin]) {
       for (let y = -20.25; y < REGION.size + 20; y += 3.7) {
@@ -73,11 +50,10 @@ describe("terrain generation", () => {
 });
 
 describe('terrain variety', () => {
-  it.each([1, 1337, 2024])('generates all ten types with road/site priority for seed %s', (seed) => {
+  it('has all ten types on the baked map, with road/site priority', () => {
     expect(Object.keys(TERRAIN_TYPES)).toHaveLength(10);
-    const t = buildTerrain(seed, REGION.size);
+    const t = TEST_MAP.terrain;
     expect(new Set(t.types)).toEqual(new Set(Object.keys(TERRAIN_TYPES)));
-    expect(buildTerrain(seed, REGION.size)).toEqual(t);
     for (let y = 0; y < t.size; y++) for (let x = 0; x < t.size; x++) {
       const point = { x: x + 0.5, y: y + 0.5 };
       const kind = t.types[y * t.size + x];
@@ -94,7 +70,7 @@ describe('terrain variety', () => {
 
 describe("terrain grid", () => {
   it('has seventeen distinct Icarus destinations with road access', () => {
-    const w = worldFor(1337);
+    const w = worldOnMap();
     expect(w.size).toBe(600);
     expect(w.terrain.heights).toHaveLength(601 * 601);
     expect(REGION.name).toBe('Icarus');
@@ -147,7 +123,7 @@ describe("terrain grid", () => {
   });
 
   it('carves a canyon and a dry river below the surrounding hills', () => {
-    const t = worldFor(1337).terrain;
+    const t = TEST_MAP.terrain;
     const canyon = TERRAIN.features.canyon;
     const river = TERRAIN.features.dryRiver;
     const pickMiddle = (line: { x: number; y: number }[]) => line[Math.floor(line.length / 2)];
@@ -161,7 +137,7 @@ describe("terrain grid", () => {
   });
 
   it("neighboring tiles share corners, so height is continuous across edges", () => {
-    const t = worldFor(1337).terrain;
+    const t = TEST_MAP.terrain;
     for (const x of [10, 23, 41])
       expect(heightAt(t, x - 1e-9, 20.3)).toBeCloseTo(
         heightAt(t, x + 1e-9, 20.3),
@@ -169,19 +145,17 @@ describe("terrain grid", () => {
       );
   });
 
-  it("roads, towns and the player start are drivable for several seeds", () => {
-    for (const seed of [0, 1, 5, 100, 1337, 2024]) {
-      const w = worldFor(seed);
-      const t = w.terrain;
-      for (const road of REGION.roads)
-        for (const p of road) expect(isCliff(t, tileAt(t, p))).toBe(false);
-      expect(t.types[tileAt(t, REGION.roads[0][1])]).toBe("road");
-      expect(isCliff(t, tileAt(t, w.vehicles[0].pos))).toBe(false);
-    }
-  }, 30_000);
+  it("roads, towns and the player start are drivable on the baked map", () => {
+    const w = worldOnMap();
+    const t = w.terrain;
+    for (const road of REGION.roads)
+      for (const p of road) expect(isCliff(t, tileAt(t, p))).toBe(false);
+    expect(t.types[tileAt(t, REGION.roads[0][1])]).toBe("road");
+    expect(isCliff(t, tileAt(t, w.vehicles[0].pos))).toBe(false);
+  });
 
   it("mountains produce cliff tiles", () => {
-    const t = worldFor(1337).terrain;
+    const t = TEST_MAP.terrain;
     expect(t.types.filter((_, i) => isCliff(t, i)).length).toBeGreaterThan(20);
   });
 

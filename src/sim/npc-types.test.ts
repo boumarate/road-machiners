@@ -10,7 +10,8 @@ import { optionChances, optionWeights } from './npc-decisions';
 import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { siteGates, sitePads } from './sites';
 import { spawnInitial, spawnNpcs } from './spawn';
-import { addVehicle, emptyWorld, forceOption, npcBrain, terrainFor } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
+import { TEST_MAP } from '../test/map';
 import { tileAt } from './terrain';
 import type { NpcActivity, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
@@ -134,7 +135,7 @@ describe('mercs', () => {
 describe('roamers', () => {
   it('explore free map points, some of them off road', () => {
     const w = emptyWorld({ x: 300, y: 300 });
-    w.terrain = terrainFor(w.seed);
+    w.terrain = TEST_MAP.terrain;
     const npc = createNpc(w, 'roamer', ['roamer'], 'scout', ['mg', 'stockEngine'], { x: 300, y: 310 });
     forceOption('idle', 'explore');
     const goals = idleGoals(w, npc.id, 30).filter((g) => g.kind === 'explore');

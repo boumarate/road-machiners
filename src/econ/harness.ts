@@ -61,6 +61,7 @@ import type { PartInstance, SkillId, Vehicle, World } from '../sim/types';
 import { dist, type Vec } from '../sim/vec';
 import { damagePart, isJunk, maxHp, partValue } from '../sim/wear';
 import { newWorld } from '../sim/world';
+import { TEST_MAP } from '../test/map';
 
 export type PolicyName = 'idle' | 'haulOnly' | 'salvageOnly' | 'contractsOnly' | 'greedy';
 
@@ -834,7 +835,7 @@ function zeroTelemetry(): Telemetry {
 }
 
 export function runPolicy(seed: number, policy: PolicyName, days: number): RunReport {
-  let world = newWorld(seed, START_KITS.standard);
+  let world = newWorld(seed, START_KITS.standard, TEST_MAP);
   const telemetry = zeroTelemetry();
   const wishlist: WishlistHit[] = [];
   const perDay: DayRecord[] = [];

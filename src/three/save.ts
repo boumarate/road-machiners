@@ -1,4 +1,4 @@
-import { buildTerrain } from '../sim/terrain';
+import type { BakedMap } from '../sim/terrain';
 import { townAt } from '../sim/sites';
 import type { World } from '../sim/types';
 
@@ -15,7 +15,7 @@ export function hasSave(storage: Storage): boolean {
   return storage.getItem(SAVE_KEY) !== null;
 }
 
-// Saves leave out the terrain, which buildTerrain rebuilds from the seed. The 600-tile terrain alone is
+// Saves leave out the terrain, which comes from the map file the save names by hash. The 600-tile terrain alone is
 // about 10 MB of JSON, past the browser's local storage quota. 4 adds weather, jobs, contacts and dust.
 // 6 moves wheel cells. 7 adds engine heat, auto patch and a parts limit on repair jobs. 8 adds the
 // player state, tows and the beacon. 9 adds NPC traits, goal stacks and states. 10 renames spurned to
@@ -26,22 +26,29 @@ export function hasSave(storage: Storage): boolean {
 // 22 adds XP targets and player piles. 23 adds shop stock, contracts, upkeep and bounty templates. 24 adds deck
 // mounts and built-in parts sized to the truck models. 25 moves locations beside their roads and the start
 // onto the road. 26 adds NPC knockouts, truck pickups on refits and revenge. 27 adds NPC driver names and their random stream. 28 adds new NPC
-// types, escorts and two goods. Older saves do not load.
-const SAVE_VERSION = 28;
+// types, escorts and two goods. 29 adds the map file hash. Older saves do not load.
+const SAVE_VERSION = 29;
 
-export function loadWorld(storage: Storage): World | null {
+// The saved world on the given map. A save made on another map fails, since its terrain is gone.
+export function loadWorld(storage: Storage, map: BakedMap): World | null {
   const raw = storage.getItem(SAVE_KEY);
   if (raw === null) return null;
-  const save: unknown = JSON.parse(raw);
-  if (!save || typeof save !== 'object' || !('version' in save) || save.version !== SAVE_VERSION) {
-    throw new SaveError('Incompatible game save version');
-  }
+  const world = savedWorld(JSON.parse(raw));
+  if (world.mapHash !== map.hash) throw new SaveError(`Game save was made on map ${world.mapHash}, not on the current map ${map.hash}`);
+  const explored: unknown = world.player.explored;
+  if (!Array.isArray(explored) || explored.length !== world.size * world.size) throw new SaveError('Invalid saved explored tiles');
+  const player = { ...world.player, explored: Uint8Array.from(explored) };
+  return { ...world, player, terrain: map.terrain };
+}
+
+function savedWorld(save: unknown): Omit<World, 'terrain'> {
+  if (!isCurrentSave(save)) throw new SaveError('Incompatible game save version');
   if (!('world' in save) || !isWorld(save.world)) throw new SaveError('Invalid saved world');
-  const explored: unknown = save.world.player.explored;
-  const tiles = save.world.size * save.world.size;
-  if (!Array.isArray(explored) || explored.length !== tiles) throw new SaveError('Invalid saved explored tiles');
-  const player = { ...save.world.player, explored: Uint8Array.from(explored) };
-  return { ...save.world, player, terrain: buildTerrain(save.world.seed, save.world.size) };
+  return save.world;
+}
+
+function isCurrentSave(save: unknown): save is { version: number } {
+  return !!save && typeof save === 'object' && 'version' in save && save.version === SAVE_VERSION;
 }
 
 // World fields a save must hold as arrays.

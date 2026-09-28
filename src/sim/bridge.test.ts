@@ -5,6 +5,7 @@ import { BRIDGE_AXIS, BRIDGE_LENGTH, crossesRail, deckAlong } from './bridge';
 import { route, routeLength } from './path';
 import { deckEnds, groundAt, heightAt, isCliff, tileAt } from './terrain';
 import { newWorld } from './world';
+import { TEST_MAP } from '../test/map';
 
 const B = TERRAIN.features.bridge;
 const at = (along: number, across: number) => ({
@@ -13,7 +14,7 @@ const at = (along: number, across: number) => ({
 });
 
 describe('Canyon Bridge', () => {
-  const w = newWorld(1337, START_KITS.standard);
+  const w = newWorld(1337, START_KITS.standard, TEST_MAP);
   const t = w.terrain;
 
   it('puts the deck on a straight line between the ground at both ends', () => {

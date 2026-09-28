@@ -38,9 +38,9 @@ function logRule(name: string, since: number, note: string): number {
 
 // The 8 neighbors of a corner on a grid of n x n corners, as index offsets with the inverse distance in
 // tiles. Rules visit only interior corners, so every offset stays inside the grid without bound checks.
-type Neighbors = { offsets: Int32Array; invDist: Float64Array };
+export type Neighbors = { offsets: Int32Array; invDist: Float64Array };
 
-function cornerNeighbors(n: number): Neighbors {
+export function cornerNeighbors(n: number): Neighbors {
   const d = Math.SQRT1_2;
   return {
     offsets: Int32Array.of(-1, 1, -n, n, -n - 1, -n + 1, n - 1, n + 1),
@@ -367,4 +367,134 @@ function steepestFace(g: WindGrid, k: number, sandSlope: number): number {
     }
   }
   return best;
+}
+
+// Ponds: how deep water stands on each corner, from the heights after every rule. Water in a basin could
+// rise to the level where the basin spills off the map edge, but a dry climate fills only the basin's
+// bottom, up to the lake depth. A priority flood from the edge finds the spill level: it walks inward
+// from the lowest corner reached so far, and each corner it reaches takes the higher of its own height
+// and the level of the corner it came from.
+
+export function pondDepths(heights: ArrayLike<number>, size: number, lakeDepth: number): Float32Array {
+  const n = size + 1;
+  const level = spillLevels(heights, n);
+  capLakes(heights, level, n, lakeDepth);
+  const depth = new Float32Array(n * n);
+  for (let k = 0; k < depth.length; k++) depth[k] = level[k] - heights[k];
+  return depth;
+}
+
+function spillLevels(heights: ArrayLike<number>, n: number): Float64Array {
+  const level = Float64Array.from(heights);
+  const reached = new Uint8Array(n * n);
+  const heap = newHeap(n * n, level);
+  for (let k = 0; k < n * n; k++) {
+    if (isInterior(k, n)) continue;
+    reached[k] = 1;
+    pushHeap(heap, k);
+  }
+  const { offsets } = cornerNeighbors(n);
+  while (heap.count > 0) floodFrom(heap, popHeap(heap), offsets, n, reached);
+  return level;
+}
+
+// Reaches every neighbor of corner k not reached yet, raising its level to k's level.
+function floodFrom(heap: Heap, k: number, offsets: Int32Array, n: number, reached: Uint8Array): void {
+  const level = heap.key;
+  for (const offset of offsets) {
+    const m = k + offset;
+    if (!isGridNeighbor(k, m, n) || reached[m]) continue;
+    reached[m] = 1;
+    level[m] = Math.max(level[m], level[k]);
+    pushHeap(heap, m);
+  }
+}
+
+// Each basin is a connected patch of corners under their spill level. Its lake rises at most lakeDepth
+// above the basin's lowest corner.
+function capLakes(heights: ArrayLike<number>, level: Float64Array, n: number, lakeDepth: number): void {
+  const seen = new Uint8Array(n * n);
+  const basin = new Int32Array(n * n);
+  for (let k = 0; k < n * n; k++) {
+    if (seen[k] || level[k] <= heights[k]) continue;
+    const count = collectBasin(heights, level, n, k, seen, basin);
+    let bottom = Infinity;
+    for (let b = 0; b < count; b++) bottom = Math.min(bottom, heights[basin[b]]);
+    for (let b = 0; b < count; b++) level[basin[b]] = Math.min(level[basin[b]], bottom + lakeDepth);
+  }
+}
+
+// Fills basin with the corners under their spill level connected to corner start, and returns their count.
+function collectBasin(heights: ArrayLike<number>, level: Float64Array, n: number, start: number, seen: Uint8Array, basin: Int32Array): number {
+  const { offsets } = cornerNeighbors(n);
+  seen[start] = 1;
+  basin[0] = start;
+  let count = 1;
+  for (let b = 0; b < count; b++) {
+    const k = basin[b];
+    for (const offset of offsets) {
+      const m = k + offset;
+      if (!isGridNeighbor(k, m, n) || seen[m] || level[m] <= heights[m]) continue;
+      seen[m] = 1;
+      basin[count++] = m;
+    }
+  }
+  return count;
+}
+
+// Offsets wrap across rows at the grid sides, so a neighbor counts only within one column and one row.
+function isGridNeighbor(k: number, m: number, n: number): boolean {
+  return m >= 0 && m < n * n && Math.abs((m % n) - (k % n)) <= 1;
+}
+
+// A binary min-heap of corners keyed by level. Ties go to the lower index, so the flood order and the
+// result depend only on the heights.
+type Heap = { items: Int32Array; count: number; key: Float64Array };
+
+function newHeap(capacity: number, key: Float64Array): Heap {
+  return { items: new Int32Array(capacity), count: 0, key };
+}
+
+function below(h: Heap, a: number, b: number): boolean {
+  const ka = h.key[h.items[a]];
+  const kb = h.key[h.items[b]];
+  return ka < kb || (ka === kb && h.items[a] < h.items[b]);
+}
+
+function swap(h: Heap, a: number, b: number): void {
+  const t = h.items[a];
+  h.items[a] = h.items[b];
+  h.items[b] = t;
+}
+
+function pushHeap(h: Heap, k: number): void {
+  let at = h.count++;
+  h.items[at] = k;
+  while (at > 0) {
+    const parent = (at - 1) >> 1;
+    if (!below(h, at, parent)) return;
+    swap(h, at, parent);
+    at = parent;
+  }
+}
+
+function popHeap(h: Heap): number {
+  const top = h.items[0];
+  h.items[0] = h.items[--h.count];
+  let at = 0;
+  for (;;) {
+    const least = leastOfFamily(h, at);
+    if (least === at) return top;
+    swap(h, at, least);
+    at = least;
+  }
+}
+
+// The slot holding the least item among slot at and its two children.
+function leastOfFamily(h: Heap, at: number): number {
+  const left = 2 * at + 1;
+  let least = at;
+  if (left < h.count && below(h, left, least)) least = left;
+  if (left + 1 < h.count && below(h, left + 1, least)) least = left + 1;
+  return least;
 }

@@ -1,52 +1,152 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
+import { GEOLOGY, TERRAIN, type TerrainTypeId } from '../data/terrain';
 import { ROAD_INDEX } from '../sim/road-index';
-import { buildTerrain } from '../sim/terrain';
-import { newDraft } from './bake';
 import { TYPE_IDS } from '../sim/terrain';
-import { groundLayer, pickType } from './bake';
+import { groundLayer, newDraft, type MapDraft } from './bake';
 
 const SEED = 1337;
-const SIZE = REGION.size;
+const G = GEOLOGY.ground;
 
-// A draft with flat ground, with a slope along x of `slope` height units per tile on every tile.
-function tilted(slope: number): Float32Array {
-  const heights = new Float32Array((SIZE + 1) * (SIZE + 1));
-  for (let j = 0; j <= SIZE; j++) for (let i = 0; i <= SIZE; i++) heights[j * (SIZE + 1) + i] = i * slope;
-  return heights;
+// Tiles near the map's top-left corner lie far from every road and site.
+const SMALL = 16;
+
+function typeAt(d: MapDraft, x: number, y: number): TerrainTypeId {
+  return TYPE_IDS[d.types[y * d.size + x]];
 }
 
-describe('ground types', () => {
-  it('gives the same types as the seed-built terrain from the same heights', () => {
-    const terrain = buildTerrain(SEED, SIZE);
-    const draft = newDraft(SIZE);
-    draft.heights.set(terrain.heights);
+function cornersOf(d: MapDraft, x: number, y: number): number[] {
+  const n = d.size + 1;
+  return [y * n + x, y * n + x + 1, (y + 1) * n + x, (y + 1) * n + x + 1];
+}
 
-    groundLayer(SEED, draft);
+function setTile(mask: Float32Array | Uint8Array, d: MapDraft, x: number, y: number, value: number): void {
+  for (const k of cornersOf(d, x, y)) mask[k] = value;
+}
 
-    const types = Array.from(draft.types, (code) => TYPE_IDS[code]);
-    expect(types).toEqual(terrain.types);
+// Flat ground with a slope along x of `slope` height units per tile.
+function tilt(d: MapDraft, slope: number): void {
+  const n = d.size + 1;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) d.heights[j * n + i] = i * slope;
+}
+
+describe('ground types from geology marks', () => {
+  it('lays loose sand where sand lies deep and not where it lies thin', () => {
+    const d = newDraft(SMALL);
+    setTile(d.sand, d, 3, 3, G.looseSand * 1.5);
+    setTile(d.sand, d, 8, 8, G.looseSand * 0.5);
+
+    groundLayer(SEED, d);
+
+    expect(typeAt(d, 3, 3)).toBe('sand');
+    expect(typeAt(d, 8, 8)).not.toBe('sand');
   });
 
-  it('makes a road tile road even on steep ground', () => {
+  it('lays sand on a gentle wash bed and gravel on a steep one', () => {
+    const gentle = newDraft(SMALL);
+    tilt(gentle, G.gravelSlope / 2);
+    setTile(gentle.flow, gentle, 5, 5, G.washFlow * 2);
+    const steep = newDraft(SMALL);
+    tilt(steep, G.gravelSlope * 2);
+    setTile(steep.flow, steep, 5, 5, G.washFlow * 2);
+
+    groundLayer(SEED, gentle);
+    groundLayer(SEED, steep);
+
+    expect(typeAt(gentle, 5, 5)).toBe('sand');
+    expect(typeAt(steep, 5, 5)).toBe('gravel');
+  });
+
+  it('leaves ground with little flow off the wash beds', () => {
+    const d = newDraft(SMALL);
+    tilt(d, G.gravelSlope * 2);
+    setTile(d.flow, d, 5, 5, G.washFlow / 2);
+
+    groundLayer(SEED, d);
+
+    expect(['gravel', 'sand']).not.toContain(typeAt(d, 5, 5));
+  });
+
+  it('lays scree where soil slumped', () => {
+    const d = newDraft(SMALL);
+    setTile(d.slumped, d, 6, 2, 1);
+
+    groundLayer(SEED, d);
+
+    expect(typeAt(d, 6, 2)).toBe('scree');
+    expect(typeAt(d, 10, 2)).not.toBe('scree');
+  });
+
+  it('dries a shallow pond to salt crust and a deep one to mud', () => {
+    // A stepped bowl in flat ground, shallower than a lake: corners 4 to 11 lie salt-deep, corners 7 to 8 mud-deep.
+    const d = newDraft(SMALL);
+    const n = SMALL + 1;
+    for (let j = 4; j <= 11; j++) for (let i = 4; i <= 11; i++) d.heights[j * n + i] = -(G.saltDepth * 1.5);
+    for (let j = 7; j <= 8; j++) for (let i = 7; i <= 8; i++) d.heights[j * n + i] = -(G.mudDepth + G.lakeDepth) / 2;
+
+    groundLayer(SEED, d);
+
+    expect(typeAt(d, 7, 7)).toBe('mud');
+    expect(typeAt(d, 4, 4)).toBe('saltCrust');
+    expect(typeAt(d, 13, 13)).not.toBe('saltCrust');
+  });
+
+  it('fills only the bottom of a basin deeper than a lake', () => {
+    // A cone falling toward corner (8, 8), far deeper than a lake, whose rim at 8 tiles out meets flat ground.
+    const d = newDraft(SMALL);
+    const n = SMALL + 1;
+    const fall = (G.lakeDepth * 4) / 8;
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) d.heights[j * n + i] = -fall * Math.max(0, 8 - Math.max(Math.abs(i - 8), Math.abs(j - 8)));
+
+    groundLayer(SEED, d);
+
+    expect(['mud', 'saltCrust']).toContain(typeAt(d, 8, 8));
+    expect(['mud', 'saltCrust']).not.toContain(typeAt(d, 8, 3));
+  });
+
+  it('lays only hardpan, scrub, asphalt, ash and built ground on flat ground with no marks', () => {
+    const d = newDraft(REGION.size);
+
+    groundLayer(SEED, d);
+
+    const kinds = new Set(Array.from(d.types, (code) => TYPE_IDS[code]));
+    expect([...kinds].sort()).toEqual(['ash', 'asphalt', 'hardpan', 'road', 'scrub']);
+  });
+});
+
+describe('built ground', () => {
+  // A full map draft where every corner carries every geology mark and the ground is steep.
+  function marked(): MapDraft {
+    const d = newDraft(REGION.size);
+    tilt(d, TERRAIN.types.screeSlope * 2);
+    d.sand.fill(G.looseSand * 2);
+    d.flow.fill(G.washFlow * 2);
+    d.slumped.fill(1);
+    return d;
+  }
+
+  it('keeps roads road under every geology mark', () => {
+    const d = groundLayer(SEED, marked());
     const [x, y] = [Math.floor(REGION.roads[0][1].x), Math.floor(REGION.roads[0][1].y)];
 
-    expect(pickType(SEED, tilted(2), SIZE, x, y)).toBe('road');
+    expect(typeAt(d, x, y)).toBe('road');
   });
 
-  it('makes town ground off its roads hardpan even on steep ground', () => {
+  it('keeps the Canyon Bridge deck road under every geology mark', () => {
+    const bridge = TERRAIN.features.bridge;
+    const mid = { x: Math.floor((bridge.from.x + bridge.to.x) / 2), y: Math.floor((bridge.from.y + bridge.to.y) / 2) };
+    const d = groundLayer(SEED, marked());
+
+    expect(typeAt(d, mid.x, mid.y)).toBe('road');
+  });
+
+  it('keeps town ground off its roads hardpan under every geology mark', () => {
     const town = REGION.towns[0];
     const off = [-0.5, 0.5].flatMap((dx) => [-0.5, 0.5].map((dy) => ({ x: Math.floor(town.pos.x + dx * town.radius), y: Math.floor(town.pos.y + dy * town.radius) })));
     const tile = off.find((t) => ROAD_INDEX.nearestWithin(t.x + 0.5, t.y + 0.5, Infinity) > REGION.roadWidth);
     if (!tile) throw new Error('Every probe tile in the town lies on a road');
+    const d = groundLayer(SEED, marked());
 
-    expect(pickType(SEED, tilted(2), SIZE, tile.x, tile.y)).toBe('hardpan');
-  });
-
-  it('makes steep ground away from roads and sites scree, and flat ground not', () => {
-    const spot = { x: 5, y: 300 };
-
-    expect(pickType(SEED, tilted(0.5), SIZE, spot.x, spot.y)).toBe('scree');
-    expect(pickType(SEED, tilted(0), SIZE, spot.x, spot.y)).not.toBe('scree');
+    expect(typeAt(d, tile.x, tile.y)).toBe('hardpan');
   });
 });

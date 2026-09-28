@@ -5,6 +5,7 @@ import { emptyWorld, addVehicle, editableTerrain, forceOption, npcBrain, testDri
 import { planNpcOrders } from './ai';
 import { getResources } from './resources';
 import { REGION } from '../data/region';
+import { RULES } from '../data/rules';
 import { MIN_CHANCE, NPCS, TRAITS, type TraitId } from '../data/npcs';
 import { SHOPS } from '../data/market';
 import { optionChances, optionWeights, visibleSalvage } from './npc-decisions';
@@ -194,11 +195,18 @@ describe('NPC activities', () => {
     let w = w0;
     let looted = false;
     let sold = false;
-    for (let turn = 0; turn < w.size * 5; turn++) {
-      w = endTurn(w, testDrive);
-      const actor = w.vehicles.find((v) => v.id === raider.id)!;
-      if ((goodsCount(actor).scrap ?? 0) > 0) looted = true;
-      if (looted && actor.resources!.money > money) { sold = true; break; }
+    // The broken cab knocks the victim out. A death roll would leave a wreck instead.
+    const deathChance = RULES.npcDeathChance;
+    (RULES as { npcDeathChance: number }).npcDeathChance = 0;
+    try {
+      for (let turn = 0; turn < w.size * 5; turn++) {
+        w = endTurn(w, testDrive);
+        const actor = w.vehicles.find((v) => v.id === raider.id)!;
+        if ((goodsCount(actor).scrap ?? 0) > 0) looted = true;
+        if (looted && actor.resources!.money > money) { sold = true; break; }
+      }
+    } finally {
+      (RULES as { npcDeathChance: number }).npcDeathChance = deathChance;
     }
     expect(w.vehicles.find((v) => v.id === victim.id)?.defeat).toBeDefined();
     expect(looted).toBe(true);
@@ -408,8 +416,8 @@ describe('salvage on the way', () => {
   it('ignores the stock of a site it passes', () => {
     forceOption('salvageSeen', 'loot');
     const { w, npc } = passingWreck();
-    w.salvage = w.salvage.filter((s) => s.id !== 'wreck900');
     const site = REGION.locations.find((l) => l.id === 'ridge-wrecks')!;
+    w.salvage = w.salvage.filter((s) => s.id === site.id);
     npc.pos = { ...sitePads(site)[0] };
     thinkNpc(w, npc);
     expect(topGoal(npc)?.kind).toBe('scavenge');

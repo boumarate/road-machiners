@@ -3,17 +3,19 @@
 // live on tiles, tile (x, y) at y * size + x, as an index into TYPE_IDS.
 
 import { REGION } from '../data/region';
-import { TERRAIN, type TerrainTypeId } from '../data/terrain';
+import { GEOLOGY, MAPGEN, TERRAIN, type TerrainTypeId } from '../data/terrain';
 import { bridgeCut, deckAlong } from '../sim/bridge';
-import { broadAt, elevationAt, flattenFactor, noiseAt, reliefAt } from '../sim/elevation';
+import { broadAt, flattenFactor, noiseAt, reliefAt } from '../sim/elevation';
 import { gradeRoads } from '../sim/road-grade';
 import { ROAD_INDEX } from '../sim/road-index';
-import { randInt, randRange, type Rng } from '../sim/rng';
+import { chance, randRange, type Rng } from '../sim/rng';
 import { heightFromElevation, TYPE_IDS, type Rock } from '../sim/terrain';
 import { dist, segmentDist, type Vec } from '../sim/vec';
+import { cornerNeighbors, geologyLayer, pondDepths, type Neighbors } from './geology';
 
 export function bakeMap(seed: number): MapDraft {
   let d = timed('base', () => baseLayer(seed, REGION.size));
+  d = timed('geology', () => geologyLayer(seed, d));
   d = timed('finish', () => finishLayer(seed, d));
   d = timed('ground', () => groundLayer(seed, d));
   return timed('rocks', () => rockLayer(seed, d));
@@ -93,20 +95,36 @@ export function finishLayer(seed: number, d: MapDraft): MapDraft {
   return d;
 }
 
-// Ground layer. Roads and sites first, then steep ground, broad surface patches, low ground and scrub.
+// Ground layer. Built ground first: roads, the bridge deck and site ground. Then the first geology rule
+// that holds for the tile, then broad surface patches, then scrub or hardpan. Geology marks live on
+// corners, so each rule reads the tile's four corners.
 
 const SITES = [...REGION.towns, ...REGION.locations];
 const T = TERRAIN.types;
+const G = GEOLOGY.ground;
+
+type GroundInput = { seed: number; d: MapDraft; pond: Float32Array };
+
+// A geology rule: the ground type it lays on tile (x, y), whose top-left corner is k, or null.
+type GroundRule = (g: GroundInput, tile: number, k: number) => TerrainTypeId | null;
 
 export function groundLayer(seed: number, d: MapDraft): MapDraft {
-  for (let y = 0; y < d.size; y++) for (let x = 0; x < d.size; x++) d.types[y * d.size + x] = typeCode(pickType(seed, d.heights, d.size, x, y));
+  const g: GroundInput = { seed, d, pond: pondDepths(d.heights, d.size, G.lakeDepth) };
+  for (let y = 0; y < d.size; y++) for (let x = 0; x < d.size; x++) d.types[y * d.size + x] = typeCode(pickType(g, x, y));
   return d;
 }
 
-// Ground type of tile (x, y) on a map of the given size, from its corner heights.
-export function pickType(seed: number, heights: ArrayLike<number>, size: number, x: number, y: number): TerrainTypeId {
+function pickType(g: GroundInput, x: number, y: number): TerrainTypeId {
   const c = { x: x + 0.5, y: y + 0.5 };
-  return builtType(c) ?? naturalType(seed, tileSteepness(heights, size, y * size + x), c);
+  const built = builtType(c);
+  if (built) return built;
+  const tile = y * g.d.size + x;
+  const k = y * (g.d.size + 1) + x;
+  for (const rule of GEOLOGY_RULES) {
+    const type = rule(g, tile, k);
+    if (type) return type;
+  }
+  return pickSurfacePatch(g.seed, c) ?? plainType(g.seed, c);
 }
 
 // Road on roads and the bridge deck, hardpan on and around sites, null elsewhere.
@@ -124,13 +142,43 @@ function nearSite(pos: Vec, radius: number, c: Vec): boolean {
   return Math.hypot(dx, dy) < radius + T.siteMargin;
 }
 
-function naturalType(seed: number, steepness: number, c: Vec): TerrainTypeId {
-  if (steepness >= T.screeSlope) return 'scree';
-  return pickSurfacePatch(seed, c) ?? plainType(seed, c);
+// Steep ground and ground where soil slumped are scree.
+function screeType(g: GroundInput, tile: number, k: number): TerrainTypeId | null {
+  if (tileSteepness(g.d.heights, g.d.size, tile) >= T.screeSlope) return 'scree';
+  return cornerMax(g.d.slumped, g.d.size, k) > 0 ? 'scree' : null;
+}
+
+// Standing water dries out: shallow ponds leave salt crust, deep ones mud.
+function pondType(g: GroundInput, _tile: number, k: number): TerrainTypeId | null {
+  const depth = cornerMax(g.pond, g.d.size, k);
+  if (depth >= G.mudDepth) return 'mud';
+  return depth >= G.saltDepth ? 'saltCrust' : null;
+}
+
+// Wash beds: fast water on steep beds leaves gravel, slow water on gentle beds leaves sand.
+function washType(g: GroundInput, tile: number, k: number): TerrainTypeId | null {
+  if (cornerMax(g.d.flow, g.d.size, k) < G.washFlow) return null;
+  return tileSteepness(g.d.heights, g.d.size, tile) >= G.gravelSlope ? 'gravel' : 'sand';
+}
+
+function sandType(g: GroundInput, _tile: number, k: number): TerrainTypeId | null {
+  return cornerMean(g.d.sand, g.d.size, k) >= G.looseSand ? 'sand' : null;
+}
+
+const GEOLOGY_RULES: GroundRule[] = [screeType, pondType, washType, sandType];
+
+// Largest and mean value over the four corners of the tile whose top-left corner is k.
+function cornerMax(a: ArrayLike<number>, size: number, k: number): number {
+  const w = size + 1;
+  return Math.max(a[k], a[k + 1], a[k + w], a[k + w + 1]);
+}
+
+function cornerMean(a: ArrayLike<number>, size: number, k: number): number {
+  const w = size + 1;
+  return (a[k] + a[k + 1] + a[k + w] + a[k + w + 1]) / 4;
 }
 
 function plainType(seed: number, c: Vec): TerrainTypeId {
-  if (elevationAt(seed, c.x, c.y) < T.sandBelow) return 'sand';
   return noiseAt(seed, c.x * T.scrubFreq, c.y * T.scrubFreq) > T.scrubAbove ? 'scrub' : 'hardpan';
 }
 
@@ -140,36 +188,65 @@ function pickSurfacePatch(seed: number, p: Vec): TerrainTypeId | null {
   const y = p.y * patches.frequency;
   if (noiseAt(seed + patches.coverageSeedOffset, x, y) <= patches.coverageAbove) return null;
   const sample = noiseAt(seed + patches.kindSeedOffset, x, y);
+  if (sample <= patches.kindAbove) return null;
   const band = patches.bands.find((entry) => sample <= entry.through);
   if (!band) throw new Error(`No terrain surface band for ${sample}`);
   return band.kind;
 }
 
-// Rock layer: clusters of boulders off the roads, sites, the bridge deck, cliffs and the map margin.
+// Rock layer: boulders on corners at the foot of cliffs and on ridge tops, each by its own chance from
+// the map seed, off the roads, sites, the bridge deck, cliffs and the map margin.
 
 const O = REGION.obstacles;
+const B = GEOLOGY.boulders;
+// The map file rounds heights to 1 / heightScale, which moves a tile's steepness by up to sqrt(2) / heightScale.
+// Boulders keep that margin below the cliff slope, so none sits on a cliff in the file.
+const BOULDER_SLOPE_LIMIT = TERRAIN.drive.maxSlope - Math.SQRT2 / MAPGEN.heightScale;
 
 export function rockLayer(seed: number, d: MapDraft): MapDraft {
-  d.rocks = scatterRocks({ rngState: seed }, d.size, d.heights);
+  const rng: Rng = { rngState: seed };
+  const n = d.size + 1;
+  const nb = cornerNeighbors(n);
+  d.rocks = [];
+  for (let j = 1; j < d.size; j++) for (let i = 1; i < d.size; i++) {
+    const odds = boulderChance(d.heights, nb, n, j * n + i);
+    if (odds > 0 && chance(rng, odds)) placeBoulder(d, rng, i, j);
+  }
   return d;
 }
 
-// Rock clusters on a map of the given size with the given corner heights, drawn from rng.
-export function scatterRocks(rng: Rng, size: number, heights: ArrayLike<number>): Rock[] {
-  const out: Rock[] = [];
-  let tries = 0;
-  for (let c = 0; c < O.clusters; c++) {
-    const center = { x: randRange(rng, O.edgeMargin, size - O.edgeMargin), y: randRange(rng, O.edgeMargin, size - O.edgeMargin) };
-    const count = randInt(rng, O.rocksPerCluster[0], O.rocksPerCluster[1]);
-    for (let i = 0; i < count; i++) {
-      tries++;
-      if (tries > O.maxTries) throw new Error('Rock placement ran out of tries');
-      const pos = { x: center.x + randRange(rng, -O.clusterSpread, O.clusterSpread), y: center.y + randRange(rng, -O.clusterSpread, O.clusterSpread) };
-      const r = randRange(rng, O.radius[0], O.radius[1]);
-      if (fitsOffRoad(size, heights, out, { pos, r })) out.push({ pos, r });
-    }
+function boulderChance(h: ArrayLike<number>, nb: Neighbors, n: number, k: number): number {
+  if (isCliffBase(h, nb, k)) return B.cliffBase;
+  return isRidgeTop(h, n, k) ? B.ridgeTop : 0;
+}
+
+// A corner at the foot of a cliff: some neighbor rises from it steeper than a truck can climb.
+function isCliffBase(h: ArrayLike<number>, nb: Neighbors, k: number): boolean {
+  for (let q = 0; q < 8; q++) {
+    if ((h[k + nb.offsets[q]] - h[k]) * nb.invDist[q] > TERRAIN.drive.maxSlope) return true;
   }
-  return out;
+  return false;
+}
+
+// A ridge top: along some line through the corner, it is the highest of three corners and bulges above
+// the middle of the other two by the ridge curvature.
+function isRidgeTop(h: ArrayLike<number>, n: number, k: number): boolean {
+  return bulges(h, k, 1, 1) || bulges(h, k, n, 1) || bulges(h, k, n + 1, 2) || bulges(h, k, n - 1, 2);
+}
+
+// Offset o to the neighbors on each side, spanSq the squared distance to them in tiles.
+function bulges(h: ArrayLike<number>, k: number, o: number, spanSq: number): boolean {
+  const a = h[k - o];
+  const b = h[k + o];
+  if (h[k] < a || h[k] < b) return false;
+  return (h[k] - (a + b) / 2) / spanSq >= B.ridgeCurvature;
+}
+
+// A boulder somewhere within half a tile of corner (i, j), kept only where it fits.
+function placeBoulder(d: MapDraft, rng: Rng, i: number, j: number): void {
+  const pos = { x: i + randRange(rng, -0.5, 0.5), y: j + randRange(rng, -0.5, 0.5) };
+  const r = randRange(rng, B.radius[0], B.radius[1]);
+  if (fitsOffRoad(d.size, d.heights, d.rocks, { pos, r })) d.rocks.push({ pos, r });
 }
 
 function fitsOffRoad(size: number, heights: ArrayLike<number>, placed: Rock[], rock: Rock): boolean {
@@ -178,7 +255,7 @@ function fitsOffRoad(size: number, heights: ArrayLike<number>, placed: Rock[], r
   const roadGap = REGION.roadWidth / 2 + O.roadClearance + r;
   if (ROAD_INDEX.nearestWithin(pos.x, pos.y, roadGap) < roadGap) return false;
   const tile = Math.floor(pos.y) * size + Math.floor(pos.x);
-  if (tileSteepness(heights, size, tile) > TERRAIN.drive.maxSlope) return false;
+  if (tileSteepness(heights, size, tile) > BOULDER_SLOPE_LIMIT) return false;
   return !onBridge(pos, r) && clearOfSites(pos, r) && placed.every((o) => dist(pos, o.pos) >= o.r + r + O.gap);
 }
 

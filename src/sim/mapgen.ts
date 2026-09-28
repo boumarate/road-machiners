@@ -1,18 +1,18 @@
-// Seeded obstacle placement: rock clusters off the roads, a few wrecks on them, then the fixed roadside landmarks.
+// Obstacle placement: the baked map's rocks, seeded site props and road wrecks, then the fixed roadside landmarks.
 
 import { REGION, type LandmarkDef } from '../data/region';
-import { isCliff, tileAt } from './terrain';
+import { isCliff, tileAt, type Rock } from './terrain';
 import { randInt, randRange } from './rng';
-import { clearOfSites, onBridge, scatterRocks } from '../mapgen/bake';
+import { clearOfSites, onBridge } from '../mapgen/bake';
 import type { Obstacle, World } from './types';
 import { angleDiff, bearing, dist, type Vec } from './vec';
 import { ROAD_INDEX } from './road-index';
 
 const O = REGION.obstacles;
 
-export function generateObstacles(world: World): Obstacle[] {
+export function generateObstacles(world: World, rocks: readonly Rock[]): Obstacle[] {
   const out: Obstacle[] = placeSites(world);
-  for (const rock of scatterRocks(world, world.size, world.terrain.heights)) out.push({ id: `rock${out.length}`, ...rock, kind: 'rock' });
+  rocks.forEach((rock, k) => out.push({ id: `rock${k}`, pos: { ...rock.pos }, r: rock.r, kind: 'rock' }));
   placeRoadWrecks(world, out);
   return [...out, ...placeLandmarks(world, out)];
 }

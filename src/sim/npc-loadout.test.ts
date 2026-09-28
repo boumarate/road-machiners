@@ -13,6 +13,7 @@ import { generateNpcLoadout, sampleWeighted } from './npc-loadout';
 import { spawnInitial, spawnNpcs } from './spawn';
 import { emptyWorld } from './testkit';
 import type { Vehicle, World } from './types';
+import { TEST_MAP } from '../test/map';
 
 let fixture: World;
 beforeAll(() => { fixture = emptyWorld(); });
@@ -231,7 +232,7 @@ describe('weighted equipment rolls', () => {
 
 describe('spawned NPCs', () => {
   it('carry the rolled wear and spares into the world', () => {
-    const world = newWorld(1, START_KITS.standard);
+    const world = newWorld(1, START_KITS.standard, TEST_MAP);
     const npcs = world.vehicles.filter((v) => v.brain !== null);
     const parts = npcs.flatMap((v) => v.items.flatMap((it) => (it.kind === 'part' && partDef(it.part.defId).kind !== 'core' ? [it.part] : [])));
     expect(parts.some((p) => p.wear > 0)).toBe(true);

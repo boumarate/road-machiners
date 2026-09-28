@@ -8,6 +8,7 @@ import { dist, polylineDist } from './vec';
 import { discoverSites } from './locations';
 import { refreshVision } from './vision';
 import { bodyOf } from './body';
+import { TEST_MAP } from '../test/map';
 
 const original = [
   [16, 94], [102, 35], [23.2, 62], [33.8, 32], [50, 32.8], [60, 18.8], [78.2, 21],
@@ -25,7 +26,7 @@ describe('Icarus exploration distances', () => {
   });
 
   it('starts on the trunk road out of clear sight of every site, knowing none', () => {
-    const world = cloneWorld(newWorld(1337, START_KITS.standard));
+    const world = cloneWorld(newWorld(1337, START_KITS.standard, TEST_MAP));
     const player = world.vehicles.find((v) => v.id === world.player.vehicleId)!;
     refreshVision(world);
     discoverSites(world);
@@ -45,7 +46,7 @@ describe('Icarus exploration distances', () => {
   });
 
   it('shares immutable terrain between turns without sharing mutable state', () => {
-    const world = newWorld(1337, START_KITS.standard);
+    const world = newWorld(1337, START_KITS.standard, TEST_MAP);
     const next = setMoveOrder(world, { kind: 'stopAt', dest: { x: 100, y: 440 } });
     expect(next.terrain).toBe(world.terrain);
     expect(Object.isFrozen(next.terrain.heights)).toBe(true);

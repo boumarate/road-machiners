@@ -111,10 +111,10 @@ export const TERRAIN = {
     ] as { center: Vec; radius: number; bank: number; depth: number }[],
   },
   reliefPx: 45, // screen pixels per height unit
-  // Tile types. Roads and sites first, then steep ground, low ground, and scrub patches.
+  // Tile types. Roads and sites first, then steep ground and the geology marks in GEOLOGY.ground, then
+  // surface patches and scrub.
   types: {
     screeSlope: 0.35, // slope from which ground is scree
-    sandBelow: -0.2, // noise elevation under which ground is loose sand
     scrubFreq: 1 / 5, // scrub patch noise frequency, cycles per tile
     scrubAbove: 0.62, // patch noise above which ground is scrub
     siteMargin: 1, // tiles around towns and locations that count as hardpan
@@ -123,10 +123,8 @@ export const TERRAIN = {
       coverageSeedOffset: 1013,
       kindSeedOffset: 2027,
       coverageAbove: 0.57,
+      kindAbove: 0.6, // kind noise at or below which a covered spot has no patch; geology lays mud, gravel and salt crust
       bands: [
-        { through: 0.3, kind: "mud" },
-        { through: 0.45, kind: "gravel" },
-        { through: 0.6, kind: "saltCrust" },
         { through: 0.75, kind: "asphalt" },
         { through: 1, kind: "ash" },
       ] as { through: number; kind: TerrainTypeId }[],
@@ -191,7 +189,25 @@ export type SandStart = {
   depth: number;
 };
 
-export const GEOLOGY: { rain: RainRules; slump: SlumpRules; wind: WindRules; sandStart: SandStart } = {
+// Ground types from the geology marks, read per tile from its four corners.
+export type GroundRules = {
+  washFlow: number;
+  gravelSlope: number;
+  lakeDepth: number;
+  saltDepth: number;
+  mudDepth: number;
+  looseSand: number;
+};
+
+// Boulders on corners at cliff bases and ridge tops.
+export type BoulderRules = {
+  cliffBase: number;
+  ridgeTop: number;
+  ridgeCurvature: number;
+  radius: [number, number];
+};
+
+export const GEOLOGY: { rain: RainRules; slump: SlumpRules; wind: WindRules; sandStart: SandStart; ground: GroundRules; boulders: BoulderRules } = {
   rain: {
     steps: 80, // rain passes over the whole map; each pass routes all water to the edge or a pool, so more passes cut deeper
     rainPerStep: 0.01, // units of water falling on every corner per pass, so a gully's water is 0.01 per corner draining into it
@@ -223,6 +239,20 @@ export const GEOLOGY: { rain: RainRules; slump: SlumpRules; wind: WindRules; san
     below: -2.5, // units; corners lower than this start with sand, since basins collect blown sand; about the lowest tenth of the map
     fade: 1, // units below `below` over which the start sand thickens to full depth
     depth: 0.2, // units of start sand at full depth, 80 cm
+  },
+  ground: {
+    washFlow: 40, // water units summed over all rain passes; a corner that carried more is a wash bed, about the wettest twentieth of the map
+    gravelSlope: 0.08, // units per tile; a wash bed at least this steep keeps gravel, fast water carries the sand on
+    lakeDepth: 0.4, // units, 1.6 m; deepest water a basin holds in this dry climate, so a lake fills only its basin's bottom; above mudDepth
+    saltDepth: 0.03, // units, 12 cm; a corner this far under its lake surface dries to salt crust
+    mudDepth: 0.25, // units, 1 m; deeper water lasts longer and leaves mud
+    looseSand: 0.1, // units of sand, 40 cm; deeper sand is loose sand, shallower sand shows the ground under it
+  },
+  boulders: {
+    cliffBase: 0.3, // chance a corner below a cliff face gets a boulder; boulders break off and roll to the foot
+    ridgeTop: 0.05, // chance a ridge-top corner gets a boulder; bare ridges hold weathered rock
+    ridgeCurvature: 0.08, // units per tile squared; a corner this far above the middle of two opposite neighbors is a ridge top
+    radius: [0.6, 1.6], // tiles of radius, 2.4 to 6.4 m
   },
 };
 

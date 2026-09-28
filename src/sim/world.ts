@@ -7,7 +7,7 @@ import type { StartKit } from '../data/start';
 import { findPart, playerVehicle } from './damage';
 import { makePart, makeVehicle } from './factory';
 import { generateObstacles } from './mapgen';
-import { buildTerrain } from './terrain';
+import type { BakedMap } from './terrain';
 import { planNpcOrders } from './ai';
 import { applyGodMode } from './cheats';
 import { assignAutoOrders, fireWeapons, isHostile, resolveDestroyed } from './combat';
@@ -37,9 +37,12 @@ import { advanceJobs, startAutoRepair } from './jobs';
 import { advanceEngineHeat } from './engine-heat';
 import { clamp, dist, type Vec } from './vec';
 
-export function newWorld(seed: number, kit: StartKit): World {
+// A new game on the baked map. The map gives terrain and rocks; the world seed drives all other randomness.
+export function newWorld(seed: number, kit: StartKit, map: BakedMap): World {
   if (!Number.isInteger(seed))
     throw new Error(`Seed must be an integer, got ${seed}`);
+  if (map.terrain.size !== REGION.size)
+    throw new Error(`Map size ${map.terrain.size} does not match region size ${REGION.size}`);
   const world: World = {
     seed,
     rngState: seed,
@@ -52,7 +55,8 @@ export function newWorld(seed: number, kit: StartKit): World {
     obstacles: [],
     salvage: [],
     shops: {},
-    terrain: buildTerrain(seed, REGION.size),
+    terrain: map.terrain,
+    mapHash: map.hash,
     player: {
       vehicleId: "",
       money: kit.money,
@@ -100,7 +104,7 @@ export function newWorld(seed: number, kit: StartKit): World {
     dustClouds: [],
     states: [],
   };
-  world.obstacles = generateObstacles(world);
+  world.obstacles = generateObstacles(world, map.rocks);
   const start = startPose();
   const truck = makeVehicle(world, {
     name: kit.name,

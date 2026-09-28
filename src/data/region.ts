@@ -343,10 +343,6 @@ export const REGION = {
     { look: "tank", center: scalePoint({ x: 48, y: 90 }), radius: 120, spacing: 55, gap: 1.2, r: [1.5, 1.5], sides: "both" },
   ] as LandmarkDef[],
   obstacles: {
-    clusters: 220,
-    rocksPerCluster: [2, 6] as [number, number],
-    clusterSpread: 4,
-    radius: [0.6, 1.6] as [number, number],
     roadWrecks: 30, // wrecks placed on roads on purpose
     roadWreckShoulder: [0.5, 0.85] as [number, number], // wreck center from the road center line, as a share of the half-width
     roadClearance: 1.6, // extra gap between rocks and road edge

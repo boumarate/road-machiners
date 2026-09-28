@@ -1,19 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
-import { TERRAIN } from '../data/terrain';
+import { MAPGEN, TERRAIN } from '../data/terrain';
 import { ROAD_INDEX } from '../sim/road-index';
+import { decodeMap, isCliff, tileAt, type BakedMap, type Rock } from '../sim/terrain';
 import { dist, segmentDist } from '../sim/vec';
-import { newDraft } from './bake';
-import type { Rock } from '../sim/terrain';
-import { rockLayer, scatterRocks } from './bake';
+import { newDraft, rockLayer, type MapDraft } from './bake';
 
 const SIZE = REGION.size;
 const O = REGION.obstacles;
 const SITES = [...REGION.towns, ...REGION.locations];
-
-function flatHeights(): Float32Array {
-  return new Float32Array((SIZE + 1) * (SIZE + 1));
-}
 
 // Every rock off roads, sites, the bridge deck and the map margin, and apart from every other rock.
 function expectClear(rocks: Rock[]): void {
@@ -30,30 +25,76 @@ function expectClear(rocks: Rock[]): void {
   }
 }
 
-describe('rock clusters', () => {
-  it('keeps every rock clear of roads, sites, the bridge, the margin and other rocks', () => {
-    const rocks = scatterRocks({ rngState: 1337 }, SIZE, flatHeights());
+// A full map draft: a high plateau west of FOOT - FACE, a cliff face falling to x = FOOT, and flat ground east of it.
+const FOOT = 300;
+const FACE = 10;
+const RISE = TERRAIN.drive.maxSlope * 2;
 
-    expect(rocks.length).toBeGreaterThan(O.clusters);
-    expectClear(rocks);
+function cliffDraft(): MapDraft {
+  const d = newDraft(SIZE);
+  const n = SIZE + 1;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) d.heights[j * n + i] = Math.min(FACE, Math.max(0, FOOT - i)) * RISE;
+  return d;
+}
+
+describe('boulders', () => {
+  it('puts boulders along the foot of a cliff', () => {
+    const d = rockLayer(1337, cliffDraft());
+
+    const atFoot = d.rocks.filter((rock) => rock.pos.x >= FOOT && rock.pos.x < FOOT + 1);
+    expect(atFoot.length).toBeGreaterThan(10);
   });
 
-  it('puts no rock on a cliff', () => {
-    // Cliffs west of the middle, flat ground east of it.
-    const heights = flatHeights();
-    const half = SIZE / 2;
-    for (let j = 0; j <= SIZE; j++) for (let i = 0; i <= half; i++) heights[j * (SIZE + 1) + i] = (half - i) * TERRAIN.drive.maxSlope * 2;
+  it('puts no boulder on the cliff face or on the flat ground away from it', () => {
+    const d = rockLayer(1337, cliffDraft());
 
-    const rocks = scatterRocks({ rngState: 1337 }, SIZE, heights);
-
-    expect(rocks.some((rock) => rock.pos.x > half)).toBe(true);
-    expect(rocks.filter((rock) => rock.pos.x < half)).toEqual([]);
+    const onFace = d.rocks.filter((rock) => rock.pos.x >= FOOT - FACE && rock.pos.x < FOOT);
+    const away = d.rocks.filter((rock) => rock.pos.x > FOOT + 1 || rock.pos.x < FOOT - FACE - 1);
+    expect(onFace).toEqual([]);
+    expect(away).toEqual([]);
   });
 
-  it('places the same rocks for the same seed', () => {
-    const a = rockLayer(1337, newDraft(SIZE));
-    const b = rockLayer(1337, newDraft(SIZE));
+  it('puts no boulder on flat ground', () => {
+    const d = rockLayer(1337, newDraft(SIZE));
+
+    expect(d.rocks).toEqual([]);
+  });
+
+  it('keeps every boulder clear of roads, sites, the bridge, the margin and other rocks', () => {
+    const d = rockLayer(1337, cliffDraft());
+
+    expectClear(d.rocks);
+  });
+
+  it('places the same boulders for the same seed', () => {
+    const a = rockLayer(1337, cliffDraft());
+    const b = rockLayer(1337, cliffDraft());
 
     expect(a.rocks).toEqual(b.rocks);
+  });
+});
+
+// The committed map file, inlined by Vite as base64 data, since the project carries no Node file typings.
+const FILES = import.meta.glob<string>('/public/maps/*.bin', { query: '?url&inline', import: 'default', eager: true });
+const DATA_URL = 'data:application/octet-stream;base64,';
+
+function bakedMap(): BakedMap {
+  const url = FILES[`/public/${MAPGEN.file}`];
+  if (url === undefined || !url.startsWith(DATA_URL)) throw new Error(`Map file public/${MAPGEN.file} is missing or did not inline. Run npm run map:bake.`);
+  return decodeMap(Uint8Array.from(atob(url.slice(DATA_URL.length)), (c) => c.charCodeAt(0)));
+}
+
+describe('boulders on the baked map', () => {
+  const map = bakedMap();
+
+  it('keeps every boulder clear of roads, sites, the bridge, the margin and other rocks', () => {
+    expect(map.rocks.length).toBeGreaterThan(0);
+    expectClear(map.rocks);
+  });
+
+  it('puts no boulder on a cliff tile', () => {
+    const onCliff = map.rocks.filter((rock) => isCliff(map.terrain, tileAt(map.terrain, rock.pos)));
+
+    expect(onCliff).toEqual([]);
   });
 });

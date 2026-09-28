@@ -1,4 +1,3 @@
-import { START_KITS } from '../data/start';
 import { describe, expect, it } from 'vitest';
 import { TERRAIN } from '../data/terrain';
 import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
@@ -7,6 +6,7 @@ import { contactsOf, soundRange } from './detect';
 import { TIME } from '../data/time';
 import { sunAt } from './sun';
 import { canVehicleSee, grayRadius, playerVisible, refreshVision, sightRadius, visibleTiles } from './vision';
+import { TEST_MAP } from '../test/map';
 
 describe('vision', () => {
   it('sees an unblocked tile within radius', () => {
@@ -69,16 +69,16 @@ describe('vision', () => {
 describe('terrain line of sight', () => {
   it('a hill between viewer and tile blocks sight', async () => {
     const { heightAt } = await import('./terrain');
-    const { newWorld } = await import('./world');
     const w = emptyWorld({ x: 30, y: 30 });
-    w.terrain = newWorld(1, START_KITS.standard).terrain;
+    w.terrain = TEST_MAP.terrain;
     const elevationAt = (_seed: number, x: number, y: number) => heightAt(w.terrain, x, y);
     let found: { a: { x: number; y: number }; b: { x: number; y: number } } | null = null;
-    for (let x = 6; x < 54 && !found; x++) {
-      for (let y = 2; y < 58 && !found; y++) {
+    // A peak above both eye heights blocks the line between the two sides.
+    for (let x = 6; x < w.size - 6 && !found; x++) {
+      for (let y = 2; y < w.size - 2 && !found; y++) {
         const peak = elevationAt(w.seed, x, y);
         const a = { x: x - 4, y }, b = { x: x + 4, y };
-        if (peak - Math.max(elevationAt(w.seed, a.x, a.y), elevationAt(w.seed, b.x, b.y)) > 0.2) found = { a, b };
+        if (peak - Math.max(elevationAt(w.seed, a.x, a.y), elevationAt(w.seed, b.x, b.y)) > TERRAIN.vision.eyeHeight) found = { a, b };
       }
     }
     expect(found, 'no hill found for this seed').not.toBeNull();

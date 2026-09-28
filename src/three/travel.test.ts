@@ -10,9 +10,10 @@ import type { GameEvent } from "../sim/types";
 import { endTurn, newWorld, setMoveOrder } from "../sim/world";
 import { addRopeFrames, canTravel, overshoots, Travel } from "./travel";
 import { addState } from "../sim/states";
+import { TEST_MAP } from "../test/map";
 
 function makeSafeWorld() {
-  const world = newWorld(1337, startKit("standard"));
+  const world = newWorld(1337, startKit("standard"), TEST_MAP);
   world.vehicles = [playerVehicle(world)];
   world.events = [];
   return world;

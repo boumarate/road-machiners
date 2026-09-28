@@ -81,6 +81,7 @@ import { DustCloudsView } from "./render/dust";
 import { ShadeView } from "./render/shade";
 import { SoundRingView } from "./render/soundRing";
 import { clearSave, hasSave, loadWorld, saveInTown, saveWorld, writeSave } from "./save";
+import type { BakedMap } from "../sim/terrain";
 import { GameMenu } from "../ui/game-menu";
 import { volleyTally } from "../ui/format";
 import { DeathScreen } from "../ui/death";
@@ -189,10 +190,9 @@ export class Game {
     overlay: HTMLElement,
     player: SoundPlayer,
     private toggleMute: () => void,
+    map: BakedMap,
   ) {
-    this.world =
-      loadWorld(window.localStorage) ??
-      newWorld(CONFIG.seed, startKit(CONFIG.startKit));
+    this.world = loadWorld(window.localStorage, map) ?? newWorld(CONFIG.seed, startKit(CONFIG.startKit), map);
     this.drive = buildDrive(this.world);
     warmRoutes(this.world, [
       ...new Set(Object.values(CHASSIS).map((c) => c.radius)),

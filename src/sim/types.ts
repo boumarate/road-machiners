@@ -365,7 +365,8 @@ export type World = {
   obstacles: Obstacle[];
   salvage: SalvageStock[];
   shops: Record<string, ShopState>; // shop id -> prices, stock and contract board; see src/sim/market.ts
-  terrain: Terrain; // corner heights and tile types, built from the seed
+  terrain: Terrain; // corner heights and tile types, from the baked map file
+  mapHash: string; // hash of the map file the world was made on; a save on another map does not load
   player: Player;
   events: GameEvent[]; // events of the last resolved turn or action
   removed: Vehicle[]; // vehicles destroyed or gone this turn, kept for the render

@@ -15,6 +15,7 @@ import { startKit } from "../data/start";
 import { newWorld } from "../sim/world";
 import { playerVehicle } from "../sim/damage";
 import { stowPart } from "../sim/inventory";
+import { TEST_MAP } from "../test/map";
 
 describe('knocked-out truck interaction', () => {
   it('offers looting a knocked-out truck in reach only while stopped', () => {
@@ -146,7 +147,7 @@ describe("rescue readout", () => {
     });
   });
   it("tells a stranded player to install a spare engine it carries", () => {
-    const w = newWorld(1337, startKit("standard"));
+    const w = newWorld(1337, startKit("standard"), TEST_MAP);
     const me = playerVehicle(w);
     const engine = me.items.find((it) => it.kind === "part" && partDef(it.part.defId).kind === "engine");
     if (!engine || engine.kind !== "part") throw new Error("Expected an engine");

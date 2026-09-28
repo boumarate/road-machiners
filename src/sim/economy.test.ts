@@ -42,6 +42,7 @@ import { sitePads, townAt, townNear } from "./sites";
 import { addVehicle, emptyWorld, testDrive } from "./testkit";
 import { endTurn, newWorld } from "./world";
 import { clockOf } from "./sun";
+import { TEST_MAP } from "../test/map";
 
 const bowl = REGION.towns.find((t) => t.id === "bowl")!;
 const nose = REGION.towns.find((t) => t.id === "nose")!;
@@ -567,7 +568,7 @@ describe("locations", () => {
   });
 
   it("driving near a site discovers it once, with XP", () => {
-    let w = newWorld(5, START_KITS.standard);
+    let w = newWorld(5, START_KITS.standard, TEST_MAP);
     const convoy = REGION.locations.find((l) => l.kind === "convoy")!;
     w.vehicles.find((v) => v.faction === "player")!.pos = {
       x: convoy.pos.x + 3.5,

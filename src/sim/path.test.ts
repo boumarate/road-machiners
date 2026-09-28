@@ -14,11 +14,12 @@ import { siteGates } from './sites';
 import { editableTerrain, emptyWorld, npcBrain } from './testkit';
 import { dist, polylineDist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
+import { TEST_MAP } from '../test/map';
 
 // Shared read-only across every test below that needs a real generated map on this seed: newWorld
 // repeats obstacle generation, NPC spawns and vision on top of the terrain build, so building it once
 // saves that work everywhere it is only read, never mutated.
-const w1337 = newWorld(1337, START_KITS.standard);
+const w1337 = newWorld(1337, START_KITS.standard, TEST_MAP);
 
 describe("route", () => {
   it("goes straight when nothing is in the way", () => {
@@ -549,7 +550,7 @@ function mulberry(seed: number): () => number {
 }
 
 describe('nav layers match the old grid rules', () => {
-  const w = newWorld(1, START_KITS.standard);
+  const w = newWorld(1, START_KITS.standard, TEST_MAP);
   const rand = mulberry(7);
   const at = (lo: number, hi: number) => lo + (hi - lo) * rand();
   // Kill wrecks come and go in play; they must block like any other obstacle.
@@ -650,7 +651,7 @@ describe('long routes search a coarse corridor', () => {
   // Shared across this describe's tests: newWorld repeats obstacle generation, NPC spawns and vision
   // on top of the terrain build, none of which these tests exercise. Tests that reshape obstacles copy
   // the array first, so they never mutate this shared world.
-  const w = newWorld(1, START_KITS.standard);
+  const w = newWorld(1, START_KITS.standard, TEST_MAP);
 
   it('coarse regions are the connected pieces of each block, linked where their cells touch', () => {
     const layer = navLayer(w.terrain, w.obstacles, 0.6);

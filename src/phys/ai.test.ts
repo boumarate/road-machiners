@@ -12,6 +12,7 @@ import { dist } from '../sim/vec';
 import { endTurn, newWorld } from '../sim/world';
 import { buildDrive, freeDrive, initPhysics, type Drive } from './drive';
 import { physicsMove } from './turn';
+import { TEST_MAP } from '../test/map';
 
 beforeAll(async () => {
   await initPhysics();
@@ -32,6 +33,8 @@ describe('NPC driving', () => {
     let w = emptyWorld({ x: 40, y: 30 });
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
     npc.brain = npcBrain('buggy', npc.pos, ['raider']);
+    // A goal east through the rock, so the first turn drives instead of rolling an idle choice.
+    npc.brain.goals = [{ kind: 'raid', targetId: null, destination: { x: 300, y: 30 }, reason: 'look for prey at known hunting grounds', phase: 'travel' }];
     w.obstacles = [{ id: 'rock', pos: { x: 31.4, y: 30 }, r: 0.8, kind: 'rock' }];
     const startX = npc.pos.x;
     let d = buildDrive(w);
@@ -43,7 +46,7 @@ describe('NPC driving', () => {
   });
 
   it('travels between towns without entering either site', () => {
-    let w = newWorld(1337, START_KITS.standard);
+    let w = newWorld(1337, START_KITS.standard, TEST_MAP);
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
     // No spawns, so no raider can end the trip before it reaches Nose.
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
