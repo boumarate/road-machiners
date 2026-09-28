@@ -1,7 +1,8 @@
-import { SALVAGE, type LootTable } from '../data/salvage';
-import { ECONOMY } from '../data/goods';
-import { REGION } from '../data/region';
+import { SALVAGE, type LootRange, type LootTable } from '../data/salvage';
+import { ECONOMY, GOODS } from '../data/goods';
+import { REGION, type LocationDef } from '../data/region';
 import { RULES } from '../data/rules';
+import { TIME } from '../data/time';
 import { chassisDef } from '../data/chassis';
 import { partDef } from '../data/parts';
 import { PERK_NUMBERS } from '../data/skills';
@@ -23,11 +24,31 @@ import { isJunk, maxHp, restorePart } from './wear';
 export function initializeSalvage(world: World): void {
   const sites = REGION.locations
     .filter((site) => site.kind === 'convoy' || site.kind === 'landmark')
-    .map((site) => rollStock(world, site.kind === 'convoy' ? SALVAGE.convoy : SALVAGE.landmark, site.id, site.pos, site.radius));
+    .map((site) => rollStock(world, siteLootTable(site)!, site.id, site.pos, site.radius));
   const wrecks = world.obstacles
-    .filter((o) => o.kind === 'wreck' && /^wreck\d+$/.test(o.id))
+    .filter((o) => o.kind === 'wreck' && isRoadWreckId(o.id))
     .map((o) => rollStock(world, SALVAGE.roadWreck, o.id, o.pos, o.r * RULES.wreckRadiusScale));
   world.salvage = [...sites, ...wrecks];
+}
+
+// The loot table a site draws from, or null for a site with no salvage of its own.
+function siteLootTable(site: LocationDef): LootTable | null {
+  if (site.kind === 'convoy') return SALVAGE.convoy;
+  if (site.kind === 'landmark') return SALVAGE.landmark;
+  return null;
+}
+
+// A wreck placed on a road at world creation, not one a destroyed truck left.
+function isRoadWreckId(id: string): boolean {
+  return /^wreck\d+$/.test(id);
+}
+
+// The loot table a stock regrows from: a site's own table, a road wreck's table, or null for a pile
+// or another one-off drop, which never regrows.
+function lootTableFor(id: string): LootTable | null {
+  const site = REGION.locations.find((l) => l.id === id);
+  if (site) return siteLootTable(site);
+  return isRoadWreckId(id) ? SALVAGE.roadWreck : null;
 }
 
 function rollStock(world: World, table: LootTable, id: string, pos: Vec, radius: number): SalvageStock {
@@ -86,7 +107,11 @@ export function collectSalvage(world: World, vehicle: Vehicle, stockId: string, 
     stock.goods[good] -= took;
     if (took === 0) continue;
     moved += took;
-    if (vehicle.id === world.player.vehicleId) world.player.costBasis[good] = ((world.player.costBasis[good] ?? 0) * held) / (held + took);
+    // A salvaged unit enters the cost basis at the good's base value, not free: looted goods still
+    // teach Social only from profit above what they would have cost to buy.
+    if (vehicle.id === world.player.vehicleId)
+      world.player.costBasis[good] =
+        ((world.player.costBasis[good] ?? 0) * held + GOODS[good].value * took) / (held + took);
   }
   return moved;
 }
@@ -129,15 +154,25 @@ export function stripPart(world: World, vehicle: Vehicle, stock: SalvageStock, p
 export function createWreckSalvage(world: World, vehicle: Vehicle): void {
   const goods = goodsCount(vehicle);
   const parts: PartInstance[] = [];
-  let coreScrap = 0;
+  const core: PartInstance[] = [];
   for (const item of vehicle.items) {
     if (item.kind !== 'part') continue;
-    if (partDef(item.part.defId).kind === 'core') coreScrap += Math.round(item.part.hp * SALVAGE.coreScrapPerHp);
+    if (partDef(item.part.defId).kind === 'core') core.push(item.part);
     else parts.push(item.part);
   }
+  const coreScrap = coreWreckScrap(vehicle, core);
   if (coreScrap > 0) goods.parts = (goods.parts ?? 0) + coreScrap;
   addVehicleStock(world, vehicle, wreckStockId(vehicle.id), goods, parts);
   vehicle.items = vehicle.items.filter((item) => item.kind === 'part' && partDef(item.part.defId).kind === 'core');
+}
+
+// The parts good a wreck's destroyed built-in parts leave: a data share of the chassis's own value,
+// scaled by how much HP those core parts still had, converted to units at the parts good's value.
+function coreWreckScrap(vehicle: Vehicle, core: PartInstance[]): number {
+  if (core.length === 0) return 0;
+  const hpShare = core.reduce((sum, part) => sum + part.hp / maxHp(part), 0) / core.length;
+  const value = chassisDef(vehicle.chassisId).value * SALVAGE.coreValueShare * hpShare;
+  return Math.round(value / GOODS.parts.value);
 }
 
 // A knocked-out truck is stripped where it stands. Every loot item moves to a pile, and the
@@ -198,6 +233,37 @@ function dropOnPile(world: World, vehicle: Vehicle, items: GridItem[], id: strin
   }
   vehicle.items = vehicle.items.filter((item) => !items.includes(item));
   return pile;
+}
+
+// ---- Slow regrowth. Every restockIntervalDays, a site or road wreck stock below its loot table's highs
+// rolls a small top-up, so scavenging thins the map out but never empties it for good.
+
+export function renewSalvage(world: World): void {
+  const period = SALVAGE.restockIntervalDays * TIME.turnsPerDay;
+  if (world.turn % period !== 0) return;
+  for (const stock of world.salvage) {
+    const table = lootTableFor(stock.id);
+    if (table) restockStock(world, stock, table);
+  }
+}
+
+// Each good, the parts good, fuel and supplies regain a share of a fresh roll, up to the table's highs. An
+// empty parts slot refills at the same share of the table's spare part chance.
+function restockStock(world: World, stock: SalvageStock, table: LootTable): void {
+  for (const [good, range] of Object.entries({ ...table.goods, parts: table.parts })) stock.goods[good] = refill(world, stock.goods[good], range);
+  stock.fuel = refill(world, stock.fuel, table.fuel);
+  stock.supplies = refill(world, stock.supplies, table.supplies);
+  if (stock.parts.length > 0 || !chance(world, table.sparePartChance * SALVAGE.restockShare)) return;
+  stock.parts.push(makePart(world, table.spareParts[randInt(world, 0, table.spareParts.length - 1)], 0));
+}
+
+// Each unit of a fresh roll comes back with chance restockShare. The high caps the gain, but a count
+// already above it stays.
+function refill(world: World, count: number | undefined, [lo, hi]: LootRange): number {
+  const current = count ?? 0;
+  let gain = 0;
+  for (let unit = randInt(world, lo, hi); unit > 0; unit--) if (chance(world, SALVAGE.restockShare)) gain++;
+  return Math.max(current, Math.min(hi, current + gain));
 }
 
 // Piles that ran out of time or loot leave the ground. Searches of them stop, and the player forgets them.

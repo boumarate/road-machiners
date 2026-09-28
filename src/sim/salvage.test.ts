@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
+import { GOODS } from '../data/goods';
+import { TIME } from '../data/time';
 import { addVehicle, emptyWorld, testDrive } from './testkit';
 import { resolveDestroyed } from './combat';
-import { addGoods, dumpItem } from './inventory';
+import { addGoods, dumpItem, removeGoods } from './inventory';
 import { corePart, goodsCount, isLoot, mountedParts } from './grid';
 import { partDef } from '../data/parts';
 import { chassisDef } from '../data/chassis';
 import { RULES } from '../data/rules';
 import { takeAllLoot, takeStores, canScavenge, scavenge } from './locations';
-import { clearPiles, collectSalvage, createKnockoutSalvage, hasSalvage, salvageUnits } from './salvage';
+import { clearPiles, collectSalvage, createKnockoutSalvage, hasSalvage, renewSalvage, salvageUnits } from './salvage';
+import { maxHp } from './wear';
 import { sitePads } from './sites';
 import { freeCells } from './grid';
 import { endTurn } from './world';
@@ -102,7 +105,9 @@ describe('finite salvage', () => {
     addGoods(w, npc, 'scrap', 3);
     const engine = mountedParts(npc, 'engine')[0];
     corePart(npc, 'cab').hp = 0;
-    const coreScrap = mountedParts(npc, 'core').reduce((sum, p) => sum + Math.round(p.hp * SALVAGE.coreScrapPerHp), 0);
+    const core = mountedParts(npc, 'core');
+    const hpShare = core.reduce((sum, p) => sum + p.hp / maxHp(p), 0) / core.length;
+    const coreScrap = Math.round((chassisDef(npc.chassisId).value * SALVAGE.coreValueShare * hpShare) / GOODS.parts.value);
     resolveDestroyed(w);
     const stock = w.salvage.find((s) => s.id === `wreck-${npc.id}`)!;
     expect(stock.goods.scrap).toBe(3);
@@ -110,6 +115,70 @@ describe('finite salvage', () => {
     expect(stock.goods.parts).toBe(coreScrap);
     resolveDestroyed(w);
     expect(w.salvage.filter((s) => s.id === stock.id)).toHaveLength(1);
+  });
+
+  it('leaves a wreck worth well under the chassis it came from', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'raiders', 'buggy', [], { x: 10, y: 10 });
+    corePart(npc, 'cab').hp = 0;
+    resolveDestroyed(w);
+    const stock = w.salvage.find((s) => s.id === `wreck-${npc.id}`)!;
+    const lootValue = (stock.goods.parts ?? 0) * GOODS.parts.value;
+    expect(lootValue).toBeLessThan(chassisDef('buggy').value * 0.5);
+  });
+
+  it('enters a salvaged good into the cost basis at its base value, not free', () => {
+    const w = emptyWorld();
+    const held = goodsCount(w.vehicles[0]).scrap ?? 0;
+    if (held > 0) removeGoods(w.vehicles[0], 'scrap', held);
+    delete w.player.costBasis.scrap;
+    w.salvage.push({ id: 'test-stock', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [] });
+    collectSalvage(w, w.vehicles[0], 'test-stock', 100);
+    expect(w.player.costBasis.scrap).toBe(GOODS.scrap.value);
+  });
+});
+
+describe('site and road wreck regrowth', () => {
+  const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
+
+  function emptyStock(w: ReturnType<typeof emptyWorld>, id: string) {
+    const stock = w.salvage.find((s) => s.id === id)!;
+    for (const good of Object.keys(stock.goods)) stock.goods[good] = 0;
+    stock.parts = [];
+    return stock;
+  }
+
+  it('refills an emptied site a share at a time, up to the table highs', () => {
+    const w = emptyWorld();
+    const stock = emptyStock(w, convoy.id);
+    const period = SALVAGE.restockIntervalDays * TIME.turnsPerDay;
+    w.turn = period;
+    renewSalvage(w);
+    const firstStep = stock.goods.scrap;
+    for (let i = 0; i < 30; i++) {
+      w.turn += period;
+      renewSalvage(w);
+    }
+    expect(firstStep).toBeLessThan(SALVAGE.convoy.goods.scrap[1]);
+    expect(stock.goods.scrap).toBe(SALVAGE.convoy.goods.scrap[1]);
+    expect(stock.goods.parts).toBe(SALVAGE.convoy.parts[1]);
+  });
+
+  it('does not restock off the interval', () => {
+    const w = emptyWorld();
+    const stock = emptyStock(w, convoy.id);
+    w.turn = 1;
+    renewSalvage(w);
+    expect(stock.goods.scrap).toBe(0);
+  });
+
+  it('keeps a count already above the table high', () => {
+    const w = emptyWorld();
+    const stock = w.salvage.find((s) => s.id === convoy.id)!;
+    stock.goods.parts = SALVAGE.convoy.parts[1] + 5;
+    w.turn = SALVAGE.restockIntervalDays * TIME.turnsPerDay;
+    renewSalvage(w);
+    expect(stock.goods.parts).toBe(SALVAGE.convoy.parts[1] + 5);
   });
 });
 
