@@ -185,8 +185,6 @@ function townName(id: string): string {
 
 export function getHudReadout(w: World) {
   const me = playerVehicle(w);
-  const cab = corePart(me, "cab");
-  const cabMax = maxHp(cab);
   const capacity = fuelCap(me);
   const p = w.player;
   const maxHealth = maxHealthOf(w);
@@ -212,11 +210,6 @@ export function getHudReadout(w: World) {
         label: "Supplies",
         value: p.supplies.toFixed(1),
         warning: p.supplies <= RULES.suppliesLow,
-      },
-      {
-        label: "Cab",
-        value: `${hp(cab.hp)} / ${cabMax}`,
-        warning: cab.hp < cabMax,
       },
       {
         label: "Driver",

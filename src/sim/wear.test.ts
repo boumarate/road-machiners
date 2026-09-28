@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { partDef, type ArmorDef, type CargoDef, type EngineDef, type ScannerDef, type WeaponDef } from '../data/parts';
-import { CONDITION } from '../data/wear';
+import { CONDITION, WEAR } from '../data/wear';
 import { REGION } from '../data/region';
 import { TERRAIN_TYPES, type TerrainTypeId } from '../data/terrain';
 import { addVehicle, emptyWorld, editableTerrain, practiceOf } from './testkit';
 import { corePart, mountedParts } from './grid';
+import { isStranded } from './stats';
 import { addState } from './states';
 import { tileAt } from './terrain';
 import type { PartInstance, Vehicle, World } from './types';
@@ -116,6 +117,48 @@ describe('wear', () => {
     expect(lostShare).toBeLessThan(0.45);
     expect(breakdowns).toBeGreaterThanOrEqual(1);
     expect(breakdowns).toBeLessThanOrEqual(6);
+  });
+
+  it('fails the engine or the transmission outright and strands the truck', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const chance = WEAR.failureChancePerTile;
+    (WEAR as { failureChancePerTile: number }).failureChancePerTile = 1;
+    try {
+      drive(me, 5);
+      applyWear(w);
+    } finally {
+      (WEAR as { failureChancePerTile: number }).failureChancePerTile = chance;
+    }
+    const driveParts = [mountedParts(me, 'engine')[0], corePart(me, 'transmission')];
+    const failed = driveParts.filter((p) => p.hp === 0);
+    expect(failed).toHaveLength(1);
+    expect(failed[0].wear).toBe(1);
+    expect(isStranded(w, me)).toBe(true);
+    expect(w.events).toContainEqual({ t: 'breakdown', vehicle: me.id, part: failed[0].id });
+  });
+
+  it('fails a truck about once in two hours of off-road driving', () => {
+    let failures = 0;
+    const hours = 10;
+    for (let seed = 1; seed <= hours; seed++) {
+      const w = emptyWorld();
+      w.rngState = seed;
+      const me = w.vehicles[0];
+      const tiles = 7.8; // scout top speed in tiles per turn
+      setTerrainUnder(w, me, tiles, 'hardpan');
+      const driveParts = [mountedParts(me, 'engine')[0], corePart(me, 'transmission')];
+      for (let turn = 0; turn < 2900; turn++) {
+        drive(me, tiles);
+        applyWear(w);
+        const failed = driveParts.find((p) => p.hp === 0);
+        if (!failed) continue;
+        failures++;
+        restorePart(failed, maxHp(failed));
+      }
+    }
+    expect(failures).toBeGreaterThanOrEqual(2);
+    expect(failures).toBeLessThanOrEqual(10);
   });
 
   it('wears NPCs too', () => {

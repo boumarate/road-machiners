@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { heatAt } from './sun';
 import { PERF } from '../data/perf';
 import { RULES } from '../data/rules';
 import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
@@ -88,7 +89,20 @@ describe('far NPC travel', () => {
     freeDrive(d);
   });
 
-  it('moves a far vehicle no farther than its speed allows and burns fuel for that distance (IV4)', () => {
+  it('stops a far vehicle at the map edge when its goal lies beyond it', () => {
+    const w = emptyWorld();
+    const far = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 4 });
+    far.speed = 2;
+    far.order = { kind: 'through', dest: { x: 120, y: -17 } };
+    const radius = vehicleStats(w, far).radius;
+    for (let turn = 0; turn < 10 && far.order; turn++) {
+      advanceFar(w, far);
+      expect(far.pos.y).toBeGreaterThanOrEqual(radius);
+    }
+    expect(far.pos.y).toBeCloseTo(radius, 6);
+  });
+
+  it('moves a far vehicle no farther than its speed allows and burns fuel for that distance at the heat where it ends (IV4)', () => {
     const w = emptyWorld();
     const far = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });
     far.speed = 2;
@@ -105,7 +119,7 @@ describe('far NPC travel', () => {
       expect(moved).toBeLessThanOrEqual(Math.max(before.speed, far.speed) + 1e-9);
       expect(far.speed).toBeLessThanOrEqual(s.maxSpeed);
       expect(far.speed).toBeLessThanOrEqual(before.speed + s.accel + 1e-9);
-      expect(before.fuel - getResources(w, far).fuel).toBeCloseTo(moved * s.fuelPerTile, 9);
+      expect(before.fuel - getResources(w, far).fuel).toBeCloseTo(moved * s.fuelPerTile * heatAt(w, far.pos), 9);
     }
   });
 

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { TERRAIN } from '../data/terrain';
 import { START_KITS } from '../data/start';
-import { BRIDGE_AXIS, BRIDGE_LENGTH, crossesRail, deckAlong } from './bridge';
+import { BRIDGE_AXIS, BRIDGE_LENGTH, BRIDGE_RAILS, crossesRail, deckAlong, nearRail } from './bridge';
 import { route, routeLength } from './path';
+import { segmentDist } from './vec';
 import { deckEnds, groundAt, heightAt, isCliff, markHeightAt, tileAt } from './terrain';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
@@ -16,6 +17,16 @@ const at = (along: number, across: number) => ({
 describe('Canyon Bridge', () => {
   const w = newWorld(1337, START_KITS.standard, TEST_MAP);
   const t = w.terrain;
+
+  it('finds points near a rail as the distance to each rail does, on and around the deck', () => {
+    const reach = 1.3;
+    for (let along = -4; along <= BRIDGE_LENGTH + 4; along += 0.37)
+      for (let across = -B.width - 4; across <= B.width + 4; across += 0.29) {
+        const p = at(along, across);
+        const near = BRIDGE_RAILS.some(([a, b]) => segmentDist(p, a, b) < reach);
+        expect(nearRail(p.x, p.y, reach)).toBe(near);
+      }
+  });
 
   it('puts the deck on a straight line between the ground at both ends', () => {
     const [h0, h1] = deckEnds(t);

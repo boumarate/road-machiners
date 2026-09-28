@@ -11,7 +11,7 @@ function doRectsOverlap(a, b) {
 }
 
 async function checkVisibleReadouts(page) {
-  for (const label of ['Money', 'Fuel', 'Supplies', 'Cab', 'Driver']) {
+  for (const label of ['Money', 'Fuel', 'Supplies', 'Driver']) {
     assert(await page.locator(`[data-resource="${label}"]`).isVisible(), `${label} must remain visible`);
   }
   assert(await page.locator('.log').isVisible(), 'Event log must remain visible');
@@ -29,7 +29,7 @@ try {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(url);
-  await page.waitForFunction(() => window.__KOROVAN__?.state);
+  await page.waitForFunction(() => window.__ROAM__?.state);
   assert(await page.locator('.icon').evaluateAll(nodes => nodes.every(node => node.title)), 'Every icon needs a hover name');
   assert(await page.locator('#ui *').evaluateAll(nodes => nodes.every(node => !getComputedStyle(node).backgroundImage.includes('gradient'))), 'UI must use flat surfaces');
   await page.keyboard.press('i');

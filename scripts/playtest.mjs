@@ -20,13 +20,13 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(e.stack ?? e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 await page.goto(url);
-await page.waitForFunction(() => window.__KOROVAN__, null, { timeout: 30000 });
+await page.waitForFunction(() => window.__ROAM__, null, { timeout: 30000 });
 await page.waitForTimeout(1000);
 await page.screenshot({ path: '.playtest/start.png' });
 
 for (let i = 0; i < turns; i++) {
   await page.evaluate((i) => {
-    const g = window.__KOROVAN__;
+    const g = window.__ROAM__;
     const w = g.state;
     const v = w.vehicles.find((x) => x.id === w.player.vehicleId);
     const a = v.heading + Math.sin(i * 0.9) * 0.9;
@@ -37,7 +37,7 @@ for (let i = 0; i < turns; i++) {
   // The turn counts once it is committed and has played back, since endTurn() ignores requests during playback.
   // travel and anim are private in TypeScript, and endTurn() checks the same call.
   await page.waitForFunction((turn) => {
-    const g = window.__KOROVAN__;
+    const g = window.__ROAM__;
     return g.state.turn === turn && !g.travel.isPlaying(g.anim);
   }, i + 2, { timeout: TURN_LIMIT_MS, polling: 50 }).catch(() => { throw new Error(`Turn ${i + 1} did not finish playing within ${TURN_LIMIT_MS} ms`); });
 }
@@ -49,7 +49,7 @@ const fps = await page.evaluate(() => new Promise((done) => {
   const f = () => (++n, performance.now() - t0 < 2000 ? requestAnimationFrame(f) : done(n / 2));
   requestAnimationFrame(f);
 }));
-const state = await page.evaluate(() => ({ turn: window.__KOROVAN__.state.turn, crashed: document.body.innerText.includes('The game crashed') }));
+const state = await page.evaluate(() => ({ turn: window.__ROAM__.state.turn, crashed: document.body.innerText.includes('The game crashed') }));
 const blank = await page.evaluate(() => {
   const c = document.querySelector('#game canvas');
   return !c || c.width === 0;

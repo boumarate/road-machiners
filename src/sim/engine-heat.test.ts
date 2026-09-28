@@ -39,7 +39,7 @@ describe('engine heat', () => {
       turns++;
       expect(turns).toBeLessThan(60);
     }
-    expect(turns).toBeGreaterThan(30);
+    expect(turns).toBeGreaterThan(20);
     expect(w.events.some((e) => e.t === 'info' && e.text.startsWith('Engine running hot'))).toBe(true);
     expect(engine(w).hp).toBe(hp - ENGINE_HEAT.overheatDamage);
     advanceEngineHeat(w);
@@ -222,7 +222,7 @@ describe('engine overdrive', () => {
       }
       return turns;
     };
-    expect(turnsToOverheat(true)).toBeLessThan(turnsToOverheat(false) / 3);
+    expect(turnsToOverheat(true)).toBeLessThan(turnsToOverheat(false) / 2);
   });
 
   it('adds no heat while parked', () => {

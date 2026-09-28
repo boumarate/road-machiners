@@ -377,12 +377,25 @@ function components(count: number, edgeStart: Int32Array, edges: Int32Array): In
 // as for a plain route, so a tasted search visits about as many cells.
 export type Taste = { seed: number; side: number; values: Float32Array };
 
+// Tastes are pure functions of seed and map size, and every route of a driver asks for its taste. 256 is many
+// times the NPC drivers alive at once.
+const TASTES_MAX = 256;
+const tastes = new Map<string, Taste>();
+
 // The taste of an NPC driver, fixed for its life by the world seed and its id. No driver, the player
 // and vehicles without a brain plan plain routes.
 export function tasteOf(world: World, v: Pick<Vehicle, "id" | "brain"> | undefined): Taste | null {
   if (!v?.brain) return null;
   const chars = Array.from(v.id, (ch) => ch.charCodeAt(0));
-  return makeTaste(Math.floor(hashRandom(world.seed, ...chars) * 0x100000000) | 0, world.size);
+  const seed = Math.floor(hashRandom(world.seed, ...chars) * 0x100000000) | 0;
+  const key = `${seed}:${world.size}`;
+  let taste = tastes.get(key);
+  if (!taste) {
+    if (tastes.size >= TASTES_MAX) tastes.clear();
+    taste = makeTaste(seed, world.size);
+    tastes.set(key, taste);
+  }
+  return taste;
 }
 
 export function makeTaste(seed: number, size: number): Taste {

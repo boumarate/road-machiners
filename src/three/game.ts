@@ -1,4 +1,3 @@
-import { startKit } from "../data/start";
 // The 3D game: wires input to the sim, the sim and physics to the Three.js view, and the HTML UI.
 // Sim time only moves while a turn plays. The path preview runs the same physics the turn will run.
 
@@ -30,14 +29,13 @@ import { getContextAction } from "../ui/hud-readout";
 import { shopAt } from "../sim/market";
 import { isStranded, maxTurn, vehicleStats } from "../sim/stats";
 import { clickOrder, parkedVehicles, throttleFor } from "../sim/steering";
-import { route, warmRoutes } from "../sim/path";
-import { CHASSIS } from "../data/chassis";
+import { route } from "../sim/path";
 import type { ShotRound, Vehicle, World } from "../sim/types";
 import { grayRadius, playerSees, tileOf, visibleTiles } from "../sim/vision";
 import { dist, type Vec } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
 import { isTowed, setBeacon, unhitch } from "../sim/tow";
-import { cloneWorld, hostileToPlayer, newWorld, playerCanAct, setMoveOrder } from "../sim/world";
+import { cloneWorld, hostileToPlayer, playerCanAct, setMoveOrder } from "../sim/world";
 import { TruckControls } from "./truck-controls";
 import { PAL } from "../render/palette";
 import { timed } from "../perf";
@@ -72,8 +70,7 @@ import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
 import { ShadeView } from "./render/shade";
 import { SoundRingView } from "./render/soundRing";
-import { clearSave, hasSave, loadWorld, saveInTown, saveWorld, writeSave } from "./save";
-import type { BakedMap } from "../sim/terrain";
+import { clearSave, hasSave, saveInTown, saveWorld, writeSave } from "./save";
 import { GameMenu } from "../ui/game-menu";
 import { roundLabel } from "../ui/format";
 import { DeathScreen } from "../ui/death";
@@ -176,17 +173,15 @@ export class Game {
   private readonly death: DeathScreen;
 
   constructor(
+    world: World,
     container: HTMLElement,
     overlay: HTMLElement,
     player: SoundPlayer,
     private toggleMute: () => void,
-    map: BakedMap,
   ) {
-    this.world = loadWorld(window.localStorage, map) ?? newWorld(CONFIG.seed, startKit(CONFIG.startKit), map);
+    this.world = world;
     this.drive = buildDrive(this.world);
-    warmRoutes(this.world, [
-      ...new Set(Object.values(CHASSIS).map((c) => c.radius)),
-    ]);
+    setTimeout(() => this.travel.warm(this.world, this.drive));
 
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.shadowMap.enabled = true;
@@ -906,6 +901,13 @@ export class Game {
   }
 
   private tick(now: number): void {
+    // Outside dev the next frame is booked first, so an error in this frame does not stop the game.
+    if (!import.meta.env.DEV) requestAnimationFrame((t) => this.tick(t));
+    this.frame(now);
+    if (import.meta.env.DEV) requestAnimationFrame((t) => this.tick(t));
+  }
+
+  private frame(now: number): void {
     const dt = now - this.last;
     this.last = now;
     const { step, speed } = this.advanceTurn(now);
@@ -944,7 +946,6 @@ export class Game {
     // The preview runs after the frame is drawn, so a click shows at once.
     this.refreshPlan();
     this.autoTurn(now);
-    requestAnimationFrame((t) => this.tick(t));
   }
 
   // Recomputes the player's sight from the truck's current spot once it has moved far enough.

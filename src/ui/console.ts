@@ -350,7 +350,7 @@ export class DebugConsole {
     for (const text of result.lines) this.print(text);
   }
 
-  // Only bad user input is printed. Any other error is a bug and goes to the crash screen.
+  // Only bad user input is printed. Any other error is a bug and goes to the crash screen, or to this log outside dev.
   private run(line: string): CommandResult | null {
     try {
       const result = runCommand(this.game.state, line);
@@ -361,6 +361,11 @@ export class DebugConsole {
       this.print(err.message, "bad");
       return null;
     }
+  }
+
+  // An error the game kept running past, outside dev.
+  error(text: string): void {
+    this.print(text, "bad");
   }
 
   private print(text: string, cls?: "dim" | "bad"): void {

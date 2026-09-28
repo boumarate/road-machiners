@@ -57,8 +57,17 @@ export function bridgeCut(x: number, y: number): number {
   return smooth(Math.min(1, into / B.ramp)) * (side <= 0 ? 1 : 1 - smooth(side / B.ramp));
 }
 
+// Bounding box of both rails. Nav layers test every map cell, and nearly all lie far outside it.
+const RAILS_BOX = {
+  minX: Math.min(...BRIDGE_RAILS.flat().map((p) => p.x)),
+  maxX: Math.max(...BRIDGE_RAILS.flat().map((p) => p.x)),
+  minY: Math.min(...BRIDGE_RAILS.flat().map((p) => p.y)),
+  maxY: Math.max(...BRIDGE_RAILS.flat().map((p) => p.y)),
+};
+
 // True when a point lies within reach of a rail.
 export function nearRail(x: number, y: number, reach: number): boolean {
+  if (x <= RAILS_BOX.minX - reach || x >= RAILS_BOX.maxX + reach || y <= RAILS_BOX.minY - reach || y >= RAILS_BOX.maxY + reach) return false;
   const p = { x, y };
   return BRIDGE_RAILS.some(([a, b]) => segmentDist(p, a, b) < reach);
 }

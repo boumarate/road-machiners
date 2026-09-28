@@ -36,7 +36,8 @@ function moveStorm(world: World, e: Extract<WeatherEvent, { kind: 'storm' }>): v
 const EXCLUDES: Partial<Record<WeatherEvent['kind'], WeatherEvent['kind']>> = { heatwave: 'overcast', overcast: 'heatwave' };
 
 function spawnIfClear(world: World, kind: WeatherEvent['kind']): void {
-  if (world.weather.some((e) => e.kind === kind || e.kind === EXCLUDES[kind])) return;
+  if (world.weather.some((e) => e.kind === EXCLUDES[kind])) return;
+  if (world.weather.filter((e) => e.kind === kind).length >= SIM.maxActive[kind]) return;
   if (!chance(world, SIM.spawnChance[kind])) return;
   const event = makeWeather(world, kind);
   world.weather.push(event);

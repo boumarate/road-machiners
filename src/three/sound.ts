@@ -181,7 +181,7 @@ export class CombatWatch {
 }
 
 export class SoundDirector {
-  readonly log: string[] = []; // recent cue ids and accent decisions, newest last; read it from __KOROVAN__ in dev
+  readonly log: string[] = []; // recent cue ids and accent decisions, newest last; read it from __ROAM__ in dev
 
   constructor(
     private player: Pick<SoundPlayer, "play">,

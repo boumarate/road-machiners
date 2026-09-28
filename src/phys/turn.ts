@@ -15,7 +15,7 @@ import { burnFuel } from '../sim/resources';
 import { setDownSpot } from '../sim/steering';
 import type { MoveOrder, Pose, Vehicle, World } from '../sim/types';
 import { dist } from '../sim/vec';
-import { visibleTiles } from '../sim/vision';
+import { exploreFrom } from '../sim/vision';
 import { bodyState, isLifted, captureDrive, freeDrive, initPhysics, restoreDrive, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type DriveSnapshot, type TurnResult, type VehicleResult } from './drive';
 import { headingOf, toMap } from './frames';
 
@@ -158,7 +158,7 @@ function orderDone(order: MoveOrder, res: VehicleResult, stopped: boolean): bool
 function exploreAlong(w: World): void {
   const me = playerVehicle(w);
   for (let i = 0; i < me.trail.length; i += EXPLORE_EVERY) {
-    for (const t of visibleTiles(w, me.trail[i])) w.player.explored[t] = 1;
+    exploreFrom(w, me.trail[i]);
   }
 }
 

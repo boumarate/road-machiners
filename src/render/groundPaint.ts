@@ -3,9 +3,9 @@
 
 import { REGION } from "../data/region";
 import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from "../data/terrain";
-import { groundSlope, tileAt, type Terrain } from "../sim/terrain";
+import { groundSlope, type Terrain } from "../sim/terrain";
 import { type Vec } from "../sim/vec";
-import { hash2, valueNoise } from "./noise";
+import { hash2 } from "./noise";
 import { PAL, mix, shade } from "./palette";
 
 export const TERRAIN_MARGIN = 10; // tiles of dim ground drawn past the map edge
@@ -79,6 +79,52 @@ export function paintGroundCanvas(
   }
 }
 
+// Per-tile inputs of the ground color, computed once per paint instead of once per pixel.
+type TileLook = { t: Terrain; color: Int32Array; shade: Float64Array; broad: CellNoise; fine: CellNoise };
+
+function tileLook(t: Terrain, hillshadeStrength: number): TileLook {
+  const count = t.size * t.size;
+  const color = new Int32Array(count);
+  const shadeBy = new Float64Array(count);
+  for (let i = 0; i < count; i++) {
+    color[i] = paintColor(t.types[i]);
+    shadeBy[i] = hillshade(t, i, hillshadeStrength);
+  }
+  return { t, color, shade: shadeBy, broad: new CellNoise(), fine: new CellNoise() };
+}
+
+// valueNoise that keeps the corner hashes of the last lattice cell. Neighbouring pixels share a cell, so most
+// calls skip the four hashes. Same arithmetic as valueNoise.
+class CellNoise {
+  private x0 = NaN;
+  private y0 = NaN;
+  private a = 0;
+  private b = 0;
+  private c = 0;
+  private d = 0;
+
+  at(x: number, y: number): number {
+    const x0 = Math.floor(x);
+    const y0 = Math.floor(y);
+    if (x0 !== this.x0 || y0 !== this.y0) {
+      this.x0 = x0;
+      this.y0 = y0;
+      this.a = hash2(x0, y0);
+      this.b = hash2(x0 + 1, y0);
+      this.c = hash2(x0, y0 + 1);
+      this.d = hash2(x0 + 1, y0 + 1);
+    }
+    const fx = smooth(x - x0);
+    const fy = smooth(y - y0);
+    const { a, b, c, d } = this;
+    return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+  }
+}
+
+function smooth(t: number): number {
+  return t * t * (3 - 2 * t);
+}
+
 // Hillshade: brighten slopes turned toward the light, darken slopes turned away.
 function hillshade(t: Terrain, tile: number, strength: number): number {
   const s = groundSlope(t, tile);
@@ -90,8 +136,15 @@ function hillshade(t: Terrain, tile: number, strength: number): number {
   );
 }
 
+// Same clamping as tileAt.
+function tileIndex(size: number, x: number, y: number): number {
+  const i = Math.min(Math.max(Math.floor(x), 0), size - 1);
+  const j = Math.min(Math.max(Math.floor(y), 0), size - 1);
+  return j * size + i;
+}
+
 // Type colors blend between tile centers, with a little jitter so borders look worn, not ruled.
-function typeColor(t: Terrain, x: number, y: number): number {
+function typeColor(look: TileLook, x: number, y: number): number {
   const jx =
     x +
     (hash2(Math.floor(x * JITTER_GRID), Math.floor(y * JITTER_GRID) + 7) -
@@ -106,14 +159,16 @@ function typeColor(t: Terrain, x: number, y: number): number {
     0.5;
   const i = Math.floor(jx);
   const j = Math.floor(jy);
-  const at = (a: number, b: number) => paintColor(t.types[tileAt(t, { x: a + 0.5, y: b + 0.5 })]);
+  const size = look.t.size;
+  const a = look.color[tileIndex(size, i + 0.5, j + 0.5)];
+  const b = look.color[tileIndex(size, i + 1.5, j + 0.5)];
+  const c = look.color[tileIndex(size, i + 0.5, j + 1.5)];
+  const d = look.color[tileIndex(size, i + 1.5, j + 1.5)];
+  // Inside one type all four match, and blending equal colors returns the color.
+  if (a === b && a === c && a === d) return a;
   const fx = jx - i;
   const fy = jy - j;
-  return mix(
-    mix(at(i, j), at(i + 1, j), fx),
-    mix(at(i, j + 1), at(i + 1, j + 1), fx),
-    fy,
-  );
+  return mix(mix(a, b, fx), mix(c, d, fx), fy);
 }
 
 // Road tiles paint as hardpan, since the ground shader draws the road over it with its own edge.
@@ -121,18 +176,14 @@ function paintColor(type: TerrainTypeId): number {
   return TERRAIN_TYPES[type === "road" ? "hardpan" : type].color;
 }
 
-function groundColor(
-  t: Terrain,
-  x: number,
-  y: number,
-  hillshadeStrength: number,
-): number {
-  const n = valueNoise(x / 7, y / 7) * 0.7 + valueNoise(x / 2.5, y / 2.5) * 0.3;
-  let color = mix(typeColor(t, x, y), PAL.sand[3], n * 0.2);
+function groundColor(look: TileLook, x: number, y: number): number {
+  const t = look.t;
+  const n = look.broad.at(x / 7, y / 7) * 0.7 + look.fine.at(x / 2.5, y / 2.5) * 0.3;
+  let color = mix(typeColor(look, x, y), PAL.sand[3], n * 0.2);
   color = shade(
     color,
     (0.97 + hash2(Math.floor(x * 3), Math.floor(y * 3)) * 0.05) *
-      hillshade(t, tileAt(t, { x, y }), hillshadeStrength),
+      look.shade[tileIndex(t.size, x, y)],
   );
   const out = Math.max(-x, -y, x - t.size, y - t.size, 0);
   if (out > 0)
@@ -145,20 +196,21 @@ function paintGround(
   t: Terrain,
   hillshadeStrength: number,
 ): void {
+  const look = tileLook(t, hillshadeStrength);
   const img = c.ctx.createImageData(c.size, c.size);
+  const data = img.data;
   for (let py = 0; py < c.size; py++) {
     for (let px = 0; px < c.size; px++) {
       const color = groundColor(
-        t,
+        look,
         c.from + (px + 0.5) / c.res,
         c.from + (py + 0.5) / c.res,
-        hillshadeStrength,
       );
       const i = (py * c.size + px) * 4;
-      img.data[i] = (color >> 16) & 0xff;
-      img.data[i + 1] = (color >> 8) & 0xff;
-      img.data[i + 2] = color & 0xff;
-      img.data[i + 3] = 255;
+      data[i] = (color >> 16) & 0xff;
+      data[i + 1] = (color >> 8) & 0xff;
+      data[i + 2] = color & 0xff;
+      data[i + 3] = 255;
     }
   }
   c.ctx.putImageData(img, 0, 0);

@@ -2,6 +2,7 @@
 import { NPC_BEHAVIOR, NPCS } from "../data/npcs";
 import { RULES } from "../data/rules";
 import { isKnockedOut } from "./defeat";
+import { isNear } from "./far";
 import { getActivityDestination, goalHolds, thinkNpc, topGoal } from "./npc-activities";
 import { route, routeLength, type Blocker } from "./path";
 import { towData } from "./states";
@@ -136,8 +137,10 @@ export function routeBlockers(world: World, v: Vehicle): Blocker[] {
 // Whether v must stop short of `dest` for another vehicle. A moving vehicle stops v only when the route around
 // its swept path no longer reaches where the route past parked vehicles alone reaches, or when it is longer by
 // more than v drives within its horizon. The swept path clears within that time, so waiting is shorter then.
+// A far driver has no body and stops short of any vehicle in its way, so moving vehicles never stop it here.
 export function trafficStops(world: World, v: Vehicle, dest: Vec): boolean {
   if (facesParked(world, v)) return true;
+  if (!isNear(world, v)) return false;
   const moving = conflicts(world, v, 0);
   if (moving.length === 0) return false;
   const parked = parkedVehicles(world, v.id);

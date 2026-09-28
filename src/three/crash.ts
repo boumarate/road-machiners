@@ -1,13 +1,31 @@
 // Any uncaught error stops the game behind a fullscreen message, so a crash is never silent.
 // A save the game cannot load gets a button that deletes it and starts a new game.
+// Outside dev, once boot is done, the game keeps running: an error goes to the browser log and the debug console.
+// A failed command changes nothing, since commands mutate a clone of the world. Boot and save errors still crash.
 
 import { clearSave, SaveError } from './save';
 
 let shown = false;
+let report: ((text: string) => void) | null = null;
+const reported = new Set<string>();
 
 export function installCrashScreen(): void {
-  window.addEventListener('error', (e) => showCrash(e.error ?? e.message));
-  window.addEventListener('unhandledrejection', (e) => showCrash(e.reason));
+  window.addEventListener('error', (e) => onError(e.error ?? e.message));
+  window.addEventListener('unhandledrejection', (e) => onError(e.reason));
+}
+
+// Call once the game runs. Does nothing in dev, where every error crashes.
+export function keepRunningOnErrors(to: (text: string) => void): void {
+  if (!import.meta.env.DEV) report = to;
+}
+
+function onError(err: unknown): void {
+  if (!report || err instanceof SaveError) return showCrash(err);
+  const text = err instanceof Error ? err.message : String(err);
+  // The browser logs every error itself. The debug console gets each message once, so a per-frame error does not flood it.
+  if (reported.has(text)) return;
+  reported.add(text);
+  report(`Error: ${text}`);
 }
 
 function showCrash(err: unknown): void {

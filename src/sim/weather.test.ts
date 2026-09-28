@@ -33,6 +33,16 @@ describe('advanceWeather', () => {
     expect(w.events.some((e) => e.t === 'weather' && e.outcome === 'ended' && e.event.id === 'w1')).toBe(true);
   });
 
+  it('runs several storms at once, never above the limit', () => {
+    const w = emptyWorld();
+    let most = 0;
+    for (let i = 0; i < 20000; i++) {
+      advanceWeather(w);
+      most = Math.max(most, w.weather.filter((e) => e.kind === 'storm').length);
+    }
+    expect(most).toBe(WEATHER.sim.maxActive.storm);
+  });
+
   it('never has a heat wave and overcast at once', () => {
     const w = emptyWorld();
     for (let i = 0; i < 20000; i++) {

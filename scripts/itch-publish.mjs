@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 
 process.loadEnvFile('.env');
 const target = process.env.ITCH_TARGET;
-if (!target) throw new Error('ITCH_TARGET is missing from .env, like "user/korovan"');
+if (!target) throw new Error('ITCH_TARGET is missing from .env, like "user/roam"');
 
 const run = (cmd, args, cwd) => execFileSync(cmd, args, { stdio: 'inherit', cwd });
 const read = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8' }).trim();

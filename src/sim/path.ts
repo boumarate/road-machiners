@@ -19,9 +19,11 @@ export type { Blocker };
 const ROUTE_CACHE_MAX = 64;
 const routeCache = new Map<string, { goal: number; cells: Int32Array }>();
 
-// `driver` plans with its taste; without one the route is the plain cheapest.
-export function route(world: World, from: Vec, to: Vec, radius: number, extra: Blocker[], driver?: Pick<Vehicle, "id" | "brain">): Vec[] {
+// `driver` plans with its taste; without one the route is the plain cheapest. A goal beyond the map edge moves
+// in to the nearest point a truck of this radius fits, since no truck may leave the map.
+export function route(world: World, from: Vec, dest: Vec, radius: number, extra: Blocker[], driver?: Pick<Vehicle, "id" | "brain">): Vec[] {
   return timed('route', () => {
+    const to = insideMap(world, dest, radius);
     const taste = tasteOf(world, driver);
     const nav = terrainNav(world.terrain);
     const statics = staticSet(world.obstacles, world.terrain.size);
@@ -39,6 +41,11 @@ export function route(world: World, from: Vec, to: Vec, radius: number, extra: B
     points.push(end);
     return shortcut(nav, statics, dynamic, from, points, reach, taste);
   });
+}
+
+function insideMap(world: World, p: Vec, radius: number): Vec {
+  const hi = world.terrain.size - radius;
+  return { x: Math.min(hi, Math.max(radius, p.x)), y: Math.min(hi, Math.max(radius, p.y)) };
 }
 
 // Builds the nav layers for these vehicle radii now, so the first turn or preview does not pay for them.

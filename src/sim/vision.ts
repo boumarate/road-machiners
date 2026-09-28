@@ -43,21 +43,33 @@ export function grayRadius(world: World, at: Vec): number {
 
 // Tile indices (y * world.size + x) the player would see from a point, within vision radius and line of sight.
 export function visibleTiles(world: World, from: Vec): Set<number> {
+  const out = new Set<number>();
+  forSeenTiles(world, from, () => true, (idx) => out.add(idx));
+  return out;
+}
+
+// Marks the tiles the player would see from a point as explored. Explored tiles skip the sight test.
+export function exploreFrom(world: World, from: Vec): void {
+  const explored = world.player.explored;
+  forSeenTiles(world, from, (idx) => explored[idx] === 0, (idx) => { explored[idx] = 1; });
+}
+
+// Calls `seen` for each tile within vision radius of `from` that passes `test` and lies in plain view.
+function forSeenTiles(world: World, from: Vec, test: (idx: number) => boolean, seen: (idx: number) => void): void {
   const size = world.size;
   const r = sightRadius(world, playerVehicle(world), from);
   // Every sight line lies within r of the viewer, so props beyond r plus their reach cannot touch it.
   const props = world.obstacles.filter((o) => blocksSight(o) && dist(from, o.pos) < r + propReach(o));
-  const out = new Set<number>();
   const lo = { x: Math.max(0, Math.floor(from.x - r)), y: Math.max(0, Math.floor(from.y - r)) };
   const hi = { x: Math.min(size - 1, Math.ceil(from.x + r)), y: Math.min(size - 1, Math.ceil(from.y + r)) };
   for (let x = lo.x; x <= hi.x; x++) {
     for (let y = lo.y; y <= hi.y; y++) {
+      const idx = y * size + x;
       const tile = { x: x + 0.5, y: y + 0.5 };
-      if (dist(from, tile) > r) continue;
-      if (inPlainView(world, from, tile, props, [])) out.add(y * size + x);
+      if (!test(idx) || dist(from, tile) > r) continue;
+      if (inPlainView(world, from, tile, props, [])) seen(idx);
     }
   }
-  return out;
 }
 
 export function canVehicleSee(world: World, observer: Vehicle, position: Vec): boolean {

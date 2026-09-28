@@ -3,7 +3,7 @@ import { isBakedObstacle, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
 import type { World } from '../sim/types';
 
-const SAVE_KEY = 'korovan.save';
+const SAVE_KEY = 'roam.save';
 
 // A stored save the game cannot load. The crash screen offers to delete it and start over.
 export class SaveError extends Error {}

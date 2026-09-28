@@ -28,6 +28,6 @@ The [awesome-gamedev-agent-skills](https://github.com/gamedev-skills/awesome-gam
 
 ## Boundaries
 
-Project guidance and user-approved scope take precedence. These skills do not authorize paid services, extra agents, experiments, or game changes. Named companion skills outside this selection are not installed. The abagames references often target action mini-games. Do not import arcade scoring thresholds, constant animation, or cartoon effects into Korovan without a game-specific reason. Use the existing Three.js and simulation boundaries rather than adopting Godot examples.
+Project guidance and user-approved scope take precedence. These skills do not authorize paid services, extra agents, experiments, or game changes. Named companion skills outside this selection are not installed. The abagames references often target action mini-games. Do not import arcade scoring thresholds, constant animation, or cartoon effects into Road Machiners without a game-specific reason. Use the existing Three.js and simulation boundaries rather than adopting Godot examples.
 
-For Korovan mockups, keep the map dominant, avoid persistent dashboard cards and repeated labels, and show secondary information on demand. Validate visual direction with the user before implementation. These skills provide design procedures, not proof of visual quality.
+For Road Machiners mockups, keep the map dominant, avoid persistent dashboard cards and repeated labels, and show secondary information on demand. Validate visual direction with the user before implementation. These skills provide design procedures, not proof of visual quality.

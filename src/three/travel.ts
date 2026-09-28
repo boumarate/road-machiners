@@ -169,6 +169,10 @@ export class Travel {
     return this.isPlaying(playback) || this.shouldAdvance(now);
   }
 
+  warm(world: World, drive: Drive): void {
+    this.turns.warm(world, drive);
+  }
+
   request(world: World, drive: Drive): void {
     this.requested = true;
     this.turns.prepare(world, drive);
@@ -246,6 +250,7 @@ export class TurnPreparation {
   private worker: Worker | null = null;
   private terrain: World["terrain"] | null = null;
   private serial = 0;
+  private warmId = 0;
   private pending: {
     id: number;
     before: World;
@@ -259,7 +264,8 @@ export class TurnPreparation {
     worker.onmessage = (event: MessageEvent<TurnResponse>) => {
       const response = event.data;
       if ("error" in response) throw new Error(response.error);
-      mergePerf(response.perf);
+      // A warm-up turn is no player turn, so it keeps its own timer.
+      mergePerf(response.id === this.warmId ? { "turn-warm": response.perf.turn } : response.perf);
       if (this.pending?.id === response.id) this.pending.ready = response.turn;
     };
     worker.onerror = (event) => {
@@ -271,12 +277,22 @@ export class TurnPreparation {
     return worker;
   }
 
+  // Runs the turn after `world` once and drops it. The worker then has its route grids built, its code compiled
+  // and the routes of that turn cached before the player's first turn. No turn runs during a radio call or after death.
+  warm(world: World, drive: Drive): void {
+    if (world.player.call || world.player.state === "dead") return;
+    this.warmId = this.post(world, drive);
+  }
+
   prepare(world: World, drive: Drive): void {
     if (this.pending?.before === world) return;
+    this.pending = { id: this.post(world, drive), before: world, ready: null };
+  }
+
+  private post(world: World, drive: Drive): number {
     const { terrain, ...state } = world;
     const saved = captureDrive(drive);
     const id = ++this.serial;
-    this.pending = { id, before: world, ready: null };
     // Terrain identity owns route caches, so keep one terrain instance in the worker.
     this.worker ??= this.createWorker();
     this.worker.postMessage(
@@ -289,6 +305,7 @@ export class TurnPreparation {
       [saved.snapshot.buffer as ArrayBuffer],
     );
     this.terrain = terrain;
+    return id;
   }
 
   take(world: World): PreparedTurn | null {
