@@ -1,6 +1,6 @@
 # More NPC types
 
-**Status:** executing
+**Status:** reviewing
 **Branch:** npc-types
 **Worktree:** .worktrees/npc-types
 **Goal:** A new game shows town patrols of Bowl Farmers and Nose Army, couriers, roamers, supply convoys with their guards, and mercs, each doing its own work on the map. A trader, courier or roamer can hire a merc, who follows it to its destination, fights its attackers, tows it when it breaks down and gets paid on arrival. Patrols fight raiders and whoever fires the first shot at a neutral NPC. The user confirms the feel in play.
@@ -137,6 +137,18 @@ Approach: grow the existing trait, idle and state machinery. Each new behavior i
 - RK3 — Economy numbers shift, since convoys sell cargo in towns. Mitigation: `npm run econ` before and after, with the change noted in the conclusion.
 - Rollback: the branch holds all changes. Main is untouched.
 
+## Verify
+- `npm test` passes 1552 tests, `npm run quality` passes, and `npm run playtest` passes at 60 fps.
+- Hire in play, `tmp/escort-try.mjs`: a trader on a trip to Nose hired a free merc on turn 3, and the merc switched to follow. The first run showed the merc trailing 14 to 22 tiles and falling back, since its top speed was below the hauler's cruise. Fixed in 4c1de52: a follower drives through its spot, and a leader waits while an escort lags past 12 tiles. After the fix the pair drove 9 to 12 tiles apart, and the merc fought a raider that came at it.
+- Lawmen in play, `tmp/lawmen-try.mjs`: after the player's first shot at a trader, the trader, the Bowl Farmer and the Nose Army car all started feuds with the player. A lawman whose sight was stale after a teleport missed the call, so the check waits one quiet turn first.
+- Paints: a lineup screenshot shows distinct colors for the trader, merc, patrols and courier. The user confirms colors in play.
+- Perf, `npm run perf` three runs each against main: first turn about 310 ms against about 180 ms on main, later turns about 60 ms against about 48 ms. Frame p95 stays at 16.8 ms. Boot and the first turn already miss their budgets on main.
+
+## Code smells
+- `src/sim/npc-loadout.ts` — loadout wear rolls draw from the market random stream, so extra spawns at world creation change shop stock.
+- `src/sim/npc-decisions.ts:213-221` — `offerGoods()` checks every good at both towns without asking whether the town sells it.
+- `src/sim/market.ts:36-38` — the comment above `goodValue()` still names `GOOD_VALUE` and an old phase.
+
 ## Conclusion
 
 ### Hands-off decisions
@@ -151,3 +163,4 @@ Approach: grow the existing trait, idle and state machinery. Each new behavior i
 - udesign: the tow of a stranded leader goes to the usual tow site — the request does not name a place.
 - uplan: caps and spawn intervals, loadouts, paints and decision weights for the new templates are picked in the plan and logged in the conclusion — the request gives none, and the game cannot run without them.
 - uplan: plan auto-approved (hands-off).
+- uexecute: goods no shop makes are priced by distance to a source-site table, `GOOD_SOURCES` in `src/data/market.ts` — town pricing throws for a good with no maker, and this table also gives convoys their routes.
