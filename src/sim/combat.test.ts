@@ -248,13 +248,24 @@ describe('hit odds', () => {
     const crossing = hitOdds(still.w, still.me, still.mg, still.buggy, 'body');
     expect(crossing.causes.crossing).toBeGreaterThan(0);
     expect(crossing.chance).toBeLessThan(base.chance);
-    const nose = range(5, Math.PI, 0);
+    const nose = range(5, Math.PI, 1);
     nose.me.speed = 4;
     const idle = hitOdds(nose.w, nose.me, nose.mg, nose.buggy, 'body');
     nose.buggy.speed = 5;
     const closing = hitOdds(nose.w, nose.me, nose.mg, nose.buggy, 'body');
     expect(closing.causes.crossing).toBeCloseTo(0, 9);
     expect(closing.chance).toBeCloseTo(idle.chance, 9);
+  });
+
+  it('a still target shrinks the whole spread to stillSpread', () => {
+    const { w, me, buggy, mg } = range(5, Math.PI, 1);
+    me.speed = 2;
+    const moving = hitOdds(w, me, mg, buggy, 'body');
+    expect(moving.causes.still).toBe(0);
+    buggy.speed = 0;
+    const still = hitOdds(w, me, mg, buggy, 'body');
+    expect(still.spread).toBeCloseTo(moving.spread * RULES.stillSpread, 12);
+    expect(still.chance).toBeGreaterThan(moving.chance);
   });
 
   it('faster rounds and gunnery raise chance, own speed lowers it', () => {
@@ -278,7 +289,7 @@ describe('hit odds', () => {
     const { w, me, buggy, mg } = range(4, broadside, 3);
     me.speed = 2;
     const o = hitOdds(w, me, mg, buggy, 'body');
-    expect(o.spread).toBeCloseTo(o.causes.weapon + o.causes.range + o.causes.skill + o.causes.crossing + o.causes.own + o.causes.recoil, 12);
+    expect(o.spread).toBeCloseTo(o.causes.weapon + o.causes.range + o.causes.skill + o.causes.crossing + o.causes.own + o.causes.recoil + o.causes.weather + o.causes.still, 12);
     expect(o.halfAngle).toBeCloseTo(o.width / (2 * o.distance), 12);
   });
 });
