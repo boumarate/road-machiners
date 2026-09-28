@@ -270,6 +270,15 @@ describe("CombatScore", () => {
     expect(loops[0].ducks).toHaveLength(plays.length);
   });
 
+  it("ducks the base when a late stab sounds, never before now", () => {
+    const { player, loops, plays, clock } = fakePlayer();
+    clock.now = 0.05;
+    const score = new CombatScore(player, () => 0);
+    score.setCombat(true, 3);
+    score.accent("accent-sighted", 0); // peak 0.1 s into the take, so its ideal start is already past
+    expect(loops[0].ducks[0]).toBeCloseTo(clock.now + plays[0][2] / 1000);
+  });
+
   it("plays light events on the secondary, to one side, without ducking the base", () => {
     const { player, loops, plays, clock } = fakePlayer();
     const score = new CombatScore(player, () => 0);

@@ -7,6 +7,7 @@ export type UiHost = {
   apply(next: World): void; // replace the world after a command and refresh the UI
   selectedWeapon(): string | null;
   selectWeapon(id: string | null): void;
-  endTurn(): void;
+  endTurn(): void; // stops automatic turns instead while they run
+  autoTravel(): boolean;
   getTurnPhase(): "Moving" | "Firing" | "Results" | null;
 };

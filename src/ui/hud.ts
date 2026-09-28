@@ -22,6 +22,7 @@ import {
 import { getHudReadout, getRescueReadout, moneyLabel, TruckConditionReadout } from "./hud-readout";
 import { conditionMeter, createIcon, createSpeedDial, partIcon } from "./cards";
 import { createSwitch } from "./switch";
+import { Tips } from "./tips";
 import { hp, kph } from "./units";
 import { maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
@@ -110,6 +111,7 @@ type HudActions = {
   unhitch: () => void;
   setBeacon: (on: boolean) => void;
   isBusy: () => boolean;
+  autoTravel: () => boolean;
   dialogue: DialogueHost;
   recenter: () => void;
 };
@@ -144,6 +146,7 @@ export class Hud {
   // Shows only while a pan has left the truck.
   private recenter = panel("recenter");
   private cameraSwitch = panel("camera-mode", topRight());
+  private tips = new Tips(window.localStorage);
   cameraMode: CameraMode = "auto";
   private toastTimer: number | null = null;
   private lines: { text: string; cls: string }[] = [];
@@ -383,6 +386,7 @@ export class Hud {
     const busy = this.actions.isBusy();
     this.condition.render(playerVehicle(w));
     this.renderContracts(w);
+    this.tips.update(w, this.actions.autoTravel());
     this.top.replaceChildren(
       this.condition.root,
       el(

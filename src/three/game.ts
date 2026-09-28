@@ -70,7 +70,7 @@ import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
 import { ShadeView } from "./render/shade";
 import { SoundRingView } from "./render/soundRing";
-import { clearSave, hasSave, saveInTown, saveWorld, writeSave } from "./save";
+import { clearGame, hasSave, saveInTown, saveWorld, writeSave } from "./save";
 import { GameMenu } from "../ui/game-menu";
 import { roundLabel } from "../ui/format";
 import { DeathScreen } from "../ui/death";
@@ -264,6 +264,7 @@ export class Game {
             : null,
         ),
       isBusy: () => this.anim !== null,
+      autoTravel: () => this.travel.isAuto(this.world),
       dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
       recenter: () => this.follow.recenter(),
     });
@@ -271,12 +272,12 @@ export class Game {
     this.menu = new GameMenu({
       save: () => writeSave(window.localStorage, this.world),
       hasSave: () => hasSave(window.localStorage),
-      clearSave: () => clearSave(window.localStorage),
+      clearGame: () => clearGame(window.localStorage),
       isBusy: () => this.anim !== null,
     });
     this.death = new DeathScreen({
       hasSave: () => hasSave(window.localStorage),
-      clearSave: () => clearSave(window.localStorage),
+      clearGame: () => clearGame(window.localStorage),
     });
 
     this.bindInput();
@@ -291,12 +292,9 @@ export class Game {
       world: () => this.displayWorld(),
       apply: (next) => { this.apply(next); saveInTown(window.localStorage, next); },
       selectedWeapon: () => this.selected,
-      selectWeapon: (id) => {
-        if (this.anim) return;
-        this.selected = id;
-        this.refreshUi();
-      },
-      endTurn: () => this.endTurn(),
+      selectWeapon: (id) => { if (this.anim) return; this.selected = id; this.refreshUi(); },
+      endTurn: () => this.travel.stopAuto(this.world) || this.endTurn(),
+      autoTravel: () => this.travel.isAuto(this.world),
       getTurnPhase: () => this.phase,
     };
   }
