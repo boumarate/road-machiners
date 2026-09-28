@@ -101,10 +101,11 @@ export function parkedVehicles(world: World, selfId: string): Blocker[] {
     .map((x) => ({ pos: x.pos, r: chassisDef(x.chassisId).radius }));
 }
 
-// Where a stranded truck lands on its wheels: its own spot when free, else the nearest free spot around it.
-// Free means clear of every other vehicle, obstacles, cliffs and bridge rails.
+// Where a stranded truck lands on its wheels: its own spot when free, else the nearest free spot around it, however
+// far. Free means clear of every other vehicle, obstacles, cliffs and bridge rails.
 export function setDownSpot(world: World, v: Vehicle): Vec {
-  const { step, reach } = RULES.stranded;
+  const { step } = RULES.stranded;
+  const reach = world.terrain.size;
   const radius = chassisDef(v.chassisId).radius;
   const others = world.vehicles.filter((o) => o.id !== v.id).map((o) => ({ pos: o.pos, r: chassisDef(o.chassisId).radius }));
   for (let ring = 0; ring * step <= reach; ring++) {
@@ -115,5 +116,5 @@ export function setDownSpot(world: World, v: Vehicle): Vec {
       if (straightClear(world, p, p, radius, others)) return p;
     }
   }
-  throw new Error(`No free spot within ${reach} tiles to set down vehicle ${v.id}`);
+  throw new Error(`No free spot on the map to set down vehicle ${v.id}`);
 }
