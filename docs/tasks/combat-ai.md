@@ -38,15 +38,15 @@
 
 ## Implementation plan
 ### Phase 1 — fight position scorer
-- New `src/sim/fight-move.ts` owns fight driving: `fightGoal(world, v, target, range)` returns the point and the order kind. It holds candidate scoring and the pace rule.
-- `src/sim/ai.ts`: `computeFightGoal()` and `driveOrder()` call into `fight-move.ts` for fight activities. The ram branch stays first.
+- A fight driving section in `src/sim/ai.ts` owns it, since a new file would break the fragmentation limit of `src/sim/`. `fightPoint()` scores the candidates, and `fightOrder()` picks the order kind and pace.
+- `computeFightGoal()` and `driveOrder()` call it for fight activities. The ram branch stays first.
 - `src/data/npcs.ts`: add `fightStyle` to `NpcTemplate` and to every template. Add `NPC_BEHAVIOR.fight` with `angles`, the term weights, `circlePace` and `whimTurns`.
 - `src/sim/types.ts`: add `fightTurn?: 1 | -1` to the brain for the circling direction.
-- Tests in `src/sim/fight-move.test.ts`: a forward-arc fighter picks a point with the target in its arc. A fighter avoids the target's forward cannon arc. A circling fighter picks a point ahead in its direction. A holding fighter parks for a parked target and drives through for a moving one.
+- Tests in `src/sim/ai-fight.test.ts`: a forward-arc fighter picks a point with the target in its arc. A fighter avoids the target's forward cannon arc. A circling fighter picks a point ahead in its direction. A holding fighter parks for a parked target and drives through for a moving one.
 ### Phase 2 — whims
 - `src/data/npcs.ts`: add the `fightWhim` decision with its weights, and trait multipliers on brave and coward.
 - `src/sim/npc-activities.ts`: a fighter rolls `fightWhim` every `whimTurns` turns and keeps the result in its brain with the turn it ends.
-- `src/sim/fight-move.ts`: apply the whim before scoring.
+- `src/sim/ai.ts`: apply the whim before scoring.
 - Tests: over many seeds each option shows up. `halt` brakes. `rush` drives through the target. `veer` flips the circling direction.
 ### Phase 3 — harness report and tuning
 - `src/test/combat-harness.ts`: add the enemies' mean speed and the rams per fight to the report.
@@ -54,7 +54,7 @@
 - Tuning goal: against the buggy, circling beats standing, but circling wins at most about 14 of 20. The buggy's mean speed in a fight is well above zero. Some fights have a ram.
 
 ## Verification
-- `npx vitest run src/sim/fight-move.test.ts src/sim/combat.test.ts src/sim/npc-decisions.test.ts src/phys` passes.
+- `npx vitest run src/sim/ai-fight.test.ts src/sim/combat.test.ts src/sim/npc-decisions.test.ts src/phys` passes.
 - `npm test` and `npm run quality` pass.
 - `npm run playtest` passes with the dev server running.
 - Manual try, positive: in the game, the `battle` console command spawns a raider. The buggy circles and shoots, and the gunwagon turns to keep its cannon on the truck.

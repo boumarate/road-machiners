@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import { corePart, mountedParts } from './grid';
 import { planNpcOrders } from './ai';
-import { DECISIONS, NPC_BEHAVIOR, TRAITS } from '../data/npcs';
+import { DECISIONS, NPC_BEHAVIOR, NPCS, TRAITS } from '../data/npcs';
+import { dist } from './vec';
 import { thinkNpc } from './npc-activities';
 import { isWeak, optionWeights } from './npc-decisions';
 import type { Vehicle, World } from './types';
@@ -89,7 +90,9 @@ describe('ram chances', () => {
     planNpcOrders(world);
     expect(raider.brain!.ramChoice).toBeUndefined();
     expect(raider.brain!.ramTarget).toBeUndefined();
-    expect(raider.order?.kind).toBe('stopAt');
+    const order = raider.order!;
+    if (order.kind === 'brake') throw new Error('A fighter with its target in sight drives');
+    expect(dist(order.dest, world.vehicles[0].pos)).toBeGreaterThanOrEqual(NPCS.buggy.preferredRange - 0.01);
   });
 
   it('rams only while the target stays within reach', () => {

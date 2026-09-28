@@ -84,6 +84,9 @@ export type NpcTemplate = {
   loadout: NpcLoadoutTable;
   aggroRange: number; // raiders pick targets inside this range
   preferredRange: number; // distance a raider tries to hold while fighting
+  // hold: drives to the best spot and parks there while the target stays parked. circle: keeps driving around the
+  // target. See the fight driving in src/sim/ai.ts.
+  fightStyle: 'hold' | 'circle';
   cap: number; // max alive at once
   interval: number; // turns between spawn attempts
   spawn: SpawnPlace;
@@ -536,6 +539,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     loadout: LOADOUTS.outrider,
     aggroRange: 11,
     preferredRange: 3,
+    fightStyle: 'circle',
     cap: 6,
     // A camp regains one buggy every 50 turns, so a fully cleared camp is back to its cap of 6 in
     // about 300 turns, one full day (TIME.turnsPerDay), not the few minutes 8 turns gave.
@@ -547,6 +551,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     loadout: LOADOUTS.gunwagon,
     aggroRange: 12,
     preferredRange: 6,
+    fightStyle: 'hold',
     cap: 2,
     // Same day-long refill as the outrider camp: cap 2 at 150 turns apart is back to full in 300 turns.
     interval: 150,
@@ -559,6 +564,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     loadout: LOADOUTS.trader,
     aggroRange: 0,
     preferredRange: 0,
+    fightStyle: 'hold',
     cap: 5,
     interval: 12,
     spawn: { kind: "town" },
@@ -569,6 +575,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     loadout: LOADOUTS.scavenger,
     aggroRange: 0,
     preferredRange: 0,
+    fightStyle: 'hold',
     cap: 4,
     interval: 12,
     spawn: { kind: "town" },
@@ -578,6 +585,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     loadout: LOADOUTS.bowlPatrol,
     aggroRange: 0,
     preferredRange: 0,
+    fightStyle: 'hold',
     // Three cars keep the Bowl approaches watched. A lost car comes back in 70 turns, so a full patrol is back in
     // about one day.
     cap: 3,
@@ -589,6 +597,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     loadout: LOADOUTS.nosePatrol,
     aggroRange: 0,
     preferredRange: 0,
+    fightStyle: 'hold',
     // Same size and refill as the Bowl patrol.
     cap: 3,
     interval: 70,
@@ -600,6 +609,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     loadout: LOADOUTS.courier,
     aggroRange: 0,
     preferredRange: 0,
+    fightStyle: 'hold',
     // Couriers are cheap, fast traffic. A lost one is replaced in 30 turns, a few hours of the day.
     cap: 3,
     interval: 30,
@@ -611,6 +621,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     loadout: LOADOUTS.roamer,
     aggroRange: 0,
     preferredRange: 0,
+    fightStyle: 'hold',
     // Same count and refill as couriers.
     cap: 3,
     interval: 30,
@@ -621,6 +632,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     loadout: LOADOUTS.convoy,
     aggroRange: 0,
     preferredRange: 0,
+    fightStyle: 'hold',
     // Two big trucks with a guard each. A lost convoy is replaced in 100 turns, half a day.
     cap: 2,
     interval: 100,
@@ -631,6 +643,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     loadout: LOADOUTS.convoyGuard,
     aggroRange: 0,
     preferredRange: 0,
+    fightStyle: 'hold',
     // One guard per convoy. It spawns only beside a new convoy, so its interval never runs.
     cap: 2,
     interval: 100,
@@ -641,6 +654,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     loadout: LOADOUTS.merc,
     aggroRange: 0,
     preferredRange: 0,
+    fightStyle: 'hold',
     // A few mercs wait for hire at the towns. A lost one comes back in 70 turns, like a patrol car.
     cap: 3,
     interval: 70,
@@ -997,6 +1011,13 @@ export const NPC_BEHAVIOR = {
   followGap: RULES.yieldDistance + 1,
   // A driver whose cab, whole truck or own health is at 30% is weak. Recovery to half prevents fight/flee oscillation.
   fleeCondition: 0.3,
+  // Fight driving; see src/sim/ai.ts. A fighter scores `angles` points around its target's next spot. Each
+  // point gets arcWeight × the share of its gun damage that bears from there, minus threatWeight × the share of the
+  // target's gun damage that bears on it, minus rangeWeight × how far off its range the point is as a share of it,
+  // minus travelWeight × the drive past one turn at top speed as a share of that speed. A circling fighter adds
+  // circleWeight × how far ahead around the target the point lies, as a share of a quarter turn, and never drives
+  // slower than circlePace tiles a turn.
+  fight: { angles: 16, arcWeight: 2, threatWeight: 2, rangeWeight: 1, travelWeight: 1, circleWeight: 1, circlePace: 3 },
   // One driver in three the player knocks out holds a grudge. See the revenge state.
   revengeChance: 0.33,
   recoverCondition: 0.5,
