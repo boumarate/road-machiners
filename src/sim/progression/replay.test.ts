@@ -23,7 +23,7 @@ const search = (turn: number, amount: number): TraceLine => ({ turn, source: 'se
 describe('replay', () => {
   it('reaches each level on the turn its running XP crosses the level cost, with the daily cap per day', () => {
     simpleSearchXp();
-    const dayTwo = 150;
+    const dayTwo = TIME.turnsPerDay * 0.75;
     expect(clockOf(40).day).toBe(1);
     expect(clockOf(dayTwo).day).toBe(2);
     const trace = [
@@ -36,7 +36,7 @@ describe('replay', () => {
     const turns = [10, 40, dayTwo, dayTwo + 10];
     const firstTurn = (level: number) => turns[totals.findIndex((xp) => xp >= XP_TO_REACH[level])] ?? null;
 
-    const curve = replay(trace, 400);
+    const curve = replay(trace, 2 * TIME.turnsPerDay);
 
     expect(curve.machining.total).toBe(450);
     expect(curve.machining.levels).toEqual([1, 2, 3, 4, 5].map(firstTurn));
@@ -66,7 +66,7 @@ describe('replay', () => {
   });
 
   it('counts XP per day up to the death turn it is given', () => {
-    const curve = replay([search(10, 1)], 100);
+    const curve = replay([search(10, 1)], TIME.turnsPerDay / 2);
 
     expect(curve.machining.perDay).toBe(curve.machining.total * 2);
   });

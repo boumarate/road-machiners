@@ -59,7 +59,7 @@ describe('StallWatch', () => {
     const watch = new StallWatch('seed 7 trader', 1, start);
     for (let turn = 2; turn < 1 + TIME.turnsPerDay; turn++) watch.note(turn, { x: 10.5, y: 10 }, false);
 
-    expect(() => watch.note(1 + TIME.turnsPerDay, { x: 10.5, y: 10 }, false)).toThrow(/seed 7 trader.*turn 201.*10\.5, 10/);
+    expect(() => watch.note(1 + TIME.turnsPerDay, { x: 10.5, y: 10 }, false)).toThrow(new RegExp(`seed 7 trader.*turn ${1 + TIME.turnsPerDay}.*10\\.5, 10`));
   });
 
   it('starts the day over when the truck moves a tile', () => {

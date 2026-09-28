@@ -1,7 +1,7 @@
 // The clock. One turn is one step of the day; hours run 0 to 24.
 
 export const TIME = {
-  turnsPerDay: 200, // a Bowl to Nose road crossing takes 100 to 150 turns, a little over half a day
+  turnsPerDay: 300, // a Bowl to Nose road crossing takes 100 to 150 turns, about half a day
   startHour: 7,
   sunrise: 6,
   sunset: 20,

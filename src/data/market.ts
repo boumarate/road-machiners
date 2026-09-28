@@ -15,7 +15,7 @@ export type ItemKind = 'weapon' | 'engine' | 'armor' | 'cargo' | 'scanner' | 'ch
 
 export const EFFORT = {
   // Net money per turn at each tier. First guesses only: the start kit gives 1000 money and a
-  // scout, a day is TIME.turnsPerDay (200) turns, and a new player should clear a tier 1 item in
+  // scout, a day is TIME.turnsPerDay (300) turns, and a new player should clear a tier 1 item in
   // about half a day to a day of play. PH8 replaces these with wages measured by the harness.
   wage: {
     1: 1.5,

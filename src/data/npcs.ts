@@ -517,9 +517,9 @@ export const NPCS: Record<string, NpcTemplate> = {
     aggroRange: 11,
     preferredRange: 3,
     cap: 6,
-    // A camp regains one buggy every 34 turns, so a fully cleared camp is back to its cap of 6 in
-    // about 200 turns, one full day (TIME.turnsPerDay), not the few minutes 8 turns gave.
-    interval: 34,
+    // A camp regains one buggy every 50 turns, so a fully cleared camp is back to its cap of 6 in
+    // about 300 turns, one full day (TIME.turnsPerDay), not the few minutes 8 turns gave.
+    interval: 50,
     spawn: { kind: "camp" },
   },
   gunwagon: {
@@ -528,8 +528,8 @@ export const NPCS: Record<string, NpcTemplate> = {
     aggroRange: 12,
     preferredRange: 6,
     cap: 2,
-    // Same day-long refill as the outrider camp: cap 2 at 100 turns apart is back to full in 200 turns.
-    interval: 100,
+    // Same day-long refill as the outrider camp: cap 2 at 150 turns apart is back to full in 300 turns.
+    interval: 150,
     spawn: { kind: "camp" },
   },
   trader: {
@@ -783,7 +783,7 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   // Sight or shots between the two parties reset it. 10 turns lets a chase lose sight behind a ridge or a
   // wreck for a while and pick the fight up again. A pursuer that stays out of sight longer gives up.
   feud: 10,
-  // A failed robber leaves the same target alone for 30 turns. At 200 turns a day that is a few hours,
+  // A failed robber leaves the same target alone for 30 turns. At 300 turns a day that is a few hours,
   // long enough for the target to drive well away before the robber may try again.
   backedOff: 30,
   // A tow lasts until the tower reaches town, the player lets go, or the tower is gone or in danger.

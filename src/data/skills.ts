@@ -58,7 +58,7 @@ export const XP_TO_REACH: readonly number[] = [0, 200, 600, 1200, 2000, 3000];
 export const MAX_SKILL_LEVEL = XP_TO_REACH.length - 1;
 
 // weight is XP per unit of amount. A scaled source multiplies by the difficulty curve in XP_RULES;
-// an unscaled source has no difficulty. Weights aim for about dailyCap XP from one day (200 turns) of the matching
+// an unscaled source has no difficulty. Weights aim for about dailyCap XP from one day (300 turns) of the matching
 // activity at mid difficulty.
 // Every practice event names its target, like a driver, a truck, a pile, a map region or a trade good. `repeat` is
 // what each earlier event on the same target multiplies the pay by. The count of earlier events halves every
