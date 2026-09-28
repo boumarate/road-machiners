@@ -1,10 +1,10 @@
 # Old world map layer
 
-**Status:** design
+**Status:** executing
 **Branch:** procedural-map
 **Worktree:** .worktrees/procedural-map
 **Goal:** The baked map carries an old world placed by rules from terrain, sites and roads: ruined settlements on flat ground, buildings on overlooks and road bends, faded old roads with broken bridges where washes cut them, bridges on today's roads over washes, power lines, billboards, tank hulks and dead fields. The fixed landmark rows are gone. The user confirms the look from the bake pictures and in play.
-**Mode:** interactive
+**Mode:** hands-off until the bake pictures
 
 ## Context
 
@@ -68,6 +68,62 @@ TDD: yes. Placement rules are deterministic functions with clear properties.
 - UK3 — Speed, wear and dust numbers for the dry field ground type.
 
 ## Plan
+
+Approach: first widen the map file from rocks to typed props and route them through the world, saves and views. In parallel, write the old-world rules against the prop type, and build the four models. Then bake, measure speed and tune with the user.
+
+### PH1 — Typed props through file, world, saves and views
+- 1.1 `src/sim/terrain.ts` (modify) — `BakedProp` and `PropKind` per IF1. `MapGrid` and `BakedMap` carry `props: BakedProp[]` in place of `rocks`. `encodeMap()` and `decodeMap()` write and read format version 2 per IF2.
+- 1.2 `src/mapgen/bake.ts` and `src/mapgen/geology.ts` (modify) — `MapDraft.props` replaces `rocks`. The rock layer writes `rock` props, and ridge-top boulders above a height become `crag` props.
+- 1.3 `src/sim/types.ts`, `src/data/region.ts` (modify) — `LandmarkLook` gains the old-world looks from IF1. `LandmarkDef` and `REGION.landmarks` go.
+- 1.4 `src/sim/mapgen.ts` (modify) — `mapObstacles(map): Obstacle[]` turns props into `rock` and `landmark` obstacles. Ids follow IF3. `placeLandmarks()` goes. `generateObstacles()` uses `mapObstacles()`.
+- 1.5 `src/three/save.ts` (modify) — saves drop every obstacle whose id `mapObstacles()` makes. `loadWorld()` puts them back from the map. `SAVE_VERSION` goes up by one.
+- 1.6 `src/three/render/obstacles.ts` (modify) — each new look maps to a model. Until PH3's models exist, ruin and gas station use `building`, and both bridges use `bridge`. Power-line wires link poles by the group and step in their ids. `roadBridge` draws over the road and blocks nothing.
+- 1.7 `src/sim/mapgen.ts` `isDriveObstacle()` (modify) — `roadBridge` landmarks are scenery.
+- Tests: the format round-trips props and rejects version 1. A saved and loaded world holds the same obstacles as the new one, and the save has no baked prop. `mapObstacles()` makes stable ids.
+- Respects: IV1, IV4. Rebake and commit the file.
+- Commit: Map props carry a kind, and baked props stay out of saves.
+
+### PH2 — Old-world rules
+- 2.1 `src/data/terrain.ts` (modify) — `OLD_WORLD` numbers for each rule, with unit and reason. `field` joins `TERRAIN_TYPES` last, so earlier type codes keep their values.
+- 2.2 `src/mapgen/oldworld.ts` (create) — `oldWorldLayer(seed, d)` runs these rules in order, each a separate exported function: `settlements()`, `overlooks()`, `bendBuildings()`, `oldRoads()`, `roadBridges()`, `powerLines()`, `billboards()`, `tankHulks()`, `fields()`. Old roads use a small least-cost search on the corner grid, with slope cost.
+- 2.3 `src/mapgen/bake.ts` (modify) — `bakeMap()` runs `oldWorldLayer()` after geology and before finish. `finishLayer()` skips flattening near broken road bridges, so the road dips through the wash, and `gradeRoads()` still caps the grade. The ground layer lays `asphalt` on old-road tiles and `field` on field tiles, after built ground. Every prop placement checks IV2 and IV5.
+- 2.4 `scripts/map-preview.mjs` (modify) — draws each prop kind in its own color and shape.
+- Tests on small drafts, one per rule. Settlements keep their spacing and stand on flat ground. An old road crossing a wash breaks and gets a span on each bank. Power poles keep one side and their spacing. No prop lands on a road, pad, site or deck. Fields and old roads never overwrite built ground. A broken road bridge leaves the road within grade limits.
+- Respects: IV1, IV2, IV3, IV5, PC1, PC2. Resolves UK1 and UK3.
+- Commit: Old-world rules place ruins, old roads, bridges, power lines, billboards, hulks and fields.
+
+### PH3 — Models
+- 3.1 `tools/blender/ruin_house.py`, `bridge_broken.py`, `road_bridge.py`, `gas_station.py` (create), each from the `wreck.py` template, and their `.glb` files in `public/models/`.
+- 3.2 `src/three/render/models.ts` (modify) — the four names join `NAMES`.
+- Each model gets a preview render, which the implementer inspects.
+- Commit: Models for ruined houses, broken bridge spans, road bridges and gas stations.
+
+### PH4 — Wire models, bake, measure and tune
+- 4.1 `src/three/render/obstacles.ts` (modify) — the four looks use their new models.
+- 4.2 Bake. Run `npm test`, `npm run playtest` and `npm run perf`. If sight checks miss the perf budget, add a spatial index for blockers in `src/sim/vision.ts`. Resolves AS1, AS2 and UK2.
+- 4.3 Send the pictures and in-game screenshots to the user. Tune `OLD_WORLD` until the user approves.
+- 4.4 Update `DESIGN.md` World and `CLAUDE.md` Architecture.
+- Commit: Bake the old world.
+
+### Interfaces
+- IF1 — `PropKind = 'rock' | 'crag' | 'ruin' | 'house' | 'silo' | 'waterTower' | 'gasStation' | 'bridgeSpan' | 'roadBridge' | 'roadBridgeBroken' | 'pole' | 'billboard' | 'tank'`. `BakedProp = { kind: PropKind; pos: Vec; r: number; yaw: number; group: number; step: number }`. Yaw is in radians from map +x toward +y. Group and step order the poles of one power line and are 0 for other props.
+- IF2 — Map file version 2: the version 1 header, heights and types, then a prop count and, per prop, kind as u8 index into the `PropKind` list, then x, y, r and yaw as f32, then group and step as u16.
+- IF3 — Obstacle ids: `rock<k>` for rocks by prop order, `<kind>-<group>-<step>` for poles, and `<kind>-<k>` for other props.
+- IF4 — `oldWorldLayer(seed: number, d: MapDraft): MapDraft`, which appends props, marks old-road and field tiles in a new `d.built` Uint8Array per tile, and lists broken road bridge points in `d.dips: Vec[]`.
+
+### Interface graph
+- PH1 -> IF1, IF2, IF3 @ src/sim/{terrain,types,mapgen}.ts, src/data/region.ts, src/three/save.ts, src/three/render/obstacles.ts, src/mapgen/geology.ts, the rock and draft parts of src/mapgen/bake.ts, their tests, public/maps/icarus.bin
+- PH2 IF1 -> IF4 @ src/mapgen/oldworld.ts and tests, src/data/terrain.ts, scripts/map-preview.mjs
+- PH3 -> @ tools/blender/{ruin_house,bridge_broken,road_bridge,gas_station}.py, public/models/*.glb for those four, src/three/render/models.ts
+- PH4 IF4 -> @ src/mapgen/bake.ts pipeline, finish and ground parts, src/three/render/obstacles.ts, src/sim/vision.ts, public/maps/icarus.bin, DESIGN.md, CLAUDE.md
+
+PH1, PH2 and PH3 own disjoint paths and run together. PH2 leaves the `bake.ts` hook, finish dips and ground marks from 2.3 to PH4, which owns `bake.ts` after PH1.
+
+### Risks / rollback
+- RK1 — Thousands of props slow sight checks or physics. PH4 measures with `npm run perf` before tuning, and adds a spatial index only on a miss.
+- RK2 — Old roads through rough ground look like noise. The least-cost search keeps them to gentle ground, and the pictures decide.
+- RK3 — Removing baked props from saves breaks a later breakable prop that must stay broken. `docs/tasks/breakable-props.md` must record broken baked props in the save by id.
+- Rollback: revert the task's commits on the branch.
 
 ## Verify
 
