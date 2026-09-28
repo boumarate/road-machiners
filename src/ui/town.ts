@@ -378,7 +378,8 @@ export class TownScreen {
     const rows = PLAYER_CHASSIS.map((id) => {
       const c = chassisDef(id);
       const mine = me.chassisId === id;
-      const cost = Math.max(0, c.value - tradeIn);
+      const diff = c.value - tradeIn;
+      const label = diff >= 0 ? `Swap for ${diff}` : `Swap, get ${-diff} back`;
       return el(
         "tr",
         {},
@@ -396,10 +397,10 @@ export class TownScreen {
             : el(
                 "button",
                 {
-                  disabled: w.player.money < cost,
+                  disabled: diff > 0 && w.player.money < diff,
                   onclick: () => this.run((x) => buyChassis(x, id)),
                 },
-                `Swap for ${cost}`,
+                label,
               ),
         ),
       );
