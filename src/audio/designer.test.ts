@@ -121,6 +121,20 @@ describe("SoundDesigner", () => {
     expect(hits[2].gain).toBe(0.5);
   });
 
+  it("finds the next bar line", () => {
+    expect(designer().nextBar(4.2)).toEqual({ slot: 16, time: 8 });
+    expect(designer().nextBar(4)).toEqual({ slot: 8, time: 4 });
+  });
+
+  it("runs slots at a new beat from a bar line, so a phrase continues across a tempo change", () => {
+    const d = designer();
+    d.offer("a", { ...LEAD, bars: 2 }, 0);
+    expect(times(d.step(0.1, 7.9, false, 0))).toEqual([4, 6]);
+    d.setBeat(16, 0.5); // from t=8, half-second beats: bars last 2 s
+    expect(times(d.step(7.9, 11.9, false, 0))).toEqual([8, 9]);
+    expect(() => d.setBeat(17, 1)).toThrow("bar line");
+  });
+
   it("fails loud on a rhythm of the wrong length", () => {
     const bad = { ...TUNING, lines: { ...TUNING.lines, lead: { ...TUNING.lines.lead, calm: ["x..."] } } };
     expect(() => designer(bad)).toThrow("Bad lead rhythm");

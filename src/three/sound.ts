@@ -1,8 +1,8 @@
 // Turns game events into sound cues. Positioned cues use the same points as the visual effects, so fog of
 // war silences what the player may not see.
 
-import { BEATS_PER_BAR, engineFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS, type CueId } from "../data/sounds";
-import { Fading, SoundDesigner, type Grid, type Hit, type Offer } from "../audio/designer";
+import { BEATS_PER_BAR, engineFileFor, hornSoundFor, MIX, SCORE_TEMPOS, scorePhaseOf, SOUNDS, type CueId } from "../data/sounds";
+import { Fading, SoundDesigner, type Hit, type Offer } from "../audio/designer";
 import { spatial } from "../audio/pick";
 import type {
   BeatLoopHandle,
@@ -39,11 +39,12 @@ export function stingOf(events: GameEvent[], playerId: string): CueId | null {
 
 // Combat score: one random base loop per battle, and two accent lines that SoundDesigner plays on its beat.
 export type AccentCue = Extract<CueId, `accent-${string}`>;
-const BASE_CUES = ["score-drums", "score-bass"] as const;
-type BaseCue = (typeof BASE_CUES)[number];
-type Base = { loop: BeatLoopHandle; grid: Grid };
+const BASES = ["drums", "bass"] as const;
+type Tempo = { cue: CueId; file: string; beat: number; bars: number; phase: number };
+// The playing base: its tempo copies, the one playing, and the bar of the loop it was at when it started.
+type Active = { tempos: Tempo[]; index: number; loop: BeatLoopHandle; since: number; sinceBar: number };
 
-const START_LEAD_SECONDS = 0.1; // bases are scheduled to start this far ahead, so each starts on its first beat
+const START_LEAD_SECONDS = 0.1; // a base is scheduled to start this far ahead, so it starts on its first beat
 const ACCENT_LEAD_SECONDS = 0.02; // earliest accent start from now, so Web Audio never gets a time in the past
 const LOOKAHEAD_SECONDS = 0.15; // hits are scheduled this far ahead, several frames, so none is missed
 
@@ -52,32 +53,25 @@ const LOOKAHEAD_SECONDS = 0.15; // hits are scheduled this far ahead, several fr
 export type AccentResult = { cue: AccentCue; offer: Offer; heat: number };
 
 export class CombatScore {
-  private bases: Base[];
-  private active: Base | null = null;
+  private active: Active | null = null;
   private designer: SoundDesigner | null = null;
   private heat = new Fading(MIX.score.heatHalfLifeSeconds);
-  private lastBar = -Infinity;
+  private lastBarSlot = -Infinity;
   private paused = false;
 
   constructor(
     private player: Pick<SoundPlayer, "beatLoop" | "now" | "play">,
     private roll: () => number,
-  ) {
-    const start = player.now() + START_LEAD_SECONDS;
-    this.bases = BASE_CUES.map((id) => this.base(id, start));
-  }
+  ) {}
 
-  // A battle starts on one random base with fresh lines. Heat carries over, so a quick second fight starts warm.
+  // A battle starts one random base at the tempo its heat wants, from its first bar, with fresh lines. Heat
+  // carries over, so a quick second fight starts warm.
   setCombat(on: boolean, fadeSeconds: number): void {
     if (on === (this.active !== null)) return;
-    this.active?.loop.setGain(0, fadeSeconds);
-    this.active = on ? this.bases[Math.floor(this.roll() * this.bases.length)] : null;
+    this.active?.loop.stop(fadeSeconds * 1000);
+    this.active = null;
     this.designer = null;
-    if (!this.active) return;
-    const now = this.player.now();
-    this.designer = new SoundDesigner(this.active.grid, MIX.score, this.roll, now + ACCENT_LEAD_SECONDS);
-    this.lastBar = this.barAt(this.active, now);
-    this.setIntensity(this.active, now, fadeSeconds);
+    if (on) this.begin(fadeSeconds);
   }
 
   // In a turn pause the lead repeats its last phrase a few times, then only the base plays.
@@ -85,17 +79,16 @@ export class CombatScore {
     this.paused = paused;
   }
 
-  // Called every frame: schedules the lines' hits just ahead, and on each bar moves the base toward the heat.
+  // Called every frame. On each bar line coming up, the base may change tempo and moves toward the heat; then the
+  // lines' hits are scheduled just ahead.
   tick(): void {
-    const base = this.active;
-    if (!base || !this.designer) return;
+    const a = this.active;
+    if (!a || !this.designer) return;
     const now = this.player.now();
+    const bar = this.designer.nextBar(now + ACCENT_LEAD_SECONDS);
+    if (bar.time <= now + LOOKAHEAD_SECONDS && bar.slot !== this.lastBarSlot) this.onBar(a, bar, now);
     const hits = this.designer.step(now + ACCENT_LEAD_SECONDS, now + LOOKAHEAD_SECONDS, this.paused, this.heat.read(now));
-    for (const h of hits) this.sound(base, h, now);
-    const bar = this.barAt(base, now);
-    if (bar <= this.lastBar) return;
-    this.lastBar = bar;
-    this.setIntensity(base, now, base.grid.beat * base.grid.beatsPerBar);
+    for (const h of hits) this.sound(a, h, now);
   }
 
   // Outside a battle the score is silent and events are ignored. In one, the event adds heat and offers its
@@ -109,33 +102,75 @@ export class CombatScore {
     return { cue, offer, heat: this.heat.read(now) };
   }
 
-  private sound(base: Base, h: Hit, now: number): void {
+  private begin(fadeSeconds: number): void {
+    const now = this.player.now();
+    const start = now + START_LEAD_SECONDS;
+    const tempos = SCORE_TEMPOS[BASES[Math.floor(this.roll() * BASES.length)]].map(tempoOf);
+    const index = this.wantedTempo(now);
+    const loop = this.startLoop(tempos[index], start, 0);
+    this.active = { tempos, index, loop, since: start, sinceBar: 0 };
+    this.designer = new SoundDesigner({ start, beat: tempos[index].beat, beatsPerBar: BEATS_PER_BAR }, MIX.score, this.roll, start);
+    this.lastBarSlot = 0;
+    this.setIntensity(loop, now, fadeSeconds);
+  }
+
+  private onBar(a: Active, bar: { slot: number; time: number }, now: number): void {
+    this.lastBarSlot = bar.slot;
+    const want = this.wantedTempo(now);
+    if (want === a.index) return this.setIntensity(a.loop, now, barSeconds(a.tempos[a.index]));
+    this.switchTempo(a, a.index + Math.sign(want - a.index), bar);
+    this.setIntensity(a.loop, now, MIX.score.tempoCrossfadeSeconds);
+  }
+
+  // Starts the new tempo copy at the same bar of the loop on the bar line, and fades the old one out there.
+  private switchTempo(a: Active, index: number, bar: { slot: number; time: number }): void {
+    const from = a.tempos[a.index];
+    const to = a.tempos[index];
+    const barInLoop = (a.sinceBar + Math.round((bar.time - a.since) / barSeconds(from))) % from.bars;
+    a.loop.stopAt(bar.time, MIX.score.tempoCrossfadeSeconds);
+    a.loop = this.startLoop(to, bar.time, barInLoop);
+    a.index = index;
+    a.since = bar.time;
+    a.sinceBar = barInLoop;
+    this.designer?.setBeat(bar.slot, to.beat);
+  }
+
+  private startLoop(t: Tempo, when: number, bar: number): BeatLoopHandle {
+    return this.player.beatLoop(t.cue, t.file, when, t.phase + bar * barSeconds(t));
+  }
+
+  private wantedTempo(now: number): number {
+    const heat = this.heat.read(now);
+    if (heat < MIX.score.slowBelowHeat) return 0;
+    return heat >= MIX.score.fastFromHeat ? 2 : 1;
+  }
+
+  private sound(a: Active, h: Hit, now: number): void {
     this.player.play(h.cue as AccentCue, { pan: h.pan, gain: h.gain }, (h.time - now) * 1000);
     const s = MIX.score;
-    if (h.line === "lead") base.loop.duck(h.time, s.duckGain, s.duckAttackSeconds, base.grid.beat * s.duckReleaseBeats);
+    const beat = a.tempos[a.index].beat;
+    if (h.line === "lead") a.loop.duck(h.time, s.duckGain, s.duckAttackSeconds, beat * s.duckReleaseBeats);
   }
 
   // Quiet heat leaves the base lower and muffled; fullHeat opens it.
-  private setIntensity(base: Base, now: number, rampSeconds: number): void {
+  private setIntensity(loop: BeatLoopHandle, now: number, rampSeconds: number): void {
     const s = MIX.score;
     const t = Math.min(1, this.heat.read(now) / s.fullHeat);
-    base.loop.setGain(s.quietGain + (1 - s.quietGain) * t, rampSeconds);
-    base.loop.setTone(s.quietCutoffHz * (s.openCutoffHz / s.quietCutoffHz) ** t, rampSeconds);
+    loop.setGain(s.quietGain + (1 - s.quietGain) * t, rampSeconds);
+    loop.setTone(s.quietCutoffHz * (s.openCutoffHz / s.quietCutoffHz) ** t, rampSeconds);
   }
+}
 
-  private barAt(base: Base, time: number): number {
-    return Math.floor((time - base.grid.start) / (base.grid.beat * base.grid.beatsPerBar));
-  }
+// One tempo copy of a base: its cue, file, beat length, bars per loop and first-beat offset.
+function tempoOf(cue: CueId): Tempo {
+  const def = SOUNDS[cue];
+  if (def.files.length !== 1) throw new Error(`Score base ${cue} needs exactly one file, has ${def.files.length}`);
+  if (!def.beat) throw new Error(`Score base ${cue} needs a beat`);
+  return { cue, file: def.files[0], beat: 60 / def.beat.bpm, bars: def.beat.bars, phase: scorePhaseOf(def.files[0]) };
+}
 
-  // Every base starts silent at one time from its first beat, so its grid is known from then on.
-  private base(id: BaseCue, start: number): Base {
-    const files = SOUNDS[id].files;
-    const beat = SOUNDS[id].beat;
-    if (files.length !== 1) throw new Error(`Score base ${id} needs exactly one file, has ${files.length}`);
-    if (!beat) throw new Error(`Score base ${id} needs a beat`);
-    const loop = this.player.beatLoop(id, files[0], start, scorePhaseOf(files[0]));
-    return { loop, grid: { start, beat: loop.duration / (beat.bars * BEATS_PER_BAR), beatsPerBar: BEATS_PER_BAR } };
-  }
+function barSeconds(t: Tempo): number {
+  return t.beat * BEATS_PER_BAR;
 }
 
 // A volley or crash the score answers.

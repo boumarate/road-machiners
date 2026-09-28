@@ -72,7 +72,7 @@ function playable(source, name, cue) {
 
 // Length and edges: one-shots lose silence and get fades, beat loops are fitted to their bars, other loops stay.
 function shapeFilters(src, cue) {
-  if (cue.beat) return fitBeat(src, beatLoopSeconds(cue.beat));
+  if (cue.beat) return fitBeat(src, beatLoopSeconds(cue.beat), cue.stretch ?? 1);
   if (cue.loop) return [];
   const trim = `silenceremove=start_periods=1:start_threshold=${SILENCE_DB}dB:start_silence=${KEEP_S}`;
   const edges = cue.setup === 'stinger' ? STINGER_EDGES : [FADE_IN_S, FADE_OUT_S];
@@ -85,13 +85,13 @@ const STINGER_TONE = 'lowpass=f=5000,treble=g=-4:f=3000'; // distorted stingers 
 const STINGER_EDGES = [0.02, 0.6]; // fade in and fade out seconds for stingers; a long fade-out lets them melt into the base
 
 // Generated loops miss their requested length by a few milliseconds. A tiny tempo change fits the loop, and the
-// pad and trim make the sample count exact.
+// pad and trim make the sample count exact. A tempo copy expects its stretch on top; atempo keeps the pitch.
 const MAX_FIT = 0.01; // largest tempo change share; a bigger miss means the wrong source
 
-function fitBeat(src, seconds) {
+function fitBeat(src, seconds, stretch) {
   const have = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', src], { encoding: 'utf8' }));
   const ratio = have / seconds;
-  if (Math.abs(ratio - 1) > MAX_FIT) throw new Error(`${src} lasts ${have} s, too far from its ${seconds.toFixed(3)} s beat loop`);
+  if (Math.abs(ratio / stretch - 1) > MAX_FIT) throw new Error(`${src} lasts ${have} s, too far from its ${seconds.toFixed(3)} s beat loop`);
   return [`atempo=${ratio.toFixed(6)}`, `apad=whole_dur=${seconds.toFixed(6)}`, `atrim=end=${seconds.toFixed(6)}`];
 }
 

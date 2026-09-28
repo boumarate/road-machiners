@@ -3,6 +3,8 @@
 // colliding. A phrase is its accent in a rhythm from the line's patterns and starts on a bar line; an urgent one
 // cuts in on the next beat. Variety lives inside that structure: random rhythm variants, a rare fill at a
 // phrase's end, a little timing and level jitter, and a chance for light events to join a busy line.
+// The beat length may change on a bar line, when the base switches tempo; slot numbers run on across the change,
+// so phrases in progress continue.
 // Pure: the caller passes audio times in seconds and a random roll function.
 
 // Audio time of one beat of the base, the beat length in seconds, and beats per bar.
@@ -77,6 +79,8 @@ export class SoundDesigner {
   private lines: Record<LineId, Line> = { lead: new Line(), secondary: new Line() };
   private cursor: number; // next slot to play
   private pan: number;
+  private anchor: { slot: number; time: number }; // slot times count from here at the current beat
+  private beat: number;
 
   constructor(
     private grid: Grid,
@@ -85,6 +89,8 @@ export class SoundDesigner {
     now: number,
   ) {
     for (const id of LINES) this.checkPatterns(id);
+    this.anchor = { slot: 0, time: grid.start };
+    this.beat = grid.beat;
     this.cursor = this.slotAtOrAfter(now);
     this.pan = (roll() < 0.5 ? -1 : 1) * tuning.secondaryPan;
   }
@@ -97,6 +103,20 @@ export class SoundDesigner {
     const chance = plan.chance * Math.exp(-this.tuning.busyFactor * busy);
     if (this.roll() >= chance) return "skipped";
     return line.offer({ cue, plan, dense: false, at }, this.tuning.lines[plan.line].queueMax);
+  }
+
+  // The first bar line at or after time.
+  nextBar(time: number): { slot: number; time: number } {
+    const perBar = this.slotsPerBar();
+    const slot = Math.ceil(this.slotAtOrAfter(time) / perBar) * perBar;
+    return { slot, time: this.slotTime(slot) };
+  }
+
+  // From bar-line slot on, beats last beat seconds.
+  setBeat(slot: number, beat: number): void {
+    if (slot % this.slotsPerBar() !== 0) throw new Error(`Tempo may change only on a bar line, not slot ${slot}`);
+    this.anchor = { slot, time: this.slotTime(slot) };
+    this.beat = beat;
   }
 
   // Hits for every slot up to until, in time order. Slots already past are skipped silently.
@@ -193,15 +213,15 @@ export class SoundDesigner {
   }
 
   private slotLength(): number {
-    return this.grid.beat / this.tuning.subdivision;
+    return this.beat / this.tuning.subdivision;
   }
 
   private slotAtOrAfter(at: number): number {
-    return Math.ceil((at - this.grid.start) / this.slotLength() - 1e-9);
+    return this.anchor.slot + Math.ceil((at - this.anchor.time) / this.slotLength() - 1e-9);
   }
 
   private slotTime(slot: number): number {
-    return this.grid.start + slot * this.slotLength();
+    return this.anchor.time + (slot - this.anchor.slot) * this.slotLength();
   }
 }
 

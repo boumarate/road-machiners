@@ -21,6 +21,7 @@ export type BeatLoopHandle = LoopHandle & {
   readonly duration: number; // seconds of one pass
   duck(time: number, gain: number, attackSeconds: number, releaseSeconds: number): void;
   setTone(cutoffHz: number, rampSeconds: number): void;
+  stopAt(time: number, fadeSeconds: number): void; // fades out from an audio time, for a switch on a bar line
 };
 
 export type Glide = { rateFrom: number; rateTo: number; gainFrom: number; gainTo: number; seconds: number; fadeSeconds: number };
@@ -83,6 +84,10 @@ export class SoundPlayer {
         duck.gain.setTargetAtTime(1, time + attack, release / 3);
       },
       setTone: (cutoff, ramp) => tone.frequency.setTargetAtTime(cutoff, this.mixer.ctx.currentTime, ramp / 3),
+      stopAt: (time, fade) => {
+        gain.gain.setTargetAtTime(0, time, fade / 3);
+        src.stop(time + fade);
+      },
     };
   }
 
