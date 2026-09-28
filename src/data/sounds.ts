@@ -155,7 +155,7 @@ export function engineFileFor(chassisId: string): string {
 }
 
 export const MIX = {
-  busVolume: { ui: 0.8, sfx: 1, ambient: 0.6, music: 0.8 } satisfies Record<Bus, number>,
+  busVolume: { ui: 0.8, sfx: 0.75, ambient: 0.6, music: 0.65 } satisfies Record<Bus, number>,
   // Import loudness per bus: the loudest 400 ms moment, in LUFS. Cue volume then sets each cue's place in the mix.
   level: { ui: -18, sfx: -14, ambient: -24, music: -18 } satisfies Record<Bus, number>,
   compressor: { threshold: -18, knee: 12, ratio: 4, attack: 0.003, release: 0.25 },
