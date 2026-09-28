@@ -1,14 +1,15 @@
 import { partDef } from '../data/parts';
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
-import { laneCount, sideToward, walkLane } from './armor';
-import { resolveDestroyed } from './combat';
+import { fireSpans, laneCount, openSides, partLane, sideBlockers, sideToward, walkLane } from './armor';
+import { fireBlock, inArc, resolveDestroyed } from './combat';
+import { makePart } from './factory';
 import { advanceKnockout, checkKnockout } from './defeat';
 import { corePart, coreParts, gridOf, mountedItems, mountedParts } from './grid';
 import { vehicleStats } from './stats';
 import { leakFuel } from './supplies';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
-import type { Vehicle } from './types';
+import type { GridItem, Vehicle, World } from './types';
 
 const partAt = (v: Vehicle, x: number, y: number) =>
   mountedItems(v).find((it) => it.x === x && it.y === y)!.part;
@@ -48,7 +49,7 @@ describe('walkLane', () => {
   it('enters each side from its own edge', () => {
     const { w, v } = plated();
     const last = gridOf(v).h - 1;
-    const round = { damage: 1, pen: 2 }; // the scout's corner cells are empty, so a round needs to pass one cell
+    const round = { damage: 1, pen: 2, blast: false }; // the scout's corner cells are empty, so a round needs to pass one cell
     expect(walkLane(w, v, 'front', 0, round)[0].part).toBe(partAt(v, 0, 1).id);
     expect(walkLane(w, v, 'left', 1, round)[0].part).toBe(partAt(v, 0, 1).id);
     expect(walkLane(w, v, 'right', 1, round)[0].part).toBe(partAt(v, 4, 1).id);
@@ -57,7 +58,7 @@ describe('walkLane', () => {
 
   it('a plate absorbs a weak round', () => {
     const { w, v, plate, engine } = plated();
-    const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 3 });
+    const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 3, blast: false });
     expect(hits.map((h) => h.part)).toEqual([plate.id]);
     expect(plate.hp).toBeLessThan(40);
     expect(engine.hp).toBe(25);
@@ -67,7 +68,7 @@ describe('walkLane', () => {
     const fresh = plated();
     const worn = plated();
     worn.plate.wear = 3;
-    const round = { damage: 10, pen: 20 };
+    const round = { damage: 10, pen: 20, blast: false };
     const freshHits = walkLane(fresh.w, fresh.v, 'front', 1, round);
     const wornHits = walkLane(worn.w, worn.v, 'front', 1, round);
     expect(wornHits[1].damage).toBeGreaterThan(freshHits[1].damage);
@@ -75,23 +76,23 @@ describe('walkLane', () => {
 
   it('a strong round passes the plate and hits the part behind', () => {
     const { w, v, plate, engine } = plated();
-    const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 20 });
+    const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 20, blast: false });
     expect(hits.map((h) => h.part).slice(0, 2)).toEqual([plate.id, engine.id]);
     expect(engine.hp).toBeLessThan(25);
   });
 
   it('a round loses damage with the pen each part takes from it', () => {
     const { w, v } = plated();
-    const hits = walkLane(w, v, 'front', 1, { damage: 20, pen: 40 });
+    const hits = walkLane(w, v, 'front', 1, { damage: 20, pen: 40, blast: false });
     expect(hits.length).toBeGreaterThan(1);
     expect(hits[1].damage).toBeLessThan(hits[0].damage);
   });
 
   it('armor scales damage down when pen is below it', () => {
     const { w, v, plate } = plated();
-    const weak = walkLane(w, v, 'front', 1, { damage: 12, pen: 6 })[0].damage;
+    const weak = walkLane(w, v, 'front', 1, { damage: 12, pen: 6, blast: false })[0].damage;
     plate.hp = 40;
-    const full = walkLane(w, v, 'front', 1, { damage: 12, pen: 100 })[0].damage;
+    const full = walkLane(w, v, 'front', 1, { damage: 12, pen: 100, blast: false })[0].damage;
     expect(weak).toBeLessThan(full);
     expect(full).toBe(12);
   });
@@ -99,14 +100,14 @@ describe('walkLane', () => {
   it('a broken part lets the round pass', () => {
     const { w, v, plate, engine } = plated();
     plate.hp = 0;
-    const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 3 });
+    const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 3, blast: false });
     expect(hits.map((h) => h.part)).toEqual([engine.id]);
     expect(plate.hp).toBe(0);
   });
 
   it('the round stops at zero pen', () => {
     const { w, v, plate, engine } = plated();
-    const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 12 });
+    const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 12, blast: false });
     expect(hits.map((h) => h.part)).toEqual([plate.id]);
     expect(engine.hp).toBe(25);
   });
@@ -114,7 +115,7 @@ describe('walkLane', () => {
   it('a part spanning several cells of the lane is hit once', () => {
     const { w, v, plate, engine } = plated();
     plate.hp = 0;
-    const hits = walkLane(w, v, 'front', 1, { damage: 1, pen: 100 });
+    const hits = walkLane(w, v, 'front', 1, { damage: 1, pen: 100, blast: false });
     expect(hits.filter((h) => h.part === engine.id)).toHaveLength(1);
   });
 
@@ -123,7 +124,7 @@ describe('walkLane', () => {
     const me = w.vehicles[0];
     const cab = corePart(me, 'cab');
     const lane = mountedItems(me).find((it) => it.part.id === cab.id)!.y;
-    const hits = walkLane(w, me, 'right', lane, { damage: 10, pen: 100 });
+    const hits = walkLane(w, me, 'right', lane, { damage: 10, pen: 100, blast: false });
     const dealt = hits.find((h) => h.part === cab.id)!.damage;
     expect(dealt).toBeGreaterThan(0);
     expect(w.player.health).toBe(RULES.maxHealth - Math.round(dealt * RULES.cabHealthShare));
@@ -202,10 +203,140 @@ describe('lane depth', () => {
   it('a crash-strength hit on the nose fades before the rear wheels', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine'], { x: 40, y: 40 });
-    for (let lane = 0; lane < laneCount(v, 'front'); lane++) walkLane(w, v, 'front', lane, { damage: 50, pen: RULES.crashPen });
+    for (let lane = 0; lane < laneCount(v, 'front'); lane++) walkLane(w, v, 'front', lane, { damage: 50, pen: RULES.crashPen, blast: false });
     const g = gridOf(v);
     const rear = coreParts(v, 'wheel').filter((p) => mountedItems(v).find((it) => it.part.id === p.id)!.y > g.h / 2);
     expect(rear.length).toBe(2);
     for (const p of rear) expect(p.hp).toBeGreaterThan(0);
+  });
+});
+
+describe('blast armor', () => {
+  // A scout with a rebar cage on the nose in front of its engine.
+  function caged() {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'scout', ['cage', 'stockEngine'], { x: 40, y: 40 });
+    return { w, v, cage: defOf(v, 'cage'), engine: defOf(v, 'stockEngine') };
+  }
+
+  it('a cage stops a blast round that a bullet of the same pen gets through', () => {
+    const blast = caged();
+    const bullet = caged();
+    const lane = partLane(blast.v, blast.cage.id, 'front');
+    walkLane(blast.w, blast.v, 'front', lane, { damage: 10, pen: 8, blast: true });
+    walkLane(bullet.w, bullet.v, 'front', lane, { damage: 10, pen: 8, blast: false });
+    expect(blast.engine.hp).toBe(partDef('stockEngine').hp);
+    expect(bullet.engine.hp).toBeLessThan(partDef('stockEngine').hp);
+  });
+
+  it('parts other than armor meet blast with their plain armor', () => {
+    const { w, v, engine } = plated();
+    defOf(v, 'plates').hp = 0;
+    const kinetic = walkLane(w, v, 'front', 1, { damage: 10, pen: 3, blast: false }).find((h) => h.part === engine.id)!.damage;
+    engine.hp = partDef('stockEngine').hp;
+    const blast = walkLane(w, v, 'front', 1, { damage: 10, pen: 3, blast: true }).find((h) => h.part === engine.id)!.damage;
+    expect(blast).toBe(kinetic);
+  });
+});
+
+// The scout's cab fills rows 3 and 4 inside the wheels. Its hood has one deck cell at (3,1), and its bed is row 5.
+function truckWith(w: World, chassisId: string, parts: { defId: string; x: number; y: number }[]): Vehicle {
+  const v = addVehicle(w, 'player', chassisId, ['stockEngine'], { x: 40, y: 40 });
+  for (const [i, p] of parts.entries()) {
+    v.items.push({ id: `i-test-${i}`, x: p.x, y: p.y, rot: 0, kind: 'part', part: makePart(w, p.defId, 0) });
+  }
+  return v;
+}
+
+function itemOf(v: Vehicle, defId: string): GridItem {
+  return mountedItems(v).find((it) => it.part.defId === defId)!;
+}
+
+describe('open sides', () => {
+  it('a gun in the bed cannot fire forward across the cab', () => {
+    const w = emptyWorld();
+    const v = truckWith(w, 'scout', [{ defId: 'mg', x: 2, y: 5 }]);
+    expect(openSides(v, itemOf(v, 'mg'))).toEqual(['rear', 'left', 'right']);
+  });
+
+  it('a gun on the hood fires forward but not back across the cab', () => {
+    const w = emptyWorld();
+    const v = truckWith(w, 'scout', [{ defId: 'mg', x: 3, y: 1 }]);
+    expect(openSides(v, itemOf(v, 'mg'))).toEqual(['front', 'left', 'right']);
+  });
+
+  it('a gun beside the hauler cab fires to every side', () => {
+    const w = emptyWorld();
+    const v = truckWith(w, 'hauler', [{ defId: 'mg', x: 1, y: 3 }]);
+    expect(openSides(v, itemOf(v, 'mg'))).toEqual(['front', 'rear', 'left', 'right']);
+  });
+
+  it('a cargo box behind a gun blinds its rear, and a flat rack does not', () => {
+    const w = emptyWorld();
+    const boxed = truckWith(w, 'hauler', [{ defId: 'mg', x: 1, y: 3 }, { defId: 'trailerBox', x: 1, y: 5 }]);
+    const racked = truckWith(w, 'hauler', [{ defId: 'mg', x: 1, y: 3 }, { defId: 'rack', x: 1, y: 5 }]);
+    expect(openSides(boxed, itemOf(boxed, 'mg'))).not.toContain('rear');
+    expect(openSides(racked, itemOf(racked, 'mg'))).toContain('rear');
+  });
+
+  it('an open seat blocks nothing', () => {
+    const w = emptyWorld();
+    const v = truckWith(w, 'carrier', [{ defId: 'mg', x: 4, y: 5 }]);
+    expect(openSides(v, itemOf(v, 'mg'))).toContain('front');
+  });
+});
+
+describe('firing past tall parts', () => {
+  it('reports a target ahead of a gun behind the cab as blocked', () => {
+    const w = emptyWorld();
+    const me = truckWith(w, 'scout', [{ defId: 'mg', x: 2, y: 5 }]);
+    const ahead = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 45, y: 40 });
+    const gun = vehicleStats(w, me).weapons[0];
+    expect(inArc(me, gun, ahead)).toBe(false);
+    expect(fireBlock(w, me, gun, ahead)).toBe('blocked');
+  });
+
+  it('lets the same gun fire at a target on its open flank', () => {
+    const w = emptyWorld();
+    const me = truckWith(w, 'scout', [{ defId: 'mg', x: 2, y: 5 }]);
+    const beside = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 40, y: 45 });
+    const gun = vehicleStats(w, me).weapons[0];
+    expect(inArc(me, gun, beside)).toBe(true);
+  });
+});
+
+describe('fire spans', () => {
+  it('a turret with every side open fires all around', () => {
+    expect(fireSpans(360, ['front', 'rear', 'left', 'right'])).toEqual([{ from: -180, to: 180 }]);
+  });
+
+  it('a turret blocked in front fires from one flank around the rear to the other', () => {
+    expect(fireSpans(360, ['rear', 'left', 'right'])).toEqual([{ from: 45, to: 315 }]);
+  });
+
+  it('a turret blocked at the rear fires across the front half and the flanks', () => {
+    expect(fireSpans(360, ['front', 'left', 'right'])).toEqual([{ from: -135, to: 135 }]);
+  });
+
+  it('a forward gun keeps its own arc when the front is open', () => {
+    expect(fireSpans(60, ['front', 'rear'])).toEqual([{ from: -30, to: 30 }]);
+  });
+
+  it('a forward gun blocked in front cannot fire at all', () => {
+    expect(fireSpans(60, ['rear', 'left', 'right'])).toEqual([]);
+  });
+
+  it('a gun open only on both flanks fires in two spans', () => {
+    expect(fireSpans(360, ['left', 'right'])).toEqual([{ from: -135, to: -45 }, { from: 45, to: 135 }]);
+  });
+});
+
+describe('side blockers', () => {
+  it('names the cab as what blocks a bed gun in front', () => {
+    const w = emptyWorld();
+    const v = truckWith(w, 'scout', [{ defId: 'mg', x: 2, y: 5 }]);
+    const blockers = sideBlockers(v, itemOf(v, 'mg'));
+    expect(Object.keys(blockers)).toEqual(['front']);
+    expect(blockers.front?.kind === 'part' && blockers.front.part.defId).toBe('cabPickup');
   });
 });

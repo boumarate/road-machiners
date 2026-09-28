@@ -17,6 +17,7 @@ import { addState, stateOf } from './states';
 import { isTownGuarded } from './guards';
 import { getResources } from './resources';
 import { chance, gauss, randRange } from './rng';
+import { vehicleMass } from './mass';
 import { vehicleStats, type MountedWeapon } from './stats';
 import type { Aim, NpcActivity, ShotRound, Vehicle, World } from './types';
 import { weatherAt } from './weather';
@@ -27,6 +28,7 @@ export type FireBlock =
   | "reloading"
   | "range"
   | "arc"
+  | "blocked"
   | "noTarget"
   | "unseen"
   | "covered"
@@ -55,16 +57,18 @@ export function isHostile(world: World, a: Vehicle, b: Vehicle): boolean {
   return hasLoot(a.faction === "raiders" ? b : a);
 }
 
-export function inArc(
-  shooter: Vehicle,
-  mw: MountedWeapon,
-  target: Vehicle,
-): boolean {
+// The target lies in the gun's own arc and on a side that no tall part blocks.
+export function inArc(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): boolean {
+  return inGunArc(shooter, mw, target) && sideOpen(shooter, mw, target);
+}
+
+function inGunArc(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): boolean {
   if (mw.def.arc >= 360) return true;
-  return (
-    Math.abs(angleDiff(shooter.heading, bearing(shooter.pos, target.pos))) <=
-    (mw.def.arc / 2) * DEG
-  );
+  return Math.abs(angleDiff(shooter.heading, bearing(shooter.pos, target.pos))) <= (mw.def.arc / 2) * DEG;
+}
+
+function sideOpen(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): boolean {
+  return mw.sides.includes(sideToward(shooter, target.pos));
 }
 
 // Why a weapon cannot fire at a target right now, or null if it can. The player only shoots what it sees.
@@ -89,8 +93,12 @@ function targetBlock(world: World, shooter: Vehicle, mw: MountedWeapon, target: 
   if (!canVehicleSee(world, shooter, target.pos)) return "unseen";
   if (!hasLineOfFire(world, shooter.pos, target.pos)) return "covered";
   if (dist(shooter.pos, target.pos) > mw.def.range) return "range";
-  if (!inArc(shooter, mw, target)) return "arc";
-  return null;
+  return arcBlock(shooter, mw, target);
+}
+
+function arcBlock(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): FireBlock | null {
+  if (!inGunArc(shooter, mw, target)) return "arc";
+  return sideOpen(shooter, mw, target) ? null : "blocked";
 }
 
 export type HitOdds = {
@@ -104,6 +112,7 @@ export type HitOdds = {
     weapon: number;
     crossing: number;
     own: number;
+    recoil: number; // the gun's kick, smaller on a heavier truck
     skill: number;
     weather: number;
     calledShot: number; // the called shot perk's cut of an aimed shot's spread, zero or negative
@@ -111,6 +120,7 @@ export type HitOdds = {
 };
 
 const M = PHYSICS.metersPerTile;
+const KG_PER_TONNE = 1000;
 
 // Tiles per turn to m/s.
 function mps(tilesPerTurn: number): number {
@@ -280,11 +290,12 @@ function spreadCauses(world: World, shooter: Vehicle, mw: MountedWeapon, target:
     weapon,
     skill: -weapon * skillEffect(world, shooter, "perception", "spread"),
     crossing: (RULES.leadError * Math.abs(rel.x * n.x + rel.y * n.y)) / mw.def.round.speed,
-    own: steady ? 0 : RULES.shake * mps(Math.abs(shooter.speed)),
+    own: steady ? 0 : RULES.shake * mw.def.shake * mps(Math.abs(shooter.speed)),
+    recoil: (mw.def.recoil * DEG) / (vehicleMass(shooter) / KG_PER_TONNE),
     weather: weatherAt(world, shooter.pos).spread,
   };
   const called = aim !== "body" && vehicleHasPerk(world, shooter, "calledShot");
-  const sum = base.weapon + base.skill + base.crossing + base.own + base.weather;
+  const sum = base.weapon + base.skill + base.crossing + base.own + base.recoil + base.weather;
   return { ...base, calledShot: called ? -sum * (1 - PERK_NUMBERS.calledShot.spread) : 0 };
 }
 
@@ -384,8 +395,9 @@ function applyShot(world: World, s: Shot): void {
         crit: roll.crit,
         offset,
         hits: walkLane(world, s.target, side, lane, {
-          damage: r.damage * k.damage,
+          damage: r.damage * k.damage * RULES.weaponDamage,
           pen: r.pen * k.pen,
+          blast: r.blast,
         }),
       };
     }
@@ -397,8 +409,9 @@ function applyShot(world: World, s: Shot): void {
         continue;
       hits.push(
         ...walkLane(world, s.target, side, lane, {
-          damage: r.splashDamage,
+          damage: r.splashDamage * RULES.weaponDamage,
           pen: r.splashPen,
+          blast: true,
         }),
       );
     }

@@ -4,7 +4,8 @@ import { mountedParts } from "../sim/grid";
 import { playerVehicle } from "../sim/damage";
 import { newWorld } from "../sim/world";
 import type { PartInstance } from "../sim/types";
-import { baselinePart, chassisStats, diffStats, partStats } from "./cards";
+import { partValue } from "../sim/wear";
+import { baselinePart, chassisStats, comparePart, diffStats, partStats } from "./cards";
 
 const part = (defId: string, wear = 0): PartInstance => ({ id: defId, defId, hp: 1, wear, reload: 0 });
 
@@ -43,5 +44,22 @@ describe("the part a new part is weighed against", () => {
     const engines = mountedParts(me, "engine");
     expect(baselinePart(me, "engine")).toBe(engines[0]);
     expect(baselinePart(me, "scanner")).toBeNull();
+  });
+});
+
+describe("the part a shop card compares with", () => {
+  it("steps through the mounted parts of the kind, most valuable first, and wraps", () => {
+    const w = newWorld(1, START_KITS.combat);
+    const me = playerVehicle(w);
+    const guns = [...mountedParts(me, "weapon")].sort((a, b) => partValue(b) - partValue(a));
+    expect(guns.length).toBeGreaterThan(1);
+    expect(comparePart(me, "weapon", 0)).toBe(guns[0]);
+    expect(comparePart(me, "weapon", 1)).toBe(guns[1]);
+    expect(comparePart(me, "weapon", guns.length)).toBe(guns[0]);
+  });
+
+  it("has nothing to compare with when no part of the kind is mounted", () => {
+    const me = playerVehicle(newWorld(1, START_KITS.standard));
+    expect(comparePart(me, "scanner", 0)).toBeNull();
   });
 });

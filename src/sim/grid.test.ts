@@ -16,7 +16,8 @@ import { sitePads } from './sites';
 const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
 
 const coreIds = (v: Vehicle) => mountedParts(v, 'core').map((p) => p.defId).sort();
-const coreItem = (w: World, defId: string) => w.vehicles[0].items.find((it) => it.kind === 'part' && it.part.defId === defId)!;
+const roleOf = (defId: string) => { const def = partDef(defId); return def.kind === 'core' ? def.role : null; };
+const coreItem = (w: World, role: string) => w.vehicles[0].items.find((it) => it.kind === 'part' && roleOf(it.part.defId) === role)!;
 
 // First spot where the part lies fully on the given letter, found by scanning the layout.
 function spotOn(chassisId: string, defId: string, letter: Cell, items: GridItem[]): GridItem {
@@ -40,10 +41,11 @@ describe('built-in parts', () => {
       const w = emptyWorld();
       const v = addVehicle(w, 'raiders', ch.id, [], { x: 40, y: 40 });
       const want = ch.core.map((c) => c.defId).sort();
-      expect(want.filter((id) => id === 'cab')).toHaveLength(1);
-      expect(want.filter((id) => id === 'wheel')).toHaveLength(4);
-      expect(want).toContain('transmission');
-      expect(want).toContain('tank');
+      const roles = want.map(roleOf);
+      expect(roles.filter((r) => r === 'cab')).toHaveLength(1);
+      expect(roles.filter((r) => r === 'wheel')).toHaveLength(4);
+      expect(roles.filter((r) => r === 'transmission')).toHaveLength(1);
+      expect(roles.filter((r) => r === 'tank')).toHaveLength(1);
       expect(coreIds(v)).toEqual(want);
     }
   });
@@ -74,7 +76,7 @@ describe('built-in parts', () => {
   it('a chassis swap replaces the core parts with the new chassis ones', () => {
     let w = emptyWorld(sitePads(bowl)[0]);
     w.player.money = 2000;
-    w.vehicles[0].items.forEach((it) => { if (it.kind === 'part' && it.part.defId === 'cab') it.part.hp = 1; });
+    w.vehicles[0].items.forEach((it) => { if (it.kind === 'part' && roleOf(it.part.defId) === 'cab') it.part.hp = 1; });
     w = buyChassis(w, 'hauler');
     const me = w.vehicles[0];
     expect(coreIds(me)).toEqual(CHASSIS.hauler.core.map((c) => c.defId).sort());
@@ -87,7 +89,7 @@ describe('cargo rows', () => {
   it('rejects an item across the end of the chassis grid', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'scout', [], { x: 40, y: 40 });
-    v.items.push({ ...spotOn('scout', 'rack', 'C', v.items), id: 'i-rack', part: makePart(w, 'rack', 0) } as GridItem);
+    v.items.push({ ...spotOn('scout', 'rack', 'D', v.items), id: 'i-rack', part: makePart(w, 'rack', 0) } as GridItem);
     const g = gridOf(v);
     const spare = (y: number): GridItem => ({ id: 'i-spare', x: 0, y, rot: 1, kind: 'part', part: makePart(w, 'rack', 0) });
     expect(g.cells[g.chassisH - 1][0]).toBe('.');

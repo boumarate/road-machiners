@@ -415,7 +415,7 @@ export class VehicleView {
   // A whip antenna at the back corner of the cab roof, and a tow chain under the rear bumper.
   // A truck with cargo rows past its grid has the cargo model at its rear, so it gets no chain.
   private buildLooseParts(v: Vehicle, body: Body, base: ModelName, bareRear: boolean): void {
-    const cab = v.items.find((it) => it.kind === 'part' && it.part.defId === 'cab');
+    const cab = v.items.find((it) => it.kind === 'part' && BODY_PARTS.has(it.part.defId));
     if (!cab) throw new Error(`${v.id} has no cab`);
     const row = Math.max(...itemCells(cab).map((c) => c.y));
     const back = cellCenter(v.chassisId, 0, row).x - CELL.along / 2;

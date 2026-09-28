@@ -12,6 +12,7 @@ export type PartKind =
 
 // w and h are the part's footprint in inventory cells before rotation. mass in kilograms.
 // armor is the penetration the part stops when a round passes through it.
+// A tall part stands higher than a gun, so a mounted weapon cannot fire across it. See openSides() in src/sim/armor.ts.
 type PartBase = {
   id: string;
   name: string;
@@ -22,13 +23,16 @@ type PartBase = {
   h: number;
   mass: number;
   armor: number;
+  tall: boolean;
 };
 
 // One round. pen is the armor it gets through. speed in m/s. A miss within splashRadius meters of a lane's
 // edge hits that lane with splashDamage and splashPen. splashRadius 0 means no splash.
+// A blast round meets blastArmor on armor parts. Splash always counts as blast.
 export type WeaponRound = {
   damage: number;
   pen: number;
+  blast: boolean;
   speed: number;
   splashRadius: number;
   splashDamage: number;
@@ -42,6 +46,8 @@ export type WeaponDef = PartBase & {
   arc: number; // total firing arc in degrees, centered forward
   spread: number; // degrees; standard deviation of a round's angular error from the gun alone
   rounds: number; // rounds per shot, each rolled on its own
+  recoil: number; // degrees of spread added on a 1 t truck; the added spread falls with truck mass
+  shake: number; // multiplies the spread from the shooter's own speed; below 1 is a stabilized gun
   round: WeaponRound;
 
   look: "mg" | "cannon";
@@ -53,10 +59,17 @@ export type EngineDef = PartBase & {
   accelBonus: number;
   fuelMult: number;
   noise: number; // multiplies how far the engine is heard
+  heat: number; // multiplies how fast the sun heats the engine
 };
 
+// full: a field repair lifts it to full HP. capped: to the field cap. none: only a town repairs it.
+export type FieldRepair = "full" | "capped" | "none";
+
+// armor stops kinetic rounds and blastArmor stops blast rounds and splash.
 export type ArmorDef = PartBase & {
   kind: "armor";
+  blastArmor: number;
+  fieldRepair: FieldRepair;
   ramMult: number; // multiplies ram damage dealt from the side it is mounted on
   look: "plates" | "cage" | "ram";
 };
@@ -73,7 +86,7 @@ export type CoreDef = PartBase & {
   role: "cab" | "transmission" | "wheel" | "tank";
 };
 
-// Detects every moving vehicle within range, through hills. Mounts on W cells, so it competes with a gun.
+// Detects every moving vehicle within range, through hills. Mounts on deck cells, so it competes with a gun.
 export type ScannerDef = PartBase & {
   kind: "scanner";
   range: number; // tiles
@@ -99,15 +112,19 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 80,
     armor: 3,
+    tall: false,
     range: 9,
     reload: 1,
     arc: 360,
     look: "mg",
     spread: 5,
     rounds: 6,
+    recoil: 0.5,
+    shake: 0.5,
     round: {
       damage: 3,
       pen: 6,
+      blast: false,
       speed: 600,
       splashRadius: 0,
       splashDamage: 0,
@@ -125,15 +142,19 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 400,
     armor: 3,
+    tall: true,
     range: 13.5,
     reload: 3,
     arc: 60,
     look: "cannon",
     spread: 2.5,
     rounds: 1,
+    recoil: 6,
+    shake: 1,
     round: {
       damage: 30,
       pen: 20,
+      blast: true,
       speed: 250,
       splashRadius: 2.5,
       splashDamage: 12,
@@ -151,15 +172,19 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 65,
     armor: 2,
+    tall: false,
     range: 4.5,
     reload: 2,
     arc: 360,
     look: "mg",
     spread: 12,
     rounds: 12,
+    recoil: 1.5,
+    shake: 0.6,
     round: {
       damage: 4,
       pen: 4,
+      blast: false,
       speed: 350,
       splashRadius: 0,
       splashDamage: 0,
@@ -177,15 +202,19 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 220,
     armor: 4,
+    tall: false,
     range: 10.5,
     reload: 2,
     arc: 180,
     look: "mg",
     spread: 4,
     rounds: 3,
+    recoil: 3,
+    shake: 0.8,
     round: {
       damage: 10,
       pen: 12,
+      blast: false,
       speed: 700,
       splashRadius: 0,
       splashDamage: 0,
@@ -203,15 +232,19 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 650,
     armor: 8,
+    tall: true,
     range: 12,
     reload: 4,
     arc: 45,
     look: "cannon",
     spread: 3,
     rounds: 1,
+    recoil: 14,
+    shake: 1.5,
     round: {
       damage: 48,
       pen: 35,
+      blast: false,
       speed: 500,
       splashRadius: 1.5,
       splashDamage: 10,
@@ -229,15 +262,19 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 170,
     armor: 1,
+    tall: false,
     range: 15,
     reload: 5,
     arc: 90,
     look: "cannon",
     spread: 8,
     rounds: 4,
+    recoil: 1,
+    shake: 1.2,
     round: {
       damage: 18,
       pen: 14,
+      blast: true,
       speed: 90,
       splashRadius: 3,
       splashDamage: 8,
@@ -255,15 +292,19 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 280,
     armor: 2,
+    tall: true,
     range: 18,
     reload: 3,
     arc: 30,
     look: "cannon",
     spread: 0.8,
     rounds: 1,
+    recoil: 5,
+    shake: 3,
     round: {
       damage: 22,
       pen: 28,
+      blast: false,
       speed: 950,
       splashRadius: 0,
       splashDamage: 0,
@@ -281,10 +322,12 @@ export const PARTS: Record<string, PartDef> = {
     h: 2,
     mass: 300,
     armor: 4,
+    tall: false,
     speedBonus: 0,
     accelBonus: 0,
     fuelMult: 1,
     noise: 1,
+    heat: 1,
   },
   tunedEngine: {
     id: "tunedEngine",
@@ -297,10 +340,12 @@ export const PARTS: Record<string, PartDef> = {
     h: 2,
     mass: 380,
     armor: 4,
+    tall: false,
     speedBonus: 1.3,
     accelBonus: 1,
     fuelMult: 1.4,
     noise: 1.3,
+    heat: 1.2,
   },
   flatFour: {
     id: "flatFour",
@@ -313,10 +358,12 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 150,
     armor: 2,
+    tall: false,
     speedBonus: -1.3,
     accelBonus: 0,
     fuelMult: 0.75,
     noise: 0.7,
+    heat: 0.7,
   },
   workhorseDiesel: {
     id: "workhorseDiesel",
@@ -329,10 +376,12 @@ export const PARTS: Record<string, PartDef> = {
     h: 2,
     mass: 420,
     armor: 6,
+    tall: false,
     speedBonus: -0.65,
     accelBonus: 0.5,
     fuelMult: 0.7,
     noise: 1.2,
+    heat: 0.6,
   },
   racingV6: {
     id: "racingV6",
@@ -345,10 +394,12 @@ export const PARTS: Record<string, PartDef> = {
     h: 2,
     mass: 240,
     armor: 2,
+    tall: false,
     speedBonus: 1.95,
     accelBonus: 0.5,
     fuelMult: 1.25,
     noise: 1.4,
+    heat: 1.6,
   },
   heavyDiesel: {
     id: "heavyDiesel",
@@ -361,10 +412,12 @@ export const PARTS: Record<string, PartDef> = {
     h: 2,
     mass: 600,
     armor: 8,
+    tall: false,
     speedBonus: -1.3,
     accelBonus: 1.5,
     fuelMult: 1.1,
     noise: 1.5,
+    heat: 0.8,
   },
   turbine: {
     id: "turbine",
@@ -377,10 +430,12 @@ export const PARTS: Record<string, PartDef> = {
     h: 2,
     mass: 310,
     armor: 3,
+    tall: false,
     speedBonus: 2.6,
     accelBonus: 2,
     fuelMult: 2.2,
     noise: 1.8,
+    heat: 2,
   },
   plates: {
     id: "plates",
@@ -393,6 +448,9 @@ export const PARTS: Record<string, PartDef> = {
     h: 3,
     mass: 350,
     armor: 12,
+    tall: false,
+    blastArmor: 12,
+    fieldRepair: "capped",
     ramMult: 1,
     look: "plates",
   },
@@ -405,8 +463,11 @@ export const PARTS: Record<string, PartDef> = {
     tier: 1,
     w: 1,
     h: 2,
-    mass: 150,
-    armor: 6,
+    mass: 110,
+    armor: 2,
+    tall: false,
+    blastArmor: 20,
+    fieldRepair: "capped",
     ramMult: 1,
     look: "cage",
   },
@@ -419,8 +480,11 @@ export const PARTS: Record<string, PartDef> = {
     tier: 2,
     w: 3,
     h: 1,
-    mass: 300,
+    mass: 420,
     armor: 20,
+    tall: false,
+    blastArmor: 8,
+    fieldRepair: "capped",
     ramMult: 2,
     look: "ram",
   },
@@ -435,6 +499,9 @@ export const PARTS: Record<string, PartDef> = {
     h: 2,
     mass: 180,
     armor: 5,
+    tall: false,
+    blastArmor: 5,
+    fieldRepair: "full",
     ramMult: 1,
     look: "plates",
   },
@@ -449,6 +516,9 @@ export const PARTS: Record<string, PartDef> = {
     h: 2,
     mass: 100,
     armor: 22,
+    tall: false,
+    blastArmor: 8,
+    fieldRepair: "none",
     ramMult: 1,
     look: "plates",
   },
@@ -462,7 +532,10 @@ export const PARTS: Record<string, PartDef> = {
     w: 1,
     h: 4,
     mass: 290,
-    armor: 15,
+    armor: 10,
+    tall: false,
+    blastArmor: 28,
+    fieldRepair: "capped",
     ramMult: 1,
     look: "plates",
   },
@@ -476,7 +549,10 @@ export const PARTS: Record<string, PartDef> = {
     w: 1,
     h: 3,
     mass: 230,
-    armor: 8,
+    armor: 4,
+    tall: false,
+    blastArmor: 26,
+    fieldRepair: "capped",
     ramMult: 1.2,
     look: "cage",
   },
@@ -491,6 +567,9 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 650,
     armor: 25,
+    tall: false,
+    blastArmor: 12,
+    fieldRepair: "capped",
     ramMult: 2.8,
     look: "ram",
   },
@@ -507,6 +586,9 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 120,
     armor: 12,
+    tall: false,
+    blastArmor: 12,
+    fieldRepair: "capped",
     ramMult: 1,
     look: "plates",
   },
@@ -521,6 +603,9 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 90,
     armor: 5,
+    tall: false,
+    blastArmor: 5,
+    fieldRepair: "full",
     ramMult: 1,
     look: "plates",
   },
@@ -535,6 +620,9 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 50,
     armor: 22,
+    tall: false,
+    blastArmor: 8,
+    fieldRepair: "none",
     ramMult: 1,
     look: "plates",
   },
@@ -549,6 +637,7 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 40,
     armor: 1,
+    tall: false,
     extraRows: 1,
     look: "rack",
   },
@@ -563,6 +652,7 @@ export const PARTS: Record<string, PartDef> = {
     h: 2,
     mass: 250,
     armor: 1,
+    tall: true,
     extraRows: 3,
     look: "box",
   },
@@ -575,8 +665,9 @@ export const PARTS: Record<string, PartDef> = {
     tier: 1,
     w: 1,
     h: 1,
-    mass: 55,
+    mass: 70,
     armor: 1,
+    tall: false,
     extraRows: 1,
     look: "box",
   },
@@ -591,6 +682,7 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 180,
     armor: 1,
+    tall: false,
     extraRows: 2,
     look: "rack",
   },
@@ -605,6 +697,7 @@ export const PARTS: Record<string, PartDef> = {
     h: 2,
     mass: 90,
     armor: 1,
+    tall: false,
     extraRows: 3,
     look: "rack",
   },
@@ -619,6 +712,7 @@ export const PARTS: Record<string, PartDef> = {
     h: 2,
     mass: 400,
     armor: 8,
+    tall: true,
     extraRows: 3,
     look: "box",
   },
@@ -633,13 +727,17 @@ export const PARTS: Record<string, PartDef> = {
     h: 2,
     mass: 550,
     armor: 3,
+    tall: true,
     extraRows: 5,
     look: "box",
   },
+  // Each chassis has one cab. It fills the cells where its base model draws the cab or the driver's seat. A closed
+  // cab is tall, so guns cannot fire across it. An open seat is not.
+  // An open seat, a hull hatch or a roll cage: the buggy, the gunwagon and the carrier.
   cab: {
     id: "cab",
     kind: "core",
-    name: "Cab",
+    name: "Driver seat",
     hp: 60,
     value: 200,
     tier: 1,
@@ -647,6 +745,82 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 80,
     armor: 3,
+    tall: false,
+    role: "cab",
+  },
+  // The courier's one-seat cabin.
+  cabNarrow: {
+    id: "cabNarrow",
+    kind: "core",
+    name: "Cabin",
+    hp: 60,
+    value: 200,
+    tier: 1,
+    w: 1,
+    h: 2,
+    mass: 80,
+    armor: 3,
+    tall: true,
+    role: "cab",
+  },
+  // The van's front seats, one row across.
+  cabRow: {
+    id: "cabRow",
+    kind: "core",
+    name: "Cab",
+    hp: 60,
+    value: 200,
+    tier: 1,
+    w: 3,
+    h: 1,
+    mass: 80,
+    armor: 3,
+    tall: true,
+    role: "cab",
+  },
+  // The scout's regular cab.
+  cabPickup: {
+    id: "cabPickup",
+    kind: "core",
+    name: "Cab",
+    hp: 60,
+    value: 200,
+    tier: 1,
+    w: 3,
+    h: 2,
+    mass: 80,
+    armor: 3,
+    tall: true,
+    role: "cab",
+  },
+  // The hauler's cab-over, beside the engine it sits on.
+  cabOver: {
+    id: "cabOver",
+    kind: "core",
+    name: "Cab",
+    hp: 60,
+    value: 200,
+    tier: 1,
+    w: 2,
+    h: 2,
+    mass: 80,
+    armor: 3,
+    tall: true,
+    role: "cab",
+  },
+  // The full-width cab of the longbed and the tractor.
+  cabWide: {
+    id: "cabWide",
+    kind: "core",
+    name: "Cab",
+    hp: 60,
+    value: 200,
+    tier: 1,
+    w: 5,
+    h: 2,
+    mass: 80,
+    armor: 3,
+    tall: true,
     role: "cab",
   },
   transmission: {
@@ -660,6 +834,7 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 60,
     armor: 3,
+    tall: false,
     role: "transmission",
   },
   wheel: {
@@ -673,12 +848,14 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 25,
     armor: 2,
+    tall: false,
     role: "wheel",
   },
+  // The small tank fits the buggy and the courier. Every other chassis carries the long tank.
   tank: {
     id: "tank",
     kind: "core",
-    name: "Fuel tank",
+    name: "Small fuel tank",
     hp: 15,
     value: 60,
     tier: 1,
@@ -686,6 +863,21 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 30,
     armor: 1,
+    tall: false,
+    role: "tank",
+  },
+  tankLong: {
+    id: "tankLong",
+    kind: "core",
+    name: "Fuel tank",
+    hp: 15,
+    value: 60,
+    tier: 1,
+    w: 2,
+    h: 1,
+    mass: 30,
+    armor: 1,
+    tall: false,
     role: "tank",
   },
   scanner: {
@@ -699,6 +891,7 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 30,
     armor: 2,
+    tall: false,
     range: 160, // tiles, through hills
   },
 };

@@ -5,11 +5,12 @@ import { RULES } from '../data/rules';
 import { REGION } from '../data/region';
 import { makePart } from './factory';
 import { update } from './world';
-import { freeCells, goodsCount, gridOf, mountedParts } from './grid';
-import { dumpItem, moveItem, removeAllGoods, spareParts, storePart, stowPart, takeFromStorage } from './inventory';
+import { openSides } from './armor';
+import { freeCells, goodsCount, gridOf, mountedItems, mountedParts } from './grid';
+import { dumpItem, mountPart, moveItem, removeAllGoods, spareParts, storePart, stowPart, takeFromStorage } from './inventory';
 import { vehicleStats } from './stats';
-import { emptyWorld } from './testkit';
-import type { World } from './types';
+import { addVehicle, emptyWorld } from './testkit';
+import type { GridItem, Vehicle, World } from './types';
 import { sitePads } from './sites';
 import { advanceJobs } from './jobs';
 
@@ -96,18 +97,18 @@ describe('inventory grid', () => {
     expect(next.vehicles[0].items.find((entry) => entry.id === 'spare-item')).toMatchObject({ x: mg.x, y: mg.y });
   });
 
-  it('a cannon works only lying along the weapon mount', () => {
+  it('a cannon works only lying fully on deck cells', () => {
     let w = emptyWorld(sitePads(bowl)[0]);
     w.player.money = 2000;
     removeAllGoods(w.vehicles[0]); // free the plain cells the cannon test claims, regardless of start cargo
-    const mg = item(w, 'mg');
-    w = storePart(w, mg.id);
+    w = storePart(w, item(w, 'mg').id);
+    w = storePart(w, item(w, 'rack').id);
     w = update(w, (d) => { d.player.storage.push(makePart(d, 'cannon', 0)); });
     const id = w.player.storage.find((p) => p.defId === 'cannon')!.id;
-    const flat = takeFromStorage(w, id, { x: mg.x, y: mg.y, rot: 0 });
+    // The scout bed row 5 is three deck cells wide. Upright, the cannon reaches down onto the back armor edge.
+    const flat = takeFromStorage(w, id, { x: 1, y: 5, rot: 0 });
     expect(vehicleStats(flat, flat.vehicles[0]).weapons.map((m) => m.def.id)).toEqual(['cannon']);
-    // Upright from the last weapon cell down into the plain cells below it.
-    const upright = takeFromStorage(w, id, { x: mg.x + 2, y: mg.y, rot: 1 });
+    const upright = takeFromStorage(w, id, { x: 1, y: 5, rot: 1 });
     expect(vehicleStats(upright, upright.vehicles[0]).weapons).toHaveLength(0);
   });
 
@@ -121,9 +122,8 @@ describe('inventory grid', () => {
     let w = emptyWorld(sitePads(bowl)[0]);
     w.player.money = 2000;
     const free = freeCells(w.vehicles[0]);
-    const mg = item(w, 'mg');
     w = update(w, (d) => { d.player.storage.push(makePart(d, 'mg', 0)); });
-    w = takeFromStorage(w, w.player.storage[0].id, { x: mg.x + 1, y: mg.y, rot: 0 });
+    w = takeFromStorage(w, w.player.storage[0].id, { x: 3, y: 5, rot: 0 });
     expect(freeCells(w.vehicles[0])).toBe(free - 1);
     expect(vehicleStats(w, w.vehicles[0]).weapons).toHaveLength(2);
   });
@@ -136,5 +136,34 @@ describe('inventory grid', () => {
     expect(stowPart(w, w.vehicles[0], makePart(w, 'mg', 0))).toBe(true);
     const loose = w.vehicles[0].items.filter((it) => it.kind === 'part' && it.part.defId === 'mg').at(-1)!;
     expect(dumpItem(w, loose.id).vehicles[0].items.some((it) => it.id === loose.id)).toBe(false);
+  });
+});
+
+function mountedItemOf(v: Vehicle, defId: string): GridItem {
+  return mountedItems(v).find((it) => it.part.defId === defId)!;
+}
+
+describe('auto mounting on the deck', () => {
+  it('places a turret where no tall part blocks it', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine'], { x: 40, y: 40 });
+    expect(mountPart(w, v, makePart(w, 'mg', 0))).toBe(true);
+    expect(openSides(v, mountedItemOf(v, 'mg'))).toHaveLength(4);
+  });
+
+  it('places a cargo box where it blinds no mounted gun', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine', 'mg'], { x: 40, y: 40 });
+    expect(mountPart(w, v, makePart(w, 'trailerBox', 0))).toBe(true);
+    expect(openSides(v, mountedItemOf(v, 'mg'))).toHaveLength(4);
+  });
+
+  it('lets a gun and a cargo frame compete for the same deck cells', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'scout', ['stockEngine'], { x: 40, y: 40 });
+    v.items.push({ id: 'i-rack', x: 1, y: 5, rot: 0, kind: 'part', part: makePart(w, 'rack', 0) });
+    v.items.push({ id: 'i-mg', x: 3, y: 5, rot: 0, kind: 'part', part: makePart(w, 'mg', 0) });
+    expect(mountedItems(v, 'cargo').map((it) => it.id)).toEqual(['i-rack']);
+    expect(mountedItems(v, 'weapon').map((it) => it.id)).toEqual(['i-mg']);
   });
 });

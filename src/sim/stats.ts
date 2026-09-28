@@ -8,7 +8,8 @@ import { PERK_NUMBERS } from '../data/skills';
 import { skillEffect, vehicleHasPerk } from './progress';
 import { TOW } from '../data/tow';
 import { maxHp, wornDef } from './wear';
-import { corePart, coreParts, mountedParts } from './grid';
+import { openSides, type Side } from './armor';
+import { corePart, coreParts, mountedItems, mountedParts } from './grid';
 import { loadFactor, vehicleMass } from './mass';
 import { getResources } from './resources';
 import { isTowing } from './tow';
@@ -16,7 +17,8 @@ import type { PartInstance, Vehicle, World } from './types';
 import { DEG } from './vec';
 import { weatherAt } from './weather';
 
-export type MountedWeapon = { part: PartInstance; def: WeaponDef };
+// sides: the sides of the truck the weapon can fire toward, past the tall parts around it.
+export type MountedWeapon = { part: PartInstance; def: WeaponDef; sides: Side[] };
 
 export type VehicleStats = {
   maxSpeed: number;
@@ -97,7 +99,7 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     roughSkill: skillEffect(world, v, 'driving', 'roughSpeed'),
     mass,
     radius: ch.radius,
-    weapons: mountedParts(v, 'weapon').map((part) => ({ part, def: wornDef<WeaponDef>(part) })),
+    weapons: mountedItems(v, 'weapon').map((item) => ({ part: item.part, def: wornDef<WeaponDef>(item.part), sides: openSides(v, item) })),
   };
 }
 

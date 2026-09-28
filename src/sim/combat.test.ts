@@ -12,7 +12,7 @@ import { stateOf } from './states';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
-import type { GameEvent, Vehicle } from './types';
+import type { GameEvent, Vehicle, World } from './types';
 import { dist } from './vec';
 import { endTurn } from './world';
 
@@ -23,6 +23,15 @@ function duel(targetPos = { x: 33, y: 30 }) {
   buggy.brain = npcBrain('buggy', targetPos, ['raider']);
   const mg = vehicleStats(w, me).weapons[0];
   return { w, me, buggy, mg };
+}
+
+// The player's scout swapped for a hauler with a forward cannon on deck beside its cab, where the cannon can fire forward.
+function cannonHauler(w: World): Vehicle {
+  const old = w.vehicles[0];
+  const v = addVehicle(w, 'player', 'hauler', ['stockEngine', 'cannon'], old.pos, old.heading);
+  v.id = old.id;
+  w.vehicles = [v, ...w.vehicles.slice(1, -1)];
+  return v;
 }
 
 function order(me: Vehicle, weaponId: string, targetId: string, aim = 'body') {
@@ -61,12 +70,9 @@ describe('combat', () => {
 
   it('cannon reloads for several turns', () => {
     const w = emptyWorld();
-    const me = w.vehicles[0];
-    const gun = me.items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
-    me.items = me.items.filter((it) => it !== gun);
-    me.items.push({ id: 'i1', x: gun.x, y: gun.y, rot: 0, kind: 'part', part: { id: 'c1', defId: 'cannon', hp: 30, reload: 0, wear: 0 } });
+    const me = cannonHauler(w);
     const t = addVehicle(w, 'raiders', 'wagon', ['cannon', 'stockEngine', 'plates'], { x: 35, y: 30 }, Math.PI);
-    order(me, 'c1', t.id);
+    order(me, vehicleStats(w, me).weapons[0].part.id, t.id);
     let shots = 0;
     for (let i = 0; i < 6; i++) {
       w.events = [];
@@ -254,7 +260,7 @@ describe('hit odds', () => {
     const { w, me, buggy, mg } = range(4, broadside, 3);
     me.speed = 2;
     const o = hitOdds(w, me, mg, buggy, 'body');
-    expect(o.spread).toBeCloseTo(o.causes.weapon + o.causes.skill + o.causes.crossing + o.causes.own, 12);
+    expect(o.spread).toBeCloseTo(o.causes.weapon + o.causes.skill + o.causes.crossing + o.causes.own + o.causes.recoil, 12);
     expect(o.halfAngle).toBeCloseTo(o.width / (2 * o.distance), 12);
   });
 });
@@ -374,15 +380,12 @@ describe('rounds', () => {
 
   it('a cannon miss within splash radius damages a part', () => {
     const w = emptyWorld();
-    const me = w.vehicles[0];
-    const gun = me.items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
-    me.items = me.items.filter((it) => it !== gun);
-    me.items.push({ id: 'i1', x: gun.x, y: gun.y, rot: 0, kind: 'part', part: { id: 'c1', defId: 'cannon', hp: 30, reload: 0, wear: 0 } });
+    const me = cannonHauler(w);
     const t = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 }, Math.PI / 2);
     for (const p of mountedParts(t)) p.hp = 1e9;
     t.speed = 3;
     me.speed = 4;
-    order(me, 'c1', t.id);
+    order(me, vehicleStats(w, me).weapons[0].part.id, t.id);
     const cannon = vehicleStats(w, me).weapons[0];
     let splashed = false;
     for (let i = 0; i < 60 && !splashed; i++) {
@@ -553,5 +556,67 @@ describe('aim perks', () => {
     const before = hitOdds(w, buggy, gun, me, part);
     w.player.perks.push('calledShot');
     expect(hitOdds(w, buggy, gun, me, part).spread).toBe(before.spread);
+  });
+});
+
+describe('recoil and shake', () => {
+  // A tank gun on the given chassis, facing a buggy 5 tiles ahead.
+  function tankGunOn(chassisId: string) {
+    const w = emptyWorld();
+    const shooter = addVehicle(w, 'player', chassisId, ['stockEngine', 'tankGun'], { x: 60, y: 60 });
+    const target = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 65, y: 60 }, Math.PI / 2);
+    return { w, shooter, target, gun: vehicleStats(w, shooter).weapons[0] };
+  }
+
+  it('a heavy gun kicks harder on a light truck', () => {
+    const light = tankGunOn('scout');
+    const heavy = tankGunOn('tractor');
+    const a = hitOdds(light.w, light.shooter, light.gun, light.target, 'body');
+    const b = hitOdds(heavy.w, heavy.shooter, heavy.gun, heavy.target, 'body');
+    expect(a.causes.recoil).toBeGreaterThan(b.causes.recoil);
+    expect(a.chance).toBeLessThan(b.chance);
+  });
+
+  it('a light gun barely kicks', () => {
+    const { w, me, buggy, mg } = duel();
+    const odds = hitOdds(w, me, mg, buggy, 'body');
+    expect(odds.causes.recoil).toBeLessThan(odds.causes.weapon / 10);
+  });
+
+  it('a stabilized gun loses less aim to its own speed than a sniper cannon', () => {
+    const w = emptyWorld();
+    const shooter = addVehicle(w, 'player', 'tractor', ['stockEngine', 'mg', 'sniperCannon'], { x: 60, y: 60 });
+    const target = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 65, y: 60 }, Math.PI / 2);
+    shooter.speed = 4;
+    const [mg, sniper] = ['mg', 'sniperCannon'].map((id) => vehicleStats(w, shooter).weapons.find((x) => x.def.id === id)!);
+    expect(hitOdds(w, shooter, mg, target, 'body').causes.own).toBeLessThan(hitOdds(w, shooter, sniper, target, 'body').causes.own);
+  });
+});
+
+describe('weapon damage multiplier', () => {
+  // A cannon on a hauler fires at a sturdy buggy. Returns the damage of each part hit.
+  function dealt(mult: number): number[] {
+    const saved = RULES.weaponDamage;
+    (RULES as { weaponDamage: number }).weaponDamage = mult;
+    try {
+      const w = emptyWorld();
+      const me = cannonHauler(w);
+      const t = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: me.pos.x + 4, y: me.pos.y }, Math.PI / 2);
+      for (const p of mountedParts(t)) p.hp = 1e9;
+      order(me, vehicleStats(w, me).weapons[0].part.id, t.id);
+      fireWeapons(w);
+      return shotsBy(w.events, me.id).flatMap((s) => s.rounds).flatMap((r) => r.hits).map((h) => h.damage);
+    } finally {
+      (RULES as { weaponDamage: number }).weaponDamage = saved;
+    }
+  }
+
+  // Each hit rounds to whole HP, so each can differ from the exact half by up to 0.5.
+  it('scales every hit by the one multiplier', () => {
+    const full = dealt(1);
+    const half = dealt(0.5);
+    expect(full.length).toBeGreaterThan(0);
+    expect(half).toHaveLength(full.length);
+    half.forEach((d, i) => expect(Math.abs(d - full[i] / 2)).toBeLessThanOrEqual(0.5));
   });
 });

@@ -46,6 +46,15 @@ import { clockOf } from "./sun";
 const bowl = REGION.towns.find((t) => t.id === "bowl")!;
 const nose = REGION.towns.find((t) => t.id === "nose")!;
 const startAtBowl = () => emptyWorld(sitePads(bowl)[0]);
+// A longbed at Bowl, for trades bigger than the start scout's cargo room. Its money is back to the start amount.
+const longbedAtBowl = () => {
+  const start = startAtBowl();
+  const money = start.player.money;
+  start.player.money = CHASSIS.longbed.value * 10;
+  const w = buyChassis(start, "longbed");
+  w.player.money = money;
+  return w;
+};
 
 describe("trade", () => {
   it("buying moves money into cargo", () => {
@@ -82,7 +91,7 @@ describe("trade", () => {
   });
 
   it("buying raises the local price and selling lowers it", () => {
-    const w = startAtBowl();
+    const w = longbedAtBowl();
     const before = buyPrice(w, "bowl", "scrap");
     const after = buyGood(w, "scrap", 20);
     expect(buyPrice(after, "bowl", "scrap")).toBeGreaterThan(before);
@@ -185,7 +194,7 @@ describe("upkeep", () => {
     "selling then buying back 25 units always loses money, at social skill %i",
     (social) => {
       for (const pressureStart of [0, 0.3, -0.3]) {
-        const w = startAtBowl();
+        const w = longbedAtBowl();
         w.player.skills.social = social;
         w.shops.bowl.pressure.scrap = pressureStart;
         addGoods(w, w.vehicles[0], "scrap", 25 - (goodsCount(w.vehicles[0]).scrap ?? 0));
@@ -201,7 +210,7 @@ describe("upkeep", () => {
     "buying then selling back 25 units always loses money, at social skill %i",
     (social) => {
       for (const pressureStart of [0, 0.3, -0.3]) {
-        const w = startAtBowl();
+        const w = longbedAtBowl();
         w.player.skills.social = social;
         w.shops.bowl.pressure.scrap = pressureStart;
 

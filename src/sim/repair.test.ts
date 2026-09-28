@@ -4,7 +4,7 @@ import { PARTS, partDef } from '../data/parts';
 import { GOODS } from '../data/goods';
 import { REPAIR } from '../data/wear';
 import { addVehicle, emptyWorld } from './testkit';
-import { mountedParts } from './grid';
+import { corePart, mountedParts } from './grid';
 import { addGoods } from './inventory';
 import { makePart } from './factory';
 import { partValue } from './wear';
@@ -48,7 +48,7 @@ describe('repairPlan', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
     const wheel = mountedParts(me).find((p) => p.defId === 'wheel')!;
-    const cab = mountedParts(me).find((p) => p.defId === 'cab')!;
+    const cab = corePart(me, 'cab');
     wheel.hp = 0;
     cab.hp = 0;
     addGoods(w, me, 'parts', 20);
@@ -124,5 +124,27 @@ describe('jury rig perk', () => {
     engine.hp = Math.ceil(partDef(engine.defId).hp * REPAIR.fieldCapShare);
     w.player.perks.push('juryRig');
     expect(repairPlan(w, npc, engine.id).needed).toBe(0);
+  });
+});
+
+describe('field repair by armor type', () => {
+  it('patches scrap panels to full HP', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'scout', ['scrapPanels', 'stockEngine'], { x: 40, y: 40 });
+    const panels = armorPart(v);
+    panels.hp = 1;
+    addGoods(w, v, 'parts', 10);
+    const plan = repairPlan(w, v, panels.id);
+    expect(plan.parts).toBeLessThan(10);
+    expect(plan.hp).toBeCloseTo(partDef('scrapPanels').hp - 1, 5);
+  });
+
+  it('leaves ceramic plates for a town garage', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'scout', ['ceramicPlates', 'stockEngine'], { x: 40, y: 40 });
+    const plates = armorPart(v);
+    plates.hp = 1;
+    addGoods(w, v, 'parts', 1);
+    expect(repairPlan(w, v, plates.id).needed).toBe(0);
   });
 });

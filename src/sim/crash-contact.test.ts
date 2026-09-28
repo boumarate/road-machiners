@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PERK_NUMBERS } from '../data/skills';
+import { RULES } from '../data/rules';
 import { applyContactCrash, computeClosingSpeed, locateCrashContact } from './crash-contact';
 import { addVehicle, emptyWorld, practiceOf } from './testkit';
 import { vehicleMass } from './mass';
@@ -117,5 +118,28 @@ describe('ram guard perk', () => {
 
   it('leaves NPC crash damage unchanged', () => {
     expect(crashDamage(true, true)).toBe(crashDamage(false, true));
+  });
+});
+
+describe('crash damage multiplier', () => {
+  // Total damage a scout takes from a head-on crash into a rock with the given multiplier.
+  function rockCrash(mult: number, impact: number): number {
+    const saved = RULES.crashDamage;
+    (RULES as { crashDamage: number }).crashDamage = mult;
+    try {
+      const world = emptyWorld();
+      const vehicle = world.vehicles[0];
+      const before = mountedParts(vehicle).reduce((sum, part) => sum + part.hp, 0);
+      applyContactCrash(world, vehicle, null, 'rock', impact, { a: { side: 'front', lanes: [1, 2, 3] }, b: null });
+      return before - mountedParts(vehicle).reduce((sum, part) => sum + part.hp, 0);
+    } finally {
+      (RULES as { crashDamage: number }).crashDamage = saved;
+    }
+  }
+
+  // Crash energy grows with the square of the impact, so half the multiplier equals the impact over the square root of 2.
+  it('acts on crash energy like a slower impact', () => {
+    expect(rockCrash(0.5, 8)).toBe(rockCrash(1, 8 / Math.SQRT2));
+    expect(rockCrash(0.5, 8)).toBeLessThan(rockCrash(1, 8));
   });
 });

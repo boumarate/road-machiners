@@ -41,8 +41,8 @@ export const REPAIR = {
 };
 
 // Engine heat for the player truck. 0 is a cold engine and 1 is overheated. The sun heats a running
-// engine; shade, night and parking cool it. Full noon sun overheats a cold engine in about 44 turns
-// at top speed and 74 at 70% of it. Morning and evening sun barely warm it.
+// engine; shade, night and parking cool it. Full noon sun overheats a cold stock engine in about 44 turns
+// at top speed and 74 at 70% of it. Morning and evening sun barely warm it. Each engine's heat scales the gain.
 export const ENGINE_HEAT = {
   gain: 0.02875, // heat per turn per unit of sun heat above 1, at top speed; scales with speed share
   coolDriving: 0.02, // heat lost per turn to airflow while driving
