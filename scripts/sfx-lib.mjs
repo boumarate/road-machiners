@@ -2,7 +2,7 @@
 // 1. Free music loses its quiet intro and outro and loops through a crossfade. A beat loop is stretched to its exact
 //    bar length, so layers stay locked.
 // 2. One-shots lose silence at both ends and get short fades. Score stingers are cut to STINGER_MAX_S with soft edges,
-//    so they sit in the music instead of cutting in.
+//    so they sit in the music instead of cutting in, and get a warmer top end.
 // 3. One-shots and the engine become mono, since the game pans them; beds keep stereo with even sides.
 //    Then one EQ for all: rumble and harsh top cut.
 // 4. Tone matched to the cue's first file, so variants sound like one sound. Families of different sounds skip it.
@@ -76,11 +76,12 @@ function shapeFilters(src, cue) {
   if (cue.loop) return [];
   const trim = `silenceremove=start_periods=1:start_threshold=${SILENCE_DB}dB:start_silence=${KEEP_S}`;
   const edges = cue.setup === 'stinger' ? STINGER_EDGES : [FADE_IN_S, FADE_OUT_S];
-  const cap = cue.setup === 'stinger' ? [`atrim=end=${STINGER_MAX_S}`] : [];
+  const cap = cue.setup === 'stinger' ? [`atrim=end=${STINGER_MAX_S}`, STINGER_TONE] : [];
   return [trim, 'areverse', trim, 'areverse', ...cap, 'areverse', `afade=t=in:d=${edges[1]}`, 'areverse', `afade=t=in:d=${edges[0]}`];
 }
 
 const STINGER_MAX_S = 1.5; // longest score stinger; longer ones drag past the moment they answer
+const STINGER_TONE = 'lowpass=f=5000,treble=g=-4:f=3000'; // distorted stingers are harsh up top; this warms them
 const STINGER_EDGES = [0.02, 0.6]; // fade in and fade out seconds for stingers; a long fade-out lets them melt into the base
 
 // Generated loops miss their requested length by a few milliseconds. A tiny tempo change fits the loop, and the
