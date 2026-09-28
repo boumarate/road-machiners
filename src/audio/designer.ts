@@ -30,6 +30,7 @@ export type DesignerTuning = {
   fillGain: number;
   secondaryPan: number; // the secondary sits this far to one side, picked per battle
   busyFactor: number; // how fast a light event's chance falls with phrases already on its line
+  leadInBeats: number; // a phrase may start this many beats before its event, since turn results are known ahead
   lines: Record<LineId, LineTuning>;
 };
 
@@ -89,7 +90,7 @@ export class SoundDesigner {
     this.pan = (roll() < 0.5 ? -1 : 1) * tuning.secondaryPan;
   }
 
-  // Queues an event's phrase, not to start before time at. A lead event always offers; a light event on the
+  // Queues an event's phrase for an event at time at; it starts no more than leadInBeats before it. A lead event always offers; a light event on the
   // secondary joins by chance, lower on a busy line.
   offer(cue: string, plan: AccentPlan, at: number): Offer {
     const line = this.lines[plan.line];
@@ -121,7 +122,7 @@ export class SoundDesigner {
   // An urgent phrase at the queue head replaces what plays, on the next beat.
   private cutIn(line: Line, slot: number, heat: number): void {
     const head = line.queue[0];
-    if (!head?.plan.urgent || slot % this.tuning.subdivision !== 0 || this.slotTime(slot) < head.at) return;
+    if (!head?.plan.urgent || slot % this.tuning.subdivision !== 0 || !this.ready(head, slot)) return;
     line.queue.shift();
     this.begin(line, head, slot, heat);
   }
@@ -129,12 +130,16 @@ export class SoundDesigner {
   private startNext(id: LineId, slot: number, paused: boolean, heat: number): void {
     const line = this.lines[id];
     const head = line.queue[0];
-    if (head && this.slotTime(slot) >= head.at) {
+    if (head && this.ready(head, slot)) {
       line.queue.shift();
       line.replays = 0;
       return this.begin(line, head, slot, heat);
     }
     if (id === "lead" && paused) this.replay(line, slot, heat);
+  }
+
+  private ready(p: Phrase, slot: number): boolean {
+    return this.slotTime(slot) >= p.at - this.tuning.leadInBeats * this.grid.beat;
   }
 
   private replay(line: Line, slot: number, heat: number): void {

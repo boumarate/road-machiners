@@ -13,6 +13,7 @@ const TUNING: DesignerTuning = {
   fillGain: 0.5,
   secondaryPan: 0.3,
   busyFactor: 0,
+  leadInBeats: 0,
   lines: {
     lead: { gain: 1, queueMax: 2, calm: ["x...x..."], hot: ["xxxxxxxx"] },
     secondary: { gain: 0.5, queueMax: 2, calm: ["..x...x."], hot: [".x.x.x.x"] },
@@ -86,6 +87,13 @@ describe("SoundDesigner", () => {
     const d = designer();
     d.offer("a", LEAD, 5);
     expect(times(d.step(0.1, 11.9, false, 0))).toEqual([8, 10]);
+  });
+
+  it("starts a phrase up to leadInBeats before its event", () => {
+    const d = designer({ ...TUNING, leadInBeats: 1 });
+    d.offer("a", LEAD, 5); // bar 4 is one beat early: allowed
+    d.offer("b", LEAD, 13.5); // bar 12 is 1.5 beats early: waits for bar 16
+    expect(d.step(0.1, 19.9, false, 0).map((h) => `${h.cue}@${h.time}`)).toEqual(["a@4", "a@6", "b@16", "b@18"]);
   });
 
   it("repeats the last lead phrase pauseRepeats times in a pause, then rests", () => {

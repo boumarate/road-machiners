@@ -626,8 +626,8 @@ export class Game {
           this.eventPoint(e.target) !== null) ||
         (e.t === "guardShot" && this.eventPoint(e.target) !== null),
     );
-    // Crash accents are asked for now, so they may land a little before the impact shows at the end of movement.
-    this.sound.accents(world.events, world.player.vehicleId, (e) => (e.t === "collision" ? Math.max(0, MOVE_MS - elapsed) : null));
+    // Turn results are known now, so the score hears every volley and crash ahead and may lead into it.
+    this.sound.accents(world.events, world.player.vehicleId, (e) => Math.max(0, MOVE_MS - elapsed) + (e.t === "collision" ? 0 : CONFIG.combatShotMs * (1 - ROUND_STAGGER)));
     // A towed truck's engine is off.
     if (!towed) this.playDriveSound(playback.result);
     this.phase = "Moving";
@@ -778,7 +778,6 @@ export class Game {
     const w = this.world;
     const rows = new Map<string, number>();
     const mine = vehicleStats(w, playerVehicle(w)).weapons;
-    this.sound.accents(w.events, w.player.vehicleId, (e) => (e.t === "collision" ? null : CONFIG.combatShotMs * (1 - ROUND_STAGGER)));
     for (const e of w.events) {
       if (e.t === "shot") {
         const a = this.eventPoint(e.shooter);

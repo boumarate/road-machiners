@@ -196,6 +196,7 @@ export const MIX = {
     fillGain: 0.5,
     secondaryPan: 0.3,
     busyFactor: 0.7,
+    leadInBeats: 1,
     duckGain: 0.6,
     duckAttackSeconds: 0.05,
     duckReleaseBeats: 2,
