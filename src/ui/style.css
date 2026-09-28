@@ -876,9 +876,6 @@ body {
   outline: 2px solid #e0674c;
   outline-offset: -2px;
 }
-.inv-fire {
-  margin: 6px 0;
-}
 .inv-item.selected {
   outline: 2px solid #eac779;
   outline-offset: -2px;

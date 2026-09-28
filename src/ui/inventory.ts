@@ -47,7 +47,7 @@ import { wearLabel } from "./format";
 import type { UiHost } from "./host";
 import { baselinePart, conditionMeter, createIcon, type IconName, diffStats, footprint as footprintEl, goodIcon, partIcon, partStats, statGrid } from "./cards";
 import { vehicleMass } from "../sim/mass";
-import { fireSpans, reachedSides, sideBlockers, SIDES, type FireSpan, type Side } from "../sim/armor";
+import { fireSpans, reachedSides, sideBlockers, SIDES, type FireSpan } from "../sim/armor";
 import { fuelLiters, hp, kg, liters } from "./units";
 
 const CELL_PX = 42;
@@ -352,7 +352,6 @@ export class InventoryView {
     this.inspection.replaceChildren(
       el("div", { class: "card-head" }, createIcon(getItemIcon(item)), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       ...(item.kind === "part" ? partDetails(playerVehicle(w), item.part, mounted) : []),
-      ...fireLine(playerVehicle(w), item, mounted),
       el("p", { class: "dim" }, inspectionHint(w, item)),
       el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
     );
@@ -911,12 +910,6 @@ function partTitle(p: PartInstance): string {
   return `${d.name} (${d.kind}) ${wearLabel(p)}, ${hp(p.hp)}/${hp(maxHp(p))} HP, ${d.w}x${d.h}`;
 }
 
-// Where a mounted gun can fire, in words. Other items get nothing.
-function fireLine(me: Vehicle, it: GridItem, mounted: boolean): HTMLElement[] {
-  const def = weaponDefOf(it);
-  return mounted && def ? [el("p", { class: "inv-fire" }, fireText(me, it, def))] : [];
-}
-
 function fieldPatchable(part: PartInstance): boolean {
   const def = partDef(part.defId);
   return def.kind !== "armor" || def.fieldRepair !== "none";
@@ -949,7 +942,7 @@ function partDetails(me: Vehicle, part: PartInstance, mounted: boolean): HTMLEle
 }
 
 // ---- Fire view: where a mounted gun can fire, shown on the grid as a fan from the gun, the same shape as its range
-// on the ground, and as one plain sentence that names the parts in the way.
+// on the ground, with the parts in its way outlined.
 
 const SVG = "http://www.w3.org/2000/svg";
 
@@ -957,50 +950,6 @@ function weaponDefOf(it: GridItem): WeaponDef | null {
   if (it.kind !== "part") return null;
   const def = partDef(it.part.defId);
   return def.kind === "weapon" ? def : null;
-}
-
-// "Fires back and to the sides. The cab blocks the front."
-export function fireText(v: Vehicle, it: GridItem, def: WeaponDef): string {
-  const blockers = sideBlockers(v, it);
-  const reach = reachedSides(def);
-  const open = reach.filter((side) => !blockers[side]);
-  const fires = open.length === 0 ? "Cannot fire." : `Fires ${directionWords(open, def)}.`;
-  return [fires, ...blockedSentences(reach, blockers)].join(" ");
-}
-
-function directionWords(open: Side[], def: WeaponDef): string {
-  if (open.length === SIDES.length) return "all around";
-  if (def.arc < 360 && open.join() === "front") return `forward in a ${def.arc}° arc`;
-  const ahead = open.includes("front") ? ["forward"] : [];
-  const back = open.includes("rear") ? ["back"] : [];
-  return listWords([...ahead, ...back, ...flankWords(open)]);
-}
-
-function flankWords(open: Side[]): string[] {
-  const flanks = open.filter((side) => side === "left" || side === "right");
-  return flanks.length === 2 ? ["to the sides"] : flanks.map((side) => `to the ${side}`);
-}
-
-// "a", "a and b", "a, b and c".
-function listWords(words: string[]): string {
-  return words.length > 1 ? `${words.slice(0, -1).join(", ")} and ${words.at(-1)}` : words[0];
-}
-
-const SIDE_WORD: Record<Side, string> = { front: "the front", rear: "the back", left: "the left", right: "the right" };
-
-// One sentence per blocking part, naming every side it blocks.
-function blockedSentences(reach: Side[], blockers: Partial<Record<Side, GridItem>>): string[] {
-  const bySide = new Map<string, { name: string; sides: Side[] }>();
-  for (const side of reach) {
-    const b = blockers[side];
-    if (!b || b.kind !== "part") continue;
-    const entry = bySide.get(b.id) ?? { name: partDef(b.part.defId).name, sides: [] };
-    entry.sides.push(side);
-    bySide.set(b.id, entry);
-  }
-  return [...bySide.values()].map(({ name, sides }) => {
-    return `The ${name.toLowerCase()} blocks ${listWords(sides.map((side) => SIDE_WORD[side]))}.`;
-  });
 }
 
 // The ids of the tall parts that block this gun, for outlining them on the grid.
