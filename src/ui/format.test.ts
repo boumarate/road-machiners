@@ -25,6 +25,7 @@ describe("wearLabel", () => {
 
 describe("contract text", () => {
   const bounty: Contract = { id: "c1", shop: "bowl", kind: "bounty", template: "buggy", targetName: "Raider outrider", reward: 100, deadline: 100, tier: 1 };
+  const fetch: Contract = { id: "c2", shop: "bowl", kind: "fetch", defId: "mg", reward: 100, deadline: 100, tier: 1 };
 
   it("shows the deadline as the game time the contract fails", () => {
     expect(contractDue(bounty)).toBe("by Day 1 19:00");
@@ -32,5 +33,9 @@ describe("contract text", () => {
 
   it("names any truck of the bounty's type", () => {
     expect(contractSummary(bounty)).toBe("destroy any Raider outrider");
+  });
+
+  it("says the hand-in part must still work and be rebuilt at most once", () => {
+    expect(contractSummary(fetch)).toBe("find a MG turret anywhere, working and rebuilt at most once, bring it to Bowl");
   });
 });

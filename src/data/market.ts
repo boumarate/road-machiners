@@ -100,14 +100,18 @@ export const CONTRACTS = {
     // The reward is the part's own pristine buy price plus this search fee: turns of effort spent
     // finding a part of a named type, in any condition, at the fetch's own tier wage.
     searchFeeTurns: 60,
+    // Worst wear a hand-in part may carry. One rebuild keeps the fetch honest: the client wants a
+    // part that still does its job, not a part on its last legs.
+    maxWear: 1,
   },
 
   bounty: {
     // Long enough that a raider's own patrol or camp turns do not expire the contract before the
-    // player can reach and fight it.
+    // player can reach and fight it. The window only sets the deadline: it does not change the pay.
     durationTurns: [200, 500] as [number, number],
-    // Combat risk pays above a flat wage.
-    rewardFactor: 1.6,
+    // Share of the target's own total worth, chassis plus every part, paid for the kill. Half its
+    // worth pays for the risk of the fight without outpricing the wreck's own salvage.
+    valueShare: 0.5,
   },
 };
 
@@ -116,10 +120,16 @@ export const CONTRACTS = {
 
 export type ShopKind = 'garage' | 'stall';
 
-// make/need/neutral multiply a good's base value to get its shop price before pressure and spread.
-// One factor set for every shop for now: a good is 25% cheaper where it is made and 35% dearer where
-// it is needed. PH8 tunes these from the harness.
-export const PRICE_FACTOR = { make: 0.75, need: 1.35, neutral: 1 };
+// A good sells near its base value times `make` where it is made. Elsewhere its price climbs with
+// the straight distance to the nearest shop that makes it, through DISTANCE_PREMIUM below, so a long
+// haul pays for the miles and a short one does not.
+export const PRICE_FACTOR = { make: 0.75 };
+
+// Fraction of a good's value added to its price per tile of straight distance to the nearest shop
+// that makes it. Picked so a single-source good hauled the length of the Bowl-Nose road (about 520
+// tiles) sells for close to double its make price, which pays a full truckload about a tier's wage
+// for the trip's estimated turns.
+export const DISTANCE_PREMIUM = { perTile: 0.0021 };
 
 // Wear weights for rolled stock, keyed by wear step (0 is pristine, CONDITION.maxWear is the last
 // reasonable step; a shop never stocks junk). Garages lean lightly worn; stalls lean heavily worn,
@@ -165,6 +175,13 @@ export type ShopDef = {
 // double or less than a third of its resting price from local buying or selling alone.
 export const PRESSURE_MAX = 0.6;
 
+// Pressure a single traded unit adds at a garage. Set so a bare hauler's cargo cells, sold in one
+// lot, move price only about halfway to PRESSURE_MAX: a garage's cargo bay of trade is meant to fit
+// in its shelf, not blow through it. Stalls keep the older, steeper rate: their thin stock saturates
+// on a handful of units, which fits a roadside stall rather than a town garage.
+const GARAGE_PRESSURE_PER_UNIT = 0.005;
+const STALL_PRESSURE_PER_UNIT = 0.02;
+
 export const SHOPS: Record<string, ShopDef> = {
   // Bowl: cheap scrap, grain, textiles, meds, electronics and parts (all cheaper than Nose in the
   // old TOWN_PRICES); dear salt, tools and batteries (all pricier than Nose there).
@@ -178,7 +195,7 @@ export const SHOPS: Record<string, ShopDef> = {
     partStock: { parts: GARAGE_PARTS, wear: GARAGE_WEAR },
     stockSize: [8, 12], // a day's restock (400 turns, 2 days) keeps a garage's shelf full
     restockTurns: 400,
-    pressurePerUnit: 0.02,
+    pressurePerUnit: GARAGE_PRESSURE_PER_UNIT,
     driftPerTurn: 0.0075, // decays a standing pressure below 5% of itself over about 400 turns (2 days)
     contractSlots: 3,
     supplies: ['fuel', 'supplies'],
@@ -195,7 +212,7 @@ export const SHOPS: Record<string, ShopDef> = {
     partStock: { parts: GARAGE_PARTS, wear: GARAGE_WEAR },
     stockSize: [8, 12],
     restockTurns: 400,
-    pressurePerUnit: 0.02,
+    pressurePerUnit: GARAGE_PRESSURE_PER_UNIT,
     driftPerTurn: 0.0075,
     contractSlots: 3,
     supplies: ['fuel', 'supplies'],
@@ -215,7 +232,7 @@ export const SHOPS: Record<string, ShopDef> = {
     },
     stockSize: [2, 4],
     restockTurns: 300,
-    pressurePerUnit: 0.02,
+    pressurePerUnit: STALL_PRESSURE_PER_UNIT,
     driftPerTurn: 0.0075,
     contractSlots: 1,
     supplies: [],
@@ -235,7 +252,7 @@ export const SHOPS: Record<string, ShopDef> = {
     },
     stockSize: [2, 4],
     restockTurns: 300,
-    pressurePerUnit: 0.02,
+    pressurePerUnit: STALL_PRESSURE_PER_UNIT,
     driftPerTurn: 0.0075,
     contractSlots: 1,
     supplies: [],
@@ -255,7 +272,7 @@ export const SHOPS: Record<string, ShopDef> = {
     },
     stockSize: [2, 4],
     restockTurns: 300,
-    pressurePerUnit: 0.02,
+    pressurePerUnit: STALL_PRESSURE_PER_UNIT,
     driftPerTurn: 0.0075,
     contractSlots: 1,
     supplies: ['fuel'],

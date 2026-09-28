@@ -11,7 +11,8 @@ import { PARTS } from '../data/parts';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { CONDITION } from '../data/wear';
-import { CONTRACTS, EFFORT, PRESSURE_MAX, SHOPS, shopDef, type ShopDef, type Tier } from '../data/market';
+import { CONTRACTS, DISTANCE_PREMIUM, EFFORT, PRESSURE_MAX, SHOPS, shopDef, type ShopDef, type Tier } from '../data/market';
+import { chassisDef } from '../data/chassis';
 import { makePart, newId } from './factory';
 import { sampleWeighted } from './npc-loadout';
 import { playerVehicle } from './damage';
@@ -22,6 +23,7 @@ import { randInt, type Rng } from './rng';
 import { canUseSite, type Site } from './sites';
 import { playerCommand } from './world';
 import type { PartInstance, Vehicle, World } from './types';
+import { isJunk, partValue } from './wear';
 import { dist, type Vec } from './vec';
 
 export type ShopState = {
@@ -76,14 +78,23 @@ export function advanceShop(world: World, shopId: string, state: ShopState): voi
   }
 }
 
-function priceFactorFor(def: ShopDef, good: string): number {
-  if (def.makes.includes(good)) return def.priceFactor.make;
-  if (def.needs.includes(good)) return def.priceFactor.need;
-  return def.priceFactor.neutral;
+// Straight distance from a shop to the nearest other shop that makes the good, so a haul's pay
+// follows the miles it actually takes to move a good to where nobody makes it. Throws if no shop
+// makes the good at all, since then no price for it could ever be grounded in a maker.
+function nearestMakerDistance(shopId: string, good: string): number {
+  const makers = Object.values(SHOPS).filter((s) => s.id !== shopId && s.makes.includes(good));
+  if (makers.length === 0) throw new Error(`No shop makes ${good}`);
+  return Math.min(...makers.map((s) => dist(shopPos(shopId), shopPos(s.id))));
 }
 
-// A good's price at a shop before pressure and spread: its base value times the shop's make/need/
-// neutral factor. Throws if the shop does not trade the good.
+function priceFactorFor(def: ShopDef, good: string): number {
+  if (def.makes.includes(good)) return def.priceFactor.make;
+  return def.priceFactor.make + DISTANCE_PREMIUM.perTile * nearestMakerDistance(def.id, good);
+}
+
+// A good's price at a shop before pressure and spread: its base value times a factor that sits near
+// `make` at a shop that makes it, and climbs with distance to the nearest maker anywhere else. Throws
+// if the shop does not trade the good.
 export function goodBasePrice(shopId: string, good: string): number {
   const def = shopDef(shopId);
   if (!def.goods.includes(good)) throw new Error(`${shopId} does not trade ${good}`);
@@ -159,12 +170,24 @@ export function estimateTurns(from: Vec, to: Vec): number {
   return (dist(from, to) * EFFORT.routeFactor) / EFFORT.refSpeed + EFFORT.handlingTurns;
 }
 
-// Reward for turns of estimated work at a tier's wage, times the kind's factor. A haul reward also
-// carries a small cut of the goods' value (0 for a bounty, which calls with cargoValue 0). Fetch
-// rewards do not go through this: see fetchReward, which pays the part's own price instead.
-export function contractReward(kind: 'haul' | 'bounty', turns: number, tier: Tier, cargoValue: number): number {
-  const commission = kind === 'haul' ? cargoValue * CONTRACTS.haul.valueShare : 0;
-  return Math.round(turns * EFFORT.wage[tier] * CONTRACTS[kind].rewardFactor + commission);
+// A haul's reward: turns of estimated travel at the good's tier wage, times the haul's reward
+// factor, plus a small cut of the hauled goods' value.
+export function contractReward(turns: number, tier: Tier, cargoValue: number): number {
+  const commission = cargoValue * CONTRACTS.haul.valueShare;
+  return Math.round(turns * EFFORT.wage[tier] * CONTRACTS.haul.rewardFactor + commission);
+}
+
+// A vehicle's total worth: its chassis value plus every part it carries, mounted or spare, at each
+// part's own current worth (junk counts at scrap value only).
+export function vehicleValue(v: Vehicle): number {
+  const parts = v.items.flatMap((it) => (it.kind === 'part' ? [it.part] : []));
+  return chassisDef(v.chassisId).value + parts.reduce((a, p) => a + partValue(p), 0);
+}
+
+// A bounty's reward: a share of the target's own total worth, so a tougher, better-equipped truck
+// pays more to put down. The deadline window is random and does not change the pay.
+export function bountyReward(target: Vehicle): number {
+  return Math.round(vehicleValue(target) * CONTRACTS.bounty.valueShare);
 }
 
 // The pristine buy price of a part def: its base value plus the shop spread, ignoring wear. A fetch
@@ -216,7 +239,7 @@ function rollHaul(world: World, input: RollInput, id: string): Contract {
   const tier = GOODS[good].tier;
   const units = randInt(world.marketRng, CONTRACTS.haul.units[0], CONTRACTS.haul.units[1]);
   const turns = estimateTurns(input.shop.pos, to.pos);
-  const reward = contractReward('haul', turns, tier, units * goodValue(good));
+  const reward = contractReward(turns, tier, units * goodValue(good));
   const deadline = world.turn + Math.round(turns * CONTRACTS.haul.durationFactor);
   return { id, shop: input.shop.id, kind: 'haul', good, units, to: to.id, reward, deadline, tier };
 }
@@ -234,7 +257,7 @@ function rollBounty(world: World, input: RollInput, id: string): Contract {
   if (!target.brain) throw new Error(`Raider ${target.id} has no brain`);
   const tier = highestPartTier(target);
   const turns = randInt(world.marketRng, CONTRACTS.bounty.durationTurns[0], CONTRACTS.bounty.durationTurns[1]);
-  const reward = contractReward('bounty', turns, tier, 0);
+  const reward = bountyReward(target);
   return { id, shop: input.shop.id, kind: 'bounty', template: target.brain.templateId, targetName: target.name, reward, deadline: world.turn + turns, tier };
 }
 
@@ -379,7 +402,10 @@ export function acceptContract(world: World, contractId: string): World {
   });
 }
 
+// A haul loads its goods for free, so a player in debt could otherwise stock up on cargo it never
+// paid for. Refused outright: pay off the debt before taking on more work.
 function loadHaul(world: World, c: Extract<Contract, { kind: 'haul' }>): void {
+  if (world.player.money < 0) throw new Error('Cannot take on a haul while in debt');
   const v = playerVehicle(world);
   if (freeCells(v) < c.units) throw new Error(`Needs ${c.units} free cells for the cargo`);
   if (addGoods(world, v, c.good, c.units) !== c.units) throw new Error('Cargo capacity invariant failed');
@@ -404,16 +430,22 @@ function handInHaul(world: World, c: Extract<Contract, { kind: 'haul' }>): void 
   removeGoods(v, c.good, c.units);
 }
 
+// A fetch takes a part that still does its job: working, not junk, and rebuilt at most
+// CONTRACTS.fetch.maxWear times.
+function fitsFetch(c: Extract<Contract, { kind: 'fetch' }>, p: PartInstance): boolean {
+  return p.defId === c.defId && p.hp > 0 && !isJunk(p) && p.wear <= CONTRACTS.fetch.maxWear;
+}
+
 function handInFetch(world: World, c: Extract<Contract, { kind: 'fetch' }>): void {
   requireShop(world, c.shop);
   const v = playerVehicle(world);
-  const spare = spareParts(v).find((p) => p.defId === c.defId);
+  const spare = spareParts(v).find((p) => fitsFetch(c, p));
   if (spare) {
     v.items = v.items.filter((it) => it.kind !== 'part' || it.part.id !== spare.id);
     return;
   }
-  const stored = world.player.storage.findIndex((p) => p.defId === c.defId);
-  if (stored < 0) throw new Error(`Needs a spare ${PARTS[c.defId].name}`);
+  const stored = world.player.storage.findIndex((p) => fitsFetch(c, p));
+  if (stored < 0) throw new Error(`Needs a spare ${PARTS[c.defId].name}, working and rebuilt at most ${CONTRACTS.fetch.maxWear} time${CONTRACTS.fetch.maxWear === 1 ? '' : 's'}`);
   world.player.storage.splice(stored, 1);
 }
 

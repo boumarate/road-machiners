@@ -1,6 +1,7 @@
 // Event log lines.
 
 import { GOODS } from '../data/goods';
+import { CONTRACTS } from '../data/market';
 import { partDef } from '../data/parts';
 import type { Contract } from '../sim/market';
 import { PERK_LEVELS, SKILL_INFO } from '../data/skills';
@@ -223,7 +224,10 @@ function contractText(c: Contract, outcome: keyof typeof CONTRACT_OUTCOME): { te
 // One line naming what a contract asks for.
 export function contractSummary(c: Contract): string {
   if (c.kind === 'haul') return `haul ${c.units} ${GOODS[c.good].name} to ${siteName(c.to)}`;
-  if (c.kind === 'fetch') return `find ${article(partDef(c.defId).name)} ${partDef(c.defId).name} anywhere, bring it to ${siteName(c.shop)}`;
+  if (c.kind === 'fetch') {
+    const rebuilt = CONTRACTS.fetch.maxWear === 1 ? 'rebuilt at most once' : `rebuilt at most ${CONTRACTS.fetch.maxWear} times`;
+    return `find ${article(partDef(c.defId).name)} ${partDef(c.defId).name} anywhere, working and ${rebuilt}, bring it to ${siteName(c.shop)}`;
+  }
   return `destroy any ${c.targetName}`;
 }
 

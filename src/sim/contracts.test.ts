@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONTRACTS, EFFORT, SHOPS } from '../data/market';
+import { chassisDef } from '../data/chassis';
 import { GOODS } from '../data/goods';
 import { PARTS } from '../data/parts';
 import { REGION } from '../data/region';
@@ -16,6 +17,7 @@ import {
   advanceContracts,
   advanceShops,
   bountyFulfilled,
+  bountyReward,
   deliverContract,
   goodValue,
   bountyLapsed,
@@ -27,6 +29,7 @@ import {
   isExpired,
   partPristineBuyPrice,
   rollContract,
+  vehicleValue,
   type Contract,
 } from './market';
 
@@ -47,27 +50,48 @@ describe('estimateTurns', () => {
 
 describe('contractReward', () => {
   it('scales with turns', () => {
-    const short = contractReward('bounty', 50, 1, 0);
-    const long = contractReward('bounty', 200, 1, 0);
+    const short = contractReward(50, 1, 0);
+    const long = contractReward(200, 1, 0);
     expect(long).toBeGreaterThan(short);
   });
 
   it('scales with tier at the same turns', () => {
-    const tier1 = contractReward('bounty', 100, 1, 0);
-    const tier3 = contractReward('bounty', 100, 3, 0);
+    const tier1 = contractReward(100, 1, 0);
+    const tier3 = contractReward(100, 3, 0);
     expect(tier3).toBeGreaterThan(tier1);
   });
 
-  it('pays a bounty more than a haul for the same turns and tier', () => {
-    const haul = contractReward('haul', 100, 2, 0);
-    const bounty = contractReward('bounty', 100, 2, 0);
-    expect(bounty).toBeGreaterThan(haul);
+  it('adds a cut of cargo value to the reward', () => {
+    const plain = contractReward(100, 2, 0);
+    const withCargo = contractReward(100, 2, 1000);
+    expect(withCargo).toBeGreaterThan(plain);
+  });
+});
+
+describe('vehicleValue', () => {
+  it('sums the chassis value and every part it carries', () => {
+    const w = emptyWorld();
+    const raider = addRaider(w, 'buggy');
+    const bare = vehicleValue(raider);
+    expect(bare).toBeGreaterThanOrEqual(chassisDef('buggy').value); // core parts add on top
+    stowPart(w, raider, makePart(w, 'plates', 0));
+    expect(vehicleValue(raider)).toBeGreaterThan(bare);
+  });
+});
+
+describe('bountyReward', () => {
+  it('pays a share of the target\'s total worth', () => {
+    const w = emptyWorld();
+    const raider = addRaider(w, 'buggy');
+    expect(bountyReward(raider)).toBe(Math.round(vehicleValue(raider) * CONTRACTS.bounty.valueShare));
   });
 
-  it('adds a cut of cargo value to a haul reward only', () => {
-    const plain = contractReward('haul', 100, 2, 0);
-    const withCargo = contractReward('haul', 100, 2, 1000);
-    expect(withCargo).toBeGreaterThan(plain);
+  it('pays more for a stronger, better-equipped target', () => {
+    const w = emptyWorld();
+    const bare = addRaider(w, 'buggy', { x: 1, y: 1 });
+    const armed = addRaider(w, 'buggy', { x: 2, y: 2 });
+    stowPart(w, armed, makePart(w, 'plates', 0));
+    expect(bountyReward(armed)).toBeGreaterThan(bountyReward(bare));
   });
 });
 
@@ -185,6 +209,22 @@ describe('rollContract', () => {
     expect(bounty).not.toBeNull();
     expect(bounty!.tier).toBe(PARTS.plates.tier);
   });
+
+  it('pays a bounty the same reward whatever its random deadline window', () => {
+    const w = emptyWorld();
+    const raider = addRaider(w, 'buggy');
+    const rewards = new Set<number>();
+    const deadlines = new Set<number>();
+    for (let i = 0; i < 50; i++) {
+      const c = rollContract(w, shop, [], [], [], [raider]);
+      if (c?.kind === 'bounty') {
+        rewards.add(c.reward);
+        deadlines.add(c.deadline);
+      }
+    }
+    expect(deadlines.size).toBeGreaterThan(1); // the window did vary
+    expect(rewards.size).toBe(1); // but the pay never did
+  });
 });
 
 describe('isExpired', () => {
@@ -290,11 +330,36 @@ describe('contract boards and delivery', () => {
 
   it('takes a fetch part from garage storage', () => {
     let w = acceptContract(atBowlWithOffer(fetch()), 'ct-fetch');
-    w = update(w, (d) => { d.player.storage.push(makePart(d, 'mg', 3)); });
+    w = update(w, (d) => { d.player.storage.push(makePart(d, 'mg', 1)); }); // wear 1, at CONTRACTS.fetch.maxWear
     const money = w.player.money;
     w = deliverContract(w, 'ct-fetch');
     expect(w.player.storage).toHaveLength(0);
     expect(w.player.money).toBe(money + 200);
+  });
+
+  it('refuses a fetch part worn past CONTRACTS.fetch.maxWear', () => {
+    let w = acceptContract(atBowlWithOffer(fetch()), 'ct-fetch');
+    w = update(w, (d) => { d.player.storage.push(makePart(d, 'mg', CONTRACTS.fetch.maxWear + 1)); });
+    expect(() => deliverContract(w, 'ct-fetch')).toThrow(/spare/);
+  });
+
+  it('refuses a fetch part at 0 HP', () => {
+    let w = acceptContract(atBowlWithOffer(fetch()), 'ct-fetch');
+    w = update(w, (d) => {
+      const part = makePart(d, 'mg', 0);
+      part.hp = 0;
+      d.player.storage.push(part);
+    });
+    expect(() => deliverContract(w, 'ct-fetch')).toThrow(/spare/);
+  });
+
+  it('refuses a junk fetch part', () => {
+    let w = acceptContract(atBowlWithOffer(fetch()), 'ct-fetch');
+    w = update(w, (d) => {
+      const part = { ...makePart(d, 'mg', 0), wear: 99, hp: 0 }; // far past junk, however far past maxWear
+      d.player.storage.push(part);
+    });
+    expect(() => deliverContract(w, 'ct-fetch')).toThrow(/spare/);
   });
 
   it('refuses a fetch with no spare part of that type', () => {
