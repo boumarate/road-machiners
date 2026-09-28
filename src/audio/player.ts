@@ -3,7 +3,7 @@
 import type { Bus, Cue } from "../data/sounds";
 import type { Bank } from "./bank";
 import type { Mixer } from "./mixer";
-import { pickVariant, VoiceLimiter } from "./pick";
+import { loudestAt, pickVariant, VoiceLimiter } from "./pick";
 
 export type Placement = { pan: number; gain: number };
 export type SoundSelection = { file: string; rate: number };
@@ -23,11 +23,14 @@ export type BeatLoopHandle = LoopHandle & {
   setTone(cutoffHz: number, rampSeconds: number): void;
 };
 
+const PEAK_WINDOW_SECONDS = 0.02; // short enough to find a hit's attack, long enough to skip single-sample spikes
+
 export type Glide = { rateFrom: number; rateTo: number; gainFrom: number; gainTo: number; seconds: number; fadeSeconds: number };
 
 
 export class SoundPlayer {
   private last = new Map<string, number>();
+  private peaks = new Map<string, number>(); // loudest moment per file, measured on first use
   private voices = new VoiceLimiter();
 
   constructor(private mixer: Mixer, private bank: Bank, private sounds: Record<string, Cue>) {}
@@ -141,11 +144,28 @@ export class SoundPlayer {
     return cue;
   }
 
-  private variant(id: string, cue: Cue): AudioBuffer {
+  // The file for a cue's next play, never the last one when there is a choice, and the seconds to its loudest
+  // moment, so a caller can land that moment on a beat or an event.
+  chooseWithPeak(id: string): { file: string; peak: number } {
+    const file = this.cue(id).files[this.nextIndex(id, this.cue(id))];
+    let peak = this.peaks.get(file);
+    if (peak === undefined) {
+      peak = loudestAt(this.getBuffer(id, this.cue(id), file).getChannelData(0), this.mixer.ctx.sampleRate, PEAK_WINDOW_SECONDS);
+      this.peaks.set(file, peak);
+    }
+    return { file, peak };
+  }
+
+  private nextIndex(id: string, cue: Cue): number {
     const i = pickVariant(cue.files.length, this.last.get(id) ?? null, Math.random());
     this.last.set(id, i);
-    const buf = this.bank.get(cue.files[i]);
-    if (!buf) throw new Error(`Sound file ${cue.files[i]} was not loaded`);
+    return i;
+  }
+
+  private variant(id: string, cue: Cue): AudioBuffer {
+    const file = cue.files[this.nextIndex(id, cue)];
+    const buf = this.bank.get(file);
+    if (!buf) throw new Error(`Sound file ${file} was not loaded`);
     return buf;
   }
 

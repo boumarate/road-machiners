@@ -177,10 +177,10 @@ export const MIX = {
   music: { fadeSeconds: 3, holdTurns: 5, pauseDelayMs: 300, pauseCutoffHz: 4000, openCutoffHz: 20000, toneSeconds: 0.6 },
   // Combat score. One random base plays while a hostile is in sight, as combat music did. Heat is a fading sum of
   // event weights, halving every heatHalfLifeSeconds; a busy fight adds about 1 per turn. It sets the base level
-  // and muffle each bar, full at fullHeat. Events queue phrases on the lead or secondary line; see SoundDesigner.
-  // Rhythms have one character per half beat, eight to a bar: x is a hit. Lead rhythms keep off the secondary's
-  // weak beats mostly, and the secondary never takes the first or third beat. The base dips to duckGain under
-  // each lead hit and recovers over duckReleaseBeats.
+  // and muffle each bar, full at fullHeat. Each event stabs on the lead or secondary line with its peak on the
+  // event, and its rhythm's tail follows on the grid; see SoundDesigner. Rhythms have one character per half beat,
+  // eight to a bar, counted from the stab: x is a hit. The base dips to duckGain under each lead hit and recovers
+  // over duckReleaseBeats.
   score: {
     subdivision: 2,
     humanizeMs: 10,
@@ -196,21 +196,21 @@ export const MIX = {
     fillGain: 0.5,
     secondaryPan: 0.3,
     busyFactor: 0.7,
-    leadInBeats: 1,
+    stabGapSeconds: 0.35,
     duckGain: 0.6,
     duckAttackSeconds: 0.05,
     duckReleaseBeats: 2,
     lines: {
-      lead: { gain: 1, queueMax: 1, calm: ["x.......", "x...x...", "x.....x."], hot: ["x...x...", "x..x..x.", "x.x...x."] },
-      secondary: { gain: 0.7, queueMax: 1, calm: ["..x.....", "......x.", ".......x"], hot: ["..x...x.", ".x....x.", "..x....x"] },
+      lead: { gain: 1, calm: ["x.......", "x...x...", "x.....x."], hot: ["x...x...", "x..x..x.", "x.x...x."] },
+      secondary: { gain: 0.7, calm: ["..x.....", "......x.", ".......x"], hot: ["..x...x.", ".x....x.", "..x....x"] },
     },
     accents: {
-      "accent-crash": { line: "lead", weight: 1, bars: 2, chance: 1, urgent: true },
-      "accent-crit": { line: "lead", weight: 0.8, bars: 1, chance: 1, urgent: false },
-      "accent-sighted": { line: "lead", weight: 0.6, bars: 1, chance: 1, urgent: false },
-      "accent-struck": { line: "lead", weight: 0.5, bars: 1, chance: 1, urgent: false },
-      "accent-hit": { line: "secondary", weight: 0.4, bars: 1, chance: 0.9, urgent: false },
-      "accent-miss": { line: "secondary", weight: 0.2, bars: 1, chance: 0.6, urgent: false },
+      "accent-crash": { line: "lead", weight: 1, bars: 2, chance: 1 },
+      "accent-crit": { line: "lead", weight: 0.8, bars: 1, chance: 1 },
+      "accent-sighted": { line: "lead", weight: 0.6, bars: 1, chance: 1 },
+      "accent-struck": { line: "lead", weight: 0.5, bars: 1, chance: 1 },
+      "accent-hit": { line: "secondary", weight: 0.4, bars: 1, chance: 0.9 },
+      "accent-miss": { line: "secondary", weight: 0.2, bars: 1, chance: 0.6 },
     },
   },
   // Approved reference cue per bus. The sound board plays it beside each candidate.

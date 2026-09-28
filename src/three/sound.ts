@@ -49,7 +49,7 @@ const LOOKAHEAD_SECONDS = 0.15; // hits are scheduled this far ahead, several fr
 
 
 // What the score did with one accent request, for the sound log.
-export type AccentResult = { cue: AccentCue; offer: Offer; heat: number };
+export type AccentResult = { cue: AccentCue; offer: Offer["result"]; heat: number };
 
 export class CombatScore {
   private bases: Base[];
@@ -60,7 +60,7 @@ export class CombatScore {
   private paused = false;
 
   constructor(
-    private player: Pick<SoundPlayer, "beatLoop" | "now" | "play">,
+    private player: Pick<SoundPlayer, "beatLoop" | "now" | "play" | "chooseWithPeak">,
     private roll: () => number,
   ) {
     const start = player.now() + START_LEAD_SECONDS;
@@ -98,19 +98,23 @@ export class CombatScore {
     this.setIntensity(base, now, base.grid.beat * base.grid.beatsPerBar);
   }
 
-  // Outside a battle the score is silent and events are ignored. In one, the event adds heat and offers its
-  // phrase, which may not start before delayMs from now.
+  // Outside a battle the score is silent and events are ignored. In one, the event adds heat, and its stab plays
+  // with the sound's loudest moment delayMs from now, or as soon as it can when that is too soon.
   accent(cue: AccentCue, delayMs: number): AccentResult | null {
-    if (!this.designer) return null;
+    const base = this.active;
+    if (!base || !this.designer) return null;
     const now = this.player.now();
     const plan = MIX.score.accents[cue];
     this.heat.add(now, plan.weight);
-    const offer = this.designer.offer(cue, plan, now + delayMs / 1000);
-    return { cue, offer, heat: this.heat.read(now) };
+    const take = this.player.chooseWithPeak(cue);
+    const offer = this.designer.offer(cue, plan, now + delayMs / 1000, take.peak, this.heat.read(now));
+    if (offer.stab) this.sound(base, offer.stab, now, take.file);
+    return { cue, offer: offer.result, heat: this.heat.read(now) };
   }
 
-  private sound(base: Base, h: Hit, now: number): void {
-    this.player.play(h.cue as AccentCue, { pan: h.pan, gain: h.gain }, (h.time - now) * 1000);
+  private sound(base: Base, h: Hit, now: number, file?: string): void {
+    const delayMs = Math.max(ACCENT_LEAD_SECONDS, h.time - now) * 1000;
+    this.player.play(h.cue as AccentCue, { pan: h.pan, gain: h.gain }, delayMs, file === undefined ? undefined : { file, rate: 1 });
     const s = MIX.score;
     if (h.line === "lead") base.loop.duck(h.time, s.duckGain, s.duckAttackSeconds, base.grid.beat * s.duckReleaseBeats);
   }

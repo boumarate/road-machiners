@@ -184,7 +184,7 @@ describe("CombatWatch", () => {
 describe("CombatScore", () => {
   type BaseId = "score-drums" | "score-bass";
   type Call = { id: BaseId; file: string; when: number; offset: number; gains: number[]; tones: number[]; ducks: number[] };
-  type Play = [string, { pan: number; gain: number }, number];
+  type Play = [string, { pan: number; gain: number }, number, { file: string; rate: number }?];
   const fakePlayer = () => {
     const loops: Call[] = [];
     const plays: Play[] = [];
@@ -192,6 +192,7 @@ describe("CombatScore", () => {
     const player = {
       now: () => clock.now,
       play: (...args: Play) => { plays.push(args); },
+      chooseWithPeak: (id: string) => ({ file: `${id}-1.ogg`, peak: 0.1 }),
       beatLoop: (id: BaseId, file: string, when: number, offset: number) => {
         const call: Call = { id, file, when, offset, gains: [], tones: [], ducks: [] };
         loops.push(call);
@@ -248,11 +249,13 @@ describe("CombatScore", () => {
     expect(plays).toEqual([]);
   });
 
-  it("queues an event's phrase and plays it on the lead, ducking the base under each hit", () => {
+  it("stabs an event with the sound's peak on it, then its tail on the lead, ducking the base under each hit", () => {
     const { player, loops, plays, clock } = fakePlayer();
     const score = new CombatScore(player, () => 0);
     score.setCombat(true, 3);
-    expect(score.accent("accent-sighted", 0)).toMatchObject({ cue: "accent-sighted", offer: "queued" });
+    expect(score.accent("accent-sighted", 1000)).toMatchObject({ cue: "accent-sighted", offer: "played" });
+    expect(plays[0][2]).toBeCloseTo(900); // peak 0.1 s into the take, event 1 s ahead
+    expect(plays[0][3]).toEqual({ file: "accent-sighted-1.ogg", rate: 1 });
     run(score, clock, 6);
     expect(plays.length).toBeGreaterThan(0);
     expect(plays.every((p) => p[0] === "accent-sighted" && p[1].pan === 0)).toBe(true);

@@ -1,8 +1,9 @@
-// The combat score's two accent lines over the background base. Events queue phrases on a line: the lead takes
-// heavy events on the strong beats, the secondary takes light ones on the weak beats, so both combine without
-// colliding. A phrase is its accent in a rhythm from the line's patterns and starts on a bar line; an urgent one
-// cuts in on the next beat. Variety lives inside that structure: random rhythm variants, a rare fill at a
-// phrase's end, a little timing and level jitter, and a chance for light events to join a busy line.
+// The combat score's two accent lines over the background base. Each event plays a stab: its accent timed so the
+// sound's loudest moment lands on the event. The rest of the accent's rhythm then follows as a tail on the beat
+// grid, counted from the slot nearest the event. The lead takes heavy events, the secondary light ones, quieter
+// and to one side. A new event replaces its line's tail; the same accent again makes the tail denser. Variety
+// lives inside that structure: random rhythm variants, a rare fill at a tail's end, a little timing and level
+// jitter, and a chance for light events to sound at all.
 // Pure: the caller passes audio times in seconds and a random roll function.
 
 // Audio time of one beat of the base, the beat length in seconds, and beats per bar.
@@ -11,71 +12,40 @@ export type Grid = { start: number; beat: number; beatsPerBar: number };
 export type LineId = "lead" | "secondary";
 
 // How an accent enters the score.
-export type AccentPlan = { line: LineId; weight: number; bars: number; chance: number; urgent: boolean };
+export type AccentPlan = { line: LineId; weight: number; bars: number; chance: number };
 
 export type LineTuning = {
   gain: number;
-  queueMax: number; // phrases waiting at most
-  calm: readonly string[]; // one-bar rhythms, x for a hit and . for a rest, one character per slot
-  hot: readonly string[]; // denser rhythms, for a hot fight or a phrase that absorbed repeat events
+  calm: readonly string[]; // one-bar rhythms from the stab on, x for a hit and . for a rest, one character per slot
+  hot: readonly string[]; // denser rhythms, for a hot fight or a repeat of the accent that is playing
 };
 
 export type DesignerTuning = {
   subdivision: number; // slots per beat
-  humanizeMs: number; // largest timing shift either way
+  humanizeMs: number; // largest timing shift after the slot, for tail hits
   gainJitter: number; // largest share of level change either way
-  hotHeat: number; // heat from which phrases take hot rhythms
+  hotHeat: number; // heat from which tails take hot rhythms
   pauseRepeats: number; // times the last lead phrase repeats in a turn pause
-  fillChance: number; // chance of a ghost hit on a lead phrase's last off-beat
+  fillChance: number; // chance of a ghost hit on a lead tail's last slot
   fillGain: number;
   secondaryPan: number; // the secondary sits this far to one side, picked per battle
-  busyFactor: number; // how fast a light event's chance falls with phrases already on its line
-  leadInBeats: number; // a phrase may start this many beats before its event, since turn results are known ahead
+  busyFactor: number; // how far a light event's chance falls while its line still plays a tail
+  stabGapSeconds: number; // a stab this close to another on its line is dropped, so hits never stack
   lines: Record<LineId, LineTuning>;
 };
 
 export type Hit = { cue: string; time: number; gain: number; pan: number; line: LineId };
-export type Offer = "queued" | "merged" | "replaced" | "dropped" | "skipped";
+export type Offer = { result: "played" | "skipped" | "crowded"; stab: Hit | null };
 
-type Phrase = { cue: string; plan: AccentPlan; dense: boolean; at: number };
-type Playing = { phrase: Phrase; pattern: string; start: number };
+type Phrase = { cue: string; plan: AccentPlan };
+// stabbed: the first slot already sounded as the event's stab.
+type Playing = { phrase: Phrase; pattern: string; start: number; stabbed: boolean };
+type Line = { playing: Playing | null; last: Phrase | null; lastPattern: string; replays: number; lastStab: number };
 
 const LINES: LineId[] = ["lead", "secondary"];
 
-class Line {
-  queue: Phrase[] = [];
-  playing: Playing | null = null;
-  last: Phrase | null = null;
-  lastPattern = "";
-  replays = 0;
-
-  busy(): number {
-    return this.queue.length + (this.playing ? 1 : 0);
-  }
-
-  // Merges into a waiting phrase of the same accent, queues, or replaces the lightest waiting phrase.
-  offer(p: Phrase, max: number): Offer {
-    const same = this.queue.find((q) => q.cue === p.cue);
-    if (same) {
-      same.dense = true;
-      return "merged";
-    }
-    if (this.queue.length < max) return this.push(p, "queued");
-    const lightest = this.queue.reduce((a, b) => (b.plan.weight < a.plan.weight ? b : a));
-    if (lightest.plan.weight >= p.plan.weight) return "dropped";
-    this.queue.splice(this.queue.indexOf(lightest), 1);
-    return this.push(p, "replaced");
-  }
-
-  private push(p: Phrase, result: Offer): Offer {
-    if (p.plan.urgent) this.queue.unshift(p);
-    else this.queue.push(p);
-    return result;
-  }
-}
-
 export class SoundDesigner {
-  private lines: Record<LineId, Line> = { lead: new Line(), secondary: new Line() };
+  private lines: Record<LineId, Line>;
   private cursor: number; // next slot to play
   private pan: number;
 
@@ -86,21 +56,32 @@ export class SoundDesigner {
     now: number,
   ) {
     for (const id of LINES) this.checkPatterns(id);
+    const line = (): Line => ({ playing: null, last: null, lastPattern: "", replays: 0, lastStab: -Infinity });
+    this.lines = { lead: line(), secondary: line() };
     this.cursor = this.slotAtOrAfter(now);
     this.pan = (roll() < 0.5 ? -1 : 1) * tuning.secondaryPan;
   }
 
-  // Queues an event's phrase for an event at time at; it starts no more than leadInBeats before it. A lead event always offers; a light event on the
-  // secondary joins by chance, lower on a busy line.
-  offer(cue: string, plan: AccentPlan, at: number): Offer {
+  // An event at time at: its stab, starting peak seconds early so the sound's loudest moment lands on the event,
+  // and a new tail on its line. A light event sounds by chance, lower while its line still plays a tail.
+  offer(cue: string, plan: AccentPlan, at: number, peak: number, heat: number): Offer {
     const line = this.lines[plan.line];
-    const busy = plan.line === "secondary" ? line.busy() : 0;
-    const chance = plan.chance * Math.exp(-this.tuning.busyFactor * busy);
-    if (this.roll() >= chance) return "skipped";
-    return line.offer({ cue, plan, dense: false, at }, this.tuning.lines[plan.line].queueMax);
+    if (!this.sounds(plan, line)) return { result: "skipped", stab: null };
+    if (Math.abs(at - line.lastStab) < this.tuning.stabGapSeconds) return { result: "crowded", stab: null };
+    const dense = line.playing?.phrase.cue === cue || heat >= this.tuning.hotHeat;
+    this.startTail(line, { cue, plan }, this.slotNearest(at), dense, true);
+    line.replays = 0;
+    line.lastStab = at;
+    const stab = { ...this.hit(plan.line, cue, 0, this.tuning.lines[plan.line].gain), time: at - peak };
+    return { result: "played", stab };
   }
 
-  // Hits for every slot up to until, in time order. Slots already past are skipped silently.
+  private sounds(plan: AccentPlan, line: Line): boolean {
+    const busy = plan.line === "secondary" && line.playing ? 1 : 0;
+    return this.roll() < plan.chance * Math.exp(-this.tuning.busyFactor * busy);
+  }
+
+  // Tail hits for every slot up to until, in time order. Slots already past are skipped silently.
   step(now: number, until: number, paused: boolean, heat: number): Hit[] {
     const hits: Hit[] = [];
     for (; this.slotTime(this.cursor) <= until; this.cursor++) {
@@ -114,46 +95,27 @@ export class SoundDesigner {
     const line = this.lines[id];
     const p = line.playing;
     if (p && slot - p.start >= p.pattern.length) line.playing = null;
-    this.cutIn(line, slot, heat);
-    if (!line.playing && slot % this.slotsPerBar() === 0) this.startNext(id, slot, paused, heat);
+    if (this.replays(id, line, paused, slot)) this.replay(line, slot, heat);
     if (line.playing) this.hitAt(id, slot, hits);
   }
 
-  // An urgent phrase at the queue head replaces what plays, on the next beat.
-  private cutIn(line: Line, slot: number, heat: number): void {
-    const head = line.queue[0];
-    if (!head?.plan.urgent || slot % this.tuning.subdivision !== 0 || !this.ready(head, slot)) return;
-    line.queue.shift();
-    this.begin(line, head, slot, heat);
+  private replays(id: LineId, line: Line, paused: boolean, slot: number): boolean {
+    return !line.playing && id === "lead" && paused && slot % this.slotsPerBar() === 0;
   }
 
-  private startNext(id: LineId, slot: number, paused: boolean, heat: number): void {
-    const line = this.lines[id];
-    const head = line.queue[0];
-    if (head && this.ready(head, slot)) {
-      line.queue.shift();
-      line.replays = 0;
-      return this.begin(line, head, slot, heat);
-    }
-    if (id === "lead" && paused) this.replay(line, slot, heat);
-  }
-
-  private ready(p: Phrase, slot: number): boolean {
-    return this.slotTime(slot) >= p.at - this.tuning.leadInBeats * this.grid.beat;
-  }
-
+  // In a turn pause the last lead phrase comes back from bar lines a few times.
   private replay(line: Line, slot: number, heat: number): void {
     if (!line.last || line.replays >= this.tuning.pauseRepeats) return;
     line.replays++;
-    this.begin(line, line.last, slot, heat);
+    this.startTail(line, line.last, slot, heat >= this.tuning.hotHeat, false);
   }
 
-  private begin(line: Line, phrase: Phrase, slot: number, heat: number): void {
+  private startTail(line: Line, phrase: Phrase, slot: number, dense: boolean, stabbed: boolean): void {
     const rhythms = this.tuning.lines[phrase.plan.line];
-    const pool = phrase.dense || heat >= this.tuning.hotHeat ? rhythms.hot : rhythms.calm;
+    const pool = dense ? rhythms.hot : rhythms.calm;
     let pattern = "";
     for (let b = 0; b < phrase.plan.bars; b++) pattern += this.pick(pool, line);
-    line.playing = { phrase, pattern, start: slot };
+    line.playing = { phrase, pattern, start: slot, stabbed };
     line.last = phrase;
   }
 
@@ -168,20 +130,23 @@ export class SoundDesigner {
   private hitAt(id: LineId, slot: number, hits: Hit[]): void {
     const p = this.lines[id].playing!;
     const i = slot - p.start;
-    const t = this.tuning;
-    if (p.pattern[i] === "x") return void hits.push(this.hit(id, p.phrase.cue, slot, t.lines[id].gain));
-    const fill = id === "lead" && i === p.pattern.length - 1 && this.roll() < t.fillChance;
-    if (fill) hits.push(this.hit(id, p.phrase.cue, slot, t.lines[id].gain * t.fillGain));
+    if (i < 0 || (i === 0 && p.stabbed)) return;
+    const gain = this.tuning.lines[id].gain;
+    if (p.pattern[i] === "x") hits.push(this.hit(id, p.phrase.cue, this.slotTime(slot), gain));
+    else if (this.fills(id, i, p)) hits.push(this.hit(id, p.phrase.cue, this.slotTime(slot), gain * this.tuning.fillGain));
   }
 
-  private hit(line: LineId, cue: string, slot: number, gain: number): Hit {
+  private fills(id: LineId, i: number, p: Playing): boolean {
+    return id === "lead" && i === p.pattern.length - 1 && this.roll() < this.tuning.fillChance;
+  }
+
+  private hit(line: LineId, cue: string, time: number, gain: number): Hit {
     const t = this.tuning;
-    const jitter = (spread: number) => (this.roll() * 2 - 1) * spread;
     return {
       cue,
       line,
-      time: this.slotTime(slot) + Math.max(0, jitter(t.humanizeMs / 1000)),
-      gain: gain * (1 + jitter(t.gainJitter)),
+      time: time + (this.roll() * t.humanizeMs) / 1000,
+      gain: gain * (1 + (this.roll() * 2 - 1) * t.gainJitter),
       pan: line === "lead" ? 0 : this.pan,
     };
   }
@@ -199,6 +164,10 @@ export class SoundDesigner {
 
   private slotLength(): number {
     return this.grid.beat / this.tuning.subdivision;
+  }
+
+  private slotNearest(at: number): number {
+    return Math.round((at - this.grid.start) / this.slotLength());
   }
 
   private slotAtOrAfter(at: number): number {
