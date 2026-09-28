@@ -13,9 +13,9 @@ import { addGoods, applyRefitLayout, getRefitLayout } from "./inventory";
 import { isJunk, maxHp } from "./wear";
 import { repairPlan, repairTurn } from "./repair";
 import { practice } from "./progress";
-import { stripPart } from "./salvage";
+import { finishTruckPickup, stripPart } from "./salvage";
 import { searchTurn } from "./search";
-import type { GridItem, Job, PartInstance, RefitJob, Vehicle, World } from "./types";
+import type { GridItem, Job, PartInstance, RefitJob, RefitPickup, Vehicle, World } from "./types";
 import { playerCommand } from "./world";
 
 export { repairPlan };
@@ -190,8 +190,9 @@ function advanceRefit(world: World, v: Vehicle, job: RefitJob): void {
   endJob(world, v, job, 'done');
 }
 
-// The part a finished refit mounted leaves its stock. A part from a wreck gets careful stripping.
-function takePickup(world: World, v: Vehicle, pickup: NonNullable<RefitJob['pickup']>): void {
+// The part a finished refit mounted leaves its stock or truck. A part from a wreck gets careful stripping.
+function takePickup(world: World, v: Vehicle, pickup: RefitPickup): void {
+  if (pickup.from === 'truck') return finishTruckPickup(world, v, pickup);
   const stock = world.salvage.find((entry) => entry.id === pickup.stockId);
   const part = stock?.parts.find((entry) => entry.id === pickup.partId);
   if (!stock || !part) throw new Error('Refit stock part disappeared after validation');

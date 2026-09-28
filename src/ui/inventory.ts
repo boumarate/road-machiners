@@ -850,7 +850,9 @@ function movedItem(v: Vehicle, move: RefitMove): GridItem {
 function pickupItem(w: World, job: RefitJob): GridItem[] {
   const pickup = job.pickup;
   if (!pickup) return [];
-  const part = w.salvage.find((stock) => stock.id === pickup.stockId)?.parts.find((p) => p.id === pickup.partId);
+  const part = pickup.from === 'stock'
+    ? w.salvage.find((stock) => stock.id === pickup.stockId)?.parts.find((p) => p.id === pickup.partId)
+    : w.vehicles.find((v) => v.id === pickup.vehicleId)?.items.flatMap((it) => (it.kind === 'part' ? [it.part] : [])).find((p) => p.id === pickup.partId);
   return part ? [{ kind: "part", id: pickup.itemId, part, ...pickup.to }] : [];
 }
 

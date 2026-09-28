@@ -14,22 +14,23 @@ import { corePart, freeCells, goodsCount, mountedParts } from './grid';
 import { cancelJob } from './jobs';
 import {
   bestTrade, canRob, decide, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve,
-  huntingGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleHostiles, visibleSalvage, type NpcProfile,
+  huntingGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
 import { hashRandom, randInt } from './rng';
-import { canReachSalvage, canTakeAny, hasSalvage, isSiteStock, pileInReach, wreckStockId } from './salvage';
+import { canLootTruck, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, isSiteStock, lootTruckTurn, pileInReach, wreckStockId } from './salvage';
 import { beginSearch } from './search';
 import { vehicleById } from './damage';
 import { plead } from './parley';
 import { addState, endState, stateOf, statesHeld } from './states';
 import { vehicleStats } from './stats';
-import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, SalvageStock, Vehicle, World } from './types';
+import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Vehicle, World } from './types';
 import { canUseSite, nearestPad } from './sites';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
-import { dropTow, isOnRope, runTow, strandedAt, towGoal, towHeldBy } from './tow';
+import { dropTow, inTowReach, isOnRope, runTow, strandedAt, towGoal, towHeldBy } from './tow';
+import { isKnockedOut } from './defeat';
 
 // ---- The goal stack. The top goal drives the NPC. A long-term goal sits at the bottom, and interruptions go on top
 // of it. A new goal replaces any goal of its kind, so the stack never holds two goals of one kind. Every change logs
@@ -53,11 +54,17 @@ export function topGoal(v: Vehicle): NpcActivity | null {
 // stack, so a pinned driver keeps patching under a danger goal until it moves.
 function jobBelongs(job: Job, v: Vehicle): boolean {
   if (job.kind === 'repair') return goalsOf(v).some((g) => g.kind === 'repair');
+  if (job.kind === 'refit') return refitBelongs(job, topGoal(v));
   return searchBelongs(job, topGoal(v));
 }
 
 function searchBelongs(job: Job, goal: NpcActivity | null): boolean {
   return job.kind === 'search' && (goal?.kind === 'scavenge' || goal?.kind === 'loot') && goal.targetId === job.stockId;
+}
+
+// A refit that takes a part off a knocked-out truck belongs to the loot goal on that truck.
+function refitBelongs(job: RefitJob, goal: NpcActivity | null): boolean {
+  return goal?.kind === 'loot' && job.pickup?.from === 'truck' && goal.targetId === job.pickup.vehicleId;
 }
 
 function goalKind(goal: NpcActivity | null): NpcActivity['kind'] | null {
@@ -198,9 +205,12 @@ function tradeGoal(world: World, vehicle: Vehicle): NpcActivity {
   return { ...createSiteActivity('trade', plan.source, 'buy profitable cargo'), purchase: { good: plan.good, sellTown: plan.sellTown } };
 }
 
+// Salvage or a knocked-out truck in sight comes first, nearest first.
 function scavengeGoal(world: World, vehicle: Vehicle): NpcActivity {
-  const visible = visibleSalvage(world, vehicle)[0];
-  if (visible) return createActivity('scavenge', visible.id, { ...visible.pos }, 'collect visible salvage');
+  const stock = visibleSalvage(world, vehicle)[0];
+  const truck = visibleDowned(world, vehicle)[0];
+  if (truck && (!stock || dist(vehicle.pos, truck.pos) < dist(vehicle.pos, stock.pos))) return createActivity('loot', truck.id, { ...truck.pos }, 'loot a knocked-out truck');
+  if (stock) return createActivity('scavenge', stock.id, { ...stock.pos }, 'collect visible salvage');
   const sites = salvageSitesAway(vehicle);
   if (sites.length === 0) throw new Error(`${vehicle.id} chose to scavenge with no salvage known`);
   return createSiteActivity('scavenge', sites[randInt(world, 0, sites.length - 1)].id, 'search a known salvage site');
@@ -261,11 +271,23 @@ function scavengeInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): str
 
 // A driver learns a stock is empty only once it can reach it.
 function lootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
+  const truck = world.vehicles.find((v) => v.id === goal.targetId);
+  return truck ? truckLootInvalid(vehicle, truck) : stockLootInvalid(world, vehicle, goal);
+}
+
+function stockLootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   const stock = world.salvage.find((s) => s.id === goal.targetId);
   if (!stock) return 'the loot is gone';
   if (!canReachSalvage(vehicle, stock)) return freeCells(vehicle) === 0 ? 'cargo cannot hold the loot' : null;
   if (!hasSalvage(stock)) return 'nothing left to loot';
   return canTakeAny(world, vehicle, stock) ? null : 'cargo cannot hold the loot';
+}
+
+// A knocked-out truck is loot until it wakes. A refit on it keeps going until it ends.
+function truckLootInvalid(vehicle: Vehicle, truck: Vehicle): string | null {
+  if (!isKnockedOut(truck)) return 'the truck got away';
+  if (vehicle.job?.kind === 'refit' || !inTowReach(vehicle, truck)) return null;
+  return canTakeFromTruck(vehicle, truck) ? null : 'cargo cannot hold the loot';
 }
 
 function towInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
@@ -363,8 +385,9 @@ function hearsVehicle(_world: World, _vehicle: Vehicle, id: string, contacts: Co
   return contacts.some((c) => c.vehicleId === id);
 }
 
+// A stock, or a knocked-out truck, still in sight.
 function seesStock(world: World, vehicle: Vehicle, id: string): boolean {
-  const stock = world.salvage.find((s) => s.id === id);
+  const stock = world.salvage.find((s) => s.id === id) ?? world.vehicles.find((v) => v.id === id && isKnockedOut(v));
   return stock !== undefined && canVehicleSee(world, vehicle, stock.pos);
 }
 
@@ -549,9 +572,10 @@ function onStrandedSeen(world: World, vehicle: Vehicle): void {
 function onSalvageSeen(world: World, vehicle: Vehicle): void {
   const top = topGoal(vehicle);
   if (!top || top.phase !== 'travel' || INTERRUPTIONS.includes(top.kind)) return;
-  const passed = visibleSalvage(world, vehicle).filter((stock) => stock.id !== top.targetId && !isSiteStock(stock));
-  const stock = passed.find((s) => react(world, vehicle, 'salvageSeen', s.id) === 'loot');
-  if (stock) pushGoal(world, vehicle, createActivity('loot', stock.id, { ...stock.pos }, 'loot salvage on the way'));
+  const stocks = visibleSalvage(world, vehicle).filter((stock) => !isSiteStock(stock));
+  const passed = [...stocks, ...visibleDowned(world, vehicle)].filter((s) => s.id !== top.targetId).sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
+  const loot = passed.find((s) => react(world, vehicle, 'salvageSeen', s.id) === 'loot');
+  if (loot) pushGoal(world, vehicle, createActivity('loot', loot.id, { ...loot.pos }, 'loot salvage on the way'));
 }
 
 // One roll per ram chance on the fight target on top. The choice holds while the chance lasts, and the fight
@@ -794,9 +818,9 @@ function stockRadius(world: World, activity: NpcActivity): number | undefined {
   return world.salvage.find((entry) => entry.id === activity.targetId)?.radius;
 }
 
-// A tower, a patcher or a trader drives up to the other truck, and parks beside it like beside a stock.
+// A tower, a patcher, a trader or a looter drives up to the other truck, and parks beside it like beside a stock.
 function towedRadius(world: World, activity: NpcActivity): number | undefined {
-  if (activity.kind !== 'tow' && activity.kind !== 'patch' && activity.kind !== 'meet') return undefined;
+  if (!['tow', 'patch', 'meet', 'loot'].includes(activity.kind)) return undefined;
   const towed = world.vehicles.find((entry) => entry.id === activity.targetId);
   return towed && chassisDef(towed.chassisId).radius;
 }
@@ -809,8 +833,10 @@ function resolveTow(world: World, vehicle: Vehicle, activity: NpcActivity): void
   if (ended) finishGoal(world, vehicle, ended);
 }
 
-// Looting searches the robbed stock like any salvage.
+// Looting searches the robbed stock like any salvage, or strips a knocked-out truck.
 function resolveSearch(world: World, vehicle: Vehicle, activity: NpcActivity): void {
+  const truck = world.vehicles.find((v) => v.id === activity.targetId);
+  if (truck) { resolveTruckLoot(world, vehicle, activity, truck); return; }
   const stock = world.salvage.find((entry) => entry.id === activity.targetId);
   if (!stock) { finishGoal(world, vehicle, 'salvage no longer available'); return; }
   // A search already runs at this stock: keep parked and wait for it to finish.
@@ -818,6 +844,13 @@ function resolveSearch(world: World, vehicle: Vehicle, activity: NpcActivity): v
   if (!canReachSalvage(vehicle, stock)) return;
   activity.phase = 'act';
   searchStock(world, vehicle, stock);
+}
+
+function resolveTruckLoot(world: World, vehicle: Vehicle, activity: NpcActivity, truck: Vehicle): void {
+  if (!canLootTruck(vehicle, truck)) return;
+  activity.phase = 'act';
+  const ended = lootTruckTurn(world, vehicle, truck);
+  if (ended) finishGoal(world, vehicle, ended);
 }
 
 function isSearching(vehicle: Vehicle, stock: SalvageStock): boolean {
@@ -926,13 +959,19 @@ export function resolveNpcActivities(world: World): void {
   }
 }
 
-// Sends a robber that won to search the stock its victim left: an NPC's wreck, or the pile a knocked-out player
-// dropped where it stands. A robber that died in the same fight loots nothing.
+// The victim's truck while it lies knocked out, else its wreck, else the pile it dropped.
+function robbedLoot(w: World, victimId: string): Vehicle | SalvageStock | undefined {
+  const victim = w.vehicles.find((v) => v.id === victimId);
+  if (victim && isKnockedOut(victim)) return victim;
+  return w.salvage.find((s) => s.id === wreckStockId(victimId)) ?? (victim && pileInReach(w, victim)) ?? undefined;
+}
+
+// Sends a robber that won to loot its victim: a knocked-out NPC truck, an NPC's wreck, or the pile a knocked-out
+// player dropped where it stands. A robber that died in the same fight loots nothing.
 export function lootRobbed(w: World, robberId: string, victimId: string): void {
   const robber = w.vehicles.find((v) => v.id === robberId);
   if (!robber) return;
-  const victim = w.vehicles.find((v) => v.id === victimId);
-  const stock = w.salvage.find((s) => s.id === wreckStockId(victimId)) ?? (victim && pileInReach(w, victim));
+  const stock = robbedLoot(w, victimId);
   if (!stock) throw new Error(`${robberId} won a robbery, but ${victimId} left no stock`);
   pushGoal(w, robber, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'loot the robbed truck' });
 }

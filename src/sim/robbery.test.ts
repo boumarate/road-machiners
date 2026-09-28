@@ -353,22 +353,23 @@ describe('looting', () => {
     advanceStates(w);
   }
 
-  it('a scumbag that wins against an NPC loots its wreck, with its scavenge goal still below', () => {
+  it('a scumbag that knocks out an NPC loots its truck, with its scavenge goal still below', () => {
     const { w, robber, target } = passing();
+    target.brain = npcBrain('trader', target.pos, ['trader']);
     robber.brain!.goals = [{ ...SCAVENGE }];
     forceOption('preySeen', 'rob');
     thinkNpc(w, robber);
     expect(stateOf(w, 'feud', robber.id, target.id)?.data).toEqual({ kind: 'feud', robbery: true });
     corePart(target, 'cab').hp = 0;
+    w.rngState = rngStateWhere((roll) => roll >= RULES.npcDeathChance);
     killTurn(w);
-    const stock = `wreck-${target.id}`;
-    expect(w.salvage.some((s) => s.id === stock)).toBe(true);
-    expect(robber.brain!.goals.at(-1)).toMatchObject({ kind: 'loot', targetId: stock });
+    expect(target.defeat?.phase).toBe('out');
+    expect(robber.brain!.goals.at(-1)).toMatchObject({ kind: 'loot', targetId: target.id });
     expect(robber.brain!.goals[0]).toMatchObject({ kind: 'scavenge', targetId: 'salvage-yard' });
-    // The loot goal drives the robber this turn. Once the stock is gone, the rob and loot goals pop, and the
-    // scavenge goal is active again.
-    expect(thinkNpc(w, robber)).toMatchObject({ kind: 'loot', targetId: stock });
-    w.salvage = w.salvage.filter((s) => s.id !== stock);
+    // The loot goal drives the robber this turn. Once the truck wakes, the loot goal pops, and the scavenge goal
+    // is active again.
+    expect(thinkNpc(w, robber)).toMatchObject({ kind: 'loot', targetId: target.id });
+    target.defeat = { ...target.defeat!, phase: 'retreat' };
     forceOption('resume', 'resume');
     expect(thinkNpc(w, robber)).toMatchObject({ kind: 'scavenge', targetId: 'salvage-yard' });
   });
@@ -393,7 +394,7 @@ describe('looting', () => {
     const npc = addScumbag(w, { x: 10, y: 10 });
     npc.brain!.goals = [{ ...SCAVENGE }];
     const foe = addPrey(w, { x: 15, y: 10 });
-    foe.brain = npcBrain('trader', foe.pos, []);
+    foe.brain = npcBrain('trader', foe.pos, ['trader']);
     addState(w, 'feud', npc.id, foe.id, { kind: 'feud', robbery: false });
     corePart(foe, 'cab').hp = 0;
     w.rngState = rngStateWhere((roll) => roll >= RULES.npcDeathChance);

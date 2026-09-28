@@ -19,6 +19,7 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { isHostile } from './combat';
 import { isRamGainful, ramImpact } from './crash-contact';
+import { isKnockedOut } from './defeat';
 import { vehicleById } from './damage';
 import { contactsOf } from './detect';
 import { getTradePrice } from './economy';
@@ -30,11 +31,11 @@ import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
 import { skillEffect, vehicleHasPerk } from './progress';
 import { randRange } from './rng';
-import { canReachSalvage, canTakeAny } from './salvage';
+import { canReachSalvage, canTakeAny, canTakeFromTruck } from './salvage';
 import { canUseSite, siteGates } from './sites';
 import { stateOf, statesHeld } from './states';
 import { getMobilityCondition, vehicleStats } from './stats';
-import { strandedAt, towSite } from './tow';
+import { inTowReach, strandedAt, towSite } from './tow';
 import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
@@ -225,6 +226,17 @@ export function visibleSalvage(world: World, vehicle: Vehicle): SalvageStock[] {
   return visible.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
 }
 
+// Knocked-out trucks in sight with something left the driver could take, or too far to inspect. Nearest first.
+export function visibleDowned(world: World, vehicle: Vehicle): Vehicle[] {
+  const visible = world.vehicles.filter((v) => seesDowned(world, vehicle, v));
+  return visible.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
+}
+
+function seesDowned(world: World, vehicle: Vehicle, target: Vehicle): boolean {
+  if (target.id === vehicle.id || !isKnockedOut(target) || !canVehicleSee(world, vehicle, target.pos)) return false;
+  return !inTowReach(vehicle, target) || canTakeFromTruck(vehicle, target);
+}
+
 function seesSalvage(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
   return canVehicleSee(world, vehicle, stock.pos) && (!canReachSalvage(vehicle, stock) || canTakeAny(world, vehicle, stock));
 }
@@ -295,14 +307,17 @@ function canTrade(world: World, vehicle: Vehicle): boolean {
 
 function canScavenge(world: World, vehicle: Vehicle): boolean {
   if (freeCells(vehicle) === 0) return false;
-  return visibleSalvage(world, vehicle).length > 0 || salvageSitesAway(vehicle).length > 0;
+  return visibleSalvage(world, vehicle).length > 0 || visibleDowned(world, vehicle).length > 0 || salvageSitesAway(vehicle).length > 0;
 }
 
-// Looting salvage on the way needs cargo room and the stock in sight.
+// Looting salvage or a knocked-out truck on the way needs cargo room and the loot in sight.
 function canLootSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
   if (subject === null) throw new Error(`${decision} needs a subject`);
+  if (freeCells(vehicle) === 0) return false;
   const stock = world.salvage.find((entry) => entry.id === subject);
-  return stock !== undefined && freeCells(vehicle) > 0 && seesSalvage(world, vehicle, stock);
+  if (stock) return seesSalvage(world, vehicle, stock);
+  const truck = world.vehicles.find((v) => v.id === subject);
+  return truck !== undefined && seesDowned(world, vehicle, truck);
 }
 
 function canRaid(_world: World, vehicle: Vehicle): boolean {

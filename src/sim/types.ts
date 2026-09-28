@@ -85,10 +85,15 @@ export type RefitMove = {
   to: { x: number; y: number; rot: 0 | 1 };
 };
 
+// A part a refit takes onto the grid, from a salvage stock or off a knocked-out truck. itemId is its new grid item.
+export type RefitPickup =
+  | { from: 'stock'; stockId: string; partId: string; itemId: string; to: RefitMove['to'] }
+  | { from: 'truck'; vehicleId: string; partId: string; itemId: string; to: RefitMove['to'] };
+
 export type RefitJob = {
   kind: 'refit';
   moves: RefitMove[];
-  pickup: { stockId: string; partId: string; itemId: string; to: RefitMove['to'] } | null;
+  pickup: RefitPickup | null;
   turnsLeft: number;
   total: number;
 };

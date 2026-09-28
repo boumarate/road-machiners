@@ -179,13 +179,14 @@ describe('NPC activities', () => {
     expect(topGoal(npc)?.kind).toBe('sell');
   });
 
-  it('a raider can destroy an NPC and sell the actual loot', () => {
+  it('a raider can knock out an NPC, strip its cargo and sell it', () => {
     const w0 = emptyWorld({ x: 58, y: 58 });
     const raider = addVehicle(w0, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 14, y: 12 });
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     forceOption('hostileSeen', 'fight');
     forceOption('idle', 'scavenge');
     const victim = addVehicle(w0, 'scavengers', 'scout', [], { x: 16, y: 12 });
+    victim.brain = npcBrain('scavenger', victim.pos, ['scavenger']);
     corePart(victim, 'cab').hp = 1;
     addGoods(w0, victim, 'scrap', 3);
     for (const key of ['buggy', 'gunwagon', 'trader', 'scavenger']) w0.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
@@ -196,14 +197,10 @@ describe('NPC activities', () => {
     for (let turn = 0; turn < w.size * 5; turn++) {
       w = endTurn(w, testDrive);
       const actor = w.vehicles.find((v) => v.id === raider.id)!;
-      if ((goodsCount(actor).scrap ?? 0) > 0) {
-        looted = true;
-        const stock = w.salvage.find((entry) => entry.id === `wreck-${victim.id}`)!;
-        expect(stock.goods.scrap + goodsCount(actor).scrap).toBe(3);
-      }
+      if ((goodsCount(actor).scrap ?? 0) > 0) looted = true;
       if (looted && actor.resources!.money > money) { sold = true; break; }
     }
-    expect(w.vehicles.some((v) => v.id === victim.id)).toBe(false);
+    expect(w.vehicles.find((v) => v.id === victim.id)?.defeat).toBeDefined();
     expect(looted).toBe(true);
     expect(sold).toBe(true);
   });

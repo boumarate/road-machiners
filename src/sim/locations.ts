@@ -126,7 +126,7 @@ function transferLoot(world: World, stock: SalvageStock, item: GridItem, to: Spo
     const work = refitTurns(world, me, RULES.refitTurnsPerPart);
     startJob(world, me, {
       kind: 'refit', moves: [],
-      pickup: { stockId: stock.id, partId: item.part.id, itemId: item.id, to },
+      pickup: { from: 'stock', stockId: stock.id, partId: item.part.id, itemId: item.id, to },
       turnsLeft: work, total: work,
     });
     return;

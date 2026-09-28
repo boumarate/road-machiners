@@ -10,9 +10,9 @@ import { findSpot, gridOf, isMounted, itemCells, MOUNT_CELLS, mountSpots, placem
 import { requireTown, townAt } from './sites';
 import { startJob } from './jobs';
 import { RULES } from '../data/rules';
-import { canReachSalvage, dumpOnPile } from './salvage';
+import { canReachSalvage, dumpOnPile, truckPickupItem } from './salvage';
 import { vehicleStats } from './stats';
-import type { GridItem, PartInstance, RefitJob, RefitMove, Vehicle, World } from './types';
+import type { GridItem, PartInstance, RefitJob, RefitMove, RefitPickup, Vehicle, World } from './types';
 import { playerCommand } from './world';
 
 // Mount a part on a free fitting mount. Returns false when no mount has room. A gun or a tall part takes the first
@@ -222,7 +222,8 @@ export function getRefitLayout(world: World, v: Vehicle, job: RefitJob): { items
   return error ? { items: null, error } : { items, error: null };
 }
 
-function getRefitPickup(world: World, v: Vehicle, pickup: NonNullable<RefitJob['pickup']>): GridItem | string {
+function getRefitPickup(world: World, v: Vehicle, pickup: RefitPickup): GridItem | string {
+  if (pickup.from === 'truck') return truckPickupItem(world, v, pickup);
   const { stockId, partId, itemId, to } = pickup;
   const stock = world.salvage.find((entry) => entry.id === stockId);
   if (!stock || !world.player.scavenged.includes(stockId) || !canReachSalvage(v, stock)) return 'Salvage is no longer in reach';

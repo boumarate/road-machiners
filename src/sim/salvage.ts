@@ -9,18 +9,21 @@ import { partDef } from '../data/parts';
 import { PERK_NUMBERS } from '../data/skills';
 import { makePart, newId } from './factory';
 import { findRoadWreckSpot } from './mapgen';
-import { playerVehicle } from './damage';
+import { playerVehicle, vehicleById } from './damage';
+import { isKnockedOut } from './defeat';
 import { grayRadius } from './vision';
-import { findSpot, goodsCount, gridOf, isLoot, isMounted, MOUNT_CELLS } from './grid';
-import { addGoods, stowPart } from './inventory';
+import { findSpot, goodsCount, gridOf, isLoot, isMounted, MOUNT_CELLS, type Spot } from './grid';
+import { addGoods, getLayoutError, refitTurns, requireIdleRefit, stowPart } from './inventory';
 import { vehicleHasPerk } from './progress';
 import { chance, randInt } from './rng';
 import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
 import { vehicleStats } from './stats';
-import { cancelJob } from './jobs';
-import type { GridItem, PartInstance, Pile, SalvageStock, Vehicle, World } from './types';
-import { canUseSite } from './sites';
+import { cancelJob, startJob } from './jobs';
+import type { GridItem, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
+import { canUseSite, townAt } from './sites';
+import { inTowReach } from './tow';
+import { playerCommand } from './world';
 import { dist, type Vec } from './vec';
 import { isJunk, maxHp, restorePart } from './wear';
 
@@ -140,9 +143,14 @@ function collectGoods(world: World, vehicle: Vehicle, stock: SalvageStock, units
 
 // The player's average paid for a good after taking `took` units from a stock while holding `held`.
 export function takeBasis(world: World, stock: SalvageStock, good: string, held: number, took: number): void {
+  addBasis(world, good, held, took, stockBasis(stock, good));
+}
+
+// The player's average paid for a good after gaining `took` units at `unit` each while holding `held`.
+export function addBasis(world: World, good: string, held: number, took: number, unit: number): void {
   if (took === 0) return;
   const paid = world.player.costBasis[good] ?? 0;
-  world.player.costBasis[good] = (paid * held + stockBasis(stock, good) * took) / (held + took);
+  world.player.costBasis[good] = (paid * held + unit * took) / (held + took);
 }
 
 // What the player paid per unit of a good in a stock: the recorded average on the player's own pile. Loot
@@ -194,7 +202,12 @@ function isWreckStock(stock: SalvageStock): boolean {
 // The careful strip perk: a part the player mounts from a wreck stock gains a share of its max HP, up to full. The
 // player's own knockout pile is no wreck, or dumping a part back on it would repair it for free.
 export function stripPart(world: World, vehicle: Vehicle, stock: SalvageStock, part: PartInstance): void {
-  if (!isWreckStock(stock) || stock.pile?.fromPlayer || !vehicleHasPerk(world, vehicle, 'carefulStrip') || isJunk(part)) return;
+  if (isWreckStock(stock) && !stock.pile?.fromPlayer) carefulStrip(world, vehicle, part);
+}
+
+// The careful strip perk on a part taken off a wreck or a knocked-out truck.
+export function carefulStrip(world: World, vehicle: Vehicle, part: PartInstance): void {
+  if (!vehicleHasPerk(world, vehicle, 'carefulStrip') || isJunk(part)) return;
   restorePart(part, part.hp + Math.round(maxHp(part) * PERK_NUMBERS.carefulStrip.hp));
 }
 
@@ -380,4 +393,119 @@ function inPlayerView(world: World, pos: Vec): boolean {
 
 function clearOfVehicles(world: World, pos: Vec, r: number): boolean {
   return world.vehicles.every((v) => dist(v.pos, pos) > chassisDef(v.chassisId).radius + r);
+}
+
+// ---- Knocked-out NPC trucks. A truck parked in reach takes their goods and spare parts at once. An installed part
+// comes off in a field refit: a refit job whose pickup names the truck. Built-in core parts stay on it. The player
+// and NPC looters follow the same rules.
+
+type TruckPickup = Extract<RefitPickup, { from: 'truck' }>;
+
+// The looter is parked beside a knocked-out truck.
+export function canLootTruck(looter: Vehicle, target: Vehicle): boolean {
+  return looter.id !== target.id && isKnockedOut(target) && looter.speed <= RULES.parkedSpeed && inTowReach(looter, target);
+}
+
+// Why this item cannot leave the truck, or null. A built-in part stays, and a rack must be empty before it comes off.
+export function takeError(target: Vehicle, item: GridItem): string | null {
+  if (item.kind === 'part' && partDef(item.part.defId).kind === 'core' && isMounted(target.chassisId, item)) return 'Built-in parts stay on the truck';
+  const left = getLayoutError(target, target.items.filter((it) => it.id !== item.id));
+  return left ? 'Empty that rack first' : null;
+}
+
+// Refit turns to move an item off the truck onto a spot: one part-worth to unmount it and one to mount it.
+function takeTurns(world: World, looter: Vehicle, target: Vehicle, item: GridItem, placed: GridItem): number {
+  const planned = RULES.refitTurnsPerPart * (Number(isMounted(target.chassisId, item)) + Number(isMounted(looter.chassisId, placed)));
+  const garage = looter.id === world.player.vehicleId && townAt(world) !== null;
+  return planned > 0 && !garage ? refitTurns(world, looter, planned) : 0;
+}
+
+// Moves one item off the truck onto the looter's grid at `to`. Loose items move at once. An installed part, or a
+// part placed on a mount, starts a field refit.
+export function takeItem(world: World, looter: Vehicle, target: Vehicle, item: GridItem, to: Spot): void {
+  const placed: GridItem = { ...item, id: newId(world, 'i'), ...to };
+  const error = takeError(target, item) ?? getLayoutError(looter, [...looter.items, placed]);
+  if (error) throw new Error(error);
+  const work = takeTurns(world, looter, target, item, placed);
+  if (work === 0) return moveNow(world, looter, target, item, placed);
+  if (item.kind !== 'part') throw new Error('Only parts take a refit');
+  const pickup: TruckPickup = { from: 'truck', vehicleId: target.id, partId: item.part.id, itemId: placed.id, to };
+  startJob(world, looter, { kind: 'refit', moves: [], pickup, turnsLeft: work, total: work });
+}
+
+function moveNow(world: World, looter: Vehicle, target: Vehicle, item: GridItem, placed: GridItem): void {
+  target.items = target.items.filter((it) => it.id !== item.id);
+  if (placed.kind === 'good' && looter.id === world.player.vehicleId) addBasis(world, placed.good, goodsCount(looter)[placed.good] ?? 0, 1, GOODS[placed.good].value);
+  looter.items.push(placed);
+}
+
+// The player command behind a drag from a knocked-out truck's grid.
+export function takeFromTruck(world: World, targetId: string, itemId: string, to: Spot): World {
+  return playerCommand(world, (w) => {
+    const me = playerVehicle(w);
+    const target = vehicleById(w, targetId);
+    requireIdleRefit(me);
+    if (!canLootTruck(me, target)) throw new Error('Park beside a knocked-out truck to loot it');
+    const item = target.items.find((it) => it.id === itemId);
+    if (!item) throw new Error(`No item ${itemId} on ${target.name}`);
+    takeItem(w, me, target, item, to);
+  });
+}
+
+// The part a running refit takes off the truck, at its new spot, or why the refit cannot go on.
+export function truckPickupItem(world: World, looter: Vehicle, pickup: TruckPickup): GridItem | string {
+  const target = world.vehicles.find((v) => v.id === pickup.vehicleId);
+  if (!target || !canLootTruck(looter, target)) return 'The truck is no longer knocked out in reach';
+  const item = target.items.find((it) => it.kind === 'part' && it.part.id === pickup.partId);
+  if (item?.kind !== 'part') return 'The part is no longer on the truck';
+  return { kind: 'part', id: pickup.itemId, part: item.part, ...pickup.to };
+}
+
+// A finished refit takes the part off the truck.
+export function finishTruckPickup(world: World, looter: Vehicle, pickup: TruckPickup): void {
+  const target = vehicleById(world, pickup.vehicleId);
+  const item = target.items.find((it) => it.kind === 'part' && it.part.id === pickup.partId);
+  if (item?.kind !== 'part') throw new Error('Truck part disappeared after validation');
+  target.items = target.items.filter((it) => it.id !== item.id);
+  if (isMounted(looter.chassisId, { ...item, ...pickup.to })) carefulStrip(world, looter, item.part);
+}
+
+// ---- NPC looters
+
+// One turn of an NPC looting a parked-beside truck. Every loose item that fits comes over at once, then one
+// installed part per refit, stowed as a spare. Returns why the loot ends, or null while work remains.
+export function lootTruckTurn(world: World, looter: Vehicle, target: Vehicle): string | null {
+  if (looter.job?.kind === 'refit') return null;
+  takeLooseItems(world, looter, target);
+  const next = nextInstalled(looter, target);
+  if (!next) return target.items.some((it) => takeError(target, it) === null) ? 'cargo cannot hold the loot' : 'nothing left to loot';
+  takeItem(world, looter, target, next.item, next.spot);
+  return null;
+}
+
+function takeLooseItems(world: World, looter: Vehicle, target: Vehicle): void {
+  for (const item of target.items.filter((it) => !isMounted(target.chassisId, it))) {
+    const spot = spareSpot(looter, item);
+    if (spot) takeItem(world, looter, target, item, spot);
+  }
+}
+
+// The looter can take at least one more item from the truck.
+export function canTakeFromTruck(looter: Vehicle, target: Vehicle): boolean {
+  return target.items.some((it) => takeError(target, it) === null && spareSpot(looter, it) !== null);
+}
+
+function nextInstalled(looter: Vehicle, target: Vehicle): { item: GridItem; spot: Spot } | null {
+  for (const item of target.items) {
+    if (!isMounted(target.chassisId, item) || takeError(target, item)) continue;
+    const spot = spareSpot(looter, item);
+    if (spot) return { item, spot };
+  }
+  return null;
+}
+
+// A spot off the mounts, where a looted item rides as cargo.
+function spareSpot(looter: Vehicle, item: GridItem): Spot | null {
+  const avoid = item.kind === 'part' ? MOUNT_CELLS[partDef(item.part.defId).kind] : null;
+  return findSpot(gridOf(looter), looter.items, { ...item, id: 'probe' }, null, avoid);
 }
