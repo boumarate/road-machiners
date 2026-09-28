@@ -1,7 +1,7 @@
 // NPC spawning up to per-template caps. Raiders appear at their camp gates, neutrals at the gates of any
 // town or other location.
 
-import { NPCS, SPAWN, type NpcTemplate, type TraitId } from "../data/npcs";
+import { FIRST_NAMES, NPCS, SPAWN, SURNAMES, type NpcTemplate, type TraitId } from "../data/npcs";
 import { chassisDef } from "../data/chassis";
 import { REGION } from "../data/region";
 import { playerVehicle } from "./damage";
@@ -99,6 +99,7 @@ export function spawnAt(world: World, tpl: NpcTemplate, loadout: NpcLoadout, pos
     heading: randRange(world, -Math.PI, Math.PI),
     brain: {
       templateId: tpl.id,
+      driver: driverName(world.nameRng),
       traits: rollTraits(world, tpl),
       goals: [],
       noticed: {},
@@ -112,6 +113,19 @@ export function spawnAt(world: World, tpl: NpcTemplate, loadout: NpcLoadout, pos
   world.vehicles.push(v);
   world.events.push({ t: "spawn", vehicle: v.id });
   return v;
+}
+
+const NAME_SALT = 0x6e616d65;
+
+export function nameStream(seed: number): Rng {
+  return { rngState: seed ^ NAME_SALT };
+}
+
+// A first name and a surname from the pools in src/data/npcs.ts.
+function driverName(names: Rng): string {
+  const first = FIRST_NAMES[randInt(names, 0, FIRST_NAMES.length - 1)];
+  const last = SURNAMES[randInt(names, 0, SURNAMES.length - 1)];
+  return `${first} ${last}`;
 }
 
 const NEUTRAL_SITES: readonly Site[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== "camp")];

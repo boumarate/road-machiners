@@ -17,7 +17,7 @@ import { fireGuards } from './guards';
 import { discoverSites } from './locations';
 import { consumeSupplies, leakFuel } from './supplies';
 import { chargeUpkeep } from './economy';
-import { spawnInitial, spawnNpcs } from './spawn';
+import { nameStream, spawnInitial, spawnNpcs } from './spawn';
 import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
 import { timed } from '../perf';
 import { noteHurt, resolveNpcActivities } from './npc-activities';
@@ -44,6 +44,7 @@ export function newWorld(seed: number, kit: StartKit): World {
     seed,
     rngState: seed,
     marketRng: marketStream(seed),
+    nameRng: nameStream(seed),
     turn: 1,
     size: REGION.size,
     nextId: 0,

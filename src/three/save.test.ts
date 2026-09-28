@@ -109,6 +109,8 @@ describe('local game save', () => {
     storage.setItem('korovan.save', JSON.stringify({ version: 26, world: { turn: 21 } }));
     expect(() => loadWorld(storage)).toThrow(/version/);
     storage.setItem('korovan.save', JSON.stringify({ version: 27, world: { turn: 21 } }));
+    expect(() => loadWorld(storage)).toThrow(/version/);
+    storage.setItem('korovan.save', JSON.stringify({ version: 28, world: { turn: 21 } }));
     expect(() => loadWorld(storage)).toThrow(/world/);
   });
 
@@ -119,7 +121,7 @@ describe('local game save', () => {
       const incomplete = { ...world };
       delete (incomplete as Partial<typeof world>)[field];
       const { terrain: _terrain, ...saved } = incomplete;
-      storage.setItem('korovan.save', JSON.stringify({ version: 27, world: saved }));
+      storage.setItem('korovan.save', JSON.stringify({ version: 28, world: saved }));
       expect(() => loadWorld(storage)).toThrow(/world/);
     }
   });

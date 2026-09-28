@@ -1,19 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import { NPCS, SPAWN } from '../data/npcs';
+import { FIRST_NAMES, NPCS, SPAWN, SURNAMES } from '../data/npcs';
 import { REGION } from '../data/region';
 import { START_KITS } from '../data/start';
 import { playerVehicle } from './damage';
 import { siteGates, sitePads } from './sites';
 import { spawnNpcs } from './spawn';
-import { emptyWorld } from './testkit';
+import { emptyWorld, testDrive } from './testkit';
 import { dist } from './vec';
-import { newWorld } from './world';
+import { endTurn, newWorld } from './world';
 
 const NEUTRAL_SITES = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'camp')];
 const nearestSite = (pos: { x: number; y: number }) =>
   NEUTRAL_SITES.reduce((best, site) => (dist(pos, site.pos) - site.radius < dist(pos, best.pos) - best.radius ? site : best));
 
 describe('NPC spawns', () => {
+  it('names each driver from the pools and keeps the name through turns', () => {
+    const w = newWorld(1337, START_KITS.standard);
+    const npcs = w.vehicles.filter((v) => v.brain);
+    for (const v of npcs) {
+      const [first, last] = v.brain!.driver.split(' ');
+      expect(FIRST_NAMES).toContain(first);
+      expect(SURNAMES).toContain(last);
+    }
+    expect(new Set(npcs.map((v) => v.brain!.driver)).size).toBeGreaterThan(1);
+    const later = endTurn(endTurn(w, testDrive), testDrive);
+    for (const v of npcs) expect(later.vehicles.find((x) => x.id === v.id)?.brain?.driver).toBe(v.brain!.driver);
+  }, 15_000);
+
   it('spreads the first neutral drivers over several sites', () => {
     const w = newWorld(1337, START_KITS.standard);
     const neutrals = w.vehicles.filter((v) => v.brain && NPCS[v.brain.templateId].spawn.kind === 'town');

@@ -167,6 +167,7 @@ export type NpcActivity = {
 
 export type NpcBrain = {
     templateId: string;
+    driver: string; // first name and surname, rolled at spawn
     traits: TraitId[]; // base traits of the template plus the extras rolled at spawn
     goals: NpcActivity[]; // goal stack, top last: a long-term goal at the bottom, interruptions above it
     noticed: Record<string, number>; // `<decision>:<vehicle id>` for subjects already decided on, to the turn last perceived
@@ -356,6 +357,7 @@ export type World = {
   seed: number;
   rngState: number;
   marketRng: Rng; // the market's own random stream; see src/sim/market.ts
+  nameRng: Rng; // the stream for NPC driver names, so a name roll never shifts other randomness; see src/sim/spawn.ts
   turn: number;
   size: number;
   nextId: number;
