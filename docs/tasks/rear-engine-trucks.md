@@ -1,6 +1,6 @@
 # Rear-engine trucks
 
-**Status:** validating
+**Status:** done
 **Branch:** rear-engine-trucks
 **Worktree:** .worktrees/rear-engine-trucks
 **Goal:** Four new chassis with the engine behind the driver are for sale in towns and driven by NPCs, each drawn from a base model copying a real vehicle. `npm test` and `npm run playtest` pass, and the user confirms the looks from in-game screenshots.
@@ -161,7 +161,7 @@ One phase per chassis: PH2 jeep, PH3 convertible, PH4 bus, PH5 loader. Each phas
 - `tools/blender/base_*.py` — four older bases share SEED 302 and four share 303.
 
 ## Conclusion
-The four chassis are buyable, spawn with NPCs and draw from their own base models. The review found one issue: the hull and cut helpers were copied into three bases. They moved to `parts_common_base.py`, and the three rebuilt models are byte-identical. AS1 held: the bus drives upright. UK1 resolved: `tall: false` alone lets guns fire across open seats. The goal waits on the user confirming the looks from the in-game shots.
+The four chassis are buyable, spawn with NPCs and draw from their own base models. The review found one issue: the hull and cut helpers were copied into three bases. They moved to `parts_common_base.py`, and the three rebuilt models are byte-identical. AS1 held: the bus drives upright. UK1 resolved: `tall: false` alone lets guns fire across open seats. The user confirmed the looks from the in-game shots.
 
 
 ### Hands-off decisions
