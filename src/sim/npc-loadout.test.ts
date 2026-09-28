@@ -194,6 +194,7 @@ describe('trader spare parts', () => {
     template.loadout.chassis = [{ value: 'buggy', weight: 1 }];
     template.loadout.cargoPart = [{ value: null, weight: 1 }];
     template.loadout.goods = [{ value: null, weight: 1 }];
+    template.loadout.spares = { pool: [{ value: 'mg', weight: 1 }], count: [{ value: 0, weight: 1 }] };
     const bare = generateNpcLoadout({ ...fixture, rngState: 3 }, template);
     const free = freeCells(makeVehicle(fixture, { ...bare, name: 'probe', faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 }));
     template.loadout.goods = [{ value: { good: 'textiles', count: free }, weight: 1 }];

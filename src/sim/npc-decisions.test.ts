@@ -244,6 +244,13 @@ describe('fight back', () => {
     expect(back(coward)).toBeLessThan(back(plain));
   });
 
+  it('a brave trader almost never runs from a shot or begs', () => {
+    const brave = shotTrader(['trader', 'brave'], 18);
+    const chances = (decision: 'attacked' | 'parley') => optionChances(optionWeights(brave.w, brave.trader, decision, brave.raider.id, vehicleDanger(brave.w, brave.raider)));
+    expect(chances('attacked').flee!).toBeLessThan(0.1);
+    expect(chances('parley').beg!).toBeLessThan(0.02);
+  });
+
   it('a guard shot fires no attacked decision', () => {
     const w = emptyWorld({ x: 80, y: 80 });
     const trader = addNpc(w, 'traders', 'trader', ['trader'], { x: 10, y: 10 }, ['autocannon', 'stockEngine']);

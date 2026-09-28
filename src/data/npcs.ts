@@ -12,7 +12,7 @@ export const NPC_RESOURCES = {
   supplies: START_KITS.standard.supplies,
 };
 
-export type TraitId = 'trader' | 'scavenger' | 'raider' | 'scumbag' | 'coward' | 'lawman' | 'courier' | 'roamer' | 'supplier' | 'guard' | 'merc';
+export type TraitId = 'trader' | 'scavenger' | 'raider' | 'scumbag' | 'coward' | 'lawman' | 'courier' | 'roamer' | 'supplier' | 'guard' | 'merc' | 'brave';
 
 export type Weighted<T> = { value: T; weight: number };
 export type CargoRoll = { good: string; count: number };
@@ -520,14 +520,19 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
 };
 
 // Traits rolled on top of a template's own. One neutral driver in four is a scumbag, and one in four a coward. Both
-// can meet in one driver. A lawman can be a coward but never a scumbag, since it keeps the peace. Raiders roll none:
-// they rob anyway.
-const NEUTRAL_EXTRAS: NpcTemplate['extraTraits'] = [{ trait: 'scumbag', chance: 0.25 }, { trait: 'coward', chance: 0.25 }];
-const LAWMAN_EXTRAS: NpcTemplate['extraTraits'] = [{ trait: 'coward', chance: 0.25 }];
+// can meet in one driver. One neutral driver or raider in seven is brave, unless it rolled coward. Lawmen and
+// convoy guards are always brave. A convoy guard can be a scumbag. Lawmen roll no extras, since they keep the peace.
+const NEUTRAL_EXTRAS: NpcTemplate['extraTraits'] = [{ trait: 'scumbag', chance: 0.25 }, { trait: 'coward', chance: 0.25 }, { trait: 'brave', chance: 0.15 }];
+const RAIDER_EXTRAS: NpcTemplate['extraTraits'] = [{ trait: 'brave', chance: 0.15 }];
+const GUARD_EXTRAS: NpcTemplate['extraTraits'] = [{ trait: 'scumbag', chance: 0.25 }];
+
+// Pairs of traits one driver never holds together. A rolled extra that opposes a trait the driver already holds
+// is dropped.
+export const OPPOSED_TRAITS: readonly [TraitId, TraitId][] = [['coward', 'brave']];
 
 export const NPCS: Record<string, NpcTemplate> = {
   buggy: {
-    id: 'buggy', name: 'Raider outrider', faction: 'raiders', traits: ['raider'], extraTraits: [],
+    id: 'buggy', name: 'Raider outrider', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
     loadout: LOADOUTS.outrider,
     aggroRange: 11,
     preferredRange: 3,
@@ -538,7 +543,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "camp" },
   },
   gunwagon: {
-    id: 'gunwagon', name: 'Raider gunwagon', faction: 'raiders', traits: ['raider'], extraTraits: [],
+    id: 'gunwagon', name: 'Raider gunwagon', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
     loadout: LOADOUTS.gunwagon,
     aggroRange: 12,
     preferredRange: 6,
@@ -569,7 +574,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "town" },
   },
   bowlFarmer: {
-    id: 'bowlFarmer', name: 'Bowl Farmers patrol', faction: 'bowl', traits: ['lawman'], extraTraits: LAWMAN_EXTRAS,
+    id: 'bowlFarmer', name: 'Bowl Farmers patrol', faction: 'bowl', traits: ['lawman', 'brave'], extraTraits: [],
     loadout: LOADOUTS.bowlPatrol,
     aggroRange: 0,
     preferredRange: 0,
@@ -580,7 +585,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "sites", ids: ["bowl"] },
   },
   noseArmy: {
-    id: 'noseArmy', name: 'Nose Army patrol', faction: 'nose', traits: ['lawman'], extraTraits: LAWMAN_EXTRAS,
+    id: 'noseArmy', name: 'Nose Army patrol', faction: 'nose', traits: ['lawman', 'brave'], extraTraits: [],
     loadout: LOADOUTS.nosePatrol,
     aggroRange: 0,
     preferredRange: 0,
@@ -622,7 +627,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "sites", ids: ["bowl", "nose"] },
   },
   convoyGuard: {
-    id: 'convoyGuard', name: 'Convoy guard', faction: 'convoys', traits: ['guard'], extraTraits: NEUTRAL_EXTRAS,
+    id: 'convoyGuard', name: 'Convoy guard', faction: 'convoys', traits: ['guard', 'brave'], extraTraits: GUARD_EXTRAS,
     loadout: LOADOUTS.convoyGuard,
     aggroRange: 0,
     preferredRange: 0,
@@ -957,6 +962,15 @@ export const TRAITS: Record<TraitId, Trait> = {
       hostileSeen: { fight: { add: 4 } }, attacked: { fightBack: { mul: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
     },
   },
+  // A brave driver almost never runs or gives up: flee, truce, beg and paying up drop to a twentieth of their
+  // weight. Boldness 1.5 lets it stand against a group half again as strong as its own.
+  brave: {
+    towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 1.5,
+    weights: {
+      hostileSeen: { flee: { mul: 0.05 } }, contactHeard: { flee: { mul: 0.05 } }, attacked: { flee: { mul: 0.05 } },
+      parley: { truce: { mul: 0.05 }, beg: { mul: 0.05 } }, threatened: { flee: { mul: 0.05 }, comply: { mul: 0.05 } },
+    },
+  },
 };
 
 export const NPC_BEHAVIOR = {
@@ -969,9 +983,9 @@ export const NPC_BEHAVIOR = {
   // A leader waits while an escort lags farther than this many tiles behind. A truck cruises about 3.4 tiles a
   // turn on a road, so 12 tiles is three to four turns of driving, still well inside sight.
   escortWaitGap: 12,
-  // Tiles from a town gate a patrol drives out to: the gate guns' range plus one sight radius, so a patrol covers
-  // the road just past the guns.
-  patrolRadius: RULES.guards.range + TERRAIN.vision.radius,
+  // Tiles from a town gate a patrol drives out to: the gate guns' range plus four sight radii, about 90 tiles. A
+  // patrol covers the roads well past the guns, about a sixth of the way to the other town.
+  patrolRadius: RULES.guards.range + TERRAIN.vision.radius * 4,
   // Tiles along a road between two patrol stops. Close enough that stops spread over every approach.
   patrolSpacing: 4,
   // Tiles a follower keeps to the side of its leader past both radii: the yield distance plus one, so it rides
