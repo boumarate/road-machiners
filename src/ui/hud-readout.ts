@@ -1,4 +1,5 @@
 import { chassisDef } from "../data/chassis";
+import { tradePartner, tradeReady } from "../sim/economy";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { maxHp } from "../sim/wear";
@@ -8,12 +9,12 @@ import { corePart, mountedParts, mountedItems, itemSize } from "../sim/grid";
 import { isStranded, vehicleStats } from "../sim/stats";
 import { towData } from "../sim/states";
 import { playerTow } from "../sim/tow";
-import { clockOf, heatAt } from "../sim/sun";
+import { heatAt } from "../sim/sun";
 import { TERRAIN } from "../data/terrain";
 import { dist, type Vec } from "../sim/vec";
 import type { SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
-import { vehicleName } from "./format";
+import { clockLabel, vehicleName } from "./format";
 import { celsius, engineCelsius, fuelLiters, hp, kph } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./cards";
@@ -35,6 +36,17 @@ function shopNear(world: World): { id: string; name: string } | null {
 
 export function getContextAction(world: World, playing: boolean): ContextAction | null {
   if (playing || !playerCanAct(world)) return null;
+  // A trade the player arranged wins over the place once both trucks are parked side by side.
+  const trade = getTradeAction(world);
+  return trade?.ready ? trade : (getPlaceAction(world) ?? trade);
+}
+
+function getTradeAction(world: World): ContextAction | null {
+  const partner = tradePartner(world);
+  return partner && { label: `Trade with ${partner.name}`, ready: tradeReady(world) !== null };
+}
+
+function getPlaceAction(world: World): ContextAction | null {
   const shop = shopNear(world);
   if (shop) return { label: `Enter ${shop.name}`, ready: shopAt(world) === shop.id };
   if (isBusy(playerVehicle(world))) return null;
@@ -122,13 +134,6 @@ function weatherLabel(w: World, pos: Vec): string {
   return names.length ? [...new Set(names)].join(", ") : "Clear";
 }
 
-function clockLabel(turn: number): string {
-  const { day, hour } = clockOf(turn);
-  const hh = Math.floor(hour);
-  const mm = Math.floor((hour - hh) * 60);
-  return `Day ${day} ${hh}:${String(mm).padStart(2, "0")}`;
-}
-
 // Negative money is debt. It shows as a positive amount owed.
 export function moneyLabel(money: number): string {
   return money < 0
@@ -150,7 +155,7 @@ export function getRescueReadout(w: World): RescueReadout | null {
   const state = playerTow(w);
   if (state && towData(state).hitched) {
     const data = towData(state);
-    return { kind: "towed", tower: vehicleName(w, state.holder), town: townName(data.town), fee: data.fee };
+    return { kind: "towed", tower: vehicleName(w, state.holder), town: townName(data.site), fee: data.fee };
   }
   if (p.beacon || isStranded(w, playerVehicle(w)))
     return { kind: "stranded", beacon: p.beacon };

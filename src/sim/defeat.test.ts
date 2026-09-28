@@ -6,13 +6,14 @@ import { CONDITION } from '../data/wear';
 import { autoOrders, isHostile } from './combat';
 import { buyGood } from './economy';
 import { advanceKnockout, checkDeath, checkKnockout } from './defeat';
-import { corePart, coreParts, goodsCount, hasLoot, mountedParts } from './grid';
+import { corePart, coreParts, goodsCount, hasLoot, isLoot, mountedParts } from './grid';
 import { addGoods, dumpItem, moveItem, spareParts } from './inventory';
 import { scavenge } from './locations';
 import { startSearch } from './search';
 import { addState, endState, stateOf } from './states';
 import { startRepair } from './jobs';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
+import { refreshVision } from './vision';
 import type { SalvageStock, Vehicle, World } from './types';
 import { endTurn, setDirect, setMoveOrder, setWeaponOrder } from './world';
 
@@ -324,17 +325,31 @@ describe('commands while knocked out', () => {
 });
 
 describe('knockout practice', () => {
-  it('pays the player on coming to after a knockout', () => {
-    const { w } = knockedOut();
-    advanceKnockout(w);
-    expect(w.player.state).toBe('active');
+  it('pays the player for a knockout with a foe in sight', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
+    refreshVision(w);
+    corePart(w.vehicles[0], 'cab').hp = 0;
+    checkKnockout(w);
     expect(practiceOf(w, 'knockout')).toMatchObject([{ amount: 1, difficulty: null }]);
   });
 
-  it('pays nothing while the driver is still out', () => {
-    const { w } = knockedOut();
+  it('pays nothing for a knockout next to a raider that ignores a stripped truck', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = w.vehicles[0];
+    me.items = me.items.filter((it) => !isLoot(me.chassisId, it));
     addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
+    refreshVision(w);
+    corePart(me, 'cab').hp = 0;
+    checkKnockout(w);
+    expect(w.player.state).toBe('knockedOut');
+    expect(practiceOf(w, 'knockout')).toEqual([]);
+  });
+
+  it('pays nothing for a knockout with nobody around', () => {
+    const { w } = knockedOut();
     advanceKnockout(w);
+    expect(w.player.state).toBe('active');
     expect(practiceOf(w, 'knockout')).toEqual([]);
   });
 

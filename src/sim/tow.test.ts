@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { NPCS } from '../data/npcs';
 import { REGION } from '../data/region';
 import { BEACON, TOW } from '../data/tow';
-import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { SKILL_EFFECTS, XP_SOURCES, XP_TO_REACH } from '../data/skills';
 import { partDef } from '../data/parts';
 import { playerVehicle } from './damage';
 import { route, routeLength } from './path';
-import { canUseSite, siteGates, sitePads } from './sites';
+import { canUseSite, siteGates, sitePads, type Site } from './sites';
 import { getResources } from './resources';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
@@ -15,7 +15,7 @@ import { thinkNpc, topGoal } from './npc-activities';
 import { optionChances, optionWeights } from './npc-decisions';
 import { addState, stateOf, towData } from './states';
 import { callVehicle, chooseOption, currentOptions, hangUp } from './dialogue';
-import { dropTow, isOnRope, isTowed, playerTow, playerTowing, setBeacon, unhitch } from './tow';
+import { dropTow, isOnRope, isTowed, playerTow, playerTowing, setBeacon, towOf, unhitch } from './tow';
 import { sunAt } from './sun';
 import { canVehicleSee, refreshVision } from './vision';
 import type { GameEvent, Vehicle, World } from './types';
@@ -49,6 +49,7 @@ function runUntil(w: World, max: number, done: (w: World) => boolean): { w: Worl
   return { w, turns: max, events };
 }
 
+const onlyCore = (v: Vehicle) => { v.items = v.items.filter((it) => it.kind === 'part' && partDef(it.part.defId).kind === 'core'); };
 const find = (w: World, id: string) => w.vehicles.find((v) => v.id === id)!;
 const feeOf = (w: World) => towData(playerTow(w)!).fee;
 
@@ -73,7 +74,7 @@ describe('tow offer', () => {
   it('a trader that sees a stranded player drives over and offers a tow', () => {
     const s = stranded();
     const r = runUntil(s.w, 30, (w) => playerTow(w) !== null);
-    expect(playerTow(r.w)).toMatchObject({ kind: 'tow', holder: s.trader.id, other: r.w.player.vehicleId, data: { kind: 'tow', town: 'bowl', fee: expect.any(Number), hitched: false } });
+    expect(playerTow(r.w)).toMatchObject({ kind: 'tow', holder: s.trader.id, other: r.w.player.vehicleId, data: { kind: 'tow', site: 'bowl', fee: expect.any(Number), waived: 0, hitched: false } });
     expect(feeOf(r.w)).toBeGreaterThan(TOW.base);
     expect(r.events.filter((e) => e.t === 'towOffer')).toEqual([{ t: 'towOffer', by: s.trader.id, town: 'bowl', fee: feeOf(r.w) }]);
     const trader = find(r.w, s.trader.id);
@@ -106,7 +107,7 @@ describe('tow offer', () => {
     const s = stranded();
     const w = hangUp(offered(s));
     expect(playerTow(w)).toBeNull();
-    expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, reason: 'refused' });
+    expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, client: w.player.vehicleId, reason: 'refused' });
     expect(stateOf(w, 'turnedDown', s.trader.id, w.player.vehicleId)).not.toBeNull();
     const later = runUntil(w, 15, (x) => playerTow(x) !== null);
     expect(later.events.some((e) => e.t === 'towOffer')).toBe(false);
@@ -209,7 +210,7 @@ describe('towing', () => {
     w = unhitch(w);
     expect(playerTow(w)).toBeNull();
     expect(w.player.money).toBe(money);
-    expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, reason: 'unhitched' });
+    expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, client: w.player.vehicleId, reason: 'unhitched' });
     expect(autoRuns(w)).toBe(false);
     expect(() => setMoveOrder(w, { kind: 'stopAt', dest: { x: 0, y: 0 } })).not.toThrow();
     const r = runUntil(w, 10, (x) => playerTow(x) !== null);
@@ -229,7 +230,7 @@ describe('towing', () => {
     w = endTurn(w, testDrive);
     expect(playerTow(w)).toBeNull();
     expect(w.player.money).toBe(money);
-    expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, reason: 'danger' });
+    expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, client: w.player.vehicleId, reason: 'danger' });
     expect(topGoal(find(w, s.trader.id))?.kind).toBe('flee');
   });
 
@@ -241,7 +242,7 @@ describe('towing', () => {
     tower.resources!.health = 0;
     w = endTurn(w, testDrive);
     expect(playerTow(w)).toBeNull();
-    expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, reason: 'gone' });
+    expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, client: w.player.vehicleId, reason: 'gone' });
   });
 
   it('arrival in town charges the fee once and allows debt', () => {
@@ -262,7 +263,7 @@ describe('towing', () => {
     w = acceptTow(w);
     const r = runUntil(w, 120, (x) => playerTow(x) === null);
     w = r.w;
-    expect(r.events.filter((e) => e.t === 'towDone')).toEqual([{ t: 'towDone', by: s.trader.id, fee }]);
+    expect(r.events.filter((e) => e.t === 'towDone')).toEqual([{ t: 'towDone', by: s.trader.id, client: w.player.vehicleId, fee }]);
     expect(r.events.filter((e) => e.t === 'stateEnded').map((e) => e.t === 'stateEnded' && e.ending)).toEqual(['fulfilled']);
     expect(w.player.money).toBe(10 - fee);
     expect(w.player.money).toBeLessThan(0);
@@ -368,14 +369,13 @@ describe('tow deals', () => {
     const r = runUntil(w, 30, (x) => playerTow(x) !== null);
     const again = playerTow(r.w)!;
     expect(again.holder).toBe(deal.holder);
-    expect(towData(again)).toEqual({ kind: 'tow', town: deal.town, fee: deal.fee, hitched: false });
+    expect(towData(again)).toEqual({ kind: 'tow', site: deal.site, fee: deal.fee, waived: 0, hitched: false });
     expect(stateOf(r.w, 'towPromise', deal.holder, r.w.player.vehicleId)).toBeNull();
   });
 });
 
 describe('emergency beacon', () => {
   const player = { x: 30, y: 30 };
-  const onlyCore = (v: Vehicle) => { v.items = v.items.filter((it) => it.kind === 'part' && partDef(it.part.defId).kind === 'core'); };
   const activitiesOf = (events: GameEvent[], id: string) => events.filter((e) => e.t === 'activity' && e.vehicle === id);
 
   it('a tower re-aims at a player who crawled off at night, then reaches and offers', () => {
@@ -498,7 +498,7 @@ describe('emergency beacon', () => {
     expect(autoRuns(w)).toBe(false);
     playerVehicle(w).speed = 0;
     expect(autoRuns(setMoveOrder(w, { kind: 'stopAt', dest: { x: 40, y: 40 } }))).toBe(false);
-    addState(w, 'tow', s.trader.id, w.player.vehicleId, { kind: 'tow', town: 'bowl', fee: 10, hitched: false });
+    addState(w, 'tow', s.trader.id, w.player.vehicleId, { kind: 'tow', site: 'bowl', fee: 10, waived: 0, hitched: false });
     expect(autoRuns(w)).toBe(false);
   });
 });
@@ -549,13 +549,13 @@ describe('the player towing an NPC', () => {
     const { w: start, npc } = strandedNpc();
     npc.resources!.money = 30;
     const w = pick(callVehicle(start, npc.id), OFFER);
-    expect(w.player.call?.vars).toEqual({ town: { kind: 'town', id: 'bowl' }, fee: { kind: 'money', amount: 30 } });
+    expect(w.player.call?.vars).toEqual({ site: { kind: 'site', id: 'bowl' }, fee: { kind: 'money', amount: 30 } });
   });
 
   it('hitching takes the driver out of physics, and it trails the player', () => {
     let { w, npc } = hitched();
     expect(isOnRope(w, npc.id)).toBe(true);
-    expect(towData(playerTowing(w)!)).toMatchObject({ town: 'bowl', hitched: true });
+    expect(towData(playerTowing(w)!)).toMatchObject({ site: 'bowl', hitched: true });
     w = setMoveOrder(w, { kind: 'stopAt', dest: at(40) });
     for (let i = 0; i < 4; i++) {
       w = endTurn(w, testDrive);
@@ -601,6 +601,48 @@ describe('the player towing an NPC', () => {
     expect(playerTowing(w)).toBeNull();
   });
 
+  it('a free tow moves no money and pays Social XP for the waived fee on arrival', () => {
+    const { w: start, npc } = strandedNpc();
+    let w = pick(pick(callVehicle(start, npc.id), OFFER), 'No charge. Hitch up.');
+    const data = towData(playerTowing(w)!);
+    expect(data.fee).toBe(0);
+    expect(data.waived).toBeGreaterThan(0);
+    const money = w.player.money;
+    const npcMoney = find(w, npc.id).resources!.money;
+    w = setMoveOrder(w, { kind: 'stopAt', dest: gate });
+    const r = runUntil(w, 60, (x) => playerTowing(x) === null);
+    expect(r.w.player.money).toBe(money);
+    expect(find(r.w, npc.id).resources!.money).toBe(npcMoney);
+    const practice = r.events.filter((e) => e.t === 'practice' && e.source === 'freeTow');
+    expect(practice).toMatchObject([{ amount: data.waived, target: npc.id }]);
+    expect(r.w.player.xpBySource.freeTow).toBeCloseTo(data.waived * XP_SOURCES.freeTow.weight);
+  });
+
+  it('a paid tow pays no free tow XP', () => {
+    let { w } = hitched();
+    w = setMoveOrder(w, { kind: 'stopAt', dest: gate });
+    const r = runUntil(w, 60, (x) => playerTowing(x) === null);
+    expect(playerTowing(r.w)).toBeNull();
+    expect(r.events.some((e) => e.t === 'practice' && e.source === 'freeTow')).toBe(false);
+  });
+
+  it('the player can tow a raider under a truce, and it names its camp', () => {
+    const kiln = REGION.locations.find((l) => l.id === 'kiln')!;
+    const kilnGate = siteGates(kiln)[0];
+    const len = dist(kilnGate, kiln.pos);
+    const outKiln = (d: number) => ({ x: kilnGate.x + ((kilnGate.x - kiln.pos.x) / len) * d, y: kilnGate.y + ((kilnGate.y - kiln.pos.y) / len) * d });
+    const w = emptyWorld(outKiln(25));
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    const raider = withTower(w, 'buggy', 'raiders', 'buggy', outKiln(28));
+    raider.resources!.fuel = 0;
+    // The player's engine is loot to a raider, so only a truce keeps the two at peace.
+    addState(w, 'truce', raider.id, w.player.vehicleId, { kind: 'none' });
+    const offered = pick(callVehicle(w, raider.id), OFFER);
+    expect(offered.player.call?.vars.site).toEqual({ kind: 'site', id: 'kiln' });
+    const towing = pick(offered, HITCH);
+    expect(towData(playerTowing(towing)!).site).toBe('kiln');
+  });
+
   it('is not offered to a driver already at its town', () => {
     const { w, npc } = strandedNpc();
     npc.pos = { ...sitePads(bowl)[0] };
@@ -617,5 +659,129 @@ describe('the player towing an NPC', () => {
     const far = strandedNpc();
     far.npc.pos = at(35);
     expect(currentOptions(callVehicle(far.w, far.npc.id)).map((o) => o.text)).not.toContain(OFFER);
+  });
+});
+
+describe('NPCs towing each other', () => {
+  const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
+  const kiln = REGION.locations.find((l) => l.id === 'kiln')!;
+
+  // A point `d` tiles out from the site's first gate, away from the site.
+  function outFrom(site: Site, d: number): Vec {
+    const gate = siteGates(site)[0];
+    const len = dist(gate, site.pos);
+    return { x: gate.x + ((gate.x - site.pos.x) / len) * d, y: gate.y + ((gate.y - site.pos.y) / len) * d };
+  }
+
+  type Driver = [templateId: string, faction: Vehicle['faction'], chassis: string];
+  const TRADER: Driver = ['trader', 'traders', 'hauler'];
+  const SCAVENGER: Driver = ['scavenger', 'scavengers', 'scout'];
+  const RAIDER: Driver = ['buggy', 'raiders', 'buggy'];
+
+  // A client with an empty tank and a tower 8 tiles further out, both 30 tiles out from the site. The player drives
+  // and watches from 10 tiles closer in, or stays at the Bowl, out of sight of raiders it carries loot past. Idle
+  // drivers wait and nobody spawns.
+  function roadside(site: Site, client: Driver, tower: Driver): { w: World; client: Vehicle; tower: Vehicle } {
+    const raiders = client[1] === 'raiders' || tower[1] === 'raiders';
+    const w = emptyWorld(raiders ? bowl.pos : outFrom(site, 20));
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    forceOption('idle', 'wait');
+    const c = withTower(w, ...client, outFrom(site, 30));
+    c.resources!.fuel = 0;
+    c.resources!.money = 1000;
+    return { w, client: c, tower: withTower(w, ...tower, outFrom(site, 38)) };
+  }
+
+  it('a scavenger hitches a stranded trader and tows it to its nearest town for a fee', () => {
+    const s = roadside(bowl, TRADER, SCAVENGER);
+    const hitch = runUntil(s.w, 40, (w) => isOnRope(w, s.client.id));
+    const tow = towOf(hitch.w, s.client.id)!;
+    expect(tow.holder).toBe(s.tower.id);
+    expect(towData(tow)).toMatchObject({ site: 'bowl', hitched: true, waived: 0 });
+    expect(hitch.events).toContainEqual({ t: 'towHitched', by: s.tower.id, client: s.client.id, site: 'bowl' });
+    const fee = towData(tow).fee;
+    expect(fee).toBeGreaterThan(0);
+    const clientMoney = find(hitch.w, s.client.id).resources!.money;
+    const towerMoney = find(hitch.w, s.tower.id).resources!.money;
+    const r = runUntil(hitch.w, 200, (w) => towOf(w, s.client.id) === null);
+    expect(r.events.filter((e) => e.t === 'towDone')).toEqual([{ t: 'towDone', by: s.tower.id, client: s.client.id, fee }]);
+    expect(find(r.w, s.client.id).resources!.money).toBe(clientMoney - fee);
+    expect(find(r.w, s.tower.id).resources!.money).toBe(towerMoney + fee);
+    expect(canUseSite(find(r.w, s.tower.id).pos, bowl)).toBe(true);
+  });
+
+  it('the fee is capped by what the client can pay', () => {
+    const s = roadside(bowl, TRADER, SCAVENGER);
+    s.client.resources!.money = 7;
+    const hitch = runUntil(s.w, 40, (w) => isOnRope(w, s.client.id));
+    expect(towData(towOf(hitch.w, s.client.id)!).fee).toBe(7);
+  });
+
+  it('a raider hitches a stranded raider and tows it to its nearest camp', () => {
+    const s = roadside(kiln, RAIDER, RAIDER);
+    const hitch = runUntil(s.w, 40, (w) => isOnRope(w, s.client.id));
+    const tow = towOf(hitch.w, s.client.id)!;
+    expect(tow.holder).toBe(s.tower.id);
+    expect(towData(tow).site).toBe('kiln');
+  });
+
+  it('a raider helps a stranded raider as readily as a scavenger helps a trader, at the same crawl home', () => {
+    const r = roadside(kiln, RAIDER, RAIDER);
+    const t = roadside(bowl, TRADER, SCAVENGER);
+    refreshVision(r.w);
+    refreshVision(t.w);
+    const raider = optionChances(optionWeights(r.w, r.tower, 'strandedSeen', r.client.id, null)).tow;
+    expect(raider).toBeCloseTo(optionChances(optionWeights(t.w, t.tower, 'strandedSeen', t.client.id, null)).tow!);
+    expect(raider).toBeGreaterThan(0.5);
+  });
+
+  it('a trader never tows a stranded raider, and a raider never tows a trader or the player', () => {
+    const r = roadside(kiln, RAIDER, TRADER);
+    refreshVision(r.w);
+    expect(optionWeights(r.w, r.tower, 'strandedSeen', r.client.id, null)).not.toHaveProperty('tow');
+    const t = roadside(bowl, TRADER, RAIDER);
+    t.w.player.fuel = 0;
+    onlyCore(t.w.vehicles[0]);
+    playerVehicle(t.w).pos = outFrom(bowl, 34);
+    refreshVision(t.w);
+    expect(canVehicleSee(t.w, t.tower, playerVehicle(t.w).pos)).toBe(true);
+    expect(optionWeights(t.w, t.tower, 'strandedSeen', t.client.id, null)).not.toHaveProperty('tow');
+    expect(optionWeights(t.w, t.tower, 'strandedSeen', t.w.player.vehicleId, null)).not.toHaveProperty('tow');
+  });
+
+  it('only one tower answers a stranded driver', () => {
+    const s = roadside(bowl, TRADER, SCAVENGER);
+    forceOption('strandedSeen', 'tow');
+    const second = withTower(s.w, ...TRADER, outFrom(bowl, 36));
+    const r = runUntil(s.w, 40, (w) => isOnRope(w, s.client.id));
+    const claims = r.w.states.filter((st) => (st.kind === 'tow' || st.kind === 'answering') && st.other === s.client.id);
+    expect(claims).toHaveLength(1);
+    expect(topGoal(find(r.w, [s.tower.id, second.id].find((id) => id !== claims[0].holder)!))?.kind).not.toBe('tow');
+  });
+
+  it('a tower busy with one client does not take a second', () => {
+    const s = roadside(bowl, TRADER, SCAVENGER);
+    forceOption('strandedSeen', 'tow');
+    const other = withTower(s.w, ...TRADER, outFrom(bowl, 42));
+    other.resources!.fuel = 0;
+    const r = runUntil(s.w, 40, (w) => isOnRope(w, s.client.id) || isOnRope(w, other.id));
+    expect(r.w.states.filter((st) => st.holder === s.tower.id && (st.kind === 'tow' || st.kind === 'answering'))).toHaveLength(1);
+    expect(find(r.w, s.tower.id).brain!.goals.filter((g) => g.kind === 'tow')).toHaveLength(1);
+  });
+
+  it('a tower in danger drops its client for free and promises to come back', () => {
+    const s = roadside(bowl, TRADER, SCAVENGER);
+    let w = runUntil(s.w, 40, (x) => isOnRope(x, s.client.id)).w;
+    const money = find(w, s.client.id).resources!.money;
+    const tower = find(w, s.tower.id);
+    withTower(w, 'buggy', 'raiders', 'buggy', { x: tower.pos.x + 8, y: tower.pos.y });
+    forceOption('hostileSeen', 'flee');
+    forceOption('attacked', 'flee');
+    const r = runUntil(w, 5, (x) => towOf(x, s.client.id) === null);
+    w = r.w;
+    expect(isOnRope(w, s.client.id)).toBe(false);
+    expect(find(w, s.client.id).resources!.money).toBe(money);
+    expect(r.events).toContainEqual({ t: 'towDropped', by: s.tower.id, client: s.client.id, reason: 'danger' });
+    expect(stateOf(w, 'towPromise', s.tower.id, s.client.id)).not.toBeNull();
   });
 });

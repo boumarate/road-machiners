@@ -1,6 +1,7 @@
 // Escapes: the player gets away from hostile trucks. At each turn's end the player keeps the ids of the hostile
 // trucks in sight. A turn that ends with none of them in sight and no hostile seen practices driving, unless one
-// of them was destroyed, which is a win and not an escape.
+// of them was destroyed, which is a win and not an escape. The strongest escaped truck is the target, so slipping in
+// and out of sight of the same truck soon stops paying.
 
 import { isHostile } from './combat';
 import { playerVehicle } from './damage';
@@ -17,7 +18,9 @@ export function noteEscape(world: World): void {
   p.hostilesSeen = p.state === 'active' ? hostilesInSight(world, me) : [];
   if (p.state !== 'active' || p.hostilesSeen.length > 0) return;
   const escaped = escapedFrom(world, before);
-  if (escaped) practice(world, 'escape', 1, escapeDifficulty(world, me, escaped));
+  if (!escaped) return;
+  const strongest = escaped.reduce((a, b) => (vehicleDanger(world, b) > vehicleDanger(world, a) ? b : a));
+  practice(world, 'escape', 1, escapeDifficulty(world, me, strongest), strongest.id);
 }
 
 // The trucks seen last turn when all of them still exist and are out of sight, or null.
@@ -33,8 +36,8 @@ function hostilesInSight(world: World, me: Vehicle): string[] {
 }
 
 // The strongest escaped truck's danger against the player's own, from 0 for a harmless one toward 1.
-function escapeDifficulty(world: World, me: Vehicle, escaped: Vehicle[]): number {
-  const theirs = Math.max(...escaped.map((v) => vehicleDanger(world, v)));
+function escapeDifficulty(world: World, me: Vehicle, strongest: Vehicle): number {
+  const theirs = vehicleDanger(world, strongest);
   if (theirs === 0) return 0;
   return theirs / (theirs + vehicleDanger(world, me));
 }

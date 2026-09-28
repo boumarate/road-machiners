@@ -34,7 +34,7 @@ describe('field refits', () => {
     expect(getWeapon(next).y).toBe(weapon.y);
     advanceJobs(next);
     expect(getWeapon(next)).toMatchObject(target);
-    expect(practiceOf(next, 'fieldJob')).toMatchObject([{ amount: 5, difficulty: null }]);
+    expect(practiceOf(next, 'fieldJob')).toEqual([]);
   });
 
   it('charges removal and installation for relocation between mounts', () => {

@@ -1,6 +1,7 @@
 // Event log lines.
 
 import { GOODS } from '../data/goods';
+import { CONTRACTS } from '../data/market';
 import { partDef } from '../data/parts';
 import type { Contract } from '../sim/market';
 import { PERK_LEVELS, SKILL_INFO } from '../data/skills';
@@ -15,6 +16,7 @@ import { npcTraits } from '../sim/npc-decisions';
 import { hasPerk } from '../sim/progress';
 import { pleaData, statesHeld, towData } from '../sim/states';
 import { isJunk } from '../sim/wear';
+import { clockOf } from '../sim/sun';
 import type { PartHit } from '../sim/armor';
 import type { GameEvent, Job, NpcState, PartInstance, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
@@ -79,6 +81,7 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   truce: () => 'Truce with you',
   grievance: () => 'Angry at your crash',
   plea: (s) => (pleaData(s).plea === 'truce' ? 'Asked you for a truce' : 'Begged you for mercy'),
+  trade: () => 'Pulling over to trade with you',
 };
 
 // One line per state the NPC holds toward the player, with turns left when the state has a timer.
@@ -180,7 +183,28 @@ function callText(world: World, e: Extract<GameEvent, { t: 'call' }>): LogLine {
   return { text: e.outcome === 'opened' ? `Radio: ${who} on the line.` : `Radio: call with ${who} ended.`, cls: 'dim' };
 }
 
-function towDroppedText(by: string, reason: Extract<GameEvent, { t: 'towDropped' }>['reason']): { text: string; cls: string } {
+function towOfferText(world: World, e: Extract<GameEvent, { t: 'towOffer' }>): LogLine {
+  return { text: `${vehicleName(world, e.by)} offers to tow you to ${siteName(e.town)} for ${e.fee}.`, cls: '' };
+}
+
+function towHitchedText(world: World, e: Extract<GameEvent, { t: 'towHitched' }>): LogLine {
+  return { text: `${vehicleName(world, e.by)} takes ${vehicleName(world, e.client)} in tow to ${siteName(e.site)}.`, cls: 'dim' };
+}
+
+function towDoneText(world: World, e: Extract<GameEvent, { t: 'towDone' }>): LogLine {
+  const by = vehicleName(world, e.by);
+  if (e.client === world.player.vehicleId) return { text: `${by} tows you into town and takes ${e.fee}.`, cls: 'bad' };
+  return { text: `${by} tows ${vehicleName(world, e.client)} in and takes ${e.fee}.`, cls: 'dim' };
+}
+
+function towDroppedText(world: World, e: Extract<GameEvent, { t: 'towDropped' }>): LogLine {
+  const by = vehicleName(world, e.by);
+  if (e.client === world.player.vehicleId) return playerTowDroppedText(by, e.reason);
+  const client = vehicleName(world, e.client);
+  return { text: e.reason === 'gone' ? `${by} is gone. ${client} is off the rope.` : `${by} drops the tow of ${client}.`, cls: 'dim' };
+}
+
+function playerTowDroppedText(by: string, reason: Extract<GameEvent, { t: 'towDropped' }>['reason']): LogLine {
   const text = reason === 'refused' ? `You turn down the tow from ${by}.`
     : reason === 'unhitched' ? `You unhitch from ${by}.`
     : reason === 'danger' ? `${by} drops the tow. There is danger.`
@@ -207,6 +231,9 @@ const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => st
   partDisabled: (e) => [e.vehicle],
   destroyed: (e) => [e.vehicle],
   plea: (e) => [e.from, e.to],
+  towHitched: (e) => [e.by, e.client],
+  towDone: (e) => [e.by, e.client],
+  towDropped: (e) => [e.by, e.client],
 };
 
 function unnoticed(world: World, e: GameEvent): boolean {
@@ -229,8 +256,23 @@ function contractText(c: Contract, outcome: keyof typeof CONTRACT_OUTCOME): { te
 // One line naming what a contract asks for.
 export function contractSummary(c: Contract): string {
   if (c.kind === 'haul') return `haul ${c.units} ${GOODS[c.good].name} to ${siteName(c.to)}`;
-  if (c.kind === 'fetch') return `bring ${article(partDef(c.defId).name)} ${partDef(c.defId).name} to ${siteName(c.shop)}`;
-  return `destroy ${c.targetName}`;
+  if (c.kind === 'fetch') {
+    const rebuilt = CONTRACTS.fetch.maxWear === 1 ? 'rebuilt at most once' : `rebuilt at most ${CONTRACTS.fetch.maxWear} times`;
+    return `find ${article(partDef(c.defId).name)} ${partDef(c.defId).name} anywhere, working and ${rebuilt}, bring it to ${siteName(c.shop)}`;
+  }
+  return `destroy any ${c.targetName}`;
+}
+
+// The game time a contract is due. It fails at the end of its deadline turn.
+export function contractDue(c: Contract): string {
+  return `by ${clockLabel(c.deadline + 1)}`;
+}
+
+export function clockLabel(turn: number): string {
+  const { day, hour } = clockOf(turn);
+  const hh = Math.floor(hour);
+  const mm = Math.floor((hour - hh) * 60);
+  return `Day ${day} ${hh}:${String(mm).padStart(2, "0")}`;
 }
 
 function article(word: string): string {
@@ -268,6 +310,10 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   honk: honkText,
   patch: patchText,
   plea: pleaText,
+  towOffer: towOfferText,
+  towHitched: towHitchedText,
+  towDone: towDoneText,
+  towDropped: towDroppedText,
 };
 
 // Returns null for events not worth a log line.
@@ -329,14 +375,6 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       return { text: 'You are knocked out.', cls: 'bad' };
     case 'wake':
       return { text: 'You come to.', cls: 'dim' };
-    case 'towOffer': {
-      const town = REGION.towns.find((t) => t.id === e.town);
-      return { text: `${n(e.by)} offers to tow you to ${town?.name ?? e.town} for ${e.fee}.`, cls: '' };
-    }
-    case 'towDone':
-      return { text: `${n(e.by)} tows you into town and takes ${e.fee}.`, cls: 'bad' };
-    case 'towDropped':
-      return towDroppedText(n(e.by), e.reason);
     case 'info':
       return { text: e.text, cls: 'dim' };
     case 'searched':

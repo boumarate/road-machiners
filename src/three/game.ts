@@ -57,7 +57,7 @@ import { HitCard } from "../ui/hitCard";
 import type { UiHost } from "../ui/host";
 import { Hud } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
-import { TownScreen } from "../ui/town";
+import { TownScreen, TruckTradeScreen } from "../ui/town";
 import { toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
 import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
@@ -186,6 +186,7 @@ export class Game {
   private readonly hitCard: HitCard;
   private readonly weapons: WeaponPanel;
   private readonly town: TownScreen;
+  private readonly trade: TruckTradeScreen;
   private readonly character: CharacterScreen;
   private readonly inventory: InventoryScreen;
   private readonly menu: GameMenu;
@@ -262,11 +263,12 @@ export class Game {
     const host = this.uiHost();
     this.weapons = new WeaponPanel(host);
     this.town = new TownScreen(host);
+    this.trade = new TruckTradeScreen(host);
     this.character = new CharacterScreen(host);
     this.inventory = new InventoryScreen(host);
     this.hud = new Hud({
-      openInventory: () => this.toggleInventory(),
-      openCharacter: () => this.toggleCharacter(),
+      openInventory: () => this.toggleScreen(this.inventory),
+      openCharacter: () => this.toggleScreen(this.character),
       toggleManual: () => {
         if (!this.anim && !this.modalOpen()) this.toggleManual();
       },
@@ -354,7 +356,7 @@ export class Game {
   }
 
   private modalOpen(): boolean {
-    return this.town.isOpen() || this.character.isOpen() || this.inventory.isOpen() || this.world.player.call !== null;
+    return this.town.isOpen() || this.trade.isOpen() || this.character.isOpen() || this.inventory.isOpen() || this.world.player.call !== null;
   }
 
   // Until a turn's shots land, the panels show the world as it was when the turn began.
@@ -383,6 +385,7 @@ export class Game {
     if (!this.anim && this.world.player.state === "dead") this.death.show();
     this.weapons.render();
     this.town.render();
+    this.trade.render();
     this.character.render();
     this.inventory.render();
     this.hud.renderAction(
@@ -396,7 +399,11 @@ export class Game {
 
   private useContext(): void {
     if (this.anim || !playerCanAct(this.world)) return;
-    if (shopAt(this.world)) return this.town.open();
+    if (this.trade.openIfReady()) return;
+    return shopAt(this.world) ? this.town.open() : this.useSite();
+  }
+
+  private useSite(): void {
     if (isBusy(playerVehicle(this.world))) return;
     const after = applySiteAction(this.world);
     if (after) {
@@ -434,7 +441,7 @@ export class Game {
   }
 
   private refreshTargetMarkers(): void {
-    this.markers.refresh(this.anim ? null : vehicleMarks(this.world, this.hovered));
+    this.markers.refresh(vehicleMarks(this.displayWorld(), this.hovered));
   }
 
   private isEditingControl(): boolean {
@@ -474,30 +481,22 @@ export class Game {
       if (e.code === "KeyE" && !modal) this.useContext();
       if (e.code === "KeyR" && !modal && !playing) this.toggleManual();
       if (e.code === "KeyP" && !modal && !playing) this.toggleAutoRepair();
-      if (e.code === "KeyC" && !playing) this.toggleCharacter();
-      if (e.code === "KeyI" && !playing) this.toggleInventory();
-      if (e.code === "Escape") {
-        this.town.close();
-        this.character.close();
-        this.inventory.close();
-      }
+      if (e.code === "KeyC" && !playing) this.toggleScreen(this.character);
+      if (e.code === "KeyI" && !playing) this.toggleScreen(this.inventory);
+      if (e.code === "Escape") this.closeScreens(null);
       const digit = ["Digit1", "Digit2", "Digit3", "Digit4"].indexOf(e.code);
       if (digit >= 0) this.selectWeaponIndex(digit);
     });
   }
 
-  private toggleInventory(): void {
-    if (this.anim) return;
-    this.town.close();
-    this.character.close();
-    this.inventory.toggle();
+  private closeScreens(keep: CharacterScreen | InventoryScreen | null): void {
+    for (const s of [this.town, this.trade, this.character, this.inventory]) if (s !== keep) s.close();
   }
 
-  private toggleCharacter(): void {
+  private toggleScreen(screen: CharacterScreen | InventoryScreen): void {
     if (this.anim) return;
-    this.town.close();
-    this.inventory.close();
-    this.character.toggle();
+    this.closeScreens(screen);
+    screen.toggle();
   }
 
   // Manual mode drives straight at the click, so the preview must rerun with the new driver.
@@ -1144,7 +1143,7 @@ export class Game {
     this.zones.root.visible = steer;
     this.path.show(steer, this.displayWorld(), this.modalOpen());
     this.weaponRange.root.visible = false;
-    this.markers.place(this.frames, hide);
+    this.markers.place(this.frames, hide, this.modalOpen());
     this.placeHitCard();
     this.placePickRing(hide);
     this.contacts.update(

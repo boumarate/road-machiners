@@ -292,7 +292,7 @@ describe('rough ground practice', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
     const tower = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 50, y: 50 });
-    addState(w, 'tow', tower.id, me.id, { kind: 'tow', town: REGION.towns[0].id, fee: 10, hitched: true });
+    addState(w, 'tow', tower.id, me.id, { kind: 'tow', site: REGION.towns[0].id, fee: 10, waived: 0, hitched: true });
     setTerrainUnder(w, me, 6, 'hardpan');
     drive(me, 6);
     applyWear(w);

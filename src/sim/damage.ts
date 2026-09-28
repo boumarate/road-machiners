@@ -38,7 +38,7 @@ function hurtDriver(world: World, v: Vehicle, dealt: number): void {
   const hardHead = vehicleHasPerk(world, v, "hardHead") ? PERK_NUMBERS.hardHead.cabShare : 1;
   const share = RULES.cabHealthShare * (1 - skillEffect(world, v, "toughness", "cabShare")) * hardHead;
   world.player.health = Math.max(0, health - Math.round(dealt * share));
-  if (world.player.health < health) practice(world, "damage", health - world.player.health, null);
+  if (world.player.health < health) practice(world, "damage", health - world.player.health, null, "driver");
 }
 
 // Mounted parts only: spares in the cargo grid cannot be shot or crashed.

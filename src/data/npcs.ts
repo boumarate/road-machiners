@@ -277,7 +277,9 @@ export const NPCS: Record<string, NpcTemplate> = {
     preferredRange: 3,
     bounty: 60,
     cap: 6,
-    interval: 8,
+    // A camp regains one buggy every 34 turns, so a fully cleared camp is back to its cap of 6 in
+    // about 200 turns, one full day (TIME.turnsPerDay), not the few minutes 8 turns gave.
+    interval: 34,
     spawn: "camp",
   },
   gunwagon: {
@@ -287,7 +289,8 @@ export const NPCS: Record<string, NpcTemplate> = {
     preferredRange: 6,
     bounty: 150,
     cap: 2,
-    interval: 20,
+    // Same day-long refill as the outrider camp: cap 2 at 100 turns apart is back to full in 200 turns.
+    interval: 100,
     spawn: "camp",
   },
   trader: {
@@ -343,7 +346,7 @@ export type DecisionOptions = {
   contactHeard: 'keep' | 'investigate' | 'flee'; // a new hostile contact beyond sight
   attacked: 'keep' | 'flee' | 'fightBack'; // a shot at the driver or a nearby visible faction mate, hit or miss
   preySeen: 'keep' | 'rob'; // a new robbery target comes in sight
-  strandedSeen: 'keep' | 'tow'; // a stranded player comes in sight
+  strandedSeen: 'keep' | 'tow'; // a stranded truck comes in sight
   salvageSeen: 'keep' | 'loot'; // a wreck or pile comes in sight on the way to a goal
   patchDeal: 'paid' | 'ownParts' | 'free'; // the terms a driver names for a roadside patch; see src/sim/patch.ts
   ramChance: 'keep' | 'ram'; // the fight target lies ahead within reach of a damaging ram
@@ -413,7 +416,9 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   backedOff: { preySeen: { rob: { mul: 0.005 } } },
   tow: {},
   patch: {},
-  truce: {},
+  trade: {},
+  // A driver rarely robs a truck it holds a truce with. A scumbag's rob weight of 2 drops to 0.01, about 2%.
+  truce: { preySeen: { rob: { mul: 0.005 } } },
   grievance: {},
   // A driver that pleaded with a foe rarely pleads with it again soon. A truce weight of 2.5 drops to 0.025.
   plea: { parley: { truce: { mul: 0.01 }, beg: { mul: 0.01 } } },
@@ -438,6 +443,9 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   // Work on a patch keeps it going. Without work it lapses after 40 turns, a fifth of a day, so a client
   // stops waiting for a patcher who never comes.
   patch: 40,
+  // Being parked in reach keeps a trade meeting going. Without that it lapses after 20 turns, so a driver stops
+  // chasing a player who drove off, and the player stops waiting for a driver who cannot get through.
+  trade: 20,
   // A truck that handed over its cargo is left alone for 60 turns: time for the raiders to search the stock and the
   // truck to drive well away. Shots start a feud, which ends the truce's effect at once.
   truce: 60,
@@ -474,7 +482,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // in ten scavengers help a stranded truck. An idle scavenger takes on a manageable hostile about nine times in
   // ten: fight 4, times NPC_BEHAVIOR.manageableFight.
   scavenger: {
-    towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
+    towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks'], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
     weights: { idle: { scavenge: { add: 10 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 9 } }, hostileSeen: { fight: { add: 2 } } },
   },
   // Traders rarely pick a fight: a fight weight of 2 drops to 0.004, about 1%, and to 0.02, about 2%, against a
@@ -492,12 +500,13 @@ export const TRAITS: Record<TraitId, Trait> = {
     },
   },
   // Raiders fight most hostiles they see and close in on most useful contacts. A raid ties with salvage in sight.
-  // A raider answers half the crashes with a fight, seldom asks for peace and refuses a truce more often than not.
-  // Threatened, it mostly fights.
+  // A raider answers half the crashes with a fight, seldom asks for peace and refuses a truce more often than not,
+  // and nearly always from prey it expects to beat. Threatened, it mostly fights. Nine in ten raiders help a stranded
+  // raider, the only truck they tow.
   raider: {
     towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], contactReactRadius: 12, boldness: 1,
     weights: {
-      idle: { raid: { add: 10 } }, contactHeard: { investigate: { add: 12 } }, hostileSeen: { fight: { add: 8 } },
+      idle: { raid: { add: 10 } }, contactHeard: { investigate: { add: 12 } }, hostileSeen: { fight: { add: 8 } }, strandedSeen: { tow: { add: 9 } },
       crashed: { retaliate: { add: 3 } }, parley: { truce: { mul: 0.3 }, beg: { mul: 0.3 } }, truceOffered: { refuse: { add: 2 } },
       mercyBegged: { finish: { add: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
     },
@@ -577,6 +586,13 @@ export const NPC_BEHAVIOR = {
   weakBeg: 40,
   // Accept weight times this when the pleading foe's group is a threat or the answering driver is weak.
   threatAccept: 5,
+  // Refuse weight times this when the driver is robbing the pleading foe and neither faces a threat nor is weak.
+  // A raider hunting a truck with loot counts as robbing it. A scumbag's 2 to 1 for accept becomes 2 to 20, so a
+  // confident robber takes a truce about one time in ten. A raider's 2 to 3 becomes 2 to 60, about one in twenty.
+  robberRefuse: 20,
+  // Truce weight times this when a hurt driver is robbing the foe and is not weak. A scumbag's truce weight of 0.5
+  // drops to 0.05 against keep 8, so it offers its prey a truce about two hurt turns in a hundred.
+  robberTruce: 0.1,
   // Comply weight times this when the player's local group is a threat. It then beats fight back and flee by far.
   threatComply: 20,
 };
@@ -588,6 +604,9 @@ export const NPC_UPKEEP = {
   lowSupplies: RULES.lowFuelThreshold,
   // Reserve one full tank and supply load before buying trade cargo.
   reserveLoads: 1,
+  // A driver sells fuel and supplies to the player only above this share of its caps. It sits well above the low
+  // thresholds, so a sale never sends the driver off to resupply at once.
+  tradeReserve: 0.5,
 };
 
 // Raiders drive between these points to look for prey.

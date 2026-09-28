@@ -1,16 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { PERK_NUMBERS } from '../data/skills';
+import { PERK_NUMBERS, XP_SOURCES } from '../data/skills';
 import { TRAIT_TALK, END, HONK_RANGE, HUB, TOPICS, type Topic } from '../data/dialogue';
-import { PARTS } from '../data/parts';
 import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, honk, placeholders, raiseCalls } from './dialogue';
 import { fireBlock, isHostile } from './combat';
-import { partTradePrice } from './economy';
-import { makePart } from './factory';
 import { NPCS } from '../data/npcs';
-import { freeCells, goodsCount, isMounted } from './grid';
-import { addGoods, spareParts, stowPart } from './inventory';
+import { goodsCount, isMounted } from './grid';
+import { addGoods } from './inventory';
 import { hasCargo } from './salvage';
 import { vehicleStats } from './stats';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
@@ -76,7 +73,7 @@ describe('calls', () => {
   it('opens on the hub with the greeting when the player sees the truck', () => {
     const { w, npc } = withNpc('trader', 'traders');
     const next = callVehicle(w, npc.id);
-    expect(next.player.call).toEqual({ with: npc.id, topic: null, node: HUB, vars: {}, line: { text: TRAIT_TALK.trader.voice!.greeting, vars: {} }, discussed: false });
+    expect(next.player.call).toEqual({ with: npc.id, topic: null, node: HUB, vars: {}, line: { text: TRAIT_TALK.trader.voice!.greeting, vars: {} } });
     expect(next.events).toContainEqual({ t: 'call', with: npc.id, outcome: 'opened' });
     expect(next.events).toContainEqual({ t: 'say', speaker: npc.id, text: TRAIT_TALK.trader.voice!.greeting, vars: {} });
   });
@@ -213,6 +210,23 @@ describe('honk', () => {
     expect(honkers(honk(w))).toEqual([w.player.vehicleId]);
   });
 
+  it('a truck in sight that honks back pays the player once', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    npcAt(w, 'trader', 'traders', 36);
+    refreshVision(w);
+    const once = honk(w);
+    expect(practiceOf(once, 'honk')).toMatchObject([{ amount: 1, difficulty: null, xp: XP_SOURCES.honk.weight }]);
+    expect(practiceOf(honk(once), 'honk')).toMatchObject([{ xp: 0 }]);
+  });
+
+  it('a truck honking back out of sight pays nothing', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const npc = npcAt(w, 'trader', 'traders', 36);
+    w.player.visible = [];
+    expect(honkers(honk(w))).toContain(npc.id);
+    expect(practiceOf(honk(w), 'honk')).toEqual([]);
+  });
+
   it('cannot honk during a call', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const npc = npcAt(w, 'trader', 'traders', 36);
@@ -328,88 +342,53 @@ describe('demand', () => {
 describe('trade', () => {
   const askText = TOPICS.trade.ask!.text;
 
-  function withSpare(templateId: string, faction: Vehicle['faction'], defId: string, wear = 0): { w: World; npc: Vehicle } {
-    const { w, npc } = withNpc(templateId, faction);
-    if (!stowPart(w, npc, makePart(w, defId, wear))) throw new Error('No room for the test spare');
-    return { w, npc };
-  }
-
-  // Opens the call and asks the trade topic, landing on its offers.
-  function openTrade(w: World, npcId: string): World {
-    const open = callVehicle(w, npcId);
-    return chooseOption(open, optionIndex(open, askText));
-  }
-
   it('a raider never offers to trade', () => {
     const { w, npc } = withNpc('buggy', 'raiders');
     const open = callVehicle(w, npc.id);
     expect(currentOptions(open).map((o) => o.text)).not.toContain(askText);
   });
 
-  it('an NPC with no spares says so and offers nothing to buy', () => {
+  it('agreeing ends the call, starts a trade meeting and sends the driver over', () => {
     const { w, npc } = withNpc('trader', 'traders');
-    const next = openTrade(w, npc.id);
-    expect(next.player.call?.line.text).toBe('Nothing spare right now.');
-    expect(currentOptions(next).map((o) => o.text)).toEqual(['Hang up.']);
+    const open = callVehicle(w, npc.id);
+    const asked = chooseOption(open, optionIndex(open, askText));
+    const next = chooseOption(asked, optionIndex(asked, 'Pulling over.'));
+    expect(next.player.call).toBeNull();
+    expect(stateOf(next, 'trade', npc.id, next.player.vehicleId)).not.toBeNull();
+    expect(next.vehicles.find((v) => v.id === npc.id)!.brain!.goals.at(-1)).toMatchObject({ kind: 'meet', targetId: next.player.vehicleId });
   });
 
-  it('lists a spare part with its buy price, and buying moves it to the player and pays the NPC', () => {
-    const { w, npc } = withSpare('trader', 'traders', 'mg', 2);
-    const part = spareParts(npc)[0];
-    const price = partTradePrice(w, playerVehicle(w), part, 'buy');
-    const npcMoneyBefore = npc.resources!.money;
-    const playerMoneyBefore = w.player.money;
-    const opened = openTrade(w, npc.id);
-    const label = `${PARTS.mg.name}, ${price}`;
-    expect(currentOptions(opened).map((o) => o.text)).toContain(label);
-    const next = chooseOption(opened, optionIndex(opened, label));
-    expect(next.player.money).toBe(playerMoneyBefore - price);
-    const npcAfter = next.vehicles.find((v) => v.id === npc.id)!;
-    expect(npcAfter.resources!.money).toBe(npcMoneyBefore + price);
-    expect(spareParts(npcAfter)).toHaveLength(0);
-    expect(spareParts(playerVehicle(next)).some((p) => p.defId === 'mg')).toBe(true);
-  });
-
-  it('refuses without enough money, and changes nothing but the said line', () => {
-    const { w, npc } = withSpare('trader', 'traders', 'mg');
-    w.player.money = 0;
-    const opened = openTrade(w, npc.id);
-    const before = currentOptions(opened);
-    const next = chooseOption(opened, before.findIndex((o) => o.partId !== undefined));
-    expect(next.player.money).toBe(0);
-    expect(next.player.call?.line.text).toBe('You cannot afford that.');
-    expect(spareParts(next.vehicles.find((v) => v.id === npc.id)!)).toHaveLength(1);
-    expect(currentOptions(next).length).toBe(before.length);
-  });
-
-  it('refuses without room on the player grid, and changes nothing but the said line', () => {
-    const { w, npc } = withSpare('trader', 'traders', 'mg');
-    const me = playerVehicle(w);
-    addGoods(w, me, 'scrap', freeCells(me)); // fill every free cell, whatever its shape
-    const npcMoneyBefore = npc.resources!.money;
-    const opened = openTrade(w, npc.id);
-    const next = chooseOption(opened, currentOptions(opened).findIndex((o) => o.partId !== undefined));
-    expect(next.player.call?.line.text).toBe('No room for that on your rig.');
-    const npcAfter = next.vehicles.find((v) => v.id === npc.id)!;
-    expect(npcAfter.resources!.money).toBe(npcMoneyBefore);
-    expect(spareParts(npcAfter)).toHaveLength(1);
-  });
-
-  it('a scavenger offers a part it happens to carry', () => {
-    const { w, npc } = withSpare('scavenger', 'scavengers', 'scrapPanels');
-    const next = openTrade(w, npc.id);
-    expect(currentOptions(next).some((o) => o.text.startsWith(PARTS.scrapPanels.name))).toBe(true);
+  it('a driver already meeting the player is not asked again', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    addState(w, 'trade', npc.id, w.player.vehicleId, { kind: 'none' });
+    const open = callVehicle(w, npc.id);
+    expect(currentOptions(open).map((o) => o.text)).not.toContain(askText);
   });
 });
 
 describe('call practice', () => {
-  it('pays the player once when a call that took up a topic ends', () => {
+  it('pays the player when a call takes up a topic, targeting the driver and topic', () => {
     const { w, npc } = withNpc('trader', 'traders');
     const open = callVehicle(w, npc.id);
     expect(practiceOf(open, 'call')).toEqual([]);
     const asked = chooseOption(open, optionIndex(open, 'Where is the nearest town?'));
-    const closed = chooseOption(asked, optionIndex(asked, 'Thanks. Over and out.'));
-    expect(practiceOf(closed, 'call')).toMatchObject([{ amount: 1, difficulty: null }]);
+    expect(practiceOf(asked, 'call')).toMatchObject([{ amount: 1, difficulty: null, target: `${npc.id}:directions`, xp: XP_SOURCES.call.weight }]);
+  });
+
+  it('pays nothing for a topic already taken up with the same driver, and in full with another driver', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    const ask = (from: World, id: string): World => {
+      const open = callVehicle(from, id);
+      const asked = chooseOption(open, optionIndex(open, 'Where is the nearest town?'));
+      return chooseOption(asked, optionIndex(asked, 'Thanks. Over and out.'));
+    };
+    const once = ask(w, npc.id);
+    const again = ask(once, npc.id);
+    expect(again.player.skills.social).toBeCloseTo(once.player.skills.social);
+    const other = addVehicle(again, 'traders', 'scout', [], { x: 30, y: 36 });
+    other.brain = npcBrain('trader', other.pos, ['trader']);
+    refreshVision(again);
+    expect(ask(again, other.id).player.skills.social).toBeCloseTo(once.player.skills.social + XP_SOURCES.call.weight);
   });
 
   it('pays nothing for a call hung up without a topic', () => {
@@ -425,7 +404,7 @@ describe('call practice', () => {
 });
 
 describe('smooth talker perk', () => {
-  it('hands over half of each good, rounded down, and every loose part', () => {
+  it('hands over half of each good, rounded up, and every loose part', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
     w.player.perks.push('smoothTalker');
@@ -440,7 +419,7 @@ describe('smooth talker perk', () => {
     next = chooseOption(next, currentOptions(next).findIndex((o) => o.text === 'Fine. Take it.'));
     const stock = next.salvage.find((s) => s.id.startsWith(`cargo-${me.id}`))!;
     for (const [good, count] of Object.entries(held)) {
-      const dropped = Math.floor(count * PERK_NUMBERS.smoothTalker.cargo);
+      const dropped = Math.ceil(count * PERK_NUMBERS.smoothTalker.cargo);
       expect(stock.goods[good] ?? 0).toBe(dropped);
       expect(goodsCount(playerVehicle(next))[good] ?? 0).toBe(count - dropped);
     }

@@ -86,6 +86,13 @@ export const RULES = {
   knockoutMaxTurns: 30, // a knockout ends after this many turns even if a hostile idles in sight
 };
 
+// Daily upkeep: a share of the truck's value, paid once per game day. A start truck (chassis 400 plus
+// four cheap parts, about 980 value) pays about 29 a day, and a maxed carrier build (about 5300 value)
+// pays about 160 a day, both inside the target bands.
+export const UPKEEP = {
+  dailyShare: 0.03,
+};
+
 // Debug console numbers. Distances are in tiles.
 export const CHEATS = {
   spawnDistance: 10, // a spawned vehicle appears this far from the truck, inside sight range

@@ -9,7 +9,7 @@ import { ENGINE_HEAT } from '../data/wear';
 import { damagePart } from './wear';
 import { playerVehicle } from './damage';
 import { mountedParts } from './grid';
-import { practice, skillEffect } from './progress';
+import { practice, regionOf, skillEffect } from './progress';
 import { vehicleStats } from './stats';
 import { heatAt } from './sun';
 import type { Vehicle, World } from './types';
@@ -42,7 +42,7 @@ export function advanceEngineHeat(world: World): void {
 // can pass full noon sun and counts as the hardest.
 function practiceHeat(world: World, speed: number, heat: number): void {
   if (speed <= RULES.parkedSpeed || heat <= 1) return;
-  practice(world, 'heat', 1, Math.min(1, (heat - 1) / (TIME.sunHeat - 1)));
+  practice(world, 'heat', 1, Math.min(1, (heat - 1) / (TIME.sunHeat - 1)), regionOf(playerVehicle(world).pos));
 }
 
 // How fast the sun heats the mounted engine. A truck with no engine has nothing to heat.

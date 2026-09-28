@@ -6,15 +6,15 @@
 import { chassisDef } from '../../data/chassis';
 import { ECONOMY, GOOD_IDS } from '../../data/goods';
 import { HUNTING_GROUNDS, NPC_BEHAVIOR, NPC_UPKEEP } from '../../data/npcs';
-import { partDef } from '../../data/parts';
+import { PARTS, partDef } from '../../data/parts';
 import { REGION, type TownDef } from '../../data/region';
 import { RULES } from '../../data/rules';
-import { ENGINE_HEAT } from '../../data/wear';
+import { CONDITION, ENGINE_HEAT } from '../../data/wear';
 import { maxHp } from '../wear';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder } from '../world';
 import { playerVehicle, vehicleById } from '../damage';
 import { chooseOption, currentOptions } from '../dialogue';
-import { buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
+import { affordableBuyCount, buyGood, buyStockPart, buySupply, partTradePrice, getTradePrice, repairAll, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
 import { findSpot, freeCells, goodsCount, gridOf, isMounted, MOUNT_CELLS, mountedParts, type Spot } from '../grid';
 import { moveItem, storePart, takeFromStorage } from '../inventory';
 import { shopAt, shopState } from '../market';
@@ -158,8 +158,15 @@ function paidFixNeeded(world: World): boolean {
   return needsService(world) || canRestoreEngine(world);
 }
 
+// In a shop, an engine it stocks must be affordable. Out of town, the bot knows no stock, so the money must cover
+// the cheapest engine's price at its most worn.
 function canRestoreEngine(world: World): boolean {
-  return mountedParts(playerVehicle(world), 'engine').length === 0 && stockEngine(world) !== null;
+  if (mountedParts(playerVehicle(world), 'engine').length > 0) return false;
+  return shopAt(world) ? stockEngine(world) !== null : world.player.money >= cheapestEngineValue();
+}
+
+function cheapestEngineValue(): number {
+  return Math.min(...Object.values(PARTS).filter((d) => d.kind === 'engine').map((d) => d.value * CONDITION.valueFactor[CONDITION.maxWear]));
 }
 
 // The cheapest engine the parked garage stocks that the bot can afford.
@@ -291,7 +298,7 @@ function bestPurchase(world: World): Purchase | null {
 function purchase(world: World, { source, market, good, spend }: { source: TownDef; market: TownDef; good: string; spend: number }): Purchase {
   const me = playerVehicle(world);
   const buy = getTradePrice(world, me, source.id, good, 'buy');
-  const count = Math.max(0, Math.min(freeCells(me), Math.floor(spend / buy)));
+  const count = affordableBuyCount(world, me, source.id, good, freeCells(me), spend);
   return { town: source, good, count, profit: (sellAt(world, market, good) - buy) * count };
 }
 

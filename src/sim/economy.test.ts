@@ -4,10 +4,10 @@ import { XP_TO_REACH } from "../data/skills";
 import { CHASSIS } from "../data/chassis";
 import { ECONOMY, GOOD_IDS } from "../data/goods";
 import { SHOPS } from "../data/market";
-import { goodBasePrice } from "./market";
-import { partDef } from "../data/parts";
+import { goodBasePrice, lotPrice, shopState } from "./market";
+import { PARTS, partDef } from "../data/parts";
 import { REGION } from "../data/region";
-import { RULES } from "../data/rules";
+import { RULES, UPKEEP } from "../data/rules";
 import { CONDITION } from "../data/wear";
 import {
   buyChassis,
@@ -16,6 +16,7 @@ import {
   buyPrice,
   buySupply,
   chassisTradeIn,
+  getLotTradePrice,
   partRepairCost,
   partTradePrice,
   repairAll,
@@ -33,17 +34,27 @@ import {
 } from "./grid";
 import { makePart } from "./factory";
 import { maxHp, partValue } from "./wear";
-import { spareParts } from "./inventory";
+import { addGoods, spareParts } from "./inventory";
 import { applySiteAction, canScavenge, salvageNear, scavenge, useOasis } from "./locations";
 import { consumeSupplies } from "./supplies";
 import { heatAt } from "./sun";
 import { sitePads, townAt, townNear } from "./sites";
 import { addVehicle, emptyWorld, testDrive } from "./testkit";
 import { endTurn, newWorld } from "./world";
+import { clockOf } from "./sun";
 
 const bowl = REGION.towns.find((t) => t.id === "bowl")!;
 const nose = REGION.towns.find((t) => t.id === "nose")!;
 const startAtBowl = () => emptyWorld(sitePads(bowl)[0]);
+// A longbed at Bowl, for trades bigger than the start scout's cargo room. Its money is back to the start amount.
+const longbedAtBowl = () => {
+  const start = startAtBowl();
+  const money = start.player.money;
+  start.player.money = CHASSIS.longbed.value * 10;
+  const w = buyChassis(start, "longbed");
+  w.player.money = money;
+  return w;
+};
 
 describe("trade", () => {
   it("buying moves money into cargo", () => {
@@ -64,25 +75,27 @@ describe("trade", () => {
     expect(() => buyGood(w, "meds", 10)).toThrow(/money/);
   });
 
-  it("the scrap route pays and trains Social", () => {
+  it("the salt route from Nose to Bowl pays and trains Social", () => {
     const start = startAtBowl();
-    const bought = buyPrice(start, "bowl", "scrap");
-    let w = buyGood(start, "scrap", 8);
-    w.vehicles[0].pos = { ...sitePads(nose)[0] };
+    start.vehicles[0].pos = { ...sitePads(nose)[0] };
+    const bought = buyPrice(start, "nose", "salt");
+    let w = buyGood(start, "salt", 8);
+    w.vehicles[0].pos = { ...sitePads(bowl)[0] };
     const money = w.player.money;
-    const sold = sellPrice(w, "nose", "scrap");
-    expect(sold).toBeGreaterThan(bought);
-    w = sellGood(w, "scrap", 10);
-    expect(w.player.money - money).toBe(10 * sold);
+    expect(sellPrice(w, "bowl", "salt")).toBeGreaterThan(bought);
+    const held = goodsCount(w.vehicles[0]).salt;
+    const total = getLotTradePrice(w, w.vehicles[0], "bowl", "salt", held, "sell");
+    w = sellGood(w, "salt", held);
+    expect(w.player.money - money).toBe(total);
     expect(w.player.skills.social).toBeGreaterThan(0);
   });
 
   it("buying raises the local price and selling lowers it", () => {
-    const w = startAtBowl();
+    const w = longbedAtBowl();
     const before = buyPrice(w, "bowl", "scrap");
-    const after = buyGood(w, "scrap", 5);
+    const after = buyGood(w, "scrap", 20);
     expect(buyPrice(after, "bowl", "scrap")).toBeGreaterThan(before);
-    const sold = sellGood(after, "scrap", 7);
+    const sold = sellGood(after, "scrap", 20);
     expect(buyPrice(sold, "bowl", "scrap")).toBeLessThan(buyPrice(after, "bowl", "scrap"));
   });
 
@@ -95,6 +108,62 @@ describe("trade", () => {
     ).toBeLessThan(before);
   });
 
+  it("social at max level cuts the spread by at most half", () => {
+    const w = startAtBowl();
+    w.player.skills.social = XP_TO_REACH[5];
+    const spreadAtMax = buyPrice(w, "bowl", "salt") - sellPrice(w, "bowl", "salt");
+    const w0 = startAtBowl();
+    const spreadAtZero = buyPrice(w0, "bowl", "salt") - sellPrice(w0, "bowl", "salt");
+    expect(Math.abs(spreadAtMax - spreadAtZero / 2)).toBeLessThanOrEqual(1);
+  });
+
+// The first turn whose day differs from the turn before it, the boundary charged upkeep applies to.
+const nextDayBoundary = () => {
+  let t = 2;
+  while (clockOf(t).day === clockOf(t - 1).day) t++;
+  return t;
+};
+
+describe("upkeep", () => {
+  it("charges no upkeep before a day boundary", () => {
+    const w = startAtBowl();
+    w.turn = nextDayBoundary() - 2;
+    const before = w.player.money;
+    const next = endTurn(w, testDrive);
+    expect(next.player.money).toBe(before);
+    expect(next.events.some((e) => e.t === "money" && e.reason === "upkeep")).toBe(false);
+  });
+
+  it("charges upkeep once when crossing a day boundary, as a share of the truck's value", () => {
+    const w = startAtBowl();
+    w.turn = nextDayBoundary() - 1;
+    const before = w.player.money;
+    const next = endTurn(w, testDrive);
+    const chassisValue = CHASSIS[w.vehicles[0].chassisId].value;
+    const partsValue = mountedParts(w.vehicles[0])
+      .filter((p) => partDef(p.defId).kind !== "core")
+      .reduce((sum, p) => sum + partValue(p), 0);
+    const expected = Math.round((chassisValue + partsValue) * UPKEEP.dailyShare);
+    expect(before - next.player.money).toBe(expected);
+    expect(next.events).toContainEqual({ t: "money", amount: -expected, reason: "upkeep" });
+  });
+
+  it("charges more upkeep for a more valuable truck", () => {
+    const start = startAtBowl();
+    start.player.money = 5000;
+    start.turn = nextDayBoundary() - 1;
+    const startCost = start.player.money - endTurn(start, testDrive).player.money;
+
+    const base = startAtBowl();
+    base.player.money = 5000;
+    const upgraded = buyChassis(base, "carrier");
+    upgraded.turn = nextDayBoundary() - 1;
+    const upgradedCost = upgraded.player.money - endTurn(upgraded, testDrive).player.money;
+
+    expect(upgradedCost).toBeGreaterThan(startCost);
+  });
+});
+
   it("trade needs a shop", () => {
     expect(() => buyGood(emptyWorld({ x: 30, y: 30 }), "scrap", 1)).toThrow(
       /shop/,
@@ -105,6 +174,52 @@ describe("trade", () => {
     for (const [id] of Object.entries(SHOPS).filter(([, s]) => s.kind === "garage"))
       for (const good of GOOD_IDS) expect(goodBasePrice(id, good)).toBeGreaterThan(0);
   });
+
+  it("a lot price equals the sum of single-unit trades", () => {
+    const w = startAtBowl();
+    const state = shopState(w, "bowl");
+    for (const direction of ["buy", "sell"] as const) {
+      const lot = lotPrice("bowl", state, "scrap", direction, ECONOMY.spread, 25);
+      let summed = 0;
+      const pressure = { ...state.pressure };
+      for (let i = 0; i < 25; i++) {
+        summed += lotPrice("bowl", { ...state, pressure }, "scrap", direction, ECONOMY.spread, 1);
+        pressure.scrap = (pressure.scrap ?? 0) + SHOPS.bowl.pressurePerUnit * (direction === "buy" ? 1 : -1);
+      }
+      expect(lot).toBe(summed);
+    }
+  });
+
+  it.each([0, XP_TO_REACH[3]])(
+    "selling then buying back 25 units always loses money, at social skill %i",
+    (social) => {
+      for (const pressureStart of [0, 0.3, -0.3]) {
+        const w = longbedAtBowl();
+        w.player.skills.social = social;
+        w.shops.bowl.pressure.scrap = pressureStart;
+        addGoods(w, w.vehicles[0], "scrap", 25 - (goodsCount(w.vehicles[0]).scrap ?? 0));
+
+        const before = w.player.money;
+        const after = buyGood(sellGood(w, "scrap", 25), "scrap", 25);
+        expect(after.player.money).toBeLessThan(before);
+      }
+    },
+  );
+
+  it.each([0, XP_TO_REACH[3]])(
+    "buying then selling back 25 units always loses money, at social skill %i",
+    (social) => {
+      for (const pressureStart of [0, 0.3, -0.3]) {
+        const w = longbedAtBowl();
+        w.player.skills.social = social;
+        w.shops.bowl.pressure.scrap = pressureStart;
+
+        const before = w.player.money;
+        const after = sellGood(buyGood(w, "scrap", 25), "scrap", 25);
+        expect(after.player.money).toBeLessThan(before);
+      }
+    },
+  );
 });
 
 describe("garage", () => {
@@ -114,6 +229,22 @@ describe("garage", () => {
     const w = buySupply(start, "supplies", RULES.suppliesCap - 12);
     expect(w.player.supplies).toBe(RULES.suppliesCap);
     expect(() => buySupply(w, "supplies", 1)).toThrow();
+  });
+
+  it("sells fuel at the pump station but refuses food", () => {
+    const pumpStation = REGION.locations.find((l) => l.id === "pump-station")!;
+    const w = emptyWorld({ ...sitePads(pumpStation)[0] });
+    w.player.fuel = 0;
+    const fueled = buySupply(w, "fuel", 1);
+    expect(fueled.player.fuel).toBeGreaterThan(0);
+    expect(() => buySupply(w, "supplies", 1)).toThrow(/does not sell/);
+  });
+
+  it("refuses any supply at a stall that sells none", () => {
+    const granary = REGION.locations.find((l) => l.id === "granary")!;
+    const w = emptyWorld({ ...sitePads(granary)[0] });
+    expect(() => buySupply(w, "fuel", 1)).toThrow(/does not sell/);
+    expect(() => buySupply(w, "supplies", 1)).toThrow(/does not sell/);
   });
 
   it("repairs parts for money", () => {
@@ -210,6 +341,17 @@ describe("garage", () => {
     expect(w.player.storage.length).toBe(0);
   });
 
+  it("refunds the difference when the trade-in beats the new chassis price", () => {
+    let w = startAtBowl();
+    w.player.money = 5000;
+    w = buyChassis(w, "carrier");
+    const tradeIn = chassisTradeIn(w);
+    expect(tradeIn).toBeGreaterThan(CHASSIS.scout.value);
+    const before = w.player.money;
+    w = buyChassis(w, "scout");
+    expect(w.player.money).toBe(before + (tradeIn - CHASSIS.scout.value));
+  });
+
   it("trade-in drops with built-in part damage", () => {
     const w = startAtBowl();
     const whole = chassisTradeIn(w);
@@ -249,6 +391,42 @@ describe("part value and trade price", () => {
     );
   });
 
+  it("a 0 HP part buys back strictly above its sell price", () => {
+    const w = startAtBowl();
+    const part = makePart(w, "turbine", 0);
+    part.hp = 0;
+    expect(partTradePrice(w, w.vehicles[0], part, "buy")).toBeGreaterThan(
+      partTradePrice(w, w.vehicles[0], part, "sell"),
+    );
+  });
+
+  it("a half-HP part buys back strictly above its sell price", () => {
+    const w = startAtBowl();
+    const part = makePart(w, "turbine", 0);
+    part.hp = Math.floor(maxHp(part) / 2);
+    expect(partTradePrice(w, w.vehicles[0], part, "buy")).toBeGreaterThan(
+      partTradePrice(w, w.vehicles[0], part, "sell"),
+    );
+  });
+
+  it("buy price is strictly above sell price for every part def and wear step, at any Social level", () => {
+    const w = startAtBowl();
+    for (const social of [0, XP_TO_REACH[3]]) {
+      w.player.skills.social = social;
+      for (const defId of Object.keys(PARTS)) {
+        for (let wear = 0; wear <= CONDITION.maxWear; wear++) {
+          const part = makePart(w, defId, wear);
+          for (const hpShare of [0, 0.5, 1]) {
+            part.hp = Math.floor(maxHp(part) * hpShare);
+            expect(partTradePrice(w, w.vehicles[0], part, "buy")).toBeGreaterThan(
+              partTradePrice(w, w.vehicles[0], part, "sell"),
+            );
+          }
+        }
+      }
+    }
+  });
+
   it("repair cost scales with the part's value", () => {
     const w = startAtBowl();
     const mg = makePart(w, "mg", 0);
@@ -274,6 +452,19 @@ describe("part value and trade price", () => {
     part.hp = 0;
     part.wear = CONDITION.maxWear + 1;
     expect(() => partRepairCost(w, part)).toThrow(/junk/);
+  });
+
+  it("loses money on a full rebuild then sale, for every part def, at Social 0", () => {
+    const w = startAtBowl();
+    for (const defId of Object.keys(PARTS)) {
+      const part = makePart(w, defId, 0);
+      part.hp = 0;
+      const cost = partRepairCost(w, part);
+      const saleBefore = partTradePrice(w, w.vehicles[0], part, "sell");
+      part.hp = partDef(defId).hp;
+      const saleAfter = partTradePrice(w, w.vehicles[0], part, "sell");
+      expect(cost).toBeGreaterThan(saleAfter - saleBefore);
+    }
   });
 });
 

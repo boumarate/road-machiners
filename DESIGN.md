@@ -8,11 +8,11 @@ The character has five skills. These are the durable upgrades that persist acros
 
 - Driving improves handling, crash damage, rough ground and crawling. It grows from driving off the road, rams and escapes from hostiles.
 - Perception improves aim, sight, hearing and contact circles. It grows from hits, new contacts and discovered places.
-- Machining improves repair and refit time, the field repair cap, search time and engine heat. It grows from field jobs, patches for other trucks and searches.
-- Toughness raises max health, and cuts health lost to cab damage, supply use and heat drain. It grows from driving in heat, health lost and knockouts survived.
-- Social improves prices, tow fees and patch prices, and makes robbers see the truck as stronger. It grows from trade profit, agreed deals and radio calls.
+- Machining improves repair and refit time, the field repair cap, search time and engine heat. It grows from field repairs, patches for other trucks and searches. Refits teach nothing, because a part can move back and forth forever.
+- Toughness raises max health, and cuts health lost to cab damage, supply use and heat drain. It grows from driving in heat, health lost and knockouts with a hostile truck in sight.
+- Social improves prices, tow fees and patch prices, and makes robbers see the truck as stronger. It grows from trade profit, agreed deals, finished contracts, radio calls, honks and free tows.
 
-Skills grow from use. Each skill has its own XP and five levels, and each level costs more XP. A hard action pays more than an easy one: a hit at a low chance pays more than a sure hit. Each skill earns full XP up to a daily cap, and much less after it until the next day. So grinding one easy action does not pay.
+Skills grow from use. Each skill has its own XP and five levels, and each level costs more XP. A hard action pays more than an easy one: a hit at a low chance pays more than a sure hit. Each skill earns full XP up to a daily cap, and much less after it until the next day. Every XP event also has a target, like a driver, a truck, a pile, a map region or a trade good. Each repeat on the same target pays less, and the target recovers slowly with game time. Some targets pay only once, like a question to one driver or a found place. So grinding one easy action on one target does not pay, even when it takes no turn.
 
 At level 2 and level 4 of each skill the player picks one of two perks. A perk changes a rule instead of a number, like crashes doing half damage or aimed shots scattering less. A pick is permanent.
 
@@ -49,7 +49,7 @@ Parts is a trade good, bought and sold like scrap or salt. It is the resource fi
 
 A job is work that needs the truck parked for a number of turns: a refit, field repair or scavenging. The player has at most one job at a time. Driving before it ends cancels it and the turns already spent are lost. The HUD shows the current job and its turns left. A seen NPC shows its job and progress above its truck.
 
-Field repair fixes one damaged mounted part. It spends parts and restores HP up to a field cap below full, only when the job finishes. Each unit of parts restores the same share of any part's max HP, so a broken wheel and a broken cab cost the same. Machining shortens the job and raises the cap. A full repair to 100% still needs a town. Scrap armor is the exception and patches to full on the road. Ceramic armor cannot be patched at all, only repaired in town. The inventory panel shows a Patch button on a damaged part, with its turns and parts cost.
+Field repair fixes one damaged mounted part. It spends parts and restores HP up to a field cap below full, only when the job finishes. The parts it spends are worth about the value it restores, so an expensive part costs more parts to fix. Machining shortens the job and raises the cap. A full repair to 100% still needs a town. Scrap armor is the exception and patches to full on the road. Ceramic armor cannot be patched at all, only repaired in town. The inventory panel shows a Patch button on a damaged part, with its turns and parts cost.
 
 Auto patch is on by default and toggles with P. Whenever the player truck is parked and idle, it patches the most damaged part with one unit of parts at a time.
 
@@ -79,7 +79,7 @@ There is no hull. A round enters from the side facing the shooter and walks the 
 
 Q toggles weapon auto mode. It gives every weapon a body shot at the nearest hostile it can hit. Clicking a target switches it off. NPC weapons target their chosen opponent or a visible attacker that shot at them or a nearby faction mate. Retreat does not disable defensive fire. NPCs avoid starting attacks in town guard range, but defend themselves there.
 
-Every raider kill pays the player a bounty by raider type.
+Every raider kill pays the player a bounty by raider type. A wreck leaves parts worth a share of its chassis value, scaled by its HP left, so a kill pays well but not more than trading. Camps refill their raiders over about a day.
 
 ## Defeat
 
@@ -93,11 +93,15 @@ Raiders ignore a truck with nothing to take. A truck has loot when it holds good
 
 A truck with no working engine, a broken transmission or an empty tank still moves at a crawl. The driver pushes it. Pushing burns no fuel, and a truck without a working engine makes no sound. A player truck that can only crawl is stranded. It can still travel automatically to an order point.
 
-Traders and scavengers help a stranded player. One that sees the truck may drive over, if it is not hostile and not in danger. It parks beside the truck and radios a tow offer to the nearest town it knows. The fee is a base price plus a price per tile of the route. The player accepts, refuses or hangs up. A stranded player can also radio a passing trader or scavenger and ask for a tow.
+Traders and scavengers help a stranded player. Raiders never do. One that sees the truck may drive over, if it is not hostile and not in danger. It parks beside the truck and radios a tow offer to the nearest town it knows. The fee is a base price plus a price per tile of the route. The player accepts, refuses or hangs up. A stranded player can also radio a passing trader or scavenger and ask for a tow.
 
 A towed truck hangs behind its tower and follows its path. The tower drives slower than its top speed. Turns run on their own while towed. The player can unhitch at any time for free. On arrival in town the tower takes the fee. Money can go below zero, and the HUD shows it as debt. A player in debt cannot buy anything, and sales pay the debt off.
 
 A stranded player can switch on an emergency beacon. Every vehicle within 250 tiles hears it, through hills. Traders and scavengers come as if they saw the truck, and one of them answers. Raiders hear it too, so a stripped truck calls safely and a truck with cargo draws raiders. Turns run on their own while the beacon calls and no offer is open. The beacon switches off when the truck can drive again or gets towed.
+
+NPCs tow each other by the same decision. A stranded driver waits once a tower is on its way. It takes the tow at once and pays what it can on arrival. A raider goes to its nearest camp, and any other driver to its nearest known town. Raiders tow only raiders, and only raiders or the player tow a raider. NPCs find stranded drivers only by sight.
+
+The player can radio a stranded NPC in reach and offer a tow to the place it names. The NPC offers what it can pay. The player can take the fee or tow for free. A free tow gives Social XP on arrival, as much as earning the waived fee in trade profit.
 
 Health at 0 kills the player. The death screen offers Load last save and New game. A dead world is never saved. Cab damage costs health at half its amount, so a lost fight costs about 30 health.
 
@@ -141,7 +145,7 @@ The sun also heats the player's running engine, faster at higher speed. Airflow,
 
 ## NPC activities
 
-NPC behavior has three layers. Traits are permanent and set the chances of choices. A goal stack keeps long-term work under interruptions like fights, flight, service and repairs. The driver usually resumes that work once an interruption ends. Decision points pick reactions by weighted chance when a new hostile, contact, attack, prey, stranded player or passed wreck appears. Traits give fixed knowledge of towns, salvage sites and hunting grounds. Each NPC remembers the subjects it already decided on and the attackers still in sight. There is no live shared intelligence. Inspection shows its activity and reason.
+NPC behavior has three layers. Traits are permanent and set the chances of choices. A goal stack keeps long-term work under interruptions like fights, flight, service and repairs. The driver usually resumes that work once an interruption ends. Decision points pick reactions by weighted chance when a new hostile, contact, attack, prey, stranded truck or passed wreck appears. Traits give fixed knowledge of towns, salvage sites and hunting grounds. Each NPC remembers the subjects it already decided on and the attackers still in sight. There is no live shared intelligence. Inspection shows its activity and reason.
 
 NPCs spawn with equipment sampled from weighted tables for their role: a chassis, a fitting engine and weapon, then optional cargo parts, armor and goods. It respects mount space, rated mass and an equipment budget separate from the driver's wallet. Rare equipment has a lower weight. The same world seed and actions produce the same equipment. There is no separate loot roll on death.
 
@@ -154,7 +158,7 @@ Idle drivers mostly fight manageable hostiles and flee stronger ones. A healthy 
 
 Scavenging is a timed search. The truck parks at a stock and searches for turns in proportion to what the stock holds, with a progress bar. A finished search opens the stock beside the truck's grid, and the player drags in what they want. What they leave stays at the site for later. NPC scavengers take everything that fits.
 
-Landmark and convoy sites hold finite stock rolled at world creation: goods, parts and sometimes a spare mountable part. Each day a site regains about a quarter of a fresh roll, up to its table's highs. Destroyed NPCs leave a wreck with the same kind of stock. Their mounted parts join it at the HP they had, and their built-in parts turn into the parts good. A looted road wreck goes after a few days, and a new road wreck appears elsewhere on a road. Both happen beyond the player's gray vision, so the road wreck count stays the same.
+Landmark and convoy sites hold finite stock rolled at world creation: goods, parts and sometimes a spare mountable part. The whole map holds loot worth well under the upgrade ladder. Each day a site regains a small share of a fresh roll, up to its table's highs, so an emptied site takes about two weeks to fill. Destroyed NPCs leave a wreck with the same kind of stock. Their mounted parts join it at the HP they had, and their built-in parts turn into parts good worth a share of the chassis value. A looted road wreck goes after a few days, and a new road wreck appears elsewhere on a road. Both happen beyond the player's gray vision, so the road wreck count stays the same.
 
 Knockout drops, handed-over cargo and dumped items go on a ground pile. Drops close together join one pile. A pile disappears when empty or after two days. Any collector can take from it.
 
@@ -182,7 +186,7 @@ A shot at another vehicle is an attack, hit or miss. The victim and its nearby f
 
 A damaging crash between trucks at peace is most likely an accident. Each damaged NPC decides once whether to forgive it or retaliate. Most drivers forgive. Raiders and scumbags retaliate more often, and a crash with a faction mate is nearly always forgiven. A retaliating driver starts a feud as if it was attacked. Contact with the truck on a tow rope counts for nothing.
 
-A driver hurt by a hostile may plead with it. It asks for a truce, or it begs for mercy when it is weak. Traders and cowards plead most, and raiders seldom. The other side decides whether to accept. A truce ends the feuds between both sides and their nearby faction mates. Mercy is a truce the beggar pays for with its cargo, which it drops for the winner to take. A driver rarely pleads with the same foe again soon.
+A driver hurt by a hostile may plead with it. It asks for a truce, or it begs for mercy when it is weak. Traders and cowards plead most, and raiders seldom. The other side decides whether to accept. A robber or raider after the other truck's cargo seldom pleads or accepts, unless it is weak or outgunned. It also rarely robs a truck it holds a truce with. A truce ends the feuds between both sides and their nearby faction mates. Mercy is a truce the beggar pays for with its cargo, which it drops for the winner to take. A driver rarely pleads with the same foe again soon.
 
 States are timed relations between two trucks. Each ends as expired, fulfilled or broken, and each ending can start other states.
 
@@ -212,15 +216,17 @@ H honks. Traders and scavengers in earshot that are not hostile honk back.
 
 ## Trade
 
-Every good, part and chassis has one base value and a tier from 1 to 3. Every price is a formula from that value. Buying adds a spread and selling cuts it, and Social narrows it. A part's value falls with each wear step. Its sell price also scales with its HP, but never drops below its scrap value from mass. Repair and rebuild cost a share of the part's value per HP restored, so an expensive part costs more to fix.
+Every good, part and chassis has one base value and a tier from 1 to 3. Every price is a formula from that value. Buying adds a spread and selling cuts it. Social narrows the spread to at most half. A part's value falls with each wear step, most at the first one, so pristine parts carry a premium. Its buy and sell prices also scale with its HP, but never drop below its scrap value from mass. Repair and rebuild cost a little more than the value they restore, so repairing a part to sell it never pays.
 
-Shops trade in Bowl and Nose garages and in stalls at the Salvage Yard, the Granary and the Pump Station. Each shop makes some goods cheap and needs others. Each unit bought raises the local price, and each unit sold lowers it. Prices drift back over about two days. NPC traders trade through the same prices, so they move them too. Profit comes from knowing routes, as in Dustland Delivery.
+Shops trade in Bowl and Nose garages and in stalls at the Salvage Yard, the Granary and the Pump Station. A good is cheap where it is made. Elsewhere its price rises with the distance to the nearest shop that makes it, so a long haul pays for the miles. Each unit bought raises the local price, and each unit sold lowers it. Garages absorb a full hauler load, and stalls move after a few units. Prices drift back over about two days. Each shop sells its own supplies: the garages sell fuel and food, and the Pump Station sells fuel. NPC traders trade through the same prices, so they move them too. Profit comes from knowing routes, as in Dustland Delivery.
 
-Each shop holds a random, finite part stock with rolled wear, and restocks on a timer. Garages hold more and fresher parts, and stalls hold a few worn ones. A part sold to a shop joins its stock. Mounting, full repairs, garage storage and chassis need a town garage.
+Each shop holds a random, finite part stock with rolled wear, and restocks on a timer. Garages hold more and fresher parts, and stalls hold a few worn ones. Spare parts found in the field are mostly worn too. A part sold to a shop joins its stock. Mounting, full repairs, garage storage and chassis need a town garage.
 
-Shops post contracts. A haul loads goods for another shop by a deadline, and a missed deadline charges their value. A fetch asks for a part of one type in any condition. A bounty names a living raider and pays on the kill. Contracts pay money, and a finished one trains Social. The player holds a few at once.
+Shops post contracts, and each shows the game time it is due. A haul loads goods for another shop by a deadline, and a missed deadline charges their value. A player in debt cannot take a haul. A fetch asks for a working part of one type, rebuilt at most once, that the shop does not stock. It pays the part's price plus a search fee. A bounty names a raider type, and any truck of that type counts. It pays half the target's value, and one kill fulfils one bounty. Contracts pay money, and a finished one trains Social from the work, not from a part's price. The player holds a few at once.
 
 The unit of effort is one turn of play. The wage is the net money per turn a player earns at a tier. An item's effort is its value divided by its tier's wage, and data keeps each item inside a target band. Contract rewards are estimated turns of work times the wage. `npm run econ` plays the sim economy with bot policies and reports wages and the day each upgrade is reached.
+
+Once a day the player pays upkeep, a small share of the truck's value, so a bigger truck costs more to keep. Upkeep can push money into debt.
 
 Fuel and supplies limit range. Fuel burns per tile by chassis, times heat. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn per turn, times heat. A full load lasts about 550 daytime turns. Without supplies the character loses health down to 30. Oases refill supplies.
 

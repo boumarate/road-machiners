@@ -50,7 +50,7 @@ function finishSearch(world: World, v: Vehicle, stockId: string): void {
   }
   if (!world.player.scavenged.includes(stockId)) {
     world.player.scavenged.push(stockId);
-    practice(world, 'search', 1, null);
+    practice(world, 'search', 1, null, stockId);
     if (vehicleHasPerk(world, v, 'scrounger')) scrounge(world, stockId);
   }
   world.events.push({ t: 'searched', stock: stockId });

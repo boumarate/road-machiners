@@ -4,6 +4,10 @@
 export const CONDITION = {
   maxWear: 4, // last wear step a broken part can be rebuilt from; one more makes it junk
   hpLoss: 0.1, // share of def max HP lost per wear step, for every part kind
+  // Value factor per wear step, indexed by wear (0 = pristine). A pristine part carries a heavy premium
+  // over one wear step in, so the drop from step 0 to 1 is much steeper than later steps. One entry per
+  // step up to maxWear; a junk part past the last step is worth its scrap value only (see sim/wear.ts).
+  valueFactor: [1, 0.7, 0.55, 0.45, 0.35],
   // Job stat loss per wear step. Cargo and core parts lose max HP only.
   statLoss: {
     spread: 0.15, // share of weapon spread added
@@ -33,7 +37,6 @@ export const PATCH = {
 
 export const REPAIR = {
   fieldCapShare: 0.7, // field repair never lifts a part above this share of its max HP
-  sharePerPart: 0.35, // share of a part's max HP restored per unit of the parts good spent, so a broken part patches to the field cap with 2
   turnsPerPart: 2, // turns the job takes per unit of parts spent
 };
 

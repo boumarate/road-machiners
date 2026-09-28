@@ -6,8 +6,8 @@ import { CONDITION, REPAIR } from '../data/wear';
 import { damagePart, partValue } from './wear';
 import { makePart } from './factory';
 import { addVehicle, emptyWorld, practiceOf } from './testkit';
-import { corePart, goodsCount, mountedParts } from './grid';
-import { addGoods, removeGoods, stowPart } from './inventory';
+import { corePart, goodsCount, gridOf, mountedParts } from './grid';
+import { addGoods, moveItem, removeGoods, stowPart } from './inventory';
 import { advanceJobs, startAutoRepair, startJob, startRepair, startStrip } from './jobs';
 import { repairPlan } from './repair';
 
@@ -89,7 +89,7 @@ describe('field repair job', () => {
     const plan = repairPlan(w, me, cage.id);
     expect(plan.needed).toBeGreaterThan(1);
     expect(plan.parts).toBe(1);
-    expect(plan.hp).toBeCloseTo(partDef(cage.defId).hp * REPAIR.sharePerPart, 5);
+    expect(plan.hp).toBeCloseTo((partDef(cage.defId).hp * GOODS.parts.value) / partValue(cage), 5);
     let next = startRepair(w, cage.id);
     for (let i = 0; i < plan.turns; i++) advanceJobs(next);
     const after = next.vehicles[0];
@@ -294,6 +294,14 @@ describe('field job practice', () => {
     const total = next.vehicles[0].job!.total;
     for (let i = 0; i < total; i++) advanceJobs(next);
     expect(practiceOf(next, 'fieldJob')).toMatchObject([{ amount: total, difficulty: null }]);
+  });
+
+  it('pays nothing for a refit that only moves parts the truck has', () => {
+    const w = emptyWorld();
+    const mg = w.vehicles[0].items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
+    const next = moveItem(w, mg.id, { x: 1, y: gridOf(w.vehicles[0]).h - 1, rot: 0 });
+    while (next.vehicles[0].job) advanceJobs(next);
+    expect(practiceOf(next, 'fieldJob')).toEqual([]);
   });
 
   it('pays nothing for a cancelled repair', () => {

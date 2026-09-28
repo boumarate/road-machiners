@@ -4,7 +4,6 @@
 import { TIME } from '../../data/time';
 import { MAIN_SKILL, MAX_SKILL_LEVEL, SKILL_IDS, TARGET_DAYS, TARGET_TOLERANCE, XP_SOURCES } from '../../data/skills';
 import { accrueXp, levelOf, type SkillProgress } from '../progress';
-import { clockOf } from '../sun';
 import type { SkillId, XpSource } from '../types';
 import { isArchetype, type Archetype } from './bot';
 import type { RunEnd, TraceLine } from './record';
@@ -22,7 +21,7 @@ export function replay(trace: readonly TraceLine[], turns: number): Curve {
   for (const line of trace) {
     const skill = XP_SOURCES[line.source].skill;
     const before = levelOf(progress.skills[skill]);
-    accrueXp(progress, line.source, line.amount, line.difficulty, clockOf(line.turn).day);
+    accrueXp(progress, line.source, line.amount, line.difficulty, line.target, line.turn);
     for (let level = before + 1; level <= levelOf(progress.skills[skill]); level++) levels[skill][level - 1] = line.turn;
   }
   const days = turns / TIME.turnsPerDay;
@@ -41,16 +40,16 @@ function requireTurnOrder(trace: readonly TraceLine[], turns: number): void {
 
 function freshProgress(): SkillProgress {
   const zero = (): Record<SkillId, number> => ({ driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 });
-  return { skills: zero(), xpToday: zero(), xpDay: 1 };
+  return { skills: zero(), xpToday: zero(), xpDay: 1, repeats: {} };
 }
 
 // A trace line read from a trace file. Throws on anything that is not a valid line.
 export function parseTraceLine(value: unknown): TraceLine {
-  const { turn, source, amount, difficulty } = asRecord(value);
-  if (!Number.isInteger(turn) || !isXpSource(source) || typeof amount !== 'number' || !isDifficulty(difficulty)) {
+  const { turn, source, amount, difficulty, target } = asRecord(value);
+  if (!Number.isInteger(turn) || !isXpSource(source) || typeof amount !== 'number' || !isDifficulty(difficulty) || typeof target !== 'string') {
     throw new Error(`Bad trace line ${JSON.stringify(value)}`);
   }
-  return { turn: turn as number, source, amount, difficulty };
+  return { turn: turn as number, source, amount, difficulty, target };
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

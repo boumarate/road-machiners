@@ -4,7 +4,7 @@ import { RULES } from "../data/rules";
 import { getActivityDestination, goalHolds, thinkNpc, topGoal } from "./npc-activities";
 import { towData } from "./states";
 import { vehicleStats } from "./stats";
-import { isOnRope, playerTow } from "./tow";
+import { isOnRope, towHeldBy } from "./tow";
 import { ramImpact } from "./crash-contact";
 import type { Vehicle, World } from "./types";
 import { angleDiff, bearing, dist, type Vec } from "./vec";
@@ -123,8 +123,8 @@ function pathsMeet(world: World, v: Vehicle, x: Vehicle): boolean {
 
 // A tower never yields to the truck on its own rope.
 function onOwnRope(world: World, tower: Vehicle, x: Vehicle): boolean {
-  const tow = playerTow(world);
-  return tow !== null && towData(tow).hitched && tow.holder === tower.id && x.id === world.player.vehicleId;
+  const tow = towHeldBy(world, tower.id);
+  return tow !== null && towData(tow).hitched && tow.other === x.id;
 }
 
 // The gap between v and x past both radii when x lies within 45 degrees of v's heading, else null.

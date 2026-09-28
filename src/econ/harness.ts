@@ -20,6 +20,7 @@ import {
   buyGood,
   buyPrice,
   buyStockPart,
+  chargeUpkeep,
   chassisTradeIn,
   partTradePrice,
   repairAll,
@@ -27,6 +28,7 @@ import {
   sellGood,
   sellPart,
   sellPrice,
+  affordableBuyCount,
 } from '../sim/economy';
 import { makeVehicle } from '../sim/factory';
 import { corePart, freeCells, goodsCount, mountedParts } from '../sim/grid';
@@ -41,6 +43,7 @@ import {
   advanceContracts,
   advanceShops,
   deliverContract,
+  fitsFetch,
   estimateTurns,
   goodValue,
   shopAt,
@@ -51,7 +54,7 @@ import {
 } from '../sim/market';
 import { advanceJobs } from '../sim/jobs';
 import { burnFuel, consumeVehicleSupplies } from '../sim/resources';
-import { collectSalvage, createWreckSalvage, salvageUnits, wreckStockId } from '../sim/salvage';
+import { collectSalvage, createWreckSalvage, renewSalvage, salvageUnits, wreckStockId } from '../sim/salvage';
 import { siteGates, sitePads } from '../sim/sites';
 import { vehicleStats } from '../sim/stats';
 import type { PartInstance, SkillId, Vehicle, World } from '../sim/types';
@@ -143,8 +146,8 @@ function currentTier(v: Vehicle): Tier {
 }
 
 // ---- Turn stepping. No physics, no NPC movement or thinking: only the per-turn economy updates
-// the design calls out (world.turn, shop drift and restock, contracts, supply and fuel burn, drive
-// wear). advanceShops and advanceContracts are the same functions endTurn calls.
+// the design calls out (world.turn, shop drift and restock, contracts, upkeep, salvage regrowth,
+// supply and fuel burn, drive wear). These are the same functions endTurn calls.
 
 function passTurns(world: World, telemetry: Telemetry, turns: number, tilesPerTurn: number): void {
   for (let i = 0; i < turns; i++) stepOneTurn(world, telemetry, tilesPerTurn);
@@ -155,6 +158,8 @@ function stepOneTurn(world: World, telemetry: Telemetry, tilesPerTurn: number): 
   world.events = [];
   advanceShops(world);
   advanceContracts(world);
+  chargeUpkeep(world);
+  renewSalvage(world);
   telemetry.debtEvents += world.events.filter((e) => e.t === 'money' && e.amount < 0 && e.reason === 'failed haul contract').length;
   telemetry.contractsDone += world.events.filter((e) => e.t === 'contract' && e.outcome === 'done' && e.contract.kind === 'bounty').length;
   const v = playerVehicle(world);
@@ -452,9 +457,8 @@ function bestGoodBetween(mem: Memory, buyShop: string, sellShop: string): HaulPl
 
 function runBuy(world: World, telemetry: Telemetry, mem: Memory, plan: HaulPlan): World {
   recordShopVisit(world, mem, plan.buyShop);
-  const price = mem.prices[plan.buyShop][plan.good].buy;
-  const afford = price > 0 ? Math.floor(world.player.money / price) : 0;
-  const units = Math.min(afford, freeCells(playerVehicle(world)));
+  const me = playerVehicle(world);
+  const units = affordableBuyCount(world, me, plan.buyShop, plan.good, freeCells(me), world.player.money);
   if (units <= 0) return world;
   world = buyGood(world, plan.good, units);
   telemetry.trades++;
@@ -501,10 +505,10 @@ function contractsOnlyAction(world: World, mem: Memory): Action {
 
 function contractIsActionable(world: World, mem: Memory, c: Contract): boolean {
   if (c.kind === 'haul') return true;
-  if (c.kind === 'bounty') return world.vehicles.some((v) => v.id === c.target);
+  if (c.kind === 'bounty') return world.vehicles.some((v) => v.brain?.templateId === c.template);
   const v = playerVehicle(world);
-  if (hasSpare(v, c.defId) || hasStored(world, c.defId)) return true;
-  if (knownStockShop(world, mem, c.defId)) return true;
+  if (hasSpare(v, c) || hasStored(world, c)) return true;
+  if (knownStockShop(world, mem, c)) return true;
   return unvisitedShop(world, mem) !== null;
 }
 
@@ -522,15 +526,15 @@ function fetchAction(c: Extract<Contract, { kind: 'fetch' }>): Action {
 
 function runFetch(world: World, telemetry: Telemetry, mem: Memory, c: Extract<Contract, { kind: 'fetch' }>): World {
   const v = playerVehicle(world);
-  if (hasSpare(v, c.defId) || hasStored(world, c.defId)) {
+  if (hasSpare(v, c) || hasStored(world, c)) {
     driveTo(world, telemetry, c.shop);
     return runDeliver(world, telemetry, mem, c.id);
   }
-  const known = knownStockShop(world, mem, c.defId);
+  const known = knownStockShop(world, mem, c);
   if (known) {
     driveTo(world, telemetry, known);
     recordShopVisit(world, mem, known);
-    return buyFetchPart(world, c.defId);
+    return buyFetchPart(world, c);
   }
   const next = unvisitedShop(world, mem);
   if (next) {
@@ -540,29 +544,31 @@ function runFetch(world: World, telemetry: Telemetry, mem: Memory, c: Extract<Co
   return world;
 }
 
-function hasSpare(v: Vehicle, defId: string): boolean {
-  return spareParts(v).some((p) => p.defId === defId);
+type Fetch = Extract<Contract, { kind: 'fetch' }>;
+
+function hasSpare(v: Vehicle, c: Fetch): boolean {
+  return spareParts(v).some((p) => fitsFetch(c, p));
 }
 
-function hasStored(world: World, defId: string): boolean {
-  return world.player.storage.some((p) => p.defId === defId);
+function hasStored(world: World, c: Fetch): boolean {
+  return world.player.storage.some((p) => fitsFetch(c, p));
 }
 
-function knownStockShop(world: World, mem: Memory, defId: string): string | null {
+function knownStockShop(world: World, mem: Memory, c: Fetch): string | null {
   const pos = playerVehicle(world).pos;
-  const found = [...mem.visited].filter((id) => world.shops[id].stock.some((p) => p.defId === defId));
+  const found = [...mem.visited].filter((id) => world.shops[id].stock.some((p) => fitsFetch(c, p)));
   return found.length ? [...found].sort((a, b) => dist(pos, siteOf(a).pos) - dist(pos, siteOf(b).pos))[0] : null;
 }
 
-function affordableStockPart(world: World, shopId: string, defId: string): PartInstance | null {
-  const part = world.shops[shopId].stock.find((p) => p.defId === defId);
+function affordableStockPart(world: World, shopId: string, c: Fetch): PartInstance | null {
+  const part = world.shops[shopId].stock.find((p) => fitsFetch(c, p));
   if (!part) return null;
   return world.player.money >= partTradePrice(world, playerVehicle(world), part, 'buy') ? part : null;
 }
 
-function buyFetchPart(world: World, defId: string): World {
+function buyFetchPart(world: World, c: Fetch): World {
   const shopId = shopAt(world);
-  const part = shopId ? affordableStockPart(world, shopId, defId) : null;
+  const part = shopId ? affordableStockPart(world, shopId, c) : null;
   if (!part) return world;
   // A stall has no storage fallback for a part that does not fit the grid (only a garage does,
   // src/sim/economy.ts buyStockPart); skip the buy there and let the bot look for room elsewhere.
@@ -575,10 +581,10 @@ function buyFetchPart(world: World, defId: string): World {
   }
 }
 
-// Drives to the bounty's named raider, if it is still in the world, and fights it. A raider that
-// left the world lapses the contract on its own via advanceContracts; the bot does nothing then.
+// Drives to a raider of the bounty's template, if one is still in the world, and fights it. With
+// none left, advanceContracts lapses the contract on its own; the bot does nothing then.
 function pursueBounty(world: World, telemetry: Telemetry, c: Extract<Contract, { kind: 'bounty' }>): void {
-  const target = world.vehicles.find((v) => v.id === c.target);
+  const target = world.vehicles.find((v) => v.brain?.templateId === c.template);
   if (!target) return;
   driveToPoint(world, telemetry, target.pos);
   resolveEncounter(world, telemetry, target);
@@ -599,7 +605,7 @@ function fittingOffers(world: World, shopId: string): Contract[] {
   const v = playerVehicle(world);
   const room = freeCells(v);
   return shopState(world, shopId).contracts.filter((c) => {
-    if (c.kind === 'haul') return c.units <= room;
+    if (c.kind === 'haul') return c.units <= room && world.player.money >= 0;
     if (c.kind === 'bounty') return mountedParts(v, 'weapon').some((p) => p.hp > 0);
     return true;
   });

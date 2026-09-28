@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { chassisDef } from "../data/chassis";
 import { RULES } from "../data/rules";
 import { corePart } from "../sim/grid";
-import { emptyWorld } from "../sim/testkit";
+import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import { maxHealthOf } from "../sim/health";
 import { XP_TO_REACH } from "../data/skills";
 import { addState, towData } from "../sim/states";
@@ -132,7 +132,7 @@ describe("rescue readout", () => {
     w.player.beacon = true;
     expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: true });
     w.player.money = 10;
-    const tow = addState(w, "tow", w.vehicles[0].id, w.player.vehicleId, { kind: "tow", town: "bowl", fee: 50, hitched: false });
+    const tow = addState(w, "tow", w.vehicles[0].id, w.player.vehicleId, { kind: "tow", site: "bowl", fee: 50, waived: 0, hitched: false });
     expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: true });
     towData(tow).hitched = true;
     expect(getRescueReadout(w)).toMatchObject({ kind: "towed", fee: 50 });
@@ -140,5 +140,29 @@ describe("rescue readout", () => {
     expect(getRescueReadout(w)).toEqual({ kind: "knockedOut" });
     w.player.state = "dead";
     expect(getRescueReadout(w)).toBeNull();
+  });
+});
+
+describe('trade interaction', () => {
+  // The player parked on a town pad, with a trader beside it that agreed to trade.
+  function atTownWithTrader(npcSpeed: number) {
+    const town = REGION.towns[0];
+    const w = emptyWorld({ ...sitePads(town)[0] });
+    const me = w.vehicles[0];
+    const npc = addVehicle(w, 'traders', 'scout', [], { x: me.pos.x + 3, y: me.pos.y });
+    npc.brain = npcBrain('trader', npc.pos, ['trader']);
+    npc.speed = npcSpeed;
+    addState(w, 'trade', npc.id, w.player.vehicleId, { kind: 'none' });
+    return { w, town, npc };
+  }
+
+  it('offers the trade over the town once both trucks are parked side by side', () => {
+    const { w, npc } = atTownWithTrader(0);
+    expect(getContextAction(w, false)).toEqual({ label: `Trade with ${npc.name}`, ready: true });
+  });
+
+  it('offers the town while the trader still drives', () => {
+    const { w, town } = atTownWithTrader(RULES.parkedSpeed + 1);
+    expect(getContextAction(w, false)).toEqual({ label: `Enter ${town.name}`, ready: true });
   });
 });

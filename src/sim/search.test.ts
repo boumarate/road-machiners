@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { knockoutStockId } from './salvage';
 import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
 import { RULES } from '../data/rules';
@@ -219,7 +220,7 @@ describe('scrounger perk', () => {
 
 describe('careful strip perk', () => {
   // The player's machine gun, worn down to 10 HP and lying in a stock, to be mounted back in the field.
-  function mountFromStock(stockId: string, perk: boolean) {
+  function mountFromStock(stockId: string, perk: boolean, playerPile = false) {
     const w = emptyWorld({ x: 30, y: 30 });
     if (perk) w.player.perks.push('carefulStrip');
     const me = w.vehicles[0];
@@ -227,7 +228,8 @@ describe('careful strip perk', () => {
     if (!weapon || weapon.kind !== 'part') throw new Error('Expected weapon');
     weapon.part.hp = 10;
     me.items = me.items.filter((item) => item.id !== weapon.id);
-    w.salvage.push({ id: stockId, pos: { ...me.pos }, radius: 1, goods: {}, parts: [weapon.part] });
+    const pile = playerPile ? { pile: { until: w.turn + 100, fromPlayer: true, basis: {} } } : {};
+    w.salvage.push({ id: stockId, pos: { ...me.pos }, radius: 1, goods: {}, parts: [weapon.part], ...pile });
     w.player.scavenged.push(stockId);
     const next = takeLoot(w, stockId, { kind: 'part', partId: weapon.part.id }, { x: weapon.x, y: weapon.y, rot: weapon.rot });
     for (let turn = 0; turn < 20 && next.vehicles[0].job; turn++) advanceJobs(next);
@@ -244,5 +246,9 @@ describe('careful strip perk', () => {
 
   it('leaves a part from a site stock as it is', () => {
     expect(mountFromStock('weapon-stock', true)).toBe(10);
+  });
+
+  it('leaves a part from the player own knockout pile as it is', () => {
+    expect(mountFromStock(knockoutStockId('v1', 5), true, true)).toBe(10);
   });
 });

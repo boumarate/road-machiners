@@ -245,6 +245,23 @@ export function partCard(o: PartCardOptions): HTMLElement {
   return card;
 }
 
+// Which mounted part a screen's cards of each kind compare with. Stepping moves every card of the kind together.
+export class CompareSteps {
+  private index = new Map<PartKind, number>();
+
+  options(me: Vehicle, kind: PartKind, rerender: () => void): Pick<PartCardOptions, "base" | "baseCount" | "onNextBase"> {
+    const index = this.index.get(kind) ?? 0;
+    return {
+      base: comparePart(me, kind, index),
+      baseCount: mountedParts(me, kind).length,
+      onNextBase: () => {
+        this.index.set(kind, index + 1);
+        rerender();
+      },
+    };
+  }
+}
+
 // What the changes in the stat table are against. With several mounted parts of the kind, a click steps to the next.
 function compareLine(o: PartCardOptions): HTMLElement {
   if (!o.base) return el("div", { class: "card-compare dim" }, "Nothing to compare");

@@ -44,8 +44,9 @@ describe('runPolicy', () => {
     expect(r.telemetry.trades).toBeGreaterThan(0);
   });
 
-  it('salvageOnly searches and sells over a day', () => {
-    const r = run(1, 'salvageOnly', 1);
+  // Map loot is thin, so a load worth selling takes more than one day to gather.
+  it('salvageOnly searches and sells over two days', () => {
+    const r = run(1, 'salvageOnly', 2);
     expect(r.telemetry.trades).toBeGreaterThan(0);
   });
 

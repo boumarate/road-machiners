@@ -109,7 +109,7 @@ export function refreshVision(world: World): void {
 // The player practices perception once per vehicle that becomes a contact, harder near the edge of reach.
 function practiceNewContacts(world: World, me: Vehicle, known: Set<string>): void {
   for (const c of world.player.contacts) {
-    if (!known.has(c.vehicleId)) practice(world, 'contact', 1, contactDifficulty(world, me, c));
+    if (!known.has(c.vehicleId)) practice(world, 'contact', 1, contactDifficulty(world, me, c), c.vehicleId);
   }
 }
 

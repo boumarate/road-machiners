@@ -1,27 +1,45 @@
 import { describe, expect, it } from 'vitest';
-import { CONTRACTS, SHOPS } from '../data/market';
+import { CONTRACTS, EFFORT, SHOPS } from '../data/market';
+import { chassisDef } from '../data/chassis';
+import { GOODS } from '../data/goods';
+import { PARTS } from '../data/parts';
 import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
 import { makePart } from './factory';
 import { goodsCount } from './grid';
+import { stowPart } from './inventory';
 import { sitePads } from './sites';
-import { addVehicle, emptyWorld } from './testkit';
-import type { World } from './types';
+import { addVehicle, emptyWorld, npcBrain, practiceOf } from './testkit';
+import type { Vehicle, World } from './types';
 import { update } from './world';
 import {
   acceptContract,
   advanceContracts,
+  advanceShops,
   bountyFulfilled,
+  bountyReward,
   deliverContract,
   goodValue,
   bountyLapsed,
   contractReward,
   estimateTurns,
+  fetchReward,
+  contractXp,
   haulPenalty,
+  initializeShops,
   isExpired,
+  partPristineBuyPrice,
   rollContract,
+  vehicleValue,
   type Contract,
 } from './market';
+
+// A raider NPC of a spawn template, as bounties name raiders by template.
+function addRaider(w: World, templateId: string, pos = { x: 5, y: 5 }): Vehicle {
+  const v = addVehicle(w, 'raiders', 'buggy', [], pos);
+  v.brain = npcBrain(templateId, pos, ['raider']);
+  return v;
+}
 
 describe('estimateTurns', () => {
   it('grows with distance', () => {
@@ -33,28 +51,76 @@ describe('estimateTurns', () => {
 
 describe('contractReward', () => {
   it('scales with turns', () => {
-    const short = contractReward('fetch', 50, 1, 0);
-    const long = contractReward('fetch', 200, 1, 0);
+    const short = contractReward(50, 1, 0);
+    const long = contractReward(200, 1, 0);
     expect(long).toBeGreaterThan(short);
   });
 
   it('scales with tier at the same turns', () => {
-    const tier1 = contractReward('fetch', 100, 1, 0);
-    const tier3 = contractReward('fetch', 100, 3, 0);
+    const tier1 = contractReward(100, 1, 0);
+    const tier3 = contractReward(100, 3, 0);
     expect(tier3).toBeGreaterThan(tier1);
   });
 
-  it('pays a bounty more than a haul for the same turns and tier', () => {
-    const haul = contractReward('haul', 100, 2, 0);
-    const bounty = contractReward('bounty', 100, 2, 0);
-    expect(bounty).toBeGreaterThan(haul);
+  it('adds a cut of cargo value to the reward', () => {
+    const plain = contractReward(100, 2, 0);
+    const withCargo = contractReward(100, 2, 1000);
+    expect(withCargo).toBeGreaterThan(plain);
+  });
+});
+
+describe('vehicleValue', () => {
+  it('sums the chassis value and every part it carries', () => {
+    const w = emptyWorld();
+    const raider = addRaider(w, 'buggy');
+    const bare = vehicleValue(raider);
+    expect(bare).toBeGreaterThanOrEqual(chassisDef('buggy').value); // core parts add on top
+    stowPart(w, raider, makePart(w, 'plates', 0));
+    expect(vehicleValue(raider)).toBeGreaterThan(bare);
+  });
+});
+
+describe('bountyReward', () => {
+  it('pays a share of the target\'s total worth', () => {
+    const w = emptyWorld();
+    const raider = addRaider(w, 'buggy');
+    expect(bountyReward(raider)).toBe(Math.round(vehicleValue(raider) * CONTRACTS.bounty.valueShare));
   });
 
-  it('adds a cut of cargo value to a haul reward only', () => {
-    const plain = contractReward('haul', 100, 2, 0);
-    const withCargo = contractReward('haul', 100, 2, 1000);
-    expect(withCargo).toBeGreaterThan(plain);
-    expect(contractReward('fetch', 100, 2, 1000)).toBe(contractReward('fetch', 100, 2, 0));
+  it('pays more for a stronger, better-equipped target', () => {
+    const w = emptyWorld();
+    const bare = addRaider(w, 'buggy', { x: 1, y: 1 });
+    const armed = addRaider(w, 'buggy', { x: 2, y: 2 });
+    stowPart(w, armed, makePart(w, 'plates', 0));
+    expect(bountyReward(armed)).toBeGreaterThan(bountyReward(bare));
+  });
+});
+
+describe('contractXp', () => {
+  it('pays fetch XP for the search fee only, not the part price', () => {
+    const cheap: Contract = { id: 'a', shop: 'bowl', kind: 'fetch', defId: 'panniers', reward: fetchReward('panniers', 1), deadline: 500, tier: 1 };
+    const dear: Contract = { ...cheap, defId: 'cage', reward: fetchReward('cage', 1) };
+    expect(contractXp(cheap)).toBe(contractXp(dear));
+    expect(contractXp(cheap)).toBe(Math.round(CONTRACTS.fetch.searchFeeTurns * EFFORT.wage[1] * CONTRACTS.fetch.xpPerEffort));
+  });
+});
+
+describe('fetchReward', () => {
+  it('exceeds the part\'s buy price by exactly the search fee', () => {
+    for (const defId of ['mg', 'plates', 'stockEngine']) {
+      for (const tier of [1, 2, 3] as const) {
+        const fee = Math.round(CONTRACTS.fetch.searchFeeTurns * EFFORT.wage[tier]);
+        expect(fetchReward(defId, tier)).toBe(partPristineBuyPrice(defId) + fee);
+      }
+    }
+  });
+
+  it('pays more for a pricier part at the same tier', () => {
+    expect(PARTS.cage.value).toBeGreaterThan(PARTS.stockEngine.value);
+    expect(PARTS.cage.tier).toBe(PARTS.stockEngine.tier);
+    const cheap = fetchReward('stockEngine', PARTS.stockEngine.tier);
+    const dear = fetchReward('cage', PARTS.cage.tier);
+    expect(dear).toBeGreaterThan(cheap);
   });
 });
 
@@ -62,15 +128,15 @@ describe('rollContract', () => {
   const shop = { id: 'bowl', pos: { x: 0, y: 0 } };
   const places = [{ id: 'nose', pos: { x: 100, y: 0 } }];
   const goods = ['salt'];
-  const partDefIds = ['rifle'];
+  const partDefIds = ['mg'];
 
   it('is deterministic for the same rng state', () => {
     const w1 = emptyWorld();
     const w2 = emptyWorld();
     w1.marketRng.rngState = 42;
     w2.marketRng.rngState = 42;
-    const raider = addVehicle(w1, 'raiders', 'buggy', [], { x: 5, y: 5 });
-    addVehicle(w2, 'raiders', 'buggy', [], { x: 5, y: 5 });
+    const raider = addRaider(w1, 'buggy');
+    addRaider(w2, 'buggy');
     const c1 = rollContract(w1, shop, places, goods, partDefIds, [raider]);
     const c2 = rollContract(w2, shop, places, goods, partDefIds, [w2.vehicles.find((v) => v.faction === 'raiders')!]);
     expect(c1).toEqual(c2);
@@ -116,6 +182,59 @@ describe('rollContract', () => {
     expect(haul).not.toBeNull();
     expect(haul!.deadline).toBeGreaterThan(w.turn);
   });
+
+  it('takes a haul\'s tier from the hauled good, not a random roll', () => {
+    const w = emptyWorld();
+    const dearGoods = ['tools']; // tier 3
+    let haul: Contract | null = null;
+    for (let i = 0; i < 50 && !haul; i++) {
+      const c = rollContract(w, shop, places, dearGoods, [], []);
+      if (c?.kind === 'haul') haul = c;
+    }
+    expect(haul).not.toBeNull();
+    expect(haul!.tier).toBe(GOODS.tools.tier);
+  });
+
+  it('takes a fetch\'s tier from the fetched part, not a random roll', () => {
+    const w = emptyWorld();
+    let fetchContract: Contract | null = null;
+    for (let i = 0; i < 50 && !fetchContract; i++) {
+      const c = rollContract(w, shop, [], [], ['workhorseDiesel'], []);
+      if (c?.kind === 'fetch') fetchContract = c;
+    }
+    expect(fetchContract).not.toBeNull();
+    expect(fetchContract!.tier).toBe(PARTS.workhorseDiesel.tier);
+  });
+
+  it('takes a bounty\'s tier from the highest tier fitted to the target', () => {
+    const w = emptyWorld();
+    const raider = addRaider(w, 'buggy');
+    const stowed = stowPart(w, raider, makePart(w, 'plates', 0)); // tier 2 armor
+    expect(stowed).toBe(true);
+    let bounty: Contract | null = null;
+    for (let i = 0; i < 50 && !bounty; i++) {
+      const c = rollContract(w, shop, [], [], [], [raider]);
+      if (c?.kind === 'bounty') bounty = c;
+    }
+    expect(bounty).not.toBeNull();
+    expect(bounty!.tier).toBe(PARTS.plates.tier);
+  });
+
+  it('pays a bounty the same reward whatever its random deadline window', () => {
+    const w = emptyWorld();
+    const raider = addRaider(w, 'buggy');
+    const rewards = new Set<number>();
+    const deadlines = new Set<number>();
+    for (let i = 0; i < 50; i++) {
+      const c = rollContract(w, shop, [], [], [], [raider]);
+      if (c?.kind === 'bounty') {
+        rewards.add(c.reward);
+        deadlines.add(c.deadline);
+      }
+    }
+    expect(deadlines.size).toBeGreaterThan(1); // the window did vary
+    expect(rewards.size).toBe(1); // but the pay never did
+  });
 });
 
 describe('isExpired', () => {
@@ -130,21 +249,31 @@ describe('isExpired', () => {
 });
 
 describe('bountyFulfilled', () => {
-  it('is true only for the player\'s kill of the target', () => {
-    const c = { kind: 'bounty', target: 'raider-1' } as Contract;
-    expect(bountyFulfilled([{ t: 'destroyed', vehicle: 'raider-1', by: 'player-1' }], c, 'player-1')).toBe(true);
-    expect(bountyFulfilled([{ t: 'destroyed', vehicle: 'raider-1', by: 'other-npc' }], c, 'player-1')).toBe(false);
-    expect(bountyFulfilled([{ t: 'destroyed', vehicle: 'raider-2', by: 'player-1' }], c, 'player-1')).toBe(false);
+  it('is true for the player\'s kill of any truck of the template', () => {
+    const w = emptyWorld();
+    const outrider = addRaider(w, 'buggy');
+    const other = addRaider(w, 'warband');
+    const c = { kind: 'bounty', template: 'buggy' } as Contract;
+    const kill = (v: Vehicle, by: string) => {
+      w.removed = [v];
+      w.events = [{ t: 'destroyed', vehicle: v.id, by }];
+      return bountyFulfilled(w, c);
+    };
+    expect(kill(outrider, w.player.vehicleId)).toBe(true);
+    expect(kill(outrider, 'other-npc')).toBe(false);
+    expect(kill(other, w.player.vehicleId)).toBe(false);
   });
 });
 
 describe('bountyLapsed', () => {
-  it('is true once the target vehicle is gone from the world', () => {
+  it('is true once no truck of the template is left in the world', () => {
     const w = emptyWorld();
-    const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 5, y: 5 });
-    const c = { kind: 'bounty', target: raider.id } as Contract;
+    const first = addRaider(w, 'buggy');
+    const second = addRaider(w, 'buggy', { x: 20, y: 5 });
+    const c = { kind: 'bounty', template: 'buggy' } as Contract;
+    w.vehicles = w.vehicles.filter((v) => v.id !== first.id);
     expect(bountyLapsed(w, c)).toBe(false);
-    w.vehicles = w.vehicles.filter((v) => v.id !== raider.id);
+    w.vehicles = w.vehicles.filter((v) => v.id !== second.id);
     expect(bountyLapsed(w, c)).toBe(true);
   });
 });
@@ -159,8 +288,8 @@ describe('haulPenalty', () => {
 describe('contract boards and delivery', () => {
   const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
   const nose = REGION.towns.find((t) => t.id === 'nose')!;
-  const haul = (to: string, units: number): Contract => ({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'salt', units, to, reward: 300, xp: 30, deadline: 500, tier: 1 });
-  const fetch = (): Contract => ({ id: 'ct-fetch', shop: 'bowl', kind: 'fetch', defId: 'mg', reward: 200, xp: 20, deadline: 500, tier: 1 });
+  const haul = (to: string, units: number): Contract => ({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'salt', units, to, reward: 300, deadline: 500, tier: 1 });
+  const fetch = (): Contract => ({ id: 'ct-fetch', shop: 'bowl', kind: 'fetch', defId: 'mg', reward: fetchReward('mg', 1), deadline: 500, tier: 1 });
 
   function atBowlWithOffer(c: Contract): World {
     const w = emptyWorld(sitePads(bowl)[0]);
@@ -171,6 +300,18 @@ describe('contract boards and delivery', () => {
   it('posts contracts on every shop board at world creation', () => {
     const w = emptyWorld();
     for (const id of Object.keys(SHOPS)) expect(w.shops[id].contracts.length).toBeGreaterThan(0);
+  });
+
+  it('never posts a fetch for a part the shop has in stock', () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const w = emptyWorld();
+      w.marketRng.rngState = seed;
+      initializeShops(w);
+      for (const state of Object.values(w.shops)) {
+        const stocked = new Set(state.stock.map((p) => p.defId));
+        for (const c of state.contracts) if (c.kind === 'fetch') expect(stocked.has(c.defId)).toBe(false);
+      }
+    }
   });
 
   it('loads haul cargo on acceptance and pays on delivery at the destination', () => {
@@ -186,6 +327,22 @@ describe('contract boards and delivery', () => {
     expect(w.player.contracts).toHaveLength(0);
   });
 
+  it('counts haul cargo as paid at its value, so selling it pays no trade XP', () => {
+    const w = atBowlWithOffer(haul('nose', 3));
+    w.vehicles[0].items = w.vehicles[0].items.filter((it) => it.kind !== 'good' || it.good !== 'salt');
+    const next = acceptContract(w, 'ct-haul');
+    expect(next.player.costBasis.salt).toBeCloseTo(goodValue('salt'));
+  });
+
+  it('pays the contract XP to social, targeting the posting shop', () => {
+    let w = acceptContract(atBowlWithOffer(haul('nose', 3)), 'ct-haul');
+    w.vehicles[0].pos = { ...sitePads(nose)[0] };
+    const social = w.player.skills.social;
+    w = deliverContract(w, 'ct-haul');
+    expect(practiceOf(w, 'contract')).toMatchObject([{ amount: 30, difficulty: null, target: 'bowl', xp: 30 }]);
+    expect(w.player.skills.social).toBeCloseTo(social + 30);
+  });
+
   it('refuses a haul delivery away from its destination', () => {
     const w = acceptContract(atBowlWithOffer(haul('nose', 3)), 'ct-haul');
     expect(() => deliverContract(w, 'ct-haul')).toThrow(/Not parked at nose/);
@@ -199,11 +356,36 @@ describe('contract boards and delivery', () => {
 
   it('takes a fetch part from garage storage', () => {
     let w = acceptContract(atBowlWithOffer(fetch()), 'ct-fetch');
-    w = update(w, (d) => { d.player.storage.push(makePart(d, 'mg', 3)); });
+    w = update(w, (d) => { d.player.storage.push(makePart(d, 'mg', 1)); }); // wear 1, at CONTRACTS.fetch.maxWear
     const money = w.player.money;
     w = deliverContract(w, 'ct-fetch');
     expect(w.player.storage).toHaveLength(0);
-    expect(w.player.money).toBe(money + 200);
+    expect(w.player.money).toBe(money + fetchReward('mg', 1));
+  });
+
+  it('refuses a fetch part worn past CONTRACTS.fetch.maxWear', () => {
+    let w = acceptContract(atBowlWithOffer(fetch()), 'ct-fetch');
+    w = update(w, (d) => { d.player.storage.push(makePart(d, 'mg', CONTRACTS.fetch.maxWear + 1)); });
+    expect(() => deliverContract(w, 'ct-fetch')).toThrow(/spare/);
+  });
+
+  it('refuses a fetch part at 0 HP', () => {
+    let w = acceptContract(atBowlWithOffer(fetch()), 'ct-fetch');
+    w = update(w, (d) => {
+      const part = makePart(d, 'mg', 0);
+      part.hp = 0;
+      d.player.storage.push(part);
+    });
+    expect(() => deliverContract(w, 'ct-fetch')).toThrow(/spare/);
+  });
+
+  it('refuses a junk fetch part', () => {
+    let w = acceptContract(atBowlWithOffer(fetch()), 'ct-fetch');
+    w = update(w, (d) => {
+      const part = { ...makePart(d, 'mg', 0), wear: 99, hp: 0 }; // far past junk, however far past maxWear
+      d.player.storage.push(part);
+    });
+    expect(() => deliverContract(w, 'ct-fetch')).toThrow(/spare/);
   });
 
   it('refuses a fetch with no spare part of that type', () => {
@@ -229,10 +411,11 @@ describe('contract boards and delivery', () => {
 
   it('pays a bounty on the player kill and lapses when the target leaves', () => {
     const base = emptyWorld();
-    const raider = addVehicle(base, 'raiders', 'scout', [], { x: 50, y: 50 });
-    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', target: raider.id, targetName: raider.name, reward: 400, xp: 40, deadline: 900, tier: 2 };
+    const raider = addRaider(base, 'buggy', { x: 50, y: 50 });
+    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: raider.name, reward: 400, deadline: 900, tier: 2 };
     const paid = update(base, (d) => {
       d.player.contracts = [bounty];
+      d.removed = [raider];
       d.events = [{ t: 'destroyed', vehicle: raider.id, by: d.player.vehicleId }];
       advanceContracts(d);
     });
@@ -244,5 +427,49 @@ describe('contract boards and delivery', () => {
     });
     expect(lapsed.player.money).toBe(base.player.money);
     expect(lapsed.player.contracts).toHaveLength(0);
+  });
+
+  it('pays out at most one held bounty per kill of the same template', () => {
+    const base = emptyWorld();
+    const raider = addRaider(base, 'buggy', { x: 50, y: 50 });
+    const held = (id: string, reward: number): Contract => ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: raider.name, reward, deadline: 900, tier: 2 });
+    const bounties = [held('ct-b1', 400), held('ct-b2', 400), held('ct-b3', 400)];
+    const result = update(base, (d) => {
+      d.player.contracts = bounties;
+      d.vehicles = d.vehicles.filter((v) => v.id !== raider.id);
+      d.removed = [raider];
+      d.events = [{ t: 'destroyed', vehicle: raider.id, by: d.player.vehicleId }];
+      advanceContracts(d);
+    });
+    expect(result.player.money).toBe(base.player.money + 400);
+    expect(result.player.contracts).toHaveLength(0); // the other two lapse, the target is gone
+  });
+
+  it('never posts two bounties for the same template on one board', () => {
+    const w = emptyWorld();
+    addRaider(w, 'buggy', { x: 1, y: 1 });
+    addRaider(w, 'buggy', { x: 2, y: 2 });
+    addRaider(w, 'buggy', { x: 3, y: 3 });
+    for (const seed of [1, 2, 3, 4, 5]) {
+      w.marketRng.rngState = seed;
+      initializeShops(w);
+      for (const state of Object.values(w.shops)) {
+        const templates = state.contracts.filter((c) => c.kind === 'bounty').map((c) => c.template);
+        expect(new Set(templates).size).toBe(templates.length);
+      }
+    }
+  });
+
+  it('drops an expired offer from the board every turn, before any restock', () => {
+    let w = atBowlWithOffer(haul('nose', 3));
+    w.shops.bowl.restockAt = 10000; // far off, so only the expiry filter runs
+    w = update(w, (d) => { d.turn = 501; advanceShops(d); });
+    expect(w.shops.bowl.contracts.find((c) => c.id === 'ct-haul')).toBeUndefined();
+  });
+
+  it('refuses to accept an offer past its deadline', () => {
+    let w = atBowlWithOffer(haul('nose', 3));
+    w = update(w, (d) => { d.turn = 501; });
+    expect(() => acceptContract(w, 'ct-haul')).toThrow(/expired/);
   });
 });

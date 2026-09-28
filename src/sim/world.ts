@@ -16,6 +16,7 @@ import { healPlayer } from './health';
 import { fireGuards } from './guards';
 import { discoverSites } from './locations';
 import { consumeSupplies, leakFuel } from './supplies';
+import { chargeUpkeep } from './economy';
 import { spawnInitial, spawnNpcs } from './spawn';
 import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
 import { timed } from '../perf';
@@ -57,12 +58,13 @@ export function newWorld(seed: number, kit: StartKit): World {
       skills: { driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 },
       xpToday: { driving: 0, perception: 0, machining: 0, toughness: 0, social: 0 },
       xpDay: 1,
+      repeats: {},
       xpBySource: {
         roughTiles: 0, ram: 0, escape: 0,
         hit: 0, contact: 0, discover: 0,
         fieldJob: 0, patch: 0, search: 0,
         heat: 0, damage: 0, knockout: 0,
-        profit: 0, deal: 0, call: 0,
+        profit: 0, deal: 0, call: 0, honk: 0, contract: 0, freeTow: 0,
       },
       perks: [],
       health: RULES.maxHealth,
@@ -223,6 +225,7 @@ export function endTurn(
     fireWeapons(w);
     fireGuards(w);
     consumeSupplies(w);
+    chargeUpkeep(w);
     healPlayer(w);
     leakFuel(w);
     applyGodMode(w);

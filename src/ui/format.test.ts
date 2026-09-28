@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { CONDITION } from "../data/wear";
+import type { Contract } from "../sim/market";
 import type { PartInstance } from "../sim/types";
-import { wearLabel } from "./format";
+import { contractDue, contractSummary, wearLabel } from "./format";
 
 function part(wear: number): PartInstance {
   return { id: "p1", defId: "mg", hp: 10, reload: 0, wear };
@@ -19,5 +20,22 @@ describe("wearLabel", () => {
 
   it("reads a part past the last wear step as junk", () => {
     expect(wearLabel(part(CONDITION.maxWear + 1))).toBe("junk");
+  });
+});
+
+describe("contract text", () => {
+  const bounty: Contract = { id: "c1", shop: "bowl", kind: "bounty", template: "buggy", targetName: "Raider outrider", reward: 100, deadline: 100, tier: 1 };
+  const fetch: Contract = { id: "c2", shop: "bowl", kind: "fetch", defId: "mg", reward: 100, deadline: 100, tier: 1 };
+
+  it("shows the deadline as the game time the contract fails", () => {
+    expect(contractDue(bounty)).toBe("by Day 1 19:00");
+  });
+
+  it("names any truck of the bounty's type", () => {
+    expect(contractSummary(bounty)).toBe("destroy any Raider outrider");
+  });
+
+  it("says the hand-in part must still work and be rebuilt at most once", () => {
+    expect(contractSummary(fetch)).toBe("find a MG turret anywhere, working and rebuilt at most once, bring it to Bowl");
   });
 });

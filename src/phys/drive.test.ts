@@ -17,6 +17,7 @@ import { physicsMove } from './turn';
 import { playerTow, unhitch } from '../sim/tow';
 import { callVehicle, chooseOption, currentOptions } from '../sim/dialogue';
 import { TOW } from '../data/tow';
+import { NPCS } from '../data/npcs';
 import { soundRange } from '../sim/detect';
 
 beforeAll(async () => {
@@ -547,6 +548,8 @@ describe('physics turns', () => {
   it('a hitched player leaves physics and returns on unhitch', () => {
     let w = emptyWorld();
     w.player.fuel = 0;
+    // A spawned driver could open its own call and hold the turns.
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
     const trader = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 40, y: 30 }, Math.PI);
     trader.brain = npcBrain('trader', trader.pos, ['trader']);
     let d = buildDrive(w);

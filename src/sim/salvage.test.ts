@@ -1,24 +1,111 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
+import { GOODS } from '../data/goods';
+import { TIME } from '../data/time';
 import { addVehicle, emptyWorld, testDrive } from './testkit';
 import { resolveDestroyed } from './combat';
-import { addGoods, dumpItem } from './inventory';
-import { corePart, goodsCount, isLoot, mountedParts } from './grid';
+import { addGoods, dumpItem, removeGoods } from './inventory';
+import { corePart, findSpot, goodsCount, gridOf, isLoot, mountedParts } from './grid';
 import { partDef } from '../data/parts';
 import { chassisDef } from '../data/chassis';
 import { RULES } from '../data/rules';
-import { takeAllLoot, takeStores, canScavenge, scavenge } from './locations';
-import { clearPiles, collectSalvage, createKnockoutSalvage, hasSalvage, isRoadWreck, renewSalvage, salvageUnits } from './salvage';
-import { TIME } from '../data/time';
+import { takeAllLoot, takeLoot, takeStores, canScavenge, scavenge } from './locations';
+import { clearPiles, collectSalvage, createCargoSalvage, createKnockoutSalvage, hasSalvage, initializeSalvage, isRoadWreck, renewSalvage, salvageInRange, salvageUnits, siteLootTable } from './salvage';
+import { SHOPS } from '../data/market';
 import type { SalvageStock, World } from './types';
 import { dist, type Vec } from './vec';
+import { maxHp } from './wear';
 import { grayRadius } from './vision';
 import { sitePads } from './sites';
 import { freeCells } from './grid';
 import { endTurn } from './world';
 
+describe('player piles', () => {
+  it('goods the player dumps and takes back keep their cost basis', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    addGoods(w, me, 'scrap', 2);
+    const held = goodsCount(me).scrap;
+    w.player.costBasis.scrap = 12;
+    let next = w;
+    for (const item of me.items.filter((it) => it.kind === 'good' && it.good === 'scrap')) next = dumpItem(next, item.id);
+    const pile = next.salvage.find((s) => s.pile)!;
+    collectSalvage(next, next.vehicles[0], pile.id, 100);
+    expect(goodsCount(next.vehicles[0]).scrap).toBe(held);
+    expect(next.player.costBasis.scrap).toBe(12);
+  });
+
+  it('goods from a pile another truck dropped count at their base value', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'traders', 'scout', [], { x: 31, y: 30 });
+    addGoods(w, npc, 'scrap', 2);
+    const pile = createCargoSalvage(w, npc, 1);
+    const held = goodsCount(w.vehicles[0]).scrap ?? 0;
+    w.player.costBasis.scrap = 12;
+    collectSalvage(w, w.vehicles[0], pile.id, 100);
+    expect(w.player.costBasis.scrap).toBeCloseTo((12 * held + GOODS.scrap.value * 2) / (held + 2));
+    expect(w.player.scavenged).not.toContain(pile.id);
+  });
+
+  it('a looted unit taken first does not wipe the paid basis of goods taken back from the player pile', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    me.items = me.items.filter((it) => it.kind === 'part');
+    addGoods(w, me, 'tools', 6);
+    w.player.costBasis.tools = 180;
+    let next = w;
+    for (const item of me.items.filter((it) => it.kind === 'good')) next = dumpItem(next, item.id);
+    next.salvage.push({ id: 'free', pos: { x: 30, y: 30 }, radius: 1, goods: { tools: 1 }, parts: [] });
+    next.player.scavenged.push('free');
+    collectSalvage(next, next.vehicles[0], 'free', 100);
+    expect(next.player.costBasis.tools).toBe(GOODS.tools.value);
+    collectSalvage(next, next.vehicles[0], next.salvage.find((s) => s.pile?.fromPlayer)!.id, 100);
+    expect(goodsCount(next.vehicles[0]).tools).toBe(7);
+    expect(next.player.costBasis.tools).toBeCloseTo((180 * 6 + GOODS.tools.value) / 7);
+  });
+
+  it('one looted good taken by hand moves the basis like taking all', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    me.items = me.items.filter((it) => it.kind === 'part');
+    addGoods(w, me, 'scrap', 2);
+    w.player.costBasis.scrap = 12;
+    w.salvage.push({ id: 'free', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: 1 }, parts: [] });
+    w.player.scavenged.push('free');
+    const spot = findSpot(gridOf(me), me.items, { id: 'x', kind: 'good', good: 'scrap', x: 0, y: 0, rot: 0 }, null, null)!;
+    expect(takeLoot(w, 'free', { kind: 'good', good: 'scrap' }, spot).player.costBasis.scrap).toBeCloseTo((12 * 2 + GOODS.scrap.value) / 3);
+  });
+
+  it('the player dumping beside another truck pile starts its own pile and leaves that one unsearched', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'traders', 'scout', [], { x: 30.5, y: 30 });
+    addGoods(w, npc, 'scrap', 2);
+    const theirs = createCargoSalvage(w, npc, 1);
+    expect(salvageInRange(w.vehicles[0], theirs)).toBe(true);
+    const good = w.vehicles[0].items.find((it) => it.kind === 'good')!;
+    const next = dumpItem(w, good.id);
+    const mine = next.salvage.find((s) => s.pile?.fromPlayer)!;
+    expect(mine.id).not.toBe(theirs.id);
+    expect(next.player.scavenged).not.toContain(theirs.id);
+    expect(next.salvage.find((s) => s.id === theirs.id)!.goods.scrap).toBe(2);
+  });
+
+  it('the player knockout pile counts as searched, so it pays no search XP', () => {
+    const w = emptyWorld();
+    const pile = createKnockoutSalvage(w, w.vehicles[0]);
+    expect(w.player.scavenged).toContain(pile.id);
+  });
+});
+
 describe('finite salvage', () => {
+  it('gives a site with a shop no salvage stock', () => {
+    const shopSites = REGION.locations.filter((site) => site.id in SHOPS);
+    expect(shopSites.length).toBeGreaterThan(0);
+    for (const site of shopSites) expect(siteLootTable(site), site.id).toBeNull();
+    expect(REGION.locations.some((site) => siteLootTable(site) !== null)).toBe(true);
+  });
+
   it('leaves overflow for another collector and never duplicates it', () => {
     const w = emptyWorld();
     const a = addVehicle(w, 'scavengers', 'scout', [], { x: 10, y: 10 });
@@ -106,7 +193,9 @@ describe('finite salvage', () => {
     addGoods(w, npc, 'scrap', 3);
     const engine = mountedParts(npc, 'engine')[0];
     corePart(npc, 'cab').hp = 0;
-    const coreScrap = mountedParts(npc, 'core').reduce((sum, p) => sum + Math.round(p.hp * SALVAGE.coreScrapPerHp), 0);
+    const core = mountedParts(npc, 'core');
+    const hpShare = core.reduce((sum, p) => sum + p.hp / maxHp(p), 0) / core.length;
+    const coreScrap = Math.round((chassisDef(npc.chassisId).value * SALVAGE.coreValueShare * hpShare) / GOODS.parts.value);
     resolveDestroyed(w);
     const stock = w.salvage.find((s) => s.id === `wreck-${npc.id}`)!;
     expect(stock.goods.scrap).toBe(3);
@@ -114,6 +203,42 @@ describe('finite salvage', () => {
     expect(stock.goods.parts).toBe(coreScrap);
     resolveDestroyed(w);
     expect(w.salvage.filter((s) => s.id === stock.id)).toHaveLength(1);
+  });
+
+  it('leaves a wreck worth well under the chassis it came from', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'raiders', 'buggy', [], { x: 10, y: 10 });
+    corePart(npc, 'cab').hp = 0;
+    resolveDestroyed(w);
+    const stock = w.salvage.find((s) => s.id === `wreck-${npc.id}`)!;
+    const lootValue = (stock.goods.parts ?? 0) * GOODS.parts.value;
+    expect(lootValue).toBeLessThan(chassisDef('buggy').value * 0.5);
+  });
+
+  it('enters a salvaged good into the cost basis at its base value, not free', () => {
+    const w = emptyWorld();
+    const held = goodsCount(w.vehicles[0]).scrap ?? 0;
+    if (held > 0) removeGoods(w.vehicles[0], 'scrap', held);
+    delete w.player.costBasis.scrap;
+    w.salvage.push({ id: 'test-stock', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [] });
+    collectSalvage(w, w.vehicles[0], 'test-stock', 100);
+    expect(w.player.costBasis.scrap).toBe(GOODS.scrap.value);
+  });
+});
+
+describe('field spare parts', () => {
+  it('are mostly worn, so a pristine find is rare', () => {
+    const wears: number[] = [];
+    for (let seed = 1; seed <= 40; seed++) {
+      const w = emptyWorld();
+      w.rngState = seed;
+      w.marketRng.rngState = seed * 7919;
+      initializeSalvage(w);
+      for (const stock of w.salvage) wears.push(...stock.parts.map((p) => p.wear));
+    }
+    const pristine = wears.filter((wear) => wear === 0).length;
+    expect(wears.length).toBeGreaterThan(50);
+    expect(pristine / wears.length).toBeLessThan(0.2);
   });
 });
 

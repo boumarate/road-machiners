@@ -10,6 +10,7 @@ import { mergePerf } from "../perf";
 import { playerVehicle } from "../sim/damage";
 import type { GameEvent, World } from "../sim/types";
 import { dist, type Vec } from "../sim/vec";
+import { isOnRope, isTowed } from "../sim/tow";
 import { playerSees } from "../sim/vision";
 import { hostileToPlayer, playerCanAct } from "../sim/world";
 
@@ -181,9 +182,9 @@ export class Travel {
       next: restoreDrive(prepared.result.next),
     };
     if (!playerCanAct(world)) this.pause();
-    const me = playerVehicle(world);
-    const towed = !result.frames[me.id];
-    if (towed) result.frames[me.id] = trailFrames(world, me);
+    // A truck on a rope has no physics frames. Its tower placed it along its trail after the physics step.
+    const towed = isTowed(world);
+    for (const v of world.vehicles) if (isOnRope(world, v.id)) result.frames[v.id] = trailFrames(world, v);
     const playback: Playback = {
       result,
       before,
