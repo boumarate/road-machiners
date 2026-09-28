@@ -279,6 +279,12 @@ describe('honk', () => {
     expect(honkers(honk(w))).toEqual([w.player.vehicleId]);
   });
 
+  it('a knocked-out driver does not honk back', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    npcAt(w, 'trader', 'traders', 36).defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+    expect(honkers(honk(w))).toEqual([w.player.vehicleId]);
+  });
+
   it('a truck in sight that honks back pays the player once', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     npcAt(w, 'trader', 'traders', 36);
@@ -323,6 +329,20 @@ describe('calls during a turn', () => {
     expect(open.player.call).toBeNull();
     expect(open.events).toContainEqual({ t: 'call', with: npc.id, outcome: 'ended' });
   });
+
+  it('a call ends when the NPC is knocked out during the turn', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    const open = callVehicle(w, npc.id);
+    open.vehicles.find((v) => v.id === npc.id)!.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+    endCallIfOut(open);
+    expect(open.player.call).toBeNull();
+  });
+
+  it('the player cannot call a knocked-out driver', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    npc.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+    expect(() => callVehicle(w, npc.id)).toThrow(/knocked-out/);
+  });
 });
 
 describe('demand', () => {
@@ -347,6 +367,18 @@ describe('demand', () => {
     const w = endTurn(start, testDrive);
     expect(w.player.call).toMatchObject({ with: raider.id, topic: 'demand' });
     expect(shotsBetween(w, raider.id, w.player.vehicleId)).toEqual([]);
+  });
+
+  it('a knocked-out raider does not raise its demand', () => {
+    const { w: start, raider } = ambush();
+    const w = endTurn(start, testDrive);
+    w.player.call = null;
+    const out = structuredClone(w);
+    out.vehicles.find((v) => v.id === raider.id)!.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+    raiseCalls(w);
+    raiseCalls(out);
+    expect(w.player.call).toMatchObject({ with: raider.id, topic: 'demand' });
+    expect(out.player.call).toBeNull();
   });
 
   it('a raider that picks attack opens fire with no call', () => {

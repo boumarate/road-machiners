@@ -7,6 +7,7 @@ import { GOODS } from '../data/goods';
 import { REGION } from '../data/region';
 import { FACTION_COLORS } from '../render/palette';
 import { playerVehicle, vehicleById } from '../sim/damage';
+import { isKnockedOut } from '../sim/defeat';
 import { callVehicle, chooseOption, currentOptions, hangUp, honk } from '../sim/dialogue';
 import type { CallVar, CallVars, GameEvent, World } from '../sim/types';
 import { playerSees } from '../sim/vision';
@@ -82,10 +83,10 @@ function isTyping(): boolean {
   return document.activeElement?.matches('input, select, textarea') ?? false;
 }
 
-// Whether T would call this vehicle now: an NPC driver the player sees, while the player can act.
+// Whether T would call this vehicle now: an awake NPC driver the player sees, while the player can act.
 export function canCall(w: World, id: string): boolean {
   const v = w.vehicles.find((x) => x.id === id);
-  return !!v?.brain && playerCanAct(w) && playerSees(w, v.pos);
+  return !!v?.brain && !isKnockedOut(v) && playerCanAct(w) && playerSees(w, v.pos);
 }
 
 export type DialogueHost = {

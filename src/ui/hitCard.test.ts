@@ -45,6 +45,12 @@ describe('hover card rows', () => {
     expect(hitCardRows(world, them.id)!.theirs[0].odds).toEqual(hitOdds(world, them, theirs, me, 'body'));
   });
 
+  it('shows a knocked-out driver firing nothing at me', () => {
+    const { world, them } = createDuel();
+    them.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [] };
+    expect(hitCardRows(world, them.id)!.theirs[0]).toMatchObject({ odds: null, text: 'driver knocked out' });
+  });
+
   it('shows the block reason instead of a chance', () => {
     const { world, them, mine } = createDuel();
     mine.part.hp = 0;
