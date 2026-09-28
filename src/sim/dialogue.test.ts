@@ -1,16 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { PERK_NUMBERS } from '../data/skills';
 import { TRAIT_TALK, END, HONK_RANGE, HUB, TOPICS, type Topic } from '../data/dialogue';
-import { PARTS } from '../data/parts';
 import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, honk, placeholders, raiseCalls } from './dialogue';
 import { fireBlock, isHostile } from './combat';
-import { partTradePrice } from './economy';
-import { makePart } from './factory';
 import { NPCS } from '../data/npcs';
-import { freeCells, goodsCount, isMounted } from './grid';
-import { addGoods, spareParts, stowPart } from './inventory';
+import { goodsCount, isMounted } from './grid';
+import { addGoods } from './inventory';
 import { hasCargo } from './salvage';
 import { vehicleStats } from './stats';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
@@ -328,77 +325,27 @@ describe('demand', () => {
 describe('trade', () => {
   const askText = TOPICS.trade.ask!.text;
 
-  function withSpare(templateId: string, faction: Vehicle['faction'], defId: string, wear = 0): { w: World; npc: Vehicle } {
-    const { w, npc } = withNpc(templateId, faction);
-    if (!stowPart(w, npc, makePart(w, defId, wear))) throw new Error('No room for the test spare');
-    return { w, npc };
-  }
-
-  // Opens the call and asks the trade topic, landing on its offers.
-  function openTrade(w: World, npcId: string): World {
-    const open = callVehicle(w, npcId);
-    return chooseOption(open, optionIndex(open, askText));
-  }
-
   it('a raider never offers to trade', () => {
     const { w, npc } = withNpc('buggy', 'raiders');
     const open = callVehicle(w, npc.id);
     expect(currentOptions(open).map((o) => o.text)).not.toContain(askText);
   });
 
-  it('an NPC with no spares says so and offers nothing to buy', () => {
+  it('agreeing ends the call, starts a trade meeting and sends the driver over', () => {
     const { w, npc } = withNpc('trader', 'traders');
-    const next = openTrade(w, npc.id);
-    expect(next.player.call?.line.text).toBe('Nothing spare right now.');
-    expect(currentOptions(next).map((o) => o.text)).toEqual(['Hang up.']);
+    const open = callVehicle(w, npc.id);
+    const asked = chooseOption(open, optionIndex(open, askText));
+    const next = chooseOption(asked, optionIndex(asked, 'Pulling over.'));
+    expect(next.player.call).toBeNull();
+    expect(stateOf(next, 'trade', npc.id, next.player.vehicleId)).not.toBeNull();
+    expect(next.vehicles.find((v) => v.id === npc.id)!.brain!.goals.at(-1)).toMatchObject({ kind: 'meet', targetId: next.player.vehicleId });
   });
 
-  it('lists a spare part with its buy price, and buying moves it to the player and pays the NPC', () => {
-    const { w, npc } = withSpare('trader', 'traders', 'mg', 2);
-    const part = spareParts(npc)[0];
-    const price = partTradePrice(w, playerVehicle(w), part, 'buy');
-    const npcMoneyBefore = npc.resources!.money;
-    const playerMoneyBefore = w.player.money;
-    const opened = openTrade(w, npc.id);
-    const label = `${PARTS.mg.name}, ${price}`;
-    expect(currentOptions(opened).map((o) => o.text)).toContain(label);
-    const next = chooseOption(opened, optionIndex(opened, label));
-    expect(next.player.money).toBe(playerMoneyBefore - price);
-    const npcAfter = next.vehicles.find((v) => v.id === npc.id)!;
-    expect(npcAfter.resources!.money).toBe(npcMoneyBefore + price);
-    expect(spareParts(npcAfter)).toHaveLength(0);
-    expect(spareParts(playerVehicle(next)).some((p) => p.defId === 'mg')).toBe(true);
-  });
-
-  it('refuses without enough money, and changes nothing but the said line', () => {
-    const { w, npc } = withSpare('trader', 'traders', 'mg');
-    w.player.money = 0;
-    const opened = openTrade(w, npc.id);
-    const before = currentOptions(opened);
-    const next = chooseOption(opened, before.findIndex((o) => o.partId !== undefined));
-    expect(next.player.money).toBe(0);
-    expect(next.player.call?.line.text).toBe('You cannot afford that.');
-    expect(spareParts(next.vehicles.find((v) => v.id === npc.id)!)).toHaveLength(1);
-    expect(currentOptions(next).length).toBe(before.length);
-  });
-
-  it('refuses without room on the player grid, and changes nothing but the said line', () => {
-    const { w, npc } = withSpare('trader', 'traders', 'mg');
-    const me = playerVehicle(w);
-    addGoods(w, me, 'scrap', freeCells(me)); // fill every free cell, whatever its shape
-    const npcMoneyBefore = npc.resources!.money;
-    const opened = openTrade(w, npc.id);
-    const next = chooseOption(opened, currentOptions(opened).findIndex((o) => o.partId !== undefined));
-    expect(next.player.call?.line.text).toBe('No room for that on your rig.');
-    const npcAfter = next.vehicles.find((v) => v.id === npc.id)!;
-    expect(npcAfter.resources!.money).toBe(npcMoneyBefore);
-    expect(spareParts(npcAfter)).toHaveLength(1);
-  });
-
-  it('a scavenger offers a part it happens to carry', () => {
-    const { w, npc } = withSpare('scavenger', 'scavengers', 'scrapPanels');
-    const next = openTrade(w, npc.id);
-    expect(currentOptions(next).some((o) => o.text.startsWith(PARTS.scrapPanels.name))).toBe(true);
+  it('a driver already meeting the player is not asked again', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    addState(w, 'trade', npc.id, w.player.vehicleId, { kind: 'none' });
+    const open = callVehicle(w, npc.id);
+    expect(currentOptions(open).map((o) => o.text)).not.toContain(askText);
   });
 });
 
