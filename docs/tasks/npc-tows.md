@@ -60,3 +60,11 @@
 - Phase 2 done. A raider is at peace with the player only under a truce, since the player's engine counts as loot.
 - Every truck on a rope gets playback frames, so an NPC on a rope trails its tower on screen.
 - `SAVE_VERSION` is 21, so every older save fails to load with the crash screen.
+
+## Result
+- Done. NPCs tow each other, raiders tow only raiders, and the player can tow for free for Social XP.
+- `npm test` passed 1297 tests. `npm run typecheck`, `npm run quality` and `npm run playtest` passed.
+- `npm run perf` misses the boot and first-turn budgets. The branch point misses both by about the same amount, with first turns at 184 to 193 ms here against 199 to 214 ms on the branch point. Later turns match.
+- Manual try, positive: a scavenger hitched a stranded trader on turn 3 in the game and towed it toward the Bowl. The log read "Scavenger takes Trader caravan in tow to Bowl." The radio offered "No charge. Hitch up.", and picking it hitched the trader with fee 0 and 84 waived.
+- Manual try, negative: a stranded raider beside a trader got no tow and no claim over 25 turns.
+- The game draws no rope between trucks. A towed truck shows only by trailing its tower.
