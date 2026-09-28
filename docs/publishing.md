@@ -5,7 +5,7 @@ The game is published on itch.io as a browser game. `npm run itch` builds the la
 ## One-time setup
 
 1. Install butler. Download it from <https://itch.io/docs/butler/installing.html> and put it on your `PATH`.
-2. Run `butler login` and approve it in the browser.
+2. Create an API key at <https://itch.io/user/settings/api-keys> and set `BUTLER_API_KEY` in `.env`. Running `butler login` in a real terminal works too.
 3. Create the project at <https://itch.io/game/new>. Set the kind of project to HTML and save it as a draft.
 4. Set `ITCH_TARGET` in `.env` to `user/game`, the two parts of the page address `user.itch.io/game`.
 5. Run `npm run itch` for the first upload.
