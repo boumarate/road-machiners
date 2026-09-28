@@ -4,7 +4,6 @@ import { startKit } from "../data/start";
 
 import * as THREE from "three";
 import { CONFIG } from "../config";
-import { partDef } from "../data/parts";
 import { PHYSICS } from "../data/physics";
 import {
   buildDrive,
@@ -81,7 +80,7 @@ import { ShadeView } from "./render/shade";
 import { SoundRingView } from "./render/soundRing";
 import { clearSave, hasSave, loadWorld, saveInTown, saveWorld, writeSave } from "./save";
 import { GameMenu } from "../ui/game-menu";
-import { volleyTally } from "../ui/format";
+import { roundLabel } from "../ui/format";
 import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
 import { CombatScore, CombatWatch, computeEngineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
@@ -773,7 +772,6 @@ export class Game {
   private playShotFx(): void {
     const w = this.world;
     const rows = new Map<string, number>();
-    const mine = vehicleStats(w, playerVehicle(w)).weapons;
     for (const e of w.events) {
       if (e.t === "shot") {
         const a = this.eventPoint(e.shooter);
@@ -784,12 +782,8 @@ export class Game {
           w.removed.find((x) => x.id === e.shooter);
         const gun = shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
         if (!gun) throw new Error(`Shot from ${e.shooter} names no mounted weapon ${e.weapon}`);
-        const def = partDef(gun.defId);
-        const heavy = def.kind === "weapon" && def.look === "cannon";
-        const slot = mine.findIndex((mw) => mw.part.id === e.weapon);
-        const label = `${slot >= 0 ? `[${slot + 1}] ` : ""}${heavy ? "Cannon" : "MG"} ${volleyTally(e.rounds)}`;
         const view = viewOf(this.views, e.shooter);
-        const landMs = this.playVolley(a, () => view.muzzle(e.weapon), b, e.rounds, gun.defId, label, e.target, rows);
+        const landMs = this.playVolley(a, () => view.muzzle(e.weapon), b, e.rounds, gun.defId, e.target, rows);
         this.sound.accents([e], w.player.vehicleId, () => landMs);
       }
       if (e.t === "guardShot") {
@@ -803,7 +797,7 @@ export class Game {
             (REGION.settlement.guardTowerHeight + 0.2) * PHYSICS.metersPerTile,
           z: g.z,
         };
-        const landMs = this.playVolley(a, () => towardFrom(a, b), b, e.rounds, "guard", `Guards ${volleyTally(e.rounds)}`, e.target, rows);
+        const landMs = this.playVolley(a, () => towardFrom(a, b), b, e.rounds, "guard", e.target, rows);
         this.sound.accents([e], w.player.vehicleId, () => landMs);
       }
       if (e.t === "collision") {
@@ -814,37 +808,31 @@ export class Game {
     }
   }
 
-  // Plays one volley's bolts from the muzzle and sounds from a to b, then its result label over the target.
+  // Plays one volley's bolts from the muzzle and sounds from a to b. Each round that damages parts shows its
+  // damage over the target as it lands.
   private playVolley(
     a: V3,
     muzzle: () => Muzzle,
     b: V3,
     rounds: ShotRound[],
     weapon: string,
-    label: string,
     targetId: string,
     rows: Map<string, number>,
   ): number {
-    const hits = rounds.filter((r) => r.hit).length;
-    const row = rows.get(targetId) ?? 0;
-    rows.set(targetId, row + 1);
     // Every round lands within the shot time, before the results show.
     const spec = projectileOf(weapon);
     const ground = (p: V3) => groundPoint(this.world.terrain, toMap(p)).y;
     const plans = planVolley(spec, a, b, rounds, CONFIG.combatShotMs, ground);
-    for (const plan of plans) {
+    plans.forEach((plan, k) => {
       this.fx.shot(spec, muzzle, plan);
       this.sound.at(spec.look === "tracer" ? "mg-fire" : "cannon-fire", a, plan.delayMs);
       this.sound.at(plan.struck ? "hit-metal" : "miss", plan.land, plan.delayMs + plan.flightMs);
-    }
-    this.fx.label(
-      b,
-      label,
-      hits > 0 ? "#ffb070" : "#c8b898",
-      row,
-      CONFIG.combatShotMs,
-      CONFIG.combatReadMs,
-    );
+      const label = roundLabel(this.world, targetId, rounds[k]);
+      if (!label) return;
+      const row = rows.get(targetId) ?? 0;
+      rows.set(targetId, row + 1);
+      this.fx.label(b, label, PAL.damageText, row, plan.delayMs + plan.flightMs, CONFIG.combatReadMs);
+    });
     return Math.min(...plans.map((plan) => plan.delayMs + plan.flightMs)); // when the first round lands
   }
 

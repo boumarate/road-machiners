@@ -38,6 +38,7 @@ export const PAL = {
   truckGlow: 0xffffff, // faint white light over the player truck at night
   text: '#f0e0b8',
   textDim: '#b8a888',
+  damageText: '#ff4a3a', // damage popups over a hit truck
 };
 
 export const FACTION_COLORS: Record<Faction, { top: number; side: number; cab: number; cabSide: number }> = {

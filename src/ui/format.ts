@@ -160,11 +160,26 @@ function damageList(world: World, vehicleId: string, hits: PartHit[]): string {
   return `; ${vehicleName(world, vehicleId)}: ${[...dealt].map(([id, d]) => `${partName(world, vehicleId, id)} −${damage(d)}`).join(', ')}`;
 }
 
-// "3/5 crit −12" over a volley: hits, crits and damage dealt.
-export function volleyTally(rounds: ShotRound[]): string {
-  const hits = rounds.filter((r) => r.hit).length;
-  const dealt = rounds.flatMap((r) => r.hits).reduce((sum, h) => sum + h.damage, 0);
-  return `${hits}/${rounds.length}${rounds.some((r) => r.crit) ? ' crit' : ''}${dealt > 0 ? ` −${damage(dealt)}` : ''}`;
+// Short part names for damage popups, by part kind and core role.
+const PART_SHORT = {
+  weapon: 'Gun', engine: 'Eng', armor: 'Arm', cargo: 'Cargo', scanner: 'Scan', store: 'Store',
+  cab: 'Cab', transmission: 'Trans', wheel: 'Whl', tank: 'Tank',
+} as const;
+
+function partShort(world: World, vehicleId: string, partId: string): string {
+  const v = findAny(world, vehicleId);
+  const p = v && mountedParts(v).find((x) => x.id === partId);
+  if (!p) throw new Error(`Round hit part ${partId}, which ${vehicleId} does not carry`);
+  const def = partDef(p.defId);
+  return PART_SHORT[def.kind === 'core' ? def.role : def.kind];
+}
+
+// "Crit! Eng: 5, Arm: 2" for the parts one round damaged, or null when it damaged none.
+export function roundLabel(world: World, vehicleId: string, round: ShotRound): string | null {
+  const dealt = partDamage(round.hits);
+  if (dealt.size === 0) return null;
+  const parts = [...dealt].map(([id, d]) => `${partShort(world, vehicleId, id)}: ${damage(d)}`).join(', ');
+  return `${round.crit ? 'Crit! ' : ''}${parts}`;
 }
 
 type LogLine = { text: string; cls: string };

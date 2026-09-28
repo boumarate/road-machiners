@@ -249,7 +249,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   // A VW Kübelwagen: open seats, a flat hood over the tank and the air-cooled engine under a rear lid.
   jeep: {
     id: 'jeep', name: 'Jeep', maxSpeed: 8.2, accel: 2.5, brake: 3, turnSlow: 115, turnFast: 42, reverseTurn: 80,
-    mass: 450, ratedMass: 1400, radius: 0.55,
+    mass: 450, handlingMass: 1400, radius: 0.55,
     layout: ['.FF.', 'XXDX', 'LXDR', 'LDXR', 'LEER', 'XEEX', '.BB.'],
     core: [
       { defId: 'cab', x: 1, y: 2 }, { defId: 'transmission', x: 2, y: 3 }, { defId: 'tank', x: 1, y: 1 },
@@ -261,7 +261,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   // A 1964 Corvair Monza convertible: a front trunk, open seats and a flat-six under the rear deck lid.
   convertible: {
     id: 'convertible', name: 'Convertible', maxSpeed: 9.4, accel: 2.5, brake: 3, turnSlow: 110, turnFast: 40, reverseTurn: 70,
-    mass: 750, ratedMass: 2000, radius: 0.6,
+    mass: 750, handlingMass: 2000, radius: 0.6,
     layout: ['.FFF.', 'XDDDX', 'LXXDR', 'LXXXR', 'LXXXR', 'LDXDR', 'LEEDR', 'XEEDX', '.BBB.'],
     core: [
       { defId: 'cabOpen', x: 1, y: 3 }, { defId: 'transmission', x: 2, y: 5 }, { defId: 'tankLong', x: 1, y: 2 },
@@ -273,7 +273,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   // A LAZ-695 city bus: guns and frames ride on the roof.
   bus: {
     id: 'bus', name: 'Bus', maxSpeed: 5.5, accel: 0.9, brake: 2, turnSlow: 65, turnFast: 22, reverseTurn: 40,
-    mass: 3000, ratedMass: 6800, radius: 0.9,
+    mass: 3000, handlingMass: 6800, radius: 0.9,
     layout: ['.FFFF.', 'XXDDDX', 'LXDDDR', 'LDDDDR', 'LDDDDR', 'LDDDDR', 'LDDDDR', 'LDXXDR', 'LDDXDR', 'LDEEDR', 'XDEEDX', '.BBBB.'],
     core: [
       { defId: 'cabNarrow', x: 1, y: 1 }, { defId: 'transmissionMid', x: 3, y: 8 }, { defId: 'tankMid', x: 2, y: 7 },
@@ -285,7 +285,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   // A Caterpillar 950 wheel loader: the bucket on the front row, the cab in the middle and the engine over the counterweight.
   loader: {
     id: 'loader', name: 'Wheel loader', maxSpeed: 3.6, accel: 1.6, brake: 2.5, turnSlow: 85, turnFast: 30, reverseTurn: 60,
-    mass: 4200, ratedMass: 7000, radius: 0.9,
+    mass: 4200, handlingMass: 7000, radius: 0.9,
     layout: ['.FFFFF.', 'XDDDDDX', 'LDXXXDR', 'LDXXXDR', 'LDDXDDR', 'LDEEDDR', 'LDEEXXR', 'XDDDDDX', '.BBBBB.'],
     core: [
       { defId: 'cabPickup', x: 2, y: 2 }, { defId: 'transmissionHeavy', x: 3, y: 4 }, { defId: 'tankHeavy', x: 4, y: 6 },
