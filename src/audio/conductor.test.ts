@@ -8,6 +8,8 @@ const TUNING: ConductorTuning = {
   crowdHalfLifeSeconds: 5,
   crowdWeight: 0.5,
   modeSoftness: 0.1,
+  repeatsPerHeat: 1,
+  maxRepeats: 4,
   startMode: "pulse",
   modes: {
     hush: { ...MODE, upAt: 0.5, downAt: -Infinity },
@@ -74,6 +76,16 @@ describe("Conductor", () => {
     expect(c.bar(100, 0.99)).toBe("hush");
     c.begin();
     expect(c.mode()).toBe("pulse");
+  });
+
+  it("repeats a played accent more the hotter the fight, up to the cap", () => {
+    const c = new Conductor(TUNING);
+    expect(c.repeats(0)).toBe(0);
+    c.hear("crash", 0);
+    expect(c.repeats(0)).toBe(3);
+    c.hear("crash", 0);
+    expect(c.repeats(0)).toBe(4);
+    expect(c.repeats(100)).toBe(0);
   });
 
   it("fails loud on an accent it has no tuning for", () => {

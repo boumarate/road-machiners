@@ -37,6 +37,18 @@ export class SoundDesigner {
     return this.slotTime(free[i]) + (humanize * this.timing.humanizeMs) / 1000;
   }
 
+  beat(): number {
+    return this.grid.beat;
+  }
+
+  // Takes the slot at time if it is free. Returns whether it did.
+  claim(time: number): boolean {
+    const slot = Math.round((time - this.grid.start) / this.slotLength());
+    if (this.taken.has(slot)) return false;
+    this.taken.add(slot);
+    return true;
+  }
+
   private slotLength(): number {
     return this.grid.beat / this.timing.subdivision;
   }

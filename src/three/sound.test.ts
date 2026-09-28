@@ -236,7 +236,20 @@ describe("CombatScore", () => {
     const [cue, at, delayMs] = plays[0] as [string, { gain: number }, number];
     expect([cue, at.gain]).toEqual(["accent-hit", 1]);
     expect(delayMs).toBeCloseTo((time - 2) * 1000);
-    expect(loops.map((l) => l.ducks)).toEqual([[time], []]);
+    expect(loops[0].ducks[0]).toBe(time);
+    expect(loops[1].ducks).toEqual([]);
+  });
+
+  it("repeats a played accent every repeatBeats, more as heat rises, each repeat quieter", () => {
+    const { player, plays } = fakePlayer();
+    const score = new CombatScore(player, () => 0);
+    score.setCombat(true, 3);
+    const r = score.accent("accent-crash", 0);
+    const s = MIX.score;
+    expect(r.repeats).toBe(Math.min(s.maxRepeats, Math.round(s.accents["accent-crash"].weight * s.repeatsPerHeat)));
+    const times = (plays as [string, { gain: number }, number][]).map((p) => p[2] / 1000);
+    expect(times[1] - times[0]).toBeCloseTo(s.repeatBeats);
+    expect((plays[1] as [string, { gain: number }])[1].gain).toBeCloseTo(s.repeatGain);
   });
 
   it("skips an accent when the roll misses its chance", () => {

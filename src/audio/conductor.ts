@@ -1,6 +1,7 @@
 // Decides how the combat score behaves, from a fading memory of the fight. Heat rises with each event and halves
 // every heatHalfLife, and a small Markov chain steps the song mode once per bar from it. Each accent plays only
-// with a chance that falls with its own recent plays and with how crowded the music is.
+// with a chance that falls with its own recent plays and with how crowded the music is. A played accent repeats
+// more times the hotter the fight, so motifs build into a groove.
 // Pure: the caller passes audio times in seconds and random rolls in [0, 1).
 
 export const MODES = ["hush", "pulse", "fight", "peak"] as const;
@@ -26,6 +27,8 @@ export type ConductorTuning = {
   crowdHalfLifeSeconds: number; // memory of all accent plays
   crowdWeight: number; // how much crowding lowers the chance
   modeSoftness: number; // heat over which a step goes from unlikely to likely
+  repeatsPerHeat: number; // repeats of a played accent per unit of heat, rounded
+  maxRepeats: number;
   startMode: Mode; // mode a battle opens in
   modes: Record<Mode, ModeTuning>;
   accents: Record<string, AccentTuning>;
@@ -101,6 +104,11 @@ export class Conductor {
     if (roll < up) this.modeIndex++;
     else if (roll > 1 - down) this.modeIndex--;
     return this.mode();
+  }
+
+  // How many times an accent played now repeats.
+  repeats(time: number): number {
+    return Math.min(this.tuning.maxRepeats, Math.round(this.heat.read(time) * this.tuning.repeatsPerHeat));
   }
 
   emphasis(id: string): number {

@@ -43,6 +43,14 @@ describe("SoundDesigner", () => {
     expect(d.schedule(12, 0, 0, 0)).toBeNull();
   });
 
+  it("claims a free slot for a repeat and refuses a taken one", () => {
+    const d = designer();
+    expect(d.schedule(12, 0, 0, 0)).toBe(11);
+    expect(d.claim(11)).toBe(false);
+    expect(d.claim(12)).toBe(true);
+    expect(d.claim(12)).toBe(false);
+  });
+
   it("keeps a slot taken after a request for a later time", () => {
     const d = designer();
     d.schedule(13, 0, 0, 0);

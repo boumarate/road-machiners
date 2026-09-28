@@ -48,7 +48,7 @@ const START_LEAD_SECONDS = 0.1; // bases are scheduled to start this far ahead, 
 const ACCENT_LEAD_SECONDS = 0.02; // earliest accent start from now, so Web Audio never gets a time in the past
 
 // What the score did with one accent request, for the sound log.
-export type AccentResult = { cue: AccentCue; chance: number; heat: number; mode: Mode; played: boolean };
+export type AccentResult = { cue: AccentCue; chance: number; heat: number; mode: Mode; played: boolean; repeats: number };
 
 export class CombatScore {
   private bases: Base[];
@@ -103,17 +103,31 @@ export class CombatScore {
     const now = this.player.now();
     const heard = this.conductor.hear(cue, now);
     const time = this.roll() < heard.chance ? this.place(cue, now, delayMs) : null;
-    if (time !== null) this.play(cue, now, time);
-    return { cue, ...heard, played: time !== null };
+    const repeats = time === null ? 0 : this.play(cue, now, time);
+    return { cue, ...heard, played: time !== null, repeats };
   }
 
   private place(cue: AccentCue, now: number, delayMs: number): number | null {
     return this.designer.schedule(now + delayMs / 1000, now + ACCENT_LEAD_SECONDS, this.conductor.emphasis(cue), this.roll());
   }
 
-  private play(cue: AccentCue, now: number, time: number): void {
+  // Plays the accent and its repeats, each on a free slot every repeatBeats. Returns the repeats played.
+  private play(cue: AccentCue, now: number, time: number): number {
     this.conductor.played(cue, time);
-    this.player.play(cue, { pan: 0, gain: 1 }, (time - now) * 1000);
+    this.sound(cue, now, time, 1);
+    const s = MIX.score;
+    const every = this.designer.beat() * s.repeatBeats;
+    let played = 0;
+    for (let k = 1; k <= this.conductor.repeats(now); k++) {
+      if (!this.designer.claim(time + k * every)) continue;
+      this.sound(cue, now, time + k * every, s.repeatGain ** k);
+      played++;
+    }
+    return played;
+  }
+
+  private sound(cue: AccentCue, now: number, time: number, gain: number): void {
+    this.player.play(cue, { pan: 0, gain }, (time - now) * 1000);
     const s = MIX.score;
     this.active?.loop.duck(time, s.duckGain, s.duckAttackSeconds, this.active.grid.beat);
   }
@@ -183,7 +197,7 @@ export class SoundDirector {
   // Logs every accent decision, played or skipped, with the chance, heat and mode behind it.
   accent(cue: AccentCue, delayMs: number): void {
     const r = this.score.accent(cue, delayMs);
-    this.record(`${cue} ${r.played ? "played" : "skipped"} p${r.chance.toFixed(2)} heat${r.heat.toFixed(1)} ${r.mode}`);
+    this.record(`${cue} ${r.played ? `played x${1 + r.repeats}` : "skipped"} p${r.chance.toFixed(2)} heat${r.heat.toFixed(1)} ${r.mode}`);
   }
 
   // delayOf gives when each event's moment comes, or null to skip the event in this call.
