@@ -1,5 +1,5 @@
 // First-time tips for driving and the horn. A tip shows while its moment lasts, one at a time. It goes away for good
-// once the player closes it or does what it says. Seen tips stay in browser storage across saves and new games.
+// once the player closes it or does what it says. Seen tips stay in browser storage across saves, and a new game clears them.
 
 import { isKnockedOut } from "../sim/defeat";
 import { playerVehicle } from "../sim/damage";
@@ -90,6 +90,10 @@ export function tipToShow(world: World, auto: boolean, seen: ReadonlySet<TipId>,
   if (!playerCanAct(world)) return null;
   const open = TIPS.filter((t) => !seen.has(t.id) && (!t.after || seen.has(t.after)) && t.when(world, auto));
   return (open.find((t) => t.id === shown) ?? open[0])?.id ?? null;
+}
+
+export function clearTips(storage: Storage): void {
+  storage.removeItem(TIPS_KEY);
 }
 
 function readSeen(storage: Storage): Set<TipId> {

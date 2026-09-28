@@ -5,7 +5,7 @@ import { el, panel, topRight } from "./dom";
 export type GameMenuActions = {
   save: () => void;
   hasSave: () => boolean;
-  clearSave: () => void;
+  clearGame: () => void; // deletes the save and everything else the run keeps
   isBusy: () => boolean;
 };
 
@@ -14,8 +14,8 @@ export function loadLastSave(): void {
   window.location.reload();
 }
 
-export function startNewGame(clearSave: () => void): void {
-  clearSave();
+export function startNewGame(clearGame: () => void): void {
+  clearGame();
   window.location.reload();
 }
 
@@ -51,6 +51,6 @@ export class GameMenu {
 
   private newGame(): void {
     if (!window.confirm("Start a new game? The current save is deleted.")) return;
-    startNewGame(this.actions.clearSave);
+    startNewGame(this.actions.clearGame);
   }
 }

@@ -70,7 +70,7 @@ import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
 import { ShadeView } from "./render/shade";
 import { SoundRingView } from "./render/soundRing";
-import { clearSave, hasSave, saveInTown, saveWorld, writeSave } from "./save";
+import { clearGame, hasSave, saveInTown, saveWorld, writeSave } from "./save";
 import { GameMenu } from "../ui/game-menu";
 import { roundLabel } from "../ui/format";
 import { DeathScreen } from "../ui/death";
@@ -272,12 +272,12 @@ export class Game {
     this.menu = new GameMenu({
       save: () => writeSave(window.localStorage, this.world),
       hasSave: () => hasSave(window.localStorage),
-      clearSave: () => clearSave(window.localStorage),
+      clearGame: () => clearGame(window.localStorage),
       isBusy: () => this.anim !== null,
     });
     this.death = new DeathScreen({
       hasSave: () => hasSave(window.localStorage),
-      clearSave: () => clearSave(window.localStorage),
+      clearGame: () => clearGame(window.localStorage),
     });
 
     this.bindInput();

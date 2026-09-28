@@ -2,6 +2,7 @@ import type { BakedMap } from '../sim/terrain';
 import { isBakedObstacle, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
 import type { World } from '../sim/types';
+import { clearTips } from '../ui/tips';
 
 const SAVE_KEY = 'roam.save';
 
@@ -10,6 +11,13 @@ export class SaveError extends Error {}
 
 export function clearSave(storage: Storage): void {
   storage.removeItem(SAVE_KEY);
+}
+
+// Clears everything a run keeps in storage: the save and the seen tips. Sound settings stay, since they are the
+// player's, not the run's.
+export function clearGame(storage: Storage): void {
+  clearSave(storage);
+  clearTips(storage);
 }
 
 export function hasSave(storage: Storage): boolean {

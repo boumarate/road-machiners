@@ -6,7 +6,7 @@ import { loadLastSave, startNewGame } from "./game-menu";
 
 export type DeathActions = {
   hasSave: () => boolean;
-  clearSave: () => void;
+  clearGame: () => void;
 };
 
 export class DeathScreen {
@@ -31,7 +31,7 @@ export class DeathScreen {
         "div",
         { class: "death-buttons" },
         el("button", { onclick: () => loadLastSave(), disabled: !saved }, "Load last save"),
-        el("button", { onclick: () => startNewGame(this.actions.clearSave) }, "New game"),
+        el("button", { onclick: () => startNewGame(this.actions.clearGame) }, "New game"),
       ),
     );
   }

@@ -3,7 +3,7 @@
 // Outside dev, once boot is done, the game keeps running: an error goes to the browser log and the debug console.
 // A failed command changes nothing, since commands mutate a clone of the world. Boot and save errors still crash.
 
-import { clearSave, SaveError } from './save';
+import { clearGame, SaveError } from './save';
 
 let shown = false;
 let report: ((text: string) => void) | null = null;
@@ -50,7 +50,7 @@ function showCrash(err: unknown): void {
     reset.style.cssText = 'margin-top:16px;padding:10px 18px;font:inherit;font-size:16px;cursor:pointer;';
     reset.textContent = 'Yeah, fuck it, start a new game';
     reset.onclick = () => {
-      clearSave(window.localStorage);
+      clearGame(window.localStorage);
       window.location.reload();
     };
     box.append(reset);

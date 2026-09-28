@@ -5,7 +5,7 @@ import { emptyWorld } from '../sim/testkit';
 import { moveItem } from '../sim/inventory';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
-import { clearSave, hasSave, loadWorld, SaveError, saveInTown, saveWorld, writeSave } from './save';
+import { clearGame, clearSave, hasSave, loadWorld, SaveError, saveInTown, saveWorld, writeSave } from './save';
 import { REGION } from '../data/region';
 import { sitePads } from '../sim/sites';
 import { TEST_MAP } from '../test/map';
@@ -32,6 +32,15 @@ describe('local game save', () => {
     expect(loadWorld(storage, TEST_MAP)).toEqual(world);
     clearSave(storage);
     expect(hasSave(storage)).toBe(false);
+  });
+
+  it('clears the save and the seen tips for a new game, and keeps sound settings', () => {
+    const storage = makeStorage();
+    writeSave(storage, newWorld(1337, startKit('standard'), TEST_MAP));
+    storage.setItem('roam.tips', JSON.stringify(['waypoint']));
+    storage.setItem('roam-sound', '{}');
+    clearGame(storage);
+    expect([storage.getItem('roam.save'), storage.getItem('roam.tips'), storage.getItem('roam-sound')]).toEqual([null, null, '{}']);
   });
 
   it('saves a command on a town pad at once, and not out in the open', () => {
