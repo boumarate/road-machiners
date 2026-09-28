@@ -182,7 +182,8 @@ describe("CombatWatch", () => {
 });
 
 describe("CombatScore", () => {
-  type Call = { id: string; file: string; when: number; offset: number; gains: number[]; tones: number[]; ducks: number[]; stoppedAt: number | null };
+  type BaseId = "score-drums" | "score-bass";
+  type Call = { id: BaseId; file: string; when: number; offset: number; gains: number[]; tones: number[]; ducks: number[] };
   type Play = [string, { pan: number; gain: number }, number];
   const fakePlayer = () => {
     const loops: Call[] = [];
@@ -191,16 +192,17 @@ describe("CombatScore", () => {
     const player = {
       now: () => clock.now,
       play: (...args: Play) => { plays.push(args); },
-      beatLoop: (id: string, file: string, when: number, offset: number) => {
-        const call: Call = { id, file, when, offset, gains: [], tones: [], ducks: [], stoppedAt: null };
+      beatLoop: (id: BaseId, file: string, when: number, offset: number) => {
+        const call: Call = { id, file, when, offset, gains: [], tones: [], ducks: [] };
         loops.push(call);
+        // One second per beat for every base.
+        const duration = SOUNDS[id].beat!.bars * 4;
         return {
-          duration: 0,
+          duration,
           setGain: (g: number) => call.gains.push(g),
           setTone: (hz: number) => call.tones.push(hz),
           glide: () => {},
-          stop: () => { call.stoppedAt = clock.now; },
-          stopAt: (t: number) => { call.stoppedAt = t; },
+          stop: () => {},
           duck: (t: number) => call.ducks.push(t),
         };
       },
@@ -214,27 +216,26 @@ describe("CombatScore", () => {
     }
   };
   const s = MIX.score;
-  const barOf = (cue: keyof typeof SOUNDS) => (60 / SOUNDS[cue].beat!.bpm) * 4;
 
-  it("starts no base before a battle, then one at the tempo its heat wants, from its first bar", () => {
+  it("starts every base silent at one time, each at its first beat", () => {
     const { player, loops } = fakePlayer();
-    const score = new CombatScore(player, () => 0);
-    expect(loops).toEqual([]);
-    score.setCombat(true, 3);
-    expect(loops.map((l) => [l.id, l.offset])).toEqual([["score-drums-slow", scorePhaseOf("score-drums-slow-1.ogg")]]);
-    expect(loops[0].gains).toEqual([s.quietGain]);
-    expect(loops[0].tones).toEqual([s.quietCutoffHz]);
+    new CombatScore(player, () => 0);
+    expect(loops.map((l) => l.id)).toEqual(["score-drums", "score-bass"]);
+    expect(new Set(loops.map((l) => l.when)).size).toBe(1);
+    expect(loops.map((l) => l.offset)).toEqual(loops.map((l) => scorePhaseOf(l.file)));
+    expect(loops.every((l) => l.gains.length === 0)).toBe(true);
   });
 
-  it("fades the base out when the battle ends and picks a base per battle", () => {
+  it("plays one random base per battle, quiet and muffled with no heat, and fades it out after", () => {
     const { player, loops } = fakePlayer();
-    const rolls = [0, 0, 0.9]; // base, secondary side, base
+    const rolls = [0.9, 0, 0, 0.1];
     const score = new CombatScore(player, () => rolls.shift() ?? 0);
+    score.setCombat(true, 3);
     score.setCombat(true, 3);
     score.setCombat(false, 3);
     score.setCombat(true, 3);
-    expect(loops.map((l) => l.id)).toEqual(["score-drums-slow", "score-bass-slow"]);
-    expect(loops[0].stoppedAt).not.toBeNull();
+    expect(loops.map((l) => l.gains)).toEqual([[s.quietGain], [s.quietGain, 0]]);
+    expect(loops[1].tones).toEqual([s.quietCutoffHz]);
   });
 
   it("ignores accents outside a battle", () => {
@@ -252,10 +253,10 @@ describe("CombatScore", () => {
     const score = new CombatScore(player, () => 0);
     score.setCombat(true, 3);
     expect(score.accent("accent-sighted", 0)).toMatchObject({ cue: "accent-sighted", offer: "queued" });
-    run(score, clock, 8);
+    run(score, clock, 6);
     expect(plays.length).toBeGreaterThan(0);
     expect(plays.every((p) => p[0] === "accent-sighted" && p[1].pan === 0)).toBe(true);
-    expect(loops.flatMap((l) => l.ducks)).toHaveLength(plays.length);
+    expect(loops[0].ducks).toHaveLength(plays.length);
   });
 
   it("plays light events on the secondary, to one side, without ducking the base", () => {
@@ -263,24 +264,19 @@ describe("CombatScore", () => {
     const score = new CombatScore(player, () => 0);
     score.setCombat(true, 3);
     score.accent("accent-hit", 0);
-    run(score, clock, 8);
+    run(score, clock, 6);
     expect(plays.length).toBeGreaterThan(0);
     expect(plays.every((p) => p[0] === "accent-hit" && p[1].pan === -s.secondaryPan)).toBe(true);
-    expect(loops.flatMap((l) => l.ducks)).toEqual([]);
+    expect(loops[0].ducks).toEqual([]);
   });
 
-  it("steps the tempo one copy per bar toward the heat, at the same bar of the loop, and opens the base", () => {
+  it("opens the base as heat rises, on the next bar", () => {
     const { player, loops, clock } = fakePlayer();
     const score = new CombatScore(player, () => 0);
     score.setCombat(true, 3);
-    for (let i = 0; i < 5; i++) score.accent("accent-crash", 0);
-    run(score, clock, barOf("score-drums-slow") + 0.5);
-    expect(loops.map((l) => l.id)).toEqual(["score-drums-slow", "score-drums"]);
-    const switchAt = loops[1].when;
-    expect(loops[0].stoppedAt).toBe(switchAt);
-    expect(loops[1].offset).toBeCloseTo(scorePhaseOf("score-drums-1.ogg") + barOf("score-drums"));
-    expect(loops[1].gains.at(-1)).toBeGreaterThan(s.quietGain);
-    run(score, clock, barOf("score-drums"));
-    expect(loops.map((l) => l.id)).toEqual(["score-drums-slow", "score-drums", "score-drums-fast"]);
+    for (let i = 0; i < 3; i++) score.accent("accent-crash", 0);
+    run(score, clock, 4);
+    expect(loops[0].gains.at(-1)).toBeGreaterThan(s.quietGain);
+    expect(loops[0].tones.at(-1)).toBeGreaterThan(s.quietCutoffHz);
   });
 });

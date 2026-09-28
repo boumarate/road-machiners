@@ -13,7 +13,6 @@ export type CueDef = {
   loop: boolean;
   setup?: Setup; // recording setup for generation; free music has none
   beat?: Beat; // a bar-exact loop on the score grid
-  stretch?: number; // a tempo copy of another beat loop: its speed against the source, pitch kept, set at import
   prompts?: readonly string[]; // generation subjects, for cues made with ElevenLabs
   seconds?: number; // generated length
 };
@@ -77,11 +76,6 @@ const DEFS = {
   // Combat score: base loops, one per battle, and accents on the base beat grid. See SoundDesigner.
   "score-drums": { bus: "music", setup: "score", beat: { bpm: 90, bars: 8 }, volume: 0.9, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless tribal war drum loop, 90 BPM in 4/4: huge pounding taiko and floor toms, heavy kick on every beat, rattling snare accents, relentless and even, no fills, no cymbals, drums only."] },
   "score-bass": { bus: "music", setup: "score", beat: { bpm: 110, bars: 8 }, volume: 0.8, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless bass guitar loop, 110 BPM in 4/4: fast driving eighth-note riff on D, gritty overdriven tone, chugging and relentless, even level, bass only, no drums."] },
-  // Tempo copies of the bases, rendered from the same source at import. Heat picks among them.
-  "score-drums-slow": { bus: "music", beat: { bpm: 90 * 0.92, bars: 8 }, stretch: 0.92, volume: 0.9, pitchJitter: 0, maxVoices: 1, loop: true },
-  "score-drums-fast": { bus: "music", beat: { bpm: 90 * 1.08, bars: 8 }, stretch: 1.08, volume: 0.9, pitchJitter: 0, maxVoices: 1, loop: true },
-  "score-bass-slow": { bus: "music", beat: { bpm: 110 * 0.92, bars: 8 }, stretch: 0.92, volume: 0.8, pitchJitter: 0, maxVoices: 1, loop: true },
-  "score-bass-fast": { bus: "music", beat: { bpm: 110 * 1.08, bars: 8 }, stretch: 1.08, volume: 0.8, pitchJitter: 0, maxVoices: 1, loop: true },
   "accent-sighted": { bus: "music", setup: "stinger", volume: 0.85, pitchJitter: 0, maxVoices: 3, loop: false, prompts: ["Three heavy tribal war drum hits, boom boom boom, with a low Mongolian throat singing growl rising under them."], seconds: 1.5 },
   "accent-struck": { bus: "music", setup: "stinger", volume: 0.85, pitchJitter: 0, maxVoices: 3, loop: false, prompts: ["One distorted electric guitar power chord on D slammed with a big tribal drum hit, then a short falling throat singing groan."], seconds: 1.5 },
   "accent-miss": { bus: "music", setup: "stinger", volume: 0.75, pitchJitter: 0, maxVoices: 3, loop: false, prompts: ["A quick palm-muted distorted electric guitar chug and a tight snare flam, then silence."], seconds: 1 },
@@ -146,17 +140,7 @@ export function hornSoundFor(chassisId: string): { file: string; rate: number } 
 const SCORE_PHASES: Record<string, number> = {
   "score-drums-1.ogg": 0.014,
   "score-bass-1.ogg": 0.232,
-  "score-drums-slow-1.ogg": 0.01,
-  "score-drums-fast-1.ogg": 0.028,
-  "score-bass-slow-1.ogg": 0.254,
-  "score-bass-fast-1.ogg": 0.234,
 };
-
-// Each combat base at slow, normal and fast tempo.
-export const SCORE_TEMPOS = {
-  drums: ["score-drums-slow", "score-drums", "score-drums-fast"],
-  bass: ["score-bass-slow", "score-bass", "score-bass-fast"],
-} as const satisfies Record<string, readonly [CueId, CueId, CueId]>;
 
 export function scorePhaseOf(file: string): number {
   const phase = SCORE_PHASES[file];
@@ -206,11 +190,6 @@ export const MIX = {
     hotHeat: 2,
     quietGain: 0.65,
     quietCutoffHz: 1500,
-    // Heat under slowBelowHeat wants the slow tempo, from fastFromHeat the fast one. The base moves one step per
-    // bar toward it and crossfades over tempoCrossfadeSeconds on the bar line.
-    slowBelowHeat: 0.8,
-    fastFromHeat: 2.2,
-    tempoCrossfadeSeconds: 0.03,
     openCutoffHz: 20000,
     pauseRepeats: 2,
     fillChance: 0.2,
