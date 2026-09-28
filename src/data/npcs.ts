@@ -668,8 +668,8 @@ export const SPAWN = {
     "merc",
     "merc",
   ],
-  // Two traders start at the gate of the town the player's start road leaves. Traders head out to other
-  // towns and sites, and every way out of that gate but the south road passes the player's start.
+  // Two traders start at the gate nearest the player of the town the player's start road leaves. Traders head out
+  // to other towns and sites, and every way out of that gate but the south road passes the player's start.
   startTraffic: { town: "bowl", templates: ["trader", "trader"] },
   // A respawn never lands closer to the player than this, so no truck pops up beside them. Initial spawns
   // skip it, so the start road has traffic.

@@ -27,12 +27,18 @@ export function spawnNpcs(world: World): void {
   }
 }
 
-// The first drivers, plus start traffic at the town the player's road leaves, so drivers soon pass the player.
+// The first drivers, plus start traffic at the gate nearest the player of the town the player's road leaves, so
+// drivers soon pass the player.
 export function spawnInitial(world: World): void {
   for (const id of SPAWN.initial) spawnWithEscorts(world, NPCS[id], () => siteFor(world, NPCS[id]), false);
   const town = REGION.towns.find((t) => t.id === SPAWN.startTraffic.town);
   if (!town) throw new Error(`Unknown start traffic town ${SPAWN.startTraffic.town}`);
-  for (const id of SPAWN.startTraffic.templates) spawnWithEscorts(world, NPCS[id], () => town, false);
+  const gate = nearestGate(town, playerVehicle(world).pos);
+  for (const id of SPAWN.startTraffic.templates) spawnWithEscorts(world, NPCS[id], () => town, false, gate);
+}
+
+function nearestGate(site: Site, from: Vec): Vec {
+  return siteGates(site).reduce((a, b) => (dist(from, a) <= dist(from, b) ? a : b));
 }
 
 function aliveOf(world: World, tpl: NpcTemplate): number {
@@ -41,8 +47,8 @@ function aliveOf(world: World, tpl: NpcTemplate): number {
 
 // Spawns a driver, then one of each escort template that follows its template, while the escort is under its cap.
 // Each escort guards its leader for no fee and no destination.
-function spawnWithEscorts(world: World, tpl: NpcTemplate, pick: () => Site, respawn: boolean): void {
-  const leader = spawnOne(world, tpl, pick, respawn);
+function spawnWithEscorts(world: World, tpl: NpcTemplate, pick: () => Site, respawn: boolean, gate: Vec | null = null): void {
+  const leader = spawnOne(world, tpl, pick, respawn, gate);
   if (!leader) return;
   for (const escort of escortsOf(tpl)) {
     const guard = aliveOf(world, escort) < escort.cap ? spawnBeside(world, escort, leader) : null;
@@ -80,13 +86,14 @@ function opposesAny(trait: TraitId, held: TraitId[]): boolean {
   return OPPOSED_TRAITS.some(([a, b]) => (a === trait && held.includes(b)) || (b === trait && held.includes(a)));
 }
 
-// pick chooses the site for each try. A respawn keeps SPAWN.minPlayerDist from the player. Initial spawns do not.
-// Returns null when no free spot was found this time. The next interval tries again.
-function spawnOne(world: World, tpl: NpcTemplate, pick: () => Site, respawn: boolean): Vehicle | null {
+// pick chooses the site for each try, and gate its gate, or a random gate when null. A respawn keeps
+// SPAWN.minPlayerDist from the player. Initial spawns do not. Returns null when no free spot was found this time.
+// The next interval tries again.
+function spawnOne(world: World, tpl: NpcTemplate, pick: () => Site, respawn: boolean, gate: Vec | null): Vehicle | null {
   const loadout = generateNpcLoadout(world, tpl);
   const radius = chassisDef(loadout.chassisId).radius;
   for (let i = 0; i < SPAWN.tries; i++) {
-    const pos = gateSpot(world, pick(), radius);
+    const pos = gateSpot(world, pick(), gate, radius);
     if (respawn && dist(pos, playerVehicle(world).pos) < SPAWN.minPlayerDist) continue;
     if (!isFree(world, pos, radius, null)) continue;
     return spawnAt(world, tpl, loadout, pos);
@@ -155,10 +162,10 @@ function campOf(world: World, tpl: NpcTemplate): Site {
   return camp;
 }
 
-// A point on the track just outside a random gate of the site.
-function gateSpot(world: World, site: Site, radius: number): Vec {
+// A point on the track just outside the given gate of the site, or a random one when null.
+function gateSpot(world: World, site: Site, given: Vec | null, radius: number): Vec {
   const gates = siteGates(site);
-  const gate = gates[randInt(world, 0, gates.length - 1)];
+  const gate = given ?? gates[randInt(world, 0, gates.length - 1)];
   const a = Math.atan2(gate.y - site.pos.y, gate.x - site.pos.x) + randRange(world, -SPAWN.gateAngle, SPAWN.gateAngle);
   const d = radius + 0.3 + randRange(world, 0, SPAWN.gateSpread);
   return { x: gate.x + Math.cos(a) * d, y: gate.y + Math.sin(a) * d };
