@@ -1,6 +1,6 @@
 # Publishing
 
-The game is published on itch.io as a browser game. `npm run itch` builds it and uploads `dist/` with butler, the itch.io upload tool. Each upload is named after the current commit.
+The game is published on itch.io as a browser game. `npm run itch` builds the last commit in a clean worktree and uploads it with butler, the itch.io upload tool. Uncommitted edits never ship. Each upload is named after its commit.
 
 ## One-time setup
 

@@ -23,7 +23,7 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 - `npm run sfx:reimport` rebuilds every sound file from the raw source path stored in its tags, after an import change.
 - `npm run progression:record -- --archetypes trader,scavenger,fighter,mixed --seeds 1,2,3 --turns 2000` plays a bot per archetype and seed and writes each trace to `tmp/progression/`. Runs go in parallel. It is slow: about 75 seconds per 2000 turns per run.
 - `npm run progression:report` replays every trace in `tmp/progression/` with the current XP rules. It prints the days to each skill level, the XP per day per archetype and misses against the targets in `src/data/skills.ts`.
-- `npm run itch` builds the game and uploads it to itch.io with butler. It needs a clean tree and names the upload after the commit. [Publishing](docs/publishing.md) has the one-time setup.
+- `npm run itch` builds the game and uploads it to itch.io with butler. It builds the last commit in a clean worktree and names the upload after it. [Publishing](docs/publishing.md) has the one-time setup.
 
 ## Config
 
