@@ -213,8 +213,8 @@ export class Game {
 
     // Ground and props cull separately, so ground picking only hits terrain.
     this.sightLimit = new SightLimit(this.world.size);
-    const groundScope = new RenderScope(this.ground, this.world.size, this.sightLimit, false);
-    const propScope = new RenderScope(this.props, this.world.size, this.sightLimit, true);
+    const groundScope = new RenderScope(this.ground, this.world.size, this.sightLimit, false, false);
+    const propScope = new RenderScope(this.props, this.world.size, this.sightLimit, true, true);
     this.scopes = [groundScope, propScope];
     const groundChunks = terrainMesh(this.world, groundScope);
     addSites(this.world.terrain, propScope);

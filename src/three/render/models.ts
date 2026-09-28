@@ -1,9 +1,12 @@
 // Blender-made models from public/models/, built by the scripts in tools/blender/.
 // loadModels() runs once at boot. model() hands out clones with their own materials.
 // socket() gives the attach points that scripts mark with Kit.socket().
+// outlineOf() and outlineProps() give models their dark outline.
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { PAL } from '../../render/palette';
 import { WEAPON_POOLS } from '../../render/partLooks';
 
 const NAMES = [
@@ -251,4 +254,120 @@ function toLambert(root: THREE.Object3D): THREE.Object3D {
     o.receiveShadow = true;
   });
   return root;
+}
+
+// A dark outline around trucks, a fixed number of screen pixels wide. It is real geometry, so the renderer's
+// antialiasing smooths it. Back faces are pushed outward along smoothed normals in screen space, so the width
+// holds at any zoom. The camera is orthographic, so clip w is 1 and an offset in clip units maps straight to pixels.
+const OUTLINE = {
+  width: { value: 0.5 }, // CSS pixels
+  viewport: { value: new THREE.Vector2(1, 1) }, // CSS pixel size of the canvas, read from the renderer before each outline draws
+};
+
+function readViewport(renderer: THREE.WebGLRenderer): void {
+  renderer.getSize(OUTLINE.viewport.value);
+}
+
+// Stencil bits models mark on their pixels. Outlines draw only where neither bit is set, so a pushed back face of a
+// thin panel never pokes through a model. Outlines draw after opaque models, so the marks are there by then.
+export const TRUCK_BIT = 1;
+export const PROP_BIT = 2;
+export const OUTLINE_ORDER = 805; // after opaque models mark the stencil, before truck silhouettes
+
+function outlineMaterial(): THREE.MeshBasicMaterial {
+  const material = new THREE.MeshBasicMaterial({
+    color: PAL.outline,
+    side: THREE.BackSide,
+    stencilWrite: true,
+    stencilRef: 0,
+    stencilFuncMask: TRUCK_BIT | PROP_BIT,
+    stencilFunc: THREE.EqualStencilFunc,
+  });
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.outlineWidth = OUTLINE.width;
+    shader.uniforms.viewport = OUTLINE.viewport;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float outlineWidth;\nuniform vec2 viewport;')
+      .replace('#include <project_vertex>', `#include <project_vertex>
+        vec3 outlineNormal = normal;
+        #ifdef USE_INSTANCING
+          outlineNormal = mat3(instanceMatrix) * outlineNormal;
+        #endif
+        vec2 outlineDir = (normalMatrix * outlineNormal).xy;
+        if (dot(outlineDir, outlineDir) > 1e-8) gl_Position.xy += normalize(outlineDir) * outlineWidth * 2.0 / viewport * gl_Position.w;`);
+  };
+  material.customProgramCacheKey = () => 'outline';
+  return material;
+}
+
+// Trucks and props keep separate materials, because the sight limit patches prop materials to clip at its edge.
+const truckOutline = outlineMaterial();
+const propOutline = outlineMaterial();
+
+// Faces split at hard edges, so vertices merge by position before normals are smoothed, or the pushed faces would
+// open cracks at every corner.
+function weld(geos: readonly THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const plain = geos.map((g) => {
+    const p = new THREE.BufferGeometry();
+    p.setAttribute('position', g.getAttribute('position').clone());
+    if (g.index) p.setIndex(g.index.clone());
+    return p.index ? p.toNonIndexed() : p;
+  });
+  const merged = mergeGeometries(plain);
+  if (!merged) throw new Error(`Could not merge ${geos.length} meshes for an outline`);
+  for (const p of plain) p.dispose();
+  const welded = mergeVertices(merged, 1e-3);
+  merged.dispose();
+  welded.computeVertexNormals();
+  return welded;
+}
+
+// One outline mesh around all truck geos, which share one space.
+// A group of lamps alone has no geos and gets no outline, so the result is empty or one mesh.
+export function outlineOf(geos: readonly THREE.BufferGeometry[]): THREE.Mesh[] {
+  if (geos.length === 0) return [];
+  const mesh = new THREE.Mesh(weld(geos), truckOutline);
+  mesh.onBeforeRender = readViewport;
+  mesh.renderOrder = OUTLINE_ORDER;
+  mesh.userData.outline = true;
+  return [mesh];
+}
+
+// Instanced props share their model's geometry, so their welded outlines are shared too.
+const welded = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
+
+// Gives every mesh under obj an outline child, and makes its materials mark their pixels for outlines.
+export function outlineProps(obj: THREE.Object3D): void {
+  const meshes: THREE.Mesh[] = [];
+  obj.traverse((o) => {
+    if (o instanceof THREE.Mesh && !o.userData.outline) meshes.push(o);
+  });
+  for (const mesh of meshes) {
+    for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      m.stencilWrite = true;
+      m.stencilRef = PROP_BIT;
+      m.stencilWriteMask = PROP_BIT;
+      m.stencilFunc = THREE.AlwaysStencilFunc;
+      m.stencilZPass = THREE.ReplaceStencilOp;
+    }
+    let geo = welded.get(mesh.geometry);
+    if (!geo) {
+      geo = weld([mesh.geometry]);
+      welded.set(mesh.geometry, geo);
+    }
+    const outline = mesh instanceof THREE.InstancedMesh ? instancedOutline(mesh, geo) : new THREE.Mesh(geo, propOutline);
+    outline.onBeforeRender = readViewport;
+    outline.renderOrder = OUTLINE_ORDER;
+    outline.userData.outline = true;
+    mesh.add(outline);
+  }
+}
+
+function instancedOutline(mesh: THREE.InstancedMesh, geo: THREE.BufferGeometry): THREE.InstancedMesh {
+  const outline = new THREE.InstancedMesh(geo, propOutline, mesh.count);
+  outline.instanceMatrix = mesh.instanceMatrix;
+  outline.boundingSphere = mesh.boundingSphere;
+  outline.boundingBox = mesh.boundingBox;
+  outline.matrixAutoUpdate = false;
+  return outline;
 }
