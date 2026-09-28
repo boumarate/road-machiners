@@ -1,5 +1,5 @@
 // Travel for vehicles far from the player. They have no physics body: each turn they follow their
-// stored route at the speed the physics driver would plan and burn fuel for the distance. They never
+// stored route at the speed the physics driver would plan and burn fuel for the distance, like the physics turn. They never
 // crash, but they cannot drive into another vehicle: a truck in the way stops them just short of it.
 
 import { chassisDef } from '../data/chassis';
@@ -8,7 +8,7 @@ import { RULES } from '../data/rules';
 import { TERRAIN } from '../data/terrain';
 import { playerVehicle } from './damage';
 import { route } from './path';
-import { getResources } from './resources';
+import { burnFuel, getResources } from './resources';
 import { fuelCap, vehicleStats, type VehicleStats } from './stats';
 import { parkedVehicles, throughSpeed } from './steering';
 import { isOnRope } from './tow';
@@ -74,8 +74,7 @@ export function advanceFar(w: World, v: Vehicle): void {
   v.pos = { x: end.x, y: end.y };
   v.heading = v.trail[v.trail.length - 1].heading;
   v.speed = block || (done && order.kind === 'stopAt') ? 0 : next;
-  const resources = getResources(w, v);
-  resources.fuel = Math.max(0, resources.fuel - walk.moved * full.fuelPerTile);
+  burnFuel(w, v, walk.moved);
   // A blocked truck drops its route, so next turn it plans one around the vehicles now parked.
   if (v.brain) v.brain.farRoute = done || block ? undefined : { dest: { ...order.dest }, points: walk.ahead };
   if (done) {

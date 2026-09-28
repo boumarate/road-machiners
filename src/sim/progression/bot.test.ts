@@ -9,7 +9,7 @@ import { goodsCount, mountedParts } from '../grid';
 import { addGoods, removeAllGoods } from '../inventory';
 import { nearestPad, nearestTown } from '../sites';
 import { isStranded } from '../stats';
-import { emptyWorld } from '../testkit';
+import { addVehicle, emptyWorld } from '../testkit';
 import { botOrders } from './bot';
 
 function town(id: string) {
@@ -99,6 +99,18 @@ describe('botOrders', () => {
     me.items = me.items.filter((it) => it.kind !== 'part' || !mountedParts(me, 'engine').includes(it.part));
     return w;
   }
+
+  it('has a scavenger beside a wreck wait to search it while a hostile is in sight', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = playerVehicle(w);
+    me.speed = 0;
+    w.salvage.push({ id: 'wreck-beside', pos: { x: 31.5, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [] });
+    addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 });
+
+    const turn = botOrders(w, 'scavenger');
+
+    expect(playerVehicle(turn.world).job).toBeNull();
+  });
 
   it('has a stranded truck crawl to the nearest town', () => {
     const w = withoutEngine(parkedAt('bowl'));

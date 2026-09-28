@@ -38,11 +38,27 @@ function wearVehicle(world: World, v: Vehicle): void {
     if (chance(world, Math.min(1, WEAR.chancePerTile * oddsScale))) damagePart(p, maxHp(p) * WEAR.hpShare, floor(p.id));
   }
 
+  breakDown(world, v, oddsScale, floor);
+  failDrive(world, v, oddsScale);
+}
+
+function breakDown(world: World, v: Vehicle, oddsScale: number, floor: (id: string) => number): void {
   const working = mountedParts(v).filter((p) => p.hp > 0);
   if (working.length === 0) return;
   if (!chance(world, Math.min(1, WEAR.breakdownChancePerTile * oddsScale))) return;
   const part = working[randInt(world, 0, working.length - 1)];
   damagePart(part, Math.round(maxHp(part) * WEAR.breakdownHpShare), floor(part.id));
+  world.events.push({ t: 'breakdown', vehicle: v.id, part: part.id });
+}
+
+// A failure takes the first engine or the transmission to 0 HP, so the truck strands.
+function failDrive(world: World, v: Vehicle, oddsScale: number): void {
+  const engine = mountedParts(v, 'engine')[0];
+  const working = [engine, corePart(v, 'transmission')].filter((p): p is PartInstance => p !== undefined && p.hp > 0);
+  if (working.length === 0) return;
+  if (!chance(world, Math.min(1, WEAR.failureChancePerTile * oddsScale))) return;
+  const part = working[randInt(world, 0, working.length - 1)];
+  damagePart(part, part.hp, 0);
   world.events.push({ t: 'breakdown', vehicle: v.id, part: part.id });
 }
 

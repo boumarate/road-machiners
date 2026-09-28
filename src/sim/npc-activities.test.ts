@@ -6,7 +6,7 @@ import { planNpcOrders } from './ai';
 import { getResources } from './resources';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
-import { MIN_CHANCE, NPC_BEHAVIOR, NPCS, TRAITS, type TraitId } from '../data/npcs';
+import { MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, NPCS, TRAITS, type TraitId } from '../data/npcs';
 import { SHOPS } from '../data/market';
 import { optionChances, optionWeights, visibleSalvage } from './npc-decisions';
 import { endTurn } from './world';
@@ -16,12 +16,39 @@ import { addGoods } from './inventory';
 import { getActivityDestination, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { cloneWorld } from './world';
 import { canUseSite, siteGates, sitePads } from './sites';
+import { fuelCap, vehicleStats } from './stats';
+import { heatAt } from './sun';
+import { dist } from './vec';
 
 function createScavenger() {
   const w = emptyWorld({ x: 50, y: 50 });
   const npc = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 10, y: 10 });
   npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
   return { w, npc };
+}
+
+function createTrader() {
+  const w = emptyWorld({ x: 50, y: 50 });
+  const npc = addVehicle(w, 'traders', 'scout', ['mg', 'stockEngine'], { x: 10, y: 10 });
+  npc.brain = npcBrain('trader', npc.pos, ['trader']);
+  return { w, npc };
+}
+
+// The fuel a trader from createTrader keeps for the straight way to its nearest town, with no misjudgment.
+function reserveOfTrader(): number {
+  const { w, npc } = createTrader();
+  const town = Math.min(...TRAITS.trader.towns.map((id) => dist(npc.pos, REGION.towns.find((t) => t.id === id)!.pos)));
+  return town * vehicleStats(w, npc).fuelPerTile * heatAt(w, npc.pos) * NPC_UPKEEP.fuelReserve * TRAITS.trader.fuelMargin;
+}
+
+function withFuelSense(sense: number, run: () => void): void {
+  const saved = NPC_UPKEEP.fuelSense;
+  (NPC_UPKEEP as { fuelSense: number }).fuelSense = sense;
+  try {
+    run();
+  } finally {
+    (NPC_UPKEEP as { fuelSense: number }).fuelSense = saved;
+  }
 }
 
 describe('NPC activities', () => {
@@ -210,7 +237,7 @@ describe('NPC activities', () => {
     corePart(victim, 'cab').hp = 1;
     addGoods(w0, victim, 'scrap', 3);
     for (const key of Object.keys(NPCS)) w0.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
-    const money = raider.resources!.money;
+    let money = raider.resources!.money;
     let w = w0;
     let looted = false;
     let sold = false;
@@ -221,8 +248,11 @@ describe('NPC activities', () => {
       for (let turn = 0; turn < w.size * 5; turn++) {
         w = endTurn(w, testDrive);
         const actor = w.vehicles.find((v) => v.id === raider.id)!;
-        if ((goodsCount(actor).scrap ?? 0) > 0) looted = true;
-        if (looted && actor.resources!.money > money) { sold = true; break; }
+        const scrap = goodsCount(actor).scrap ?? 0;
+        if (scrap > 0) looted = true;
+        // The sale pays for the scrap. The raider may buy fuel on the way, so its money can end below the start.
+        if (looted && scrap === 0 && actor.resources!.money > money) { sold = true; break; }
+        money = actor.resources!.money;
       }
     } finally {
       (RULES as { npcDeathChance: number }).npcDeathChance = deathChance;
@@ -245,6 +275,43 @@ describe('NPC activities', () => {
     getResources(w, npc).fuel = 0;
     planNpcOrders(w);
     expect(topGoal(npc)?.kind).toBe('resupply');
+  });
+
+  it('heads for fuel once the tank holds less than its reserve for the straight way to a town', () => {
+    const tank = (fuel: number) => {
+      const { w, npc } = createTrader();
+      planNpcOrders(w);
+      getResources(w, npc).fuel = fuel;
+      planNpcOrders(w);
+      return topGoal(npc)?.kind;
+    };
+    withFuelSense(0, () => {
+      const need = reserveOfTrader();
+      expect(tank(need * 1.05)).not.toBe('resupply');
+      expect(tank(need * 0.95)).toBe('resupply');
+    });
+  });
+
+  it('drives on near a town with a tank well below a fifth', () => {
+    const { w, npc } = createTrader();
+    const pad = sitePads(REGION.towns[0])[0];
+    npc.pos = { x: pad.x, y: pad.y + 30 };
+    planNpcOrders(w);
+    getResources(w, npc).fuel = 0.1 * fuelCap(npc);
+    planNpcOrders(w);
+    expect(topGoal(npc)?.kind).not.toBe('resupply');
+  });
+
+  it('turns a coward back for fuel with a tank a trader drives on with', () => {
+    withFuelSense(0, () => {
+      const fuel = reserveOfTrader() * 1.05;
+      const { w, npc } = createTrader();
+      npc.brain!.traits = ['trader', 'coward'];
+      planNpcOrders(w);
+      getResources(w, npc).fuel = fuel;
+      planNpcOrders(w);
+      expect(topGoal(npc)?.kind).toBe('resupply');
+    });
   });
 
   it('lets an idle healthy scavenger fight a nearby raider', () => {
