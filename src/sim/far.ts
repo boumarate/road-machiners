@@ -1,19 +1,22 @@
 // Travel for vehicles far from the player. They have no physics body: each turn they follow their
 // stored route at the speed the physics driver would plan and burn fuel for the distance, like the physics turn. They never
-// crash, but they cannot drive into another vehicle: a truck in the way stops them just short of it.
+// crash, but they cannot drive into another vehicle: a truck in the way stops them just short of it. A breakable prop
+// on the way breaks.
 
 import { chassisDef } from '../data/chassis';
 import { PERF } from '../data/perf';
 import { RULES } from '../data/rules';
 import { TERRAIN } from '../data/terrain';
 import { playerVehicle } from './damage';
+import { boxSegmentDistance, isBreakable, propBoxes, propReach } from './mapgen';
 import { route } from './path';
+import { breakProp } from './salvage';
 import { burnFuel, getResources } from './resources';
 import { fuelCap, vehicleStats, type VehicleStats } from './stats';
 import { parkedVehicles, throughSpeed } from './steering';
 import { isOnRope } from './tow';
-import type { MoveOrder, Pose, Vehicle, World } from './types';
-import { bearing, dist, type Vec } from './vec';
+import type { MoveOrder, Obstacle, Pose, Vehicle, World } from './types';
+import { bearing, dist, segmentDist, type Vec } from './vec';
 
 // The player, and every vehicle within sight radius plus the live margin of the player, drives in physics.
 // A towed truck has no body: it follows its tower through followTower instead.
@@ -75,6 +78,7 @@ export function advanceFar(w: World, v: Vehicle): void {
   v.heading = v.trail[v.trail.length - 1].heading;
   v.speed = block || (done && order.kind === 'stopAt') ? 0 : next;
   burnFuel(w, v, walk.moved);
+  breakCrossed(w, v, walk.path, full.radius);
   // A blocked truck drops its route, so next turn it plans one around the vehicles now parked.
   if (v.brain) v.brain.farRoute = done || block ? undefined : { dest: { ...order.dest }, points: walk.ahead };
   if (done) {
@@ -106,6 +110,17 @@ function firstContact(w: World, v: Vehicle, path: Vec[], radius: number): { othe
     walked += len;
   }
   return null;
+}
+
+// Breaks every breakable prop the truck body touches along the walk.
+function breakCrossed(w: World, v: Vehicle, path: Vec[], radius: number): void {
+  const crossed = w.obstacles.filter((o) => isBreakable(o) && path.some((p, seg) => seg > 0 && touches(o, path[seg - 1], p, radius)));
+  for (const o of crossed) breakProp(w, o.id, v.id);
+}
+
+// Whether a truck of this radius driving from a to b touches the prop's boxes. The reach test skips far props cheaply.
+function touches(o: Obstacle, a: Vec, b: Vec, radius: number): boolean {
+  return segmentDist(o.pos, a, b) < propReach(o) + radius && propBoxes(o).some((box) => boxSegmentDistance(box, a, b) < radius);
 }
 
 // Walks up to `budget` tiles along the route. path starts at from and holds each corner passed and the end point.

@@ -1,5 +1,5 @@
 // Physics as the sim's movement step. The turn pipeline hands the draft world to physicsMove, which
-// runs the turn in the physics engine and writes poses, speeds, trails, fuel, crashes and orders back.
+// runs the turn in the physics engine and writes breaks, poses, speeds, trails, fuel, crashes and orders back.
 // Vehicles far from the player have no body and travel through advanceFar.
 
 import { RULES } from '../data/rules';
@@ -10,6 +10,7 @@ import { perfSnapshot, resetPerf, type PerfStat } from '../perf';
 import { playerVehicle } from '../sim/damage';
 import { advanceFar } from '../sim/far';
 import { applyContactCrash } from '../sim/crash-contact';
+import { breakProp } from '../sim/salvage';
 import { isOnRope } from '../sim/tow';
 import { burnFuel } from '../sim/resources';
 import { setDownSpot } from '../sim/steering';
@@ -101,8 +102,11 @@ export function physicsMove(d: Drive, done: (r: TurnResult) => void): (w: World)
 
 // Writes the physics result back for the vehicles that drove in it. Vehicles without frames were far
 // and are left alone. A vehicle driving in physics drops any route stored while it was far, since it
-// no longer starts where that route left off.
+// no longer starts where that route left off. Breaks go first, from each truck's pose at the turn's start, so
+// the side that hit takes the scrape. The body's speed then replaces the sim's, since physics already took the
+// slowdown when the prop broke.
 export function applyTurn(w: World, r: TurnResult): void {
+  applyBreaks(w, r);
   for (const v of w.vehicles) {
     const frames = r.frames[v.id];
     if (frames) applyDriven(w, r, v, frames);
@@ -113,6 +117,10 @@ export function applyTurn(w: World, r: TurnResult): void {
     const b = w.vehicles.find((v) => v.id === c.b) ?? null;
     applyContactCrash(w, a, b, c.b, toTilesPerTurn(c.impact), c.contact);
   }
+}
+
+function applyBreaks(w: World, r: TurnResult): void {
+  for (const b of r.breaks) breakProp(w, b.prop, b.vehicle);
 }
 
 // Moves a stranded truck to free ground and stops it. syncDrive then sets its body there on its wheels.

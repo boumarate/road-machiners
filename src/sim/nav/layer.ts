@@ -1,12 +1,14 @@
 // Static navigation layers: per-tile cliff flags and route costs, and per-cell blocked flags and step
 // costs for one vehicle radius. Road and kill wrecks and parked vehicles are not in here; the A* overlay
-// stamps them per query. Per-driver route taste scales these costs.
+// stamps them per query. Breakable props make their cells costly instead of blocked. Per-driver route taste
+// scales these costs.
 
 import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
+import { BREAKABLE } from '../../data/rules';
 import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from '../../data/terrain';
 import { nearRail } from '../bridge';
-import { boxDistance, isDriveObstacle, propBoxes, propKey, propReach, type PosedBox } from '../mapgen';
+import { boxDistance, isBreakable, isDriveObstacle, propBoxes, propKey, propReach, type PosedBox } from '../mapgen';
 import { isCliff, tileSlope, type Terrain } from '../terrain';
 import { hashRandom } from '../rng';
 import type { Obstacle, Vehicle, World } from '../types';
@@ -42,6 +44,7 @@ export type CoarseGrid = {
   edges: Int32Array; // linked regions
 };
 
+// Its slow also holds the costly cells of breakable props.
 export type NavLayer = TerrainNav & {
   id: number; // identity for route cache keys
   radius: number;
@@ -49,8 +52,10 @@ export type NavLayer = TerrainNav & {
   coarse: CoarseGrid;
 };
 
-// The static drive obstacles of one obstacles array as blockers, and a bucket index over them.
-export type StaticSet = { key: string; blockers: Blocker[]; buckets: ObstacleBuckets };
+// The static drive obstacles of one obstacles array as blockers, and a bucket index over all of them. Solid
+// blockers block cells. Breakable ones make cells costly, and straight line checks treat them as solid, so only
+// the grid search decides to drive through one.
+export type StaticSet = { key: string; solid: Blocker[]; costly: Blocker[]; buckets: ObstacleBuckets };
 
 // Road and kill wrecks come and go in play. Every other drive obstacle is fixed at map generation.
 export function isTransientWreck(o: Obstacle): boolean {
@@ -120,16 +125,30 @@ export function nearCliff(nav: TerrainNav, x: number, y: number, reach: number):
   return c[tileIndex(s, x, y)] === 1 || c[tileIndex(s, x + reach, y)] === 1 || c[tileIndex(s, x - reach, y)] === 1 || c[tileIndex(s, x, y + reach)] === 1 || c[tileIndex(s, x, y - reach)] === 1;
 }
 
-// Built once per obstacles array. The length check catches obstacles pushed into the same array.
-const staticSets = new WeakMap<Obstacle[], { length: number; set: StaticSet }>();
+// Built once per obstacles array and its content. Props break and grow back in place during a turn, so a hit
+// needs the same obstacle objects in the same order.
+const staticSets = new WeakMap<Obstacle[], { items: Obstacle[]; set: StaticSet }>();
 
 export function staticSet(obstacles: Obstacle[], size: number): StaticSet {
   const hit = staticSets.get(obstacles);
-  if (hit && hit.length === obstacles.length) return hit.set;
-  const statics = obstacles.filter((o) => isDriveObstacle(o) && !isTransientWreck(o)).map(driveBlocker);
-  const set = { key: blockerKey(statics), blockers: statics, buckets: new ObstacleBuckets(statics, size) };
-  staticSets.set(obstacles, { length: obstacles.length, set });
+  if (hit && sameItems(hit.items, obstacles)) return hit.set;
+  const statics = obstacles.filter((o) => isDriveObstacle(o) && !isTransientWreck(o));
+  const all = statics.map(driveBlocker);
+  const breakable = statics.map(isBreakable);
+  const set = {
+    key: blockerKey(all),
+    solid: all.filter((_, i) => !breakable[i]),
+    costly: all.filter((_, i) => breakable[i]),
+    buckets: new ObstacleBuckets(all, size),
+  };
+  staticSets.set(obstacles, { items: obstacles.slice(), set });
   return set;
+}
+
+function sameItems(a: readonly Obstacle[], b: readonly Obstacle[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }
 
 // Blockers that change during play: road and kill wrecks and the caller's extra circles.
@@ -183,10 +202,22 @@ export function navLayer(terrain: Terrain, obstacles: Obstacle[], radius: number
     e.cellCliff.set(radius, cliff);
   }
   const blocked = cliff.slice();
-  stampBlockers(n, statics.blockers, radius, (c) => (blocked[c] = 1));
-  const layer: NavLayer = { ...nav, id: nextLayerId++, radius, blocked, coarse: coarseGrid(n, blocked, nav.slow) };
+  stampBlockers(n, statics.solid, radius, (c) => (blocked[c] = 1));
+  const slow = costlySlow(nav, statics.costly, radius);
+  const layer: NavLayer = { ...nav, slow, id: nextLayerId++, radius, blocked, coarse: coarseGrid(n, blocked, slow) };
   e.layers.set(key, layer);
   return layer;
+}
+
+// The terrain's step costs, times BREAKABLE.routeCost on cells a breakable prop would block. A cell near two
+// breakable props costs the same as near one.
+function costlySlow(nav: TerrainNav, costly: Blocker[], radius: number): Float32Array {
+  if (costly.length === 0) return nav.slow;
+  const marked = new Uint8Array(nav.n * nav.n);
+  stampBlockers(nav.n, costly, radius, (c) => (marked[c] = 1));
+  const slow = nav.slow.slice();
+  for (let c = 0; c < slow.length; c++) if (marked[c]) slow[c] *= BREAKABLE.routeCost;
+  return slow;
 }
 
 // Calls mark for every cell whose center lies closer than the vehicle radius plus clearance to a blocker: to a

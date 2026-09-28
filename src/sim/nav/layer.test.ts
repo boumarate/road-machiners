@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
-import { boxDistance, propBoxes } from '../mapgen';
+import { BREAKABLE } from '../../data/rules';
+import { boxDistance, boxSegmentDistance, propBoxes } from '../mapgen';
+import { route } from '../path';
 import type { Obstacle } from '../types';
 import { dist, type Vec } from '../vec';
 import { stampOverlay } from './astar';
@@ -103,5 +105,91 @@ describe('prop footprints', () => {
     w.obstacles = [{ ...ruin, yaw: 1 }];
 
     expect(navLayer(w.terrain, w.obstacles, radius) === before).toBe(false);
+  });
+});
+
+describe('breakable props', () => {
+  const radius = 0.6;
+  const grow = radius + CLEARANCE;
+  const cellAt = (n: number, p: Vec) => Math.floor(p.y / CELL) * n + Math.floor(p.x / CELL);
+
+  // A fence segment is 4 m long, a tile at radius 0.5. Yaw a quarter turn lays it along map y.
+  const fenceAt = (id: string, pos: Vec): Obstacle => ({ id, pos, r: 0.5, kind: 'landmark', look: 'fence', yaw: Math.PI / 2 });
+
+  // A straight fence line along map y at x, reaching `half` tiles to either side of y. Segments overlap a little.
+  function fenceLine(x: number, y: number, half: number): Obstacle[] {
+    const count = Math.ceil((2 * half) / 0.95) + 1;
+    return Array.from({ length: count }, (_, k) => fenceAt(`fence-${k}`, { x, y: y - half + (2 * half * k) / (count - 1) }));
+  }
+
+  function crosses(fences: Obstacle[], from: Vec, points: Vec[]): boolean {
+    let prev = from;
+    for (const p of points) {
+      if (fences.some((f) => propBoxes(f).some((b) => boxSegmentDistance(b, prev, p) === 0))) return true;
+      prev = p;
+    }
+    return false;
+  }
+
+  it('stamps a fence as costly cells, not blocked ones', () => {
+    const w = emptyWorld();
+    const fence = fenceAt('fence-0', { x: 40.2, y: 40.3 });
+    w.obstacles = [fence];
+    const open = navLayer(w.terrain, [], radius);
+    const layer = navLayer(w.terrain, w.obstacles, radius);
+    const cell = cellAt(layer.n, fence.pos);
+
+    expect(layer.blocked[cell]).toBe(0);
+    expect(layer.slow[cell]).toBeCloseTo(open.slow[cell] * BREAKABLE.routeCost);
+  });
+
+  it('keeps a shack blocked', () => {
+    const w = emptyWorld();
+    const shack: Obstacle = { id: 'shack-0', pos: { x: 40.2, y: 40.3 }, r: 0.9, kind: 'landmark', look: 'shack', yaw: 0 };
+    w.obstacles = [shack];
+    const layer = navLayer(w.terrain, w.obstacles, radius);
+
+    expect(layer.blocked[cellAt(layer.n, shack.pos)]).toBe(1);
+  });
+
+  // On flat road every cell costs 1 per tile. Crossing the fence adds routeCost - 1 per tile across its stamped
+  // band, which is the rails' width plus the grown clearance on both sides.
+  const crossExtra = (2 * grow + 0.1) * (BREAKABLE.routeCost - 1);
+  // Half the length of a fence line whose detour between points `gap` tiles either side of it costs `extra` more
+  // than the straight way.
+  const halfFor = (gap: number, extra: number) => Math.sqrt(((2 * gap + extra) / 2) ** 2 - gap ** 2) - grow;
+
+  it('goes around a short fence line, whose detour costs less than crossing', () => {
+    const w = emptyWorld();
+    const gap = 6;
+    w.obstacles = fenceLine(60, 60, halfFor(gap, crossExtra / 2));
+    const from = { x: 60 - gap, y: 60 };
+
+    expect(crosses(w.obstacles, from, route(w, from, { x: 60 + gap, y: 60 }, radius, []))).toBe(false);
+  });
+
+  it('crosses a long fence line, whose detour costs more than crossing', () => {
+    const w = emptyWorld();
+    const gap = 6;
+    w.obstacles = fenceLine(60, 120, halfFor(gap, crossExtra * 2));
+    const from = { x: 60 - gap, y: 120 };
+
+    expect(crosses(w.obstacles, from, route(w, from, { x: 60 + gap, y: 120 }, radius, []))).toBe(true);
+  });
+
+  // In one draft a fence may break while another prop grows back, so the list keeps its length.
+  it('builds a new layer when a fence breaks in place and the same one when it grows back', () => {
+    const w = emptyWorld();
+    const fence = fenceAt('fence-0', { x: 40.2, y: 40.3 });
+    const other = fenceAt('fence-1', { x: 80.2, y: 80.3 });
+    w.obstacles = [fence];
+    const whole = navLayer(w.terrain, w.obstacles, radius);
+    w.obstacles[0] = other;
+    const broken = navLayer(w.terrain, w.obstacles, radius);
+    w.obstacles[0] = fence;
+
+    expect(broken === whole).toBe(false);
+    expect(broken.slow[cellAt(broken.n, fence.pos)]).toBeCloseTo(whole.slow[cellAt(whole.n, fence.pos)] / BREAKABLE.routeCost);
+    expect(navLayer(w.terrain, w.obstacles, radius)).toBe(whole);
   });
 });

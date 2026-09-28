@@ -11,7 +11,7 @@ import { advanceFar, fuelLimited, isNear } from './far';
 import { getResources } from './resources';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
-import type { Pose, World } from './types';
+import type { Obstacle, Pose, World } from './types';
 import { dist } from './vec';
 import { endTurn } from './world';
 
@@ -295,5 +295,42 @@ describe('far travel contact', () => {
     mover.order = { kind: 'through', dest: { x: 200, y: 120 } };
     advanceFar(w, mover);
     expect(mover.pos.x).toBeGreaterThan(121);
+  });
+});
+
+describe('far NPCs and breakable props', () => {
+  // A fence line along map y at x, 60 tiles long: going around it costs far more than smashing through.
+  function fenceLine(x: number, y: number): Obstacle[] {
+    return Array.from({ length: 64 }, (_, k) => ({ id: `fence-${k}`, pos: { x, y: y - 30 + k * 0.95 }, r: 0.5, kind: 'landmark' as const, look: 'fence' as const, yaw: Math.PI / 2 }));
+  }
+
+  it('breaks a fence on its route and drives on', () => {
+    const w = emptyWorld();
+    const x = 30 + LIVE + 50;
+    w.obstacles = fenceLine(x, 80);
+    const npc = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: x - 10, y: 80 });
+    npc.order = { kind: 'stopAt', dest: { x: x + 10, y: 80 } };
+
+    for (let i = 0; i < 12 && npc.order; i++) advanceFar(w, npc);
+
+    expect(w.broken.length).toBeGreaterThan(0);
+    expect(w.broken.every((b) => !w.obstacles.includes(b.obstacle))).toBe(true);
+    expect(npc.pos.x).toBeGreaterThan(x);
+    expect(w.events.some((e) => e.t === 'collision' && e.a === npc.id && w.broken.some((b) => b.obstacle.id === e.b))).toBe(true);
+  });
+
+  it('leaves a fence beside its route standing', () => {
+    const w = emptyWorld();
+    const x = 30 + LIVE + 50;
+    // Yaw 0 lays the fence along map x, two tiles beside the straight way.
+    const fence: Obstacle = { id: 'fence-0', pos: { x, y: 80 }, r: 0.5, kind: 'landmark', look: 'fence', yaw: 0 };
+    w.obstacles = [fence];
+    const npc = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: x - 10, y: 82 });
+    npc.order = { kind: 'stopAt', dest: { x: x + 10, y: 82 } };
+
+    for (let i = 0; i < 12 && npc.order; i++) advanceFar(w, npc);
+
+    expect(w.obstacles).toEqual([fence]);
+    expect(w.broken).toEqual([]);
   });
 });

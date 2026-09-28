@@ -7,9 +7,9 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { chassisDef } from '../data/chassis';
 import { PERF } from '../data/perf';
 import { PHYSICS } from '../data/physics';
-import { RULES } from '../data/rules';
+import { BREAKABLE, RULES } from '../data/rules';
 import { fuelLimited, isNear } from '../sim/far';
-import { isDriveObstacle, obstacleReach, propBoxes } from '../sim/mapgen';
+import { isBreakable, isDriveObstacle, obstacleReach, propBoxes } from '../sim/mapgen';
 import { playerVehicle } from '../sim/damage';
 import { vehicleMass } from '../sim/mass';
 import { groundSpeed, vehicleStats, type VehicleStats } from '../sim/stats';
@@ -62,8 +62,9 @@ export type Drive = {
 export type Bridge = { deck: number; rails: number[] };
 
 export type Crash = { a: string; b: string; impact: number; contact: CrashGeometry }; // b is a vehicle id, an obstacle id, 'edge' or 'rail'; impact in m/s
+export type Break = { prop: string; vehicle: string }; // a breakable prop the vehicle smashed through
 export type VehicleResult = { passed: boolean; arrived: boolean };
-export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; results: Record<string, VehicleResult> };
+export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; breaks: Break[]; results: Record<string, VehicleResult> };
 
 export type DriveSnapshot = Omit<Drive, "world"> & { snapshot: Uint8Array };
 
@@ -217,28 +218,78 @@ function run(d: Drive, w: World, steps: number): TurnResult {
   const obstacleOf = new Map(Object.entries(d.obstacles).flatMap(([id, handles]) => handles.map((h) => [h, id] as const)));
 
   const frames: TurnFrames = Object.fromEntries(cars.map((c) => [c.v.id, [] as VehicleFrame[]]));
-  const crashes: Crash[] = [];
-  const crashed = new Set<string>(); // one crash per pair per turn
+  const contacts = new Contacts(w);
   for (let i = 0; i < steps; i++) {
     const before = new Map(cars.map((c) => [c.v.id, captureImpactMotion(c.body)]));
     for (const c of cars) driveStep(c, w.terrain);
     for (const c of cars) c.ctl.updateVehicle(DT);
     world.step(events);
     events.drainCollisionEvents((h1, h2, started) => {
-      if (!started) return;
-      const crash = crashOf(h1, h2, owner, obstacleOf, d, before, world, w);
-      if (!crash) return;
-      const key = [crash.a, crash.b].sort().join('|');
-      if (crashed.has(key)) return;
-      crashed.add(key);
-      crashes.push(crash);
+      if (started) contacts.add(crashOf(h1, h2, owner, obstacleOf, d, before, world, w));
     });
+    smash(world, d, contacts.takeNewBreaks(), cars, before);
     for (const c of cars) frames[c.v.id].push(frameOf(c.ctl, c.body, before.get(c.v.id)!.velocity));
   }
   for (const c of cars) world.removeVehicleController(c.ctl);
   events.free();
   const results = Object.fromEntries(cars.map((c) => [c.v.id, c.result]));
-  return { next: { world, bodies: { ...d.bodies }, obstacles: { ...d.obstacles }, memory, terrain: d.terrain, bridge: d.bridge }, frames, crashes, results };
+  const obstacles = Object.fromEntries(Object.entries(d.obstacles).filter(([id]) => !contacts.isBroken(id)));
+  return { next: { world, bodies: { ...d.bodies }, obstacles, memory, terrain: d.terrain, bridge: d.bridge }, frames, crashes: contacts.crashes, breaks: contacts.breaks, results };
+}
+
+// The turn's crashes and breaks. A contact with a breakable prop at BREAKABLE.breakSpeed or faster breaks it
+// instead of crashing. Slower, the prop holds and the contact is a crash like any other. One crash per pair per turn.
+class Contacts {
+  readonly crashes: Crash[] = [];
+  readonly breaks: Break[] = [];
+  private readonly crashed = new Set<string>();
+  private readonly breakable: Set<string>;
+  private fresh: Break[] = [];
+
+  constructor(w: World) {
+    this.breakable = new Set(w.obstacles.filter(isBreakable).map((o) => o.id));
+  }
+
+  add(crash: Crash | null): void {
+    if (!crash || this.isBroken(crash.b)) return;
+    if (this.breakable.has(crash.b) && crash.impact >= BREAKABLE.breakSpeed) {
+      const b = { prop: crash.b, vehicle: crash.a };
+      this.breaks.push(b);
+      this.fresh.push(b);
+      return;
+    }
+    const key = [crash.a, crash.b].sort().join('|');
+    if (this.crashed.has(key)) return;
+    this.crashed.add(key);
+    this.crashes.push(crash);
+  }
+
+  isBroken(id: string): boolean {
+    return this.breaks.some((b) => b.prop === id);
+  }
+
+  // Breaks since the last call.
+  takeNewBreaks(): Break[] {
+    const out = this.fresh;
+    this.fresh = [];
+    return out;
+  }
+}
+
+// Removes each broken prop's colliders and gives the truck that broke it back its motion from before the hit, less
+// the BREAKABLE.slowdown share of its speed, so it drives on through where the prop stood.
+function smash(world: RAPIER.World, d: Drive, breaks: Break[], cars: Car[], before: Map<string, ImpactMotion>): void {
+  for (const b of breaks) smashOne(world, d, b, cars, before);
+}
+
+function smashOne(world: RAPIER.World, d: Drive, b: Break, cars: Car[], before: Map<string, ImpactMotion>): void {
+  for (const handle of d.obstacles[b.prop]) world.removeCollider(world.getCollider(handle), false);
+  const car = cars.find((c) => c.v.id === b.vehicle);
+  const motion = before.get(b.vehicle);
+  if (!car || !motion) throw new Error(`Break of ${b.prop} by ${b.vehicle}, which has no body`);
+  const keep = 1 - BREAKABLE.slowdown;
+  car.body.setLinvel({ x: motion.velocity.x * keep, y: motion.velocity.y * keep, z: motion.velocity.z * keep }, true);
+  car.body.setAngvel(motion.spin, true);
 }
 
 function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf: Map<number, string>, d: Drive, before: Map<string, ImpactMotion>, physics: RAPIER.World, state: World): Crash | null {
@@ -253,7 +304,7 @@ function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf:
 }
 
 function captureCrash(physics: RAPIER.World, state: World, before: Map<string, ImpactMotion>, pair: { a: string; b: string; first: number; other: number }, va: ImpactMotion): Crash | null {
-  const vb = before.get(pair.b) ?? { velocity: { x: 0, y: 0, z: 0 }, heading: 0 };
+  const vb = before.get(pair.b) ?? { velocity: { x: 0, y: 0, z: 0 }, spin: { x: 0, y: 0, z: 0 }, heading: 0 };
   const vehicle = state.vehicles.find((v) => v.id === pair.a);
   if (!vehicle) throw new Error(`Unknown crash vehicle ${pair.a}`);
   const target = state.vehicles.find((v) => v.id === pair.b) ?? null;
@@ -261,7 +312,7 @@ function captureCrash(physics: RAPIER.World, state: World, before: Map<string, I
   return hit ? { a: pair.a, b: pair.b, ...hit } : null;
 }
 
-type ImpactMotion = { velocity: RAPIER.Vector; heading: number };
+type ImpactMotion = { velocity: RAPIER.Vector; spin: RAPIER.Vector; heading: number };
 
 function rotateToBody(vector: Vec, heading: number): Vec {
   const c = Math.cos(heading);
@@ -304,7 +355,7 @@ function readCrashContact(world: RAPIER.World, first: RAPIER.Collider, second: R
 }
 
 function captureImpactMotion(body: RAPIER.RigidBody): ImpactMotion {
-  return { velocity: body.linvel(), heading: headingOf(body.rotation()) };
+  return { velocity: body.linvel(), spin: body.angvel(), heading: headingOf(body.rotation()) };
 }
 
 function makeCar(world: RAPIER.World, body: RAPIER.RigidBody, b: Body, mass: number): RAPIER.DynamicRayCastVehicleController {
