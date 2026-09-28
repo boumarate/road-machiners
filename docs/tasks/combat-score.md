@@ -105,7 +105,7 @@ Approach: data and generation first, since wiring needs real loop lengths. The p
 - Commit: Add the battle console command.
 
 ### Test strategy
-- Unit tests as listed. Then `npm test`, `npm run quality`, `npm run playtest`, and a Playwright script in `tmp/` that runs `battle`, plays turns, and reads `__KOROVAN__.sound.log` for accents.
+- Unit tests as listed. Then `npm test`, `npm run quality`, `npm run playtest`, and a Playwright script in `tmp/` that runs `battle`, plays turns, and reads `__ROAM__.sound.log` for accents.
 
 ### Risks / rollback
 - RK1 — Generated loops drift off tempo, so accents feel off beat. Mitigation: measure in PH2, set `bpm` to the measured value, or regenerate once.

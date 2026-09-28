@@ -46,7 +46,7 @@ Randomness only changes how a sound plays: which take, which rhythm variant, a r
 
 Volley accents are timed from the volley's own plan, when the first round lands. Crash accents are known at turn start, so their peak lands on the impact at the end of movement.
 
-To hear a fight without looking for one, open the console with the backquote key and type `battle`. It spawns a random hostile raider near the truck. `__KOROVAN__.sound.log` in dev lists recent cues and what the score did with each accent, like `accent-hit skipped heat1.2`.
+To hear a fight without looking for one, open the console with the backquote key and type `battle`. It spawns a random hostile raider near the truck. `__ROAM__.sound.log` in dev lists recent cues and what the score did with each accent, like `accent-hit skipped heat1.2`.
 
 ## Adding a sound
 

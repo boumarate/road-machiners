@@ -1,4 +1,4 @@
-# Korovan
+# Road Machiners
 
 Turn-based wasteland truck RPG in 3D with an isometric camera. Design lives in DESIGN.md.
 
@@ -81,7 +81,7 @@ Do not bypass the quality hook, add suppressions, or raise its limits to make a 
 
 - Every sim rule change gets a Vitest test.
 - After render or game changes, run `npm run playtest`.
-- For behavior checks, drive the game with a Playwright script in `tmp/`. Launch Chromium with `--use-angle=metal --enable-gpu --ignore-gpu-blocklist`, so it renders on the real GPU. SwiftShader renders on the CPU at 10 to 20 fps, so its frame rate says nothing about the game. The game is on `window.__KOROVAN__` in dev. Its world is `__KOROVAN__.state`. To set up a situation, clone that world, edit it, and pass it to `apply()`. `debugScreenOf(x, y)` gives the screen point of a map point on the ground, for clicks.
+- For behavior checks, drive the game with a Playwright script in `tmp/`. Launch Chromium with `--use-angle=metal --enable-gpu --ignore-gpu-blocklist`, so it renders on the real GPU. SwiftShader renders on the CPU at 10 to 20 fps, so its frame rate says nothing about the game. The game is on `window.__ROAM__` in dev. Its world is `__ROAM__.state`. To set up a situation, clone that world, edit it, and pass it to `apply()`. `debugScreenOf(x, y)` gives the screen point of a map point on the ground, for clicks.
 - Look at screenshots after visual changes. The user confirms small visual details.
 
 ## Art

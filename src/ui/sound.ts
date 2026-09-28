@@ -4,7 +4,7 @@ import { MIX, type Bus } from "../data/sounds";
 import type { Mixer } from "../audio/mixer";
 import { el, panel, topRight } from "./dom";
 
-const KEY = "korovan-sound";
+const KEY = "roam-sound";
 const BUSES: Bus[] = ["music", "sfx", "ambient", "ui"];
 const LABEL: Record<Bus, string> = { music: "Music", sfx: "Effects", ambient: "Wind", ui: "Interface" };
 

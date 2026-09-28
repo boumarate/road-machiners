@@ -40,8 +40,8 @@ const overlay = element('overlay');
 const game = new Game(element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute(), map);
 const view = { focus: () => game.rig.focus(), setSpeed: (factor: number) => game.follow.keyPan.setSpeed(factor) };
 new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
-performance.mark('korovan:ready');
+performance.mark('roam:ready');
 if (import.meta.env.DEV) {
-  (window as any).__KOROVAN__ = game;
-  (window as any).__KOROVAN_PERF__ = { snapshot: perfSnapshot, reset: resetPerf };
+  (window as any).__ROAM__ = game;
+  (window as any).__ROAM_PERF__ = { snapshot: perfSnapshot, reset: resetPerf };
 }

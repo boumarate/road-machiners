@@ -26,28 +26,28 @@ page.on('pageerror', (e) => errors.push(e.stack ?? e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 
 await page.goto(url);
-await page.waitForFunction(() => window.__KOROVAN__ && window.__KOROVAN_PERF__, null, { timeout: 60000 });
+await page.waitForFunction(() => window.__ROAM__ && window.__ROAM_PERF__, null, { timeout: 60000 });
 await page.waitForTimeout(1000);
 const results = {};
 
 results.bootMs = await page.evaluate(() => {
-  const mark = performance.getEntriesByName('korovan:ready')[0];
-  if (!mark) throw new Error('No korovan:ready performance mark');
+  const mark = performance.getEntriesByName('roam:ready')[0];
+  if (!mark) throw new Error('No roam:ready performance mark');
   return mark.startTime;
 });
 
-await page.evaluate(() => window.__KOROVAN_PERF__.reset());
+await page.evaluate(() => window.__ROAM_PERF__.reset());
 const turnMs = [];
 for (let i = 0; i < TURNS; i++) {
   const before = await page.evaluate(() => {
-    const g = window.__KOROVAN__;
+    const g = window.__ROAM__;
     const turn = g.state.turn;
     g.endTurn();
     return turn;
   });
-  await page.waitForFunction((turn) => window.__KOROVAN__.state.turn === turn + 1, before, { timeout: 30000 });
+  await page.waitForFunction((turn) => window.__ROAM__.state.turn === turn + 1, before, { timeout: 30000 });
   turnMs.push(await page.evaluate(() => {
-    const s = window.__KOROVAN_PERF__.snapshot().turn;
+    const s = window.__ROAM_PERF__.snapshot().turn;
     if (!s) throw new Error('No turn timer recorded');
     return s.last;
   }));
@@ -58,16 +58,16 @@ results.turnMs = Math.max(...turnMs);
 const previewMs = [];
 for (const offset of ORDER_OFFSETS) {
   previewMs.push(await page.evaluate(async ([dx, dy]) => {
-    const g = window.__KOROVAN__;
+    const g = window.__ROAM__;
     const w = { ...g.state, vehicles: g.state.vehicles.map((v) => ({ ...v })) };
     const me = w.vehicles.find((v) => v.id === w.player.vehicleId);
     if (!me) throw new Error(`Player vehicle ${w.player.vehicleId} missing`);
     const clamp = (x) => Math.max(1, Math.min(w.size - 1, x));
     me.order = { kind: 'stopAt', dest: { x: clamp(me.pos.x + dx), y: clamp(me.pos.y + dy) } };
-    window.__KOROVAN_PERF__.reset();
+    window.__ROAM_PERF__.reset();
     g.apply(w);
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-    const s = window.__KOROVAN_PERF__.snapshot().preview;
+    const s = window.__ROAM_PERF__.snapshot().preview;
     if (!s) throw new Error('No preview timer recorded after a move order');
     return s.last;
   }, offset));
@@ -75,7 +75,7 @@ for (const offset of ORDER_OFFSETS) {
 results.previewMs = Math.max(...previewMs);
 
 const towns = await page.evaluate(async () => {
-  if (typeof window.__KOROVAN__.debugView !== 'function') throw new Error('Game.debugView is missing, so frame time cannot be measured over the towns');
+  if (typeof window.__ROAM__.debugView !== 'function') throw new Error('Game.debugView is missing, so frame time cannot be measured over the towns');
   const { REGION } = await import('/src/data/region.ts');
   const { sitePads } = await import('/src/sim/sites.ts');
   return REGION.towns.map((t) => ({ name: t.name, x: t.pos.x, y: t.pos.y, pad: sitePads(t)[0] }));
@@ -84,7 +84,7 @@ const frameP95 = [];
 for (const t of towns) {
   frameP95.push(await page.evaluate(async ({ x, y, pad, zoom, settle, sample }) => {
     // The camera cannot pan past gray vision, so the truck moves to the town's pad first. Trucks never enter a site.
-    const g = window.__KOROVAN__;
+    const g = window.__ROAM__;
     const w = { ...g.state, vehicles: g.state.vehicles.map((v) => (v.id === g.state.player.vehicleId ? { ...v, pos: pad, order: null } : v)) };
     g.apply(w);
     g.debugView(x, y, zoom);
