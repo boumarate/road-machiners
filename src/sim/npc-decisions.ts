@@ -32,7 +32,7 @@ import { skillEffect } from './progress';
 import { randRange } from './rng';
 import { canReachSalvage, canTakeAny, canTakeFromTruck, siteLootTable } from './salvage';
 import { canUseSite, siteGates, sitePads, siteUnder, type Site } from './sites';
-import { stateOf, statesHeld } from './states';
+import { boundTo, givesWord, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
 import { canHire, canTakeEscort, declineFactor, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
 import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
@@ -336,12 +336,16 @@ export function busyWithFight(vehicle: Vehicle, otherId: string): boolean {
 
 // ---- Robbery.
 
-// A robber can rob a truck it sees, that is not hostile yet, that is not busy fighting another, that is not
-// knocked out, since that one is looted instead, that is not on a tow rope, and that carries loot. Cheap checks run before the sight line.
+// A robber can rob a truck it sees, that is fair game, that is not busy fighting another, and that is robbable.
+// Cheap checks run before the sight line.
 export function canRob(w: World, robber: Vehicle, target: Vehicle): boolean {
   if (robber.id === target.id || !isRobbable(w, target) || busyWithFight(target, robber.id)) return false;
-  if (isHostile(w, robber, target)) return false;
-  return canVehicleSee(w, robber, target.pos);
+  return isFairGame(w, robber, target) && canVehicleSee(w, robber, target.pos);
+}
+
+// A truck the robber is not hostile to yet and has no deal with.
+function isFairGame(w: World, robber: Vehicle, target: Vehicle): boolean {
+  return !isHostile(w, robber, target) && !boundTo(w, robber.id, target.id);
 }
 
 function isRobbable(w: World, target: Vehicle): boolean {
@@ -743,8 +747,37 @@ export function hasChoice(weights: Partial<Record<OptionName, number>>): boolean
   return !('keep' in weights) || Object.keys(weights).some((option) => option !== 'keep');
 }
 
-// hasChoice from availability alone, without the situation factors.
+// A venture starts something new on the driver's own initiative. A response answers what happens to the driver.
+const DECISION_KINDS: Record<DecisionId, 'venture' | 'response'> = {
+  hostileSeen: 'response',
+  contactHeard: 'response',
+  attacked: 'response',
+  preySeen: 'venture',
+  strandedSeen: 'venture',
+  salvageSeen: 'venture',
+  patchDeal: 'response',
+  ramChance: 'response',
+  crashed: 'response',
+  parley: 'response',
+  truceOffered: 'response',
+  mercyBegged: 'response',
+  threatened: 'response',
+  mugging: 'response',
+  resume: 'response',
+  idle: 'venture',
+  escortSeen: 'venture',
+  hireOffered: 'response',
+};
+
+// A driver that gave its word starts no venture until the deal ends, except about the truck it gave it to.
+export function keepsWord(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  if (DECISION_KINDS[decision] !== 'venture' || !givesWord(world, vehicle.id)) return false;
+  return subject === null || !boundTo(world, vehicle.id, subject);
+}
+
+// hasChoice from availability alone, without the situation factors. A driver keeping its word has none.
 export function offersChoice(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  if (keepsWord(world, vehicle, decision, subject)) return false;
   const options = Object.keys(DECISIONS[decision]) as OptionName[];
   if (!options.includes('keep')) return true;
   return options.some((option) => option !== 'keep' && AVAILABLE[option](world, vehicle, decision, subject));

@@ -6,7 +6,8 @@ import { SPAWN } from '../data/npcs';
 import { REGION } from '../data/region';
 import { getResources } from './resources';
 import { siteGates } from './sites';
-import { autoOrders, fireWeapons, hitOdds, isHostile, laneOfOffset, resolveDestroyed } from './combat';
+import { autoOrders, fireWeapons, hitOdds, isHostile, laneOfOffset, noteAttack, resolveDestroyed } from './combat';
+import { thinkNpc, topGoal } from './npc-activities';
 import { mountedItems, mountedParts } from './grid';
 import { addState, stateOf } from './states';
 import { refreshVision } from './vision';
@@ -644,5 +645,39 @@ describe('weapon damage multiplier', () => {
     expect(full.length).toBeGreaterThan(0);
     expect(half).toHaveLength(full.length);
     half.forEach((d, i) => expect(Math.abs(d - full[i] / 2)).toBeLessThanOrEqual(0.5));
+  });
+});
+
+describe('betrayal', () => {
+  function partners() {
+    const w = emptyWorld({ x: 80, y: 80 });
+    const me = w.vehicles[0];
+    const npc = addVehicle(w, 'traders', 'scout', ['mg', 'stockEngine'], { x: me.pos.x + 6, y: me.pos.y });
+    npc.brain = npcBrain('trader', npc.pos, ['trader']);
+    return { w, me, npc };
+  }
+
+  it('a shot at a trade partner gives the partner revenge on the shooter', () => {
+    const { w, me, npc } = partners();
+    addState(w, 'trade', npc.id, me.id, { kind: 'none' });
+    noteAttack(w, me, npc, true);
+    expect(stateOf(w, 'revenge', npc.id, me.id)).not.toBeNull();
+  });
+
+  it('a shot at a stranger gives no revenge', () => {
+    const { w, me, npc } = partners();
+    noteAttack(w, me, npc, true);
+    expect(stateOf(w, 'revenge', npc.id, me.id)).toBeNull();
+  });
+
+  it('a betrayed partner drops the deal and fights back', () => {
+    const { w, me, npc } = partners();
+    addState(w, 'trade', npc.id, me.id, { kind: 'none' });
+    npc.brain!.goals = [{ kind: 'meet', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'pull over to trade' }];
+    noteAttack(w, me, npc, true);
+    forceOption('attacked', 'fightBack');
+    thinkNpc(w, npc);
+    expect(stateOf(w, 'trade', npc.id, me.id)).toBeNull();
+    expect(topGoal(npc)).toMatchObject({ kind: 'fight', targetId: me.id });
   });
 });

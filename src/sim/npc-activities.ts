@@ -16,7 +16,7 @@ import { addGoods } from './inventory';
 import { cancelJob, inCombat } from './jobs';
 import { isFree } from './spawn';
 import {
-  bestTrade, canRob, decide, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolTown, travelSitesAway,
+  bestTrade, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolTown, travelSitesAway,
   huntingGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
@@ -304,6 +304,7 @@ const IDLE_GOALS: Record<Exclude<DecisionOptions['idle'], 'wait'>, IdleGoal> = {
 };
 
 function idleGoal(world: World, vehicle: Vehicle): NpcActivity {
+  if (keepsWord(world, vehicle, 'idle', null)) return createActivity('wait', null, null, 'keep its word');
   const option = decide(world, vehicle, 'idle', null, null);
   if (option === 'wait') return createActivity('wait', null, null, 'nothing worth doing');
   return IDLE_GOALS[option](world, vehicle);
@@ -666,9 +667,8 @@ export function defyThreat(world: World, vehicle: Vehicle, threatener: Vehicle, 
 
 // One roll per new truck in sight the NPC can rob, nearest first. The sighting's perceived danger weighs the roll.
 // Rob starts a feud with the target and fights it. The feud makes the target a hostile in sight, so it is noticed
-// as one and fires no second roll. A driver on a tow job keeps its word and robs no one until the tow ends.
+// as one and fires no second roll.
 function onPreySeen(world: World, vehicle: Vehicle): void {
-  if (vehicle.brain!.goals.some((goal) => goal.kind === 'tow')) return;
   const prey = world.vehicles
     .filter((other) => !(`preySeen:${other.id}` in vehicle.brain!.noticed) && canRob(world, vehicle, other))
     .sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
@@ -1027,22 +1027,28 @@ function searchStock(world: World, vehicle: Vehicle, stock: SalvageStock): void 
 }
 
 // The goal reach rule: within twice the stop radius of the destination.
-export function reachedDestination(vehicle: Vehicle, activity: NpcActivity): boolean {
+export function withinReach(vehicle: Vehicle, activity: NpcActivity): boolean {
   return activity.destination !== null && dist(vehicle.pos, activity.destination) <= RULES.arriveRadius * 2;
 }
 
+// A point goal ends within reach, or when its move order arrived this turn. A move arrives at the closest point the
+// route reaches, so a point no truck can reach, like one another truck covers, still ends the goal.
+function reachedDestination(world: World, vehicle: Vehicle, activity: NpcActivity): boolean {
+  return withinReach(vehicle, activity) || world.events.some((e) => e.t === 'arrived' && e.vehicle === vehicle.id);
+}
+
 function resolveRaid(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  if (reachedDestination(vehicle, activity)) finishGoal(world, vehicle, 'reached hunting ground');
+  if (reachedDestination(world, vehicle, activity)) finishGoal(world, vehicle, 'reached hunting ground');
 }
 
 // A flee ends parked on its point: a safe spot, or the map edge. The driver keeps the threat noticed while it
 // still perceives it, so it does not flee again from the same truck.
 function resolveFlee(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  if (reachedDestination(vehicle, activity)) finishGoal(world, vehicle, 'nowhere farther to run');
+  if (reachedDestination(world, vehicle, activity)) finishGoal(world, vehicle, 'nowhere farther to run');
 }
 
 function resolveInvestigate(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  if (reachedDestination(vehicle, activity)) finishGoal(world, vehicle, 'found nothing at the contact');
+  if (reachedDestination(world, vehicle, activity)) finishGoal(world, vehicle, 'found nothing at the contact');
 }
 
 // The site of a site goal once the NPC can use it, which starts the act phase. Null while it cannot.
@@ -1113,7 +1119,7 @@ function resolveTravel(world: World, vehicle: Vehicle, activity: NpcActivity): v
 // A goal that only drives to a point ends parked on it.
 function arrivalResolver(reason: string): Resolver {
   return (world, vehicle, activity) => {
-    if (reachedDestination(vehicle, activity)) finishGoal(world, vehicle, reason);
+    if (reachedDestination(world, vehicle, activity)) finishGoal(world, vehicle, reason);
   };
 }
 

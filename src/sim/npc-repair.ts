@@ -5,7 +5,7 @@ import { NPC_UPKEEP } from '../data/npcs';
 import { isJunk, maxHp } from './wear';
 import { mountedParts } from './grid';
 import { inCombat, startJob } from './jobs';
-import { reachedDestination } from './npc-activities';
+import { withinReach } from './npc-activities';
 import { straightClear } from './path';
 import { repairPlan } from './repair';
 import { getResources } from './resources';
@@ -82,7 +82,7 @@ export function continueNpcRepair(world: World, vehicle: Vehicle, activity: NpcA
 // A driver repairs where it stands with no spot, or within the goal reach rule of its spot, so a drift after a
 // patch does not send it circling back.
 export function repairsHere(vehicle: Vehicle, activity: NpcActivity): boolean {
-  return activity.destination === null || reachedDestination(vehicle, activity);
+  return activity.destination === null || withinReach(vehicle, activity);
 }
 
 // Starts the next repair job once parked where it repairs. True when nothing is left to patch.

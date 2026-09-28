@@ -401,9 +401,15 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   const stored = mem.route && dist(mem.route.dest, order.dest) < RULES.arriveRadius && mem.route.radius === s.radius ? continueRoute(w, v.pos, mem.route, order.dest, s.radius, blockers, v) : null;
   const path = v.direct ? null : stored ?? [...route(w, v.pos, order.dest, s.radius, blockers, v)]; // copied, since driving consumes it
   mem.route = path ? { ...keepRoute(w, order.dest, path, blockers), radius: s.radius } : null;
-  if (order.kind === 'stopAt') return { ...base, dest: order.dest, route: path, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
+  if (order.kind === 'stopAt') return { ...base, dest: stopPoint(path, order.dest), route: path, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
   const next = throughSpeed(s, speed, dist(v.pos, order.dest), order.pace);
   return { ...base, dest: order.dest, route: path, target: toMps(next), stopAt: false };
+}
+
+// A stop order arrives at the route's end, which is the closest point the planner reaches when the order point
+// itself cannot be reached, as in far travel. A careless driver has no route and stops on the order point.
+function stopPoint(path: Vec[] | null, dest: Vec): Vec {
+  return path ? path[path.length - 1] : dest;
 }
 
 // Without an order a moving truck coasts on, and a parked one holds its brakes, so it does not roll down a slope.

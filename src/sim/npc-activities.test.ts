@@ -19,6 +19,8 @@ import { canUseSite, siteGates, sitePads } from './sites';
 import { fuelCap, vehicleStats } from './stats';
 import { heatAt } from './sun';
 import { dist } from './vec';
+import { advanceFar } from './far';
+import type { World } from './types';
 
 function createScavenger() {
   const w = emptyWorld({ x: 50, y: 50 });
@@ -565,5 +567,23 @@ describe('salvage on the way', () => {
     thinkNpc(w, npc);
     thinkNpc(w, npc);
     expect(topGoal(npc)?.kind).toBe('loot');
+  });
+});
+
+describe('point goals', () => {
+  it('an explore goal ends once the move arrives as close as it can to a point another truck covers', () => {
+    const w0 = emptyWorld({ x: 10, y: 10 });
+    const npc = addVehicle(w0, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 150, y: 150 });
+    npc.brain = npcBrain('roamer', npc.pos, ['roamer']);
+    npc.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 170, y: 150 }, phase: 'travel', reason: 'test spot' }];
+    addVehicle(w0, 'traders', 'hauler', [], { x: 170, y: 150 });
+    const moveFar = (w: World) => w.vehicles.forEach((v) => advanceFar(w, v));
+    // Salvage on the way would pull the driver off its point.
+    forceOption('salvageSeen', 'keep');
+    let w = w0;
+    for (let i = 0; i < 20 && topGoal(w.vehicles.find((v) => v.id === npc.id)!)?.kind === 'explore'; i++) w = endTurn(w, moveFar);
+    const after = w.vehicles.find((v) => v.id === npc.id)!;
+    expect(topGoal(after)?.kind).not.toBe('explore');
+    expect(dist(after.pos, { x: 170, y: 150 })).toBeGreaterThan(RULES.arriveRadius * 2);
   });
 });

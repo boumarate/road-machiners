@@ -9,7 +9,7 @@ import { decide, huntingGrounds, isWeak, optionChances, optionWeights, vehicleDa
 import { siteLootTable } from './salvage';
 import { sitePads } from './sites';
 import { noteHurt, thinkNpc, topGoal } from './npc-activities';
-import { addState, stateOf } from './states';
+import { addState, endState, stateOf } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls } from './testkit';
 import type { TraitId } from '../data/npcs';
 import type { Faction, Vehicle, World } from './types';
@@ -447,5 +447,38 @@ describe('hunting grounds', () => {
     for (const p of grounds.filter(onRoad)) for (const site of sites) expect(dist(p, site.pos) - site.radius).toBeGreaterThanOrEqual(HUNT.siteDistance);
     const guarded = [...REGION.towns, ...REGION.locations.filter((l) => l.kind === 'camp')];
     for (const p of grounds) for (const site of guarded) expect(dist(p, site.pos)).toBeGreaterThan(site.radius + REGION.sites.pad.length);
+  });
+});
+
+describe('a driver that gave its word', () => {
+  // A scumbag pulling over to trade with the player, with a loaded truck passing by.
+  function meeting() {
+    const w = emptyWorld({ x: 80, y: 80 });
+    const me = w.vehicles[0];
+    const npc = addNpc(w, 'traders', 'trader', ['trader', 'scumbag'], { x: 40, y: 30 });
+    const passer = addVehicle(w, 'traders', 'scout', [], { x: 44, y: 34 });
+    if (addGoods(w, passer, 'scrap', 2) < 2) throw new Error('No room for the passer goods');
+    addState(w, 'trade', npc.id, me.id, { kind: 'none' });
+    npc.brain!.goals = [{ kind: 'meet', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'pull over to trade' }];
+    return { w, me, npc, passer };
+  }
+
+  it('starts nothing of its own until the deal ends, then decides', () => {
+    const { w, me, npc, passer } = meeting();
+    forceOption('preySeen', 'rob');
+    thinkNpc(w, npc);
+    expect(npc.brain!.goals.map((g) => g.kind)).toEqual(['meet']);
+    expect(npc.brain!.noticed).not.toHaveProperty([`preySeen:${passer.id}`]);
+    endState(w, stateOf(w, 'trade', npc.id, me.id)!, 'fulfilled');
+    thinkNpc(w, npc);
+    expect(topGoal(npc)).toMatchObject({ kind: 'fight', targetId: passer.id });
+  });
+
+  it('still reacts to a hostile in sight', () => {
+    const { w, npc } = meeting();
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 46, y: 30 });
+    forceOption('hostileSeen', 'fight');
+    thinkNpc(w, npc);
+    expect(topGoal(npc)).toMatchObject({ kind: 'fight', targetId: raider.id });
   });
 });

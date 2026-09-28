@@ -782,7 +782,8 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   answering: {},
   // An escort tows its stranded leader: tow outweighs keep 99 to 1.
   escort: { strandedSeen: { tow: { add: 99 } } },
-  // A driver the player knocked out wants revenge: every hostile choice about the player gets more likely.
+  // A driver the player knocked out, or a partner a truck betrayed, wants revenge: every hostile choice about that
+  // truck gets more likely.
   // Robbing and closing in on a heard contact no longer need a trait.
   revenge: {
     hostileSeen: { fight: { add: 4 } },

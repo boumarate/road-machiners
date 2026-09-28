@@ -173,6 +173,8 @@ Engine overdrive, on the O key, gives the player 33% more top speed and accelera
 
 NPC behavior has three layers. Traits are permanent and set the chances of choices. A goal stack keeps long-term work under interruptions like fights, flight, service and repairs. The driver usually resumes that work once an interruption ends. Decision points pick reactions by weighted chance when a new hostile, contact, attack, prey, stranded truck or passed wreck appears. Traits give fixed knowledge of towns, salvage sites and hunting grounds. Each NPC remembers the subjects it already decided on and the attackers still in sight. There is no live shared intelligence. The hover panel shows what a seen driver is doing and why, under its name. It also shows every state the driver holds toward the player, like feuds, grudges, revenge and deals, with the turns left. The full log debug flag logs each goal change and its reason.
 
+A driver never stands still for good. It waits for a parked truck ahead only while that truck is about to drive. A point it cannot reach, like one another truck covers, counts as reached once it gets as close as it can. A driver that still stays put for a while with its goal out of reach drives to a random free spot nearby and tries again.
+
 NPCs spawn with equipment sampled from weighted tables for their role: a chassis, a fitting engine and weapon, then optional cargo parts, armor and goods. It respects mount space, rated mass and an equipment budget separate from the driver's wallet. Rare equipment has a lower weight. The same world seed and actions produce the same equipment. There is no separate loot roll on defeat.
 
 - Scavengers collect salvage and sell cargo. A scavenger on a trip stops for three in four wrecks it passes, then mostly goes back to its trip.
@@ -221,6 +223,8 @@ A shot at another vehicle is an attack, hit or miss. The victim and its nearby f
 A damaging crash between trucks at peace is most likely an accident. Each damaged NPC decides once whether to forgive it or retaliate. Most drivers forgive. Raiders and scumbags retaliate more often, and a crash with a faction mate is nearly always forgiven. A retaliating driver starts a feud as if it was attacked. Contact with the truck on a tow rope counts for nothing.
 
 A driver hurt by a hostile may plead with it. It asks for a truce, or it begs for mercy when it is weak. Traders and cowards plead most, and raiders seldom. The other side decides whether to accept. A robber or raider after the other truck's cargo seldom pleads or accepts, unless it is weak or outgunned. It also rarely robs a truck it holds a truce with. A truce ends the feuds between both sides and their nearby faction mates. Mercy is a truce the beggar pays for with its cargo, which it drops for the winner to take. A driver rarely pleads with the same foe again soon.
+
+A driver keeps its word. A trade meeting, a patch, a tow, a tow on its way and an escort are deals. The two sides of a deal never rob each other. The driver that made the deal starts nothing of its own until the deal ends: it robs no one, tows no one else, loots nothing and hires no one. It still reacts to hostiles, contacts and attacks. A deal kept to its end leaves both drivers backed off from each other for a while. A driver attacked by its deal partner fights back or flees as usual, and it also wants revenge on that truck.
 
 States are timed relations between two trucks. Each ends as expired, fulfilled or broken, and each ending can start other states.
 
@@ -276,7 +280,7 @@ Fuel and supplies limit range. Fuel burns per tile by chassis, times heat. Below
 
 ## Escorts
 
-One truck can follow another as its escort. The follower rides beside its leader's tail at the leader's pace, and resumes following after any fight or tow. It treats shots at the leader as shots at itself, so it fights back or flees as it would for itself. It tows a stranded leader to the usual tow site.
+One truck can follow another as its escort. The follower rides beside its leader's tail at the leader's pace, and resumes following after any fight or tow. The leader waits for an escort that falls behind while following. It does not wait for an escort busy with a fight or a service stop, which catches up after. It treats shots at the leader as shots at itself, so it fights back or flees as it would for itself. It tows a stranded leader to the usual tow site.
 
 A trader, courier or roamer on its way to a site may hire a free merc it sees. The fee grows with the distance to the destination, and the client must afford it above its upkeep reserve. The merc accepts or refuses, and a hurt merc refuses more often. The client pays once, when it reaches the destination. An escort ends unpaid when either truck is gone, knocked out or turns hostile.
 

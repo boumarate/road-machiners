@@ -26,6 +26,8 @@ export type StateKind = {
   hooks: Partial<Record<StateEnding, (w: World, s: NpcState) => void>>;
   // The turns of shared work left while the parties work on it this turn, or null. See workOf().
   work(w: World, s: NpcState): WorkLeft | null;
+  // True when the holder gave the other party its word while the state lasts. See boundTo() and givesWord().
+  binds: boolean;
 };
 
 const never = (): boolean => false;
@@ -52,9 +54,10 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
       fulfilled: (w, s) => { if (feudData(s).robbery) lootRobbed(w, s.holder, s.other); },
     },
     work: noWork,
+    binds: false,
   },
   // The holder does not rob the other party while it lasts.
-  backedOff: { refresh: never, check: noCheck, hooks: {}, work: noWork },
+  backedOff: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
   // The holder tows the other party to a town or camp. See src/sim/tow.ts. An NPC tower's goal fulfils and breaks it. A
   // player tower's arrival is its check.
   tow: {
@@ -62,37 +65,39 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
     check: (w, s) => (s.holder === w.player.vehicleId ? checkPlayerTow(w, s) : null),
     hooks: { fulfilled: payTow, broken: releaseTow },
     work: noWork,
+    binds: true,
   },
-  turnedDown: { refresh: never, check: noCheck, hooks: {}, work: noWork },
-  towPromise: { refresh: never, check: noCheck, hooks: {}, work: noWork },
+  turnedDown: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
+  towPromise: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
   // The holder has taken the job of towing the other party, so no other driver answers. It is fulfilled by the offer
   // in src/sim/tow.ts, and broken once the holder's tow goal is gone from its stack.
-  answering: { refresh: never, check: (w, s) => (answerDropped(w, s) ? 'broken' : null), hooks: {}, work: noWork },
+  answering: { refresh: never, check: (w, s) => (answerDropped(w, s) ? 'broken' : null), hooks: {}, work: noWork, binds: true },
   // The holder patches the other party's truck. See src/sim/patch.ts. Work keeps it going, and the fulfilled hook
   // pays once.
   // The two parties are not foes while it lasts, unless a feud says otherwise. See isFoe() in src/sim/combat.ts.
-  truce: { refresh: never, check: noCheck, hooks: {}, work: noWork },
+  truce: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
   // The holder took damage in a crash with the other party while the two were at peace. The holder decides once
   // whether to forgive it, and src/sim/npc-activities.ts ends it then.
-  grievance: { refresh: never, check: noCheck, hooks: {}, work: noWork },
+  grievance: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
   // The holder asked the other party for a truce or mercy. See src/sim/parley.ts. It holds after the answer, so the
   // holder rarely asks the same party again soon.
-  plea: { refresh: never, check: noCheck, hooks: {}, work: noWork },
+  plea: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
   patch: {
     refresh: isPatching,
     check: checkPatch,
     hooks: { fulfilled: settlePatch, expired: lapsePatch },
     work: patchWork,
+    binds: true,
   },
   // The holder pulls over to trade with the player. See src/sim/economy.ts. Being parked in reach keeps it
   // going. The player ends it when done trading, and a feud between the two breaks it.
-  trade: { refresh: isMeeting, check: checkTrade, hooks: {}, work: noWork },
-  // The holder wants revenge on the player, who knocked it out. src/sim/defeat.ts fulfils it when the holder knocks
-  // the player out, and src/sim/parley.ts when the player hands it cargo.
-  revenge: { refresh: never, check: noCheck, hooks: {}, work: noWork },
+  trade: { refresh: isMeeting, check: checkTrade, hooks: {}, work: noWork, binds: true },
+  // The holder wants revenge on the other party, who knocked it out or attacked it during a deal. src/sim/defeat.ts
+  // fulfils it when the holder knocks the player out, and src/sim/parley.ts when the player hands it cargo.
+  revenge: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
   // The holder escorts the other party. See src/sim/tow.ts. The leader's arrival fulfils it, and the fulfilled
   // hook pays once.
-  escort: { refresh: never, check: checkEscort, hooks: { fulfilled: payEscort }, work: noWork },
+  escort: { refresh: never, check: checkEscort, hooks: { fulfilled: payEscort }, work: noWork, binds: true },
 };
 
 // A missing holder is left to the missing-party rule.
@@ -131,13 +136,32 @@ export function statesHeld(w: World, holder: string): NpcState[] {
   return w.states.filter((s) => s.holder === holder);
 }
 
+// Whether a and b have a deal that binds either of them. Neither turns on the other while it lasts.
+export function boundTo(w: World, a: string, b: string): boolean {
+  return w.states.some((s) => kindOf(s.kind).binds && ((s.holder === a && s.other === b) || (s.holder === b && s.other === a)));
+}
+
+// Whether the holder gave some truck its word. It starts nothing of its own until the deal ends.
+export function givesWord(w: World, holder: string): boolean {
+  return w.states.some((s) => s.holder === holder && kindOf(s.kind).binds);
+}
+
 // Removes the state, logs the ending, then runs the ending's hook. A hook may add or end other states.
 export function endState(w: World, s: NpcState, ending: StateEnding): void {
   const i = w.states.findIndex((x) => x.id === s.id);
   if (i < 0) throw new Error(`State ${s.id} has already ended`);
   const [ended] = w.states.splice(i, 1);
   w.events.push({ t: 'stateEnded', state: ended, ending });
+  if (kindOf(ended.kind).binds && ending !== 'broken') backOffAfterDeal(w, ended);
   kindOf(ended.kind).hooks[ending]?.(w, ended);
+}
+
+// A deal that was not broken leaves each NPC party backed off from the other, so neither turns on the other just
+// after it.
+function backOffAfterDeal(w: World, s: NpcState): void {
+  for (const [id, other] of [[s.holder, s.other], [s.other, s.holder]]) {
+    if (w.vehicles.find((v) => v.id === id)?.brain) addState(w, 'backedOff', id, other, { kind: 'none' });
+  }
 }
 
 // The turn step. A state added this turn waits for the next one, so a hook chain moves one step per turn.
