@@ -6,6 +6,7 @@ import { chassisDef } from "../data/chassis";
 import type { VehicleStats } from "./stats";
 import type { Blocker } from "./path";
 import { nearestPad, siteUnder } from "./sites";
+import { straightClear } from "./path";
 import type { MoveOrder, Vehicle, World } from "./types";
 import { clamp, DEG, dist, type Vec } from "./vec";
 
@@ -98,4 +99,21 @@ export function parkedVehicles(world: World, selfId: string): Blocker[] {
   return world.vehicles
     .filter((x) => x.id !== selfId && x.id !== target && x.speed < RULES.parkedSpeed)
     .map((x) => ({ pos: x.pos, r: chassisDef(x.chassisId).radius }));
+}
+
+// Where a stranded truck lands on its wheels: its own spot when free, else the nearest free spot around it.
+// Free means clear of every other vehicle, obstacles, cliffs and bridge rails.
+export function setDownSpot(world: World, v: Vehicle): Vec {
+  const { step, reach } = RULES.stranded;
+  const radius = chassisDef(v.chassisId).radius;
+  const others = world.vehicles.filter((o) => o.id !== v.id).map((o) => ({ pos: o.pos, r: chassisDef(o.chassisId).radius }));
+  for (let ring = 0; ring * step <= reach; ring++) {
+    const spots = Math.max(1, Math.ceil(2 * Math.PI * ring));
+    for (let i = 0; i < spots; i++) {
+      const a = (2 * Math.PI * i) / spots;
+      const p = { x: v.pos.x + Math.cos(a) * ring * step, y: v.pos.y + Math.sin(a) * ring * step };
+      if (straightClear(world, p, p, radius, others)) return p;
+    }
+  }
+  throw new Error(`No free spot within ${reach} tiles to set down vehicle ${v.id}`);
 }
