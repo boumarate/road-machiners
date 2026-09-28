@@ -192,6 +192,17 @@ describe('old roads', () => {
     expect(Math.cos(east.yaw)).toBeLessThan(-0.9);
   });
 
+  it('bridges a steep gully that no road could drive through, with a span on each bank', () => {
+    const { d, towns } = washDraft();
+    setCorners(d, 'heights', (i) => (i >= 36 && i <= 44 ? -3 : 0));
+
+    expect(oldRoads(d, towns, OLD_WORLD.oldRoads)).toHaveLength(1);
+
+    const spans = d.props.filter((p) => p.kind === 'bridgeSpan');
+    expect(spans).toHaveLength(2);
+    expect(spans.every((p) => p.pos.x < 36 || p.pos.x > 44)).toBe(true);
+  });
+
   it('stands no span over a shallow wash, which only cuts the asphalt', () => {
     const { d, towns } = washDraft(OLD_WORLD.oldRoads.minDrop / 2);
 
