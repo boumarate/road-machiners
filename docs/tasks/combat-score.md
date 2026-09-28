@@ -122,6 +122,14 @@ Approach: data and generation first, since wiring needs real loop lengths. The p
 ## Conclusion
 Built and verified. The music itself is unconfirmed until the user plays a battle.
 
+Revised after the user's first listen:
+- One random base per battle replaces the two layers. Each base keeps its own tempo: drums 90 BPM, bass 110 BPM. IV4 no longer applies.
+- Accents are tribal metal stingers, cut to 1.5 s with soft edges on import.
+- `Conductor` in `src/audio/conductor.ts` replaces the repeat cap. Heat fades by half every 8 s. A four-mode Markov chain steps once per bar and sets base level and muffle filter. Each accent plays by chance, lowered by its own fatigue and by crowding. IV3 no longer applies.
+- `SoundDesigner` now only places accents: a free slot up to two half-beats around the moment, weighted toward strong beats for strong events.
+- Calm music picks a new random track each time a fight ends.
+- In a scripted fight against one outrider, heat reached about 2.4. Peak mode needs 3, so it may be rare.
+
 - Review: merge-ready. One finding fixed: sight flickers from frame to frame during playback, so `CombatWatch` now counts a hostile as sighted only after a whole turn out of sight.
 - Review scope flag: `CombatScore` and `CombatWatch` sit in `src/three/sound.ts` because the quality gate blocks a new `src/three` file. That file now holds event mapping, encounter memory and Web Audio wiring. A later sound feature may need a split that the fragmentation rule allows.
 - AS1 held: loop mode keeps the length within 13 ms, and the importer makes it exact.

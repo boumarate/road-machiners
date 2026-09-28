@@ -15,10 +15,12 @@ export type LoopHandle = {
   stop(fadeMs: number): void;
 };
 
-// A loop started on a shared beat. Duck dips it under an accent at an audio time and recovers over the release.
+// A loop started on its beat. Duck dips it under an accent at an audio time and recovers over the release.
+// Tone moves its low-pass cutoff, which muffles it when low.
 export type BeatLoopHandle = LoopHandle & {
   readonly duration: number; // seconds of one pass
   duck(time: number, gain: number, attackSeconds: number, releaseSeconds: number): void;
+  setTone(cutoffHz: number, rampSeconds: number): void;
 };
 
 export type Glide = { rateFrom: number; rateTo: number; gainFrom: number; gainTo: number; seconds: number; fadeSeconds: number };
@@ -64,8 +66,10 @@ export class SoundPlayer {
     const buffer = this.getBuffer(id, cue, file);
     const src = this.loopSource(buffer);
     const duck = this.mixer.ctx.createGain();
-    src.connect(duck);
-    const gain = this.chain(duck, cue, { pan: 0, gain: 0 });
+    const tone = this.mixer.ctx.createBiquadFilter();
+    tone.type = "lowpass";
+    src.connect(duck).connect(tone);
+    const gain = this.chain(tone, cue, { pan: 0, gain: 0 });
     src.start(when, offset);
     return {
       ...this.loopHandle(src, gain, cue),
@@ -74,6 +78,7 @@ export class SoundPlayer {
         duck.gain.setTargetAtTime(level, time, attack / 3);
         duck.gain.setTargetAtTime(1, time + attack, release / 3);
       },
+      setTone: (cutoff, ramp) => tone.frequency.setTargetAtTime(cutoff, this.mixer.ctx.currentTime, ramp / 3),
     };
   }
 

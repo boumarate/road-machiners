@@ -2,6 +2,7 @@
 // war silences what the player may not see.
 
 import { BEATS_PER_BAR, engineFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS, type CueId } from "../data/sounds";
+import { Conductor, type Mode } from "../audio/conductor";
 import { SoundDesigner, type Grid } from "../audio/designer";
 import { spatial } from "../audio/pick";
 import type {
@@ -46,10 +47,15 @@ type Base = { loop: BeatLoopHandle; grid: Grid };
 const START_LEAD_SECONDS = 0.1; // bases are scheduled to start this far ahead, so each starts on its first beat
 const ACCENT_LEAD_SECONDS = 0.02; // earliest accent start from now, so Web Audio never gets a time in the past
 
+// What the score did with one accent request, for the sound log.
+export type AccentResult = { cue: AccentCue; chance: number; heat: number; mode: Mode; played: boolean };
+
 export class CombatScore {
   private bases: Base[];
   private active: Base | null = null;
   private designer: SoundDesigner;
+  private conductor = new Conductor(MIX.score);
+  private lastBar = -Infinity;
 
   constructor(
     private player: Pick<SoundPlayer, "beatLoop" | "now" | "play">,
@@ -57,33 +63,63 @@ export class CombatScore {
   ) {
     const start = player.now() + START_LEAD_SECONDS;
     this.bases = BASE_CUES.map((id) => this.base(id, start));
-    this.designer = this.designerFor(this.bases[0]);
+    this.designer = new SoundDesigner(this.bases[0].grid, MIX.score);
   }
 
-  // A battle starts on one random base, and accents follow its beat until the battle ends.
+  // A battle starts on one random base in the conductor's start mode, and accents follow that base's beat.
   setCombat(on: boolean, fadeSeconds: number): void {
     if (on === (this.active !== null)) return;
     this.active?.loop.setGain(0, fadeSeconds);
     this.active = on ? this.bases[Math.floor(this.roll() * this.bases.length)] : null;
     if (!this.active) return;
-    this.active.loop.setGain(1, fadeSeconds);
-    this.designer = this.designerFor(this.active);
+    this.conductor.begin();
+    this.designer = new SoundDesigner(this.active.grid, MIX.score);
+    this.lastBar = this.barAt(this.active, this.player.now());
+    const m = this.conductor.modeTuning();
+    this.active.loop.setTone(m.cutoffHz, 0);
+    this.active.loop.setGain(m.gain, fadeSeconds);
   }
 
-  // Plays an accent on the first free slot after delayMs, with the base dipping under it.
-  // Returns false when the designer drops it.
-  accent(cue: AccentCue, delayMs: number): boolean {
+  // Called every frame. On each new bar of the active base, the conductor may change mode, and the base moves
+  // to the new level and tone over one bar.
+  tick(): void {
+    const base = this.active;
+    if (!base) return;
     const now = this.player.now();
-    const play = this.designer.schedule(cue, now + delayMs / 1000, now + ACCENT_LEAD_SECONDS, this.roll());
-    if (!play) return false;
-    this.player.play(cue, { pan: 0, gain: play.gain }, (play.time - now) * 1000);
-    const s = MIX.score;
-    this.active?.loop.duck(play.time, s.duckGain, s.duckAttackSeconds, this.active.grid.beat);
-    return true;
+    const bar = this.barAt(base, now);
+    if (bar <= this.lastBar) return;
+    this.lastBar = bar;
+    const before = this.conductor.mode();
+    if (this.conductor.bar(now, this.roll()) === before) return;
+    const m = this.conductor.modeTuning();
+    const barSeconds = base.grid.beat * base.grid.beatsPerBar;
+    base.loop.setGain(m.gain, barSeconds);
+    base.loop.setTone(m.cutoffHz, barSeconds);
   }
 
-  private designerFor(base: Base): SoundDesigner {
-    return new SoundDesigner(base.grid, MIX.score);
+  // The event adds heat. Its accent then plays with the conductor's chance, on a slot near delayMs, with the base
+  // dipping under it.
+  accent(cue: AccentCue, delayMs: number): AccentResult {
+    const now = this.player.now();
+    const heard = this.conductor.hear(cue, now);
+    const time = this.roll() < heard.chance ? this.place(cue, now, delayMs) : null;
+    if (time !== null) this.play(cue, now, time);
+    return { cue, ...heard, played: time !== null };
+  }
+
+  private place(cue: AccentCue, now: number, delayMs: number): number | null {
+    return this.designer.schedule(now + delayMs / 1000, now + ACCENT_LEAD_SECONDS, this.conductor.emphasis(cue), this.roll());
+  }
+
+  private play(cue: AccentCue, now: number, time: number): void {
+    this.conductor.played(cue, time);
+    this.player.play(cue, { pan: 0, gain: 1 }, (time - now) * 1000);
+    const s = MIX.score;
+    this.active?.loop.duck(time, s.duckGain, s.duckAttackSeconds, this.active.grid.beat);
+  }
+
+  private barAt(base: Base, time: number): number {
+    return Math.floor((time - base.grid.start) / (base.grid.beat * base.grid.beatsPerBar));
   }
 
   // Every base starts silent at one time from its first beat, so its grid is known from then on.
@@ -93,7 +129,7 @@ export class CombatScore {
     if (files.length !== 1) throw new Error(`Score base ${id} needs exactly one file, has ${files.length}`);
     if (!beat) throw new Error(`Score base ${id} needs a beat`);
     const loop = this.player.beatLoop(id, files[0], start, scorePhaseOf(files[0]));
-    return { loop, grid: { start, beat: loop.duration / (beat.bars * BEATS_PER_BAR) } };
+    return { loop, grid: { start, beat: loop.duration / (beat.bars * BEATS_PER_BAR), beatsPerBar: BEATS_PER_BAR } };
   }
 }
 
@@ -136,7 +172,7 @@ export class CombatWatch {
 }
 
 export class SoundDirector {
-  readonly log: string[] = []; // recent cue ids, newest last; read it from __KOROVAN__ in dev
+  readonly log: string[] = []; // recent cue ids and accent decisions, newest last; read it from __KOROVAN__ in dev
 
   constructor(
     private player: Pick<SoundPlayer, "play">,
@@ -144,9 +180,10 @@ export class SoundDirector {
     private score: Pick<CombatScore, "accent">,
   ) {}
 
-  // Logs only accents the score plays, so dropped repeats stay out of the log.
+  // Logs every accent decision, played or skipped, with the chance, heat and mode behind it.
   accent(cue: AccentCue, delayMs: number): void {
-    if (this.score.accent(cue, delayMs)) this.record(cue);
+    const r = this.score.accent(cue, delayMs);
+    this.record(`${cue} ${r.played ? "played" : "skipped"} p${r.chance.toFixed(2)} heat${r.heat.toFixed(1)} ${r.mode}`);
   }
 
   // delayOf gives when each event's moment comes, or null to skip the event in this call.
@@ -173,7 +210,7 @@ export class SoundDirector {
     this.player.play(cue, CENTER, 0);
   }
 
-  private record(cue: CueId): void {
+  private record(cue: string): void {
     this.log.push(cue);
     if (this.log.length > LOG_SIZE) this.log.shift();
   }
@@ -268,7 +305,7 @@ export class SoundLoops {
   private calm: LoopHandle;
   private last: LoopLevels | null = null;
 
-  constructor(player: SoundPlayer, private score: Pick<CombatScore, "setCombat">) {
+  constructor(player: SoundPlayer, private score: Pick<CombatScore, "setCombat" | "tick">) {
     this.player = player;
     const silent = { pan: 0, gain: 0 };
     this.wind = player.loop("wind", silent);
@@ -295,6 +332,7 @@ export class SoundLoops {
     if (was?.windGain !== l.windGain)
       this.wind.setGain(l.windGain, MIX.wind.fadeSeconds);
     this.updateMusic(l, was);
+    this.score.tick();
   }
 
   // Calm music comes back after a fight as a new random track.

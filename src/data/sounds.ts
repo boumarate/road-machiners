@@ -174,18 +174,36 @@ export const MIX = {
   // leaves, so a hostile at the edge of sight does not flip the music every turn.
   music: { fadeSeconds: 3, holdTurns: 5 },
   // Combat score. One random base plays while a hostile is in sight, as combat music did. Each beat of the base has
-  // subdivision slots, and an accent lands on a random free slot up to spreadSlots before or after its moment.
-  // Each repeat of one accent inside repeatSeconds plays at repeatGain times the last, and plays past repeatMax
-  // are dropped. The base dips to duckGain under an accent and recovers over one beat.
+  // subdivision slots, and an accent lands on a free slot up to spreadSlots before or after its moment. The base
+  // dips to duckGain under an accent and recovers over one beat. See Conductor for heat, modes and chances.
+  // A busy fight adds about 1 heat per turn, so heat settles near 4; the mode thresholds sit around that.
   score: {
     subdivision: 2,
     spreadSlots: 2,
     humanizeMs: 15,
-    repeatSeconds: 4,
-    repeatGain: 0.55,
-    repeatMax: 2,
     duckGain: 0.55,
     duckAttackSeconds: 0.05,
+    heatHalfLifeSeconds: 8,
+    fatigueHalfLifeSeconds: 6,
+    crowdHalfLifeSeconds: 4,
+    crowdWeight: 0.5,
+    modeSoftness: 0.3,
+    startMode: "pulse",
+    modes: {
+      hush: { gain: 0.5, cutoffHz: 700, boost: 0.6, upAt: 0.3, downAt: -Infinity },
+      pulse: { gain: 0.8, cutoffHz: 1800, boost: 0.8, upAt: 1.2, downAt: 0.15 },
+      fight: { gain: 1, cutoffHz: 8000, boost: 1, upAt: 3, downAt: 0.6 },
+      peak: { gain: 1, cutoffHz: 20000, boost: 1.3, upAt: Infinity, downAt: 2 },
+    },
+    // emphasis 2 pulls hard toward strong beats, 0 is even, and below 0 leans to off-beats.
+    accents: {
+      "accent-crash": { weight: 1, chance: 1, emphasis: 2 },
+      "accent-crit": { weight: 0.8, chance: 0.9, emphasis: 2 },
+      "accent-sighted": { weight: 0.6, chance: 1, emphasis: 1 },
+      "accent-struck": { weight: 0.5, chance: 0.7, emphasis: 1 },
+      "accent-hit": { weight: 0.4, chance: 0.6, emphasis: 0 },
+      "accent-miss": { weight: 0.2, chance: 0.4, emphasis: -1 },
+    },
   },
   // Approved reference cue per bus. The sound board plays it beside each candidate.
   anchors: { sfx: "cannon-fire" } as Partial<Record<Bus, CueId>>,

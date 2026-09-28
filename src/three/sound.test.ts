@@ -90,7 +90,7 @@ describe("engine sound assignment", () => {
         return { glide: () => {}, setGain: () => {}, stop: (ms: number) => stopped.push(ms) };
       },
     } as unknown as SoundPlayer;
-    const loops = new SoundLoops(player, { setCombat: () => {} });
+    const loops = new SoundLoops(player, { setCombat: () => {}, tick: () => {} });
     const glide = engineGlide(0, 10, 1, MIX)!;
 
     loops.drive(glide, "scout");
@@ -120,7 +120,7 @@ describe("horn sound assignment", () => {
     const width = globalThis.window?.innerWidth;
     Object.defineProperty(globalThis, "window", { value: { innerWidth: 100 }, configurable: true });
     try {
-      const director = new SoundDirector(player, rig, { accent: () => true });
+      const director = new SoundDirector(player, rig, { accent: () => { throw new Error("no accent here"); } });
       director.honk({ x: 0, y: 0, z: 0 }, 500, "scout");
       expect(calls).toEqual([["horn", { pan: 0, gain: 1 }, 500, hornSoundFor("scout")]]);
     } finally {
@@ -179,23 +179,32 @@ describe("CombatWatch", () => {
 
 describe("CombatScore", () => {
   type BaseId = "score-drums" | "score-bass";
-  type Call = { id: BaseId; file: string; when: number; offset: number; gains: number[]; ducks: number[] };
+  type Call = { id: BaseId; file: string; when: number; offset: number; gains: number[]; tones: number[]; ducks: number[] };
   const fakePlayer = () => {
     const loops: Call[] = [];
     const plays: unknown[][] = [];
+    const clock = { now: 2 };
     const player = {
-      now: () => 2,
+      now: () => clock.now,
       play: (...args: unknown[]) => { plays.push(args); },
       beatLoop: (id: BaseId, file: string, when: number, offset: number) => {
-        const call: Call = { id, file, when, offset, gains: [], ducks: [] };
+        const call: Call = { id, file, when, offset, gains: [], tones: [], ducks: [] };
         loops.push(call);
         // One second per beat for every base.
         const duration = SOUNDS[id].beat!.bars * 4;
-        return { duration, setGain: (g: number) => call.gains.push(g), glide: () => {}, stop: () => {}, duck: (t: number) => call.ducks.push(t) };
+        return {
+          duration,
+          setGain: (g: number) => call.gains.push(g),
+          setTone: (hz: number) => call.tones.push(hz),
+          glide: () => {},
+          stop: () => {},
+          duck: (t: number) => call.ducks.push(t),
+        };
       },
     } as unknown as SoundPlayer;
-    return { player, loops, plays };
+    return { player, loops, plays, clock };
   };
+  const start = MIX.score.modes[MIX.score.startMode];
 
   it("starts every base silent at one time, each at its first beat", () => {
     const { player, loops } = fakePlayer();
@@ -206,7 +215,7 @@ describe("CombatScore", () => {
     expect(loops.every((l) => l.gains.length === 0)).toBe(true);
   });
 
-  it("plays one random base per battle and fades it out after", () => {
+  it("plays one random base per battle in the start mode and fades it out after", () => {
     const { player, loops } = fakePlayer();
     const rolls = [0.9, 0.1];
     const score = new CombatScore(player, () => rolls.shift() ?? 0);
@@ -214,20 +223,41 @@ describe("CombatScore", () => {
     score.setCombat(true, 3);
     score.setCombat(false, 3);
     score.setCombat(true, 3);
-    expect(loops.map((l) => l.gains)).toEqual([[1], [1, 0]]);
+    expect(loops.map((l) => l.gains)).toEqual([[start.gain], [start.gain, 0]]);
+    expect(loops[1].tones).toEqual([start.cutoffHz]);
   });
 
-  it("plays an accent on the active base's grid and ducks that base there", () => {
+  it("plays a heard accent on the active base's grid and ducks that base there", () => {
     const { player, loops, plays } = fakePlayer();
     const score = new CombatScore(player, () => 0);
     score.setCombat(true, 3);
-    expect(score.accent("accent-hit", 0)).toBe(true);
-    const start = loops[0].when;
-    const slot = 1 / MIX.score.subdivision;
-    const time = start + Math.ceil((2 - start) / slot) * slot;
+    expect(score.accent("accent-hit", 0)).toMatchObject({ cue: "accent-hit", played: true, mode: MIX.score.startMode });
+    const time = loops[0].when; // the first slot at or after now + lead
     const [cue, at, delayMs] = plays[0] as [string, { gain: number }, number];
     expect([cue, at.gain]).toEqual(["accent-hit", 1]);
     expect(delayMs).toBeCloseTo((time - 2) * 1000);
     expect(loops.map((l) => l.ducks)).toEqual([[time], []]);
+  });
+
+  it("skips an accent when the roll misses its chance", () => {
+    const { player, plays } = fakePlayer();
+    const rolls = [0, 0.999];
+    const score = new CombatScore(player, () => rolls.shift() ?? 0);
+    score.setCombat(true, 3);
+    expect(score.accent("accent-miss", 0).played).toBe(false);
+    expect(plays).toEqual([]);
+  });
+
+  it("moves the base to the new mode's level and tone on a bar line", () => {
+    const { player, loops, clock } = fakePlayer();
+    const score = new CombatScore(player, () => 0);
+    score.setCombat(true, 3);
+    for (let i = 0; i < 4; i++) score.accent("accent-crash", 0);
+    score.tick(); // same bar: nothing
+    clock.now += 4; // next bar; roll 0 steps up
+    score.tick();
+    const next = MIX.score.modes.fight;
+    expect(loops[0].gains.at(-1)).toBe(next.gain);
+    expect(loops[0].tones.at(-1)).toBe(next.cutoffHz);
   });
 });
