@@ -9,7 +9,8 @@ import { TYPE_IDS } from '../src/sim/terrain.ts';
 const OUTSIDE = 0x202020;
 const SITE_EDGE = 0x8a1e14;
 // Round props are discs of their radius. Long props are boxes along their facing, half as wide as long.
-// Road bridge decks are as wide as the road. Billboards are boards across their facing. Road bridges go first, since other props never overlap them.
+// Road bridge decks are as wide as the road. Billboards are boards across their facing. Fence segments are
+// one-pixel lines along their facing, r to each side of the center. Road bridges go first, since other props never overlap them.
 const PROP_LOOKS = {
   rock: { color: 0x3a3028, shape: 'disc' },
   crag: { color: 0x6a5a48, shape: 'disc' },
@@ -22,6 +23,10 @@ const PROP_LOOKS = {
   pole: { color: 0x101010, shape: 'disc' },
   billboard: { color: 0x20b0b0, shape: 'board' },
   tank: { color: 0x3e5a22, shape: 'disc' },
+  shack: { color: 0xa8743a, shape: 'box' },
+  fence: { color: 0xf4ecd0, shape: 'rail' },
+  junk: { color: 0xc03890, shape: 'disc' },
+  carWreck: { color: 0x2a2a70, shape: 'long' },
 };
 const DRAW_ORDER = Object.keys(PROP_LOOKS);
 const COLORS = TYPE_IDS.map((id) => TERRAIN_TYPES[id].color);
@@ -40,16 +45,24 @@ export function paintMap(d, area, pxPerTile) {
   return pic;
 }
 
+// Half extents along and across a box-shaped prop's facing, from its radius and the size of half a pixel.
+const BOX_SHAPES = {
+  box: (r) => [r * Math.SQRT1_2, r * Math.SQRT1_2],
+  long: (r) => [r, r / 2],
+  rail: (r, halfPixel) => [r, halfPixel],
+  deck: (r) => [r, REGION.roadWidth / 2],
+  board: (r, halfPixel) => [Math.max(r / 5, halfPixel), r],
+};
+
 function paintProp(pic, area, pxPerTile, prop) {
   const look = PROP_LOOKS[prop.kind];
   if (!look) throw new Error(`No preview look for prop kind ${prop.kind}`);
   // Half a pixel at least, so a thin pole still covers one pixel.
-  const r = Math.max(prop.r, 0.5 / pxPerTile);
+  const halfPixel = 0.5 / pxPerTile;
+  const r = Math.max(prop.r, halfPixel);
   if (look.shape === 'disc') return paintDisc(pic, area, pxPerTile, prop.pos, r, look.color, 0);
-  if (look.shape === 'box') return paintBox(pic, area, pxPerTile, prop.pos, prop.yaw, r * Math.SQRT1_2, r * Math.SQRT1_2, look.color);
-  if (look.shape === 'long') return paintBox(pic, area, pxPerTile, prop.pos, prop.yaw, r, r / 2, look.color);
-  if (look.shape === 'deck') return paintBox(pic, area, pxPerTile, prop.pos, prop.yaw, r, REGION.roadWidth / 2, look.color);
-  return paintBox(pic, area, pxPerTile, prop.pos, prop.yaw, Math.max(r / 5, 0.5 / pxPerTile), r, look.color);
+  const [halfAlong, halfAcross] = BOX_SHAPES[look.shape](r, halfPixel);
+  paintBox(pic, area, pxPerTile, prop.pos, prop.yaw, halfAlong, halfAcross, look.color);
 }
 
 function groundColor(d, x, y) {

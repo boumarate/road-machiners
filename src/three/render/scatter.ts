@@ -1,9 +1,10 @@
-// Ground scatter: loose pebbles and dry scrub on open ground. Decoration only, no collision.
+// Ground scatter: loose pebbles and dry scrub on open ground, with scrub dense on scrub ground. Decoration only, no collision.
 // Placement comes from render noise per tile, so it is the same on every load. Each terrain chunk
 // draws its scatter as one instanced model per kind.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
+import type { TerrainTypeId } from '../../data/terrain';
 import { REGION } from '../../data/region';
 import { hash2 } from '../../render/noise';
 import { ROAD_INDEX } from '../../sim/road-index';
@@ -17,7 +18,10 @@ const S = PHYSICS.metersPerTile;
 const ROAD_GAP = REGION.roadWidth / 2 + 0.3; // tiles from a road center line kept free of scatter
 const OBSTACLE_GAP = 0.5; // tiles past an obstacle's radius kept free of scatter
 const PEBBLE_CHANCE = 0.3; // share of tiles with a pebble cluster
-const SCRUB_CHANCE = 0.14; // share of tiles with a scrub tuft
+// Share of scrub tiles with a scrub tuft. Dense, so scrub ground reads as brush at the default zoom.
+const SCRUB_ON_SCRUB = 0.45;
+// Share of other open tiles with a scrub tuft. Sparse, so bare ground still shows a stray bush.
+const SCRUB_ELSEWHERE = 0.04;
 const PEBBLE_RADIUS = { min: 0.025, max: 0.045 }; // tiles
 const SCRUB_RADIUS = { min: 0.07, max: 0.12 }; // tiles
 const TINT = { min: 0.85, max: 1.15 };
@@ -35,7 +39,7 @@ export function addScatter(t: Terrain, obstacles: Obstacle[], scope: RenderScope
       if (blocked[y * t.size + x]) continue;
       const h = hash2(x * 7 + 3, y * 13 + 5);
       const isPebble = h < PEBBLE_CHANCE;
-      const isScrub = h > 1 - SCRUB_CHANCE;
+      const isScrub = h > 1 - scrubChance(t.types[y * t.size + x]);
       if (!isPebble && !isScrub) continue;
       const p = { x: x + hash2(x, y * 3), y: y + hash2(x * 5, y) };
       if (ROAD_INDEX.nearestWithin(p.x, p.y, ROAD_GAP) < ROAD_GAP) continue;
@@ -55,6 +59,11 @@ export function addScatter(t: Terrain, obstacles: Obstacle[], scope: RenderScope
       scope.add(group, center, reach);
     }
   }
+}
+
+// Share of tiles of a ground type with a scrub tuft.
+function scrubChance(type: TerrainTypeId): number {
+  return type === 'scrub' ? SCRUB_ON_SCRUB : SCRUB_ELSEWHERE;
 }
 
 // Tiles whose center lies within an obstacle's radius plus the gap.

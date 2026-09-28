@@ -48,6 +48,27 @@ describe('vision', () => {
     expect(vis.has(30 * w.size + 36)).toBe(true);
   });
 
+  it('sees through a fence but not past a shack', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const from = { x: 30, y: 30 };
+    w.obstacles = [{ id: 'fence-0', pos: { x: 33, y: 30 }, r: 1.2, kind: 'landmark', look: 'fence', yaw: Math.PI / 2 }];
+    const pastFence = visibleTiles(w, from).has(30 * w.size + 36);
+    w.obstacles = [{ id: 'shack-0', pos: { x: 33, y: 30 }, r: 1.2, kind: 'landmark', look: 'shack', yaw: 0 }];
+    const pastShack = visibleTiles(w, from).has(30 * w.size + 36);
+
+    expect(pastFence).toBe(true);
+    expect(pastShack).toBe(false);
+  });
+
+  it('lets an NPC see and a gun fire through a fence', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.obstacles = [{ id: 'fence-0', pos: { x: 33, y: 30 }, r: 1.2, kind: 'landmark', look: 'fence', yaw: Math.PI / 2 }];
+    const npc = { ...w.vehicles[0], id: 'npc', pos: { x: 30, y: 30 } };
+
+    expect(canVehicleSee(w, npc, { x: 36.5, y: 30 })).toBe(true);
+    expect(hasLineOfFire(w, { x: 30, y: 30 }, { x: 36.5, y: 30 })).toBe(true);
+  });
+
   it('respects the vision radius', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const vis = visibleTiles(w, { x: 30, y: 30 });

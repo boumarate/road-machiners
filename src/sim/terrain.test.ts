@@ -51,8 +51,9 @@ describe("road index", () => {
 
 describe('terrain variety', () => {
   it('has every type with a bake rule on the baked map, with road/site priority', () => {
-    // Ash has no bake rule yet.
-    const ruled = Object.keys(TERRAIN_TYPES).filter((id) => id !== 'ash');
+    // Ash has no bake rule yet. Dirty water and toxic pools wait for the new-world layer.
+    const unruled = ['ash', 'dirtyWater', 'toxic'];
+    const ruled = Object.keys(TERRAIN_TYPES).filter((id) => !unruled.includes(id));
     const t = TEST_MAP.terrain;
     expect(new Set(t.types)).toEqual(new Set(ruled));
     for (let y = 0; y < t.size; y++) for (let x = 0; x < t.size; x++) {
@@ -66,6 +67,15 @@ describe('terrain variety', () => {
   it('gives each new surface a distinct color', () => {
     const kinds = ['mud', 'gravel', 'saltCrust', 'asphalt', 'ash', 'field'] as TerrainTypeId[];
     expect(new Set(kinds.map((id) => TERRAIN_TYPES[id]?.color)).size).toBe(6);
+  });
+
+  it('gives dirty water and toxic pools colors of their own and slows trucks on them like mud', () => {
+    const colors = Object.values(TERRAIN_TYPES).map((t) => t.color);
+
+    for (const id of ['dirtyWater', 'toxic'] as TerrainTypeId[]) {
+      expect(colors.filter((c) => c === TERRAIN_TYPES[id].color)).toHaveLength(1);
+      expect(TERRAIN_TYPES[id].speed).toBe(TERRAIN_TYPES.mud.speed);
+    }
   });
 });
 

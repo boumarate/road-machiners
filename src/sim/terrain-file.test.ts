@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAPGEN } from '../data/terrain';
 import { newDraft, typeCode, type MapDraft } from '../mapgen/bake';
-import { decodeMap, encodeMap, PROP_KINDS, type BakedProp } from './terrain';
+import { decodeMap, encodeMap, PROP_KINDS, TYPE_IDS, type BakedProp } from './terrain';
 
 const PROP_BYTES = 1 + 4 * 4 + 2 * 2;
 
@@ -34,6 +34,19 @@ describe('map file', () => {
     d.props = PROP_KINDS.map((kind, k): BakedProp => ({ kind, pos: { x: k * 0.125, y: 1 }, r: 0.5, yaw: k * 0.25, group: k, step: k + 1 }));
 
     expect(decodeMap(encodeMap(d, 1)).props).toEqual(d.props);
+  });
+
+  it('keeps the stored code of every older prop kind and ground type', () => {
+    expect(PROP_KINDS).toEqual(['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck']);
+    expect(TYPE_IDS).toEqual(['road', 'hardpan', 'sand', 'scrub', 'scree', 'mud', 'gravel', 'saltCrust', 'asphalt', 'ash', 'field', 'dirtyWater', 'toxic']);
+  });
+
+  it('round-trips pool ground types', () => {
+    const d = smallDraft();
+    d.types[0] = typeCode('dirtyWater');
+    d.types[1] = typeCode('toxic');
+
+    expect(decodeMap(encodeMap(d, 1)).terrain.types.slice(0, 2)).toEqual(['dirtyWater', 'toxic']);
   });
 
   it('refuses a prop the file cannot store', () => {

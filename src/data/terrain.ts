@@ -15,7 +15,9 @@ export type TerrainTypeId =
   | "saltCrust"
   | "asphalt"
   | "ash"
-  | "field";
+  | "field"
+  | "dirtyWater"
+  | "toxic";
 
 export type TerrainType = {
   id: TerrainTypeId;
@@ -38,8 +40,13 @@ export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
   asphalt: { id: "asphalt", name: "Cracked asphalt", speed: 0.98, wear: 0.6, dust: 0.3, color: 0x55565b },
   ash: { id: "ash", name: "Ash", speed: 0.6, wear: 1, dust: 1.6, color: 0x77737a },
   // Dead fields: dry furrowed dirt. Furrows slow a truck like scrub and shake it a little more than
-  // hardpan, and the tilled dirt throws more dust than hardpan. Last, so earlier type codes keep their values.
+  // hardpan, and the tilled dirt throws more dust than hardpan.
   field: { id: "field", name: "Dead field", speed: 0.8, wear: 1.1, dust: 1.4, color: 0x8e6e4a },
+  // Pools: shallow standing water over a mud bottom, so both drag a truck like mud and raise no dust.
+  // Toxic sludge eats at parts more than plain mud. Both wears stay below scree, the roughest ground.
+  // Last, so earlier type codes keep their values.
+  dirtyWater: { id: "dirtyWater", name: "Dirty water", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x55583a },
+  toxic: { id: "toxic", name: "Toxic pool", speed: 0.45, wear: 1.8, dust: 0.1, color: 0x9aa83c },
 };
 
 export const TERRAIN = {
