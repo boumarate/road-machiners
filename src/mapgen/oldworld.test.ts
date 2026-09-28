@@ -159,7 +159,7 @@ describe('old roads', () => {
   // Two settlements on flat ground with a wash bed running north to south between them, off every road
   // and site of the region. The wash is a trench `depth` deep, with a floor from x 38 to 42 and sides
   // sloping over 4 tiles.
-  function washDraft(depth = 1.2): { d: MapDraft; towns: OldSettlement[] } {
+  function washDraft(depth = 4): { d: MapDraft; towns: OldSettlement[] } {
     const d = newDraft(80);
     setCorners(d, 'flow', (i) => (i >= 34 && i <= 46 ? WET : 0));
     setCorners(d, 'heights', (i) => -depth * Math.max(0, Math.min(1, (4 - Math.max(38 - i, i - 42, 0)) / 4)) * (i >= 34 && i <= 46 ? 1 : 0));

@@ -333,8 +333,9 @@ export type BendRules = {
 
 // The old highway across the dry river. See highway() in src/mapgen/oldworld.ts.
 export type HighwayRules = {
+  count: number;
+  spacing: number;
   maxLength: number;
-  minGap: number;
   bridgeCost: number;
   maxBridge: number;
 };
@@ -354,6 +355,7 @@ export type OldRoadRules = {
   minBridge: number;
   minDrop: number;
   minGapRatio: number;
+  spanGap: number;
   maxBridge: number;
   bridgeCost: number;
   bankBack: number;
@@ -473,13 +475,15 @@ export const OLD_WORLD: {
     minBridge: 6, // tiles, 24 m, across a wash where the old road had a bridge; narrower gullies just cut the asphalt
     minDrop: 1, // height units, 4 m, from the lower bank to the wash floor; the broken span model hangs over a drop this deep
     minGapRatio: 0.05, // gap depth per tile of bridge; a gap shallower than 1 in 20 of its length reads as flat ground
+    spanGap: 1.5, // height units, 6 m, of gap under a bridge that leaves broken ends standing; shallower ones just wash the road out
     maxBridge: 40, // tiles, 160 m, the longest bridge an old road jumps a gully on
     bridgeCost: 1.5, // cost per tile of a bridge over a road on flat ground; a bridge beats a detour 50% longer
     bankBack: 3, // tiles back from a cut edge where a bank's height is read, past the gully side
   },
   highway: {
-    maxLength: 260, // tiles, 1 km, the longest highway between two settlements
-    minGap: 1.5, // height units, 6 m, below the lower end of the bridge; shallower gaps read as flat ground on screen
+    count: 4, // old highways on the map, each with its great broken bridge; rare enough to stay landmarks
+    spacing: 80, // tiles, 320 m, between the deepest bridges of two highways, so they spread over the map
+    maxLength: 400, // tiles, 1.6 km, the longest highway between two settlements
     bridgeCost: 1.2, // cost per tile of highway bridge over road on flat ground; a little dearer, so the bridge spans only the ravine
     maxBridge: 80, // tiles, 320 m, the longest highway bridge; enough for a wide valley and its banks
   },

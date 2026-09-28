@@ -358,9 +358,10 @@ export function oldRoads(d: MapDraft, towns: OldSettlement[], rules: OldRoadRule
   return out;
 }
 
-// The old highway: of all settlement pairs within reach, the one whose road jumps the deepest gap on a
-// bridge, so the map's one great broken bridge stands over its most striking drop. The canyon has Canyon
-// Bridge, so no highway bridge crosses it. Empty when no pair's route bridges a gap minGap deep.
+// Old highways: of all settlement pairs within reach, those whose roads jump the deepest gaps on bridges,
+// deepest first, up to count highways with their bridges at least spacing apart. So each great broken
+// bridge stands over one of the map's most striking drops. The canyon has Canyon Bridge, so no highway
+// bridge crosses it. Only bridges deep enough to leave broken ends count.
 export function highway(d: MapDraft, towns: OldSettlement[], roads: OldRoadRules, rules: HighwayRules): OldRoad[] {
   const grid = new RouteGrid(d, { ...roads, bridgeCost: rules.bridgeCost, maxBridge: rules.maxBridge });
   const pairs = towns.flatMap((a, k) => towns.slice(k + 1).map((b) => [a.pos, b.pos] as const));
@@ -368,11 +369,21 @@ export function highway(d: MapDraft, towns: OldSettlement[], roads: OldRoadRules
     .filter(([a, b]) => dist(a, b) <= rules.maxLength)
     .map(([a, b]) => grid.route(a, b))
     .filter((path): path is RoutePath => path !== null)
-    .map((path) => ({ path, gap: Math.max(0, ...realBridges(d, path.bridges.filter((br) => !overCanyon(br)), roads).map((br) => gapDepth(d, br))) }))
-    .filter((c) => c.gap >= rules.minGap);
-  if (candidates.length === 0) return [];
-  const best = candidates.reduce((x, y) => (y.gap > x.gap ? y : x));
-  return [layOldRoad(d, { line: new RoadLine(best.path.points), width: roads.width, bridges: best.path.bridges.filter((br) => !overCanyon(br)) }, roads)];
+    .map((path) => ({ path, best: deepestBridge(d, path.bridges.filter((br) => !overCanyon(br)), roads) }))
+    .filter((c) => c.best !== null && c.best.gap >= roads.spanGap)
+    .sort((x, y) => y.best!.gap - x.best!.gap);
+  const chosen: typeof candidates = [];
+  for (const c of candidates) {
+    if (chosen.length >= rules.count) break;
+    if (chosen.every((o) => dist(o.best!.mid, c.best!.mid) >= rules.spacing)) chosen.push(c);
+  }
+  return chosen.map((c) => layOldRoad(d, { line: new RoadLine(c.path.points), width: roads.width, bridges: c.path.bridges.filter((br) => !overCanyon(br)) }, roads));
+}
+
+// The real bridge of a route over the deepest gap, with its depth and midpoint, or null.
+function deepestBridge(d: MapDraft, bridges: [Vec, Vec][], rules: OldRoadRules): { gap: number; mid: Vec } | null {
+  const real = realBridges(d, bridges, rules).map(([a, b]) => ({ gap: gapDepth(d, [a, b]), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }));
+  return real.length === 0 ? null : real.reduce((x, y) => (y.gap > x.gap ? y : x));
 }
 
 // The jumps that span a gap a player can see. The route grid reads heights only at its nodes, so a jump
@@ -536,10 +547,11 @@ class RouteGrid {
   }
 
   // Whether a bridge from a to b, over ground whose lowest point is low, spans a real gap: the floor lies
-  // minDrop below a, b rises minDrop above the floor again, and a and b are within the slope limit.
+  // minDrop below a, b is back on the far rim within minDrop of a's height, and a and b are within the slope
+  // limit.
   private spansGap(a: number, b: number, low: number, cells: number): boolean {
     const drop = this.rules.minDrop;
-    return low <= this.heights[a] - drop && this.heights[b] >= low + drop && this.reachable(a, b, cells);
+    return low <= this.heights[a] - drop && this.heights[b] >= this.heights[a] - drop && this.reachable(a, b, cells);
   }
 
   // The node at (i, j) when it is on the grid and open, or -1.
@@ -650,7 +662,8 @@ function layOldRoad(d: MapDraft, route: OldRoad, rules: OldRoadRules): OldRoad {
     if (isCutTile(d, tileOf(d.size, p)) || road.bridges.some(([x, y]) => segmentDist(p, x, y) < road.width / 2)) continue;
     markTiles(d, tilesWithin(d.size, p, road.width / 2), BUILT_OLD_ROAD);
   }
-  for (const [x, y] of road.bridges) {
+  // A fallen bridge over a shallower gully left only a washed-out gap. A great one left its broken ends.
+  for (const [x, y] of road.bridges.filter((br) => gapDepth(d, br) >= rules.spanGap)) {
     placeSpan(d, x, y, rules);
     placeSpan(d, y, x, rules);
   }
