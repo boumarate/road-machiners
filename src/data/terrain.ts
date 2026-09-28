@@ -342,6 +342,7 @@ export type OldRoadRules = {
   width: number;
   spanRadius: number;
   spanRoadGap: number;
+  minBridge: number;
 };
 
 export type RoadBridgeRules = {
@@ -351,6 +352,9 @@ export type RoadBridgeRules = {
   maxSpan: number;
   overhang: number;
   brokenShare: number;
+  spanRadius: number;
+  besideGap: number;
+  dipReach: number;
 };
 
 export type PowerLineRules = {
@@ -463,14 +467,18 @@ export const OLD_WORLD: {
     width: 3, // tiles, 12 m, of cracked asphalt
     spanRadius: 1.5, // tiles of footprint of a broken bridge span
     spanRoadGap: 1, // tiles between a span and a road edge
+    minBridge: 6, // tiles, 24 m, across a wash where the old road had a bridge; narrower gullies just cut the asphalt
   },
   roadBridges: {
     seedOffset: 7004,
     sample: 0.5, // tiles between points walked along a road
-    minSpan: 2, // tiles, 8 m, of wash bed along the road that need a bridge; narrower gullies pass under the road in a culvert
-    maxSpan: 16, // tiles, 64 m; a longer wet stretch is the road running along a wash, not across it, so it gets no bridge
+    minSpan: 4, // tiles, 16 m, of wash bed along the road that need a bridge; narrower gullies pass under the road in a culvert
+    maxSpan: 9, // tiles, 36 m; a longer wet stretch is the road running along a wash, not across it, so it gets no bridge
     overhang: 2, // tiles the bridge reaches past each edge of the wash bed
     brokenShare: 0.35, // share of road bridges that are broken, where the road dips through the wash
+    spanRadius: 1.5, // tiles of footprint of each broken end, the bridge_broken model's reference radius
+    besideGap: 1, // tiles between the road edge and the broken ends of the old bridge beside it
+    dipReach: 12, // tiles around a broken bridge where the road keeps the wash's ground; road grading still caps its grade
   },
   powerLines: {
     seedOffset: 7005,

@@ -47,6 +47,14 @@ describe('vision', () => {
     expect(vis.has(30 * w.size + 36)).toBe(true);
   });
 
+  it('sees over a road bridge but not past a ruin', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.obstacles = [{ id: 'roadBridge-0', pos: { x: 33, y: 30 }, r: 1.2, kind: 'landmark', look: 'roadBridge', yaw: 0 }];
+    expect(visibleTiles(w, { x: 30, y: 30 }).has(30 * w.size + 36)).toBe(true);
+    w.obstacles = [{ id: 'ruin-0', pos: { x: 33, y: 30 }, r: 1.2, kind: 'landmark', look: 'ruin', yaw: 0 }];
+    expect(visibleTiles(w, { x: 30, y: 30 }).has(30 * w.size + 36)).toBe(false);
+  });
+
   it('respects the vision radius', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const vis = visibleTiles(w, { x: 30, y: 30 });

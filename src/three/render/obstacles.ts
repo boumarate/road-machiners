@@ -201,29 +201,30 @@ function buildWater(t: Terrain, o: Obstacle): THREE.Object3D {
 
 // Baked landmarks from the map file: power poles with sagging wires between them, billboards, rock spires,
 // tank hulks, old buildings, silos, water towers and bridges. Each faces its baked yaw. A pole's crossbar
-// lies across its line, so the wires run along it. Ruins, houses and gas stations use the building model,
-// and every bridge the Canyon Bridge model.
+// lies across its line, so the wires run along it. Houses use the settlement building model. A road bridge
+// stretches along the road to its crossing and keeps its width.
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
 
 const MODELS: Record<LandmarkLook, ModelName> = {
   crag: 'crag',
-  ruin: 'building',
+  ruin: 'ruin_house',
   house: 'building',
   silo: 'silo',
   waterTower: 'water_tower',
-  gasStation: 'building',
-  bridgeSpan: 'bridge',
-  roadBridge: 'bridge',
-  roadBridgeBroken: 'bridge',
+  gasStation: 'gas_station',
+  bridgeSpan: 'bridge_broken',
+  roadBridge: 'road_bridge',
   pole: 'power_pole',
   billboard: 'billboard',
   tank: 'tank_hulk',
 };
 // Footprint radius in meters each model is built at, for models that scale evenly to their obstacle radius:
-// the crag spire, the silo body, the water tower tank and half the bridge deck length. The building model
+// the crag spire, the silo body, the water tower tank, the ruined house, the gas station and the broken bridge end. The building model
 // stretches to its footprint instead. The others stand at their real size.
-const MODEL_RADIUS: Partial<Record<ModelName, number>> = { crag: 1, silo: 2.5, water_tower: 2, bridge: 16 };
+const MODEL_RADIUS: Partial<Record<ModelName, number>> = { crag: 1, silo: 2.5, water_tower: 2, ruin_house: 4.8, gas_station: 7.2, bridge_broken: 6 };
+// Meters of deck the road bridge model is built with along the road, tools/blender/road_bridge.py.
+const ROAD_BRIDGE_LENGTH = 24;
 const WIRES = ['wire0', 'wire1', 'wire2'];
 const SAG = 0.7; // meters a wire hangs below its ends at mid-span
 const WIRE_POINTS = 8;
@@ -238,6 +239,7 @@ function buildLandmark(t: Terrain, o: Landmark): THREE.Object3D {
   }
   const radius = MODEL_RADIUS[name];
   if (radius !== undefined) g.scale.setScalar((o.r * S) / radius);
+  if (name === 'road_bridge') g.scale.x = (2 * o.r * S) / ROAD_BRIDGE_LENGTH;
   g.add(model(name));
   return g;
 }

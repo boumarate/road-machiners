@@ -12,7 +12,6 @@ const SITE_EDGE = 0x8a1e14;
 // Road bridge decks are as wide as the road. Billboards are boards across their facing. Road bridges go first, since other props never overlap them.
 const PROP_LOOKS = {
   roadBridge: { color: 0x3a4a8a, shape: 'deck' },
-  roadBridgeBroken: { color: 0xc02a80, shape: 'deck' },
   rock: { color: 0x3a3028, shape: 'disc' },
   crag: { color: 0x6a5a48, shape: 'disc' },
   ruin: { color: 0x6e2a1e, shape: 'box' },

@@ -47,7 +47,7 @@ describe('baked map obstacles', () => {
   });
 
   it('knows every obstacle it makes as baked, and no other', () => {
-    const baked = mapObstacles(mapWith([prop('rock', 10), prop('pole', 20, { group: 4, step: 7 }), prop('tank', 30), prop('roadBridgeBroken', 40)]));
+    const baked = mapObstacles(mapWith([prop('rock', 10), prop('pole', 20, { group: 4, step: 7 }), prop('tank', 30), prop('roadBridge', 40)]));
     const world = newWorld(1337, START_KITS.standard, TEST_MAP);
     const others = world.obstacles.filter((o) => !mapObstacles(TEST_MAP).some((b) => b.id === o.id));
     const runtimeWrecks: Obstacle[] = [{ id: 'wreck-v12', pos: { x: 1, y: 1 }, r: 1, kind: 'wreck' }, { id: 'wreck31', pos: { x: 1, y: 1 }, r: 1, kind: 'wreck' }];
@@ -58,7 +58,7 @@ describe('baked map obstacles', () => {
   });
 
   it('blocks trucks with every landmark but a road bridge, which trucks drive over', () => {
-    const kinds = ['crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'roadBridgeBroken', 'pole', 'billboard', 'tank'] as const;
+    const kinds = ['crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank'] as const;
     const blocking = mapObstacles(mapWith(kinds.map((kind, k) => prop(kind, k * 10))));
     const [bridge] = mapObstacles(mapWith([prop('roadBridge', 10)]));
 

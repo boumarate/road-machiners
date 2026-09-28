@@ -3,7 +3,7 @@
 // live on tiles, tile (x, y) at y * size + x, as an index into TYPE_IDS.
 
 import { REGION } from '../data/region';
-import { GEOLOGY, MAPGEN, TERRAIN, type TerrainTypeId } from '../data/terrain';
+import { GEOLOGY, MAPGEN, OLD_WORLD, TERRAIN, type TerrainTypeId } from '../data/terrain';
 import { bridgeCut, deckAlong } from '../sim/bridge';
 import { broadAt, flattenFactor, noiseAt, reliefAt } from '../sim/elevation';
 import { gradeRoads } from '../sim/road-grade';
@@ -12,11 +12,13 @@ import { chance, randRange, type Rng } from '../sim/rng';
 import { heightFromElevation, TYPE_IDS, type BakedProp } from '../sim/terrain';
 import { clearOfSites, onBridge } from '../sim/mapgen';
 import { dist, polylineDist, type Vec } from '../sim/vec';
+import { BUILT_FIELD, BUILT_OLD_ROAD, oldWorldLayer } from './oldworld';
 import { cornerNeighbors, geologyLayer, pondDepths, type Neighbors } from './geology';
 
 export function bakeMap(seed: number): MapDraft {
   let d = timed('base', () => baseLayer(seed, REGION.size));
   d = timed('geology', () => geologyLayer(seed, d));
+  d = timed('old world', () => oldWorldLayer(seed, d));
   d = timed('finish', () => finishLayer(seed, d));
   d = timed('ground', () => groundLayer(seed, d));
   return timed('rocks', () => rockLayer(seed, d));
@@ -90,10 +92,18 @@ export function baseLayer(seed: number, size: number): MapDraft {
 // Finish layer: ground near roads and sites blends down to the broad rolling height, except in the gap
 // under Canyon Bridge, then road grading caps every road and bank grade.
 
+// 1 at a broken road bridge, falling to 0 at OLD_WORLD.roadBridges.dipReach, so the road there keeps the
+// wash's ground and dips through it instead of crossing on a causeway.
+function dipAt(dips: Vec[], x: number, y: number): number {
+  let near = Infinity;
+  for (const p of dips) near = Math.min(near, dist(p, { x, y }));
+  return 1 - Math.min(1, near / OLD_WORLD.roadBridges.dipReach);
+}
+
 export function finishLayer(seed: number, d: MapDraft): MapDraft {
   const w = d.size + 1;
   for (let j = 0; j <= d.size; j++) for (let i = 0; i <= d.size; i++) {
-    const flatten = flattenFactor(i, j) * (1 - bridgeCut(i, j));
+    const flatten = flattenFactor(i, j) * (1 - bridgeCut(i, j)) * (1 - dipAt(d.dips, i, j));
     if (flatten === 0) continue;
     const k = j * w + i;
     d.heights[k] += (heightFromElevation(broadAt(seed, i, j)) - d.heights[k]) * flatten;
@@ -121,11 +131,16 @@ export function groundLayer(seed: number, d: MapDraft): MapDraft {
   return d;
 }
 
+// Ground types for old-world tile marks.
+const MARKED_TYPES: Record<number, TerrainTypeId> = { [BUILT_OLD_ROAD]: 'asphalt', [BUILT_FIELD]: 'field' };
+
 function pickType(g: GroundInput, x: number, y: number): TerrainTypeId {
   const c = { x: x + 0.5, y: y + 0.5 };
   const built = builtType(c);
   if (built) return built;
   const tile = y * g.d.size + x;
+  const marked = MARKED_TYPES[g.d.built[tile]];
+  if (marked) return marked;
   const k = y * (g.d.size + 1) + x;
   for (const rule of GEOLOGY_RULES) {
     const type = rule(g, tile, k);

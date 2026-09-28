@@ -9,7 +9,7 @@ import { route, routeLength } from './path';
 import { canUseSite, nearestPad, siteGates, sitePads, type Site } from './sites';
 import { getResources } from './resources';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateWhere, testDrive } from './testkit';
 import { hasLoot } from './grid';
 import { thinkNpc, topGoal } from './npc-activities';
 import { optionChances, optionWeights } from './npc-decisions';
@@ -368,6 +368,9 @@ describe('tow deals', () => {
     expect(isTowed(w)).toBe(true);
     dropTow(w, playerTow(w)!, 'danger');
     expect(stateOf(w, 'towPromise', deal.holder, w.player.vehicleId)).not.toBeNull();
+    // A forced option still leaves keep its minimum chance, so pin the tower's fresh strandedSeen roll mid-range.
+    w.rngState = rngStateWhere((roll) => roll > 0.4 && roll < 0.6);
+    thinkNpc(w, find(w, deal.holder));
     const r = runUntil(w, 30, (x) => playerTow(x) !== null);
     const again = playerTow(r.w)!;
     expect(again.holder).toBe(deal.holder);

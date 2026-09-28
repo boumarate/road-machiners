@@ -216,9 +216,9 @@ describe('road bridges', () => {
 
     roadBridges(SEED, d, OLD_WORLD.roadBridges);
 
-    expect(d.props.length).toBeGreaterThan(0);
-    for (const p of d.props) {
-      expect(['roadBridge', 'roadBridgeBroken']).toContain(p.kind);
+    const bridges = d.props.filter((p) => p.kind === 'roadBridge');
+    expect(bridges.length).toBeGreaterThan(0);
+    for (const p of bridges) {
       expect(Math.abs(p.pos.x - 201.5)).toBeLessThan(3);
       const { line, s } = nearestOnRoads(p.pos);
       expect(dist(line.pointAt(s), p.pos)).toBeLessThan(0.5);
@@ -227,15 +227,20 @@ describe('road bridges', () => {
     }
   });
 
-  it('lists every broken road bridge as a dip, and no other', () => {
+  it('lists every broken road bridge as a dip, with its broken ends beside the road, off its surface', () => {
     const d = bandDraft();
 
     roadBridges(SEED, d, { ...OLD_WORLD.roadBridges, brokenShare: 0.5 });
 
-    const broken = d.props.filter((p) => p.kind === 'roadBridgeBroken');
-    expect(broken.length).toBeGreaterThan(0);
-    expect(broken.length).toBeLessThan(d.props.length);
-    expect(d.dips).toEqual(broken.map((p) => p.pos));
+    const ends = d.props.filter((p) => p.kind === 'bridgeSpan');
+    expect(d.dips.length).toBeGreaterThan(0);
+    expect(d.props.some((p) => p.kind === 'roadBridge')).toBe(true);
+    expect(ends.length).toBeGreaterThan(0);
+    for (const end of ends) {
+      const { line, s } = nearestOnRoads(end.pos);
+      expect(dist(line.pointAt(s), end.pos)).toBeGreaterThan(REGION.roadWidth / 2 + end.r);
+      expect(Math.min(...d.dips.map((p) => dist(p, end.pos)))).toBeLessThan(OLD_WORLD.roadBridges.maxSpan);
+    }
   });
 
   it('puts no bridge where roads stay dry', () => {
@@ -389,7 +394,7 @@ describe('old-world layer', () => {
   it('keeps every prop but road bridges off roads, sites and the deck, and apart from each other', () => {
     const d = oldWorldLayer(SEED, rollingDraft());
 
-    const standing = d.props.filter((p) => p.kind !== 'roadBridge' && p.kind !== 'roadBridgeBroken');
+    const standing = d.props.filter((p) => p.kind !== 'roadBridge');
     expect(new Set(standing.map((p) => p.kind)).size).toBeGreaterThan(5);
     for (const p of standing) expectOffBuilt(p);
     for (let a = 0; a < standing.length; a++) for (let b = a + 1; b < standing.length; b++) {

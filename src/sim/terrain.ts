@@ -97,7 +97,7 @@ export function isCliff(t: Terrain, tile: number): boolean {
 // The hash is FNV-1a over every byte, so any change to the file changes it.
 
 // Kinds of baked props, in their stored order: the map file keeps a kind as its index here.
-export const PROP_KINDS = ['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'roadBridge', 'roadBridgeBroken', 'pole', 'billboard', 'tank'] as const;
+export const PROP_KINDS = ['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'roadBridge', 'pole', 'billboard', 'tank'] as const;
 export type PropKind = (typeof PROP_KINDS)[number];
 // A prop the bake placed. yaw is in radians from map +x toward +y. group and step order the poles of one
 // power line, and are 0 for other props.

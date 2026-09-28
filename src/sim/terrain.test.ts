@@ -51,8 +51,8 @@ describe("road index", () => {
 
 describe('terrain variety', () => {
   it('has every type with a bake rule on the baked map, with road/site priority', () => {
-    // Asphalt and ash have no bake rule yet.
-    const ruled = Object.keys(TERRAIN_TYPES).filter((id) => id !== 'asphalt' && id !== 'ash');
+    // Ash has no bake rule yet.
+    const ruled = Object.keys(TERRAIN_TYPES).filter((id) => id !== 'ash');
     const t = TEST_MAP.terrain;
     expect(new Set(t.types)).toEqual(new Set(ruled));
     for (let y = 0; y < t.size; y++) for (let x = 0; x < t.size; x++) {
@@ -64,8 +64,8 @@ describe('terrain variety', () => {
   });
 
   it('gives each new surface a distinct color', () => {
-    const kinds = ['mud', 'gravel', 'saltCrust', 'asphalt', 'ash'] as TerrainTypeId[];
-    expect(new Set(kinds.map((id) => TERRAIN_TYPES[id]?.color)).size).toBe(5);
+    const kinds = ['mud', 'gravel', 'saltCrust', 'asphalt', 'ash', 'field'] as TerrainTypeId[];
+    expect(new Set(kinds.map((id) => TERRAIN_TYPES[id]?.color)).size).toBe(6);
   });
 });
 

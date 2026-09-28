@@ -555,6 +555,8 @@ function layOldRoad(d: MapDraft, road: OldRoad, rules: OldRoadRules): void {
     if (!cut[k]) markTiles(d, tilesWithin(d.size, p, road.width / 2), BUILT_OLD_ROAD);
   });
   for (const [a, b] of crossings(cut)) {
+    // A narrow gully only cuts the asphalt. A wide wash took a bridge, whose broken ends stand on the banks.
+    if ((b - a) * rules.sample < rules.minBridge) continue;
     place(d, prop('bridgeSpan', points[a], rules.spanRadius, bearing(points[a], points[b])), rules.spanRoadGap);
     place(d, prop('bridgeSpan', points[b], rules.spanRadius, bearing(points[b], points[a])), rules.spanRoadGap);
   }
@@ -582,8 +584,8 @@ function crossings(cut: boolean[]): [number, number][] {
 }
 
 // Road bridges: where a road of today crosses a wash bed, a low bridge stands over the crossing along
-// the road. It is scenery over the road surface. A share are broken, and the road dips through the wash
-// at their points in d.dips.
+// the road. It is scenery over the road surface. A share are broken: the road dips through the wash at
+// their points in d.dips, and the broken ends of the old bridge stand beside it on both banks.
 
 export function roadBridges(seed: number, d: MapDraft, rules: RoadBridgeRules): void {
   REGION.roads.forEach((road, r) => {
@@ -591,11 +593,29 @@ export function roadBridges(seed: number, d: MapDraft, rules: RoadBridgeRules): 
     washRuns(d, line, rules).forEach(([s0, s1], k) => {
       const mid = (s0 + s1) / 2;
       const pos = line.pointAt(mid);
-      const broken = hashRandom(seed, rules.seedOffset, r, k) < rules.brokenShare;
-      d.props.push(prop(broken ? 'roadBridgeBroken' : 'roadBridge', pos, (s1 - s0) / 2 + rules.overhang, facing(line.dirAt(mid))));
-      if (broken) d.dips.push({ ...pos });
+      // Where two roads meet on a wash, the first bridge serves both.
+      if (d.props.some((o) => dist(o.pos, pos) < o.r + (s1 - s0) / 2 + rules.overhang)) return;
+      if (hashRandom(seed, rules.seedOffset, r, k) >= rules.brokenShare) {
+        d.props.push(prop('roadBridge', pos, (s1 - s0) / 2 + rules.overhang, facing(line.dirAt(mid))));
+        return;
+      }
+      d.dips.push({ ...pos });
+      const side = hashRandom(seed, rules.seedOffset + 1, r, k) < 0.5 ? 1 : -1;
+      brokenEnds(d, line, [s0, s1], side, rules);
     });
   });
+}
+
+// The two broken ends of an old bridge beside the road, on the banks at s0 and s1, facing each other.
+function brokenEnds(d: MapDraft, line: RoadLine, [s0, s1]: [number, number], side: number, rules: RoadBridgeRules): void {
+  const out = REGION.roadWidth / 2 + rules.besideGap + rules.spanRadius;
+  const ends = [s0, s1].map((s) => {
+    const p = line.pointAt(s);
+    const dir = line.dirAt(s);
+    return { x: p.x - dir.y * side * out, y: p.y + dir.x * side * out };
+  });
+  place(d, prop('bridgeSpan', ends[0], rules.spanRadius, facing({ x: ends[1].x - ends[0].x, y: ends[1].y - ends[0].y })), rules.besideGap);
+  place(d, prop('bridgeSpan', ends[1], rules.spanRadius, facing({ x: ends[0].x - ends[1].x, y: ends[0].y - ends[1].y })), rules.besideGap);
 }
 
 // Stretches of the road across wash beds, as distances along it from the first wet point to the next dry
