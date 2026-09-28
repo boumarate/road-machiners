@@ -434,7 +434,7 @@ export class Game {
   }
 
   private refreshTargetMarkers(): void {
-    this.markers.refresh(this.anim ? null : vehicleMarks(this.world, this.hovered));
+    this.markers.refresh(vehicleMarks(this.displayWorld(), this.hovered));
   }
 
   private isEditingControl(): boolean {
@@ -1144,7 +1144,7 @@ export class Game {
     this.zones.root.visible = steer;
     this.path.show(steer, this.displayWorld(), this.modalOpen());
     this.weaponRange.root.visible = false;
-    this.markers.place(this.frames, hide);
+    this.markers.place(this.frames, hide, this.modalOpen());
     this.placeHitCard();
     this.placePickRing(hide);
     this.contacts.update(

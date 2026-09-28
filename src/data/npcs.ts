@@ -474,7 +474,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // in ten scavengers help a stranded truck. An idle scavenger takes on a manageable hostile about nine times in
   // ten: fight 4, times NPC_BEHAVIOR.manageableFight.
   scavenger: {
-    towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks', 'salvage-yard'], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
+    towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks'], supplySites: ['dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1,
     weights: { idle: { scavenge: { add: 10 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 9 } }, hostileSeen: { fight: { add: 2 } } },
   },
   // Traders rarely pick a fight: a fight weight of 2 drops to 0.004, about 1%, and to 0.02, about 2%, against a

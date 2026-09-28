@@ -30,7 +30,7 @@ import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
 import { skillEffect, vehicleHasPerk } from './progress';
 import { randRange } from './rng';
-import { canReachSalvage, hasSalvage } from './salvage';
+import { canReachSalvage, canTakeAny } from './salvage';
 import { canUseSite, siteGates } from './sites';
 import { statesHeld } from './states';
 import { getMobilityCondition, vehicleStats } from './stats';
@@ -226,7 +226,7 @@ export function visibleSalvage(world: World, vehicle: Vehicle): SalvageStock[] {
 }
 
 function seesSalvage(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
-  return canVehicleSee(world, vehicle, stock.pos) && (!canReachSalvage(vehicle, stock) || hasSalvage(stock));
+  return canVehicleSee(world, vehicle, stock.pos) && (!canReachSalvage(vehicle, stock) || canTakeAny(world, vehicle, stock));
 }
 
 // Known salvage sites other than the one the NPC stands at.

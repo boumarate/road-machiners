@@ -88,22 +88,23 @@ export class VehicleMarkers {
 
   constructor(private readonly container: HTMLElement, private readonly rig: CameraRig) {}
 
-  // Replaces every marker. Null clears them, as during a turn's playback.
-  refresh(marks: Map<string, VehicleMark> | null): void {
+  refresh(marks: Map<string, VehicleMark>): void {
     for (const node of this.els.values()) node.remove();
     this.els.clear();
-    for (const [id, mark] of marks ?? []) {
+    for (const [id, mark] of marks) {
       const node = markerNode(mark);
       this.container.appendChild(node);
       this.els.set(id, node);
     }
   }
 
-  place(frames: Record<string, VehicleFrame>, hide: boolean): void {
+  // Weapons and the radio key hide while turns advance. Jobs stay, so their bars step each turn.
+  place(frames: Record<string, VehicleFrame>, hideAims: boolean, hideAll: boolean): void {
     for (const [id, node] of this.els) {
       const f = frames[id];
-      node.style.display = hide || !f ? 'none' : 'flex';
-      if (hide || !f) continue;
+      node.style.display = hideAll || !f ? 'none' : 'flex';
+      if (hideAll || !f) continue;
+      node.classList.toggle('aims-hidden', hideAims);
       const p = this.rig.screenOf({ x: f.pos.x, y: f.pos.y + MARKER_LIFT, z: f.pos.z });
       node.style.left = `${p.x}px`;
       node.style.top = `${p.y}px`;
