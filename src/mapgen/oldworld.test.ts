@@ -19,7 +19,6 @@ import {
   oldWorldLayer,
   overlooks,
   powerLines,
-  roadBridges,
   settlements,
   tankHulks,
   type OldSettlement,
@@ -157,10 +156,12 @@ describe('bend buildings', () => {
 
 describe('old roads', () => {
   // Two settlements on flat ground with a wash bed running north to south between them, off every road
-  // and site of the region.
-  function washDraft(): { d: MapDraft; towns: OldSettlement[] } {
+  // and site of the region. The wash is a trench `depth` deep, with a floor from x 38 to 42 and sides
+  // sloping over 4 tiles.
+  function washDraft(depth = 1.2): { d: MapDraft; towns: OldSettlement[] } {
     const d = newDraft(80);
-    setCorners(d, 'flow', (i) => (i >= 38 && i <= 42 ? WET : 0));
+    setCorners(d, 'flow', (i) => (i >= 34 && i <= 46 ? WET : 0));
+    setCorners(d, 'heights', (i) => -depth * Math.max(0, Math.min(1, (4 - Math.max(38 - i, i - 42, 0)) / 4)) * (i >= 34 && i <= 46 ? 1 : 0));
     const town = (x: number): OldSettlement => ({ pos: { x, y: 40 }, radius: 5, farm: false, ground: 0 });
     return { d, towns: [town(14), town(66)] };
   }
@@ -174,7 +175,7 @@ describe('old roads', () => {
     const tiles = tilesMarked(d, BUILT_OLD_ROAD);
     expect(tiles.filter((t) => t.x < 37).length).toBeGreaterThan(10);
     expect(tiles.filter((t) => t.x > 43).length).toBeGreaterThan(10);
-    expect(tiles.filter((t) => t.x >= 37 && t.x <= 43)).toEqual([]);
+    expect(tiles.filter((t) => t.x >= 35 && t.x <= 45)).toEqual([]);
   });
 
   it('stands a broken span on each bank, facing across', () => {
@@ -185,10 +186,19 @@ describe('old roads', () => {
     const spans = d.props.filter((p) => p.kind === 'bridgeSpan');
     expect(spans).toHaveLength(2);
     const [west, east] = [...spans].sort((a, b) => a.pos.x - b.pos.x);
-    expect(west.pos.x).toBeLessThanOrEqual(37);
-    expect(east.pos.x).toBeGreaterThanOrEqual(43);
+    expect(west.pos.x).toBeLessThanOrEqual(35);
+    expect(east.pos.x).toBeGreaterThanOrEqual(45);
     expect(Math.cos(west.yaw)).toBeGreaterThan(0.9);
     expect(Math.cos(east.yaw)).toBeLessThan(-0.9);
+  });
+
+  it('stands no span over a shallow wash, which only cuts the asphalt', () => {
+    const { d, towns } = washDraft(OLD_WORLD.oldRoads.minDrop / 2);
+
+    oldRoads(d, towns, OLD_WORLD.oldRoads);
+
+    expect(tilesMarked(d, BUILT_OLD_ROAD).length).toBeGreaterThan(20);
+    expect(d.props).toEqual([]);
   });
 
   it('lays an unbroken road with no spans over dry ground', () => {
@@ -200,56 +210,6 @@ describe('old roads', () => {
     expect(d.props).toEqual([]);
     const columns = new Set(tilesMarked(d, BUILT_OLD_ROAD).map((t) => Math.floor(t.x)));
     for (let x = 14; x < 66; x++) expect(columns.has(x)).toBe(true);
-  });
-});
-
-describe('road bridges', () => {
-  // A wash bed 4 tiles wide running north to south across the whole map.
-  function bandDraft(): MapDraft {
-    const d = newDraft(SIZE);
-    setCorners(d, 'flow', (i) => (i >= 200 && i <= 203 ? WET : 0));
-    return d;
-  }
-
-  it('stand on the road over each wash crossing, along the road', () => {
-    const d = bandDraft();
-
-    roadBridges(SEED, d, OLD_WORLD.roadBridges);
-
-    const bridges = d.props.filter((p) => p.kind === 'roadBridge');
-    expect(bridges.length).toBeGreaterThan(0);
-    for (const p of bridges) {
-      expect(Math.abs(p.pos.x - 201.5)).toBeLessThan(3);
-      const { line, s } = nearestOnRoads(p.pos);
-      expect(dist(line.pointAt(s), p.pos)).toBeLessThan(0.5);
-      const along = line.dirAt(s);
-      expect(Math.abs(Math.cos(p.yaw - Math.atan2(along.y, along.x)))).toBeGreaterThan(0.95);
-    }
-  });
-
-  it('lists every broken road bridge as a dip, with its broken ends beside the road, off its surface', () => {
-    const d = bandDraft();
-
-    roadBridges(SEED, d, { ...OLD_WORLD.roadBridges, brokenShare: 0.5 });
-
-    const ends = d.props.filter((p) => p.kind === 'bridgeSpan');
-    expect(d.dips.length).toBeGreaterThan(0);
-    expect(d.props.some((p) => p.kind === 'roadBridge')).toBe(true);
-    expect(ends.length).toBeGreaterThan(0);
-    for (const end of ends) {
-      const { line, s } = nearestOnRoads(end.pos);
-      expect(dist(line.pointAt(s), end.pos)).toBeGreaterThan(REGION.roadWidth / 2 + end.r);
-      expect(Math.min(...d.dips.map((p) => dist(p, end.pos)))).toBeLessThan(OLD_WORLD.roadBridges.maxSpan);
-    }
-  });
-
-  it('puts no bridge where roads stay dry', () => {
-    const d = newDraft(SIZE);
-
-    roadBridges(SEED, d, OLD_WORLD.roadBridges);
-
-    expect(d.props).toEqual([]);
-    expect(d.dips).toEqual([]);
   });
 });
 
@@ -391,10 +351,10 @@ describe('old-world layer', () => {
     return d;
   }
 
-  it('keeps every prop but road bridges off roads, sites and the deck, and apart from each other', () => {
+  it('keeps every prop off roads, sites and the deck, and apart from each other', () => {
     const d = oldWorldLayer(SEED, rollingDraft());
 
-    const standing = d.props.filter((p) => p.kind !== 'roadBridge');
+    const standing = d.props;
     expect(new Set(standing.map((p) => p.kind)).size).toBeGreaterThan(5);
     for (const p of standing) expectOffBuilt(p);
     for (let a = 0; a < standing.length; a++) for (let b = a + 1; b < standing.length; b++) {
@@ -422,7 +382,6 @@ describe('old-world layer', () => {
     const b = oldWorldLayer(SEED, rollingDraft());
 
     expect(b.props).toEqual(a.props);
-    expect(b.dips).toEqual(a.dips);
     expect(Array.from(b.built)).toEqual(Array.from(a.built));
   });
 });

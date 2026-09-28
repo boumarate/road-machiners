@@ -39,7 +39,6 @@ const NAMES = [
   'tank_hulk',
   'ruin_house',
   'bridge_broken',
-  'road_bridge',
   'gas_station',
 
   'bumper_front',

@@ -110,9 +110,8 @@ function overlapsAny(out: Obstacle[], pos: Vec, r: number): boolean {
   return out.some((o) => o.kind !== 'site' && dist(pos, o.pos) < o.r + r + O.gap);
 }
 
-// Site props are scenery. The whole site boundary blocks traffic instead. A road bridge stands over its road.
+// Site props are scenery. The whole site boundary blocks traffic instead.
 export function isDriveObstacle(o: Obstacle): boolean {
-  if (o.kind === 'landmark') return o.look !== 'roadBridge';
   return o.kind !== 'building' && o.kind !== 'water' && !o.id.startsWith('cw-');
 }
 

@@ -1,7 +1,6 @@
 // Old-world layer: what stood on the map before, placed by rules from terrain, flow and today's sites and
-// roads. It reads the draft after geology. It appends props, marks old-road and field tiles in d.built and
-// lists the points where a road dips through a wash under a broken road bridge in d.dips. Numbers live in
-// OLD_WORLD in src/data/terrain.ts. Every rule draws from the map seed and its own seed offset.
+// roads. It reads the draft after geology. It appends props and marks old-road and field tiles in d.built.
+// Numbers live in OLD_WORLD in src/data/terrain.ts. Every rule draws from the map seed and its own seed offset.
 
 import { REGION } from '../data/region';
 import {
@@ -14,7 +13,6 @@ import {
   type OldRoadRules,
   type OverlookRules,
   type PowerLineRules,
-  type RoadBridgeRules,
   type SettlementRules,
   type TankRules,
 } from '../data/terrain';
@@ -42,7 +40,6 @@ export function oldWorldLayer(seed: number, d: MapDraft): MapDraft {
   overlooks(seed, d, W.overlooks);
   bendBuildings(seed, d, W.bends);
   const roads = oldRoads(d, towns, W.oldRoads);
-  roadBridges(seed, d, W.roadBridges);
   powerLines(seed, d, W.powerLines);
   billboards(seed, d, W.billboards);
   tankHulks(seed, d, roads, W.tanks);
@@ -455,8 +452,47 @@ class RouteGrid {
       if (done[a]) continue;
       done[a] = 1;
       this.relax(a, goal, { cost, parent, open });
+      this.relaxBridges(a, goal, { cost, parent, open });
     }
     return null;
+  }
+
+  // Old roads crossed deep gullies on bridges: a straight jump over sunken nodes to a bank of about the
+  // same height, costlier per tile than a road on the ground.
+  private relaxBridges(a: number, goal: number, s: { cost: Float64Array; parent: Int32Array; open: NodeHeap }): void {
+    for (const [di, dj, len] of STEPS) {
+      const b = this.bridgeEnd(a, di, dj);
+      if (b < 0) continue;
+      const steps = Math.max(Math.abs((b % this.n) - (a % this.n)), Math.abs(Math.floor(b / this.n) - Math.floor(a / this.n)));
+      const through = s.cost[a] + steps * len * this.rules.cell * this.rules.bridgeCost;
+      if (through >= s.cost[b]) continue;
+      s.cost[b] = through;
+      s.parent[b] = a;
+      s.open.push(b, through + this.guess(b, goal));
+    }
+  }
+
+  // The first node past a run of nodes at least minDrop below node a along a direction, when it is open and
+  // within the slope limit of a, or -1. The run must start next to a and stay within the longest bridge.
+  private bridgeEnd(a: number, di: number, dj: number): number {
+    const floor = this.heights[a] - this.rules.minDrop;
+    for (let k = 1; k * this.rules.cell <= this.rules.maxBridge; k++) {
+      const b = this.openNode((a % this.n) + di * k, Math.floor(a / this.n) + dj * k);
+      if (b < 0) return -1;
+      if (this.heights[b] > floor) return k > 1 && this.reachable(a, b, k * Math.hypot(di, dj)) ? b : -1;
+    }
+    return -1;
+  }
+
+  // The node at (i, j) when it is on the grid and open, or -1.
+  private openNode(i: number, j: number): number {
+    const node = this.nodeAt(i, j);
+    return node >= 0 && !this.closed[node] ? node : -1;
+  }
+
+  // Whether a bridge of the given length in cells may join nodes a and b.
+  private reachable(a: number, b: number, cells: number): boolean {
+    return this.stepCost(a, b, cells * this.rules.cell) < Infinity;
   }
 
   private relax(a: number, goal: number, s: { cost: Float64Array; parent: Int32Array; open: NodeHeap }): void {
@@ -555,8 +591,9 @@ function layOldRoad(d: MapDraft, road: OldRoad, rules: OldRoadRules): void {
     if (!cut[k]) markTiles(d, tilesWithin(d.size, p, road.width / 2), BUILT_OLD_ROAD);
   });
   for (const [a, b] of crossings(cut)) {
-    // A narrow gully only cuts the asphalt. A wide wash took a bridge, whose broken ends stand on the banks.
-    if ((b - a) * rules.sample < rules.minBridge) continue;
+    // A narrow or shallow gully only cuts the asphalt. A wide, deep wash took a bridge, whose broken ends
+    // stand on the banks over the drop.
+    if ((b - a) * rules.sample < rules.minBridge || washDrop(d, points, a, b, Math.round(rules.bankBack / rules.sample)) < rules.minDrop) continue;
     place(d, prop('bridgeSpan', points[a], rules.spanRadius, bearing(points[a], points[b])), rules.spanRoadGap);
     place(d, prop('bridgeSpan', points[b], rules.spanRadius, bearing(points[b], points[a])), rules.spanRoadGap);
   }
@@ -571,6 +608,22 @@ function markable(d: MapDraft, tile: number): boolean {
   return d.built[tile] === BUILT_NONE && !isCutTile(d, tile) && !builtGround(tileCenter(d.size, tile));
 }
 
+// How far the lowest ground between two banks lies below the lower bank, in height units. Each bank is read
+// a few tiles back from the cut edge, since the cut edge often lies part way down the gully side.
+function washDrop(d: MapDraft, points: Vec[], a: number, b: number, back: number): number {
+  const at = (p: Vec) => groundOf(d, p);
+  let low = Infinity;
+  for (let k = a + 1; k < b; k++) low = Math.min(low, at(points[k]));
+  const banks = [points[Math.max(0, a - back)], points[Math.min(points.length - 1, b + back)]];
+  return Math.min(...banks.map(at)) - low;
+}
+
+// Ground height of the draft at a map point, from its nearest corner.
+function groundOf(d: MapDraft, p: Vec): number {
+  const n = d.size + 1;
+  return d.heights[Math.round(p.y) * n + Math.round(p.x)];
+}
+
 // Each run of cut points with an uncut bank on both sides, as the indexes of those two banks.
 function crossings(cut: boolean[]): [number, number][] {
   const out: [number, number][] = [];
@@ -581,75 +634,6 @@ function crossings(cut: boolean[]): [number, number][] {
     bank = k;
   });
   return out;
-}
-
-// Road bridges: where a road of today crosses a wash bed, a low bridge stands over the crossing along
-// the road. It is scenery over the road surface. A share are broken: the road dips through the wash at
-// their points in d.dips, and the broken ends of the old bridge stand beside it on both banks.
-
-export function roadBridges(seed: number, d: MapDraft, rules: RoadBridgeRules): void {
-  REGION.roads.forEach((road, r) => {
-    const line = new RoadLine(road);
-    washRuns(d, line, rules).forEach(([s0, s1], k) => {
-      const mid = (s0 + s1) / 2;
-      const pos = line.pointAt(mid);
-      // Where two roads meet on a wash, the first bridge serves both.
-      if (d.props.some((o) => dist(o.pos, pos) < o.r + (s1 - s0) / 2 + rules.overhang)) return;
-      if (hashRandom(seed, rules.seedOffset, r, k) >= rules.brokenShare) {
-        d.props.push(prop('roadBridge', pos, (s1 - s0) / 2 + rules.overhang, facing(line.dirAt(mid))));
-        return;
-      }
-      d.dips.push({ ...pos });
-      const side = hashRandom(seed, rules.seedOffset + 1, r, k) < 0.5 ? 1 : -1;
-      brokenEnds(d, line, [s0, s1], side, rules);
-    });
-  });
-}
-
-// The two broken ends of an old bridge beside the road, on the banks at s0 and s1, facing each other.
-function brokenEnds(d: MapDraft, line: RoadLine, [s0, s1]: [number, number], side: number, rules: RoadBridgeRules): void {
-  const out = REGION.roadWidth / 2 + rules.besideGap + rules.spanRadius;
-  const ends = [s0, s1].map((s) => {
-    const p = line.pointAt(s);
-    const dir = line.dirAt(s);
-    return { x: p.x - dir.y * side * out, y: p.y + dir.x * side * out };
-  });
-  place(d, prop('bridgeSpan', ends[0], rules.spanRadius, facing({ x: ends[1].x - ends[0].x, y: ends[1].y - ends[0].y })), rules.besideGap);
-  place(d, prop('bridgeSpan', ends[1], rules.spanRadius, facing({ x: ends[0].x - ends[1].x, y: ends[0].y - ends[1].y })), rules.besideGap);
-}
-
-// Stretches of the road across wash beds, as distances along it from the first wet point to the next dry
-// one. Stretches in site clearance, near the Canyon Bridge deck, too short or too long are left out.
-function washRuns(d: MapDraft, line: RoadLine, rules: RoadBridgeRules): [number, number][] {
-  const along = stations(line.length, rules.sample);
-  const wet = along.map((s) => {
-    const p = line.pointAt(s);
-    return isWashTile(d, tileOf(d.size, p)) && clearOfSites(p, 0) && !onBridge(p, rules.overhang);
-  });
-  return runs(wet)
-    .map(([a, b]): [number, number] => [along[a], along[b]])
-    .filter(([a, b]) => b - a >= rules.minSpan && b - a <= rules.maxSpan);
-}
-
-// Each run of true flags that a false flag ends, as the index of its first flag and of that false flag.
-function runs(flags: boolean[]): [number, number][] {
-  const out: [number, number][] = [];
-  let start = -1;
-  flags.forEach((flag, k) => {
-    if (flag) {
-      if (start < 0) start = k;
-      return;
-    }
-    if (start >= 0) out.push([start, k]);
-    start = -1;
-  });
-  return out;
-}
-
-function isWashTile(d: MapDraft, tile: number): boolean {
-  const w = d.size + 1;
-  const k = Math.floor(tile / d.size) * w + (tile % d.size);
-  return Math.max(d.flow[k], d.flow[k + 1], d.flow[k + w], d.flow[k + w + 1]) >= GEOLOGY.ground.washFlow;
 }
 
 // Power lines: poles at even steps along one side of a share of the long roads. Each line is its own

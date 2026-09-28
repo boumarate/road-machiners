@@ -3,7 +3,7 @@
 // live on tiles, tile (x, y) at y * size + x, as an index into TYPE_IDS.
 
 import { REGION } from '../data/region';
-import { GEOLOGY, MAPGEN, OLD_WORLD, TERRAIN, type TerrainTypeId } from '../data/terrain';
+import { GEOLOGY, MAPGEN, TERRAIN, type TerrainTypeId } from '../data/terrain';
 import { bridgeCut, deckAlong } from '../sim/bridge';
 import { broadAt, flattenFactor, noiseAt, reliefAt } from '../sim/elevation';
 import { gradeRoads } from '../sim/road-grade';
@@ -44,7 +44,6 @@ export type MapDraft = {
   // Old-world ground marks per tile, as the BUILT_ codes in ./oldworld.
   built: Uint8Array;
   // Points where a current road crosses a wash under a broken road bridge.
-  dips: Vec[];
 };
 
 export function newDraft(size: number): MapDraft {
@@ -59,7 +58,6 @@ export function newDraft(size: number): MapDraft {
     flow: new Float32Array(corners),
     slumped: new Uint8Array(corners),
     built: new Uint8Array(size * size),
-    dips: [],
   };
 }
 
@@ -92,18 +90,10 @@ export function baseLayer(seed: number, size: number): MapDraft {
 // Finish layer: ground near roads and sites blends down to the broad rolling height, except in the gap
 // under Canyon Bridge, then road grading caps every road and bank grade.
 
-// 1 at a broken road bridge, falling to 0 at OLD_WORLD.roadBridges.dipReach, so the road there keeps the
-// wash's ground and dips through it instead of crossing on a causeway.
-function dipAt(dips: Vec[], x: number, y: number): number {
-  let near = Infinity;
-  for (const p of dips) near = Math.min(near, dist(p, { x, y }));
-  return 1 - Math.min(1, near / OLD_WORLD.roadBridges.dipReach);
-}
-
 export function finishLayer(seed: number, d: MapDraft): MapDraft {
   const w = d.size + 1;
   for (let j = 0; j <= d.size; j++) for (let i = 0; i <= d.size; i++) {
-    const flatten = flattenFactor(i, j) * (1 - bridgeCut(i, j)) * (1 - dipAt(d.dips, i, j));
+    const flatten = flattenFactor(i, j) * (1 - bridgeCut(i, j));
     if (flatten === 0) continue;
     const k = j * w + i;
     d.heights[k] += (heightFromElevation(broadAt(seed, i, j)) - d.heights[k]) * flatten;

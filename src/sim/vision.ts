@@ -17,11 +17,6 @@ import { practice, skillEffect, vehicleHasPerk } from './progress';
 
 const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building', 'landmark'];
 
-// A road bridge is a low deck over the road, so trucks see over and along it.
-function blocksSight(o: Obstacle): boolean {
-  return BLOCKING.includes(o.kind) && !(o.kind === 'landmark' && o.look === 'roadBridge');
-}
-
 // A viewer's vision radius at a point: the base radius, shrunk by weather and at night, and widened by the
 // player's perception and, while parked, the lookout perk.
 export function sightRadius(world: World, viewer: Vehicle, at: Vec = viewer.pos): number {
@@ -42,7 +37,7 @@ export function visibleTiles(world: World, from: Vec): Set<number> {
   const size = world.size;
   const r = sightRadius(world, playerVehicle(world), from);
   // Every sight line lies within r of the viewer, so blockers beyond r plus their radius cannot touch it.
-  const blockers = world.obstacles.filter((o) => blocksSight(o) && dist(from, o.pos) < r + o.r);
+  const blockers = world.obstacles.filter((o) => BLOCKING.includes(o.kind) && dist(from, o.pos) < r + o.r);
   const out = new Set<number>();
   const lo = { x: Math.max(0, Math.floor(from.x - r)), y: Math.max(0, Math.floor(from.y - r)) };
   const hi = { x: Math.min(size - 1, Math.ceil(from.x + r)), y: Math.min(size - 1, Math.ceil(from.y + r)) };
@@ -60,7 +55,7 @@ export function canVehicleSee(world: World, observer: Vehicle, position: Vec): b
   if (observer.id === world.player.vehicleId) return playerSees(world, position);
   const target = position;
   return dist(observer.pos, target) <= sightRadius(world, observer) &&
-    inPlainView(world, observer.pos, target, world.obstacles.filter((o) => blocksSight(o)));
+    inPlainView(world, observer.pos, target, world.obstacles.filter((o) => BLOCKING.includes(o.kind)));
 }
 
 // Within the close radius, rocks and hills do not hide anything.
@@ -70,7 +65,7 @@ function inPlainView(world: World, a: Vec, b: Vec, blockers: Obstacle[]): boolea
 
 // A straight line past rocks and over hills, with no close radius: a shot needs it even when the target is seen.
 export function hasLineOfFire(world: World, a: Vec, b: Vec): boolean {
-  return hasLineOfSight(a, b, world.obstacles.filter((o) => blocksSight(o))) && clearOverTerrain(world.terrain, a, b);
+  return hasLineOfSight(a, b, world.obstacles.filter((o) => BLOCKING.includes(o.kind))) && clearOverTerrain(world.terrain, a, b);
 }
 
 // An obstacle blocks sight only if it sits between the viewer and the tile.

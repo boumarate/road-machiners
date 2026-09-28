@@ -343,18 +343,10 @@ export type OldRoadRules = {
   spanRadius: number;
   spanRoadGap: number;
   minBridge: number;
-};
-
-export type RoadBridgeRules = {
-  seedOffset: number;
-  sample: number;
-  minSpan: number;
-  maxSpan: number;
-  overhang: number;
-  brokenShare: number;
-  spanRadius: number;
-  besideGap: number;
-  dipReach: number;
+  minDrop: number;
+  maxBridge: number;
+  bridgeCost: number;
+  bankBack: number;
 };
 
 export type PowerLineRules = {
@@ -407,7 +399,6 @@ export const OLD_WORLD: {
   overlooks: OverlookRules;
   bends: BendRules;
   oldRoads: OldRoadRules;
-  roadBridges: RoadBridgeRules;
   powerLines: PowerLineRules;
   billboards: BillboardRules;
   tanks: TankRules;
@@ -468,17 +459,10 @@ export const OLD_WORLD: {
     spanRadius: 1.5, // tiles of footprint of a broken bridge span
     spanRoadGap: 1, // tiles between a span and a road edge
     minBridge: 6, // tiles, 24 m, across a wash where the old road had a bridge; narrower gullies just cut the asphalt
-  },
-  roadBridges: {
-    seedOffset: 7004,
-    sample: 0.5, // tiles between points walked along a road
-    minSpan: 4, // tiles, 16 m, of wash bed along the road that need a bridge; narrower gullies pass under the road in a culvert
-    maxSpan: 9, // tiles, 36 m; a longer wet stretch is the road running along a wash, not across it, so it gets no bridge
-    overhang: 2, // tiles the bridge reaches past each edge of the wash bed
-    brokenShare: 0.35, // share of road bridges that are broken, where the road dips through the wash
-    spanRadius: 1.5, // tiles of footprint of each broken end, the bridge_broken model's reference radius
-    besideGap: 1, // tiles between the road edge and the broken ends of the old bridge beside it
-    dipReach: 12, // tiles around a broken bridge where the road keeps the wash's ground; road grading still caps its grade
+    minDrop: 1, // height units, 4 m, from the lower bank to the wash floor; the broken span model hangs over a drop this deep
+    maxBridge: 40, // tiles, 160 m, the longest bridge an old road jumps a gully on
+    bridgeCost: 1.5, // cost per tile of a bridge over a road on flat ground; a bridge beats a detour 50% longer
+    bankBack: 3, // tiles back from a cut edge where a bank's height is read, past the gully side
   },
   powerLines: {
     seedOffset: 7005,
