@@ -38,6 +38,10 @@ export const PHYSICS = {
     longbed: { halfHeight: 0.55, wheelY: -0.35, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
     carrier: { halfHeight: 0.6, wheelY: -0.4, wheelRadius: 0.65, wheelHalfWidth: 0.28 },
     tractor: { halfHeight: 0.65, wheelY: -0.45, wheelRadius: 0.7, wheelHalfWidth: 0.3 },
+    jeep: { halfHeight: 0.4, wheelY: -0.25, wheelRadius: 0.45, wheelHalfWidth: 0.18 },
+    convertible: { halfHeight: 0.35, wheelY: -0.2, wheelRadius: 0.42, wheelHalfWidth: 0.17 },
+    bus: { halfHeight: 0.8, wheelY: -0.55, wheelRadius: 0.55, wheelHalfWidth: 0.22 },
+    loader: { halfHeight: 0.65, wheelY: -0.45, wheelRadius: 0.8, wheelHalfWidth: 0.32 },
   },
   driver: {
     steerGain: 1.6, // wheel angle per radian of heading error

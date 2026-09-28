@@ -115,6 +115,10 @@ const ENGINE_FILES: Record<string, string> = {
   longbed: "engine-3.ogg",
   carrier: "engine-3.ogg",
   tractor: "engine-3.ogg",
+  jeep: "engine-1.ogg",
+  convertible: "engine-2.ogg",
+  bus: "engine-3.ogg",
+  loader: "engine-3.ogg",
 };
 
 // Two recordings with fixed pitch profiles give each chassis a recognizable horn.
@@ -128,6 +132,10 @@ const HORN_SOUNDS: Record<string, { file: string; rate: number }> = {
   longbed: { file: "horn-2.ogg", rate: 1 },
   carrier: { file: "horn-1.ogg", rate: 0.82 },
   tractor: { file: "horn-2.ogg", rate: 1.08 },
+  jeep: { file: "horn-1.ogg", rate: 1.08 },
+  convertible: { file: "horn-2.ogg", rate: 1.28 },
+  bus: { file: "horn-2.ogg", rate: 0.72 },
+  loader: { file: "horn-1.ogg", rate: 0.72 },
 };
 
 export function hornSoundFor(chassisId: string): { file: string; rate: number } {

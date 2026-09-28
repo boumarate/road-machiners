@@ -43,7 +43,8 @@ const addedParts: Record<Exclude<PartKind, "core" | "scanner">, string[]> = {
   cargo: ["panniers", "flatbed", "lightFrame", "enclosedFrame", "heavyFrame"],
 };
 const addedGoods = ["grain", "textiles", "tools", "batteries", "electronics"];
-const addedChassis = ["courier", "van", "longbed", "carrier", "tractor"];
+const addedChassis = ["courier", "van", "longbed", "carrier", "tractor", "jeep", "convertible", "bus", "loader"];
+const rearEngineChassis = ["jeep", "convertible", "bus", "loader"];
 
 describe("equipment variety", () => {
   it("gives every mounted weapon its extended range", () => {
@@ -100,9 +101,9 @@ describe("equipment variety", () => {
     },
   );
 
-  it("adds five buyable chassis with valid built-in parts and physics bodies", () => {
-    expect(Object.keys(CHASSIS)).toHaveLength(9);
-    expect(PLAYER_CHASSIS).toHaveLength(7);
+  it("adds buyable chassis with valid built-in parts and physics bodies", () => {
+    expect(Object.keys(CHASSIS)).toHaveLength(13);
+    expect(PLAYER_CHASSIS).toHaveLength(11);
     for (const id of addedChassis) {
       expect(PLAYER_CHASSIS).toContain(id);
       const w = buyChassis(world, id);
@@ -123,7 +124,16 @@ describe("equipment variety", () => {
     }
     expect(
       new Set(addedChassis.map((id) => CHASSIS[id].layout.join("\n"))).size,
-    ).toBe(5);
+    ).toBe(addedChassis.length);
+  });
+
+  it.each(rearEngineChassis)("puts the %s engine bay behind the cab", (id) => {
+    const def = CHASSIS[id];
+    const cab = def.core.find((core) => { const part = PARTS[core.defId]; return part.kind === "core" && part.role === "cab"; })!;
+    const cabEnd = cab.y + PARTS[cab.defId].h;
+    const bayRows = def.layout.flatMap((row, y) => (row.includes("E") ? [y] : []));
+    expect(bayRows.length).toBeGreaterThan(0);
+    expect(Math.min(...bayRows)).toBeGreaterThanOrEqual(cabEnd);
   });
 
   it("keeps every part, chassis and good inside its tier's effort band", () => {

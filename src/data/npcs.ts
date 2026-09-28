@@ -123,6 +123,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "courier", weight: 3 },
       { value: "scout", weight: 3 },
       { value: "van", weight: 1 },
+      { value: "jeep", weight: 3 },
     ],
     engine: [
       { value: "stockEngine", weight: 6 },
@@ -165,6 +166,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "tractor", weight: 2 },
       { value: "hauler", weight: 2 },
       { value: "scout", weight: 1 },
+      { value: "loader", weight: 1 },
     ],
     engine: [
       { value: "stockEngine", weight: 5 },
@@ -211,6 +213,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "van", weight: 4 },
       { value: "tractor", weight: 1 },
       { value: "scout", weight: 2 },
+      { value: "bus", weight: 2 },
     ],
     engine: [
       { value: "stockEngine", weight: 4 },
@@ -260,6 +263,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "courier", weight: 2 },
       { value: "buggy", weight: 2 },
       { value: "hauler", weight: 1 },
+      { value: "jeep", weight: 2 },
     ],
     engine: [
       { value: "stockEngine", weight: 6 },
@@ -302,6 +306,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     chassis: [
       { value: "tractor", weight: 5 },
       { value: "hauler", weight: 4 },
+      { value: "loader", weight: 2 },
     ],
     engine: LAW_ENGINES,
     weapon: LAW_WEAPONS,
@@ -333,6 +338,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "courier", weight: 5 },
       { value: "buggy", weight: 4 },
       { value: "scout", weight: 3 },
+      { value: "convertible", weight: 3 },
     ],
     engine: [
       { value: "flatFour", weight: 5 },
@@ -370,6 +376,8 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "van", weight: 3 },
       { value: "buggy", weight: 2 },
       { value: "courier", weight: 1 },
+      { value: "convertible", weight: 1 },
+      { value: "jeep", weight: 1 },
     ],
     engine: [
       { value: "stockEngine", weight: 5 },
@@ -408,6 +416,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     chassis: [
       { value: "hauler", weight: 6 },
       { value: "longbed", weight: 3 },
+      { value: "bus", weight: 2 },
     ],
     engine: [
       { value: "workhorseDiesel", weight: 6 },

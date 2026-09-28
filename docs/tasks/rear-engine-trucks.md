@@ -4,7 +4,7 @@
 **Branch:** rear-engine-trucks
 **Worktree:** .worktrees/rear-engine-trucks
 **Goal:** Four new chassis with the engine behind the driver are for sale in towns and driven by NPCs, each drawn from a base model copying a real vehicle. `npm test` and `npm run playtest` pass, and the user confirms the looks from in-game screenshots.
-**Mode:** interactive
+**Mode:** hands-off
 
 ## Context
 - Nine chassis exist in `src/data/chassis.ts`. Every one but the carrier has its engine bay `E` ahead of the cab.
@@ -51,9 +51,9 @@ LD..DR
 LD..DR
 LD..DR
 LDXXDR
-XDDXDX
-LDEEDR
-LDEEDR
+LDDXDR
+LDEEDR   wheels on rows 1 and 10, since bodyOf() needs mirrored wheel rows
+XDEEDX
 .BBBB.
 ```
 
@@ -148,3 +148,14 @@ One phase per chassis: PH2 jeep, PH3 convertible, PH4 bus, PH5 loader. Each phas
 - PH3 IF1 -> @ tools/blender/base_convertible.py, public/models/base_convertible.glb
 - PH4 IF1 -> @ tools/blender/base_bus.py, public/models/base_bus.glb
 - PH5 IF1 -> @ tools/blender/base_loader.py, public/models/base_loader.glb
+
+## Conclusion
+
+### Hands-off decisions
+- size: medium — four chassis plus four models.
+- branch: rear-engine-trucks in .worktrees/rear-engine-trucks.
+- uplan: plan approved by the user, hands-off from execute on.
+- prices: set in PH1 as asked, then moved to pass the rule that more deck cells never cost less in a tier. Jeep 2336, convertible 3112, bus 3920, loader 5208.
+
+### Deferred (needs user input)
+- `src/phys/ai.test.ts` "passes the oncoming player" fails on this branch. With the old NPC tables it passes, so the new spawn weights only shift world RNG. Under the new rolls the trader comes within 1.0 tiles of the oncoming player and slows to 0.48, under `RULES.parkedSpeed`. That is the old head-on dodge failing for this seed, not the new trucks. Fixing the dodge or reseeding the test is your call.
