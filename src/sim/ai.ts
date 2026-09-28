@@ -103,18 +103,25 @@ function foeInSight(world: World, v: Vehicle, activity: NpcActivity): Vehicle | 
   return foe && canVehicleSee(world, v, foe.pos) ? foe : null;
 }
 
-function computeFightGoal(
-  world: World,
-  v: Vehicle,
-  preferredRange: number,
-  target: Vehicle,
-): Vec {
-  if (v.brain!.ramChoice === target.id && ramImpact(world, v, target) !== null) {
-    v.brain!.ramTarget = target.id;
-    return leadOf(target);
+// A chosen ram, then a rash whim, win over the scored spot. A rush drives through the target like a ram. A halt
+// brakes where the driver is. A veer drives to the whim's spot around the target.
+function computeFightGoal(world: World, v: Vehicle, preferredRange: number, target: Vehicle): Vec | null {
+  const b = v.brain!;
+  const lead = leadOf(target);
+  if (rams(world, v, target)) {
+    b.ramTarget = target.id;
+    return lead;
   }
+  if (b.whim?.kind === "halt") return null;
   const clearance = vehicleStats(world, v).radius + vehicleStats(world, target).radius + RULES.yieldDistance;
-  return fightPoint(world, v, target, Math.max(preferredRange, clearance));
+  const range = Math.max(preferredRange, clearance);
+  if (b.whim?.kind === "veer") return { x: lead.x + Math.cos(b.whim.angle) * range, y: lead.y + Math.sin(b.whim.angle) * range };
+  return fightPoint(world, v, target, range);
+}
+
+function rams(world: World, v: Vehicle, target: Vehicle): boolean {
+  const b = v.brain!;
+  return b.whim?.kind === "rush" || (b.ramChoice === target.id && ramImpact(world, v, target) !== null);
 }
 
 // A fighter keeps to its shortest gun range. A fight without a gun is a decision bug, so it throws.

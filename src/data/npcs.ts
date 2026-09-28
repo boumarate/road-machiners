@@ -705,6 +705,9 @@ export type DecisionOptions = {
   salvageSeen: 'keep' | 'loot'; // a wreck or pile comes in sight on the way to a goal
   patchDeal: 'paid' | 'ownParts' | 'free'; // the terms a driver names for a roadside patch; see src/sim/patch.ts
   ramChance: 'keep' | 'ram'; // the fight target lies ahead within reach of a damaging ram
+  // Every NPC_BEHAVIOR.fight.whimTurns turns of a fight: go on, or do something rash until the next roll. Rush
+  // drives straight through the target, halt brakes and sits, veer turns the other way round to a random spot.
+  fightWhim: 'keep' | 'rush' | 'halt' | 'veer';
   crashed: 'forgive' | 'retaliate'; // a truck at peace with the driver damaged it in a crash
   parley: 'keep' | 'truce' | 'beg'; // a foe hurt the driver this turn
   truceOffered: 'accept' | 'refuse'; // a foe asks for a truce
@@ -744,6 +747,8 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   patchDeal: { paid: 6, ownParts: 3, free: 1 },
   // A fighter takes 9 in 10 rams that look worth it. Otherwise it keeps shooting from its range.
   ramChance: { keep: 1, ram: 9 },
+  // About one roll in eight is rash, so a driver does something odd about once in 30 turns of fighting.
+  fightWhim: { keep: 20, rush: 1, halt: 1, veer: 1 },
   // Most crashes between trucks at peace are accidents. Four drivers in five shrug one off.
   crashed: { forgive: 4, retaliate: 1 },
   // A hurt driver mostly fights on. Asking for a truce is rare unless the foe is a threat, and begging is rare
@@ -909,7 +914,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // truck that looks as dangerous as its own, and stand against one up to 30% stronger. It answers a crash with a
   // fight twice as often as most drivers.
   scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 1.3, fuelMargin: 1, weights: { preySeen: { rob: { add: 2 } }, crashed: { retaliate: { add: 1 } } } },
-  // A coward runs three times as often from a new hostile or a shot, picks a fight half as often, and shoots back
+  // A coward veers off three times as often in a fight. It runs three times as often from a new hostile or a shot, picks a fight half as often, and shoots back
   // at a third of the weight. Boldness 0.6 makes a truck that looks as dangerous as its own a threat, even at the
   // lowest misjudgment. It asks for a truce twice as often and begs three times as often. Threatened, it runs or
   // pays. It hires a merc three times as readily. It keeps 40% more fuel for the way home.
@@ -918,7 +923,7 @@ export const TRAITS: Record<TraitId, Trait> = {
     weights: {
       hostileSeen: { flee: { mul: 3 }, fight: { mul: 0.5 } }, attacked: { flee: { mul: 3 }, fightBack: { mul: 0.3 } },
       parley: { truce: { mul: 2 }, beg: { mul: 3 } }, threatened: { flee: { mul: 3 }, comply: { add: 1 } },
-      escortSeen: { hire: { mul: 3 } },
+      escortSeen: { hire: { mul: 3 } }, fightWhim: { veer: { mul: 3 } },
     },
   },
   // Lawmen patrol their town and hunt raiders and first shooters at neutral NPCs. They fight most hostiles they
@@ -981,12 +986,13 @@ export const TRAITS: Record<TraitId, Trait> = {
     },
   },
   // A brave driver almost never runs or gives up: flee, truce, beg and paying up drop to a twentieth of their
-  // weight. Boldness 1.5 lets it stand against a group half again as strong as its own.
+  // weight. It rushes its foe three times as often. Boldness 1.5 lets it stand against a group half again as strong as its own.
   brave: {
     towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 1.5, fuelMargin: 1,
     weights: {
       hostileSeen: { flee: { mul: 0.05 } }, contactHeard: { flee: { mul: 0.05 } }, attacked: { flee: { mul: 0.05 } },
       parley: { truce: { mul: 0.05 }, beg: { mul: 0.05 } }, threatened: { flee: { mul: 0.05 }, comply: { mul: 0.05 } },
+      fightWhim: { rush: { mul: 3 } },
     },
   },
 };
@@ -1016,8 +1022,8 @@ export const NPC_BEHAVIOR = {
   // target's gun damage that bears on it, minus rangeWeight × how far off its range the point is as a share of it,
   // minus travelWeight × the drive past one turn at top speed as a share of that speed. A circling fighter adds
   // circleWeight × how far ahead around the target the point lies, as a share of a quarter turn, and never drives
-  // slower than circlePace tiles a turn.
-  fight: { angles: 16, arcWeight: 2, threatWeight: 2, rangeWeight: 1, travelWeight: 1, circleWeight: 1, circlePace: 3 },
+  // slower than circlePace tiles a turn. A fighter rolls fightWhim every whimTurns turns.
+  fight: { angles: 16, arcWeight: 2, threatWeight: 2, rangeWeight: 1, travelWeight: 1, circleWeight: 1, circlePace: 3, whimTurns: 4 },
   // One driver in three the player knocks out holds a grudge. See the revenge state.
   revengeChance: 0.33,
   recoverCondition: 0.5,

@@ -725,6 +725,23 @@ function onRamChance(world: World, vehicle: Vehicle): void {
   if (target !== null && react(world, vehicle, 'ramChance', target) === 'ram') brain.ramChoice = target;
 }
 
+// A fighter rolls a whim every NPC_BEHAVIOR.fight.whimTurns turns and holds it until the next roll. A veer turns
+// the circling direction around and picks a random spot around the target. Out of a fight the whim is dropped.
+function onFightWhim(world: World, vehicle: Vehicle): void {
+  const brain = vehicle.brain!;
+  const target = fightTarget(vehicle);
+  if (target === null) return void delete brain.whim;
+  if (!brain.whim || world.turn >= brain.whim.until) rollWhim(world, vehicle, target);
+}
+
+function rollWhim(world: World, vehicle: Vehicle, target: string): void {
+  const brain = vehicle.brain!;
+  const kind = decide(world, vehicle, 'fightWhim', target, null);
+  if (kind === 'veer') brain.fightTurn = brain.fightTurn === 1 ? -1 : 1;
+  const angle = kind === 'veer' ? randRange(world, -Math.PI, Math.PI) : 0;
+  brain.whim = { kind, until: world.turn + NPC_BEHAVIOR.fight.whimTurns, angle };
+}
+
 function inDanger(vehicle: Vehicle): boolean {
   const top = topGoal(vehicle)?.kind;
   return top === 'fight' || top === 'flee';
@@ -815,6 +832,7 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   onSalvageSeen(world, vehicle);
   onEscortSeen(world, vehicle);
   onRamChance(world, vehicle);
+  onFightWhim(world, vehicle);
   steer(world, vehicle, profile, contacts);
   return currentActivity(world, vehicle, profile, hold);
 }
