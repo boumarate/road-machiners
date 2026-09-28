@@ -44,10 +44,9 @@ import {
   hostileToPlayer,
   newWorld,
   playerCanAct,
-  setAutoRepair,
-  setDirect,
   setMoveOrder,
 } from "../sim/world";
+import { TruckControls } from "./truck-controls";
 import { PAL } from "../render/palette";
 import { timed } from "../perf";
 import { CharacterScreen } from "../ui/character";
@@ -136,6 +135,7 @@ export class Game {
   private readonly path: PathView;
   private readonly fx: Fx3D;
   private readonly truckFx: TruckFx;
+  private readonly controls: TruckControls;
   readonly sound: SoundDirector;
   private panelOpen = false; // last frame's panel state, for open and close sounds
   private readonly loops: SoundLoops;
@@ -243,6 +243,7 @@ export class Game {
     this.labels = new Labels(overlay);
     this.fx = new Fx3D(this.scene, overlay, this.rig);
     this.truckFx = new TruckFx(this.fx);
+    this.controls = new TruckControls({ world: () => this.world, apply: (next) => this.apply(next), refreshPlan: () => this.refreshPlan(), doused: () => { this.truckFx.douse(); this.hud.pushEvents(this.world); } });
     const score = new CombatScore(player, Math.random);
     this.sound = new SoundDirector(player, this.rig, score);
     this.loops = new SoundLoops(player, score);
@@ -260,12 +261,10 @@ export class Game {
     this.hud = new Hud({
       openInventory: () => this.toggleScreen(this.inventory),
       openCharacter: () => this.toggleScreen(this.character),
-      toggleManual: () => {
-        if (!this.anim && !this.modalOpen()) this.toggleManual();
-      },
-      toggleAutoRepair: () => {
-        if (!this.anim && !this.modalOpen()) this.toggleAutoRepair();
-      },
+      toggleManual: this.whenIdle(() => this.controls.toggleManual()),
+      toggleAutoRepair: this.whenIdle(() => this.controls.toggleAutoRepair()),
+      toggleOverdrive: this.whenIdle(() => this.controls.toggleOverdrive()),
+      douseEngine: this.whenIdle(() => this.controls.douseEngine()),
       unhitch: () =>
         this.rescueCommand((w) =>
           w.player.state === "active" && isTowed(w) ? unhitch(w) : null,
@@ -464,21 +463,29 @@ export class Game {
       if (e.code === "Space") {
         if (!modal && this.travel.handleSpace(e, playing, this.world)) this.endTurn();
       }
-      if (e.code === "KeyF") this.follow.recenter();
-      if (e.code === "KeyM") this.toggleMute();
-      if (e.code === "KeyQ" && !modal) this.weapons.toggleAuto();
-      if (e.code === "KeyX" && !modal) this.weapons.toggleVisible();
-      if (e.code === "Digit0" && !modal) this.weapons.selectWeapon(null);
-      if (e.code === "KeyE" && !modal) this.useContext();
-      if (e.code === "KeyR" && !modal && !playing) this.toggleManual();
-      if (e.code === "KeyP" && !modal && !playing) this.toggleAutoRepair();
-      if (e.code === "KeyC" && !playing) this.toggleScreen(this.character);
-      if (e.code === "KeyI" && !playing) this.toggleScreen(this.inventory);
-      if (e.code === "Escape") this.closeScreens(null);
+      const key = this.keys[e.code];
+      if (key && !(key.noModal && modal) && !(key.idle && playing)) key.run();
       const digit = ["Digit1", "Digit2", "Digit3", "Digit4"].indexOf(e.code);
       if (digit >= 0) this.selectWeaponIndex(digit);
     });
   }
+
+  // Single-key actions. noModal keys wait for panels and calls to close, idle keys wait for the turn to finish playing.
+  private readonly keys: Record<string, { run: () => void; noModal?: true; idle?: true }> = {
+    KeyF: { run: () => this.follow.recenter() },
+    KeyM: { run: () => this.toggleMute() },
+    KeyQ: { run: () => this.weapons.toggleAuto(), noModal: true },
+    KeyX: { run: () => this.weapons.toggleVisible(), noModal: true },
+    Digit0: { run: () => this.weapons.selectWeapon(null), noModal: true },
+    KeyE: { run: () => this.useContext(), noModal: true },
+    KeyR: { run: () => this.controls.toggleManual(), noModal: true, idle: true },
+    KeyP: { run: () => this.controls.toggleAutoRepair(), noModal: true, idle: true },
+    KeyO: { run: () => this.controls.toggleOverdrive(), noModal: true, idle: true },
+    KeyG: { run: () => this.controls.douseEngine(), noModal: true, idle: true },
+    KeyC: { run: () => this.toggleScreen(this.character), idle: true },
+    KeyI: { run: () => this.toggleScreen(this.inventory), idle: true },
+    Escape: { run: () => this.closeScreens(null) },
+  };
 
   private closeScreens(keep: CharacterScreen | InventoryScreen | null): void {
     for (const s of [this.town, this.trade, this.character, this.inventory]) if (s !== keep) s.close();
@@ -490,15 +497,9 @@ export class Game {
     screen.toggle();
   }
 
-  // Manual mode drives straight at the click, so the preview must rerun with the new driver.
-  private toggleManual(): void {
-    if (!playerCanAct(this.world)) return;
-    this.apply(setDirect(this.world, !playerVehicle(this.world).direct));
-    this.refreshPlan();
-  }
-
-  private toggleAutoRepair(): void {
-    this.apply(setAutoRepair(this.world, !this.world.player.autoRepair));
+  // A HUD button action that waits for the turn to finish playing and for panels and calls to close.
+  private whenIdle(run: () => void): () => void {
+    return () => void (!this.anim && !this.modalOpen() && run());
   }
 
   private selectWeaponIndex(i: number): void {

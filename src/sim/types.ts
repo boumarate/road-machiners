@@ -285,6 +285,7 @@ export type Player = {
   autoFire: boolean;
   autoRepair: boolean; // patch the most damaged part whenever the truck is parked
   engineHeat: number; // 0 cold to 1 overheated; see src/sim/engine-heat.ts
+  overdrive: boolean; // engine overdrive: faster and quicker, but heats the engine; see src/sim/engine-heat.ts
   discovered: string[];
   scavenged: string[]; // stocks the player finished searching; their loot can be taken
   storage: PartInstance[]; // spare parts kept in town garages, usable in any town
