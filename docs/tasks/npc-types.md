@@ -1,6 +1,6 @@
 # More NPC types
 
-**Status:** reviewing
+**Status:** validating
 **Branch:** npc-types
 **Worktree:** .worktrees/npc-types
 **Goal:** A new game shows town patrols of Bowl Farmers and Nose Army, couriers, roamers, supply convoys with their guards, and mercs, each doing its own work on the map. A trader, courier or roamer can hire a merc, who follows it to its destination, fights its attackers, tows it when it breaks down and gets paid on arrival. Patrols fight raiders and whoever fires the first shot at a neutral NPC. The user confirms the feel in play.
@@ -150,6 +150,42 @@ Approach: grow the existing trait, idle and state machinery. Each new behavior i
 - `src/sim/market.ts:36-38` — the comment above `goodValue()` still names `GOOD_VALUE` and an old phase.
 
 ## Conclusion
+
+Outcome: all six templates, lawmen, escorts and merc hiring work in tests and in a scripted game run, at 4c1de52. The Goal still needs the user's feel check in play.
+
+Invariants:
+- IV1 — every new choice goes through `decide()`: idle options, `escortSeen`, `hireOffered`. Options stay available at `MIN_CHANCE`.
+- IV2 — caps, intervals, fee rate, wait gap, follow gap and patrol radius live in `src/data/npcs.ts` with reasons.
+- IV3 — `escort.test.ts` covers one payment on arrival and none on a broken escort.
+- IV4 — `escort.test.ts` drops the follow goal the turn its state ends.
+- IV5 — the existing suite stays green. Every driver now also rolls explore at the 1% minimum when idle, which IV1 requires.
+- IV6 — the quality gate passes on every commit.
+- IV7 — `SAVE_VERSION` is 27.
+
+### Assumptions check
+- AS1 — held for frames, missed for the first turn. Frame p95 stays at 16.8 ms. The first turn takes about 310 ms against about 180 ms on main, over the 100 ms budget main already misses.
+- AS2 — unverifiable so far. No explore goal got stuck in the runs. There is no goal drop for an unreachable point.
+
+### Unknowns
+- UK1 — `escort.ts` failed the fragmentation rule at 6.23 against 6.19, so escorts live in `src/sim/tow.ts`.
+- UK2 — no per-good tables. A new good needs Bowl and Nose to sell it, a maker shop or a `GOOD_SOURCES` entry, a model and an icon.
+
+### Deviations from plan
+- `hireOffered` options are `take` and `decline`, since `accept` and `refuse` already carry truce situation factors.
+- `follow` is an interruption kind, so a fight or tow above it resumes it without the resume roll.
+- Added after the play check: a follower drives through its spot while the leader moves, and a leader waits while an escort lags past `NPC_BEHAVIOR.escortWaitGap`. Without it a merc slower than its client fell back without end.
+- A finished NPC tow clears the tower's `strandedSeen` memory, so an escort can tow its leader a second time.
+
+### Known risks
+- The first turn after boot is about 130 ms slower, from twice the starting NPCs.
+- A convoy guard robs its own convoy at the 1% minimum, once per escort, since rob stays available.
+- An escort that misses the first shot at its leader records later attackers but gets no feud of its own. Faction mates already share this gap.
+- An orphan convoy guard with no convoy waits where it stands, not at its home town.
+- A far follower re-plans its route every turn, since its point moves.
+
+### Future work
+- The player hiring mercs, and patrols that escort the player.
+- Fuel and water deliveries raising town stock beyond the normal sell pressure.
 
 ### Hands-off decisions
 - make: size Medium, full flow — six templates and a new cooperation mechanic span many files.
