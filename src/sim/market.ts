@@ -432,7 +432,7 @@ function handInHaul(world: World, c: Extract<Contract, { kind: 'haul' }>): void 
 
 // A fetch takes a part that still does its job: working, not junk, and rebuilt at most
 // CONTRACTS.fetch.maxWear times.
-function fitsFetch(c: Extract<Contract, { kind: 'fetch' }>, p: PartInstance): boolean {
+export function fitsFetch(c: Extract<Contract, { kind: 'fetch' }>, p: PartInstance): boolean {
   return p.defId === c.defId && p.hp > 0 && !isJunk(p) && p.wear <= CONTRACTS.fetch.maxWear;
 }
 

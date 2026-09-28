@@ -33,7 +33,7 @@ import {
   mountedParts,
 } from "../sim/grid";
 import { spareParts } from "../sim/inventory";
-import { acceptContract, deliverContract, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
+import { acceptContract, deliverContract, fitsFetch, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
 import { REGION } from "../data/region";
 import type { PartInstance, Vehicle, World } from "../sim/types";
 import { el, panel } from "./dom";
@@ -553,8 +553,8 @@ function canDeliver(w: World, c: Contract): boolean {
   if (c.kind === "haul") return (goodsCount(me)[c.good] ?? 0) >= c.units;
   if (c.kind === "fetch")
     return (
-      spareParts(me).some((p) => p.defId === c.defId) ||
-      w.player.storage.some((p) => p.defId === c.defId)
+      spareParts(me).some((p) => fitsFetch(c, p)) ||
+      w.player.storage.some((p) => fitsFetch(c, p))
     );
   return false;
 }
