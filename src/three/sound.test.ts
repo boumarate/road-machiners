@@ -3,7 +3,7 @@ import type { GameEvent, ShotRound } from "../sim/types";
 import { CHASSIS } from "../data/chassis";
 import { engineFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS } from "../data/sounds";
 import type { SoundPlayer } from "../audio/player";
-import { accentOf, clashed, CombatScore, CombatWatch, engineGlide, loopLevels, SoundDirector, SoundLoops, stingOf } from "./sound";
+import { accentOf, CombatScore, CombatWatch, engineGlide, loopLevels, SoundDirector, SoundLoops, stingOf } from "./sound";
 import type { CameraRig } from "./render/camera";
 
 describe("stingOf", () => {
@@ -29,26 +29,19 @@ describe("stingOf", () => {
 });
 
 describe("loopLevels", () => {
-  const calm = { stormTiles: 100, turnsSinceDanger: Infinity, turnsSinceClash: Infinity };
+  const calm = { stormTiles: 100, turnsSinceDanger: Infinity };
   it("raises wind near storms", () => {
     expect(loopLevels(calm, MIX).windGain).toBe(MIX.wind.baseGain);
     expect(loopLevels({ ...calm, stormTiles: 0 }, MIX).windGain).toBe(MIX.wind.stormGain);
   });
   it("switches music to combat while in danger", () => {
     const l = loopLevels({ ...calm, turnsSinceDanger: 0 }, MIX);
-    expect([l.calmGain, l.drumsGain, l.bassGain]).toEqual([0, 1, 0]);
+    expect([l.calmGain, l.combatGain]).toEqual([0, 1]);
   });
   it("holds combat music for a few turns after the last hostile leaves sight", () => {
     const hold = MIX.music.holdTurns;
-    expect(loopLevels({ ...calm, turnsSinceDanger: hold }, MIX).drumsGain).toBe(1);
-    expect(loopLevels({ ...calm, turnsSinceDanger: hold + 1 }, MIX).drumsGain).toBe(0);
-  });
-  it("adds the bass for a few turns after shots fly, only while the drums play", () => {
-    const hold = MIX.score.clashHoldTurns;
-    const danger = { ...calm, turnsSinceDanger: 0 };
-    expect(loopLevels({ ...danger, turnsSinceClash: hold }, MIX).bassGain).toBe(1);
-    expect(loopLevels({ ...danger, turnsSinceClash: hold + 1 }, MIX).bassGain).toBe(0);
-    expect(loopLevels({ ...calm, turnsSinceClash: 0 }, MIX).bassGain).toBe(0);
+    expect(loopLevels({ ...calm, turnsSinceDanger: hold }, MIX).combatGain).toBe(1);
+    expect(loopLevels({ ...calm, turnsSinceDanger: hold + 1 }, MIX).combatGain).toBe(0);
   });
 });
 
@@ -77,11 +70,6 @@ describe("accentOf", () => {
     expect(accentOf({ t: "collision", a: "n", b: "p", hitsA: [], hitsB: [] }, "p")).toBe("accent-crash");
     expect(accentOf({ t: "collision", a: "n", b: "m", hitsA: [], hitsB: [] }, "p")).toBeNull();
   });
-  it("marks a clash only for shots by or at the player", () => {
-    expect(clashed([shot("p", "n", [round(false)])], "p")).toBe(true);
-    expect(clashed([shot("n", "p", [round(false)])], "p")).toBe(true);
-    expect(clashed([shot("a", "b", [round(true)])], "p")).toBe(false);
-  });
 });
 
 describe("engine sound assignment", () => {
@@ -102,7 +90,7 @@ describe("engine sound assignment", () => {
         return { glide: () => {}, setGain: () => {}, stop: (ms: number) => stopped.push(ms) };
       },
     } as unknown as SoundPlayer;
-    const loops = new SoundLoops(player, { setLevels: () => {} });
+    const loops = new SoundLoops(player, { setCombat: () => {} });
     const glide = engineGlide(0, 10, 1, MIX)!;
 
     loops.drive(glide, "scout");
@@ -168,68 +156,78 @@ describe("engineGlide", () => {
 describe("CombatWatch", () => {
   it("flags a hostile when it comes into sight after a whole turn out of it", () => {
     const watch = new CombatWatch();
-    expect(watch.observe(1, ["a"], false).sighted).toBe(true);
-    expect(watch.observe(1, ["a"], false).sighted).toBe(false);
-    expect(watch.observe(2, [], false).sighted).toBe(false);
-    expect(watch.observe(4, ["a"], false).sighted).toBe(true);
+    expect(watch.observe(1, ["a"]).sighted).toBe(true);
+    expect(watch.observe(1, ["a"]).sighted).toBe(false);
+    expect(watch.observe(2, []).sighted).toBe(false);
+    expect(watch.observe(4, ["a"]).sighted).toBe(true);
   });
   it("ignores sight flicker inside a turn and into the next", () => {
     const watch = new CombatWatch();
-    watch.observe(1, ["a"], false);
-    watch.observe(1, [], false);
-    expect(watch.observe(1, ["a"], false).sighted).toBe(false);
-    watch.observe(2, [], false);
-    expect(watch.observe(2, ["a"], false).sighted).toBe(false);
+    watch.observe(1, ["a"]);
+    watch.observe(1, []);
+    expect(watch.observe(1, ["a"]).sighted).toBe(false);
+    watch.observe(2, []);
+    expect(watch.observe(2, ["a"]).sighted).toBe(false);
   });
-  it("counts turns since the last danger and clash", () => {
+  it("counts turns since the last danger", () => {
     const watch = new CombatWatch();
-    expect(watch.observe(1, [], false)).toMatchObject({ turnsSinceDanger: Infinity, turnsSinceClash: Infinity });
-    watch.observe(2, ["a"], true);
-    expect(watch.observe(5, [], false)).toMatchObject({ turnsSinceDanger: 3, turnsSinceClash: 3 });
+    expect(watch.observe(1, []).turnsSinceDanger).toBe(Infinity);
+    watch.observe(2, ["a"]);
+    expect(watch.observe(5, []).turnsSinceDanger).toBe(3);
   });
 });
 
 describe("CombatScore", () => {
-  type Call = { id: string; file: string; when: number; offset: number; ducks: number[] };
-  const fakePlayer = (lengths: Record<string, number>) => {
+  type BaseId = "score-drums" | "score-bass";
+  type Call = { id: BaseId; file: string; when: number; offset: number; gains: number[]; ducks: number[] };
+  const fakePlayer = () => {
     const loops: Call[] = [];
     const plays: unknown[][] = [];
     const player = {
       now: () => 2,
       play: (...args: unknown[]) => { plays.push(args); },
-      beatLoop: (id: string, file: string, when: number, offset: number) => {
-        const call: Call = { id, file, when, offset, ducks: [] };
+      beatLoop: (id: BaseId, file: string, when: number, offset: number) => {
+        const call: Call = { id, file, when, offset, gains: [], ducks: [] };
         loops.push(call);
-        return { duration: lengths[id], setGain: () => {}, glide: () => {}, stop: () => {}, duck: (t: number) => call.ducks.push(t) };
+        // One second per beat for every base.
+        const duration = SOUNDS[id].beat!.bars * 4;
+        return { duration, setGain: (g: number) => call.gains.push(g), glide: () => {}, stop: () => {}, duck: (t: number) => call.ducks.push(t) };
       },
     } as unknown as SoundPlayer;
     return { player, loops, plays };
   };
-  const bars = SOUNDS["score-drums"].beat!.bars;
 
-  it("starts both layers at one time, each at its first beat", () => {
-    const { player, loops } = fakePlayer({ "score-drums": 32, "score-bass": 32 });
+  it("starts every base silent at one time, each at its first beat", () => {
+    const { player, loops } = fakePlayer();
     new CombatScore(player, () => 0);
-    expect(loops.map((l) => l.when)).toEqual([loops[0].when, loops[0].when]);
+    expect(loops.map((l) => l.id)).toEqual(["score-drums", "score-bass"]);
+    expect(new Set(loops.map((l) => l.when)).size).toBe(1);
     expect(loops.map((l) => l.offset)).toEqual(loops.map((l) => scorePhaseOf(l.file)));
+    expect(loops.every((l) => l.gains.length === 0)).toBe(true);
   });
 
-  it("fails when the layers differ in length", () => {
-    const { player } = fakePlayer({ "score-drums": 32, "score-bass": 32.1 });
-    expect(() => new CombatScore(player, () => 0)).toThrow("differ in length");
+  it("plays one random base per battle and fades it out after", () => {
+    const { player, loops } = fakePlayer();
+    const rolls = [0.9, 0.1];
+    const score = new CombatScore(player, () => rolls.shift() ?? 0);
+    score.setCombat(true, 3);
+    score.setCombat(true, 3);
+    score.setCombat(false, 3);
+    score.setCombat(true, 3);
+    expect(loops.map((l) => l.gains)).toEqual([[1], [1, 0]]);
   });
 
-  it("plays an accent on the beat grid and ducks both layers there", () => {
-    const beat = 1; // one second per beat
-    const { player, loops, plays } = fakePlayer({ "score-drums": bars * 4 * beat, "score-bass": bars * 4 * beat });
+  it("plays an accent on the active base's grid and ducks that base there", () => {
+    const { player, loops, plays } = fakePlayer();
     const score = new CombatScore(player, () => 0);
+    score.setCombat(true, 3);
     expect(score.accent("accent-hit", 0)).toBe(true);
     const start = loops[0].when;
-    const slot = beat / MIX.score.subdivision;
+    const slot = 1 / MIX.score.subdivision;
     const time = start + Math.ceil((2 - start) / slot) * slot;
     const [cue, at, delayMs] = plays[0] as [string, { gain: number }, number];
     expect([cue, at.gain]).toEqual(["accent-hit", 1]);
     expect(delayMs).toBeCloseTo((time - 2) * 1000);
-    expect(loops.map((l) => l.ducks)).toEqual([[time], [time]]);
+    expect(loops.map((l) => l.ducks)).toEqual([[time], []]);
   });
 });

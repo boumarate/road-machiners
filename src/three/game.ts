@@ -85,7 +85,7 @@ import { GameMenu } from "../ui/game-menu";
 import { volleyTally } from "../ui/format";
 import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
-import { clashed, CombatScore, CombatWatch, computeEngineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
+import { CombatScore, CombatWatch, computeEngineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
 import type { SoundPlayer } from "../audio/player";
 import { uiRoot } from "../ui/dom";
 import { Travel, type Playback, type LiveVision } from "./travel";
@@ -626,6 +626,8 @@ export class Game {
           this.eventPoint(e.target) !== null) ||
         (e.t === "guardShot" && this.eventPoint(e.target) !== null),
     );
+    // Crash accents are asked for now, so they may land a little before the impact shows at the end of movement.
+    this.sound.accents(world.events, world.player.vehicleId, (e) => (e.t === "collision" ? Math.max(0, MOVE_MS - elapsed) : null));
     // A towed truck's engine is off.
     if (!towed) this.playDriveSound(playback.result);
     this.phase = "Moving";
@@ -736,8 +738,7 @@ export class Game {
     const me = playerVehicle(this.world);
     const f = this.frames[me.id];
     const at = f ? toMap(f.pos) : me.pos;
-    const hostiles = this.world.vehicles.filter((v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v)).map((v) => v.id);
-    const signs = this.combatWatch.observe(this.world.turn, hostiles, clashed(this.world.events, me.id));
+    const signs = this.combatWatch.observe(this.world.turn, this.world.vehicles.filter((v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v)).map((v) => v.id));
     if (signs.sighted) this.sound.accent("accent-sighted", 0);
     this.loops.update({ stormTiles: this.weather.stormTilesFrom(at.x, at.y), ...signs });
   }
@@ -777,7 +778,7 @@ export class Game {
     const w = this.world;
     const rows = new Map<string, number>();
     const mine = vehicleStats(w, playerVehicle(w)).weapons;
-    this.sound.accents(w.events, w.player.vehicleId, CONFIG.combatShotMs * (1 - ROUND_STAGGER));
+    this.sound.accents(w.events, w.player.vehicleId, (e) => (e.t === "collision" ? null : CONFIG.combatShotMs * (1 - ROUND_STAGGER)));
     for (const e of w.events) {
       if (e.t === "shot") {
         const a = this.eventPoint(e.shooter);

@@ -1,4 +1,5 @@
-// Times score accents so they land on the beat of the looping layers, as parts of one song.
+// Times score accents so they land on the beat of the looping base, as parts of one song. An accent lands on a
+// random free slot near the moment it answers, a little before or after, so it never feels mechanical.
 // Pure: the caller passes audio times in seconds and a random roll in [0, 1).
 
 // Audio time of one beat of the layers, and the beat length in seconds.
@@ -6,7 +7,7 @@ export type Grid = { start: number; beat: number };
 
 export type ScoreTiming = {
   subdivision: number; // slots per beat
-  maxSlotShift: number; // slots an accent may move past a taken one
+  spreadSlots: number; // slots an accent may land before or after its wanted slot
   humanizeMs: number; // largest random delay after the slot
   repeatSeconds: number; // window in which repeats of one accent are quieted
   repeatGain: number; // gain factor per earlier play in the window
@@ -23,18 +24,22 @@ export class SoundDesigner {
 
   constructor(private grid: Grid, private timing: ScoreTiming) {}
 
-  // The slot time and gain for an accent wanted at time at, or null when it is dropped.
-  schedule(id: string, at: number, roll: number): AccentPlay | null {
+  // The slot time and gain for an accent wanted at time at and not before earliest, or null when it is dropped.
+  // One roll picks the slot, and what is left of it picks the humanize delay.
+  schedule(id: string, at: number, earliest: number, roll: number): AccentPlay | null {
     // Requests may come out of time order, so slots are kept for a window behind the request.
     this.forgetBefore(this.slotAtOrAfter(at - this.timing.repeatSeconds));
-    const slot = this.freeSlot(this.slotAtOrAfter(at));
-    if (slot === null) return null;
+    const free = this.freeSlots(at, earliest);
+    if (free.length === 0) return null;
+    const pick = roll * free.length;
+    const slot = free[Math.floor(pick)];
     const time = this.slotTime(slot);
     const earlier = this.recentPlays(id, time);
     if (earlier.length > this.timing.repeatMax) return null;
     this.taken.add(slot);
     this.plays.set(id, [...earlier, time]);
-    return { time: time + (roll * this.timing.humanizeMs) / 1000, gain: this.timing.repeatGain ** earlier.length };
+    const humanize = pick - Math.floor(pick);
+    return { time: time + (humanize * this.timing.humanizeMs) / 1000, gain: this.timing.repeatGain ** earlier.length };
   }
 
   private slotLength(): number {
@@ -49,9 +54,13 @@ export class SoundDesigner {
     return this.grid.start + slot * this.slotLength();
   }
 
-  private freeSlot(first: number): number | null {
-    for (let s = first; s <= first + this.timing.maxSlotShift; s++) if (!this.taken.has(s)) return s;
-    return null;
+  // Free slots within spreadSlots of the one nearest at, none before earliest.
+  private freeSlots(at: number, earliest: number): number[] {
+    const wanted = Math.round((at - this.grid.start) / this.slotLength());
+    const first = Math.max(wanted - this.timing.spreadSlots, this.slotAtOrAfter(earliest));
+    const out: number[] = [];
+    for (let s = first; s <= wanted + this.timing.spreadSlots; s++) if (!this.taken.has(s)) out.push(s);
+    return out;
   }
 
   private forgetBefore(slot: number): void {

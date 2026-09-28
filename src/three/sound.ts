@@ -2,7 +2,7 @@
 // war silences what the player may not see.
 
 import { BEATS_PER_BAR, engineFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS, type CueId } from "../data/sounds";
-import { SoundDesigner } from "../audio/designer";
+import { SoundDesigner, type Grid } from "../audio/designer";
 import { spatial } from "../audio/pick";
 import type {
   BeatLoopHandle,
@@ -37,55 +37,63 @@ export function stingOf(events: GameEvent[], playerId: string): CueId | null {
   );
 }
 
-// Combat score: a drum layer and a bass layer locked to one beat, and accents that SoundDesigner puts on it.
+// Combat score: one random base loop per battle, and accents that SoundDesigner puts on its beat.
 export type AccentCue = Extract<CueId, `accent-${string}`>;
-type LayerCue = "score-drums" | "score-bass";
+const BASE_CUES = ["score-drums", "score-bass"] as const;
+type BaseCue = (typeof BASE_CUES)[number];
+type Base = { loop: BeatLoopHandle; grid: Grid };
 
-const START_LEAD_SECONDS = 0.1; // both layers are scheduled for one start time this far ahead
-const LENGTH_TOLERANCE_SECONDS = 0.001; // layers closer in length than this count as equal
+const START_LEAD_SECONDS = 0.1; // bases are scheduled to start this far ahead, so each starts on its first beat
+const ACCENT_LEAD_SECONDS = 0.02; // earliest accent start from now, so Web Audio never gets a time in the past
 
 export class CombatScore {
-  private drums: BeatLoopHandle;
-  private bass: BeatLoopHandle;
+  private bases: Base[];
+  private active: Base | null = null;
   private designer: SoundDesigner;
-  private beat: number;
 
   constructor(
     private player: Pick<SoundPlayer, "beatLoop" | "now" | "play">,
     private roll: () => number,
   ) {
     const start = player.now() + START_LEAD_SECONDS;
-    this.drums = this.layer("score-drums", start);
-    this.bass = this.layer("score-bass", start);
-    if (Math.abs(this.drums.duration - this.bass.duration) > LENGTH_TOLERANCE_SECONDS)
-      throw new Error(`Score layers differ in length: ${this.drums.duration} s and ${this.bass.duration} s`);
-    const beat = SOUNDS["score-drums"].beat;
-    if (!beat) throw new Error("score-drums needs a beat");
-    this.beat = this.drums.duration / (beat.bars * BEATS_PER_BAR);
-    this.designer = new SoundDesigner({ start, beat: this.beat }, MIX.score);
+    this.bases = BASE_CUES.map((id) => this.base(id, start));
+    this.designer = this.designerFor(this.bases[0]);
   }
 
-  setLevels(drums: number, bass: number, fadeSeconds: number): void {
-    this.drums.setGain(drums, fadeSeconds);
-    this.bass.setGain(bass, fadeSeconds);
+  // A battle starts on one random base, and accents follow its beat until the battle ends.
+  setCombat(on: boolean, fadeSeconds: number): void {
+    if (on === (this.active !== null)) return;
+    this.active?.loop.setGain(0, fadeSeconds);
+    this.active = on ? this.bases[Math.floor(this.roll() * this.bases.length)] : null;
+    if (!this.active) return;
+    this.active.loop.setGain(1, fadeSeconds);
+    this.designer = this.designerFor(this.active);
   }
 
-  // Plays an accent on the first free slot after delayMs, with both layers dipping under it.
+  // Plays an accent on the first free slot after delayMs, with the base dipping under it.
   // Returns false when the designer drops it.
   accent(cue: AccentCue, delayMs: number): boolean {
     const now = this.player.now();
-    const play = this.designer.schedule(cue, now + delayMs / 1000, this.roll());
+    const play = this.designer.schedule(cue, now + delayMs / 1000, now + ACCENT_LEAD_SECONDS, this.roll());
     if (!play) return false;
     this.player.play(cue, { pan: 0, gain: play.gain }, (play.time - now) * 1000);
     const s = MIX.score;
-    for (const layer of [this.drums, this.bass]) layer.duck(play.time, s.duckGain, s.duckAttackSeconds, this.beat);
+    this.active?.loop.duck(play.time, s.duckGain, s.duckAttackSeconds, this.active.grid.beat);
     return true;
   }
 
-  private layer(id: LayerCue, start: number): BeatLoopHandle {
+  private designerFor(base: Base): SoundDesigner {
+    return new SoundDesigner(base.grid, MIX.score);
+  }
+
+  // Every base starts silent at one time from its first beat, so its grid is known from then on.
+  private base(id: BaseCue, start: number): Base {
     const files = SOUNDS[id].files;
-    if (files.length !== 1) throw new Error(`Score layer ${id} needs exactly one file, has ${files.length}`);
-    return this.player.beatLoop(id, files[0], start, scorePhaseOf(files[0]));
+    const beat = SOUNDS[id].beat;
+    if (files.length !== 1) throw new Error(`Score base ${id} needs exactly one file, has ${files.length}`);
+    if (!beat) throw new Error(`Score base ${id} needs a beat`);
+    const loop = this.player.beatLoop(id, files[0], start, scorePhaseOf(files[0]));
+    return { loop, grid: { start, beat: loop.duration / (beat.bars * BEATS_PER_BAR) } };
   }
 }
 
@@ -109,31 +117,22 @@ function plainAccent(struck: boolean, mine: boolean): AccentCue | null {
   return struck ? "accent-struck" : null;
 }
 
-export type CombatSigns = { sighted: boolean; turnsSinceDanger: number; turnsSinceClash: number };
+export type CombatSigns = { sighted: boolean; turnsSinceDanger: number };
 
-// Remembers the last turn each hostile was in sight, and the last turns of danger and of a clash.
+// Remembers the last turn each hostile was in sight, and the last turn of danger.
 export class CombatWatch {
   private seen = new Map<string, number>();
   private lastDanger = -Infinity;
-  private lastClash = -Infinity;
 
   // sighted is true when a hostile in sight now was out of sight for a whole turn. Sight flickers from frame
   // to frame while a turn plays, so a gap inside one turn does not count.
-  observe(turn: number, hostiles: string[], clash: boolean): CombatSigns {
+  observe(turn: number, hostiles: string[]): CombatSigns {
     const sighted = hostiles.some((id) => (this.seen.get(id) ?? -Infinity) < turn - 1);
     for (const [id, last] of this.seen) if (last < turn - 1) this.seen.delete(id);
     for (const id of hostiles) this.seen.set(id, turn);
     if (hostiles.length > 0) this.lastDanger = turn;
-    if (clash) this.lastClash = turn;
-    return { sighted, turnsSinceDanger: turn - this.lastDanger, turnsSinceClash: turn - this.lastClash };
+    return { sighted, turnsSinceDanger: turn - this.lastDanger };
   }
-}
-
-// Whether shots flew by or at the player this turn.
-export function clashed(events: GameEvent[], playerId: string): boolean {
-  return events.some(
-    (e) => (e.t === "shot" && (e.shooter === playerId || e.target === playerId)) || (e.t === "guardShot" && e.target === playerId),
-  );
 }
 
 export class SoundDirector {
@@ -150,11 +149,12 @@ export class SoundDirector {
     if (this.score.accent(cue, delayMs)) this.record(cue);
   }
 
-  // A volley's accent comes when its first round lands, a crash's at once.
-  accents(events: GameEvent[], playerId: string, landMs: number): void {
+  // delayOf gives when each event's moment comes, or null to skip the event in this call.
+  accents(events: GameEvent[], playerId: string, delayOf: (e: GameEvent) => number | null): void {
     for (const e of events) {
       const cue = accentOf(e, playerId);
-      if (cue) this.accent(cue, e.t === "collision" ? 0 : landMs);
+      const delay = cue && delayOf(e);
+      if (cue && delay !== null) this.accent(cue, delay);
     }
   }
 
@@ -192,25 +192,22 @@ export class SoundDirector {
 }
 
 // What the loops respond to each frame. The turn counts are Infinity when it never happened.
-export type LoopState = { stormTiles: number; turnsSinceDanger: number; turnsSinceClash: number };
+export type LoopState = { stormTiles: number; turnsSinceDanger: number };
 
 export type LoopLevels = {
   windGain: number;
   calmGain: number;
-  drumsGain: number;
-  bassGain: number;
+  combatGain: number;
 };
 
 export function loopLevels(s: LoopState, mix: typeof MIX): LoopLevels {
   const w = mix.wind;
   const near = Math.max(0, 1 - s.stormTiles / w.stormReachTiles);
   const danger = s.turnsSinceDanger <= mix.music.holdTurns;
-  const clash = danger && s.turnsSinceClash <= mix.score.clashHoldTurns;
   return {
     windGain: w.baseGain + (w.stormGain - w.baseGain) * near,
     calmGain: danger ? 0 : 1,
-    drumsGain: danger ? 1 : 0,
-    bassGain: clash ? 1 : 0,
+    combatGain: danger ? 1 : 0,
   };
 }
 
@@ -261,7 +258,7 @@ export function engineGlide(
   };
 }
 
-// Engine, wind, calm music and the combat score layers run for the whole session. Wind and music change gain;
+// Engine, wind, calm music and the combat score bases run for the whole session. Wind and music change gain;
 // the engine sounds only while a turn plays.
 export class SoundLoops {
   private engine: LoopHandle | null = null;
@@ -271,7 +268,7 @@ export class SoundLoops {
   private calm: LoopHandle;
   private last: LoopLevels | null = null;
 
-  constructor(player: SoundPlayer, private score: Pick<CombatScore, "setLevels">) {
+  constructor(player: SoundPlayer, private score: Pick<CombatScore, "setCombat">) {
     this.player = player;
     const silent = { pan: 0, gain: 0 };
     this.wind = player.loop("wind", silent);
@@ -300,14 +297,21 @@ export class SoundLoops {
     this.updateMusic(l, was);
   }
 
+  // Calm music comes back after a fight as a new random track.
   private updateMusic(l: LoopLevels, was: LoopLevels | null): void {
-    if (was?.calmGain !== l.calmGain)
-      this.calm.setGain(l.calmGain, MIX.music.fadeSeconds);
-    if (!was || scoreChanged(l, was))
-      this.score.setLevels(l.drumsGain, l.bassGain, MIX.music.fadeSeconds);
+    this.updateCalm(l.calmGain, was);
+    if (was?.combatGain !== l.combatGain) this.score.setCombat(l.combatGain > 0, MIX.music.fadeSeconds);
   }
+
+  private updateCalm(gain: number, was: LoopLevels | null): void {
+    const fade = MIX.music.fadeSeconds;
+    if (was?.calmGain === gain) return;
+    if (was?.calmGain === 0) this.nextCalm(fade);
+    this.calm.setGain(gain, fade);
 }
 
-function scoreChanged(l: LoopLevels, was: LoopLevels): boolean {
-  return was.drumsGain !== l.drumsGain || was.bassGain !== l.bassGain;
+  private nextCalm(fadeSeconds: number): void {
+    this.calm.stop(fadeSeconds * 1000);
+    this.calm = this.player.loop("music-calm", { pan: 0, gain: 0 });
+  }
 }

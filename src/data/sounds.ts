@@ -19,9 +19,9 @@ export type CueDef = {
 
 export type Cue = CueDef & { files: string[] }; // variants; one is picked per play
 
-export type Setup = "field" | "cab" | "score";
+export type Setup = "field" | "cab" | "score" | "stinger";
 
-// A beat loop lasts bars * BEATS_PER_BAR beats at bpm, so layers of equal bars and bpm stay locked.
+// A beat loop lasts exactly bars * BEATS_PER_BAR beats at bpm, so its beat grid holds across repeats.
 export type Beat = { bpm: number; bars: number };
 export const BEATS_PER_BAR = 4;
 
@@ -33,7 +33,8 @@ export function beatLoopSeconds(b: Beat): number {
 export const SOUND_STYLE: Record<Setup, string> = {
   field: "Realistic sound effect, one field microphone about 10 meters away, outdoors in a dry desert, natural and unprocessed, full frequency range, no cinematic whoosh, no sub-bass boom, no music, no voices.",
   cab: "Realistic foley, one close microphone inside an old truck cab, natural and unprocessed, dry, no reverb, no electronic sounds, no music, no voices.",
-  score: "Western wasteland soundtrack, 90 BPM, D minor. Warm dry analog recording in a small wooden room: felt-muted drum kit with brushes, round fingered bass guitar. Soft and mellow, no distortion, no vocals, no synths.",
+  stinger: "Tribal power metal stinger for a wasteland battle, 90 BPM, D minor. Big tribal war drums, heavy distorted electric guitar, deep Mongolian throat singing. Punchy, fierce and energetic, short, no screams, no synths.",
+  score: "Wasteland war soundtrack in the style of Mad Max, D minor. Raw dry recording in one room: tribal war drums and a gritty overdriven electric bass. Driving, fierce and steady, no vocals, no synths.",
 };
 
 const DEFS = {
@@ -61,6 +62,8 @@ const DEFS = {
   "explosion": { bus: "sfx", setup: "field", volume: 1, pitchJitter: 0.04, maxVoices: 2, loop: false, prompts: ["Truck fuel tank explodes, big fiery blast with falling metal debris."], seconds: 3 },
   // Generated horns come out thin and high. The files are generated takes run through ffmpeg
   // "asetrate=44100*0.55,aresample=44100,bass=g=8:f=120,volume=8dB,asoftclip=type=tanh" before import.
+  // Air brakes are the one approved take, arrive-1790459643829.mp3, run through ffmpeg
+  // "asetrate=44100*<rate>,aresample=44100,lowpass=f=3500:p=1" at rates 1, 0.93 and 1.07 before import.
   "horn": { bus: "sfx", setup: "field", volume: 0.8, pitchJitter: 0, maxVoices: 4, loop: false, prompts: ["Mad Max war rig horn: a huge rusted diesel truck blasts its twin air horns once, a deep booming low chord, brassy, gritty and overdriven, heavy as a freight train. Vehicle horn only, no music."], seconds: 1.5 },
   "crash": { bus: "sfx", setup: "field", volume: 0.9, pitchJitter: 0.06, maxVoices: 2, loop: false, prompts: ["Two heavy steel trucks ram each other at speed: one hard, deep crunch of thick metal, a short scrape, then debris settling. Single impact."], seconds: 1.5 },
 
@@ -68,17 +71,17 @@ const DEFS = {
   // Engine recordings are assigned by chassis; pitch and level follow the truck's speed.
   "engine": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Old heavy diesel truck engine running at steady medium revs, recorded close to the engine bay: clear exhaust note, mechanical clatter and valve tick, full and present, not muffled, seamless loop."], seconds: 4 },
   "wind": { bus: "ambient", setup: "field", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Dry desert wind blowing over open sand and rocks, steady, seamless loop."], seconds: 12 },
-  "music-calm": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Slow sparse post-apocalyptic desert road music, lonely twangy baritone guitar and low drone, 80 bpm, instrumental, seamless loop."], seconds: 90 },
+  "music-calm": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Slow sparse post-apocalyptic desert road music, lonely twangy baritone guitar and low drone, 80 bpm, instrumental, seamless loop.", "Slow sparse desert ambient, dusty harmonica and distant slide guitar over a low drone, 70 bpm, instrumental, seamless loop.", "Quiet post-apocalyptic road ambient, soft muted electric guitar arpeggios and a low cello drone, 75 bpm, instrumental, seamless loop."], seconds: 90 },
 
-  // Combat score: two locked layers and soft accents on their beat grid. See SoundDesigner.
-  "score-drums": { bus: "music", setup: "score", beat: { bpm: 90, bars: 8 }, volume: 0.9, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless drum loop, steady 4/4 groove: soft kick on one and three, brushed snare on two and four, warm tom pulse, no fills, no crash cymbals, even level, drums only."] },
-  "score-bass": { bus: "music", setup: "score", beat: { bpm: 90, bars: 8 }, volume: 0.8, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless bass guitar loop in 4/4: a slow repeating two bar figure of long D root and A fifth notes, warm and round, even level, bass only, no drums."] },
-  "accent-sighted": { bus: "music", setup: "score", volume: 0.6, pitchJitter: 0, maxVoices: 2, loop: false, prompts: ["Drums only, no bass guitar: three quick separate warm tom hits, high, middle, low, then silence."], seconds: 1.5 },
-  "accent-struck": { bus: "music", setup: "score", volume: 0.6, pitchJitter: 0, maxVoices: 2, loop: false, prompts: ["Single short phrase: one soft kick drum thump with a low bass guitar note that slides down and fades."], seconds: 2 },
-  "accent-miss": { bus: "music", setup: "score", volume: 0.5, pitchJitter: 0, maxVoices: 2, loop: false, prompts: ["Drums only, no bass guitar, no toms: one soft brushed snare swish with a light wooden rim click, airy and short."], seconds: 1 },
-  "accent-hit": { bus: "music", setup: "score", volume: 0.6, pitchJitter: 0, maxVoices: 2, loop: false, prompts: ["Single short phrase: one warm punchy tom hit together with a short plucked bass guitar note on D."], seconds: 1.5 },
-  "accent-crit": { bus: "music", setup: "score", volume: 0.7, pitchJitter: 0, maxVoices: 1, loop: false, prompts: ["Single dramatic phrase: two big low floor tom hits, then a long deep bass guitar note on D ringing out with a soft mallet cymbal swell."], seconds: 3 },
-  "accent-crash": { bus: "music", setup: "score", volume: 0.75, pitchJitter: 0, maxVoices: 1, loop: false, prompts: ["Single very dramatic phrase: a slow heavy tom fill down the kit, landing on a deep bass guitar note on D and a soft mallet-rolled cymbal that rings out and fades."], seconds: 4 },
+  // Combat score: base loops, one per battle, and accents on the base beat grid. See SoundDesigner.
+  "score-drums": { bus: "music", setup: "score", beat: { bpm: 90, bars: 8 }, volume: 0.9, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless tribal war drum loop, 90 BPM in 4/4: huge pounding taiko and floor toms, heavy kick on every beat, rattling snare accents, relentless and even, no fills, no cymbals, drums only."] },
+  "score-bass": { bus: "music", setup: "score", beat: { bpm: 110, bars: 8 }, volume: 0.8, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless bass guitar loop, 110 BPM in 4/4: fast driving eighth-note riff on D, gritty overdriven tone, chugging and relentless, even level, bass only, no drums."] },
+  "accent-sighted": { bus: "music", setup: "stinger", volume: 0.85, pitchJitter: 0, maxVoices: 2, loop: false, prompts: ["Three heavy tribal war drum hits, boom boom boom, with a low Mongolian throat singing growl rising under them."], seconds: 1.5 },
+  "accent-struck": { bus: "music", setup: "stinger", volume: 0.85, pitchJitter: 0, maxVoices: 2, loop: false, prompts: ["One distorted electric guitar power chord on D slammed with a big tribal drum hit, then a short falling throat singing groan."], seconds: 1.5 },
+  "accent-miss": { bus: "music", setup: "stinger", volume: 0.75, pitchJitter: 0, maxVoices: 2, loop: false, prompts: ["A quick palm-muted distorted electric guitar chug and a tight snare flam, then silence."], seconds: 1 },
+  "accent-hit": { bus: "music", setup: "stinger", volume: 1.3, pitchJitter: 0, maxVoices: 2, loop: false, prompts: ["One punchy distorted electric guitar power chord stab on D with a big tribal floor tom hit."], seconds: 1.5 },
+  "accent-crit": { bus: "music", setup: "stinger", volume: 0.95, pitchJitter: 0, maxVoices: 1, loop: false, prompts: ["Two massive tribal war drum hits, a soaring distorted electric guitar power chord on D and a deep Mongolian throat singing shout."], seconds: 1.5 },
+  "accent-crash": { bus: "music", setup: "stinger", volume: 1, pitchJitter: 0, maxVoices: 1, loop: false, prompts: ["A thundering tribal drum fill into a huge distorted electric guitar power chord on D ringing out, with a deep Mongolian throat singing drone swelling under it."], seconds: 1.5 },
 } as const satisfies Record<string, CueDef>;
 
 export type CueId = keyof typeof DEFS;
@@ -135,8 +138,8 @@ export function hornSoundFor(chassisId: string): { file: string; rate: number } 
 
 // First-beat offset of each beat loop file, from scripts/sfx-phase.py. Layers start at these offsets, so their beats meet.
 const SCORE_PHASES: Record<string, number> = {
-  "score-drums-1.ogg": 0.012,
-  "score-bass-1.ogg": 0.238,
+  "score-drums-1.ogg": 0.014,
+  "score-bass-1.ogg": 0.232,
 };
 
 export function scorePhaseOf(file: string): number {
@@ -170,19 +173,18 @@ export const MIX = {
   // Music crossfades to combat while a hostile is in sight. It holds combat for holdTurns after the last one
   // leaves, so a hostile at the edge of sight does not flip the music every turn.
   music: { fadeSeconds: 3, holdTurns: 5 },
-  // Combat score. Drums play while a hostile is in sight, as combat music did. Bass joins for clashHoldTurns after a
-  // shot by or at the player. Accents snap to subdivision slots per beat of the layers and shift up to maxSlotShift
-  // slots off a taken one. Each repeat of one accent inside repeatSeconds plays at repeatGain times the last,
-  // and plays past repeatMax are dropped. Layers dip to duckGain under an accent and recover over one beat.
+  // Combat score. One random base plays while a hostile is in sight, as combat music did. Each beat of the base has
+  // subdivision slots, and an accent lands on a random free slot up to spreadSlots before or after its moment.
+  // Each repeat of one accent inside repeatSeconds plays at repeatGain times the last, and plays past repeatMax
+  // are dropped. The base dips to duckGain under an accent and recovers over one beat.
   score: {
-    clashHoldTurns: 5,
     subdivision: 2,
-    maxSlotShift: 2,
+    spreadSlots: 2,
     humanizeMs: 15,
     repeatSeconds: 4,
     repeatGain: 0.55,
     repeatMax: 2,
-    duckGain: 0.7,
+    duckGain: 0.55,
     duckAttackSeconds: 0.05,
   },
   // Approved reference cue per bus. The sound board plays it beside each candidate.
