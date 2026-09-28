@@ -6,7 +6,7 @@ import { addVehicle, emptyWorld, practiceOf } from './testkit';
 import { contactsOf, soundRange } from './detect';
 import { TIME } from '../data/time';
 import { sunAt } from './sun';
-import { canVehicleSee, grayRadius, playerVisible, refreshVision, sightRadius, visibleTiles } from './vision';
+import { canVehicleSee, exploreFrom, grayRadius, playerVisible, refreshVision, sightRadius, visibleTiles } from './vision';
 
 describe('vision', () => {
   it('sees an unblocked tile within radius', () => {
@@ -45,6 +45,19 @@ describe('vision', () => {
     w.obstacles = [{ id: 'pond', pos: { x: 33, y: 30 }, r: 1.2, kind: 'water' }];
     const vis = visibleTiles(w, { x: 30, y: 30 });
     expect(vis.has(30 * w.size + 36)).toBe(true);
+  });
+
+  it('explores from a point exactly the tiles seen from there, and keeps tiles explored before', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.obstacles = [{ id: 'r', pos: { x: 33, y: 30 }, r: 1.2, kind: 'rock' }];
+    const from = { x: 30, y: 30 };
+    const before = 5 * w.size + 5; // far outside sight
+    w.player.explored.fill(0);
+    w.player.explored[before] = 1;
+    exploreFrom(w, from);
+    const expected = new Set([...visibleTiles(w, from), before]);
+    const marked = new Set([...w.player.explored.keys()].filter((i) => w.player.explored[i] === 1));
+    expect(marked).toEqual(expected);
   });
 
   it('respects the vision radius', () => {
