@@ -166,12 +166,20 @@ describe("engineGlide", () => {
 });
 
 describe("CombatWatch", () => {
-  it("flags a hostile only on the frame it comes into sight", () => {
+  it("flags a hostile when it comes into sight after a whole turn out of it", () => {
     const watch = new CombatWatch();
     expect(watch.observe(1, ["a"], false).sighted).toBe(true);
     expect(watch.observe(1, ["a"], false).sighted).toBe(false);
     expect(watch.observe(2, [], false).sighted).toBe(false);
-    expect(watch.observe(3, ["a"], false).sighted).toBe(true);
+    expect(watch.observe(4, ["a"], false).sighted).toBe(true);
+  });
+  it("ignores sight flicker inside a turn and into the next", () => {
+    const watch = new CombatWatch();
+    watch.observe(1, ["a"], false);
+    watch.observe(1, [], false);
+    expect(watch.observe(1, ["a"], false).sighted).toBe(false);
+    watch.observe(2, [], false);
+    expect(watch.observe(2, ["a"], false).sighted).toBe(false);
   });
   it("counts turns since the last danger and clash", () => {
     const watch = new CombatWatch();

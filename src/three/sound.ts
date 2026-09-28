@@ -111,16 +111,18 @@ function plainAccent(struck: boolean, mine: boolean): AccentCue | null {
 
 export type CombatSigns = { sighted: boolean; turnsSinceDanger: number; turnsSinceClash: number };
 
-// Remembers, frame to frame, which hostiles were in sight and the last turns of danger and of a clash.
+// Remembers the last turn each hostile was in sight, and the last turns of danger and of a clash.
 export class CombatWatch {
-  private seen = new Set<string>();
+  private seen = new Map<string, number>();
   private lastDanger = -Infinity;
   private lastClash = -Infinity;
 
-  // sighted is true when a hostile in sight now was not in sight last frame.
+  // sighted is true when a hostile in sight now was out of sight for a whole turn. Sight flickers from frame
+  // to frame while a turn plays, so a gap inside one turn does not count.
   observe(turn: number, hostiles: string[], clash: boolean): CombatSigns {
-    const sighted = hostiles.some((id) => !this.seen.has(id));
-    this.seen = new Set(hostiles);
+    const sighted = hostiles.some((id) => (this.seen.get(id) ?? -Infinity) < turn - 1);
+    for (const [id, last] of this.seen) if (last < turn - 1) this.seen.delete(id);
+    for (const id of hostiles) this.seen.set(id, turn);
     if (hostiles.length > 0) this.lastDanger = turn;
     if (clash) this.lastClash = turn;
     return { sighted, turnsSinceDanger: turn - this.lastDanger, turnsSinceClash: turn - this.lastClash };

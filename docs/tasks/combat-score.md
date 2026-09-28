@@ -1,6 +1,6 @@
 # Combat score
 
-**Status:** executing
+**Status:** validating
 **Branch:** combat-score
 **Worktree:** .worktrees/combat-score
 **Goal:** In a battle, the player hears a warm drum loop that a slow bass loop joins once shots fly, with soft musical accents on the beat for enemy sighted, player shot, full miss, player hit, crit and crash, and repeats do not spam. The console command `battle` starts such a battle. Confirming the sound needs the user to play a battle.
@@ -120,6 +120,16 @@ Approach: data and generation first, since wiring needs real loop lengths. The p
 - Not checked: how the music sounds. It needs the user's ears.
 
 ## Conclusion
+Built and verified. The music itself is unconfirmed until the user plays a battle.
+
+- Review: merge-ready. One finding fixed: sight flickers from frame to frame during playback, so `CombatWatch` now counts a hostile as sighted only after a whole turn out of sight.
+- Review scope flag: `CombatScore` and `CombatWatch` sit in `src/three/sound.ts` because the quality gate blocks a new `src/three` file. That file now holds event mapping, encounter memory and Web Audio wiring. A later sound feature may need a split that the fragmentation rule allows.
+- AS1 held: loop mode keeps the length within 13 ms, and the importer makes it exact.
+- AS2 held for the drums, and weakly for the bass (CK2).
+- AS3 held: 556 credits spent.
+- UK1 resolved: drums first beat at 0.012 s, bass at 0.238 s, both 90 BPM.
+- UK2 resolved: librosa runs through `uv run --with librosa`.
+- Future work: player hit and miss accents in a scripted battle, once a script can make the player's gun fire.
 
 ### Hands-off decisions
 - make: size Medium — new audio module, generated assets, console command.
@@ -138,6 +148,7 @@ Approach: data and generation first, since wiring needs real loop lengths. The p
 - uexecute: `accent-sighted` and `accent-miss` prompts reworded to "drums only, no bass guitar" and regenerated — first takes were plain bass notes.
 - uexecute: generation spent 556 credits by the account counter, 4,753 of 40,000 used.
 - uexecute: `CombatScore` and `CombatWatch` live in `src/three/sound.ts` — the quality gate rejects a new file in `src/three` and growth of `game.ts`.
+- ureview: applied the sighting flicker fix without asking — high confidence, small.
 - uverify: crit accent follows the game's own volley label, which says "crit" when any round crits — with 6-round bursts that is about 4 in 10 volleys.
 
 ### Deferred (needs user input)
