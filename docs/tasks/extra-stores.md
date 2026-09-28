@@ -53,3 +53,18 @@ Work goes in a worktree at `.worktrees/extra-stores`. The main checkout has unco
 - `npm test`, `npm run quality`, `npm run playtest` all pass.
 - Manual try, positive: give the player a jerrycan rack by cheat, mount it, fill at a town. The fuel bar shows 260 L on the scout. The fill button charges for 60 L more.
 - Manual try, negative: with a full tank, unmount the rack. Fuel drops to 200 L and the log shows "60 L fuel lost". Stowing the rack on a plain cell gives no extra capacity.
+
+## Result
+- Done on branch `extra-stores`. Jerrycan racks and supply lockers mount on deck cells and raise the caps while mounted.
+- `fitStores()` in `resources.ts` spills fuel and supplies above a lowered cap. It runs after every refit, after a chassis swap, and once per turn for stores lost to looters.
+- Checks: `npm test` passes, 1596 tests. `npm run quality` passes. `npm run playtest` passes at 60 fps. New Vitest cases cover the caps, broken and stowed stores, the player spill and the NPC spill.
+- Manual try, positive: in Bowl, both stores mounted and filled to 260 L and 30 supplies. The HUD showed "260 / 260 L".
+- Manual try, negative: unmounting both while full dropped to 200 L and 20 supplies. The log said "No room for fuel: fuel -12.0" and "No room for supplies: supplies -10.0". A stowed store adds nothing.
+- Found, not fixed: `tp bowl` crashes the page with "v293 has 0 mounted wheels, expected 4" on a Bowl hauler. It happens on 3907ac7 without this change. The main checkout has uncommitted `vehicle.ts` edits that may be the fix.
+
+### Hands-off decisions
+- uexecute: kept value 120 at tier 1. The effort band test is skipped, and current parts all miss their bands.
+- uexecute: `store` effort bands copy the cargo bands.
+- uexecute: garages stock both stores through the all-parts table. The Pump Station adds jerrycan racks and the Granary adds supply lockers.
+- uexecute: the start kit, NPC spawn fuel and the chassis card still read the chassis base tank. None of them has a mounted store at that point.
+- uexecute: the spill log uses sim fuel units, like the existing leak line.
