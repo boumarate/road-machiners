@@ -25,6 +25,7 @@ def build(kit: Kit) -> None:
         tube(kit, f"muzzle{y:.2f}", 0.038, 0.84, 0.9, "dark", y=y, sides=6)
     kit.box("clamp", (0.04, 0.2, 0.075), (0.5, 0, 0), "metal_light")
     kit.box("clamp_rear", (0.03, 0.19, 0.07), (0.2, 0, 0), "rust_side")
+    kit.socket("tip", (0.9, 0, 0))
 
 
 if __name__ == "__main__":

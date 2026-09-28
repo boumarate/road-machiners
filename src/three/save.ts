@@ -27,7 +27,7 @@ export function hasSave(storage: Storage): boolean {
 // mounts and built-in parts sized to the truck models. 25 moves locations beside their roads and the start
 // onto the road. 26 adds NPC knockouts, truck pickups on refits and revenge. 27 adds NPC driver names and their random stream. 28 adds new NPC
 // types, escorts and two goods. Older saves do not load.
-const SAVE_VERSION = 28;
+const SAVE_VERSION = 29;
 
 export function loadWorld(storage: Storage): World | null {
   const raw = storage.getItem(SAVE_KEY);

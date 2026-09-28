@@ -15,14 +15,28 @@ import { heightAt } from '../../sim/terrain';
 import type { World } from '../../sim/types';
 
 const S = PHYSICS.metersPerTile;
+const TAU = 2 * Math.PI;
 const LIFT = 0.04; // meters above the terrain surface, avoids z-fighting
 const REACH = 20; // tiles from the player to the patch edge, the base sight radius
 const SIDE = REACH * 2 + 1; // corners along one side of the patch
 // Heat at which the haze is at full strength: noon sun in a heat wave, the hottest ground there is.
 const HAZE_FULL = 1 + (TIME.sunHeat - 1) * WEATHER.sim.effects.heatwave;
-// The ground shifts up to HAZE.shift meters, in waves HAZE.wave meters long that ripple at HAZE.speed
-// radians per second: a fraction of a ground paint block, so edges waver without breaking apart.
-const HAZE = { shift: 0.18, wave: 4, speed: 4 };
+// The ground shifts up to HAZE.shift meters: a small fraction of a ground paint block, so edges waver without
+// breaking apart. Three waves of unrelated lengths, headings and speeds add up, each bent by a slow warp, so the
+// ripple never repeats a visible pattern. `wave` is meters, `speed` radians per second and `heading` radians.
+// Gusts turn the shimmer on in patches about HAZE.gust meters across that drift and fade over tens of seconds,
+// so hot ground is never evenly rippled.
+const HAZE = {
+  shift: 0.09,
+  waves: [
+    { wave: 4.7, speed: 2.9, heading: 0.4, weight: 1 },
+    { wave: 2.6, speed: 4.1, heading: 2.3, weight: 0.6 },
+    { wave: 1.4, speed: 6.3, heading: 4.1, weight: 0.35 },
+  ],
+  warp: { wave: 9, speed: 0.9, depth: 1.6 },
+  gust: 22,
+  gustSpeed: 0.21,
+};
 
 export class ShadeView {
   readonly mesh: THREE.Mesh;
@@ -145,16 +159,42 @@ uniform float hazeTime;
 uniform float hazeUvPerMeter;`;
 
 // The mask texels sit on patch corners, so a texel center is half a tile in from the patch origin.
-// Redefining the ground uv and the road point shifts every lookup after it until the #undef.
+// Redefining the ground uv and the road point shifts every lookup after it until the #undef. The shadow lookup
+// reads the unshifted point, so shadows never move with the haze.
 const HAZE_SHIFT = `
   vec2 hazeCell = (vHazeXZ - hazeOrigin) / ${S.toFixed(4)} + 0.5;
   float hazeOn = texture2D(hazeMask, hazeCell / ${SIDE.toFixed(1)}).r;
-  float hazeK = ${((2 * Math.PI) / HAZE.wave).toFixed(4)};
-  vec2 hazeShift = hazeOn * ${HAZE.shift.toFixed(3)} * vec2(
-    sin(vHazeXZ.y * hazeK + hazeTime * ${HAZE.speed.toFixed(2)}),
-    sin(vHazeXZ.x * hazeK * 1.3 - hazeTime * ${(HAZE.speed * 1.2).toFixed(2)}));
+  vec2 hazeP = vHazeXZ;
+  float hazeT = hazeTime;
+  vec2 hazeWarp = ${glslFloat(HAZE.warp.depth)} * vec2(
+    sin(hazeP.y * ${glslFloat(TAU / HAZE.warp.wave)} + hazeT * ${glslFloat(HAZE.warp.speed)}),
+    sin(hazeP.x * ${glslFloat(TAU / HAZE.warp.wave * 0.83)} - hazeT * ${glslFloat(HAZE.warp.speed * 1.37)}));
+  vec2 hazeShift = vec2(0.0);
+${HAZE.waves.map(waveGlsl).join('\n')}
+  float hazeGust = smoothstep(0.35, 0.95, 0.5 + 0.5 * sin(hazeP.x * ${glslFloat(TAU / HAZE.gust)} + hazeT * ${glslFloat(HAZE.gustSpeed)}
+    + 1.7 * sin(hazeP.y * ${glslFloat(TAU / HAZE.gust * 0.71)} - hazeT * ${glslFloat(HAZE.gustSpeed * 0.63)}))
+    * sin(hazeP.y * ${glslFloat(TAU / HAZE.gust * 0.87)} - hazeT * ${glslFloat(HAZE.gustSpeed * 1.21)}
+    + 1.3 * sin(hazeP.x * ${glslFloat(TAU / HAZE.gust * 0.53)} + hazeT * ${glslFloat(HAZE.gustSpeed * 0.77)})));
+  // Ground in a cast shadow gets no haze, so shadow edges stay still.
+  float hazeLit = 1.0;
+  #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+    hazeLit = getShadow(directionalShadowMap[0], directionalLightShadows[0].shadowMapSize, 1.0,
+      directionalLightShadows[0].shadowBias, directionalLightShadows[0].shadowRadius, vDirectionalShadowCoord[0]);
+  #endif
+  hazeShift *= hazeOn * hazeLit * hazeGust * ${glslFloat(HAZE.shift / HAZE.waves.reduce((sum, w) => sum + w.weight, 0))};
   #define vMapUv (vMapUv + hazeShift * hazeUvPerMeter)
   #define vRoadXZ (vRoadXZ + hazeShift)`;
+
+// One ripple: it runs along its heading, and wobbles the ground across and along it.
+function waveGlsl(w: (typeof HAZE.waves)[number]): string {
+  const dir = `vec2(${glslFloat(Math.cos(w.heading))}, ${glslFloat(Math.sin(w.heading))})`;
+  const phase = `dot(hazeP + hazeWarp, ${dir}) * ${glslFloat(TAU / w.wave)} - hazeT * ${glslFloat(w.speed)}`;
+  return `  hazeShift += ${glslFloat(w.weight)} * vec2(sin(${phase}), cos(${phase} * 0.77));`;
+}
+
+function glslFloat(x: number): string {
+  return x.toFixed(4);
+}
 
 function patchIndices(): THREE.BufferAttribute {
   const out: number[] = [];

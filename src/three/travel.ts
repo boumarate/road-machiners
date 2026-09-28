@@ -12,7 +12,7 @@ import type { GameEvent, World } from "../sim/types";
 import { dist, type Vec } from "../sim/vec";
 import { isOnRope, isTowed } from "../sim/tow";
 import { playerSees } from "../sim/vision";
-import { hostileToPlayer, playerCanAct } from "../sim/world";
+import { autoRuns, hostileToPlayer, playerCanAct } from "../sim/world";
 
 export type LiveVision = {
   visible: Set<number>;
@@ -92,6 +92,7 @@ export class Travel {
   private automatic = false;
   private pressedAt: number | null = null;
   private requested = false;
+  private autoHalted = false;
   private remainder = 0;
   private readonly turns = new TurnPreparation();
 
@@ -112,12 +113,30 @@ export class Travel {
     return step;
   }
 
+  // Returns whether to play one turn now.
   handleSpace(event: KeyboardEvent, playing: boolean, world: World): boolean {
     event.preventDefault();
     if (event.repeat) return false;
+    if (autoRuns(world)) {
+      this.toggleAutoHalt();
+      return false;
+    }
     const order = playerVehicle(world).order;
     const follow = canTravel(world) && order !== null && order.kind !== "brake";
     return this.press(performance.now(), playing, follow);
+  }
+
+  // Space stops the turns that run on their own while the player is stranded, and the next Space restarts them.
+  // Holding the restarting press fast-forwards, as in travel.
+  private toggleAutoHalt(): void {
+    this.autoHalted = !this.autoHalted;
+    if (!this.autoHalted) this.pressedAt = performance.now();
+  }
+
+  // Whether turns run on their own now. A stop lasts until Space or until the stranded spell ends.
+  autoAllowed(world: World): boolean {
+    if (!autoRuns(world)) this.autoHalted = false;
+    return autoRuns(world) && !this.autoHalted;
   }
 
   release(): void {

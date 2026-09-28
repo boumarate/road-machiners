@@ -1,12 +1,15 @@
 // Parked jobs: work that needs the truck to stay parked for several turns. One rule for every driver.
 // A job is cancelled on any turn its truck ends above parked speed, and its finished turns are lost.
+// No driver works with a hostile in sight: no job starts then, and a running job is cancelled.
 // A repair is also cancelled once the grid holds no parts for it.
 
 import { GOODS } from "../data/goods";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { STRIP } from "../data/salvage";
+import { isHostile } from "./combat";
 import { playerVehicle } from "./damage";
+import { canVehicleSee } from "./vision";
 import { partValue } from "./wear";
 import { freeCells, goodsCount, isMounted, itemSize, mountedParts } from "./grid";
 import { addGoods, applyRefitLayout, getRefitLayout } from "./inventory";
@@ -30,7 +33,13 @@ export function isBusy(v: Vehicle): boolean {
   return v.job !== null && !isAutoPatch(v.job);
 }
 
+// A hostile the driver sees.
+export function inCombat(world: World, v: Vehicle): boolean {
+  return world.vehicles.some((other) => isHostile(world, v, other) && canVehicleSee(world, v, other.pos));
+}
+
 export function startJob(world: World, v: Vehicle, job: Job): void {
+  if (inCombat(world, v)) throw new Error("Not with a hostile in sight");
   if (isAutoPatch(v.job)) cancelJob(world, v);
   if (v.job)
     throw new Error(`${v.name} is already busy with a ${v.job.kind} job`);
@@ -67,8 +76,7 @@ export function startRepair(world: World, partId: string): World {
 export function startAutoRepair(world: World): void {
   if (!world.player.autoRepair || world.player.state !== "active") return;
   const v = playerVehicle(world);
-  if (v.job || v.speed > RULES.parkedSpeed || (goodsCount(v).parts ?? 0) === 0)
-    return;
+  if (!canAutoPatch(world, v)) return;
   const worst = mountedParts(v)
     .filter((p) => !isJunk(p) && repairPlan(world, v, p.id).needed > 0)
     .sort((a, b) => a.hp / maxHp(a) - b.hp / maxHp(b))[0];
@@ -82,6 +90,11 @@ export function startAutoRepair(world: World): void {
     total: plan.turns,
     auto: true,
   });
+}
+
+// Idle, parked, out of combat, with parts to patch with.
+function canAutoPatch(world: World, v: Vehicle): boolean {
+  return !v.job && v.speed <= RULES.parkedSpeed && (goodsCount(v).parts ?? 0) > 0 && !inCombat(world, v);
 }
 
 // The player command that starts stripping a spare, non-core part for units of the parts good.
@@ -138,7 +151,7 @@ export function advanceJobs(world: World): void {
 
 // A turn handler does one turn of work and returns true once the job is finished.
 function advanceJob(world: World, v: Vehicle, job: Job): void {
-  if (v.speed > RULES.parkedSpeed) return endJob(world, v, job, "cancelled");
+  if (v.speed > RULES.parkedSpeed || inCombat(world, v)) return endJob(world, v, job, "cancelled");
   if (job.kind === "refit") return advanceRefit(world, v, job);
   if (isStalled(world, v, job)) return endJob(world, v, job, "cancelled");
   if (jobTurn(world, v, job)) endJob(world, v, job, "done");

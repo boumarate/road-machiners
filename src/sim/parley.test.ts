@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { REFUSED } from '../data/dialogue';
 import { NPCS, type TraitId } from '../data/npcs';
 import { isHostile, noteCollision } from './combat';
 import { playerVehicle } from './damage';
@@ -213,6 +214,16 @@ describe('NPC pleas to the player', () => {
     expect(w.player.call).toBeNull();
   });
 
+  it('a pleading foe calls even while it flees another truck', () => {
+    const w = quietWorld();
+    const npc = npcAt(w, 'traders', ['trader'], 36);
+    feud(w, npc, playerVehicle(w));
+    npc.brain!.goals.push({ kind: 'flee', targetId: 'someone-else', destination: { x: 60, y: 30 }, reason: 'escape an attacker', phase: 'travel' });
+    plead(w, npc, playerVehicle(w), 'mercy');
+    raiseCalls(w);
+    expect(w.player.call).toMatchObject({ with: npc.id, topic: 'mercyPlea' });
+  });
+
   it('hanging up refuses the plea', () => {
     const { w: start, npc } = pleading('truce');
     const w = hangUp(start);
@@ -243,6 +254,15 @@ describe('player pleas', () => {
     expect(currentOptions(w).map((o) => o.text)).toEqual(['Enough shooting. Can we call a truce?', 'I give up. Let me go.', 'Hang up.']);
   });
 
+  it('a foe busy fighting another truck takes the call, and the player can offer a truce', () => {
+    forceOption('truceOffered', 'accept');
+    const { w: start, npc } = atWar();
+    npc.brain!.goals.push({ kind: 'fight', targetId: 'someone-else', destination: { x: 40, y: 30 }, reason: 'fight back', phase: 'travel' });
+    let w = pick(callVehicle(start, npc.id), 'Enough shooting. Can we call a truce?');
+    w = pick(w, 'We both drive away.');
+    expect(isHostile(w, w.vehicles.find((v) => v.id === npc.id)!, playerVehicle(w))).toBe(false);
+  });
+
   it('an accepted truce makes peace', () => {
     forceOption('truceOffered', 'accept');
     const { w: start, npc } = atWar();
@@ -260,7 +280,7 @@ describe('player pleas', () => {
     w = pick(w, 'Then we finish this.');
     expect(isHostile(w, w.vehicles.find((v) => v.id === npc.id)!, playerVehicle(w))).toBe(true);
     w = callVehicle(w, npc.id);
-    expect(w.player.call).toBeNull();
+    expect(w.player.call?.node).toBe(REFUSED);
   });
 
   it('spared mercy costs the player the cargo', () => {

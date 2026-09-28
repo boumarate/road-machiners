@@ -471,6 +471,11 @@ export class Hud {
     );
   }
 
+  // Sends a horn pressed during the turn that just ended.
+  flushHorn(): void {
+    this.dialogue.flushHorn();
+  }
+
   pushEvents(w: World): void {
     for (const e of w.events) {
       const line = eventText(w, e);

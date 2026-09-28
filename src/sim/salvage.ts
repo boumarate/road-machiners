@@ -19,7 +19,7 @@ import { chance, randInt } from './rng';
 import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
 import { vehicleStats } from './stats';
-import { cancelJob, startJob } from './jobs';
+import { cancelJob, inCombat, startJob } from './jobs';
 import type { GridItem, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
 import { canUseSite, townAt } from './sites';
 import { inTowReach } from './tow';
@@ -462,6 +462,7 @@ export function finishTruckPickup(world: World, looter: Vehicle, pickup: TruckPi
 export function lootTruckTurn(world: World, looter: Vehicle, target: Vehicle): string | null {
   if (looter.job?.kind === 'refit') return null;
   takeLooseItems(world, looter, target);
+  if (inCombat(world, looter)) return null;
   const next = nextInstalled(looter, target);
   if (!next) return target.items.some((it) => takeError(target, it) === null) ? 'cargo cannot hold the loot' : 'nothing left to loot';
   takeItem(world, looter, target, next.item, next.spot);

@@ -168,7 +168,9 @@ def main() -> None:
     cab_lower(kit)
     cab_upper(kit)
     bed(kit)
-    level_sockets(kit, G, "row", [ROOF] * 3 + [CANVAS_TOP] * 6, fronts={0: ROOF_FRONT, 3: BED_FRONT})
+    # Items on the engine cells stand on the roof underside in the hatch.
+    hatch = {(x, y): UNDER_ROOF for x in (2, 3) for y in (1, 2)}
+    level_sockets(kit, G, "row", [ROOF] * 3 + [CANVAS_TOP] * 6, fronts={0: ROOF_FRONT, 3: BED_FRONT}, cells=hatch)
     level_sockets(kit, G, "floor", [BELT] + [UNDER_ROOF] * 2 + [RAIL] * 6)
     check_base(kit, "base_hauler", G)
     kit.export("base_hauler", args, view_size=7.5)

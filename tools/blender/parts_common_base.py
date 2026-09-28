@@ -3,8 +3,8 @@
 A base is one whole-body model per chassis. It fills the chassis grid footprint: rows x CELL_ALONG along Blender X,
 columns x CELL_ACROSS across Blender Y, nose at +X, truck left at +Y. Its origin is the physics collider center,
 so Z = half_height is the deck top and Z = -half_height the collider bottom.
-Kit parts from the shared kit stand on the base at the row<y> sockets. Core parts and engines on their engine mount cells
-stand lower, at the floor<y> sockets: the engine bay under a hood cutout, the cab floor or the bed floor.
+Kit parts from the shared kit stand on the base at the row<y>_<x> sockets, one per cell. Core parts and engines on their
+engine mount cells stand lower, at the floor<y>_<x> sockets: the engine bay under a hood cutout, the cab floor or the bed floor.
 
 Style: big flat panels and chunky slabs that read at the default game zoom. No detail under about 10 cm.
 Few strong color blocks: paint body, trim accents, dark glass, bright lamps, dark underbody.
@@ -82,16 +82,38 @@ def flare(kit: Kit, name: str, g: Grid, wx: float, hub_z: float, radius: float, 
     prism(kit, name, outer + list(reversed(inner)), y0, y1, "under")
 
 
-def level_sockets(kit: Kit, g: Grid, prefix: str, heights: list[float], fronts: dict[int, float] | None = None) -> None:
-    """One <prefix><y> socket per grid row at heights[y]: row for where kit parts stand, floor for core parts and mounted engines.
+def level_sockets(
+    kit: Kit, g: Grid, prefix: str, heights: list[float], fronts: dict[int, float] | None = None, cells: dict[tuple[int, int], float] | None = None
+) -> None:
+    """One <prefix><y>_<x> socket per grid cell: row for where kit parts stand, floor for core parts and mounted engines.
 
+    heights[y] is the level of row y. cells gives a different level at column x, row y, keyed (x, y), where the surface
+    under that cell is not the row's: a low fender beside a narrow hood, or an engine cutout.
     The socket's X is the front edge of the surface on that row, the row's own front edge unless fronts gives a lower one.
     The view moves an item back until its front edge is behind it, so nothing overhangs a raked windshield.
     """
     if len(heights) != g.rows:
         raise ValueError(f"{len(heights)} {prefix} heights for {g.rows} rows")
+    levels = cells or {}
+    outside = [c for c in levels if not (0 <= c[0] < g.cols and 0 <= c[1] < g.rows)]
+    if outside:
+        raise ValueError(f"{prefix} cells {outside} lie outside the {g.cols}x{g.rows} grid")
     for y, z in enumerate(heights):
-        kit.socket(f"{prefix}{y}", ((fronts or {}).get(y, g.row_x(y - 0.5)), 0, z))
+        for x in range(g.cols):
+            kit.socket(f"{prefix}{y}_{x}", ((fronts or {}).get(y, g.row_x(y - 0.5)), g.col_y(x), levels.get((x, y), z)))
+
+
+def surface_z(g: Grid, x: int, y: int) -> float:
+    """The height of the built base's top surface at the center of column x, row y, for cells over a slope or a step.
+
+    Call it after the whole body is built. Raises when nothing lies under the cell center.
+    """
+    bpy.context.view_layer.update()
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    hit, loc, *_ = bpy.context.scene.ray_cast(depsgraph, Vector((g.row_x(y), g.col_y(x), 10.0)), Vector((0, 0, -1)))
+    if not hit:
+        raise RuntimeError(f"No base surface under cell {x},{y}")
+    return round(loc.z, 3)
 
 
 def check_base(kit: Kit, name: str, g: Grid) -> None:

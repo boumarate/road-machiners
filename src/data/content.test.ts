@@ -52,13 +52,13 @@ describe("equipment variety", () => {
         .map((weapon) => [weapon.id, weapon.range]),
     );
     expect(ranges).toEqual({
-      mg: 9,
-      cannon: 13.5,
-      shotgun: 4.5,
-      autocannon: 10.5,
-      tankGun: 12,
-      rocketRack: 15,
-      sniperCannon: 18,
+      mg: 18,
+      cannon: 27,
+      shotgun: 9,
+      autocannon: 21,
+      tankGun: 24,
+      rocketRack: 30,
+      sniperCannon: 36,
     });
   });
 
@@ -225,5 +225,23 @@ describe("part trade-offs", () => {
     const worse = { ...PARTS.mg, id: "worseMg", hp: PARTS.mg.hp - 1 } as PartDef;
     expect(dominates(PARTS.mg, worse)).toBe(true);
     expect(dominates(worse, PARTS.mg)).toBe(false);
+  });
+});
+
+describe("chassis drive parts", () => {
+  const hpOf = (chassisId: string, role: "wheel" | "transmission" | "tank"): number => {
+    const core = CHASSIS[chassisId].core.find((c) => {
+      const def = PARTS[c.defId];
+      return def.kind === "core" && def.role === role;
+    });
+    if (!core) throw new Error(`${chassisId} has no ${role}`);
+    return PARTS[core.defId].hp;
+  };
+
+  it("gives heavier chassis tougher wheels, transmissions and fuel tanks", () => {
+    for (const role of ["wheel", "transmission", "tank"] as const) {
+      expect(hpOf("hauler", role)).toBeGreaterThan(hpOf("scout", role));
+      expect(hpOf("wagon", role)).toBeGreaterThan(hpOf("hauler", role));
+    }
   });
 });

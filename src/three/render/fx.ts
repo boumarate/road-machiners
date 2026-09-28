@@ -32,9 +32,27 @@ const MG_BOLT = 0.04; // bolt length as a share of the flight
 const CANNON_BOLT = 0.06;
 const LABEL_ROW_PX = 22; // screen spacing between stacked shot labels
 
+// Muzzle flash: a flat star of additive triangles at the barrel tip, pointing where the round goes. It pops at full
+// size and shrinks over its life. Lengths run from the tip to the star's front point.
+const FLASH = {
+  life: 0.07, // seconds; about four frames at 60 fps
+  mgLength: 0.6, // meters
+  cannonLength: 1.4, // meters
+  endScale: 0.3, // share of the full size left at the end of the life
+  max: 48, // flashes alive at once; a long MG burst overlaps a few, extra flashes are dropped
+};
+
 type FloatText = { el: HTMLDivElement; pos: V3; rowPx: number; age: number; life: number; used: boolean };
+// Where a round leaves the gun and the unit direction it leaves in, read when the round fires.
+export type Muzzle = { pos: V3; dir: V3 };
 // A round in flight: after its delay a bolt runs from muzzle to landing point over its life, then the impact plays.
 type Tracer = { line: THREE.LineSegments; from: THREE.Vector3; to: THREE.Vector3; heavy: boolean; age: number; life: number; fire: () => void; land: () => void };
+type Flash = { mesh: THREE.Mesh; size: number; age: number };
+
+// A muzzle at a fixed gun point, like a guard tower, facing its target.
+export function towardFrom(from: V3, target: V3): Muzzle {
+  return { pos: from, dir: { x: target.x - from.x, y: target.y - from.y, z: target.z - from.z } };
+}
 type Pending = { left: number; run: () => void }; // seconds until run
 
 // ---- Particle pools.
@@ -170,6 +188,80 @@ class ParticlePool {
   }
 }
 
+// ---- Muzzle flashes.
+
+// The flash shape for a length of 1 along +X: a long spike in two crossed planes, and a six-point star across the barrel.
+function flashGeometry(): THREE.BufferGeometry {
+  const pts: number[] = [];
+  const tri = (a: number[], b: number[], c: number[]) => pts.push(...a, ...b, ...c);
+  const half = 0.18; // half width of the long spike
+  tri([0, 0, 0], [0.3, half, 0], [1, 0, 0]);
+  tri([0, 0, 0], [1, 0, 0], [0.3, -half, 0]);
+  tri([0, 0, 0], [0.3, 0, half], [1, 0, 0]);
+  tri([0, 0, 0], [1, 0, 0], [0.3, 0, -half]);
+  const points = 6;
+  const outer = 0.32; // star point radius
+  const inner = 0.1; // star notch radius
+  const x = 0.06; // the star stands just past the tip
+  for (let i = 0; i < points * 2; i++) {
+    const a0 = (i / (points * 2)) * Math.PI * 2;
+    const a1 = ((i + 1) / (points * 2)) * Math.PI * 2;
+    const r0 = i % 2 === 0 ? outer : inner;
+    const r1 = i % 2 === 0 ? inner : outer;
+    tri([x, 0, 0], [x, Math.cos(a0) * r0, Math.sin(a0) * r0], [x, Math.cos(a1) * r1, Math.sin(a1) * r1]);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  return geo;
+}
+
+const X_AXIS = new THREE.Vector3(1, 0, 0);
+
+// A fixed pool of flash meshes sharing one geometry and material.
+class MuzzleFlashes {
+  private flashes: Flash[] = [];
+  private turn = new THREE.Quaternion();
+  private roll = new THREE.Quaternion();
+  private dir = new THREE.Vector3();
+
+  constructor(scene: THREE.Scene) {
+    const geo = flashGeometry();
+    const mat = new THREE.MeshBasicMaterial({ color: PAL.flash, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+    for (let i = 0; i < FLASH.max; i++) {
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.visible = false;
+      mesh.frustumCulled = false;
+      scene.add(mesh);
+      this.flashes.push({ mesh, size: 0, age: 0 });
+    }
+  }
+
+  show(m: Muzzle, heavy: boolean): void {
+    const f = this.flashes.find((x) => !x.mesh.visible);
+    if (!f) return;
+    f.size = heavy ? FLASH.cannonLength : FLASH.mgLength;
+    f.age = 0;
+    f.mesh.visible = true;
+    f.mesh.position.set(m.pos.x, m.pos.y, m.pos.z);
+    this.turn.setFromUnitVectors(X_AXIS, this.dir.set(m.dir.x, m.dir.y, m.dir.z).normalize());
+    this.roll.setFromAxisAngle(X_AXIS, Math.random() * Math.PI * 2);
+    f.mesh.quaternion.copy(this.turn).multiply(this.roll);
+    f.mesh.scale.setScalar(f.size);
+  }
+
+  tick(dt: number): void {
+    for (const f of this.flashes) {
+      if (!f.mesh.visible) continue;
+      f.age += dt;
+      if (f.age >= FLASH.life) {
+        f.mesh.visible = false;
+        continue;
+      }
+      f.mesh.scale.setScalar(f.size * (1 - (1 - FLASH.endScale) * (f.age / FLASH.life)));
+    }
+  }
+}
+
 // ---- Effects.
 
 // Wheel dust: a narrow, dense jet from the tire that slows, widens and fades into a trailing cloud.
@@ -183,9 +275,11 @@ export class Fx3D {
   private texts: FloatText[] = [];
   private tracers: Tracer[] = [];
   private pending: Pending[] = [];
+  private flashes: MuzzleFlashes;
 
   constructor(private scene: THREE.Scene, private overlay: HTMLElement, private rig: CameraRig) {
     scene.add(this.puffs.mesh, this.glows.mesh);
+    this.flashes = new MuzzleFlashes(scene);
     for (let i = 0; i < MAX_TEXTS; i++) {
       const el = document.createElement('div');
       el.style.position = 'absolute';
@@ -212,22 +306,26 @@ export class Fx3D {
     }
   }
 
-  // One round leaves `from` after delayMs and reaches its landing point after flightMs more. It lands with sparks
-  // when it struck something, else with dust.
-  shot(from: V3, land: V3, sparks: boolean, heavy: boolean, delayMs: number, flightMs: number): void {
+  // One round leaves the muzzle after delayMs and reaches its landing point after flightMs more. muzzle is read when
+  // the round fires, so the bolt starts at the barrel tip as the turret points then. It lands with sparks when it
+  // struck something, else with dust.
+  shot(muzzle: () => Muzzle, land: V3, sparks: boolean, heavy: boolean, delayMs: number, flightMs: number): void {
     const color = heavy ? CANNON_COLOR : PAL.flash;
     const line = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 1 }));
     line.visible = false;
     this.scene.add(line);
     const fire = () => {
+      const m = muzzle();
+      tracer.from.set(m.pos.x, m.pos.y, m.pos.z);
       line.visible = true;
-      this.puff(from, PAL.flash, 1, { speed: 0, life: flightMs / 2000, scale: heavy ? 0.9 : 0.5, grow: 1.6, additive: true });
+      this.flashes.show(m, heavy);
+      this.puff(m.pos, PAL.flash, 1, { speed: 0, life: flightMs / 2000, scale: heavy ? 0.9 : 0.5, grow: 1.6, additive: true });
     };
     const impact = () => {
       if (sparks) this.puff(land, 0xffa040, heavy ? 14 : 6, { speed: 4, life: 0.35, scale: 0.35, grow: 0.3, additive: true });
       else this.puff(land, 0xd8c098, 4, { speed: 1.5, life: 0.9, scale: 0.5, grow: 1.4 });
     };
-    const tracer: Tracer = { line, from: new THREE.Vector3(from.x, from.y, from.z), to: new THREE.Vector3(land.x, land.y, land.z), heavy, age: -delayMs / 1000, life: flightMs / 1000, fire, land: impact };
+    const tracer: Tracer = { line, from: new THREE.Vector3(), to: new THREE.Vector3(land.x, land.y, land.z), heavy, age: -delayMs / 1000, life: flightMs / 1000, fire, land: impact };
     this.tracers.push(tracer);
   }
 
@@ -300,6 +398,7 @@ export class Fx3D {
     const dt = dtMs / 1000;
     this.puffs.tick(dt);
     this.glows.tick(dt);
+    this.flashes.tick(dt);
     for (let i = this.pending.length - 1; i >= 0; i--) {
       const job = this.pending[i];
       job.left -= dt;

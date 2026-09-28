@@ -27,8 +27,9 @@ export type Topic = {
   // How the player raises it from the hub. A driver in a feud with the player takes up only topics asked during
   // feuds.
   ask: { text: string; when: ConditionId[]; duringFeud: boolean } | null;
-  // When an NPC calls the player with it; higher priority wins. A feud stops the call unless `duringFeud`.
-  raise: { when: ConditionId[]; priority: number; duringFeud: boolean } | null;
+  // When an NPC calls the player with it; higher priority wins. A feud stops the call unless `duringFeud`. A player
+  // in combat takes only calls that are part of the fight, marked `duringCombat`.
+  raise: { when: ConditionId[]; priority: number; duringFeud: boolean; duringCombat: boolean } | null;
   prepare: PrepareId | null; // fills the call values when the topic opens
   hangUp: EffectId[]; // runs when the player hangs up inside the topic
   start: string;
@@ -37,6 +38,8 @@ export type Topic = {
 
 export const HUB = 'hub';
 export const END = 'end';
+// The node, outside any topic, of a call the driver refused. It offers only hang up.
+export const REFUSED = 'callRefused';
 // What a driver busy fighting another truck says when the player calls.
 export const BUSY_LINE = 'Busy here! Off the channel.';
 
@@ -64,7 +67,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     id: 'tow',
     once: false,
     ask: null,
-    raise: { when: ['offersTow'], priority: 2, duringFeud: false },
+    raise: { when: ['offersTow'], priority: 2, duringFeud: false, duringCombat: false },
     prepare: 'towOffer',
     hangUp: ['refuseTow'],
     start: 'offer',
@@ -129,7 +132,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     id: 'patchRequest',
     once: true,
     ask: null,
-    raise: { when: ['npcNeedsPatch'], priority: 1, duringFeud: false },
+    raise: { when: ['npcNeedsPatch'], priority: 1, duringFeud: false, duringCombat: false },
     prepare: 'patchTerms',
     hangUp: ['settleRefused'],
     start: 'ask',
@@ -155,7 +158,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     id: 'demand',
     once: true,
     ask: null,
-    raise: { when: ['demandsCargo'], priority: 3, duringFeud: true },
+    raise: { when: ['demandsCargo'], priority: 3, duringFeud: true, duringCombat: true },
     prepare: null,
     hangUp: ['settleRefused'],
     start: 'demand',
@@ -259,7 +262,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     id: 'truceOffer',
     once: false,
     ask: null,
-    raise: { when: ['offersTruce'], priority: 4, duringFeud: true },
+    raise: { when: ['offersTruce'], priority: 4, duringFeud: true, duringCombat: true },
     prepare: null,
     hangUp: ['refusePlea'],
     start: 'offer',
@@ -278,7 +281,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     id: 'mercyPlea',
     once: false,
     ask: null,
-    raise: { when: ['begsMercy'], priority: 4, duringFeud: true },
+    raise: { when: ['begsMercy'], priority: 4, duringFeud: true, duringCombat: true },
     prepare: null,
     hangUp: ['refusePlea'],
     start: 'beg',

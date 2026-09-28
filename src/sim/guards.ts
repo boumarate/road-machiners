@@ -1,5 +1,5 @@
-// Town guards keep the peace. The gun at each town gate shoots the nearest vehicle in range that fired this turn.
-// Raiders also trade in towns, so guards judge by action, not faction. Guards cannot be hit, so a town is a
+// Town guards keep the peace. The gun at each town gate shoots the nearest vehicle in range that fired this turn
+// at anyone but a raider. Raiders also trade in towns, so guards judge by action, not faction. Guards cannot be hit, so a town is a
 // safe place to run to. Raider camp guns judge by faction: they shoot the nearest outsider in range.
 
 import { REGION } from '../data/region';
@@ -16,7 +16,13 @@ export function isTownGuarded(pos: Vec): boolean {
 }
 
 export function fireGuards(world: World): void {
-  const fired = new Set(world.events.flatMap((e) => (e.t === 'shot' ? [e.shooter] : [])));
+  // A raider destroyed by this turn's shots is already off the map.
+  const raider = (id: string) => {
+    const target = world.vehicles.find((v) => v.id === id) ?? world.removed.find((v) => v.id === id);
+    if (!target) throw new Error(`Shot at unknown vehicle ${id}`);
+    return target.faction === 'raiders';
+  };
+  const fired = new Set(world.events.flatMap((e) => (e.t === 'shot' && !raider(e.target) ? [e.shooter] : [])));
   for (const town of REGION.towns) fireSite(world, town, (v) => fired.has(v.id));
   for (const camp of REGION.locations) if (camp.kind === 'camp') fireSite(world, camp, (v) => v.faction !== 'raiders');
 }

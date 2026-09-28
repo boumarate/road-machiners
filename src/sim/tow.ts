@@ -24,6 +24,7 @@ import { isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
 import { isDefeated, isKnockedOut } from './defeat';
 import { contactsOf, hearsBeacon } from './detect';
+import { inCombat } from './jobs';
 import { route, routeLength } from './path';
 import { busyWithFight, decide, getKnownSite, getUpkeepReserve, isWeak, npcProfile } from './npc-decisions';
 import { placeBase } from './npc-activities';
@@ -143,12 +144,11 @@ function answeredByOther(world: World, tower: Vehicle, client: Vehicle): boolean
 }
 
 // Where the tow goes, or null when there is nowhere to go. A player client rides to the tower's known town nearest
-// it. An NPC client names its nearest own camp, else its nearest known town, and needs a tow only away from it.
+// it. An NPC client names its nearest own camp, else its nearest known town. Either needs a tow only away from it.
 function towDestination(world: World, tower: Vehicle, client: Vehicle): Site | null {
-  if (isPlayer(world, client)) return nearestSite(npcProfile(tower).towns, client.pos);
   // A truck without a driver names no destination.
-  if (!client.brain) return null;
-  const site = npcHomeSite(client);
+  if (!isPlayer(world, client) && !client.brain) return null;
+  const site = isPlayer(world, client) ? nearestSite(npcProfile(tower).towns, client.pos) : npcHomeSite(client);
   return site && !canUseSite(client.pos, site) ? site : null;
 }
 
@@ -270,8 +270,7 @@ export function runTow(world: World, vehicle: Vehicle, activity: NpcActivity): s
     return held.other === world.player.vehicleId ? 'towed the player to town' : 'towed a stranded truck';
   }
   const client = vehicleById(world, activity.targetId!);
-  // Another driver got there first this turn. Next turn this one's tow goal pops.
-  if (towOf(world, client.id) || !inTowReach(vehicle, client)) return null;
+  if (!readyToTow(world, vehicle, client)) return null;
   activity.phase = 'act';
   if (isPlayer(world, client)) offer(world, vehicle, client);
   else hitch(world, vehicle, client);
@@ -288,6 +287,13 @@ function towerTerms(world: World, tower: Vehicle, client: Vehicle): { site: stri
   }
   const site = towSite(world, tower, client);
   return { site: site.id, fee: towFee(world, tower, client, site) };
+}
+
+// The tower can hitch or offer now. When another driver got there first this turn, this one's tow goal pops next
+// turn. A player in combat gets the offer once the fight ends, and the tower waits beside the truck.
+function readyToTow(world: World, tower: Vehicle, client: Vehicle): boolean {
+  if (towOf(world, client.id) || !inTowReach(tower, client)) return false;
+  return !isPlayer(world, client) || !inCombat(world, client);
 }
 
 // Ends the tower's claim on the client, which the tow now replaces.

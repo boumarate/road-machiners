@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NPCS, SPAWN, type TraitId } from '../data/npcs';
+import { NPC_BEHAVIOR, NPCS, SPAWN, type TraitId } from '../data/npcs';
 import { REGION } from '../data/region';
 import { planNpcOrders } from './ai';
 import { assignAutoOrders, fireWeapons } from './combat';
@@ -115,6 +115,8 @@ describe('NPC gameplay recovery', () => {
     expectReturnFire(world, npc, enemy);
     enemy.pos = { x: 200, y: 100 };
     enemy.speed = 0;
+    // The driver hunts a lost foe for a while before it gives up.
+    world.turn += NPC_BEHAVIOR.fightSearchTurns + 1;
     // The resume roll goes back to the interrupted work about nine times in ten.
     const resumed = shareOfSeeds(world, npc.id, (x, me) => {
       planNpcOrders(x);

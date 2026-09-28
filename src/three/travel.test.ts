@@ -81,6 +81,34 @@ describe("turn advancement", () => {
   });
 });
 
+describe("turns that run on their own", () => {
+  const space = (repeat = false) => ({ repeat, preventDefault: () => {} }) as KeyboardEvent;
+
+  it("Space stops them, and the next Space restarts them", () => {
+    const world = makeSafeWorld();
+    world.player.state = "knockedOut";
+    const travel = new Travel(250);
+    expect(travel.autoAllowed(world)).toBe(true);
+    travel.handleSpace(space(), false, world);
+    expect(travel.autoAllowed(world)).toBe(false);
+    travel.handleSpace(space(true), false, world);
+    expect(travel.autoAllowed(world)).toBe(false);
+    travel.handleSpace(space(), false, world);
+    expect(travel.autoAllowed(world)).toBe(true);
+  });
+
+  it("a stop ends with the stranded spell", () => {
+    const world = makeSafeWorld();
+    world.player.state = "knockedOut";
+    const travel = new Travel(250);
+    travel.handleSpace(space(), false, world);
+    world.player.state = "active";
+    expect(travel.autoAllowed(world)).toBe(false);
+    world.player.state = "knockedOut";
+    expect(travel.autoAllowed(world)).toBe(true);
+  });
+});
+
 describe("waypoint travel with physics", () => {
   beforeAll(initPhysics);
 

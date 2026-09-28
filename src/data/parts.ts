@@ -41,7 +41,7 @@ export type WeaponRound = {
 
 export type WeaponDef = PartBase & {
   kind: "weapon";
-  range: number; // tiles
+  range: number; // tiles. Aim worsens toward it by RULES.rangeFalloff for the weapon's tier.
   reload: number; // turns between shots, 1 = every turn
   arc: number; // total firing arc in degrees, centered forward
   spread: number; // degrees; standard deviation of a round's angular error from the gun alone
@@ -113,7 +113,7 @@ export const PARTS: Record<string, PartDef> = {
     mass: 80,
     armor: 3,
     tall: false,
-    range: 9,
+    range: 18,
     reload: 1,
     arc: 360,
     look: "mg",
@@ -143,7 +143,7 @@ export const PARTS: Record<string, PartDef> = {
     mass: 400,
     armor: 3,
     tall: true,
-    range: 13.5,
+    range: 27,
     reload: 3,
     arc: 60,
     look: "cannon",
@@ -173,7 +173,7 @@ export const PARTS: Record<string, PartDef> = {
     mass: 65,
     armor: 2,
     tall: false,
-    range: 4.5,
+    range: 9,
     reload: 2,
     arc: 360,
     look: "mg",
@@ -203,7 +203,7 @@ export const PARTS: Record<string, PartDef> = {
     mass: 220,
     armor: 4,
     tall: false,
-    range: 10.5,
+    range: 21,
     reload: 2,
     arc: 180,
     look: "mg",
@@ -233,7 +233,7 @@ export const PARTS: Record<string, PartDef> = {
     mass: 650,
     armor: 8,
     tall: true,
-    range: 12,
+    range: 24,
     reload: 4,
     arc: 45,
     look: "cannon",
@@ -263,7 +263,7 @@ export const PARTS: Record<string, PartDef> = {
     mass: 170,
     armor: 1,
     tall: false,
-    range: 15,
+    range: 30,
     reload: 5,
     arc: 90,
     look: "cannon",
@@ -293,7 +293,7 @@ export const PARTS: Record<string, PartDef> = {
     mass: 280,
     armor: 2,
     tall: true,
-    range: 18,
+    range: 36,
     reload: 3,
     arc: 30,
     look: "cannon",

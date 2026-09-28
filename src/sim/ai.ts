@@ -9,6 +9,7 @@ import { escortsOf, isOnRope, towHeldBy } from "./tow";
 import { ramImpact } from "./crash-contact";
 import type { NpcActivity, Vehicle, World } from "./types";
 import { angleDiff, bearing, dist, type Vec } from "./vec";
+import { canVehicleSee } from "./vision";
 
 // NPC drivers that plan this turn. A truck on a tow rope only trails its tower, so it keeps no order.
 // A knocked-out driver keeps its brake order until it wakes.
@@ -50,16 +51,7 @@ export function planNpcOrders(world: World): void {
       };
       b.stalled = 0;
     }
-    let goal = getActivityDestination(world, v, activity);
-    if (activity.kind === "fight") {
-      const target = world.vehicles.find(
-        (other) => other.id === activity.targetId,
-      );
-      if (!target) throw new Error("Fight activity missing visible target");
-      const preferredRange =
-        tpl.preferredRange > 0 ? tpl.preferredRange : shortestRange(world, v);
-      goal = computeFightGoal(world, v, preferredRange, target);
-    }
+    const goal = orderPoint(world, v, activity, tpl.preferredRange);
     v.order =
       holds(world, v, activity) || !goal
         ? { kind: "brake" }
@@ -71,6 +63,17 @@ export function planNpcOrders(world: World): void {
             };
     v.direct = false;
   }
+}
+
+// Where the driver heads. A fighter keeps its range from a target in sight. One that lost sight of its target
+// drives to where it last perceived it.
+function orderPoint(world: World, v: Vehicle, activity: NpcActivity, templateRange: number): Vec | null {
+  if (activity.kind !== "fight") return getActivityDestination(world, v, activity);
+  const target = world.vehicles.find((other) => other.id === activity.targetId);
+  if (!target) throw new Error("Fight activity missing its target");
+  if (!canVehicleSee(world, v, target.pos)) return getActivityDestination(world, v, activity);
+  const preferredRange = templateRange > 0 ? templateRange : shortestRange(world, v);
+  return computeFightGoal(world, v, preferredRange, target);
 }
 
 // A driver brakes for a vehicle close ahead, or while it waits for an escort.

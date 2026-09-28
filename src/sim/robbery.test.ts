@@ -305,6 +305,17 @@ describe('scumbag robbery', () => {
     }
   });
 
+  it('a driver on a tow job robs no one it passes', () => {
+    const { w, robber, target } = passing();
+    // An open tow offer to the player, waiting for an answer.
+    addState(w, 'tow', robber.id, w.player.vehicleId, { kind: 'tow', site: 'bowl', fee: 10, waived: 0, hitched: false });
+    robber.brain!.goals = [{ kind: 'tow', targetId: w.player.vehicleId, destination: null, phase: 'act', reason: 'wait for an answer to a tow offer' }];
+    forceOption('preySeen', 'rob');
+    thinkNpc(w, robber);
+    expect(robber.brain!.goals.some((g) => isRob(g, target.id))).toBe(false);
+    expect(stateOf(w, 'feud', robber.id, target.id)).toBeNull();
+  });
+
   it('a robber stops its search to rob', () => {
     const { w, robber, target } = passing();
     robber.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'act', reason: 'search a known salvage site' }];

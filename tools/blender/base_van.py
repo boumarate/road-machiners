@@ -150,7 +150,9 @@ def main() -> None:
     hood(kit)
     box(kit)
     hood_rows = [round(hood_z(G.row_x(y)), 3) for y in range(3)]
-    level_sockets(kit, G, "row", hood_rows + [ROOF] * 6, fronts={3: RAKE_TOP})
+    # Items on the engine cells stand on the bay floor under the cutout.
+    bay = {(x, y): BAY_FLOOR for x in (1, 2) for y in (1, 2)}
+    level_sockets(kit, G, "row", hood_rows + [ROOF] * 6, fronts={3: RAKE_TOP}, cells=bay)
     level_sockets(kit, G, "floor", [FLOOR] + [BAY_FLOOR] * 2 + [G.top] * 6)
     check_base(kit, "base_van", G)
     kit.export("base_van", args, view_size=7.2)

@@ -27,6 +27,7 @@ def build(kit: Kit) -> None:
     kit.box("front_sight", (0.02, 0.012, 0.05), (0.86, 0, 0.035), "metal")
     kit.box("brake", (0.08, 0.055, 0.05), (0.96, 0, 0), "metal_light")
     kit.box("brake_port", (0.03, 0.058, 0.03), (0.96, 0, 0), "dark")
+    kit.socket("tip", (1.0, 0, 0))
 
 
 if __name__ == "__main__":

@@ -40,7 +40,6 @@ import { dist } from "../sim/vec";
 import { TERRAIN } from "../data/terrain";
 import { isTowed, setBeacon, unhitch } from "../sim/tow";
 import {
-  autoRuns,
   cloneWorld,
   hostileToPlayer,
   newWorld,
@@ -61,14 +60,14 @@ import { toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/
 import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
-import { Fx3D, TruckFx } from "./render/fx";
+import { Fx3D, TruckFx, towardFrom, type Muzzle } from "./render/fx";
 import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
 import { PathView } from "./render/path";
 import { RenderScope, SightLimit } from "./render/scope";
 import { addSites } from "./render/sites";
 import { terrainMesh } from "./render/terrain";
-import { VehicleView } from "./render/vehicle";
+import { VehicleView, viewOf } from "./render/vehicle";
 import { WeaponRangeView } from "./render/weaponRange";
 import { WeatherView } from "./render/weather";
 import { ZonesView } from "./render/zones";
@@ -93,7 +92,6 @@ import { computeRoundPoint } from "../phys/frames";
 
 const PLAN_TURNS = 3; // turns of path preview
 
-const HONK_REPLY_MS = 500; // a driver takes a moment to answer a horn
 const PICK_PX = 30; // click radius around a vehicle's screen position
 const MIN_ZONE_HALF_ANGLE = Math.PI / 12; // zones stay visible for trucks that barely turn
 const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is recomputed during a turn
@@ -279,7 +277,7 @@ export class Game {
             : null,
         ),
       isBusy: () => this.anim !== null,
-      dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), honked: () => this.playHonks() },
+      dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
       recenter: () => this.follow.recenter(),
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
@@ -672,6 +670,7 @@ export class Game {
     const pending = this.pending;
     this.pending = null;
     if (pending) this.runRescue(pending);
+    this.hud.flushHorn();
     this.refreshUi();
   }
 
@@ -697,20 +696,17 @@ export class Game {
   private autoTurn(now: number): void {
     if (this.anim || this.modalOpen() || this.world.player.state === "dead")
       return;
-    if (!autoRuns(this.world) || now - this.idleSince < CONFIG.autoTurnMs)
+    if (!this.travel.autoAllowed(this.world) || now - this.idleSince < CONFIG.autoTurnMs)
       return;
     this.endTurn();
   }
 
-  // Explosions and broken parts where they happen, then one result sting for the turn.
-  // The player's horn at once, then each answer a beat later, nearest first. Answers come only from earshot, so unseen trucks are heard.
-  private playHonks(): void {
-    this.world.events.filter((e) => e.t === "honk").forEach((e, i) => {
-      const v = vehicleById(this.world, e.vehicle), f = this.frames[v.id] ?? restFrame(this.world, v);
-      this.sound.honk({ x: f.pos.x, y: f.pos.y + GUN_HEIGHT, z: f.pos.z }, i * HONK_REPLY_MS, v.chassisId);
-    });
+  private playHorn(id: string, delayMs: number): void {
+    const v = vehicleById(this.world, id), f = this.frames[v.id] ?? restFrame(this.world, v);
+    this.sound.honk({ x: f.pos.x, y: f.pos.y + GUN_HEIGHT, z: f.pos.z }, delayMs, v.chassisId);
   }
 
+  // Explosions and broken parts where they happen, then one result sting for the turn.
   private playImpactSounds(): void {
     for (const e of this.world.events) {
       const id =
@@ -796,7 +792,8 @@ export class Game {
         const heavy = def?.kind === "weapon" && def.look === "cannon";
         const slot = mine.findIndex((mw) => mw.part.id === e.weapon);
         const label = `${slot >= 0 ? `[${slot + 1}] ` : ""}${heavy ? "Cannon" : "MG"} ${volleyTally(e.rounds)}`;
-        this.playVolley(a, b, e.rounds, heavy, label, e.target, rows);
+        const view = viewOf(this.views, e.shooter);
+        this.playVolley(a, () => view.muzzle(e.weapon), b, e.rounds, heavy, label, e.target, rows);
       }
       if (e.t === "guardShot") {
         const b = this.eventPoint(e.target);
@@ -811,6 +808,7 @@ export class Game {
         };
         this.playVolley(
           a,
+          () => towardFrom(a, b),
           b,
           e.rounds,
           false,
@@ -827,9 +825,10 @@ export class Game {
     }
   }
 
-  // Plays one volley's bolts and sounds from a to b, then its result label over the target.
+  // Plays one volley's bolts from the muzzle and sounds from a to b, then its result label over the target.
   private playVolley(
     a: V3,
+    muzzle: () => Muzzle,
     b: V3,
     rounds: ShotRound[],
     heavy: boolean,
@@ -849,7 +848,7 @@ export class Game {
           : 0;
       const land = computeRoundPoint(a, b, r.offset);
       const struck = r.hit || r.hits.length > 0;
-      this.fx.shot(a, land, struck, heavy, delay, flight);
+      this.fx.shot(muzzle, land, struck, heavy, delay, flight);
       this.sound.at(heavy ? "cannon-fire" : "mg-fire", a, delay);
       this.sound.at(struck ? "hit-metal" : "miss", land, delay + flight);
     });
@@ -1054,7 +1053,7 @@ export class Game {
       view.outline(look === "dark");
       view.windows(glass);
       view.pose(f, dt);
-      view.aim(this.turretAim(v, f));
+      view.aim((partId) => this.turretAim((before || v).weaponOrders, f, partId));
       this.truckFx.emit(this.world, display, f, frames !== null, dt);
     }
     for (const [id, view] of this.views) {
@@ -1071,9 +1070,10 @@ export class Game {
     return lampsOn(v.id, this.lightTurn()) && this.sightLimit.reaches(f.pos) ? "dark" : null;
   }
 
-  // Turrets point at their first ordered target.
-  private turretAim(v: Vehicle, f: VehicleFrame): number | null {
-    const order = Object.values(v.weaponOrders)[0];
+  // A turret points at its own ordered target, else at the first ordered target. While a turn plays,
+  // orders come from the turn's start, so turrets keep aim at what they fire on.
+  private turretAim(orders: Vehicle["weaponOrders"], f: VehicleFrame, partId: string): number | null {
+    const order = orders[partId] ?? Object.values(orders)[0];
     const target = order && this.frames[order.targetId];
     return target
       ? Math.atan2(target.pos.z - f.pos.z, target.pos.x - f.pos.x)

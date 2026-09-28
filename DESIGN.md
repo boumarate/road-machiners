@@ -72,7 +72,7 @@ The truck plans a route around rocks, wrecks, parked vehicles and cliffs, prefer
 
 Crash damage grows with the square of impact speed, and a slow bump does no damage. The lighter truck takes the bigger share, so heavy trucks win rams. A ram part on the striking side takes the blow and hits harder. R toggles manual driving, which skips the route planner so the truck can ram. NPC drivers use the same steering and obstacle routing as the player. A stuck driver backs away before trying the route again.
 
-Weapons have range, reload time, scatter, a firing arc and a number of rounds per shot. A turret covers all sides. A forward gun needs the truck to face the target. Tall parts block fire: the cab, the big guns and box cargo frames. A gun fires toward a side only when no tall part stands between it and that edge of the grid, in the lane through the gun's center. So a gun behind the cab cannot fire forward, and a cargo box behind a turret blinds its rear. Hovering or selecting a gun in the grid draws its firing fan and outlines the parts in its way. On the ground, the selected gun's reach shows bright, and with no gun selected every gun's reach shows faint.
+Weapons have range, reload time, scatter, a firing arc and a number of rounds per shot. Scatter grows sharply toward the end of a gun's range, and cheap guns lose more aim there than good ones. A cheap gun at full range scatters four times as wide as up close, and a top gun twice as wide. A turret covers all sides. A forward gun needs the truck to face the target. Tall parts block fire: the cab, the big guns and box cargo frames. A gun fires toward a side only when no tall part stands between it and that edge of the grid, in the lane through the gun's center. So a gun behind the cab cannot fire forward, and a cargo box behind a turret blinds its rear. Hovering or selecting a gun in the grid draws its firing fan and outlines the parts in its way. On the ground, the selected gun's reach shows bright, and with no gun selected every gun's reach shows faint.
 
 Heavy guns kick. Recoil adds scatter that falls with truck mass, so a tank gun sprays on a scout and holds steady on a tractor. Each gun also has its own shake from the truck's speed. A stabilized MG fires well on the move, and a sniper cannon needs a parked truck. Each round rolls on its own. It hits when its scatter is smaller than the target's width as seen from the gun. So distance, target size, facing, crossing speed, the shooter's own speed and round speed all matter. Hovering a truck shows both sides' chances and their causes.
 
@@ -102,11 +102,13 @@ Raiders ignore a truck with nothing to take. A truck has loot when it holds good
 
 A truck with no working engine, a broken transmission or an empty tank still moves at a crawl. The driver pushes it. Pushing burns no fuel, and a truck without a working engine makes no sound. A player truck that can only crawl is stranded. It can still travel automatically to an order point.
 
-Traders and scavengers help a stranded player. Raiders never do. One that sees the truck may drive over, if it is not hostile and not in danger. It parks beside the truck and radios a tow offer to the nearest town it knows. The fee is a base price plus a price per tile of the route. The player accepts, refuses or hangs up. A stranded player can also radio a passing trader or scavenger and ask for a tow.
+Traders and scavengers help a stranded player. Raiders never do. One that sees the truck may drive over, if it is not hostile and not in danger. No driver sets out while the player is in combat. It parks beside the truck and radios a tow offer to the nearest town it knows. A driver that arrives during a fight waits beside the truck and makes its offer once the fight ends. The fee is a base price plus a price per tile of the route. The player accepts, refuses or hangs up. A stranded player can also radio a passing trader or scavenger and ask for a tow.
 
 A towed truck hangs behind its tower and follows its path. The tower drives slower than its top speed. Turns run on their own while towed. The player can unhitch at any time for free. On arrival in town the tower takes the fee. Money can go below zero, and the HUD shows it as debt. A player in debt cannot buy anything, and sales pay the debt off.
 
 A stranded player can switch on an emergency beacon. Every vehicle within 250 tiles hears it, through hills. Traders and scavengers come as if they saw the truck, and one of them answers. Raiders hear it too, so a stripped truck calls safely and a truck with cargo draws raiders. Turns run on their own while the beacon calls and no offer is open. The beacon switches off when the truck can drive again or gets towed.
+
+Space stops turns that run on their own, while knocked out, towed or on the beacon. The next Space starts them again.
 
 NPCs tow each other by the same decision. A stranded driver waits once a tower is on its way. It takes the tow at once and pays what it can on arrival. A raider goes to its nearest camp, and any other driver to its nearest known town. Raiders tow only raiders, and only raiders or the player tow a raider. NPCs find stranded drivers only by sight.
 
@@ -130,7 +132,7 @@ Dust clouds are objects in the world. Every turn a truck moving faster than a cr
 
 A radio scanner is a part that mounts on a deck cell, so it competes with a gun. It detects every moving vehicle within 160 tiles, through hills, and shows it as a steady blip. Bowl, Nose and the Pump Station sell it.
 
-NPCs detect the player and each other with the same rules. A contact makes an NPC react only when its circle is small enough for the NPC's traits. Vague distant sounds stay audible without redirecting an NPC. Scanner and beacon contacts stay useful from farther away. A useful hostile contact fires one decision: keep, investigate or flee. Raiders mostly investigate, and traders and scavengers mostly flee. An investigation drives to where the contact first was and ends on arrival. A driver busy with trade, salvage, service or repairs mostly keeps on.
+NPCs detect the player and each other with the same rules. A contact makes an NPC react only when its circle is small enough for the NPC's traits. Vague distant sounds stay audible without redirecting an NPC. Scanner and beacon contacts stay useful from farther away. A useful hostile contact fires one decision: keep, investigate or flee. Raiders mostly investigate, and traders and scavengers mostly flee. An investigation drives to where the contact first was and ends on arrival. A fighter that loses sight of its target drives to where it last saw it. Each turn it hears the engine or sees the dust, it turns toward that contact. After about 6 turns with neither, it gives up. A driver busy with trade, salvage, service or repairs mostly keeps on.
 
 ## World
 
@@ -140,7 +142,7 @@ Danger is set by region, not by player level.
 
 Faction squads roam the map. Places are discovered by exploring. Towns and locations are static places that trucks never enter, so they block driving. Towns and small locations have one gate, where the first road crosses their edge. Large locations have a gate on every road. Each gate post carries a lamp. A dust pad lies outside each gate. A site is used only from a pad. Towns have a wall, and other sites have palisades, stone walls, wreck walls or fences. The truck must be stopped to use a town or search salvage. In reach but still moving, the action shows dimmed.
 
-Each town gate has a guard gun. Each turn it shoots the nearest vehicle in its range that fired, whatever its faction. Raiders also trade in towns, so guards judge by action. A town gate is therefore a safe place to run to.
+Each town gate has a guard gun. Each turn it shoots the nearest vehicle in its range that fired at anyone but a raider, whatever its own faction. Raiders also trade in towns, so guards judge by action. A town gate is therefore a safe place to run to.
 
 Raiders have two camps, Scrapjaw Camp in the north and Kiln Camp in the south. A dirt track leads to each camp gate. Raiders spawn outside a camp gate. Each camp gate gun shoots the nearest non-raider in its range every turn, whether or not that vehicle fired. The player cannot use camp services.
 
@@ -150,7 +152,7 @@ A day is a fixed number of turns, and the clock starts in the morning. The sun r
 
 Weather events come from the world's own randomness, so a seed replays the same weather. A dust storm is a moving area: inside it, sight and aim both suffer, top speed drops, and wear climbs faster. A heat wave covers the whole region and strengthens the sun's heat. Overcast also covers the region, and cancels the sun's heat. The HUD shows the day, time, current heat and the region's weather.
 
-The sun also heats the player's running engine, faster at higher speed. Airflow, shade, night and parking cool it, and parking in shade cools it fastest. Full noon sun at top speed overheats a cold engine in about 44 turns, while morning and evening sun barely warm it. An overheated engine loses HP every turn it keeps driving. Engines heat at different rates: a racing V6 or a turbine overheats fast in the noon sun, and a diesel runs cool. The HUD shows the engine temperature as a gauge, and the log warns once when it runs hot. NPCs have no engine heat, since they have no rule for stopping to cool down.
+The sun also heats the player's running engine, faster at higher speed. Airflow, shade, night and parking cool it, and parking in shade cools it fastest. Full noon sun at top speed overheats a cold engine in about 23 turns, while morning and evening sun barely warm it. An overheated engine loses HP every turn it keeps driving. Engines heat at different rates: a racing V6 or a turbine overheats fast in the noon sun, and a diesel runs cool. The HUD shows the engine temperature as a gauge, and the log warns once when it runs hot. NPCs have no engine heat, since they have no rule for stopping to cool down.
 
 ## NPC activities
 
@@ -175,7 +177,7 @@ Shops have unlimited money. Goods prices move with trade, and part stock is fini
 
 ## NPC traits and states
 
-Every NPC carries a set of traits instead of one class. Each trait adds activities and shifts chances. A scavenger with the scumbag trait still scavenges, and it also robs. Traits roll at spawn: every scavenger scavenges, and some are also scumbags or cowards. Traits stay hidden, so the player learns a driver is a scumbag only when it starts acting like one. The Perception perk Read the driver shows traits in the hover panel.
+Every NPC carries a set of traits instead of one class. Each trait adds activities and shifts chances. A scavenger with the scumbag trait still scavenges, and it also robs. Traits roll at spawn: every scavenger scavenges, and some are also scumbags or cowards. One neutral driver in four is a scumbag and one in four a coward, whatever its kind. Lawmen can be cowards but never scumbags, and raiders roll neither. Traits stay hidden, so the player learns a driver is a scumbag only when it starts acting like one. The Perception perk Read the driver shows traits in the hover panel.
 
 - Scavenger collects salvage and helps stranded trucks.
 - Trader buys and sells between towns, rarely starts a fight, and sometimes fights back.
@@ -213,7 +215,7 @@ States are timed relations between two trucks. Each ends as expired, fulfilled o
 
 ## Social
 
-Every truck has a radio, as in Space Rangers 2. A call reaches only a truck in sight. The player calls the truck under the cursor with T. An NPC calls the player when it has something to say. Turns wait while a call is open, and neither truck on the line shoots the other. A driver busy fighting or fleeing another truck does not take calls or honk back. Other drivers do not rob it, tow it or hire it until that fight ends.
+Every truck has a radio, as in Space Rangers 2. A call reaches only a truck in sight. The player calls the truck under the cursor with T. An NPC calls the player when it has something to say. Turns wait while a call is open, and neither truck on the line shoots the other. A driver busy fighting or fleeing another truck answers a call with a short refusal in the call panel, and the player can only hang up. It does not honk back. Other drivers do not rob it, tow it or hire it until that fight ends. A hostile driver is part of the player's fight, so it takes calls even while it fights another truck. While the player is in combat, only the foe calls, with a cargo demand, a truce or a plea for mercy. Tow offers and patch requests wait until the fight ends.
 
 Talk is built from topics. A topic is lines and replies in data, and its logic is named conditions and effects in code. The player's call opens on a menu of the topics that truck can take up. A driver's traits decide its voice and its topics. A topic can be once per driver: that driver remembers how it ended.
 
@@ -221,13 +223,13 @@ Talk is built from topics. A topic is lines and replies in data, and its logic i
 - Tow: see Defeat.
 - Spares: traders and scavengers sell their spare parts to the player. The player cannot sell over the radio.
 - Patch: a patch gets a broken engine or gearbox going again at a quarter of its HP. A stranded player asks a trader or scavenger. A stranded NPC asks the player once, unless it carries the parts to fix its own truck. The NPC's traits roll the terms: paid, bring your own parts, or free. Only terms the payer can cover come up. The work runs while both trucks stay parked side by side, and the payment moves once when it ends. A deal nobody works on lapses for free.
-- Demand: a raider or robber about to attack radios first, once, and asks for the cargo. Handing it over drops the goods and loose parts beside the truck. The attacker and its mates nearby then keep a truce for a while. Shots break the truce. Refusing keeps the fight.
+- Demand: a raider or robber about to attack the player radios first, once, and asks for the cargo. About two in five open fire without a call. Handing it over drops the goods and loose parts beside the truck. The attacker and its mates nearby then keep a truce for a while. Shots break the truce. Refusing keeps the fight.
 - Truce and mercy: the player can call a hostile truck and ask for a truce or give up. Mercy costs the player's cargo. The driver's answer is rolled like an NPC plea. After an answer, the player cannot ask the same driver again for a while. A driver in a feud takes up only these topics. A hurt NPC calls the player with its own truce or plea for mercy. Sparing a beggar leaves its cargo on the ground.
 - Towing an NPC: the player can offer a tow to a stranded driver at peace parked within reach. The driver names its nearest known town and pays the tow fee, up to the money it holds, when the player reaches that town. The towed truck trails the player, and the player drives slower. The player can let it off the rope by radio for free.
 - Patching an NPC: the player can offer a patch to a driver stranded by a broken engine or gearbox. The driver names its terms as it does when it asks.
 - Robbery: the player can demand the cargo of a truck at peace, once per driver. The driver gives it up, fights or runs. Traders and cowards give up more, raiders fight more, and every driver gives up to a much stronger player. Giving up drops the cargo beside the truck and holds a truce with the player. Fighting or running starts a feud.
 
-H honks. Traders and scavengers in earshot that are not hostile honk back.
+H honks, also while a turn plays. Traders and scavengers in earshot that are not hostile honk back. During a turn they answer once it ends.
 
 ## Trade
 

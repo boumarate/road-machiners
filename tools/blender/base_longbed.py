@@ -204,7 +204,10 @@ def main() -> None:
     hood(kit)
     cab(kit)
     deck(kit)
-    level_sockets(kit, G, "row", [HOOD_TOP] * 3 + [ROOF] * 2 + [DECK] * 6, fronts={3: RAKE_TOP, 5: CAB_BACK - RAIL_T})
+    # The outer hood columns are the low fenders. The engine cells are the bay under the cutout.
+    fenders = {(x, y): FENDER_TOP for x in (0, 6) for y in (0, 1, 2)}
+    bay = {(x, y): BAY_FLOOR for x in (2, 3) for y in (1, 2)}
+    level_sockets(kit, G, "row", [HOOD_TOP] * 3 + [ROOF] * 2 + [DECK] * 6, fronts={3: RAKE_TOP, 5: CAB_BACK - RAIL_T}, cells=fenders | bay)
     level_sockets(kit, G, "floor", [FLOOR] + [BAY_FLOOR] * 2 + [G.top] * 2 + [DECK] * 6)
     check_base(kit, "base_longbed", G)
     kit.export("base_longbed", args, view_size=9.0)

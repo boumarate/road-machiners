@@ -26,6 +26,7 @@ def build(kit: Kit) -> None:
     tube(kit, "barrel", 0.02, 0.44, 0.64, "metal", sides=6)
     hider = tube(kit, "flash_hider", 0.03, 0.64, 0.7, "dark", sides=6)
     taper(hider, 1.2)
+    kit.socket("tip", (0.7, 0, 0))
 
 
 if __name__ == "__main__":

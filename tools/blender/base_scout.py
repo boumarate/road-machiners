@@ -106,7 +106,9 @@ def main() -> None:
     hood(kit)
     cab(kit)
     bed(kit)
-    level_sockets(kit, G, "row", [HOOD_TOP] * 3 + [ROOF] * 2 + [FLOOR] * 3, fronts={3: ROOF_FRONT})
+    # Items on the engine cells stand on the bay floor under the cutout.
+    bay = {(x, y): FLOOR for x in (1, 2) for y in (1, 2)}
+    level_sockets(kit, G, "row", [HOOD_TOP] * 3 + [ROOF] * 2 + [FLOOR] * 3, fronts={3: ROOF_FRONT}, cells=bay)
     level_sockets(kit, G, "floor", [FLOOR] * 3 + [G.top] * 2 + [FLOOR] * 3)
     check_base(kit, "base_scout", G)
     kit.export("base_scout", args, view_size=6.5)

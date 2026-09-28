@@ -10,6 +10,7 @@ import { corePart, goodsCount, gridOf, mountedParts } from './grid';
 import { addGoods, moveItem, removeGoods, stowPart } from './inventory';
 import { advanceJobs, startAutoRepair, startJob, startRepair, startStrip } from './jobs';
 import { repairPlan } from './repair';
+import { addState } from './states';
 
 function armorPart(v: ReturnType<typeof emptyWorld>['vehicles'][0]) {
   const part = mountedParts(v).find((p) => partDef(p.defId).kind === 'armor')!;
@@ -325,5 +326,38 @@ describe('field job practice', () => {
     for (let i = 0; i < plan.turns; i++) advanceJobs(w);
     expect(npc.job).toBeNull();
     expect(practiceOf(w, 'fieldJob')).toEqual([]);
+  });
+});
+
+describe('jobs in combat', () => {
+  // A player with a damaged part, spare parts, and a feuding raider parked in sight.
+  function underFire() {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = w.vehicles[0];
+    me.speed = 0;
+    const cage = armorPart(me);
+    cage.hp = 1;
+    addGoods(w, me, 'parts', 20);
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 35, y: 30 });
+    addState(w, 'feud', raider.id, me.id, { kind: 'feud', robbery: false });
+    return { w, me, cage, raider };
+  }
+
+  it('starts no job with a hostile in sight', () => {
+    const { w, me, cage } = underFire();
+    expect(() => startRepair(w, cage.id)).toThrow(/hostile in sight/);
+    startAutoRepair(w);
+    expect(me.job).toBeNull();
+  });
+
+  it('cancels a running job once a hostile comes in sight', () => {
+    const { w, me, cage, raider } = underFire();
+    w.vehicles = w.vehicles.filter((v) => v.id !== raider.id);
+    const next = startRepair(w, cage.id);
+    next.vehicles.push(raider);
+    next.events = [];
+    advanceJobs(next);
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.events).toContainEqual(expect.objectContaining({ t: 'job', vehicle: me.id, outcome: 'cancelled' }));
   });
 });
