@@ -39,3 +39,14 @@ Mode: hands-off
 - Manual try, positive: hover two traders in a Playwright script and see two different names.
 - Manual try, positive: save, reload, hover the same NPC and see the same name.
 - Manual try, negative: hover the player truck and see no driver line and no crash.
+
+## Result
+- Done. NPCs get a saved first name and surname, and the hover panel shows it over the truck type.
+- `npm test` passes: 1480 tests, 1 skipped. `npm run quality` and `npm run playtest` pass.
+- Manual try, positive: two raiders showed "Ugo Sokol" and "Vera Yates" in the hover panel. After Save and reload, each showed the same name.
+- Manual try, negative: the player truck still shows "Your truck" and no driver line. No page errors.
+
+### Hands-off decisions
+- uexecute: names roll from a new stream `world.nameRng` — rolling from the world stream shifted it and broke 4 seed-sensitive tow tests.
+- uexecute: the name pools live in `src/data/npcs.ts` — a new data file failed the quality gate on folder fragmentation.
+- uexecute: the worktree has its own `npm ci` install — a symlinked `node_modules` made Vite refuse font files.
