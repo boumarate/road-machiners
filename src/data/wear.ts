@@ -50,3 +50,7 @@ export const ENGINE_HEAT = {
   warnAt: 0.75, // heat at which the log warns once and the gauge turns red
   overheatDamage: 1, // HP each working engine loses per turn driven while overheated
 };
+
+// Sun heat from which the ground shimmers in heat haze. Above it airflow no longer cools a truck at top
+// speed, so any driving engine heats up there. Noon sun heat is 2.5.
+export const HAZE_FROM = 1 + ENGINE_HEAT.coolDriving / ENGINE_HEAT.gain;

@@ -226,7 +226,7 @@ export class Game {
     addScatter(this.world.terrain, this.world.obstacles, propScope);
     this.fog = new FogView(this.world, groundChunks, this.sightLimit);
     this.path = new PathView(this.world.terrain);
-    this.shade = new ShadeView(this.world);
+    this.shade = new ShadeView(this.world, groundChunks);
     this.weather = new WeatherView(this.world);
     this.scene.add(
       this.ground,

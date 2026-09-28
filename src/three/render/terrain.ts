@@ -59,6 +59,11 @@ export function meshHeightAt(t: Terrain, x: number, y: number): number {
   return c + (b - c) * (1 - fx) + (d - c) * (1 - fy);
 }
 
+// The ground map's uv per meter. The map spans the world plus TERRAIN_MARGIN tiles on each side.
+export function groundUvPerMeter(size: number): number {
+  return 1 / ((size + 2 * TERRAIN_MARGIN) * S);
+}
+
 export type TerrainChunk = {
   x: number;
   y: number;
