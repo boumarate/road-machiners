@@ -27,7 +27,7 @@ Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Play
 
 ## Config
 
-`src/config.ts` holds the world seed, which drives all sim randomness but not the map, start kit, combat playback times, save interval, automatic turn delay, Space hold delay and travel speed multiplier. Change these values to adjust game settings. `.env` holds only `ELEVENLABS_API_KEY` and `SFX_MAX_GENERATIONS` for sound generation. Copy `.env.example` to `.env` before using sound generation.
+`src/config.ts` holds the world seed, start kit, combat playback times, save interval, automatic turn delay, Space hold delay and travel speed multiplier. The world seed drives sim randomness, not the map. Change these values to adjust game settings. `.env` holds only `ELEVENLABS_API_KEY` and `SFX_MAX_GENERATIONS` for sound generation. Copy `.env.example` to `.env` before using sound generation.
 
 ## Architecture
 
