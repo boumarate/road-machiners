@@ -154,3 +154,12 @@ Approach: a new `src/mapgen/` folder holds the bake pipeline as pure functions o
 ## Code smells
 
 ## Conclusion
+
+### Deviations from plan
+- File layout: the quality gate allows a new component 5 production files per 1,000 code lines, and `src/data` was over its ceiling. So the bake layers live in `src/mapgen/bake.ts`, the rules in `src/mapgen/geology.ts`, the file format in `src/sim/terrain.ts`, `MAPGEN` and `GEOLOGY` in `src/data/terrain.ts`, and the picture painter in `scripts/map-preview.mjs`.
+- PH1 and PH3 landed in one commit, 2afbd81, after a failed `git commit --only` pathspec. Splitting it would need a history rewrite.
+- Rain routes water from the highest corner to the lowest in each pass. A one-tile-per-step flow model wore the ground down evenly and cut no channels.
+- Wind uses stylized shadow and sand slopes of 0.03 and 0.12. Physical angles on 4 m tiles formed no dune ridges.
+
+### Hands-off decisions
+- udesign, uplan: approved by the user. Hands-off applies from execution until the first map pictures.
