@@ -10,18 +10,24 @@ import { el, panel } from "./dom";
 
 const TIPS_KEY = "roam.tips";
 
-export type TipId = "waypoint" | "drive" | "stop" | "manual" | "zones" | "honk";
+export type TipId = "waypoint" | "drive" | "autoStop" | "stop" | "manual" | "zones" | "honk";
 
 type Tip = {
   id: TipId;
   text: string;
   after?: TipId; // shows only once this tip is seen
-  when: (w: World) => boolean;
+  seenWhenOver?: true; // counts as seen once its moment ends while it shows
+  when: (w: World, auto: boolean) => boolean; // auto: turns follow each other without a key press
   done: (w: World) => boolean;
 };
 
 const npcInSight = (w: World): boolean =>
   w.vehicles.some((v) => v.brain && !isKnockedOut(v) && playerSees(w, v.pos));
+
+const hasWaypoint = (w: World): boolean => {
+  const kind = playerVehicle(w).order?.kind;
+  return kind === "through" || kind === "stopAt";
+};
 
 // List order is priority when two tips could show at once.
 const TIPS: readonly Tip[] = [
@@ -29,14 +35,22 @@ const TIPS: readonly Tip[] = [
     id: "waypoint",
     text: "Click the ground to set a waypoint.",
     when: (w) => !playerVehicle(w).direct,
-    done: (w) => ["through", "stop"].includes(playerVehicle(w).order?.kind ?? ""),
+    done: (w) => hasWaypoint(w),
   },
   {
     id: "drive",
     text: "[Space] to drive to the waypoint.",
     after: "waypoint",
-    when: (w) => !playerVehicle(w).direct && ["through", "stop"].includes(playerVehicle(w).order?.kind ?? ""),
+    when: (w) => !playerVehicle(w).direct && hasWaypoint(w),
     done: (w) => playerVehicle(w).speed > 0,
+  },
+  {
+    id: "autoStop",
+    text: "[Space] to stop automatic travel.",
+    after: "drive",
+    when: (_w, auto) => auto,
+    done: () => false,
+    seenWhenOver: true,
   },
   {
     id: "stop",
@@ -72,9 +86,9 @@ export function doneTips(world: World): TipId[] {
 }
 
 // The tip to show now. The shown tip keeps its place while its moment lasts, so a new tip never swaps it out.
-export function tipToShow(world: World, seen: ReadonlySet<TipId>, shown: TipId | null): TipId | null {
+export function tipToShow(world: World, auto: boolean, seen: ReadonlySet<TipId>, shown: TipId | null): TipId | null {
   if (!playerCanAct(world)) return null;
-  const open = TIPS.filter((t) => !seen.has(t.id) && (!t.after || seen.has(t.after)) && t.when(world));
+  const open = TIPS.filter((t) => !seen.has(t.id) && (!t.after || seen.has(t.after)) && t.when(world, auto));
   return (open.find((t) => t.id === shown) ?? open[0])?.id ?? null;
 }
 
@@ -92,20 +106,27 @@ export class Tips {
   private readonly box = panel("tip");
   private readonly seen: Set<TipId>;
   private shown: TipId | null = null;
-  private world: World | null = null;
+  private moment: { world: World; auto: boolean } | null = null;
 
   constructor(private readonly storage: Storage) {
     this.seen = readSeen(storage);
     this.box.style.display = "none";
   }
 
-  update(world: World): void {
-    this.world = world;
+  update(world: World, auto: boolean): void {
+    this.moment = { world, auto };
     for (const id of doneTips(world)) this.markSeen(id);
-    const next = tipToShow(world, this.seen, this.shown);
+    const next = tipToShow(world, auto, this.seen, this.shown);
     if (next === this.shown) return;
+    this.passShown();
     this.shown = next;
     this.render();
+  }
+
+  // The shown tip leaves the screen. A tip marked seenWhenOver has done its job.
+  private passShown(): void {
+    const tip = TIPS.find((t) => t.id === this.shown);
+    if (tip?.seenWhenOver) this.markSeen(tip.id);
   }
 
   private markSeen(id: TipId): void {
@@ -115,11 +136,11 @@ export class Tips {
   }
 
   private close(): void {
-    if (!this.shown || !this.world) throw new Error("Closed a tip that was never shown");
+    if (!this.shown || !this.moment) throw new Error("Closed a tip that was never shown");
     this.markSeen(this.shown);
     this.shown = null;
     this.render();
-    this.update(this.world);
+    this.update(this.moment.world, this.moment.auto);
   }
 
   private render(): void {

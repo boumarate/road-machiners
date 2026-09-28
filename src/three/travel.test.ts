@@ -29,6 +29,17 @@ describe("turn advancement", () => {
     expect(travel.shouldAdvance(1000)).toBe(true);
   });
 
+  it("the turn button stops waypoint travel and reports it", () => {
+    const world = makeSafeWorld();
+    const travel = new Travel(250);
+    expect(travel.stopAuto(world)).toBe(false);
+    travel.press(0, false, true);
+    travel.release();
+    expect(travel.isAuto(world)).toBe(true);
+    expect(travel.stopAuto(world)).toBe(true);
+    expect(travel.shouldAdvance(1000)).toBe(false);
+  });
+
   it("Space pauses travel without scheduling an extra turn", () => {
     const travel = new Travel(250);
     travel.press(0, false, true);
@@ -96,6 +107,16 @@ describe("turns that run on their own", () => {
     expect(travel.autoAllowed(world)).toBe(false);
     travel.handleSpace(space(), false, world);
     expect(travel.autoAllowed(world)).toBe(true);
+  });
+
+  it("the turn button stops them as Space does", () => {
+    const world = makeSafeWorld();
+    world.player.state = "knockedOut";
+    const travel = new Travel(250);
+    expect(travel.isAuto(world)).toBe(true);
+    expect(travel.stopAuto(world)).toBe(true);
+    expect(travel.isAuto(world)).toBe(false);
+    expect(travel.stopAuto(world)).toBe(false);
   });
 
   it("a stop ends with the stranded spell", () => {

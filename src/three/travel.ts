@@ -139,6 +139,19 @@ export class Travel {
     return autoRuns(world) && !this.autoHalted;
   }
 
+  // Whether turns follow each other without a key press: travel to the order point or turns while stranded.
+  isAuto(world: World): boolean {
+    return this.automatic || (autoRuns(world) && !this.autoHalted);
+  }
+
+  // Stops automatic turns as Space does. Returns whether any were running.
+  stopAuto(world: World): boolean {
+    if (!this.isAuto(world)) return false;
+    if (autoRuns(world)) this.autoHalted = true;
+    this.pause();
+    return true;
+  }
+
   release(): void {
     this.pressedAt = null;
   }

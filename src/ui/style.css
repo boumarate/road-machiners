@@ -1761,3 +1761,7 @@ canvas.view {
   font-size: 16px;
   line-height: 1.2;
 }
+#ui .end-turn.auto {
+  border-color: #d9a441;
+  color: #eed38e;
+}

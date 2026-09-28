@@ -121,10 +121,20 @@ export class WeaponPanel {
       el("button", { class: "weapon-toggle", "aria-expanded": String(this.expanded), onclick: () => this.toggleVisible(), title: "Show or hide weapons [X]" }, this.expanded ? "Hide [X]" : "Show [X]"),
     );
     this.root.replaceChildren(head, ...(this.expanded ? [this.renderControls(w, locked)] : []));
-    this.turn.replaceChildren(el('button', {
+    this.turn.replaceChildren(this.renderTurnButton(phase));
+  }
+
+  // While turns run on their own, the button shows it and stops them.
+  private renderTurnButton(phase: ReturnType<UiHost["getTurnPhase"]>): HTMLElement {
+    if (this.host.autoTravel())
+      return el('button', {
+        class: 'end-turn auto', title: 'Automatic travel. Space to stop.',
+        'aria-label': 'Stop automatic travel', onclick: () => this.host.endTurn(),
+      }, createIcon('turn'), el('span', {}, 'Auto'));
+    return el('button', {
       class: 'end-turn', disabled: phase !== null, title: 'End turn [Space]',
       'aria-label': phase ? `${phase} in progress` : 'End turn', onclick: () => this.host.endTurn(),
-    }, createIcon('turn'), el('span', {}, phase ? `${phase}…` : 'Space')));
+    }, createIcon('turn'), el('span', {}, phase ? `${phase}…` : 'Space'));
   }
 
   private renderAllButton(locked: boolean): HTMLElement {

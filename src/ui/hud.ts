@@ -111,6 +111,7 @@ type HudActions = {
   unhitch: () => void;
   setBeacon: (on: boolean) => void;
   isBusy: () => boolean;
+  autoTravel: () => boolean;
   dialogue: DialogueHost;
   recenter: () => void;
 };
@@ -385,7 +386,7 @@ export class Hud {
     const busy = this.actions.isBusy();
     this.condition.render(playerVehicle(w));
     this.renderContracts(w);
-    this.tips.update(w);
+    this.tips.update(w, this.actions.autoTravel());
     this.top.replaceChildren(
       this.condition.root,
       el(

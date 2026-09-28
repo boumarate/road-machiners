@@ -264,6 +264,7 @@ export class Game {
             : null,
         ),
       isBusy: () => this.anim !== null,
+      autoTravel: () => this.travel.isAuto(this.world),
       dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
       recenter: () => this.follow.recenter(),
     });
@@ -291,12 +292,9 @@ export class Game {
       world: () => this.displayWorld(),
       apply: (next) => { this.apply(next); saveInTown(window.localStorage, next); },
       selectedWeapon: () => this.selected,
-      selectWeapon: (id) => {
-        if (this.anim) return;
-        this.selected = id;
-        this.refreshUi();
-      },
-      endTurn: () => this.endTurn(),
+      selectWeapon: (id) => { if (this.anim) return; this.selected = id; this.refreshUi(); },
+      endTurn: () => this.travel.stopAuto(this.world) || this.endTurn(),
+      autoTravel: () => this.travel.isAuto(this.world),
       getTurnPhase: () => this.phase,
     };
   }

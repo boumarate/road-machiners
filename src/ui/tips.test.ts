@@ -9,30 +9,34 @@ describe("driving tips", () => {
     const w = emptyWorld();
     const me = playerVehicle(w);
     const seen = new Set<TipId>();
-    expect(tipToShow(w, seen, null)).toBe("waypoint");
+    expect(tipToShow(w, false, seen, null)).toBe("waypoint");
 
-    me.order = { kind: "through", dest: { x: 40, y: 30 } };
+    me.order = { kind: "stopAt", dest: { x: 40, y: 30 } };
+    expect(doneTips(w)).toContain("waypoint");
     seen.add("waypoint");
-    expect(tipToShow(w, seen, null)).toBe("drive");
+    expect(tipToShow(w, false, seen, null)).toBe("drive");
 
     me.speed = 2;
     seen.add("drive");
-    expect(tipToShow(w, seen, null)).toBe("stop");
+    expect(tipToShow(w, true, seen, null)).toBe("autoStop");
+
+    seen.add("autoStop");
+    expect(tipToShow(w, false, seen, null)).toBe("stop");
 
     me.speed = 0;
     me.order = { kind: "brake" };
     seen.add("stop");
-    expect(tipToShow(w, seen, null)).toBe("manual");
+    expect(tipToShow(w, false, seen, null)).toBe("manual");
 
     me.direct = true;
     seen.add("manual");
-    expect(tipToShow(w, seen, null)).toBe("zones");
+    expect(tipToShow(w, false, seen, null)).toBe("zones");
   });
 
   it("holds a later driving tip until the one before it is seen", () => {
     const w = emptyWorld();
     playerVehicle(w).speed = 2;
-    expect(tipToShow(w, new Set(), null)).toBe("waypoint");
+    expect(tipToShow(w, false, new Set(), null)).toBe("waypoint");
   });
 
   it("marks tips done by what the player did", () => {
@@ -47,7 +51,7 @@ describe("driving tips", () => {
   it("shows no tip to a player who cannot act", () => {
     const w = emptyWorld();
     w.player.state = "dead";
-    expect(tipToShow(w, new Set(), null)).toBeNull();
+    expect(tipToShow(w, false, new Set(), null)).toBeNull();
   });
 });
 
@@ -55,15 +59,15 @@ describe("horn tip", () => {
   it("shows once an NPC is in sight and keeps a shown tip in place", () => {
     const w = emptyWorld();
     const seen = new Set<TipId>(["waypoint", "drive", "stop", "manual"]);
-    expect(tipToShow(w, seen, null)).toBeNull();
+    expect(tipToShow(w, false, seen, null)).toBeNull();
 
     const npc = addVehicle(w, "scavengers", "scout", [], { x: 32, y: 30 });
     npc.brain = npcBrain("scavenger", npc.pos, ["scavenger"]);
     refreshVision(w);
-    expect(tipToShow(w, seen, null)).toBe("honk");
+    expect(tipToShow(w, false, seen, null)).toBe("honk");
 
     const driving = new Set<TipId>();
-    expect(tipToShow(w, driving, "waypoint")).toBe("waypoint");
+    expect(tipToShow(w, false, driving, "waypoint")).toBe("waypoint");
   });
 
   it("ignores an NPC out of sight", () => {
@@ -71,6 +75,6 @@ describe("horn tip", () => {
     const npc = addVehicle(w, "scavengers", "scout", [], { x: 58, y: 58 });
     npc.brain = npcBrain("scavenger", npc.pos, ["scavenger"]);
     refreshVision(w);
-    expect(tipToShow(w, new Set(["waypoint"]), null)).toBeNull();
+    expect(tipToShow(w, false, new Set(["waypoint"]), null)).toBeNull();
   });
 });
