@@ -353,39 +353,47 @@ export function oldRoads(d: MapDraft, towns: OldSettlement[], rules: OldRoadRule
   for (const link of [...townLinks(towns, rules), ...roadLinks(d, towns, rules)]) {
     const path = grid.route(link.from, link.to);
     if (!path) continue;
-    const road = { line: new RoadLine(path.points), width: rules.width, bridges: path.bridges };
-    layOldRoad(d, road, rules);
-    out.push(road);
+    out.push(layOldRoad(d, { line: new RoadLine(path.points), width: rules.width, bridges: path.bridges }, rules));
   }
   return out;
 }
 
-// The old highway: the nearest two settlements whose straight line crosses the dry river, joined by a road that
-// bridges the riverbed rather than driving through it. Empty when no pair lies within reach.
+// The old highway: of all settlement pairs within reach, the one whose road jumps the deepest gap on a
+// bridge, so the map's one great broken bridge stands over its most striking drop. The canyon has Canyon
+// Bridge, so no highway bridge crosses it. Empty when no pair's route bridges a gap minGap deep.
 export function highway(d: MapDraft, towns: OldSettlement[], roads: OldRoadRules, rules: HighwayRules): OldRoad[] {
-  // The river's end stretches are shallow, so a road there drives around the head instead of bridging it.
-  const river = TERRAIN.features.dryRiver.path.slice(1, -1);
-  const pairs = towns.flatMap((a, k) => towns.slice(k + 1).map((b) => ({ a, b, d: dist(a.pos, b.pos) })));
-  const across = pairs.filter((p) => p.d <= rules.maxLength && crossesLine(river, p.a.pos, p.b.pos));
-  if (across.length === 0) return [];
-  const { a, b } = across.reduce((x, y) => (y.d < x.d ? y : x));
-  const bridgeRules = { ...roads, bridgeCost: rules.bridgeCost, maxBridge: rules.maxBridge };
-  const path = new RouteGrid(d, bridgeRules).route(a.pos, b.pos);
-  if (!path) return [];
-  const road = { line: new RoadLine(path.points), width: roads.width, bridges: path.bridges };
-  layOldRoad(d, road, roads);
-  return [road];
+  const grid = new RouteGrid(d, { ...roads, bridgeCost: rules.bridgeCost, maxBridge: rules.maxBridge });
+  const pairs = towns.flatMap((a, k) => towns.slice(k + 1).map((b) => [a.pos, b.pos] as const));
+  const candidates = pairs
+    .filter(([a, b]) => dist(a, b) <= rules.maxLength)
+    .map(([a, b]) => grid.route(a, b))
+    .filter((path): path is RoutePath => path !== null)
+    .map((path) => ({ path, gap: Math.max(0, ...realBridges(d, path.bridges.filter((br) => !overCanyon(br)), roads).map((br) => gapDepth(d, br))) }))
+    .filter((c) => c.gap >= rules.minGap);
+  if (candidates.length === 0) return [];
+  const best = candidates.reduce((x, y) => (y.gap > x.gap ? y : x));
+  return [layOldRoad(d, { line: new RoadLine(best.path.points), width: roads.width, bridges: best.path.bridges.filter((br) => !overCanyon(br)) }, roads)];
 }
 
-// Whether the segment from p to q crosses the polyline.
-function crossesLine(line: readonly Vec[], p: Vec, q: Vec): boolean {
-  for (let k = 1; k < line.length; k++) if (segmentsCross(p, q, line[k - 1], line[k])) return true;
-  return false;
+// The jumps that span a gap a player can see. The route grid reads heights only at its nodes, so a jump
+// may cross shallower ground on the actual line, and a long bridge over a gentle dip reads as flat ground.
+// Such jumps are plain road.
+function realBridges(d: MapDraft, bridges: [Vec, Vec][], rules: OldRoadRules): [Vec, Vec][] {
+  return bridges.filter((br) => gapDepth(d, br) >= Math.max(rules.minDrop, dist(br[0], br[1]) * rules.minGapRatio));
 }
 
-function segmentsCross(a: Vec, b: Vec, c: Vec, d: Vec): boolean {
-  const turn = (p: Vec, q: Vec, r: Vec) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
-  return turn(a, b, c) !== turn(a, b, d) && turn(c, d, a) !== turn(c, d, b);
+// How far the lowest ground under a bridge lies below its lower end, in height units.
+function gapDepth(d: MapDraft, [a, b]: [Vec, Vec]): number {
+  const at = (p: Vec) => d.heights[Math.round(p.y) * (d.size + 1) + Math.round(p.x)];
+  const steps = Math.ceil(dist(a, b));
+  let low = Infinity;
+  for (let k = 1; k < steps; k++) low = Math.min(low, at({ x: a.x + ((b.x - a.x) * k) / steps, y: a.y + ((b.y - a.y) * k) / steps }));
+  return Math.min(at(a), at(b)) - low;
+}
+
+function overCanyon([a, b]: [Vec, Vec]): boolean {
+  const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  return polylineDist(mid, CANYON.path) < CANYON.width + CANYON.bank;
 }
 
 // Each settlement to its nearest neighbor within reach, each pair once.
@@ -435,6 +443,8 @@ const STEPS: [number, number, number][] = [
   [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2],
 ];
 
+type RoutePath = { points: Vec[]; bridges: [Vec, Vec][] };
+
 type SearchState = { cost: Float64Array; parent: Int32Array; bridged: Uint8Array; open: NodeHeap };
 
 // Nodes on every cell-th corner. A node inside a site is closed. Costs are in tiles.
@@ -461,7 +471,7 @@ class RouteGrid {
   // Corner points from the node nearest from to the node nearest to, both replaced by the exact ends, with
   // only every smoothEvery-th node kept between them. Null when no route exists.
   // Both ends of every bridge jump stay, so the road runs straight over each bridge.
-  route(from: Vec, to: Vec): { points: Vec[]; bridges: [Vec, Vec][] } | null {
+  route(from: Vec, to: Vec): RoutePath | null {
     const goal = this.nodeNear(to);
     const found = this.search(this.nodeNear(from), goal);
     if (!found) return null;
@@ -632,7 +642,8 @@ class NodeHeap {
   }
 }
 
-function layOldRoad(d: MapDraft, road: OldRoad, rules: OldRoadRules): void {
+function layOldRoad(d: MapDraft, route: OldRoad, rules: OldRoadRules): OldRoad {
+  const road = { ...route, bridges: realBridges(d, route.bridges, rules) };
   const along = stations(road.line.length, rules.sample);
   for (const p of along.map((s) => road.line.pointAt(s))) {
     // Water cuts the asphalt on the ground. A bridge fell, so its span leaves no road.
@@ -643,6 +654,7 @@ function layOldRoad(d: MapDraft, road: OldRoad, rules: OldRoadRules): void {
     placeSpan(d, x, y, rules);
     placeSpan(d, y, x, rules);
   }
+  return road;
 }
 
 // A broken span on the bank at `bank`, facing the far bank. Where the bank point itself is taken or too

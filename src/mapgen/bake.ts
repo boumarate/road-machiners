@@ -18,8 +18,8 @@ import { cornerNeighbors, geologyLayer, pondDepths, type Neighbors } from './geo
 export function bakeMap(seed: number): MapDraft {
   let d = timed('base', () => baseLayer(seed, REGION.size));
   d = timed('geology', () => geologyLayer(seed, d));
-  d = timed('old world', () => oldWorldLayer(seed, d));
   d = timed('finish', () => finishLayer(seed, d));
+  d = timed('old world', () => oldWorldLayer(seed, d));
   d = timed('ground', () => groundLayer(seed, d));
   return timed('rocks', () => rockLayer(seed, d));
 }

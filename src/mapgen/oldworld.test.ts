@@ -227,7 +227,7 @@ describe('old roads', () => {
 });
 
 describe('old highway', () => {
-  // A trench 3 units deep along the dry river's middle stretches, and one settlement on each side of it.
+  // A trench 3 units deep along the dry river, and one settlement on each side of it.
   function riverDraft(): { d: MapDraft; towns: OldSettlement[] } {
     const d = newDraft(REGION.size);
     const river = TERRAIN.features.dryRiver.path;
@@ -238,7 +238,7 @@ describe('old highway', () => {
     return { d, towns: [town(-40), town(40)] };
   }
 
-  it('bridges the dry river between settlements on its two sides, with a span on each bank', () => {
+  it('bridges the deepest gap between settlements, with a span on each bank', () => {
     const { d, towns } = riverDraft();
 
     const [road] = highway(d, towns, OLD_WORLD.oldRoads, OLD_WORLD.highway);
@@ -249,10 +249,11 @@ describe('old highway', () => {
     for (const p of spans) expect(polylineDist(p.pos, TERRAIN.features.dryRiver.path)).toBeGreaterThanOrEqual(8);
   });
 
-  it('builds no highway when no two settlements face each other across the river', () => {
+  it('builds no highway when no route between settlements bridges a deep gap', () => {
     const { d, towns } = riverDraft();
+    d.heights.fill(0);
 
-    expect(highway(d, [towns[0]], OLD_WORLD.oldRoads, OLD_WORLD.highway)).toEqual([]);
+    expect(highway(d, towns, OLD_WORLD.oldRoads, OLD_WORLD.highway)).toEqual([]);
   });
 });
 

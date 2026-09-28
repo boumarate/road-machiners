@@ -334,6 +334,7 @@ export type BendRules = {
 // The old highway across the dry river. See highway() in src/mapgen/oldworld.ts.
 export type HighwayRules = {
   maxLength: number;
+  minGap: number;
   bridgeCost: number;
   maxBridge: number;
 };
@@ -352,6 +353,7 @@ export type OldRoadRules = {
   spanBack: number;
   minBridge: number;
   minDrop: number;
+  minGapRatio: number;
   maxBridge: number;
   bridgeCost: number;
   bankBack: number;
@@ -470,14 +472,16 @@ export const OLD_WORLD: {
     spanBack: 12, // tiles a span may step back from its bank point to find open, gentle ground
     minBridge: 6, // tiles, 24 m, across a wash where the old road had a bridge; narrower gullies just cut the asphalt
     minDrop: 1, // height units, 4 m, from the lower bank to the wash floor; the broken span model hangs over a drop this deep
+    minGapRatio: 0.05, // gap depth per tile of bridge; a gap shallower than 1 in 20 of its length reads as flat ground
     maxBridge: 40, // tiles, 160 m, the longest bridge an old road jumps a gully on
     bridgeCost: 1.5, // cost per tile of a bridge over a road on flat ground; a bridge beats a detour 50% longer
     bankBack: 3, // tiles back from a cut edge where a bank's height is read, past the gully side
   },
   highway: {
-    maxLength: 260, // tiles, 1 km, the longest highway between two settlements across the riverbed
-    bridgeCost: 0.8, // cost per tile of highway bridge over road on flat ground; highways kept level over valleys
-    maxBridge: 80, // tiles, 320 m, the longest highway bridge; enough for the riverbed and its banks
+    maxLength: 260, // tiles, 1 km, the longest highway between two settlements
+    minGap: 1.5, // height units, 6 m, below the lower end of the bridge; shallower gaps read as flat ground on screen
+    bridgeCost: 1.2, // cost per tile of highway bridge over road on flat ground; a little dearer, so the bridge spans only the ravine
+    maxBridge: 80, // tiles, 320 m, the longest highway bridge; enough for a wide valley and its banks
   },
   powerLines: {
     seedOffset: 7005,
