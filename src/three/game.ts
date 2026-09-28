@@ -24,9 +24,8 @@ import {
   type VehicleFrame,
 } from "../phys/frames";
 import { applyTurn, type PreparedTurn } from "../phys/turn";
-import { maxHp } from "../sim/wear";
 import { playerVehicle, vehicleById } from "../sim/damage";
-import { corePart, mountedParts } from "../sim/grid";
+import { mountedParts } from "../sim/grid";
 import { applySiteAction, canLoot, salvageHere } from "../sim/locations";
 import { getContextAction } from "../ui/hud-readout";
 import { shopAt } from "../sim/market";
@@ -62,7 +61,7 @@ import { toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/
 import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
-import { Fx3D } from "./render/fx";
+import { Fx3D, TruckFx } from "./render/fx";
 import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
 import { PathView } from "./render/path";
@@ -74,13 +73,9 @@ import { WeaponRangeView } from "./render/weaponRange";
 import { WeatherView } from "./render/weather";
 import { ZonesView } from "./render/zones";
 import { REGION } from "../data/region";
-import { TERRAIN_TYPES } from "../data/terrain";
-import { bodyOf } from "../sim/body";
-import { headingOf } from "../phys/frames";
 import { isBusy } from "../sim/jobs";
 import { daylightAt, lampsOn, lightScene, NightLights, sunLight } from "./render/daylight";
 import { sunAt } from "../sim/sun";
-import { tileAt } from "../sim/terrain";
 import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
 import { ShadeView } from "./render/shade";
@@ -101,10 +96,6 @@ const PLAN_TURNS = 3; // turns of path preview
 const HONK_REPLY_MS = 500; // a driver takes a moment to answer a horn
 const PICK_PX = 30; // click radius around a vehicle's screen position
 const MIN_ZONE_HALF_ANGLE = Math.PI / 12; // zones stay visible for trucks that barely turn
-const DUST_CHANCE = 0.3; // per moving vehicle per frame while a turn plays, times the ground's dust value
-const DUST_BEHIND_M = 0.4; // meters behind the body's rear where wheel dust rises
-const SMOKE_CHANCE = 0.05; // per hurt vehicle per frame
-const HURT_CAB = 0.35; // cab hp share under which a vehicle smokes
 const LIVE_VISION_STEP = 0.35; // tiles the truck moves before its sight is recomputed during a turn
 // The circle under the hovered vehicle, which a click targets. Sizes are in tiles.
 const PICK_RING = { gap: 0.45, width: 0.06, alpha: 0.9, lift: 0.02 };
@@ -147,6 +138,7 @@ export class Game {
   private readonly soundRing = new SoundRingView();
   private readonly path: PathView;
   private readonly fx: Fx3D;
+  private readonly truckFx: TruckFx;
   readonly sound: SoundDirector;
   private panelOpen = false; // last frame's panel state, for open and close sounds
   private readonly loops: SoundLoops;
@@ -253,6 +245,7 @@ export class Game {
     overlay.append(this.vignette, this.stormTint);
     this.labels = new Labels(overlay);
     this.fx = new Fx3D(this.scene, overlay, this.rig);
+    this.truckFx = new TruckFx(this.fx);
     this.sound = new SoundDirector(player, this.rig);
     this.loops = new SoundLoops(player);
     uiRoot().addEventListener("click", (e) => {
@@ -1062,7 +1055,7 @@ export class Game {
       view.windows(glass);
       view.pose(f, dt);
       view.aim(this.turretAim(v, f));
-      this.vehicleParticles(display, f, frames !== null);
+      this.truckFx.emit(this.world, display, f, frames !== null, dt);
     }
     for (const [id, view] of this.views) {
       if (ids.has(id)) continue;
@@ -1076,30 +1069,6 @@ export class Game {
   private lookOf(v: Vehicle, f: VehicleFrame, seen: boolean): "full" | "dark" | null {
     if (seen || this.lingers(v)) return "full";
     return lampsOn(v.id, this.lightTurn()) && this.sightLimit.reaches(f.pos) ? "dark" : null;
-  }
-
-  // Wheel dust rises from the ground just behind the rear wheels, so it never reads as exhaust.
-  private dustPoint(v: Vehicle, f: VehicleFrame): V3 {
-    const at = toMap(f.pos);
-    const h = headingOf(f.rot);
-    const back =
-      (bodyOf(v.chassisId).half.x + DUST_BEHIND_M) / PHYSICS.metersPerTile;
-    return groundPoint(this.world.terrain, {
-      x: at.x - Math.cos(h) * back,
-      y: at.y - Math.sin(h) * back,
-    });
-  }
-
-  private vehicleParticles(v: Vehicle, f: VehicleFrame, moving: boolean): void {
-    const ground =
-      TERRAIN_TYPES[
-        this.world.terrain.types[tileAt(this.world.terrain, v.pos)]
-      ];
-    if (moving && v.speed > 0.5 && Math.random() < DUST_CHANCE * ground.dust)
-      this.fx.dust(this.dustPoint(v, f));
-    const cab = corePart(v, "cab");
-    const hurt = cab.hp < maxHp(cab) * HURT_CAB || mountedParts(v).some((p) => p.hp === 0);
-    if (hurt && Math.random() < SMOKE_CHANCE) this.fx.smoke(f.pos);
   }
 
   // Turrets point at their first ordered target.
