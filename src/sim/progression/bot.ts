@@ -11,6 +11,7 @@ import { REGION, type TownDef } from '../../data/region';
 import { RULES } from '../../data/rules';
 import { CONDITION, ENGINE_HEAT } from '../../data/wear';
 import { maxHp } from '../wear';
+import { inCombat } from '../jobs';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder } from '../world';
 import { playerVehicle, vehicleById } from '../damage';
 import { chooseOption, currentOptions } from '../dialogue';
@@ -213,7 +214,7 @@ function engineSpot(v: Vehicle, defId: string): Spot | null {
 function needsService(world: World): boolean {
   const p = world.player;
   const me = playerVehicle(world);
-  const lowFuel = p.fuel <= fuelCap(me) * NPC_UPKEEP.lowFuel && p.money >= ECONOMY.supplyPrice.fuel;
+  const lowFuel = p.fuel <= fuelCap(me) * RULES.lowFuelThreshold && p.money >= ECONOMY.supplyPrice.fuel;
   const lowSupplies = p.supplies <= suppliesCap(me) * NPC_UPKEEP.lowSupplies && p.money >= ECONOMY.supplyPrice.supplies;
   const damaged = mountedParts(me).some(isBadlyDamaged) && repairCost(world) <= p.money;
   return lowFuel || lowSupplies || damaged;
@@ -389,8 +390,12 @@ function lootHere(o: Orders): void {
   o.run((w) => takeAllLoot(w, stock.id));
 }
 
+// A player cannot start a search with a hostile in sight, so the bot waits beside the stock and lets auto fire work.
 function visitStock(o: Orders, stock: SalvageStock): void {
-  if (canReachSalvage(o.me, stock)) return o.run((w) => startSearch(w, stock.id));
+  if (canReachSalvage(o.me, stock)) {
+    if (!inCombat(o.world, o.me)) o.run((w) => startSearch(w, stock.id));
+    return;
+  }
   const site = REGION.locations.find((l) => l.id === stock.id);
   driveTo(o, site ? nearestPad(site, o.me.pos) : besideStop(o.world, stock.pos, stock.radius));
 }
