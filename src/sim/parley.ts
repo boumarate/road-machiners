@@ -43,11 +43,13 @@ function holdFire(v: Vehicle, target: Vehicle): void {
 }
 
 // The loser drops its cargo beside its truck, only half of each good for a player with the smooth talker perk, and
-// both sides make peace. An NPC winner goes to take the cargo.
+// both sides make peace. An NPC winner goes to take the cargo, and its grudge against the loser is settled.
 export function yieldTo(world: World, loser: Vehicle, winner: Vehicle): void {
   const share = vehicleHasPerk(world, loser, 'smoothTalker') ? PERK_NUMBERS.smoothTalker.cargo : 1;
   const stock = hasCargo(loser) ? createCargoSalvage(world, loser, share) : null;
   makePeace(world, loser, winner);
+  const grudge = stateOf(world, 'revenge', winner.id, loser.id);
+  if (grudge) endState(world, grudge, 'fulfilled');
   if (stock && winner.brain) pushGoal(world, winner, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'take the handed-over cargo' });
 }
 

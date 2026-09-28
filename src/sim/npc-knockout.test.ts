@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
 import { autoOrders, isFoe, resolveDestroyed } from './combat';
-import { advanceNpcKnockouts } from './defeat';
+import { advanceNpcKnockouts, checkKnockout, knockOutNpc, refitAtHome } from './defeat';
 import { corePart, coreParts } from './grid';
 import { addVehicle, emptyWorld, npcBrain, rngStateWhere } from './testkit';
 import type { Vehicle, World } from './types';
@@ -10,7 +10,10 @@ import { setWeaponOrder } from './world';
 import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { getResources } from './resources';
 import { sitePads } from './sites';
-import { addState } from './states';
+import { addState, stateOf } from './states';
+import { optionWeights } from './npc-decisions';
+import { yieldTo } from './parley';
+import { NPC_BEHAVIOR } from '../data/npcs';
 import { vehicleStats } from './stats';
 import { canTowNpc, npcHomeSite } from './tow';
 import { dist } from './vec';
@@ -200,5 +203,67 @@ describe('the retreat home', () => {
     resolveNpcActivities(w);
     expect(buggy.defeat).toBeUndefined();
     expect(topGoal(buggy)?.kind).not.toBe('retreat');
+  });
+});
+
+describe('revenge', () => {
+  function knockOutRolling(w: World, v: Vehicle, grudge: boolean): void {
+    corePart(v, 'cab').hp = 0;
+    w.rngState = rngStateWhere((roll) => (roll < NPC_BEHAVIOR.revengeChance) === grudge);
+    knockOutNpc(w, v);
+  }
+
+  it('an NPC the player knocks out may hold a grudge against the player', () => {
+    const { w, me, buggy } = beside();
+    knockOutRolling(w, buggy, true);
+    expect(stateOf(w, 'revenge', buggy.id, me.id)).not.toBeNull();
+  });
+
+  it('an NPC knocked out by another truck holds no grudge against the player', () => {
+    const { w, me, buggy } = beside();
+    buggy.lastHitBy = 'someone-else';
+    knockOutRolling(w, buggy, true);
+    expect(stateOf(w, 'revenge', buggy.id, me.id)).toBeNull();
+  });
+
+  it('raises a raider\'s chance to fight the player', () => {
+    const { w, me, buggy } = beside();
+    const before = optionWeights(w, buggy, 'hostileSeen', me.id, null).fight!;
+    addState(w, 'revenge', buggy.id, me.id, { kind: 'none' });
+    expect(optionWeights(w, buggy, 'hostileSeen', me.id, null).fight).toBeGreaterThan(before);
+  });
+
+  it('raises a trader\'s chance to rob the player', () => {
+    const { w, me } = beside();
+    const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 30, y: 34 });
+    trader.brain = npcBrain('trader', trader.pos, ['trader']);
+    refreshVision(w);
+    const before = optionWeights(w, trader, 'preySeen', me.id, null).rob!;
+    addState(w, 'revenge', trader.id, me.id, { kind: 'none' });
+    expect(optionWeights(w, trader, 'preySeen', me.id, null).rob).toBeGreaterThan(before);
+  });
+
+  it('ends once the holder knocks the player out', () => {
+    const { w, me, buggy } = beside();
+    addState(w, 'revenge', buggy.id, me.id, { kind: 'none' });
+    me.lastHitBy = buggy.id;
+    corePart(me, 'cab').hp = 0;
+    checkKnockout(w);
+    expect(stateOf(w, 'revenge', buggy.id, me.id)).toBeNull();
+    expect(w.events.some((e) => e.t === 'stateEnded' && e.state.kind === 'revenge' && e.ending === 'fulfilled')).toBe(true);
+  });
+
+  it('ends once the player hands the holder its cargo', () => {
+    const { w, me, buggy } = beside();
+    addState(w, 'revenge', buggy.id, me.id, { kind: 'none' });
+    yieldTo(w, me, buggy);
+    expect(stateOf(w, 'revenge', buggy.id, me.id)).toBeNull();
+  });
+
+  it('outlasts a defeat and the refit at home', () => {
+    const { w, me, buggy } = beside();
+    knockOutRolling(w, buggy, true);
+    refitAtHome(w, buggy);
+    expect(stateOf(w, 'revenge', buggy.id, me.id)).not.toBeNull();
   });
 });

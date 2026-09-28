@@ -4,7 +4,7 @@
 // once the trucks that attacked it look away, then retreats home. Nobody is its foe until it refits there.
 
 import { PERK_NUMBERS } from "../data/skills";
-import { NPCS } from "../data/npcs";
+import { NPC_BEHAVIOR, NPCS } from "../data/npcs";
 import { chassisDef } from "../data/chassis";
 import { RULES } from "../data/rules";
 import { isJunk, maxHp, restorePart } from "./wear";
@@ -14,10 +14,11 @@ import { corePart, mountedParts } from "./grid";
 import { cancelJob } from "./jobs";
 import { hasPerk, practice } from "./progress";
 import { createKnockoutSalvage } from "./salvage";
-import { endState } from "./states";
+import { addState, endState, stateOf } from "./states";
 import { makeVehicle } from "./factory";
 import { generateNpcLoadout } from "./npc-loadout";
 import { getResources } from "./resources";
+import { chance } from "./rng";
 import { sitePads, type Site } from "./sites";
 import { isFree } from "./spawn";
 import { npcHomeSite, towOf } from "./tow";
@@ -51,6 +52,7 @@ export function checkKnockout(world: World): void {
   // Whoever fought the player got what the feud was for.
   for (const s of world.states.filter((x) => x.kind === "feud" && x.other === me.id))
     endState(world, s, "fulfilled");
+  settleRevenge(world, me);
   world.events.push({ t: "knockout" });
 }
 
@@ -100,15 +102,28 @@ export function isKnockedOut(v: Vehicle): boolean {
 
 // The truck brakes to a stop and every gun aimed at it drops its order, so finishing it off takes a new manual order.
 export function knockOutNpc(world: World, v: Vehicle): void {
-  if (!v.brain) throw new Error(`${v.id} has no NPC brain to knock out`);
-  const foes = new Set(Object.keys(v.brain.attackers));
-  if (v.lastHitBy && world.vehicles.some((x) => x.id === v.lastHitBy)) foes.add(v.lastHitBy);
-  v.defeat = { phase: "out", turns: 0, unseen: 0, foes: [...foes] };
+  v.defeat = { phase: "out", turns: 0, unseen: 0, foes: foesOf(world, v) };
   v.order = { kind: "brake" };
   v.weaponOrders = {};
   cancelJob(world, v);
   for (const other of world.vehicles) dropOrdersAt(other, v.id);
   world.events.push({ t: "npcKnockout", vehicle: v.id, by: v.lastHitBy ?? "unknown" });
+  if (v.lastHitBy === world.player.vehicleId && chance(world, NPC_BEHAVIOR.revengeChance))
+    addState(world, "revenge", v.id, world.player.vehicleId, { kind: "none" });
+}
+
+// The trucks that attacked the NPC, and the one that dealt the last blow.
+function foesOf(world: World, v: Vehicle): string[] {
+  if (!v.brain) throw new Error(`${v.id} has no NPC brain to knock out`);
+  const foes = new Set(Object.keys(v.brain.attackers));
+  if (v.lastHitBy && world.vehicles.some((x) => x.id === v.lastHitBy)) foes.add(v.lastHitBy);
+  return [...foes];
+}
+
+// The truck that knocked the player out settles any grudge it held.
+function settleRevenge(world: World, me: Vehicle): void {
+  const held = me.lastHitBy ? stateOf(world, "revenge", me.lastHitBy, me.id) : null;
+  if (held) endState(world, held, "fulfilled");
 }
 
 function dropOrdersAt(shooter: Vehicle, targetId: string): void {

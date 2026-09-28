@@ -78,6 +78,9 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   // The holder pulls over to trade with the player. See src/sim/economy.ts. Being parked in reach keeps it
   // going. The player ends it when done trading, and a feud between the two breaks it.
   trade: { refresh: isMeeting, check: checkTrade, hooks: {} },
+  // The holder wants revenge on the player, who knocked it out. src/sim/defeat.ts fulfils it when the holder knocks
+  // the player out, and src/sim/parley.ts when the player hands it cargo.
+  revenge: { refresh: never, check: noCheck, hooks: {} },
 };
 
 // A missing holder is left to the missing-party rule.
@@ -97,7 +100,7 @@ function turnsOf(kind: StateKindId): number | null {
 }
 
 // The data kind each state kind carries.
-const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none', grievance: 'none', plea: 'plea', trade: 'none' };
+const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none', grievance: 'none', plea: 'plea', trade: 'none', revenge: 'none' };
 
 export function addState(w: World, kind: StateKindId, holder: string, other: string, data: StateData): NpcState {
   kindOf(kind);

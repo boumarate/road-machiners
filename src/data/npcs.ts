@@ -423,6 +423,20 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   // A driver that dropped a tow for danger comes back for the player: tow outweighs keep 20 to 1.
   towPromise: { strandedSeen: { tow: { add: 20 } } },
   answering: {},
+  // A driver the player knocked out wants revenge: every hostile choice about the player gets more likely.
+  // Robbing and closing in on a heard contact no longer need a trait.
+  revenge: {
+    hostileSeen: { fight: { add: 4 } },
+    contactHeard: { investigate: { add: 2 } },
+    attacked: { fightBack: { mul: 2 } },
+    preySeen: { rob: { add: 2 } },
+    ramChance: { ram: { mul: 2 } },
+    crashed: { retaliate: { mul: 4 } },
+    parley: { keep: { mul: 2 } },
+    truceOffered: { refuse: { mul: 3 } },
+    mercyBegged: { finish: { mul: 3 } },
+    threatened: { fightBack: { mul: 2 } },
+  },
 };
 
 // State durations in turns. See src/sim/states.ts. null means the state has no timer and ends only by its checks.
@@ -453,6 +467,8 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   turnedDown: null,
   // A tower that dropped a hitched tow for danger keeps its terms until its next offer to that player.
   towPromise: null,
+  // A grudge against the player fades after 10 days, unless the driver settles it first.
+  revenge: 2000,
   // A driver on its way to a stranded player holds the job until it offers, its tow goal pops, or it is gone.
   answering: null,
 };
@@ -526,6 +542,8 @@ export const TRAITS: Record<TraitId, Trait> = {
 export const NPC_BEHAVIOR = {
   // Cab warnings begin at 30%. Recovery to half cab health prevents fight/flee oscillation.
   fleeCondition: 0.3,
+  // One driver in three the player knocks out holds a grudge. See the revenge state.
+  revengeChance: 0.33,
   recoverCondition: 0.5,
   // An enemy is a threat when its perceived danger beats the driver's own times this and its boldness.
   threatRatio: 1,
