@@ -1,8 +1,8 @@
 # Rear-engine trucks
 
-**Status:** design
-**Branch:** main
-**Worktree:** none
+**Status:** executing
+**Branch:** rear-engine-trucks
+**Worktree:** .worktrees/rear-engine-trucks
 **Goal:** Four new chassis with the engine behind the driver are for sale in towns and driven by NPCs, each drawn from a base model copying a real vehicle. `npm test` and `npm run playtest` pass, and the user confirms the looks from in-game screenshots.
 **Mode:** interactive
 
@@ -92,3 +92,59 @@ TDD: no. The change is data and models. The existing content and physics tests c
 
 ### Unknowns
 - UK1 — Whether the open `cabOpen` needs any rule beyond `tall: false`.
+
+## Plan
+
+Approach: I do the data and wiring in PH1. Four implementers each write one base model in parallel, PH2 to PH5. The models read the grid and body numbers from IF1 and own disjoint files.
+
+### PH1 — Chassis data and wiring
+- 1.1 `src/data/chassis.ts:36` — add `'jeep' | 'convertible' | 'bus' | 'loader'` to `ChassisDef.look`.
+- 1.2 `src/data/chassis.ts:233` — add the four chassis with the design layouts and cores and these numbers. Values land mid-band: 2036, 3212, 3620 and 4808.
+  - jeep: maxSpeed 8.2, accel 2.5, brake 3, turn 115/42, reverse 80, mass 450, rated 1400, radius 0.55, fuel 35 at 0.2, base 900, tier 1.
+  - convertible: maxSpeed 9.4, accel 2.5, brake 3, turn 110/40, reverse 70, mass 750, rated 2000, radius 0.6, fuel 45 at 0.26, base 1500, tier 2.
+  - bus: maxSpeed 5.5, accel 0.9, brake 2, turn 65/22, reverse 40, mass 3000, rated 6800, radius 0.9, fuel 110 at 0.45, base 1200, tier 2. Mid drive parts.
+  - loader: maxSpeed 3.6, accel 1.6, brake 2.5, turn 85/30, reverse 60, mass 4200, rated 7000, radius 0.9, fuel 130 at 0.65, base 2600, tier 3. Heavy drive parts.
+- 1.3 `src/data/chassis.ts:240` — append the four ids to `PLAYER_CHASSIS`.
+- 1.4 `src/data/parts.ts:826-850` — add `cabOpen`: 3x2, not tall, otherwise like `cabPickup`. Update the cab comments for the jeep, bus and loader.
+- 1.5 `src/data/physics.ts:30-40` — add the four bodies from IF1.
+- 1.6 `src/render/partLooks.ts:9-19` and `src/three/render/models.ts:9-19` — add `base_jeep`, `base_convertible`, `base_bus` and `base_loader`.
+- 1.7 `src/data/sounds.ts:106-130` — engines: jeep engine-1, convertible engine-2, bus and loader engine-3. Horns: jeep horn-1 at 1.08, convertible horn-2 at 1.28, bus horn-2 at 0.72, loader horn-1 at 0.72.
+- 1.8 `src/data/npcs.ts:119-420` — jeep weight 3 for outriders and 2 for scavengers. Convertible 3 for couriers. Roamers get a convertible at 1 and a jeep at 1. Bus 2 for traders and 2 for convoys. Loader 1 for gunwagons and 2 for Bowl patrols.
+- 1.9 `src/data/content.test.ts:46,99-100,122` and `src/phys/content.test.ts:13` — add the four ids and raise the counts to 13 chassis and 11 buyable.
+- 1.10 A test in `src/data/content.test.ts` checks IV1: every `E` cell of the four new chassis lies on a row after the last cab row.
+- 1.11 `DESIGN.md:256` — list the four new buyable chassis.
+- Respects: IV1, IV2, IV3.
+- Commit: Add the jeep, convertible, bus and loader chassis with rear engines.
+
+### PH2 to PH5 — Base models
+One phase per chassis: PH2 jeep, PH3 convertible, PH4 bus, PH5 loader. Each phase owns `tools/blender/base_<id>.py` and `public/models/base_<id>.glb`.
+- Build the design's real vehicle in the style of `base_scout.py` on `parts_common_base.py`, with a `SEED` no other base uses.
+- Grid and body come from IF1. Wheels sit on the rows of the wheel cores.
+- The engine bay is a cutout behind the cab over the `E` cells, with `floor` sockets at the bay floor like `base_carrier.py`.
+- Open cabs show seats and no roof. The bus and loader have closed roofs.
+- Bus: `row` sockets on the roof for every cell. Loader: bucket and lift arms drawn on row 0, inside the footprint.
+- Render the preview to `tmp/base_<id>.png` and look at it. `check_base()` passes (IV4).
+- Respects: IV4, PC1.
+- Commit: Add a stylized base model for the <id>: a <real vehicle>.
+
+### Test strategy
+- `npm test` covers IV1 to IV3. `npm run typecheck` covers the look union.
+- Verify boots the game, buys each chassis with the console, screenshots it and runs `npm run playtest`.
+
+### Risks / rollback
+- RK1 — The tall bus collider may tip in turns (AS1). The physics test drives it. If it tips, lower `halfHeight` and keep the drawn roof above the collider.
+- RK2 — `cabOpen` may need a rule beyond `tall: false` (UK1). Verify fires a gun across the convertible seats.
+
+### Interfaces
+- IF1 — Grid and body per chassis, as cols x rows, then halfHeight, wheelY, wheelRadius and wheelHalfWidth in meters:
+  - jeep 4x7: 0.4, -0.25, 0.45, 0.18.
+  - convertible 5x9: 0.35, -0.2, 0.42, 0.17.
+  - bus 6x12: 0.8, -0.55, 0.55, 0.22.
+  - loader 7x9: 0.65, -0.45, 0.8, 0.32.
+
+### Interface graph
+- PH1 -> IF1 @ src/, DESIGN.md
+- PH2 IF1 -> @ tools/blender/base_jeep.py, public/models/base_jeep.glb
+- PH3 IF1 -> @ tools/blender/base_convertible.py, public/models/base_convertible.glb
+- PH4 IF1 -> @ tools/blender/base_bus.py, public/models/base_bus.glb
+- PH5 IF1 -> @ tools/blender/base_loader.py, public/models/base_loader.glb
