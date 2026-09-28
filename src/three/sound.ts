@@ -112,11 +112,12 @@ export class CombatScore {
     return { cue, offer: offer.result, heat: this.heat.read(now) };
   }
 
+  // A hit whose time is too soon or already past sounds as soon as it can, and the base ducks when it sounds.
   private sound(base: Base, h: Hit, now: number, file?: string): void {
-    const delayMs = Math.max(ACCENT_LEAD_SECONDS, h.time - now) * 1000;
-    this.player.play(h.cue as AccentCue, { pan: h.pan, gain: h.gain }, delayMs, file === undefined ? undefined : { file, rate: 1 });
+    const start = now + Math.max(ACCENT_LEAD_SECONDS, h.time - now);
+    this.player.play(h.cue as AccentCue, { pan: h.pan, gain: h.gain }, (start - now) * 1000, file === undefined ? undefined : { file, rate: 1 });
     const s = MIX.score;
-    if (h.line === "lead") base.loop.duck(h.time, s.duckGain, s.duckAttackSeconds, base.grid.beat * s.duckReleaseBeats);
+    if (h.line === "lead") base.loop.duck(start, s.duckGain, s.duckAttackSeconds, base.grid.beat * s.duckReleaseBeats);
   }
 
   // Quiet heat leaves the base lower and muffled; fullHeat opens it.
