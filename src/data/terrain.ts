@@ -564,3 +564,147 @@ export const MAPGEN = {
     { name: 'sand', center: { x: 390, y: 350 }, side: 100 },
   ] as MapSpot[],
 };
+
+// New-world rules for the map bake: what squatters and weather made of the old world since, placed from
+// terrain, water, sites and old-world props. See src/mapgen/newworld.ts. Distances are in tiles of 4 m,
+// heights in units of 4 m, slopes in units per tile. Each rule draws its randomness from the map seed and its
+// own seedOffset, so rules never shift each other.
+export type PoolRules = {
+  minDepth: number;
+  maxTiles: number;
+  toxicReach: number;
+};
+
+export type ScrubRules = {
+  seedOffset: number;
+  seedFlow: number;
+  seedChance: number;
+  poolReach: number;
+  oasisReach: number;
+  steps: number;
+  spread: number;
+  dryShare: number;
+};
+
+export type CampRules = {
+  seedOffset: number;
+  radius: number;
+  siteGap: number;
+  roadGap: number;
+  flatSlope: number;
+  spacing: number;
+  tries: number;
+  siteChance: number;
+  ruinChance: number;
+  junctionChance: number;
+  junctionReach: number;
+  clusterReach: number;
+  clusterMin: number;
+  shacks: [number, number];
+  shackRadius: [number, number];
+  junk: [number, number];
+  junkRadius: [number, number];
+  innerGap: number;
+  placeTries: number;
+  fenceArc: [number, number];
+  fenceMissing: number;
+  fenceRoadGap: number;
+};
+
+export type FieldFenceRules = {
+  seedOffset: number;
+  minTiles: number;
+  angleStep: number;
+  edgeChance: number;
+  missingShare: number;
+  roadGap: number;
+};
+
+export type CarWreckRules = {
+  seedOffset: number;
+  radius: number;
+  roadStep: number;
+  roadChance: number;
+  shoulder: [number, number];
+  skew: number;
+  oldRoadChance: number;
+  oldRoadGap: number;
+  campChance: number;
+  campGroup: [number, number];
+  campSpread: number;
+  washChance: number;
+  placeTries: number;
+};
+
+export const NEW_WORLD: {
+  fenceLength: number;
+  pools: PoolRules;
+  scrub: ScrubRules;
+  camps: CampRules;
+  fieldFences: FieldFenceRules;
+  carWrecks: CarWreckRules;
+} = {
+  fenceLength: 1, // tiles, 4 m, of one fence segment; a fence line is a row of them, so it breaks segment by segment
+  pools: {
+    minDepth: 0.05, // units, 20 cm; a tile with a corner this far under its basin's spill level holds water after rain
+    maxTiles: 40, // tiles, 640 m²; larger basins are lakes that dry to mud and salt crust, not pools
+    toxicReach: 12, // tiles, 48 m, past the footprint of a gas station, tank hulk or silo that its spills drain into a basin
+  },
+  scrub: {
+    seedOffset: 8002,
+    seedFlow: 0.4, // share of the wash flow; a tile beside a bed that carried this much water stays moist
+    seedChance: 0.5, // chance a moist tile starts scrub, so the first growth is patchy
+    poolReach: 2, // tiles around a pool where scrub starts
+    oasisReach: 12, // tiles past an oasis's site clearance where scrub starts
+    steps: 6, // growth steps; each lets scrub creep one tile further
+    spread: 0.35, // chance per step that scrub takes a flat, moist neighbor tile
+    dryShare: 0.15, // share of that chance left on dry ground, so scrub mostly follows the water
+  },
+  camps: {
+    seedOffset: 8003,
+    radius: 5, // tiles, 20 m; the fence ring of a camp, with the shacks and junk inside
+    siteGap: 2, // tiles between the camp ring and a site's clearance
+    roadGap: 2, // tiles between the camp ring and a road edge
+    flatSlope: 0.15, // steepest tile under a camp's center
+    spacing: 30, // tiles between camp centers, so camps never merge
+    tries: 16, // directions tried around a site or junction for open ground
+    siteChance: 0.7, // chance a town or oasis has a camp outside it
+    ruinChance: 0.5, // chance an old settlement has squatters among its ruins
+    junctionChance: 0.5, // chance a road junction has a camp beside it
+    junctionReach: 15, // tiles past the nearest camp spot to a junction that a camp may lie, out of the fork between its roads
+    clusterReach: 8, // tiles between houses of one old settlement; settlements have a radius of 5
+    clusterMin: 3, // houses and ruins that make an old settlement, not a lone building
+    shacks: [2, 5], // shacks per camp
+    shackRadius: [0.6, 0.9], // tiles of footprint, 5 to 7 m across
+    junk: [1, 3], // junk piles of barrels and tires per camp
+    junkRadius: [0.35, 0.6], // tiles of footprint
+    innerGap: 1.5, // tiles between the shacks and junk and the fence ring
+    placeTries: 12, // tries to fit each shack or junk pile before it is left out
+    fenceArc: [0.3, 0.65], // share of the ring a camp fences; the rest stays open
+    fenceMissing: 0.1, // share of fence segments fallen or taken, left as gaps
+    fenceRoadGap: 1, // tiles between a fence segment and a road edge
+  },
+  fieldFences: {
+    seedOffset: 8004,
+    minTiles: 12, // tiles; smaller patches of old field are scraps with no fence
+    angleStep: 2, // degrees between angles tried to fit a field's rectangle
+    edgeChance: 0.5, // chance each edge of a field keeps a fence; one edge always stays open
+    missingShare: 0.15, // share of fence segments fallen or taken, left as gaps
+    roadGap: 1, // tiles between a fence segment and a road edge
+  },
+  carWrecks: {
+    seedOffset: 8005,
+    radius: 0.6, // tiles of footprint, a car 4.5 m long
+    roadStep: 25, // tiles between checked road points
+    roadChance: 0.25, // chance a road point has a burnt car on its shoulder
+    shoulder: [0.5, 2], // tiles between a wreck and the road edge
+    skew: 30, // degrees a roadside wreck turns off the road direction at most
+    oldRoadChance: 0.005, // chance per tile of old road that a car died there
+    oldRoadGap: 1, // tiles between an old-road wreck and a road edge
+    campChance: 0.6, // chance a camp has cars dragged in beside it
+    campGroup: [1, 3], // cars in a camp group
+    campSpread: 4, // tiles past the camp ring a car may lie
+    washChance: 0.003, // chance per wash-bed tile that a flood left a car there, nose down
+    placeTries: 8, // tries to fit each camp car before it is left out
+  },
+};

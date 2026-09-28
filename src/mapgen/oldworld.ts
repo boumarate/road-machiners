@@ -95,17 +95,17 @@ const TURN = Math.PI * 2;
 
 type Scored = { pos: Vec; score: number };
 
-function prop(kind: PropKind, pos: Vec, r: number, yaw: number, group = 0, step = 0): BakedProp {
+export function prop(kind: PropKind, pos: Vec, r: number, yaw: number, group = 0, step = 0): BakedProp {
   return { kind, pos, r, yaw, group, step };
 }
 
-function ruleRng(seed: number, offset: number): Rng {
+export function ruleRng(seed: number, offset: number): Rng {
   return { rngState: Math.floor(hashRandom(seed, offset) * 2 ** 32) | 0 };
 }
 
 // Inside the map margin, roadGap tiles past every road edge, clear of sites with their pads, and off the
 // Canyon Bridge deck and its ramps.
-function clearGround(size: number, pos: Vec, r: number, roadGap: number): boolean {
+export function clearGround(size: number, pos: Vec, r: number, roadGap: number): boolean {
   if (Math.min(pos.x, pos.y, size - pos.x, size - pos.y) < O.edgeMargin + r) return false;
   const reach = HALF + roadGap + r;
   if (ROAD_INDEX.nearestWithin(pos.x, pos.y, reach) < reach) return false;
@@ -115,7 +115,7 @@ function clearGround(size: number, pos: Vec, r: number, roadGap: number): boolea
 // Adds the prop where it stands on clear ground, off cliffs and apart from every prop already placed.
 // Roadside props pass a road gap of 0: they stand at their own gap from their road, and only the road
 // surface must stay clear.
-function place(d: MapDraft, p: BakedProp, roadGap: number): boolean {
+export function place(d: MapDraft, p: BakedProp, roadGap: number): boolean {
   if (!clearGround(d.size, p.pos, p.r, roadGap)) return false;
   if (tileSteepness(d.heights, d.size, tileOf(d.size, p.pos)) > TERRAIN.drive.maxSlope) return false;
   if (d.props.some((o) => dist(o.pos, p.pos) < o.r + p.r + O.gap)) return false;
@@ -124,24 +124,24 @@ function place(d: MapDraft, p: BakedProp, roadGap: number): boolean {
 }
 
 // Ground today's world built on: roads, the bridge deck, and sites with their pads.
-function builtGround(c: Vec): boolean {
+export function builtGround(c: Vec): boolean {
   if (deckAlong(c.x, c.y) !== null) return true;
   return ROAD_INDEX.nearestWithin(c.x, c.y, HALF) < HALF || !clearOfSites(c, 0);
 }
 
 // A wash bed or the canyon floor: water cut the ground there, so old roads break and fields stop.
-function isCutTile(d: MapDraft, tile: number): boolean {
+export function isCutTile(d: MapDraft, tile: number): boolean {
   const w = d.size + 1;
   const k = Math.floor(tile / d.size) * w + (tile % d.size);
   if (Math.max(d.flow[k], d.flow[k + 1], d.flow[k + w], d.flow[k + w + 1]) >= GEOLOGY.ground.washFlow) return true;
   return polylineDist(tileCenter(d.size, tile), CANYON.path) <= CANYON.width;
 }
 
-function tileOf(size: number, p: Vec): number {
+export function tileOf(size: number, p: Vec): number {
   return clamp(Math.floor(p.y), 0, size - 1) * size + clamp(Math.floor(p.x), 0, size - 1);
 }
 
-function tileCenter(size: number, tile: number): Vec {
+export function tileCenter(size: number, tile: number): Vec {
   return { x: (tile % size) + 0.5, y: Math.floor(tile / size) + 0.5 };
 }
 
@@ -152,7 +152,7 @@ function tileHeight(d: MapDraft, tile: number): number {
 }
 
 // Tiles whose centers lie within r of c, inside the map.
-function tilesWithin(size: number, c: Vec, r: number): number[] {
+export function tilesWithin(size: number, c: Vec, r: number): number[] {
   const out: number[] = [];
   for (let y = Math.max(0, Math.floor(c.y - r)); y <= Math.min(size - 1, Math.floor(c.y + r)); y++) {
     for (let x = Math.max(0, Math.floor(c.x - r)); x <= Math.min(size - 1, Math.floor(c.x + r)); x++) {
@@ -173,7 +173,7 @@ function spaced<T extends Scored>(spots: T[], spacing: number, count: number): T
 }
 
 // Distances along a line of the given length, step apart, from 0.
-function stations(length: number, step: number): number[] {
+export function stations(length: number, step: number): number[] {
   const out: number[] = [];
   for (let k = 0; k * step <= length; k++) out.push(k * step);
   return out;
@@ -185,20 +185,20 @@ function unit(a: Vec, b: Vec): Vec {
   return { x: (b.x - a.x) / d, y: (b.y - a.y) / d };
 }
 
-function offset(p: Vec, dir: Vec, by: number): Vec {
+export function offset(p: Vec, dir: Vec, by: number): Vec {
   return { x: p.x + dir.x * by, y: p.y + dir.y * by };
 }
 
 // The unit normal of dir to one side: +1 turns dir a quarter toward +y, -1 away.
-function sideOf(dir: Vec, side: number): Vec {
+export function sideOf(dir: Vec, side: number): Vec {
   return { x: -dir.y * side, y: dir.x * side };
 }
 
-function facing(dir: Vec): number {
+export function facing(dir: Vec): number {
   return Math.atan2(dir.y, dir.x);
 }
 
-function range(rng: Rng, [lo, hi]: readonly [number, number]): number {
+export function range(rng: Rng, [lo, hi]: readonly [number, number]): number {
   return randRange(rng, lo, hi);
 }
 
@@ -235,12 +235,16 @@ function settlementScore(seed: number, d: MapDraft, rules: SettlementRules, anch
   return closeness * (1 - rules.jitter) + hashRandom(seed, rules.seedOffset, pos.x, pos.y) * rules.jitter;
 }
 
-// Today's sites, and the road ends that meet another road.
+// Today's sites, and the road junctions.
 function siteAnchors(): Anchor[] {
-  const junctions = REGION.roads
+  return [...SITES.map((s) => ({ pos: s.pos, radius: s.radius })), ...roadJunctions().map((pos) => ({ pos, radius: 0 }))];
+}
+
+// The road ends that meet another road, once per road that ends there.
+export function roadJunctions(): Vec[] {
+  return REGION.roads
     .flatMap((road) => [road[0], road[road.length - 1]])
     .filter((p) => REGION.roads.filter((road) => road.some((q) => dist(p, q) < 0.01)).length > 1);
-  return [...SITES.map((s) => ({ pos: s.pos, radius: s.radius })), ...junctions.map((pos) => ({ pos, radius: 0 }))];
 }
 
 function flatAndDry(d: MapDraft, pos: Vec, rules: SettlementRules): boolean {
@@ -685,7 +689,7 @@ function markTiles(d: MapDraft, tiles: number[], code: number): void {
 }
 
 // Old-world ground marks go only on unmarked tiles off built ground and off wash beds.
-function markable(d: MapDraft, tile: number): boolean {
+export function markable(d: MapDraft, tile: number): boolean {
   return d.built[tile] === BUILT_NONE && !isCutTile(d, tile) && !builtGround(tileCenter(d.size, tile));
 }
 

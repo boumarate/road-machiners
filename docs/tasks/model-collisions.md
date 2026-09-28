@@ -1,10 +1,10 @@
 # Collisions by model shape
 
-**Status:** design
+**Status:** executing
 **Branch:** procedural-map
 **Worktree:** .worktrees/procedural-map
 **Goal:** Every static prop collides, blocks routes and blocks sight by its model's shape, not by a disc of its radius. A truck hits a fence along its rails, drives between a gas station's posts under its canopy, and stops against a ruin's walls. The user confirms in play.
-**Mode:** interactive
+**Mode:** hands-off until in-game checks
 
 ## Context
 
@@ -52,6 +52,34 @@ TDD: yes.
 - UK2 — Whether the road wreck, which scales by a rule in `RULES.wreckRadiusScale`, needs its pose rule moved too.
 
 ## Plan
+
+### PH1 — Shapes from models
+- 1.1 `scripts/prop-shapes.mjs` (create) and `package.json` script `models:shapes` — loads each prop `.glb` in Node with the three.js glTF loader, rasterizes its triangles on a 0.5 m grid in model space, and merges cells into boxes by height span. Writes `src/data/prop-shapes.json` through a temp file and rename.
+- 1.2 `src/data/prop-shapes.json` (create) — per model name: `{ hash, boxes: { x0, x1, y0, y1, z0, z1 }[] }` in model meters, x forward, y sideways, z up, where `hash` is the `.glb` file hash.
+- 1.3 `src/data/prop-shapes.test.ts` (create) — every model a prop pose names has a shape, and each stored hash matches its `.glb` (IV2).
+- Commit: Collision shapes from prop models.
+
+### PH2 — One pose per obstacle
+- 2.1 `src/sim/mapgen.ts` (modify) — `propPose(o: Obstacle): PropPose` per IF2. The turn and scale rules move here unchanged from `src/three/render/obstacles.ts`, with the `MODEL_RADIUS` table and hash helpers they need.
+- 2.2 `src/three/render/obstacles.ts` (modify) — every prop view reads `propPose()`.
+- Tests: poses equal the old view rules for each kind, and IV4 holds for every baked prop against its shape.
+- Commit: Obstacles carry one pose that views and collisions share.
+
+### PH3 — Collisions, routes and sight by shape
+- 3.1 `src/phys/drive.ts` (modify) — each prop becomes box colliders at its pose, leaving out boxes above `PHYSICS.truckClearance`. Crash lookup maps every collider of a prop to its id.
+- 3.2 `src/sim/nav/layer.ts` (modify) — static and transient props stamp their low boxes' ground outlines.
+- 3.3 `src/sim/vision.ts` (modify) — a prop blocks a sight line where a box covering eye height crosses it.
+- Tests: a truck passes a fence's end but not its middle, drives under a canopy, routes stamp an L-shaped ruin as an L, and sight passes over a fence but not a wall.
+- Commit: Props collide, block routes and block sight by model shape.
+
+### Interfaces
+- IF1 [blocks] — `src/data/prop-shapes.json` as in 1.2, loaded through `propShape(model: string): ShapeBox[]` in `src/sim/mapgen.ts`. PH3 tests need real shapes.
+- IF2 — `PropPose = { model: string; pos: Vec; yaw: number; scale: number }`, yaw in radians from map +x toward +y, scale uniform from model meters.
+
+### Interface graph
+- PH1 -> IF1 @ scripts/prop-shapes.mjs, package.json, src/data/prop-shapes.json, src/data/prop-shapes.test.ts
+- PH2 -> IF2 @ src/sim/mapgen.ts, src/three/render/obstacles.ts, their tests
+- PH3 IF1, IF2 -> @ src/phys/drive.ts, src/sim/nav/layer.ts, src/sim/vision.ts, src/data/physics.ts, their tests
 
 ## Verify
 
