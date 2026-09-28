@@ -43,6 +43,9 @@ const ART = {
     '<path d="M7 9h26v27H7zM11 4h6v5M23 4h6v5M21 13l-7 11h7l-2 9 9-13h-8z"/>',
   electronics:
     '<path d="M8 8h24v24H8zM14 14h12v12H14zM14 3v5M20 3v5M26 3v5M14 32v5M20 32v5M26 32v5M3 14h5M3 20h5M3 26h5M32 14h5M32 20h5M32 26h5"/>',
+  fuelDrums:
+    '<ellipse cx="11.5" cy="9" rx="6.5" ry="3"/><ellipse cx="28.5" cy="9" rx="6.5" ry="3"/><path d="M5 9v25q6.5 4 13 0V9M22 9v25q6.5 4 13 0V9M5 18q6.5 4 13 0M5 27q6.5 4 13 0M22 18q6.5 4 13 0M22 27q6.5 4 13 0"/>',
+  water: '<path d="M20 4Q8 19 8 26a12 12 0 0 0 24 0Q32 19 20 4zM13 27q2 5 7 5"/>',
   turn: '<path d="M5 14h16V5l16 15-16 15v-9H5z"/>',
   tools:
     '<path d="M12 5l6 7-6 6-7-6q-3 10 10 11l14 14 8-8-14-14q1-13-11-10z"/>',
@@ -99,6 +102,8 @@ const ICON_NAMES: Record<IconName, string> = {
   batteries: "Batteries",
   electronics: "Electronics",
   parts: "Parts",
+  fuelDrums: "Fuel drums",
+  water: "Water",
   scanner: "Radio scanner",
   damage: "Damage",
   pen: "Penetration",
@@ -151,6 +156,8 @@ const GOOD_ICON: Record<string, IconName> = {
   batteries: "batteries",
   electronics: "electronics",
   parts: "parts",
+  fuelDrums: "fuelDrums",
+  water: "water",
 };
 
 export function goodIcon(good: string): IconName {

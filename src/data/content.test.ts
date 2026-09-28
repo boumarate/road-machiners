@@ -144,7 +144,8 @@ describe("equipment variety", () => {
   });
 
   it("adds five goods with profitable routes and real buy/sell transactions", () => {
-    expect(Object.keys(GOODS)).toHaveLength(9); // three base goods, five trade goods, and parts for field repair
+    // three base goods, five trade goods, parts for field repair, and fuel drums and water for supply convoys
+    expect(Object.keys(GOODS)).toHaveLength(11);
     expect(GOOD_IDS).toEqual(Object.keys(GOODS));
     for (const id of addedGoods) {
       expect(GOODS[id].mass).toBeGreaterThan(0);
@@ -163,6 +164,14 @@ describe("equipment variety", () => {
       expect(goodsCount(w.vehicles[0])[id]).toBeUndefined();
       expect(w.player.money).toBeGreaterThan(start.player.money);
     }
+  });
+
+  it.each(["fuelDrums", "water"])("%s sells dear in Bowl and Nose, and no shop makes it", (good) => {
+    for (const town of ["bowl", "nose"]) {
+      expect(SHOPS[town].needs).toContain(good);
+      expect(sellPrice(world, town, good)).toBeGreaterThan(0);
+    }
+    expect(Object.values(SHOPS).filter((shop) => shop.makes.includes(good))).toEqual([]);
   });
 });
 

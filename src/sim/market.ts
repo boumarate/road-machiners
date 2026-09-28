@@ -11,7 +11,7 @@ import { PARTS } from '../data/parts';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { CONDITION } from '../data/wear';
-import { CONTRACTS, DISTANCE_PREMIUM, EFFORT, PRESSURE_MAX, SHOPS, shopDef, type ShopDef, type Tier } from '../data/market';
+import { CONTRACTS, DISTANCE_PREMIUM, EFFORT, GOOD_SOURCES, PRESSURE_MAX, SHOPS, shopDef, type ShopDef, type Tier } from '../data/market';
 import { chassisDef } from '../data/chassis';
 import { makePart, newId } from './factory';
 import { sampleWeighted } from './npc-loadout';
@@ -78,13 +78,15 @@ export function advanceShop(world: World, shopId: string, state: ShopState): voi
   }
 }
 
-// Straight distance from a shop to the nearest other shop that makes the good, so a haul's pay
-// follows the miles it actually takes to move a good to where nobody makes it. Throws if no shop
-// makes the good at all, since then no price for it could ever be grounded in a maker.
+// Straight distance from a shop to the nearest other shop that makes the good, or to the nearest
+// source site in GOOD_SOURCES, so a haul's pay follows the miles it actually takes to move a good to
+// where nobody makes it. Throws if the good has neither, since then no price for it could ever be
+// grounded in a maker.
 function nearestMakerDistance(shopId: string, good: string): number {
-  const makers = Object.values(SHOPS).filter((s) => s.id !== shopId && s.makes.includes(good));
-  if (makers.length === 0) throw new Error(`No shop makes ${good}`);
-  return Math.min(...makers.map((s) => dist(shopPos(shopId), shopPos(s.id))));
+  const makers = Object.values(SHOPS).filter((s) => s.id !== shopId && s.makes.includes(good)).map((s) => s.id);
+  const origins = [...makers, ...(GOOD_SOURCES[good] ?? [])];
+  if (origins.length === 0) throw new Error(`No shop or source site makes ${good}`);
+  return Math.min(...origins.map((id) => dist(shopPos(shopId), siteOf(id).pos)));
 }
 
 function priceFactorFor(def: ShopDef, good: string): number {
@@ -375,9 +377,9 @@ export function shopAt(world: World): string | null {
   return Object.keys(SHOPS).find((id) => canUseSite(v.pos, siteOf(id))) ?? null;
 }
 
-export function siteOf(shopId: string): Site {
-  const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === shopId);
-  if (!site) throw new Error(`Shop ${shopId} has no site in the region`);
+export function siteOf(siteId: string): Site {
+  const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === siteId);
+  if (!site) throw new Error(`No site ${siteId} in the region`);
   return site;
 }
 

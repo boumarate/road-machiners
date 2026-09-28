@@ -86,6 +86,8 @@ const NAMES = [
   'good_batteries',
   'good_electronics',
   'good_parts',
+  'good_fuel_drums',
+  'good_water',
 
   'wmount_ring_small',
   'wmount_pintle',

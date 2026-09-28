@@ -15,6 +15,11 @@ export const GOODS: Record<string, GoodDef> = {
   batteries: { id: 'batteries', name: 'Batteries', mass: 120, value: 76, tier: 2 },
   electronics: { id: 'electronics', name: 'Electronics', mass: 15, value: 155, tier: 3 },
   parts: { id: 'parts', name: 'Parts', mass: 20, value: 20, tier: 1 }, // spent by field repair
+  // Supply convoys load these free at the Pump Station and the oases. Both are heavier than grain and
+  // salt per unit, so a load pays by volume, not margin. Fuel is worth more than salt, since only one
+  // pump fills it. Water is worth less than grain, since two oases give it away.
+  fuelDrums: { id: 'fuelDrums', name: 'Fuel drums', mass: 140, value: 28, tier: 1 },
+  water: { id: 'water', name: 'Water', mass: 110, value: 18, tier: 1 },
 };
 
 export const GOOD_IDS = Object.keys(GOODS);

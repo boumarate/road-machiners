@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ECONOMY } from '../data/goods';
-import { EFFORT, PRESSURE_MAX, SHOPS } from '../data/market';
+import { ECONOMY, GOODS } from '../data/goods';
+import { DISTANCE_PREMIUM, EFFORT, GOOD_SOURCES, PRICE_FACTOR, PRESSURE_MAX, SHOPS } from '../data/market';
+import { dist } from './vec';
 import { emptyWorld, addVehicle } from './testkit';
 import { freeCells } from './grid';
 import {
@@ -150,6 +151,28 @@ describe('market', () => {
     const bowl = goodBasePrice('bowl', 'salt');
     expect(nose).toBeLessThan(granary);
     expect(granary).toBeLessThan(bowl);
+  });
+
+  it('prices a good no shop makes by the distance to its nearest source site', () => {
+    const toPump = dist(siteOf('bowl').pos, siteOf('pump-station').pos);
+    const expected = GOODS.fuelDrums.value * (PRICE_FACTOR.make + DISTANCE_PREMIUM.perTile * toPump);
+    expect(goodBasePrice('bowl', 'fuelDrums')).toBeCloseTo(expected, 9);
+  });
+
+  it('prices water by the nearer of its two oases', () => {
+    const toOasis = Math.min(...['dustwell', 'green-pit'].map((id) => dist(siteOf('nose').pos, siteOf(id).pos)));
+    const expected = GOODS.water.value * (PRICE_FACTOR.make + DISTANCE_PREMIUM.perTile * toOasis);
+    expect(goodBasePrice('nose', 'water')).toBeCloseTo(expected, 9);
+  });
+
+  it('throws pricing a good with neither a maker nor a source site', () => {
+    const sources = GOOD_SOURCES.water;
+    delete GOOD_SOURCES.water;
+    try {
+      expect(() => goodBasePrice('bowl', 'water')).toThrow('No shop or source site makes water');
+    } finally {
+      GOOD_SOURCES.water = sources;
+    }
   });
 
   it('pays a full truck load of a haul about a tier wage times the trip turns, lot pressure included', () => {

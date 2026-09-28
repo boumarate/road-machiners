@@ -136,6 +136,13 @@ export const PRICE_FACTOR = { make: 0.75 };
 // for the trip's estimated turns.
 export const DISTANCE_PREMIUM = { perTile: 0.0021 };
 
+// Sites that give out a good with no shop that makes it. Supply convoys haul these goods from the
+// sources to the towns, so a town prices them by the distance to the nearest source.
+export const GOOD_SOURCES: Record<string, string[]> = {
+  fuelDrums: ['pump-station'],
+  water: ['dustwell', 'green-pit'],
+};
+
 // Wear weights for rolled stock, keyed by wear step (0 is pristine, CONDITION.maxWear is the last
 // reasonable step; a shop never stocks junk). Garages lean lightly worn; stalls lean heavily worn,
 // since they take in whatever passing traders and scavengers carry.
@@ -194,8 +201,8 @@ export const SHOPS: Record<string, ShopDef> = {
     id: 'bowl',
     kind: 'garage',
     makes: ['scrap', 'grain', 'textiles', 'meds', 'electronics', 'parts'],
-    needs: ['salt', 'tools', 'batteries'],
-    goods: ['scrap', 'salt', 'meds', 'grain', 'textiles', 'tools', 'batteries', 'electronics', 'parts'],
+    needs: ['salt', 'tools', 'batteries', 'fuelDrums', 'water'],
+    goods: ['scrap', 'salt', 'meds', 'grain', 'textiles', 'tools', 'batteries', 'electronics', 'parts', 'fuelDrums', 'water'],
     priceFactor: PRICE_FACTOR,
     partStock: { parts: GARAGE_PARTS, wear: GARAGE_WEAR },
     stockSize: [8, 12], // a day's restock (400 turns, 2 days) keeps a garage's shelf full
@@ -211,8 +218,8 @@ export const SHOPS: Record<string, ShopDef> = {
     id: 'nose',
     kind: 'garage',
     makes: ['salt', 'tools', 'batteries'],
-    needs: ['scrap', 'grain', 'textiles', 'meds', 'electronics', 'parts'],
-    goods: ['scrap', 'salt', 'meds', 'grain', 'textiles', 'tools', 'batteries', 'electronics', 'parts'],
+    needs: ['scrap', 'grain', 'textiles', 'meds', 'electronics', 'parts', 'fuelDrums', 'water'],
+    goods: ['scrap', 'salt', 'meds', 'grain', 'textiles', 'tools', 'batteries', 'electronics', 'parts', 'fuelDrums', 'water'],
     priceFactor: PRICE_FACTOR,
     partStock: { parts: GARAGE_PARTS, wear: GARAGE_WEAR },
     stockSize: [8, 12],
