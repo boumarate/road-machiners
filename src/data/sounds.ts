@@ -11,19 +11,29 @@ export type CueDef = {
   pitchJitter: number; // playback rate varies by up to this share either way
   maxVoices: number; // plays of this cue sounding at once
   loop: boolean;
-  setup?: Setup; // recording setup for generation; music has none
+  setup?: Setup; // recording setup for generation; free music has none
+  beat?: Beat; // a bar-exact loop on the score grid
   prompts?: readonly string[]; // generation subjects, for cues made with ElevenLabs
   seconds?: number; // generated length
 };
 
 export type Cue = CueDef & { files: string[] }; // variants; one is picked per play
 
-export type Setup = "field" | "cab";
+export type Setup = "field" | "cab" | "score";
+
+// A beat loop lasts bars * BEATS_PER_BAR beats at bpm, so layers of equal bars and bpm stay locked.
+export type Beat = { bpm: number; bars: number };
+export const BEATS_PER_BAR = 4;
+
+export function beatLoopSeconds(b: Beat): number {
+  return (b.bars * BEATS_PER_BAR * 60) / b.bpm;
+}
 
 // Shared prompt start per recording setup, so generated sounds share one microphone and place.
 export const SOUND_STYLE: Record<Setup, string> = {
   field: "Realistic sound effect, one field microphone about 10 meters away, outdoors in a dry desert, natural and unprocessed, full frequency range, no cinematic whoosh, no sub-bass boom, no music, no voices.",
   cab: "Realistic foley, one close microphone inside an old truck cab, natural and unprocessed, dry, no reverb, no electronic sounds, no music, no voices.",
+  score: "Western wasteland soundtrack, 90 BPM, D minor. Warm dry analog recording in a small wooden room: felt-muted drum kit with brushes, round fingered bass guitar. Soft and mellow, no distortion, no vocals, no synths.",
 };
 
 const DEFS = {
@@ -59,7 +69,16 @@ const DEFS = {
   "engine": { bus: "sfx", setup: "field", volume: 0.6, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Old heavy diesel truck engine running at steady medium revs, recorded close to the engine bay: clear exhaust note, mechanical clatter and valve tick, full and present, not muffled, seamless loop."], seconds: 4 },
   "wind": { bus: "ambient", setup: "field", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Dry desert wind blowing over open sand and rocks, steady, seamless loop."], seconds: 12 },
   "music-calm": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Slow sparse post-apocalyptic desert road music, lonely twangy baritone guitar and low drone, 80 bpm, instrumental, seamless loop."], seconds: 90 },
-  "music-combat": { bus: "music", volume: 1, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Tense driving desert combat music, distorted baritone guitar riff, pounding tom drums, 120 bpm, instrumental, seamless loop."], seconds: 60 },
+
+  // Combat score: two locked layers and soft accents on their beat grid. See SoundDesigner.
+  "score-drums": { bus: "music", setup: "score", beat: { bpm: 90, bars: 8 }, volume: 0.9, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless drum loop, steady 4/4 groove: soft kick on one and three, brushed snare on two and four, warm tom pulse, no fills, no crash cymbals, even level, drums only."] },
+  "score-bass": { bus: "music", setup: "score", beat: { bpm: 90, bars: 8 }, volume: 0.8, pitchJitter: 0, maxVoices: 1, loop: true, prompts: ["Seamless bass guitar loop in 4/4: a slow repeating two bar figure of long D root and A fifth notes, warm and round, even level, bass only, no drums."] },
+  "accent-sighted": { bus: "music", setup: "score", volume: 0.6, pitchJitter: 0, maxVoices: 2, loop: false, prompts: ["Drums only, no bass guitar: three quick separate warm tom hits, high, middle, low, then silence."], seconds: 1.5 },
+  "accent-struck": { bus: "music", setup: "score", volume: 0.6, pitchJitter: 0, maxVoices: 2, loop: false, prompts: ["Single short phrase: one soft kick drum thump with a low bass guitar note that slides down and fades."], seconds: 2 },
+  "accent-miss": { bus: "music", setup: "score", volume: 0.5, pitchJitter: 0, maxVoices: 2, loop: false, prompts: ["Drums only, no bass guitar, no toms: one soft brushed snare swish with a light wooden rim click, airy and short."], seconds: 1 },
+  "accent-hit": { bus: "music", setup: "score", volume: 0.6, pitchJitter: 0, maxVoices: 2, loop: false, prompts: ["Single short phrase: one warm punchy tom hit together with a short plucked bass guitar note on D."], seconds: 1.5 },
+  "accent-crit": { bus: "music", setup: "score", volume: 0.7, pitchJitter: 0, maxVoices: 1, loop: false, prompts: ["Single dramatic phrase: two big low floor tom hits, then a long deep bass guitar note on D ringing out with a soft mallet cymbal swell."], seconds: 3 },
+  "accent-crash": { bus: "music", setup: "score", volume: 0.75, pitchJitter: 0, maxVoices: 1, loop: false, prompts: ["Single very dramatic phrase: a slow heavy tom fill down the kit, landing on a deep bass guitar note on D and a soft mallet-rolled cymbal that rings out and fades."], seconds: 4 },
 } as const satisfies Record<string, CueDef>;
 
 export type CueId = keyof typeof DEFS;
@@ -114,6 +133,18 @@ export function hornSoundFor(chassisId: string): { file: string; rate: number } 
   return sound;
 }
 
+// First-beat offset of each beat loop file, from scripts/sfx-phase.py. Layers start at these offsets, so their beats meet.
+const SCORE_PHASES: Record<string, number> = {
+  "score-drums-1.ogg": 0.012,
+  "score-bass-1.ogg": 0.238,
+};
+
+export function scorePhaseOf(file: string): number {
+  const phase = SCORE_PHASES[file];
+  if (phase === undefined) throw new Error(`Beat loop ${file} has no phase; run scripts/sfx-phase.py`);
+  return phase;
+}
+
 export function engineFileFor(chassisId: string): string {
   const file = ENGINE_FILES[chassisId];
   if (!file) throw new Error(`Unknown chassis ${chassisId}`);
@@ -139,6 +170,21 @@ export const MIX = {
   // Music crossfades to combat while a hostile is in sight. It holds combat for holdTurns after the last one
   // leaves, so a hostile at the edge of sight does not flip the music every turn.
   music: { fadeSeconds: 3, holdTurns: 5 },
+  // Combat score. Drums play while a hostile is in sight, as combat music did. Bass joins for clashHoldTurns after a
+  // shot by or at the player. Accents snap to subdivision slots per beat of the layers and shift up to maxSlotShift
+  // slots off a taken one. Each repeat of one accent inside repeatSeconds plays at repeatGain times the last,
+  // and plays past repeatMax are dropped. Layers dip to duckGain under an accent and recover over one beat.
+  score: {
+    clashHoldTurns: 5,
+    subdivision: 2,
+    maxSlotShift: 2,
+    humanizeMs: 15,
+    repeatSeconds: 4,
+    repeatGain: 0.55,
+    repeatMax: 2,
+    duckGain: 0.7,
+    duckAttackSeconds: 0.05,
+  },
   // Approved reference cue per bus. The sound board plays it beside each candidate.
   anchors: { sfx: "cannon-fire" } as Partial<Record<Bus, CueId>>,
 } as const;

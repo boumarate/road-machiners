@@ -85,7 +85,7 @@ import { GameMenu } from "../ui/game-menu";
 import { volleyTally } from "../ui/format";
 import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
-import { computeEngineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
+import { clashed, CombatScore, CombatWatch, computeEngineGlide, SoundDirector, SoundLoops, stingOf } from "./sound";
 import type { SoundPlayer } from "../audio/player";
 import { uiRoot } from "../ui/dom";
 import { Travel, type Playback, type LiveVision } from "./travel";
@@ -142,7 +142,7 @@ export class Game {
   readonly sound: SoundDirector;
   private panelOpen = false; // last frame's panel state, for open and close sounds
   private readonly loops: SoundLoops;
-  private lastDangerTurn = -Infinity; // last turn a hostile was in sight, for the combat music hold
+  private readonly combatWatch = new CombatWatch();
   private readonly views = new Map<string, VehicleView>();
   private frames: Record<string, VehicleFrame> = {}; // last shown pose per vehicle
   // A played turn: physics movement, then shots in flight when there was combat, then time to read results.
@@ -246,8 +246,9 @@ export class Game {
     this.labels = new Labels(overlay);
     this.fx = new Fx3D(this.scene, overlay, this.rig);
     this.truckFx = new TruckFx(this.fx);
-    this.sound = new SoundDirector(player, this.rig);
-    this.loops = new SoundLoops(player);
+    const score = new CombatScore(player, Math.random);
+    this.sound = new SoundDirector(player, this.rig, score);
+    this.loops = new SoundLoops(player, score);
     uiRoot().addEventListener("click", (e) => {
       if ((e.target as HTMLElement).closest("button"))
         this.sound.ui("ui-click");
@@ -735,16 +736,10 @@ export class Game {
     const me = playerVehicle(this.world);
     const f = this.frames[me.id];
     const at = f ? toMap(f.pos) : me.pos;
-    if (
-      this.world.vehicles.some(
-        (v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v),
-      )
-    )
-      this.lastDangerTurn = this.world.turn;
-    this.loops.update({
-      stormTiles: this.weather.stormTilesFrom(at.x, at.y),
-      turnsSinceDanger: this.world.turn - this.lastDangerTurn,
-    });
+    const hostiles = this.world.vehicles.filter((v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v)).map((v) => v.id);
+    const signs = this.combatWatch.observe(this.world.turn, hostiles, clashed(this.world.events, me.id));
+    if (signs.sighted) this.sound.accent("accent-sighted", 0);
+    this.loops.update({ stormTiles: this.weather.stormTilesFrom(at.x, at.y), ...signs });
   }
 
   private playPanelSounds(): void {
@@ -782,6 +777,7 @@ export class Game {
     const w = this.world;
     const rows = new Map<string, number>();
     const mine = vehicleStats(w, playerVehicle(w)).weapons;
+    this.sound.accents(w.events, w.player.vehicleId, CONFIG.combatShotMs * (1 - ROUND_STAGGER));
     for (const e of w.events) {
       if (e.t === "shot") {
         const a = this.eventPoint(e.shooter);

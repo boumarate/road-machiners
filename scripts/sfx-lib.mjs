@@ -1,5 +1,6 @@
 // Shared sound import: every file, whatever its source, gets the same treatment before the game uses it.
-// 1. Music loses its quiet intro and outro and loops through a crossfade.
+// 1. Free music loses its quiet intro and outro and loops through a crossfade. A beat loop is stretched to its exact
+//    bar length, so layers stay locked.
 // 2. One-shots lose silence at both ends and get short fades.
 // 3. One-shots and the engine become mono, since the game pans them; beds keep stereo with even sides.
 //    Then one EQ for all: rumble and harsh top cut.
@@ -8,6 +9,7 @@
 // Output is 48 kHz Ogg Opus with the source path in its comment tag.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
+import { beatLoopSeconds } from '../src/data/sounds.ts';
 
 export const SFX_DIR = 'public/sfx';
 const PEAK_DB = -1; // limiter ceiling
@@ -46,10 +48,8 @@ export function importFile(source, id, cue, level) {
   const name = nextName(id);
   const out = `${SFX_DIR}/${name}`;
   if (existsSync(out)) throw new Error(`${out} exists`);
-  const src = cue.bus === 'music' ? musicLoop(source, name) : source;
-  const trim = `silenceremove=start_periods=1:start_threshold=${SILENCE_DB}dB:start_silence=${KEEP_S}`;
-  const shape = cue.loop ? [] : [trim, 'areverse', trim, `afade=t=in:d=${FADE_OUT_S}`, 'areverse', `afade=t=in:d=${FADE_IN_S}`];
-  const base = [...shape, channels(src, cue), EQ];
+  const src = playable(source, name, cue);
+  const base = [...shapeFilters(src, cue), channels(src, cue), EQ];
   const family = (cue.prompts?.length ?? 0) > 1;
   const shaped = [...base, ...(family ? [] : toneMatch(src, base.join(','), id))].join(',');
   const rawPeak = measure(src, 'anull').peak;
@@ -61,6 +61,31 @@ export function importFile(source, id, cue, level) {
   const short = level - loudness - gain > 0.05 ? `, ${(level - loudness - gain).toFixed(1)} dB under target` : '';
   console.log(`${source} -> ${out}  ${loudness.toFixed(1)} LUFS, gain ${gain.toFixed(1)} dB${short}`);
   return name;
+}
+
+// Free music loops through a crossfade first; other sources are used as they are.
+function playable(source, name, cue) {
+  const freeMusic = cue.bus === 'music' && cue.loop && !cue.beat;
+  return freeMusic ? musicLoop(source, name) : source;
+}
+
+// Length and edges: one-shots lose silence and get fades, beat loops are fitted to their bars, other loops stay.
+function shapeFilters(src, cue) {
+  if (cue.beat) return fitBeat(src, beatLoopSeconds(cue.beat));
+  if (cue.loop) return [];
+  const trim = `silenceremove=start_periods=1:start_threshold=${SILENCE_DB}dB:start_silence=${KEEP_S}`;
+  return [trim, 'areverse', trim, `afade=t=in:d=${FADE_OUT_S}`, 'areverse', `afade=t=in:d=${FADE_IN_S}`];
+}
+
+// Generated loops miss their requested length by a few milliseconds. A tiny tempo change fits the loop, and the
+// pad and trim make the sample count exact.
+const MAX_FIT = 0.01; // largest tempo change share; a bigger miss means the wrong source
+
+function fitBeat(src, seconds) {
+  const have = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', src], { encoding: 'utf8' }));
+  const ratio = have / seconds;
+  if (Math.abs(ratio - 1) > MAX_FIT) throw new Error(`${src} lasts ${have} s, too far from its ${seconds.toFixed(3)} s beat loop`);
+  return [`atempo=${ratio.toFixed(6)}`, `apad=whole_dur=${seconds.toFixed(6)}`, `atrim=end=${seconds.toFixed(6)}`];
 }
 
 // Generated clips often sit far to one side. Beds keep stereo with both sides at the same level.

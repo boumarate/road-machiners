@@ -2,7 +2,7 @@
 // imports them. Never overwrites a file.
 // Usage: npm run sfx:gen -- <cue> <count>
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { MIX, SOUND_STYLE, SOUNDS } from '../src/data/sounds.ts';
+import { beatLoopSeconds, MIX, SOUND_STYLE, SOUNDS } from '../src/data/sounds.ts';
 import { cueOf, importFile } from './sfx-lib.mjs';
 
 const API = 'https://api.elevenlabs.io/v1';
@@ -21,8 +21,10 @@ const count = Number(countArg);
 if (!id || !Number.isInteger(count) || count <= 0) throw new Error('Usage: npm run sfx:gen -- <cue> <count>');
 if (count > cap) throw new Error(`${count} generations exceed SFX_MAX_GENERATIONS=${cap}`);
 const cue = cueOf(SOUNDS, id);
-if (!cue.prompts || !cue.seconds) throw new Error(`Cue ${id} needs prompts and seconds to generate`);
-const music = cue.bus === 'music';
+// A beat loop is exactly its bars long, so it goes to the sound API, which keeps the requested length and loops seamlessly.
+const seconds = cue.beat ? beatLoopSeconds(cue.beat) : cue.seconds;
+if (!cue.prompts || !seconds) throw new Error(`Cue ${id} needs prompts and seconds or a beat to generate`);
+const music = cue.bus === 'music' && !cue.setup;
 if (!music && !cue.setup) throw new Error(`Cue ${id} needs a setup to generate`);
 
 // Families take the next prompts in order; single-prompt cues repeat theirs.
@@ -30,7 +32,7 @@ const textFor = (i) => {
   const subject = cue.prompts[(cue.files.length + i) % cue.prompts.length];
   return music ? subject : `${SOUND_STYLE[cue.setup]} ${subject}`;
 };
-console.log(`${id}: ${count} x ${cue.seconds}s ${music ? 'music' : `sound, about ${count * cue.seconds * SFX_CREDITS_PER_SECOND} credits`}`);
+console.log(`${id}: ${count} x ${seconds.toFixed(2)}s ${music ? 'music' : `sound, about ${Math.round(count * seconds * SFX_CREDITS_PER_SECOND)} credits`}`);
 
 mkdirSync(RAW_DIR, { recursive: true });
 for (let i = 0; i < count; i++) {
@@ -44,8 +46,8 @@ for (let i = 0; i < count; i++) {
 
 async function generate(text) {
   const [path, body] = music
-    ? ['/music?output_format=mp3_44100_192', { prompt: text, music_length_ms: cue.seconds * 1000, force_instrumental: true }]
-    : ['/sound-generation?output_format=mp3_44100_192', { text, duration_seconds: cue.seconds, loop: cue.loop, prompt_influence: PROMPT_INFLUENCE, model_id: 'eleven_text_to_sound_v2' }];
+    ? ['/music?output_format=mp3_44100_192', { prompt: text, music_length_ms: seconds * 1000, force_instrumental: true }]
+    : ['/sound-generation?output_format=mp3_44100_192', { text, duration_seconds: seconds, loop: cue.loop, prompt_influence: PROMPT_INFLUENCE, model_id: 'eleven_text_to_sound_v2' }];
   const res = await fetch(API + path, { method: 'POST', headers: { 'xi-api-key': key, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`ElevenLabs ${path} failed: ${res.status} ${await res.text()}`);
   return Buffer.from(await res.arrayBuffer());

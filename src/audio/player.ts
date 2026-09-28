@@ -15,6 +15,12 @@ export type LoopHandle = {
   stop(fadeMs: number): void;
 };
 
+// A loop started on a shared beat. Duck dips it under an accent at an audio time and recovers over the release.
+export type BeatLoopHandle = LoopHandle & {
+  readonly duration: number; // seconds of one pass
+  duck(time: number, gain: number, attackSeconds: number, releaseSeconds: number): void;
+};
+
 export type Glide = { rateFrom: number; rateTo: number; gainFrom: number; gainTo: number; seconds: number; fadeSeconds: number };
 
 
@@ -39,15 +45,53 @@ export class SoundPlayer {
     src.start(start);
   }
 
+  // Audio time in seconds, the clock every scheduled play uses.
+  now(): number {
+    return this.mixer.ctx.currentTime;
+  }
+
   loop(id: string, at: Placement, file?: string): LoopHandle {
-    const cue = this.cue(id);
-    if (!cue.loop) throw new Error(`Sound ${id} is not a loop`);
-    const ctx = this.mixer.ctx;
-    const src = ctx.createBufferSource();
-    src.buffer = file === undefined ? this.variant(id, cue) : this.getBuffer(id, cue, file);
-    src.loop = true;
+    const cue = this.loopCue(id);
+    const src = this.loopSource(file === undefined ? this.variant(id, cue) : this.getBuffer(id, cue, file));
     const gain = this.chain(src, cue, at);
     src.start();
+    return this.loopHandle(src, gain, cue);
+  }
+
+  // Starts silent at audio time when, offset seconds into the file, so layers started together share a beat.
+  beatLoop(id: string, file: string, when: number, offset: number): BeatLoopHandle {
+    const cue = this.loopCue(id);
+    const buffer = this.getBuffer(id, cue, file);
+    const src = this.loopSource(buffer);
+    const duck = this.mixer.ctx.createGain();
+    src.connect(duck);
+    const gain = this.chain(duck, cue, { pan: 0, gain: 0 });
+    src.start(when, offset);
+    return {
+      ...this.loopHandle(src, gain, cue),
+      duration: buffer.duration,
+      duck: (time, level, attack, release) => {
+        duck.gain.setTargetAtTime(level, time, attack / 3);
+        duck.gain.setTargetAtTime(1, time + attack, release / 3);
+      },
+    };
+  }
+
+  private loopCue(id: string): Cue {
+    const cue = this.cue(id);
+    if (!cue.loop) throw new Error(`Sound ${id} is not a loop`);
+    return cue;
+  }
+
+  private loopSource(buffer: AudioBuffer): AudioBufferSourceNode {
+    const src = this.mixer.ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    return src;
+  }
+
+  private loopHandle(src: AudioBufferSourceNode, gain: GainNode, cue: Cue): LoopHandle {
+    const ctx = this.mixer.ctx;
     return {
       setGain: (g, ramp) => gain.gain.setTargetAtTime(cue.volume * g, ctx.currentTime, ramp / 3),
       glide: (g) => {
@@ -97,7 +141,7 @@ export class SoundPlayer {
   }
 
   // Source -> gain -> pan -> bus. Returns the gain for live changes.
-  private chain(src: AudioBufferSourceNode, cue: Cue, at: Placement): GainNode {
+  private chain(src: AudioNode, cue: Cue, at: Placement): GainNode {
     const ctx = this.mixer.ctx;
     const gain = ctx.createGain();
     gain.gain.value = cue.volume * at.gain;
