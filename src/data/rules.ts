@@ -43,7 +43,7 @@ export const RULES = {
   tankLeak: 1, // fuel lost per turn with a broken tank
 
   // Global damage multipliers. Tune these to make every fight faster or slower.
-  weaponDamage: 0.5625, // every weapon round and splash, guard guns included
+  weaponDamage: 0.61875, // every weapon round and splash, guard guns included
   crashDamage: 1.125, // every crash and ram, into trucks and obstacles alike
 
   // Town guards. Each town gate has one gun. Every turn it shoots the nearest vehicle within range that fired.
@@ -81,6 +81,10 @@ export const RULES = {
   rangeFalloff: { 1: 3, 2: 2, 3: 1 } as Record<Tier, number>,
   leadError: 4.5, // share of the lead angle the gunner misjudges
   shake: 0.002, // radians of spread per m/s of the shooter's own speed
+  // A target slower than stillSpeed tiles per turn stands still: its whole spread shrinks to stillSpread. Moving
+  // matters, and a stuck truck is easy to hit.
+  stillSpeed: 0.1,
+  stillSpread: 0.6,
   cellMeters: 0.5, // width of one grid cell, for the size of an aimed part
   cabHealthShare: 0.25, // share of cab damage the player's character takes as health loss
   minHit: 0.05,

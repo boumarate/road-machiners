@@ -74,7 +74,7 @@ function subTable(obj: Table, key: string, path: string): Table {
   return sub as Table;
 }
 
-// Flat road ground with no obstacles and no NPCs. Frozen terrain is shared by world clones instead of copied.
+// Flat road ground with no obstacles and no NPCs, and no spawns later. Frozen terrain is shared by world clones instead of copied.
 function openWorld(fight: Fight): World {
   const w = newWorld(fight.seed, START_KITS[fight.kit] ?? missing('kit', fight.kit), TEST_MAP);
   const terrain = { size: w.size, heights: new Array((w.size + 1) * (w.size + 1)).fill(0), types: new Array(w.size * w.size).fill('road') };
@@ -84,6 +84,7 @@ function openWorld(fight: Fight): World {
   w.obstacles = [];
   w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
   w.states = [];
+  for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER; // only the fight's trucks drive here
   const me = w.vehicles[0];
   me.pos = { ...CENTER };
   me.heading = 0;

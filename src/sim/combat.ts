@@ -138,6 +138,7 @@ export type HitOdds = {
     recoil: number; // the gun's kick, smaller on a heavier truck
     skill: number;
     weather: number;
+    still: number; // negative: a target standing still is easy to aim at
   }; // radians
 };
 
@@ -298,7 +299,8 @@ export function hitOdds(
   return { chance, bodyChance, distance, width, halfAngle, spread, causes };
 }
 
-// Each cause of a shot's spread. The steady aim perk takes the shake of the player's own speed away.
+// Each cause of a shot's spread. The steady aim perk takes the shake of the player's own speed away. A target that
+// stands still takes a share off the whole spread, so a stuck or parked truck is easy to hit.
 function spreadCauses(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle): HitOdds["causes"] {
   const weapon = mw.def.spread * DEG;
   const n = across(shooter, target);
@@ -316,7 +318,9 @@ function spreadCauses(world: World, shooter: Vehicle, mw: MountedWeapon, target:
     recoil: (mw.def.recoil * DEG) / (vehicleMass(shooter) / KG_PER_TONNE),
     weather: vehicleHasPerk(world, shooter, "stormRider") ? 0 : weatherAt(world, shooter.pos).spread,
   };
-  return base;
+  const sum = Object.values(base).reduce((a, cause) => a + cause, 0);
+  const still = Math.abs(target.speed) < RULES.stillSpeed ? -sum * (1 - RULES.stillSpread) : 0;
+  return { ...base, still };
 }
 
 // One round's angular error in radians and whether it hit the aimed part or, for a body shot, the truck. The
