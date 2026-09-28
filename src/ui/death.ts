@@ -26,7 +26,7 @@ export class DeathScreen {
     this.root.setAttribute("aria-label", "You died");
     this.root.append(
       el("h3", {}, "You died"),
-      el("div", { class: "dim" }, saved ? "The run ends here. Your last save is kept." : "The run ends here. There is no save yet."),
+      el("div", { class: "dim" }, "The life of a great machiner has ended"),
       el(
         "div",
         { class: "death-buttons" },
