@@ -81,3 +81,11 @@
 - `npm test`, `npm run quality` and `npm run playtest` pass.
 - Manual try, positive: in a Playwright script, break a raider's cab near the player. It stays as a truck. Park beside it and open Strip. Drag a spare part across. Drag its weapon across and see the refit bar name the weapon. Then target the raider by hand and fire. It becomes a wreck.
 - Manual try, negative: with auto fire on, a knocked-out raider in range draws no fire. Start a removal, then let the raider wake. The removal stops. Drive away, and after the unseen turns it is at its camp with fresh gear on the same chassis.
+
+## Result
+- Done on branch `npc-knockouts`, in six commits, one per phase.
+- Checks: `npm test` passes, 1469 tests. `npm run quality` passes. `npm run playtest` passes at 60 fps.
+- Manual try, positive: a knocked-out raider beside the player showed "Loot Raider outrider". Its grid opened on the right. A scrap moved at once. Removing its MG ran a 3-turn refit labeled "Remove MG turret from Raider outrider". A manual order then finished it into a wreck.
+- Manual try, negative: with auto fire on, a knocked-out raider in range drew no shots over 4 turns. A removal stopped when the raider woke, since its attackers could no longer see it.
+- Changes from the plan: the truck looting lives in `src/sim/salvage.ts`, since the quality gate blocks a new file in `src/sim/`. Idle scavengers also pick knocked-out trucks in sight, like wrecks. A knocked-out NPC takes no tow. The save version is 25.
+- Not tried in the browser: the teleport home after 50 unseen turns. Unit tests cover it.
