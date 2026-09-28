@@ -175,51 +175,41 @@ export const MIX = {
   // Between turns, once no turn has played for pauseDelayMs, music is muffled to pauseCutoffHz over toneSeconds.
   // The delay keeps the short gaps between automatic turns clear.
   music: { fadeSeconds: 3, holdTurns: 5, pauseDelayMs: 300, pauseCutoffHz: 4000, openCutoffHz: 20000, toneSeconds: 0.6 },
-  // Combat score. One random base plays while a hostile is in sight, as combat music did. Each beat of the base has
-  // subdivision slots, and an accent lands on a free slot up to spreadSlots before or after its moment. The base
-  // dips to duckGain under an accent and recovers over one beat. See Conductor for heat, modes and chances.
-  // A busy fight adds about 1 heat per turn, so heat settles near 4; the mode thresholds sit around that.
-  // The newest played accent leads as the motif and repeats round(heat * repeatsPerHeat) times, up to maxRepeats,
-  // every repeatBeats beats, each repeat at repeatGain times the one before. Only the lead repeats.
-  // Between turns it repeats at most pauseRepeats times. Accents start at least minGapSlots apart and
-  // alternate panSpread left and right. Recall: see Conductor.
+  // Combat score. One random base plays while a hostile is in sight, as combat music did. Heat is a fading sum of
+  // event weights, halving every heatHalfLifeSeconds; a busy fight adds about 1 per turn. It sets the base level
+  // and muffle each bar, full at fullHeat. Events queue phrases on the lead or secondary line; see SoundDesigner.
+  // Rhythms have one character per half beat, eight to a bar: x is a hit. Lead rhythms keep off the secondary's
+  // weak beats mostly, and the secondary never takes the first or third beat. The base dips to duckGain under
+  // each lead hit and recovers over duckReleaseBeats.
   score: {
     subdivision: 2,
-    spreadSlots: 2,
-    minGapSlots: 2,
-    humanizeMs: 15,
-    panSpread: 0.25,
-    duckGain: 0.55,
+    humanizeMs: 10,
+    gainJitter: 0.1,
+    heatHalfLifeSeconds: 8,
+    fullHeat: 3,
+    hotHeat: 2,
+    quietGain: 0.65,
+    quietCutoffHz: 1500,
+    openCutoffHz: 20000,
+    pauseRepeats: 3,
+    fillChance: 0.2,
+    fillGain: 0.5,
+    secondaryPan: 0.3,
+    busyFactor: 0.7,
+    duckGain: 0.6,
     duckAttackSeconds: 0.05,
     duckReleaseBeats: 2,
-    heatHalfLifeSeconds: 8,
-    fatigueHalfLifeSeconds: 6,
-    crowdHalfLifeSeconds: 4,
-    crowdWeight: 0.5,
-    modeSoftness: 0.15,
-    repeatsPerHeat: 1.5,
-    maxRepeats: 6,
-    repeatBeats: 2,
-    repeatGain: 0.85,
-    pauseRepeats: 3,
-    recallChance: 0.7,
-    recallHalfLifeSeconds: 10,
-    recallDistance: 0.25,
-    startMode: "pulse",
-    modes: {
-      hush: { gain: 0.5, cutoffHz: 700, boost: 0.6, upAt: 0.3, downAt: -Infinity },
-      pulse: { gain: 0.8, cutoffHz: 1800, boost: 0.8, upAt: 1.2, downAt: 0.15 },
-      fight: { gain: 1, cutoffHz: 8000, boost: 1, upAt: 3, downAt: 0.6 },
-      peak: { gain: 1, cutoffHz: 20000, boost: 1.3, upAt: Infinity, downAt: 2 },
+    lines: {
+      lead: { gain: 1, queueMax: 2, calm: ["x...x...", "x.....x.", "x..x...."], hot: ["x..xx.x.", "x.x.x..x", "xx..x.x."] },
+      secondary: { gain: 0.7, queueMax: 2, calm: ["..x...x.", "......x.", "..x....x"], hot: [".x.x.x.x", "..xx..x.", ".x.x..xx"] },
     },
-    // emphasis 2 pulls hard toward strong beats, 0 is even, and below 0 leans to off-beats.
     accents: {
-      "accent-crash": { weight: 1, chance: 1, emphasis: 2 },
-      "accent-crit": { weight: 0.8, chance: 0.9, emphasis: 2 },
-      "accent-sighted": { weight: 0.6, chance: 1, emphasis: 1 },
-      "accent-struck": { weight: 0.5, chance: 0.7, emphasis: 1 },
-      "accent-hit": { weight: 0.4, chance: 0.6, emphasis: 0 },
-      "accent-miss": { weight: 0.2, chance: 0.4, emphasis: -1 },
+      "accent-crash": { line: "lead", weight: 1, bars: 2, chance: 1, urgent: true },
+      "accent-crit": { line: "lead", weight: 0.8, bars: 2, chance: 1, urgent: false },
+      "accent-sighted": { line: "lead", weight: 0.6, bars: 1, chance: 1, urgent: false },
+      "accent-struck": { line: "lead", weight: 0.5, bars: 1, chance: 1, urgent: false },
+      "accent-hit": { line: "secondary", weight: 0.4, bars: 1, chance: 0.9, urgent: false },
+      "accent-miss": { line: "secondary", weight: 0.2, bars: 1, chance: 0.6, urgent: false },
     },
   },
   // Approved reference cue per bus. The sound board plays it beside each candidate.

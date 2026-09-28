@@ -184,13 +184,14 @@ describe("CombatWatch", () => {
 describe("CombatScore", () => {
   type BaseId = "score-drums" | "score-bass";
   type Call = { id: BaseId; file: string; when: number; offset: number; gains: number[]; tones: number[]; ducks: number[] };
+  type Play = [string, { pan: number; gain: number }, number];
   const fakePlayer = () => {
     const loops: Call[] = [];
-    const plays: unknown[][] = [];
+    const plays: Play[] = [];
     const clock = { now: 2 };
     const player = {
       now: () => clock.now,
-      play: (...args: unknown[]) => { plays.push(args); },
+      play: (...args: Play) => { plays.push(args); },
       beatLoop: (id: BaseId, file: string, when: number, offset: number) => {
         const call: Call = { id, file, when, offset, gains: [], tones: [], ducks: [] };
         loops.push(call);
@@ -208,7 +209,13 @@ describe("CombatScore", () => {
     } as unknown as SoundPlayer;
     return { player, loops, plays, clock };
   };
-  const start = MIX.score.modes[MIX.score.startMode];
+  const run = (score: CombatScore, clock: { now: number }, seconds: number) => {
+    for (let t = 0; t < seconds * 20; t++) {
+      clock.now += 0.05;
+      score.tick();
+    }
+  };
+  const s = MIX.score;
 
   it("starts every base silent at one time, each at its first beat", () => {
     const { player, loops } = fakePlayer();
@@ -219,94 +226,16 @@ describe("CombatScore", () => {
     expect(loops.every((l) => l.gains.length === 0)).toBe(true);
   });
 
-  it("plays one random base per battle in the start mode and fades it out after", () => {
+  it("plays one random base per battle, quiet and muffled with no heat, and fades it out after", () => {
     const { player, loops } = fakePlayer();
-    const rolls = [0.9, 0.1];
+    const rolls = [0.9, 0, 0, 0.1];
     const score = new CombatScore(player, () => rolls.shift() ?? 0);
     score.setCombat(true, 3);
     score.setCombat(true, 3);
     score.setCombat(false, 3);
     score.setCombat(true, 3);
-    expect(loops.map((l) => l.gains)).toEqual([[start.gain], [start.gain, 0]]);
-    expect(loops[1].tones).toEqual([start.cutoffHz]);
-  });
-
-  it("plays a heard accent on the active base's grid and ducks that base there", () => {
-    const { player, loops, plays } = fakePlayer();
-    const score = new CombatScore(player, () => 0);
-    score.setCombat(true, 3);
-    expect(score.accent("accent-hit", 0)).toMatchObject({ cue: "accent-hit", played: true, mode: MIX.score.startMode });
-    const time = loops[0].when; // the first slot at or after now + lead
-    const [cue, at, delayMs] = plays[0] as [string, { gain: number }, number];
-    expect([cue, at.gain]).toEqual(["accent-hit", 1]);
-    expect(delayMs).toBeCloseTo((time - 2) * 1000);
-    expect(loops[0].ducks[0]).toBe(time);
-    expect(loops[1].ducks).toEqual([]);
-  });
-
-  type Play = [string, { gain: number }, number];
-  const startTimes = (plays: unknown[][], now: (i: number) => number) => (plays as Play[]).map((p, i) => now(i) + p[2] / 1000);
-
-  it("repeats the lead motif every repeatBeats as time passes, each repeat quieter", () => {
-    const { player, plays, clock } = fakePlayer();
-    const nows: number[] = [];
-    const play = player.play.bind(player);
-    (player as { play: unknown }).play = (...args: unknown[]) => { nows.push(clock.now); play(...(args as Parameters<typeof play>)); };
-    const score = new CombatScore(player, () => 0);
-    score.setCombat(true, 3);
-    const s = MIX.score;
-    const r = score.accent("accent-crash", 0)!;
-    expect(r.repeats).toBe(Math.min(s.maxRepeats, Math.round(s.accents["accent-crash"].weight * s.repeatsPerHeat)));
-    expect(plays).toHaveLength(1);
-    for (let t = 0; t < 120; t++) {
-      clock.now += 0.05;
-      score.tick();
-    }
-    const times = startTimes(plays, (i) => nows[i]);
-    expect(plays).toHaveLength(1 + r.repeats);
-    expect(times[1] - times[0]).toBeCloseTo(s.repeatBeats);
-    expect((plays[1] as Play)[1].gain).toBeCloseTo(s.repeatGain);
-  });
-
-  it("repeats the lead motif at a steady level at most pauseRepeats times in a pause", () => {
-    const { player, plays, clock } = fakePlayer();
-    const score = new CombatScore(player, () => 0);
-    score.setCombat(true, 3);
-    score.accent("accent-crash", 0);
-    score.setPaused(true);
-    for (let t = 0; t < 400; t++) {
-      clock.now += 0.05;
-      score.tick();
-    }
-    expect(plays).toHaveLength(1 + MIX.score.pauseRepeats);
-    const gains = (plays as Play[]).slice(1).map((p) => p[1].gain);
-    expect(new Set(gains)).toEqual(new Set([MIX.score.repeatGain]));
-  });
-
-  it("lets the newest played accent take the lead, so only one motif repeats", () => {
-    const { player, plays, clock } = fakePlayer();
-    const score = new CombatScore(player, () => 0);
-    score.setCombat(true, 3);
-    score.accent("accent-crit", 0);
-    expect(score.accent("accent-hit", 900)!.played).toBe(true);
-    for (let t = 0; t < 120; t++) {
-      clock.now += 0.05;
-      score.tick();
-    }
-    const cues = (plays as Play[]).map((p) => p[0]);
-    expect(cues.slice(0, 2)).toEqual(["accent-crit", "accent-hit"]);
-    expect(cues.length).toBeGreaterThan(2);
-    expect(cues.slice(2).every((c) => c === "accent-hit")).toBe(true);
-  });
-
-  it("alternates accent sounds left and right", () => {
-    const { player, plays } = fakePlayer();
-    const score = new CombatScore(player, () => 0);
-    score.setCombat(true, 3);
-    score.accent("accent-crit", 0);
-    score.accent("accent-hit", 900);
-    const pans = (plays as [string, { pan: number }][]).map((p) => p[1].pan);
-    expect(pans).toEqual([-MIX.score.panSpread, MIX.score.panSpread]);
+    expect(loops.map((l) => l.gains)).toEqual([[s.quietGain], [s.quietGain, 0]]);
+    expect(loops[1].tones).toEqual([s.quietCutoffHz]);
   });
 
   it("ignores accents outside a battle", () => {
@@ -319,25 +248,35 @@ describe("CombatScore", () => {
     expect(plays).toEqual([]);
   });
 
-  it("skips an accent when the roll misses its chance", () => {
-    const { player, plays } = fakePlayer();
-    const rolls = [0, 0, 0.999]; // base pick, recall, chance
-    const score = new CombatScore(player, () => rolls.shift() ?? 0);
+  it("queues an event's phrase and plays it on the lead, ducking the base under each hit", () => {
+    const { player, loops, plays, clock } = fakePlayer();
+    const score = new CombatScore(player, () => 0);
     score.setCombat(true, 3);
-    expect(score.accent("accent-miss", 0)!.played).toBe(false);
-    expect(plays).toEqual([]);
+    expect(score.accent("accent-sighted", 0)).toMatchObject({ cue: "accent-sighted", offer: "queued" });
+    run(score, clock, 6);
+    expect(plays.length).toBeGreaterThan(0);
+    expect(plays.every((p) => p[0] === "accent-sighted" && p[1].pan === 0)).toBe(true);
+    expect(loops[0].ducks).toHaveLength(plays.length);
   });
 
-  it("moves the base to the new mode's level and tone on a bar line", () => {
+  it("plays light events on the secondary, to one side, without ducking the base", () => {
+    const { player, loops, plays, clock } = fakePlayer();
+    const score = new CombatScore(player, () => 0);
+    score.setCombat(true, 3);
+    score.accent("accent-hit", 0);
+    run(score, clock, 6);
+    expect(plays.length).toBeGreaterThan(0);
+    expect(plays.every((p) => p[0] === "accent-hit" && p[1].pan === -s.secondaryPan)).toBe(true);
+    expect(loops[0].ducks).toEqual([]);
+  });
+
+  it("opens the base as heat rises, on the next bar", () => {
     const { player, loops, clock } = fakePlayer();
     const score = new CombatScore(player, () => 0);
     score.setCombat(true, 3);
-    for (let i = 0; i < 4; i++) score.accent("accent-crash", 0);
-    score.tick(); // same bar: nothing
-    clock.now += 4; // next bar; roll 0 steps up
-    score.tick();
-    const next = MIX.score.modes.fight;
-    expect(loops[0].gains.at(-1)).toBe(next.gain);
-    expect(loops[0].tones.at(-1)).toBe(next.cutoffHz);
+    for (let i = 0; i < 3; i++) score.accent("accent-crash", 0);
+    run(score, clock, 4);
+    expect(loops[0].gains.at(-1)).toBeGreaterThan(s.quietGain);
+    expect(loops[0].tones.at(-1)).toBeGreaterThan(s.quietCutoffHz);
   });
 });

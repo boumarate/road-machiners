@@ -2,8 +2,7 @@
 // war silences what the player may not see.
 
 import { BEATS_PER_BAR, engineFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS, type CueId } from "../data/sounds";
-import { Conductor, type Mode } from "../audio/conductor";
-import { SoundDesigner, type Grid } from "../audio/designer";
+import { Fading, SoundDesigner, type Grid, type Hit, type Offer } from "../audio/designer";
 import { spatial } from "../audio/pick";
 import type {
   BeatLoopHandle,
@@ -38,7 +37,7 @@ export function stingOf(events: GameEvent[], playerId: string): CueId | null {
   );
 }
 
-// Combat score: one random base loop per battle, and accents that SoundDesigner puts on its beat.
+// Combat score: one random base loop per battle, and two accent lines that SoundDesigner plays on its beat.
 export type AccentCue = Extract<CueId, `accent-${string}`>;
 const BASE_CUES = ["score-drums", "score-bass"] as const;
 type BaseCue = (typeof BASE_CUES)[number];
@@ -46,25 +45,19 @@ type Base = { loop: BeatLoopHandle; grid: Grid };
 
 const START_LEAD_SECONDS = 0.1; // bases are scheduled to start this far ahead, so each starts on its first beat
 const ACCENT_LEAD_SECONDS = 0.02; // earliest accent start from now, so Web Audio never gets a time in the past
-const MOTIF_LOOKAHEAD_SECONDS = 0.1; // a motif repeat is scheduled once it is this close, several frames ahead
+const LOOKAHEAD_SECONDS = 0.15; // hits are scheduled this far ahead, several frames, so none is missed
 
-// The accent repeating now. Only one motif leads at a time, so repeats never pile up.
-// pauseRepeats counts repeats inside the current pause.
-type Motif = { cue: AccentCue; next: number; every: number; k: number; repeats: number; pauseRepeats: number };
 
 // What the score did with one accent request, for the sound log.
-// cue is the event's own accent; sounded is the one played for it, which recall may swap.
-export type AccentResult = { cue: AccentCue; sounded: AccentCue; chance: number; heat: number; mode: Mode; played: boolean; repeats: number };
+export type AccentResult = { cue: AccentCue; offer: Offer; heat: number };
 
 export class CombatScore {
   private bases: Base[];
   private active: Base | null = null;
-  private designer: SoundDesigner;
-  private conductor = new Conductor<AccentCue>(MIX.score);
+  private designer: SoundDesigner | null = null;
+  private heat = new Fading(MIX.score.heatHalfLifeSeconds);
   private lastBar = -Infinity;
-  private motif: Motif | null = null;
   private paused = false;
-  private side = 1; // stereo side of the last accent sound; each next one takes the other
 
   constructor(
     private player: Pick<SoundPlayer, "beatLoop" | "now" | "play">,
@@ -72,95 +65,62 @@ export class CombatScore {
   ) {
     const start = player.now() + START_LEAD_SECONDS;
     this.bases = BASE_CUES.map((id) => this.base(id, start));
-    this.designer = new SoundDesigner(this.bases[0].grid, MIX.score);
   }
 
-  // A battle starts on one random base in the conductor's start mode, and accents follow that base's beat.
+  // A battle starts on one random base with fresh lines. Heat carries over, so a quick second fight starts warm.
   setCombat(on: boolean, fadeSeconds: number): void {
     if (on === (this.active !== null)) return;
     this.active?.loop.setGain(0, fadeSeconds);
-    this.motif = null;
     this.active = on ? this.bases[Math.floor(this.roll() * this.bases.length)] : null;
+    this.designer = null;
     if (!this.active) return;
-    this.conductor.begin();
-    this.designer = new SoundDesigner(this.active.grid, MIX.score);
-    this.lastBar = this.barAt(this.active, this.player.now());
-    const m = this.conductor.modeTuning();
-    this.active.loop.setTone(m.cutoffHz, 0);
-    this.active.loop.setGain(m.gain, fadeSeconds);
+    const now = this.player.now();
+    this.designer = new SoundDesigner(this.active.grid, MIX.score, this.roll, now + ACCENT_LEAD_SECONDS);
+    this.lastBar = this.barAt(this.active, now);
+    this.setIntensity(this.active, now, fadeSeconds);
   }
 
-  // While paused between turns, the lead motif repeats at its current level up to pauseRepeats times, then only
-  // the base plays.
+  // In a turn pause the lead repeats its last phrase a few times, then only the base plays.
   setPaused(paused: boolean): void {
-    if (paused && !this.paused && this.motif) this.motif.pauseRepeats = 0;
     this.paused = paused;
   }
 
-  // Called every frame. On each new bar of the active base, the conductor may change mode, and the base moves
-  // to the new level and tone over one bar.
+  // Called every frame: schedules the lines' hits just ahead, and on each bar moves the base toward the heat.
   tick(): void {
     const base = this.active;
-    if (!base) return;
+    if (!base || !this.designer) return;
     const now = this.player.now();
-    this.advanceMotif(now);
+    const hits = this.designer.step(now + ACCENT_LEAD_SECONDS, now + LOOKAHEAD_SECONDS, this.paused, this.heat.read(now));
+    for (const h of hits) this.sound(base, h, now);
     const bar = this.barAt(base, now);
     if (bar <= this.lastBar) return;
     this.lastBar = bar;
-    const before = this.conductor.mode();
-    if (this.conductor.bar(now, this.roll()) === before) return;
-    const m = this.conductor.modeTuning();
-    const barSeconds = base.grid.beat * base.grid.beatsPerBar;
-    base.loop.setGain(m.gain, barSeconds);
-    base.loop.setTone(m.cutoffHz, barSeconds);
+    this.setIntensity(base, now, base.grid.beat * base.grid.beatsPerBar);
   }
 
-  // Outside a battle the score is silent and events are ignored. In one, the event adds heat, and its accent plays
-  // with the conductor's chance, on a slot near delayMs, with the base dipping under it.
+  // Outside a battle the score is silent and events are ignored. In one, the event adds heat and offers its
+  // phrase, which may not start before delayMs from now.
   accent(cue: AccentCue, delayMs: number): AccentResult | null {
-    if (!this.active) return null;
+    if (!this.designer) return null;
     const now = this.player.now();
-    const heard = this.conductor.hear(cue, now);
-    const sounded = this.conductor.recall(cue, now, this.roll());
-    const time = this.roll() < heard.chance ? this.place(sounded, now, delayMs) : null;
-    const repeats = time === null ? 0 : this.play(sounded, now, time);
-    return { cue, sounded, ...heard, played: time !== null, repeats };
+    const plan = MIX.score.accents[cue];
+    this.heat.add(now, plan.weight);
+    const offer = this.designer.offer(cue, plan, now + delayMs / 1000);
+    return { cue, offer, heat: this.heat.read(now) };
   }
 
-  private place(cue: AccentCue, now: number, delayMs: number): number | null {
-    return this.designer.schedule(now + delayMs / 1000, now + ACCENT_LEAD_SECONDS, this.conductor.emphasis(cue), this.roll());
-  }
-
-  // Plays the accent, which takes the lead motif from any older one. Returns the repeats planned.
-  private play(cue: AccentCue, now: number, time: number): number {
-    this.conductor.played(cue, time);
-    this.sound(cue, now, time, 1);
-    const repeats = this.conductor.repeats(now);
-    const every = this.designer.beat() * MIX.score.repeatBeats;
-    this.motif = repeats > 0 ? { cue, next: time + every, every, k: 1, repeats, pauseRepeats: 0 } : null;
-    return repeats;
-  }
-
-  // Schedules the lead motif's repeats as they come near, each on a free slot and quieter than the last.
-  private advanceMotif(now: number): void {
-    const m = this.motif;
-    while (m && this.motif === m && m.next <= now + MOTIF_LOOKAHEAD_SECONDS) this.repeatMotif(m, now);
-  }
-
-  private repeatMotif(m: Motif, now: number): void {
-    if (m.next >= now && this.designer.claim(m.next)) this.sound(m.cue, now, m.next, MIX.score.repeatGain ** m.k);
-    m.next += m.every;
-    if (this.paused) m.pauseRepeats++;
-    else m.k++;
-    if (m.k > m.repeats || m.pauseRepeats >= MIX.score.pauseRepeats) this.motif = null;
-  }
-
-  // Successive accent sounds sit a little left and right in turn, so overlapping tails stay apart.
-  private sound(cue: AccentCue, now: number, time: number, gain: number): void {
+  private sound(base: Base, h: Hit, now: number): void {
+    this.player.play(h.cue as AccentCue, { pan: h.pan, gain: h.gain }, (h.time - now) * 1000);
     const s = MIX.score;
-    this.side = -this.side;
-    this.player.play(cue, { pan: this.side * s.panSpread, gain }, (time - now) * 1000);
-    this.active?.loop.duck(time, s.duckGain, s.duckAttackSeconds, this.active.grid.beat * s.duckReleaseBeats);
+    if (h.line === "lead") base.loop.duck(h.time, s.duckGain, s.duckAttackSeconds, base.grid.beat * s.duckReleaseBeats);
+  }
+
+  // Quiet heat leaves the base lower and muffled; fullHeat opens it.
+  private setIntensity(base: Base, now: number, rampSeconds: number): void {
+    const s = MIX.score;
+    const t = Math.min(1, this.heat.read(now) / s.fullHeat);
+    base.loop.setGain(s.quietGain + (1 - s.quietGain) * t, rampSeconds);
+    base.loop.setTone(s.quietCutoffHz * (s.openCutoffHz / s.quietCutoffHz) ** t, rampSeconds);
   }
 
   private barAt(base: Base, time: number): number {
@@ -225,12 +185,11 @@ export class SoundDirector {
     private score: Pick<CombatScore, "accent">,
   ) {}
 
-  // Logs every accent decision, played or skipped, with the chance, heat and mode behind it.
+  // Logs what the score did with every accent request, and the heat after it.
   accent(cue: AccentCue, delayMs: number): void {
     const r = this.score.accent(cue, delayMs);
     if (!r) return;
-    const as = r.sounded === cue ? "" : ` as ${r.sounded}`;
-    this.record(`${cue}${as} ${r.played ? `played x${1 + r.repeats}` : "skipped"} p${r.chance.toFixed(2)} heat${r.heat.toFixed(1)} ${r.mode}`);
+    this.record(`${cue} ${r.offer} heat${r.heat.toFixed(1)}`);
   }
 
   // delayOf gives when each event's moment comes, or null to skip the event in this call.

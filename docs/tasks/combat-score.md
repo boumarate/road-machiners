@@ -125,8 +125,8 @@ Built and verified. The music itself is unconfirmed until the user plays a battl
 Revised after the user's first listen:
 - One random base per battle replaces the two layers. Each base keeps its own tempo: drums 90 BPM, bass 110 BPM. IV4 no longer applies.
 - Accents are tribal metal stingers, cut to 1.5 s with soft edges on import.
-- `Conductor` in `src/audio/conductor.ts` replaces the repeat cap. Heat fades by half every 8 s. A four-mode Markov chain steps once per bar and sets base level and muffle filter. Each accent plays by chance, lowered by its own fatigue and by crowding. IV3 no longer applies.
-- `SoundDesigner` now only places accents: a free slot up to two half-beats around the moment, weighted toward strong beats for strong events.
+- A chance-driven conductor with song modes and recall was tried and dropped: the user found it too random.
+- `SoundDesigner` is now a sequencer of two accent lines over the base. Heavy events queue phrases on the lead, on strong beats. Light events join the secondary, on weak beats, by a chance that falls when it is busy. Phrases are fixed rhythms from a small pool, start on bar lines, and merge repeat events into a denser rhythm. A crash cuts in on the next beat. Heat, a fading sum of events, sets the base level and muffle each bar. IV1 to IV3 no longer apply.
 - Calm music picks a new random track each time a fight ends.
 - In a scripted fight against one outrider, heat reached about 2.4. Peak mode needs 3, so it may be rare.
 

@@ -1,68 +1,138 @@
 import { describe, expect, it } from "vitest";
-import { SoundDesigner, type SlotTiming } from "./designer";
+import { Fading, SoundDesigner, type AccentPlan, type DesignerTuning } from "./designer";
 
-// One beat per second, four beats per bar, two slots per beat: slots every half second from time 10,
-// bars starting at 10, 14, 18.
-const GRID = { start: 10, beat: 1, beatsPerBar: 4 };
-const TIMING: SlotTiming = { subdivision: 2, spreadSlots: 2, minGapSlots: 1, humanizeMs: 20 };
+// One beat per second, four beats per bar, two slots per beat: slots every half second, bars at 0, 4, 8.
+const GRID = { start: 0, beat: 1, beatsPerBar: 4 };
+const TUNING: DesignerTuning = {
+  subdivision: 2,
+  humanizeMs: 0,
+  gainJitter: 0,
+  hotHeat: 5,
+  pauseRepeats: 2,
+  fillChance: 0,
+  fillGain: 0.5,
+  secondaryPan: 0.3,
+  busyFactor: 0,
+  lines: {
+    lead: { gain: 1, queueMax: 2, calm: ["x...x..."], hot: ["xxxxxxxx"] },
+    secondary: { gain: 0.5, queueMax: 2, calm: ["..x...x."], hot: [".x.x.x.x"] },
+  },
+};
+const LEAD: AccentPlan = { line: "lead", weight: 0.5, bars: 1, chance: 1, urgent: false };
+const HEAVY: AccentPlan = { ...LEAD, weight: 1 };
+const CRASH: AccentPlan = { ...LEAD, weight: 1, bars: 2, urgent: true };
+const LIGHT: AccentPlan = { line: "secondary", weight: 0.2, bars: 1, chance: 1, urgent: false };
 
-function designer(): SoundDesigner {
-  return new SoundDesigner(GRID, TIMING);
+function designer(tuning = TUNING, roll = () => 0): SoundDesigner {
+  return new SoundDesigner(GRID, tuning, roll, 0.1);
 }
 
+const times = (hits: { time: number }[]) => hits.map((h) => h.time);
+
 describe("SoundDesigner", () => {
-  it("lands up to spreadSlots before or after the wanted slot", () => {
-    expect(designer().schedule(12, 0, 0, 0)).toBe(11);
-    expect(designer().schedule(12, 0, 0, 0.999)).toBeCloseTo(13.02, 2);
-  });
-
-  it("never lands before the earliest time", () => {
-    expect(designer().schedule(12, 11.9, 0, 0)).toBe(12);
-  });
-
-  it("pulls a strong accent onto the bar's first beat", () => {
-    // Slots 13 to 15: weights 2^8, 1, 4^8, 1, 2^8. A middle roll falls on the downbeat at 14, halfway into it.
-    expect(designer().schedule(14, 0, 8, 0.5)).toBeCloseTo(14.01);
-  });
-
-  it("pushes a weak accent off the beat", () => {
-    // Negative emphasis: the off-beats at 13.5 and 14.5 hold almost all the weight.
-    const t = designer().schedule(14, 0, -8, 0.25)!;
-    expect(Math.round(t * 2) / 2).toBe(13.5);
-  });
-
-  it("skips taken slots", () => {
+  it("starts a lead phrase on the next bar line and plays its rhythm", () => {
     const d = designer();
-    d.schedule(12, 0, 0, 0);
-    expect(d.schedule(12, 0, 0, 0)).toBe(11.5);
+    d.offer("a", LEAD, 0.1);
+    expect(times(d.step(0.1, 7.9, false, 0))).toEqual([4, 6]);
   });
 
-  it("drops an accent when every slot in the window is taken", () => {
+  it("plays the secondary on weak beats, to one side and quieter", () => {
     const d = designer();
-    for (let i = 0; i < 5; i++) d.schedule(12, 0, 0, 0);
-    expect(d.schedule(12, 0, 0, 0)).toBeNull();
+    d.offer("b", LIGHT, 0);
+    const hits = d.step(0.1, 7.9, false, 0);
+    expect(times(hits)).toEqual([5, 7]);
+    expect(hits.map((h) => [h.pan, h.gain])).toEqual([[-0.3, 0.5], [-0.3, 0.5]]);
   });
 
-  it("claims a free slot for a repeat and refuses a taken one", () => {
+  it("plays queued phrases one after another", () => {
     const d = designer();
-    expect(d.schedule(12, 0, 0, 0)).toBe(11);
-    expect(d.claim(11)).toBe(false);
-    expect(d.claim(12)).toBe(true);
-    expect(d.claim(12)).toBe(false);
+    d.offer("a", LEAD, 0);
+    d.offer("c", LEAD, 0);
+    const hits = d.step(0.1, 11.9, false, 0);
+    expect(hits.map((h) => `${h.cue}@${h.time}`)).toEqual(["a@4", "a@6", "c@8", "c@10"]);
   });
 
-  it("keeps accents minGapSlots apart", () => {
-    const d = new SoundDesigner(GRID, { ...TIMING, minGapSlots: 2 });
-    expect(d.schedule(12, 0, 0, 0)).toBe(11);
-    expect(d.schedule(12, 0, 0, 0)).toBe(12);
-    expect(d.claim(12.5)).toBe(false);
-    expect(d.claim(13)).toBe(true);
-  });
-
-  it("keeps a slot taken after a request for a later time", () => {
+  it("merges a repeat event into its waiting phrase, which then takes a dense rhythm", () => {
     const d = designer();
-    d.schedule(13, 0, 0, 0);
-    d.schedule(16, 0, 0, 0);
-    expect(d.schedule(13, 0, 0, 0)).toBe(12.5);
+    expect(d.offer("a", LEAD, 0)).toBe("queued");
+    expect(d.offer("a", LEAD, 0)).toBe("merged");
+    expect(d.step(0.1, 7.9, false, 0)).toHaveLength(8);
+  });
+
+  it("takes dense rhythms once the fight is hot", () => {
+    const d = designer();
+    d.offer("a", LEAD, 0);
+    expect(d.step(0.1, 7.9, false, 5)).toHaveLength(8);
+  });
+
+  it("drops an event when the queue is full of phrases as heavy, and lets a heavier one replace the lightest", () => {
+    const d = designer();
+    d.offer("a", LEAD, 0);
+    d.offer("c", LEAD, 0);
+    expect(d.offer("d", LEAD, 0)).toBe("dropped");
+    expect(d.offer("e", HEAVY, 0)).toBe("replaced");
+    expect(new Set(d.step(0.1, 11.9, false, 0).map((h) => h.cue))).toEqual(new Set(["c", "e"]));
+  });
+
+  it("cuts an urgent phrase in on the next beat", () => {
+    const d = designer();
+    d.offer("a", LEAD, 0);
+    d.step(0.1, 4.9, false, 0);
+    d.offer("crash", CRASH, 4.6);
+    expect(d.step(4.6, 5.1, false, 0).map((h) => `${h.cue}@${h.time}`)).toEqual(["crash@5"]);
+  });
+
+  it("does not start a phrase before its event's time", () => {
+    const d = designer();
+    d.offer("a", LEAD, 5);
+    expect(times(d.step(0.1, 11.9, false, 0))).toEqual([8, 10]);
+  });
+
+  it("repeats the last lead phrase pauseRepeats times in a pause, then rests", () => {
+    const d = designer();
+    d.offer("a", LEAD, 0);
+    expect(times(d.step(0.1, 30, true, 0))).toEqual([4, 6, 8, 10, 12, 14]);
+  });
+
+  it("rests after a phrase when not paused", () => {
+    const d = designer();
+    d.offer("a", LEAD, 0);
+    expect(times(d.step(0.1, 30, false, 0))).toEqual([4, 6]);
+  });
+
+  it("always offers a lead event, however busy the lead is", () => {
+    const d = designer({ ...TUNING, busyFactor: 10 }, () => 0.99);
+    d.offer("a", LEAD, 0);
+    expect(d.offer("c", LEAD, 0)).toBe("queued");
+  });
+
+  it("lets a light event join by chance, lower on a busy line", () => {
+    const tuning = { ...TUNING, busyFactor: 1 };
+    const d = designer(tuning, () => 0.5);
+    expect(d.offer("b", { ...LIGHT, chance: 0.6 }, 0)).toBe("queued");
+    expect(d.offer("c", { ...LIGHT, chance: 0.6 }, 0)).toBe("skipped");
+  });
+
+  it("adds a fill on the last slot of a lead phrase by chance", () => {
+    const d = designer({ ...TUNING, fillChance: 1 });
+    d.offer("a", LEAD, 0);
+    const hits = d.step(0.1, 7.9, false, 0);
+    expect(times(hits)).toEqual([4, 6, 7.5]);
+    expect(hits[2].gain).toBe(0.5);
+  });
+
+  it("fails loud on a rhythm of the wrong length", () => {
+    const bad = { ...TUNING, lines: { ...TUNING.lines, lead: { ...TUNING.lines.lead, calm: ["x..."] } } };
+    expect(() => designer(bad)).toThrow("Bad lead rhythm");
+  });
+});
+
+describe("Fading", () => {
+  it("halves every half-life and adds on top", () => {
+    const f = new Fading(2);
+    f.add(0, 4);
+    expect(f.read(2)).toBeCloseTo(2);
+    f.add(4, 1);
+    expect(f.read(4)).toBeCloseTo(2);
   });
 });
