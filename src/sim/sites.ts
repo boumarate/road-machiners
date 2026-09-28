@@ -20,15 +20,15 @@ export function siteGates(site: Site): Vec[] {
     // Roads that cross the edge close together share one gate.
     const all = crossings.filter((p, i) => !crossings.slice(0, i).some((q) => dist(q, p) < REGION.sites.gateSpacing));
     if (all.length === 0) throw new Error(`Site ${site.id} has no road into it`);
-    // Towns and small locations have one gate, on the first road into them.
-    gates = isLarge(site) ? all : all.slice(0, 1);
+    // Small locations have one gate, on the first road into them. Towns and large locations have one per road.
+    gates = hasGatePerRoad(site) ? all : all.slice(0, 1);
     GATES.set(site.id, gates);
   }
   return gates;
 }
 
-function isLarge(site: Site): boolean {
-  return 'kind' in site && site.radius >= REGION.sites.multiGateRadius;
+function hasGatePerRoad(site: Site): boolean {
+  return !('kind' in site) || site.radius >= REGION.sites.multiGateRadius;
 }
 
 // One pad center per gate, in gate order. Each pad lies outside the site with its inner edge on the gate.

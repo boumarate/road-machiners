@@ -163,7 +163,7 @@ export type NpcActivity = {
   destination: Vec | null;
   phase: "travel" | "act";
   reason: string;
-  purchase?: { good: string; sellTown: string };
+  purchase?: { good: string; sellShop: string };
   load?: { good: string }; // the good a haul loads free at its source site
   perceived?: number; // the turn a fight last saw or detected its target
   demands?: boolean; // a fight on the player radios for the cargo before the first shot
