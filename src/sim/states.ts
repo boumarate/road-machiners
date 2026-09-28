@@ -6,13 +6,16 @@ import { STATE_TURNS } from '../data/npcs';
 import { vehicleById } from './damage';
 import { newId } from './factory';
 import { lootRobbed } from './npc-activities';
-import { checkPatch, isPatching, lapsePatch, settlePatch } from './patch';
+import { checkPatch, isPatching, lapsePatch, patchWork, settlePatch } from './patch';
 import { practice } from './progress';
 import { checkEscort, checkPlayerTow, payEscort } from './tow';
 import { checkTrade, isMeeting } from './economy';
 import { getResources } from './resources';
-import type { NpcState, StateData, StateEnding, StateKindId, Vehicle, World } from './types';
+import type { Job, NpcState, StateData, StateEnding, StateKindId, Vehicle, World } from './types';
 import { canVehicleSee } from './vision';
+
+export type WorkLeft = { turnsLeft: number; total: number };
+export type Work = WorkLeft & ({ from: 'job'; job: Job } | { from: 'state'; state: NpcState });
 
 export type StateKind = {
   // True when this turn's events reset the timer to its full length.
@@ -21,10 +24,13 @@ export type StateKind = {
   // must not assume both parties still exist.
   check(w: World, s: NpcState): StateEnding | null;
   hooks: Partial<Record<StateEnding, (w: World, s: NpcState) => void>>;
+  // The turns of shared work left while the parties work on it this turn, or null. See workOf().
+  work(w: World, s: NpcState): WorkLeft | null;
 };
 
 const never = (): boolean => false;
 const noCheck = (): StateEnding | null => null;
+const noWork = (): WorkLeft | null => null;
 
 export const STATE_KINDS: Record<StateKindId, StateKind> = {
   // Both parties are hostile while it lasts. Shots between them or either one seeing the other keep it going.
@@ -45,45 +51,48 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
       // A won robbery sends the robber to loot what the other party left behind.
       fulfilled: (w, s) => { if (feudData(s).robbery) lootRobbed(w, s.holder, s.other); },
     },
+    work: noWork,
   },
   // The holder does not rob the other party while it lasts.
-  backedOff: { refresh: never, check: noCheck, hooks: {} },
+  backedOff: { refresh: never, check: noCheck, hooks: {}, work: noWork },
   // The holder tows the other party to a town or camp. See src/sim/tow.ts. An NPC tower's goal fulfils and breaks it. A
   // player tower's arrival is its check.
   tow: {
     refresh: never,
     check: (w, s) => (s.holder === w.player.vehicleId ? checkPlayerTow(w, s) : null),
     hooks: { fulfilled: payTow, broken: releaseTow },
+    work: noWork,
   },
-  turnedDown: { refresh: never, check: noCheck, hooks: {} },
-  towPromise: { refresh: never, check: noCheck, hooks: {} },
+  turnedDown: { refresh: never, check: noCheck, hooks: {}, work: noWork },
+  towPromise: { refresh: never, check: noCheck, hooks: {}, work: noWork },
   // The holder has taken the job of towing the other party, so no other driver answers. It is fulfilled by the offer
   // in src/sim/tow.ts, and broken once the holder's tow goal is gone from its stack.
-  answering: { refresh: never, check: (w, s) => (answerDropped(w, s) ? 'broken' : null), hooks: {} },
+  answering: { refresh: never, check: (w, s) => (answerDropped(w, s) ? 'broken' : null), hooks: {}, work: noWork },
   // The holder patches the other party's truck. See src/sim/patch.ts. Work keeps it going, and the fulfilled hook
   // pays once.
   // The two parties are not foes while it lasts, unless a feud says otherwise. See isFoe() in src/sim/combat.ts.
-  truce: { refresh: never, check: noCheck, hooks: {} },
+  truce: { refresh: never, check: noCheck, hooks: {}, work: noWork },
   // The holder took damage in a crash with the other party while the two were at peace. The holder decides once
   // whether to forgive it, and src/sim/npc-activities.ts ends it then.
-  grievance: { refresh: never, check: noCheck, hooks: {} },
+  grievance: { refresh: never, check: noCheck, hooks: {}, work: noWork },
   // The holder asked the other party for a truce or mercy. See src/sim/parley.ts. It holds after the answer, so the
   // holder rarely asks the same party again soon.
-  plea: { refresh: never, check: noCheck, hooks: {} },
+  plea: { refresh: never, check: noCheck, hooks: {}, work: noWork },
   patch: {
     refresh: isPatching,
     check: checkPatch,
     hooks: { fulfilled: settlePatch, expired: lapsePatch },
+    work: patchWork,
   },
   // The holder pulls over to trade with the player. See src/sim/economy.ts. Being parked in reach keeps it
   // going. The player ends it when done trading, and a feud between the two breaks it.
-  trade: { refresh: isMeeting, check: checkTrade, hooks: {} },
+  trade: { refresh: isMeeting, check: checkTrade, hooks: {}, work: noWork },
   // The holder wants revenge on the player, who knocked it out. src/sim/defeat.ts fulfils it when the holder knocks
   // the player out, and src/sim/parley.ts when the player hands it cargo.
-  revenge: { refresh: never, check: noCheck, hooks: {} },
+  revenge: { refresh: never, check: noCheck, hooks: {}, work: noWork },
   // The holder escorts the other party. See src/sim/tow.ts. The leader's arrival fulfils it, and the fulfilled
   // hook pays once.
-  escort: { refresh: never, check: checkEscort, hooks: { fulfilled: payEscort } },
+  escort: { refresh: never, check: checkEscort, hooks: { fulfilled: payEscort }, work: noWork },
 };
 
 // A missing holder is left to the missing-party rule.
@@ -222,4 +231,17 @@ function releaseTow(w: World, s: NpcState): void {
 // strandedSeen decision. An escort keeps its leader in sight, so this lets it tow the leader again.
 function forgetClient(tower: Vehicle, clientId: string): void {
   if (tower.brain) delete tower.brain.noticed[`strandedSeen:${clientId}`];
+}
+
+// Timed work a truck does: its parked job, or a state whose kind declares work, like a patch. A job comes first. A
+// state counts for both its parties while its work is under way. The HUD and the markers over NPCs read only this,
+// so any new kind of timed work shows its progress.
+export function workOf(w: World, v: Vehicle): Work | null {
+  if (v.job) return { from: 'job', job: v.job, turnsLeft: v.job.turnsLeft, total: v.job.total };
+  for (const state of w.states) {
+    if (state.holder !== v.id && state.other !== v.id) continue;
+    const left = kindOf(state.kind).work(w, state);
+    if (left) return { from: 'state', state, ...left };
+  }
+  return null;
 }

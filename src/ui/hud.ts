@@ -3,7 +3,8 @@
 import { DialoguePanel, type DialogueHost } from "./dialogue";
 import { partDef } from "../data/parts";
 import { baseGrid, corePart, coreParts, mountedParts } from "../sim/grid";
-import type { Job, Vehicle, World } from "../sim/types";
+import type { Vehicle, World } from "../sim/types";
+import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
 import { el, panel, topRight } from "./dom";
 import {
@@ -11,8 +12,8 @@ import {
   contractSummary,
   eventText,
   formatNpcActivity,
-  jobLabel,
-  jobProgress,
+  workLabel,
+  workProgress,
   formatNpcStates,
   formatNpcTraits,
 } from "./format";
@@ -228,26 +229,26 @@ export class Hud {
   }
 
   // The context action for the E key, or hidden. An action that needs a stop first shows disabled.
-  // A job shows its progress instead, except an auto patch, which yields to any action.
+  // Work shows its progress instead, except work that blocks no job, which yields to any action.
   renderAction(
     action: ContextAction | null,
     world: World,
     onUse: () => void,
   ): void {
     const me = playerVehicle(world);
-    const shown = shownJob(action, me.job);
+    const shown = shownWork(action, workOf(world, me));
     this.action.style.display = action || shown ? "" : "none";
-    if (shown) this.renderJob(shown, jobLabel(world, me, shown));
+    if (shown) this.renderWork(shown, workLabel(world, me, shown));
     else if (action) this.renderActionButton(action, onUse);
   }
 
-  private renderJob(job: Job, label: string): void {
-    const progress = Math.round(jobProgress(job) * 100);
+  private renderWork(work: Work, label: string): void {
+    const progress = Math.round(workProgress(work) * 100);
     this.action.replaceChildren(
       el(
         "span",
         { class: "job-label" },
-        `${label} · ${job.turnsLeft} ${job.turnsLeft === 1 ? 'turn' : 'turns'} left`,
+        `${label} · ${work.turnsLeft} ${work.turnsLeft === 1 ? 'turn' : 'turns'} left`,
       ),
       el(
         "span",
@@ -602,7 +603,9 @@ function npcLines(w: World, v: Vehicle): HTMLElement[] {
   ];
 }
 
-// A running auto patch gives way to any usable context action, so the player can still act.
-function shownJob(action: ContextAction | null, job: Job | null): Job | null {
-  return action && !action.hint && isAutoPatch(job) ? null : job;
+// Work that blocks no job, like an auto patch or a patch deal, gives way to any usable context action, so the
+// player can still act.
+function shownWork(action: ContextAction | null, work: Work | null): Work | null {
+  const blocks = work?.from === "job" && !isAutoPatch(work.job);
+  return action && !action.hint && !blocks ? null : work;
 }

@@ -1,11 +1,13 @@
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { fireBlock, hitOdds, type FireBlock } from "../sim/combat";
+import { isKnockedOut } from "../sim/defeat";
 import { playerVehicle } from "../sim/damage";
 import { mountedParts } from "../sim/grid";
 import { vehicleStats, type MountedWeapon } from "../sim/stats";
-import type { Job, Vehicle, World } from "../sim/types";
+import type { Vehicle, World } from "../sim/types";
 import { playerSees } from "../sim/vision";
+import { workOf } from "../sim/states";
 import { playerCanAct, setAutoFire, setWeaponOrder } from "../sim/world";
 import { el, panel } from "./dom";
 import { meters } from "./units";
@@ -13,7 +15,7 @@ import type { UiHost } from "./host";
 import { createIcon } from './cards';
 import { createSwitch } from "./switch";
 import { canCall } from "./dialogue";
-import { jobLabel, jobProgress } from "./format";
+import { workLabel, workProgress } from "./format";
 
 export const BLOCK_TEXT: Record<FireBlock, string> = {
   disabled: "disabled",
@@ -25,22 +27,23 @@ export const BLOCK_TEXT: Record<FireBlock, string> = {
   unseen: "not in sight",
   covered: "behind cover",
   talking: "on the radio",
+  out: "driver knocked out",
 };
 
 // One weapon aimed at a vehicle, as its marker shows it.
 export type WeaponMark = { slot: number; look: "mg" | "cannon"; status: string; ready: boolean };
-// A job a seen NPC works on, with its progress from 0 to 1.
+// Timed work a seen NPC does, with its progress from 0 to 1.
 export type JobMark = { label: string; progress: number };
-export type VehicleMark = { weapons: WeaponMark[]; radio: boolean; job: JobMark | null };
+export type VehicleMark = { weapons: WeaponMark[]; radio: boolean; job: JobMark | null; out: boolean };
 
 // Markers above vehicles, by vehicle id: each player weapon aimed at the vehicle with its status, the
-// radio key on the hovered truck when it can take a call, and the job of each seen NPC.
+// radio key on the hovered truck when it can take a call, the job of each seen NPC, and each seen knocked-out NPC.
 export function vehicleMarks(w: World, hovered: string | null): Map<string, VehicleMark> {
   const marks = new Map<string, VehicleMark>();
   const markOf = (id: string) => {
     const found = marks.get(id);
     if (found) return found;
-    const made: VehicleMark = { weapons: [], radio: false, job: null };
+    const made: VehicleMark = { weapons: [], radio: false, job: null, out: false };
     marks.set(id, made);
     return made;
   };
@@ -50,15 +53,17 @@ export function vehicleMarks(w: World, hovered: string | null): Map<string, Vehi
       markOf(readout.target.id).weapons.push({ slot: i + 1, look: mw.def.look, status: readout.status, ready: readout.canFire });
   });
   if (hovered && canCall(w, hovered)) markOf(hovered).radio = true;
-  for (const v of w.vehicles) {
+  for (const v of w.vehicles.filter((x) => x.brain && playerSees(w, x.pos))) {
     const job = seenNpcJob(w, v);
-    if (job) markOf(v.id).job = { label: jobLabel(w, v, job), progress: jobProgress(job) };
+    if (job) markOf(v.id).job = job;
+    if (isKnockedOut(v)) markOf(v.id).out = true;
   }
   return marks;
 }
 
-function seenNpcJob(w: World, v: Vehicle): Job | null {
-  return v.brain && playerSees(w, v.pos) ? v.job : null;
+function seenNpcJob(w: World, v: Vehicle): JobMark | null {
+  const work = workOf(w, v);
+  return work && { label: workLabel(w, v, work), progress: workProgress(work) };
 }
 
 // A click on a vehicle aims the weapons at it. When all of them already aim at it, the click clears them.

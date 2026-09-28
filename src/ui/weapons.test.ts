@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hitOdds } from "../sim/combat";
+import { addState } from "../sim/states";
 import { vehicleStats } from "../sim/stats";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import { refreshVision } from "../sim/vision";
@@ -137,6 +138,7 @@ describe("vehicle marks", () => {
       weapons: [{ slot: 1, look: gun.def.look, status: "ready", ready: true }],
       radio: false,
       job: null,
+      out: false,
     });
   });
 
@@ -151,6 +153,35 @@ describe("vehicle marks", () => {
     target.brain = npcBrain("scavenger", target.pos, ["scavenger"]);
     target.job = { kind: "search", stockId: "wreck-1", turnsLeft: 3, total: 4 };
     expect(vehicleMarks(world, null).get(target.id)?.job).toEqual({ label: "Search", progress: 0.25 });
+  });
+
+  it("shows the patch a seen NPC does with its progress", () => {
+    const { world, me, target } = createDuel();
+    target.brain = npcBrain("scavenger", target.pos, ["scavenger"]);
+    target.pos = { x: me.pos.x + 1, y: me.pos.y };
+    target.speed = 0;
+    me.speed = 0;
+    addState(world, "patch", target.id, me.id, { kind: "patch", deal: "free", parts: 1, price: 0, work: 4, workLeft: 3 });
+    expect(vehicleMarks(world, null).get(target.id)?.job).toEqual({ label: `Patch ${me.name}`, progress: 0.25 });
+  });
+
+  it("shows the patch a seen NPC gets with its patcher", () => {
+    const { world, me, target } = createDuel();
+    target.brain = npcBrain("scavenger", target.pos, ["scavenger"]);
+    target.pos = { x: me.pos.x + 1, y: me.pos.y };
+    target.speed = 0;
+    me.speed = 0;
+    addState(world, "patch", me.id, target.id, { kind: "patch", deal: "free", parts: 1, price: 0, work: 4, workLeft: 1 });
+    expect(vehicleMarks(world, null).get(target.id)?.job).toEqual({ label: `Patched by ${me.name}`, progress: 0.75 });
+  });
+
+  it("marks a seen knocked-out NPC and offers no radio key on it", () => {
+    const { world, target } = createDuel();
+    target.brain = npcBrain("scavenger", target.pos, ["scavenger"]);
+    target.defeat = { phase: "out", turns: 0, unseen: 0, foes: [] };
+    expect(vehicleMarks(world, target.id).get(target.id)).toMatchObject({ out: true, radio: false });
+    target.defeat.phase = "retreat";
+    expect(vehicleMarks(world, target.id).get(target.id)).toMatchObject({ out: false, radio: true });
   });
 
   it("hides the job of an NPC out of sight", () => {

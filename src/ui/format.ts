@@ -6,7 +6,9 @@ import { partDef } from '../data/parts';
 import type { Contract } from '../sim/market';
 import { PERK_LEVELS, SKILL_INFO } from '../data/skills';
 import { TERRAIN } from '../data/terrain';
-import { playerVehicle } from '../sim/damage';
+import { playerVehicle, vehicleById } from '../sim/damage';
+import { isKnockedOut } from '../sim/defeat';
+import type { Work, WorkLeft } from '../sim/states';
 import { dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
 import { mountedParts } from '../sim/grid';
@@ -55,9 +57,17 @@ function itemName(it: GridItem): string {
   return it.kind === 'part' ? partDef(it.part.defId).name : GOODS[it.good].name;
 }
 
-// The share of a job's turns already worked, from 0 to 1.
-export function jobProgress(job: Job): number {
-  return 1 - job.turnsLeft / job.total;
+// What timed work does, in words, for the truck `v` doing it.
+export function workLabel(world: World, v: Vehicle, work: Work): string {
+  if (work.from === 'job') return jobLabel(world, v, work.job);
+  const s = work.state;
+  if (s.kind !== 'patch') throw new Error(`No work label for a ${s.kind} state`);
+  return s.holder === v.id ? `Patch ${vehicleById(world, s.other).name}` : `Patched by ${vehicleById(world, s.holder).name}`;
+}
+
+// The share of the work's turns already done, from 0 to 1.
+export function workProgress(work: WorkLeft): number {
+  return 1 - work.turnsLeft / work.total;
 }
 import { damage } from './units';
 
@@ -85,14 +95,22 @@ function partName(world: World, vehicleId: string, partId: string): string {
   return p ? partDef(p.defId).name : 'part';
 }
 
-// A seen NPC's top goal and its reason, shown under its driver's name.
+// A seen NPC's top goal and its reason, shown under its driver's name. A knocked-out driver pursues no goal.
 export function formatNpcActivity(world: World, vehicle: Vehicle): string | null {
-  const activity = vehicle.brain ? topGoal(vehicle) : null;
-  if (!activity || !playerSees(world, vehicle.pos)) return null;
-  const target = world.vehicles.find((v) => v.id === activity.targetId);
-  const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === activity.targetId);
-  const label = target && playerSees(world, target.pos) ? target.name : site && world.player.discovered.includes(site.id) ? site.name : null;
+  if (!vehicle.brain || !playerSees(world, vehicle.pos)) return null;
+  if (isKnockedOut(vehicle)) return 'Knocked out';
+  const activity = topGoal(vehicle);
+  if (!activity) return null;
+  const label = targetLabel(world, activity.targetId);
   return `${activity.kind}${label ? `: ${label}` : ''} — ${activity.reason}`;
+}
+
+// A goal target's name once the player sees the truck or has discovered the site.
+function targetLabel(world: World, targetId: string | null): string | null {
+  const target = world.vehicles.find((v) => v.id === targetId);
+  if (target) return playerSees(world, target.pos) ? target.name : null;
+  const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === targetId);
+  return site && world.player.discovered.includes(site.id) ? site.name : null;
 }
 
 // "Traits: scavenger, scumbag" for an NPC. The hover panel shows it as one line. Traits stay hidden, so null,
