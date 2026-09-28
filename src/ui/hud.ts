@@ -18,6 +18,7 @@ import {
 } from "./format";
 import { getHudReadout, getRescueReadout, moneyLabel, TruckConditionReadout } from "./hud-readout";
 import { createIcon, createSpeedDial, type IconName } from "./cards";
+import { createSwitch } from "./switch";
 import { hp, kph } from "./units";
 import { maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
@@ -145,7 +146,7 @@ export class Hud {
   private rescue = panel("rescue");
   // Shows only while a pan has left the truck.
   private recenter = panel("recenter");
-  private cameraButton = el("button", { onclick: () => this.toggleCameraMode(), title: "Camera mode" });
+  private cameraSwitch = panel("camera-mode", topRight());
   cameraMode: CameraMode = "auto";
   private toastTimer: number | null = null;
   private lines: { text: string; cls: string }[] = [];
@@ -161,7 +162,6 @@ export class Hud {
     this.rescue.style.display = "none";
     this.recenter.style.display = "none";
     this.recenter.append(el("button", { onclick: () => actions.recenter() }, "Center on truck (F)"));
-    panel("camera-mode", topRight()).append(this.cameraButton);
     this.showCameraMode();
     window.addEventListener("keydown", (e) => {
       if (e.code === "KeyV" && !document.activeElement?.matches("input, select, textarea")) this.toggleCameraMode();
@@ -197,7 +197,16 @@ export class Hud {
   }
 
   private showCameraMode(): void {
-    this.cameraButton.textContent = this.cameraMode === "auto" ? "Camera: auto [V]" : "Camera: centered [V]";
+    this.cameraSwitch.replaceChildren(
+      createSwitch({
+        on: "Cam auto",
+        off: "Centered",
+        checked: this.cameraMode === "auto",
+        key: "V",
+        title: "Camera mode: lead toward the order point, or stay centered on the truck [V]",
+        onclick: () => this.toggleCameraMode(),
+      }),
+    );
   }
 
   showRecenter(on: boolean): void {
@@ -277,16 +286,13 @@ export class Hud {
     this.rescue.style.display = r ? "" : "none";
     if (!r) return this.rescue.replaceChildren();
     const beacon = (on: boolean) =>
-      el(
-        "button",
-        {
-          class: on ? "on" : "",
-          "aria-pressed": String(on),
-          onclick: () => this.actions.setBeacon(!on),
-          title: "Call for a tow by radio.",
-        },
-        on ? "Beacon on" : "Beacon off",
-      );
+      createSwitch({
+        on: "Beacon on",
+        off: "Beacon off",
+        checked: on,
+        title: "Call for a tow by radio.",
+        onclick: () => this.actions.setBeacon(!on),
+      });
     const buttons = (...children: HTMLElement[]) =>
       el("div", { class: "rescue-buttons" }, ...children);
     if (r.kind === "knockedOut")
@@ -339,18 +345,15 @@ export class Hud {
 
   // The character button, marked while a perk pair waits for a pick.
   private engineButtons(w: World, busy: boolean): HTMLElement[] {
-    const on = w.player.overdrive;
-    const overdrive = el(
-      "button",
-      {
-        class: on ? "on" : "",
-        disabled: busy,
-        "aria-pressed": String(on),
-        onclick: () => this.actions.toggleOverdrive(),
-        title: "Engine overdrive: faster, but the engine heats fast [O]",
-      },
-      on ? "Overdrive [O]" : "Normal [O]",
-    );
+    const overdrive = createSwitch({
+      on: "Overdrive",
+      off: "Normal",
+      checked: w.player.overdrive,
+      key: "O",
+      disabled: busy,
+      title: "Engine overdrive: faster, but the engine heats fast [O]",
+      onclick: () => this.actions.toggleOverdrive(),
+    });
     const douse = el(
       "button",
       {
@@ -427,28 +430,24 @@ export class Hud {
       el(
         "div",
         { class: "instrument-actions" },
-        el(
-          "button",
-          {
-            class: readout.manual ? "on" : "",
-            disabled: busy,
-            "aria-pressed": String(readout.manual),
-            onclick: () => this.actions.toggleManual(),
-            title: "Toggle manual driving [R]",
-          },
-          readout.manual ? "Manual [R]" : "Route [R]",
-        ),
-        el(
-          "button",
-          {
-            class: w.player.autoRepair ? "on" : "",
-            disabled: busy,
-            "aria-pressed": String(w.player.autoRepair),
-            onclick: () => this.actions.toggleAutoRepair(),
-            title: "Patch damaged parts while parked [P]",
-          },
-          w.player.autoRepair ? "Auto patch [P]" : "No patch [P]",
-        ),
+        createSwitch({
+          on: "Manual",
+          off: "Route",
+          checked: readout.manual,
+          key: "R",
+          disabled: busy,
+          title: "Manual driving: straight at the point, or follow the roads [R]",
+          onclick: () => this.actions.toggleManual(),
+        }),
+        createSwitch({
+          on: "Auto patch",
+          off: "No patch",
+          checked: w.player.autoRepair,
+          key: "P",
+          disabled: busy,
+          title: "Patch damaged parts while parked [P]",
+          onclick: () => this.actions.toggleAutoRepair(),
+        }),
         ...this.engineButtons(w, busy),
         this.characterButton(w, busy),
         ...(readout.broken

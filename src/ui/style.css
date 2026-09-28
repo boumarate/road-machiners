@@ -119,7 +119,7 @@ body {
 #ui .instruments {
   left: 14px;
   bottom: 14px;
-  width: 442px;
+  width: 486px;
   min-height: 98px;
   padding: 0;
   display: grid;
@@ -224,12 +224,13 @@ body {
   grid-column: 2;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 0 8px 5px 0;
 }
 #ui .instrument-actions button {
   font-size: 10px;
   padding: 2px 5px;
+  white-space: nowrap;
   background: #292e31;
 }
 .instrument-actions .icon {
@@ -240,10 +241,114 @@ body {
   font-size: 11px;
 }
 
+/* Metal toggle switch: a riveted plate, the on option above the lever and the off option below. */
+#ui button.switch {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 10px;
+  background: linear-gradient(#3a4043, #2c3134);
+  border: 1px solid #5d6264;
+  border-radius: 3px;
+  box-shadow:
+    inset 0 1px 0 #ffffff14,
+    inset 0 -1px 0 #0006;
+}
+#ui button.switch:hover {
+  border-color: #c2b08b;
+}
+.switch::before,
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #9a9d9e, #3c4042);
+  box-shadow: 0 1px 0 #0008;
+}
+.switch::before {
+  left: 4px;
+}
+.switch::after {
+  right: 4px;
+}
+.switch-option {
+  font: 10px / 1.2 var(--font-ui);
+  color: #7b7e7c;
+  white-space: nowrap;
+}
+.switch-option kbd {
+  margin-left: 2px;
+  font: 9px var(--font-mono);
+  color: #dac7a2;
+}
+.switch-option.chosen {
+  color: #f2d48a;
+  text-shadow: 0 0 6px #f2b84a66;
+}
+/* The lever stands on a hex nut and leans toward the chosen option. */
+.switch-lever {
+  position: relative;
+  width: 22px;
+  height: 26px;
+}
+.switch-nut {
+  position: absolute;
+  left: 3px;
+  top: 5px;
+  width: 16px;
+  height: 16px;
+  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+  background: linear-gradient(160deg, #b9bcbc, #5a5f61 60%, #3a3e40);
+}
+.switch-nut::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: #1d2022;
+  box-shadow: inset 0 1px 1px #000;
+}
+.switch-bat {
+  position: absolute;
+  left: 7px;
+  width: 8px;
+  height: 15px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #6b7072, #e6e8e6 40%, #9da1a2 70%, #54595b);
+  box-shadow: 0 2px 2px #0009;
+}
+.switch-bat::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  width: 10px;
+  height: 6px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #f4f4f0, #8b9091);
+}
+.up .switch-bat {
+  top: -2px;
+}
+.up .switch-bat::after {
+  top: -1px;
+}
+.down .switch-bat {
+  bottom: -2px;
+}
+.down .switch-bat::after {
+  bottom: -1px;
+}
+
 #ui .weapons {
-  left: 476px;
+  left: 520px;
   bottom: 14px;
-  max-width: calc(100vw - 606px);
+  max-width: calc(100vw - 650px);
   padding: 0;
   border: 0;
   background: none;
