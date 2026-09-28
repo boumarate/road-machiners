@@ -254,10 +254,14 @@ function investigateInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): 
   return target && isHostile(world, vehicle, target) ? null : 'the contact is gone';
 }
 
-// A wreck is an opportunity only while it remains observable.
+// A scavenge goal at a known site names the site, not a stock, and a site never vanishes. One at a visible
+// stock ends once the stock is gone, and a wreck is also an opportunity only while it stays observable.
 function scavengeInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
-  if (!goal.targetId?.startsWith('wreck-')) return null;
-  return world.salvage.some((stock) => stock.id === goal.targetId && canVehicleSee(world, vehicle, stock.pos)) ? null : 'lost sight of the wreck';
+  if ([...REGION.towns, ...REGION.locations].some((entry) => entry.id === goal.targetId)) return null;
+  const stock = world.salvage.find((s) => s.id === goal.targetId);
+  if (!stock) return 'the salvage is gone';
+  if (goal.targetId?.startsWith('wreck-') && !canVehicleSee(world, vehicle, stock.pos)) return 'lost sight of the wreck';
+  return null;
 }
 
 function lootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
