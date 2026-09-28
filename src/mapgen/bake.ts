@@ -10,7 +10,7 @@ import { gradeRoads } from '../sim/road-grade';
 import { ROAD_INDEX } from '../sim/road-index';
 import { chance, randRange, type Rng } from '../sim/rng';
 import { heightFromElevation, TYPE_IDS, type Rock } from '../sim/terrain';
-import { dist, segmentDist, type Vec } from '../sim/vec';
+import { dist, polylineDist, segmentDist, type Vec } from '../sim/vec';
 import { cornerNeighbors, geologyLayer, pondDepths, type Neighbors } from './geology';
 
 export function bakeMap(seed: number): MapDraft {
@@ -96,7 +96,7 @@ export function finishLayer(seed: number, d: MapDraft): MapDraft {
 }
 
 // Ground layer. Built ground first: roads, the bridge deck and site ground. Then the first geology rule
-// that holds for the tile, then broad surface patches, then scrub or hardpan. Geology marks live on
+// that holds for the tile, then scrub or hardpan. Geology marks live on
 // corners, so each rule reads the tile's four corners.
 
 const SITES = [...REGION.towns, ...REGION.locations];
@@ -109,7 +109,7 @@ type GroundInput = { seed: number; d: MapDraft; pond: Float32Array };
 type GroundRule = (g: GroundInput, tile: number, k: number) => TerrainTypeId | null;
 
 export function groundLayer(seed: number, d: MapDraft): MapDraft {
-  const g: GroundInput = { seed, d, pond: pondDepths(d.heights, d.size, G.lakeDepth) };
+  const g: GroundInput = { seed, d, pond: drainChannels(pondDepths(d.heights, d.size, G.lakeDepth), d.size) };
   for (let y = 0; y < d.size; y++) for (let x = 0; x < d.size; x++) d.types[y * d.size + x] = typeCode(pickType(g, x, y));
   return d;
 }
@@ -124,7 +124,20 @@ function pickType(g: GroundInput, x: number, y: number): TerrainTypeId {
     const type = rule(g, tile, k);
     if (type) return type;
   }
-  return pickSurfacePatch(g.seed, c) ?? plainType(g.seed, c);
+  return plainType(g.seed, c);
+}
+
+// The canyon and the dry river are water courses: their floors and lower banks are wash beds, never lakes,
+// even where the carved floor holds a closed hollow. Half the bank reaches the foot of the slope.
+function drainChannels(pond: Float32Array, size: number): Float32Array {
+  const n = size + 1;
+  const channels = [TERRAIN.features.canyon, TERRAIN.features.dryRiver];
+  for (let k = 0; k < pond.length; k++) {
+    if (pond[k] === 0) continue;
+    const p = { x: k % n, y: Math.floor(k / n) };
+    if (channels.some((c) => polylineDist(p, c.path) <= c.width + c.bank / 2)) pond[k] = 0;
+  }
+  return pond;
 }
 
 // Road on roads and the bridge deck, hardpan on and around sites, null elsewhere.
@@ -182,18 +195,6 @@ function plainType(seed: number, c: Vec): TerrainTypeId {
   return noiseAt(seed, c.x * T.scrubFreq, c.y * T.scrubFreq) > T.scrubAbove ? 'scrub' : 'hardpan';
 }
 
-function pickSurfacePatch(seed: number, p: Vec): TerrainTypeId | null {
-  const patches = T.patches;
-  const x = p.x * patches.frequency;
-  const y = p.y * patches.frequency;
-  if (noiseAt(seed + patches.coverageSeedOffset, x, y) <= patches.coverageAbove) return null;
-  const sample = noiseAt(seed + patches.kindSeedOffset, x, y);
-  if (sample <= patches.kindAbove) return null;
-  const band = patches.bands.find((entry) => sample <= entry.through);
-  if (!band) throw new Error(`No terrain surface band for ${sample}`);
-  return band.kind;
-}
-
 // Rock layer: boulders on corners at the foot of cliffs and on ridge tops, each by its own chance from
 // the map seed, off the roads, sites, the bridge deck, cliffs and the map margin.
 
@@ -209,7 +210,8 @@ export function rockLayer(seed: number, d: MapDraft): MapDraft {
   const nb = cornerNeighbors(n);
   d.rocks = [];
   for (let j = 1; j < d.size; j++) for (let i = 1; i < d.size; i++) {
-    const odds = boulderChance(d.heights, nb, n, j * n + i);
+    // Sand buries rock, and dune crests are not rock ridges.
+    const odds = d.sand[j * n + i] >= G.looseSand ? 0 : boulderChance(d.heights, nb, n, j * n + i);
     if (odds > 0 && chance(rng, odds)) placeBoulder(d, rng, i, j);
   }
   return d;

@@ -104,13 +104,24 @@ describe('ground types from geology marks', () => {
     expect(['mud', 'saltCrust']).not.toContain(typeAt(d, 8, 3));
   });
 
-  it('lays only hardpan, scrub, asphalt, ash and built ground on flat ground with no marks', () => {
+  it('lays no lake on the canyon floor, which drains', () => {
+    const d = newDraft(REGION.size);
+    const n = REGION.size + 1;
+    const at = TERRAIN.features.canyon.path[2];
+    for (let j = at.y - 3; j <= at.y + 3; j++) for (let i = at.x - 3; i <= at.x + 3; i++) d.heights[j * n + i] = -G.mudDepth * 2;
+
+    groundLayer(SEED, d);
+
+    expect(['mud', 'saltCrust']).not.toContain(typeAt(d, at.x, at.y));
+  });
+
+  it('lays only hardpan, scrub and built ground on flat ground with no marks', () => {
     const d = newDraft(REGION.size);
 
     groundLayer(SEED, d);
 
     const kinds = new Set(Array.from(d.types, (code) => TYPE_IDS[code]));
-    expect([...kinds].sort()).toEqual(['ash', 'asphalt', 'hardpan', 'road', 'scrub']);
+    expect([...kinds].sort()).toEqual(['hardpan', 'road', 'scrub']);
   });
 });
 

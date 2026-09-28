@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
-import { MAPGEN, TERRAIN } from '../data/terrain';
+import { GEOLOGY, MAPGEN, TERRAIN } from '../data/terrain';
 import { ROAD_INDEX } from '../sim/road-index';
 import { decodeMap, isCliff, tileAt, type BakedMap, type Rock } from '../sim/terrain';
 import { dist, segmentDist } from '../sim/vec';
@@ -52,6 +52,13 @@ describe('boulders', () => {
     const away = d.rocks.filter((rock) => rock.pos.x > FOOT + 1 || rock.pos.x < FOOT - FACE - 1);
     expect(onFace).toEqual([]);
     expect(away).toEqual([]);
+  });
+
+  it('puts no boulder where deep sand covers the cliff foot', () => {
+    const d = cliffDraft();
+    d.sand.fill(GEOLOGY.ground.looseSand);
+
+    expect(rockLayer(1337, d).rocks).toEqual([]);
   });
 
   it('puts no boulder on flat ground', () => {

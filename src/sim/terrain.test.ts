@@ -50,10 +50,11 @@ describe("road index", () => {
 });
 
 describe('terrain variety', () => {
-  it('has all ten types on the baked map, with road/site priority', () => {
-    expect(Object.keys(TERRAIN_TYPES)).toHaveLength(10);
+  it('has every type with a bake rule on the baked map, with road/site priority', () => {
+    // Asphalt and ash have no bake rule yet.
+    const ruled = Object.keys(TERRAIN_TYPES).filter((id) => id !== 'asphalt' && id !== 'ash');
     const t = TEST_MAP.terrain;
-    expect(new Set(t.types)).toEqual(new Set(Object.keys(TERRAIN_TYPES)));
+    expect(new Set(t.types)).toEqual(new Set(ruled));
     for (let y = 0; y < t.size; y++) for (let x = 0; x < t.size; x++) {
       const point = { x: x + 0.5, y: y + 0.5 };
       const kind = t.types[y * t.size + x];

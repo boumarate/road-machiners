@@ -3,7 +3,8 @@
 // sites; the finish layer grades roads over the result.
 
 import { GEOLOGY } from "../data/terrain";
-import type { RainRules, SandStart, SlumpRules, WindRules } from "../data/terrain";
+import type { DuneRules, RainRules, SandStart, SlumpRules, WindRules } from "../data/terrain";
+import { noiseAt } from "../sim/elevation";
 import { chance, nextRandom } from "../sim/rng";
 import type { Rng } from "../sim/rng";
 import type { MapDraft } from "./bake";
@@ -18,7 +19,9 @@ export function geologyLayer(seed: number, d: MapDraft): MapDraft {
   slump(d, GEOLOGY.slump);
   t = logRule("slump", t, "");
   const windOut = wind(d, GEOLOGY.wind, { rngState: seed });
-  logRule("wind", t, `${windOut.toFixed(1)} units of sand off the edge`);
+  t = logRule("wind", t, `${windOut.toFixed(1)} units of sand off the edge`);
+  dunes(d, GEOLOGY.dunes, GEOLOGY.wind.direction, seed);
+  logRule("dunes", t, "");
   return d;
 }
 
@@ -71,6 +74,8 @@ type RainGrid = {
   order: Uint32Array; // corners from highest to lowest
   weights: Float64Array; // scratch: share weight of each neighbor of the current corner
   steepest: number; // scratch: steepest slope down from the current corner, units per tile
+  before: Float64Array; // heights before the current step, for spreading its cuts
+  spread: Float64Array; // scratch: this step's height change while it spreads
   flow: Float32Array;
   outflow: number;
 };
@@ -84,10 +89,38 @@ export function rain(d: MapDraft, rules: RainRules): number {
     sortByHeight(g);
     g.water.fill(rules.rainPerStep);
     g.soil.fill(0);
+    g.before.set(g.height);
     for (const k of g.order) route(g, k, rules);
+    spreadCuts(g, rules);
   }
   for (let k = 0; k < g.height.length; k++) d.heights[k] = g.height[k];
   return g.outflow;
+}
+
+// Spreads one step's cuts and deposits to the four side neighbors, so water carves gullies a few tiles
+// wide instead of one-tile rills along the grid. Each pass trades change between neighbor pairs, so the
+// total height never changes.
+function spreadCuts(g: RainGrid, rules: RainRules): void {
+  const { n, height, before, spread } = g;
+  for (let k = 0; k < height.length; k++) spread[k] = height[k] - before[k];
+  for (let pass = 0; pass < rules.spreadPasses; pass++) {
+    height.set(spread);
+    spreadPass(spread, height, n, rules.spreadRate);
+  }
+  for (let k = 0; k < height.length; k++) height[k] = before[k] + spread[k];
+}
+
+// One pass: every pair of side neighbors trades change, read from the pass's start values in start.
+function spreadPass(out: Float64Array, start: Float64Array, n: number, rate: number): void {
+  for (let j = 0; j < n; j++) for (let i = 0; i + 1 < n; i++) trade(out, start, j * n + i, j * n + i + 1, rate);
+  for (let j = 0; j + 1 < n; j++) for (let i = 0; i < n; i++) trade(out, start, j * n + i, (j + 1) * n + i, rate);
+}
+
+// Moves a share of the difference in change between corners a and b, read from the pass's start values.
+function trade(out: Float64Array, start: Float64Array, a: number, b: number, rate: number): void {
+  const t = (start[b] - start[a]) * rate;
+  out[a] += t;
+  out[b] -= t;
 }
 
 function newRainGrid(d: MapDraft): RainGrid {
@@ -104,6 +137,8 @@ function newRainGrid(d: MapDraft): RainGrid {
     order,
     weights: new Float64Array(8),
     steepest: 0,
+    before: new Float64Array(count),
+    spread: new Float64Array(count),
     flow: d.flow,
     outflow: 0,
   };
@@ -497,4 +532,45 @@ function leastOfFamily(h: Heap, at: number): number {
   if (left < h.count && below(h, left, least)) least = left;
   if (left + 1 < h.count && below(h, left + 1, least)) least = left + 1;
   return least;
+}
+
+// Dune fields: deep sand on gentle ground piles into ridges across the wind. Each ridge rises gently on its
+// windward side and drops steeply behind its crest. Noise bends the crest lines, so ridges wander and
+// break. Ridge height grows with sand depth, and the added sand counts as sand for the ground types.
+export function dunes(d: MapDraft, rules: DuneRules, windDirection: number, seed: number): void {
+  const n = d.size + 1;
+  const angle = (windDirection * Math.PI) / 180;
+  const ground = Float32Array.from(d.heights);
+  for (let j = 1; j < n - 1; j++) for (let i = 1; i < n - 1; i++) {
+    const k = j * n + i;
+    const share = duneShare(d.sand[k], cornerSlope(ground, n, k), rules);
+    if (share === 0) continue;
+    const bend = (noiseAt(seed + rules.bendSeedOffset, i * rules.bendFrequency, j * rules.bendFrequency) - 0.5) * 2 * rules.bend;
+    const phase = fract((i * Math.cos(angle) + j * Math.sin(angle) + bend) / rules.wavelength);
+    const lift = rules.height * share * ridgeProfile(phase, rules.leeShare);
+    d.heights[k] += lift;
+    d.sand[k] += lift;
+  }
+}
+
+// 0 to 1: how much of a full dune ridge a corner carries, from its sand depth, and 0 on slopes too steep
+// for dunes to stand.
+function duneShare(sand: number, slope: number, rules: DuneRules): number {
+  if (sand <= rules.minSand || slope > rules.maxSlope) return 0;
+  return Math.min(1, (sand - rules.minSand) / (rules.fullSand - rules.minSand));
+}
+
+// Height of a ridge at a phase along the wind, 0 to 1: a long windward rise, then a short lee face.
+function ridgeProfile(phase: number, leeShare: number): number {
+  const rise = 1 - leeShare;
+  return phase < rise ? phase / rise : (1 - phase) / leeShare;
+}
+
+// Steepest height change per tile from a corner to its four side neighbors.
+function cornerSlope(h: Float32Array, n: number, k: number): number {
+  return Math.max(Math.abs(h[k + 1] - h[k - 1]), Math.abs(h[k + n] - h[k - n])) / 2;
+}
+
+function fract(x: number): number {
+  return x - Math.floor(x);
 }

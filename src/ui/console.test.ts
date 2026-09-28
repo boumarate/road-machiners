@@ -130,6 +130,7 @@ describe("queries", () => {
         "list",
         "log",
         "money",
+        "noclip",
         "perk",
         "repair",
         "reveal",

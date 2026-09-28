@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { GEOLOGY } from "../data/terrain";
-import type { RainRules, SlumpRules, WindRules } from "../data/terrain";
+import type { DuneRules, RainRules, SlumpRules, WindRules } from "../data/terrain";
 import { hashRandom } from "../sim/rng";
 import { newDraft } from "./bake";
 import type { MapDraft } from "./bake";
-import { geologyLayer, rain, slump, wind } from "./geology";
+import { dunes, geologyLayer, rain, slump, wind } from "./geology";
 
 function total(a: Float32Array): number {
   let s = 0;
@@ -23,7 +23,12 @@ const RAIN_RULES: RainRules = {
   pickupRate: 0.02,
   dropRate: 0.3,
   maxDig: 0.5,
+  spreadPasses: 2,
+  spreadRate: 0.2,
 };
+
+// Rain with no spreading of cuts, to test how water routes and digs on its own.
+const UNSPREAD: RainRules = { ...RAIN_RULES, spreadPasses: 0 };
 
 // A plane that falls 0.2 units per tile toward +y, with small bumps so water gathers into lines.
 function tiltedPlane(size: number): MapDraft {
@@ -60,10 +65,26 @@ describe("rain", () => {
     const row = 36;
     const before = deepestDip(d, row);
 
-    rain(d, RAIN_RULES);
+    rain(d, UNSPREAD);
 
     expect(before).toBeLessThan(0.05);
     expect(deepestDip(d, row)).toBeGreaterThan(0.1);
+  });
+
+  it("spreads cuts, so no one-tile rill stays deeper than half of what unspread rain leaves", () => {
+    const rill = (d: MapDraft, row: number) => {
+      const n = d.size + 1;
+      let deepest = 0;
+      for (let i = 2; i < n - 2; i++) deepest = Math.max(deepest, (d.heights[row * n + i - 1] + d.heights[row * n + i + 1]) / 2 - d.heights[row * n + i]);
+      return deepest;
+    };
+    const spread = tiltedPlane(48);
+    const unspread = tiltedPlane(48);
+
+    rain(spread, RAIN_RULES);
+    rain(unspread, UNSPREAD);
+
+    expect(rill(spread, 36)).toBeLessThan(rill(unspread, 36) / 2);
   });
 
   it("gathers flow into lines downhill", () => {
@@ -71,7 +92,7 @@ describe("rain", () => {
     const n = d.size + 1;
     const row = 40;
 
-    rain(d, RAIN_RULES);
+    rain(d, UNSPREAD);
 
     const flows = Array.from(d.flow.subarray(row * n + 2, row * n + n - 2)).sort((a, b) => a - b);
     expect(flows[flows.length - 1]).toBeGreaterThan(flows[flows.length >> 1] * 2.5);
@@ -261,5 +282,72 @@ describe("geologyLayer", () => {
 
     expect(high.sand.every((v) => v === 0)).toBe(true);
     expect(low.sand.some((v) => v > 0)).toBe(true);
+  });
+});
+
+// Fixed dune rules on a wind toward +x, so ridges run along y and repeat every 10 tiles along x.
+const DUNE_RULES: DuneRules = {
+  minSand: 0.1,
+  fullSand: 0.3,
+  maxSlope: 0.15,
+  height: 1,
+  wavelength: 10,
+  leeShare: 0.25,
+  bend: 0,
+  bendFrequency: 1 / 40,
+  bendSeedOffset: 0,
+};
+
+function sandSheet(size: number, depth: number): MapDraft {
+  const d = newDraft(size);
+  d.sand.fill(depth);
+  return d;
+}
+
+// Heights along row y from x = 1 to size - 1.
+function row(d: MapDraft, y: number): number[] {
+  const n = d.size + 1;
+  return Array.from({ length: d.size - 1 }, (_, x) => d.heights[y * n + x + 1]);
+}
+
+describe("dunes", () => {
+  it("raises ridges on deep sand, one per wavelength, as sand", () => {
+    const d = sandSheet(40, 0.5);
+
+    dunes(d, DUNE_RULES, 0, 1);
+
+    const heights = row(d, 20);
+    const crests = heights.filter((h, x) => x > 0 && x < heights.length - 1 && h > heights[x - 1] && h >= heights[x + 1]);
+    expect(crests.length).toBeGreaterThanOrEqual(3);
+    expect(Math.max(...heights)).toBeGreaterThan(0.7);
+    expect(d.sand[20 * 41 + 10]).toBeCloseTo(0.5 + d.heights[20 * 41 + 10]);
+  });
+
+  it("drops the lee face steeper than the windward rise", () => {
+    const d = sandSheet(40, 0.5);
+
+    dunes(d, DUNE_RULES, 0, 1);
+
+    const steps = row(d, 20).slice(1).map((h, x) => h - row(d, 20)[x]);
+    expect(-Math.min(...steps)).toBeGreaterThan(2 * Math.max(...steps));
+  });
+
+  it("leaves thin sand flat", () => {
+    const d = sandSheet(40, 0.05);
+
+    dunes(d, DUNE_RULES, 0, 1);
+
+    expect(Math.max(...d.heights)).toBe(0);
+  });
+
+  it("leaves sand on steep ground flat", () => {
+    const d = sandSheet(40, 0.5);
+    const n = 41;
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) d.heights[j * n + i] = j * 0.3;
+    const before = Float32Array.from(d.heights);
+
+    dunes(d, DUNE_RULES, 0, 1);
+
+    expect(Array.from(d.heights)).toEqual(Array.from(before));
   });
 });
