@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { START_KITS } from '../data/start';
-import { isBakedObstacle, isDriveObstacle, mapObstacles } from './mapgen';
+import { PHYSICS } from '../data/physics';
+import { isBakedObstacle, isDriveObstacle, mapObstacles, propPose, propShape } from './mapgen';
 import { ROAD_INDEX } from './road-index';
 import type { Obstacle } from './types';
 import { dist } from './vec';
@@ -101,5 +102,92 @@ describe('world from the baked map', () => {
   it('rejects a map of another size than the region', () => {
     const small: BakedMap = { ...TEST_MAP, terrain: { size: 10, heights: [], types: [] } };
     expect(() => newWorld(1337, START_KITS.standard, small)).toThrow(/size/);
+  });
+});
+
+describe('prop poses', () => {
+  const S = PHYSICS.metersPerTile;
+  const even = (s: number) => ({ x: s, y: s, z: s });
+  const landmark = (look: Landmark['look'], r: number, yaw = 0.5): Landmark => ({ id: `${look}-9`, pos: { x: 12, y: 34 }, r, kind: 'landmark', look, yaw });
+
+  it('turns and sizes a rock by its id and radius', () => {
+    const pose = propPose({ id: 'rock7', pos: { x: 12, y: 34 }, r: 1.5, kind: 'rock' });
+
+    expect(pose.model).toBe('rock');
+    expect(pose.pos).toEqual({ x: 12, y: 34 });
+    expect(pose.yaw).toBeCloseTo(-0.8441973181907088 * Math.PI * 2, 12);
+    expect(pose.scale).toEqual(even(1.5 * S));
+  });
+
+  it('turns a wreck by its id the other way and sizes it from its 0.7-tile reference', () => {
+    const pose = propPose({ id: 'wreck3', pos: { x: 12, y: 34 }, r: 0.91, kind: 'wreck' });
+
+    expect(pose.model).toBe('wreck');
+    expect(pose.yaw).toBeCloseTo(0.30278265313245356 * Math.PI * 2, 12);
+    expect(pose.scale).toEqual(even(0.91 / 0.7));
+  });
+
+  it('stretches a building to its footprint, with a height and half turn from its id', () => {
+    const seed = 0.4361626429017633;
+    const pose = propPose({ id: 'bld-bowl-1', pos: { x: 12, y: 34 }, r: 1, kind: 'building' });
+
+    expect(pose.model).toBe('building');
+    expect(pose.yaw).toBeCloseTo(seed * Math.PI, 12);
+    expect(pose.scale.x).toBeCloseTo(0.78 * 2 * S, 12);
+    expect(pose.scale.y).toBeCloseTo(0.78 * 2 * S, 12);
+    expect(pose.scale.z).toBeCloseTo((16 + seed * 20) * (S / 45), 12);
+  });
+
+  it('faces a landmark along its baked yaw and scales it evenly to its radius', () => {
+    const cases: [Landmark['look'], number, string, number][] = [
+      ['crag', 1.2, 'crag', (1.2 * S) / 1],
+      ['silo', 2, 'silo', (2 * S) / 2.5],
+      ['waterTower', 1, 'water_tower', (1 * S) / 2],
+      ['ruin', 1.5, 'ruin_house', (1.5 * S) / 4.8],
+      ['gasStation', 2, 'gas_station', (2 * S) / 7.2],
+      ['bridgeSpan', 2, 'bridge_broken', (2 * S) / 6],
+      ['carWreck', 0.7, 'wreck', (0.7 * S) / (0.7 * S)],
+      ['shack', 0.9, 'shack', (0.9 * S) / 3.6],
+      ['junk', 0.6, 'junk', (0.6 * S) / 2.4],
+      ['fence', 0.5, 'fence', (2 * 0.5 * S) / 4],
+      ['billboard', 2, 'billboard', 1],
+      ['tank', 1.5, 'tank_hulk', 1],
+    ];
+
+    for (const [look, r, model, scale] of cases) expect(propPose(landmark(look, r)), look).toEqual({ model, pos: { x: 12, y: 34 }, yaw: 0.5, scale: even(scale) });
+  });
+
+  it('turns a power pole a quarter turn off its line, so its crossbar lies across it', () => {
+    expect(propPose(landmark('pole', 0.4))).toEqual({ model: 'power_pole', pos: { x: 12, y: 34 }, yaw: 0.5 + Math.PI / 2, scale: even(1) });
+  });
+
+  it('stretches a house like a settlement building', () => {
+    const pose = propPose(landmark('house', 1.5));
+
+    expect(pose.model).toBe('building');
+    expect(pose.yaw).toBe(0.5);
+    expect(pose.scale.x).toBeCloseTo(1.5 * 0.78 * 2 * S, 12);
+    expect(pose.scale.z).toBeGreaterThanOrEqual(16 * (S / 45));
+    expect(pose.scale.z).toBeLessThan(36 * (S / 45));
+  });
+
+  it('refuses obstacles with no model', () => {
+    expect(() => propPose({ id: 'site-bowl', pos: { x: 1, y: 1 }, r: 5, kind: 'site' })).toThrow(/site-bowl/);
+    expect(() => propPose({ id: 'pond-oasis', pos: { x: 1, y: 1 }, r: 2, kind: 'water' })).toThrow(/pond-oasis/);
+  });
+
+  it('keeps every box of every baked prop inside its bounding radius', () => {
+    const tolerance = 0.25; // meters, a half cell of the shape grid
+    const outside = mapObstacles(TEST_MAP).flatMap((o) => {
+      const pose = propPose(o);
+      const reach = Math.max(...propShape(pose.model).flatMap((b) => [b.x0, b.x1].flatMap((x) => [b.y0, b.y1].map((y) => Math.hypot(x * pose.scale.x, y * pose.scale.y)))));
+      return reach > o.r * S + tolerance ? [`${o.id} ${pose.model} reach ${reach.toFixed(2)} m > r ${(o.r * S).toFixed(2)} m`] : [];
+    });
+
+    expect(outside).toEqual([]);
+  });
+
+  it('refuses a model with no shape', () => {
+    expect(() => propShape('nothing')).toThrow(/nothing/);
   });
 });

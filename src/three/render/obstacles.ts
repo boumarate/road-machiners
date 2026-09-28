@@ -7,11 +7,12 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { hashStr } from '../../render/noise';
 import { PAL } from '../../render/palette';
 import { PHYSICS } from '../../data/physics';
+import { propPose, type PropPose } from '../../sim/mapgen';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import { hasSalvage, salvageUnits } from '../../sim/salvage';
-import type { LandmarkLook, Obstacle, SalvageStock } from '../../sim/types';
+import type { Obstacle, SalvageStock } from '../../sim/types';
 import { dist } from '../../sim/vec';
-import { instancedModel, model, socket, type ModelName } from './models';
+import { instancedModel, model, socket } from './models';
 import type { RenderScope } from './scope';
 import { TERRAIN_CHUNK } from './terrain';
 
@@ -123,13 +124,10 @@ function disposeTree(obj: THREE.Object3D): void {
 }
 
 function buildObstacle(t: Terrain, o: Obstacle): THREE.Object3D {
-  if (o.kind === 'wreck') return buildWreck(t, o);
-  if (o.kind === 'building') return buildBuilding(t, o);
   if (o.kind === 'water') return buildWater(t, o);
-  if (o.kind === 'landmark') return buildLandmark(t, o);
   // A site's boundary blocks traffic but has no model of its own; buildSites draws the site.
   if (o.kind === 'site') return new THREE.Group();
-  throw new Error(`No model for obstacle kind ${(o as Obstacle).kind}`);
+  return buildProp(t, o);
 }
 
 function seat(t: Terrain, o: Obstacle): THREE.Group {
@@ -138,47 +136,38 @@ function seat(t: Terrain, o: Obstacle): THREE.Group {
   return g;
 }
 
-// A boulder from tools/blender/rock.py, modeled at a 1 m radius. Each rock gets its own yaw and tint.
+// A boulder from tools/blender/rock.py, modeled at a 1 m radius. Each rock gets its own tint.
 function rockPlacement(t: Terrain, o: Obstacle): { matrix: THREE.Matrix4; tint: number } {
-  const seed = hashStr(o.id);
-  const g = seat(t, o);
-  g.rotation.y = seed * Math.PI * 2;
-  g.scale.setScalar(o.r * S);
+  const g = posed(t, propPose(o));
   g.updateMatrix();
-  return { matrix: g.matrix, tint: 0.9 + seed * 0.2 };
+  return { matrix: g.matrix, tint: 0.9 + hashStr(o.id) * 0.2 };
 }
 
-// A burnt pickup from tools/blender/wreck.py, modeled at the 0.7-tile reference size.
-function buildWreck(t: Terrain, o: Obstacle): THREE.Object3D {
-  const seed = hashStr(o.id);
-  const g = seat(t, o);
-  g.rotation.y = -seed * Math.PI * 2;
-  g.scale.setScalar(o.r / 0.7);
-  g.add(model('wreck'));
+// A group at the prop's pose. A three.js turn by -yaw points the model's +X at map direction yaw. Model
+// sideways is three.js z and model up is three.js y.
+function posed(t: Terrain, pose: PropPose): THREE.Group {
+  const g = new THREE.Group();
+  g.position.set(pose.pos.x * S, heightAt(t, pose.pos.x, pose.pos.y) * S, pose.pos.y * S);
+  g.rotation.y = -pose.yaw;
+  g.scale.set(pose.scale.x, pose.scale.z, pose.scale.y);
   return g;
 }
 
-// A building from tools/blender/building.py, modeled with a 1 by 0.85 m footprint and 1 m walls, stretched to
-// each footprint and height. Random roof color per id.
-function buildBuilding(t: Terrain, o: Obstacle): THREE.Object3D {
-  const g = seat(t, o);
-  g.rotation.y = -hashStr(o.id) * Math.PI;
-  g.add(buildingShell(o));
+// Wrecks, settlement buildings and baked landmarks. A building gets a roof color from its id.
+function buildProp(t: Terrain, o: Obstacle): THREE.Object3D {
+  const pose = propPose(o);
+  const g = posed(t, pose);
+  const obj = model(pose.model);
+  if (pose.model === 'building') paintRoof(obj, o.id);
+  g.add(obj);
   return g;
 }
 
-// The building model stretched to an obstacle's footprint, at a height and roof color from its id.
-function buildingShell(o: Obstacle): THREE.Object3D {
-  const seed = hashStr(o.id);
-  const size = o.r * 0.78 * 2 * S; // full footprint, in meters
-  const height = (16 + seed * 20) * (S / 45); // 45px per height unit in the 2D relief scale
-  const roof = PAL.roof[Math.floor(seed * 97) % PAL.roof.length];
-  const house = model('building');
-  house.scale.set(size, height, size);
+function paintRoof(house: THREE.Object3D, id: string): void {
+  const roof = PAL.roof[Math.floor(hashStr(id) * 97) % PAL.roof.length];
   eachMaterial(house, (m) => {
     if (m.name === 'roof') m.color.setHex(roof);
   });
-  return house;
 }
 
 function eachMaterial(obj: THREE.Object3D, fn: (m: THREE.MeshLambertMaterial) => void): void {
@@ -199,56 +188,11 @@ function buildWater(t: Terrain, o: Obstacle): THREE.Object3D {
   return g;
 }
 
-// Baked landmarks from the map file: power poles with sagging wires between them, billboards, rock spires,
-// tank hulks, old buildings, silos, water towers, bridges, shacks, fence segments, junk piles and car wrecks.
-// Each faces its baked yaw. A pole's crossbar lies across its line, so the wires run along it. A fence
-// segment faces along its line. Houses and shacks use the settlement building model.
-
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
 
-const MODELS: Record<LandmarkLook, ModelName> = {
-  crag: 'crag',
-  ruin: 'ruin_house',
-  house: 'building',
-  silo: 'silo',
-  waterTower: 'water_tower',
-  gasStation: 'gas_station',
-  bridgeSpan: 'bridge_broken',
-  pole: 'power_pole',
-  billboard: 'billboard',
-  tank: 'tank_hulk',
-  shack: 'building',
-  fence: 'power_pole',
-  junk: 'crates',
-  carWreck: 'wreck',
-};
-// Footprint radius in meters each model is built at, for models that scale evenly to their obstacle radius:
-// the crag spire, the silo body, the water tower tank, the ruined house, the gas station, the broken bridge end,
-// the crates of a junk pile and the burnt car. The building model stretches to its footprint instead. The others
-// stand at their real size.
-const MODEL_RADIUS: Partial<Record<ModelName, number>> = { crag: 1, silo: 2.5, water_tower: 2, ruin_house: 4.8, gas_station: 7.2, bridge_broken: 6, crates: CRATES_RADIUS, wreck: 0.7 * S };
 const WIRES = ['wire0', 'wire1', 'wire2'];
 const SAG = 0.7; // meters a wire hangs below its ends at mid-span
 const WIRE_POINTS = 8;
-
-function buildLandmark(t: Terrain, o: Landmark): THREE.Object3D {
-  const g = seat(t, o);
-  g.rotation.y = -yawOf(o);
-  const name = MODELS[o.look];
-  if (name === 'building') {
-    g.add(buildingShell(o));
-    return g;
-  }
-  const radius = MODEL_RADIUS[name];
-  if (radius !== undefined) g.scale.setScalar((o.r * S) / radius);
-  g.add(model(name));
-  return g;
-}
-
-// Map yaw of the model's +X. A three.js turn by -yaw about y points +X at map direction yaw.
-function yawOf(o: Landmark): number {
-  return o.look === 'pole' ? o.yaw + Math.PI / 2 : o.yaw;
-}
 
 // Wires between neighboring poles of one line: poles whose ids name the same line and following steps.
 export function addPowerLines(t: Terrain, obstacles: Obstacle[], scope: RenderScope): void {
@@ -257,7 +201,7 @@ export function addPowerLines(t: Terrain, obstacles: Obstacle[], scope: RenderSc
   for (const a of poles.values()) {
     const b = poles.get(nextId(a.id));
     if (!b) continue;
-    const ends = [a, b].map((p) => buildLandmark(t, p));
+    const ends = [a, b].map((p) => buildProp(t, p));
     for (const e of ends) e.updateMatrixWorld(true);
     const spans = WIRES.map((w) => span(socket('power_pole', w).applyMatrix4(ends[0].matrixWorld), socket('power_pole', w).applyMatrix4(ends[1].matrixWorld)));
     const mesh = new THREE.Mesh(mergeGeometries(spans), material);

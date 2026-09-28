@@ -1,10 +1,12 @@
 // Obstacle placement: the baked map's props, then seeded site props and road wrecks.
 
+import { PHYSICS } from '../data/physics';
+import SHAPES from '../data/prop-shapes.json';
 import { REGION } from '../data/region';
 import { PROP_KINDS, type BakedMap, type BakedProp } from './terrain';
 import { randInt, randRange } from './rng';
 import { TERRAIN } from '../data/terrain';
-import type { Obstacle, World } from './types';
+import type { LandmarkLook, Obstacle, World } from './types';
 import { angleDiff, bearing, dist, segmentDist, type Vec } from './vec';
 
 const O = REGION.obstacles;
@@ -124,4 +126,93 @@ export function onBridge(pos: Vec, r: number): boolean {
 // Whether a prop keeps the extra site clearance from every town and location.
 export function clearOfSites(pos: Vec, r: number): boolean {
   return [...REGION.towns, ...REGION.locations].every((s) => dist(pos, s.pos) > s.radius + O.siteClearance + r);
+}
+
+// Prop poses: the model each obstacle shows, and its place, turn and scale. The views draw from the pose, and
+// collisions place the model's shape by it.
+
+// Scale from model meters on each model axis: x forward, y sideways, z up.
+export type PropScale = { x: number; y: number; z: number };
+// yaw turns the model's +x in radians from map +x toward +y.
+export type PropPose = { model: PropModel; pos: Vec; yaw: number; scale: PropScale };
+// One box of a model's collision shape, in model meters: x forward, y sideways, z up.
+export type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
+
+type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
+type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk';
+
+const M = PHYSICS.metersPerTile;
+const TURN = Math.PI * 2;
+const LANDMARK_MODELS: Record<LandmarkLook, PropModel> = {
+  crag: 'crag',
+  ruin: 'ruin_house',
+  house: 'building',
+  silo: 'silo',
+  waterTower: 'water_tower',
+  gasStation: 'gas_station',
+  bridgeSpan: 'bridge_broken',
+  pole: 'power_pole',
+  billboard: 'billboard',
+  tank: 'tank_hulk',
+  shack: 'shack',
+  fence: 'fence',
+  junk: 'junk',
+  carWreck: 'wreck',
+};
+// Footprint radius in meters each model is built at, for models that scale evenly to their obstacle radius. A
+// fence segment is 4 m long, so its radius is half that. The building model stretches to its footprint instead.
+// The pole, billboard and tank stand at their real size.
+const MODEL_RADIUS: Partial<Record<PropModel, number>> = { crag: 1, silo: 2.5, water_tower: 2, ruin_house: 4.8, gas_station: 7.2, bridge_broken: 6, wreck: 0.7 * M, shack: 3.6, junk: 2.4, fence: 2 };
+const WRECK_RADIUS = 0.7; // tiles, the reference size of the wreck model
+const BUILDING_FILL = 0.78; // share of the obstacle radius a building's footprint fills
+const SHAPE_BOXES = new Map<string, readonly ShapeBox[]>(Object.entries(SHAPES).map(([name, shape]) => [name, shape.boxes]));
+
+export function propPose(o: Obstacle): PropPose {
+  const pos = { ...o.pos };
+  if (o.kind === 'landmark') return landmarkPose(o);
+  if (o.kind === 'rock') return { model: 'rock', pos, yaw: -idHash(o.id) * TURN, scale: even(o.r * M) };
+  if (o.kind === 'wreck') return { model: 'wreck', pos, yaw: idHash(o.id) * TURN, scale: even(o.r / WRECK_RADIUS) };
+  if (o.kind === 'building') return { model: 'building', pos, yaw: idHash(o.id) * Math.PI, scale: buildingScale(o) };
+  throw new Error(`Obstacle ${o.id} of kind ${o.kind} has no prop model`);
+}
+
+// The collision boxes of a prop model, from src/data/prop-shapes.json.
+export function propShape(model: string): readonly ShapeBox[] {
+  const boxes = SHAPE_BOXES.get(model);
+  if (boxes === undefined) throw new Error(`Prop model ${model} has no shape in prop-shapes.json. Run npm run models:shapes.`);
+  return boxes;
+}
+
+// A landmark faces its baked yaw. A pole turns a quarter more, so its crossbar lies across its line.
+function landmarkPose(o: Landmark): PropPose {
+  const model = LANDMARK_MODELS[o.look];
+  const pos = { ...o.pos };
+  const yaw = o.look === 'pole' ? o.yaw + Math.PI / 2 : o.yaw;
+  if (model === 'building') return { model, pos, yaw, scale: buildingScale(o) };
+  const radius = MODEL_RADIUS[model];
+  return { model, pos, yaw, scale: even(radius === undefined ? 1 : (o.r * M) / radius) };
+}
+
+// The building model has a 1 by 0.85 m footprint and 1 m walls. It stretches to the obstacle's footprint, at a
+// height from its id: 16 to 36 height units of the 2D relief scale, at 45 px per unit.
+function buildingScale(o: Obstacle): PropScale {
+  const size = o.r * BUILDING_FILL * 2 * M;
+  return { x: size, y: size, z: (16 + idHash(o.id) * 20) * (M / 45) };
+}
+
+function even(s: number): PropScale {
+  return { x: s, y: s, z: s };
+}
+
+// A hash of an obstacle id in [0, 1), for turns and heights that must not draw on the world RNG.
+function idHash(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  // Final avalanche so ids that differ in one character land far apart.
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
 }
