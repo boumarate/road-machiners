@@ -173,6 +173,9 @@ export class Hud {
       el("summary", { title: "Driving and combat controls" }, "?"),
     );
     this.help.append(guide);
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "Escape") guide.removeAttribute("open");
+    });
     guide.append(
       el("div", {}, "Click the ground: drive there by road. Shift-click: stop there."),
       el("div", {}, "Space: drive on or pause. Hold Space: fast-forward. Click your truck: brake."),
