@@ -41,7 +41,7 @@ describe('raider camps', () => {
     const raiders = w.vehicles.filter((v) => v.faction === 'raiders');
     expect(raiders).toHaveLength(SPAWN.initial.filter((id) => NPCS[id].faction === 'raiders').length);
     for (const r of raiders) {
-      const near = camps.flatMap((c) => siteGates(c)).some((g) => dist(g, r.pos) <= SPAWN.campSpread + 2);
+      const near = camps.flatMap((c) => siteGates(c)).some((g) => dist(g, r.pos) <= SPAWN.gateSpread + 2);
       expect(near, `raider at ${r.pos.x},${r.pos.y}`).toBe(true);
     }
   });

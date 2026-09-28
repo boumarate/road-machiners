@@ -20,8 +20,19 @@ describe('site gates and pads', () => {
     const large = REGION.locations.filter((l) => l.radius >= REGION.sites.multiGateRadius);
     expect(large.map((l) => l.id).sort()).toEqual(['fallen-sun', 'orchard']);
     for (const site of SITES) {
-      if (large.includes(site as never)) expect(siteGates(site).length, site.id).toBeGreaterThan(1);
+      const roads = REGION.roads.filter((road) => road.some((p) => dist(p, site.pos) <= site.radius)).length;
+      if (large.includes(site as never)) expect(siteGates(site).length, site.id).toBe(roads);
       else expect(siteGates(site).length, site.id).toBe(1);
+    }
+  });
+
+  it('lets no road pass through a location', () => {
+    for (const site of REGION.locations) {
+      for (const road of REGION.roads) {
+        const inside = road.map((p) => dist(p, site.pos) <= site.radius);
+        if (!inside.some(Boolean)) continue;
+        expect(inside[0] || inside[inside.length - 1], `${site.id} sits on a through road`).toBe(true);
+      }
     }
   });
 

@@ -351,11 +351,27 @@ describe('site restock', () => {
     emptyStock(stock);
     runDays(w, 1);
     const firstDay = stock.goods.scrap;
-    runDays(w, 29);
+    // A unit comes back at SALVAGE.restockShare a day, so a year of days fills every range but for
+    // odds far below one in a million.
+    runDays(w, 365);
     expect(firstDay).toBeLessThan(SALVAGE.convoy.goods.scrap[1]);
     expect(stock.goods.scrap).toBe(SALVAGE.convoy.goods.scrap[1]);
     expect(stock.goods.parts).toBe(SALVAGE.convoy.parts[1]);
     expect(stock.fuel).toBe(SALVAGE.convoy.fuel[1]);
+  });
+
+  it('refills an emptied spare part slot with one part at a small daily chance', () => {
+    const w = emptyWorld();
+    const stock = stockOf(w, convoy.id);
+    emptyStock(stock);
+    // The daily chance is sparePartChance * restockShare, a few percent, so 1000 days refill it
+    // except with odds far below one in a million.
+    let days = 0;
+    while (stock.parts.length === 0 && days < 1000) {
+      runDays(w, 1);
+      days++;
+    }
+    runDays(w, 30);
     expect(stock.parts).toHaveLength(1);
   });
 

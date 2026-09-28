@@ -83,10 +83,11 @@ export const REGION = {
     offRoadCost: 1.75,
     // Per-driver route taste. Each NPC driver sees route cost multiplied by its own smooth noise field,
     // so drivers between the same points take different roads and shortcuts. Lattice points lie `scale`
-    // tiles apart, about the size of a hill or a road bend. `strength` 0.5 scales cost from 0.75 to 1.25,
-    // so a driver can prefer a road up to 67% longer. A road on the worst taste costs 1.25, below
-    // hardpan beside it on the best taste at 0.75 x 1.75 / 0.9, so drivers keep to roads where they have one.
-    taste: { scale: 40, strength: 0.5 },
+    // tiles apart, about the size of a hill or a road bend. `strength` 0.6 scales cost from 0.7 to 1.3,
+    // so a driver can prefer a road up to 86% longer. Below 0.6 every Bowl to Nose driver takes the
+    // middle road past Pump Station. A road on the worst taste costs 1.3, below hardpan beside it on
+    // the best taste at 0.7 x 1.75 / 0.9 = 1.36, so drivers keep to roads where they have one.
+    taste: { scale: 40, strength: 0.6 },
     // Tiles of a kept route a driver re-straightens each time it reuses the route. The rest stays as
     // planned. It covers 4 turns, a real turn plus 3 preview turns, at the top speed of 11.7 tiles per
     // turn: the fastest chassis with the strongest engine.
@@ -106,7 +107,7 @@ export const REGION = {
       edge: "fence",
       name: "Old Orchard",
       kind: "landmark",
-      pos: scalePoint({ x: 28, y: 64 }),
+      pos: scalePoint({ x: 23.2, y: 62 }),
       radius: 16, // the ruin on the far edge reaches 14.5 tiles; the trees stop at 10
     },
     {
@@ -114,7 +115,7 @@ export const REGION = {
       edge: "stone",
       name: "Dustwell",
       kind: "oasis",
-      pos: scalePoint({ x: 37, y: 32 }),
+      pos: scalePoint({ x: 33.8, y: 32 }),
       radius: 6,
     },
     {
@@ -122,7 +123,7 @@ export const REGION = {
       edge: "palisade",
       name: "The Granary",
       kind: "landmark",
-      pos: scalePoint({ x: 50, y: 36 }),
+      pos: scalePoint({ x: 50, y: 32.8 }),
       radius: 6,
     },
     {
@@ -130,7 +131,7 @@ export const REGION = {
       edge: "wrecks",
       name: "Burnt Convoy",
       kind: "convoy",
-      pos: scalePoint({ x: 63, y: 20 }),
+      pos: scalePoint({ x: 60, y: 18.8 }),
       radius: 6,
     },
     {
@@ -138,7 +139,7 @@ export const REGION = {
       edge: "wrecks",
       name: "Podfield",
       kind: "convoy",
-      pos: scalePoint({ x: 77, y: 24 }),
+      pos: scalePoint({ x: 78.2, y: 21 }),
       radius: 6,
     },
     {
@@ -146,7 +147,7 @@ export const REGION = {
       edge: "fence",
       name: "Canyon Bridge",
       kind: "landmark",
-      pos: scalePoint({ x: 103, y: 70 }),
+      pos: scalePoint({ x: 106.2, y: 70 }),
       radius: 6,
     },
     {
@@ -154,7 +155,7 @@ export const REGION = {
       edge: "fence",
       name: "Glass Flats",
       kind: "landmark",
-      pos: scalePoint({ x: 88, y: 84 }),
+      pos: scalePoint({ x: 90.3, y: 86.3 }),
       radius: 6,
     },
     {
@@ -162,7 +163,7 @@ export const REGION = {
       edge: "stone",
       name: "Green Pit",
       kind: "oasis",
-      pos: scalePoint({ x: 73, y: 92 }),
+      pos: scalePoint({ x: 71.8, y: 89 }),
       radius: 6,
     },
     {
@@ -170,7 +171,7 @@ export const REGION = {
       edge: "fence",
       name: "South Lock",
       kind: "landmark",
-      pos: scalePoint({ x: 58, y: 91 }),
+      pos: scalePoint({ x: 56.8, y: 94 }),
       radius: 6,
     },
     {
@@ -178,7 +179,7 @@ export const REGION = {
       edge: "wrecks",
       name: "Ridge Wrecks",
       kind: "convoy",
-      pos: scalePoint({ x: 41, y: 87 }),
+      pos: scalePoint({ x: 41, y: 90.2 }),
       radius: 6,
     },
     {
@@ -186,7 +187,7 @@ export const REGION = {
       edge: "fence",
       name: "Pump Station",
       kind: "landmark",
-      pos: scalePoint({ x: 43, y: 54 }),
+      pos: scalePoint({ x: 40.7, y: 51.7 }),
       radius: 6,
     },
     {
@@ -202,7 +203,7 @@ export const REGION = {
       edge: "palisade",
       name: "Salvage Yard",
       kind: "convoy",
-      pos: scalePoint({ x: 82, y: 49 }),
+      pos: scalePoint({ x: 82, y: 52.2 }),
       radius: 6,
     },
     // Raider camps. Raiders spawn at their gates and service there. Their gate guns shoot every outsider in range.
@@ -287,6 +288,19 @@ export const REGION = {
       { x: 93, y: 70 },
       { x: 88, y: 84 },
     ]),
+    // Short straight spurs lead from a road point to each location beside it, so through traffic passes by.
+    scaleRoad([{ x: 28, y: 64 }, { x: 23.2, y: 62 }], [0]),
+    scaleRoad([{ x: 37, y: 32 }, { x: 33.8, y: 32 }], [0]),
+    scaleRoad([{ x: 50, y: 36 }, { x: 50, y: 32.8 }], [0]),
+    scaleRoad([{ x: 63, y: 20 }, { x: 60, y: 18.8 }], [0]),
+    scaleRoad([{ x: 77, y: 24 }, { x: 78.2, y: 21 }], [0]),
+    scaleRoad([{ x: 103, y: 70 }, { x: 106.2, y: 70 }], [0]),
+    scaleRoad([{ x: 88, y: 84 }, { x: 90.3, y: 86.3 }], [0]),
+    scaleRoad([{ x: 73, y: 92 }, { x: 71.8, y: 89 }], [0]),
+    scaleRoad([{ x: 58, y: 91 }, { x: 56.8, y: 94 }], [0]),
+    scaleRoad([{ x: 41, y: 87 }, { x: 41, y: 90.2 }], [0]),
+    scaleRoad([{ x: 43, y: 54 }, { x: 40.7, y: 51.7 }], [0]),
+    scaleRoad([{ x: 82, y: 49 }, { x: 82, y: 52.2 }], [0]),
     // Dead-end tracks lead to the raider camps.
     scaleRoad([
       { x: 37, y: 32 },
@@ -386,5 +400,8 @@ export const REGION = {
     orchardRows: 11,
     orchardSpacing: 2,
   },
-  playerStart: { town: "bowl", offset: { x: 15, y: -27 } },
+  // The player starts on the right shoulder of the north trunk road, which leaves Bowl toward Old Orchard.
+  // 83 tiles along the road from Bowl's center is 55 tiles past its wall. Bowl is then out of clear sight
+  // and shows only grey, so a new player asks a passing driver for the way.
+  playerStart: { road: 0, distance: 83, shoulder: 1.5 },
 };

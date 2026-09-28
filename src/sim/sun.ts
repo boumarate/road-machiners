@@ -60,6 +60,11 @@ export function inShade(world: World, pos: Vec, sun: Sun): boolean {
 export function heatAt(world: World, pos: Vec): number {
   const sun = sunAt(world.turn);
   if (!sun || inShade(world, pos, sun)) return 1;
+  return sunHeatAt(world, pos, sun);
+}
+
+// Heat at pos if it stands in the sun. For callers that already know pos is not in shade.
+export function sunHeatAt(world: World, pos: Vec, sun: Sun): number {
   const t = clamp(sun.elevation / (TIME.noonElevation * (Math.PI / 180)), 0, 1);
   const excess = (TIME.sunHeat - 1) * t;
   return 1 + excess * weatherAt(world, pos).heat;

@@ -1,16 +1,19 @@
-import { MIN_CHANCE, NPC_BEHAVIOR } from '../data/npcs';
+import { HUNT, MIN_CHANCE, NPC_BEHAVIOR } from '../data/npcs';
+import { REGION } from '../data/region';
 import { PERK_NUMBERS } from '../data/skills';
 import { describe, expect, it, onTestFinished } from 'vitest';
 import { TERRAIN } from '../data/terrain';
 import { corePart } from './grid';
 import { addGoods } from './inventory';
-import { decide, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
+import { decide, huntingGrounds, optionChances, optionWeights, vehicleDanger } from './npc-decisions';
+import { siteLootTable } from './salvage';
+import { sitePads } from './sites';
 import { noteHurt, thinkNpc, topGoal } from './npc-activities';
 import { addState, stateOf } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import type { TraitId } from '../data/npcs';
 import type { Faction, Vehicle, World } from './types';
-import type { Vec } from './vec';
+import { dist, polylineDist, type Vec } from './vec';
 import { refreshVision } from './vision';
 import { cloneWorld } from './world';
 
@@ -399,5 +402,25 @@ describe('robbery after a truce', () => {
     const before = rob();
     addState(w, 'truce', robber.id, me.id, { kind: 'none' });
     expect(rob()).toBeLessThan(before / 100);
+  });
+});
+
+describe('hunting grounds', () => {
+  const grounds = huntingGrounds();
+  const lootPads = REGION.locations.filter((l) => l.kind !== 'camp' && siteLootTable(l)).flatMap((l) => sitePads(l));
+  const isPad = (p: Vec) => lootPads.some((pad) => dist(p, pad) < 0.01);
+  const onRoad = (p: Vec) => !isPad(p) && REGION.roads.some((road) => polylineDist(p, road) < 0.01);
+
+  it('lie on lonely road stretches and at the pads of salvage sites', () => {
+    expect(lootPads.length).toBeGreaterThan(0);
+    for (const pad of lootPads) expect(grounds).toContainEqual(pad);
+    expect(grounds.filter(onRoad).length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('keeps road grounds far from every site, and none at a town or camp', () => {
+    const sites = [...REGION.towns, ...REGION.locations];
+    for (const p of grounds.filter(onRoad)) for (const site of sites) expect(dist(p, site.pos) - site.radius).toBeGreaterThanOrEqual(HUNT.siteDistance);
+    const guarded = [...REGION.towns, ...REGION.locations.filter((l) => l.kind === 'camp')];
+    for (const p of grounds) for (const site of guarded) expect(dist(p, site.pos)).toBeGreaterThan(site.radius + REGION.sites.pad.length);
   });
 });

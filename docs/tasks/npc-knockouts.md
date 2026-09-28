@@ -87,5 +87,5 @@
 - Checks: `npm test` passes, 1469 tests. `npm run quality` passes. `npm run playtest` passes at 60 fps.
 - Manual try, positive: a knocked-out raider beside the player showed "Loot Raider outrider". Its grid opened on the right. A scrap moved at once. Removing its MG ran a 3-turn refit labeled "Remove MG turret from Raider outrider". A manual order then finished it into a wreck.
 - Manual try, negative: with auto fire on, a knocked-out raider in range drew no shots over 4 turns. A removal stopped when the raider woke, since its attackers could no longer see it.
-- Changes from the plan: the truck looting lives in `src/sim/salvage.ts`, since the quality gate blocks a new file in `src/sim/`. Idle scavengers also pick knocked-out trucks in sight, like wrecks. A knocked-out NPC takes no tow. The save version is 25.
+- Changes from the plan: the truck looting lives in `src/sim/salvage.ts`, since the quality gate blocks a new file in `src/sim/`. Idle scavengers also pick knocked-out trucks in sight, like wrecks. A knocked-out NPC takes no tow. The save version is 26.
 - Not tried in the browser: the teleport home after 50 unseen turns. Unit tests cover it.

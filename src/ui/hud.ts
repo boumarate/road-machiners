@@ -174,20 +174,14 @@ export class Hud {
     );
     this.help.append(guide);
     guide.append(
-      el("div", {}, "Click: plan drive-through. Shift-click: plan stop there."),
-      el("div", {}, "Click your truck: brake. No order: coast on."),
-      el(
-        "div",
-        {},
-        "Click a vehicle: target it. 1-4: weapon. 0: all. W: weapons.",
-      ),
-      el(
-        "div",
-        {},
-        "Space: start / pause travel. In combat: one turn. Hold: fast-forward. A: auto fire. P: auto patch. C: character. I: inventory. T: radio the truck under the cursor. H: honk.",
-      ),
-      el("div", {}, "R: manual driving, straight through anything."),
-      el("div", {}, "Right-drag: pan. F: center on truck. Wheel: zoom. V: camera mode. M: mute."),
+      el("div", {}, "Click the ground: drive there by road. Shift-click: stop there."),
+      el("div", {}, "Space: drive on or pause. Hold Space: fast-forward. Click your truck: brake."),
+      el("div", {}, "R: manual mode. Drive straight at the point, through anything. Space plays one turn."),
+      el("div", {}, "Click a town or site: stop at its pad. E on a pad: trade, repair or loot."),
+      el("div", {}, "T: radio the truck under the cursor. Ask drivers the way. 1-9: reply. H: honk."),
+      el("div", {}, "Click a truck: target it. 1-4: pick a weapon. 0: all. Q: auto fire. X: show weapons."),
+      el("div", {}, "P: auto patch. C: character. I: inventory. Esc: close."),
+      el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
     );
   }
 

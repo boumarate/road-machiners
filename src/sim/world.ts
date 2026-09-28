@@ -73,7 +73,7 @@ export function newWorld(seed: number, kit: StartKit): World {
       autoFire: false,
       autoRepair: true,
       engineHeat: 0,
-      discovered: [REGION.playerStart.town],
+      discovered: [],
       scavenged: [],
       storage: [],
       contracts: [],
@@ -100,7 +100,7 @@ export function newWorld(seed: number, kit: StartKit): World {
     states: [],
   };
   world.obstacles = generateObstacles(world);
-  const town = REGION.towns.find((t) => t.id === REGION.playerStart.town)!;
+  const start = startPose();
   const truck = makeVehicle(world, {
     name: kit.name,
     faction: "player",
@@ -108,11 +108,8 @@ export function newWorld(seed: number, kit: StartKit): World {
     parts: kit.parts.map((defId) => ({ defId, wear: 0 })),
     spares: [],
     cargo: kit.cargo,
-    pos: {
-      x: town.pos.x + REGION.playerStart.offset.x,
-      y: town.pos.y + REGION.playerStart.offset.y,
-    },
-    heading: -Math.PI / 4,
+    pos: start.pos,
+    heading: start.heading,
     brain: null,
   });
   const blocked = world.obstacles.filter(
@@ -131,6 +128,31 @@ export function newWorld(seed: number, kit: StartKit): World {
   refreshVision(world);
   world.events = [];
   return world;
+}
+
+// The player's start: REGION.playerStart.distance tiles along its road from the road's first point,
+// moved to the right shoulder and facing along the road.
+export function startPose(): { pos: Vec; heading: number } {
+  const { road, distance, shoulder } = REGION.playerStart;
+  const points = REGION.roads[road];
+  let left = distance;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const length = dist(a, b);
+    if (left > length) {
+      left -= length;
+      continue;
+    }
+    const heading = Math.atan2(b.y - a.y, b.x - a.x);
+    const t = left / length;
+    // Map y points down, so (-sin, cos) of the heading points to the right of travel.
+    return {
+      pos: { x: a.x + (b.x - a.x) * t - Math.sin(heading) * shoulder, y: a.y + (b.y - a.y) * t + Math.cos(heading) * shoulder },
+      heading,
+    };
+  }
+  throw new Error(`Player start lies ${distance} tiles along road ${road}, past its end`);
 }
 
 export function cloneWorld(world: World): World {
