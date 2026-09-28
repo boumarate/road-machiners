@@ -102,11 +102,10 @@ export const RULES = {
   retreatTeleportTurns: 50,
 };
 
-// Daily upkeep: a share of the truck's value, paid once per game day. A start truck (chassis 400 plus
-// four cheap parts, about 980 value) pays about 29 a day, and a maxed carrier build (about 5300 value)
-// pays about 160 a day, both inside the target bands.
+// Daily upkeep: a share of the truck's value, paid once per game day. A start truck (a scout plus
+// four cheap parts, about 3200 value) pays about 29 a day. A salvage run earns about 110 a day.
 export const UPKEEP = {
-  dailyShare: 0.03,
+  dailyShare: 0.009,
 };
 
 // Debug console numbers. Distances are in tiles.

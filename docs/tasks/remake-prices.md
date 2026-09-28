@@ -18,9 +18,15 @@
   - store: money per unit of added cap.
   - core: money per HP, so heavy grades cost more.
   - scanner: money per tile of range.
-- `EFFORT.wage` takes the wages measured by the harness. Bases are set so every non-core part and chassis lands inside its band.
+- Scale, set by the user after the first harness run:
+  - The tier 1 wage is the salvage bot's measured 0.37 per turn. The other bots lose money, so they do not set wages. Tier 2 and 3 wages keep the old ratio to tier 1.
+  - Chassis tiers start at 2000, 3000 and 4500.
+  - Tier 1 parts cost 100 to 250. Tier 2 parts cost about 200 to 450, and tier 3 parts about 350 to 800.
+  - Bands in turns are rewritten to hold these ranges at the new wages.
+- A chassis trade-in pays the normal sell price: value less the sell spread, scaled by core health and wear. It no longer pays half.
+- Other readers of chassis value keep their money effect. Upkeep `dailyShare`, bounty `valueShare` and wreck `coreValueShare` shrink by the value growth.
 - Goods keep their values. Their bands change to match them.
-- NPC equipment budgets scale with the new values, so NPC gear stays about as strong as now.
+- NPC equipment budgets grow by the chassis price growth, so NPC gear stays about as strong as now.
 - Out of scope: new items, stat changes, shop stock tables and contract factors.
 
 ## Invariants and principles
@@ -33,16 +39,18 @@
 ### Phase 1 — Harness runs and measures wages
 - `src/econ/harness.ts` `sellSpareParts()`: sell stored parts only at a garage.
 - Run `npm run econ -- --seeds 1,2,3 --days 30 --policy all` with a log in `tmp/`. Read the wage per tier from `tmp/econ/report.md`.
-- `src/data/market.ts` `EFFORT.wage`: set measured wages and note the run in a comment.
+- Done. Salvage earns 0.37 per turn at tier 1. Idle, haul and contract bots lose money, and greedy earns 0.27.
 
 ### Phase 2 — Price formula
 - `src/data/prices.ts`: coefficients per kind and `priced(def)`, which returns `base + modifier`.
 - `src/data/parts.ts`, `src/data/chassis.ts`: rename the hand-set field to `base`. Export defs with `value` filled by `priced()`.
 - Test in `src/data/prices.test.ts`: the order rule per kind, and core grades cost more.
 
-### Phase 3 — Set bases and budgets
+### Phase 3 — Set bases, bands and dependents
+- `chassisTradeIn()` in `src/sim/economy.ts`: use the sell spread. Remove `ECONOMY.chassisSellFactor`.
+- `UPKEEP.dailyShare`, `CONTRACTS.bounty.valueShare`, `SALVAGE.coreValueShare`: scale down by the value growth.
 - Set every `base` so each item lands in its band at the measured wages.
-- `EFFORT.bands` goods rows: fit the current goods values.
+- `EFFORT.wage` and `EFFORT.bands`: new wages, and bands that hold the new price ranges and current goods values.
 - `src/data/npcs.ts` budgets: scale each one by the ratio of new to old worth of its typical loadout.
 - Unskip the band test in `src/data/content.test.ts`.
 - Re-run the econ harness and compare the days to each upgrade with the Phase 1 run.

@@ -390,7 +390,8 @@ function takeSellablePart(world: World, shopId: string, partId: string): PartIns
   return world.player.storage.splice(i, 1)[0];
 }
 
-// The trade-in scales by the mean health and the mean wear of the built-in parts.
+// The trade-in is the chassis sell price: value less the sell spread, scaled by the mean health and
+// the mean wear of the built-in parts.
 export function chassisTradeIn(world: World): number {
   const me = playerVehicle(world);
   const core = mountedParts(me, "core");
@@ -399,7 +400,7 @@ export function chassisTradeIn(world: World): number {
   const meanWear = core.reduce((a, p) => a + p.wear, 0) / core.length;
   return Math.floor(
     chassisDef(me.chassisId).value *
-      ECONOMY.chassisSellFactor *
+      (1 - spread(world)) *
       health *
       wearFactor(meanWear),
   );
