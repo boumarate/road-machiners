@@ -740,7 +740,7 @@ export class Game {
     const at = f ? toMap(f.pos) : me.pos;
     const signs = this.combatWatch.observe(this.world.turn, this.world.vehicles.filter((v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v)).map((v) => v.id));
     if (signs.sighted) this.sound.accent("accent-sighted", 0);
-    this.loops.update({ stormTiles: this.weather.stormTilesFrom(at.x, at.y), ...signs });
+    this.loops.update({ stormTiles: this.weather.stormTilesFrom(at.x, at.y), ...signs, paused: !this.anim && performance.now() - this.idleSince > MIX.music.pauseDelayMs });
   }
 
   private playPanelSounds(): void {

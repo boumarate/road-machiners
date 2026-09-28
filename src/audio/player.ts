@@ -1,6 +1,6 @@
 // Plays catalog cues: one-shots with a variant, pitch jitter and voice limit, and loops with live controls.
 
-import type { Cue } from "../data/sounds";
+import type { Bus, Cue } from "../data/sounds";
 import type { Bank } from "./bank";
 import type { Mixer } from "./mixer";
 import { pickVariant, VoiceLimiter } from "./pick";
@@ -45,6 +45,10 @@ export class SoundPlayer {
     src.playbackRate.value = rate;
     this.chain(src, cue, at);
     src.start(start);
+  }
+
+  setBusTone(bus: Bus, cutoffHz: number, rampSeconds: number): void {
+    this.mixer.setBusTone(bus, cutoffHz, rampSeconds);
   }
 
   // Audio time in seconds, the clock every scheduled play uses.

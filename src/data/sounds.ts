@@ -172,13 +172,16 @@ export const MIX = {
   wind: { baseGain: 0.4, stormGain: 1, stormReachTiles: 12, fadeSeconds: 1 },
   // Music crossfades to combat while a hostile is in sight. It holds combat for holdTurns after the last one
   // leaves, so a hostile at the edge of sight does not flip the music every turn.
-  music: { fadeSeconds: 3, holdTurns: 5 },
+  // Between turns, once no turn has played for pauseDelayMs, music is muffled to pauseCutoffHz over toneSeconds.
+  // The delay keeps the short gaps between automatic turns clear.
+  music: { fadeSeconds: 3, holdTurns: 5, pauseDelayMs: 300, pauseCutoffHz: 2500, openCutoffHz: 20000, toneSeconds: 0.6 },
   // Combat score. One random base plays while a hostile is in sight, as combat music did. Each beat of the base has
   // subdivision slots, and an accent lands on a free slot up to spreadSlots before or after its moment. The base
   // dips to duckGain under an accent and recovers over one beat. See Conductor for heat, modes and chances.
   // A busy fight adds about 1 heat per turn, so heat settles near 4; the mode thresholds sit around that.
-  // A played accent repeats round(heat * repeatsPerHeat) times, up to maxRepeats, every repeatBeats beats, each
-  // repeat at repeatGain times the one before.
+  // A played accent leads as the motif and repeats round(heat * repeatsPerHeat) times, up to maxRepeats, every
+  // repeatBeats beats, each repeat at repeatGain times the one before. A heavier motif still repeating keeps the
+  // lead, and a lighter accent then plays once.
   score: {
     subdivision: 2,
     spreadSlots: 2,
@@ -189,7 +192,7 @@ export const MIX = {
     fatigueHalfLifeSeconds: 6,
     crowdHalfLifeSeconds: 4,
     crowdWeight: 0.5,
-    modeSoftness: 0.3,
+    modeSoftness: 0.15,
     repeatsPerHeat: 1.5,
     maxRepeats: 6,
     repeatBeats: 2,

@@ -46,6 +46,10 @@ type Base = { loop: BeatLoopHandle; grid: Grid };
 
 const START_LEAD_SECONDS = 0.1; // bases are scheduled to start this far ahead, so each starts on its first beat
 const ACCENT_LEAD_SECONDS = 0.02; // earliest accent start from now, so Web Audio never gets a time in the past
+const MOTIF_LOOKAHEAD_SECONDS = 0.1; // a motif repeat is scheduled once it is this close, several frames ahead
+
+// The accent repeating now. Only one motif leads at a time, so repeats never pile up.
+type Motif = { cue: AccentCue; weight: number; next: number; every: number; k: number; repeats: number };
 
 // What the score did with one accent request, for the sound log.
 export type AccentResult = { cue: AccentCue; chance: number; heat: number; mode: Mode; played: boolean; repeats: number };
@@ -56,6 +60,8 @@ export class CombatScore {
   private designer: SoundDesigner;
   private conductor = new Conductor(MIX.score);
   private lastBar = -Infinity;
+  private motif: Motif | null = null;
+  private paused = false;
 
   constructor(
     private player: Pick<SoundPlayer, "beatLoop" | "now" | "play">,
@@ -70,6 +76,7 @@ export class CombatScore {
   setCombat(on: boolean, fadeSeconds: number): void {
     if (on === (this.active !== null)) return;
     this.active?.loop.setGain(0, fadeSeconds);
+    this.motif = null;
     this.active = on ? this.bases[Math.floor(this.roll() * this.bases.length)] : null;
     if (!this.active) return;
     this.conductor.begin();
@@ -80,12 +87,18 @@ export class CombatScore {
     this.active.loop.setGain(m.gain, fadeSeconds);
   }
 
+  // While paused between turns, the lead motif keeps repeating at its current level instead of running out.
+  setPaused(paused: boolean): void {
+    this.paused = paused;
+  }
+
   // Called every frame. On each new bar of the active base, the conductor may change mode, and the base moves
   // to the new level and tone over one bar.
   tick(): void {
     const base = this.active;
     if (!base) return;
     const now = this.player.now();
+    this.advanceMotif(now);
     const bar = this.barAt(base, now);
     if (bar <= this.lastBar) return;
     this.lastBar = bar;
@@ -111,19 +124,31 @@ export class CombatScore {
     return this.designer.schedule(now + delayMs / 1000, now + ACCENT_LEAD_SECONDS, this.conductor.emphasis(cue), this.roll());
   }
 
-  // Plays the accent and its repeats, each on a free slot every repeatBeats. Returns the repeats played.
+  // Plays the accent. It becomes the lead motif unless a heavier one is still repeating, in which case it plays
+  // once. Returns the repeats planned.
   private play(cue: AccentCue, now: number, time: number): number {
     this.conductor.played(cue, time);
     this.sound(cue, now, time, 1);
-    const s = MIX.score;
-    const every = this.designer.beat() * s.repeatBeats;
-    let played = 0;
-    for (let k = 1; k <= this.conductor.repeats(now); k++) {
-      if (!this.designer.claim(time + k * every)) continue;
-      this.sound(cue, now, time + k * every, s.repeatGain ** k);
-      played++;
-    }
-    return played;
+    const weight = this.conductor.weight(cue);
+    if (this.motif && this.motif.weight > weight) return 0;
+    const repeats = this.conductor.repeats(now);
+    const every = this.designer.beat() * MIX.score.repeatBeats;
+    this.motif = repeats > 0 ? { cue, weight, next: time + every, every, k: 1, repeats } : null;
+    return repeats;
+  }
+
+  // Schedules the lead motif's repeats as they come near, each on a free slot and quieter than the last.
+  private advanceMotif(now: number): void {
+    const m = this.motif;
+    while (m && this.motif === m && m.next <= now + MOTIF_LOOKAHEAD_SECONDS) this.repeatMotif(m, now);
+  }
+
+  private repeatMotif(m: Motif, now: number): void {
+    if (m.next >= now && this.designer.claim(m.next)) this.sound(m.cue, now, m.next, MIX.score.repeatGain ** m.k);
+    m.next += m.every;
+    if (this.paused) return;
+    m.k++;
+    if (m.k > m.repeats) this.motif = null;
   }
 
   private sound(cue: AccentCue, now: number, time: number, gain: number): void {
@@ -243,12 +268,14 @@ export class SoundDirector {
 }
 
 // What the loops respond to each frame. The turn counts are Infinity when it never happened.
-export type LoopState = { stormTiles: number; turnsSinceDanger: number };
+export type LoopState = { stormTiles: number; turnsSinceDanger: number; paused: boolean };
 
 export type LoopLevels = {
   windGain: number;
   calmGain: number;
   combatGain: number;
+  musicCutoffHz: number;
+  paused: boolean;
 };
 
 export function loopLevels(s: LoopState, mix: typeof MIX): LoopLevels {
@@ -259,6 +286,8 @@ export function loopLevels(s: LoopState, mix: typeof MIX): LoopLevels {
     windGain: w.baseGain + (w.stormGain - w.baseGain) * near,
     calmGain: danger ? 0 : 1,
     combatGain: danger ? 1 : 0,
+    musicCutoffHz: s.paused ? mix.music.pauseCutoffHz : mix.music.openCutoffHz,
+    paused: s.paused,
   };
 }
 
@@ -319,7 +348,7 @@ export class SoundLoops {
   private calm: LoopHandle;
   private last: LoopLevels | null = null;
 
-  constructor(player: SoundPlayer, private score: Pick<CombatScore, "setCombat" | "tick">) {
+  constructor(player: SoundPlayer, private score: Pick<CombatScore, "setCombat" | "setPaused" | "tick">) {
     this.player = player;
     const silent = { pan: 0, gain: 0 };
     this.wind = player.loop("wind", silent);
@@ -352,6 +381,8 @@ export class SoundLoops {
   // Calm music comes back after a fight as a new random track.
   private updateMusic(l: LoopLevels, was: LoopLevels | null): void {
     this.updateCalm(l.calmGain, was);
+    if (was?.musicCutoffHz !== l.musicCutoffHz) this.player.setBusTone("music", l.musicCutoffHz, MIX.music.toneSeconds);
+    this.score.setPaused(l.paused);
     if (was?.combatGain !== l.combatGain) this.score.setCombat(l.combatGain > 0, MIX.music.fadeSeconds);
   }
 

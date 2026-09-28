@@ -29,7 +29,7 @@ describe("stingOf", () => {
 });
 
 describe("loopLevels", () => {
-  const calm = { stormTiles: 100, turnsSinceDanger: Infinity };
+  const calm = { stormTiles: 100, turnsSinceDanger: Infinity, paused: false };
   it("raises wind near storms", () => {
     expect(loopLevels(calm, MIX).windGain).toBe(MIX.wind.baseGain);
     expect(loopLevels({ ...calm, stormTiles: 0 }, MIX).windGain).toBe(MIX.wind.stormGain);
@@ -37,6 +37,10 @@ describe("loopLevels", () => {
   it("switches music to combat while in danger", () => {
     const l = loopLevels({ ...calm, turnsSinceDanger: 0 }, MIX);
     expect([l.calmGain, l.combatGain]).toEqual([0, 1]);
+  });
+  it("muffles music during a pause between turns", () => {
+    expect(loopLevels(calm, MIX).musicCutoffHz).toBe(MIX.music.openCutoffHz);
+    expect(loopLevels({ ...calm, paused: true }, MIX).musicCutoffHz).toBe(MIX.music.pauseCutoffHz);
   });
   it("holds combat music for a few turns after the last hostile leaves sight", () => {
     const hold = MIX.music.holdTurns;
@@ -90,7 +94,7 @@ describe("engine sound assignment", () => {
         return { glide: () => {}, setGain: () => {}, stop: (ms: number) => stopped.push(ms) };
       },
     } as unknown as SoundPlayer;
-    const loops = new SoundLoops(player, { setCombat: () => {}, tick: () => {} });
+    const loops = new SoundLoops(player, { setCombat: () => {}, setPaused: () => {}, tick: () => {} });
     const glide = engineGlide(0, 10, 1, MIX)!;
 
     loops.drive(glide, "scout");
@@ -240,16 +244,60 @@ describe("CombatScore", () => {
     expect(loops[1].ducks).toEqual([]);
   });
 
-  it("repeats a played accent every repeatBeats, more as heat rises, each repeat quieter", () => {
-    const { player, plays } = fakePlayer();
+  type Play = [string, { gain: number }, number];
+  const startTimes = (plays: unknown[][], now: (i: number) => number) => (plays as Play[]).map((p, i) => now(i) + p[2] / 1000);
+
+  it("repeats the lead motif every repeatBeats as time passes, each repeat quieter", () => {
+    const { player, plays, clock } = fakePlayer();
+    const nows: number[] = [];
+    const play = player.play.bind(player);
+    (player as { play: unknown }).play = (...args: unknown[]) => { nows.push(clock.now); play(...(args as Parameters<typeof play>)); };
+    const score = new CombatScore(player, () => 0);
+    score.setCombat(true, 3);
+    const s = MIX.score;
+    const r = score.accent("accent-crash", 0);
+    expect(r.repeats).toBe(Math.min(s.maxRepeats, Math.round(s.accents["accent-crash"].weight * s.repeatsPerHeat)));
+    expect(plays).toHaveLength(1);
+    for (let t = 0; t < 120; t++) {
+      clock.now += 0.05;
+      score.tick();
+    }
+    const times = startTimes(plays, (i) => nows[i]);
+    expect(plays).toHaveLength(1 + r.repeats);
+    expect(times[1] - times[0]).toBeCloseTo(s.repeatBeats);
+    expect((plays[1] as Play)[1].gain).toBeCloseTo(s.repeatGain);
+  });
+
+  it("keeps the lead motif repeating at a steady level while paused", () => {
+    const { player, plays, clock } = fakePlayer();
     const score = new CombatScore(player, () => 0);
     score.setCombat(true, 3);
     const r = score.accent("accent-crash", 0);
-    const s = MIX.score;
-    expect(r.repeats).toBe(Math.min(s.maxRepeats, Math.round(s.accents["accent-crash"].weight * s.repeatsPerHeat)));
-    const times = (plays as [string, { gain: number }, number][]).map((p) => p[2] / 1000);
-    expect(times[1] - times[0]).toBeCloseTo(s.repeatBeats);
-    expect((plays[1] as [string, { gain: number }])[1].gain).toBeCloseTo(s.repeatGain);
+    score.setPaused(true);
+    for (let t = 0; t < 400; t++) {
+      clock.now += 0.05;
+      score.tick();
+    }
+    expect(plays.length).toBeGreaterThan(1 + r.repeats);
+    const gains = (plays as Play[]).slice(1).map((p) => p[1].gain);
+    expect(new Set(gains)).toEqual(new Set([MIX.score.repeatGain]));
+  });
+
+  it("plays a lighter accent once while a heavier motif leads, and lets a heavier one take over", () => {
+    const { player, plays, clock } = fakePlayer();
+    const score = new CombatScore(player, () => 0);
+    score.setCombat(true, 3);
+    score.accent("accent-crit", 0);
+    expect(score.accent("accent-hit", 500).repeats).toBe(0);
+    expect(score.accent("accent-crash", 900).repeats).toBeGreaterThan(0);
+    for (let t = 0; t < 120; t++) {
+      clock.now += 0.05;
+      score.tick();
+    }
+    const cues = (plays as Play[]).map((p) => p[0]);
+    expect(cues.slice(0, 3)).toEqual(["accent-crit", "accent-hit", "accent-crash"]);
+    expect(cues.length).toBeGreaterThan(3);
+    expect(cues.slice(3).every((c) => c === "accent-crash")).toBe(true);
   });
 
   it("skips an accent when the roll misses its chance", () => {

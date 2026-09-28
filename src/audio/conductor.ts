@@ -111,6 +111,10 @@ export class Conductor {
     return Math.min(this.tuning.maxRepeats, Math.round(this.heat.read(time) * this.tuning.repeatsPerHeat));
   }
 
+  weight(id: string): number {
+    return this.accent(id).weight;
+  }
+
   emphasis(id: string): number {
     return this.accent(id).emphasis;
   }
