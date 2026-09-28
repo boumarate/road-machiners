@@ -61,8 +61,8 @@ export const RULES = {
   // Engine overdrive multiplies the player's top speed and acceleration by this. It heats the engine; see
   // ENGINE_HEAT.overdriveGain.
   overdriveBoost: 1.33,
-  // Over the rated mass, top speed and turning scale by (rated / mass) to this power. 500 kg over a 3000 kg rating
-  // leaves about 54% of the speed, and 1000 kg over leaves about 32%.
+  // Past the rated mass, top speed and turning also scale by (rated / mass) to this power. 500 kg over a 3000 kg rating
+  // cuts them to about 54%, and 1000 kg over to about 32%.
   overloadExponent: 4,
 
   // Combat

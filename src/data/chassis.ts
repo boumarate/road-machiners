@@ -1,6 +1,6 @@
 // Truck chassis. Speeds are tiles per turn. Turn rates are degrees per turn. Masses are kilograms.
-// Speed, turn, accel and brake numbers hold for a truck at ratedMass: chassis, usual parts and half a load of goods.
-// A lighter truck beats them and a heavier one falls short. See loadFactor() in src/sim/mass.ts.
+// Speed, turn, accel and brake numbers hold for a truck at handlingMass. A lighter truck beats them and a heavier one
+// falls short. Past ratedMass it slows hard. See loadFactor() in src/sim/mass.ts.
 //
 // layout is the inventory grid as a top view, nose on row 0. One string per row. Every character except a space is a cell.
 //   D           deck mount: weapons, scanners and cargo frames all compete for these cells
@@ -15,7 +15,7 @@
 // Each chassis is drawn from its base model in src/render/partLooks.ts, built by tools/blender/base_<id>.py on this grid.
 
 import type { Tier } from './market';
-import type { Unpriced } from './parts';
+import { PARTS } from './parts';
 
 export type ChassisDef = {
   id: string;
@@ -27,7 +27,8 @@ export type ChassisDef = {
   turnFast: number; // turn limit at max speed
   reverseTurn: number; // turn limit for one turn of backing up
   mass: number; // bare frame, without core parts, other parts or goods
-  ratedMass: number; // loaded mass the speed and handling numbers assume
+  handlingMass: number; // loaded mass the speed and handling numbers assume
+  ratedMass: number; // load limit, set by ratedMassOf()
   radius: number; // collision radius in tiles
   layout: string[];
   core: { defId: string; x: number; y: number }[];
@@ -42,20 +43,36 @@ export type ChassisDef = {
 // Money per unit of each priced stat. See partModifier() in src/data/parts.ts for the value rule.
 export const CHASSIS_PRICE_MODIFIERS = { perDeckCell: 60, perArmorCell: 30, perTopSpeed: 80 };
 
-export function chassisModifier(def: Unpriced<ChassisDef>): number {
+// The hand-set fields. value and ratedMass derive from them.
+export type ChassisInput = Omit<ChassisDef, 'value' | 'ratedMass'>;
+
+export function chassisModifier(def: ChassisInput): number {
   const cells = def.layout.join('');
   const count = (marks: string) => [...cells].filter((c) => marks.includes(c)).length;
   const m = CHASSIS_PRICE_MODIFIERS;
   return m.perDeckCell * count('D') + m.perArmorCell * count('FBLR') + m.perTopSpeed * def.maxSpeed;
 }
 
-function priceChassis(def: Unpriced<ChassisDef>): ChassisDef {
-  const value = Math.round(def.base + chassisModifier(def));
-  if (value <= 0) throw new Error(`Chassis ${def.id} prices at ${value}. Raise its base.`);
-  return { ...def, value };
+// The rated mass is the truck with a full tier 1 fighting kit: its core parts, a stock engine, a scrap sheet on every
+// armor cell and a machine gun on half the deck cells. So every truck can armor all its sides with the heaviest
+// armor and still mount guns. Cargo and heavier gear go past the rating.
+export const RATED_KIT = { engine: 'stockEngine', armorPerCell: 'scrapSheet', gun: 'mg', gunDeckShare: 0.5 };
+
+export function ratedMassOf(def: ChassisInput): number {
+  const cells = def.layout.join('');
+  const count = (marks: string) => [...cells].filter((c) => marks.includes(c)).length;
+  const core = def.core.reduce((sum, c) => sum + PARTS[c.defId].mass, 0);
+  const guns = Math.ceil(count('D') * RATED_KIT.gunDeckShare);
+  return def.mass + core + PARTS[RATED_KIT.engine].mass + count('FBLR') * PARTS[RATED_KIT.armorPerCell].mass + guns * PARTS[RATED_KIT.gun].mass;
 }
 
-const UNPRICED_CHASSIS: Record<string, Unpriced<ChassisDef>> = {
+function finishChassis(def: ChassisInput): ChassisDef {
+  const value = Math.round(def.base + chassisModifier(def));
+  if (value <= 0) throw new Error(`Chassis ${def.id} prices at ${value}. Raise its base.`);
+  return { ...def, value, ratedMass: ratedMassOf(def) };
+}
+
+const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   scout: {
     id: 'scout',
     name: 'Scout pickup',
@@ -66,7 +83,7 @@ const UNPRICED_CHASSIS: Record<string, Unpriced<ChassisDef>> = {
     turnFast: 40,
     reverseTurn: 60,
     mass: 680,
-    ratedMass: 2100,
+    handlingMass: 2100,
     radius: 0.6,
     // The wheels sit one row in from each end, so the body overhangs them like a real pickup.
     layout: [
@@ -103,7 +120,7 @@ const UNPRICED_CHASSIS: Record<string, Unpriced<ChassisDef>> = {
     turnFast: 25,
     reverseTurn: 45,
     mass: 2730,
-    ratedMass: 5800,
+    handlingMass: 5800,
     radius: 0.8,
     layout: ['.FFFFF.', 'XDEEXXX', 'LDEEXXR', 'LDDDDDR', 'L..X..R', 'LDDDDDR', 'LDDDDDR', 'XDDXXDX', '.BBBBB.'],
     core: [
@@ -130,7 +147,7 @@ const UNPRICED_CHASSIS: Record<string, Unpriced<ChassisDef>> = {
     turnFast: 45,
     reverseTurn: 90,
     mass: 230,
-    ratedMass: 900,
+    handlingMass: 900,
     radius: 0.5,
     layout: ['.FF.', 'XEEX', 'LEER', 'LXDR', 'XXXX', '.BB.'],
     core: [
@@ -157,7 +174,7 @@ const UNPRICED_CHASSIS: Record<string, Unpriced<ChassisDef>> = {
     turnFast: 25,
     reverseTurn: 45,
     mass: 2130,
-    ratedMass: 3700,
+    handlingMass: 3700,
     radius: 0.8,
     layout: ['.FFF.', 'XDDDX', 'LEEXR', 'LEEDR', 'L.X.R', 'XDXXX', '.BBB.'],
     core: [
@@ -176,7 +193,7 @@ const UNPRICED_CHASSIS: Record<string, Unpriced<ChassisDef>> = {
   },
   courier: {
     id: 'courier', name: 'Courier', maxSpeed: 9.75, accel: 3, brake: 3, turnSlow: 125, turnFast: 42, reverseTurn: 80,
-    mass: 280, ratedMass: 1100, radius: 0.5,
+    mass: 280, handlingMass: 1100, radius: 0.5,
     layout: ['.FF.', 'XEEX', 'LEER', 'LXDR', 'LXXR', 'XXDX', '.BB.'],
     core: [
       { defId: 'cabNarrow', x: 1, y: 3 }, { defId: 'transmission', x: 2, y: 4 }, { defId: 'tank', x: 1, y: 5 },
@@ -187,7 +204,7 @@ const UNPRICED_CHASSIS: Record<string, Unpriced<ChassisDef>> = {
   },
   van: {
     id: 'van', name: 'Utility van', maxSpeed: 6.5, accel: 1.5, brake: 3, turnSlow: 100, turnFast: 35, reverseTurn: 65,
-    mass: 1100, ratedMass: 3000, radius: 0.7,
+    mass: 1100, handlingMass: 3000, radius: 0.7,
     layout: ['.FFF.', 'XEEDX', 'LEEXR', 'LXXXR', 'LDDDR', 'LDDDR', 'LDXXR', 'XDDDX', '.BBB.'],
     core: [
       { defId: 'cabRow', x: 1, y: 3 }, { defId: 'transmissionMid', x: 3, y: 2 }, { defId: 'tankMid', x: 2, y: 6 },
@@ -198,7 +215,7 @@ const UNPRICED_CHASSIS: Record<string, Unpriced<ChassisDef>> = {
   },
   longbed: {
     id: 'longbed', name: 'Longbed truck', maxSpeed: 4.55, accel: 0.8, brake: 1.8, turnSlow: 70, turnFast: 20, reverseTurn: 40,
-    mass: 2900, ratedMass: 7200, radius: 0.95,
+    mass: 2900, handlingMass: 7200, radius: 0.95,
     layout: ['.FFFFF.', 'XDEEDDX', 'LDEEXDR', 'LXXXXXR', 'LXXXXXR', 'LDDDDDR', 'LDDDDDR', 'LDDDDDR', 'LDDXXDR', 'XDDDDDX', '.BBBBB.'],
     core: [
       { defId: 'cabWide', x: 1, y: 3 }, { defId: 'transmissionHeavy', x: 4, y: 2 }, { defId: 'tankHeavy', x: 3, y: 8 },
@@ -209,7 +226,7 @@ const UNPRICED_CHASSIS: Record<string, Unpriced<ChassisDef>> = {
   },
   carrier: {
     id: 'carrier', name: 'Armored carrier', maxSpeed: 5.2, accel: 1, brake: 2.5, turnSlow: 75, turnFast: 28, reverseTurn: 50,
-    mass: 3200, ratedMass: 5200, radius: 0.85,
+    mass: 3200, handlingMass: 5200, radius: 0.85,
     layout: ['.FFFF.', 'XDDDDX', 'LDDDXR', 'LEE..R', 'LEEXDR', 'LDDDDR', 'LDDXXR', 'XDDDDX', '.BBBB.'],
     core: [
       { defId: 'cab', x: 4, y: 2 }, { defId: 'transmissionHeavy', x: 3, y: 4 }, { defId: 'tankHeavy', x: 3, y: 6 },
@@ -220,7 +237,7 @@ const UNPRICED_CHASSIS: Record<string, Unpriced<ChassisDef>> = {
   },
   tractor: {
     id: 'tractor', name: 'Heavy tractor', maxSpeed: 3.9, accel: 1.8, brake: 2, turnSlow: 65, turnFast: 22, reverseTurn: 55,
-    mass: 3600, ratedMass: 6500, radius: 0.9,
+    mass: 3600, handlingMass: 6500, radius: 0.9,
     layout: ['.FFFFF.', 'XDEEXDX', 'LDEEDDR', 'LXXXXXR', 'LXXXXXR', 'LDDDDDR', 'LDDDDDR', 'XDDXXDX', '.BBBBB.'],
     core: [
       { defId: 'cabWide', x: 1, y: 3 }, { defId: 'transmissionHeavy', x: 4, y: 1 }, { defId: 'tankHeavy', x: 3, y: 7 },
@@ -280,7 +297,7 @@ const UNPRICED_CHASSIS: Record<string, Unpriced<ChassisDef>> = {
 };
 
 export const CHASSIS: Record<string, ChassisDef> = Object.fromEntries(
-  Object.entries(UNPRICED_CHASSIS).map(([id, def]) => [id, priceChassis(def)]),
+  Object.entries(CHASSIS_INPUTS).map(([id, def]) => [id, finishChassis(def)]),
 );
 
 // Chassis the player can buy in towns.
