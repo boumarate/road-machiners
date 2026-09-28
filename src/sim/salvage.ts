@@ -1,4 +1,4 @@
-import { SALVAGE, type LootRange, type LootTable } from '../data/salvage';
+import { FIELD_SPARE_WEAR, SALVAGE, type LootRange, type LootTable } from '../data/salvage';
 import { ECONOMY, GOODS } from '../data/goods';
 import { REGION, type LocationDef } from '../data/region';
 import { RULES } from '../data/rules';
@@ -11,6 +11,7 @@ import { goodsCount, isLoot, isMounted } from './grid';
 import { addGoods, stowPart } from './inventory';
 import { vehicleHasPerk } from './progress';
 import { chance, randInt } from './rng';
+import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
 import { vehicleStats } from './stats';
 import { cancelJob } from './jobs';
@@ -51,12 +52,19 @@ function lootTableFor(id: string): LootTable | null {
   return isRoadWreckId(id) ? SALVAGE.roadWreck : null;
 }
 
+// A spare part found in the field. Its wear draws from the market stream, so it leaves world RNG
+// draws unchanged.
+function fieldSpare(world: World, table: LootTable): PartInstance {
+  const defId = table.spareParts[randInt(world, 0, table.spareParts.length - 1)];
+  return makePart(world, defId, sampleWeighted(world.marketRng, FIELD_SPARE_WEAR));
+}
+
 function rollStock(world: World, table: LootTable, id: string, pos: Vec, radius: number): SalvageStock {
   const goods: Record<string, number> = {};
   for (const [good, [lo, hi]] of Object.entries(table.goods)) goods[good] = randInt(world, lo, hi);
   goods.parts = randInt(world, table.parts[0], table.parts[1]);
   const parts: PartInstance[] = [];
-  if (chance(world, table.sparePartChance)) parts.push(makePart(world, table.spareParts[randInt(world, 0, table.spareParts.length - 1)], 0));
+  if (chance(world, table.sparePartChance)) parts.push(fieldSpare(world, table));
   return { id, pos: { ...pos }, radius, goods, parts, fuel: randInt(world, ...table.fuel), supplies: randInt(world, ...table.supplies) };
 }
 
@@ -254,7 +262,7 @@ function restockStock(world: World, stock: SalvageStock, table: LootTable): void
   stock.fuel = refill(world, stock.fuel, table.fuel);
   stock.supplies = refill(world, stock.supplies, table.supplies);
   if (stock.parts.length > 0 || !chance(world, table.sparePartChance * SALVAGE.restockShare)) return;
-  stock.parts.push(makePart(world, table.spareParts[randInt(world, 0, table.spareParts.length - 1)], 0));
+  stock.parts.push(fieldSpare(world, table));
 }
 
 // Each unit of a fresh roll comes back with chance restockShare. The high caps the gain, but a count

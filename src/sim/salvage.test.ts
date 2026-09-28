@@ -11,7 +11,7 @@ import { partDef } from '../data/parts';
 import { chassisDef } from '../data/chassis';
 import { RULES } from '../data/rules';
 import { takeAllLoot, takeStores, canScavenge, scavenge } from './locations';
-import { clearPiles, collectSalvage, createKnockoutSalvage, hasSalvage, renewSalvage, salvageUnits } from './salvage';
+import { clearPiles, collectSalvage, createKnockoutSalvage, hasSalvage, initializeSalvage, renewSalvage, salvageUnits } from './salvage';
 import { maxHp } from './wear';
 import { sitePads } from './sites';
 import { freeCells } from './grid';
@@ -135,6 +135,22 @@ describe('finite salvage', () => {
     w.salvage.push({ id: 'test-stock', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [] });
     collectSalvage(w, w.vehicles[0], 'test-stock', 100);
     expect(w.player.costBasis.scrap).toBe(GOODS.scrap.value);
+  });
+});
+
+describe('field spare parts', () => {
+  it('are mostly worn, so a pristine find is rare', () => {
+    const wears: number[] = [];
+    for (let seed = 1; seed <= 40; seed++) {
+      const w = emptyWorld();
+      w.rngState = seed;
+      w.marketRng.rngState = seed * 7919;
+      initializeSalvage(w);
+      for (const stock of w.salvage) wears.push(...stock.parts.map((p) => p.wear));
+    }
+    const pristine = wears.filter((wear) => wear === 0).length;
+    expect(wears.length).toBeGreaterThan(50);
+    expect(pristine / wears.length).toBeLessThan(0.2);
   });
 });
 

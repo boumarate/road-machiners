@@ -297,8 +297,8 @@ export const HARNESS = {
   // EFFORT.routeFactor (below), which the same design already grounds in REGION.navigation.
 
   // Raider encounters per tile driven outside a site's reach. Set so a Bowl to Nose crossing (about
-  // 175 tiles, EFFORT.refSpeed) meets a raider close to once in three crossings.
-  encounterRate: 0.002,
+  // 680 road tiles) meets a raider close to once in three crossings.
+  encounterRate: 0.0005,
 
   // Odds a bot with at least one working weapon wins an encounter. Raiders roam in ones and twos, so
   // a defended truck should win more often than not.

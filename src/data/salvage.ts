@@ -1,5 +1,7 @@
 // Loot tables and search speed for scavenging. Rolls draw through rng.ts at world creation.
 
+import type { Weighted } from './npcs';
+
 export type LootRange = [number, number];
 
 export type LootTable = {
@@ -10,6 +12,16 @@ export type LootTable = {
   fuel: LootRange; // fuel units left in tanks and cans
   supplies: LootRange; // supply units left in crates
 };
+
+// Wear steps a spare part found in the field rolls, from the market stream. Parts left out in the
+// waste have mostly broken and been rebuilt, so a pristine find is the rare prize.
+export const FIELD_SPARE_WEAR: Weighted<number>[] = [
+  { value: 0, weight: 1 },
+  { value: 1, weight: 3 },
+  { value: 2, weight: 4 },
+  { value: 3, weight: 3 },
+  { value: 4, weight: 2 },
+];
 
 export const SALVAGE = {
   unitsPerTurn: 2, // stock units, goods or parts, a search gets through per turn
@@ -28,7 +40,7 @@ export const SALVAGE = {
   landmark: {
     goods: { scrap: [1, 2], salt: [0, 1], meds: [0, 1] },
     parts: [1, 2],
-    sparePartChance: 0.4,
+    sparePartChance: 0.2,
     spareParts: ['stockEngine', 'plates', 'cage', 'mg'],
     fuel: [0, 8],
     supplies: [0, 3],
@@ -37,7 +49,7 @@ export const SALVAGE = {
     // Scrap never rolls to 0, so a road wreck always has something to search for.
     goods: { scrap: [1, 1] },
     parts: [0, 1],
-    sparePartChance: 0.2,
+    sparePartChance: 0.1,
     spareParts: ['mg', 'cage', 'rack', 'flatFour'],
     fuel: [0, 4],
     supplies: [0, 1],
@@ -45,7 +57,7 @@ export const SALVAGE = {
   convoy: {
     goods: { scrap: [1, 3], meds: [0, 1] },
     parts: [1, 2],
-    sparePartChance: 0.6,
+    sparePartChance: 0.3,
     spareParts: ['tunedEngine', 'cannon', 'ram', 'trailerBox'],
     fuel: [4, 12],
     supplies: [2, 6],

@@ -20,6 +20,7 @@ import {
   buyGood,
   buyPrice,
   buyStockPart,
+  chargeUpkeep,
   chassisTradeIn,
   partTradePrice,
   repairAll,
@@ -53,7 +54,7 @@ import {
 } from '../sim/market';
 import { advanceJobs } from '../sim/jobs';
 import { burnFuel, consumeVehicleSupplies } from '../sim/resources';
-import { collectSalvage, createWreckSalvage, salvageUnits, wreckStockId } from '../sim/salvage';
+import { collectSalvage, createWreckSalvage, renewSalvage, salvageUnits, wreckStockId } from '../sim/salvage';
 import { siteGates, sitePads } from '../sim/sites';
 import { vehicleStats } from '../sim/stats';
 import type { PartInstance, SkillId, Vehicle, World } from '../sim/types';
@@ -145,8 +146,8 @@ function currentTier(v: Vehicle): Tier {
 }
 
 // ---- Turn stepping. No physics, no NPC movement or thinking: only the per-turn economy updates
-// the design calls out (world.turn, shop drift and restock, contracts, supply and fuel burn, drive
-// wear). advanceShops and advanceContracts are the same functions endTurn calls.
+// the design calls out (world.turn, shop drift and restock, contracts, upkeep, salvage regrowth,
+// supply and fuel burn, drive wear). These are the same functions endTurn calls.
 
 function passTurns(world: World, telemetry: Telemetry, turns: number, tilesPerTurn: number): void {
   for (let i = 0; i < turns; i++) stepOneTurn(world, telemetry, tilesPerTurn);
@@ -157,6 +158,8 @@ function stepOneTurn(world: World, telemetry: Telemetry, tilesPerTurn: number): 
   world.events = [];
   advanceShops(world);
   advanceContracts(world);
+  chargeUpkeep(world);
+  renewSalvage(world);
   telemetry.debtEvents += world.events.filter((e) => e.t === 'money' && e.amount < 0 && e.reason === 'failed haul contract').length;
   telemetry.contractsDone += world.events.filter((e) => e.t === 'contract' && e.outcome === 'done' && e.contract.kind === 'bounty').length;
   const v = playerVehicle(world);
@@ -602,7 +605,7 @@ function fittingOffers(world: World, shopId: string): Contract[] {
   const v = playerVehicle(world);
   const room = freeCells(v);
   return shopState(world, shopId).contracts.filter((c) => {
-    if (c.kind === 'haul') return c.units <= room;
+    if (c.kind === 'haul') return c.units <= room && world.player.money >= 0;
     if (c.kind === 'bounty') return mountedParts(v, 'weapon').some((p) => p.hp > 0);
     return true;
   });
