@@ -21,13 +21,13 @@ const REACH = 20; // tiles from the player to the patch edge, the base sight rad
 const SIDE = REACH * 2 + 1; // corners along one side of the patch
 // Heat at which the haze is at full strength: noon sun in a heat wave, the hottest ground there is.
 const HAZE_FULL = 1 + (TIME.sunHeat - 1) * WEATHER.sim.effects.heatwave;
-// The ground shifts up to HAZE.shift meters: a small fraction of a ground paint block, so edges waver without
-// breaking apart. Three waves of unrelated lengths, headings and speeds add up, each bent by a slow warp, so the
-// ripple never repeats a visible pattern. `wave` is meters, `speed` radians per second and `heading` radians.
+// The ground shifts up to HAZE.shift meters, about 7 pixels at default zoom on the hottest ground, so edges waver
+// visibly without breaking apart. Three waves of unrelated lengths, headings and speeds add up, each bent by a
+// slow warp, so the ripple never repeats a visible pattern. `wave` is meters, `speed` radians per second and `heading` radians.
 // Gusts turn the shimmer on in patches about HAZE.gust meters across that drift and fade over tens of seconds,
 // so hot ground is never evenly rippled.
 const HAZE = {
-  shift: 0.09,
+  shift: 0.5,
   waves: [
     { wave: 4.7, speed: 2.9, heading: 0.4, weight: 1 },
     { wave: 2.6, speed: 4.1, heading: 2.3, weight: 0.6 },

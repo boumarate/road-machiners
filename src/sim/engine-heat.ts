@@ -21,8 +21,10 @@ export function advanceEngineHeat(world: World): void {
   let next: number;
   if (me.speed > RULES.parkedSpeed) {
     const share = Math.min(1, me.speed / vehicleStats(world, me).maxSpeed);
-    const skill = 1 - skillEffect(world, me, 'machining', 'engineHeat');
-    next = before + ENGINE_HEAT.gain * engineHeatMult(me) * (heat - 1) * share * skill - ENGINE_HEAT.coolDriving;
+    // The engine and skill scale airflow cooling as much as sun heating, so every engine starts heating at the
+    // same sun heat, where the ground shimmers, and differs only in how fast.
+    const rate = engineHeatMult(me) * (1 - skillEffect(world, me, 'machining', 'engineHeat'));
+    next = before + rate * (ENGINE_HEAT.gain * (heat - 1) * share - ENGINE_HEAT.coolDriving);
   } else {
     next = before - ENGINE_HEAT.coolParked / heat;
   }
