@@ -200,3 +200,6 @@ Invariants:
 - uplan: caps and spawn intervals, loadouts, paints and decision weights for the new templates are picked in the plan and logged in the conclusion — the request gives none, and the game cannot run without them.
 - uplan: plan auto-approved (hands-off).
 - uexecute: goods no shop makes are priced by distance to a source-site table, `GOOD_SOURCES` in `src/data/market.ts` — town pricing throws for a good with no maker, and this table also gives convoys their routes.
+- uexecute: caps are 3 Bowl Farmers, 3 Nose Army cars, 3 couriers, 3 roamers, 2 convoys with 2 guards and 3 mercs, so up to 36 NPCs live and 20 start — the request gives no counts.
+- uexecute: escort and follow code lives in `src/sim/tow.ts` — a new file failed the fragmentation rule.
+- uverify: a leader waits while its escort lags more than 12 tiles — a slower merc otherwise fell behind for good in play.
