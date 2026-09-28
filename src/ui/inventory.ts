@@ -3,7 +3,7 @@
 
 import { GOODS } from "../data/goods";
 import { chassisDef } from "../data/chassis";
-import { partDef, type PartKind } from "../data/parts";
+import { partDef, type PartKind, type WeaponDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { STRIP } from "../data/salvage";
 import { isJunk, maxHp } from "../sim/wear";
@@ -15,6 +15,7 @@ import {
   gridOf,
   isMounted,
   itemCells,
+  itemSize,
   placementError,
   type Cell,
   type Spot,
@@ -46,6 +47,7 @@ import { wearLabel } from "./format";
 import type { UiHost } from "./host";
 import { baselinePart, conditionMeter, createIcon, type IconName, diffStats, footprint as footprintEl, goodIcon, partIcon, partStats, statGrid } from "./cards";
 import { vehicleMass } from "../sim/mass";
+import { fireSpans, reachedSides, sideBlockers, SIDES, type FireSpan } from "../sim/armor";
 import { fuelLiters, hp, kg, liters } from "./units";
 
 const CELL_PX = 42;
@@ -53,9 +55,8 @@ const CELL_PX = 42;
 const MIN_CELL_PX = 28;
 
 const CELL_TITLE: Record<Cell, string> = {
-  W: "weapon mount",
+  D: "deck mount for a weapon, scanner or cargo frame",
   E: "engine mount",
-  C: "cargo mount",
   F: "front armor mount",
   B: "back armor mount",
   L: "left armor mount",
@@ -170,6 +171,7 @@ export class InventoryView {
     }
     grid.append(...this.gridItems(w, me));
     this.gridEl = grid;
+    this.showFan(me, this.selectedGun(me));
     const inTown = townAt(w) !== null;
     this.root.replaceChildren(
       el(
@@ -219,12 +221,12 @@ export class InventoryView {
       el(
         "div",
         {},
-        "Top view, nose up. W E C: weapon, engine, cargo mounts. F B L R: armor mounts on the front, back, left and right.",
+        "Top view, nose up. D: deck mounts for weapons, scanners and cargo frames. E: engine mount. F B L R: armor mounts on the front, back, left and right.",
       ),
       el(
         "div",
         {},
-        "A part works only when it lies fully on one of its letters. Built-in parts are fixed and can only be repaired.",
+        "A part works only when it lies fully on one of its letters. Built-in parts are fixed and can only be repaired. A gun cannot fire across the cab, big guns or cargo boxes. The marks on a gun show its blocked sides.",
       ),
       el(
         "div",
@@ -274,6 +276,7 @@ export class InventoryView {
       if (e.key === "Enter") this.activateItem(it);
     });
     if (it.kind === "part") node.append(conditionBar(it.part));
+    this.hoverFan(node, me, it, mounted);
     if (!core)
       node.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
@@ -302,6 +305,33 @@ export class InventoryView {
     node.classList.add("refitting");
     node.title = `Refit: ${left === 1 ? "1 turn" : `${left} turns`} left. Driving cancels it.`;
     return node;
+  }
+
+  // The selected item when it is a mounted gun, whose fan stays up while nothing else is hovered.
+  private selectedGun(me: Vehicle): GridItem | null {
+    const it = me.items.find((item) => item.id === this.selectedItem);
+    return it && it.kind === "part" && weaponDefOf(it) && isMounted(me.chassisId, it) ? it : null;
+  }
+
+  // Hovering a mounted gun shows its fan. Leaving it shows the selected gun's fan again.
+  private hoverFan(node: HTMLElement, me: Vehicle, it: GridItem, mounted: boolean): void {
+    if (!mounted || !weaponDefOf(it)) return;
+    node.addEventListener("mouseenter", () => this.showFan(me, it));
+    node.addEventListener("mouseleave", () => this.showFan(me, this.selectedGun(me)));
+  }
+
+  // Draws where the gun can fire and outlines the tall parts in its way. null clears both.
+  private showFan(me: Vehicle, it: GridItem | null): void {
+    if (!this.gridEl) return;
+    clearFan(this.gridEl);
+    if (it) this.drawFan(this.gridEl, me, it);
+  }
+
+  private drawFan(grid: HTMLElement, me: Vehicle, it: GridItem): void {
+    const def = weaponDefOf(it);
+    if (!def) return;
+    grid.append(fanSvg(me, it, def, gridOf(me), this.cell));
+    for (const id of blockerIds(me, it, def)) grid.querySelector(`[data-item-id="${id}"]`)?.classList.add("blocking");
   }
 
   private activateItem(item: GridItem): void {
@@ -355,6 +385,7 @@ export class InventoryView {
     part: PartInstance,
   ): HTMLElement | null {
     if (isJunk(part)) return null;
+    if (!fieldPatchable(part)) return townOnlyPatch(part);
     const plan = repairPlan(w, me, part.id);
     if (plan.needed === 0) return null;
     const reason = patchBlocker(me, plan);
@@ -879,6 +910,16 @@ function partTitle(p: PartInstance): string {
   return `${d.name} (${d.kind}) ${wearLabel(p)}, ${hp(p.hp)}/${hp(maxHp(p))} HP, ${d.w}x${d.h}`;
 }
 
+function fieldPatchable(part: PartInstance): boolean {
+  const def = partDef(part.defId);
+  return def.kind !== "armor" || def.fieldRepair !== "none";
+}
+
+// Armor that only a town repairs shows a disabled Patch button while damaged, so the player learns why.
+function townOnlyPatch(part: PartInstance): HTMLElement | null {
+  return part.hp < maxHp(part) ? el("button", { class: "inv-patch", disabled: true }, "Patch (town only)") : null;
+}
+
 function itemName(it: GridItem): string {
   return it.kind === "good" ? GOODS[it.good].name : partDef(it.part.defId).name;
 }
@@ -898,4 +939,59 @@ function partDetails(me: Vehicle, part: PartInstance, mounted: boolean): HTMLEle
     statGrid(diffStats(partStats(part), base ? partStats(base) : null)),
     base ? el("p", { class: "dim" }, `Against ${partDef(base.defId).name}`) : el("span"),
   ];
+}
+
+// ---- Fire view: where a mounted gun can fire, shown on the grid as a fan from the gun, the same shape as its range
+// on the ground, with the parts in its way outlined.
+
+const SVG = "http://www.w3.org/2000/svg";
+
+function weaponDefOf(it: GridItem): WeaponDef | null {
+  if (it.kind !== "part") return null;
+  const def = partDef(it.part.defId);
+  return def.kind === "weapon" ? def : null;
+}
+
+// The ids of the tall parts that block this gun, for outlining them on the grid.
+function blockerIds(v: Vehicle, it: GridItem, def: WeaponDef): string[] {
+  const blockers = sideBlockers(v, it);
+  return reachedSides(def).flatMap((side) => {
+    const b = blockers[side];
+    return b ? [b.id] : [];
+  });
+}
+
+// The fan over the grid, nose up. radius is in pixels, cell is the grid cell size in pixels.
+function fanSvg(v: Vehicle, it: GridItem, def: WeaponDef, size: { w: number; h: number }, cell: number): SVGSVGElement {
+  const { w, h } = itemSize(it);
+  const cx = (it.x + w / 2) * cell;
+  const cy = (it.y + h / 2) * cell;
+  const radius = Math.max(size.w, size.h) * cell;
+  const svg = document.createElementNS(SVG, "svg");
+  svg.setAttribute("class", "inv-fan");
+  svg.setAttribute("width", String(size.w * cell));
+  svg.setAttribute("height", String(size.h * cell));
+  const open = SIDES.filter((side) => !sideBlockers(v, it)[side]);
+  for (const span of fireSpans(def.arc, open)) {
+    const path = document.createElementNS(SVG, "path");
+    path.setAttribute("d", spanPath(cx, cy, radius, span));
+    svg.append(path);
+  }
+  return svg;
+}
+
+// 0 degrees points to the nose, up on the grid, and positive angles turn right.
+function spanPath(cx: number, cy: number, r: number, span: FireSpan): string {
+  const at = (deg: number) => {
+    const a = (deg * Math.PI) / 180;
+    return `${cx + r * Math.sin(a)} ${cy - r * Math.cos(a)}`;
+  };
+  if (span.to - span.from >= 360) return `M ${cx - r} ${cy} a ${r} ${r} 0 1 0 ${2 * r} 0 a ${r} ${r} 0 1 0 ${-2 * r} 0 Z`;
+  const large = span.to - span.from > 180 ? 1 : 0;
+  return `M ${cx} ${cy} L ${at(span.from)} A ${r} ${r} 0 ${large} 1 ${at(span.to)} Z`;
+}
+
+function clearFan(grid: HTMLElement): void {
+  grid.querySelector(".inv-fan")?.remove();
+  for (const node of grid.querySelectorAll(".blocking")) node.classList.remove("blocking");
 }

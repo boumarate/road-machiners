@@ -111,3 +111,21 @@ describe('machining on engine heat', () => {
     expect(heating(XP_TO_REACH[5])).toBeCloseTo(heating(0) * (1 - 5 * SKILL_EFFECTS.machining.engineHeat));
   });
 });
+
+describe('engine heat by engine', () => {
+  function heatAfterTurns(engineId: string, turns: number): number {
+    const w = emptyWorld();
+    w.turn = NOON;
+    const me = w.vehicles[0];
+    const item = me.items.find((it) => it.kind === 'part' && partDef(it.part.defId).kind === 'engine')!;
+    if (item.kind !== 'part') throw new Error('engine item is not a part');
+    item.part = { ...item.part, defId: engineId, hp: partDef(engineId).hp };
+    me.speed = vehicleStats(w, me).maxSpeed;
+    for (let i = 0; i < turns; i++) advanceEngineHeat(w);
+    return w.player.engineHeat;
+  }
+
+  it('a racing V6 runs hotter than a workhorse diesel in the noon sun', () => {
+    expect(heatAfterTurns('racingV6', 10)).toBeGreaterThan(heatAfterTurns('workhorseDiesel', 10));
+  });
+});

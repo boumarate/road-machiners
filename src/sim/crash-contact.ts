@@ -59,7 +59,7 @@ function applyContactDamage(world: World, vehicle: Vehicle, contact: CrashContac
   const energy = computeCrashEnergy(world, vehicle, impact, share, mult);
   const hits = new Map<string, number>();
   // A glancing contact transfers only its touched share of the side's damage budget.
-  const round = { damage: energy / laneCount(vehicle, contact.side), pen: RULES.crashPen * mult };
+  const round = { damage: energy / laneCount(vehicle, contact.side), pen: RULES.crashPen * mult, blast: false };
   for (const lane of contact.lanes) {
     // All lanes meet the same pre-impact armor, even if this crash breaks it.
     const copy = structuredClone(vehicle);
@@ -75,7 +75,7 @@ function applyContactDamage(world: World, vehicle: Vehicle, contact: CrashContac
 function computeCrashEnergy(world: World, vehicle: Vehicle, impact: number, share: number, mult: number): number {
   const driving = skillEffect(world, vehicle, 'driving', 'crashDamage');
   const guard = vehicleHasPerk(world, vehicle, 'ramGuard') ? PERK_NUMBERS.ramGuard.crashTaken : 1;
-  return RULES.ramDamage * impact * impact * share * mult * Math.max(0, 1 - driving) * guard;
+  return RULES.ramDamage * RULES.crashDamage * impact * impact * share * mult * Math.max(0, 1 - driving) * guard;
 }
 
 function applyCrashHits(world: World, vehicle: Vehicle, hits: Map<string, number>): PartHit[] {

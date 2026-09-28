@@ -28,7 +28,14 @@ export type RepairPlan = { turns: number; parts: number; hp: number; needed: num
 
 export function repairPlan(world: World, v: Vehicle, partId: string, maxParts = Infinity): RepairPlan {
   const part = findRepairPart(v, partId);
-  return planPartRepair(part, fieldCapShare(world, v), machiningMult(world, v), goodsCount(v).parts ?? 0, maxParts);
+  return planPartRepair(part, partFieldCap(world, v, part), machiningMult(world, v), goodsCount(v).parts ?? 0, maxParts);
+}
+
+// Scrap armor patches to full and ceramic armor only mends in town. Every other part stops at the field cap.
+function partFieldCap(world: World, v: Vehicle, part: PartInstance): number {
+  const def = partDef(part.defId);
+  if (def.kind !== 'armor' || def.fieldRepair === 'capped') return fieldCapShare(world, v);
+  return def.fieldRepair === 'full' ? 1 : 0;
 }
 
 // Share of max HP a field repair lifts a part to. The player's machining and the jury rig perk raise it, up to full HP.

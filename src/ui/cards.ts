@@ -2,8 +2,9 @@
 // and the change against the player's own.
 // Stat values are in display units, so a difference reads the same as the value.
 
+import { RULES } from "../data/rules";
 import { chassisDef } from "../data/chassis";
-import { partDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef } from "../data/parts";
+import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type FieldRepair } from "../data/parts";
 import { baseGrid, cellCount, mountedParts, type Cell } from "../sim/grid";
 import { isJunk, maxHp, partValue, wornDef } from "../sim/wear";
 import type { PartInstance, Vehicle } from "../sim/types";
@@ -64,6 +65,11 @@ const ART = {
   turning: '<path d="M10 35V22q0-12 14-12h6M25 4l7 6-7 6"/>',
   cells: '<path d="M5 5h30v30H5zM5 20h30M20 5v30"/>',
   load: '<path d="M3 27h34v6H3zM9 27V13h22v14M9 33v3M31 33v3"/>',
+  recoil: '<path d="M16 20h20M16 14v12M4 20l8-6v12z"/>',
+  blast: '<path d="M20 4l3 9 9-4-4 9 9 2-9 3 4 9-9-4-3 9-3-9-9 4 4-9-9-3 9-2-4-9 9 4z"/>',
+  heat: '<path d="M16 25V7a4 4 0 0 1 8 0v18a7 7 0 1 1-8 0zM20 13v15"/>',
+  patch: '<path d="M8 14l14-9 11 17-14 9zM15 15l3 5M20 12l3 5M18 22l3 5"/>',
+  tall: '<path d="M14 36V8h12v28M6 36h28M20 8V3"/>',
   clock: '<circle cx="20" cy="20" r="15"/><path d="M20 10v10l7 5"/>',
 } as const;
 
@@ -110,6 +116,11 @@ const ICON_NAMES: Record<IconName, string> = {
   turning: "Turning",
   cells: "Cargo cells",
   load: "Rated load",
+  recoil: "Recoil",
+  blast: "Blast armor",
+  heat: "Heat",
+  patch: "Field repair",
+  tall: "Tall",
   clock: "Time left",
 };
 
@@ -155,7 +166,7 @@ export function partIcon(part: PartInstance): IconName {
   return def.kind;
 }
 
-// One icon cell per stat. A stat with a change shows it below the value, colored by whether it helps.
+// One row per stat: icon, name, value, and the change against the player's own, colored by whether it helps.
 export function statGrid(diffs: StatDiff[]): HTMLElement {
   return el(
     "div",
@@ -165,8 +176,9 @@ export function statGrid(diffs: StatDiff[]): HTMLElement {
         "div",
         { class: "stat", title: d.stat.label },
         createIcon(d.stat.icon),
+        el("span", { class: "stat-name" }, ICON_NAMES[d.stat.icon]),
         el("span", { class: "stat-val" }, d.stat.text, el("small", {}, d.stat.unit)),
-        d.delta === null ? null : el("span", { class: `delta ${d.verdict}` }, d.delta === 0 ? "=" : d.text),
+        d.delta === null ? el("span") : el("span", { class: `delta ${d.verdict}` }, d.delta === 0 ? "=" : d.text),
       ),
     ),
   );
@@ -201,6 +213,8 @@ function partNote(part: PartInstance): string {
 export type PartCardOptions = {
   part: PartInstance;
   base: PartInstance | null; // the part it is weighed against, or null for no comparison
+  baseCount: number; // mounted parts of its kind the player can step through
+  onNextBase: (() => void) | null; // steps to the next mounted part of its kind
   action: HTMLElement | null;
   onHover?: (on: boolean) => void;
 };
@@ -218,9 +232,10 @@ export function partCard(o: PartCardOptions): HTMLElement {
       el("div", { class: "card-name" }, el("b", {}, def.name), el("span", { class: "dim" }, partNote(o.part))),
       footprint(def.w, def.h),
     ),
+    compareLine(o),
     conditionMeter(o.part),
     statGrid(diffs),
-    el("div", { class: "card-foot" }, el("span", { class: "dim" }, baseNote(o)), o.action),
+    el("div", { class: "card-foot" }, el("span"), o.action),
   );
   if (o.onHover) {
     const hover = o.onHover;
@@ -230,10 +245,34 @@ export function partCard(o: PartCardOptions): HTMLElement {
   return card;
 }
 
-function baseNote(o: PartCardOptions): string {
-  if (!o.base) return `No ${partDef(o.part.defId).kind} mounted`;
-  if (o.base === o.part) return "Mounted";
-  return `vs ${partDef(o.base.defId).name}`;
+// Which mounted part a screen's cards of each kind compare with. Stepping moves every card of the kind together.
+export class CompareSteps {
+  private index = new Map<PartKind, number>();
+
+  options(me: Vehicle, kind: PartKind, rerender: () => void): Pick<PartCardOptions, "base" | "baseCount" | "onNextBase"> {
+    const index = this.index.get(kind) ?? 0;
+    return {
+      base: comparePart(me, kind, index),
+      baseCount: mountedParts(me, kind).length,
+      onNextBase: () => {
+        this.index.set(kind, index + 1);
+        rerender();
+      },
+    };
+  }
+}
+
+// What the changes in the stat table are against. With several mounted parts of the kind, a click steps to the next.
+function compareLine(o: PartCardOptions): HTMLElement {
+  if (!o.base) return el("div", { class: "card-compare dim" }, "Nothing to compare");
+  const name = partDef(o.base.defId).name;
+  if (o.baseCount < 2 || !o.onNextBase) return el("div", { class: "card-compare" }, `Compared with ${name}`);
+  const next = o.onNextBase;
+  return el(
+    "button",
+    { class: "card-compare", title: "Compare with your next part of this kind", onclick: () => next() },
+    `Compared with ${name}. Click for your next one.`,
+  );
 }
 
 // A truck's grid seen from above, nose up, one colored square per cell.
@@ -272,7 +311,12 @@ export type StatIcon =
   | "turning"
   | "cells"
   | "load"
-  | "scanner";
+  | "scanner"
+  | "recoil"
+  | "blast"
+  | "heat"
+  | "patch"
+  | "tall";
 
 // better is the direction that helps the player. null marks a stat with no better side.
 export type Stat = {
@@ -301,10 +345,11 @@ function signed(value: number, decimals: number): string {
   return `${value < 0 ? "−" : "+"}${formatNumber(Math.abs(value), decimals)}`;
 }
 
-// The stats a part shows, with its wear applied.
+// The few stats that decide a part's job and weakness, most important first, with its wear applied.
+// The condition meter already shows HP.
 export function partStats(part: PartInstance): Stat[] {
   const def = partDef(part.defId);
-  return [...KIND_STATS[def.kind](part), stat("hp", "Max HP", hp(maxHp(part)), "", "more"), stat("mass", "Mass", def.mass, "kg", "less")];
+  return [...KIND_STATS[def.kind](part), stat("mass", "Mass: every kilogram costs speed", def.mass, "kg", "less")];
 }
 
 const KIND_STATS: Record<PartKind, (part: PartInstance) => Stat[]> = {
@@ -317,8 +362,18 @@ const KIND_STATS: Record<PartKind, (part: PartInstance) => Stat[]> = {
 };
 
 function cargoStats(part: PartInstance): Stat[] {
-  const rows = partDefOf<CargoDef>(part).extraRows;
-  return [{ ...stat("rows", "Extra cargo rows", rows, rows === 1 ? "row" : "rows", "more"), text: `+${rows}` }];
+  const d = partDefOf<CargoDef>(part);
+  return [{ ...stat("rows", "Extra cargo rows", d.extraRows, d.extraRows === 1 ? "row" : "rows", "more"), text: `+${d.extraRows}` }, tallStat(d)];
+}
+
+// Blast rounds meet an armor part's blast armor instead of its plain armor.
+function penStat(d: WeaponDef): Stat {
+  return { ...stat("pen", "Penetration: the armor a round gets through", d.round.pen, "", "more"), unit: d.round.blast ? "blast" : "" };
+}
+
+// Tall parts stand higher than a gun, so guns cannot fire across them.
+function tallStat(d: PartDef): Stat {
+  return { ...stat("tall", "Tall: guns cannot fire across it", d.tall ? 1 : 0, "", "less"), text: d.tall ? "tall" : "low" };
 }
 
 function partDefOf<T>(part: PartInstance): T {
@@ -327,15 +382,16 @@ function partDefOf<T>(part: PartInstance): T {
 
 function weaponStats(part: PartInstance): Stat[] {
   const d = wornDef<WeaponDef>(part);
-  const shot = { ...stat("damage", "Damage per shot", d.rounds * d.round.damage, "", "more") };
-  if (d.rounds > 1) shot.text = `${d.rounds}×${d.round.damage}`;
+  const round = d.round.damage * RULES.weaponDamage;
+  const shot = { ...stat("damage", "Damage per shot", d.rounds * round, "", "more", 1) };
+  if (d.rounds > 1) shot.text = `${d.rounds}×${formatNumber(round, 1)}`;
   return [
     shot,
-    stat("pen", "Penetration", d.round.pen, "", "more"),
+    penStat(d),
     stat("range", "Range", meters(d.range), "m", "more"),
     stat("reload", "Turns between shots", d.reload, "t", "less"),
-    stat("spread", "Spread", d.spread, "°", "less", 1),
     stat("arc", "Firing arc", d.arc, "°", "more"),
+    stat("recoil", "Recoil: spread added on a 1 t truck, less on a heavier one", d.recoil, "°", "less", 1),
   ];
 }
 
@@ -347,14 +403,27 @@ function engineStats(part: PartInstance): Stat[] {
     { ...speed, text: signed(speed.value, 0) },
     { ...accel, text: signed(accel.value, 1) },
     stat("fuel", "Fuel use", d.fuelMult, "×", "less", 1),
-    stat("noise", "Engine noise", d.noise, "×", "less", 1),
+    stat("heat", "Heat: how fast the sun heats it", d.heat, "×", "less", 1),
   ];
 }
 
 function armorStats(part: PartInstance): Stat[] {
   const d = wornDef<ArmorDef>(part);
-  const armor = stat("armor", "Armor: penetration it stops", Math.round(d.armor), "", "more");
-  return d.ramMult > 1 ? [armor, stat("ram", "Ram damage", d.ramMult, "×", "more", 1)] : [armor];
+  const armor = stat("armor", "Armor: kinetic penetration it stops", Math.round(d.armor), "", "more");
+  const blast = stat("blast", "Blast armor: blast penetration it stops", Math.round(d.blastArmor), "", "more");
+  const stats = [armor, blast, fieldRepairStat(d.fieldRepair)];
+  return d.ramMult > 1 ? [...stats, stat("ram", "Ram damage", d.ramMult, "×", "more", 1)] : stats;
+}
+
+const FIELD_REPAIR: Record<FieldRepair, { rank: number; text: string; label: string }> = {
+  none: { rank: 0, text: "town", label: "Field repair: only a town repairs it" },
+  capped: { rank: 1, text: "cap", label: "Field repair: patches up to the field cap" },
+  full: { rank: 2, text: "full", label: "Field repair: patches to full HP on the road" },
+};
+
+function fieldRepairStat(repair: FieldRepair): Stat {
+  const r = FIELD_REPAIR[repair];
+  return { ...stat("patch", r.label, r.rank, "", "more"), text: r.text };
 }
 
 // A truck's own numbers, without parts.
@@ -389,7 +458,11 @@ function verdictOf(delta: number, better: Stat["better"]): Verdict {
 
 // The mounted part a new part of this kind is weighed against: the most valuable one on the truck.
 export function baselinePart(v: Vehicle, kind: PartKind): PartInstance | null {
-  const mounted = mountedParts(v, kind);
-  if (mounted.length === 0) return null;
-  return mounted.reduce((best, p) => (partValue(p) > partValue(best) ? p : best));
+  return comparePart(v, kind, 0);
+}
+
+// The mounted parts of a kind, most valuable first. The player steps through them to pick what a card compares with.
+export function comparePart(v: Vehicle, kind: PartKind, index: number): PartInstance | null {
+  const mounted = [...mountedParts(v, kind)].sort((a, b) => partValue(b) - partValue(a));
+  return mounted.length === 0 ? null : mounted[index % mounted.length];
 }

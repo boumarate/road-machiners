@@ -800,7 +800,7 @@ body {
 .inv-cell.c-plain {
   background: #303d44;
 }
-.inv-cell.c-W {
+.inv-cell.c-D {
   background: #483e36;
 }
 .inv-cell.c-E {
@@ -814,9 +814,6 @@ body {
 }
 .inv-cell.c-X {
   background: #20292e;
-}
-.inv-cell.c-C {
-  background: #48433a;
 }
 .inv-item {
   position: absolute;
@@ -862,6 +859,22 @@ body {
 .inv-item.fixed {
   cursor: pointer;
   border-color: #707f86;
+}
+.inv-fan {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.inv-fan path {
+  fill: rgba(234, 199, 121, 0.16);
+  stroke: #eac779;
+  stroke-width: 2;
+}
+.inv-item.blocking {
+  outline: 2px solid #e0674c;
+  outline-offset: -2px;
 }
 .inv-item.selected {
   outline: 2px solid #eac779;
@@ -1261,6 +1274,15 @@ canvas.view {
 .card-name .dim {
   font-size: 12px;
 }
+.card-compare {
+  margin: 4px 0 6px;
+  font-size: 12px;
+  text-align: left;
+}
+#ui button.card-compare {
+  padding: 2px 6px;
+  font-size: 12px;
+}
 .card-foot {
   display: flex;
   align-items: center;
@@ -1299,21 +1321,28 @@ canvas.view {
 /* Stat cells: icon, value and the change against the player's own. */
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-  gap: 6px 8px;
+  grid-template-columns: 18px 1fr auto 52px;
+  gap: 3px 8px;
+  align-items: center;
 }
 .stat {
-  display: grid;
-  grid-template-columns: 18px 1fr;
-  grid-template-rows: auto auto;
-  column-gap: 4px;
-  align-items: center;
+  display: contents;
   font: 13px/1.15 var(--font-mono);
 }
 .stat .icon {
-  grid-row: span 2;
   width: 18px;
   height: 18px;
+}
+.stat-name {
+  font-size: 13px;
+  color: var(--muted);
+}
+.stat-val {
+  font: 13px var(--font-mono);
+  text-align: right;
+}
+.stat .delta {
+  text-align: right;
 }
 .stat .icon svg,
 .chip .icon svg,
@@ -1471,14 +1500,11 @@ canvas.view {
 .chassis-map .c-plain {
   background: #3a4a52;
 }
-.chassis-map .c-W {
+.chassis-map .c-D {
   background: #b0775a;
 }
 .chassis-map .c-E {
   background: #6f9aac;
-}
-.chassis-map .c-C {
-  background: #b09a6a;
 }
 .chassis-map .c-X {
   background: #26313a;
@@ -1516,9 +1542,8 @@ canvas.view {
 .inv-grid[data-hint] .inv-item {
   opacity: 0.35;
 }
-.inv-grid[data-hint~="W"] .c-W,
+.inv-grid[data-hint~="D"] .c-D,
 .inv-grid[data-hint~="E"] .c-E,
-.inv-grid[data-hint~="C"] .c-C,
 .inv-grid[data-hint~="F"] .c-F,
 .inv-grid[data-hint~="B"] .c-B,
 .inv-grid[data-hint~="L"] .c-L,

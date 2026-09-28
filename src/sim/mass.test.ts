@@ -26,11 +26,12 @@ describe('vehicle mass', () => {
     expect(vehicleMass(v)).toBe(CHASSIS.hauler.mass + coreMass('hauler') + PARTS.mg.mass + PARTS.stockEngine.mass + PARTS.plates.mass + 3 * GOODS.scrap.mass);
   });
 
-  it('load factor is 1 up to the rated mass, then sqrt(rated / mass)', () => {
+  it('load factor is sqrt(rated / mass) on both sides of the rated mass', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine', 'trailerBox'], { x: 40, y: 40 });
     expect(vehicleMass(v)).toBeLessThan(CHASSIS.hauler.ratedMass);
-    expect(loadFactor(v)).toBe(1);
+    expect(loadFactor(v)).toBeCloseTo(Math.sqrt(CHASSIS.hauler.ratedMass / vehicleMass(v)), 10);
+    expect(loadFactor(v)).toBeGreaterThan(1);
     addGoods(w, v, 'scrap', 999);
     const m = vehicleMass(v);
     expect(m).toBeGreaterThan(CHASSIS.hauler.ratedMass);
@@ -60,6 +61,17 @@ describe('load in stats', () => {
     expect(heavy.reverseTurn).toBeLessThan(light.reverseTurn);
     expect(heavy.accel).toBeLessThan(light.accel);
     expect(heavy.brake).toBeLessThan(light.brake);
+  });
+
+  it('a part on a truck below its rated mass still costs top speed and turning', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'scout', ['stockEngine'], { x: 40, y: 40 });
+    const before = vehicleStats(w, v);
+    expect(stowPart(w, v, makePart(w, 'plates', 0))).toBe(true);
+    const after = vehicleStats(w, v);
+    expect(vehicleMass(v)).toBeLessThan(CHASSIS.scout.ratedMass);
+    expect(after.maxSpeed).toBeLessThan(before.maxSpeed);
+    expect(after.turnSlow).toBeLessThan(before.turnSlow);
   });
 
   it('stats mass is the vehicle mass in kg', () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { XP_TO_REACH } from '../data/skills';
 import { hitOdds } from '../sim/combat';
+import { corePart } from '../sim/grid';
 import { vehicleStats } from '../sim/stats';
 import { addVehicle, emptyWorld } from '../sim/testkit';
 import { DEG } from '../sim/vec';
@@ -25,16 +26,16 @@ describe('hover card rows', () => {
     expect(card.mine[0]).toMatchObject({ odds: o, text: `${Math.round(o.chance * 100)}%` });
     const deg = (r: number) => (r / DEG).toFixed(1);
     expect(o.causes.crossing).toBeGreaterThan(0);
-    expect(card.mine[0].cause).toBe(`${Math.round(o.distance)} m · shows ${o.width.toFixed(1)} m wide · scatter ${deg(o.causes.weapon)}° weapon +${deg(o.causes.crossing)}° crossing`);
+    expect(o.causes.recoil).toBeGreaterThan(0);
+    expect(card.mine[0].cause).toBe(`${Math.round(o.distance)} m · shows ${o.width.toFixed(1)} m wide · scatter ${deg(o.causes.weapon)}° weapon +${deg(o.causes.crossing)}° crossing +${deg(o.causes.recoil)}° recoil`);
   });
 
   it('shows its weapons against me with the aim of its order at me', () => {
     const { world, me, them, theirs } = createDuel();
-    const cab = me.items.find((it) => it.kind === 'part' && it.part.defId === 'cab')!;
-    if (cab.kind !== 'part') throw new Error('cab is not a part');
-    them.weaponOrders[theirs.part.id] = { targetId: me.id, aim: cab.part.id };
+    const cab = corePart(me, 'cab');
+    them.weaponOrders[theirs.part.id] = { targetId: me.id, aim: cab.id };
     const card = hitCardRows(world, them.id)!;
-    expect(card.theirs[0].odds).toEqual(hitOdds(world, them, theirs, me, cab.part.id));
+    expect(card.theirs[0].odds).toEqual(hitOdds(world, them, theirs, me, cab.id));
   });
 
   it('uses a body shot for its weapons ordered at someone else', () => {

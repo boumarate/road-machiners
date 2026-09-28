@@ -5,22 +5,22 @@ import { partDef, type CoreDef, type PartKind } from '../data/parts';
 import type { GridItem, PartInstance, Vehicle } from './types';
 
 export type SideLetter = 'F' | 'B' | 'L' | 'R';
-export type Cell = 'W' | 'E' | 'C' | SideLetter | 'X' | '.';
+export type Cell = 'D' | 'E' | SideLetter | 'X' | '.';
 // cells[y][x], null is a hole. Rows from chassisH on come from mounted cargo parts.
 export type Grid = { w: number; h: number; chassisH: number; cells: (Cell | null)[][] };
 export type Spot = { x: number; y: number; rot: 0 | 1 };
 
 // Letters each kind mounts on. Armor lists the front first, so auto-mounting fills the nose before the sides.
 export const MOUNT_CELLS: Record<PartKind, Cell[]> = {
-  weapon: ['W'],
+  weapon: ['D'],
   engine: ['E'],
   armor: ['F', 'B', 'L', 'R'],
-  cargo: ['C'],
+  cargo: ['D'],
   core: ['X'],
-  scanner: ['W'],
+  scanner: ['D'],
 };
 const SIDES: readonly Cell[] = ['F', 'B', 'L', 'R'];
-const CELL_CHARS: readonly string[] = ['W', 'E', 'C', 'F', 'B', 'L', 'R', 'X', '.'];
+const CELL_CHARS: readonly string[] = ['D', 'E', 'F', 'B', 'L', 'R', 'X', '.'];
 
 // A chassis's layout is fixed data, so its grid is cached: this runs on every mounted-part lookup,
 // for every vehicle, every turn.
@@ -137,8 +137,7 @@ export function freeCells(v: Vehicle): number {
 
 // Why an item cannot sit at (x, y, rot), or null if it can. ignoreId skips the item being moved.
 export function placementError(g: Grid, items: GridItem[], item: GridItem, ignoreId: string | null): string | null {
-  const taken = new Set<string>();
-  for (const it of items) if (it.id !== ignoreId) for (const c of itemCells(it)) taken.add(`${c.x},${c.y}`);
+  const taken = takenCells(items, ignoreId);
   const cells = itemCells(item);
   if (crossesChassisEnd(g, cells) || !cells.every((c) => onGrid(g, c))) return 'Does not fit there';
   if (cells.some((c) => taken.has(`${c.x},${c.y}`))) return 'Something is in the way';
@@ -159,17 +158,31 @@ function crossesChassisEnd(g: Grid, cells: { y: number }[]): boolean {
 // and earlier letters win. Without them, plain cells are tried before mount cells so mounts stay free,
 // and spots fully on one avoid letter are skipped, so a stowed spare never mounts by accident.
 export function findSpot(g: Grid, items: GridItem[], item: GridItem, mount: Cell[] | null, avoid: Cell[] | null): Spot | null {
-  const tries: Spot[] = [];
-  for (const rot of [0, 1] as const) for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) tries.push({ x, y, rot });
+  if (mount) return mountSpots(g, items, item, mount)[0] ?? null;
+  const tries = allSpots(g);
   const fits = (s: Spot) => placementError(g, items, { ...item, ...s }, item.id) === null;
   const onlyOn = (s: Spot, cell: Cell) => itemCells({ ...item, ...s }).every((c) => g.cells[c.y]?.[c.x] === cell);
-  if (mount) {
-    for (const letter of mount) {
-      const spot = tries.find((s) => fits(s) && onlyOn(s, letter));
-      if (spot) return spot;
-    }
-    return null;
-  }
   const allowed = (s: Spot) => fits(s) && !(avoid && avoid.some((a) => onlyOn(s, a)));
   return tries.find((s) => allowed(s) && onlyOn(s, '.')) ?? tries.find(allowed) ?? null;
+}
+
+// Every free spot fully on one of the mount letters, earlier letters first, each letter in reading order.
+// Mount letters lie only on chassis rows, so a spot fully on one never crosses into cargo rows.
+export function mountSpots(g: Grid, items: GridItem[], item: GridItem, mount: Cell[]): Spot[] {
+  const taken = takenCells(items, item.id);
+  const tries = allSpots(g);
+  const free = (s: Spot, letter: Cell) => itemCells({ ...item, ...s }).every((c) => g.cells[c.y]?.[c.x] === letter && !taken.has(`${c.x},${c.y}`));
+  return mount.flatMap((letter) => tries.filter((s) => free(s, letter)));
+}
+
+function takenCells(items: GridItem[], ignoreId: string | null): Set<string> {
+  const taken = new Set<string>();
+  for (const it of items) if (it.id !== ignoreId) for (const c of itemCells(it)) taken.add(`${c.x},${c.y}`);
+  return taken;
+}
+
+function allSpots(g: Grid): Spot[] {
+  const tries: Spot[] = [];
+  for (const rot of [0, 1] as const) for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) tries.push({ x, y, rot });
+  return tries;
 }
