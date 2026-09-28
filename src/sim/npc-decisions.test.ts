@@ -337,3 +337,25 @@ describe('known face perk', () => {
     expect(known.keep).toBe(base.keep);
   });
 });
+
+describe('truce answers', () => {
+  const setup = (robbery: boolean) => {
+    const w = emptyWorld({ x: 80, y: 80 });
+    const me = w.player.vehicleId;
+    const robber = addNpc(w, 'scavengers', 'scavenger', ['scavenger', 'scumbag'], { x: 14, y: 10 }, ['autocannon', 'stockEngine']);
+    addState(w, 'feud', robber.id, me, { kind: 'feud', robbery });
+    const accept = () => optionChances(optionWeights(w, robber, 'truceOffered', me, vehicleDanger(w, find(w, me)))).accept!;
+    return { robber, accept };
+  };
+
+  it('a confident robber rarely takes a truce from its prey', () => {
+    expect(setup(false).accept()).toBeGreaterThan(0.5);
+    expect(setup(true).accept()).toBeLessThan(0.15);
+  });
+
+  it('a weak robber takes a truce as readily as any driver', () => {
+    const { robber, accept } = setup(true);
+    corePart(robber, 'cab').hp = 1;
+    expect(accept()).toBeGreaterThan(0.5);
+  });
+});

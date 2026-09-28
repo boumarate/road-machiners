@@ -581,6 +581,9 @@ export const NPC_BEHAVIOR = {
   weakBeg: 40,
   // Accept weight times this when the pleading foe's group is a threat or the answering driver is weak.
   threatAccept: 5,
+  // Refuse weight times this when the driver is robbing the pleading foe and neither faces a threat nor is weak.
+  // A scumbag's 2 to 1 for accept becomes 2 to 20, so a confident robber takes a truce about one time in ten.
+  robberRefuse: 20,
   // Comply weight times this when the player's local group is a threat. It then beats fight back and flee by far.
   threatComply: 20,
 };
