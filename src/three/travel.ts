@@ -68,6 +68,14 @@ export function overshoots(world: World, next: Pick<World, "events" | "vehicles"
   return dist(after.pos, me.order.dest) > dist(me.pos, me.order.dest);
 }
 
+// A truck on a rope has no physics frames. Its tower placed it along its trail after the physics step. A truck let
+// off the rope at the end of the turn, like on arrival in town, rode the rope during the step too.
+export function addRopeFrames(before: World, after: World, frames: TurnResult["frames"]): void {
+  for (const v of after.vehicles) {
+    if (isOnRope(after, v.id) || (!frames[v.id] && isOnRope(before, v.id))) frames[v.id] = trailFrames(after, v);
+  }
+}
+
 export function canTravel(world: World): boolean {
   const me = playerVehicle(world);
   if (!playerCanAct(world) || me.direct) return false;
@@ -182,9 +190,8 @@ export class Travel {
       next: restoreDrive(prepared.result.next),
     };
     if (!playerCanAct(world)) this.pause();
-    // A truck on a rope has no physics frames. Its tower placed it along its trail after the physics step.
-    const towed = isTowed(world);
-    for (const v of world.vehicles) if (isOnRope(world, v.id)) result.frames[v.id] = trailFrames(world, v);
+    const towed = isTowed(before) || isTowed(world);
+    addRopeFrames(before, world, result.frames);
     const playback: Playback = {
       result,
       before,
