@@ -7,7 +7,7 @@ import { START_KITS } from '../data/start';
 import {
   addSkillXp, applyGodMode, CheatError, grantPerk, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
   repairAll, revealMap, setFuel, setHealth, setMoney, setSupplies, skipToHour, spawnNear,
-  startWeather, teleport, toggleFullLog, toggleGod,
+  noclipMove, startWeather, teleport, toggleFullLog, toggleGod,
 } from './cheats';
 import { playerVehicle } from './damage';
 import { maxHealthOf } from './health';
@@ -168,6 +168,24 @@ describe('god mode', () => {
     };
     expect(endTurn(broken(false), testDrive).player.state).toBe('knockedOut');
     expect(endTurn(broken(true), testDrive).player.state).toBe('active');
+  });
+});
+
+describe('noclipMove', () => {
+  it('puts the truck on an obstacle, stops it and refreshes vision', () => {
+    const w = emptyWorld();
+    w.obstacles.push({ id: 'rock-x', pos: { x: 80, y: 90 }, r: 2, kind: 'rock' });
+    const me = playerVehicle(w);
+    me.speed = 3;
+    me.order = { kind: 'through', dest: { x: 50, y: 50 } };
+    const next = noclipMove(w, { x: 80, y: 90 });
+    expect(playerVehicle(next)).toMatchObject({ pos: { x: 80, y: 90 }, speed: 0, order: null, trail: [] });
+    expect(next.player.explored[90 * next.size + 80]).toBe(1);
+  });
+
+  it('clamps the truck to the map', () => {
+    const w = emptyWorld();
+    expect(playerVehicle(noclipMove(w, { x: -5, y: w.size + 5 })).pos).toEqual({ x: 0, y: w.size });
   });
 });
 

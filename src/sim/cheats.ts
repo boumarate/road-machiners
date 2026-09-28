@@ -190,6 +190,20 @@ export function teleport(world: World, target: Vec): World {
   });
 }
 
+// Noclip flight: puts the player truck at a map point, clamped to the map, without checking obstacles.
+export function noclipMove(world: World, target: Vec): World {
+  if (!Number.isFinite(target.x) || !Number.isFinite(target.y)) throw new CheatError(`Bad target ${target.x}, ${target.y}`);
+  if (!playerCanAct(world)) throw new CheatError(`Cannot fly while the player is ${isTowed(world) ? 'towed' : world.player.state}`);
+  return update(world, (w) => {
+    const me = playerVehicle(w);
+    me.pos = { x: Math.min(Math.max(target.x, 0), w.size), y: Math.min(Math.max(target.y, 0), w.size) };
+    me.order = null;
+    me.speed = 0;
+    me.trail = [];
+    refreshVision(w);
+  });
+}
+
 // Where a place's services work, nearest the truck: the pad of its nearest gate.
 export function placeSpot(world: World, id: string): Vec {
   const places: Site[] = [...REGION.towns, ...REGION.locations];

@@ -10,6 +10,7 @@ import {
   grantPerk,
   killVehicles,
   makeHostile,
+  noclipMove,
   nearbyVehicles,
   placeSpot,
   repairAll,
@@ -26,11 +27,14 @@ import {
   toggleGod,
 } from "../sim/cheats";
 import { PERKS, SKILL_IDS, XP_RULES } from "../data/skills";
+import { playerVehicle } from "../sim/damage";
 import { levelOf, xpTodayOf } from "../sim/progress";
+import { dist } from "../sim/vec";
 import type { World, XpSource } from "../sim/types";
 import { el, panel } from "./dom";
 
-export type CommandResult = { world: World | null; lines: string[] };
+// noclip asks the game to switch noclip flight, which lives in the view, not in the world.
+export type CommandResult = { world: World | null; lines: string[]; noclip?: true };
 
 export type Command = {
   name: string;
@@ -161,6 +165,12 @@ export const COMMANDS: readonly Command[] = [
     return { world: null, lines };
   }),
 
+  command("noclip", "Fly the truck with WASD at the view center, through obstacles. Again to land.", { min: 0, max: 0 }, () => ({
+    world: null,
+    lines: [],
+    noclip: true,
+  })),
+
   command("help", "List every command.", { min: 0, max: 0 }, () => ({
     world: null,
     lines: COMMANDS.map((c) => `${c.usage}  ${c.help}`),
@@ -195,6 +205,50 @@ export type ConsoleGame = {
   apply(w: World): void;
 };
 
+// The view parts noclip flight drives: the ground point at the view center in meters, and the key pan speed.
+export type NoclipView = {
+  focus(): { x: number; z: number };
+  setSpeed(factor: number): void;
+};
+
+// Noclip pans this many times faster than normal key panning, so crossing the map takes seconds.
+const NOCLIP_PAN_SPEED = 4;
+// Tiles the view center must move before the flying truck follows, so a still view changes no world.
+const NOCLIP_STEP = 0.05;
+
+// Noclip flight: WASD pans the view fast and the truck follows the view center through obstacles, once
+// per frame. Landing moves the truck to the nearest free spot.
+export class Noclip {
+  private on = false;
+
+  constructor(
+    private readonly game: ConsoleGame,
+    private readonly view: NoclipView,
+    private readonly metersPerTile: number,
+  ) {
+    const frame = (): void => {
+      this.fly();
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }
+
+  // Returns whether flight is now on. Throws CheatError when the truck cannot land.
+  toggle(): boolean {
+    if (this.on) this.game.apply(teleport(this.game.state, playerVehicle(this.game.state).pos));
+    this.on = !this.on;
+    this.view.setSpeed(this.on ? NOCLIP_PAN_SPEED : 1);
+    return this.on;
+  }
+
+  private fly(): void {
+    if (!this.on || this.game.busy) return;
+    const focus = this.view.focus();
+    const target = { x: focus.x / this.metersPerTile, y: focus.z / this.metersPerTile };
+    if (dist(target, playerVehicle(this.game.state).pos) > NOCLIP_STEP) this.game.apply(noclipMove(this.game.state, target));
+  }
+}
+
 // The backquote key, or § by its character, since Mac ISO keyboards report that key under another code.
 function isToggleKey(e: KeyboardEvent): boolean {
   return e.code === "Backquote" || e.key === "§";
@@ -207,7 +261,7 @@ export class DebugConsole {
   private readonly history: string[] = [];
   private cursor = 0; // history index shown in the input; history.length is the fresh line
 
-  constructor(host: HTMLElement, private readonly game: ConsoleGame) {
+  constructor(host: HTMLElement, private readonly game: ConsoleGame, private readonly noclip: Noclip) {
     this.root = panel("debug-console", host);
     this.root.hidden = true;
     this.log = el("div", { class: "debug-console-log" });
@@ -282,7 +336,9 @@ export class DebugConsole {
   // Only bad user input is printed. Any other error is a bug and goes to the crash screen.
   private run(line: string): CommandResult | null {
     try {
-      return runCommand(this.game.state, line);
+      const result = runCommand(this.game.state, line);
+      if (!result.noclip) return result;
+      return { world: null, lines: [this.noclip.toggle() ? "noclip on: WASD flies the truck" : "noclip off"] };
     } catch (err) {
       if (!(err instanceof CheatError)) throw err;
       this.print(err.message, "bad");

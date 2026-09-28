@@ -123,7 +123,7 @@ export class Game {
   private readonly stormTint = Object.assign(document.createElement("div"), {
     className: "storm-tint",
   }); // dust haze while inside a storm
-  private readonly rig: CameraRig;
+  readonly rig: CameraRig;
   private readonly ground = new THREE.Group(); // terrain chunks near the view, for ground picking
   private readonly props = new THREE.Group(); // sites and obstacles near the view
   private readonly scopes: RenderScope[];
@@ -168,7 +168,7 @@ export class Game {
   );
   private selected: string | null = null;
   private readonly sightLimit: SightLimit;
-  private readonly follow: TruckFollow;
+  readonly follow: TruckFollow;
   private planFor: World | null = null;
   private last = performance.now();
   private idleSince = performance.now(); // when the last turn's playback ended, for the auto turn pace

@@ -197,7 +197,7 @@ export class TruckFollow {
 
   constructor(
     private rig: CameraRig,
-    private keyPan: KeyPan,
+    readonly keyPan: KeyPan,
     canvas: HTMLElement,
   ) {
     let from: { x: number; y: number } | null = null;
@@ -262,6 +262,7 @@ const KEY_PAN_PX_PER_S = 1000;
 
 export class KeyPan {
   private held = new Set<string>();
+  private speed = 1; // multiplies KEY_PAN_PX_PER_S
 
   // typing: true while a text field has focus, so its keys do not pan.
   constructor(typing: () => boolean) {
@@ -270,6 +271,11 @@ export class KeyPan {
     });
     window.addEventListener("keyup", (e) => this.held.delete(e.code));
     window.addEventListener("blur", () => this.held.clear());
+  }
+
+  setSpeed(factor: number): void {
+    if (!(factor > 0 && Number.isFinite(factor))) throw new Error(`Key pan speed must be a finite positive number, got ${factor}`);
+    this.speed = factor;
   }
 
   // Moves the view for dtMs milliseconds of held keys. Returns true if it moved.
@@ -282,7 +288,7 @@ export class KeyPan {
     }
     const len = Math.hypot(x, y);
     if (len === 0) return false;
-    const px = (KEY_PAN_PX_PER_S * Math.max(0, dtMs)) / 1000;
+    const px = (KEY_PAN_PX_PER_S * this.speed * Math.max(0, dtMs)) / 1000;
     // panBy drags the content, so the view moves the opposite way.
     rig.panBy((-x / len) * px, (-y / len) * px);
     return true;
