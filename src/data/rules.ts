@@ -43,7 +43,7 @@ export const RULES = {
   tankLeak: 1, // fuel lost per turn with a broken tank
 
   // Global damage multipliers. Tune these to make every fight faster or slower.
-  weaponDamage: 0.61875, // every weapon round and splash, guard guns included
+  weaponDamage: 1.2375, // every weapon round and splash, guard guns included
   crashDamage: 1.125, // every crash and ram, into trucks and obstacles alike
 
   // Town guards. Each town gate has one gun. Every turn it shoots the nearest vehicle within range that fired.
