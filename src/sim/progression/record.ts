@@ -13,7 +13,7 @@ import { endTurn, newWorld, update } from '../world';
 import { botOrders, parkedOnPurpose, type Archetype } from './bot';
 
 // One practice event. turn is the world turn it happened on; a run of N turns ends on world turn N + 1.
-export type TraceLine = { turn: number; source: XpSource; amount: number; difficulty: number | null };
+export type TraceLine = { turn: number; source: XpSource; amount: number; difficulty: number | null; target: string };
 // The last entry of a run the player did not survive. turn is the world turn the player died on.
 export type RunEnd = { end: 'death'; turn: number };
 // death is set on the last step of a run the player did not survive.
@@ -96,7 +96,7 @@ function moveAllFar(w: World): void {
 }
 
 function traceOf(events: GameEvent[], turn: number): TraceLine[] {
-  return events.flatMap((e) => (e.t === 'practice' ? [{ turn, source: e.source, amount: e.amount, difficulty: e.difficulty }] : []));
+  return events.flatMap((e) => (e.t === 'practice' ? [{ turn, source: e.source, amount: e.amount, difficulty: e.difficulty, target: e.target }] : []));
 }
 
 // Fails loud when the player truck stays within STALL_TILES of one point for a whole in-game day. A turn parked on

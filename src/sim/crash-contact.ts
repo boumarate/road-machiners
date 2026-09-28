@@ -39,7 +39,7 @@ function practiceRam(world: World, a: Vehicle, b: Vehicle, hitsA: PartHit[], hit
   const [own, other, dealt] = a.id === me ? [a, b, hitsB] : [b, a, hitsA];
   const damage = dealt.reduce((sum, hit) => sum + hit.damage, 0);
   if (damage === 0) return;
-  practice(world, 'ram', damage, vehicleMass(other) / (vehicleMass(other) + vehicleMass(own)));
+  practice(world, 'ram', damage, vehicleMass(other) / (vehicleMass(other) + vehicleMass(own)), other.id);
 }
 
 // Damage only. The real crash also notes the attacks, which a ram forecast must not.

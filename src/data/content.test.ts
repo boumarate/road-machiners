@@ -35,6 +35,9 @@ const addedParts: Record<Exclude<PartKind, "core" | "scanner">, string[]> = {
     "spacedArmor",
     "reinforcedCage",
     "plowRam",
+    "steelPlate",
+    "scrapSheet",
+    "ceramicTile",
   ],
   cargo: ["panniers", "flatbed", "lightFrame", "enclosedFrame", "heavyFrame"],
 };
@@ -60,7 +63,7 @@ describe("equipment variety", () => {
   });
 
   it.each(Object.entries(addedParts))(
-    "adds five usable %s parts",
+    "adds usable %s parts",
     (kind, ids) => {
       const originalCounts: Record<string, number> = {
         weapon: 2,
@@ -69,7 +72,7 @@ describe("equipment variety", () => {
         cargo: 2,
       };
       expect(Object.values(PARTS).filter((p) => p.kind === kind)).toHaveLength(
-        originalCounts[kind] + 5,
+        originalCounts[kind] + ids.length,
       );
       for (const id of ids) {
         expect(PARTS[id].kind).toBe(kind);
@@ -160,5 +163,13 @@ describe("equipment variety", () => {
       expect(goodsCount(w.vehicles[0])[id]).toBeUndefined();
       expect(w.player.money).toBeGreaterThan(start.player.money);
     }
+  });
+});
+
+describe("one-cell armor plates", () => {
+  it.each(["steelPlate", "scrapSheet", "ceramicTile"])("%s fills one cell with its plate line's armor", (id) => {
+    const line = { steelPlate: "plates", scrapSheet: "scrapPanels", ceramicTile: "ceramicPlates" }[id]!;
+    expect([PARTS[id].w, PARTS[id].h]).toEqual([1, 1]);
+    expect(PARTS[id].armor).toBe(PARTS[line].armor);
   });
 });

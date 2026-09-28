@@ -7,7 +7,9 @@ import { vehicleById } from './damage';
 import { newId } from './factory';
 import { lootRobbed } from './npc-activities';
 import { checkPatch, isPatching, lapsePatch, settlePatch } from './patch';
+import { practice } from './progress';
 import { checkPlayerTow } from './tow';
+import { checkTrade, isMeeting } from './economy';
 import { getResources } from './resources';
 import type { NpcState, StateData, StateEnding, StateKindId, World } from './types';
 import { canVehicleSee } from './vision';
@@ -46,7 +48,7 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   },
   // The holder does not rob the other party while it lasts.
   backedOff: { refresh: never, check: noCheck, hooks: {} },
-  // The holder tows the other party to a town. See src/sim/tow.ts. An NPC tower's goal fulfils and breaks it. A
+  // The holder tows the other party to a town or camp. See src/sim/tow.ts. An NPC tower's goal fulfils and breaks it. A
   // player tower's arrival is its check.
   tow: {
     refresh: never,
@@ -55,7 +57,7 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   },
   turnedDown: { refresh: never, check: noCheck, hooks: {} },
   towPromise: { refresh: never, check: noCheck, hooks: {} },
-  // The holder has taken the job of towing the player, so no other driver answers. It is fulfilled by the offer
+  // The holder has taken the job of towing the other party, so no other driver answers. It is fulfilled by the offer
   // in src/sim/tow.ts, and broken once the holder's tow goal is gone from its stack.
   answering: { refresh: never, check: (w, s) => (answerDropped(w, s) ? 'broken' : null), hooks: {} },
   // The holder patches the other party's truck. See src/sim/patch.ts. Work keeps it going, and the fulfilled hook
@@ -73,6 +75,9 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
     check: checkPatch,
     hooks: { fulfilled: settlePatch, expired: lapsePatch },
   },
+  // The holder pulls over to trade with the player. See src/sim/economy.ts. Being parked in reach keeps it
+  // going. The player ends it when done trading, and a feud between the two breaks it.
+  trade: { refresh: isMeeting, check: checkTrade, hooks: {} },
 };
 
 // A missing holder is left to the missing-party rule.
@@ -92,7 +97,7 @@ function turnsOf(kind: StateKindId): number | null {
 }
 
 // The data kind each state kind carries.
-const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none', grievance: 'none', plea: 'plea' };
+const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none', grievance: 'none', plea: 'plea', trade: 'none' };
 
 export function addState(w: World, kind: StateKindId, holder: string, other: string, data: StateData): NpcState {
   kindOf(kind);
@@ -188,17 +193,18 @@ function payTow(w: World, s: NpcState): void {
   towed.speed = 0;
   towed.order = null;
   if (s.holder === w.player.vehicleId) w.events.push({ t: 'money', amount: tow.fee, reason: `towing ${towed.name}` });
-  else w.events.push({ t: 'towDone', by: s.holder, fee: tow.fee });
+  if (s.holder === w.player.vehicleId && tow.waived > 0) practice(w, 'freeTow', tow.waived, null, s.other);
+  else w.events.push({ t: 'towDone', by: s.holder, client: s.other, fee: tow.fee });
 }
 
 // A released truck brakes to a stop. The caller logs why the tow broke, except for a tower that left the world,
 // which only this step sees.
-// An NPC tower forgets it decided on this player, so a stranded player in sight is a fresh strandedSeen decision.
+// An NPC tower forgets it decided on this client, so a stranded client in sight is a fresh strandedSeen decision.
 function releaseTow(w: World, s: NpcState): void {
   const towed = w.vehicles.find((v) => v.id === s.other);
   if (towed && towData(s).hitched) towed.order = { kind: 'brake' };
   if (s.holder === w.player.vehicleId) return;
   const holder = w.vehicles.find((v) => v.id === s.holder);
-  if (!holder) w.events.push({ t: 'towDropped', by: s.holder, reason: 'gone' });
+  if (!holder) w.events.push({ t: 'towDropped', by: s.holder, client: s.other, reason: 'gone' });
   else delete holder.brain!.noticed[`strandedSeen:${s.other}`];
 }

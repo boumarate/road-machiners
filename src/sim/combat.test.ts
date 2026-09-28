@@ -136,6 +136,23 @@ describe('combat', () => {
     expect(w.obstacles.filter((o) => o.id.startsWith('wreck-'))).toHaveLength(RULES.maxKillWrecks);
   });
 
+  it('clearing an old kill wreck stops a search of it', () => {
+    const { w } = duel();
+    const kill = () => {
+      const b = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 10 + w.obstacles.length * 2, y: 10 });
+      b.brain = npcBrain('buggy', b.pos, ['raider']);
+      corePart(b, 'cab').hp = 0;
+      resolveDestroyed(w);
+      return b.id;
+    };
+    const oldest = kill();
+    const searcher = addVehicle(w, 'scavengers', 'scout', [], { x: 10, y: 14 });
+    searcher.job = { kind: 'search', stockId: `wreck-${oldest}`, turnsLeft: 3, total: 3 };
+    for (let i = 0; i < RULES.maxKillWrecks; i++) kill();
+    expect(w.salvage.some((s) => s.id === `wreck-${oldest}`)).toBe(false);
+    expect(searcher.job).toBeNull();
+  });
+
   it('shooting a neutral makes it and its nearby mates hostile', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];

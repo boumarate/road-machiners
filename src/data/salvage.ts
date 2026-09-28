@@ -1,4 +1,4 @@
-// Loot tables and search speed for scavenging. Rolls draw through rng.ts at world creation.
+// Loot tables, search speed and daily renewal for scavenging. Rolls draw through rng.ts.
 
 import type { Weighted } from './npcs';
 
@@ -29,14 +29,14 @@ export const SALVAGE = {
   // Share of a wrecked chassis's value that its destroyed built-in parts leave as the parts good, scaled by
   // their remaining HP share. Keeps a wreck's loot well under the truck's own value, so a kill is not a windfall.
   coreValueShare: 0.15,
-  // Sites and road wrecks roll a top-up every this many days...
-  restockIntervalDays: 4,
-  // ...gaining this share of a fresh roll from their loot table each time, up to the table's highs. From
-  // empty, a site takes several intervals, a few weeks, to fill back up: a slow trickle, not a reset.
-  restockShare: 0.3,
-  // Goods and parts ranges cut to about a third of their old values: the whole map's loot used to sell for far
-  // more than the upgrade ladder costs, and scavengers never let it regrow fast enough to matter. Fuel and
-  // supplies stay, since they are spent, not resold.
+  // Each day a site regains this share of a fresh roll from its loot table, up to the table's highs. An emptied
+  // site takes about two weeks to fill back up: a slow trickle, not a reset.
+  restockShare: 0.08,
+  // Goods and parts ranges sit at about a third of what the map once held. The whole map's loot used to sell
+  // for far more than the upgrade ladder costs. Fuel and supplies stay, since they are spent, not resold.
+  // Days a looted road wreck lies empty before it goes. It goes only beyond the player's gray vision, and a new
+  // road wreck appears elsewhere, also beyond it, so the road wreck count stays constant.
+  wreckClearDays: 3,
   landmark: {
     goods: { scrap: [1, 2], salt: [0, 1], meds: [0, 1] },
     parts: [1, 2],

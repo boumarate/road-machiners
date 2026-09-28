@@ -11,11 +11,13 @@ import {
   contractSummary,
   eventText,
   formatNpcActivity,
+  JOB_LABELS,
+  jobProgress,
   formatNpcStates,
   formatNpcTraits,
 } from "./format";
 import { getHudReadout, getRescueReadout, moneyLabel, TruckConditionReadout } from "./hud-readout";
-import { createIcon, createSpeedDial, type IconName } from "./icons";
+import { createIcon, createSpeedDial, type IconName } from "./cards";
 import { hp, kph } from "./units";
 import { maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
@@ -230,8 +232,8 @@ export class Hud {
   }
 
   private renderJob(job: Job): void {
-    const progress = Math.round((1 - job.turnsLeft / job.total) * 100);
-    const label = { search: 'Search', repair: 'Repair', refit: 'Refit', strip: 'Strip' }[job.kind];
+    const progress = Math.round(jobProgress(job) * 100);
+    const label = JOB_LABELS[job.kind];
     this.action.replaceChildren(
       el(
         "span",

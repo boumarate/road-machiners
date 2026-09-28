@@ -22,7 +22,7 @@ git commit
 
 `npm run quality` checks tracked and untracked source files in the working tree against HEAD. The pre-commit hook checks the full staged source tree against HEAD. Both run the full TypeScript check. A new repository with no HEAD treats every file as new.
 
-The hook exports the index to a temporary directory under `tmp/` and removes it when the check finishes. Dependencies come from this checkout's `node_modules`. Stage changes to the quality scripts, policy files, and dependency manifests together. The hook refuses unstaged changes to those files.
+The hook exports the index to a temporary directory under `tmp/` and removes it when the check finishes. Dependencies come from this checkout's `node_modules`. Stage changes to `.oxlintrc.json`, `.quality.json`, `package.json`, `package-lock.json`, `scripts/quality.mjs` and `scripts/quality-policy.mjs` together. The hook refuses unstaged changes to those files.
 
 ## Enforced rules
 

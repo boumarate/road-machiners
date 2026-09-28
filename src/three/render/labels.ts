@@ -7,8 +7,8 @@ import { groundPoint, type VehicleFrame } from '../../phys/frames';
 import { PAL } from '../../render/palette';
 import type { World } from '../../sim/types';
 import { el } from '../../ui/dom';
-import { createIcon } from '../../ui/icons';
-import type { VehicleMark, WeaponMark } from '../../ui/weapons';
+import { createIcon } from '../../ui/cards';
+import type { JobMark, VehicleMark, WeaponMark } from '../../ui/weapons';
 import { playerExplored } from '../../sim/vision';
 import type { CameraRig } from './camera';
 import type { SightLimit } from './scope';
@@ -25,7 +25,7 @@ export class Labels {
       const el = document.createElement('div');
       el.style.position = 'absolute';
       el.style.transform = 'translate(-50%, -100%)';
-      el.style.font = '15px monospace';
+      el.style.font = '15px var(--font-mono)';
       el.style.color = PAL.text;
       el.style.background = '#1a1410aa'; // PAL.bg with alpha, matches the old 2D label backing
       el.style.padding = '3px 6px';
@@ -64,34 +64,47 @@ function weaponChip(mark: WeaponMark): HTMLElement {
   );
 }
 
+function jobChip(job: JobMark): HTMLElement {
+  return el('div', { class: 'marker-job' },
+    el('span', {}, job.label),
+    el('span', { class: 'job-bar' }, el('span', { style: `width:${Math.round(job.progress * 100)}%` })),
+  );
+}
+
+function markerNode(mark: VehicleMark): HTMLElement {
+  return el('div', { class: 'vehicle-marker' },
+    mark.weapons.length > 0 ? el('div', { class: 'marker-weapons' }, ...mark.weapons.map(weaponChip)) : null,
+    mark.radio ? el('div', { class: 'marker-radio' }, '[T] Radio') : null,
+    mark.job ? jobChip(mark.job) : null,
+  );
+}
+
 const MARKER_LIFT = 3.5; // meters above a vehicle where its label sits
 
-// Markers above vehicles: an icon per player weapon aimed at the vehicle, and the radio key on the hovered
-// truck. The content comes from vehicleMarks() in src/ui/weapons.ts.
+// Markers above vehicles: an icon per player weapon aimed at the vehicle, the radio key on the hovered
+// truck, and the job an NPC works on. The content comes from vehicleMarks() in src/ui/weapons.ts.
 export class VehicleMarkers {
   private readonly els = new Map<string, HTMLElement>(); // by vehicle id
 
   constructor(private readonly container: HTMLElement, private readonly rig: CameraRig) {}
 
-  // Replaces every marker. Null clears them, as during a turn's playback.
-  refresh(marks: Map<string, VehicleMark> | null): void {
+  refresh(marks: Map<string, VehicleMark>): void {
     for (const node of this.els.values()) node.remove();
     this.els.clear();
-    for (const [id, mark] of marks ?? []) {
-      const node = el('div', { class: 'vehicle-marker' },
-        mark.weapons.length > 0 ? el('div', { class: 'marker-weapons' }, ...mark.weapons.map(weaponChip)) : null,
-        mark.radio ? el('div', { class: 'marker-radio' }, '[T] Radio') : null,
-      );
+    for (const [id, mark] of marks) {
+      const node = markerNode(mark);
       this.container.appendChild(node);
       this.els.set(id, node);
     }
   }
 
-  place(frames: Record<string, VehicleFrame>, hide: boolean): void {
+  // Weapons and the radio key hide while turns advance. Jobs stay, so their bars step each turn.
+  place(frames: Record<string, VehicleFrame>, hideAims: boolean, hideAll: boolean): void {
     for (const [id, node] of this.els) {
       const f = frames[id];
-      node.style.display = hide || !f ? 'none' : 'flex';
-      if (hide || !f) continue;
+      node.style.display = hideAll || !f ? 'none' : 'flex';
+      if (hideAll || !f) continue;
+      node.classList.toggle('aims-hidden', hideAims);
       const p = this.rig.screenOf({ x: f.pos.x, y: f.pos.y + MARKER_LIFT, z: f.pos.z });
       node.style.left = `${p.x}px`;
       node.style.top = `${p.y}px`;

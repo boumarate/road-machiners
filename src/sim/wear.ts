@@ -11,7 +11,7 @@ import { TERRAIN_TYPES, type TerrainTypeId } from '../data/terrain';
 import { CONDITION, WEAR } from '../data/wear';
 import { playerVehicle } from './damage';
 import { corePart, mountedParts } from './grid';
-import { practice } from './progress';
+import { practice, regionOf } from './progress';
 import { chance, randInt } from './rng';
 import { tileAt } from './terrain';
 import { isTowed } from './tow';
@@ -91,7 +91,7 @@ function practiceRoughGround(world: World): void {
     tiles += len;
     weighted += len * rough;
   }
-  if (tiles > 0) practice(world, 'roughTiles', tiles, weighted / tiles);
+  if (tiles > 0) practice(world, 'roughTiles', tiles, weighted / tiles, regionOf(playerVehicle(world).pos));
 }
 
 // ---- Part condition.

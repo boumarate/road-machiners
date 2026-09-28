@@ -404,11 +404,15 @@ export function acceptContract(world: World, contractId: string): World {
 
 // A haul loads its goods for free, so a player in debt could otherwise stock up on cargo it never
 // paid for. Refused outright: pay off the debt before taking on more work.
+// Hauled goods count as paid at the value a missed deadline charges, so selling them teaches no trade.
 function loadHaul(world: World, c: Extract<Contract, { kind: 'haul' }>): void {
   if (world.player.money < 0) throw new Error('Cannot take on a haul while in debt');
   const v = playerVehicle(world);
   if (freeCells(v) < c.units) throw new Error(`Needs ${c.units} free cells for the cargo`);
+  const held = goodsCount(v)[c.good] ?? 0;
   if (addGoods(world, v, c.good, c.units) !== c.units) throw new Error('Cargo capacity invariant failed');
+  const paid = world.player.costBasis[c.good] ?? 0;
+  world.player.costBasis[c.good] = (paid * held + goodValue(c.good) * c.units) / (held + c.units);
 }
 
 // Hands in a haul at its destination or a fetch at the shop that posted it. Bounties pay on the kill.
@@ -449,14 +453,21 @@ function handInFetch(world: World, c: Extract<Contract, { kind: 'fetch' }>): voi
   world.player.storage.splice(stored, 1);
 }
 
-// Ends an active contract. Done pays the reward and XP; failed charges the haul penalty, debt allowed.
+// Social XP for a done contract, from the money that paid for work. A fetch's part price is a purchase, so only
+// its search fee counts.
+export function contractXp(c: Contract): number {
+  const effort = c.kind === 'fetch' ? c.reward - partPristineBuyPrice(c.defId) : c.reward;
+  return Math.round(effort * CONTRACTS[c.kind].xpPerEffort);
+}
+
+// Ends an active contract. Done pays the reward and the contract's XP to Social; failed charges the haul penalty, debt allowed.
 function finishContract(world: World, c: Contract, outcome: 'done' | 'failed' | 'lapsed'): void {
   world.player.contracts = world.player.contracts.filter((x) => x.id !== c.id);
   world.events.push({ t: 'contract', contract: { ...c }, outcome });
   if (outcome === 'done') {
     world.player.money += c.reward;
     world.events.push({ t: 'money', amount: c.reward, reason: 'contract' });
-    practice(world, 'deal', 1, null);
+    practice(world, 'contract', contractXp(c), null, c.shop);
   }
   if (outcome === 'failed' && c.kind === 'haul') {
     const penalty = haulPenalty(c, goodValue(c.good));

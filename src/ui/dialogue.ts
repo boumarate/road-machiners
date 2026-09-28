@@ -29,6 +29,12 @@ function townName(id: string): string {
   return town.name;
 }
 
+function siteName(id: string): string {
+  const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === id);
+  if (!site) throw new Error(`Unknown site ${id}`);
+  return site.name;
+}
+
 function distanceText(tiles: number): string {
   const m = meters(tiles);
   return m >= METERS_PER_KM ? `${(m / METERS_PER_KM).toFixed(1)} km` : `${m} m`;
@@ -44,6 +50,7 @@ type VarText = { [K in CallVar['kind']]: (v: Extract<CallVar, { kind: K }>) => s
 
 const VAR_TEXT: VarText = {
   town: (v) => townName(v.id),
+  site: (v) => siteName(v.id),
   money: (v) => String(v.amount),
   distance: (v) => distanceText(v.tiles),
   bearing: (v) => compass(v.rad),

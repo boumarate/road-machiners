@@ -65,11 +65,16 @@ export function roadExits(p: Vec): number[] {
 }
 
 function placeRoadWrecks(world: World, out: Obstacle[]): void {
-  let placed = 0;
-  let tries = 0;
-  while (placed < O.roadWrecks) {
-    tries++;
-    if (tries > O.maxTries) throw new Error('Road wreck placement ran out of tries');
+  for (let placed = 0; placed < O.roadWrecks; placed++) {
+    const spot = findRoadWreckSpot(world, out, () => true);
+    out.push({ id: `wreck${placed}`, ...spot, kind: 'wreck' });
+  }
+}
+
+// A random spot on a road shoulder, clear of sites, the bridge deck, the given obstacles, and any spot `allowed`
+// rejects. The world RNG picks it.
+export function findRoadWreckSpot(world: World, obstacles: Obstacle[], allowed: (pos: Vec, r: number) => boolean): { pos: Vec; r: number } {
+  for (let tries = 1; tries <= O.maxTries; tries++) {
     const road = REGION.roads[randInt(world, 0, REGION.roads.length - 1)];
     const seg = randInt(world, 0, road.length - 2);
     const t = randRange(world, 0.2, 0.8);
@@ -80,10 +85,9 @@ function placeRoadWrecks(world: World, out: Obstacle[]): void {
     const len = dist(a, b);
     const pos = { x: a.x + (b.x - a.x) * t - ((b.y - a.y) / len) * side, y: a.y + (b.y - a.y) * t + ((b.x - a.x) / len) * side };
     const r = randRange(world, 0.55, 0.8);
-    if (!clearOfSites(pos, r) || overlapsAny(out, pos, r) || onBridge(pos, r)) continue;
-    out.push({ id: `wreck${placed}`, pos, r, kind: 'wreck' });
-    placed++;
+    if (clearOfSites(pos, r) && !overlapsAny(obstacles, pos, r) && !onBridge(pos, r) && allowed(pos, r)) return { pos, r };
   }
+  throw new Error('Road wreck placement ran out of tries');
 }
 
 function fitsOffRoad(world: World, out: Obstacle[], pos: Vec, r: number): boolean {

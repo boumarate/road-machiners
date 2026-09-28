@@ -494,6 +494,50 @@ export const PARTS: Record<string, PartDef> = {
     ramMult: 2.8,
     look: "ram",
   },
+  // One-cell cuts of the plate lines above. Each keeps its line's armor value, so a single cell patches a gap
+  // or a corner that a longer row cannot fill. Per cell they cost a bit more than the long rows.
+  steelPlate: {
+    id: "steelPlate",
+    kind: "armor",
+    name: "Steel plate",
+    hp: 14,
+    value: 95,
+    tier: 2,
+    w: 1,
+    h: 1,
+    mass: 120,
+    armor: 12,
+    ramMult: 1,
+    look: "plates",
+  },
+  scrapSheet: {
+    id: "scrapSheet",
+    kind: "armor",
+    name: "Scrap sheet",
+    hp: 11,
+    value: 40,
+    tier: 1,
+    w: 1,
+    h: 1,
+    mass: 90,
+    armor: 5,
+    ramMult: 1,
+    look: "plates",
+  },
+  ceramicTile: {
+    id: "ceramicTile",
+    kind: "armor",
+    name: "Ceramic tile",
+    hp: 9,
+    value: 230,
+    tier: 2,
+    w: 1,
+    h: 1,
+    mass: 50,
+    armor: 22,
+    ramMult: 1,
+    look: "plates",
+  },
   rack: {
     id: "rack",
     kind: "cargo",
@@ -655,7 +699,7 @@ export const PARTS: Record<string, PartDef> = {
     h: 1,
     mass: 30,
     armor: 2,
-    range: 160, // tiles; covers the whole map, through hills
+    range: 160, // tiles, through hills
   },
 };
 

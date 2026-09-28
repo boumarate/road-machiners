@@ -19,7 +19,7 @@ import {
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
 import { hashRandom, randInt } from './rng';
-import { canReachSalvage, hasSalvage, pileInReach, wreckStockId } from './salvage';
+import { canReachSalvage, canTakeAny, hasSalvage, isSiteStock, pileInReach, wreckStockId } from './salvage';
 import { beginSearch } from './search';
 import { vehicleById } from './damage';
 import { plead } from './parley';
@@ -29,14 +29,14 @@ import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, SalvageS
 import { canUseSite, nearestPad } from './sites';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
-import { dropTow, isOnRope, playerTow, runTow, strandedPlayerAt, towGoal } from './tow';
+import { dropTow, isOnRope, runTow, strandedAt, towGoal, towHeldBy } from './tow';
 
 // ---- The goal stack. The top goal drives the NPC. A long-term goal sits at the bottom, and interruptions go on top
 // of it. A new goal replaces any goal of its kind, so the stack never holds two goals of one kind. Every change logs
 // an `activity` event.
 
 // Goals that interrupt a long-term goal. Popping one that uncovers the long-term goal fires the resume decision.
-export const INTERRUPTIONS: readonly NpcActivity['kind'][] = ['fight', 'flee', 'investigate', 'resupply', 'tow', 'loot', 'repair', 'patch'];
+export const INTERRUPTIONS: readonly NpcActivity['kind'][] = ['fight', 'flee', 'investigate', 'resupply', 'tow', 'loot', 'repair', 'patch', 'meet'];
 
 function goalsOf(v: Vehicle): NpcActivity[] {
   if (!v.brain) throw new Error(`${v.id} has no NPC brain`);
@@ -232,8 +232,7 @@ export function finishGoal(world: World, vehicle: Vehicle, reason: string): void
 }
 
 function heldTow(world: World, vehicle: Vehicle): NpcState | null {
-  const tow = playerTow(world);
-  return tow?.holder === vehicle.id ? tow : null;
+  return towHeldBy(world, vehicle.id);
 }
 
 // Why a goal of one kind can no longer run, or null while it can.
@@ -254,26 +253,26 @@ function investigateInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): 
   return target && isHostile(world, vehicle, target) ? null : 'the contact is gone';
 }
 
-// A scavenge goal at a known site names the site, not a stock, and a site never vanishes. One at a visible
-// stock ends once the stock is gone, and a wreck is also an opportunity only while it stays observable.
+// A wreck or a loot pile is an opportunity only while it remains observable. A known site stays one.
 function scavengeInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
-  if ([...REGION.towns, ...REGION.locations].some((entry) => entry.id === goal.targetId)) return null;
-  const stock = world.salvage.find((s) => s.id === goal.targetId);
-  if (!stock) return 'the salvage is gone';
-  if (goal.targetId?.startsWith('wreck-') && !canVehicleSee(world, vehicle, stock.pos)) return 'lost sight of the wreck';
-  return null;
+  if (goal.targetId === null || [...REGION.towns, ...REGION.locations].some((site) => site.id === goal.targetId)) return null;
+  return world.salvage.some((stock) => stock.id === goal.targetId && canVehicleSee(world, vehicle, stock.pos)) ? null : 'lost sight of the salvage';
 }
 
+// A driver learns a stock is empty only once it can reach it.
 function lootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   const stock = world.salvage.find((s) => s.id === goal.targetId);
   if (!stock) return 'the loot is gone';
+  if (!canReachSalvage(vehicle, stock)) return freeCells(vehicle) === 0 ? 'cargo cannot hold the loot' : null;
   if (!hasSalvage(stock)) return 'nothing left to loot';
-  return freeCells(vehicle) === 0 ? 'cargo cannot hold the loot' : null;
+  return canTakeAny(world, vehicle, stock) ? null : 'cargo cannot hold the loot';
 }
 
-function towInvalid(world: World, vehicle: Vehicle): string | null {
+function towInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   if (heldTow(world, vehicle)) return null;
-  return strandedPlayerAt(world, vehicle) && !stateOf(world, 'turnedDown', vehicle.id, world.player.vehicleId) ? null : 'the tow is off';
+  const client = world.vehicles.find((v) => v.id === goal.targetId);
+  if (!client || stateOf(world, 'turnedDown', vehicle.id, client.id)) return 'the tow is off';
+  return strandedAt(world, vehicle, client) ? null : 'the tow is off';
 }
 
 // A patch goal holds while its patch state does: the patcher drives over, and the client waits.
@@ -291,6 +290,16 @@ export function patchGoal(world: World, npc: Vehicle, other: Vehicle, patcher: b
   pushGoal(world, npc, goal);
 }
 
+// A meet goal holds while the driver's trade meeting with its target does.
+function meetInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
+  return goal.targetId && stateOf(world, 'trade', vehicle.id, goal.targetId) ? null : 'the trade is off';
+}
+
+// The goal a trade meeting gives the driver: it drives up to the other truck and parks beside it.
+export function meetGoal(world: World, npc: Vehicle, other: Vehicle): void {
+  pushGoal(world, npc, createActivity('meet', other.id, { ...other.pos }, 'pull over to trade'));
+}
+
 const GOAL_CHECKS: Partial<Record<NpcActivity['kind'], GoalCheck>> = {
   fight: fightInvalid,
   flee: fleeInvalid,
@@ -299,7 +308,14 @@ const GOAL_CHECKS: Partial<Record<NpcActivity['kind'], GoalCheck>> = {
   loot: lootInvalid,
   tow: towInvalid,
   patch: patchInvalid,
+  meet: meetInvalid,
 };
+
+// Whether a goal still holds, for a driver that has not thought yet this turn. Its stock, tow or target may be
+// gone since it last did.
+export function goalHolds(world: World, vehicle: Vehicle, goal: NpcActivity): boolean {
+  return invalidReason(world, vehicle, goal, usefulContacts(world, vehicle)) === null;
+}
 
 function invalidReason(world: World, vehicle: Vehicle, goal: NpcActivity, contacts: Contact[]): string | null {
   const check = GOAL_CHECKS[goal.kind];
@@ -334,7 +350,7 @@ function perceives(world: World, vehicle: Vehicle, decision: string, id: string,
   return PERCEIVES[decision as NoticedDecision](world, vehicle, id, contacts);
 }
 
-type NoticedDecision = 'hostileSeen' | 'contactHeard' | 'preySeen' | 'strandedSeen' | 'ramChance';
+type NoticedDecision = 'hostileSeen' | 'contactHeard' | 'preySeen' | 'strandedSeen' | 'salvageSeen' | 'ramChance';
 
 type Perception = (world: World, vehicle: Vehicle, id: string, contacts: Contact[]) => boolean;
 
@@ -347,6 +363,11 @@ function hearsVehicle(_world: World, _vehicle: Vehicle, id: string, contacts: Co
   return contacts.some((c) => c.vehicleId === id);
 }
 
+function seesStock(world: World, vehicle: Vehicle, id: string): boolean {
+  const stock = world.salvage.find((s) => s.id === id);
+  return stock !== undefined && canVehicleSee(world, vehicle, stock.pos);
+}
+
 function hasRamChance(world: World, vehicle: Vehicle, id: string): boolean {
   return world.vehicles.some((v) => v.id === id) && offersChoice(world, vehicle, 'ramChance', id);
 }
@@ -357,6 +378,7 @@ const PERCEIVES: Record<NoticedDecision, Perception> = {
   contactHeard: hearsVehicle,
   preySeen: seesVehicle,
   strandedSeen: seesVehicle,
+  salvageSeen: seesStock,
   ramChance: hasRamChance,
 };
 
@@ -510,11 +532,26 @@ function onPreySeen(world: World, vehicle: Vehicle): void {
   }
 }
 
-// A driver in a fight or on the run never starts a tow. It decides once the danger goal pops.
+// One roll per stranded truck the driver could tow, nearest first. A driver in a fight or on the run never starts
+// a tow. It decides once the danger goal pops.
 function onStrandedSeen(world: World, vehicle: Vehicle): void {
   if (inDanger(vehicle)) return;
-  const at = strandedPlayerAt(world, vehicle);
-  if (at && react(world, vehicle, 'strandedSeen', world.player.vehicleId) === 'tow') startTow(world, vehicle, at);
+  const clients = world.vehicles
+    .map((client) => ({ client, at: strandedAt(world, vehicle, client) }))
+    .filter((c): c is { client: Vehicle; at: Vec } => c.at !== null)
+    .sort((a, b) => dist(vehicle.pos, a.at) - dist(vehicle.pos, b.at));
+  const chosen = clients.find((c) => react(world, vehicle, 'strandedSeen', c.client.id) === 'tow');
+  if (chosen) startTow(world, vehicle, chosen.client, chosen.at);
+}
+
+// One roll per wreck or pile in sight while the driver travels to a long-term goal, nearest first. Sites are goals
+// of their own. Loot pushes a loot goal, and popping it fires the resume roll.
+function onSalvageSeen(world: World, vehicle: Vehicle): void {
+  const top = topGoal(vehicle);
+  if (!top || top.phase !== 'travel' || INTERRUPTIONS.includes(top.kind)) return;
+  const passed = visibleSalvage(world, vehicle).filter((stock) => stock.id !== top.targetId && !isSiteStock(stock));
+  const stock = passed.find((s) => react(world, vehicle, 'salvageSeen', s.id) === 'loot');
+  if (stock) pushGoal(world, vehicle, createActivity('loot', stock.id, { ...stock.pos }, 'loot salvage on the way'));
 }
 
 // One roll per ram chance on the fight target on top. The choice holds while the chance lasts, and the fight
@@ -539,27 +576,39 @@ function fightTarget(vehicle: Vehicle): string | null {
 // A driver the player turned down that picks tow again is over it: its turnedDown state ends, so the tow goal holds.
 // The client counts as noticed prey, so a tower that set out for a beacon does not roll to rob it on arrival.
 // The driver claims the job, so no other driver answers while it is on its way.
-export function startTow(world: World, vehicle: Vehicle, at: Vec): void {
-  const me = world.player.vehicleId;
-  const turnedDown = stateOf(world, 'turnedDown', vehicle.id, me);
+export function startTow(world: World, vehicle: Vehicle, client: Vehicle, at: Vec): void {
+  const turnedDown = stateOf(world, 'turnedDown', vehicle.id, client.id);
   if (turnedDown) endState(world, turnedDown, 'fulfilled');
-  vehicle.brain!.noticed[`preySeen:${me}`] = world.turn;
-  addState(world, 'answering', vehicle.id, me, { kind: 'none' });
-  pushGoal(world, vehicle, createActivity('tow', me, { ...at }, 'help a stranded truck'));
+  vehicle.brain!.noticed[`preySeen:${client.id}`] = world.turn;
+  addState(world, 'answering', vehicle.id, client.id, { kind: 'none' });
+  pushGoal(world, vehicle, createActivity('tow', client.id, { ...at }, 'help a stranded truck'));
 }
 
 // A flee keeps running from where its threat is now. An investigation keeps the destination it started with.
 function steer(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[]): void {
   const top = topGoal(vehicle);
-  if (top?.kind === 'flee') steerFlee(world, vehicle, profile, contacts, top);
-  else if (top?.kind === 'tow' && !heldTow(world, vehicle)) steerToStranded(world, vehicle, top);
+  if (top) STEERS[top.kind]?.(world, vehicle, top, profile, contacts);
+}
+
+type Steer = (world: World, vehicle: Vehicle, goal: NpcActivity, profile: NpcProfile, contacts: Contact[]) => void;
+
+const STEERS: Partial<Record<NpcActivity['kind'], Steer>> = {
+  flee: (world, vehicle, goal, profile, contacts) => steerFlee(world, vehicle, profile, contacts, goal),
+  tow: (world, vehicle, goal) => { if (!heldTow(world, vehicle)) steerToStranded(world, vehicle, goal); },
+  meet: (world, _vehicle, goal) => steerToMeet(world, goal),
+};
+
+// A driver on its way to trade re-aims at the other truck every turn. The two keep in touch on the radio, so it
+// knows where the other truck is without sight.
+function steerToMeet(world: World, goal: NpcActivity): void {
+  goal.destination = { ...vehicleById(world, goal.targetId!).pos };
 }
 
 // A tower on its way re-aims every turn: at the truck once it sees it, else at the newest beacon circle. A stale
 // point can leave it parked out of tow reach, since the player may crawl and a beacon circle is off by its radius.
 function steerToStranded(world: World, vehicle: Vehicle, goal: NpcActivity): void {
-  const at = strandedPlayerAt(world, vehicle);
-  if (!at) throw new Error(`${vehicle.id} heads for a tow with no stranded player perceived`);
+  const at = strandedAt(world, vehicle, vehicleById(world, goal.targetId!));
+  if (!at) throw new Error(`${vehicle.id} heads for a tow with no stranded client perceived`);
   goal.destination = { ...at };
 }
 
@@ -597,6 +646,7 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   onContactsHeard(world, vehicle, profile, contacts);
   onPreySeen(world, vehicle);
   onStrandedSeen(world, vehicle);
+  onSalvageSeen(world, vehicle);
   onRamChance(world, vehicle);
   steer(world, vehicle, profile, contacts);
   return currentActivity(world, vehicle, profile, hold);
@@ -618,7 +668,7 @@ function applyFixedRules(world: World, vehicle: Vehicle, profile: NpcProfile): N
     return null;
   }
   const top = topGoal(vehicle)?.kind;
-  if (top === 'tow' || top === 'patch') return null;
+  if (top === 'tow' || top === 'patch' || top === 'meet') return null;
   return pushService(world, vehicle, profile);
 }
 
@@ -666,10 +716,17 @@ function keepRepairing(world: World, vehicle: Vehicle): boolean {
 }
 
 // A held wait wins unless an interruption is on top. Then the top goal runs, or the empty stack sells or rolls idle.
+// A stranded driver with a tower on its way waits for it outside danger, since crawling off would leave the tower
+// chasing it.
 function currentActivity(world: World, vehicle: Vehicle, profile: NpcProfile, hold: NpcActivity | null): NpcActivity {
   const top = topGoal(vehicle);
+  if (awaitsTower(world, vehicle)) return createActivity('wait', null, null, 'wait for a tow');
   if (hold && (!top || !INTERRUPTIONS.includes(top.kind))) return hold;
   return top ?? nextGoal(world, vehicle, profile);
+}
+
+function awaitsTower(world: World, vehicle: Vehicle): boolean {
+  return !inDanger(vehicle) && world.states.some((s) => s.kind === 'answering' && s.other === vehicle.id);
 }
 
 function nextGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity {
@@ -737,9 +794,9 @@ function stockRadius(world: World, activity: NpcActivity): number | undefined {
   return world.salvage.find((entry) => entry.id === activity.targetId)?.radius;
 }
 
-// A tower or a patcher drives up to its client, and parks beside it like beside a stock.
+// A tower, a patcher or a trader drives up to the other truck, and parks beside it like beside a stock.
 function towedRadius(world: World, activity: NpcActivity): number | undefined {
-  if (activity.kind !== 'tow' && activity.kind !== 'patch') return undefined;
+  if (activity.kind !== 'tow' && activity.kind !== 'patch' && activity.kind !== 'meet') return undefined;
   const towed = world.vehicles.find((entry) => entry.id === activity.targetId);
   return towed && chassisDef(towed.chassisId).radius;
 }
@@ -768,7 +825,7 @@ function isSearching(vehicle: Vehicle, stock: SalvageStock): boolean {
 }
 
 function searchStock(world: World, vehicle: Vehicle, stock: SalvageStock): void {
-  if (!hasSalvage(stock) || freeCells(vehicle) === 0) {
+  if (!canTakeAny(world, vehicle, stock)) {
     finishGoal(world, vehicle, !hasSalvage(stock) ? 'salvage exhausted' : 'cargo cannot hold salvage');
     return;
   }

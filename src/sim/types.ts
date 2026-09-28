@@ -20,7 +20,7 @@ export type XpSource =
   | "hit" | "contact" | "discover"
   | "fieldJob" | "patch" | "search"
   | "heat" | "damage" | "knockout"
-  | "profit" | "deal" | "call";
+  | "profit" | "deal" | "call" | "honk" | "contract" | "freeTow";
 
 export type PartInstance = {
   id: string;
@@ -70,8 +70,14 @@ export type SalvageStock = {
   parts: PartInstance[];
   fuel?: number; // fuel units that pour into a tank, not the grid
   supplies?: number; // supply units that go to driver stores, not the grid
-  pile?: { until: number }; // loot lying loose on the ground, drawn as a heap, gone at turn `until`. Sites and wrecks draw their own stock.
+  pile?: Pile; // loot lying loose on the ground, drawn as a heap. Sites and wrecks draw their own stock.
+  emptySince?: number; // turn a daily check first found a road wreck looted; see renewSalvage in src/sim/salvage.ts
 };
+
+// A pile is gone at turn `until`. The player's items and other trucks' items never share a pile. A player pile counts
+// as searched, and `basis` keeps the average paid per unit of each good on it, so taking them back restores their
+// cost. Goods on any other pile cost nothing.
+export type Pile = { until: number; fromPlayer: boolean; basis: Record<string, number> };
 
 export type RefitMove = {
   itemId: string;
@@ -143,7 +149,7 @@ export type DriverResources = {
 };
 
 export type NpcActivity = {
-  kind: 'scavenge' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate' | 'tow' | 'loot' | 'repair' | 'patch';
+  kind: 'scavenge' | 'sell' | 'trade' | 'resupply' | 'raid' | 'fight' | 'flee' | 'wait' | 'investigate' | 'tow' | 'loot' | 'repair' | 'patch' | 'meet';
   targetId: string | null;
   destination: Vec | null;
   phase: "travel" | "act";
@@ -198,18 +204,19 @@ export type Obstacle =
   | { id: string; pos: Vec; r: number; kind: "landmark"; look: LandmarkLook; yaw: number };
 
 // A timed relation one vehicle holds toward another. src/sim/states.ts owns them.
-export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce' | 'grievance' | 'plea';
+export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce' | 'grievance' | 'plea' | 'trade';
 export type StateEnding = 'expired' | 'fulfilled' | 'broken';
 export type Plea = 'truce' | 'mercy';
-// A tow state: the holder tows the other party to `town` for `fee`, paid on arrival. hitched is false while the offer is open.
+// A tow state: the holder tows the other party to the town or camp `site` for `fee`, paid on arrival. `waived` is
+// the fee a player tower let go, which pays Social XP on arrival. hitched is false while an offer to the player is open.
 // A tow promise: the terms of a tow the holder dropped for danger, which its next offer keeps.
 // A feud: robbery is true when the holder started it to rob the other party, so a win sends it to loot.
 // A plea: the holder asked the other party for a truce or for mercy. answered is false while the player has not
 // answered yet.
 export type StateData =
-  | { kind: 'tow'; town: string; fee: number; hitched: boolean }
+  | { kind: 'tow'; site: string; fee: number; waived: number; hitched: boolean }
   | { kind: 'feud'; robbery: boolean }
-  | { kind: 'towPromise'; town: string; fee: number }
+  | { kind: 'towPromise'; site: string; fee: number }
   | { kind: 'plea'; plea: Plea; answered: boolean }
   | { kind: 'patch'; deal: PatchDeal; parts: number; price: number; work: number; workLeft: number } // holder patches other
   | { kind: 'none' };
@@ -226,6 +233,7 @@ export type NpcState = {
 // A value a dialogue line shows. The sim keeps raw values, and the UI formats them.
 export type CallVar =
   | { kind: "town"; id: string }
+  | { kind: "site"; id: string } // a town or a location
   | { kind: "money"; amount: number }
   | { kind: "distance"; tiles: number }
   | { kind: "bearing"; rad: number }
@@ -236,8 +244,10 @@ export type CallVars = Record<string, CallVar>;
 
 // An open radio call with the NPC `with`. A null topic means the hub of topics. `line` is what the NPC said
 // last, which is the node's line or an answer that kept the call on the hub.
-// `discussed` turns true once the call takes up a topic; only such a call practices social when it ends.
-export type Call = { with: string; topic: TopicId | null; node: string; vars: CallVars; line: { text: string; vars: CallVars }; discussed: boolean };
+// Earlier practice events on one target: `count` of them as of turn `turn`.
+export type Repeat = { count: number; turn: number };
+
+export type Call = { with: string; topic: TopicId | null; node: string; vars: CallVars; line: { text: string; vars: CallVars } };
 export type TopicOutcome = "agreed" | "refused" | "done";
 
 export type Player = {
@@ -246,6 +256,7 @@ export type Player = {
   skills: Record<SkillId, number>; // XP per skill; the level follows from XP_TO_REACH
   xpToday: Record<SkillId, number>; // XP per skill earned on day xpDay, for the daily soft cap
   xpDay: number;
+  repeats: Record<string, Repeat>; // "source:target" to the earlier practice on that target; see XP_SOURCES
   xpBySource: Record<XpSource, number>; // lifetime XP per source, for the debug console
   perks: PerkId[]; // picked perks, at most one per pair; see src/sim/progress.ts
   health: number;
@@ -267,7 +278,6 @@ export type Player = {
   beacon: boolean; // the emergency beacon calls every vehicle within BEACON.range; see src/sim/tow.ts
   call: Call | null;
   talked: Record<string, Partial<Record<TopicId, TopicOutcome>>>; // NPC id to how each topic with it ended
-  socialCallDay: Record<string, number>; // NPC id to the day a call with it last practiced social
   explored: Uint8Array; // fog of war: tile y * world.size + x, 1 once seen
   visible: number[]; // tiles the player sees right now, sorted; refreshed by refreshVision
   contacts: Contact[]; // vehicles detected beyond sight; refreshed by refreshVision
@@ -295,7 +305,7 @@ export type GameEvent =
   | { t: 'spawn'; vehicle: string }
   | { t: 'despawn'; vehicle: string }
   | { t: 'hostile'; vehicle: string; against: string }
-  | { t: 'practice'; source: XpSource; amount: number; difficulty: number | null; xp: number }
+  | { t: 'practice'; source: XpSource; amount: number; difficulty: number | null; target: string; xp: number }
   | { t: 'skillUp'; skill: SkillId; level: number }
   | { t: 'money'; amount: number; reason: string }
   | { t: 'contract'; contract: Contract; outcome: 'accepted' | 'done' | 'failed' | 'lapsed' }
@@ -305,8 +315,9 @@ export type GameEvent =
   | { t: 'knockout' }
   | { t: 'wake' }
   | { t: 'towOffer'; by: string; town: string; fee: number }
-  | { t: 'towDone'; by: string; fee: number }
-  | { t: 'towDropped'; by: string; reason: 'refused' | 'unhitched' | 'danger' | 'gone' }
+  | { t: 'towHitched'; by: string; client: string; site: string }
+  | { t: 'towDone'; by: string; client: string; fee: number }
+  | { t: 'towDropped'; by: string; client: string; reason: 'refused' | 'unhitched' | 'danger' | 'gone' }
   | { t: 'stateEnded'; state: NpcState; ending: StateEnding }
   | { t: 'job'; vehicle: string; job: Job; outcome: 'started' | 'done' | 'cancelled' }
   | { t: 'breakdown'; vehicle: string; part: string }

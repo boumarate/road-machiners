@@ -6,10 +6,10 @@
 import { chassisDef } from '../../data/chassis';
 import { ECONOMY, GOOD_IDS } from '../../data/goods';
 import { HUNTING_GROUNDS, NPC_BEHAVIOR, NPC_UPKEEP } from '../../data/npcs';
-import { partDef } from '../../data/parts';
+import { PARTS, partDef } from '../../data/parts';
 import { REGION, type TownDef } from '../../data/region';
 import { RULES } from '../../data/rules';
-import { ENGINE_HEAT } from '../../data/wear';
+import { CONDITION, ENGINE_HEAT } from '../../data/wear';
 import { maxHp } from '../wear';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder } from '../world';
 import { playerVehicle, vehicleById } from '../damage';
@@ -158,8 +158,15 @@ function paidFixNeeded(world: World): boolean {
   return needsService(world) || canRestoreEngine(world);
 }
 
+// In a shop, an engine it stocks must be affordable. Out of town, the bot knows no stock, so the money must cover
+// the cheapest engine's price at its most worn.
 function canRestoreEngine(world: World): boolean {
-  return mountedParts(playerVehicle(world), 'engine').length === 0 && stockEngine(world) !== null;
+  if (mountedParts(playerVehicle(world), 'engine').length > 0) return false;
+  return shopAt(world) ? stockEngine(world) !== null : world.player.money >= cheapestEngineValue();
+}
+
+function cheapestEngineValue(): number {
+  return Math.min(...Object.values(PARTS).filter((d) => d.kind === 'engine').map((d) => d.value * CONDITION.valueFactor[CONDITION.maxWear]));
 }
 
 // The cheapest engine the parked garage stocks that the bot can afford.
@@ -230,14 +237,15 @@ function serviceHere(o: Orders): void {
 
 const GOALS: Record<Goal, (o: Orders) => void> = { trader: traderGoal, scavenger: scavengerGoal, fighter: fight };
 
-// A trader with too little money for a load, and every town known, scavenges until it can buy one.
+// A trader with too little money for a load, and every town known, scavenges until it can buy one. Salvage never
+// grows back, so a bot with neither left waits in the nearest town.
 function traderGoal(o: Orders): void {
-  if (!trade(o) && !scavenge(o)) throw new Error(`Trader bot can neither trade nor scavenge, with ${o.world.player.money} money`);
+  if (!trade(o) && !scavenge(o)) driveToSite(o, nearestTown(o.world));
 }
 
-// A scavenger with no stock left to search and no salvage site left to find trades instead.
+// A scavenger with no stock left to search and no salvage site left to find trades instead, or waits in town.
 function scavengerGoal(o: Orders): void {
-  if (!scavenge(o) && !trade(o)) throw new Error(`Scavenger bot can neither scavenge nor trade, with ${o.world.player.money} money`);
+  if (!scavenge(o) && !trade(o)) driveToSite(o, nearestTown(o.world));
 }
 
 type Purchase = { town: TownDef; good: string; count: number; profit: number };

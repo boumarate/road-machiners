@@ -12,7 +12,7 @@ import { corePart, hasLoot, itemSize, mountedItems, mountedParts } from './grid'
 import { PERK_NUMBERS } from '../data/skills';
 import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { canVehicleSee, hasLineOfFire } from './vision';
-import { createWreckSalvage } from './salvage';
+import { createWreckSalvage, removeStocks } from './salvage';
 import { addState, stateOf } from './states';
 import { isTownGuarded } from './guards';
 import { getResources } from './resources';
@@ -423,7 +423,7 @@ function applyShot(world: World, s: Shot): void {
 function practiceHits(world: World, s: Shot): void {
   if (s.shooter.id !== world.player.vehicleId) return;
   const hits = s.rolls.filter((roll) => roll.hit).length;
-  if (hits > 0) practice(world, 'hit', hits, 1 - s.odds.chance);
+  if (hits > 0) practice(world, 'hit', hits, 1 - s.odds.chance, s.target.id);
 }
 
 function witnessesAttack(world: World, observer: Vehicle, shooter: Vehicle, target: Vehicle): boolean {
@@ -528,7 +528,7 @@ function clearOldWrecks(world: World): void {
   );
   if (drop.size > 0) {
     world.obstacles = world.obstacles.filter((o) => !drop.has(o.id));
-    world.salvage = world.salvage.filter((stock) => !drop.has(stock.id));
+    removeStocks(world, drop);
   }
 }
 

@@ -198,7 +198,7 @@ describe('teleport', () => {
   it('rejects a player on a tow rope', () => {
     const w = emptyWorld();
     const tower = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 40, y: 30 });
-    addState(w, 'tow', tower.id, w.player.vehicleId, { kind: 'tow', town: REGION.towns[0].id, fee: 10, hitched: true });
+    addState(w, 'tow', tower.id, w.player.vehicleId, { kind: 'tow', site: REGION.towns[0].id, fee: 10, waived: 0, hitched: true });
     expect(() => teleport(w, { x: 80, y: 90 })).toThrow(/towed/);
   });
 
@@ -310,10 +310,10 @@ describe('vehicle cheats', () => {
     const w = emptyWorld();
     const tower = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 40, y: 30 });
     tower.brain = npcBrain('trader', tower.pos, ['trader']);
-    addState(w, 'tow', tower.id, w.player.vehicleId, { kind: 'tow', town: REGION.towns[0].id, fee: 10, hitched: true });
+    addState(w, 'tow', tower.id, w.player.vehicleId, { kind: 'tow', site: REGION.towns[0].id, fee: 10, waived: 0, hitched: true });
     const next = killVehicles(w, tower.id);
     expect(next.states).toEqual([]);
-    expect(next.events).toContainEqual({ t: 'towDropped', by: tower.id, reason: 'gone' });
+    expect(next.events).toContainEqual({ t: 'towDropped', by: tower.id, client: next.player.vehicleId, reason: 'gone' });
     expect(() => endTurn(next, testDrive)).not.toThrow();
   });
 

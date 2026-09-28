@@ -3,9 +3,7 @@
 
 import type { ConditionId, EffectId, PrepareId } from '../data/dialogue';
 import { REGION, type TownDef } from '../data/region';
-import { partTradePrice } from './economy';
 import { playerVehicle } from './damage';
-import { stowPart } from './inventory';
 import { discoverSite } from './locations';
 import { isHostile } from './combat';
 import { patchGoal, startTow, topGoal } from './npc-activities';
@@ -14,8 +12,8 @@ import { answerPlea, answersPlea, answersThreat, pendingPlea, playerPleaded, set
 import { hasCargo } from './salvage';
 import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
 import { npcProfile } from './npc-decisions';
-import { getResources } from './resources';
 import { towData } from './states';
+import { startTrade, tradeWith } from './economy';
 import { acceptOffer, canTowNpc, hitchNpc, npcTowTerms, playerTow, playerTowing, refuseOffer, releaseNpc, strandedPlayerAt } from './tow';
 import type { Call, CallVars, Plea, TopicOutcome, Vehicle, World } from './types';
 import { bearing, dist } from './vec';
@@ -44,7 +42,6 @@ function nearestKnownTown(world: World, npc: Vehicle): TownDef {
 function settle(world: World, npc: Vehicle, call: Call, outcome: TopicOutcome): void {
   if (!call.topic) throw new Error('Only a topic can be settled');
   world.player.talked[npc.id] = { ...world.player.talked[npc.id], [call.topic]: outcome };
-  if (outcome === 'agreed') practice(world, 'deal', 1, null);
 }
 
 // The rolled answer a line waits on, or null before the topic's prepare step.
@@ -79,23 +76,6 @@ function offerBy(world: World, npc: Vehicle) {
   return tow?.holder === npc.id && !towData(tow).hitched ? tow : null;
 }
 
-// The radio trade topic buys a live NPC spare, not a static option, so it calls this directly from
-// src/sim/dialogue.ts instead of going through EFFECTS. The price uses the player's own trade spread,
-// the same one town buys use, since it is the player's Trade skill narrowing it, not the NPC's.
-export type SpareOutcome = 'bought' | 'noRoom' | 'noMoney';
-
-export function buySpare(world: World, npc: Vehicle, partId: string): SpareOutcome {
-  const item = npc.items.find((it) => it.kind === 'part' && it.part.id === partId);
-  if (!item || item.kind !== 'part') throw new Error(`${npc.id} has no spare part ${partId}`);
-  const price = partTradePrice(world, playerVehicle(world), item.part, 'buy');
-  if (world.player.money < price) return 'noMoney';
-  if (!stowPart(world, playerVehicle(world), item.part)) return 'noRoom';
-  npc.items = npc.items.filter((it) => it.id !== item.id);
-  world.player.money -= price;
-  getResources(world, npc).money += price;
-  return 'bought';
-}
-
 export const CONDITIONS: Record<ConditionId, Condition> = {
   knowsTown: (_world, npc) => knownTowns(npc).length > 0,
   offersTow: (world, npc) => offerBy(world, npc) !== null,
@@ -103,6 +83,7 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   canTowPlayer: (world, npc) => strandedPlayerAt(world, npc) !== null && topGoal(npc)?.kind !== 'tow',
   playerNeedsPatch: (world) => needsPatch(playerVehicle(world)) && !inPatch(world, world.player.vehicleId),
   npcNeedsPatch: (world, npc) => needsPatch(npc) && !canFixItself(world, npc) && !inPatch(world, npc.id),
+  noTrade: (world, npc) => tradeWith(world, npc) === null,
   hasDeal: (_world, _npc, vars) => vars.deal !== undefined,
   noDeal: (_world, _npc, vars) => vars.deal === undefined,
   // About to attack the player, who carries something worth taking.
@@ -134,7 +115,8 @@ export const EFFECTS: Record<EffectId, Effect> = {
   },
   acceptTow: (world) => acceptOffer(world),
   refuseTow: (world) => refuseOffer(world),
-  askTow: (world, npc) => startTow(world, npc, strandedPlayerAt(world, npc)!),
+  askTow: (world, npc) => startTow(world, npc, playerVehicle(world), strandedPlayerAt(world, npc)!),
+  startTrade: (world, npc) => startTrade(world, npc),
   agreePatch: (world, npc, call) => {
     const terms = call.vars.deal;
     if (terms?.kind !== 'deal') throw new Error('agreePatch needs deal terms');
@@ -142,24 +124,24 @@ export const EFFECTS: Record<EffectId, Effect> = {
     patchGoal(world, npc, playerVehicle(world), deal.holder === npc.id);
     settle(world, npc, call, 'agreed');
   },
+  // A handover and a threat end at once, so they practice social now. A patch practices when it is done.
   handOver: (world, npc, call) => {
     yieldTo(world, playerVehicle(world), npc);
     settle(world, npc, call, 'agreed');
+    practice(world, 'deal', 1, null, npc.id);
   },
   acceptPlea: (world, npc) => answerPlea(world, npc, true),
   refusePlea: (world, npc) => answerPlea(world, npc, false),
   settlePlea: (world, npc, call) => settlePlayerPlea(world, npc, playerPlea(call), answerOf(call.vars) === 'yes'),
   withdrawPlea: (world, npc, call) => settlePlayerPlea(world, npc, playerPlea(call), false),
-  hitchNpc: (world, npc, call) => {
-    const { town, fee } = call.vars;
-    if (town?.kind !== 'town' || fee?.kind !== 'money') throw new Error('hitchNpc needs a town and a fee');
-    hitchNpc(world, npc, town.id, fee.amount);
-  },
+  hitchNpc: (world, npc) => hitchNpc(world, npc, false),
+  hitchNpcFree: (world, npc) => hitchNpc(world, npc, true),
   releaseNpc: (world, npc) => releaseNpc(world, npc),
   settleThreat: (world, npc, call) => {
     const answer = threatAnswer(call);
     settleThreat(world, npc, answer);
     settle(world, npc, call, answer === 'comply' ? 'agreed' : 'refused');
+    if (answer === 'comply') practice(world, 'deal', 1, null, npc.id);
   },
   settleDone: (world, npc, call) => settle(world, npc, call, 'done'),
   settleRefused: (world, npc, call) => settle(world, npc, call, 'refused'),
@@ -170,8 +152,8 @@ export const PREPARES: Record<PrepareId, Prepare> = {
   mercyAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'mercy') ? 'yes' : 'no' } }),
   threatAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersThreat(world, npc) } }),
   npcTowTerms: (world, npc) => {
-    const { town, fee } = npcTowTerms(world, npc);
-    return { town: { kind: 'town', id: town.id }, fee: { kind: 'money', amount: fee } };
+    const { site, fee } = npcTowTerms(world, npc);
+    return { site: { kind: 'site', id: site.id }, fee: { kind: 'money', amount: fee } };
   },
   // No `deal` value means the driver cannot offer a patch.
   patchTerms: (world, npc): CallVars => {
@@ -181,8 +163,8 @@ export const PREPARES: Record<PrepareId, Prepare> = {
   towOffer: (world, npc) => {
     const tow = offerBy(world, npc);
     if (!tow) throw new Error(`${npc.id} made no tow offer`);
-    const { town, fee } = towData(tow);
-    return { town: { kind: 'town', id: town }, fee: { kind: 'money', amount: fee } };
+    const { site, fee } = towData(tow);
+    return { town: { kind: 'town', id: site }, fee: { kind: 'money', amount: fee } };
   },
   nearestTown: (world, npc) => {
     const me = playerVehicle(world).pos;

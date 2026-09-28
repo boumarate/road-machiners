@@ -12,7 +12,7 @@ export const SKILL_INFO: Record<SkillId, { name: string; grows: string }> = {
   perception: { name: 'Perception', grows: 'hits, contacts, discoveries' },
   machining: { name: 'Machining', grows: 'field jobs, patches, searches' },
   toughness: { name: 'Toughness', grows: 'heat, damage taken, knockouts' },
-  social: { name: 'Social', grows: 'trade profit, deals, calls' },
+  social: { name: 'Social', grows: 'trade profit, deals, contracts, calls, honks' },
 };
 
 // Fraction each level adds to an effect. Every reader names its effect, so a missing key fails typecheck.
@@ -54,30 +54,39 @@ export type SkillEffect<S extends SkillId> = keyof (typeof EFFECTS)[S] & string;
 export const SKILL_EFFECTS: { [S in SkillId]: Record<SkillEffect<S>, number> } = EFFECTS;
 
 // Total XP a skill needs to reach each level; index is the level. Each step costs more than the last.
-export const XP_TO_REACH: readonly number[] = [0, 100, 300, 600, 1000, 1500];
+export const XP_TO_REACH: readonly number[] = [0, 200, 600, 1200, 2000, 3000];
 export const MAX_SKILL_LEVEL = XP_TO_REACH.length - 1;
 
 // weight is XP per unit of amount. A scaled source multiplies by the difficulty curve in XP_RULES;
 // an unscaled source has no difficulty. Weights aim for about dailyCap XP from one day (200 turns) of the matching
 // activity at mid difficulty.
-export type XpSourceDef = { skill: SkillId; weight: number; scaled: boolean };
+// Every practice event names its target, like a driver, a truck, a pile, a map region or a trade good. `repeat` is
+// what each earlier event on the same target multiplies the pay by. The count of earlier events halves every
+// XP_RULES.repeatHalfLife turns, so a target pays again slowly with game time. A repeat of 0 pays once per target
+// for good. Every source decays, so spamming a target pays a bounded total: 1 / (1 - repeat) events.
+export type XpSourceDef = { skill: SkillId; weight: number; scaled: boolean; repeat: number };
 
 export const XP_SOURCES: Record<XpSource, XpSourceDef> = {
-  roughTiles: { skill: 'driving', weight: 0.5, scaled: true }, // per tile driven off the road; about 4 tiles a turn
-  ram: { skill: 'driving', weight: 0.25, scaled: true }, // per HP of crash damage the player's truck deals
-  escape: { skill: 'driving', weight: 8, scaled: true }, // per turn every hostile truck seen last turn drops out of sight
-  hit: { skill: 'perception', weight: 6, scaled: true }, // per round of the player's that hits
-  contact: { skill: 'perception', weight: 0.25, scaled: true }, // per truck newly detected beyond sight
-  discover: { skill: 'perception', weight: 10, scaled: false }, // per place found
-  fieldJob: { skill: 'machining', weight: 0.75, scaled: false }, // per turn of a finished repair or refit job
-  patch: { skill: 'machining', weight: 75, scaled: false }, // per finished roadside patch on another truck
-  search: { skill: 'machining', weight: 80, scaled: false }, // per first finished search of a stock
-  heat: { skill: 'toughness', weight: 0.3, scaled: true }, // per turn driven in heat above shade
-  damage: { skill: 'toughness', weight: 1.5, scaled: false }, // per point of health lost to cab damage
-  knockout: { skill: 'toughness', weight: 100, scaled: false }, // per knockout the player wakes from
-  profit: { skill: 'social', weight: 0.8, scaled: false }, // per money unit of profit on a sale
-  deal: { skill: 'social', weight: 30, scaled: false }, // per talk topic that ends agreed
-  call: { skill: 'social', weight: 8, scaled: false }, // per radio call that ends
+  roughTiles: { skill: 'driving', weight: 0.5, scaled: true, repeat: 0.9 }, // per tile driven off the road, about 4 a turn; target: map region
+  ram: { skill: 'driving', weight: 0.25, scaled: true, repeat: 0.7 }, // per HP of crash damage the player's truck deals; target: rammed truck
+  escape: { skill: 'driving', weight: 8, scaled: true, repeat: 0.25 }, // per turn every hostile truck seen last turn drops out of sight; target: strongest escaped truck
+  hit: { skill: 'perception', weight: 6, scaled: true, repeat: 0.95 }, // per round of the player's that hits; target: shot truck
+  contact: { skill: 'perception', weight: 0.25, scaled: true, repeat: 0.5 }, // per truck newly detected beyond sight; target: that truck
+  discover: { skill: 'perception', weight: 10, scaled: false, repeat: 0 }, // per place found; target: the place
+  fieldJob: { skill: 'machining', weight: 0.75, scaled: false, repeat: 0.7 }, // per turn of a finished repair; target: repaired part
+  patch: { skill: 'machining', weight: 75, scaled: false, repeat: 0.5 }, // per finished roadside patch on another truck; target: patched truck
+  search: { skill: 'machining', weight: 80, scaled: false, repeat: 0 }, // per first finished search of a stock; target: the stock
+  heat: { skill: 'toughness', weight: 0.3, scaled: true, repeat: 0.9 }, // per turn driven in heat above shade; target: map region
+  damage: { skill: 'toughness', weight: 1.5, scaled: false, repeat: 0.95 }, // per point of health lost to cab damage; target: the driver
+  knockout: { skill: 'toughness', weight: 100, scaled: false, repeat: 0.5 }, // per knockout with a hostile truck in sight; target: the driver
+  profit: { skill: 'social', weight: 0.8, scaled: false, repeat: 0.8 }, // per money unit of profit on a sale; target: town and good
+  deal: { skill: 'social', weight: 30, scaled: false, repeat: 0.5 }, // per finished patch deal, and per handover or threat that ends agreed; target: the other driver
+  call: { skill: 'social', weight: 8, scaled: false, repeat: 0 }, // per topic taken up on a radio call; target: driver and topic
+  honk: { skill: 'social', weight: 2, scaled: false, repeat: 0 }, // per driver in sight that honks back; target: that driver
+  contract: { skill: 'social', weight: 1, scaled: false, repeat: 0.8 }, // per XP a finished contract names; target: the shop that posted it
+  // Per money unit of tow fee the player waives, paid on arrival. The profit weight, so kindness teaches as much as
+  // earning that money would. Target: the towed driver.
+  freeTow: { skill: 'social', weight: 0.8, scaled: false, repeat: 0.5 },
 };
 
 export const XP_RULES = {
@@ -87,6 +96,12 @@ export const XP_RULES = {
   // XP a skill earns per in-game day at the full rate. Past it, XP pays `overCap` times as much.
   dailyCap: 150,
   overCap: 0.1,
+  // Turns for the count of earlier events on one target to halve: one day.
+  repeatHalfLife: 200,
+  // A decaying target with fewer earlier events than this is forgotten at the day's first practice.
+  forgetBelow: 0.01,
+  // Map regions for region targets, in tiles on a side.
+  regionTiles: 16,
 };
 
 // Perks. At each perk level of a skill the player picks one perk from its pair, for good. A perk changes a rule the
@@ -143,7 +158,7 @@ export const PERK_NUMBERS = {
   hardHead: { cabShare: 0.5 }, // share of cab damage the player loses as health, times this
   quickWake: { knockoutTurns: 0.5 }, // turn limit of a watched knockout, times this
   knownFace: { tow: 2 }, // tow offer weight toward the stranded player, times this
-  smoothTalker: { cargo: 0.5 }, // share of each good the player drops to a demand, rounded down
+  smoothTalker: { cargo: 0.5 }, // share of each good the player drops to a demand, rounded up
   bluff: { danger: 2 }, // danger a robber sees in the player truck, times this
 };
 
@@ -160,8 +175,8 @@ export const MAIN_SKILL: Record<Archetype, SkillId | null> = {
 
 // In-game day by which a skill reaches a level, keyed by level. A level missing from a table is not checked.
 export const TARGET_DAYS = {
-  main: { 2: 2, 4: 8, 5: 15 },
-  off: { 2: 5 },
+  main: { 2: 4, 4: 16, 5: 30 },
+  off: { 2: 10 },
 } as const satisfies Record<'main' | 'off', Partial<Record<number, number>>>;
 
 // A curve passes when it reaches a level within this share of the target day, either way.

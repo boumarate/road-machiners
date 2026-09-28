@@ -9,7 +9,7 @@ import { makePart } from './factory';
 import { goodsCount } from './grid';
 import { stowPart } from './inventory';
 import { sitePads } from './sites';
-import { addVehicle, emptyWorld, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, npcBrain, practiceOf } from './testkit';
 import type { Vehicle, World } from './types';
 import { update } from './world';
 import {
@@ -24,6 +24,7 @@ import {
   contractReward,
   estimateTurns,
   fetchReward,
+  contractXp,
   haulPenalty,
   initializeShops,
   isExpired,
@@ -92,6 +93,15 @@ describe('bountyReward', () => {
     const armed = addRaider(w, 'buggy', { x: 2, y: 2 });
     stowPart(w, armed, makePart(w, 'plates', 0));
     expect(bountyReward(armed)).toBeGreaterThan(bountyReward(bare));
+  });
+});
+
+describe('contractXp', () => {
+  it('pays fetch XP for the search fee only, not the part price', () => {
+    const cheap: Contract = { id: 'a', shop: 'bowl', kind: 'fetch', defId: 'panniers', reward: fetchReward('panniers', 1), deadline: 500, tier: 1 };
+    const dear: Contract = { ...cheap, defId: 'cage', reward: fetchReward('cage', 1) };
+    expect(contractXp(cheap)).toBe(contractXp(dear));
+    expect(contractXp(cheap)).toBe(Math.round(CONTRACTS.fetch.searchFeeTurns * EFFORT.wage[1] * CONTRACTS.fetch.xpPerEffort));
   });
 });
 
@@ -279,7 +289,7 @@ describe('contract boards and delivery', () => {
   const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
   const nose = REGION.towns.find((t) => t.id === 'nose')!;
   const haul = (to: string, units: number): Contract => ({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'salt', units, to, reward: 300, deadline: 500, tier: 1 });
-  const fetch = (): Contract => ({ id: 'ct-fetch', shop: 'bowl', kind: 'fetch', defId: 'mg', reward: 200, deadline: 500, tier: 1 });
+  const fetch = (): Contract => ({ id: 'ct-fetch', shop: 'bowl', kind: 'fetch', defId: 'mg', reward: fetchReward('mg', 1), deadline: 500, tier: 1 });
 
   function atBowlWithOffer(c: Contract): World {
     const w = emptyWorld(sitePads(bowl)[0]);
@@ -317,6 +327,22 @@ describe('contract boards and delivery', () => {
     expect(w.player.contracts).toHaveLength(0);
   });
 
+  it('counts haul cargo as paid at its value, so selling it pays no trade XP', () => {
+    const w = atBowlWithOffer(haul('nose', 3));
+    w.vehicles[0].items = w.vehicles[0].items.filter((it) => it.kind !== 'good' || it.good !== 'salt');
+    const next = acceptContract(w, 'ct-haul');
+    expect(next.player.costBasis.salt).toBeCloseTo(goodValue('salt'));
+  });
+
+  it('pays the contract XP to social, targeting the posting shop', () => {
+    let w = acceptContract(atBowlWithOffer(haul('nose', 3)), 'ct-haul');
+    w.vehicles[0].pos = { ...sitePads(nose)[0] };
+    const social = w.player.skills.social;
+    w = deliverContract(w, 'ct-haul');
+    expect(practiceOf(w, 'contract')).toMatchObject([{ amount: 30, difficulty: null, target: 'bowl', xp: 30 }]);
+    expect(w.player.skills.social).toBeCloseTo(social + 30);
+  });
+
   it('refuses a haul delivery away from its destination', () => {
     const w = acceptContract(atBowlWithOffer(haul('nose', 3)), 'ct-haul');
     expect(() => deliverContract(w, 'ct-haul')).toThrow(/Not parked at nose/);
@@ -334,7 +360,7 @@ describe('contract boards and delivery', () => {
     const money = w.player.money;
     w = deliverContract(w, 'ct-fetch');
     expect(w.player.storage).toHaveLength(0);
-    expect(w.player.money).toBe(money + 200);
+    expect(w.player.money).toBe(money + fetchReward('mg', 1));
   });
 
   it('refuses a fetch part worn past CONTRACTS.fetch.maxWear', () => {

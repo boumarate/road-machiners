@@ -1,5 +1,5 @@
 import { describe, expect, it, onTestFinished } from 'vitest';
-import { SKILL_IDS, TARGET_DAYS, XP_RULES, XP_SOURCES, XP_TO_REACH } from '../../data/skills';
+import { SKILL_IDS, TARGET_DAYS, TARGET_TOLERANCE, XP_RULES, XP_SOURCES, XP_TO_REACH } from '../../data/skills';
 import { TIME } from '../../data/time';
 import { clockOf } from '../sun';
 import type { SkillId } from '../types';
@@ -18,7 +18,7 @@ function simpleSearchXp(): void {
   });
 }
 
-const search = (turn: number, amount: number): TraceLine => ({ turn, source: 'search', amount, difficulty: null });
+const search = (turn: number, amount: number): TraceLine => ({ turn, source: 'search', amount, difficulty: null, target: `stock-${turn}` });
 
 describe('replay', () => {
   it('reaches each level on the turn its running XP crosses the level cost, with the daily cap per day', () => {
@@ -45,9 +45,16 @@ describe('replay', () => {
   });
 
   it('scales a scaled source by its difficulty', () => {
-    const curve = replay([{ turn: 5, source: 'hit', amount: 1, difficulty: 1 }], 200);
+    const curve = replay([{ turn: 5, source: 'hit', amount: 1, difficulty: 1, target: 'v2' }], 200);
 
     expect(curve.perception.total).toBe(Math.min(XP_SOURCES.hit.weight * XP_RULES.hard, XP_RULES.dailyCap));
+  });
+
+  it('pays less for repeats on one target, and a once-only target pays once', () => {
+    const hits = replay([1, 2].map((turn) => ({ turn, source: 'hit' as const, amount: 1, difficulty: 1, target: 'v2' })), 200);
+    expect(hits.perception.total).toBeCloseTo(XP_SOURCES.hit.weight * XP_RULES.hard * (1 + XP_SOURCES.hit.repeat ** 1));
+    const found = replay([1, 2].map((turn) => ({ turn, source: 'discover' as const, amount: 1, difficulty: null, target: 'bowl' })), 200);
+    expect(found.perception.total).toBe(XP_SOURCES.discover.weight);
   });
 
   it('rejects a trace out of turn order', () => {
@@ -85,6 +92,7 @@ describe('targetMisses', () => {
   };
   const day = (d: number) => d * TIME.turnsPerDay;
   const offOnly = (misses: string[]) => misses.filter((m) => !m.startsWith('social'));
+  const pastWindow = (target: number) => day(Math.ceil(target * (1 + TARGET_TOLERANCE)) + 1);
 
   it('passes a main skill that reaches each level on its target day', () => {
     const levels = [day(1), day(TARGET_DAYS.main[2]), day(5), day(TARGET_DAYS.main[4]), null];
@@ -95,12 +103,12 @@ describe('targetMisses', () => {
   it('flags a level reached too early or too late', () => {
     const early = targetMisses(curveWith('social', [1, 2, 3, day(TARGET_DAYS.main[4]), null]), 'trader', day(10));
     expect(early).toContain(`social level 2: day 0.0, target day ${TARGET_DAYS.main[2]}, too early`);
-    const late = targetMisses(curveWith('social', [day(1), day(TARGET_DAYS.main[2]), day(5), null, null]), 'trader', day(11));
+    const late = targetMisses(curveWith('social', [day(1), day(TARGET_DAYS.main[2]), day(5), null, null]), 'trader', pastWindow(TARGET_DAYS.main[4]));
     expect(late).toContain(`social level 4: never, target day ${TARGET_DAYS.main[4]}, too late`);
   });
 
   it('does not flag an unreached level whose window starts after the run', () => {
-    const misses = targetMisses(curveWith('social', [day(1), day(TARGET_DAYS.main[2]), day(5), day(TARGET_DAYS.main[4]), null]), 'trader', day(10));
+    const misses = targetMisses(curveWith('social', [day(1), day(TARGET_DAYS.main[2]), day(5), day(TARGET_DAYS.main[4]), null]), 'trader', pastWindow(TARGET_DAYS.off[2]));
     expect(misses.some((m) => m.startsWith('social level 5'))).toBe(false);
     expect(offOnly(misses).length).toBeGreaterThan(0); // off skills that never level still miss
   });

@@ -92,6 +92,11 @@ describe('asking a driver for a patch', () => {
     expect(currentOptions(open).map((o) => o.text)).not.toContain('My truck is broken down. Can you patch it?');
   });
 
+  it('agreeing to a patch pays no deal XP until the patch is done', () => {
+    const { w: start, trader } = brokenPlayer(4);
+    expect(practiceOf(agreedTerms(start, trader.id, 'free'), 'deal')).toEqual([]);
+  });
+
   it('a free patch spends the patcher parts, costs nothing and gets the truck going', () => {
     const { w: start, trader } = brokenPlayer(4);
     const money = start.player.money;
@@ -250,6 +255,7 @@ describe('patch practice', () => {
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 32, y: 30 });
     settle(w, playerVehicle(w), npc);
     expect(practiceOf(w, 'patch')).toMatchObject([{ amount: 1, difficulty: null }]);
+    expect(practiceOf(w, 'deal')).toMatchObject([{ amount: 1, difficulty: null }]);
   });
 
   it('pays nothing when an NPC patches the player', () => {
@@ -257,6 +263,7 @@ describe('patch practice', () => {
     const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
     settle(w, npc, playerVehicle(w));
     expect(practiceOf(w, 'patch')).toEqual([]);
+    expect(practiceOf(w, 'deal')).toMatchObject([{ amount: 1, difficulty: null }]);
   });
 
   it('pays nothing when an NPC patches another NPC', () => {
@@ -265,6 +272,7 @@ describe('patch practice', () => {
     const client = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 52, y: 30 });
     settle(w, patcher, client);
     expect(practiceOf(w, 'patch')).toEqual([]);
+    expect(practiceOf(w, 'deal')).toEqual([]);
   });
 });
 

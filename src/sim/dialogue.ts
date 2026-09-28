@@ -4,46 +4,18 @@
 // src/data/dialogue.ts, and its logic in src/sim/dialogue-rules.ts.
 
 import { END, HONK_RANGE, HUB, TOPICS, TRAIT_TALK, type DialogueOption, type Topic, type TopicId, type Voice } from '../data/dialogue';
-import { partDef } from '../data/parts';
 import { inFeud, isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
-import { buySpare, CONDITIONS, EFFECTS, PREPARES, type SpareOutcome } from './dialogue-rules';
-import { partTradePrice } from './economy';
-import { spareParts } from './inventory';
-import type { Call, CallVars, PartInstance, Vehicle, World } from './types';
+import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
+import type { Call, CallVars, Vehicle, World } from './types';
 import { dist } from './vec';
 import { npcTraits } from './npc-decisions';
 import { practice } from './progress';
-import { clockOf } from './sun';
 import { canVehicleSee } from './vision';
 import { playerCommand, requireActivePlayer, update } from './world';
 
 // An option the player can pick now. The hub lists topics, and a topic node lists its own options.
-// `partId` is set only for a trade offer: picking it buys that spare instead of following `option`.
-export type OfferedOption = { text: string; topic: TopicId | null; option: DialogueOption | null; partId?: string };
-
-// The trade topic's line and options come live from the NPC's current spares, not from TOPICS data,
-// since the list shrinks as the player buys and no static node can list every NPC's stock.
-function tradeSpares(npc: Vehicle): PartInstance[] {
-  return spareParts(npc);
-}
-
-function tradeLine(npc: Vehicle): string {
-  return tradeSpares(npc).length > 0 ? 'Have a look.' : 'Nothing spare right now.';
-}
-
-function tradeOptions(world: World, npc: Vehicle): OfferedOption[] {
-  return tradeSpares(npc).map((part) => {
-    const price = partTradePrice(world, playerVehicle(world), part, 'buy');
-    return { text: `${partDef(part.defId).name}, ${price}`, topic: 'trade' as const, option: null, partId: part.id };
-  });
-}
-
-const SPARE_OUTCOME_LINE: Record<SpareOutcome, string> = {
-  bought: 'Take it.',
-  noRoom: 'No room for that on your rig.',
-  noMoney: 'You cannot afford that.',
-};
+export type OfferedOption = { text: string; topic: TopicId | null; option: DialogueOption | null };
 
 // The one place talk reads traits: the first voice among the driver's traits, and the union of their topics.
 export function talkOf(npc: Vehicle): Voice & { topics: TopicId[] } {
@@ -79,7 +51,6 @@ export function currentOptions(world: World): OfferedOption[] {
   const npc = vehicleById(world, call.with);
   const hangUp: OfferedOption = { text: 'Hang up.', topic: null, option: null };
   if (!call.topic) return [...askable(world, npc).map((t) => ({ text: t.ask!.text, topic: t.id, option: null })), hangUp];
-  if (call.topic === 'trade') return [...tradeOptions(world, npc), hangUp];
   const node = TOPICS[call.topic].nodes[call.node];
   const options = node.options.filter((o) => holds(world, npc, o.when, call.vars)).map((o) => ({ text: o.text, topic: call.topic, option: o }));
   return [...options, hangUp];
@@ -89,7 +60,6 @@ export function currentOptions(world: World): OfferedOption[] {
 export function currentLine(world: World): string {
   const call = openCall(world);
   if (!call.topic) return talkOf(vehicleById(world, call.with)).greeting;
-  if (call.topic === 'trade') return tradeLine(vehicleById(world, call.with));
   return TOPICS[call.topic].nodes[call.node].line;
 }
 
@@ -113,27 +83,21 @@ function enter(world: World, call: Call, topic: TopicId | null, node: string): v
   say(world, call.with, currentLine(world), call.vars);
 }
 
+// Taking up a topic practices social. The same topic with the same driver pays only the first time.
 function enterTopic(world: World, npc: Vehicle, call: Call, topic: Topic): void {
   call.vars = topic.prepare ? PREPARES[topic.prepare](world, npc) : {};
-  call.discussed = true;
+  practice(world, 'call', 1, null, `${npc.id}:${topic.id}`);
   enter(world, call, topic.id, topic.start);
 }
 
-// An ended call that took up a topic practices social, once per NPC per day. Hanging up at once teaches
-// nothing, and a same-day repeat call to the same NPC farms no more XP.
 function endCall(world: World, call: Call): void {
   world.player.call = null;
   world.events.push({ t: 'call', with: call.with, outcome: 'ended' });
-  const today = clockOf(world.turn).day;
-  if (call.discussed && world.player.socialCallDay[call.with] !== today) {
-    world.player.socialCallDay[call.with] = today;
-    practice(world, 'call', 1, null);
-  }
 }
 
 function begin(world: World, npc: Vehicle): Call {
   if (world.player.call) throw new Error('A call is already open');
-  const call: Call = { with: npc.id, topic: null, node: HUB, vars: {}, line: { text: '', vars: {} }, discussed: false };
+  const call: Call = { with: npc.id, topic: null, node: HUB, vars: {}, line: { text: '', vars: {} } };
   world.player.call = call;
   world.events.push({ t: 'call', with: npc.id, outcome: 'opened' });
   return call;
@@ -164,7 +128,6 @@ export function chooseOption(world: World, index: number): World {
     const call = openCall(w);
     const npc = vehicleById(w, call.with);
     say(w, w.player.vehicleId, offered.text, call.vars);
-    if (offered.partId) return say(w, npc.id, SPARE_OUTCOME_LINE[buySpare(w, npc, offered.partId)], {});
     if (offered.option) return follow(w, npc, call, offered.option);
     if (offered.topic) return askTopic(w, npc, call, TOPICS[offered.topic]);
     hangUpCall(w, npc, call);
@@ -244,8 +207,16 @@ export function honk(world: World): World {
   return playerCommand(world, (w) => {
     const me = playerVehicle(w);
     w.events.push({ t: 'honk', vehicle: me.id });
-    for (const npc of answering(w, me)) w.events.push({ t: 'honk', vehicle: npc.id });
+    for (const npc of answering(w, me)) {
+      w.events.push({ t: 'honk', vehicle: npc.id });
+      practiceHonk(w, me, npc);
+    }
   });
+}
+
+// A driver in sight that honks back practices social a little.
+function practiceHonk(world: World, me: Vehicle, npc: Vehicle): void {
+  if (canVehicleSee(world, me, npc.pos)) practice(world, 'honk', 1, null, npc.id);
 }
 
 function answering(world: World, me: Vehicle): Vehicle[] {

@@ -1,5 +1,4 @@
-// Market data: shop profiles and stock, the effort model and contract terms. See src/sim/market.ts
-// and src/sim/contracts.ts.
+// Market data: shop profiles and stock, the effort model and contract terms. See src/sim/market.ts.
 
 import { PARTS } from './parts';
 import type { Weighted } from './npcs';
@@ -91,6 +90,8 @@ export const CONTRACTS = {
     units: [3, 12] as [number, number],
     // Owed share of the hauled goods' value if the deadline passes (Design > Contract terms).
     penaltyShare: 1,
+    // Social XP per money of the reward, all of which pays for the trip.
+    xpPerEffort: 0.1,
   },
 
   fetch: {
@@ -103,6 +104,8 @@ export const CONTRACTS = {
     // Worst wear a hand-in part may carry. One rebuild keeps the fetch honest: the client wants a
     // part that still does its job, not a part on its last legs.
     maxWear: 1,
+    // Social XP per money of the search fee. The part's own price is a purchase, not work, so it teaches nothing.
+    xpPerEffort: 0.15,
   },
 
   bounty: {
@@ -112,6 +115,8 @@ export const CONTRACTS = {
     // Share of the target's own total worth, chassis plus every part, paid for the kill. Half its
     // worth pays for the risk of the fight without outpricing the wreck's own salvage.
     valueShare: 0.5,
+    // Social XP per money of the reward, all of which pays for the fight.
+    xpPerEffort: 0.25,
   },
 };
 
@@ -227,7 +232,7 @@ export const SHOPS: Record<string, ShopDef> = {
     goods: ['scrap', 'parts', 'tools'],
     priceFactor: PRICE_FACTOR,
     partStock: {
-      parts: (['plates', 'cage', 'scrapPanels', 'ram', 'plowRam', 'mg', 'shotgun', 'rack', 'panniers'] as const).map((id) => ({ value: id, weight: 1 })),
+      parts: (['plates', 'steelPlate', 'cage', 'scrapPanels', 'scrapSheet', 'ram', 'plowRam', 'mg', 'shotgun', 'rack', 'panniers'] as const).map((id) => ({ value: id, weight: 1 })),
       wear: STALL_WEAR,
     },
     stockSize: [2, 4],
@@ -247,7 +252,7 @@ export const SHOPS: Record<string, ShopDef> = {
     goods: ['grain', 'salt', 'textiles'],
     priceFactor: PRICE_FACTOR,
     partStock: {
-      parts: (['rack', 'panniers', 'flatbed', 'scrapPanels', 'cage'] as const).map((id) => ({ value: id, weight: 1 })),
+      parts: (['rack', 'panniers', 'flatbed', 'scrapPanels', 'scrapSheet', 'cage'] as const).map((id) => ({ value: id, weight: 1 })),
       wear: STALL_WEAR,
     },
     stockSize: [2, 4],
