@@ -19,6 +19,7 @@ const WHITE = new THREE.Color(0xffffff);
 const GLASS_SATURATION = 0.9; // share of the glow color's saturation kept, so windows read softer than the light
 
 // Keyed by the sun's height in degrees, highest first. Negative is below the horizon.
+// By day the ground color is warm sand, so faces turned down catch light bounced off the desert.
 type Key = {
   h: number;
   sun: number;
@@ -34,8 +35,8 @@ const KEYS: Key[] = [
     h: 45,
     sun: 0xffecd0,
     sunI: 2.0,
-    sky: 0xb0c0dc,
-    ground: 0x6a5038,
+    sky: 0xaebbd7,
+    ground: 0xba8a56,
     skyI: 1.0,
     glassI: 0,
     glassWhite: 0,
@@ -44,8 +45,8 @@ const KEYS: Key[] = [
     h: 20,
     sun: 0xffdcaa,
     sunI: 2.15,
-    sky: 0xb8bcd4,
-    ground: 0x6a5038,
+    sky: 0xb5b7cf,
+    ground: 0xba8a56,
     skyI: 0.95,
     glassI: 0,
     glassWhite: 0,
@@ -54,8 +55,8 @@ const KEYS: Key[] = [
     h: 8,
     sun: 0xffa050,
     sunI: 2.2,
-    sky: 0xa8a0c0,
-    ground: 0x5a4030,
+    sky: 0xa79ebe,
+    ground: 0x936c46,
     skyI: 0.85,
     glassI: 0.1,
     glassWhite: 0,

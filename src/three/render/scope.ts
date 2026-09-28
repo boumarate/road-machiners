@@ -9,6 +9,7 @@ import { TERRAIN } from '../../data/terrain';
 import type { Vec } from '../../sim/vec';
 import type { V3 } from '../../phys/frames';
 import { TERRAIN_CHUNK } from './terrain';
+import { outlineProps } from './models';
 
 const S = PHYSICS.metersPerTile;
 // Meters added around each chunk's bounds, so shadows cast into view from outside it still draw.
@@ -27,10 +28,14 @@ export class RenderScope {
   private readonly frustum = new THREE.Frustum();
   private readonly viewProjection = new THREE.Matrix4();
   private readonly test = new THREE.Box3();
+  private readonly prepare: (obj: THREE.Object3D) => void;
 
   // The root must stay at the world origin: chunk bounds are world boxes.
   // grey: objects out of clear sight drain to grey. The ground greys itself, so its scope passes false.
-  constructor(private readonly root: THREE.Object3D, private readonly mapSize: number, private readonly limit: SightLimit, private readonly grey: boolean) {
+  // outlined: objects get outlines as they are added, before the sight limit patches their materials, so the
+  // outlines are clipped too.
+  constructor(private readonly root: THREE.Object3D, private readonly mapSize: number, private readonly limit: SightLimit, private readonly grey: boolean, outlined: boolean) {
+    this.prepare = outlined ? outlineProps : () => {};
     this.perSide = Math.ceil(mapSize / TERRAIN_CHUNK);
     this.chunks = new Array<Chunk | null>(this.perSide * this.perSide).fill(null);
   }
@@ -48,6 +53,7 @@ export class RenderScope {
     bounds.expandByPoint(new THREE.Vector3((pos.x - radius) * S, low, (pos.y - radius) * S));
     bounds.expandByPoint(new THREE.Vector3((pos.x + radius) * S, high, (pos.y + radius) * S));
     chunk.box.union(bounds);
+    this.prepare(obj);
     chunk.group.add(obj);
     this.owner.set(obj, chunk);
     this.limit.patch(obj, this.grey);
