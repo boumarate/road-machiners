@@ -8,22 +8,31 @@
 // An NPC client takes the tow at once, to its nearest own camp, else its nearest known town, for what it can pay.
 // The player can tow a stranded NPC the same way, for its fee or for free. The radio releases it.
 // Raiders tow only raiders, and only raiders or the player tow a raider.
+// Escorts live here too, since an escort tows its stranded leader. An escort is an `escort` state its holder keeps
+// toward the leader it guards. It is fulfilled when the leader can use its destination site, and its hook pays the
+// fee once. It breaks when either party is gone, beaten or hostile to the other. The escort follows the leader and
+// fights its attackers through src/sim/combat.ts.
+// The follow goal knows nothing of escorts. It holds while its driver keeps any following state toward the leader,
+// and steers every turn to a spot behind the leader. It sits at the bottom of the stack, so fights and tows go on
+// top and the follow resumes after them.
 
 import { chassisDef } from '../data/chassis';
 import { ECONOMY } from '../data/goods';
+import { NPC_BEHAVIOR, NPCS } from '../data/npcs';
 import { BEACON, TOW } from '../data/tow';
 import { isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
-import { isKnockedOut } from './defeat';
+import { isDefeated, isKnockedOut } from './defeat';
 import { contactsOf, hearsBeacon } from './detect';
 import { route, routeLength } from './path';
 import { getKnownSite, npcProfile } from './npc-decisions';
+import { placeBase } from './npc-activities';
 import { skillEffect } from './progress';
 import { canUseSite, nearestPad, type Site } from './sites';
 import { addState, endState, stateOf, towData, towPromiseData } from './states';
 import { isStranded, vehicleStats } from './stats';
 import { getResources } from './resources';
-import type { GameEvent, NpcActivity, NpcState, Pose, StateEnding, Vehicle, World } from './types';
+import type { GameEvent, NpcActivity, NpcState, Pose, StateData, StateEnding, StateKindId, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 import { playerCommand, update } from './world';
@@ -396,4 +405,86 @@ export function unhitch(world: World): World {
     addState(w, 'turnedDown', tow.holder, tow.other, { kind: 'none' });
     dropTow(w, tow, 'unhitched');
   });
+}
+
+// ---- Escorts and the follow goal.
+
+// State kinds whose holder follows the other party.
+const FOLLOWING: readonly StateKindId[] = ['escort'];
+
+// Whether the follower holds a following state toward the leader.
+export function follows(world: World, follower: Vehicle, leaderId: string): boolean {
+  return world.states.some((s) => FOLLOWING.includes(s.kind) && s.holder === follower.id && s.other === leaderId);
+}
+
+export function followGoal(leader: Vehicle): NpcActivity {
+  return { kind: 'follow', targetId: leader.id, destination: { ...leader.pos }, phase: 'travel', reason: 'follow its leader' };
+}
+
+// The escort takes the job and puts the follow goal at the bottom of its stack. Returns that goal.
+export function startEscort(world: World, escort: Vehicle, leader: Vehicle, site: string | null, fee: number): NpcActivity {
+  addState(world, 'escort', escort.id, leader.id, { kind: 'escort', site, fee });
+  const goal = followGoal(leader);
+  placeBase(world, escort, goal);
+  return goal;
+}
+
+// The follower re-aims every turn at a spot behind the leader, past both radii and the follow gap. The two keep in
+// touch on the radio, so it knows where the leader is without sight.
+export function steerFollow(world: World, vehicle: Vehicle, goal: NpcActivity): void {
+  const leader = vehicleById(world, goal.targetId!);
+  const gap = vehicleStats(world, leader).radius + vehicleStats(world, vehicle).radius + NPC_BEHAVIOR.followGap;
+  goal.destination = { x: leader.pos.x - Math.cos(leader.heading) * gap, y: leader.pos.y - Math.sin(leader.heading) * gap };
+}
+
+// The vehicles that escort the leader. An escort gone this turn is left out. The missing-party rule in
+// src/sim/states.ts breaks its state.
+export function escortsOf(world: World, leaderId: string): Vehicle[] {
+  const holders = new Set(world.states.filter((s) => s.kind === 'escort' && s.other === leaderId).map((s) => s.holder));
+  return world.vehicles.filter((v) => holders.has(v.id));
+}
+
+// The nearest leader of the template the guard's template escorts, of the guard's faction, awake and with no escort
+// yet. Null when there is none.
+export function unguardedLeader(world: World, guard: Vehicle): Vehicle | null {
+  const tpl = NPCS[guard.brain!.templateId];
+  if (!tpl || tpl.spawn.kind !== 'escort') throw new Error(`${guard.id} has no escort template`);
+  const place = tpl.spawn;
+  const free = world.vehicles.filter((v) => v.brain?.templateId === place.of && v.faction === guard.faction && !isDefeated(v) && escortsOf(world, v.id).length === 0);
+  return free.sort((a, b) => dist(guard.pos, a.pos) - dist(guard.pos, b.pos))[0] ?? null;
+}
+
+// The idle escort option: the guard joins the nearest unguarded leader for no fee and no destination.
+export function joinLeader(world: World, guard: Vehicle): NpcActivity {
+  const leader = unguardedLeader(world, guard);
+  if (!leader) throw new Error(`${guard.id} chose an escort with no unguarded leader`);
+  return startEscort(world, guard, leader, null, 0);
+}
+
+function escortData(s: NpcState): Extract<StateData, { kind: 'escort' }> {
+  if (s.data.kind !== 'escort') throw new Error(`State ${s.id} holds no escort`);
+  return s.data;
+}
+
+// A missing party is left to the missing-party rule in src/sim/states.ts.
+export function checkEscort(w: World, s: NpcState): StateEnding | null {
+  const escort = w.vehicles.find((v) => v.id === s.holder);
+  const leader = w.vehicles.find((v) => v.id === s.other);
+  if (!escort || !leader) return null;
+  if (escortBroken(w, escort, leader)) return 'broken';
+  const site = escortData(s).site;
+  return site !== null && canUseSite(leader.pos, getKnownSite(site)) ? 'fulfilled' : null;
+}
+
+function escortBroken(w: World, escort: Vehicle, leader: Vehicle): boolean {
+  return isDefeated(escort) || isDefeated(leader) || isHostile(w, escort, leader) || isHostile(w, leader, escort);
+}
+
+// The one place an escort fee is paid, capped by the leader's money.
+export function payEscort(w: World, s: NpcState): void {
+  const leader = getResources(w, vehicleById(w, s.other));
+  const fee = Math.min(escortData(s).fee, Math.max(0, leader.money));
+  leader.money -= fee;
+  getResources(w, vehicleById(w, s.holder)).money += fee;
+  w.events.push({ t: 'escortPaid', by: s.holder, client: s.other, fee });
 }

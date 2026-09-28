@@ -459,13 +459,23 @@ function witnessesAttack(world: World, observer: Vehicle, shooter: Vehicle, targ
   );
 }
 
-// A shot, hit or miss, marks its shooter as an attacker of the target and of faction mates nearby that see both.
-// Each NPC decides once on the latest shots. Hidden targets are not broadcast.
+// An escort of the target that sees the shooter defends the target wherever it is.
+function escortSees(world: World, v: Vehicle, shooter: Vehicle, target: Vehicle): boolean {
+  return stateOf(world, "escort", v.id, target.id) !== null && canVehicleSee(world, v, shooter.pos);
+}
+
+// A shot, hit or miss, marks its shooter as an attacker of the target, of faction mates nearby that see both, and of
+// escorts of the target that see the shooter. Each NPC decides once on the latest shots. Hidden targets are not
+// broadcast.
 function recordAttack(world: World, shooter: Vehicle, target: Vehicle): void {
   for (const observer of world.vehicles) {
     if (!observer.brain || observer.id === shooter.id) continue;
-    if (observer.id === target.id || witnessesAttack(world, observer, shooter, target)) observer.brain.attackers[shooter.id] = false;
+    if (learnsAttack(world, observer, shooter, target)) observer.brain.attackers[shooter.id] = false;
   }
+}
+
+function learnsAttack(world: World, observer: Vehicle, shooter: Vehicle, target: Vehicle): boolean {
+  return observer.id === target.id || witnessesAttack(world, observer, shooter, target) || escortSees(world, observer, shooter, target);
 }
 
 // The one attack rule: a vehicle that damages another attacks it. The victim and witnesses learn the attacker,
@@ -512,7 +522,7 @@ function towPair(world: World, a: Vehicle, b: Vehicle): boolean {
   return stateOf(world, 'tow', a.id, b.id) !== null || stateOf(world, 'tow', b.id, a.id) !== null;
 }
 
-// The target and its faction mates nearby that see the shooter start a feud with it.
+// The target and the drivers that stand by it start a feud with the shooter.
 export function startFeuds(world: World, shooter: Vehicle, target: Vehicle): void {
   for (const v of world.vehicles) {
     if (!joinsFeud(world, v, shooter, target) || stateOf(world, "feud", v.id, shooter.id)) continue;
@@ -521,10 +531,11 @@ export function startFeuds(world: World, shooter: Vehicle, target: Vehicle): voi
   }
 }
 
-// The target and its faction mates nearby that see the shooter. The player decides its own hostility.
+// The target, its faction mates nearby that see the shooter, and its escorts that see the shooter. The player
+// decides its own hostility.
 function joinsFeud(world: World, v: Vehicle, shooter: Vehicle, target: Vehicle): boolean {
   if (v.faction === "player") return false;
-  if (v.id === target.id) return true;
+  if (v.id === target.id || escortSees(world, v, shooter, target)) return true;
   return v.faction === target.faction && dist(v.pos, target.pos) <= SPAWN.neighborHelp && canVehicleSee(world, v, shooter.pos);
 }
 

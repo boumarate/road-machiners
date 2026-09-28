@@ -115,6 +115,7 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   plea: (s) => (pleaData(s).plea === 'truce' ? 'Asked you for a truce' : 'Begged you for mercy'),
   trade: () => 'Pulling over to trade with you',
   revenge: () => 'Wants revenge on you',
+  escort: () => 'Escorting you',
 };
 
 // One line per state the NPC holds toward the player, with turns left when the state has a timer.
@@ -230,6 +231,10 @@ function towDoneText(world: World, e: Extract<GameEvent, { t: 'towDone' }>): Log
   return { text: `${by} tows ${vehicleName(world, e.client)} in and takes ${e.fee}.`, cls: 'dim' };
 }
 
+function escortPaidText(world: World, e: Extract<GameEvent, { t: 'escortPaid' }>): LogLine {
+  return { text: `${vehicleName(world, e.client)} pays ${vehicleName(world, e.by)} ${e.fee} for the escort.`, cls: 'dim' };
+}
+
 function towDroppedText(world: World, e: Extract<GameEvent, { t: 'towDropped' }>): LogLine {
   const by = vehicleName(world, e.by);
   if (e.client === world.player.vehicleId) return playerTowDroppedText(by, e.reason);
@@ -268,6 +273,7 @@ const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => st
   plea: (e) => [e.from, e.to],
   towHitched: (e) => [e.by, e.client],
   towDone: (e) => [e.by, e.client],
+  escortPaid: (e) => [e.by, e.client],
   towDropped: (e) => [e.by, e.client],
 };
 
@@ -350,6 +356,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   towOffer: towOfferText,
   towHitched: towHitchedText,
   towDone: towDoneText,
+  escortPaid: escortPaidText,
   towDropped: towDroppedText,
 };
 

@@ -11,6 +11,7 @@ import { generateNpcLoadout, type NpcLoadout } from "./npc-loadout";
 import { getKnownSite, profileOf } from "./npc-decisions";
 import { chance, randInt, randRange, type Rng } from "./rng";
 import { siteGates, type Site } from "./sites";
+import { startEscort } from "./tow";
 import type { Vehicle, World } from "./types";
 import { dist, type Vec } from "./vec";
 
@@ -39,18 +40,22 @@ function aliveOf(world: World, tpl: NpcTemplate): number {
 }
 
 // Spawns a driver, then one of each escort template that follows its template, while the escort is under its cap.
+// Each escort guards its leader for no fee and no destination.
 function spawnWithEscorts(world: World, tpl: NpcTemplate, pick: () => Site, respawn: boolean): void {
   const leader = spawnOne(world, tpl, pick, respawn);
   if (!leader) return;
-  for (const escort of escortsOf(tpl)) if (aliveOf(world, escort) < escort.cap) spawnBeside(world, escort, leader);
+  for (const escort of escortsOf(tpl)) {
+    const guard = aliveOf(world, escort) < escort.cap ? spawnBeside(world, escort, leader) : null;
+    if (guard) startEscort(world, guard, leader, null, 0);
+  }
 }
 
 function escortsOf(tpl: NpcTemplate): NpcTemplate[] {
   return Object.values(NPCS).filter((e) => e.spawn.kind === "escort" && e.spawn.of === tpl.id);
 }
 
-// An escort spawns SPAWN.escortGap tiles from its leader's side, at a random free angle.
-function spawnBeside(world: World, tpl: NpcTemplate, leader: Vehicle): void {
+// An escort spawns SPAWN.escortGap tiles from its leader's side, at a random free angle. Null when no spot is free.
+function spawnBeside(world: World, tpl: NpcTemplate, leader: Vehicle): Vehicle | null {
   const loadout = generateNpcLoadout(world, tpl);
   const radius = chassisDef(loadout.chassisId).radius;
   const d = chassisDef(leader.chassisId).radius + radius + SPAWN.escortGap;
@@ -58,10 +63,10 @@ function spawnBeside(world: World, tpl: NpcTemplate, leader: Vehicle): void {
     const a = randRange(world, -Math.PI, Math.PI);
     const pos = { x: leader.pos.x + Math.cos(a) * d, y: leader.pos.y + Math.sin(a) * d };
     if (!isFree(world, pos, radius, null)) continue;
-    spawnAt(world, tpl, loadout, pos);
-    return;
+    return spawnAt(world, tpl, loadout, pos);
   }
   world.events.push({ t: "info", text: `No free spot to spawn ${tpl.name}` });
+  return null;
 }
 
 // The template's base traits plus each extra that wins its roll.

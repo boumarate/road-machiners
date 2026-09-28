@@ -36,7 +36,7 @@ import { canReachSalvage, canTakeAny, canTakeFromTruck, siteLootTable } from './
 import { canUseSite, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { stateOf, statesHeld } from './states';
 import { getMobilityCondition, vehicleStats } from './stats';
-import { inTowReach, strandedAt, towSite } from './tow';
+import { inTowReach, strandedAt, towSite, unguardedLeader } from './tow';
 import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
@@ -408,8 +408,10 @@ function canHaul(_world: World, vehicle: Vehicle): boolean {
   return freeCells(vehicle) > 0 && npcProfile(vehicle).haulSites.length > 0;
 }
 
-// Taking up an escort needs the escort state, which does not exist yet.
-const never = (): boolean => false;
+// An idle guard takes up an escort of a leader no escort guards yet.
+function canEscort(world: World, vehicle: Vehicle): boolean {
+  return hasTrait(vehicle, 'guard') && unguardedLeader(world, vehicle) !== null;
+}
 
 type OptionName = DecisionOptions[DecisionId];
 
@@ -433,7 +435,7 @@ const AVAILABLE: Record<OptionName, Availability> = {
   travel: canTravel,
   explore: canDrive,
   haul: canHaul,
-  escort: never,
+  escort: canEscort,
   paid: dealAvailable('paid'),
   ownParts: dealAvailable('ownParts'),
   free: dealAvailable('free'),

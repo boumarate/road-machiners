@@ -31,7 +31,7 @@ import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, RefitJob
 import { canUseSite, nearestPad } from './sites';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
-import { dropTow, inTowReach, isOnRope, npcHomeSite, runTow, strandedAt, towGoal, towHeldBy } from './tow';
+import { dropTow, follows, inTowReach, isOnRope, joinLeader, npcHomeSite, runTow, steerFollow, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut, refitAtHome } from './defeat';
 
 // ---- The goal stack. The top goal drives the NPC. A long-term goal sits at the bottom, and interruptions go on top
@@ -39,7 +39,9 @@ import { isDefeated, isKnockedOut, refitAtHome } from './defeat';
 // an `activity` event.
 
 // Goals that interrupt a long-term goal. Popping one that uncovers the long-term goal fires the resume decision.
-export const INTERRUPTIONS: readonly NpcActivity['kind'][] = ['fight', 'flee', 'investigate', 'resupply', 'tow', 'loot', 'repair', 'patch', 'meet', 'retreat'];
+// A follow is listed too. It resumes after an interruption without the resume roll, and a follower stops for no
+// salvage.
+export const INTERRUPTIONS: readonly NpcActivity['kind'][] = ['fight', 'flee', 'investigate', 'resupply', 'tow', 'loot', 'repair', 'patch', 'meet', 'retreat', 'follow'];
 
 function goalsOf(v: Vehicle): NpcActivity[] {
   if (!v.brain) throw new Error(`${v.id} has no NPC brain`);
@@ -100,6 +102,15 @@ export function replaceBase(w: World, v: Vehicle, goal: NpcActivity): void {
   if (goals.length === 0) throw new Error(`${v.id} has no long-term goal to replace`);
   const previous = topGoal(v);
   v.brain!.goals = [goal, ...goals.slice(1).filter((g) => g.kind !== goal.kind)];
+  logChange(w, v, previous, goal.reason);
+}
+
+// Puts a goal at the bottom of the stack. It replaces the long-term goal there, and goes under interruptions when
+// there is none.
+export function placeBase(w: World, v: Vehicle, goal: NpcActivity): void {
+  const previous = topGoal(v);
+  const kept = goalsOf(v).filter((g, i) => g.kind !== goal.kind && (i > 0 || INTERRUPTIONS.includes(g.kind)));
+  v.brain!.goals = [goal, ...kept];
   logChange(w, v, previous, goal.reason);
 }
 
@@ -259,7 +270,7 @@ function haulGoal(world: World, vehicle: Vehicle): NpcActivity {
 
 type IdleGoal = (world: World, vehicle: Vehicle) => NpcActivity;
 
-const IDLE_GOALS: Record<Exclude<DecisionOptions['idle'], 'wait' | 'escort'>, IdleGoal> = {
+const IDLE_GOALS: Record<Exclude<DecisionOptions['idle'], 'wait'>, IdleGoal> = {
   trade: tradeGoal,
   scavenge: scavengeGoal,
   raid: raidGoal,
@@ -267,12 +278,12 @@ const IDLE_GOALS: Record<Exclude<DecisionOptions['idle'], 'wait' | 'escort'>, Id
   travel: travelGoal,
   explore: exploreGoal,
   haul: haulGoal,
+  escort: joinLeader,
 };
 
 function idleGoal(world: World, vehicle: Vehicle): NpcActivity {
   const option = decide(world, vehicle, 'idle', null, null);
   if (option === 'wait') return createActivity('wait', null, null, 'nothing worth doing');
-  if (option === 'escort') throw new Error(`${vehicle.id} chose an escort, which no driver can take up`);
   return IDLE_GOALS[option](world, vehicle);
 }
 
@@ -377,6 +388,7 @@ const GOAL_CHECKS: Partial<Record<NpcActivity['kind'], GoalCheck>> = {
   tow: towInvalid,
   patch: patchInvalid,
   meet: meetInvalid,
+  follow: (world, vehicle, goal) => (follows(world, vehicle, goal.targetId!) ? null : 'no longer follows its leader'),
 };
 
 // Whether a goal still holds, for a driver that has not thought yet this turn. Its stock, tow or target may be
@@ -667,6 +679,7 @@ const STEERS: Partial<Record<NpcActivity['kind'], Steer>> = {
   flee: (world, vehicle, goal, profile, contacts) => steerFlee(world, vehicle, profile, contacts, goal),
   tow: (world, vehicle, goal) => { if (!heldTow(world, vehicle)) steerToStranded(world, vehicle, goal); },
   meet: (world, _vehicle, goal) => steerToMeet(world, goal),
+  follow: steerFollow,
 };
 
 // A driver on its way to trade re-aims at the other truck every turn. The two keep in touch on the radio, so it
@@ -814,7 +827,8 @@ function awaitsTower(world: World, vehicle: Vehicle): boolean {
 
 function nextGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity {
   const next = hasSaleCargo(vehicle) ? saleGoal(world, vehicle, profile) : idleGoal(world, vehicle);
-  if (next.kind !== 'wait') pushGoal(world, vehicle, next);
+  // An escort places its own follow goal.
+  if (next.kind !== 'wait' && topGoal(vehicle) !== next) pushGoal(world, vehicle, next);
   return next;
 }
 
@@ -842,7 +856,7 @@ function addHurt(hurt: Map<string, number>, id: string, hits: PartHit[]): void {
 export function getActivityDestination(world: World, vehicle: Vehicle, activity: NpcActivity): Vec | null {
   if (!activity.destination) return null;
   if (activity.kind === 'repair') return repairsHere(vehicle, activity) ? null : activity.destination;
-  if (['fight', 'flee', 'raid', 'investigate', 'patrol', 'explore'].includes(activity.kind)) return activity.destination;
+  if (['fight', 'flee', 'raid', 'investigate', 'patrol', 'explore', 'follow'].includes(activity.kind)) return activity.destination;
   return siteStop(world, vehicle, activity, activity.destination);
 }
 

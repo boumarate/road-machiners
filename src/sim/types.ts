@@ -218,13 +218,15 @@ export type Obstacle =
   | { id: string; pos: Vec; r: number; kind: "landmark"; look: LandmarkLook; yaw: number };
 
 // A timed relation one vehicle holds toward another. src/sim/states.ts owns them.
-export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce' | 'grievance' | 'plea' | 'trade' | 'revenge';
+export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce' | 'grievance' | 'plea' | 'trade' | 'revenge' | 'escort';
 export type StateEnding = 'expired' | 'fulfilled' | 'broken';
 export type Plea = 'truce' | 'mercy';
 // A tow state: the holder tows the other party to the town or camp `site` for `fee`, paid on arrival. `waived` is
 // the fee a player tower let go, which pays Social XP on arrival. hitched is false while an offer to the player is open.
 // A tow promise: the terms of a tow the holder dropped for danger, which its next offer keeps.
 // A feud: robbery is true when the holder started it to rob the other party, so a win sends it to loot.
+// An escort: the holder guards the other party to the town or location `site` for `fee`, paid on arrival. A null
+// site never arrives, so the escort stands until it breaks.
 // A plea: the holder asked the other party for a truce or for mercy. answered is false while the player has not
 // answered yet.
 export type StateData =
@@ -232,6 +234,7 @@ export type StateData =
   | { kind: 'feud'; robbery: boolean }
   | { kind: 'towPromise'; site: string; fee: number }
   | { kind: 'plea'; plea: Plea; answered: boolean }
+  | { kind: 'escort'; site: string | null; fee: number }
   | { kind: 'patch'; deal: PatchDeal; parts: number; price: number; work: number; workLeft: number } // holder patches other
   | { kind: 'none' };
 export type NpcState = {
@@ -333,6 +336,7 @@ export type GameEvent =
   | { t: 'towOffer'; by: string; town: string; fee: number }
   | { t: 'towHitched'; by: string; client: string; site: string }
   | { t: 'towDone'; by: string; client: string; fee: number }
+  | { t: 'escortPaid'; by: string; client: string; fee: number }
   | { t: 'towDropped'; by: string; client: string; reason: 'refused' | 'unhitched' | 'danger' | 'gone' }
   | { t: 'stateEnded'; state: NpcState; ending: StateEnding }
   | { t: 'job'; vehicle: string; job: Job; outcome: 'started' | 'done' | 'cancelled' }

@@ -53,6 +53,7 @@ export function emptyWorld(pos: Vec = { x: 30, y: 30 }): World {
     Object.freeze(emptyTemplate.terrain.types);
     Object.freeze(emptyTemplate.terrain);
     emptyTemplate.vehicles = emptyTemplate.vehicles.filter((v) => v.faction === 'player');
+    emptyTemplate.states = [];
   }
   const w = cloneWorld(emptyTemplate);
   const p = w.vehicles[0];

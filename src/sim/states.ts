@@ -8,10 +8,10 @@ import { newId } from './factory';
 import { lootRobbed } from './npc-activities';
 import { checkPatch, isPatching, lapsePatch, settlePatch } from './patch';
 import { practice } from './progress';
-import { checkPlayerTow } from './tow';
+import { checkEscort, checkPlayerTow, payEscort } from './tow';
 import { checkTrade, isMeeting } from './economy';
 import { getResources } from './resources';
-import type { NpcState, StateData, StateEnding, StateKindId, World } from './types';
+import type { NpcState, StateData, StateEnding, StateKindId, Vehicle, World } from './types';
 import { canVehicleSee } from './vision';
 
 export type StateKind = {
@@ -81,6 +81,9 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   // The holder wants revenge on the player, who knocked it out. src/sim/defeat.ts fulfils it when the holder knocks
   // the player out, and src/sim/parley.ts when the player hands it cargo.
   revenge: { refresh: never, check: noCheck, hooks: {} },
+  // The holder escorts the other party. See src/sim/tow.ts. The leader's arrival fulfils it, and the fulfilled
+  // hook pays once.
+  escort: { refresh: never, check: checkEscort, hooks: { fulfilled: payEscort } },
 };
 
 // A missing holder is left to the missing-party rule.
@@ -100,7 +103,7 @@ function turnsOf(kind: StateKindId): number | null {
 }
 
 // The data kind each state kind carries.
-const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none', grievance: 'none', plea: 'plea', trade: 'none', revenge: 'none' };
+const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none', grievance: 'none', plea: 'plea', trade: 'none', revenge: 'none', escort: 'escort' };
 
 export function addState(w: World, kind: StateKindId, holder: string, other: string, data: StateData): NpcState {
   kindOf(kind);
@@ -191,8 +194,12 @@ export function towData(s: NpcState): Extract<StateData, { kind: 'tow' }> {
 function payTow(w: World, s: NpcState): void {
   const tow = towData(s);
   const towed = vehicleById(w, s.other);
+  const tower = vehicleById(w, s.holder);
   getResources(w, towed).money -= tow.fee;
-  getResources(w, vehicleById(w, s.holder)).money += tow.fee;
+  getResources(w, tower).money += tow.fee;
+  // An NPC client needs no tow at its destination. A player client may still be stranded in town, and no offer
+  // should follow there.
+  if (towed.brain) forgetClient(tower, s.other);
   towed.speed = 0;
   towed.order = null;
   if (s.holder === w.player.vehicleId) w.events.push({ t: 'money', amount: tow.fee, reason: `towing ${towed.name}` });
@@ -202,12 +209,17 @@ function payTow(w: World, s: NpcState): void {
 
 // A released truck brakes to a stop. The caller logs why the tow broke, except for a tower that left the world,
 // which only this step sees.
-// An NPC tower forgets it decided on this client, so a stranded client in sight is a fresh strandedSeen decision.
 function releaseTow(w: World, s: NpcState): void {
   const towed = w.vehicles.find((v) => v.id === s.other);
   if (towed && towData(s).hitched) towed.order = { kind: 'brake' };
   if (s.holder === w.player.vehicleId) return;
   const holder = w.vehicles.find((v) => v.id === s.holder);
   if (!holder) w.events.push({ t: 'towDropped', by: s.holder, client: s.other, reason: 'gone' });
-  else delete holder.brain!.noticed[`strandedSeen:${s.other}`];
+  else forgetClient(holder, s.other);
+}
+
+// An NPC tower forgets it decided on this client after a tow ends, so the client stranded in sight again is a fresh
+// strandedSeen decision. An escort keeps its leader in sight, so this lets it tow the leader again.
+function forgetClient(tower: Vehicle, clientId: string): void {
+  if (tower.brain) delete tower.brain.noticed[`strandedSeen:${clientId}`];
 }

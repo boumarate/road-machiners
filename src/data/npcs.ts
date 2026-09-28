@@ -680,7 +680,7 @@ export type DecisionOptions = {
   mercyBegged: 'spare' | 'finish'; // a foe gives up and asks to be let go
   threatened: 'comply' | 'fightBack' | 'flee'; // the player demands the driver's cargo
   resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal
-  // The goal stack is empty. Escort needs the escort state, which does not exist yet, so no driver can take it.
+  // The goal stack is empty. Escort joins a leader that no escort guards yet.
   idle: 'trade' | 'scavenge' | 'raid' | 'wait' | 'patrol' | 'travel' | 'explore' | 'haul' | 'escort';
 };
 export type DecisionId = keyof DecisionOptions;
@@ -753,6 +753,9 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   // A driver that dropped a tow for danger comes back for the player: tow outweighs keep 20 to 1.
   towPromise: { strandedSeen: { tow: { add: 20 } } },
   answering: {},
+  // An escort tows its stranded leader: tow outweighs keep 99 to 1. It robs the truck it guards as rarely as a
+  // truce partner.
+  escort: { strandedSeen: { tow: { add: 99 } }, preySeen: { rob: { mul: 0.005 } } },
   // A driver the player knocked out wants revenge: every hostile choice about the player gets more likely.
   // Robbing and closing in on a heard contact no longer need a trait.
   revenge: {
@@ -801,6 +804,8 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   revenge: 2000,
   // A driver on its way to a stranded player holds the job until it offers, its tow goal pops, or it is gone.
   answering: null,
+  // An escort lasts until the leader reaches its destination, or either party is gone, beaten or hostile.
+  escort: null,
 };
 
 export type Trait = {
@@ -935,6 +940,9 @@ export const NPC_BEHAVIOR = {
   patrolRadius: RULES.guards.range + TERRAIN.vision.radius,
   // Tiles along a road between two patrol stops. Close enough that stops spread over every approach.
   patrolSpacing: 4,
+  // Tiles a follower keeps behind its leader past both radii: the yield distance plus one, so it stops outside
+  // the braking check of src/sim/ai.ts.
+  followGap: RULES.yieldDistance + 1,
   // Cab warnings begin at 30%. Recovery to half cab health prevents fight/flee oscillation.
   fleeCondition: 0.3,
   // One driver in three the player knocks out holds a grudge. See the revenge state.
