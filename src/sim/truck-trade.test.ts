@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { chassisDef } from '../data/chassis';
-import { ECONOMY } from '../data/goods';
+import { ECONOMY, GOODS } from '../data/goods';
 import { NPC_UPKEEP, NPCS, STATE_TURNS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
-import { partTradePrice } from './economy';
+import { partTradePrice, truckPartPrice } from './economy';
 import { makePart } from './factory';
 import { freeCells, goodsCount } from './grid';
 import { addGoods, spareParts, stowPart } from './inventory';
@@ -139,15 +139,17 @@ describe('trades', () => {
     expect(() => buyTruckGood(w0, npc.id, 'parts', 2)).toThrow('will not sell');
   });
 
-  it('parts trade both ways at the player part prices', () => {
+  it('parts trade both ways at the road part prices, wider than a shop', () => {
     const { w: start, npc } = meeting();
     const w0 = update(start, (w) => { stowPart(w, find(w, npc.id), makePart(w, 'mg', 1)); });
     const part = spareParts(find(w0, npc.id))[0];
-    const buy = partTradePrice(w0, playerVehicle(w0), part, 'buy');
+    const buy = truckPartPrice(w0, part, 'buy');
+    expect(buy).toBeGreaterThan(partTradePrice(w0, playerVehicle(w0), part, 'buy'));
     const w1 = buyTruckPart(w0, npc.id, part.id);
     expect(w1.player.money).toBe(w0.player.money - buy);
     expect(spareParts(playerVehicle(w1)).map((p) => p.id)).toContain(part.id);
-    const sell = partTradePrice(w1, playerVehicle(w1), part, 'sell');
+    const sell = truckPartPrice(w1, part, 'sell');
+    expect(sell).toBeLessThan(partTradePrice(w1, playerVehicle(w1), part, 'sell'));
     const w2 = sellTruckPart(w1, npc.id, part.id);
     expect(w2.player.money).toBe(w1.player.money + sell);
     expect(spareParts(find(w2, npc.id)).map((p) => p.id)).toContain(part.id);
@@ -178,6 +180,14 @@ describe('trades', () => {
     expect(w.player.fuel).toBe(5);
     expect(w.player.money).toBe(w0.player.money - 5 * truckSupplyPrice(w0, 'fuel'));
     expect(find(w, npc.id).resources!.fuel).toBe(cap * NPC_UPKEEP.tradeReserve);
+  });
+
+  it('a truck trades goods at the road spread around their value', () => {
+    const { w } = meeting();
+    const value = GOODS.scrap.value;
+    const margin = ECONOMY.spread + ECONOMY.roadSpread;
+    expect(truckGoodPrice(w, 'scrap', 'buy')).toBe(Math.ceil(value * (1 + margin)));
+    expect(truckGoodPrice(w, 'scrap', 'sell')).toBe(Math.floor(value * (1 - margin)));
   });
 
   it('a truck charges more for fuel than a town', () => {

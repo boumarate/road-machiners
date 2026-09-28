@@ -27,9 +27,9 @@ describe('engine heat', () => {
     while (w.player.engineHeat < 1) {
       advanceEngineHeat(w);
       turns++;
-      expect(turns).toBeLessThan(30);
+      expect(turns).toBeLessThan(60);
     }
-    expect(turns).toBeGreaterThan(15);
+    expect(turns).toBeGreaterThan(30);
     expect(w.events.some((e) => e.t === 'info' && e.text.startsWith('Engine running hot'))).toBe(true);
     expect(engine(w).hp).toBe(hp - ENGINE_HEAT.overheatDamage);
     advanceEngineHeat(w);

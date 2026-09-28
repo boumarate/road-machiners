@@ -52,6 +52,10 @@ export const RULES = {
     round: { damage: 6, pen: 8, blast: false },
   },
 
+  // Over the rated mass, top speed and turning scale by (rated / mass) to this power. 500 kg over a 3000 kg rating
+  // leaves about 54% of the speed, and 1000 kg over leaves about 32%.
+  overloadExponent: 4,
+
   // Combat
   // A round that lands on the truck is a crit with this chance. A crit multiplies its damage and pen, so a few
   // lucky rounds can swing a fight that many small rolls would otherwise average out. A machine gun lands several

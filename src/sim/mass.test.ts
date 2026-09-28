@@ -1,3 +1,4 @@
+import { RULES } from '../data/rules';
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { GOODS } from '../data/goods';
@@ -26,7 +27,7 @@ describe('vehicle mass', () => {
     expect(vehicleMass(v)).toBe(CHASSIS.hauler.mass + coreMass('hauler') + PARTS.mg.mass + PARTS.stockEngine.mass + PARTS.plates.mass + 3 * GOODS.scrap.mass);
   });
 
-  it('load factor is sqrt(rated / mass) on both sides of the rated mass', () => {
+  it('load factor is sqrt(rated / mass) under the rated mass, and falls hard over it', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine', 'trailerBox'], { x: 40, y: 40 });
     expect(vehicleMass(v)).toBeLessThan(CHASSIS.hauler.ratedMass);
@@ -35,7 +36,8 @@ describe('vehicle mass', () => {
     addGoods(w, v, 'scrap', 999);
     const m = vehicleMass(v);
     expect(m).toBeGreaterThan(CHASSIS.hauler.ratedMass);
-    expect(loadFactor(v)).toBeCloseTo(Math.sqrt(CHASSIS.hauler.ratedMass / m), 10);
+    expect(loadFactor(v)).toBeCloseTo((CHASSIS.hauler.ratedMass / m) ** RULES.overloadExponent, 10);
+    expect(loadFactor(v)).toBeLessThan(Math.sqrt(CHASSIS.hauler.ratedMass / m));
   });
 
   it('every chassis, part and good states a positive mass', () => {

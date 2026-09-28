@@ -62,7 +62,7 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   const ch = chassisDef(v.chassisId);
   const engines = mountedParts(v, 'engine');
   const mass = vehicleMass(v);
-  // Top speed and turning drop with the square root of overload. The engine and brakes give fixed forces,
+  // Top speed and turning follow loadFactor(), which drops hard past the rated mass. The engine and brakes give fixed forces,
   // so acceleration and braking fall with mass.
   const load = loadFactor(v);
   const force = ch.ratedMass / mass;

@@ -10,7 +10,7 @@ import {
   contractDue,
   contractSummary,
   eventText,
-  npcActivityLine,
+  formatNpcActivity,
   jobLabel,
   jobProgress,
   formatNpcStates,
@@ -530,7 +530,7 @@ export class Hud {
       v.faction === "player" ? "" : hostile ? "hostile" : "neutral";
     this.info.style.display = "";
     this.infoBody.replaceChildren(
-      ...infoHeading(v),
+      ...infoHeading(w, v),
       el(
         "div",
         { class: hostile ? "bad" : "dim" },
@@ -544,20 +544,25 @@ export class Hud {
   }
 }
 
-// The NPC's traits once the player can read them, top goal and the states it holds toward the player. The player's own truck has none.
-// An NPC reads as its driver's name over its template name. The player's truck keeps its own name.
-function infoHeading(v: Vehicle): HTMLElement[] {
+// An NPC reads as its driver's name, what it is doing now, then its template name. The player's truck keeps its own
+// name.
+function infoHeading(w: World, v: Vehicle): HTMLElement[] {
   if (!v.brain) return [el("h3", {}, v.name)];
-  return [el("h3", {}, v.brain.driver), el("div", { class: "dim" }, v.name)];
+  const activity = formatNpcActivity(w, v);
+  return [
+    el("h3", {}, v.brain.driver),
+    ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),
+    el("div", { class: "dim" }, v.name),
+  ];
 }
 
+// The NPC's traits once the player can read them, and the states it holds toward the player. The player's own truck
+// has none.
 function npcLines(w: World, v: Vehicle): HTMLElement[] {
   if (!v.brain) return [];
-  const activity = npcActivityLine(w, v);
   const traits = formatNpcTraits(w, v);
   return [
     ...(traits ? [el("div", { class: "npc-traits" }, traits)] : []),
-    ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),
     ...formatNpcStates(w, v).map((line) =>
       el("div", { class: "npc-state" }, line),
     ),
