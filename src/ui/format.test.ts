@@ -38,7 +38,7 @@ describe("contract text", () => {
   });
 
   it("says the hand-in part must still work and be rebuilt at most once", () => {
-    expect(contractSummary(fetch)).toBe("Bring MG turret to Bowl: working, rebuilt at most once, found anywhere");
+    expect(contractSummary(fetch)).toBe("Bring MG turret to Bowl: working, rebuilt at most once");
   });
 });
 

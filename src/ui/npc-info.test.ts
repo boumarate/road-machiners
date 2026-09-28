@@ -5,7 +5,7 @@ import { corePart } from '../sim/grid';
 import type { GameEvent } from '../sim/types';
 import { addState } from '../sim/states';
 import { refreshVision } from '../sim/vision';
-import { eventText, formatNpcActivity, formatNpcStates, formatNpcTraits } from './format';
+import { eventText, formatNpcActivity, formatNpcStates, formatNpcTraits, npcActivityLine } from './format';
 
 it('shows a visible NPC reason without naming its unseen target', () => {
   const w = emptyWorld();
@@ -17,7 +17,19 @@ it('shows a visible NPC reason without naming its unseen target', () => {
   expect(formatNpcActivity(w, npc)).toBe('flee — avoid a costly fight');
   npc.pos = { x: 58, y: 55 };
   expect(formatNpcActivity(w, npc)).toBeNull();
-  expect(eventText(w, { t: 'activity', vehicle: npc.id, previous: null, activity: 'flee', reason: 'avoid a costly fight' })).toBeNull();
+});
+
+it('shows NPC goals and their reasons only with the full log flag', () => {
+  const w = emptyWorld();
+  const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 32, y: 30 });
+  npc.brain = { ...npcBrain('scavenger', npc.pos, ['scavenger']), goals: [{ kind: 'flee', targetId: null, destination: null, phase: 'act', reason: 'avoid a costly fight' }] };
+  refreshVision(w);
+  const event: GameEvent = { t: 'activity', vehicle: npc.id, previous: null, activity: 'flee', reason: 'avoid a costly fight' };
+  expect(npcActivityLine(w, npc)).toBeNull();
+  expect(eventText(w, event)).toBeNull();
+  w.player.fullLog = true;
+  expect(npcActivityLine(w, npc)).toBe('flee — avoid a costly fight');
+  expect(eventText(w, event)?.text).toContain('flee — avoid a costly fight');
 });
 
 it('shows NPC traits as one line with the read the driver perk', () => {
@@ -40,7 +52,7 @@ it('fails loudly for a vehicle with no NPC brain', () => {
   expect(() => formatNpcTraits(w, playerVehicle(w))).toThrow('has no NPC brain');
 });
 
-it('lists states toward the player with turns left', () => {
+it('lists states toward the player, and hides the feud timer and hidden intent', () => {
   const w = emptyWorld();
   const me = playerVehicle(w);
   const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 32, y: 30 });
@@ -48,8 +60,10 @@ it('lists states toward the player with turns left', () => {
   npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
   addState(w, 'feud', npc.id, me.id, { kind: 'feud', robbery: true }).turnsLeft = 7;
   addState(w, 'turnedDown', npc.id, me.id, { kind: 'none' });
+  addState(w, 'revenge', npc.id, me.id, { kind: 'none' });
+  addState(w, 'truce', npc.id, me.id, { kind: 'none' }).turnsLeft = 3;
   addState(w, 'feud', npc.id, other.id, { kind: 'feud', robbery: false });
-  expect(formatNpcStates(w, npc)).toEqual(['Feud with you, 7 turns', 'You turned down its tow']);
+  expect(formatNpcStates(w, npc)).toEqual(['Feud with you', 'You turned down its tow', 'Truce with you, 3 turns']);
 });
 
 it('tells a tow offer from a running tow', () => {
@@ -70,7 +84,7 @@ it('logs how a feud with the player ends', () => {
   npc.name = 'Scavenger';
   const feud = addState(w, 'feud', npc.id, me.id, { kind: 'feud', robbery: true });
   expect(eventText(w, { t: 'stateEnded', state: feud, ending: 'expired' })).toEqual({ text: 'Scavenger gives up the feud with you.', cls: 'good' });
-  expect(eventText(w, { t: 'stateEnded', state: feud, ending: 'fulfilled' })).toEqual({ text: 'Scavenger ends the feud: you are beaten.', cls: 'bad' });
+  expect(eventText(w, { t: 'stateEnded', state: feud, ending: 'fulfilled' })).toEqual({ text: 'Scavenger ends the feud.', cls: 'bad' });
 });
 
 it('logs no state ending for tow states or states between NPCs', () => {

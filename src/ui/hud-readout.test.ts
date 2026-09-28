@@ -150,11 +150,11 @@ describe("rescue readout", () => {
     const me = playerVehicle(w);
     const engine = me.items.find((it) => it.kind === "part" && partDef(it.part.defId).kind === "engine");
     if (!engine || engine.kind !== "part") throw new Error("Expected an engine");
-    // A knockout strips the cargo and the kit, so the roof row has room for the engine.
+    // Without the cargo and the cage, the roof row has room for the engine.
     me.items = me.items.filter((it) => it !== engine && it.kind === "part" && it.part.defId !== "cage");
     expect(getRescueReadout(w)).toMatchObject({ kind: "stranded", reason: "No working engine." });
     expect(stowPart(w, me, engine.part)).toBe(true);
-    expect(getRescueReadout(w)).toMatchObject({ kind: "stranded", reason: expect.stringContaining("E cells") });
+    expect(getRescueReadout(w)).toMatchObject({ kind: "stranded", reason: "No working engine. Install the spare [I]." });
   });
   it("follows the player from stranded to tow, and leaves an open offer to the radio", () => {
     const w = emptyWorld();

@@ -171,7 +171,7 @@ function strandedReason(w: World): string {
   const me = playerVehicle(w);
   if (!hasWorkingEngine(me)) {
     const spare = spareParts(me).some((part) => partDef(part.defId).kind === "engine");
-    return spare ? "No working engine. Drag the spare engine onto the E cells in the inventory [I]." : "No working engine.";
+    return spare ? "No working engine. Install the spare [I]." : "No working engine.";
   }
   if (!isWorking(corePart(me, "transmission"))) return "The transmission is broken.";
   if (w.player.fuel <= 0) return "Out of fuel.";

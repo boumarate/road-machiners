@@ -356,7 +356,7 @@ function signed(value: number, decimals: number): string {
 // The condition meter already shows HP.
 export function partStats(part: PartInstance): Stat[] {
   const def = partDef(part.defId);
-  return [...KIND_STATS[def.kind](part), stat("mass", "Mass: every kilogram costs speed", def.mass, "kg", "less")];
+  return [...KIND_STATS[def.kind](part), stat("mass", "Mass", def.mass, "kg", "less")];
 }
 
 const KIND_STATS: Record<PartKind, (part: PartInstance) => Stat[]> = {
@@ -375,12 +375,12 @@ function cargoStats(part: PartInstance): Stat[] {
 
 // Blast rounds meet an armor part's blast armor instead of its plain armor.
 function penStat(d: WeaponDef): Stat {
-  return { ...stat("pen", "Penetration: the armor a round gets through", d.round.pen, "", "more"), unit: d.round.blast ? "blast" : "" };
+  return { ...stat("pen", "Penetration", d.round.pen, "", "more"), unit: d.round.blast ? "blast" : "" };
 }
 
 // Tall parts stand higher than a gun, so guns cannot fire across them.
 function tallStat(d: PartDef): Stat {
-  return { ...stat("tall", "Tall: guns cannot fire across it", d.tall ? 1 : 0, "", "less"), text: d.tall ? "tall" : "low" };
+  return { ...stat("tall", "Height", d.tall ? 1 : 0, "", "less"), text: d.tall ? "tall" : "low" };
 }
 
 function partDefOf<T>(part: PartInstance): T {
@@ -398,7 +398,7 @@ function weaponStats(part: PartInstance): Stat[] {
     stat("range", "Range", meters(d.range), "m", "more"),
     stat("reload", "Turns between shots", d.reload, "t", "less"),
     stat("arc", "Firing arc", d.arc, "°", "more"),
-    stat("recoil", "Recoil: spread added on a 1 t truck, less on a heavier one", d.recoil, "°", "less", 1),
+    stat("recoil", "Recoil", d.recoil, "°", "less", 1),
   ];
 }
 
@@ -410,22 +410,22 @@ function engineStats(part: PartInstance): Stat[] {
     { ...speed, text: signed(speed.value, 0) },
     { ...accel, text: signed(accel.value, 1) },
     stat("fuel", "Fuel use", d.fuelMult, "×", "less", 1),
-    stat("heat", "Heat: how fast the sun heats it", d.heat, "×", "less", 1),
+    stat("heat", "Heat", d.heat, "×", "less", 1),
   ];
 }
 
 function armorStats(part: PartInstance): Stat[] {
   const d = wornDef<ArmorDef>(part);
-  const armor = stat("armor", "Armor: kinetic penetration it stops", Math.round(d.armor), "", "more");
-  const blast = stat("blast", "Blast armor: blast penetration it stops", Math.round(d.blastArmor), "", "more");
+  const armor = stat("armor", "Armor", Math.round(d.armor), "", "more");
+  const blast = stat("blast", "Blast armor", Math.round(d.blastArmor), "", "more");
   const stats = [armor, blast, fieldRepairStat(d.fieldRepair)];
   return d.ramMult > 1 ? [...stats, stat("ram", "Ram damage", d.ramMult, "×", "more", 1)] : stats;
 }
 
 const FIELD_REPAIR: Record<FieldRepair, { rank: number; text: string; label: string }> = {
-  none: { rank: 0, text: "town", label: "Field repair: only a town repairs it" },
-  capped: { rank: 1, text: "cap", label: "Field repair: patches up to the field cap" },
-  full: { rank: 2, text: "full", label: "Field repair: patches to full HP on the road" },
+  none: { rank: 0, text: "town", label: "Repair: town only" },
+  capped: { rank: 1, text: "cap", label: "Field repair: partial" },
+  full: { rank: 2, text: "full", label: "Field repair: full" },
 };
 
 function fieldRepairStat(repair: FieldRepair): Stat {
@@ -436,13 +436,13 @@ function fieldRepairStat(repair: FieldRepair): Stat {
 // A truck's own numbers, without parts.
 export function chassisStats(chassisId: string): Stat[] {
   const c = chassisDef(chassisId);
-  const turning = stat("turning", "Turn limit at speed and at a crawl", (c.turnFast + c.turnSlow) / 2, "°", "more");
+  const turning = stat("turning", "Turning",(c.turnFast + c.turnSlow) / 2, "°", "more");
   return [
-    stat("speed", "Base top speed, before the engine and load", kph(c.maxSpeed), "km/h", "more"),
+    stat("speed", "Base top speed", kph(c.maxSpeed), "km/h", "more"),
     stat("accel", "Acceleration", mps2(c.accel), "m/s²", "more", 1),
     { ...turning, text: `${c.turnFast}–${c.turnSlow}` },
     stat("cells", "Cargo cells", cellCount(baseGrid(chassisId)), "", "more"),
-    stat("load", "Rated load: mass the speed and handling hold at", c.ratedMass, "kg", "more"),
+    stat("load", "Rated load", c.ratedMass, "kg", "more"),
     stat("mass", "Empty mass", c.mass, "kg", "less"),
     stat("fuel", "Fuel tank", fuelLiters(c.fuelCap), "L", "more"),
   ];

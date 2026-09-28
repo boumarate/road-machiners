@@ -188,7 +188,7 @@ export class InventoryView {
               : el(
                   "div",
                   { class: "dim" },
-                  `Park to install or remove parts: ${Math.ceil(RULES.refitTurnsPerPart)} turns each, ${Math.ceil(2 * RULES.refitTurnsPerPart)} to replace. Driving cancels the work. Goods and spares move instantly.`,
+                  "Park to install or remove parts.",
                 ),
           el(
             "div",
@@ -216,7 +216,7 @@ export class InventoryView {
       el(
         "div",
         {},
-        "A part works only when it lies fully on one of its letters. Built-in parts are fixed and can only be repaired. A gun cannot fire across the cab, big guns or cargo boxes. The marks on a gun show its blocked sides.",
+        "A part works only when it lies fully on one of its letters. The marks on a gun show its blocked sides.",
       ),
       el(
         "div",
@@ -268,7 +268,7 @@ export class InventoryView {
     const node = this.itemEl(w, item);
     const left = v.job?.kind === "refit" ? v.job.turnsLeft : 0;
     node.classList.add("refitting");
-    node.title = `Refit: ${left === 1 ? "1 turn" : `${left} turns`} left. Driving cancels it.`;
+    node.title = `Refit: ${left === 1 ? "1 turn" : `${left} turns`} left`;
     return node;
   }
 
@@ -516,10 +516,7 @@ export class InventoryView {
     return [
       el(
         "button",
-        {
-          title: "Pour into the tank and stores up to their caps",
-          onclick: () => this.run((world) => takeStores(world, stock.id)),
-        },
+        { onclick: () => this.run((world) => takeStores(world, stock.id)) },
         `Take fuel ${fuelLiters(stock.fuel ?? 0)} L, supplies ${(stock.supplies ?? 0).toFixed(1)}`,
       ),
     ];
@@ -556,7 +553,7 @@ export class InventoryView {
       el(
         "div",
         { class: "dim" },
-        "Drag items onto the grid. What you leave stays here.",
+        "Drag items onto the grid.",
       ),
     );
   }
@@ -574,7 +571,7 @@ export class InventoryView {
       { class: "inv-truck inv-target" },
       el("h3", {}, `${target.name}, knocked out`),
       el("div", { class: "truck-shell" }, el("div", { class: "truck-nose", "aria-hidden": "true" }), grid),
-      el("div", { class: "dim" }, "Drag items onto your grid. Goods and spares move at once. An installed part takes a refit to remove."),
+      el("div", { class: "dim" }, "Drag items onto your grid."),
     );
   }
 
@@ -939,9 +936,9 @@ function itemTitle(it: GridItem, mounted: boolean): string {
 // What the inspection panel says under an item's title: how to move it.
 function inspectionHint(w: World, item: GridItem): string {
   if (item.kind === "good")
-    return "Drag to rearrange cargo. Dropping in the dump area discards it.";
+    return "Drag to rearrange cargo.";
   if (townAt(w)) return "Garage: drag movable parts onto matching mounts or into storage.";
-  return "Drag onto a mount or off it to start a refit. It runs while the truck stays parked.";
+  return "Drag onto a mount or off it to start a refit.";
 }
 
 // Why a Patch button is disabled, or null when the patch can start.

@@ -351,7 +351,7 @@ export type GameEvent =
   | { t: 'honk'; vehicle: string }
   | { t: 'patch'; patcher: string; client: string; outcome: 'started' | 'done' | 'lapsed' }
   | { t: 'plea'; from: string; to: string; plea: Plea; accepted: boolean | null } // null while the player has to answer
-  | { t: 'info'; text: string };
+  | { t: 'info'; text: string; debug?: true }; // a debug line shows only with the full log flag
 
 export type World = {
   seed: number;

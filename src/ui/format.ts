@@ -85,6 +85,11 @@ function partName(world: World, vehicleId: string, partId: string): string {
   return p ? partDef(p.defId).name : 'part';
 }
 
+// An NPC's goal and its reason, for the full log debug flag only. Players read intent from what a driver does.
+export function npcActivityLine(world: World, vehicle: Vehicle): string | null {
+  return world.player.fullLog ? formatNpcActivity(world, vehicle) : null;
+}
+
 export function formatNpcActivity(world: World, vehicle: Vehicle): string | null {
   const activity = vehicle.brain ? topGoal(vehicle) : null;
   if (!activity || !playerSees(world, vehicle.pos)) return null;
@@ -101,41 +106,41 @@ export function formatNpcTraits(world: World, vehicle: Vehicle): string | null {
   return hasPerk(world, 'readDriver') ? `Traits: ${traits.join(', ')}` : null;
 }
 
-// How a state the NPC holds reads from the player's side.
-const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
+// How a state the NPC holds reads from the player's side. A null label keeps the driver's intent hidden.
+const STATE_LABELS: Record<StateKindId, ((s: NpcState) => string) | null> = {
   feud: () => 'Feud with you',
-  backedOff: () => 'Backing off from you',
+  backedOff: null,
   tow: (s) => (towData(s).hitched ? 'Towing you' : 'Tow offer to you'),
   turnedDown: () => 'You turned down its tow',
   towPromise: () => 'Promised you a tow',
   answering: () => 'Coming to tow you',
   patch: () => 'Patching your truck',
   truce: () => 'Truce with you',
-  grievance: () => 'Angry at your crash',
+  grievance: null,
   plea: (s) => (pleaData(s).plea === 'truce' ? 'Asked you for a truce' : 'Begged you for mercy'),
   trade: () => 'Pulling over to trade with you',
-  revenge: () => 'Wants revenge on you',
+  revenge: null,
   escort: () => 'Escorting you',
 };
 
-// One line per state the NPC holds toward the player, with turns left when the state has a timer.
+// One line per shown state the NPC holds toward the player, with turns left when a deal has a timer.
+// A feud hides its timer, so the player does not know when the driver gives up.
 export function formatNpcStates(world: World, vehicle: Vehicle): string[] {
   return statesHeld(world, vehicle.id)
     .filter((s) => s.other === world.player.vehicleId)
-    .map((s) => (s.turnsLeft === null ? STATE_LABELS[s.kind](s) : `${STATE_LABELS[s.kind](s)}, ${s.turnsLeft} turn${s.turnsLeft === 1 ? '' : 's'}`));
+    .flatMap((s) => {
+      const label = STATE_LABELS[s.kind]?.(s);
+      if (!label) return [];
+      return s.turnsLeft === null || s.kind === 'feud' ? [label] : [`${label}, ${s.turnsLeft} turn${s.turnsLeft === 1 ? '' : 's'}`];
+    });
 }
 
 // Log lines for the end of a state an NPC holds toward the player. Tow states log through the tow events.
 const STATE_ENDED_TEXT: Partial<Record<StateKindId, Record<StateEnding, ((holder: string) => { text: string; cls: string }) | null>>> = {
   feud: {
     expired: (holder) => ({ text: `${holder} gives up the feud with you.`, cls: 'good' }),
-    fulfilled: (holder) => ({ text: `${holder} ends the feud: you are beaten.`, cls: 'bad' }),
+    fulfilled: (holder) => ({ text: `${holder} ends the feud.`, cls: 'bad' }),
     broken: (holder) => ({ text: `The feud with ${holder} is over.`, cls: 'dim' }),
-  },
-  backedOff: {
-    expired: (holder) => ({ text: `${holder} stops backing off from you.`, cls: 'dim' }),
-    fulfilled: null,
-    broken: null,
   },
 };
 
@@ -173,8 +178,8 @@ function jobText(world: World, e: Extract<GameEvent, { t: 'job' }>): LogLine | n
   if (e.vehicle !== world.player.vehicleId) return null;
   const what = jobLabel(world, playerVehicle(world), e.job);
   const lines = {
-    started: { text: `${what} started: stay parked about ${e.job.turnsLeft} turns. End turns with Space.`, cls: '' },
-    cancelled: { text: `${what} cancelled: the truck moved or required items changed`, cls: 'bad' },
+    started: { text: `${what} started, about ${e.job.turnsLeft} turns parked`, cls: '' },
+    cancelled: { text: `${what} cancelled`, cls: 'bad' },
     done: { text: `${what} done`, cls: 'good' },
   };
   return lines[e.outcome];
@@ -200,9 +205,9 @@ function patchText(world: World, e: Extract<GameEvent, { t: 'patch' }>): LogLine
   const me = world.player.vehicleId;
   const other = vehicleName(world, e.patcher === me ? e.client : e.patcher);
   const lines = {
-    started: e.patcher === me ? `You start patching ${other}. Stay parked beside it.` : `${other} starts patching your truck. Stay parked.`,
+    started: e.patcher === me ? `You start patching ${other}.` : `${other} starts patching your truck.`,
     done: e.patcher === me ? `You patched ${other}.` : `${other} patched your truck.`,
-    lapsed: `The patch with ${other} is off: nobody worked on it.`,
+    lapsed: `The patch with ${other} is off.`,
   };
   return { text: lines[e.outcome], cls: e.outcome === 'lapsed' ? 'dim' : e.outcome === 'done' ? 'good' : '' };
 }
@@ -253,7 +258,7 @@ function towDroppedText(world: World, e: Extract<GameEvent, { t: 'towDropped' }>
 function playerTowDroppedText(by: string, reason: Extract<GameEvent, { t: 'towDropped' }>['reason']): LogLine {
   const text = reason === 'refused' ? `You turn down the tow from ${by}.`
     : reason === 'unhitched' ? `You unhitch from ${by}.`
-    : reason === 'danger' ? `${by} drops the tow. There is danger.`
+    : reason === 'danger' ? `${by} drops the tow.`
     : `${by} is gone. The tow is off.`;
   return { text, cls: reason === 'refused' || reason === 'unhitched' ? 'dim' : 'bad' };
 }
@@ -294,7 +299,7 @@ function unnoticed(world: World, e: GameEvent): boolean {
 
 function searchedText(stock: string): { text: string; cls: string } {
   const site = [...REGION.towns, ...REGION.locations].find((l) => l.id === stock);
-  return { text: `Search done${site ? ` at ${site.name}` : ''}. Drag what you want into the truck.`, cls: 'good' };
+  return { text: `Search done${site ? ` at ${site.name}` : ''}.`, cls: 'good' };
 }
 
 const CONTRACT_OUTCOME = { accepted: ['Contract taken', ''], done: ['Contract done', 'good'], failed: ['Contract failed', 'bad'], lapsed: ['Contract lapsed', 'dim'] } as const;
@@ -309,7 +314,7 @@ export function contractSummary(c: Contract): string {
   if (c.kind === 'haul') return `Haul ${c.units} ${GOODS[c.good].name} to ${siteName(c.to)}`;
   if (c.kind === 'fetch') {
     const rebuilt = CONTRACTS.fetch.maxWear === 1 ? 'rebuilt at most once' : `rebuilt at most ${CONTRACTS.fetch.maxWear} times`;
-    return `Bring ${partDef(c.defId).name} to ${siteName(c.shop)}: working, ${rebuilt}, found anywhere`;
+    return `Bring ${partDef(c.defId).name} to ${siteName(c.shop)}: working, ${rebuilt}`;
   }
   return `Defeat any ${c.targetName}`;
 }
@@ -348,8 +353,20 @@ function pleaText(world: World, e: Extract<GameEvent, { t: 'plea' }>): LogLine |
   return { text: `${vehicleName(world, e.from)} ${asks} from ${vehicleName(world, e.to)}: ${answer}`, cls: 'dim' };
 }
 
+// NPC goals are debug lines. Players read intent from what a driver does.
+function activityText(world: World, e: Extract<GameEvent, { t: 'activity' }>): LogLine | null {
+  const vehicle = world.vehicles.find((v) => v.id === e.vehicle);
+  return world.player.fullLog && vehicle ? { text: `${vehicle.name}: ${e.activity ?? 'idle'} — ${e.reason}`, cls: 'dim' } : null;
+}
+
+function infoText(world: World, e: Extract<GameEvent, { t: 'info' }>): LogLine | null {
+  return e.debug && !world.player.fullLog ? null : { text: e.text, cls: 'dim' };
+}
+
 // Events whose log line has its own function.
 const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent, { t: K }>) => LogLine | null } = {
+  activity: activityText,
+  info: infoText,
   npcKnockout: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} knocked out`, cls: 'good' }),
   npcWake: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} comes to`, cls: 'dim' }),
   stateEnded: stateEndedText,
@@ -377,10 +394,6 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
   const n = (id: string) => vehicleName(world, id);
   const me = world.player.vehicleId;
   switch (e.t) {
-    case 'activity': {
-      const vehicle = world.vehicles.find((v) => v.id === e.vehicle);
-      return vehicle && playerSees(world, vehicle.pos) ? { text: `${vehicle.name}: ${e.activity ?? 'idle'} — ${e.reason}`, cls: 'dim' } : null;
-    }
     case 'collision': {
       const b = e.b === 'edge' ? 'the map edge' : e.b === 'rail' ? 'the bridge rail' : e.b.startsWith('v') ? n(e.b) : 'an obstacle';
       const dealt = [...e.hitsA, ...e.hitsB].reduce((sum, h) => sum + h.damage, 0);
@@ -428,8 +441,6 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
       return { text: 'You are knocked out.', cls: 'bad' };
     case 'wake':
       return { text: 'You come to.', cls: 'dim' };
-    case 'info':
-      return { text: e.text, cls: 'dim' };
     case 'searched':
       return searchedText(e.stock);
     case 'contract':

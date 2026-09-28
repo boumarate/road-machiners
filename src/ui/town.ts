@@ -189,7 +189,7 @@ export class TownScreen {
     const hint = pressureHint(def, state, g);
     return el(
       "div",
-      { class: "good-row", title: goodPriceTitle(def, state, g) },
+      { class: "good-row" },
       el(
         "div",
         { class: "good-name" },
@@ -433,7 +433,7 @@ function headerChips(w: World): HTMLElement {
     el("span", { class: "chip", title: "Free cargo cells" }, createIcon("cells"), `${freeCells(me)} free`),
     el(
       "span",
-      { class: `chip${mass > rated ? " bad" : ""}`, title: "Mass against rated load. Over it, the truck slows and turns wider." },
+      { class: `chip${mass > rated ? " bad" : ""}`, title: "Mass against rated load" },
       createIcon("load"),
       `${kg(mass)} / ${kg(rated)}`,
     ),
@@ -483,11 +483,6 @@ function pressureHint(def: ShopDef, state: ShopState, good: string): { text: str
   return null;
 }
 
-function goodPriceTitle(def: ShopDef, state: ShopState, good: string): string {
-  const factor = def.makes.includes(good) ? "Made here" : "Priced by the distance to the nearest maker";
-  const pressure = Math.round((state.pressure[good] ?? 0) * 100);
-  return `Base value ${GOODS[good].value}. ${factor}. Local pressure ${pressure >= 0 ? "+" : ""}${pressure}%.`;
-}
 
 // True when the player already holds what a haul or fetch contract needs to hand in.
 function canDeliver(w: World, c: Contract): boolean {
@@ -625,7 +620,7 @@ export class TruckTradeScreen {
     const sell = truckGoodPrice(w, g, "sell");
     return el(
       "div",
-      { class: "good-row", title: `Base value ${GOODS[g].value}. Trucks trade at base value.` },
+      { class: "good-row" },
       el(
         "div",
         { class: "good-name" },

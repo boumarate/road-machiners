@@ -10,7 +10,7 @@ import {
   contractDue,
   contractSummary,
   eventText,
-  formatNpcActivity,
+  npcActivityLine,
   jobLabel,
   jobProgress,
   formatNpcStates,
@@ -164,7 +164,6 @@ export class Hud {
     });
     this.log.replaceChildren(
       el("h3", {}, "Log"),
-      el("div", { class: "dim" }, "Drive out. Watch for raiders."),
     );
     this.log.setAttribute("aria-label", "Event log");
     const guide = el(
@@ -181,7 +180,7 @@ export class Hud {
       el("div", {}, "Space: drive on or pause. Hold Space: fast-forward. Click your truck: brake."),
       el("div", {}, "R: manual mode. Drive straight at the point, through anything. Space plays one turn."),
       el("div", {}, "Click a town or site: stop at its pad. E on a pad: trade, repair or loot."),
-      el("div", {}, "T: radio the truck under the cursor. Ask drivers the way. 1-9: reply. H: honk."),
+      el("div", {}, "T: radio the truck under the cursor. 1-9: reply. H: honk."),
       el("div", {}, "Click a truck: target it. 1-4: pick a weapon. 0: all. Q: auto fire. X: show weapons."),
       el("div", {}, "P: auto patch. C: character. I: inventory. Esc: close."),
       el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
@@ -280,21 +279,14 @@ export class Hud {
           class: on ? "on" : "",
           "aria-pressed": String(on),
           onclick: () => this.actions.setBeacon(!on),
-          title: "Call for a tow by radio. Raiders hear it too.",
+          title: "Call for a tow by radio.",
         },
         on ? "Beacon on" : "Beacon off",
       );
     const buttons = (...children: HTMLElement[]) =>
       el("div", { class: "rescue-buttons" }, ...children);
     if (r.kind === "knockedOut")
-      this.rescue.replaceChildren(
-        el("h3", { class: "bad" }, "Knocked out"),
-        el(
-          "div",
-          { class: "dim" },
-          "Looters may strip the truck. You come to when the trucks that beat you look away.",
-        ),
-      );
+      this.rescue.replaceChildren(el("h3", { class: "bad" }, "Knocked out"));
     if (r.kind === "towed")
       this.rescue.replaceChildren(
         el("h3", {}, "Under tow"),
@@ -302,7 +294,7 @@ export class Hud {
         el(
           "div",
           { class: "dim" },
-          `Fee ${moneyLabel(r.fee)} on arrival. Unhitching is free.`,
+          `Fee ${moneyLabel(r.fee)} on arrival.`,
         ),
         buttons(
           el("button", { onclick: () => this.actions.unhitch() }, "Unhitch"),
@@ -315,7 +307,7 @@ export class Hud {
           "div",
           { class: "dim" },
           r.beacon
-            ? "Calling for a tow. Raiders hear it too."
+            ? "Calling for a tow."
             : `${r.reason} The truck can only crawl.`.trim(),
         ),
         buttons(beacon(r.beacon)),
@@ -424,8 +416,7 @@ export class Hud {
             disabled: busy,
             "aria-pressed": String(w.player.autoRepair),
             onclick: () => this.actions.toggleAutoRepair(),
-            title:
-              "Patch the worst part with one unit of parts whenever the truck is parked [P]",
+            title: "Patch damaged parts while parked [P]",
           },
           w.player.autoRepair ? "Auto patch [P]" : "No patch [P]",
         ),
@@ -557,7 +548,7 @@ function infoHeading(v: Vehicle): HTMLElement[] {
 
 function npcLines(w: World, v: Vehicle): HTMLElement[] {
   if (!v.brain) return [];
-  const activity = formatNpcActivity(w, v);
+  const activity = npcActivityLine(w, v);
   const traits = formatNpcTraits(w, v);
   return [
     ...(traits ? [el("div", { class: "npc-traits" }, traits)] : []),

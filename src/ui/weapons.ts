@@ -150,7 +150,6 @@ export class WeaponPanel {
         el('span', {}, readout.target?.name ?? 'No visible target'),
         el('span', {}, readout.status),
         readout.target && order ? this.createAimSelect(readout.target, chosen.part.id, order.aim) : null,
-        el('small', {}, 'Estimates use current positions. Movement happens first.'),
         el('button', { class: 'weapon-hold', onclick: () => this.holdWeapon(chosen.part.id) }, 'Hold fire'),
       ));
     }
