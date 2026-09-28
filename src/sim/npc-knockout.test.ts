@@ -7,6 +7,13 @@ import { addVehicle, emptyWorld, npcBrain, rngStateWhere } from './testkit';
 import type { Vehicle, World } from './types';
 import { refreshVision } from './vision';
 import { setWeaponOrder } from './world';
+import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
+import { getResources } from './resources';
+import { sitePads } from './sites';
+import { addState } from './states';
+import { vehicleStats } from './stats';
+import { canTowNpc, npcHomeSite } from './tow';
+import { dist } from './vec';
 
 // The player at 30,30 with a machine gun, and a raider buggy beside it that the player hit last.
 function beside(): { w: World; me: Vehicle; buggy: Vehicle } {
@@ -94,6 +101,19 @@ describe('finishing off', () => {
   });
 });
 
+describe('towing a knocked-out truck', () => {
+  it('takes no tow while it lies knocked out, and takes one once awake', () => {
+    const { w, buggy } = beside();
+    for (const engine of buggy.items) if (engine.kind === 'part' && engine.part.defId === 'stockEngine') engine.part.hp = 0;
+    breakCab(w, buggy, false);
+    expect(canTowNpc(w, buggy)).toBe(false);
+    advanceNpcKnockouts(w);
+    buggy.defeat = { ...buggy.defeat!, phase: 'retreat' };
+    corePart(buggy, 'cab').hp = 10;
+    expect(canTowNpc(w, buggy)).toBe(true);
+  });
+});
+
 describe('NPC waking', () => {
   it('stays out while the truck that beat it sees it', () => {
     const { w, buggy } = beside();
@@ -122,5 +142,63 @@ describe('NPC waking', () => {
     expect(buggy.defeat?.phase).toBe('out');
     advanceNpcKnockouts(w);
     expect(buggy.defeat?.phase).toBe('retreat');
+  });
+});
+
+describe('the retreat home', () => {
+  // A raider buggy that woke from a knockout far from the player, stripped of its gun.
+  function retreating(): { w: World; buggy: Vehicle } {
+    const w = emptyWorld();
+    const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 150, y: 150 });
+    buggy.brain = npcBrain('buggy', buggy.pos, ['raider']);
+    buggy.items = buggy.items.filter((it) => !(it.kind === 'part' && it.part.defId === 'mg'));
+    buggy.defeat = { phase: 'retreat', turns: 3, unseen: 0, foes: [] };
+    refreshVision(w);
+    return { w, buggy };
+  }
+
+  it('heads for its home site and makes no other decision', () => {
+    const { w, buggy } = retreating();
+    const home = npcHomeSite(buggy)!;
+    expect(thinkNpc(w, buggy)).toMatchObject({ kind: 'retreat', targetId: home.id });
+  });
+
+  it('appears at a home pad after enough turns beyond the player\'s gray vision, refitted on the same chassis', () => {
+    const { w, buggy } = retreating();
+    const home = npcHomeSite(buggy)!;
+    const money = getResources(w, buggy).money;
+    for (let turn = 1; turn < RULES.retreatTeleportTurns; turn++) advanceNpcKnockouts(w);
+    expect(buggy.defeat?.unseen).toBe(RULES.retreatTeleportTurns - 1);
+    advanceNpcKnockouts(w);
+    expect(sitePads(home).some((pad) => dist(pad, buggy.pos) < 0.01)).toBe(true);
+    expect(buggy.defeat).toBeUndefined();
+    expect(buggy.chassisId).toBe('buggy');
+    expect(vehicleStats(w, buggy).weapons.length).toBeGreaterThan(0);
+    expect(getResources(w, buggy).money).toBe(money);
+  });
+
+  it('never appears at home while the player can see it', () => {
+    const { w, buggy } = retreating();
+    buggy.pos = { x: 34, y: 30 };
+    for (let turn = 0; turn < RULES.retreatTeleportTurns; turn++) advanceNpcKnockouts(w);
+    expect(buggy.defeat).toMatchObject({ phase: 'retreat', unseen: 0 });
+  });
+
+  it('stays on a tow rope instead of appearing at home', () => {
+    const { w, buggy } = retreating();
+    const tower = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 152, y: 150 });
+    addState(w, 'tow', tower.id, buggy.id, { kind: 'tow', site: npcHomeSite(buggy)!.id, fee: 0, hitched: true, waived: 0 });
+    for (let turn = 0; turn < RULES.retreatTeleportTurns; turn++) advanceNpcKnockouts(w);
+    expect(buggy.defeat?.phase).toBe('retreat');
+    expect(buggy.pos).toEqual({ x: 150, y: 150 });
+  });
+
+  it('refits when it drives up to its home pad', () => {
+    const { w, buggy } = retreating();
+    buggy.pos = { ...sitePads(npcHomeSite(buggy)!)[0] };
+    thinkNpc(w, buggy);
+    resolveNpcActivities(w);
+    expect(buggy.defeat).toBeUndefined();
+    expect(topGoal(buggy)?.kind).not.toBe('retreat');
   });
 });

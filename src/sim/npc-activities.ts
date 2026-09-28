@@ -29,15 +29,15 @@ import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, RefitJob
 import { canUseSite, nearestPad } from './sites';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
-import { dropTow, inTowReach, isOnRope, runTow, strandedAt, towGoal, towHeldBy } from './tow';
-import { isKnockedOut } from './defeat';
+import { dropTow, inTowReach, isOnRope, npcHomeSite, runTow, strandedAt, towGoal, towHeldBy } from './tow';
+import { isDefeated, isKnockedOut, refitAtHome } from './defeat';
 
 // ---- The goal stack. The top goal drives the NPC. A long-term goal sits at the bottom, and interruptions go on top
 // of it. A new goal replaces any goal of its kind, so the stack never holds two goals of one kind. Every change logs
 // an `activity` event.
 
 // Goals that interrupt a long-term goal. Popping one that uncovers the long-term goal fires the resume decision.
-export const INTERRUPTIONS: readonly NpcActivity['kind'][] = ['fight', 'flee', 'investigate', 'resupply', 'tow', 'loot', 'repair', 'patch', 'meet'];
+export const INTERRUPTIONS: readonly NpcActivity['kind'][] = ['fight', 'flee', 'investigate', 'resupply', 'tow', 'loot', 'repair', 'patch', 'meet', 'retreat'];
 
 function goalsOf(v: Vehicle): NpcActivity[] {
   if (!v.brain) throw new Error(`${v.id} has no NPC brain`);
@@ -660,6 +660,7 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   forget(world, vehicle, contacts);
   pruneAttackers(world, vehicle);
   dropInvalidGoals(world, vehicle, contacts);
+  if (isDefeated(vehicle)) return retreatHome(world, vehicle);
   const hold = applyFixedRules(world, vehicle, profile);
   onGrievances(world, vehicle);
   onParley(world, vehicle);
@@ -674,6 +675,17 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   onRamChance(world, vehicle);
   steer(world, vehicle, profile, contacts);
   return currentActivity(world, vehicle, profile, hold);
+}
+
+// A defeated driver makes no decisions. It heads home, or waits for a tower on its way.
+function retreatHome(world: World, vehicle: Vehicle): NpcActivity {
+  if (topGoal(vehicle)?.kind !== 'retreat') {
+    const home = npcHomeSite(vehicle);
+    if (!home) throw new Error(`${vehicle.id} knows no home to retreat to`);
+    pushGoal(world, vehicle, createSiteActivity('retreat', home.id, 'retreat home after a defeat'));
+  }
+  if (awaitsTower(world, vehicle)) return createActivity('wait', null, null, 'wait for a tow');
+  return topGoal(vehicle)!;
 }
 
 function dropInvalidGoals(world: World, vehicle: Vehicle, contacts: Contact[]): void {
@@ -924,6 +936,12 @@ function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): vo
   finishGoal(world, vehicle, 'cannot afford trade cargo');
 }
 
+function resolveRetreat(world: World, vehicle: Vehicle, activity: NpcActivity): void {
+  if (!reachSite(vehicle, activity)) return;
+  refitAtHome(world, vehicle);
+  finishGoal(world, vehicle, 'refitted at home');
+}
+
 function resolveRepair(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   if (resolveNpcRepair(world, vehicle, activity)) finishGoal(world, vehicle, 'finished field repairs');
 }
@@ -931,6 +949,7 @@ function resolveRepair(world: World, vehicle: Vehicle, activity: NpcActivity): v
 const RESOLVERS: Partial<Record<NpcActivity['kind'], Resolver>> = {
   tow: resolveTow,
   repair: resolveRepair,
+  retreat: resolveRetreat,
   scavenge: resolveSearch,
   loot: resolveSearch,
   raid: resolveRaid,

@@ -371,6 +371,7 @@ describe('looting', () => {
     expect(thinkNpc(w, robber)).toMatchObject({ kind: 'loot', targetId: target.id });
     target.defeat = { ...target.defeat!, phase: 'retreat' };
     forceOption('resume', 'resume');
+    forceOption('strandedSeen', 'keep');
     expect(thinkNpc(w, robber)).toMatchObject({ kind: 'scavenge', targetId: 'salvage-yard' });
   });
 

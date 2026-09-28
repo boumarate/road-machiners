@@ -14,6 +14,7 @@ import { ECONOMY } from '../data/goods';
 import { BEACON, TOW } from '../data/tow';
 import { isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
+import { isKnockedOut } from './defeat';
 import { contactsOf, hearsBeacon } from './detect';
 import { route, routeLength } from './path';
 import { getKnownSite, npcProfile } from './npc-decisions';
@@ -112,9 +113,9 @@ function unclaimed(world: World, tower: Vehicle, client: Vehicle): boolean {
   return isPlayer(world, tower) || !answeredByOther(world, tower, client);
 }
 
-// A knocked out or dead player takes no tow.
+// A knocked out or dead player, or a knocked-out NPC, takes no tow.
 function awake(world: World, client: Vehicle): boolean {
-  return !isPlayer(world, client) || world.player.state === 'active';
+  return isPlayer(world, client) ? world.player.state === 'active' : !isKnockedOut(client);
 }
 
 // The tower holds a tow or a claim toward another client.
@@ -138,9 +139,14 @@ function towDestination(world: World, tower: Vehicle, client: Vehicle): Site | n
   if (isPlayer(world, client)) return nearestSite(npcProfile(tower).towns, client.pos);
   // A truck without a driver names no destination.
   if (!client.brain) return null;
-  const profile = npcProfile(client);
-  const site = nearestSite(profile.bases.length > 0 ? profile.bases : profile.towns, client.pos);
+  const site = npcHomeSite(client);
   return site && !canUseSite(client.pos, site) ? site : null;
+}
+
+// Where an NPC goes for safety: its nearest own camp, else its nearest known town.
+export function npcHomeSite(v: Vehicle): Site | null {
+  const profile = npcProfile(v);
+  return nearestSite(profile.bases.length > 0 ? profile.bases : profile.towns, v.pos);
 }
 
 function nearestSite(ids: readonly string[], from: Vec): Site | null {

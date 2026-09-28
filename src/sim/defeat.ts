@@ -4,6 +4,8 @@
 // once the trucks that attacked it look away, then retreats home. Nobody is its foe until it refits there.
 
 import { PERK_NUMBERS } from "../data/skills";
+import { NPCS } from "../data/npcs";
+import { chassisDef } from "../data/chassis";
 import { RULES } from "../data/rules";
 import { isJunk, maxHp, restorePart } from "./wear";
 import { playerVehicle } from "./damage";
@@ -13,8 +15,15 @@ import { cancelJob } from "./jobs";
 import { hasPerk, practice } from "./progress";
 import { createKnockoutSalvage } from "./salvage";
 import { endState } from "./states";
+import { makeVehicle } from "./factory";
+import { generateNpcLoadout } from "./npc-loadout";
+import { getResources } from "./resources";
+import { sitePads, type Site } from "./sites";
+import { isFree } from "./spawn";
+import { npcHomeSite, towOf } from "./tow";
 import type { Vehicle, World } from "./types";
-import { canVehicleSee } from "./vision";
+import { dist, type Vec } from "./vec";
+import { canVehicleSee, grayRadius } from "./vision";
 
 export function checkDeath(world: World): void {
   const p = world.player;
@@ -108,7 +117,10 @@ function dropOrdersAt(shooter: Vehicle, targetId: string): void {
 }
 
 export function advanceNpcKnockouts(world: World): void {
-  for (const v of world.vehicles) if (isKnockedOut(v)) advanceNpcKnockout(world, v);
+  for (const v of world.vehicles) {
+    if (v.defeat?.phase === "out") advanceNpcKnockout(world, v);
+    else if (v.defeat?.phase === "retreat") advanceRetreat(world, v);
+  }
 }
 
 // Looters that did not fight it do not keep the driver down.
@@ -123,4 +135,59 @@ function advanceNpcKnockout(world: World, v: Vehicle): void {
 
 function attackerWatches(world: World, v: Vehicle, foes: string[]): boolean {
   return world.vehicles.some((x) => foes.includes(x.id) && canVehicleSee(world, x, v.pos));
+}
+
+// ---- The retreat home. The NPC drives or crawls to its home site, and towers may tow it there. Out of the player's
+// sight for long enough, it appears at the home pad instead. At home it refits and the defeat ends.
+
+// A truck on a tow rope or waiting for a tower stays where the tow puts it.
+function advanceRetreat(world: World, v: Vehicle): void {
+  const defeat = v.defeat!;
+  defeat.unseen = inPlayerView(world, v.pos) ? 0 : defeat.unseen + 1;
+  if (defeat.unseen < RULES.retreatTeleportTurns || towOf(world, v.id) || answered(world, v)) return;
+  const spot = hiddenHomeSpot(world, v);
+  if (spot) teleportHome(world, v, spot);
+}
+
+function answered(world: World, v: Vehicle): boolean {
+  return world.states.some((s) => s.kind === "answering" && s.other === v.id);
+}
+
+function inPlayerView(world: World, pos: Vec): boolean {
+  return dist(playerVehicle(world).pos, pos) <= grayRadius(world, pos);
+}
+
+// A free pad of the home site beyond the player's gray vision, nearest the truck first, or null.
+function hiddenHomeSpot(world: World, v: Vehicle): Vec | null {
+  const home = homeOf(v);
+  const radius = chassisDef(v.chassisId).radius;
+  const pads = [...sitePads(home)].sort((a, b) => dist(v.pos, a) - dist(v.pos, b));
+  return pads.find((pad) => !inPlayerView(world, pad) && isFree(world, pad, radius, v.id)) ?? null;
+}
+
+function homeOf(v: Vehicle): Site {
+  const home = npcHomeSite(v);
+  if (!home) throw new Error(`${v.id} knows no home to retreat to`);
+  return home;
+}
+
+function teleportHome(world: World, v: Vehicle, spot: Vec): void {
+  v.pos = { ...spot };
+  v.speed = 0;
+  v.order = null;
+  v.trail = [];
+  delete v.brain!.farRoute;
+  refitAtHome(world, v);
+}
+
+// The truck at its home site gets a fresh loadout for its template on the same chassis, and spawn fuel, supplies
+// and health. The driver keeps its money, name, traits and goals. The defeat ends.
+export function refitAtHome(world: World, v: Vehicle): void {
+  const template = NPCS[v.brain!.templateId];
+  const loadout = generateNpcLoadout(world, template, v.chassisId);
+  const fresh = makeVehicle(world, { name: v.name, faction: v.faction, ...loadout, pos: v.pos, heading: v.heading, brain: null });
+  v.items = fresh.items;
+  v.resources = { ...fresh.resources!, money: getResources(world, v).money };
+  v.job = null;
+  delete v.defeat;
 }

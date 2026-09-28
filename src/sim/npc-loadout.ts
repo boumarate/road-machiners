@@ -219,9 +219,10 @@ function chooseCargo(rng: Rng, wearRng: Rng, table: NpcLoadoutTable, v: Vehicle)
 // Rolls the chassis, its required engine and weapon, then optional cargo and armor, each fitting the
 // budget and rated mass at pristine wear. Only the finally mounted parts get an actual wear roll (IV6).
 // Wear and spares draw from `wearRng`, the market stream, so they never shift the main stream's decisions.
-function chooseVehicle(probe: World, rng: Rng, wearRng: Rng, template: NpcTemplate): Vehicle {
+function chooseVehicle(probe: World, rng: Rng, wearRng: Rng, template: NpcTemplate, chassisId: string | null): Vehicle {
   const table = template.loadout;
-  const chassisChoices = table.chassis.map((entry) => ({ value: buildArmedChoices(probe, template, entry.value), weight: entry.weight })).filter((entry) => entry.value.length > 0);
+  const chassis = chassisId === null ? table.chassis : table.chassis.filter((entry) => entry.value === chassisId);
+  const chassisChoices = chassis.map((entry) => ({ value: buildArmedChoices(probe, template, entry.value), weight: entry.weight })).filter((entry) => entry.value.length > 0);
   if (!chassisChoices.length) throw new Error(`No valid required NPC loadout for ${template.id}`);
   let v = chooseRequiredParts(rng, table, sampleWeighted(rng, chassisChoices));
   rollNewWear(probe, wearRng, table, new Set(), v);
@@ -234,14 +235,15 @@ function chooseVehicle(probe: World, rng: Rng, wearRng: Rng, template: NpcTempla
   return v;
 }
 
-export function generateNpcLoadout(world: World, template: NpcTemplate): NpcLoadout {
+// A fresh loadout for the template. A given chassis keeps the truck the driver already has.
+export function generateNpcLoadout(world: World, template: NpcTemplate, chassisId: string | null = null): NpcLoadout {
   const table = template.loadout;
   validateTable(table);
   // Probes may allocate IDs, but only the completed selection advances the real world's RNG.
   const probe = { ...world };
   const rng = { rngState: world.rngState };
   const wearRng = { rngState: world.marketRng.rngState };
-  const v = chooseVehicle(probe, rng, wearRng, template);
+  const v = chooseVehicle(probe, rng, wearRng, template, chassisId);
   const { spares, carried } = chooseCargo(rng, wearRng, table, v);
   const parts = mountedNonCore(v);
   world.rngState = rng.rngState;

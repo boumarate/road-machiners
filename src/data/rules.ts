@@ -85,6 +85,9 @@ export const RULES = {
   defeatPatch: 0.25, // share of max hp broken core parts get back when a driver wakes from a knockout
   knockoutMaxTurns: 30, // a knockout ends after this many turns even if a hostile idles in sight
   npcDeathChance: 0.05, // an NPC whose cab breaks dies into a wreck instead of a knockout
+  // A defeated NPC that spent this many turns in a row beyond the player's gray vision appears at its home pad, so
+  // crawlers do not pile up on the map. 50 turns is a quarter of a day: a player who turns back still meets it.
+  retreatTeleportTurns: 50,
 };
 
 // Daily upkeep: a share of the truck's value, paid once per game day. A start truck (chassis 400 plus
