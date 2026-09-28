@@ -88,6 +88,19 @@ describe('far NPC travel', () => {
     freeDrive(d);
   });
 
+  it('stops a far vehicle at the map edge when its goal lies beyond it', () => {
+    const w = emptyWorld();
+    const far = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 4 });
+    far.speed = 2;
+    far.order = { kind: 'through', dest: { x: 120, y: -17 } };
+    const radius = vehicleStats(w, far).radius;
+    for (let turn = 0; turn < 10 && far.order; turn++) {
+      advanceFar(w, far);
+      expect(far.pos.y).toBeGreaterThanOrEqual(radius);
+    }
+    expect(far.pos.y).toBeCloseTo(radius, 6);
+  });
+
   it('moves a far vehicle no farther than its speed allows and burns fuel for that distance (IV4)', () => {
     const w = emptyWorld();
     const far = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });

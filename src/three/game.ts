@@ -901,6 +901,13 @@ export class Game {
   }
 
   private tick(now: number): void {
+    // Outside dev the next frame is booked first, so an error in this frame does not stop the game.
+    if (!import.meta.env.DEV) requestAnimationFrame((t) => this.tick(t));
+    this.frame(now);
+    if (import.meta.env.DEV) requestAnimationFrame((t) => this.tick(t));
+  }
+
+  private frame(now: number): void {
     const dt = now - this.last;
     this.last = now;
     const { step, speed } = this.advanceTurn(now);
@@ -939,7 +946,6 @@ export class Game {
     // The preview runs after the frame is drawn, so a click shows at once.
     this.refreshPlan();
     this.autoTurn(now);
-    requestAnimationFrame((t) => this.tick(t));
   }
 
   // Recomputes the player's sight from the truck's current spot once it has moved far enough.

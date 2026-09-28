@@ -21,7 +21,7 @@ import { DebugConsole, Noclip } from '../ui/console';
 import { uiRoot } from '../ui/dom';
 import { mountPerfPanel } from '../ui/perf-panel';
 import { SoundSettings } from '../ui/sound';
-import { installCrashScreen } from './crash';
+import { installCrashScreen, keepRunningOnErrors } from './crash';
 import { Game } from './game';
 import { loadWorld } from './save';
 import { loadModels } from './render/models';
@@ -53,7 +53,8 @@ const soundSettings = new SoundSettings(mixer, window.localStorage);
 const overlay = element('overlay');
 const game = new Game(world, element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute());
 const view = { focus: () => game.rig.focus(), setSpeed: (factor: number) => game.follow.keyPan.setSpeed(factor) };
-new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
+const debugConsole = new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
+keepRunningOnErrors((text) => debugConsole.error(text));
 performance.mark('roam:ready');
 setTimeout(() => warmAfterBoot(routeRadii(game.state)));
 if (import.meta.env.DEV) {

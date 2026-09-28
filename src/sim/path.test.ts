@@ -29,6 +29,12 @@ describe("route", () => {
     ]);
   });
 
+  it("ends at the map edge when the goal lies beyond it", () => {
+    const w = emptyWorld();
+    const pts = route(w, { x: 30, y: 10 }, { x: 30, y: -17 }, 0.6, []);
+    expect(pts[pts.length - 1]).toEqual({ x: 30, y: 0.6 });
+  });
+
   it("bends around a rock in the way, keeping clear of it", () => {
     const w = emptyWorld();
     w.obstacles = [{ id: "r", pos: { x: 35, y: 30 }, r: 1.2, kind: "rock" }];
