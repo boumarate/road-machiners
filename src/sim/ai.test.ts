@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { PERF } from '../data/perf';
+import { TERRAIN } from '../data/terrain';
 import { planNpcOrders, routeBlockers, trafficStops } from './ai';
 import { topGoal } from './npc-activities';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
@@ -87,6 +89,19 @@ describe('NPC traffic', () => {
     const { w, npc } = scene(106, 100, 0, 2);
     expect(routeBlockers(w, npc).length).toBeGreaterThan(0);
     expect(trafficStops(w, npc, DEST)).toBe(false);
+  });
+
+  it('a far driver does not stop for a moving truck, since far travel stops short of any truck in its way', () => {
+    const oncoming = (playerAt: { x: number; y: number }) => {
+      const { w, npc } = scene(playerAt.x, playerAt.y, 0, 0);
+      corridor(w);
+      const other = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 112, y: 100 }, Math.PI);
+      other.brain = npcBrain('trader', other.pos, ['trader']);
+      other.speed = 5;
+      return trafficStops(w, npc, DEST);
+    };
+    expect(oncoming({ x: 100, y: 110 })).toBe(true);
+    expect(oncoming({ x: 100, y: 100 + TERRAIN.vision.radius + PERF.liveMargin + 10 })).toBe(false);
   });
 
   it('the player routes around parked vehicles only', () => {
