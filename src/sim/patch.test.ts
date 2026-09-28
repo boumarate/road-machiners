@@ -9,6 +9,7 @@ import { goodsCount, mountedParts } from './grid';
 import { addGoods, removeGoods } from './inventory';
 import { thinkNpc, topGoal } from './npc-activities';
 import { dealAvailable, needsPatch, patchData, patchTerms, settlePatch } from './patch';
+import { makePeace } from './parley';
 import { addState, stateOf } from './states';
 import { isStranded } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
@@ -204,6 +205,29 @@ describe('a stranded driver asking the player', () => {
     mountedParts(npc, 'engine')[0].hp = partDef('stockEngine').hp;
     const w = callVehicle(start, npc.id);
     expect(currentOptions(w).map((o) => o.text)).not.toContain('Your truck looks dead. Want me to patch it?');
+  });
+
+  it('a hostile raider gets no patch until a truce, then waits parked for it', () => {
+    const w0 = emptyWorld({ x: 30, y: 30 });
+    for (const id of Object.keys(NPCS)) w0.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    w0.player.autoRepair = false;
+    setParts(w0, playerVehicle(w0), 4);
+    const raider = addVehicle(w0, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 }, Math.PI);
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    breakEngine(raider);
+    expect(endTurn(w0, testDrive).player.call).toBeNull();
+    expect(currentOptions(callVehicle(w0, raider.id)).map((o) => o.text)).not.toContain('Your truck looks dead. Want me to patch it?');
+    makePeace(w0, playerVehicle(w0), raider);
+    forceOption('patchDeal', 'paid');
+    let w = callVehicle(w0, raider.id);
+    w = answer(w, 'Your truck looks dead. Want me to patch it?');
+    w = answer(w, 'What can you offer?');
+    w = answer(w, 'Deal. Stay where you are.');
+    const start = { ...raider.pos };
+    w = setMoveOrder(w, { kind: 'stopAt', dest: { x: 38, y: 30 } });
+    w = runUntil(w, 60, (x) => stateOf(x, 'patch', x.player.vehicleId, raider.id) === null).w;
+    expect(isStranded(w, find(w, raider.id))).toBe(false);
+    expect(find(w, raider.id).pos.x).toBeCloseTo(start.x, 0);
   });
 
   it('a driver carrying the parts fixes its own truck instead of asking', () => {

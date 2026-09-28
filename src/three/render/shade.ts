@@ -143,7 +143,10 @@ export class ShadeView {
 
 // Shade alpha and haze byte at a patch corner in reach, by day.
 export function cornerLook(world: World, x: number, y: number, sun: Sun): { shade: number; haze: number } {
-  if (inShade(world, { x, y }, sun)) return { shade: cornerExplored(world, x, y) ? TIME.shadeAlpha : 0, haze: 0 };
+  if (inShade(world, { x, y }, sun)) {
+    const fade = Math.min(1, sun.elevation / (TIME.shadeFadeElevation * (Math.PI / 180)));
+    return { shade: cornerExplored(world, x, y) ? TIME.shadeAlpha * fade : 0, haze: 0 };
+  }
   return { shade: 0, haze: hazeOf(sunHeatAt(world, { x, y }, sun)) };
 }
 

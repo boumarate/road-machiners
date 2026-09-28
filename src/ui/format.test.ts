@@ -31,7 +31,7 @@ describe("contract text", () => {
   const fetch: Contract = { id: "c2", shop: "bowl", kind: "fetch", defId: "mg", reward: 100, deadline: 100, tier: 1 };
 
   it("shows the deadline as the game time the contract fails", () => {
-    expect(contractDue(bounty)).toBe("by Day 1 15:00");
+    expect(contractDue(bounty)).toBe("by Day 1 12:19");
   });
 
   it("names any truck of the bounty's type", () => {

@@ -54,9 +54,21 @@ describe('salvage interaction', () => {
     const site = REGION.locations.find((site) => site.id === 'podfield')!;
     const w = emptyWorld({ ...sitePads(site)[0] });
     w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [] }];
-    expect(getContextAction(w, false)).toEqual({ label: `Search ${site.name}`, ready: true });
+    expect(getContextAction(w, false)).toEqual({ label: `Search ${site.name}`, ready: true, combat: false });
     w.salvage[0].goods.scrap = 0;
     expect(getContextAction(w, false)).toEqual({ label: `${site.name} is picked clean`, ready: false, hint: 'No loot left' });
+  });
+});
+
+describe('search in combat', () => {
+  it('blocks a search while a hostile is in sight', () => {
+    const site = REGION.locations.find((site) => site.id === 'podfield')!;
+    const w = emptyWorld({ ...sitePads(site)[0] });
+    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [] }];
+    const me = playerVehicle(w).pos;
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: me.x + 6, y: me.y });
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    expect(getContextAction(w, false)).toEqual({ label: `Search ${site.name}`, ready: false, combat: true });
   });
 });
 

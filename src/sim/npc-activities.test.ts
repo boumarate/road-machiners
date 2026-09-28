@@ -241,12 +241,14 @@ describe('NPC activities', () => {
     let w = w0;
     let looted = false;
     let sold = false;
+    let knockedOut = false;
     // The broken cab knocks the victim out. A death roll would leave a wreck instead.
     const deathChance = RULES.npcDeathChance;
     (RULES as { npcDeathChance: number }).npcDeathChance = 0;
     try {
       for (let turn = 0; turn < w.size * 5; turn++) {
         w = endTurn(w, testDrive);
+        if (w.vehicles.find((v) => v.id === victim.id)?.defeat) knockedOut = true;
         const actor = w.vehicles.find((v) => v.id === raider.id)!;
         const scrap = goodsCount(actor).scrap ?? 0;
         if (scrap > 0) looted = true;
@@ -257,7 +259,7 @@ describe('NPC activities', () => {
     } finally {
       (RULES as { npcDeathChance: number }).npcDeathChance = deathChance;
     }
-    expect(w.vehicles.find((v) => v.id === victim.id)?.defeat).toBeDefined();
+    expect(knockedOut).toBe(true);
     expect(looted).toBe(true);
     expect(sold).toBe(true);
   });

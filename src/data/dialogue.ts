@@ -103,7 +103,7 @@ export const TOPICS: Record<TopicId, Topic> = {
   patch: {
     id: 'patch',
     once: false,
-    ask: { text: 'My truck is broken down. Can you patch it?', when: ['playerNeedsPatch', 'npcCalm'], duringFeud: false },
+    ask: { text: 'My truck is broken down. Can you patch it?', when: ['playerNeedsPatch', 'npcCalm', 'atPeace'], duringFeud: false },
     raise: null,
     prepare: 'patchTerms',
     hangUp: [],
@@ -134,7 +134,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     id: 'patchRequest',
     once: true,
     ask: null,
-    raise: { when: ['npcNeedsPatch', 'npcCalm'], priority: 1, duringFeud: false, duringCombat: false },
+    raise: { when: ['npcNeedsPatch', 'npcCalm', 'atPeace'], priority: 1, duringFeud: false, duringCombat: false },
     prepare: 'patchTerms',
     hangUp: ['settleRefused'],
     start: 'ask',
@@ -334,7 +334,7 @@ export const TOPICS: Record<TopicId, Topic> = {
   offerPatch: {
     id: 'offerPatch',
     once: false,
-    ask: { text: 'Your truck looks dead. Want me to patch it?', when: ['npcNeedsPatch'], duringFeud: false },
+    ask: { text: 'Your truck looks dead. Want me to patch it?', when: ['npcNeedsPatch', 'atPeace'], duringFeud: false },
     raise: null,
     prepare: 'patchTerms',
     hangUp: [],
