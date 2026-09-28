@@ -164,6 +164,14 @@ describe('site and road wreck regrowth', () => {
     expect(stock.goods.parts).toBe(SALVAGE.convoy.parts[1]);
   });
 
+  it('regrows during a turn that ends on the interval', () => {
+    const w = emptyWorld();
+    for (const stock of w.salvage) emptyStock(w, stock.id);
+    w.turn = SALVAGE.restockIntervalDays * TIME.turnsPerDay - 1;
+    const next = endTurn(w, testDrive);
+    expect(next.salvage.reduce((sum, stock) => sum + salvageUnits(stock), 0)).toBeGreaterThan(0);
+  });
+
   it('does not restock off the interval', () => {
     const w = emptyWorld();
     const stock = emptyStock(w, convoy.id);

@@ -66,16 +66,17 @@ describe("trade", () => {
     expect(() => buyGood(w, "meds", 10)).toThrow(/money/);
   });
 
-  it("the scrap route pays and trains Social", () => {
+  it("the salt route from Nose to Bowl pays and trains Social", () => {
     const start = startAtBowl();
-    const bought = buyPrice(start, "bowl", "scrap");
-    let w = buyGood(start, "scrap", 8);
-    w.vehicles[0].pos = { ...sitePads(nose)[0] };
+    start.vehicles[0].pos = { ...sitePads(nose)[0] };
+    const bought = buyPrice(start, "nose", "salt");
+    let w = buyGood(start, "salt", 8);
+    w.vehicles[0].pos = { ...sitePads(bowl)[0] };
     const money = w.player.money;
-    const sold = sellPrice(w, "nose", "scrap");
-    expect(sold).toBeGreaterThan(bought);
-    const total = getLotTradePrice(w, w.vehicles[0], "nose", "scrap", 10, "sell");
-    w = sellGood(w, "scrap", 10);
+    expect(sellPrice(w, "bowl", "salt")).toBeGreaterThan(bought);
+    const held = goodsCount(w.vehicles[0]).salt;
+    const total = getLotTradePrice(w, w.vehicles[0], "bowl", "salt", held, "sell");
+    w = sellGood(w, "salt", held);
     expect(w.player.money - money).toBe(total);
     expect(w.player.skills.social).toBeGreaterThan(0);
   });
@@ -83,9 +84,9 @@ describe("trade", () => {
   it("buying raises the local price and selling lowers it", () => {
     const w = startAtBowl();
     const before = buyPrice(w, "bowl", "scrap");
-    const after = buyGood(w, "scrap", 5);
+    const after = buyGood(w, "scrap", 20);
     expect(buyPrice(after, "bowl", "scrap")).toBeGreaterThan(before);
-    const sold = sellGood(after, "scrap", 7);
+    const sold = sellGood(after, "scrap", 20);
     expect(buyPrice(sold, "bowl", "scrap")).toBeLessThan(buyPrice(after, "bowl", "scrap"));
   });
 
