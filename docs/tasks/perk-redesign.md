@@ -74,7 +74,8 @@ Approach: PH1 swaps the perk data, removes every old reader and adds all new sta
   - `PerkId`, `PERKS`, `PERK_NUMBERS` — the 20 new ids: `rammer, coldRunning, steadyAim, dustScreen, readDriver, spotter, cargoEye, nightEyes, welder, cannibal, rebuild, roadMechanic, desertRat, stormRider, fightThrough, longHaul, marketEars, rumorMill, paidTruce, bountyTalk`. Names and rules copy DESIGN.md. Numbers: `rammer.stallTurns 1`, `dustScreen {topShare 0.9, radius 2}`, `spotter.turns` = one day from `TIME`, `welder {scrap 3, turns 3, part 'scrapSheet'}`, `cannibal.turns 1`, `roadMechanic.price 2`, `desertRat.sunShare` = elevation share at 9:00, `rumorMill.radius 60`, `paidTruce.share 0.1`, `fightThrough.health 0.5`.
 - 1.2 Remove old readers and their tests: `crash-contact.ts:77`, `stats.ts:132`, `detect.ts:41,52`, `vision.ts:26`, `combat.ts:310-312`, `repair.ts:43`, `inventory.ts:95`, `search.ts:43-54`, `salvage.ts:206-207`, `resources.ts:24,32`, `damage.ts:38`, `defeat.ts:58`, `parley.ts:48`, `npc-decisions.ts:524,622`, `patch.ts:66,105`; matching blocks in their `*.test.ts`. `progress.test.ts`, `cheats.test.ts`, `console.test.ts` and `npc-info.test.ts` switch to new ids. Respects IV5.
 - 1.3 `src/sim/types.ts` (modify) — `Vehicle.stalledUntil?: number`, `DustCloud.screen?: true`, `Contact.sources` adds `'mark'`, `Player.marked: {vehicleId: string; until: number}[]`, `Player.rumored: string[]`, `PartInstance.rebuilt?: true`, `Job` adds `{kind: 'weld'; turnsLeft: number; total: number}`, `NpcBrain.lastTown?: string`, `CallVar` adds `{kind: 'prices'; town: string; goods: {good: GoodId; buy: number; sell: number}[]}`. `src/sim/world.ts:70` inits `marked: []`, `rumored: []`. `detect.ts:119-131` `channelShare` gets a `mark` case. `jobs.ts:163` `jobTurn` throws a clear "weld not wired" until PH3. `src/ui/format.ts:26-29` job label `Weld`.
-- 1.4 `src/three/save.ts:18-30` — `SAVE_VERSION` 31 with changelog line. Respects IV6.
+- 1.4 `src/sim/economy.ts:588` — export `transfer` for PH4.
+- 1.5 `src/three/save.ts:18-30` — `SAVE_VERSION` 31 with changelog line. Respects IV6.
 - Commit: Replace the perk set with the redesigned perks and add their state
 
 ### PH2 — Driving and Perception hooks
@@ -101,7 +102,7 @@ Approach: PH1 swaps the perk data, removes every old reader and adds all new sta
 ### PH4 — Social hooks
 - 4.1 Market ears: set `brain.lastTown` in `src/sim/npc-activities.ts:1016-1040` resolvers for town sites. Topic `marketNews` in `src/data/dialogue.ts` for trader talk, condition `knowsLastTown` and prepare `lastTownPrices` in `src/sim/dialogue-rules.ts`, both gated on the perk. The call panel renders a `prices` var as a list (UK3).
 - 4.2 Rumor mill: topic `rumor`, once per driver; prepare `nearestRumor` picks the nearest undiscovered site or unsearched stock within radius of the driver; effect `revealRumor` calls `discoverSite` or pushes to `player.rumored`. `src/three/render/labels.ts:46` labels rumored wrecks (AS3).
-- 4.3 Paid truce: topic `buyTruce` with `duringFeud`, condition `canPayTruce`, effect `payTruce` that calls an exported `transfer` from `src/sim/economy.ts:588` and `makePeace` from `src/sim/parley.ts:26`. Price from `vehicleValue`.
+- 4.3 Paid truce: topic `buyTruce` with `duringFeud`, condition `canPayTruce`, effect `payTruce` that calls `transfer` from `src/sim/economy.ts` and `makePeace` from `src/sim/parley.ts:26`. Price from `vehicleValue`.
 - 4.4 Bounty talk: `creditBounty(world, npc)` in `src/sim/market.ts` near `:291`; called from `yieldTo` in `src/sim/parley.ts:47` when the winner has the perk.
 - Tests: `dialogue.test.ts`, `npc-activities` test for `lastTown`, `market.test.ts`.
 - Commit: one per perk.
@@ -138,5 +139,5 @@ Approach: PH1 swaps the perk data, removes every old reader and adds all new sta
 - udesign: Paid truce always succeeds when paid — the perk is the price, no roll.
 - udesign: SAVE_VERSION bump, no migration — no backwards-compat per CLAUDE.md.
 - uplan: plan auto-approved (hands-off).
-- uplan: PH3 Economy `transfer` export is used by PH4 — PH4 owns that one-line export in economy.ts.
+- uplan: PH1 exports `transfer` from economy.ts, so PH3 and PH4 stay on disjoint files.
 - make: reuse the existing branch `perks` and worktree `.worktrees/perks` — the user named them.
