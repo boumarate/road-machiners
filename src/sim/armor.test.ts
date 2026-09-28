@@ -286,6 +286,12 @@ describe('open sides', () => {
     const v = truckWith(w, 'carrier', [{ defId: 'mg', x: 4, y: 5 }]);
     expect(openSides(v, itemOf(v, 'mg'))).toContain('front');
   });
+
+  it('a gun behind the convertible seats fires forward across them', () => {
+    const w = emptyWorld();
+    const v = truckWith(w, 'convertible', [{ defId: 'mg', x: 1, y: 5 }]);
+    expect(openSides(v, itemOf(v, 'mg'))).toEqual(['front', 'rear', 'left', 'right']);
+  });
 });
 
 describe('firing past tall parts', () => {

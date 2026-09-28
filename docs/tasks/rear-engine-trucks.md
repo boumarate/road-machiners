@@ -1,6 +1,6 @@
 # Rear-engine trucks
 
-**Status:** executing
+**Status:** reviewing
 **Branch:** rear-engine-trucks
 **Worktree:** .worktrees/rear-engine-trucks
 **Goal:** Four new chassis with the engine behind the driver are for sale in towns and driven by NPCs, each drawn from a base model copying a real vehicle. `npm test` and `npm run playtest` pass, and the user confirms the looks from in-game screenshots.
@@ -41,15 +41,15 @@ XEEDX
 .BBB.
 ```
 
-Bus, `bus`, tier 2, 6x12. Copies the LAZ-695 city bus: rounded nose, window band, rear engine. Guns and frames stand on the roof. The aisle cells are plain, so they carry goods and spares but mount nothing. Slow, long and roomy, with the mid-weight drive parts. The driver uses `cabNarrow` at the front left.
+Bus, `bus`, tier 2, 6x12. Copies the LAZ-695 city bus: rounded nose, window band, rear engine. Guns and frames stand on the roof, which is one deck. Slow, long and roomy, with the mid-weight drive parts. The driver uses `cabNarrow` at the front left.
 ```
 .FFFF.   cabNarrow at 1,1
 XXDDDX   tankMid at 2,7
-LX..DR   transmissionMid at 3,8
-LD..DR
-LD..DR
-LD..DR
-LD..DR
+LXDDDR   transmissionMid at 3,8
+LDDDDR
+LDDDDR
+LDDDDR
+LDDDDR
 LDXXDR
 LDDXDR
 LDEEDR   wheels on rows 1 and 10, since bodyOf() needs mirrored wheel rows
@@ -149,6 +149,14 @@ One phase per chassis: PH2 jeep, PH3 convertible, PH4 bus, PH5 loader. Each phas
 - PH4 IF1 -> @ tools/blender/base_bus.py, public/models/base_bus.glb
 - PH5 IF1 -> @ tools/blender/base_loader.py, public/models/base_loader.glb
 
+## Verify
+- `npm test`: 1667 of 1668 pass. The one failure is the AI oncoming test under Deferred.
+- The typecheck, the data tests and the physics upright drive pass for all four (IV1 to IV3, AS1 held).
+- A new armor test fires a gun behind the convertible seats forward across them. `tall: false` is enough (UK1 resolved).
+- In-game shots at 10 am from the rear three-quarter, in `tmp/rear-{jeep,convertible,bus,loader}.png` by `tmp/rear-shots.mjs`: each reads as its vehicle, with the engine showing at the back. No page errors.
+- The bus could not mount any 2x2 cargo frame while it had the aisle. Fixed, see Hands-off decisions.
+- `npm run playtest` fails with "expected turn 13, got 12" on this branch and on main alike, so the fault is older than this branch.
+
 ## Conclusion
 
 ### Hands-off decisions
@@ -156,6 +164,8 @@ One phase per chassis: PH2 jeep, PH3 convertible, PH4 bus, PH5 loader. Each phas
 - branch: rear-engine-trucks in .worktrees/rear-engine-trucks.
 - uplan: plan approved by the user, hands-off from execute on.
 - prices: set in PH1 as asked, then moved to pass the rule that more deck cells never cost less in a tier. Jeep 2336, convertible 3112, bus 3920, loader 5208.
+- bus aisle: the plain aisle cells left no 2x2 deck block, so no cargo frame fit. The whole roof is deck now, with the base lowered to keep the price at 3920.
 
 ### Deferred (needs user input)
+- `npm run playtest` fails on main too: "expected turn 13, got 12", 3 runs out of 3 here and 1 out of 1 on main.
 - `src/phys/ai.test.ts` "passes the oncoming player" fails on this branch. With the old NPC tables it passes, so the new spawn weights only shift world RNG. Under the new rolls the trader comes within 1.0 tiles of the oncoming player and slows to 0.48, under `RULES.parkedSpeed`. That is the old head-on dodge failing for this seed, not the new trucks. Fixing the dodge or reseeding the test is your call.

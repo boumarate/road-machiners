@@ -253,17 +253,17 @@ const UNPRICED_CHASSIS: Record<string, Unpriced<ChassisDef>> = {
     ],
     fuelCap: 45, fuelPerTile: 0.26, base: 1400, tier: 2, look: 'convertible',
   },
-  // A LAZ-695 city bus: guns and frames ride on the roof, and the aisle carries goods but mounts nothing.
+  // A LAZ-695 city bus: guns and frames ride on the roof.
   bus: {
     id: 'bus', name: 'Bus', maxSpeed: 5.5, accel: 0.9, brake: 2, turnSlow: 65, turnFast: 22, reverseTurn: 40,
     mass: 3000, ratedMass: 6800, radius: 0.9,
-    layout: ['.FFFF.', 'XXDDDX', 'LX..DR', 'LD..DR', 'LD..DR', 'LD..DR', 'LD..DR', 'LDXXDR', 'LDDXDR', 'LDEEDR', 'XDEEDX', '.BBBB.'],
+    layout: ['.FFFF.', 'XXDDDX', 'LXDDDR', 'LDDDDR', 'LDDDDR', 'LDDDDR', 'LDDDDR', 'LDXXDR', 'LDDXDR', 'LDEEDR', 'XDEEDX', '.BBBB.'],
     core: [
       { defId: 'cabNarrow', x: 1, y: 1 }, { defId: 'transmissionMid', x: 3, y: 8 }, { defId: 'tankMid', x: 2, y: 7 },
       { defId: 'wheelMid', x: 0, y: 1 }, { defId: 'wheelMid', x: 5, y: 1 },
       { defId: 'wheelMid', x: 0, y: 10 }, { defId: 'wheelMid', x: 5, y: 10 },
     ],
-    fuelCap: 110, fuelPerTile: 0.45, base: 1500, tier: 2, look: 'bus',
+    fuelCap: 110, fuelPerTile: 0.45, base: 900, tier: 2, look: 'bus',
   },
   // A Caterpillar 950 wheel loader: the bucket on the front row, the cab in the middle and the engine over the counterweight.
   loader: {
