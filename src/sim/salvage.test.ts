@@ -9,7 +9,8 @@ import { partDef } from '../data/parts';
 import { chassisDef } from '../data/chassis';
 import { RULES } from '../data/rules';
 import { takeAllLoot, takeStores, canScavenge, scavenge } from './locations';
-import { clearPiles, collectSalvage, createKnockoutSalvage, hasSalvage, isRoadWreck, renewSalvage, salvageUnits } from './salvage';
+import { clearPiles, collectSalvage, createKnockoutSalvage, hasSalvage, isRoadWreck, renewSalvage, salvageUnits, siteLootTable } from './salvage';
+import { SHOPS } from '../data/market';
 import { TIME } from '../data/time';
 import type { SalvageStock, World } from './types';
 import { dist, type Vec } from './vec';
@@ -19,6 +20,13 @@ import { freeCells } from './grid';
 import { endTurn } from './world';
 
 describe('finite salvage', () => {
+  it('gives a site with a shop no salvage stock', () => {
+    const shopSites = REGION.locations.filter((site) => site.id in SHOPS);
+    expect(shopSites.length).toBeGreaterThan(0);
+    for (const site of shopSites) expect(siteLootTable(site), site.id).toBeNull();
+    expect(REGION.locations.some((site) => siteLootTable(site) !== null)).toBe(true);
+  });
+
   it('leaves overflow for another collector and never duplicates it', () => {
     const w = emptyWorld();
     const a = addVehicle(w, 'scavengers', 'scout', [], { x: 10, y: 10 });

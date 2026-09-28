@@ -131,7 +131,8 @@ function driveOne(world: World, v: Vehicle): void {
   }
   // Ramp by at most accel or brake, like real steering, so tests that race a decision against an
   // approach (a threat check, a reach check) see the same timing the game gives them.
-  const target = Math.min(s.maxSpeed, remaining);
+  // Stops inside the arrival radius, not on the point, where the vehicle it drives to often stands.
+  const target = Math.min(s.maxSpeed, remaining - RULES.arriveRadius / 2);
   const speed = target > v.speed ? Math.min(target, v.speed + s.accel) : Math.max(target, v.speed - s.brake);
   v.heading = Math.atan2(dest.y - v.pos.y, dest.x - v.pos.x);
   const from = { ...v.pos, heading: v.heading };

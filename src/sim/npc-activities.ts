@@ -19,7 +19,7 @@ import {
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
 import { hashRandom, randInt } from './rng';
-import { canReachSalvage, hasSalvage, isSiteStock, pileInReach, wreckStockId } from './salvage';
+import { canReachSalvage, canTakeAny, hasSalvage, isSiteStock, pileInReach, wreckStockId } from './salvage';
 import { beginSearch } from './search';
 import { vehicleById } from './damage';
 import { plead } from './parley';
@@ -264,8 +264,9 @@ function scavengeInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): str
 function lootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
   const stock = world.salvage.find((s) => s.id === goal.targetId);
   if (!stock) return 'the loot is gone';
-  if (canReachSalvage(vehicle, stock) && !hasSalvage(stock)) return 'nothing left to loot';
-  return freeCells(vehicle) === 0 ? 'cargo cannot hold the loot' : null;
+  if (!canReachSalvage(vehicle, stock)) return freeCells(vehicle) === 0 ? 'cargo cannot hold the loot' : null;
+  if (!hasSalvage(stock)) return 'nothing left to loot';
+  return canTakeAny(world, vehicle, stock) ? null : 'cargo cannot hold the loot';
 }
 
 function towInvalid(world: World, vehicle: Vehicle): string | null {
@@ -812,7 +813,7 @@ function isSearching(vehicle: Vehicle, stock: SalvageStock): boolean {
 }
 
 function searchStock(world: World, vehicle: Vehicle, stock: SalvageStock): void {
-  if (!hasSalvage(stock) || freeCells(vehicle) === 0) {
+  if (!canTakeAny(world, vehicle, stock)) {
     finishGoal(world, vehicle, !hasSalvage(stock) ? 'salvage exhausted' : 'cargo cannot hold salvage');
     return;
   }

@@ -1,4 +1,5 @@
 import { SALVAGE, type LootRange, type LootTable } from '../data/salvage';
+import { SHOPS } from '../data/market';
 import { ECONOMY } from '../data/goods';
 import { REGION, type LocationDef } from '../data/region';
 import { RULES } from '../data/rules';
@@ -10,7 +11,7 @@ import { makePart, newId } from './factory';
 import { findRoadWreckSpot } from './mapgen';
 import { playerVehicle } from './damage';
 import { grayRadius } from './vision';
-import { goodsCount, isLoot, isMounted } from './grid';
+import { findSpot, goodsCount, gridOf, isLoot, isMounted, MOUNT_CELLS } from './grid';
 import { addGoods, stowPart } from './inventory';
 import { vehicleHasPerk } from './progress';
 import { chance, randInt } from './rng';
@@ -33,8 +34,9 @@ export function initializeSalvage(world: World): void {
   world.salvage = [...sites, ...wrecks];
 }
 
-// The loot table of a site that holds salvage, or null.
+// The loot table of a site that holds salvage, or null. A site with a shop trades instead.
 export function siteLootTable(site: LocationDef): LootTable | null {
+  if (site.id in SHOPS) return null;
   if (site.kind === 'convoy') return SALVAGE.convoy;
   return site.kind === 'landmark' ? SALVAGE.landmark : null;
 }
@@ -60,6 +62,19 @@ export function rollStock(world: World, table: LootTable, id: string, pos: Vec, 
 
 export function hasSalvage(stock: SalvageStock): boolean {
   return stock.parts.length > 0 || Object.values(stock.goods).some((count) => count > 0) || hasStores(stock);
+}
+
+// Whether a collect would move anything from the stock into the vehicle.
+export function canTakeAny(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
+  const room = storesRoom(world, vehicle);
+  if ((['fuel', 'supplies'] as const).some((kind) => (stock[kind] ?? 0) > 0 && room[kind] > 0)) return true;
+  const grid = gridOf(vehicle);
+  const good: GridItem = { id: 'fit-check', x: 0, y: 0, rot: 0, kind: 'good', good: 'scrap' };
+  if (Object.values(stock.goods).some((count) => count > 0) && findSpot(grid, vehicle.items, good, null, null)) return true;
+  return stock.parts.some((part) => {
+    const item: GridItem = { id: 'fit-check', x: 0, y: 0, rot: 0, kind: 'part', part };
+    return findSpot(grid, vehicle.items, item, null, MOUNT_CELLS[partDef(part.defId).kind]) !== null;
+  });
 }
 
 // Fuel or supplies left in the stock.
@@ -114,13 +129,21 @@ export function collectSalvage(world: World, vehicle: Vehicle, stockId: string, 
 // Whatever does not fit stays behind.
 export function pourStores(world: World, vehicle: Vehicle, stock: SalvageStock): void {
   const resources = getResources(world, vehicle);
-  const caps = { fuel: chassisDef(vehicle.chassisId).fuelCap, supplies: RULES.suppliesCap };
+  const room = storesRoom(world, vehicle);
   for (const kind of ['fuel', 'supplies'] as const) {
-    const took = Math.min(stock[kind] ?? 0, Math.max(0, caps[kind] - resources[kind]));
+    const took = Math.min(stock[kind] ?? 0, room[kind]);
     if (took <= 0) continue;
     resources[kind] += took;
     stock[kind] = (stock[kind] ?? 0) - took;
   }
+}
+
+function storesRoom(world: World, vehicle: Vehicle): { fuel: number; supplies: number } {
+  const resources = getResources(world, vehicle);
+  return {
+    fuel: Math.max(0, chassisDef(vehicle.chassisId).fuelCap - resources.fuel),
+    supplies: Math.max(0, RULES.suppliesCap - resources.supplies),
+  };
 }
 
 // A wreck keeps its mounted non-core parts at their current HP. Built-in core parts are wrecked
