@@ -309,13 +309,13 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   const s = fuelLimited(w, v, full, speed, order);
   const engine = s.maxSpeed > 0;
   // The stats accel already falls with load, so the engine force stays fixed as mass grows.
-  // Brakes grip with a force sized for the rated mass, so a heavy truck brakes worse.
+  // Brakes grip with a force sized for the handling mass, so a heavy truck brakes worse.
   const base = {
     engine,
     maxSteer: T.maxSteer * (s.turnSlow / (ch.turnSlow * DEG)),
     engineForce: (full.mass * T.engineAccel * (s.accel / ch.accel)) / 2,
-    brakeForce: T.brakeForce * (ch.ratedMass / 1000),
-    stopDecel: D.stopDecel * (ch.ratedMass / full.mass), // the stop plan brakes as hard as this load allows
+    brakeForce: T.brakeForce * (ch.handlingMass / 1000),
+    stopDecel: D.stopDecel * (ch.handlingMass / full.mass), // the stop plan brakes as hard as this load allows
   };
   if (!order) return { ...base, dest: null, route: null, target: idleTarget(speed), stopAt: false };
   if (order.kind === 'brake') return { ...base, dest: null, route: null, target: 0, stopAt: false };

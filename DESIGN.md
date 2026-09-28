@@ -40,7 +40,7 @@ Garage equipment changes are instant. Outside town, a change is a refit job:
 
 Machining and a perk shorten these times. The old layout stays active until the whole job finishes. Rearranging, storing, dumping or collecting items is blocked during a refit. Moving goods or spare parts without installing them stays instant.
 
-Every part and good has a mass. A heavier truck accelerates, brakes, steers and tops out worse. Every kilogram counts: a truck lighter than its rated mass beats the listed speed, and a heavier one falls short. Past the rated mass the loss is severe: 500 kg over a 3000 kg rating leaves about half the speed. Trucks make tradeoffs: cargo vs armor vs fuel use. No truck is best at everything.
+Every part and good has a mass. A heavier truck accelerates, brakes, steers and tops out worse. Every kilogram counts: a truck lighter than its handling mass beats the listed speed, and a heavier one falls short. The rated mass is the load limit. Every truck can put tier 1 armor on all its armor cells and guns on half its deck and stay at or under it. Cargo and heavier gear use the rest of the room. Past the rated mass the loss is severe: 500 kg over a 3000 kg rating leaves about half the speed. For the same job a higher tier part weighs less, so better gear leaves more room. Trucks make tradeoffs: cargo vs armor vs fuel use. No truck is best at everything.
 
 No part is better than another of its kind at everything but price. Each has one job and one weakness, and a content test enforces it.
 
