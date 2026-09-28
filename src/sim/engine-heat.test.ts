@@ -258,3 +258,33 @@ describe('dousing the engine', () => {
     expect(() => douseEngine(w)).toThrow(/supplies/);
   });
 });
+
+describe('desert rat', () => {
+  // Engine heat after one turn of top speed from a cold engine at a turn.
+  function heating(turn: number, perks: ReturnType<typeof emptyWorld>['player']['perks']): number {
+    const w = emptyWorld();
+    w.turn = turn;
+    w.player.perks = perks;
+    const me = w.vehicles[0];
+    me.speed = vehicleStats(w, me).maxSpeed;
+    advanceEngineHeat(w);
+    return w.player.engineHeat;
+  }
+
+  const NINE = 1 + ((9 - TIME.startHour) * TIME.turnsPerDay) / 24;
+
+  it('heats the engine in the noon sun like the 9:00 sun', () => {
+    expect(heating(NOON, ['desertRat'])).toBeCloseTo(heating(NINE, []), 2);
+    expect(heating(NOON, ['desertRat'])).toBeLessThan(heating(NOON, []));
+  });
+
+  it('keeps heat practice at the real sun heat', () => {
+    const w = emptyWorld();
+    w.turn = NOON;
+    w.player.perks = ['desertRat'];
+    const me = w.vehicles[0];
+    me.speed = vehicleStats(w, me).maxSpeed;
+    advanceEngineHeat(w);
+    expect(practiceOf(w, 'heat')[0].difficulty).toBeCloseTo((heatAt(w, me.pos) - 1) / (TIME.sunHeat - 1));
+  });
+});

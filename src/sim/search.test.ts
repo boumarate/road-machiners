@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
 import { RULES } from '../data/rules';
-import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
+import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { beginSearch } from './search';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import { goodsCount } from './grid';
@@ -161,6 +161,20 @@ describe('machining on searches', () => {
     w.player.skills.machining = XP_TO_REACH[5];
     beginSearch(w, npc, 'rich');
     expect(npc.job).toEqual(expect.objectContaining({ kind: 'search', turnsLeft: 5, total: 5 }));
+  });
+
+  it('installs salvage in one job with the Cannibal perk', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = w.vehicles[0];
+    const weapon = me.items.find((item) => item.kind === 'part' && item.part.defId === 'mg');
+    if (!weapon || weapon.kind !== 'part') throw new Error('Expected weapon');
+    me.items = me.items.filter((item) => item.id !== weapon.id);
+    w.salvage.push({ id: 'weapon-stock', pos: { ...me.pos }, radius: 1, goods: {}, parts: [weapon.part] });
+    w.player.scavenged.push('weapon-stock');
+    w.player.perks = ['cannibal'];
+    const next = takeLoot(w, 'weapon-stock', { kind: 'part', partId: weapon.part.id }, { x: weapon.x, y: weapon.y, rot: weapon.rot });
+    const turns = PERK_NUMBERS.cannibal.turns;
+    expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: turns, total: turns });
   });
 
   it('installs salvage in fewer turns for the player at level 5', () => {

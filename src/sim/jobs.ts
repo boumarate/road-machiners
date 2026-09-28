@@ -7,15 +7,17 @@ import { GOODS } from "../data/goods";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { STRIP } from "../data/salvage";
+import { PERK_NUMBERS } from "../data/skills";
 import { isHostile } from "./combat";
 import { playerVehicle } from "./damage";
 import { canVehicleSee } from "./vision";
 import { partValue } from "./wear";
 import { freeCells, goodsCount, isMounted, itemSize, mountedParts } from "./grid";
-import { addGoods, applyRefitLayout, getRefitLayout } from "./inventory";
+import { addGoods, applyRefitLayout, getRefitLayout, removeGoods, stowPart } from "./inventory";
+import { makePart } from "./factory";
 import { isJunk, maxHp } from "./wear";
 import { repairPlan, repairTurn } from "./repair";
-import { practice } from "./progress";
+import { practice, vehicleHasPerk } from "./progress";
 import { finishTruckPickup } from "./salvage";
 import { searchTurn } from "./search";
 import type { GridItem, Job, PartInstance, RefitJob, RefitPickup, Vehicle, World } from "./types";
@@ -145,6 +147,36 @@ function isStripStalled(v: Vehicle, partId: string): boolean {
   return !item || isMounted(v.chassisId, item) || !stripFits(v, item);
 }
 
+// The Welder perk command: a parked job that turns scrap metal into one pristine scrap armor part.
+export function startWeld(world: World): World {
+  return playerCommand(world, (w) => {
+    const v = playerVehicle(w);
+    if (!vehicleHasPerk(w, v, "welder")) throw new Error("Welding needs the Welder perk");
+    if (!hasWeldScrap(v)) throw new Error(`Welding needs ${PERK_NUMBERS.welder.scrap} scrap metal`);
+    if (!weldFits(v)) throw new Error("No room for the welded part");
+    const turns = PERK_NUMBERS.welder.turns;
+    startJob(w, v, { kind: "weld", turnsLeft: turns, total: turns });
+  });
+}
+
+function hasWeldScrap(v: Vehicle): boolean {
+  return (goodsCount(v).scrap ?? 0) >= PERK_NUMBERS.welder.scrap;
+}
+
+// The scrap cells free up first, so they count as room for the part.
+function weldFits(v: Vehicle): boolean {
+  const def = partDef(PERK_NUMBERS.welder.part);
+  return freeCells(v) + PERK_NUMBERS.welder.scrap >= def.w * def.h;
+}
+
+function weldTurn(world: World, v: Vehicle, job: Extract<Job, { kind: "weld" }>): boolean {
+  job.turnsLeft = Math.max(0, job.turnsLeft - 1);
+  if (job.turnsLeft > 0) return false;
+  removeGoods(v, "scrap", PERK_NUMBERS.welder.scrap);
+  if (!stowPart(world, v, makePart(world, PERK_NUMBERS.welder.part, 0))) throw new Error(`Welded part would not fit on ${v.name}`);
+  return true;
+}
+
 export function advanceJobs(world: World): void {
   for (const v of world.vehicles) if (v.job) advanceJob(world, v, v.job);
 }
@@ -159,6 +191,7 @@ function advanceJob(world: World, v: Vehicle, job: Job): void {
 
 function isStalled(world: World, v: Vehicle, job: Job): boolean {
   if (job.kind === "repair") return isRepairStalled(world, v, job.partId, job.parts);
+  if (job.kind === "weld") return !hasWeldScrap(v) || !weldFits(v);
   return job.kind === "strip" && isStripStalled(v, job.partId);
 }
 
@@ -166,7 +199,7 @@ function jobTurn(world: World, v: Vehicle, job: Job): boolean {
   if (job.kind === "repair") return repairTurn(world, v, job);
   if (job.kind === "search") return searchTurn(world, v, job);
   if (job.kind === "strip") return stripTurn(world, v, job);
-  if (job.kind === "weld") throw new Error("Weld jobs are not wired yet");
+  if (job.kind === "weld") return weldTurn(world, v, job);
   throw new Error(`Unhandled job kind ${job.kind}`);
 }
 

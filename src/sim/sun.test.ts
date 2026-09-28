@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TIME } from '../data/time';
 import { DEG } from './vec';
 import { addVehicle, emptyWorld } from './testkit';
-import { clockOf, heatAt, inShade, sunAt, type Sun } from './sun';
+import { cappedHeatAt, clockOf, heatAt, inShade, sunAt, type Sun } from './sun';
 
 // Turn number that lands the clock on a given hour of day 1.
 function turnFor(hour: number): number {
@@ -81,5 +81,24 @@ describe('heatAt', () => {
     for (let j = by - 1; j <= by + 1; j++) for (let i = bx - 1; i <= bx + 1; i++) heights[j * (size + 1) + i] = 50;
     w.terrain = { ...w.terrain, heights };
     expect(heatAt(w, pos)).toBe(1);
+  });
+});
+
+describe('cappedHeatAt', () => {
+  it('caps the sun height share, so noon sun heats like a lower sun', () => {
+    const w = emptyWorld();
+    const pos = { x: 30, y: 30 };
+    w.turn = turnFor((TIME.sunrise + TIME.sunset) / 2);
+    expect(cappedHeatAt(w, pos, 0.5)).toBeCloseTo(1 + (heatAt(w, pos) - 1) * 0.5);
+    expect(cappedHeatAt(w, pos, 1)).toBe(heatAt(w, pos));
+  });
+
+  it('leaves a sun lower than the cap as it is, and night at 1', () => {
+    const w = emptyWorld();
+    const pos = { x: 30, y: 30 };
+    w.turn = turnFor(TIME.sunrise + 1);
+    expect(cappedHeatAt(w, pos, 0.9)).toBe(heatAt(w, pos));
+    w.turn = turnFor(2);
+    expect(cappedHeatAt(w, pos, 0.5)).toBe(1);
   });
 });

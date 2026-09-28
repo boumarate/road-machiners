@@ -12,7 +12,7 @@ import { playerVehicle, vehicleById } from './damage';
 import { isKnockedOut } from './defeat';
 import { grayRadius } from './vision';
 import { findSpot, goodsCount, gridOf, isMounted, MOUNT_CELLS, type Spot } from './grid';
-import { addGoods, getLayoutError, refitTurns, requireIdleRefit, stowPart } from './inventory';
+import { addGoods, getLayoutError, lootRefitTurns, requireIdleRefit, stowPart } from './inventory';
 import { chance, randInt } from './rng';
 import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
@@ -383,7 +383,7 @@ export function takeError(target: Vehicle, item: GridItem): string | null {
 function takeTurns(world: World, looter: Vehicle, target: Vehicle, item: GridItem, placed: GridItem): number {
   const planned = RULES.refitTurnsPerPart * (Number(isMounted(target.chassisId, item)) + Number(isMounted(looter.chassisId, placed)));
   const garage = looter.id === world.player.vehicleId && townAt(world) !== null;
-  return planned > 0 && !garage ? refitTurns(world, looter, planned) : 0;
+  return planned > 0 && !garage ? lootRefitTurns(world, looter, planned) : 0;
 }
 
 // Moves one item off the truck onto the looter's grid at `to`. Loose items move at once. An installed part, or a
