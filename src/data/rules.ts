@@ -37,9 +37,9 @@ export const RULES = {
   wheelLoss: 0.15, // share of speed and turning lost per broken wheel
   tankLeak: 1, // fuel lost per turn with a broken tank
 
-  // Multiplies the damage of every weapon round and splash, guard guns included, but not crashes or rams.
-  // Tune this one number to make every fight faster or slower.
-  weaponDamage: 0.75,
+  // Global damage multipliers. Tune these to make every fight faster or slower.
+  weaponDamage: 0.75, // every weapon round and splash, guard guns included
+  crashDamage: 0.75, // every crash and ram, into trucks and obstacles alike
 
   // Town guards. Each town gate has one gun. Every turn it shoots the nearest vehicle within range that fired.
   // Each round hits with a flat chance and enters a random lane of the side facing the gate.

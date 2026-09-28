@@ -75,7 +75,7 @@ function applyContactDamage(world: World, vehicle: Vehicle, contact: CrashContac
 function computeCrashEnergy(world: World, vehicle: Vehicle, impact: number, share: number, mult: number): number {
   const driving = skillEffect(world, vehicle, 'driving', 'crashDamage');
   const guard = vehicleHasPerk(world, vehicle, 'ramGuard') ? PERK_NUMBERS.ramGuard.crashTaken : 1;
-  return RULES.ramDamage * impact * impact * share * mult * Math.max(0, 1 - driving) * guard;
+  return RULES.ramDamage * RULES.crashDamage * impact * impact * share * mult * Math.max(0, 1 - driving) * guard;
 }
 
 function applyCrashHits(world: World, vehicle: Vehicle, hits: Map<string, number>): PartHit[] {
