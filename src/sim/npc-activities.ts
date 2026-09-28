@@ -16,7 +16,7 @@ import { addGoods } from './inventory';
 import { cancelJob, inCombat } from './jobs';
 import { isFree } from './spawn';
 import {
-  bestTrade, canRob, decide, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolTown, travelSitesAway,
+  bestTrade, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolTown, travelSitesAway,
   huntingGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
@@ -304,6 +304,7 @@ const IDLE_GOALS: Record<Exclude<DecisionOptions['idle'], 'wait'>, IdleGoal> = {
 };
 
 function idleGoal(world: World, vehicle: Vehicle): NpcActivity {
+  if (keepsWord(world, vehicle, 'idle', null)) return createActivity('wait', null, null, 'keep its word');
   const option = decide(world, vehicle, 'idle', null, null);
   if (option === 'wait') return createActivity('wait', null, null, 'nothing worth doing');
   return IDLE_GOALS[option](world, vehicle);
@@ -666,9 +667,8 @@ export function defyThreat(world: World, vehicle: Vehicle, threatener: Vehicle, 
 
 // One roll per new truck in sight the NPC can rob, nearest first. The sighting's perceived danger weighs the roll.
 // Rob starts a feud with the target and fights it. The feud makes the target a hostile in sight, so it is noticed
-// as one and fires no second roll. A driver on a tow job keeps its word and robs no one until the tow ends.
+// as one and fires no second roll.
 function onPreySeen(world: World, vehicle: Vehicle): void {
-  if (vehicle.brain!.goals.some((goal) => goal.kind === 'tow')) return;
   const prey = world.vehicles
     .filter((other) => !(`preySeen:${other.id}` in vehicle.brain!.noticed) && canRob(world, vehicle, other))
     .sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));

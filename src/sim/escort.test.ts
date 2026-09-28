@@ -416,4 +416,12 @@ describe('a leader with escorts', () => {
     planNpcOrders(w);
     expect(convoy.order?.kind).not.toBe('brake');
   });
+
+  it('drives on while a lagging escort is busy with a goal of its own', () => {
+    const { w, convoy } = pair(60 - NPC_BEHAVIOR.escortWaitGap - 1);
+    const guard = escortsOf(w, convoy.id)[0];
+    guard.brain!.goals.push({ kind: 'resupply', targetId: 'bowl', destination: { ...BOWL.pos }, phase: 'travel', reason: 'low fuel' });
+    planNpcOrders(w);
+    expect(convoy.order?.kind).not.toBe('brake');
+  });
 });

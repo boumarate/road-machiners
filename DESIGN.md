@@ -222,6 +222,8 @@ A damaging crash between trucks at peace is most likely an accident. Each damage
 
 A driver hurt by a hostile may plead with it. It asks for a truce, or it begs for mercy when it is weak. Traders and cowards plead most, and raiders seldom. The other side decides whether to accept. A robber or raider after the other truck's cargo seldom pleads or accepts, unless it is weak or outgunned. It also rarely robs a truck it holds a truce with. A truce ends the feuds between both sides and their nearby faction mates. Mercy is a truce the beggar pays for with its cargo, which it drops for the winner to take. A driver rarely pleads with the same foe again soon.
 
+A driver keeps its word. A trade meeting, a patch, a tow, a tow on its way and an escort are deals. The two sides of a deal never rob each other. The driver that made the deal starts nothing of its own until the deal ends: it robs no one, tows no one else, loots nothing and hires no one. It still reacts to hostiles, contacts and attacks. A deal kept to its end leaves both drivers backed off from each other for a while. A driver attacked by its deal partner fights back or flees as usual, and it also wants revenge on that truck.
+
 States are timed relations between two trucks. Each ends as expired, fulfilled or broken, and each ending can start other states.
 
 - A feud makes both trucks hostile. Sight or shots between them keep it going. It expires after some turns without either, and a failed robber then backs off.
@@ -276,7 +278,7 @@ Fuel and supplies limit range. Fuel burns per tile by chassis, times heat. Below
 
 ## Escorts
 
-One truck can follow another as its escort. The follower rides beside its leader's tail at the leader's pace, and resumes following after any fight or tow. It treats shots at the leader as shots at itself, so it fights back or flees as it would for itself. It tows a stranded leader to the usual tow site.
+One truck can follow another as its escort. The follower rides beside its leader's tail at the leader's pace, and resumes following after any fight or tow. The leader waits for an escort that falls behind while following. It does not wait for an escort busy with a fight or a service stop, which catches up after. It treats shots at the leader as shots at itself, so it fights back or flees as it would for itself. It tows a stranded leader to the usual tow site.
 
 A trader, courier or roamer on its way to a site may hire a free merc it sees. The fee grows with the distance to the destination, and the client must afford it above its upkeep reserve. The merc accepts or refuses, and a hurt merc refuses more often. The client pays once, when it reaches the destination. An escort ends unpaid when either truck is gone, knocked out or turns hostile.
 

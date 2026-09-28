@@ -76,11 +76,12 @@ function orderPoint(world: World, v: Vehicle, activity: NpcActivity, templateRan
   return computeFightGoal(world, v, preferredRange, target);
 }
 
-// A leader out of danger waits while an escort lags more than NPC_BEHAVIOR.escortWaitGap behind, so a slower
-// escort keeps up. A fight or a flight does not wait.
+// A leader out of danger waits while an escort that follows it lags more than NPC_BEHAVIOR.escortWaitGap behind,
+// so a slower escort keeps up. A fight or a flight does not wait. Nor does the leader wait for an escort busy with
+// a goal of its own, like a fight or a fuel stop, since that escort is not coming. It catches up after.
 function waitsForEscort(world: World, v: Vehicle, activity: NpcActivity): boolean {
   if (activity.kind === "fight" || activity.kind === "flee") return false;
-  return escortsOf(world, v.id).some((e) => dist(e.pos, v.pos) > NPC_BEHAVIOR.escortWaitGap);
+  return escortsOf(world, v.id).some((e) => topGoal(e)?.kind === "follow" && dist(e.pos, v.pos) > NPC_BEHAVIOR.escortWaitGap);
 }
 
 // A rammer drives through its target. A follower drives through its spot at the follow pace while the leader

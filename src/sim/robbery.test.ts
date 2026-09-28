@@ -3,14 +3,14 @@ import { STATE_TURNS } from '../data/npcs';
 import type { TraitId } from '../data/npcs';
 import { addGoods } from './inventory';
 import { thinkNpc } from './npc-activities';
-import { npcProfile, optionWeights, ownDanger, vehicleDanger } from './npc-decisions';
+import { canRob, npcProfile, optionWeights, ownDanger, vehicleDanger } from './npc-decisions';
 import { NPC_BEHAVIOR, TRAITS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { resolveDestroyed } from './combat';
 import { checkKnockout } from './defeat';
 import { corePart, mountedParts } from './grid';
-import { addState, advanceStates, stateOf } from './states';
+import { addState, advanceStates, endState, stateOf } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateWhere } from './testkit';
 import type { NpcActivity, Vehicle, World } from './types';
 import type { Vec } from './vec';
@@ -314,6 +314,38 @@ describe('scumbag robbery', () => {
     thinkNpc(w, robber);
     expect(robber.brain!.goals.some((g) => isRob(g, target.id))).toBe(false);
     expect(stateOf(w, 'feud', robber.id, target.id)).toBeNull();
+  });
+
+  it('a driver in a trade meeting does not rob its partner', () => {
+    const { w, robber, target } = passing();
+    addState(w, 'trade', robber.id, target.id, { kind: 'none' });
+    robber.brain!.goals = [{ kind: 'meet', targetId: target.id, destination: { ...target.pos }, phase: 'travel', reason: 'pull over to trade' }];
+    forceOption('preySeen', 'rob');
+    thinkNpc(w, robber);
+    expect(robber.brain!.goals.some((g) => isRob(g, target.id))).toBe(false);
+    expect(stateOf(w, 'feud', robber.id, target.id)).toBeNull();
+  });
+
+  it('a truck escorting another does not rob it, and the leader does not rob its escort', () => {
+    const { w, robber, target } = passing();
+    addState(w, 'escort', robber.id, target.id, { kind: 'escort', site: null, fee: 0 });
+    target.brain = npcBrain('scavenger', target.pos, ['scavenger', 'scumbag']);
+    expect(canRob(w, robber, target)).toBe(false);
+    expect(canRob(w, target, robber)).toBe(false);
+  });
+
+  it('a trade kept to its end leaves both sides backed off from each other', () => {
+    const { w, robber, target } = passing();
+    target.brain = npcBrain('scavenger', target.pos, ['scavenger']);
+    endState(w, addState(w, 'trade', robber.id, target.id, { kind: 'none' }), 'fulfilled');
+    expect(stateOf(w, 'backedOff', robber.id, target.id)).not.toBeNull();
+    expect(stateOf(w, 'backedOff', target.id, robber.id)).not.toBeNull();
+  });
+
+  it('a broken trade leaves no one backed off', () => {
+    const { w, robber, target } = passing();
+    endState(w, addState(w, 'trade', robber.id, target.id, { kind: 'none' }), 'broken');
+    expect(stateOf(w, 'backedOff', robber.id, target.id)).toBeNull();
   });
 
   it('a robber stops its search to rob', () => {
