@@ -362,11 +362,12 @@ body {
 }
 .weapons .weapon-tools {
   display: flex;
+  align-items: center;
   gap: 5px;
   margin-bottom: 5px;
   padding-right: 50px;
 }
-#ui .weapon-tools button,
+#ui .weapon-tools button:not(.switch),
 #ui .weapon-toggle {
   padding: 3px 7px;
   font: 10px var(--font-ui);

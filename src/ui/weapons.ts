@@ -11,6 +11,7 @@ import { el, panel } from "./dom";
 import { meters } from "./units";
 import type { UiHost } from "./host";
 import { createIcon } from './cards';
+import { createSwitch } from "./switch";
 import { canCall } from "./dialogue";
 import { jobLabel, jobProgress } from "./format";
 
@@ -123,15 +124,14 @@ export class WeaponPanel {
           },
           "All [0]",
         ),
-        el(
-          "button",
-          {
-            class: w.player.autoFire ? "on" : "",
-            "aria-pressed": String(w.player.autoFire),
-            onclick: () => this.toggleAuto(),
-          },
-          `Auto: ${w.player.autoFire ? "on" : "off"} [Q]`,
-        ),
+        createSwitch({
+          on: "Auto fire",
+          off: "Auto fire off",
+          checked: w.player.autoFire,
+          key: "Q",
+          title: "Auto fire: guns shoot at hostiles on their own [Q]",
+          onclick: () => this.toggleAuto(),
+        }),
       ),
       el(
         "div",
