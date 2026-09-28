@@ -149,6 +149,7 @@ export const PERK_IDS = Object.keys(PERKS) as PerkId[];
 
 export const PERK_NUMBERS = {
   rammer: { stallTurns: 1 }, // turns a rammed hostile truck's engine stays stalled
+  coldRunning: { speedShare: 0.5 }, // share of top speed below which the engine is heard only inside sight
   dustScreen: {
     topShare: 0.9, // share of top speed that counts as top speed, since fuel and slopes keep a truck just under it
     radius: 2, // tiles from a screening cloud within which it blocks a sight line

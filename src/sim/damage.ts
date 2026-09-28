@@ -3,11 +3,12 @@
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import * as wear from "./wear";
-import { practice, skillEffect } from "./progress";
-import { mountedParts } from "./grid";
+import { practice, skillEffect, vehicleHasPerk } from "./progress";
+import { corePart, mountedParts } from "./grid";
 import type { PartInstance, Vehicle, World } from "./types";
 
-// Damage to the player's cab also hurts the character.
+// Damage to the player's cab also hurts the character. Rounds pass a broken cab, so a player fighting through on a
+// broken cab is hurt by damage to any part instead.
 export function damagePart(
   world: World,
   v: Vehicle,
@@ -19,15 +20,15 @@ export function damagePart(
   wear.damagePart(part, dealt, 0);
   if (wasWorking && part.hp === 0)
     world.events.push({ t: "partDisabled", vehicle: v.id, part: part.id });
-  const def = partDef(part.defId);
-  if (
-    v.id === world.player.vehicleId &&
-    def.kind === "core" &&
-    def.role === "cab"
-  ) {
-    hurtDriver(world, v, dealt);
-  }
+  if (hurtsDriver(world, v, part)) hurtDriver(world, v, dealt);
   return dealt;
+}
+
+function hurtsDriver(world: World, v: Vehicle, part: PartInstance): boolean {
+  if (v.id !== world.player.vehicleId) return false;
+  const def = partDef(part.defId);
+  if (def.kind === "core" && def.role === "cab") return true;
+  return corePart(v, "cab").hp === 0 && vehicleHasPerk(world, v, "fightThrough");
 }
 
 // The player's character takes a share of cab damage, cut by toughness, and the health lost

@@ -45,7 +45,7 @@ function hearingRange(world: World, observer: Vehicle, v: Vehicle): number {
 
 // Cold running: the player's engine below half its top speed.
 function runsCold(world: World, v: Vehicle): boolean {
-  return vehicleHasPerk(world, v, 'coldRunning') && v.speed < vehicleStats(world, v).maxSpeed / 2;
+  return vehicleHasPerk(world, v, 'coldRunning') && v.speed < vehicleStats(world, v).maxSpeed * PERK_NUMBERS.coldRunning.speedShare;
 }
 
 // Range a moving vehicle's dust trail is seen from. Zero at limp speed or below, at night, or fully hidden by weather (storms shrink it through weatherAt's sight multiplier).

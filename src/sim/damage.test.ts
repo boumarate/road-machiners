@@ -54,3 +54,23 @@ describe('toughness on cab damage', () => {
   });
 });
 
+
+describe('fight through on a broken cab', () => {
+  function healthLostToTransmissionHit(perk: boolean): number {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    if (perk) w.player.perks.push('fightThrough');
+    corePart(me, 'cab').hp = 0;
+    const health = w.player.health;
+    damagePart(w, me, corePart(me, 'transmission'), 20);
+    return health - w.player.health;
+  }
+
+  it('hurts the driver when any part is hit', () => {
+    expect(healthLostToTransmissionHit(true)).toBeGreaterThan(0);
+  });
+
+  it('keeps other parts from hurting a driver without the perk', () => {
+    expect(healthLostToTransmissionHit(false)).toBe(0);
+  });
+});
