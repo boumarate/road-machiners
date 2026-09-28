@@ -182,6 +182,12 @@ Every NPC carries a set of traits instead of one class. Each trait adds activiti
 - Raider hunts at hunting grounds, investigates distant engines and knows the raider camps.
 - Scumbag robs trucks that carry loot and look weaker than it.
 - Coward flees more often and fights back less.
+- Lawman patrols the roads near its town and fights raiders on sight. It attacks whoever fires the first shot at a neutral NPC or starts robbing one, the player included.
+- Courier travels between towns and locations, and almost never stops for salvage.
+- Roamer mostly explores random places, off road too, and trades and scavenges when it finds a chance.
+- Supplier hauls fuel drums from the Pump Station and water from the oases to the towns.
+- Guard follows a supply convoy and protects it.
+- Merc waits at a town for hire, then escorts its client.
 
 A chance is 0 only when an option is physically impossible. A driver with no working gun cannot fight, and a truck with no loot cannot be robbed. Anything a driver can do keeps at least a 1% chance. So an ordinary scavenger robs about once in a hundred chances, and a trader sometimes starts a fight.
 
@@ -243,10 +249,19 @@ Fuel and supplies limit range. Fuel burns per tile by chassis, times heat. Below
 
 - Buyable chassis: Scout pickup, Hauler, Courier, Utility van, Longbed truck, Armored carrier and Heavy tractor. Raiders can also use the buggy and gunwagon chassis.
 - Parts: weapons, engines, armor, cargo parts and the radio scanner. Cheap, light, durable, fuel-efficient and high-output variants have different costs and footprints. Cargo parts extend the inventory grid, without trailer physics.
-- Goods: parts, scrap metal, salt, meds, grain, textiles, machine tools, batteries and electronics. Bowl and Nose trade every good. Each stall trades a few.
+- Goods: parts, scrap metal, salt, meds, grain, textiles, machine tools, batteries, electronics, fuel drums and water. Bowl and Nose trade every good. Each stall trades a few. No shop makes fuel drums or water. Supply convoys load them for free at the Pump Station and the oases, and towns price them by the distance to those sources.
 - Region: Icarus, a 600-tile basin with Bowl and Nose as hubs, other destinations and two raider camps. The destinations include two canyon crossings and the Fallen Sun. Winding roads cross rolling grades between distinct landmarks. Towns lie on the roads, and other locations sit beside them on short spurs, so through traffic passes by. The player starts on the road out of Bowl, out of sight of every site and knowing none, so the first step is to ask a passing driver the way. See [landmark visuals](VISUAL_DESIGN.md).
 - Enemies: raider outriders and gunwagons with sampled chassis and equipment.
-- Neutrals: trader caravans and scavengers. Shooting one makes it and its nearby mates hostile. They spawn outside the gate of a random town or location, never close to the player. Two traders start at the Bowl gate, so drivers soon pass the player on the start road.
+- Neutrals: trader caravans, scavengers, couriers, roamers, mercs, and supply convoys with their guards. Shooting one makes it and its nearby mates hostile, and lawmen who see it join in. They spawn outside the gate of a town or location, never close to the player. Two traders start at the Bowl gate, so drivers soon pass the player on the start road.
+- Lawmen: the Bowl Farmers and the Nose Army, heavily armored patrol cars in their town's colors. Each spawns only at its own town.
+
+## Escorts
+
+One truck can follow another as its escort. The follower drives behind its leader and resumes following after any fight or tow. It treats shots at the leader as shots at itself, so it fights back or flees as it would for itself. It tows a stranded leader to the usual tow site.
+
+A trader, courier or roamer on its way to a site may hire a free merc it sees. The fee grows with the distance to the destination, and the client must afford it above its upkeep reserve. The merc accepts or refuses, and a hurt merc refuses more often. The client pays once, when it reaches the destination. An escort ends unpaid when either truck is gone, knocked out or turns hostile.
+
+Each supply convoy spawns with a guard that escorts it for free. A guard whose convoy is gone joins another unguarded convoy, or waits in town.
 
 ## Out of scope for now
 
