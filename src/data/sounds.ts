@@ -181,7 +181,8 @@ export const MIX = {
   // A busy fight adds about 1 heat per turn, so heat settles near 4; the mode thresholds sit around that.
   // The newest played accent leads as the motif and repeats round(heat * repeatsPerHeat) times, up to maxRepeats,
   // every repeatBeats beats, each repeat at repeatGain times the one before. Only the lead repeats.
-  // lead. Accents start at least minGapSlots apart and alternate panSpread left and right.
+  // Between turns it repeats at most pauseRepeats times. Accents start at least minGapSlots apart and
+  // alternate panSpread left and right. Recall: see Conductor.
   score: {
     subdivision: 2,
     spreadSlots: 2,
@@ -200,6 +201,10 @@ export const MIX = {
     maxRepeats: 6,
     repeatBeats: 2,
     repeatGain: 0.85,
+    pauseRepeats: 3,
+    recallChance: 0.7,
+    recallHalfLifeSeconds: 10,
+    recallDistance: 0.25,
     startMode: "pulse",
     modes: {
       hush: { gain: 0.5, cutoffHz: 700, boost: 0.6, upAt: 0.3, downAt: -Infinity },

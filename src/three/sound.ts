@@ -49,16 +49,18 @@ const ACCENT_LEAD_SECONDS = 0.02; // earliest accent start from now, so Web Audi
 const MOTIF_LOOKAHEAD_SECONDS = 0.1; // a motif repeat is scheduled once it is this close, several frames ahead
 
 // The accent repeating now. Only one motif leads at a time, so repeats never pile up.
-type Motif = { cue: AccentCue; next: number; every: number; k: number; repeats: number };
+// pauseRepeats counts repeats inside the current pause.
+type Motif = { cue: AccentCue; next: number; every: number; k: number; repeats: number; pauseRepeats: number };
 
 // What the score did with one accent request, for the sound log.
-export type AccentResult = { cue: AccentCue; chance: number; heat: number; mode: Mode; played: boolean; repeats: number };
+// cue is the event's own accent; sounded is the one played for it, which recall may swap.
+export type AccentResult = { cue: AccentCue; sounded: AccentCue; chance: number; heat: number; mode: Mode; played: boolean; repeats: number };
 
 export class CombatScore {
   private bases: Base[];
   private active: Base | null = null;
   private designer: SoundDesigner;
-  private conductor = new Conductor(MIX.score);
+  private conductor = new Conductor<AccentCue>(MIX.score);
   private lastBar = -Infinity;
   private motif: Motif | null = null;
   private paused = false;
@@ -88,8 +90,10 @@ export class CombatScore {
     this.active.loop.setGain(m.gain, fadeSeconds);
   }
 
-  // While paused between turns, the lead motif keeps repeating at its current level instead of running out.
+  // While paused between turns, the lead motif repeats at its current level up to pauseRepeats times, then only
+  // the base plays.
   setPaused(paused: boolean): void {
+    if (paused && !this.paused && this.motif) this.motif.pauseRepeats = 0;
     this.paused = paused;
   }
 
@@ -111,14 +115,16 @@ export class CombatScore {
     base.loop.setTone(m.cutoffHz, barSeconds);
   }
 
-  // The event adds heat. Its accent then plays with the conductor's chance, on a slot near delayMs, with the base
-  // dipping under it.
-  accent(cue: AccentCue, delayMs: number): AccentResult {
+  // Outside a battle the score is silent and events are ignored. In one, the event adds heat, and its accent plays
+  // with the conductor's chance, on a slot near delayMs, with the base dipping under it.
+  accent(cue: AccentCue, delayMs: number): AccentResult | null {
+    if (!this.active) return null;
     const now = this.player.now();
     const heard = this.conductor.hear(cue, now);
-    const time = this.roll() < heard.chance ? this.place(cue, now, delayMs) : null;
-    const repeats = time === null ? 0 : this.play(cue, now, time);
-    return { cue, ...heard, played: time !== null, repeats };
+    const sounded = this.conductor.recall(cue, now, this.roll());
+    const time = this.roll() < heard.chance ? this.place(sounded, now, delayMs) : null;
+    const repeats = time === null ? 0 : this.play(sounded, now, time);
+    return { cue, sounded, ...heard, played: time !== null, repeats };
   }
 
   private place(cue: AccentCue, now: number, delayMs: number): number | null {
@@ -131,7 +137,7 @@ export class CombatScore {
     this.sound(cue, now, time, 1);
     const repeats = this.conductor.repeats(now);
     const every = this.designer.beat() * MIX.score.repeatBeats;
-    this.motif = repeats > 0 ? { cue, next: time + every, every, k: 1, repeats } : null;
+    this.motif = repeats > 0 ? { cue, next: time + every, every, k: 1, repeats, pauseRepeats: 0 } : null;
     return repeats;
   }
 
@@ -144,9 +150,9 @@ export class CombatScore {
   private repeatMotif(m: Motif, now: number): void {
     if (m.next >= now && this.designer.claim(m.next)) this.sound(m.cue, now, m.next, MIX.score.repeatGain ** m.k);
     m.next += m.every;
-    if (this.paused) return;
-    m.k++;
-    if (m.k > m.repeats) this.motif = null;
+    if (this.paused) m.pauseRepeats++;
+    else m.k++;
+    if (m.k > m.repeats || m.pauseRepeats >= MIX.score.pauseRepeats) this.motif = null;
   }
 
   // Successive accent sounds sit a little left and right in turn, so overlapping tails stay apart.
@@ -222,7 +228,9 @@ export class SoundDirector {
   // Logs every accent decision, played or skipped, with the chance, heat and mode behind it.
   accent(cue: AccentCue, delayMs: number): void {
     const r = this.score.accent(cue, delayMs);
-    this.record(`${cue} ${r.played ? `played x${1 + r.repeats}` : "skipped"} p${r.chance.toFixed(2)} heat${r.heat.toFixed(1)} ${r.mode}`);
+    if (!r) return;
+    const as = r.sounded === cue ? "" : ` as ${r.sounded}`;
+    this.record(`${cue}${as} ${r.played ? `played x${1 + r.repeats}` : "skipped"} p${r.chance.toFixed(2)} heat${r.heat.toFixed(1)} ${r.mode}`);
   }
 
   // delayOf gives when each event's moment comes, or null to skip the event in this call.

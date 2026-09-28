@@ -1,7 +1,8 @@
 // Decides how the combat score behaves, from a fading memory of the fight. Heat rises with each event and halves
 // every heatHalfLife, and a small Markov chain steps the song mode once per bar from it. Each accent plays only
 // with a chance that falls with its own recent plays and with how crowded the music is. A played accent repeats
-// more times the hotter the fight, so motifs build into a groove.
+// more times the hotter the fight, so motifs build into a groove. The last played accent may also come back for
+// the next event of similar weight, with a chance that fades, so the fight keeps returning to one motif.
 // Pure: the caller passes audio times in seconds and random rolls in [0, 1).
 
 export const MODES = ["hush", "pulse", "fight", "peak"] as const;
@@ -29,6 +30,9 @@ export type ConductorTuning = {
   modeSoftness: number; // heat over which a step goes from unlikely to likely
   repeatsPerHeat: number; // repeats of a played accent per unit of heat, rounded
   maxRepeats: number;
+  recallChance: number; // chance the last played accent replaces the next event's own, right after it played
+  recallHalfLifeSeconds: number;
+  recallDistance: number; // largest weight difference between two accents that can stand in for each other
   startMode: Mode; // mode a battle opens in
   modes: Record<Mode, ModeTuning>;
   accents: Record<string, AccentTuning>;
@@ -54,10 +58,11 @@ export class Fading {
 
 export type Hearing = { chance: number; heat: number; mode: Mode };
 
-export class Conductor {
+export class Conductor<Id extends string> {
   private heat: Fading;
   private crowd: Fading;
   private fatigue = new Map<string, Fading>();
+  private last: { id: Id; at: number } | null = null; // last played accent, for recall
   private modeIndex: number;
 
   constructor(private tuning: ConductorTuning) {
@@ -89,7 +94,17 @@ export class Conductor {
     return { chance, heat: this.heat.read(time), mode: this.mode() };
   }
 
-  played(id: string, time: number): void {
+  // The accent to sound for an event: sometimes the last played one, when their weights are close.
+  recall(id: Id, time: number, roll: number): Id {
+    const last = this.last;
+    if (!last || last.id === id) return id;
+    if (Math.abs(this.accent(last.id).weight - this.accent(id).weight) > this.tuning.recallDistance) return id;
+    const t = this.tuning;
+    return roll < t.recallChance * 0.5 ** ((time - last.at) / t.recallHalfLifeSeconds) ? last.id : id;
+  }
+
+  played(id: Id, time: number): void {
+    this.last = { id, at: time };
     this.fatigueOf(id).add(time, 1);
     this.crowd.add(time, 1);
   }

@@ -10,6 +10,9 @@ const TUNING: ConductorTuning = {
   modeSoftness: 0.1,
   repeatsPerHeat: 1,
   maxRepeats: 4,
+  recallChance: 0.8,
+  recallHalfLifeSeconds: 10,
+  recallDistance: 0.5,
   startMode: "pulse",
   modes: {
     hush: { ...MODE, upAt: 0.5, downAt: -Infinity },
@@ -17,7 +20,11 @@ const TUNING: ConductorTuning = {
     fight: { ...MODE, boost: 2, upAt: 5, downAt: 1 },
     peak: { ...MODE, upAt: Infinity, downAt: 3 },
   },
-  accents: { hit: { weight: 1, chance: 0.5, emphasis: 0 }, crash: { weight: 3, chance: 1, emphasis: 2 } },
+  accents: {
+    hit: { weight: 1, chance: 0.5, emphasis: 0 },
+    graze: { weight: 1.4, chance: 0.5, emphasis: 0 },
+    crash: { weight: 3, chance: 1, emphasis: 2 },
+  },
 };
 
 describe("Fading", () => {
@@ -86,6 +93,22 @@ describe("Conductor", () => {
     c.hear("crash", 0);
     expect(c.repeats(0)).toBe(4);
     expect(c.repeats(100)).toBe(0);
+  });
+
+  it("recalls the last played accent for an event of close weight, with a chance that fades", () => {
+    const c = new Conductor<string>(TUNING);
+    expect(c.recall("graze", 0, 0)).toBe("graze");
+    c.played("hit", 0);
+    expect(c.recall("graze", 0, 0.79)).toBe("hit");
+    expect(c.recall("graze", 0, 0.81)).toBe("graze");
+    expect(c.recall("graze", 10, 0.39)).toBe("hit");
+    expect(c.recall("graze", 10, 0.41)).toBe("graze");
+  });
+
+  it("never recalls across a large weight gap", () => {
+    const c = new Conductor<string>(TUNING);
+    c.played("hit", 0);
+    expect(c.recall("crash", 0, 0)).toBe("crash");
   });
 
   it("fails loud on an accent it has no tuning for", () => {

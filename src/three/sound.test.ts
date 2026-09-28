@@ -255,7 +255,7 @@ describe("CombatScore", () => {
     const score = new CombatScore(player, () => 0);
     score.setCombat(true, 3);
     const s = MIX.score;
-    const r = score.accent("accent-crash", 0);
+    const r = score.accent("accent-crash", 0)!;
     expect(r.repeats).toBe(Math.min(s.maxRepeats, Math.round(s.accents["accent-crash"].weight * s.repeatsPerHeat)));
     expect(plays).toHaveLength(1);
     for (let t = 0; t < 120; t++) {
@@ -268,17 +268,17 @@ describe("CombatScore", () => {
     expect((plays[1] as Play)[1].gain).toBeCloseTo(s.repeatGain);
   });
 
-  it("keeps the lead motif repeating at a steady level while paused", () => {
+  it("repeats the lead motif at a steady level at most pauseRepeats times in a pause", () => {
     const { player, plays, clock } = fakePlayer();
     const score = new CombatScore(player, () => 0);
     score.setCombat(true, 3);
-    const r = score.accent("accent-crash", 0);
+    score.accent("accent-crash", 0);
     score.setPaused(true);
     for (let t = 0; t < 400; t++) {
       clock.now += 0.05;
       score.tick();
     }
-    expect(plays.length).toBeGreaterThan(1 + r.repeats);
+    expect(plays).toHaveLength(1 + MIX.score.pauseRepeats);
     const gains = (plays as Play[]).slice(1).map((p) => p[1].gain);
     expect(new Set(gains)).toEqual(new Set([MIX.score.repeatGain]));
   });
@@ -288,7 +288,7 @@ describe("CombatScore", () => {
     const score = new CombatScore(player, () => 0);
     score.setCombat(true, 3);
     score.accent("accent-crit", 0);
-    expect(score.accent("accent-hit", 900).played).toBe(true);
+    expect(score.accent("accent-hit", 900)!.played).toBe(true);
     for (let t = 0; t < 120; t++) {
       clock.now += 0.05;
       score.tick();
@@ -309,12 +309,22 @@ describe("CombatScore", () => {
     expect(pans).toEqual([-MIX.score.panSpread, MIX.score.panSpread]);
   });
 
+  it("ignores accents outside a battle", () => {
+    const { player, plays } = fakePlayer();
+    const score = new CombatScore(player, () => 0);
+    expect(score.accent("accent-crash", 0)).toBeNull();
+    score.setCombat(true, 3);
+    score.setCombat(false, 3);
+    expect(score.accent("accent-crash", 0)).toBeNull();
+    expect(plays).toEqual([]);
+  });
+
   it("skips an accent when the roll misses its chance", () => {
     const { player, plays } = fakePlayer();
-    const rolls = [0, 0.999];
+    const rolls = [0, 0, 0.999]; // base pick, recall, chance
     const score = new CombatScore(player, () => rolls.shift() ?? 0);
     score.setCombat(true, 3);
-    expect(score.accent("accent-miss", 0).played).toBe(false);
+    expect(score.accent("accent-miss", 0)!.played).toBe(false);
     expect(plays).toEqual([]);
   });
 
