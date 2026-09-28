@@ -28,26 +28,62 @@ export function spawnNpcs(world: World): void {
 }
 
 // The first drivers, plus start traffic at the town the player's road leaves, so drivers soon pass the player.
+// Drivers deal their sites from shuffled decks, so every seed spreads them evenly over their sites.
+// Each world must start with the whole roster, so a driver with no free spot stops the new game.
 export function spawnInitial(world: World): void {
-  for (const id of SPAWN.initial) spawnWithEscorts(world, NPCS[id], () => siteFor(world, NPCS[id]), false);
+  const decks = new Map<string, Site[]>();
+  for (const id of SPAWN.initial) {
+    spawnRequired(world, NPCS[id], dealSite(world, decks, sitesFor(NPCS[id])));
+  }
   const town = REGION.towns.find((t) => t.id === SPAWN.startTraffic.town);
   if (!town) throw new Error(`Unknown start traffic town ${SPAWN.startTraffic.town}`);
-  for (const id of SPAWN.startTraffic.templates) spawnWithEscorts(world, NPCS[id], () => town, false);
+  for (const id of SPAWN.startTraffic.templates) spawnRequired(world, NPCS[id], town);
+}
+
+// The next site from the deck of these sites, reshuffled once every site is dealt.
+function dealSite(world: World, decks: Map<string, Site[]>, sites: readonly Site[]): Site {
+  const key = sites.map((s) => s.id).join();
+  let deck = decks.get(key) ?? [];
+  if (deck.length === 0) {
+    deck = [...sites];
+    for (let i = deck.length - 1; i > 0; i--) {
+      const j = randInt(world, 0, i);
+      [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+  }
+  const site = deck.pop()!;
+  decks.set(key, deck);
+  return site;
 }
 
 function aliveOf(world: World, tpl: NpcTemplate): number {
   return world.vehicles.filter((v) => v.brain?.templateId === tpl.id).length;
 }
 
-// Spawns a driver, then one of each escort template that follows its template, while the escort is under its cap.
-// Each escort guards its leader for no fee and no destination.
+// Spawns a driver, then its escorts.
 function spawnWithEscorts(world: World, tpl: NpcTemplate, pick: () => Site, respawn: boolean): void {
   const leader = spawnOne(world, tpl, pick, respawn);
-  if (!leader) return;
-  for (const escort of escortsOf(tpl)) {
-    const guard = aliveOf(world, escort) < escort.cap ? spawnBeside(world, escort, leader) : null;
+  if (leader) spawnEscorts(world, tpl, leader);
+}
+
+// Like spawnWithEscorts at a fixed site, but a driver or escort with no free spot throws.
+function spawnRequired(world: World, tpl: NpcTemplate, site: Site): void {
+  const leader = spawnOne(world, tpl, () => site, false);
+  if (!leader) throw new Error(`No free spot to spawn ${tpl.name} at ${site.id} in the new world`);
+  const missed = spawnEscorts(world, tpl, leader);
+  if (missed.length > 0) throw new Error(`No free spot to spawn ${missed[0].name} beside ${tpl.name} in the new world`);
+}
+
+// One of each escort template that follows the leader's template, while the escort is under its cap. Each escort
+// guards its leader for no fee and no destination. Returns the escorts that found no free spot.
+function spawnEscorts(world: World, tpl: NpcTemplate, leader: Vehicle): NpcTemplate[] {
+  const missed: NpcTemplate[] = [];
+  for (const escort of escortsOf(tpl).filter((e) => aliveOf(world, e) < e.cap)) {
+    const guard = spawnBeside(world, escort, leader);
     if (guard) startEscort(world, guard, leader, null, 0);
+    else missed.push(escort);
   }
+  return missed;
 }
 
 function escortsOf(tpl: NpcTemplate): NpcTemplate[] {
@@ -136,23 +172,29 @@ function driverName(names: Rng): string {
 
 const NEUTRAL_SITES: readonly Site[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== "camp")];
 
-// Raiders spawn at one of their camps, neutrals at any town or other location, and others at their listed sites.
+// A random site among the template's spawn sites.
 function siteFor(world: World, tpl: NpcTemplate): Site {
+  const sites = sitesFor(tpl);
+  return sites[randInt(world, 0, sites.length - 1)];
+}
+
+// Raiders spawn at their camps, neutrals at any town or other location, and others at their listed sites.
+function sitesFor(tpl: NpcTemplate): readonly Site[] {
   const place = tpl.spawn;
-  if (place.kind === "camp") return campOf(world, tpl);
-  if (place.kind === "town") return NEUTRAL_SITES[randInt(world, 0, NEUTRAL_SITES.length - 1)];
-  if (place.kind === "sites") return getKnownSite(place.ids[randInt(world, 0, place.ids.length - 1)]);
+  if (place.kind === "camp") return campsOf(tpl);
+  if (place.kind === "town") return NEUTRAL_SITES;
+  if (place.kind === "sites") return place.ids.map(getKnownSite);
   throw new Error(`${tpl.id} spawns only beside a new ${place.of}`);
 }
 
-// A random camp among the template's bases.
-function campOf(world: World, tpl: NpcTemplate): Site {
+function campsOf(tpl: NpcTemplate): Site[] {
   const bases = profileOf(tpl.traits).bases;
   if (bases.length === 0) throw new Error(`${tpl.id} spawns at a camp but its traits know none`);
-  const id = bases[randInt(world, 0, bases.length - 1)];
-  const camp = REGION.locations.find((l) => l.id === id);
-  if (!camp) throw new Error(`Unknown camp ${id}`);
-  return camp;
+  return bases.map((id) => {
+    const camp = REGION.locations.find((l) => l.id === id);
+    if (!camp) throw new Error(`Unknown camp ${id}`);
+    return camp;
+  });
 }
 
 // A point on the track just outside a random gate of the site.

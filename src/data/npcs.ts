@@ -674,7 +674,7 @@ export const SPAWN = {
   // A respawn never lands closer to the player than this, so no truck pops up beside them. Initial spawns
   // skip it, so the start road has traffic.
   minPlayerDist: 16,
-  gateSpread: 6, // distance beyond a gate for spawns; room for a full camp to spawn at once
+  gateSpread: 12, // distance beyond a gate for spawns; room for the start crowd at Bowl on every seed
   gateAngle: 0.3, // radians either side of the track leaving a gate
   tries: 40,
   escortGap: 1, // tiles between an escort and its leader at spawn; room to pull away without a crash

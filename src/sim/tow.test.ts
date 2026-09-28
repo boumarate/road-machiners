@@ -321,7 +321,11 @@ describe('towing', () => {
     expect(me.speed).toBe(0);
     expect(dist(me.pos, find(w, s.trader.id).pos)).toBeLessThanOrEqual(TOW.gap + 1e-6);
     // The tower stops inward of the pad center, so the truck it trails stands well on the pad and not at its edge.
-    expect(dist(me.pos, nearestPad(town, me.pos))).toBeLessThan(REGION.sites.pad.length / 2 - 0.5);
+    // Drivers keep their own spots across the pad width, so only the offset along the pad length counts.
+    const pad = nearestPad(town, me.pos);
+    const outward = Math.atan2(pad.y - town.pos.y, pad.x - town.pos.x);
+    const along = (me.pos.x - pad.x) * Math.cos(outward) + (me.pos.y - pad.y) * Math.sin(outward);
+    expect(Math.abs(along)).toBeLessThan(REGION.sites.pad.length / 2 - 0.5);
     expect(autoRuns(w)).toBe(false);
     const after = runUntil(w, 5, () => false);
     expect(after.events.some((e) => e.t === 'towDone')).toBe(false);

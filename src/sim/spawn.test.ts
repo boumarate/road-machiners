@@ -34,15 +34,25 @@ describe('NPC spawns', () => {
     expect(spots(1337)).not.toEqual(spots(42));
   }, 15_000);
 
-  it('spreads the first neutral drivers over several sites', () => {
-    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
-    const neutrals = w.vehicles.filter((v) => v.brain && NPCS[v.brain.templateId].spawn.kind === 'town');
-    const sites = new Set(neutrals.map((v) => nearestSite(v.pos).id));
-    expect(sites.size).toBeGreaterThanOrEqual(3);
-  }, 15_000);
+  it('starts the whole roster on every seed, with at most one dealt neutral driver per site', () => {
+    const guards = SPAWN.initial.filter((id) => id === 'convoy').map(() => 'convoyGuard');
+    const roster = [...SPAWN.initial, ...SPAWN.startTraffic.templates, ...guards].sort();
+    for (let seed = 1; seed <= 20; seed++) {
+      const npcs = newWorld(seed * 7919, START_KITS.standard, TEST_MAP).vehicles.filter((v) => v.brain);
+      expect(npcs.map((v) => v.brain!.templateId).sort()).toEqual(roster);
+      const perSite = new Map<string, number>();
+      for (const v of npcs.filter((v) => NPCS[v.brain!.templateId].spawn.kind === 'town')) {
+        const id = nearestSite(v.pos).id;
+        perSite.set(id, (perSite.get(id) ?? 0) + 1);
+      }
+      for (const [id, count] of perSite) {
+        const traffic = id === SPAWN.startTraffic.town ? SPAWN.startTraffic.templates.length : 0;
+        expect(count).toBeLessThanOrEqual(1 + traffic);
+      }
+    }
+  }, 60_000);
 
   it('starts traders at the gate of the town the start road leaves', () => {
-    // On some world seeds the first drivers crowd the gate and a start trader finds no free spot.
     const w = newWorld(2, START_KITS.standard, TEST_MAP);
     const town = REGION.towns.find((t) => t.id === SPAWN.startTraffic.town)!;
     const gate = siteGates(town)[0];
