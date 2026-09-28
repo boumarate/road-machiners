@@ -404,6 +404,7 @@ function infoText(world: World, e: Extract<GameEvent, { t: 'info' }>): LogLine |
 const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent, { t: K }>) => LogLine | null } = {
   activity: activityText,
   info: infoText,
+  scrapPatch: () => ({ text: 'You patch up your car with scrap until it starts moving again.', cls: 'good' }),
   npcKnockout: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} knocked out`, cls: 'good' }),
   npcWake: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} comes to`, cls: 'dim' }),
   stateEnded: stateEndedText,
