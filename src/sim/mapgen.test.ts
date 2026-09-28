@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { START_KITS } from '../data/start';
 import { PHYSICS } from '../data/physics';
-import { isBakedObstacle, isDriveObstacle, mapObstacles, propPose, propShape } from './mapgen';
+import { boxDistance, boxSegmentDistance, isBakedObstacle, isDriveObstacle, mapObstacles, propBoxes, propPose, propReach, propShape, segmentCrossesBox } from './mapgen';
 import { ROAD_INDEX } from './road-index';
 import type { Obstacle } from './types';
 import { dist } from './vec';
@@ -95,7 +95,11 @@ describe('world from the baked map', () => {
 
   it('overlaps no baked prop with any other obstacle', () => {
     const all = world.obstacles.filter((o) => o.kind !== 'site');
-    const overlaps = baked.flatMap((o) => all.filter((other) => other.id !== o.id && dist(o.pos, other.pos) <= o.r + other.r).map((other) => `${o.id} ${other.id}`));
+    // Fence segments of a line meet end to end. On a camp ring they meet at an angle, so their circles overlap a
+    // little, but the segments only touch. The map stores positions as float32, off by up to 6e-5 tiles at x = 600.
+    const ends = (o: Obstacle) => (o.kind === 'landmark' && o.look === 'fence' ? [1, -1].map((k) => ({ x: o.pos.x + k * o.r * Math.cos(o.yaw), y: o.pos.y + k * o.r * Math.sin(o.yaw) })) : []);
+    const touching = (a: Obstacle, b: Obstacle) => ends(a).some((p) => ends(b).some((q) => dist(p, q) < 1e-4));
+    const overlaps = baked.flatMap((o) => all.filter((other) => other.id !== o.id && dist(o.pos, other.pos) < o.r + other.r - 1e-6 && !touching(o, other)).map((other) => `${o.id} ${other.id}`));
     expect(overlaps).toEqual([]);
   });
 
@@ -176,15 +180,47 @@ describe('prop poses', () => {
     expect(() => propPose({ id: 'pond-oasis', pos: { x: 1, y: 1 }, r: 2, kind: 'water' })).toThrow(/pond-oasis/);
   });
 
-  it('keeps every box of every baked prop inside its bounding radius', () => {
-    const tolerance = 0.25; // meters, a half cell of the shape grid
-    const outside = mapObstacles(TEST_MAP).flatMap((o) => {
+  it('reaches the farthest posed box corner of every baked prop', () => {
+    const corners = (o: Obstacle) => {
       const pose = propPose(o);
-      const reach = Math.max(...propShape(pose.model).flatMap((b) => [b.x0, b.x1].flatMap((x) => [b.y0, b.y1].map((y) => Math.hypot(x * pose.scale.x, y * pose.scale.y)))));
-      return reach > o.r * S + tolerance ? [`${o.id} ${pose.model} reach ${reach.toFixed(2)} m > r ${(o.r * S).toFixed(2)} m`] : [];
+      const c = Math.cos(pose.yaw);
+      const s = Math.sin(pose.yaw);
+      // The view's turn: model x runs along yaw, model y along (sin, -cos).
+      return propShape(pose.model).flatMap((b) => [b.x0, b.x1].flatMap((x) => [b.y0, b.y1].map((y) => Math.hypot(x * pose.scale.x * c + y * pose.scale.y * s, x * pose.scale.x * s - y * pose.scale.y * c) / S)));
+    };
+    const misses = mapObstacles(TEST_MAP).flatMap((o) => {
+      const farthest = Math.max(...corners(o));
+      return Math.abs(propReach(o) - farthest) > 1e-9 ? [`${o.id} reach ${propReach(o)} farthest ${farthest}`] : [];
     });
 
-    expect(outside).toEqual([]);
+    expect(misses).toEqual([]);
+  });
+
+  it('places a box where the view draws it: model x along yaw, model y toward map -y', () => {
+    const station = (yaw: number): Landmark => ({ id: 'gasStation-9', pos: { x: 10, y: 20 }, r: 7.2 / S, kind: 'landmark', look: 'gasStation', yaw });
+    const pump = (o: Obstacle) => propBoxes(o)[0]; // model box x 5 to 6.91, y -4.72 to -3.5, at scale 1
+
+    expect(pump(station(0)).center.x).toBeCloseTo(10 + 5.955 / S, 9);
+    expect(pump(station(0)).center.y).toBeCloseTo(20 + 4.11 / S, 9);
+    expect(pump(station(Math.PI / 2)).center.x).toBeCloseTo(10 - 4.11 / S, 9);
+    expect(pump(station(Math.PI / 2)).center.y).toBeCloseTo(20 + 5.955 / S, 9);
+    expect(pump(station(0)).half.x).toBeCloseTo(1.91 / 2 / S, 9);
+    expect(pump(station(0)).z1).toBeCloseTo(0.38, 9);
+  });
+
+  it('tells distance to a box outline and whether a segment crosses it', () => {
+    const fence = propBoxes({ id: 'fence-9', pos: { x: 10, y: 10 }, r: 0.5, kind: 'landmark', look: 'fence', yaw: 0 })[0]; // model x -0.5 to 0.5: the middle post
+
+    expect(boxDistance(fence, { x: 10, y: 10 })).toBe(0);
+    expect(boxDistance(fence, { x: 10 + 0.125 + 1, y: fence.center.y })).toBeCloseTo(1, 9);
+    expect(segmentCrossesBox(fence, { x: 10, y: 5 }, { x: 10, y: 15 })).toBe(true);
+    expect(segmentCrossesBox(fence, { x: 11, y: 5 }, { x: 11, y: 15 })).toBe(false);
+    expect(segmentCrossesBox(fence, { x: 10, y: 5 }, { x: 10, y: 9 })).toBe(false);
+    expect(boxSegmentDistance(fence, { x: 10, y: 5 }, { x: 10, y: 15 })).toBe(0);
+    expect(boxSegmentDistance(fence, { x: 11.125, y: 5 }, { x: 11.125, y: 15 })).toBeCloseTo(1, 9);
+    // Nearest to the corner at +x, +y, closer than either end of the segment.
+    const corner = { x: fence.center.x + fence.half.x, y: fence.center.y + fence.half.y };
+    expect(boxSegmentDistance(fence, { x: 10.625, y: 10 }, { x: 10.125, y: 10.5 })).toBeCloseTo((20.625 - corner.x - corner.y) / Math.SQRT2, 9);
   });
 
   it('refuses a model with no shape', () => {

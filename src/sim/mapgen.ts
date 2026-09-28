@@ -216,3 +216,114 @@ function idHash(s: string): number {
   h ^= h >>> 16;
   return (h >>> 0) / 4294967296;
 }
+
+// One box of a posed prop. Its ground outline is a rectangle in map tiles around center: half.x tiles each way
+// along axis, a unit vector, and half.y tiles each way across it. z0 and z1 are meters above the prop's ground point.
+export type PosedBox = { center: Vec; axis: Vec; half: Vec; z0: number; z1: number };
+// key: names the model, turn, scale and position, so equal keys mean equal boxes. reach: tiles from the prop's
+// position to the farthest corner of its boxes.
+type PosedShape = { key: string; reach: number; boxes: readonly PosedBox[] };
+
+// Shapes about the origin by model, turn and scale, and posed shapes by key. World clones copy obstacles, so the
+// key finds a clone's shape again. Obstacles never change after placement, so each object also keeps its shape.
+const LOCAL_SHAPES = new Map<string, PosedShape>();
+const POSED_BY_KEY = new Map<string, PosedShape>();
+const POSED_SHAPES = new WeakMap<Obstacle, PosedShape>();
+
+// The collision boxes of a prop at its pose.
+export function propBoxes(o: Obstacle): readonly PosedBox[] {
+  return posedShape(o).boxes;
+}
+
+// Tiles from the prop's position to the farthest corner of its posed boxes. A circle of this radius holds the
+// whole shape, so a cheap test with it never misses a collision. The obstacle radius is only the placement footprint.
+export function propReach(o: Obstacle): number {
+  return posedShape(o).reach;
+}
+
+// Names a prop's model, turn, scale and position: two props with one key have the same boxes.
+export function propKey(o: Obstacle): string {
+  return posedShape(o).key;
+}
+
+function posedShape(o: Obstacle): PosedShape {
+  const own = POSED_SHAPES.get(o);
+  if (own) return own;
+  const pose = propPose(o);
+  const local = localShape(pose);
+  const key = `${local.key}|${pose.pos.x},${pose.pos.y}`;
+  let shape = POSED_BY_KEY.get(key);
+  if (!shape) {
+    shape = { key, reach: local.reach, boxes: local.boxes.map((b) => ({ ...b, center: { x: pose.pos.x + b.center.x, y: pose.pos.y + b.center.y } })) };
+    POSED_BY_KEY.set(key, shape);
+  }
+  POSED_SHAPES.set(o, shape);
+  return shape;
+}
+
+// The view turns a model by -yaw about the up axis, and model sideways +y is three.js -z, which is map -y. So a
+// model point (x, y) lands at map offset (x cos + y sin, x sin - y cos) after scaling.
+function localShape(pose: PropPose): PosedShape {
+  const { x: sx, y: sy, z: sz } = pose.scale;
+  const key = `${pose.model}|${pose.yaw}|${sx}|${sy}|${sz}`;
+  const hit = LOCAL_SHAPES.get(key);
+  if (hit) return hit;
+  const c = Math.cos(pose.yaw);
+  const s = Math.sin(pose.yaw);
+  let reach = 0;
+  const boxes = propShape(pose.model).map((b) => {
+    const mx = ((b.x0 + b.x1) / 2) * sx;
+    const my = ((b.y0 + b.y1) / 2) * sy;
+    const half = { x: ((b.x1 - b.x0) / 2) * (sx / M), y: ((b.y1 - b.y0) / 2) * (sy / M) };
+    reach = Math.max(reach, Math.hypot(Math.abs(mx) / M + half.x, Math.abs(my) / M + half.y));
+    return { center: { x: (mx * c + my * s) / M, y: (mx * s - my * c) / M }, axis: { x: c, y: s }, half, z0: b.z0 * sz, z1: b.z1 * sz };
+  });
+  const shape = { key, reach, boxes };
+  LOCAL_SHAPES.set(key, shape);
+  return shape;
+}
+
+// Point p in the box's frame: tiles along its axis and across it, from its center.
+function boxLocal(box: PosedBox, p: Vec): Vec {
+  const dx = p.x - box.center.x;
+  const dy = p.y - box.center.y;
+  return { x: dx * box.axis.x + dy * box.axis.y, y: dy * box.axis.x - dx * box.axis.y };
+}
+
+// Tiles from p to the box's ground outline, 0 inside it.
+export function boxDistance(box: PosedBox, p: Vec): number {
+  const q = boxLocal(box, p);
+  return Math.hypot(Math.max(0, Math.abs(q.x) - box.half.x), Math.max(0, Math.abs(q.y) - box.half.y));
+}
+
+// Whether segment ab touches the box's ground outline. Clips the segment to the outline's slabs.
+export function segmentCrossesBox(box: PosedBox, a: Vec, b: Vec): boolean {
+  const p = boxLocal(box, a);
+  const q = boxLocal(box, b);
+  let t0 = 0;
+  let t1 = 1;
+  for (const [from, to, half] of [[p.x, q.x, box.half.x], [p.y, q.y, box.half.y]]) {
+    const d = to - from;
+    if (d === 0) {
+      if (Math.abs(from) > half) return false;
+      continue;
+    }
+    const ta = (-half - from) / d;
+    const tb = (half - from) / d;
+    t0 = Math.max(t0, Math.min(ta, tb));
+    t1 = Math.min(t1, Math.max(ta, tb));
+    if (t0 > t1) return false;
+  }
+  return true;
+}
+
+// Tiles from segment ab to the box's ground outline, 0 where it crosses. Apart, the nearest points are an end of
+// the segment or a corner of the outline.
+export function boxSegmentDistance(box: PosedBox, a: Vec, b: Vec): number {
+  if (segmentCrossesBox(box, a, b)) return 0;
+  const { center: c, axis: u, half: h } = box;
+  let best = Math.min(boxDistance(box, a), boxDistance(box, b));
+  for (const i of [-1, 1])
+    for (const j of [-1, 1]) best = Math.min(best, segmentDist({ x: c.x + u.x * h.x * i - u.y * h.y * j, y: c.y + u.y * h.x * i + u.x * h.y * j }, a, b));
+  return best;
+}

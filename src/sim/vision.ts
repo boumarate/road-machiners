@@ -1,11 +1,14 @@
-// Fog of war: which tiles the player vehicle can see, blocked by solid obstacles and hills. Water and fences do not block sight.
+// Fog of war: which tiles the player vehicle can see, blocked by props and hills. A prop blocks sight with the boxes of its
+// shape that span eye height, so low fences and junk leave it open. Water does not block sight.
 // The player's current view is world state: player targeting, fire, discovery and the render all read it.
 // NPCs query the same occlusion rules from their own positions.
 
+import { PHYSICS } from '../data/physics';
 import { TERRAIN } from '../data/terrain';
 import { TIME } from '../data/time';
 import type { Obstacle, Vehicle, World } from './types';
 import { heightAt, type Terrain } from './terrain';
+import { boxDistance, propBoxes, propReach, segmentCrossesBox } from './mapgen';
 import { sunAt } from './sun';
 import { weatherAt } from './weather';
 import { dist, segmentDist, type Vec } from './vec';
@@ -15,14 +18,14 @@ import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { PERK_NUMBERS } from '../data/skills';
 
 const BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building', 'landmark'];
+const EYE = TERRAIN.vision.eyeHeight * PHYSICS.metersPerTile; // meters above the ground
 
-// Solid obstacles block sight. A fence does not, since its rails leave gaps to see through.
 function blocksSight(o: Obstacle): boolean {
-  return BLOCKING.includes(o.kind) && !(o.kind === 'landmark' && o.look === 'fence');
+  return BLOCKING.includes(o.kind);
 }
 
-// A circle that blocks sight lines through it.
-type Blocker = { pos: Vec; r: number };
+// A dust screen: a circle that blocks sight lines through it.
+type Screen = { pos: Vec; r: number };
 
 // A viewer's vision radius at a point: the base radius, shrunk by weather and at night, and widened by the
 // player's perception. Night eyes keeps it at night, and storm rider keeps it in weather.
@@ -42,8 +45,8 @@ export function grayRadius(world: World, at: Vec): number {
 export function visibleTiles(world: World, from: Vec): Set<number> {
   const size = world.size;
   const r = sightRadius(world, playerVehicle(world), from);
-  // Every sight line lies within r of the viewer, so blockers beyond r plus their radius cannot touch it.
-  const blockers = world.obstacles.filter((o) => blocksSight(o) && dist(from, o.pos) < r + o.r);
+  // Every sight line lies within r of the viewer, so props beyond r plus their reach cannot touch it.
+  const props = world.obstacles.filter((o) => blocksSight(o) && dist(from, o.pos) < r + propReach(o));
   const out = new Set<number>();
   const lo = { x: Math.max(0, Math.floor(from.x - r)), y: Math.max(0, Math.floor(from.y - r)) };
   const hi = { x: Math.min(size - 1, Math.ceil(from.x + r)), y: Math.min(size - 1, Math.ceil(from.y + r)) };
@@ -51,7 +54,7 @@ export function visibleTiles(world: World, from: Vec): Set<number> {
     for (let y = lo.y; y <= hi.y; y++) {
       const tile = { x: x + 0.5, y: y + 0.5 };
       if (dist(from, tile) > r) continue;
-      if (inPlainView(world, from, tile, blockers)) out.add(y * size + x);
+      if (inPlainView(world, from, tile, props, [])) out.add(y * size + x);
     }
   }
   return out;
@@ -61,28 +64,35 @@ export function canVehicleSee(world: World, observer: Vehicle, position: Vec): b
   if (observer.id === world.player.vehicleId) return playerSees(world, position);
   const target = position;
   return dist(observer.pos, target) <= sightRadius(world, observer) &&
-    inPlainView(world, observer.pos, target, [...world.obstacles.filter(blocksSight), ...dustScreens(world)]);
+    inPlainView(world, observer.pos, target, world.obstacles.filter(blocksSight), dustScreens(world));
 }
 
 // Dust screen clouds block sight like rocks, for NPCs only. The player's view never counts them.
-function dustScreens(world: World): Blocker[] {
+function dustScreens(world: World): Screen[] {
   return world.dustClouds.filter((c) => c.screen).map((c) => ({ pos: c.pos, r: PERK_NUMBERS.dustScreen.radius }));
 }
 
 // Within the close radius, rocks and hills do not hide anything.
-function inPlainView(world: World, a: Vec, b: Vec, blockers: readonly Blocker[]): boolean {
-  return dist(a, b) <= TERRAIN.vision.closeRadius || (hasLineOfSight(a, b, blockers) && clearOverTerrain(world.terrain, a, b));
+function inPlainView(world: World, a: Vec, b: Vec, props: readonly Obstacle[], screens: readonly Screen[]): boolean {
+  return dist(a, b) <= TERRAIN.vision.closeRadius || (hasLineOfSight(a, b, props, screens) && clearOverTerrain(world.terrain, a, b));
 }
 
 // A straight line past rocks and over hills, with no close radius: a shot needs it even when the target is seen.
 export function hasLineOfFire(world: World, a: Vec, b: Vec): boolean {
-  return hasLineOfSight(a, b, world.obstacles.filter(blocksSight)) && clearOverTerrain(world.terrain, a, b);
+  return hasLineOfSight(a, b, world.obstacles.filter(blocksSight), []) && clearOverTerrain(world.terrain, a, b);
 }
 
-// An obstacle blocks sight only if it sits between the viewer and the tile.
-function hasLineOfSight(a: Vec, b: Vec, blockers: readonly Blocker[]): boolean {
+// A dust screen blocks sight only if it sits between the viewer and the target.
+function hasLineOfSight(a: Vec, b: Vec, props: readonly Obstacle[], screens: readonly Screen[]): boolean {
   const targetDist = dist(a, b);
-  return blockers.every((o) => dist(a, o.pos) >= targetDist || segmentDist(o.pos, a, b) >= o.r);
+  return props.every((o) => !propHides(o, a, b)) && screens.every((o) => dist(a, o.pos) >= targetDist || segmentDist(o.pos, a, b) >= o.r);
+}
+
+// A prop hides b from a where the line crosses a box that spans eye height above the prop's ground. A box that
+// holds b does not hide it, so the viewer sees the prop's own face.
+function propHides(o: Obstacle, a: Vec, b: Vec): boolean {
+  if (segmentDist(o.pos, a, b) >= propReach(o)) return false;
+  return propBoxes(o).some((box) => box.z0 <= EYE && box.z1 >= EYE && segmentCrossesBox(box, a, b) && boxDistance(box, b) > 0);
 }
 
 // Hills block sight: the ground between must stay under the line from the viewer's eye to the target's top.

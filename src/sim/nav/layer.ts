@@ -2,14 +2,15 @@
 // costs for one vehicle radius. Road and kill wrecks and parked vehicles are not in here; the A* overlay
 // stamps them per query. Per-driver route taste scales these costs.
 
+import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
 import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from '../../data/terrain';
 import { nearRail } from '../bridge';
-import { isDriveObstacle } from '../mapgen';
+import { boxDistance, isDriveObstacle, propBoxes, propKey, propReach, type PosedBox } from '../mapgen';
 import { isCliff, tileSlope, type Terrain } from '../terrain';
 import { hashRandom } from '../rng';
 import type { Obstacle, Vehicle, World } from '../types';
-import { dist } from '../vec';
+import { dist, type Vec } from '../vec';
 import { ObstacleBuckets, type Blocker } from './buckets';
 
 export const CELL = 0.5; // tiles per grid cell
@@ -48,8 +49,8 @@ export type NavLayer = TerrainNav & {
   coarse: CoarseGrid;
 };
 
-// The static drive obstacles of one obstacles array and a bucket index over them.
-export type StaticSet = { key: string; buckets: ObstacleBuckets };
+// The static drive obstacles of one obstacles array as blockers, and a bucket index over them.
+export type StaticSet = { key: string; blockers: Blocker[]; buckets: ObstacleBuckets };
 
 // Road and kill wrecks come and go in play. Every other drive obstacle is fixed at map generation.
 export function isTransientWreck(o: Obstacle): boolean {
@@ -125,20 +126,39 @@ const staticSets = new WeakMap<Obstacle[], { length: number; set: StaticSet }>()
 export function staticSet(obstacles: Obstacle[], size: number): StaticSet {
   const hit = staticSets.get(obstacles);
   if (hit && hit.length === obstacles.length) return hit.set;
-  const statics = obstacles.filter((o) => isDriveObstacle(o) && !isTransientWreck(o));
-  const set = { key: blockerKey(statics), buckets: new ObstacleBuckets(statics, size) };
+  const statics = obstacles.filter((o) => isDriveObstacle(o) && !isTransientWreck(o)).map(driveBlocker);
+  const set = { key: blockerKey(statics), blockers: statics, buckets: new ObstacleBuckets(statics, size) };
   staticSets.set(obstacles, { length: obstacles.length, set });
   return set;
 }
 
 // Blockers that change during play: road and kill wrecks and the caller's extra circles.
 export function dynamicBlockers(obstacles: Obstacle[], extra: Blocker[]): Blocker[] {
-  return [...obstacles.filter((o) => isDriveObstacle(o) && isTransientWreck(o)), ...extra];
+  return [...obstacles.filter((o) => isDriveObstacle(o) && isTransientWreck(o)).map(driveBlocker), ...extra];
 }
 
-// Exact content key: number-to-string round-trips, so equal keys mean equal circles.
+// A site's edge blocks as a circle. A prop blocks with its boxes that start below truck roofs, so trucks pass
+// under canopies.
+function driveBlocker(o: Obstacle): Blocker {
+  if (o.kind === 'site') return { pos: o.pos, r: o.r };
+  return { pos: o.pos, r: propReach(o), prop: { key: propKey(o), boxes: lowBoxes(propBoxes(o)) } };
+}
+
+// World clones share posed boxes, so each box list is filtered once.
+const lowBoxCache = new WeakMap<readonly PosedBox[], PosedBox[]>();
+
+function lowBoxes(boxes: readonly PosedBox[]): PosedBox[] {
+  let low = lowBoxCache.get(boxes);
+  if (!low) {
+    low = boxes.filter((b) => b.z0 < PHYSICS.truckClearance);
+    lowBoxCache.set(boxes, low);
+  }
+  return low;
+}
+
+// Exact content key: number-to-string round-trips, so equal keys mean equal circles, and a prop key names its pose.
 export function blockerKey(blockers: Blocker[]): string {
-  return blockers.map((o) => `${o.pos.x},${o.pos.y},${o.r}`).join('|');
+  return blockers.map((o) => (o.prop ? o.prop.key : `${o.pos.x},${o.pos.y},${o.r}`)).join('|');
 }
 
 export function navLayer(terrain: Terrain, obstacles: Obstacle[], radius: number): NavLayer {
@@ -163,22 +183,40 @@ export function navLayer(terrain: Terrain, obstacles: Obstacle[], radius: number
     e.cellCliff.set(radius, cliff);
   }
   const blocked = cliff.slice();
-  stampCircles(n, obstacles.filter((o) => isDriveObstacle(o) && !isTransientWreck(o)), radius, (c) => (blocked[c] = 1));
+  stampBlockers(n, statics.blockers, radius, (c) => (blocked[c] = 1));
   const layer: NavLayer = { ...nav, id: nextLayerId++, radius, blocked, coarse: coarseGrid(n, blocked, nav.slow) };
   e.layers.set(key, layer);
   return layer;
 }
 
-// Calls mark for every cell whose center lies within the blocker radius plus vehicle radius plus clearance.
-export function stampCircles(n: number, blockers: Blocker[], radius: number, mark: (cell: number) => void): void {
+// Calls mark for every cell whose center lies closer than the vehicle radius plus clearance to a blocker: to a
+// circle's edge, or to the ground outline of a prop's box.
+export function stampBlockers(n: number, blockers: Blocker[], radius: number, mark: (cell: number) => void): void {
+  const grow = radius + CLEARANCE;
   for (const o of blockers) {
-    const reach = o.r + radius + CLEARANCE;
-    const x0 = Math.max(0, Math.floor((o.pos.x - reach) / CELL));
-    const y0 = Math.max(0, Math.floor((o.pos.y - reach) / CELL));
-    const x1 = Math.min(n - 1, Math.floor((o.pos.x + reach) / CELL));
-    const y1 = Math.min(n - 1, Math.floor((o.pos.y + reach) / CELL));
-    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) if (dist({ x: (x + 0.5) * CELL, y: (y + 0.5) * CELL }, o.pos) < reach) mark(y * n + x);
+    if (!o.prop) {
+      const reach = o.r + grow;
+      stampWithin(n, o.pos, reach, reach, (p) => dist(p, o.pos) < reach, mark);
+      continue;
+    }
+    for (const box of o.prop.boxes) stampWithin(n, box.center, ...boxExtent(box, grow), (p) => boxDistance(box, p) < grow, mark);
   }
+}
+
+// Half the width and height of the map-aligned square around a box's outline grown by grow.
+function boxExtent(box: PosedBox, grow: number): [number, number] {
+  const ax = Math.abs(box.axis.x);
+  const ay = Math.abs(box.axis.y);
+  return [ax * box.half.x + ay * box.half.y + grow, ay * box.half.x + ax * box.half.y + grow];
+}
+
+// Marks the cells within ex and ey tiles of center whose centers pass the test.
+function stampWithin(n: number, center: Vec, ex: number, ey: number, inside: (p: Vec) => boolean, mark: (cell: number) => void): void {
+  const x0 = Math.max(0, Math.floor((center.x - ex) / CELL));
+  const y0 = Math.max(0, Math.floor((center.y - ey) / CELL));
+  const x1 = Math.min(n - 1, Math.floor((center.x + ex) / CELL));
+  const y1 = Math.min(n - 1, Math.floor((center.y + ey) / CELL));
+  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) if (inside({ x: (x + 0.5) * CELL, y: (y + 0.5) * CELL })) mark(y * n + x);
 }
 
 // The connected component of a cell over the 8-neighbour steps A* takes, from 1; 0 on blocked cells.

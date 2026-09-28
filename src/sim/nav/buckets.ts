@@ -1,9 +1,12 @@
-// A uniform grid over circular blockers, so a line check reads only the blockers near its segment.
+// A uniform grid over blockers by their circles, so a line check reads only the blockers near its segment.
 
+import { boxSegmentDistance, type PosedBox } from '../mapgen';
 import { segmentDist, type Vec } from '../vec';
 
-// Circles to route around, such as rocks, wrecks and parked vehicles.
-export type Blocker = { pos: Vec; r: number };
+// What routes keep clear of. Site edges and parked vehicles are circles. A prop blocks by the ground outlines of
+// its boxes that reach below truck roofs. Its r is then its reach, so a circle test with r never misses the boxes,
+// and its key names its pose for cache keys.
+export type Blocker = { pos: Vec; r: number; prop?: { key: string; boxes: readonly PosedBox[] } };
 
 const BUCKET = 8; // tiles per bucket side
 const HALF_DIAG = (BUCKET * Math.SQRT2) / 2;
@@ -28,8 +31,9 @@ export class ObstacleBuckets {
     this.maxR = maxR;
   }
 
-  // Every blocker whose circle, grown by reach, can touch segment ab. Buckets whose center is farther
-  // than reach + the largest radius + half a bucket diagonal cannot hold such a blocker.
+  // Every circle that, grown by reach, can touch segment ab, and every prop with a box outline closer than reach
+  // to it. Buckets whose center is farther than reach + the largest radius + half a bucket diagonal cannot hold
+  // such a blocker.
   alongSegment(a: Vec, b: Vec, reach: number): Blocker[] {
     const out = this.outside.slice();
     const pad = reach + this.maxR;
@@ -45,6 +49,13 @@ export class ObstacleBuckets {
         if (segmentDist({ x: (bx + 0.5) * BUCKET, y: (by + 0.5) * BUCKET }, a, b) > lim) continue;
         for (const o of cell) out.push(o);
       }
-    return out;
+    return out.filter((o) => mayTouch(o, a, b, reach));
   }
+}
+
+// A circle stays a candidate for the caller's own test. A prop is one only when a box outline lies within reach.
+function mayTouch(o: Blocker, a: Vec, b: Vec, reach: number): boolean {
+  if (!o.prop) return true;
+  if (segmentDist(o.pos, a, b) >= o.r + reach) return false;
+  return o.prop.boxes.some((box) => boxSegmentDistance(box, a, b) < reach);
 }

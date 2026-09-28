@@ -296,7 +296,8 @@ describe('physics turns', () => {
     const w = ordered({ kind: 'through', dest: { x: 28, y: 33 } });
     const at = me(w).pos;
     w.obstacles = [-3, -2, -1, 0, 1, 2, 3].map((i) => ({ id: `r${i}`, pos: { x: at.x + 1.8, y: at.y + i * 1.2 }, r: 0.7, kind: 'rock' as const }));
-    const { w: after, d } = play(w, 12);
+    // The truck rolls forward one or two turns until a rock stops it, then backs out; a rock's turn decides which.
+    const { w: after, d } = play(w, 14);
     expect(me(after).order).toBeNull();
     freeDrive(d);
   });

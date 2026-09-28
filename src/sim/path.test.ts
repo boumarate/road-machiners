@@ -3,13 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
 import { resetPerf, perfSnapshot } from '../perf';
-import { isDriveObstacle } from './mapgen';
+import { PHYSICS } from '../data/physics';
+import { boxDistance, boxSegmentDistance, isDriveObstacle, propBoxes, propReach } from './mapgen';
 import { findCells, nearestFreeCell, stampOverlay } from './nav/astar';
 import { COARSE, componentOf, dynamicBlockers, navLayer, terrainNav, tileIndex } from './nav/layer';
 import { continueRoute, keepRoute, route, routeLength, straightClear, type Blocker } from './path';
 import { nextRandom } from './rng';
 import { isCliff, tileAt, tileSlope, type Terrain } from './terrain';
-import type { World } from './types';
+import type { Obstacle, World } from './types';
 import { siteGates } from './sites';
 import { editableTerrain, emptyWorld, npcBrain } from './testkit';
 import { dist, polylineDist, segmentDist, type Vec } from './vec';
@@ -39,6 +40,30 @@ describe("route", () => {
       expect(segmentDist(w.obstacles[0].pos, prev, p)).toBeGreaterThanOrEqual(
         1.2 + 0.6,
       );
+      prev = p;
+    }
+  });
+
+  // A fence segment one tile long, standing along map y. Its rails are 0.05 tiles thick.
+  const fence = { id: "fence-0", pos: { x: 40, y: 30 }, r: 0.5, kind: "landmark" as const, look: "fence" as const, yaw: Math.PI / 2 };
+
+  it("drives straight along a fence's side, closer to it than its radius would allow", () => {
+    const w = emptyWorld();
+    w.obstacles = [fence];
+    const to = { x: 41.2, y: 40 };
+
+    expect(route(w, { x: 41.2, y: 20 }, to, 0.6, [])).toEqual([to]);
+  });
+
+  it("bends around a fence across the way, keeping clear of its rails", () => {
+    const w = emptyWorld();
+    w.obstacles = [fence];
+    const pts = route(w, { x: 35, y: 30 }, { x: 45, y: 30 }, 0.6, []);
+
+    expect(pts.length).toBeGreaterThan(1);
+    let prev = { x: 35, y: 30 };
+    for (const p of pts) {
+      for (const box of propBoxes(fence)) expect(boxSegmentDistance(box, prev, p)).toBeGreaterThanOrEqual(0.6);
       prev = p;
     }
   });
@@ -128,10 +153,10 @@ describe('driver taste', () => {
 });
 
 describe('kept routes', () => {
-  // A rock forces a bend, so the route has a corner before its end.
+  // A row of rocks along the way forces a bend at each end, so the route has corners before its end.
   function bent(): { w: World; from: Vec; to: Vec; points: Vec[] } {
     const w = emptyWorld();
-    w.obstacles = [{ id: 'r', pos: { x: 40, y: 30 }, r: 2, kind: 'rock' }];
+    w.obstacles = [36, 40, 44].map((x) => ({ id: `r${x}`, pos: { x, y: 30 }, r: 1.5, kind: 'rock' as const }));
     const from = { x: 30, y: 30 };
     const to = { x: 50, y: 30 };
     return { w, from, to, points: route(w, from, to, 0.6, []) };
@@ -228,7 +253,7 @@ describe('routes prefer roads', () => {
     const pts = route(w, from, { x: 44, y: 30 }, 0.6, []);
     expect(pts.length).toBeGreaterThan(1);
     expect(dist(pts[0], rock)).toBeGreaterThan(dist(from, rock));
-    for (let i = 1; i < pts.length; i++) expect(segmentDist(rock, pts[i - 1], pts[i])).toBeGreaterThanOrEqual(3 + 0.6);
+    for (let i = 1; i < pts.length; i++) for (const box of propBoxes(w.obstacles[0])) expect(boxSegmentDistance(box, pts[i - 1], pts[i])).toBeGreaterThanOrEqual(0.6);
   });
 
   it('prices the ground within a road width of a site like road', () => {
@@ -261,7 +286,8 @@ describe('routes prefer roads', () => {
 });
 
 // The grid rules before the nav layers, kept as a reference: cliff probes, obstacle stamping,
-// weighted A*, nearest free cell and shortcuts. New routes must match them.
+// weighted A*, nearest free cell and shortcuts. New routes must match them. Props block by the ground outlines of
+// their boxes below truck roofs, and site edges and parked vehicles by circles.
 namespace Ref {
   export const CELL = 0.5;
   export const CLEARANCE = 0.4;
@@ -300,14 +326,23 @@ namespace Ref {
   export function grid(layer: { n: number; cliff: Uint8Array; slow: Float32Array }, blockers: Blocker[], radius: number): Grid {
     const n = layer.n;
     const blocked = layer.cliff.slice();
-    for (const o of blockers) {
-      const reach = o.r + radius + CLEARANCE;
+    const grow = radius + CLEARANCE;
+    // A circle marks the cells around its center, a box the cells around its own center within its half diagonal.
+    const circles = blockers.flatMap((o) => (o.prop ? o.prop.boxes.map((b) => ({ pos: b.center, r: Math.hypot(b.half.x, b.half.y), inside: (p: Vec) => boxDistance(b, p) < grow })) : [{ pos: o.pos, r: o.r, inside: (p: Vec) => dist(p, o.pos) < o.r + grow }]));
+    for (const o of circles) {
+      const reach = o.r + grow;
       const lo = { x: Math.max(0, Math.floor((o.pos.x - reach) / CELL)), y: Math.max(0, Math.floor((o.pos.y - reach) / CELL)) };
       const hi = { x: Math.min(n - 1, Math.floor((o.pos.x + reach) / CELL)), y: Math.min(n - 1, Math.floor((o.pos.y + reach) / CELL)) };
       for (let x = lo.x; x <= hi.x; x++)
-        for (let y = lo.y; y <= hi.y; y++) if (dist({ x: (x + 0.5) * CELL, y: (y + 0.5) * CELL }, o.pos) < reach) blocked[y * n + x] = 1;
+        for (let y = lo.y; y <= hi.y; y++) if (o.inside({ x: (x + 0.5) * CELL, y: (y + 0.5) * CELL })) blocked[y * n + x] = 1;
     }
     return { n, blocked, slow: layer.slow };
+  }
+
+  // A prop's r is its reach, so a line clear of its circle is clear of its boxes.
+  function touches(o: Blocker, a: Vec, b: Vec, reach: number): boolean {
+    if (segmentDist(o.pos, a, b) >= o.r + reach) return false;
+    return !o.prop || o.prop.boxes.some((box) => boxSegmentDistance(box, a, b) < reach);
   }
 
   export function cellOf(g: Grid, p: Vec): number {
@@ -436,7 +471,7 @@ namespace Ref {
   // Route cost of the straight line: length times the mean tile cost of its samples. Infinity when it
   // touches an obstacle or, with a reach, a cliff, or crosses a tile costlier than maxCost.
   export function lineCost(t: Terrain, obstacles: Blocker[], a: Vec, b: Vec, reach: number | null, maxCost: number): number {
-    if (reach !== null && !obstacles.every((o) => segmentDist(o.pos, a, b) >= o.r + reach)) return Infinity;
+    if (reach !== null && obstacles.some((o) => touches(o, a, b, reach))) return Infinity;
     const n = Math.ceil(dist(a, b) * 4);
     let sum = 0;
     for (let k = 0; k <= n; k++) {
@@ -531,7 +566,12 @@ namespace Ref {
   }
 
   export function blockers(w: World, extra: Blocker[]): Blocker[] {
-    return [...w.obstacles.filter(isDriveObstacle), ...extra];
+    return [...w.obstacles.filter(isDriveObstacle).map(blocker), ...extra];
+  }
+
+  function blocker(o: Obstacle): Blocker {
+    if (o.kind === 'site') return o;
+    return { pos: o.pos, r: propReach(o), prop: { key: o.id, boxes: propBoxes(o).filter((b) => b.z0 < PHYSICS.truckClearance) } };
   }
 }
 

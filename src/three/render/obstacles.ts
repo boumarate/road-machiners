@@ -7,7 +7,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { hashStr } from '../../render/noise';
 import { PAL } from '../../render/palette';
 import { PHYSICS } from '../../data/physics';
-import { propPose, type PropPose } from '../../sim/mapgen';
+import { propPose, propReach, type PropPose } from '../../sim/mapgen';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import { hasSalvage, salvageUnits } from '../../sim/salvage';
 import type { Obstacle, SalvageStock } from '../../sim/types';
@@ -49,7 +49,7 @@ export class ObstacleViews {
           m.updateMatrix();
           m.matrixAutoUpdate = false;
         });
-        this.scope.add(obj, o.pos, o.r);
+        this.scope.add(obj, o.pos, viewReach(o));
         this.byId.set(o.id, obj);
       }
     }
@@ -111,6 +111,11 @@ export class ObstacleViews {
     }
     return new Set(rocks.map((o) => o.id));
   }
+}
+
+// Tiles from an obstacle's position that its view can cover. A prop's boxes may reach past its radius.
+function viewReach(o: Obstacle): number {
+  return o.kind === 'water' || o.kind === 'site' ? o.r : propReach(o);
 }
 
 function disposeTree(obj: THREE.Object3D): void {

@@ -5,10 +5,12 @@
 
 import RAPIER from '@dimforge/rapier3d-compat';
 import { chassisDef } from '../data/chassis';
+import { PERF } from '../data/perf';
 import { PHYSICS } from '../data/physics';
 import { RULES } from '../data/rules';
 import { fuelLimited, isNear } from '../sim/far';
-import { isDriveObstacle } from '../sim/mapgen';
+import { isDriveObstacle, propPose, propReach, propShape } from '../sim/mapgen';
+import { playerVehicle } from '../sim/damage';
 import { vehicleMass } from '../sim/mass';
 import { groundSpeed, vehicleStats, type VehicleStats } from '../sim/stats';
 import { continueRoute, keepRoute, route, type KeptRoute } from '../sim/path';
@@ -17,7 +19,7 @@ import { routeBlockers } from '../sim/ai';
 import { BRIDGE_AXIS, BRIDGE_LENGTH } from '../sim/bridge';
 import { deckEnds, heightAt, tileAt, type Terrain } from '../sim/terrain';
 import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
-import type { MoveOrder, Vehicle, World } from '../sim/types';
+import type { MoveOrder, Obstacle, Vehicle, World } from '../sim/types';
 import { angleDiff, bearing, clamp, DEG, dist, type Vec } from '../sim/vec';
 import { bodyOf, type Body } from '../sim/body';
 import { wheelMounts } from './body';
@@ -50,7 +52,7 @@ type Memory = { steer: number; reverse: boolean; route: (KeptRoute & { radius: n
 export type Drive = {
   world: RAPIER.World;
   bodies: Record<string, number>; // vehicle id to rigid body handle
-  obstacles: Record<string, number>; // obstacle id to collider handle
+  obstacles: Record<string, number[]>; // obstacle id to its collider handles
   memory: Record<string, Memory>;
   terrain: number; // terrain collider handle
   bridge: Bridge;
@@ -104,23 +106,59 @@ export function syncDrive(d: Drive, w: World): void {
     delete d.memory[id];
   }
   for (const v of near) syncVehicle(d, w, v);
-  const obstacleIds = new Set(w.obstacles.filter(isDriveObstacle).map((o) => o.id));
-  for (const [id, handle] of Object.entries(d.obstacles)) {
-    if (obstacleIds.has(id)) continue;
-    d.world.removeCollider(d.world.getCollider(handle), false);
-    delete d.obstacles[id];
-  }
-  // Only obstacles that block driving get colliders. Site props are scenery; the site boundary blocks instead.
-  for (const o of w.obstacles.filter(isDriveObstacle)) {
-    if (d.obstacles[o.id] !== undefined) continue;
-    const ground = heightAt(w.terrain, o.pos.x, o.pos.y) * S;
-    const half = PHYSICS.rockHeight / 2;
-    const desc = RAPIER.ColliderDesc.cylinder(half, o.r * S).setTranslation(o.pos.x * S, ground + half - PHYSICS.rockSink, o.pos.y * S);
-    d.obstacles[o.id] = d.world.createCollider(desc).handle;
-  }
+  syncObstacles(d, w);
   for (const v of w.vehicles) {
     if (isNear(w, v) !== (d.bodies[v.id] !== undefined)) throw new Error(`Vehicle ${v.id} is ${isNear(w, v) ? 'near without' : 'far with'} a physics body`);
   }
+}
+
+// Only obstacles that block driving get colliders. Site props are scenery; the site boundary blocks instead. Every
+// physics step costs time per collider in the world, so a prop gets colliders only while a truck with a body could
+// reach it this turn: bodies stay within the near radius of the player, and PHYSICS.propLiveMargin covers a turn.
+function syncObstacles(d: Drive, w: World): void {
+  const center = playerVehicle(w).pos;
+  const range = TERRAIN.vision.radius + PERF.liveMargin + PHYSICS.propLiveMargin;
+  const live = w.obstacles.filter((o) => isDriveObstacle(o) && dist(o.pos, center) <= range + reachOf(o));
+  const liveIds = new Set(live.map((o) => o.id));
+  for (const [id, handles] of Object.entries(d.obstacles)) {
+    if (liveIds.has(id)) continue;
+    for (const handle of handles) d.world.removeCollider(d.world.getCollider(handle), false);
+    delete d.obstacles[id];
+  }
+  for (const o of live) {
+    if (d.obstacles[o.id] === undefined) d.obstacles[o.id] = obstacleColliders(w.terrain, o).map((desc) => d.world.createCollider(desc).handle);
+  }
+}
+
+// Tiles from an obstacle's position to the farthest point of its colliders.
+function reachOf(o: Obstacle): number {
+  return o.kind === 'site' ? o.r : propReach(o);
+}
+
+// A site's boundary blocks as a cylinder of its radius. A prop blocks by its model's boxes at the pose the view
+// draws it: turned by yaw and scaled on the ground height at its position. Boxes that start above truck roofs are
+// left out, so trucks pass under canopies. A box that starts lower than PHYSICS.rockSink reaches that far below the
+// ground, so slopes leave no gap under it.
+function obstacleColliders(t: Terrain, o: Obstacle): RAPIER.ColliderDesc[] {
+  const ground = heightAt(t, o.pos.x, o.pos.y) * S;
+  if (o.kind === 'site') {
+    const half = PHYSICS.rockHeight / 2;
+    return [RAPIER.ColliderDesc.cylinder(half, o.r * S).setTranslation(o.pos.x * S, ground + half - PHYSICS.rockSink, o.pos.y * S)];
+  }
+  const pose = propPose(o);
+  const k = pose.scale;
+  const cos = Math.cos(pose.yaw);
+  const sin = Math.sin(pose.yaw);
+  return propShape(pose.model).filter((b) => b.z0 * k.z < PHYSICS.truckClearance).map((b) => {
+    const bottom = b.z0 * k.z < PHYSICS.rockSink ? Math.min(b.z0 * k.z, -PHYSICS.rockSink) : b.z0 * k.z;
+    const top = b.z1 * k.z;
+    // Box center in scaled model meters: forward and sideways, where model sideways +y is the model's left.
+    const fwd = ((b.x0 + b.x1) / 2) * k.x;
+    const side = ((b.y0 + b.y1) / 2) * k.y;
+    const desc = RAPIER.ColliderDesc.cuboid(((b.x1 - b.x0) / 2) * k.x, (top - bottom) / 2, ((b.y1 - b.y0) / 2) * k.y);
+    desc.setTranslation(pose.pos.x * S + fwd * cos + side * sin, ground + (top + bottom) / 2, pose.pos.y * S + fwd * sin - side * cos);
+    return desc.setRotation(headingQuat(pose.yaw));
+  });
 }
 
 // A stranded truck is set back on its wheels at its sim pose, which applyTurn has moved to free ground.
@@ -189,7 +227,7 @@ function run(d: Drive, w: World, steps: number): TurnResult {
   });
   const owner = new Map<number, string>(); // collider handle to vehicle id
   for (const c of cars) owner.set(c.body.collider(0).handle, c.v.id);
-  const obstacleOf = new Map(Object.entries(d.obstacles).map(([id, h]) => [h, id]));
+  const obstacleOf = new Map(Object.entries(d.obstacles).flatMap(([id, handles]) => handles.map((h) => [h, id] as const)));
 
   const frames: TurnFrames = Object.fromEntries(cars.map((c) => [c.v.id, [] as VehicleFrame[]]));
   const crashes: Crash[] = [];

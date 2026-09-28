@@ -48,10 +48,11 @@ describe('vision', () => {
     expect(vis.has(30 * w.size + 36)).toBe(true);
   });
 
-  it('sees through a fence but not past a shack', () => {
+  // A fence segment is one tile long, so its radius is half a tile.
+  it('sees over a fence but not past a shack', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const from = { x: 30, y: 30 };
-    w.obstacles = [{ id: 'fence-0', pos: { x: 33, y: 30 }, r: 1.2, kind: 'landmark', look: 'fence', yaw: Math.PI / 2 }];
+    w.obstacles = [{ id: 'fence-0', pos: { x: 33, y: 30 }, r: 0.5, kind: 'landmark', look: 'fence', yaw: Math.PI / 2 }];
     const pastFence = visibleTiles(w, from).has(30 * w.size + 36);
     w.obstacles = [{ id: 'shack-0', pos: { x: 33, y: 30 }, r: 1.2, kind: 'landmark', look: 'shack', yaw: 0 }];
     const pastShack = visibleTiles(w, from).has(30 * w.size + 36);
@@ -60,13 +61,41 @@ describe('vision', () => {
     expect(pastShack).toBe(false);
   });
 
-  it('lets an NPC see and a gun fire through a fence', () => {
+  it('lets an NPC see and a gun fire over a fence', () => {
     const w = emptyWorld({ x: 30, y: 30 });
-    w.obstacles = [{ id: 'fence-0', pos: { x: 33, y: 30 }, r: 1.2, kind: 'landmark', look: 'fence', yaw: Math.PI / 2 }];
+    w.obstacles = [{ id: 'fence-0', pos: { x: 33, y: 30 }, r: 0.5, kind: 'landmark', look: 'fence', yaw: Math.PI / 2 }];
     const npc = { ...w.vehicles[0], id: 'npc', pos: { x: 30, y: 30 } };
 
     expect(canVehicleSee(w, npc, { x: 36.5, y: 30 })).toBe(true);
     expect(hasLineOfFire(w, { x: 30, y: 30 }, { x: 36.5, y: 30 })).toBe(true);
+  });
+
+  it('sees over a junk pile lower than the eye', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.obstacles = [{ id: 'junk-0', pos: { x: 33, y: 30 }, r: 1.2, kind: 'landmark', look: 'junk', yaw: 0 }];
+
+    expect(hasLineOfFire(w, { x: 30, y: 30 }, { x: 36.5, y: 30 })).toBe(true);
+  });
+
+  // The ruin model at scale 1 (radius 1.2 tiles). Its south corner, model y -3.9 to -2.5 m at model x 3.35 to
+  // 4.45 m, is rubble below eye height, and its standing south wall ends at model y -3.52 m. Model y runs to map -y.
+  it('sees over the rubble of a ruin but not through its standing wall', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.obstacles = [{ id: 'ruin-0', pos: { x: 33, y: 30 }, r: 1.2, kind: 'landmark', look: 'ruin', yaw: 0 }];
+    const line = (modelY: number) => hasLineOfFire(w, { x: 28, y: 30 - modelY / 4 }, { x: 38, y: 30 - modelY / 4 });
+
+    expect(line(-3.7)).toBe(true); // 0.9 tiles from the center, inside its 1.2-tile radius
+    expect(line(-3)).toBe(false);
+    expect(line(0)).toBe(false);
+  });
+
+  it('sees a ruin wall that holds the target', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.obstacles = [{ id: 'ruin-0', pos: { x: 33, y: 30 }, r: 1.2, kind: 'landmark', look: 'ruin', yaw: 0 }];
+    const eastWall = { x: 33 + 4 / 4, y: 30 }; // model x 3.5 to 4.5 m
+
+    expect(hasLineOfFire(w, { x: 40, y: 30 }, eastWall)).toBe(true);
+    expect(hasLineOfFire(w, { x: 26, y: 30 }, eastWall)).toBe(false);
   });
 
   it('respects the vision radius', () => {

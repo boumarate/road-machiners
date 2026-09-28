@@ -5,7 +5,7 @@
 import { REGION } from '../../data/region';
 import { count } from '../../perf';
 import type { Blocker } from './buckets';
-import { CELL, COARSE, componentOf, stampCircles, tasted, type NavLayer, type Taste } from './layer';
+import { CELL, COARSE, componentOf, stampBlockers, tasted, type NavLayer, type Taste } from './layer';
 
 // Cells blocked by road and kill wrecks and parked vehicles: stamp[c] === gen. Valid until the next stampOverlay.
 export type Overlay = { stamp: Uint32Array; gen: number };
@@ -20,7 +20,7 @@ export function stampOverlay(layer: NavLayer, blockers: Blocker[], radius: numbe
   }
   const gen = ++overlay.gen;
   const stamp = overlay.stamp;
-  stampCircles(layer.n, blockers, radius, (c) => (stamp[c] = gen));
+  stampBlockers(layer.n, blockers, radius, (c) => (stamp[c] = gen));
   return overlay;
 }
 
