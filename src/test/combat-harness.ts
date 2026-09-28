@@ -124,8 +124,10 @@ function orders(w: World, fight: Fight, foe: Vehicle): World {
   return setMoveOrder(w, { kind: 'through', dest: { x: foe.pos.x + Math.cos(a) * fight.orbit, y: foe.pos.y + Math.sin(a) * fight.orbit } });
 }
 
-function turnLine(w: World, turn: number, me: Vehicle, enemyIds: Set<string>): string {
-  const foes = w.vehicles.filter((v) => enemyIds.has(v.id)).map((v) =>
+// One line about a turn: distance, speeds, each enemy's activity and the shots.
+export function turnLine(w: World, turn: number): string {
+  const me = w.vehicles.find((v) => v.id === w.player.vehicleId)!;
+  const foes = w.vehicles.filter((v) => v.id !== me.id).map((v) =>
     `${v.id} d${dist(v.pos, me.pos).toFixed(1)} v${v.speed.toFixed(1)} ${v.brain?.goals.at(-1)?.kind ?? '-'}${isDefeated(v) ? ' OUT' : ''}`);
   const shots = w.events.flatMap((e) => (e.t === 'shot' ? [`${e.shooter}:${e.rounds.filter((r) => r.hit).length}/${e.rounds.length}@${Math.round(e.chance * 100)}%`] : []));
   return `t${turn} me ${me.pos.x.toFixed(1)},${me.pos.y.toFixed(1)} v${me.speed.toFixed(1)} ${me.order?.kind ?? "-"} | ${foes.join(' | ')} | ${shots.join(' ')}`;
@@ -181,8 +183,8 @@ function playTurn(w: World, d: Drive, c: Count): { w: World; d: Drive } {
   return { w, d: next! };
 }
 
-// log, when given, gets one line per turn: distance, speeds, each enemy's activity and the shots.
-export function runFight(fight: Fight, log?: (line: string) => void): FightReport {
+// watch, when given, sees the world after every turn, for traces and custom counts.
+export function runFight(fight: Fight, watch?: (w: World, turn: number) => void): FightReport {
   let w = setup(fight);
   const c: Count = { meId: w.player.vehicleId, enemyIds: new Set(w.vehicles.slice(1).map((v) => v.id)), me: side(), them: side() };
   let d = buildDrive(w);
@@ -196,7 +198,7 @@ export function runFight(fight: Fight, log?: (line: string) => void): FightRepor
     turns++;
     const me = w.vehicles.find((v) => v.id === c.meId)!;
     speed += Math.abs(me.speed);
-    log?.(turnLine(w, turns, me, c.enemyIds));
+    watch?.(w, turns);
     outcome = outcomeOf(w, c);
   }
   freeDrive(d);

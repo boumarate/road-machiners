@@ -4,7 +4,7 @@
 // --trace prints one line per turn. --out sets the report folder, tmp/combat by default.
 // --enemies lists lineups; + joins trucks in one lineup. --set changes one balance number for this run.
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { formatReport, POLICIES, runFight, setNumber } from '../src/test/combat-harness.ts';
+import { formatReport, POLICIES, runFight, setNumber, turnLine } from '../src/test/combat-harness.ts';
 import { initPhysics } from '../src/phys/drive.ts';
 
 function argOf(name, fallback) {
@@ -43,7 +43,7 @@ await initPhysics();
 console.log(`Running ${lineups.length} lineups x ${policies.length} policies x ${seeds.length} seeds...`);
 const reports = [];
 for (const enemies of lineups)
-  for (const policy of policies) for (const seed of seeds) reports.push(runFight({ ...base, enemies, policy, seed }, trace ? (l) => console.log(`${enemies.join('+')} ${policy} s${seed} ${l}`) : undefined));
+  for (const policy of policies) for (const seed of seeds) reports.push(runFight({ ...base, enemies, policy, seed }, trace ? (w, t) => console.log(`${enemies.join('+')} ${policy} s${seed} ${turnLine(w, t)}`) : undefined));
 
 const out = argOf('out', 'tmp/combat');
 mkdirSync(out, { recursive: true });
