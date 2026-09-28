@@ -25,7 +25,7 @@ import { playerVehicle, vehicleById } from './damage';
 import { isDefeated, isKnockedOut } from './defeat';
 import { contactsOf, hearsBeacon } from './detect';
 import { route, routeLength } from './path';
-import { decide, getKnownSite, getUpkeepReserve, isWeak, npcProfile } from './npc-decisions';
+import { busyWithFight, decide, getKnownSite, getUpkeepReserve, isWeak, npcProfile } from './npc-decisions';
 import { placeBase } from './npc-activities';
 import { skillEffect } from './progress';
 import { canUseSite, nearestPad, type Site } from './sites';
@@ -224,7 +224,7 @@ export function towGoal(world: World, vehicle: Vehicle): NpcActivity {
 // Where this NPC puts the client when it could tow it: in sight, or for the player also on the beacon. Otherwise
 // null.
 export function strandedAt(world: World, vehicle: Vehicle, client: Vehicle): Vec | null {
-  if (!canTow(world, vehicle, client)) return null;
+  if (busyWithFight(client, vehicle.id) || !canTow(world, vehicle, client)) return null;
   if (canVehicleSee(world, vehicle, client.pos)) return client.pos;
   return isPlayer(world, client) ? beaconCenter(world, vehicle, client) : null;
 }
@@ -513,7 +513,7 @@ export function isFreeMerc(world: World, v: Vehicle): boolean {
 
 // Free mercs the client sees and is at peace with, nearest first.
 export function mercsInSight(world: World, client: Vehicle): Vehicle[] {
-  const mercs = world.vehicles.filter((v) => v.id !== client.id && isFreeMerc(world, v) && !isHostile(world, client, v) && canVehicleSee(world, client, v.pos));
+  const mercs = world.vehicles.filter((v) => v.id !== client.id && isFreeMerc(world, v) && !busyWithFight(v, client.id) && !isHostile(world, client, v) && canVehicleSee(world, client, v.pos));
   return mercs.sort((a, b) => dist(client.pos, a.pos) - dist(client.pos, b.pos));
 }
 

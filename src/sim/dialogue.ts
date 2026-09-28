@@ -3,13 +3,13 @@
 // NPC call opens on the topic it raises. Turns wait while a call is open. Topic content lives in
 // src/data/dialogue.ts, and its logic in src/sim/dialogue-rules.ts.
 
-import { END, HONK_RANGE, HUB, TOPICS, TRAIT_TALK, type DialogueOption, type Topic, type TopicId, type Voice } from '../data/dialogue';
+import { BUSY_LINE, END, HONK_RANGE, HUB, TOPICS, TRAIT_TALK, type DialogueOption, type Topic, type TopicId, type Voice } from '../data/dialogue';
 import { inFeud, isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
 import type { Call, CallVars, Vehicle, World } from './types';
 import { dist } from './vec';
-import { npcTraits } from './npc-decisions';
+import { busyWithFight, npcTraits } from './npc-decisions';
 import { practice } from './progress';
 import { canVehicleSee } from './vision';
 import { playerCommand, requireActivePlayer, update } from './world';
@@ -103,8 +103,8 @@ function begin(world: World, npc: Vehicle): Call {
   return call;
 }
 
-// The player calls a truck in sight. A truck in a feud with the player with no topic to take up answers once and
-// hangs up.
+// The player calls a truck in sight. A truck busy fighting another, or in a feud with the player with no topic to
+// take up, answers once and hangs up.
 export function callVehicle(world: World, npcId: string): World {
   return update(world, (w) => {
     requireActivePlayer(w);
@@ -112,12 +112,17 @@ export function callVehicle(world: World, npcId: string): World {
     const npc = vehicleById(w, npcId);
     if (!npc.brain) throw new Error(`${npcId} has no driver to call`);
     if (!canVehicleSee(w, playerVehicle(w), npc.pos)) throw new Error(`${npcId} is out of sight`);
-    if (inFeud(w, npc, playerVehicle(w)) && askable(w, npc).length === 0) {
-      say(w, npc.id, talkOf(npc).refusal, {});
-      return;
-    }
+    const refusal = refusalOf(w, npc);
+    if (refusal) return say(w, npc.id, refusal, {});
     enter(w, begin(w, npc), null, HUB);
   });
+}
+
+// The line a driver answers with instead of taking the player's call, or null when it takes the call.
+function refusalOf(world: World, npc: Vehicle): string | null {
+  if (busyWithFight(npc, world.player.vehicleId)) return BUSY_LINE;
+  if (inFeud(world, npc, playerVehicle(world)) && askable(world, npc).length === 0) return talkOf(npc).refusal;
+  return null;
 }
 
 // The player picks an offered option by its index in currentOptions().
@@ -178,7 +183,8 @@ export function hangUp(world: World): World {
   });
 }
 
-// A turn step: the first NPC in vehicle order that sees the player and wants to raise a topic calls. The
+// A turn step: the first NPC in vehicle order that sees the player, is not busy fighting another truck and wants to
+// raise a topic calls. The
 // highest priority topic wins. A driver in a feud with the player calls only with a topic raised during feuds. One call at a time.
 export function raiseCalls(world: World): void {
   if (world.player.call || world.player.state !== 'active') return;
@@ -192,7 +198,7 @@ export function raiseCalls(world: World): void {
 }
 
 function raisedTopic(world: World, npc: Vehicle, me: Vehicle): Topic | null {
-  if (!npc.brain || !canVehicleSee(world, npc, me.pos)) return null;
+  if (!npc.brain || busyWithFight(npc, me.id) || !canVehicleSee(world, npc, me.pos)) return null;
   const feud = inFeud(world, npc, me);
   const wanted = talkOf(npc).topics
     .map((id) => TOPICS[id])
@@ -201,8 +207,8 @@ function raisedTopic(world: World, npc: Vehicle, me: Vehicle): Topic | null {
   return wanted[0] ?? null;
 }
 
-// The horn is a signal, not a call. The player honks, and every NPC in earshot whose class answers and that is
-// not hostile honks back, nearest first. Honking takes no turn.
+// The horn is a signal, not a call. The player honks, and every NPC in earshot whose class answers, that is not
+// hostile and that is not busy fighting another truck honks back, nearest first. Honking takes no turn.
 export function honk(world: World): World {
   return playerCommand(world, (w) => {
     const me = playerVehicle(w);
@@ -221,6 +227,6 @@ function practiceHonk(world: World, me: Vehicle, npc: Vehicle): void {
 
 function answering(world: World, me: Vehicle): Vehicle[] {
   return world.vehicles
-    .filter((v) => v.brain && dist(v.pos, me.pos) <= HONK_RANGE && talkOf(v).honksBack && !isHostile(world, v, me))
+    .filter((v) => v.brain && dist(v.pos, me.pos) <= HONK_RANGE && talkOf(v).honksBack && !busyWithFight(v, me.id) && !isHostile(world, v, me))
     .sort((a, b) => dist(a.pos, me.pos) - dist(b.pos, me.pos));
 }

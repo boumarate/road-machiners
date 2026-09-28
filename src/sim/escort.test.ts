@@ -344,6 +344,12 @@ describe('hiring a merc', () => {
     expect(optionWeights(w, trader, 'escortSeen', merc.id, null)).not.toHaveProperty('hire');
   });
 
+  it('a merc busy fighting another truck cannot be hired', () => {
+    const { w, trader, merc } = onTrip(5000);
+    merc.brain!.goals.push({ kind: 'fight', targetId: 'someone-else', destination: { ...merc.pos }, reason: 'fight back', phase: 'travel' });
+    expect(optionWeights(w, trader, 'escortSeen', merc.id, null)).not.toHaveProperty('hire');
+  });
+
   it('a client that cannot pay the fee above its upkeep reserve cannot hire', () => {
     const { w, trader, merc } = onTrip(0);
     expect(optionWeights(w, trader, 'escortSeen', merc.id, null)).not.toHaveProperty('hire');

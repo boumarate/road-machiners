@@ -321,12 +321,19 @@ export function haulGoods(siteId: string): string[] {
   return goods;
 }
 
+// True while an NPC driver fights or flees a truck other than `otherId`. Such a driver takes no calls or offers
+// from that truck, and nobody but its foe starts a robbery, tow or hire with it.
+export function busyWithFight(vehicle: Vehicle, otherId: string): boolean {
+  const top = vehicle.brain ? topGoal(vehicle) : null;
+  return (top?.kind === 'fight' || top?.kind === 'flee') && top.targetId !== otherId;
+}
+
 // ---- Robbery.
 
-// A robber can rob a truck it sees, that is not hostile yet, and that carries loot.
-// Cheap checks run before the sight line.
+// A robber can rob a truck it sees, that is not hostile yet, that is not busy fighting another, and that carries
+// loot. Cheap checks run before the sight line.
 export function canRob(w: World, robber: Vehicle, target: Vehicle): boolean {
-  if (robber.id === target.id || !hasLoot(target)) return false;
+  if (robber.id === target.id || !hasLoot(target) || busyWithFight(target, robber.id)) return false;
   if (isHostile(w, robber, target)) return false;
   return canVehicleSee(w, robber, target.pos);
 }

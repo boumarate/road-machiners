@@ -37,6 +37,8 @@ export type Topic = {
 
 export const HUB = 'hub';
 export const END = 'end';
+// What a driver busy fighting another truck says when the player calls.
+export const BUSY_LINE = 'Busy here! Off the channel.';
 
 export const TOPICS: Record<TopicId, Topic> = {
   directions: {

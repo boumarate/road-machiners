@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { PERK_NUMBERS, XP_SOURCES } from '../data/skills';
-import { TRAIT_TALK, END, HONK_RANGE, HUB, TOPICS, type Topic } from '../data/dialogue';
+import { BUSY_LINE, TRAIT_TALK, END, HONK_RANGE, HUB, TOPICS, type Topic } from '../data/dialogue';
 import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, honk, placeholders, raiseCalls } from './dialogue';
@@ -92,6 +92,20 @@ describe('calls', () => {
     expect(next.events).toContainEqual({ t: 'say', speaker: npc.id, text: TRAIT_TALK.trader.voice!.refusal, vars: {} });
   });
 
+  it('a truck busy fighting another truck answers once and opens no call', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    npc.brain!.goals.push({ kind: 'fight', targetId: 'someone-else', destination: { x: 40, y: 30 }, reason: 'fight back', phase: 'travel' });
+    const next = callVehicle(w, npc.id);
+    expect(next.player.call).toBeNull();
+    expect(next.events).toContainEqual({ t: 'say', speaker: npc.id, text: BUSY_LINE, vars: {} });
+  });
+
+  it('a truck fighting the player still takes the call', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    npc.brain!.goals.push({ kind: 'fight', targetId: w.player.vehicleId, destination: { x: 30, y: 30 }, reason: 'fight back', phase: 'travel' });
+    expect(callVehicle(w, npc.id).player.call).not.toBeNull();
+  });
+
   it('stops turns and other commands until it ends', () => {
     const { w, npc } = withNpc('trader', 'traders');
     const open = callVehicle(w, npc.id);
@@ -168,6 +182,13 @@ describe('NPC calls', () => {
     expect(closed.player.call).toBeNull();
   });
 
+  it('an NPC busy fighting another truck raises no call', () => {
+    const { w, npc } = withNpc('trader', 'traders');
+    npc.brain!.goals.push({ kind: 'flee', targetId: 'someone-else', destination: { x: 50, y: 30 }, reason: 'escape an attacker', phase: 'travel' });
+    raiseCalls(w);
+    expect(w.player.call).toBeNull();
+  });
+
   it('an NPC that does not see the player stays quiet', () => {
     const { w } = withNpc('trader', 'traders', 200);
     raiseCalls(w);
@@ -201,12 +222,14 @@ describe('honk', () => {
     expect(honkers(honk(w))).toEqual([w.player.vehicleId, near.id, far.id]);
   });
 
-  it('trucks out of earshot, raiders and trucks in a feud stay silent', () => {
+  it('trucks out of earshot, raiders, trucks in a feud and trucks busy fighting stay silent', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     npcAt(w, 'trader', 'traders', 30 + HONK_RANGE + 1);
     const feuding = npcAt(w, 'scavenger', 'scavengers', 34);
     addState(w, 'feud', feuding.id, w.player.vehicleId, { kind: 'feud', robbery: false });
     npcAt(w, 'buggy', 'raiders', 36);
+    const busy = npcAt(w, 'trader', 'traders', 32);
+    busy.brain!.goals.push({ kind: 'flee', targetId: 'someone-else', destination: { x: 60, y: 30 }, reason: 'escape an attacker', phase: 'travel' });
     expect(honkers(honk(w))).toEqual([w.player.vehicleId]);
   });
 

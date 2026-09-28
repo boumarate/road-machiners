@@ -77,6 +77,14 @@ const UNAVAILABLE: Record<string, Setup> = {
     const w = emptyWorld({ x: 200, y: 200 });
     return { w, robber: addScumbag(w, { x: 10, y: 10 }), target: addPrey(w, { x: 15, y: 10 }, [], 0) };
   },
+  busyFighting: () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const robber = addScumbag(w, { x: 10, y: 10 });
+    const target = addPrey(w, { x: 15, y: 10 });
+    target.brain = npcBrain('trader', target.pos, ['trader']);
+    target.brain.goals.push({ kind: 'fight', targetId: 'someone-else', destination: { x: 20, y: 10 }, reason: 'fight back', phase: 'travel' });
+    return { w, robber, target };
+  },
 };
 
 // Worlds where one robbery judgment fails and the others pass.
