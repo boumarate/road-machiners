@@ -14,10 +14,11 @@ from __future__ import annotations
 
 import math
 
+import bmesh
 import bpy
 from mathutils import Vector
 
-from kit import CELL_ACROSS, CELL_ALONG, Kit
+from kit import CELL_ACROSS, CELL_ALONG, Kit, Vec3
 from parts_common_core import COLORS, FIT_SLACK
 from shapes import prism
 
@@ -129,3 +130,39 @@ def check_base(kit: Kit, name: str, g: Grid) -> None:
     print(f"{name} bounds x {lo.x:.3f}..{hi.x:.3f} y {lo.y:.3f}..{hi.y:.3f} z {lo.z:.3f}..{hi.z:.3f}")
     if lo.x < -g.half_x - FIT_SLACK or hi.x > g.half_x + FIT_SLACK or lo.y < -g.half_y - FIT_SLACK or hi.y > g.half_y + FIT_SLACK:
         raise RuntimeError(f"{name} leaves its {g.cols}x{g.rows} footprint: x {lo.x:.3f}..{hi.x:.3f}, y {lo.y:.3f}..{hi.y:.3f}")
+
+
+def hull_mesh(name: str, points: list[Vec3]) -> bpy.types.Object:
+    """A convex hull of points as an unregistered object, with coplanar triangles merged into flat faces."""
+    mesh = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    verts = [bm.verts.new(p) for p in points]
+    result = bmesh.ops.convex_hull(bm, input=verts)
+    bmesh.ops.delete(bm, geom=result["geom_interior"] + result["geom_unused"], context="VERTS")
+    bmesh.ops.dissolve_limit(bm, angle_limit=0.01, verts=bm.verts, edges=bm.edges)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(mesh)
+    bm.free()
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    return obj
+
+
+def cut_hulls(obj: bpy.types.Object, cutters: list[list[Vec3]]) -> None:
+    """Subtracts the convex hull of each point list from obj."""
+    for i, points in enumerate(cutters):
+        cutter = hull_mesh(f"{obj.name}_cutter{i}", points)
+        mod = obj.modifiers.new(f"cut{i}", "BOOLEAN")
+        mod.operation = "DIFFERENCE"
+        mod.solver = "EXACT"
+        mod.object = cutter
+        bpy.ops.object.select_all(action="DESELECT")
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+        bpy.data.objects.remove(cutter)
+
+
+def cut_boxes(obj: bpy.types.Object, boxes: list[tuple[Vec3, Vec3]]) -> None:
+    """Subtracts axis-aligned boxes, each given as (min corner, max corner), from obj."""
+    cut_hulls(obj, [[(x, y, z) for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])] for lo, hi in boxes])

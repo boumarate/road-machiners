@@ -822,11 +822,11 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   },
   // Each chassis has one cab. It fills the cells where its base model draws the cab or the driver's seat. A closed
   // cab is tall, so guns cannot fire across it. An open seat is not.
-  // An open seat, a hull hatch or a roll cage: the buggy, the gunwagon and the carrier.
+  // An open seat, a hull hatch or a roll cage: the buggy, the gunwagon, the carrier and the jeep.
   cab: {
     id: "cab", kind: "core", name: "Driver seat", hp: 120, base: 80, tier: 1, w: 1, h: 1, mass: 80, armor: 3, tall: false, role: "cab",
   },
-  // The courier's one-seat cabin.
+  // The courier's one-seat cabin and the bus driver's seat.
   cabNarrow: {
     id: "cabNarrow", kind: "core", name: "Cabin", hp: 120, base: 80, tier: 1, w: 1, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
   },
@@ -834,9 +834,13 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   cabRow: {
     id: "cabRow", kind: "core", name: "Cab", hp: 120, base: 80, tier: 1, w: 3, h: 1, mass: 80, armor: 3, tall: true, role: "cab",
   },
-  // The scout's regular cab.
+  // The scout's regular cab and the loader's cab.
   cabPickup: {
     id: "cabPickup", kind: "core", name: "Cab", hp: 120, base: 80, tier: 1, w: 3, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
+  },
+  // The convertible's two open seat rows. Guns fire across them.
+  cabOpen: {
+    id: "cabOpen", kind: "core", name: "Open seats", hp: 120, base: 80, tier: 1, w: 3, h: 2, mass: 80, armor: 3, tall: false, role: "cab",
   },
   // The hauler's cab-over, beside the engine it sits on.
   cabOver: {

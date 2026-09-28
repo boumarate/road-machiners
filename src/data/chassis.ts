@@ -36,7 +36,7 @@ export type ChassisDef = {
   base: number; // hand-set part of the value. See chassisModifier().
   value: number; // money value of a new chassis, base plus a stat modifier
   tier: Tier;
-  look: 'pickup' | 'hauler' | 'buggy' | 'wagon' | 'courier' | 'van' | 'longbed' | 'carrier' | 'tractor';
+  look: 'pickup' | 'hauler' | 'buggy' | 'wagon' | 'courier' | 'van' | 'longbed' | 'carrier' | 'tractor' | 'jeep' | 'convertible' | 'bus' | 'loader';
 };
 
 // Money per unit of each priced stat. See partModifier() in src/data/parts.ts for the value rule.
@@ -229,6 +229,54 @@ const UNPRICED_CHASSIS: Record<string, Unpriced<ChassisDef>> = {
     ],
     fuelCap: 120, fuelPerTile: 0.6, base: 2510, tier: 3, look: 'tractor',
   },
+  // A VW Kübelwagen: open seats, a flat hood over the tank and the air-cooled engine under a rear lid.
+  jeep: {
+    id: 'jeep', name: 'Jeep', maxSpeed: 8.2, accel: 2.5, brake: 3, turnSlow: 115, turnFast: 42, reverseTurn: 80,
+    mass: 450, ratedMass: 1400, radius: 0.55,
+    layout: ['.FF.', 'XXDX', 'LXDR', 'LDXR', 'LEER', 'XEEX', '.BB.'],
+    core: [
+      { defId: 'cab', x: 1, y: 2 }, { defId: 'transmission', x: 2, y: 3 }, { defId: 'tank', x: 1, y: 1 },
+      { defId: 'wheel', x: 0, y: 1 }, { defId: 'wheel', x: 3, y: 1 },
+      { defId: 'wheel', x: 0, y: 5 }, { defId: 'wheel', x: 3, y: 5 },
+    ],
+    fuelCap: 35, fuelPerTile: 0.2, base: 1200, tier: 1, look: 'jeep',
+  },
+  // A 1964 Corvair Monza convertible: a front trunk, open seats and a flat-six under the rear deck lid.
+  convertible: {
+    id: 'convertible', name: 'Convertible', maxSpeed: 9.4, accel: 2.5, brake: 3, turnSlow: 110, turnFast: 40, reverseTurn: 70,
+    mass: 750, ratedMass: 2000, radius: 0.6,
+    layout: ['.FFF.', 'XDDDX', 'LXXDR', 'LXXXR', 'LXXXR', 'LDXDR', 'LEEDR', 'XEEDX', '.BBB.'],
+    core: [
+      { defId: 'cabOpen', x: 1, y: 3 }, { defId: 'transmission', x: 2, y: 5 }, { defId: 'tankLong', x: 1, y: 2 },
+      { defId: 'wheel', x: 0, y: 1 }, { defId: 'wheel', x: 4, y: 1 },
+      { defId: 'wheel', x: 0, y: 7 }, { defId: 'wheel', x: 4, y: 7 },
+    ],
+    fuelCap: 45, fuelPerTile: 0.26, base: 1400, tier: 2, look: 'convertible',
+  },
+  // A LAZ-695 city bus: guns and frames ride on the roof.
+  bus: {
+    id: 'bus', name: 'Bus', maxSpeed: 5.5, accel: 0.9, brake: 2, turnSlow: 65, turnFast: 22, reverseTurn: 40,
+    mass: 3000, ratedMass: 6800, radius: 0.9,
+    layout: ['.FFFF.', 'XXDDDX', 'LXDDDR', 'LDDDDR', 'LDDDDR', 'LDDDDR', 'LDDDDR', 'LDXXDR', 'LDDXDR', 'LDEEDR', 'XDEEDX', '.BBBB.'],
+    core: [
+      { defId: 'cabNarrow', x: 1, y: 1 }, { defId: 'transmissionMid', x: 3, y: 8 }, { defId: 'tankMid', x: 2, y: 7 },
+      { defId: 'wheelMid', x: 0, y: 1 }, { defId: 'wheelMid', x: 5, y: 1 },
+      { defId: 'wheelMid', x: 0, y: 10 }, { defId: 'wheelMid', x: 5, y: 10 },
+    ],
+    fuelCap: 110, fuelPerTile: 0.45, base: 900, tier: 2, look: 'bus',
+  },
+  // A Caterpillar 950 wheel loader: the bucket on the front row, the cab in the middle and the engine over the counterweight.
+  loader: {
+    id: 'loader', name: 'Wheel loader', maxSpeed: 3.6, accel: 1.6, brake: 2.5, turnSlow: 85, turnFast: 30, reverseTurn: 60,
+    mass: 4200, ratedMass: 7000, radius: 0.9,
+    layout: ['.FFFFF.', 'XDDDDDX', 'LDXXXDR', 'LDXXXDR', 'LDDXDDR', 'LDEEDDR', 'LDEEXXR', 'XDDDDDX', '.BBBBB.'],
+    core: [
+      { defId: 'cabPickup', x: 2, y: 2 }, { defId: 'transmissionHeavy', x: 3, y: 4 }, { defId: 'tankHeavy', x: 4, y: 6 },
+      { defId: 'wheelHeavy', x: 0, y: 1 }, { defId: 'wheelHeavy', x: 6, y: 1 },
+      { defId: 'wheelHeavy', x: 0, y: 7 }, { defId: 'wheelHeavy', x: 6, y: 7 },
+    ],
+    fuelCap: 130, fuelPerTile: 0.65, base: 3000, tier: 3, look: 'loader',
+  },
 };
 
 export const CHASSIS: Record<string, ChassisDef> = Object.fromEntries(
@@ -236,7 +284,7 @@ export const CHASSIS: Record<string, ChassisDef> = Object.fromEntries(
 );
 
 // Chassis the player can buy in towns.
-export const PLAYER_CHASSIS = ['scout', 'hauler', 'courier', 'van', 'longbed', 'carrier', 'tractor'];
+export const PLAYER_CHASSIS = ['scout', 'hauler', 'courier', 'van', 'longbed', 'carrier', 'tractor', 'jeep', 'convertible', 'bus', 'loader'];
 
 export function chassisDef(id: string): ChassisDef {
   const def = CHASSIS[id];
