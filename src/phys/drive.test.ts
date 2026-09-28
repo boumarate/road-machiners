@@ -121,8 +121,8 @@ describe('physics turns', () => {
     const w = emptyWorld({ x: 20, y: 50 });
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 30, y: 30 });
     npc.order = { kind: 'stopAt', dest: { x: 10, y: 30 } };
-    // Six seconds allow a pickup to turn around nose first on flat ground.
-    const result = play(w, 6);
+    // Four seconds turn a pickup around nose first on flat ground, and it is driving toward the point.
+    const result = play(w, 4);
     const actor = result.w.vehicles.find((v) => v.id === npc.id)!;
     expect(Math.abs(angleDiff(actor.heading, Math.PI))).toBeLessThan(Math.PI / 2);
     expect(actor.speed).toBeGreaterThan(0);
@@ -235,7 +235,7 @@ describe('physics turns', () => {
   });
 
   it('from rest, a close drive-through click is reached instead of stopping short', () => {
-    const { w, d } = play(ordered({ kind: 'through', dest: { x: 33, y: 30.5 } }), 5);
+    const { w, d } = play(ordered({ kind: 'through', dest: { x: 33, y: 30.5 } }), 8);
     expect(me(w).order).toBeNull();
     freeDrive(d);
   });
@@ -279,7 +279,7 @@ describe('physics turns', () => {
     const dest = { x: 26, y: 33 };
     let w = ordered({ kind: 'through', dest });
     let d = buildDrive(w);
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 14; i++) {
       let next: Drive | null = null;
       w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
       freeDrive(d);

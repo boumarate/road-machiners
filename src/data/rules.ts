@@ -52,6 +52,9 @@ export const RULES = {
     round: { damage: 6, pen: 8, blast: false },
   },
 
+  // Every truck's acceleration, in the sim and in physics, times this. Tune here to make all trucks livelier or
+  // heavier at once.
+  accelScale: 0.67,
   // Over the rated mass, top speed and turning scale by (rated / mass) to this power. 500 kg over a 3000 kg rating
   // leaves about 54% of the speed, and 1000 kg over leaves about 32%.
   overloadExponent: 4,

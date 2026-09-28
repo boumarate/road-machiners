@@ -78,7 +78,7 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   if (hasWorkingEngine(v)) {
     const e = wornDef<EngineDef>(engines[0]);
     maxSpeed = Math.max(RULES.minSpeedCap, (ch.maxSpeed + e.speedBonus) * load * wheels);
-    accel = (ch.accel + e.accelBonus) * force;
+    accel = (ch.accel + e.accelBonus) * force * RULES.accelScale;
     fuelMult = e.fuelMult;
     // A broken transmission leaves only a crawl to limp home.
     if (!isWorking(corePart(v, 'transmission'))) maxSpeed = Math.min(maxSpeed, limpSpeed);

@@ -400,8 +400,10 @@ export const REGION = {
     orchardRows: 11,
     orchardSpacing: 2,
   },
-  // The player starts on the right shoulder of the north trunk road, which leaves Bowl toward Old Orchard.
-  // 125 tiles along the road from Bowl's center is about 90 tiles past its wall, halfway to Old Orchard. Bowl
-  // is then past grey vision, so a new player asks a passing driver for the way.
-  playerStart: { road: 0, distance: 125, shoulder: 1.5 },
+  // The player starts off the north trunk road, which leaves Bowl toward Old Orchard, facing the road. The road
+  // point lies 125 tiles along it from Bowl's center, about 90 tiles past its wall and halfway to Old Orchard, so
+  // Bowl is past grey vision. `offset` tiles to the right of that point the road lies in grey vision, past clear
+  // sight, near the top edge of the screen at the widest zoom. The ground between is open. A new player drives
+  // ahead and meets the road.
+  playerStart: { road: 0, distance: 125, offset: 45 },
 };
