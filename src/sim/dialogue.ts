@@ -6,6 +6,7 @@
 import { BUSY_LINE, END, HONK_RANGE, HUB, REFUSED, TOPICS, TRAIT_TALK, type DialogueOption, type Topic, type TopicId, type Voice } from '../data/dialogue';
 import { inFeud, isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
+import { isKnockedOut } from './defeat';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
 import type { Call, CallVars, Vehicle, World } from './types';
 import { dist } from './vec';
@@ -119,6 +120,7 @@ export function callVehicle(world: World, npcId: string): World {
     if (w.player.call) throw new Error('A call is already open');
     const npc = vehicleById(w, npcId);
     if (!npc.brain) throw new Error(`${npcId} has no driver to call`);
+    if (isKnockedOut(npc)) throw new Error(`${npcId} has a knocked-out driver`);
     if (!canVehicleSee(w, playerVehicle(w), npc.pos)) throw new Error(`${npcId} is out of sight`);
     const refusal = refusalOf(w, npc);
     const call = begin(w, npc);
@@ -173,14 +175,14 @@ function follow(world: World, npc: Vehicle, call: Call, option: DialogueOption):
   enter(world, call, call.topic, option.go);
 }
 
-// A call opened during a turn ends when the player is knocked out or killed later in that turn, or the NPC is
-// gone. It counts as hanging up.
+// A call opened during a turn ends when the player or the NPC is knocked out or killed later in that turn, or the
+// NPC is gone. It counts as hanging up.
 export function endCallIfOut(world: World): void {
   const call = world.player.call;
   if (!call) return;
   const npc = world.vehicles.find((v) => v.id === call.with);
   if (!npc) return endCall(world, call);
-  if (world.player.state !== 'active') hangUpCall(world, npc, call);
+  if (world.player.state !== 'active' || isKnockedOut(npc)) hangUpCall(world, npc, call);
 }
 
 // True while the player and this vehicle talk: neither shoots the other.
@@ -204,8 +206,8 @@ export function hangUp(world: World): World {
   });
 }
 
-// A turn step: the first NPC in vehicle order that sees the player, is not busy fighting another truck and wants to
-// raise a topic calls. The highest priority topic wins. A driver in a feud with the player calls only with a topic
+// A turn step: the first NPC in vehicle order that sees the player, is awake, is not busy fighting another truck
+// and wants to raise a topic calls. A knocked-out driver keeps its old goals, so it must not read them here. The highest priority topic wins. A driver in a feud with the player calls only with a topic
 // raised during feuds. While the player is in combat, only topics raised during combat call. One call at a time.
 export function raiseCalls(world: World): void {
   if (world.player.call || world.player.state !== 'active') return;
@@ -219,7 +221,7 @@ export function raiseCalls(world: World): void {
 }
 
 function raisedTopic(world: World, npc: Vehicle, me: Vehicle): Topic | null {
-  if (!npc.brain || busyElsewhere(world, npc, me) || !canVehicleSee(world, npc, me.pos)) return null;
+  if (!npc.brain || isKnockedOut(npc) || busyElsewhere(world, npc, me) || !canVehicleSee(world, npc, me.pos)) return null;
   const feud = inFeud(world, npc, me);
   const combat = inCombat(world, me);
   const wanted = talkOf(npc).topics
@@ -235,7 +237,7 @@ function allowedNow(raise: NonNullable<Topic['raise']>, feud: boolean, combat: b
 }
 
 // The horn is a signal, not a call. The player honks, and every NPC in earshot whose class answers, that is not
-// hostile and that is not busy fighting another truck honks back, nearest first. Honking takes no turn.
+// hostile, not knocked out and not busy fighting another truck honks back, nearest first. Honking takes no turn.
 export function honk(world: World): World {
   return playerCommand(world, (w) => {
     const me = playerVehicle(w);
@@ -254,6 +256,6 @@ function practiceHonk(world: World, me: Vehicle, npc: Vehicle): void {
 
 function answering(world: World, me: Vehicle): Vehicle[] {
   return world.vehicles
-    .filter((v) => v.brain && dist(v.pos, me.pos) <= HONK_RANGE && talkOf(v).honksBack && !busyWithFight(v, me.id) && !isHostile(world, v, me))
+    .filter((v) => v.brain && !isKnockedOut(v) && dist(v.pos, me.pos) <= HONK_RANGE && talkOf(v).honksBack && !busyWithFight(v, me.id) && !isHostile(world, v, me))
     .sort((a, b) => dist(a.pos, me.pos) - dist(b.pos, me.pos));
 }

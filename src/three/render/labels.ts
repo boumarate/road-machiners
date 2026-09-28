@@ -75,6 +75,7 @@ function markerNode(mark: VehicleMark): HTMLElement {
   return el('div', { class: 'vehicle-marker' },
     mark.weapons.length > 0 ? el('div', { class: 'marker-weapons' }, ...mark.weapons.map(weaponChip)) : null,
     mark.radio ? el('div', { class: 'marker-radio' }, '[T] Radio') : null,
+    mark.out ? el('div', { class: 'marker-out' }, 'Knocked out') : null,
     mark.job ? jobChip(mark.job) : null,
   );
 }
@@ -82,7 +83,7 @@ function markerNode(mark: VehicleMark): HTMLElement {
 const MARKER_LIFT = 3.5; // meters above a vehicle where its label sits
 
 // Markers above vehicles: an icon per player weapon aimed at the vehicle, the radio key on the hovered
-// truck, and the job an NPC works on. The content comes from vehicleMarks() in src/ui/weapons.ts.
+// truck, a knocked-out driver, and the job an NPC works on. The content comes from vehicleMarks() in src/ui/weapons.ts.
 export class VehicleMarkers {
   private readonly els = new Map<string, HTMLElement>(); // by vehicle id
 
