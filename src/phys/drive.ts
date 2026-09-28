@@ -123,7 +123,7 @@ export function syncDrive(d: Drive, w: World): void {
   }
 }
 
-// A truck flipped for RULES.flipBackTurns turns is set back on its wheels at its sim pose.
+// A stranded truck is set back on its wheels at its sim pose, which applyTurn has moved to free ground.
 function syncVehicle(d: Drive, w: World, v: Vehicle): void {
   const handle = d.bodies[v.id];
   if (handle === undefined) {
@@ -135,7 +135,7 @@ function syncVehicle(d: Drive, w: World, v: Vehicle): void {
   setMass(body, v);
   const t = body.translation();
   const moved = dist({ x: t.x / S, y: t.z / S }, v.pos) > TELEPORT_TILES;
-  if (moved || (v.flippedTurns ?? 0) >= RULES.flipBackTurns) placeBody(body, w, v);
+  if (moved || (v.strandedTurns ?? 0) >= RULES.stranded.turns) placeBody(body, w, v);
 }
 
 function addVehicle(world: RAPIER.World, w: World, v: Vehicle): number {
@@ -575,6 +575,13 @@ export function trailFrames(w: World, v: Vehicle): VehicleFrame[] {
 function rideHeight(w: World, v: Vehicle): number {
   const b = bodyOf(v.chassisId);
   return heightAt(w.terrain, v.pos.x, v.pos.y) * S + b.wheelRadius + T.suspensionRest - b.wheelY;
+}
+
+// Whether the vehicle's body rests high above the ground at its sim position, so its wheels hang in the air.
+export function isLifted(d: Drive, w: World, v: Vehicle): boolean {
+  const handle = d.bodies[v.id];
+  if (handle === undefined) throw new Error(`No physics body for ${v.id}`);
+  return d.world.getRigidBody(handle).translation().y > rideHeight(w, v) + T.liftedRise;
 }
 
 // Map pose and speed of a vehicle's body, and whether it stands on its wheels.

@@ -10,7 +10,10 @@ export const RULES = {
   fuelUseFactor: 0.075, // share of the chassis fuel rate burned per tile; a daytime Bowl to Nose road trip uses under 60% of the starting fuel, leaving room for detours and fights
   npcStuckTurns: 2, // failed drive attempts before backing out
   npcRecoveryTurns: 2, // turns spent backing out before resuming the route
-  flipBackTurns: 3, // turns a vehicle can end flipped before it is set back on its wheels
+  // A truck that ends `turns` turns in a row flipped or lifted off the ground, like on top of another truck, is set down
+  // on its wheels. It lands on the nearest free spot, searched in rings `step` tiles apart out to `reach` tiles. The step
+  // is below the smallest vehicle radius. The reach fits two of the largest trucks side by side with clearance.
+  stranded: { turns: 3, step: 0.25, reach: 4 },
   // A player click within throttle reach and less than `cone` degrees off straight behind backs the truck up.
   // Any other point behind turns the truck around nose first. A stuck NPC backs out `distance` tiles.
   reverse: { cone: 20, distance: 1 },

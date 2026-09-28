@@ -9,6 +9,7 @@ export const PHYSICS = {
     gravityScale: 2, // trucks fall faster than the world's gravity, so bumps do not throw them in the air
     comBelow: 0.7, // meters the center of mass sits below the chassis box center, near the axles, so trucks rarely flip
     flipTilt: 60, // degrees of body tilt from upright past which a truck counts as flipped
+    liftedRise: 0.5, // meters above its ride height past which a truck counts as lifted off the ground; above suspensionTravel, so no wheel reaches
     inertiaScale: 2, // rotational inertia relative to a plain box of the same mass, so trucks resist rolling
     suspensionRest: 0.4,
     suspensionTravel: 0.3,
