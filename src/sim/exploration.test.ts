@@ -4,14 +4,14 @@ import { TERRAIN } from '../data/terrain';
 import { PHYSICS } from '../data/physics';
 import { START_KITS } from '../data/start';
 import { cloneWorld, newWorld, setMoveOrder } from './world';
-import { dist } from './vec';
+import { dist, polylineDist } from './vec';
 import { discoverSites } from './locations';
 import { refreshVision } from './vision';
 import { bodyOf } from './body';
 
 const original = [
-  [16, 94], [102, 35], [28, 64], [37, 32], [50, 36], [63, 20], [77, 24],
-  [103, 70], [88, 84], [73, 92], [58, 91], [41, 87], [43, 54], [64, 54], [82, 49],
+  [16, 94], [102, 35], [23.2, 62], [33.8, 32], [50, 32.8], [60, 18.8], [78.2, 21],
+  [106.2, 70], [90.3, 86.3], [71.8, 89], [56.8, 94], [41, 90.2], [40.7, 51.7], [64, 54], [82, 52.2],
   [22, 14], [66, 76],
 ];
 
@@ -24,14 +24,14 @@ describe('Icarus exploration distances', () => {
     }
   });
 
-  it('does not reveal another destination after leaving Bowl by one metre', () => {
+  it('starts on the trunk road out of clear sight of every site, knowing none', () => {
     const world = cloneWorld(newWorld(1337, START_KITS.standard));
     const player = world.vehicles.find((v) => v.id === world.player.vehicleId)!;
-    player.pos.x += 0.25;
     refreshVision(world);
     discoverSites(world);
-    expect(world.player.discovered).toEqual(['bowl']);
-    for (const site of REGION.locations) expect(dist(player.pos, site.pos) - site.radius).toBeGreaterThan(TERRAIN.vision.radius);
+    expect(world.player.discovered).toEqual([]);
+    expect(polylineDist(player.pos, REGION.roads[REGION.playerStart.road])).toBeLessThan(REGION.roadWidth / 2);
+    for (const site of [...REGION.towns, ...REGION.locations]) expect(dist(player.pos, site.pos) - site.radius).toBeGreaterThan(TERRAIN.vision.radius);
   }, 15_000);
 
   it('gives settlements human-scale footprints and an outside starting point', () => {
@@ -41,7 +41,6 @@ describe('Icarus exploration distances', () => {
       for (const site of REGION.locations) expect(dist(town.pos, site.pos)).toBeGreaterThan(town.radius + site.radius);
     }
     const bowl = REGION.towns.find((town) => town.id === 'bowl')!;
-    expect(Math.hypot(REGION.playerStart.offset.x, REGION.playerStart.offset.y)).toBeGreaterThan(bowl.radius + 1);
     expect(TERRAIN.features.craters[0].radius).toBeGreaterThan(bowl.radius);
   });
 

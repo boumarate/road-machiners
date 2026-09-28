@@ -56,8 +56,8 @@ function terrainHash(t: Terrain): string {
 
 describe("terrain generation", () => {
   it("keeps the exact heights and types of known seeds", () => {
-    expect(terrainHash(buildTerrain(1, REGION.size))).toBe("952b4c67");
-    expect(terrainHash(buildTerrain(7, REGION.size))).toBe("f4ac495f");
+    expect(terrainHash(buildTerrain(1, REGION.size))).toBe("a2b87e1e");
+    expect(terrainHash(buildTerrain(7, REGION.size))).toBe("48f890cf");
   }, 30_000);
 
   it("finds the same road distance through the road index as over every road", () => {
@@ -119,8 +119,13 @@ describe("terrain grid", () => {
   it('links both towns by northern and southern canyon crossings', () => {
     const connects = (a: string, b: string) => {
       const sites = [...REGION.towns, ...REGION.locations];
-      const p = sites.find((site) => site.id === a)!.pos;
-      const q = sites.find((site) => site.id === b)!.pos;
+      // A location beside a road joins it at the first point of its spur. A town lies on its roads.
+      const access = (id: string) => {
+        const pos = sites.find((site) => site.id === id)!.pos;
+        return REGION.roads.find((road) => dist(road.at(-1)!, pos) < 0.01 && road.length === 2)?.[0] ?? pos;
+      };
+      const p = access(a);
+      const q = access(b);
       return REGION.roads.some((road) => road.some((point) => dist(point, p) < 0.01) && road.some((point) => dist(point, q) < 0.01));
     };
     for (const [a, b] of [

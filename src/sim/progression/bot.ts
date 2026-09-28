@@ -271,7 +271,8 @@ function buyThere(o: Orders, buy: Purchase): true {
 
 // Sells the cargo in its best market, or drives there. True once the cargo is sold.
 function sellAtMarket(o: Orders): boolean {
-  const market = bestMarket(o.world);
+  // The player starts knowing no town, so the first market is the nearest town it finds.
+  const market = knownTowns(o.world).length > 0 ? bestMarket(o.world) : nearestUndiscovered(o.world, REGION.towns)!;
   if (townAt(o.world)?.id !== market.id) {
     driveToSite(o, market);
     return false;

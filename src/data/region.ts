@@ -115,7 +115,7 @@ export const REGION = {
       edge: "stone",
       name: "Dustwell",
       kind: "oasis",
-      pos: scalePoint({ x: 39.3, y: 34.3 }),
+      pos: scalePoint({ x: 33.8, y: 32 }),
       radius: 6,
     },
     {
@@ -290,7 +290,7 @@ export const REGION = {
     ]),
     // Short straight spurs lead from a road point to each location beside it, so through traffic passes by.
     scaleRoad([{ x: 28, y: 64 }, { x: 23.2, y: 62 }], [0]),
-    scaleRoad([{ x: 37, y: 32 }, { x: 39.3, y: 34.3 }], [0]),
+    scaleRoad([{ x: 37, y: 32 }, { x: 33.8, y: 32 }], [0]),
     scaleRoad([{ x: 50, y: 36 }, { x: 50, y: 32.8 }], [0]),
     scaleRoad([{ x: 63, y: 20 }, { x: 60, y: 18.8 }], [0]),
     scaleRoad([{ x: 77, y: 24 }, { x: 78.2, y: 21 }], [0]),
@@ -400,5 +400,8 @@ export const REGION = {
     orchardRows: 11,
     orchardSpacing: 2,
   },
-  playerStart: { town: "bowl", offset: { x: 15, y: -27 } },
+  // The player starts on the right shoulder of the north trunk road, which leaves Bowl toward Old Orchard.
+  // 83 tiles along the road from Bowl's center is 55 tiles past its wall. Bowl is then out of clear sight
+  // and shows only grey, so a new player asks a passing driver for the way.
+  playerStart: { road: 0, distance: 83, shoulder: 1.5 },
 };
