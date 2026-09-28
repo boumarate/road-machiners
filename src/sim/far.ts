@@ -38,7 +38,7 @@ export function fuelLimited(w: World, v: Vehicle, s: VehicleStats, speed: number
   const wanted = order?.kind === 'through' ? throughSpeed(capped, speed, dist(v.pos, order.dest), order.pace) : Math.min(capped.maxSpeed, speed + capped.accel);
   if (wanted * s.fuelPerTile <= fuel) return capped;
   const cap = Math.max(s.limpSpeed, speed - s.brake);
-  return { ...s, maxSpeed: cap, accel: Math.min(s.accel, s.limpSpeed) };
+  return { ...s, maxSpeed: cap, accel: Math.min(s.accel, s.limpAccel) };
 }
 
 // One turn of far travel. With no order or a brake order the vehicle slows by its brake and stays
