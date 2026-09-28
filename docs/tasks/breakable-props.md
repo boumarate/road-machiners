@@ -13,6 +13,7 @@
 - Every drive obstacle is a solid Rapier cylinder, and every truck contact with one is a crash. No sensor colliders exist yet. See `syncDrive()` in `src/phys/drive.ts`.
 - Route grids stamp static drive obstacles once per obstacle list. Transient road wrecks are stamped per query instead. See `staticSet()` and `dynamicBlockers()` in `src/sim/nav/layer.ts`.
 - Obstacle views sync by id each frame, so a removed obstacle disappears. Rocks are instanced once at boot instead. See `ObstacleViews.sync()` in `src/three/render/obstacles.ts`.
+- Baked props stay out of saves and are rebuilt from the map file on load, per `docs/tasks/map-old-world.md`. A broken baked prop must therefore be saved by id, or it comes back on reload.
 - Looted road wrecks are replaced only beyond the player's gray vision, in `turnOverRoadWrecks()` in `src/sim/salvage.ts`. This is the precedent for regrowth out of sight.
 
 ## Design
