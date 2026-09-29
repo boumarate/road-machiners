@@ -1,8 +1,8 @@
 """The courier base: a stylized Baja Beetle, the lifted off-road VW Beetle with cut fenders.
 
 Grid: 4 columns by 7 rows, 1.94 m across by 4.55 m along. Half height 0.3 m, from PHYSICS.bodies.courier.
-Rows 0 to 2 are a short sloped front with the engine standing in a bay between the front fenders, rows 3 and 4 a domed
-faceted cabin with a flat roof, rows 5 and 6 a rear deck with a side rack and a sloped tail.
+Rows 0 to 3 are a sloped front with the engine standing in a bay between the front fenders, rows 4 and 5 a domed
+faceted cabin with a flat roof, row 6 a rear deck with a side rack and a sloped tail.
 Four separate fenders cut high over the wheels, joined by dark running boards, give the Beetle silhouette.
 Wheels sit on rows 1 and 5 in the outer columns, radius 0.4 m, half width 0.16 m, mount 0.2 m below the center.
 Run: blender --background --python tools/blender/base_courier.py -- public/models/base_courier.glb [tmp/base_courier.png]
@@ -45,10 +45,10 @@ FRONT_FENDER_TOP = HOOD_TOP + 0.08  # the front fenders stand proud of the hood
 REAR_FENDER_TOP = G.top - 0.15
 TAIL_TOP = G.top - 0.14
 FENDER_CUT = 0.5  # radians up from the hub line where the fenders are cut, Baja style
-BAY_FRONT = G.row_x(0.5)  # the engine cells run from row 1 to row 2
-COWL = G.row_x(2.5)  # the windshield base, behind the engine cells
-DECK_FRONT = G.row_x(4.5)  # the cabin's rear slope ends here
-DECK_BACK = G.row_x(5.5)  # the tail slope starts here
+BAY_FRONT = G.row_x(1.5)  # the engine cells run from row 2 to row 3
+COWL = G.row_x(3.5)  # the windshield base, behind the engine cells
+DECK_FRONT = G.row_x(5.5)  # the cabin's rear slope ends here
+DECK_BACK = G.row_x(6)  # the tail slope starts here
 
 GLASS_H = 0.5  # the dome's height above the beltline, to the glass top
 CAP = 0.07  # the roof cap stands this far over the glass
@@ -153,7 +153,7 @@ def cabin(kit: Kit) -> None:
     loft(kit, "round_back", [(DECK_FRONT, dome(0.14, BODY - 0.04, BODY - 0.12)), (ROOF_BACK - 0.16, dome(0.8 * (GLASS_H + CAP), shoulder + 0.02, top + 0.06)), (ROOF_BACK + 0.02, back)], "paint")
     for s, sy in (("l", 1), ("r", -1)):
         strut(kit, f"a_pillar_{s}", (COWL, sy * (BODY - 0.04), G.top + 0.03), (SCREEN_TOP, sy * (shoulder - 0.02), G.top + SHOE * GLASS_H), 0.09, "paint")
-        strut(kit, f"b_pillar_{s}", (G.row_x(3.5), sy * (BODY - 0.04), G.top), (G.row_x(3.5) - 0.05, sy * (shoulder - 0.02), G.top + SHOE * GLASS_H), 0.1, "paint")
+        strut(kit, f"b_pillar_{s}", (G.row_x(4.5), sy * (BODY - 0.04), G.top), (G.row_x(4.5) - 0.05, sy * (shoulder - 0.02), G.top + SHOE * GLASS_H), 0.1, "paint")
 
 
 def rack(kit: Kit) -> None:
@@ -176,11 +176,11 @@ def main() -> None:
     rack(kit)
     # The outer hood columns are the front fenders, which stand proud of the hood. The engine cells are the bay.
     wings = {(x, y): FRONT_FENDER_TOP for x in (0, 3) for y in (0, 1, 2)}
-    bay = {(x, y): FLOOR for x in (1, 2) for y in (1, 2)}
+    bay = {(x, y): FLOOR for x in (1, 2) for y in (2, 3)}
     # The outer cells beside the cabin and the tail hold the running boards and fender slopes, the tail cells its top.
-    flanks = {(x, y): surface_z(G, x, y) for x in (0, 3) for y in (3, 4, 6)} | {(x, 6): surface_z(G, x, 6) for x in (1, 2)}
-    level_sockets(kit, G, "row", [HOOD_TOP] * 3 + [ROOF] * 2 + [G.top, TAIL_TOP], fronts={3: ROOF_FRONT}, cells=wings | bay | flanks)
-    level_sockets(kit, G, "floor", [FLOOR] * 5 + [G.top] * 2)
+    flanks = {(x, y): surface_z(G, x, y) for x in (0, 3) for y in (3, 4, 5, 6)} | {(x, 6): surface_z(G, x, 6) for x in (1, 2)}
+    level_sockets(kit, G, "row", [HOOD_TOP] * 4 + [ROOF] * 2 + [TAIL_TOP], fronts={4: ROOF_FRONT}, cells=wings | bay | flanks)
+    level_sockets(kit, G, "floor", [FLOOR] * 6 + [G.top])
     check_base(kit, "base_courier", G)
     kit.export("base_courier", args, view_size=5.5)
 

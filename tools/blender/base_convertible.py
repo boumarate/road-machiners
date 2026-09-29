@@ -3,7 +3,7 @@
 Grid: 5 columns by 9 rows, 2.42 m across by 5.85 m along. Half height 0.35 m, from PHYSICS.bodies.convertible.
 One long low slab body with a crease band wrapping around it at the beltline. Rows 0 to 2 are a flat front trunk lid
 with no grille, the fuel tank hidden under it. Rows 3 and 4 are the open cabin behind a raked windshield: two bucket
-seats and a rear bench, with the folded top boot behind the bench. Rows 5 to 8 are a flat rear deck lid over the
+seats and a rear bench. Rows 5 to 8 are a flat rear deck lid over the
 transmission, with a cutout over the engine cells and a louvered grille behind it. Round quad lamps front and back.
 Wheels sit on rows 1 and 7 in the outer columns, radius 0.42 m, half width 0.17 m, mount 0.2 m below the center.
 Run: blender --background --python tools/blender/base_convertible.py -- public/models/base_convertible.glb [tmp/base_convertible.png]
@@ -39,9 +39,8 @@ COWL = G.row_x(2.5)  # the windshield base, where the cabin begins
 CAB_BACK = G.row_x(4.5)  # the rear bench back, where the rear deck begins
 SCREEN_X = COWL - 0.4  # the windshield top leans back this far
 SCREEN_Z = DECK + 0.42
-BOOT_BACK = CAB_BACK - 0.32  # the folded top boot covers the front of row 5
-BAY_FRONT = G.row_x(5.5)  # the engine cutout covers rows 6 and 7, columns 1 and 2
-BAY_BACK = G.row_x(7.5)
+BAY_FRONT = G.row_x(4.5)  # the engine cutout covers rows 5 and 6, columns 1 and 2
+BAY_BACK = G.row_x(6.5)
 BAY_LEFT = G.col_y(0.5)
 BAY_RIGHT = G.col_y(2.5)
 CREASE_Z = DECK - 0.09  # the crease band wrapping around the body
@@ -85,7 +84,6 @@ def front(kit: Kit) -> None:
 def rear(kit: Kit) -> None:
     """The flat rear deck lid with the engine cutout, a dark louvered grille behind it, and quad round taillights."""
     h = DECK - FLOOR
-    kit.box("deck_fore", (CAB_BACK - BAY_FRONT, 2 * SIDE, h), ((CAB_BACK + BAY_FRONT) / 2, 0, FLOOR + h / 2), "paint")
     tail = [(BACK, FLOOR), (BAY_BACK, FLOOR), (BAY_BACK, DECK), (BACK + 0.08, DECK), (BACK, DECK - 0.08)]
     prism(kit, "deck_aft", tail, -SIDE, SIDE, "paint")
     kit.box("deck_l", (BAY_FRONT - BAY_BACK, SIDE - BAY_LEFT, h), ((BAY_FRONT + BAY_BACK) / 2, (SIDE + BAY_LEFT) / 2, FLOOR + h / 2), "paint")
@@ -110,7 +108,7 @@ def crease(kit: Kit) -> None:
 
 
 def cabin(kit: Kit) -> None:
-    """Thin doors, a dark dash, a raked windshield in a chrome frame, the seats and the folded top boot."""
+    """Thin doors, a dark dash, a raked windshield in a chrome frame, the seats and the bench."""
     h = DECK - FLOOR
     mirrored(kit, "door", (COWL - CAB_BACK, SIDE - DOOR_IN, h), (COWL + CAB_BACK) / 2, (SIDE + DOOR_IN) / 2, FLOOR + h / 2, "paint")
     kit.box("carpet", (COWL - CAB_BACK, 2 * DOOR_IN, 0.02), ((COWL + CAB_BACK) / 2, 0, FLOOR + 0.01), "under")
@@ -127,9 +125,6 @@ def cabin(kit: Kit) -> None:
         kit.box(f"seatback_{s}", (0.12, 0.56, 0.5), (G.row_x(3) - 0.28, y, FLOOR + 0.3), "leather", rot=(0, -0.2, 0))
     kit.box("bench", (0.4, 2 * DOOR_IN - 0.08, 0.16), (G.row_x(4) + 0.06, 0, FLOOR + 0.08), "leather")
     kit.box("bench_back", (0.12, 2 * DOOR_IN - 0.08, 0.46), (CAB_BACK + 0.1, 0, FLOOR + 0.28), "leather", rot=(0, -0.2, 0))
-    # The folded top boot sits on the deck behind the bench, a low rounded roll.
-    boot = [(CAB_BACK + 0.04, DECK), (BOOT_BACK, DECK), (BOOT_BACK + 0.06, DECK + 0.1), (CAB_BACK - 0.04, DECK + 0.16), (CAB_BACK + 0.04, DECK + 0.12)]
-    prism(kit, "boot", boot, -DOOR_IN, DOOR_IN, "wheel")
 
 
 def main() -> None:
@@ -141,9 +136,9 @@ def main() -> None:
     crease(kit)
     cabin(kit)
     # Items on the engine cells stand on the bay floor under the cutout.
-    bay = {(x, y): FLOOR for x in (1, 2) for y in (6, 7)}
-    level_sockets(kit, G, "row", [DECK] * G.rows, fronts={5: BOOT_BACK}, cells=bay)
-    level_sockets(kit, G, "floor", [TRUNK_FLOOR] * 3 + [FLOOR] * 2 + [TRANSMISSION_FLOOR] + [FLOOR] * 2 + [DECK])
+    bay = {(x, y): FLOOR for x in (1, 2) for y in (5, 6)}
+    level_sockets(kit, G, "row", [DECK] * G.rows, cells=bay)
+    level_sockets(kit, G, "floor", [TRUNK_FLOOR] * 3 + [FLOOR] * 4 + [TRANSMISSION_FLOOR] + [DECK])
     check_base(kit, "base_convertible", G)
     kit.export("base_convertible", args, view_size=7.0)
 

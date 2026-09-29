@@ -1,9 +1,9 @@
 """The buggy base: a stylized Meyers Manx dune buggy with a gun cage.
 
 Grid: 4 columns by 6 rows, 1.94 m across by 3.9 m along. Half height 0.35 m, from PHYSICS.bodies.buggy.
-Rows 0 to 2 are a narrow tub nose with the engine standing bare over the engine cells, rows 3 and 4 the open seats
-under a roll cage, row 5 a short tail. Tall swept fenders cover the front wheels, and the rear wheels stand bare
-under small mudguards. The cage top carries a flat gun deck, so the weapon on row 3 sits on the cage like a technical.
+Rows 0 to 3 are a narrow tub nose with the engine standing bare over the engine cells, rows 4 and 5 the open seats
+under a roll cage, with a short tail behind the seats. Tall swept fenders cover the front wheels, and the rear wheels stand bare
+under small mudguards. The cage top carries a flat gun deck, so the weapon on row 4 sits on the cage like a technical.
 Wheels sit on rows 1 and 4 in the outer columns, radius 0.5 m, half width 0.22 m, mount 0.2 m below the center.
 Run: blender --background --python tools/blender/base_buggy.py -- public/models/base_buggy.glb [tmp/base_buggy.png]
 """
@@ -43,11 +43,12 @@ ROOF = G.top + 0.6  # the gun deck on the cage top
 TUBE = 0.08  # cage tube thickness
 TUBE_Z = ROOF - 0.12  # cage rail center height, under the gun deck
 CAGE_Y = 0.62  # cage rails across, from the center line
-CAGE_FRONT = G.row_x(2.5) - 0.2  # the cage's front top bar
-CAGE_BACK = G.row_x(4.5) + 0.1  # the cage's rear top bar
-DECK_BACK = G.row_x(3.5) - 0.2  # the gun deck covers row 3 and a little of row 4
-BAY_FRONT = G.row_x(0.5)  # the engine cells run from row 1 to row 2
-COWL = G.row_x(2.5)  # the dash stands behind the engine cells
+CAGE_FRONT = G.row_x(3.5) - 0.2  # the cage's front top bar
+CAGE_BACK = G.row_x(5.5) + 0.1  # the cage's rear top bar
+DECK_BACK = G.row_x(4.5) - 0.2  # the gun deck covers row 4 and a little of row 5
+BAY_FRONT = G.row_x(1.5)  # the engine cells run from row 2 to row 3
+COWL = G.row_x(3.5)  # the dash stands behind the engine cells
+TAIL_START = G.row_x(5.5) + 0.35  # the tub floor rises to the tail deck here
 SIDE_BACK = WHEELS_X[1] + ARCH_R + 0.06  # the side panel ends in front of the bare rear wheel
 
 
@@ -68,7 +69,7 @@ def tub(kit: Kit) -> None:
     nose_low = 0.0
     profile = [
         (BACK + 0.18, PAN), (FRONT - 0.25, PAN), (FRONT, PAN + 0.2), (FRONT, nose_low), (FRONT - 0.22, NOSE_TOP),
-        (BAY_FRONT, NOSE_TOP), (BAY_FRONT, FLOOR), (G.row_x(4.5), FLOOR), (G.row_x(4.5), TAIL_TOP),
+        (BAY_FRONT, NOSE_TOP), (BAY_FRONT, FLOOR), (TAIL_START, FLOOR), (TAIL_START, TAIL_TOP),
         (BACK + 0.12, TAIL_TOP), (BACK, TAIL_TOP - 0.12), (BACK, PAN + 0.14),
     ]
     prism(kit, "tub", profile, -TUB, TUB, "paint")
@@ -112,7 +113,7 @@ def seats(kit: Kit) -> None:
     kit.box("dash", (0.1, 2 * TUB, HOOD_TOP + 0.12 - FLOOR), (COWL - 0.05, 0, (HOOD_TOP + 0.12 + FLOOR) / 2), "under")
     for s, y in (("l", G.col_y(1)), ("r", G.col_y(2))):
         kit.box(f"cushion_{s}", (0.42, 0.38, 0.12), (COWL - 0.37, y, FLOOR + 0.06), "under")
-        kit.box(f"seatback_{s}", (0.12, 0.38, 0.52), (G.row_x(3.5) + 0.1, y, FLOOR + 0.34), "under", rot=(0, -0.2, 0))
+        kit.box(f"seatback_{s}", (0.12, 0.38, 0.52), (G.row_x(4.5) + 0.1, y, FLOOR + 0.34), "under", rot=(0, -0.2, 0))
 
 
 def cage(kit: Kit) -> None:
@@ -142,10 +143,10 @@ def main() -> None:
     cage(kit)
     deck_front = CAGE_FRONT + 0.03
     # Items on the engine cells stand on the bay floor.
-    bay = {(x, y): FLOOR for x in (1, 2) for y in (1, 2)}
+    bay = {(x, y): FLOOR for x in (1, 2) for y in (2, 3)}
     # The outer cells beside the gun deck stand on the side panels, and the rear corners on the tub floor behind the wheels.
-    flanks = {(x, y): surface_z(G, x, y) for x in (0, 3) for y in (3, 5)}
-    level_sockets(kit, G, "row", [NOSE_TOP] + [HOOD_TOP] * 2 + [ROOF] * 2 + [TAIL_TOP], fronts={3: deck_front}, cells=bay | flanks)
+    flanks = {(x, y): surface_z(G, x, y) for x in (0, 3) for y in (4, 5)} | {(x, 5): surface_z(G, x, 5) for x in (1, 2)}
+    level_sockets(kit, G, "row", [NOSE_TOP] + [HOOD_TOP] * 3 + [ROOF] * 2, fronts={4: deck_front}, cells=bay | flanks)
     level_sockets(kit, G, "floor", [FLOOR] * 6)
     check_base(kit, "base_buggy", G)
     kit.export("base_buggy", args, view_size=5.0)

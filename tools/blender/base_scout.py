@@ -1,7 +1,7 @@
 """The scout base: a stylized 1988 Toyota Hilux regular-cab pickup.
 
 Grid: 5 columns by 8 rows, 2.42 m across by 5.2 m along. Half height 0.45 m, from PHYSICS.bodies.pickup.
-Rows 0 to 2 are the hood with a cutout over the engine cells, rows 3 and 4 the cab, rows 5 to 7 the bed.
+Rows 0 to 3 are the hood with a cutout over the engine cells, rows 4 and 5 the cab, rows 6 and 7 the bed.
 Wheels sit on rows 1 and 6 in the outer columns, radius 0.45 m, half width 0.18 m, mount 0.3 m below the center.
 Run: blender --background --python tools/blender/base_scout.py -- public/models/base_scout.glb [tmp/base_scout.png]
 """
@@ -31,9 +31,9 @@ ROOF_T = 0.08
 SIDE = G.half_y - INSET  # body side outer face
 FRONT = G.half_x - INSET  # nose face
 BACK = -G.half_x + INSET  # tail face
-CAB_FRONT = G.row_x(2.5)
-CAB_BACK = G.row_x(4.5)
-BAY_FRONT = G.row_x(0.5)  # the engine cutout covers rows 1 and 2, columns 1 and 2
+CAB_FRONT = G.row_x(3.5)
+CAB_BACK = G.row_x(5.5)
+BAY_FRONT = G.row_x(1.5)  # the engine cutout covers rows 2 and 3, columns 1 and 2
 BAY_LEFT = G.col_y(0.5)
 BAY_RIGHT = G.col_y(2.5)
 RAKE_TOP = CAB_FRONT - 0.36  # the windshield top
@@ -107,9 +107,9 @@ def main() -> None:
     cab(kit)
     bed(kit)
     # Items on the engine cells stand on the bay floor under the cutout.
-    bay = {(x, y): FLOOR for x in (1, 2) for y in (1, 2)}
-    level_sockets(kit, G, "row", [HOOD_TOP] * 3 + [ROOF] * 2 + [FLOOR] * 3, fronts={3: ROOF_FRONT}, cells=bay)
-    level_sockets(kit, G, "floor", [FLOOR] * 3 + [G.top] * 2 + [FLOOR] * 3)
+    bay = {(x, y): FLOOR for x in (1, 2) for y in (2, 3)}
+    level_sockets(kit, G, "row", [HOOD_TOP] * 4 + [ROOF] * 2 + [FLOOR] * 2, fronts={4: ROOF_FRONT}, cells=bay)
+    level_sockets(kit, G, "floor", [FLOOR] * 4 + [G.top] * 2 + [FLOOR] * 2)
     check_base(kit, "base_scout", G)
     kit.export("base_scout", args, view_size=6.5)
 
