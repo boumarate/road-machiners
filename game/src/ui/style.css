@@ -66,7 +66,8 @@ body {
 #ui button:focus-visible,
 #ui select:focus-visible,
 #ui [tabindex]:focus-visible,
-#ui summary:focus-visible {
+#ui summary:focus-visible,
+#ui a:focus-visible {
   outline: 2px solid #edc879;
   outline-offset: 2px;
 }
@@ -569,16 +570,23 @@ body {
   padding: 3px 5px;
   outline: none;
 }
-#ui .help {
-  left: 14px;
-  top: 14px;
+#ui .help,
+#ui .bug-report {
   padding: 5px 9px;
   background: #272b2ef5;
   font-size: 12px;
 }
+.help summary,
+.bug-report a {
+  font-size: 16px;
+}
 .help summary {
   list-style: none;
-  font-size: 16px;
+}
+.bug-report a {
+  display: block;
+  color: var(--ink);
+  text-decoration: none;
 }
 .help details[open] {
   width: calc(var(--inspection-width) - 20px);
@@ -775,6 +783,9 @@ body {
 }
 #ui:has(.modal:not([style*="display: none"]))
   > .panel:not(.modal):not(.toast):not(.instruments):not(.log) {
+  visibility: hidden;
+}
+#ui:has(.modal:not([style*="display: none"])) > .top-left {
   visibility: hidden;
 }
 #ui:has(.modal:not([style*="display: none"])) > .instruments,
@@ -1324,6 +1335,17 @@ canvas.view {
   background: #e0c070;
 }
 
+.top-left {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+#ui .top-left > .panel {
+  position: static;
+}
 .top-right {
   position: absolute;
   right: 14px;
