@@ -127,7 +127,7 @@ describe("equipment variety", () => {
 
   it("adds buyable chassis with valid built-in parts and physics bodies", () => {
     expect(Object.keys(CHASSIS)).toHaveLength(13);
-    expect(PLAYER_CHASSIS).toHaveLength(11);
+    expect(PLAYER_CHASSIS).toHaveLength(13);
     for (const id of addedChassis) {
       expect(PLAYER_CHASSIS).toContain(id);
       const w = buyChassis(world, id);

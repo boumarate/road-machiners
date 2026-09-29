@@ -291,7 +291,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     // The engine bay moved a row forward, and the transmission sits between the rear wheels.
     layout: [' FFF ', 'LXDXR', 'LXXDR', 'LXXXR', 'LXXXR', 'LEEDR', 'LEEDR', 'LXXXR', ' BBB '],
     core: [
-      { defId: 'cabOpen', x: 1, y: 3 },
+      { defId: 'cabHardtop', x: 1, y: 3 },
       { defId: 'transmission', x: 2, y: 7 },
       { defId: 'tankLong', x: 1, y: 2 },
       { defId: 'wheel', x: 1, y: 1 },
@@ -341,7 +341,7 @@ export const CHASSIS: Record<string, ChassisDef> = Object.fromEntries(
 );
 
 // Chassis the player can buy in towns.
-export const PLAYER_CHASSIS = ['scout', 'hauler', 'courier', 'van', 'longbed', 'carrier', 'tractor', 'jeep', 'convertible', 'bus', 'loader'];
+export const PLAYER_CHASSIS = ['scout', 'hauler', 'courier', 'van', 'longbed', 'carrier', 'tractor', 'jeep', 'convertible', 'bus', 'loader', 'buggy', 'wagon'];
 
 export function chassisDef(id: string): ChassisDef {
   const def = CHASSIS[id];
