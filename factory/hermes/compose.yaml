@@ -48,6 +48,7 @@ services:
         - -c
         - "import subprocess; assert subprocess.run(['/opt/hermes/bin/hermes', 'gateway', 'status'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0"
       interval: 30s
-      timeout: 5s
+      # `hermes gateway status` takes several seconds inside the s6 image.
+      timeout: 30s
       retries: 3
       start_period: 30s

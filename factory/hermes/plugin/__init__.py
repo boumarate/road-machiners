@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from .allowlist import write_allowlist
 from .committee import Committee, CommitteeError
 
 REQUIRED_KEYS = (
@@ -115,6 +116,8 @@ def write_inbox(inbox: str, command: dict, now_ms: Optional[int] = None) -> Path
             final = Path(inbox) / f"{stamp}-{command['messageId']}.json"
         temp = final.with_suffix(".json.tmp")
         temp.write_text(json.dumps(command))
+        # The factory user reads the inbox through the shared group, so the file must be group-readable.
+        os.chmod(temp, 0o640)
         os.replace(temp, final)
     return final
 
@@ -200,6 +203,7 @@ def make_hook(cfg: Config):
                 reply, restart = str(error), False
             await _reply(gateway, event, reply)
             if restart:
+                write_allowlist(Path(os.environ["HERMES_HOME"]) / ".env", cfg.committee.ids())
                 _schedule_restart()
             return {"action": "skip", "reason": "factory-committee"}
         decision = route(event.text, event.reply_to_message_id, source.chat_id, read_approval_posts(cfg.state_dir), cfg)

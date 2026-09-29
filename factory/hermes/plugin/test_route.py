@@ -184,10 +184,12 @@ def test_committee_list_in_any_chat(tmp_path):
 def test_committee_add_schedules_restart(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(plugin, "_schedule_restart", lambda: calls.append(1))
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     result, adapter, _ = dispatch(tmp_path, "1", text="/committee add 7 bob")
     assert result["reason"] == "factory-committee"
     assert "Added 7" in adapter.sent[0]
     assert calls == [1]
+    assert (tmp_path / ".env").read_text() == "TELEGRAM_ALLOWED_USERS=1,7\n"
 
 
 def test_committee_bad_input_replies_without_restart(tmp_path, monkeypatch):
