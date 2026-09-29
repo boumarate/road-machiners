@@ -64,7 +64,7 @@ const DEFS = {
   // Generated horns come out thin and high. The files are generated takes run through ffmpeg
   // "asetrate=44100*0.55,aresample=44100,bass=g=8:f=120,volume=8dB,asoftclip=type=tanh" before import.
   // Air brakes are the one approved take, arrive-1790459643829.mp3, run through ffmpeg
-  // "asetrate=44100*<rate>,aresample=44100,lowpass=f=3500:p=1" at rates 1, 0.93 and 1.07 before import.
+  // "asetrate=44100*<rate>,aresample=44100,lowpass=f=1400:p=1,highpass=f=60,afade=t=in:d=0.12" at rates 0.88, 0.8 and 0.95 before import.
   "horn": { bus: "sfx", setup: "field", volume: 0.8, pitchJitter: 0, maxVoices: 4, loop: false, prompts: ["Mad Max war rig horn: a huge rusted diesel truck blasts its twin air horns once, a deep booming low chord, brassy, gritty and overdriven, heavy as a freight train. Vehicle horn only, no music."], seconds: 1.5 },
   "crash": { bus: "sfx", setup: "field", volume: 0.9, pitchJitter: 0.06, maxVoices: 2, loop: false, prompts: ["Two heavy steel trucks ram each other at speed: one hard, deep crunch of thick metal, a short scrape, then debris settling. Single impact."], seconds: 1.5 },
 
