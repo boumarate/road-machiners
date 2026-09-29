@@ -2,9 +2,9 @@
 
 Grid: 5 columns by 9 rows, 2.42 m across by 5.85 m along. Half height 0.35 m, from PHYSICS.bodies.convertible.
 One long low slab body with a crease band wrapping around it at the beltline. Rows 0 to 2 are a flat front trunk lid
-with no grille, the fuel tank hidden under it. Rows 3 and 4 are the open cabin behind a raked windshield: two bucket
-seats and a rear bench, with the folded top boot behind the bench. Rows 5 to 8 are a flat rear deck lid over the
-transmission, with a cutout over the engine cells and a louvered grille behind it. Round quad lamps front and back.
+with no grille, the fuel tank hidden under it. Rows 3 and 4 are the closed hardtop cabin: a raked windshield, a flat
+roof, pillarless side windows and a sloped rear window, over two bucket seats and a rear bench. Rows 5 to 8 are a flat
+rear deck lid over the transmission, with a cutout over the engine cells and a louvered grille behind it. Round quad lamps front and back.
 Wheels sit on rows 1 and 7 in the outer columns, radius 0.42 m, half width 0.17 m, mount 0.2 m below the center.
 Run: blender --background --python tools/blender/base_convertible.py -- public/models/base_convertible.glb [tmp/base_convertible.png]
 """
@@ -39,7 +39,10 @@ COWL = G.row_x(2.5)  # the windshield base, where the cabin begins
 CAB_BACK = G.row_x(4.5)  # the rear bench back, where the rear deck begins
 SCREEN_X = COWL - 0.4  # the windshield top leans back this far
 SCREEN_Z = DECK + 0.42
-BOOT_BACK = CAB_BACK - 0.32  # the folded top boot covers the front of row 5
+ROOF_TOP = SCREEN_Z + 0.05  # the roof's flat top, where items on the cab cells stand
+ROOF_BOTTOM = ROOF_TOP - 0.07
+ROOF_FRONT = SCREEN_X + 0.03  # the roof's front edge, over the windshield header
+BOOT_BACK = CAB_BACK - 0.32  # the rear window meets the deck here
 BAY_FRONT = G.row_x(5.5)  # the engine cutout covers rows 6 and 7, columns 1 and 2
 BAY_BACK = G.row_x(7.5)
 BAY_LEFT = G.col_y(0.5)
@@ -127,9 +130,24 @@ def cabin(kit: Kit) -> None:
         kit.box(f"seatback_{s}", (0.12, 0.56, 0.5), (G.row_x(3) - 0.28, y, FLOOR + 0.3), "leather", rot=(0, -0.2, 0))
     kit.box("bench", (0.4, 2 * DOOR_IN - 0.08, 0.16), (G.row_x(4) + 0.06, 0, FLOOR + 0.08), "leather")
     kit.box("bench_back", (0.12, 2 * DOOR_IN - 0.08, 0.46), (CAB_BACK + 0.1, 0, FLOOR + 0.28), "leather", rot=(0, -0.2, 0))
-    # The folded top boot sits on the deck behind the bench, a low rounded roll.
-    boot = [(CAB_BACK + 0.04, DECK), (BOOT_BACK, DECK), (BOOT_BACK + 0.06, DECK + 0.1), (CAB_BACK - 0.04, DECK + 0.16), (CAB_BACK + 0.04, DECK + 0.12)]
-    prism(kit, "boot", boot, -DOOR_IN, DOOR_IN, "wheel")
+    hardtop(kit)
+
+
+def hardtop(kit: Kit) -> None:
+    """A flat roof on painted A and C pillars, dark pillarless side windows and a sloped rear window."""
+    ya, yb = DOOR_IN, SIDE - 0.02
+    roof = [(ROOF_FRONT, ROOF_BOTTOM), (CAB_BACK, ROOF_BOTTOM), (CAB_BACK, ROOF_TOP), (ROOF_FRONT - 0.06, ROOF_TOP), (ROOF_FRONT, ROOF_TOP - 0.04)]
+    prism(kit, "roof", roof, -yb, yb, "trim")
+    a_pillar = [(COWL + 0.02, DECK), (COWL - 0.1, DECK), (SCREEN_X - 0.08, ROOF_BOTTOM), (SCREEN_X + 0.04, ROOF_BOTTOM)]
+    c_pillar = [(BOOT_BACK + 0.12, DECK), (BOOT_BACK, DECK), (CAB_BACK, ROOF_BOTTOM), (CAB_BACK + 0.12, ROOF_BOTTOM)]
+    window = [(COWL - 0.1, DECK), (BOOT_BACK + 0.12, DECK), (CAB_BACK + 0.12, ROOF_BOTTOM), (SCREEN_X - 0.08, ROOF_BOTTOM)]
+    rear = [(CAB_BACK, ROOF_BOTTOM), (BOOT_BACK, DECK), (BOOT_BACK + 0.03, DECK), (CAB_BACK + 0.03, ROOF_BOTTOM)]
+    for s, (y0, y1) in (("l", (ya, yb)), ("r", (-yb, -ya))):
+        prism(kit, f"a_pillar_paint_{s}", a_pillar, y0, y1, "paint")
+        prism(kit, f"c_pillar_{s}", c_pillar, y0, y1, "paint")
+        mid = (y0 + y1) / 2
+        prism(kit, f"side_glass_{s}", window, mid - 0.015, mid + 0.015, "glass")
+    prism(kit, "rear_glass", rear, -ya, ya, "glass")
 
 
 def main() -> None:
@@ -142,7 +160,8 @@ def main() -> None:
     cabin(kit)
     # Items on the engine cells stand on the bay floor under the cutout.
     bay = {(x, y): FLOOR for x in (1, 2) for y in (6, 7)}
-    level_sockets(kit, G, "row", [DECK] * G.rows, fronts={5: BOOT_BACK}, cells=bay)
+    # Items on the cab cells stand on the roof.
+    level_sockets(kit, G, "row", [DECK] * 3 + [ROOF_TOP] * 2 + [DECK] * 4, fronts={3: ROOF_FRONT - 0.06, 5: BOOT_BACK}, cells=bay)
     level_sockets(kit, G, "floor", [TRUNK_FLOOR] * 3 + [FLOOR] * 2 + [TRANSMISSION_FLOOR] + [FLOOR] * 2 + [DECK])
     check_base(kit, "base_convertible", G)
     kit.export("base_convertible", args, view_size=7.0)
