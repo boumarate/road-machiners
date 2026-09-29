@@ -52,12 +52,13 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   const features = await releaseFeatures(ctx, release);
   await ctx.repo.merge(release.branch, 'main', `Release ${release.day}`);
   await ctx.repo.push('main');
+  // A conflict in dev fails here, before anything public happens.
+  await ctx.repo.merge('main', 'dev', `Merge main into dev after release ${release.day}`);
+  await ctx.repo.push('dev');
   await publish(ctx, keys);
   const channel = ctx.cfg.publicChannel;
   await ctx.telegram.sendPhoto(channel, screenshot, `ROAM release ${release.day}`);
   await ctx.telegram.sendMessage(channel, `${readFileSync(notesPath, 'utf8').trim()}\n\nChanges:\n${features.map((feature) => `- ${featureLine(feature)}`).join('\n')}`);
-  await ctx.repo.merge('main', 'dev', `Merge main into dev after release ${release.day}`);
-  await ctx.repo.push('dev');
   await deployDev(ctx, agentLog(ctx, issue, 'ship'));
   await ctx.github.comment(issue, `Shipped by ${by} in the committee chat. Release ${release.day} is on main and itch.io.`);
   await ctx.github.close(issue, 'completed');

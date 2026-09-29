@@ -39,18 +39,27 @@ describe('ship', () => {
     const at = (name: string) => f.calls.findIndex((call) => call.startsWith(name));
     expect(at('sync release/2026-09-29')).toBeLessThan(at('merge release/2026-09-29 main'));
     expect(at('merge release/2026-09-29 main')).toBeLessThan(at('push main'));
-    expect(at('push main')).toBeLessThan(at('prepare main'));
+    expect(at('push main')).toBeLessThan(at('merge main dev'));
+    expect(at('merge main dev')).toBeLessThan(at('push dev'));
+    expect(at('push dev')).toBeLessThan(at('prepare main'));
     expect(at('prepare main')).toBeLessThan(at('run butler'));
     expect(at('run butler')).toBeLessThan(at('photo public'));
     expect(at('photo public')).toBeLessThan(at('message public'));
-    expect(at('message public')).toBeLessThan(at('merge main dev'));
-    expect(at('merge main dev')).toBeLessThan(at('push dev'));
     expect(shells).toEqual([{ script: 'npm ci && npm run build', env: { SAVE_SCOPE: '' } }]);
     expect(runs).toEqual([{ cmd: 'butler', args: ['push', join(ROOT, 'work', 'release-main', 'game', 'dist'), 'u/g:html5', '--userversion', 'abc1234'], env: { BUTLER_API_KEY: 'secret' } }]);
     const publicNote = f.calls.find((call) => call.startsWith('message public')) ?? '';
     expect(publicNote).toContain('Trucks are faster.');
     expect(publicNote).toContain('- #3 faster trucks');
     expect(publicNote).not.toContain('#6');
+  });
+
+  it('fails on a dev merge conflict before the build, the butler push and any public post', async () => {
+    const f = shippable();
+    const merge = f.ctx.repo.merge;
+    f.ctx.repo.merge = async (branch, into, message) => { if (into === 'dev') throw new Error('merge conflict in dev'); return merge(branch, into, message); };
+    await expect(ship(f.ctx, 11, 'Ann')).rejects.toThrow('merge conflict in dev');
+    expect(f.calls.some((call) => call.startsWith('prepare') || call.startsWith('run butler') || call.includes('public'))).toBe(false);
+    expect(readState(f.ctx.statePath).release).not.toBeNull();
   });
 
   it('closes the tracking issue, clears the release and the rc build, and tells the committee', async () => {

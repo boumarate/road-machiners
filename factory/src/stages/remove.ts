@@ -13,6 +13,8 @@ export async function remove(ctx: Ctx, issue: number): Promise<void> {
   await ctx.repo.sync(release.branch);
   // Each branch is pushed right after its revert, so a later failure never leaves a local revert that a later push would carry.
   const onRelease = await revertAndPush(ctx, issue, release.branch);
+  // The release branch changed, so the candidate post no longer matches it. Ship must not run on it, even if the dev revert fails.
+  if (onRelease) updateState(ctx.statePath, (state) => ({ ...state, pendingShip: null, release: state.release && { ...state.release, postId: null } }));
   const onDev = await revertAndPush(ctx, issue, BASE_BRANCH);
   if (!onRelease && !onDev) throw new Error(`Neither ${release.branch} nor ${BASE_BRANCH} has a merge of issue #${issue}`);
   await deployDev(ctx, agentLog(ctx, issue, 'remove'));
@@ -24,7 +26,7 @@ export async function remove(ctx: Ctx, issue: number): Promise<void> {
   await ctx.github.comment(issue, `${FEEDBACK_HEADING}\n\nRemoved from release ${release.day} by ${removal.by}:\n\n${removal.text}`);
   await ctx.github.move(issue, 'Design');
   // Ship reads postId, so the old candidate post can no longer ship this release.
-  updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: null, removed: [...state.release.removed, issue] } }));
+  updateState(ctx.statePath, (state) => ({ ...state, pendingShip: null, release: state.release && { ...state.release, postId: null, removed: [...state.release.removed, issue] } }));
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Issue #${issue} is out of release ${release.day} and back in design. A new candidate follows when the release tasks are done.`);
 }
 

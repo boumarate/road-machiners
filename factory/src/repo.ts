@@ -8,6 +8,20 @@ import { OUT_DIR, TASK_DIR, type FactoryConfig, type HostRepo, type Run } from '
 const NO_HOOKS = ['-c', 'core.hooksPath=/dev/null', '-c', 'user.name=ROAM Factory', '-c', 'user.email=factory@roam.invalid'];
 const SYNCED_BRANCHES = ['dev', 'main'];
 
+// The log runs newest first, so the first entry that names the issue decides.
+// A revert means the branch is clean already, and a merge that came back after a removal reverts its latest merge.
+function mergeToRevert(log: string, issue: number): string | null {
+  const merge = `Merge issue #${issue}:`;
+  const reverted = `Revert "Merge issue #${issue}:`;
+  for (const line of log.split('\n').filter(Boolean)) {
+    const [hash, ...words] = line.split(' ');
+    const subject = words.join(' ');
+    if (subject.startsWith(reverted)) return null;
+    if (subject.startsWith(merge)) return hash;
+  }
+  return null;
+}
+
 export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
   const path = `${cfg.home}/repo`;
   const gitIn = async (cwd: string, args: string[]): Promise<string> => must(await run('git', [...NO_HOOKS, ...args], { cwd }), `git ${args.join(' ')}`);
@@ -53,18 +67,17 @@ export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
       await git(['branch', name, from]);
     },
     async revertIssueMerge(issue, branch) {
-      const log = await git(['log', '--first-parent', '--merges', '--format=%H %s', `main..${branch}`]);
-      const prefix = `Merge issue #${issue}:`;
-      // The log runs newest first, so a feature that came back after a removal reverts its latest merge.
-      const found = log.split('\n').filter(Boolean).map((line) => line.split(' ')).find(([, ...subject]) => subject.join(' ').startsWith(prefix));
-      if (!found) return false;
+      const log = await git(['log', '--first-parent', '--format=%H %s', `main..${branch}`]);
+      const hash = mergeToRevert(log, issue);
+      if (hash === null) return false;
       await git(['checkout', branch]);
-      const result = await run('git', [...NO_HOOKS, 'revert', '--no-edit', '-m', '1', found[0]], { cwd: path });
+      const result = await run('git', [...NO_HOOKS, 'revert', '--no-edit', '-m', '1', hash], { cwd: path });
       if (result.code === 0) return true;
       const files = await conflictedFiles();
       const reason = (result.stderr || result.stdout).trim();
+      // The host repo never stays mid-revert, conflict or not.
+      if (await hasRef('REVERT_HEAD')) await git(['revert', '--abort']);
       if (files.length === 0) throw new Error(`revert of issue #${issue} on ${branch} failed without a conflict: ${reason}`);
-      await git(['revert', '--abort']);
       throw new Error(`revert of issue #${issue} on ${branch} failed. Conflicting files: ${files.join(', ')}. ${reason}`);
     },
     async deleteBranch(branch) {
