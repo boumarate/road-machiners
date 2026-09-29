@@ -91,7 +91,7 @@ export const CONTRACTS = {
   haul: {
     // The deadline is the estimated travel turns times this factor, so a normal detour, a stop for
     // fuel or a fight does not expire the contract on its own.
-    durationFactor: 3,
+    durationFactor: 6,
     // A tier wage is what salvage earns. A haul pays about three of them, so a contract beats
     // scavenging along the same road.
     rewardFactor: 3.2,
@@ -109,7 +109,7 @@ export const CONTRACTS = {
   fetch: {
     // A fetch has no fixed travel: the part can come from a garage or the field. The window is a
     // flat turn range that stands in for the effort of finding one, and sets the deadline.
-    durationTurns: [150, 400] as [number, number],
+    durationTurns: [300, 800] as [number, number],
     // The reward is the part's own pristine buy price plus this search fee: turns of effort spent
     // finding a part of a named type, in any condition, at the fetch's own tier wage.
     searchFeeTurns: 240,
@@ -123,7 +123,7 @@ export const CONTRACTS = {
   bounty: {
     // Long enough that a raider's own patrol or camp turns do not expire the contract before the
     // player can reach and fight it. The window only sets the deadline: it does not change the pay.
-    durationTurns: [200, 500] as [number, number],
+    durationTurns: [400, 1000] as [number, number],
     // Share of the target's own total worth, chassis plus every part, paid for the kill. A fifth of
     // its worth pays for the risk of the fight without outpricing the wreck's own salvage.
     valueShare: 0.2,
