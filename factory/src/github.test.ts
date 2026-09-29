@@ -79,4 +79,20 @@ describe('ghClient', () => {
     const client = ghClient(fake([], project(['Design', 'Done'])), CFG);
     await expect(client.cards()).rejects.toThrow('"Implementation"');
   });
+
+  it('shows the real error when the project lookup fails for another reason', async () => {
+    const run: Run = async () => ({ code: 1, stdout: '', stderr: 'HTTP 502: Bad Gateway' });
+    await expect(ghClient(run, CFG).cards()).rejects.toThrow('502');
+  });
+
+  it('tries the organization when the owner is not a user', async () => {
+    const orgProject = JSON.stringify({ data: { organization: { projectV2: { id: 'P1', field: { id: 'F1', options: ALL.map((name) => ({ id: name, name })) } } } } });
+    const run: Run = async (_cmd, args) => {
+      const text = args.join(' ');
+      if (text.includes('user(login')) return { code: 1, stdout: '', stderr: "Could not resolve to a User with the login of 'o'." };
+      if (text.includes('organization(login')) return ok(orgProject);
+      return ok(JSON.stringify({ data: { node: { items: { pageInfo: { hasNextPage: false, endCursor: '' }, nodes: [] } } } }));
+    };
+    await expect(ghClient(run, CFG).cards()).resolves.toEqual([]);
+  });
 });

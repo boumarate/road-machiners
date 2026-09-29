@@ -35,6 +35,8 @@ type ItemsPage = {
   data: { node: { items: { pageInfo: { hasNextPage: boolean; endCursor: string }; nodes: ItemNode[] } } };
 };
 
+const NOT_THIS_KIND = /Could not resolve to an? (User|Organization)/;
+
 export function ghClient(run: Run, cfg: FactoryConfig): GitHub {
   const repo = cfg.repo;
   let board: Board | null = null;
@@ -70,7 +72,9 @@ export function ghClient(run: Run, cfg: FactoryConfig): GitHub {
     for (const kind of ['user', 'organization']) {
       const query = `query($owner: String!, $number: Int!) { ${kind}(login: $owner) { projectV2(number: $number) { ${PROJECT_FIELDS} } } }`;
       const result = await run('gh', graphqlArgs(query, { owner: cfg.projectOwner, number: cfg.projectNumber }));
-      if (result.code !== 0) continue;
+      // Only a wrong owner kind moves on to the next kind. Any other error is real and stops here.
+      if (result.code !== 0 && NOT_THIS_KIND.test(result.stderr)) continue;
+      must(result, `gh api graphql ${kind} project`);
       const data = JSON.parse(result.stdout) as { data: Record<string, { projectV2: BoardData | null } | null> };
       const project = data.data[kind]?.projectV2;
       if (project) return project;
