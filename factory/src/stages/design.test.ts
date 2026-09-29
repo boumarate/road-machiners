@@ -73,8 +73,8 @@ describe('design stage', () => {
 
   it('pushes and moves to Implementation on a plan', async () => {
     const ctx = fakeCtx((run) => {
-      mkdirSync(`${run.clone}/docs/tasks`, { recursive: true });
-      writeFileSync(`${run.clone}/docs/tasks/issue-7.md`, PLAN);
+      mkdirSync(`${run.clone}/.factory-tasks`, { recursive: true });
+      writeFileSync(`${run.clone}/.factory-tasks/issue-7.md`, PLAN);
     });
     await runStage(ctx, 7);
     expect(calls).toContain('push factory/issue-7');
@@ -85,17 +85,17 @@ describe('design stage', () => {
     let seen = '';
     await runStage(fakeCtx((run) => {
       seen = run.prompt;
-      mkdirSync(`${run.clone}/docs/tasks`, { recursive: true });
-      writeFileSync(`${run.clone}/docs/tasks/issue-7.md`, PLAN);
+      mkdirSync(`${run.clone}/.factory-tasks`, { recursive: true });
+      writeFileSync(`${run.clone}/.factory-tasks/issue-7.md`, PLAN);
     }), 7);
-    expect(seen).toContain('docs/tasks/issue-7.md');
+    expect(seen).toContain('.factory-tasks/issue-7.md');
     expect(seen).toContain('factory/issue-7');
   });
 
   it('throws when the plan is empty', async () => {
     const ctx = fakeCtx((run) => {
-      mkdirSync(`${run.clone}/docs/tasks`, { recursive: true });
-      writeFileSync(`${run.clone}/docs/tasks/issue-7.md`, '# Task\n\n## Plan\n\n## Verify\n');
+      mkdirSync(`${run.clone}/.factory-tasks`, { recursive: true });
+      writeFileSync(`${run.clone}/.factory-tasks/issue-7.md`, '# Task\n\n## Plan\n\n## Verify\n');
     });
     await expect(runStage(ctx, 7)).rejects.toThrow('Plan');
   });
@@ -108,8 +108,8 @@ describe('design stage', () => {
   it('does not push when the diff bumps SAVE_MAJOR', async () => {
     diff = 'diff --git a/src/three/save-migrations.ts b/src/three/save-migrations.ts\n@@ -1 +1 @@\n-const SAVE_MAJOR = 1;\n+const SAVE_MAJOR = 2;\n';
     const ctx = fakeCtx((run) => {
-      mkdirSync(`${run.clone}/docs/tasks`, { recursive: true });
-      writeFileSync(`${run.clone}/docs/tasks/issue-7.md`, PLAN);
+      mkdirSync(`${run.clone}/.factory-tasks`, { recursive: true });
+      writeFileSync(`${run.clone}/.factory-tasks/issue-7.md`, PLAN);
     });
     await expect(runStage(ctx, 7)).rejects.toThrow('SAVE_MAJOR');
     expect(calls.filter((call) => call.startsWith('push'))).toEqual([]);

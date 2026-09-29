@@ -128,7 +128,9 @@ export type Ctx = {
 };
 
 export const BRANCH = (issue: number): string => `factory/issue-${issue}`;
-export const TASK_FILE = (issue: number): string => `docs/tasks/issue-${issue}.md`;
+// Task files stay in the work clone and never reach a commit. Git ignores their folder there.
+export const TASK_DIR = '.factory-tasks';
+export const TASK_FILE = (issue: number): string => `${TASK_DIR}/issue-${issue}.md`;
 export const WORK_DIR = (home: string, issue: number): string => `${home}/work/issue-${issue}`;
 export const OUT_DIR = '.factory';
 export const STUCK_LABEL = 'factory-stuck';

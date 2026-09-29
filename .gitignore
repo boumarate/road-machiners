@@ -9,3 +9,4 @@ __pycache__/
 .pi/
 .DS_Store
 .factory/
+.factory-tasks/

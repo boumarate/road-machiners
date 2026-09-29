@@ -29,8 +29,8 @@ describe('maintenance', () => {
     const agent = f.ctx.container.agent;
     f.ctx.container.agent = async (run: AgentRun) => {
       await agent(run);
-      mkdirSync(join(run.clone, 'docs/tasks'), { recursive: true });
-      writeFileSync(join(run.clone, 'docs/tasks/issue-7.md'), '# T\n\n## Plan\n\n- do it\n\n## Other\n');
+      mkdirSync(join(run.clone, '.factory-tasks'), { recursive: true });
+      writeFileSync(join(run.clone, '.factory-tasks/issue-7.md'), '# T\n\n## Plan\n\n- do it\n\n## Other\n');
     };
     await maintenance(f.ctx);
     expect(f.calls.at(-1)).toBe('addCard Implementation');

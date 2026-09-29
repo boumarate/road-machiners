@@ -13,7 +13,7 @@ If you find one:
 - Use up:udesign and up:uplan in hands-off mode.
 - Stop before execution. Do not change game code.
 - Write .factory/issue.md. The first line is a short title. The rest is the issue body.
-- Commit the task file on {{branch}}.
+- Git ignores the task file. Never commit it and never force-add it. Commit nothing in this stage.
 
 If nothing is worth fixing, write .factory/nothing.md with one short reason. Do not write a task file.
 

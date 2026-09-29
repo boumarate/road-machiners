@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fillPrompt } from './common';
+import { factoryPaths, fillPrompt } from './common';
 
 describe('fillPrompt', () => {
   it('fills every variable', () => {
@@ -10,5 +10,12 @@ describe('fillPrompt', () => {
 
   it('throws on an unfilled variable', () => {
     expect(() => fillPrompt('design', { issue: '7' })).toThrow('unfilled {{');
+  });
+});
+
+describe('factoryPaths', () => {
+  it('finds agent messages and task files in a diff', () => {
+    const diff = 'diff --git a/src/a.ts b/src/a.ts\n+x\ndiff --git a/.factory-tasks/issue-8.md b/.factory-tasks/issue-8.md\n+y\ndiff --git a/.factory/approval.json b/.factory/approval.json\n';
+    expect(factoryPaths(diff)).toEqual(['.factory-tasks/issue-8.md', '.factory/approval.json']);
   });
 });

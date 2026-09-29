@@ -40,5 +40,7 @@ If the request needs a major save format bump, do not plan it.
 Write what the committee must decide to `.factory/needs-committee.md`.
 Then stop.
 
-Commit the task file on the current branch {{branch}}.
+Git ignores the task file. Never commit it and never force-add it.
+The next stages read it from this clone.
+Commit nothing in this stage.
 Never push.

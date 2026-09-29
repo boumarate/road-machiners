@@ -17,6 +17,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   if (reason !== null) return refuse(ctx, issue, reason);
   requirePlan(clone, TASK_FILE(issue));
   await guardAndPush(ctx, issue, BASE_BRANCH);
+  await postDesign(ctx, issue, readFileSync(`${clone}/${TASK_FILE(issue)}`, 'utf8'));
   await ctx.github.move(issue, 'Implementation');
 }
 
@@ -47,4 +48,13 @@ function planText(task: string): string {
   const rest = lines.slice(start + 1);
   const end = rest.findIndex((line) => line.startsWith('## '));
   return (end < 0 ? rest : rest.slice(0, end)).join('\n').trim();
+}
+
+// GitHub caps a comment at 65536 characters. The rest of the room holds the wrapper and the marker.
+const DESIGN_COMMENT_LIMIT = 60000;
+
+// The task file never reaches git, so the issue shows the design and plan to anyone who wants to read them.
+async function postDesign(ctx: Ctx, issue: number, taskFile: string): Promise<void> {
+  const body = taskFile.length > DESIGN_COMMENT_LIMIT ? `${taskFile.slice(0, DESIGN_COMMENT_LIMIT)}\n\n(cut here, the full file is in the factory work clone)` : taskFile;
+  await ctx.github.comment(issue, `<details>\n<summary>Design and plan</summary>\n\n${body}\n\n</details>`);
 }

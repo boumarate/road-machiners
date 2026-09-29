@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { must } from './exec';
-import type { FactoryConfig, HostRepo, Run } from './types';
+import { OUT_DIR, TASK_DIR, type FactoryConfig, type HostRepo, type Run } from './types';
 
 // Hooks are switched off on every call, so no git command here runs code from a repository.
 // The identity names the factory on its merge commits, the same one the agent image uses.
@@ -53,6 +53,8 @@ export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
       if (existsSync(dir)) return;
       mkdirSync(dirname(dir), { recursive: true });
       await gitIn(dirname(dir), ['clone', '--no-hardlinks', path, dir]);
+      // The clone ignores the factory's own files, whatever the branch's .gitignore says.
+      appendFileSync(join(dir, '.git', 'info', 'exclude'), `\n${OUT_DIR}/\n${TASK_DIR}/\n`);
       await checkoutBranch(dir, branch, base);
     },
     async fetchFromWork(dir, branch) {

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { changesSaveMajor } from '../save-guard';
-import { BRANCH, NEEDS_INFO_LABEL, OUT_DIR, QUESTIONS_HEADING, WORK_DIR, type CardStage, type Ctx } from '../types';
+import { BRANCH, NEEDS_INFO_LABEL, OUT_DIR, QUESTIONS_HEADING, TASK_DIR, WORK_DIR, type CardStage, type Ctx } from '../types';
 
 export const BASE_BRANCH = 'dev';
 
@@ -61,9 +61,18 @@ export function throwIfNeedsCommittee(clone: string): void {
   if (text !== null) throw new Error(`The agent needs a committee decision: ${text.trim()}`);
 }
 
+// Paths in a diff that belong to the factory, not the game: agent messages and task files.
+export function factoryPaths(diff: string): string[] {
+  const paths = [...diff.matchAll(/^diff --git a\/(.+) b\/(.+)$/gm)].flatMap((match) => [match[1], match[2]]);
+  return [...new Set(paths)].filter((path) => path.startsWith(`${OUT_DIR}/`) || path.startsWith(`${TASK_DIR}/`));
+}
+
 export async function guardAndPush(ctx: Ctx, issue: number, base: string): Promise<void> {
   await ctx.repo.fetchFromWork(workDir(ctx, issue), BRANCH(issue));
-  if (changesSaveMajor(await ctx.repo.diff(base, BRANCH(issue)))) {
+  const diff = await ctx.repo.diff(base, BRANCH(issue));
+  const leaked = factoryPaths(diff);
+  if (leaked.length) throw new Error(`The branch commits factory files, which must stay out of the game repo: ${leaked.join(', ')}`);
+  if (changesSaveMajor(diff)) {
     throw new Error('The change bumps SAVE_MAJOR in src/three/save-migrations.ts. The committee must decide on a major save bump before this can go on.');
   }
   await ctx.repo.push(BRANCH(issue));
