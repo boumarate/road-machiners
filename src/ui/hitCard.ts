@@ -9,7 +9,8 @@ import { DEG } from '../sim/vec';
 import { el } from './dom';
 import { ammoText, blockText } from './weapons';
 
-export type HitRow = { label: string; odds: HitOdds | null; text: string; cause: string | null };
+// `cause` names the biggest reasons in plain words. `detail` holds every number, for a tooltip.
+export type HitRow = { label: string; odds: HitOdds | null; text: string; cause: string | null; detail: string | null };
 export type HitCardData = { name: string; mine: HitRow[]; theirs: HitRow[] };
 
 function deg(r: number): string {
@@ -18,7 +19,7 @@ function deg(r: number): string {
 
 // "18 m · shows 4.1 m wide · scatter 2.0° weapon +1.1° crossing +0.4° own speed −0.3° gunnery".
 // Extra causes that round to zero are left out.
-function causeLine(o: HitOdds): string {
+function detailLine(o: HitOdds): string {
   const extra = ([[o.causes.range, 'range'], [o.causes.crossing, 'crossing'], [o.causes.own, 'own speed'], [o.causes.recoil, 'recoil'], [o.causes.skill, 'perception'], [o.causes.weather, 'weather'], [o.causes.still, 'still target']] as const)
     .filter(([r]) => deg(r) !== '0.0')
     .map(([r, name]) => ` ${r < 0 ? '−' : '+'}${deg(r)}° ${name}`)
@@ -26,12 +27,28 @@ function causeLine(o: HitOdds): string {
   return `${Math.round(o.distance)} m · shows ${o.width.toFixed(1)} m wide · scatter ${deg(o.causes.weapon)}° weapon${extra}`;
 }
 
+// A cause is a main reason when it makes up at least this share of the scatter. Smaller ones are noise to a player.
+const MAIN_SHARE = 0.25;
+const MAX_REASONS = 2;
+
+// The biggest reasons the chance is low, in plain words: "far, you are moving". A parked target reads as easy.
+function reasonLine(o: HitOdds): string {
+  const c = o.causes;
+  const reasons: string[] = ([[c.range, 'far'], [c.crossing, 'target crossing fast'], [c.own, 'you are moving'], [c.recoil, 'gun kick'], [c.weather, 'bad weather'], [c.weapon, 'loose gun']] as const)
+    .filter(([r]) => r / o.spread >= MAIN_SHARE)
+    .sort((a, b) => b[0] - a[0])
+    .slice(0, MAX_REASONS)
+    .map(([, name]) => name);
+  if (deg(c.still) !== '0.0') reasons.unshift('target is parked: easy');
+  return reasons.length > 0 ? reasons.join(', ') : 'clear shot';
+}
+
 function row(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle, aim: Aim, name: string): HitRow {
   const block = fireBlock(world, shooter, mw, target);
   const label = `${name} ${ammoText(mw)}`;
-  if (block !== null) return { label, odds: null, text: blockText(mw, block), cause: null };
+  if (block !== null) return { label, odds: null, text: blockText(mw, block), cause: null, detail: null };
   const odds = hitOdds(world, shooter, mw, target, aim);
-  return { label, odds, text: `${Math.round(odds.chance * 100)}%`, cause: causeLine(odds) };
+  return { label, odds, text: `${Math.round(odds.chance * 100)}%`, cause: reasonLine(odds), detail: detailLine(odds) };
 }
 
 // A weapon's aim at a target: its order's aim when the order is at that target, else a body shot.
@@ -71,8 +88,8 @@ export class HitCard {
     const section = (title: string, rows: HitRow[]) => [
       el('div', { class: 'hc-head' }, title),
       ...(rows.length === 0 ? [el('div', { class: 'dim' }, 'No weapons')] : rows.flatMap((r) => [
-        el('div', { class: 'hc-row' }, el('span', {}, r.label), el('span', { class: r.odds ? 'good' : 'dim' }, r.text)),
-        ...(r.cause ? [el('div', { class: 'hc-cause dim' }, r.cause)] : []),
+        el('div', { class: 'hc-row', ...(r.detail ? { title: r.detail } : {}) }, el('span', {}, r.label), el('span', { class: r.odds ? 'hc-chance' : 'dim' }, r.text)),
+        ...(r.cause ? [el('div', { class: 'hc-cause dim', title: r.detail ?? '' }, r.cause)] : []),
       ])),
     ];
     this.root.replaceChildren(...section('You → it', card.mine), ...section('It → you', card.theirs));

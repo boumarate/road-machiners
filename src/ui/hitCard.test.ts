@@ -27,7 +27,29 @@ describe('hover card rows', () => {
     const deg = (r: number) => (r / DEG).toFixed(1);
     expect(o.causes.crossing).toBeGreaterThan(0);
     expect(o.causes.recoil).toBeGreaterThan(0);
-    expect(card.mine[0].cause).toBe(`${Math.round(o.distance)} m · shows ${o.width.toFixed(1)} m wide · scatter ${deg(o.causes.weapon)}° weapon +${deg(o.causes.range)}° range +${deg(o.causes.crossing)}° crossing +${deg(o.causes.recoil)}° recoil`);
+    expect(card.mine[0].detail).toBe(`${Math.round(o.distance)} m · shows ${o.width.toFixed(1)} m wide · scatter ${deg(o.causes.weapon)}° weapon +${deg(o.causes.range)}° range +${deg(o.causes.crossing)}° crossing +${deg(o.causes.recoil)}° recoil`);
+  });
+
+  it('names the biggest reasons in plain words and keeps at most two', () => {
+    const { world, them } = createDuel();
+    const cause = hitCardRows(world, them.id)!.mine[0].cause!;
+    expect(cause).toMatch(/^(far|target crossing fast|you are moving|gun kick|bad weather|loose gun)(, (far|target crossing fast|you are moving|gun kick|bad weather|loose gun))?$/);
+  });
+
+  it('calls a parked target easy', () => {
+    const { world, them } = createDuel();
+    them.speed = 0;
+    const row = hitCardRows(world, them.id)!.mine[0];
+    expect(row.odds!.causes.still).toBeLessThan(0);
+    expect(row.cause).toContain('target is parked: easy');
+  });
+
+  it('says clear shot when no cause is a main one', () => {
+    const { world, them } = createDuel();
+    them.speed = 0;
+    world.vehicles[0].speed = 0;
+    const row = hitCardRows(world, them.id)!.mine[0];
+    expect(row.cause).not.toContain('you are moving');
   });
 
   it('shows its weapons against me with the aim of its order at me', () => {
@@ -54,7 +76,7 @@ describe('hover card rows', () => {
   it('shows the block reason instead of a chance', () => {
     const { world, them, mine } = createDuel();
     mine.part.hp = 0;
-    expect(hitCardRows(world, them.id)!.mine[0]).toMatchObject({ odds: null, text: 'disabled', cause: null });
+    expect(hitCardRows(world, them.id)!.mine[0]).toMatchObject({ odds: null, text: 'disabled', cause: null, detail: null });
   });
 
   it('shows perception as a negative scatter cause', () => {
@@ -62,7 +84,7 @@ describe('hover card rows', () => {
     world.player.skills.perception = XP_TO_REACH[3];
     const o = hitOdds(world, me, mine, them, 'body');
     expect(o.causes.skill).toBeLessThan(0);
-    expect(hitCardRows(world, them.id)!.mine[0].cause).toContain(` −${(-o.causes.skill / DEG).toFixed(1)}° perception`);
+    expect(hitCardRows(world, them.id)!.mine[0].detail).toContain(` −${(-o.causes.skill / DEG).toFixed(1)}° perception`);
   });
 
   it('shows no card for my own truck', () => {

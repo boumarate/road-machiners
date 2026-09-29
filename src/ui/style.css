@@ -674,6 +674,13 @@ body {
   justify-content: space-between;
   gap: 12px;
 }
+.hitcard .hc-chance {
+  font-size: 16px;
+  color: #c0cf92;
+}
+.hitcard .hc-row {
+  align-items: baseline;
+}
 .hitcard .hc-cause {
   font-size: 11px;
   margin-bottom: 3px;
