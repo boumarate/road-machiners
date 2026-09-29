@@ -1,9 +1,10 @@
 import { PHYSICS } from '../data/physics';
-import { baseGrid, corePart, coreParts, mountedParts } from './grid';
+import { lanesAt } from './body';
+import { corePart, coreParts, mountedParts } from './grid';
 import { NPC_BEHAVIOR } from '../data/npcs';
 import { isHostile, noteCollision } from './combat';
 import { getMobilityCondition, isStranded, vehicleStats } from './stats';
-import { angleDiff, bearing, clamp, dist, type Vec } from './vec';
+import { angleDiff, bearing, dist, type Vec } from './vec';
 import { laneCount, passShare, ramMult, sideToward, walkLane, type PartHit, type Side } from './armor';
 import { partDef, sustainedDamage } from '../data/parts';
 import { isJunk, maxHp, restorePart } from './wear';
@@ -262,15 +263,9 @@ function selectContactSide(normal: Vec): Side {
 export function locateCrashContact(chassisId: string, points: Vec[], normal: Vec): CrashContact {
   if (points.length === 0) throw new Error('Crash has no contact points');
   const side = selectContactSide(normal);
-  const grid = baseGrid(chassisId);
   const front = side === 'front' || side === 'rear';
-  const count = front ? grid.w : grid.h;
-  const indices = points.map((point) => front
-    ? point.y / PHYSICS.cell.across + grid.w / 2
-    : grid.h / 2 - point.x / PHYSICS.cell.along);
-  const first = clamp(Math.floor(Math.min(...indices)), 0, count - 1);
-  const last = clamp(Math.floor(Math.max(...indices)), 0, count - 1);
-  return { side, lanes: Array.from({ length: last - first + 1 }, (_, i) => first + i) };
+  const values = points.map((point) => (front ? point.y : point.x));
+  return { side, lanes: lanesAt(chassisId, front ? 'column' : 'row', Math.min(...values), Math.max(...values)) };
 }
 
 export function computeClosingSpeed(relative: Vec, normal: Vec): number {
