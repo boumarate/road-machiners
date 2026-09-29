@@ -99,7 +99,7 @@ const CAPTION_LIMIT = 1024;
 const TRIM_MARK = '…';
 
 // The approval post is one photo with everything in its caption. The full notes also go on the issue.
-async function post(ctx: Ctx, issue: number, approval: Approval, screenshot: string, url: string): Promise<void> {
+export async function post(ctx: Ctx, issue: number, approval: Approval, screenshot: string, url: string): Promise<void> {
   const item = await ctx.github.issue(issue);
   const link = `https://github.com/${ctx.cfg.repo}/issues/${issue}`;
   const pr = await pullRequestUrl(ctx, issue, item.title, approval);
