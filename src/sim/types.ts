@@ -194,6 +194,8 @@ export type NpcBrain = {
     ramChoice?: string; // the fight target this driver chose to ram while its ram chance lasts
     ramTarget?: string; // the fight target this driver drives through this turn
     fightTurn?: 1 | -1; // a circling fighter's direction around its target; see src/sim/ai.ts
+    // Where the fight target was, how it faced and how fast it drove when the driver last read it, on `turn`.
+    targetSeen?: { id: string; turn: number; pos: Vec; heading: number; speed: number };
     // The fight whim rolled last, held until turn `until`. angle is where around the target a veer drives.
     whim?: { kind: 'keep' | 'rush' | 'halt' | 'veer'; until: number; angle: number };
     farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest

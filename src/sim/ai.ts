@@ -128,7 +128,9 @@ function orderPoint(world: World, v: Vehicle, activity: NpcActivity, templateRan
   if (!target) throw new Error("Fight activity missing its target");
   if (!canVehicleSee(world, v, target.pos)) return getActivityDestination(world, v, activity);
   const preferredRange = templateRange > 0 ? templateRange : shortestRange(world, v);
-  return computeFightGoal(world, v, preferredRange, target);
+  const seen = perceivedTarget(world, v, target);
+  noteTarget(world, v, target);
+  return computeFightGoal(world, v, preferredRange, target, seen);
 }
 
 // A leader out of danger waits while an escort that follows it lags more than NPC_BEHAVIOR.escortWaitGap behind,
@@ -158,19 +160,34 @@ function foeInSight(world: World, v: Vehicle, activity: NpcActivity): Vehicle | 
 }
 
 // A chosen ram, then a rash whim, win over the scored spot. A rush drives through the target like a ram. A halt
-// brakes where the driver is. A veer drives to the whim's spot around the target.
-function computeFightGoal(world: World, v: Vehicle, preferredRange: number, target: Vehicle): Vec | null {
+// brakes where the driver is. A veer drives to the whim's spot around the target. Rams aim at the target as it is.
+// Every other spot is placed against `seen`, the target as the driver last read it.
+function computeFightGoal(world: World, v: Vehicle, preferredRange: number, target: Vehicle, seen: Vehicle): Vec | null {
   const b = v.brain!;
-  const lead = leadOf(target);
   if (rams(world, v, target)) {
     b.ramTarget = target.id;
-    return lead;
+    return leadOf(target);
   }
   if (b.whim?.kind === "halt") return null;
+  const lead = leadOf(seen);
   const clearance = vehicleStats(world, v).radius + vehicleStats(world, target).radius + RULES.yieldDistance;
   const range = Math.max(preferredRange, clearance);
   if (b.whim?.kind === "veer") return { x: lead.x + Math.cos(b.whim.angle) * range, y: lead.y + Math.sin(b.whim.angle) * range };
-  return fightPoint(world, v, target, range);
+  return fightPoint(world, v, seen, range);
+}
+
+// A fighter reacts a turn late: it places itself against where its target was and how it faced when it last read
+// it on an earlier turn. A sharp turn or a dash catches it off guard for a turn. A first sighting reads the target
+// as it is.
+export function perceivedTarget(world: World, v: Vehicle, target: Vehicle): Vehicle {
+  const seen = v.brain!.targetSeen;
+  if (!seen || seen.id !== target.id || seen.turn >= world.turn) return target;
+  return { ...target, pos: { ...seen.pos }, heading: seen.heading, speed: seen.speed };
+}
+
+// The driver reads its target as it is now, for its next turn.
+export function noteTarget(world: World, v: Vehicle, target: Vehicle): void {
+  v.brain!.targetSeen = { id: target.id, turn: world.turn, pos: { ...target.pos }, heading: target.heading, speed: target.speed };
 }
 
 function rams(world: World, v: Vehicle, target: Vehicle): boolean {

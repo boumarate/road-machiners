@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { afterTurn, exposure, fightOrder, fightPoint, planNpcOrders } from './ai';
+import { afterTurn, exposure, fightOrder, fightPoint, noteTarget, perceivedTarget, planNpcOrders } from './ai';
 import { mountedParts, sideOf, type SideLetter } from './grid';
 import { decide } from './npc-decisions';
 import { thinkNpc } from './npc-activities';
@@ -98,6 +98,25 @@ function inFight(): { w: World; v: Vehicle } {
   v.brain!.goals.push({ kind: 'fight', targetId: me, destination: { x: 40, y: 30 }, phase: 'travel', reason: 'test' });
   return { w, v };
 }
+
+describe('reaction delay', () => {
+  it('a fighter reads its target where it was and how it faced last turn', () => {
+    const w = emptyWorld({ x: 40, y: 30 });
+    const me = w.vehicles[0];
+    const v = fighter(w, 'gunwagon', ['stockEngine', 'mg'], { x: 46, y: 30 });
+    expect(perceivedTarget(w, v, me)).toBe(me);
+    const before = { pos: { ...me.pos }, heading: me.heading, speed: me.speed };
+    noteTarget(w, v, me);
+    expect(perceivedTarget(w, v, me)).toBe(me);
+    w.turn++;
+    me.pos = { x: 41, y: 31 };
+    me.heading = Math.PI;
+    me.speed = 3;
+    const seen = perceivedTarget(w, v, me);
+    expect({ pos: seen.pos, heading: seen.heading, speed: seen.speed }).toEqual(before);
+    expect(seen.id).toBe(me.id);
+  });
+});
 
 describe('exposure', () => {
   // The player's hauler with a forward cannon at (40, 30) facing +x, and a fighter at (48, 30) facing it, so the
