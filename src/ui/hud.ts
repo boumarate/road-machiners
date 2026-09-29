@@ -18,6 +18,7 @@ import {
   formatNpcMark,
   formatNpcStates,
   formatNpcTraits,
+  type LogLine,
 } from "./format";
 import { getHudReadout, getRescueReadout, moneyLabel, conditionLabel, type RescueReadout, TruckConditionReadout } from "./hud-readout";
 import { createIcon, createSpeedDial } from "./cards";
@@ -131,6 +132,12 @@ function weatherLabel(w: World): string {
   return [...new Set(w.weather.map((e) => WEATHER_NAMES[e.kind]))].join(", ");
 }
 
+// A log line led by the turn it happened on.
+function turnStamped(turn: number, line: LogLine): LogLine {
+  const stamp = `T${turn} `;
+  return { ...line, text: stamp + line.text, spans: line.spans && [{ text: stamp, cls: "" }, ...line.spans] };
+}
+
 export class Hud {
   private top = panel("instruments");
   private condition = new TruckConditionView();
@@ -151,7 +158,7 @@ export class Hud {
   private tips = new Tips(window.localStorage);
   cameraMode: CameraMode = "auto";
   private toastTimer: number | null = null;
-  private lines: { text: string; cls: string }[] = [];
+  private lines: LogLine[] = [];
 
   private readonly dialogue: DialoguePanel;
 
@@ -492,7 +499,7 @@ export class Hud {
     for (const e of w.events) {
       const line = eventText(w, e);
       if (line)
-        this.lines.unshift({ text: `T${w.turn} ${line.text}`, cls: line.cls });
+        this.lines.unshift(turnStamped(w.turn, line));
       if (
         line &&
         (e.t === "knockout" || e.t === "skillUp" || e.t === "discover")
@@ -516,7 +523,7 @@ export class Hud {
       el(
         "div",
         { class: "log-lines", tabindex: 0 },
-        ...this.lines.map((l) => el("div", { class: l.cls }, l.text)),
+        ...this.lines.map((l) => el("div", { class: l.cls }, ...(l.spans ? l.spans.map((sp) => el("span", { class: sp.cls }, sp.text)) : [l.text]))),
       ),
     );
   }
