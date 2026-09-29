@@ -26,10 +26,12 @@ REQUIRED_KEYS = (
 )
 COMMITTEE_PREFIX = "/committee"
 RESTART_DELAY_SECONDS = 2.0
-BUTTON_PATTERN = r"^factory:(approve|deny):\d+$"
+BUTTON_PATTERN = r"^factory:(approve|deny|ship):\d+$"
 BUTTON_DATA = re.compile(BUTTON_PATTERN)
 BUTTON_REFUSED = "Only committee members can press this."
-BUTTON_TOASTS = {"approve": "Approve queued", "deny": "Deny queued"}
+BUTTON_TOASTS = {"approve": "Approve queued", "deny": "Deny queued", "ship": "Ship queued"}
+BUTTON_STALE = "This release post is out of date."
+REMOVE_REPLY = re.compile(r"remove\s+#?(\d+)", re.IGNORECASE)
 log = logging.getLogger(__name__)
 QUEUED_REPLY = "Queued. The factory picks this up on its next tick."
 
@@ -54,20 +56,50 @@ def load_config(environ: dict) -> Config:
     return Config(environ["FACTORY_INBOX"].strip(), environ["FACTORY_STATE_DIR"].strip(), environ["FACTORY_COMMITTEE_CHAT"].strip(), committee)
 
 
-def read_approval_posts(state_dir: str) -> dict:
+@dataclass(frozen=True)
+class Release:
+    issue: int
+    post_id: Optional[int]
+
+
+def _is_int(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _parse_release(raw) -> Optional[Release]:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(f"state.json release is not an object: {raw!r}")
+    issue, post_id = raw.get("issue"), raw.get("postId")
+    if not _is_int(issue):
+        raise ValueError(f"state.json release.issue is not a number: {issue!r}")
+    if post_id is not None and not _is_int(post_id):
+        raise ValueError(f"state.json release.postId is not a number or null: {post_id!r}")
+    return Release(issue, post_id)
+
+
+def read_state(state_dir: str) -> tuple:
+    """Returns (approvalPosts, release) from state.json. A missing file gives ({}, None)."""
     path = Path(state_dir) / "state.json"
     if not path.is_file():
-        return {}
-    return json.loads(path.read_text())["approvalPosts"]
+        return {}, None
+    data = json.loads(path.read_text())
+    return data["approvalPosts"], _parse_release(data.get("release"))
+
+
+def read_approval_posts(state_dir: str) -> dict:
+    return read_state(state_dir)[0]
+
 
 CHANGE_PREFIX = "/change "
 
 
-def route(text, reply_to_message_id, chat_id, approval_posts, cfg) -> Optional[tuple]:
+def route(text, reply_to_message_id, chat_id, approval_posts, cfg, release=None) -> Optional[tuple]:
     """Decides what a committee member's message means. Returns None for normal Hermes chat."""
     if str(chat_id) != cfg.chat:
         return None
-    return _request(text or "", reply_to_message_id, approval_posts)
+    return _request(text or "", reply_to_message_id, approval_posts, release)
 
 
 def committee_args(text) -> Optional[str]:
@@ -86,7 +118,18 @@ def _schedule_restart() -> None:
     timer.start()
 
 
-def _request(text, reply_to_message_id, approval_posts) -> Optional[tuple]:
+def _release_request(text, release) -> tuple:
+    if text.strip().lower() == "ship":
+        return ("ship", release.issue)
+    match = REMOVE_REPLY.fullmatch(text.strip())
+    if match:
+        return ("remove", int(match.group(1)), text)
+    return ("release-task", text)
+
+
+def _request(text, reply_to_message_id, approval_posts, release=None) -> Optional[tuple]:
+    if release is not None and release.post_id is not None and str(reply_to_message_id) == str(release.post_id):
+        return _release_request(text, release)
     issue = approval_posts.get(str(reply_to_message_id)) if reply_to_message_id is not None else None
     if issue is not None:
         if text.strip().lower() == "approve":
@@ -101,8 +144,8 @@ def inbox_command(decision: tuple, user_id, user_name, chat_id, message_id) -> d
     kind = decision[0]
     return {
         "kind": kind,
-        "issue": decision[1] if kind in ("approve", "feedback") else None,
-        "text": decision[2] if kind == "feedback" else decision[1] if kind == "change" else None,
+        "issue": decision[1] if kind in ("approve", "feedback", "ship", "remove") else None,
+        "text": decision[2] if kind in ("feedback", "remove") else decision[1] if kind in ("change", "release-task") else None,
         "by": str(user_id),
         "byName": user_name or None,
         "chat": str(chat_id),
@@ -130,7 +173,7 @@ def write_inbox(inbox: str, command: dict, now_ms: Optional[int] = None) -> Path
 
 
 def parse_button(data) -> Optional[tuple]:
-    """Splits callback data `factory:<approve|deny>:<issue>` into (kind, issue). None for anything else."""
+    """Splits callback data `factory:<approve|deny|ship>:<issue>` into (kind, issue). None for anything else."""
     if not isinstance(data, str) or not BUTTON_DATA.fullmatch(data):
         return None
     _, kind, issue = data.split(":")
@@ -157,6 +200,11 @@ def make_button_handler(cfg: Config):
             await _answer(query, BUTTON_REFUSED)
             return
         message = query.message
+        if kind == "ship":
+            release = read_state(cfg.state_dir)[1]
+            if release is None or release.post_id != message.message_id:
+                await _answer(query, BUTTON_STALE)
+                return
         command = button_command(kind, issue, user.id, getattr(user, "full_name", None), message.chat.id, message.message_id)
         write_inbox(cfg.inbox, command)
         await _answer(query, BUTTON_TOASTS[kind])
@@ -267,7 +315,8 @@ def make_hook(cfg: Config):
                 write_allowlist(Path(os.environ["HERMES_HOME"]) / ".env", cfg.committee.ids())
                 _schedule_restart()
             return {"action": "skip", "reason": "factory-committee"}
-        decision = route(event.text, event.reply_to_message_id, source.chat_id, read_approval_posts(cfg.state_dir), cfg)
+        posts, release = read_state(cfg.state_dir)
+        decision = route(event.text, event.reply_to_message_id, source.chat_id, posts, cfg, release)
         if decision is None:
             return None
         command = inbox_command(

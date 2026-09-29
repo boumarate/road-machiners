@@ -39,8 +39,12 @@ class FakeQuery:
         self.markups.append(reply_markup)
 
 
-def press(tmp_path, query):
-    cfg = plugin.Config(str(tmp_path), "/state", "-100", FakeCommittee())
+def press(tmp_path, query, state=None):
+    state_dir = tmp_path / "state"
+    state_dir.mkdir(exist_ok=True)
+    if state is not None:
+        (state_dir / "state.json").write_text(json.dumps(state))
+    cfg = plugin.Config(str(tmp_path), str(state_dir), "-100", FakeCommittee())
     handler = plugin.make_button_handler(cfg)
     asyncio.run(handler(SimpleNamespace(callback_query=query), None))
     return [json.loads(f.read_text()) for f in sorted(tmp_path.glob("*.json"))]
@@ -49,6 +53,7 @@ def press(tmp_path, query):
 def test_parse_button():
     assert plugin.parse_button("factory:approve:12") == ("approve", 12)
     assert plugin.parse_button("factory:deny:3") == ("deny", 3)
+    assert plugin.parse_button("factory:ship:40") == ("ship", 40)
     for bad in ("factory:approve:", "factory:merge:1", "factory:approve:1x", "xfactory:approve:1", "factory:approve:1\n", None):
         assert plugin.parse_button(bad) is None
 
@@ -56,6 +61,7 @@ def test_parse_button():
 def test_pattern_scopes_core_buttons():
     import re
     assert re.match(plugin.BUTTON_PATTERN, "factory:approve:12")
+    assert re.match(plugin.BUTTON_PATTERN, "factory:ship:12")
     assert not re.match(plugin.BUTTON_PATTERN, "ea:once:12")
     assert not re.match(plugin.BUTTON_PATTERN, "factory:approve:x")
 
@@ -74,6 +80,32 @@ def test_member_deny(tmp_path):
     commands = press(tmp_path, query)
     assert commands[0]["kind"] == "deny" and commands[0]["issue"] == 9
     assert query.answers == ["Deny queued"]
+
+
+def release_state(post_id):
+    return {"approvalPosts": {}, "release": {"issue": 40, "branch": "release/d", "day": "d", "postId": post_id, "removed": []}}
+
+
+def test_ship_on_current_post_queues(tmp_path):
+    query = FakeQuery("factory:ship:40")
+    commands = press(tmp_path, query, release_state(55))
+    assert [(c["kind"], c["issue"], c["messageId"]) for c in commands] == [("ship", 40, 55)]
+    assert query.answers == ["Ship queued"]
+    assert query.markups == [None]
+
+
+@pytest.mark.parametrize("state", [release_state(54), release_state(None), {"approvalPosts": {}, "release": None}, {"approvalPosts": {}}, None])
+def test_ship_on_stale_post_queues_nothing(tmp_path, state):
+    query = FakeQuery("factory:ship:40")
+    assert press(tmp_path, query, state) == []
+    assert query.answers == [plugin.BUTTON_STALE]
+    assert query.markups == []
+
+
+def test_ship_by_non_member_is_refused(tmp_path):
+    query = FakeQuery("factory:ship:40", user_id=8)
+    assert press(tmp_path, query, release_state(55)) == []
+    assert query.answers == [plugin.BUTTON_REFUSED]
 
 
 def test_non_member_is_refused(tmp_path):

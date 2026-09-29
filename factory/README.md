@@ -14,16 +14,17 @@ The design and its reasons are in [the factory task](docs/tasks/game-factory.md)
 4. Implementation runs Sonnet with the up execute skill.
 5. Testing runs Sonnet with the up verify and review skills. Then the factory runs the tests and the CPU playtest itself, builds the branch and copies it to `/<hash>/`. The state file records the build of each issue.
 6. Testing opens a pull request against `dev`, or reuses the open one. The committee chat gets a screenshot, the play link, the pull request link and how to try it. The post has Approve and Deny buttons. Approve merges the branch into `dev`, which redeploys to `/dev/`. Deny labels the issue `wont-do` and closes it and the pull request as not planned. A reply to the post sends the task back to design with the reply as feedback.
-7. Every `FACTORY_RELEASE_DAYS`, `dev` merges into `main` and ships to itch.io. The factory builds a fresh clone of `main` in the agent container with an empty save scope, then runs `butler push` on the host. Only that call gets `BUTLER_API_KEY`. The public channel gets the changelog.
-8. Every `FACTORY_MAINTENANCE_HOURS`, Sonnet picks one slow spot, quality issue or stale doc and opens a task for it.
-9. A committee message starting with `/change` asks for a change to the factory itself. The factory opens a pull request against `dev` that touches only `factory/`. It never merges it.
-10. A committee member can ask Hermes for one-off work, like "simulate 10 battles and tell me if the MG is too weak". The factory opens an `adhoc` issue and runs Sonnet in a fresh clone of `dev`. It may run any repo harness, pushes nothing, and answers the member's message with a report.
+7. Every `FACTORY_RELEASE_DAYS`, the factory cuts branch `release/<day>` from `dev`. It opens a tracking issue with the label `release` and two cleanup issues, one for optimization and one for code janitor work. They carry the labels `release-task` and `maintenance`. Release tasks run the normal stages against the release branch. Cleanup tasks merge into it without a committee post.
+8. When no release task is open, the factory builds the release candidate at `/rc/`. The committee chat gets a screenshot, the play link, the pull request, the notes and the feature list, with a Ship button. A reply `remove #N` takes feature N out of the release and `dev`, and reopens its issue. Any other reply opens a new `release-task` issue with the reply as its body. Both make a new candidate later.
+9. `ship`, as a reply or the Ship button, merges the release branch into `main` and ships to itch.io. It works only on the current candidate post and only when no release task is open. The factory builds a fresh clone of `main` in the agent container with an empty save scope, then runs `butler push` on the host. Only that call gets `BUTLER_API_KEY`. The public channel gets the changelog. Then `main` merges back into `dev`.
+10. A committee message starting with `/change` asks for a change to the factory itself. The factory opens a pull request against `dev` that touches only `factory/`. It never merges it.
+11. A committee member can ask Hermes for one-off work, like "simulate 10 battles and tell me if the MG is too weak". The factory opens an `adhoc` issue and runs Sonnet in a fresh clone of `dev`. It may run any repo harness, pushes nothing, and answers the member's message with a report.
 
 Every tick, after intake, the factory deletes each folder in the web root except `dev` and the builds of cards now in Approval.
 
-The factory starts at most `FACTORY_MAX_JOBS_PER_DAY` public-driven jobs in any 24 hours. Triage, design, implementation, testing, maintenance and release count. Approve, change and ad hoc jobs do not. The first time the cap blocks work, the committee chat gets one notice with the count and the time the next slot frees.
+The factory starts at most `FACTORY_MAX_JOBS_PER_DAY` public-driven jobs in any 24 hours. Triage, design, implementation, testing and the release cut count. Approve, change and ad hoc jobs do not. The first time the cap blocks work, the committee chat gets one notice with the count and the time the next slot frees.
 
-A failed or timed-out stage labels its issue `factory-stuck` and posts once to the committee chat. Remove the label to let the factory try again.
+A failed or timed-out stage labels its issue `factory-stuck` and posts once to the committee chat. A stuck release step labels the tracking issue. Remove the label to let the factory try again.
 
 ## Parts
 
