@@ -297,10 +297,8 @@ export class VehicleView {
     for (const [y, bumperName, yaw] of ends) {
       for (let x = 0; x < grid.w; x++) {
         if (grid.cells[y][x] === null || bumperless.has(`${x},${y}`)) continue;
-        const rect = cellRect(v.chassisId, [{ x, y }]);
         const bumper = model(bumperName);
-        const faceX = y === 0 ? rect.x1 - CELL.along / 2 : rect.x0 + CELL.along / 2;
-        place(bumper, { pos: new THREE.Vector3(faceX, body.half.y, (rect.z0 + rect.z1) / 2), yaw, scale: new THREE.Vector3(1, stretch, 1) });
+        place(bumper, bumperPlacement(cellRect(v.chassisId, [{ x, y }]), y === 0, body.half.y, yaw, stretch));
         tint(bumper, paint, 1);
         into.add(bumper);
       }
@@ -605,6 +603,13 @@ function seatArmor(pos: THREE.Vector3, rect: CellRect, side: SideLetter, depth: 
   if (side === 'F') pos.x = rect.x1 - depth / 2;
   else if (side === 'B') pos.x = rect.x0 + depth / 2;
   else pos.z += Math.sign(pos.z) * (depth / 2);
+}
+
+// A bumper fills its cell against the model's nose or tail face, as wide as the cell's projected column.
+function bumperPlacement(rect: CellRect, nose: boolean, top: number, yaw: number, stretch: number): Placement {
+  const x = nose ? rect.x1 - CELL.along / 2 : rect.x0 + CELL.along / 2;
+  const width = rect.z1 > rect.z0 ? (rect.z1 - rect.z0) / CELL.across : 1;
+  return { pos: new THREE.Vector3(x, top, (rect.z0 + rect.z1) / 2), yaw, scale: new THREE.Vector3(1, stretch, width) };
 }
 
 // How deep an armor model stands: a mounted side plate is thin skin, any other armor fills its cell.
