@@ -36,6 +36,7 @@ It follows `Steelman/infra`. Run every command from `factory/infra`.
 - `/opt/factory/www` is `FACTORY_WEB_ROOT`. Set it in the factory `.env`.
 - `/opt/factory/hermes` holds the Hermes state and login.
 - The inbox is owned by uid 10000, the Hermes user. Its group is `factory` with mode 2770. Hermes writes files there. The tick reads and deletes them.
+- The `committee` folder has the same owner, group and mode. Hermes writes `committee.json` there. The tick only reads it.
 
 ## First-time steps
 
@@ -43,7 +44,7 @@ It follows `Steelman/infra`. Run every command from `factory/infra`.
 2. Copy `prod.env.example` to `prod.env` and fill it in.
 3. Make a GitHub token with repo and project scopes. Put it in `FACTORY_GH_TOKEN`.
 4. Run `claude setup-token` on any machine you are logged in to. Put the result in `CLAUDE_CODE_OAUTH_TOKEN` in the factory `.env`.
-5. Make a Telegram bot with BotFather. Put its token in `TELEGRAM_BOT_TOKEN`. Set the committee ids and the chat id in the factory `.env`.
+5. Make a Telegram bot with BotFather. Put its token in `TELEGRAM_BOT_TOKEN`. Set `FACTORY_COMMITTEE_BOOTSTRAP` to your Telegram user id, `FACTORY_COMMITTEE_BOOTSTRAP_GITHUB` to your GitHub login and `FACTORY_COMMITTEE_CHAT` to the chat id in the factory `.env`. You are the first committee member. Add others with `/committee add` in the chat.
 6. In the factory `.env`, set `FACTORY_HOME=/opt/factory/home`, `FACTORY_WEB_ROOT=/opt/factory/www`, `FACTORY_TICK_MINUTES` and `FACTORY_PUBLIC_URL=https://<domain>`. Also set `ITCH_TARGET` and `BUTLER_API_KEY`.
 7. Set `FACTORY_ENV_FILE` in `prod.env` to that file. Run provision, then deploy.
 8. Sign Hermes in to its model. Run this on the server: `cd /opt/factory/code && FACTORY_HERMES_DIR=/opt/factory/hermes docker compose -f factory/hermes/compose.yaml --env-file .env run --rm hermes hermes auth add anthropic`. Then restart Hermes with `docker restart factory-hermes`.

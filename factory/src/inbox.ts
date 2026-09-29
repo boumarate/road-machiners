@@ -1,5 +1,6 @@
 import { mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { readCommittee, telegramIds } from './committee';
 import { feedback } from './stages/approval';
 import { updateState } from './state';
 import type { Ctx } from './types';
@@ -50,7 +51,8 @@ async function handleFile(ctx: Ctx, path: string): Promise<void> {
 }
 
 async function handle(ctx: Ctx, command: InboxCommand): Promise<string> {
-  if (!ctx.cfg.committeeTelegram.includes(command.by)) throw new Error('Only committee members can do that.');
+  const { home, committeeBootstrapTelegram: telegram, committeeBootstrapGithub: github } = ctx.cfg;
+  if (!telegramIds(readCommittee(home, { telegram, github })).includes(command.by)) throw new Error('Only committee members can do that.');
   const by = command.byName ?? command.by;
   if (command.kind === 'change') return queueChange(ctx, requireText(command), by);
   const issue = requireIssue(command);

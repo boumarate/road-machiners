@@ -112,18 +112,19 @@ files.directory(name=f"dir {FACTORY_ROOT}", path=FACTORY_ROOT, mode="755", prese
 for path in [CODE_DIR, HOME_DIR, WWW_DIR, f"{HOME_DIR}/logs", f"{HOME_DIR}/state"]:
     files.directory(name=f"dir {path}", path=path, user=FACTORY_USER, group=FACTORY_USER, mode="755", present=True, _sudo=True)
 
-# The Hermes plugin (uid 10000) writes inbox files. The tick (factory user) reads and deletes them.
+# The Hermes plugin (uid 10000) writes inbox files and the committee file. The tick (factory user) reads them and deletes inbox files.
 # Owner 10000 gives the plugin write access. Group factory plus setgid puts every new file in the factory group.
 # Mode 2770 then lets the tick read files and delete them from the directory. Other users get nothing.
-files.directory(
-    name=f"dir {HOME_DIR}/inbox",
-    path=f"{HOME_DIR}/inbox",
-    user=str(HERMES_UID),
-    group=FACTORY_USER,
-    mode="2770",
-    present=True,
-    _sudo=True,
-)
+for name in ("inbox", "committee"):
+    files.directory(
+        name=f"dir {HOME_DIR}/{name}",
+        path=f"{HOME_DIR}/{name}",
+        user=str(HERMES_UID),
+        group=FACTORY_USER,
+        mode="2770",
+        present=True,
+        _sudo=True,
+    )
 files.directory(name=f"dir {HERMES_DIR}", path=HERMES_DIR, user=str(HERMES_UID), group=str(HERMES_UID), mode="700", present=True, _sudo=True)
 for path in [f"{FACTORY_ROOT}/caddy/data", f"{FACTORY_ROOT}/caddy/config"]:
     files.directory(name=f"dir {path}", path=path, present=True, _sudo=True)

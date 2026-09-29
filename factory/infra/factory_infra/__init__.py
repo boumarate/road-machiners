@@ -18,7 +18,7 @@ CODE_DIR = f"{FACTORY_ROOT}/code"
 HOME_DIR = f"{FACTORY_ROOT}/home"
 WWW_DIR = f"{FACTORY_ROOT}/www"
 HERMES_DIR = f"{FACTORY_ROOT}/hermes"
-# The Hermes image runs its agent as this uid. It writes the inbox.
+# The Hermes image runs its agent as this uid. It writes the inbox and the committee file.
 HERMES_UID = 10000
 
 
@@ -42,7 +42,7 @@ def read_factory_env(path: str | Path) -> dict[str, str]:
     values = {key: value for key, value in dotenv_values(path).items() if value is not None}
     expected = {"FACTORY_HOME": HOME_DIR, "FACTORY_WEB_ROOT": WWW_DIR}
     wrong = [f"{key} must be {want}, got {values.get(key)!r}" for key, want in expected.items() if values.get(key) != want]
-    for key in ("FACTORY_TICK_MINUTES", "FACTORY_COMMITTEE_TELEGRAM", "FACTORY_COMMITTEE_CHAT", "TELEGRAM_BOT_TOKEN", "FACTORY_IMAGE"):
+    for key in ("FACTORY_TICK_MINUTES", "FACTORY_COMMITTEE_BOOTSTRAP", "FACTORY_COMMITTEE_BOOTSTRAP_GITHUB", "FACTORY_COMMITTEE_CHAT", "TELEGRAM_BOT_TOKEN", "FACTORY_IMAGE"):
         if not values.get(key, "").strip():
             wrong.append(f"{key} is missing")
     tick = values.get("FACTORY_TICK_MINUTES", "")

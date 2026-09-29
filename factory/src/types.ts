@@ -19,8 +19,8 @@ export type FactoryConfig = {
   buildModel: string;
   minVotes: number;
   minAgeHours: number;
-  committeeGithub: string[];
-  committeeTelegram: string[];
+  committeeBootstrapTelegram: string; // sole member while committee.json is missing
+  committeeBootstrapGithub: string;
   telegramToken: string;
   committeeChat: string;
   publicChannel: string;

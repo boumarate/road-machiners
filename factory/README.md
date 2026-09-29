@@ -22,9 +22,16 @@ A failed or timed-out stage labels its issue `factory-stuck` and posts once to t
 - `src/` holds the Node CLI. `npm run factory -- tick` is the entry point. A timer runs it.
 - `prompts/` holds the prompt of each agent stage.
 - `docker/` holds the agent image. Agents get only their work clone and `CLAUDE_CODE_OAUTH_TOKEN`.
-- `hermes/` holds the Hermes compose file, its config template and the plugin that queues committee replies into `$FACTORY_HOME/inbox`.
+- `hermes/` holds the Hermes compose file, its config template and the plugin that queues committee replies into `$FACTORY_HOME/inbox` and edits the committee file.
 - `infra/` deploys the server with pyinfra. See [infra/README.md](infra/README.md).
 - `mac/` runs the factory on a Mac. See [mac/README.md](mac/README.md).
+
+## Committee
+
+- The committee is a whitelist in `$FACTORY_HOME/committee/committee.json`. Each member has a Telegram id, a GitHub login and a name.
+- Until that file exists, the committee is one member from `FACTORY_COMMITTEE_BOOTSTRAP` and `FACTORY_COMMITTEE_BOOTSTRAP_GITHUB` in `.env`.
+- Members manage the list in the chat with `/committee list`, `/committee add`, `/committee remove` and `/committee github`. The Hermes plugin writes the file. The factory reads it on every tick and every command.
+- The bot answers committee members only.
 
 ## GitHub setup
 

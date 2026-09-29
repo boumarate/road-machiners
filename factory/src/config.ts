@@ -14,8 +14,8 @@ const KEYS = {
   buildModel: 'FACTORY_BUILD_MODEL',
   minVotes: 'FACTORY_MIN_VOTES',
   minAgeHours: 'FACTORY_MIN_AGE_HOURS',
-  committeeGithub: 'FACTORY_COMMITTEE_GITHUB',
-  committeeTelegram: 'FACTORY_COMMITTEE_TELEGRAM',
+  committeeBootstrapTelegram: 'FACTORY_COMMITTEE_BOOTSTRAP',
+  committeeBootstrapGithub: 'FACTORY_COMMITTEE_BOOTSTRAP_GITHUB',
   telegramToken: 'TELEGRAM_BOT_TOKEN',
   committeeChat: 'FACTORY_COMMITTEE_CHAT',
   publicChannel: 'FACTORY_PUBLIC_CHANNEL',
@@ -25,7 +25,6 @@ const KEYS = {
 } as const satisfies Record<keyof FactoryConfig, string>;
 
 const NUMBERS = new Set<keyof FactoryConfig>(['projectNumber', 'minVotes', 'minAgeHours', 'stageTimeoutMinutes', 'releaseDays', 'maintenanceHours']);
-const LISTS = new Set<keyof FactoryConfig>(['committeeGithub', 'committeeTelegram']);
 
 export function loadConfig(env: Record<string, string | undefined>): FactoryConfig {
   const missing = Object.values(KEYS).filter((key) => !env[key]?.trim());
@@ -34,8 +33,7 @@ export function loadConfig(env: Record<string, string | undefined>): FactoryConf
   return Object.fromEntries(entries) as FactoryConfig;
 }
 
-function parse(field: keyof FactoryConfig, key: string, raw: string): string | number | string[] {
-  if (LISTS.has(field)) return raw.split(',').map((item) => item.trim()).filter(Boolean);
+function parse(field: keyof FactoryConfig, key: string, raw: string): string | number {
   if (!NUMBERS.has(field)) return raw;
   const value = Number(raw);
   if (!Number.isFinite(value) || value <= 0) throw new Error(`${key} must be a positive number, got "${raw}".`);

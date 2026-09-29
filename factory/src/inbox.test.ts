@@ -9,7 +9,7 @@ const ROOT = resolve('tmp/factory-inbox-test');
 const statePath = join(ROOT, 'state.json');
 
 function fakeCtx(cards: Card[], sent: string[], calls: string[]): Ctx {
-  const cfg = { home: ROOT, committeeTelegram: ['11'], committeeChat: '-5' } as FactoryConfig;
+  const cfg = { home: ROOT, committeeBootstrapTelegram: '11', committeeBootstrapGithub: 'boss', committeeChat: '-5' } as FactoryConfig;
   return {
     cfg, statePath, now: () => new Date(5000), log: () => undefined,
     github: {
@@ -47,6 +47,15 @@ describe('drainInbox', () => {
     await drainInbox(fakeCtx([], sent, []));
     expect(readState(statePath).pendingChanges).toEqual([]);
     expect(sent[0]).toContain('Only committee members');
+  });
+
+  it('reads the committee file, so a member added later is accepted', async () => {
+    mkdirSync(join(ROOT, 'committee'), { recursive: true });
+    writeFileSync(join(ROOT, 'committee', 'committee.json'), '{"members":[{"telegram":"99","github":null,"name":null}]}');
+    put('1.json', { kind: 'change', text: 'x', by: '99' });
+    put('2.json', { kind: 'change', text: 'y', by: '11' });
+    await drainInbox(fakeCtx([], [], []));
+    expect(readState(statePath).pendingChanges.map((item) => item.text)).toEqual(['x']);
   });
 
   it('sends feedback back to design at once', async () => {

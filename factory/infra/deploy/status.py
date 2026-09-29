@@ -19,6 +19,7 @@ checks = {
     "last tick log lines": f"timeout 20 tail -n 20 {HOME_DIR}/logs/tick.log 2>&1 || true",
     "running job and state": f"timeout 20 sh -c 'jq -c .job {HOME_DIR}/state/state.json' 2>&1 || true",
     "inbox": f"timeout 20 sh -c 'stat -c \"%A %U:%G\" {HOME_DIR}/inbox; ls {HOME_DIR}/inbox | wc -l' 2>&1 || true",
+    "committee": f"timeout 20 sh -c 'stat -c \"%A %U:%G\" {HOME_DIR}/committee; ls {HOME_DIR}/committee' 2>&1 || true",
     "gh auth": f"timeout 30 sudo -H -u {FACTORY_USER} gh auth status 2>&1 | head -4 || true",
     "containers": "timeout 30 docker ps --format '{{.Names}}\t{{.Status}}' 2>&1 || true",
     "hermes health": "timeout 30 docker inspect --format '{{.Name}}\t{{.State.Status}}\t{{if .State.Health}}{{.State.Health.Status}}{{end}}' factory-hermes 2>&1 || true",
