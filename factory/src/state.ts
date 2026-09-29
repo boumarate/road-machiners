@@ -1,12 +1,12 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import type { FactoryState } from './types';
 
-export const EMPTY_STATE: FactoryState = { job: null, approvalPosts: {}, lastRelease: null, lastMaintenance: null, pendingApprovals: {}, pendingChanges: [], adhocReplies: {} };
+export const EMPTY_STATE: FactoryState = { job: null, approvalPosts: {}, lastRelease: null, lastMaintenance: null, pendingApprovals: {}, pendingChanges: [], adhocReplies: {}, lastTickError: null };
 
 export function readState(path: string): FactoryState {
   if (!existsSync(path)) return structuredClone(EMPTY_STATE);
   const saved = JSON.parse(readFileSync(path, 'utf8')) as Partial<FactoryState>;
-  return { ...saved, adhocReplies: saved.adhocReplies ?? {} } as FactoryState;
+  return { ...saved, adhocReplies: saved.adhocReplies ?? {}, lastTickError: saved.lastTickError ?? null } as FactoryState;
 }
 
 // Writes a temp file and renames it, so a crash never leaves half a state file.

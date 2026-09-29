@@ -61,6 +61,7 @@ export type FactoryState = {
   lastMaintenance: string | null; // ISO time
   pendingApprovals: Record<string, string>; // issue number -> approving Telegram user, run by the next tick
   pendingChanges: ChangeRequest[]; // factory change requests, run by the next ticks in order
+  lastTickError: string | null; // the last tick crash posted to the committee, so a lasting outage posts once
   adhocReplies: Record<string, { chat: string; messageId: number }>; // ad hoc issue number -> the chat message its report answers
 };
 

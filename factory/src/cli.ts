@@ -4,6 +4,7 @@ import { drainInbox } from './inbox';
 import { intake } from './intake';
 import { runJob } from './job';
 import { tick } from './tick';
+import { guardTick } from './tick-guard';
 import type { JobStage } from './types';
 
 const JOB_STAGES: JobStage[] = ['design', 'implement', 'testing', 'release', 'maintenance', 'approve', 'change', 'adhoc'];
@@ -14,8 +15,10 @@ async function main(args: string[]): Promise<void> {
   const codeDir = process.cwd();
   const [command, stage, issue] = args;
   if (command === 'tick') {
-    await drainInbox(ctx);
-    return tick(ctx, codeDir);
+    return guardTick(ctx, async () => {
+      await drainInbox(ctx);
+      await tick(ctx, codeDir);
+    });
   }
   if (command === 'intake') return void (await intake(ctx));
   if (command === 'run') return runJob(ctx, parseStage(stage), issue === '-' ? null : parseIssue(issue), codeDir);
