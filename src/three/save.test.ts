@@ -1,17 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { GAME_VERSION } from '../config';
 import { startKit } from '../data/start';
 import { newWorld } from '../sim/world';
 import { emptyWorld } from '../sim/testkit';
 import { moveItem } from '../sim/inventory';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
-import { clearGame, clearSave, hasSave, loadWorld, SaveError, saveInTown, saveWorld, writeSave } from './save';
+import { clearGame, clearSave, hasSave, loadWorld, SaveError, saveInTown, saveOf, saveWorld, writeSave } from './save';
 import { REGION } from '../data/region';
 import { sitePads } from '../sim/sites';
 import { TEST_MAP } from '../test/map';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { breakProp } from '../sim/salvage';
+import { MIGRATIONS, SAVE_FORMAT, SAVE_MAJOR } from './save-migrations';
+import SAVED_SHAPE from './save-shape.json';
+import { newGameShape } from '../test/save-shape';
 
 function makeStorage(): Storage {
   const values = new Map<string, string>();
@@ -91,12 +93,35 @@ describe('local game save', () => {
     expect(storage.getItem('roam.save')).toBe('{');
   });
 
-  it('rejects incompatible versions and incomplete worlds', () => {
+  it('rejects another major format, a newer minor format and incomplete worlds', () => {
     const storage = makeStorage();
-    storage.setItem('roam.save', JSON.stringify({ version: 34, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: GAME_VERSION, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/world/);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const saved = JSON.parse(JSON.stringify(saveOf(world))).world;
+    const cases = [
+      [{ major: SAVE_MAJOR - 1, minor: 0 }, saved, /new game/],
+      [{ major: SAVE_MAJOR + 1, minor: 0 }, saved, /new game/],
+      [{ major: SAVE_MAJOR, minor: MIGRATIONS.length + 1 }, saved, /newer/],
+      [{ major: SAVE_MAJOR, minor: -1 }, saved, /format/],
+      [SAVE_FORMAT, { turn: 21 }, /world/],
+    ] as const;
+    for (const [format, savedWorld, error] of cases) {
+      storage.setItem('roam.save', JSON.stringify({ format, world: savedWorld }));
+      expect(() => loadWorld(storage, TEST_MAP)).toThrow(SaveError);
+      expect(() => loadWorld(storage, TEST_MAP)).toThrow(error);
+    }
+  });
+
+  it('loads a save from before save formats as format 1.0', () => {
+    const storage = makeStorage();
+    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    storage.setItem('roam.save', JSON.stringify({ version: '1.0.0', world: saveOf(world).world }));
+    expect(loadWorld(storage, TEST_MAP)).toEqual(world);
+  });
+
+  it('records the saved shape of the current format', () => {
+    const format = `${SAVE_FORMAT.major}.${SAVE_FORMAT.minor}`;
+    expect(SAVED_SHAPE.format, 'Run npm run save:shape after a new save format').toBe(format);
+    expect(newGameShape(), 'The saved shape changed. Add a migration step in src/three/save-migrations.ts, then run npm run save:shape').toEqual(SAVED_SHAPE.shape);
   });
 
   it('rejects a save missing a field required for future turns', () => {
@@ -106,7 +131,7 @@ describe('local game save', () => {
       const incomplete = { ...world };
       delete (incomplete as Partial<typeof world>)[field];
       const { terrain: _terrain, ...saved } = incomplete;
-      storage.setItem('roam.save', JSON.stringify({ version: GAME_VERSION, world: saved }));
+      storage.setItem('roam.save', JSON.stringify({ format: SAVE_FORMAT, world: saved }));
       expect(() => loadWorld(storage, TEST_MAP)).toThrow(/world/);
     }
   });

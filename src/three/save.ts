@@ -1,9 +1,9 @@
-import { GAME_VERSION } from '../config';
 import type { BakedMap } from '../sim/terrain';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
 import type { BrokenProp, Obstacle, World } from '../sim/types';
 import { clearTips } from '../ui/tips';
+import { MIGRATIONS, SAVE_FORMAT, SAVE_MAJOR, type SavedJson } from './save-migrations';
 
 const SAVE_KEY = 'roam.save';
 
@@ -26,9 +26,7 @@ export function hasSave(storage: Storage): boolean {
 }
 
 // Saves leave out the terrain and the baked props, which come from the map file the save names by hash. Broken props are saved whole. The 600-tile terrain alone is
-// about 10 MB of JSON, past the browser's local storage quota. A save loads only in the game version that wrote it,
-// so any change to the saved shape needs a new version in package.json.
-const SAVE_VERSION = GAME_VERSION;
+// about 10 MB of JSON, past the browser's local storage quota. Old saves migrate to the current format on load.
 
 // The saved world on the given map. A save made on another map fails, since its terrain is gone.
 export function loadWorld(storage: Storage, map: BakedMap): World | null {
@@ -54,13 +52,35 @@ function standingBaked(map: BakedMap, broken: readonly BrokenProp[]): Obstacle[]
 }
 
 function savedWorld(save: unknown): Omit<World, 'terrain'> {
-  if (!isCurrentSave(save)) throw new SaveError('Incompatible game save version');
-  if (!('world' in save) || !isWorld(save.world)) throw new SaveError('Invalid saved world');
-  return save.world;
+  const world = migratedWorld(save);
+  if (!isWorld(world)) throw new SaveError('Invalid saved world');
+  return world;
 }
 
-function isCurrentSave(save: unknown): save is { version: string } {
-  return !!save && typeof save === 'object' && 'version' in save && save.version === SAVE_VERSION;
+// The saved world carried through every step from the save's minor format to the current one.
+function migratedWorld(save: unknown): unknown {
+  if (!isJsonObject(save)) throw new SaveError('Invalid game save');
+  const { major, minor } = formatOf(save);
+  if (major !== SAVE_MAJOR) throw new SaveError(`Game save format ${major}.${minor} is from an incompatible game version. Start a new game.`);
+  if (minor > MIGRATIONS.length) throw new SaveError(`Game save format ${major}.${minor} is from a newer game version`);
+  if (!isJsonObject(save.world)) throw new SaveError('Invalid saved world');
+  return MIGRATIONS.slice(minor).reduce((world, step) => step(world), save.world);
+}
+
+// Saves from before save formats carry the game version 1.0.0 and hold format 1.0.
+function formatOf(save: SavedJson): { major: number; minor: number } {
+  if (save.version === '1.0.0') return { major: 1, minor: 0 };
+  const format = save.format;
+  if (!isJsonObject(format) || !isCount(format.major) || !isCount(format.minor)) throw new SaveError('Game save has no valid format version');
+  return { major: format.major, minor: format.minor };
+}
+
+function isJsonObject(value: unknown): value is SavedJson {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
 // World fields a save must hold as arrays.
@@ -94,9 +114,14 @@ export function saveInTown(storage: Storage, world: World): void {
 
 export function writeSave(storage: Storage, world: World): void {
   if (world.player.state === 'dead') throw new Error('Cannot save a world whose player is dead');
+  storage.setItem(SAVE_KEY, JSON.stringify(saveOf(world)));
+}
+
+// The save of a world as it goes into JSON.
+export function saveOf(world: World): { format: typeof SAVE_FORMAT; world: object } {
   const { terrain: _terrain, ...saved } = world;
   // JSON writes a typed array as an object keyed by index, so explored goes out as a plain list.
   const player = { ...saved.player, explored: Array.from(saved.player.explored) };
   const obstacles = saved.obstacles.filter((o) => !isBakedObstacle(o));
-  storage.setItem(SAVE_KEY, JSON.stringify({ version: SAVE_VERSION, world: { ...saved, player, obstacles } }));
+  return { format: SAVE_FORMAT, world: { ...saved, player, obstacles } };
 }
