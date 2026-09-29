@@ -1,0 +1,46 @@
+# Hermes for the factory chat bot. It runs the same on the Mac and on the server.
+# Paths come from env. FACTORY_HOME is the factory home. FACTORY_HERMES_DIR holds Hermes state and defaults to $FACTORY_HOME/hermes.
+# Run: docker compose -f factory/hermes/compose.yaml --env-file .env up -d
+name: factory-hermes
+
+services:
+  hermes:
+    container_name: factory-hermes
+    image: factory-hermes:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["/usr/local/bin/factory-start"]
+    restart: unless-stopped
+    environment:
+      HERMES_HOME: /opt/data
+      HERMES_WRITE_SAFE_ROOT: /opt/data
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?set TELEGRAM_BOT_TOKEN}
+      TELEGRAM_ALLOWED_USERS: ${FACTORY_COMMITTEE_TELEGRAM:?set FACTORY_COMMITTEE_TELEGRAM}
+      FACTORY_COMMITTEE_TELEGRAM: ${FACTORY_COMMITTEE_TELEGRAM:?set FACTORY_COMMITTEE_TELEGRAM}
+      FACTORY_COMMITTEE_CHAT: ${FACTORY_COMMITTEE_CHAT:?set FACTORY_COMMITTEE_CHAT}
+      FACTORY_INBOX: /factory/inbox
+      FACTORY_STATE_DIR: /factory/state
+    volumes:
+      - ${FACTORY_HERMES_DIR:-${FACTORY_HOME:?set FACTORY_HOME}/hermes}:/opt/data
+      - ./plugin:/opt/data/plugins/factory:ro
+      - ${FACTORY_HOME:?set FACTORY_HOME}/inbox:/factory/inbox
+      - ${FACTORY_HOME:?set FACTORY_HOME}/state:/factory/state:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - NET_RAW
+      - NET_ADMIN
+    cpus: 2
+    mem_limit: 4g
+    pids_limit: 256
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import subprocess; assert subprocess.run(['/opt/hermes/bin/hermes', 'gateway', 'status'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

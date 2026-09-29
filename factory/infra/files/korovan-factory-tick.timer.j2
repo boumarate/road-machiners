@@ -1,0 +1,9 @@
+[Unit]
+Description=Run the Korovan game factory tick every {{ tick_minutes }} minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec={{ tick_minutes }}min
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,26 @@
+{
+	email {$ACME_EMAIL}
+	servers {
+		# HTTP/3 needs UDP 443, which the firewall does not open.
+		protocols h1 h2
+	}
+}
+
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+# The web root holds /dev/ and one folder per build hash. Folder requests serve index.html.
+{$DOMAIN} {
+	import security_headers
+	root * /srv/www
+	file_server {
+		index index.html
+	}
+}
