@@ -25,7 +25,7 @@ It follows `Steelman/infra`. Run every command from `factory/infra`.
 
 - Provision installs packages, Docker, Node 24, gh and butler. It opens ports 22, 80 and 443. It makes the `factory` user and the `/opt/factory` folders.
 - Deploy syncs the repo to `/opt/factory/code` and pushes the factory `.env` to `/opt/factory/code/factory/.env` with mode 600.
-- Deploy runs `npm ci` in `/opt/factory/code/factory`, logs gh in with the token and builds the agent image and the egress proxy image `<FACTORY_IMAGE>-proxy`.
+- Deploy runs `npm ci` in `/opt/factory/code/factory`, sets git to use gh for credentials and builds the agent image and the egress proxy image `<FACTORY_IMAGE>-proxy`.
 - Deploy installs the tick service and timer. The timer runs `factory tick` from `/opt/factory/code/factory` every `FACTORY_TICK_MINUTES`.
 - Deploy starts Hermes and Caddy with Docker Compose. Caddy serves `/opt/factory/www` with automatic TLS.
 - Deploy stops early when the factory `.env` has the wrong `FACTORY_HOME` or `FACTORY_WEB_ROOT`.
