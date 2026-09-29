@@ -9,7 +9,7 @@ import { addGoods } from './inventory';
 import { CONDITIONS } from './dialogue-rules';
 import { hasCargo } from './salvage';
 import { aimAt } from './parley';
-import { stateOf } from './states';
+import { addState, stateOf } from './states';
 import { topGoal } from './npc-activities';
 import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
 import type { Vehicle, World } from './types';
@@ -113,11 +113,62 @@ describe('surrender offer to a stranded player', () => {
     w.vehicles.push(lawman);
     expect(aimAt(w, mugger, me)).toBe('body');
   });
+});
 
-  it('a driver that does not want the cargo makes no offer', () => {
-    const { w: start, raider } = strandedAmbush();
-    start.vehicles = start.vehicles.map((v) => (v.id === raider.id ? { ...v, faction: 'traders' as const } : v));
+// A lawman on patrol with a machine gun fights a stranded player who carries goods. It takes nothing.
+function strandedByLawman(): { w: World; lawman: Vehicle } {
+  const w = emptyWorld({ x: 30, y: 30 });
+  for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+  addGoods(w, playerVehicle(w), 'scrap', 2);
+  w.player.fuel = 0;
+  const lawman = addVehicle(w, 'bowl', 'buggy', ['stockEngine', 'mg'], { x: 40, y: 30 }, Math.PI);
+  lawman.brain = npcBrain('bowlFarmer', lawman.pos, ['lawman']);
+  addState(w, 'feud', lawman.id, w.player.vehicleId, { kind: 'feud', robbery: false });
+  forceOption('hostileSeen', 'fight');
+  return { w, lawman };
+}
+
+describe('plain surrender to a stranded player', () => {
+  it('a lawman alone with a stranded player radios a plain offer, not a strip demand', () => {
+    const { w: start, lawman } = strandedByLawman();
     const w = endTurn(start, testDrive);
-    expect(w.player.call?.topic).not.toBe('surrender');
+    expect(w.player.call).toMatchObject({ with: lawman.id, topic: 'giveUp' });
+    expect(currentOptions(w).map((o) => o.text)).toContain('Standing down.');
+  });
+
+  it('accepting ends the fight, holds a truce and takes nothing', () => {
+    const { w: start, lawman } = strandedByLawman();
+    const before = mountedParts(playerVehicle(start)).length;
+    let w = pick(endTurn(start, testDrive), 'Standing down.');
+    const after = playerVehicle(w);
+    expect(hasCargo(after)).toBe(true);
+    expect(mountedParts(after).length).toBe(before);
+    expect(stateOf(w, 'truce', lawman.id, after.id)).not.toBeNull();
+    expect(isHostile(w, w.vehicles.find((v) => v.id === lawman.id)!, after)).toBe(false);
+    for (let i = 0; i < 5; i++) {
+      w = endTurn(w, testDrive);
+      expect(shotsAtPlayer(w, lawman)).toEqual([]);
+    }
+  });
+
+  it('refusing makes every shot aim at the cab', () => {
+    const { w: start, lawman } = strandedByLawman();
+    let w = pick(endTurn(start, testDrive), 'Come and get it.');
+    const cab = corePart(playerVehicle(w), 'cab').id;
+    const aims = new Set<string>();
+    for (let i = 0; i < 10; i++) {
+      w = endTurn(w, testDrive);
+      for (const e of shotsAtPlayer(w, lawman)) if (e.t === 'shot') aims.add(e.aim);
+    }
+    expect([...aims]).toEqual([cab]);
+  });
+
+  it('a second hostile in sight keeps the normal fight: no offer', () => {
+    const { w: start, lawman } = strandedByLawman();
+    const other = addVehicle(start, 'raiders', 'buggy', ['stockEngine', 'mg'], { x: 40, y: 34 });
+    other.brain = npcBrain('buggy', other.pos, ['raider']);
+    const w = endTurn(start, testDrive);
+    expect(w.player.call?.topic).not.toBe('giveUp');
+    expect(CONDITIONS.demandsGiveUp(w, w.vehicles.find((v) => v.id === lawman.id)!, {})).toBe(false);
   });
 });

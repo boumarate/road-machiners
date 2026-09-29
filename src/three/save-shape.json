@@ -267,6 +267,17 @@
      },
      {
       "deadline": "number",
+      "good": "string",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "tier": "number",
+      "to": "string",
+      "units": "number"
+     },
+     {
+      "deadline": "number",
       "id": "string",
       "kind": "string",
       "reward": "number",
@@ -314,12 +325,11 @@
     "contracts": [
      {
       "deadline": "number",
+      "defId": "string",
       "id": "string",
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "targetName": "string",
-      "template": "string",
       "tier": "number"
      }
     ],
@@ -445,6 +455,11 @@
     "stock": [
      {
       "defId": "string",
+      "gun": {
+       "ammo": "number",
+       "cooldown": "number",
+       "reloadWork": "number"
+      },
       "hp": "number",
       "id": "string",
       "wear": "number"

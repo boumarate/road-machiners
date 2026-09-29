@@ -10,7 +10,7 @@ import { corePart, isMounted } from './grid';
 import { applyRefitLayout } from './inventory';
 import { creditBounty } from './market';
 import { defyThreat, pushGoal, topGoal } from './npc-activities';
-import { decide, perceiveDanger, visibleHostiles, wantsLoot } from './npc-decisions';
+import { decide, perceiveDanger, visibleHostiles } from './npc-decisions';
 import { vehicleHasPerk } from './progress';
 import { createCargoSalvage, dumpOnPile, hasCargo, takeError } from './salvage';
 import { isStranded } from './stats';
@@ -61,6 +61,13 @@ export function yieldTo(world: World, loser: Vehicle, winner: Vehicle, dumped: S
 // A stranded player gives up to a robber: the cargo and the best installed parts go onto the ground, and the truck stays.
 export function surrenderTo(world: World, me: Vehicle, robber: Vehicle): void {
   yieldTo(world, me, robber, dumpWantedParts(world, me));
+}
+
+// A stranded player gives up to a driver that takes nothing: both sides make peace and the truck keeps everything.
+export function giveUpTo(world: World, me: Vehicle, winner: Vehicle): void {
+  makePeace(world, me, winner);
+  const grudge = stateOf(world, 'revenge', winner.id, me.id);
+  if (grudge) endState(world, grudge, 'fulfilled');
 }
 
 // With Bounty talk, an NPC that gives up to the player counts for a bounty on its template.
@@ -147,11 +154,11 @@ function fightsPlayer(world: World, npc: Vehicle): boolean {
   return top?.kind === 'fight' && top.targetId === world.player.vehicleId && world.player.state === 'active';
 }
 
-// The driver fights the stranded player, wants its cargo, and sees no other foe.
+// The driver fights the stranded player and sees no other foe.
 export function hasStrandedPrey(world: World, npc: Vehicle): boolean {
   const me = playerVehicle(world);
   if (!fightsPlayer(world, npc)) return false;
-  return isStranded(world, me) && wantsLoot(world, npc, me) && visibleHostiles(world, npc).every((foe) => foe.id === me.id);
+  return isStranded(world, me) && visibleHostiles(world, npc).every((foe) => foe.id === me.id);
 }
 
 // Installed parts that can leave the truck, best first.
@@ -178,8 +185,14 @@ function dumpWantedParts(world: World, victim: Vehicle): SalvageStock | null {
   return pile;
 }
 
+// The player refused or hung up on this driver's offer to end the fight.
+function refusedOffer(world: World, shooter: Vehicle): boolean {
+  const talked = world.player.talked[shooter.id];
+  return talked?.surrender === 'refused' || talked?.giveUp === 'refused';
+}
+
 // Where a shot from this driver at the target lands: at the cab once the prey refused to give up, else anywhere.
 export function aimAt(world: World, shooter: Vehicle, target: Vehicle): Aim {
   if (target.id !== world.player.vehicleId || !hasStrandedPrey(world, shooter)) return 'body';
-  return world.player.talked[shooter.id]?.surrender === 'refused' ? corePart(target, 'cab').id : 'body';
+  return refusedOffer(world, shooter) ? corePart(target, 'cab').id : 'body';
 }
