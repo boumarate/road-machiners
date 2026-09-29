@@ -8,7 +8,7 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
 import type { PartHit } from './armor';
-import { callLawmen, isHostile, startFeuds } from './combat';
+import { callLawmen, isHostile, shotDamage, startFeuds } from './combat';
 import { affordableBuyCount, getTradePrice, sellVehicleCargo, serviceAtCamp, serviceVehicle, tradeGoods } from './economy';
 import { isJunk, maxHp } from './wear';
 import { corePart, freeCells, goodsCount, mountedParts } from './grid';
@@ -940,7 +940,7 @@ export function noteHurt(world: World): void {
 }
 
 function addEventHurt(hurt: Map<string, number>, e: GameEvent): void {
-  if (e.t === 'shot' || e.t === 'guardShot') for (const round of e.rounds) addHurt(hurt, e.target, round.hits);
+  if (e.t === 'shot' || e.t === 'guardShot') for (const [id, hits] of shotDamage(e)) addHurt(hurt, id, hits);
   else if (e.t === 'collision') {
     addHurt(hurt, e.a, e.hitsA);
     addHurt(hurt, e.b, e.hitsB);

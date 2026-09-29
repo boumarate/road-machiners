@@ -7,21 +7,22 @@ import { isDefeated, isKnockedOut, knockOutNpc } from './defeat';
 import { RULES } from '../data/rules';
 import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
-import { laneCount, partLane, sideToward, walkLane, type PartHit, type Side } from './armor';
+import { blastLanes, laneCount, lanePoint, partLane, sideToward, walkLane, type PartHit, type Side } from './armor';
 import { bodyOf } from './body';
 import { corePart, hasLoot, itemSize, mountedItems, mountedParts } from './grid';
 import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { canVehicleSee, hasLineOfFire } from './vision';
 import { createWreckSalvage, removeStocks } from './salvage';
-import { addState, stateOf } from './states';
+import { addState, endState, stateOf, strayData } from './states';
 import { isOnRope, towHeldBy } from './tow';
 import { isTownGuarded } from './guards';
 import { getResources } from './resources';
-import { chance, gauss, randRange } from './rng';
+import { chance, gauss, randInt, randRange } from './rng';
+import { sampleWeighted } from './npc-loadout';
 import { vehicleMass } from './mass';
 import { vehicleStats, type MountedWeapon } from './stats';
 import { partDef, type WeaponDef } from '../data/parts';
-import type { Aim, GunState, NpcActivity, PartInstance, ShotRound, Vehicle, World } from './types';
+import type { Aim, GunState, NpcActivity, PartInstance, ShotRound, Vehicle, VehicleHits, World } from './types';
 import { weatherAt } from './weather';
 import { angleDiff, bearing, clamp, dist, DEG, type Vec } from './vec';
 
@@ -444,64 +445,117 @@ function spendShot(world: World, s: Shot): void {
   if (gun.ammo === 0) world.events.push({ t: "empty", vehicle: s.shooter.id, weapon: s.mw.part.id });
 }
 
-// A hit enters the lane under its offset, or the aimed part's lane. An aimed miss that lands on the truck enters
-// the lane under its offset. A miss off the truck with splash hits every lane of the struck side whose center
-// lies within the splash radius of where it landed.
+// A shot counts as an attack on its target even when it misses: the target and witnesses saw it fired at them.
+// Every other truck its rounds damage takes unintended damage, which noteStray() judges.
 function applyShot(world: World, s: Shot): void {
   spendShot(world, s);
-  // A shot counts as an attack even when it misses: the target and witnesses saw it fired at them.
   noteAttack(world, s.shooter, s.target, !isHostile(world, s.target, s.shooter));
-  const r = s.mw.def.round;
-  const { side, lanes, body } = s.aiming;
-  const rounds: ShotRound[] = s.rolls.map((roll) => {
-    const offset = s.aiming.center + roll.error * s.odds.distance;
-    if (roll.hit || Math.abs(offset) < body / 2) {
-      const lane =
-        roll.hit && s.aiming.lane !== null
-          ? s.aiming.lane
-          : laneOfOffset(side, body, lanes, offset);
-      const k = roll.crit
-        ? { damage: RULES.critDamage, pen: RULES.critPen }
-        : { damage: 1, pen: 1 };
-      return {
-        hit: true,
-        crit: roll.crit,
-        offset,
-        hits: walkLane(world, s.target, side, lane, {
-          damage: r.damage * k.damage * RULES.weaponDamage,
-          pen: r.pen * k.pen,
-          blast: r.blast,
-        }),
-      };
-    }
-    const hits: PartHit[] = [];
-    for (let lane = 0; lane < lanes; lane++) {
-      if (
-        Math.abs(offset - laneCenter(side, body, lanes, lane)) > r.splashRadius
-      )
-        continue;
-      hits.push(
-        ...walkLane(world, s.target, side, lane, {
-          damage: r.splashDamage * RULES.weaponDamage,
-          pen: r.splashPen,
-          blast: true,
-        }),
-      );
-    }
-    return { hit: false, crit: false, offset, hits };
-  });
-  if (rounds.some((x) => x.hits.length > 0)) s.target.lastHitBy = s.shooter.id;
+  const rounds = s.rolls.map((roll) => resolveRound(world, s, roll));
+  const event = { t: "shot" as const, shooter: s.shooter.id, weapon: s.mw.part.id, target: s.target.id, aim: s.aim, chance: s.odds.chance, side: s.aiming.side, rounds };
+  for (const id of shotDamage(event).keys()) vehicleById(world, id).lastHitBy = s.shooter.id;
+  noteStray(world, s, event);
   practiceHits(world, s);
-  world.events.push({
-    t: "shot",
-    shooter: s.shooter.id,
-    weapon: s.mw.part.id,
-    target: s.target.id,
-    aim: s.aim,
-    chance: s.odds.chance,
-    side,
-    rounds,
-  });
+  world.events.push(event);
+}
+
+// Part hits of a shot per truck, direct and blast.
+export function shotDamage(e: { rounds: ShotRound[] }): Map<string, PartHit[]> {
+  const out = new Map<string, PartHit[]>();
+  const add = (id: string, hits: PartHit[]) => { if (hits.length > 0) out.set(id, [...(out.get(id) ?? []), ...hits]); };
+  for (const r of e.rounds) {
+    if (r.struck) add(r.struck, r.hits);
+    for (const b of r.blast) add(b.vehicle, b.hits);
+  }
+  return out;
+}
+
+function vehicleById(world: World, id: string): Vehicle {
+  const v = world.vehicles.find((x) => x.id === id);
+  if (!v) throw new Error(`No vehicle ${id}`);
+  return v;
+}
+
+// Where a round landed: the truck it struck and the lane it entered, or the ground.
+type Landing = { struck: Vehicle | null; lane: number | null; hits: PartHit[]; point: Vec };
+
+function resolveRound(world: World, s: Shot, roll: Roll): ShotRound {
+  const offset = s.aiming.center + roll.error * s.odds.distance;
+  const landing = landRound(world, s, roll, offset);
+  const hit = landing.struck?.id === s.target.id;
+  const blast = explode(world, s.mw.def.round, landing);
+  return { hit, crit: hit && roll.crit, offset, struck: landing.struck?.id ?? null, hits: landing.hits, blast };
+}
+
+// A hit enters the lane under its offset, or the aimed part's lane. An aimed miss that lands on the truck enters
+// the lane under its offset. A miss off the truck may stray into another truck near the line of fire.
+function landRound(world: World, s: Shot, roll: Roll, offset: number): Landing {
+  const { side, lanes, body } = s.aiming;
+  if (!roll.hit && Math.abs(offset) >= body / 2) return strayRound(world, s, missPoint(s.shooter, s.target, offset));
+  const lane = roll.hit && s.aiming.lane !== null ? s.aiming.lane : laneOfOffset(side, body, lanes, offset);
+  const k = roll.crit ? { damage: RULES.critDamage, pen: RULES.critPen } : { damage: 1, pen: 1 };
+  const r = s.mw.def.round;
+  const hits = walkLane(world, s.target, side, lane, { damage: r.damage * k.damage * RULES.weaponDamage, pen: r.pen * k.pen, blast: r.blast });
+  return { struck: s.target, lane, hits, point: lanePoint(s.target, side, lane) };
+}
+
+// A stray round enters a random lane of the side facing the shooter, with its full damage and pen.
+function strayRound(world: World, s: Shot, miss: Vec): Landing {
+  const victim = strayVictim(world, s, miss);
+  if (!victim) return { struck: null, lane: null, hits: [], point: miss };
+  const side = sideToward(victim, s.shooter.pos);
+  const lane = randInt(world, 0, laneCount(victim, side) - 1);
+  const r = s.mw.def.round;
+  const hits = walkLane(world, victim, side, lane, { damage: r.damage * RULES.weaponDamage, pen: r.pen, blast: r.blast });
+  return { struck: victim, lane, hits, point: lanePoint(victim, side, lane) };
+}
+
+// Where a round that missed the truck lands: beside the target, at its offset across the line of fire.
+function missPoint(shooter: Vehicle, target: Vehicle, offset: number): Vec {
+  const n = across(shooter, target);
+  return { x: target.pos.x + (n.x * offset) / M, y: target.pos.y + (n.y * offset) / M };
+}
+
+// Trucks other than shooter and target whose center lies within reach of the line of fire, which runs from the
+// shooter through the miss point and on by reach. The stray chance is rolled only when one exists, and nearer
+// trucks to the line weigh more.
+function strayVictim(world: World, s: Shot, miss: Vec): Vehicle | null {
+  const candidates = strayCandidates(world, s.shooter, s.target, miss);
+  if (candidates.length === 0 || !chance(world, s.mw.def.stray)) return null;
+  return sampleWeighted(world, candidates);
+}
+
+function strayCandidates(world: World, shooter: Vehicle, target: Vehicle, miss: Vec): { value: Vehicle; weight: number }[] {
+  const reach = RULES.stray.reach;
+  const len = dist(shooter.pos, miss);
+  const dir = { x: (miss.x - shooter.pos.x) / len, y: (miss.y - shooter.pos.y) / len };
+  return world.vehicles
+    .filter((v) => v.id !== shooter.id && v.id !== target.id)
+    .map((v) => ({ value: v, weight: reach - lineOffset(shooter.pos, dir, len + reach, v.pos) }))
+    .filter((c) => c.weight > 0);
+}
+
+// How far a point lies from the line from a along dir for len tiles, or Infinity past either end.
+function lineOffset(a: Vec, dir: Vec, len: number, p: Vec): number {
+  const rel = { x: p.x - a.x, y: p.y - a.y };
+  const along = rel.x * dir.x + rel.y * dir.y;
+  if (along < 0 || along > len) return Infinity;
+  return Math.abs(rel.x * dir.y - rel.y * dir.x);
+}
+
+// A round with a splash radius explodes where it lands. Every truck with a lane center within the radius takes
+// splash in those lanes on the side facing the blast. The lane a direct hit entered takes no extra splash.
+function explode(world: World, r: WeaponDef["round"], landing: Landing): VehicleHits[] {
+  if (r.splashRadius <= 0) return [];
+  const out: VehicleHits[] = [];
+  for (const v of world.vehicles) {
+    const { side, lanes } = blastLanes(v, landing.point, r.splashRadius);
+    const skip = v.id === landing.struck?.id ? landing.lane : null;
+    const hits = lanes
+      .filter((lane) => lane !== skip)
+      .flatMap((lane) => walkLane(world, v, side, lane, { damage: r.splashDamage * RULES.weaponDamage, pen: r.splashPen, blast: true }));
+    if (hits.length > 0) out.push({ vehicle: v.id, hits });
+  }
+  return out;
 }
 
 // The player practices perception from each round that hits as rolled, harder at a lower hit chance. A miss
@@ -547,6 +601,33 @@ export function noteAttack(world: World, attacker: Vehicle, victim: Vehicle, cal
   if (!calm) return;
   startFeuds(world, attacker, victim);
   callLawmen(world, attacker, victim);
+}
+
+// Damage a shot dealt to trucks other than its target. A foe of the shooter was attacked and fights back. Any other
+// NPC sums the unintended damage in a strayFire state, and past RULES.stray.feudDamage takes it as an attack. The
+// player decides its own hostility, and a shooter caught in its own blast blames nobody.
+function noteStray(world: World, s: Shot, e: { rounds: ShotRound[] }): void {
+  for (const [id, hits] of shotDamage(e)) {
+    if (id === s.target.id || id === s.shooter.id) continue;
+    const damage = hits.reduce((sum, h) => sum + h.damage, 0);
+    if (damage > 0) judgeStray(world, s.shooter, vehicleById(world, id), damage);
+  }
+}
+
+function judgeStray(world: World, shooter: Vehicle, victim: Vehicle, damage: number): void {
+  if (isHostile(world, victim, shooter)) recordAttack(world, shooter, victim);
+  else if (victim.brain) sumStray(world, shooter, victim, damage);
+}
+
+function sumStray(world: World, shooter: Vehicle, victim: Vehicle, damage: number): void {
+  const held = stateOf(world, "strayFire", victim.id, shooter.id);
+  const total = (held ? strayData(held).damage : 0) + damage;
+  if (total < RULES.stray.feudDamage) {
+    addState(world, "strayFire", victim.id, shooter.id, { kind: "strayFire", damage: total });
+    return;
+  }
+  if (held) endState(world, held, "fulfilled");
+  noteAttack(world, shooter, victim, true);
 }
 
 // Aggression against a neutral NPC, one outside the raiders, calls every lawman that sees both trucks. Each starts

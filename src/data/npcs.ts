@@ -848,6 +848,7 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   // A driver rarely robs a truck it holds a truce with. A scumbag's rob weight of 2 drops to 0.01, about 2%.
   truce: { preySeen: { rob: { mul: 0.005 } } },
   grievance: {},
+  strayFire: {},
   // A driver that pleaded with a foe rarely pleads with it again soon. A truce weight of 2.5 drops to 0.025.
   plea: { parley: { truce: { mul: 0.01 }, beg: { mul: 0.01 } } },
   // A driver the player turned down rarely offers that player a tow again. A tow weight of 9 drops to 0.009,
@@ -897,6 +898,8 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   // A crash victim decides on the crash the first turn it sees the other truck. It lets the crash go after 5
   // turns out of sight.
   grievance: 5,
+  // Stray hits from the same shooter add up for 60 turns after the last one, long enough to cover one fight.
+  strayFire: 60,
   // A driver waits 20 turns before it pleads with the same foe again. The player answers within that time too.
   plea: 20,
   // A driver the player turned down holds it until it offers that player a tow again.

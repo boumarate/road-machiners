@@ -53,6 +53,7 @@ export type WeaponDef = PartBase & {
   rounds: number; // rounds per shot, each rolled on its own
   recoil: number; // degrees of spread added on a 1 t truck; the added spread falls with truck mass
   shake: number; // multiplies the spread from the shooter's own speed; below 1 is a stabilized gun
+  stray: number; // chance a round that misses its target hits another truck near the line of fire
   round: WeaponRound;
 
   look: "mg" | "cannon";
@@ -190,6 +191,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     rounds: 6,
     recoil: 0.5,
     shake: 0.5,
+    stray: 0.15,
     round: {
       damage: 3,
       pen: 4,
@@ -222,6 +224,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     rounds: 1,
     recoil: 6,
     shake: 1,
+    stray: 0.2,
     round: {
       damage: 30,
       pen: 15,
@@ -254,6 +257,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     rounds: 12,
     recoil: 1.5,
     shake: 0.6,
+    stray: 0.3,
     round: {
       damage: 4,
       pen: 3,
@@ -286,6 +290,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     rounds: 3,
     recoil: 3,
     shake: 0.8,
+    stray: 0.15,
     round: {
       damage: 10,
       pen: 9,
@@ -318,6 +323,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     rounds: 1,
     recoil: 14,
     shake: 1.5,
+    stray: 0.1,
     round: {
       damage: 48,
       pen: 26,
@@ -350,6 +356,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     rounds: 4,
     recoil: 1,
     shake: 1.2,
+    stray: 0.35,
     round: {
       damage: 18,
       pen: 14,
@@ -382,6 +389,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     rounds: 1,
     recoil: 5,
     shake: 3,
+    stray: 0.05,
     round: {
       damage: 22,
       pen: 21,

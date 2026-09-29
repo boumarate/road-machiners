@@ -1,4 +1,6 @@
 import { RULES } from '../data/rules';
+import { PHYSICS } from '../data/physics';
+import { bodyOf } from './body';
 // Sides and lanes of a truck's grid. A round enters the grid from the struck side and walks one lane of cells inward.
 // Each working part it meets takes damage and stops some of its penetration. Fire leaves the other way: a gun fires
 // toward a side only when no tall part stands between it and that edge, in the lane through the gun's center cell.
@@ -61,6 +63,53 @@ function laneKey(g: Grid, c: { x: number; y: number }): string {
 
 function isCab(def: PartDef): boolean {
   return def.kind === 'core' && def.role === 'cab';
+}
+
+// A point in the truck's frame, in meters: forward along the heading and right across it.
+type Local = { fwd: number; right: number };
+
+function toLocal(v: Vehicle, p: Vec): Local {
+  const dx = (p.x - v.pos.x) * PHYSICS.metersPerTile;
+  const dy = (p.y - v.pos.y) * PHYSICS.metersPerTile;
+  const c = Math.cos(v.heading);
+  const s = Math.sin(v.heading);
+  return { fwd: dx * c + dy * s, right: -dx * s + dy * c };
+}
+
+function toMap(v: Vehicle, l: Local): Vec {
+  const c = Math.cos(v.heading);
+  const s = Math.sin(v.heading);
+  const m = PHYSICS.metersPerTile;
+  return { x: v.pos.x + (l.fwd * c - l.right * s) / m, y: v.pos.y + (l.fwd * s + l.right * c) / m };
+}
+
+// Where a lane's center meets the outer face of a side. Column 0 is the truck's left edge, row 0 its nose.
+function laneFace(v: Vehicle, side: Side, lane: number): Local {
+  const half = bodyOf(v.chassisId).half;
+  const n = laneCount(v, side);
+  const across = (lane + 0.5) / n;
+  switch (side) {
+    case 'front': return { fwd: half.x, right: (across * 2 - 1) * half.z };
+    case 'rear': return { fwd: -half.x, right: (across * 2 - 1) * half.z };
+    case 'left': return { fwd: (1 - across * 2) * half.x, right: -half.z };
+    case 'right': return { fwd: (1 - across * 2) * half.x, right: half.z };
+  }
+}
+
+// The map point where a round entering a lane meets the truck.
+export function lanePoint(v: Vehicle, side: Side, lane: number): Vec {
+  return toMap(v, laneFace(v, side, lane));
+}
+
+// The side of a truck facing a blast, and its lanes whose face centers lie within radius meters of the blast.
+export function blastLanes(v: Vehicle, p: Vec, radius: number): { side: Side; lanes: number[] } {
+  const side = sideToward(v, p);
+  const at = toLocal(v, p);
+  const lanes = Array.from({ length: laneCount(v, side) }, (_, i) => i).filter((lane) => {
+    const face = laneFace(v, side, lane);
+    return Math.hypot(at.fwd - face.fwd, at.right - face.right) <= radius;
+  });
+  return { side, lanes };
 }
 
 // Front and rear lanes are grid columns. Left and right lanes are grid rows.

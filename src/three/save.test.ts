@@ -141,6 +141,10 @@ describe('local game save', () => {
     storage.setItem('roam.save', JSON.stringify({ version: 32, world: { turn: 21 } }));
     expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
     storage.setItem('roam.save', JSON.stringify({ version: 33, world: { turn: 21 } }));
+    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
+    storage.setItem('roam.save', JSON.stringify({ version: 34, world: { turn: 21 } }));
+    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
+    storage.setItem('roam.save', JSON.stringify({ version: 35, world: { turn: 21 } }));
     expect(() => loadWorld(storage, TEST_MAP)).toThrow(/world/);
   });
 
@@ -151,7 +155,7 @@ describe('local game save', () => {
       const incomplete = { ...world };
       delete (incomplete as Partial<typeof world>)[field];
       const { terrain: _terrain, ...saved } = incomplete;
-      storage.setItem('roam.save', JSON.stringify({ version: 33, world: saved }));
+      storage.setItem('roam.save', JSON.stringify({ version: 35, world: saved }));
       expect(() => loadWorld(storage, TEST_MAP)).toThrow(/world/);
     }
   });

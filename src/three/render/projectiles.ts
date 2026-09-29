@@ -61,13 +61,25 @@ const MISSILE = {
 };
 
 export type RoundPlan = { land: V3; struck: boolean; delayMs: number; flightMs: number };
+// Where one round flies: point b of the truck it struck, or of its target when it struck none, and its offset
+// across the line of fire.
+export type RoundAim = { b: V3; struck: boolean; offset: number };
 
-// Where and when each round of a volley from gun point a at target point b lands. groundY gives the ground height
-// under a point.
-export function planVolley(spec: ProjectileSpec, a: V3, b: V3, rounds: ShotRound[], windowMs: number, groundY: (p: V3) => number): RoundPlan[] {
+// A round that struck a truck other than its target flies to that truck when it shows, else past the target.
+// pointOf gives the point of a truck that shows.
+export function roundAims(b: V3, targetId: string, rounds: ShotRound[], pointOf: (id: string) => V3 | null): RoundAim[] {
+  return rounds.map((r) => {
+    if (r.struck === null || r.struck === targetId) return { b, struck: r.struck !== null, offset: r.offset };
+    const p = pointOf(r.struck);
+    return p ? { b: p, struck: true, offset: 0 } : { b, struck: false, offset: r.offset };
+  });
+}
+
+// Where and when each round of a volley from gun point a lands. groundY gives the ground height under a point.
+export function planVolley(spec: ProjectileSpec, a: V3, rounds: RoundAim[], windowMs: number, groundY: (p: V3) => number): RoundPlan[] {
   return rounds.map((r, k) => {
-    const struck = r.hit || r.hits.length > 0;
-    const land = struck ? hitPoint(a, b, r.offset) : missPoint(a, b, r.offset, groundY);
+    const struck = r.struck;
+    const land = struck ? hitPoint(a, r.b, r.offset) : missPoint(a, r.b, r.offset, groundY);
     const delayMs = rounds.length > 1 ? (k / (rounds.length - 1)) * spec.stagger * windowMs : 0;
     const meters = Math.hypot(land.x - a.x, land.y - a.y, land.z - a.z);
     return { land, struck, delayMs, flightMs: Math.min((meters / spec.speed) * 1000, windowMs - delayMs) };

@@ -50,7 +50,7 @@ import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
 import { Fx3D, TruckFx } from "./render/fx";
-import { planVolley, projectileOf, towardFrom, type Muzzle } from "./render/projectiles";
+import { planVolley, projectileOf, roundAims, towardFrom, type Muzzle } from "./render/projectiles";
 import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
 import { PathView } from "./render/path";
@@ -813,18 +813,25 @@ export class Game {
     // Every round lands within the shot time, before the results show.
     const spec = projectileOf(weapon);
     const ground = (p: V3) => groundPoint(this.world.terrain, toMap(p)).y;
-    const plans = planVolley(spec, a, b, rounds, CONFIG.combatShotMs, ground);
+    const plans = planVolley(spec, a, roundAims(b, targetId, rounds, (id) => this.eventPoint(id)), CONFIG.combatShotMs, ground);
     plans.forEach((plan, k) => {
       this.fx.shot(spec, muzzle, plan);
       this.sound.at(spec.look === "tracer" ? "mg-fire" : "cannon-fire", a, plan.delayMs);
       this.sound.at(plan.struck ? "hit-metal" : "miss", plan.land, plan.delayMs + plan.flightMs);
-      const label = roundLabel(this.world, targetId, rounds[k]);
-      if (!label) return;
-      const row = rows.get(targetId) ?? 0;
-      rows.set(targetId, row + 1);
-      this.fx.label(b, label, PAL.damageText, row, plan.delayMs + plan.flightMs, CONFIG.combatReadMs);
+      const r = rounds[k];
+      const struck = r.struck === null ? [] : [{ vehicle: r.struck, hits: r.hits }];
+      for (const dealt of [...struck, ...r.blast]) this.damageLabel(dealt.vehicle, roundLabel(this.world, dealt.vehicle, dealt.hits, r.crit), rows, plan.delayMs + plan.flightMs);
     });
     return Math.min(...plans.map((plan) => plan.delayMs + plan.flightMs)); // when the first round lands
+  }
+
+  // Damage text over a truck that shows, stacked in rows per truck.
+  private damageLabel(vehicleId: string, label: string | null, rows: Map<string, number>, atMs: number): void {
+    const p = this.eventPoint(vehicleId);
+    if (!label || !p) return;
+    const row = rows.get(vehicleId) ?? 0;
+    rows.set(vehicleId, row + 1);
+    this.fx.label(p, label, PAL.damageText, row, atMs, CONFIG.combatReadMs);
   }
 
   // The path preview chains physics turns from the current state, so it shows what will happen.

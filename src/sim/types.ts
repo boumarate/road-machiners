@@ -239,7 +239,7 @@ export type Obstacle =
 export type BrokenProp = { obstacle: Obstacle; turn: number };
 
 // A timed relation one vehicle holds toward another. src/sim/states.ts owns them.
-export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce' | 'grievance' | 'plea' | 'trade' | 'revenge' | 'escort';
+export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce' | 'grievance' | 'plea' | 'trade' | 'revenge' | 'escort' | 'strayFire';
 export type StateEnding = 'expired' | 'fulfilled' | 'broken';
 export type Plea = 'truce' | 'mercy';
 // A tow state: the holder tows the other party to the town or camp `site` for `fee`, paid on arrival. `waived` is
@@ -257,6 +257,7 @@ export type StateData =
   | { kind: 'plea'; plea: Plea; answered: boolean }
   | { kind: 'escort'; site: string | null; fee: number }
   | { kind: 'patch'; deal: PatchDeal; parts: number; price: number; work: number; workLeft: number } // holder patches other
+  | { kind: 'strayFire'; damage: number } // unintended damage the holder took from the other party
   | { kind: 'none' };
 export type NpcState = {
   id: string;
@@ -329,12 +330,17 @@ export type Player = {
 
 // One round of a shot. offset is where it crossed the target in meters from its center, across the line
 // of fire, positive to the shooter's right. hits lists the parts it damaged, by direct hit or splash.
+// hit: the round landed on its target. struck: the truck it landed on, or null for the ground. hits: its direct
+// hits on that truck. blast: the part hits its explosion dealt, per truck.
 export type ShotRound = {
   hit: boolean;
   crit: boolean;
   offset: number;
+  struck: string | null;
   hits: PartHit[];
+  blast: VehicleHits[];
 };
+export type VehicleHits = { vehicle: string; hits: PartHit[] };
 
 export type GameEvent =
   | { t: 'activity'; vehicle: string; previous: NpcActivity['kind'] | null; activity: NpcActivity['kind'] | null; reason: string }

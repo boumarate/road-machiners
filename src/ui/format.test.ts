@@ -3,7 +3,7 @@ import { CONDITION } from "../data/wear";
 import type { Contract } from "../sim/market";
 import { partDef } from "../data/parts";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
-import type { Job, PartInstance } from "../sim/types";
+import type { GameEvent, Job, PartInstance } from "../sim/types";
 import { contractDue, contractSummary, eventText, jobLabel, roundLabel, wearLabel } from "./format";
 import { mountedParts } from "../sim/grid";
 
@@ -74,18 +74,17 @@ describe("roundLabel", () => {
   const w = emptyWorld();
   const v = addVehicle(w, "raiders", "buggy", ["mg"], { x: 10, y: 10 });
   const idOf = (kind: string) => mountedParts(v).find((p) => partDef(p.defId).kind === kind || (partDef(p.defId) as { role?: string }).role === kind)!.id;
-  const hit = (crit: boolean, hits: { part: string; damage: number }[]) => ({ hit: true, crit, offset: 0, hits });
-
+  
   it("names each damaged part short with its damage", () => {
-    expect(roundLabel(w, v.id, hit(false, [{ part: idOf("weapon"), damage: 3 }, { part: idOf("cab"), damage: 4.2 }]))).toBe("Gun: 3, Cab: 5");
+    expect(roundLabel(w, v.id, [{ part: idOf("weapon"), damage: 3 }, { part: idOf("cab"), damage: 4.2 }], false)).toBe("Gun: 3, Cab: 5");
   });
 
   it("marks a crit", () => {
-    expect(roundLabel(w, v.id, hit(true, [{ part: idOf("wheel"), damage: 5 }]))).toBe("Crit! Whl: 5");
+    expect(roundLabel(w, v.id, [{ part: idOf("wheel"), damage: 5 }], true)).toBe("Crit! Whl: 5");
   });
 
   it("shows nothing for a round that damaged no part", () => {
-    expect(roundLabel(w, v.id, hit(false, [{ part: idOf("wheel"), damage: 0 }]))).toBeNull();
+    expect(roundLabel(w, v.id, [{ part: idOf("wheel"), damage: 0 }], false)).toBeNull();
   });
 });
 
@@ -97,5 +96,22 @@ describe("collision log", () => {
     w.broken = [{ obstacle: fence, turn: w.turn }];
     expect(eventText(w, { t: "collision", a: me, b: "fence-3", hitsA: [], hitsB: [] })).toBeNull();
     expect(eventText(w, { t: "collision", a: me, b: "rock7", hitsA: [{ part: "x", damage: 4 }], hitsB: [] })).toBeNull();
+  });
+});
+
+describe("shot log", () => {
+  it("names stray fire that hits the player in a shot between other trucks", () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const raider = addVehicle(w, "raiders", "buggy", ["mg"], { x: 40, y: 40 });
+    const trader = addVehicle(w, "traders", "hauler", ["stockEngine"], { x: 44, y: 40 });
+    const cab = mountedParts(me).find((p) => (partDef(p.defId) as { role?: string }).role === "cab")!;
+    const e: GameEvent = {
+      t: "shot", shooter: raider.id, weapon: mountedParts(raider, "weapon")[0].id, target: trader.id, aim: "body", chance: 0.5, side: "front",
+      rounds: [{ hit: false, crit: false, offset: 3, struck: me.id, hits: [{ part: cab.id, damage: 4 }], blast: [] }],
+    };
+    const line = eventText(w, e);
+    expect(line?.text).toContain("; stray fire hits ");
+    expect(line?.cls).toBe("bad");
   });
 });

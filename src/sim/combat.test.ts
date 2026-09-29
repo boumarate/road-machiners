@@ -422,7 +422,7 @@ describe('rounds', () => {
       Object.assign(cannon.part, gunFor(cannon.part.defId));
       fireWeapons(w);
       const miss = shotsBy(w.events, me.id)[0].rounds.find((r) => !r.hit);
-      if (miss && miss.hits.length > 0) splashed = true;
+      if (miss?.blast.some((b) => b.vehicle === t.id)) splashed = true;
     }
     expect(splashed).toBe(true);
   });

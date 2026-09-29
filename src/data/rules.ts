@@ -46,6 +46,13 @@ export const RULES = {
   weaponDamage: 1.2375, // every weapon round and splash, guard guns included
   crashDamage: 1.125, // every crash and ram, into trucks and obstacles alike
 
+  // Stray fire. A round that misses its target may hit another truck whose center lies within reach of the line
+  // of fire, which runs on past the target by reach. Unintended damage summed to feudDamage counts as an attack.
+  stray: {
+    reach: 1.5, // tiles
+    feudDamage: 40, // about one cannon hit or ten MG rounds
+  },
+
   // Town guards. Each town gate has one gun. Every turn it shoots the nearest vehicle within range that fired.
   // Each round hits with a flat chance and enters a random lane of the side facing the gate.
   guards: {

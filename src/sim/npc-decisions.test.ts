@@ -201,7 +201,7 @@ describe('decision weights', () => {
 });
 
 describe('fight back', () => {
-  const round = (damage: number) => ({ hit: true, crit: false, offset: 0, hits: [{ part: 'x', damage }] });
+  const round = (struck: string, damage: number) => ({ hit: true, crit: false, offset: 0, struck, hits: [{ part: 'x', damage }], blast: [] });
 
   // A trader shot this turn by a raider in sight for `damage`. A base goal is set, so only the attacked decision
   // rolls. 18 damage is 30% of a cab, three times the hit that gives flee its base weight.
@@ -210,7 +210,7 @@ describe('fight back', () => {
     const trader = addNpc(w, 'traders', 'trader', traits, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
     trader.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'test base goal' }];
     const raider = addNpc(w, 'raiders', 'buggy', ['raider'], { x: 14, y: 10 });
-    w.events = [{ t: 'shot', shooter: raider.id, weapon: 'w', target: trader.id, aim: 'body', chance: 1, side: 'front', rounds: [round(damage)] }];
+    w.events = [{ t: 'shot', shooter: raider.id, weapon: 'w', target: trader.id, aim: 'body', chance: 1, side: 'front', rounds: [round(trader.id, damage)] }];
     noteHurt(w);
     w.events = [];
     // The shot's attack record, as combat leaves it.
@@ -255,7 +255,7 @@ describe('fight back', () => {
     const w = emptyWorld({ x: 80, y: 80 });
     const trader = addNpc(w, 'traders', 'trader', ['trader'], { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
     trader.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'test base goal' }];
-    w.events = [{ t: 'guardShot', site: 'bowl', from: { x: 0, y: 0 }, target: trader.id, rounds: [round(8)] }];
+    w.events = [{ t: 'guardShot', site: 'bowl', from: { x: 0, y: 0 }, target: trader.id, rounds: [round(trader.id, 8)] }];
     noteHurt(w);
     w.events = [];
     expect(trader.brain!.hurt).toBe(8);
