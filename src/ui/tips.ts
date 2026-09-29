@@ -11,7 +11,7 @@ import { el, panel } from "./dom";
 
 const TIPS_KEY = "roam.tips";
 
-export type TipId = "waypoint" | "drive" | "autoStop" | "stop" | "manual" | "zones" | "honk" | "farewell";
+export type TipId = "waypoint" | "drive" | "autoStop" | "stop" | "stopAt" | "manual" | "zones" | "honk" | "farewell";
 
 type Tip = {
   id: TipId;
@@ -66,9 +66,16 @@ const TIPS: readonly Tip[] = [
     done: (w) => playerVehicle(w).order?.kind === "brake",
   },
   {
+    id: "stopAt",
+    text: "[Shift]-click to set a waypoint your truck stops at. Click a waypoint to switch it.",
+    after: "stop",
+    when: (w) => !playerVehicle(w).direct,
+    done: (w) => playerVehicle(w).order?.kind === "stopAt",
+  },
+  {
     id: "manual",
     text: "[R] to drive in manual mode.",
-    after: "stop",
+    after: "stopAt",
     when: (w) => !playerVehicle(w).direct,
     done: (w) => playerVehicle(w).direct,
   },

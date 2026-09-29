@@ -6,7 +6,7 @@ import { startPose } from "../sim/world";
 import { doneTips, tipToShow, type TipId } from "./tips";
 
 describe("driving tips", () => {
-  it("walks the player from a waypoint to Space, stopping and manual mode", () => {
+  it("walks the player from a waypoint to Space, stopping, stop waypoints and manual mode", () => {
     const w = emptyWorld();
     const me = playerVehicle(w);
     const seen = new Set<TipId>();
@@ -27,6 +27,11 @@ describe("driving tips", () => {
     me.speed = 0;
     me.order = { kind: "brake" };
     seen.add("stop");
+    expect(tipToShow(w, false, seen, null)).toBe("stopAt");
+
+    me.order = { kind: "stopAt", dest: { x: 40, y: 30 } };
+    expect(doneTips(w)).toContain("stopAt");
+    seen.add("stopAt");
     expect(tipToShow(w, false, seen, null)).toBe("manual");
 
     me.direct = true;
@@ -59,7 +64,7 @@ describe("driving tips", () => {
 describe("horn tip", () => {
   it("shows once an NPC is in sight and keeps a shown tip in place", () => {
     const w = emptyWorld();
-    const seen = new Set<TipId>(["waypoint", "drive", "stop", "manual"]);
+    const seen = new Set<TipId>(["waypoint", "drive", "stop", "stopAt", "manual"]);
     expect(tipToShow(w, false, seen, null)).toBeNull();
 
     const npc = addVehicle(w, "scavengers", "scout", [], { x: 32, y: 30 });
@@ -81,7 +86,7 @@ describe("horn tip", () => {
 });
 
 describe("farewell tip", () => {
-  const allButFarewell: TipId[] = ["waypoint", "drive", "autoStop", "stop", "manual", "zones", "honk"];
+  const allButFarewell: TipId[] = ["waypoint", "drive", "autoStop", "stop", "stopAt", "manual", "zones", "honk"];
 
   it("shows once the player drives well past where traders first show up", () => {
     const w = emptyWorld();
