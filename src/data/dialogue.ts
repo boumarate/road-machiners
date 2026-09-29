@@ -7,14 +7,14 @@ import type { DecisionOptions, TraitId } from './npcs';
 
 type PatchDeal = DecisionOptions['patchDeal'];
 
-export type TopicId = 'directions' | 'tow' | 'askTow' | 'patch' | 'patchRequest' | 'demand' | 'trade' | 'truce' | 'mercy' | 'rob' | 'truceOffer' | 'mercyPlea' | 'offerTow' | 'releaseTow' | 'offerPatch' | 'marketNews' | 'rumor' | 'buyTruce';
+export type TopicId = 'directions' | 'tow' | 'askTow' | 'patch' | 'patchRequest' | 'demand' | 'surrender' | 'trade' | 'truce' | 'mercy' | 'rob' | 'truceOffer' | 'mercyPlea' | 'offerTow' | 'releaseTow' | 'offerPatch' | 'marketNews' | 'rumor' | 'buyTruce';
 export type ConditionId =
-  | 'knowsTown' | 'offersTow' | 'canTowPlayer' | 'playerNeedsPatch' | 'npcNeedsPatch' | 'hasDeal' | 'noDeal' | 'demandsCargo'
+  | 'knowsTown' | 'offersTow' | 'canTowPlayer' | 'playerNeedsPatch' | 'npcNeedsPatch' | 'hasDeal' | 'noDeal' | 'demandsCargo' | 'demandsSurrender'
   | 'atOdds' | 'atPeace' | 'noPlayerPlea' | 'npcHasCargo' | 'offersTruce' | 'begsMercy'
   | 'accepts' | 'refuses' | 'complies' | 'resists' | 'runs' | 'canTowNpc' | 'towedByPlayer' | 'noTrade' | 'npcCalm'
   | 'knowsLastTown' | 'hearsRumor' | 'rumorOfSite' | 'rumorOfWreck' | 'canPayTruce';
 export type EffectId =
-  | 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow' | 'agreePatch' | 'handOver'
+  | 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow' | 'agreePatch' | 'handOver' | 'surrender'
   | 'acceptPlea' | 'refusePlea' | 'settlePlea' | 'withdrawPlea' | 'settleThreat' | 'hitchNpc' | 'hitchNpcFree' | 'releaseNpc' | 'startTrade'
   | 'revealRumor' | 'payTruce';
 export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms' | 'truceAnswer' | 'mercyAnswer' | 'threatAnswer' | 'npcTowTerms' | 'lastTownPrices' | 'nearestRumor' | 'trucePrice';
@@ -169,6 +169,26 @@ export const TOPICS: Record<TopicId, Topic> = {
         line: 'Dump your cargo and roll on. Or we take it off your wreck.',
         options: [
           { text: 'Fine. Take it.', when: [], effects: ['handOver'], go: END },
+          { text: 'Come and get it.', when: [], effects: ['settleRefused'], go: END },
+        ],
+      },
+    },
+  },
+  // A robber alone with the stranded player calls once. Giving up strips the truck of cargo and the best parts and
+  // ends the fight. Refusing or hanging up makes the robber shoot at the cab.
+  surrender: {
+    id: 'surrender',
+    once: true,
+    ask: null,
+    raise: { when: ['demandsSurrender'], priority: 5, duringFeud: true, duringCombat: true },
+    prepare: null,
+    hangUp: ['settleRefused'],
+    start: 'offer',
+    nodes: {
+      offer: {
+        line: 'Your truck is dead. Hand over the cargo and your best parts, and you keep the truck. Or I shoot for your cab.',
+        options: [
+          { text: 'Fine. Take it.', when: [], effects: ['surrender'], go: END },
           { text: 'Come and get it.', when: [], effects: ['settleRefused'], go: END },
         ],
       },
@@ -463,7 +483,7 @@ export type TraitTalk = { voice: Voice | null; topics: TopicId[] };
 export const HONK_RANGE = DETECT.sound.limp;
 
 // Every driver can be asked for peace, robbed, towed and patched, and can plead for peace.
-const PARLEY: TopicId[] = ['truce', 'mercy', 'buyTruce', 'rob', 'truceOffer', 'mercyPlea', 'offerTow', 'releaseTow', 'offerPatch'];
+const PARLEY: TopicId[] = ['surrender', 'truce', 'mercy', 'buyTruce', 'rob', 'truceOffer', 'mercyPlea', 'offerTow', 'releaseTow', 'offerPatch'];
 
 export const TRAIT_TALK: Record<TraitId, TraitTalk> = {
   trader: { voice: { greeting: 'Go ahead.', repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true }, topics: ['directions', 'marketNews', 'rumor', 'tow', 'askTow', 'patch', 'patchRequest', 'trade', ...PARLEY] },

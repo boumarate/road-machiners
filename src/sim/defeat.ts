@@ -22,6 +22,7 @@ import { sitePads, type Site } from "./sites";
 import { isFree } from "./spawn";
 import { npcHomeSite, towOf } from "./tow";
 import { lootRobbed } from "./npc-activities";
+import { wantsLoot } from "./npc-decisions";
 import type { Vehicle, World } from "./types";
 import { dist, type Vec } from "./vec";
 import { canVehicleSee, grayRadius } from "./vision";
@@ -46,10 +47,11 @@ export function checkKnockout(world: World): void {
   p.knockouts++;
   stopKnockedOut(world, me);
   me.trail = [];
+  const robbers = robbersOf(world, me);
   // Whoever fought the player got what the feud was for.
   for (const s of world.states.filter((x) => x.kind === "feud" && x.other === me.id))
     endState(world, s, "fulfilled");
-  sendRaidersToLoot(world, me);
+  sendToLoot(world, me, robbers);
   settleRevenge(world, me);
   world.events.push({ t: "knockout" });
 }
@@ -121,10 +123,14 @@ function withLastHitter(world: World, v: Vehicle, ids: string[]): string[] {
   return [...foes];
 }
 
-// A raider that fought the player loots the truck, as a robber does. A won robbery already sent its robber.
-function sendRaidersToLoot(world: World, me: Vehicle): void {
-  const raiders = world.vehicles.filter((v) => v.brain && v.faction === "raiders" && me.defeat!.foes.includes(v.id));
-  for (const raider of raiders.filter((v) => !isLooting(v, me.id))) lootRobbed(world, raider.id, me.id);
+// The foes that come for the player's cargo: raiders, and drivers that want it. A won robbery already sent its robber.
+// Read before the feuds end, since a robbery feud is what marks a robber.
+function robbersOf(world: World, me: Vehicle): Vehicle[] {
+  return world.vehicles.filter((v) => v.brain && me.defeat!.foes.includes(v.id) && (v.faction === "raiders" || wantsLoot(world, v, me)));
+}
+
+function sendToLoot(world: World, me: Vehicle, robbers: Vehicle[]): void {
+  for (const robber of robbers.filter((v) => !isLooting(v, me.id))) lootRobbed(world, robber.id, me.id);
 }
 
 function isLooting(v: Vehicle, targetId: string): boolean {

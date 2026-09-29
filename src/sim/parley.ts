@@ -3,15 +3,20 @@
 // decision. Radio talk with the player lives in src/sim/dialogue.ts, and this module owns what the answers do.
 
 import { SPAWN } from '../data/npcs';
+import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
+import { partSellPrice } from './economy';
+import { corePart, isMounted } from './grid';
+import { applyRefitLayout } from './inventory';
 import { creditBounty } from './market';
-import { defyThreat, pushGoal } from './npc-activities';
-import { decide, perceiveDanger } from './npc-decisions';
+import { defyThreat, pushGoal, topGoal } from './npc-activities';
+import { decide, perceiveDanger, visibleHostiles, wantsLoot } from './npc-decisions';
 import { vehicleHasPerk } from './progress';
-import { createCargoSalvage, hasCargo } from './salvage';
+import { createCargoSalvage, dumpOnPile, hasCargo, takeError } from './salvage';
+import { isStranded } from './stats';
 import { addState, endState, pleaData, stateOf } from './states';
 import type { DecisionOptions } from '../data/npcs';
-import type { Plea, Vehicle, World } from './types';
+import type { Aim, GridItem, Plea, SalvageStock, Vehicle, World } from './types';
 import { dist } from './vec';
 
 export type ThreatAnswer = DecisionOptions['threatened'];
@@ -43,13 +48,19 @@ function holdFire(v: Vehicle, target: Vehicle): void {
 }
 
 // The loser drops its cargo beside its truck, and both sides make peace. An NPC winner goes to take the cargo, and its grudge against the loser is settled.
-export function yieldTo(world: World, loser: Vehicle, winner: Vehicle): void {
-  const stock = hasCargo(loser) ? createCargoSalvage(world, loser, 1) : null;
+// `dumped` is the pile the loser already threw parts onto.
+export function yieldTo(world: World, loser: Vehicle, winner: Vehicle, dumped: SalvageStock | null = null): void {
+  const stock = hasCargo(loser) ? createCargoSalvage(world, loser, 1) : dumped;
   makePeace(world, loser, winner);
   const grudge = stateOf(world, 'revenge', winner.id, loser.id);
   if (grudge) endState(world, grudge, 'fulfilled');
   if (stock && winner.brain) pushGoal(world, winner, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'take the handed-over cargo' });
   creditYield(world, loser, winner);
+}
+
+// A stranded player gives up to a robber: the cargo and the best installed parts go onto the ground, and the truck stays.
+export function surrenderTo(world: World, me: Vehicle, robber: Vehicle): void {
+  yieldTo(world, me, robber, dumpWantedParts(world, me));
 }
 
 // With Bounty talk, an NPC that gives up to the player counts for a bounty on its template.
@@ -122,4 +133,53 @@ export function settleThreat(world: World, npc: Vehicle, answer: ThreatAnswer): 
   const me = playerVehicle(world);
   if (answer === 'comply') yieldTo(world, npc, me);
   else defyThreat(world, npc, me, answer);
+}
+
+// ---- Stripping a stranded player. A robber alone with a stranded player offers to strip the truck instead of wrecking
+// it. The player who gives up hands over the cargo and the best installed parts and keeps the truck. The player who
+// refuses or hangs up faces aimed shots at the cab, so the truck is knocked out with its parts in better shape.
+
+type PartItem = Extract<GridItem, { kind: 'part' }>;
+
+// The driver fights the active player.
+function fightsPlayer(world: World, npc: Vehicle): boolean {
+  const top = npc.brain ? topGoal(npc) : null;
+  return top?.kind === 'fight' && top.targetId === world.player.vehicleId && world.player.state === 'active';
+}
+
+// The driver fights the stranded player, wants its cargo, and sees no other foe.
+export function hasStrandedPrey(world: World, npc: Vehicle): boolean {
+  const me = playerVehicle(world);
+  if (!fightsPlayer(world, npc)) return false;
+  return isStranded(world, me) && wantsLoot(world, npc, me) && visibleHostiles(world, npc).every((foe) => foe.id === me.id);
+}
+
+// Installed parts that can leave the truck, best first.
+function removableParts(victim: Vehicle): PartItem[] {
+  return victim.items
+    .filter((item): item is PartItem => item.kind === 'part' && isMounted(victim.chassisId, item) && takeError(victim, item) === null)
+    .sort((a, b) => partSellPrice(b.part) - partSellPrice(a.part));
+}
+
+// The prey has something to take.
+export function hasStrippable(victim: Vehicle): boolean {
+  return hasCargo(victim) || removableParts(victim).length > 0;
+}
+
+// The wanted parts go onto the ground. The pile they land on is returned, or null when none left the truck.
+function dumpWantedParts(world: World, victim: Vehicle): SalvageStock | null {
+  let pile: SalvageStock | null = null;
+  for (let taken = 0; taken < RULES.surrenderParts; taken++) {
+    const best = removableParts(victim)[0];
+    if (!best) break;
+    pile = dumpOnPile(world, victim, best);
+  }
+  if (pile) applyRefitLayout(world, victim, victim.items);
+  return pile;
+}
+
+// Where a shot from this driver at the target lands: at the cab once the prey refused to give up, else anywhere.
+export function aimAt(world: World, shooter: Vehicle, target: Vehicle): Aim {
+  if (target.id !== world.player.vehicleId || !hasStrandedPrey(world, shooter)) return 'body';
+  return world.player.talked[shooter.id]?.surrender === 'refused' ? corePart(target, 'cab').id : 'body';
 }

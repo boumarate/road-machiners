@@ -11,7 +11,7 @@ import { isHostile } from './combat';
 import { patchGoal, startTow, topGoal, underAttack } from './npc-activities';
 import { vehicleValue } from './market';
 import { hasPerk, practice } from './progress';
-import { answerPlea, answersPlea, answersThreat, makePeace, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, yieldTo, type ThreatAnswer } from './parley';
+import { answerPlea, answersPlea, answersThreat, hasStrandedPrey, hasStrippable, makePeace, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, surrenderTo, yieldTo, type ThreatAnswer } from './parley';
 import { hasCargo, hasSalvage } from './salvage';
 import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
 import { npcProfile } from './npc-decisions';
@@ -115,9 +115,12 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   noDeal: (_world, _npc, vars) => vars.deal === undefined,
   // About to attack the player, who carries something worth taking, and chose to call first.
   demandsCargo: (world, npc) => {
+    if (hasStrandedPrey(world, npc)) return false;
     const top = topGoal(npc);
     return top?.kind === 'fight' && top.targetId === world.player.vehicleId && top.demands === true && hasCargo(playerVehicle(world));
   },
+  // The stranded player is alone with a robber and has cargo or parts to lose.
+  demandsSurrender: (world, npc) => hasStrandedPrey(world, npc) && hasStrippable(playerVehicle(world)),
   atOdds: (world, npc) => isHostile(world, npc, playerVehicle(world)),
   atPeace: (world, npc) => !isHostile(world, npc, playerVehicle(world)),
   noPlayerPlea: (world, npc) => !playerPleaded(world, npc),
@@ -159,6 +162,11 @@ export const EFFECTS: Record<EffectId, Effect> = {
   // A handover and a threat end at once, so they practice social now. A patch practices when it is done.
   handOver: (world, npc, call) => {
     yieldTo(world, playerVehicle(world), npc);
+    settle(world, npc, call, 'agreed');
+    practice(world, 'deal', 1, null, npc.id);
+  },
+  surrender: (world, npc, call) => {
+    surrenderTo(world, playerVehicle(world), npc);
     settle(world, npc, call, 'agreed');
     practice(world, 'deal', 1, null, npc.id);
   },

@@ -623,6 +623,11 @@ function robs(world: World, vehicle: Vehicle, subject: string | null): boolean {
   return robbingFeud(world, vehicle, target) || (vehicle.faction === 'raiders' && target.faction !== 'raiders' && hasLoot(target));
 }
 
+// Whether the driver may and does want the target's cargo. Only these drivers strip a stranded player.
+export function wantsLoot(world: World, vehicle: Vehicle, target: Vehicle): boolean {
+  return traitsAllowRobbing(vehicle) && robs(world, vehicle, target.id);
+}
+
 function robbingFeud(world: World, vehicle: Vehicle, target: Vehicle): boolean {
   const feud = stateOf(world, 'feud', vehicle.id, target.id);
   return feud?.data.kind === 'feud' && feud.data.robbery;

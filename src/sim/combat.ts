@@ -2,6 +2,7 @@
 // so fire is simultaneous: a vehicle killed this turn still gets its shots off.
 
 import { onCall } from "./dialogue";
+import { aimAt } from "./parley";
 import { SPAWN } from '../data/npcs';
 import { isDefeated, isKnockedOut, knockOutNpc } from './defeat';
 import { RULES } from '../data/rules';
@@ -781,7 +782,7 @@ export function autoOrders(world: World, v: Vehicle): void {
           hasLineOfFire(world, v.pos, h.pos),
       ) ?? hostiles[0];
     if (target)
-      v.weaponOrders[mw.part.id] = { targetId: target.id, aim: "body" };
+      v.weaponOrders[mw.part.id] = { targetId: target.id, aim: aimAt(world, v, target) };
   }
 }
 
