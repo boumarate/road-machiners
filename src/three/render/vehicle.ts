@@ -394,7 +394,9 @@ export class VehicleView {
     if (items.length !== mounts.length) throw new Error(`${v.id} has ${items.length} mounted wheels, expected ${mounts.length}`);
     const tones = mounts.map((m) => {
       const item = items.find((it) => {
-        const c = cellCenter(v.chassisId, it.x, it.y);
+        // A wheel cell lies one cell inside the side armor, and its hub on the edge column of the same row.
+        const width = baseGrid(v.chassisId).w;
+        const c = cellCenter(v.chassisId, it.x < width / 2 ? 0 : width - 1, it.y);
         return Math.abs(c.x - m.x) < 1e-6 && Math.abs(c.z - m.z) < 1e-6;
       });
       if (!item) throw new Error(`${v.id} has no wheel item at the wheel mount ${m.x},${m.z}`);
