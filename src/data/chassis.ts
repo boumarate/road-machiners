@@ -20,7 +20,7 @@
 // projection stretches whatever grid it gets over the model.
 //
 // showsCores says whether the view draws the transmission and the tank. It is true for the junk-built trucks whose
-// parts stick out of the body: the scout, buggy, courier, jeep and wagon. There the two parts stand on a low surface of
+// parts stick out of the body: the scout, courier and wagon. There the two parts stand on a low surface of
 // the model, never on a cab roof. It is false for the others, whose bodies cover them, so the parts take part in the
 // grid but are not drawn. Engines show in the hood hole on every chassis.
 //
@@ -160,20 +160,20 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     mass: 230,
     handlingMass: 900,
     radius: 0.5,
-    // The grid has ten rows, so the model's low nose holds the engine, the transmission and the tank, and the cab roof is a gun deck.
-    layout: [' FFFF ', 'LXEEXR', 'LXEEXR', 'LDXXXR', 'LDXXXR', 'LDXDDR', 'LDDDDR', 'LXDDXR', 'LXDDXR', ' BBBB '],
+    // A light runabout: five deck cells, one free 2 by 2 block for a missile launcher. The model has room for the engine alone in its low nose, so the transmission and the tank sit inside the body.
+    layout: [' FFFF ', 'LXEEXR', 'LXEEXR', 'LXDDXR', 'LDDDXR', 'LXXXXR', 'LXXXXR', ' BBBB '],
     core: [
-      { defId: 'cab', x: 2, y: 5 },
-      { defId: 'transmission', x: 2, y: 3 },
+      { defId: 'cab', x: 1, y: 3 },
+      { defId: 'transmission', x: 2, y: 5 },
       { defId: 'tank', x: 4, y: 3 },
       { defId: 'wheel', x: 1, y: 1 },
       { defId: 'wheel', x: 4, y: 1 },
-      { defId: 'wheel', x: 1, y: 7 },
-      { defId: 'wheel', x: 4, y: 7 },
+      { defId: 'wheel', x: 1, y: 5 },
+      { defId: 'wheel', x: 4, y: 5 },
     ],
     fuelCap: 30,
     fuelPerTile: 0.2,
-    base: 10, showsCores: true, tier: 1,
+    base: 300, showsCores: false, tier: 1,
     look: 'buggy',
   },
   wagon: {
@@ -288,18 +288,18 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   jeep: {
     id: 'jeep', name: 'Jeep', maxSpeed: 8.2, accel: 2.5, brake: 3, turnSlow: 115, turnFast: 42, reverseTurn: 80,
     mass: 450, handlingMass: 1400, radius: 0.55,
-    // The grid has ten rows. The transmission stands on the hood, the engine bay is on the rear deck, the tank lies on the tail deck and the cabin roof is a gun deck.
-    layout: [' FFFF ', 'LXXXXR', 'LXXXXR', 'LDDDDR', 'LDXDDR', 'LDDDDR', 'LDEEDR', 'LXEEXR', 'LXXXXR', ' BBBB '],
+    // The engine bay is on the rear deck and the cabin roof is a gun deck. The model has no low place for the transmission and the tank, so they sit inside the body.
+    layout: [' FFFF ', 'LXXXXR', 'LXXXXR', 'LDXDDR', 'LDDDDR', 'LXEEXR', 'LXEEXR', 'LDXXDR', ' BBBB '],
     core: [
-      { defId: 'cab', x: 2, y: 4 },
+      { defId: 'cab', x: 2, y: 3 },
       { defId: 'transmission', x: 2, y: 1 },
-      { defId: 'tank', x: 2, y: 8, rot: 1 },
+      { defId: 'tank', x: 2, y: 7, rot: 1 },
       { defId: 'wheel', x: 1, y: 1 },
       { defId: 'wheel', x: 4, y: 1 },
-      { defId: 'wheel', x: 1, y: 7 },
-      { defId: 'wheel', x: 4, y: 7 },
+      { defId: 'wheel', x: 1, y: 5 },
+      { defId: 'wheel', x: 4, y: 5 },
     ],
-    fuelCap: 35, fuelPerTile: 0.2, base: 330, showsCores: true, tier: 1, look: 'jeep',
+    fuelCap: 35, fuelPerTile: 0.2, base: 330, showsCores: false, tier: 1, look: 'jeep',
   },
   // A 1964 Corvair Monza convertible: a front trunk, open seats and a flat-six under the rear deck lid.
   convertible: {

@@ -143,6 +143,6 @@ describe('deck blocks for the bigger guns', () => {
 describe('shown cores', () => {
   it('shows the transmission and the tank on the junk-built trucks and hides them on the others', () => {
     const shown = Object.entries(CHASSIS).filter(([, c]) => c.showsCores).map(([id]) => id).sort();
-    expect(shown).toEqual(['buggy', 'courier', 'jeep', 'scout', 'wagon']);
+    expect(shown).toEqual(['courier', 'scout', 'wagon']);
   });
 });

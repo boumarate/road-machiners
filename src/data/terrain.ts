@@ -89,7 +89,7 @@ export const TERRAIN = {
     bridge: {
       from: scalePoint({ x: 97.9, y: 75.1 }),
       to: scalePoint({ x: 101.5, y: 71.5 }),
-      width: 4, // tiles between the rails; the widest truck keeps its clearance from both
+      width: 8, // tiles between the rails; the widest truck keeps its clearance from both
       abutment: 1, // tiles of causeway left under each deck end
       ramp: 1.5, // tiles over which the cut ground falls to the canyon
     },

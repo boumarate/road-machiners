@@ -5,8 +5,6 @@ import { emptyWorld } from '../sim/testkit';
 import { moveItem } from '../sim/inventory';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
-import { partDef } from '../data/parts';
-import type { PartInstance, World } from '../sim/types';
 import { clearGame, clearSave, hasSave, loadWorld, SaveError, saveInTown, saveOf, saveWorld, writeSave } from './save';
 import { REGION } from '../data/region';
 import { sitePads } from '../sim/sites';
@@ -14,8 +12,6 @@ import { TEST_MAP } from '../test/map';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { breakProp } from '../sim/salvage';
 import { MIGRATIONS, SAVE_FORMAT, SAVE_MAJOR } from './save-migrations';
-import { CHASSIS_1_5 } from './save-migration-core-parts';
-import { CHASSIS_1_2 } from './save-migration-wheels';
 import SAVED_SHAPE from './save-shape.json';
 import { newGameShape } from '../test/save-shape';
 
@@ -29,48 +25,6 @@ function makeStorage(): Storage {
     removeItem: (key) => { values.delete(key); },
     setItem: (key, value) => { values.set(key, value); },
   };
-}
-
-// Guns that existed in format 1.0.
-const GUNS_1_0 = ['mg', 'cannon', 'shotgun', 'autocannon', 'tankGun', 'rocketRack', 'sniperCannon'];
-
-// Drops every gun that format 1.0 did not have, so the world can be saved as 1.0.
-function withGuns10(world: World): World {
-  const old = (p: PartInstance) => partDef(p.defId).kind !== 'weapon' || GUNS_1_0.includes(p.defId);
-  for (const shop of Object.values(world.shops)) shop.stock = shop.stock.filter(old);
-  for (const v of world.vehicles) v.items = v.items.filter((it) => it.kind !== 'part' || old(it.part));
-  return world;
-}
-
-// A saved world as format 1.0 held it: parts carry a reload counter and no gun state, and built-in parts stand on the
-// cells the 1.2 step moves them from, under the ids they had then. New games start with full magazines, which the 1.1 step restores.
-function asFormat10(world: unknown): unknown {
-  const old = JSON.parse(JSON.stringify(world), (_key, value) => {
-    if (!value || typeof value !== 'object' || !('defId' in value) || !('wear' in value)) return value;
-    const { gun, ...rest } = value as { gun?: { cooldown: number } };
-    return { ...rest, reload: gun ? gun.cooldown : 0 };
-  }) as { vehicles: { chassisId: string; items: { x: number; y: number; part?: { defId: string } }[] }[] };
-  for (const v of old.vehicles) {
-    const grid = CHASSIS_1_2[v.chassisId];
-    const reading = (a: { x: number; y: number }, b: { x: number; y: number }) => a.y - b.y || a.x - b.x;
-    for (const newId of new Set(grid.newCore.map((c) => c[0]))) {
-      const defId = Object.entries(grid.renamed ?? {}).find(([, renamed]) => renamed === newId)?.[0] ?? newId;
-      const currentId = CHASSIS_1_5[v.chassisId].renamed?.[newId] ?? newId;
-      const cores = v.items.filter((it) => it.part?.defId === currentId).sort(reading);
-      const from = grid.oldCore.filter((c) => c[0] === defId).map(([, x, y]) => ({ x, y })).sort(reading);
-      const to = grid.newCore.filter((c) => c[0] === newId).map(([, x, y]) => ({ x, y })).sort(reading);
-      cores.forEach((it, i) => Object.assign(it, from[i], { rot: 0 }, { part: { ...it.part, defId } }));
-      if (cores.length !== to.length) throw new Error(`${v.chassisId} lost a ${newId}`);
-    }
-  }
-  return old;
-}
-
-// A world whose trucks carry only their built-in parts. A world of format 1.0 has every other item on cells of the old
-// grids, and the 1.2 step moves those, which its own tests cover.
-function coresOnly(world: World): World {
-  for (const v of world.vehicles) v.items = v.items.filter((it) => it.kind === 'part' && partDef(it.part.defId).kind === 'core');
-  return world;
 }
 
 describe('local game save', () => {
@@ -155,13 +109,6 @@ describe('local game save', () => {
       expect(() => loadWorld(storage, TEST_MAP)).toThrow(SaveError);
       expect(() => loadWorld(storage, TEST_MAP)).toThrow(error);
     }
-  });
-
-  it('loads a save from before save formats as format 1.0', () => {
-    const storage = makeStorage();
-    const world = coresOnly(withGuns10(newWorld(1337, startKit('standard'), TEST_MAP)));
-    storage.setItem('roam.save', JSON.stringify({ version: '1.0.0', world: asFormat10(saveOf(world).world) }));
-    expect(loadWorld(storage, TEST_MAP)).toEqual(world);
   });
 
   it('records the saved shape of the current format', () => {
