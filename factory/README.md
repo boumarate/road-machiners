@@ -22,7 +22,7 @@ A failed or timed-out stage labels its issue `factory-stuck` and posts once to t
 - `src/` holds the Node CLI. `npm run factory -- tick` is the entry point. A timer runs it.
 - `prompts/` holds the prompt of each agent stage.
 - `docker/` holds the agent image. Agents get only their work clone and `CLAUDE_CODE_OAUTH_TOKEN`.
-- `hermes/` holds the Hermes compose file, its config template and the plugin that queues committee replies into `$FACTORY_HOME/inbox` and edits the committee file.
+- `hermes/` holds the Hermes compose file, its config template, its identity in `SOUL.md` and the plugin that queues committee replies into `$FACTORY_HOME/inbox` and edits the committee file.
 - `infra/` deploys the server with pyinfra. See [infra/README.md](infra/README.md).
 - `mac/` runs the factory on a Mac. See [mac/README.md](mac/README.md).
 

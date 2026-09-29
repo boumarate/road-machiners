@@ -7,6 +7,7 @@ FROM nousresearch/hermes-agent:v2026.9.24
 USER root
 
 COPY config.yaml /opt/factory/config.seed.yaml
+COPY SOUL.md /opt/factory/SOUL.md
 
 # The config seeds once. Later edits in HERMES_HOME stay.
 # The umask keeps inbox files readable by the factory group and closed to everyone else.
@@ -15,6 +16,8 @@ COPY --chmod=755 <<'EOF2' /usr/local/bin/factory-start
 set -eu
 umask 0027
 [ -f "$HERMES_HOME/config.yaml" ] || cp /opt/factory/config.seed.yaml "$HERMES_HOME/config.yaml"
+# The repo owns the identity, so every start replaces it.
+cp /opt/factory/SOUL.md "$HERMES_HOME/SOUL.md"
 # The allow list is the committee file, or the bootstrap id before the plugin seeds it.
 TELEGRAM_ALLOWED_USERS=$(python - <<'PY'
 import json, os, sys

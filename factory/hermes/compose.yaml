@@ -27,6 +27,11 @@ services:
       - ./plugin:/opt/data/plugins/factory:ro
       - ${FACTORY_HOME:?set FACTORY_HOME}/inbox:/factory/inbox
       - ${FACTORY_HOME:?set FACTORY_HOME}/state:/factory/state:ro
+      # Read-only material Hermes explains to the committee. SOUL.md names these paths.
+      - ${FACTORY_HOME:?set FACTORY_HOME}/logs:/factory/logs:ro
+      # Only the README and prompts, so no env file under factory/ can reach Hermes.
+      - ../README.md:/factory/code/README.md:ro
+      - ../prompts:/factory/code/prompts:ro
       - ${FACTORY_HOME:?set FACTORY_HOME}/committee:/factory/committee
     security_opt:
       - no-new-privileges:true
