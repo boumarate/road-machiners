@@ -384,7 +384,7 @@ body {
   gap: 6px;
 }
 .weapons .weapon-slot {
-  width: 84px;
+  width: 96px;
   min-width: 0;
 }
 #ui .weapon-pick {
@@ -407,6 +407,18 @@ body {
   left: 5px;
   font: 11px var(--font-mono);
   color: #e5c47c;
+}
+.weapon-name {
+  max-width: 100%;
+  padding-left: 10px;
+  box-sizing: border-box;
+  font-size: 10px;
+  line-height: 1.15;
+  text-align: center;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .weapon-pick [data-status] {
   font: 10px / 1.2 var(--font-mono);

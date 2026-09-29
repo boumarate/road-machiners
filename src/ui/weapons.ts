@@ -274,8 +274,8 @@ export class WeaponPanel {
           onclick: () => this.selectWeapon(selected ? null : mw.part.id),
         },
         el('span', { class: 'weapon-number' }, `${i + 1}`),
+        el("span", { class: "weapon-name" }, mw.def.name),
         createIcon(mw.def.look === 'cannon' ? 'cannon' : 'mg'),
-        el("span", { class: "sr-only weapon-name" }, mw.def.name),
         el(
           "span",
           { class: readout.canFire ? "good" : "dim", "data-status": "" },
