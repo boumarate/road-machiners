@@ -61,17 +61,20 @@ export function throwIfNeedsCommittee(clone: string): void {
   if (text !== null) throw new Error(`The agent needs a committee decision: ${text.trim()}`);
 }
 
-// Paths in a diff that belong to the factory, not the game: agent messages and task files.
+// Paths an agent branch must never carry: agent messages, task files, and GitHub workflows,
+// which GitHub would run with the repo's secrets as soon as the factory pushes them.
+const FORBIDDEN_PREFIXES = [`${OUT_DIR}/`, `${TASK_DIR}/`, '.github/'];
+
 export function factoryPaths(diff: string): string[] {
   const paths = [...diff.matchAll(/^diff --git a\/(.+) b\/(.+)$/gm)].flatMap((match) => [match[1], match[2]]);
-  return [...new Set(paths)].filter((path) => path.startsWith(`${OUT_DIR}/`) || path.startsWith(`${TASK_DIR}/`));
+  return [...new Set(paths)].filter((path) => FORBIDDEN_PREFIXES.some((prefix) => path.startsWith(prefix)));
 }
 
 export async function guardAndPush(ctx: Ctx, issue: number, base: string): Promise<void> {
   await ctx.repo.fetchFromWork(workDir(ctx, issue), BRANCH(issue));
   const diff = await ctx.repo.diff(base, BRANCH(issue));
   const leaked = factoryPaths(diff);
-  if (leaked.length) throw new Error(`The branch commits factory files, which must stay out of the game repo: ${leaked.join(', ')}`);
+  if (leaked.length) throw new Error(`The branch touches paths an agent may not push: ${leaked.join(', ')}`);
   if (changesSaveMajor(diff)) {
     throw new Error('The change bumps SAVE_MAJOR in src/three/save-migrations.ts. The committee must decide on a major save bump before this can go on.');
   }

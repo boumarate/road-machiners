@@ -19,3 +19,9 @@ describe('factoryPaths', () => {
     expect(factoryPaths(diff)).toEqual(['.factory-tasks/issue-8.md', '.factory/approval.json']);
   });
 });
+
+describe('factoryPaths and workflows', () => {
+  it('refuses GitHub workflow files', () => {
+    expect(factoryPaths('diff --git a/.github/workflows/x.yml b/.github/workflows/x.yml\n+on: push\n')).toEqual(['.github/workflows/x.yml']);
+  });
+});
