@@ -455,6 +455,8 @@ describe('looting', () => {
     target.brain = npcBrain('trader', target.pos, ['trader']);
     robber.brain!.goals = [{ ...SCAVENGE }];
     forceOption('preySeen', 'rob');
+    // A stranded target offered a way out holds out, so the robbery ends in a knockout.
+    forceOption('surrenderOffered', 'refuse');
     thinkNpc(w, robber);
     expect(stateOf(w, 'feud', robber.id, target.id)?.data).toEqual({ kind: 'feud', robbery: true });
     corePart(target, 'cab').hp = 0;
