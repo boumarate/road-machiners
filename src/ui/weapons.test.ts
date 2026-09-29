@@ -1,10 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { hitOdds } from "../sim/combat";
+import { playerVehicle } from "../sim/damage";
+import { mountedParts } from "../sim/grid";
+import type { Vehicle } from "../sim/types";
 import { addState } from "../sim/states";
 import { vehicleStats } from "../sim/stats";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import { refreshVision } from "../sim/vision";
-import { ammoCells, canForceReload, getWeaponReadout, toggleTarget, vehicleMarks } from "./weapons";
+import { HoverHold, aimAtPart, aimMarks, aimName, ammoCells, canForceReload, getWeaponReadout, toggleTarget, vehicleMarks } from "./weapons";
 
 function createDuel() {
   const world = emptyWorld();
@@ -232,5 +235,84 @@ describe("ammo cells", () => {
 
   it("never fills more cells than are spent", () => {
     expect(ammoCells(4, 3, 3, 4)).toEqual(["loaded", "loaded", "loaded", "reloading"]);
+  });
+});
+
+describe("aiming at parts", () => {
+  function wheelOf(target: Vehicle) {
+    const wheel = mountedParts(target).find((p) => p.defId === "wheel");
+    if (!wheel) throw new Error("Target has no wheel");
+    return wheel;
+  }
+
+  it("aims the given guns at a part and marks it with the gun number", () => {
+    const { world, target, gun } = createDuel();
+    const wheel = wheelOf(target);
+    const next = aimAtPart(world, [gun], target, wheel.id);
+    expect(playerVehicle(next).weaponOrders[gun.part.id]).toEqual({ targetId: target.id, aim: wheel.id });
+    expect(aimMarks(next, target.id).get(wheel.id)).toEqual([1]);
+  });
+
+  it("returns to a body shot when the guns already aim at the part", () => {
+    const { world, target, gun } = createDuel();
+    const wheel = wheelOf(target);
+    const again = aimAtPart(aimAtPart(world, [gun], target, wheel.id), [gun], target, wheel.id);
+    expect(playerVehicle(again).weaponOrders[gun.part.id]).toEqual({ targetId: target.id, aim: "body" });
+    expect(aimMarks(again, target.id).size).toBe(0);
+  });
+
+  it("names the aimed part or a body shot", () => {
+    const { target } = createDuel();
+    expect(aimName(target, "body")).toBe("body shot");
+    expect(aimName(target, wheelOf(target).id)).toBe("Wheel");
+  });
+
+  it("rejects a part the target does not have", () => {
+    const { world, target, gun } = createDuel();
+    expect(() => aimAtPart(world, [gun], target, "nope")).toThrow();
+  });
+});
+
+describe("hover hold", () => {
+  afterEach(() => vi.useRealTimers());
+
+  function setup() {
+    vi.useFakeTimers();
+    const seen: (string | null)[] = [];
+    const hold = new HoverHold((id) => seen.push(id), 400);
+    return { seen, hold };
+  }
+
+  it("passes a hover on a truck at once", () => {
+    const { seen, hold } = setup();
+    hold.move("v2", "v1");
+    expect(seen).toEqual(["v2"]);
+  });
+
+  it("ends the hover after the delay when the pointer leaves the truck", () => {
+    const { seen, hold } = setup();
+    hold.move(null, "v1");
+    vi.advanceTimersByTime(399);
+    expect(seen).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(seen).toEqual([null]);
+  });
+
+  it("keeps the hover while the pointer is on the panel and ends it when the pointer leaves", () => {
+    const { seen, hold } = setup();
+    const panel = new EventTarget();
+    hold.watch(panel);
+    hold.move(null, "v1");
+    panel.dispatchEvent(new Event("mouseenter"));
+    vi.advanceTimersByTime(1000);
+    expect(seen).toEqual([]);
+    panel.dispatchEvent(new Event("mouseleave"));
+    expect(seen).toEqual([null]);
+  });
+
+  it("does nothing when nothing was hovered", () => {
+    const { seen, hold } = setup();
+    hold.move(null, null);
+    expect(seen).toEqual([null]);
   });
 });

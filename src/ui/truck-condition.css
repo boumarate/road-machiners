@@ -67,3 +67,24 @@
   width: fit-content;
   margin: 8px auto 0;
 }
+.condition-part.aimable {
+  cursor: crosshair;
+}
+.condition-part.aimable:hover {
+  border-color: #f3efde;
+}
+.condition-aim {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  min-width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  padding: 0 2px;
+  border: 2px solid #fa3934;
+  border-radius: 8px;
+  background: #141a1ccc;
+  color: #f3efde;
+  font: 10px / 10px var(--font-mono);
+  text-align: center;
+}

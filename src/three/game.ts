@@ -45,7 +45,7 @@ import type { UiHost } from "../ui/host";
 import { COMBAT_BLOCKED, Hud } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
 import { TownScreen, TruckTradeScreen } from "../ui/town";
-import { toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
+import { aimAtPart, HoverHold, toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
 import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
@@ -144,6 +144,8 @@ export class Game {
   private live: LiveVision | null = null; // the player's view while a turn plays
   private hoverGround: Vec | null = null;
   private hovered: string | null = null;
+  // The pointer needs a moment to travel from a truck to its panel.
+  private readonly hoverHold = new HoverHold((id) => this.setHovered(id), 400);
   private readonly pickRing = new THREE.Mesh(
     new THREE.RingGeometry(1, 1, 48).rotateX(-Math.PI / 2),
     new THREE.MeshBasicMaterial({
@@ -270,8 +272,10 @@ export class Game {
       autoTravel: () => this.travel.isAuto(this.world),
       dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
       recenter: () => this.follow.recenter(),
+      aimPart: (vehicleId, partId) => this.anim === null && this.apply(aimAtPart(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, vehicleId), partId)),
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
+    this.hoverHold.watch(this.hud.getInspectionRoot());
     this.menu = new GameMenu({
       save: () => writeSave(window.localStorage, this.world),
       hasSave: () => hasSave(window.localStorage),
@@ -402,11 +406,7 @@ export class Game {
 
   private refreshInfo(): void {
     const w = this.displayWorld();
-    const v = this.hovered
-      ? (w.vehicles.find(
-          (x) => x.id === this.hovered && playerSees(w, x.pos),
-        ) ?? null)
-      : null;
+    const v = w.vehicles.find((x) => x.id === this.hovered && playerSees(w, x.pos)) ?? null;
     this.hud.showInfo(w, v, v ? hostileToPlayer(w, v) : false);
     this.hitCard.render(w, v ? v.id : null);
   }
@@ -582,6 +582,10 @@ export class Game {
       id || this.modalOpen()
         ? null
         : this.rig.groundUnder(e.clientX, e.clientY, this.ground);
+    this.hoverHold.move(id, this.hovered);
+  }
+
+  private setHovered(id: string | null): void {
     if (id === this.hovered) return;
     this.hovered = id;
     this.refreshInfo();

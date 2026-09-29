@@ -2,10 +2,9 @@ import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { fireBlock, gunOf, hitOdds, type FireBlock } from "../sim/combat";
 import { isKnockedOut } from "../sim/defeat";
-import { playerVehicle } from "../sim/damage";
-import { mountedParts } from "../sim/grid";
+import { findPart, playerVehicle } from "../sim/damage";
 import { vehicleStats, type MountedWeapon } from "../sim/stats";
-import type { Vehicle, World } from "../sim/types";
+import type { Aim, Vehicle, World } from "../sim/types";
 import { playerSees } from "../sim/vision";
 import { workOf } from "../sim/states";
 import { playerCanAct, reloadWeapon, setAutoFire, setWeaponOrder } from "../sim/world";
@@ -75,6 +74,34 @@ export function toggleTarget(w: World, weapons: MountedWeapon[], target: Vehicle
   for (const mw of weapons)
     w = setWeaponOrder(w, mw.part.id, aimed ? null : { targetId: target.id, aim: "body" });
   return w;
+}
+
+// Aims the chosen guns at one part of a target. When they all aim at that part already, they go back to a body shot.
+export function aimAtPart(w: World, weapons: MountedWeapon[], target: Vehicle, partId: string): World {
+  const orders = playerVehicle(w).weaponOrders;
+  const aimed = weapons.length > 0 && weapons.every((mw) => orders[mw.part.id]?.targetId === target.id && orders[mw.part.id].aim === partId);
+  if (w.player.autoFire) w = setAutoFire(w, false);
+  for (const mw of weapons)
+    w = setWeaponOrder(w, mw.part.id, { targetId: target.id, aim: aimed ? "body" : partId });
+  return w;
+}
+
+// Gun numbers, as the panel counts them, that aim at each part of a target. A body shot marks no part.
+export function aimMarks(w: World, targetId: string): Map<string, number[]> {
+  const marks = new Map<string, number[]>();
+  const orders = playerVehicle(w).weaponOrders;
+  vehicleStats(w, playerVehicle(w)).weapons.forEach((mw, i) => {
+    const order = orders[mw.part.id];
+    if (!order || order.targetId !== targetId || order.aim === "body") return;
+    marks.set(order.aim, [...(marks.get(order.aim) ?? []), i + 1]);
+  });
+  return marks;
+}
+
+// The aimed spot in words: "body shot" or the part's name.
+export function aimName(target: Vehicle, aim: Aim): string {
+  const part = aim === "body" ? null : findPart(target, aim);
+  return part ? partDef(part.defId).name : "body shot";
 }
 
 function turns(n: number): string {
@@ -218,9 +245,8 @@ export class WeaponPanel {
     const order = playerVehicle(w).weaponOrders[chosen.part.id];
     return el('div', { class: 'weapon-detail' },
       el('strong', {}, chosen.def.name),
-      el('span', {}, readout.target?.name ?? 'No visible target'),
+      el('span', {}, readout.target ? `${readout.target.name}, ${aimName(readout.target, order?.aim ?? 'body')}` : 'No visible target'),
       el('span', {}, readout.status),
-      readout.target && order ? this.createAimSelect(readout.target, chosen.part.id, order.aim) : null,
       el('button', { class: 'weapon-hold', onclick: () => this.holdWeapon(chosen.part.id) }, 'Hold fire'),
     );
   }
@@ -294,38 +320,6 @@ export class WeaponPanel {
     this.host.apply(reloadWeapon(this.host.world(), weaponId));
   }
 
-  private createAimSelect(
-    target: Vehicle,
-    weaponId: string,
-    aim: string,
-  ): HTMLElement {
-    const options = [
-      el("option", { value: "body", selected: aim === "body" }, "Body"),
-    ];
-    for (const p of mountedParts(target)) {
-      options.push(
-        el(
-          "option",
-          { value: p.id, selected: aim === p.id },
-          `${partDef(p.defId).name}${p.hp > 0 ? "" : " (disabled)"}`,
-        ),
-      );
-    }
-    const select = el(
-      "select",
-      { "aria-label": "Aim point" },
-      ...options,
-    ) as HTMLSelectElement;
-    select.addEventListener("change", () => {
-      if (this.host.getTurnPhase() !== null) return;
-      const w = setAutoFire(this.host.world(), false);
-      this.host.apply(
-        setWeaponOrder(w, weaponId, { targetId: target.id, aim: select.value }),
-      );
-    });
-    return el("label", { class: "weapon-aim" }, "Aim at ", select);
-  }
-
   private holdWeapon(weaponId: string): void {
     if (this.host.getTurnPhase() !== null) return;
     this.host.apply(
@@ -356,4 +350,35 @@ export function weaponsForClick(
 ): MountedWeapon[] {
   const all = vehicleStats(world, playerVehicle(world)).weapons;
   return selected ? all.filter((m) => m.part.id === selected) : all;
+}
+
+// Keeps a hover alive for a short delay after the pointer leaves the hovered truck, and while the pointer is over the
+// panel that truck opened, so the pointer can travel from a truck to its panel.
+export class HoverHold {
+  private timer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(private apply: (id: string | null) => void, private delayMs: number) {}
+
+  // Passes a new hover on at once. The pointer leaving a hovered truck passes on after the delay, unless the pointer
+  // arrives on the panel or hovers again first.
+  move(next: string | null, current: string | null): void {
+    if (next !== null || current === null) return this.now(next);
+    this.timer ??= setTimeout(() => this.now(null), this.delayMs);
+  }
+
+  cancel(): void {
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
+  }
+
+  private now(id: string | null): void {
+    this.cancel();
+    this.apply(id);
+  }
+
+  // The panel holds the hover while the pointer is on it and ends it when the pointer leaves.
+  watch(panel: EventTarget): void {
+    panel.addEventListener("mouseenter", () => this.cancel());
+    panel.addEventListener("mouseleave", () => this.now(null));
+  }
 }

@@ -477,11 +477,6 @@ body {
   font-size: 12px;
   align-self: flex-start;
 }
-.weapon-aim {
-  display: block;
-  width: 100%;
-  font-size: 12px;
-}
 #ui .turn-control {
   right: 16px;
   bottom: 14px;
