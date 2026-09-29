@@ -4,7 +4,9 @@ tmp/
 .playtest/
 .worktrees/
 .env
-.claude/scheduled_tasks.lock
+**/.claude/scheduled_tasks.lock
 __pycache__/
 .pi/
 .DS_Store
+.factory/
+.factory-tasks/

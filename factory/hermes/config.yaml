@@ -1,0 +1,34 @@
+# Hermes config template for the game factory chat bot.
+# Keys were checked against cli-config.yaml.example in the Hermes source.
+model:
+  # Hermes chats through the ChatGPT subscription. Sign in once with `hermes auth add openai-codex`.
+  provider: openai-codex
+  default: gpt-6-sol
+
+telegram:
+  require_mention: true
+
+# Keep Hermes's own notices out of the committee chat.
+compression:
+  codex_gpt55_autoraise_notice: false
+
+display:
+  platforms:
+    telegram:
+      tool_progress: "off"
+      interim_assistant_messages: false
+      long_running_notifications: false
+      streaming: false
+
+plugins:
+  enabled:
+    - factory
+
+# The file toolset also holds write and patch. Hermes has no read-only file toolset.
+platform_toolsets:
+  telegram:
+    - file
+    - skills
+    - memory
+    - session_search
+    - factory

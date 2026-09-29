@@ -1,0 +1,57 @@
+# Hermes for the factory chat bot. It runs the same on the Mac and on the server.
+# Paths come from env. FACTORY_HOME is the factory home. FACTORY_HERMES_DIR holds Hermes state and defaults to $FACTORY_HOME/hermes.
+# Run: docker compose -f factory/hermes/compose.yaml --env-file factory/.env up -d
+name: factory-hermes
+
+services:
+  hermes:
+    container_name: factory-hermes
+    image: factory-hermes:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["/usr/local/bin/factory-start"]
+    restart: unless-stopped
+    environment:
+      HERMES_HOME: /opt/data
+      HERMES_WRITE_SAFE_ROOT: /opt/data
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?set TELEGRAM_BOT_TOKEN}
+      FACTORY_COMMITTEE_DIR: /factory/committee
+      FACTORY_COMMITTEE_BOOTSTRAP: ${FACTORY_COMMITTEE_BOOTSTRAP:?set FACTORY_COMMITTEE_BOOTSTRAP}
+      FACTORY_COMMITTEE_BOOTSTRAP_GITHUB: ${FACTORY_COMMITTEE_BOOTSTRAP_GITHUB:?set FACTORY_COMMITTEE_BOOTSTRAP_GITHUB}
+      FACTORY_COMMITTEE_CHAT: ${FACTORY_COMMITTEE_CHAT:?set FACTORY_COMMITTEE_CHAT}
+      # The committee chat is Hermes's home channel, so it does not ask for one.
+      TELEGRAM_HOME_CHANNEL: ${FACTORY_COMMITTEE_CHAT:?set FACTORY_COMMITTEE_CHAT}
+      FACTORY_INBOX: /factory/inbox
+      FACTORY_STATE_DIR: /factory/state
+    volumes:
+      - ${FACTORY_HERMES_DIR:-${FACTORY_HOME:?set FACTORY_HOME}/hermes}:/opt/data
+      - ./plugin:/opt/data/plugins/factory:ro
+      - ${FACTORY_HOME:?set FACTORY_HOME}/inbox:/factory/inbox
+      - ${FACTORY_HOME:?set FACTORY_HOME}/state:/factory/state:ro
+      # Read-only material Hermes explains to the committee. SOUL.md names these paths.
+      - ${FACTORY_HOME:?set FACTORY_HOME}/logs:/factory/logs:ro
+      # Only the README and prompts, so no env file under factory/ can reach Hermes.
+      - ../README.md:/factory/code/README.md:ro
+      - ../prompts:/factory/code/prompts:ro
+      - ${FACTORY_HOME:?set FACTORY_HOME}/committee:/factory/committee
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - NET_RAW
+      - NET_ADMIN
+    cpus: 2
+    # Hermes idles near 300 MB. The cap leaves room for the testing gate on a 4 GB server.
+    mem_limit: 1536m
+    pids_limit: 256
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import subprocess; assert subprocess.run(['/opt/hermes/bin/hermes', 'gateway', 'status'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0"
+      interval: 30s
+      # `hermes gateway status` takes several seconds inside the s6 image.
+      timeout: 30s
+      retries: 3
+      start_period: 30s

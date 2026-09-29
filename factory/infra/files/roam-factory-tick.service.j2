@@ -1,0 +1,18 @@
+[Unit]
+Description=ROAM game factory tick
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User={{ service_user }}
+WorkingDirectory={{ code_dir }}/factory
+UMask=0022
+ExecStart=/usr/bin/npm run -s factory -- tick
+StandardOutput=append:{{ home_dir }}/logs/tick.log
+StandardError=append:{{ home_dir }}/logs/tick.log
+# A tick is short. Systemd stops one that hangs.
+TimeoutStartSec=10min
+# The tick starts stage jobs as detached processes. They must outlive the tick.
+# The default kill mode would stop them when the tick exits.
+KillMode=process

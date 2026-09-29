@@ -1,0 +1,221 @@
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { drainInbox, parseCommand } from './inbox';
+import { EMPTY_STATE, readState, writeState } from './state';
+import type { Card, Ctx, FactoryConfig, ReleaseState } from './types';
+
+const ROOT = resolve('tmp/factory-inbox-test');
+const statePath = join(ROOT, 'state.json');
+
+function fakeCtx(cards: Card[], sent: string[], calls: string[]): Ctx {
+  const cfg = { home: ROOT, committeeBootstrapTelegram: '11', committeeBootstrapGithub: 'boss', committeeChat: '-5' } as FactoryConfig;
+  return {
+    cfg, statePath, now: () => new Date(5000), log: () => undefined,
+    github: {
+      cards: async () => cards,
+      createIssue: async (title: string, body: string, labels: string[]) => { calls.push(`create ${title}|${body}|${labels}`); return 9; },
+      addCard: async (n: number, column: string) => { calls.push(`addCard ${n} ${column}`); },
+      comment: async (n: number, body: string) => { calls.push(`comment ${n} ${body}`); },
+      move: async (n: number, column: string) => { calls.push(`move ${n} ${column}`); },
+      pullRequestFor: async () => null,
+      addLabel: async (n: number, label: string) => { calls.push(`addLabel ${n} ${label}`); },
+      close: async (n: number, reason: string) => { calls.push(`close ${n} ${reason}`); },
+    },
+    telegram: { sendMessage: async (_chat: string, text: string) => { sent.push(text); return 1; } },
+  } as unknown as Ctx;
+}
+
+function put(name: string, command: object): void {
+  writeFileSync(join(ROOT, 'inbox', name), JSON.stringify({ issue: null, text: null, byName: 'Ann', chat: '-5', messageId: 3, by: '11', ...command }));
+}
+
+describe('drainInbox', () => {
+  beforeEach(() => {
+    rmSync(ROOT, { recursive: true, force: true });
+    mkdirSync(join(ROOT, 'inbox'), { recursive: true });
+    writeState(statePath, structuredClone(EMPTY_STATE));
+  });
+
+  it('queues an approval for a card in Approval and empties the inbox', async () => {
+    const sent: string[] = [];
+    put('1.json', { kind: 'approve', issue: 4 });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], sent, []));
+    expect(readState(statePath).pendingApprovals).toEqual({ '4': 'Ann' });
+    expect(readdirSync(join(ROOT, 'inbox'))).toEqual([]);
+    expect(sent[0]).toContain('queued');
+  });
+
+  it('queues an ad hoc task as an issue, a card and a reply entry', async () => {
+    const sent: string[] = [];
+    const calls: string[] = [];
+    put('1.json', { kind: 'adhoc', text: `${'x'.repeat(100)}\nmore` });
+    await drainInbox(fakeCtx([], sent, calls));
+    expect(calls[0]).toBe(`create ${'x'.repeat(80)}|${'x'.repeat(100)}\nmore\n\nRequested by Ann in the committee chat.|adhoc`);
+    expect(calls[1]).toBe('addCard 9 Implementation');
+    expect(readState(statePath).adhocReplies).toEqual({ '9': { chat: '-5', messageId: 3 } });
+    expect(sent[0]).toBe('Queued as #9. The report comes as a reply here.');
+  });
+
+  it('refuses an ad hoc task without text', async () => {
+    const sent: string[] = [];
+    put('1.json', { kind: 'adhoc' });
+    await drainInbox(fakeCtx([], sent, []));
+    expect(readState(statePath).adhocReplies).toEqual({});
+    expect(sent[0]).toContain('needs text');
+  });
+
+  it('refuses a user outside the committee and queues nothing', async () => {
+    const sent: string[] = [];
+    put('1.json', { kind: 'change', text: 'faster ticks', by: '99' });
+    await drainInbox(fakeCtx([], sent, []));
+    expect(readState(statePath).pendingChanges).toEqual([]);
+    expect(sent[0]).toContain('Only committee members');
+  });
+
+  it('reads the committee file, so a member added later is accepted', async () => {
+    mkdirSync(join(ROOT, 'committee'), { recursive: true });
+    writeFileSync(join(ROOT, 'committee', 'committee.json'), '{"members":[{"telegram":"99","github":null,"name":null}]}');
+    put('1.json', { kind: 'change', text: 'x', by: '99' });
+    put('2.json', { kind: 'change', text: 'y', by: '11' });
+    await drainInbox(fakeCtx([], [], []));
+    expect(readState(statePath).pendingChanges.map((item) => item.text)).toEqual(['x']);
+  });
+
+  it('sends feedback back to design at once', async () => {
+    const calls: string[] = [];
+    put('1.json', { kind: 'feedback', issue: 4, text: 'too loud' });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], [], calls));
+    expect(calls).toEqual([expect.stringContaining('too loud'), 'move 4 Design']);
+  });
+
+  it('denies a card in Approval: closes, labels, moves to Done and clears state', async () => {
+    const sent: string[] = [];
+    const calls: string[] = [];
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), approvalPosts: { 100: 4, 200: 5 }, pendingApprovals: { 4: 'Ann' } });
+    put('1.json', { kind: 'deny', issue: 4 });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], sent, calls));
+    expect(calls).toEqual(['comment 4 Denied by Ann in the committee chat.', 'addLabel 4 wont-do', 'close 4 not planned', 'move 4 Done']);
+    expect(readState(statePath).approvalPosts).toEqual({ 200: 5 });
+    expect(readState(statePath).pendingApprovals).toEqual({});
+    expect(sent[0]).toBe('Issue #4 is denied and closed.');
+  });
+
+  it('answers with an error when a denied card is not in Approval', async () => {
+    const sent: string[] = [];
+    const calls: string[] = [];
+    put('1.json', { kind: 'deny', issue: 4 });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Testing', labels: [] }], sent, calls));
+    expect(calls).toEqual([]);
+    expect(sent[0]).toContain('not in Approval');
+  });
+
+  it('queues change requests in order', async () => {
+    put('1.json', { kind: 'change', text: 'a' });
+    put('2.json', { kind: 'change', text: 'b' });
+    await drainInbox(fakeCtx([], [], []));
+    expect(readState(statePath).pendingChanges.map((item) => item.text)).toEqual(['a', 'b']);
+  });
+});
+
+const RELEASE: ReleaseState = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [] };
+const openRelease = (over: Partial<ReleaseState> = {}) => writeState(statePath, { ...structuredClone(EMPTY_STATE), release: { ...RELEASE, ...over } });
+
+describe('release commands', () => {
+  beforeEach(() => {
+    rmSync(ROOT, { recursive: true, force: true });
+    mkdirSync(join(ROOT, 'inbox'), { recursive: true });
+    writeState(statePath, structuredClone(EMPTY_STATE));
+  });
+
+  it('queues a ship for the current candidate post', async () => {
+    const sent: string[] = [];
+    openRelease();
+    put('1.json', { kind: 'ship', issue: 20 });
+    await drainInbox(fakeCtx([], sent, []));
+    expect(readState(statePath).pendingShip).toBe('Ann');
+    expect(sent[0]).toContain('Ship of release 2026-09-29 is queued');
+  });
+
+  it('refuses a ship without an open release, without a post, or for another issue', async () => {
+    const sent: string[] = [];
+    put('1.json', { kind: 'ship', issue: 20 });
+    await drainInbox(fakeCtx([], sent, []));
+    expect(sent[0]).toContain('No release is open');
+    openRelease({ postId: null });
+    put('2.json', { kind: 'ship', issue: 20 });
+    await drainInbox(fakeCtx([], sent, []));
+    expect(sent[1]).toContain('no current candidate post');
+    openRelease();
+    put('3.json', { kind: 'ship', issue: 21 });
+    await drainInbox(fakeCtx([], sent, []));
+    expect(sent[2]).toContain('not the open release');
+    expect(readState(statePath).pendingShip).toBeNull();
+  });
+
+  it('refuses a ship from outside the committee', async () => {
+    const sent: string[] = [];
+    openRelease();
+    put('1.json', { kind: 'ship', issue: 20, by: '99' });
+    await drainInbox(fakeCtx([], sent, []));
+    expect(readState(statePath).pendingShip).toBeNull();
+    expect(sent[0]).toContain('Only committee members');
+  });
+
+  it('queues a removal with the whole reply', async () => {
+    const sent: string[] = [];
+    openRelease();
+    put('1.json', { kind: 'remove', issue: 5, text: 'remove #5 too loud' });
+    await drainInbox(fakeCtx([], sent, []));
+    expect(readState(statePath).pendingRemovals).toEqual([{ issue: 5, by: 'Ann', text: 'remove #5 too loud' }]);
+    expect(sent[0]).toContain('Removal of #5');
+  });
+
+  it('refuses a removal without an open release or of a feature already removed', async () => {
+    const sent: string[] = [];
+    put('1.json', { kind: 'remove', issue: 5, text: 'remove 5' });
+    await drainInbox(fakeCtx([], sent, []));
+    expect(sent[0]).toContain('No release is open');
+    openRelease({ removed: [5] });
+    put('2.json', { kind: 'remove', issue: 5, text: 'remove 5' });
+    await drainInbox(fakeCtx([], sent, []));
+    expect(sent[1]).toContain('already removed');
+    expect(readState(statePath).pendingRemovals).toEqual([]);
+  });
+
+  it('opens a release task as an issue and a Design card, and drops the current post', async () => {
+    const sent: string[] = [];
+    const calls: string[] = [];
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), release: RELEASE, pendingShip: 'Bob' });
+    put('1.json', { kind: 'release-task', text: 'The horn is too quiet\nMake it louder' });
+    await drainInbox(fakeCtx([], sent, calls));
+    expect(calls[0]).toBe('create The horn is too quiet|The horn is too quiet\nMake it louder\n\nRequested by Ann in the committee chat as a task of release 2026-09-29.|release-task');
+    expect(calls[1]).toBe('addCard 9 Design');
+    expect(readState(statePath).release?.postId).toBeNull();
+    expect(readState(statePath).pendingShip).toBeNull();
+    expect(sent[0]).toContain('Opened #9');
+  });
+
+  it('refuses a release task without an open release or without text', async () => {
+    const sent: string[] = [];
+    const calls: string[] = [];
+    put('1.json', { kind: 'release-task', text: 'x' });
+    await drainInbox(fakeCtx([], sent, calls));
+    expect(sent[0]).toContain('No release is open');
+    openRelease();
+    put('2.json', { kind: 'release-task' });
+    await drainInbox(fakeCtx([], sent, calls));
+    expect(sent[1]).toContain('needs text');
+    expect(calls).toEqual([]);
+    expect(readState(statePath).release?.postId).toBe(42);
+  });
+});
+
+describe('parseCommand', () => {
+  it('accepts the release kinds', () => {
+    for (const kind of ['ship', 'remove', 'release-task']) expect(parseCommand(`{"kind":"${kind}","by":"1","chat":"c","messageId":1}`).kind).toBe(kind);
+  });
+  it('rejects an unknown kind', () => {
+    expect(() => parseCommand('{"kind":"merge","by":"1","chat":"c","messageId":1}')).toThrow('Unknown inbox command kind');
+  });
+});

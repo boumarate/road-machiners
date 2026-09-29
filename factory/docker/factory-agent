@@ -1,0 +1,19 @@
+#!/bin/bash
+# Links the game's project skills from /work/game/.agents/skills into the ephemeral container home, then runs claude.
+# Claude Code loads user skills from ~/.claude/skills and does not discover .agents/skills.
+set -euo pipefail
+
+src=/work/game/.agents/skills
+if [ ! -d "$src" ]; then
+  echo "factory-agent: $src is missing" >&2
+  exit 1
+fi
+
+mkdir -p "$HOME/.claude/skills"
+for dir in "$src"/*/; do
+  if [ -f "${dir}SKILL.md" ]; then
+    ln -s "${dir%/}" "$HOME/.claude/skills/$(basename "$dir")"
+  fi
+done
+
+exec claude "$@"

@@ -1,0 +1,5 @@
+prod.env
+.venv/
+__pycache__/
+.pytest_cache/
+server.env
