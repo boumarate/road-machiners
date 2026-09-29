@@ -1,7 +1,6 @@
-// The 1.1 to 1.2 step: every chassis grid gets an armor column outside the model on each side, and the front and rear armor
-// rows span the full model width. So a model column moves one column right, the left armor column stays at column 0 and
-// the right one moves two columns right. The four built-in wheels stay on the model's edge columns. The tables below are
-// the chassis grids and part shapes as they stood when the step was written.
+// The 1.1 to 1.2 step: armor mounts ring the outline of every chassis, and everything else sits inside the ring. The four
+// built-in wheels sit one cell inside the side armor. The tables below are the chassis grids and part shapes as they stood
+// when the step was written.
 
 import type { SavedJson } from './save-migrations';
 
@@ -16,83 +15,82 @@ const MOUNTS_1_2: Record<string, string> = { weapon: 'D', engine: 'E', armor: 'F
 export const CHASSIS_1_2: Record<string, ChassisGrid> = {
   scout: {
     oldLayout: ['.FFF.', 'XEEDX', 'LEEXR', 'LXXXR', 'LXXXR', 'LDDDR', 'XDXXX', '.BBB.'],
-    newLayout: [' FFFFF ', 'LXEEDXR', 'LXEEDXR', 'L.XXX.R', 'L.XXX.R', 'L.....R', 'LXDDDXR', ' BBBBB '],
+    newLayout: [' FFF ', 'LXXXR', 'LEEDR', 'LEEDR', 'LXXXR', 'LXXXR', 'LXXXR', ' BBB '],
     oldCore: [['cabPickup', 1, 3], ['transmission', 3, 2], ['tankLong', 2, 6], ['wheel', 0, 1], ['wheel', 4, 1], ['wheel', 0, 6], ['wheel', 4, 6]],
+    newCore: [['cabPickup', 1, 4], ['transmission', 2, 6], ['tank', 2, 1], ['wheel', 1, 1], ['wheel', 3, 1], ['wheel', 1, 6], ['wheel', 3, 6]],
     renamed: { tankLong: 'tank' },
-    newCore: [['cabPickup', 2, 3], ['transmission', 5, 2], ['tank', 1, 2], ['wheel', 1, 1], ['wheel', 5, 1], ['wheel', 1, 6], ['wheel', 5, 6]],
   },
   hauler: {
     oldLayout: ['.FFFFF.', 'XDEEXXX', 'LDEEXXR', 'LDDDDDR', 'L..X..R', 'LDDDDDR', 'LDDDDDR', 'XDDXXDX', '.BBBBB.'],
-    newLayout: [' FFFFFFF ', 'LXDEEXXXR', 'L.DEEXX.R', 'L.DDDDD.R', 'L...X...R', 'L.DDDDD.R', 'L.DDDDD.R', 'LXDDXXDXR', ' BBBBBBB '],
+    newLayout: [' FFFFF ', 'LXEEDXR', 'LDEEXXR', 'LDDDXXR', 'L..X..R', 'LDDDDDR', 'LDDDDDR', 'LXDXXXR', ' BBBBB '],
     oldCore: [['cabOver', 4, 1], ['transmissionMid', 3, 4], ['tankMid', 3, 7], ['wheelMid', 0, 1], ['wheelMid', 6, 1], ['wheelMid', 0, 7], ['wheelMid', 6, 7]],
-    newCore: [['cabOver', 5, 1], ['transmissionMid', 4, 4], ['tankMid', 4, 7], ['wheelMid', 1, 1], ['wheelMid', 7, 1], ['wheelMid', 1, 7], ['wheelMid', 7, 7]],
+    newCore: [['cabOver', 4, 2], ['transmissionMid', 3, 4], ['tankMid', 3, 7], ['wheelMid', 1, 1], ['wheelMid', 5, 1], ['wheelMid', 1, 7], ['wheelMid', 5, 7]],
   },
   buggy: {
     oldLayout: ['.FF.', 'XEEX', 'LEER', 'LXDR', 'XXXX', '.BB.'],
-    newLayout: [' FFFF ', 'LXEEXR', 'L.EE.R', 'L.XD.R', 'LXXXXR', ' BBBB '],
+    newLayout: [' FF ', 'LXXR', 'XEED', 'XEEX', 'LXXR', ' BB '],
     oldCore: [['cab', 1, 3], ['transmission', 1, 4], ['tank', 2, 4], ['wheel', 0, 1], ['wheel', 3, 1], ['wheel', 0, 4], ['wheel', 3, 4]],
-    newCore: [['cab', 2, 3], ['transmission', 2, 4], ['tank', 3, 4], ['wheel', 1, 1], ['wheel', 4, 1], ['wheel', 1, 4], ['wheel', 4, 4]],
+    newCore: [['cab', 0, 2], ['transmission', 0, 3], ['tank', 3, 3], ['wheel', 1, 1], ['wheel', 2, 1], ['wheel', 1, 4], ['wheel', 2, 4]],
   },
   wagon: {
     oldLayout: ['.FFF.', 'XDDDX', 'LEEXR', 'LEEDR', 'L.X.R', 'XDXXX', '.BBB.'],
-    newLayout: [' FFFFF ', 'LXDDDXR', 'L.EEX.R', 'L.EED.R', 'L..X..R', 'LXDXXXR', ' BBBBB '],
+    newLayout: [' FFF ', 'LXXXR', 'LEEXR', 'LEEXR', 'LDDDR', 'LXXXR', ' BBB '],
     oldCore: [['cab', 3, 2], ['transmissionHeavy', 2, 4], ['tankHeavy', 2, 5], ['wheelHeavy', 0, 1], ['wheelHeavy', 4, 1], ['wheelHeavy', 0, 5], ['wheelHeavy', 4, 5]],
-    newCore: [['cab', 4, 2], ['transmissionHeavy', 3, 4], ['tankHeavy', 3, 5], ['wheelHeavy', 1, 1], ['wheelHeavy', 5, 1], ['wheelHeavy', 1, 5], ['wheelHeavy', 5, 5]],
+    newCore: [['cab', 2, 5], ['transmissionHeavy', 2, 1], ['tankHeavy', 3, 2, 1], ['wheelHeavy', 1, 1], ['wheelHeavy', 3, 1], ['wheelHeavy', 1, 5], ['wheelHeavy', 3, 5]],
   },
   courier: {
     oldLayout: ['.FF.', 'XEEX', 'LEER', 'LXDR', 'LXXR', 'XXDX', '.BB.'],
-    newLayout: [' FFFF ', 'LXEEXR', 'L.EE.R', 'L.XD.R', 'L.XX.R', 'LXXDXR', ' BBBB '],
+    newLayout: [' FF ', 'LXXR', 'LEER', 'XEED', 'XXXD', 'LXXR', ' BB '],
     oldCore: [['cabNarrow', 1, 3], ['transmission', 2, 4], ['tank', 1, 5], ['wheel', 0, 1], ['wheel', 3, 1], ['wheel', 0, 5], ['wheel', 3, 5]],
-    newCore: [['cabNarrow', 2, 3], ['transmission', 3, 4], ['tank', 2, 5], ['wheel', 1, 1], ['wheel', 4, 1], ['wheel', 1, 5], ['wheel', 4, 5]],
+    newCore: [['cabNarrow', 0, 3], ['transmission', 1, 4], ['tank', 2, 4], ['wheel', 1, 1], ['wheel', 2, 1], ['wheel', 1, 5], ['wheel', 2, 5]],
   },
   van: {
     oldLayout: ['.FFF.', 'XEEDX', 'LEEXR', 'LXXXR', 'LDDDR', 'LDDDR', 'LDXXR', 'XDDDX', '.BBB.'],
-    newLayout: [' FFFFF ', 'LXEEDXR', 'L.EEX.R', 'L.XXX.R', 'L.DDD.R', 'L.DDD.R', 'L.DXX.R', 'LXDDDXR', ' BBBBB '],
+    newLayout: [' FFF ', 'LXDXR', 'LEEXR', 'LEEDR', 'LXXXR', 'LDDDR', 'LDXXR', 'LXDXR', ' BBB '],
     oldCore: [['cabRow', 1, 3], ['transmissionMid', 3, 2], ['tankMid', 2, 6], ['wheelMid', 0, 1], ['wheelMid', 4, 1], ['wheelMid', 0, 7], ['wheelMid', 4, 7]],
-    newCore: [['cabRow', 2, 3], ['transmissionMid', 4, 2], ['tankMid', 3, 6], ['wheelMid', 1, 1], ['wheelMid', 5, 1], ['wheelMid', 1, 7], ['wheelMid', 5, 7]],
+    newCore: [['cabRow', 1, 4], ['transmissionMid', 3, 2], ['tankMid', 2, 6], ['wheelMid', 1, 1], ['wheelMid', 3, 1], ['wheelMid', 1, 7], ['wheelMid', 3, 7]],
   },
   longbed: {
     oldLayout: ['.FFFFF.', 'XDEEDDX', 'LDEEXDR', 'LXXXXXR', 'LXXXXXR', 'LDDDDDR', 'LDDDDDR', 'LDDDDDR', 'LDDXXDR', 'XDDDDDX', '.BBBBB.'],
-    newLayout: [' FFFFFFF ', 'LXDEEDDXR', 'L.DEEXD.R', 'L.XXXXX.R', 'L.XXXXX.R', 'L.DDDDD.R', 'L.DDDDD.R', 'L.DDDDD.R', 'L.DDXXD.R', 'LXDDDDDXR', ' BBBBBBB '],
+    newLayout: [' FFFFF ', 'LXEEDXR', 'LDEEXDR', 'LXXXXXR', 'LXXXXXR', 'LDDDDDR', 'LDDDDDR', 'LDDDDDR', 'LDDXXDR', 'LXDDDXR', ' BBBBB '],
     oldCore: [['cabWide', 1, 3], ['transmissionHeavy', 4, 2], ['tankHeavy', 3, 8], ['wheelHeavy', 0, 1], ['wheelHeavy', 6, 1], ['wheelHeavy', 0, 9], ['wheelHeavy', 6, 9]],
-    newCore: [['cabWide', 2, 3], ['transmissionHeavy', 5, 2], ['tankHeavy', 4, 8], ['wheelHeavy', 1, 1], ['wheelHeavy', 7, 1], ['wheelHeavy', 1, 9], ['wheelHeavy', 7, 9]],
+    newCore: [['cabWide', 1, 3], ['transmissionHeavy', 4, 2], ['tankHeavy', 3, 8], ['wheelHeavy', 1, 1], ['wheelHeavy', 5, 1], ['wheelHeavy', 1, 9], ['wheelHeavy', 5, 9]],
   },
   carrier: {
     oldLayout: ['.FFFF.', 'XDDDDX', 'LDDDXR', 'LEE..R', 'LEEXDR', 'LDDDDR', 'LDDXXR', 'XDDDDX', '.BBBB.'],
-    newLayout: [' FFFFFF ', 'LXDDDDXR', 'L.DDDX.R', 'L.EE...R', 'L.EEXD.R', 'L.DDDD.R', 'L.DDXX.R', 'LXDDDDXR', ' BBBBBB '],
+    newLayout: [' FFFF ', 'LXDDXR', 'LDDDXR', 'LEE..R', 'LEEXDR', 'LDDDDR', 'LDDXXR', 'LXDDXR', ' BBBB '],
     oldCore: [['cab', 4, 2], ['transmissionHeavy', 3, 4], ['tankHeavy', 3, 6], ['wheelHeavy', 0, 1], ['wheelHeavy', 5, 1], ['wheelHeavy', 0, 7], ['wheelHeavy', 5, 7]],
-    newCore: [['cab', 5, 2], ['transmissionHeavy', 4, 4], ['tankHeavy', 4, 6], ['wheelHeavy', 1, 1], ['wheelHeavy', 6, 1], ['wheelHeavy', 1, 7], ['wheelHeavy', 6, 7]],
+    newCore: [['cab', 4, 2], ['transmissionHeavy', 3, 4], ['tankHeavy', 3, 6], ['wheelHeavy', 1, 1], ['wheelHeavy', 4, 1], ['wheelHeavy', 1, 7], ['wheelHeavy', 4, 7]],
   },
   tractor: {
     oldLayout: ['.FFFFF.', 'XDEEXDX', 'LDEEDDR', 'LXXXXXR', 'LXXXXXR', 'LDDDDDR', 'LDDDDDR', 'XDDXXDX', '.BBBBB.'],
-    newLayout: [' FFFFFFF ', 'LXDEEXDXR', 'L.DEEDD.R', 'L.XXXXX.R', 'L.XXXXX.R', 'L.DDDDD.R', 'L.DDXXD.R', 'LXDDDDDXR', ' BBBBBBB '],
+    newLayout: [' FFFFF ', 'LXEEXXR', 'LDEEDDR', 'LXXXXXR', 'LXXXXXR', 'LDDDDDR', 'LDDDDDR', 'LXDXXXR', ' BBBBB '],
     oldCore: [['cabWide', 1, 3], ['transmissionHeavy', 4, 1], ['tankHeavy', 3, 7], ['wheelHeavy', 0, 1], ['wheelHeavy', 6, 1], ['wheelHeavy', 0, 7], ['wheelHeavy', 6, 7]],
-    newCore: [['cabWide', 2, 3], ['transmissionHeavy', 5, 1], ['tankHeavy', 4, 6], ['wheelHeavy', 1, 1], ['wheelHeavy', 7, 1], ['wheelHeavy', 1, 7], ['wheelHeavy', 7, 7]],
+    newCore: [['cabWide', 1, 3], ['transmissionHeavy', 4, 1], ['tankHeavy', 3, 7], ['wheelHeavy', 1, 1], ['wheelHeavy', 5, 1], ['wheelHeavy', 1, 7], ['wheelHeavy', 5, 7]],
   },
   jeep: {
     oldLayout: ['.FF.', 'XXDX', 'LXDR', 'LDXR', 'LEER', 'XEEX', '.BB.'],
-    newLayout: [' FFFF ', 'LXXDXR', 'L.XD.R', 'L.DX.R', 'L.EE.R', 'LXEEXR', ' BBBB '],
+    newLayout: [' FF ', 'LXXR', 'XXXD', 'LEED', 'LEER', 'LXXR', ' BB '],
     oldCore: [['cab', 1, 2], ['transmission', 2, 3], ['tank', 1, 1], ['wheel', 0, 1], ['wheel', 3, 1], ['wheel', 0, 5], ['wheel', 3, 5]],
-    newCore: [['cab', 2, 2], ['transmission', 3, 3], ['tank', 2, 1], ['wheel', 1, 1], ['wheel', 4, 1], ['wheel', 1, 5], ['wheel', 4, 5]],
+    newCore: [['tank', 0, 2], ['cab', 1, 2], ['transmission', 2, 2], ['wheel', 1, 1], ['wheel', 2, 1], ['wheel', 1, 5], ['wheel', 2, 5]],
   },
   convertible: {
     oldLayout: ['.FFF.', 'XDDDX', 'LXXDR', 'LXXXR', 'LXXXR', 'LDXDR', 'LEEDR', 'XEEDX', '.BBB.'],
-    newLayout: [' FFFFF ', 'LXDDDXR', 'L.XXD.R', 'L.XXX.R', 'L.XXX.R', 'L.DXD.R', 'L.EED.R', 'LXEEDXR', ' BBBBB '],
+    newLayout: [' FFF ', 'LXDXR', 'LXXDR', 'LXXXR', 'LXXXR', 'LEEDR', 'LEEDR', 'LXXXR', ' BBB '],
     oldCore: [['cabOpen', 1, 3], ['transmission', 2, 5], ['tankLong', 1, 2], ['wheel', 0, 1], ['wheel', 4, 1], ['wheel', 0, 7], ['wheel', 4, 7]],
-    renamed: { cabOpen: 'cabHardtop' },
-    newCore: [['cabHardtop', 2, 3], ['transmission', 3, 5], ['tankLong', 2, 2], ['wheel', 1, 1], ['wheel', 5, 1], ['wheel', 1, 7], ['wheel', 5, 7]],
+    newCore: [['cabOpen', 1, 3], ['transmission', 2, 7], ['tankLong', 1, 2], ['wheel', 1, 1], ['wheel', 3, 1], ['wheel', 1, 7], ['wheel', 3, 7]],
   },
   bus: {
     oldLayout: ['.FFFF.', 'XXDDDX', 'LXDDDR', 'LDDDDR', 'LDDDDR', 'LDDDDR', 'LDDDDR', 'LDXXDR', 'LDDXDR', 'LDEEDR', 'XDEEDX', '.BBBB.'],
-    newLayout: [' FFFFFF ', 'LXXDDDXR', 'L.XDDD.R', 'L.DDDD.R', 'L.DDDD.R', 'L.DDDD.R', 'L.DDDD.R', 'L.DXXD.R', 'L.DEED.R', 'L.DEED.R', 'LXDXDDXR', ' BBBBBB '],
+    newLayout: [' FFFF ', 'LXXDXR', 'LDXDDR', 'LDDDDR', 'LDDDDR', 'LDDDDR', 'LDDDDR', 'LDXXDR', 'LDDXDR', 'LDEEDR', 'LXEEXR', ' BBBB '],
     oldCore: [['cabNarrow', 1, 1], ['transmissionMid', 3, 8], ['tankMid', 2, 7], ['wheelMid', 0, 1], ['wheelMid', 5, 1], ['wheelMid', 0, 10], ['wheelMid', 5, 10]],
-    newCore: [['cabNarrow', 2, 1], ['transmissionMid', 3, 10], ['tankMid', 3, 7], ['wheelMid', 1, 1], ['wheelMid', 6, 1], ['wheelMid', 1, 10], ['wheelMid', 6, 10]],
+    newCore: [['cabNarrow', 2, 1], ['transmissionMid', 3, 8], ['tankMid', 2, 7], ['wheelMid', 1, 1], ['wheelMid', 4, 1], ['wheelMid', 1, 10], ['wheelMid', 4, 10]],
   },
   loader: {
     oldLayout: ['.FFFFF.', 'XDDDDDX', 'LDXXXDR', 'LDXXXDR', 'LDDXDDR', 'LDEEDDR', 'LDEEXXR', 'XDDDDDX', '.BBBBB.'],
-    newLayout: [' FFFFFFF ', 'LXDDDDDXR', 'L.DXXXD.R', 'L.DXXXD.R', 'L.DDXDD.R', 'L.DEEDD.R', 'L.DEEXX.R', 'LXDDDDDXR', ' BBBBBBB '],
+    newLayout: [' FFFFF ', 'LXDDDXR', 'LDXXXDR', 'LDXXXDR', 'LDDXDDR', 'LDEEDDR', 'LDEEXXR', 'LXDDDXR', ' BBBBB '],
     oldCore: [['cabPickup', 2, 2], ['transmissionHeavy', 3, 4], ['tankHeavy', 4, 6], ['wheelHeavy', 0, 1], ['wheelHeavy', 6, 1], ['wheelHeavy', 0, 7], ['wheelHeavy', 6, 7]],
-    newCore: [['cabPickup', 3, 2], ['transmissionHeavy', 4, 4], ['tankHeavy', 5, 6], ['wheelHeavy', 1, 1], ['wheelHeavy', 7, 1], ['wheelHeavy', 1, 7], ['wheelHeavy', 7, 7]],
+    newCore: [['cabPickup', 2, 2], ['transmissionHeavy', 3, 4], ['tankHeavy', 4, 6], ['wheelHeavy', 1, 1], ['wheelHeavy', 5, 1], ['wheelHeavy', 1, 7], ['wheelHeavy', 5, 7]],
   },
 };
 
@@ -148,7 +146,6 @@ const PART_SHAPES_1_2: Record<string, PartShape> = {
   cabRow: ['core', 3, 1, 200, 0],
   cabPickup: ['core', 3, 2, 200, 0],
   cabOpen: ['core', 3, 2, 200, 0],
-  cabHardtop: ['core', 3, 2, 200, 0],
   cabOver: ['core', 2, 2, 200, 0],
   cabWide: ['core', 5, 2, 200, 0],
   transmission: ['core', 1, 1, 150, 0],
@@ -192,13 +189,10 @@ function relocate(vehicle: SavedJson): number {
   const items = vehicle.items as Item[];
   const cores = items.filter((it) => it.kind === 'part' && shapeOf(it)[0] === 'core');
   moveCores(chassis, cores);
-  const others = items.filter((it) => !cores.includes(it));
-  const worked = new Set(others.filter((it) => worksOn(chassis.oldLayout, it)));
-  shiftToNewColumns(chassis, others);
-  const { movers, room } = splitItems(chassis, others, worked, new Set(cores.flatMap(cellsOf).map(keyOf)));
+  const { movers, room } = splitItems(chassis, items.filter((it) => !cores.includes(it)), new Set(cores.flatMap(cellsOf).map(keyOf)));
   let removedValue = 0;
   for (const it of movers) {
-    const spot = newSpot(room, it, worked.has(it));
+    const spot = newSpot(chassis, room, it);
     if (!spot) {
       vehicle.items = (vehicle.items as Item[]).filter((entry) => entry !== it);
       removedValue += valueOf(it);
@@ -216,10 +210,10 @@ type Room = { layout: string[]; width: number; rows: number; taken: Set<string> 
 
 // Splits the non-built-in items into the ones that keep their cell and the ones that must move, and gives the room
 // the keepers leave. Built-in parts fill the blocked cells.
-function splitItems(chassis: ChassisGrid, others: Item[], worked: Set<Item>, blocked: Set<string>): { movers: Item[]; room: Room } {
+function splitItems(chassis: ChassisGrid, others: Item[], blocked: Set<string>): { movers: Item[]; room: Room } {
   const layout = chassis.newLayout;
   const stays = (it: Item) =>
-    !cellsOf(it).some((c) => blocked.has(keyOf(c)) || isHole(layout, c)) && !(worked.has(it) && !worksOn(layout, it));
+    !cellsOf(it).some((c) => blocked.has(keyOf(c)) || isHole(layout, c)) && !(worksOn(chassis.oldLayout, it) && !worksOn(layout, it));
   const staying = others.filter(stays);
   const width = Math.max(...layout.map((r) => r.length));
   const rows = layout.length + staying.reduce((sum, it) => sum + (worksOn(layout, it) ? extraRowsOf(it) : 0), 0);
@@ -229,27 +223,12 @@ function splitItems(chassis: ChassisGrid, others: Item[], worked: Set<Item>, blo
 }
 
 // An item that worked moves to a free mount that holds it. Any other item, or one with no such mount, moves to plain cells.
-function newSpot(room: Room, it: Item, worked: boolean): { x: number; y: number; rot: 0 | 1 } | null {
-  if (worked) {
+function newSpot(chassis: ChassisGrid, room: Room, it: Item): { x: number; y: number; rot: 0 | 1 } | null {
+  if (worksOn(chassis.oldLayout, it)) {
     const mount = freeSpot(room, it, (spot) => worksOn(room.layout, spot));
     if (mount) return mount;
   }
   return freeSpot(room, it, null);
-}
-
-// Moves the other items to the columns of the new grid: a part that worked on the left armor column stays on it, one that
-// worked on the right armor column moves to the new right column, and any other item moves one column right.
-function shiftToNewColumns(chassis: ChassisGrid, others: Item[]): void {
-  for (const it of others) it.x += columnShift(chassis, it);
-}
-
-function columnShift(chassis: ChassisGrid, it: Item): number {
-  if (!worksOn(chassis.oldLayout, it)) return 1;
-  const oldWidth = Math.max(...chassis.oldLayout.map((r) => r.length));
-  const cells = cellsOf(it);
-  if (cells.every((c) => c.x === 0 && chassis.oldLayout[c.y][0] === 'L')) return 0;
-  if (cells.every((c) => c.x === oldWidth - 1 && chassis.oldLayout[c.y][oldWidth - 1] === 'R')) return 2;
-  return 1;
 }
 
 // Pairs the saved built-in parts with the old cells by defId and reading order, then moves each to the new cell.
