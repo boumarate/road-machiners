@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PARTS } from '../../data/parts';
-import { planVolley, projectileOf, type RoundAim } from './projectiles';
+import { blastRadiusOf, planVolley, projectileOf, type RoundAim } from './projectiles';
 
 const A = { x: 0, y: 2, z: 0 };
 const B = { x: 40, y: 2, z: 0 };
@@ -40,5 +40,13 @@ describe('planVolley', () => {
 
   it('fails loud for a weapon with no projectile look', () => {
     expect(() => projectileOf('laser')).toThrow(/No projectile look/);
+  });
+
+  it('explodes only rounds with splash, and guard bullets never', () => {
+    expect(blastRadiusOf('grenadeLauncher')).toBeGreaterThan(0);
+    expect(blastRadiusOf('cannon')).toBeGreaterThan(0);
+    expect(blastRadiusOf('mg')).toBe(0);
+    expect(blastRadiusOf('guard')).toBe(0);
+    expect(() => blastRadiusOf('stockEngine')).toThrow();
   });
 });

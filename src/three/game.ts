@@ -50,7 +50,7 @@ import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
 import { Fx3D, TruckFx } from "./render/fx";
-import { planVolley, projectileOf, roundAims, towardFrom, type Muzzle } from "./render/projectiles";
+import { blastRadiusOf, planVolley, projectileOf, roundAims, towardFrom, type Muzzle } from "./render/projectiles";
 import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
 import { PathView } from "./render/path";
@@ -823,7 +823,7 @@ export class Game {
     const ground = (p: V3) => groundPoint(this.world.terrain, toMap(p)).y;
     const plans = planVolley(spec, a, roundAims(b, targetId, rounds, (id) => this.eventPoint(id)), CONFIG.combatShotMs, ground);
     plans.forEach((plan, k) => {
-      this.fx.shot(spec, muzzle, plan);
+      this.fx.shot(spec, muzzle, plan, blastRadiusOf(weapon));
       this.sound.at(spec.look === "tracer" ? "mg-fire" : "cannon-fire", a, plan.delayMs);
       this.sound.at(plan.struck ? "hit-metal" : "miss", plan.land, plan.delayMs + plan.flightMs);
       const r = rounds[k];

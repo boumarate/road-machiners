@@ -295,14 +295,14 @@ export class Fx3D {
   }
 
   // One round leaves the muzzle after its delay and flies to its landing point. muzzle is read when the round
-  // fires, so it starts at the barrel tip as the turret points then. It lands with sparks when it struck something,
-  // else with dust.
-  shot(spec: ProjectileSpec, muzzle: () => Muzzle, plan: RoundPlan): void {
+  // fires, so it starts at the barrel tip as the turret points then. A round with a blast radius in meters explodes
+  // where it lands. Any other lands with sparks when it struck something, else with dust.
+  shot(spec: ProjectileSpec, muzzle: () => Muzzle, plan: RoundPlan, blastRadius: number): void {
     const onFire = (m: Muzzle) => {
       this.flashes.show(m, spec.flash);
       this.puff(m.pos, PAL.flash, 1, { speed: 0, life: 0.12, scale: spec.flash * 0.6, grow: 1.6, additive: true });
     };
-    const onLand = () => (spec.look === 'missile' ? this.blast(plan.land) : this.impact(plan, spec.look === 'shell'));
+    const onLand = () => (blastRadius > 0 ? this.blast(plan.land, blastRadius) : this.impact(plan, spec.look === 'shell'));
     this.projectiles.launch({ spec, muzzle, plan, onFire, onLand });
   }
 
@@ -312,11 +312,13 @@ export class Fx3D {
     else this.puff(plan.land, DUST.color, big ? 10 : 4, { speed: big ? 3 : 1.5, life: 0.9, scale: big ? 0.8 : 0.5, grow: 1.4 });
   }
 
-  // A small rocket blast: a fireball, sparks and a smoke ball.
-  private blast(p: V3): void {
-    this.puff(p, 0xffa040, 16, { speed: 5, life: 0.35, scale: 0.35, grow: 0.3, additive: true });
-    this.puff(p, 0x3a3028, 8, { speed: 2, life: 1.2, scale: 0.8, grow: 2.2 });
-    this.puff(p, 0xffc060, 1, { speed: 0, life: 0.3, scale: 1.8, grow: 1.5, additive: true });
+  // An explosion sized by its blast radius in meters: a flash as wide as the blast, a fireball, thrown dirt and a
+  // smoke ball that outlasts it.
+  private blast(p: V3, radius: number): void {
+    this.puff(p, 0xffc060, 1, { speed: 0, life: 0.45, scale: radius * 1.8, grow: 1.4, additive: true });
+    this.puff(p, 0xffa040, Math.round(14 + 8 * radius), { speed: 2 + 2 * radius, life: 0.55, scale: 0.4 + 0.15 * radius, grow: 0.5, additive: true });
+    this.puff(p, DUST.color, Math.round(8 + 6 * radius), { speed: 3 + 1.2 * radius, life: 1.2, scale: 0.5 + 0.15 * radius, grow: 2 });
+    this.puff(p, 0x3a3028, Math.round(6 + 4 * radius), { speed: 0.8 + 0.5 * radius, life: 2 + 0.3 * radius, scale: 0.7 + 0.3 * radius, grow: 2.6 });
   }
 
   // Gray smoke left behind a flying missile.
