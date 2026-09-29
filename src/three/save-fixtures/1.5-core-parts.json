@@ -1,0 +1,407 @@
+{
+  "player": {
+    "vehicleId": "v1",
+    "money": 223
+  },
+  "vehicles": [
+    {
+      "id": "v1",
+      "chassisId": "scout",
+      "items": [
+        {
+          "id": "i1",
+          "x": 1,
+          "y": 3,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p1",
+            "defId": "cabPickup",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i2",
+          "x": 2,
+          "y": 5,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p2",
+            "defId": "transmission",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i3",
+          "x": 4,
+          "y": 5,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p3",
+            "defId": "tank",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i4",
+          "x": 1,
+          "y": 1,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p4",
+            "defId": "wheel",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i5",
+          "x": 5,
+          "y": 1,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p5",
+            "defId": "wheel",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i6",
+          "x": 1,
+          "y": 5,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p6",
+            "defId": "wheel",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i7",
+          "x": 5,
+          "y": 5,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p7",
+            "defId": "wheel",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i8",
+          "x": 4,
+          "y": 2,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p8",
+            "defId": "mg",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i10",
+          "x": 0,
+          "y": 4,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p10",
+            "defId": "scrapSheet",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i50",
+          "x": 4,
+          "y": 3,
+          "rot": 0,
+          "kind": "good",
+          "good": "scrap"
+        },
+        {
+          "id": "i51",
+          "x": 6,
+          "y": 5,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p51",
+            "defId": "scrapSheet",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i52",
+          "x": 4,
+          "y": 1,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p52",
+            "defId": "mg",
+            "hp": 40,
+            "wear": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "v2",
+      "chassisId": "hauler",
+      "items": [
+        {
+          "id": "i11",
+          "x": 5,
+          "y": 1,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p11",
+            "defId": "cabOver",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i12",
+          "x": 3,
+          "y": 3,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p12",
+            "defId": "transmissionMid",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i13",
+          "x": 5,
+          "y": 6,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p13",
+            "defId": "tankMid",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i14",
+          "x": 1,
+          "y": 1,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p14",
+            "defId": "wheelMid",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i15",
+          "x": 7,
+          "y": 1,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p15",
+            "defId": "wheelMid",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i16",
+          "x": 1,
+          "y": 6,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p16",
+            "defId": "wheelMid",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i17",
+          "x": 7,
+          "y": 6,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p17",
+            "defId": "wheelMid",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i18",
+          "x": 2,
+          "y": 1,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p18",
+            "defId": "mg",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i19",
+          "x": 3,
+          "y": 1,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p19",
+            "defId": "stockEngine",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i40",
+          "x": 2,
+          "y": 4,
+          "rot": 0,
+          "kind": "good",
+          "good": "grain"
+        }
+      ]
+    },
+    {
+      "id": "v3",
+      "chassisId": "buggy",
+      "items": [
+        {
+          "id": "i20",
+          "x": 2,
+          "y": 5,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p20",
+            "defId": "cab",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i21",
+          "x": 2,
+          "y": 3,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p21",
+            "defId": "transmission",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i22",
+          "x": 4,
+          "y": 3,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p22",
+            "defId": "tank",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i23",
+          "x": 1,
+          "y": 1,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p23",
+            "defId": "wheel",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i24",
+          "x": 4,
+          "y": 1,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p24",
+            "defId": "wheel",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i25",
+          "x": 1,
+          "y": 7,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p25",
+            "defId": "wheel",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i26",
+          "x": 4,
+          "y": 7,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p26",
+            "defId": "wheel",
+            "hp": 40,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i27",
+          "x": 1,
+          "y": 3,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p27",
+            "defId": "mg",
+            "hp": 40,
+            "wear": 0
+          }
+        }
+      ]
+    }
+  ],
+  "removed": []
+}

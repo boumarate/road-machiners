@@ -3,6 +3,7 @@
 
 import { coreParts } from './save-migration-core-parts';
 import { longWheels } from './save-migration-long-wheels';
+import { gunSizes } from './save-migration-gun-sizes';
 import { armorSkin } from './save-migration-skin';
 import { wheelsInside } from './save-migration-wheels';
 
@@ -14,7 +15,7 @@ export const SAVE_MAJOR = 1;
 
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
-export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [gunMagazines, wheelsInside, armorSkin, longWheels, coreParts];
+export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [gunMagazines, wheelsInside, armorSkin, longWheels, coreParts, gunSizes];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;
 

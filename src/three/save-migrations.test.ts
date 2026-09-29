@@ -4,6 +4,8 @@ import PARTS_1_0 from './save-fixtures/1.0-parts.json';
 import WHEELS_1_1 from './save-fixtures/1.1-wheels.json';
 import SKIN_1_2 from './save-fixtures/1.2-skin.json';
 import WHEELS_1_3 from './save-fixtures/1.3-wheels.json';
+import CORE_1_5 from './save-fixtures/1.5-core-parts.json';
+import { CHASSIS_1_6 } from './save-migration-gun-sizes';
 import LONG_WHEELS_1_4 from './save-fixtures/1.4-long-wheels.json';
 import { CHASSIS_1_5 } from './save-migration-core-parts';
 import { CHASSIS_1_4 } from './save-migration-long-wheels';
@@ -339,5 +341,45 @@ describe('1.4 to 1.5 bigger transmission, tank and flat-four', () => {
     const world = structuredClone(LONG_WHEELS_1_4);
     itemOf(world, 'v1', 'i2')!.x = 4;
     expect(() => MIGRATIONS[4](world)).toThrow('Saved built-in transmission is at 4,3');
+  });
+});
+
+describe('1.5 to 1.6 bigger guns', () => {
+  type Saved = typeof CORE_1_5;
+  type SavedItem = { id: string; x: number; y: number; rot: number; kind: string; part?: { defId: string } };
+  const truck = (chassisId: string, extra: object[]) => {
+    const world = structuredClone(CORE_1_5);
+    const cores = CHASSIS_1_6[chassisId].core.map(([defId, x, y, rot], i) => ({ id: `c${i}`, x, y, rot: rot ?? 0, kind: 'part', part: { id: `pc${i}`, defId, hp: 40, wear: 0 } }));
+    world.vehicles = [{ id: 'v1', chassisId, items: [...cores, ...extra] }] as never;
+    return world;
+  };
+  const gun = (id: string, defId: string, x: number, y: number) => ({ id, x, y, rot: 0, kind: 'part', part: { id: `p${id}`, defId, hp: 40, wear: 0 } });
+  const itemOf = (world: unknown, id: string) => ((world as Saved).vehicles[0].items as SavedItem[]).find((it) => it.id === id);
+
+  it('keeps a gun whose new footprint still fits its cells', () => {
+    const next = MIGRATIONS[5](truck('hauler', [gun('g1', 'cannon', 5, 3)]));
+    expect([itemOf(next, 'g1')!.x, itemOf(next, 'g1')!.y]).toEqual([5, 3]);
+  });
+
+  it('moves a gun that grew onto another item to the first free deck spot where it works', () => {
+    const next = MIGRATIONS[5](truck('hauler', [gun('g0', 'mg', 7, 4), gun('g1', 'cannon', 6, 3)]));
+    expect([itemOf(next, 'g0')!.x, itemOf(next, 'g0')!.y]).toEqual([7, 4]);
+    const moved = itemOf(next, 'g1')!;
+    const layout = CHASSIS_1_6.hauler.layout;
+    expect([[0, 0], [1, 0], [0, 1], [1, 1]].map(([dx, dy]) => layout[moved.y + dy][moved.x + dx])).toEqual(['D', 'D', 'D', 'D']);
+  });
+
+  it('removes a gun with no room left and pays the player its value', () => {
+    const layout = CHASSIS_1_6.scout.layout;
+    const fill = layout.flatMap((row, y) => [...row].flatMap((ch, x) => (ch === 'D' ? [gun(`f${x}_${y}`, 'mg', x, y)] : [])));
+    const next = MIGRATIONS[5](truck('scout', [...fill, gun('big', 'tankGun', 1, 3)]));
+    expect(itemOf(next, 'big')).toBeUndefined();
+    expect((next as Saved).player.money).toBe(CORE_1_5.player.money + 590);
+  });
+
+  it('fails loudly on a chassis it does not know', () => {
+    const world = structuredClone(CORE_1_5);
+    world.vehicles = [{ id: 'v1', chassisId: 'tank', items: [] }] as never;
+    expect(() => MIGRATIONS[5](world)).toThrow('unknown chassis');
   });
 });
