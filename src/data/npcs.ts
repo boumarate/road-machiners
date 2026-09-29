@@ -253,7 +253,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 2 }, weight: 1 },
     ],
     wear: WEAR_RAIDER,
-    targets: { guns: [3.2, 4.8], armor: [0.5, 0.8] },
+    targets: { guns: [3.2, 5.1], armor: [0.5, 0.8] },
     spares: null,
   },
   trader: {
@@ -382,7 +382,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
     wear: WEAR_TRADER,
-    targets: { guns: [5.7, 8.5], armor: [0.5, 0.85] },
+    targets: { guns: [5.7, 9.2], armor: [0.5, 0.85] },
     spares: null,
   },
   // The Nose Army drives wagons and carriers.
@@ -402,7 +402,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
     wear: WEAR_TRADER,
-    targets: { guns: [3.0, 4.5], armor: [0.5, 0.85] },
+    targets: { guns: [3.0, 5.2], armor: [0.5, 0.85] },
     spares: null,
   },
   // Light and fast. A courier carries a few small valuables and little armor.
@@ -575,7 +575,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
     wear: WEAR_TRADER,
-    targets: { guns: [1.55, 2.3], armor: [0.5, 0.85] },
+    targets: { guns: [1.55, 3.5], armor: [0.5, 0.85] },
     spares: null,
   },
   // A merc sells its guns, so it spends its budget on weapons and armor, not cargo.
@@ -622,7 +622,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
     wear: WEAR_SCAVENGER,
-    targets: { guns: [1.85, 2.8], armor: [0.6, 0.9] },
+    targets: { guns: [1.85, 4.4], armor: [0.6, 0.9] },
     spares: null,
   },
 };

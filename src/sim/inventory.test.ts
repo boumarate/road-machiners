@@ -105,10 +105,10 @@ describe('inventory grid', () => {
     w = storePart(w, item(w, 'panniers').id);
     w = update(w, (d) => { d.player.storage.push(makePart(d, 'autocannon', 0)); });
     const id = w.player.storage.find((p) => p.defId === 'autocannon')!.id;
-    // The scout has two deck cells stacked beside the engine at (3,2) and (3,3). Turned across, the gun reaches onto the right armor edge.
-    const stacked = takeFromStorage(w, id, { x: 3, y: 2, rot: 1 });
+    // The scout has two deck cells stacked beside the engine at (4,1) and (4,2). Turned across on the plain bed cells, the gun is no deck gun.
+    const stacked = takeFromStorage(w, id, { x: 4, y: 1, rot: 1 });
     expect(vehicleStats(stacked, stacked.vehicles[0]).weapons.map((m) => m.def.id)).toEqual(['autocannon']);
-    const across = takeFromStorage(w, id, { x: 3, y: 2, rot: 0 });
+    const across = takeFromStorage(w, id, { x: 2, y: 5, rot: 0 });
     expect(vehicleStats(across, across.vehicles[0]).weapons).toHaveLength(0);
   });
 
@@ -125,7 +125,7 @@ describe('inventory grid', () => {
     w = storePart(w, item(w, 'panniers').id);
     const free = freeCells(w.vehicles[0]);
     w = update(w, (d) => { d.player.storage.push(makePart(d, 'mg', 0)); });
-    w = takeFromStorage(w, w.player.storage.find((p) => p.defId === 'mg')!.id, { x: 3, y: 2, rot: 0 });
+    w = takeFromStorage(w, w.player.storage.find((p) => p.defId === 'mg')!.id, { x: 4, y: 1, rot: 0 });
     expect(freeCells(w.vehicles[0])).toBe(free - 1);
     expect(vehicleStats(w, w.vehicles[0]).weapons).toHaveLength(2);
   });
@@ -164,7 +164,7 @@ describe('auto mounting on the deck', () => {
   it('lets a gun and a cargo frame compete for the same deck cells', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine'], { x: 40, y: 40 });
-    v.items.push({ id: 'i-rack', x: 1, y: 5, rot: 0, kind: 'part', part: makePart(w, 'rack', 0) });
+    v.items.push({ id: 'i-rack', x: 2, y: 5, rot: 0, kind: 'part', part: makePart(w, 'rack', 0) });
     v.items.push({ id: 'i-mg', x: 4, y: 5, rot: 0, kind: 'part', part: makePart(w, 'mg', 0) });
     expect(mountedItems(v, 'cargo').map((it) => it.id)).toEqual(['i-rack']);
     expect(mountedItems(v, 'weapon').map((it) => it.id)).toEqual(['i-mg']);

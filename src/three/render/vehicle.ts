@@ -28,7 +28,6 @@ const PAINT = 'paint';
 const LAMP = 'light'; // the headlight face material in the nose and base models
 const GLASS = 'glass'; // the cab window material in the base models, tinted by the daylight
 const TRIM = 'trim'; // base material that takes the faction cab color
-const FIT_SLACK = 1e-3; // meters a base may pass its footprint by float noise
 
 // Color factor for every material of a broken part.
 const BROKEN_TONE: Record<PartKind, number> = { weapon: 0.5, armor: 0.6, engine: 0.6, cargo: 0.6, core: 0.6, scanner: 0.6, store: 0.6 };
@@ -41,6 +40,7 @@ const SIDE_YAW: Record<SideLetter, number> = { F: 0, B: Math.PI, R: -Math.PI / 2
 
 // Bumpers are authored 1 m tall with their top on the deck top. They stretch to the chassis box height plus the skirt.
 const EDGE_H = 1;
+const SIDE_SKIN = 0.1; // meters a mounted side plate stands out from the model face
 const SKIRT = 0.22; // meters a base hangs below the collider, SKIRT in tools/blender/parts_common_base.py
 
 // A truck behind terrain or props shows through as a flat faction-color silhouette.
@@ -218,7 +218,7 @@ export class VehicleView {
     this.buildBase(v, body, base, still, paint, FACTION_COLORS[v.faction].cab, bumperlessCells(v, onBody));
     const wheelItems: PartItem[] = [];
     for (const item of onBody) {
-      const surface = baseLevel(base, item, 'row');
+      const surface = baseLevel(base, item, 'row', v.chassisId);
       if (item.kind === 'good') {
         still.add(this.placeItem(v, item, paint, surface));
         continue;
@@ -233,7 +233,7 @@ export class VehicleView {
       else if (def.kind === 'weapon') this.buildWeapon(v, item, mounted, still, paint, this.riser(v, item, baseTop(v, base), surface, paint, still));
       else if (def.kind === 'armor') still.add(this.placeArmor(v, body, item, paint, mounted, surface));
       // Core parts sit on the floor. An engine on its mount stands in the engine bay and shows through the cutout.
-      else if (def.kind === 'core' || (def.kind === 'engine' && mounted)) still.add(this.placeItem(v, item, paint, baseLevel(base, item, 'floor')));
+      else if (def.kind === 'core' || (def.kind === 'engine' && mounted)) still.add(this.placeItem(v, item, paint, baseLevel(base, item, 'floor', v.chassisId)));
       else still.add(this.placeItem(v, item, paint, surface));
     }
     this.buildWheels(v, body, wheelItems, paint);
@@ -286,7 +286,6 @@ export class VehicleView {
   // The chassis base model at the collider center, and kit bumpers on its front and back row cells unless a ram or cage covers them.
   private buildBase(v: Vehicle, body: Body, name: ModelName, into: THREE.Group, paint: number, trim: number, bumperless: Set<string>): void {
     const obj = model(name);
-    checkBaseFits(v.chassisId, body, obj);
     tint(obj, paint, 1);
     obj.traverse((o) => {
       if (o instanceof THREE.Mesh && o.material.name === TRIM) o.material.color.setHex(trim);
@@ -318,8 +317,8 @@ export class VehicleView {
 
   // Armor is authored as a front-edge row of N cells with its outer face at +x.
   // It turns to the side its cells lie on and stretches to their span. A spare armor part lies as a front or a left row on its row surface.
-  // A mounted plate or cage hangs from the deck top over the base side. A mounted cage or ram takes the bumper's place.
-  // A mounted ram hangs from the chassis bottom.
+  // A mounted plate or cage hangs from the deck top. On a side it is skin: thin, on the model's outer face.
+  // A mounted cage or ram takes the bumper's place. A mounted ram hangs from the chassis bottom.
   private placeArmor(v: Vehicle, body: Body, item: PartItem, paint: number, mounted: boolean, surface: number): THREE.Object3D {
     const def = partDef(item.part.defId);
     const n = Math.max(def.w, def.h);
@@ -330,12 +329,13 @@ export class VehicleView {
     const span = across ? size.w * CELL.across : size.h * CELL.along;
     const depthCells = across ? size.h : size.w;
     if (depthCells !== 1) throw new Error(`Armor ${item.part.id} is ${depthCells} cells deep on side ${side}, expected 1`);
-    const depth = across ? CELL.along : CELL.across;
+    const depth = armorDepth(mounted, across);
     if (def.kind !== 'armor') throw new Error(`Part ${def.id} is not armor`);
     const obj = model(partModel(def.id));
     const height = new THREE.Box3().setFromObject(obj).max.y;
     const hung = { plates: body.half.y - height, ram: -body.half.y, cage: body.half.y - height }[def.look];
     const at = footprint(v, item, mounted ? hung : surface);
+    at.pos.z += skinShift(mounted, across, at.pos.z, depth);
     place(obj, { pos: at.pos, yaw: SIDE_YAW[side], scale: new THREE.Vector3(depth / CELL.along, 1, span / (n * CELL.across)) });
     tint(obj, paint, toneOf(item));
     return obj;
@@ -394,9 +394,7 @@ export class VehicleView {
     if (items.length !== mounts.length) throw new Error(`${v.id} has ${items.length} mounted wheels, expected ${mounts.length}`);
     const tones = mounts.map((m) => {
       const item = items.find((it) => {
-        // A wheel cell lies one cell inside the side armor, and its hub on the edge column of the same row.
-        const width = baseGrid(v.chassisId).w;
-        const c = cellCenter(v.chassisId, it.x < width / 2 ? 0 : width - 1, it.y);
+        const c = cellCenter(v.chassisId, it.x, it.y);
         return Math.abs(c.x - m.x) < 1e-6 && Math.abs(c.z - m.z) < 1e-6;
       });
       if (!item) throw new Error(`${v.id} has no wheel item at the wheel mount ${m.x},${m.z}`);
@@ -447,7 +445,7 @@ export class VehicleView {
     const row = Math.max(...itemCells(cab).map((c) => c.y));
     const back = cellCenter(v.chassisId, 0, row).x - CELL.along / 2;
     const antenna = mergeStatic(wrapped(model('antenna')));
-    antenna.position.set(back + ANTENNA_INSET, socket(base, `row${row}_${cab.x}`).y, -body.half.z + ANTENNA_INSET);
+    antenna.position.set(back + ANTENNA_INSET, socket(base, socketName('row', cab.x, row, v.chassisId)).y, -body.half.z + ANTENNA_INSET);
     this.body.add(antenna);
     this.motion.addWhip(antenna, WHIPS.antenna);
     if (!bareRear) return;
@@ -548,25 +546,35 @@ function bumperlessCells(v: Vehicle, items: GridItem[]): Set<string> {
 }
 
 // A base model's level under an item: the highest row or floor socket over its cells, in body meters.
-function baseLevel(base: ModelName, item: GridItem, level: 'row' | 'floor'): number {
-  return Math.max(...itemCells(item).map((c) => socket(base, `${level}${c.y}_${c.x}`).y));
+function baseLevel(base: ModelName, item: GridItem, level: 'row' | 'floor', chassisId: string): number {
+  return Math.max(...itemCells(item).map((c) => socket(base, socketName(level, c.x, c.y, chassisId)).y));
+}
+
+// The socket of a grid cell. Model column c is grid column c + 1. An armor column shares the socket of the model column beside it.
+function socketName(level: 'row' | 'floor', x: number, y: number, chassisId: string): string {
+  const inner = baseGrid(chassisId).w - 2;
+  return `${level}${y}_${Math.min(Math.max(x - 1, 0), inner - 1)}`;
 }
 
 // The front edge of the surface under an item: the rearmost row socket x over its rows, in body meters.
-function baseFront(base: ModelName, item: GridItem): number {
-  return Math.min(...itemCells(item).map((c) => socket(base, `row${c.y}_${c.x}`).x));
+function baseFront(base: ModelName, item: GridItem, chassisId: string): number {
+  return Math.min(...itemCells(item).map((c) => socket(base, socketName('row', c.x, c.y, chassisId)).x));
 }
 
 // The highest row surface of a base, in body meters: the cab roof on a pickup.
 function baseTop(v: Vehicle, base: ModelName): number {
-  return Math.max(...baseGrid(v.chassisId).cells.flatMap((row, y) => row.map((_, x) => socket(base, `row${y}_${x}`).y)));
+  return Math.max(...baseGrid(v.chassisId).cells.flatMap((row, y) => row.map((_, x) => socket(base, socketName('row', x, y, v.chassisId)).y)));
 }
 
-// A base fills its chassis footprint in length and width, so the drawn truck matches its collider.
-function checkBaseFits(chassisId: string, body: Body, obj: THREE.Object3D): void {
-  const box = new THREE.Box3().setFromObject(obj);
-  const out = box.min.x < -body.half.x - FIT_SLACK || box.max.x > body.half.x + FIT_SLACK || box.min.z < -body.half.z - FIT_SLACK || box.max.z > body.half.z + FIT_SLACK;
-  if (out) throw new Error(`${chassisId} base spans x ${box.min.x.toFixed(3)}..${box.max.x.toFixed(3)}, z ${box.min.z.toFixed(3)}..${box.max.z.toFixed(3)}, past its footprint ${body.half.x} by ${body.half.z}`);
+// How deep an armor model stands: a mounted side plate is thin skin, any other armor fills its cell.
+function armorDepth(mounted: boolean, across: boolean): number {
+  if (across) return CELL.along;
+  return mounted ? SIDE_SKIN : CELL.across;
+}
+
+// A mounted side plate stands on the model's outer face, so its center moves out by half its depth.
+function skinShift(mounted: boolean, across: boolean, z: number, depth: number): number {
+  return mounted && !across ? Math.sign(z) * (depth / 2) : 0;
 }
 
 function itemModel(item: GridItem) {
@@ -587,7 +595,7 @@ function footprint(v: Vehicle, item: GridItem, y: number): Placement {
   const pos = new THREE.Vector3((first.x + last.x) / 2, y, (first.z + last.z) / 2);
   const base = baseModel(v.chassisId);
   const halfLength = (itemSize(item).h * CELL.along) / 2;
-  if (y === baseLevel(base, item, 'row')) pos.x -= Math.max(0, pos.x + halfLength - baseFront(base, item));
+  if (y === baseLevel(base, item, 'row', v.chassisId)) pos.x -= Math.max(0, pos.x + halfLength - baseFront(base, item, v.chassisId));
   if (item.rot === 0) return { pos, yaw: 0, scale: new THREE.Vector3(1, 1, 1) };
   return { pos, yaw: ROT_YAW, scale: new THREE.Vector3(CELL.across / CELL.along, 1, CELL.along / CELL.across) };
 }

@@ -40,7 +40,8 @@ describe('NPC driving', () => {
     w.obstacles = [{ id: 'rock', pos: { x: 31.4, y: 30 }, r: 0.8, kind: 'rock' }];
     const startX = npc.pos.x;
     let d = buildDrive(w);
-    for (let i = 0; i < RULES.npcStuckTurns + 1; i++) ({ w, d } = turn(w, d));
+    // The rock is round and the truck nose narrow, so the first turn slides along it before the truck stalls.
+    for (let i = 0; i < RULES.npcStuckTurns + 2; i++) ({ w, d } = turn(w, d));
     expect(w.vehicles.find((v) => v.id === npc.id)!.brain!.recovery).toBeGreaterThan(0);
     ({ w, d } = turn(w, d));
     expect(w.vehicles.find((v) => v.id === npc.id)!.pos.x).toBeLessThan(startX);

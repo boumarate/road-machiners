@@ -1,6 +1,7 @@
 // Armor rules on a stepped outline: the nose and the tail are narrower than the middle, so the corner cells do not exist.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
+import TRUCK_SHAPES from '../data/truck-shapes.json';
 import { blastLanes, cabShield, lanePoint, openSides, walkLane } from './armor';
 import { makePart } from './factory';
 import { mountedItems, sideOf } from './grid';
@@ -31,8 +32,10 @@ const STEPPED = {
   ],
 };
 
-beforeAll(() => { CHASSIS.stepped = STEPPED; });
-afterAll(() => { delete CHASSIS.stepped; });
+// The stepped truck has no model of its own, so it borrows the scout's collision boxes.
+const SHAPES = TRUCK_SHAPES as Record<string, unknown>;
+beforeAll(() => { CHASSIS.stepped = STEPPED; SHAPES.base_stepped = TRUCK_SHAPES.base_scout; });
+afterAll(() => { delete CHASSIS.stepped; delete SHAPES.base_stepped; });
 
 let nextItem = 0;
 

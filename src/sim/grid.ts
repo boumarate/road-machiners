@@ -145,13 +145,20 @@ export function goodsCount(v: Vehicle): Record<string, number> {
   return out;
 }
 
+// Side armor cells are skin outside the model, so only armor lies on them. Every other cell can carry cargo.
+function isSkin(cell: Cell | null): boolean {
+  return cell === 'L' || cell === 'R';
+}
+
+// The cells of a grid that carry cargo.
 export function cellCount(g: Grid): number {
-  return g.cells.flat().filter((c) => c !== null).length;
+  return g.cells.flat().filter((c) => c !== null && !isSkin(c)).length;
 }
 
 export function freeCells(v: Vehicle): number {
-  const used = v.items.reduce((a, it) => a + itemCells(it).length, 0);
-  return cellCount(gridOf(v)) - used;
+  const g = gridOf(v);
+  const used = v.items.reduce((a, it) => a + itemCells(it).filter((c) => !isSkin(g.cells[c.y]?.[c.x] ?? null)).length, 0);
+  return cellCount(g) - used;
 }
 
 // Why an item cannot sit at (x, y, rot), or null if it can. ignoreId skips the item being moved.
@@ -160,7 +167,12 @@ export function placementError(g: Grid, items: GridItem[], item: GridItem, ignor
   const cells = itemCells(item);
   if (crossesChassisEnd(g, cells) || !cells.every((c) => onGrid(g, c))) return 'Does not fit there';
   if (cells.some((c) => taken.has(cellKey(c.x, c.y)))) return 'Something is in the way';
+  if (!isArmorItem(item) && cells.some((c) => isSkin(g.cells[c.y][c.x]))) return 'Only armor fits on the sides';
   return null;
+}
+
+function isArmorItem(item: GridItem): boolean {
+  return item.kind === 'part' && partDef(item.part.defId).kind === 'armor';
 }
 
 function onGrid(g: Grid, c: { x: number; y: number }): boolean {

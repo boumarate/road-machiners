@@ -264,16 +264,6 @@
       "reward": "number",
       "shop": "string",
       "tier": "number"
-     },
-     {
-      "deadline": "number",
-      "id": "string",
-      "kind": "string",
-      "reward": "number",
-      "shop": "string",
-      "targetName": "string",
-      "template": "string",
-      "tier": "number"
      }
     ],
     "pressure": {
@@ -314,14 +304,12 @@
     "contracts": [
      {
       "deadline": "number",
-      "good": "string",
+      "defId": "string",
       "id": "string",
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "tier": "number",
-      "to": "string",
-      "units": "number"
+      "tier": "number"
      }
     ],
     "pressure": {
@@ -360,16 +348,6 @@
       "tier": "number",
       "to": "string",
       "units": "number"
-     },
-     {
-      "deadline": "number",
-      "id": "string",
-      "kind": "string",
-      "reward": "number",
-      "shop": "string",
-      "targetName": "string",
-      "template": "string",
-      "tier": "number"
      }
     ],
     "pressure": {
@@ -410,14 +388,12 @@
     "contracts": [
      {
       "deadline": "number",
-      "good": "string",
+      "defId": "string",
       "id": "string",
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "tier": "number",
-      "to": "string",
-      "units": "number"
+      "tier": "number"
      }
     ],
     "pressure": {
@@ -439,13 +415,14 @@
     "contracts": [
      {
       "deadline": "number",
+      "good": "string",
       "id": "string",
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "targetName": "string",
-      "template": "string",
-      "tier": "number"
+      "tier": "number",
+      "to": "string",
+      "units": "number"
      }
     ],
     "pressure": {
@@ -455,17 +432,6 @@
     },
     "restockAt": "number",
     "stock": [
-     {
-      "defId": "string",
-      "gun": {
-       "ammo": "number",
-       "cooldown": "number",
-       "reloadWork": "number"
-      },
-      "hp": "number",
-      "id": "string",
-      "wear": "number"
-     },
      {
       "defId": "string",
       "hp": "number",

@@ -6,7 +6,7 @@ import { REGION } from '../data/region';
 import { buyChassis } from './economy';
 import { partDef } from '../data/parts';
 import { makePart, makeVehicle } from './factory';
-import { baseGrid, gridOf, isMounted, placementError, itemCells, mountedItems, mountedParts, sideOf, type Cell } from './grid';
+import { baseGrid, cellCount, freeCells, gridOf, isMounted, placementError, itemCells, mountedItems, mountedParts, sideOf, type Cell } from './grid';
 import { moveItem, storePart } from './inventory';
 import { generateNpcLoadout } from './npc-loadout';
 import { addVehicle, emptyWorld } from './testkit';
@@ -192,5 +192,28 @@ describe('armor ring', () => {
         if (openFaces(id, x, y).length === 0) expect('FBLR'.includes(letter), `${id} ${x},${y}`).toBe(false);
       }
     }
+  });
+});
+
+describe('side armor skin', () => {
+  const probe = (defId: string, x: number, y: number): GridItem => ({ id: 'probe', x, y, rot: 0, kind: 'part', part: { id: 'probe', defId, hp: 1, wear: 0 } });
+
+  it('lets armor lie on a side column and refuses every other item there', () => {
+    const g = baseGrid('scout');
+    expect(placementError(g, [], probe('steelPlate', 0, 2), null)).toBeNull();
+    expect(placementError(g, [], probe('mg', 0, 2), null)).toMatch(/only armor/i);
+    expect(placementError(g, [], { id: 'g', x: g.w - 1, y: 2, rot: 0, kind: 'good', good: 'scrap' }, null)).toMatch(/only armor/i);
+  });
+
+  it('does not count the side columns as cargo cells', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'scout', [], { x: 40, y: 40 });
+    const g = baseGrid('scout');
+    const skin = g.cells.flat().filter((c) => c === 'L' || c === 'R').length;
+    expect(skin).toBe(2 * (g.h - 2));
+    expect(cellCount(g)).toBe(g.cells.flat().filter((c) => c !== null).length - skin);
+    const before = freeCells(v);
+    v.items.push({ id: 'i-plate', x: 0, y: 2, rot: 0, kind: 'part', part: makePart(w, 'steelPlate', 0) });
+    expect(freeCells(v)).toBe(before);
   });
 });

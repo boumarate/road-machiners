@@ -22,6 +22,24 @@ const BASE_MODELS: Record<string, ModelName> = {
   loader: 'base_loader',
 };
 
+// The engine cutout of each base model, as inclusive model columns and rows, copied from the docstring of
+// tools/blender/base_<id>.py. Model column c is grid column c + 1. The E cells of the chassis layout fill it.
+export const HOOD_HOLES: Record<string, { cols: [number, number]; rows: [number, number] }> = {
+  scout: { cols: [1, 2], rows: [1, 2] },
+  hauler: { cols: [2, 3], rows: [1, 2] },
+  buggy: { cols: [1, 2], rows: [1, 2] },
+  wagon: { cols: [1, 2], rows: [2, 3] },
+  courier: { cols: [1, 2], rows: [1, 2] },
+  van: { cols: [1, 2], rows: [1, 2] },
+  longbed: { cols: [2, 3], rows: [1, 2] },
+  carrier: { cols: [1, 2], rows: [3, 4] },
+  tractor: { cols: [2, 3], rows: [1, 2] },
+  jeep: { cols: [1, 2], rows: [4, 5] },
+  convertible: { cols: [1, 2], rows: [6, 7] },
+  bus: { cols: [2, 3], rows: [8, 9] },
+  loader: { cols: [2, 3], rows: [5, 6] },
+};
+
 export function baseModel(chassisId: string): ModelName {
   const base = BASE_MODELS[chassisId];
   if (!base) throw new Error(`Chassis ${chassisId} has no base model in BASE_MODELS`);
