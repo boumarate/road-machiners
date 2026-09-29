@@ -344,15 +344,6 @@
     "contracts": [
      {
       "deadline": "number",
-      "defId": "string",
-      "id": "string",
-      "kind": "string",
-      "reward": "number",
-      "shop": "string",
-      "tier": "number"
-     },
-     {
-      "deadline": "number",
       "good": "string",
       "id": "string",
       "kind": "string",

@@ -186,7 +186,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
-    gunFill: 0.5,
+    gunFill: 0.25,
     armor: [
       { value: "scrapPanels", weight: 5 },
       { value: "cage", weight: 3 },
@@ -344,7 +344,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
-    gunFill: 0.7,
+    gunFill: 0.25,
     armor: [
       { value: "scrapPanels", weight: 5 },
       { value: "cage", weight: 4 },
@@ -386,7 +386,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
     wear: WEAR_TRADER,
-    targets: { guns: [5.7, 9.2], armor: [0.5, 0.85] },
+    targets: { guns: [4.2, 6.5], armor: [0.5, 0.85] }, // MAX_GUN_SLOWDOWN caps the guns
     spares: null,
   },
   // The Nose Army drives wagons and carriers.
@@ -478,7 +478,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
-    gunFill: 0.7,
+    gunFill: 0.25,
     armor: [
       { value: "scrapPanels", weight: 4 },
       { value: "cage", weight: 3 },
@@ -521,7 +521,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
-    gunFill: 0.4,
+    gunFill: 0.25,
     armor: [
       { value: "plates", weight: 3 },
       { value: "cage", weight: 2 },
@@ -615,7 +615,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     // The rare empty outcome covers a wagon whose heavy gun leaves no rated mass for plates.
     extraGun: LIGHT_GUNS,
     minGuns: 1,
-    gunFill: 1,
+    gunFill: 0.8,
     armor: [
       { value: "plates", weight: 5 },
       { value: "spacedArmor", weight: 3 },
