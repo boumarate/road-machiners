@@ -1,8 +1,10 @@
 // Runs the combat harness (src/test/combat-harness.ts) and writes its report to tmp/combat/.
 // Usage: npm run combat -- --kit standard --enemies buggy,gunwagon,buggy+buggy --policy all --seeds 1-20
+//   [--guns mg,shotgun] [--levels poor,loaded]
 //   [--gap 8] [--orbit 6] [--turns 40] [--set RULES.leadError=3 --set PARTS.mg.spread=4] [--trace]
 // --trace prints one line per turn. --out sets the report folder, tmp/combat by default.
-// --enemies lists lineups; + joins trucks in one lineup. --set changes one balance number for this run.
+// --enemies lists lineups; + joins trucks in one lineup. --guns runs each listed weapon as the player's only gun.
+// --levels runs each listed enemy gear level. Without them the kit keeps its guns and enemies roll their level. --set changes one balance number for this run.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { formatReport, POLICIES, runFight, setNumber, turnLine } from '../src/test/combat-harness.ts';
 import { initPhysics } from '../src/phys/drive.ts';
@@ -37,13 +39,16 @@ const policies = policyArg === 'all' ? POLICIES : policyArg.split(',');
 for (const p of policies) if (!POLICIES.includes(p)) throw new Error(`Unknown policy "${p}". Known: ${POLICIES.join(', ')}`);
 const lineups = argOf('enemies', 'buggy,gunwagon').split(',').map((l) => l.split('+'));
 const seeds = parseSeeds(argOf('seeds', '1-10'));
+const guns = argOf('guns', null)?.split(',') ?? [null];
+const levels = argOf('levels', null)?.split(',') ?? [null];
 const base = { kit: argOf('kit', 'standard'), gap: positiveInt('gap', '8'), orbit: positiveInt('orbit', '6'), maxTurns: positiveInt('turns', '40') };
 
 await initPhysics();
-console.log(`Running ${lineups.length} lineups x ${policies.length} policies x ${seeds.length} seeds...`);
+console.log(`Running ${guns.length} guns x ${lineups.length} lineups x ${levels.length} levels x ${policies.length} policies x ${seeds.length} seeds...`);
 const reports = [];
-for (const enemies of lineups)
-  for (const policy of policies) for (const seed of seeds) reports.push(runFight({ ...base, enemies, policy, seed }, trace ? (w, t) => console.log(`${enemies.join('+')} ${policy} s${seed} ${turnLine(w, t)}`) : undefined));
+const fights = guns.flatMap((gun) => lineups.flatMap((enemies) => levels.flatMap((level) => policies.flatMap((policy) => seeds.map((seed) => ({ ...base, gun, enemies, level, policy, seed }))))));
+const label = (f) => `${f.gun ?? 'kit'} ${f.enemies.join('+')} ${f.level ?? 'rolled'} ${f.policy} s${f.seed}`;
+for (const f of fights) reports.push(runFight(f, trace ? (w, t) => console.log(`${label(f)} ${turnLine(w, t)}`) : undefined));
 
 const out = argOf('out', 'tmp/combat');
 mkdirSync(out, { recursive: true });

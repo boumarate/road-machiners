@@ -3,7 +3,7 @@
 // and outcomes, so a balance change can be judged before it ships. The game never imports this module.
 
 import { CHASSIS } from '../data/chassis';
-import { DECISIONS, NPC_BEHAVIOR, NPCS, TRAITS } from '../data/npcs';
+import { DECISIONS, NPC_BEHAVIOR, NPCS, TRAITS, type GearLevel } from '../data/npcs';
 import { PARTS } from '../data/parts';
 import { PHYSICS } from '../data/physics';
 import { RULES } from '../data/rules';
@@ -12,6 +12,8 @@ import { START_KITS } from '../data/start';
 import { buildDrive, freeDrive, type Drive } from '../phys/drive';
 import { physicsMove } from '../phys/turn';
 import { isDefeated } from '../sim/defeat';
+import { makePart } from '../sim/factory';
+import { mountPart } from '../sim/inventory';
 import { hangUp } from '../sim/dialogue';
 import { mountedParts } from '../sim/grid';
 import { generateNpcLoadout } from '../sim/npc-loadout';
@@ -29,7 +31,9 @@ export const POLICIES: Policy[] = ['stand', 'orbit', 'charge'];
 
 export type Fight = {
   kit: string; // a START_KITS id for the player truck
+  gun: string | null; // a weapon id that replaces every gun of the kit, or null to keep the kit's guns
   enemies: string[]; // NPCS template ids; each gets a rolled loadout
+  level: GearLevel | null; // the gear level of every enemy loadout, or null to roll it as a spawn does
   policy: Policy;
   seed: number;
   gap: number; // tiles between the player and the enemies at the start
@@ -112,10 +116,11 @@ function missing(what: string, id: string): never {
 // a fleeing driver measures nothing about the fight.
 function setup(fight: Fight): World {
   const w = openWorld(fight);
+  if (fight.gun) swapGuns(w, fight.gun);
   fight.enemies.forEach((id, i) => {
     const tpl = NPCS[id] ?? missing('NPC template', id);
     const pos = { x: CENTER.x + fight.gap, y: CENTER.y + (i - (fight.enemies.length - 1) / 2) * 3 };
-    const e = spawnAt(w, tpl, generateNpcLoadout(w, tpl), pos);
+    const e = spawnAt(w, tpl, generateNpcLoadout(w, tpl, null, fight.level), pos);
     e.heading = Math.PI;
     e.brain!.traits = e.brain!.traits.filter((t) => t !== 'coward');
     e.brain!.attackers[w.player.vehicleId] = true;
@@ -123,6 +128,14 @@ function setup(fight: Fight): World {
   });
   refreshVision(w);
   return setAutoFire(w, true);
+}
+
+// The player truck drops its guns and mounts one of the given weapon where its fire reaches the most sides.
+function swapGuns(w: World, gun: string): void {
+  if (PARTS[gun]?.kind !== 'weapon') throw new Error(`Unknown weapon "${gun}"`);
+  const me = w.vehicles.find((v) => v.id === w.player.vehicleId)!;
+  me.items = me.items.filter((it) => it.kind !== 'part' || PARTS[it.part.defId].kind !== 'weapon');
+  if (!mountPart(w, me, makePart(w, gun, 0))) throw new Error(`${gun} does not fit the ${me.chassisId}`);
 }
 
 function orders(w: World, fight: Fight, foe: Vehicle): World {
@@ -223,14 +236,15 @@ export function runFight(fight: Fight, watch?: (w: World, turn: number) => void)
   return { fight, outcome: outcome ?? 'timeout', turns, crashes: c.crashes, me: c.me, them: c.them };
 }
 
-export type Group = { enemies: string; policy: Policy; reports: FightReport[] };
+export type Group = { gun: string; enemies: string; level: string; policy: Policy; reports: FightReport[] };
 
-// Groups reports by enemy lineup and policy, in run order.
+// Groups reports by gun, enemy lineup, gear level and policy, in run order.
 export function groups(reports: FightReport[]): Group[] {
   const out = new Map<string, Group>();
   for (const r of reports) {
-    const key = `${r.fight.enemies.join('+')}|${r.fight.policy}`;
-    if (!out.has(key)) out.set(key, { enemies: r.fight.enemies.join('+'), policy: r.fight.policy, reports: [] });
+    const g = { gun: r.fight.gun ?? 'kit', enemies: r.fight.enemies.join('+'), level: r.fight.level ?? 'rolled', policy: r.fight.policy };
+    const key = `${g.gun}|${g.enemies}|${g.level}|${g.policy}`;
+    if (!out.has(key)) out.set(key, { ...g, reports: [] });
     out.get(key)!.reports.push(r);
   }
   return [...out.values()];
@@ -246,8 +260,8 @@ export function formatReport(reports: FightReport[], sets: string[]): string {
     `Kit ${kit}. ${reports.length} fights. Changed numbers: ${sets.length ? sets.join(', ') : 'none'}.`,
     'Speed is tiles per turn. Hit is rounds that hit. Odds is the mean hit chance shown for those rounds. Damage is part HP lost per turn. Crashes are per fight.',
     '',
-    '| enemies | policy | won | lost | fled | timeout | turns | crashes | my speed | my hit | my odds | my dmg/turn | their speed | their hit | their odds | their dmg/turn |',
-    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+    '| gun | enemies | level | policy | won | lost | fled | timeout | turns | crashes | my speed | my hit | my odds | my dmg/turn | their speed | their hit | their odds | their dmg/turn |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
   ];
   for (const g of groups(reports)) lines.push(groupRow(g));
   return lines.join('\n') + '\n';
@@ -262,6 +276,6 @@ function groupRow(g: Group): string {
     const rounds = sum((r) => pick(r).rounds);
     return [(sum((r) => pick(r).speed) / turns).toFixed(1), pct(sum((r) => pick(r).hits), rounds), pct(sum((r) => pick(r).odds), rounds), (sum((r) => pick(r).damage) / turns).toFixed(1)];
   };
-  const cells = [g.enemies, g.policy, ...(['won', 'lost', 'fled', 'timeout'] as Outcome[]).map(count), (turns / rs.length).toFixed(1), (sum((r) => r.crashes) / rs.length).toFixed(1), ...sideCells((r) => r.me), ...sideCells((r) => r.them)];
+  const cells = [g.gun, g.enemies, g.level, g.policy, ...(['won', 'lost', 'fled', 'timeout'] as Outcome[]).map(count), (turns / rs.length).toFixed(1), (sum((r) => r.crashes) / rs.length).toFixed(1), ...sideCells((r) => r.me), ...sideCells((r) => r.them)];
   return `| ${cells.join(' | ')} |`;
 }

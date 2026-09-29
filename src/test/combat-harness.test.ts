@@ -9,7 +9,7 @@ beforeAll(async () => {
   await initPhysics();
 });
 
-const FIGHT: Fight = { kit: 'standard', enemies: ['buggy'], policy: 'stand', seed: 3, gap: 8, orbit: 6, maxTurns: 4 };
+const FIGHT: Fight = { kit: 'standard', gun: null, enemies: ['buggy'], level: null, policy: 'stand', seed: 3, gap: 8, orbit: 6, maxTurns: 4 };
 
 describe('combat harness', () => {
   it('gives the same report for the same fight', () => {
