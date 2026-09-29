@@ -3,7 +3,7 @@ import { reportFailure } from './fail';
 import { intake } from './intake';
 import { isAlive, killJob, spawnJob } from './jobs';
 import { readState, updateState } from './state';
-import { STUCK_LABEL } from './types';
+import { ADHOC_LABEL, STUCK_LABEL } from './types';
 import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Run } from './types';
 
 export type JobPick = { stage: JobStage; issue: number | null };
@@ -25,8 +25,17 @@ function queued(state: FactoryState): JobPick | null {
   return change ? { stage: 'change', issue: change.id } : null;
 }
 
+function openCards(cards: Card[]): Card[] {
+  return cards.filter((card) => !card.labels.includes(STUCK_LABEL));
+}
+
+function adhocJob(cards: Card[]): JobPick | null {
+  const first = openCards(cards).filter((card) => card.column === 'Implementation' && card.labels.includes(ADHOC_LABEL)).sort((a, b) => a.issue - b.issue)[0];
+  return first ? { stage: 'adhoc', issue: first.issue } : null;
+}
+
 function cardJob(cards: Card[]): JobPick | null {
-  const open = cards.filter((card) => !card.labels.includes(STUCK_LABEL));
+  const open = openCards(cards).filter((card) => !card.labels.includes(ADHOC_LABEL));
   for (const [column, stage] of CARD_ORDER) {
     const first = open.filter((card) => card.column === column).sort((a, b) => a.issue - b.issue)[0];
     if (first) return { stage, issue: first.issue };
@@ -34,11 +43,13 @@ function cardJob(cards: Card[]): JobPick | null {
   return null;
 }
 
-// Picks the next job. Queued approvals and changes first, then due periodic jobs, then the card furthest along.
+// Picks the next job. Queued approvals and changes first, then ad hoc tasks, then due periodic jobs, then the card furthest along.
 export function chooseJob(state: FactoryState, cards: Card[], now: Date, cfg: Due): JobPick | null {
   if (state.job) return null;
   const first = queued(state);
   if (first) return first;
+  const adhoc = adhocJob(cards);
+  if (adhoc) return adhoc;
   if (isDue(state.lastRelease, now, cfg.releaseDays * DAY_MS)) return { stage: 'release', issue: null };
   if (isDue(state.lastMaintenance, now, cfg.maintenanceHours * HOUR_MS)) return { stage: 'maintenance', issue: null };
   return cardJob(cards);

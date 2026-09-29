@@ -3,11 +3,13 @@ import { join } from 'node:path';
 import { readCommittee, telegramIds } from './committee';
 import { feedback } from './stages/approval';
 import { updateState } from './state';
-import type { Ctx } from './types';
+import { ADHOC_LABEL, type Ctx } from './types';
+
+const TITLE_LIMIT = 80;
 
 // One committee command, written by the Hermes plugin into $FACTORY_HOME/inbox.
 export type InboxCommand = {
-  kind: 'approve' | 'feedback' | 'change';
+  kind: 'approve' | 'feedback' | 'change' | 'adhoc';
   issue: number | null;
   text: string | null;
   by: string; // Telegram user id
@@ -22,7 +24,7 @@ export function inboxDir(home: string): string {
 
 export function parseCommand(raw: string): InboxCommand {
   const data = JSON.parse(raw) as Partial<InboxCommand>;
-  if (!['approve', 'feedback', 'change'].includes(String(data.kind))) throw new Error(`Unknown inbox command kind ${data.kind}`);
+  if (!['approve', 'feedback', 'change', 'adhoc'].includes(String(data.kind))) throw new Error(`Unknown inbox command kind ${data.kind}`);
   if (typeof data.by !== 'string' || typeof data.chat !== 'string' || typeof data.messageId !== 'number') throw new Error('Inbox command lacks by, chat or messageId');
   return data as InboxCommand;
 }
@@ -54,6 +56,7 @@ async function handle(ctx: Ctx, command: InboxCommand): Promise<string> {
   const { home, committeeBootstrapTelegram: telegram, committeeBootstrapGithub: github } = ctx.cfg;
   if (!telegramIds(readCommittee(home, { telegram, github })).includes(command.by)) throw new Error('Only committee members can do that.');
   const by = command.byName ?? command.by;
+  if (command.kind === 'adhoc') return queueAdhoc(ctx, command, by);
   if (command.kind === 'change') return queueChange(ctx, requireText(command), by);
   const issue = requireIssue(command);
   if (command.kind === 'feedback') {
@@ -68,6 +71,16 @@ async function queueApproval(ctx: Ctx, issue: number, by: string): Promise<strin
   if (card?.column !== 'Approval') throw new Error(`Issue #${issue} is not waiting for approval.`);
   updateState(ctx.statePath, (state) => ({ ...state, pendingApprovals: { ...state.pendingApprovals, [String(issue)]: by } }));
   return `Approval of #${issue} is queued. The merge into dev starts on a coming tick.`;
+}
+
+async function queueAdhoc(ctx: Ctx, command: InboxCommand, by: string): Promise<string> {
+  const text = requireText(command).trim();
+  const title = text.split('\n')[0].trim().slice(0, TITLE_LIMIT);
+  const n = await ctx.github.createIssue(title, `${text}\n\nRequested by ${by} in the committee chat.`, [ADHOC_LABEL]);
+  await ctx.github.addCard(n, 'Implementation');
+  const reply = { chat: command.chat, messageId: command.messageId };
+  updateState(ctx.statePath, (state) => ({ ...state, adhocReplies: { ...state.adhocReplies, [String(n)]: reply } }));
+  return `Queued as #${n}. The report comes as a reply here.`;
 }
 
 function queueChange(ctx: Ctx, text: string, by: string): string {

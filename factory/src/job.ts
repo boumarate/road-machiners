@@ -1,4 +1,5 @@
 import { reportFailure } from './fail';
+import { adhoc } from './stages/adhoc';
 import { approve } from './stages/approval';
 import { change } from './stages/change';
 import { runStage as design } from './stages/design';
@@ -33,6 +34,7 @@ async function dispatch(ctx: Ctx, stage: JobStage, issue: number | null, codeDir
 
 async function dispatchNumbered(ctx: Ctx, stage: Exclude<JobStage, 'release' | 'maintenance'>, issue: number): Promise<void> {
   if (stage === 'change') return change(ctx, issue);
+  if (stage === 'adhoc') return adhoc(ctx, issue);
   if (stage === 'approve') return approve(ctx, issue, readState(ctx.statePath).pendingApprovals[String(issue)] ?? 'the committee');
   return CARD_STAGES[stage](ctx, issue);
 }

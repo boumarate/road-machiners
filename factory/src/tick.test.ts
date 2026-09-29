@@ -14,6 +14,19 @@ const state = (over: Partial<FactoryState> = {}): FactoryState => ({ ...structur
 const card = (issue: number, column: Card['column'], labels: string[] = []): Card => ({ itemId: `i${issue}`, issue, column, labels });
 
 describe('chooseJob', () => {
+  it('picks the lowest ad hoc card after queued work and before due periodic jobs', () => {
+    const cards = [card(8, 'Implementation', ['adhoc']), card(6, 'Implementation', ['adhoc']), card(5, 'Implementation'), card(7, 'Implementation', ['adhoc', 'factory-stuck'])];
+    expect(chooseJob(state({ lastRelease: null }), cards, NOW, CFG)).toEqual({ stage: 'adhoc', issue: 6 });
+    const queuedChange = state({ pendingChanges: [{ id: 3, text: 'x', by: 'a' }] });
+    expect(chooseJob(queuedChange, cards, NOW, CFG)).toEqual({ stage: 'change', issue: 3 });
+  });
+
+  it('skips ad hoc cards in the normal implement pick', () => {
+    const cards = [card(2, 'Implementation', ['adhoc']), card(3, 'Implementation')];
+    expect(chooseJob(state(), cards, NOW, CFG)).toEqual({ stage: 'adhoc', issue: 2 });
+    expect(chooseJob(state(), [card(2, 'Implementation', ['adhoc', 'factory-stuck']), card(3, 'Implementation')], NOW, CFG)).toEqual({ stage: 'implement', issue: 3 });
+  });
+
   it('returns null while a job runs', () => {
     const job: Job = { stage: 'design', issue: 1, pid: 1, startedAt: '', log: '' };
     expect(chooseJob(state({ job }), [card(2, 'Design')], NOW, CFG)).toBeNull();

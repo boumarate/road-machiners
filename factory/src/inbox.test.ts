@@ -14,6 +14,8 @@ function fakeCtx(cards: Card[], sent: string[], calls: string[]): Ctx {
     cfg, statePath, now: () => new Date(5000), log: () => undefined,
     github: {
       cards: async () => cards,
+      createIssue: async (title: string, body: string, labels: string[]) => { calls.push(`create ${title}|${body}|${labels}`); return 9; },
+      addCard: async (n: number, column: string) => { calls.push(`addCard ${n} ${column}`); },
       comment: async (n: number, body: string) => { calls.push(`comment ${n} ${body}`); },
       move: async (n: number, column: string) => { calls.push(`move ${n} ${column}`); },
     },
@@ -39,6 +41,25 @@ describe('drainInbox', () => {
     expect(readState(statePath).pendingApprovals).toEqual({ '4': 'Ann' });
     expect(readdirSync(join(ROOT, 'inbox'))).toEqual([]);
     expect(sent[0]).toContain('queued');
+  });
+
+  it('queues an ad hoc task as an issue, a card and a reply entry', async () => {
+    const sent: string[] = [];
+    const calls: string[] = [];
+    put('1.json', { kind: 'adhoc', text: `${'x'.repeat(100)}\nmore` });
+    await drainInbox(fakeCtx([], sent, calls));
+    expect(calls[0]).toBe(`create ${'x'.repeat(80)}|${'x'.repeat(100)}\nmore\n\nRequested by Ann in the committee chat.|adhoc`);
+    expect(calls[1]).toBe('addCard 9 Implementation');
+    expect(readState(statePath).adhocReplies).toEqual({ '9': { chat: '-5', messageId: 3 } });
+    expect(sent[0]).toBe('Queued as #9. The report comes as a reply here.');
+  });
+
+  it('refuses an ad hoc task without text', async () => {
+    const sent: string[] = [];
+    put('1.json', { kind: 'adhoc' });
+    await drainInbox(fakeCtx([], sent, []));
+    expect(readState(statePath).adhocReplies).toEqual({});
+    expect(sent[0]).toContain('needs text');
   });
 
   it('refuses a user outside the committee and queues nothing', async () => {

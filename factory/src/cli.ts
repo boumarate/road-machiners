@@ -6,7 +6,7 @@ import { runJob } from './job';
 import { tick } from './tick';
 import type { JobStage } from './types';
 
-const JOB_STAGES: JobStage[] = ['design', 'implement', 'testing', 'release', 'maintenance', 'approve', 'change'];
+const JOB_STAGES: JobStage[] = ['design', 'implement', 'testing', 'release', 'maintenance', 'approve', 'change', 'adhoc'];
 
 async function main(args: string[]): Promise<void> {
   process.loadEnvFile('.env');

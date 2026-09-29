@@ -21,14 +21,16 @@ export function fake(): Fake {
     run: async (cmd: string, args: string[]) => { note(`run ${cmd} ${args.join(' ')}`); return { code: 0, stdout: '', stderr: '' }; },
     github: {
       createIssue: async () => { note('createIssue'); return 7; },
+      issue: async () => ({ number: 7, title: 'T', body: 'Simulate battles', labels: ['adhoc'], createdAt: '', state: 'OPEN', thumbsUp: [] }),
       editIssue: async () => note('editIssue'),
       comment: async (_n: number, body: string) => note(`comment ${body}`),
+      move: async (_n: number, column: string) => note(`move ${column}`),
       close: async (_n: number, reason: string) => note(`close ${reason}`),
       addCard: async (_n: number, column: string) => note(`addCard ${column}`),
       openPullRequest: async (branch: string, base: string, title: string) => { note(`pr ${branch} ${base} ${title}`); return 'http://pr'; },
     },
     telegram: {
-      sendMessage: async (chat: string) => { note(`message ${chat}`); return 1; },
+      sendMessage: async (chat: string, text: string, replyTo?: number) => { note(`message ${chat} ${replyTo ?? '-'} ${text}`); return 1; },
       sendPhoto: async (chat: string) => { note(`photo ${chat}`); return 1; },
     },
     container: {

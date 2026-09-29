@@ -14,6 +14,7 @@ The design and its reasons are in [the factory task](../docs/tasks/game-factory.
 6. Every `FACTORY_RELEASE_DAYS`, `dev` merges into `main` and ships to itch.io with `npm run itch`. The public channel gets the changelog.
 7. Every `FACTORY_MAINTENANCE_HOURS`, Sonnet picks one slow spot, quality issue or stale doc and opens a task for it.
 8. A committee message starting with `/change` asks for a change to the factory itself. The factory opens a pull request against `dev` that touches only `factory/`. It never merges it.
+9. A committee member can ask Hermes for one-off work, like "simulate 10 battles and tell me if the MG is too weak". The factory opens an `adhoc` issue and runs Sonnet in a fresh clone of `dev`. It may run any repo harness, pushes nothing, and answers the member's message with a report.
 
 A failed or timed-out stage labels its issue `factory-stuck` and posts once to the committee chat. Remove the label to let the factory try again.
 

@@ -4,7 +4,7 @@ export type Column = 'Design' | 'Implementation' | 'Testing' | 'Approval' | 'Don
 
 export type CardStage = 'design' | 'implement' | 'testing';
 export type PeriodicStage = 'release' | 'maintenance';
-export type Stage = CardStage | PeriodicStage | 'approve' | 'feedback' | 'change' | 'intake' | 'tick';
+export type Stage = CardStage | PeriodicStage | 'approve' | 'feedback' | 'change' | 'adhoc' | 'intake' | 'tick';
 
 export type FactoryConfig = {
   repo: string; // "owner/name" on GitHub
@@ -50,7 +50,7 @@ export type Issue = {
 export type Card = { itemId: string; issue: number; column: Column; labels: string[] };
 
 // A job is one detached `factory run` process. `issue` is null for release and maintenance, and a change id for change.
-export type JobStage = CardStage | PeriodicStage | 'approve' | 'change';
+export type JobStage = CardStage | PeriodicStage | 'approve' | 'change' | 'adhoc';
 export type Job = { stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string };
 export type ChangeRequest = { id: number; text: string; by: string };
 
@@ -61,6 +61,7 @@ export type FactoryState = {
   lastMaintenance: string | null; // ISO time
   pendingApprovals: Record<string, string>; // issue number -> approving Telegram user, run by the next tick
   pendingChanges: ChangeRequest[]; // factory change requests, run by the next ticks in order
+  adhocReplies: Record<string, { chat: string; messageId: number }>; // ad hoc issue number -> the chat message its report answers
 };
 
 export interface GitHub {
@@ -126,5 +127,6 @@ export const OUT_DIR = '.factory';
 export const STUCK_LABEL = 'factory-stuck';
 export const WONT_DO_LABEL = 'wont-do';
 export const MAINTENANCE_LABEL = 'maintenance';
+export const ADHOC_LABEL = 'adhoc';
 export const CANDIDATE_LABELS = ['feature-request', 'bug'];
 export const FEEDBACK_HEADING = '## Committee feedback';

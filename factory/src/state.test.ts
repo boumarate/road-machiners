@@ -1,10 +1,16 @@
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readState, updateState } from './state';
 
 describe('state', () => {
+  it('reads an old state file without adhocReplies', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'factory-state-')), 'state.json');
+    writeFileSync(path, JSON.stringify({ job: null, approvalPosts: {}, lastRelease: null, lastMaintenance: null, pendingApprovals: {}, pendingChanges: [] }));
+    expect(readState(path).adhocReplies).toEqual({});
+  });
+
   it('starts empty and keeps updates', () => {
     const path = join(mkdtempSync(join(tmpdir(), 'factory-state-')), 'state.json');
     expect(readState(path).job).toBeNull();
