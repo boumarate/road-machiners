@@ -22,8 +22,8 @@ const ICON_PX = 26;
 const LIFT = 0.15; // meters above the ground, so the shape does not z-fight with it
 const DEG_PER_STEP = 5; // at most this many degrees per edge segment keeps the curve smooth
 const LINE_WIDTH_PX = 2;
-const FILL_ALPHA = 0.3;
-const LINE_ALPHA = 0.3;
+const FILL_ALPHA = 0.15;
+const LINE_ALPHA = 0.15;
 
 export class WeaponRangeView {
   readonly root = new THREE.Group();
