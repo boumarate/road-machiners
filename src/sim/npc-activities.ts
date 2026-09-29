@@ -13,7 +13,7 @@ import { callLawmen, isHostile, shotDamage, startFeuds } from './combat';
 import { affordableBuyCount, getTradePrice, sellVehicleCargo, serviceAtCamp, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
 import { isJunk, maxHp } from './wear';
 import { corePart, freeCells, goodsCount, mountedParts } from './grid';
-import { addGoods } from './inventory';
+import { addGoods, cargoRoom } from './inventory';
 import { cancelJob, inCombat } from './jobs';
 import { isFree } from './spawn';
 import {
@@ -1134,7 +1134,7 @@ function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): vo
   if (!activity.purchase) throw new Error('Trade activity missing purchase');
   noteTown(vehicle, site.id);
   const budget = getResources(world, vehicle).money - getUpkeepReserve(vehicle);
-  const count = affordableBuyCount(world, vehicle, site.id, activity.purchase.good, freeCells(vehicle), budget);
+  const count = affordableBuyCount(world, vehicle, site.id, activity.purchase.good, cargoRoom(vehicle, activity.purchase.good), budget);
   if (count > 0) {
     tradeGoods(world, vehicle, site.id, activity.purchase.good, count, 'buy');
     if (vehicle.brain!.goals[0] !== activity) throw new Error(`${vehicle.id} trades above its long-term goal`);
@@ -1149,7 +1149,7 @@ function resolveHaul(world: World, vehicle: Vehicle, activity: NpcActivity): voi
   const site = reachSite(vehicle, activity);
   if (!site) return;
   if (!activity.load) throw new Error('Haul activity missing load');
-  if (addGoods(world, vehicle, activity.load.good, freeCells(vehicle)) === 0) {
+  if (addGoods(world, vehicle, activity.load.good, cargoRoom(vehicle, activity.load.good)) === 0) {
     finishGoal(world, vehicle, 'cargo cannot hold the load');
     return;
   }

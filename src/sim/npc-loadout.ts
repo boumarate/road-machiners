@@ -8,7 +8,7 @@ import { makePart, makeVehicle, type PartSpec } from './factory';
 import { baseGrid, cellKey, freeCells, gridOf, itemCells, mountedItems, type Cell } from './grid';
 import { addGoods, mountPart, stowPart } from './inventory';
 import { vehicleMass } from './mass';
-import { gunDrag } from './stats';
+import { gunDrag, meetsSpeedFloor, npcMassRoom } from './stats';
 import { nextRandom, type Rng } from './rng';
 import type { Vehicle, World } from './types';
 import { partValue } from './wear';
@@ -126,6 +126,13 @@ function tryMountChoice(world: World, v: Vehicle, id: string, budget: number, mo
   return everyGunFires(candidate) ? candidate : null;
 }
 
+// A part beyond the template minimum. It must also leave the truck above the NPC speed floor, so its weight and gun
+// draw never slow it below MIN_NPC_SPEED_SHARE.
+function tryMountExtra(world: World, v: Vehicle, id: string, budget: number, mount?: Cell[]): Vehicle | null {
+  const next = tryMountChoice(world, v, id, budget, mount);
+  return next && meetsSpeedFloor(next) ? next : null;
+}
+
 // One wear roll per mounted non-core part, shifted by the gear level and clamped so a spawned part is never junk.
 // Core parts stay wear 0.
 function rollWear(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle): void {
@@ -179,7 +186,7 @@ function chooseRequiredParts(rng: Rng, table: NpcLoadoutTable, choices: ArmedCho
 function chooseOptionalPart(world: World, rng: Rng, v: Vehicle, budget: number, pool: Weighted<string | null>[]): Vehicle {
   const choices: Weighted<Vehicle>[] = [];
   for (const entry of pool) {
-    const candidate = entry.value === null ? v : tryMountChoice(world, v, entry.value, budget);
+    const candidate = entry.value === null ? v : tryMountExtra(world, v, entry.value, budget);
     if (candidate) choices.push({ value: candidate, weight: entry.weight });
   }
   if (!choices.length) throw new Error(`No eligible optional equipment for ${v.chassisId}. Add an explicit empty outcome or a fitting part.`);
@@ -209,7 +216,7 @@ function chooseGoods(rng: Rng, table: NpcLoadoutTable, level: Level, room: Room)
 // the factory uses, so everything chosen fits at spawn. Rated mass caps the load too.
 function chooseCargo(world: World, rng: Rng, wearRng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle): { spares: PartSpec[]; carried: Record<string, number> } {
   const load = { ...v, items: [...v.items] };
-  const massLeft = () => chassisDef(v.chassisId).ratedMass - vehicleMass(load);
+  const massLeft = () => Math.min(chassisDef(v.chassisId).ratedMass - vehicleMass(load), npcMassRoom(load));
   const carried: Record<string, number> = {};
   const addGood = (good: string, n: number) => {
     const added = addGoods(world, load, good, n);
@@ -259,7 +266,7 @@ function chooseVehicle(probe: World, rng: Rng, template: NpcTemplate, chassisId:
 function addGuns(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle, budget: number): Vehicle {
   for (let spot = freeDeckCells(v); spot > 0; spot--) {
     if (nextRandom(rng) >= Math.min(1, level.fill * table.gunFill)) continue;
-    const next = pickFitting(world, rng, table.extraGun, (id) => withinGunSlowdown(tryMountChoice(world, v, id, budget)));
+    const next = pickFitting(world, rng, table.extraGun, (id) => withinGunSlowdown(tryMountExtra(world, v, id, budget)));
     if (!next) break;
     v = next;
   }
@@ -297,7 +304,7 @@ function addArmor(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, 
   const target = Math.round(edgeCells(v.chassisId) * level.armor);
   for (const sides of SIDE_ORDER) {
     if (armoredCells(v) >= target) break;
-    const typed = pickFitting(world, rng, table.armor, (id) => tryMountChoice(world, v, id, budget, [sides[0]]));
+    const typed = pickFitting(world, rng, table.armor, (id) => tryMountExtra(world, v, id, budget, [sides[0]]));
     if (!typed) continue;
     v = typed;
     const type = mountedItems(v, 'armor').at(-1)!.part.defId;
@@ -311,7 +318,7 @@ function fillSides(world: World, v: Vehicle, type: string, sides: Cell[], budget
     progress = false;
     for (const side of sides) {
       if (armoredCells(v) >= target) break;
-      const next = tryMountChoice(world, v, type, budget, [side]);
+      const next = tryMountExtra(world, v, type, budget, [side]);
       if (next) [v, progress] = [next, true];
     }
   }
