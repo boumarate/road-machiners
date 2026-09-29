@@ -59,6 +59,28 @@ describe('NPC equipment generation', () => {
     }
   });
 
+  describe('gun fill chance', () => {
+    const gunsAt = (level: GearLevel) => {
+      const template = NPCS.gunwagon;
+      let total = 0;
+      const rolls = 12;
+      for (let seed = 1; seed <= rolls; seed++) total += generateNpcLoadout({ ...fixture, rngState: seed }, template, null, level).parts.filter((p) => partDef(p.defId).kind === 'weapon').length;
+      return total / rolls;
+    };
+
+    it('a poor truck carries only the guns its template requires', () => {
+      expect(gunsAt('poor')).toBe(NPCS.gunwagon.loadout.minGuns);
+    });
+
+    it('more fill chance gives more guns, and a loaded truck reaches many', () => {
+      const [light, standard, heavy, loaded] = (['light', 'standard', 'heavy', 'loaded'] as const).map(gunsAt);
+      expect(light).toBeLessThan(standard);
+      expect(standard).toBeLessThan(heavy);
+      expect(heavy).toBeLessThan(loaded);
+      expect(loaded).toBeGreaterThanOrEqual(NPCS.gunwagon.loadout.minGuns + 3);
+    }, 120_000);
+  });
+
   it.each(Object.values(NPCS))('gives $id only guns that can fire', (template) => {
     for (let seed = 1; seed <= 32; seed++) {
       const world = { ...fixture, rngState: seed };

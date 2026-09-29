@@ -70,6 +70,7 @@ const ART = {
   turning: '<path d="M10 35V22q0-12 14-12h6M25 4l7 6-7 6"/>',
   cells: '<path d="M5 5h30v30H5zM5 20h30M20 5v30"/>',
   load: '<path d="M3 27h34v6H3zM9 27V13h22v14M9 33v3M31 33v3"/>',
+  power: '<path d="M23 3L9 22h10l-3 15 15-20H21z"/>',
   recoil: '<path d="M16 20h20M16 14v12M4 20l8-6v12z"/>',
   blast: '<path d="M20 4l3 9 9-4-4 9 9 2-9 3 4 9-9-4-3 9-3-9-9 4 4-9-9-3 9-2-4-9 9 4z"/>',
   heat: '<path d="M16 25V7a4 4 0 0 1 8 0v18a7 7 0 1 1-8 0zM20 13v15"/>',
@@ -126,6 +127,7 @@ const ICON_NAMES: Record<IconName, string> = {
   cells: "Cargo cells",
   load: "Rated load",
   recoil: "Recoil",
+  power: "Power",
   blast: "Blast armor",
   heat: "Heat",
   patch: "Field repair",
@@ -307,6 +309,7 @@ export type StatIcon =
   | "load"
   | "scanner"
   | "recoil"
+  | "power"
   | "blast"
   | "heat"
   | "patch"
@@ -395,6 +398,7 @@ function weaponStats(part: PartInstance): Stat[] {
     stat("reload", "Turns to reload", d.reload, "t", "less"),
     stat("arc", "Firing arc", d.arc, "°", "more"),
     stat("recoil", "Recoil", d.recoil, "°", "less", 1),
+    stat("power", "Power draw", d.draw, "", "less", 1),
   ];
 }
 
@@ -405,6 +409,7 @@ function engineStats(part: PartInstance): Stat[] {
   return [
     { ...speed, text: signed(speed.value, 0) },
     { ...accel, text: signed(accel.value, 1) },
+    stat("power", "Gun power", d.capacity, "", "more"),
     stat("fuel", "Fuel use", d.fuelMult, "×", "less", 1),
     stat("heat", "Heat", d.heat, "×", "less", 1),
   ];

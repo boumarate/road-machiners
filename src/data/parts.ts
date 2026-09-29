@@ -50,6 +50,7 @@ export type WeaponRound = {
 
 export type WeaponDef = PartBase & {
   kind: "weapon";
+  draw: number; // power draw of a working gun on the engine's capacity, see gunDrag() in src/sim/stats.ts
   range: number; // tiles. Aim worsens toward it by RULES.rangeFalloff for the weapon's tier.
   cooldown: number; // turns between shots, 1 = every turn
   magazine: number; // shots before the gun must reload
@@ -69,6 +70,7 @@ export type EngineDef = PartBase & {
   kind: "engine";
   speedBonus: number;
   accelBonus: number;
+  capacity: number; // total draw of working guns the engine carries before they slow the truck fully
   fuelMult: number;
   noise: number; // multiplies how far the engine is heard
   heat: number; // multiplies how fast the sun heats the engine
@@ -190,6 +192,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     tall: false,
     speedBonus: 0,
     accelBonus: 0,
+    capacity: 7,
     fuelMult: 1,
     noise: 1,
     heat: 1,
@@ -208,6 +211,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     tall: false,
     speedBonus: 1.3,
     accelBonus: 1,
+    capacity: 10,
     fuelMult: 1.4,
     noise: 1.3,
     heat: 1.2,
@@ -226,6 +230,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     tall: false,
     speedBonus: -1.3,
     accelBonus: 0,
+    capacity: 5,
     fuelMult: 0.75,
     noise: 0.7,
     heat: 0.7,
@@ -244,6 +249,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     tall: false,
     speedBonus: -0.65,
     accelBonus: 0.5,
+    capacity: 10,
     fuelMult: 0.7,
     noise: 1.2,
     heat: 0.6,
@@ -262,6 +268,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     tall: false,
     speedBonus: 1.95,
     accelBonus: 0.5,
+    capacity: 8,
     fuelMult: 1.25,
     noise: 1.4,
     heat: 1.6,
@@ -280,6 +287,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     tall: false,
     speedBonus: -1.3,
     accelBonus: 1.5,
+    capacity: 16,
     fuelMult: 1.1,
     noise: 1.5,
     heat: 0.8,
@@ -298,6 +306,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     tall: false,
     speedBonus: 2.6,
     accelBonus: 2,
+    capacity: 13,
     fuelMult: 2.2,
     noise: 1.8,
     heat: 2,

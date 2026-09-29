@@ -5,7 +5,7 @@ import { partDef, type PartKind } from '../data/parts';
 import { CONDITION } from '../data/wear';
 import { everyGunFires } from './armor';
 import { makePart, makeVehicle, type PartSpec } from './factory';
-import { baseGrid, freeCells, itemCells, mountedItems, type Cell } from './grid';
+import { baseGrid, cellKey, freeCells, gridOf, itemCells, mountedItems, type Cell } from './grid';
 import { addGoods, mountPart, stowPart } from './inventory';
 import { vehicleMass } from './mass';
 import { nextRandom, type Rng } from './rng';
@@ -233,8 +233,8 @@ function addSpareParts(world: World, rng: Rng, table: NpcLoadoutTable, level: Le
   return added;
 }
 
-// Rolls the chassis with its engine and main gun, then fills extra guns, one utility part and armor toward the
-// gear level's targets. The utility part comes before armor, so a hauler keeps its cargo part on a small budget.
+// Rolls the chassis with its engine and main gun, then one utility part, then extra guns and armor toward the
+// gear level's targets. The utility part comes first, so a full deck of guns never crowds out a hauler's cargo part.
 // Each part fits the level's budget and the rated mass at pristine wear.
 function chooseVehicle(probe: World, rng: Rng, template: NpcTemplate, chassisId: string | null, level: Level): Vehicle {
   const table = template.loadout;
@@ -246,20 +246,27 @@ function chooseVehicle(probe: World, rng: Rng, template: NpcTemplate, chassisId:
   const chassisChoices = chassis.map((entry) => ({ value: buildArmedChoices(probe, template, entry.value, required), weight: entry.weight })).filter((entry) => entry.value.length > 0);
   if (!chassisChoices.length) throw new Error(`No valid required NPC loadout for ${template.id}`);
   let v = chooseRequiredParts(rng, table, sampleWeighted(rng, chassisChoices));
-  v = addGuns(probe, rng, table, level, v, budget);
   v = chooseOptionalPart(probe, rng, v, required, table.cargoPart);
+  v = addGuns(probe, rng, table, level, v, budget);
   return addArmor(probe, rng, table, level, v, budget);
 }
 
-// Extra guns up to the level's roll, until none fits. The template minimum is already mounted.
+// Every free deck cell is a spot for one more gun, and each rolls the level's fill chance once. A roll that hits
+// mounts the first gun that fits, budget and rated mass allowing. The template minimum is already mounted.
 function addGuns(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle, budget: number): Vehicle {
-  const target = sampleWeighted(rng, level.guns);
-  while (mountedItems(v, 'weapon').length < target) {
+  for (let spot = freeDeckCells(v); spot > 0; spot--) {
+    if (nextRandom(rng) >= level.fill) continue;
     const next = pickFitting(world, rng, table.extraGun, (id) => tryMountChoice(world, v, id, budget));
     if (!next) break;
     v = next;
   }
   return v;
+}
+
+function freeDeckCells(v: Vehicle): number {
+  const taken = new Set(v.items.flatMap(itemCells).map((c) => cellKey(c.x, c.y)));
+  const cells = gridOf(v).cells;
+  return cells.flatMap((row, y) => row.flatMap((c, x) => (c === 'D' && !taken.has(cellKey(x, y)) ? [1] : []))).length;
 }
 
 // A weighted pick among the pool entries that `mount` can fit, mounted. Null when none fits.

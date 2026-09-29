@@ -5,10 +5,11 @@
 import { chassisDef } from '../data/chassis';
 import { GOODS } from '../data/goods';
 import { GEAR_LEVEL_IDS, NPCS, type GearLevel } from '../data/npcs';
-import { partDef } from '../data/parts';
+import { partDef, type EngineDef } from '../data/parts';
 import { START_KITS } from '../data/start';
 import { gridOf, itemCells, mountedItems } from '../sim/grid';
 import { vehicleMass } from '../sim/mass';
+import { gunDrag, vehicleStats } from '../sim/stats';
 import { generateNpcLoadout } from '../sim/npc-loadout';
 import { spawnAt } from '../sim/spawn';
 import type { Vehicle, World } from '../sim/types';
@@ -28,6 +29,8 @@ export type TemplateStats = {
   cab: Record<CabSide, number>; // share of cab lanes on each side with armor between the edge and the cab
   value: number; // chassis and gear, wear counted
   mass: number; // share of rated mass
+  drag: number; // share of top speed the guns' power draw takes
+  speed: number; // top speed as a share of the chassis top speed
   cargo: number; // value of goods and loose spares
 };
 
@@ -42,7 +45,7 @@ function worldFor(seed: number): World {
 export function templateStats(id: string, rolls: number, level: GearLevel | null = null): TemplateStats {
   const tpl = NPCS[id];
   if (!tpl) throw new Error(`Unknown template ${id}`);
-  const s: TemplateStats = { id, rolls, levels: { poor: 0, light: 0, standard: 0, heavy: 0, loaded: 0 }, guns: 0, armor: 0, cab: { front: 0, rear: 0, left: 0, right: 0 }, value: 0, mass: 0, cargo: 0 };
+  const s: TemplateStats = { id, rolls, levels: { poor: 0, light: 0, standard: 0, heavy: 0, loaded: 0 }, guns: 0, armor: 0, cab: { front: 0, rear: 0, left: 0, right: 0 }, value: 0, mass: 0, drag: 0, speed: 0, cargo: 0 };
   for (let seed = 1; seed <= rolls; seed++) {
     const w = worldFor(seed);
     const loadout = generateNpcLoadout(w, tpl, null, level);
@@ -54,6 +57,8 @@ export function templateStats(id: string, rolls: number, level: GearLevel | null
     for (const side of CAB_SIDES) s.cab[side] += cab[side] / rolls;
     s.value += gearValue(v) / rolls;
     s.mass += vehicleMass(v) / chassisDef(v.chassisId).ratedMass / rolls;
+    s.drag += (1 - gunDrag(v, (partDef(mountedItems(v, 'engine')[0].part.defId) as EngineDef).capacity)) / rolls;
+    s.speed += vehicleStats(w, v).maxSpeed / chassisDef(v.chassisId).maxSpeed / rolls;
     s.cargo += (Object.entries(loadout.cargo).reduce((sum, [good, n]) => sum + GOODS[good].value * n, 0) + loadout.spares.reduce((sum, p) => sum + partDef(p.defId).value, 0)) / rolls;
   }
   return s;
@@ -98,15 +103,15 @@ export function formatLoadoutReport(stats: TemplateStats[]): string {
   const lines = [
     '# NPC loadouts',
     '',
-    `${stats[0]?.rolls ?? 0} rolls per template. Levels are poor, light, standard, heavy, loaded. Armor is the share of edge cells armored. Cab is the share of cab lanes shielded per side: front, rear, left, right.`,
+    `${stats[0]?.rolls ?? 0} rolls per template. Levels are poor, light, standard, heavy, loaded. Armor is the share of edge cells armored. Gun drag is the top speed the guns take. Speed is the top speed against the chassis top speed. Cab is the share of cab lanes shielded per side: front, rear, left, right.`,
     '',
-    '| template | levels | guns | armor | cab F/B/L/R | gear value | mass | cargo value |',
-    '|---|---|---|---|---|---|---|---|',
+    '| template | levels | guns | armor | cab F/B/L/R | gear value | mass | gun drag | speed | cargo value |',
+    '|---|---|---|---|---|---|---|---|---|---|',
   ];
   for (const s of stats) {
     const levels = GEAR_LEVEL_IDS.map((l) => pct(s.levels[l])).join(' ');
     const cab = CAB_SIDES.map((side) => pct(s.cab[side])).join(' ');
-    lines.push(`| ${s.id} | ${levels} | ${s.guns.toFixed(2)} | ${pct(s.armor)} | ${cab} | ${Math.round(s.value)} | ${pct(s.mass)} | ${Math.round(s.cargo)} |`);
+    lines.push(`| ${s.id} | ${levels} | ${s.guns.toFixed(2)} | ${pct(s.armor)} | ${cab} | ${Math.round(s.value)} | ${pct(s.mass)} | ${pct(s.drag)} | ${pct(s.speed)} | ${Math.round(s.cargo)} |`);
   }
   return lines.join('\n') + '\n';
 }

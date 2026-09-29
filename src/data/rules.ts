@@ -36,6 +36,12 @@ export const RULES = {
   yieldDistance: 1.5, // tiles neutral drivers keep past both radii from a vehicle ahead, beyond what both close before they stop; see src/sim/ai.ts
   maxBulge: 0.25, // tiles a steering arc may stray from the straight route line
   limpSpeed: 1.04, // 15 km/h, top speed with an empty tank or a dead engine or transmission; a truck this slow raises no dust
+  // Working guns slow the truck: top speed and acceleration scale by 1 - gunDragMax * min(1, draw / capacity) ** gunDragCurve.
+  // Draw sums the guns' `draw`, capacity is the engine's. The curve is convex, so the first guns cost little and a
+  // deck packed with guns reaches the full 60%. With a stock engine (7), one or two light guns cost 3 to 10%, two
+  // long rifles 15%, and seven 1-cell guns on a big deck 60%.
+  gunDragMax: 0.6,
+  gunDragCurve: 1.5,
   minSpeedCap: 1, // a heavy load never pushes max speed below this
   collisionMinImpact: 1.5, // slower bumps deal no damage
   // A crash gives each truck ramDamage × impact² in tiles per turn × the other body's share of both masses,

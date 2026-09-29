@@ -84,8 +84,9 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   // Without a working engine, or with a stalled one, the driver pushes the truck at limp speed and burns no fuel.
   if (hasWorkingEngine(v) && !isStalled(world, v)) {
     const e = wornDef<EngineDef>(engines[0]);
-    maxSpeed = Math.max(RULES.minSpeedCap, (ch.maxSpeed + e.speedBonus) * load * wheels);
-    accel = (ch.accel + e.accelBonus) * force * RULES.accelScale;
+    const drag = gunDrag(v, e.capacity);
+    maxSpeed = Math.max(RULES.minSpeedCap, (ch.maxSpeed + e.speedBonus) * load * wheels * drag);
+    accel = (ch.accel + e.accelBonus) * force * RULES.accelScale * drag;
     fuelMult = e.fuelMult;
     if (inOverdrive(world, v)) {
       maxSpeed *= RULES.overdriveBoost;
@@ -113,6 +114,13 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     radius: ch.radius,
     weapons: mountedItems(v, 'weapon').map((item) => ({ part: item.part, def: wornDef<WeaponDef>(item.part), sides: openSides(v, item) })),
   };
+}
+
+// Speed and acceleration multiplier from the working guns. Each draws power from the engine, up to gunDragMax slower
+// once their total draw reaches the engine's capacity. The curve is convex: the first guns cost little.
+export function gunDrag(v: Vehicle, capacity: number): number {
+  const draw = mountedItems(v, 'weapon').filter((item) => isWorking(item.part)).reduce((sum, item) => sum + wornDef<WeaponDef>(item.part).draw, 0);
+  return 1 - RULES.gunDragMax * Math.min(1, draw / capacity) ** RULES.gunDragCurve;
 }
 
 // Only the player's truck has engine overdrive.
