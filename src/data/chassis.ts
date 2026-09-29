@@ -4,17 +4,16 @@
 //
 // layout is the inventory grid as a top view, nose on row 0. One string per row. Every character except a space is a cell.
 //   D           deck mount: weapons, scanners and cargo frames all compete for these cells
-//   E           engine bay, fixed per chassis because the base model has a hood cutout over it
+//   E           engine bay. The engine is drawn in the model's hood hole wherever these cells lie, see engineAnchor()
 //   F, B, L, R  armor mounts on the front, back, left and right edges. Armor works when it lies fully on one of them.
 //   X           built-in cells, each filled by a core part listed in core
-// The grid is the base model's columns plus one armor column on each side, outside the model. Column 0 is L and the last
-// column is R, on every row but the first and last. The first and last rows are the model's bumper rows, F and B, and
-// span its full width. So model column c is grid column c + 1, and model rows are grid rows. A side plate is skin: it
-// draws thin on the model's outer face and adds no width. A space is no cell, so the armor columns leave out the corners.
+// The grid is logical. Column 0 is L and the last column is R, on every row but the first and last, which are F and B.
+// The projection in src/sim/body.ts stretches the inner cells over the base model and puts the armor ring on its outer
+// faces, so a side plate is skin that adds no width. A space is no cell, so the armor columns leave out the corners.
 // A part works only when it lies fully on mount cells of its kind. Any item may sit on any free cell, so empty mounts hold cargo too.
 //
-// core places the built-in parts at fixed cells, unrotated unless it lists rot 1. The four wheels sit on the model's
-// edge columns, grid column 1 and the one before the last, one cell in from the side armor.
+// core places the built-in parts at fixed cells, unrotated unless it lists rot 1. The four wheels sit one column in from
+// the side armor, one in each corner of the truck. The physics wheels come from PHYSICS.bodies, not these cells.
 //
 // Critical parts are the engine, the cab and the tank. They stay clear of armor by tier. Tier 1 parts may touch armor
 // cells. On tier 2 the engine touches armor cells on one side at most. On tier 3 every critical part has a cell that is

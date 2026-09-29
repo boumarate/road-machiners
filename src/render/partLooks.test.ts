@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { GOOD_IDS } from '../data/goods';
 import { PARTS } from '../data/parts';
-import { BODY_PARTS, HOOD_HOLES, PART_MODELS, WEAPON_POOLS, baseModel, partModel, weaponLook } from './partLooks';
+import { BODY_PARTS, PART_MODELS, WEAPON_POOLS, baseModel, partModel, weaponLook } from './partLooks';
 
 const weaponIds = Object.values(PARTS).filter((d) => d.kind === 'weapon').map((d) => d.id);
 const otherIds = Object.values(PARTS).filter((d) => d.kind !== 'weapon' && !BODY_PARTS.has(d.id)).map((d) => d.id);
@@ -56,17 +56,5 @@ describe('part looks', () => {
   it('gives 50 ids more than one look for a weapon with larger pools', () => {
     const looks = new Set(Array.from({ length: 50 }, (_, i) => JSON.stringify(weaponLook(`p${i}`, 'mg'))));
     expect(looks.size).toBeGreaterThan(1);
-  });
-
-  it('puts the engine cells of every chassis on its base hood hole', () => {
-    expect(Object.keys(HOOD_HOLES).sort()).toEqual(Object.keys(CHASSIS).sort());
-    for (const [id, chassis] of Object.entries(CHASSIS)) {
-      const hole = HOOD_HOLES[id];
-      const cells = new Set<string>();
-      for (let y = hole.rows[0]; y <= hole.rows[1]; y++) for (let c = hole.cols[0]; c <= hole.cols[1]; c++) cells.add(`${c + 1},${y}`);
-      const engine = new Set<string>();
-      chassis.layout.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === 'E') engine.add(`${x},${y}`); }));
-      expect([...engine].sort(), id).toEqual([...cells].sort());
-    }
   });
 });
