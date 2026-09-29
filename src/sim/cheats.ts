@@ -274,14 +274,15 @@ export function kitChoices(templateId: string | null = null): { tpl: NpcTemplate
   return choices;
 }
 
-// Swaps the player truck for a random chassis with a loadout rolled like an NPC's, picked with the world RNG. A
-// template or a gear level narrows the roll. The truck keeps its id, name and place. Its goods and spares go, and
-// fuel and supplies are cut to the new caps.
-export function randomKit(world: World, templateId: string | null = null, level: string | null = null): World {
+// Swaps the player truck for a random template's chassis with a loadout rolled like an NPC's, picked with the world
+// RNG. level is a gear level from 1 for poor to 5 for loaded, or null for one picked evenly at random. The truck
+// keeps its id, name and place. Its goods and spares go, and fuel and supplies are cut to the new caps.
+export function randomKit(world: World, level: number | null): World {
   if (!playerCanAct(world)) throw new CheatError(`Cannot swap trucks while the player is ${isTowed(world) ? 'towed' : world.player.state}`);
-  const gear = gearLevelOf(level);
-  const choices = kitChoices(templateId);
+  if (level !== null) gearLevelOf(level);
+  const choices = kitChoices();
   return update(world, (w) => {
+    const gear = gearLevelOf(level ?? randInt(w, 1, GEAR_LEVEL_IDS.length));
     const { tpl, chassisId } = choices[randInt(w, 0, choices.length - 1)];
     const old = playerVehicle(w);
     const spot = freeSpotNear(w, old.pos, chassisDef(chassisId).radius, old.id);
@@ -296,10 +297,10 @@ export function randomKit(world: World, templateId: string | null = null, level:
   });
 }
 
-function gearLevelOf(level: string | null): GearLevel | null {
-  if (level === null) return null;
-  const found = GEAR_LEVEL_IDS.find((id) => id === level);
-  if (!found) throw new CheatError(`Unknown gear level ${level}. Levels: ${GEAR_LEVEL_IDS.join(', ')}`);
+// Gear level 1 is the first of GEAR_LEVEL_IDS, poor, and the last is loaded.
+function gearLevelOf(level: number): GearLevel {
+  const found = Number.isInteger(level) ? GEAR_LEVEL_IDS[level - 1] : undefined;
+  if (!found) throw new CheatError(`Gear level must be 1 to ${GEAR_LEVEL_IDS.length}: ${GEAR_LEVEL_IDS.join(', ')}`);
   return found;
 }
 
