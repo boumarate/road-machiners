@@ -1,21 +1,24 @@
 import asyncio
 import importlib.util
 import json
+import sys
 import types
 from pathlib import Path
 
 import pytest
 
-spec = importlib.util.spec_from_file_location("factory_plugin", Path(__file__).parent / "__init__.py")
+plugin_dir = Path(__file__).parent
+spec = importlib.util.spec_from_file_location("factory_plugin", plugin_dir / "__init__.py", submodule_search_locations=[str(plugin_dir)])
 plugin = importlib.util.module_from_spec(spec)
+sys.modules["factory_plugin"] = plugin
 spec.loader.exec_module(plugin)
 
-CFG = plugin.Config("/inbox", "/state", frozenset({"1", "2"}), "-100")
+CFG = plugin.Config("/inbox", "/state", "-100", None)
 POSTS = {"55": 12}
 
 
-def route(text, reply=None, user="1", chat="-100"):
-    return plugin.route(text, reply, user, chat, POSTS, CFG)
+def route(text, reply=None, chat="-100"):
+    return plugin.route(text, reply, chat, POSTS, CFG)
 
 
 def test_approve_reply():
@@ -38,24 +41,19 @@ def test_change_request():
     assert route("/changelog") is None
 
 
-def test_other_chat_is_ignored_even_for_strangers():
+
+
+
+
+
+
+def test_other_chat_is_normal_chat():
     assert route("approve", "55", chat="-200") is None
-    assert route("/change x", user="9", chat="-200") is None
-
-
-def test_stranger_is_denied():
-    assert route("approve", "55", user="9")[0] == "denied"
-    assert route("no", "55", user="9")[0] == "denied"
-    assert route("/change x", user="9")[0] == "denied"
-
-
-def test_stranger_plain_chat_is_normal():
-    assert route("hello", user="9") is None
-    assert route("hello", "99", user="9") is None
+    assert route("/change x", chat="-200") is None
 
 
 def test_ids_compare_as_strings():
-    assert plugin.route("approve", 55, 1, -100, POSTS, CFG) == ("approve", 12)
+    assert plugin.route("approve", 55, -100, POSTS, CFG) == ("approve", 12)
 
 
 def test_inbox_command_shapes():
@@ -87,21 +85,41 @@ def test_write_inbox_is_atomic(tmp_path, monkeypatch):
     assert [p.name for p in tmp_path.iterdir()] == ["1700000000000-79.json"]
 
 
-ENV = {
-    "FACTORY_INBOX": "/in", "FACTORY_STATE_DIR": "/st",
-    "FACTORY_COMMITTEE_TELEGRAM": "1, 2", "FACTORY_COMMITTEE_CHAT": "-100",
-}
+def env(tmp_path):
+    return {
+        "FACTORY_INBOX": "/in", "FACTORY_STATE_DIR": "/st", "FACTORY_COMMITTEE_CHAT": "-100",
+        "FACTORY_COMMITTEE_DIR": str(tmp_path / "committee"),
+        "FACTORY_COMMITTEE_BOOTSTRAP": "1", "FACTORY_COMMITTEE_BOOTSTRAP_GITHUB": "boss",
+    }
 
 
-def test_load_config():
-    assert plugin.load_config(ENV) == plugin.Config("/in", "/st", frozenset({"1", "2"}), "-100")
+def test_load_config(tmp_path):
+    cfg = plugin.load_config(env(tmp_path))
+    assert (cfg.inbox, cfg.state_dir, cfg.chat) == ("/in", "/st", "-100")
+    assert cfg.committee.bootstrap == "1"
 
 
-@pytest.mark.parametrize("key", list(ENV))
-def test_load_config_fails_loud(key):
-    env = {k: v for k, v in ENV.items() if k != key}
+@pytest.mark.parametrize("key", plugin.REQUIRED_KEYS)
+def test_load_config_fails_loud(tmp_path, key):
+    values = {k: v for k, v in env(tmp_path).items() if k != key}
     with pytest.raises(RuntimeError, match=key):
-        plugin.load_config(env)
+        plugin.load_config(values)
+
+
+def test_register_seeds_the_file(tmp_path):
+    hooks = []
+    ctx = types.SimpleNamespace(register_hook=lambda name, fn: hooks.append(name))
+    plugin_env = env(tmp_path)
+    old = plugin.os.environ.copy()
+    plugin.os.environ.update(plugin_env)
+    try:
+        plugin.register(ctx)
+    finally:
+        plugin.os.environ.clear()
+        plugin.os.environ.update(old)
+    assert hooks == ["pre_gateway_dispatch"]
+    data = json.loads((tmp_path / "committee" / "committee.json").read_text())
+    assert data == {"members": [{"telegram": "1", "github": "boss", "name": None}]}
 
 
 def test_read_approval_posts(tmp_path):
@@ -119,13 +137,15 @@ class Adapter:
         return types.SimpleNamespace(success=True, error=None)
 
 
-def dispatch(tmp_path, user, text="/change x"):
+def dispatch(tmp_path, user, text="/change x", chat="-100", monkeypatch=None):
     (tmp_path / "state").mkdir(exist_ok=True)
     (tmp_path / "inbox").mkdir(exist_ok=True)
-    cfg = plugin.Config(str(tmp_path / "inbox"), str(tmp_path / "state"), frozenset({"1"}), "-100")
+    committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
+    committee.seed()
+    cfg = plugin.Config(str(tmp_path / "inbox"), str(tmp_path / "state"), "-100", committee)
     adapter = Adapter()
     gateway = types.SimpleNamespace(adapters={"telegram": adapter})
-    source = types.SimpleNamespace(user_id=user, user_name="Ann", chat_id="-100", platform="telegram")
+    source = types.SimpleNamespace(user_id=user, user_name="Ann", chat_id=chat, platform="telegram")
     event = types.SimpleNamespace(text=text, reply_to_message_id=None, source=source, message_id="5")
     result = asyncio.run(plugin.make_hook(cfg)(event, gateway, None))
     return result, adapter, tmp_path / "inbox"
@@ -139,7 +159,47 @@ def test_hook_queues_and_replies(tmp_path):
     assert json.loads(file.read_text())["by"] == "1"
 
 
-def test_hook_denies_without_queueing(tmp_path):
-    result, adapter, inbox = dispatch(tmp_path, "9")
-    assert result["reason"] == "factory-denied"
+@pytest.mark.parametrize("chat", ["-100", "-200"])
+@pytest.mark.parametrize("text", ["/change x", "hello", "/committee list", "/committee add 5"])
+def test_hook_drops_non_members_silently(tmp_path, chat, text):
+    result, adapter, inbox = dispatch(tmp_path, "9", text=text, chat=chat)
+    assert result == {"action": "skip", "reason": "factory-not-committee"}
+    assert adapter.sent == []
     assert list(inbox.iterdir()) == []
+    assert plugin.Committee(str(tmp_path / "committee"), "1", "boss").ids() == frozenset({"1"})
+
+
+def test_member_plain_chat_in_other_chat_passes(tmp_path):
+    result, adapter, _ = dispatch(tmp_path, "1", text="hello", chat="-200")
+    assert result is None
+    assert adapter.sent == []
+
+
+def test_committee_list_in_any_chat(tmp_path):
+    result, adapter, _ = dispatch(tmp_path, "1", text="/committee list", chat="-200")
+    assert result["reason"] == "factory-committee"
+    assert "1 github: boss" in adapter.sent[0]
+
+
+def test_committee_add_schedules_restart(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(plugin, "_schedule_restart", lambda: calls.append(1))
+    result, adapter, _ = dispatch(tmp_path, "1", text="/committee add 7 bob")
+    assert result["reason"] == "factory-committee"
+    assert "Added 7" in adapter.sent[0]
+    assert calls == [1]
+
+
+def test_committee_bad_input_replies_without_restart(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(plugin, "_schedule_restart", lambda: calls.append(1))
+    result, adapter, _ = dispatch(tmp_path, "1", text="/committee add abc")
+    assert "number" in adapter.sent[0]
+    assert calls == []
+
+
+def test_committee_args():
+    assert plugin.committee_args("/committee") == ""
+    assert plugin.committee_args(" /committee list ") == "list"
+    assert plugin.committee_args("/committeex") is None
+    assert plugin.committee_args("hello") is None

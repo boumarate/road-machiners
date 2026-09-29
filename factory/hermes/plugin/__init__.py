@@ -1,18 +1,28 @@
 """Hermes plugin for the game factory.
 
-A pre_gateway_dispatch hook takes committee messages in the factory chat and writes them
-to the factory inbox as JSON files. The host tick reads the inbox.
-Every other message goes to Hermes as normal chat.
+A pre_gateway_dispatch hook drops every message from a user outside the committee.
+It answers /committee commands from members in any chat.
+It takes committee messages in the factory chat and writes them to the factory inbox as JSON files.
+The host tick reads the inbox. Every other member message goes to Hermes as normal chat.
 """
 
 import json
 import os
+import signal
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-REQUIRED_KEYS = ("FACTORY_INBOX", "FACTORY_STATE_DIR", "FACTORY_COMMITTEE_TELEGRAM", "FACTORY_COMMITTEE_CHAT")
+from .committee import Committee, CommitteeError
+
+REQUIRED_KEYS = (
+    "FACTORY_INBOX", "FACTORY_STATE_DIR", "FACTORY_COMMITTEE_CHAT",
+    "FACTORY_COMMITTEE_DIR", "FACTORY_COMMITTEE_BOOTSTRAP", "FACTORY_COMMITTEE_BOOTSTRAP_GITHUB",
+)
+COMMITTEE_PREFIX = "/committee"
+RESTART_DELAY_SECONDS = 2.0
 QUEUED_REPLY = "Queued. The factory picks this up on its next tick."
 
 
@@ -20,21 +30,20 @@ QUEUED_REPLY = "Queued. The factory picks this up on its next tick."
 class Config:
     inbox: str
     state_dir: str
-    committee: frozenset
     chat: str
+    committee: Committee
 
 
 def load_config(environ: dict) -> Config:
     missing = [key for key in REQUIRED_KEYS if not environ.get(key, "").strip()]
     if missing:
         raise RuntimeError(f"Factory plugin env is missing {', '.join(missing)}.")
-    committee = frozenset(part.strip() for part in environ["FACTORY_COMMITTEE_TELEGRAM"].split(",") if part.strip())
-    if not committee:
-        raise RuntimeError("FACTORY_COMMITTEE_TELEGRAM has no user ids.")
-    return Config(
-        environ["FACTORY_INBOX"].strip(), environ["FACTORY_STATE_DIR"].strip(),
-        committee, environ["FACTORY_COMMITTEE_CHAT"].strip(),
+    committee = Committee(
+        environ["FACTORY_COMMITTEE_DIR"].strip(),
+        environ["FACTORY_COMMITTEE_BOOTSTRAP"].strip(),
+        environ["FACTORY_COMMITTEE_BOOTSTRAP_GITHUB"].strip(),
     )
+    return Config(environ["FACTORY_INBOX"].strip(), environ["FACTORY_STATE_DIR"].strip(), environ["FACTORY_COMMITTEE_CHAT"].strip(), committee)
 
 
 def read_approval_posts(state_dir: str) -> dict:
@@ -46,17 +55,27 @@ def read_approval_posts(state_dir: str) -> dict:
 CHANGE_PREFIX = "/change "
 
 
-def route(text, reply_to_message_id, user_id, chat_id, approval_posts, cfg) -> Optional[tuple]:
-    """Decides what a message means. Returns None for normal Hermes chat."""
+def route(text, reply_to_message_id, chat_id, approval_posts, cfg) -> Optional[tuple]:
+    """Decides what a committee member's message means. Returns None for normal Hermes chat."""
     if str(chat_id) != cfg.chat:
         return None
-    text = text or ""
-    request = _request(text, reply_to_message_id, approval_posts)
-    if request is None:
-        return None
-    if str(user_id) not in cfg.committee:
-        return ("denied", "Only committee members can do this.")
-    return request
+    return _request(text or "", reply_to_message_id, approval_posts)
+
+
+def committee_args(text) -> Optional[str]:
+    """The text after /committee, or None when the message is not that command."""
+    text = (text or "").strip()
+    if text == COMMITTEE_PREFIX:
+        return ""
+    if text.startswith(COMMITTEE_PREFIX + " "):
+        return text[len(COMMITTEE_PREFIX):].strip()
+    return None
+
+
+def _schedule_restart() -> None:
+    timer = threading.Timer(RESTART_DELAY_SECONDS, os.kill, args=(os.getpid(), signal.SIGTERM))
+    timer.daemon = True
+    timer.start()
 
 
 def _request(text, reply_to_message_id, approval_posts) -> Optional[tuple]:
@@ -102,15 +121,21 @@ async def _reply(gateway, event, text: str) -> None:
 def make_hook(cfg: Config):
     async def on_dispatch(event, gateway, session_store, **kwargs):
         source = event.source
-        decision = route(
-            event.text, event.reply_to_message_id, source.user_id, source.chat_id,
-            read_approval_posts(cfg.state_dir), cfg,
-        )
+        if not cfg.committee.is_member(source.user_id):
+            return {"action": "skip", "reason": "factory-not-committee"}
+        args = committee_args(event.text)
+        if args is not None:
+            try:
+                reply, restart = cfg.committee.execute(args, str(source.user_id))
+            except CommitteeError as error:
+                reply, restart = str(error), False
+            await _reply(gateway, event, reply)
+            if restart:
+                _schedule_restart()
+            return {"action": "skip", "reason": "factory-committee"}
+        decision = route(event.text, event.reply_to_message_id, source.chat_id, read_approval_posts(cfg.state_dir), cfg)
         if decision is None:
             return None
-        if decision[0] == "denied":
-            await _reply(gateway, event, decision[1])
-            return {"action": "skip", "reason": "factory-denied"}
         command = inbox_command(
             decision, source.user_id, getattr(source, "user_name", None), source.chat_id, event.message_id,
         )
@@ -123,4 +148,5 @@ def make_hook(cfg: Config):
 
 def register(ctx) -> None:
     cfg = load_config(dict(os.environ))
+    cfg.committee.seed()
     ctx.register_hook("pre_gateway_dispatch", make_hook(cfg))
