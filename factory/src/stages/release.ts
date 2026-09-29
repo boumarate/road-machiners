@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, mkdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { must } from '../exec';
 import { updateState } from '../state';
@@ -37,26 +37,34 @@ shot=$(ls -t .playtest/*.png | head -n 1)
 cp "$shot" ${OUT_DIR}/screenshot.png
 `;
 
-function linkEnv(gameDir: string, codeDir: string): void {
-  const target = join(gameDir, '.env');
-  if (existsSync(target) || lstatSync(target, { throwIfNoEntry: false })) unlinkSync(target);
-  symlinkSync(join(codeDir, '.env'), target);
-}
-
-async function publish(ctx: Ctx, codeDir: string, day: string): Promise<void> {
+// Builds main in a fresh clone inside the container, so build code never runs next to the butler key.
+// The empty save scope keeps the itch save key. Only the butler call gets the key.
+async function publish(ctx: Ctx, day: string): Promise<void> {
   await ctx.repo.merge('dev', 'main', `Release ${day}`);
   await ctx.repo.push('main');
-  const gameDir = agentHome(ctx.repo.path, GAME_DIR);
-  linkEnv(gameDir, codeDir);
+  const dir = join(ctx.cfg.home, 'work', 'release-main');
+  rmSync(dir, { recursive: true, force: true });
+  await ctx.repo.prepareWorkClone('main', 'main', dir);
   const log = releaseLog(ctx);
-  must(await ctx.run('npm', ['ci'], { cwd: gameDir, logPath: log }), 'npm ci on main');
-  must(await ctx.run('npm', ['run', 'itch'], { cwd: gameDir, logPath: log }), 'npm run itch');
+  await ctx.container.shell(dir, 'npm ci && npm run build', log, { SAVE_SCOPE: '' });
+  const version = await ctx.repo.headHash('main');
+  const { itchTarget, butlerKey } = itchKeys(ctx);
+  const args = ['push', join(dir, GAME_DIR, 'dist'), `${itchTarget}:html5`, '--userversion', version];
+  must(await ctx.run('butler', args, { env: { BUTLER_API_KEY: butlerKey }, logPath: log }), 'butler push');
 }
 
 // Ships dev to main and itch.io, then posts the changelog. Nothing new on dev means nothing ships.
-export async function release(ctx: Ctx, codeDir: string): Promise<void> {
+// Checked first, so a release without them stops before it merges anything into main.
+function itchKeys(ctx: Ctx): { itchTarget: string; butlerKey: string } {
+  const { itchTarget, butlerKey } = ctx.cfg;
+  if (!itchTarget || !butlerKey) throw new Error('A release needs ITCH_TARGET and BUTLER_API_KEY in factory/.env.');
+  return { itchTarget, butlerKey };
+}
+
+export async function release(ctx: Ctx): Promise<void> {
   const now = ctx.now();
   updateState(ctx.statePath, (state) => ({ ...state, lastRelease: now.toISOString() }));
+  itchKeys(ctx);
   await ctx.repo.sync();
   const changelog = await ctx.repo.mergeLog('dev', 'main');
   if (changelog.length === 0) {
@@ -75,7 +83,7 @@ export async function release(ctx: Ctx, codeDir: string): Promise<void> {
   const description = readOutput(home, 'release.md');
   if (description === null) throw new Error('release agent wrote no .factory/release.md');
   const day = now.toISOString().slice(0, 10);
-  await publish(ctx, codeDir, day);
+  await publish(ctx, day);
   const channel = ctx.cfg.publicChannel;
   await ctx.telegram.sendPhoto(channel, join(home, OUT_DIR, 'screenshot.png'), `ROAM release ${day}`);
   await ctx.telegram.sendMessage(channel, `${description.trim()}\n\nChanges:\n${changelog.map((line) => `- ${line}`).join('\n')}`);

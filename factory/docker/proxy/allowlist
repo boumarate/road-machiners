@@ -1,0 +1,16 @@
+# One regex per line, matched against the host name. Anchor every entry.
+
+# Claude Code API. Every model call goes here.
+^api\.anthropic\.com$
+
+# npm registry for npm ci and npm view.
+^registry\.npmjs\.org$
+
+# git and gh over HTTPS.
+^github\.com$
+
+# Source archives of GitHub dependencies.
+^codeload\.github\.com$
+
+# Release assets and raw files that GitHub redirects to.
+^objects\.githubusercontent\.com$

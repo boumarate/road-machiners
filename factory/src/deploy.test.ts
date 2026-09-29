@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { buildAndDeploy } from './deploy';
+import { buildAndDeploy, recordBuild, removeStaleBuilds } from './deploy';
+import { EMPTY_STATE, readState, writeState } from './state';
 import type { Ctx } from './types';
 
 function setup(): { ctx: Ctx; clone: string; webRoot: string; shells: string[][] } {
@@ -34,5 +35,32 @@ describe('buildAndDeploy', () => {
     expect(readFileSync(join(webRoot, 'dev', 'index.html'), 'utf8')).toBe('new');
     expect(existsSync(join(webRoot, 'dev', 'old.html'))).toBe(false);
     expect(existsSync(join(webRoot, '.dev.new'))).toBe(false);
+  });
+});
+
+describe('removeStaleBuilds', () => {
+  it('removes folders not kept, spares dev and files, and logs each', () => {
+    const { webRoot } = setup();
+    for (const name of ['dev', 'keep1', 'gone1', 'gone2']) mkdirSync(join(webRoot, name), { recursive: true });
+    writeFileSync(join(webRoot, 'index.html'), 'x');
+    const logs: string[] = [];
+    const removed = removeStaleBuilds(webRoot, new Set(['keep1']), (m) => logs.push(m));
+    expect(removed.sort()).toEqual(['gone1', 'gone2']);
+    expect(logs).toHaveLength(2);
+    expect(['dev', 'keep1', 'gone1', 'index.html'].map((n) => existsSync(join(webRoot, n)))).toEqual([true, true, false, true]);
+  });
+
+  it('does nothing when the web root does not exist yet', () => {
+    expect(removeStaleBuilds(join('tmp', 'factory-no-such-web'), new Set(), () => undefined)).toEqual([]);
+  });
+});
+
+describe('recordBuild', () => {
+  it('stores the folder name under the issue number', () => {
+    const { webRoot } = setup();
+    const statePath = join(webRoot, '..', 'state.json');
+    writeState(statePath, structuredClone(EMPTY_STATE));
+    recordBuild(statePath, 7, 'abc1234');
+    expect(readState(statePath).builds).toEqual({ '7': 'abc1234' });
   });
 });

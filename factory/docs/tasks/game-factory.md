@@ -95,7 +95,7 @@ The factory is a Node CLI in `factory/`, run on the host. Hermes only triggers i
 
 - The release job lists merge commits on `dev` since `main` as the changelog. Each names its issue.
 - Sonnet writes a short description from that list in a container. The screenshot comes from a CPU playtest of `dev`.
-- The host merges `dev` into `main`, pushes, runs `npm run itch` and posts the screenshot, description and changelog to `FACTORY_PUBLIC_CHANNEL`.
+- The host merges `dev` into `main` and pushes. The agent container builds `main`, and the host uploads only `game/dist` with butler. Then it posts the screenshot, description and changelog to `FACTORY_PUBLIC_CHANNEL`.
 - An empty changelog skips the release and records the time.
 
 ### Maintenance
@@ -144,8 +144,12 @@ TDD: yes for the pure rules: intake marking, the tick choice, reply parsing, the
 
 ### Invariants
 
+- IV10 — Agent and build containers reach only the allowlisted hosts through the egress proxy, unless their issue has the `open-network` label.
+- IV11 — No agent branch reaching GitHub carries `.github/`, `.factory` or `.factory-tasks` paths.
+- IV12 — Public-driven agent jobs stay within `FACTORY_MAX_JOBS_PER_DAY` in any 24 hours.
+
 - IV1 — An agent container gets only its work clone mount and `CLAUDE_CODE_OAUTH_TOKEN`. No GitHub, Telegram or butler credential enters it.
-- IV2 — The host runs no git hook, npm script or build from a work clone. Release's `npm run itch` on committee-approved `main` is the one exception, since the user asked for that command.
+- IV2 — The host runs no git hook, npm script or build from any clone. Builds run in the agent container, and the host only copies or uploads their output.
 - IV3 — At most one job runs at a time. A job past the timeout is killed and reported.
 - IV4 — A failed or stalled stage labels its card `factory-stuck` and posts once. No stage retries on its own.
 - IV5 — Only committee Telegram ids can approve, give feedback or request a change. Only committee GitHub logins count as a committee vote.
@@ -289,4 +293,3 @@ Approach: PH1 writes the shared types and core helpers inline, so every later ph
 - `claude setup-token` for `CLAUDE_CODE_OAUTH_TOKEN` — interactive login.
 - Server, domain and web server config — the user will provide them at the end.
 - Stage timeout and tick interval — no value was given. `.env.example` needs numbers for a first run.
-- Release runs `npm run itch` on the host with the butler key — this runs approved but agent-written build code with that key.

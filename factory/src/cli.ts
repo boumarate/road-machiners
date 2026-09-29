@@ -21,7 +21,7 @@ async function main(args: string[]): Promise<void> {
     });
   }
   if (command === 'intake') return void (await intake(ctx));
-  if (command === 'run') return runJob(ctx, parseStage(stage), issue === '-' ? null : parseIssue(issue), codeDir);
+  if (command === 'run') return runJob(ctx, parseStage(stage), issue === '-' ? null : parseIssue(issue));
   throw new Error(`Unknown command "${command}". Use tick, run <stage> <issue|->, or intake.`);
 }
 

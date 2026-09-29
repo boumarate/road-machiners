@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { changesSaveMajor } from '../save-guard';
-import { BRANCH, GAME_DIR, NEEDS_INFO_LABEL, OUT_DIR, QUESTIONS_HEADING, WORK_DIR, type CardStage, type Ctx } from '../types';
+import { BRANCH, GAME_DIR, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, WORK_DIR, type CardStage, type Ctx, type Stage } from '../types';
 
 export const BASE_BRANCH = 'dev';
 
@@ -48,8 +48,16 @@ export function fillPrompt(name: string, vars: Record<string, string>): string {
   return text;
 }
 
+// Only a collaborator can set the label, so an issue with it runs its agent on the normal network. No issue means the restricted network.
+export async function useOpenNetwork(ctx: Ctx, stage: Stage, issue: number | null): Promise<boolean> {
+  const open = issue !== null && (await ctx.github.issue(issue)).labels.includes(OPEN_NETWORK_LABEL);
+  ctx.log(stage, issue, open ? `agent runs on the open network (label ${OPEN_NETWORK_LABEL})` : 'agent runs on the restricted network');
+  return open;
+}
+
 export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, model: string, prompt: string): Promise<void> {
-  await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt, log: agentLog(ctx, issue, stage) });
+  const openNetwork = await useOpenNetwork(ctx, stage, issue);
+  await ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt, log: agentLog(ctx, issue, stage), openNetwork });
 }
 
 // Asks the issue author. The card stays where it is until a member answers on the issue.

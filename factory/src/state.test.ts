@@ -11,6 +11,13 @@ describe('state', () => {
     expect(readState(path).adhocReplies).toEqual({});
   });
 
+  it('reads an old state file without builds, jobStarts or capNoticed', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'factory-state-')), 'state.json');
+    writeFileSync(path, JSON.stringify({ job: null, approvalPosts: {}, lastRelease: null, lastMaintenance: null, pendingApprovals: {}, pendingChanges: [] }));
+    const state = readState(path);
+    expect([state.builds, state.jobStarts, state.capNoticed]).toEqual([{}, [], false]);
+  });
+
   it('starts empty and keeps updates', () => {
     const path = join(mkdtempSync(join(tmpdir(), 'factory-state-')), 'state.json');
     expect(readState(path).job).toBeNull();

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readState } from '../state';
 import type { AgentRun, Ctx } from '../types';
 
-vi.mock('../deploy', () => ({ buildAndDeploy: async () => 'https://play.test/abc123/' }));
+vi.mock('../deploy', () => ({ buildAndDeploy: async () => 'https://play.test/abc123/', recordBuild: () => undefined }));
 const { runStage, approvalCaption } = await import('./testing');
 
 let home = '';
@@ -24,6 +24,7 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
   let failuresLeft = shellFailures;
   const fake = {
     cfg: { home, buildModel: 'sonnet', repo: 'o/r', committeeChat: 'chat' },
+    log: () => undefined,
     statePath: `${home}/state.json`,
     github: {
       issue: async () => ({ number: 7, title: 'Big horn', body: '', labels: [], createdAt: '', state: 'OPEN', thumbsUp: [] }),

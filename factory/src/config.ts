@@ -1,6 +1,7 @@
 import type { FactoryConfig } from './types';
 
-// Every key is required. A missing key stops the factory before it touches GitHub or Telegram.
+// Every key is required, except the itch keys. A missing key stops the factory before it touches GitHub or Telegram.
+// Only the release uses the itch keys, so without them the release alone fails loud.
 const KEYS = {
   repo: 'FACTORY_REPO',
   projectOwner: 'FACTORY_PROJECT_OWNER',
@@ -22,15 +23,24 @@ const KEYS = {
   stageTimeoutMinutes: 'FACTORY_STAGE_TIMEOUT_MINUTES',
   releaseDays: 'FACTORY_RELEASE_DAYS',
   maintenanceHours: 'FACTORY_MAINTENANCE_HOURS',
+  itchTarget: 'ITCH_TARGET',
+  butlerKey: 'BUTLER_API_KEY',
+  maxJobsPerDay: 'FACTORY_MAX_JOBS_PER_DAY',
 } as const satisfies Record<keyof FactoryConfig, string>;
 
-const NUMBERS = new Set<keyof FactoryConfig>(['projectNumber', 'minVotes', 'minAgeHours', 'stageTimeoutMinutes', 'releaseDays', 'maintenanceHours']);
+const RELEASE_ONLY = new Set<keyof FactoryConfig>(['itchTarget', 'butlerKey']);
+
+const NUMBERS = new Set<keyof FactoryConfig>(['projectNumber', 'minVotes', 'minAgeHours', 'stageTimeoutMinutes', 'releaseDays', 'maintenanceHours', 'maxJobsPerDay']);
 
 export function loadConfig(env: Record<string, string | undefined>): FactoryConfig {
-  const missing = Object.values(KEYS).filter((key) => !env[key]?.trim());
+  const missing = Object.entries(KEYS).filter(([field, key]) => !RELEASE_ONLY.has(field as keyof FactoryConfig) && !env[key]?.trim()).map(([, key]) => key);
   if (missing.length) throw new Error(`Factory config is missing ${missing.join(', ')}. See .env.example.`);
-  const entries = Object.entries(KEYS).map(([field, key]) => [field, parse(field as keyof FactoryConfig, key, env[key]!.trim())]);
+  const entries = Object.entries(KEYS).map(([field, key]) => [field, read(field as keyof FactoryConfig, key, env[key]?.trim())]);
   return Object.fromEntries(entries) as FactoryConfig;
+}
+
+function read(field: keyof FactoryConfig, key: string, raw: string | undefined): string | number | null {
+  return raw ? parse(field, key, raw) : null;
 }
 
 function parse(field: keyof FactoryConfig, key: string, raw: string): string | number {

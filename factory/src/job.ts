@@ -14,10 +14,10 @@ import type { Ctx, JobStage } from './types';
 const CARD_STAGES = { triage, design, implement, testing } as const;
 
 // Runs one job to its end. Success or failure, the job slot and its queued command are cleared, so nothing retries.
-export async function runJob(ctx: Ctx, stage: JobStage, issue: number | null, codeDir: string): Promise<void> {
+export async function runJob(ctx: Ctx, stage: JobStage, issue: number | null): Promise<void> {
   const log = readState(ctx.statePath).job?.log ?? null;
   try {
-    await dispatch(ctx, stage, issue, codeDir);
+    await dispatch(ctx, stage, issue);
     ctx.log(stage, issue, 'done');
   } catch (error) {
     await reportFailure(ctx, stage, stage === 'change' ? null : issue, error, log);
@@ -26,8 +26,8 @@ export async function runJob(ctx: Ctx, stage: JobStage, issue: number | null, co
   }
 }
 
-async function dispatch(ctx: Ctx, stage: JobStage, issue: number | null, codeDir: string): Promise<void> {
-  if (stage === 'release') return release(ctx, codeDir);
+async function dispatch(ctx: Ctx, stage: JobStage, issue: number | null): Promise<void> {
+  if (stage === 'release') return release(ctx);
   if (stage === 'maintenance') return maintenance(ctx);
   if (issue === null) throw new Error(`Job ${stage} needs an issue or change id`);
   return dispatchNumbered(ctx, stage, issue);

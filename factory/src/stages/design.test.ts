@@ -19,6 +19,7 @@ function fakeCtx(agent: (run: AgentRun) => void): Ctx {
   const record = (name: string) => async (...args: unknown[]) => { calls.push(`${name} ${args.join(' ')}`); };
   const fake = {
     cfg: { home, designModel: 'opus', buildModel: 'sonnet', repo: 'o/r' },
+    log: () => undefined,
     github: {
       issue: async () => ({ number: 7, title: 'Big horn', body: 'Add a horn', labels: [], createdAt: '', state: 'OPEN', author: 'anna', thumbsUp: [] }),
       comments: async () => [{ login: 'a', body: 'yes please' }],

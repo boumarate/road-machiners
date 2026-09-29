@@ -1,7 +1,7 @@
 import { rmSync, writeFileSync } from 'node:fs';
 import { readState, updateState } from '../state';
 import { GAME_DIR, OUT_DIR, type Ctx } from '../types';
-import { agentHome, fillPrompt, readOutput, resetOutputs } from './common';
+import { agentHome, fillPrompt, readOutput, resetOutputs, useOpenNetwork } from './common';
 
 // Runs one committee request as a read-only investigation. Nothing is pushed. The report goes back to the chat and the issue.
 export async function adhoc(ctx: Ctx, issue: number): Promise<void> {
@@ -16,7 +16,8 @@ export async function adhoc(ctx: Ctx, issue: number): Promise<void> {
   resetOutputs(home);
   writeFileSync(`${home}/${OUT_DIR}/request.md`, `# Committee request\n\n${item.body}\n`);
   const log = `${ctx.cfg.home}/logs/issue-${issue}-adhoc.log`;
-  await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.buildModel, prompt: fillPrompt('adhoc', { issue: String(issue) }), log });
+  const openNetwork = await useOpenNetwork(ctx, 'adhoc', issue);
+  await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.buildModel, prompt: fillPrompt('adhoc', { issue: String(issue) }), log, openNetwork });
   const report = readOutput(home, 'report.md')?.trim();
   if (!report) throw new Error(`The agent wrote no ${OUT_DIR}/report.md`);
   await ctx.telegram.sendMessage(reply.chat, report, reply.messageId);

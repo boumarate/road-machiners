@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -7,11 +7,32 @@ import { EMPTY_STATE, readState, writeState } from './state';
 import { FACTORY_MARK, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Card, type Ctx, type IssueComment, type FactoryState, type Job } from './types';
 
 const NOW = new Date('2026-01-10T12:00:00Z');
-const CFG = { releaseDays: 7, maintenanceHours: 24 };
+const CFG = { releaseDays: 7, maintenanceHours: 24, maxJobsPerDay: 3 };
 const FRESH = { lastRelease: '2026-01-09T12:00:00Z', lastMaintenance: '2026-01-10T06:00:00Z' };
 
 const state = (over: Partial<FactoryState> = {}): FactoryState => ({ ...structuredClone(EMPTY_STATE), ...FRESH, ...over });
 const card = (issue: number, column: Card['column'], labels: string[] = []): Card => ({ itemId: `i${issue}`, issue, column, labels });
+
+const starts = (...hoursAgo: number[]): string[] => hoursAgo.map((h) => new Date(NOW.getTime() - h * 3_600_000).toISOString());
+
+describe('chooseJob daily cap', () => {
+  const capped = state({ jobStarts: starts(23, 5, 1), lastRelease: null });
+
+  it('skips periodic and card jobs at the cap', () => {
+    expect(chooseJob(capped, [card(4, 'Design')], NOW, CFG)).toBeNull();
+    expect(chooseJob({ ...capped, jobStarts: starts(1, 5) }, [card(4, 'Design')], NOW, CFG)).toEqual({ stage: 'release', issue: null });
+  });
+
+  it('still runs committee-driven jobs at the cap', () => {
+    expect(chooseJob({ ...capped, pendingApprovals: { '4': 'u' } }, [], NOW, CFG)).toEqual({ stage: 'approve', issue: 4 });
+    expect(chooseJob({ ...capped, pendingChanges: [{ id: 2, text: 't', by: 'u' }] }, [], NOW, CFG)).toEqual({ stage: 'change', issue: 2 });
+    expect(chooseJob(capped, [card(6, 'Implementation', ['adhoc'])], NOW, CFG)).toEqual({ stage: 'adhoc', issue: 6 });
+  });
+
+  it('ignores starts older than 24 hours', () => {
+    expect(chooseJob({ ...capped, jobStarts: starts(25, 5, 1) }, [], NOW, CFG)).toEqual({ stage: 'release', issue: null });
+  });
+});
 
 describe('chooseJob', () => {
   it('picks the lowest ad hoc card after queued work and before due periodic jobs', () => {
@@ -90,7 +111,7 @@ function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: 
   const spawned: string[][] = [];
   const github = { cards: async () => cards, candidates: async () => [], addLabel: async (n: number, l: string) => { labels.push(`${n}:${l}`); }, comments: async () => comments, removeLabel: async (n: number, l: string) => { removed.push(`${n}:${l}`); } };
   const telegram = { sendMessage: async (_chat: string, text: string) => { sent.push(text); return 1; } };
-  const cfg = { home: dir, repo: 'o/r', committeeChat: 'c', stageTimeoutMinutes: 30, ...CFG };
+  const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', stageTimeoutMinutes: 30, ...CFG };
   const ctx = { cfg, github, telegram, statePath, now: () => NOW, log: () => undefined } as unknown as Ctx;
   const deps: TickDeps = { isAlive: () => alive, kill: async (_run, pid) => { killed.push(pid); }, spawn: (args) => { spawned.push(args); return 77; } };
   return { ctx, sent, labels, removed, deps, killed, spawned };
@@ -147,5 +168,51 @@ describe('tick', () => {
     await tick(h.ctx, '/code', h.deps);
     expect(h.removed).toEqual([]);
     expect(h.spawned).toEqual([]);
+  });
+
+  it('counts and prunes public-driven starts, not committee-driven ones', async () => {
+    const h = harness(null, false, [card(8, 'Implementation')]);
+    writeState(h.ctx.statePath, state({ jobStarts: starts(30, 2) }));
+    await tick(h.ctx, '/code', h.deps);
+    expect(readState(h.ctx.statePath).jobStarts).toEqual([...starts(2), NOW.toISOString()]);
+    const c = harness(null, false, []);
+    writeState(c.ctx.statePath, state({ jobStarts: starts(2), pendingApprovals: { '3': 'u' } }));
+    await tick(c.ctx, '/code', c.deps);
+    expect(c.spawned).toEqual([['approve', '3']]);
+    expect(readState(c.ctx.statePath).jobStarts).toEqual(starts(2));
+  });
+
+  it('posts the cap notice once, then again after the cap frees', async () => {
+    const h = harness(null, false, [card(8, 'Design')]);
+    writeState(h.ctx.statePath, state({ jobStarts: starts(23, 5, 1) }));
+    await tick(h.ctx, '/code', h.deps);
+    await tick(h.ctx, '/code', h.deps);
+    expect(h.spawned).toEqual([]);
+    expect(h.sent).toHaveLength(1);
+    expect(h.sent[0]).toContain('3 of 3');
+    expect(h.sent[0]).toContain('2026-01-10T13:00:00.000Z');
+    expect(readState(h.ctx.statePath).capNoticed).toBe(true);
+    writeState(h.ctx.statePath, state({ jobStarts: starts(1, 5), capNoticed: true }));
+    await tick(h.ctx, '/code', h.deps);
+    expect(readState(h.ctx.statePath).capNoticed).toBe(false);
+    writeState(h.ctx.statePath, state({ jobStarts: starts(23, 5, 1) }));
+    await tick(h.ctx, '/code', h.deps);
+    expect(h.sent).toHaveLength(2);
+  });
+
+  it('posts no cap notice when nothing waits', async () => {
+    const h = harness(null, false, []);
+    writeState(h.ctx.statePath, state({ jobStarts: starts(23, 5, 1) }));
+    await tick(h.ctx, '/code', h.deps);
+    expect(h.sent).toEqual([]);
+  });
+
+  it('deletes builds outside Approval after intake, keeping dev', async () => {
+    const h = harness(null, false, [card(8, 'Approval'), card(9, 'Done')]);
+    const web = h.ctx.cfg.webRoot;
+    for (const name of ['dev', 'aaa1111', 'bbb2222', 'ccc3333']) mkdirSync(join(web, name), { recursive: true });
+    writeState(h.ctx.statePath, state({ builds: { '8': 'aaa1111', '9': 'bbb2222' } }));
+    await tick(h.ctx, '/code', h.deps);
+    expect(['dev', 'aaa1111', 'bbb2222', 'ccc3333'].filter((name) => existsSync(join(web, name)))).toEqual(['dev', 'aaa1111']);
   });
 });

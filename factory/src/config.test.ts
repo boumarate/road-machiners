@@ -7,6 +7,7 @@ const FULL = {
   FACTORY_BUILD_MODEL: 'sonnet', FACTORY_MIN_VOTES: '5', FACTORY_MIN_AGE_HOURS: '24', FACTORY_COMMITTEE_BOOTSTRAP_GITHUB: 'boss',
   FACTORY_COMMITTEE_BOOTSTRAP: '1', TELEGRAM_BOT_TOKEN: 'bt', FACTORY_COMMITTEE_CHAT: '-1', FACTORY_PUBLIC_CHANNEL: '@c',
   FACTORY_STAGE_TIMEOUT_MINUTES: '180', FACTORY_RELEASE_DAYS: '7', FACTORY_MAINTENANCE_HOURS: '24',
+  ITCH_TARGET: 'u/g', BUTLER_API_KEY: 'bk', FACTORY_MAX_JOBS_PER_DAY: '10',
 };
 
 describe('loadConfig', () => {
@@ -16,10 +17,18 @@ describe('loadConfig', () => {
     expect(cfg.committeeBootstrapGithub).toBe('boss');
     expect(cfg.committeeBootstrapTelegram).toBe('1');
     expect(cfg.committeeChat).toBe('-1');
+    expect(cfg.maxJobsPerDay).toBe(10);
+    expect(cfg.itchTarget).toBe('u/g');
   });
 
   it('names every missing key', () => {
     expect(() => loadConfig({ ...FULL, FACTORY_REPO: '', TELEGRAM_BOT_TOKEN: undefined })).toThrow('FACTORY_REPO, TELEGRAM_BOT_TOKEN');
+  });
+
+  it('requires the cap key but leaves the itch keys to the release', () => {
+    expect(() => loadConfig({ ...FULL, FACTORY_MAX_JOBS_PER_DAY: '' })).toThrow('FACTORY_MAX_JOBS_PER_DAY');
+    const cfg = loadConfig({ ...FULL, ITCH_TARGET: '', BUTLER_API_KEY: undefined });
+    expect([cfg.itchTarget, cfg.butlerKey]).toEqual([null, null]);
   });
 
   it('rejects a bad number', () => {

@@ -1,5 +1,34 @@
 import { describe, expect, it } from 'vitest';
-import { agentHome, factoryPaths, fillPrompt } from './common';
+import type { AgentRun, Ctx } from '../types';
+import { agentHome, factoryPaths, fillPrompt, runAgent } from './common';
+
+function agentCtx(labels: string[]): { ctx: Ctx; runs: AgentRun[]; logs: string[] } {
+  const runs: AgentRun[] = [];
+  const logs: string[] = [];
+  const ctx = {
+    cfg: { home: 'tmp/factory-common-test' },
+    github: { issue: async () => ({ labels }) },
+    container: { agent: async (run: AgentRun) => { runs.push(run); } },
+    log: (_stage: string, _issue: number | null, msg: string) => { logs.push(msg); },
+  } as unknown as Ctx;
+  return { ctx, runs, logs };
+}
+
+describe('runAgent network', () => {
+  it('uses the restricted network without the open-network label', async () => {
+    const { ctx, runs, logs } = agentCtx(['bug']);
+    await runAgent(ctx, 7, 'design', 'opus', 'p');
+    expect(runs[0].openNetwork).toBe(false);
+    expect(logs).toEqual(['agent runs on the restricted network']);
+  });
+
+  it('uses the open network with the open-network label', async () => {
+    const { ctx, runs, logs } = agentCtx(['bug', 'open-network']);
+    await runAgent(ctx, 7, 'design', 'opus', 'p');
+    expect(runs[0].openNetwork).toBe(true);
+    expect(logs[0]).toContain('open network');
+  });
+});
 
 describe('fillPrompt', () => {
   it('fills every variable', () => {

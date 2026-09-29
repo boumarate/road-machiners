@@ -1,4 +1,4 @@
-"""Deploy the game factory: sync code, push the env file, build the agent image, install the tick timer, start Hermes and Caddy.
+"""Deploy the game factory: sync code, push the env file, build the agent and proxy images, install the tick timer, start Hermes and Caddy.
 
 Run after provision.py. Re-run to roll out changes.
 """
@@ -77,6 +77,16 @@ server.shell(
 server.shell(
     name="Build the agent image",
     commands=[f"cd {CODE_DIR} && timeout 1800 docker build -t {image} factory/docker"],
+    **as_factory,
+)
+
+# The next agent run starts a fresh proxy from the new image and its allowlist.
+server.shell(
+    name="Build the egress proxy image and drop the old proxy container",
+    commands=[
+        f"cd {CODE_DIR} && timeout 600 docker build -t {image}-proxy factory/docker/proxy",
+        "timeout 60 docker rm -f roam-factory-proxy >/dev/null 2>&1 || true",
+    ],
     **as_factory,
 )
 

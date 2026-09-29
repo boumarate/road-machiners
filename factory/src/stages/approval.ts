@@ -14,7 +14,9 @@ function forgetPosts(ctx: Ctx, issue: number, dropPending: boolean): void {
     const approvalPosts = Object.fromEntries(Object.entries(state.approvalPosts).filter(([, number]) => number !== issue));
     const pendingApprovals = { ...state.pendingApprovals };
     if (dropPending) delete pendingApprovals[String(issue)];
-    return { ...state, approvalPosts, pendingApprovals };
+    const builds = { ...state.builds };
+    delete builds[String(issue)];
+    return { ...state, approvalPosts, pendingApprovals, builds };
   });
 }
 

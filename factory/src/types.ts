@@ -27,6 +27,9 @@ export type FactoryConfig = {
   stageTimeoutMinutes: number;
   releaseDays: number;
   maintenanceHours: number;
+  itchTarget: string | null; // itch.io page as "user/game". Null until set, and then a release fails loud.
+  butlerKey: string | null; // BUTLER_API_KEY, only ever in the env of the butler call
+  maxJobsPerDay: number; // public-driven agent jobs allowed in any 24 hours
 };
 
 export type RunOptions = { cwd?: string; env?: Record<string, string>; input?: string; logPath?: string };
@@ -64,6 +67,9 @@ export type FactoryState = {
   pendingChanges: ChangeRequest[]; // factory change requests, run by the next ticks in order
   lastTickError: string | null; // the last tick crash posted to the committee, so a lasting outage posts once
   adhocReplies: Record<string, { chat: string; messageId: number }>; // ad hoc issue number -> the chat message its report answers
+  builds: Record<string, string>; // issue number -> folder name of its deployed build under the web root
+  jobStarts: string[]; // ISO start times of public-driven jobs in the last 24 hours
+  capNoticed: boolean; // the committee heard that the daily job cap blocks work, until the cap frees
 };
 
 export interface GitHub {
@@ -93,7 +99,8 @@ export interface Telegram {
 }
 
 // `dir` is the repo folder the agent works in, `game` or `factory`. The container starts it there.
-export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string };
+// `openNetwork` runs the container on the normal network with no proxy. Absent means the restricted network.
+export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean };
 
 export interface Container {
   // Runs Claude Code headless in the clone. Throws on a nonzero exit.
@@ -147,3 +154,8 @@ export const NEEDS_INFO_LABEL = 'needs-info';
 export const FACTORY_MARK = '<!-- roam-factory -->'; // last line of every factory comment, so a factory comment differs from a member's
 export const QUESTIONS_HEADING = '## Questions from the factory';
 export const FEEDBACK_HEADING = '## Committee feedback';
+// Agent containers sit on an internal Docker network. The proxy container is their only way out.
+export const AGENT_NETWORK = 'roam-factory-agents';
+export const PROXY_NAME = 'roam-factory-proxy';
+export const PROXY_PORT = 8888;
+export const OPEN_NETWORK_LABEL = 'open-network';

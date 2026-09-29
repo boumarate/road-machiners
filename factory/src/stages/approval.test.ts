@@ -17,7 +17,7 @@ beforeEach(() => {
   calls = [];
   column = 'Approval';
   openPr = null;
-  writeState(`${home}/state.json`, { ...EMPTY_STATE, approvalPosts: { 100: 7, 101: 7, 200: 8 }, pendingApprovals: { 7: 'bob' } });
+  writeState(`${home}/state.json`, { ...EMPTY_STATE, approvalPosts: { 100: 7, 101: 7, 200: 8 }, pendingApprovals: { 7: 'bob' }, builds: { 7: 'aaa1111', 8: 'bbb2222' } });
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
@@ -52,6 +52,7 @@ describe('approve', () => {
     const state = readState(`${home}/state.json`);
     expect(state.approvalPosts).toEqual({ 200: 8 });
     expect(state.pendingApprovals).toEqual({});
+    expect(state.builds).toEqual({ 8: 'bbb2222' });
   });
 
   it('throws when the card is not in Approval', async () => {
@@ -66,6 +67,7 @@ describe('feedback', () => {
     await feedback(fakeCtx(), 7, 'bob', 'Make it louder');
     expect(calls).toEqual(['comment 7 ## Committee feedback\n\nFrom bob:\n\nMake it louder', 'move 7 Design']);
     expect(readState(`${home}/state.json`).approvalPosts).toEqual({ 200: 8 });
+    expect(readState(`${home}/state.json`).builds).toEqual({ 8: 'bbb2222' });
   });
 });
 
@@ -81,6 +83,7 @@ describe('deny', () => {
     const state = readState(`${home}/state.json`);
     expect(state.approvalPosts).toEqual({ 200: 8 });
     expect(state.pendingApprovals).toEqual({});
+    expect(state.builds).toEqual({ 8: 'bbb2222' });
   });
 
   it('closes the open pull request with the same comment', async () => {

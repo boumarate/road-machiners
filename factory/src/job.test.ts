@@ -20,7 +20,7 @@ describe('runJob', () => {
       telegram: { sendMessage: async (_c: string, text: string) => { posts.push(text); return 1; } },
       github: {},
     } as unknown as Ctx;
-    await runJob(ctx, 'change', 9, ROOT);
+    await runJob(ctx, 'change', 9);
     const state = readState(statePath);
     expect(state.job).toBeNull();
     expect(state.pendingChanges).toEqual([]);

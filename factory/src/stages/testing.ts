@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { buildAndDeploy } from '../deploy';
+import { buildAndDeploy, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
 import { updateState } from '../state';
 import { BRANCH, GAME_DIR, OUT_DIR, TASK_FILE, type Ctx } from '../types';
@@ -41,7 +41,9 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
     if (again !== null) throw new Error(`The factory checks failed twice.\n${again}`);
   }
   const approval = readApproval(home);
-  const url = await buildAndDeploy(ctx, checkDir(ctx, issue), await ctx.repo.headHash(BRANCH(issue)), agentLog(ctx, issue, 'checks'));
+  const build = await ctx.repo.headHash(BRANCH(issue));
+  const url = await buildAndDeploy(ctx, checkDir(ctx, issue), build, agentLog(ctx, issue, 'checks'));
+  recordBuild(ctx.statePath, issue, build);
   await post(ctx, issue, approval, `${home}/${OUT_DIR}/screenshot.png`, url);
   await ctx.github.move(issue, 'Approval');
 }

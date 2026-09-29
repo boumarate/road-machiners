@@ -11,6 +11,9 @@ RUN npm install -g @anthropic-ai/claude-code
 COPY --chmod=755 factory-agent /usr/local/bin/factory-agent
 
 # Everything below runs as the image's non-root user.
+# Claude Code reaches only the Anthropic API, so the egress allowlist needs no telemetry hosts.
+ENV CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+
 USER pwuser
 
 # The mounted clone belongs to the host user, so git must trust it.

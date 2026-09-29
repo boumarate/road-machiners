@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { updateState } from '../state';
 import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, TASK_FILE, WORK_DIR, type Ctx } from '../types';
-import { agentHome, agentLog, fillPrompt, guardAndPush, readOutput, resetOutputs } from './common';
+import { agentHome, agentLog, fillPrompt, guardAndPush, readOutput, resetOutputs, useOpenNetwork } from './common';
 
 // The text under `## Plan`, up to the next heading.
 function planOf(taskText: string): string {
@@ -29,7 +29,7 @@ export async function maintenance(ctx: Ctx): Promise<void> {
   const home = agentHome(dir, GAME_DIR);
   resetOutputs(home);
   const prompt = fillPrompt('maintenance', { issue: String(n), taskFile: TASK_FILE(n), branch: BRANCH(n) });
-  await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.buildModel, prompt, log: agentLog(ctx, n, 'maintenance') });
+  await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.buildModel, prompt, log: agentLog(ctx, n, 'maintenance'), openNetwork: await useOpenNetwork(ctx, 'maintenance', null) });
   const nothing = readOutput(home, 'nothing.md');
   if (nothing !== null) {
     await ctx.github.comment(n, nothing.trim());
