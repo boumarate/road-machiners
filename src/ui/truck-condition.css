@@ -112,3 +112,14 @@
 .condition-part.broken .icon {
   opacity: 0.35;
 }
+.condition-tip {
+  position: absolute;
+  z-index: 5;
+  padding: 2px 6px;
+  border: 1px solid #505b5d;
+  background: #141a1cf2;
+  color: #f3efde;
+  font: 12px var(--font-ui);
+  white-space: nowrap;
+  pointer-events: none;
+}

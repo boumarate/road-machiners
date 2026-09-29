@@ -109,7 +109,7 @@ export function openArmorSlots(vehicle: Vehicle): { x: number; y: number }[] {
 
 // The tooltip of a part tile: the part's name and condition.
 export function conditionLabel(part: { name: string; percent: number }): string {
-  return `${part.name}: ${part.percent}%${part.percent === 0 ? " (broken)" : ""}`;
+  return part.percent === 0 ? `${part.name} · broken` : `${part.name} · ${part.percent}%`;
 }
 
 export class TruckConditionReadout {

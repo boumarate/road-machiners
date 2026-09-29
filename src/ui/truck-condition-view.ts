@@ -20,9 +20,14 @@ export class TruckConditionView {
   private readout = new TruckConditionReadout();
   private slots = el("div", { class: "condition-slots" });
   private nodes = new Map<string, HTMLElement>();
+  // The name label of the tile under the pointer. The panel is rebuilt on every refresh, which cancels the browser's
+  // own tooltip, so the hovered part is kept here and the label is redrawn with it.
+  private tip = el("div", { class: "condition-tip" });
+  private hoverId: string | null = null;
+  private tiles: ConditionPart[] = [];
 
   constructor() {
-    this.body.append(this.slots);
+    this.body.append(this.slots, this.tip);
     this.root.append(this.body);
   }
 
@@ -38,8 +43,19 @@ export class TruckConditionView {
       this.nodes.delete(id);
     }
     this.slots.replaceChildren(...openArmorSlots(vehicle).map(({ x, y }) =>
-      el("div", { class: "condition-slot", title: "No armor here", style: `left:${x * CELL}px;top:${y * CELL}px;width:${CELL}px;height:${CELL}px` })));
+      el("div", { class: "condition-slot", style: `left:${x * CELL}px;top:${y * CELL}px;width:${CELL}px;height:${CELL}px` })));
     for (const part of parts) this.renderPart(part, aim);
+    this.tiles = parts;
+    this.showTip();
+  }
+
+  private showTip(): void {
+    const part = this.tiles.find((p) => p.id === this.hoverId);
+    this.tip.style.display = part ? "" : "none";
+    if (!part) return;
+    this.tip.textContent = conditionLabel(part);
+    this.tip.style.left = `${part.x * CELL}px`;
+    this.tip.style.top = `${part.y === 0 ? (part.y + part.h) * CELL + 2 : part.y * CELL - 22}px`;
   }
 
   private renderPart(part: ConditionPart, aim?: ConditionAim): void {
@@ -57,8 +73,15 @@ export class TruckConditionView {
     node.dataset.condition = part.state;
     node.classList.toggle("broken", part.broken);
     markAim(node, part.id, aim);
-    node.title = conditionLabel(part);
-    node.setAttribute("aria-label", node.title);
+    node.setAttribute("aria-label", conditionLabel(part));
+    node.onmouseenter = () => {
+      this.hoverId = part.id;
+      this.showTip();
+    };
+    node.onmouseleave = () => {
+      if (this.hoverId === part.id) this.hoverId = null;
+      this.showTip();
+    };
     node.style.cssText = `left:${part.x * 30}px;top:${part.y * 30}px;width:${part.w * 30}px;height:${part.h * 30}px`;
     fillOf(node).style.height = `${part.percent}%`;
     if (part.hit) this.flashDamage(node);
