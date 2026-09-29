@@ -62,6 +62,12 @@ def test_release_ship_reply():
 def test_release_remove_reply():
     assert rroute("remove #7") == ("remove", 7, "remove #7")
     assert rroute("Remove 12") == ("remove", 12, "Remove 12")
+    assert rroute("remove #12 it crashes on load") == ("remove", 12, "remove #12 it crashes on load")
+    assert rroute("  REMOVE 3 too loud\n") == ("remove", 3, "  REMOVE 3 too loud\n")
+
+
+def test_release_remove_needs_a_word_boundary_after_the_number():
+    assert rroute("remove 12abc") == ("release-task", "remove 12abc")
 
 
 def test_release_other_reply_opens_task():

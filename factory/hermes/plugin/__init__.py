@@ -31,7 +31,7 @@ BUTTON_DATA = re.compile(BUTTON_PATTERN)
 BUTTON_REFUSED = "Only committee members can press this."
 BUTTON_TOASTS = {"approve": "Approve queued", "deny": "Deny queued", "ship": "Ship queued"}
 BUTTON_STALE = "This release post is out of date."
-REMOVE_REPLY = re.compile(r"remove\s+#?(\d+)", re.IGNORECASE)
+REMOVE_REPLY = re.compile(r"remove\s+#?(\d+)\b", re.IGNORECASE)
 log = logging.getLogger(__name__)
 QUEUED_REPLY = "Queued. The factory picks this up on its next tick."
 
@@ -121,7 +121,7 @@ def _schedule_restart() -> None:
 def _release_request(text, release) -> tuple:
     if text.strip().lower() == "ship":
         return ("ship", release.issue)
-    match = REMOVE_REPLY.fullmatch(text.strip())
+    match = REMOVE_REPLY.match(text.strip())
     if match:
         return ("remove", int(match.group(1)), text)
     return ("release-task", text)
