@@ -584,7 +584,7 @@ function rectOf(v: Pick<Vehicle, 'chassisId'>, item: GridItem): CellRect {
 
 // A good or loose part that finds no surface to rest on. Guns stand on posts, armor lies on the faces and mounted
 // engines and wheels have their own spots, so they always show.
-function wouldFloat(v: Pick<Vehicle, 'chassisId'>, item: GridItem): boolean {
+export function wouldFloat(v: Pick<Vehicle, 'chassisId'>, item: GridItem): boolean {
   return !alwaysDrawn(v, item) && restOf(v, item).perched;
 }
 

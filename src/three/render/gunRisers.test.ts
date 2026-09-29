@@ -7,7 +7,7 @@ import { cellRect, restOn } from '../../sim/body';
 import { baseGrid, itemCells } from '../../sim/grid';
 import type { GridItem } from '../../sim/types';
 import { loadModels } from './models';
-import { weaponStand } from './vehicle';
+import { weaponStand, wouldFloat } from './vehicle';
 
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
 await loadModels(async (name) => {
@@ -40,5 +40,25 @@ describe('gun risers', () => {
       }
     }
     expect(problems).toEqual([]);
+  });
+});
+
+describe('parts that are always drawn', () => {
+  it('never hides a weapon or armor for lack of a surface, on any chassis and cell', () => {
+    const kept = Object.values(PARTS).filter((p) => p.kind === 'weapon' || p.kind === 'armor');
+    const hidden: string[] = [];
+    for (const id of Object.keys(CHASSIS)) {
+      const { w, h } = baseGrid(id);
+      for (const def of kept) {
+        for (let y = 0; y + def.h <= h; y++) {
+          for (let x = 0; x + def.w <= w; x++) {
+            const item = { id: 'g', kind: 'part', x, y, rot: 0, part: { id: 'p', defId: def.id, hp: 1, wear: 0 } } as unknown as GridItem;
+            if (!itemCells(item).every((c) => baseGrid(id).cells[c.y]?.[c.x])) continue;
+            if (wouldFloat({ chassisId: id }, item)) hidden.push(`${def.id} on ${id} at ${x},${y}`);
+          }
+        }
+      }
+    }
+    expect(hidden).toEqual([]);
   });
 });
