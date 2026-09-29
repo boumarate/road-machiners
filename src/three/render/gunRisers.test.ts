@@ -40,7 +40,7 @@ describe('gun risers', () => {
       }
     }
     expect(problems).toEqual([]);
-  }, 120_000);
+  });
 });
 
 describe('parts that are always drawn', () => {
