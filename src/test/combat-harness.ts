@@ -18,6 +18,7 @@ import { hangUp } from '../sim/dialogue';
 import { mountedParts } from '../sim/grid';
 import { generateNpcLoadout, type NpcLoadout } from '../sim/npc-loadout';
 import { spawnAt } from '../sim/spawn';
+import { vehicleStats } from '../sim/stats';
 import type { Vehicle, World } from '../sim/types';
 import { bearing, dist, type Vec } from '../sim/vec';
 import { refreshVision } from '../sim/vision';
@@ -25,9 +26,10 @@ import { cloneWorld, endTurn, newWorld, seedStreams, setAutoFire, setMoveOrder }
 import { TEST_MAP } from './map';
 
 // stand: brakes and never moves, like a stuck truck. orbit: circles the nearest enemy. charge: drives at the
-// nearest enemy and brakes once close.
-export type Policy = 'stand' | 'orbit' | 'charge';
-export const POLICIES: Policy[] = ['stand', 'orbit', 'charge'];
+// nearest enemy and brakes once close. kite: closes in to near the edge of its longest gun range, then backs straight
+// away from the nearest enemy, nose and guns toward it. A truck that faces away turns and drives off instead.
+export type Policy = 'stand' | 'orbit' | 'charge' | 'kite';
+export const POLICIES: Policy[] = ['stand', 'orbit', 'charge', 'kite'];
 
 export type Fight = {
   kit: string; // a START_KITS id for the player truck
@@ -51,8 +53,9 @@ export type Outcome = 'won' | 'lost' | 'fled' | 'timeout';
 // crashes counts collisions between the player and an enemy, rams included.
 export type FightReport = { fight: Fight; outcome: Outcome; turns: number; crashes: number; me: Side; them: Side };
 
-const CENTER: Vec = { x: 60, y: 60 };
-const FLED_RANGE = 40; // tiles from the start; an enemy this far has left the fight
+// The middle of the map, so a truck that backs or drives away for a whole fight never reaches the map edge.
+const CENTER: Vec = { x: TEST_MAP.terrain.size / 2, y: TEST_MAP.terrain.size / 2 };
+const FLED_RANGE = 40; // tiles from the player truck; an enemy this far has left the fight
 
 // Balance tables that --set may change, by the name the data files export them under.
 const TABLES: Record<string, object> = { RULES, PHYSICS, NPCS, PARTS, CHASSIS, TRAITS, DECISIONS, NPC_BEHAVIOR, SKILL_EFFECTS };
@@ -153,6 +156,8 @@ function outfitFoe(w: World, e: Vehicle, o: Outfit): void {
   outfit(w, e, o);
 }
 
+const KITE_HOLD = 0.8; // share of the longest gun range a kiting truck closes to, so a closing foe stays in range
+
 function orders(w: World, fight: Fight, foe: Vehicle): World {
   const me = w.vehicles.find((v) => v.id === w.player.vehicleId)!;
   if (fight.policy === 'stand') return setMoveOrder(w, { kind: 'brake' });
@@ -160,8 +165,22 @@ function orders(w: World, fight: Fight, foe: Vehicle): World {
     if (dist(me.pos, foe.pos) <= fight.orbit) return setMoveOrder(w, { kind: 'brake' });
     return setMoveOrder(w, { kind: 'through', dest: foe.pos });
   }
+  if (fight.policy === 'kite') return kite(w, me, foe);
+  return circle(w, me, foe, fight.orbit);
+}
+
+function circle(w: World, me: Vehicle, foe: Vehicle, radius: number): World {
   const a = bearing(foe.pos, me.pos) + Math.PI / 2; // a quarter circle ahead keeps the truck turning at speed
-  return setMoveOrder(w, { kind: 'through', dest: { x: foe.pos.x + Math.cos(a) * fight.orbit, y: foe.pos.y + Math.sin(a) * fight.orbit } });
+  return setMoveOrder(w, { kind: 'through', dest: { x: foe.pos.x + Math.cos(a) * radius, y: foe.pos.y + Math.sin(a) * radius } });
+}
+
+function kite(w: World, me: Vehicle, foe: Vehicle): World {
+  const reach = Math.max(...vehicleStats(w, me).weapons.map((mw) => mw.def.range));
+  const d = dist(me.pos, foe.pos);
+  if (d > KITE_HOLD * reach) return setMoveOrder(w, { kind: 'through', dest: foe.pos });
+  const away = bearing(foe.pos, me.pos);
+  const back = RULES.throttleZones.reach * KITE_HOLD;
+  return setMoveOrder(w, { kind: 'through', dest: { x: me.pos.x + Math.cos(away) * back, y: me.pos.y + Math.sin(away) * back } });
 }
 
 // One line about a turn: distance, speeds, each enemy's activity and the shots.
@@ -216,7 +235,8 @@ function outcomeOf(w: World, c: Count): Outcome | null {
   if (w.player.state !== 'active') return 'lost';
   const left = w.vehicles.filter((v) => c.enemyIds.has(v.id) && !isDefeated(v));
   if (left.length === 0) return 'won';
-  if (left.every((v) => dist(v.pos, CENTER) > FLED_RANGE)) return 'fled';
+  const me = w.vehicles.find((v) => v.id === c.meId)!;
+  if (left.every((v) => dist(v.pos, me.pos) > FLED_RANGE)) return 'fled';
   return null;
 }
 
