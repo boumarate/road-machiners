@@ -459,35 +459,9 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.weapon-detail {
-  position: fixed;
-  top: 64px;
-  left: 14px;
-  width: var(--inspection-width);
-  height: var(--inspection-height);
-  max-width: calc(100vw - 28px);
-  box-sizing: border-box;
-  overflow: auto;
-  padding: 14px;
-  background: #272b2ef5;
-  border: 1px solid var(--edge);
-  border-top: 2px solid #c1a264;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-}
-#ui:has(.help details[open]) .weapon-detail {
-  visibility: hidden;
-}
-.weapon-detail small {
-  color: var(--muted);
-  font-size: 11px;
-}
 #ui .weapon-hold {
-  padding: 3px 7px;
-  font-size: 12px;
-  align-self: flex-start;
+  padding: 1px 4px;
+  font-size: 11px;
 }
 #ui .turn-control {
   right: 16px;

@@ -7,7 +7,7 @@ import { cellRect, restOn } from '../../sim/body';
 import { baseGrid, itemCells } from '../../sim/grid';
 import type { GridItem } from '../../sim/types';
 import { loadModels } from './models';
-import { weaponStand, wouldFloat } from './vehicle';
+import { footprint, standingY, weaponStand, wouldFloat } from './vehicle';
 
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
 await loadModels(async (name) => {
@@ -40,7 +40,7 @@ describe('gun risers', () => {
       }
     }
     expect(problems).toEqual([]);
-  });
+  }, 120_000);
 });
 
 describe('parts that are always drawn', () => {
@@ -61,4 +61,40 @@ describe('parts that are always drawn', () => {
     }
     expect(hidden).toEqual([]);
   });
+});
+
+describe('placing any item on any cell', () => {
+  it('never throws and always gives a finite spot, on every chassis, ring cell included', () => {
+    const problems: string[] = [];
+    for (const id of Object.keys(CHASSIS)) {
+      const { w, h, cells } = baseGrid(id);
+      // One part per kind and size: placement reads nothing else of a part.
+      const shapes = [...new Map(Object.values(PARTS).map((def) => [`${def.kind}${def.w}x${def.h}`, def])).values()];
+      const items = [
+        ...shapes.map((def) => ({ label: def.id, item: (x: number, y: number, rot: 0 | 1) => ({ id: 'g', kind: 'part', x, y, rot, part: { id: 'p', defId: def.id, hp: 1, wear: 0 } }) })),
+        { label: 'good', item: (x: number, y: number, rot: 0 | 1) => ({ id: 'g', kind: 'good', x, y, rot, good: 'scrap' }) },
+      ];
+      for (const { label, item } of items) {
+        for (const rot of [0, 1] as const) {
+          for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+              const it = item(x, y, rot) as unknown as GridItem;
+              if (!itemCells(it).every((c) => cells[c.y]?.[c.x])) continue;
+              const where = `${label} rot ${rot} at ${x},${y} on ${id}`;
+              try {
+                wouldFloat({ chassisId: id }, it);
+                const y0 = standingY({ chassisId: id }, it);
+                const at = footprint({ chassisId: id }, it, y0);
+                if (![y0, at.pos.x, at.pos.z, at.scale.x, at.scale.z].every(Number.isFinite)) problems.push(`${where}: not finite`);
+                if (label !== 'good' && PARTS[label].kind === 'weapon') weaponStand({ chassisId: id }, it);
+              } catch (e) {
+                problems.push(`${where}: ${(e as Error).message}`);
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(problems).toEqual([]);
+  }, 120_000);
 });

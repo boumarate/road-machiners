@@ -8,7 +8,7 @@ import { chassisDef } from '../../data/chassis';
 import { partDef, type PartDef, type PartKind } from '../../data/parts';
 import { PHYSICS } from '../../data/physics';
 import { wheelMounts } from '../../phys/body';
-import { bodyOf, cellCenter, cellRect, engineAnchor, restOn, surfaceAt, type Body, type CellRect, type Rest } from '../../sim/body';
+import { bodyOf, cellCenter, cellRect, engineAnchor, highestUnder, restOn, surfaceAt, type Body, type CellRect, type Rest } from '../../sim/body';
 import { headingOf, headingQuat, type V3, type VehicleFrame } from '../../phys/frames';
 import { FACTION_COLORS, PAL } from '../../render/palette';
 import { BODY_PARTS, baseModel, partModel, weaponLook } from '../../render/partLooks';
@@ -575,7 +575,7 @@ export function weaponStand(v: Pick<Vehicle, 'chassisId'>, item: GridItem): { at
 function highestAhead(chassisId: string, rect: CellRect): number {
   const nose = bodyOf(chassisId).half.x;
   if (rect.x1 >= nose) return -Infinity;
-  return surfaceAt(chassisId, { ...rect, x0: rect.x1, x1: nose });
+  return highestUnder(chassisId, { ...rect, x0: rect.x1, x1: nose });
 }
 
 function rectOf(v: Pick<Vehicle, 'chassisId'>, item: GridItem): CellRect {
@@ -602,7 +602,7 @@ function restOf(v: Pick<Vehicle, 'chassisId'>, item: GridItem): Rest {
 }
 
 // The model surface an item stands on, in body meters.
-function standingY(v: Pick<Vehicle, 'chassisId'>, item: GridItem): number {
+export function standingY(v: Pick<Vehicle, 'chassisId'>, item: GridItem): number {
   return restOf(v, item).y;
 }
 
@@ -655,7 +655,7 @@ function toneOf(item: GridItem): number {
 // Center of an item's projected footprint at height y, with the turn and stretch that fit the model to the footprint.
 // A model is authored for its rotation 0 cells. Rotation 1 turns it, so its length runs across the truck.
 // A ring cell projects to a zero-width span. The item then keeps its nominal size along that axis.
-function footprint(v: Pick<Vehicle, 'chassisId'>, item: GridItem, y: number): Placement {
+export function footprint(v: Pick<Vehicle, 'chassisId'>, item: GridItem, y: number): Placement {
   const rect = restOf(v, item).rect;
   const size = itemSize(item);
   const dx = rect.x1 - rect.x0 > 0 ? rect.x1 - rect.x0 : size.h * CELL.along;

@@ -145,14 +145,19 @@ function topOver(map: HeightMap, xa: number, xb: number, ya: number, yb: number)
 // The body y of the highest point of the model's top surface under the rect. A rect with no width or depth, like an
 // armor cell on a face, reads the samples one step around it. Throws when the model has no geometry there.
 export function surfaceAt(chassisId: string, rect: CellRect): number {
+  const best = highestUnder(chassisId, rect);
+  if (best === -Infinity) throw new Error(`The ${chassisId} model has no surface under x ${rect.x0}..${rect.x1}, z ${rect.z0}..${rect.z1}`);
+  return best;
+}
+
+// Like surfaceAt, but -Infinity over air.
+export function highestUnder(chassisId: string, rect: CellRect): number {
   const map = truckShape(chassisId).heights;
   const reach = (lo: number, hi: number) => (hi > lo ? [lo, hi] : [lo - map.cell, hi + map.cell]);
   const [xa, xb] = reach(rect.x0, rect.x1);
   // Model y points to the truck's left, body z to its right.
   const [ya, yb] = reach(-rect.z1, -rect.z0);
-  const best = topOver(map, xa, xb, ya, yb);
-  if (best === -Infinity) throw new Error(`The ${chassisId} model has no surface under x ${rect.x0}..${rect.x1}, z ${rect.z0}..${rect.z1}`);
-  return best;
+  return topOver(map, xa, xb, ya, yb);
 }
 
 // How far a surface may stand above a resting part before the part would cut into it, in meters.
@@ -184,8 +189,15 @@ const MIN_SLOPE = 0.1;
 export function restOn(chassisId: string, rect: CellRect): Rest {
   const map = truckShape(chassisId).heights;
   const samples = rect.x1 > rect.x0 && rect.z1 > rect.z0 ? samplesUnder(map, rect) : [];
-  if (samples.length === 0) return { y: surfaceAt(chassisId, rect), rect, perched: false, slope: FLAT };
+  if (samples.length === 0) return restOnEdge(chassisId, rect);
   return cleanSlope(map, samples, rect) ?? restFlat(map, samples, rect) ?? perch(chassisId, map, samples, rect);
+}
+
+// A rect with no width or depth, like a ring cell, rests on the samples around it. Over air nothing holds the part, so
+// it perches.
+function restOnEdge(chassisId: string, rect: CellRect): Rest {
+  const y = highestUnder(chassisId, rect);
+  return y === -Infinity ? { y: 0, rect, perched: true, slope: FLAT } : { y, rect, perched: false, slope: FLAT };
 }
 
 // A plane at least MIN_SLOPE steep that half the footprint touches and nothing pokes through. Null otherwise.

@@ -218,7 +218,6 @@ export class WeaponPanel {
 
   private renderControls(w: World, locked: boolean): HTMLElement {
     const weapons = vehicleStats(w, playerVehicle(w)).weapons;
-    const chosen = weapons.find((mw) => mw.part.id === this.host.selectedWeapon());
     return el(
       "fieldset",
       { disabled: locked },
@@ -236,18 +235,6 @@ export class WeaponPanel {
         ...weapons.map((mw, i) => this.renderSlot(w, mw, i, locked)),
       ),
       weapons.length === 0 ? el("div", { class: "dim" }, "No weapons installed") : null,
-      chosen ? this.renderDetail(w, chosen) : null,
-    );
-  }
-
-  private renderDetail(w: World, chosen: MountedWeapon): HTMLElement {
-    const readout = getWeaponReadout(w, chosen);
-    const order = playerVehicle(w).weaponOrders[chosen.part.id];
-    return el('div', { class: 'weapon-detail' },
-      el('strong', {}, chosen.def.name),
-      el('span', {}, readout.target ? `${readout.target.name}, ${aimName(readout.target, order?.aim ?? 'body')}` : 'No visible target'),
-      el('span', {}, readout.status),
-      el('button', { class: 'weapon-hold', onclick: () => this.holdWeapon(chosen.part.id) }, 'Hold fire'),
     );
   }
 
@@ -300,6 +287,15 @@ export class WeaponPanel {
         el("span", { class: "sr-only" }, label),
         ...ammoCells(mw.def.magazine, gun.ammo, gun.reloadWork, mw.def.reload).map((state) =>
           el("span", { class: `ammo-cell ${state}`, "aria-hidden": "true" })),
+      ),
+      el(
+        "button",
+        {
+          class: "weapon-hold",
+          title: "Hold fire: stop auto fire and clear this gun's target",
+          onclick: () => this.holdWeapon(mw.part.id),
+        },
+        "Hold",
       ),
       el(
         "button",
