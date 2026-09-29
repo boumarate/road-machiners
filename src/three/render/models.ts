@@ -282,6 +282,8 @@ function readViewport(renderer: THREE.WebGLRenderer): void {
 // thin panel never pokes through a model. Outlines draw after opaque models, so the marks are there by then.
 export const TRUCK_BIT = 1;
 export const PROP_BIT = 2;
+export const READY_ARC_BIT = 4; // ready arcs and the selected gun's reach mark their pixels, so where they overlap a spot is shaded once
+export const SPENT_ARC_BIT = 8;
 export const OUTLINE_ORDER = 805; // after opaque models mark the stencil, before truck silhouettes
 
 function outlineMaterial(): THREE.MeshBasicMaterial {

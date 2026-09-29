@@ -228,15 +228,15 @@ export class VehicleView {
       const mounted = isMounted(v.chassisId, item);
       // The cab core has no model: the base draws the cab.
       if (BODY_PARTS.has(def.id)) continue;
-      const surface = standingY(v, item);
       const wheel = isWheel(def);
       if (wheel && mounted) wheelItems.push(item);
-      else if (wheel) still.add(this.spareWheel(v, body, item, paint, surface));
+      else if (wheel) still.add(this.spareWheel(v, body, item, paint, standingY(v, item)));
       else if (def.kind === 'weapon') this.buildWeapon(v, item, mounted, still, paint, this.riser(v, item, paint, still));
-      else if (def.kind === 'armor') still.add(this.placeArmor(v, body, item, paint, mounted, surface));
+      // A mounted plate hangs on the model's outer face, so it rests on no surface.
+      else if (def.kind === 'armor') still.add(this.placeArmor(v, body, item, paint, mounted));
       // An engine on its mount stands in the engine bay and shows through the cutout.
       else if (def.kind === 'engine' && mounted) still.add(this.placeEngine(v, item, paint));
-      else still.add(this.placeItem(v, item, paint, surface));
+      else still.add(this.placeItem(v, item, paint, standingY(v, item)));
     }
     this.buildWheels(v, body, wheelItems, paint);
     this.buildSuspension(body, paint);
@@ -331,13 +331,13 @@ export class VehicleView {
   // It turns to the side its cells lie on and stretches to their span. A spare armor part lies as a front or a left row on its row surface.
   // A mounted plate or cage hangs from the deck top. On a side it is skin: thin, on the model's outer face.
   // A mounted cage or ram takes the bumper's place. A mounted ram hangs from the chassis bottom.
-  private placeArmor(v: Vehicle, body: Body, item: PartItem, paint: number, mounted: boolean, surface: number): THREE.Object3D {
+  private placeArmor(v: Vehicle, body: Body, item: PartItem, paint: number, mounted: boolean): THREE.Object3D {
     const def = partDef(item.part.defId);
     if (def.kind !== 'armor') throw new Error(`Part ${def.id} is not armor`);
     const side = armorSide(v, item);
     const across = side === 'F' || side === 'B';
-    const at = footprint(v, item, surface);
     const rect = rectOf(v, item);
+    const at = mounted ? { pos: new THREE.Vector3((rect.x0 + rect.x1) / 2, 0, (rect.z0 + rect.z1) / 2) } : footprint(v, item, standingY(v, item));
     const depth = armorDepth(mounted, across);
     const obj = model(partModel(def.id));
     if (mounted) {

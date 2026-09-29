@@ -38,6 +38,7 @@ import { isTowed, setBeacon, unhitch } from "../sim/tow";
 import { cloneWorld, hostileToPlayer, playerCanAct, setMoveOrder } from "../sim/world";
 import { TruckControls } from "./truck-controls";
 import { PAL } from "../render/palette";
+import { READY_ARC_BIT } from "./render/models";
 import { timed } from "../perf";
 import { CharacterScreen } from "../ui/character";
 import { HitCard } from "../ui/hitCard";
@@ -137,7 +138,7 @@ export class Game {
   private anim: Playback | null = null;
   private readonly travel = new Travel(CONFIG.travelHoldMs);
   private phase: TurnPhase = null;
-  private readonly weaponRange = new WeaponRangeView();
+  private readonly weaponRange = new WeaponRangeView(PAL.select, READY_ARC_BIT);
   private readonly hoverArcs: HoverArcsView;
   private readonly markers: VehicleMarkers;
   private readonly overlay: HTMLElement;

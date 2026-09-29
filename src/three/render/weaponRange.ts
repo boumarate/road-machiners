@@ -16,22 +16,29 @@ import { DEG, type Vec } from '../../sim/vec';
 import { createIcon } from '../../ui/cards';
 import { el } from '../../ui/dom';
 import type { CameraRig } from './camera';
+import { READY_ARC_BIT, SPENT_ARC_BIT } from './models';
 
 const S = PHYSICS.metersPerTile;
 const ICON_PX = 26;
 const LIFT = 0.15; // meters above the ground, so the shape does not z-fight with it
 const DEG_PER_STEP = 5; // at most this many degrees per edge segment keeps the curve smooth
 const LINE_WIDTH_PX = 2;
-const FILL_ALPHA = 0.15;
-const LINE_ALPHA = 0.15;
+const FILL_ALPHA = 0.075;
+const LINE_ALPHA = 0.075;
+const ICON_ALPHA = 0.5;
 
 export class WeaponRangeView {
   readonly root = new THREE.Group();
   private fill: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   private edges: Line2[] = [];
 
-  constructor(private readonly color: number = PAL.select) {
-    this.fill = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: FILL_ALPHA, depthTest: false, side: THREE.DoubleSide }));
+  // stencilBit: the fill draws each pixel once, so where its arcs overlap it is no darker.
+  constructor(private readonly color: number, stencilBit: number) {
+    this.fill = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity: FILL_ALPHA, depthTest: false, side: THREE.DoubleSide,
+      stencilWrite: true, stencilRef: stencilBit, stencilFuncMask: stencilBit, stencilWriteMask: stencilBit,
+      stencilFunc: THREE.NotEqualStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
+    }));
     this.fill.renderOrder = 810;
     this.root.add(this.fill);
     this.root.visible = false;
@@ -86,7 +93,7 @@ function rimPoints(span: FireSpan, heading: number, point: (angle: number) => TH
 
 
 export type IconSpot = { angle: number; distance: number }; // degrees from the truck heading, tiles from the truck
-export type HoverArc = { weapon: MountedWeapon; spans: FireSpan[]; spent: boolean; spot: IconSpot };
+export type HoverArc = { weapon: MountedWeapon; slot: number; spans: FireSpan[]; spent: boolean; spot: IconSpot }; // slot: the gun's number, as the weapon panel shows it
 
 const ICON_RANGE_SHARE = 0.5; // an icon sits at this share of the gun's range
 const ICON_NUDGE_SHARE = 0.15; // icons on one spot step outward by this share of range
@@ -106,20 +113,20 @@ export function iconSpot(spans: readonly FireSpan[], range: number, taken: reado
 // The arcs to draw: guns with hit points, in mount order. Empty and cooling guns are spent.
 export function hoverArcs(world: World, vehicle: Vehicle, weapons: readonly MountedWeapon[]): HoverArc[] {
   const arcs: HoverArc[] = [];
-  for (const weapon of weapons) {
+  for (const [i, weapon] of weapons.entries()) {
     const block = fireBlock(world, vehicle, weapon, null);
     const spans = fireSpans(weapon.def.arc, weapon.sides);
     if (block === 'disabled' || spans.length === 0) continue;
     const spot = iconSpot(spans, weapon.def.range, arcs.map((arc) => arc.spot));
-    arcs.push({ weapon, spans, spent: block === 'empty' || block === 'cooldown', spot });
+    arcs.push({ weapon, slot: i + 1, spans, spent: block === 'empty' || block === 'cooldown', spot });
   }
   return arcs;
 }
 
 export class HoverArcsView {
   readonly root = new THREE.Group();
-  private readonly ready = new WeaponRangeView(PAL.select);
-  private readonly spent = new WeaponRangeView(PAL.arcSpent);
+  private readonly ready = new WeaponRangeView(PAL.select, READY_ARC_BIT);
+  private readonly spent = new WeaponRangeView(PAL.arcSpent, SPENT_ARC_BIT);
   private readonly icons = new Map<string, HTMLElement>(); // by weapon part id
 
   constructor(private readonly overlay: HTMLElement, private readonly rig: CameraRig) {
@@ -170,8 +177,10 @@ export class HoverArcsView {
     for (const arc of arcs) {
       const id = arc.weapon.part.id;
       if (this.icons.has(id)) continue;
-      const node = el('div', { class: 'arc-icon' }, createIcon(arc.weapon.def.look));
-      node.style.cssText = `position:absolute;width:${ICON_PX}px;height:${ICON_PX}px;transform:translate(-50%,-50%);pointer-events:none;display:flex;align-items:center;justify-content:center;border:2px solid;border-radius:50%;background:rgba(20,18,14,0.75)`;
+      const number = el('span', {}, `${arc.slot}`);
+      number.style.cssText = 'position:absolute;right:-6px;bottom:-6px;font:bold 11px sans-serif;color:#fff;background:rgba(20,18,14,0.9);border-radius:3px;padding:0 3px;line-height:14px';
+      const node = el('div', { class: 'arc-icon' }, createIcon(arc.weapon.def.look), number);
+      node.style.cssText = `position:absolute;width:${ICON_PX}px;height:${ICON_PX}px;transform:translate(-50%,-50%);pointer-events:none;display:flex;align-items:center;justify-content:center;border:2px solid;border-radius:50%;background:rgba(20,18,14,0.75);opacity:${ICON_ALPHA}`;
       this.overlay.appendChild(node);
       this.icons.set(id, node);
     }
