@@ -1,0 +1,41 @@
+import { BRANCH, TASK_FILE, WONT_DO_LABEL, type Ctx } from '../types';
+import { BASE_BRANCH, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
+import { existsSync, readFileSync } from 'node:fs';
+
+export async function runStage(ctx: Ctx, issue: number): Promise<void> {
+  const clone = workDir(ctx, issue);
+  await ctx.repo.sync();
+  await ctx.repo.prepareWorkClone(BRANCH(issue), BASE_BRANCH, clone);
+  resetOutputs(clone);
+  await writeIssueInput(ctx, issue, clone);
+  const prompt = fillPrompt('design', { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) });
+  await runAgent(ctx, issue, 'design', ctx.cfg.designModel, prompt);
+  throwIfNeedsCommittee(clone);
+  const reason = readOutput(clone, 'wont-do.md');
+  if (reason !== null) return refuse(ctx, issue, reason);
+  requirePlan(clone, TASK_FILE(issue));
+  await guardAndPush(ctx, issue, BASE_BRANCH);
+  await ctx.github.move(issue, 'Implementation');
+}
+
+async function refuse(ctx: Ctx, issue: number, reason: string): Promise<void> {
+  await ctx.github.comment(issue, reason.trim());
+  await ctx.github.addLabel(issue, WONT_DO_LABEL);
+  await ctx.github.close(issue, 'not planned');
+  await ctx.github.move(issue, 'Done');
+}
+
+function requirePlan(clone: string, taskFile: string): void {
+  const path = `${clone}/${taskFile}`;
+  if (!existsSync(path)) throw new Error(`The design stage wrote no task file ${taskFile}`);
+  if (planText(readFileSync(path, 'utf8')) === '') throw new Error(`Task file ${taskFile} has no non-empty "## Plan" section`);
+}
+
+function planText(task: string): string {
+  const lines = task.split('\n');
+  const start = lines.findIndex((line) => line.trim() === '## Plan');
+  if (start < 0) return '';
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => line.startsWith('## '));
+  return (end < 0 ? rest : rest.slice(0, end)).join('\n').trim();
+}
