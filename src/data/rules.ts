@@ -44,6 +44,12 @@ export const RULES = {
   ramDamage: 2.5,
   cellPen: 0.5, // penetration every grid cell a round or crash passes costs, for the frame and bulk in the way
   crashPen: 4, // penetration of crash damage in each lane
+  // A truck body hitting the ground takes crash damage times this. Falls are slow next to driving: a roll off a 3 m
+  // drop lands at about 2.7 tiles per turn, and 3 makes that nearly as hard as a wall crash at 5.
+  groundCrash: 3,
+  // A truck landing on its wheels after a jump gives each working wheel ramDamage × crashDamage × landing speed² in
+  // tiles per turn × this. A 3 m drop costs a wheel about 5 HP. Drops under 1 m land slower than collisionMinImpact.
+  landingDamage: 0.25,
   wheelLoss: 0.15, // share of speed and turning lost per broken wheel
   tankLeak: 1, // fuel lost per turn with a broken tank
 

@@ -1,5 +1,5 @@
 import { PHYSICS } from '../data/physics';
-import { baseGrid, corePart, mountedParts } from './grid';
+import { baseGrid, corePart, coreParts, mountedParts } from './grid';
 import { NPC_BEHAVIOR } from '../data/npcs';
 import { isHostile, noteCollision } from './combat';
 import { getMobilityCondition, isStranded, vehicleStats } from './stats';
@@ -30,6 +30,23 @@ export function applyContactCrash(world: World, a: Vehicle, b: Vehicle | null, w
   }
   const hitsA = applyContactDamage(world, a, contact.a, impact, 1, 1);
   world.events.push({ t: 'collision', a: a.id, b: what, hitsA, hitsB: [] });
+}
+
+// The truck's body hit the ground, which hurts far more than a crash at the same speed into an obstacle.
+export function applyGroundCrash(world: World, v: Vehicle, what: string, impact: number, contact: CrashContact): void {
+  if (!Number.isFinite(impact) || impact < 0) throw new Error(`Bad ground crash impact ${impact}`);
+  const hitsA = applyContactDamage(world, v, contact, impact, 1, RULES.groundCrash);
+  world.events.push({ t: 'collision', a: v.id, b: what, hitsA, hitsB: [] });
+}
+
+// The truck landed on its wheels after a jump. Each working wheel takes a small blow.
+export function applyLanding(world: World, v: Vehicle, what: string, impact: number): void {
+  if (!Number.isFinite(impact) || impact < 0) throw new Error(`Bad landing impact ${impact}`);
+  if (impact < RULES.collisionMinImpact) return;
+  const driving = skillEffect(world, v, 'driving', 'crashDamage');
+  const damage = RULES.ramDamage * RULES.crashDamage * RULES.landingDamage * impact * impact * Math.max(0, 1 - driving);
+  const hitsA = coreParts(v, 'wheel').filter((wheel) => wheel.hp > 0).map((wheel) => ({ part: wheel.id, damage: damagePart(world, v, wheel, damage) }));
+  world.events.push({ t: 'collision', a: v.id, b: what, hitsA, hitsB: [] });
 }
 
 // The player practices driving from the damage its truck deals in a crash with another vehicle. A heavier
