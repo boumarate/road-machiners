@@ -20,8 +20,9 @@ Save the screenshot as `.factory/screenshot.png`.
 
 Write `.factory/approval.json` with this shape.
 `{"description": "...", "howToTry": "..."}`
-The description is short plain text about what changed.
-The howToTry text is the steps a committee member follows in the browser.
+The description is plain text about what changed, under 300 characters.
+The howToTry text is the steps a committee member follows in the browser, under 400 characters.
+They play the branch build from a link in the post, so start the steps from the loaded game, not from `npm run dev`.
 
 The factory checks your branch after you finish.
 It runs `npm test`, `npm run typecheck` and `npm run playtest -- --cpu` against the dev server.

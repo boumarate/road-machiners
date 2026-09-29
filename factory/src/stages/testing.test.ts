@@ -4,7 +4,7 @@ import { readState } from '../state';
 import type { AgentRun, Ctx } from '../types';
 
 vi.mock('../deploy', () => ({ buildAndDeploy: async () => 'https://play.test/abc123/' }));
-const { runStage } = await import('./testing');
+const { runStage, approvalCaption } = await import('./testing');
 
 let home = '';
 let calls: string[] = [];
@@ -25,6 +25,7 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
     github: {
       issue: async () => ({ number: 7, title: 'Big horn', body: '', labels: [], createdAt: '', state: 'OPEN', thumbsUp: [] }),
       move: async (issue: number, column: string) => { calls.push(`move ${issue} ${column}`); },
+      comment: async (issue: number) => { calls.push(`comment ${issue}`); },
     },
     telegram: {
       sendPhoto: async (chat: string, path: string, caption: string) => { calls.push(`photo ${chat} ${path} ${caption}`); return 100; },
@@ -55,18 +56,25 @@ function writeOutputs(run: AgentRun, approval: string | null): void {
 }
 
 describe('testing stage', () => {
-  it('posts the photo and the reply, records both ids and moves to Approval', async () => {
+  it('posts one photo with everything in the caption, records it and moves to Approval', async () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'A loud horn.', howToTry: 'Press H.' })));
     await runStage(ctx, 7);
     expect(shellScript).toContain('npm run playtest -- --cpu');
     expect(shellScript).toContain('seq 1 60');
-    expect(calls.find((call) => call.startsWith('photo'))).toContain('#7 Big horn\nhttps://play.test/abc123/');
-    const message = calls.find((call) => call.startsWith('message 100'));
-    expect(message).toContain('How to try: Press H.');
-    expect(message).toContain('Reply approve to this message to merge into dev.');
-    expect(readState(`${home}/state.json`).approvalPosts).toEqual({ 100: 7, 101: 7 });
+    const photo = calls.find((call) => call.startsWith('photo')) ?? '';
+    expect(photo).toContain('#7 Big horn\n\nPlay: https://play.test/abc123/');
+    expect(photo).toContain('How to try: Press H.');
+    expect(calls.some((call) => call.startsWith('message'))).toBe(false);
+    expect(calls).toContain('comment 7');
+    expect(readState(`${home}/state.json`).approvalPosts).toEqual({ 100: 7 });
     expect(calls.at(-1)).toBe('move 7 Approval');
-    expect(readFileSync(`${home}/state.json`, 'utf8')).toContain('101');
+  });
+
+  it('fits long notes into the caption limit', () => {
+    const caption = approvalCaption('#7 Big horn', 'https://play.test/x/', 'https://github.com/o/r/issues/7', { description: 'd'.repeat(900), howToTry: 'h'.repeat(900) });
+    expect(caption.length).toBeLessThanOrEqual(1024);
+    expect(caption).toContain('…');
+    expect(caption).toContain('Reply approve');
   });
 
   it('throws when approval.json lacks howToTry', async () => {

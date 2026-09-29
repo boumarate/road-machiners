@@ -25,7 +25,7 @@ kill "$server"
 exit $code
 `;
 
-type Approval = { description: string; howToTry: string };
+export type Approval = { description: string; howToTry: string };
 
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const clone = workDir(ctx, issue);
@@ -94,19 +94,36 @@ function checkFailure(log: string, error: unknown): string {
   return stripAnsi(tail);
 }
 
+// Telegram caps a photo caption at 1024 characters.
+const CAPTION_LIMIT = 1024;
+const TRIM_MARK = '…';
+
+// The approval post is one photo with everything in its caption. The full notes also go on the issue.
 async function post(ctx: Ctx, issue: number, approval: Approval, screenshot: string, url: string): Promise<void> {
   const item = await ctx.github.issue(issue);
-  const chat = ctx.cfg.committeeChat;
-  const caption = `#${issue} ${item.title}\n${url}`.slice(0, 1024);
-  const photoId = await ctx.telegram.sendPhoto(chat, screenshot, caption);
-  const text = [
-    item.title,
-    `Play: ${url}`,
-    `Issue: https://github.com/${ctx.cfg.repo}/issues/${issue}`,
-    approval.description,
-    `How to try: ${approval.howToTry}`,
-    'Reply approve to this message to merge into dev. Any other reply sends feedback to design.',
-  ].join('\n\n');
-  const textId = await ctx.telegram.sendMessage(chat, text, photoId);
-  updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: { ...state.approvalPosts, [photoId]: issue, [textId]: issue } }));
+  const link = `https://github.com/${ctx.cfg.repo}/issues/${issue}`;
+  await ctx.github.comment(issue, `Ready for approval: ${url}\n\n${approval.description}\n\nHow to try: ${approval.howToTry}`);
+  const photoId = await ctx.telegram.sendPhoto(ctx.cfg.committeeChat, screenshot, approvalCaption(`#${issue} ${item.title}`, url, link, approval));
+  updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: { ...state.approvalPosts, [photoId]: issue } }));
+}
+
+export function approvalCaption(title: string, url: string, link: string, approval: Approval): string {
+  const head = `${title}\n\nPlay: ${url}\nIssue: ${link}`;
+  const tail = 'Reply approve to merge into dev. Any other reply sends feedback to design.';
+  const room = CAPTION_LIMIT - head.length - tail.length - '\n\n'.repeat(3).length - 'How to try: '.length;
+  const [description, howToTry] = fitBoth(approval.description, approval.howToTry, room);
+  return [head, description, `How to try: ${howToTry}`, tail].join('\n\n');
+}
+
+// Shortens the two texts to fit the room, cutting the longer one first. The full texts are on the issue.
+function fitBoth(first: string, second: string, room: number): [string, string] {
+  if (first.length + second.length <= room) return [first, second];
+  const half = Math.floor(room / 2);
+  const firstRoom = Math.max(half, room - second.length);
+  const cutFirst = cut(first, firstRoom);
+  return [cutFirst, cut(second, room - cutFirst.length)];
+}
+
+function cut(text: string, room: number): string {
+  return text.length <= room ? text : `${text.slice(0, room - TRIM_MARK.length).trimEnd()}${TRIM_MARK}`;
 }
