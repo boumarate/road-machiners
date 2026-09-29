@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MIGRATIONS } from './save-migrations';
 import PARTS_1_0 from './save-fixtures/1.0-parts.json';
+import WHEELS_1_1 from './save-fixtures/1.1-wheels.json';
 
 describe('save migrations', () => {
   it('1.0 to 1.1 gives weapon parts a full magazine and drops the reload counter from every part', () => {
@@ -17,5 +18,52 @@ describe('save migrations', () => {
       ],
       shops: { bowl: { restockAt: 400, stock: [{ id: 'p3', defId: 'cannon', hp: 60, wear: 2, gun: { cooldown: 0, ammo: 2, reloadWork: 0 } }] } },
     });
+  });
+});
+
+describe('1.1 to 1.2 wheels inside the side armor', () => {
+  const migrated = () => MIGRATIONS[1](structuredClone(WHEELS_1_1)) as unknown as typeof WHEELS_1_1;
+  const itemsOf = (world: typeof WHEELS_1_1, vehicleId: string) => world.vehicles.find((v) => v.id === vehicleId)!.items as { id: string; x: number; y: number; rot: number }[];
+  const cellOf = (world: typeof WHEELS_1_1, vehicleId: string, itemId: string) => {
+    const it = itemsOf(world, vehicleId).find((entry) => entry.id === itemId);
+    return it && [it.x, it.y];
+  };
+
+  it('moves the four wheels of a scout one cell in and the cab and tank to their new cells', () => {
+    const world = migrated();
+    expect(['i4', 'i5', 'i6', 'i7'].map((id) => cellOf(world, 'v1', id))).toEqual([[1, 1], [3, 1], [1, 6], [3, 6]]);
+    expect(cellOf(world, 'v1', 'i1')).toEqual([1, 4]);
+    expect(cellOf(world, 'v1', 'i3')).toEqual([3, 3]);
+  });
+
+  it('keeps an armor plate that stands on an unchanged edge cell', () => {
+    expect(cellOf(migrated(), 'v1', 'i10')).toEqual([0, 4]);
+  });
+
+  it('removes items with no free plain cell (all four corners hold goods) and pays the player their value', () => {
+    const world = migrated();
+    expect(cellOf(world, 'v1', 'i8')).toBeUndefined();
+    expect(cellOf(world, 'v1', 'i9')).toBeUndefined();
+    expect(world.player.money).toBe(100 + 170 + 19);
+  });
+
+  it('moves an item that overlaps a wheel to the first plain cell in reading order', () => {
+    expect(cellOf(migrated(), 'v2', 'i18')).toEqual([0, 0]);
+  });
+
+  it('moves a gun off a cell whose mount letter changed, and pays nothing for an NPC truck', () => {
+    const world = migrated();
+    expect(cellOf(world, 'v3', 'i27')).toBeUndefined();
+    expect(world.player.money).toBe(100 + 170 + 19);
+  });
+
+  it('keeps an engine that stays on its bay', () => {
+    expect(cellOf(migrated(), 'v2', 'i19')).toEqual([2, 1]);
+  });
+
+  it('fails loudly on a chassis it does not know', () => {
+    const bad = structuredClone(WHEELS_1_1);
+    bad.vehicles[0].chassisId = 'ghost';
+    expect(() => MIGRATIONS[1](bad)).toThrow(/unknown chassis/);
   });
 });
