@@ -97,3 +97,55 @@ function columnZ(chassisId: string, x: number, w: number): number {
   const across = PHYSICS.cell.across;
   return (x - 1 + 0.5) * across - ((w - 2) * across) / 2;
 }
+
+// STUB START: temporary cellRect, surfaceAt and engineAnchor. The projection and height map replace this block at merge.
+export type CellRect = { x0: number; x1: number; z0: number; z1: number };
+
+export function cellRect(chassisId: string, cells: readonly { x: number; y: number }[]): CellRect {
+  const spans = cells.map((c) => ({ ...alongSpan(chassisId, c.y), ...acrossSpan(chassisId, c.x, c.y) }));
+  return {
+    x0: Math.min(...spans.map((s) => s.x0)),
+    x1: Math.max(...spans.map((s) => s.x1)),
+    z0: Math.min(...spans.map((s) => s.z0)),
+    z1: Math.max(...spans.map((s) => s.z1)),
+  };
+}
+
+// The first and last rows lie on the model's front and back faces. Other rows span one cell.
+function alongSpan(chassisId: string, y: number): { x0: number; x1: number } {
+  const half = bodyOf(chassisId).half;
+  if (y === 0) return { x0: half.x, x1: half.x };
+  if (y === baseGrid(chassisId).h - 1) return { x0: -half.x, x1: -half.x };
+  const at = cellCenter(chassisId, 0, y).x;
+  return { x0: at - PHYSICS.cell.along / 2, x1: at + PHYSICS.cell.along / 2 };
+}
+
+// The first and last columns lie on the model's side faces. Other columns span one cell.
+function acrossSpan(chassisId: string, x: number, y: number): { z0: number; z1: number } {
+  const at = cellCenter(chassisId, x, y).z;
+  const reach = x === 0 || x === baseGrid(chassisId).w - 1 ? 0 : PHYSICS.cell.across / 2;
+  return { z0: at - reach, z1: at + reach };
+}
+
+export function surfaceAt(chassisId: string, rect: CellRect): number {
+  const tops = shapeBoxesUnder(chassisId, rect).map((b) => b.z1);
+  if (tops.length === 0) throw new Error(`The ${chassisId} model has no surface under ${JSON.stringify(rect)}`);
+  return Math.max(...tops);
+}
+
+export function engineAnchor(chassisId: string): { x: number; y: number; z: number } {
+  const cells = chassisDef(chassisId).layout.flatMap((row, y) => [...row].flatMap((ch, x) => (ch === 'E' ? [{ x, y }] : [])));
+  const rect = cellRect(chassisId, cells);
+  const x = (rect.x0 + rect.x1) / 2;
+  const z = (rect.z0 + rect.z1) / 2;
+  const floors = shapeBoxesUnder(chassisId, { x0: x, x1: x, z0: z, z1: z }).map((b) => b.z1);
+  return { x, y: Math.min(...floors), z };
+}
+
+// Base model boxes in body space that overlap the rect. The shape files number the truck's left as +y.
+function shapeBoxesUnder(chassisId: string, rect: CellRect): ShapeBox[] {
+  const shape = (TRUCK_SHAPES as Record<string, { boxes: ShapeBox[] }>)[`base_${chassisId}`];
+  const overlaps = (lo: number, hi: number, a: number, b: number) => (b > a ? Math.min(hi, b) - Math.max(lo, a) > 0.01 : a >= lo - 0.01 && a <= hi + 0.01);
+  return shape.boxes.filter((b) => overlaps(b.x0, b.x1, rect.x0, rect.x1) && overlaps(-b.y1, -b.y0, rect.z0, rect.z1));
+}
+// STUB END
