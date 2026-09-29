@@ -8,5 +8,8 @@ const { version } = JSON.parse(readFileSync('package.json', 'utf8'))
 export default defineConfig({
   base: './',
   server: { hmr: false },
-  define: { __GAME_VERSION__: JSON.stringify(version) },
+  define: {
+    __GAME_VERSION__: JSON.stringify(version),
+    __SAVE_SCOPE__: JSON.stringify(process.env.SAVE_SCOPE ?? ''),
+  },
 })

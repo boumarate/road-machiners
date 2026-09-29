@@ -5,7 +5,14 @@ import type { BrokenProp, Obstacle, World } from '../sim/types';
 import { clearTips } from '../ui/tips';
 import { MIGRATIONS, SAVE_FORMAT, SAVE_MAJOR, type SavedJson } from './save-migrations';
 
-const SAVE_KEY = 'roam.save';
+declare const __SAVE_SCOPE__: string;
+
+// A build with a scope keeps its save apart from other builds served from the same site.
+export function saveKey(scope: string): string {
+  return scope === '' ? 'roam.save' : `roam.save.${scope}`;
+}
+
+const SAVE_KEY = saveKey(__SAVE_SCOPE__);
 
 // A stored save the game cannot load. The crash screen offers to delete it and start over.
 export class SaveError extends Error {}

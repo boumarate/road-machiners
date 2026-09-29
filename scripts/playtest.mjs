@@ -1,6 +1,7 @@
 // Boots the game in headless Chromium on the Metal GPU, plays turns, and fails on page errors, the crash screen,
 // a blank canvas or a low frame rate. Screenshots go to .playtest/.
-// Usage: npm run playtest -- [--url http://localhost:5173] [--turns 12]
+// With --cpu, Chromium draws in software and the frame rate is printed but not checked.
+// Usage: npm run playtest -- [--url http://localhost:5173] [--turns 12] [--cpu]
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright';
 
@@ -10,11 +11,12 @@ const arg = (name, fallback) => {
 };
 const url = arg('url', 'http://localhost:5173');
 const turns = Number(arg('turns', '12'));
+const cpu = process.argv.includes('--cpu');
 const MIN_FPS = 50; // headless Chromium caps frames at 60 Hz
 const TURN_LIMIT_MS = 10000; // a turn plays in about 1.3 s, and the first, while the game warms up, in about 3.2 s
 
 mkdirSync('.playtest', { recursive: true });
-const browser = await chromium.launch({ args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ args: cpu ? [] : ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.stack ?? e.message));
@@ -60,7 +62,7 @@ const problems = [...errors];
 if (state.crashed) problems.push('crash screen shown');
 if (state.turn !== turns + 1) problems.push(`expected turn ${turns + 1}, got ${state.turn}`);
 if (blank) problems.push('no WebGL canvas');
-if (fps < MIN_FPS) problems.push(`fps ${fps} under ${MIN_FPS}`);
+if (!cpu && fps < MIN_FPS) problems.push(`fps ${fps} under ${MIN_FPS}`);
 console.log(`turns ${state.turn - 1}, fps ${fps}`);
 if (problems.length > 0) {
   console.error(`FAIL\n${problems.join('\n')}`);

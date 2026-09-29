@@ -5,7 +5,7 @@ import { emptyWorld } from '../sim/testkit';
 import { moveItem } from '../sim/inventory';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
-import { clearGame, clearSave, hasSave, loadWorld, SaveError, saveInTown, saveOf, saveWorld, writeSave } from './save';
+import { clearGame, clearSave, hasSave, loadWorld, SaveError, saveKey, saveInTown, saveOf, saveWorld, writeSave } from './save';
 import { REGION } from '../data/region';
 import { sitePads } from '../sim/sites';
 import { TEST_MAP } from '../test/map';
@@ -255,5 +255,15 @@ describe('local game save', () => {
     const loaded = loadWorld(storage, TEST_MAP)!;
     expect(loaded).toEqual({ ...world, turn: 21 });
     expect(loaded.terrain).toBe(world.terrain);
+  });
+});
+
+describe('saveKey', () => {
+  it('keeps the plain key for an unscoped build', () => {
+    expect(saveKey('')).toBe('roam.save');
+  });
+
+  it('adds the scope to the key', () => {
+    expect(saveKey('factory')).toBe('roam.save.factory');
   });
 });
