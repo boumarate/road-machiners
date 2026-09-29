@@ -495,6 +495,7 @@ export function advanceContracts(world: World): void {
   for (const c of [...world.player.contracts]) {
     const outcome = contractOutcome(world, c, paidTemplates);
     if (outcome) finishContract(world, c, outcome);
+    else if (c.deadline - world.turn === CONTRACTS.warnTurns) world.events.push({ t: 'contract', contract: { ...c }, outcome: 'expiring' });
   }
 }
 

@@ -402,11 +402,12 @@ function searchedText(stock: string): { text: string; cls: string } {
   return { text: `Search done${site ? ` at ${site.name}` : ''}.`, cls: 'good' };
 }
 
-const CONTRACT_OUTCOME = { accepted: ['Contract taken', ''], done: ['Contract done', 'good'], failed: ['Contract failed', 'bad'], lapsed: ['Contract lapsed', 'dim'] } as const;
+const CONTRACT_OUTCOME = { accepted: ['Contract taken', ''], expiring: ['Contract due soon', 'bad'], done: ['Contract done', 'good'], failed: ['Contract failed', 'bad'], lapsed: ['Contract lapsed', 'dim'] } as const;
 
 function contractText(c: Contract, outcome: keyof typeof CONTRACT_OUTCOME): { text: string; cls: string } {
   const [label, cls] = CONTRACT_OUTCOME[outcome];
-  return { text: `${label}: ${contractSummary(c)}, pays ${c.reward}`, cls };
+  const tail = outcome === 'expiring' ? `, ${contractDue(c)}` : `, pays ${c.reward}`;
+  return { text: `${label}: ${contractSummary(c)}${tail}`, cls };
 }
 
 // One line naming what a contract asks for.

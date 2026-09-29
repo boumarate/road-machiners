@@ -420,6 +420,16 @@ describe('contract boards and delivery', () => {
     expect(w.player.money).toBe(money - haulPenalty(haul('nose', 3) as Extract<Contract, { kind: 'haul' }>, goodValue('salt')));
   });
 
+  it('warns once when a held contract is two game hours from its deadline', () => {
+    let w = acceptContract(atBowlWithOffer(haul('nose', 3)), 'ct-haul');
+    const warned = (turn: number) =>
+      update(w, (d) => { d.turn = turn; d.events = []; advanceContracts(d); }).events.filter((e) => e.t === 'contract' && e.outcome === 'expiring');
+    const deadline = w.player.contracts[0].deadline;
+    expect(warned(deadline - CONTRACTS.warnTurns - 1)).toHaveLength(0);
+    expect(warned(deadline - CONTRACTS.warnTurns)).toHaveLength(1);
+    expect(warned(deadline - CONTRACTS.warnTurns + 1)).toHaveLength(0);
+  });
+
   it('pays a bounty on the player kill and lapses when the target leaves', () => {
     const base = emptyWorld();
     const raider = addRaider(base, 'buggy', { x: 50, y: 50 });

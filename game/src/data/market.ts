@@ -2,6 +2,7 @@
 
 import { PARTS } from './parts';
 import type { Weighted } from './npcs';
+import { TIME } from './time';
 
 // The effort model. The unit of effort is one turn of play. The wage is the net money a player
 // earns per turn, after fuel, supplies and repairs, at each tier. An item's effort is its value
@@ -83,6 +84,9 @@ export const EFFORT = {
 export const CONTRACTS = {
   // The player holds at most this many contracts at once (Design > Contract terms).
   maxActive: 3,
+
+  // The log warns once when a held contract has this many turns left: two game hours.
+  warnTurns: Math.round(TIME.turnsPerDay / 12),
 
   haul: {
     // The deadline is the estimated travel turns times this factor, so a normal detour, a stop for
