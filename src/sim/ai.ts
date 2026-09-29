@@ -17,7 +17,7 @@ import type { MoveOrder, NpcActivity, Vehicle, World } from "./types";
 import { angleDiff, bearing, dist, type Vec } from "./vec";
 import { canVehicleSee } from "./vision";
 import { inArc } from "./combat";
-import { ramMult } from "./armor";
+import { passShare, ramMult, sideToward } from "./armor";
 import { vehicleMass } from "./mass";
 import { chance } from "./rng";
 
@@ -224,7 +224,7 @@ export function scorePoint(world: World, v: Vehicle, target: Vehicle, lead: Vec,
   const me = afterTurn(world, v, p);
   const there = { ...target, pos: lead };
   const mine = gunShare(sv.weapons, (mw) => inReach(me, mw, there));
-  const theirs = gunShare(vehicleStats(world, target).weapons, (mw) => inReach(there, mw, me));
+  const theirs = exposure(world, target, there, me);
   const off = Math.abs(dist(p, lead) - range) / range;
   const travel = Math.max(0, dist(v.pos, p) - sv.maxSpeed) / Math.max(sv.maxSpeed, RULES.arriveRadius);
   const ahead = turn === 0 ? 0 : Math.min(1, (turn * angleDiff(bearing(lead, v.pos), bearing(lead, p))) / QUARTER);
@@ -251,6 +251,18 @@ export function afterTurn(world: World, v: Vehicle, p: Vec): Vehicle {
   const heading = bearing(v.pos, p);
   const step = Math.min(d, sv.maxSpeed, v.speed + sv.accel);
   return { ...v, pos: { x: v.pos.x + Math.cos(heading) * step, y: v.pos.y + Math.sin(heading) * step }, heading };
+}
+
+// The share of the shooter's working gun damage per turn that could hit v and get past the armor on the side v shows
+// each gun. A bare side facing every gun gives 1, a well plated one far less. shooter holds the guns and at is
+// where it stands.
+export function exposure(world: World, shooter: Vehicle, at: Vehicle, v: Vehicle): number {
+  const working = vehicleStats(world, shooter).weapons.filter((mw) => mw.part.hp > 0);
+  const total = working.reduce((sum, mw) => sum + sustainedDamage(mw.def), 0);
+  if (total === 0) return 0;
+  const side = sideToward(v, at.pos);
+  const exposed = working.filter((mw) => inReach(at, mw, v)).reduce((sum, mw) => sum + sustainedDamage(mw.def) * passShare(v, side, mw.def.round), 0);
+  return exposed / total;
 }
 
 function inReach(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): boolean {

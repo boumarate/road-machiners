@@ -177,6 +177,31 @@ function shareOf(def: PartDef, round: Round): number {
   return def.kind === 'armor' ? round.armorShare : 1;
 }
 
+// The share of a round's damage that gets past the armor on one side, averaged over its lanes. A lane whose first
+// working part is armor stops pen equal to its armor and lets the rest through, as walkLane() does. Any other lane
+// lets it all through.
+export function passShare(v: Vehicle, side: Side, round: { pen: number; blast: boolean }): number {
+  const g = gridOf(v);
+  const owner = new Map<string, PartInstance>();
+  for (const it of mountedItems(v)) for (const c of itemCells(it)) owner.set(`${c.x},${c.y}`, it.part);
+  const lanes = Array.from({ length: laneCount(v, side) }, (_, lane) => firstPart(g, owner, side, lane));
+  const pass = (part: PartInstance | null) => {
+    const def = part && wornDef(part);
+    if (!def || def.kind !== 'armor') return 1;
+    return round.pen <= 0 ? 0 : Math.max(0, round.pen - armorAgainst(def, round.blast)) / round.pen;
+  };
+  return lanes.reduce((sum, part) => sum + pass(part), 0) / lanes.length;
+}
+
+// The first working part a round meets in a lane, or null when it meets none.
+function firstPart(g: Grid, owner: Map<string, PartInstance>, side: Side, lane: number): PartInstance | null {
+  for (const c of laneCells(g, side, lane)) {
+    const part = owner.get(`${c.x},${c.y}`);
+    if (part && part.hp > 0) return part;
+  }
+  return null;
+}
+
 function armorAgainst(def: PartDef, blast: boolean): number {
   return blast && def.kind === 'armor' ? def.blastArmor : def.armor;
 }

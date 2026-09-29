@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { afterTurn, fightOrder, fightPoint, planNpcOrders } from './ai';
+import { afterTurn, exposure, fightOrder, fightPoint, planNpcOrders } from './ai';
+import { mountedParts, sideOf, type SideLetter } from './grid';
 import { decide } from './npc-decisions';
 import { thinkNpc } from './npc-activities';
 import { dist } from './vec';
@@ -97,6 +98,32 @@ function inFight(): { w: World; v: Vehicle } {
   v.brain!.goals.push({ kind: 'fight', targetId: me, destination: { x: 40, y: 30 }, phase: 'travel', reason: 'test' });
   return { w, v };
 }
+
+describe('exposure', () => {
+  // The player's hauler with a forward cannon at (40, 30) facing +x, and a fighter at (48, 30) facing it, so the
+  // fighter's front faces the cannon. `keep` names the one side whose plates stay.
+  function faceOff(keep: SideLetter | null) {
+    const w = emptyWorld({ x: 40, y: 30 });
+    const gun = addVehicle(w, 'player', 'hauler', ['stockEngine', 'cannon'], { x: 40, y: 30 }, 0);
+    gun.id = w.vehicles[0].id;
+    w.vehicles = [gun, ...w.vehicles.slice(1, -1)];
+    const plates = Array.from({ length: 20 }, () => 'steelPlate');
+    const v = fighter(w, 'gunwagon', ['stockEngine', 'mg', ...plates], { x: 48, y: 30 });
+    v.heading = Math.PI;
+    const strip = new Set(mountedParts(v, 'armor').filter((p) => sideOf(v, p) !== keep).map((p) => p.id));
+    v.items = v.items.filter((it) => it.kind !== 'part' || !strip.has(it.part.id));
+    return exposure(w, gun, gun, v);
+  }
+
+  it('is full for a bare side facing a gun that bears', () => {
+    expect(faceOff(null)).toBeCloseTo(1);
+  });
+
+  it('drops when the side facing the gun is plated, and not when only the far side is', () => {
+    expect(faceOff('F')).toBeLessThan(faceOff(null) * 0.8);
+    expect(faceOff('B')).toBeCloseTo(faceOff(null));
+  });
+});
 
 describe('fight whims', () => {
   it('rolls every whim over many seeds', () => {

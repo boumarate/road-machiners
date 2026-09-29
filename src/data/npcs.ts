@@ -1119,7 +1119,7 @@ export const NPC_BEHAVIOR = {
   fleeCondition: 0.3,
   // Fight driving; see src/sim/ai.ts. A fighter scores `angles` points around its target's next spot. Each
   // point gets arcWeight × the share of its gun damage that bears from there, minus threatWeight × the share of the
-  // target's gun damage that bears on it, minus rangeWeight × how far off its range the point is as a share of it,
+  // target's gun damage that bears on it and gets past the armor on the side it shows each gun, minus rangeWeight × how far off its range the point is as a share of it,
   // minus travelWeight × the drive past one turn at top speed as a share of that speed. A circling fighter adds
   // circleWeight × how far ahead around the target the point lies, as a share of a quarter turn, and never drives
   // slower than circlePace tiles a turn. Every fighter subtracts rammedWeight × the danger of standing in the target's
