@@ -4,6 +4,7 @@ import type { Contract } from "../sim/market";
 import { partDef } from "../data/parts";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import type { GameEvent, Job, PartInstance } from "../sim/types";
+import { maxHp } from "../sim/wear";
 import { contractDue, contractSummary, eventText, jobLabel, roundLabel, wearLabel } from "./format";
 import { mountedParts } from "../sim/grid";
 
@@ -111,8 +112,53 @@ describe("shot log", () => {
       rounds: [{ hit: false, crit: false, offset: 3, struck: me.id, hits: [{ part: cab.id, damage: 4 }], blast: [] }],
     };
     const line = eventText(w, e);
-    expect(line?.text).toContain("; stray fire hits ");
+    expect(line?.text).toContain(" · stray fire hits ");
     expect(line?.cls).toBe("bad");
+  });
+
+  function duel() {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const raider = addVehicle(w, "raiders", "buggy", ["mg", "steelPlate"], { x: 40, y: 40 });
+    const parts = mountedParts(raider);
+    const cab = parts.find((p) => (partDef(p.defId) as { role?: string }).role === "cab")!;
+    const armor = parts.find((p) => partDef(p.defId).kind === "armor");
+    const shot = (hits: { part: string; damage: number }[], rounds = 2): GameEvent => ({
+      t: "shot", shooter: me.id, weapon: mountedParts(me, "weapon")[0].id, target: raider.id, aim: "body", chance: 0.4, side: "front",
+      rounds: Array.from({ length: rounds }, (_, i) => ({ hit: i === 0, crit: false, offset: 0, struck: raider.id, hits: i === 0 ? hits : [], blast: [] })),
+    });
+    return { w, raider, cab, armor, shot };
+  }
+
+  it("reads who shot whom, hits, chance and damage per part", () => {
+    const { w, raider, cab, shot } = duel();
+    cab.hp = maxHp(cab);
+    const line = eventText(w, shot([{ part: cab.id, damage: 2 }]))!;
+    expect(line.text).toMatch(/^.+ → .+ · 1\/2 hit \(40%\) · .+ −2$/);
+    expect(line.text).toContain(raider.name);
+  });
+
+  it("marks a part with no HP left as broken in the bad color", () => {
+    const { w, cab, shot } = duel();
+    cab.hp = 0;
+    const line = eventText(w, shot([{ part: cab.id, damage: 5 }]))!;
+    expect(line.spans!.find((s) => s.text.endsWith(" broken"))?.cls).toBe("bad");
+  });
+
+  it("puts inner parts before armor and dims the armor", () => {
+    const { w, cab, armor, shot } = duel();
+    if (!armor) throw new Error('The raider has no armor');
+    armor.hp = maxHp(armor);
+    cab.hp = maxHp(cab);
+    const line = eventText(w, shot([{ part: armor.id, damage: 1 }, { part: cab.id, damage: 2 }]))!;
+    const names = line.spans!.map((s) => s.text);
+    expect(names.findIndex((t) => t.startsWith(partDef(cab.defId).name))).toBeLessThan(names.findIndex((t) => t.startsWith(partDef(armor.defId).name)));
+    expect(line.spans!.find((s) => s.text.startsWith(partDef(armor.defId).name))?.cls).toBe("dim");
+  });
+
+  it("logs a shot with no damage without a damage list", () => {
+    const { w, shot } = duel();
+    expect(eventText(w, shot([]))!.text).not.toContain("−");
   });
 });
 
