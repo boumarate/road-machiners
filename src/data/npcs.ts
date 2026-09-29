@@ -1144,10 +1144,10 @@ export const NPC_BEHAVIOR = {
   // target's gun damage that bears on it and gets past the armor on the side it shows each gun, minus rangeWeight × how far off its range the point is as a share of it,
   // minus travelWeight × the drive past one turn at top speed as a share of that speed. A circling fighter adds
   // circleWeight × how far ahead around the target the point lies, as a share of a quarter turn, and never drives
-  // slower than circlePace tiles a turn. Every fighter subtracts rammedWeight × the danger of standing in the target's
-  // ram path, which grows with how much heavier the target is and with a ram bar on its nose. A fighter rolls
+  // slower than circlePace tiles a turn. Every fighter subtracts rammedWeight × the ram value of the target's ram at
+  // that point, and one that rams readily adds ramWeight × the ram value of its own ram from there. A fighter rolls
   // fightWhim every whimTurns turns.
-  fight: { angles: 16, arcWeight: 2, threatWeight: 2, rangeWeight: 1, travelWeight: 1, circleWeight: 1, rammedWeight: 2, circlePace: 3, whimTurns: 4 },
+  fight: { angles: 16, arcWeight: 2, threatWeight: 2, rangeWeight: 1, travelWeight: 1, circleWeight: 1, rammedWeight: 2, ramWeight: 2, circlePace: 3, whimTurns: 4 },
   // One driver in three the player knocks out holds a grudge. See the revenge state.
   revengeChance: 0.33,
   recoverCondition: 0.5,
@@ -1181,14 +1181,28 @@ export const NPC_BEHAVIOR = {
   // Investigate weight times this when the cab or a driving part is at or below the recover condition. A raider's
   // investigate weight of 12 drops to 0.12, so a crippled raider closes in on a contact 1 to 4 times in 100.
   crippledInvestigate: 0.01,
-  // Ram weight times this when the forecast says the ram costs the driver more than the target, or breaks one of
-  // its working parts. A ram weight of 9 drops to 0.009, about 1%.
-  riskyRam: 0.001,
-  // A ram's weight scales by the rammer's mass over the target's, to this power: twice the mass rams four times as
-  // readily, half the mass a quarter as readily.
-  ramMassPower: 2,
-  // Ram weight share against a truck whose working ram bar faces the rammer.
-  ramBarRam: 0.2,
+  // A ram is worth its expected net damage: what the crash model says it takes off the target minus what it takes off
+  // the rammer, each part counted by partWeight, times the chance it connects. It competes with the rammer's guns over
+  // the same turns, at gunWeight per point of gun damage that gets past the armor. The ram's share of the two is the
+  // ram value, from 0 to 1. A ram that nets nothing, or leaves the rammer below the flee condition, is worth 0.
+  ram: {
+    // Value of one hit point lost, by the part that loses it. The cab, wheels, engine and guns decide a fight. Armor
+    // and ram bars exist to be hit.
+    partWeight: { cab: 4, wheel: 2, transmission: 2, tank: 1, engine: 3, weapon: 3, armor: 0.25, scanner: 1, store: 1, cargo: 1 },
+    gunWeight: 1,
+    // Ram weight is the ram value times this, so a ram worth as much as the guns, a value of 0.5, weighs 0.15 times the
+    // base weight and is chosen about 1 time in 2. Against an equal truck this gives a ram in about 1 fight in 8 without
+    // a ram bar and 1 in 3 with one.
+    valueScale: 0.3,
+    // Ram weight when the ram is worth nothing. A ram weight of 9 drops to 0.009, about 1%.
+    riskyRam: 0.001,
+    // The chance a ram connects is 1 / (1 + sway), where sway is the sideways distance the target can open before the
+    // impact, as a share of the width of the path. The rammer closes at its impact speed, so each tile of gap costs
+    // 1 / impact turns. The target can move out at its speed times (dodge + how far its heading is off the ram line, as a
+    // sine). A parked or stranded target never moves, so it is hit for sure. A truck at 6 tiles a turn, 12 tiles off, 
+    // crossing the line, has a sway of about 5 and connects about 1 time in 6.
+    dodge: 0.3,
+  },
   // Salvage in sight weighs 10 times a known site out of sight.
   visibleSalvage: 10,
   // A robber mostly picks targets weaker than itself, away from town guards. Rob weight times this when the

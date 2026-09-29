@@ -43,7 +43,7 @@ export type Fight = {
 };
 
 // One gun and a stock engine on a hauler, with every armor cell filled with one armor part or left bare.
-export type Outfit = { gun: string; armor: string | null };
+export type Outfit = { gun: string; armor: string | null; ram?: string };
 
 // odds sums each round's hit chance. speed sums the side's speed each turn, averaged over its awake trucks.
 export type Side = { rounds: number; hits: number; odds: number; damage: number; speed: number };
@@ -142,6 +142,7 @@ function outfit(w: World, v: Vehicle, o: Outfit): void {
   if (v.chassisId !== 'hauler') throw new Error(`Outfits go on a hauler, not a ${v.chassisId}`);
   v.items = v.items.filter((it) => it.kind === 'part' && PARTS[it.part.defId].kind === 'core');
   for (const id of ['stockEngine', o.gun]) if (!mountPart(w, v, makePart(w, id, 0))) throw new Error(`${id} does not fit the hauler`);
+  if (o.ram && !mountPart(w, v, makePart(w, o.ram, 0))) throw new Error(`${o.ram} does not fit the hauler`);
   if (o.armor) while (mountPart(w, v, makePart(w, o.armor, 0)));
 }
 
@@ -265,7 +266,7 @@ export function groups(reports: FightReport[]): Group[] {
 }
 
 function outfitName(o: Outfit | null): string | null {
-  return o && `${o.gun}/${o.armor ?? 'bare'}`;
+  return o && `${o.gun}/${o.armor ?? 'bare'}${o.ram ? `+${o.ram}` : ''}`;
 }
 
 const pct = (a: number, b: number) => (b > 0 ? `${Math.round((100 * a) / b)}%` : '-');

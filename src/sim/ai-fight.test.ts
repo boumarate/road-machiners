@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { afterTurn, exposure, fightOrder, fightPoint, noteTarget, perceivedTarget, planNpcOrders } from './ai';
+import { ramValue } from './crash-contact';
+import { afterTurn, exposure, fightOrder, fightPoint, leadOf, scorePoint, noteTarget, perceivedTarget, planNpcOrders } from './ai';
 import { mountedParts, sideOf, type SideLetter } from './grid';
 import { decide } from './npc-decisions';
 import { thinkNpc } from './npc-activities';
@@ -57,12 +58,27 @@ describe('fight driving', () => {
     const w = emptyWorld({ x: 40, y: 30 });
     const heavy = addVehicle(w, 'player', 'hauler', ['stockEngine', 'mg', 'plowRam'], { x: 40, y: 30 }, 0);
     heavy.id = w.vehicles[0].id;
-    heavy.speed = 3; // charging, so its ram reaches the fighter's spots this turn
+    heavy.speed = 4; // charging, so its ram catches the fighter's spots this turn
     w.vehicles = [heavy, ...w.vehicles.slice(1, -1)];
     const v = fighter(w, 'gunwagon', ['stockEngine', 'mg'], { x: 46, y: 30 }, 'buggy');
-    v.speed = 4;
+    v.speed = 1;
     const next = afterTurn(w, v, fightPoint(w, v, heavy, 4));
-    expect(Math.abs(angleDiff(heavy.heading, bearing(heavy.pos, next.pos)))).toBeGreaterThan(Math.PI / 4);
+    expect(ramValue(w, { ...heavy, pos: leadOf(heavy) }, next)).toBe(0);
+  });
+
+  it('a fighter that rams readily scores a spot that lines its ram up higher than one that does not', () => {
+    const w = emptyWorld({ x: 40, y: 30 });
+    const me = w.vehicles[0];
+    me.speed = 0;
+    const raider = fighter(w, 'gunwagon', ['stockEngine', 'mg', 'plowRam'], { x: 47, y: 30 });
+    raider.heading = Math.PI;
+    raider.speed = 4;
+    const trader = fighter(w, 'trader', ['stockEngine', 'mg', 'plowRam'], { x: 47, y: 30 });
+    trader.heading = Math.PI;
+    trader.speed = 4;
+    trader.brain!.traits = ['trader'];
+    const lined = { x: 45, y: 30 }; // on the raider's nose line
+    expect(scorePoint(w, raider, me, me.pos, 6, lined, 0)).toBeGreaterThan(scorePoint(w, trader, me, me.pos, 6, lined, 0));
   });
 
   it('a circling fighter picks a point ahead around the target in its direction', () => {

@@ -12,13 +12,13 @@ import { isFree } from "./spawn";
 import { parkedVehicles } from "./steering";
 import { vehicleStats, type MountedWeapon } from "./stats";
 import { escortsOf, followPace, isOnRope, towHeldBy } from "./tow";
-import { ramImpact } from "./crash-contact";
+import { ramImpact, ramValue } from "./crash-contact";
+import { ramsReadily } from "./npc-decisions";
 import type { MoveOrder, NpcActivity, Vehicle, World } from "./types";
 import { angleDiff, bearing, dist, type Vec } from "./vec";
 import { canVehicleSee } from "./vision";
 import { inArc } from "./combat";
-import { passShare, ramMult, sideToward } from "./armor";
-import { vehicleMass } from "./mass";
+import { passShare, sideToward } from "./armor";
 import { chance } from "./rng";
 
 // NPC drivers that plan this turn. A truck on a tow rope only trails its tower, so it keeps no order.
@@ -259,18 +259,9 @@ export function scorePoint(world: World, v: Vehicle, target: Vehicle, lead: Vec,
   const off = Math.abs(dist(p, lead) - range) / range;
   const travel = Math.max(0, dist(v.pos, p) - sv.maxSpeed) / Math.max(sv.maxSpeed, RULES.arriveRadius);
   const ahead = turn === 0 ? 0 : Math.min(1, (turn * angleDiff(bearing(lead, v.pos), bearing(lead, p))) / QUARTER);
-  const rammed = rammedDanger(world, v, there, me);
-  return F.arcWeight * mine - F.threatWeight * theirs - F.rangeWeight * off - F.travelWeight * travel + F.circleWeight * ahead - F.rammedWeight * rammed;
-}
-
-// How bad a spot in the target's ram path is: zero outside the 45 degrees off its nose within one turn's drive.
-// Inside, a heavier target counts by how much heavier it is, and a ram bar on its nose by how much more it hits.
-function rammedDanger(world: World, v: Vehicle, target: Vehicle, spot: Vehicle): number {
-  const st = vehicleStats(world, target);
-  const reach = Math.min(st.maxSpeed, target.speed + st.accel) + st.radius + vehicleStats(world, v).radius;
-  const inPath = dist(target.pos, spot.pos) <= reach && Math.abs(angleDiff(target.heading, bearing(target.pos, spot.pos))) <= Math.PI / 4;
-  if (!inPath) return 0;
-  return Math.max(0, vehicleMass(target) / vehicleMass(v) - 1) + (ramMult(target, 'front') - 1);
+  const rammed = ramValue(world, there, me);
+  const seek = ramsReadily(world, v, target.id) ? ramValue(world, me, there) : 0;
+  return F.arcWeight * mine - F.threatWeight * theirs - F.rangeWeight * off - F.travelWeight * travel + F.circleWeight * ahead - F.rammedWeight * rammed + F.ramWeight * seek;
 }
 
 // Where v is after one turn of driving toward p, facing the way it drives. Guns fire after the move, so arcs are

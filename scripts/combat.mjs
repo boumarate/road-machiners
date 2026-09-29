@@ -1,11 +1,11 @@
 // Runs the combat harness (src/test/combat-harness.ts) and writes its report to tmp/combat/.
 // Usage: npm run combat -- --kit standard --enemies buggy,gunwagon,buggy+buggy --policy all --seeds 1-20
-//   [--guns mg,shotgun --armor plates] [--levels poor,loaded] [--foe-gun mg --foe-armor plates]
+//   [--guns mg,shotgun --armor plates] [--levels poor,loaded] [--foe-gun mg --foe-armor plates --foe-ram plowRam]
 //   [--gap 8] [--orbit 6] [--turns 40] [--set RULES.leadError=3 --set PARTS.mg.spread=4] [--trace]
 // --trace prints one line per turn. --out sets the report folder, tmp/combat by default.
 // --enemies lists lineups; + joins trucks in one lineup. --guns runs each listed weapon as the only gun of a hauler with
 // --armor on every armor cell, or bare without it. --levels runs each listed enemy gear level. --foe-gun gives every
-// enemy a hauler with that gun and --foe-armor. --set changes one balance number for this run.
+// enemy a hauler with that gun, --foe-armor and a --foe-ram bar on its nose. --set changes one balance number for this run.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { formatReport, POLICIES, runFight, setNumber, turnLine } from '../src/test/combat-harness.ts';
 import { initPhysics } from '../src/phys/drive.ts';
@@ -43,7 +43,7 @@ const seeds = parseSeeds(argOf('seeds', '1-10'));
 const armor = argOf('armor', null);
 const mes = argOf('guns', null)?.split(',').map((gun) => ({ gun, armor })) ?? [null];
 const foeGun = argOf('foe-gun', null);
-const foe = foeGun ? { gun: foeGun, armor: argOf('foe-armor', null) } : null;
+const foe = foeGun ? { gun: foeGun, armor: argOf('foe-armor', null), ram: argOf('foe-ram', undefined) } : null;
 const levels = argOf('levels', null)?.split(',') ?? [null];
 const base = { kit: argOf('kit', 'standard'), gap: positiveInt('gap', '8'), orbit: positiveInt('orbit', '6'), maxTurns: positiveInt('turns', '40') };
 
