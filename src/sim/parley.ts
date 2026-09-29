@@ -3,6 +3,8 @@
 // decision. Radio talk with the player lives in src/sim/dialogue.ts, and this module owns what the answers do.
 
 import { SPAWN } from '../data/npcs';
+import { isHostile } from './combat';
+import { isKnockedOut } from './defeat';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
 import { partSellPrice } from './economy';
@@ -10,7 +12,8 @@ import { corePart, isMounted } from './grid';
 import { applyRefitLayout } from './inventory';
 import { creditBounty } from './market';
 import { defyThreat, pushGoal, topGoal } from './npc-activities';
-import { decide, perceiveDanger, visibleHostiles } from './npc-decisions';
+import { decide, perceiveDanger, visibleHostiles, wantsLoot } from './npc-decisions';
+import { SPARE_LINE } from '../data/dialogue';
 import { vehicleHasPerk } from './progress';
 import { createCargoSalvage, dumpOnPile, hasCargo, takeError } from './salvage';
 import { isStranded } from './stats';
@@ -58,15 +61,15 @@ export function yieldTo(world: World, loser: Vehicle, winner: Vehicle, dumped: S
   creditYield(world, loser, winner);
 }
 
-// A stranded player gives up to a robber: the cargo and the best installed parts go onto the ground, and the truck stays.
-export function surrenderTo(world: World, me: Vehicle, robber: Vehicle): void {
-  yieldTo(world, me, robber, dumpWantedParts(world, me));
+// A stranded truck gives up to a robber: the cargo and the best installed parts go onto the ground, and the truck stays.
+export function surrenderTo(world: World, loser: Vehicle, robber: Vehicle): void {
+  yieldTo(world, loser, robber, dumpWantedParts(world, loser));
 }
 
-// A stranded player gives up to a driver that takes nothing: both sides make peace and the truck keeps everything.
-export function giveUpTo(world: World, me: Vehicle, winner: Vehicle): void {
-  makePeace(world, me, winner);
-  const grudge = stateOf(world, 'revenge', winner.id, me.id);
+// A stranded truck gives up to a driver that takes nothing: both sides make peace and the truck keeps everything.
+export function giveUpTo(world: World, loser: Vehicle, winner: Vehicle): void {
+  makePeace(world, loser, winner);
+  const grudge = stateOf(world, 'revenge', winner.id, loser.id);
   if (grudge) endState(world, grudge, 'fulfilled');
 }
 
@@ -156,9 +159,66 @@ function fightsPlayer(world: World, npc: Vehicle): boolean {
 
 // The driver fights the stranded player and sees no other foe.
 export function hasStrandedPrey(world: World, npc: Vehicle): boolean {
-  const me = playerVehicle(world);
-  if (!fightsPlayer(world, npc)) return false;
-  return isStranded(world, me) && visibleHostiles(world, npc).every((foe) => foe.id === me.id);
+  return fightsPlayer(world, npc) && strandedPrey(world, npc)?.id === world.player.vehicleId;
+}
+
+// The stranded truck the driver fights with no other foe in sight, player or NPC, or null.
+export function strandedPrey(world: World, npc: Vehicle): Vehicle | null {
+  const prey = fightTarget(world, npc);
+  if (!prey || !isBeaten(world, npc, prey)) return null;
+  return visibleHostiles(world, npc).every((foe) => foe.id === prey.id) ? prey : null;
+}
+
+function fightTarget(world: World, npc: Vehicle): Vehicle | null {
+  const top = npc.brain ? topGoal(npc) : null;
+  if (top?.kind !== 'fight') return null;
+  return world.vehicles.find((v) => v.id === top.targetId) ?? null;
+}
+
+// The prey can no longer drive but is still in the fight: stranded, awake and hostile.
+function isBeaten(world: World, npc: Vehicle, prey: Vehicle): boolean {
+  return isStranded(world, prey) && !isKnockedOut(prey) && isHostile(world, npc, prey);
+}
+
+// The driver takes cargo and parts from the prey: a robber, and the prey has something to take.
+function strips(world: World, npc: Vehicle, prey: Vehicle): boolean {
+  return wantsLoot(world, npc, prey) && hasStrippable(prey);
+}
+
+// A driver alone with the stranded player that takes nothing from it: not a robber, or a robber with nothing to take.
+export function offersGiveUp(world: World, npc: Vehicle): boolean {
+  return hasStrandedPrey(world, npc) && !strips(world, npc, playerVehicle(world));
+}
+
+// A driver alone with a stranded foe decides once what to do with it. A driver that takes nothing may judge the foe not
+// worth the trouble and leave in peace. Otherwise it offers the foe a way out: the player hears it on the radio, and
+// an NPC foe answers at once, giving up or holding out.
+export function judgeStrandedFoe(world: World, npc: Vehicle): void {
+  const prey = strandedPrey(world, npc);
+  if (!prey || `strandedFoe:${prey.id}` in npc.brain!.noticed) return;
+  npc.brain!.noticed[`strandedFoe:${prey.id}`] = world.turn;
+  const robs = strips(world, npc, prey);
+  if (!robs && decide(world, npc, 'strandedFoe', prey.id, null) === 'spare') return spare(world, npc, prey);
+  if (prey.brain) answerOffer(world, prey, npc, robs);
+}
+
+function spare(world: World, npc: Vehicle, prey: Vehicle): void {
+  if (!prey.brain) world.events.push({ t: 'say', speaker: npc.id, text: SPARE_LINE, vars: {} });
+  makePeace(world, npc, prey);
+}
+
+// A stranded NPC offered a way out gives up, stripped by a robber or let go by anyone else, or holds out and draws fire
+// at its cab.
+function answerOffer(world: World, prey: Vehicle, winner: Vehicle, robs: boolean): void {
+  prey.brain!.noticed[`surrenderOffered:${winner.id}`] = world.turn;
+  if (decide(world, prey, 'surrenderOffered', winner.id, null) === 'refuse') return;
+  if (robs) surrenderTo(world, prey, winner);
+  else giveUpTo(world, prey, winner);
+}
+
+// Whether the driver judged the stranded player and chose to offer a way to stand down.
+export function judgedWorthOffer(world: World, npc: Vehicle): boolean {
+  return `strandedFoe:${world.player.vehicleId}` in npc.brain!.noticed;
 }
 
 // Installed parts that can leave the truck, best first.
@@ -185,14 +245,17 @@ function dumpWantedParts(world: World, victim: Vehicle): SalvageStock | null {
   return pile;
 }
 
-// The player refused or hung up on this driver's offer to end the fight.
-function refusedOffer(world: World, shooter: Vehicle): boolean {
+// The prey refused or, for the player, hung up on this driver's offer to end the fight. An NPC prey that answered and
+// is still fighting refused, since giving up makes peace.
+function refusedOffer(world: World, shooter: Vehicle, prey: Vehicle): boolean {
+  if (prey.brain) return `surrenderOffered:${shooter.id}` in prey.brain.noticed;
   const talked = world.player.talked[shooter.id];
   return talked?.surrender === 'refused' || talked?.giveUp === 'refused';
 }
 
-// Where a shot from this driver at the target lands: at the cab once the prey refused to give up, else anywhere.
+// Where a shot from this driver at the target lands: at the cab once the stranded prey refused to give up, else
+// anywhere.
 export function aimAt(world: World, shooter: Vehicle, target: Vehicle): Aim {
-  if (target.id !== world.player.vehicleId || !hasStrandedPrey(world, shooter)) return 'body';
-  return refusedOffer(world, shooter) ? corePart(target, 'cab').id : 'body';
+  if (strandedPrey(world, shooter)?.id !== target.id) return 'body';
+  return refusedOffer(world, shooter, target) ? corePart(target, 'cab').id : 'body';
 }

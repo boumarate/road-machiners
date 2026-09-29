@@ -11,7 +11,7 @@ import { isHostile } from './combat';
 import { patchGoal, startTow, topGoal, underAttack } from './npc-activities';
 import { vehicleValue } from './market';
 import { hasPerk, practice } from './progress';
-import { answerPlea, answersPlea, answersThreat, giveUpTo, hasStrandedPrey, hasStrippable, makePeace, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, surrenderTo, yieldTo, type ThreatAnswer } from './parley';
+import { answerPlea, answersPlea, answersThreat, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, surrenderTo, yieldTo, type ThreatAnswer } from './parley';
 import { hasCargo, hasSalvage } from './salvage';
 import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
 import { npcProfile, wantsLoot } from './npc-decisions';
@@ -122,7 +122,7 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   // The stranded player is alone with a robber and has cargo or parts to lose.
   demandsSurrender: (world, npc) => hasStrandedPrey(world, npc) && wantsLoot(world, npc, playerVehicle(world)) && hasStrippable(playerVehicle(world)),
   // The stranded player is alone with a driver that takes nothing: not a robber, or a robber with nothing to take.
-  demandsGiveUp: (world, npc) => hasStrandedPrey(world, npc) && !(wantsLoot(world, npc, playerVehicle(world)) && hasStrippable(playerVehicle(world))),
+  demandsGiveUp: (world, npc) => offersGiveUp(world, npc) && judgedWorthOffer(world, npc),
   atOdds: (world, npc) => isHostile(world, npc, playerVehicle(world)),
   atPeace: (world, npc) => !isHostile(world, npc, playerVehicle(world)),
   noPlayerPlea: (world, npc) => !playerPleaded(world, npc),

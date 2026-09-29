@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NPCS } from '../data/npcs';
+import { SPARE_LINE } from '../data/dialogue';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
 import { chooseOption, currentOptions, hangUp } from './dialogue';
@@ -116,7 +117,7 @@ describe('surrender offer to a stranded player', () => {
 });
 
 // A lawman on patrol with a machine gun fights a stranded player who carries goods. It takes nothing.
-function strandedByLawman(): { w: World; lawman: Vehicle } {
+function strandedByLawman(judge: 'offer' | 'spare' = 'offer'): { w: World; lawman: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
   for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
   addGoods(w, playerVehicle(w), 'scrap', 2);
@@ -125,6 +126,7 @@ function strandedByLawman(): { w: World; lawman: Vehicle } {
   lawman.brain = npcBrain('bowlFarmer', lawman.pos, ['lawman']);
   addState(w, 'feud', lawman.id, w.player.vehicleId, { kind: 'feud', robbery: false });
   forceOption('hostileSeen', 'fight');
+  forceOption('strandedFoe', judge);
   return { w, lawman };
 }
 
@@ -170,5 +172,54 @@ describe('plain surrender to a stranded player', () => {
     const w = endTurn(start, testDrive);
     expect(w.player.call?.topic).not.toBe('giveUp');
     expect(CONDITIONS.demandsGiveUp(w, w.vehicles.find((v) => v.id === lawman.id)!, {})).toBe(false);
+  });
+});
+
+describe('a stranded player not worth the trouble', () => {
+  it('a driver that judges the player not worth it says so, makes peace and never offers', () => {
+    const { w: start, lawman } = strandedByLawman('spare');
+    const w = endTurn(start, testDrive);
+    expect(w.events).toContainEqual({ t: 'say', speaker: lawman.id, text: SPARE_LINE, vars: {} });
+    expect(w.player.call?.topic).not.toBe('giveUp');
+    expect(isHostile(w, w.vehicles.find((v) => v.id === lawman.id)!, playerVehicle(w))).toBe(false);
+  });
+});
+
+// A raider beside a stranded trader far from the player, feuding over the trader's cargo.
+function npcAmbush(answer: 'accept' | 'refuse'): { w: World; raider: Vehicle; trader: Vehicle } {
+  const w = emptyWorld({ x: 5, y: 5 });
+  for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+  const trader = addVehicle(w, 'traders', 'hauler', ['stockEngine', 'mg'], { x: 60, y: 60 }, 0);
+  trader.brain = npcBrain('trader', trader.pos, ['trader']);
+  trader.resources!.fuel = 0;
+  addGoods(w, trader, 'scrap', 3);
+  const raider = addVehicle(w, 'raiders', 'buggy', ['stockEngine', 'mg'], { x: 66, y: 60 }, Math.PI);
+  raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+  addState(w, 'feud', raider.id, trader.id, { kind: 'feud', robbery: true });
+  forceOption('hostileSeen', 'fight');
+  forceOption('surrenderOffered', answer);
+  return { w, raider, trader };
+}
+
+describe('surrender between NPCs', () => {
+  it('a stranded NPC that gives up to a robber drops its cargo, and the robber goes to take it', () => {
+    const { w: start, raider, trader } = npcAmbush('accept');
+    const w = endTurn(start, testDrive);
+    const t = w.vehicles.find((v) => v.id === trader.id)!;
+    const r = w.vehicles.find((v) => v.id === raider.id)!;
+    expect(isHostile(w, r, t)).toBe(false);
+    expect(hasCargo(t)).toBe(false);
+    expect(topGoal(r)?.kind).toBe('loot');
+  });
+
+  it('a stranded NPC that holds out draws the robber\'s fire at its cab', () => {
+    const { w: start, raider, trader } = npcAmbush('refuse');
+    let w = endTurn(start, testDrive);
+    const cab = corePart(w.vehicles.find((v) => v.id === trader.id)!, 'cab').id;
+    const r = w.vehicles.find((v) => v.id === raider.id)!;
+    expect(aimAt(w, r, w.vehicles.find((v) => v.id === trader.id)!)).toBe(cab);
+    w = endTurn(w, testDrive);
+    const aims = w.events.flatMap((e) => (e.t === 'shot' && e.shooter === raider.id && e.target === trader.id ? [e.aim] : []));
+    expect(aims.every((aim) => aim === cab)).toBe(true);
   });
 });

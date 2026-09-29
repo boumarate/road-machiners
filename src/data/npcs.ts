@@ -818,6 +818,10 @@ export type DecisionOptions = {
   parley: 'keep' | 'truce' | 'beg'; // a foe hurt the driver this turn
   truceOffered: 'accept' | 'refuse'; // a foe asks for a truce
   mercyBegged: 'spare' | 'finish'; // a foe gives up and asks to be let go
+  // A driver that takes nothing fights a stranded foe alone: offer it a way out, or judge it not worth the trouble and
+  // leave.
+  strandedFoe: 'offer' | 'spare';
+  surrenderOffered: 'accept' | 'refuse'; // a stranded NPC is offered a way out by the foe that beat it
   threatened: 'comply' | 'fightBack' | 'flee'; // the player demands the driver's cargo
   mugging: 'demand' | 'attack'; // the driver sets out to fight the player: radio for the cargo first, or just open fire
   resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal
@@ -864,6 +868,10 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   truceOffered: { accept: 2, refuse: 1 },
   // Three drivers in four let a beaten foe go. The beggar leaves its cargo.
   mercyBegged: { spare: 3, finish: 1 },
+  // About one driver in ten leaves a stranded foe alone.
+  strandedFoe: { offer: 9, spare: 1 },
+  // A stranded driver mostly takes the way out. The accept factor for weak drivers raises it further.
+  surrenderOffered: { accept: 3, refuse: 1 },
   // A threatened driver gives up its cargo, fights or runs about equally. The two sides' strength decides most.
   threatened: { comply: 1, fightBack: 1, flee: 1 },
   // A driver about to attack the player radios for the cargo first a bit more often than it opens fire unwarned.

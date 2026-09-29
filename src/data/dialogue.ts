@@ -44,6 +44,8 @@ export const END = 'end';
 export const REFUSED = 'callRefused';
 // What a driver busy fighting another truck says when the player calls.
 export const BUSY_LINE = 'Busy here! Off the channel.';
+// A driver that judges the stranded player not worth the trouble says this and leaves in peace.
+export const SPARE_LINE = 'You are not worth the trouble.';
 
 export const TOPICS: Record<TopicId, Topic> = {
   directions: {
@@ -186,7 +188,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     start: 'offer',
     nodes: {
       offer: {
-        line: 'Your truck is dead. Hand over the cargo and your best parts, and you keep the truck. Or I shoot for your cab.',
+        line: 'Your truck is dead. Hand over the cargo and your best parts, and you keep the truck. Refuse, and I take it off your wreck.',
         options: [
           { text: 'Fine. Take it.', when: [], effects: ['surrender'], go: END },
           { text: 'Come and get it.', when: [], effects: ['settleRefused'], go: END },
@@ -194,7 +196,8 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // Any other driver alone with the stranded player, and a robber with nothing to take, calls once. Giving up ends the
+  // Any other driver alone with the stranded player, and a robber with nothing to take, calls once, unless it judged the
+  // player not worth the trouble and left. See judgeStrandedFoe() in src/sim/parley.ts. Giving up ends the
   // fight with a truce and takes nothing. Refusing or hanging up makes every gun shoot at the cab.
   giveUp: {
     id: 'giveUp',
@@ -206,7 +209,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     start: 'offer',
     nodes: {
       offer: {
-        line: 'Your truck is dead in the road. Stand down and we both drive on. Or I shoot for your cab.',
+        line: 'Your truck is dead in the road. Stand down and we both drive on.',
         options: [
           { text: 'Standing down.', when: [], effects: ['giveUp'], go: END },
           { text: 'Come and get it.', when: [], effects: ['settleRefused'], go: END },
