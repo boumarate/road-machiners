@@ -77,8 +77,9 @@ describe('walkLane', () => {
 
   it('a strong round passes the plate and hits the part behind', () => {
     const { w, v, plate, engine } = plated();
+    const tank = defOf(v, 'tank');
     const hits = walkLane(w, v, 'front', 2, { damage: 10, pen: 20, blast: false, armorShare: 1 });
-    expect(hits.map((h) => h.part).slice(0, 2)).toEqual([plate.id, engine.id]);
+    expect(hits.map((h) => h.part).slice(0, 3)).toEqual([plate.id, tank.id, engine.id]);
     expect(engine.hp).toBeLessThan(maxHp(engine));
   });
 
@@ -110,9 +111,10 @@ describe('walkLane', () => {
 
   it('a broken part lets the round pass', () => {
     const { w, v, plate, engine } = plated();
+    const tank = defOf(v, 'tank');
     plate.hp = 0;
     const hits = walkLane(w, v, 'front', 2, { damage: 10, pen: 3, blast: false, armorShare: 1 });
-    expect(hits.map((h) => h.part)).toEqual([engine.id]);
+    expect(hits.map((h) => h.part)).toEqual([tank.id, engine.id]);
     expect(plate.hp).toBe(0);
   });
 
@@ -251,7 +253,8 @@ describe('blast armor', () => {
   });
 });
 
-// The scout's cab fills rows 4 and 5 inside the side armor. Its hood has one deck cell at (2,1), and its bed is row 6.
+// The scout's cab fills rows 4 and 5 inside the side armor, and its deck pair at (3,2) and (3,3) lies beside the engine.
+// The van's cab fills row 4, and a deck row lies behind it.
 function truckWith(w: World, chassisId: string, parts: { defId: string; x: number; y: number }[]): Vehicle {
   const v = addVehicle(w, 'player', chassisId, ['stockEngine'], { x: 40, y: 40 });
   for (const [i, p] of parts.entries()) {
@@ -267,13 +270,13 @@ function itemOf(v: Vehicle, defId: string): GridItem {
 describe('open sides', () => {
   it('a gun in the bed cannot fire forward across the cab', () => {
     const w = emptyWorld();
-    const v = truckWith(w, 'scout', [{ defId: 'mg', x: 2, y: 6 }]);
+    const v = truckWith(w, 'van', [{ defId: 'mg', x: 2, y: 5 }]);
     expect(openSides(v, itemOf(v, 'mg'))).toEqual(['rear', 'left', 'right']);
   });
 
-  it('a gun on the hood fires forward but not back across the cab', () => {
+  it('a gun beside the hood fires forward but not back across the cab', () => {
     const w = emptyWorld();
-    const v = truckWith(w, 'scout', [{ defId: 'mg', x: 2, y: 1 }]);
+    const v = truckWith(w, 'scout', [{ defId: 'mg', x: 3, y: 3 }]);
     expect(openSides(v, itemOf(v, 'mg'))).toEqual(['front', 'left', 'right']);
   });
 
@@ -307,7 +310,7 @@ describe('open sides', () => {
 describe('firing past tall parts', () => {
   it('reports a target ahead of a gun behind the cab as blocked', () => {
     const w = emptyWorld();
-    const me = truckWith(w, 'scout', [{ defId: 'mg', x: 2, y: 6 }]);
+    const me = truckWith(w, 'van', [{ defId: 'mg', x: 2, y: 5 }]);
     const ahead = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 45, y: 40 });
     const gun = vehicleStats(w, me).weapons[0];
     expect(inArc(me, gun, ahead)).toBe(false);
@@ -316,7 +319,7 @@ describe('firing past tall parts', () => {
 
   it('lets the same gun fire at a target on its open flank', () => {
     const w = emptyWorld();
-    const me = truckWith(w, 'scout', [{ defId: 'mg', x: 2, y: 6 }]);
+    const me = truckWith(w, 'van', [{ defId: 'mg', x: 2, y: 5 }]);
     const beside = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 40, y: 45 });
     const gun = vehicleStats(w, me).weapons[0];
     expect(inArc(me, gun, beside)).toBe(true);
@@ -352,9 +355,9 @@ describe('fire spans', () => {
 describe('side blockers', () => {
   it('names the cab as what blocks a bed gun in front', () => {
     const w = emptyWorld();
-    const v = truckWith(w, 'scout', [{ defId: 'mg', x: 2, y: 6 }]);
+    const v = truckWith(w, 'van', [{ defId: 'mg', x: 2, y: 5 }]);
     const blockers = sideBlockers(v, itemOf(v, 'mg'));
     expect(Object.keys(blockers)).toEqual(['front']);
-    expect(blockers.front?.kind === 'part' && blockers.front.part.defId).toBe('cabPickup');
+    expect(blockers.front?.kind === 'part' && blockers.front.part.defId).toBe('cabRow');
   });
 });

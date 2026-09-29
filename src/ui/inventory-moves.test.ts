@@ -3,7 +3,7 @@ import { REGION } from "../data/region";
 import { partDef } from "../data/parts";
 import { makePart } from "../sim/factory";
 import { isMounted, mountedParts } from "../sim/grid";
-import { mountPart, spareParts, stowPart } from "../sim/inventory";
+import { mountPart, removeAllGoods, spareParts, stowPart } from "../sim/inventory";
 import { sitePads } from "../sim/sites";
 import { emptyWorld } from "../sim/testkit";
 import { update } from "../sim/world";
@@ -65,6 +65,7 @@ describe("double click in a garage", () => {
 
   it("installs a spare part from the grid", () => {
     const w = emptyWorld(sitePads(bowl)[0]);
+    removeAllGoods(w.vehicles[0]);
     stowPart(w, w.vehicles[0], makePart(w, "cage", 0));
     const spare = w.vehicles[0].items.filter((it) => it.kind === "part" && it.part.defId === "cage").find((it) => !isMounted("scout", it))!;
     const next = doubleClickCommand(w, gridClick(spare))!(w);
@@ -120,6 +121,7 @@ describe("double click outside a garage", () => {
 
   it("moves a loot part into storage, never onto a mount", () => {
     const w = emptyWorld({ x: 30, y: 30 });
+    removeAllGoods(w.vehicles[0]);
     const part = makePart(w, "cage", 0);
     w.salvage.push({ id: "rich", pos: { x: 30, y: 30 }, radius: 1, goods: {}, parts: [part] });
     w.player.scavenged.push("rich");

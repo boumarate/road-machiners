@@ -575,7 +575,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
     wear: WEAR_TRADER,
-    targets: { guns: [2.1, 3.1], armor: [0.5, 0.85] },
+    targets: { guns: [1.55, 2.3], armor: [0.5, 0.85] },
     spares: null,
   },
   // A merc sells its guns, so it spends its budget on weapons and armor, not cargo.
@@ -622,7 +622,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
     wear: WEAR_SCAVENGER,
-    targets: { guns: [2.7, 4.1], armor: [0.6, 0.9] },
+    targets: { guns: [1.85, 2.8], armor: [0.6, 0.9] },
     spares: null,
   },
 };

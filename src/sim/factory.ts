@@ -49,7 +49,7 @@ export function addCoreParts(world: World, v: Vehicle): void {
   for (const c of chassisDef(v.chassisId).core) {
     const def = partDef(c.defId);
     if (def.kind !== 'core') throw new Error(`${c.defId} on ${v.chassisId} is not a core part`);
-    const item: GridItem = { id: newId(world, 'i'), x: c.x, y: c.y, rot: 0, kind: 'part', part: makePart(world, c.defId, 0) };
+    const item: GridItem = { id: newId(world, 'i'), x: c.x, y: c.y, rot: c.rot ?? 0, kind: 'part', part: makePart(world, c.defId, 0) };
     const err = placementError(gridOf(v), v.items, item, null);
     if (err) throw new Error(`${def.name} at ${c.x},${c.y} on ${v.chassisId}: ${err}`);
     if (!isMounted(v.chassisId, item)) throw new Error(`${def.name} at ${c.x},${c.y} on ${v.chassisId} is not on built-in cells`);

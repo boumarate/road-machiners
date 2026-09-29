@@ -141,9 +141,9 @@ describe('store capacity', () => {
 
   it('each mounted store adds its room to its own cap', () => {
     const w = emptyWorld();
-    const v = addVehicle(w, 'raiders', 'scout', ['stockEngine', 'jerrycans', 'jerrycans', 'supplyLocker'], { x: 40, y: 40 });
+    const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine', 'jerrycans', 'jerrycans', 'supplyLocker'], { x: 40, y: 40 });
     expect(mountedParts(v, 'store')).toHaveLength(3);
-    expect(fuelCap(v)).toBe(CHASSIS.scout.fuelCap + 2 * jerrycans.amount);
+    expect(fuelCap(v)).toBe(CHASSIS.hauler.fuelCap + 2 * jerrycans.amount);
     expect(suppliesCap(v)).toBe(RULES.baseSupplies + locker.amount);
   });
 

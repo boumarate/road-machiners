@@ -63,7 +63,7 @@ describe('built-in parts', () => {
   it('moving or storing a core part throws', () => {
     const w = emptyWorld(sitePads(bowl)[0]);
     const cab = coreItem(w, 'cab');
-    expect(() => moveItem(w, cab.id, { x: cab.x, y: cab.y, rot: 1 })).toThrow(/built.in/i);
+    expect(() => moveItem(w, cab.id, { x: cab.x, y: cab.y, rot: cab.rot })).toThrow(/built.in/i);
     expect(() => storePart(w, cab.id)).toThrow(/built.in/i);
   });
 
@@ -91,10 +91,10 @@ describe('cargo rows', () => {
     const v = addVehicle(w, 'raiders', 'scout', [], { x: 40, y: 40 });
     v.items.push({ ...spotOn('scout', 'rack', 'D', v.items), id: 'i-rack', part: makePart(w, 'rack', 0) } as GridItem);
     const g = gridOf(v);
-    const spare = (y: number): GridItem => ({ id: 'i-spare', x: 0, y, rot: 1, kind: 'part', part: makePart(w, 'rack', 0) });
-    expect(g.cells[g.chassisH - 1][0]).toBe('.');
-    expect(placementError(g, v.items, spare(g.chassisH - 1), null)).toBe('Does not fit there');
-    expect(placementError(g, v.items, { ...spare(g.chassisH - 1), rot: 0 }, null)).toBeNull();
+    const spare = (y: number, rot: 0 | 1): GridItem => ({ id: 'i-spare', x: 1, y, rot, kind: 'part', part: makePart(w, 'rack', 0) });
+    expect(g.cells[g.chassisH][1]).toBe('.');
+    expect(placementError(g, v.items, spare(g.chassisH - 1, 1), null)).toBe('Does not fit there');
+    expect(placementError(g, v.items, spare(g.chassisH, 0), null)).toBeNull();
   });
 });
 
@@ -148,6 +148,49 @@ describe('side armor mounts', () => {
       const d = PARTS[id];
       if (d.kind !== 'armor') throw new Error(`${id} must be armor`);
       expect(d.ramMult).toBe(1);
+    }
+  });
+});
+
+// The 2 wide interiors of these chassis cannot hold their four wheels, an engine bay, their other built-in parts and a
+// deck cell, so some of those still lie on the outline.
+const OPEN_RING = ['buggy', 'courier', 'jeep'];
+const FACES: Record<string, { dx: number; dy: number }> = { F: { dx: 0, dy: -1 }, B: { dx: 0, dy: 1 }, L: { dx: -1, dy: 0 }, R: { dx: 1, dy: 0 } };
+
+// The letters of the sides of a cell that face no cell.
+function openFaces(chassisId: string, x: number, y: number): string[] {
+  const g = baseGrid(chassisId);
+  return Object.entries(FACES).filter(([, f]) => g.cells[y + f.dy]?.[x + f.dx] == null).map(([letter]) => letter);
+}
+
+function cellsOfLayout(chassisId: string): { x: number; y: number; letter: Cell }[] {
+  const g = baseGrid(chassisId);
+  return g.cells.flatMap((row, y) => row.flatMap((letter, x) => (letter === null ? [] : [{ x, y, letter }])));
+}
+
+describe('armor ring', () => {
+  it('leaves the four corner cells out of every chassis', () => {
+    for (const id of Object.keys(CHASSIS)) {
+      const g = baseGrid(id);
+      const corners = [g.cells[0][0], g.cells[0][g.w - 1], g.cells[g.h - 1][0], g.cells[g.h - 1][g.w - 1]];
+      expect(corners, id).toEqual([null, null, null, null]);
+    }
+  });
+
+  it('puts an armor mount on every outline cell, on a side that cell faces', () => {
+    for (const id of Object.keys(CHASSIS).filter((c) => !OPEN_RING.includes(c))) {
+      for (const { x, y, letter } of cellsOfLayout(id)) {
+        const faces = openFaces(id, x, y);
+        if (faces.length > 0) expect(faces, `${id} ${x},${y}`).toContain(letter);
+      }
+    }
+  });
+
+  it('keeps armor mounts off the inside of the ring', () => {
+    for (const id of Object.keys(CHASSIS).filter((c) => !OPEN_RING.includes(c))) {
+      for (const { x, y, letter } of cellsOfLayout(id)) {
+        if (openFaces(id, x, y).length === 0) expect('FBLR'.includes(letter), `${id} ${x},${y}`).toBe(false);
+      }
     }
   });
 });

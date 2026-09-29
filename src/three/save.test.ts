@@ -52,12 +52,13 @@ function asFormat10(world: unknown): unknown {
   for (const v of old.vehicles) {
     const grid = CHASSIS_1_2[v.chassisId];
     const reading = (a: { x: number; y: number }, b: { x: number; y: number }) => a.y - b.y || a.x - b.x;
-    for (const defId of new Set(grid.newCore.map((c) => c[0]))) {
-      const cores = v.items.filter((it) => it.part?.defId === defId).sort(reading);
+    for (const newId of new Set(grid.newCore.map((c) => c[0]))) {
+      const defId = Object.entries(grid.renamed ?? {}).find(([, renamed]) => renamed === newId)?.[0] ?? newId;
+      const cores = v.items.filter((it) => it.part?.defId === newId).sort(reading);
       const from = grid.oldCore.filter((c) => c[0] === defId).map(([, x, y]) => ({ x, y })).sort(reading);
-      const to = grid.newCore.filter((c) => c[0] === defId).map(([, x, y]) => ({ x, y })).sort(reading);
-      cores.forEach((it, i) => Object.assign(it, from[i]));
-      if (cores.length !== to.length) throw new Error(`${v.chassisId} lost a ${defId}`);
+      const to = grid.newCore.filter((c) => c[0] === newId).map(([, x, y]) => ({ x, y })).sort(reading);
+      cores.forEach((it, i) => Object.assign(it, from[i], { rot: 0 }, { part: { ...it.part, defId } }));
+      if (cores.length !== to.length) throw new Error(`${v.chassisId} lost a ${newId}`);
     }
   }
   return old;

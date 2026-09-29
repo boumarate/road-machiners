@@ -267,17 +267,6 @@
      },
      {
       "deadline": "number",
-      "good": "string",
-      "id": "string",
-      "kind": "string",
-      "reward": "number",
-      "shop": "string",
-      "tier": "number",
-      "to": "string",
-      "units": "number"
-     },
-     {
-      "deadline": "number",
       "id": "string",
       "kind": "string",
       "reward": "number",
@@ -325,12 +314,14 @@
     "contracts": [
      {
       "deadline": "number",
-      "defId": "string",
+      "good": "string",
       "id": "string",
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "tier": "number"
+      "tier": "number",
+      "to": "string",
+      "units": "number"
      }
     ],
     "pressure": {
@@ -358,6 +349,17 @@
       "reward": "number",
       "shop": "string",
       "tier": "number"
+     },
+     {
+      "deadline": "number",
+      "good": "string",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "tier": "number",
+      "to": "string",
+      "units": "number"
      },
      {
       "deadline": "number",
@@ -408,13 +410,14 @@
     "contracts": [
      {
       "deadline": "number",
+      "good": "string",
       "id": "string",
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "targetName": "string",
-      "template": "string",
-      "tier": "number"
+      "tier": "number",
+      "to": "string",
+      "units": "number"
      }
     ],
     "pressure": {
@@ -436,14 +439,13 @@
     "contracts": [
      {
       "deadline": "number",
-      "good": "string",
       "id": "string",
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "tier": "number",
-      "to": "string",
-      "units": "number"
+      "targetName": "string",
+      "template": "string",
+      "tier": "number"
      }
     ],
     "pressure": {
@@ -460,6 +462,12 @@
        "cooldown": "number",
        "reloadWork": "number"
       },
+      "hp": "number",
+      "id": "string",
+      "wear": "number"
+     },
+     {
+      "defId": "string",
       "hp": "number",
       "id": "string",
       "wear": "number"

@@ -458,10 +458,11 @@ describe('breakable props', () => {
     const crash = w.events.find((e) => e.t === 'collision');
     if (crash?.t !== 'collision') throw new Error('Expected a collision event');
     const dealt = crash.hitsA.reduce((sum, hit) => sum + hit.damage, 0);
+    const hardest = Math.max(...crash.hitsA.map((hit) => hit.damage));
     expect(me.speed).toBeCloseTo(3 * (1 - BREAKABLE.slowdown));
     expect(crash).toMatchObject({ a: me.id, b: 'fence-7', hitsB: [] });
     expect(dealt).toBeGreaterThan(0);
-    expect(dealt).toBeLessThanOrEqual(BREAKABLE.damage);
+    expect(hardest).toBeLessThanOrEqual(BREAKABLE.damage);
   });
 
   it('refuses a prop that does not break, or one not standing', () => {

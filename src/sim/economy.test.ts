@@ -364,7 +364,7 @@ describe("garage", () => {
         .map((p) => p.defId)
         .filter((id) => partDef(id).kind !== "core")
         .sort(),
-    ).toEqual(["cage", "mg", "rack", "stockEngine"]);
+    ).toEqual(["cage", "mg", "panniers", "stockEngine"]);
     expect(goodsCount(me)).toEqual({ scrap: 2, parts: 2 });
     expect(w.player.money).toBe(
       2000 -

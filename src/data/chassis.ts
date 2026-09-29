@@ -8,9 +8,13 @@
 //   F, B, L, R  armor mounts on the front, back, left and right edges. Armor works when it lies fully on one of them.
 //   X           built-in cells, each filled by a core part listed in core
 //   .           plain cell, where spare parts ride without being installed
+// Armor mounts ring the outline: every cell on the edge of the shape is F, B, L or R by the side it faces, and every
+// other cell lies inside the ring. A space is no cell, so a narrow nose or tail leaves its corners out. The buggy, the
+// courier and the jeep have a 2 cell wide inside that cannot hold their wheels, engine bay, other built-in parts and
+// deck, so some of those still lie on their outline.
 // A part works only when it lies fully on mount cells of its kind. Any item may sit on any free cell, so empty mounts hold cargo too.
 //
-// core places the built-in parts at fixed cells, unrotated. The four wheels sit one cell in from the side edges, so side armor covers them.
+// core places the built-in parts at fixed cells, unrotated unless it lists rot 1. The four wheels sit one cell in from the side edges, so side armor covers them.
 //
 // Each chassis is drawn from its base model in src/render/partLooks.ts, built by tools/blender/base_<id>.py on this grid.
 
@@ -31,7 +35,7 @@ export type ChassisDef = {
   ratedMass: number; // load limit, set by ratedMassOf()
   radius: number; // collision radius in tiles
   layout: string[];
-  core: { defId: string; x: number; y: number }[];
+  core: { defId: string; x: number; y: number; rot?: 0 | 1 }[];
   fuelCap: number;
   fuelPerTile: number;
   base: number; // hand-set part of the value. See chassisModifier().
@@ -85,12 +89,13 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     mass: 680,
     handlingMass: 2100,
     radius: 0.6,
-    // The tank lies on the right edge and a deck pair on the left edge, since the three inner columns hold no other pair.
-    layout: ['.FFF.', 'LXDXR', 'DEEXD', 'DEEXX', 'LXXXR', 'LXXXR', 'LXDXR', '.BBB.'],
+    // The three inner columns hold the wheels, the engine bay and the cab. The tank and the transmission lie between
+    // the front and rear wheels, and the two deck cells beside the engine bay.
+    layout: [' FFF ', 'LXXXR', 'LEEDR', 'LEEDR', 'LXXXR', 'LXXXR', 'LXXXR', ' BBB '],
     core: [
       { defId: 'cabPickup', x: 1, y: 4 },
-      { defId: 'transmission', x: 3, y: 2 },
-      { defId: 'tankLong', x: 3, y: 3 },
+      { defId: 'transmission', x: 2, y: 6 },
+      { defId: 'tank', x: 2, y: 1 },
       { defId: 'wheel', x: 1, y: 1 },
       { defId: 'wheel', x: 3, y: 1 },
       { defId: 'wheel', x: 1, y: 6 },
@@ -114,7 +119,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     handlingMass: 5800,
     radius: 0.8,
     // The cab sits a row back, clear of the front right wheel.
-    layout: ['.FFFFF.', 'LXEEDXR', 'LDEEXXR', 'LDDDXXR', 'L..X..R', 'LDDDDDR', 'LDDDDDR', 'LXDXXXR', '.BBBBB.'],
+    layout: [' FFFFF ', 'LXEEDXR', 'LDEEXXR', 'LDDDXXR', 'L..X..R', 'LDDDDDR', 'LDDDDDR', 'LXDXXXR', ' BBBBB '],
     core: [
       { defId: 'cabOver', x: 4, y: 2 },
       { defId: 'transmissionMid', x: 3, y: 4 },
@@ -142,7 +147,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     handlingMass: 900,
     radius: 0.5,
     // Wheels fill the inner cells of both wheel rows, so the cab, transmission and tank sit on the edge cells between them.
-    layout: ['.FF.', 'LXXR', 'XEED', 'XEEX', 'LXXR', '.BB.'],
+    layout: [' FF ', 'LXXR', 'XEED', 'XEEX', 'LXXR', ' BB '],
     core: [
       { defId: 'cab', x: 0, y: 2 },
       { defId: 'transmission', x: 0, y: 3 },
@@ -169,12 +174,12 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     mass: 2130,
     handlingMass: 3700,
     radius: 0.8,
-    // The tank lies on the right edge to keep a three cell deck row, and the transmission sits between the rear wheels.
-    layout: ['.FFF.', 'LXDXR', 'LEEXR', 'LEEXX', 'LDDDR', 'LXXXR', '.BBB.'],
+    // The tank stands beside the engine bay, the cab sits between the rear wheels and the deck keeps a three cell row.
+    layout: [' FFF ', 'LXXXR', 'LEEXR', 'LEEXR', 'LDDDR', 'LXXXR', ' BBB '],
     core: [
-      { defId: 'cab', x: 3, y: 2 },
-      { defId: 'transmissionHeavy', x: 2, y: 5 },
-      { defId: 'tankHeavy', x: 3, y: 3 },
+      { defId: 'cab', x: 2, y: 5 },
+      { defId: 'transmissionHeavy', x: 2, y: 1 },
+      { defId: 'tankHeavy', x: 3, y: 2, rot: 1 },
       { defId: 'wheelHeavy', x: 1, y: 1 },
       { defId: 'wheelHeavy', x: 3, y: 1 },
       { defId: 'wheelHeavy', x: 1, y: 5 },
@@ -182,14 +187,14 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     ],
     fuelCap: 60,
     fuelPerTile: 0.4,
-    base: 2030, tier: 2,
+    base: 1990, tier: 2,
     look: 'wagon',
   },
   courier: {
     id: 'courier', name: 'Courier', maxSpeed: 9.75, accel: 3, brake: 3, turnSlow: 125, turnFast: 42, reverseTurn: 80,
     mass: 280, handlingMass: 1100, radius: 0.5,
     // The engine bay moved a row back and the cab sits on the left edge.
-    layout: ['.FF.', 'LXXR', 'LEER', 'XEED', 'XXXD', 'LXXR', '.BB.'],
+    layout: [' FF ', 'LXXR', 'LEER', 'XEED', 'XXXD', 'LXXR', ' BB '],
     core: [
       { defId: 'cabNarrow', x: 0, y: 3 },
       { defId: 'transmission', x: 1, y: 4 },
@@ -205,7 +210,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     id: 'van', name: 'Utility van', maxSpeed: 6.5, accel: 1.5, brake: 3, turnSlow: 100, turnFast: 35, reverseTurn: 65,
     mass: 1100, handlingMass: 3000, radius: 0.7,
     // The engine bay moved a row back and the cab a row back with it.
-    layout: ['.FFF.', 'LXDXR', 'LEEXR', 'LEEDR', 'LXXXR', 'LDDDR', 'LDXXR', 'LXDXR', '.BBB.'],
+    layout: [' FFF ', 'LXDXR', 'LEEXR', 'LEEDR', 'LXXXR', 'LDDDR', 'LDXXR', 'LXDXR', ' BBB '],
     core: [
       { defId: 'cabRow', x: 1, y: 4 },
       { defId: 'transmissionMid', x: 3, y: 2 },
@@ -220,7 +225,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   longbed: {
     id: 'longbed', name: 'Longbed truck', maxSpeed: 4.55, accel: 0.8, brake: 1.8, turnSlow: 70, turnFast: 20, reverseTurn: 40,
     mass: 2900, handlingMass: 7200, radius: 0.95,
-    layout: ['.FFFFF.', 'LXEEDXR', 'LDEEXDR', 'LXXXXXR', 'LXXXXXR', 'LDDDDDR', 'LDDDDDR', 'LDDDDDR', 'LDDXXDR', 'LXDDDXR', '.BBBBB.'],
+    layout: [' FFFFF ', 'LXEEDXR', 'LDEEXDR', 'LXXXXXR', 'LXXXXXR', 'LDDDDDR', 'LDDDDDR', 'LDDDDDR', 'LDDXXDR', 'LXDDDXR', ' BBBBB '],
     core: [
       { defId: 'cabWide', x: 1, y: 3 },
       { defId: 'transmissionHeavy', x: 4, y: 2 },
@@ -235,7 +240,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   carrier: {
     id: 'carrier', name: 'Armored carrier', maxSpeed: 5.2, accel: 1, brake: 2.5, turnSlow: 75, turnFast: 28, reverseTurn: 50,
     mass: 3200, handlingMass: 5200, radius: 0.85,
-    layout: ['.FFFF.', 'LXDDXR', 'LDDDXR', 'LEE..R', 'LEEXDR', 'LDDDDR', 'LDDXXR', 'LXDDXR', '.BBBB.'],
+    layout: [' FFFF ', 'LXDDXR', 'LDDDXR', 'LEE..R', 'LEEXDR', 'LDDDDR', 'LDDXXR', 'LXDDXR', ' BBBB '],
     core: [
       { defId: 'cab', x: 4, y: 2 },
       { defId: 'transmissionHeavy', x: 3, y: 4 },
@@ -250,7 +255,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   tractor: {
     id: 'tractor', name: 'Heavy tractor', maxSpeed: 3.9, accel: 1.8, brake: 2, turnSlow: 65, turnFast: 22, reverseTurn: 55,
     mass: 3600, handlingMass: 6500, radius: 0.9,
-    layout: ['.FFFFF.', 'LXEEXXR', 'LDEEDDR', 'LXXXXXR', 'LXXXXXR', 'LDDDDDR', 'LDDDDDR', 'LXDXXXR', '.BBBBB.'],
+    layout: [' FFFFF ', 'LXEEXXR', 'LDEEDDR', 'LXXXXXR', 'LXXXXXR', 'LDDDDDR', 'LDDDDDR', 'LXDXXXR', ' BBBBB '],
     core: [
       { defId: 'cabWide', x: 1, y: 3 },
       { defId: 'transmissionHeavy', x: 4, y: 1 },
@@ -267,7 +272,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     id: 'jeep', name: 'Jeep', maxSpeed: 8.2, accel: 2.5, brake: 3, turnSlow: 115, turnFast: 42, reverseTurn: 80,
     mass: 450, handlingMass: 1400, radius: 0.55,
     // Tank, cab and transmission share one row ahead of the engine bay, which moved a row forward.
-    layout: ['.FF.', 'LXXR', 'XXXD', 'LEED', 'LEER', 'LXXR', '.BB.'],
+    layout: [' FF ', 'LXXR', 'XXXD', 'LEED', 'LEER', 'LXXR', ' BB '],
     core: [
       { defId: 'tank', x: 0, y: 2 },
       { defId: 'cab', x: 1, y: 2 },
@@ -284,7 +289,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     id: 'convertible', name: 'Convertible', maxSpeed: 9.4, accel: 2.5, brake: 3, turnSlow: 110, turnFast: 40, reverseTurn: 70,
     mass: 750, handlingMass: 2000, radius: 0.6,
     // The engine bay moved a row forward, and the transmission sits between the rear wheels.
-    layout: ['.FFF.', 'LXDXR', 'LXXDR', 'LXXXR', 'LXXXR', 'LEEDR', 'LEEDR', 'LXXXR', '.BBB.'],
+    layout: [' FFF ', 'LXDXR', 'LXXDR', 'LXXXR', 'LXXXR', 'LEEDR', 'LEEDR', 'LXXXR', ' BBB '],
     core: [
       { defId: 'cabOpen', x: 1, y: 3 },
       { defId: 'transmission', x: 2, y: 7 },
@@ -301,7 +306,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     id: 'bus', name: 'Bus', maxSpeed: 5.5, accel: 0.9, brake: 2, turnSlow: 65, turnFast: 22, reverseTurn: 40,
     mass: 3000, handlingMass: 6800, radius: 0.9,
     // The cab moved one column in, clear of the front left wheel.
-    layout: ['.FFFF.', 'LXXDXR', 'LDXDDR', 'LDDDDR', 'LDDDDR', 'LDDDDR', 'LDDDDR', 'LDXXDR', 'LDDXDR', 'LDEEDR', 'LXEEXR', '.BBBB.'],
+    layout: [' FFFF ', 'LXXDXR', 'LDXDDR', 'LDDDDR', 'LDDDDR', 'LDDDDR', 'LDDDDR', 'LDXXDR', 'LDDXDR', 'LDEEDR', 'LXEEXR', ' BBBB '],
     core: [
       { defId: 'cabNarrow', x: 2, y: 1 },
       { defId: 'transmissionMid', x: 3, y: 8 },
@@ -317,7 +322,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   loader: {
     id: 'loader', name: 'Wheel loader', maxSpeed: 3.6, accel: 1.6, brake: 2.5, turnSlow: 85, turnFast: 30, reverseTurn: 60,
     mass: 4200, handlingMass: 7000, radius: 0.9,
-    layout: ['.FFFFF.', 'LXDDDXR', 'LDXXXDR', 'LDXXXDR', 'LDDXDDR', 'LDEEDDR', 'LDEEXXR', 'LXDDDXR', '.BBBBB.'],
+    layout: [' FFFFF ', 'LXDDDXR', 'LDXXXDR', 'LDXXXDR', 'LDDXDDR', 'LDEEDDR', 'LDEEXXR', 'LXDDDXR', ' BBBBB '],
     core: [
       { defId: 'cabPickup', x: 2, y: 2 },
       { defId: 'transmissionHeavy', x: 3, y: 4 },

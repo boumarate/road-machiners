@@ -80,7 +80,7 @@ describe('load in stats', () => {
 
   it('a part on a truck below its rated mass still costs top speed and turning', () => {
     const w = emptyWorld();
-    const v = addVehicle(w, 'raiders', 'scout', ['stockEngine'], { x: 40, y: 40 });
+    const v = addVehicle(w, 'raiders', 'scout', ['stockEngine', 'panniers'], { x: 40, y: 40 });
     const before = vehicleStats(w, v);
     expect(stowPart(w, v, makePart(w, 'plates', 0))).toBe(true);
     const after = vehicleStats(w, v);

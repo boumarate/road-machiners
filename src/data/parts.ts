@@ -685,7 +685,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   wheelHeavy: {
     id: "wheelHeavy", kind: "core", name: "Heavy wheel", hp: 80, base: 10, tier: 1, w: 1, h: 1, mass: 25, armor: 5, tall: false, role: "wheel",
   },
-  // The small tank fits the buggy and the courier. The scout carries the long tank.
+  // The small tank fits the scout, the buggy, the courier and the jeep. The convertible carries the long tank.
   tank: {
     id: "tank", kind: "core", name: "Small fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 1, mass: 30, armor: 1, tall: false, role: "tank",
   },

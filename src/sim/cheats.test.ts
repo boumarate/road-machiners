@@ -17,7 +17,7 @@ import { playerVehicle } from './damage';
 import { maxHealthOf } from './health';
 import { XP_TO_REACH } from '../data/skills';
 import { corePart, goodsCount, mountedParts } from './grid';
-import { spareParts } from './inventory';
+import { removeAllGoods, spareParts } from './inventory';
 import { clockOf } from './sun';
 import { addState, stateOf } from './states';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
@@ -112,7 +112,9 @@ describe('part cheats', () => {
   });
 
   it('gives parts as spares and goods as cargo', () => {
-    const w = give(give(emptyWorld(), 'plates', 1), 'salt', 2);
+    const start = emptyWorld();
+    removeAllGoods(playerVehicle(start)); // the start cargo fills most of the panniers row
+    const w = give(give(start, 'plates', 1), 'salt', 2);
     const me = playerVehicle(w);
     expect(spareParts(me).map((p) => p.defId)).toContain('plates');
     expect(goodsCount(me).salt).toBe(2);
