@@ -45,6 +45,7 @@ The factory plugin reads certain committee messages before you see them. It answ
 
 - A reply "approve" to an approval post queues the merge.
 - Any other reply to an approval post sends feedback to design.
+- The Approve and Deny buttons under an approval post do the same for a tap. Approve merges the branch into `dev`. Deny closes the issue for good. A reply to the post is still feedback.
 - `/change <request>` asks for a change to the factory itself. The factory answers with a pull request that touches only `factory/`. A person merges it.
 - `/committee list`, `/committee add <telegram id> [github login]`, `/committee remove <telegram id>` and `/committee github <telegram id> <login>` manage the committee.
 

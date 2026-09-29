@@ -7,7 +7,9 @@ The host tick reads the inbox. Every other member message goes to Hermes as norm
 """
 
 import json
+import logging
 import os
+import re
 import signal
 import threading
 import time
@@ -24,6 +26,11 @@ REQUIRED_KEYS = (
 )
 COMMITTEE_PREFIX = "/committee"
 RESTART_DELAY_SECONDS = 2.0
+BUTTON_PATTERN = r"^factory:(approve|deny):\d+$"
+BUTTON_DATA = re.compile(BUTTON_PATTERN)
+BUTTON_REFUSED = "Only committee members can press this."
+BUTTON_TOASTS = {"approve": "Approve queued", "deny": "Deny queued"}
+log = logging.getLogger(__name__)
 QUEUED_REPLY = "Queued. The factory picks this up on its next tick."
 
 
@@ -120,6 +127,60 @@ def write_inbox(inbox: str, command: dict, now_ms: Optional[int] = None) -> Path
         os.chmod(temp, 0o640)
         os.replace(temp, final)
     return final
+
+
+def parse_button(data) -> Optional[tuple]:
+    """Splits callback data `factory:<approve|deny>:<issue>` into (kind, issue). None for anything else."""
+    if not isinstance(data, str) or not BUTTON_DATA.fullmatch(data):
+        return None
+    _, kind, issue = data.split(":")
+    return kind, int(issue)
+
+
+def button_command(kind: str, issue: int, user_id, user_name, chat_id, message_id) -> dict:
+    return {
+        "kind": kind, "issue": issue, "text": None,
+        "by": str(user_id), "byName": user_name or None,
+        "chat": str(chat_id), "messageId": int(message_id),
+    }
+
+
+def make_button_handler(cfg: Config):
+    async def on_button(update, context) -> None:
+        query = update.callback_query
+        parsed = parse_button(query.data)
+        if parsed is None:
+            return
+        kind, issue = parsed
+        user = query.from_user
+        if not cfg.committee.is_member(user.id):
+            await _answer(query, BUTTON_REFUSED)
+            return
+        message = query.message
+        command = button_command(kind, issue, user.id, getattr(user, "full_name", None), message.chat.id, message.message_id)
+        write_inbox(cfg.inbox, command)
+        await _answer(query, BUTTON_TOASTS[kind])
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            log.exception("Factory could not clear the buttons of message %s.", message.message_id)
+
+    return on_button
+
+
+async def _answer(query, text: str) -> None:
+    try:
+        await query.answer(text=text)
+    except Exception:
+        log.exception("Factory could not answer the button press.")
+
+
+def make_button_factory(cfg: Config):
+    def factory(native, adapter) -> None:
+        from telegram.ext import CallbackQueryHandler
+        native.add_handler(CallbackQueryHandler(make_button_handler(cfg), pattern=BUTTON_PATTERN))
+
+    return factory
 
 
 QUEUE_TOOL = "factory_queue_task"
@@ -223,4 +284,5 @@ def register(ctx) -> None:
     cfg = load_config(dict(os.environ))
     cfg.committee.seed()
     ctx.register_hook("pre_gateway_dispatch", make_hook(cfg))
+    ctx.register_telegram_handler(make_button_factory(cfg))
     ctx.register_tool(name=QUEUE_TOOL, toolset="factory", schema=QUEUE_SCHEMA, handler=make_queue_handler(cfg))

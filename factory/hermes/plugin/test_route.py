@@ -108,7 +108,7 @@ def test_load_config_fails_loud(tmp_path, key):
 
 def test_register_seeds_the_file(tmp_path):
     hooks = []
-    ctx = types.SimpleNamespace(register_hook=lambda name, fn: hooks.append(name), register_tool=lambda **kw: None)
+    ctx = types.SimpleNamespace(register_hook=lambda name, fn: hooks.append(name), register_tool=lambda **kw: None, register_telegram_handler=lambda fn: None)
     plugin_env = env(tmp_path)
     old = plugin.os.environ.copy()
     plugin.os.environ.update(plugin_env)
@@ -267,7 +267,7 @@ def test_register_adds_queue_tool(tmp_path, monkeypatch):
         monkeypatch.setenv(key, value)
     calls = []
     ctx = types.SimpleNamespace(
-        register_hook=lambda *a: None, register_tool=lambda **kw: calls.append(kw),
+        register_hook=lambda *a: None, register_tool=lambda **kw: calls.append(kw), register_telegram_handler=lambda fn: None,
     )
     plugin.register(ctx)
     assert calls[0]["name"] == "factory_queue_task" and calls[0]["toolset"] == "factory"
