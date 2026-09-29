@@ -51,7 +51,17 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const cleanup = item.labels.includes(RELEASE_TASK_LABEL) && item.labels.includes(MAINTENANCE_LABEL);
   if (!cleanup) await post(ctx, issue, approval, `${home}/${OUT_DIR}/screenshot.png`, url, base);
   await ctx.github.move(issue, 'Approval');
-  if (cleanup) await approve(ctx, issue, 'the factory');
+  if (cleanup) await mergeCleanup(ctx, issue);
+}
+
+// approve() requires the Approval column. A failed merge puts the card back in Testing, so the stuck label the caller adds can be removed to retry.
+async function mergeCleanup(ctx: Ctx, issue: number): Promise<void> {
+  try {
+    await approve(ctx, issue, 'the factory');
+  } catch (error) {
+    await ctx.github.move(issue, 'Testing');
+    throw error;
+  }
 }
 
 async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'test-fix', base: string): Promise<void> {

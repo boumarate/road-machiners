@@ -4,7 +4,7 @@ import { EMPTY_STATE, readState, writeState } from '../state';
 import type { AgentRun, Ctx } from '../types';
 
 vi.mock('../deploy', () => ({ buildAndDeploy: async () => 'https://play.test/abc123/', recordBuild: () => undefined }));
-vi.mock('./approval', () => ({ approve: async (_ctx: unknown, issue: number, by: string) => { approved.push(`approve ${issue} ${by}`); } }));
+vi.mock('./approval', () => ({ approve: async (_ctx: unknown, issue: number, by: string) => { if (approveError) throw new Error(approveError); approved.push(`approve ${issue} ${by}`); } }));
 const { runStage, approvalCaption } = await import('./testing');
 
 let home = '';
@@ -15,6 +15,7 @@ let openPr: string | null = null;
 let labels: string[] = [];
 let bases: string[] = [];
 const approved: string[] = [];
+let approveError = '';
 
 beforeEach(() => {
   mkdirSync('tmp', { recursive: true });
@@ -24,6 +25,7 @@ beforeEach(() => {
   labels = [];
   bases = [];
   approved.length = 0;
+  approveError = '';
   writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [] } });
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
@@ -162,6 +164,14 @@ describe('testing stage', () => {
     expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
     expect(calls.at(-1)).toBe('move 7 Approval');
     expect(approved).toEqual(['approve 7 the factory']);
+  });
+
+  it('moves a cleanup task back to Testing when the merge fails', async () => {
+    labels = ['release-task', 'maintenance'];
+    approveError = 'merge conflict';
+    const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
+    await expect(runStage(ctx, 7)).rejects.toThrow('merge conflict');
+    expect(calls.filter((call) => call.startsWith('move'))).toEqual(['move 7 Approval', 'move 7 Testing']);
   });
 
   it('posts a maintenance task on dev for approval as usual', async () => {
