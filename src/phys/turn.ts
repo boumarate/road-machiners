@@ -9,7 +9,7 @@ import { endTurn } from '../sim/world';
 import { perfSnapshot, resetPerf, type PerfStat } from '../perf';
 import { playerVehicle } from '../sim/damage';
 import { advanceFar } from '../sim/far';
-import { applyContactCrash } from '../sim/crash-contact';
+import { applyContactCrash, applyGroundCrash, applyLanding } from '../sim/crash-contact';
 import { breakProp } from '../sim/salvage';
 import { isOnRope } from '../sim/tow';
 import { burnFuel } from '../sim/resources';
@@ -17,7 +17,7 @@ import { setDownSpot } from '../sim/steering';
 import type { MoveOrder, Pose, Vehicle, World } from '../sim/types';
 import { dist } from '../sim/vec';
 import { exploreFrom } from '../sim/vision';
-import { bodyState, isLifted, captureDrive, freeDrive, initPhysics, restoreDrive, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type DriveSnapshot, type TurnResult, type VehicleResult } from './drive';
+import { bodyState, GROUND, isLifted, captureDrive, freeDrive, initPhysics, restoreDrive, simulateTurn, syncDrive, toTilesPerTurn, trailFrames, TURN_STEPS, type Drive, type DriveSnapshot, type TurnResult, type VehicleResult } from './drive';
 import { headingOf, toMap } from './frames';
 
 export type TurnState = Omit<World, 'terrain'>;
@@ -111,11 +111,24 @@ export function applyTurn(w: World, r: TurnResult): void {
     const frames = r.frames[v.id];
     if (frames) applyDriven(w, r, v, frames);
   }
+  applyCrashes(w, r);
+  applyLandings(w, r);
+}
+
+function applyCrashes(w: World, r: TurnResult): void {
   for (const c of r.crashes) {
     const a = w.vehicles.find((v) => v.id === c.a);
     if (!a) throw new Error(`Crash with unknown vehicle ${c.a}`);
-    const b = w.vehicles.find((v) => v.id === c.b) ?? null;
-    applyContactCrash(w, a, b, c.b, toTilesPerTurn(c.impact), c.contact);
+    if (c.b === GROUND) applyGroundCrash(w, a, c.b, toTilesPerTurn(c.impact), c.contact.a);
+    else applyContactCrash(w, a, w.vehicles.find((v) => v.id === c.b) ?? null, c.b, toTilesPerTurn(c.impact), c.contact);
+  }
+}
+
+function applyLandings(w: World, r: TurnResult): void {
+  for (const l of r.landings) {
+    const v = w.vehicles.find((x) => x.id === l.vehicle);
+    if (!v) throw new Error(`Landing of unknown vehicle ${l.vehicle}`);
+    applyLanding(w, v, GROUND, toTilesPerTurn(l.impact));
   }
 }
 

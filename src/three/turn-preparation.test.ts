@@ -41,7 +41,7 @@ beforeEach(() => {
   const { terrain: _terrain, ...state } = world;
   reply = {
     world: state,
-    result: { next: captureDrive(drive), frames: {}, crashes: [], breaks: [], results: {} },
+    result: { next: captureDrive(drive), frames: {}, crashes: [], breaks: [], landings: [], results: {} },
   };
 });
 afterEach(() => {

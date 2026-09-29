@@ -177,12 +177,19 @@ function follow(world: World, npc: Vehicle, call: Call, option: DialogueOption):
 
 // A call opened during a turn ends when the player or the NPC is knocked out or killed later in that turn, or the
 // NPC is gone. It counts as hanging up.
+// A call the driver raised earlier in the turn also ends, without its hang-up effects, once the reason for it is
+// gone, like a tow offer dropped for danger or a plea that ran out. Its answers would act on nothing.
 export function endCallIfOut(world: World): void {
   const call = world.player.call;
   if (!call) return;
   const npc = world.vehicles.find((v) => v.id === call.with);
-  if (!npc) return endCall(world, call);
+  if (!npc || lostReason(world, npc, call)) return endCall(world, call);
   if (world.player.state !== 'active' || isKnockedOut(npc)) hangUpCall(world, npc, call);
+}
+
+function lostReason(world: World, npc: Vehicle, call: Call): boolean {
+  const raise = call.topic ? TOPICS[call.topic].raise : null;
+  return raise !== null && !holds(world, npc, raise.when, call.vars);
 }
 
 // True while the player and this vehicle talk: neither shoots the other.

@@ -5,6 +5,7 @@ import { PARTS, partDef } from '../data/parts';
 import { START_KITS } from '../data/start';
 import { newWorld } from './world';
 import { CONDITION } from '../data/wear';
+import { everyGunFires } from './armor';
 import { makeVehicle } from './factory';
 import { freeCells, goodsCount, gridOf, isMounted, mountedParts, placementError } from './grid';
 import { vehicleMass } from './mass';
@@ -55,6 +56,15 @@ describe('NPC equipment generation', () => {
       const cost = CHASSIS[v.chassisId].value + loadout.parts.reduce((sum, p) => sum + PARTS[p.defId].value, 0);
       expect(cost).toBeLessThanOrEqual(template.loadout.budget * Math.max(1, GEAR_LEVELS[loadout.level].budget)); // the required build may pass a poor level's budget
       expect(v.resources?.money).toBe(fixture.player.money);
+    }
+  });
+
+  it.each(Object.values(NPCS))('gives $id only guns that can fire', (template) => {
+    for (let seed = 1; seed <= 32; seed++) {
+      const world = { ...fixture, rngState: seed };
+      const loadout = generateNpcLoadout(world, template);
+      const v = makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+      expect(everyGunFires(v), describeLoadout(v)).toBe(true);
     }
   });
 

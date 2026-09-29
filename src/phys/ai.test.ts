@@ -5,6 +5,7 @@ import { START_KITS } from '../data/start';
 import { RULES } from '../data/rules';
 import { NPCS } from '../data/npcs';
 import { REGION } from '../data/region';
+import { addGoods } from '../sim/inventory';
 import { canUseSite } from '../sim/sites';
 import { vehicleStats } from '../sim/stats';
 import { addVehicle, emptyWorld, npcBrain } from '../sim/testkit';
@@ -77,6 +78,10 @@ describe('NPC driving', () => {
     const bowl = REGION.towns[0];
     const npc = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: bowl.pos.x + bowl.radius + 2, y: bowl.pos.y });
     npc.brain = npcBrain('trader', npc.pos, ['trader']);
+    // A delivery to Nose, so the trader does not stop at a Bowl pad beside it.
+    const nose = REGION.towns[1];
+    addGoods(w, npc, 'scrap', 1);
+    npc.brain.goals = [{ kind: 'sell', targetId: nose.id, destination: { ...nose.pos }, phase: 'travel', reason: 'test delivery' }];
     let d = buildDrive(w);
     const trader = () => w.vehicles.find((v) => v.id === npc.id)!;
     // The trader gets up to cruising speed on its way out of Bowl.

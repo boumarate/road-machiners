@@ -5,12 +5,17 @@ import { emptyWorld } from '../sim/testkit';
 import { moveItem } from '../sim/inventory';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
-import { clearGame, clearSave, hasSave, loadWorld, SaveError, saveInTown, saveWorld, writeSave } from './save';
+import { partDef } from '../data/parts';
+import type { PartInstance, World } from '../sim/types';
+import { clearGame, clearSave, hasSave, loadWorld, SaveError, saveInTown, saveOf, saveWorld, writeSave } from './save';
 import { REGION } from '../data/region';
 import { sitePads } from '../sim/sites';
 import { TEST_MAP } from '../test/map';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { breakProp } from '../sim/salvage';
+import { MIGRATIONS, SAVE_FORMAT, SAVE_MAJOR } from './save-migrations';
+import SAVED_SHAPE from './save-shape.json';
+import { newGameShape } from '../test/save-shape';
 
 function makeStorage(): Storage {
   const values = new Map<string, string>();
@@ -22,6 +27,27 @@ function makeStorage(): Storage {
     removeItem: (key) => { values.delete(key); },
     setItem: (key, value) => { values.set(key, value); },
   };
+}
+
+// Guns that existed in format 1.0.
+const GUNS_1_0 = ['mg', 'cannon', 'shotgun', 'autocannon', 'tankGun', 'rocketRack', 'sniperCannon'];
+
+// Drops every gun that format 1.0 did not have, so the world can be saved as 1.0.
+function withGuns10(world: World): World {
+  const old = (p: PartInstance) => partDef(p.defId).kind !== 'weapon' || GUNS_1_0.includes(p.defId);
+  for (const shop of Object.values(world.shops)) shop.stock = shop.stock.filter(old);
+  for (const v of world.vehicles) v.items = v.items.filter((it) => it.kind !== 'part' || old(it.part));
+  return world;
+}
+
+// A saved world as format 1.0 held it: parts carry a reload counter and no gun state. New games start with full
+// magazines, which the 1.1 step restores.
+function asFormat10(world: unknown): unknown {
+  return JSON.parse(JSON.stringify(world), (_key, value) => {
+    if (!value || typeof value !== 'object' || !('defId' in value) || !('wear' in value)) return value;
+    const { gun, ...rest } = value as { gun?: { cooldown: number } };
+    return { ...rest, reload: gun ? gun.cooldown : 0 };
+  });
 }
 
 describe('local game save', () => {
@@ -90,62 +116,35 @@ describe('local game save', () => {
     expect(storage.getItem('roam.save')).toBe('{');
   });
 
-  it('rejects incompatible versions and incomplete worlds', () => {
+  it('rejects another major format, a newer minor format and incomplete worlds', () => {
     const storage = makeStorage();
-    storage.setItem('roam.save', JSON.stringify({ version: 5, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 8, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 9, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 10, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 11, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 12, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 13, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 14, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 15, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 16, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 17, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 18, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 19, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 20, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 21, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 22, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 23, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 24, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 25, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 26, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 27, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 28, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 31, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 32, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 33, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 34, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/version/);
-    storage.setItem('roam.save', JSON.stringify({ version: 35, world: { turn: 21 } }));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow(/world/);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const saved = JSON.parse(JSON.stringify(saveOf(world))).world;
+    const cases = [
+      [{ major: SAVE_MAJOR - 1, minor: 0 }, saved, /new game/],
+      [{ major: SAVE_MAJOR + 1, minor: 0 }, saved, /new game/],
+      [{ major: SAVE_MAJOR, minor: MIGRATIONS.length + 1 }, saved, /newer/],
+      [{ major: SAVE_MAJOR, minor: -1 }, saved, /format/],
+      [SAVE_FORMAT, { turn: 21 }, /world/],
+    ] as const;
+    for (const [format, savedWorld, error] of cases) {
+      storage.setItem('roam.save', JSON.stringify({ format, world: savedWorld }));
+      expect(() => loadWorld(storage, TEST_MAP)).toThrow(SaveError);
+      expect(() => loadWorld(storage, TEST_MAP)).toThrow(error);
+    }
+  });
+
+  it('loads a save from before save formats as format 1.0', () => {
+    const storage = makeStorage();
+    const world = withGuns10(newWorld(1337, startKit('standard'), TEST_MAP));
+    storage.setItem('roam.save', JSON.stringify({ version: '1.0.0', world: asFormat10(saveOf(world).world) }));
+    expect(loadWorld(storage, TEST_MAP)).toEqual(world);
+  });
+
+  it('records the saved shape of the current format', () => {
+    const format = `${SAVE_FORMAT.major}.${SAVE_FORMAT.minor}`;
+    expect(SAVED_SHAPE.format, 'Run npm run save:shape after a new save format').toBe(format);
+    expect(newGameShape(), 'The saved shape changed. Add a migration step in src/three/save-migrations.ts, then run npm run save:shape').toEqual(SAVED_SHAPE.shape);
   });
 
   it('rejects a save missing a field required for future turns', () => {
@@ -155,7 +154,7 @@ describe('local game save', () => {
       const incomplete = { ...world };
       delete (incomplete as Partial<typeof world>)[field];
       const { terrain: _terrain, ...saved } = incomplete;
-      storage.setItem('roam.save', JSON.stringify({ version: 35, world: saved }));
+      storage.setItem('roam.save', JSON.stringify({ format: SAVE_FORMAT, world: saved }));
       expect(() => loadWorld(storage, TEST_MAP)).toThrow(/world/);
     }
   });

@@ -35,6 +35,7 @@ const TELEPORT_TILES = 0.5; // a sim position this far from its body was moved b
 const WALL = 50; // meters of wall thickness at the map edge
 export const EDGE = 'edge'; // the crash target name for the map border
 export const RAIL = 'rail'; // the crash target name for a Canyon Bridge rail
+export const GROUND = 'ground'; // the crash target name for the terrain and the bridge deck under a truck's body
 
 // Tiles per turn to meters per second, and back.
 export const toMps = (tilesPerTurn: number) => (tilesPerTurn * S) / PHYSICS.turnSeconds;
@@ -45,7 +46,8 @@ export const toTilesPerTurn = (mps: number) => (mps * PHYSICS.turnSeconds) / S;
 // the whole way again every turn.
 // ahead holds the drive-through point that was ahead of the nose on the last leg at the last step.
 // stall holds the seconds the truck has pushed forward at a point behind it without moving.
-type Memory = { steer: number; reverse: boolean; route: (KeptRoute & { radius: number }) | null; ahead: Vec | null; stall: number };
+// airborne is true when no wheel touched the ground at the last step, so a jump that spans two turns still lands.
+type Memory = { steer: number; reverse: boolean; route: (KeptRoute & { radius: number }) | null; ahead: Vec | null; stall: number; airborne: boolean };
 
 // Everything a turn needs to start: the physics world, which body and collider belongs to which
 // vehicle or obstacle, and each driver's memory.
@@ -61,10 +63,11 @@ export type Drive = {
 // Collider handles of the Canyon Bridge deck and its two rails.
 export type Bridge = { deck: number; rails: number[] };
 
-export type Crash = { a: string; b: string; impact: number; contact: CrashGeometry }; // b is a vehicle id, an obstacle id, 'edge' or 'rail'; impact in m/s
+export type Crash = { a: string; b: string; impact: number; contact: CrashGeometry }; // b is a vehicle id, an obstacle id, 'edge', 'rail' or 'ground'; impact in m/s
 export type Break = { prop: string; vehicle: string; step: number }; // a breakable prop the vehicle smashed through at this physics step
 export type VehicleResult = { passed: boolean; arrived: boolean };
-export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; breaks: Break[]; results: Record<string, VehicleResult> };
+export type Landing = { vehicle: string; impact: number }; // wheels touching down after a jump, impact in m/s downward
+export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; breaks: Break[]; landings: Landing[]; results: Record<string, VehicleResult> };
 
 export type DriveSnapshot = Omit<Drive, "world"> & { snapshot: Uint8Array };
 
@@ -154,7 +157,7 @@ function syncVehicle(d: Drive, w: World, v: Vehicle): void {
   const handle = d.bodies[v.id];
   if (handle === undefined) {
     d.bodies[v.id] = addVehicle(d.world, w, v);
-    d.memory[v.id] = { steer: 0, reverse: false, route: null, ahead: null, stall: 0 };
+    d.memory[v.id] = { steer: 0, reverse: false, route: null, ahead: null, stall: 0, airborne: false };
     return;
   }
   const body = d.world.getRigidBody(handle);
@@ -219,10 +222,12 @@ function run(d: Drive, w: World, steps: number): TurnResult {
 
   const frames: TurnFrames = Object.fromEntries(cars.map((c) => [c.v.id, [] as VehicleFrame[]]));
   const contacts = new Contacts(w);
+  const landings = new Landings();
   for (let i = 0; i < steps; i++) {
     const before = new Map(cars.map((c) => [c.v.id, captureImpactMotion(c.body)]));
     for (const c of cars) driveStep(c, w.terrain);
     for (const c of cars) c.ctl.updateVehicle(DT);
+    landings.note(cars, before);
     world.step(events);
     events.drainCollisionEvents((h1, h2, started) => {
       if (started) contacts.add(crashOf(h1, h2, owner, obstacleOf, d, before, world, w), i);
@@ -234,7 +239,32 @@ function run(d: Drive, w: World, steps: number): TurnResult {
   events.free();
   const results = Object.fromEntries(cars.map((c) => [c.v.id, c.result]));
   const obstacles = Object.fromEntries(Object.entries(d.obstacles).filter(([id]) => !contacts.isBroken(id)));
-  return { next: { world, bodies: { ...d.bodies }, obstacles, memory, terrain: d.terrain, bridge: d.bridge }, frames, crashes: contacts.crashes, breaks: contacts.breaks, results };
+  return { next: { world, bodies: { ...d.bodies }, obstacles, memory, terrain: d.terrain, bridge: d.bridge }, frames, crashes: contacts.crashes, breaks: contacts.breaks, landings: landings.all(), results };
+}
+
+// The hardest landing of each truck this turn: its wheels touch the ground after a step with every wheel in the air.
+class Landings {
+  private readonly hardest = new Map<string, number>();
+
+  note(cars: Car[], before: Map<string, ImpactMotion>): void {
+    for (const c of cars) this.noteCar(c, before.get(c.v.id)!);
+  }
+
+  private noteCar(c: Car, motion: ImpactMotion): void {
+    const touching = wheelsTouch(c.ctl);
+    const impact = Math.max(0, -motion.velocity.y);
+    if (c.mem.airborne && touching && impact > (this.hardest.get(c.v.id) ?? 0)) this.hardest.set(c.v.id, impact);
+    c.mem.airborne = !touching;
+  }
+
+  all(): Landing[] {
+    return [...this.hardest].map(([vehicle, impact]) => ({ vehicle, impact }));
+  }
+}
+
+function wheelsTouch(ctl: RAPIER.DynamicRayCastVehicleController): boolean {
+  for (let i = 0; i < ctl.numWheels(); i++) if (ctl.wheelIsInContact(i)) return true;
+  return false;
 }
 
 // The turn's crashes and breaks. A contact with a breakable prop at BREAKABLE.breakSpeed or faster breaks it
@@ -295,12 +325,16 @@ function smashOne(world: RAPIER.World, d: Drive, b: Break, cars: Car[], before: 
 function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf: Map<number, string>, d: Drive, before: Map<string, ImpactMotion>, physics: RAPIER.World, state: World): Crash | null {
   const a = owner.get(h1) ?? owner.get(h2);
   if (a === undefined) return null;
-  const other = owner.get(h1) === a ? h2 : h1;
-  // The deck is ground, like the terrain.
-  if (other === d.terrain || other === d.bridge.deck) return null;
+  const [first, other] = owner.get(h1) === a ? [h1, h2] : [h2, h1];
   const va = before.get(a)!;
-  const b = owner.get(other) ?? obstacleOf.get(other) ?? (d.bridge.rails.includes(other) ? RAIL : EDGE);
-  return captureCrash(physics, state, before, { a, b, first: owner.get(h1) === a ? h1 : h2, other }, va);
+  // The deck is ground, like the terrain.
+  if (other === d.terrain || other === d.bridge.deck) return captureGroundCrash(physics, state, a, first, other, va);
+  return captureCrash(physics, state, before, { a, b: crashTarget(other, owner, obstacleOf, d), first, other }, va);
+}
+
+// The name of what a truck hit: a vehicle id, an obstacle id, a rail or the map edge.
+function crashTarget(other: number, owner: Map<number, string>, obstacleOf: Map<number, string>, d: Drive): string {
+  return owner.get(other) ?? obstacleOf.get(other) ?? (d.bridge.rails.includes(other) ? RAIL : EDGE);
 }
 
 function captureCrash(physics: RAPIER.World, state: World, before: Map<string, ImpactMotion>, pair: { a: string; b: string; first: number; other: number }, va: ImpactMotion): Crash | null {
@@ -310,6 +344,26 @@ function captureCrash(physics: RAPIER.World, state: World, before: Map<string, I
   const target = state.vehicles.find((v) => v.id === pair.b) ?? null;
   const hit = readCrashContact(physics, physics.getCollider(pair.first), physics.getCollider(pair.other), vehicle, target, va, vb);
   return hit ? { a: pair.a, b: pair.b, ...hit } : null;
+}
+
+// The truck's body, not its wheels, hitting the ground: a flip, a nose dive off a jump or a slam into a steep bank.
+function captureGroundCrash(physics: RAPIER.World, state: World, a: string, first: number, ground: number, motion: ImpactMotion): Crash | null {
+  const vehicle = state.vehicles.find((v) => v.id === a);
+  if (!vehicle) throw new Error(`Unknown crash vehicle ${a}`);
+  const hits: { impact: number; contact: CrashGeometry }[] = [];
+  physics.contactPair(physics.getCollider(first), physics.getCollider(ground), (manifold, flipped) => {
+    const raw = manifold.normal();
+    const sign = flipped ? -1 : 1;
+    const v = motion.velocity;
+    const impact = Math.max(0, (v.x * raw.x + v.y * raw.y + v.z * raw.z) * sign);
+    const points = readManifoldPoints(manifold, flipped);
+    if (points.a.length === 0) return;
+    // The normal out of the truck in its own frame, so a truck on its side or roof takes the hit where it lands.
+    const local = flipped ? manifold.localNormal2() : manifold.localNormal1();
+    hits.push({ impact, contact: { a: locateCrashContact(vehicle.chassisId, points.a, { x: local.x, y: local.z }), b: null } });
+  });
+  hits.sort((x, y) => y.impact - x.impact);
+  return hits[0] ? { a, b: GROUND, ...hits[0] } : null;
 }
 
 type ImpactMotion = { velocity: RAPIER.Vector; spin: RAPIER.Vector; heading: number };
@@ -401,9 +455,15 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   const stored = mem.route && dist(mem.route.dest, order.dest) < RULES.arriveRadius && mem.route.radius === s.radius ? continueRoute(w, v.pos, mem.route, order.dest, s.radius, blockers, v) : null;
   const path = v.direct ? null : stored ?? [...route(w, v.pos, order.dest, s.radius, blockers, v)]; // copied, since driving consumes it
   mem.route = path ? { ...keepRoute(w, order.dest, path, blockers), radius: s.radius } : null;
-  if (order.kind === 'stopAt') return { ...base, dest: order.dest, route: path, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
+  if (order.kind === 'stopAt') return { ...base, dest: stopPoint(path, order.dest), route: path, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
   const next = throughSpeed(s, speed, dist(v.pos, order.dest), order.pace);
   return { ...base, dest: order.dest, route: path, target: toMps(next), stopAt: false };
+}
+
+// A stop order arrives at the route's end, which is the closest point the planner reaches when the order point
+// itself cannot be reached, as in far travel. A careless driver has no route and stops on the order point.
+function stopPoint(path: Vec[] | null, dest: Vec): Vec {
+  return path ? path[path.length - 1] : dest;
 }
 
 // Without an order a moving truck coasts on, and a parked one holds its brakes, so it does not roll down a slope.

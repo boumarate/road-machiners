@@ -5,7 +5,7 @@ import { XP_TO_REACH } from '../data/skills';
 import { makeVehicle } from '../sim/factory';
 import { addGoods, removeAllGoods } from '../sim/inventory';
 import { loadFactor, vehicleMass } from '../sim/mass';
-import { corePart } from '../sim/grid';
+import { corePart, mountedParts } from '../sim/grid';
 import { addVehicle, editableTerrain, emptyWorld, npcBrain, partHp } from '../sim/testkit';
 import type { MoveOrder, World } from '../sim/types';
 import { angleDiff, bearing, dist, type Vec } from '../sim/vec';
@@ -74,6 +74,7 @@ function ordered(order: MoveOrder, speed = 0, heading = 0): World {
 
 const me = (w: World) => w.vehicles[0];
 const HILL_GRADE = 0.2; // height per tile, steeper than 90% of the generated map's slopes
+const LIMP_GRADE = 0.35; // height per tile, a steep bank beside a road
 
 describe('physics turns', () => {
   it('a truck knocked out while driving brakes to a stop', () => {
@@ -265,6 +266,16 @@ describe('physics turns', () => {
     const { w } = play(ordered({ kind: 'stopAt', dest: { x: 38, y: 31 } }), 8);
     expect(dist(me(w).pos, { x: 38, y: 31 })).toBeLessThan(RULES.arriveRadius + 0.3);
     expect(me(w).order).toBeNull();
+  });
+
+  it('a stop order at a point no truck can reach arrives at the closest point the route reaches', () => {
+    const dest = { x: 40, y: 31 };
+    const start = ordered({ kind: 'stopAt', dest });
+    start.obstacles.push({ id: 'boulder', kind: 'rock', pos: dest, r: 3 });
+    const { w, d } = play(start, 12);
+    expect(me(w).order).toBeNull();
+    expect(dist(me(w).pos, dest)).toBeLessThan(6);
+    freeDrive(d);
   });
 
   it('a course point behind, beyond throttle reach, turns the truck around', () => {
@@ -512,6 +523,19 @@ describe('physics turns', () => {
     const { w } = play(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 6);
     // Up the slope, which starts at x 28, and still moving rather than stalling. Overload slows it hard.
     expect(me(w).pos.x).toBeGreaterThan(30);
+    expect(me(w).speed).toBeGreaterThan(0.5);
+  });
+
+  it('a limping courier crawls up a bank as steep as any chassis limps up', () => {
+    const w0 = emptyWorld({ x: 26, y: 30 });
+    w0.terrain = structuredClone(w0.terrain);
+    const n = w0.terrain.size;
+    for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) w0.terrain.heights[j * (n + 1) + i] = Math.max(0, i - 28) * LIMP_GRADE;
+    const courier = makeVehicle(w0, { name: 'courier', faction: 'player', chassisId: 'courier', parts: [{ defId: 'stockEngine', wear: 0 }], spares: [], cargo: {}, pos: { x: 26, y: 30 }, heading: 0, brain: null });
+    w0.vehicles[0] = { ...courier, id: me(w0).id };
+    mountedParts(me(w0), 'engine')[0].hp = 0;
+    const { w } = play(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 12);
+    expect(me(w).pos.x).toBeGreaterThan(32);
     expect(me(w).speed).toBeGreaterThan(0.5);
   });
 

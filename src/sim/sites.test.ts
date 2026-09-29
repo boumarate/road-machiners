@@ -16,12 +16,12 @@ describe('site gates and pads', () => {
     }
   });
 
-  it('gives towns and small locations one gate, and large locations a gate per road', () => {
+  it('gives towns and large locations a gate per road, and small locations one gate', () => {
     const large = REGION.locations.filter((l) => l.radius >= REGION.sites.multiGateRadius);
     expect(large.map((l) => l.id).sort()).toEqual(['fallen-sun', 'orchard']);
     for (const site of SITES) {
       const roads = REGION.roads.filter((road) => road.some((p) => dist(p, site.pos) <= site.radius)).length;
-      if (large.includes(site as never)) expect(siteGates(site).length, site.id).toBe(roads);
+      if (large.includes(site as never) || REGION.towns.includes(site as never)) expect(siteGates(site).length, site.id).toBe(roads);
       else expect(siteGates(site).length, site.id).toBe(1);
     }
   });

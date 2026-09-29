@@ -6,6 +6,7 @@ import { baseGrid, corePart, coreParts, mountedParts } from "../sim/grid";
 import type { Vehicle, World } from "../sim/types";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
+import { GAME_VERSION } from "../config";
 import { el, panel, topRight } from "./dom";
 import {
   contractDue,
@@ -19,7 +20,7 @@ import {
   formatNpcStates,
   formatNpcTraits,
 } from "./format";
-import { getHudReadout, getRescueReadout, moneyLabel, TruckConditionReadout } from "./hud-readout";
+import { getHudReadout, getRescueReadout, moneyLabel, type RescueReadout, TruckConditionReadout } from "./hud-readout";
 import { conditionMeter, createIcon, createSpeedDial, partIcon } from "./cards";
 import { createSwitch } from "./switch";
 import { Tips } from "./tips";
@@ -143,6 +144,8 @@ export class Hud {
   private action = panel("action");
   private toastBox = panel("toast");
   private rescue = panel("rescue");
+  // Stands on top of the part condition panel.
+  private stranded = panel("stranded", this.condition.root);
   // Shows only while a pan has left the truck.
   private recenter = panel("recenter");
   private cameraSwitch = panel("camera-mode", topRight());
@@ -160,6 +163,7 @@ export class Hud {
     this.contracts.style.display = "none";
     this.toastBox.style.display = "none";
     this.rescue.style.display = "none";
+    this.stranded.style.display = "none";
     this.recenter.style.display = "none";
     this.recenter.append(el("button", { onclick: () => actions.recenter() }, "Center on truck (F)"));
     this.showCameraMode();
@@ -188,6 +192,7 @@ export class Hud {
       el("div", {}, "Click a truck: target it. 1-4: pick a weapon. 0: all. Q: auto fire. X: show weapons."),
       el("div", {}, "P: auto patch. C: character. I: inventory. Esc: close."),
       el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
+      el("div", { class: "version" }, `v${GAME_VERSION}`),
     );
   }
 
@@ -279,50 +284,50 @@ export class Hud {
     );
   }
 
-  // The prompts in the middle of the screen: an open radio call, and the rescue state. That is the knockout
-  // banner, the tow in progress, or the beacon switch of a stranded truck.
+  // The rescue prompts: an open radio call and the knockout banner or tow in the middle of the screen,
+  // and the beacon switch of a stranded truck above the part condition panel.
   renderRescue(w: World): void {
     this.dialogue.render(w);
     const r = getRescueReadout(w);
+    this.renderMiddle(r?.kind === "stranded" ? null : r);
+    this.renderStranded(r?.kind === "stranded" ? r : null);
+  }
+
+  private renderMiddle(r: Exclude<RescueReadout, { kind: "stranded" }> | null): void {
     this.rescue.style.display = r ? "" : "none";
     if (!r) return this.rescue.replaceChildren();
-    const beacon = (on: boolean) =>
-      createSwitch({
-        on: "Beacon on",
-        off: "Beacon off",
-        checked: on,
-        title: "Call for a tow by radio.",
-        onclick: () => this.actions.setBeacon(!on),
-      });
-    const buttons = (...children: HTMLElement[]) =>
-      el("div", { class: "rescue-buttons" }, ...children);
     if (r.kind === "knockedOut")
-      this.rescue.replaceChildren(el("h3", { class: "bad" }, "Knocked out"));
-    if (r.kind === "towed")
-      this.rescue.replaceChildren(
-        el("h3", {}, "Under tow"),
-        el("div", {}, `${r.tower} tows you to ${r.town}.`),
-        el(
-          "div",
-          { class: "dim" },
-          `Fee ${moneyLabel(r.fee)} on arrival.`,
-        ),
-        buttons(
-          el("button", { onclick: () => this.actions.unhitch() }, "Unhitch"),
-        ),
-      );
-    if (r.kind === "stranded")
-      this.rescue.replaceChildren(
-        el("h3", {}, "Stranded"),
-        el(
-          "div",
-          { class: "dim" },
-          r.beacon
-            ? "Calling for a tow."
-            : r.reason,
-        ),
-        buttons(beacon(r.beacon)),
-      );
+      return this.rescue.replaceChildren(el("h3", { class: "bad" }, "Knocked out"));
+    this.rescue.replaceChildren(
+      el("h3", {}, "Under tow"),
+      el("div", {}, `${r.tower} tows you to ${r.town}.`),
+      el("div", { class: "dim" }, `Fee ${moneyLabel(r.fee)} on arrival.`),
+      el(
+        "div",
+        { class: "rescue-buttons" },
+        el("button", { onclick: () => this.actions.unhitch() }, "Unhitch"),
+      ),
+    );
+  }
+
+  private renderStranded(r: Extract<RescueReadout, { kind: "stranded" }> | null): void {
+    this.stranded.style.display = r ? "" : "none";
+    if (!r) return this.stranded.replaceChildren();
+    this.stranded.replaceChildren(
+      el("h3", {}, "Stranded"),
+      el("div", { class: "dim" }, r.beacon ? "Calling for a tow." : r.reason),
+      el(
+        "div",
+        { class: "rescue-buttons" },
+        createSwitch({
+          on: "Beacon on",
+          off: "Beacon off",
+          checked: r.beacon,
+          title: "Call for a tow by radio.",
+          onclick: () => this.actions.setBeacon(!r.beacon),
+        }),
+      ),
+    );
   }
 
   // Compact list of held contracts and their due times. Hidden while the player holds none.

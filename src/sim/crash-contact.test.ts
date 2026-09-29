@@ -120,9 +120,16 @@ describe('crash damage multiplier', () => {
   }
 
   // Crash energy grows with the square of the impact, so half the multiplier equals the impact over the square root of 2.
+  // Both impacts stay below RULES.hardCrashSpeed.
   it('acts on crash energy like a slower impact', () => {
-    expect(rockCrash(0.5, 8)).toBe(rockCrash(1, 8 / Math.SQRT2));
-    expect(rockCrash(0.5, 8)).toBeLessThan(rockCrash(1, 8));
+    const impact = RULES.hardCrashSpeed;
+    expect(rockCrash(0.5, impact)).toBe(rockCrash(1, impact / Math.SQRT2));
+    expect(rockCrash(0.5, impact)).toBeLessThan(rockCrash(1, impact));
+  });
+
+  it('a crash into an obstacle past the hard crash speed hits much harder than its energy alone', () => {
+    const slow = rockCrash(1, RULES.hardCrashSpeed);
+    expect(rockCrash(1, RULES.hardCrashSpeed * 2)).toBeGreaterThan(slow * 4 * 1.5);
   });
 });
 

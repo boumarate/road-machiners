@@ -1,11 +1,11 @@
 import { chassisDef } from '../data/chassis';
 import { GOODS } from '../data/goods';
 import { GEAR_LEVELS, GEAR_LEVEL_IDS, NPC_UPKEEP, type CargoRoll, type GearLevel, type NpcLoadoutTable, type NpcTemplate, type Weighted } from '../data/npcs';
-import { partDef, type PartKind, type WeaponDef } from '../data/parts';
+import { partDef, type PartKind } from '../data/parts';
 import { CONDITION } from '../data/wear';
+import { everyGunFires } from './armor';
 import { makePart, makeVehicle, type PartSpec } from './factory';
 import { baseGrid, freeCells, itemCells, mountedItems, type Cell } from './grid';
-import { openSides, reachedSides } from './armor';
 import { addGoods, mountPart, stowPart } from './inventory';
 import { vehicleMass } from './mass';
 import { nextRandom, type Rng } from './rng';
@@ -112,6 +112,7 @@ function computeEquipmentCost(v: Vehicle): number {
   }, 0);
 }
 
+// A part is refused when it leaves any gun with no open side in its arc, like a front gun behind the cab.
 // Probing checks feasibility at pristine wear, the most expensive and heaviest case a part can be. Any
 // wear later rolled onto the mounted part only lowers its value, so a feasible pristine fit stays feasible.
 // A fit that leaves any gun with no open side its arc reaches does not count, since that gun could never fire.
@@ -121,13 +122,6 @@ function tryMountChoice(world: World, v: Vehicle, id: string, budget: number, mo
   const candidate = { ...v, items: [...v.items] };
   if (!mountPart(world, candidate, makePart(world, id, 0), mount)) return null;
   return everyGunFires(candidate) ? candidate : null;
-}
-
-function everyGunFires(v: Vehicle): boolean {
-  return mountedItems(v, 'weapon').every((item) => {
-    const reach = reachedSides(partDef(item.part.defId) as WeaponDef);
-    return openSides(v, item).some((side) => reach.includes(side));
-  });
 }
 
 // One wear roll per mounted non-core part, shifted by the gear level and clamped so a spawned part is never junk.

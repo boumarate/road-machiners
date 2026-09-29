@@ -1,5 +1,9 @@
 // Game settings. Change these values to configure a new game and playback.
 
+// The version from package.json, set at build time in vite.config.ts and vitest.config.ts. Saves load only in the same version.
+declare const __GAME_VERSION__: string;
+export const GAME_VERSION = __GAME_VERSION__;
+
 export const CONFIG = {
   startKit: 'standard',
   // A fixed world seed replays the same game. Null rolls a new seed for each new game.

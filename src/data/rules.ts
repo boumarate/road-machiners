@@ -11,10 +11,15 @@ export const RULES = {
   fuelUseFactor: 0.075, // share of the chassis fuel rate burned per tile; a daytime Bowl to Nose road trip uses under 60% of the starting fuel, leaving room for detours and fights
   npcStuckTurns: 2, // failed drive attempts before backing out
   npcRecoveryTurns: 2, // turns spent backing out before resuming the route
+  // An NPC that stays put `turns` turns in a row while its goal point is out of reach, for any reason, drives `driveTurns`
+  // turns to a random free spot `reach` tiles away or closer, then takes up its goal again. A wait for traffic or an
+  // escort lasts a few turns, so 20 turns catches only waits that do not end. 6 tiles is a few truck lengths: off a
+  // blocked lane, still near the goal.
+  unstick: { turns: 20, reach: 6, driveTurns: 3 },
   // A truck that ends `turns` turns in a row flipped or lifted off the ground, like on top of another truck, is set down
-  // on its wheels. It lands on the nearest free spot, searched in rings `step` tiles apart out to `reach` tiles. The step
-  // is below the smallest vehicle radius. The reach fits two of the largest trucks side by side with clearance.
-  stranded: { turns: 3, step: 0.25, reach: 4 },
+  // on its wheels. It lands on the nearest free spot, searched in rings `step` tiles apart. The step is below the
+  // smallest vehicle radius.
+  stranded: { turns: 3, step: 0.25 },
   // A player click within throttle reach and less than `cone` degrees off straight behind backs the truck up.
   // Any other point behind turns the truck around nose first. A stuck NPC backs out `distance` tiles.
   reverse: { cone: 20, distance: 1 },
@@ -37,8 +42,18 @@ export const RULES = {
   // spread over the lanes of its struck side. An obstacle's share is 1. Squaring the impact, like crash
   // energy, keeps a full-speed crash at 6 as hard as before while a bump at 2 only scratches the paint.
   ramDamage: 2.5,
+  // A crash into an obstacle faster than this, in tiles per turn, hits harder: its damage and penetration grow by
+  // (impact / hardCrashSpeed)². About 58 km/h. A crash at 6 deals 2.25 times the damage, one at 8 four times, so
+  // steering a fast enemy into a rock pays off.
+  hardCrashSpeed: 4,
   cellPen: 0.5, // penetration every grid cell a round or crash passes costs, for the frame and bulk in the way
   crashPen: 4, // penetration of crash damage in each lane
+  // A truck body hitting the ground takes crash damage times this. Falls are slow next to driving: a roll off a 3 m
+  // drop lands at about 2.7 tiles per turn, and 3 makes that as hard as a wall crash at about 4.3.
+  groundCrash: 3,
+  // A truck landing on its wheels after a jump gives each working wheel ramDamage × crashDamage × landing speed² in
+  // tiles per turn × this. A 3 m drop costs a wheel about 5 HP. Drops under 1 m land slower than collisionMinImpact.
+  landingDamage: 0.25,
   wheelLoss: 0.15, // share of speed and turning lost per broken wheel
   tankLeak: 1, // fuel lost per turn with a broken tank
 
@@ -113,6 +128,7 @@ export const RULES = {
 
   // Knockout
   defeatPatch: 0.25, // share of max hp broken core parts get back when a driver wakes from a knockout
+  scrapPatch: 0.4, // share of max hp drive parts and of the tank a stranded, broke player with nothing to sell gets at a town
   knockoutMaxTurns: 30, // a knockout ends after this many turns even if a hostile idles in sight
   npcDeathChance: 0.05, // an NPC whose cab breaks dies into a wreck instead of a knockout
   // A defeated NPC that spent this many turns in a row beyond the player's gray vision appears at its home pad, so

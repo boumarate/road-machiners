@@ -13,7 +13,7 @@ import { corePart, hasLoot, itemSize, mountedItems, mountedParts } from './grid'
 import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { canVehicleSee, hasLineOfFire } from './vision';
 import { createWreckSalvage, removeStocks } from './salvage';
-import { addState, endState, stateOf, strayData } from './states';
+import { addState, boundTo, endState, stateOf, strayData } from './states';
 import { isOnRope, towHeldBy } from './tow';
 import { isTownGuarded } from './guards';
 import { getResources } from './resources';
@@ -596,9 +596,11 @@ function learnsAttack(world: World, observer: Vehicle, shooter: Vehicle, target:
 
 // The one attack rule: a vehicle that damages another attacks it. The victim and witnesses learn the attacker,
 // and a feud starts when the two were at peace before the blow. calm is that peace, read before any damage lands.
+// An NPC attacked by a truck it had a deal with wants revenge on it.
 export function noteAttack(world: World, attacker: Vehicle, victim: Vehicle, calm: boolean): void {
   recordAttack(world, attacker, victim);
   if (!calm) return;
+  if (victim.brain && boundTo(world, attacker.id, victim.id)) addState(world, "revenge", victim.id, attacker.id, { kind: "none" });
   startFeuds(world, attacker, victim);
   callLawmen(world, attacker, victim);
 }

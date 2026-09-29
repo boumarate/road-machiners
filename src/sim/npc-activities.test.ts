@@ -19,6 +19,8 @@ import { canUseSite, siteGates, sitePads } from './sites';
 import { fuelCap, vehicleStats } from './stats';
 import { heatAt } from './sun';
 import { dist } from './vec';
+import { advanceFar } from './far';
+import type { World } from './types';
 
 function createScavenger() {
   const w = emptyWorld({ x: 50, y: 50 });
@@ -34,11 +36,13 @@ function createTrader() {
   return { w, npc };
 }
 
-// The fuel a trader from createTrader keeps for the straight way to its nearest town, with no misjudgment.
+// The fuel a trader from createTrader keeps for the straight way to its nearest pump, a town or the fuel stall,
+// with no misjudgment.
 function reserveOfTrader(): number {
   const { w, npc } = createTrader();
-  const town = Math.min(...TRAITS.trader.towns.map((id) => dist(npc.pos, REGION.towns.find((t) => t.id === id)!.pos)));
-  return town * vehicleStats(w, npc).fuelPerTile * heatAt(w, npc.pos) * NPC_UPKEEP.fuelReserve * TRAITS.trader.fuelMargin;
+  const pumps = [...TRAITS.trader.towns, 'pump-station'].map((id) => [...REGION.towns, ...REGION.locations].find((s) => s.id === id)!);
+  const pump = Math.min(...pumps.map((site) => dist(npc.pos, site.pos)));
+  return pump * vehicleStats(w, npc).fuelPerTile * heatAt(w, npc.pos) * NPC_UPKEEP.fuelReserve * TRAITS.trader.fuelMargin;
 }
 
 function withFuelSense(sense: number, run: () => void): void {
@@ -217,9 +221,10 @@ describe('NPC activities', () => {
     const { w, npc } = createScavenger();
     npc.brain!.templateId = 'trader';
     npc.brain!.traits = ['trader'];
-    npc.pos = { ...sitePads(REGION.towns[0])[0] };
     forceOption('idle', 'trade');
     planNpcOrders(w);
+    const source = [...REGION.towns, ...REGION.locations].find((s) => s.id === topGoal(npc)?.targetId)!;
+    npc.pos = { ...sitePads(source)[0] };
     resolveNpcActivities(w);
     expect(npc.resources!.money).toBeGreaterThan(0);
     expect(Object.values(goodsCount(npc)).reduce((sum, n) => sum + n, 0)).toBeGreaterThan(0);
@@ -227,7 +232,8 @@ describe('NPC activities', () => {
   });
 
   it('a raider can knock out an NPC, strip its cargo and sell it', () => {
-    const w0 = emptyWorld({ x: 58, y: 58 });
+    // The player waits far off the raider's way to any shop, so the raider has no reason to stop for it.
+    const w0 = emptyWorld({ x: 450, y: 60 });
     const raider = addVehicle(w0, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 14, y: 12 });
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     forceOption('hostileSeen', 'fight');
@@ -279,7 +285,7 @@ describe('NPC activities', () => {
     expect(topGoal(npc)?.kind).toBe('resupply');
   });
 
-  it('heads for fuel once the tank holds less than its reserve for the straight way to a town', () => {
+  it('heads for fuel once the tank holds less than its reserve for the straight way to a pump', () => {
     const tank = (fuel: number) => {
       const { w, npc } = createTrader();
       planNpcOrders(w);
@@ -565,5 +571,23 @@ describe('salvage on the way', () => {
     thinkNpc(w, npc);
     thinkNpc(w, npc);
     expect(topGoal(npc)?.kind).toBe('loot');
+  });
+});
+
+describe('point goals', () => {
+  it('an explore goal ends once the move arrives as close as it can to a point another truck covers', () => {
+    const w0 = emptyWorld({ x: 10, y: 10 });
+    const npc = addVehicle(w0, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 150, y: 150 });
+    npc.brain = npcBrain('roamer', npc.pos, ['roamer']);
+    npc.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 170, y: 150 }, phase: 'travel', reason: 'test spot' }];
+    addVehicle(w0, 'traders', 'hauler', [], { x: 170, y: 150 });
+    const moveFar = (w: World) => w.vehicles.forEach((v) => advanceFar(w, v));
+    // Salvage on the way would pull the driver off its point.
+    forceOption('salvageSeen', 'keep');
+    let w = w0;
+    for (let i = 0; i < 20 && topGoal(w.vehicles.find((v) => v.id === npc.id)!)?.kind === 'explore'; i++) w = endTurn(w, moveFar);
+    const after = w.vehicles.find((v) => v.id === npc.id)!;
+    expect(topGoal(after)?.kind).not.toBe('explore');
+    expect(dist(after.pos, { x: 170, y: 150 })).toBeGreaterThan(RULES.arriveRadius * 2);
   });
 });

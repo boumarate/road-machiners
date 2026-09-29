@@ -22,6 +22,7 @@
     "progression:report": "vite-node scripts/progression-report.mjs",
     "map:bake": "vite-node scripts/map-bake.mjs",
     "models:shapes": "node scripts/prop-shapes.mjs",
+    "save:shape": "vite-node scripts/save-shape.mjs",
     "itch": "node scripts/itch-publish.mjs"
   },
   "license": "ISC",

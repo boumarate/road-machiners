@@ -73,7 +73,7 @@ export function workLabel(world: World, v: Vehicle, work: Work): string {
 export function workProgress(work: WorkLeft): number {
   return 1 - work.turnsLeft / work.total;
 }
-import { damage } from './units';
+import { damage, fuelLiters } from './units';
 
 // A part's condition in one word: junk, pristine, or a rebuild count for a part that has broken and
 // been rebuilt before (one wear step per break).
@@ -434,6 +434,7 @@ function infoText(world: World, e: Extract<GameEvent, { t: 'info' }>): LogLine |
 const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent, { t: K }>) => LogLine | null } = {
   activity: activityText,
   info: infoText,
+  scrapPatch: (_, e) => ({ text: `You patch up your car with scrap until it starts moving again.${e.fuel > 0 ? ` Townsfolk spare you ${fuelLiters(e.fuel)} L of fuel.` : ''}`, cls: 'good' }),
   npcKnockout: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} knocked out`, cls: 'good' }),
   npcWake: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} comes to`, cls: 'dim' }),
   stateEnded: stateEndedText,

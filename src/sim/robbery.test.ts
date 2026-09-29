@@ -3,20 +3,21 @@ import { STATE_TURNS } from '../data/npcs';
 import type { TraitId } from '../data/npcs';
 import { addGoods } from './inventory';
 import { thinkNpc } from './npc-activities';
-import { npcProfile, optionWeights, ownDanger, vehicleDanger } from './npc-decisions';
+import { canRob, npcProfile, optionWeights, ownDanger, vehicleDanger } from './npc-decisions';
 import { NPC_BEHAVIOR, TRAITS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { resolveDestroyed } from './combat';
 import { checkKnockout } from './defeat';
 import { corePart, mountedParts } from './grid';
-import { addState, advanceStates, stateOf } from './states';
+import { addState, advanceStates, endState, stateOf } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateWhere } from './testkit';
 import type { NpcActivity, Vehicle, World } from './types';
 import type { Vec } from './vec';
 import { cloneWorld } from './world';
 import { REGION } from '../data/region';
 import { siteGates } from './sites';
+import { startEscort } from './tow';
 
 // A gate of Bowl. The robbery spots below lie outside Bowl's wall, north of the gate: one within guard range and one
 // past it.
@@ -54,8 +55,34 @@ function isRob(goal: NpcActivity | undefined, target: string): boolean {
 
 type Setup = () => { w: World; robber: Vehicle; target: Vehicle };
 
+// A scumbag leader with loot in sight away from towns, and a scumbag merc escorting it.
+function escorted() {
+  const w = emptyWorld({ x: 200, y: 200 });
+  const leader = addScumbag(w, { x: 10, y: 10 });
+  const merc = addScumbag(w, { x: 10, y: 12 }, ['mg', 'stockEngine'], ['merc', 'scumbag']);
+  startEscort(w, merc, leader, null, 0);
+  return { w, leader, merc, target: addPrey(w, { x: 15, y: 10 }) };
+}
+
+// A scumbag robber of a template whose trait forbids robbing.
+function forbidden(templateId: string, trait: TraitId): Setup {
+  return () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const robber = addScumbag(w, { x: 10, y: 10 });
+    robber.brain = npcBrain(templateId, robber.pos, [trait, 'scumbag']);
+    return { w, robber, target: addPrey(w, { x: 15, y: 10 }) };
+  };
+}
+
 // Worlds where rob is unavailable for one reason, and everything else would allow it.
 const UNAVAILABLE: Record<string, Setup> = {
+  supplier: forbidden('convoy', 'supplier'),
+  guard: forbidden('convoyGuard', 'guard'),
+  lawman: forbidden('bowlFarmer', 'lawman'),
+  following: () => {
+    const { w, merc, target } = escorted();
+    return { w, robber: merc, target };
+  },
   unseen: () => {
     const w = emptyWorld({ x: 200, y: 200 });
     return { w, robber: addScumbag(w, { x: 10, y: 10 }), target: addPrey(w, { x: 60, y: 10 }) };
@@ -136,6 +163,11 @@ describe('robbery checks', () => {
     // Beside the gate, but both past guard range, passes too.
     const far = emptyWorld({ x: 200, y: 200 });
     expect(robWeight(far, addScumbag(far, outFromGate(UNGUARDED)), addPrey(far, outFromGate(UNGUARDED + 5)), 0)).toBe(FULL_ROB);
+  });
+
+  it('the leader of an escort still gets the full rob weight', () => {
+    const { w, leader, target } = escorted();
+    expect(robWeight(w, leader, target, vehicleDanger(w, target))).toBe(FULL_ROB);
   });
 
   for (const [name, make] of Object.entries(UNAVAILABLE)) {
@@ -322,6 +354,38 @@ describe('scumbag robbery', () => {
     thinkNpc(w, robber);
     expect(robber.brain!.goals.some((g) => isRob(g, target.id))).toBe(false);
     expect(stateOf(w, 'feud', robber.id, target.id)).toBeNull();
+  });
+
+  it('a driver in a trade meeting does not rob its partner', () => {
+    const { w, robber, target } = passing();
+    addState(w, 'trade', robber.id, target.id, { kind: 'none' });
+    robber.brain!.goals = [{ kind: 'meet', targetId: target.id, destination: { ...target.pos }, phase: 'travel', reason: 'pull over to trade' }];
+    forceOption('preySeen', 'rob');
+    thinkNpc(w, robber);
+    expect(robber.brain!.goals.some((g) => isRob(g, target.id))).toBe(false);
+    expect(stateOf(w, 'feud', robber.id, target.id)).toBeNull();
+  });
+
+  it('a truck escorting another does not rob it, and the leader does not rob its escort', () => {
+    const { w, robber, target } = passing();
+    addState(w, 'escort', robber.id, target.id, { kind: 'escort', site: null, fee: 0 });
+    target.brain = npcBrain('scavenger', target.pos, ['scavenger', 'scumbag']);
+    expect(canRob(w, robber, target)).toBe(false);
+    expect(canRob(w, target, robber)).toBe(false);
+  });
+
+  it('a trade kept to its end leaves both sides backed off from each other', () => {
+    const { w, robber, target } = passing();
+    target.brain = npcBrain('scavenger', target.pos, ['scavenger']);
+    endState(w, addState(w, 'trade', robber.id, target.id, { kind: 'none' }), 'fulfilled');
+    expect(stateOf(w, 'backedOff', robber.id, target.id)).not.toBeNull();
+    expect(stateOf(w, 'backedOff', target.id, robber.id)).not.toBeNull();
+  });
+
+  it('a broken trade leaves no one backed off', () => {
+    const { w, robber, target } = passing();
+    endState(w, addState(w, 'trade', robber.id, target.id, { kind: 'none' }), 'broken');
+    expect(stateOf(w, 'backedOff', robber.id, target.id)).toBeNull();
   });
 
   it('a robber stops its search to rob', () => {

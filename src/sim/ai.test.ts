@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { PERF } from '../data/perf';
+import { RULES } from '../data/rules';
 import { TERRAIN } from '../data/terrain';
 import { planNpcOrders, routeBlockers, trafficStops } from './ai';
 import { topGoal } from './npc-activities';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
+import { startEscort } from './tow';
 import type { Vehicle, World } from './types';
+import { dist } from './vec';
 
 describe('NPC driving', () => {
   it('uses the obstacle-aware driver on every turn', () => {
@@ -27,6 +30,43 @@ describe('NPC driving', () => {
     expect(first.id < second.id).toBe(true);
     planNpcOrders(w);
     expect(topGoal(second)?.kind).not.toBe('loot');
+  });
+});
+
+describe('face offs', () => {
+  // Two traders parked nose to nose. The first has the lower id, so it is the one that may wait.
+  function noseToNose(): { w: World; first: Vehicle; second: Vehicle } {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const first = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 100, y: 100 });
+    first.brain = npcBrain('trader', first.pos, ['trader']);
+    first.heading = 0;
+    first.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 150, y: 100 }, phase: 'travel', reason: 'test trip east' });
+    const second = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 104, y: 100 });
+    second.brain = npcBrain('trader', second.pos, ['trader']);
+    second.heading = Math.PI;
+    expect(first.id < second.id).toBe(true);
+    return { w, first, second };
+  }
+
+  it('of two parked trucks that both set off, only the higher id drives on the first turn', () => {
+    const { w, first, second } = noseToNose();
+    second.brain!.goals.push({ kind: 'explore', targetId: null, destination: { x: 40, y: 100 }, phase: 'travel', reason: 'test trip west' });
+    planNpcOrders(w);
+    expect(first.order?.kind).toBe('brake');
+    expect(second.order?.kind).toBe('stopAt');
+  });
+
+  it('a driver waits for a parked truck ahead that holds a move order', () => {
+    const { w, first, second } = noseToNose();
+    second.order = { kind: 'stopAt', dest: { x: 60, y: 100 } };
+    expect(trafficStops(w, first, { x: 150, y: 100 })).toBe(true);
+  });
+
+  it('a driver does not wait for a parked truck ahead that holds no move order, like one waiting for a tow', () => {
+    const { w, first, second } = noseToNose();
+    second.brain!.goals.push({ kind: 'resupply', targetId: 'bowl', destination: { x: 60, y: 100 }, phase: 'travel', reason: 'low fuel' });
+    second.order = null;
+    expect(trafficStops(w, first, { x: 150, y: 100 })).toBe(false);
   });
 });
 
@@ -112,5 +152,38 @@ describe('NPC traffic', () => {
     npc.brain = npcBrain('trader', npc.pos, ['trader']);
     npc.speed = 7;
     expect(routeBlockers(w, me)).toEqual([]);
+  });
+});
+
+describe('getting unstuck', () => {
+  // A leader bound east whose following escort lags far behind, so the leader waits for it.
+  function waitingLeader(): { w: World; leader: Vehicle } {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const leader = addVehicle(w, 'convoys', 'hauler', ['mg', 'workhorseDiesel'], { x: 100, y: 100 });
+    leader.brain = npcBrain('convoy', leader.pos, ['supplier']);
+    leader.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 170, y: 100 }, phase: 'travel', reason: 'test trip east' }];
+    const guard = addVehicle(w, 'convoys', 'scout', ['mg', 'stockEngine'], { x: 60, y: 100 });
+    guard.brain = npcBrain('convoyGuard', guard.pos, ['guard']);
+    startEscort(w, guard, leader, null, 0);
+    return { w, leader };
+  }
+
+  it('a driver held in place drives to a free spot nearby after the unstick wait', () => {
+    const { w, leader } = waitingLeader();
+    for (let i = 0; i < RULES.unstick.turns; i++) {
+      planNpcOrders(w);
+      expect(leader.order?.kind).toBe('brake');
+    }
+    planNpcOrders(w);
+    expect(leader.order?.kind).toBe('stopAt');
+    const spot = leader.order!.kind === 'stopAt' ? leader.order!.dest : null;
+    expect(dist(spot!, leader.pos)).toBeLessThanOrEqual(RULES.unstick.reach);
+  });
+
+  it('a driver parked on its goal point never counts as stuck', () => {
+    const { w, leader } = waitingLeader();
+    leader.brain!.goals[0].destination = { ...leader.pos };
+    for (let i = 0; i < RULES.unstick.turns * 2; i++) planNpcOrders(w);
+    expect(leader.brain!.recovery ?? 0).toBe(0);
   });
 });

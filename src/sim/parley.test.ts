@@ -3,12 +3,12 @@ import { REFUSED } from '../data/dialogue';
 import { NPCS, type TraitId } from '../data/npcs';
 import { isHostile, noteCollision } from './combat';
 import { playerVehicle } from './damage';
-import { callVehicle, chooseOption, currentOptions, hangUp, raiseCalls } from './dialogue';
+import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, raiseCalls } from './dialogue';
 import { addGoods } from './inventory';
 import { pushGoal, thinkNpc, topGoal } from './npc-activities';
 import { makePeace, plead, yieldTo } from './parley';
 import { hasCargo } from './salvage';
-import { addState, stateOf } from './states';
+import { addState, endState, stateOf } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import type { Contract } from './market';
 import type { Faction, Vehicle, World } from './types';
@@ -205,6 +205,15 @@ describe('NPC pleas to the player', () => {
     expect(start.player.call).toMatchObject({ with: npc.id, topic: 'truceOffer' });
     const w = pick(start, 'Agreed. Guns down.');
     expect(isHostile(w, w.vehicles.find((v) => v.id === npc.id)!, playerVehicle(w))).toBe(false);
+  });
+
+  it('a plea call ends when the plea runs out later in the same turn, so no answer throws', () => {
+    const { w, npc } = pleading('truce');
+    endState(w, stateOf(w, 'plea', npc.id, w.player.vehicleId)!, 'expired');
+
+    endCallIfOut(w);
+
+    expect(w.player.call).toBeNull();
   });
 
   it('refusing keeps the feud, and the driver does not call again with the same plea', () => {

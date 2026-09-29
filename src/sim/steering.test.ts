@@ -98,4 +98,12 @@ describe("setting a stranded truck down", () => {
     expect(gap).toBeGreaterThan(0);
     expect(gap).toBeLessThan(1);
   });
+
+  it("searches past the usual reach when nothing near is free, so a wedged truck still lands", () => {
+    const w = emptyWorld({ x: 60, y: 60 });
+    const me = w.vehicles[0];
+    w.obstacles = [{ id: "big", pos: { ...me.pos }, r: 7, kind: "rock" }];
+    const spot = setDownSpot(w, me);
+    expect(dist(spot, me.pos)).toBeGreaterThan(4);
+  });
 });

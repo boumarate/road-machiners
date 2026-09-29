@@ -3,7 +3,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
 import { corePart } from '../sim/grid';
-import { addVehicle, emptyWorld, npcBrain, rngStateWhere } from '../sim/testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateWhere } from '../sim/testkit';
 import type { Vehicle, World } from '../sim/types';
 import { dist } from '../sim/vec';
 import { refreshVision } from '../sim/vision';
@@ -36,6 +36,8 @@ describe('NPC knockout in physics', () => {
     buggy.brain.attackers[w.player.vehicleId] = true;
     buggy.lastHitBy = w.player.vehicleId;
     buggy.order = { kind: 'through', dest: { x: 70, y: 30 } };
+    // It opens fire unwarned, so no cargo demand opens a call and stops the turns.
+    forceOption('mugging', 'attack');
     refreshVision(w);
     let d = buildDrive(w);
     ({ w, d } = turn(w, d));

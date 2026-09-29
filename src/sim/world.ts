@@ -16,7 +16,7 @@ import { healPlayer } from './health';
 import { fireGuards } from './guards';
 import { discoverSites } from './locations';
 import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
-import { chargeUpkeep } from './economy';
+import { chargeUpkeep, scrapPatch } from './economy';
 import { nameStream, spawnInitial, spawnNpcs } from './spawn';
 import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
 import { timed } from '../perf';
@@ -257,6 +257,7 @@ export function endTurn(
     fireGuards(w);
     consumeSupplies(w);
     chargeUpkeep(w);
+    scrapPatch(w);
     healPlayer(w);
     leakFuel(w);
     fitAllStores(w);

@@ -193,6 +193,23 @@ describe('auto patch', () => {
     expect(engine.hp).toBe(1 + plan.hp);
   });
 
+  it('cancels when its part leaves the mounts, as when stored at a garage', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    me.speed = 0;
+    const engine = mountedParts(me).find((p) => partDef(p.defId).kind === 'engine')!;
+    engine.hp = 1;
+    addGoods(w, me, 'parts', 5);
+    startAutoRepair(w);
+    me.items = me.items.filter((it) => !(it.kind === 'part' && it.part.id === engine.id));
+    w.player.storage.push(engine);
+
+    advanceJobs(w);
+
+    expect(me.job).toBeNull();
+    expect(engine.hp).toBe(1);
+  });
+
   it('skips a junk part', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
@@ -222,6 +239,35 @@ describe('auto patch', () => {
     removeGoods(me, 'parts', goodsCount(me).parts ?? 0);
     startAutoRepair(w);
     expect(me.job).toBeNull();
+  });
+});
+
+describe('drive order', () => {
+  it('cancels a running job once the player sets a drive order, before the truck gains speed', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    me.speed = 0;
+    armorPart(me).hp = 1;
+    addGoods(w, me, 'parts', 5);
+    startAutoRepair(w);
+    expect(me.job).not.toBeNull();
+    me.order = { kind: 'through', dest: { x: me.pos.x + 10, y: me.pos.y } };
+    advanceJobs(w);
+    expect(me.job).toBeNull();
+    startAutoRepair(w);
+    expect(me.job).toBeNull();
+  });
+
+  it('lets an NPC with a leftover order work', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine', 'cage'], { x: 50, y: 50 });
+    npc.speed = 0;
+    npc.order = { kind: 'stopAt', dest: { x: 60, y: 50 } };
+    armorPart(npc).hp = 1;
+    addGoods(w, npc, 'parts', 20);
+    startJob(w, npc, { kind: 'repair', partId: armorPart(npc).id, parts: 1, turnsLeft: 3, total: 3 });
+    advanceJobs(w);
+    expect(npc.job).not.toBeNull();
   });
 });
 

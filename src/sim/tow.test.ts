@@ -14,7 +14,7 @@ import { hasLoot } from './grid';
 import { thinkNpc, topGoal } from './npc-activities';
 import { optionChances, optionWeights } from './npc-decisions';
 import { addState, endState, stateOf, towData } from './states';
-import { callVehicle, chooseOption, currentOptions, hangUp } from './dialogue';
+import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp } from './dialogue';
 import { dropTow, isOnRope, isTowed, playerTow, playerTowing, setBeacon, towOf, unhitch } from './tow';
 import { sunAt } from './sun';
 import { canVehicleSee, refreshVision } from './vision';
@@ -71,6 +71,18 @@ const acceptTow = (w: World) => answer(w, 'Deal. Hitch me up.');
 const refuseTow = (w: World) => answer(w, 'No thanks.');
 
 describe('tow offer', () => {
+  it('a tow call ends when the offer is dropped later in the same turn, so no answer throws', () => {
+    const w = offered(stranded());
+    const tow = playerTow(w)!;
+    dropTow(w, tow, 'danger');
+    w.events = [];
+
+    endCallIfOut(w);
+
+    expect(w.player.call).toBeNull();
+    expect(w.events).toContainEqual({ t: 'call', with: tow.holder, outcome: 'ended' });
+  });
+
   it('a trader that sees a stranded player drives over and offers a tow', () => {
     const s = stranded();
     const r = runUntil(s.w, 30, (w) => playerTow(w) !== null);

@@ -8,11 +8,11 @@
 // can rob, mostly a weaker one away from guards.
 
 import { dealAvailable } from './patch';
-import { ECONOMY, GOOD_IDS } from '../data/goods';
-import { GOOD_SOURCES } from '../data/market';
+import { ECONOMY } from '../data/goods';
+import { GOOD_SOURCES, SHOPS, type ShopDef } from '../data/market';
 import {
   DECISIONS, HUNT, MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, STATE_WEIGHTS, TRAITS,
-  type DecisionId, type DecisionOptions, type TraitId, type TraitWeights, type WeightChange,
+  type DecisionId, type DecisionOptions, type Trait, type TraitId, type TraitWeights, type Weighted, type WeightChange,
 } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
@@ -34,7 +34,7 @@ import { skillEffect } from './progress';
 import { randRange } from './rng';
 import { canReachSalvage, canTakeAny, canTakeFromTruck, siteLootTable } from './salvage';
 import { canUseSite, siteGates, sitePads, siteUnder, type Site } from './sites';
-import { stateOf, statesHeld } from './states';
+import { boundTo, givesWord, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
 import { canHire, canTakeEscort, declineFactor, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
 import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
@@ -53,6 +53,7 @@ export type NpcProfile = {
   contactReactRadius: number;
   boldness: number;
   fuelMargin: number;
+  robs: Trait['robs'];
 };
 
 export function npcTraits(v: Vehicle): TraitId[] {
@@ -68,7 +69,7 @@ export function hasTrait(v: Vehicle, id: TraitId): boolean {
 }
 
 // Known sites are the union over traits, in trait order. The widest contact radius wins. Boldness and fuel margin
-// multiply.
+// multiply. One trait that never robs makes the driver never rob.
 export function profileOf(traits: TraitId[]): NpcProfile {
   if (traits.length === 0) throw new Error('A profile needs at least one trait');
   const defs = traits.map((id) => {
@@ -86,6 +87,7 @@ export function profileOf(traits: TraitId[]): NpcProfile {
     contactReactRadius: Math.max(...defs.map((t) => t.contactReactRadius)),
     boldness: defs.reduce((product, t) => product * t.boldness, 1),
     fuelMargin: defs.reduce((product, t) => product * t.fuelMargin, 1),
+    robs: defs.some((t) => t.robs === 'never') ? 'never' : 'offDuty',
   };
 }
 
@@ -202,33 +204,26 @@ export function getUpkeepReserve(vehicle: Vehicle): number {
   return (fuelCap(vehicle) * ECONOMY.supplyPrice.fuel + suppliesCap(vehicle) * ECONOMY.supplyPrice.supplies) * NPC_UPKEEP.reserveLoads;
 }
 
-function nearestSite(vehicle: Vehicle, ids: string[]) {
-  return ids.map(getKnownSite).sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos))[0];
-}
+export type TradePlan = { source: string; good: string; sellShop: string };
 
-export type TradePlan = { source: string; good: string; sellTown: string };
-type TradeOffer = { plan: TradePlan | null; profit: number };
-
-// The most profitable affordable good to buy in the nearest known town and sell in another, or null.
-export function bestTrade(world: World, vehicle: Vehicle): TradePlan | null {
-  const towns = npcProfile(vehicle).towns;
-  const source = nearestSite(vehicle, towns);
-  if (!source) return null;
+// Every affordable profitable run: a good bought at one shop and sold at another. Its weight is the profit per unit
+// over the tiles of the trip, from the driver to the source and on to the buyer. Near runs win most rolls, but not
+// all, so traders spread over every shop pair instead of all taking the one best run.
+export function tradeOffers(world: World, vehicle: Vehicle): Weighted<TradePlan>[] {
   const spend = getResources(world, vehicle).money - getUpkeepReserve(vehicle);
-  const best: TradeOffer = { plan: null, profit: 0 };
-  for (const town of towns) if (town !== source.id) offerGoods(world, vehicle, { source: source.id, sellTown: town, spend }, best);
-  return best.plan;
+  const shops = Object.values(SHOPS);
+  return shops.flatMap((source) => shops.filter((buyer) => buyer.id !== source.id).flatMap((buyer) => runOffers(world, vehicle, source, buyer, spend)));
 }
 
-// Keeps in `best` any good bought at the source and sold in the town that beats its profit within `spend`.
-function offerGoods(world: World, vehicle: Vehicle, route: { source: string; sellTown: string; spend: number }, best: TradeOffer): void {
-  for (const good of GOOD_IDS) {
-    const buy = getTradePrice(world, vehicle, route.source, good, 'buy');
-    const profit = getTradePrice(world, vehicle, route.sellTown, good, 'sell') - buy;
-    if (route.spend < buy || profit <= best.profit) continue;
-    best.profit = profit;
-    best.plan = { source: route.source, good, sellTown: route.sellTown };
-  }
+// The runs from source to buyer, one per good both trade that pays and costs no more than `spend` a unit.
+function runOffers(world: World, vehicle: Vehicle, source: ShopDef, buyer: ShopDef, spend: number): Weighted<TradePlan>[] {
+  const sourcePos = getKnownSite(source.id).pos;
+  const trip = dist(vehicle.pos, sourcePos) + dist(sourcePos, getKnownSite(buyer.id).pos);
+  return source.goods.filter((good) => buyer.goods.includes(good)).flatMap((good) => {
+    const buy = getTradePrice(world, vehicle, source.id, good, 'buy');
+    const profit = getTradePrice(world, vehicle, buyer.id, good, 'sell') - buy;
+    return spend >= buy && profit > 0 ? [{ value: { source: source.id, good, sellShop: buyer.id }, weight: profit / trip }] : [];
+  });
 }
 
 // Salvage in sight that still holds something, or that is too far to inspect. Nearest first.
@@ -336,12 +331,16 @@ export function busyWithFight(vehicle: Vehicle, otherId: string): boolean {
 
 // ---- Robbery.
 
-// A robber can rob a truck it sees, that is not hostile yet, that is not busy fighting another, that is not
-// knocked out, since that one is looted instead, that is not on a tow rope, and that carries loot. Cheap checks run before the sight line.
+// A robber can rob a truck it sees, that is fair game, that is not busy fighting another, and that is robbable.
+// Cheap checks run before the sight line.
 export function canRob(w: World, robber: Vehicle, target: Vehicle): boolean {
   if (robber.id === target.id || !isRobbable(w, target) || busyWithFight(target, robber.id)) return false;
-  if (isHostile(w, robber, target)) return false;
-  return canVehicleSee(w, robber, target.pos);
+  return isFairGame(w, robber, target) && canVehicleSee(w, robber, target.pos);
+}
+
+// A truck the robber is not hostile to yet and has no deal with.
+function isFairGame(w: World, robber: Vehicle, target: Vehicle): boolean {
+  return !isHostile(w, robber, target) && !boundTo(w, robber.id, target.id);
 }
 
 function isRobbable(w: World, target: Vehicle): boolean {
@@ -379,9 +378,17 @@ function canDrive(world: World, vehicle: Vehicle): boolean {
   return getResources(world, vehicle).fuel > 0;
 }
 
-// A robbery is a fight, so it also needs a working gun.
+// A robbery is a fight, so it also needs a working gun. The driver's traits must allow it too.
 function canRobSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  if (!traitsAllowRobbing(vehicle)) return false;
   return firepower(world, vehicle) > 0 && canRob(world, vehicle, subjectOf(world, decision, subject));
+}
+
+// A follow goal stays at the base of the stack while the driver follows a leader, so the driver stays on duty
+// through fights.
+function traitsAllowRobbing(vehicle: Vehicle): boolean {
+  const robs = npcProfile(vehicle).robs;
+  return robs === 'offDuty' && !vehicle.brain!.goals.some((goal) => goal.kind === 'follow');
 }
 
 // A ram needs the subject as the fight target on top of the goals, within reach of a damaging ram.
@@ -400,7 +407,7 @@ function canResume(_world: World, vehicle: Vehicle): boolean {
 }
 
 function canTrade(world: World, vehicle: Vehicle): boolean {
-  return bestTrade(world, vehicle) !== null;
+  return tradeOffers(world, vehicle).length > 0;
 }
 
 function canScavenge(world: World, vehicle: Vehicle): boolean {
@@ -747,8 +754,38 @@ export function hasChoice(weights: Partial<Record<OptionName, number>>): boolean
   return !('keep' in weights) || Object.keys(weights).some((option) => option !== 'keep');
 }
 
-// hasChoice from availability alone, without the situation factors.
+// A venture starts something new on the driver's own initiative. A response answers what happens to the driver.
+const DECISION_KINDS: Record<DecisionId, 'venture' | 'response'> = {
+  hostileSeen: 'response',
+  contactHeard: 'response',
+  attacked: 'response',
+  preySeen: 'venture',
+  strandedSeen: 'venture',
+  salvageSeen: 'venture',
+  patchDeal: 'response',
+  ramChance: 'response',
+  fightWhim: 'response',
+  crashed: 'response',
+  parley: 'response',
+  truceOffered: 'response',
+  mercyBegged: 'response',
+  threatened: 'response',
+  mugging: 'response',
+  resume: 'response',
+  idle: 'venture',
+  escortSeen: 'venture',
+  hireOffered: 'response',
+};
+
+// A driver that gave its word starts no venture until the deal ends, except about the truck it gave it to.
+export function keepsWord(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  if (DECISION_KINDS[decision] !== 'venture' || !givesWord(world, vehicle.id)) return false;
+  return subject === null || !boundTo(world, vehicle.id, subject);
+}
+
+// hasChoice from availability alone, without the situation factors. A driver keeping its word has none.
 export function offersChoice(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  if (keepsWord(world, vehicle, decision, subject)) return false;
   const options = Object.keys(DECISIONS[decision]) as OptionName[];
   if (!options.includes('keep')) return true;
   return options.some((option) => option !== 'keep' && AVAILABLE[option](world, vehicle, decision, subject));
