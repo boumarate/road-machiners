@@ -4,7 +4,8 @@ import { must } from './exec';
 import type { FactoryConfig, HostRepo, Run } from './types';
 
 // Hooks are switched off on every call, so no git command here runs code from a repository.
-const NO_HOOKS = ['-c', 'core.hooksPath=/dev/null'];
+// The identity names the factory on its merge commits, the same one the agent image uses.
+const NO_HOOKS = ['-c', 'core.hooksPath=/dev/null', '-c', 'user.name=ROAM Factory', '-c', 'user.email=factory@roam.invalid'];
 const SYNCED_BRANCHES = ['dev', 'main'];
 
 export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
