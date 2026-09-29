@@ -49,13 +49,18 @@ export type Issue = {
 
 export type Card = { itemId: string; issue: number; column: Column; labels: string[] };
 
-export type Job = { stage: CardStage | PeriodicStage; issue: number | null; pid: number; startedAt: string; log: string };
+// A job is one detached `factory run` process. `issue` is null for release and maintenance, and a change id for change.
+export type JobStage = CardStage | PeriodicStage | 'approve' | 'change';
+export type Job = { stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string };
+export type ChangeRequest = { id: number; text: string; by: string };
 
 export type FactoryState = {
   job: Job | null;
   approvalPosts: Record<string, number>; // Telegram message id -> issue number
   lastRelease: string | null; // ISO time
   lastMaintenance: string | null; // ISO time
+  pendingApprovals: Record<string, string>; // issue number -> approving Telegram user, run by the next tick
+  pendingChanges: ChangeRequest[]; // factory change requests, run by the next ticks in order
 };
 
 export interface GitHub {

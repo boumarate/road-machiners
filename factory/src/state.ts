@@ -1,10 +1,10 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import type { FactoryState } from './types';
 
-export const EMPTY_STATE: FactoryState = { job: null, approvalPosts: {}, lastRelease: null, lastMaintenance: null };
+export const EMPTY_STATE: FactoryState = { job: null, approvalPosts: {}, lastRelease: null, lastMaintenance: null, pendingApprovals: {}, pendingChanges: [] };
 
 export function readState(path: string): FactoryState {
-  if (!existsSync(path)) return { ...EMPTY_STATE, approvalPosts: {} };
+  if (!existsSync(path)) return structuredClone(EMPTY_STATE);
   return JSON.parse(readFileSync(path, 'utf8')) as FactoryState;
 }
 
