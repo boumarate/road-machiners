@@ -13,7 +13,7 @@ import { isHostile } from "./combat";
 import { playerVehicle } from "./damage";
 import { canVehicleSee } from "./vision";
 import { partValue } from "./wear";
-import { freeCells, goodsCount, isMounted, itemSize, mountedParts } from "./grid";
+import { corePart, coreParts, freeCells, goodsCount, isMounted, itemSize, mountedParts } from "./grid";
 import { addGoods, applyRefitLayout, getRefitLayout, removeGoods, stowPart } from "./inventory";
 import { makePart } from "./factory";
 import { isJunk, maxHp } from "./wear";
@@ -88,15 +88,15 @@ export function startRepair(world: World, partId: string): World {
   });
 }
 
-// Auto patch: a parked, idle player truck patches its most damaged part with one unit of parts at a
-// time, so driving off loses at most one short job.
+// Auto patch: a parked, idle player truck patches with one unit of parts at a time, so driving off loses at
+// most one short job. Parts that strand the truck come first, then broken wheels, then the most damaged part.
 export function startAutoRepair(world: World): void {
   if (!world.player.autoRepair || world.player.state !== "active") return;
   const v = playerVehicle(world);
   if (!canAutoPatch(world, v)) return;
   const worst = mountedParts(v)
     .filter((p) => !isJunk(p) && repairPlan(world, v, p.id).needed > 0)
-    .sort((a, b) => a.hp / maxHp(a) - b.hp / maxHp(b))[0];
+    .sort((a, b) => patchRank(v, a) - patchRank(v, b) || a.hp / maxHp(a) - b.hp / maxHp(b))[0];
   if (!worst) return;
   const plan = repairPlan(world, v, worst.id, 1);
   startJob(world, v, {
@@ -107,6 +107,13 @@ export function startAutoRepair(world: World): void {
     total: plan.turns,
     auto: true,
   });
+}
+
+// 0 for a broken engine or transmission, which strand the truck. 1 for a broken wheel. 2 for the rest.
+function patchRank(v: Vehicle, part: PartInstance): number {
+  if (part.hp > 0) return 2;
+  if (part === mountedParts(v, "engine")[0] || part === corePart(v, "transmission")) return 0;
+  return coreParts(v, "wheel").includes(part) ? 1 : 2;
 }
 
 // Idle, parked, out of combat, with parts to patch with.
