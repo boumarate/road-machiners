@@ -134,6 +134,7 @@ describe("queries", () => {
         "money",
         "noclip",
         "perk",
+        "randomkit",
         "repair",
         "reveal",
         "skills",
@@ -144,6 +145,12 @@ describe("queries", () => {
         "xp",
       ].sort(),
     );
+  });
+
+  it("randomkit swaps the truck and names the new chassis", () => {
+    const result = runCommand(emptyWorld(), "randomkit");
+    const me = result.world!.vehicles.find((v) => v.id === result.world!.player.vehicleId)!;
+    expect(result.lines[0]).toContain(`randomkit: ${me.chassisId} with `);
   });
 
   it("perk grants the perk and names it", () => {

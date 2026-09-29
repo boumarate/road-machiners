@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { chassisDef } from '../data/chassis';
+import { chassisDef, PLAYER_CHASSIS } from '../data/chassis';
+import { openSides, reachedSides } from './armor';
+import { mountedItems } from './grid';
+import { generateNpcLoadout } from './npc-loadout';
+import type { WeaponDef } from '../data/parts';
 import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { CHEATS, RULES } from '../data/rules';
 import { START_KITS } from '../data/start';
 import {
-  addSkillXp, applyGodMode, CheatError, grantPerk, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
+  addSkillXp, applyGodMode, CheatError, kitChoices, randomKit, grantPerk, damagePartTo, give, killVehicles, makeHostile, placeSpot, nearbyVehicles,
   repairAll, revealMap, setFuel, setHealth, setMoney, setSupplies, skipToHour, spawnNear,
   noclipMove, startBattle, startWeather, teleport, toggleFullLog, toggleGod,
 } from './cheats';
@@ -395,5 +399,40 @@ describe('cheats and toughness', () => {
     w.player.health = 1;
     applyGodMode(w);
     expect(w.player.health).toBe(maxHealthOf(w));
+  });
+});
+
+describe('randomkit', () => {
+  it('gives the player a player chassis with at least one gun, and every gun can fire', () => {
+    const chassis = new Set<string>();
+    for (let seed = 1; seed <= 20; seed++) {
+      const w = emptyWorld();
+      w.rngState = seed * 7919;
+      const before = playerVehicle(w);
+      const next = randomKit(w);
+      const me = playerVehicle(next);
+      chassis.add(me.chassisId);
+      expect(me.id).toBe(before.id);
+      expect(PLAYER_CHASSIS).toContain(me.chassisId);
+      const guns = mountedItems(me, 'weapon');
+      expect(guns.length).toBeGreaterThan(0);
+      for (const item of guns) {
+        const reach = reachedSides(partDef(item.part.defId) as WeaponDef);
+        expect(openSides(me, item).some((side) => reach.includes(side))).toBe(true);
+      }
+    }
+    expect(chassis.size).toBeGreaterThan(2);
+  });
+
+  it('every template and player chassis pair rolls a loadout', () => {
+    for (const { tpl, chassisId } of kitChoices()) {
+      expect(generateNpcLoadout(emptyWorld(), tpl, chassisId).chassisId).toBe(chassisId);
+    }
+  });
+
+  it('refuses while the player is knocked out', () => {
+    const w = emptyWorld();
+    w.player.state = 'knockedOut';
+    expect(() => randomKit(w)).toThrow(CheatError);
   });
 });

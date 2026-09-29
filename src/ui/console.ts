@@ -13,6 +13,7 @@ import {
   noclipMove,
   nearbyVehicles,
   placeSpot,
+  randomKit,
   repairAll,
   revealMap,
   setFuel,
@@ -29,6 +30,8 @@ import {
 } from "../sim/cheats";
 import { PERKS, SKILL_IDS, XP_RULES } from "../data/skills";
 import { playerVehicle } from "../sim/damage";
+import { mountedParts } from "../sim/grid";
+import { partDef } from "../data/parts";
 import { levelOf, xpTodayOf } from "../sim/progress";
 import { dist } from "../sim/vec";
 import type { World, XpSource } from "../sim/types";
@@ -153,6 +156,11 @@ export const COMMANDS: readonly Command[] = [
     }
     const hostile = flag === "hostile";
     return changed(spawnNear(world, templateId, hostile), `spawned ${hostile ? "hostile " : ""}${templateId}`);
+  }),
+  command("randomkit", "Swap the truck for a random chassis and loadout with working guns.", { min: 0, max: 0 }, (world) => {
+    const next = randomKit(world);
+    const me = next.vehicles.find((v) => v.id === next.player.vehicleId)!;
+    return changed(next, `randomkit: ${me.chassisId} with ${mountedParts(me).filter((p) => partDef(p.defId).kind !== 'core').map((p) => partDef(p.defId).name).join(', ')}`);
   }),
   command("battle", "Place a random hostile raider near the truck.", { min: 0, max: 0 }, (world) => {
     const next = startBattle(world);
