@@ -30,7 +30,7 @@ Lean toward `ready`.
 When in doubt, pick `ready`.
 
 The author may have answered earlier questions.
-Look in the comments under the heading "factory questions".
+Look in the comments under the heading "Questions from the factory".
 Use those answers.
 Never ask again what they answered.
 
