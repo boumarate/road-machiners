@@ -1,14 +1,14 @@
 # Factory release
 
-Status: design
+Status: planning
 Branch: game-factory
 Worktree: .worktrees/game-factory
 Goal: Every release period, dev merges to main, npm run itch ships it, and the public channel gets a changelog post.
-Mode: interactive
+Mode: hands-off
 
 ## Context
 
-- Part of the [game factory](game-factory.md). That task owns the stage flow and the contracts between parts.
+- Part of the [game factory](game-factory.md). Its Design and Plan cover this part, so each contract has one home.
 - Every configured number of days, a changelog is compiled from `dev` against `main`.
 - `dev` merges to `main`.
 - Stable deploys to itch.io with the existing `npm run itch`. See [Publishing](../publishing.md).

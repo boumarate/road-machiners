@@ -1,14 +1,14 @@
 # Factory build stage
 
-Status: design
+Status: planning
 Branch: game-factory
 Worktree: .worktrees/game-factory
 Goal: A card with an approved plan gets a pushed task branch whose tests and CPU playtest pass, and moves to approval.
-Mode: interactive
+Mode: hands-off
 
 ## Context
 
-- Part of the [game factory](game-factory.md). That task owns the stage flow and the contracts between parts.
+- Part of the [game factory](game-factory.md). Its Design and Plan cover this part, so each contract has one home.
 - Sonnet 5.5 implements the plan on the task branch, as Claude Code in headless mode.
 - It runs `npm test`, `npm run quality` and the playtest in CPU mode, then pushes.
 - Implementation and testing are separate kanban columns.

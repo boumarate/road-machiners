@@ -23,7 +23,8 @@
     "map:bake": "vite-node scripts/map-bake.mjs",
     "models:shapes": "node scripts/prop-shapes.mjs",
     "save:shape": "vite-node scripts/save-shape.mjs",
-    "itch": "node scripts/itch-publish.mjs"
+    "itch": "node scripts/itch-publish.mjs",
+    "factory": "vite-node factory/src/cli.ts --"
   },
   "license": "ISC",
   "description": "",
@@ -34,6 +35,7 @@
     "three": "^0.186.1"
   },
   "devDependencies": {
+    "@types/node": "^22.20.4",
     "@types/three": "^0.186.0",
     "oxc-parser": "0.151.0",
     "oxlint": "1.85.0",

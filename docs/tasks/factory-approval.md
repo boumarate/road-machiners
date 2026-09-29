@@ -1,14 +1,14 @@
 # Factory approval
 
-Status: design
+Status: planning
 Branch: game-factory
 Worktree: .worktrees/game-factory
 Goal: The committee gets a Telegram post per built task, and an approve merges it to dev while feedback sends it back to design.
-Mode: interactive
+Mode: hands-off
 
 ## Context
 
-- Part of the [game factory](game-factory.md). That task owns the stage flow and the contracts between parts.
+- Part of the [game factory](game-factory.md). Its Design and Plan cover this part, so each contract has one home.
 - Hermes posts to the committee Telegram chat.
 - The post has a screenshot of the core feature, the play link, the issue link, a short description and how to try it.
 - An approve reply or button merges the task branch to `dev`.

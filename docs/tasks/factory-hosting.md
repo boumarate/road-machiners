@@ -1,14 +1,14 @@
 # Factory hosting
 
-Status: design
+Status: planning
 Branch: game-factory
 Worktree: .worktrees/game-factory
 Goal: A pushed task branch plays at /{hash} on the server, dev plays at /dev, and each keeps its own save.
-Mode: interactive
+Mode: hands-off
 
 ## Context
 
-- Part of the [game factory](game-factory.md). That task owns the stage flow and the contracts between parts.
+- Part of the [game factory](game-factory.md). Its Design and Plan cover this part, so each contract has one home.
 - The server serves `/dev` and `/{hash}` as static files. Stable lives on itch.io.
 - The Vite base is already relative, so a build runs from any folder.
 - A deploy step builds the branch and copies it to `/{hash}`. It holds its own credentials, apart from the agents.

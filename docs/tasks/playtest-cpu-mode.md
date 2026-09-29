@@ -1,14 +1,14 @@
 # Playtest CPU mode
 
-Status: design
+Status: planning
 Branch: game-factory
 Worktree: .worktrees/game-factory
 Goal: npm run playtest in CPU mode passes on a GPU-less server, and the default mode still checks FPS on the Mac.
-Mode: interactive
+Mode: hands-off
 
 ## Context
 
-- Part of the [game factory](game-factory.md). That task owns the stage flow and the contracts between parts.
+- Part of the [game factory](game-factory.md). Its Design and Plan cover this part, so each contract has one home.
 - The CPU server draws in software, at 10 to 20 fps.
 - `scripts/playtest.mjs` launches Chromium with Metal flags and fails under `MIN_FPS`.
 - The CPU mode skips the FPS check and the Metal flags. It still fails on page errors and the crash screen.
