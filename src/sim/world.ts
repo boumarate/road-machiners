@@ -37,17 +37,19 @@ import { advanceJobs, startAutoRepair } from './jobs';
 import { advanceEngineHeat } from './engine-heat';
 import { clamp, dist, type Vec } from './vec';
 
+// The world seed and the random streams it starts.
+export function seedStreams(seed: number): Pick<World, 'seed' | 'rngState' | 'marketRng' | 'nameRng'> {
+  if (!Number.isInteger(seed)) throw new Error(`Seed must be an integer, got ${seed}`);
+  return { seed, rngState: seed, marketRng: marketStream(seed), nameRng: nameStream(seed) };
+}
+
 // A new game on the baked map. The map gives terrain and props; the world seed drives all other randomness.
-export function newWorld(seed: number, kit: StartKit, map: BakedMap): World {
-  if (!Number.isInteger(seed))
-    throw new Error(`Seed must be an integer, got ${seed}`);
+// `populate` false leaves the map with no NPCs and no spawn draws, for tools that place their own trucks.
+export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = true): World {
   if (map.terrain.size !== REGION.size)
     throw new Error(`Map size ${map.terrain.size} does not match region size ${REGION.size}`);
   const world: World = {
-    seed,
-    rngState: seed,
-    marketRng: marketStream(seed),
-    nameRng: nameStream(seed),
+    ...seedStreams(seed),
     turn: 1,
     size: REGION.size,
     nextId: 0,
@@ -132,7 +134,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap): World {
   world.player.vehicleId = truck.id;
   initializeSalvage(world);
   world.player.storage = kit.storage.map((defId) => makePart(world, defId, 0));
-  spawnInitial(world);
+  if (populate) spawnInitial(world);
   initializeShops(world);
   refreshVision(world);
   world.events = [];

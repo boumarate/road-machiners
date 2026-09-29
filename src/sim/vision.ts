@@ -24,6 +24,13 @@ function blocksSight(o: Obstacle): boolean {
   return BLOCKING.includes(o.kind);
 }
 
+// The sight-blocking props that can touch the line a-b. Every point of the line lies within dist(a, b) of a, so a prop
+// farther than that plus its reach cannot hide anything.
+function propsNear(world: World, a: Vec, b: Vec): Obstacle[] {
+  const d = dist(a, b);
+  return world.obstacles.filter((o) => blocksSight(o) && dist(a, o.pos) < d + propReach(o));
+}
+
 // A dust screen: a circle that blocks sight lines through it.
 type Screen = { pos: Vec; r: number };
 
@@ -76,7 +83,7 @@ export function canVehicleSee(world: World, observer: Vehicle, position: Vec): b
   if (observer.id === world.player.vehicleId) return playerSees(world, position);
   const target = position;
   return dist(observer.pos, target) <= sightRadius(world, observer) &&
-    inPlainView(world, observer.pos, target, world.obstacles.filter(blocksSight), dustScreens(world));
+    inPlainView(world, observer.pos, target, propsNear(world, observer.pos, target), dustScreens(world));
 }
 
 // Dust screen clouds block sight like rocks, for NPCs only. The player's view never counts them.
@@ -91,7 +98,7 @@ function inPlainView(world: World, a: Vec, b: Vec, props: readonly Obstacle[], s
 
 // A straight line past rocks and over hills, with no close radius: a shot needs it even when the target is seen.
 export function hasLineOfFire(world: World, a: Vec, b: Vec): boolean {
-  return hasLineOfSight(a, b, world.obstacles.filter(blocksSight), []) && clearOverTerrain(world.terrain, a, b);
+  return hasLineOfSight(a, b, propsNear(world, a, b), []) && clearOverTerrain(world.terrain, a, b);
 }
 
 // A dust screen blocks sight only if it sits between the viewer and the target.

@@ -65,10 +65,20 @@ export function isMounted(chassisId: string, item: GridItem): boolean {
 function mountLetter(chassisId: string, item: GridItem): Cell | null {
   if (item.kind !== 'part') return null;
   const base = baseGrid(chassisId);
-  const letters = itemCells(item).map((c) => base.cells[c.y]?.[c.x] ?? null);
-  const first = letters[0];
+  const first = letterAt(base, item.x, item.y);
   if (first === null || !MOUNT_CELLS[partDef(item.part.defId).kind].includes(first)) return null;
-  return letters.every((l) => l === first) ? first : null;
+  return coversOnly(base, item, first) ? first : null;
+}
+
+function letterAt(g: Grid, x: number, y: number): Cell | null {
+  return g.cells[y]?.[x] ?? null;
+}
+
+// True when every cell the item covers carries the letter.
+function coversOnly(g: Grid, item: GridItem & { kind: 'part' }, letter: Cell): boolean {
+  const { w, h } = itemSize(item);
+  for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) if (letterAt(g, item.x + dx, item.y + dy) !== letter) return false;
+  return true;
 }
 
 // The side a mounted armor part covers. Null for any other part or an unmounted one.
@@ -79,21 +89,29 @@ export function sideOf(v: Vehicle, part: PartInstance): SideLetter | null {
   return letter !== null && SIDES.includes(letter) ? (letter as SideLetter) : null;
 }
 
+// Grids by chassis and cargo rows. Callers only read them, so one frozen grid serves every vehicle with that shape.
+const gridCache = new Map<string, Grid>();
+
 export function gridOf(v: Vehicle): Grid {
   const base = baseGrid(v.chassisId);
-  const extra = mountedItems(v, 'cargo').reduce((a, it) => a + (partDef(it.part.defId) as { extraRows: number }).extraRows, 0);
-  const rows = Array.from({ length: extra }, () => Array.from({ length: base.w }, () => '.' as Cell));
-  return { w: base.w, h: base.h + extra, chassisH: base.h, cells: [...base.cells, ...rows] };
+  let extra = 0;
+  for (const it of mountedItems(v, 'cargo')) extra += (partDef(it.part.defId) as { extraRows: number }).extraRows;
+  const key = `${v.chassisId}|${extra}`;
+  const cached = gridCache.get(key);
+  if (cached) return cached;
+  const rows = Array.from({ length: extra }, () => Object.freeze(Array.from({ length: base.w }, () => '.' as Cell)));
+  const grid = Object.freeze({ w: base.w, h: base.h + extra, chassisH: base.h, cells: Object.freeze([...base.cells, ...rows]) as (Cell | null)[][] });
+  gridCache.set(key, grid);
+  return grid;
 }
 
 type PartItem = Extract<GridItem, { kind: 'part' }>;
 
 // Mounted parts in reading order, so weapon numbering stays stable.
 export function mountedItems(v: Vehicle, kind?: PartKind): PartItem[] {
-  return v.items
-    .filter((it): it is PartItem => it.kind === 'part' && isMounted(v.chassisId, it))
-    .filter((it) => !kind || partDef(it.part.defId).kind === kind)
-    .sort((a, b) => a.y - b.y || a.x - b.x);
+  const out: PartItem[] = [];
+  for (const it of v.items) if (it.kind === 'part' && (!kind || partDef(it.part.defId).kind === kind) && isMounted(v.chassisId, it)) out.push(it);
+  return out.sort((a, b) => a.y - b.y || a.x - b.x);
 }
 
 export function mountedParts(v: Vehicle, kind?: PartKind): PartInstance[] {
@@ -141,7 +159,7 @@ export function placementError(g: Grid, items: GridItem[], item: GridItem, ignor
   const taken = takenCells(items, ignoreId);
   const cells = itemCells(item);
   if (crossesChassisEnd(g, cells) || !cells.every((c) => onGrid(g, c))) return 'Does not fit there';
-  if (cells.some((c) => taken.has(`${c.x},${c.y}`))) return 'Something is in the way';
+  if (cells.some((c) => taken.has(cellKey(c.x, c.y)))) return 'Something is in the way';
   return null;
 }
 
@@ -172,18 +190,44 @@ export function findSpot(g: Grid, items: GridItem[], item: GridItem, mount: Cell
 export function mountSpots(g: Grid, items: GridItem[], item: GridItem, mount: Cell[]): Spot[] {
   const taken = takenCells(items, item.id);
   const tries = allSpots(g);
-  const free = (s: Spot, letter: Cell) => itemCells({ ...item, ...s }).every((c) => g.cells[c.y]?.[c.x] === letter && !taken.has(`${c.x},${c.y}`));
+  const sizes = [itemSize({ ...item, rot: 0 }), itemSize({ ...item, rot: 1 })];
+  const free = (s: Spot, letter: Cell) => {
+    const { w, h } = sizes[s.rot];
+    for (let dy = 0; dy < h; dy++) {
+      const row = g.cells[s.y + dy];
+      for (let dx = 0; dx < w; dx++) if (row?.[s.x + dx] !== letter || taken.has(cellKey(s.x + dx, s.y + dy))) return false;
+    }
+    return true;
+  };
   return mount.flatMap((letter) => tries.filter((s) => free(s, letter)));
 }
 
-function takenCells(items: GridItem[], ignoreId: string | null): Set<string> {
-  const taken = new Set<string>();
-  for (const it of items) if (it.id !== ignoreId) for (const c of itemCells(it)) taken.add(`${c.x},${c.y}`);
+// A cell's number in a set. Grids are far narrower than the row stride, so keys never collide.
+const KEY_ROW = 1024;
+
+export function cellKey(x: number, y: number): number {
+  return y * KEY_ROW + x;
+}
+
+function takenCells(items: GridItem[], ignoreId: string | null): Set<number> {
+  const taken = new Set<number>();
+  for (const it of items) {
+    if (it.id === ignoreId) continue;
+    const { w, h } = itemSize(it);
+    for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) taken.add(cellKey(it.x + dx, it.y + dy));
+  }
   return taken;
 }
 
-function allSpots(g: Grid): Spot[] {
+// Every spot of a grid shape, by width and height. Spots are shared, so callers must not change them.
+const spotCache = new Map<number, readonly Spot[]>();
+
+function allSpots(g: Grid): readonly Spot[] {
+  const key = cellKey(g.w, g.h);
+  const cached = spotCache.get(key);
+  if (cached) return cached;
   const tries: Spot[] = [];
-  for (const rot of [0, 1] as const) for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) tries.push({ x, y, rot });
+  for (const rot of [0, 1] as const) for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) tries.push(Object.freeze({ x, y, rot }));
+  spotCache.set(key, tries);
   return tries;
 }

@@ -19,7 +19,7 @@ import { spawnAt } from '../sim/spawn';
 import type { Vehicle, World } from '../sim/types';
 import { bearing, dist, type Vec } from '../sim/vec';
 import { refreshVision } from '../sim/vision';
-import { endTurn, newWorld, setAutoFire, setMoveOrder } from '../sim/world';
+import { cloneWorld, endTurn, newWorld, seedStreams, setAutoFire, setMoveOrder } from '../sim/world';
 import { TEST_MAP } from './map';
 
 // stand: brakes and never moves, like a stuck truck. orbit: circles the nearest enemy. charge: drives at the
@@ -60,6 +60,7 @@ export function setNumber(assignment: string): void {
   const owner = keys.slice(1).reduce((obj, key) => subTable(obj, key, path), rootTable(keys[0]));
   if (typeof owner[last] !== 'number') throw new Error(`${path} is not a number`);
   owner[last] = value;
+  BASES.clear(); // a base world holds numbers rolled from the old tables
 }
 
 type Table = Record<string, unknown>;
@@ -76,22 +77,31 @@ function subTable(obj: Table, key: string, path: string): Table {
   return sub as Table;
 }
 
-// Flat road ground with no obstacles and no NPCs, and no spawns later. Frozen terrain is shared by world clones instead of copied.
-function openWorld(fight: Fight): World {
-  const w = newWorld(fight.seed, START_KITS[fight.kit] ?? missing('kit', fight.kit), TEST_MAP);
+// Flat road ground with no obstacles and no NPCs, and no spawns later. The base world is built once per kit and
+// cloned for each fight, so every fight shares one frozen terrain and its cached route grids.
+const BASES = new Map<string, World>();
+
+function baseWorld(kit: string): World {
+  const cached = BASES.get(kit);
+  if (cached) return cached;
+  const w = newWorld(0, START_KITS[kit] ?? missing('kit', kit), TEST_MAP, false);
   const terrain = { size: w.size, heights: new Array((w.size + 1) * (w.size + 1)).fill(0), types: new Array(w.size * w.size).fill('road') };
   Object.freeze(terrain.heights);
   Object.freeze(terrain.types);
   w.terrain = Object.freeze(terrain);
   w.obstacles = [];
-  w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
   w.states = [];
   for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER; // only the fight's trucks drive here
   const me = w.vehicles[0];
   me.pos = { ...CENTER };
   me.heading = 0;
   me.speed = 0;
+  BASES.set(kit, w);
   return w;
+}
+
+function openWorld(fight: Fight): World {
+  return Object.assign(cloneWorld(baseWorld(fight.kit)), seedStreams(fight.seed));
 }
 
 function missing(what: string, id: string): never {

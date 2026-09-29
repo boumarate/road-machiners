@@ -51,16 +51,19 @@ export function markHeightAt(t: Terrain, origin: Vec, x: number, y: number): num
 
 // Ground height at a map point: blend of the four corners of its tile. Outside the map, the nearest edge.
 export function groundAt(t: Terrain, x: number, y: number): number {
-  const cx = clamp(x, 0, t.size);
-  const cy = clamp(y, 0, t.size);
+  const cx = x < 0 ? 0 : x > t.size ? t.size : x;
+  const cy = y < 0 ? 0 : y > t.size ? t.size : y;
   const i = Math.min(Math.floor(cx), t.size - 1);
   const j = Math.min(Math.floor(cy), t.size - 1);
   const fx = cx - i;
   const fy = cy - j;
-  const a = corner(t, i, j);
-  const b = corner(t, i + 1, j);
-  const c = corner(t, i, j + 1);
-  const d = corner(t, i + 1, j + 1);
+  // i and j are inside the map after clamping, so the four corner indices need no further clamp.
+  const row = t.size + 1;
+  const k = j * row + i;
+  const a = t.heights[k];
+  const b = t.heights[k + 1];
+  const c = t.heights[k + row];
+  const d = t.heights[k + row + 1];
   return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
 }
 
