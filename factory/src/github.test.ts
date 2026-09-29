@@ -59,6 +59,22 @@ describe('ghClient', () => {
     expect(mutation).toEqual(expect.arrayContaining(['project=P1', 'item=I7', 'field=F1', 'option=id-Testing']));
   });
 
+  it('finds the open pull request of a branch or null', async () => {
+    const run: Run = async (_cmd, args) => ok(args.includes('factory/issue-7') ? '[{"url":"https://github.com/o/r/pull/3"}]' : '[]');
+    const client = ghClient(run, CFG);
+    expect(await client.pullRequestFor('factory/issue-7')).toBe('https://github.com/o/r/pull/3');
+    expect(await client.pullRequestFor('factory/issue-8')).toBeNull();
+  });
+
+  it('lists pull requests by head and closes one with a comment', async () => {
+    const calls: string[][] = [];
+    const client = ghClient(async (_cmd, args) => { calls.push(args); return ok('[]'); }, CFG);
+    await client.pullRequestFor('b');
+    await client.closePullRequest('b', 'Denied');
+    expect(calls[0]).toEqual(['pr', 'list', '-R', 'o/r', '--head', 'b', '--state', 'open', '--json', 'url']);
+    expect(calls[1]).toEqual(['pr', 'close', 'b', '-R', 'o/r', '--comment', 'Denied']);
+  });
+
   it('names a missing Status option', async () => {
     const client = ghClient(fake([], project(['Design', 'Done'])), CFG);
     await expect(client.cards()).rejects.toThrow('"Implementation"');

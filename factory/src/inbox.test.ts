@@ -18,6 +18,9 @@ function fakeCtx(cards: Card[], sent: string[], calls: string[]): Ctx {
       addCard: async (n: number, column: string) => { calls.push(`addCard ${n} ${column}`); },
       comment: async (n: number, body: string) => { calls.push(`comment ${n} ${body}`); },
       move: async (n: number, column: string) => { calls.push(`move ${n} ${column}`); },
+      pullRequestFor: async () => null,
+      addLabel: async (n: number, label: string) => { calls.push(`addLabel ${n} ${label}`); },
+      close: async (n: number, reason: string) => { calls.push(`close ${n} ${reason}`); },
     },
     telegram: { sendMessage: async (_chat: string, text: string) => { sent.push(text); return 1; } },
   } as unknown as Ctx;
@@ -84,6 +87,27 @@ describe('drainInbox', () => {
     put('1.json', { kind: 'feedback', issue: 4, text: 'too loud' });
     await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], [], calls));
     expect(calls).toEqual([expect.stringContaining('too loud'), 'move 4 Design']);
+  });
+
+  it('denies a card in Approval: closes, labels, moves to Done and clears state', async () => {
+    const sent: string[] = [];
+    const calls: string[] = [];
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), approvalPosts: { 100: 4, 200: 5 }, pendingApprovals: { 4: 'Ann' } });
+    put('1.json', { kind: 'deny', issue: 4 });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], sent, calls));
+    expect(calls).toEqual(['comment 4 Denied by Ann in the committee chat.', 'addLabel 4 wont-do', 'close 4 not planned', 'move 4 Done']);
+    expect(readState(statePath).approvalPosts).toEqual({ 200: 5 });
+    expect(readState(statePath).pendingApprovals).toEqual({});
+    expect(sent[0]).toBe('Issue #4 is denied and closed.');
+  });
+
+  it('answers with an error when a denied card is not in Approval', async () => {
+    const sent: string[] = [];
+    const calls: string[] = [];
+    put('1.json', { kind: 'deny', issue: 4 });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Testing', labels: [] }], sent, calls));
+    expect(calls).toEqual([]);
+    expect(sent[0]).toContain('not in Approval');
   });
 
   it('queues change requests in order', async () => {

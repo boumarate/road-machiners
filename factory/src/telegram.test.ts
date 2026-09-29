@@ -74,6 +74,28 @@ describe('botClient sendPhoto', () => {
     expect(file.size).toBe(3);
   });
 
+  it('sends the buttons as an inline keyboard', async () => {
+    mkdirSync(join(process.cwd(), 'tmp'), { recursive: true });
+    const { fetchFn, calls } = fakeFetch([ok(5)]);
+    await botClient('T', fetchFn).sendPhoto('c', png(), 'cap', [[{ text: 'Yes', data: 'factory:approve:4' }, { text: 'No', data: 'factory:deny:4' }]]);
+    const markup = (calls[0]!.init.body as FormData).get('reply_markup') as string;
+    expect(JSON.parse(markup)).toEqual({ inline_keyboard: [[{ text: 'Yes', callback_data: 'factory:approve:4' }, { text: 'No', callback_data: 'factory:deny:4' }]] });
+  });
+
+  it('sends no reply_markup without buttons', async () => {
+    mkdirSync(join(process.cwd(), 'tmp'), { recursive: true });
+    const { fetchFn, calls } = fakeFetch([ok(5)]);
+    await botClient('T', fetchFn).sendPhoto('c', png(), 'cap');
+    expect((calls[0]!.init.body as FormData).has('reply_markup')).toBe(false);
+  });
+
+  it('throws when callback data is over 64 bytes', async () => {
+    mkdirSync(join(process.cwd(), 'tmp'), { recursive: true });
+    const { fetchFn, calls } = fakeFetch([ok(1)]);
+    await expect(botClient('T', fetchFn).sendPhoto('c', png(), 'cap', [[{ text: 'x', data: 'd'.repeat(65) }]])).rejects.toThrow('64');
+    expect(calls).toHaveLength(0);
+  });
+
   it('throws when the caption is over 1024 chars', async () => {
     mkdirSync(join(process.cwd(), 'tmp'), { recursive: true });
     const { fetchFn, calls } = fakeFetch([ok(1)]);

@@ -102,14 +102,25 @@ const TRIM_MARK = '…';
 async function post(ctx: Ctx, issue: number, approval: Approval, screenshot: string, url: string): Promise<void> {
   const item = await ctx.github.issue(issue);
   const link = `https://github.com/${ctx.cfg.repo}/issues/${issue}`;
+  const pr = await pullRequestUrl(ctx, issue, item.title, approval);
   await ctx.github.comment(issue, `Ready for approval: ${url}\n\n${approval.description}\n\nHow to try: ${approval.howToTry}`);
-  const photoId = await ctx.telegram.sendPhoto(ctx.cfg.committeeChat, screenshot, approvalCaption(`#${issue} ${item.title}`, url, link, approval));
+  const caption = approvalCaption(`#${issue} ${item.title}`, url, link, pr, approval);
+  const buttons = [[{ text: 'Approve', data: `factory:approve:${issue}` }, { text: 'Deny', data: `factory:deny:${issue}` }]];
+  const photoId = await ctx.telegram.sendPhoto(ctx.cfg.committeeChat, screenshot, caption, buttons);
   updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: { ...state.approvalPosts, [photoId]: issue } }));
 }
 
-export function approvalCaption(title: string, url: string, link: string, approval: Approval): string {
-  const head = `${title}\n\nPlay: ${url}\nIssue: ${link}`;
-  const tail = 'Reply approve to merge into dev. Any other reply sends feedback to design.';
+// A feedback round reuses the pull request of the first round.
+async function pullRequestUrl(ctx: Ctx, issue: number, title: string, approval: Approval): Promise<string> {
+  const open = await ctx.github.pullRequestFor(BRANCH(issue));
+  if (open !== null) return open;
+  const body = `Closes #${issue}.\n\n${approval.description}\n\nHow to try: ${approval.howToTry}\n\nThe factory merges it when the committee approves.`;
+  return ctx.github.openPullRequest(BRANCH(issue), BASE_BRANCH, `#${issue} ${title}`, body);
+}
+
+export function approvalCaption(title: string, url: string, link: string, pr: string, approval: Approval): string {
+  const head = `${title}\n\nPlay: ${url}\nIssue: ${link}\nPR: ${pr}`;
+  const tail = 'Approve merges into dev. Deny closes the issue. A reply to this post sends feedback to design.';
   const room = CAPTION_LIMIT - head.length - tail.length - '\n\n'.repeat(3).length - 'How to try: '.length;
   const [description, howToTry] = fitBoth(approval.description, approval.howToTry, room);
   return [head, description, `How to try: ${howToTry}`, tail].join('\n\n');

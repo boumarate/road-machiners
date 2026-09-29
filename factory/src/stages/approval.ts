@@ -1,7 +1,7 @@
 import { rmSync } from 'node:fs';
 import { deployDev } from '../deploy';
 import { updateState } from '../state';
-import { BRANCH, FEEDBACK_HEADING, type Ctx } from '../types';
+import { BRANCH, FEEDBACK_HEADING, WONT_DO_LABEL, type Ctx } from '../types';
 import { BASE_BRANCH, agentLog, workDir } from './common';
 
 async function requireApproval(ctx: Ctx, issue: number): Promise<void> {
@@ -24,6 +24,7 @@ export async function approve(ctx: Ctx, issue: number, by: string): Promise<void
   const item = await ctx.github.issue(issue);
   await ctx.repo.merge(BRANCH(issue), BASE_BRANCH, `Merge issue #${issue}: ${item.title}`);
   await ctx.repo.push(BASE_BRANCH);
+  // The pushed dev holds the branch head, so GitHub marks the pull request merged by itself.
   await deployDev(ctx, agentLog(ctx, issue, 'approve'));
   await ctx.github.comment(issue, `Approved by ${by} in the committee chat and merged into dev.`);
   await ctx.github.close(issue, 'completed');
@@ -39,4 +40,15 @@ export async function feedback(ctx: Ctx, issue: number, by: string, text: string
   await ctx.github.comment(issue, `${FEEDBACK_HEADING}\n\nFrom ${by}:\n\n${text}`);
   await ctx.github.move(issue, 'Design');
   forgetPosts(ctx, issue, false);
+}
+
+export async function deny(ctx: Ctx, issue: number, by: string): Promise<void> {
+  await requireApproval(ctx, issue);
+  const comment = `Denied by ${by} in the committee chat.`;
+  await ctx.github.comment(issue, comment);
+  if ((await ctx.github.pullRequestFor(BRANCH(issue))) !== null) await ctx.github.closePullRequest(BRANCH(issue), comment);
+  await ctx.github.addLabel(issue, WONT_DO_LABEL);
+  await ctx.github.close(issue, 'not planned');
+  await ctx.github.move(issue, 'Done');
+  forgetPosts(ctx, issue, true);
 }

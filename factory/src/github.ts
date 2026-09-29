@@ -174,6 +174,14 @@ export function ghClient(run: Run, cfg: FactoryConfig): GitHub {
       const out = await gh(['pr', 'create', '-R', repo, '--head', branch, '--base', base, '--title', title, '--body', body]);
       return out.trim();
     },
+    async pullRequestFor(branch) {
+      const out = await gh(['pr', 'list', '-R', repo, '--head', branch, '--state', 'open', '--json', 'url']);
+      const found = JSON.parse(out) as { url: string }[];
+      return found[0]?.url ?? null;
+    },
+    async closePullRequest(branch, comment) {
+      await gh(['pr', 'close', branch, '-R', repo, '--comment', comment]);
+    },
   };
 }
 

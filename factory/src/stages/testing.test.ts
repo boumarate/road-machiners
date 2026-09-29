@@ -9,11 +9,14 @@ const { runStage, approvalCaption } = await import('./testing');
 let home = '';
 let calls: string[] = [];
 let shellScript = '';
+let photoButtons: unknown;
+let openPr: string | null = null;
 
 beforeEach(() => {
   mkdirSync('tmp', { recursive: true });
   home = mkdtempSync('tmp/factory-testing-');
   calls = [];
+  openPr = null;
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
@@ -26,9 +29,11 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
       issue: async () => ({ number: 7, title: 'Big horn', body: '', labels: [], createdAt: '', state: 'OPEN', thumbsUp: [] }),
       move: async (issue: number, column: string) => { calls.push(`move ${issue} ${column}`); },
       comment: async (issue: number) => { calls.push(`comment ${issue}`); },
+      pullRequestFor: async (branch: string) => { calls.push(`pullRequestFor ${branch}`); return openPr; },
+      openPullRequest: async (branch: string, base: string, title: string, body: string) => { calls.push(`openPullRequest ${branch} ${base} ${title} | ${body}`); return 'https://github.com/o/r/pull/50'; },
     },
     telegram: {
-      sendPhoto: async (chat: string, path: string, caption: string) => { calls.push(`photo ${chat} ${path} ${caption}`); return 100; },
+      sendPhoto: async (chat: string, path: string, caption: string, buttons?: unknown) => { calls.push(`photo ${chat} ${path} ${caption}`); photoButtons = buttons; return 100; },
       sendMessage: async (chat: string, text: string, replyTo?: number) => { calls.push(`message ${replyTo} ${text}`); return 101; },
     },
     container: {
@@ -56,6 +61,24 @@ function writeOutputs(run: AgentRun, approval: string | null): void {
 }
 
 describe('testing stage', () => {
+  it('opens a pull request against dev when none is open', async () => {
+    const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'A loud horn.', howToTry: 'Press H.' })));
+    await runStage(ctx, 7);
+    const opened = calls.find((call) => call.startsWith('openPullRequest')) ?? '';
+    expect(opened).toContain('openPullRequest factory/issue-7 dev #7 Big horn | Closes #7.');
+    expect(opened).toContain('A loud horn.');
+    expect(opened).toContain('How to try: Press H.');
+    expect(opened).toContain('The factory merges it when the committee approves.');
+  });
+
+  it('reuses the open pull request of the branch', async () => {
+    openPr = 'https://github.com/o/r/pull/12';
+    const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
+    await runStage(ctx, 7);
+    expect(calls.some((call) => call.startsWith('openPullRequest'))).toBe(false);
+    expect(calls.find((call) => call.startsWith('photo'))).toContain('PR: https://github.com/o/r/pull/12');
+  });
+
   it('posts one photo with everything in the caption, records it and moves to Approval', async () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'A loud horn.', howToTry: 'Press H.' })));
     await runStage(ctx, 7);
@@ -64,6 +87,8 @@ describe('testing stage', () => {
     const photo = calls.find((call) => call.startsWith('photo')) ?? '';
     expect(photo).toContain('#7 Big horn\n\nPlay: https://play.test/abc123/');
     expect(photo).toContain('How to try: Press H.');
+    expect(photo).toContain('Issue: https://github.com/o/r/issues/7\nPR: https://github.com/o/r/pull/50');
+    expect(photoButtons).toEqual([[{ text: 'Approve', data: 'factory:approve:7' }, { text: 'Deny', data: 'factory:deny:7' }]]);
     expect(calls.some((call) => call.startsWith('message'))).toBe(false);
     expect(calls).toContain('comment 7');
     expect(readState(`${home}/state.json`).approvalPosts).toEqual({ 100: 7 });
@@ -71,10 +96,10 @@ describe('testing stage', () => {
   });
 
   it('fits long notes into the caption limit', () => {
-    const caption = approvalCaption('#7 Big horn', 'https://play.test/x/', 'https://github.com/o/r/issues/7', { description: 'd'.repeat(900), howToTry: 'h'.repeat(900) });
+    const caption = approvalCaption('#7 Big horn', 'https://play.test/x/', 'https://github.com/o/r/issues/7', 'https://github.com/o/r/pull/50', { description: 'd'.repeat(900), howToTry: 'h'.repeat(900) });
     expect(caption.length).toBeLessThanOrEqual(1024);
     expect(caption).toContain('…');
-    expect(caption).toContain('Reply approve');
+    expect(caption).toContain('Deny closes the issue');
   });
 
   it('throws when approval.json lacks howToTry', async () => {

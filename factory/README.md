@@ -10,7 +10,7 @@ The design and its reasons are in [the factory task](../docs/tasks/game-factory.
 2. Design runs Opus with the up design and plan skills. It writes `docs/tasks/issue-N.md` on branch `factory/issue-N`, or refuses the issue as "won't do".
 3. Implementation runs Sonnet with the up execute skill.
 4. Testing runs Sonnet with the up verify and review skills. Then the factory runs the tests and the CPU playtest itself, builds the branch and copies it to `/<hash>/`.
-5. The committee chat gets a screenshot, the play link and how to try it. A reply "approve" merges the branch into `dev`, which redeploys to `/dev/`. Any other reply sends the task back to design.
+5. Testing opens a pull request against `dev`, or reuses the open one. The committee chat gets a screenshot, the play link, the pull request link and how to try it. The post has Approve and Deny buttons. Approve merges the branch into `dev`, which redeploys to `/dev/`. Deny labels the issue `wont-do` and closes it and the pull request as not planned. A reply to the post sends the task back to design with the reply as feedback.
 6. Every `FACTORY_RELEASE_DAYS`, `dev` merges into `main` and ships to itch.io with `npm run itch`. The public channel gets the changelog.
 7. Every `FACTORY_MAINTENANCE_HOURS`, Sonnet picks one slow spot, quality issue or stale doc and opens a task for it.
 8. A committee message starting with `/change` asks for a change to the factory itself. The factory opens a pull request against `dev` that touches only `factory/`. It never merges it.

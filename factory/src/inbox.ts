@@ -1,7 +1,7 @@
 import { mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { readCommittee, telegramIds } from './committee';
-import { feedback } from './stages/approval';
+import { deny, feedback } from './stages/approval';
 import { updateState } from './state';
 import { ADHOC_LABEL, type Ctx } from './types';
 
@@ -9,7 +9,7 @@ const TITLE_LIMIT = 80;
 
 // One committee command, written by the Hermes plugin into $FACTORY_HOME/inbox.
 export type InboxCommand = {
-  kind: 'approve' | 'feedback' | 'change' | 'adhoc';
+  kind: 'approve' | 'deny' | 'feedback' | 'change' | 'adhoc';
   issue: number | null;
   text: string | null;
   by: string; // Telegram user id
@@ -24,7 +24,7 @@ export function inboxDir(home: string): string {
 
 export function parseCommand(raw: string): InboxCommand {
   const data = JSON.parse(raw) as Partial<InboxCommand>;
-  if (!['approve', 'feedback', 'change', 'adhoc'].includes(String(data.kind))) throw new Error(`Unknown inbox command kind ${data.kind}`);
+  if (!['approve', 'deny', 'feedback', 'change', 'adhoc'].includes(String(data.kind))) throw new Error(`Unknown inbox command kind ${data.kind}`);
   if (typeof data.by !== 'string' || typeof data.chat !== 'string' || typeof data.messageId !== 'number') throw new Error('Inbox command lacks by, chat or messageId');
   return data as InboxCommand;
 }
@@ -58,10 +58,17 @@ async function handle(ctx: Ctx, command: InboxCommand): Promise<string> {
   const by = command.byName ?? command.by;
   if (command.kind === 'adhoc') return queueAdhoc(ctx, command, by);
   if (command.kind === 'change') return queueChange(ctx, requireText(command), by);
-  const issue = requireIssue(command);
+  return handleIssueCommand(ctx, command, requireIssue(command), by);
+}
+
+async function handleIssueCommand(ctx: Ctx, command: InboxCommand, issue: number, by: string): Promise<string> {
   if (command.kind === 'feedback') {
     await feedback(ctx, issue, by, requireText(command));
     return `Feedback on #${issue} is on the issue. The task goes back to design.`;
+  }
+  if (command.kind === 'deny') {
+    await deny(ctx, issue, by);
+    return `Issue #${issue} is denied and closed.`;
   }
   return queueApproval(ctx, issue, by);
 }

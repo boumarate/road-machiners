@@ -78,11 +78,16 @@ export interface GitHub {
   addCard(issue: number, column: Column): Promise<void>;
   move(issue: number, column: Column): Promise<void>;
   openPullRequest(branch: string, base: string, title: string, body: string): Promise<string>;
+  pullRequestFor(branch: string): Promise<string | null>; // URL of the open pull request with that head branch
+  closePullRequest(branch: string, comment: string): Promise<void>;
 }
+
+// One inline keyboard button. `data` comes back as the callback data of a press.
+export type InlineButton = { text: string; data: string };
 
 export interface Telegram {
   sendMessage(chat: string, text: string, replyTo?: number): Promise<number>;
-  sendPhoto(chat: string, pngPath: string, caption: string): Promise<number>;
+  sendPhoto(chat: string, pngPath: string, caption: string, buttons?: InlineButton[][]): Promise<number>;
 }
 
 export type AgentRun = { clone: string; model: string; prompt: string; log: string };
