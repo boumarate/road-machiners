@@ -296,24 +296,23 @@ describe('vehicle cheats', () => {
     expect(v.brain!.attackers).toEqual({ [w.player.vehicleId]: false });
   });
 
-  it('starts a battle with one hostile raider near the truck', () => {
+  it('starts a battle with one hostile NPC near the truck', () => {
     const w = emptyWorld();
     const next = startBattle(w);
     const added = next.vehicles.filter((v) => !w.vehicles.some((x) => x.id === v.id));
     expect(added).toHaveLength(1);
-    expect(added[0].faction).toBe('raiders');
     expect(hostileToPlayer(next, added[0])).toBe(true);
     expect(dist(added[0].pos, playerVehicle(next).pos)).toBeLessThan(CHEATS.spawnDistance * 2);
   });
 
-  it('picks raider templates with the world RNG', () => {
-    const picks = new Set<string>();
+  it('picks templates of every kind with the world RNG', () => {
+    const factions = new Set<string>();
     let w = emptyWorld();
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 24; i++) {
       w = startBattle(w);
-      picks.add(w.vehicles[w.vehicles.length - 1].brain!.templateId);
+      factions.add(w.vehicles[w.vehicles.length - 1].faction);
     }
-    expect(picks.size).toBeGreaterThan(1);
+    expect(factions.size).toBeGreaterThan(2);
   });
 
   it('rejects an unknown template', () => {

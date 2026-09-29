@@ -258,11 +258,10 @@ export function spawnNear(world: World, templateId: string, hostile: boolean): W
   return update(world, (w) => spawnInDraft(w, tpl, hostile));
 }
 
-// Spawns a hostile NPC of a raiders template, picked with the world RNG.
+// Spawns a hostile NPC of any template, picked with the world RNG.
 export function startBattle(world: World): World {
-  const raiders = Object.values(NPCS).filter((t) => t.faction === 'raiders');
-  if (raiders.length === 0) throw new Error('NPCS has no raiders template');
-  return update(world, (w) => spawnInDraft(w, raiders[randInt(w, 0, raiders.length - 1)], true));
+  const templates = Object.values(NPCS);
+  return update(world, (w) => spawnInDraft(w, templates[randInt(w, 0, templates.length - 1)], true));
 }
 
 // Every NPC template paired with each player chassis its loadout table can roll, or only `templateId`'s pairs.
