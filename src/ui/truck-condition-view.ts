@@ -48,8 +48,8 @@ export class TruckConditionView {
       node = el(
         "div",
         { class: "condition-part", "data-part-id": part.id },
+        el("span", { class: "condition-fill" }),
         createIcon(part.icon),
-        el("span", { class: "condition-percent" }),
       );
       this.nodes.set(part.id, node);
       this.body.append(node);
@@ -60,22 +60,21 @@ export class TruckConditionView {
     node.title = conditionLabel(part);
     node.setAttribute("aria-label", node.title);
     node.style.cssText = `left:${part.x * 30}px;top:${part.y * 30}px;width:${part.w * 30}px;height:${part.h * 30}px`;
-    const label = node.querySelector(".condition-percent");
-    if (!label) throw new Error("Condition percentage missing");
-    label.textContent = `${part.percent}%`;
+    fillOf(node).style.height = `${part.percent}%`;
     if (part.hit) this.flashDamage(node);
   }
 
   private flashDamage(node: HTMLElement): void {
-    for (const animation of node.getAnimations()) animation.cancel();
-    node.animate(
-      [
-        { background: "#fa3934", borderColor: "#ffd1bd", offset: 0 },
-        { background: "#fa3934", borderColor: "#ffd1bd", offset: 0.65 },
-        { background: "#613b35", borderColor: "#de8e7d", offset: 1 },
-      ],
-      { duration: 300, iterations: 2 },
-    );
+    for (const target of [node, fillOf(node)]) {
+      for (const animation of target.getAnimations()) animation.cancel();
+      target.animate(
+        [
+          { background: "#fa3934", borderColor: "#ffd1bd", offset: 0 },
+          { background: "#fa3934", borderColor: "#ffd1bd", offset: 0.65 },
+        ],
+        { duration: 300, iterations: 2 },
+      );
+    }
   }
 }
 
@@ -87,4 +86,10 @@ function markAim(node: HTMLElement, partId: string, aim?: ConditionAim): void {
   node.querySelector(".condition-aim")?.remove();
   const guns = aim?.marks.get(partId);
   if (guns) node.append(el("span", { class: "condition-aim", title: `Aimed by gun ${guns.join(", ")}` }, guns.join(" ")));
+}
+
+function fillOf(node: HTMLElement): HTMLElement {
+  const fill = node.querySelector<HTMLElement>(".condition-fill");
+  if (!fill) throw new Error("Condition fill missing");
+  return fill;
 }

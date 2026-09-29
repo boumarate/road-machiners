@@ -100,3 +100,13 @@ describe("armor on the condition panel", () => {
     expect(plated.length).toBeLessThan(bare.length);
   });
 });
+
+describe("condition fill", () => {
+  it("gives a tile the share of its HP as its fill percent", () => {
+    const vehicle = emptyWorld().vehicles[0];
+    const engine = mountedParts(vehicle, "engine")[0];
+    engine.hp = engine.hp * 0.95;
+    const tile = new TruckConditionReadout().update(vehicle).find((part) => part.id === engine.id);
+    expect(tile).toMatchObject({ percent: 95, state: "damaged" });
+  });
+});
