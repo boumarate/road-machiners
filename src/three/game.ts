@@ -58,7 +58,7 @@ import { RenderScope, SightLimit } from "./render/scope";
 import { addSites } from "./render/sites";
 import { terrainMesh } from "./render/terrain";
 import { VehicleView, viewOf } from "./render/vehicle";
-import { WeaponRangeView } from "./render/weaponRange";
+import { HoverArcsView, WeaponRangeView } from "./render/weaponRange";
 import { WeatherView } from "./render/weather";
 import { ZonesView } from "./render/zones";
 import { REGION } from "../data/region";
@@ -138,6 +138,7 @@ export class Game {
   private readonly travel = new Travel(CONFIG.travelHoldMs);
   private phase: TurnPhase = null;
   private readonly weaponRange = new WeaponRangeView();
+  private readonly hoverArcs: HoverArcsView;
   private readonly markers: VehicleMarkers;
   private readonly overlay: HTMLElement;
   private live: LiveVision | null = null; // the player's view while a turn plays
@@ -213,6 +214,7 @@ export class Game {
     this.path = new PathView(this.world.terrain);
     this.shade = new ShadeView(this.world, groundChunks);
     this.weather = new WeatherView(this.world);
+    this.hoverArcs = new HoverArcsView(overlay, this.rig);
     this.scene.add(
       this.ground,
       this.props,
@@ -221,6 +223,7 @@ export class Game {
       this.zones.root,
       this.path.root,
       this.weaponRange.root,
+      this.hoverArcs.root,
       this.contacts.root,
       this.dust.root,
       this.soundRing.root,
@@ -1092,16 +1095,11 @@ export class Game {
     this.zones.root.visible = steer;
     this.path.show(steer, this.displayWorld(), this.modalOpen());
     this.weaponRange.root.visible = false;
+    this.hoverArcs.follow(this.displayWorld(), this.hovered, this.frames, this.modalOpen());
     this.markers.place(this.frames, hide, this.modalOpen());
     this.placeHitCard();
     this.placePickRing(hide);
-    this.contacts.update(
-      this.world.terrain,
-      this.world.player.contacts,
-      playerVehicle(this.world).pos,
-      this.world.turn,
-      performance.now(),
-    );
+    this.contacts.update(this.world.terrain, this.world.player.contacts, playerVehicle(this.world).pos, this.world.turn, performance.now());
     this.dust.update(this.world, this.world.terrain, performance.now());
     const meFrame = this.frames[playerVehicle(this.world).id];
     this.soundRing.update(
