@@ -47,6 +47,43 @@ def test_change_request():
 
 
 
+REL = plugin.Release(issue=40, post_id=90)
+
+
+def rroute(text, reply="90"):
+    return plugin.route(text, reply, "-100", POSTS, CFG, REL)
+
+
+def test_release_ship_reply():
+    assert rroute("ship") == ("ship", 40)
+    assert rroute("  SHIP \n") == ("ship", 40)
+
+
+def test_release_remove_reply():
+    assert rroute("remove #7") == ("remove", 7, "remove #7")
+    assert rroute("Remove 12") == ("remove", 12, "Remove 12")
+
+
+def test_release_other_reply_opens_task():
+    assert rroute("add rain") == ("release-task", "add rain")
+    assert rroute("remove the fog") == ("release-task", "remove the fog")
+    assert rroute("ship it") == ("release-task", "ship it")
+
+
+def test_release_reply_to_old_or_null_post_is_normal_chat():
+    assert rroute("ship", "91") is None
+    assert plugin.route("ship", "90", "-100", POSTS, CFG, plugin.Release(40, None)) is None
+    assert plugin.route("ship", "90", "-100", POSTS, CFG, None) is None
+
+
+def test_approval_reply_still_works_with_release():
+    assert plugin.route("approve", "55", "-100", POSTS, CFG, REL) == ("approve", 12)
+
+
+def test_release_reply_in_other_chat_is_normal_chat():
+    assert plugin.route("ship", "90", "-200", POSTS, CFG, REL) is None
+
+
 def test_other_chat_is_normal_chat():
     assert route("approve", "55", chat="-200") is None
     assert route("/change x", chat="-200") is None
@@ -65,6 +102,18 @@ def test_inbox_command_shapes():
     }
     assert plugin.inbox_command(("change", "z"), 1, "", -100, 79) == {
         "kind": "change", "issue": None, "text": "z", "by": "1", "byName": None, "chat": "-100", "messageId": 79,
+    }
+
+
+def test_inbox_command_release_shapes():
+    assert plugin.inbox_command(("ship", 40), 1, "Ann", -100, 80) == {
+        "kind": "ship", "issue": 40, "text": None, "by": "1", "byName": "Ann", "chat": "-100", "messageId": 80,
+    }
+    assert plugin.inbox_command(("remove", 7, "remove #7"), 1, "Ann", -100, 81) == {
+        "kind": "remove", "issue": 7, "text": "remove #7", "by": "1", "byName": "Ann", "chat": "-100", "messageId": 81,
+    }
+    assert plugin.inbox_command(("release-task", "add rain"), 1, "Ann", -100, 82) == {
+        "kind": "release-task", "issue": None, "text": "add rain", "by": "1", "byName": "Ann", "chat": "-100", "messageId": 82,
     }
 
 
@@ -128,6 +177,26 @@ def test_read_approval_posts(tmp_path):
     assert plugin.read_approval_posts(str(tmp_path)) == {"7": 3}
 
 
+def test_read_state_release(tmp_path):
+    assert plugin.read_state(str(tmp_path)) == ({}, None)
+    state = tmp_path / "state.json"
+    state.write_text('{"approvalPosts": {}}')
+    assert plugin.read_state(str(tmp_path)) == ({}, None)
+    state.write_text('{"approvalPosts": {}, "release": null}')
+    assert plugin.read_state(str(tmp_path)) == ({}, None)
+    state.write_text('{"approvalPosts": {"7": 3}, "release": {"issue": 40, "branch": "release/x", "day": "x", "postId": 90, "removed": []}}')
+    assert plugin.read_state(str(tmp_path)) == ({"7": 3}, plugin.Release(40, 90))
+    state.write_text('{"approvalPosts": {}, "release": {"issue": 40, "postId": null}}')
+    assert plugin.read_state(str(tmp_path))[1] == plugin.Release(40, None)
+
+
+@pytest.mark.parametrize("release", ['"x"', '{}', '{"issue": "4"}', '{"issue": 4, "postId": "9"}', '{"issue": true, "postId": 1}', '[]'])
+def test_read_state_malformed_release_raises(tmp_path, release):
+    (tmp_path / "state.json").write_text('{"approvalPosts": {}, "release": %s}' % release)
+    with pytest.raises(ValueError, match="release"):
+        plugin.read_state(str(tmp_path))
+
+
 class Adapter:
     def __init__(self):
         self.sent = []
@@ -149,6 +218,23 @@ def dispatch(tmp_path, user, text="/change x", chat="-100", monkeypatch=None):
     event = types.SimpleNamespace(text=text, reply_to_message_id=None, source=source, message_id="5")
     result = asyncio.run(plugin.make_hook(cfg)(event, gateway, None))
     return result, adapter, tmp_path / "inbox"
+
+
+def test_hook_routes_release_reply(tmp_path):
+    (tmp_path / "state").mkdir()
+    (tmp_path / "state" / "state.json").write_text('{"approvalPosts": {}, "release": {"issue": 40, "branch": "b", "day": "d", "postId": 90, "removed": []}}')
+    (tmp_path / "inbox").mkdir()
+    committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
+    committee.seed()
+    cfg = plugin.Config(str(tmp_path / "inbox"), str(tmp_path / "state"), "-100", committee)
+    adapter = Adapter()
+    gateway = types.SimpleNamespace(adapters={"telegram": adapter})
+    source = types.SimpleNamespace(user_id="1", user_name="Ann", chat_id="-100", platform="telegram")
+    event = types.SimpleNamespace(text="ship", reply_to_message_id="90", source=source, message_id="5")
+    result = asyncio.run(plugin.make_hook(cfg)(event, gateway, None))
+    assert result == {"action": "skip", "reason": "factory-ship"}
+    (file,) = (tmp_path / "inbox").iterdir()
+    assert json.loads(file.read_text())["issue"] == 40
 
 
 def test_hook_queues_and_replies(tmp_path):
