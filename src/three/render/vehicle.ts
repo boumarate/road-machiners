@@ -347,7 +347,7 @@ export class VehicleView {
     return obj;
   }
 
-  // A weapon standing below the model's tallest point gets a riser post up to it, so its turret clears the cab when it turns.
+  // A weapon standing below the highest point ahead of it in its lane gets a riser post up to it, so its turret clears the cab.
   // Returns where the weapon mount stands.
   private riser(v: Vehicle, item: PartItem, paint: number, into: THREE.Group): Placement {
     const { at, bottom, top } = weaponStand(v, item);
@@ -552,24 +552,19 @@ function bumperlessCells(v: Vehicle, items: GridItem[]): Set<string> {
   return cells;
 }
 
-// Where a weapon stands. The post starts on the model's surface under the gun and rises to the tallest point of the
-// model, so the turret clears every part when it turns. The post and the mount share x and z, at the center of the footprint.
+// Where a weapon stands. The post starts on the model's surface under the gun and rises to the highest point ahead of it
+// in its own lane, so the turret clears the cab in front but not a stack or a tire off to the side. The post and the
+// mount share x and z, at the center of the footprint.
 export function weaponStand(v: Pick<Vehicle, 'chassisId'>, item: GridItem): { at: Placement; bottom: number; top: number } {
   const bottom = standingY(v, item);
-  return { at: footprint(v, item, bottom), bottom, top: Math.max(bottom, tallestPoint(v.chassisId)) };
+  return { at: footprint(v, item, bottom), bottom, top: Math.max(bottom, highestAhead(v.chassisId, rectOf(v, item))) };
 }
 
-const tallest = new Map<string, number>();
-
-// The highest model surface over the whole truck, in body meters.
-function tallestPoint(chassisId: string): number {
-  const known = tallest.get(chassisId);
-  if (known !== undefined) return known;
-  const { cells } = baseGrid(chassisId);
-  const all = cells.flatMap((row, y) => row.flatMap((cell, x) => (cell === null ? [] : [{ x, y }])));
-  const top = surfaceAt(chassisId, cellRect(chassisId, all));
-  tallest.set(chassisId, top);
-  return top;
+// The highest model surface between the front of a rect and the nose, over the rect's width, in body meters.
+function highestAhead(chassisId: string, rect: CellRect): number {
+  const nose = bodyOf(chassisId).half.x;
+  if (rect.x1 >= nose) return -Infinity;
+  return surfaceAt(chassisId, { ...rect, x0: rect.x1, x1: nose });
 }
 
 function rectOf(v: Pick<Vehicle, 'chassisId'>, item: GridItem): CellRect {
