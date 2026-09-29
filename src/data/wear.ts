@@ -53,9 +53,9 @@ export const ENGINE_HEAT = {
   coolParked: 0.15, // heat lost per turn while parked, divided by the sun heat at the spot
   warnAt: 0.75, // heat at which the log warns once and the gauge turns red
   overheatDamage: 2, // HP each working engine loses per turn driven while overheated
-  // Extra heat per turn driven in overdrive, in any sun. Overheats a cold stock engine in about 28 turns at night
-  // and 10 in full noon sun.
-  overdriveGain: 0.06,
+  // Extra heat per turn driven in overdrive, in any sun. Overheats a cold stock engine at top speed in about 16
+  // turns at night and 8 in full noon sun.
+  overdriveGain: 0.09,
   douseSupplies: 1, // supplies poured over the engine to cool it at once
   douseCool: 0.5, // heat one douse takes away
 };
