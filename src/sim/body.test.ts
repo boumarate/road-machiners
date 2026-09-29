@@ -220,8 +220,8 @@ describe('resting parts', () => {
   type Map = { cell: number; i0: number; j0: number; top: (number | null)[][] };
   const TOLERANCE = 0.05;
   const SIZES = [[1, 1], [1, 2], [2, 1], [2, 2], [1, 3], [3, 1], [2, 3], [3, 2]];
-  // Tops in meters of the height samples fully inside a rect.
-  const topsIn = (map: Map, r: { x0: number; x1: number; z0: number; z1: number }) => {
+  // The height samples fully inside a rect: body x and z of each sample center, and its top in meters.
+  const samplesIn = (map: Map, r: { x0: number; x1: number; z0: number; z1: number }) => {
     const range = (lo: number, hi: number) => {
       const first = Math.ceil((lo - 1e-6) / map.cell);
       const last = Math.floor((hi + 1e-6) / map.cell) - 1;
@@ -229,13 +229,15 @@ describe('resting parts', () => {
     };
     return range(r.x0, r.x1).flatMap((i) => range(-r.z1, -r.z0).flatMap((j) => {
       const top = map.top[i - map.i0]?.[j - map.j0];
-      return typeof top === 'number' ? [top / 100] : [];
+      return typeof top === 'number' ? [{ x: (i + 0.5) * map.cell, z: -(j + 0.5) * map.cell, top: top / 100 }] : [];
     }));
   };
 
-  it('never cuts into the model and stands on at least half its footprint, on every chassis, cell and size', () => {
+  it('never cuts into the model and stands on at least half its footprint, flat or leaning, on every chassis, cell and size', () => {
     const problems: string[] = [];
     let perched = 0;
+    let leaning = 0;
+    const floats: number[] = [];
     let total = 0;
     for (const id of Object.keys(CHASSIS)) {
       const map = (TRUCK_SHAPES as Record<string, { heights: Map }>)[`base_${id}`].heights;
@@ -246,16 +248,25 @@ describe('resting parts', () => {
             const cells = Array.from({ length: sw * sh }, (_, k) => ({ x: x + (k % sw), y: y + Math.floor(k / sw) }));
             const rest = restOn(id, cellRect(id, cells));
             total++;
-            if (rest.perched) { perched++; continue; }
-            const tops = topsIn(map, rest.rect);
+            if (rest.perched) {
+              perched++;
+              const px = (rest.rect.x0 + rest.rect.x1) / 2;
+              const pz = (rest.rect.z0 + rest.rect.z1) / 2;
+              floats.push(Math.max(...samplesIn(map, rest.rect).map((sm) => rest.y + rest.slope.x * (sm.x - px) + rest.slope.z * (sm.z - pz) - sm.top)));
+              continue;
+            }
+            const cx = (rest.rect.x0 + rest.rect.x1) / 2;
+            const cz = (rest.rect.z0 + rest.rect.z1) / 2;
+            const gaps = samplesIn(map, rest.rect).map((sm) => rest.y + rest.slope.x * (sm.x - cx) + rest.slope.z * (sm.z - cz) - sm.top);
             const label = `${id} ${sw}x${sh} at ${x},${y}`;
-            if (tops.some((t) => t > rest.y + TOLERANCE)) problems.push(`${label} cuts into the model`);
-            if (tops.filter((t) => t >= rest.y - TOLERANCE).length * 2 < tops.length) problems.push(`${label} floats over most of its footprint`);
+            if (gaps.some((g) => g < -TOLERANCE - 1e-9)) problems.push(`${label} cuts into the model`);
+            if (gaps.filter((g) => g <= TOLERANCE + 1e-9).length * 2 < gaps.length) problems.push(`${label} floats over most of its footprint`);
+            if (rest.slope.x !== 0 || rest.slope.z !== 0) leaning++;
           }
         }
       }
     }
-    console.log(`resting parts: ${perched} of ${total} footprints perch on a taller surface`);
+        console.log(`resting parts: ${leaning} of ${total} footprints lean on a slope, ${perched} perch on a taller surface, floating ${[0.1, 0.2, 0.4].map((lim) => `${floats.filter((f) => f > lim).length} more than ${lim} m`).join(', ')}`);
     expect(problems).toEqual([]);
   });
 });

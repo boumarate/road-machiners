@@ -311,6 +311,7 @@ export class VehicleView {
   private placeItem(v: Vehicle, item: GridItem, paint: number, y: number): THREE.Object3D {
     const obj = model(itemModel(item));
     place(obj, footprint(v, item, y));
+    lean(obj, restOf(v, item).slope);
     tint(obj, paint, toneOf(item));
     return obj;
   }
@@ -648,6 +649,17 @@ function footprint(v: Pick<Vehicle, 'chassisId'>, item: GridItem, y: number): Pl
   const pos = new THREE.Vector3((rect.x0 + rect.x1) / 2, y, (rect.z0 + rect.z1) / 2);
   if (item.rot === 0) return { pos, yaw: 0, scale: new THREE.Vector3(dx / (own.h * CELL.along), 1, dz / (own.w * CELL.across)) };
   return { pos, yaw: ROT_YAW, scale: new THREE.Vector3(dz / (own.h * CELL.along), 1, dx / (own.w * CELL.across)) };
+}
+
+const X_AXIS = new THREE.Vector3(1, 0, 0);
+const Z_AXIS = new THREE.Vector3(0, 0, 1);
+
+// Tilts a placed part to lie on a slope, rising by slope.x per meter toward the nose and slope.z toward the right.
+function lean(obj: THREE.Object3D, slope: Rest['slope']): void {
+  if (slope.x === 0 && slope.z === 0) return;
+  const pitch = new THREE.Quaternion().setFromAxisAngle(Z_AXIS, Math.atan(slope.x));
+  const roll = new THREE.Quaternion().setFromAxisAngle(X_AXIS, -Math.atan(slope.z));
+  obj.quaternion.premultiply(pitch.multiply(roll));
 }
 
 function place(obj: THREE.Object3D, at: Placement): void {

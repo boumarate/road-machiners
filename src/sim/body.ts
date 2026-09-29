@@ -162,17 +162,38 @@ const CLIP_TOLERANCE = 0.05;
 const MIN_KEEP = 0.3;
 
 // Where a part rests: its base height, the footprint it is drawn over, and whether it perches on top of something.
-export type Rest = { y: number; rect: CellRect; perched: boolean };
+// slope is the rise of the resting surface per meter along the truck (x) and across it (z). A flat rest has no slope.
+export type Rest = { y: number; rect: CellRect; perched: boolean; slope: { x: number; z: number } };
+
+const FLAT = { x: 0, z: 0 };
+// The steepest surface a part leans on, as rise per meter: about 35 degrees. Steeper, it perches instead.
+const MAX_SLOPE = 0.7;
+// A surface that fits a plane this steep or steeper, as rise per meter, tilts the part even when a flat rest would fit.
+const MIN_SLOPE = 0.1;
 
 // A part rests on a surface of the model without cutting into it. Each candidate surface runs from the one that carries
 // half its footprint, the median of the height samples under it, up to the highest. On a candidate, the drawn footprint
 // shrinks away from anything taller, like a bed wall or a rim, and at least half of what is left must touch the
-// surface. The candidate that keeps the most footprint wins. A part that fits on none perches on the highest point.
+// surface. The candidate that keeps the most footprint wins. A clean slope, one plane with no sample far below it,
+// tilts the part first. A part that fits on no flat surface, like one on a raked
+// window, leans on the plane that fits the samples, raised until none pokes through, if at least half of them touch
+// it. A part that fits on neither perches: tilted on that plane when it floats less that way than flat on the highest
+// point.
 export function restOn(chassisId: string, rect: CellRect): Rest {
-  if (!(rect.x1 > rect.x0 && rect.z1 > rect.z0)) return { y: surfaceAt(chassisId, rect), rect, perched: false };
   const map = truckShape(chassisId).heights;
-  const samples = samplesUnder(map, rect);
-  if (samples.length === 0) return { y: surfaceAt(chassisId, rect), rect, perched: false };
+  const samples = rect.x1 > rect.x0 && rect.z1 > rect.z0 ? samplesUnder(map, rect) : [];
+  if (samples.length === 0) return { y: surfaceAt(chassisId, rect), rect, perched: false, slope: FLAT };
+  return cleanSlope(map, samples, rect) ?? restFlat(map, samples, rect) ?? perch(map, samples, rect);
+}
+
+// A plane at least MIN_SLOPE steep that half the footprint touches and nothing pokes through. Null otherwise.
+function cleanSlope(map: HeightMap, samples: Sample[], rect: CellRect): Rest | null {
+  const slope = leanOn(map, samples, rect, CLIP_TOLERANCE, true);
+  return slope && Math.hypot(slope.slope.x, slope.slope.z) >= MIN_SLOPE ? slope : null;
+}
+
+// The flat surface that keeps the most footprint, see restOn(). Null when none fits.
+function restFlat(map: HeightMap, samples: Sample[], rect: CellRect): Rest | null {
   const tops = samples.map((sm) => sm.top).sort((a, b) => a - b);
   const levels = [...new Set(tops.slice(Math.floor((tops.length - 1) / 2)))];
   const fits = levels.flatMap((y) => {
@@ -182,8 +203,54 @@ export function restOn(chassisId: string, rect: CellRect): Rest {
     return !box.empty && Math.min(di, dj) >= MIN_KEEP && supports(samples, box, y) ? [{ y, box, area: di * dj }] : [];
   });
   const best = fits.reduce<(typeof fits)[number] | null>((a, b) => (a && a.area >= b.area ? a : b), null);
-  if (best) return { y: best.y, rect: rectOfBox(map, best.box, rect), perched: false };
-  return { y: surfaceAt(chassisId, rect), rect, perched: true };
+  return best && { y: best.y, rect: rectOfBox(map, best.box, rect), perched: false, slope: FLAT };
+}
+
+// A part that fits nowhere: tilted on the fitted plane when that floats less than flat on the highest point.
+function perch(map: HeightMap, samples: Sample[], rect: CellRect): Rest {
+  const tops = samples.map((sm) => sm.top);
+  const highest = Math.max(...tops);
+  const leaning = leanOn(map, samples, rect, highest - Math.min(...tops), false);
+  return leaning ? { ...leaning, perched: true } : { y: highest, rect, perched: true, slope: FLAT };
+}
+
+// The plane through the samples by least squares, raised until no sample stands above it. Null when it is steeper than
+// MAX_SLOPE, when a sample lies more than maxGap below it, or, with halfTouching, when fewer than half touch it.
+function leanOn(map: HeightMap, samples: Sample[], rect: CellRect, maxGap: number, halfTouching: boolean): Rest | null {
+  const points = samples.map((sm) => ({ x: (sm.i + 0.5) * map.cell, z: -(sm.j + 0.5) * map.cell, y: sm.top }));
+  const plane = fitPlane(points);
+  if (!plane || Math.hypot(plane.x, plane.z) > MAX_SLOPE) return null;
+  const at = (pt: { x: number; z: number }) => plane.y + plane.x * pt.x + plane.z * pt.z;
+  const lift = Math.max(...points.map((pt) => pt.y - at(pt)));
+  const gaps = points.map((pt) => at(pt) + lift - pt.y);
+  if (!gapsFit(gaps, maxGap, halfTouching)) return null;
+  const center = { x: (rect.x0 + rect.x1) / 2, z: (rect.z0 + rect.z1) / 2 };
+  return { y: at(center) + lift, rect, perched: false, slope: { x: plane.x, z: plane.z } };
+}
+
+// No gap wider than maxGap, and with halfTouching, at least half the gaps within the clip tolerance.
+function gapsFit(gaps: number[], maxGap: number, halfTouching: boolean): boolean {
+  if (gaps.some((g) => g > maxGap)) return false;
+  return !halfTouching || gaps.filter((g) => g <= CLIP_TOLERANCE).length * 2 >= gaps.length;
+}
+
+// Least squares y = y0 + x * sx + z * sz over the points, as { y: y0, x: sx, z: sz }. Null when the points lie on a line.
+function fitPlane(points: { x: number; y: number; z: number }[]): { y: number; x: number; z: number } | null {
+  const n = points.length;
+  const mean = (f: (pt: { x: number; y: number; z: number }) => number) => points.reduce((sum, pt) => sum + f(pt), 0) / n;
+  const mx = mean((pt) => pt.x);
+  const mz = mean((pt) => pt.z);
+  const my = mean((pt) => pt.y);
+  const sxx = mean((pt) => (pt.x - mx) ** 2);
+  const szz = mean((pt) => (pt.z - mz) ** 2);
+  const sxz = mean((pt) => (pt.x - mx) * (pt.z - mz));
+  const sxy = mean((pt) => (pt.x - mx) * (pt.y - my));
+  const szy = mean((pt) => (pt.z - mz) * (pt.y - my));
+  const det = sxx * szz - sxz * sxz;
+  if (Math.abs(det) < 1e-12) return null;
+  const x = (sxy * szz - szy * sxz) / det;
+  const z = (szy * sxx - sxy * sxz) / det;
+  return { y: my - x * mx - z * mz, x, z };
 }
 
 type Sample = { i: number; j: number; top: number };
