@@ -155,12 +155,12 @@ describe("rescue readout", () => {
     });
   });
   it("tells a stranded player to install a spare engine it carries", () => {
-    const w = newWorld(1337, startKit("standard"), TEST_MAP);
+    const w = newWorld(1337, startKit("combat"), TEST_MAP);
     const me = playerVehicle(w);
     const engine = me.items.find((it) => it.kind === "part" && partDef(it.part.defId).kind === "engine");
     if (!engine || engine.kind !== "part") throw new Error("Expected an engine");
-    // Without the cargo and the cage, the roof row has room for the engine.
-    me.items = me.items.filter((it) => it !== engine && it.kind === "part" && it.part.defId !== "cage");
+    // The hauler keeps only its built-in parts, so its deck has room to stow the engine.
+    me.items = me.items.filter((it) => it.kind === "part" && partDef(it.part.defId).kind === "core");
     expect(getRescueReadout(w)).toMatchObject({ kind: "stranded", reason: "No working engine." });
     expect(stowPart(w, me, engine.part)).toBe(true);
     expect(getRescueReadout(w)).toMatchObject({ kind: "stranded", reason: "No working engine. Install the spare [I]." });
