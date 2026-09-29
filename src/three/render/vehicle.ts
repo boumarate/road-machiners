@@ -230,7 +230,7 @@ export class VehicleView {
       const wheel = isWheel(def);
       if (wheel && mounted) wheelItems.push(item);
       else if (wheel) still.add(this.spareWheel(v, body, item, paint, surface));
-      else if (def.kind === 'weapon') this.buildWeapon(v, item, mounted, still, paint, this.riser(v, item, baseTop(v, base), surface, paint, still));
+      else if (def.kind === 'weapon') this.buildWeapon(v, item, mounted, still, paint, this.riser(v, item, paint, still));
       else if (def.kind === 'armor') still.add(this.placeArmor(v, body, item, paint, mounted, surface));
       // Core parts sit on the floor. An engine on its mount stands in the engine bay and shows through the cutout.
       else if (def.kind === 'core' || (def.kind === 'engine' && mounted)) still.add(this.placeItem(v, item, paint, baseLevel(base, item, 'floor', v.chassisId)));
@@ -342,23 +342,23 @@ export class VehicleView {
   }
 
   // A weapon standing below the base top gets a riser post up to it, so its turret clears the cab when it turns.
-  // Returns the height the weapon mount stands on.
-  private riser(v: Vehicle, item: PartItem, clear: number, y: number, paint: number, into: THREE.Group): number {
-    if (y >= clear) return y;
+  // Returns where the weapon mount stands.
+  private riser(v: Vehicle, item: PartItem, paint: number, into: THREE.Group): Placement {
+    const { at, bottom, top } = weaponStand(v, item);
+    const mount = { ...at, pos: at.pos.clone().setY(top) };
+    if (bottom >= top) return mount;
     const post = model('wmount_riser');
-    const at = footprint(v, item, y);
-    place(post, { pos: at.pos, yaw: 0, scale: new THREE.Vector3(1, (clear - y) / socket('wmount_riser', 'top').y, 1) });
+    place(post, { pos: at.pos.clone().setY(bottom), yaw: 0, scale: new THREE.Vector3(1, (top - bottom) / socket('wmount_riser', 'top').y, 1) });
     tint(post, paint, toneOf(item));
     into.add(post);
-    return clear;
+    return mount;
   }
 
   // The mount fills the footprint. The head keeps its authored size, sits at the mount's head socket and turns with aim.
   // The receiver is the head's origin, the barrel joins at its muzzle socket and the extra at its extra socket.
-  private buildWeapon(v: Vehicle, item: PartItem, active: boolean, still: THREE.Group, paint: number, y: number): void {
+  private buildWeapon(v: Vehicle, item: PartItem, active: boolean, still: THREE.Group, paint: number, at: Placement): void {
     const look = weaponLook(item.part.id, item.part.defId);
     const tone = toneOf(item);
-    const at = footprint(v, item, y);
     const mount = model(look.mount);
     place(mount, at);
     tint(mount, paint, tone);
@@ -556,13 +556,22 @@ function socketName(level: 'row' | 'floor', x: number, y: number, chassisId: str
   return `${level}${y}_${Math.min(Math.max(x - 1, 0), inner - 1)}`;
 }
 
-// The front edge of the surface under an item: the rearmost row socket x over its rows, in body meters.
-function baseFront(base: ModelName, item: GridItem, chassisId: string): number {
-  return Math.min(...itemCells(item).map((c) => socket(base, socketName('row', c.x, c.y, chassisId)).x));
+// How far the surface ends behind the front edge of the cells under an item, at its worst row, in body meters.
+function overhang(base: ModelName, item: GridItem, chassisId: string): number {
+  const cellFront = (c: { x: number; y: number }) => cellCenter(chassisId, c.x, c.y).x + CELL.along / 2;
+  return Math.max(0, ...itemCells(item).map((c) => cellFront(c) - socket(base, socketName('row', c.x, c.y, chassisId)).x));
+}
+
+// Where a weapon stands. The footprint is placed on the item's highest surface, so it keeps off the step up to a cab.
+// The post starts at the lowest surface under the item, so it stands on the model at every cell. The mount stands at the top.
+export function weaponStand(v: Pick<Vehicle, 'chassisId'>, item: GridItem): { at: Placement; bottom: number; top: number } {
+  const base = baseModel(v.chassisId);
+  const heights = itemCells(item).map((c) => socket(base, socketName('row', c.x, c.y, v.chassisId)).y);
+  return { at: footprint(v, item, Math.max(...heights)), bottom: Math.min(...heights), top: baseTop(v, base) };
 }
 
 // The highest row surface of a base, in body meters: the cab roof on a pickup.
-function baseTop(v: Vehicle, base: ModelName): number {
+function baseTop(v: Pick<Vehicle, 'chassisId'>, base: ModelName): number {
   return Math.max(...baseGrid(v.chassisId).cells.flatMap((row, y) => row.map((_, x) => socket(base, socketName('row', x, y, v.chassisId)).y)));
 }
 
@@ -588,14 +597,13 @@ function toneOf(item: GridItem): number {
 
 // Center of an item's cells at height y, with the turn and base stretch for its rotation.
 // An item standing on a row surface moves back until its front edge is behind the surface's front edge, so it never overhangs a raked windshield.
-function footprint(v: Vehicle, item: GridItem, y: number): Placement {
+function footprint(v: Pick<Vehicle, 'chassisId'>, item: GridItem, y: number): Placement {
   const cells = itemCells(item);
   const first = cellCenter(v.chassisId, cells[0].x, cells[0].y);
   const last = cellCenter(v.chassisId, cells[cells.length - 1].x, cells[cells.length - 1].y);
   const pos = new THREE.Vector3((first.x + last.x) / 2, y, (first.z + last.z) / 2);
   const base = baseModel(v.chassisId);
-  const halfLength = (itemSize(item).h * CELL.along) / 2;
-  if (y === baseLevel(base, item, 'row', v.chassisId)) pos.x -= Math.max(0, pos.x + halfLength - baseFront(base, item, v.chassisId));
+  if (y === baseLevel(base, item, 'row', v.chassisId)) pos.x -= overhang(base, item, v.chassisId);
   if (item.rot === 0) return { pos, yaw: 0, scale: new THREE.Vector3(1, 1, 1) };
   return { pos, yaw: ROT_YAW, scale: new THREE.Vector3(CELL.across / CELL.along, 1, CELL.along / CELL.across) };
 }
