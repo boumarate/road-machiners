@@ -1,4 +1,4 @@
-A committee member asked to change how the Korovan factory works. Read the request in .factory/request.md.
+A committee member asked to change how the ROAM factory works. Read the request in .factory/request.md.
 
 Edit only files under factory/. Never touch the game.
 Follow CLAUDE.md.

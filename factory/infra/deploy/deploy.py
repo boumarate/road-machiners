@@ -81,8 +81,8 @@ server.shell(
 
 files.template(
     name="tick service unit",
-    src=str(FILES / "korovan-factory-tick.service.j2"),
-    dest="/etc/systemd/system/korovan-factory-tick.service",
+    src=str(FILES / "roam-factory-tick.service.j2"),
+    dest="/etc/systemd/system/roam-factory-tick.service",
     mode="644",
     user=FACTORY_USER,
     code_dir=CODE_DIR,
@@ -91,15 +91,15 @@ files.template(
 )
 files.template(
     name="tick timer unit",
-    src=str(FILES / "korovan-factory-tick.timer.j2"),
-    dest="/etc/systemd/system/korovan-factory-tick.timer",
+    src=str(FILES / "roam-factory-tick.timer.j2"),
+    dest="/etc/systemd/system/roam-factory-tick.timer",
     mode="644",
     tick_minutes=tick_minutes,
     _sudo=True,
 )
 systemd.service(
     name="tick timer enabled",
-    service="korovan-factory-tick.timer",
+    service="roam-factory-tick.timer",
     running=True,
     enabled=True,
     daemon_reload=True,

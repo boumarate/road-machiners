@@ -1,7 +1,7 @@
 [project]
-name = "korovan-factory-infra"
+name = "roam-factory-infra"
 version = "0.1.0"
-description = "Provisioning and deploy for the Korovan game factory server"
+description = "Provisioning and deploy for the ROAM game factory server"
 requires-python = ">=3.11"
 dependencies = ["pyinfra==3.9.2", "pydantic-settings==2.14.1"]
 

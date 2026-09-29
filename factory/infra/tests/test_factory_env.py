@@ -6,7 +6,7 @@ GOOD = """\
 FACTORY_HOME=/opt/factory/home
 FACTORY_WEB_ROOT=/opt/factory/www
 FACTORY_TICK_MINUTES=5
-FACTORY_IMAGE=korovan-agent
+FACTORY_IMAGE=roam-agent
 FACTORY_COMMITTEE_TELEGRAM=1,2
 FACTORY_COMMITTEE_CHAT=-100
 TELEGRAM_BOT_TOKEN=dummy
@@ -30,7 +30,7 @@ def test_rejects_mac_paths(tmp_path):
 
 
 def test_rejects_missing_key(tmp_path):
-    text = GOOD.replace("FACTORY_IMAGE=korovan-agent\n", "")
+    text = GOOD.replace("FACTORY_IMAGE=roam-agent\n", "")
     with pytest.raises(ValueError, match="FACTORY_IMAGE is missing"):
         read_factory_env(write(tmp_path, text))
 

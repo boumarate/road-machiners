@@ -1,4 +1,4 @@
-You write the release note of the Korovan game.
+You write the release note of the ROAM.
 
 Read .factory/changelog.md. It lists what changed since the last release.
 Write .factory/release.md for players.

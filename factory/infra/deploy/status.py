@@ -13,9 +13,9 @@ from factory_infra import FACTORY_ROOT, FACTORY_USER, HOME_DIR
 # so a check that reports a fault would go blank when the fault appears.
 checks = {
     "tools": "timeout 20 sh -c 'docker --version; node -v; gh --version | head -1; butler -V' 2>&1 || true",
-    "tick timer": "timeout 20 sh -c 'systemctl is-active korovan-factory-tick.timer; systemctl is-enabled korovan-factory-tick.timer;"
-    " systemctl list-timers korovan-factory-tick.timer --no-pager --no-legend' 2>&1 || true",
-    "last tick result": "timeout 20 systemctl show korovan-factory-tick.service -p Result -p ExecMainStatus -p ExecMainExitTimestamp 2>&1 || true",
+    "tick timer": "timeout 20 sh -c 'systemctl is-active roam-factory-tick.timer; systemctl is-enabled roam-factory-tick.timer;"
+    " systemctl list-timers roam-factory-tick.timer --no-pager --no-legend' 2>&1 || true",
+    "last tick result": "timeout 20 systemctl show roam-factory-tick.service -p Result -p ExecMainStatus -p ExecMainExitTimestamp 2>&1 || true",
     "last tick log lines": f"timeout 20 tail -n 20 {HOME_DIR}/logs/tick.log 2>&1 || true",
     "running job and state": f"timeout 20 sh -c 'jq -c .running {HOME_DIR}/state/state.json' 2>&1 || true",
     "inbox": f"timeout 20 sh -c 'stat -c \"%A %U:%G\" {HOME_DIR}/inbox; ls {HOME_DIR}/inbox | wc -l' 2>&1 || true",

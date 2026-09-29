@@ -1,4 +1,4 @@
-You are the daily maintenance pass of the Korovan factory. You work on issue #{{issue}} on branch {{branch}}.
+You are the daily maintenance pass of the ROAM factory. You work on issue #{{issue}} on branch {{branch}}.
 
 Read CLAUDE.md first. Then look at the code, tests and docs.
 Pick exactly one of these:

@@ -1,4 +1,4 @@
-This is the implementation stage of the Korovan factory.
+This is the implementation stage of the ROAM factory.
 You work alone in a clone of the game repo. You are on branch {{branch}}.
 The plan for issue {{issue}} is in {{taskFile}}.
 

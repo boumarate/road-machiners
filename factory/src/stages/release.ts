@@ -76,7 +76,7 @@ export async function release(ctx: Ctx, codeDir: string): Promise<void> {
   const day = now.toISOString().slice(0, 10);
   await publish(ctx, codeDir, day);
   const channel = ctx.cfg.publicChannel;
-  await ctx.telegram.sendPhoto(channel, join(dir, OUT_DIR, 'screenshot.png'), `Korovan release ${day}`);
+  await ctx.telegram.sendPhoto(channel, join(dir, OUT_DIR, 'screenshot.png'), `ROAM release ${day}`);
   await ctx.telegram.sendMessage(channel, `${description.trim()}\n\nChanges:\n${changelog.map((line) => `- ${line}`).join('\n')}`);
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Release ${day} shipped with ${changelog.length} changes.`);
   ctx.log('release', null, `shipped ${changelog.length} changes`);

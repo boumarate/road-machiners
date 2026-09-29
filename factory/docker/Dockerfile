@@ -12,8 +12,8 @@ RUN npm install -g @anthropic-ai/claude-code
 USER pwuser
 
 # The mounted clone belongs to the host user, so git must trust it.
-RUN git config --global user.name "Korovan Factory" \
- && git config --global user.email "factory@korovan.invalid" \
+RUN git config --global user.name "ROAM Factory" \
+ && git config --global user.email "factory@roam.invalid" \
  && git config --global --add safe.directory /work
 
 RUN claude plugin marketplace add https://github.com/btseytlin/ultrapack.git \

@@ -1,4 +1,4 @@
-This is the testing stage of the Korovan factory.
+This is the testing stage of the ROAM factory.
 You work alone in a clone of the game repo. You are on branch {{branch}}.
 Issue {{issue}} is built. Its plan is in {{taskFile}}.
 

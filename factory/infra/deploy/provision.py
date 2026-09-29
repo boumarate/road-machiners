@@ -123,8 +123,8 @@ for path in [f"{FACTORY_ROOT}/caddy/data", f"{FACTORY_ROOT}/caddy/config"]:
 
 files.template(
     name="logrotate for the tick log",
-    src=str(FILES / "korovan-factory.logrotate.j2"),
-    dest="/etc/logrotate.d/korovan-factory",
+    src=str(FILES / "roam-factory.logrotate.j2"),
+    dest="/etc/logrotate.d/roam-factory",
     mode="644",
     home_dir=HOME_DIR,
     _sudo=True,

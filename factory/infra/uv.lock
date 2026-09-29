@@ -428,29 +428,6 @@ wheels = [
 ]
 
 [[package]]
-name = "korovan-factory-infra"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "pydantic-settings" },
-    { name = "pyinfra" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pydantic-settings", specifier = "==2.14.1" },
-    { name = "pyinfra", specifier = "==3.9.2" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8" }]
-
-[[package]]
 name = "markupsafe"
 version = "3.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -798,6 +775,29 @@ sdist = { url = "https://files.pythonhosted.org/packages/6a/53/ed9d74092561d4b01
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0d/17/c5c6b53ddc18f297992099b3d9ec16c855c0ccc83263a21fe4d1c625ec6c/python_dotenv-1.2.3-py3-none-any.whl", hash = "sha256:904552145e8bfed22162c09dab1c2b9b54fefa7b23ba780f4f26ca0316b0f0d9", size = 22780, upload-time = "2026-08-16T16:54:52.473Z" },
 ]
+
+[[package]]
+name = "roam-factory-infra"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "pydantic-settings" },
+    { name = "pyinfra" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic-settings", specifier = "==2.14.1" },
+    { name = "pyinfra", specifier = "==3.9.2" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8" }]
 
 [[package]]
 name = "six"
