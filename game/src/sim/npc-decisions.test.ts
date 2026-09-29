@@ -1,4 +1,5 @@
 import { HUNT, MIN_CHANCE, NPC_BEHAVIOR } from '../data/npcs';
+import { partDef, type PartDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { describe, expect, it, onTestFinished } from 'vitest';
 import { TERRAIN } from '../data/terrain';
@@ -201,7 +202,7 @@ describe('decision weights', () => {
 });
 
 describe('fight back', () => {
-  const round = (damage: number) => ({ hit: true, crit: false, offset: 0, hits: [{ part: 'x', damage }] });
+  const round = (struck: string, damage: number) => ({ hit: true, crit: false, offset: 0, struck, hits: [{ part: 'x', damage }], blast: [] });
 
   // A trader shot this turn by a raider in sight for `damage`. A base goal is set, so only the attacked decision
   // rolls. 18 damage is 30% of a cab, three times the hit that gives flee its base weight.
@@ -210,7 +211,7 @@ describe('fight back', () => {
     const trader = addNpc(w, 'traders', 'trader', traits, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
     trader.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'test base goal' }];
     const raider = addNpc(w, 'raiders', 'buggy', ['raider'], { x: 14, y: 10 });
-    w.events = [{ t: 'shot', shooter: raider.id, weapon: 'w', target: trader.id, aim: 'body', chance: 1, side: 'front', rounds: [round(damage)] }];
+    w.events = [{ t: 'shot', shooter: raider.id, weapon: 'w', target: trader.id, aim: 'body', chance: 1, side: 'front', rounds: [round(trader.id, damage)] }];
     noteHurt(w);
     w.events = [];
     // The shot's attack record, as combat leaves it.
@@ -255,7 +256,7 @@ describe('fight back', () => {
     const w = emptyWorld({ x: 80, y: 80 });
     const trader = addNpc(w, 'traders', 'trader', ['trader'], { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
     trader.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'test base goal' }];
-    w.events = [{ t: 'guardShot', site: 'bowl', from: { x: 0, y: 0 }, target: trader.id, rounds: [round(8)] }];
+    w.events = [{ t: 'guardShot', site: 'bowl', from: { x: 0, y: 0 }, target: trader.id, rounds: [round(trader.id, 8)] }];
     noteHurt(w);
     w.events = [];
     expect(trader.brain!.hurt).toBe(8);
@@ -401,18 +402,30 @@ describe('truce answers', () => {
   });
 });
 
+// The parts a hard ram takes out: the guns, the engine and the wheels.
+function brokenInRam(def: PartDef): boolean {
+  return def.kind === 'weapon' || def.kind === 'engine' || (def.kind === 'core' && def.role === 'wheel');
+}
+
 describe('truce offers', () => {
-  it('a robber that is not weak rarely offers its prey a truce', () => {
-    const truce = (robbery: boolean, cab: number | null) => {
-      const w = emptyWorld({ x: 80, y: 80 });
-      const me = w.player.vehicleId;
-      const robber = addNpc(w, 'scavengers', 'scavenger', ['scavenger', 'scumbag'], { x: 14, y: 10 }, ['autocannon', 'stockEngine']);
-      addState(w, 'feud', robber.id, me, { kind: 'feud', robbery });
-      if (cab !== null) corePart(robber, 'cab').hp = cab;
-      return optionWeights(w, robber, 'parley', me, vehicleDanger(w, find(w, me))).truce!;
-    };
-    expect(truce(true, null)).toBeLessThan(truce(false, null) / 5);
-    expect(truce(true, 1)).toBe(truce(false, 1));
+  // A hurt raider gunwagon beside the player's scout. The scout's gun and engine can be broken.
+  function duel(playerBroken: boolean, raiderCab: number | null) {
+    const w = emptyWorld({ x: 80, y: 80 });
+    const me = find(w, w.player.vehicleId);
+    if (playerBroken) for (const p of mountedParts(me)) if (brokenInRam(partDef(p.defId))) p.hp = 0;
+    const raider = addNpc(w, 'raiders', 'gunwagon', ['raider'], { x: 14, y: 10 }, ['autocannon', 'stockEngine']);
+    addState(w, 'feud', raider.id, me.id, { kind: 'feud', robbery: false });
+    if (raiderCab !== null) corePart(raider, 'cab').hp = raiderCab;
+    return optionChances(optionWeights(w, raider, 'parley', me.id, vehicleDanger(w, me)));
+  }
+
+  it('a driver that is winning offers a truce at about the floor chance', () => {
+    expect(duel(true, null).truce!).toBeLessThan(2 * MIN_CHANCE);
+  });
+
+  it('a weak driver pleads far more often than a winning one', () => {
+    const pleads = (c: ReturnType<typeof duel>) => c.truce! + c.beg!;
+    expect(pleads(duel(true, 1))).toBeGreaterThan(pleads(duel(true, null)) * 5);
   });
 });
 

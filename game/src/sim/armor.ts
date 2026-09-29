@@ -1,4 +1,6 @@
 import { RULES } from '../data/rules';
+import { PHYSICS } from '../data/physics';
+import { bodyOf } from './body';
 // Sides and lanes of a truck's grid. A round enters the grid from the struck side and walks one lane of cells inward.
 // Each working part it meets takes damage and stops some of its penetration. Fire leaves the other way: a gun fires
 // toward a side only when no tall part stands between it and that edge, in the lane through the gun's center cell.
@@ -13,8 +15,8 @@ import { angleDiff, bearing, type Vec } from './vec';
 
 export type Side = 'front' | 'rear' | 'left' | 'right';
 export type PartHit = { part: string; damage: number };
-// A blast round meets an armor part's blastArmor instead of its armor.
-export type Round = { damage: number; pen: number; blast: boolean };
+// A blast round meets an armor part's blastArmor instead of its armor. Armor parts take damage times armorShare.
+export type Round = { damage: number; pen: number; blast: boolean; armorShare: number };
 
 const QUARTER = Math.PI / 4;
 
@@ -63,6 +65,53 @@ function isCab(def: PartDef): boolean {
   return def.kind === 'core' && def.role === 'cab';
 }
 
+// A point in the truck's frame, in meters: forward along the heading and right across it.
+type Local = { fwd: number; right: number };
+
+function toLocal(v: Vehicle, p: Vec): Local {
+  const dx = (p.x - v.pos.x) * PHYSICS.metersPerTile;
+  const dy = (p.y - v.pos.y) * PHYSICS.metersPerTile;
+  const c = Math.cos(v.heading);
+  const s = Math.sin(v.heading);
+  return { fwd: dx * c + dy * s, right: -dx * s + dy * c };
+}
+
+function toMap(v: Vehicle, l: Local): Vec {
+  const c = Math.cos(v.heading);
+  const s = Math.sin(v.heading);
+  const m = PHYSICS.metersPerTile;
+  return { x: v.pos.x + (l.fwd * c - l.right * s) / m, y: v.pos.y + (l.fwd * s + l.right * c) / m };
+}
+
+// Where a lane's center meets the outer face of a side. Column 0 is the truck's left edge, row 0 its nose.
+function laneFace(v: Vehicle, side: Side, lane: number): Local {
+  const half = bodyOf(v.chassisId).half;
+  const n = laneCount(v, side);
+  const across = (lane + 0.5) / n;
+  switch (side) {
+    case 'front': return { fwd: half.x, right: (across * 2 - 1) * half.z };
+    case 'rear': return { fwd: -half.x, right: (across * 2 - 1) * half.z };
+    case 'left': return { fwd: (1 - across * 2) * half.x, right: -half.z };
+    case 'right': return { fwd: (1 - across * 2) * half.x, right: half.z };
+  }
+}
+
+// The map point where a round entering a lane meets the truck.
+export function lanePoint(v: Vehicle, side: Side, lane: number): Vec {
+  return toMap(v, laneFace(v, side, lane));
+}
+
+// The side of a truck facing a blast, and its lanes whose face centers lie within radius meters of the blast.
+export function blastLanes(v: Vehicle, p: Vec, radius: number): { side: Side; lanes: number[] } {
+  const side = sideToward(v, p);
+  const at = toLocal(v, p);
+  const lanes = Array.from({ length: laneCount(v, side) }, (_, i) => i).filter((lane) => {
+    const face = laneFace(v, side, lane);
+    return Math.hypot(at.fwd - face.fwd, at.right - face.right) <= radius;
+  });
+  return { side, lanes };
+}
+
 // Front and rear lanes are grid columns. Left and right lanes are grid rows.
 export function laneCount(v: Vehicle, side: Side): number {
   const g = gridOf(v);
@@ -95,7 +144,7 @@ function laneCells(g: Grid, side: Side, lane: number): { x: number; y: number }[
 // by its armor, and damage drops in the same proportion as pen. The walk stops at zero pen. Holes, empty cells, goods, spares and broken parts let the round pass.
 // A part covering several cells of the lane is hit once.
 export function walkLane(world: World, v: Vehicle, side: Side, lane: number, round: Round): PartHit[] {
-  if (!(round.damage >= 0 && round.pen >= 0)) throw new Error(`Bad round ${JSON.stringify(round)}`);
+  checkRound(round);
   const g = gridOf(v);
   const owner = new Map<number, PartInstance>();
   for (const it of mountedItems(v)) for (const c of itemCells(it)) owner.set(cellKey(c.x, c.y), it.part);
@@ -110,12 +159,47 @@ export function walkLane(world: World, v: Vehicle, side: Side, lane: number, rou
     const part = owner.get(cellKey(c.x, c.y));
     if (pen <= 0 || !part || part.hp <= 0 || struck.has(part.id)) continue;
     struck.add(part.id);
-    const armor = armorAgainst(wornDef(part), round.blast);
-    hits.push({ part: part.id, damage: damagePart(world, v, part, damage * Math.min(1, pen / armor)) });
+    const def = wornDef(part);
+    const armor = armorAgainst(def, round.blast);
+    hits.push({ part: part.id, damage: damagePart(world, v, part, damage * shareOf(def, round) * Math.min(1, pen / armor)) });
     damage *= Math.max(0, pen - armor) / pen;
     pen -= armor;
   }
   return hits;
+}
+
+function checkRound(round: Round): void {
+  if (!(round.damage >= 0 && round.pen >= 0 && round.armorShare >= 0)) throw new Error(`Bad round ${JSON.stringify(round)}`);
+}
+
+// Armor parts take a round's armor share of its damage, and every other part the whole of it.
+function shareOf(def: PartDef, round: Round): number {
+  return def.kind === 'armor' ? round.armorShare : 1;
+}
+
+// The share of a round's damage that gets past the armor on one side, averaged over its lanes. A lane whose first
+// working part is armor stops pen equal to its armor and lets the rest through, as walkLane() does. Any other lane
+// lets it all through.
+export function passShare(v: Vehicle, side: Side, round: { pen: number; blast: boolean }): number {
+  const g = gridOf(v);
+  const owner = new Map<string, PartInstance>();
+  for (const it of mountedItems(v)) for (const c of itemCells(it)) owner.set(`${c.x},${c.y}`, it.part);
+  const lanes = Array.from({ length: laneCount(v, side) }, (_, lane) => firstPart(g, owner, side, lane));
+  const pass = (part: PartInstance | null) => {
+    const def = part && wornDef(part);
+    if (!def || def.kind !== 'armor') return 1;
+    return round.pen <= 0 ? 0 : Math.max(0, round.pen - armorAgainst(def, round.blast)) / round.pen;
+  };
+  return lanes.reduce((sum, part) => sum + pass(part), 0) / lanes.length;
+}
+
+// The first working part a round meets in a lane, or null when it meets none.
+function firstPart(g: Grid, owner: Map<string, PartInstance>, side: Side, lane: number): PartInstance | null {
+  for (const c of laneCells(g, side, lane)) {
+    const part = owner.get(`${c.x},${c.y}`);
+    if (part && part.hp > 0) return part;
+  }
+  return null;
 }
 
 function armorAgainst(def: PartDef, blast: boolean): number {

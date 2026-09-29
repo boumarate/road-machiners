@@ -6,8 +6,8 @@ import { REGION } from '../data/region';
 import { makePart } from './factory';
 import { update } from './world';
 import { openSides } from './armor';
-import { freeCells, goodsCount, gridOf, mountedItems, mountedParts } from './grid';
-import { dumpItem, mountPart, moveItem, removeAllGoods, spareParts, storePart, stowPart, takeFromStorage } from './inventory';
+import { freeCells, goodsCount, gridOf, isMounted, mountedItems, mountedParts } from './grid';
+import { dumpItem, installSpot, mountPart, moveItem, removeAllGoods, spareParts, storePart, stowPart, stowSpot, takeFromStorage } from './inventory';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import { addVehicle, emptyWorld } from './testkit';
 import type { GridItem, Vehicle, World } from './types';
@@ -17,7 +17,7 @@ import { advanceJobs } from './jobs';
 const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
 const item = (w: World, defId: string) => w.vehicles[0].items.find((it) => it.kind === 'part' && it.part.defId === defId)!;
 const good = (w: World) => w.vehicles[0].items.find((it) => it.kind === 'good')!;
-// The roof rack's row, just below the scout's own layout.
+// The panniers' row, just below the scout's own layout.
 const rackRow = CHASSIS.scout.layout.length;
 
 describe('inventory grid', () => {
@@ -32,11 +32,11 @@ describe('inventory grid', () => {
 
   it('the start kit is mounted and working', () => {
     const w = emptyWorld();
-    expect(mountedParts(w.vehicles[0]).map((p) => p.defId).filter((id) => PARTS[id].kind !== 'core').sort()).toEqual(['cage', 'mg', 'rack', 'stockEngine']);
+    expect(mountedParts(w.vehicles[0]).map((p) => p.defId).filter((id) => PARTS[id].kind !== 'core').sort()).toEqual(['cage', 'mg', 'panniers', 'stockEngine']);
     expect(vehicleStats(w, w.vehicles[0]).weapons).toHaveLength(1);
   });
 
-  it('the roof rack adds a full row', () => {
+  it('the panniers add a full row', () => {
     const w = emptyWorld();
     expect(gridOf(w.vehicles[0]).h).toBe(rackRow + 1);
   });
@@ -51,7 +51,7 @@ describe('inventory grid', () => {
   it('items cannot overlap or leave the grid', () => {
     const w = emptyWorld();
     const g = good(w);
-    expect(() => moveItem(w, g.id, { x: 0, y: 1, rot: 0 })).toThrow(/Built-in/);
+    expect(() => moveItem(w, g.id, { x: 1, y: 1, rot: 0 })).toThrow(/Built-in/);
     expect(() => moveItem(w, g.id, { x: 9, y: 0, rot: 0 })).toThrow(/fit/);
   });
 
@@ -75,13 +75,13 @@ describe('inventory grid', () => {
     const w = emptyWorld();
     const mg = item(w, 'mg');
     if (mg.kind !== 'part') throw new Error('Expected weapon');
-    w.vehicles[0].items.push({ ...mg, id: 'spare-item', part: { ...mg.part, id: 'spare-part' }, x: 1, y: rackRow });
+    w.vehicles[0].items.push({ ...mg, id: 'spare-item', part: { ...mg.part, id: 'spare-part' }, x: 4, y: rackRow });
     const next = moveItem(w, 'spare-item', { x: mg.x, y: mg.y, rot: 0 });
     expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', total: 5 });
     for (let turn = 0; turn < 4; turn++) advanceJobs(next);
     expect(next.vehicles[0].items.find((it) => it.id === mg.id)).toMatchObject({ x: mg.x, y: mg.y });
     advanceJobs(next);
-    expect(next.vehicles[0].items.find((it) => it.id === mg.id)).toMatchObject({ x: 1, y: rackRow });
+    expect(next.vehicles[0].items.find((it) => it.id === mg.id)).toMatchObject({ x: 4, y: rackRow });
     expect(next.vehicles[0].items.find((it) => it.id === 'spare-item')).toMatchObject({ x: mg.x, y: mg.y });
     expect(next.vehicles[0].items.map((it) => it.id).sort()).toEqual(w.vehicles[0].items.map((it) => it.id).sort());
   });
@@ -90,40 +90,42 @@ describe('inventory grid', () => {
     const w = emptyWorld(sitePads(bowl)[0]);
     const mg = item(w, 'mg');
     if (mg.kind !== 'part') throw new Error('Expected weapon');
-    w.vehicles[0].items.push({ ...mg, id: 'spare-item', part: { ...mg.part, id: 'spare-part' }, x: 1, y: rackRow });
+    w.vehicles[0].items.push({ ...mg, id: 'spare-item', part: { ...mg.part, id: 'spare-part' }, x: 4, y: rackRow });
     const next = moveItem(w, 'spare-item', { x: mg.x, y: mg.y, rot: 0 });
     expect(next.vehicles[0].job).toBeNull();
-    expect(next.vehicles[0].items.find((entry) => entry.id === mg.id)).toMatchObject({ x: 1, y: rackRow });
+    expect(next.vehicles[0].items.find((entry) => entry.id === mg.id)).toMatchObject({ x: 4, y: rackRow });
     expect(next.vehicles[0].items.find((entry) => entry.id === 'spare-item')).toMatchObject({ x: mg.x, y: mg.y });
   });
 
-  it('a cannon works only lying fully on deck cells', () => {
+  it('a gun works only lying fully on deck cells', () => {
     let w = emptyWorld(sitePads(bowl)[0]);
     w.player.money = 2000;
-    removeAllGoods(w.vehicles[0]); // free the plain cells the cannon test claims, regardless of start cargo
+    removeAllGoods(w.vehicles[0]); // free the cells the gun test claims, regardless of start cargo
     w = storePart(w, item(w, 'mg').id);
-    w = storePart(w, item(w, 'rack').id);
-    w = update(w, (d) => { d.player.storage.push(makePart(d, 'cannon', 0)); });
-    const id = w.player.storage.find((p) => p.defId === 'cannon')!.id;
-    // The scout bed row 5 is three deck cells wide. Upright, the cannon reaches down onto the back armor edge.
-    const flat = takeFromStorage(w, id, { x: 1, y: 5, rot: 0 });
-    expect(vehicleStats(flat, flat.vehicles[0]).weapons.map((m) => m.def.id)).toEqual(['cannon']);
-    const upright = takeFromStorage(w, id, { x: 1, y: 5, rot: 1 });
-    expect(vehicleStats(upright, upright.vehicles[0]).weapons).toHaveLength(0);
+    w = storePart(w, item(w, 'panniers').id);
+    w = update(w, (d) => { d.player.storage.push(makePart(d, 'heavyMg', 0)); });
+    const id = w.player.storage.find((p) => p.defId === 'heavyMg')!.id;
+    // The scout has two deck cells stacked beside the engine at (4,1) and (4,2). Lying on the front armor row, the gun is no deck gun.
+    const stacked = takeFromStorage(w, id, { x: 4, y: 1, rot: 0 });
+    expect(vehicleStats(stacked, stacked.vehicles[0]).weapons.map((m) => m.def.id)).toEqual(['heavyMg']);
+    const across = takeFromStorage(w, id, { x: 4, y: 0, rot: 1 });
+    expect(vehicleStats(across, across.vehicles[0]).weapons).toHaveLength(0);
   });
 
-  it('removing the rack is blocked while its row holds items', () => {
+  it('removing the panniers is blocked while their row holds items', () => {
     let w = emptyWorld(sitePads(bowl)[0]);
     w = moveItem(w, good(w).id, { x: 0, y: rackRow, rot: 0 });
-    expect(() => storePart(w, item(w, 'rack').id)).toThrow(/fall off/);
+    expect(() => storePart(w, item(w, 'panniers').id)).toThrow(/fall off/);
   });
 
   it('more parts mean less cargo room', () => {
     let w = emptyWorld(sitePads(bowl)[0]);
     w.player.money = 2000;
+    removeAllGoods(w.vehicles[0]);
+    w = storePart(w, item(w, 'panniers').id);
     const free = freeCells(w.vehicles[0]);
     w = update(w, (d) => { d.player.storage.push(makePart(d, 'mg', 0)); });
-    w = takeFromStorage(w, w.player.storage[0].id, { x: 3, y: 5, rot: 0 });
+    w = takeFromStorage(w, w.player.storage.find((p) => p.defId === 'mg')!.id, { x: 4, y: 1, rot: 0 });
     expect(freeCells(w.vehicles[0])).toBe(free - 1);
     expect(vehicleStats(w, w.vehicles[0]).weapons).toHaveLength(2);
   });
@@ -153,25 +155,33 @@ describe('auto mounting on the deck', () => {
 
   it('places a cargo box where it blinds no mounted gun', () => {
     const w = emptyWorld();
-    const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine', 'mg'], { x: 40, y: 40 });
+    const v = addVehicle(w, 'raiders', 'longbed', ['stockEngine', 'mg'], { x: 40, y: 40 });
+    const before = openSides(v, mountedItemOf(v, 'mg'));
     expect(mountPart(w, v, makePart(w, 'trailerBox', 0))).toBe(true);
-    expect(openSides(v, mountedItemOf(v, 'mg'))).toHaveLength(4);
+    expect(openSides(v, mountedItemOf(v, 'mg'))).toEqual(before);
   });
 
   it('lets a gun and a cargo frame compete for the same deck cells', () => {
     const w = emptyWorld();
-    const v = addVehicle(w, 'raiders', 'scout', ['stockEngine'], { x: 40, y: 40 });
-    v.items.push({ id: 'i-rack', x: 1, y: 5, rot: 0, kind: 'part', part: makePart(w, 'rack', 0) });
-    v.items.push({ id: 'i-mg', x: 3, y: 5, rot: 0, kind: 'part', part: makePart(w, 'mg', 0) });
+    const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine'], { x: 40, y: 40 });
+    v.items.push({ id: 'i-rack', x: 2, y: 5, rot: 0, kind: 'part', part: makePart(w, 'rack', 0) });
+    v.items.push({ id: 'i-mg', x: 4, y: 5, rot: 0, kind: 'part', part: makePart(w, 'mg', 0) });
     expect(mountedItems(v, 'cargo').map((it) => it.id)).toEqual(['i-rack']);
     expect(mountedItems(v, 'weapon').map((it) => it.id)).toEqual(['i-mg']);
   });
 });
 
+// Takes the start kit's gun, panniers and cargo off the truck, which frees both deck cells.
+function freeDeck(v: Vehicle): void {
+  removeAllGoods(v);
+  v.items = v.items.filter((it) => it.kind === 'good' || !['mg', 'panniers'].includes(it.part.defId));
+}
+
 describe('stores', () => {
   it('unmounting a full store in town spills what no longer fits and logs it', () => {
     const w = emptyWorld(sitePads(bowl)[0]);
     const me = w.vehicles[0];
+    freeDeck(me);
     expect(mountPart(w, me, makePart(w, 'jerrycans', 0))).toBe(true);
     expect(mountPart(w, me, makePart(w, 'supplyLocker', 0))).toBe(true);
     w.player.fuel = fuelCap(me);
@@ -187,10 +197,55 @@ describe('stores', () => {
   it('unmounting a store with room to spare keeps every drop', () => {
     const w = emptyWorld(sitePads(bowl)[0]);
     const me = w.vehicles[0];
+    freeDeck(me);
     expect(mountPart(w, me, makePart(w, 'jerrycans', 0))).toBe(true);
     w.player.fuel = CHASSIS.scout.fuelCap - 1;
     const off = storePart(w, item(w, 'jerrycans').id);
     expect(off.player.fuel).toBe(CHASSIS.scout.fuelCap - 1);
     expect(off.events.some((e) => e.t === 'supply')).toBe(false);
+  });
+});
+
+describe('spots for double click moves', () => {
+  const partItem = (w: World, defId: string): Extract<GridItem, { kind: 'part' }> => ({ id: 'probe', x: 0, y: 0, rot: 0, kind: 'part', part: makePart(w, defId, 0) });
+
+  it('installSpot finds a free mount that holds the part', () => {
+    const w = emptyWorld();
+    const probe = partItem(w, 'cage');
+    const spot = installSpot(w.vehicles[0], probe);
+    expect(spot).not.toBeNull();
+    expect(isMounted('scout', { ...probe, ...spot! })).toBe(true);
+  });
+
+  it('installSpot is null when every fitting mount is taken', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    while (mountPart(w, me, makePart(w, 'cage', 0)));
+    expect(installSpot(me, partItem(w, 'cage'))).toBeNull();
+  });
+
+  it('installSpot ignores the spare own cells', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const spare = { ...partItem(w, 'cage'), id: 'spare' };
+    const spot = installSpot(me, spare)!;
+    me.items.push({ ...spare, ...spot });
+    expect(installSpot(me, { ...spare, ...spot })).toEqual(spot);
+  });
+
+  it('stowSpot keeps a part off the mounts', () => {
+    const w = emptyWorld();
+    removeAllGoods(w.vehicles[0]);
+    const probe = partItem(w, 'cage');
+    const spot = stowSpot(w.vehicles[0], probe);
+    expect(spot).not.toBeNull();
+    expect(isMounted('scout', { ...probe, ...spot! })).toBe(false);
+  });
+
+  it('stowSpot is null when the grid has no free plain cell', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    while (stowPart(w, me, makePart(w, 'cage', 0)));
+    expect(stowSpot(me, partItem(w, 'cage'))).toBeNull();
   });
 });

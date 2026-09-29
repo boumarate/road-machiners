@@ -160,8 +160,9 @@ describe('prop colliders follow the model shape', () => {
   it('every truck roof at rest is below the clearance under which props are left out', () => {
     for (const id of Object.keys(CHASSIS)) {
       const b = bodyOf(id);
-      const roof = b.wheelRadius + PHYSICS.truck.suspensionRest - b.wheelY + b.half.y;
-      expect(roof, id).toBeLessThan(PHYSICS.truckClearance);
+      const roof = b.wheelRadius + PHYSICS.truck.suspensionRest - b.wheelY + Math.max(...b.boxes.map((box) => box.at.y + box.half.y));
+      expect(roof, id).toBeLessThanOrEqual(PHYSICS.truckRoof + 1e-9);
+      expect(PHYSICS.truckRoof, id).toBeLessThan(PHYSICS.truckClearance);
     }
   });
 
@@ -203,13 +204,14 @@ describe('breakable props', () => {
     expect(me(w).pos.x).toBeGreaterThan(42);
   });
 
-  // The contact pushes the truck back for the one step it lasts. From the next step on it drives at the kept speed.
+  // The contact pushes the truck back for the steps it lasts. Within a few steps of the first push it drives at the kept speed.
   it('breaking a fence costs the truck its slowdown share of speed, not a full stop', () => {
     const { w, speeds } = play(paced({ x: 37, y: 30 }, { x: 60, y: 30 }, fast, [fence]), 3);
     const hit = speeds.indexOf(Math.min(...speeds));
+    const kept = BREAKABLE.breakSpeed * 2 * (1 - BREAKABLE.slowdown);
 
     expect(w.broken.length).toBe(1);
-    expect(speeds[hit + 1]).toBeCloseTo(BREAKABLE.breakSpeed * 2 * (1 - BREAKABLE.slowdown), 0);
+    expect(speeds.slice(hit + 1, hit + 6).some((speed) => Math.abs(speed - kept) < 0.5)).toBe(true);
   });
 
   it('a slow truck stops at a fence, which holds', () => {

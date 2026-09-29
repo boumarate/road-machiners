@@ -1,8 +1,9 @@
-"""The jeep base: a stylized VW Kübelwagen Type 82, the open air-cooled field car.
+"""The jeep base: a stylized VW Kübelwagen Type 82, the air-cooled field car with a hardtop.
 
 Grid: 4 columns by 7 rows, 1.94 m across by 4.55 m along. Half height 0.4 m, from PHYSICS.bodies.jeep.
 One slab-sided body from nose to tail. Rows 0 and 1 are a flat sloped front hood with the spare wheel on it,
-rows 2 and 3 an open tub behind an upright windshield with the driver's seat and a passenger seat cushion,
+rows 2 and 3 a closed cab behind an upright windshield with the driver's seat and a passenger seat cushion,
+under a flat hardtop roof with side windows and a rear window,
 rows 4 and 5 the rear deck with a cutout over the engine cells, row 6 a louvered tail sloping down to the rear.
 Wheels sit on rows 1 and 5 in the outer columns, radius 0.45 m, half width 0.18 m, mount 0.25 m below the center.
 Run: blender --background --python tools/blender/base_jeep.py -- public/models/base_jeep.glb [tmp/base_jeep.png]
@@ -49,7 +50,9 @@ BAY_BACK = G.row_x(5.5)  # the engine cells run from row 4 to row 5, and the tai
 SEAM_LOW = -0.28  # door seams end above the front arch
 RAKE = 0.08  # the windshield leans back this far at its top
 SCREEN_TOP = TOP + 0.42
-SEAT_TOP = 0.24  # the passenger seat cushion, where items on that cell stand
+SEAT_TOP = 0.24  # the passenger seat cushion
+ROOF_TOP = SCREEN_TOP + 0.05  # the roof's flat top, where items on the cab cells stand
+ROOF_BOTTOM = ROOF_TOP - 0.07
 HOOD_SLOPE = math.atan2(TOP - NOSE_TOP, FRONT - 0.08 - COWL)
 TAIL_SLOPE = math.atan2(TOP - TAIL_Z, BAY_BACK - BACK)
 
@@ -135,6 +138,24 @@ def windshield(kit: Kit) -> None:
     prism(kit, "glass", glass, -span + 0.03, span - 0.03, "glass")
 
 
+def hardtop(kit: Kit) -> None:
+    """A flat roof over the tub on trim pillars, with dark side windows over the doors and a rear window on the tub's back."""
+    base_x = COWL - 0.03
+    top_x = base_x - RAKE
+    front = top_x + 0.04
+    roof = [(front, ROOF_BOTTOM), (TUB_BACK, ROOF_BOTTOM), (TUB_BACK, ROOF_TOP), (front - 0.08, ROOF_TOP), (front, ROOF_TOP - 0.05)]
+    prism(kit, "roof", roof, -SIDE, SIDE, "trim")
+    h = ROOF_BOTTOM - TOP
+    pillar = SIDE - DOOR_T / 2
+    for x, w in (((COWL + TUB_BACK) / 2, 0.08), (TUB_BACK + 0.08, 0.16)):
+        mirrored(kit, f"pillar{x:.2f}", (w, DOOR_T, h), x, pillar, TOP + h / 2, "trim")
+    window = [(base_x - 0.06, TOP), (TUB_BACK + 0.16, TOP), (TUB_BACK + 0.16, ROOF_BOTTOM), (top_x - 0.06, ROOF_BOTTOM)]
+    for sy in (1, -1):
+        y = sy * (SIDE - DOOR_T / 2)
+        prism(kit, f"side_glass_{'l' if sy > 0 else 'r'}", window, y - 0.015, y + 0.015, "glass")
+    kit.box("rear_glass", (0.03, 2 * (SIDE - DOOR_T) - 0.32, h - 0.05), (TUB_BACK + 0.015, 0, TOP + 0.05 + (h - 0.05) / 2), "glass")
+
+
 def seats(kit: Kit) -> None:
     """The driver's seat and steering wheel on the cab cell, and a bare passenger cushion beside it."""
     x = G.row_x(2) - 0.04
@@ -166,14 +187,14 @@ def main() -> None:
     ribs(kit)
     hood(kit)
     windshield(kit)
+    hardtop(kit)
     seats(kit)
     tail(kit)
-    # The hood and tail rows lie on slopes. The tub cells stand on its floor, the passenger cell on the seat cushion.
+    # The hood and tail rows lie on slopes. The cab cells stand on the roof.
     slopes = {(x, y): surface_z(G, x, y) for x in range(G.cols) for y in (0, 1, 6)}
-    tub = {(x, y): FLOOR for x in range(G.cols) for y in (2, 3)} | {(2, 2): SEAT_TOP}
     # Items on the engine cells stand on the bay floor under the cutout.
     bay = {(x, y): FLOOR for x in (1, 2) for y in (4, 5)}
-    level_sockets(kit, G, "row", [TOP] * G.rows, fronts={2: COWL - 0.03 - RAKE - 0.06}, cells=slopes | tub | bay)
+    level_sockets(kit, G, "row", [TOP] * 2 + [ROOF_TOP] * 2 + [TOP] * 3, fronts={2: COWL - 0.03 - RAKE - 0.06}, cells=slopes | bay)
     level_sockets(kit, G, "floor", [FLOOR] * G.rows)
     check_base(kit, "base_jeep", G)
     kit.export("base_jeep", args, view_size=5.5)

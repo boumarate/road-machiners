@@ -1,7 +1,7 @@
 import { partDef } from '../data/parts';
 import { describe, expect, it } from 'vitest';
-import { corePart, mountedItems, mountedParts } from './grid';
-import { applyContactCrash, estimateCrashGeometry, isRamGainful } from './crash-contact';
+import { corePart, itemCells, mountedItems, mountedParts } from './grid';
+import { applyContactCrash, estimateCrashGeometry, forecastRam, ramHitChance, ramImpact, ramValue } from './crash-contact';
 import { RULES } from '../data/rules';
 import { thinkNpc } from './npc-activities';
 import { addState, stateOf } from './states';
@@ -23,7 +23,7 @@ function crashOf(w: World): Extract<GameEvent, { t: 'collision' }> {
 }
 
 const total = (hits: { damage: number }[]) => hits.reduce((a, h) => a + h.damage, 0);
-const partAt = (v: Vehicle, x: number, y: number) => mountedItems(v).find((it) => it.x === x && it.y === y)!.part;
+const partAt = (v: Vehicle, x: number, y: number) => mountedItems(v).find((it) => itemCells(it).some((c) => c.x === x && c.y === y))!.part;
 const partOf = (v: Vehicle, defId: string) => mountedParts(v).find((p) => p.defId === defId)!;
 
 // Moves the scout's ram bar from the nose to the tail mount.
@@ -81,9 +81,9 @@ describe('rams', () => {
       return { v, part: crashOf(w).hitsB[0].part };
     };
     const rear = firstHit(38.5);
-    expect(rear.part).toBe(partAt(rear.v, 0, 6).id);
+    expect(rear.part).toBe(partAt(rear.v, 1, 6).id);
     const front = firstHit(41.5);
-    expect(front.part).toBe(partAt(front.v, 0, 1).id);
+    expect(front.part).toBe(partAt(front.v, 1, 1).id);
   });
 
   it('an obstacle hit lands on the side facing it at full share', () => {
@@ -152,7 +152,7 @@ describe('rams as attacks', () => {
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     raider.speed = 5;
     const before = JSON.stringify(w.vehicles);
-    isRamGainful(w, raider, victim);
+    forecastRam(w, raider, victim, FULL_SPEED);
     expect(JSON.stringify(w.vehicles)).toBe(before);
     expect(w.states).toEqual([]);
     expect(w.events).toEqual([]);
@@ -184,5 +184,73 @@ describe('rams as attacks', () => {
     expect(total(crashOf(w).hitsB)).toBeGreaterThan(0);
     expect(stateOf(w, 'feud', trader.id, me.id)).toBeNull();
     expect(trader.brain!.attackers).toEqual({});
+  });
+});
+
+// Two haulers of one mass, the second facing the first from `gap` tiles. The rammer drives at 5 tiles a turn.
+function duel(rammerParts: string[], targetParts: string[], gap = 6): { w: World; rammer: Vehicle; target: Vehicle } {
+  const w = emptyWorld({ x: 1, y: 1 });
+  const rammer = addVehicle(w, 'raiders', 'hauler', rammerParts, { x: 30, y: 30 }, 0);
+  const target = addVehicle(w, 'traders', 'hauler', targetParts, { x: 30 + gap, y: 30 }, Math.PI);
+  rammer.speed = 5;
+  return { w, rammer, target };
+}
+
+describe('ram value', () => {
+  it('is 0 when the target lies outside the ram cone', () => {
+    const { w, rammer, target } = duel(['cannon', 'stockEngine'], ['cannon', 'stockEngine']);
+    rammer.heading = Math.PI;
+    expect(ramValue(w, rammer, target)).toBe(0);
+  });
+
+  it('rises with a ram bar on the rammer nose against an equal truck', () => {
+    const bare = duel(['cannon', 'stockEngine'], ['cannon', 'stockEngine']);
+    const barred = duel(['cannon', 'stockEngine', 'plowRam'], ['cannon', 'stockEngine']);
+    expect(ramValue(barred.w, barred.rammer, barred.target)).toBeGreaterThan(ramValue(bare.w, bare.rammer, bare.target));
+  });
+
+  it('is not vetoed by a broken ram bar on a ram that hurts the target far more', () => {
+    const { w, rammer, target } = duel(['cannon', 'stockEngine', 'plowRam'], ['cannon', 'stockEngine']);
+    const bar = mountedParts(rammer, 'armor')[0];
+    bar.hp = 1;
+    expect(ramValue(w, rammer, target)).toBeGreaterThan(0);
+  });
+
+  it('is 0 when the ram costs the rammer more than it deals', () => {
+    const w = emptyWorld({ x: 1, y: 1 });
+    const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 }, 0);
+    const hauler = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine', 'plowRam'], { x: 36, y: 30 }, Math.PI);
+    buggy.speed = 5;
+    expect(ramImpact(w, buggy, hauler)).not.toBeNull();
+    expect(ramValue(w, buggy, hauler)).toBe(0);
+  });
+});
+
+describe('ram hit chance', () => {
+  it('is higher for a near slow target than for a far fast one', () => {
+    const near = duel(['cannon', 'stockEngine'], ['cannon', 'stockEngine'], 4);
+    near.target.speed = 1;
+    const far = duel(['cannon', 'stockEngine'], ['cannon', 'stockEngine'], 24);
+    far.target.speed = 5;
+    far.target.heading = Math.PI / 2; // crossing the ram line
+    const chance = (d: typeof near) => ramHitChance(d.w, d.rammer, d.target, ramImpact(d.w, d.rammer, d.target)!);
+    expect(chance(near)).toBeGreaterThan(chance(far));
+    expect(chance(far)).toBeLessThan(0.3);
+  });
+
+  it('is certain against a parked truck at any distance', () => {
+    const { w, rammer, target } = duel(['cannon', 'stockEngine'], ['cannon', 'stockEngine'], 24);
+    target.speed = 0;
+    expect(ramHitChance(w, rammer, target, ramImpact(w, rammer, target)!)).toBe(1);
+  });
+
+  it('is lower for a target crossing the line than for one driving along it at the same speed', () => {
+    const along = duel(['cannon', 'stockEngine'], ['cannon', 'stockEngine'], 12);
+    along.target.speed = 3;
+    const across = duel(['cannon', 'stockEngine'], ['cannon', 'stockEngine'], 12);
+    across.target.speed = 3;
+    across.target.heading = Math.PI / 2;
+    const chance = (d: typeof along) => ramHitChance(d.w, d.rammer, d.target, ramImpact(d.w, d.rammer, d.target)!);
+    expect(chance(across)).toBeLessThan(chance(along));
   });
 });

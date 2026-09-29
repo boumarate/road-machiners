@@ -215,6 +215,7 @@ describe('a stranded driver asking the player', () => {
     const raider = addVehicle(w0, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 }, Math.PI);
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     breakEngine(raider);
+    forceOption('mugging', 'attack');
     expect(endTurn(w0, testDrive).player.call).toBeNull();
     expect(currentOptions(callVehicle(w0, raider.id)).map((o) => o.text)).not.toContain('Your truck looks dead. Want me to patch it?');
     makePeace(w0, playerVehicle(w0), raider);

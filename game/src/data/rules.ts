@@ -36,6 +36,12 @@ export const RULES = {
   yieldDistance: 1.5, // tiles neutral drivers keep past both radii from a vehicle ahead, beyond what both close before they stop; see src/sim/ai.ts
   maxBulge: 0.25, // tiles a steering arc may stray from the straight route line
   limpSpeed: 1.04, // 15 km/h, top speed with an empty tank or a dead engine or transmission; a truck this slow raises no dust
+  // Working guns slow the truck: top speed and acceleration scale by 1 - gunDragMax * min(1, draw / capacity) ** gunDragCurve.
+  // Draw sums the guns' `draw`, capacity is the engine's. The curve is convex, so the first guns cost little and a
+  // deck packed with guns reaches the full 60%. With a stock engine (7), one or two light guns cost 3 to 10%, two
+  // long rifles 15%, and seven 1-cell guns on a big deck 60%.
+  gunDragMax: 0.6,
+  gunDragCurve: 1.5,
   minSpeedCap: 1, // a heavy load never pushes max speed below this
   collisionMinImpact: 1.5, // slower bumps deal no damage
   // A crash gives each truck ramDamage × impact² in tiles per turn × the other body's share of both masses,
@@ -61,6 +67,13 @@ export const RULES = {
   weaponDamage: 1.2375, // every weapon round and splash, guard guns included
   crashDamage: 1.125, // every crash and ram, into trucks and obstacles alike
 
+  // Stray fire. A round that misses its target may hit another truck whose center lies within reach of the line
+  // of fire, which runs on past the target by reach. Unintended damage summed to feudDamage counts as an attack.
+  stray: {
+    reach: 1.5, // tiles
+    feudDamage: 40, // about one cannon hit or ten MG rounds
+  },
+
   // Town guards. Each town gate has one gun. Every turn it shoots the nearest vehicle within range that fired.
   // Each round hits with a flat chance and enters a random lane of the side facing the gate.
   guards: {
@@ -68,7 +81,7 @@ export const RULES = {
     rounds: 4,
     hitChance: 0.5,
     missOffset: 1.5,
-    round: { damage: 6, pen: 8, blast: false },
+    round: { damage: 6, pen: 8, blast: false, armorShare: 1 },
   },
 
   // Every truck's acceleration, in the sim and in physics, times this. Tune here to make all trucks livelier or
@@ -123,6 +136,7 @@ export const RULES = {
   defeatPatch: 0.25, // share of max hp broken core parts get back when a driver wakes from a knockout
   scrapPatch: 0.4, // share of max hp drive parts and of the tank a stranded, broke player with nothing to sell gets at a town
   knockoutMaxTurns: 30, // a knockout ends after this many turns even if a hostile idles in sight
+  surrenderParts: 2, // installed parts, best first, a robber takes with the cargo from a stranded player who gives up
   npcDeathChance: 0.05, // an NPC whose cab breaks dies into a wreck instead of a knockout
   // A defeated NPC that spent this many turns in a row beyond the player's gray vision appears at its home pad, so
   // crawlers do not pile up on the map. 50 turns is a quarter of a day: a player who turns back still meets it.

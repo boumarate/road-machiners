@@ -1,14 +1,13 @@
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
-import { fireBlock, hitOdds, type FireBlock } from "../sim/combat";
+import { fireBlock, gunOf, hitOdds, type FireBlock } from "../sim/combat";
 import { isKnockedOut } from "../sim/defeat";
-import { playerVehicle } from "../sim/damage";
-import { mountedParts } from "../sim/grid";
+import { findPart, playerVehicle } from "../sim/damage";
 import { vehicleStats, type MountedWeapon } from "../sim/stats";
-import type { Vehicle, World } from "../sim/types";
+import type { Aim, Vehicle, World } from "../sim/types";
 import { playerSees } from "../sim/vision";
 import { workOf } from "../sim/states";
-import { playerCanAct, setAutoFire, setWeaponOrder } from "../sim/world";
+import { playerCanAct, reloadWeapon, setAutoFire, setWeaponOrder } from "../sim/world";
 import { el, panel } from "./dom";
 import { meters } from "./units";
 import type { UiHost } from "./host";
@@ -19,7 +18,8 @@ import { workLabel, workProgress } from "./format";
 
 export const BLOCK_TEXT: Record<FireBlock, string> = {
   disabled: "disabled",
-  reloading: "reloading",
+  cooldown: "cooling down",
+  empty: "reloading",
   range: "out of range",
   arc: "out of arc",
   blocked: "view blocked on truck",
@@ -76,6 +76,75 @@ export function toggleTarget(w: World, weapons: MountedWeapon[], target: Vehicle
   return w;
 }
 
+// Aims the chosen guns at one part of a target. When they all aim at that part already, they go back to a body shot.
+export function aimAtPart(w: World, weapons: MountedWeapon[], target: Vehicle, partId: string): World {
+  const orders = playerVehicle(w).weaponOrders;
+  const aimed = weapons.length > 0 && weapons.every((mw) => orders[mw.part.id]?.targetId === target.id && orders[mw.part.id].aim === partId);
+  if (w.player.autoFire) w = setAutoFire(w, false);
+  for (const mw of weapons)
+    w = setWeaponOrder(w, mw.part.id, { targetId: target.id, aim: aimed ? "body" : partId });
+  return w;
+}
+
+// Gun numbers, as the panel counts them, that aim at each part of a target. A body shot marks no part.
+export function aimMarks(w: World, targetId: string): Map<string, number[]> {
+  const marks = new Map<string, number[]>();
+  const orders = playerVehicle(w).weaponOrders;
+  vehicleStats(w, playerVehicle(w)).weapons.forEach((mw, i) => {
+    const order = orders[mw.part.id];
+    if (!order || order.targetId !== targetId || order.aim === "body") return;
+    marks.set(order.aim, [...(marks.get(order.aim) ?? []), i + 1]);
+  });
+  return marks;
+}
+
+// The aimed spot in words: "body shot" or the part's name.
+export function aimName(target: Vehicle, aim: Aim): string {
+  const part = aim === "body" ? null : findPart(target, aim);
+  return part ? partDef(part.defId).name : "body shot";
+}
+
+function turns(n: number): string {
+  return `${n} ${n === 1 ? "turn" : "turns"}`;
+}
+
+// Why a gun cannot fire, with the turns left for a cooldown or a reload.
+export function blockText(mw: MountedWeapon, block: FireBlock): string {
+  const gun = gunOf(mw.part);
+  if (block === "cooldown") return `ready in ${turns(gun.cooldown)}`;
+  if (block === "empty") return `reloading ${turns(mw.def.reload - gun.reloadWork)}`;
+  return BLOCK_TEXT[block];
+}
+
+// Rounds left in the magazine, like "3/5".
+export function ammoText(mw: MountedWeapon): string {
+  return `${gunOf(mw.part).ammo}/${mw.def.magazine}`;
+}
+
+export type AmmoCell = "loaded" | "spent" | "reloading";
+
+// One cell per magazine round: loaded rounds first, then spent ones. A gun at work on a reload
+// fills its spent cells left to right with the share reloadWork / reload of the whole row.
+export function ammoCells(magazine: number, ammo: number, reloadWork: number, reload: number): AmmoCell[] {
+  const spent = magazine - ammo;
+  const filled = reloadWork > 0 ? Math.min(spent, Math.ceil((reloadWork / reload) * magazine)) : 0;
+  return Array.from({ length: magazine }, (_, i) =>
+    i < ammo ? "loaded" : i < ammo + filled ? "reloading" : "spent");
+}
+
+// Ammo status for the tooltip and screen readers.
+export function ammoLabel(mw: MountedWeapon): string {
+  const gun = gunOf(mw.part);
+  if (gun.reloadWork > 0) return `reloading, ${turns(mw.def.reload - gun.reloadWork)} left`;
+  return `${gun.ammo}/${mw.def.magazine} rounds`;
+}
+
+// A forced reload helps only a gun with a partly spent magazine.
+export function canForceReload(mw: MountedWeapon): boolean {
+  const ammo = gunOf(mw.part).ammo;
+  return mw.part.hp > 0 && ammo > 0 && ammo < mw.def.magazine;
+}
+
 // Current-position feedback shared by the weapon buttons and map markers.
 export function getWeaponReadout(w: World, mw: MountedWeapon) {
   const me = playerVehicle(w);
@@ -85,12 +154,7 @@ export function getWeaponReadout(w: World, mw: MountedWeapon) {
     : null;
   const target = assigned && playerSees(w, assigned.pos) ? assigned : null;
   const block = fireBlock(w, me, mw, assigned);
-  const status =
-    block === "reloading"
-      ? `reload ${mw.part.reload} ${mw.part.reload === 1 ? "turn" : "turns"}`
-      : block
-        ? BLOCK_TEXT[block]
-        : "ready";
+  const status = block ? blockText(mw, block) : "ready";
   return {
     target,
     status,
@@ -154,7 +218,6 @@ export class WeaponPanel {
 
   private renderControls(w: World, locked: boolean): HTMLElement {
     const weapons = vehicleStats(w, playerVehicle(w)).weapons;
-    const chosen = weapons.find((mw) => mw.part.id === this.host.selectedWeapon());
     return el(
       "fieldset",
       { disabled: locked },
@@ -169,26 +232,13 @@ export class WeaponPanel {
       el(
         "div",
         { class: "weapon-slots" },
-        ...weapons.map((mw, i) => this.renderSlot(w, mw, i)),
+        ...weapons.map((mw, i) => this.renderSlot(w, mw, i, locked)),
       ),
       weapons.length === 0 ? el("div", { class: "dim" }, "No weapons installed") : null,
-      chosen ? this.renderDetail(w, chosen) : null,
     );
   }
 
-  private renderDetail(w: World, chosen: MountedWeapon): HTMLElement {
-    const readout = getWeaponReadout(w, chosen);
-    const order = playerVehicle(w).weaponOrders[chosen.part.id];
-    return el('div', { class: 'weapon-detail' },
-      el('strong', {}, chosen.def.name),
-      el('span', {}, readout.target?.name ?? 'No visible target'),
-      el('span', {}, readout.status),
-      readout.target && order ? this.createAimSelect(readout.target, chosen.part.id, order.aim) : null,
-      el('button', { class: 'weapon-hold', onclick: () => this.holdWeapon(chosen.part.id) }, 'Hold fire'),
-    );
-  }
-
-  private renderSlot(w: World, mw: MountedWeapon, i: number): HTMLElement {
+  private renderSlot(w: World, mw: MountedWeapon, i: number, locked: boolean): HTMLElement {
     const readout = getWeaponReadout(w, mw);
     const selected = this.host.selectedWeapon() === mw.part.id;
     const chance =
@@ -207,12 +257,12 @@ export class WeaponPanel {
           class: `weapon-pick ${selected ? "on" : ""}`,
           "aria-pressed": String(selected),
           'aria-label': `${mw.def.name}: ${readout.status}, ${target}`,
-          title: `${mw.def.name}: ${mw.def.rounds} × ${Number((mw.def.round.damage * RULES.weaponDamage).toFixed(1))} damage, pen ${mw.def.round.pen}, range ${meters(mw.def.range)} m, arc ${mw.def.arc}°, fires every ${mw.def.reload} turn(s)`,
+          title: `${mw.def.name}: ${mw.def.rounds} × ${Number((mw.def.round.damage * RULES.weaponDamage).toFixed(1))} damage, pen ${mw.def.round.pen}, range ${meters(mw.def.range)} m, arc ${mw.def.arc}°, fires every ${mw.def.cooldown} turn(s), ${mw.def.magazine} shots, reloads in ${mw.def.reload} turn(s)`,
           onclick: () => this.selectWeapon(selected ? null : mw.part.id),
         },
         el('span', { class: 'weapon-number' }, `${i + 1}`),
+        el("span", { class: "weapon-name" }, mw.def.name),
         createIcon(mw.def.look === 'cannon' ? 'cannon' : 'mg'),
-        el("span", { class: "sr-only weapon-name" }, mw.def.name),
         el(
           "span",
           { class: readout.canFire ? "good" : "dim", "data-status": "" },
@@ -220,40 +270,50 @@ export class WeaponPanel {
         ),
         el("span", { class: "weapon-target" }, target),
       ),
-
+      this.renderAmmo(mw, locked),
     );
   }
 
-  private createAimSelect(
-    target: Vehicle,
-    weaponId: string,
-    aim: string,
-  ): HTMLElement {
-    const options = [
-      el("option", { value: "body", selected: aim === "body" }, "Body"),
-    ];
-    for (const p of mountedParts(target)) {
-      options.push(
-        el(
-          "option",
-          { value: p.id, selected: aim === p.id },
-          `${partDef(p.defId).name}${p.hp > 0 ? "" : " (disabled)"}`,
-        ),
-      );
-    }
-    const select = el(
-      "select",
-      { "aria-label": "Aim point" },
-      ...options,
-    ) as HTMLSelectElement;
-    select.addEventListener("change", () => {
-      if (this.host.getTurnPhase() !== null) return;
-      const w = setAutoFire(this.host.world(), false);
-      this.host.apply(
-        setWeaponOrder(w, weaponId, { targetId: target.id, aim: select.value }),
-      );
-    });
-    return el("label", { class: "weapon-aim" }, "Aim at ", select);
+  // Rounds left and the button that forces a reload.
+  private renderAmmo(mw: MountedWeapon, locked: boolean): HTMLElement {
+    const gun = gunOf(mw.part);
+    const label = ammoLabel(mw);
+    return el(
+      "div",
+      { class: "weapon-ammo-row" },
+      el(
+        "span",
+        { class: "weapon-ammo", title: label },
+        el("span", { class: "sr-only" }, label),
+        ...ammoCells(mw.def.magazine, gun.ammo, gun.reloadWork, mw.def.reload).map((state) =>
+          el("span", { class: `ammo-cell ${state}`, "aria-hidden": "true" })),
+      ),
+      el(
+        "button",
+        {
+          class: "weapon-hold",
+          title: "Hold fire: stop auto fire and clear this gun's target",
+          onclick: () => this.holdWeapon(mw.part.id),
+        },
+        "Hold",
+      ),
+      el(
+        "button",
+        {
+          class: "weapon-reload",
+          disabled: locked || !canForceReload(mw),
+          title: `Reload: drop the magazine and refill it in ${turns(mw.def.reload)}`,
+          "aria-label": `Reload ${mw.def.name}`,
+          onclick: () => this.forceReload(mw.part.id),
+        },
+        createIcon("reload"),
+      ),
+    );
+  }
+
+  private forceReload(weaponId: string): void {
+    if (this.host.getTurnPhase() !== null) return;
+    this.host.apply(reloadWeapon(this.host.world(), weaponId));
   }
 
   private holdWeapon(weaponId: string): void {
@@ -286,4 +346,35 @@ export function weaponsForClick(
 ): MountedWeapon[] {
   const all = vehicleStats(world, playerVehicle(world)).weapons;
   return selected ? all.filter((m) => m.part.id === selected) : all;
+}
+
+// Keeps a hover alive for a short delay after the pointer leaves the hovered truck, and while the pointer is over the
+// panel that truck opened, so the pointer can travel from a truck to its panel.
+export class HoverHold {
+  private timer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(private apply: (id: string | null) => void, private delayMs: number) {}
+
+  // Passes a new hover on at once. The pointer leaving a hovered truck passes on after the delay, unless the pointer
+  // arrives on the panel or hovers again first.
+  move(next: string | null, current: string | null): void {
+    if (next !== null || current === null) return this.now(next);
+    this.timer ??= setTimeout(() => this.now(null), this.delayMs);
+  }
+
+  cancel(): void {
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
+  }
+
+  private now(id: string | null): void {
+    this.cancel();
+    this.apply(id);
+  }
+
+  // The panel holds the hover while the pointer is on it and ends it when the pointer leaves.
+  watch(panel: EventTarget): void {
+    panel.addEventListener("mouseenter", () => this.cancel());
+    panel.addEventListener("mouseleave", () => this.now(null));
+  }
 }

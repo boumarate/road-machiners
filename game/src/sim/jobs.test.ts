@@ -8,7 +8,7 @@ import { makePart } from './factory';
 import { addVehicle, emptyWorld, practiceOf } from './testkit';
 import { corePart, goodsCount, gridOf, mountedParts } from './grid';
 import { addGoods, moveItem, removeGoods, stowPart } from './inventory';
-import { advanceJobs, startAutoRepair, startJob, startRepair, startStrip, startWeld } from './jobs';
+import { advanceJobs, cancelRefit, startAutoRepair, startJob, startRepair, startStrip, startWeld } from './jobs';
 import { PERK_NUMBERS } from '../data/skills';
 import { repairPlan } from './repair';
 import { addState } from './states';
@@ -129,6 +129,20 @@ describe('field repair job', () => {
     cage.hp = 1;
     addGoods(w, me, 'parts', 20);
     expect(() => startRepair(w, cage.id)).toThrow('Stop the truck first');
+  });
+
+  it('a standing player truck drops its leftover drive order to start a job', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    me.speed = 0;
+    me.order = { kind: 'through', dest: { x: me.pos.x + 20, y: me.pos.y } };
+    const cage = armorPart(me);
+    cage.hp = 1;
+    addGoods(w, me, 'parts', 20);
+    const next = startRepair(w, cage.id);
+    const after = next.vehicles.find((v) => v.id === me.id)!;
+    expect(after.job?.kind).toBe('repair');
+    expect(after.order).toBeNull();
   });
 });
 
@@ -478,5 +492,34 @@ describe('weld job', () => {
     const next = startWeld(w);
     for (let i = 0; i < turns; i++) advanceJobs(next);
     expect(practiceOf(next, 'fieldJob')).toEqual([]);
+  });
+});
+
+describe('cancelling a refit', () => {
+  it('ends the job and leaves every item where it was', () => {
+    const w = emptyWorld();
+    const mg = w.vehicles[0].items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
+    const before = structuredClone(w.vehicles[0].items);
+    const started = moveItem(w, mg.id, { x: 1, y: gridOf(w.vehicles[0]).h - 1, rot: 0 });
+    advanceJobs(started);
+    expect(started.vehicles[0].job).toMatchObject({ kind: 'refit' });
+
+    const next = cancelRefit(started);
+
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.vehicles[0].items).toEqual(before);
+    expect(next.events).toContainEqual(expect.objectContaining({ t: 'job', outcome: 'cancelled' }));
+  });
+
+  it('throws when no refit runs', () => {
+    expect(() => cancelRefit(emptyWorld())).toThrow(/No refit/);
+  });
+
+  it('throws for another kind of job', () => {
+    const w = emptyWorld();
+    armorPart(w.vehicles[0]).hp = 1;
+    addGoods(w, w.vehicles[0], 'parts', 20);
+    const repairing = startRepair(w, armorPart(w.vehicles[0]).id);
+    expect(() => cancelRefit(repairing)).toThrow(/No refit/);
   });
 });

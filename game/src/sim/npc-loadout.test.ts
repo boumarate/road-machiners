@@ -1,6 +1,6 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
-import { GEAR_LEVELS, NPCS, type GearLevel, type NpcTemplate } from '../data/npcs';
+import { GEAR_LEVELS, MAX_GUN_SLOWDOWN, MIN_NPC_SPEED_SHARE, NPCS, type GearLevel, type NpcTemplate } from '../data/npcs';
 import { PARTS, partDef } from '../data/parts';
 import { START_KITS } from '../data/start';
 import { newWorld } from './world';
@@ -8,18 +8,35 @@ import { CONDITION } from '../data/wear';
 import { everyGunFires } from './armor';
 import { makeVehicle } from './factory';
 import { freeCells, goodsCount, gridOf, isMounted, mountedParts, placementError } from './grid';
-import { vehicleMass } from './mass';
+import { loadFactor, vehicleMass } from './mass';
 import { generateNpcLoadout, sampleWeighted } from './npc-loadout';
 import { spawnAt, spawnInitial, spawnNpcs } from './spawn';
 import { openSides, reachedSides } from './armor';
 import { mountedItems } from './grid';
-import type { WeaponDef } from '../data/parts';
+import type { EngineDef, WeaponDef } from '../data/parts';
+import { gunDrag, npcMassRoom } from './stats';
+import { addGoods } from './inventory';
+import { GOODS } from '../data/goods';
 import { emptyWorld } from './testkit';
 import type { Vehicle, World } from './types';
 import { TEST_MAP } from '../test/map';
+import TRUCK_SHAPES from '../data/truck-shapes.json';
+
+// A scout with one deck cell, where a cannon or a heavy frame cannot mount. It borrows the scout's collision boxes.
+const TINY = {
+  ...CHASSIS.scout,
+  id: 'tiny',
+  layout: CHASSIS.scout.layout.map((row, y) => (y === 0 || y === CHASSIS.scout.layout.length - 1 ? row : row.replace(/D/g, (_m, at: number) => (y === 1 && at === 4 ? 'D' : 'X')))),
+};
+const SHAPES = TRUCK_SHAPES as Record<string, unknown>;
 
 let fixture: World;
-beforeAll(() => { fixture = emptyWorld(); });
+beforeAll(() => {
+  fixture = emptyWorld();
+  CHASSIS.tiny = TINY;
+  SHAPES.base_tiny = TRUCK_SHAPES.base_scout;
+});
+afterAll(() => { delete CHASSIS.tiny; delete SHAPES.base_tiny; });
 
 function describeLoadout(v: Vehicle): string {
   return JSON.stringify({ chassis: v.chassisId, parts: mountedParts(v).map((p) => p.defId), goods: v.items.filter((i) => i.kind === 'good').map((i) => i.good) });
@@ -37,7 +54,7 @@ describe('NPC equipment generation', () => {
       }
     }
     for (const [role, variants] of Object.entries(seen)) expect(variants.size, role).toBeGreaterThanOrEqual(5);
-  });
+  }, 60_000); // 40 full spawns, each trying every engine and gun pair of every template
 
   it.each(Object.values(NPCS))('fits $id equipment and cargo within its budget and rated mass', (template) => {
     for (let seed = 1; seed <= 32; seed++) {
@@ -59,6 +76,67 @@ describe('NPC equipment generation', () => {
     }
   });
 
+  describe('gun fill chance', () => {
+    const gunsAt = (level: GearLevel) => {
+      const template = NPCS.gunwagon;
+      let total = 0;
+      const rolls = 12;
+      for (let seed = 1; seed <= rolls; seed++) total += generateNpcLoadout({ ...fixture, rngState: seed }, template, null, level).parts.filter((p) => partDef(p.defId).kind === 'weapon').length;
+      return total / rolls;
+    };
+
+    it('a poor truck carries only the guns its template requires', () => {
+      expect(gunsAt('poor')).toBe(NPCS.gunwagon.loadout.minGuns);
+    });
+
+    it('more fill chance gives more guns, and a loaded truck reaches many', () => {
+      const [light, standard, heavy, loaded] = (['light', 'standard', 'heavy', 'loaded'] as const).map(gunsAt);
+      // The gunwagon decks are small, so the higher levels can fill every deck spot and tie.
+      expect(light).toBeLessThan(standard);
+      expect(standard).toBeLessThanOrEqual(heavy);
+      expect(heavy).toBeLessThanOrEqual(loaded);
+      expect(light).toBeLessThan(loaded);
+      expect(loaded).toBeGreaterThan(NPCS.gunwagon.loadout.minGuns);
+    }, 120_000);
+
+    it('stops extra guns before they slow a loaded truck past the limit', () => {
+      for (let seed = 1; seed <= 12; seed++) {
+        const world = { ...fixture, rngState: seed };
+        const loadout = generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded');
+        const v = makeVehicle(world, { ...loadout, name: 'test', faction: 'raiders', brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+        const engine = mountedItems(v, 'engine')[0];
+        expect(1 - gunDrag(v, (partDef(engine.part.defId) as EngineDef).capacity), describeLoadout(v)).toBeLessThanOrEqual(MAX_GUN_SLOWDOWN);
+      }
+    }, 120_000);
+  });
+
+  it.each(Object.values(NPCS))('keeps $id above the speed floor at every gear level', (template) => {
+    for (const level of Object.keys(GEAR_LEVELS) as GearLevel[]) {
+      for (let seed = 1; seed <= 12; seed++) {
+        const world = { ...fixture, rngState: seed };
+        const loadout = generateNpcLoadout(world, template, null, level);
+        const v = makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+        const engine = mountedItems(v, 'engine')[0];
+        const share = loadFactor(v) * gunDrag(v, (partDef(engine.part.defId) as EngineDef).capacity);
+        expect(share, `${level} ${describeLoadout(v)}`).toBeGreaterThanOrEqual(MIN_NPC_SPEED_SHARE - 0.02);
+      }
+    }
+  }, 120_000);
+
+  it('gives an NPC no cargo past its speed floor, and the player any', () => {
+    const world = { ...fixture, rngState: 3 };
+    const npc = spawnAt(world, NPCS.gunwagon, { ...generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded'), cargo: {}, spares: [] }, { x: 50, y: 50 });
+    const room = npcMassRoom(npc);
+    const free = freeCells(npc);
+    const added = addGoods(world, npc, 'tools', 1000);
+    expect(added * GOODS.tools.mass).toBeLessThanOrEqual(room);
+    expect(added).toBeLessThan(free);
+    const player = spawnAt(world, NPCS.gunwagon, { ...generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded'), cargo: {}, spares: [] }, { x: 60, y: 50 });
+    player.brain = null;
+    const playerFree = freeCells(player);
+    expect(addGoods(world, player, 'tools', 1000)).toBe(playerFree);
+  });
+
   it.each(Object.values(NPCS))('gives $id only guns that can fire', (template) => {
     for (let seed = 1; seed <= 32; seed++) {
       const world = { ...fixture, rngState: seed };
@@ -70,7 +148,7 @@ describe('NPC equipment generation', () => {
 
   it('filters an oversized weapon before rolling, even with a high weight', () => {
     const template = structuredClone(NPCS.buggy);
-    template.loadout.chassis = [{ value: 'buggy', weight: 1 }];
+    template.loadout.chassis = [{ value: 'tiny', weight: 1 }];
     template.loadout.engine = [{ value: 'stockEngine', weight: 1 }];
     template.loadout.weapon = [{ value: 'cannon', weight: 1000 }, { value: 'mg', weight: 1 }];
     const loadout = generateNpcLoadout({ ...fixture }, template);
@@ -90,7 +168,7 @@ describe('NPC equipment generation', () => {
 
   it('rejects impossible required equipment without consuming RNG or IDs', () => {
     const template = structuredClone(NPCS.buggy);
-    template.loadout.chassis = [{ value: 'buggy', weight: 1 }];
+    template.loadout.chassis = [{ value: 'tiny', weight: 1 }];
     template.loadout.weapon = [{ value: 'cannon', weight: 1 }];
     const world = { ...fixture };
     expect(() => generateNpcLoadout(world, template)).toThrow(/No valid required/);
@@ -107,7 +185,7 @@ describe('NPC equipment generation', () => {
     ['invalid optional weight', (t: NpcTemplate) => { t.loadout.armor = [{ value: 'plates', weight: 0 }]; }],
     ['an unknown gear level', (t: NpcTemplate) => { t.loadout.levels = [{ value: 'shiny' as GearLevel, weight: 1 }]; }],
     ['no guns required', (t: NpcTemplate) => { t.loadout.minGuns = 0; }],
-    ['impossible optional part', (t: NpcTemplate) => { t.loadout.chassis = [{ value: 'buggy', weight: 1 }]; t.loadout.cargoPart = [{ value: 'heavyFrame', weight: 1 }]; }],
+    ['impossible optional part', (t: NpcTemplate) => { t.loadout.chassis = [{ value: 'tiny', weight: 1 }]; t.loadout.cargoPart = [{ value: 'heavyFrame', weight: 1 }]; }],
     ['impossible cargo', (t: NpcTemplate) => { t.loadout.goods = [{ value: { good: 'scrap', count: 1000 }, weight: 1 }]; }],
     ['wear step past the last rebuildable step', (t: NpcTemplate) => { t.loadout.wear = [{ value: CONDITION.maxWear + 1, weight: 1 }]; }],
     ['negative wear step', (t: NpcTemplate) => { t.loadout.wear = [{ value: -1, weight: 1 }]; }],

@@ -5,7 +5,7 @@
 export type SavedJson = Record<string, unknown>;
 
 // Bump for a change old saves cannot follow, like a new map, and empty MIGRATIONS with it. Players start a new game.
-export const SAVE_MAJOR = 1;
+export const SAVE_MAJOR = 2;
 
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.

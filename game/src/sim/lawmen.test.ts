@@ -12,6 +12,7 @@ import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import type { Faction, GameEvent, Vehicle, World } from './types';
 import type { Vec } from './vec';
+import { gunFor } from './factory';
 
 function addNpc(w: World, faction: Faction, traits: TraitId[], pos: Vec, parts = ['mg', 'stockEngine']): Vehicle {
   const v = addVehicle(w, faction, 'scout', parts, pos);
@@ -82,7 +83,7 @@ describe('lawmen', () => {
     const trader = addNpc(w, 'traders', ['trader'], { x: 13, y: 10 });
     shoot(w, shooter, trader);
     const lawman = addLawman(w, { x: 16, y: 14 });
-    for (const p of vehicleStats(w, shooter).weapons) p.part.reload = 0;
+    for (const p of vehicleStats(w, shooter).weapons) Object.assign(p.part, gunFor(p.part.defId));
     w.events = [];
     shoot(w, shooter, trader);
     expect(stateOf(w, 'feud', lawman.id, shooter.id)).toBeNull();

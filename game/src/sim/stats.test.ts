@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
 import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { corePart, mountedParts } from './grid';
-import { fuelCap, groundSpeed, isStranded, suppliesCap, vehicleStats } from './stats';
+import { fuelCap, groundSpeed, gunDrag, isStranded, suppliesCap, vehicleStats } from './stats';
 import { endTurn } from './world';
 import { CHASSIS } from '../data/chassis';
-import { PARTS, type StoreDef } from '../data/parts';
+import { PARTS, type EngineDef, type StoreDef } from '../data/parts';
 import { makePart } from './factory';
 import { mountPart, stowPart } from './inventory';
 import { addVehicle, emptyWorld } from './testkit';
@@ -141,9 +141,9 @@ describe('store capacity', () => {
 
   it('each mounted store adds its room to its own cap', () => {
     const w = emptyWorld();
-    const v = addVehicle(w, 'raiders', 'scout', ['stockEngine', 'jerrycans', 'jerrycans', 'supplyLocker'], { x: 40, y: 40 });
+    const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine', 'jerrycans', 'jerrycans', 'supplyLocker'], { x: 40, y: 40 });
     expect(mountedParts(v, 'store')).toHaveLength(3);
-    expect(fuelCap(v)).toBe(CHASSIS.scout.fuelCap + 2 * jerrycans.amount);
+    expect(fuelCap(v)).toBe(CHASSIS.hauler.fuelCap + 2 * jerrycans.amount);
     expect(suppliesCap(v)).toBe(RULES.baseSupplies + locker.amount);
   });
 
@@ -162,5 +162,63 @@ describe('store capacity', () => {
     expect(fuelCap(v)).toBe(CHASSIS.scout.fuelCap);
     expect(mountPart(w, v, makePart(w, 'supplyLocker', 0))).toBe(true);
     expect(suppliesCap(v)).toBe(RULES.baseSupplies + locker.amount);
+  });
+});
+
+describe('gun power draw', () => {
+  const speedWith = (chassis: string, parts: string[]) => {
+    const w = emptyWorld();
+    return vehicleStats(w, addVehicle(w, 'raiders', chassis, parts, { x: 40, y: 40 })).maxSpeed;
+  };
+
+  it('a gun draws 1 plus half per extra cell, times 1 plus a quarter per tier above 1', () => {
+    for (const def of Object.values(PARTS)) {
+      if (def.kind === 'weapon') expect(def.draw, def.id).toBeCloseTo((1 + 0.5 * (def.w * def.h - 1)) * (1 + 0.25 * (def.tier - 1)));
+    }
+  });
+
+  it('every engine has a capacity, and a higher tier engine at least matches a lower tier one', () => {
+    const engines = Object.values(PARTS).filter((d) => d.kind === 'engine');
+    for (const e of engines) expect(e.capacity, e.id).toBeGreaterThan(0);
+    const capacityOf = (id: string) => (PARTS[id] as EngineDef).capacity;
+    expect(capacityOf('heavyDiesel')).toBeGreaterThan(capacityOf('stockEngine'));
+  });
+
+  it('no guns cost no speed', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'scout', ['stockEngine'], { x: 40, y: 40 });
+    expect(gunDrag(v, 7)).toBe(1);
+  });
+
+  it('two light guns on a stock engine cost between 5 and 15 percent', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'scout', ['stockEngine', 'mg', 'mg'], { x: 40, y: 40 });
+    expect(1 - gunDrag(v, 7)).toBeGreaterThan(0.05);
+    expect(1 - gunDrag(v, 7)).toBeLessThan(0.15);
+  });
+
+  it('draw at or past the capacity caps the loss at 60 percent', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine'], { x: 40, y: 40 });
+    for (let i = 0; i < 16; i++) expect(mountPart(w, v, makePart(w, 'mg', 0))).toBe(true);
+    expect(gunDrag(v, 7)).toBeCloseTo(1 - RULES.gunDragMax);
+  });
+
+  it('a broken gun draws nothing', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'scout', ['stockEngine', 'mg', 'mg'], { x: 40, y: 40 });
+    const both = gunDrag(v, 7);
+    mountedParts(v, 'weapon')[0].hp = 0;
+    expect(gunDrag(v, 7)).toBeGreaterThan(both);
+  });
+
+  it('guns lower top speed and acceleration, and a bigger engine loses less', () => {
+    const w = emptyWorld();
+    const bare = vehicleStats(w, addVehicle(w, 'raiders', 'hauler', ['stockEngine'], { x: 40, y: 40 }));
+    const armed = vehicleStats(w, addVehicle(w, 'raiders', 'hauler', ['stockEngine', 'cannon'], { x: 40, y: 40 }));
+    expect(armed.maxSpeed).toBeLessThan(bare.maxSpeed);
+    expect(armed.accel).toBeLessThan(bare.accel);
+    const share = (engine: string) => speedWith('hauler', [engine, 'cannon']) / speedWith('hauler', [engine]);
+    expect(share('heavyDiesel')).toBeGreaterThan(share('stockEngine'));
   });
 });

@@ -1,9 +1,9 @@
 """The buggy base: a stylized Meyers Manx dune buggy with a gun cage.
 
 Grid: 4 columns by 6 rows, 1.94 m across by 3.9 m along. Half height 0.35 m, from PHYSICS.bodies.buggy.
-Rows 0 to 2 are a narrow tub nose with the engine standing bare over the engine cells, rows 3 and 4 the open seats
-under a roll cage, row 5 a short tail. Tall swept fenders cover the front wheels, and the rear wheels stand bare
-under small mudguards. The cage top carries a flat gun deck, so the weapon on row 3 sits on the cage like a technical.
+Rows 0 to 2 are a narrow tub nose with the engine standing bare over the engine cells, rows 3 and 4 the seats
+in a closed cab built into a roll cage, with a windshield, side doors and windows, a roof and a rear window, row 5 a short tail. Tall swept fenders cover the front wheels, and the rear wheels stand bare
+under small mudguards. The cab roof is a flat gun deck, so the weapon on row 3 sits on the cab like a technical.
 Wheels sit on rows 1 and 4 in the outer columns, radius 0.5 m, half width 0.22 m, mount 0.2 m below the center.
 Run: blender --background --python tools/blender/base_buggy.py -- public/models/base_buggy.glb [tmp/base_buggy.png]
 """
@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit import Kit, parse_args  # noqa: E402
-from parts_common_base import ARCH_CLEARANCE, ARCH_SEGMENTS, BASE_COLORS, INSET, SUSPENSION_REST, Grid, check_base, level_sockets, surface_z  # noqa: E402
+from parts_common_base import ARCH_CLEARANCE, ARCH_SEGMENTS, BASE_COLORS, INSET, SUSPENSION_REST, Grid, check_base, hull_mesh, level_sockets, surface_z  # noqa: E402
 from shapes import prism, strut  # noqa: E402
 
 SEED = 302
@@ -133,6 +133,29 @@ def cage(kit: Kit) -> None:
     kit.box("gun_deck", (CAGE_FRONT - DECK_BACK + 0.06, 2 * CAGE_Y + 0.1, ROOF - TUBE_Z - TUBE / 2), ((CAGE_FRONT + DECK_BACK) / 2, 0, deck_z), "metal")
 
 
+def cab(kit: Kit) -> None:
+    """Closes the cage: painted doors behind the fender panels, dark glass in the cage frame and a roof over the whole cab."""
+    glass_top = TUBE_Z - TUBE / 2
+    door_top = HOOD_TOP - 0.02
+    door_bottom = 0.08  # above the rear mudguards
+    door_x = (COWL + CAGE_BACK) / 2
+    thin = 0.03
+    side = [(COWL + 0.1, door_top), (CAGE_BACK, door_top), (CAGE_BACK, glass_top), (CAGE_FRONT, glass_top)]
+    for s, sy in (("l", 1), ("r", -1)):
+        kit.box(f"door_{s}", (COWL - CAGE_BACK, 0.06, door_top - door_bottom), (door_x, sy * CAGE_Y, (door_top + door_bottom) / 2), "paint")
+        y = sy * CAGE_Y
+        prism(kit, f"side_glass_{s}", side, y - thin / 2, y + thin / 2, "glass")
+    screen = [(COWL + 0.1, door_top), (COWL + 0.1 - thin, door_top), (CAGE_FRONT - thin, glass_top), (CAGE_FRONT, glass_top)]
+    prism(kit, "windshield", screen, -CAGE_Y + 0.04, CAGE_Y - 0.04, "glass")
+    # The rear window lies between the two rear hoop legs.
+    top_y, low_y, low_x = CAGE_Y - 0.04, TUB - 0.12, BACK + 0.35
+    points = [(x + dx, sy * y, z) for dx in (0, thin) for sy in (1, -1) for x, y, z in ((CAGE_BACK, top_y, glass_top), (low_x, low_y, TAIL_TOP))]
+    kit._add(hull_mesh("rear_glass", points), "rear_glass", "glass", 0.0)
+    roof_front = DECK_BACK - 0.03
+    roof_back = CAGE_BACK - TUBE / 2
+    kit.box("roof_rear", (roof_front - roof_back, 2 * CAGE_Y + 0.1, ROOF - TUBE_Z - TUBE / 2), ((roof_front + roof_back) / 2, 0, ROOF - (ROOF - TUBE_Z - TUBE / 2) / 2), "metal")
+
+
 def main() -> None:
     args = parse_args()
     kit = Kit(BASE_COLORS, SEED)
@@ -140,6 +163,7 @@ def main() -> None:
     sides(kit)
     seats(kit)
     cage(kit)
+    cab(kit)
     deck_front = CAGE_FRONT + 0.03
     # Items on the engine cells stand on the bay floor.
     bay = {(x, y): FLOOR for x in (1, 2) for y in (1, 2)}

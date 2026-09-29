@@ -1,10 +1,12 @@
 import { PHYSICS } from '../data/physics';
-import { baseGrid, corePart, coreParts, mountedParts } from './grid';
+import { lanesAt } from './body';
+import { corePart, coreParts, mountedParts } from './grid';
 import { NPC_BEHAVIOR } from '../data/npcs';
 import { isHostile, noteCollision } from './combat';
 import { getMobilityCondition, isStranded, vehicleStats } from './stats';
-import { angleDiff, bearing, clamp, type Vec } from './vec';
-import { laneCount, ramMult, walkLane, type PartHit, type Side } from './armor';
+import { angleDiff, bearing, dist, type Vec } from './vec';
+import { laneCount, passShare, ramMult, sideToward, walkLane, type PartHit, type Side } from './armor';
+import { partDef, sustainedDamage } from '../data/parts';
 import { isJunk, maxHp, restorePart } from './wear';
 import { damagePart } from './damage';
 import { RULES } from '../data/rules';
@@ -97,7 +99,7 @@ function applyContactDamage(world: World, vehicle: Vehicle, contact: CrashContac
   const energy = computeCrashEnergy(world, vehicle, impact, share, mult);
   const hits = new Map<string, number>();
   // A glancing contact transfers only its touched share of the side's damage budget.
-  const round = { damage: energy / laneCount(vehicle, contact.side), pen: RULES.crashPen * mult, blast: false };
+  const round = { damage: energy / laneCount(vehicle, contact.side), pen: RULES.crashPen * mult, blast: false, armorShare: 1 };
   for (const lane of contact.lanes) {
     // All lanes meet the same pre-impact armor, even if this crash breaks it.
     const copy = structuredClone(vehicle);
@@ -137,44 +139,94 @@ export function ramImpact(world: World, attacker: Vehicle, target: Vehicle): num
   return impact < RULES.collisionMinImpact ? null : impact;
 }
 
-// Whether a ram now looks worth it: the attacker drives well enough, the forecast target loses more than the
-// attacker, and the attacker keeps its working parts, its cab and its driving parts above the flee condition.
-export function isRamGainful(world: World, attacker: Vehicle, target: Vehicle): boolean {
-  const impact = ramImpact(world, attacker, target);
-  if (impact === null) throw new Error(`${attacker.id} weighs a ram on ${target.id} it cannot make`);
-  if (getMobilityCondition(attacker) <= NPC_BEHAVIOR.recoverCondition) return false;
-  return canSurviveRam(world, attacker, target, impact, bearing(attacker.pos, target.pos), NPC_BEHAVIOR.fleeCondition);
-}
+// The hit points a forecast ram takes off each part of both trucks, and whether the attacker stays fit to fight.
+// Fit means its driving parts and cab stay above the flee condition. A part that lost nothing is left out.
+export type PartLoss = { defId: string; lost: number };
+export type RamForecast = { dealt: PartLoss[]; cost: PartLoss[]; fit: boolean };
 
-function canSurviveRam(world: World, attacker: Vehicle, target: Vehicle, impact: number, heading: number, minimum: number): boolean {
+// The forecast of a ram at the given closing speed, run through the crash model on copies. Nothing in the world
+// changes. Enemy part health is not observable, so the target's parts count as intact, except junk, which no
+// repair rebuilds.
+export function forecastRam(world: World, attacker: Vehicle, target: Vehicle, impact: number): RamForecast {
   const own = structuredClone(attacker);
   const other = structuredClone(target);
-  // Enemy part health is not observable. Assume intact protection for the risk estimate.
-  // A junk part stays broken, since no repair rebuilds it.
   for (const part of mountedParts(other)) if (!isJunk(part)) restorePart(part, maxHp(part));
   const intact = structuredClone(other);
   const draft = { ...world, player: structuredClone(world.player), events: [] };
-  own.heading = heading;
-  const contact = estimateCrashGeometry(own, other, other.pos);
-  damageVehicleCrash(draft, own, other, impact, contact);
-  const ownLoss = computePartLoss(attacker, own);
-  const otherLoss = computePartLoss(intact, other);
-  return otherLoss > ownLoss && retainsCombatParts(attacker, own, minimum);
+  own.heading = bearing(attacker.pos, target.pos);
+  damageVehicleCrash(draft, own, other, impact, estimateCrashGeometry(own, other, other.pos));
+  const minimum = NPC_BEHAVIOR.fleeCondition;
+  const cab = corePart(own, 'cab');
+  const fit = getMobilityCondition(attacker) > NPC_BEHAVIOR.recoverCondition && getMobilityCondition(own) > minimum && cab.hp > maxHp(cab) * minimum;
+  return { dealt: partLosses(intact, other), cost: partLosses(attacker, own), fit };
 }
 
-function computePartLoss(before: Vehicle, after: Vehicle): number {
+function partLosses(before: Vehicle, after: Vehicle): PartLoss[] {
   const hp = new Map(mountedParts(before).map((part) => [part.id, part.hp]));
-  return mountedParts(after).reduce((sum, part) => {
+  return mountedParts(after).flatMap((part) => {
     const previous = hp.get(part.id);
     if (previous === undefined) throw new Error(`Ram forecast introduced part ${part.id}`);
-    return sum + previous - part.hp;
-  }, 0);
+    return previous > part.hp ? [{ defId: part.defId, lost: previous - part.hp }] : [];
+  });
 }
 
-function retainsCombatParts(before: Vehicle, after: Vehicle, minimum: number): boolean {
-  const working = new Set(mountedParts(before).filter((part) => part.hp > 0).map((part) => part.id));
-  const disabled = mountedParts(after).some((part) => working.has(part.id) && part.hp === 0);
-  return !disabled && getMobilityCondition(after) > minimum && corePart(after, 'cab').hp > maxHp(corePart(after, 'cab')) * minimum;
+const R = NPC_BEHAVIOR.ram;
+
+// What a ram is worth against firing: 0 to 1. Both count expected damage per point of part weight. The ram is the
+// crash model's net damage times the chance it connects. The guns are what the attacker's working guns deliver past
+// the armor on the side the target shows them, over the turns the ram takes to close plus the turn it lands. The
+// value is the ram's share of the two. It is 0 when the ram cannot be made, nets nothing or leaves the attacker unfit.
+export function ramValue(world: World, attacker: Vehicle, target: Vehicle): number {
+  const impact = ramImpact(world, attacker, target);
+  if (impact === null) return 0;
+  const forecast = forecastRam(world, attacker, target, impact);
+  const net = weighed(forecast.dealt) - weighed(forecast.cost);
+  if (!forecast.fit || net <= 0) return 0;
+  const turns = turnsToClose(world, attacker, target, impact);
+  const worth = ramHitChance(world, attacker, target, impact) * net;
+  const guns = gunDamage(world, attacker, target) * R.gunWeight * (1 + turns);
+  return worth / (worth + guns);
+}
+
+// The ram weight factor. A ram worth nothing weighs R.riskyRam, and a worthwhile one its value times R.valueScale.
+export function ramFactor(world: World, attacker: Vehicle, target: Vehicle): number {
+  const value = ramValue(world, attacker, target);
+  return value > 0 ? value * R.valueScale : R.riskyRam;
+}
+
+// The chance a ram at this closing speed connects. See NPC_BEHAVIOR.ram.dodge.
+export function ramHitChance(world: World, attacker: Vehicle, target: Vehicle, impact: number): number {
+  const line = bearing(attacker.pos, target.pos);
+  const sway = target.speed * (R.dodge + Math.abs(Math.sin(angleDiff(target.heading, line)))) * turnsToClose(world, attacker, target, impact);
+  return 1 / (1 + sway / pathWidth(world, attacker, target));
+}
+
+// Turns the attacker drives before the blow lands, at the closing speed.
+function turnsToClose(world: World, attacker: Vehicle, target: Vehicle, impact: number): number {
+  const gap = Math.max(0, dist(attacker.pos, target.pos) - pathWidth(world, attacker, target));
+  return gap / impact;
+}
+
+function pathWidth(world: World, attacker: Vehicle, target: Vehicle): number {
+  return vehicleStats(world, attacker).radius + vehicleStats(world, target).radius;
+}
+
+function weighed(losses: PartLoss[]): number {
+  return losses.reduce((sum, { defId, lost }) => sum + lost * partWeight(defId), 0);
+}
+
+function partWeight(defId: string): number {
+  const def = partDef(defId);
+  const key = def.kind === 'core' ? def.role : def.kind;
+  const weight = R.partWeight[key];
+  if (weight === undefined) throw new Error(`No ram part weight for ${key}`);
+  return weight;
+}
+
+// The attacker's working gun damage per turn that gets past the armor on the side the target shows it.
+function gunDamage(world: World, attacker: Vehicle, target: Vehicle): number {
+  const side = sideToward(target, attacker.pos);
+  return vehicleStats(world, attacker).weapons.filter((mw) => mw.part.hp > 0).reduce((sum, mw) => sum + sustainedDamage(mw.def) * passShare(target, side, mw.def.round), 0);
 }
 
 export function estimateCrashGeometry(a: Vehicle, b: Vehicle | null, from: Vec): CrashGeometry {
@@ -211,15 +263,9 @@ function selectContactSide(normal: Vec): Side {
 export function locateCrashContact(chassisId: string, points: Vec[], normal: Vec): CrashContact {
   if (points.length === 0) throw new Error('Crash has no contact points');
   const side = selectContactSide(normal);
-  const grid = baseGrid(chassisId);
   const front = side === 'front' || side === 'rear';
-  const count = front ? grid.w : grid.h;
-  const indices = points.map((point) => front
-    ? point.y / PHYSICS.cell.across + grid.w / 2
-    : grid.h / 2 - point.x / PHYSICS.cell.along);
-  const first = clamp(Math.floor(Math.min(...indices)), 0, count - 1);
-  const last = clamp(Math.floor(Math.max(...indices)), 0, count - 1);
-  return { side, lanes: Array.from({ length: last - first + 1 }, (_, i) => first + i) };
+  const values = points.map((point) => (front ? point.y : point.x));
+  return { side, lanes: lanesAt(chassisId, front ? 'column' : 'row', Math.min(...values), Math.max(...values)) };
 }
 
 export function computeClosingSpeed(relative: Vec, normal: Vec): number {

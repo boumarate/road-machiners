@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { playerVehicle } from "../sim/damage";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
+import { vehicleStats } from "../sim/stats";
 import { refreshVision } from "../sim/vision";
 import { startPose } from "../sim/world";
 import { doneTips, tipToShow, type TipId } from "./tips";
 
 describe("driving tips", () => {
-  it("walks the player from a waypoint to Space, stopping and manual mode", () => {
+  it("walks the player from a waypoint to Space, stopping, stop waypoints and manual mode", () => {
     const w = emptyWorld();
     const me = playerVehicle(w);
     const seen = new Set<TipId>();
@@ -27,6 +28,11 @@ describe("driving tips", () => {
     me.speed = 0;
     me.order = { kind: "brake" };
     seen.add("stop");
+    expect(tipToShow(w, false, seen, null)).toBe("stopAt");
+
+    me.order = { kind: "stopAt", dest: { x: 40, y: 30 } };
+    expect(doneTips(w)).toContain("stopAt");
+    seen.add("stopAt");
     expect(tipToShow(w, false, seen, null)).toBe("manual");
 
     me.direct = true;
@@ -59,7 +65,7 @@ describe("driving tips", () => {
 describe("horn tip", () => {
   it("shows once an NPC is in sight and keeps a shown tip in place", () => {
     const w = emptyWorld();
-    const seen = new Set<TipId>(["waypoint", "drive", "stop", "manual"]);
+    const seen = new Set<TipId>(["waypoint", "drive", "stop", "stopAt", "manual"]);
     expect(tipToShow(w, false, seen, null)).toBeNull();
 
     const npc = addVehicle(w, "scavengers", "scout", [], { x: 32, y: 30 });
@@ -80,8 +86,43 @@ describe("horn tip", () => {
   });
 });
 
+describe("aim tip", () => {
+  const driving = new Set<TipId>(["waypoint", "drive", "stop", "stopAt", "manual"]);
+
+  function withRaider() {
+    const w = emptyWorld();
+    const npc = addVehicle(w, "raiders", "scout", [], { x: 32, y: 30 });
+    npc.brain = npcBrain("raider", npc.pos, ["raider"]);
+    refreshVision(w);
+    return { w, npc };
+  }
+
+  it("shows for an armed player once a hostile is in sight, ahead of the horn tip", () => {
+    const { w } = withRaider();
+    expect(tipToShow(w, false, driving, null)).toBe("aim");
+  });
+
+  it("stays away from a neutral", () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, "traders", "scout", [], { x: 32, y: 30 });
+    npc.brain = npcBrain("trader", npc.pos, ["trader"]);
+    refreshVision(w);
+    expect(tipToShow(w, false, driving, null)).toBe("honk");
+  });
+
+  it("is done once a gun aims at a part", () => {
+    const { w, npc } = withRaider();
+    const me = playerVehicle(w);
+    const gun = vehicleStats(w, me).weapons[0].part.id;
+    me.weaponOrders[gun] = { targetId: npc.id, aim: "body" };
+    expect(doneTips(w)).not.toContain("aim");
+    me.weaponOrders[gun] = { targetId: npc.id, aim: "engine" };
+    expect(doneTips(w)).toContain("aim");
+  });
+});
+
 describe("farewell tip", () => {
-  const allButFarewell: TipId[] = ["waypoint", "drive", "autoStop", "stop", "manual", "zones", "honk"];
+  const allButFarewell: TipId[] = ["waypoint", "drive", "autoStop", "stop", "stopAt", "manual", "zones", "honk"];
 
   it("shows once the player drives well past where traders first show up", () => {
     const w = emptyWorld();

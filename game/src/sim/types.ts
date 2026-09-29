@@ -25,10 +25,14 @@ export type PartInstance = {
   id: string;
   defId: string;
   hp: number;
-  reload: number;
+  gun?: GunState; // weapons only
   wear: number; // wear steps from breaking, 0 for pristine. See src/sim/condition.ts.
   rebuilt?: true; // a junk part rebuilt to the last wear step, which cannot be rebuilt again; see src/sim/wear.ts
 };
+
+// A weapon's fire state. cooldown counts turns to the next shot. reloadWork counts turns toward a full magazine,
+// and firing resets it. See src/sim/combat.ts.
+export type GunState = { cooldown: number; ammo: number; reloadWork: number };
 
 // An item in a vehicle's inventory grid. x and y are the top-left cell. rot 1 swaps width and height.
 // A part works only while it lies fully on mount cells of its kind. Each good unit takes one cell.
@@ -190,6 +194,8 @@ export type NpcBrain = {
     ramChoice?: string; // the fight target this driver chose to ram while its ram chance lasts
     ramTarget?: string; // the fight target this driver drives through this turn
     fightTurn?: 1 | -1; // a circling fighter's direction around its target; see src/sim/ai.ts
+    // Where the fight target was, how it faced and how fast it drove when the driver last read it, on `turn`.
+    targetSeen?: { id: string; turn: number; pos: Vec; heading: number; speed: number };
     // The fight whim rolled last, held until turn `until`. angle is where around the target a veer drives.
     whim?: { kind: 'keep' | 'rush' | 'halt' | 'veer'; until: number; angle: number };
     farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
@@ -236,7 +242,7 @@ export type Obstacle =
 export type BrokenProp = { obstacle: Obstacle; turn: number };
 
 // A timed relation one vehicle holds toward another. src/sim/states.ts owns them.
-export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce' | 'grievance' | 'plea' | 'trade' | 'revenge' | 'escort';
+export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce' | 'grievance' | 'plea' | 'trade' | 'revenge' | 'escort' | 'strayFire';
 export type StateEnding = 'expired' | 'fulfilled' | 'broken';
 export type Plea = 'truce' | 'mercy';
 // A tow state: the holder tows the other party to the town or camp `site` for `fee`, paid on arrival. `waived` is
@@ -254,6 +260,7 @@ export type StateData =
   | { kind: 'plea'; plea: Plea; answered: boolean }
   | { kind: 'escort'; site: string | null; fee: number }
   | { kind: 'patch'; deal: PatchDeal; parts: number; price: number; work: number; workLeft: number } // holder patches other
+  | { kind: 'strayFire'; damage: number } // unintended damage the holder took from the other party
   | { kind: 'none' };
 export type NpcState = {
   id: string;
@@ -326,16 +333,22 @@ export type Player = {
 
 // One round of a shot. offset is where it crossed the target in meters from its center, across the line
 // of fire, positive to the shooter's right. hits lists the parts it damaged, by direct hit or splash.
+// hit: the round landed on its target. struck: the truck it landed on, or null for the ground. hits: its direct
+// hits on that truck. blast: the part hits its explosion dealt, per truck.
 export type ShotRound = {
   hit: boolean;
   crit: boolean;
   offset: number;
+  struck: string | null;
   hits: PartHit[];
+  blast: VehicleHits[];
 };
+export type VehicleHits = { vehicle: string; hits: PartHit[] };
 
 export type GameEvent =
   | { t: 'activity'; vehicle: string; previous: NpcActivity['kind'] | null; activity: NpcActivity['kind'] | null; reason: string }
   | { t: 'collision'; a: string; b: string; hitsA: PartHit[]; hitsB: PartHit[] } // parts damaged on a and on b; hitsB is empty when b is not a vehicle
+  | { t: 'empty'; vehicle: string; weapon: string }
   | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; chance: number; side: Side; rounds: ShotRound[] }
   | { t: 'guardShot'; site: string; from: Vec; target: string; rounds: ShotRound[] }
   | { t: 'partDisabled'; vehicle: string; part: string }

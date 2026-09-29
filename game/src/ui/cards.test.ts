@@ -4,11 +4,10 @@ import { mountedParts } from "../sim/grid";
 import { playerVehicle } from "../sim/damage";
 import { newWorld } from "../sim/world";
 import type { PartInstance } from "../sim/types";
-import { partValue } from "../sim/wear";
-import { baselinePart, chassisStats, comparePart, diffStats, partStats } from "./cards";
+import { baselinePart, chassisStats, compareBase, diffStats, partStats } from "./cards";
 import { TEST_MAP } from "../test/map";
 
-const part = (defId: string, wear = 0): PartInstance => ({ id: defId, defId, hp: 1, wear, reload: 0 });
+const part = (defId: string, wear = 0): PartInstance => ({ id: defId, defId, hp: 1, wear });
 
 describe("part stats and their change against the player's part", () => {
   it("marks a faster engine better and its higher fuel use worse", () => {
@@ -49,18 +48,15 @@ describe("the part a new part is weighed against", () => {
 });
 
 describe("the part a shop card compares with", () => {
-  it("steps through the mounted parts of the kind, most valuable first, and wraps", () => {
-    const w = newWorld(1, START_KITS.combat, TEST_MAP);
-    const me = playerVehicle(w);
-    const guns = [...mountedParts(me, "weapon")].sort((a, b) => partValue(b) - partValue(a));
-    expect(guns.length).toBeGreaterThan(1);
-    expect(comparePart(me, "weapon", 0)).toBe(guns[0]);
-    expect(comparePart(me, "weapon", 1)).toBe(guns[1]);
-    expect(comparePart(me, "weapon", guns.length)).toBe(guns[0]);
+  it("is the selected item", () => {
+    expect(compareBase(part("turbine"), part("stockEngine"))).toEqual(part("turbine"));
   });
 
-  it("has nothing to compare with when no part of the kind is mounted", () => {
-    const me = playerVehicle(newWorld(1, START_KITS.standard, TEST_MAP));
-    expect(comparePart(me, "scanner", 0)).toBeNull();
+  it("is nothing while no item is selected, so the card shows plain stats", () => {
+    expect(compareBase(null, part("stockEngine"))).toBeNull();
+  });
+
+  it("is nothing for the selected part's own card", () => {
+    expect(compareBase(part("turbine"), part("turbine"))).toBeNull();
   });
 });

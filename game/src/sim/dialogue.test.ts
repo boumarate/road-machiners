@@ -232,7 +232,7 @@ describe('NPC calls', () => {
 
   it('only the fight topics call during combat', () => {
     const fight = Object.values(TOPICS).filter((t) => t.raise?.duringCombat).map((t) => t.id);
-    expect(fight.sort()).toEqual(['demand', 'mercyPlea', 'truceOffer']);
+    expect(fight.sort()).toEqual(['demand', 'giveUp', 'mercyPlea', 'surrender', 'truceOffer']);
   });
 
   it('an NPC that does not see the player stays quiet', () => {
@@ -435,7 +435,9 @@ describe('demand', () => {
     let shots = 0;
     for (let i = 0; i < 8; i++) {
       w = endTurn(w, testDrive);
-      expect(w.player.call).toBeNull();
+      // A raider that shot the player to a standstill may offer surrender. The demand itself never returns.
+      expect(w.player.call?.topic).not.toBe('demand');
+      if (w.player.call) w = hangUp(w);
       shots += shotsBetween(w, raider.id, w.player.vehicleId).length;
     }
     expect(shots).toBeGreaterThan(0);

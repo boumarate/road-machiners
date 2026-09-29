@@ -56,6 +56,8 @@ const ART = {
   pen: '<path d="M22 5v30M4 20h28M26 14l7 6-7 6"/>',
   range: '<path d="M4 20h32M4 13v14M36 13v14M12 17v6M20 16v8M28 17v6"/>',
   reload: '<path d="M33 20a13 13 0 1 1-4-9.5M33 5v9h-9"/>',
+  cooldown: '<path d="M11 5h18M11 35h18M13 5q0 11 7 15q-7 4-7 15M27 5q0 11-7 15q7 4 7 15"/>',
+  magazine: '<path d="M14 6h12v28H14zM14 13h12M14 20h12M14 27h12"/>',
   spread: '<path d="M5 20l30-12M5 20l30 12M5 20h30"/>',
   arc: '<path d="M20 33L7 12M20 33l13-21M9 15q11-9 22 0"/>',
   speed: '<path d="M5 30a15 15 0 1 1 30 0M20 30l9-11M10 30h3M27 30h3"/>',
@@ -68,6 +70,7 @@ const ART = {
   turning: '<path d="M10 35V22q0-12 14-12h6M25 4l7 6-7 6"/>',
   cells: '<path d="M5 5h30v30H5zM5 20h30M20 5v30"/>',
   load: '<path d="M3 27h34v6H3zM9 27V13h22v14M9 33v3M31 33v3"/>',
+  power: '<path d="M23 3L9 22h10l-3 15 15-20H21z"/>',
   recoil: '<path d="M16 20h20M16 14v12M4 20l8-6v12z"/>',
   blast: '<path d="M20 4l3 9 9-4-4 9 9 2-9 3 4 9-9-4-3 9-3-9-9 4 4-9-9-3 9-2-4-9 9 4z"/>',
   heat: '<path d="M16 25V7a4 4 0 0 1 8 0v18a7 7 0 1 1-8 0zM20 13v15"/>',
@@ -109,6 +112,8 @@ const ICON_NAMES: Record<IconName, string> = {
   pen: "Penetration",
   range: "Range",
   reload: "Reload",
+  cooldown: "Cooldown",
+  magazine: "Magazine",
   spread: "Spread",
   arc: "Firing arc",
   speed: "Speed",
@@ -122,6 +127,7 @@ const ICON_NAMES: Record<IconName, string> = {
   cells: "Cargo cells",
   load: "Rated load",
   recoil: "Recoil",
+  power: "Power",
   blast: "Blast armor",
   heat: "Heat",
   patch: "Field repair",
@@ -220,9 +226,7 @@ function partNote(part: PartInstance): string {
 
 export type PartCardOptions = {
   part: PartInstance;
-  base: PartInstance | null; // the part it is weighed against, or null for no comparison
-  baseCount: number; // mounted parts of its kind the player can step through
-  onNextBase: (() => void) | null; // steps to the next mounted part of its kind
+  base: PartInstance | null; // the part it is weighed against, or null for plain stats
   action: HTMLElement | null;
   onHover?: (on: boolean) => void;
 };
@@ -240,7 +244,7 @@ export function partCard(o: PartCardOptions): HTMLElement {
       el("div", { class: "card-name" }, el("b", {}, def.name), el("span", { class: "dim" }, partNote(o.part))),
       footprint(def.w, def.h),
     ),
-    compareLine(o),
+    ...(o.base ? [compareLine(o.base)] : []),
     conditionMeter(o.part),
     statGrid(diffs),
     el("div", { class: "card-foot" }, el("span"), o.action),
@@ -253,34 +257,15 @@ export function partCard(o: PartCardOptions): HTMLElement {
   return card;
 }
 
-// Which mounted part a screen's cards of each kind compare with. Stepping moves every card of the kind together.
-export class CompareSteps {
-  private index = new Map<PartKind, number>();
-
-  options(me: Vehicle, kind: PartKind, rerender: () => void): Pick<PartCardOptions, "base" | "baseCount" | "onNextBase"> {
-    const index = this.index.get(kind) ?? 0;
-    return {
-      base: comparePart(me, kind, index),
-      baseCount: mountedParts(me, kind).length,
-      onNextBase: () => {
-        this.index.set(kind, index + 1);
-        rerender();
-      },
-    };
-  }
+// The part a shop card is weighed against: the item the player selected. With nothing selected, or the card
+// showing that same part, the card shows plain stats.
+export function compareBase(selected: PartInstance | null, part: PartInstance): PartInstance | null {
+  return selected && selected.id !== part.id ? selected : null;
 }
 
-// What the changes in the stat table are against. With several mounted parts of the kind, a click steps to the next.
-function compareLine(o: PartCardOptions): HTMLElement {
-  if (!o.base) return el("div", { class: "card-compare dim" }, "Nothing to compare");
-  const name = partDef(o.base.defId).name;
-  if (o.baseCount < 2 || !o.onNextBase) return el("div", { class: "card-compare" }, `Compared with ${name}`);
-  const next = o.onNextBase;
-  return el(
-    "button",
-    { class: "card-compare", title: "Compare with your next part of this kind", onclick: () => next() },
-    `Compared with ${name}`,
-  );
+// What the changes in the stat table are against.
+function compareLine(base: PartInstance): HTMLElement {
+  return el("div", { class: "card-compare" }, `Compared with ${partDef(base.defId).name}`);
 }
 
 // A truck's grid seen from above, nose up, one colored square per cell.
@@ -305,6 +290,8 @@ export type StatIcon =
   | "pen"
   | "range"
   | "reload"
+  | "cooldown"
+  | "magazine"
   | "spread"
   | "arc"
   | "speed"
@@ -322,6 +309,7 @@ export type StatIcon =
   | "load"
   | "scanner"
   | "recoil"
+  | "power"
   | "blast"
   | "heat"
   | "patch"
@@ -405,9 +393,12 @@ function weaponStats(part: PartInstance): Stat[] {
     shot,
     penStat(d),
     stat("range", "Range", meters(d.range), "m", "more"),
-    stat("reload", "Turns between shots", d.reload, "t", "less"),
+    stat("cooldown", "Turns between shots", d.cooldown, "t", "less"),
+    stat("magazine", "Shots per magazine", d.magazine, "", "more"),
+    stat("reload", "Turns to reload", d.reload, "t", "less"),
     stat("arc", "Firing arc", d.arc, "°", "more"),
     stat("recoil", "Recoil", d.recoil, "°", "less", 1),
+    stat("power", "Power draw", d.draw, "", "less", 1),
   ];
 }
 
@@ -418,6 +409,7 @@ function engineStats(part: PartInstance): Stat[] {
   return [
     { ...speed, text: signed(speed.value, 0) },
     { ...accel, text: signed(accel.value, 1) },
+    stat("power", "Gun power", d.capacity, "", "more"),
     stat("fuel", "Fuel use", d.fuelMult, "×", "less", 1),
     stat("heat", "Heat", d.heat, "×", "less", 1),
   ];
@@ -472,13 +464,7 @@ function verdictOf(delta: number, better: Stat["better"]): Verdict {
   return (delta > 0) === (better === "more") ? "better" : "worse";
 }
 
-// The mounted part a new part of this kind is weighed against: the most valuable one on the truck.
+// The mounted part a spare of this kind is weighed against: the most valuable one on the truck.
 export function baselinePart(v: Vehicle, kind: PartKind): PartInstance | null {
-  return comparePart(v, kind, 0);
-}
-
-// The mounted parts of a kind, most valuable first. The player steps through them to pick what a card compares with.
-export function comparePart(v: Vehicle, kind: PartKind, index: number): PartInstance | null {
-  const mounted = [...mountedParts(v, kind)].sort((a, b) => partValue(b) - partValue(a));
-  return mounted.length === 0 ? null : mounted[index % mounted.length];
+  return [...mountedParts(v, kind)].sort((a, b) => partValue(b) - partValue(a))[0] ?? null;
 }

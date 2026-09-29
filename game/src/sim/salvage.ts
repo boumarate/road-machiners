@@ -12,9 +12,10 @@ import { playerVehicle, vehicleById } from './damage';
 import { isKnockedOut } from './defeat';
 import { grayRadius } from './vision';
 import { findSpot, goodsCount, gridOf, isMounted, MOUNT_CELLS, type Spot } from './grid';
-import { addGoods, getLayoutError, lootRefitTurns, requireIdleRefit, stowPart } from './inventory';
+import { addGoods, cargoMassRoom, getLayoutError, lootRefitTurns, requireIdleRefit, stowPart } from './inventory';
 import { chance, randInt } from './rng';
 import { sampleWeighted } from './npc-loadout';
+import { itemMass } from './mass';
 import { getResources } from './resources';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import { cancelJob, inCombat, startJob } from './jobs';
@@ -81,10 +82,11 @@ export function canTakeAny(world: World, vehicle: Vehicle, stock: SalvageStock):
   if ((['fuel', 'supplies'] as const).some((kind) => (stock[kind] ?? 0) > 0 && room[kind] > 0)) return true;
   const grid = gridOf(vehicle);
   const good: GridItem = { id: 'fit-check', x: 0, y: 0, rot: 0, kind: 'good', good: 'scrap' };
-  if (Object.values(stock.goods).some((count) => count > 0) && findSpot(grid, vehicle.items, good, null, null)) return true;
+  const massRoom = cargoMassRoom(vehicle);
+  if (Object.entries(stock.goods).some(([id, count]) => count > 0 && GOODS[id].mass <= massRoom) && findSpot(grid, vehicle.items, good, null, null)) return true;
   return stock.parts.some((part) => {
     const item: GridItem = { id: 'fit-check', x: 0, y: 0, rot: 0, kind: 'part', part };
-    return findSpot(grid, vehicle.items, item, null, MOUNT_CELLS[partDef(part.defId).kind]) !== null;
+    return itemMass(item) <= massRoom && findSpot(grid, vehicle.items, item, null, MOUNT_CELLS[partDef(part.defId).kind]) !== null;
   });
 }
 
@@ -370,7 +372,7 @@ export function breakProp(world: World, id: string, vehicleId: string): void {
   // The lane in the middle of the side facing the prop takes the scrape, through the crash damage path.
   const contact = estimateCrashGeometry(vehicle, null, prop.pos).a;
   const lane = contact.lanes[Math.floor(contact.lanes.length / 2)];
-  const hitsA = walkLane(world, vehicle, contact.side, lane, { damage: BREAKABLE.damage, pen: RULES.crashPen, blast: false });
+  const hitsA = walkLane(world, vehicle, contact.side, lane, { damage: BREAKABLE.damage, pen: RULES.crashPen, blast: false, armorShare: 1 });
   world.events.push({ t: 'collision', a: vehicle.id, b: id, hitsA, hitsB: [] });
 }
 
@@ -508,6 +510,7 @@ function nextInstalled(looter: Vehicle, target: Vehicle): { item: GridItem; spot
 
 // A spot off the mounts, where a looted item rides as cargo.
 function spareSpot(looter: Vehicle, item: GridItem): Spot | null {
+  if (itemMass(item) > cargoMassRoom(looter)) return null;
   const avoid = item.kind === 'part' ? MOUNT_CELLS[partDef(item.part.defId).kind] : null;
   return findSpot(gridOf(looter), looter.items, { ...item, id: 'probe' }, null, avoid);
 }

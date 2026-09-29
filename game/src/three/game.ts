@@ -38,6 +38,7 @@ import { isTowed, setBeacon, unhitch } from "../sim/tow";
 import { cloneWorld, hostileToPlayer, playerCanAct, setMoveOrder } from "../sim/world";
 import { TruckControls } from "./truck-controls";
 import { PAL } from "../render/palette";
+import { READY_ARC_BIT } from "./render/models";
 import { timed } from "../perf";
 import { CharacterScreen } from "../ui/character";
 import { HitCard } from "../ui/hitCard";
@@ -45,12 +46,12 @@ import type { UiHost } from "../ui/host";
 import { COMBAT_BLOCKED, Hud } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
 import { TownScreen, TruckTradeScreen } from "../ui/town";
-import { toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
+import { aimAtPart, HoverHold, toggleTarget, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
 import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
 import { FogView } from "./render/fog";
 import { Fx3D, TruckFx } from "./render/fx";
-import { planVolley, projectileOf, towardFrom, type Muzzle } from "./render/projectiles";
+import { blastRadiusOf, planVolley, projectileOf, roundAims, towardFrom, type Muzzle } from "./render/projectiles";
 import { Labels, VehicleMarkers } from "./render/labels";
 import { ObstacleViews } from "./render/obstacles";
 import { PathView } from "./render/path";
@@ -58,7 +59,7 @@ import { RenderScope, SightLimit } from "./render/scope";
 import { addSites } from "./render/sites";
 import { terrainMesh } from "./render/terrain";
 import { VehicleView, viewOf } from "./render/vehicle";
-import { WeaponRangeView } from "./render/weaponRange";
+import { HoverArcsView, WeaponRangeView } from "./render/weaponRange";
 import { WeatherView } from "./render/weather";
 import { ZonesView } from "./render/zones";
 import { REGION } from "../data/region";
@@ -137,12 +138,15 @@ export class Game {
   private anim: Playback | null = null;
   private readonly travel = new Travel(CONFIG.travelHoldMs);
   private phase: TurnPhase = null;
-  private readonly weaponRange = new WeaponRangeView();
+  private readonly weaponRange = new WeaponRangeView(PAL.select, READY_ARC_BIT);
+  private readonly hoverArcs: HoverArcsView;
   private readonly markers: VehicleMarkers;
   private readonly overlay: HTMLElement;
   private live: LiveVision | null = null; // the player's view while a turn plays
   private hoverGround: Vec | null = null;
   private hovered: string | null = null;
+  // The pointer needs a moment to travel from a truck to its panel.
+  private readonly hoverHold = new HoverHold((id) => this.setHovered(id), 400);
   private readonly pickRing = new THREE.Mesh(
     new THREE.RingGeometry(1, 1, 48).rotateX(-Math.PI / 2),
     new THREE.MeshBasicMaterial({
@@ -213,6 +217,7 @@ export class Game {
     this.path = new PathView(this.world.terrain);
     this.shade = new ShadeView(this.world, groundChunks);
     this.weather = new WeatherView(this.world);
+    this.hoverArcs = new HoverArcsView(overlay, this.rig);
     this.scene.add(
       this.ground,
       this.props,
@@ -221,6 +226,7 @@ export class Game {
       this.zones.root,
       this.path.root,
       this.weaponRange.root,
+      this.hoverArcs.root,
       this.contacts.root,
       this.dust.root,
       this.soundRing.root,
@@ -267,8 +273,10 @@ export class Game {
       autoTravel: () => this.travel.isAuto(this.world),
       dialogue: { world: () => this.world, hovered: () => this.hovered, busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
       recenter: () => this.follow.recenter(),
+      aimPart: (vehicleId, partId) => this.anim === null && this.apply(aimAtPart(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, vehicleId), partId)),
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
+    this.hoverHold.watch(this.hud.getInspectionRoot());
     this.menu = new GameMenu({
       save: () => writeSave(window.localStorage, this.world),
       hasSave: () => hasSave(window.localStorage),
@@ -399,11 +407,7 @@ export class Game {
 
   private refreshInfo(): void {
     const w = this.displayWorld();
-    const v = this.hovered
-      ? (w.vehicles.find(
-          (x) => x.id === this.hovered && playerSees(w, x.pos),
-        ) ?? null)
-      : null;
+    const v = w.vehicles.find((x) => x.id === this.hovered && playerSees(w, x.pos)) ?? null;
     this.hud.showInfo(w, v, v ? hostileToPlayer(w, v) : false);
     this.hitCard.render(w, v ? v.id : null);
   }
@@ -579,6 +583,10 @@ export class Game {
       id || this.modalOpen()
         ? null
         : this.rig.groundUnder(e.clientX, e.clientY, this.ground);
+    this.hoverHold.move(id, this.hovered);
+  }
+
+  private setHovered(id: string | null): void {
     if (id === this.hovered) return;
     this.hovered = id;
     this.refreshInfo();
@@ -635,6 +643,7 @@ export class Game {
     this.phase = a.combat ? "Firing" : "Results";
     timed("fog", () => this.fog.update(this.combatFogWorld()));
     this.playShotFx();
+    this.playDryGuns();
     this.weapons.render();
   }
 
@@ -760,6 +769,14 @@ export class Game {
     return { x: f.pos.x, y: f.pos.y + GUN_HEIGHT, z: f.pos.z };
   }
 
+  // A seen gun that fired its last round clunks as the volley ends.
+  private playDryGuns(): void {
+    for (const e of this.world.events) {
+      const p = e.t === "empty" ? this.eventPoint(e.vehicle) : null;
+      if (p) this.sound.at("gun-empty", p, CONFIG.combatShotMs);
+    }
+  }
+
   private playShotFx(): void {
     const w = this.world;
     const rows = new Map<string, number>();
@@ -768,9 +785,7 @@ export class Game {
         const a = this.eventPoint(e.shooter);
         const b = this.eventPoint(e.target);
         if (!a || !b) continue;
-        const shooter =
-          w.vehicles.find((x) => x.id === e.shooter) ??
-          w.removed.find((x) => x.id === e.shooter);
+        const shooter = w.vehicles.find((x) => x.id === e.shooter) ?? w.removed.find((x) => x.id === e.shooter);
         const gun = shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
         if (!gun) throw new Error(`Shot from ${e.shooter} names no mounted weapon ${e.weapon}`);
         const view = viewOf(this.views, e.shooter);
@@ -781,13 +796,7 @@ export class Game {
         const b = this.eventPoint(e.target);
         if (!b) continue;
         const g = groundPoint(this.world.terrain, e.from);
-        const a = {
-          x: g.x,
-          y:
-            g.y +
-            (REGION.settlement.guardTowerHeight + 0.2) * PHYSICS.metersPerTile,
-          z: g.z,
-        };
+        const a = { x: g.x, y: g.y + (REGION.settlement.guardTowerHeight + 0.2) * PHYSICS.metersPerTile, z: g.z };
         const landMs = this.playVolley(a, () => towardFrom(a, b), b, e.rounds, "guard", e.target, rows);
         this.sound.accents([e], w.player.vehicleId, () => landMs);
       }
@@ -813,18 +822,25 @@ export class Game {
     // Every round lands within the shot time, before the results show.
     const spec = projectileOf(weapon);
     const ground = (p: V3) => groundPoint(this.world.terrain, toMap(p)).y;
-    const plans = planVolley(spec, a, b, rounds, CONFIG.combatShotMs, ground);
+    const plans = planVolley(spec, a, roundAims(b, targetId, rounds, (id) => this.eventPoint(id)), CONFIG.combatShotMs, ground);
     plans.forEach((plan, k) => {
-      this.fx.shot(spec, muzzle, plan);
+      this.fx.shot(spec, muzzle, plan, blastRadiusOf(weapon));
       this.sound.at(spec.look === "tracer" ? "mg-fire" : "cannon-fire", a, plan.delayMs);
       this.sound.at(plan.struck ? "hit-metal" : "miss", plan.land, plan.delayMs + plan.flightMs);
-      const label = roundLabel(this.world, targetId, rounds[k]);
-      if (!label) return;
-      const row = rows.get(targetId) ?? 0;
-      rows.set(targetId, row + 1);
-      this.fx.label(b, label, PAL.damageText, row, plan.delayMs + plan.flightMs, CONFIG.combatReadMs);
+      const r = rounds[k];
+      const struck = r.struck === null ? [] : [{ vehicle: r.struck, hits: r.hits }];
+      for (const dealt of [...struck, ...r.blast]) this.damageLabel(dealt.vehicle, roundLabel(this.world, dealt.vehicle, dealt.hits, r.crit), rows, plan.delayMs + plan.flightMs);
     });
     return Math.min(...plans.map((plan) => plan.delayMs + plan.flightMs)); // when the first round lands
+  }
+
+  // Damage text over a truck that shows, stacked in rows per truck.
+  private damageLabel(vehicleId: string, label: string | null, rows: Map<string, number>, atMs: number): void {
+    const p = this.eventPoint(vehicleId);
+    if (!label || !p) return;
+    const row = rows.get(vehicleId) ?? 0;
+    rows.set(vehicleId, row + 1);
+    this.fx.label(p, label, PAL.damageText, row, atMs, CONFIG.combatReadMs);
   }
 
   // The path preview chains physics turns from the current state, so it shows what will happen.
@@ -1084,16 +1100,11 @@ export class Game {
     this.zones.root.visible = steer;
     this.path.show(steer, this.displayWorld(), this.modalOpen());
     this.weaponRange.root.visible = false;
+    this.hoverArcs.follow(this.displayWorld(), this.hovered, this.frames, this.modalOpen());
     this.markers.place(this.frames, hide, this.modalOpen());
     this.placeHitCard();
     this.placePickRing(hide);
-    this.contacts.update(
-      this.world.terrain,
-      this.world.player.contacts,
-      playerVehicle(this.world).pos,
-      this.world.turn,
-      performance.now(),
-    );
+    this.contacts.update(this.world.terrain, this.world.player.contacts, playerVehicle(this.world).pos, this.world.turn, performance.now());
     this.dust.update(this.world, this.world.terrain, performance.now());
     const meFrame = this.frames[playerVehicle(this.world).id];
     this.soundRing.update(

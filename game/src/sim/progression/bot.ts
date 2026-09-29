@@ -207,7 +207,7 @@ function itemOf(world: World, partId: string): string {
 }
 
 function engineSpot(v: Vehicle, defId: string): Spot | null {
-  const probe: GridItem = { id: 'engine-probe', x: 0, y: 0, rot: 0, kind: 'part', part: { id: 'engine-probe', defId, hp: 0, reload: 0, wear: 0 } };
+  const probe: GridItem = { id: 'engine-probe', x: 0, y: 0, rot: 0, kind: 'part', part: { id: 'engine-probe', defId, hp: 0, wear: 0 } };
   return findSpot(gridOf(v), v.items, probe, MOUNT_CELLS.engine, null);
 }
 

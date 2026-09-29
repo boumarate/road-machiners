@@ -143,7 +143,7 @@ describe('NPC gameplay recovery', () => {
     const { world, npc } = createScenario();
     npc.brain!.goals = [workGoal('scavenger')];
     const ally = addVehicle(world, 'scavengers', 'scout', [], { x: 32, y: 32 });
-    const enemy = addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
+    const enemy = addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 30 });
     fireAt(world, enemy, ally);
     const reacted = shareOfSeeds(world, npc.id, (x, me) => {
       planNpcOrders(x);
@@ -157,7 +157,7 @@ describe('NPC gameplay recovery', () => {
     const { world, npc } = createScenario();
     const gate = siteGates(REGION.towns[0])[0];
     npc.pos = { ...gate };
-    const enemy = addVehicle(world, 'raiders', 'buggy', ['mg'], { x: gate.x + 3, y: gate.y });
+    const enemy = addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: gate.x + 3, y: gate.y });
     fireAt(world, enemy, npc);
     const fought = shareOfSeeds(world, npc.id, (x, me) => {
       planNpcOrders(x);

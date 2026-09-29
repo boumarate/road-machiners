@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { GOOD_IDS } from "../data/goods";
-import { getItemIcon } from "./inventory";
+import { getItemIcon } from "./inventory-draw";
 
 describe("inventory artwork for current trade goods", () => {
   it.each(GOOD_IDS)("provides an icon for %s", (good) => {

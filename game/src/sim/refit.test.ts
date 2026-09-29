@@ -39,6 +39,8 @@ describe('field refits', () => {
 
   it('charges removal and installation for relocation between mounts', () => {
     const w = emptyWorld();
+    removeAllGoods(w.vehicles[0]);
+    w.vehicles[0].items = w.vehicles[0].items.filter((it) => it.kind === 'good' || it.part.defId !== 'panniers');
     const weapon = getWeapon(w);
     const to = findSpot(gridOf(w.vehicles[0]), w.vehicles[0].items, { ...weapon, id: 'probe' }, MOUNT_CELLS.weapon, null);
     if (!to) throw new Error('Expected spare mount');
@@ -129,7 +131,7 @@ describe('field refits', () => {
     const w = emptyWorld();
     const engine = w.vehicles[0].items.find((item) => item.kind === 'part' && item.part.defId === 'stockEngine');
     if (!engine) throw new Error('Expected engine');
-    expect(() => moveItem(w, engine.id, { x: 0, y: 0, rot: 0 })).toThrow('More than one item');
+    expect(() => moveItem(w, engine.id, { x: 4, y: 1, rot: 0 })).toThrow('More than one item');
   });
 
   it('cancels when a required item has changed position', () => {
@@ -157,8 +159,8 @@ describe('field refits', () => {
   it('rejects removal of cargo rows that still hold items', () => {
     const w = emptyWorld();
     removeAllGoods(w.vehicles[0]);
-    const rack = w.vehicles[0].items.find((item) => item.kind === 'part' && item.part.defId === 'rack');
-    if (!rack) throw new Error('Expected rack');
+    const rack = w.vehicles[0].items.find((item) => item.kind === 'part' && item.part.defId === 'panniers');
+    if (!rack) throw new Error('Expected panniers');
     w.vehicles[0].items.push({ id: 'cargo', kind: 'good', good: 'scrap', x: 0, y: CHASSIS.scout.layout.length, rot: 0 });
     const result = planItemMove(w.vehicles[0], rack.id, { x: 2, y: CHASSIS.scout.layout.length, rot: 0 });
     expect(result.error).toMatch(/fit|fall off/);

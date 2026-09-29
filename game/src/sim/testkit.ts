@@ -40,6 +40,8 @@ export function emptyWorld(pos: Vec = { x: 30, y: 30 }): World {
     Object.freeze(emptyTemplate.terrain);
     emptyTemplate.vehicles = emptyTemplate.vehicles.filter((v) => v.faction === 'player');
     emptyTemplate.states = [];
+    // A fixed state, so the rolls in a test do not move when the spawn loadouts drawn by newWorld() change.
+    emptyTemplate.rngState = -1655809527;
   }
   const w = cloneWorld(emptyTemplate);
   const p = w.vehicles[0];

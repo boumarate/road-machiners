@@ -17,11 +17,13 @@ import { playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
 import { npcTraits } from '../sim/npc-decisions';
 import { hasPerk } from '../sim/progress';
-import { pleaData, statesHeld, towData } from '../sim/states';
+import { pleaData, statesHeld, strayData, towData } from '../sim/states';
+import { RULES } from '../data/rules';
 import { isJunk } from '../sim/wear';
 import { clockOf } from '../sim/sun';
 import type { PartHit } from '../sim/armor';
-import type { GameEvent, GridItem, Job, NpcState, PartInstance, RefitJob, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
+import { shotDamage } from '../sim/combat';
+import type { GameEvent, GridItem, Job, NpcState, PartInstance, RefitJob, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
 
 // What a job works on, in words: "Repair Autocannon", "Remove Autocannon from Raider outrider".
@@ -155,6 +157,7 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   trade: () => 'Pulling over to trade with you',
   revenge: () => 'Wants revenge on you',
   escort: () => 'Escorting you',
+  strayFire: (s) => `Hit by your stray fire, ${Math.round(strayData(s).damage)} of ${RULES.stray.feudDamage} damage forgiven`,
 };
 
 // One line per state the NPC holds toward the player, with turns left when the state has a timer.
@@ -205,15 +208,66 @@ function partShort(world: World, vehicleId: string, partId: string): string {
   return PART_SHORT[def.kind === 'core' ? def.role : def.kind];
 }
 
-// "Crit! Eng: 5, Arm: 2" for the parts one round damaged, or null when it damaged none.
-export function roundLabel(world: World, vehicleId: string, round: ShotRound): string | null {
-  const dealt = partDamage(round.hits);
+// "Crit! Eng: 5, Arm: 2" for the parts of one truck a round damaged, or null when it damaged none.
+export function roundLabel(world: World, vehicleId: string, hits: PartHit[], crit: boolean): string | null {
+  const dealt = partDamage(hits);
   if (dealt.size === 0) return null;
   const parts = [...dealt].map(([id, d]) => `${partShort(world, vehicleId, id)}: ${damage(d)}`).join(', ');
-  return `${round.crit ? 'Crit! ' : ''}${parts}`;
+  return `${crit ? 'Crit! ' : ''}${parts}`;
 }
 
-type LogLine = { text: string; cls: string };
+// A log line is plain text. Spans split it into pieces the log colors on their own.
+export type LogSpan = { text: string; cls: string };
+export type LogLine = { text: string; cls: string; spans?: LogSpan[] };
+
+function spanLine(cls: string, spans: LogSpan[]): LogLine {
+  return { text: spans.map((s) => s.text).join(''), cls, spans };
+}
+
+// A shot by or at the player, or one whose stray rounds or blast hit the player. Trucks hit that the shot was not
+// aimed at follow as stray damage.
+function shotText(world: World, e: Extract<GameEvent, { t: 'shot' }>): LogLine | null {
+  const me = world.player.vehicleId;
+  const damaged = shotDamage(e);
+  if (e.shooter !== me && e.target !== me && !damaged.has(me)) return null;
+  const strays = [...damaged].filter(([id]) => id !== e.target).flatMap(([id, h]) => [
+    { text: ` · stray fire hits ${vehicleName(world, id)}`, cls: '' },
+    ...damageSpans(world, id, h),
+  ]);
+  return spanLine(hurts(damaged.get(me)) ? 'bad' : '', [...aimedSpans(world, e, damaged.get(e.target) ?? []), ...strays]);
+}
+
+function hurts(hits: PartHit[] | undefined): boolean {
+  return hits !== undefined && hits.some((h) => h.damage > 0);
+}
+
+// "MG → Buggy at Cab · 3/6 hit (40%) · 1 crit", then the damage per part.
+function aimedSpans(world: World, e: Extract<GameEvent, { t: 'shot' }>, onTarget: PartHit[]): LogSpan[] {
+  const aim = e.aim === 'body' ? '' : ` at ${partName(world, e.target, e.aim)}`;
+  const hits = e.rounds.filter((r) => r.hit).length;
+  const crits = e.rounds.filter((r) => r.crit).length;
+  return [
+    { text: `${partName(world, e.shooter, e.weapon)} → ${vehicleName(world, e.target)}${aim} · ${hits}/${e.rounds.length} hit`, cls: '' },
+    { text: ` (${Math.round(e.chance * 100)}%)`, cls: 'dim' },
+    ...(crits ? [{ text: ` · ${crits} crit`, cls: '' }] : []),
+    ...damageSpans(world, e.target, onTarget),
+  ];
+}
+
+// " · Cab −5 broken, Plate −3": inner parts first, then armor in the dim color. A part with no HP left reads broken.
+function damageSpans(world: World, vehicleId: string, hits: PartHit[]): LogSpan[] {
+  const v = findAny(world, vehicleId);
+  const parts = [...partDamage(hits)].map(([id, d]) => {
+    const part = v && mountedParts(v).find((x) => x.id === id);
+    if (!part) throw new Error(`Round hit part ${id}, which ${vehicleId} does not carry`);
+    return { part, armor: partDef(part.defId).kind === 'armor', d };
+  });
+  const spans = [...parts.filter((p) => !p.armor), ...parts.filter((p) => p.armor)].map(({ part, armor, d }): LogSpan => {
+    const broken = part.hp <= 0;
+    return { text: `${partDef(part.defId).name} −${damage(d)}${broken ? ' broken' : ''}`, cls: broken ? 'bad' : armor ? 'dim' : '' };
+  });
+  return spans.flatMap((s, i) => [{ text: i === 0 ? ' · ' : ', ', cls: '' }, s]);
+}
 
 // Only the player's own jobs are logged.
 function jobText(world: World, e: Extract<GameEvent, { t: 'job' }>): LogLine | null {
@@ -408,6 +462,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   npcKnockout: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} knocked out`, cls: 'good' }),
   npcWake: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} comes to`, cls: 'dim' }),
   stateEnded: stateEndedText,
+  empty: () => null, // the HUD shows ammo; the log holds no gun state
   say: sayText,
   job: jobText,
   weather: weatherText,
@@ -426,7 +481,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
 };
 
 // Returns null for events not worth a log line.
-export function eventText(world: World, e: GameEvent): { text: string; cls: string } | null {
+export function eventText(world: World, e: GameEvent): LogLine | null {
   if (unnoticed(world, e)) return null;
   const own = EVENT_TEXTS[e.t] as ((world: World, e: GameEvent) => LogLine | null) | undefined;
   if (own) return own(world, e);
@@ -436,21 +491,15 @@ export function eventText(world: World, e: GameEvent): { text: string; cls: stri
     // Crashes are shown by the hit truck and its part damage, not logged.
     case 'collision':
       return null;
-    case 'shot': {
-      if (e.shooter !== me && e.target !== me) return null;
-      const aim = e.aim === 'body' ? '' : ` at ${partName(world, e.target, e.aim)}`;
-      const hits = e.rounds.filter((r) => r.hit).length;
-      const crits = e.rounds.filter((r) => r.crit).length;
-      const dealt = partDamage(e.rounds.flatMap((r) => r.hits));
-      const parts = [...dealt].map(([id, d]) => `, ${partName(world, e.target, id)} −${damage(d)}`).join('');
-      const text = `${partName(world, e.shooter, e.weapon)} → ${n(e.target)}${aim}: ${hits}/${e.rounds.length} hits${crits ? `, ${crits} crit` : ''}${parts} (${Math.round(e.chance * 100)}%)`;
-      return { text, cls: e.target === me && dealt.size > 0 ? 'bad' : '' };
-    }
+    case 'shot':
+      return shotText(world, e);
     case 'guardShot': {
       const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === e.site)!;
       const hits = e.rounds.filter((r) => r.hit).length;
-      const parts = [...partDamage(e.rounds.flatMap((r) => r.hits))].map(([id, d]) => `, ${partName(world, e.target, id)} −${damage(d)}`).join('');
-      return { text: `${site.name} guards → ${n(e.target)}: ${hits}/${e.rounds.length} hits${parts}`, cls: 'dim' };
+      return spanLine('dim', [
+        { text: `${site.name} guards → ${n(e.target)} · ${hits}/${e.rounds.length} hit`, cls: '' },
+        ...damageSpans(world, e.target, e.rounds.flatMap((r) => r.hits)),
+      ]);
     }
     case 'partDisabled':
       return { text: `${n(e.vehicle)}: ${partName(world, e.vehicle, e.part)} disabled`, cls: e.vehicle === me ? 'bad' : 'good' };

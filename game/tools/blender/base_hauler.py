@@ -1,8 +1,8 @@
-"""The hauler base: a stylized GAZ-66, the Soviet cab-over 4x4 army truck with a canvas-covered cargo bed.
+"""The hauler base: a stylized GAZ-66, the Soviet cab-over 4x4 army truck with an open cargo bed.
 
 Grid: 7 columns by 9 rows, 3.39 m across by 5.85 m along. Half height 0.6 m, from PHYSICS.bodies.hauler.
 Rows 0 to 2 are the flat-faced cab over the engine, with a hatch in the roof over the engine cells.
-Rows 3 to 8 are the cargo bed under a boxy canvas cover. The canvas top is the bed rows' surface.
+Rows 3 to 8 are the open cargo bed with low walls. The bed floor is the bed rows' surface.
 Wheels sit on rows 1 and 7 in the outer columns, radius 0.6 m, half width 0.25 m, mount 0.4 m below the center.
 Run: blender --background --python tools/blender/base_hauler.py -- public/models/base_hauler.glb [tmp/base_hauler.png]
 """
@@ -13,8 +13,6 @@ import math
 import sys
 from pathlib import Path
 
-import bmesh
-import bpy
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit import Kit, parse_args  # noqa: E402
@@ -50,9 +48,12 @@ COAMING = 0.1  # the raised rim around the hatch, as wide as it is tall
 
 BED_FRONT = CAB_BACK - 0.08  # the gap between cab and bed
 BED_BOTTOM = HUB_Z + WHEEL_R + ARCH_CLEARANCE + 0.04  # the bed rides just above the rear wheel tops
-RAIL = 0.5  # the bed side boards end and the canvas starts
-CANVAS_TOP = ROOF + 0.1
-CANVAS_CHAMFER = 0.14
+BED_FLOOR = BED_BOTTOM + 0.1  # the bed floor's top, where items stand
+WALL_TOP = BED_FLOOR + 0.3  # the low bed walls
+HEAD_TOP = BED_FLOOR + 0.5  # the headboard behind the cab is a little taller
+WALL_T = 0.1
+CAP_T = 0.05
+CAP_OVERHANG = 0.02
 FRAME_BOTTOM = -0.5  # the dark ladder frame under the bed, high off the ground like the real truck
 
 
@@ -60,26 +61,6 @@ def mirrored(kit: Kit, name: str, size: tuple[float, float, float], x: float, y:
     """A box on the left side at +y and its twin on the right side."""
     kit.box(f"{name}_l", size, (x, y, z), mat)
     kit.box(f"{name}_r", size, (x, -y, z), mat)
-
-
-def prism_across(kit: Kit, name: str, profile: list[tuple[float, float]], x0: float, x1: float, mat: str) -> None:
-    """Extrudes a closed YZ profile from Blender X x0 to x1 as one mesh, for shapes shaped across the truck."""
-    mesh = bpy.data.meshes.new(name)
-    bm = bmesh.new()
-    near = [bm.verts.new((x0, y, z)) for y, z in profile]
-    far = [bm.verts.new((x1, y, z)) for y, z in profile]
-    bm.faces.new(near)
-    bm.faces.new(list(reversed(far)))
-    n = len(profile)
-    for i in range(n):
-        j = (i + 1) % n
-        bm.faces.new((near[i], near[j], far[j], far[i]))
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    bm.to_mesh(mesh)
-    bm.free()
-    obj = bpy.data.objects.new(name, mesh)
-    bpy.context.scene.collection.objects.link(obj)
-    kit._add(obj, name, mat, 0.0)
 
 
 def half_ring(kit: Kit, name: str, wx: float, r0: float, r1: float, y0: float, y1: float) -> None:
@@ -142,21 +123,22 @@ def cab_upper(kit: Kit) -> None:
 
 
 def bed(kit: Kit) -> None:
-    """A high bed on a dark frame: painted side boards, a tall canvas cover with hoop ribs, mudguards and taillights."""
+    """An open bed on a dark frame: a floor, low painted walls with a trim cap, a headboard, mudguards and taillights."""
     length = BED_FRONT - BACK
     mid = (BED_FRONT + BACK) / 2
     kit.box("frame", (BED_FRONT - BACK - 0.1, 2 * WELL_Y, BED_BOTTOM - FRAME_BOTTOM), ((BED_FRONT + BACK + 0.1) / 2, 0, (BED_BOTTOM + FRAME_BOTTOM) / 2), "under")
-    kit.box("boards", (length, 2 * SIDE, RAIL - BED_BOTTOM), (mid, 0, (RAIL + BED_BOTTOM) / 2), "paint")
-    # One dark rub rail splits the boards, so the bed side reads as planks.
-    mirrored(kit, "rub_rail", (length, 0.02, 0.1), mid, SIDE + 0.01, (RAIL + BED_BOTTOM) / 2, "under")
-    canvas = [(-SIDE, RAIL), (SIDE, RAIL), (SIDE, CANVAS_TOP - CANVAS_CHAMFER), (SIDE - CANVAS_CHAMFER, CANVAS_TOP), (-SIDE + CANVAS_CHAMFER, CANVAS_TOP), (-SIDE, CANVAS_TOP - CANVAS_CHAMFER)]
-    prism_across(kit, "canvas", canvas, BACK, BED_FRONT, "trim")
-    # The hoops under the canvas show as raised ribs down the sides and over the top.
-    rib = 0.03
-    ribbed = [(-SIDE - rib, RAIL), (SIDE + rib, RAIL), (SIDE + rib, CANVAS_TOP - CANVAS_CHAMFER), (SIDE - CANVAS_CHAMFER, CANVAS_TOP + rib), (-SIDE + CANVAS_CHAMFER, CANVAS_TOP + rib), (-SIDE - rib, CANVAS_TOP - CANVAS_CHAMFER)]
-    for i in range(1, 4):
-        x = BACK + length * i / 4
-        prism_across(kit, f"rib{i}", ribbed, x - 0.06, x + 0.06, "trim")
+    # The open bed: a dark floor and low painted walls. Items stand on the floor and show over the walls.
+    kit.box("floor", (length, 2 * SIDE, BED_FLOOR - BED_BOTTOM), (mid, 0, (BED_FLOOR + BED_BOTTOM) / 2), "metal")
+    wall_h = WALL_TOP - BED_BOTTOM
+    mirrored(kit, "wall", (length, WALL_T, wall_h), mid, SIDE - WALL_T / 2, BED_BOTTOM + wall_h / 2, "paint")
+    inner = 2 * (SIDE - WALL_T)
+    kit.box("tailgate", (WALL_T, inner, wall_h), (BACK + WALL_T / 2, 0, BED_BOTTOM + wall_h / 2), "paint")
+    head_h = HEAD_TOP - BED_BOTTOM
+    kit.box("headboard", (WALL_T, inner, head_h), (BED_FRONT - WALL_T / 2, 0, BED_BOTTOM + head_h / 2), "paint")
+    # A faction colored cap runs along the wall tops, and one dark rub rail splits the outer wall so it reads as planks.
+    mirrored(kit, "cap", (length, WALL_T + 2 * CAP_OVERHANG, CAP_T), mid, SIDE - WALL_T / 2, WALL_TOP - CAP_T / 2, "trim")
+    kit.box("cap_tail", (WALL_T + CAP_OVERHANG, inner, CAP_T), (BACK + (WALL_T + CAP_OVERHANG) / 2 - CAP_OVERHANG, 0, WALL_TOP - CAP_T / 2), "trim")
+    mirrored(kit, "rub_rail", (length, 0.02, 0.08), mid, SIDE + 0.01, BED_BOTTOM + 0.16, "under")
     for s, (y0, y1) in (("l", (WELL_Y, G.half_y)), ("r", (-G.half_y, -WELL_Y))):
         half_ring(kit, f"mudguard_{s}", REAR_WHEEL_X, WHEEL_R + ARCH_CLEARANCE, WHEEL_R + ARCH_CLEARANCE + FLARE, y0, y1)
     mirrored(kit, "taillight", (INSET, 0.22, 0.16), BACK - INSET / 2, SIDE - 0.2, BED_BOTTOM + 0.14, "red")
@@ -170,8 +152,8 @@ def main() -> None:
     bed(kit)
     # Items on the engine cells stand on the roof underside in the hatch.
     hatch = {(x, y): UNDER_ROOF for x in (2, 3) for y in (1, 2)}
-    level_sockets(kit, G, "row", [ROOF] * 3 + [CANVAS_TOP] * 6, fronts={0: ROOF_FRONT, 3: BED_FRONT}, cells=hatch)
-    level_sockets(kit, G, "floor", [BELT] + [UNDER_ROOF] * 2 + [RAIL] * 6)
+    level_sockets(kit, G, "row", [ROOF] * 3 + [BED_FLOOR] * 6, fronts={0: ROOF_FRONT, 3: BED_FRONT}, cells=hatch)
+    level_sockets(kit, G, "floor", [BELT] + [UNDER_ROOF] * 2 + [BED_FLOOR] * 6)
     check_base(kit, "base_hauler", G)
     kit.export("base_hauler", args, view_size=7.5)
 

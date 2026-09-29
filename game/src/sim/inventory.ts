@@ -1,18 +1,20 @@
 // Inventory commands. Field equipment changes use parked refit jobs.
 
+import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
 import { skillEffect, vehicleHasPerk } from './progress';
 import { playerVehicle } from './damage';
 import { newId } from './factory';
 import { cabShield, gunLayoutScore } from './armor';
-import { findSpot, gridOf, isMounted, itemCells, MOUNT_CELLS, mountSpots, placementError, type Cell, type Spot } from './grid';
+import { findSpot, freeCells, gridOf, isMounted, itemCells, MOUNT_CELLS, mountSpots, placementError, type Cell, type Spot } from './grid';
 import { requireTown, townAt } from './sites';
 import { startJob } from './jobs';
 import { RULES } from '../data/rules';
 import { PERK_NUMBERS } from '../data/skills';
 import { canReachSalvage, dumpOnPile, truckPickupItem } from './salvage';
 import { fitStores } from './resources';
-import { vehicleStats } from './stats';
+import { itemMass } from './mass';
+import { npcMassRoom, vehicleStats } from './stats';
 import type { GridItem, PartInstance, RefitJob, RefitMove, RefitPickup, Vehicle, World } from './types';
 import { playerCommand } from './world';
 
@@ -20,13 +22,29 @@ import { playerCommand } from './world';
 // spot with the best gun layout, so a gun covers sides the others miss and a box blinds no gun. Armor takes the
 // spot that shields the most cab lanes. `mount` narrows the cells a part may use, like one side's edge for armor.
 export function mountPart(world: World, v: Vehicle, part: PartInstance, mount: Cell[] = MOUNT_CELLS[partDef(part.defId).kind]): boolean {
-  const item: GridItem = { id: newId(world, 'i'), x: 0, y: 0, rot: 0, kind: 'part', part };
-  const def = partDef(part.defId);
-  const spot = def.kind === 'weapon' || def.tall ? bestArcSpot(v, item, mount)
-    : def.kind === 'armor' ? bestShieldSpot(v, item, mount) : findSpot(gridOf(v), v.items, item, mount, null);
+  const item: PartItem = { id: newId(world, 'i'), x: 0, y: 0, rot: 0, kind: 'part', part };
+  const spot = installSpot(v, item, mount);
   if (!spot) return false;
   v.items.push({ ...item, ...spot });
   return true;
+}
+
+type PartItem = Extract<GridItem, { kind: 'part' }>;
+
+// The spot mountPart would pick for this part item, or null when no mount has room. The item may already stand
+// on the grid, as a spare: its own cells count as free.
+export function installSpot(v: Vehicle, item: PartItem, mount: Cell[] = MOUNT_CELLS[partDef(item.part.defId).kind]): Spot | null {
+  const others = { ...v, items: v.items.filter((it) => it.id !== item.id) };
+  const def = partDef(item.part.defId);
+  if (def.kind === 'weapon' || def.tall) return bestArcSpot(others, item, mount);
+  if (def.kind === 'armor') return bestShieldSpot(others, item, mount);
+  return findSpot(gridOf(others), others.items, item, mount, null);
+}
+
+// The spot for an item in the truck's storage, off every mount, or null when only mounts or nothing is free.
+export function stowSpot(v: Vehicle, item: GridItem): Spot | null {
+  const avoid = item.kind === 'part' ? MOUNT_CELLS[partDef(item.part.defId).kind] : null;
+  return findSpot(gridOf(v), v.items, item, null, avoid);
 }
 
 function bestArcSpot(v: Vehicle, item: GridItem, mount: Cell[]): Spot | null {
@@ -51,23 +69,36 @@ function bestShieldSpot(v: Vehicle, item: GridItem, mount: Cell[]): Spot | null 
 }
 
 // Put a spare part anywhere it fits without mounting it. Returns false when there is no room.
+// Kilograms of cargo the truck can take. An NPC truck stops at its speed floor, see npcMassRoom(). The player has no cap,
+// since weight only slows the player's truck.
+export function cargoMassRoom(v: Vehicle): number {
+  return v.brain ? npcMassRoom(v) : Infinity;
+}
+
+// Units of a good that fit the grid and the mass room.
+export function cargoRoom(v: Vehicle, good: string): number {
+  return Math.min(freeCells(v), Math.floor(cargoMassRoom(v) / GOODS[good].mass));
+}
+
 export function stowPart(world: World, v: Vehicle, part: PartInstance): boolean {
   const item: GridItem = { id: newId(world, 'i'), x: 0, y: 0, rot: 0, kind: 'part', part };
-  const spot = findSpot(gridOf(v), v.items, item, null, MOUNT_CELLS[partDef(part.defId).kind]);
+  if (itemMass(item) > cargoMassRoom(v)) return false;
+  const spot = stowSpot(v, item);
   if (!spot) return false;
   v.items.push({ ...item, ...spot });
   return true;
 }
 
-// Adds up to n units, one cell each. Returns how many fit.
+// Adds up to n units, one cell each. Returns how many fit the grid and the mass room.
 export function addGoods(world: World, v: Vehicle, good: string, n: number): number {
-  for (let i = 0; i < n; i++) {
+  const count = Math.min(n, cargoRoom(v, good));
+  for (let i = 0; i < count; i++) {
     const item: GridItem = { id: newId(world, 'i'), x: 0, y: 0, rot: 0, kind: 'good', good };
     const spot = findSpot(gridOf(v), v.items, item, null, null);
     if (!spot) return i;
     v.items.push({ ...item, ...spot });
   }
-  return n;
+  return count;
 }
 
 export function removeGoods(v: Vehicle, good: string, n: number): void {

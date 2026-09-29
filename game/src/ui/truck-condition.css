@@ -28,16 +28,28 @@
   justify-content: center;
   box-sizing: border-box;
   border: 1px solid #9cac91;
-  border-radius: 4px;
-  background: #394d40;
+  border-radius: 0;
+  background: #1d2426;
+  overflow: hidden;
+}
+.condition-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #4d6b58;
 }
 .condition-part[data-condition="damaged"] {
-  background: #584831;
   border-color: #d6ac6a;
 }
+.condition-part[data-condition="damaged"] .condition-fill {
+  background: #7d6238;
+}
 .condition-part[data-condition="critical"] {
-  background: #613b35;
   border-color: #de8e7d;
+}
+.condition-part[data-condition="critical"] .condition-fill {
+  background: #8a4a40;
 }
 .condition-part .icon {
   width: 100%;
@@ -45,20 +57,69 @@
   max-width: 44px;
   max-height: 44px;
   opacity: 0.7;
+  position: relative;
 }
 .condition-part .icon svg {
   fill: none;
   stroke: #c7d1c2;
 }
-.condition-percent {
-  position: absolute;
-  bottom: 1px;
-  color: #f3efde;
-  font: 10px var(--font-mono);
-  text-shadow: 1px 1px 1px #141a1c, -1px -1px 1px #141a1c;
-}
 @media (max-width: 1100px) {
   #ui .truck-condition {
     bottom: calc(100% + 110px);
   }
+}
+#ui .info .truck-condition {
+  position: static;
+  width: fit-content;
+  margin: 8px auto 0;
+}
+.condition-part.aimable {
+  cursor: crosshair;
+}
+.condition-part.aimable:hover {
+  border-color: #f3efde;
+}
+.condition-aim {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  min-width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  padding: 0 2px;
+  border: 2px solid #fa3934;
+  border-radius: 8px;
+  background: #141a1ccc;
+  color: #f3efde;
+  font: 10px / 10px var(--font-mono);
+  text-align: center;
+}
+.condition-slots {
+  position: absolute;
+  inset: 0;
+}
+.condition-slot {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px dashed #5f6b6d;
+  border-radius: 0;
+}
+.condition-part.broken {
+  border-style: dashed;
+  border-color: #de8e7d;
+  background: #2a1a18;
+}
+.condition-part.broken .icon {
+  opacity: 0.35;
+}
+.condition-tip {
+  position: absolute;
+  z-index: 5;
+  padding: 2px 6px;
+  border: 1px solid #505b5d;
+  background: #141a1cf2;
+  color: #f3efde;
+  font: 12px var(--font-ui);
+  white-space: nowrap;
+  pointer-events: none;
 }

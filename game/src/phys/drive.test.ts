@@ -292,7 +292,7 @@ describe('physics turns', () => {
     const dest = { x: 26, y: 33 };
     let w = ordered({ kind: 'through', dest });
     let d = buildDrive(w);
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 16; i++) {
       let next: Drive | null = null;
       w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
       freeDrive(d);

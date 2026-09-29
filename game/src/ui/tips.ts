@@ -4,14 +4,15 @@
 import { isKnockedOut } from "../sim/defeat";
 import { playerVehicle } from "../sim/damage";
 import type { World } from "../sim/types";
+import { vehicleStats } from "../sim/stats";
 import { playerSees } from "../sim/vision";
 import { dist } from "../sim/vec";
-import { playerCanAct, startPose } from "../sim/world";
+import { playerCanAct, hostileToPlayer, startPose } from "../sim/world";
 import { el, panel } from "./dom";
 
 const TIPS_KEY = "roam.tips";
 
-export type TipId = "waypoint" | "drive" | "autoStop" | "stop" | "manual" | "zones" | "honk" | "farewell";
+export type TipId = "waypoint" | "drive" | "autoStop" | "stop" | "stopAt" | "manual" | "zones" | "aim" | "honk" | "farewell";
 
 type Tip = {
   id: TipId;
@@ -29,6 +30,9 @@ const spawn = startPose().pos;
 
 const npcInSight = (w: World): boolean =>
   w.vehicles.some((v) => v.brain && !isKnockedOut(v) && playerSees(w, v.pos));
+
+const hostileInSight = (w: World): boolean =>
+  w.vehicles.some((v) => v.brain && !isKnockedOut(v) && hostileToPlayer(w, v) && playerSees(w, v.pos));
 
 const hasWaypoint = (w: World): boolean => {
   const kind = playerVehicle(w).order?.kind;
@@ -66,9 +70,16 @@ const TIPS: readonly Tip[] = [
     done: (w) => playerVehicle(w).order?.kind === "brake",
   },
   {
+    id: "stopAt",
+    text: "[Shift]-click to set a waypoint your truck stops at. Click a waypoint to switch it.",
+    after: "stop",
+    when: (w) => !playerVehicle(w).direct,
+    done: (w) => playerVehicle(w).order?.kind === "stopAt",
+  },
+  {
     id: "manual",
     text: "[R] to drive in manual mode.",
-    after: "stop",
+    after: "stopAt",
     when: (w) => !playerVehicle(w).direct,
     done: (w) => playerVehicle(w).direct,
   },
@@ -77,6 +88,12 @@ const TIPS: readonly Tip[] = [
     text: "Manual mode: click a zone to drive. Green speeds up. Yellow holds speed. Red slows down.",
     when: (w) => playerVehicle(w).direct,
     done: () => false,
+  },
+  {
+    id: "aim",
+    text: "Click an enemy truck, then click one of its parts to aim your guns at it.",
+    when: (w) => vehicleStats(w, playerVehicle(w)).weapons.length > 0 && hostileInSight(w),
+    done: (w) => Object.values(playerVehicle(w).weaponOrders).some((o) => o.aim !== "body"),
   },
   {
     id: "honk",

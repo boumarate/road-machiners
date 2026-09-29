@@ -1,5 +1,5 @@
 {
- "format": "1.0",
+ "format": "2.0",
  "shape": {
   "broken": [],
   "dustClouds": [],
@@ -129,9 +129,37 @@
     "parts": [
      {
       "defId": "string",
+      "gun": {
+       "ammo": "number",
+       "cooldown": "number",
+       "reloadWork": "number"
+      },
       "hp": "number",
       "id": "string",
-      "reload": "number",
+      "wear": "number"
+     }
+    ],
+    "pos": {
+     "x": "number",
+     "y": "number"
+    },
+    "radius": "number",
+    "supplies": "number"
+   },
+   {
+    "fuel": "number",
+    "goods": {
+     "meds": "number",
+     "parts": "number",
+     "salt": "number",
+     "scrap": "number"
+    },
+    "id": "string",
+    "parts": [
+     {
+      "defId": "string",
+      "hp": "number",
+      "id": "string",
       "wear": "number"
      }
     ],
@@ -169,9 +197,13 @@
     "parts": [
      {
       "defId": "string",
+      "gun": {
+       "ammo": "number",
+       "cooldown": "number",
+       "reloadWork": "number"
+      },
       "hp": "number",
       "id": "string",
-      "reload": "number",
       "wear": "number"
      }
     ],
@@ -209,7 +241,6 @@
       "defId": "string",
       "hp": "number",
       "id": "string",
-      "reload": "number",
       "wear": "number"
      }
     ],
@@ -236,6 +267,17 @@
      },
      {
       "deadline": "number",
+      "good": "string",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "tier": "number",
+      "to": "string",
+      "units": "number"
+     },
+     {
+      "deadline": "number",
       "id": "string",
       "kind": "string",
       "reward": "number",
@@ -262,15 +304,45 @@
     "stock": [
      {
       "defId": "string",
+      "gun": {
+       "ammo": "number",
+       "cooldown": "number",
+       "reloadWork": "number"
+      },
       "hp": "number",
       "id": "string",
-      "reload": "number",
+      "wear": "number"
+     },
+     {
+      "defId": "string",
+      "hp": "number",
+      "id": "string",
       "wear": "number"
      }
     ]
    },
    "granary": {
     "contracts": [
+     {
+      "deadline": "number",
+      "defId": "string",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "tier": "number"
+     },
+     {
+      "deadline": "number",
+      "good": "string",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "tier": "number",
+      "to": "string",
+      "units": "number"
+     },
      {
       "deadline": "number",
       "id": "string",
@@ -293,13 +365,21 @@
       "defId": "string",
       "hp": "number",
       "id": "string",
-      "reload": "number",
       "wear": "number"
      }
     ]
    },
    "nose": {
     "contracts": [
+     {
+      "deadline": "number",
+      "defId": "string",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "tier": "number"
+     },
      {
       "deadline": "number",
       "good": "string",
@@ -339,9 +419,19 @@
     "stock": [
      {
       "defId": "string",
+      "gun": {
+       "ammo": "number",
+       "cooldown": "number",
+       "reloadWork": "number"
+      },
       "hp": "number",
       "id": "string",
-      "reload": "number",
+      "wear": "number"
+     },
+     {
+      "defId": "string",
+      "hp": "number",
+      "id": "string",
       "wear": "number"
      }
     ]
@@ -356,6 +446,27 @@
       "reward": "number",
       "shop": "string",
       "tier": "number"
+     },
+     {
+      "deadline": "number",
+      "good": "string",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "tier": "number",
+      "to": "string",
+      "units": "number"
+     },
+     {
+      "deadline": "number",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "targetName": "string",
+      "template": "string",
+      "tier": "number"
      }
     ],
     "pressure": {
@@ -369,13 +480,21 @@
       "defId": "string",
       "hp": "number",
       "id": "string",
-      "reload": "number",
       "wear": "number"
      }
     ]
    },
    "salvage-yard": {
     "contracts": [
+     {
+      "deadline": "number",
+      "defId": "string",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "tier": "number"
+     },
      {
       "deadline": "number",
       "good": "string",
@@ -386,6 +505,16 @@
       "tier": "number",
       "to": "string",
       "units": "number"
+     },
+     {
+      "deadline": "number",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "targetName": "string",
+      "template": "string",
+      "tier": "number"
      }
     ],
     "pressure": {
@@ -397,9 +526,19 @@
     "stock": [
      {
       "defId": "string",
+      "gun": {
+       "ammo": "number",
+       "cooldown": "number",
+       "reloadWork": "number"
+      },
       "hp": "number",
       "id": "string",
-      "reload": "number",
+      "wear": "number"
+     },
+     {
+      "defId": "string",
+      "hp": "number",
+      "id": "string",
       "wear": "number"
      }
     ]
@@ -445,9 +584,26 @@
       "kind": "string",
       "part": {
        "defId": "string",
+       "gun": {
+        "ammo": "number",
+        "cooldown": "number",
+        "reloadWork": "number"
+       },
        "hp": "number",
        "id": "string",
-       "reload": "number",
+       "wear": "number"
+      },
+      "rot": "number",
+      "x": "number",
+      "y": "number"
+     },
+     {
+      "id": "string",
+      "kind": "string",
+      "part": {
+       "defId": "string",
+       "hp": "number",
+       "id": "string",
        "wear": "number"
       },
       "rot": "number",
@@ -505,9 +661,26 @@
       "kind": "string",
       "part": {
        "defId": "string",
+       "gun": {
+        "ammo": "number",
+        "cooldown": "number",
+        "reloadWork": "number"
+       },
        "hp": "number",
        "id": "string",
-       "reload": "number",
+       "wear": "number"
+      },
+      "rot": "number",
+      "x": "number",
+      "y": "number"
+     },
+     {
+      "id": "string",
+      "kind": "string",
+      "part": {
+       "defId": "string",
+       "hp": "number",
+       "id": "string",
        "wear": "number"
       },
       "rot": "number",
@@ -581,9 +754,26 @@
       "kind": "string",
       "part": {
        "defId": "string",
+       "gun": {
+        "ammo": "number",
+        "cooldown": "number",
+        "reloadWork": "number"
+       },
        "hp": "number",
        "id": "string",
-       "reload": "number",
+       "wear": "number"
+      },
+      "rot": "number",
+      "x": "number",
+      "y": "number"
+     },
+     {
+      "id": "string",
+      "kind": "string",
+      "part": {
+       "defId": "string",
+       "hp": "number",
+       "id": "string",
        "wear": "number"
       },
       "rot": "number",

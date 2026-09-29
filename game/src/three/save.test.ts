@@ -111,13 +111,6 @@ describe('local game save', () => {
     }
   });
 
-  it('loads a save from before save formats as format 1.0', () => {
-    const storage = makeStorage();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
-    storage.setItem('roam.save', JSON.stringify({ version: '1.0.0', world: saveOf(world).world }));
-    expect(loadWorld(storage, TEST_MAP)).toEqual(world);
-  });
-
   it('records the saved shape of the current format', () => {
     const format = `${SAVE_FORMAT.major}.${SAVE_FORMAT.minor}`;
     expect(SAVED_SHAPE.format, 'Run npm run save:shape after a new save format').toBe(format);

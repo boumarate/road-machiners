@@ -30,6 +30,7 @@ export const PAL = {
   dest: 0xe05030,
   throttle: { brake: 0xe05a3a, hold: 0xf0d060, accelerate: 0x7cc85a },
   select: 0xf0d060,
+  arcSpent: 0x9a9a94, // firing arc of a gun that is reloading or cooling down
   contact: 0xf4f1ea, // faint white sound waves around a contact
   dustTrail: 0xe0c49a, // dust streak behind a contact seen by its dust, pale so it shows over fog
   radio: 0x8fe0c8, // crisp scanner blip

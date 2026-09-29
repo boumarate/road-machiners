@@ -17,9 +17,7 @@ import {
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { isHostile } from './combat';
-import { isRamGainful, ramImpact } from './crash-contact';
-import { ramMult, sideToward } from './armor';
-import { vehicleMass } from './mass';
+import { ramFactor, ramImpact } from './crash-contact';
 import { isKnockedOut } from './defeat';
 import { vehicleById } from './damage';
 import { contactsOf } from './detect';
@@ -481,6 +479,7 @@ const AVAILABLE: Record<OptionName, Availability> = {
   accept: always,
   refuse: always,
   spare: always,
+  offer: always,
   finish: always,
   rush: canDrive,
   halt: always,
@@ -571,15 +570,9 @@ function keepFactor(world: World, vehicle: Vehicle, decision: DecisionId, subjec
   return restrained ? NPC_BEHAVIOR.keepWork : 1;
 }
 
-// A ram the forecast calls costly is rare. A heavier driver rams a lighter truck more readily and a lighter one a
-// heavier truck less, by the mass ratio to NPC_BEHAVIOR.ramMassPower. A ram bar facing the driver cuts the weight to
-// NPC_BEHAVIOR.ramBarRam.
-function ramFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): number {
-  const target = subjectOf(world, decision, subject);
-  const gain = isRamGainful(world, vehicle, target) ? 1 : NPC_BEHAVIOR.riskyRam;
-  const mass = (vehicleMass(vehicle) / vehicleMass(target)) ** NPC_BEHAVIOR.ramMassPower;
-  const bar = ramMult(target, sideToward(target, vehicle.pos)) > 1 ? NPC_BEHAVIOR.ramBarRam : 1;
-  return gain * mass * bar;
+// A ram is weighed by its value against firing, see ramValue() in src/sim/ram-value.ts. One worth nothing is rare.
+function ramWeight(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): number {
+  return ramFactor(world, vehicle, subjectOf(world, decision, subject));
 }
 
 // A crash with a faction mate is mostly forgiven.
@@ -588,9 +581,11 @@ function retaliateFactor(world: World, vehicle: Vehicle, decision: DecisionId, s
 }
 
 // A driver facing a threat asks for a truce more often. A robber that is not weak rarely asks its prey.
-function truceFactor(world: World, vehicle: Vehicle, _decision: DecisionId, subject: string | null, danger: number | null): number {
+// A driver facing a threat offers a truce readily. One that is not weak and can handle its foe is winning, so it
+// rarely offers one.
+function truceFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
   if (danger !== null && !isManageable(world, vehicle, danger)) return NPC_BEHAVIOR.threatTruce;
-  return robs(world, vehicle, subject) && !isWeak(world, vehicle) ? NPC_BEHAVIOR.robberTruce : 1;
+  return isWeak(world, vehicle) ? 1 : NPC_BEHAVIOR.winningTruce;
 }
 
 // A weak driver begs.
@@ -619,6 +614,11 @@ function robs(world: World, vehicle: Vehicle, subject: string | null): boolean {
   if (subject === null) return false;
   const target = vehicleById(world, subject);
   return robbingFeud(world, vehicle, target) || (vehicle.faction === 'raiders' && target.faction !== 'raiders' && hasLoot(target));
+}
+
+// Whether the driver may and does want the target's cargo. Only these drivers strip a stranded player.
+export function wantsLoot(world: World, vehicle: Vehicle, target: Vehicle): boolean {
+  return traitsAllowRobbing(vehicle) && robs(world, vehicle, target.id);
 }
 
 function robbingFeud(world: World, vehicle: Vehicle, target: Vehicle): boolean {
@@ -661,7 +661,7 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   flee: fleeFactor,
   investigate: investigateFactor,
   rob: robFactor,
-  ram: ramFactor,
+  ram: ramWeight,
   tow: towFactor,
   demand: neutral,
   attack: neutral,
@@ -687,6 +687,7 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   accept: acceptFactor,
   refuse: refuseFactor,
   spare: neutral,
+  offer: neutral,
   finish: neutral,
   rush: neutral,
   halt: neutral,
@@ -727,6 +728,17 @@ export function optionWeights<D extends DecisionId>(world: World, vehicle: Vehic
     out[option] = (base[option] + add) * mul * factor;
   }
   return out as Partial<Record<DecisionOptions[D], number>>;
+}
+
+// Whether the driver's traits and states weigh a ram at least as much as keeping its range, before the situation.
+// A trader, which almost never rams, has no use for a ram spot.
+export function ramsReadily(world: World, vehicle: Vehicle, subject: string): boolean {
+  const tables = changeTables(world, vehicle, subject);
+  const weight = (option: 'ram' | 'keep') => {
+    const { add, mul } = sumChanges(tables, 'ramChance', option);
+    return (DECISIONS.ramChance[option] + add) * mul;
+  };
+  return weight('ram') >= weight('keep');
 }
 
 // The summed adds and the product of muls the tables set for one option. A mul at or below 0 throws.
@@ -771,6 +783,8 @@ const DECISION_KINDS: Record<DecisionId, 'venture' | 'response'> = {
   mercyBegged: 'response',
   threatened: 'response',
   mugging: 'response',
+  strandedFoe: 'response',
+  surrenderOffered: 'response',
   resume: 'response',
   idle: 'venture',
   escortSeen: 'venture',

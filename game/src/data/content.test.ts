@@ -3,7 +3,7 @@ import { CHASSIS, PLAYER_CHASSIS } from "./chassis";
 import { GOODS, GOOD_IDS } from "./goods";
 import { EFFORT, SHOPS, type ItemKind } from "./market";
 import { goodBasePrice } from "../sim/market";
-import { PARTS, type PartDef, type PartKind } from "./parts";
+import { PARTS, type PartDef, type PartKind, type WeaponDef } from "./parts";
 import { REGION } from "./region";
 import { bodyOf } from "../sim/body";
 import {
@@ -28,7 +28,11 @@ beforeAll(() => {
 
 const addedParts: Record<Exclude<PartKind, "core" | "scanner">, string[]> = {
   store: ["jerrycans", "supplyLocker"],
-  weapon: ["shotgun", "autocannon", "tankGun", "rocketRack", "sniperCannon"],
+  weapon: [
+    "shotgun", "longRifle", "flamer", "pneumobolter", "slugCannon",
+    "heavyMg", "amRifle", "autocannon", "recoilless", "battleRifle",
+    "gatling", "rocketRack", "sniperCannon", "grenadeLauncher", "tankGun", "flechette",
+  ],
   engine: ["flatFour", "workhorseDiesel", "racingV6", "heavyDiesel", "turbine"],
   armor: [
     "scrapPanels",
@@ -47,21 +51,41 @@ const addedChassis = ["courier", "van", "longbed", "carrier", "tractor", "jeep",
 const rearEngineChassis = ["jeep", "convertible", "bus", "loader"];
 
 describe("equipment variety", () => {
-  it("gives every mounted weapon its extended range", () => {
-    const ranges = Object.fromEntries(
-      Object.values(PARTS)
-        .filter((part) => part.kind === "weapon")
-        .map((weapon) => [weapon.id, weapon.range]),
-    );
-    expect(ranges).toEqual({
-      mg: 13.5,
-      cannon: 27,
-      shotgun: 9,
-      autocannon: 21,
-      tankGun: 24,
-      rocketRack: 30,
-      sniperCannon: 36,
-    });
+  it("gives every weapon a magazine and a reload time", () => {
+    for (const part of Object.values(PARTS)) {
+      if (part.kind !== "weapon") continue;
+      expect(Number.isInteger(part.magazine) && part.magazine > 0, `${part.id} magazine`).toBe(true);
+      expect(Number.isInteger(part.reload) && part.reload > 0, `${part.id} reload`).toBe(true);
+      expect(Number.isInteger(part.cooldown) && part.cooldown > 0, `${part.id} cooldown`).toBe(true);
+    }
+  });
+
+  it("gives each tier one gun per class set: three pure classes and three pairs", () => {
+    const weapons = Object.values(PARTS).filter((p): p is WeaponDef => p.kind === "weapon");
+    for (const tier of [1, 2, 3]) {
+      const sets = weapons.filter((w) => w.tier === tier).map((w) => [...w.classes].sort().join("+")).sort();
+      expect(sets, `tier ${tier}`).toEqual(["chip", "chip+damager", "chip+precision", "damager", "damager+precision", "precision"]);
+    }
+  });
+
+  it("makes pure damagers weak against armor and pure chippers strong against it", () => {
+    for (const w of Object.values(PARTS)) {
+      if (w.kind !== "weapon" || w.classes.length !== 1) continue;
+      if (w.classes[0] === "damager") expect(w.round.armorShare, w.id).toBeLessThan(1);
+      if (w.classes[0] === "chip") expect(w.round.armorShare, w.id).toBeGreaterThan(1);
+    }
+  });
+
+  it("gives the pure precision gun of each tier the least spread and the longest range in its tier", () => {
+    const weapons = Object.values(PARTS).filter((p): p is WeaponDef => p.kind === "weapon");
+    for (const tier of [1, 2, 3]) {
+      const own = weapons.filter((w) => w.tier === tier);
+      const precise = own.find((w) => w.classes.length === 1 && w.classes[0] === "precision")!;
+      for (const w of own.filter((x) => x !== precise)) {
+        expect(precise.spread, `${precise.id} vs ${w.id}`).toBeLessThan(w.spread);
+        expect(precise.range, `${precise.id} vs ${w.id}`).toBeGreaterThan(w.range);
+      }
+    }
   });
 
   it.each(Object.entries(addedParts))(
@@ -103,7 +127,7 @@ describe("equipment variety", () => {
 
   it("adds buyable chassis with valid built-in parts and physics bodies", () => {
     expect(Object.keys(CHASSIS)).toHaveLength(13);
-    expect(PLAYER_CHASSIS).toHaveLength(11);
+    expect(PLAYER_CHASSIS).toHaveLength(13);
     for (const id of addedChassis) {
       expect(PLAYER_CHASSIS).toContain(id);
       const w = buyChassis(world, id);

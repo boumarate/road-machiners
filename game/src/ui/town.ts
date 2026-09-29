@@ -42,7 +42,7 @@ import { acceptContract, deliverContract, fitsFetch, shopAt, shopState, type Con
 import { REGION } from "../data/region";
 import type { PartInstance, Vehicle, World } from "../sim/types";
 import { maxHp } from "../sim/wear";
-import { chassisMap, chassisStats, CompareSteps, createIcon, diffStats, goodIcon, partCard, statGrid, type IconName } from "./cards";
+import { chassisMap, chassisStats, compareBase, createIcon, diffStats, goodIcon, partCard, statGrid, type IconName } from "./cards";
 import { el, panel } from "./dom";
 import { contractDue, contractSummary } from "./format";
 import { InventoryView, truckChips } from "./inventory";
@@ -67,7 +67,6 @@ export class TownScreen {
   private root = panel("modal");
   private tab: Tab = "market";
   private stockFilter: StockFilter = "all";
-  private compare = new CompareSteps();
   private error = "";
 
   private inventory: InventoryView;
@@ -92,6 +91,7 @@ export class TownScreen {
 
   // Closed windows drop their contents, so hidden copies never answer clicks or drops.
   close(): void {
+    this.inventory.clearSelection();
     this.root.style.display = "none";
     this.root.replaceChildren();
   }
@@ -225,7 +225,7 @@ export class TownScreen {
       const price = partTradePrice(w, me, p, "buy");
       return partCard({
         part: p,
-        ...this.compare.options(me, kind, () => this.render()),
+        base: compareBase(this.inventory.selectedPart(), p),
         action: this.button(`Buy ${price}`, (x) => buyStockPart(x, p.id), w.player.money < price),
         onHover: this.hintMounts(kind),
       });
@@ -268,7 +268,7 @@ export class TownScreen {
       const kind = partDef(p.defId).kind;
       return partCard({
         part: p,
-        ...this.compare.options(me, kind, () => this.render()),
+        base: compareBase(this.inventory.selectedPart(), p),
         action: this.button(`Sell ${partTradePrice(w, me, p, "sell")}`, (x) => sellPart(x, p.id)),
         onHover: this.hintMounts(kind),
       });
@@ -497,7 +497,6 @@ const SUPPLY_STEP = 10;
 export class TruckTradeScreen {
   private root = panel("modal");
   private tab: TradeTab = "goods";
-  private compare = new CompareSteps();
   private npcId: string | null = null;
   private error = "";
   private inventory: InventoryView;
@@ -527,6 +526,7 @@ export class TruckTradeScreen {
   close(): void {
     if (!this.npcId) return;
     const npcId = this.npcId;
+    this.inventory.clearSelection();
     this.npcId = null;
     this.root.style.display = "none";
     this.root.replaceChildren();
@@ -634,7 +634,7 @@ export class TruckTradeScreen {
     const me = playerVehicle(w);
     const card = (p: PartInstance, action: HTMLElement) => {
       const kind = partDef(p.defId).kind;
-      return partCard({ part: p, ...this.compare.options(me, kind, () => this.render()), action, onHover: this.hintMounts(kind) });
+      return partCard({ part: p, base: compareBase(this.inventory.selectedPart(), p), action, onHover: this.hintMounts(kind) });
     };
     const theirs = spareParts(npc).map((p) => {
       const price = truckPartPrice(w, p, "buy");

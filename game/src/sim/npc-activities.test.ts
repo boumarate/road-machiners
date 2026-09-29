@@ -238,6 +238,8 @@ describe('NPC activities', () => {
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     forceOption('hostileSeen', 'fight');
     forceOption('idle', 'scavenge');
+    // The engineless victim is stranded. It holds out when offered a way out, so the fight ends in a knockout.
+    forceOption('surrenderOffered', 'refuse');
     const victim = addVehicle(w0, 'scavengers', 'scout', [], { x: 16, y: 12 });
     victim.brain = npcBrain('scavenger', victim.pos, ['scavenger']);
     corePart(victim, 'cab').hp = 1;

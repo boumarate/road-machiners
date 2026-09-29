@@ -4,8 +4,8 @@ Grid: 6 columns by 12 rows, 2.904 m across by 7.8 m along. Half height 0.8 m, fr
 One long closed body in three color blocks: a painted lower body with a trim stripe, a dark window band with trim pillars,
 and a trim roof with rounded edges. The front is rounded in plan with a two-piece raked windshield.
 The window band ends at row 8. Rows 9 to 11 are the closed engine compartment with side intakes and a sloped rear.
-The flat roof is the row surface of every cell, the aisle included. A raised strip runs over columns 2 and 3 up to row 8.
-Behind it the engine hatch is a cutout over the engine cells, columns 2 and 3 on rows 9 and 10.
+The flat roof is the row surface of every cell, the aisle included. A raised strip runs over columns 2 and 3 up to row 7.
+Behind it the engine hatch is a cutout over the engine cells, columns 2 and 3 on rows 8 and 9.
 Doors are on the right side, Blender -Y: one behind the front wheels and one ahead of the rear wheels.
 Wheels sit on rows 1 and 10 in the outer columns, radius 0.55 m, half width 0.22 m, mount 0.55 m below the center.
 Run: blender --background --python tools/blender/base_bus.py -- public/models/base_bus.glb [tmp/base_bus.png]
@@ -46,8 +46,8 @@ GLASS_BACK = G.row_x(8.5)  # the window band ends here, the engine compartment s
 STRIP_H = 0.07  # the raised roof strip over columns 2 and 3
 STRIP_Y = G.col_y(1.5)
 BAY_FLOOR = WIN_TOP + 0.05  # a 0.45 m engine pokes 0.2 m out of the hatch
-BAY_BACK = G.row_x(10.5)
-BAY_FRONT = G.row_x(8.5)
+BAY_BACK = G.row_x(9.5)
+BAY_FRONT = G.row_x(7.5)
 
 # Body outline in plan per height: z, front x, back x, half width.
 LOWER = [(G.bottom, FRONT, BACK, SIDE), (BELT, FRONT, BACK, SIDE)]
@@ -185,8 +185,8 @@ def main() -> None:
     front(kit)
     rear(kit)
     # Items on the strip columns stand on the strip, and items on the engine cells stand on the bay floor under the hatch.
-    strip = {(x, y): ROOF + STRIP_H for x in (2, 3) for y in range(9)}
-    bay = {(x, y): BAY_FLOOR for x in (2, 3) for y in (9, 10)}
+    strip = {(x, y): ROOF + STRIP_H for x in (2, 3) for y in range(8)}
+    bay = {(x, y): BAY_FLOOR for x in (2, 3) for y in (8, 9)}
     level_sockets(kit, G, "row", [ROOF] * G.rows, fronts={0: ROOF_FRONT}, cells=strip | bay)
     # Core parts stand on the bus floor at the belt line, hidden in the body. The engine stands in the bay.
     level_sockets(kit, G, "floor", [BELT] * G.rows, cells=bay)

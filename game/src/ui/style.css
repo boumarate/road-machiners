@@ -384,7 +384,7 @@ body {
   gap: 6px;
 }
 .weapons .weapon-slot {
-  width: 84px;
+  width: 96px;
   min-width: 0;
 }
 #ui .weapon-pick {
@@ -408,8 +408,49 @@ body {
   font: 11px var(--font-mono);
   color: #e5c47c;
 }
+.weapon-name {
+  max-width: 100%;
+  padding-left: 10px;
+  box-sizing: border-box;
+  font-size: 10px;
+  line-height: 1.15;
+  text-align: center;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .weapon-pick [data-status] {
   font: 10px / 1.2 var(--font-mono);
+}
+.weapon-ammo-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 2px;
+}
+.weapon-ammo {
+  display: flex;
+  gap: 2px;
+}
+.ammo-cell {
+  width: 6px;
+  height: 12px;
+  border: 1px solid var(--edge);
+  background: var(--ink);
+}
+.ammo-cell.spent {
+  background: #000;
+}
+.ammo-cell.reloading {
+  background: #e5c47c;
+}
+#ui .weapon-reload {
+  padding: 1px 4px;
+}
+.weapon-reload .icon {
+  width: 16px;
+  height: 16px;
 }
 .weapon-target {
   font-size: 10px;
@@ -418,40 +459,9 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.weapon-detail {
-  position: fixed;
-  top: 64px;
-  left: 14px;
-  width: var(--inspection-width);
-  height: var(--inspection-height);
-  max-width: calc(100vw - 28px);
-  box-sizing: border-box;
-  overflow: auto;
-  padding: 14px;
-  background: #272b2ef5;
-  border: 1px solid var(--edge);
-  border-top: 2px solid #c1a264;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-}
-#ui:has(.help details[open]) .weapon-detail {
-  visibility: hidden;
-}
-.weapon-detail small {
-  color: var(--muted);
-  font-size: 11px;
-}
 #ui .weapon-hold {
-  padding: 3px 7px;
-  font-size: 12px;
-  align-self: flex-start;
-}
-.weapon-aim {
-  display: block;
-  width: 100%;
-  font-size: 12px;
+  padding: 1px 4px;
+  font-size: 11px;
 }
 #ui .turn-control {
   right: 16px;
@@ -644,6 +654,13 @@ body {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+}
+.hitcard .hc-chance {
+  font-size: 16px;
+  color: #c0cf92;
+}
+.hitcard .hc-row {
+  align-items: baseline;
 }
 .hitcard .hc-cause {
   font-size: 11px;
@@ -1155,6 +1172,27 @@ body {
 }
 .inv-item.refitting {
   border: 2px dashed #eac779;
+}
+.inv-chip.selected {
+  outline: 2px solid #eac779;
+  outline-offset: -2px;
+}
+.inv-item.holding {
+  outline: 2px dashed #eac779;
+  outline-offset: -2px;
+}
+.inv-ghost.held {
+  box-shadow: 0 0 0 2px #eac779;
+}
+.inv-refit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border: 1px dashed #eac779;
+  font-size: 13px;
 }
 .inv-ghost {
   position: fixed;

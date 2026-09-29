@@ -28,8 +28,9 @@ export type NpcLoadoutTable = {
   chassis: Weighted<string>[];
   engine: Weighted<string>[];
   weapon: Weighted<string>[]; // the main gun
-  extraGun: Weighted<string>[]; // guns past the main one, up to the level's gun count
+  extraGun: Weighted<string>[]; // guns past the main one, one per free deck spot the level's fill chance hits
   minGuns: number; // guns the driver always gets, whatever its level rolls
+  gunFill: number; // times the gear level's fill chance is the chance that a free deck spot gets a gun; see GEAR_LEVELS
   armor: Weighted<string>[]; // one type per armored side
   cargoPart: Weighted<string | null>[];
   goods: Weighted<CargoRoll | null>[];
@@ -39,22 +40,36 @@ export type NpcLoadoutTable = {
   targets: { guns: [number, number]; armor: [number, number] };
 };
 
-// What each gear level aims for. guns rolls the gun count, the main gun included. armor is the share of the
-// chassis edge cells to armor. budget multiplies the template budget. wearShift moves every wear roll, clamped
-// to CONDITION.maxWear. cargo multiplies the goods and spares counts. Passes stop early when the budget, rated
-// mass or grid room runs out, so a poor truck may end below its targets.
-export const GEAR_LEVELS: Record<GearLevel, { guns: Weighted<number>[]; armor: number; budget: number; wearShift: number; cargo: number }> = {
-  poor: { guns: [{ value: 1, weight: 1 }], armor: 0.1, budget: 0.6, wearShift: 1, cargo: 0.5 },
-  light: { guns: [{ value: 1, weight: 1 }], armor: 0.3, budget: 0.85, wearShift: 0, cargo: 0.75 },
-  standard: { guns: [{ value: 1, weight: 2 }, { value: 2, weight: 1 }], armor: 0.5, budget: 1.15, wearShift: 0, cargo: 1 },
-  heavy: { guns: [{ value: 2, weight: 1 }], armor: 0.75, budget: 1.6, wearShift: -1, cargo: 1 },
-  loaded: { guns: [{ value: 2, weight: 1 }, { value: 3, weight: 1 }], armor: 1, budget: 2.4, wearShift: -2, cargo: 1.5 },
+// What each gear level aims for. fill is the base chance that each free deck spot gets a gun after the main gun and
+// the template minimum. The template's `gunFill` scales it, capped at 1: 0.2 for haulers that must stay fast, 0.4 to
+// 0.5 for convoys, couriers and small buggies, 0.7 for scavengers and roamers, 1 for gunwagons, mercs and patrols; see addGuns() in src/sim/npc-loadout.ts. armor is the share of the chassis edge cells to armor.
+// budget multiplies the template budget. wearShift moves every wear roll, clamped to CONDITION.maxWear. cargo
+// multiplies the goods and spares counts. Passes stop early when the budget, rated mass or grid room runs out, so
+// a poor truck may end below its targets. Guns come first in the fill order, so the budget cuts armor before guns.
+// Extra guns stop before their power draw slows the truck by more than this share, see gunDrag() in src/sim/stats.ts.
+// A stronger engine carries more guns. The template's minimum guns ignore it.
+export const MAX_GUN_SLOWDOWN = 0.35;
+
+// The share of its unloaded speed that an NPC truck keeps after its guns, armor and cargo. Loadouts stop adding
+// weight before they cross it, and an NPC takes no loot, purchase or spare part that would. The template's minimum
+// build ignores it. See npcMassRoom() in src/sim/stats.ts.
+export const MIN_NPC_SPEED_SHARE = 0.6;
+
+export const GEAR_LEVELS: Record<GearLevel, { fill: number; armor: number; budget: number; wearShift: number; cargo: number }> = {
+  poor: { fill: 0, armor: 0.1, budget: 0.6, wearShift: 1, cargo: 0.5 },
+  light: { fill: 0.1, armor: 0.3, budget: 0.85, wearShift: 0, cargo: 0.75 },
+  standard: { fill: 0.25, armor: 0.5, budget: 1.15, wearShift: 0, cargo: 1 },
+  heavy: { fill: 0.45, armor: 0.75, budget: 1.6, wearShift: -1, cargo: 1 },
+  loaded: { fill: 0.8, armor: 1, budget: 2.4, wearShift: -2, cargo: 1.5 },
 };
 
 // Light guns for the extra gun pass.
 const LIGHT_GUNS: Weighted<string>[] = [
   { value: "mg", weight: 3 },
   { value: "shotgun", weight: 2 },
+  { value: "flamer", weight: 1 },
+  { value: "longRifle", weight: 1 },
+  { value: "slugCannon", weight: 1 },
 ];
 
 // Shared wear rolls for spawned kit. Raiders run rougher rigs than traders, who keep theirs closer to new.
@@ -84,6 +99,7 @@ const TRADER_SPARES: SpareTable = {
     { value: null, weight: 3 },
     { value: "mg", weight: 2 },
     { value: "shotgun", weight: 1 },
+    { value: "longRifle", weight: 1 },
     { value: "scrapPanels", weight: 2 },
     { value: "flatFour", weight: 1 },
     { value: "rack", weight: 1 },
@@ -129,6 +145,10 @@ const LAW_WEAPONS: Weighted<string>[] = [
   { value: "autocannon", weight: 4 },
   { value: "tankGun", weight: 2 },
   { value: "rocketRack", weight: 1 },
+  { value: "heavyMg", weight: 3 },
+  { value: "battleRifle", weight: 2 },
+  { value: "recoilless", weight: 1 },
+  { value: "amRifle", weight: 1 },
 ];
 const LAW_ARMOR: Weighted<string>[] = [
   { value: "plates", weight: 6 },
@@ -165,9 +185,13 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "autocannon", weight: 2 },
       { value: "rocketRack", weight: 1 },
       { value: "cannon", weight: 2 },
+      { value: "flamer", weight: 2 },
+      { value: "pneumobolter", weight: 1 },
+      { value: "slugCannon", weight: 1 },
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 0.25,
     armor: [
       { value: "scrapPanels", weight: 5 },
       { value: "cage", weight: 3 },
@@ -185,7 +209,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
     wear: WEAR_RAIDER,
-    targets: { guns: [1, 1.5], armor: [0.3, 0.6] },
+    targets: { guns: [0.8, 1.8], armor: [0.3, 0.6] },
     spares: null,
   },
   // No tractor or scout: neither has a spot where a second gun covers behind the truck.
@@ -211,9 +235,13 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "autocannon", weight: 3 },
       { value: "rocketRack", weight: 2 },
       { value: "sniperCannon", weight: 1 },
+      { value: "grenadeLauncher", weight: 2 },
+      { value: "recoilless", weight: 2 },
+      { value: "gatling", weight: 1 },
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 2,
+    gunFill: 1,
     armor: [
       { value: "plates", weight: 6 },
       { value: "spacedArmor", weight: 3 },
@@ -234,7 +262,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 2 }, weight: 1 },
     ],
     wear: WEAR_RAIDER,
-    targets: { guns: [2, 2.5], armor: [0.5, 0.8] },
+    targets: { guns: [2.6, 5.1], armor: [0.5, 0.8] },
     spares: null,
   },
   trader: {
@@ -259,9 +287,12 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "mg", weight: 6 },
       { value: "shotgun", weight: 4 },
       { value: "autocannon", weight: 1 },
+      { value: "slugCannon", weight: 1 },
+      { value: "heavyMg", weight: 1 },
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 0.2,
     armor: [
       { value: "plates", weight: 4 },
       { value: "cage", weight: 3 },
@@ -287,7 +318,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 4 }, weight: 1 },
     ],
     wear: WEAR_TRADER,
-    targets: { guns: [1, 1.5], armor: [0.3, 0.6] },
+    targets: { guns: [1.4, 2.2], armor: [0.3, 0.6] },
     spares: TRADER_SPARES,
   },
   scavenger: {
@@ -312,9 +343,13 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "shotgun", weight: 6 },
       { value: "autocannon", weight: 1 },
       { value: "cannon", weight: 1 },
+      { value: "longRifle", weight: 2 },
+      { value: "flamer", weight: 1 },
+      { value: "slugCannon", weight: 1 },
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 0.25,
     armor: [
       { value: "scrapPanels", weight: 5 },
       { value: "cage", weight: 4 },
@@ -335,7 +370,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
     wear: WEAR_SCAVENGER,
-    targets: { guns: [1, 1.5], armor: [0.2, 0.5] },
+    targets: { guns: [1.0, 1.6], armor: [0.2, 0.5] },
     spares: null,
   },
   // Bowl Farmers drive farm chassis.
@@ -351,11 +386,12 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     weapon: LAW_WEAPONS,
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 1,
     armor: LAW_ARMOR,
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
     wear: WEAR_TRADER,
-    targets: { guns: [1.6, 2.3], armor: [0.5, 0.85] },
+    targets: { guns: [4.2, 6.5], armor: [0.5, 0.85] }, // MAX_GUN_SLOWDOWN caps the guns
     spares: null,
   },
   // The Nose Army drives wagons and carriers.
@@ -370,11 +406,12 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     weapon: LAW_WEAPONS,
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 1,
     armor: LAW_ARMOR,
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
     wear: WEAR_TRADER,
-    targets: { guns: [1.6, 2.3], armor: [0.5, 0.85] },
+    targets: { guns: [3.0, 5.2], armor: [0.5, 0.85] },
     spares: null,
   },
   // Light and fast. A courier carries a few small valuables and little armor.
@@ -396,9 +433,11 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     weapon: [
       { value: "mg", weight: 6 },
       { value: "shotgun", weight: 3 },
+      { value: "longRifle", weight: 1 },
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 0.5,
     armor: [
       { value: "scrapPanels", weight: 3 },
       { value: "cage", weight: 2 },
@@ -414,7 +453,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "meds", count: 2 }, weight: 2 },
     ],
     wear: WEAR_TRADER,
-    targets: { guns: [1, 1.4], armor: [0.15, 0.45] },
+    targets: { guns: [0.9, 1.7], armor: [0.15, 0.45] },
     spares: null,
   },
   // A roamer's rig is a scavenger's, a bit better kept.
@@ -438,9 +477,13 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "mg", weight: 5 },
       { value: "shotgun", weight: 5 },
       { value: "autocannon", weight: 1 },
+      { value: "longRifle", weight: 1 },
+      { value: "pneumobolter", weight: 1 },
+      { value: "battleRifle", weight: 1 },
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 0.25,
     armor: [
       { value: "scrapPanels", weight: 4 },
       { value: "cage", weight: 3 },
@@ -458,7 +501,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "tools", count: 1 }, weight: 1 },
     ],
     wear: WEAR_SCAVENGER,
-    targets: { guns: [1, 1.6], armor: [0.3, 0.6] },
+    targets: { guns: [1.05, 1.7], armor: [0.3, 0.6] },
     spares: null,
   },
   // A convoy is a big truck that always carries a cargo part, since it hauls for a living. Its guard does the
@@ -479,9 +522,11 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     weapon: [
       { value: "mg", weight: 6 },
       { value: "shotgun", weight: 3 },
+      { value: "heavyMg", weight: 1 },
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 0.25,
     armor: [
       { value: "plates", weight: 3 },
       { value: "cage", weight: 2 },
@@ -499,7 +544,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "water", count: 6 }, weight: 1 },
     ],
     wear: WEAR_TRADER,
-    targets: { guns: [1.1, 1.8], armor: [0.4, 0.7] },
+    targets: { guns: [2.6, 3.9], armor: [0.4, 0.7] },
     spares: null,
   },
   // A guard is quick enough to keep up with its convoy and armed to fight for it.
@@ -523,9 +568,13 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "mg", weight: 4 },
       { value: "cannon", weight: 2 },
       { value: "shotgun", weight: 2 },
+      { value: "heavyMg", weight: 3 },
+      { value: "battleRifle", weight: 2 },
+      { value: "recoilless", weight: 1 },
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 1,
     armor: [
       { value: "plates", weight: 4 },
       { value: "cage", weight: 3 },
@@ -535,7 +584,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
     wear: WEAR_TRADER,
-    targets: { guns: [1.4, 2.1], armor: [0.5, 0.85] },
+    targets: { guns: [1.55, 3.5], armor: [0.5, 0.85] },
     spares: null,
   },
   // A merc sells its guns, so it spends its budget on weapons and armor, not cargo.
@@ -561,10 +610,17 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "rocketRack", weight: 2 },
       { value: "sniperCannon", weight: 1 },
       { value: "tankGun", weight: 1 },
+      { value: "heavyMg", weight: 3 },
+      { value: "battleRifle", weight: 2 },
+      { value: "amRifle", weight: 1 },
+      { value: "gatling", weight: 1 },
+      { value: "flechette", weight: 1 },
+      { value: "grenadeLauncher", weight: 1 },
     ],
     // The rare empty outcome covers a wagon whose heavy gun leaves no rated mass for plates.
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 0.8,
     armor: [
       { value: "plates", weight: 5 },
       { value: "spacedArmor", weight: 3 },
@@ -575,7 +631,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
     wear: WEAR_SCAVENGER,
-    targets: { guns: [1.7, 2.4], armor: [0.6, 0.9] },
+    targets: { guns: [1.85, 4.4], armor: [0.6, 0.9] },
     spares: null,
   },
 };
@@ -606,7 +662,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "camp" },
   },
   gunwagon: {
-    id: 'gunwagon', name: 'Raider gunwagon', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
+    id: 'gunwagon', name: 'Gunwagon', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
     loadout: LOADOUTS.gunwagon,
     aggroRange: 12,
     preferredRange: 6,
@@ -771,6 +827,10 @@ export type DecisionOptions = {
   parley: 'keep' | 'truce' | 'beg'; // a foe hurt the driver this turn
   truceOffered: 'accept' | 'refuse'; // a foe asks for a truce
   mercyBegged: 'spare' | 'finish'; // a foe gives up and asks to be let go
+  // A driver that takes nothing fights a stranded foe alone: offer it a way out, or judge it not worth the trouble and
+  // leave.
+  strandedFoe: 'offer' | 'spare';
+  surrenderOffered: 'accept' | 'refuse'; // a stranded NPC is offered a way out by the foe that beat it
   threatened: 'comply' | 'fightBack' | 'flee'; // the player demands the driver's cargo
   mugging: 'demand' | 'attack'; // the driver sets out to fight the player: radio for the cargo first, or just open fire
   resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal
@@ -817,6 +877,10 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   truceOffered: { accept: 2, refuse: 1 },
   // Three drivers in four let a beaten foe go. The beggar leaves its cargo.
   mercyBegged: { spare: 3, finish: 1 },
+  // About one driver in ten leaves a stranded foe alone.
+  strandedFoe: { offer: 9, spare: 1 },
+  // A stranded driver mostly takes the way out. The accept factor for weak drivers raises it further.
+  surrenderOffered: { accept: 3, refuse: 1 },
   // A threatened driver gives up its cargo, fights or runs about equally. The two sides' strength decides most.
   threatened: { comply: 1, fightBack: 1, flee: 1 },
   // A driver about to attack the player radios for the cargo first a bit more often than it opens fire unwarned.
@@ -849,6 +913,7 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   // A driver rarely robs a truck it holds a truce with. A scumbag's rob weight of 0.5 drops to 0.0025, about 1%.
   truce: { preySeen: { rob: { mul: 0.005 } } },
   grievance: {},
+  strayFire: {},
   // A driver that pleaded with a foe rarely pleads with it again soon. A truce weight of 2.5 drops to 0.025.
   plea: { parley: { truce: { mul: 0.01 }, beg: { mul: 0.01 } } },
   // A driver the player turned down rarely offers that player a tow again. A tow weight of 9 drops to 0.009,
@@ -898,6 +963,8 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   // A crash victim decides on the crash the first turn it sees the other truck. It lets the crash go after 5
   // turns out of sight.
   grievance: 5,
+  // Stray hits from the same shooter add up for 60 turns after the last one, long enough to cover one fight.
+  strayFire: 60,
   // A driver waits 20 turns before it pleads with the same foe again. The player answers within that time too.
   plea: 20,
   // A driver the player turned down holds it until it offers that player a tow again.
@@ -1083,13 +1150,13 @@ export const NPC_BEHAVIOR = {
   fleeCondition: 0.3,
   // Fight driving; see src/sim/ai.ts. A fighter scores `angles` points around its target's next spot. Each
   // point gets arcWeight × the share of its gun damage that bears from there, minus threatWeight × the share of the
-  // target's gun damage that bears on it, minus rangeWeight × how far off its range the point is as a share of it,
+  // target's gun damage that bears on it and gets past the armor on the side it shows each gun, minus rangeWeight × how far off its range the point is as a share of it,
   // minus travelWeight × the drive past one turn at top speed as a share of that speed. A circling fighter adds
   // circleWeight × how far ahead around the target the point lies, as a share of a quarter turn, and never drives
-  // slower than circlePace tiles a turn. Every fighter subtracts rammedWeight × the danger of standing in the target's
-  // ram path, which grows with how much heavier the target is and with a ram bar on its nose. A fighter rolls
+  // slower than circlePace tiles a turn. Every fighter subtracts rammedWeight × the ram value of the target's ram at
+  // that point, and one that rams readily adds ramWeight × the ram value of its own ram from there. A fighter rolls
   // fightWhim every whimTurns turns.
-  fight: { angles: 16, arcWeight: 2, threatWeight: 2, rangeWeight: 1, travelWeight: 1, circleWeight: 1, rammedWeight: 2, circlePace: 3, whimTurns: 4 },
+  fight: { angles: 16, arcWeight: 2, threatWeight: 2, rangeWeight: 1, travelWeight: 1, circleWeight: 1, rammedWeight: 2, ramWeight: 2, circlePace: 3, whimTurns: 4 },
   // One driver in three the player knocks out holds a grudge. See the revenge state.
   revengeChance: 0.33,
   recoverCondition: 0.5,
@@ -1123,14 +1190,28 @@ export const NPC_BEHAVIOR = {
   // Investigate weight times this when the cab or a driving part is at or below the recover condition. A raider's
   // investigate weight of 12 drops to 0.12, so a crippled raider closes in on a contact 1 to 4 times in 100.
   crippledInvestigate: 0.01,
-  // Ram weight times this when the forecast says the ram costs the driver more than the target, or breaks one of
-  // its working parts. A ram weight of 9 drops to 0.009, about 1%.
-  riskyRam: 0.001,
-  // A ram's weight scales by the rammer's mass over the target's, to this power: twice the mass rams four times as
-  // readily, half the mass a quarter as readily.
-  ramMassPower: 2,
-  // Ram weight share against a truck whose working ram bar faces the rammer.
-  ramBarRam: 0.2,
+  // A ram is worth its expected net damage: what the crash model says it takes off the target minus what it takes off
+  // the rammer, each part counted by partWeight, times the chance it connects. It competes with the rammer's guns over
+  // the same turns, at gunWeight per point of gun damage that gets past the armor. The ram's share of the two is the
+  // ram value, from 0 to 1. A ram that nets nothing, or leaves the rammer below the flee condition, is worth 0.
+  ram: {
+    // Value of one hit point lost, by the part that loses it. The cab, wheels, engine and guns decide a fight. Armor
+    // and ram bars exist to be hit.
+    partWeight: { cab: 4, wheel: 2, transmission: 2, tank: 1, engine: 3, weapon: 3, armor: 0.25, scanner: 1, store: 1, cargo: 1 },
+    gunWeight: 1,
+    // Ram weight is the ram value times this, so a ram worth as much as the guns, a value of 0.5, weighs 0.15 times the
+    // base weight and is chosen about 1 time in 2. Against an equal truck this gives a ram in about 1 fight in 8 without
+    // a ram bar and 1 in 3 with one.
+    valueScale: 0.3,
+    // Ram weight when the ram is worth nothing. A ram weight of 9 drops to 0.009, about 1%.
+    riskyRam: 0.001,
+    // The chance a ram connects is 1 / (1 + sway), where sway is the sideways distance the target can open before the
+    // impact, as a share of the width of the path. The rammer closes at its impact speed, so each tile of gap costs
+    // 1 / impact turns. The target can move out at its speed times (dodge + how far its heading is off the ram line, as a
+    // sine). A parked or stranded target never moves, so it is hit for sure. A truck at 6 tiles a turn, 12 tiles off, 
+    // crossing the line, has a sway of about 5 and connects about 1 time in 6.
+    dodge: 0.3,
+  },
   // Salvage in sight weighs 10 times a known site out of sight.
   visibleSalvage: 10,
   // A robber mostly picks targets weaker than itself, away from town guards. Rob weight times this when the
@@ -1160,9 +1241,9 @@ export const NPC_BEHAVIOR = {
   // A raider hunting a truck with loot counts as robbing it. A scumbag's 2 to 1 for accept becomes 2 to 20, so a
   // confident robber takes a truce about one time in ten. A raider's 2 to 3 becomes 2 to 60, about one in twenty.
   robberRefuse: 20,
-  // Truce weight times this when a hurt driver is robbing the foe and is not weak. A scumbag's truce weight of 0.5
-  // drops to 0.05 against keep 8, so it offers its prey a truce about two hurt turns in a hundred.
-  robberTruce: 0.1,
+  // Truce weight times this when a hurt driver is not weak and its foe is no threat, so it is winning. A trader's
+  // truce weight of 2.5 drops to 0.025 against keep 8, and every driver then offers at about the 1% floor.
+  winningTruce: 0.01,
   // Comply weight times this when the player's local group is a threat. It then beats fight back and flee by far.
   threatComply: 20,
 };

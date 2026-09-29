@@ -3,6 +3,7 @@
 
 import { chassisDef } from '../data/chassis';
 import { partDef, type EngineDef, type StoreDef, type WeaponDef } from '../data/parts';
+import { MIN_NPC_SPEED_SHARE } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { skillEffect } from './progress';
 import { TOW } from '../data/tow';
@@ -84,8 +85,9 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
   // Without a working engine, or with a stalled one, the driver pushes the truck at limp speed and burns no fuel.
   if (hasWorkingEngine(v) && !isStalled(world, v)) {
     const e = wornDef<EngineDef>(engines[0]);
-    maxSpeed = Math.max(RULES.minSpeedCap, (ch.maxSpeed + e.speedBonus) * load * wheels);
-    accel = (ch.accel + e.accelBonus) * force * RULES.accelScale;
+    const drag = gunDrag(v, e.capacity);
+    maxSpeed = Math.max(RULES.minSpeedCap, (ch.maxSpeed + e.speedBonus) * load * wheels * drag);
+    accel = (ch.accel + e.accelBonus) * force * RULES.accelScale * drag;
     fuelMult = e.fuelMult;
     if (inOverdrive(world, v)) {
       maxSpeed *= RULES.overdriveBoost;
@@ -113,6 +115,40 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     radius: ch.radius,
     weapons: mountedItems(v, 'weapon').map((item) => ({ part: item.part, def: wornDef<WeaponDef>(item.part), sides: openSides(v, item) })),
   };
+}
+
+// Speed and acceleration multiplier from the working guns. Each draws power from the engine, up to gunDragMax slower
+// once their total draw reaches the engine's capacity. The curve is convex: the first guns cost little.
+export function gunDrag(v: Vehicle, capacity: number): number {
+  const draw = mountedItems(v, 'weapon').filter((item) => isWorking(item.part)).reduce((sum, item) => sum + wornDef<WeaponDef>(item.part).draw, 0);
+  return 1 - RULES.gunDragMax * Math.min(1, draw / capacity) ** RULES.gunDragCurve;
+}
+
+// Kilograms an NPC truck can still take before load and gun drag cut its speed below MIN_NPC_SPEED_SHARE of the unloaded
+// speed. Zero when it is already below. Speed falls as mass rises, so a bisection finds the limit.
+export function npcMassRoom(v: Vehicle): number {
+  const needed = neededLoadFactor(v);
+  if (loadFactor(v) < needed) return 0;
+  let low = 0;
+  let high = chassisDef(v.chassisId).ratedMass;
+  while (loadFactor(v, high) >= needed) high *= 2;
+  while (high - low > 1) {
+    const mid = (low + high) / 2;
+    if (loadFactor(v, mid) >= needed) low = mid;
+    else high = mid;
+  }
+  return low;
+}
+
+// Whether the truck keeps MIN_NPC_SPEED_SHARE of its unloaded speed.
+export function meetsSpeedFloor(v: Vehicle): boolean {
+  return loadFactor(v) >= neededLoadFactor(v);
+}
+
+// The load factor that, with the gun drag, still gives MIN_NPC_SPEED_SHARE.
+function neededLoadFactor(v: Vehicle): number {
+  const engine = mountedParts(v, 'engine')[0];
+  return MIN_NPC_SPEED_SHARE / (engine ? gunDrag(v, wornDef<EngineDef>(engine).capacity) : 1);
 }
 
 // Only the player's truck has engine overdrive.

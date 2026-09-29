@@ -101,6 +101,7 @@ describe('hills and the scanner', () => {
     raiseHill(w);
     refreshVision(w); // the stored view was taken before the hill rose
     const observer = w.vehicles[0];
+    observer.items = observer.items.filter((it) => it.kind === 'good' || it.part.defId !== 'mg'); // frees a deck cell
     const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
     target.speed = 0.2; // below the parked threshold used by sound, so only the scanner should trigger
     expect(scannerRange(observer)).toBe(0);
@@ -118,6 +119,7 @@ describe('a worn scanner', () => {
   it('reaches less far', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const observer = w.vehicles[0];
+    observer.items = observer.items.filter((it) => it.kind === 'good' || it.part.defId !== 'mg'); // frees a deck cell
     const scanner = makePart(w, 'scanner', 0);
     if (!mountPart(w, observer, scanner)) throw new Error('No free mount for the test scanner');
     const fresh = scannerRange(observer);

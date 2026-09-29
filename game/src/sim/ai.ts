@@ -1,5 +1,6 @@
 // Activity execution uses the same steering and route planner as the player.
 import { NPC_BEHAVIOR, NPCS, SPAWN } from "../data/npcs";
+import { sustainedDamage } from "../data/parts";
 import { RULES } from "../data/rules";
 import { isKnockedOut } from "./defeat";
 import { isNear } from "./far";
@@ -11,13 +12,13 @@ import { isFree } from "./spawn";
 import { parkedVehicles } from "./steering";
 import { vehicleStats, type MountedWeapon } from "./stats";
 import { escortsOf, followPace, isOnRope, towHeldBy } from "./tow";
-import { ramImpact } from "./crash-contact";
+import { ramImpact, ramValue } from "./crash-contact";
+import { ramsReadily } from "./npc-decisions";
 import type { MoveOrder, NpcActivity, Vehicle, World } from "./types";
 import { angleDiff, bearing, dist, type Vec } from "./vec";
 import { canVehicleSee } from "./vision";
 import { inArc } from "./combat";
-import { ramMult } from "./armor";
-import { vehicleMass } from "./mass";
+import { passShare, sideToward } from "./armor";
 import { chance } from "./rng";
 
 // NPC drivers that plan this turn. A truck on a tow rope only trails its tower, so it keeps no order.
@@ -126,8 +127,10 @@ function orderPoint(world: World, v: Vehicle, activity: NpcActivity, templateRan
   const target = world.vehicles.find((other) => other.id === activity.targetId);
   if (!target) throw new Error("Fight activity missing its target");
   if (!canVehicleSee(world, v, target.pos)) return getActivityDestination(world, v, activity);
-  const preferredRange = templateRange > 0 ? templateRange : shortestRange(world, v);
-  return computeFightGoal(world, v, preferredRange, target);
+  const preferredRange = templateRange > 0 ? templateRange : shortestRange(world, v) - RULES.arriveRadius;
+  const seen = perceivedTarget(world, v, target);
+  noteTarget(world, v, target);
+  return computeFightGoal(world, v, preferredRange, target, seen);
 }
 
 // A leader out of danger waits while an escort that follows it lags more than NPC_BEHAVIOR.escortWaitGap behind,
@@ -157,19 +160,34 @@ function foeInSight(world: World, v: Vehicle, activity: NpcActivity): Vehicle | 
 }
 
 // A chosen ram, then a rash whim, win over the scored spot. A rush drives through the target like a ram. A halt
-// brakes where the driver is. A veer drives to the whim's spot around the target.
-function computeFightGoal(world: World, v: Vehicle, preferredRange: number, target: Vehicle): Vec | null {
+// brakes where the driver is. A veer drives to the whim's spot around the target. Rams aim at the target as it is.
+// Every other spot is placed against `seen`, the target as the driver last read it.
+function computeFightGoal(world: World, v: Vehicle, preferredRange: number, target: Vehicle, seen: Vehicle): Vec | null {
   const b = v.brain!;
-  const lead = leadOf(target);
   if (rams(world, v, target)) {
     b.ramTarget = target.id;
-    return lead;
+    return leadOf(target);
   }
   if (b.whim?.kind === "halt") return null;
+  const lead = leadOf(seen);
   const clearance = vehicleStats(world, v).radius + vehicleStats(world, target).radius + RULES.yieldDistance;
   const range = Math.max(preferredRange, clearance);
   if (b.whim?.kind === "veer") return { x: lead.x + Math.cos(b.whim.angle) * range, y: lead.y + Math.sin(b.whim.angle) * range };
-  return fightPoint(world, v, target, range);
+  return fightPoint(world, v, seen, range);
+}
+
+// A fighter reacts a turn late: it places itself against where its target was and how it faced when it last read
+// it on an earlier turn. A sharp turn or a dash catches it off guard for a turn. A first sighting reads the target
+// as it is.
+export function perceivedTarget(world: World, v: Vehicle, target: Vehicle): Vehicle {
+  const seen = v.brain!.targetSeen;
+  if (!seen || seen.id !== target.id || seen.turn >= world.turn) return target;
+  return { ...target, pos: { ...seen.pos }, heading: seen.heading, speed: seen.speed };
+}
+
+// The driver reads its target as it is now, for its next turn.
+export function noteTarget(world: World, v: Vehicle, target: Vehicle): void {
+  v.brain!.targetSeen = { id: target.id, turn: world.turn, pos: { ...target.pos }, heading: target.heading, speed: target.speed };
 }
 
 function rams(world: World, v: Vehicle, target: Vehicle): boolean {
@@ -177,7 +195,8 @@ function rams(world: World, v: Vehicle, target: Vehicle): boolean {
   return b.whim?.kind === "rush" || (b.ramChoice === target.id && ramImpact(world, v, target) !== null);
 }
 
-// A fighter keeps to its shortest gun range. A fight without a gun is a decision bug, so it throws.
+// A fighter keeps to its shortest gun range, less the distance a stop order may fall short of its point. A fight
+// without a gun is a decision bug, so it throws.
 function shortestRange(world: World, v: Vehicle): number {
   const weapons = vehicleStats(world, v).weapons;
   if (weapons.length === 0) throw new Error(`${v.name} is fighting without a gun`);
@@ -197,18 +216,31 @@ export function leadOf(target: Vehicle): Vec {
 }
 
 // The best scored point around the target's lead at `range`. Arcs are judged where the fighter is after this turn's
-// drive toward the point, and range at the point itself.
+// drive toward the point, and range at the point itself. A point where some working gun bears always beats one where
+// none does, so a slow fighter never parks where it cannot fire while a firing spot exists. With no such point, or no
+// working gun, the best score wins.
 export function fightPoint(world: World, v: Vehicle, target: Vehicle, range: number): Vec {
   const lead = leadOf(target);
   const turn = circleTurn(world, v);
-  let best: { p: Vec; score: number } | null = null;
+  let best: { p: Vec; score: number; fires: boolean } | null = null;
   for (let i = 0; i < F.angles; i++) {
     const a = (2 * Math.PI * i) / F.angles;
     const p = { x: lead.x + Math.cos(a) * range, y: lead.y + Math.sin(a) * range };
     const score = scorePoint(world, v, target, lead, range, p, turn);
-    if (!best || score > best.score) best = { p, score };
+    const fires = bearingShare(world, v, { ...target, pos: lead }, p) > 0;
+    if (!best || beats({ score, fires }, best)) best = { p, score, fires };
   }
   return best!.p;
+}
+
+function beats(a: { score: number; fires: boolean }, b: { score: number; fires: boolean }): boolean {
+  return a.fires === b.fires ? a.score > b.score : a.fires;
+}
+
+// The share of v's working gun damage that bears on the target after a turn of driving toward p.
+function bearingShare(world: World, v: Vehicle, there: Vehicle, p: Vec): number {
+  const me = afterTurn(world, v, p);
+  return gunShare(vehicleStats(world, v).weapons, (mw) => inReach(me, mw, there));
 }
 
 // A circling fighter's direction around its target, 1 or -1, picked once with world RNG. A holding fighter has none.
@@ -222,34 +254,37 @@ export function scorePoint(world: World, v: Vehicle, target: Vehicle, lead: Vec,
   const sv = vehicleStats(world, v);
   const me = afterTurn(world, v, p);
   const there = { ...target, pos: lead };
-  const mine = gunShare(sv.weapons, (mw) => inReach(me, mw, there));
-  const theirs = gunShare(vehicleStats(world, target).weapons, (mw) => inReach(there, mw, me));
+  const mine = bearingShare(world, v, there, p);
+  const theirs = exposure(world, target, there, me);
   const off = Math.abs(dist(p, lead) - range) / range;
   const travel = Math.max(0, dist(v.pos, p) - sv.maxSpeed) / Math.max(sv.maxSpeed, RULES.arriveRadius);
   const ahead = turn === 0 ? 0 : Math.min(1, (turn * angleDiff(bearing(lead, v.pos), bearing(lead, p))) / QUARTER);
-  const rammed = rammedDanger(world, v, there, me);
-  return F.arcWeight * mine - F.threatWeight * theirs - F.rangeWeight * off - F.travelWeight * travel + F.circleWeight * ahead - F.rammedWeight * rammed;
-}
-
-// How bad a spot in the target's ram path is: zero outside the 45 degrees off its nose within one turn's drive.
-// Inside, a heavier target counts by how much heavier it is, and a ram bar on its nose by how much more it hits.
-function rammedDanger(world: World, v: Vehicle, target: Vehicle, spot: Vehicle): number {
-  const st = vehicleStats(world, target);
-  const reach = Math.min(st.maxSpeed, target.speed + st.accel) + st.radius + vehicleStats(world, v).radius;
-  const inPath = dist(target.pos, spot.pos) <= reach && Math.abs(angleDiff(target.heading, bearing(target.pos, spot.pos))) <= Math.PI / 4;
-  if (!inPath) return 0;
-  return Math.max(0, vehicleMass(target) / vehicleMass(v) - 1) + (ramMult(target, 'front') - 1);
+  const rammed = ramValue(world, there, me);
+  const seek = ramsReadily(world, v, target.id) ? ramValue(world, me, there) : 0;
+  return F.arcWeight * mine - F.threatWeight * theirs - F.rangeWeight * off - F.travelWeight * travel + F.circleWeight * ahead - F.rammedWeight * rammed + F.ramWeight * seek;
 }
 
 // Where v is after one turn of driving toward p, facing the way it drives. Guns fire after the move, so arcs are
 // judged there.
 export function afterTurn(world: World, v: Vehicle, p: Vec): Vehicle {
   const d = dist(v.pos, p);
-  if (d <= RULES.arriveRadius * 2) return { ...v, pos: p };
+  if (d <= RULES.arriveRadius) return v;
   const sv = vehicleStats(world, v);
   const heading = bearing(v.pos, p);
   const step = Math.min(d, sv.maxSpeed, v.speed + sv.accel);
   return { ...v, pos: { x: v.pos.x + Math.cos(heading) * step, y: v.pos.y + Math.sin(heading) * step }, heading };
+}
+
+// The share of the shooter's working gun damage per turn that could hit v and get past the armor on the side v shows
+// each gun. A bare side facing every gun gives 1, a well plated one far less. shooter holds the guns and at is
+// where it stands.
+export function exposure(world: World, shooter: Vehicle, at: Vehicle, v: Vehicle): number {
+  const working = vehicleStats(world, shooter).weapons.filter((mw) => mw.part.hp > 0);
+  const total = working.reduce((sum, mw) => sum + sustainedDamage(mw.def), 0);
+  if (total === 0) return 0;
+  const side = sideToward(v, at.pos);
+  const exposed = working.filter((mw) => inReach(at, mw, v)).reduce((sum, mw) => sum + sustainedDamage(mw.def) * passShare(v, side, mw.def.round), 0);
+  return exposed / total;
 }
 
 function inReach(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): boolean {
@@ -259,7 +294,7 @@ function inReach(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): boolean 
 // The share of the working guns' damage per turn that `bears` lets fire. No working gun gives 0.
 function gunShare(weapons: MountedWeapon[], bears: (mw: MountedWeapon) => boolean): number {
   const working = weapons.filter((mw) => mw.part.hp > 0);
-  const perTurn = (mw: MountedWeapon) => (mw.def.round.damage * mw.def.rounds) / mw.def.reload;
+  const perTurn = (mw: MountedWeapon) => sustainedDamage(mw.def);
   const total = working.reduce((sum, mw) => sum + perTurn(mw), 0);
   if (total === 0) return 0;
   return working.filter(bears).reduce((sum, mw) => sum + perTurn(mw), 0) / total;

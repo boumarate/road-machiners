@@ -1,29 +1,44 @@
-// Gun reach on the ground, shown only for the selected gun. A turret with every side open covers a circle. A forward arc or tall parts on the truck cut it to sectors. Draped over the terrain, level with Canyon Bridge beside its deck.
+// Gun reach on the ground: the selected gun's, and the firing arcs of the hovered truck. A turret with every side open covers a circle. A forward arc or tall parts on the truck cut it to sectors. Draped over the terrain, level with Canyon Bridge beside its deck.
 
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { PHYSICS } from '../../data/physics';
+import { headingOf, toMap, type VehicleFrame } from '../../phys/frames';
 import { PAL } from '../../render/palette';
 import { fireSpans, type FireSpan } from '../../sim/armor';
-import type { MountedWeapon } from '../../sim/stats';
+import { fireBlock } from '../../sim/combat';
+import { vehicleStats, type MountedWeapon } from '../../sim/stats';
 import { markHeightAt, type Terrain } from '../../sim/terrain';
+import type { Vehicle, World } from '../../sim/types';
 import { DEG, type Vec } from '../../sim/vec';
+import { createIcon } from '../../ui/cards';
+import { el } from '../../ui/dom';
+import type { CameraRig } from './camera';
+import { READY_ARC_BIT, SPENT_ARC_BIT } from './models';
 
 const S = PHYSICS.metersPerTile;
+const ICON_PX = 26;
 const LIFT = 0.15; // meters above the ground, so the shape does not z-fight with it
 const DEG_PER_STEP = 5; // at most this many degrees per edge segment keeps the curve smooth
 const LINE_WIDTH_PX = 2;
-const FILL_ALPHA = 0.1;
-const LINE_ALPHA = 0.8;
+const FILL_ALPHA = 0.075;
+const LINE_ALPHA = 0.075;
+const ICON_ALPHA = 0.5;
 
 export class WeaponRangeView {
   readonly root = new THREE.Group();
-  private fill = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: PAL.select, transparent: true, opacity: FILL_ALPHA, depthTest: false, side: THREE.DoubleSide }));
+  private fill: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   private edges: Line2[] = [];
 
-  constructor() {
+  // stencilBit: the fill draws each pixel once, so where its arcs overlap it is no darker.
+  constructor(private readonly color: number, stencilBit: number) {
+    this.fill = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity: FILL_ALPHA, depthTest: false, side: THREE.DoubleSide,
+      stencilWrite: true, stencilRef: stencilBit, stencilFuncMask: stencilBit, stencilWriteMask: stencilBit,
+      stencilFunc: THREE.NotEqualStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
+    }));
     this.fill.renderOrder = 810;
     this.root.add(this.fill);
     this.root.visible = false;
@@ -53,7 +68,7 @@ export class WeaponRangeView {
 
   private drawEdges(outlines: THREE.Vector3[][], opacity: number): void {
     while (this.edges.length < outlines.length) {
-      const edge = new Line2(new LineGeometry(), new LineMaterial({ color: PAL.select, linewidth: LINE_WIDTH_PX, transparent: true, opacity: LINE_ALPHA, depthTest: false }));
+      const edge = new Line2(new LineGeometry(), new LineMaterial({ color: this.color, linewidth: LINE_WIDTH_PX, transparent: true, opacity: LINE_ALPHA, depthTest: false }));
       edge.renderOrder = 811;
       this.edges.push(edge);
       this.root.add(edge);
@@ -74,4 +89,100 @@ export class WeaponRangeView {
 function rimPoints(span: FireSpan, heading: number, point: (angle: number) => THREE.Vector3): THREE.Vector3[] {
   const steps = Math.max(1, Math.ceil((span.to - span.from) / DEG_PER_STEP));
   return Array.from({ length: steps + 1 }, (_, i) => point(heading + (span.from + ((span.to - span.from) * i) / steps) * DEG));
+}
+
+
+export type IconSpot = { angle: number; distance: number }; // degrees from the truck heading, tiles from the truck
+export type HoverArc = { weapon: MountedWeapon; slot: number; spans: FireSpan[]; spent: boolean; spot: IconSpot }; // slot: the gun's number, as the weapon panel shows it
+
+const ICON_RANGE_SHARE = 0.5; // an icon sits at this share of the gun's range
+const ICON_NUDGE_SHARE = 0.15; // icons on one spot step outward by this share of range
+const SAME_SPOT_TILES = 1.5; // icons closer than this overlap
+
+// Center of the widest span at half range. A spot that touches one already taken moves out along the radius until it is free.
+export function iconSpot(spans: readonly FireSpan[], range: number, taken: readonly IconSpot[]): IconSpot {
+  const widest = spans.reduce((a, b) => (b.to - b.from > a.to - a.from ? b : a));
+  const angle = (widest.from + widest.to) / 2;
+  let distance = range * ICON_RANGE_SHARE;
+  while (taken.some((t) => Math.hypot(t.distance * Math.cos(t.angle * DEG) - distance * Math.cos(angle * DEG), t.distance * Math.sin(t.angle * DEG) - distance * Math.sin(angle * DEG)) < SAME_SPOT_TILES)) {
+    distance += range * ICON_NUDGE_SHARE;
+  }
+  return { angle, distance };
+}
+
+// The arcs to draw: guns with hit points, in mount order. Empty and cooling guns are spent.
+export function hoverArcs(world: World, vehicle: Vehicle, weapons: readonly MountedWeapon[]): HoverArc[] {
+  const arcs: HoverArc[] = [];
+  for (const [i, weapon] of weapons.entries()) {
+    const block = fireBlock(world, vehicle, weapon, null);
+    const spans = fireSpans(weapon.def.arc, weapon.sides);
+    if (block === 'disabled' || spans.length === 0) continue;
+    const spot = iconSpot(spans, weapon.def.range, arcs.map((arc) => arc.spot));
+    arcs.push({ weapon, slot: i + 1, spans, spent: block === 'empty' || block === 'cooldown', spot });
+  }
+  return arcs;
+}
+
+export class HoverArcsView {
+  readonly root = new THREE.Group();
+  private readonly ready = new WeaponRangeView(PAL.select, READY_ARC_BIT);
+  private readonly spent = new WeaponRangeView(PAL.arcSpent, SPENT_ARC_BIT);
+  private readonly icons = new Map<string, HTMLElement>(); // by weapon part id
+
+  constructor(private readonly overlay: HTMLElement, private readonly rig: CameraRig) {
+    this.root.add(this.ready.root, this.spent.root);
+    this.hide();
+  }
+
+  // Draws the arcs of the hovered vehicle at its shown pose, or hides them without one.
+  follow(world: World, hovered: string | null, frames: Record<string, VehicleFrame>, off: boolean): void {
+    const vehicle = hovered === null ? undefined : world.vehicles.find((v) => v.id === hovered);
+    const frame = vehicle && frames[vehicle.id];
+    if (off || !vehicle || !frame) return this.hide();
+    this.update(world.terrain, hoverArcs(world, vehicle, vehicleStats(world, vehicle).weapons), frame);
+  }
+
+  private update(terrain: Terrain, arcs: HoverArc[], frame: VehicleFrame): void {
+    const pos = toMap(frame.pos);
+    const heading = headingOf(frame.rot);
+    this.ready.set(terrain, pos, heading, arcs.filter((a) => !a.spent).map((a) => a.weapon));
+    this.spent.set(terrain, pos, heading, arcs.filter((a) => a.spent).map((a) => a.weapon));
+    this.root.visible = true;
+    this.syncIcons(arcs);
+    for (const arc of arcs) {
+      const a = heading + arc.spot.angle * DEG;
+      const x = pos.x + Math.cos(a) * arc.spot.distance;
+      const y = pos.y + Math.sin(a) * arc.spot.distance;
+      const p = this.rig.screenOf({ x: x * S, y: markHeightAt(terrain, pos, x, y) * S, z: y * S });
+      const node = this.icons.get(arc.weapon.part.id)!;
+      node.style.left = `${p.x}px`;
+      node.style.top = `${p.y}px`;
+      node.style.borderColor = `#${(arc.spent ? PAL.arcSpent : PAL.select).toString(16).padStart(6, '0')}`;
+    }
+  }
+
+  hide(): void {
+    this.root.visible = false;
+    for (const node of this.icons.values()) node.remove();
+    this.icons.clear();
+  }
+
+  private syncIcons(arcs: HoverArc[]): void {
+    const ids = new Set(arcs.map((a) => a.weapon.part.id));
+    for (const [id, node] of this.icons) {
+      if (ids.has(id)) continue;
+      node.remove();
+      this.icons.delete(id);
+    }
+    for (const arc of arcs) {
+      const id = arc.weapon.part.id;
+      if (this.icons.has(id)) continue;
+      const number = el('span', {}, `${arc.slot}`);
+      number.style.cssText = 'position:absolute;right:-6px;bottom:-6px;font:bold 11px sans-serif;color:#fff;background:rgba(20,18,14,0.9);border-radius:3px;padding:0 3px;line-height:14px';
+      const node = el('div', { class: 'arc-icon' }, createIcon(arc.weapon.def.look), number);
+      node.style.cssText = `position:absolute;width:${ICON_PX}px;height:${ICON_PX}px;transform:translate(-50%,-50%);pointer-events:none;display:flex;align-items:center;justify-content:center;border:2px solid;border-radius:50%;background:rgba(20,18,14,0.75);opacity:${ICON_ALPHA}`;
+      this.overlay.appendChild(node);
+      this.icons.set(id, node);
+    }
+  }
 }

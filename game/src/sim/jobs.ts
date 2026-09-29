@@ -48,11 +48,18 @@ export function inCombat(world: World, v: Vehicle): boolean {
   return world.vehicles.some((other) => isHostile(world, v, other) && canVehicleSee(world, v, other.pos));
 }
 
+// A player truck standing still that starts work has chosen to stay, so a drive order left from before is dropped.
+// Otherwise the order would stop the work at once.
+function dropLeftoverOrder(world: World, v: Vehicle): void {
+  if (v.id === world.player.vehicleId && v.speed <= RULES.parkedSpeed) v.order = null;
+}
+
 export function startJob(world: World, v: Vehicle, job: Job): void {
   if (inCombat(world, v)) throw new Error("Not with a hostile in sight");
   if (isAutoPatch(v.job)) cancelJob(world, v);
   if (v.job)
     throw new Error(`${v.name} is already busy with a ${v.job.kind} job`);
+  dropLeftoverOrder(world, v);
   if (!isParkedForWork(world, v)) throw new Error("Stop the truck first");
   v.job = job;
   world.events.push({
@@ -255,6 +262,16 @@ function takePickup(world: World, v: Vehicle, pickup: RefitPickup): void {
 
 export function cancelJob(world: World, v: Vehicle): void {
   if (v.job) endJob(world, v, v.job, "cancelled");
+}
+
+// The player command that aborts a running refit. A refit changes the grid and takes its pickup only when it
+// finishes, so ending the job leaves every item where it stood before the refit began.
+export function cancelRefit(world: World): World {
+  return playerCommand(world, (w) => {
+    const v = playerVehicle(w);
+    if (v.job?.kind !== "refit") throw new Error("No refit to cancel");
+    cancelJob(w, v);
+  });
 }
 
 function endJob(

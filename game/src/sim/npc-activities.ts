@@ -9,11 +9,11 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
 import type { PartHit } from './armor';
-import { callLawmen, isHostile, startFeuds } from './combat';
+import { callLawmen, isHostile, shotDamage, startFeuds } from './combat';
 import { affordableBuyCount, getTradePrice, sellVehicleCargo, serviceAtCamp, serviceAtStall, serviceVehicle, tradeGoods } from './economy';
 import { isJunk, maxHp } from './wear';
 import { corePart, freeCells, goodsCount, mountedParts } from './grid';
-import { addGoods } from './inventory';
+import { addGoods, cargoRoom } from './inventory';
 import { cancelJob, inCombat } from './jobs';
 import { isFree } from './spawn';
 import {
@@ -27,7 +27,7 @@ import { sampleWeighted } from './npc-loadout';
 import { canLootTruck, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, isSiteStock, lootTruckTurn, wreckStockId } from './salvage';
 import { beginSearch } from './search';
 import { vehicleById } from './damage';
-import { plead } from './parley';
+import { judgeStrandedFoe, plead } from './parley';
 import { addState, endState, stateOf, statesHeld } from './states';
 import { suppliesCap, vehicleStats } from './stats';
 import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Vehicle, World } from './types';
@@ -515,7 +515,7 @@ function perceives(world: World, vehicle: Vehicle, decision: string, id: string,
   return PERCEIVES[decision as NoticedDecision](world, vehicle, id, contacts);
 }
 
-type NoticedDecision = 'hostileSeen' | 'contactHeard' | 'preySeen' | 'strandedSeen' | 'salvageSeen' | 'ramChance' | 'escortSeen';
+type NoticedDecision = 'hostileSeen' | 'contactHeard' | 'preySeen' | 'strandedSeen' | 'salvageSeen' | 'ramChance' | 'escortSeen' | 'strandedFoe' | 'surrenderOffered';
 
 type Perception = (world: World, vehicle: Vehicle, id: string, contacts: Contact[]) => boolean;
 
@@ -547,6 +547,8 @@ const PERCEIVES: Record<NoticedDecision, Perception> = {
   salvageSeen: seesStock,
   ramChance: hasRamChance,
   escortSeen: seesVehicle,
+  strandedFoe: seesVehicle, // rolled in src/sim/parley.ts judgeStrandedFoe()
+  surrenderOffered: seesVehicle, // rolled in src/sim/parley.ts answerOffer()
 };
 
 // Rolls a decision about a subject once while the subject stays noticed. Null when it already is. When only keep
@@ -850,6 +852,7 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   onEscortSeen(world, vehicle);
   onRamChance(world, vehicle);
   onFightWhim(world, vehicle);
+  judgeStrandedFoe(world, vehicle);
   steer(world, vehicle, profile, contacts);
   return currentActivity(world, vehicle, profile, hold);
 }
@@ -957,7 +960,7 @@ export function noteHurt(world: World): void {
 }
 
 function addEventHurt(hurt: Map<string, number>, e: GameEvent): void {
-  if (e.t === 'shot' || e.t === 'guardShot') for (const round of e.rounds) addHurt(hurt, e.target, round.hits);
+  if (e.t === 'shot' || e.t === 'guardShot') for (const [id, hits] of shotDamage(e)) addHurt(hurt, id, hits);
   else if (e.t === 'collision') {
     addHurt(hurt, e.a, e.hitsA);
     addHurt(hurt, e.b, e.hitsB);
@@ -1131,7 +1134,7 @@ function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): vo
   if (!activity.purchase) throw new Error('Trade activity missing purchase');
   noteTown(vehicle, site.id);
   const budget = getResources(world, vehicle).money - getUpkeepReserve(vehicle);
-  const count = affordableBuyCount(world, vehicle, site.id, activity.purchase.good, freeCells(vehicle), budget);
+  const count = affordableBuyCount(world, vehicle, site.id, activity.purchase.good, cargoRoom(vehicle, activity.purchase.good), budget);
   if (count > 0) {
     tradeGoods(world, vehicle, site.id, activity.purchase.good, count, 'buy');
     if (vehicle.brain!.goals[0] !== activity) throw new Error(`${vehicle.id} trades above its long-term goal`);
@@ -1146,7 +1149,7 @@ function resolveHaul(world: World, vehicle: Vehicle, activity: NpcActivity): voi
   const site = reachSite(vehicle, activity);
   if (!site) return;
   if (!activity.load) throw new Error('Haul activity missing load');
-  if (addGoods(world, vehicle, activity.load.good, freeCells(vehicle)) === 0) {
+  if (addGoods(world, vehicle, activity.load.good, cargoRoom(vehicle, activity.load.good)) === 0) {
     finishGoal(world, vehicle, 'cargo cannot hold the load');
     return;
   }

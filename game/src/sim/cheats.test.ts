@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { chassisDef, PLAYER_CHASSIS } from '../data/chassis';
-import { NPCS } from '../data/npcs';
 import { openSides, reachedSides } from './armor';
 import { mountedItems } from './grid';
 import { generateNpcLoadout } from './npc-loadout';
@@ -18,7 +17,7 @@ import { playerVehicle } from './damage';
 import { maxHealthOf } from './health';
 import { XP_TO_REACH } from '../data/skills';
 import { corePart, goodsCount, mountedParts } from './grid';
-import { spareParts } from './inventory';
+import { removeAllGoods, spareParts } from './inventory';
 import { clockOf } from './sun';
 import { addState, stateOf } from './states';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
@@ -113,7 +112,9 @@ describe('part cheats', () => {
   });
 
   it('gives parts as spares and goods as cargo', () => {
-    const w = give(give(emptyWorld(), 'plates', 1), 'salt', 2);
+    const start = emptyWorld();
+    removeAllGoods(playerVehicle(start)); // the start cargo fills most of the panniers row
+    const w = give(give(start, 'plates', 1), 'salt', 2);
     const me = playerVehicle(w);
     expect(spareParts(me).map((p) => p.defId)).toContain('plates');
     expect(goodsCount(me).salt).toBe(2);
@@ -296,24 +297,23 @@ describe('vehicle cheats', () => {
     expect(v.brain!.attackers).toEqual({ [w.player.vehicleId]: false });
   });
 
-  it('starts a battle with one hostile raider near the truck', () => {
+  it('starts a battle with one hostile NPC near the truck', () => {
     const w = emptyWorld();
     const next = startBattle(w);
     const added = next.vehicles.filter((v) => !w.vehicles.some((x) => x.id === v.id));
     expect(added).toHaveLength(1);
-    expect(added[0].faction).toBe('raiders');
     expect(hostileToPlayer(next, added[0])).toBe(true);
     expect(dist(added[0].pos, playerVehicle(next).pos)).toBeLessThan(CHEATS.spawnDistance * 2);
   });
 
-  it('picks raider templates with the world RNG', () => {
-    const picks = new Set<string>();
+  it('picks templates of every kind with the world RNG', () => {
+    const factions = new Set<string>();
     let w = emptyWorld();
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 24; i++) {
       w = startBattle(w);
-      picks.add(w.vehicles[w.vehicles.length - 1].brain!.templateId);
+      factions.add(w.vehicles[w.vehicles.length - 1].faction);
     }
-    expect(picks.size).toBeGreaterThan(1);
+    expect(factions.size).toBeGreaterThan(2);
   });
 
   it('rejects an unknown template', () => {
@@ -416,7 +416,7 @@ describe('randomkit', () => {
       const w = emptyWorld();
       w.rngState = seed * 7919;
       const before = playerVehicle(w);
-      const next = randomKit(w);
+      const next = randomKit(w, null);
       const me = playerVehicle(next);
       chassis.add(me.chassisId);
       expect(me.id).toBe(before.id);
@@ -440,18 +440,23 @@ describe('randomkit', () => {
   it('refuses while the player is knocked out', () => {
     const w = emptyWorld();
     w.player.state = 'knockedOut';
-    expect(() => randomKit(w)).toThrow(CheatError);
+    expect(() => randomKit(w, null)).toThrow(CheatError);
   });
 
-  it('narrows the roll to a template and a gear level', () => {
-    const loaded = playerVehicle(randomKit(emptyWorld(), 'merc', 'loaded'));
-    const poor = playerVehicle(randomKit(emptyWorld(), 'merc', 'poor'));
-    expect(NPCS.merc.loadout.chassis.map((c) => c.value)).toContain(loaded.chassisId);
-    expect(mountedItems(loaded, 'weapon').length).toBeGreaterThan(mountedItems(poor, 'weapon').length);
+  it('a higher gear level rolls more guns on average', () => {
+    const guns = (level: number) => {
+      let sum = 0;
+      for (let seed = 1; seed <= 12; seed++) {
+        const w = emptyWorld();
+        w.rngState = seed * 104729;
+        sum += mountedItems(playerVehicle(randomKit(w, level)), 'weapon').length;
+      }
+      return sum;
+    };
+    expect(guns(5)).toBeGreaterThan(guns(1));
   });
 
-  it('rejects an unknown template or gear level', () => {
-    expect(() => randomKit(emptyWorld(), 'nobody')).toThrow(CheatError);
-    expect(() => randomKit(emptyWorld(), 'merc', 'shiny')).toThrow(CheatError);
+  it('rejects a gear level outside 1 to 5', () => {
+    for (const level of [0, 6, 2.5]) expect(() => randomKit(emptyWorld(), level)).toThrow(CheatError);
   });
 });

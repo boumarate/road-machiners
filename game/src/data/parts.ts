@@ -1,4 +1,5 @@
 import type { Tier } from './market';
+import { UNPRICED_WEAPONS } from './weapons';
 
 // Truck parts. Core parts are built into every chassis; the rest are bought and swapped in towns.
 
@@ -29,9 +30,13 @@ type PartBase = {
   tall: boolean;
 };
 
-// One round. pen is the armor it gets through. speed in m/s. A miss within splashRadius meters of a lane's
-// edge hits that lane with splashDamage and splashPen. splashRadius 0 means no splash.
-// A blast round meets blastArmor on armor parts. Splash always counts as blast.
+// Hidden roles that shape a gun's numbers; the player never sees them. A damager wrecks the parts behind armor, a
+// chipper strips armor and a precision gun picks one part off from afar.
+export type WeaponClass = "damager" | "chip" | "precision";
+
+// One round. pen is the armor it gets through. speed in m/s. A round with a splashRadius above 0 explodes where it
+// lands, and every lane of any truck within splashRadius meters takes splashDamage and splashPen. A blast round
+// meets blastArmor on armor parts. Splash always counts as blast. Armor parts take damage and splash times armorShare.
 export type WeaponRound = {
   damage: number;
   pen: number;
@@ -40,19 +45,24 @@ export type WeaponRound = {
   splashRadius: number;
   splashDamage: number;
   splashPen: number;
+  armorShare: number;
 };
 
 export type WeaponDef = PartBase & {
   kind: "weapon";
+  draw: number; // power draw of a working gun on the engine's capacity, see gunDrag() in src/sim/stats.ts
   range: number; // tiles. Aim worsens toward it by RULES.rangeFalloff for the weapon's tier.
-  reload: number; // turns between shots, 1 = every turn
+  cooldown: number; // turns between shots, 1 = every turn
+  magazine: number; // shots before the gun must reload
+  reload: number; // turns without firing that refill the magazine
   arc: number; // total firing arc in degrees, centered forward
   spread: number; // degrees; standard deviation of a round's angular error from the gun alone
   rounds: number; // rounds per shot, each rolled on its own
   recoil: number; // degrees of spread added on a 1 t truck; the added spread falls with truck mass
   shake: number; // multiplies the spread from the shooter's own speed; below 1 is a stabilized gun
+  stray: number; // chance a round that misses its target hits another truck near the line of fire
   round: WeaponRound;
-
+  classes: WeaponClass[];
   look: "mg" | "cannon";
 };
 
@@ -60,6 +70,7 @@ export type EngineDef = PartBase & {
   kind: "engine";
   speedBonus: number;
   accelBonus: number;
+  capacity: number; // total draw of working guns the engine carries before they slow the truck fully
   fuelMult: number;
   noise: number; // multiplies how far the engine is heard
   heat: number; // multiplies how fast the sun heats the engine
@@ -137,7 +148,7 @@ type UnpricedByKind = {
 };
 const m = PART_PRICE_MODIFIERS;
 const MODIFIERS: { [K in PartKind]: (def: UnpricedByKind[K]) => number } = {
-  weapon: (d) => m.weapon.perDamagePerTurn * ((d.round.damage * d.rounds) / d.reload) + m.weapon.perRange * d.range,
+  weapon: (d) => m.weapon.perDamagePerTurn * sustainedDamage(d) + m.weapon.perRange * d.range,
   engine: (d) => m.engine.perSpeedBonus * d.speedBonus + m.engine.perAccelBonus * d.accelBonus,
   armor: (d) => m.armor.perArmorCell * (d.armor + d.blastArmor) * d.w * d.h,
   cargo: (d) => m.cargo.perExtraRow * d.extraRows,
@@ -145,6 +156,11 @@ const MODIFIERS: { [K in PartKind]: (def: UnpricedByKind[K]) => number } = {
   scanner: (d) => m.scanner.perRange * d.range,
   core: (d) => m.core.perHp * d.hp,
 };
+
+// Damage per turn over a full magazine: the shots, then the reload.
+export function sustainedDamage(d: Pick<WeaponDef, 'round' | 'rounds' | 'cooldown' | 'magazine' | 'reload'>): number {
+  return (d.round.damage * d.rounds * d.magazine) / (d.magazine * d.cooldown + d.reload);
+}
 
 function kindModifier<K extends PartKind>(kind: K, def: UnpricedByKind[K]): number {
   return MODIFIERS[kind](def);
@@ -161,216 +177,7 @@ function pricePart(def: Unpriced<PartDef>): PartDef {
 }
 
 const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
-  mg: {
-    id: "mg",
-    kind: "weapon",
-    name: "MG turret",
-    hp: 40,
-    base: 120,
-    tier: 1,
-    w: 1,
-    h: 1,
-    mass: 110,
-    armor: 3,
-    tall: false,
-    range: 13.5, // a short-reach starter gun
-    reload: 1,
-    arc: 360,
-    look: "mg",
-    spread: 5,
-    rounds: 6,
-    recoil: 0.5,
-    shake: 0.5,
-    round: {
-      damage: 3,
-      pen: 4,
-      blast: false,
-      speed: 600,
-      splashRadius: 0,
-      splashDamage: 0,
-      splashPen: 0,
-    },
-  },
-  cannon: {
-    id: "cannon",
-    kind: "weapon",
-    name: "Forward cannon",
-    hp: 60,
-    base: 240,
-    tier: 2,
-    w: 3,
-    h: 1,
-    mass: 270,
-    armor: 3,
-    tall: true,
-    range: 27,
-    reload: 3,
-    arc: 60,
-    look: "cannon",
-    spread: 2.5,
-    rounds: 1,
-    recoil: 6,
-    shake: 1,
-    round: {
-      damage: 30,
-      pen: 15,
-      blast: true,
-      speed: 250,
-      splashRadius: 2.5,
-      splashDamage: 12,
-      splashPen: 6,
-    },
-  },
-  shotgun: {
-    id: "shotgun",
-    kind: "weapon",
-    name: "Shotgun turret",
-    hp: 36,
-    base: 60,
-    tier: 1,
-    w: 1,
-    h: 1,
-    mass: 100,
-    armor: 2,
-    tall: false,
-    range: 9,
-    reload: 2,
-    arc: 360,
-    look: "mg",
-    spread: 12,
-    rounds: 12,
-    recoil: 1.5,
-    shake: 0.6,
-    round: {
-      damage: 4,
-      pen: 3,
-      blast: false,
-      speed: 350,
-      splashRadius: 0,
-      splashDamage: 0,
-      splashPen: 0,
-    },
-  },
-  autocannon: {
-    id: "autocannon",
-    kind: "weapon",
-    name: "Autocannon",
-    hp: 56,
-    base: 300,
-    tier: 2,
-    w: 2,
-    h: 1,
-    mass: 180,
-    armor: 4,
-    tall: false,
-    range: 21,
-    reload: 2,
-    arc: 180,
-    look: "mg",
-    spread: 4,
-    rounds: 3,
-    recoil: 3,
-    shake: 0.8,
-    round: {
-      damage: 10,
-      pen: 9,
-      blast: false,
-      speed: 700,
-      splashRadius: 0,
-      splashDamage: 0,
-      splashPen: 0,
-    },
-  },
-  tankGun: {
-    id: "tankGun",
-    kind: "weapon",
-    name: "Tank gun",
-    hp: 90,
-    base: 600,
-    tier: 3,
-    w: 3,
-    h: 1,
-    mass: 210,
-    armor: 8,
-    tall: true,
-    range: 24,
-    reload: 4,
-    arc: 45,
-    look: "cannon",
-    spread: 3,
-    rounds: 1,
-    recoil: 14,
-    shake: 1.5,
-    round: {
-      damage: 48,
-      pen: 26,
-      blast: false,
-      speed: 500,
-      splashRadius: 1.5,
-      splashDamage: 10,
-      splashPen: 5,
-    },
-  },
-  rocketRack: {
-    id: "rocketRack",
-    kind: "weapon",
-    name: "Rocket rack",
-    hp: 32,
-    base: 430,
-    tier: 3,
-    w: 2,
-    h: 1,
-    mass: 110,
-    armor: 1,
-    tall: false,
-    range: 30,
-    reload: 5,
-    arc: 90,
-    look: "cannon",
-    spread: 8,
-    rounds: 4,
-    recoil: 1,
-    shake: 1.2,
-    round: {
-      damage: 18,
-      pen: 14,
-      blast: true,
-      speed: 90,
-      splashRadius: 3,
-      splashDamage: 8,
-      splashPen: 4,
-    },
-  },
-  sniperCannon: {
-    id: "sniperCannon",
-    kind: "weapon",
-    name: "Sniper cannon",
-    hp: 40,
-    base: 500,
-    tier: 3,
-    w: 3,
-    h: 1,
-    mass: 180,
-    armor: 2,
-    tall: true,
-    range: 36,
-    reload: 3,
-    arc: 30,
-    look: "cannon",
-    spread: 0.8,
-    rounds: 1,
-    recoil: 5,
-    shake: 3,
-    round: {
-      damage: 22,
-      pen: 21,
-      blast: false,
-      speed: 950,
-      splashRadius: 0,
-      splashDamage: 0,
-      splashPen: 0,
-    },
-  },
+  ...UNPRICED_WEAPONS,
   stockEngine: {
     id: "stockEngine",
     kind: "engine",
@@ -385,6 +192,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     tall: false,
     speedBonus: 0,
     accelBonus: 0,
+    capacity: 7,
     fuelMult: 1,
     noise: 1,
     heat: 1,
@@ -403,6 +211,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     tall: false,
     speedBonus: 1.3,
     accelBonus: 1,
+    capacity: 10,
     fuelMult: 1.4,
     noise: 1.3,
     heat: 1.2,
@@ -415,12 +224,13 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     base: 180,
     tier: 1,
     w: 2,
-    h: 1,
-    mass: 180,
+    h: 2,
+    mass: 224,
     armor: 2,
     tall: false,
     speedBonus: -1.3,
     accelBonus: 0,
+    capacity: 5,
     fuelMult: 0.75,
     noise: 0.7,
     heat: 0.7,
@@ -439,6 +249,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     tall: false,
     speedBonus: -0.65,
     accelBonus: 0.5,
+    capacity: 10,
     fuelMult: 0.7,
     noise: 1.2,
     heat: 0.6,
@@ -457,6 +268,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     tall: false,
     speedBonus: 1.95,
     accelBonus: 0.5,
+    capacity: 8,
     fuelMult: 1.25,
     noise: 1.4,
     heat: 1.6,
@@ -475,6 +287,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     tall: false,
     speedBonus: -1.3,
     accelBonus: 1.5,
+    capacity: 16,
     fuelMult: 1.1,
     noise: 1.5,
     heat: 0.8,
@@ -493,6 +306,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     tall: false,
     speedBonus: 2.6,
     accelBonus: 2,
+    capacity: 13,
     fuelMult: 2.2,
     noise: 1.8,
     heat: 2,
@@ -839,9 +653,9 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   cabPickup: {
     id: "cabPickup", kind: "core", name: "Cab", hp: 120, base: 80, tier: 1, w: 3, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
   },
-  // The convertible's two open seat rows. Guns fire across them.
-  cabOpen: {
-    id: "cabOpen", kind: "core", name: "Open seats", hp: 120, base: 80, tier: 1, w: 3, h: 2, mass: 80, armor: 3, tall: false, role: "cab",
+  // The convertible's closed hardtop cabin.
+  cabHardtop: {
+    id: "cabHardtop", kind: "core", name: "Hardtop cab", hp: 120, base: 80, tier: 1, w: 3, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
   },
   // The hauler's cab-over, beside the engine it sits on.
   cabOver: {
@@ -852,38 +666,38 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     id: "cabWide", kind: "core", name: "Cab", hp: 120, base: 80, tier: 1, w: 5, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
   },
   transmission: {
-    id: "transmission", kind: "core", name: "Transmission", hp: 40, base: 110, tier: 1, w: 1, h: 1, mass: 60, armor: 3, tall: false, role: "transmission",
+    id: "transmission", kind: "core", name: "Transmission", hp: 40, base: 110, tier: 1, w: 2, h: 2, mass: 60, armor: 3, tall: false, role: "transmission",
   },
   // Van and hauler drive parts, and the heavy ones of the gunwagon, carrier, tractor and longbed.
   transmissionMid: {
-    id: "transmissionMid", kind: "core", name: "Truck transmission", hp: 60, base: 110, tier: 1, w: 1, h: 1, mass: 60, armor: 4, tall: false, role: "transmission",
+    id: "transmissionMid", kind: "core", name: "Truck transmission", hp: 60, base: 110, tier: 1, w: 2, h: 2, mass: 60, armor: 4, tall: false, role: "transmission",
   },
   transmissionHeavy: {
-    id: "transmissionHeavy", kind: "core", name: "Heavy transmission", hp: 90, base: 110, tier: 1, w: 1, h: 1, mass: 60, armor: 6, tall: false, role: "transmission",
+    id: "transmissionHeavy", kind: "core", name: "Heavy transmission", hp: 90, base: 110, tier: 1, w: 2, h: 2, mass: 60, armor: 6, tall: false, role: "transmission",
   },
   wheel: {
-    id: "wheel", kind: "core", name: "Wheel", hp: 30, base: 10, tier: 1, w: 1, h: 1, mass: 25, armor: 2, tall: false, role: "wheel",
+    id: "wheel", kind: "core", name: "Wheel", hp: 30, base: 10, tier: 1, w: 1, h: 2, mass: 25, armor: 2, tall: false, role: "wheel",
   },
   // Van and hauler drive parts, and the heavy ones of the gunwagon, carrier, tractor and longbed.
   wheelMid: {
-    id: "wheelMid", kind: "core", name: "Truck wheel", hp: 50, base: 10, tier: 1, w: 1, h: 1, mass: 25, armor: 3, tall: false, role: "wheel",
+    id: "wheelMid", kind: "core", name: "Truck wheel", hp: 50, base: 10, tier: 1, w: 1, h: 2, mass: 25, armor: 3, tall: false, role: "wheel",
   },
   wheelHeavy: {
-    id: "wheelHeavy", kind: "core", name: "Heavy wheel", hp: 80, base: 10, tier: 1, w: 1, h: 1, mass: 25, armor: 5, tall: false, role: "wheel",
+    id: "wheelHeavy", kind: "core", name: "Heavy wheel", hp: 80, base: 10, tier: 1, w: 1, h: 2, mass: 25, armor: 5, tall: false, role: "wheel",
   },
-  // The small tank fits the buggy and the courier. The scout carries the long tank.
+  // The small tank fits the scout, the buggy, the courier and the jeep. The convertible carries the long tank. All tanks lie two cells along the truck.
   tank: {
-    id: "tank", kind: "core", name: "Small fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 1, mass: 30, armor: 1, tall: false, role: "tank",
+    id: "tank", kind: "core", name: "Small fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 1, tall: false, role: "tank",
   },
   tankLong: {
-    id: "tankLong", kind: "core", name: "Fuel tank", hp: 30, base: 30, tier: 1, w: 2, h: 1, mass: 30, armor: 1, tall: false, role: "tank",
+    id: "tankLong", kind: "core", name: "Fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 1, tall: false, role: "tank",
   },
   // Van and hauler drive parts, and the heavy ones of the gunwagon, carrier, tractor and longbed.
   tankMid: {
-    id: "tankMid", kind: "core", name: "Truck fuel tank", hp: 50, base: 30, tier: 1, w: 2, h: 1, mass: 30, armor: 3, tall: false, role: "tank",
+    id: "tankMid", kind: "core", name: "Truck fuel tank", hp: 50, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 3, tall: false, role: "tank",
   },
   tankHeavy: {
-    id: "tankHeavy", kind: "core", name: "Armored fuel tank", hp: 80, base: 30, tier: 1, w: 2, h: 1, mass: 30, armor: 6, tall: false, role: "tank",
+    id: "tankHeavy", kind: "core", name: "Armored fuel tank", hp: 80, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 6, tall: false, role: "tank",
   },
   scanner: {
     id: "scanner",

@@ -83,7 +83,7 @@ describe('NPC knockout', () => {
 describe('finishing off', () => {
   function shotAt(w: World, target: Vehicle, damage: number): void {
     const hits = [{ part: corePart(target, 'cab').id, damage }];
-    w.events = [{ t: 'shot', shooter: w.player.vehicleId, weapon: 'mg', target: target.id, aim: 'body', chance: 1, side: 'front', rounds: [{ hit: true, crit: false, offset: 0, hits }] }];
+    w.events = [{ t: 'shot', shooter: w.player.vehicleId, weapon: 'mg', target: target.id, aim: 'body', chance: 1, side: 'front', rounds: [{ hit: true, crit: false, offset: 0, struck: target.id, hits, blast: [] }] }];
   }
 
   it('turns a knocked-out truck into a wreck when a shot damages it', () => {

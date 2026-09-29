@@ -170,8 +170,14 @@ function syncVehicle(d: Drive, w: World, v: Vehicle): void {
 function addVehicle(world: RAPIER.World, w: World, v: Vehicle): number {
   const b = bodyOf(v.chassisId);
   const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setCanSleep(false).setGravityScale(T.gravityScale));
-  const collider = RAPIER.ColliderDesc.cuboid(b.half.x, b.half.y, b.half.z).setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
-  world.createCollider(collider, body);
+  // The boxes carry no density: setMass gives the body its mass, center and inertia.
+  for (const box of b.boxes) {
+    const collider = RAPIER.ColliderDesc.cuboid(box.half.x, box.half.y, box.half.z)
+      .setTranslation(box.at.x, box.at.y, box.at.z)
+      .setDensity(0)
+      .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
+    world.createCollider(collider, body);
+  }
   setMass(body, v);
   placeBody(body, w, v);
   return body.handle;
@@ -183,7 +189,7 @@ function setMass(body: RAPIER.RigidBody, v: Vehicle): void {
   const mass = vehicleMass(v);
   const k = (mass / 3) * T.inertiaScale; // m/12 * (2a)^2 = m/3 * a^2
   const inertia = { x: k * (h.y * h.y + h.z * h.z), y: k * (h.x * h.x + h.z * h.z), z: k * (h.x * h.x + h.y * h.y) };
-  body.collider(0).setMassProperties(mass, { x: 0, y: -T.comBelow, z: 0 }, inertia, { x: 0, y: 0, z: 0, w: 1 });
+  body.setAdditionalMassProperties(mass, { x: 0, y: -T.comBelow, z: 0 }, inertia, { x: 0, y: 0, z: 0, w: 1 }, true);
   body.recomputeMassPropertiesFromColliders();
 }
 
@@ -202,6 +208,10 @@ export function simulateTurn(d: Drive, w: World): TurnResult {
   return run(d, w, TURN_STEPS);
 }
 
+function noteOwner(owner: Map<number, string>, body: RAPIER.RigidBody, vehicleId: string): void {
+  for (let i = 0; i < body.numColliders(); i++) owner.set(body.collider(i).handle, vehicleId);
+}
+
 type Car = { v: Vehicle; s: VehicleStats; b: Body; body: RAPIER.RigidBody; ctl: RAPIER.DynamicRayCastVehicleController; mem: Memory; plan: Plan; result: VehicleResult };
 
 function run(d: Drive, w: World, steps: number): TurnResult {
@@ -217,7 +227,7 @@ function run(d: Drive, w: World, steps: number): TurnResult {
     return { v, s, b, body, ctl: makeCar(world, body, b, s.mass), mem, plan: planTurn(w, v, s, body, v.order, mem), result: { passed: false, arrived: false } };
   });
   const owner = new Map<number, string>(); // collider handle to vehicle id
-  for (const c of cars) owner.set(c.body.collider(0).handle, c.v.id);
+  for (const c of cars) noteOwner(owner, c.body, c.v.id);
   const obstacleOf = new Map(Object.entries(d.obstacles).flatMap(([id, handles]) => handles.map((h) => [h, id] as const)));
 
   const frames: TurnFrames = Object.fromEntries(cars.map((c) => [c.v.id, [] as VehicleFrame[]]));

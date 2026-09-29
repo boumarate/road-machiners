@@ -1,8 +1,6 @@
 // Vehicle instruments, critical resources, event history and inspection.
 
 import { DialoguePanel, type DialogueHost } from "./dialogue";
-import { partDef } from "../data/parts";
-import { baseGrid, corePart, coreParts, mountedParts } from "../sim/grid";
 import type { Vehicle, World } from "../sim/types";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
@@ -19,82 +17,19 @@ import {
   formatNpcMark,
   formatNpcStates,
   formatNpcTraits,
+  type LogLine,
 } from "./format";
-import { getHudReadout, getRescueReadout, moneyLabel, type RescueReadout, TruckConditionReadout } from "./hud-readout";
-import { conditionMeter, createIcon, createSpeedDial, partIcon } from "./cards";
+import { getHudReadout, getRescueReadout, moneyLabel, type RescueReadout } from "./hud-readout";
+import { createIcon, createSpeedDial } from "./cards";
+import { aimMarks } from "./weapons";
 import { createSwitch } from "./switch";
 import { Tips } from "./tips";
-import { hp, kph } from "./units";
-import { maxHp } from "../sim/wear";
+import { kph } from "./units";
 import { playerVehicle } from "../sim/damage";
 import { pendingPerkPairs } from "../sim/progress";
 import { canDouse } from "../sim/engine-heat";
 import { ENGINE_HEAT } from "../data/wear";
-import "./truck-condition.css";
-
-type ConditionPart = ReturnType<TruckConditionReadout["update"]>[number];
-
-class TruckConditionView {
-  readonly root = el("div", {
-    class: "truck-condition",
-    "aria-label": "Truck part condition, nose up",
-  });
-  private body = el("div", { class: "condition-chassis" });
-  private readout = new TruckConditionReadout();
-  private nodes = new Map<string, HTMLElement>();
-
-  constructor() {
-    this.root.append(this.body);
-  }
-
-  render(vehicle: Vehicle): void {
-    const grid = baseGrid(vehicle.chassisId);
-    this.body.style.width = `${grid.w * 30}px`;
-    this.body.style.height = `${grid.h * 30}px`;
-    const parts = this.readout.update(vehicle);
-    const ids = new Set(parts.map((part) => part.id));
-    for (const [id, node] of this.nodes) {
-      if (ids.has(id)) continue;
-      node.remove();
-      this.nodes.delete(id);
-    }
-    for (const part of parts) this.renderPart(part);
-  }
-
-  private renderPart(part: ConditionPart): void {
-    let node = this.nodes.get(part.id);
-    if (!node) {
-      node = el(
-        "div",
-        { class: "condition-part", "data-part-id": part.id },
-        createIcon(part.icon),
-        el("span", { class: "condition-percent" }),
-      );
-      this.nodes.set(part.id, node);
-      this.body.append(node);
-    }
-    node.dataset.condition = part.state;
-    node.title = `${part.name}: ${part.percent}%${part.percent === 0 ? " (broken)" : ""}`;
-    node.setAttribute("aria-label", node.title);
-    node.style.cssText = `left:${part.x * 30}px;top:${part.y * 30}px;width:${part.w * 30}px;height:${part.h * 30}px`;
-    const label = node.querySelector(".condition-percent");
-    if (!label) throw new Error("Condition percentage missing");
-    label.textContent = `${part.percent}%`;
-    if (part.hit) this.flashDamage(node);
-  }
-
-  private flashDamage(node: HTMLElement): void {
-    for (const animation of node.getAnimations()) animation.cancel();
-    node.animate(
-      [
-        { background: "#fa3934", borderColor: "#ffd1bd", offset: 0 },
-        { background: "#fa3934", borderColor: "#ffd1bd", offset: 0.65 },
-        { background: "#613b35", borderColor: "#de8e7d", offset: 1 },
-      ],
-      { duration: 300, iterations: 2 },
-    );
-  }
-}
+import { type ConditionAim, TruckConditionView } from "./truck-condition-view";
 
 // The E key action. ready is false while the truck must stop first.
 // A hint marks an action that can never run here, and says why. combat marks an action a hostile in sight blocks.
@@ -115,6 +50,7 @@ type HudActions = {
   autoTravel: () => boolean;
   dialogue: DialogueHost;
   recenter: () => void;
+  aimPart: (vehicleId: string, partId: string) => void;
 };
 // Centered keeps the truck in the middle of the screen. Auto shifts the view ahead of it.
 export type CameraMode = "centered" | "auto";
@@ -133,9 +69,16 @@ function weatherLabel(w: World): string {
   return [...new Set(w.weather.map((e) => WEATHER_NAMES[e.kind]))].join(", ");
 }
 
+// A log line led by the turn it happened on.
+function turnStamped(turn: number, line: LogLine): LogLine {
+  const stamp = `T${turn} `;
+  return { ...line, text: stamp + line.text, spans: line.spans && [{ text: stamp, cls: "" }, ...line.spans] };
+}
+
 export class Hud {
   private top = panel("instruments");
   private condition = new TruckConditionView();
+  private inspected = new TruckConditionView();
   private contracts = panel("contracts");
   private log = panel("log");
   private info = panel("info");
@@ -152,7 +95,7 @@ export class Hud {
   private tips = new Tips(window.localStorage);
   cameraMode: CameraMode = "auto";
   private toastTimer: number | null = null;
-  private lines: { text: string; cls: string }[] = [];
+  private lines: LogLine[] = [];
 
   private readonly dialogue: DialoguePanel;
 
@@ -493,7 +436,7 @@ export class Hud {
     for (const e of w.events) {
       const line = eventText(w, e);
       if (line)
-        this.lines.unshift({ text: `T${w.turn} ${line.text}`, cls: line.cls });
+        this.lines.unshift(turnStamped(w.turn, line));
       if (
         line &&
         (e.t === "knockout" || e.t === "skillUp" || e.t === "discover")
@@ -517,9 +460,15 @@ export class Hud {
       el(
         "div",
         { class: "log-lines", tabindex: 0 },
-        ...this.lines.map((l) => el("div", { class: l.cls }, l.text)),
+        ...this.lines.map((l) => el("div", { class: l.cls }, ...(l.spans ? l.spans.map((sp) => el("span", { class: sp.cls }, sp.text)) : [l.text]))),
       ),
     );
+  }
+
+  // Parts of another truck take clicks that aim the guns.
+  private aimOf(w: World, v: Vehicle): ConditionAim | undefined {
+    if (v.id === playerVehicle(w).id) return undefined;
+    return { marks: aimMarks(w, v.id), pick: (partId) => this.actions.aimPart(v.id, partId) };
   }
 
   showInfo(w: World, v: Vehicle | null, hostile: boolean): void {
@@ -527,32 +476,7 @@ export class Hud {
       this.info.style.display = "none";
       return;
     }
-    const cab = corePart(v, "cab");
-    const pct = Math.round((cab.hp / maxHp(cab)) * 100);
-    // The four wheels read as one line.
-    const wheels = coreParts(v, "wheel");
-    const working = wheels.filter((p) => p.hp > 0).length;
-    const parts = mountedParts(v)
-      .filter((p) => !wheels.includes(p))
-      .map((p) =>
-        el(
-          "div",
-          { class: `info-part${p.hp > 0 ? "" : " bad"}` },
-          createIcon(partIcon(p)),
-          el("span", {}, partDef(p.defId).name),
-          el("span", { class: "info-hp" }, `${hp(p.hp)} / ${hp(maxHp(p))}`),
-          conditionMeter(p),
-        ),
-      );
-    parts.push(
-      el(
-        "div",
-        { class: `info-part${working === wheels.length ? "" : " bad"}` },
-        createIcon("wheel"),
-        el("span", {}, "Wheels"),
-        el("span", { class: "info-hp" }, `${working} / ${wheels.length} working`),
-      ),
-    );
+    this.inspected.render(v, this.aimOf(w, v));
     const stance =
       v.faction === "player" ? "" : hostile ? "hostile" : "neutral";
     this.info.style.display = "";
@@ -563,10 +487,10 @@ export class Hud {
         { class: hostile ? "bad" : "dim" },
         `${v.faction} ${stance}`.trim(),
       ),
-      el("div", {}, `Cab ${pct}%   Speed ${kph(v.speed)} km/h`),
-      el("div", { class: "bar" }, el("div", { style: `width:${pct}%` })),
+      el("div", {}, `Speed ${kph(v.speed)} km/h`),
       ...npcLines(w, v),
-      ...parts,
+      this.inspected.root,
+      ...(this.aimOf(w, v) ? [el("div", { class: "dim" }, "Click a part to aim the selected gun at it")] : []),
     );
   }
 }
