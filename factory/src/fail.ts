@@ -1,4 +1,4 @@
-import { STUCK_LABEL, type Ctx, type Stage } from './types';
+import { STUCK_LABEL, type Ctx, type FactoryState, type JobStage, type Stage } from './types';
 
 const ANSI = new RegExp(String.raw`\u001b\[[0-9;]*[A-Za-z]`, 'g');
 const FAILURE_LINE = /FAIL|Error|error:|failed|×/;
@@ -15,6 +15,14 @@ export function summarizeError(message: string): string {
   const failures = lines.filter((line) => FAILURE_LINE.test(line));
   const picked = (failures.length ? failures : lines.slice(-SUMMARY_LINES)).slice(0, SUMMARY_LINES);
   return picked.join('\n').slice(0, SUMMARY_CHARS);
+}
+
+// The issue a failed job labels. Card stages, approve, candidate, ship and remove name theirs in the job.
+// The cut names the tracking issue once it exists, and a change has none.
+export function failureIssue(stage: JobStage, issue: number | null, state: FactoryState): number | null {
+  if (stage === 'change') return null;
+  if (stage === 'release') return state.release?.issue ?? null;
+  return issue;
 }
 
 // A failed stage stops its card and tells the committee once. Nothing retries until a human removes the label.

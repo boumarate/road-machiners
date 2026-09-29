@@ -6,7 +6,7 @@ const FULL = {
   FACTORY_PUBLIC_URL: 'http://x', FACTORY_IMAGE: 'img', CLAUDE_CODE_OAUTH_TOKEN: 't', FACTORY_DESIGN_MODEL: 'opus',
   FACTORY_BUILD_MODEL: 'sonnet', FACTORY_MIN_VOTES: '5', FACTORY_MIN_AGE_HOURS: '24', FACTORY_COMMITTEE_BOOTSTRAP_GITHUB: 'boss',
   FACTORY_COMMITTEE_BOOTSTRAP: '1', TELEGRAM_BOT_TOKEN: 'bt', FACTORY_COMMITTEE_CHAT: '-1', FACTORY_PUBLIC_CHANNEL: '@c',
-  FACTORY_STAGE_TIMEOUT_MINUTES: '180', FACTORY_RELEASE_DAYS: '7', FACTORY_MAINTENANCE_HOURS: '24',
+  FACTORY_STAGE_TIMEOUT_MINUTES: '180', FACTORY_RELEASE_DAYS: '7',
   ITCH_TARGET: 'u/g', BUTLER_API_KEY: 'bk', FACTORY_MAX_JOBS_PER_DAY: '10',
 };
 
@@ -29,6 +29,12 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...FULL, FACTORY_MAX_JOBS_PER_DAY: '' })).toThrow('FACTORY_MAX_JOBS_PER_DAY');
     const cfg = loadConfig({ ...FULL, ITCH_TARGET: '', BUTLER_API_KEY: undefined });
     expect([cfg.itchTarget, cfg.butlerKey]).toEqual([null, null]);
+  });
+
+  it('ignores FACTORY_MAINTENANCE_HOURS left in an old .env', () => {
+    const cfg = loadConfig({ ...FULL, FACTORY_MAINTENANCE_HOURS: 'soon' });
+    expect(cfg).not.toHaveProperty('maintenanceHours');
+    expect(cfg.releaseDays).toBe(7);
   });
 
   it('rejects a bad number', () => {

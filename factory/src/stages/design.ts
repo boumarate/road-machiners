@@ -1,11 +1,12 @@
 import { BRANCH, GAME_DIR, TASK_FILE, WONT_DO_LABEL, type Ctx } from '../types';
-import { BASE_BRANCH, agentHome, askAuthor, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
+import { agentHome, askAuthor, baseBranchOf, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, syncBase, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 import { existsSync, readFileSync } from 'node:fs';
 
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const clone = workDir(ctx, issue);
-  await ctx.repo.sync();
-  await ctx.repo.prepareWorkClone(BRANCH(issue), BASE_BRANCH, clone);
+  const base = await baseBranchOf(ctx, issue);
+  await syncBase(ctx, base);
+  await ctx.repo.prepareWorkClone(BRANCH(issue), base, clone);
   const home = agentHome(clone, GAME_DIR);
   resetOutputs(home);
   await writeIssueInput(ctx, issue, home);
@@ -17,7 +18,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const reason = readOutput(home, 'wont-do.md');
   if (reason !== null) return refuse(ctx, issue, reason);
   requirePlan(home, TASK_FILE(issue));
-  await guardAndPush(ctx, issue, BASE_BRANCH);
+  await guardAndPush(ctx, issue, base);
   await postDesign(ctx, issue, readFileSync(`${home}/${TASK_FILE(issue)}`, 'utf8'));
   await ctx.github.move(issue, 'Implementation');
 }

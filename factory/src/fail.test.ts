@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { reportFailure, summarizeError } from './fail';
-import type { Ctx } from './types';
+import { failureIssue, reportFailure, summarizeError } from './fail';
+import { EMPTY_STATE } from './state';
+import type { Ctx, FactoryState } from './types';
 
 describe('summarizeError', () => {
   it('keeps the failure lines of colored test output', () => {
@@ -25,5 +26,23 @@ describe('reportFailure', () => {
     await expect(reportFailure(ctx, 'implement', 4, new Error('agent failed'), 'l')).rejects.toThrow('x509');
     expect(posts[0]).toContain('Factory stage implement failed on issue #4');
     expect(posts[1]).toContain('Could not label issue #4');
+  });
+});
+
+describe('failureIssue', () => {
+  const open: FactoryState = { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/x', day: 'd', postId: null, removed: [] } };
+  const none = structuredClone(EMPTY_STATE);
+
+  it('names the issue of a card stage, approve, candidate, ship and remove', () => {
+    for (const stage of ['design', 'approve', 'candidate', 'ship', 'remove'] as const) expect(failureIssue(stage, 9, open)).toBe(9);
+  });
+
+  it('names the tracking issue for a cut once one exists, and no issue before', () => {
+    expect(failureIssue('release', null, open)).toBe(20);
+    expect(failureIssue('release', null, none)).toBeNull();
+  });
+
+  it('names no issue for a change', () => {
+    expect(failureIssue('change', 5, open)).toBeNull();
   });
 });

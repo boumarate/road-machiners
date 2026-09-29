@@ -41,13 +41,35 @@ export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
 
   return {
     path,
-    async sync() {
+    async sync(...extra) {
       if (!existsSync(path)) {
         mkdirSync(dirname(path), { recursive: true });
         await gitIn(dirname(path), ['clone', `https://github.com/${cfg.repo}.git`, path]);
       }
       await git(['fetch', 'origin']);
-      for (const branch of SYNCED_BRANCHES) await fastForward(branch);
+      for (const branch of new Set([...SYNCED_BRANCHES, ...extra])) await fastForward(branch);
+    },
+    async createBranch(name, from) {
+      await git(['branch', name, from]);
+    },
+    async revertIssueMerge(issue, branch) {
+      const log = await git(['log', '--first-parent', '--merges', '--format=%H %s', `main..${branch}`]);
+      const prefix = `Merge issue #${issue}:`;
+      // The log runs newest first, so a feature that came back after a removal reverts its latest merge.
+      const found = log.split('\n').filter(Boolean).map((line) => line.split(' ')).find(([, ...subject]) => subject.join(' ').startsWith(prefix));
+      if (!found) return false;
+      await git(['checkout', branch]);
+      const result = await run('git', [...NO_HOOKS, 'revert', '--no-edit', '-m', '1', found[0]], { cwd: path });
+      if (result.code === 0) return true;
+      const files = await conflictedFiles();
+      const reason = (result.stderr || result.stdout).trim();
+      if (files.length === 0) throw new Error(`revert of issue #${issue} on ${branch} failed without a conflict: ${reason}`);
+      await git(['revert', '--abort']);
+      throw new Error(`revert of issue #${issue} on ${branch} failed. Conflicting files: ${files.join(', ')}. ${reason}`);
+    },
+    async deleteBranch(branch) {
+      if (await hasRef(`refs/heads/${branch}`)) await git(['branch', '-D', branch]);
+      if ((await git(['ls-remote', '--heads', 'origin', branch])).trim() !== '') await git(['push', 'origin', '--delete', branch]);
     },
     async prepareWorkClone(branch, base, dir) {
       if (existsSync(dir)) return;

@@ -4,11 +4,11 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { chooseJob, tick, type TickDeps } from './tick';
 import { EMPTY_STATE, readState, writeState } from './state';
-import { FACTORY_MARK, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Card, type Ctx, type IssueComment, type FactoryState, type Job } from './types';
+import { FACTORY_MARK, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Card, type ReleaseState, type Ctx, type IssueComment, type FactoryState, type Job } from './types';
 
 const NOW = new Date('2026-01-10T12:00:00Z');
-const CFG = { releaseDays: 7, maintenanceHours: 24, maxJobsPerDay: 3 };
-const FRESH = { lastRelease: '2026-01-09T12:00:00Z', lastMaintenance: '2026-01-10T06:00:00Z' };
+const CFG = { releaseDays: 7, maxJobsPerDay: 3 };
+const FRESH = { lastRelease: '2026-01-09T12:00:00Z' };
 
 const state = (over: Partial<FactoryState> = {}): FactoryState => ({ ...structuredClone(EMPTY_STATE), ...FRESH, ...over });
 const card = (issue: number, column: Card['column'], labels: string[] = []): Card => ({ itemId: `i${issue}`, issue, column, labels });
@@ -31,6 +31,64 @@ describe('chooseJob daily cap', () => {
 
   it('ignores starts older than 24 hours', () => {
     expect(chooseJob({ ...capped, jobStarts: starts(25, 5, 1) }, [], NOW, CFG)).toEqual({ stage: 'release', issue: null });
+  });
+});
+
+const RELEASE: ReleaseState = { issue: 20, branch: 'release/2026-01-05', day: '2026-01-05', postId: null, removed: [] };
+const tracking = (labels: string[] = ['release']): Card => card(20, 'Approval', labels);
+
+describe('chooseJob during a release', () => {
+  const open = state({ release: RELEASE, lastRelease: null });
+
+  it('cuts a release only when none is open', () => {
+    expect(chooseJob(state({ lastRelease: null }), [], NOW, CFG)).toEqual({ stage: 'release', issue: null });
+    expect(chooseJob(open, [], NOW, CFG)).toBeNull();
+  });
+
+  it('starts the candidate once every release task is Done and the tracking issue is healthy', () => {
+    const cards = [tracking(), card(21, 'Done', ['release-task', 'maintenance'])];
+    expect(chooseJob(open, cards, NOW, CFG)).toEqual({ stage: 'candidate', issue: 20 });
+  });
+
+  it('waits for a release task outside Done, also a stuck one', () => {
+    expect(chooseJob(open, [tracking(), card(21, 'Approval', ['release-task'])], NOW, CFG)).toBeNull();
+    expect(chooseJob(open, [tracking(), card(21, 'Testing', ['release-task', STUCK_LABEL])], NOW, CFG)).toBeNull();
+  });
+
+  it('waits when the tracking issue is stuck, missing, or already has a post', () => {
+    expect(chooseJob(open, [tracking(['release', STUCK_LABEL])], NOW, CFG)).toBeNull();
+    expect(chooseJob(open, [], NOW, CFG)).toBeNull();
+    expect(chooseJob({ ...open, release: { ...RELEASE, postId: 5 } }, [tracking()], NOW, CFG)).toBeNull();
+  });
+
+  it('counts the candidate against the daily cap', () => {
+    const capped = { ...open, jobStarts: starts(23, 5, 1) };
+    expect(chooseJob(capped, [tracking()], NOW, CFG)).toBeNull();
+  });
+
+  it('runs release tasks before other cards, furthest along first', () => {
+    const cards = [tracking(), card(30, 'Testing'), card(21, 'Design', ['release-task']), card(22, 'Implementation', ['release-task'])];
+    expect(chooseJob(open, cards, NOW, CFG)).toEqual({ stage: 'implement', issue: 22 });
+  });
+
+  it('never gives the tracking issue card a card job', () => {
+    expect(chooseJob(state(), [card(20, 'Design', ['release'])], NOW, CFG)).toBeNull();
+  });
+
+  it('runs a removal and then a ship before ad hoc work, at the cap too', () => {
+    const queuedState = { ...open, release: { ...RELEASE, postId: 5 }, pendingShip: 'Ann', pendingRemovals: [{ issue: 8, by: 'Ann', text: 't' }], jobStarts: starts(23, 5, 1) };
+    const adhoc = [card(6, 'Implementation', ['adhoc'])];
+    expect(chooseJob(queuedState, adhoc, NOW, CFG)).toEqual({ stage: 'remove', issue: 8 });
+    expect(chooseJob({ ...queuedState, pendingRemovals: [] }, adhoc, NOW, CFG)).toEqual({ stage: 'ship', issue: 20 });
+  });
+
+  it('runs an approval before a removal', () => {
+    const s = { ...open, pendingApprovals: { '4': 'u' }, pendingRemovals: [{ issue: 8, by: 'Ann', text: 't' }] };
+    expect(chooseJob(s, [], NOW, CFG)).toEqual({ stage: 'approve', issue: 4 });
+  });
+
+  it('ignores a queued ship when no release is open', () => {
+    expect(chooseJob(state({ pendingShip: 'Ann' }), [], NOW, CFG)).toBeNull();
   });
 });
 
@@ -70,11 +128,6 @@ describe('chooseJob', () => {
 
   it('skips release inside the interval', () => {
     expect(chooseJob(state({ lastRelease: '2026-01-03T13:00:00Z' }), [], NOW, CFG)).toBeNull();
-  });
-
-  it('runs maintenance after release, when due', () => {
-    expect(chooseJob(state({ lastMaintenance: null }), [], NOW, CFG)).toEqual({ stage: 'maintenance', issue: null });
-    expect(chooseJob(state({ lastMaintenance: '2026-01-09T11:00:00Z' }), [], NOW, CFG)).toEqual({ stage: 'maintenance', issue: null });
   });
 
   it('picks the card furthest along, lowest issue first', () => {
@@ -214,5 +267,44 @@ describe('tick', () => {
     writeState(h.ctx.statePath, state({ builds: { '8': 'aaa1111', '9': 'bbb2222' } }));
     await tick(h.ctx, '/code', h.deps);
     expect(['dev', 'aaa1111', 'bbb2222', 'ccc3333'].filter((name) => existsSync(join(web, name)))).toEqual(['dev', 'aaa1111']);
+  });
+
+  it('keeps the rc build while the tracking card waits in Approval', async () => {
+    const h = harness(null, false, [card(20, 'Approval', ['release']), card(9, 'Done')]);
+    const web = h.ctx.cfg.webRoot;
+    for (const name of ['dev', 'rc', 'bbb2222']) mkdirSync(join(web, name), { recursive: true });
+    writeState(h.ctx.statePath, state({ release: { ...RELEASE, postId: 7 }, builds: { '20': 'rc', '9': 'bbb2222' } }));
+    await tick(h.ctx, '/code', h.deps);
+    expect(['dev', 'rc', 'bbb2222'].filter((name) => existsSync(join(web, name)))).toEqual(['dev', 'rc']);
+  });
+
+  it('labels the tracking issue when a candidate job dies', async () => {
+    const h = harness(job('2026-01-10T11:50:00Z', 'candidate', 20), false);
+    await tick(h.ctx, '/code', h.deps);
+    expect(h.labels).toEqual([`20:${STUCK_LABEL}`]);
+  });
+
+  it('labels the tracking issue when a release cut dies after it opened one, and no issue before', async () => {
+    const after = harness(job('2026-01-10T11:50:00Z', 'release', null), false);
+    writeState(after.ctx.statePath, state({ job: job('2026-01-10T11:50:00Z', 'release', null), release: RELEASE }));
+    await tick(after.ctx, '/code', after.deps);
+    expect(after.labels).toEqual([`20:${STUCK_LABEL}`]);
+    const before = harness(job('2026-01-10T11:50:00Z', 'release', null), false);
+    await tick(before.ctx, '/code', before.deps);
+    expect(before.labels).toEqual([]);
+  });
+
+  it('labels the removed feature when a removal dies', async () => {
+    const h = harness(job('2026-01-10T11:50:00Z', 'remove', 8), false);
+    await tick(h.ctx, '/code', h.deps);
+    expect(h.labels).toEqual([`8:${STUCK_LABEL}`]);
+  });
+
+  it('starts a queued ship without counting it against the cap', async () => {
+    const h = harness(null, false, []);
+    writeState(h.ctx.statePath, state({ release: { ...RELEASE, postId: 7 }, pendingShip: 'Ann', jobStarts: starts(2) }));
+    await tick(h.ctx, '/code', h.deps);
+    expect(h.spawned).toEqual([['ship', '20']]);
+    expect(readState(h.ctx.statePath).jobStarts).toEqual(starts(2));
   });
 });

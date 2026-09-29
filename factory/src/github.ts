@@ -151,6 +151,8 @@ export function ghClient(run: Run, cfg: FactoryConfig): GitHub {
       await gh(['issue', 'close', String(number), '-R', repo, '--reason', reason]);
     },
     async createIssue(title, body, labels) {
+      // `gh issue create --label` fails on a label the repo lacks, so the labels exist first.
+      for (const label of labels) await gh(['label', 'create', label, '-R', repo, '--force']);
       const args = ['issue', 'create', '-R', repo, '--title', title, '--body', body];
       for (const label of labels) args.push('--label', label);
       const url = (await gh(args)).trim();
@@ -186,6 +188,9 @@ export function ghClient(run: Run, cfg: FactoryConfig): GitHub {
     },
     async closePullRequest(branch, comment) {
       await gh(['pr', 'close', branch, '-R', repo, '--comment', comment]);
+    },
+    async reopen(number) {
+      await gh(['issue', 'reopen', String(number), '-R', repo]);
     },
   };
 }

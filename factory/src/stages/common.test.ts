@@ -1,6 +1,8 @@
+import { mkdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { AgentRun, Ctx } from '../types';
-import { agentHome, factoryPaths, fillPrompt, runAgent } from './common';
+import { EMPTY_STATE, writeState } from '../state';
+import { agentHome, baseBranchFor, baseBranchOf, factoryPaths, fillPrompt, runAgent, syncBase } from './common';
 
 function agentCtx(labels: string[]): { ctx: Ctx; runs: AgentRun[]; logs: string[] } {
   const runs: AgentRun[] = [];
@@ -69,5 +71,44 @@ describe('agentHome', () => {
 describe('factoryPaths and workflows', () => {
   it('refuses GitHub workflow files', () => {
     expect(factoryPaths('diff --git a/.github/workflows/x.yml b/.github/workflows/x.yml\n+on: push\n')).toEqual(['.github/workflows/x.yml']);
+  });
+});
+
+describe('base branch', () => {
+  const statePath = 'tmp/factory-common-test/state.json';
+  const withRelease = () => {
+    mkdirSync('tmp/factory-common-test', { recursive: true });
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [] } });
+  };
+  const ctxWith = (labels: string[], synced: string[] = []) => ({
+    statePath,
+    github: { issue: async () => ({ labels }) },
+    repo: { sync: async (...extra: string[]) => { synced.push(extra.join(',')); } },
+  }) as unknown as Ctx;
+
+  it('is dev for an ordinary card, whatever the state holds', async () => {
+    withRelease();
+    expect(baseBranchFor(ctxWith([]), ['bug'])).toBe('dev');
+    expect(await baseBranchOf(ctxWith(['feature-request']), 7)).toBe('dev');
+  });
+
+  it('is the release branch for a release task', async () => {
+    withRelease();
+    expect(baseBranchFor(ctxWith([]), ['release-task', 'maintenance'])).toBe('release/2026-09-29');
+    expect(await baseBranchOf(ctxWith(['release-task']), 7)).toBe('release/2026-09-29');
+  });
+
+  it('throws for a release task when no release is open', async () => {
+    mkdirSync('tmp/factory-common-test', { recursive: true });
+    writeState(statePath, structuredClone(EMPTY_STATE));
+    expect(() => baseBranchFor(ctxWith([]), ['release-task'])).toThrow('needs an open release');
+    await expect(baseBranchOf(ctxWith(['release-task']), 7)).rejects.toThrow('needs an open release');
+  });
+
+  it('syncs the release branch as an extra and nothing extra for dev', async () => {
+    const synced: string[] = [];
+    await syncBase(ctxWith([], synced), 'dev');
+    await syncBase(ctxWith([], synced), 'release/2026-09-29');
+    expect(synced).toEqual(['', 'release/2026-09-29']);
   });
 });

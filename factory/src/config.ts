@@ -22,7 +22,6 @@ const KEYS = {
   publicChannel: 'FACTORY_PUBLIC_CHANNEL',
   stageTimeoutMinutes: 'FACTORY_STAGE_TIMEOUT_MINUTES',
   releaseDays: 'FACTORY_RELEASE_DAYS',
-  maintenanceHours: 'FACTORY_MAINTENANCE_HOURS',
   itchTarget: 'ITCH_TARGET',
   butlerKey: 'BUTLER_API_KEY',
   maxJobsPerDay: 'FACTORY_MAX_JOBS_PER_DAY',
@@ -30,7 +29,7 @@ const KEYS = {
 
 const RELEASE_ONLY = new Set<keyof FactoryConfig>(['itchTarget', 'butlerKey']);
 
-const NUMBERS = new Set<keyof FactoryConfig>(['projectNumber', 'minVotes', 'minAgeHours', 'stageTimeoutMinutes', 'releaseDays', 'maintenanceHours', 'maxJobsPerDay']);
+const NUMBERS = new Set<keyof FactoryConfig>(['projectNumber', 'minVotes', 'minAgeHours', 'stageTimeoutMinutes', 'releaseDays', 'maxJobsPerDay']);
 
 export function loadConfig(env: Record<string, string | undefined>): FactoryConfig {
   const missing = Object.entries(KEYS).filter(([field, key]) => !RELEASE_ONLY.has(field as keyof FactoryConfig) && !env[key]?.trim()).map(([, key]) => key);

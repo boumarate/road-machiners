@@ -1,9 +1,10 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readState } from '../state';
+import { EMPTY_STATE, readState, writeState } from '../state';
 import type { AgentRun, Ctx } from '../types';
 
 vi.mock('../deploy', () => ({ buildAndDeploy: async () => 'https://play.test/abc123/', recordBuild: () => undefined }));
+vi.mock('./approval', () => ({ approve: async (_ctx: unknown, issue: number, by: string) => { approved.push(`approve ${issue} ${by}`); } }));
 const { runStage, approvalCaption } = await import('./testing');
 
 let home = '';
@@ -11,12 +12,19 @@ let calls: string[] = [];
 let shellScript = '';
 let photoButtons: unknown;
 let openPr: string | null = null;
+let labels: string[] = [];
+let bases: string[] = [];
+const approved: string[] = [];
 
 beforeEach(() => {
   mkdirSync('tmp', { recursive: true });
   home = mkdtempSync('tmp/factory-testing-');
   calls = [];
   openPr = null;
+  labels = [];
+  bases = [];
+  approved.length = 0;
+  writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [] } });
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
@@ -27,7 +35,7 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
     log: () => undefined,
     statePath: `${home}/state.json`,
     github: {
-      issue: async () => ({ number: 7, title: 'Big horn', body: '', labels: [], createdAt: '', state: 'OPEN', thumbsUp: [] }),
+      issue: async () => ({ number: 7, title: 'Big horn', body: '', labels, createdAt: '', state: 'OPEN', thumbsUp: [] }),
       move: async (issue: number, column: string) => { calls.push(`move ${issue} ${column}`); },
       comment: async (issue: number) => { calls.push(`comment ${issue}`); },
       pullRequestFor: async (branch: string) => { calls.push(`pullRequestFor ${branch}`); return openPr; },
@@ -46,10 +54,10 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
       },
     },
     repo: {
-      prepareWorkClone: async (_b: string, _base: string, dir: string) => { mkdirSync(dir, { recursive: true }); },
+      prepareWorkClone: async (_b: string, base: string, dir: string) => { bases.push(`prepare ${base}`); mkdirSync(dir, { recursive: true }); },
       fetchFromWork: async () => undefined,
       push: async (branch: string) => { calls.push(`push ${branch}`); },
-      diff: async () => '',
+      diff: async (base: string) => { bases.push(`diff ${base}`); return ''; },
       headHash: async () => 'abc123',
     },
   };
@@ -97,7 +105,7 @@ describe('testing stage', () => {
   });
 
   it('fits long notes into the caption limit', () => {
-    const caption = approvalCaption('#7 Big horn', 'https://play.test/x/', 'https://github.com/o/r/issues/7', 'https://github.com/o/r/pull/50', { description: 'd'.repeat(900), howToTry: 'h'.repeat(900) });
+    const caption = approvalCaption('#7 Big horn', 'https://play.test/x/', 'https://github.com/o/r/issues/7', 'https://github.com/o/r/pull/50', { description: 'd'.repeat(900), howToTry: 'h'.repeat(900) }, 'dev');
     expect(caption.length).toBeLessThanOrEqual(1024);
     expect(caption).toContain('…');
     expect(caption).toContain('Deny closes the issue');
@@ -128,5 +136,46 @@ describe('testing stage', () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })), 2);
     await expect(runStage(ctx, 7)).rejects.toThrow('The factory checks failed twice');
     expect(calls).not.toContain('move 7 Approval');
+  });
+
+  it('works on the release branch for a release task and merges there', async () => {
+    labels = ['release-task'];
+    const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
+    await runStage(ctx, 7);
+    expect(new Set(bases)).toEqual(new Set(['prepare release/2026-09-29', 'diff release/2026-09-29']));
+    expect(calls.find((call) => call.startsWith('openPullRequest'))).toContain('openPullRequest factory/issue-7 release/2026-09-29 #7 Big horn');
+    expect(calls.find((call) => call.startsWith('photo'))).toContain('Approve merges into release/2026-09-29.');
+    expect(approved).toEqual([]);
+  });
+
+  it('works on dev for an ordinary card even while a release is open', async () => {
+    const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
+    await runStage(ctx, 7);
+    expect(new Set(bases)).toEqual(new Set(['prepare dev', 'diff dev']));
+  });
+
+  it('merges a cleanup task into the release itself, with no committee post', async () => {
+    labels = ['release-task', 'maintenance'];
+    const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
+    await runStage(ctx, 7);
+    expect(calls.some((call) => call.startsWith('photo') || call.startsWith('openPullRequest') || call === 'comment 7')).toBe(false);
+    expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+    expect(calls.at(-1)).toBe('move 7 Approval');
+    expect(approved).toEqual(['approve 7 the factory']);
+  });
+
+  it('posts a maintenance task on dev for approval as usual', async () => {
+    labels = ['maintenance'];
+    const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
+    await runStage(ctx, 7);
+    expect(calls.some((call) => call.startsWith('photo'))).toBe(true);
+    expect(approved).toEqual([]);
+  });
+
+  it('does not merge a cleanup task when the checks fail twice', async () => {
+    labels = ['release-task', 'maintenance'];
+    const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })), 2);
+    await expect(runStage(ctx, 7)).rejects.toThrow('checks failed twice');
+    expect(approved).toEqual([]);
   });
 });

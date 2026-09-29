@@ -102,4 +102,19 @@ describe('ghClient', () => {
     };
     await expect(ghClient(run, CFG).cards()).resolves.toEqual([]);
   });
+
+  it('reopens an issue', async () => {
+    const calls: string[][] = [];
+    await ghClient(async (_cmd, args) => { calls.push(args); return ok(''); }, CFG).reopen(7);
+    expect(calls).toEqual([['issue', 'reopen', '7', '-R', 'o/r']]);
+  });
+
+  it('creates a missing label before it opens an issue with it', async () => {
+    const calls: string[][] = [];
+    const run: Run = async (_cmd, args) => { calls.push(args); return ok(args[0] === 'issue' ? 'https://github.com/o/r/issues/31\n' : ''); };
+    const number = await ghClient(run, CFG).createIssue('T', 'B', ['release-task', 'maintenance']);
+    expect(number).toBe(31);
+    expect(calls.map((args) => args.slice(0, 3).join(' '))).toEqual(['label create release-task', 'label create maintenance', 'issue create -R']);
+    expect(calls[2]).toEqual(['issue', 'create', '-R', 'o/r', '--title', 'T', '--body', 'B', '--label', 'release-task', '--label', 'maintenance']);
+  });
 });

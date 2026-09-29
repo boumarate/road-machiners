@@ -2,9 +2,27 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { changesSaveMajor } from '../save-guard';
-import { BRANCH, GAME_DIR, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, WORK_DIR, type CardStage, type Ctx, type Stage } from '../types';
+import { readState } from '../state';
+import { BRANCH, GAME_DIR, NEEDS_INFO_LABEL, OPEN_NETWORK_LABEL, OUT_DIR, QUESTIONS_HEADING, RELEASE_TASK_LABEL, WORK_DIR, type CardStage, type Ctx, type Stage } from '../types';
 
 export const BASE_BRANCH = 'dev';
+
+// A release task works on the release branch, every other card on dev. No open release is a bug, so it throws.
+export function baseBranchFor(ctx: Ctx, labels: string[]): string {
+  if (!labels.includes(RELEASE_TASK_LABEL)) return BASE_BRANCH;
+  const release = readState(ctx.statePath).release;
+  if (release === null) throw new Error(`A ${RELEASE_TASK_LABEL} issue needs an open release, and none is open`);
+  return release.branch;
+}
+
+export async function baseBranchOf(ctx: Ctx, issue: number): Promise<string> {
+  return baseBranchFor(ctx, (await ctx.github.issue(issue)).labels);
+}
+
+// Fast-forwards the base branch too when it is a release branch.
+export function syncBase(ctx: Ctx, base: string): Promise<void> {
+  return base === BASE_BRANCH ? ctx.repo.sync() : ctx.repo.sync(base);
+}
 
 export function workDir(ctx: Ctx, issue: number): string {
   return WORK_DIR(ctx.cfg.home, issue);

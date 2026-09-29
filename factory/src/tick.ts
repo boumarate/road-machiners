@@ -1,30 +1,33 @@
 import { join } from 'node:path';
 import { removeStaleBuilds } from './deploy';
-import { reportFailure } from './fail';
+import { failureIssue, reportFailure } from './fail';
 import { intake } from './intake';
 import { isAlive, killJob, spawnJob } from './jobs';
 import { readState, updateState } from './state';
 import { isAnswered } from './questions';
-import { ADHOC_LABEL, NEEDS_INFO_LABEL, STUCK_LABEL } from './types';
+import { ADHOC_LABEL, NEEDS_INFO_LABEL, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
 import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Run } from './types';
 
 export type JobPick = { stage: JobStage; issue: number | null };
-type Due = Pick<FactoryConfig, 'releaseDays' | 'maintenanceHours' | 'maxJobsPerDay'>;
+type Due = Pick<FactoryConfig, 'releaseDays' | 'maxJobsPerDay'>;
 
-const HOUR_MS = 3_600_000;
-const DAY_MS = 24 * HOUR_MS;
+const DAY_MS = 24 * 3_600_000;
 const MINUTE_MS = 60_000;
 // Committee-driven jobs never count against the daily cap.
-const UNCAPPED_STAGES: JobStage[] = ['approve', 'change', 'adhoc'];
+const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc'];
 const CARD_ORDER: [Card['column'], JobStage][] = [['Testing', 'testing'], ['Implementation', 'implement'], ['Design', 'design'], ['Triage', 'triage']];
 
 function isDue(last: string | null, now: Date, everyMs: number): boolean {
   return last === null || now.getTime() - new Date(last).getTime() > everyMs;
 }
 
+// A removal runs before a ship, so a Ship pressed after a Remove finds the release without a current post and refuses.
 function queued(state: FactoryState): JobPick | null {
   const approval = Object.keys(state.pendingApprovals).map(Number).sort((a, b) => a - b)[0];
   if (approval !== undefined) return { stage: 'approve', issue: approval };
+  const removal = state.pendingRemovals[0];
+  if (removal) return { stage: 'remove', issue: removal.issue };
+  if (state.pendingShip !== null && state.release) return { stage: 'ship', issue: state.release.issue };
   const change = state.pendingChanges[0];
   return change ? { stage: 'change', issue: change.id } : null;
 }
@@ -38,13 +41,28 @@ function adhocJob(cards: Card[]): JobPick | null {
   return first ? { stage: 'adhoc', issue: first.issue } : null;
 }
 
-function cardJob(cards: Card[]): JobPick | null {
-  const open = openCards(cards).filter((card) => !card.labels.includes(ADHOC_LABEL));
+function furthestCard(cards: Card[]): JobPick | null {
   for (const [column, stage] of CARD_ORDER) {
-    const first = open.filter((card) => card.column === column).sort((a, b) => a.issue - b.issue)[0];
+    const first = cards.filter((card) => card.column === column).sort((a, b) => a.issue - b.issue)[0];
     if (first) return { stage, issue: first.issue };
   }
   return null;
+}
+
+// Release tasks go before other cards. The tracking issue card only waits for Ship, so it never gets a card job.
+function cardJob(cards: Card[]): JobPick | null {
+  const open = openCards(cards).filter((card) => !card.labels.includes(ADHOC_LABEL) && !card.labels.includes(RELEASE_LABEL));
+  return furthestCard(open.filter((card) => card.labels.includes(RELEASE_TASK_LABEL))) ?? furthestCard(open.filter((card) => !card.labels.includes(RELEASE_TASK_LABEL)));
+}
+
+// The candidate waits until the tracking issue is healthy and every release task is done.
+function candidateJob(state: FactoryState, cards: Card[]): JobPick | null {
+  const release = state.release;
+  if (release === null || release.postId !== null) return null;
+  const tracking = cards.find((card) => card.issue === release.issue);
+  if (!tracking || tracking.labels.includes(STUCK_LABEL)) return null;
+  if (cards.some((card) => card.labels.includes(RELEASE_TASK_LABEL) && card.column !== 'Done')) return null;
+  return { stage: 'candidate', issue: release.issue };
 }
 
 export function countsAgainstCap(stage: JobStage): boolean {
@@ -69,12 +87,11 @@ function pickJob(state: FactoryState, cards: Card[], now: Date, cfg: Due, allowC
 }
 
 function countedJob(state: FactoryState, cards: Card[], now: Date, cfg: Due): JobPick | null {
-  if (isDue(state.lastRelease, now, cfg.releaseDays * DAY_MS)) return { stage: 'release', issue: null };
-  if (isDue(state.lastMaintenance, now, cfg.maintenanceHours * HOUR_MS)) return { stage: 'maintenance', issue: null };
-  return cardJob(cards);
+  if (state.release === null && isDue(state.lastRelease, now, cfg.releaseDays * DAY_MS)) return { stage: 'release', issue: null };
+  return candidateJob(state, cards) ?? cardJob(cards);
 }
 
-// Picks the next job. Queued approvals and changes first, then ad hoc tasks, then due periodic jobs, then the card furthest along.
+// Picks the next job. Queued approvals, removals, ships and changes first, then ad hoc tasks, then a due release cut or candidate, then the card furthest along.
 // At the daily cap only the committee-driven jobs are left.
 export function chooseJob(state: FactoryState, cards: Card[], now: Date, cfg: Due): JobPick | null {
   return pickJob(state, cards, now, cfg, !atCap(state, now, cfg));
@@ -92,16 +109,11 @@ function clearJob(ctx: Ctx): void {
   updateState(ctx.statePath, (state) => ({ ...state, job: null }));
 }
 
-// Card stages and approve report on their issue. Change and periodic jobs report on none.
-function failureIssue(job: Job): number | null {
-  return job.stage === 'change' ? null : job.issue;
-}
-
 async function checkJob(ctx: Ctx, job: Job, deps: TickDeps): Promise<boolean> {
   const minutes = (ctx.now().getTime() - new Date(job.startedAt).getTime()) / MINUTE_MS;
   if (!deps.isAlive(job.pid)) {
     clearJob(ctx);
-    await reportFailure(ctx, job.stage, failureIssue(job), 'job process died without finishing', job.log);
+    await reportFailure(ctx, job.stage, failureIssue(job.stage, job.issue, readState(ctx.statePath)), 'job process died without finishing', job.log);
     return false;
   }
   if (minutes <= ctx.cfg.stageTimeoutMinutes) {
@@ -110,7 +122,7 @@ async function checkJob(ctx: Ctx, job: Job, deps: TickDeps): Promise<boolean> {
   }
   await deps.kill(ctx.run, job.pid);
   clearJob(ctx);
-  await reportFailure(ctx, job.stage, failureIssue(job), `timed out after ${ctx.cfg.stageTimeoutMinutes} minutes`, job.log);
+  await reportFailure(ctx, job.stage, failureIssue(job.stage, job.issue, readState(ctx.statePath)), `timed out after ${ctx.cfg.stageTimeoutMinutes} minutes`, job.log);
   return false;
 }
 
@@ -142,6 +154,7 @@ async function releaseAnswered(ctx: Ctx, cards: Card[]): Promise<Card[]> {
 // Removes builds no card in Approval still needs.
 function cleanBuilds(ctx: Ctx, cards: Card[]): void {
   const builds = readState(ctx.statePath).builds;
+  // The candidate's card is the tracking issue, so its 'rc' build stays while the card waits in Approval.
   const keep = cards.filter((card) => card.column === 'Approval').map((card) => builds[String(card.issue)]).filter((name) => name !== undefined);
   removeStaleBuilds(ctx.cfg.webRoot, new Set(keep), (msg) => ctx.log('tick', null, msg));
 }

@@ -7,7 +7,7 @@ import { tick } from './tick';
 import { guardTick } from './tick-guard';
 import type { JobStage } from './types';
 
-const JOB_STAGES: JobStage[] = ['triage', 'design', 'implement', 'testing', 'release', 'maintenance', 'approve', 'change', 'adhoc'];
+const JOB_STAGES: JobStage[] = ['triage', 'design', 'implement', 'testing', 'release', 'candidate', 'ship', 'remove', 'approve', 'change', 'adhoc'];
 
 async function main(args: string[]): Promise<void> {
   process.loadEnvFile('.env');

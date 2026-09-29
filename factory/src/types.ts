@@ -3,8 +3,8 @@
 export type Column = 'Triage' | 'Design' | 'Implementation' | 'Testing' | 'Approval' | 'Done';
 
 export type CardStage = 'triage' | 'design' | 'implement' | 'testing';
-export type PeriodicStage = 'release' | 'maintenance';
-export type Stage = CardStage | PeriodicStage | 'approve' | 'feedback' | 'change' | 'adhoc' | 'intake' | 'tick';
+export type ReleaseStage = 'release' | 'candidate' | 'ship' | 'remove';
+export type Stage = CardStage | ReleaseStage | 'approve' | 'feedback' | 'change' | 'adhoc' | 'intake' | 'tick';
 
 export type FactoryConfig = {
   repo: string; // "owner/name" on GitHub
@@ -26,7 +26,6 @@ export type FactoryConfig = {
   publicChannel: string;
   stageTimeoutMinutes: number;
   releaseDays: number;
-  maintenanceHours: number;
   itchTarget: string | null; // itch.io page as "user/game". Null until set, and then a release fails loud.
   butlerKey: string | null; // BUTLER_API_KEY, only ever in the env of the butler call
   maxJobsPerDay: number; // public-driven agent jobs allowed in any 24 hours
@@ -53,16 +52,29 @@ export type Issue = {
 
 export type Card = { itemId: string; issue: number; column: Column; labels: string[] };
 
-// A job is one detached `factory run` process. `issue` is null for release and maintenance, and a change id for change.
-export type JobStage = CardStage | PeriodicStage | 'approve' | 'change' | 'adhoc';
+// A job is one detached `factory run` process. `issue` is null for the release cut and a change id for change.
+// Candidate and ship carry the tracking issue, remove the issue of the feature to take out.
+export type JobStage = CardStage | ReleaseStage | 'approve' | 'change' | 'adhoc';
 export type Job = { stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string };
 export type ChangeRequest = { id: number; text: string; by: string };
+export type Removal = { issue: number; by: string; text: string };
+
+// The open release. Its branch takes the release tasks, and Ship merges it into main.
+export type ReleaseState = {
+  issue: number; // tracking issue
+  branch: string;
+  day: string; // YYYY-MM-DD of the cut
+  postId: number | null; // Telegram id of the current candidate post. Null while none is current.
+  removed: number[]; // feature issues taken out of this release
+};
 
 export type FactoryState = {
   job: Job | null;
   approvalPosts: Record<string, number>; // Telegram message id -> issue number
   lastRelease: string | null; // ISO time
-  lastMaintenance: string | null; // ISO time
+  release: ReleaseState | null;
+  pendingShip: string | null; // Telegram user who pressed Ship, run by the next tick
+  pendingRemovals: Removal[]; // features to take out of the release, run by the next ticks in order
   pendingApprovals: Record<string, string>; // issue number -> approving Telegram user, run by the next tick
   pendingChanges: ChangeRequest[]; // factory change requests, run by the next ticks in order
   lastTickError: string | null; // the last tick crash posted to the committee, so a lasting outage posts once
@@ -88,6 +100,7 @@ export interface GitHub {
   openPullRequest(branch: string, base: string, title: string, body: string): Promise<string>;
   pullRequestFor(branch: string): Promise<string | null>; // URL of the open pull request with that head branch
   closePullRequest(branch: string, comment: string): Promise<void>;
+  reopen(number: number): Promise<void>;
 }
 
 // One inline keyboard button. `data` comes back as the callback data of a press.
@@ -112,7 +125,11 @@ export interface Container {
 export interface HostRepo {
   // The host's own clone. Git never runs hooks in it.
   path: string;
-  sync(): Promise<void>; // fetch origin, fast-forward dev and main
+  sync(...extra: string[]): Promise<void>; // fetch origin, fast-forward dev, main and the extra branches
+  createBranch(name: string, from: string): Promise<void>; // throws when the branch exists
+  // Reverts the newest first-parent merge `Merge issue #N:` in main..branch. False when the branch lacks it. A conflict aborts and throws.
+  revertIssueMerge(issue: number, branch: string): Promise<boolean>;
+  deleteBranch(branch: string): Promise<void>; // locally if present, and on origin if it is there
   prepareWorkClone(branch: string, base: string, dir: string): Promise<void>;
   fetchFromWork(dir: string, branch: string): Promise<void>;
   push(branch: string): Promise<void>;
@@ -148,6 +165,8 @@ export const OUT_DIR = '.factory';
 export const STUCK_LABEL = 'factory-stuck';
 export const WONT_DO_LABEL = 'wont-do';
 export const MAINTENANCE_LABEL = 'maintenance';
+export const RELEASE_LABEL = 'release'; // the tracking issue of the open release
+export const RELEASE_TASK_LABEL = 'release-task'; // work that runs on the release branch
 export const ADHOC_LABEL = 'adhoc';
 export const CANDIDATE_LABELS = ['feature-request', 'bug'];
 export const NEEDS_INFO_LABEL = 'needs-info';

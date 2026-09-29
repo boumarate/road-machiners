@@ -1,56 +1,53 @@
-import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { readState } from '../state';
-import { ROOT, fake, reset } from './test-fakes';
+import { fake, reset } from './test-fakes';
 import { release } from './release';
 
 beforeEach(reset);
 
-describe('release', () => {
-  it('stops before merging anything when the itch keys are missing', async () => {
+describe('release cut', () => {
+  it('only records the time when dev has no feature merges', async () => {
     const f = fake();
-    await expect(release(f.ctx)).rejects.toThrow('ITCH_TARGET and BUTLER_API_KEY');
-    expect(f.calls).toEqual([]);
-  });
-
-  it('only records the time when dev has nothing new', async () => {
-    const f = fake();
-    Object.assign(f.ctx.cfg, { itchTarget: 'u/g', butlerKey: 'secret' });
+    f.changelog = ['Merge main into dev after release 2026-09-22'];
     await release(f.ctx);
-    expect(readState(f.ctx.statePath).lastRelease).toBe('2026-09-29T10:00:00.000Z');
+    const state = readState(f.ctx.statePath);
+    expect(state.lastRelease).toBe('2026-09-29T10:00:00.000Z');
+    expect(state.release).toBeNull();
     expect(f.calls).toEqual(['sync']);
   });
 
-  it('builds main in a fresh clone, pushes with butler alone, and posts publicly last', async () => {
+  it('cuts the branch, opens the tracking issue and two cleanup tasks, and sets the release', async () => {
     const f = fake();
-    f.changelog = ['Merge issue 3: faster trucks'];
-    f.agentWrites = { 'release.md': 'Trucks are faster.', 'screenshot.png': 'png' };
-    const runs: { cmd: string; args: string[]; env?: Record<string, string> }[] = [];
-    f.ctx.run = async (cmd, args, opts) => { runs.push({ cmd, args, env: opts?.env }); f.calls.push(`run ${cmd} ${args.join(' ')}`); return { code: 0, stdout: '', stderr: '' }; };
-    f.ctx.repo.headHash = async () => 'abc1234';
-    const shells: { script: string; env?: Record<string, string> }[] = [];
-    const shell = f.ctx.container.shell;
-    f.ctx.container.shell = async (clone, script, log, env) => { shells.push({ script, env }); f.calls.push(`shell ${clone}`); return shell(clone, script, log, env); };
-    Object.assign(f.ctx.cfg, { itchTarget: 'u/g', butlerKey: 'secret' });
+    f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];
     await release(f.ctx);
-    const at = (name: string) => f.calls.findIndex((call) => call.startsWith(name));
-    expect(at('merge dev main')).toBeLessThan(at('push main'));
-    expect(at('push main')).toBeLessThan(at('prepare main'));
-    expect(at('prepare main')).toBeLessThan(at('run butler'));
-    expect(at('run butler')).toBeLessThan(at('photo public'));
-    expect(at('photo public')).toBeLessThan(at('message public'));
-    expect(at('message public')).toBeLessThan(at('message committee'));
-    expect(shells.at(-1)).toEqual({ script: 'npm ci && npm run build', env: { SAVE_SCOPE: '' } });
-    expect(runs).toEqual([{ cmd: 'butler', args: ['push', join(ROOT, 'work', 'release-main', 'game', 'dist'), 'u/g:html5', '--userversion', 'abc1234'], env: { BUTLER_API_KEY: 'secret' } }]);
+    expect(f.calls).toEqual([
+      'sync',
+      'branch release/2026-09-29 dev',
+      'push release/2026-09-29',
+      'createIssue Release 2026-09-29',
+      'addCard Approval',
+      'createIssue Optimize one slow spot (release 2026-09-29)',
+      'addCard Design',
+      'createIssue Code janitor pass (release 2026-09-29)',
+      'addCard Design',
+    ]);
+    expect(f.created.map((issue) => issue.labels)).toEqual([['release'], ['release-task', 'maintenance'], ['release-task', 'maintenance']]);
+    expect(f.created[0].body).toContain('- #3 faster trucks');
+    expect(f.created[1].body).toContain('slow spot');
+    expect(f.created[2].body).toContain('stale doc');
+    expect(readState(f.ctx.statePath).release).toEqual({ issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [] });
   });
 
-  it('posts nothing publicly when butler fails', async () => {
+  it('keeps the release set when a task cannot be opened, so the failure names the tracking issue', async () => {
     const f = fake();
-    f.changelog = ['Merge issue 3: faster trucks'];
-    f.agentWrites = { 'release.md': 'Trucks are faster.', 'screenshot.png': 'png' };
-    f.ctx.run = async () => ({ code: 1, stdout: '', stderr: 'bad key' });
-    f.ctx.repo.headHash = async () => 'abc1234';
-    await expect(release(f.ctx)).rejects.toThrow('butler push failed');
-    expect(f.calls.some((call) => call.startsWith('photo') || call.startsWith('message'))).toBe(false);
+    f.changelog = ['Merge issue #3: faster trucks'];
+    let created = 0;
+    f.ctx.github.createIssue = async () => {
+      created += 1;
+      if (created === 2) throw new Error('gh down');
+      return 20 + created;
+    };
+    await expect(release(f.ctx)).rejects.toThrow('gh down');
+    expect(readState(f.ctx.statePath).release?.issue).toBe(21);
   });
 });

@@ -2,7 +2,7 @@ import { rmSync } from 'node:fs';
 import { deployDev } from '../deploy';
 import { updateState } from '../state';
 import { BRANCH, FEEDBACK_HEADING, WONT_DO_LABEL, type Ctx } from '../types';
-import { BASE_BRANCH, agentLog, workDir } from './common';
+import { BASE_BRANCH, agentLog, baseBranchFor, syncBase, workDir } from './common';
 
 async function requireApproval(ctx: Ctx, issue: number): Promise<void> {
   const card = (await ctx.github.cards()).find((item) => item.issue === issue);
@@ -22,19 +22,32 @@ function forgetPosts(ctx: Ctx, issue: number, dropPending: boolean): void {
 
 export async function approve(ctx: Ctx, issue: number, by: string): Promise<void> {
   await requireApproval(ctx, issue);
-  await ctx.repo.sync();
   const item = await ctx.github.issue(issue);
-  await ctx.repo.merge(BRANCH(issue), BASE_BRANCH, `Merge issue #${issue}: ${item.title}`);
-  await ctx.repo.push(BASE_BRANCH);
-  // The pushed dev holds the branch head, so GitHub marks the pull request merged by itself.
-  await deployDev(ctx, agentLog(ctx, issue, 'approve'));
-  await ctx.github.comment(issue, `Approved by ${by} in the committee chat and merged into dev.`);
+  const base = baseBranchFor(ctx, item.labels);
+  await syncBase(ctx, base);
+  await ctx.repo.merge(BRANCH(issue), base, `Merge issue #${issue}: ${item.title}`);
+  await ctx.repo.push(base);
+  const message = base === BASE_BRANCH ? await mergedIntoDev(ctx, issue, item.title, by) : await mergedIntoRelease(ctx, issue, item.title, by, base);
   await ctx.github.close(issue, 'completed');
   await ctx.github.move(issue, 'Done');
   forgetPosts(ctx, issue, true);
   rmSync(workDir(ctx, issue), { recursive: true, force: true });
   rmSync(`${ctx.cfg.home}/work/check-issue-${issue}`, { recursive: true, force: true });
-  await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Issue #${issue} ${item.title} is merged into dev.\nPlay it: ${ctx.cfg.publicUrl}/dev`);
+  await ctx.telegram.sendMessage(ctx.cfg.committeeChat, message);
+}
+
+// The pushed dev holds the branch head, so GitHub marks the pull request merged by itself.
+async function mergedIntoDev(ctx: Ctx, issue: number, title: string, by: string): Promise<string> {
+  await deployDev(ctx, agentLog(ctx, issue, 'approve'));
+  await ctx.github.comment(issue, `Approved by ${by} in the committee chat and merged into dev.`);
+  return `Issue #${issue} ${title} is merged into dev.\nPlay it: ${ctx.cfg.publicUrl}/dev`;
+}
+
+// Release work never reaches dev by itself, so dev stays as it is until Ship. A feature back after a removal is in the release again.
+async function mergedIntoRelease(ctx: Ctx, issue: number, title: string, by: string, branch: string): Promise<string> {
+  updateState(ctx.statePath, (state) => (state.release ? { ...state, release: { ...state.release, removed: state.release.removed.filter((n) => n !== issue) } } : state));
+  await ctx.github.comment(issue, `Approved by ${by} and merged into the release branch ${branch}.`);
+  return `Issue #${issue} ${title} is merged into the release ${branch}.`;
 }
 
 export async function feedback(ctx: Ctx, issue: number, by: string, text: string): Promise<void> {

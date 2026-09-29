@@ -27,4 +27,39 @@ describe('runJob', () => {
     expect(posts).toHaveLength(1);
     expect(posts[0]).toContain('offline');
   });
+
+  it('clears the queued ship after a failed ship, and reports on the tracking issue', async () => {
+    rmSync(ROOT, { recursive: true, force: true });
+    mkdirSync(ROOT, { recursive: true });
+    const statePath = join(ROOT, 'state.json');
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), job: { stage: 'ship', issue: 20, pid: 1, startedAt: '', log: 'l' }, pendingShip: 'Ann', release: { issue: 20, branch: 'release/x', day: 'd', postId: 5, removed: [] } });
+    const labels: string[] = [];
+    const ctx = {
+      cfg: { home: ROOT, repo: 'o/r', committeeChat: 'c', itchTarget: null, butlerKey: null } as unknown as FactoryConfig, statePath, now: () => new Date(), log: () => undefined,
+      telegram: { sendMessage: async () => 1 },
+      github: { addLabel: async (n: number, label: string) => { labels.push(`${n}:${label}`); } },
+    } as unknown as Ctx;
+    await runJob(ctx, 'ship', 20);
+    const state = readState(statePath);
+    expect(state.pendingShip).toBeNull();
+    expect(state.release).not.toBeNull();
+    expect(labels).toEqual(['20:factory-stuck']);
+  });
+
+  it('drops only the failed removal from the queue', async () => {
+    rmSync(ROOT, { recursive: true, force: true });
+    mkdirSync(ROOT, { recursive: true });
+    const statePath = join(ROOT, 'state.json');
+    const removals = [{ issue: 5, by: 'a', text: 't' }, { issue: 6, by: 'b', text: 'u' }];
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), job: { stage: 'remove', issue: 5, pid: 1, startedAt: '', log: 'l' }, pendingRemovals: removals });
+    const labels: string[] = [];
+    const ctx = {
+      cfg: { home: ROOT, repo: 'o/r', committeeChat: 'c' } as FactoryConfig, statePath, now: () => new Date(), log: () => undefined,
+      telegram: { sendMessage: async () => 1 },
+      github: { addLabel: async (n: number, label: string) => { labels.push(`${n}:${label}`); } },
+    } as unknown as Ctx;
+    await runJob(ctx, 'remove', 5);
+    expect(readState(statePath).pendingRemovals).toEqual([removals[1]]);
+    expect(labels).toEqual(['5:factory-stuck']);
+  });
 });
