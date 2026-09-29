@@ -20,18 +20,18 @@ factory_dir = f"{CODE_DIR}/factory"
 env_path = f"{factory_dir}/.env"
 as_factory = {"_sudo": True, "_sudo_user": FACTORY_USER}
 
-# pyinfra matches exclude_dir against the path relative to the repo, so each name needs a top-level and a nested pattern.
-# It matches exclude against the full local path, which may hold any folder name, like .worktrees. So file patterns name files only.
-SKIPPED_DIRS = [".git", "node_modules", ".worktrees", "tmp", "dist", ".playtest", ".claude", "__pycache__", ".pytest_cache", ".venv"]
-files.sync(
+# rsync sends only changed files in one connection. A per-file sync took 15 minutes.
+# A pattern without a leading slash matches at any depth. --delete spares excluded paths, so the server keeps its node_modules and .env.
+SKIPPED = [".git/", "node_modules/", ".worktrees/", "tmp/", "dist/", ".playtest/", ".claude/", "__pycache__/", ".pytest_cache/", ".venv/", ".env", ".DS_Store", "/factory/infra/"]
+files.rsync(
     name="Sync the repo checkout",
-    src=str(REPO_ROOT),
+    src=f"{REPO_ROOT}/",
     dest=CODE_DIR,
-    user=FACTORY_USER,
-    group=FACTORY_USER,
-    delete=True,
-    exclude_dir=["factory/infra", *SKIPPED_DIRS, *[f"*/{name}" for name in SKIPPED_DIRS]],
-    exclude=["*/.env", "*/.DS_Store"],
+    flags=["-rlpt", "--delete", *[f"--exclude={pattern}" for pattern in SKIPPED]],
+)
+server.shell(
+    name="The factory user owns the checkout",
+    commands=[f"chown -R {FACTORY_USER}:{FACTORY_USER} {CODE_DIR}"],
     _sudo=True,
 )
 
