@@ -257,7 +257,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 2 }, weight: 1 },
     ],
     wear: WEAR_RAIDER,
-    targets: { guns: [3.2, 5.1], armor: [0.5, 0.8] },
+    targets: { guns: [3.0, 5.1], armor: [0.5, 0.8] },
     spares: null,
   },
   trader: {
