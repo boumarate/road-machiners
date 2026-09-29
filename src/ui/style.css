@@ -1562,8 +1562,6 @@ canvas.view {
   flex: none;
 }
 .footprint i {
-  width: 9px;
-  height: 9px;
   background: #8d9296;
 }
 .meter {
@@ -1750,10 +1748,6 @@ canvas.view {
   width: max-content;
   padding: 3px;
   background: #1a2125;
-}
-.chassis-map i {
-  width: 10px;
-  height: 10px;
 }
 .chassis-map .hole {
   background: none;
