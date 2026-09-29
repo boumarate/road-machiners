@@ -9,9 +9,7 @@ Run up:uverify and then up:ureview on {{taskFile}}.
 Fix what they find.
 Commit the fixes on the current branch.
 
-Run the playtest with `npm run playtest -- --cpu`.
-Never run it without `--cpu`.
-This machine has no GPU.
+This machine has no GPU and is slow. Keep checks focused.
 
 Take a screenshot of the core feature.
 Write a Playwright script in `tmp/`.
@@ -27,7 +25,9 @@ They play the branch build from a link in the post, so start the steps from the 
 The factory checks your branch after you finish.
 It runs `npm test`, `npm run typecheck` and `npm run playtest -- --cpu` against the dev server.
 Every test must pass, not only the tests for this issue.
-Run all three yourself before you finish.
+Run all three once, as your last step, after every fix.
+Start the dev server first with `npm run dev`.
+Never run the playtest without `--cpu`.
 
 A failure blocks the task even when your change did not cause it.
 Fix every failure you find, also ones already broken on `dev`.

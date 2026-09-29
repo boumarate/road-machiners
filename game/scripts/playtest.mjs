@@ -1,7 +1,7 @@
 // Boots the game in headless Chromium on the Metal GPU, plays turns, and fails on page errors, the crash screen,
 // a blank canvas or a low frame rate. Screenshots go to .playtest/.
 // With --cpu, Chromium draws in software and the frame rate is printed but not checked.
-// Usage: npm run playtest -- [--url http://localhost:5173] [--turns 12] [--cpu]
+// Usage: npm run playtest -- [--url http://localhost:5173] [--turns 12, or 4 with --cpu] [--cpu]
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright';
 
@@ -10,8 +10,9 @@ const arg = (name, fallback) => {
   return i >= 0 ? process.argv[i + 1] : fallback;
 };
 const url = arg('url', 'http://localhost:5173');
-const turns = Number(arg('turns', '12'));
 const cpu = process.argv.includes('--cpu');
+// --cpu checks that the game boots and plays, not its speed. Software drawing is slow, so it plays fewer turns.
+const turns = Number(arg('turns', cpu ? '4' : '12'));
 const MIN_FPS = 50; // headless Chromium caps frames at 60 Hz
 // A turn plays in about 1.3 s on the GPU, and the first, while the game warms up, in about 3.2 s.
 // Software drawing on a 2 vCPU server runs near 1.5 fps, and turns there took over 10 s, so --cpu waits longer.
