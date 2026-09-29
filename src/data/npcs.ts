@@ -1196,9 +1196,9 @@ export const NPC_BEHAVIOR = {
   // A raider hunting a truck with loot counts as robbing it. A scumbag's 2 to 1 for accept becomes 2 to 20, so a
   // confident robber takes a truce about one time in ten. A raider's 2 to 3 becomes 2 to 60, about one in twenty.
   robberRefuse: 20,
-  // Truce weight times this when a hurt driver is robbing the foe and is not weak. A scumbag's truce weight of 0.5
-  // drops to 0.05 against keep 8, so it offers its prey a truce about two hurt turns in a hundred.
-  robberTruce: 0.1,
+  // Truce weight times this when a hurt driver is not weak and its foe is no threat, so it is winning. A trader's
+  // truce weight of 2.5 drops to 0.025 against keep 8, and every driver then offers at about the 1% floor.
+  winningTruce: 0.01,
   // Comply weight times this when the player's local group is a threat. It then beats fight back and flee by far.
   threatComply: 20,
 };

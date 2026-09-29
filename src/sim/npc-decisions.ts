@@ -588,9 +588,11 @@ function retaliateFactor(world: World, vehicle: Vehicle, decision: DecisionId, s
 }
 
 // A driver facing a threat asks for a truce more often. A robber that is not weak rarely asks its prey.
-function truceFactor(world: World, vehicle: Vehicle, _decision: DecisionId, subject: string | null, danger: number | null): number {
+// A driver facing a threat offers a truce readily. One that is not weak and can handle its foe is winning, so it
+// rarely offers one.
+function truceFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
   if (danger !== null && !isManageable(world, vehicle, danger)) return NPC_BEHAVIOR.threatTruce;
-  return robs(world, vehicle, subject) && !isWeak(world, vehicle) ? NPC_BEHAVIOR.robberTruce : 1;
+  return isWeak(world, vehicle) ? 1 : NPC_BEHAVIOR.winningTruce;
 }
 
 // A weak driver begs.
