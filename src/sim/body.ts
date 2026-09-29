@@ -160,6 +160,8 @@ const CLIP_TOLERANCE = 0.05;
 // A part never shrinks below this share of its footprint along either axis to clear taller surfaces. A small part
 // standing on something reads better than a full one floating.
 const MIN_KEEP = 0.3;
+// The share of a resting part's footprint that must touch the surface under it, so at most a sliver overhangs.
+const MIN_SUPPORT = 0.9;
 
 // Where a part rests: its base height, the footprint it is drawn over, and whether it perches on top of something.
 // slope is the rise of the resting surface per meter along the truck (x) and across it (z). A flat rest has no slope.
@@ -183,7 +185,7 @@ export function restOn(chassisId: string, rect: CellRect): Rest {
   const map = truckShape(chassisId).heights;
   const samples = rect.x1 > rect.x0 && rect.z1 > rect.z0 ? samplesUnder(map, rect) : [];
   if (samples.length === 0) return { y: surfaceAt(chassisId, rect), rect, perched: false, slope: FLAT };
-  return cleanSlope(map, samples, rect) ?? restFlat(map, samples, rect) ?? perch(map, samples, rect);
+  return cleanSlope(map, samples, rect) ?? restFlat(map, samples, rect) ?? perch(chassisId, map, samples, rect);
 }
 
 // A plane at least MIN_SLOPE steep that half the footprint touches and nothing pokes through. Null otherwise.
@@ -194,10 +196,10 @@ function cleanSlope(map: HeightMap, samples: Sample[], rect: CellRect): Rest | n
 
 // The flat surface that keeps the most footprint, see restOn(). Null when none fits.
 function restFlat(map: HeightMap, samples: Sample[], rect: CellRect): Rest | null {
-  const tops = samples.map((sm) => sm.top).sort((a, b) => a - b);
+  const tops = samples.map((sm) => sm.top).filter(Number.isFinite).sort((a, b) => a - b);
   const levels = [...new Set(tops.slice(Math.floor((tops.length - 1) / 2)))];
   const fits = levels.flatMap((y) => {
-    const box = clearBox(samples, y + CLIP_TOLERANCE);
+    const box = clearBox(samples, y - CLIP_TOLERANCE, y + CLIP_TOLERANCE);
     const di = (box.i1 - box.i0) / spanOf(samples, 'i');
     const dj = (box.j1 - box.j0) / spanOf(samples, 'j');
     return !box.empty && Math.min(di, dj) >= MIN_KEEP && supports(samples, box, y) ? [{ y, box, area: di * dj }] : [];
@@ -207,31 +209,34 @@ function restFlat(map: HeightMap, samples: Sample[], rect: CellRect): Rest | nul
 }
 
 // A part that fits nowhere: tilted on the fitted plane when that floats less than flat on the highest point.
-function perch(map: HeightMap, samples: Sample[], rect: CellRect): Rest {
-  const tops = samples.map((sm) => sm.top);
+function perch(chassisId: string, map: HeightMap, samples: Sample[], rect: CellRect): Rest {
+  const tops = samples.map((sm) => sm.top).filter(Number.isFinite);
+  if (tops.length === 0) return { y: surfaceAt(chassisId, rect), rect, perched: true, slope: FLAT };
   const highest = Math.max(...tops);
   const leaning = leanOn(map, samples, rect, highest - Math.min(...tops), false);
   return leaning ? { ...leaning, perched: true } : { y: highest, rect, perched: true, slope: FLAT };
 }
 
 // The plane through the samples by least squares, raised until no sample stands above it. Null when it is steeper than
-// MAX_SLOPE, when a sample lies more than maxGap below it, or, with halfTouching, when fewer than half touch it.
-function leanOn(map: HeightMap, samples: Sample[], rect: CellRect, maxGap: number, halfTouching: boolean): Rest | null {
+// MAX_SLOPE, over air, when a sample lies more than maxGap below it, or, with mostTouching, when less than MIN_SUPPORT of
+// the footprint touches it.
+function leanOn(map: HeightMap, samples: Sample[], rect: CellRect, maxGap: number, mostTouching: boolean): Rest | null {
+  if (samples.some((sm) => !Number.isFinite(sm.top))) return null;
   const points = samples.map((sm) => ({ x: (sm.i + 0.5) * map.cell, z: -(sm.j + 0.5) * map.cell, y: sm.top }));
   const plane = fitPlane(points);
   if (!plane || Math.hypot(plane.x, plane.z) > MAX_SLOPE) return null;
   const at = (pt: { x: number; z: number }) => plane.y + plane.x * pt.x + plane.z * pt.z;
   const lift = Math.max(...points.map((pt) => pt.y - at(pt)));
   const gaps = points.map((pt) => at(pt) + lift - pt.y);
-  if (!gapsFit(gaps, maxGap, halfTouching)) return null;
+  if (!gapsFit(gaps, maxGap, mostTouching)) return null;
   const center = { x: (rect.x0 + rect.x1) / 2, z: (rect.z0 + rect.z1) / 2 };
   return { y: at(center) + lift, rect, perched: false, slope: { x: plane.x, z: plane.z } };
 }
 
-// No gap wider than maxGap, and with halfTouching, at least half the gaps within the clip tolerance.
-function gapsFit(gaps: number[], maxGap: number, halfTouching: boolean): boolean {
+// No gap wider than maxGap, and with mostTouching, at least MIN_SUPPORT of the gaps within the clip tolerance.
+function gapsFit(gaps: number[], maxGap: number, mostTouching: boolean): boolean {
   if (gaps.some((g) => g > maxGap)) return false;
-  return !halfTouching || gaps.filter((g) => g <= CLIP_TOLERANCE).length * 2 >= gaps.length;
+  return !mostTouching || gaps.filter((g) => g <= CLIP_TOLERANCE).length >= MIN_SUPPORT * gaps.length;
 }
 
 // Least squares y = y0 + x * sx + z * sz over the points, as { y: y0, x: sx, z: sz }. Null when the points lie on a line.
@@ -257,7 +262,8 @@ type Sample = { i: number; j: number; top: number };
 // cut marks the sides that trimming moved: i0, i1, j0 and j1, in that order.
 type Box = { i0: number; i1: number; j0: number; j1: number; empty: boolean; cut: [boolean, boolean, boolean, boolean] };
 
-// The height samples that lie fully inside the rect, with their tops in meters. Model y points to the truck's left.
+// The height samples that lie fully inside the rect, with their tops in meters. Where the model has no geometry the top
+// is -Infinity, air that holds nothing up. Model y points to the truck's left.
 function samplesUnder(map: HeightMap, rect: CellRect): Sample[] {
   const range = (lo: number, hi: number) => {
     const first = Math.ceil((lo - 1e-6) / map.cell);
@@ -266,14 +272,14 @@ function samplesUnder(map: HeightMap, rect: CellRect): Sample[] {
   };
   return range(rect.x0, rect.x1).flatMap((i) => range(-rect.z1, -rect.z0).flatMap((j) => {
     const top = map.top[i - map.i0]?.[j - map.j0];
-    return typeof top === 'number' ? [{ i, j, top: top / 100 }] : [];
+    return [{ i, j, top: typeof top === 'number' ? top / 100 : -Infinity }];
   }));
 }
 
-// True when at least half the samples inside the box reach the level, so the part stands on something, not on air.
+// True when at least MIN_SUPPORT of the samples inside the box reach the level, so the part barely overhangs anything.
 function supports(samples: Sample[], box: Box, y: number): boolean {
   const inside = samples.filter((sm) => sm.i >= box.i0 && sm.i < box.i1 && sm.j >= box.j0 && sm.j < box.j1);
-  return inside.filter((sm) => sm.top >= y - CLIP_TOLERANCE).length * 2 >= inside.length;
+  return inside.filter((sm) => sm.top >= y - CLIP_TOLERANCE).length >= MIN_SUPPORT * inside.length;
 }
 
 function spanOf(samples: Sample[], key: 'i' | 'j'): number {
@@ -281,13 +287,13 @@ function spanOf(samples: Sample[], key: 'i' | 'j'): number {
   return Math.max(...values) - Math.min(...values) + 1;
 }
 
-// The sample box left after trimming away every sample taller than the limit, one edge row or column at a time.
-// Box bounds are half open: i0 <= i < i1.
-function clearBox(samples: Sample[], limit: number): Box {
+// The sample box left after trimming away every sample outside the band from low to high, one edge row or column at a
+// time: taller things the part would cut into, and drops or air it would hang over. Box bounds are half open.
+function clearBox(samples: Sample[], low: number, high: number): Box {
   const box: Box = { i0: Math.min(...samples.map((sm) => sm.i)), i1: Math.max(...samples.map((sm) => sm.i)) + 1, j0: Math.min(...samples.map((sm) => sm.j)), j1: Math.max(...samples.map((sm) => sm.j)) + 1, empty: false, cut: [false, false, false, false] };
   const inBox = (sm: Sample) => sm.i >= box.i0 && sm.i < box.i1 && sm.j >= box.j0 && sm.j < box.j1;
   for (;;) {
-    const tall = samples.filter((sm) => sm.top > limit && inBox(sm));
+    const tall = samples.filter((sm) => (sm.top > high || sm.top < low) && inBox(sm));
     if (tall.length === 0) return box;
     trimEdge(box, tall);
     if (box.i1 <= box.i0 || box.j1 <= box.j0) return { ...box, empty: true };

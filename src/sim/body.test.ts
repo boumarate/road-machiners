@@ -229,11 +229,11 @@ describe('resting parts', () => {
     };
     return range(r.x0, r.x1).flatMap((i) => range(-r.z1, -r.z0).flatMap((j) => {
       const top = map.top[i - map.i0]?.[j - map.j0];
-      return typeof top === 'number' ? [{ x: (i + 0.5) * map.cell, z: -(j + 0.5) * map.cell, top: top / 100 }] : [];
+      return [{ x: (i + 0.5) * map.cell, z: -(j + 0.5) * map.cell, top: typeof top === 'number' ? top / 100 : -Infinity }];
     }));
   };
 
-  it('never cuts into the model and stands on at least half its footprint, flat or leaning, on every chassis, cell and size', () => {
+  it('never cuts into the model and overhangs at most a tenth of its footprint, flat or leaning, on every chassis, cell and size', () => {
     const problems: string[] = [];
     let perched = 0;
     let leaning = 0;
@@ -260,13 +260,13 @@ describe('resting parts', () => {
             const gaps = samplesIn(map, rest.rect).map((sm) => rest.y + rest.slope.x * (sm.x - cx) + rest.slope.z * (sm.z - cz) - sm.top);
             const label = `${id} ${sw}x${sh} at ${x},${y}`;
             if (gaps.some((g) => g < -TOLERANCE - 1e-9)) problems.push(`${label} cuts into the model`);
-            if (gaps.filter((g) => g <= TOLERANCE + 1e-9).length * 2 < gaps.length) problems.push(`${label} floats over most of its footprint`);
+            if (gaps.filter((g) => g <= TOLERANCE + 1e-9).length < 0.9 * gaps.length) problems.push(`${label} overhangs more than a tenth of its footprint`);
             if (rest.slope.x !== 0 || rest.slope.z !== 0) leaning++;
           }
         }
       }
     }
-        console.log(`resting parts: ${leaning} of ${total} footprints lean on a slope, ${perched} perch on a taller surface, floating ${[0.1, 0.2, 0.4].map((lim) => `${floats.filter((f) => f > lim).length} more than ${lim} m`).join(', ')}`);
+        console.log(`resting parts: ${leaning} of ${total} footprints lean on a slope, ${perched} find no rest and are hidden unless always drawn, floating ${[0.1, 0.2, 0.4].map((lim) => `${floats.filter((f) => f > lim).length} more than ${lim} m`).join(', ')}`);
     expect(problems).toEqual([]);
   });
 });
