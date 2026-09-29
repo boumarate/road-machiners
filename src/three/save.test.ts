@@ -14,6 +14,7 @@ import { TEST_MAP } from '../test/map';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { breakProp } from '../sim/salvage';
 import { MIGRATIONS, SAVE_FORMAT, SAVE_MAJOR } from './save-migrations';
+import { CHASSIS_1_5 } from './save-migration-core-parts';
 import { CHASSIS_1_2 } from './save-migration-wheels';
 import SAVED_SHAPE from './save-shape.json';
 import { newGameShape } from '../test/save-shape';
@@ -42,7 +43,7 @@ function withGuns10(world: World): World {
 }
 
 // A saved world as format 1.0 held it: parts carry a reload counter and no gun state, and built-in parts stand on the
-// cells the 1.2 step moves them from. New games start with full magazines, which the 1.1 step restores.
+// cells the 1.2 step moves them from, under the ids they had then. New games start with full magazines, which the 1.1 step restores.
 function asFormat10(world: unknown): unknown {
   const old = JSON.parse(JSON.stringify(world), (_key, value) => {
     if (!value || typeof value !== 'object' || !('defId' in value) || !('wear' in value)) return value;
@@ -54,7 +55,8 @@ function asFormat10(world: unknown): unknown {
     const reading = (a: { x: number; y: number }, b: { x: number; y: number }) => a.y - b.y || a.x - b.x;
     for (const newId of new Set(grid.newCore.map((c) => c[0]))) {
       const defId = Object.entries(grid.renamed ?? {}).find(([, renamed]) => renamed === newId)?.[0] ?? newId;
-      const cores = v.items.filter((it) => it.part?.defId === newId).sort(reading);
+      const currentId = CHASSIS_1_5[v.chassisId].renamed?.[newId] ?? newId;
+      const cores = v.items.filter((it) => it.part?.defId === currentId).sort(reading);
       const from = grid.oldCore.filter((c) => c[0] === defId).map(([, x, y]) => ({ x, y })).sort(reading);
       const to = grid.newCore.filter((c) => c[0] === newId).map(([, x, y]) => ({ x, y })).sort(reading);
       cores.forEach((it, i) => Object.assign(it, from[i], { rot: 0 }, { part: { ...it.part, defId } }));
