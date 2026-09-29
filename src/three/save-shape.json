@@ -236,6 +236,17 @@
      },
      {
       "deadline": "number",
+      "good": "string",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "tier": "number",
+      "to": "string",
+      "units": "number"
+     },
+     {
+      "deadline": "number",
       "id": "string",
       "kind": "string",
       "reward": "number",
@@ -273,6 +284,26 @@
     "contracts": [
      {
       "deadline": "number",
+      "defId": "string",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "tier": "number"
+     },
+     {
+      "deadline": "number",
+      "good": "string",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "tier": "number",
+      "to": "string",
+      "units": "number"
+     },
+     {
+      "deadline": "number",
       "id": "string",
       "kind": "string",
       "reward": "number",
@@ -300,6 +331,15 @@
    },
    "nose": {
     "contracts": [
+     {
+      "deadline": "number",
+      "defId": "string",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "tier": "number"
+     },
      {
       "deadline": "number",
       "good": "string",
@@ -356,6 +396,27 @@
       "reward": "number",
       "shop": "string",
       "tier": "number"
+     },
+     {
+      "deadline": "number",
+      "good": "string",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "tier": "number",
+      "to": "string",
+      "units": "number"
+     },
+     {
+      "deadline": "number",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "targetName": "string",
+      "template": "string",
+      "tier": "number"
      }
     ],
     "pressure": {
@@ -378,6 +439,15 @@
     "contracts": [
      {
       "deadline": "number",
+      "defId": "string",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "tier": "number"
+     },
+     {
+      "deadline": "number",
       "good": "string",
       "id": "string",
       "kind": "string",
@@ -386,6 +456,16 @@
       "tier": "number",
       "to": "string",
       "units": "number"
+     },
+     {
+      "deadline": "number",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "targetName": "string",
+      "template": "string",
+      "tier": "number"
      }
     ],
     "pressure": {
