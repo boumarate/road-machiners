@@ -635,6 +635,7 @@ export class Game {
     this.phase = a.combat ? "Firing" : "Results";
     timed("fog", () => this.fog.update(this.combatFogWorld()));
     this.playShotFx();
+    this.playDryGuns();
     this.weapons.render();
   }
 
@@ -760,6 +761,14 @@ export class Game {
     return { x: f.pos.x, y: f.pos.y + GUN_HEIGHT, z: f.pos.z };
   }
 
+  // A seen gun that fired its last round clunks as the volley ends.
+  private playDryGuns(): void {
+    for (const e of this.world.events) {
+      const p = e.t === "empty" ? this.eventPoint(e.vehicle) : null;
+      if (p) this.sound.at("gun-empty", p, CONFIG.combatShotMs);
+    }
+  }
+
   private playShotFx(): void {
     const w = this.world;
     const rows = new Map<string, number>();
@@ -768,9 +777,7 @@ export class Game {
         const a = this.eventPoint(e.shooter);
         const b = this.eventPoint(e.target);
         if (!a || !b) continue;
-        const shooter =
-          w.vehicles.find((x) => x.id === e.shooter) ??
-          w.removed.find((x) => x.id === e.shooter);
+        const shooter = w.vehicles.find((x) => x.id === e.shooter) ?? w.removed.find((x) => x.id === e.shooter);
         const gun = shooter && mountedParts(shooter).find((p) => p.id === e.weapon);
         if (!gun) throw new Error(`Shot from ${e.shooter} names no mounted weapon ${e.weapon}`);
         const view = viewOf(this.views, e.shooter);
@@ -781,13 +788,7 @@ export class Game {
         const b = this.eventPoint(e.target);
         if (!b) continue;
         const g = groundPoint(this.world.terrain, e.from);
-        const a = {
-          x: g.x,
-          y:
-            g.y +
-            (REGION.settlement.guardTowerHeight + 0.2) * PHYSICS.metersPerTile,
-          z: g.z,
-        };
+        const a = { x: g.x, y: g.y + (REGION.settlement.guardTowerHeight + 0.2) * PHYSICS.metersPerTile, z: g.z };
         const landMs = this.playVolley(a, () => towardFrom(a, b), b, e.rounds, "guard", e.target, rows);
         this.sound.accents([e], w.player.vehicleId, () => landMs);
       }
