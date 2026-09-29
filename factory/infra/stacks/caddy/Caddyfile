@@ -24,3 +24,9 @@
 		index index.html
 	}
 }
+
+# www sends every request to the bare domain, keeping the path.
+www.{$DOMAIN} {
+	import security_headers
+	redir https://{$DOMAIN}{uri} permanent
+}
