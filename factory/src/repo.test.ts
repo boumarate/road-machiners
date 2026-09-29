@@ -42,7 +42,7 @@ describe('hostRepo', () => {
   it('fetches a work branch into the host clone', async () => {
     const { run, calls } = fakeRun();
     await hostRepo(run, cfg('/h')).fetchFromWork('/w/x', 'factory/issue-3');
-    expect(calls[0].slice(2)).toEqual(['fetch', '/w/x', '+factory/issue-3:factory/issue-3']);
+    expect(calls[0].slice(6)).toEqual(['fetch', '/w/x', '+factory/issue-3:factory/issue-3']);
   });
 
   it('merges and aborts a real conflict, leaving the tree clean', async () => {
