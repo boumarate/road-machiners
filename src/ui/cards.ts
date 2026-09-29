@@ -8,7 +8,6 @@ import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, t
 import { baseGrid, cellCount, mountedParts, type Cell } from "../sim/grid";
 import { isJunk, maxHp, partValue, wornDef } from "../sim/wear";
 import type { PartInstance, Vehicle } from "../sim/types";
-import { cellPx } from "./cell-shape";
 import { el } from "./dom";
 import { wearLabel } from "./format";
 import { fuelLiters, hp, kph, meters, mps2 } from "./units";
@@ -199,19 +198,11 @@ export function statGrid(diffs: StatDiff[]): HTMLElement {
   );
 }
 
-const FOOTPRINT_CELL_PX = 7;
-const MAP_CELL_PX = 8;
-
-// Columns and rows of true-shape cells: each cell is width px wide and taller than wide.
-function cellGridStyle(columns: number, width: number): string {
-  return `grid-template-columns:repeat(${columns},${width}px);grid-auto-rows:${cellPx(width).h}px`;
-}
-
 // The part's cells before rotation, drawn small.
 export function footprint(w: number, h: number): HTMLElement {
   return el(
     "div",
-    { class: "footprint", title: `${w}×${h} cells`, style: cellGridStyle(w, FOOTPRINT_CELL_PX) },
+    { class: "footprint", title: `${w}×${h} cells`, style: `grid-template-columns:repeat(${w},1fr)` },
     ...Array.from({ length: w * h }, () => el("i")),
   );
 }
@@ -282,7 +273,7 @@ export function chassisMap(chassisId: string): HTMLElement {
   const g = baseGrid(chassisId);
   return el(
     "div",
-    { class: "chassis-map", title: `${chassisDef(chassisId).name} layout`, style: cellGridStyle(g.w, MAP_CELL_PX) },
+    { class: "chassis-map", title: `${chassisDef(chassisId).name} layout`, style: `grid-template-columns:repeat(${g.w},1fr)` },
     ...g.cells.flat().map((c) => el("i", { class: cellClass(c) })),
   );
 }
