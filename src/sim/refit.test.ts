@@ -131,7 +131,7 @@ describe('field refits', () => {
     const w = emptyWorld();
     const engine = w.vehicles[0].items.find((item) => item.kind === 'part' && item.part.defId === 'stockEngine');
     if (!engine) throw new Error('Expected engine');
-    expect(() => moveItem(w, engine.id, { x: 0, y: 0, rot: 0 })).toThrow('More than one item');
+    expect(() => moveItem(w, engine.id, { x: 3, y: 1, rot: 0 })).toThrow('More than one item');
   });
 
   it('cancels when a required item has changed position', () => {

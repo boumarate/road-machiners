@@ -56,8 +56,9 @@ export const PHYSICS = {
   },
   rockHeight: 3, // meters of obstacle collider height
   rockSink: 0.5, // meters an obstacle collider reaches below the ground, so slopes leave no gap
-  // Meters above the ground past which a prop box is no collider, so trucks pass under canopies and boards. The
-  // tallest chassis box, bus and loader, has its roof 2.3 m up at rest; 0.5 m more leaves room for suspension bounce.
+  // Meters above the ground past which a prop box is no collider, so trucks pass under canopies and boards.
+  // A truck collider stops at truckRoof at rest; the 0.5 m above it leave room for suspension bounce.
+  truckRoof: 2.3,
   truckClearance: 2.8,
   // Tiles past the reach of trucks with bodies within which props keep colliders: more than a turn at the top speed
   // of the fastest kit, 15.6 tiles, plus the longest truck.

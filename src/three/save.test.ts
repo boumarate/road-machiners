@@ -64,6 +64,13 @@ function asFormat10(world: unknown): unknown {
   return old;
 }
 
+// A world whose trucks carry only their built-in parts. A world of format 1.0 has every other item on cells of the old
+// grids, and the 1.2 step moves those, which its own tests cover.
+function coresOnly(world: World): World {
+  for (const v of world.vehicles) v.items = v.items.filter((it) => it.kind === 'part' && partDef(it.part.defId).kind === 'core');
+  return world;
+}
+
 describe('local game save', () => {
   it('saves by hand on any turn and clears for a new game', () => {
     const storage = makeStorage();
@@ -150,7 +157,7 @@ describe('local game save', () => {
 
   it('loads a save from before save formats as format 1.0', () => {
     const storage = makeStorage();
-    const world = withGuns10(newWorld(1337, startKit('standard'), TEST_MAP));
+    const world = coresOnly(withGuns10(newWorld(1337, startKit('standard'), TEST_MAP)));
     storage.setItem('roam.save', JSON.stringify({ version: '1.0.0', world: asFormat10(saveOf(world).world) }));
     expect(loadWorld(storage, TEST_MAP)).toEqual(world);
   });

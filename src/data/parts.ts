@@ -657,6 +657,10 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   cabOpen: {
     id: "cabOpen", kind: "core", name: "Open seats", hp: 120, base: 80, tier: 1, w: 3, h: 2, mass: 80, armor: 3, tall: false, role: "cab",
   },
+  // The convertible's hardtop cab. Same shape as cabOpen until the closed cab part lands.
+  cabHardtop: {
+    id: "cabHardtop", kind: "core", name: "Hardtop cab", hp: 120, base: 80, tier: 1, w: 3, h: 2, mass: 80, armor: 3, tall: false, role: "cab",
+  },
   // The hauler's cab-over, beside the engine it sits on.
   cabOver: {
     id: "cabOver", kind: "core", name: "Cab", hp: 120, base: 80, tier: 1, w: 2, h: 2, mass: 80, armor: 3, tall: true, role: "cab",

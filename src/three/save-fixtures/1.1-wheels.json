@@ -164,6 +164,40 @@
      "rot": 0,
      "kind": "good",
      "good": "salt"
+    },
+    {
+     "id": "i50",
+     "x": 0,
+     "y": 2,
+     "rot": 0,
+     "kind": "good",
+     "good": "scrap"
+    },
+    {
+     "id": "i51",
+     "x": 4,
+     "y": 5,
+     "rot": 0,
+     "kind": "part",
+     "part": {
+      "id": "p51",
+      "defId": "scrapSheet",
+      "hp": 40,
+      "wear": 0
+     }
+    },
+    {
+     "id": "i52",
+     "x": 1,
+     "y": 5,
+     "rot": 0,
+     "kind": "part",
+     "part": {
+      "id": "p52",
+      "defId": "mg",
+      "hp": 40,
+      "wear": 0
+     }
     }
    ]
   },

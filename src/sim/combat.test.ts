@@ -376,8 +376,8 @@ describe('rounds', () => {
         rounds++;
         if (!r.hit) continue;
         hits++;
-        expect(r.hits.length).toBeGreaterThan(0);
-        struck.add(r.hits[0].part);
+        // A round in an empty armor column lane grazes the skin and hits no part.
+        if (r.hits.length > 0) struck.add(r.hits[0].part);
       }
     }
     expect([...struck].some((id) => id !== wheel.id)).toBe(true);
