@@ -112,6 +112,17 @@ describe('model surface', () => {
     expect(surfaceAt('scout', rect)).toBeCloseTo(Math.max(...parts));
   });
 
+  it('leaves out a wall that stands over a row edge', () => {
+    // The scout cab's rear wall and the wagon windshield end just past a row edge, and neither belongs to the row behind.
+    expect(surfaceAt('scout', cellRect('scout', [{ x: 3, y: 5 }, { x: 3, y: 6 }]))).toBeLessThan(0.1);
+    expect(surfaceAt('wagon', cellRect('wagon', [{ x: 2, y: 4 }, { x: 3, y: 4 }, { x: 2, y: 5 }, { x: 3, y: 5 }]))).toBeLessThan(0.7);
+  });
+
+  it('reads a rect narrower than a sample cell at its middle', () => {
+    const at = cellCenter('scout', 3, 5);
+    expect(surfaceAt('scout', { x0: at.x - 0.02, x1: at.x + 0.02, z0: at.z - 0.02, z1: at.z + 0.02 })).toBeLessThan(0.1);
+  });
+
   it('throws when the model has nothing under the rect', () => {
     expect(() => surfaceAt('scout', { x0: 50, x1: 51, z0: 0, z1: 1 })).toThrow(/no surface/);
   });

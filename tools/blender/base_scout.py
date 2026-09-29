@@ -88,12 +88,12 @@ def cab(kit: Kit) -> None:
 
 
 def bed(kit: Kit) -> None:
-    """A sunk bed: thin painted walls to the beltline, a front wall behind the cab, a tailgate and taillights."""
+    """A sunk bed: thin painted walls to the beltline, a front wall on the cab's rear edge, a tailgate and taillights."""
     length = CAB_BACK - BACK
     mid = (CAB_BACK + BACK) / 2
     h = G.top - FLOOR
     mirrored(kit, "bed_side", (length, BED_WALL, h), mid, SIDE - BED_WALL / 2, FLOOR + h / 2, "paint")
-    kit.box("bed_front", (BED_WALL, 2 * (SIDE - BED_WALL), h), (CAB_BACK - BED_WALL / 2, 0, FLOOR + h / 2), "paint")
+    kit.box("bed_front", (BED_WALL, 2 * (SIDE - BED_WALL), h), (CAB_BACK + BED_WALL / 2, 0, FLOOR + h / 2), "paint")
     kit.box("tailgate", (BED_WALL, 2 * (SIDE - BED_WALL), h), (BACK + BED_WALL / 2, 0, FLOOR + h / 2), "paint")
     kit.box("rear_panel", (0.04, 2 * WELL_Y, FLOOR - G.bottom), (BACK + 0.02, 0, (FLOOR + G.bottom) / 2), "paint")
     mirrored(kit, "taillight", (INSET, 0.2, 0.24), BACK - INSET / 2, SIDE - 0.1, G.top - 0.16, "red")

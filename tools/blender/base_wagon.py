@@ -42,7 +42,7 @@ BAY_FLOOR = HOOD_TOP - 0.3  # a 0.45 m engine pokes 0.15 m out of the cutout
 BAY_LEFT = G.col_y(0.5)
 BAY_RIGHT = G.col_y(2.5)
 
-COWL_FRONT = -0.45  # the rear body starts here, in front of the rear wheel arch
+COWL_FRONT = -0.39  # the rear body starts here, in front of the rear wheel arch
 COWL_BACK = G.row_x(3.5)
 WS_X = (COWL_FRONT + COWL_BACK) / 2  # the windshield stands on the cowl
 WS_TOP = HOOD_TOP + 0.5
@@ -135,7 +135,7 @@ def rear_body(kit: Kit) -> None:
 
 def windshield(kit: Kit) -> None:
     """A flat upright split windshield in a trim frame, on the cowl."""
-    post = 0.1
+    post = 0.08
     h = WS_TOP - HOOD_TOP
     mirrored(kit, "ws_post", (post, post, h), WS_X, SIDE - post / 2, HOOD_TOP + h / 2, "trim")
     kit.box("ws_mid", (post, post, h), (WS_X, 0, HOOD_TOP + h / 2), "trim")

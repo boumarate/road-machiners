@@ -127,13 +127,16 @@ function ringSign(index: number, count: number, first: number): number {
   return index === count - 1 ? -first : 0;
 }
 
-// The largest height map value over the sample cells the ranges cover, in meters, or -Infinity over no geometry.
-// Ranges are in model space.
+// The largest height map value over the sample cells that lie fully inside the ranges, in meters, or -Infinity over no
+// geometry. A sample cell that reaches over a range edge belongs to the neighbor, so a wall that ends at a row edge does
+// not raise the next row. A range narrower than a sample cell reads the cell at its middle. Ranges are in model space.
 function topOver(map: HeightMap, xa: number, xb: number, ya: number, yb: number): number {
   const eps = 1e-6;
   const cellsOf = (lo: number, hi: number) => {
-    const first = Math.floor((lo + eps) / map.cell);
-    return Array.from({ length: Math.floor((hi - eps) / map.cell) - first + 1 }, (_, k) => first + k);
+    const first = Math.ceil((lo - eps) / map.cell);
+    const last = Math.floor((hi + eps) / map.cell) - 1;
+    if (last < first) return [Math.floor((lo + hi) / 2 / map.cell)];
+    return Array.from({ length: last - first + 1 }, (_, k) => first + k);
   };
   const tops = cellsOf(xa, xb).flatMap((i) => cellsOf(ya, yb).map((j) => map.top[i - map.i0]?.[j - map.j0]));
   return Math.max(-Infinity, ...tops.filter((t): t is number => typeof t === 'number').map((t) => t / 100));
