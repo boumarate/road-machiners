@@ -29,7 +29,8 @@ export function bodyOf(chassisId: string): Body {
   const mirrored =
     cols.length === 2 && rows.length === 2 && cols[0] + cols[1] === w - 1 && rows[0] + rows[1] === h - 1 && corners.size === 4;
   if (!mirrored) throw new Error(`Chassis ${chassisId} wheel cores are not mirror placed`);
-  const frontLeft = cellCenter(chassisId, cols[0], rows[0]);
+  // The wheel cores sit one cell inside the side armor, but the hubs stay on the outer edge column.
+  const frontLeft = cellCenter(chassisId, 0, rows[0]);
   return {
     half: { x: (h * PHYSICS.cell.along) / 2, y: look.halfHeight, z: (w * PHYSICS.cell.across) / 2 },
     wheelX: frontLeft.x,

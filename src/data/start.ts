@@ -20,7 +20,7 @@ export const START_KITS: Record<string, StartKit> = {
   standard: {
     name: 'Your truck',
     chassis: 'scout',
-    parts: ['mg', 'stockEngine', 'cage', 'rack'],
+    parts: ['rack', 'mg', 'stockEngine', 'cage'],
     storage: [],
     money: 1000,
     fuel: CHASSIS.scout.fuelCap,

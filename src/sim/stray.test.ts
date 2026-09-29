@@ -76,7 +76,7 @@ describe('stray fire', () => {
     target.weaponOrders = { [gun.id]: { targetId: aimed.id, aim: 'body' } };
     me.weaponOrders = {};
     let hurt = 0;
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 200; i++) {
       Object.assign(gun, gunFor(gun.defId));
       w.events = [];
       fireWeapons(w);

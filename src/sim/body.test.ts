@@ -10,7 +10,7 @@ describe('body from the chassis grid', () => {
     expect(b.half.z).toBeCloseTo(1.21);
   });
 
-  it('puts the scout wheel mounts at the centers of its wheel cells', () => {
+  it('puts the scout wheel mounts on the edge columns of its wheel rows', () => {
     const b = bodyOf('scout');
     const front = cellCenter('scout', 0, 1);
     const rear = cellCenter('scout', 4, 6);
@@ -18,6 +18,14 @@ describe('body from the chassis grid', () => {
     expect(b.wheelZ).toBeCloseTo(-front.z);
     expect(-b.wheelX).toBeCloseTo(rear.x);
     expect(b.wheelZ).toBeCloseTo(rear.z);
+  });
+
+  it('keeps every wheel core one cell inside the edge column', () => {
+    for (const [id, c] of Object.entries(CHASSIS)) {
+      const w = Math.max(...c.layout.map((r) => r.length));
+      const wheels = c.core.filter((core) => core.defId.startsWith('wheel'));
+      expect(wheels.map((core) => core.x).sort(), id).toEqual([1, 1, w - 2, w - 2].sort());
+    }
   });
 
   it('gives the nose-left cell center in body meters', () => {
