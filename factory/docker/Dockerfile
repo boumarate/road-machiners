@@ -21,4 +21,7 @@ RUN git config --global user.name "ROAM Factory" \
 RUN claude plugin marketplace add https://github.com/btseytlin/ultrapack.git \
  && claude plugin install up@ultrapack
 
+# Factory commits carry no Claude co-author trailer.
+RUN node -e 'const f=require("os").homedir()+"/.claude/settings.json";const fs=require("fs");const s=fs.existsSync(f)?JSON.parse(fs.readFileSync(f,"utf8")):{};s.attribution={commit:"",pr:""};s.includeCoAuthoredBy=false;fs.writeFileSync(f,JSON.stringify(s,null,2))'
+
 WORKDIR /work
