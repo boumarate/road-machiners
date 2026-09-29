@@ -14,7 +14,7 @@ export function isMarked(issue: Issue, now: Date, rules: MarkRules): boolean {
   return byCommittee || issue.thumbsUp.length >= rules.minVotes;
 }
 
-// Puts every marked issue that is not yet on the board into Design.
+// Puts every marked issue that is not yet on the board into Triage.
 export async function intake(ctx: Ctx): Promise<number[]> {
   const { cfg, github } = ctx;
   const bootstrap = { telegram: cfg.committeeBootstrapTelegram, github: cfg.committeeBootstrapGithub };
@@ -24,9 +24,9 @@ export async function intake(ctx: Ctx): Promise<number[]> {
   const added: number[] = [];
   for (const issue of candidates) {
     if (onBoard.has(issue.number) || !isMarked(issue, ctx.now(), rules)) continue;
-    await github.addCard(issue.number, 'Design');
-    await github.comment(issue.number, 'The factory picked this up for design.');
-    ctx.log('intake', issue.number, 'added to Design');
+    await github.addCard(issue.number, 'Triage');
+    await github.comment(issue.number, 'The factory picked this up for triage.');
+    ctx.log('intake', issue.number, 'added to Triage');
     added.push(issue.number);
   }
   return added;

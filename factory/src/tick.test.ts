@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { chooseJob, tick, type TickDeps } from './tick';
 import { EMPTY_STATE, readState, writeState } from './state';
-import { STUCK_LABEL, type Card, type Ctx, type FactoryState, type Job } from './types';
+import { FACTORY_MARK, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Card, type Ctx, type IssueComment, type FactoryState, type Job } from './types';
 
 const NOW = new Date('2026-01-10T12:00:00Z');
 const CFG = { releaseDays: 7, maintenanceHours: 24 };
@@ -63,6 +63,13 @@ describe('chooseJob', () => {
     expect(chooseJob(state(), cards.slice(0, 1), NOW, CFG)).toEqual({ stage: 'design', issue: 1 });
   });
 
+  it('runs Triage cards last and skips needs-info and stuck ones', () => {
+    const cards = [card(1, 'Triage'), card(2, 'Triage', [NEEDS_INFO_LABEL]), card(3, 'Design')];
+    expect(chooseJob(state(), cards, NOW, CFG)).toEqual({ stage: 'design', issue: 3 });
+    expect(chooseJob(state(), cards.slice(0, 2), NOW, CFG)).toEqual({ stage: 'triage', issue: 1 });
+    expect(chooseJob(state(), [card(2, 'Triage', [NEEDS_INFO_LABEL]), card(4, 'Triage', [STUCK_LABEL])], NOW, CFG)).toBeNull();
+  });
+
   it('skips stuck cards, Approval and Done', () => {
     const cards = [card(1, 'Testing', [STUCK_LABEL]), card(2, 'Approval'), card(3, 'Done'), card(4, 'Design')];
     expect(chooseJob(state(), cards, NOW, CFG)).toEqual({ stage: 'design', issue: 4 });
@@ -70,22 +77,23 @@ describe('chooseJob', () => {
   });
 });
 
-type Harness = { ctx: Ctx; sent: string[]; labels: string[]; deps: TickDeps; killed: number[]; spawned: string[][] };
+type Harness = { ctx: Ctx; sent: string[]; labels: string[]; removed: string[]; deps: TickDeps; killed: number[]; spawned: string[][] };
 
-function harness(job: Job | null, alive: boolean, cards: Card[] = []): Harness {
+function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: IssueComment[] = []): Harness {
   const dir = mkdtempSync(join(tmpdir(), 'tick-'));
   const statePath = join(dir, 'state.json');
   writeState(statePath, state({ job }));
   const sent: string[] = [];
   const labels: string[] = [];
+  const removed: string[] = [];
   const killed: number[] = [];
   const spawned: string[][] = [];
-  const github = { cards: async () => cards, candidates: async () => [], addLabel: async (n: number, l: string) => { labels.push(`${n}:${l}`); } };
+  const github = { cards: async () => cards, candidates: async () => [], addLabel: async (n: number, l: string) => { labels.push(`${n}:${l}`); }, comments: async () => comments, removeLabel: async (n: number, l: string) => { removed.push(`${n}:${l}`); } };
   const telegram = { sendMessage: async (_chat: string, text: string) => { sent.push(text); return 1; } };
   const cfg = { home: dir, repo: 'o/r', committeeChat: 'c', stageTimeoutMinutes: 30, ...CFG };
   const ctx = { cfg, github, telegram, statePath, now: () => NOW, log: () => undefined } as unknown as Ctx;
   const deps: TickDeps = { isAlive: () => alive, kill: async (_run, pid) => { killed.push(pid); }, spawn: (args) => { spawned.push(args); return 77; } };
-  return { ctx, sent, labels, deps, killed, spawned };
+  return { ctx, sent, labels, removed, deps, killed, spawned };
 }
 
 const job = (startedAt: string, stage: Job['stage'] = 'design', issue: number | null = 5): Job => ({ stage, issue, pid: 42, startedAt, log: '/l.log' });
@@ -123,5 +131,21 @@ describe('tick', () => {
     const started = readState(h.ctx.statePath).job;
     expect(started).toMatchObject({ stage: 'implement', issue: 8, pid: 77 });
     expect(started?.log).toMatch(/logs\/implement-8-2026-01-10T120000\.000Z\.log$/);
+  });
+
+  it('removes needs-info from an answered Triage card and starts its triage', async () => {
+    const asked = { login: 'bot', body: `${QUESTIONS_HEADING}\n\n1. What?\n\n${FACTORY_MARK}` };
+    const h = harness(null, false, [card(8, 'Triage', [NEEDS_INFO_LABEL])], [asked, { login: 'anna', body: 'This' }]);
+    await tick(h.ctx, '/code', h.deps);
+    expect(h.removed).toEqual([`8:${NEEDS_INFO_LABEL}`]);
+    expect(h.spawned).toEqual([['triage', '8']]);
+  });
+
+  it('keeps needs-info while nobody answered and starts nothing', async () => {
+    const asked = { login: 'bot', body: `${QUESTIONS_HEADING}\n\n1. What?\n\n${FACTORY_MARK}` };
+    const h = harness(null, false, [card(8, 'Triage', [NEEDS_INFO_LABEL])], [asked]);
+    await tick(h.ctx, '/code', h.deps);
+    expect(h.removed).toEqual([]);
+    expect(h.spawned).toEqual([]);
   });
 });

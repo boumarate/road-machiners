@@ -20,7 +20,7 @@ function fakeCtx(agent: (run: AgentRun) => void): Ctx {
   const fake = {
     cfg: { home, designModel: 'opus', buildModel: 'sonnet', repo: 'o/r' },
     github: {
-      issue: async () => ({ number: 7, title: 'Big horn', body: 'Add a horn', labels: [], createdAt: '', state: 'OPEN', thumbsUp: [] }),
+      issue: async () => ({ number: 7, title: 'Big horn', body: 'Add a horn', labels: [], createdAt: '', state: 'OPEN', author: 'anna', thumbsUp: [] }),
       comments: async () => [{ login: 'a', body: 'yes please' }],
       comment: record('comment'), addLabel: record('addLabel'), close: record('close'), move: record('move'),
     },
@@ -44,6 +44,31 @@ describe('design stage', () => {
     expect(calls).toContain('close 7 not planned');
     expect(calls).toContain('move 7 Done');
     expect(calls).not.toContain('push factory/issue-7');
+  });
+
+  it('asks the author, moves back to Triage and pushes nothing on questions', async () => {
+    const ctx = fakeCtx((run) => writeFileSync(`${run.clone}/.factory/questions.md`, 'Which horn?\n\n  How loud?\n'));
+    await runStage(ctx, 7);
+    const post = calls.find((call) => call.startsWith('comment 7 ## Questions from the factory')) ?? '';
+    expect(post).toContain('@anna');
+    expect(post).toContain('1. Which horn?\n2. How loud?');
+    expect(calls).toContain('addLabel 7 needs-info');
+    expect(calls.at(-1)).toBe('move 7 Triage');
+    expect(calls.filter((call) => call.startsWith('push'))).toEqual([]);
+  });
+
+  it('checks questions before wont-do and the plan', async () => {
+    const ctx = fakeCtx((run) => {
+      writeFileSync(`${run.clone}/.factory/questions.md`, 'Which horn?');
+      writeFileSync(`${run.clone}/.factory/wont-do.md`, 'No.');
+    });
+    await runStage(ctx, 7);
+    expect(calls).not.toContain('close 7 not planned');
+    expect(calls.at(-1)).toBe('move 7 Triage');
+  });
+
+  it('throws on an empty questions file', async () => {
+    await expect(runStage(fakeCtx((run) => writeFileSync(`${run.clone}/.factory/questions.md`, '\n')), 7)).rejects.toThrow('empty questions.md');
   });
 
   it('pushes and moves to Implementation on a plan', async () => {

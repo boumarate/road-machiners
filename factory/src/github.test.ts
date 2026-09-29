@@ -5,14 +5,14 @@ import type { FactoryConfig, Run, RunResult } from './types';
 const CFG = { repo: 'o/r', projectOwner: 'o', projectNumber: 3 } as FactoryConfig;
 const ok = (stdout: string): RunResult => ({ code: 0, stdout, stderr: '' });
 
-const RAW = (number: number) => ({ number, title: `t${number}`, body: '', labels: [{ name: 'bug' }], createdAt: '2026-01-01T00:00:00Z', state: 'OPEN' });
+const RAW = (number: number) => ({ number, title: `t${number}`, body: '', labels: [{ name: 'bug' }], createdAt: '2026-01-01T00:00:00Z', state: 'OPEN', author: { login: 'anna' } });
 
 function project(options: string[]): string {
   const field = { id: 'F1', options: options.map((name) => ({ id: `id-${name}`, name })) };
   return JSON.stringify({ data: { user: { projectV2: { id: 'P1', field } } } });
 }
 
-const ALL = ['Design', 'Implementation', 'Testing', 'Approval', 'Done'];
+const ALL = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'];
 
 function fake(calls: string[][], projectJson: string): Run {
   return async (_cmd, args) => {
@@ -38,8 +38,15 @@ describe('ghClient', () => {
   it('unions candidates by number and fills thumbs-up', async () => {
     const found = await ghClient(fake([], project(ALL)), CFG).candidates(['bug', 'feature-request']);
     expect(found.map((i) => i.number)).toEqual([1, 2, 3]);
+    expect(found[0].author).toBe('anna');
     expect(found[0].labels).toEqual(['bug']);
     expect(found[0].thumbsUp).toEqual(['anna', 'boss']);
+  });
+
+  it('ends every comment with the factory marker on its own line', async () => {
+    const calls: string[][] = [];
+    await ghClient(fake(calls, project(ALL)), CFG).comment(1, 'Hello');
+    expect(calls[0]).toEqual(['issue', 'comment', '1', '-R', 'o/r', '--body', 'Hello\n\n<!-- roam-factory -->']);
   });
 
   it('reads comments', async () => {
@@ -76,7 +83,7 @@ describe('ghClient', () => {
   });
 
   it('names a missing Status option', async () => {
-    const client = ghClient(fake([], project(['Design', 'Done'])), CFG);
+    const client = ghClient(fake([], project(['Triage', 'Design', 'Done'])), CFG);
     await expect(client.cards()).rejects.toThrow('"Implementation"');
   });
 

@@ -1,8 +1,8 @@
 // Shared types of the game factory. Every module codes against these, so stages, wrappers and tests agree.
 
-export type Column = 'Design' | 'Implementation' | 'Testing' | 'Approval' | 'Done';
+export type Column = 'Triage' | 'Design' | 'Implementation' | 'Testing' | 'Approval' | 'Done';
 
-export type CardStage = 'design' | 'implement' | 'testing';
+export type CardStage = 'triage' | 'design' | 'implement' | 'testing';
 export type PeriodicStage = 'release' | 'maintenance';
 export type Stage = CardStage | PeriodicStage | 'approve' | 'feedback' | 'change' | 'adhoc' | 'intake' | 'tick';
 
@@ -44,6 +44,7 @@ export type Issue = {
   labels: string[];
   createdAt: string; // ISO time
   state: 'OPEN' | 'CLOSED';
+  author: string; // login of the issue author
   thumbsUp: string[]; // logins that reacted +1
 };
 
@@ -135,4 +136,7 @@ export const WONT_DO_LABEL = 'wont-do';
 export const MAINTENANCE_LABEL = 'maintenance';
 export const ADHOC_LABEL = 'adhoc';
 export const CANDIDATE_LABELS = ['feature-request', 'bug'];
+export const NEEDS_INFO_LABEL = 'needs-info';
+export const FACTORY_MARK = '<!-- roam-factory -->'; // last line of every factory comment, so a factory comment differs from a member's
+export const QUESTIONS_HEADING = '## Questions from the factory';
 export const FEEDBACK_HEADING = '## Committee feedback';

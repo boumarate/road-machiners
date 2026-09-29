@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { isMarked } from './intake';
-import type { Issue } from './types';
+import { intake, isMarked } from './intake';
+import type { Ctx, Issue } from './types';
 
 const NOW = new Date('2026-01-10T12:00:00Z');
 const RULES = { minVotes: 3, minAgeHours: 24, committee: ['boss'] };
 
 function issue(over: Partial<Issue>): Issue {
-  return { number: 1, title: 't', body: '', labels: [], createdAt: '2026-01-01T00:00:00Z', state: 'OPEN', thumbsUp: [], ...over };
+  return { number: 1, title: 't', body: '', labels: [], createdAt: '2026-01-01T00:00:00Z', state: 'OPEN', author: 'anna', thumbsUp: [], ...over };
 }
 
 describe('isMarked', () => {
@@ -24,5 +24,24 @@ describe('isMarked', () => {
 
   it('rejects too few votes and no committee vote', () => {
     expect(isMarked(issue({ thumbsUp: ['a', 'b'] }), NOW, RULES)).toBe(false);
+  });
+});
+
+describe('intake', () => {
+  it('puts a marked issue in Triage and says so', async () => {
+    const calls: string[] = [];
+    const ctx = {
+      cfg: { home: 'tmp/factory-intake-none', minVotes: 3, minAgeHours: 24, committeeBootstrapTelegram: '1', committeeBootstrapGithub: 'boss' },
+      now: () => NOW,
+      log: () => undefined,
+      github: {
+        cards: async () => [],
+        candidates: async () => [issue({ number: 4, thumbsUp: ['boss'] }), issue({ number: 5 })],
+        addCard: async (n: number, column: string) => { calls.push(`addCard ${n} ${column}`); },
+        comment: async (n: number, body: string) => { calls.push(`comment ${n} ${body}`); },
+      },
+    } as unknown as Ctx;
+    expect(await intake(ctx)).toEqual([4]);
+    expect(calls).toEqual(['addCard 4 Triage', 'comment 4 The factory picked this up for triage.']);
   });
 });

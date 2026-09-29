@@ -7,10 +7,11 @@ import { runStage as implement } from './stages/implement';
 import { maintenance } from './stages/maintenance';
 import { release } from './stages/release';
 import { runStage as testing } from './stages/testing';
+import { runStage as triage } from './stages/triage';
 import { readState, updateState } from './state';
 import type { Ctx, JobStage } from './types';
 
-const CARD_STAGES = { design, implement, testing } as const;
+const CARD_STAGES = { triage, design, implement, testing } as const;
 
 // Runs one job to its end. Success or failure, the job slot and its queued command are cleared, so nothing retries.
 export async function runJob(ctx: Ctx, stage: JobStage, issue: number | null, codeDir: string): Promise<void> {

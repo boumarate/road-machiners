@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { changesSaveMajor } from '../save-guard';
-import { BRANCH, OUT_DIR, WORK_DIR, type CardStage, type Ctx } from '../types';
+import { BRANCH, NEEDS_INFO_LABEL, OUT_DIR, QUESTIONS_HEADING, WORK_DIR, type CardStage, type Ctx } from '../types';
 
 export const BASE_BRANCH = 'dev';
 
@@ -44,6 +44,15 @@ export function fillPrompt(name: string, vars: Record<string, string>): string {
 
 export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, model: string, prompt: string): Promise<void> {
   await ctx.container.agent({ clone: workDir(ctx, issue), model, prompt, log: agentLog(ctx, issue, stage) });
+}
+
+// Asks the issue author. The card stays where it is until a member answers on the issue.
+export async function askAuthor(ctx: Ctx, issue: number, questions: string[]): Promise<void> {
+  const { author } = await ctx.github.issue(issue);
+  const numbered = questions.map((question, index) => `${index + 1}. ${question}`);
+  const body = [QUESTIONS_HEADING, `@${author}`, numbered.join('\n'), 'The work continues once someone answers here.'].join('\n\n');
+  await ctx.github.comment(issue, body);
+  await ctx.github.addLabel(issue, NEEDS_INFO_LABEL);
 }
 
 // The agent may stop early and ask the committee for a decision.

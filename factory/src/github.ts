@@ -1,11 +1,12 @@
 import { must } from './exec';
+import { FACTORY_MARK } from './types';
 import type { Card, Column, FactoryConfig, GitHub, Issue, IssueComment, Run } from './types';
 
-const COLUMNS: Column[] = ['Design', 'Implementation', 'Testing', 'Approval', 'Done'];
-const ISSUE_FIELDS = 'number,title,body,labels,createdAt,state';
+const COLUMNS: Column[] = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'];
+const ISSUE_FIELDS = 'number,title,body,labels,createdAt,state,author';
 
 type Board = { projectId: string; fieldId: string; options: Record<string, string> };
-type RawIssue = Omit<Issue, 'labels' | 'thumbsUp'> & { labels: { name: string }[] };
+type RawIssue = Omit<Issue, 'labels' | 'thumbsUp' | 'author'> & { labels: { name: string }[]; author: { login: string } };
 type Vars = Record<string, string | number>;
 
 type BoardData = {
@@ -59,7 +60,7 @@ export function ghClient(run: Run, cfg: FactoryConfig): GitHub {
   }
 
   async function fill(raw: RawIssue): Promise<Issue> {
-    return { ...raw, labels: raw.labels.map((label) => label.name), thumbsUp: await thumbsUp(raw.number) };
+    return { ...raw, author: raw.author.login, labels: raw.labels.map((label) => label.name), thumbsUp: await thumbsUp(raw.number) };
   }
 
   async function list(label: string): Promise<RawIssue[]> {
@@ -137,7 +138,7 @@ export function ghClient(run: Run, cfg: FactoryConfig): GitHub {
       return rows.map((row) => JSON.parse(row) as IssueComment);
     },
     async comment(number, body) {
-      await gh(['issue', 'comment', String(number), '-R', repo, '--body', body]);
+      await gh(['issue', 'comment', String(number), '-R', repo, '--body', `${body}\n\n${FACTORY_MARK}`]);
     },
     async addLabel(number, label) {
       await gh(['label', 'create', label, '-R', repo, '--force']);

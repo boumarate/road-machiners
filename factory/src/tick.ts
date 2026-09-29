@@ -3,7 +3,8 @@ import { reportFailure } from './fail';
 import { intake } from './intake';
 import { isAlive, killJob, spawnJob } from './jobs';
 import { readState, updateState } from './state';
-import { ADHOC_LABEL, STUCK_LABEL } from './types';
+import { isAnswered } from './questions';
+import { ADHOC_LABEL, NEEDS_INFO_LABEL, STUCK_LABEL } from './types';
 import type { Card, Ctx, FactoryConfig, FactoryState, Job, JobStage, Run } from './types';
 
 export type JobPick = { stage: JobStage; issue: number | null };
@@ -12,7 +13,7 @@ type Due = Pick<FactoryConfig, 'releaseDays' | 'maintenanceHours'>;
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 const MINUTE_MS = 60_000;
-const CARD_ORDER: [Card['column'], JobStage][] = [['Testing', 'testing'], ['Implementation', 'implement'], ['Design', 'design']];
+const CARD_ORDER: [Card['column'], JobStage][] = [['Testing', 'testing'], ['Implementation', 'implement'], ['Design', 'design'], ['Triage', 'triage']];
 
 function isDue(last: string | null, now: Date, everyMs: number): boolean {
   return last === null || now.getTime() - new Date(last).getTime() > everyMs;
@@ -26,7 +27,7 @@ function queued(state: FactoryState): JobPick | null {
 }
 
 function openCards(cards: Card[]): Card[] {
-  return cards.filter((card) => !card.labels.includes(STUCK_LABEL));
+  return cards.filter((card) => !card.labels.includes(STUCK_LABEL) && !card.labels.includes(NEEDS_INFO_LABEL));
 }
 
 function adhocJob(cards: Card[]): JobPick | null {
@@ -98,12 +99,29 @@ function startJob(ctx: Ctx, codeDir: string, pick: JobPick, deps: TickDeps): voi
   ctx.log('tick', pick.issue, `started ${pick.stage}, pid ${pid}, log ${log}`);
 }
 
+// A Triage card that waits for answers gets its label back off once someone replies. Returns the cards as they stand after that.
+async function releaseAnswered(ctx: Ctx, cards: Card[]): Promise<Card[]> {
+  const released: Card[] = [];
+  for (const card of cards) {
+    const waiting = card.column === 'Triage' && card.labels.includes(NEEDS_INFO_LABEL);
+    if (!waiting || !isAnswered(await ctx.github.comments(card.issue))) {
+      released.push(card);
+      continue;
+    }
+    await ctx.github.removeLabel(card.issue, NEEDS_INFO_LABEL);
+    ctx.log('tick', card.issue, `answered, removed ${NEEDS_INFO_LABEL}`);
+    released.push({ ...card, labels: card.labels.filter((label) => label !== NEEDS_INFO_LABEL) });
+  }
+  return released;
+}
+
 // One tick: check the running job, run intake, start at most one job. `deps` defaults to the real process control.
 export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS): Promise<void> {
   const running = readState(ctx.statePath).job;
   if (running && (await checkJob(ctx, running, deps))) return;
   await intake(ctx);
-  const pick = chooseJob(readState(ctx.statePath), await ctx.github.cards(), ctx.now(), ctx.cfg);
+  const cards = await releaseAnswered(ctx, await ctx.github.cards());
+  const pick = chooseJob(readState(ctx.statePath), cards, ctx.now(), ctx.cfg);
   if (!pick) return ctx.log('tick', null, 'nothing to do');
   startJob(ctx, codeDir, pick, deps);
 }

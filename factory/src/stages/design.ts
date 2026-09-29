@@ -1,5 +1,5 @@
 import { BRANCH, TASK_FILE, WONT_DO_LABEL, type Ctx } from '../types';
-import { BASE_BRANCH, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
+import { BASE_BRANCH, askAuthor, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 import { existsSync, readFileSync } from 'node:fs';
 
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
@@ -11,11 +11,20 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const prompt = fillPrompt('design', { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) });
   await runAgent(ctx, issue, 'design', ctx.cfg.designModel, prompt);
   throwIfNeedsCommittee(clone);
+  const questions = readOutput(clone, 'questions.md');
+  if (questions !== null) return askBack(ctx, issue, questions);
   const reason = readOutput(clone, 'wont-do.md');
   if (reason !== null) return refuse(ctx, issue, reason);
   requirePlan(clone, TASK_FILE(issue));
   await guardAndPush(ctx, issue, BASE_BRANCH);
   await ctx.github.move(issue, 'Implementation');
+}
+
+async function askBack(ctx: Ctx, issue: number, text: string): Promise<void> {
+  const questions = text.split('\n').map((line) => line.trim()).filter((line) => line !== '');
+  if (questions.length === 0) throw new Error('The design stage wrote an empty questions.md');
+  await askAuthor(ctx, issue, questions);
+  await ctx.github.move(issue, 'Triage');
 }
 
 async function refuse(ctx: Ctx, issue: number, reason: string): Promise<void> {
