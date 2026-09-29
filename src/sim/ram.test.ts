@@ -1,6 +1,6 @@
 import { partDef } from '../data/parts';
 import { describe, expect, it } from 'vitest';
-import { corePart, mountedItems, mountedParts } from './grid';
+import { corePart, itemCells, mountedItems, mountedParts } from './grid';
 import { applyContactCrash, estimateCrashGeometry, forecastRam, ramHitChance, ramImpact, ramValue } from './crash-contact';
 import { RULES } from '../data/rules';
 import { thinkNpc } from './npc-activities';
@@ -23,7 +23,7 @@ function crashOf(w: World): Extract<GameEvent, { t: 'collision' }> {
 }
 
 const total = (hits: { damage: number }[]) => hits.reduce((a, h) => a + h.damage, 0);
-const partAt = (v: Vehicle, x: number, y: number) => mountedItems(v).find((it) => it.x === x && it.y === y)!.part;
+const partAt = (v: Vehicle, x: number, y: number) => mountedItems(v).find((it) => itemCells(it).some((c) => c.x === x && c.y === y))!.part;
 const partOf = (v: Vehicle, defId: string) => mountedParts(v).find((p) => p.defId === defId)!;
 
 // Moves the scout's ram bar from the nose to the tail mount.

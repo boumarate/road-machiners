@@ -5,7 +5,7 @@ import { fireSpans, laneCount, openSides, partLane, sideBlockers, sideToward, wa
 import { fireBlock, inArc, resolveDestroyed } from './combat';
 import { makePart } from './factory';
 import { advanceKnockout, checkKnockout } from './defeat';
-import { corePart, coreParts, gridOf, mountedItems, mountedParts } from './grid';
+import { corePart, coreParts, gridOf, itemCells, mountedItems, mountedParts } from './grid';
 import { vehicleStats } from './stats';
 import { maxHp } from './wear';
 import { leakFuel } from './supplies';
@@ -13,7 +13,7 @@ import { addVehicle, emptyWorld, npcBrain, rngStateWhere } from './testkit';
 import type { GridItem, Vehicle, World } from './types';
 
 const partAt = (v: Vehicle, x: number, y: number) =>
-  mountedItems(v).find((it) => it.x === x && it.y === y)!.part;
+  mountedItems(v).find((it) => itemCells(it).some((c) => c.x === x && c.y === y))!.part;
 const defOf = (v: Vehicle, defId: string) => mountedParts(v).find((p) => p.defId === defId)!;
 
 // A scout with plates on the nose: a 3x1 plate at (2,0), the engine at (2,1)-(3,2) behind it and the cab behind that.
@@ -295,7 +295,7 @@ describe('open sides', () => {
 
   it('an open seat blocks nothing', () => {
     const w = emptyWorld();
-    const v = truckWith(w, 'carrier', [{ defId: 'mg', x: 4, y: 5 }]);
+    const v = truckWith(w, 'carrier', [{ defId: 'mg', x: 5, y: 5 }]);
     expect(openSides(v, itemOf(v, 'mg'))).toContain('front');
   });
 

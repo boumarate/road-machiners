@@ -8,23 +8,25 @@ import { mountedItems, sideOf } from './grid';
 import { addVehicle, emptyWorld } from './testkit';
 import type { GridItem, Vehicle, World } from './types';
 
-// A 5 by 7 chassis. The nose is one cell wide, then steps out. The armor cells at (1,1), (3,1), (1,5) and (3,5) face
-// two ways, so they carry the letter of the front or rear. Wheels stand at (1,2), (3,2), (1,4) and (3,4).
+// A 5 by 8 chassis. The nose is one cell wide, then steps out. The armor cells at (1,1), (3,1), (1,6) and (3,6) face
+// two ways, so they carry the letter of the front or rear. The wheels are two cells long and stand at (1,2), (3,2),
+// (1,4) and (3,4), which leaves the middle column for the compact parts and the cab.
 //   row 0   '  F  '
 //   row 1   ' FDF '
-//   row 2   'LXXXR'   wheel, transmission, wheel
-//   row 3   'LXXDR'   tank, the two cell cab, a deck cell
-//   row 4   'LXXXR'   wheel, the rest of the cab, wheel
-//   row 5   ' BDB '
-//   row 6   '  B  '
+//   row 2   'LXXXR'   wheels, compact transmission
+//   row 3   'LXXXR'   wheels, the two cell cab
+//   row 4   'LXXXR'   wheels, the rest of the cab
+//   row 5   'LXXXR'   wheels, compact tank
+//   row 6   ' BDB '
+//   row 7   '  B  '
 const STEPPED = {
   ...CHASSIS.scout,
   id: 'stepped',
-  layout: ['  F  ', ' FDF ', 'LXXXR', 'LXXDR', 'LXXXR', ' BDB ', '  B  '],
+  layout: ['  F  ', ' FDF ', 'LXXXR', 'LXXXR', 'LXXXR', 'LXXXR', ' BDB ', '  B  '],
   core: [
-    { defId: 'transmission', x: 2, y: 2 },
-    { defId: 'tank', x: 1, y: 3 },
+    { defId: 'transmissionMini', x: 2, y: 2 },
     { defId: 'cabNarrow', x: 2, y: 3 },
+    { defId: 'tankMini', x: 2, y: 5 },
     { defId: 'wheel', x: 1, y: 2 },
     { defId: 'wheel', x: 3, y: 2 },
     { defId: 'wheel', x: 1, y: 4 },
@@ -73,8 +75,8 @@ describe('a stepped outline', () => {
 
   it('counts armor on a stepped cell for the side its letter names', () => {
     const w = emptyWorld();
-    const v = steppedWith(w, [{ defId: 'steelPlate', x: 1, y: 1 }, { defId: 'steelPlate', x: 3, y: 5 }, { defId: 'steelPlate', x: 0, y: 3 }]);
-    const sides = [plateAt(v, 1, 1), plateAt(v, 3, 5), plateAt(v, 0, 3)].map((it) => sideOf(v, it.part));
+    const v = steppedWith(w, [{ defId: 'steelPlate', x: 1, y: 1 }, { defId: 'steelPlate', x: 3, y: 6 }, { defId: 'steelPlate', x: 0, y: 3 }]);
+    const sides = [plateAt(v, 1, 1), plateAt(v, 3, 6), plateAt(v, 0, 3)].map((it) => sideOf(v, it.part));
     expect(sides).toEqual(['F', 'B', 'L']);
   });
 

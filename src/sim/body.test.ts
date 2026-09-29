@@ -1,11 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
+import { partDef, type CoreDef } from '../data/parts';
 import BASELINE from './body-baseline.json';
 import { bodyOf, cellCenter, cellRect, engineAnchor, lanesAt, surfaceAt } from './body';
 import { baseGrid } from './grid';
 
 const ids = Object.keys(CHASSIS);
+// The roles of the core parts that stand on a roof as high as the cab's or the model's top, like guns and frames do, since the
+// model has no lower place for them: a closed cargo area, a closed hull, or a cabin that fills the body between the wheels.
+const ROOFED: Record<string, string[]> = {
+  hauler: ['transmission', 'tank'],
+  van: ['transmission', 'tank'],
+  bus: ['transmission', 'tank'],
+  carrier: ['transmission', 'tank'],
+  buggy: ['transmission', 'tank'],
+  courier: ['transmission'],
+  jeep: ['transmission'],
+};
+// How far below the cab roof or the model top a part must stand to count as lower.
+const CLEAR = 0.15;
+
+const coreCellsOf = (id: string, role: CoreDef['role']) => CHASSIS[id].core.flatMap((c) => {
+  const def = partDef(c.defId) as CoreDef;
+  if (def.role !== role) return [];
+  const w = c.rot === 1 ? def.h : def.w;
+  const h = c.rot === 1 ? def.w : def.h;
+  return Array.from({ length: w * h }, (_, i) => ({ x: c.x + (i % w), y: c.y + Math.floor(i / w) }));
+});
 const cellsOf = (id: string, letter: string) => CHASSIS[id].layout.flatMap((row, y) => [...row].flatMap((ch, x) => (ch === letter ? [{ x, y }] : [])));
 
 describe('body from the base model', () => {
@@ -145,6 +167,31 @@ describe('grid and model correspondence', () => {
         const at = cellCenter(id, c.x, c.y);
         expect(Math.sign(at.x) * Math.sign(anchor.x) >= 0, `${id} engine cell ${c.x},${c.y} is in the wrong half along the truck`).toBe(true);
       }
+    }
+  });
+
+  it('stands the transmission and the tank below the cab roof and the model top, except on the roofed trucks', () => {
+    for (const id of ids) {
+      const inner = CHASSIS[id].layout.flatMap((row, y) => [...row].flatMap((ch, x) => ('DEX'.includes(ch) ? [{ x, y }] : [])));
+      const top = Math.max(...inner.map((c) => surfaceAt(id, cellRect(id, [c]))));
+      const cab = CHASSIS[id].core.map((c) => partDef(c.defId)).find((d): d is CoreDef => d.kind === 'core' && d.role === 'cab')!;
+      const cabTop = cab.tall ? surfaceAt(id, cellRect(id, coreCellsOf(id, 'cab'))) : Infinity;
+      for (const role of ['transmission', 'tank'] as const) {
+        const surface = surfaceAt(id, cellRect(id, coreCellsOf(id, role)));
+        if (ROOFED[id]?.includes(role)) {
+          expect(top - surface, `${id} ${role} is listed as roofed but stands ${top - surface} m below the top`).toBeLessThan(CLEAR);
+        } else {
+          expect(surface, `${id} ${role} stands too high`).toBeLessThanOrEqual(Math.min(top, cabTop) - CLEAR);
+        }
+      }
+    }
+  });
+
+  it('seats the engine in its hood hole, well below the model top', () => {
+    for (const id of ids) {
+      const inner = CHASSIS[id].layout.flatMap((row, y) => [...row].flatMap((ch, x) => ('DEX'.includes(ch) ? [{ x, y }] : [])));
+      const top = Math.max(...inner.map((c) => surfaceAt(id, cellRect(id, [c]))));
+      expect(top - engineAnchor(id).y, id).toBeGreaterThanOrEqual(CLEAR);
     }
   });
 

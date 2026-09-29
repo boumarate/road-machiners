@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS, type ChassisDef } from './chassis';
-import { partDef } from './parts';
+import { PARTS, partDef } from './parts';
 
 type Cell = { x: number; y: number };
 
@@ -83,5 +83,79 @@ describe('chassis grids', () => {
       expect([...armorTouched(c, coreCells(c, 'cab'))], `${id} cab`).toEqual([]);
       expect([...armorTouched(c, coreCells(c, 'tank'))], `${id} tank`).toEqual([]);
     }
+  });
+});
+
+// The chassis with too little room between the wheels for full size parts. They carry compact ones instead.
+const COMPACT_CORE: Record<string, string[]> = { buggy: ['transmissionMini', 'tankMini'] };
+const COMPACT_IDS = Object.values(COMPACT_CORE).flat();
+
+// Chassis with no free block of deck cells of the size, since their cores fill the low places of the model. See the
+// layout comments in src/data/chassis.ts for where each core lies.
+const NO_BLOCK_2X2 = ['scout', 'buggy', 'wagon', 'courier', 'jeep', 'convertible'];
+const NO_BLOCK_2X3 = ['wagon', 'convertible'];
+
+// True when the layout has a w by h block of cells that carry only the letter D, w across and h along the truck.
+function hasDeckBlock(c: ChassisDef, w: number, h: number): boolean {
+  for (let y = 0; y + h <= c.layout.length; y++) {
+    for (let x = 0; x + w <= c.layout[0].length; x++) {
+      const cells = Array.from({ length: w * h }, (_, i) => letterAt(c, x + (i % w), y + Math.floor(i / w)));
+      if (cells.every((ch) => ch === 'D')) return true;
+    }
+  }
+  return false;
+}
+
+describe('core part sizes', () => {
+  const parts = Object.values(PARTS);
+
+  it('gives every transmission 2 by 2 cells, except the compact one', () => {
+    for (const p of parts.filter((d) => d.kind === 'core' && d.role === 'transmission')) {
+      expect([p.w, p.h], p.id).toEqual(COMPACT_IDS.includes(p.id) ? [1, 1] : [2, 2]);
+    }
+  });
+
+  it('gives every fuel tank two cells along the truck, except the compact one', () => {
+    for (const p of parts.filter((d) => d.kind === 'core' && d.role === 'tank')) {
+      expect([p.w, p.h], p.id).toEqual(COMPACT_IDS.includes(p.id) ? [1, 1] : [1, 2]);
+    }
+  });
+
+  it('gives every engine at least 2 by 2 cells', () => {
+    for (const p of parts.filter((d) => d.kind === 'engine')) {
+      expect(p.w, p.id).toBeGreaterThanOrEqual(2);
+      expect(p.h, p.id).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('uses the compact parts only on the chassis that list them', () => {
+    for (const [id, c] of Object.entries(CHASSIS)) {
+      const used = c.core.map((k) => k.defId).filter((d) => COMPACT_IDS.includes(d)).sort();
+      expect(used, id).toEqual([...(COMPACT_CORE[id] ?? [])].sort());
+    }
+  });
+
+  it('gives every chassis an engine bay that holds the biggest engine', () => {
+    const engines = parts.filter((d) => d.kind === 'engine');
+    const w = Math.max(...engines.map((d) => d.w));
+    const h = Math.max(...engines.map((d) => d.h));
+    for (const [id, c] of Object.entries(CHASSIS)) {
+      const bay = new Set(engineCells(c).map((cell) => `${cell.x},${cell.y}`));
+      const fits = [...bay].some((key) => {
+        const [x, y] = key.split(',').map(Number);
+        return Array.from({ length: w * h }, (_, i) => `${x + (i % w)},${y + Math.floor(i / w)}`).every((k) => bay.has(k));
+      });
+      expect(fits, id).toBe(true);
+    }
+  });
+});
+
+describe('deck blocks for the bigger guns', () => {
+  it('keeps a free 2 by 2 block of deck cells on every chassis but the listed ones', () => {
+    for (const [id, c] of Object.entries(CHASSIS)) expect(hasDeckBlock(c, 2, 2), id).toBe(!NO_BLOCK_2X2.includes(id));
+  });
+
+  it('keeps a free 2 across by 3 along block of deck cells on every tier 2 and 3 chassis but the listed ones', () => {
+    for (const [id, c] of Object.entries(CHASSIS).filter(([, ch]) => ch.tier >= 2)) expect(hasDeckBlock(c, 2, 3), id).toBe(!NO_BLOCK_2X3.includes(id));
   });
 });

@@ -224,8 +224,8 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     base: 180,
     tier: 1,
     w: 2,
-    h: 1,
-    mass: 180,
+    h: 2,
+    mass: 224,
     armor: 2,
     tall: false,
     speedBonus: -1.3,
@@ -666,14 +666,18 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     id: "cabWide", kind: "core", name: "Cab", hp: 120, base: 80, tier: 1, w: 5, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
   },
   transmission: {
-    id: "transmission", kind: "core", name: "Transmission", hp: 40, base: 110, tier: 1, w: 1, h: 1, mass: 60, armor: 3, tall: false, role: "transmission",
+    id: "transmission", kind: "core", name: "Transmission", hp: 40, base: 110, tier: 1, w: 2, h: 2, mass: 60, armor: 3, tall: false, role: "transmission",
+  },
+  // The buggy has two free columns between its wheels, too few for a full size transmission and tank.
+  transmissionMini: {
+    id: "transmissionMini", kind: "core", name: "Compact transmission", hp: 40, base: 110, tier: 1, w: 1, h: 1, mass: 60, armor: 3, tall: false, role: "transmission",
   },
   // Van and hauler drive parts, and the heavy ones of the gunwagon, carrier, tractor and longbed.
   transmissionMid: {
-    id: "transmissionMid", kind: "core", name: "Truck transmission", hp: 60, base: 110, tier: 1, w: 1, h: 1, mass: 60, armor: 4, tall: false, role: "transmission",
+    id: "transmissionMid", kind: "core", name: "Truck transmission", hp: 60, base: 110, tier: 1, w: 2, h: 2, mass: 60, armor: 4, tall: false, role: "transmission",
   },
   transmissionHeavy: {
-    id: "transmissionHeavy", kind: "core", name: "Heavy transmission", hp: 90, base: 110, tier: 1, w: 1, h: 1, mass: 60, armor: 6, tall: false, role: "transmission",
+    id: "transmissionHeavy", kind: "core", name: "Heavy transmission", hp: 90, base: 110, tier: 1, w: 2, h: 2, mass: 60, armor: 6, tall: false, role: "transmission",
   },
   wheel: {
     id: "wheel", kind: "core", name: "Wheel", hp: 30, base: 10, tier: 1, w: 1, h: 2, mass: 25, armor: 2, tall: false, role: "wheel",
@@ -685,19 +689,22 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   wheelHeavy: {
     id: "wheelHeavy", kind: "core", name: "Heavy wheel", hp: 80, base: 10, tier: 1, w: 1, h: 2, mass: 25, armor: 5, tall: false, role: "wheel",
   },
-  // The small tank fits the scout, the buggy, the courier and the jeep. The convertible carries the long tank.
+  // The small tank fits the scout, the buggy, the courier and the jeep. The convertible carries the long tank. All tanks lie two cells along the truck.
   tank: {
-    id: "tank", kind: "core", name: "Small fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 1, mass: 30, armor: 1, tall: false, role: "tank",
+    id: "tank", kind: "core", name: "Small fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 1, tall: false, role: "tank",
+  },
+  tankMini: {
+    id: "tankMini", kind: "core", name: "Compact fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 1, mass: 30, armor: 1, tall: false, role: "tank",
   },
   tankLong: {
-    id: "tankLong", kind: "core", name: "Fuel tank", hp: 30, base: 30, tier: 1, w: 2, h: 1, mass: 30, armor: 1, tall: false, role: "tank",
+    id: "tankLong", kind: "core", name: "Fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 1, tall: false, role: "tank",
   },
   // Van and hauler drive parts, and the heavy ones of the gunwagon, carrier, tractor and longbed.
   tankMid: {
-    id: "tankMid", kind: "core", name: "Truck fuel tank", hp: 50, base: 30, tier: 1, w: 2, h: 1, mass: 30, armor: 3, tall: false, role: "tank",
+    id: "tankMid", kind: "core", name: "Truck fuel tank", hp: 50, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 3, tall: false, role: "tank",
   },
   tankHeavy: {
-    id: "tankHeavy", kind: "core", name: "Armored fuel tank", hp: 80, base: 30, tier: 1, w: 2, h: 1, mass: 30, armor: 6, tall: false, role: "tank",
+    id: "tankHeavy", kind: "core", name: "Armored fuel tank", hp: 80, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 6, tall: false, role: "tank",
   },
   scanner: {
     id: "scanner",
