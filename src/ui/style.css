@@ -411,6 +411,23 @@ body {
 .weapon-pick [data-status] {
   font: 10px / 1.2 var(--font-mono);
 }
+.weapon-ammo-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 2px;
+}
+.weapon-ammo {
+  font: 11px var(--font-mono);
+  color: #e5c47c;
+}
+#ui .weapon-reload {
+  padding: 1px 4px;
+}
+.weapon-reload .icon {
+  width: 16px;
+  height: 16px;
+}
 .weapon-target {
   font-size: 10px;
   max-width: 100%;

@@ -15,6 +15,7 @@ import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } 
 import type { GameEvent, Vehicle, World } from './types';
 import { dist } from './vec';
 import { endTurn } from './world';
+import { gunFor } from './factory';
 
 function duel(targetPos = { x: 33, y: 30 }) {
   const w = emptyWorld();
@@ -46,12 +47,12 @@ describe('combat', () => {
     expect(w.events.filter((e) => e.t === 'shot')).toHaveLength(0);
   });
 
-  it('fires in range and starts reload', () => {
+  it('fires in range and starts the cooldown', () => {
     const { w, me, buggy, mg } = duel();
     order(me, mg.part.id, buggy.id);
     fireWeapons(w);
     expect(w.events.some((e) => e.t === 'shot' && e.shooter === me.id)).toBe(true);
-    expect(mg.part.reload).toBe(mg.def.reload - 1);
+    expect(mg.part.gun?.cooldown).toBe(mg.def.cooldown - 1);
   });
 
   it('forward arc blocks shots to the side', () => {
@@ -59,8 +60,8 @@ describe('combat', () => {
     const me = w.vehicles[0];
     me.chassisId = 'hauler';
     me.items = [
-      { id: 'i1', x: 0, y: 0, rot: 0, kind: 'part', part: { id: 'c1', defId: 'cannon', hp: 30, reload: 0, wear: 0 } },
-      { id: 'i2', x: 4, y: 0, rot: 0, kind: 'part', part: { id: 'e1', defId: 'stockEngine', hp: 25, reload: 0, wear: 0 } },
+      { id: 'i1', x: 0, y: 0, rot: 0, kind: 'part', part: { id: 'c1', defId: 'cannon', hp: 30, wear: 0, ...gunFor('cannon') } },
+      { id: 'i2', x: 4, y: 0, rot: 0, kind: 'part', part: { id: 'e1', defId: 'stockEngine', hp: 25, wear: 0 } },
     ];
     const side = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 35 });
     order(me, 'c1', side.id);
@@ -68,7 +69,7 @@ describe('combat', () => {
     expect(w.events.some((e) => e.t === 'shot' && e.shooter === me.id)).toBe(false);
   });
 
-  it('cannon reloads for several turns', () => {
+  it('cannon cools down for several turns', () => {
     const w = emptyWorld();
     const me = cannonHauler(w);
     const t = addVehicle(w, 'raiders', 'wagon', ['cannon', 'stockEngine', 'plates'], { x: 35, y: 30 }, Math.PI);
@@ -97,7 +98,7 @@ describe('combat', () => {
     gun.hp = 1;
     order(me, mg.part.id, buggy.id, gun.id);
     for (let i = 0; i < 40 && gun.hp > 0; i++) {
-      mg.part.reload = 0;
+      Object.assign(mg.part, gunFor(mg.part.defId));
       fireWeapons(w);
     }
     expect(gun.hp).toBe(0);
@@ -301,7 +302,7 @@ describe('rounds', () => {
     let mixed = false;
     for (let i = 0; i < 20; i++) {
       w.events = [];
-      mg.part.reload = 0;
+      Object.assign(mg.part, gunFor(mg.part.defId));
       fireWeapons(w);
       const [shot] = shotsBy(w.events, me.id);
       expect(shot.rounds).toHaveLength(mg.def.rounds);
@@ -321,7 +322,7 @@ describe('rounds', () => {
     let plainDamage = 0;
     for (let i = 0; i < 400; i++) {
       w.events = [];
-      mg.part.reload = 0;
+      Object.assign(mg.part, gunFor(mg.part.defId));
       fireWeapons(w);
       for (const r of shotsBy(w.events, me.id)[0].rounds) {
         if (!r.hit) continue;
@@ -344,7 +345,7 @@ describe('rounds', () => {
     let rounds = 0;
     for (let i = 0; i < 300; i++) {
       w.events = [];
-      mg.part.reload = 0;
+      Object.assign(mg.part, gunFor(mg.part.defId));
       fireWeapons(w);
       for (const r of shotsBy(w.events, me.id)[0].rounds) {
         rounds++;
@@ -367,7 +368,7 @@ describe('rounds', () => {
     const struck = new Set<string>();
     for (let i = 0; i < 300; i++) {
       w.events = [];
-      mg.part.reload = 0;
+      Object.assign(mg.part, gunFor(mg.part.defId));
       fireWeapons(w);
       for (const r of shotsBy(w.events, me.id)[0].rounds) {
         rounds++;
@@ -418,7 +419,7 @@ describe('rounds', () => {
     let splashed = false;
     for (let i = 0; i < 60 && !splashed; i++) {
       w.events = [];
-      cannon.part.reload = 0;
+      Object.assign(cannon.part, gunFor(cannon.part.defId));
       fireWeapons(w);
       const miss = shotsBy(w.events, me.id)[0].rounds.find((r) => !r.hit);
       if (miss && miss.hits.length > 0) splashed = true;
@@ -477,7 +478,8 @@ describe('NPC attack records and defensive fire', () => {
       fireWeapons(w);
       expect(w.events.some((e) => e.t === 'shot' && e.target === target.id)).toBe(true);
       getResources(w, target).health = RULES.maxHealth;
-      mountedParts(raider, 'weapon')[0].reload = 0;
+      const gun = mountedParts(raider, 'weapon')[0];
+      Object.assign(gun, gunFor(gun.defId));
     };
     shootAt(far);
     expect(npc.brain!.attackers).toEqual({});
@@ -517,7 +519,7 @@ describe('hit practice', () => {
     let hits = 0;
     for (let i = 0; i < 10; i++) {
       w.events = [];
-      mg.part.reload = 0;
+      Object.assign(mg.part, gunFor(mg.part.defId));
       order(me, mg.part.id, buggy.id);
       fireWeapons(w);
       const shot = w.events.find((e) => e.t === 'shot' && e.shooter === me.id);
@@ -535,7 +537,7 @@ describe('hit practice', () => {
     const { w, me, buggy } = duel();
     const gun = vehicleStats(w, buggy).weapons[0];
     for (let i = 0; i < 10; i++) {
-      gun.part.reload = 0;
+      Object.assign(gun.part, gunFor(gun.part.defId));
       order(buggy, gun.part.id, me.id);
       fireWeapons(w);
     }

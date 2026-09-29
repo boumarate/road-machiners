@@ -4,7 +4,7 @@ import { addState } from "../sim/states";
 import { vehicleStats } from "../sim/stats";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import { refreshVision } from "../sim/vision";
-import { getWeaponReadout, toggleTarget, vehicleMarks } from "./weapons";
+import { canForceReload, getWeaponReadout, toggleTarget, vehicleMarks } from "./weapons";
 
 function createDuel() {
   const world = emptyWorld();
@@ -41,11 +41,21 @@ describe("weapon readout at current positions", () => {
     });
   });
 
-  it("shows remaining reload turns without implying a shot can fire", () => {
+  it("shows remaining cooldown turns without implying a shot can fire", () => {
     const { world, gun } = createDuel();
-    gun.part.reload = 2;
+    gun.part.gun = { cooldown: 2, ammo: 1, reloadWork: 0 };
     expect(getWeaponReadout(world, gun)).toMatchObject({
-      status: "reload 2 turns",
+      status: "ready in 2 turns",
+      chance: null,
+      canFire: false,
+    });
+  });
+
+  it("shows remaining reload turns for an empty gun", () => {
+    const { world, gun } = createDuel();
+    gun.part.gun = { cooldown: 0, ammo: 0, reloadWork: 1 };
+    expect(getWeaponReadout(world, gun)).toMatchObject({
+      status: `reloading ${gun.def.reload - 1} ${gun.def.reload - 1 === 1 ? "turn" : "turns"}`,
       chance: null,
       canFire: false,
     });
@@ -90,10 +100,19 @@ describe("weapon readout at current positions", () => {
     expect(world.vehicles).toContain(target);
   });
 
+  it("offers a forced reload only for a partly spent magazine", () => {
+    const { gun } = createDuel();
+    expect(canForceReload(gun)).toBe(false);
+    gun.part.gun = { cooldown: 0, ammo: 1, reloadWork: 0 };
+    expect(canForceReload(gun)).toBe(true);
+    gun.part.gun = { cooldown: 0, ammo: 0, reloadWork: 0 };
+    expect(canForceReload(gun)).toBe(false);
+  });
+
   it("keeps disabled status ahead of reload", () => {
     const { world, gun } = createDuel();
     gun.part.hp = 0;
-    gun.part.reload = 2;
+    gun.part.gun = { cooldown: 2, ammo: 1, reloadWork: 0 };
     expect(getWeaponReadout(world, gun)).toMatchObject({
       status: "disabled",
       chance: null,

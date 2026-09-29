@@ -34,8 +34,14 @@ export function newId(world: World, prefix: string): string {
 // A part at the given wear step, at full HP for that step.
 export function makePart(world: World, defId: string, wear: number): PartInstance {
   if (!Number.isInteger(wear) || wear < 0 || wear > CONDITION.maxWear) throw new Error(`Bad wear ${wear} for a new ${defId}`);
-  const part: PartInstance = { id: newId(world, 'p'), defId, hp: 0, reload: 0, wear };
+  const part: PartInstance = { id: newId(world, 'p'), defId, hp: 0, wear, ...gunFor(defId) };
   return { ...part, hp: maxHp(part) };
+}
+
+// A weapon starts with a full magazine. Other parts carry no gun state.
+export function gunFor(defId: string): Pick<PartInstance, 'gun'> {
+  const def = partDef(defId);
+  return def.kind === 'weapon' ? { gun: { cooldown: 0, ammo: def.magazine, reloadWork: 0 } } : {};
 }
 
 // Places the chassis's built-in parts at their fixed cells. Throws if a spot is taken or is not built-in cells.

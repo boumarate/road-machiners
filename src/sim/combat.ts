@@ -20,13 +20,15 @@ import { getResources } from './resources';
 import { chance, gauss, randRange } from './rng';
 import { vehicleMass } from './mass';
 import { vehicleStats, type MountedWeapon } from './stats';
-import type { Aim, NpcActivity, ShotRound, Vehicle, World } from './types';
+import { partDef, type WeaponDef } from '../data/parts';
+import type { Aim, GunState, NpcActivity, PartInstance, ShotRound, Vehicle, World } from './types';
 import { weatherAt } from './weather';
 import { angleDiff, bearing, clamp, dist, DEG, type Vec } from './vec';
 
 export type FireBlock =
   | "disabled"
-  | "reloading"
+  | "cooldown"
+  | "empty"
   | "range"
   | "arc"
   | "blocked"
@@ -105,8 +107,47 @@ export function fireBlock(
 
 function weaponBlock(mw: MountedWeapon): FireBlock | null {
   if (mw.part.hp <= 0) return "disabled";
-  if (mw.part.reload > 0) return "reloading";
+  const gun = gunOf(mw.part);
+  if (gun.ammo <= 0) return "empty";
+  if (gun.cooldown > 0) return "cooldown";
   return null;
+}
+
+// The fire state of a weapon part. Every weapon part has one.
+export function gunOf(part: PartInstance): GunState {
+  if (!part.gun) throw new Error(`Weapon part ${part.id} has no gun state`);
+  return part.gun;
+}
+
+// Drops the rest of the magazine, so the gun reloads from empty.
+export function dropMagazine(part: PartInstance): void {
+  const gun = gunOf(part);
+  gun.ammo = 0;
+  gun.reloadWork = 0;
+}
+
+// After the fire phase. Cooldown counts down. A gun that did not fire works one turn on its reload when it is empty
+// or was not cooling down this turn, and a full reload fills the magazine.
+function tickGuns(world: World, fired: Set<string>): void {
+  for (const v of world.vehicles)
+    for (const part of mountedParts(v, "weapon")) tickGun(part, fired.has(part.id));
+}
+
+function worksReload(gun: GunState, def: WeaponDef, fired: boolean, cooling: boolean): boolean {
+  if (fired || gun.ammo >= def.magazine) return false;
+  return gun.ammo === 0 || !cooling;
+}
+
+function tickGun(part: PartInstance, fired: boolean): void {
+  const def = partDef(part.defId) as WeaponDef;
+  const gun = gunOf(part);
+  const cooling = gun.cooldown > 0;
+  if (cooling) gun.cooldown--;
+  if (!worksReload(gun, def, fired, cooling)) return;
+  gun.reloadWork++;
+  if (gun.reloadWork < def.reload) return;
+  gun.ammo = def.magazine;
+  gun.reloadWork = 0;
 }
 
 // Two trucks on a radio call hold fire at each other.
@@ -390,16 +431,24 @@ export function fireWeapons(world: World): void {
     }
   }
   for (const s of shots) applyShot(world, s);
-  // Reload counts down at the end of the fire phase, so reload 1 means ready every turn.
-  for (const v of world.vehicles)
-    for (const p of mountedParts(v, "weapon")) if (p.reload > 0) p.reload--;
+  // Cooldown counts down at the end of the fire phase, so cooldown 1 means ready every turn.
+  tickGuns(world, new Set(shots.map((s) => s.mw.part.id)));
+}
+
+// A shot takes one round from the magazine and starts the cooldown. The last round pushes an empty event.
+function spendShot(world: World, s: Shot): void {
+  const gun = gunOf(s.mw.part);
+  gun.cooldown = s.mw.def.cooldown;
+  gun.ammo--;
+  gun.reloadWork = 0;
+  if (gun.ammo === 0) world.events.push({ t: "empty", vehicle: s.shooter.id, weapon: s.mw.part.id });
 }
 
 // A hit enters the lane under its offset, or the aimed part's lane. An aimed miss that lands on the truck enters
 // the lane under its offset. A miss off the truck with splash hits every lane of the struck side whose center
 // lies within the splash radius of where it landed.
 function applyShot(world: World, s: Shot): void {
-  s.mw.part.reload = s.mw.def.reload;
+  spendShot(world, s);
   // A shot counts as an attack even when it misses: the target and witnesses saw it fired at them.
   noteAttack(world, s.shooter, s.target, !isHostile(world, s.target, s.shooter));
   const r = s.mw.def.round;

@@ -26,7 +26,7 @@ function spotOn(chassisId: string, defId: string, letter: Cell, items: GridItem[
   for (const rot of [0, 1] as const) {
     for (let y = 0; y < g.h; y++) {
       for (let x = 0; x < g.w; x++) {
-        const item: GridItem = { id: 'probe', x, y, rot, kind: 'part', part: { id: 'probe', defId, hp: 1, reload: 0, wear: 0 } };
+        const item: GridItem = { id: 'probe', x, y, rot, kind: 'part', part: { id: 'probe', defId, hp: 1, wear: 0 } };
         const cells = itemCells(item);
         if (cells.every((c) => g.cells[c.y]?.[c.x] === letter && !taken.has(`${c.x},${c.y}`))) return item;
       }

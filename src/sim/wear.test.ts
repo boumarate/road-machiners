@@ -172,7 +172,7 @@ describe('wear', () => {
 });
 
 function part(defId: string, wear: number, hp = partDef(defId).hp): PartInstance {
-  return { id: 'p1', defId, hp, reload: 0, wear };
+  return { id: 'p1', defId, hp, wear };
 }
 
 // Source files of src/sim/ keyed by path, without tests.

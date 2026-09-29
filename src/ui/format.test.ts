@@ -8,7 +8,7 @@ import { contractDue, contractSummary, eventText, jobLabel, roundLabel, wearLabe
 import { mountedParts } from "../sim/grid";
 
 function part(wear: number): PartInstance {
-  return { id: "p1", defId: "mg", hp: 10, reload: 0, wear };
+  return { id: "p1", defId: "mg", hp: 10, wear };
 }
 
 describe("wearLabel", () => {

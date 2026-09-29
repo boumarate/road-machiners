@@ -25,10 +25,14 @@ export type PartInstance = {
   id: string;
   defId: string;
   hp: number;
-  reload: number;
+  gun?: GunState; // weapons only
   wear: number; // wear steps from breaking, 0 for pristine. See src/sim/condition.ts.
   rebuilt?: true; // a junk part rebuilt to the last wear step, which cannot be rebuilt again; see src/sim/wear.ts
 };
+
+// A weapon's fire state. cooldown counts turns to the next shot. reloadWork counts turns toward a full magazine,
+// and firing resets it. See src/sim/combat.ts.
+export type GunState = { cooldown: number; ammo: number; reloadWork: number };
 
 // An item in a vehicle's inventory grid. x and y are the top-left cell. rot 1 swaps width and height.
 // A part works only while it lies fully on mount cells of its kind. Each good unit takes one cell.
@@ -335,6 +339,7 @@ export type ShotRound = {
 export type GameEvent =
   | { t: 'activity'; vehicle: string; previous: NpcActivity['kind'] | null; activity: NpcActivity['kind'] | null; reason: string }
   | { t: 'collision'; a: string; b: string; hitsA: PartHit[]; hitsB: PartHit[] } // parts damaged on a and on b; hitsB is empty when b is not a vehicle
+  | { t: 'empty'; vehicle: string; weapon: string }
   | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; chance: number; side: Side; rounds: ShotRound[] }
   | { t: 'guardShot'; site: string; from: Vec; target: string; rounds: ShotRound[] }
   | { t: 'partDisabled'; vehicle: string; part: string }

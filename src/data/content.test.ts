@@ -47,6 +47,15 @@ const addedChassis = ["courier", "van", "longbed", "carrier", "tractor", "jeep",
 const rearEngineChassis = ["jeep", "convertible", "bus", "loader"];
 
 describe("equipment variety", () => {
+  it("gives every weapon a magazine and a reload time", () => {
+    for (const part of Object.values(PARTS)) {
+      if (part.kind !== "weapon") continue;
+      expect(Number.isInteger(part.magazine) && part.magazine > 0, `${part.id} magazine`).toBe(true);
+      expect(Number.isInteger(part.reload) && part.reload > 0, `${part.id} reload`).toBe(true);
+      expect(Number.isInteger(part.cooldown) && part.cooldown > 0, `${part.id} cooldown`).toBe(true);
+    }
+  });
+
   it("gives every mounted weapon its extended range", () => {
     const ranges = Object.fromEntries(
       Object.values(PARTS)

@@ -1,6 +1,6 @@
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
-import { fireBlock, hitOdds, type FireBlock } from "../sim/combat";
+import { fireBlock, gunOf, hitOdds, type FireBlock } from "../sim/combat";
 import { isKnockedOut } from "../sim/defeat";
 import { playerVehicle } from "../sim/damage";
 import { mountedParts } from "../sim/grid";
@@ -8,7 +8,7 @@ import { vehicleStats, type MountedWeapon } from "../sim/stats";
 import type { Vehicle, World } from "../sim/types";
 import { playerSees } from "../sim/vision";
 import { workOf } from "../sim/states";
-import { playerCanAct, setAutoFire, setWeaponOrder } from "../sim/world";
+import { playerCanAct, reloadWeapon, setAutoFire, setWeaponOrder } from "../sim/world";
 import { el, panel } from "./dom";
 import { meters } from "./units";
 import type { UiHost } from "./host";
@@ -19,7 +19,8 @@ import { workLabel, workProgress } from "./format";
 
 export const BLOCK_TEXT: Record<FireBlock, string> = {
   disabled: "disabled",
-  reloading: "reloading",
+  cooldown: "cooling down",
+  empty: "reloading",
   range: "out of range",
   arc: "out of arc",
   blocked: "view blocked on truck",
@@ -76,6 +77,29 @@ export function toggleTarget(w: World, weapons: MountedWeapon[], target: Vehicle
   return w;
 }
 
+function turns(n: number): string {
+  return `${n} ${n === 1 ? "turn" : "turns"}`;
+}
+
+// Why a gun cannot fire, with the turns left for a cooldown or a reload.
+export function blockText(mw: MountedWeapon, block: FireBlock): string {
+  const gun = gunOf(mw.part);
+  if (block === "cooldown") return `ready in ${turns(gun.cooldown)}`;
+  if (block === "empty") return `reloading ${turns(mw.def.reload - gun.reloadWork)}`;
+  return BLOCK_TEXT[block];
+}
+
+// Rounds left in the magazine, like "3/5".
+export function ammoText(mw: MountedWeapon): string {
+  return `${gunOf(mw.part).ammo}/${mw.def.magazine}`;
+}
+
+// A forced reload helps only a gun with a partly spent magazine.
+export function canForceReload(mw: MountedWeapon): boolean {
+  const ammo = gunOf(mw.part).ammo;
+  return mw.part.hp > 0 && ammo > 0 && ammo < mw.def.magazine;
+}
+
 // Current-position feedback shared by the weapon buttons and map markers.
 export function getWeaponReadout(w: World, mw: MountedWeapon) {
   const me = playerVehicle(w);
@@ -85,12 +109,7 @@ export function getWeaponReadout(w: World, mw: MountedWeapon) {
     : null;
   const target = assigned && playerSees(w, assigned.pos) ? assigned : null;
   const block = fireBlock(w, me, mw, assigned);
-  const status =
-    block === "reloading"
-      ? `reload ${mw.part.reload} ${mw.part.reload === 1 ? "turn" : "turns"}`
-      : block
-        ? BLOCK_TEXT[block]
-        : "ready";
+  const status = block ? blockText(mw, block) : "ready";
   return {
     target,
     status,
@@ -169,7 +188,7 @@ export class WeaponPanel {
       el(
         "div",
         { class: "weapon-slots" },
-        ...weapons.map((mw, i) => this.renderSlot(w, mw, i)),
+        ...weapons.map((mw, i) => this.renderSlot(w, mw, i, locked)),
       ),
       weapons.length === 0 ? el("div", { class: "dim" }, "No weapons installed") : null,
       chosen ? this.renderDetail(w, chosen) : null,
@@ -188,7 +207,7 @@ export class WeaponPanel {
     );
   }
 
-  private renderSlot(w: World, mw: MountedWeapon, i: number): HTMLElement {
+  private renderSlot(w: World, mw: MountedWeapon, i: number, locked: boolean): HTMLElement {
     const readout = getWeaponReadout(w, mw);
     const selected = this.host.selectedWeapon() === mw.part.id;
     const chance =
@@ -207,7 +226,7 @@ export class WeaponPanel {
           class: `weapon-pick ${selected ? "on" : ""}`,
           "aria-pressed": String(selected),
           'aria-label': `${mw.def.name}: ${readout.status}, ${target}`,
-          title: `${mw.def.name}: ${mw.def.rounds} × ${Number((mw.def.round.damage * RULES.weaponDamage).toFixed(1))} damage, pen ${mw.def.round.pen}, range ${meters(mw.def.range)} m, arc ${mw.def.arc}°, fires every ${mw.def.reload} turn(s)`,
+          title: `${mw.def.name}: ${mw.def.rounds} × ${Number((mw.def.round.damage * RULES.weaponDamage).toFixed(1))} damage, pen ${mw.def.round.pen}, range ${meters(mw.def.range)} m, arc ${mw.def.arc}°, fires every ${mw.def.cooldown} turn(s), ${mw.def.magazine} shots, reloads in ${mw.def.reload} turn(s)`,
           onclick: () => this.selectWeapon(selected ? null : mw.part.id),
         },
         el('span', { class: 'weapon-number' }, `${i + 1}`),
@@ -220,8 +239,33 @@ export class WeaponPanel {
         ),
         el("span", { class: "weapon-target" }, target),
       ),
-
+      this.renderAmmo(mw, locked),
     );
+  }
+
+  // Rounds left and the button that forces a reload.
+  private renderAmmo(mw: MountedWeapon, locked: boolean): HTMLElement {
+    return el(
+      "div",
+      { class: "weapon-ammo-row" },
+      el("span", { class: "weapon-ammo", title: "Rounds in the magazine" }, ammoText(mw)),
+      el(
+        "button",
+        {
+          class: "weapon-reload",
+          disabled: locked || !canForceReload(mw),
+          title: `Reload: drop the magazine and refill it in ${turns(mw.def.reload)}`,
+          "aria-label": `Reload ${mw.def.name}`,
+          onclick: () => this.forceReload(mw.part.id),
+        },
+        createIcon("reload"),
+      ),
+    );
+  }
+
+  private forceReload(weaponId: string): void {
+    if (this.host.getTurnPhase() !== null) return;
+    this.host.apply(reloadWeapon(this.host.world(), weaponId));
   }
 
   private createAimSelect(

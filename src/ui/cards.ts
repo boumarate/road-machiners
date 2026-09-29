@@ -56,6 +56,8 @@ const ART = {
   pen: '<path d="M22 5v30M4 20h28M26 14l7 6-7 6"/>',
   range: '<path d="M4 20h32M4 13v14M36 13v14M12 17v6M20 16v8M28 17v6"/>',
   reload: '<path d="M33 20a13 13 0 1 1-4-9.5M33 5v9h-9"/>',
+  cooldown: '<path d="M11 5h18M11 35h18M13 5q0 11 7 15q-7 4-7 15M27 5q0 11-7 15q7 4 7 15"/>',
+  magazine: '<path d="M14 6h12v28H14zM14 13h12M14 20h12M14 27h12"/>',
   spread: '<path d="M5 20l30-12M5 20l30 12M5 20h30"/>',
   arc: '<path d="M20 33L7 12M20 33l13-21M9 15q11-9 22 0"/>',
   speed: '<path d="M5 30a15 15 0 1 1 30 0M20 30l9-11M10 30h3M27 30h3"/>',
@@ -109,6 +111,8 @@ const ICON_NAMES: Record<IconName, string> = {
   pen: "Penetration",
   range: "Range",
   reload: "Reload",
+  cooldown: "Cooldown",
+  magazine: "Magazine",
   spread: "Spread",
   arc: "Firing arc",
   speed: "Speed",
@@ -305,6 +309,8 @@ export type StatIcon =
   | "pen"
   | "range"
   | "reload"
+  | "cooldown"
+  | "magazine"
   | "spread"
   | "arc"
   | "speed"
@@ -405,7 +411,9 @@ function weaponStats(part: PartInstance): Stat[] {
     shot,
     penStat(d),
     stat("range", "Range", meters(d.range), "m", "more"),
-    stat("reload", "Turns between shots", d.reload, "t", "less"),
+    stat("cooldown", "Turns between shots", d.cooldown, "t", "less"),
+    stat("magazine", "Shots per magazine", d.magazine, "", "more"),
+    stat("reload", "Turns to reload", d.reload, "t", "less"),
     stat("arc", "Firing arc", d.arc, "°", "more"),
     stat("recoil", "Recoil", d.recoil, "°", "less", 1),
   ];

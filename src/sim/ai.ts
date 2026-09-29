@@ -1,5 +1,6 @@
 // Activity execution uses the same steering and route planner as the player.
 import { NPC_BEHAVIOR, NPCS } from "../data/npcs";
+import { sustainedDamage } from "../data/parts";
 import { RULES } from "../data/rules";
 import { isKnockedOut } from "./defeat";
 import { isNear } from "./far";
@@ -208,7 +209,7 @@ function inReach(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): boolean 
 // The share of the working guns' damage per turn that `bears` lets fire. No working gun gives 0.
 function gunShare(weapons: MountedWeapon[], bears: (mw: MountedWeapon) => boolean): number {
   const working = weapons.filter((mw) => mw.part.hp > 0);
-  const perTurn = (mw: MountedWeapon) => (mw.def.round.damage * mw.def.rounds) / mw.def.reload;
+  const perTurn = (mw: MountedWeapon) => sustainedDamage(mw.def);
   const total = working.reduce((sum, mw) => sum + perTurn(mw), 0);
   if (total === 0) return 0;
   return working.filter(bears).reduce((sum, mw) => sum + perTurn(mw), 0) / total;

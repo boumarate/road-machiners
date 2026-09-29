@@ -39,7 +39,7 @@ export function hasSave(storage: Storage): boolean {
 // their state: marks, rumors, stalls, dust screens, welds, rebuilt parts and NPC last towns. 32 adds the map
 // file hash and leaves out baked props. 33 adds broken props, which a load leaves out of the baked ones. Older
 // saves do not load.
-const SAVE_VERSION = 33;
+const SAVE_VERSION = 34;
 
 // The saved world on the given map. A save made on another map fails, since its terrain is gone.
 export function loadWorld(storage: Storage, map: BakedMap): World | null {

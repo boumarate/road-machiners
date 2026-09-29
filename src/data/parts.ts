@@ -45,7 +45,9 @@ export type WeaponRound = {
 export type WeaponDef = PartBase & {
   kind: "weapon";
   range: number; // tiles. Aim worsens toward it by RULES.rangeFalloff for the weapon's tier.
-  reload: number; // turns between shots, 1 = every turn
+  cooldown: number; // turns between shots, 1 = every turn
+  magazine: number; // shots before the gun must reload
+  reload: number; // turns without firing that refill the magazine
   arc: number; // total firing arc in degrees, centered forward
   spread: number; // degrees; standard deviation of a round's angular error from the gun alone
   rounds: number; // rounds per shot, each rolled on its own
@@ -137,7 +139,7 @@ type UnpricedByKind = {
 };
 const m = PART_PRICE_MODIFIERS;
 const MODIFIERS: { [K in PartKind]: (def: UnpricedByKind[K]) => number } = {
-  weapon: (d) => m.weapon.perDamagePerTurn * ((d.round.damage * d.rounds) / d.reload) + m.weapon.perRange * d.range,
+  weapon: (d) => m.weapon.perDamagePerTurn * sustainedDamage(d) + m.weapon.perRange * d.range,
   engine: (d) => m.engine.perSpeedBonus * d.speedBonus + m.engine.perAccelBonus * d.accelBonus,
   armor: (d) => m.armor.perArmorCell * (d.armor + d.blastArmor) * d.w * d.h,
   cargo: (d) => m.cargo.perExtraRow * d.extraRows,
@@ -145,6 +147,11 @@ const MODIFIERS: { [K in PartKind]: (def: UnpricedByKind[K]) => number } = {
   scanner: (d) => m.scanner.perRange * d.range,
   core: (d) => m.core.perHp * d.hp,
 };
+
+// Damage per turn over a full magazine: the shots, then the reload.
+export function sustainedDamage(d: Pick<WeaponDef, 'round' | 'rounds' | 'cooldown' | 'magazine' | 'reload'>): number {
+  return (d.round.damage * d.rounds * d.magazine) / (d.magazine * d.cooldown + d.reload);
+}
 
 function kindModifier<K extends PartKind>(kind: K, def: UnpricedByKind[K]): number {
   return MODIFIERS[kind](def);
@@ -174,7 +181,9 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     armor: 3,
     tall: false,
     range: 13.5, // a short-reach starter gun
-    reload: 1,
+    cooldown: 1,
+    magazine: 5,
+    reload: 2,
     arc: 360,
     look: "mg",
     spread: 5,
@@ -204,6 +213,8 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     armor: 3,
     tall: true,
     range: 27,
+    cooldown: 3,
+    magazine: 2,
     reload: 3,
     arc: 60,
     look: "cannon",
@@ -234,6 +245,8 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     armor: 2,
     tall: false,
     range: 9,
+    cooldown: 2,
+    magazine: 3,
     reload: 2,
     arc: 360,
     look: "mg",
@@ -264,6 +277,8 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     armor: 4,
     tall: false,
     range: 21,
+    cooldown: 2,
+    magazine: 4,
     reload: 2,
     arc: 180,
     look: "mg",
@@ -294,7 +309,9 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     armor: 8,
     tall: true,
     range: 24,
-    reload: 4,
+    cooldown: 4,
+    magazine: 2,
+    reload: 3,
     arc: 45,
     look: "cannon",
     spread: 3,
@@ -324,7 +341,9 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     armor: 1,
     tall: false,
     range: 30,
-    reload: 5,
+    cooldown: 1,
+    magazine: 1,
+    reload: 4,
     arc: 90,
     look: "cannon",
     spread: 8,
@@ -354,6 +373,8 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     armor: 2,
     tall: true,
     range: 36,
+    cooldown: 3,
+    magazine: 3,
     reload: 3,
     arc: 30,
     look: "cannon",

@@ -7,7 +7,7 @@ import { vehicleStats, type MountedWeapon } from '../sim/stats';
 import type { Aim, Vehicle, World } from '../sim/types';
 import { DEG } from '../sim/vec';
 import { el } from './dom';
-import { BLOCK_TEXT } from './weapons';
+import { ammoText, blockText } from './weapons';
 
 export type HitRow = { label: string; odds: HitOdds | null; text: string; cause: string | null };
 export type HitCardData = { name: string; mine: HitRow[]; theirs: HitRow[] };
@@ -26,9 +26,10 @@ function causeLine(o: HitOdds): string {
   return `${Math.round(o.distance)} m · shows ${o.width.toFixed(1)} m wide · scatter ${deg(o.causes.weapon)}° weapon${extra}`;
 }
 
-function row(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle, aim: Aim, label: string): HitRow {
+function row(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle, aim: Aim, name: string): HitRow {
   const block = fireBlock(world, shooter, mw, target);
-  if (block !== null) return { label, odds: null, text: BLOCK_TEXT[block], cause: null };
+  const label = `${name} ${ammoText(mw)}`;
+  if (block !== null) return { label, odds: null, text: blockText(mw, block), cause: null };
   const odds = hitOdds(world, shooter, mw, target, aim);
   return { label, odds, text: `${Math.round(odds.chance * 100)}%`, cause: causeLine(odds) };
 }

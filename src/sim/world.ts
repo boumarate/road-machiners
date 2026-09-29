@@ -10,7 +10,7 @@ import { generateObstacles, obstacleReach } from './mapgen';
 import type { BakedMap } from './terrain';
 import { planNpcOrders } from './ai';
 import { applyGodMode } from './cheats';
-import { assignAutoOrders, fireWeapons, isHostile, resolveDestroyed } from './combat';
+import { assignAutoOrders, dropMagazine, fireWeapons, isHostile, resolveDestroyed } from './combat';
 import { advanceKnockout, advanceNpcKnockouts, checkDeath, checkKnockout } from './defeat';
 import { healPlayer } from './health';
 import { fireGuards } from './guards';
@@ -303,6 +303,15 @@ export function setWeaponOrder(
     if (order.aim !== "body" && !findPart(target, order.aim))
       throw new Error(`Target has no part ${order.aim}`);
     me.weaponOrders[weaponId] = order;
+  });
+}
+
+// The player drops the rest of a gun's magazine, so it reloads from empty.
+export function reloadWeapon(world: World, weaponId: string): World {
+  return playerCommand(world, (w) => {
+    const mw = vehicleStats(w, playerVehicle(w)).weapons.find((m) => m.part.id === weaponId);
+    if (!mw) throw new Error(`Player has no weapon ${weaponId}`);
+    dropMagazine(mw.part);
   });
 }
 

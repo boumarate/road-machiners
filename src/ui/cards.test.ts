@@ -8,7 +8,7 @@ import { partValue } from "../sim/wear";
 import { baselinePart, chassisStats, comparePart, diffStats, partStats } from "./cards";
 import { TEST_MAP } from "../test/map";
 
-const part = (defId: string, wear = 0): PartInstance => ({ id: defId, defId, hp: 1, wear, reload: 0 });
+const part = (defId: string, wear = 0): PartInstance => ({ id: defId, defId, hp: 1, wear });
 
 describe("part stats and their change against the player's part", () => {
   it("marks a faster engine better and its higher fuel use worse", () => {
