@@ -180,6 +180,10 @@ describe('exposure', () => {
     const plates = Array.from({ length: 20 }, () => 'steelPlate');
     const v = fighter(w, 'gunwagon', ['stockEngine', 'mg', ...plates], { x: 48, y: 30 });
     v.heading = Math.PI;
+    // Every lane needs a working part ahead of the rear plates, so the gun stands on the first lane the wheels leave open.
+    const mg = v.items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
+    mg.x = 2;
+    mg.y = 1;
     const strip = new Set(mountedParts(v, 'armor').filter((p) => sideOf(v, p) !== keep).map((p) => p.id));
     v.items = v.items.filter((it) => it.kind !== 'part' || !strip.has(it.part.id));
     return exposure(w, gun, gun, v);
