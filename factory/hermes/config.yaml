@@ -27,3 +27,4 @@ platform_toolsets:
     - skills
     - memory
     - session_search
+    - factory

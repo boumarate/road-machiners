@@ -108,7 +108,7 @@ def test_load_config_fails_loud(tmp_path, key):
 
 def test_register_seeds_the_file(tmp_path):
     hooks = []
-    ctx = types.SimpleNamespace(register_hook=lambda name, fn: hooks.append(name))
+    ctx = types.SimpleNamespace(register_hook=lambda name, fn: hooks.append(name), register_tool=lambda **kw: None)
     plugin_env = env(tmp_path)
     old = plugin.os.environ.copy()
     plugin.os.environ.update(plugin_env)
@@ -203,3 +203,70 @@ def test_committee_args():
     assert plugin.committee_args(" /committee list ") == "list"
     assert plugin.committee_args("/committeex") is None
     assert plugin.committee_args("hello") is None
+
+
+def queue_setup(tmp_path, session):
+    committee = plugin.Committee(str(tmp_path / "committee"), "1", "boss")
+    committee.seed()
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    cfg = plugin.Config(str(inbox), "/st", "-100", committee)
+    return inbox, plugin.make_queue_handler(cfg, session_env=lambda key: session.get(key, ""))
+
+
+SESSION = {
+    "HERMES_SESSION_CHAT_ID": "-100", "HERMES_SESSION_USER_ID": "1",
+    "HERMES_SESSION_USER_NAME": "Ann", "HERMES_SESSION_MESSAGE_ID": "77",
+}
+
+
+def test_queue_tool_writes_adhoc_command(tmp_path):
+    inbox, handle = queue_setup(tmp_path, SESSION)
+    result = json.loads(handle({"request": "  Run npm run combat and report hit rates.  "}))
+    assert result["success"] is True
+    files = list(inbox.iterdir())
+    assert len(files) == 1
+    assert json.loads(files[0].read_text()) == {
+        "kind": "adhoc", "issue": None, "text": "Run npm run combat and report hit rates.",
+        "by": "1", "byName": "Ann", "chat": "-100", "messageId": 77,
+    }
+
+
+def test_queue_tool_refuses_non_member(tmp_path):
+    inbox, handle = queue_setup(tmp_path, {**SESSION, "HERMES_SESSION_USER_ID": "2"})
+    assert "error" in json.loads(handle({"request": "x"}))
+    assert list(inbox.iterdir()) == []
+
+
+@pytest.mark.parametrize("key", list(SESSION))
+def test_queue_tool_refuses_missing_session_value(tmp_path, key):
+    inbox, handle = queue_setup(tmp_path, {**SESSION, key: ""})
+    assert key in json.loads(handle({"request": "x"}))["error"]
+    assert list(inbox.iterdir()) == []
+
+
+def test_queue_tool_refuses_empty_request(tmp_path):
+    inbox, handle = queue_setup(tmp_path, SESSION)
+    assert "error" in json.loads(handle({"request": "  "}))
+    assert list(inbox.iterdir()) == []
+
+
+def test_queue_tool_two_calls_make_two_files(tmp_path, monkeypatch):
+    inbox, handle = queue_setup(tmp_path, SESSION)
+    monkeypatch.setattr(plugin.time, "time", lambda: 1700000000.0)
+    handle({"request": "first"})
+    handle({"request": "second"})
+    texts = sorted(json.loads(p.read_text())["text"] for p in inbox.iterdir())
+    assert texts == ["first", "second"]
+
+
+def test_register_adds_queue_tool(tmp_path, monkeypatch):
+    for key, value in env(tmp_path).items():
+        monkeypatch.setenv(key, value)
+    calls = []
+    ctx = types.SimpleNamespace(
+        register_hook=lambda *a: None, register_tool=lambda **kw: calls.append(kw),
+    )
+    plugin.register(ctx)
+    assert calls[0]["name"] == "factory_queue_task" and calls[0]["toolset"] == "factory"
+    assert calls[0]["schema"]["parameters"]["required"] == ["request"]

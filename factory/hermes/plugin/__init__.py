@@ -102,13 +102,82 @@ def inbox_command(decision: tuple, user_id, user_name, chat_id, message_id) -> d
     }
 
 
+_WRITE_LOCK = threading.Lock()
+
+
 def write_inbox(inbox: str, command: dict, now_ms: Optional[int] = None) -> Path:
+    """Writes one command file atomically. A taken name moves the stamp up, so no file replaces another."""
     stamp = int(time.time() * 1000) if now_ms is None else now_ms
-    final = Path(inbox) / f"{stamp}-{command['messageId']}.json"
-    temp = final.with_suffix(".json.tmp")
-    temp.write_text(json.dumps(command))
-    os.replace(temp, final)
+    with _WRITE_LOCK:
+        final = Path(inbox) / f"{stamp}-{command['messageId']}.json"
+        while final.exists():
+            stamp += 1
+            final = Path(inbox) / f"{stamp}-{command['messageId']}.json"
+        temp = final.with_suffix(".json.tmp")
+        temp.write_text(json.dumps(command))
+        os.replace(temp, final)
     return final
+
+
+QUEUE_TOOL = "factory_queue_task"
+QUEUE_SCHEMA = {
+    "name": QUEUE_TOOL,
+    "description": (
+        "Queue one-off work for the factory when a committee member asks for something that needs running code "
+        "or reading the repo, like a simulation, a balance check, a measurement or an investigation. "
+        "A coding agent runs it in a clone of the game repo. The result comes back later as a reply to the member's message. "
+        "Call it once per task."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "request": {
+                "type": "string",
+                "description": (
+                    "The full task text. It must stand on its own: the agent sees nothing of this chat. "
+                    "Say what to run, what to measure and what to report."
+                ),
+            },
+        },
+        "required": ["request"],
+    },
+}
+QUEUE_DONE = "Queued. Tell the member the task is queued and the answer will come as a reply to their message."
+SESSION_KEYS = (
+    "HERMES_SESSION_CHAT_ID", "HERMES_SESSION_USER_ID", "HERMES_SESSION_USER_NAME", "HERMES_SESSION_MESSAGE_ID",
+)
+
+
+def _session_env(name: str) -> str:
+    from gateway.session_context import get_session_env
+    return get_session_env(name)
+
+
+def make_queue_handler(cfg: Config, session_env=_session_env):
+    def handle(args: dict, **kwargs) -> str:
+        request = str(args.get("request") or "").strip()
+        if not request:
+            return _tool_error("The request is empty.")
+        chat, user, name, message = (session_env(key).strip() for key in SESSION_KEYS)
+        missing = [key for key, value in zip(SESSION_KEYS, (chat, user, name, message)) if not value]
+        if missing:
+            return _tool_error(f"The chat session has no {', '.join(missing)}. Nothing was queued.")
+        if not cfg.committee.is_member(user):
+            return _tool_error("Only committee members can queue tasks. Nothing was queued.")
+        if not message.isdigit():
+            return _tool_error("The session message id is not a number. Nothing was queued.")
+        command = {
+            "kind": "adhoc", "issue": None, "text": request,
+            "by": user, "byName": name, "chat": chat, "messageId": int(message),
+        }
+        write_inbox(cfg.inbox, command)
+        return json.dumps({"success": True, "message": QUEUE_DONE})
+
+    return handle
+
+
+def _tool_error(message: str) -> str:
+    return json.dumps({"error": message})
 
 
 async def _reply(gateway, event, text: str) -> None:
@@ -150,3 +219,4 @@ def register(ctx) -> None:
     cfg = load_config(dict(os.environ))
     cfg.committee.seed()
     ctx.register_hook("pre_gateway_dispatch", make_hook(cfg))
+    ctx.register_tool(name=QUEUE_TOOL, toolset="factory", schema=QUEUE_SCHEMA, handler=make_queue_handler(cfg))
