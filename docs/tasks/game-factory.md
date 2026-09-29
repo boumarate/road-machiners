@@ -29,12 +29,14 @@ The factory is a Node CLI in `factory/`, run on the host. Hermes only triggers i
 
 ### Runtime
 
-- `factory tick` is the one entry point. A Hermes cron job with `--no-agent` runs it every `FACTORY_TICK_MINUTES`.
+- `factory tick` is the one entry point. A systemd timer runs it every `FACTORY_TICK_MINUTES` on the server. On the Mac a loop script runs it.
+- Hermes runs in Docker, like `Steelman/infrobot`, and owns Telegram chat. It cannot start agent containers, since that needs the Docker socket, which is root on the host. So the host timer runs the tick, not a Hermes cron job.
 - A tick checks the running job first. A job past `FACTORY_STAGE_TIMEOUT_MINUTES` is killed and reported as failed. A running job ends the tick.
 - A tick then runs intake, then starts at most one job. Release is due every `FACTORY_RELEASE_DAYS`, and maintenance every `FACTORY_MAINTENANCE_HOURS`. Due periodic jobs start first. Otherwise the card furthest along starts: testing, then implementation, then design.
 - A job runs as a detached `factory run <stage> <issue>` process with a pid file and a log in `$FACTORY_HOME/logs/`. The tick stays short, so the Hermes script timeout never matters.
+- The Hermes plugin writes each committee command as a JSON file into `$FACTORY_HOME/inbox/`. The tick drains the inbox first and answers in the chat through the Bot API.
 - An approve reply and a `/change` request only queue work in local state. The next tick runs them as jobs before any other, so the host clone never serves two jobs at once. Feedback touches only GitHub, so it runs at once.
-- Local state lives in `$FACTORY_HOME/state.json`: the running job, approval post ids and the last release and maintenance times. It is written to a temp file and renamed.
+- Local state lives in `$FACTORY_HOME/state/state.json`: the running job, approval post ids and the last release and maintenance times. It is written to a temp file and renamed.
 - The kanban column is the stage state of each card. Local state holds only what GitHub cannot.
 
 ### Kanban and names
@@ -80,7 +82,8 @@ The factory is a Node CLI in `factory/`, run on the host. Hermes only triggers i
 ### Telegram
 
 - The host sends posts through the Bot API with `TELEGRAM_BOT_TOKEN`. It is the same bot Hermes uses. Sending does not disturb Hermes polling.
-- `factory/hermes/plugin/` holds a Hermes plugin. Its `pre_gateway_dispatch` hook handles messages in the committee chat from ids in `FACTORY_COMMITTEE_TELEGRAM`. A reply to an approval post runs `factory approve` or `factory feedback`. A message starting with `/change` runs `factory change`. It skips these messages, so they never reach the LLM. Everything else goes to Hermes as normal chat.
+- `factory/hermes/plugin/` holds a Hermes plugin. Its `pre_gateway_dispatch` hook handles messages in the committee chat from ids in `FACTORY_COMMITTEE_TELEGRAM`. A reply to an approval post queues an approve or feedback command. A message starting with `/change` queues a change request. It skips these messages, so they never reach the LLM. Everything else goes to Hermes as normal chat.
+- The Hermes container mounts only the inbox, read-write, and the state folder, read-only. It holds no GitHub or deploy credential.
 - Approval uses a reply, not a button, since Hermes has no hook for new button types.
 
 ### Hosting
@@ -113,7 +116,8 @@ The factory is a Node CLI in `factory/`, run on the host. Hermes only triggers i
 ### Setup and testing on the Mac
 
 - `factory/README.md` covers setup: the `.env` keys, the Docker image, the Hermes plugin and cron install, and the web root.
-- `factory/hermes/install.sh` copies the tick script and plugin into `$HERMES_HOME` and creates the cron job.
+- `factory/infra/` is a pyinfra project in the style of `Steelman/infra`. `provision.py` sets up a Linux host: packages, Docker, Node, gh, firewall and the factory user. `deploy.py` syncs the code, builds the agent image, pushes the env file, installs the tick timer and starts Hermes and Caddy with Docker Compose. Caddy serves the web root with TLS. `status.py` reads facts only.
+- On the Mac, Hermes runs from the same compose file, and `factory/mac/tick-loop.sh` runs the tick.
 - A private sandbox repo under btseytlin holds a copy of the game for end-to-end runs. The factory reads its repo from `FACTORY_REPO`.
 
 Backward compatibility: saves on itch keep `roam.save`. Nothing else has consumers.
@@ -148,7 +152,7 @@ TDD: yes for the pure rules: intake marking, the tick choice, reply parsing, the
 
 - UK1 — The server domain and web server. Deferred to the user.
 - UK2 — The stage timeout and tick interval values.
-- UK3 — Which model Hermes uses for chat.
+- UK3 — Which model Hermes uses for chat. Infrobot uses Codex OAuth. The factory config starts with Anthropic, and the user confirms.
 
 ## Plan
 
@@ -248,6 +252,8 @@ Approach: PH1 writes the shared types and core helpers inline, so every later ph
 - make: size Large, full flow — nine parts and new infrastructure.
 - make: one task file drives all nine parts — the contracts need one home, and separate plans would repeat them.
 - make: branch `game-factory` in `.worktrees/game-factory`, already made before hands-off started.
+- udesign: Hermes in Docker and a systemd tick timer — user pointed at Steelman/infrobot and Steelman/infra; a Hermes container cannot run agent containers without root-level Docker access.
+- udesign: pyinfra deploy in `factory/infra/` — user asked for pyinfra like Steelman/infra.
 - make: pushing to a private sandbox repo is allowed — the user authorized a temp repo. Nothing is pushed to `origin`.
 - udesign: agents run in Docker containers — the user required agents without secrets, and the container matches the CPU server.
 - udesign: host fetches from work clones and never runs their hooks — an agent could plant a hook that runs with host credentials.
