@@ -1,7 +1,7 @@
 // Generates new variants of one catalog cue with ElevenLabs, keeps the raw files in tmp/sfx-raw/,
 // imports them. Never overwrites a file.
 // Usage: npm run sfx:gen -- <cue> <count>
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { beatLoopSeconds, MIX, SOUND_STYLE, SOUNDS } from '../src/data/sounds.ts';
 import { cueOf, importFile } from './sfx-lib.mjs';
 
@@ -10,7 +10,8 @@ const RAW_DIR = 'tmp/sfx-raw';
 const SFX_CREDITS_PER_SECOND = 40; // ElevenLabs price for sound effects with a set duration
 const PROMPT_INFLUENCE = 0.7; // well above the API default of 0.3, so the shared recording setup is followed
 
-process.loadEnvFile('.env');
+// Agent containers get the key in their env and have no .env file.
+if (existsSync('.env')) process.loadEnvFile('.env');
 const key = process.env.ELEVENLABS_API_KEY;
 const cap = Number(process.env.SFX_MAX_GENERATIONS);
 if (!key) throw new Error('ELEVENLABS_API_KEY is missing from .env');

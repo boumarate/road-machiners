@@ -3,7 +3,7 @@ import { loadConfig } from './config';
 
 const FULL = {
   FACTORY_REPO: 'o/r', FACTORY_PROJECT_OWNER: 'o', FACTORY_PROJECT_NUMBER: '3', FACTORY_HOME: '/h', FACTORY_WEB_ROOT: '/w',
-  FACTORY_PUBLIC_URL: 'http://x', FACTORY_IMAGE: 'img', CLAUDE_CODE_OAUTH_TOKEN: 't', FACTORY_DESIGN_MODEL: 'opus',
+  FACTORY_PUBLIC_URL: 'http://x', FACTORY_IMAGE: 'img', CLAUDE_CODE_OAUTH_TOKEN: 't', ELEVENLABS_API_KEY: 'ek', SFX_MAX_GENERATIONS: '6', FACTORY_DESIGN_MODEL: 'opus',
   FACTORY_BUILD_MODEL: 'sonnet', FACTORY_MIN_VOTES: '5', FACTORY_MIN_AGE_HOURS: '24', FACTORY_COMMITTEE_BOOTSTRAP_GITHUB: 'boss',
   FACTORY_COMMITTEE_BOOTSTRAP: '1', TELEGRAM_BOT_TOKEN: 'bt', FACTORY_COMMITTEE_CHAT: '-1', FACTORY_PUBLIC_CHANNEL: '@c',
   FACTORY_STAGE_TIMEOUT_MINUTES: '180', FACTORY_RELEASE_DAYS: '7',
@@ -19,6 +19,7 @@ describe('loadConfig', () => {
     expect(cfg.committeeChat).toBe('-1');
     expect(cfg.maxJobsPerDay).toBe(10);
     expect(cfg.itchTarget).toBe('u/g');
+    expect(cfg.sfxMaxGenerations).toBe(6);
   });
 
   it('names every missing key', () => {

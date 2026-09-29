@@ -2,9 +2,17 @@
 # The Playwright tag matches the playwright version in game/package-lock.json.
 FROM mcr.microsoft.com/playwright:v1.63.0-noble
 
+# ffmpeg serves the game's sound scripts. The X and GL libraries let Blender load in background mode.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git curl ca-certificates \
+ && apt-get install -y --no-install-recommends git curl ca-certificates xz-utils ffmpeg \
+    libgl1 libegl1 libx11-6 libxext6 libxi6 libxxf86vm1 libxfixes3 libxrender1 libxkbcommon0 libsm6 libice6 \
  && apt-get clean
+
+# Blender builds the game's models from tools/blender/. The version matches the one the models were made with.
+ARG BLENDER_VERSION=5.2.2
+RUN curl -fsSL "https://download.blender.org/release/Blender${BLENDER_VERSION%.*}/blender-${BLENDER_VERSION}-linux-x64.tar.xz" | tar -xJ -C /opt \
+ && ln -s "/opt/blender-${BLENDER_VERSION}-linux-x64/blender" /usr/local/bin/blender \
+ && blender --background --factory-startup --version
 
 RUN npm install -g @anthropic-ai/claude-code
 

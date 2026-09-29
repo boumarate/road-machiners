@@ -56,7 +56,7 @@ The factory is a Node CLI in `factory/`, run on the host. Hermes only triggers i
 ### Agent container
 
 - `factory/docker/Dockerfile` builds from the Playwright image. It adds git, Claude Code and the ultrapack plugin, and runs as a non-root user.
-- A container gets one mount, the work clone at `$FACTORY_HOME/work/issue-N`, and one secret, `CLAUDE_CODE_OAUTH_TOKEN`.
+- A container mounts the work clone at `$FACTORY_HOME/work/issue-N` and the shared npm cache. Its secrets are `CLAUDE_CODE_OAUTH_TOKEN` and `ELEVENLABS_API_KEY`.
 - The work clone is a plain clone, not a worktree, so its git data lives inside the mount.
 - The agent commits on the task branch. It writes messages for the host into `.factory/` in the clone, which git ignores.
 - The host never runs git hooks or npm scripts inside a work clone. It fetches the branch into its own clone and pushes from there.
@@ -148,7 +148,7 @@ TDD: yes for the pure rules: intake marking, the tick choice, reply parsing, the
 - IV11 — No agent branch reaching GitHub carries `.github/`, `.factory` or `.factory-tasks` paths.
 - IV12 — Public-driven agent jobs stay within `FACTORY_MAX_JOBS_PER_DAY` in any 24 hours.
 
-- IV1 — An agent container gets only its work clone mount and `CLAUDE_CODE_OAUTH_TOKEN`. No GitHub, Telegram or butler credential enters it.
+- IV1 — An agent container gets only its work clone, the npm cache, `CLAUDE_CODE_OAUTH_TOKEN` and `ELEVENLABS_API_KEY`. No GitHub, Telegram or butler credential enters it.
 - IV2 — The host runs no git hook, npm script or build from any clone. Builds run in the agent container, and the host only copies or uploads their output.
 - IV3 — At most one job runs at a time. A job past the timeout is killed and reported.
 - IV4 — A failed or stalled stage labels its card `factory-stuck` and posts once. No stage retries on its own.

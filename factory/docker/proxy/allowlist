@@ -3,6 +3,9 @@
 # Claude Code API. Every model call goes here.
 ^api\.anthropic\.com$
 
+# ElevenLabs sound generation for the game's sfx:gen.
+^api\.elevenlabs\.io$
+
 # npm registry for npm ci and npm view.
 ^registry\.npmjs\.org$
 
