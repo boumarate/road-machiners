@@ -17,8 +17,8 @@ apt.packages(
     _sudo=True,
 )
 
-files.put(
-    name="Docker daemon.json (log rotation)",
+daemon_json = files.put(
+    name="Docker daemon.json (log rotation, published ports on 127.0.0.1 by default)",
     src=str(FILES / "daemon.json"),
     dest="/etc/docker/daemon.json",
     mode="644",
@@ -28,6 +28,13 @@ files.put(
 server.shell(
     name="Install Docker (convenience script, skipped if present)",
     commands=["command -v docker >/dev/null || (timeout 600 sh -c 'curl -fsSL https://get.docker.com | sh')"],
+    _sudo=True,
+)
+# The port default in daemon.json applies only after a restart.
+server.shell(
+    name="Restart Docker after a daemon.json change",
+    commands=["timeout 120 systemctl restart docker"],
+    _if=daemon_json.did_change,
     _sudo=True,
 )
 

@@ -138,3 +138,17 @@ server.shell(
     commands=["timeout 30 docker exec factory-caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile"],
     _sudo=True,
 )
+
+# Docker skips UFW for published ports. Fail the deploy on any published port except Caddy's 80 and 443.
+files.put(
+    name="Push the published port check",
+    src=str(FILES / "check-ports.sh"),
+    dest=f"{FACTORY_ROOT}/check-ports.sh",
+    mode="755",
+    _sudo=True,
+)
+server.shell(
+    name="No published ports but Caddy 80 and 443",
+    commands=[f"timeout 30 {FACTORY_ROOT}/check-ports.sh"],
+    _sudo=True,
+)

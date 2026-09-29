@@ -27,6 +27,7 @@ It follows `Steelman/infra`. Run every command from `factory/infra`.
 - Deploy installs the tick service and timer. The timer runs `factory tick` every `FACTORY_TICK_MINUTES`.
 - Deploy starts Hermes and Caddy with Docker Compose. Caddy serves `/opt/factory/www` with automatic TLS.
 - Deploy stops early when the factory `.env` has the wrong `FACTORY_HOME` or `FACTORY_WEB_ROOT`.
+- Docker skips UFW for published ports. So `daemon.json` binds published ports to 127.0.0.1 unless a port names its address, and only Caddy names 0.0.0.0 for 80 and 443. Deploy ends with `check-ports.sh`, which fails on any other published port. Status lists the published ports.
 
 ## Folders on the server
 

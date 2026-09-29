@@ -5,9 +5,11 @@ services:
     container_name: factory-caddy
     image: caddy:2.10-alpine
     restart: unless-stopped
+    # Docker skips UFW for published ports, and daemon.json binds them to 127.0.0.1 unless a port names its address.
+    # Caddy is the one service that asks for public ports. deploy.py fails on any other published port.
     ports:
-      - "80:80"
-      - "443:443"
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
     environment:
       DOMAIN: ${FACTORY_DOMAIN:?set FACTORY_DOMAIN}
       ACME_EMAIL: ${FACTORY_ACME_EMAIL:?set FACTORY_ACME_EMAIL}
