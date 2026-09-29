@@ -33,6 +33,7 @@ The factory is a Node CLI in `factory/`, run on the host. Hermes only triggers i
 - A tick checks the running job first. A job past `FACTORY_STAGE_TIMEOUT_MINUTES` is killed and reported as failed. A running job ends the tick.
 - A tick then runs intake, then starts at most one job. Release is due every `FACTORY_RELEASE_DAYS`, and maintenance every `FACTORY_MAINTENANCE_HOURS`. Due periodic jobs start first. Otherwise the card furthest along starts: testing, then implementation, then design.
 - A job runs as a detached `factory run <stage> <issue>` process with a pid file and a log in `$FACTORY_HOME/logs/`. The tick stays short, so the Hermes script timeout never matters.
+- An approve reply and a `/change` request only queue work in local state. The next tick runs them as jobs before any other, so the host clone never serves two jobs at once. Feedback touches only GitHub, so it runs at once.
 - Local state lives in `$FACTORY_HOME/state.json`: the running job, approval post ids and the last release and maintenance times. It is written to a temp file and renamed.
 - The kanban column is the stage state of each card. Local state holds only what GitHub cannot.
 
