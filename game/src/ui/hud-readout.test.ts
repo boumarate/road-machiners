@@ -7,7 +7,8 @@ import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import { maxHealthOf } from "../sim/health";
 import { XP_TO_REACH } from "../data/skills";
 import { addState, towData } from "../sim/states";
-import { getContextAction, getHudReadout, getRescueReadout } from "./hud-readout";
+import { bugReportUrl, getContextAction, getHudReadout, getRescueReadout, versionLabel } from "./hud-readout";
+import { GAME_VERSION } from "../config";
 import { REGION } from '../data/region';
 import { sitePads } from '../sim/sites';
 import { partDef } from "../data/parts";
@@ -205,5 +206,25 @@ describe('trade interaction', () => {
   it('offers the town while the trader still drives', () => {
     const { w, town } = atTownWithTrader(RULES.parkedSpeed + 1);
     expect(getContextAction(w, false)).toEqual({ label: `Enter ${town.name}`, ready: true });
+  });
+});
+
+describe('bug report link', () => {
+  it('points at the bug form with the version filled', () => {
+    const url = new URL(bugReportUrl('v1.2.3'));
+    expect(url.origin).toBe('https://github.com');
+    expect(url.pathname).toBe('/btseytlin/road-machiners/issues/new');
+    expect(url.searchParams.get('template')).toBe('bug.yml');
+    expect(url.searchParams.get('version')).toBe('v1.2.3');
+  });
+
+  it('encodes a version with special characters', () => {
+    const url = new URL(bugReportUrl('v1 & 2+3'));
+    expect(url.searchParams.get('version')).toBe('v1 & 2+3');
+    expect([...url.searchParams.keys()].sort()).toEqual(['template', 'version']);
+  });
+
+  it('labels the version as the ? menu shows it', () => {
+    expect(versionLabel()).toBe(`v${GAME_VERSION}`);
   });
 });

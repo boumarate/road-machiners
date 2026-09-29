@@ -1,3 +1,4 @@
+import { GAME_VERSION } from "../config";
 import { tradePartner, tradeReady } from "../sim/economy";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
@@ -267,4 +268,20 @@ export function getHudReadout(w: World) {
       },
     ],
   };
+}
+
+// The bug form in .github/ISSUE_TEMPLATE/bug.yml.
+export const BUG_REPORT_URL = "https://github.com/btseytlin/road-machiners/issues/new";
+
+// The text the ? menu shows.
+export function versionLabel(): string {
+  return `v${GAME_VERSION}`;
+}
+
+// The form field id is `version`, so GitHub prefills that field.
+export function bugReportUrl(version: string): string {
+  const url = new URL(BUG_REPORT_URL);
+  url.searchParams.set("template", "bug.yml");
+  url.searchParams.set("version", version);
+  return url.href;
 }
