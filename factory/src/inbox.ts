@@ -123,7 +123,7 @@ async function openReleaseTask(ctx: Ctx, command: InboxCommand, by: string): Pro
   const title = text.split('\n')[0].trim().slice(0, TITLE_LIMIT);
   const n = await ctx.github.createIssue(title, `${text}\n\nRequested by ${by} in the committee chat as a task of release ${release.day}.`, [RELEASE_TASK_LABEL]);
   await ctx.github.addCard(n, 'Design');
-  updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: null } }));
+  updateState(ctx.statePath, (state) => ({ ...state, pendingShip: null, release: state.release && { ...state.release, postId: null } }));
   return `Opened #${n} as a task of release ${release.day}. A new candidate follows when it is done.`;
 }
 

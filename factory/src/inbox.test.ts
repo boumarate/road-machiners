@@ -186,12 +186,13 @@ describe('release commands', () => {
   it('opens a release task as an issue and a Design card, and drops the current post', async () => {
     const sent: string[] = [];
     const calls: string[] = [];
-    openRelease();
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), release: RELEASE, pendingShip: 'Bob' });
     put('1.json', { kind: 'release-task', text: 'The horn is too quiet\nMake it louder' });
     await drainInbox(fakeCtx([], sent, calls));
     expect(calls[0]).toBe('create The horn is too quiet|The horn is too quiet\nMake it louder\n\nRequested by Ann in the committee chat as a task of release 2026-09-29.|release-task');
     expect(calls[1]).toBe('addCard 9 Design');
     expect(readState(statePath).release?.postId).toBeNull();
+    expect(readState(statePath).pendingShip).toBeNull();
     expect(sent[0]).toContain('Opened #9');
   });
 

@@ -130,6 +130,51 @@ describe('release branch operations', () => {
     expect((await git('status', '--porcelain')).trim()).toBe('');
   });
 
+  it('skips a merge that the branch already reverted, so a retried removal finishes the other branch', async () => {
+    const { repo, git, feature } = await releaseSetup();
+    await feature(3, 'f.txt', 'three\n', 'dev');
+    await repo.createBranch('release/x', 'dev');
+    expect(await repo.revertIssueMerge(3, 'release/x')).toBe(true);
+    const head = (await git('rev-parse', 'release/x')).trim();
+    expect(await repo.revertIssueMerge(3, 'release/x')).toBe(false);
+    expect((await git('rev-parse', 'release/x')).trim()).toBe(head);
+    expect(await repo.revertIssueMerge(3, 'dev')).toBe(true);
+    expect(readFileSync(join(repo.path, 'f.txt'), 'utf8')).toBe('base\n');
+  });
+
+  it('reverts a merge that came back after an earlier revert', async () => {
+    const { repo, git, feature } = await releaseSetup();
+    await feature(3, 'f.txt', 'three\n', 'dev');
+    expect(await repo.revertIssueMerge(3, 'dev')).toBe(true);
+    await git('branch', '-D', 'factory/issue-3');
+    await feature(3, 'f.txt', 'three again\n', 'dev');
+    expect(await repo.revertIssueMerge(3, 'dev')).toBe(true);
+    expect(readFileSync(join(repo.path, 'f.txt'), 'utf8')).toBe('base\n');
+  });
+
+  it('aborts a revert that fails without a conflict, leaving no REVERT_HEAD', async () => {
+    const { repo, git, feature } = await releaseSetup();
+    await feature(3, 'f.txt', 'three\n', 'dev');
+    // A local edit to a file that the revert touches makes git refuse the revert with no conflicted files.
+    writeFileSync(join(repo.path, 'f.txt'), 'dirty\n');
+    await expect(repo.revertIssueMerge(3, 'dev')).rejects.toThrow('without a conflict');
+    expect((await realRun('git', ['rev-parse', '--verify', '--quiet', 'REVERT_HEAD'], { cwd: repo.path })).code).not.toBe(0);
+    expect((await git('log', '-1', '--format=%s')).trim()).toBe('Merge issue #3: title 3');
+  });
+
+  it('runs revert --abort after a failed revert that left REVERT_HEAD', async () => {
+    const calls: string[][] = [];
+    const run: Run = async (_cmd, args) => {
+      calls.push(args);
+      if (args.includes('log')) return { code: 0, stdout: 'abc Merge issue #3: t\n', stderr: '' };
+      if (args.includes('--no-edit')) return { code: 1, stdout: '', stderr: 'boom' };
+      if (args.includes('--diff-filter=U')) return { code: 0, stdout: '', stderr: '' };
+      return { code: 0, stdout: '', stderr: '' };
+    };
+    await expect(hostRepo(run, cfg('/h')).revertIssueMerge(3, 'dev')).rejects.toThrow('without a conflict');
+    expect(calls.some((a) => a.includes('--abort'))).toBe(true);
+  });
+
   it('deletes a branch locally and on origin, and does nothing when it is gone', async () => {
     const { repo, git, origin } = await releaseSetup();
     await git('branch', 'factory/issue-7', 'dev');
