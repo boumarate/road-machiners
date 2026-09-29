@@ -83,7 +83,7 @@ files.template(
     src=str(FILES / "roam-factory-tick.service.j2"),
     dest="/etc/systemd/system/roam-factory-tick.service",
     mode="644",
-    user=FACTORY_USER,
+    service_user=FACTORY_USER,
     code_dir=CODE_DIR,
     home_dir=HOME_DIR,
     _sudo=True,
