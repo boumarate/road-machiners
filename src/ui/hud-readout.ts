@@ -4,7 +4,7 @@ import { RULES } from "../data/rules";
 import { maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
 import { maxHealthOf } from "../sim/health";
-import { corePart, mountedParts, mountedItems, itemSize } from "../sim/grid";
+import { baseGrid, corePart, mountedParts, mountedItems, itemSize, MOUNT_CELLS } from "../sim/grid";
 import { fuelCap, hasWorkingEngine, isStranded, isWorking, vehicleStats } from "../sim/stats";
 import { spareParts } from "../sim/inventory";
 import { towData } from "../sim/states";
@@ -83,12 +83,28 @@ function getSalvageName(stock: SalvageStock): string {
 function getConditionIcon(def: ReturnType<typeof partDef>): IconName {
   if (def.kind === "core") return def.role === "tank" ? "fuel" : def.role;
   if (def.kind === "weapon") return def.look;
+  if (def.kind === "armor") return "armor";
   return "engine" as const;
 }
 
 function getConditionState(ratio: number): string {
   if (ratio <= 0.25) return "critical";
   return ratio < 1 ? "damaged" : "healthy";
+}
+
+// Armor edge cells with no armor mounted on them: the stripped spots of a truck.
+export function openArmorSlots(vehicle: Vehicle): { x: number; y: number }[] {
+  const covered = new Set<string>();
+  for (const item of mountedItems(vehicle, "armor")) {
+    const { w, h } = itemSize(item);
+    for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) covered.add(`${item.x + dx},${item.y + dy}`);
+  }
+  const open: { x: number; y: number }[] = [];
+  baseGrid(vehicle.chassisId).cells.forEach((row, y) =>
+    row.forEach((cell, x) => {
+      if (cell && MOUNT_CELLS.armor.includes(cell) && !covered.has(`${x},${y}`)) open.push({ x, y });
+    }));
+  return open;
 }
 
 // The tooltip of a part tile: the part's name and condition.
@@ -107,7 +123,7 @@ export class TruckConditionReadout {
     this.health = new Map();
     return mountedItems(vehicle)
       .filter((item) =>
-        ["core", "engine", "weapon"].includes(partDef(item.part.defId).kind),
+        ["core", "engine", "weapon", "armor"].includes(partDef(item.part.defId).kind),
       )
       .map((item) => {
         const def = partDef(item.part.defId);
@@ -124,6 +140,7 @@ export class TruckConditionReadout {
           ...itemSize(item),
           percent: hp > 0 ? Math.max(1, Math.floor(ratio * 100)) : 0,
           state: getConditionState(ratio),
+          broken: hp <= 0,
           hit: before !== undefined && hp < before,
         };
       });

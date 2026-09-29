@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { chassisDef, PLAYER_CHASSIS } from '../data/chassis';
+import { NPCS } from '../data/npcs';
 import { openSides, reachedSides } from './armor';
 import { mountedItems } from './grid';
 import { generateNpcLoadout } from './npc-loadout';
@@ -414,7 +415,7 @@ describe('randomkit', () => {
       const w = emptyWorld();
       w.rngState = seed * 7919;
       const before = playerVehicle(w);
-      const next = randomKit(w, null);
+      const next = randomKit(w);
       const me = playerVehicle(next);
       chassis.add(me.chassisId);
       expect(me.id).toBe(before.id);
@@ -438,23 +439,18 @@ describe('randomkit', () => {
   it('refuses while the player is knocked out', () => {
     const w = emptyWorld();
     w.player.state = 'knockedOut';
-    expect(() => randomKit(w, null)).toThrow(CheatError);
+    expect(() => randomKit(w)).toThrow(CheatError);
   });
 
-  it('a higher gear level rolls more guns on average', () => {
-    const guns = (level: number) => {
-      let sum = 0;
-      for (let seed = 1; seed <= 12; seed++) {
-        const w = emptyWorld();
-        w.rngState = seed * 104729;
-        sum += mountedItems(playerVehicle(randomKit(w, level)), 'weapon').length;
-      }
-      return sum;
-    };
-    expect(guns(5)).toBeGreaterThan(guns(1));
+  it('narrows the roll to a template and a gear level', () => {
+    const loaded = playerVehicle(randomKit(emptyWorld(), 'merc', 'loaded'));
+    const poor = playerVehicle(randomKit(emptyWorld(), 'merc', 'poor'));
+    expect(NPCS.merc.loadout.chassis.map((c) => c.value)).toContain(loaded.chassisId);
+    expect(mountedItems(loaded, 'weapon').length).toBeGreaterThan(mountedItems(poor, 'weapon').length);
   });
 
-  it('rejects a gear level outside 1 to 5', () => {
-    for (const level of [0, 6, 2.5]) expect(() => randomKit(emptyWorld(), level)).toThrow(CheatError);
+  it('rejects an unknown template or gear level', () => {
+    expect(() => randomKit(emptyWorld(), 'nobody')).toThrow(CheatError);
+    expect(() => randomKit(emptyWorld(), 'merc', 'shiny')).toThrow(CheatError);
   });
 });

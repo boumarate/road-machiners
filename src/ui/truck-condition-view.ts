@@ -2,8 +2,10 @@ import { baseGrid } from "../sim/grid";
 import type { Vehicle } from "../sim/types";
 import { createIcon } from "./cards";
 import { el } from "./dom";
-import { conditionLabel, TruckConditionReadout } from "./hud-readout";
+import { conditionLabel, openArmorSlots, TruckConditionReadout } from "./hud-readout";
 import "./truck-condition.css";
+
+const CELL = 30;
 
 type ConditionPart = ReturnType<TruckConditionReadout["update"]>[number];
 // Gun numbers aiming at each part id, and the click that aims the chosen guns at a part.
@@ -16,9 +18,11 @@ export class TruckConditionView {
   });
   private body = el("div", { class: "condition-chassis" });
   private readout = new TruckConditionReadout();
+  private slots = el("div", { class: "condition-slots" });
   private nodes = new Map<string, HTMLElement>();
 
   constructor() {
+    this.body.append(this.slots);
     this.root.append(this.body);
   }
 
@@ -33,6 +37,8 @@ export class TruckConditionView {
       node.remove();
       this.nodes.delete(id);
     }
+    this.slots.replaceChildren(...openArmorSlots(vehicle).map(({ x, y }) =>
+      el("div", { class: "condition-slot", title: "No armor here", style: `left:${x * CELL}px;top:${y * CELL}px;width:${CELL}px;height:${CELL}px` })));
     for (const part of parts) this.renderPart(part, aim);
   }
 
@@ -49,6 +55,7 @@ export class TruckConditionView {
       this.body.append(node);
     }
     node.dataset.condition = part.state;
+    node.classList.toggle("broken", part.broken);
     markAim(node, part.id, aim);
     node.title = conditionLabel(part);
     node.setAttribute("aria-label", node.title);

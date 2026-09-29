@@ -88,3 +88,24 @@
   font: 10px / 10px var(--font-mono);
   text-align: center;
 }
+.condition-slots {
+  position: absolute;
+  inset: 0;
+}
+.condition-slot {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px dashed #5f6b6d;
+  border-radius: 3px;
+}
+.condition-part.broken {
+  border-style: dashed;
+  border-color: #de8e7d;
+  background: #2a1a18;
+}
+.condition-part.broken .icon {
+  opacity: 0.35;
+}
+.condition-part.broken .condition-percent {
+  color: #de8e7d;
+}
