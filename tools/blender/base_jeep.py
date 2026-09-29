@@ -2,8 +2,8 @@
 
 Grid: 4 columns by 7 rows, 1.94 m across by 4.55 m along. Half height 0.4 m, from PHYSICS.bodies.jeep.
 One slab-sided body from nose to tail. Rows 0 and 1 are a flat sloped front hood with the spare wheel on it,
-row 2 an open tub behind an upright windshield with the driver's seat and a passenger seat cushion,
-rows 3 and 4 the rear deck with a cutout over the engine cells, rows 5 and 6 a louvered tail sloping down to the rear.
+rows 2 and 3 an open tub behind an upright windshield with the driver's seat and a passenger seat cushion,
+rows 4 and 5 the rear deck with a cutout over the engine cells, row 6 a louvered tail sloping down to the rear.
 Wheels sit on rows 1 and 5 in the outer columns, radius 0.45 m, half width 0.18 m, mount 0.25 m below the center.
 Run: blender --background --python tools/blender/base_jeep.py -- public/models/base_jeep.glb [tmp/base_jeep.png]
 """
@@ -43,9 +43,9 @@ TAIL_Z = 0.0  # the tail slope ends at the rear face's top edge
 TAIL_LOW = -0.35
 
 COWL = G.row_x(1.5)  # the windshield base and the tub front, behind the hood rows
-TUB_BACK = G.row_x(2.5)  # the tub ends at the engine bay
+TUB_BACK = G.row_x(3.5)  # the tub ends at the engine bay
 FIREWALL = 0.03  # half the wall between the tub and the engine bay
-BAY_BACK = G.row_x(4.5)  # the engine cells run from row 3 to row 4, and the tail slope starts here
+BAY_BACK = G.row_x(5.5)  # the engine cells run from row 4 to row 5, and the tail slope starts here
 SEAM_LOW = -0.28  # door seams end above the front arch
 RAKE = 0.08  # the windshield leans back this far at its top
 SCREEN_TOP = TOP + 0.42
@@ -169,10 +169,10 @@ def main() -> None:
     seats(kit)
     tail(kit)
     # The hood and tail rows lie on slopes. The tub cells stand on its floor, the passenger cell on the seat cushion.
-    slopes = {(x, y): surface_z(G, x, y) for x in range(G.cols) for y in (0, 1, 5, 6)}
-    tub = {(x, y): FLOOR for x in range(G.cols) for y in (2,)} | {(2, 2): SEAT_TOP}
+    slopes = {(x, y): surface_z(G, x, y) for x in range(G.cols) for y in (0, 1, 6)}
+    tub = {(x, y): FLOOR for x in range(G.cols) for y in (2, 3)} | {(2, 2): SEAT_TOP}
     # Items on the engine cells stand on the bay floor under the cutout.
-    bay = {(x, y): FLOOR for x in (1, 2) for y in (3, 4)}
+    bay = {(x, y): FLOOR for x in (1, 2) for y in (4, 5)}
     level_sockets(kit, G, "row", [TOP] * G.rows, fronts={2: COWL - 0.03 - RAKE - 0.06}, cells=slopes | tub | bay)
     level_sockets(kit, G, "floor", [FLOOR] * G.rows)
     check_base(kit, "base_jeep", G)

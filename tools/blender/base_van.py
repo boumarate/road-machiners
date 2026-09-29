@@ -1,8 +1,8 @@
 """The van base: a stylized 1980s Chevy G20 full-size van.
 
 Grid: 5 columns by 9 rows, 2.42 m across by 5.85 m along. Half height 0.5 m, from PHYSICS.bodies.van.
-Rows 0 to 3 are a sloped hood with a cutout over the engine cells, rows 4 to 8 one tall closed box.
-The flat box roof is the row surface for rows 4 to 8, so weapons and cargo stand on it like on a roof rack.
+Rows 0 to 2 are a short sloped hood with a cutout over the engine cells, rows 3 to 8 one tall closed box.
+The flat box roof is the row surface for rows 3 to 8, so weapons and cargo stand on it like on a roof rack.
 Wheels sit on rows 1 and 7 in the outer columns, radius 0.45 m, half width 0.18 m, mount 0.35 m below the center.
 Run: blender --background --python tools/blender/base_van.py -- public/models/base_van.glb [tmp/base_van.png]
 """
@@ -34,19 +34,19 @@ FRONT = G.half_x - INSET  # nose face
 BACK = -G.half_x + INSET  # tail face
 NOSE_TOP = G.top - 0.02  # the hood's front edge, above the chamfer
 NOSE_CHAMFER = 0.14
-CAB_FRONT = G.row_x(3.5)  # the windshield base, where the box starts
+CAB_FRONT = G.row_x(2.5)  # the windshield base, where the box starts
 COWL = G.top + 0.34  # the hood's back edge at the windshield base
 ROOF = G.top + 1.0
 ROOF_T = 0.1
 UNDER_ROOF = ROOF - ROOF_T
 RAKE_TOP = CAB_FRONT - 0.42  # the windshield top
 ROOF_CHAMFER = 0.1
-BAY_FRONT = G.row_x(1.5)  # the engine cutout covers rows 2 and 3, columns 1 and 2
+BAY_FRONT = G.row_x(0.5)  # the engine cutout covers rows 1 and 2, columns 1 and 2
 BAY_LEFT = G.col_y(0.5)
 BAY_RIGHT = G.col_y(2.5)
 BAY_FLOOR = 0.36  # a 0.5 m engine block tops out 0.02 m above the cowl and well above the hood on row 1
 LAMP_Y = (0.66, 1.08)  # headlight span across, from the center line
-WINDOW_BACK = G.row_x(4.55)  # the front door windows end here, the box behind is closed
+WINDOW_BACK = G.row_x(3.55)  # the front door windows end here, the box behind is closed
 STRIPE_Z = 0.12  # the side stripe's bottom edge
 STRIPE_H = 0.24
 STRIPE_KICK = G.row_x(6.3)  # the stripe turns up toward the roof here
@@ -149,11 +149,11 @@ def main() -> None:
     lower_body(kit)
     hood(kit)
     box(kit)
-    hood_rows = [round(hood_z(G.row_x(y)), 3) for y in range(4)]
+    hood_rows = [round(hood_z(G.row_x(y)), 3) for y in range(3)]
     # Items on the engine cells stand on the bay floor under the cutout.
-    bay = {(x, y): BAY_FLOOR for x in (1, 2) for y in (2, 3)}
-    level_sockets(kit, G, "row", hood_rows + [ROOF] * 5, fronts={4: RAKE_TOP}, cells=bay)
-    level_sockets(kit, G, "floor", [FLOOR] * 2 + [BAY_FLOOR] * 2 + [G.top] * 5)
+    bay = {(x, y): BAY_FLOOR for x in (1, 2) for y in (1, 2)}
+    level_sockets(kit, G, "row", hood_rows + [ROOF] * 6, fronts={3: RAKE_TOP}, cells=bay)
+    level_sockets(kit, G, "floor", [FLOOR] + [BAY_FLOOR] * 2 + [G.top] * 6)
     check_base(kit, "base_van", G)
     kit.export("base_van", args, view_size=7.2)
 
