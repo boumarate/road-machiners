@@ -43,4 +43,14 @@ describe('truck shapes', () => {
       expect(b.z1).toBeGreaterThan(b.z0);
     }
   });
+
+  it.each(names)('%s has a 0.1 m height map with geometry under every collision box center', (name) => {
+    const { heights, boxes } = SHAPES[name];
+    expect(heights.cell).toBe(0.1);
+    for (const b of boxes) {
+      const i = Math.floor((b.x0 + b.x1) / 2 / heights.cell) - heights.i0;
+      const j = Math.floor((b.y0 + b.y1) / 2 / heights.cell) - heights.j0;
+      expect(heights.top[i]?.[j], `${name} box center`).toEqual(expect.any(Number));
+    }
+  });
 });

@@ -18,6 +18,26 @@ export function shapeOf(triangles, cfg) {
   return capBoxes(mergeCells(rasterize(triangles, cfg), cfg), cfg).map(roundBox);
 }
 
+// The top surface of a model: per cell of cell meters, the highest point of any triangle over it, rounded up to whole
+// centimeters. A cell no triangle touches is null. Returns cell indices i0, j0 of the first row and column (x and y in
+// model space) and top[i][j] in centimeters, so cell (i, j) spans x from (i0 + i) * cell to (i0 + i + 1) * cell.
+export function heightMap(triangles, cell) {
+  const cfg = { cell };
+  const best = new Map();
+  let i0 = Infinity, i1 = -Infinity, j0 = Infinity, j1 = -Infinity;
+  for (const tri of triangles) {
+    for (const [key, i, j, part] of triangleCells(tri, cfg)) {
+      if (!(best.get(key) >= part.z1)) best.set(key, part.z1);
+      i0 = Math.min(i0, i); i1 = Math.max(i1, i); j0 = Math.min(j0, j); j1 = Math.max(j1, j);
+    }
+  }
+  const top = Array.from({ length: i1 - i0 + 1 }, (_, i) => Array.from({ length: j1 - j0 + 1 }, (_, j) => {
+    const z = best.get(`${i + i0},${j + j0}`);
+    return z === undefined ? null : Math.ceil(z * CM - 1e-6);
+  }));
+  return { cell, i0, j0, top };
+}
+
 // FNV-1a over the file bytes, as 8 hex digits. src/data/prop-shapes.test.ts repeats it.
 export function fnv1a(bytes) {
   let h = 0x811c9dc5;
@@ -269,9 +289,12 @@ export function roundBox(b) {
 // One model per block and one box per line, sorted by name, so a rerun writes the same bytes.
 export function formatShapes(all) {
   const blocks = Object.keys(all).sort().map((name) => {
-    const { hash, boxes } = all[name];
+    const { hash, boxes, heights } = all[name];
     const lines = boxes.map((b) => `      ${JSON.stringify(b)}`).join(',\n');
-    return `  ${JSON.stringify(name)}: {\n    "hash": ${JSON.stringify(hash)},\n    "boxes": [\n${lines}\n    ]\n  }`;
+    const head = `  ${JSON.stringify(name)}: {\n    "hash": ${JSON.stringify(hash)},\n    "boxes": [\n${lines}\n    ]`;
+    if (!heights) return `${head}\n  }`;
+    const rows = heights.top.map((r) => `        ${JSON.stringify(r)}`).join(',\n');
+    return `${head},\n    "heights": {\n      "cell": ${heights.cell},\n      "i0": ${heights.i0},\n      "j0": ${heights.j0},\n      "top": [\n${rows}\n      ]\n    }\n  }`;
   });
   return `{\n${blocks.join(',\n')}\n}\n`;
 }

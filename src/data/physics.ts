@@ -24,24 +24,25 @@ export const PHYSICS = {
     maxSteer: 0.6, // radians of front wheel angle
     steerRate: 3, // radians per second the wheels can turn
   },
-  // One inventory grid cell in meters. A truck's body is its grid: length is rows x along, width is columns x across.
+  // One deck cell in meters, as the base models are built. Only the drawing of parts still reads it. Sim code goes through the projection in src/sim/body.ts.
   cell: { across: 0.484, along: 0.65 },
-  // Body per chassis look, in meters. halfHeight: chassis box half height. Length, width and wheel mounts come from the grid.
-  // wheelY: suspension mount height relative to the chassis center. Mass comes from src/sim/mass.ts.
+  // Body per chassis look, in meters. Length and width come from the base model. halfHeight: chassis box half height.
+  // wheelX: axle distance from the center. wheelZ: wheel distance from the center line. wheelY: suspension mount height relative to the chassis center.
+  // engine: the center of the hood hole on the bay floor, in body space. Mass comes from src/sim/mass.ts.
   bodies: {
-    pickup: { halfHeight: 0.45, wheelY: -0.3, wheelRadius: 0.45, wheelHalfWidth: 0.18 },
-    hauler: { halfHeight: 0.6, wheelY: -0.4, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
-    buggy: { halfHeight: 0.35, wheelY: -0.2, wheelRadius: 0.5, wheelHalfWidth: 0.22 },
-    wagon: { halfHeight: 0.7, wheelY: -0.45, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
-    courier: { halfHeight: 0.3, wheelY: -0.2, wheelRadius: 0.4, wheelHalfWidth: 0.16 },
-    van: { halfHeight: 0.5, wheelY: -0.35, wheelRadius: 0.45, wheelHalfWidth: 0.18 },
-    longbed: { halfHeight: 0.55, wheelY: -0.35, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
-    carrier: { halfHeight: 0.6, wheelY: -0.4, wheelRadius: 0.65, wheelHalfWidth: 0.28 },
-    tractor: { halfHeight: 0.65, wheelY: -0.45, wheelRadius: 0.7, wheelHalfWidth: 0.3 },
-    jeep: { halfHeight: 0.4, wheelY: -0.25, wheelRadius: 0.45, wheelHalfWidth: 0.18 },
-    convertible: { halfHeight: 0.35, wheelY: -0.2, wheelRadius: 0.42, wheelHalfWidth: 0.17 },
-    bus: { halfHeight: 0.8, wheelY: -0.55, wheelRadius: 0.55, wheelHalfWidth: 0.22 },
-    loader: { halfHeight: 0.65, wheelY: -0.45, wheelRadius: 0.8, wheelHalfWidth: 0.32 },
+    pickup: { halfHeight: 0.45, wheelY: -0.3, wheelX: 1.625, wheelZ: 0.968, engine: { x: 1.3, y: 0.05, z: -0.242 }, wheelRadius: 0.45, wheelHalfWidth: 0.18 },
+    hauler: { halfHeight: 0.6, wheelY: -0.4, wheelX: 1.95, wheelZ: 1.452, engine: { x: 1.625, y: 1.21, z: -0.242 }, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
+    buggy: { halfHeight: 0.35, wheelY: -0.2, wheelX: 0.975, wheelZ: 0.726, engine: { x: 0.65, y: 0.05, z: 0 }, wheelRadius: 0.5, wheelHalfWidth: 0.22 },
+    wagon: { halfHeight: 0.7, wheelY: -0.45, wheelX: 1.3, wheelZ: 0.968, engine: { x: 0.325, y: 0.3, z: -0.242 }, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
+    courier: { halfHeight: 0.3, wheelY: -0.2, wheelX: 1.3, wheelZ: 0.726, engine: { x: 0.975, y: 0, z: 0 }, wheelRadius: 0.4, wheelHalfWidth: 0.16 },
+    van: { halfHeight: 0.5, wheelY: -0.35, wheelX: 1.95, wheelZ: 0.968, engine: { x: 1.625, y: 0.36, z: -0.242 }, wheelRadius: 0.45, wheelHalfWidth: 0.18 },
+    longbed: { halfHeight: 0.55, wheelY: -0.35, wheelX: 2.6, wheelZ: 1.452, engine: { x: 2.275, y: 0.35, z: -0.242 }, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
+    carrier: { halfHeight: 0.6, wheelY: -0.4, wheelX: 1.95, wheelZ: 1.21, engine: { x: 0.325, y: 0.4, z: -0.484 }, wheelRadius: 0.65, wheelHalfWidth: 0.28 },
+    tractor: { halfHeight: 0.65, wheelY: -0.45, wheelX: 1.95, wheelZ: 1.452, engine: { x: 1.625, y: 0.5, z: -0.242 }, wheelRadius: 0.7, wheelHalfWidth: 0.3 },
+    jeep: { halfHeight: 0.4, wheelY: -0.25, wheelX: 1.3, wheelZ: 0.726, engine: { x: -0.975, y: 0, z: 0 }, wheelRadius: 0.45, wheelHalfWidth: 0.18 },
+    convertible: { halfHeight: 0.35, wheelY: -0.2, wheelX: 1.95, wheelZ: 0.968, engine: { x: -1.625, y: -0.03, z: -0.242 }, wheelRadius: 0.42, wheelHalfWidth: 0.17 },
+    bus: { halfHeight: 0.8, wheelY: -0.55, wheelX: 2.925, wheelZ: 1.21, engine: { x: -1.95, y: 1.05, z: 0 }, wheelRadius: 0.55, wheelHalfWidth: 0.22 },
+    loader: { halfHeight: 0.65, wheelY: -0.45, wheelX: 1.95, wheelZ: 1.452, engine: { x: -0.975, y: 0.5, z: -0.242 }, wheelRadius: 0.8, wheelHalfWidth: 0.32 },
   },
   driver: {
     steerGain: 1.6, // wheel angle per radian of heading error
