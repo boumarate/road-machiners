@@ -19,12 +19,12 @@ export function inspectSource(file, source) {
 
 export function collectComponents(sources) {
   const components = new Map();
-  const production = [...sources].filter(([file]) => file.startsWith('src/') && !testPattern.test(file));
+  const production = [...sources].filter(([file]) => file.startsWith('game/src/') && !testPattern.test(file));
   for (const [file, source] of production) {
     const { lines } = inspectSource(file, source);
     if (!lines) continue;
     const parts = file.split('/');
-    const name = parts.length > 2 ? `src/${parts[1]}` : 'src';
+    const name = parts.length > 3 ? `game/src/${parts[2]}` : 'game/src';
     const component = components.get(name) ?? { files: 0, lines: 0 };
     component.files++;
     component.lines += lines;

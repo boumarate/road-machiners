@@ -22,16 +22,16 @@ It follows `Steelman/infra`. Run every command from `factory/infra`.
 ## What each deploy does
 
 - Provision installs packages, Docker, Node 24, gh and butler. It opens ports 22, 80 and 443. It makes the `factory` user and the `/opt/factory` folders.
-- Deploy syncs the repo to `/opt/factory/code` and pushes the factory `.env` there with mode 600.
-- Deploy runs `npm ci`, logs gh in with the token and builds the agent image.
-- Deploy installs the tick service and timer. The timer runs `factory tick` every `FACTORY_TICK_MINUTES`.
+- Deploy syncs the repo to `/opt/factory/code` and pushes the factory `.env` to `/opt/factory/code/factory/.env` with mode 600.
+- Deploy runs `npm ci` in `/opt/factory/code/factory`, logs gh in with the token and builds the agent image.
+- Deploy installs the tick service and timer. The timer runs `factory tick` from `/opt/factory/code/factory` every `FACTORY_TICK_MINUTES`.
 - Deploy starts Hermes and Caddy with Docker Compose. Caddy serves `/opt/factory/www` with automatic TLS.
 - Deploy stops early when the factory `.env` has the wrong `FACTORY_HOME` or `FACTORY_WEB_ROOT`.
 - Docker skips UFW for published ports. So `daemon.json` binds published ports to 127.0.0.1 unless a port names its address, and only Caddy names 0.0.0.0 for 80 and 443. Deploy ends with `check-ports.sh`, which fails on any other published port. Status lists the published ports.
 
 ## Folders on the server
 
-- `/opt/factory/code` holds the synced checkout and the `.env`.
+- `/opt/factory/code` holds the synced checkout. The factory runs from `/opt/factory/code/factory`, where its `.env` lives.
 - `/opt/factory/home` is `FACTORY_HOME`. Set it in the factory `.env`.
 - `/opt/factory/www` is `FACTORY_WEB_ROOT`. Set it in the factory `.env`.
 - `/opt/factory/hermes` holds the Hermes state and login.
@@ -47,7 +47,7 @@ It follows `Steelman/infra`. Run every command from `factory/infra`.
 5. Make a Telegram bot with BotFather. Put its token in `TELEGRAM_BOT_TOKEN`. Set `FACTORY_COMMITTEE_BOOTSTRAP` to your Telegram user id, `FACTORY_COMMITTEE_BOOTSTRAP_GITHUB` to your GitHub login and `FACTORY_COMMITTEE_CHAT` to the chat id in the factory `.env`. You are the first committee member. Add others with `/committee add` in the chat.
 6. In the factory `.env`, set `FACTORY_HOME=/opt/factory/home`, `FACTORY_WEB_ROOT=/opt/factory/www`, `FACTORY_TICK_MINUTES` and `FACTORY_PUBLIC_URL=https://<domain>`. Also set `ITCH_TARGET` and `BUTLER_API_KEY`.
 7. Set `FACTORY_ENV_FILE` in `prod.env` to that file. Run provision, then deploy.
-8. Sign Hermes in to ChatGPT, which it uses for chat. Run this on the server: `cd /opt/factory/code && FACTORY_HERMES_DIR=/opt/factory/hermes docker compose -f factory/hermes/compose.yaml --env-file .env run --rm --no-deps hermes hermes auth add openai-codex`. Then restart Hermes with `docker restart factory-hermes`.
+8. Sign Hermes in to ChatGPT, which it uses for chat. Run this on the server: `cd /opt/factory/code && FACTORY_HERMES_DIR=/opt/factory/hermes docker compose -f factory/hermes/compose.yaml --env-file factory/.env run --rm --no-deps hermes hermes auth add openai-codex`. Then restart Hermes with `docker restart factory-hermes`.
 9. Run status and check the timer, Hermes health and the gh login.
 
 Do not start a second Hermes gateway for the same bot token. The one-off container above only runs the login command.

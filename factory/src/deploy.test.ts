@@ -9,8 +9,8 @@ function setup(): { ctx: Ctx; clone: string; webRoot: string; shells: string[][]
   const root = mkdtempSync(join('tmp', 'factory-deploy-'));
   const clone = join(root, 'clone');
   const webRoot = join(root, 'web');
-  mkdirSync(join(clone, 'dist'), { recursive: true });
-  writeFileSync(join(clone, 'dist', 'index.html'), 'new');
+  mkdirSync(join(clone, 'game', 'dist'), { recursive: true });
+  writeFileSync(join(clone, 'game', 'dist', 'index.html'), 'new');
   const shells: string[][] = [];
   const container = { agent: async () => {}, shell: async (c: string, s: string, l: string, e?: Record<string, string>) => { shells.push([c, s, l, JSON.stringify(e)]); } };
   const ctx = { cfg: { webRoot, publicUrl: 'http://x/play' }, container } as unknown as Ctx;

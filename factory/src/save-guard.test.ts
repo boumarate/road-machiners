@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { changesSaveMajor } from './save-guard';
 
-const HEAD = 'diff --git a/src/three/save-migrations.ts b/src/three/save-migrations.ts\n--- a/src/three/save-migrations.ts\n+++ b/src/three/save-migrations.ts\n@@ -1,3 +1,3 @@\n';
+const HEAD = 'diff --git a/game/src/three/save-migrations.ts b/game/src/three/save-migrations.ts\n--- a/game/src/three/save-migrations.ts\n+++ b/game/src/three/save-migrations.ts\n@@ -1,3 +1,3 @@\n';
 
 describe('changesSaveMajor', () => {
   it('is true for a changed SAVE_MAJOR', () => {
@@ -22,7 +22,7 @@ describe('changesSaveMajor', () => {
   });
 
   it('is false in another file', () => {
-    const other = 'diff --git a/src/x.ts b/src/x.ts\n--- a/src/x.ts\n+++ b/src/x.ts\n@@ -1 +1 @@\n+const SAVE_MAJOR = 2;\n';
+    const other = 'diff --git a/game/src/x.ts b/game/src/x.ts\n--- a/game/src/x.ts\n+++ b/game/src/x.ts\n@@ -1 +1 @@\n+const SAVE_MAJOR = 2;\n';
     expect(changesSaveMajor(other)).toBe(false);
   });
 

@@ -2,6 +2,7 @@ import { EMPTY_STATE, writeState } from '../state';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
+import { agentHome } from './common';
 import type { AgentRun, Ctx, FactoryConfig } from '../types';
 
 // Each test file loads its own copy of this module, so each file gets its own folder and parallel files never collide.
@@ -37,8 +38,9 @@ export function fake(): Fake {
       shell: async () => note('shell'),
       agent: async (run: AgentRun) => {
         note('agent');
-        mkdirSync(join(run.clone, '.factory'), { recursive: true });
-        for (const [name, text] of Object.entries(f.agentWrites)) writeFileSync(join(run.clone, '.factory', name), text);
+        const home = agentHome(run.clone, run.dir);
+        mkdirSync(join(home, '.factory'), { recursive: true });
+        for (const [name, text] of Object.entries(f.agentWrites)) writeFileSync(join(home, '.factory', name), text);
       },
     },
     repo: {
@@ -58,7 +60,7 @@ export function fake(): Fake {
 
 export function reset(): void {
   rmSync(ROOT, { recursive: true, force: true });
-  mkdirSync(join(ROOT, 'repo'), { recursive: true });
+  mkdirSync(join(ROOT, 'repo', 'game'), { recursive: true });
   writeFileSync(join(ROOT, 'code.env'), '');
   writeState(join(ROOT, 'state.json'), structuredClone(EMPTY_STATE));
 }

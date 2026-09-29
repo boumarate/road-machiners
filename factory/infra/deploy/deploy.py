@@ -15,7 +15,8 @@ FILES = INFRA_DIR / "files"
 factory_env = read_factory_env(settings.factory_env_file)
 image = factory_env["FACTORY_IMAGE"]
 tick_minutes = factory_env["FACTORY_TICK_MINUTES"]
-env_path = f"{CODE_DIR}/.env"
+factory_dir = f"{CODE_DIR}/factory"
+env_path = f"{factory_dir}/.env"
 as_factory = {"_sudo": True, "_sudo_user": FACTORY_USER}
 
 files.sync(
@@ -48,8 +49,8 @@ files.put(
 )
 
 server.shell(
-    name="npm ci",
-    commands=[f"cd {CODE_DIR} && timeout 900 npm ci"],
+    name="npm ci in factory",
+    commands=[f"cd {factory_dir} && timeout 900 npm ci"],
     **as_factory,
 )
 

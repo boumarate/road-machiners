@@ -1,5 +1,5 @@
 import { cpSync, mkdirSync, renameSync, rmSync } from 'node:fs';
-import type { Ctx } from './types';
+import { GAME_DIR, type Ctx } from './types';
 
 const SCOPE = /^[a-z0-9-]+$/;
 
@@ -11,7 +11,7 @@ export async function buildAndDeploy(ctx: Ctx, clone: string, scope: string, log
   const staging = `${ctx.cfg.webRoot}/.${scope}.new`;
   mkdirSync(ctx.cfg.webRoot, { recursive: true });
   rmSync(staging, { recursive: true, force: true });
-  cpSync(`${clone}/dist`, staging, { recursive: true });
+  cpSync(`${clone}/${GAME_DIR}/dist`, staging, { recursive: true });
   rmSync(target, { recursive: true, force: true });
   renameSync(staging, target);
   return `${ctx.cfg.publicUrl}/${scope}/`;

@@ -1,4 +1,4 @@
-const SAVE_FILE = 'src/three/save-migrations.ts';
+const SAVE_FILE = 'game/src/three/save-migrations.ts';
 const SAVE_MAJOR_LINE = /SAVE_MAJOR\s*=/;
 
 // True when the diff adds or removes a SAVE_MAJOR assignment in the save migrations file.

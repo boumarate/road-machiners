@@ -1,5 +1,5 @@
-# Agent image: Claude Code with the ultrapack plugin, an entry script that links the clone's project skills, plus the browser tooling the game's tests and builds need.
-# The Playwright tag matches the playwright version in package-lock.json.
+# Agent image: Claude Code with the ultrapack plugin, an entry script that links the game's project skills, plus the browser tooling the game's tests and builds need.
+# The Playwright tag matches the playwright version in game/package-lock.json.
 FROM mcr.microsoft.com/playwright:v1.63.0-noble
 
 RUN apt-get update \

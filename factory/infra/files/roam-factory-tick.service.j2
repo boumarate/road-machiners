@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User={{ user }}
-WorkingDirectory={{ code_dir }}
+WorkingDirectory={{ code_dir }}/factory
 UMask=0022
 ExecStart=/usr/bin/npm run -s factory -- tick
 StandardOutput=append:{{ home_dir }}/logs/tick.log

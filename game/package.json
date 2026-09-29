@@ -1,0 +1,41 @@
+{
+  "name": "roam",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "typecheck": "tsc",
+    "test": "vitest run",
+    "playtest": "node scripts/playtest.mjs",
+    "perf": "node scripts/perf.mjs",
+    "sfx:gen": "vite-node scripts/sfx-gen.mjs",
+    "sfx:import": "vite-node scripts/sfx-import.mjs",
+    "sfx:board": "vite --open /sound.html",
+    "sfx:reimport": "vite-node scripts/sfx-reimport.mjs",
+    "econ": "vite-node scripts/econ.mjs",
+    "combat": "vite-node scripts/combat.mjs",
+    "loadouts": "vite-node scripts/loadouts.mjs",
+    "progression:record": "vite-node scripts/progression-record.mjs",
+    "progression:report": "vite-node scripts/progression-report.mjs",
+    "map:bake": "vite-node scripts/map-bake.mjs",
+    "models:shapes": "node scripts/prop-shapes.mjs",
+    "save:shape": "vite-node scripts/save-shape.mjs",
+    "itch": "node scripts/itch-publish.mjs"
+  },
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.21.0",
+    "@fontsource/barlow-semi-condensed": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.186.0",
+    "playwright": "^1.63.0",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.7"
+  },
+  "type": "module"
+}

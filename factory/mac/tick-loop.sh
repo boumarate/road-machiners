@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Runs the factory tick every FACTORY_TICK_MINUTES. Start it in tmux from anywhere.
+# Runs the factory tick every FACTORY_TICK_MINUTES. Start it in tmux from anywhere. It runs from factory/ and loads factory/.env.
 # A tick that fails is logged and the loop goes on. Stop it with Ctrl-C.
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "$repo_root"
+factory_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$factory_root"
 
 set -a
 # shellcheck disable=SC1091
 source .env
 set +a
 
-: "${FACTORY_HOME:?set FACTORY_HOME in .env}"
-: "${FACTORY_TICK_MINUTES:?set FACTORY_TICK_MINUTES in .env}"
+: "${FACTORY_HOME:?set FACTORY_HOME in factory/.env}"
+: "${FACTORY_TICK_MINUTES:?set FACTORY_TICK_MINUTES in factory/.env}"
 
 mkdir -p "$FACTORY_HOME/logs"
 log="$FACTORY_HOME/logs/tick.log"

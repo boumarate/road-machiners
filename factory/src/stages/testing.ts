@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { buildAndDeploy } from '../deploy';
 import { stripAnsi } from '../fail';
 import { updateState } from '../state';
-import { BRANCH, OUT_DIR, TASK_FILE, type Ctx } from '../types';
-import { BASE_BRANCH, agentLog, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, throwIfNeedsCommittee, workDir } from './common';
+import { BRANCH, GAME_DIR, OUT_DIR, TASK_FILE, type Ctx } from '../types';
+import { BASE_BRANCH, agentHome, agentLog, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, throwIfNeedsCommittee, workDir } from './common';
 
 const CHECK_SCRIPT = `set -e
 npm ci
@@ -28,35 +28,36 @@ exit $code
 export type Approval = { description: string; howToTry: string };
 
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
-  const clone = workDir(ctx, issue);
-  await ctx.repo.prepareWorkClone(BRANCH(issue), BASE_BRANCH, clone);
-  resetOutputs(clone);
+  const home = agentHome(workDir(ctx, issue), GAME_DIR);
+  await ctx.repo.prepareWorkClone(BRANCH(issue), BASE_BRANCH, workDir(ctx, issue));
+  resetOutputs(home);
   await agentRound(ctx, issue, 'test');
   const failure = await runChecks(ctx, issue);
   // The agent gets one round to fix what the factory's own checks found. A second failure stops the card.
   if (failure !== null) {
-    writeFileSync(`${clone}/${OUT_DIR}/check-failure.md`, failure);
+    writeFileSync(`${home}/${OUT_DIR}/check-failure.md`, failure);
     await agentRound(ctx, issue, 'test-fix');
     const again = await runChecks(ctx, issue);
     if (again !== null) throw new Error(`The factory checks failed twice.\n${again}`);
   }
-  const approval = readApproval(clone);
+  const approval = readApproval(home);
   const url = await buildAndDeploy(ctx, checkDir(ctx, issue), await ctx.repo.headHash(BRANCH(issue)), agentLog(ctx, issue, 'checks'));
-  await post(ctx, issue, approval, `${clone}/${OUT_DIR}/screenshot.png`, url);
+  await post(ctx, issue, approval, `${home}/${OUT_DIR}/screenshot.png`, url);
   await ctx.github.move(issue, 'Approval');
 }
 
 async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'test-fix'): Promise<void> {
   await runAgent(ctx, issue, 'testing', ctx.cfg.buildModel, fillPrompt(prompt, { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue) }));
-  throwIfNeedsCommittee(workDir(ctx, issue));
-  readApproval(workDir(ctx, issue));
+  const home = agentHome(workDir(ctx, issue), GAME_DIR);
+  throwIfNeedsCommittee(home);
+  readApproval(home);
   await guardAndPush(ctx, issue, BASE_BRANCH);
 }
 
-function readApproval(clone: string): Approval {
-  const raw = readOutput(clone, 'approval.json');
+function readApproval(home: string): Approval {
+  const raw = readOutput(home, 'approval.json');
   if (raw === null) throw new Error('The testing stage wrote no .factory/approval.json');
-  if (readOutput(clone, 'screenshot.png') === null) throw new Error('The testing stage wrote no .factory/screenshot.png');
+  if (readOutput(home, 'screenshot.png') === null) throw new Error('The testing stage wrote no .factory/screenshot.png');
   return parseApproval(JSON.parse(raw));
 }
 

@@ -1,12 +1,13 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkFragmentation, collectComponents, inspectSource } from './quality-policy.mjs';
 
 const root = process.cwd();
 const sourcePattern = /\.(?:[cm]?[jt]s|[jt]sx)$/;
-const ignoredPattern = /^(?:node_modules|dist|tmp|\.worktrees|\.pi|\.playtest|\.agents|\.claude)\//;
+const ignoredPattern = /(?:^|\/)(?:node_modules|dist|tmp|\.worktrees|\.pi|\.playtest|\.agents|\.claude)\//;
+const typeProjects = ['game', 'factory'];
 const maxBuffer = 64 * 1024 * 1024; // Bounds captured Git and linter output, including the repo-wide baseline.
 
 function runGit(...args) {
@@ -114,21 +115,25 @@ function checkQuality(directory, baseline, files, headFiles) {
 
 function checkTypes(directory) {
   const compiler = fileURLToPath(new URL('./bin/tsc', import.meta.resolve('typescript/package.json')));
-  const result = spawnSync(process.execPath, [compiler, '--project', path.join(directory, 'tsconfig.json')], { cwd: directory, stdio: 'inherit' });
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error('Typecheck failed.');
+  for (const project of typeProjects) {
+    const modules = path.join(directory, project, 'node_modules');
+    if (directory !== root && !existsSync(modules)) symlinkSync(path.join(root, project, 'node_modules'), modules);
+    const result = spawnSync(process.execPath, [compiler, '--project', path.join(directory, project, 'tsconfig.json')], { cwd: path.join(directory, project), stdio: 'inherit' });
+    if (result.error) throw result.error;
+    if (result.status !== 0) throw new Error(`Typecheck failed in ${project}.`);
+  }
 }
 
 function assertStagedTooling() {
   const changed = splitPaths(runGit('diff', '--name-only', '-z'));
-  const tooling = new Set(['.oxlintrc.json', '.quality.json', 'package.json', 'package-lock.json', 'scripts/quality.mjs', 'scripts/quality-policy.mjs']);
+  const tooling = new Set(['.oxlintrc.json', '.quality.json', 'package.json', 'package-lock.json', 'quality/quality.mjs', 'quality/quality-policy.mjs']);
   const unstaged = changed.filter(file => tooling.has(file));
   if (unstaged.length) throw new Error(`Stage or restore quality tooling before committing: ${unstaged.join(', ')}`);
 }
 
 function runChecks() {
   const args = process.argv.slice(2);
-  if (args.some(argument => argument !== '--staged')) throw new Error('Usage: node scripts/quality.mjs [--staged]');
+  if (args.some(argument => argument !== '--staged')) throw new Error('Usage: node quality/quality.mjs [--staged]');
   const staged = args.includes('--staged');
   if (staged) assertStagedTooling();
   mkdirSync(path.join(root, 'tmp'), { recursive: true });

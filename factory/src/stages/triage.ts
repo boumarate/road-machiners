@@ -1,5 +1,5 @@
-import { BRANCH, WONT_DO_LABEL, type Ctx } from '../types';
-import { BASE_BRANCH, askAuthor, fillPrompt, readOutput, resetOutputs, runAgent, workDir, writeIssueInput } from './common';
+import { BRANCH, GAME_DIR, WONT_DO_LABEL, type Ctx } from '../types';
+import { BASE_BRANCH, agentHome, askAuthor, fillPrompt, readOutput, resetOutputs, runAgent, workDir, writeIssueInput } from './common';
 
 type Verdict = { verdict: 'ready' | 'wont-do'; reason: string } | { verdict: 'unclear'; reason: string; questions: string[] };
 
@@ -8,10 +8,11 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const clone = workDir(ctx, issue);
   await ctx.repo.sync();
   await ctx.repo.prepareWorkClone(BRANCH(issue), BASE_BRANCH, clone);
-  resetOutputs(clone);
-  await writeIssueInput(ctx, issue, clone);
+  const home = agentHome(clone, GAME_DIR);
+  resetOutputs(home);
+  await writeIssueInput(ctx, issue, home);
   await runAgent(ctx, issue, 'triage', ctx.cfg.buildModel, fillPrompt('triage', { issue: String(issue) }));
-  const result = parseVerdict(readOutput(clone, 'triage.json'));
+  const result = parseVerdict(readOutput(home, 'triage.json'));
   if (result.verdict === 'unclear') return askAuthor(ctx, issue, result.questions);
   if (result.verdict === 'ready') {
     await ctx.github.comment(issue, `Triage passed: ${result.reason}`);

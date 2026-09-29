@@ -92,12 +92,13 @@ export interface Telegram {
   sendPhoto(chat: string, pngPath: string, caption: string, buttons?: InlineButton[][]): Promise<number>;
 }
 
-export type AgentRun = { clone: string; model: string; prompt: string; log: string };
+// `dir` is the repo folder the agent works in, `game` or `factory`. The container starts it there.
+export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string };
 
 export interface Container {
   // Runs Claude Code headless in the clone. Throws on a nonzero exit.
   agent(run: AgentRun): Promise<void>;
-  // Runs a bash script in the clone with no secret. Throws on a nonzero exit.
+  // Runs a bash script in the game folder of the clone with no secret. It only runs game npm scripts. Throws on a nonzero exit.
   shell(clone: string, script: string, log: string, env?: Record<string, string>): Promise<void>;
 }
 
@@ -127,8 +128,12 @@ export type Ctx = {
   log: (stage: Stage, issue: number | null, msg: string) => void;
 };
 
+// The two folders of the repo. Agents run in one of them, and their files live there.
+export const GAME_DIR = 'game';
+export const FACTORY_DIR = 'factory';
 export const BRANCH = (issue: number): string => `factory/issue-${issue}`;
 // Task files stay in the work clone and never reach a commit. Git ignores their folder there.
+// TASK_FILE and OUT_DIR are relative to the agent folder, which is the agent's working directory.
 export const TASK_DIR = '.factory-tasks';
 export const TASK_FILE = (issue: number): string => `${TASK_DIR}/issue-${issue}.md`;
 export const WORK_DIR = (home: string, issue: number): string => `${home}/work/issue-${issue}`;

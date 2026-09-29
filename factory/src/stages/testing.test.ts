@@ -56,8 +56,8 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
 }
 
 function writeOutputs(run: AgentRun, approval: string | null): void {
-  if (approval !== null) writeFileSync(`${run.clone}/.factory/approval.json`, approval);
-  writeFileSync(`${run.clone}/.factory/screenshot.png`, 'png');
+  if (approval !== null) writeFileSync(`${run.clone}/${run.dir}/.factory/approval.json`, approval);
+  writeFileSync(`${run.clone}/${run.dir}/.factory/screenshot.png`, 'png');
 }
 
 describe('testing stage', () => {
@@ -118,7 +118,7 @@ describe('testing stage', () => {
     await runStage(ctx, 7);
     expect(prompts).toHaveLength(2);
     expect(prompts[1]).toContain('second round');
-    expect(readFileSync(`${home}/work/issue-7/.factory/check-failure.md`, 'utf8')).toContain('npm test failed');
+    expect(readFileSync(`${home}/work/issue-7/game/.factory/check-failure.md`, 'utf8')).toContain('npm test failed');
     expect(calls.filter((call) => call === 'checks')).toHaveLength(2);
     expect(calls.at(-1)).toBe('move 7 Approval');
   });

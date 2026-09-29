@@ -3,11 +3,11 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022", "DOM"],
-    "types": ["vite/client", "node"],
+    "lib": ["ES2022"],
+    "types": ["node"],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["src", "factory/src"]
+  "include": ["src"]
 }

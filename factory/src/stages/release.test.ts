@@ -28,7 +28,7 @@ describe('release', () => {
     expect(at('run npm run')).toBeLessThan(at('photo public'));
     expect(at('photo public')).toBeLessThan(at('message public'));
     expect(at('message public')).toBeLessThan(at('message committee'));
-    expect(lstatSync(join(ROOT, 'repo', '.env')).isSymbolicLink()).toBe(true);
+    expect(lstatSync(join(ROOT, 'repo', 'game', '.env')).isSymbolicLink()).toBe(true);
   });
 });
 

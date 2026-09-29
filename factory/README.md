@@ -2,7 +2,9 @@
 
 The public files and votes on GitHub issues. Agents design and build the top ones. A human committee approves each result by playing it.
 
-The design and its reasons are in [the factory task](../docs/tasks/game-factory.md).
+Run every command in this file from `factory/`, unless it says otherwise. The factory reads its settings from `factory/.env`. Copy `.env.example` to `.env` first.
+
+The design and its reasons are in [the factory task](docs/tasks/game-factory.md).
 
 ## Flow
 
@@ -21,7 +23,7 @@ A failed or timed-out stage labels its issue `factory-stuck` and posts once to t
 
 ## Parts
 
-- `src/` holds the Node CLI. `npm run factory -- tick` is the entry point. A timer runs it.
+- `src/` holds the Node CLI. `npm run factory -- tick` is the entry point. Run `npm ci` in `factory/` first. A timer runs it.
 - `prompts/` holds the prompt of each agent stage.
 - `docker/` holds the agent image. Agents get only their work clone and `CLAUDE_CODE_OAUTH_TOKEN`.
 - `hermes/` holds the Hermes compose file, its config template, its identity in `SOUL.md` and the plugin that queues committee replies into `$FACTORY_HOME/inbox` and edits the committee file.
@@ -31,7 +33,7 @@ A failed or timed-out stage labels its issue `factory-stuck` and posts once to t
 ## Committee
 
 - The committee is a whitelist in `$FACTORY_HOME/committee/committee.json`. Each member has a Telegram id, a GitHub login and a name.
-- Until that file exists, the committee is one member from `FACTORY_COMMITTEE_BOOTSTRAP` and `FACTORY_COMMITTEE_BOOTSTRAP_GITHUB` in `.env`.
+- Until that file exists, the committee is one member from `FACTORY_COMMITTEE_BOOTSTRAP` and `FACTORY_COMMITTEE_BOOTSTRAP_GITHUB` in `factory/.env`.
 - Members manage the list in the chat with `/committee list`, `/committee add`, `/committee remove` and `/committee github`. The Hermes plugin writes the file. The factory reads it on every tick and every command.
 - The bot answers committee members only.
 
@@ -39,11 +41,11 @@ A failed or timed-out stage labels its issue `factory-stuck` and posts once to t
 
 - The host needs `gh` logged in with the `repo` and `project` scopes. Run `gh auth setup-git` so git pushes with it.
 - The host needs a git identity, since approvals make merge commits.
-- Make a GitHub Project for the repo. Its Status field needs the options Triage, Design, Implementation, Testing, Approval and Done. Put its owner and number in `.env`.
+- Make a GitHub Project for the repo. Its Status field needs the options Triage, Design, Implementation, Testing, Approval and Done. Put its owner and number in `factory/.env`.
 - The repo needs a `dev` branch.
 
 ## Tests
 
-- `npx vitest run factory` runs the CLI tests.
-- `uv run --with pytest pytest factory/hermes` runs the plugin tests.
-- `cd factory/infra && uv run pytest` runs the infra helper tests.
+- `npm test` runs the CLI tests.
+- `uv run --with pytest pytest hermes` runs the plugin tests.
+- `cd infra && uv run pytest` runs the infra helper tests.

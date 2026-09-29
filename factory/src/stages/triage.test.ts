@@ -28,7 +28,7 @@ function fakeCtx(verdict: string | null): Ctx {
       agent: async (run: AgentRun) => {
         calls.push(`agent ${run.model}`);
         prompt = run.prompt;
-        if (verdict !== null) writeFileSync(`${run.clone}/.factory/triage.json`, verdict);
+        if (verdict !== null) writeFileSync(`${run.clone}/${run.dir}/.factory/triage.json`, verdict);
       },
     },
     repo: {

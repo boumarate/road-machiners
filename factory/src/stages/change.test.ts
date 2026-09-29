@@ -26,11 +26,15 @@ describe('change', () => {
     pending(f);
     f.diff = 'diff --git a/factory/src/a.ts b/factory/src/a.ts\n+x\n';
     f.agentWrites = { 'pr-title.txt': 'Post daily\n' };
+    const dirs: string[] = [];
+    const agent = f.ctx.container.agent;
+    f.ctx.container.agent = async (run) => { dirs.push(run.dir); await agent(run); };
     await change(f.ctx, 4);
+    expect(dirs).toEqual(['factory']);
     expect(f.calls).toContain('push factory-change/4');
     expect(f.calls).toContain('pr factory-change/4 dev Post daily');
     expect(readState(f.ctx.statePath).pendingChanges).toEqual([]);
-    expect(readFileSync(join(ROOT, 'work/change-4/.factory/request.md'), 'utf8')).toContain('ann');
+    expect(readFileSync(join(ROOT, 'work/change-4/factory/.factory/request.md'), 'utf8')).toContain('ann');
   });
 
   it('throws for an unknown id', async () => {

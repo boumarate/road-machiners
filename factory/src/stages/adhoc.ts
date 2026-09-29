@@ -1,7 +1,7 @@
 import { rmSync, writeFileSync } from 'node:fs';
 import { readState, updateState } from '../state';
-import { OUT_DIR, type Ctx } from '../types';
-import { fillPrompt, readOutput, resetOutputs } from './common';
+import { GAME_DIR, OUT_DIR, type Ctx } from '../types';
+import { agentHome, fillPrompt, readOutput, resetOutputs } from './common';
 
 // Runs one committee request as a read-only investigation. Nothing is pushed. The report goes back to the chat and the issue.
 export async function adhoc(ctx: Ctx, issue: number): Promise<void> {
@@ -12,11 +12,12 @@ export async function adhoc(ctx: Ctx, issue: number): Promise<void> {
   const dir = `${ctx.cfg.home}/work/adhoc-${issue}`;
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone('dev', 'dev', dir);
-  resetOutputs(dir);
-  writeFileSync(`${dir}/${OUT_DIR}/request.md`, `# Committee request\n\n${item.body}\n`);
+  const home = agentHome(dir, GAME_DIR);
+  resetOutputs(home);
+  writeFileSync(`${home}/${OUT_DIR}/request.md`, `# Committee request\n\n${item.body}\n`);
   const log = `${ctx.cfg.home}/logs/issue-${issue}-adhoc.log`;
-  await ctx.container.agent({ clone: dir, model: ctx.cfg.buildModel, prompt: fillPrompt('adhoc', { issue: String(issue) }), log });
-  const report = readOutput(dir, 'report.md')?.trim();
+  await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.buildModel, prompt: fillPrompt('adhoc', { issue: String(issue) }), log });
+  const report = readOutput(home, 'report.md')?.trim();
   if (!report) throw new Error(`The agent wrote no ${OUT_DIR}/report.md`);
   await ctx.telegram.sendMessage(reply.chat, report, reply.messageId);
   await ctx.github.comment(issue, report);

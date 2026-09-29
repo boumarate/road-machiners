@@ -13,13 +13,15 @@ const run = (cmd, args, cwd) => execFileSync(cmd, args, { stdio: 'inherit', cwd 
 const read = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8' }).trim();
 
 const version = read('git', ['rev-parse', '--short', 'HEAD']);
-const dir = resolve('.worktrees/itch-publish');
+const top = read('git', ['rev-parse', '--show-toplevel']);
+const dir = resolve(top, '.worktrees/itch-publish');
+const build = resolve(dir, 'game');
 if (existsSync(dir)) run('git', ['worktree', 'remove', '--force', dir]);
 run('git', ['worktree', 'add', '--detach', dir, 'HEAD']);
 try {
-  symlinkSync(resolve('node_modules'), resolve(dir, 'node_modules'));
-  run('npm', ['run', 'build'], dir);
-  run('butler', ['push', resolve(dir, 'dist'), `${target}:html5`, '--userversion', version]);
+  symlinkSync(resolve('node_modules'), resolve(build, 'node_modules'));
+  run('npm', ['run', 'build'], build);
+  run('butler', ['push', resolve(build, 'dist'), `${target}:html5`, '--userversion', version]);
 } finally {
   run('git', ['worktree', 'remove', '--force', dir]);
 }

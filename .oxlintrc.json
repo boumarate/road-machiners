@@ -3,7 +3,7 @@
   "plugins": ["typescript", "oxc"],
   "categories": { "correctness": "error" },
   "env": { "browser": true, "node": true },
-  "ignorePatterns": ["node_modules/**", "dist/**", "tmp/**", ".worktrees/**", ".pi/**", ".playtest/**", ".agents/**", ".claude/**"],
+  "ignorePatterns": ["**/node_modules/**", "**/dist/**", "**/tmp/**", "**/.worktrees/**", "**/.pi/**", "**/.playtest/**", "**/.agents/**", "**/.claude/**"],
   "rules": {
     "typescript/no-explicit-any": "error",
     "typescript/consistent-type-imports": "error",
@@ -19,7 +19,7 @@
       "rules": { "complexity": "off", "max-depth": "off", "max-lines-per-function": "off", "max-lines": "off" }
     },
     {
-      "files": ["src/sim/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
+      "files": ["game/src/sim/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
       "rules": {
         "no-restricted-imports": ["error", {
           "patterns": [{

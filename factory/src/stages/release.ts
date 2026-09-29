@@ -2,8 +2,8 @@ import { existsSync, lstatSync, mkdirSync, rmSync, symlinkSync, unlinkSync, writ
 import { join } from 'node:path';
 import { must } from '../exec';
 import { updateState } from '../state';
-import { OUT_DIR, type Ctx } from '../types';
-import { fillPrompt, readOutput, resetOutputs } from './common';
+import { GAME_DIR, OUT_DIR, type Ctx } from '../types';
+import { agentHome, fillPrompt, readOutput, resetOutputs } from './common';
 
 const SERVER_TRIES = 60;
 
@@ -37,8 +37,8 @@ shot=$(ls -t .playtest/*.png | head -n 1)
 cp "$shot" ${OUT_DIR}/screenshot.png
 `;
 
-function linkEnv(repoPath: string, codeDir: string): void {
-  const target = join(repoPath, '.env');
+function linkEnv(gameDir: string, codeDir: string): void {
+  const target = join(gameDir, '.env');
   if (existsSync(target) || lstatSync(target, { throwIfNoEntry: false })) unlinkSync(target);
   symlinkSync(join(codeDir, '.env'), target);
 }
@@ -46,10 +46,11 @@ function linkEnv(repoPath: string, codeDir: string): void {
 async function publish(ctx: Ctx, codeDir: string, day: string): Promise<void> {
   await ctx.repo.merge('dev', 'main', `Release ${day}`);
   await ctx.repo.push('main');
-  linkEnv(ctx.repo.path, codeDir);
+  const gameDir = agentHome(ctx.repo.path, GAME_DIR);
+  linkEnv(gameDir, codeDir);
   const log = releaseLog(ctx);
-  must(await ctx.run('npm', ['ci'], { cwd: ctx.repo.path, logPath: log }), 'npm ci on main');
-  must(await ctx.run('npm', ['run', 'itch'], { cwd: ctx.repo.path, logPath: log }), 'npm run itch');
+  must(await ctx.run('npm', ['ci'], { cwd: gameDir, logPath: log }), 'npm ci on main');
+  must(await ctx.run('npm', ['run', 'itch'], { cwd: gameDir, logPath: log }), 'npm run itch');
 }
 
 // Ships dev to main and itch.io, then posts the changelog. Nothing new on dev means nothing ships.
@@ -65,18 +66,18 @@ export async function release(ctx: Ctx, codeDir: string): Promise<void> {
   const dir = join(ctx.cfg.home, 'work', 'release');
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone('dev', 'dev', dir);
-  resetOutputs(dir);
-  mkdirSync(join(dir, OUT_DIR), { recursive: true });
-  writeFileSync(join(dir, OUT_DIR, 'changelog.md'), changelog.join('\n') + '\n');
+  const home = agentHome(dir, GAME_DIR);
+  resetOutputs(home);
+  writeFileSync(join(home, OUT_DIR, 'changelog.md'), changelog.join('\n') + '\n');
   const log = releaseLog(ctx);
   await ctx.container.shell(dir, PLAYTEST_SCRIPT, log);
-  await ctx.container.agent({ clone: dir, model: ctx.cfg.buildModel, prompt: fillPrompt('release', {}), log });
-  const description = readOutput(dir, 'release.md');
+  await ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.buildModel, prompt: fillPrompt('release', {}), log });
+  const description = readOutput(home, 'release.md');
   if (description === null) throw new Error('release agent wrote no .factory/release.md');
   const day = now.toISOString().slice(0, 10);
   await publish(ctx, codeDir, day);
   const channel = ctx.cfg.publicChannel;
-  await ctx.telegram.sendPhoto(channel, join(dir, OUT_DIR, 'screenshot.png'), `ROAM release ${day}`);
+  await ctx.telegram.sendPhoto(channel, join(home, OUT_DIR, 'screenshot.png'), `ROAM release ${day}`);
   await ctx.telegram.sendMessage(channel, `${description.trim()}\n\nChanges:\n${changelog.map((line) => `- ${line}`).join('\n')}`);
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Release ${day} shipped with ${changelog.length} changes.`);
   ctx.log('release', null, `shipped ${changelog.length} changes`);
