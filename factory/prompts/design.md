@@ -23,9 +23,18 @@ Read that feedback first.
 It comes before the original request.
 Revise the task file to answer it.
 
-If the request goes against DESIGN.md, do not plan it.
+Triage already refused most requests that go against DESIGN.md.
+If one still does, do not plan it.
 Write the reason in plain words to `.factory/wont-do.md`.
 Then stop.
+
+If a real blocker makes design impossible, do not write a task file.
+Write the questions to `.factory/questions.md`, one per line.
+Then stop.
+Use this only for a real blocker.
+When in doubt, make a reasonable choice.
+Write it in the task file as an assumption.
+The committee corrects it at approval.
 
 If the request needs a major save format bump, do not plan it.
 Write what the committee must decide to `.factory/needs-committee.md`.
