@@ -17,7 +17,8 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
-function fakeCtx(agent: (run: AgentRun) => void): Ctx {
+function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
+  let failuresLeft = shellFailures;
   const fake = {
     cfg: { home, buildModel: 'sonnet', repo: 'o/r', committeeChat: 'chat' },
     statePath: `${home}/state.json`,
@@ -31,7 +32,11 @@ function fakeCtx(agent: (run: AgentRun) => void): Ctx {
     },
     container: {
       agent: async (run: AgentRun) => agent(run),
-      shell: async (_dir: string, script: string) => { shellScript = script; },
+      shell: async (_dir: string, script: string) => {
+        shellScript = script;
+        calls.push('checks');
+        if (failuresLeft-- > 0) throw new Error('npm test failed: 1 failed');
+      },
     },
     repo: {
       prepareWorkClone: async (_b: string, _base: string, dir: string) => { mkdirSync(dir, { recursive: true }); },
@@ -72,5 +77,22 @@ describe('testing stage', () => {
 
   it('throws when approval.json is missing', async () => {
     await expect(runStage(fakeCtx((run) => writeOutputs(run, null)), 7)).rejects.toThrow('approval.json');
+  });
+
+  it('gives the agent one fix round when the checks fail, then posts', async () => {
+    const prompts: string[] = [];
+    const ctx = fakeCtx((run) => { prompts.push(run.prompt); writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })); }, 1);
+    await runStage(ctx, 7);
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).toContain('second round');
+    expect(readFileSync(`${home}/work/issue-7/.factory/check-failure.md`, 'utf8')).toContain('npm test failed');
+    expect(calls.filter((call) => call === 'checks')).toHaveLength(2);
+    expect(calls.at(-1)).toBe('move 7 Approval');
+  });
+
+  it('stops after the checks fail twice', async () => {
+    const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })), 2);
+    await expect(runStage(ctx, 7)).rejects.toThrow('The factory checks failed twice');
+    expect(calls).not.toContain('move 7 Approval');
   });
 });

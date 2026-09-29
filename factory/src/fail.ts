@@ -5,9 +5,13 @@ const FAILURE_LINE = /FAIL|Error|error:|failed|×/;
 const SUMMARY_LINES = 6;
 const SUMMARY_CHARS = 800;
 
+export function stripAnsi(text: string): string {
+  return text.replace(ANSI, '');
+}
+
 // The few lines of an error that say what broke. Tool output is long and colored, and the full text stays in the log.
 export function summarizeError(message: string): string {
-  const lines = message.replace(ANSI, '').split('\n').map((line) => line.trim()).filter(Boolean);
+  const lines = stripAnsi(message).split('\n').map((line) => line.trim()).filter(Boolean);
   const failures = lines.filter((line) => FAILURE_LINE.test(line));
   const picked = (failures.length ? failures : lines.slice(-SUMMARY_LINES)).slice(0, SUMMARY_LINES);
   return picked.join('\n').slice(0, SUMMARY_CHARS);
