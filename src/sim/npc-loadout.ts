@@ -1,13 +1,14 @@
 import { chassisDef } from '../data/chassis';
 import { GOODS } from '../data/goods';
-import { GEAR_LEVELS, GEAR_LEVEL_IDS, NPC_UPKEEP, type CargoRoll, type GearLevel, type NpcLoadoutTable, type NpcTemplate, type Weighted } from '../data/npcs';
-import { partDef, type PartKind } from '../data/parts';
+import { GEAR_LEVELS, GEAR_LEVEL_IDS, MAX_GUN_SLOWDOWN, NPC_UPKEEP, type CargoRoll, type GearLevel, type NpcLoadoutTable, type NpcTemplate, type Weighted } from '../data/npcs';
+import { partDef, type EngineDef, type PartKind } from '../data/parts';
 import { CONDITION } from '../data/wear';
 import { everyGunFires } from './armor';
 import { makePart, makeVehicle, type PartSpec } from './factory';
 import { baseGrid, cellKey, freeCells, gridOf, itemCells, mountedItems, type Cell } from './grid';
 import { addGoods, mountPart, stowPart } from './inventory';
 import { vehicleMass } from './mass';
+import { gunDrag } from './stats';
 import { nextRandom, type Rng } from './rng';
 import type { Vehicle, World } from './types';
 import { partValue } from './wear';
@@ -253,15 +254,23 @@ function chooseVehicle(probe: World, rng: Rng, template: NpcTemplate, chassisId:
 }
 
 // Every free deck cell is a spot for one more gun, and each rolls the level's fill chance once. A roll that hits
-// mounts the first gun that fits, budget and rated mass allowing. The template minimum is already mounted.
+// mounts the first gun that fits, budget, rated mass and MAX_GUN_SLOWDOWN allowing. The template minimum is already
+// mounted.
 function addGuns(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle, budget: number): Vehicle {
   for (let spot = freeDeckCells(v); spot > 0; spot--) {
     if (nextRandom(rng) >= Math.min(1, level.fill * table.gunFill)) continue;
-    const next = pickFitting(world, rng, table.extraGun, (id) => tryMountChoice(world, v, id, budget));
+    const next = pickFitting(world, rng, table.extraGun, (id) => withinGunSlowdown(tryMountChoice(world, v, id, budget)));
     if (!next) break;
     v = next;
   }
   return v;
+}
+
+// The truck, or null when its guns slow it past MAX_GUN_SLOWDOWN on its pristine engine.
+function withinGunSlowdown(v: Vehicle | null): Vehicle | null {
+  const engine = v && mountedItems(v, 'engine')[0];
+  if (!v || !engine) return v;
+  return 1 - gunDrag(v, (partDef(engine.part.defId) as EngineDef).capacity) <= MAX_GUN_SLOWDOWN ? v : null;
 }
 
 function freeDeckCells(v: Vehicle): number {

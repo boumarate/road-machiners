@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
-import { GEAR_LEVELS, NPCS, type GearLevel, type NpcTemplate } from '../data/npcs';
+import { GEAR_LEVELS, MAX_GUN_SLOWDOWN, NPCS, type GearLevel, type NpcTemplate } from '../data/npcs';
 import { PARTS, partDef } from '../data/parts';
 import { START_KITS } from '../data/start';
 import { newWorld } from './world';
@@ -13,7 +13,8 @@ import { generateNpcLoadout, sampleWeighted } from './npc-loadout';
 import { spawnAt, spawnInitial, spawnNpcs } from './spawn';
 import { openSides, reachedSides } from './armor';
 import { mountedItems } from './grid';
-import type { WeaponDef } from '../data/parts';
+import type { EngineDef, WeaponDef } from '../data/parts';
+import { gunDrag } from './stats';
 import { emptyWorld } from './testkit';
 import type { Vehicle, World } from './types';
 import { TEST_MAP } from '../test/map';
@@ -77,7 +78,17 @@ describe('NPC equipment generation', () => {
       expect(light).toBeLessThan(standard);
       expect(standard).toBeLessThan(heavy);
       expect(heavy).toBeLessThan(loaded);
-      expect(loaded).toBeGreaterThanOrEqual(NPCS.gunwagon.loadout.minGuns + 3);
+      expect(loaded).toBeGreaterThanOrEqual(NPCS.gunwagon.loadout.minGuns + 1);
+    }, 120_000);
+
+    it('stops extra guns before they slow a loaded truck past the limit', () => {
+      for (let seed = 1; seed <= 12; seed++) {
+        const world = { ...fixture, rngState: seed };
+        const loadout = generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded');
+        const v = makeVehicle(world, { ...loadout, name: 'test', faction: 'raiders', brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+        const engine = mountedItems(v, 'engine')[0];
+        expect(1 - gunDrag(v, (partDef(engine.part.defId) as EngineDef).capacity), describeLoadout(v)).toBeLessThanOrEqual(MAX_GUN_SLOWDOWN);
+      }
     }, 120_000);
   });
 

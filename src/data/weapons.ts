@@ -3,7 +3,7 @@ import type { WeaponDef } from './parts';
 // Every gun. Each tier has one gun per class set: damager, chip and precision alone, and each pair of them. See
 // WeaponClass in src/data/parts.ts. Prices come from base plus the stat modifier in src/data/parts.ts.
 // Every range fits inside the 20 tile sight radius, TERRAIN.vision.radius, since a gun never fires at a truck its
-// driver cannot see. Pure precision guns reach farthest, then precision pairs, chip guns and damagers. Precision guns
+// driver cannot see. Pure precision guns reach farthest, then precision pairs. Chip guns and pure damagers reach about as far as each other, and the other pairs least. Precision guns
 // shake little, so they hit on the move and trade damage for reach.
 // Every gun has a power draw: its cells times (1 + 0.25 per tier above 1). Engines carry it, see RULES.gunDragMax.
 export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
@@ -57,7 +57,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
     armor: 2,
     tall: false,
     classes: ["damager"],
-    range: 8,
+    range: 10,
     cooldown: 1,
     magazine: 2,
     reload: 2,
@@ -273,7 +273,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
     armor: 3,
     tall: true,
     classes: ["damager"],
-    range: 12,
+    range: 13,
     cooldown: 1,
     magazine: 2,
     reload: 2,
@@ -489,7 +489,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
     armor: 1,
     tall: false,
     classes: ["damager"],
-    range: 13,
+    range: 14,
     cooldown: 1,
     magazine: 1,
     reload: 3,

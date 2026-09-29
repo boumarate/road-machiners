@@ -46,6 +46,10 @@ export type NpcLoadoutTable = {
 // budget multiplies the template budget. wearShift moves every wear roll, clamped to CONDITION.maxWear. cargo
 // multiplies the goods and spares counts. Passes stop early when the budget, rated mass or grid room runs out, so
 // a poor truck may end below its targets. Guns come first in the fill order, so the budget cuts armor before guns.
+// Extra guns stop before their power draw slows the truck by more than this share, see gunDrag() in src/sim/stats.ts.
+// A stronger engine carries more guns. The template's minimum guns ignore it.
+export const MAX_GUN_SLOWDOWN = 0.35;
+
 export const GEAR_LEVELS: Record<GearLevel, { fill: number; armor: number; budget: number; wearShift: number; cargo: number }> = {
   poor: { fill: 0, armor: 0.1, budget: 0.6, wearShift: 1, cargo: 0.5 },
   light: { fill: 0.1, armor: 0.3, budget: 0.85, wearShift: 0, cargo: 0.75 },
