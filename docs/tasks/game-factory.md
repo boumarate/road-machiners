@@ -104,6 +104,16 @@ The factory is a Node CLI in `factory/`, run on the host. Hermes only triggers i
 - The host retitles the issue from `.factory/issue.md` and puts the card in Implementation. From there it flows like any task.
 - An agent that finds nothing writes `.factory/nothing.md`. The host closes the issue.
 
+### Triage
+
+- The board has a Triage column before Design. Intake puts voted issues there.
+- The triage stage runs Sonnet 5.5 in the agent container with `factory/prompts/triage.md`. The prompt holds a rubric: a clear goal, a result a player can check, a sane scope and a fit with DESIGN.md. The agent writes `.factory/triage.json` with a verdict `ready`, `unclear` or `wont-do`, a short reason and, for `unclear`, the questions.
+- `ready` moves the card to Design. `wont-do` comments the reason, labels `wont-do`, closes the issue and moves the card to Done.
+- `unclear` comments the questions to the author, labels the issue `needs-info` and leaves the card in Triage. The tick skips cards with that label.
+- Every factory comment ends with a hidden marker, since factory comments post from the same GitHub account as a member. Each tick, a `needs-info` issue with a comment without the marker after the last factory question loses the label, and triage runs again with the answers.
+- Design may send a card back to Triage with `.factory/questions.md`, only for a genuine blocker. Trying and taking feedback at approval comes first.
+- Triage runs in the container, not in Hermes. Issue text is untrusted, and Hermes holds committee powers.
+
 ### Ad hoc tasks
 
 - A committee member asks Hermes for one-off work in plain words, like "simulate 10 battles and tell me if the MG is too weak".
@@ -260,6 +270,7 @@ Approach: PH1 writes the shared types and core helpers inline, so every later ph
 - make: size Large, full flow — nine parts and new infrastructure.
 - make: one task file drives all nine parts — the contracts need one home, and separate plans would repeat them.
 - make: branch `game-factory` in `.worktrees/game-factory`, already made before hands-off started.
+- udesign: triage in the Sonnet container, not Hermes — issue text is untrusted and Hermes holds committee powers; user agreed.
 - udesign: Hermes in Docker and a systemd tick timer — user pointed at Steelman/infrobot and Steelman/infra; a Hermes container cannot run agent containers without root-level Docker access.
 - udesign: pyinfra deploy in `factory/infra/` — user asked for pyinfra like Steelman/infra.
 - make: pushing to a private sandbox repo is allowed — the user authorized a temp repo. Nothing is pushed to `origin`.
