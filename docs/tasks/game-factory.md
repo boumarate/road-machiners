@@ -104,6 +104,14 @@ The factory is a Node CLI in `factory/`, run on the host. Hermes only triggers i
 - The host retitles the issue from `.factory/issue.md` and puts the card in Implementation. From there it flows like any task.
 - An agent that finds nothing writes `.factory/nothing.md`. The host closes the issue.
 
+### Ad hoc tasks
+
+- A committee member asks Hermes for one-off work in plain words, like "simulate 10 battles and tell me if the MG is too weak".
+- Hermes queues it with the plugin tool `factory_queue_task`. The tool writes an `adhoc` inbox command with the request, the member and the chat message to answer.
+- The tick opens a GitHub issue labeled `adhoc` for it and puts the card in Implementation. Each request is its own issue, so a new one never replaces an old one. They run oldest first, after queued approvals and changes.
+- The `adhoc` job runs Sonnet 5.5 in a fresh clone of `dev` with `factory/prompts/adhoc.md`. It may run any repo harness, like `npm run combat`. It writes `.factory/report.md`. Nothing is pushed.
+- The host posts the report as a reply to the member's message, comments it on the issue, closes the issue and moves the card to Done.
+
 ### Factory chat
 
 - `factory change "<text>"` clones `dev` and runs Sonnet with `factory/prompts/change.md`. The host checks that the diff touches only `factory/`, pushes a branch and opens a pull request against `dev`. It never merges.
