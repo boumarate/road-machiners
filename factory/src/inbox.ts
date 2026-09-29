@@ -1,0 +1,85 @@
+import { mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { feedback } from './stages/approval';
+import { updateState } from './state';
+import type { Ctx } from './types';
+
+// One committee command, written by the Hermes plugin into $FACTORY_HOME/inbox.
+export type InboxCommand = {
+  kind: 'approve' | 'feedback' | 'change';
+  issue: number | null;
+  text: string | null;
+  by: string; // Telegram user id
+  byName: string | null;
+  chat: string;
+  messageId: number;
+};
+
+export function inboxDir(home: string): string {
+  return join(home, 'inbox');
+}
+
+export function parseCommand(raw: string): InboxCommand {
+  const data = JSON.parse(raw) as Partial<InboxCommand>;
+  if (!['approve', 'feedback', 'change'].includes(String(data.kind))) throw new Error(`Unknown inbox command kind ${data.kind}`);
+  if (typeof data.by !== 'string' || typeof data.chat !== 'string' || typeof data.messageId !== 'number') throw new Error('Inbox command lacks by, chat or messageId');
+  return data as InboxCommand;
+}
+
+// Handles every queued command once, oldest first. A bad command is answered and dropped, never retried.
+export async function drainInbox(ctx: Ctx): Promise<void> {
+  const dir = inboxDir(ctx.cfg.home);
+  mkdirSync(dir, { recursive: true });
+  const files = readdirSync(dir).filter((name) => name.endsWith('.json')).sort();
+  for (const name of files) await handleFile(ctx, join(dir, name));
+}
+
+async function handleFile(ctx: Ctx, path: string): Promise<void> {
+  const raw = readFileSync(path, 'utf8');
+  rmSync(path);
+  let command: InboxCommand | null = null;
+  try {
+    command = parseCommand(raw);
+    const answer = await handle(ctx, command);
+    await ctx.telegram.sendMessage(command.chat, answer, command.messageId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    ctx.log('tick', command?.issue ?? null, `inbox command failed: ${message}`);
+    if (command) await ctx.telegram.sendMessage(command.chat, `That did not work: ${message}`, command.messageId);
+  }
+}
+
+async function handle(ctx: Ctx, command: InboxCommand): Promise<string> {
+  if (!ctx.cfg.committeeTelegram.includes(command.by)) throw new Error('Only committee members can do that.');
+  const by = command.byName ?? command.by;
+  if (command.kind === 'change') return queueChange(ctx, requireText(command), by);
+  const issue = requireIssue(command);
+  if (command.kind === 'feedback') {
+    await feedback(ctx, issue, by, requireText(command));
+    return `Feedback on #${issue} is on the issue. The task goes back to design.`;
+  }
+  return queueApproval(ctx, issue, by);
+}
+
+async function queueApproval(ctx: Ctx, issue: number, by: string): Promise<string> {
+  const card = (await ctx.github.cards()).find((item) => item.issue === issue);
+  if (card?.column !== 'Approval') throw new Error(`Issue #${issue} is not waiting for approval.`);
+  updateState(ctx.statePath, (state) => ({ ...state, pendingApprovals: { ...state.pendingApprovals, [String(issue)]: by } }));
+  return `Approval of #${issue} is queued. The merge into dev starts on a coming tick.`;
+}
+
+function queueChange(ctx: Ctx, text: string, by: string): string {
+  const id = ctx.now().getTime();
+  updateState(ctx.statePath, (state) => ({ ...state, pendingChanges: [...state.pendingChanges, { id, text, by }] }));
+  return `Change request ${id} is queued. The factory answers with a pull request.`;
+}
+
+function requireIssue(command: InboxCommand): number {
+  if (typeof command.issue !== 'number') throw new Error(`A ${command.kind} command needs an issue number.`);
+  return command.issue;
+}
+
+function requireText(command: InboxCommand): string {
+  if (!command.text?.trim()) throw new Error(`A ${command.kind} command needs text.`);
+  return command.text;
+}
