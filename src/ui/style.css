@@ -1187,6 +1187,27 @@ body {
 .inv-item.refitting {
   border: 2px dashed #eac779;
 }
+.inv-chip.selected {
+  outline: 2px solid #eac779;
+  outline-offset: -2px;
+}
+.inv-item.holding {
+  outline: 2px dashed #eac779;
+  outline-offset: -2px;
+}
+.inv-ghost.held {
+  box-shadow: 0 0 0 2px #eac779;
+}
+.inv-refit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border: 1px dashed #eac779;
+  font-size: 13px;
+}
 .inv-ghost {
   position: fixed;
   pointer-events: none;
