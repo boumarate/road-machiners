@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 # Hermes with the factory config seed and a start script. The plugin is mounted at run time, not copied.
-FROM nousresearch/hermes-agent:v2026.8.31
+# v2026.9.24 is the first release with gpt-6-sol on the Codex provider.
+FROM nousresearch/hermes-agent:v2026.9.24
 
 # Hermes starts as root, fixes the ownership of its state and drops to uid 10000.
 USER root

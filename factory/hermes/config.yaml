@@ -1,9 +1,9 @@
 # Hermes config template for the game factory chat bot.
 # Keys were checked against cli-config.yaml.example in the Hermes source.
 model:
-  # The user confirms the provider before first run.
-  provider: anthropic
-  default: claude-sonnet-5-5
+  # Hermes chats through the ChatGPT subscription. Sign in once with `hermes auth add openai-codex`.
+  provider: openai-codex
+  default: gpt-6-sol
 
 telegram:
   require_mention: true

@@ -47,7 +47,7 @@ It follows `Steelman/infra`. Run every command from `factory/infra`.
 5. Make a Telegram bot with BotFather. Put its token in `TELEGRAM_BOT_TOKEN`. Set `FACTORY_COMMITTEE_BOOTSTRAP` to your Telegram user id, `FACTORY_COMMITTEE_BOOTSTRAP_GITHUB` to your GitHub login and `FACTORY_COMMITTEE_CHAT` to the chat id in the factory `.env`. You are the first committee member. Add others with `/committee add` in the chat.
 6. In the factory `.env`, set `FACTORY_HOME=/opt/factory/home`, `FACTORY_WEB_ROOT=/opt/factory/www`, `FACTORY_TICK_MINUTES` and `FACTORY_PUBLIC_URL=https://<domain>`. Also set `ITCH_TARGET` and `BUTLER_API_KEY`.
 7. Set `FACTORY_ENV_FILE` in `prod.env` to that file. Run provision, then deploy.
-8. Sign Hermes in to its model. Run this on the server: `cd /opt/factory/code && FACTORY_HERMES_DIR=/opt/factory/hermes docker compose -f factory/hermes/compose.yaml --env-file .env run --rm hermes hermes auth add anthropic`. Then restart Hermes with `docker restart factory-hermes`.
+8. Sign Hermes in to ChatGPT, which it uses for chat. Run this on the server: `cd /opt/factory/code && FACTORY_HERMES_DIR=/opt/factory/hermes docker compose -f factory/hermes/compose.yaml --env-file .env run --rm --no-deps hermes hermes auth add openai-codex`. Then restart Hermes with `docker restart factory-hermes`.
 9. Run status and check the timer, Hermes health and the gh login.
 
 Do not start a second Hermes gateway for the same bot token. The one-off container above only runs the login command.
