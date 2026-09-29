@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { playerVehicle } from "../sim/damage";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
+import { vehicleStats } from "../sim/stats";
 import { refreshVision } from "../sim/vision";
 import { startPose } from "../sim/world";
 import { doneTips, tipToShow, type TipId } from "./tips";
@@ -82,6 +83,41 @@ describe("horn tip", () => {
     npc.brain = npcBrain("scavenger", npc.pos, ["scavenger"]);
     refreshVision(w);
     expect(tipToShow(w, false, new Set(["waypoint"]), null)).toBeNull();
+  });
+});
+
+describe("aim tip", () => {
+  const driving = new Set<TipId>(["waypoint", "drive", "stop", "stopAt", "manual"]);
+
+  function withRaider() {
+    const w = emptyWorld();
+    const npc = addVehicle(w, "raiders", "scout", [], { x: 32, y: 30 });
+    npc.brain = npcBrain("raider", npc.pos, ["raider"]);
+    refreshVision(w);
+    return { w, npc };
+  }
+
+  it("shows for an armed player once a hostile is in sight, ahead of the horn tip", () => {
+    const { w } = withRaider();
+    expect(tipToShow(w, false, driving, null)).toBe("aim");
+  });
+
+  it("stays away from a neutral", () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, "traders", "scout", [], { x: 32, y: 30 });
+    npc.brain = npcBrain("trader", npc.pos, ["trader"]);
+    refreshVision(w);
+    expect(tipToShow(w, false, driving, null)).toBe("honk");
+  });
+
+  it("is done once a gun aims at a part", () => {
+    const { w, npc } = withRaider();
+    const me = playerVehicle(w);
+    const gun = vehicleStats(w, me).weapons[0].part.id;
+    me.weaponOrders[gun] = { targetId: npc.id, aim: "body" };
+    expect(doneTips(w)).not.toContain("aim");
+    me.weaponOrders[gun] = { targetId: npc.id, aim: "engine" };
+    expect(doneTips(w)).toContain("aim");
   });
 });
 
