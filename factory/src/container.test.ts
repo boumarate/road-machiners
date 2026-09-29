@@ -30,7 +30,7 @@ describe('dockerContainer', () => {
     const call = runCall(calls);
     expect(call.args.join(' ')).not.toContain('secret-token');
     expect(call.opts?.env).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'secret-token' });
-    expect(call.opts?.input).toBe('do it');
+    expect(call.opts?.input).toBe('Your folder is /work/game. Write every .factory/ and .factory-tasks/ file under /work/game, even after you change directory.\n\ndo it');
     expect(call.opts?.logPath).toBe('/l.log');
     expect(call.args.filter((a) => a === '-v')).toHaveLength(2);
     expect(call.args).toContain('/w/c:/work');

@@ -41,6 +41,11 @@ async function ensureProxy(run: Run, cfg: FactoryConfig): Promise<void> {
   await docker(`connect ${PROXY_NAME} to the default bridge`, ['network', 'connect', 'bridge', PROXY_NAME]);
 }
 
+// Prompts name agent files relative to the agent folder. An agent that changes directory, say to commit from the repo root, would write them elsewhere, so the full path comes first.
+export function outputsNote(dir: string): string {
+  return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory.`;
+}
+
 // Agents get the work clone, the npm cache and the OAuth token, nothing else. The token travels in the docker process env, never in argv.
 // Unless the run is open, containers sit on the internal network and reach only the proxy's allowlist.
 export function dockerContainer(run: Run, cfg: FactoryConfig): Container {
@@ -51,7 +56,7 @@ export function dockerContainer(run: Run, cfg: FactoryConfig): Container {
         ...BASE_ARGS, '-i', ...mountArgs(cfg, clone, dir), ...networkArgs(openNetwork === true), '-e', 'CLAUDE_CODE_OAUTH_TOKEN', cfg.image,
         'factory-agent', '-p', '--model', model, '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose',
       ];
-      const result = await run('docker', args, { env: { CLAUDE_CODE_OAUTH_TOKEN: cfg.oauthToken }, input: prompt, logPath: log });
+      const result = await run('docker', args, { env: { CLAUDE_CODE_OAUTH_TOKEN: cfg.oauthToken }, input: `${outputsNote(dir)}\n\n${prompt}`, logPath: log });
       must(result, `agent in ${clone}`);
     },
     async shell(clone, script, log, env = {}) {
