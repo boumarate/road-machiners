@@ -2,7 +2,7 @@
 
 pyinfra project for one Ubuntu 24.04 LTS server that runs the game factory.
 
-A Hetzner CX23 with 2 vCPUs and 4 GB is enough. The testing gate peaks near 2.6 GB, Hermes idles near 300 MB, and provision adds 4 GB of swap for spikes. The server needs IPv4, since GitHub has no IPv6. Attach a Hetzner cloud firewall that allows inbound TCP 22, 80 and 443 only. It sits outside the machine, so Docker cannot bypass it.
+A Hetzner CX23 with 2 vCPUs and 4 GB is enough. The testing gate peaks near 2.6 GB, Hermes idles near 300 MB, and provision adds 4 GB of swap for spikes. The server needs IPv4, since GitHub has no IPv6. `uv run python firewall.py <server IPv4>` creates a Hetzner cloud firewall that allows inbound TCP 22, 80 and 443 only, and attaches it. It sits outside the machine, so Docker cannot bypass it. It needs `HCLOUD_TOKEN` in `prod.env`.
 It follows `Steelman/infra`. Run every command from `factory/infra`.
 
 ## Layout
