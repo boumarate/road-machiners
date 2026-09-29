@@ -24,7 +24,7 @@ describe('dockerContainer', () => {
     expect(call.args.filter((a) => a === '-v')).toHaveLength(1);
     expect(call.args).toContain('/w/c:/work');
     expect(call.args.filter((a) => a === '-e')).toHaveLength(1);
-    expect(call.args.slice(call.args.indexOf('img:1'))).toEqual(['img:1', 'claude', '-p', '--model', 'opus', '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose']);
+    expect(call.args.slice(call.args.indexOf('img:1'))).toEqual(['img:1', 'factory-agent', '-p', '--model', 'opus', '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose']);
   });
 
   it('throws when the agent exits nonzero', async () => {

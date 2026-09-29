@@ -17,7 +17,7 @@ export function dockerContainer(run: Run, cfg: FactoryConfig): Container {
     async agent({ clone, model, prompt, log }) {
       const args = [
         ...BASE_ARGS, '-i', ...mountArgs(clone), '-e', 'CLAUDE_CODE_OAUTH_TOKEN', cfg.image,
-        'claude', '-p', '--model', model, '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose',
+        'factory-agent', '-p', '--model', model, '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose',
       ];
       const result = await run('docker', args, { env: { CLAUDE_CODE_OAUTH_TOKEN: cfg.oauthToken }, input: prompt, logPath: log });
       must(result, `agent in ${clone}`);

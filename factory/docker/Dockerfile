@@ -1,4 +1,4 @@
-# Agent image: Claude Code with the ultrapack plugin, plus the browser tooling the game's tests and builds need.
+# Agent image: Claude Code with the ultrapack plugin, an entry script that links the clone's project skills, plus the browser tooling the game's tests and builds need.
 # The Playwright tag matches the playwright version in package-lock.json.
 FROM mcr.microsoft.com/playwright:v1.63.0-noble
 
@@ -7,6 +7,8 @@ RUN apt-get update \
  && apt-get clean
 
 RUN npm install -g @anthropic-ai/claude-code
+
+COPY --chmod=755 factory-agent /usr/local/bin/factory-agent
 
 # Everything below runs as the image's non-root user.
 USER pwuser
