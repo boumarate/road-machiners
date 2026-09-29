@@ -50,6 +50,11 @@ export type NpcLoadoutTable = {
 // A stronger engine carries more guns. The template's minimum guns ignore it.
 export const MAX_GUN_SLOWDOWN = 0.35;
 
+// The share of its unloaded speed that an NPC truck keeps after its guns, armor and cargo. Loadouts stop adding
+// weight before they cross it, and an NPC takes no loot, purchase or spare part that would. The template's minimum
+// build ignores it. See npcMassRoom() in src/sim/stats.ts.
+export const MIN_NPC_SPEED_SHARE = 0.6;
+
 export const GEAR_LEVELS: Record<GearLevel, { fill: number; armor: number; budget: number; wearShift: number; cargo: number }> = {
   poor: { fill: 0, armor: 0.1, budget: 0.6, wearShift: 1, cargo: 0.5 },
   light: { fill: 0.1, armor: 0.3, budget: 0.85, wearShift: 0, cargo: 0.75 },

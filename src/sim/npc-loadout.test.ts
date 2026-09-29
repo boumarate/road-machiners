@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
-import { GEAR_LEVELS, MAX_GUN_SLOWDOWN, NPCS, type GearLevel, type NpcTemplate } from '../data/npcs';
+import { GEAR_LEVELS, MAX_GUN_SLOWDOWN, MIN_NPC_SPEED_SHARE, NPCS, type GearLevel, type NpcTemplate } from '../data/npcs';
 import { PARTS, partDef } from '../data/parts';
 import { START_KITS } from '../data/start';
 import { newWorld } from './world';
@@ -8,13 +8,15 @@ import { CONDITION } from '../data/wear';
 import { everyGunFires } from './armor';
 import { makeVehicle } from './factory';
 import { freeCells, goodsCount, gridOf, isMounted, mountedParts, placementError } from './grid';
-import { vehicleMass } from './mass';
+import { loadFactor, vehicleMass } from './mass';
 import { generateNpcLoadout, sampleWeighted } from './npc-loadout';
 import { spawnAt, spawnInitial, spawnNpcs } from './spawn';
 import { openSides, reachedSides } from './armor';
 import { mountedItems } from './grid';
 import type { EngineDef, WeaponDef } from '../data/parts';
-import { gunDrag } from './stats';
+import { gunDrag, npcMassRoom } from './stats';
+import { addGoods } from './inventory';
+import { GOODS } from '../data/goods';
 import { emptyWorld } from './testkit';
 import type { Vehicle, World } from './types';
 import { TEST_MAP } from '../test/map';
@@ -106,6 +108,33 @@ describe('NPC equipment generation', () => {
         expect(1 - gunDrag(v, (partDef(engine.part.defId) as EngineDef).capacity), describeLoadout(v)).toBeLessThanOrEqual(MAX_GUN_SLOWDOWN);
       }
     }, 120_000);
+  });
+
+  it.each(Object.values(NPCS))('keeps $id above the speed floor at every gear level', (template) => {
+    for (const level of Object.keys(GEAR_LEVELS) as GearLevel[]) {
+      for (let seed = 1; seed <= 12; seed++) {
+        const world = { ...fixture, rngState: seed };
+        const loadout = generateNpcLoadout(world, template, null, level);
+        const v = makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+        const engine = mountedItems(v, 'engine')[0];
+        const share = loadFactor(v) * gunDrag(v, (partDef(engine.part.defId) as EngineDef).capacity);
+        expect(share, `${level} ${describeLoadout(v)}`).toBeGreaterThanOrEqual(MIN_NPC_SPEED_SHARE - 0.02);
+      }
+    }
+  }, 120_000);
+
+  it('gives an NPC no cargo past its speed floor, and the player any', () => {
+    const world = { ...fixture, rngState: 3 };
+    const npc = spawnAt(world, NPCS.gunwagon, { ...generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded'), cargo: {}, spares: [] }, { x: 50, y: 50 });
+    const room = npcMassRoom(npc);
+    const free = freeCells(npc);
+    const added = addGoods(world, npc, 'tools', 1000);
+    expect(added * GOODS.tools.mass).toBeLessThanOrEqual(room);
+    expect(added).toBeLessThan(free);
+    const player = spawnAt(world, NPCS.gunwagon, { ...generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded'), cargo: {}, spares: [] }, { x: 60, y: 50 });
+    player.brain = null;
+    const playerFree = freeCells(player);
+    expect(addGoods(world, player, 'tools', 1000)).toBe(playerFree);
   });
 
   it.each(Object.values(NPCS))('gives $id only guns that can fire', (template) => {
