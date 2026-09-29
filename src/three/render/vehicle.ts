@@ -217,8 +217,9 @@ export class VehicleView {
     const onBody = v.items.filter((item) => onChassis(v, item));
     this.buildBase(v, body, baseModel(v.chassisId), still, paint, FACTION_COLORS[v.faction].cab, bumperlessCells(v, onBody));
     const wheelItems: PartItem[] = [];
-    // The transmission and the tank of a truck that does not show its cores sit inside the body.
-    for (const item of onBody.filter((it) => !hidesInside(v, it))) {
+    // The transmission and the tank of a truck that does not show its cores sit inside the body. A part with no surface
+    // to rest on would float, so it is not drawn either.
+    for (const item of onBody.filter((it) => !hidesInside(v, it) && !wouldFloat(v, it))) {
       if (item.kind === 'good') {
         still.add(this.placeItem(v, item, paint, standingY(v, item)));
         continue;
@@ -579,6 +580,20 @@ function highestAhead(chassisId: string, rect: CellRect): number {
 
 function rectOf(v: Pick<Vehicle, 'chassisId'>, item: GridItem): CellRect {
   return cellRect(v.chassisId, itemCells(item));
+}
+
+// A good or loose part that finds no surface to rest on. Guns stand on posts, armor lies on the faces and mounted
+// engines and wheels have their own spots, so they always show.
+function wouldFloat(v: Pick<Vehicle, 'chassisId'>, item: GridItem): boolean {
+  return !alwaysDrawn(v, item) && restOf(v, item).perched;
+}
+
+// Weapons, armor, and engines and wheels on their mounts.
+function alwaysDrawn(v: Pick<Vehicle, 'chassisId'>, item: GridItem): boolean {
+  if (item.kind !== 'part') return false;
+  const def = partDef(item.part.defId);
+  if (def.kind === 'weapon' || def.kind === 'armor') return true;
+  return (def.kind === 'engine' || isWheel(def)) && isMounted(v.chassisId, item);
 }
 
 // Where an item rests on the model, see restOn().
