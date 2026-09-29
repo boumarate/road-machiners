@@ -155,6 +155,104 @@ export function surfaceAt(chassisId: string, rect: CellRect): number {
   return best;
 }
 
+// How far a surface may stand above a resting part before the part would cut into it, in meters.
+const CLIP_TOLERANCE = 0.05;
+// A part never shrinks below this share of its footprint along either axis to clear taller surfaces. A small part
+// standing on something reads better than a full one floating.
+const MIN_KEEP = 0.3;
+
+// Where a part rests: its base height, the footprint it is drawn over, and whether it perches on top of something.
+export type Rest = { y: number; rect: CellRect; perched: boolean };
+
+// A part rests on a surface of the model without cutting into it. Each candidate surface runs from the one that carries
+// half its footprint, the median of the height samples under it, up to the highest. On a candidate, the drawn footprint
+// shrinks away from anything taller, like a bed wall or a rim, and at least half of what is left must touch the
+// surface. The candidate that keeps the most footprint wins. A part that fits on none perches on the highest point.
+export function restOn(chassisId: string, rect: CellRect): Rest {
+  if (!(rect.x1 > rect.x0 && rect.z1 > rect.z0)) return { y: surfaceAt(chassisId, rect), rect, perched: false };
+  const map = truckShape(chassisId).heights;
+  const samples = samplesUnder(map, rect);
+  if (samples.length === 0) return { y: surfaceAt(chassisId, rect), rect, perched: false };
+  const tops = samples.map((sm) => sm.top).sort((a, b) => a - b);
+  const levels = [...new Set(tops.slice(Math.floor((tops.length - 1) / 2)))];
+  const fits = levels.flatMap((y) => {
+    const box = clearBox(samples, y + CLIP_TOLERANCE);
+    const di = (box.i1 - box.i0) / spanOf(samples, 'i');
+    const dj = (box.j1 - box.j0) / spanOf(samples, 'j');
+    return !box.empty && Math.min(di, dj) >= MIN_KEEP && supports(samples, box, y) ? [{ y, box, area: di * dj }] : [];
+  });
+  const best = fits.reduce<(typeof fits)[number] | null>((a, b) => (a && a.area >= b.area ? a : b), null);
+  if (best) return { y: best.y, rect: rectOfBox(map, best.box, rect), perched: false };
+  return { y: surfaceAt(chassisId, rect), rect, perched: true };
+}
+
+type Sample = { i: number; j: number; top: number };
+// cut marks the sides that trimming moved: i0, i1, j0 and j1, in that order.
+type Box = { i0: number; i1: number; j0: number; j1: number; empty: boolean; cut: [boolean, boolean, boolean, boolean] };
+
+// The height samples that lie fully inside the rect, with their tops in meters. Model y points to the truck's left.
+function samplesUnder(map: HeightMap, rect: CellRect): Sample[] {
+  const range = (lo: number, hi: number) => {
+    const first = Math.ceil((lo - 1e-6) / map.cell);
+    const last = Math.floor((hi + 1e-6) / map.cell) - 1;
+    return Array.from({ length: Math.max(0, last - first + 1) }, (_, k) => first + k);
+  };
+  return range(rect.x0, rect.x1).flatMap((i) => range(-rect.z1, -rect.z0).flatMap((j) => {
+    const top = map.top[i - map.i0]?.[j - map.j0];
+    return typeof top === 'number' ? [{ i, j, top: top / 100 }] : [];
+  }));
+}
+
+// True when at least half the samples inside the box reach the level, so the part stands on something, not on air.
+function supports(samples: Sample[], box: Box, y: number): boolean {
+  const inside = samples.filter((sm) => sm.i >= box.i0 && sm.i < box.i1 && sm.j >= box.j0 && sm.j < box.j1);
+  return inside.filter((sm) => sm.top >= y - CLIP_TOLERANCE).length * 2 >= inside.length;
+}
+
+function spanOf(samples: Sample[], key: 'i' | 'j'): number {
+  const values = samples.map((sm) => sm[key]);
+  return Math.max(...values) - Math.min(...values) + 1;
+}
+
+// The sample box left after trimming away every sample taller than the limit, one edge row or column at a time.
+// Box bounds are half open: i0 <= i < i1.
+function clearBox(samples: Sample[], limit: number): Box {
+  const box: Box = { i0: Math.min(...samples.map((sm) => sm.i)), i1: Math.max(...samples.map((sm) => sm.i)) + 1, j0: Math.min(...samples.map((sm) => sm.j)), j1: Math.max(...samples.map((sm) => sm.j)) + 1, empty: false, cut: [false, false, false, false] };
+  const inBox = (sm: Sample) => sm.i >= box.i0 && sm.i < box.i1 && sm.j >= box.j0 && sm.j < box.j1;
+  for (;;) {
+    const tall = samples.filter((sm) => sm.top > limit && inBox(sm));
+    if (tall.length === 0) return box;
+    trimEdge(box, tall);
+    if (box.i1 <= box.i0 || box.j1 <= box.j0) return { ...box, empty: true };
+  }
+}
+
+// Trims the edge row or column of the box that holds the most tall samples. When no edge holds one, it trims the edge
+// nearest the first tall sample, so the loop always closes in on it.
+function trimEdge(box: Box, tall: Sample[]): void {
+  const edges = [(sm: Sample) => sm.i === box.i0, (sm: Sample) => sm.i === box.i1 - 1, (sm: Sample) => sm.j === box.j0, (sm: Sample) => sm.j === box.j1 - 1];
+  const counts = edges.map((on) => tall.filter(on).length);
+  const most = Math.max(...counts);
+  const first = tall[0];
+  const gaps = [first.i - box.i0, box.i1 - 1 - first.i, first.j - box.j0, box.j1 - 1 - first.j];
+  const side = most > 0 ? counts.indexOf(most) : gaps.indexOf(Math.min(...gaps));
+  box.cut[side] = true;
+  if (side === 0) box.i0 += 1;
+  else if (side === 1) box.i1 -= 1;
+  else if (side === 2) box.j0 += 1;
+  else box.j1 -= 1;
+}
+
+// The rect with each trimmed side moved in to the sample box. Model j grows to the truck's left, so j1 bounds z0.
+function rectOfBox(map: HeightMap, box: Box, rect: CellRect): CellRect {
+  return {
+    x0: box.cut[0] ? box.i0 * map.cell : rect.x0,
+    x1: box.cut[1] ? box.i1 * map.cell : rect.x1,
+    z0: box.cut[3] ? -box.j1 * map.cell : rect.z0,
+    z1: box.cut[2] ? -box.j0 * map.cell : rect.z1,
+  };
+}
+
 // The center of the hood hole on the bay floor, where the engine is drawn.
 export function engineAnchor(chassisId: string): { x: number; y: number; z: number } {
   return { ...PHYSICS.bodies[chassisDef(chassisId).look].engine };

@@ -3,7 +3,8 @@ import { CHASSIS } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
 import { partDef, type CoreDef } from '../data/parts';
 import BASELINE from './body-baseline.json';
-import { bodyOf, cellCenter, cellRect, engineAnchor, lanesAt, surfaceAt } from './body';
+import { bodyOf, cellCenter, cellRect, engineAnchor, lanesAt, restOn, surfaceAt } from './body';
+import TRUCK_SHAPES from '../data/truck-shapes.json';
 import { baseGrid } from './grid';
 
 const ids = Object.keys(CHASSIS);
@@ -212,5 +213,49 @@ describe('grid and model correspondence', () => {
         }
       }
     }
+  });
+});
+
+describe('resting parts', () => {
+  type Map = { cell: number; i0: number; j0: number; top: (number | null)[][] };
+  const TOLERANCE = 0.05;
+  const SIZES = [[1, 1], [1, 2], [2, 1], [2, 2], [1, 3], [3, 1], [2, 3], [3, 2]];
+  // Tops in meters of the height samples fully inside a rect.
+  const topsIn = (map: Map, r: { x0: number; x1: number; z0: number; z1: number }) => {
+    const range = (lo: number, hi: number) => {
+      const first = Math.ceil((lo - 1e-6) / map.cell);
+      const last = Math.floor((hi + 1e-6) / map.cell) - 1;
+      return Array.from({ length: Math.max(0, last - first + 1) }, (_, k) => first + k);
+    };
+    return range(r.x0, r.x1).flatMap((i) => range(-r.z1, -r.z0).flatMap((j) => {
+      const top = map.top[i - map.i0]?.[j - map.j0];
+      return typeof top === 'number' ? [top / 100] : [];
+    }));
+  };
+
+  it('never cuts into the model and stands on at least half its footprint, on every chassis, cell and size', () => {
+    const problems: string[] = [];
+    let perched = 0;
+    let total = 0;
+    for (const id of Object.keys(CHASSIS)) {
+      const map = (TRUCK_SHAPES as Record<string, { heights: Map }>)[`base_${id}`].heights;
+      const { w, h } = baseGrid(id);
+      for (const [sw, sh] of SIZES) {
+        for (let y = 1; y + sh <= h - 1; y++) {
+          for (let x = 1; x + sw <= w - 1; x++) {
+            const cells = Array.from({ length: sw * sh }, (_, k) => ({ x: x + (k % sw), y: y + Math.floor(k / sw) }));
+            const rest = restOn(id, cellRect(id, cells));
+            total++;
+            if (rest.perched) { perched++; continue; }
+            const tops = topsIn(map, rest.rect);
+            const label = `${id} ${sw}x${sh} at ${x},${y}`;
+            if (tops.some((t) => t > rest.y + TOLERANCE)) problems.push(`${label} cuts into the model`);
+            if (tops.filter((t) => t >= rest.y - TOLERANCE).length * 2 < tops.length) problems.push(`${label} floats over most of its footprint`);
+          }
+        }
+      }
+    }
+    console.log(`resting parts: ${perched} of ${total} footprints perch on a taller surface`);
+    expect(problems).toEqual([]);
   });
 });

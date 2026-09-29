@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../../data/chassis';
 import { PARTS } from '../../data/parts';
-import { cellRect, surfaceAt } from '../../sim/body';
+import { cellRect, restOn } from '../../sim/body';
 import { baseGrid, itemCells } from '../../sim/grid';
 import type { GridItem } from '../../sim/types';
 import { loadModels } from './models';
@@ -32,8 +32,8 @@ describe('gun risers', () => {
             const { at: { pos }, bottom } = weaponStand({ chassisId: id }, item);
             const rect = cellRect(id, itemCells(item));
             const label = `${def.id} rot ${rot} at ${x},${y}`;
-            const surface = surfaceAt(id, rect);
-            if (Math.abs(bottom - surface) > TOLERANCE) problems.push(`${label}: post starts at ${bottom.toFixed(2)}, surface is ${surface.toFixed(2)}`);
+            const surface = restOn(id, rect).y;
+            if (Math.abs(bottom - surface) > TOLERANCE) problems.push(`${label}: post starts at ${bottom.toFixed(2)}, its rest is ${surface.toFixed(2)}`);
             if (pos.x < rect.x0 || pos.x > rect.x1 || pos.z < rect.z0 || pos.z > rect.z1) problems.push(`${label}: post at ${pos.x.toFixed(2)},${pos.z.toFixed(2)} is outside its rect`);
           }
         }
