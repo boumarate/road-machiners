@@ -60,7 +60,7 @@ describe('patrols', () => {
   it('patrols around the town nearest home, not the nearest town now', () => {
     const nose = siteById('nose');
     const w = emptyWorld({ x: 300, y: 300 });
-    const npc = createNpc(w, 'noseArmy', ['lawman'], 'wagon', ['cannon', 'workhorseDiesel'], sitePads(siteById('bowl'))[0]);
+    const npc = createNpc(w, 'noseArmy', ['lawman'], 'hauler', ['cannon', 'workhorseDiesel'], sitePads(siteById('bowl'))[0]);
     npc.brain!.home = { ...sitePads(nose)[0] };
     forceOption('idle', 'patrol');
     const goal = idleGoals(w, npc.id, 1)[0];
@@ -123,7 +123,7 @@ describe('mercs', () => {
     const bowl = siteById('bowl');
     const w = emptyWorld({ x: 300, y: 300 });
     const pad = sitePads(bowl)[0];
-    const npc = createNpc(w, 'merc', ['merc'], 'wagon', ['cannon', 'workhorseDiesel'], pad);
+    const npc = createNpc(w, 'merc', ['merc'], 'hauler', ['cannon', 'workhorseDiesel'], pad);
     w.salvage = [{ id: 'wreck-test', pos: { x: pad.x + 4, y: pad.y }, radius: 0.6, goods: { scrap: 2 }, parts: [] }];
     const chances = optionChances(optionWeights(w, npc, 'idle', null, null));
     expect(chances.scavenge).toBeCloseTo(MIN_CHANCE, 3);

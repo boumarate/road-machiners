@@ -64,7 +64,7 @@ describe('magazines', () => {
 
   it('turns spent cooling down do not count toward a reload', () => {
     const w = emptyWorld();
-    const t = addVehicle(w, 'raiders', 'wagon', ['cannon', 'stockEngine'], { x: 35, y: 30 }, Math.PI);
+    const t = addVehicle(w, 'raiders', 'hauler', ['cannon', 'stockEngine'], { x: 35, y: 30 }, Math.PI);
     const gun = vehicleStats(w, t).weapons[0];
     gun.part.gun = { cooldown: 2, ammo: 1, reloadWork: 0 };
     t.weaponOrders = {};

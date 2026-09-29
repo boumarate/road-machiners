@@ -171,9 +171,9 @@ describe('gun power draw', () => {
     return vehicleStats(w, addVehicle(w, 'raiders', chassis, parts, { x: 40, y: 40 })).maxSpeed;
   };
 
-  it('a gun draws its cells times 1 plus a quarter per tier above 1', () => {
+  it('a gun draws 1 plus half per extra cell, times 1 plus a quarter per tier above 1', () => {
     for (const def of Object.values(PARTS)) {
-      if (def.kind === 'weapon') expect(def.draw, def.id).toBeCloseTo(def.w * def.h * (1 + 0.25 * (def.tier - 1)));
+      if (def.kind === 'weapon') expect(def.draw, def.id).toBeCloseTo((1 + 0.5 * (def.w * def.h - 1)) * (1 + 0.25 * (def.tier - 1)));
     }
   });
 
@@ -214,11 +214,11 @@ describe('gun power draw', () => {
 
   it('guns lower top speed and acceleration, and a bigger engine loses less', () => {
     const w = emptyWorld();
-    const bare = vehicleStats(w, addVehicle(w, 'raiders', 'wagon', ['stockEngine'], { x: 40, y: 40 }));
-    const armed = vehicleStats(w, addVehicle(w, 'raiders', 'wagon', ['stockEngine', 'cannon'], { x: 40, y: 40 }));
+    const bare = vehicleStats(w, addVehicle(w, 'raiders', 'hauler', ['stockEngine'], { x: 40, y: 40 }));
+    const armed = vehicleStats(w, addVehicle(w, 'raiders', 'hauler', ['stockEngine', 'cannon'], { x: 40, y: 40 }));
     expect(armed.maxSpeed).toBeLessThan(bare.maxSpeed);
     expect(armed.accel).toBeLessThan(bare.accel);
-    const share = (engine: string) => speedWith('wagon', [engine, 'cannon']) / speedWith('wagon', [engine]);
+    const share = (engine: string) => speedWith('hauler', [engine, 'cannon']) / speedWith('hauler', [engine]);
     expect(share('heavyDiesel')).toBeGreaterThan(share('stockEngine'));
   });
 });

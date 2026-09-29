@@ -73,7 +73,7 @@ describe('combat', () => {
   it('a gun cooling down holds fire until its cooldown runs out', () => {
     const w = emptyWorld();
     const me = cannonHauler(w);
-    const t = addVehicle(w, 'raiders', 'wagon', ['cannon', 'stockEngine', 'plates'], { x: 35, y: 30 }, Math.PI);
+    const t = addVehicle(w, 'raiders', 'hauler', ['cannon', 'stockEngine', 'plates'], { x: 35, y: 30 }, Math.PI);
     const gun = vehicleStats(w, me).weapons[0];
     order(me, gun.part.id, t.id);
     gun.part.gun = { cooldown: 2, ammo: gun.def.magazine, reloadWork: 0 };

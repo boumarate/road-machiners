@@ -103,12 +103,12 @@ describe('inventory grid', () => {
     removeAllGoods(w.vehicles[0]); // free the cells the gun test claims, regardless of start cargo
     w = storePart(w, item(w, 'mg').id);
     w = storePart(w, item(w, 'panniers').id);
-    w = update(w, (d) => { d.player.storage.push(makePart(d, 'autocannon', 0)); });
-    const id = w.player.storage.find((p) => p.defId === 'autocannon')!.id;
+    w = update(w, (d) => { d.player.storage.push(makePart(d, 'heavyMg', 0)); });
+    const id = w.player.storage.find((p) => p.defId === 'heavyMg')!.id;
     // The scout has two deck cells stacked beside the engine at (4,1) and (4,2). Lying on the front armor row, the gun is no deck gun.
-    const stacked = takeFromStorage(w, id, { x: 4, y: 1, rot: 1 });
-    expect(vehicleStats(stacked, stacked.vehicles[0]).weapons.map((m) => m.def.id)).toEqual(['autocannon']);
-    const across = takeFromStorage(w, id, { x: 4, y: 0, rot: 0 });
+    const stacked = takeFromStorage(w, id, { x: 4, y: 1, rot: 0 });
+    expect(vehicleStats(stacked, stacked.vehicles[0]).weapons.map((m) => m.def.id)).toEqual(['heavyMg']);
+    const across = takeFromStorage(w, id, { x: 4, y: 0, rot: 1 });
     expect(vehicleStats(across, across.vehicles[0]).weapons).toHaveLength(0);
   });
 
