@@ -13,7 +13,9 @@ const url = arg('url', 'http://localhost:5173');
 const turns = Number(arg('turns', '12'));
 const cpu = process.argv.includes('--cpu');
 const MIN_FPS = 50; // headless Chromium caps frames at 60 Hz
-const TURN_LIMIT_MS = 10000; // a turn plays in about 1.3 s, and the first, while the game warms up, in about 3.2 s
+// A turn plays in about 1.3 s on the GPU, and the first, while the game warms up, in about 3.2 s.
+// Software drawing on a 2 vCPU server runs near 1.5 fps, and turns there took over 10 s, so --cpu waits longer.
+const TURN_LIMIT_MS = cpu ? 60000 : 10000;
 
 mkdirSync('.playtest', { recursive: true });
 const browser = await chromium.launch({ args: cpu ? [] : ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
