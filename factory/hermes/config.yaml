@@ -8,6 +8,10 @@ model:
 telegram:
   require_mention: true
 
+# Keep Hermes's own notices out of the committee chat.
+compression:
+  codex_gpt55_autoraise_notice: false
+
 display:
   platforms:
     telegram:
