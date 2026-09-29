@@ -101,6 +101,7 @@ function validateTable(table: NpcLoadoutTable): void {
 function validateGear(table: NpcLoadoutTable): void {
   validateWeights(table.levels);
   for (const { value } of table.levels) if (!GEAR_LEVEL_IDS.includes(value)) throw new Error(`Unknown gear level ${value}`);
+  if (!(table.gunFill > 0)) throw new Error(`gunFill ${table.gunFill} must be above 0`);
   if (!Number.isInteger(table.minGuns) || table.minGuns < 1) throw new Error(`minGuns ${table.minGuns} must be a whole number of at least 1`);
 }
 
@@ -255,7 +256,7 @@ function chooseVehicle(probe: World, rng: Rng, template: NpcTemplate, chassisId:
 // mounts the first gun that fits, budget and rated mass allowing. The template minimum is already mounted.
 function addGuns(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle, budget: number): Vehicle {
   for (let spot = freeDeckCells(v); spot > 0; spot--) {
-    if (nextRandom(rng) >= level.fill) continue;
+    if (nextRandom(rng) >= Math.min(1, level.fill * table.gunFill)) continue;
     const next = pickFitting(world, rng, table.extraGun, (id) => tryMountChoice(world, v, id, budget));
     if (!next) break;
     v = next;

@@ -30,6 +30,7 @@ export type NpcLoadoutTable = {
   weapon: Weighted<string>[]; // the main gun
   extraGun: Weighted<string>[]; // guns past the main one, one per free deck spot the level's fill chance hits
   minGuns: number; // guns the driver always gets, whatever its level rolls
+  gunFill: number; // times the gear level's fill chance is the chance that a free deck spot gets a gun; see GEAR_LEVELS
   armor: Weighted<string>[]; // one type per armored side
   cargoPart: Weighted<string | null>[];
   goods: Weighted<CargoRoll | null>[];
@@ -39,8 +40,9 @@ export type NpcLoadoutTable = {
   targets: { guns: [number, number]; armor: [number, number] };
 };
 
-// What each gear level aims for. fill is the chance that each free deck spot gets a gun after the main gun and the
-// template minimum; see addGuns() in src/sim/npc-loadout.ts. armor is the share of the chassis edge cells to armor.
+// What each gear level aims for. fill is the base chance that each free deck spot gets a gun after the main gun and
+// the template minimum. The template's `gunFill` scales it, capped at 1: 0.2 for haulers that must stay fast, 0.4 to
+// 0.5 for convoys, couriers and small buggies, 0.7 for scavengers and roamers, 1 for gunwagons, mercs and patrols; see addGuns() in src/sim/npc-loadout.ts. armor is the share of the chassis edge cells to armor.
 // budget multiplies the template budget. wearShift moves every wear roll, clamped to CONDITION.maxWear. cargo
 // multiplies the goods and spares counts. Passes stop early when the budget, rated mass or grid room runs out, so
 // a poor truck may end below its targets. Guns come first in the fill order, so the budget cuts armor before guns.
@@ -180,6 +182,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 0.5,
     armor: [
       { value: "scrapPanels", weight: 5 },
       { value: "cage", weight: 3 },
@@ -197,7 +200,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
     wear: WEAR_RAIDER,
-    targets: { guns: [1.0, 1.4], armor: [0.3, 0.6] },
+    targets: { guns: [0.8, 1.4], armor: [0.3, 0.6] },
     spares: null,
   },
   // No tractor or scout: neither has a spot where a second gun covers behind the truck.
@@ -229,6 +232,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 2,
+    gunFill: 1,
     armor: [
       { value: "plates", weight: 6 },
       { value: "spacedArmor", weight: 3 },
@@ -279,6 +283,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 0.2,
     armor: [
       { value: "plates", weight: 4 },
       { value: "cage", weight: 3 },
@@ -304,7 +309,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 4 }, weight: 1 },
     ],
     wear: WEAR_TRADER,
-    targets: { guns: [3.3, 4.9], armor: [0.3, 0.6] },
+    targets: { guns: [1.4, 2.2], armor: [0.3, 0.6] },
     spares: TRADER_SPARES,
   },
   scavenger: {
@@ -335,6 +340,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 0.7,
     armor: [
       { value: "scrapPanels", weight: 5 },
       { value: "cage", weight: 4 },
@@ -355,7 +361,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
     wear: WEAR_SCAVENGER,
-    targets: { guns: [1.3, 1.9], armor: [0.2, 0.5] },
+    targets: { guns: [1.0, 1.6], armor: [0.2, 0.5] },
     spares: null,
   },
   // Bowl Farmers drive farm chassis.
@@ -371,6 +377,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     weapon: LAW_WEAPONS,
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 1,
     armor: LAW_ARMOR,
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
@@ -390,6 +397,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     weapon: LAW_WEAPONS,
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 1,
     armor: LAW_ARMOR,
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
@@ -420,6 +428,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 0.5,
     armor: [
       { value: "scrapPanels", weight: 3 },
       { value: "cage", weight: 2 },
@@ -465,6 +474,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 0.7,
     armor: [
       { value: "scrapPanels", weight: 4 },
       { value: "cage", weight: 3 },
@@ -482,7 +492,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "tools", count: 1 }, weight: 1 },
     ],
     wear: WEAR_SCAVENGER,
-    targets: { guns: [1.4, 2.1], armor: [0.3, 0.6] },
+    targets: { guns: [1.05, 1.7], armor: [0.3, 0.6] },
     spares: null,
   },
   // A convoy is a big truck that always carries a cargo part, since it hauls for a living. Its guard does the
@@ -507,6 +517,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 0.4,
     armor: [
       { value: "plates", weight: 3 },
       { value: "cage", weight: 2 },
@@ -524,7 +535,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "water", count: 6 }, weight: 1 },
     ],
     wear: WEAR_TRADER,
-    targets: { guns: [4.5, 6.8], armor: [0.4, 0.7] },
+    targets: { guns: [2.6, 3.9], armor: [0.4, 0.7] },
     spares: null,
   },
   // A guard is quick enough to keep up with its convoy and armed to fight for it.
@@ -554,6 +565,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     ],
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 1,
     armor: [
       { value: "plates", weight: 4 },
       { value: "cage", weight: 3 },
@@ -599,6 +611,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     // The rare empty outcome covers a wagon whose heavy gun leaves no rated mass for plates.
     extraGun: LIGHT_GUNS,
     minGuns: 1,
+    gunFill: 1,
     armor: [
       { value: "plates", weight: 5 },
       { value: "spacedArmor", weight: 3 },
