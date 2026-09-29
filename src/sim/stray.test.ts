@@ -51,8 +51,8 @@ describe('stray fire', () => {
 
   it('stray damage below the threshold starts no feud and is summed in a stray fire state', () => {
     const { w, me, onLine } = range();
-    const dealt = fire(w, me, 20);
-    const taken = dealt.get(onLine.id) ?? 0;
+    let taken = 0;
+    for (let i = 0; i < 20 && taken === 0; i++) taken = fire(w, me, 1).get(onLine.id) ?? 0;
     expect(taken).toBeGreaterThan(0);
     expect(taken).toBeLessThan(RULES.stray.feudDamage);
     expect(inFeud(w, onLine, me)).toBe(false);

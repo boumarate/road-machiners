@@ -494,7 +494,7 @@ function landRound(world: World, s: Shot, roll: Roll, offset: number): Landing {
   const lane = roll.hit && s.aiming.lane !== null ? s.aiming.lane : laneOfOffset(side, body, lanes, offset);
   const k = roll.crit ? { damage: RULES.critDamage, pen: RULES.critPen } : { damage: 1, pen: 1 };
   const r = s.mw.def.round;
-  const hits = walkLane(world, s.target, side, lane, { damage: r.damage * k.damage * RULES.weaponDamage, pen: r.pen * k.pen, blast: r.blast });
+  const hits = walkLane(world, s.target, side, lane, { damage: r.damage * k.damage * RULES.weaponDamage, pen: r.pen * k.pen, blast: r.blast, armorShare: r.armorShare });
   return { struck: s.target, lane, hits, point: lanePoint(s.target, side, lane) };
 }
 
@@ -505,7 +505,7 @@ function strayRound(world: World, s: Shot, miss: Vec): Landing {
   const side = sideToward(victim, s.shooter.pos);
   const lane = randInt(world, 0, laneCount(victim, side) - 1);
   const r = s.mw.def.round;
-  const hits = walkLane(world, victim, side, lane, { damage: r.damage * RULES.weaponDamage, pen: r.pen, blast: r.blast });
+  const hits = walkLane(world, victim, side, lane, { damage: r.damage * RULES.weaponDamage, pen: r.pen, blast: r.blast, armorShare: r.armorShare });
   return { struck: victim, lane, hits, point: lanePoint(victim, side, lane) };
 }
 
@@ -552,7 +552,7 @@ function explode(world: World, r: WeaponDef["round"], landing: Landing): Vehicle
     const skip = v.id === landing.struck?.id ? landing.lane : null;
     const hits = lanes
       .filter((lane) => lane !== skip)
-      .flatMap((lane) => walkLane(world, v, side, lane, { damage: r.splashDamage * RULES.weaponDamage, pen: r.splashPen, blast: true }));
+      .flatMap((lane) => walkLane(world, v, side, lane, { damage: r.splashDamage * RULES.weaponDamage, pen: r.splashPen, blast: true, armorShare: r.armorShare }));
     if (hits.length > 0) out.push({ vehicle: v.id, hits });
   }
   return out;

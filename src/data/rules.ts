@@ -60,7 +60,7 @@ export const RULES = {
     rounds: 4,
     hitChance: 0.5,
     missOffset: 1.5,
-    round: { damage: 6, pen: 8, blast: false },
+    round: { damage: 6, pen: 8, blast: false, armorShare: 1 },
   },
 
   // Every truck's acceleration, in the sim and in physics, times this. Tune here to make all trucks livelier or

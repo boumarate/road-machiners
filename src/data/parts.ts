@@ -1,4 +1,5 @@
 import type { Tier } from './market';
+import { UNPRICED_WEAPONS } from './weapons';
 
 // Truck parts. Core parts are built into every chassis; the rest are bought and swapped in towns.
 
@@ -29,9 +30,13 @@ type PartBase = {
   tall: boolean;
 };
 
-// One round. pen is the armor it gets through. speed in m/s. A miss within splashRadius meters of a lane's
-// edge hits that lane with splashDamage and splashPen. splashRadius 0 means no splash.
-// A blast round meets blastArmor on armor parts. Splash always counts as blast.
+// Hidden roles that shape a gun's numbers; the player never sees them. A damager wrecks the parts behind armor, a
+// chipper strips armor and a precision gun picks one part off from afar.
+export type WeaponClass = "damager" | "chip" | "precision";
+
+// One round. pen is the armor it gets through. speed in m/s. A round with a splashRadius above 0 explodes where it
+// lands, and every lane of any truck within splashRadius meters takes splashDamage and splashPen. A blast round
+// meets blastArmor on armor parts. Splash always counts as blast. Armor parts take damage and splash times armorShare.
 export type WeaponRound = {
   damage: number;
   pen: number;
@@ -40,6 +45,7 @@ export type WeaponRound = {
   splashRadius: number;
   splashDamage: number;
   splashPen: number;
+  armorShare: number;
 };
 
 export type WeaponDef = PartBase & {
@@ -55,7 +61,7 @@ export type WeaponDef = PartBase & {
   shake: number; // multiplies the spread from the shooter's own speed; below 1 is a stabilized gun
   stray: number; // chance a round that misses its target hits another truck near the line of fire
   round: WeaponRound;
-
+  classes: WeaponClass[];
   look: "mg" | "cannon";
 };
 
@@ -169,237 +175,7 @@ function pricePart(def: Unpriced<PartDef>): PartDef {
 }
 
 const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
-  mg: {
-    id: "mg",
-    kind: "weapon",
-    name: "MG turret",
-    hp: 40,
-    base: 120,
-    tier: 1,
-    w: 1,
-    h: 1,
-    mass: 110,
-    armor: 3,
-    tall: false,
-    range: 13.5, // a short-reach starter gun
-    cooldown: 1,
-    magazine: 5,
-    reload: 2,
-    arc: 360,
-    look: "mg",
-    spread: 5,
-    rounds: 6,
-    recoil: 0.5,
-    shake: 0.5,
-    stray: 0.15,
-    round: {
-      damage: 3,
-      pen: 4,
-      blast: false,
-      speed: 600,
-      splashRadius: 0,
-      splashDamage: 0,
-      splashPen: 0,
-    },
-  },
-  cannon: {
-    id: "cannon",
-    kind: "weapon",
-    name: "Forward cannon",
-    hp: 60,
-    base: 240,
-    tier: 2,
-    w: 3,
-    h: 1,
-    mass: 270,
-    armor: 3,
-    tall: true,
-    range: 27,
-    cooldown: 3,
-    magazine: 2,
-    reload: 3,
-    arc: 60,
-    look: "cannon",
-    spread: 2.5,
-    rounds: 1,
-    recoil: 6,
-    shake: 1,
-    stray: 0.2,
-    round: {
-      damage: 30,
-      pen: 15,
-      blast: true,
-      speed: 250,
-      splashRadius: 2.5,
-      splashDamage: 12,
-      splashPen: 6,
-    },
-  },
-  shotgun: {
-    id: "shotgun",
-    kind: "weapon",
-    name: "Shotgun turret",
-    hp: 36,
-    base: 60,
-    tier: 1,
-    w: 1,
-    h: 1,
-    mass: 100,
-    armor: 2,
-    tall: false,
-    range: 9,
-    cooldown: 2,
-    magazine: 3,
-    reload: 2,
-    arc: 360,
-    look: "mg",
-    spread: 12,
-    rounds: 12,
-    recoil: 1.5,
-    shake: 0.6,
-    stray: 0.3,
-    round: {
-      damage: 4,
-      pen: 3,
-      blast: false,
-      speed: 350,
-      splashRadius: 0,
-      splashDamage: 0,
-      splashPen: 0,
-    },
-  },
-  autocannon: {
-    id: "autocannon",
-    kind: "weapon",
-    name: "Autocannon",
-    hp: 56,
-    base: 300,
-    tier: 2,
-    w: 2,
-    h: 1,
-    mass: 180,
-    armor: 4,
-    tall: false,
-    range: 21,
-    cooldown: 2,
-    magazine: 4,
-    reload: 2,
-    arc: 180,
-    look: "mg",
-    spread: 4,
-    rounds: 3,
-    recoil: 3,
-    shake: 0.8,
-    stray: 0.15,
-    round: {
-      damage: 10,
-      pen: 9,
-      blast: false,
-      speed: 700,
-      splashRadius: 0,
-      splashDamage: 0,
-      splashPen: 0,
-    },
-  },
-  tankGun: {
-    id: "tankGun",
-    kind: "weapon",
-    name: "Tank gun",
-    hp: 90,
-    base: 600,
-    tier: 3,
-    w: 3,
-    h: 1,
-    mass: 210,
-    armor: 8,
-    tall: true,
-    range: 24,
-    cooldown: 4,
-    magazine: 2,
-    reload: 3,
-    arc: 45,
-    look: "cannon",
-    spread: 3,
-    rounds: 1,
-    recoil: 14,
-    shake: 1.5,
-    stray: 0.1,
-    round: {
-      damage: 48,
-      pen: 26,
-      blast: false,
-      speed: 500,
-      splashRadius: 1.5,
-      splashDamage: 10,
-      splashPen: 5,
-    },
-  },
-  rocketRack: {
-    id: "rocketRack",
-    kind: "weapon",
-    name: "Rocket rack",
-    hp: 32,
-    base: 430,
-    tier: 3,
-    w: 2,
-    h: 1,
-    mass: 110,
-    armor: 1,
-    tall: false,
-    range: 30,
-    cooldown: 1,
-    magazine: 1,
-    reload: 4,
-    arc: 90,
-    look: "cannon",
-    spread: 8,
-    rounds: 4,
-    recoil: 1,
-    shake: 1.2,
-    stray: 0.35,
-    round: {
-      damage: 18,
-      pen: 14,
-      blast: true,
-      speed: 90,
-      splashRadius: 3,
-      splashDamage: 8,
-      splashPen: 4,
-    },
-  },
-  sniperCannon: {
-    id: "sniperCannon",
-    kind: "weapon",
-    name: "Sniper cannon",
-    hp: 40,
-    base: 500,
-    tier: 3,
-    w: 3,
-    h: 1,
-    mass: 180,
-    armor: 2,
-    tall: true,
-    range: 36,
-    cooldown: 3,
-    magazine: 3,
-    reload: 3,
-    arc: 30,
-    look: "cannon",
-    spread: 0.8,
-    rounds: 1,
-    recoil: 5,
-    shake: 3,
-    stray: 0.05,
-    round: {
-      damage: 22,
-      pen: 21,
-      blast: false,
-      speed: 950,
-      splashRadius: 0,
-      splashDamage: 0,
-      splashPen: 0,
-    },
-  },
+  ...UNPRICED_WEAPONS,
   stockEngine: {
     id: "stockEngine",
     kind: "engine",

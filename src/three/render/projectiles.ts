@@ -39,6 +39,19 @@ export const PROJECTILES: Record<string, ProjectileSpec> = {
   cannon: { look: 'shell', speed: 60, stagger: 0, length: 0.6, width: 0.22, color: 0xffad50, flash: 1.4, wobble: 0 },
   tankGun: { look: 'shell', speed: 60, stagger: 0, length: 0.75, width: 0.28, color: 0xffad50, flash: 1.6, wobble: 0 },
   sniperCannon: { look: 'shell', speed: 110, stagger: 0, length: 0.7, width: 0.16, color: 0xffd080, flash: 1.2, wobble: 0 },
+  heavyMg: { look: 'tracer', speed: 200, stagger: 0.5, length: 1.4, width: 0.07, color: PAL.flash, flash: 0.7, wobble: 0 },
+  gatling: { look: 'tracer', speed: 220, stagger: 0.6, length: 1.2, width: 0.05, color: PAL.flash, flash: 0.7, wobble: 0 },
+  // Rifle rounds are one fast bright streak.
+  longRifle: { look: 'tracer', speed: 260, stagger: 0, length: 2, width: 0.05, color: 0xffd080, flash: 0.8, wobble: 0 },
+  amRifle: { look: 'tracer', speed: 260, stagger: 0, length: 2.2, width: 0.08, color: 0xffd080, flash: 1.1, wobble: 0 },
+  battleRifle: { look: 'tracer', speed: 240, stagger: 0.35, length: 1.6, width: 0.06, color: 0xffd080, flash: 0.8, wobble: 0 },
+  flechette: { look: 'tracer', speed: 280, stagger: 0.3, length: 1.8, width: 0.04, color: 0xd8e0e8, flash: 0.8, wobble: 0 },
+  // Burning fuel crawls out in short fat orange gouts.
+  flamer: { look: 'tracer', speed: 30, stagger: 0.4, length: 0.8, width: 0.3, color: 0xff7a20, flash: 1, wobble: 0.3 },
+  pneumobolter: { look: 'shell', speed: 90, stagger: 0, length: 0.9, width: 0.08, color: 0xb8b0a0, flash: 0.4, wobble: 0 },
+  slugCannon: { look: 'shell', speed: 100, stagger: 0.3, length: 0.4, width: 0.14, color: 0xffad50, flash: 1, wobble: 0 },
+  recoilless: { look: 'shell', speed: 60, stagger: 0, length: 0.7, width: 0.2, color: 0xffad50, flash: 1.6, wobble: 0 },
+  grenadeLauncher: { look: 'shell', speed: 45, stagger: 0.5, length: 0.3, width: 0.16, color: 0x8a8a70, flash: 0.9, wobble: 0 },
   rocketRack: { look: 'missile', speed: 40, stagger: 0.5, length: 0.9, width: 0.16, color: 0x6a6a64, flash: 0.9, wobble: 0.5 },
 };
 

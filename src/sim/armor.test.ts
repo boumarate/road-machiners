@@ -50,7 +50,7 @@ describe('walkLane', () => {
   it('enters each side from its own edge', () => {
     const { w, v } = plated();
     const last = gridOf(v).h - 1;
-    const round = { damage: 1, pen: 2, blast: false }; // the scout's corner cells are empty, so a round needs to pass one cell
+    const round = { damage: 1, pen: 2, blast: false, armorShare: 1 }; // the scout's corner cells are empty, so a round needs to pass one cell
     expect(walkLane(w, v, 'front', 0, round)[0].part).toBe(partAt(v, 0, 1).id);
     expect(walkLane(w, v, 'left', 1, round)[0].part).toBe(partAt(v, 0, 1).id);
     expect(walkLane(w, v, 'right', 1, round)[0].part).toBe(partAt(v, 4, 1).id);
@@ -59,7 +59,7 @@ describe('walkLane', () => {
 
   it('a plate absorbs a weak round', () => {
     const { w, v, plate, engine } = plated();
-    const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 3, blast: false });
+    const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 3, blast: false, armorShare: 1 });
     expect(hits.map((h) => h.part)).toEqual([plate.id]);
     expect(plate.hp).toBeLessThan(maxHp(plate));
     expect(engine.hp).toBe(maxHp(engine));
@@ -69,7 +69,7 @@ describe('walkLane', () => {
     const fresh = plated();
     const worn = plated();
     worn.plate.wear = 3;
-    const round = { damage: 10, pen: 20, blast: false };
+    const round = { damage: 10, pen: 20, blast: false, armorShare: 1 };
     const freshHits = walkLane(fresh.w, fresh.v, 'front', 1, round);
     const wornHits = walkLane(worn.w, worn.v, 'front', 1, round);
     expect(wornHits[1].damage).toBeGreaterThan(freshHits[1].damage);
@@ -77,23 +77,33 @@ describe('walkLane', () => {
 
   it('a strong round passes the plate and hits the part behind', () => {
     const { w, v, plate, engine } = plated();
-    const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 20, blast: false });
+    const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 20, blast: false, armorShare: 1 });
     expect(hits.map((h) => h.part).slice(0, 2)).toEqual([plate.id, engine.id]);
     expect(engine.hp).toBeLessThan(maxHp(engine));
   });
 
+  it('armor share scales damage to armor parts and leaves the part behind alone', () => {
+    const plain = plated();
+    const chip = plated();
+    const base = walkLane(plain.w, plain.v, 'front', 1, { damage: 10, pen: 40, blast: false, armorShare: 1 });
+    const scaled = walkLane(chip.w, chip.v, 'front', 1, { damage: 10, pen: 40, blast: false, armorShare: 2 });
+    expect(scaled[0].part).toBe(chip.plate.id);
+    expect(scaled[0].damage).toBeCloseTo(2 * base[0].damage);
+    expect(scaled[1].damage).toBeCloseTo(base[1].damage);
+  });
+
   it('a round loses damage with the pen each part takes from it', () => {
     const { w, v } = plated();
-    const hits = walkLane(w, v, 'front', 1, { damage: 20, pen: 40, blast: false });
+    const hits = walkLane(w, v, 'front', 1, { damage: 20, pen: 40, blast: false, armorShare: 1 });
     expect(hits.length).toBeGreaterThan(1);
     expect(hits[1].damage).toBeLessThan(hits[0].damage);
   });
 
   it('armor scales damage down when pen is below it', () => {
     const { w, v, plate } = plated();
-    const weak = walkLane(w, v, 'front', 1, { damage: 12, pen: 6, blast: false })[0].damage;
+    const weak = walkLane(w, v, 'front', 1, { damage: 12, pen: 6, blast: false, armorShare: 1 })[0].damage;
     plate.hp = maxHp(plate);
-    const full = walkLane(w, v, 'front', 1, { damage: 12, pen: 100, blast: false })[0].damage;
+    const full = walkLane(w, v, 'front', 1, { damage: 12, pen: 100, blast: false, armorShare: 1 })[0].damage;
     expect(weak).toBeLessThan(full);
     expect(full).toBe(12);
   });
@@ -101,14 +111,14 @@ describe('walkLane', () => {
   it('a broken part lets the round pass', () => {
     const { w, v, plate, engine } = plated();
     plate.hp = 0;
-    const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 3, blast: false });
+    const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 3, blast: false, armorShare: 1 });
     expect(hits.map((h) => h.part)).toEqual([engine.id]);
     expect(plate.hp).toBe(0);
   });
 
   it('the round stops at zero pen', () => {
     const { w, v, plate, engine } = plated();
-    const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 12, blast: false });
+    const hits = walkLane(w, v, 'front', 1, { damage: 10, pen: 12, blast: false, armorShare: 1 });
     expect(hits.map((h) => h.part)).toEqual([plate.id]);
     expect(engine.hp).toBe(maxHp(engine));
   });
@@ -116,7 +126,7 @@ describe('walkLane', () => {
   it('a part spanning several cells of the lane is hit once', () => {
     const { w, v, plate, engine } = plated();
     plate.hp = 0;
-    const hits = walkLane(w, v, 'front', 1, { damage: 1, pen: 100, blast: false });
+    const hits = walkLane(w, v, 'front', 1, { damage: 1, pen: 100, blast: false, armorShare: 1 });
     expect(hits.filter((h) => h.part === engine.id)).toHaveLength(1);
   });
 
@@ -125,7 +135,7 @@ describe('walkLane', () => {
     const me = w.vehicles[0];
     const cab = corePart(me, 'cab');
     const lane = mountedItems(me).find((it) => it.part.id === cab.id)!.y;
-    const hits = walkLane(w, me, 'right', lane, { damage: 10, pen: 100, blast: false });
+    const hits = walkLane(w, me, 'right', lane, { damage: 10, pen: 100, blast: false, armorShare: 1 });
     const dealt = hits.find((h) => h.part === cab.id)!.damage;
     expect(dealt).toBeGreaterThan(0);
     expect(w.player.health).toBe(RULES.maxHealth - Math.round(dealt * RULES.cabHealthShare));
@@ -205,7 +215,7 @@ describe('lane depth', () => {
   it('a crash-strength hit on the nose fades before the rear wheels', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine'], { x: 40, y: 40 });
-    for (let lane = 0; lane < laneCount(v, 'front'); lane++) walkLane(w, v, 'front', lane, { damage: 50, pen: RULES.crashPen, blast: false });
+    for (let lane = 0; lane < laneCount(v, 'front'); lane++) walkLane(w, v, 'front', lane, { damage: 50, pen: RULES.crashPen, blast: false, armorShare: 1 });
     const g = gridOf(v);
     const rear = coreParts(v, 'wheel').filter((p) => mountedItems(v).find((it) => it.part.id === p.id)!.y > g.h / 2);
     expect(rear.length).toBe(2);
@@ -225,8 +235,8 @@ describe('blast armor', () => {
     const blast = caged();
     const bullet = caged();
     const lane = partLane(blast.v, blast.cage.id, 'front');
-    walkLane(blast.w, blast.v, 'front', lane, { damage: 10, pen: 8, blast: true });
-    walkLane(bullet.w, bullet.v, 'front', lane, { damage: 10, pen: 8, blast: false });
+    walkLane(blast.w, blast.v, 'front', lane, { damage: 10, pen: 8, blast: true, armorShare: 1 });
+    walkLane(bullet.w, bullet.v, 'front', lane, { damage: 10, pen: 8, blast: false, armorShare: 1 });
     expect(blast.engine.hp).toBe(partDef('stockEngine').hp);
     expect(bullet.engine.hp).toBeLessThan(partDef('stockEngine').hp);
   });
@@ -234,9 +244,9 @@ describe('blast armor', () => {
   it('parts other than armor meet blast with their plain armor', () => {
     const { w, v, engine } = plated();
     defOf(v, 'plates').hp = 0;
-    const kinetic = walkLane(w, v, 'front', 1, { damage: 10, pen: 3, blast: false }).find((h) => h.part === engine.id)!.damage;
+    const kinetic = walkLane(w, v, 'front', 1, { damage: 10, pen: 3, blast: false, armorShare: 1 }).find((h) => h.part === engine.id)!.damage;
     engine.hp = partDef('stockEngine').hp;
-    const blast = walkLane(w, v, 'front', 1, { damage: 10, pen: 3, blast: true }).find((h) => h.part === engine.id)!.damage;
+    const blast = walkLane(w, v, 'front', 1, { damage: 10, pen: 3, blast: true, armorShare: 1 }).find((h) => h.part === engine.id)!.damage;
     expect(blast).toBe(kinetic);
   });
 });

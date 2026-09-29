@@ -15,8 +15,8 @@ import { angleDiff, bearing, type Vec } from './vec';
 
 export type Side = 'front' | 'rear' | 'left' | 'right';
 export type PartHit = { part: string; damage: number };
-// A blast round meets an armor part's blastArmor instead of its armor.
-export type Round = { damage: number; pen: number; blast: boolean };
+// A blast round meets an armor part's blastArmor instead of its armor. Armor parts take damage times armorShare.
+export type Round = { damage: number; pen: number; blast: boolean; armorShare: number };
 
 const QUARTER = Math.PI / 4;
 
@@ -144,7 +144,7 @@ function laneCells(g: Grid, side: Side, lane: number): { x: number; y: number }[
 // by its armor, and damage drops in the same proportion as pen. The walk stops at zero pen. Holes, empty cells, goods, spares and broken parts let the round pass.
 // A part covering several cells of the lane is hit once.
 export function walkLane(world: World, v: Vehicle, side: Side, lane: number, round: Round): PartHit[] {
-  if (!(round.damage >= 0 && round.pen >= 0)) throw new Error(`Bad round ${JSON.stringify(round)}`);
+  checkRound(round);
   const g = gridOf(v);
   const owner = new Map<string, PartInstance>();
   for (const it of mountedItems(v)) for (const c of itemCells(it)) owner.set(`${c.x},${c.y}`, it.part);
@@ -159,12 +159,22 @@ export function walkLane(world: World, v: Vehicle, side: Side, lane: number, rou
     const part = owner.get(`${c.x},${c.y}`);
     if (pen <= 0 || !part || part.hp <= 0 || struck.has(part.id)) continue;
     struck.add(part.id);
-    const armor = armorAgainst(wornDef(part), round.blast);
-    hits.push({ part: part.id, damage: damagePart(world, v, part, damage * Math.min(1, pen / armor)) });
+    const def = wornDef(part);
+    const armor = armorAgainst(def, round.blast);
+    hits.push({ part: part.id, damage: damagePart(world, v, part, damage * shareOf(def, round) * Math.min(1, pen / armor)) });
     damage *= Math.max(0, pen - armor) / pen;
     pen -= armor;
   }
   return hits;
+}
+
+function checkRound(round: Round): void {
+  if (!(round.damage >= 0 && round.pen >= 0 && round.armorShare >= 0)) throw new Error(`Bad round ${JSON.stringify(round)}`);
+}
+
+// Armor parts take a round's armor share of its damage, and every other part the whole of it.
+function shareOf(def: PartDef, round: Round): number {
+  return def.kind === 'armor' ? round.armorShare : 1;
 }
 
 function armorAgainst(def: PartDef, blast: boolean): number {

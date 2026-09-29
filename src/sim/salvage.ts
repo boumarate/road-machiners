@@ -370,7 +370,7 @@ export function breakProp(world: World, id: string, vehicleId: string): void {
   // The lane in the middle of the side facing the prop takes the scrape, through the crash damage path.
   const contact = estimateCrashGeometry(vehicle, null, prop.pos).a;
   const lane = contact.lanes[Math.floor(contact.lanes.length / 2)];
-  const hitsA = walkLane(world, vehicle, contact.side, lane, { damage: BREAKABLE.damage, pen: RULES.crashPen, blast: false });
+  const hitsA = walkLane(world, vehicle, contact.side, lane, { damage: BREAKABLE.damage, pen: RULES.crashPen, blast: false, armorShare: 1 });
   world.events.push({ t: 'collision', a: vehicle.id, b: id, hitsA, hitsB: [] });
 }
 
