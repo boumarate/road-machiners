@@ -13,6 +13,8 @@ INFRA_DIR = Path(__file__).resolve().parent.parent
 REPO_ROOT = INFRA_DIR.parent.parent
 
 FACTORY_USER = "factory"
+# Agent containers run as pwuser, uid 1001 in the Playwright image. They write into work clones the factory user owns, so both share the uid.
+FACTORY_UID = 1001
 FACTORY_ROOT = "/opt/factory"
 CODE_DIR = f"{FACTORY_ROOT}/code"
 HOME_DIR = f"{FACTORY_ROOT}/home"

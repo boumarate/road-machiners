@@ -6,7 +6,7 @@ Packages, Docker, Node 24, gh, butler, the firewall, the factory user and the /o
 # pyright: reportMissingImports=false
 from pyinfra.operations import apt, files, server, systemd
 
-from factory_infra import CODE_DIR, FACTORY_ROOT, FACTORY_USER, HERMES_DIR, HERMES_UID, HOME_DIR, INFRA_DIR, WWW_DIR
+from factory_infra import CODE_DIR, FACTORY_ROOT, FACTORY_UID, FACTORY_USER, HERMES_DIR, HERMES_UID, HOME_DIR, INFRA_DIR, WWW_DIR
 
 FILES = INFRA_DIR / "files"
 
@@ -110,6 +110,7 @@ systemd.service(
 server.user(
     name="factory system user in the docker group",
     user=FACTORY_USER,
+    uid=FACTORY_UID,
     system=True,
     home=f"/home/{FACTORY_USER}",
     create_home=True,
