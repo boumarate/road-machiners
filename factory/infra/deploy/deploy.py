@@ -20,6 +20,9 @@ factory_dir = f"{CODE_DIR}/factory"
 env_path = f"{factory_dir}/.env"
 as_factory = {"_sudo": True, "_sudo_user": FACTORY_USER}
 
+# pyinfra matches exclude_dir against the path relative to the repo, so each name needs a top-level and a nested pattern.
+# It matches exclude against the full local path, which may hold any folder name, like .worktrees. So file patterns name files only.
+SKIPPED_DIRS = [".git", "node_modules", ".worktrees", "tmp", "dist", ".playtest", ".claude", "__pycache__", ".pytest_cache", ".venv"]
 files.sync(
     name="Sync the repo checkout",
     src=str(REPO_ROOT),
@@ -27,14 +30,8 @@ files.sync(
     user=FACTORY_USER,
     group=FACTORY_USER,
     delete=True,
-    exclude_dir=[
-        ".git", "node_modules", ".worktrees", "tmp", "dist", ".playtest", ".claude",
-        "factory/infra", "*/node_modules", "*/__pycache__",
-    ],
-    exclude=[
-        "*/.env", "*/.DS_Store",
-        "*/.git/*", "*/node_modules/*", "*/.worktrees/*", "*/tmp/*", "*/dist/*", "*/.playtest/*", "*/.claude/*", "*/factory/infra/*",
-    ],
+    exclude_dir=["factory/infra", *SKIPPED_DIRS, *[f"*/{name}" for name in SKIPPED_DIRS]],
+    exclude=["*/.env", "*/.DS_Store"],
     _sudo=True,
 )
 
