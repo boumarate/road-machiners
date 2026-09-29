@@ -189,6 +189,9 @@ export type NpcBrain = {
     recoveryGoal?: Vec;
     ramChoice?: string; // the fight target this driver chose to ram while its ram chance lasts
     ramTarget?: string; // the fight target this driver drives through this turn
+    fightTurn?: 1 | -1; // a circling fighter's direction around its target; see src/sim/ai.ts
+    // The fight whim rolled last, held until turn `until`. angle is where around the target a veer drives.
+    whim?: { kind: 'keep' | 'rush' | 'halt' | 'veer'; until: number; angle: number };
     farRoute?: { dest: Vec; points: Vec[] }; // route points still ahead while far from the player, for the order's dest
     lastTown?: string; // id of the last town where this driver finished a service or trade
 };

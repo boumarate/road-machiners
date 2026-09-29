@@ -1,9 +1,9 @@
 // Debug console commands. Each returns a new world through update() and throws CheatError on bad input.
 // God mode is the one cheat that acts inside the turn pipeline.
 
-import { chassisDef } from '../data/chassis';
+import { chassisDef, PLAYER_CHASSIS } from '../data/chassis';
 import { GOOD_IDS, GOODS } from '../data/goods';
-import { NPCS, type NpcTemplate } from '../data/npcs';
+import { GEAR_LEVEL_IDS, NPCS, type GearLevel, type NpcTemplate } from '../data/npcs';
 import { PARTS, partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { CHEATS } from '../data/rules';
@@ -12,7 +12,7 @@ import { TIME } from '../data/time';
 import { resolveDestroyed, wreckVehicle } from './combat';
 import { damagePart, isJunk, maxHp, restorePart } from './wear';
 import { playerVehicle } from './damage';
-import { makePart } from './factory';
+import { makePart, makeVehicle } from './factory';
 import { maxHealthOf } from './health';
 import { corePart, mountedParts } from './grid';
 import { addGoods, stowPart } from './inventory';
@@ -263,6 +263,45 @@ export function startBattle(world: World): World {
   const raiders = Object.values(NPCS).filter((t) => t.faction === 'raiders');
   if (raiders.length === 0) throw new Error('NPCS has no raiders template');
   return update(world, (w) => spawnInDraft(w, raiders[randInt(w, 0, raiders.length - 1)], true));
+}
+
+// Every NPC template paired with each player chassis its loadout table can roll, or only `templateId`'s pairs.
+export function kitChoices(templateId: string | null = null): { tpl: NpcTemplate; chassisId: string }[] {
+  if (templateId !== null && !NPCS[templateId]) throw new CheatError(`Unknown template ${templateId}. Templates: ${Object.keys(NPCS).join(', ')}`);
+  const templates = templateId === null ? Object.values(NPCS) : [NPCS[templateId]];
+  const choices = templates.flatMap((tpl) =>
+    tpl.loadout.chassis.filter((c) => PLAYER_CHASSIS.includes(c.value)).map((c) => ({ tpl, chassisId: c.value })));
+  if (choices.length === 0) throw new CheatError(`${templateId} rolls no chassis the player can drive`);
+  return choices;
+}
+
+// Swaps the player truck for a random chassis with a loadout rolled like an NPC's, picked with the world RNG. A
+// template or a gear level narrows the roll. The truck keeps its id, name and place. Its goods and spares go, and
+// fuel and supplies are cut to the new caps.
+export function randomKit(world: World, templateId: string | null = null, level: string | null = null): World {
+  if (!playerCanAct(world)) throw new CheatError(`Cannot swap trucks while the player is ${isTowed(world) ? 'towed' : world.player.state}`);
+  const gear = gearLevelOf(level);
+  const choices = kitChoices(templateId);
+  return update(world, (w) => {
+    const { tpl, chassisId } = choices[randInt(w, 0, choices.length - 1)];
+    const old = playerVehicle(w);
+    const spot = freeSpotNear(w, old.pos, chassisDef(chassisId).radius, old.id);
+    if (!spot) throw new CheatError(`No free spot for a ${chassisId} here`);
+    const loadout = generateNpcLoadout(w, tpl, chassisId, gear);
+    const truck = makeVehicle(w, { name: old.name, faction: 'player', chassisId, parts: loadout.parts, spares: [], cargo: {}, pos: spot, heading: old.heading, brain: null });
+    truck.id = old.id;
+    w.vehicles = w.vehicles.map((v) => (v.id === old.id ? truck : v));
+    w.player.fuel = Math.min(w.player.fuel, fuelCap(truck));
+    w.player.supplies = Math.min(w.player.supplies, suppliesCap(truck));
+    refreshVision(w);
+  });
+}
+
+function gearLevelOf(level: string | null): GearLevel | null {
+  if (level === null) return null;
+  const found = GEAR_LEVEL_IDS.find((id) => id === level);
+  if (!found) throw new CheatError(`Unknown gear level ${level}. Levels: ${GEAR_LEVEL_IDS.join(', ')}`);
+  return found;
 }
 
 function spawnInDraft(w: World, tpl: NpcTemplate, hostile: boolean): void {

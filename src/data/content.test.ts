@@ -54,7 +54,7 @@ describe("equipment variety", () => {
         .map((weapon) => [weapon.id, weapon.range]),
     );
     expect(ranges).toEqual({
-      mg: 18,
+      mg: 13.5,
       cannon: 27,
       shotgun: 9,
       autocannon: 21,

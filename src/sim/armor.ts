@@ -39,6 +39,30 @@ export function ramMult(v: Vehicle, side: Side): number {
   return mult;
 }
 
+// How well armor shields the cab, to compare armor layouts. A cab lane is shielded where an armor cell on that
+// side's edge lies in a lane that crosses the cab. Front and rear lanes are columns, left and right lanes are rows.
+// Each side adds the square root of its shielded lanes, so cover spreads over the sides before it deepens on one.
+export function cabShield(v: Vehicle): number {
+  const g = gridOf(v);
+  const cab = mountedItems(v, 'core').filter((it) => isCab(partDef(it.part.defId))).flatMap(itemCells);
+  const cabLanes = new Set(cab.flatMap((c) => [`F${c.x}`, `B${c.x}`, `L${c.y}`, `R${c.y}`]));
+  const shielded = new Set(mountedItems(v, 'armor').flatMap(itemCells).map((c) => laneKey(g, c)).filter((key) => cabLanes.has(key)));
+  const perSide = new Map<string, number>();
+  for (const key of shielded) perSide.set(key[0], (perSide.get(key[0]) ?? 0) + 1);
+  return [...perSide.values()].reduce((sum, n) => sum + Math.sqrt(n), 0);
+}
+
+// The side and lane an edge cell covers, like "F2" for front column 2. Front and rear lanes are columns, left and
+// right lanes are rows. A cell off the edge gives a key no lane has.
+function laneKey(g: Grid, c: { x: number; y: number }): string {
+  const letter = g.cells[c.y]?.[c.x] ?? '';
+  return letter === 'F' || letter === 'B' ? `${letter}${c.x}` : `${letter}${c.y}`;
+}
+
+function isCab(def: PartDef): boolean {
+  return def.kind === 'core' && def.role === 'cab';
+}
+
 // Front and rear lanes are grid columns. Left and right lanes are grid rows.
 export function laneCount(v: Vehicle, side: Side): number {
   const g = gridOf(v);
@@ -145,12 +169,18 @@ export function everyGunFires(v: Vehicle): boolean {
   });
 }
 
-// Open sides summed over every mounted weapon, to compare layouts. Only sides the gun's own arc reaches count.
-export function openSideCount(v: Vehicle): number {
-  return mountedItems(v, 'weapon').reduce((sum, item) => {
+// Compares gun layouts. The sides any gun covers count first, so a new gun goes where it fires toward a side no
+// other gun does. Open sides summed over every gun break ties. Only sides a gun's own arc reaches count.
+export function gunLayoutScore(v: Vehicle): number {
+  const covered = new Set<Side>();
+  let sum = 0;
+  for (const item of mountedItems(v, 'weapon')) {
     const reach = reachedSides(partDef(item.part.defId) as WeaponDef);
-    return sum + openSides(v, item).filter((side) => reach.includes(side)).length;
-  }, 0);
+    const open = openSides(v, item).filter((side) => reach.includes(side));
+    for (const side of open) covered.add(side);
+    sum += open.length;
+  }
+  return covered.size * (SIDES.length * mountedItems(v, 'weapon').length + 1) + sum;
 }
 
 // The sides a centered arc reaches. The front quarter spans 90 degrees, so a wider arc reaches the flanks, and one

@@ -18,6 +18,8 @@ import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { isHostile } from './combat';
 import { isRamGainful, ramImpact } from './crash-contact';
+import { ramMult, sideToward } from './armor';
+import { vehicleMass } from './mass';
 import { isKnockedOut } from './defeat';
 import { vehicleById } from './damage';
 import { contactsOf } from './detect';
@@ -480,6 +482,9 @@ const AVAILABLE: Record<OptionName, Availability> = {
   refuse: always,
   spare: always,
   finish: always,
+  rush: canDrive,
+  halt: always,
+  veer: canDrive,
   comply: always,
   demand: always,
   attack: always,
@@ -566,9 +571,15 @@ function keepFactor(world: World, vehicle: Vehicle, decision: DecisionId, subjec
   return restrained ? NPC_BEHAVIOR.keepWork : 1;
 }
 
-// A ram the forecast calls costly is rare.
+// A ram the forecast calls costly is rare. A heavier driver rams a lighter truck more readily and a lighter one a
+// heavier truck less, by the mass ratio to NPC_BEHAVIOR.ramMassPower. A ram bar facing the driver cuts the weight to
+// NPC_BEHAVIOR.ramBarRam.
 function ramFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): number {
-  return isRamGainful(world, vehicle, subjectOf(world, decision, subject)) ? 1 : NPC_BEHAVIOR.riskyRam;
+  const target = subjectOf(world, decision, subject);
+  const gain = isRamGainful(world, vehicle, target) ? 1 : NPC_BEHAVIOR.riskyRam;
+  const mass = (vehicleMass(vehicle) / vehicleMass(target)) ** NPC_BEHAVIOR.ramMassPower;
+  const bar = ramMult(target, sideToward(target, vehicle.pos)) > 1 ? NPC_BEHAVIOR.ramBarRam : 1;
+  return gain * mass * bar;
 }
 
 // A crash with a faction mate is mostly forgiven.
@@ -677,6 +688,9 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   refuse: refuseFactor,
   spare: neutral,
   finish: neutral,
+  rush: neutral,
+  halt: neutral,
+  veer: neutral,
   comply: complyFactor,
   hire: neutral,
   take: neutral,
@@ -750,6 +764,7 @@ const DECISION_KINDS: Record<DecisionId, 'venture' | 'response'> = {
   salvageSeen: 'venture',
   patchDeal: 'response',
   ramChance: 'response',
+  fightWhim: 'response',
   crashed: 'response',
   parley: 'response',
   truceOffered: 'response',

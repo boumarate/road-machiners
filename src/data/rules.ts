@@ -42,10 +42,14 @@ export const RULES = {
   // spread over the lanes of its struck side. An obstacle's share is 1. Squaring the impact, like crash
   // energy, keeps a full-speed crash at 6 as hard as before while a bump at 2 only scratches the paint.
   ramDamage: 2.5,
+  // A crash into an obstacle faster than this, in tiles per turn, hits harder: its damage and penetration grow by
+  // (impact / hardCrashSpeed)². About 58 km/h. A crash at 6 deals 2.25 times the damage, one at 8 four times, so
+  // steering a fast enemy into a rock pays off.
+  hardCrashSpeed: 4,
   cellPen: 0.5, // penetration every grid cell a round or crash passes costs, for the frame and bulk in the way
   crashPen: 4, // penetration of crash damage in each lane
   // A truck body hitting the ground takes crash damage times this. Falls are slow next to driving: a roll off a 3 m
-  // drop lands at about 2.7 tiles per turn, and 3 makes that nearly as hard as a wall crash at 5.
+  // drop lands at about 2.7 tiles per turn, and 3 makes that as hard as a wall crash at about 4.3.
   groundCrash: 3,
   // A truck landing on its wheels after a jump gives each working wheel ramDamage × crashDamage × landing speed² in
   // tiles per turn × this. A 3 m drop costs a wheel about 5 HP. Drops under 1 m land slower than collisionMinImpact.

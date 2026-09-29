@@ -41,7 +41,7 @@ function order(me: Vehicle, weaponId: string, targetId: string, aim = 'body') {
 
 describe('combat', () => {
   it('does not fire out of range', () => {
-    const { w, me, buggy, mg } = duel({ x: 49, y: 30 }) // 19 tiles: past the gun's 18, still in sight;
+    const { w, me, buggy, mg } = duel({ x: 44, y: 30 }) // 14 tiles: past the gun's 13.5, still in sight;
     order(me, mg.part.id, buggy.id);
     fireWeapons(w);
     expect(w.events.filter((e) => e.t === 'shot')).toHaveLength(0);

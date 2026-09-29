@@ -11,8 +11,8 @@ import { addGoods, mountPart, stowPart } from './inventory';
 import type { Faction, GridItem, NpcBrain, PartInstance, Vehicle, World } from './types';
 import type { Vec } from './vec';
 
-// A part to create, with its wear step.
-export type PartSpec = { defId: string; wear: number };
+// A part to create, with its wear step. `at` places it on that grid spot instead of the first fitting mount.
+export type PartSpec = { defId: string; wear: number; at?: Pick<GridItem, 'x' | 'y' | 'rot'> };
 
 export type VehicleSpec = {
   name: string;
@@ -78,10 +78,19 @@ export function makeVehicle(world: World, spec: VehicleSpec): Vehicle {
 
 // Mounts the parts, then adds cargo, then stows the spares. Throws when any of them does not fit.
 function loadVehicle(world: World, v: Vehicle, spec: VehicleSpec): void {
-  for (const { defId, wear } of spec.parts) {
-    if (!mountPart(world, v, makePart(world, defId, wear))) throw new Error(`No free mount for ${defId} on ${spec.chassisId}`);
+  for (const { defId, wear, at } of spec.parts) {
+    const part = makePart(world, defId, wear);
+    if (at) placeAt(world, v, part, at);
+    else if (!mountPart(world, v, part)) throw new Error(`No free mount for ${defId} on ${spec.chassisId}`);
   }
   loadCargo(world, v, spec);
+}
+
+function placeAt(world: World, v: Vehicle, part: PartInstance, at: NonNullable<PartSpec['at']>): void {
+  const item: GridItem = { id: newId(world, 'i'), kind: 'part', part, ...at };
+  const error = placementError(gridOf(v), v.items, item, item.id);
+  if (error) throw new Error(`Cannot place ${part.defId} at ${at.x},${at.y} on ${v.chassisId}: ${error}`);
+  v.items.push(item);
 }
 
 function loadCargo(world: World, v: Vehicle, spec: VehicleSpec): void {

@@ -28,7 +28,7 @@ export function applyContactCrash(world: World, a: Vehicle, b: Vehicle | null, w
     practiceRam(world, a, b, hitsA, hitsB);
     return;
   }
-  const hitsA = applyContactDamage(world, a, contact.a, impact, 1, 1);
+  const hitsA = applyContactDamage(world, a, contact.a, impact, 1, hardCrash(impact));
   world.events.push({ t: 'collision', a: a.id, b: what, hitsA, hitsB: [] });
 }
 
@@ -47,6 +47,11 @@ export function applyLanding(world: World, v: Vehicle, what: string, impact: num
   const damage = RULES.ramDamage * RULES.crashDamage * RULES.landingDamage * impact * impact * Math.max(0, 1 - driving);
   const hitsA = coreParts(v, 'wheel').filter((wheel) => wheel.hp > 0).map((wheel) => ({ part: wheel.id, damage: damagePart(world, v, wheel, damage) }));
   world.events.push({ t: 'collision', a: v.id, b: what, hitsA, hitsB: [] });
+}
+
+// How much harder a fast crash into an obstacle hits; see RULES.hardCrashSpeed.
+function hardCrash(impact: number): number {
+  return Math.max(1, impact / RULES.hardCrashSpeed) ** 2;
 }
 
 // The player practices driving from the damage its truck deals in a crash with another vehicle. A heavier
