@@ -418,8 +418,20 @@ body {
   margin-top: 2px;
 }
 .weapon-ammo {
-  font: 11px var(--font-mono);
-  color: #e5c47c;
+  display: flex;
+  gap: 2px;
+}
+.ammo-cell {
+  width: 6px;
+  height: 12px;
+  border: 1px solid var(--edge);
+  background: var(--ink);
+}
+.ammo-cell.spent {
+  background: #000;
+}
+.ammo-cell.reloading {
+  background: #e5c47c;
 }
 #ui .weapon-reload {
   padding: 1px 4px;

@@ -94,6 +94,24 @@ export function ammoText(mw: MountedWeapon): string {
   return `${gunOf(mw.part).ammo}/${mw.def.magazine}`;
 }
 
+export type AmmoCell = "loaded" | "spent" | "reloading";
+
+// One cell per magazine round: loaded rounds first, then spent ones. A gun at work on a reload
+// fills its spent cells left to right with the share reloadWork / reload of the whole row.
+export function ammoCells(magazine: number, ammo: number, reloadWork: number, reload: number): AmmoCell[] {
+  const spent = magazine - ammo;
+  const filled = reloadWork > 0 ? Math.min(spent, Math.ceil((reloadWork / reload) * magazine)) : 0;
+  return Array.from({ length: magazine }, (_, i) =>
+    i < ammo ? "loaded" : i < ammo + filled ? "reloading" : "spent");
+}
+
+// Ammo status for the tooltip and screen readers.
+export function ammoLabel(mw: MountedWeapon): string {
+  const gun = gunOf(mw.part);
+  if (gun.reloadWork > 0) return `reloading, ${turns(mw.def.reload - gun.reloadWork)} left`;
+  return `${gun.ammo}/${mw.def.magazine} rounds`;
+}
+
 // A forced reload helps only a gun with a partly spent magazine.
 export function canForceReload(mw: MountedWeapon): boolean {
   const ammo = gunOf(mw.part).ammo;
@@ -245,10 +263,18 @@ export class WeaponPanel {
 
   // Rounds left and the button that forces a reload.
   private renderAmmo(mw: MountedWeapon, locked: boolean): HTMLElement {
+    const gun = gunOf(mw.part);
+    const label = ammoLabel(mw);
     return el(
       "div",
       { class: "weapon-ammo-row" },
-      el("span", { class: "weapon-ammo", title: "Rounds in the magazine" }, ammoText(mw)),
+      el(
+        "span",
+        { class: "weapon-ammo", title: label },
+        el("span", { class: "sr-only" }, label),
+        ...ammoCells(mw.def.magazine, gun.ammo, gun.reloadWork, mw.def.reload).map((state) =>
+          el("span", { class: `ammo-cell ${state}`, "aria-hidden": "true" })),
+      ),
       el(
         "button",
         {

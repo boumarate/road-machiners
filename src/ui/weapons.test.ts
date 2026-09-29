@@ -4,7 +4,7 @@ import { addState } from "../sim/states";
 import { vehicleStats } from "../sim/stats";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import { refreshVision } from "../sim/vision";
-import { canForceReload, getWeaponReadout, toggleTarget, vehicleMarks } from "./weapons";
+import { ammoCells, canForceReload, getWeaponReadout, toggleTarget, vehicleMarks } from "./weapons";
 
 function createDuel() {
   const world = emptyWorld();
@@ -210,5 +210,27 @@ describe("vehicle marks", () => {
     target.job = { kind: "search", stockId: "wreck-1", turnsLeft: 3, total: 4 };
     target.pos = { x: 58, y: 58 };
     expect(vehicleMarks(world, null).has(target.id)).toBe(false);
+  });
+});
+
+describe("ammo cells", () => {
+  it("shows a full magazine as all loaded", () => {
+    expect(ammoCells(3, 3, 0, 4)).toEqual(["loaded", "loaded", "loaded"]);
+  });
+
+  it("shows spent rounds after the loaded ones", () => {
+    expect(ammoCells(5, 2, 0, 4)).toEqual(["loaded", "loaded", "spent", "spent", "spent"]);
+  });
+
+  it("fills spent cells left to right with the reload share", () => {
+    expect(ammoCells(4, 0, 2, 4)).toEqual(["reloading", "reloading", "spent", "spent"]);
+  });
+
+  it("keeps loaded cells while a partly spent gun reloads", () => {
+    expect(ammoCells(4, 1, 1, 2)).toEqual(["loaded", "reloading", "reloading", "spent"]);
+  });
+
+  it("never fills more cells than are spent", () => {
+    expect(ammoCells(4, 3, 3, 4)).toEqual(["loaded", "loaded", "loaded", "reloading"]);
   });
 });
