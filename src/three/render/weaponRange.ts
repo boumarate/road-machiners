@@ -85,23 +85,35 @@ function rimPoints(span: FireSpan, heading: number, point: (angle: number) => TH
 }
 
 
-export type HoverArc = { weapon: MountedWeapon; spans: FireSpan[]; spent: boolean; iconAngle: number };
+export type IconSpot = { angle: number; distance: number }; // degrees from the truck heading, tiles from the truck
+export type HoverArc = { weapon: MountedWeapon; spans: FireSpan[]; spent: boolean; spot: IconSpot };
 
-// Degrees from the truck heading where the gun's icon sits: inside its widest span, spread by rank among all guns so icons of equal arcs do not stack.
-export function iconAngle(spans: readonly FireSpan[], rank: number, count: number): number {
+const ICON_RANGE_SHARE = 0.5; // an icon sits at this share of the gun's range
+const ICON_NUDGE_SHARE = 0.15; // icons on one spot step outward by this share of range
+const SAME_SPOT_TILES = 1.5; // icons closer than this overlap
+
+// Center of the widest span at half range. A spot that touches one already taken moves out along the radius until it is free.
+export function iconSpot(spans: readonly FireSpan[], range: number, taken: readonly IconSpot[]): IconSpot {
   const widest = spans.reduce((a, b) => (b.to - b.from > a.to - a.from ? b : a));
-  return widest.from + ((widest.to - widest.from) * (rank + 1)) / (count + 1);
+  const angle = (widest.from + widest.to) / 2;
+  let distance = range * ICON_RANGE_SHARE;
+  while (taken.some((t) => Math.hypot(t.distance * Math.cos(t.angle * DEG) - distance * Math.cos(angle * DEG), t.distance * Math.sin(t.angle * DEG) - distance * Math.sin(angle * DEG)) < SAME_SPOT_TILES)) {
+    distance += range * ICON_NUDGE_SHARE;
+  }
+  return { angle, distance };
 }
 
 // The arcs to draw: guns with hit points, in mount order. Empty and cooling guns are spent.
 export function hoverArcs(world: World, vehicle: Vehicle, weapons: readonly MountedWeapon[]): HoverArc[] {
-  const working = weapons.filter((weapon) => fireBlock(world, vehicle, weapon, null) !== 'disabled');
-  return working.flatMap((weapon, rank) => {
-    const spans = fireSpans(weapon.def.arc, weapon.sides);
-    if (spans.length === 0) return [];
+  const arcs: HoverArc[] = [];
+  for (const weapon of weapons) {
     const block = fireBlock(world, vehicle, weapon, null);
-    return [{ weapon, spans, spent: block === 'empty' || block === 'cooldown', iconAngle: iconAngle(spans, rank, working.length) }];
-  });
+    const spans = fireSpans(weapon.def.arc, weapon.sides);
+    if (block === 'disabled' || spans.length === 0) continue;
+    const spot = iconSpot(spans, weapon.def.range, arcs.map((arc) => arc.spot));
+    arcs.push({ weapon, spans, spent: block === 'empty' || block === 'cooldown', spot });
+  }
+  return arcs;
 }
 
 export class HoverArcsView {
@@ -131,9 +143,9 @@ export class HoverArcsView {
     this.root.visible = true;
     this.syncIcons(arcs);
     for (const arc of arcs) {
-      const a = heading + arc.iconAngle * DEG;
-      const x = pos.x + Math.cos(a) * arc.weapon.def.range;
-      const y = pos.y + Math.sin(a) * arc.weapon.def.range;
+      const a = heading + arc.spot.angle * DEG;
+      const x = pos.x + Math.cos(a) * arc.spot.distance;
+      const y = pos.y + Math.sin(a) * arc.spot.distance;
       const p = this.rig.screenOf({ x: x * S, y: markHeightAt(terrain, pos, x, y) * S, z: y * S });
       const node = this.icons.get(arc.weapon.part.id)!;
       node.style.left = `${p.x}px`;

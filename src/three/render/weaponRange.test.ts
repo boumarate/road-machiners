@@ -3,7 +3,7 @@ import { fireSpans } from '../../sim/armor';
 import { gunOf } from '../../sim/combat';
 import { vehicleStats } from '../../sim/stats';
 import { addVehicle, emptyWorld } from '../../sim/testkit';
-import { hoverArcs, iconAngle } from './weaponRange';
+import { hoverArcs, iconSpot } from './weaponRange';
 
 function raiderWithGun() {
   const world = emptyWorld();
@@ -48,16 +48,28 @@ describe('hoverArcs', () => {
   });
 });
 
-describe('iconAngle', () => {
-  it('sits inside the widest span', () => {
-    const angle = iconAngle([{ from: -10, to: 10 }, { from: 60, to: 180 }], 0, 1);
+describe('iconSpot', () => {
+  it('sits at the middle of the widest span at half range', () => {
+    const spot = iconSpot([{ from: -10, to: 10 }, { from: 60, to: 180 }], 20, []);
 
-    expect(angle).toBe(120);
+    expect(spot).toEqual({ angle: 120, distance: 10 });
   });
 
-  it('spreads guns of equal arcs apart', () => {
+  it('moves out along the radius when another icon holds the spot', () => {
     const spans = [{ from: -45, to: 45 }];
+    const first = iconSpot(spans, 20, []);
 
-    expect(iconAngle(spans, 0, 2)).not.toBe(iconAngle(spans, 1, 2));
+    const second = iconSpot(spans, 20, [first]);
+
+    expect(second.angle).toBe(first.angle);
+    expect(second.distance).toBeGreaterThan(first.distance);
+  });
+
+  it('leaves an icon alone when the spots are far apart', () => {
+    const first = iconSpot([{ from: -45, to: 45 }], 20, []);
+
+    const second = iconSpot([{ from: 90, to: 180 }], 20, [first]);
+
+    expect(second.distance).toBe(10);
   });
 });
