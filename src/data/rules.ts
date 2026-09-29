@@ -37,6 +37,10 @@ export const RULES = {
   // spread over the lanes of its struck side. An obstacle's share is 1. Squaring the impact, like crash
   // energy, keeps a full-speed crash at 6 as hard as before while a bump at 2 only scratches the paint.
   ramDamage: 2.5,
+  // A crash into an obstacle faster than this, in tiles per turn, hits harder: its damage and penetration grow by
+  // (impact / hardCrashSpeed)². About 58 km/h. A crash at 6 deals 2.25 times the damage, one at 8 four times, so
+  // steering a fast enemy into a rock pays off.
+  hardCrashSpeed: 4,
   cellPen: 0.5, // penetration every grid cell a round or crash passes costs, for the frame and bulk in the way
   crashPen: 4, // penetration of crash damage in each lane
   wheelLoss: 0.15, // share of speed and turning lost per broken wheel

@@ -28,8 +28,13 @@ export function applyContactCrash(world: World, a: Vehicle, b: Vehicle | null, w
     practiceRam(world, a, b, hitsA, hitsB);
     return;
   }
-  const hitsA = applyContactDamage(world, a, contact.a, impact, 1, 1);
+  const hitsA = applyContactDamage(world, a, contact.a, impact, 1, hardCrash(impact));
   world.events.push({ t: 'collision', a: a.id, b: what, hitsA, hitsB: [] });
+}
+
+// How much harder a fast crash into an obstacle hits; see RULES.hardCrashSpeed.
+function hardCrash(impact: number): number {
+  return Math.max(1, impact / RULES.hardCrashSpeed) ** 2;
 }
 
 // The player practices driving from the damage its truck deals in a crash with another vehicle. A heavier
