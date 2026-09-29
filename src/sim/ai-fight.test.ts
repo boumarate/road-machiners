@@ -3,6 +3,8 @@ import { afterTurn, exposure, fightOrder, fightPoint, noteTarget, perceivedTarge
 import { mountedParts, sideOf, type SideLetter } from './grid';
 import { decide } from './npc-decisions';
 import { thinkNpc } from './npc-activities';
+import { PARTS } from '../data/parts';
+import { RULES } from '../data/rules';
 import { dist } from './vec';
 import { inArc } from './combat';
 import { vehicleStats } from './stats';
@@ -21,6 +23,12 @@ function fighter(w: World, templateId: string, parts: string[], pos: Vec, chassi
 function bearsFrom(w: World, v: Vehicle, target: Vehicle, p: Vec): boolean {
   const me = afterTurn(w, v, p);
   return vehicleStats(w, v).weapons.every((mw) => inArc(me, mw, target));
+}
+
+// Whether any gun of v bears on the target after a turn of driving toward p.
+function inReachAfter(w: World, v: Vehicle, target: Vehicle, p: Vec): boolean {
+  const me = afterTurn(w, v, p);
+  return vehicleStats(w, v).weapons.some((mw) => dist(me.pos, target.pos) <= mw.def.range && inArc(me, mw, target));
 }
 
 describe('fight driving', () => {
@@ -78,6 +86,33 @@ describe('fight driving', () => {
     const order = fightOrder(w, v, me, dest);
     expect(order.kind).toBe('through');
     expect(order.kind === 'through' && order.pace).toBeGreaterThanOrEqual(4);
+  });
+
+  it('a fighter that cannot fire from where it stands drives to a spot where it can, even when it is slow', () => {
+    const w = emptyWorld({ x: 40, y: 30 });
+    const me = w.vehicles[0];
+    const v = fighter(w, 'convoyGuard', ['stockEngine', 'shotgun'], { x: 48.3, y: 30 });
+    v.heading = 0; // the shotgun points away from the target
+    for (const part of mountedParts(v)) if (PARTS[part.defId].kind === 'core') part.hp = 0; // a limping truck
+    const start = vehicleStats(w, v);
+    expect(inReachAfter(w, v, me, v.pos)).toBe(false);
+    const p = fightPoint(w, v, me, start.weapons[0].def.range);
+    expect(inReachAfter(w, v, me, p)).toBe(true);
+  });
+
+  it('a parked fighter aims inside its gun range, so falling short of its stop point still leaves it in reach', () => {
+    const w = emptyWorld({ x: 40, y: 30 });
+    const me = w.vehicles[0];
+    const v = fighter(w, 'convoyGuard', ['stockEngine', 'shotgun'], { x: 48.3, y: 30 });
+    v.heading = Math.PI;
+    const range = vehicleStats(w, v).weapons[0].def.range;
+    v.brain!.noticed[`hostileSeen:${me.id}`] = w.turn;
+    v.brain!.noticed[`ramChance:${me.id}`] = w.turn;
+    v.brain!.goals.push({ kind: 'fight', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'test' });
+    v.brain!.whim = { kind: 'keep', until: w.turn + 4, angle: 0 };
+    planNpcOrders(w);
+    const dest = v.order?.kind === 'stopAt' ? v.order.dest : null;
+    expect(dest && dist(dest, me.pos)).toBeLessThanOrEqual(range - RULES.arriveRadius);
   });
 
   it('a circling fighter never parks', () => {

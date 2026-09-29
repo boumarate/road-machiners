@@ -127,7 +127,7 @@ function orderPoint(world: World, v: Vehicle, activity: NpcActivity, templateRan
   const target = world.vehicles.find((other) => other.id === activity.targetId);
   if (!target) throw new Error("Fight activity missing its target");
   if (!canVehicleSee(world, v, target.pos)) return getActivityDestination(world, v, activity);
-  const preferredRange = templateRange > 0 ? templateRange : shortestRange(world, v);
+  const preferredRange = templateRange > 0 ? templateRange : shortestRange(world, v) - RULES.arriveRadius;
   const seen = perceivedTarget(world, v, target);
   noteTarget(world, v, target);
   return computeFightGoal(world, v, preferredRange, target, seen);
@@ -195,7 +195,8 @@ function rams(world: World, v: Vehicle, target: Vehicle): boolean {
   return b.whim?.kind === "rush" || (b.ramChoice === target.id && ramImpact(world, v, target) !== null);
 }
 
-// A fighter keeps to its shortest gun range. A fight without a gun is a decision bug, so it throws.
+// A fighter keeps to its shortest gun range, less the distance a stop order may fall short of its point. A fight
+// without a gun is a decision bug, so it throws.
 function shortestRange(world: World, v: Vehicle): number {
   const weapons = vehicleStats(world, v).weapons;
   if (weapons.length === 0) throw new Error(`${v.name} is fighting without a gun`);
@@ -215,18 +216,31 @@ export function leadOf(target: Vehicle): Vec {
 }
 
 // The best scored point around the target's lead at `range`. Arcs are judged where the fighter is after this turn's
-// drive toward the point, and range at the point itself.
+// drive toward the point, and range at the point itself. A point where some working gun bears always beats one where
+// none does, so a slow fighter never parks where it cannot fire while a firing spot exists. With no such point, or no
+// working gun, the best score wins.
 export function fightPoint(world: World, v: Vehicle, target: Vehicle, range: number): Vec {
   const lead = leadOf(target);
   const turn = circleTurn(world, v);
-  let best: { p: Vec; score: number } | null = null;
+  let best: { p: Vec; score: number; fires: boolean } | null = null;
   for (let i = 0; i < F.angles; i++) {
     const a = (2 * Math.PI * i) / F.angles;
     const p = { x: lead.x + Math.cos(a) * range, y: lead.y + Math.sin(a) * range };
     const score = scorePoint(world, v, target, lead, range, p, turn);
-    if (!best || score > best.score) best = { p, score };
+    const fires = bearingShare(world, v, { ...target, pos: lead }, p) > 0;
+    if (!best || beats({ score, fires }, best)) best = { p, score, fires };
   }
   return best!.p;
+}
+
+function beats(a: { score: number; fires: boolean }, b: { score: number; fires: boolean }): boolean {
+  return a.fires === b.fires ? a.score > b.score : a.fires;
+}
+
+// The share of v's working gun damage that bears on the target after a turn of driving toward p.
+function bearingShare(world: World, v: Vehicle, there: Vehicle, p: Vec): number {
+  const me = afterTurn(world, v, p);
+  return gunShare(vehicleStats(world, v).weapons, (mw) => inReach(me, mw, there));
 }
 
 // A circling fighter's direction around its target, 1 or -1, picked once with world RNG. A holding fighter has none.
@@ -240,7 +254,7 @@ export function scorePoint(world: World, v: Vehicle, target: Vehicle, lead: Vec,
   const sv = vehicleStats(world, v);
   const me = afterTurn(world, v, p);
   const there = { ...target, pos: lead };
-  const mine = gunShare(sv.weapons, (mw) => inReach(me, mw, there));
+  const mine = bearingShare(world, v, there, p);
   const theirs = exposure(world, target, there, me);
   const off = Math.abs(dist(p, lead) - range) / range;
   const travel = Math.max(0, dist(v.pos, p) - sv.maxSpeed) / Math.max(sv.maxSpeed, RULES.arriveRadius);
@@ -263,7 +277,7 @@ function rammedDanger(world: World, v: Vehicle, target: Vehicle, spot: Vehicle):
 // judged there.
 export function afterTurn(world: World, v: Vehicle, p: Vec): Vehicle {
   const d = dist(v.pos, p);
-  if (d <= RULES.arriveRadius * 2) return { ...v, pos: p };
+  if (d <= RULES.arriveRadius) return v;
   const sv = vehicleStats(world, v);
   const heading = bearing(v.pos, p);
   const step = Math.min(d, sv.maxSpeed, v.speed + sv.accel);
