@@ -16,7 +16,7 @@ import { makePart } from '../sim/factory';
 import { mountPart } from '../sim/inventory';
 import { hangUp } from '../sim/dialogue';
 import { mountedParts } from '../sim/grid';
-import { generateNpcLoadout } from '../sim/npc-loadout';
+import { generateNpcLoadout, type NpcLoadout } from '../sim/npc-loadout';
 import { spawnAt } from '../sim/spawn';
 import type { Vehicle, World } from '../sim/types';
 import { bearing, dist, type Vec } from '../sim/vec';
@@ -31,15 +31,19 @@ export const POLICIES: Policy[] = ['stand', 'orbit', 'charge'];
 
 export type Fight = {
   kit: string; // a START_KITS id for the player truck
-  gun: string | null; // a weapon id that replaces every gun of the kit, or null to keep the kit's guns
+  me: Outfit | null; // replaces the kit's parts, or null to keep the kit
   enemies: string[]; // NPCS template ids; each gets a rolled loadout
   level: GearLevel | null; // the gear level of every enemy loadout, or null to roll it as a spawn does
+  foe: Outfit | null; // every enemy drives a hauler with this outfit, or null for rolled loadouts
   policy: Policy;
   seed: number;
   gap: number; // tiles between the player and the enemies at the start
   orbit: number; // tiles; orbit radius and charge stop distance
   maxTurns: number;
 };
+
+// One gun and a stock engine on a hauler, with every armor cell filled with one armor part or left bare.
+export type Outfit = { gun: string; armor: string | null };
 
 // odds sums each round's hit chance. speed sums the side's speed each turn, averaged over its awake trucks.
 export type Side = { rounds: number; hits: number; odds: number; damage: number; speed: number };
@@ -116,11 +120,12 @@ function missing(what: string, id: string): never {
 // a fleeing driver measures nothing about the fight.
 function setup(fight: Fight): World {
   const w = openWorld(fight);
-  if (fight.gun) swapGuns(w, fight.gun);
+  if (fight.me) outfit(w, w.vehicles.find((v) => v.id === w.player.vehicleId)!, fight.me);
   fight.enemies.forEach((id, i) => {
     const tpl = NPCS[id] ?? missing('NPC template', id);
     const pos = { x: CENTER.x + fight.gap, y: CENTER.y + (i - (fight.enemies.length - 1) / 2) * 3 };
-    const e = spawnAt(w, tpl, generateNpcLoadout(w, tpl, null, fight.level), pos);
+    const e = spawnAt(w, tpl, fight.foe ? BARE_HAULER : generateNpcLoadout(w, tpl, null, fight.level), pos);
+    if (fight.foe) outfitFoe(w, e, fight.foe);
     e.heading = Math.PI;
     e.brain!.traits = e.brain!.traits.filter((t) => t !== 'coward');
     e.brain!.attackers[w.player.vehicleId] = true;
@@ -130,12 +135,21 @@ function setup(fight: Fight): World {
   return setAutoFire(w, true);
 }
 
-// The player truck drops its guns and mounts one of the given weapon where its fire reaches the most sides.
-function swapGuns(w: World, gun: string): void {
-  if (PARTS[gun]?.kind !== 'weapon') throw new Error(`Unknown weapon "${gun}"`);
-  const me = w.vehicles.find((v) => v.id === w.player.vehicleId)!;
-  me.items = me.items.filter((it) => it.kind !== 'part' || PARTS[it.part.defId].kind !== 'weapon');
-  if (!mountPart(w, me, makePart(w, gun, 0))) throw new Error(`${gun} does not fit the ${me.chassisId}`);
+// Strips every part but the built-in ones, then mounts a stock engine, the gun and the armor on every armor cell.
+function outfit(w: World, v: Vehicle, o: Outfit): void {
+  if (PARTS[o.gun]?.kind !== 'weapon') throw new Error(`Unknown weapon "${o.gun}"`);
+  if (o.armor !== null && PARTS[o.armor]?.kind !== 'armor') throw new Error(`Unknown armor "${o.armor}"`);
+  if (v.chassisId !== 'hauler') throw new Error(`Outfits go on a hauler, not a ${v.chassisId}`);
+  v.items = v.items.filter((it) => it.kind === 'part' && PARTS[it.part.defId].kind === 'core');
+  for (const id of ['stockEngine', o.gun]) if (!mountPart(w, v, makePart(w, id, 0))) throw new Error(`${id} does not fit the hauler`);
+  if (o.armor) while (mountPart(w, v, makePart(w, o.armor, 0)));
+}
+
+const BARE_HAULER: NpcLoadout = { chassisId: 'hauler', level: 'standard', parts: [], spares: [], cargo: {} };
+
+// An outfitted enemy keeps its template's brain and drives and fights as that driver would.
+function outfitFoe(w: World, e: Vehicle, o: Outfit): void {
+  outfit(w, e, o);
 }
 
 function orders(w: World, fight: Fight, foe: Vehicle): World {
@@ -242,12 +256,16 @@ export type Group = { gun: string; enemies: string; level: string; policy: Polic
 export function groups(reports: FightReport[]): Group[] {
   const out = new Map<string, Group>();
   for (const r of reports) {
-    const g = { gun: r.fight.gun ?? 'kit', enemies: r.fight.enemies.join('+'), level: r.fight.level ?? 'rolled', policy: r.fight.policy };
+    const g = { gun: outfitName(r.fight.me) ?? 'kit', enemies: outfitName(r.fight.foe) ?? r.fight.enemies.join('+'), level: r.fight.level ?? 'rolled', policy: r.fight.policy };
     const key = `${g.gun}|${g.enemies}|${g.level}|${g.policy}`;
     if (!out.has(key)) out.set(key, { ...g, reports: [] });
     out.get(key)!.reports.push(r);
   }
   return [...out.values()];
+}
+
+function outfitName(o: Outfit | null): string | null {
+  return o && `${o.gun}/${o.armor ?? 'bare'}`;
 }
 
 const pct = (a: number, b: number) => (b > 0 ? `${Math.round((100 * a) / b)}%` : '-');

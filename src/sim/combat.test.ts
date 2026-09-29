@@ -70,18 +70,19 @@ describe('combat', () => {
     expect(w.events.some((e) => e.t === 'shot' && e.shooter === me.id)).toBe(false);
   });
 
-  it('cannon cools down for several turns', () => {
+  it('a gun cooling down holds fire until its cooldown runs out', () => {
     const w = emptyWorld();
     const me = cannonHauler(w);
     const t = addVehicle(w, 'raiders', 'wagon', ['cannon', 'stockEngine', 'plates'], { x: 35, y: 30 }, Math.PI);
-    order(me, vehicleStats(w, me).weapons[0].part.id, t.id);
-    let shots = 0;
-    for (let i = 0; i < 6; i++) {
+    const gun = vehicleStats(w, me).weapons[0];
+    order(me, gun.part.id, t.id);
+    gun.part.gun = { cooldown: 2, ammo: gun.def.magazine, reloadWork: 0 };
+    const fired = Array.from({ length: 3 }, () => {
       w.events = [];
       fireWeapons(w);
-      shots += w.events.filter((e) => e.t === 'shot' && e.shooter === me.id).length;
-    }
-    expect(shots).toBe(2);
+      return w.events.filter((e) => e.t === 'shot' && e.shooter === me.id).length;
+    });
+    expect(fired).toEqual([0, 0, 1]);
   });
 
   it('aimed shots have lower hit chance', () => {
