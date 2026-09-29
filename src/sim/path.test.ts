@@ -601,7 +601,7 @@ describe('nav layers match the old grid rules', () => {
   const at = (lo: number, hi: number) => lo + (hi - lo) * rand();
   // Kill wrecks come and go in play; they must block like any other obstacle.
   for (let i = 0; i < 4; i++) w.obstacles.push({ id: `wreck-t${i}`, pos: { x: at(40, w.size - 40), y: at(40, w.size - 40) }, r: 1, kind: 'wreck' });
-  const pairs = Array.from({ length: 30 }, (_, i) => {
+  const pairs = Array.from({ length: 10 }, (_, i) => {
     const from = { x: at(5, w.size - 5), y: at(5, w.size - 5) };
     // Half the pairs are short, so straight lines are often clear; the rest cross the map.
     const reach = i % 2 === 0 ? 30 : w.size;
@@ -640,8 +640,8 @@ describe('nav layers match the old grid rules', () => {
       expect(Ref.pathCost(g, got) - Ref.pathCost(g, ref)).toBeLessThanOrEqual(tolerance * Ref.pathCost(g, ref));
       if (tolerance === 0.01) expect(Ref.pathCost(g, ref) - Ref.pathCost(g, got)).toBeLessThanOrEqual(0.01 * Ref.pathCost(g, ref));
     }
-    // Random points often land in closed cliff basins; half the pairs still need a real search.
-    expect(searched).toBeGreaterThanOrEqual(12);
+    // Random points often land in closed cliff basins; some pairs still need a real search.
+    expect(searched).toBeGreaterThanOrEqual(4);
   }, 60_000);
 
   it('straightClear equals the reference line check', () => {

@@ -7,7 +7,7 @@ import { RULES } from '../data/rules';
 import { partDef, type PartDef, type WeaponDef } from '../data/parts';
 import { wornDef } from './wear';
 import { damagePart } from './damage';
-import { gridOf, itemCells, itemSize, mountedItems, mountedParts, sideOf, type Grid, type SideLetter } from './grid';
+import { cellKey, gridOf, itemCells, itemSize, mountedItems, mountedParts, sideOf, type Grid, type SideLetter } from './grid';
 import type { GridItem, PartInstance, Vehicle, World } from './types';
 import { angleDiff, bearing, type Vec } from './vec';
 
@@ -97,8 +97,8 @@ function laneCells(g: Grid, side: Side, lane: number): { x: number; y: number }[
 export function walkLane(world: World, v: Vehicle, side: Side, lane: number, round: Round): PartHit[] {
   if (!(round.damage >= 0 && round.pen >= 0)) throw new Error(`Bad round ${JSON.stringify(round)}`);
   const g = gridOf(v);
-  const owner = new Map<string, PartInstance>();
-  for (const it of mountedItems(v)) for (const c of itemCells(it)) owner.set(`${c.x},${c.y}`, it.part);
+  const owner = new Map<number, PartInstance>();
+  for (const it of mountedItems(v)) for (const c of itemCells(it)) owner.set(cellKey(c.x, c.y), it.part);
   const hits: PartHit[] = [];
   const struck = new Set<string>();
   let pen = round.pen;
@@ -107,7 +107,7 @@ export function walkLane(world: World, v: Vehicle, side: Side, lane: number, rou
     if (pen <= 0) break;
     if (g.cells[c.y][c.x] === null) continue;
     pen -= RULES.cellPen;
-    const part = owner.get(`${c.x},${c.y}`);
+    const part = owner.get(cellKey(c.x, c.y));
     if (pen <= 0 || !part || part.hp <= 0 || struck.has(part.id)) continue;
     struck.add(part.id);
     const armor = armorAgainst(wornDef(part), round.blast);
@@ -140,25 +140,38 @@ export function openSides(v: Vehicle, item: GridItem): Side[] {
 // The nearest tall item in the gun's lane toward each blocked side. An open side has no entry.
 export function sideBlockers(v: Vehicle, item: GridItem): Partial<Record<Side, GridItem>> {
   const tall = tallCells(v, item.id);
+  const out: Partial<Record<Side, GridItem>> = {};
+  if (tall.size === 0) return out;
   const g = gridOf(v);
   const { w, h } = itemSize(item);
   const center = { x: item.x + Math.floor(w / 2), y: item.y + Math.floor(h / 2) };
-  const out: Partial<Record<Side, GridItem>> = {};
   for (const side of SIDES) {
-    const blocker = laneToEdge(g, center, side).map((c) => tall.get(`${c.x},${c.y}`)).find((it) => it !== undefined);
-    if (blocker) out[side] = blocker;
+    const { dx, dy } = STEP[side];
+    for (let x = center.x, y = center.y; inGrid(g, { x, y }); x += dx, y += dy) {
+      const blocker = tall.get(cellKey(x, y));
+      if (blocker) {
+        out[side] = blocker;
+        break;
+      }
+    }
   }
   return out;
 }
 
 // The item on each cell covered by a tall part, leaving out one item.
-function tallCells(v: Vehicle, exceptId: string): Map<string, GridItem> {
-  const tall = new Map<string, GridItem>();
-  for (const it of v.items) {
-    if (it.id === exceptId || it.kind !== 'part' || !partDef(it.part.defId).tall) continue;
-    for (const c of itemCells(it)) tall.set(`${c.x},${c.y}`, it);
-  }
+function tallCells(v: Vehicle, exceptId: string): Map<number, GridItem> {
+  const tall = new Map<number, GridItem>();
+  for (const it of v.items) if (it.id !== exceptId && isTall(it)) paintCells(tall, it);
   return tall;
+}
+
+function isTall(it: GridItem): boolean {
+  return it.kind === 'part' && Boolean(partDef(it.part.defId).tall);
+}
+
+function paintCells(cells: Map<number, GridItem>, it: GridItem): void {
+  const { w, h } = itemSize(it);
+  for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) cells.set(cellKey(it.x + dx, it.y + dy), it);
 }
 
 // True when every mounted gun has at least one open side inside its own arc.
@@ -189,14 +202,6 @@ export function reachedSides(def: WeaponDef): Side[] {
   if (def.arc > 270) return [...SIDES];
   if (def.arc > 90) return ['front', 'left', 'right'];
   return ['front'];
-}
-
-// Grid cells from a start cell to the edge of the grid on one side, the start included.
-function laneToEdge(g: Grid, start: { x: number; y: number }, side: Side): { x: number; y: number }[] {
-  const { dx, dy } = STEP[side];
-  const out: { x: number; y: number }[] = [];
-  for (let c = start; inGrid(g, c); c = { x: c.x + dx, y: c.y + dy }) out.push(c);
-  return out;
 }
 
 function inGrid(g: Grid, c: { x: number; y: number }): boolean {

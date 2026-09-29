@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { PARTS } from '../data/parts';
 import { RULES } from '../data/rules';
+import { mountedParts } from '../sim/grid';
 import { initPhysics } from '../phys/drive';
 import { runFight, setNumber, type Fight } from './combat-harness';
 
@@ -12,6 +14,16 @@ const FIGHT: Fight = { kit: 'standard', enemies: ['buggy'], policy: 'stand', see
 describe('combat harness', () => {
   it('gives the same report for the same fight', () => {
     expect(runFight(FIGHT)).toEqual(runFight(FIGHT));
+  });
+
+  it('gives the same report for a seed after other seeds ran', () => {
+    const first = runFight(FIGHT);
+    runFight({ ...FIGHT, seed: 4 });
+    expect(runFight(FIGHT)).toEqual(first);
+  });
+
+  it('refuses a seed that is not a whole number', () => {
+    expect(() => runFight({ ...FIGHT, seed: 1.5 })).toThrow('Seed must be an integer');
   });
 
   it('counts the rounds both sides fire', () => {
@@ -30,6 +42,22 @@ describe('combat harness', () => {
     setNumber(`RULES.leadError=${old + 1}`);
     expect(RULES.leadError).toBe(old + 1);
     setNumber(`RULES.leadError=${old}`);
+  });
+
+  it('builds the next fight from a changed balance number', () => {
+    const gunHp = () => {
+      let hp = 0;
+      runFight({ ...FIGHT, maxTurns: 1 }, (w) => { hp = mountedParts(w.vehicles[0], 'weapon')[0].hp; });
+      return hp;
+    };
+    const old = (PARTS.mg as { hp: number }).hp;
+    expect(gunHp()).toBeLessThanOrEqual(old);
+    setNumber(`PARTS.mg.hp=${old * 100}`);
+    try {
+      expect(gunHp()).toBeGreaterThan(old);
+    } finally {
+      setNumber(`PARTS.mg.hp=${old}`);
+    }
   });
 
   it('refuses a path that names no number', () => {
