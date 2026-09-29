@@ -18,14 +18,25 @@ export function summarizeError(message: string): string {
 }
 
 // A failed stage stops its card and tells the committee once. Nothing retries until a human removes the label.
+// Telegram goes first, so a GitHub outage that broke the stage cannot also hide the report.
 export async function reportFailure(ctx: Ctx, stage: Stage, issue: number | null, error: unknown, log: string | null): Promise<void> {
   const message = error instanceof Error ? error.message : String(error);
   ctx.log(stage, issue, `failed: ${message}`);
-  if (issue !== null) await ctx.github.addLabel(issue, STUCK_LABEL);
   const where = issue === null ? '' : ` on issue #${issue} https://github.com/${ctx.cfg.repo}/issues/${issue}`;
   const lines = [`Factory stage ${stage} failed${where}.`, summarizeError(message)];
   if (log) lines.push(`Log: ${log}`);
   if (issue !== null) lines.push(`Remove the ${STUCK_LABEL} label to let the factory try again.`);
   lines.push('Reply here to ask Hermes what went wrong.');
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, lines.join('\n\n'));
+  if (issue !== null) await labelStuck(ctx, issue);
+}
+
+async function labelStuck(ctx: Ctx, issue: number): Promise<void> {
+  try {
+    await ctx.github.addLabel(issue, STUCK_LABEL);
+  } catch (error) {
+    const reason = summarizeError(error instanceof Error ? error.message : String(error));
+    await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Could not label issue #${issue} ${STUCK_LABEL}, so the factory may run it again.\n\n${reason}`);
+    throw error;
+  }
 }

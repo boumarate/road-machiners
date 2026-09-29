@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { summarizeError } from './fail';
+import { reportFailure, summarizeError } from './fail';
+import type { Ctx } from './types';
 
 describe('summarizeError', () => {
   it('keeps the failure lines of colored test output', () => {
@@ -9,5 +10,20 @@ describe('summarizeError', () => {
 
   it('falls back to the last lines when nothing looks like a failure', () => {
     expect(summarizeError('one\ntwo\nthree')).toBe('one\ntwo\nthree');
+  });
+});
+
+describe('reportFailure', () => {
+  it('posts to Telegram before labeling, and posts again when the label fails', async () => {
+    const posts: string[] = [];
+    const ctx = {
+      cfg: { repo: 'o/r', committeeChat: 'c' },
+      log: () => undefined,
+      telegram: { sendMessage: async (_c: string, text: string) => { posts.push(text); return 1; } },
+      github: { addLabel: async () => { throw new Error('x509: certificate is not standards compliant'); } },
+    } as unknown as Ctx;
+    await expect(reportFailure(ctx, 'implement', 4, new Error('agent failed'), 'l')).rejects.toThrow('x509');
+    expect(posts[0]).toContain('Factory stage implement failed on issue #4');
+    expect(posts[1]).toContain('Could not label issue #4');
   });
 });
