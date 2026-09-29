@@ -150,7 +150,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   },
   buggy: {
     id: 'buggy',
-    name: 'Raider buggy',
+    name: 'Buggy',
     maxSpeed: 9.1,
     accel: 3,
     brake: 3,
@@ -178,7 +178,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   },
   wagon: {
     id: 'wagon',
-    name: 'Raider gunwagon',
+    name: 'Gunwagon',
     maxSpeed: 3.9,
     accel: 1,
     brake: 2,

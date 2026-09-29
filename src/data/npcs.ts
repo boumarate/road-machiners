@@ -657,7 +657,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "camp" },
   },
   gunwagon: {
-    id: 'gunwagon', name: 'Raider gunwagon', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
+    id: 'gunwagon', name: 'Gunwagon', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
     loadout: LOADOUTS.gunwagon,
     aggroRange: 12,
     preferredRange: 6,
