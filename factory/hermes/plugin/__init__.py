@@ -1,59 +1,47 @@
 """Hermes plugin for the game factory.
 
-A pre_gateway_dispatch hook takes committee messages in the factory chat and runs the factory CLI.
+A pre_gateway_dispatch hook takes committee messages in the factory chat and writes them
+to the factory inbox as JSON files. The host tick reads the inbox.
 Every other message goes to Hermes as normal chat.
 """
 
-import asyncio
 import json
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-REQUIRED_KEYS = ("FACTORY_HOME", "FACTORY_COMMITTEE_TELEGRAM", "FACTORY_COMMITTEE_CHAT")
+REQUIRED_KEYS = ("FACTORY_INBOX", "FACTORY_STATE_DIR", "FACTORY_COMMITTEE_TELEGRAM", "FACTORY_COMMITTEE_CHAT")
+QUEUED_REPLY = "Queued. The factory picks this up on its next tick."
 
 
 @dataclass(frozen=True)
 class Config:
-    code_dir: str
-    home: str
+    inbox: str
+    state_dir: str
     committee: frozenset
     chat: str
 
 
-def parse_env(text: str) -> dict:
-    values = {}
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.removeprefix("export ").split("=", 1)
-        values[key.strip()] = value.strip().strip("\"'")
-    return values
-
-
 def load_config(environ: dict) -> Config:
-    code_dir = environ.get("FACTORY_CODE_DIR", "").strip()
-    if not code_dir:
-        raise RuntimeError("FACTORY_CODE_DIR is not set. Add it to ~/.hermes/.env.")
-    env_file = Path(code_dir) / ".env"
-    if not env_file.is_file():
-        raise RuntimeError(f"Factory env file {env_file} does not exist.")
-    values = parse_env(env_file.read_text())
-    missing = [key for key in REQUIRED_KEYS if not values.get(key)]
+    missing = [key for key in REQUIRED_KEYS if not environ.get(key, "").strip()]
     if missing:
-        raise RuntimeError(f"{env_file} is missing {', '.join(missing)}.")
-    committee = frozenset(part.strip() for part in values["FACTORY_COMMITTEE_TELEGRAM"].split(",") if part.strip())
-    return Config(code_dir, values["FACTORY_HOME"], committee, values["FACTORY_COMMITTEE_CHAT"])
+        raise RuntimeError(f"Factory plugin env is missing {', '.join(missing)}.")
+    committee = frozenset(part.strip() for part in environ["FACTORY_COMMITTEE_TELEGRAM"].split(",") if part.strip())
+    if not committee:
+        raise RuntimeError("FACTORY_COMMITTEE_TELEGRAM has no user ids.")
+    return Config(
+        environ["FACTORY_INBOX"].strip(), environ["FACTORY_STATE_DIR"].strip(),
+        committee, environ["FACTORY_COMMITTEE_CHAT"].strip(),
+    )
 
 
-def read_approval_posts(home: str) -> dict:
-    path = Path(home) / "state.json"
+def read_approval_posts(state_dir: str) -> dict:
+    path = Path(state_dir) / "state.json"
     if not path.is_file():
         return {}
     return json.loads(path.read_text())["approvalPosts"]
-
 
 CHANGE_PREFIX = "/change "
 
@@ -82,25 +70,26 @@ def _request(text, reply_to_message_id, approval_posts) -> Optional[tuple]:
     return None
 
 
-def cli_args(decision: tuple, user_id: str) -> list:
+def inbox_command(decision: tuple, user_id, user_name, chat_id, message_id) -> dict:
     kind = decision[0]
-    if kind == "approve":
-        return ["approve", str(decision[1]), "--by", user_id]
-    if kind == "feedback":
-        return ["feedback", str(decision[1]), "--by", user_id, "--text", decision[2]]
-    return ["change", "--by", user_id, "--text", decision[1]]
+    return {
+        "kind": kind,
+        "issue": decision[1] if kind in ("approve", "feedback") else None,
+        "text": decision[2] if kind == "feedback" else decision[1] if kind == "change" else None,
+        "by": str(user_id),
+        "byName": user_name or None,
+        "chat": str(chat_id),
+        "messageId": int(message_id),
+    }
 
 
-async def run_factory(code_dir: str, args: list) -> str:
-    proc = await asyncio.create_subprocess_exec(
-        "npm", "run", "-s", "factory", "--", *args,
-        cwd=code_dir, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-    )
-    out, err = await proc.communicate()
-    out, err = out.decode().strip(), err.decode().strip()
-    if proc.returncode == 0:
-        return out or "Done."
-    return f"Factory command failed (exit {proc.returncode}).\n{err or out}"
+def write_inbox(inbox: str, command: dict, now_ms: Optional[int] = None) -> Path:
+    stamp = int(time.time() * 1000) if now_ms is None else now_ms
+    final = Path(inbox) / f"{stamp}-{command['messageId']}.json"
+    temp = final.with_suffix(".json.tmp")
+    temp.write_text(json.dumps(command))
+    os.replace(temp, final)
+    return final
 
 
 async def _reply(gateway, event, text: str) -> None:
@@ -115,15 +104,18 @@ def make_hook(cfg: Config):
         source = event.source
         decision = route(
             event.text, event.reply_to_message_id, source.user_id, source.chat_id,
-            read_approval_posts(cfg.home), cfg,
+            read_approval_posts(cfg.state_dir), cfg,
         )
         if decision is None:
             return None
         if decision[0] == "denied":
             await _reply(gateway, event, decision[1])
             return {"action": "skip", "reason": "factory-denied"}
-        output = await run_factory(cfg.code_dir, cli_args(decision, str(source.user_id)))
-        await _reply(gateway, event, output)
+        command = inbox_command(
+            decision, source.user_id, getattr(source, "user_name", None), source.chat_id, event.message_id,
+        )
+        write_inbox(cfg.inbox, command)
+        await _reply(gateway, event, QUEUED_REPLY)
         return {"action": "skip", "reason": f"factory-{decision[0]}"}
 
     return on_dispatch

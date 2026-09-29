@@ -1,0 +1,29 @@
+# Hermes config template for the game factory chat bot.
+# Keys were checked against cli-config.yaml.example in the Hermes source.
+model:
+  # The user confirms the provider before first run.
+  provider: anthropic
+  default: claude-sonnet-5-5
+
+telegram:
+  require_mention: true
+
+display:
+  platforms:
+    telegram:
+      tool_progress: "off"
+      interim_assistant_messages: false
+      long_running_notifications: false
+      streaming: false
+
+plugins:
+  enabled:
+    - factory
+
+# The file toolset also holds write and patch. Hermes has no read-only file toolset.
+platform_toolsets:
+  telegram:
+    - file
+    - skills
+    - memory
+    - session_search
