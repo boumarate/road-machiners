@@ -91,6 +91,11 @@ function getConditionState(ratio: number): string {
   return ratio < 1 ? "damaged" : "healthy";
 }
 
+// The tooltip of a part tile: the part's name and condition.
+export function conditionLabel(part: { name: string; percent: number }): string {
+  return `${part.name}: ${part.percent}%${part.percent === 0 ? " (broken)" : ""}`;
+}
+
 export class TruckConditionReadout {
   private vehicleId: string | null = null;
   private health = new Map<string, number>();

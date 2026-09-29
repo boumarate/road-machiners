@@ -1,8 +1,7 @@
 // Vehicle instruments, critical resources, event history and inspection.
 
 import { DialoguePanel, type DialogueHost } from "./dialogue";
-import { partDef } from "../data/parts";
-import { baseGrid, corePart, coreParts, mountedParts } from "../sim/grid";
+import { baseGrid } from "../sim/grid";
 import type { Vehicle, World } from "../sim/types";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
@@ -20,12 +19,11 @@ import {
   formatNpcStates,
   formatNpcTraits,
 } from "./format";
-import { getHudReadout, getRescueReadout, moneyLabel, type RescueReadout, TruckConditionReadout } from "./hud-readout";
-import { conditionMeter, createIcon, createSpeedDial, partIcon } from "./cards";
+import { getHudReadout, getRescueReadout, moneyLabel, conditionLabel, type RescueReadout, TruckConditionReadout } from "./hud-readout";
+import { createIcon, createSpeedDial } from "./cards";
 import { createSwitch } from "./switch";
 import { Tips } from "./tips";
-import { hp, kph } from "./units";
-import { maxHp } from "../sim/wear";
+import { kph } from "./units";
 import { playerVehicle } from "../sim/damage";
 import { pendingPerkPairs } from "../sim/progress";
 import { canDouse } from "../sim/engine-heat";
@@ -74,7 +72,7 @@ class TruckConditionView {
       this.body.append(node);
     }
     node.dataset.condition = part.state;
-    node.title = `${part.name}: ${part.percent}%${part.percent === 0 ? " (broken)" : ""}`;
+    node.title = conditionLabel(part);
     node.setAttribute("aria-label", node.title);
     node.style.cssText = `left:${part.x * 30}px;top:${part.y * 30}px;width:${part.w * 30}px;height:${part.h * 30}px`;
     const label = node.querySelector(".condition-percent");
@@ -136,6 +134,7 @@ function weatherLabel(w: World): string {
 export class Hud {
   private top = panel("instruments");
   private condition = new TruckConditionView();
+  private inspected = new TruckConditionView();
   private contracts = panel("contracts");
   private log = panel("log");
   private info = panel("info");
@@ -527,32 +526,7 @@ export class Hud {
       this.info.style.display = "none";
       return;
     }
-    const cab = corePart(v, "cab");
-    const pct = Math.round((cab.hp / maxHp(cab)) * 100);
-    // The four wheels read as one line.
-    const wheels = coreParts(v, "wheel");
-    const working = wheels.filter((p) => p.hp > 0).length;
-    const parts = mountedParts(v)
-      .filter((p) => !wheels.includes(p))
-      .map((p) =>
-        el(
-          "div",
-          { class: `info-part${p.hp > 0 ? "" : " bad"}` },
-          createIcon(partIcon(p)),
-          el("span", {}, partDef(p.defId).name),
-          el("span", { class: "info-hp" }, `${hp(p.hp)} / ${hp(maxHp(p))}`),
-          conditionMeter(p),
-        ),
-      );
-    parts.push(
-      el(
-        "div",
-        { class: `info-part${working === wheels.length ? "" : " bad"}` },
-        createIcon("wheel"),
-        el("span", {}, "Wheels"),
-        el("span", { class: "info-hp" }, `${working} / ${wheels.length} working`),
-      ),
-    );
+    this.inspected.render(v);
     const stance =
       v.faction === "player" ? "" : hostile ? "hostile" : "neutral";
     this.info.style.display = "";
@@ -563,10 +537,9 @@ export class Hud {
         { class: hostile ? "bad" : "dim" },
         `${v.faction} ${stance}`.trim(),
       ),
-      el("div", {}, `Cab ${pct}%   Speed ${kph(v.speed)} km/h`),
-      el("div", { class: "bar" }, el("div", { style: `width:${pct}%` })),
+      el("div", {}, `Speed ${kph(v.speed)} km/h`),
       ...npcLines(w, v),
-      ...parts,
+      this.inspected.root,
     );
   }
 }

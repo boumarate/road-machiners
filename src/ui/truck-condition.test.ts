@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { corePart, coreParts, mountedParts, mountedItems, itemSize } from "../sim/grid";
 import { emptyWorld } from "../sim/testkit";
-import { TruckConditionReadout } from "./hud-readout";
+import { conditionLabel, TruckConditionReadout } from "./hud-readout";
 
 describe("truck condition", () => {
   it("keeps critical parts at their actual chassis positions", () => {
@@ -52,5 +52,20 @@ describe("truck condition", () => {
     const engine = mountedItems(vehicle, "engine")[0];
     engine.y = 20;
     expect(readout.update(vehicle).some((part) => part.id === engine.part.id)).toBe(false);
+  });
+});
+
+describe("condition tooltip", () => {
+  it("names the part with its condition", () => {
+    expect(conditionLabel({ name: "Stock engine", percent: 40 })).toBe("Stock engine: 40%");
+  });
+
+  it("marks a broken part", () => {
+    expect(conditionLabel({ name: "Cab", percent: 0 })).toBe("Cab: 0% (broken)");
+  });
+
+  it("gives every tile of a truck a name", () => {
+    const parts = new TruckConditionReadout().update(emptyWorld().vehicles[0]);
+    for (const part of parts) expect(conditionLabel(part).startsWith(`${part.name}:`)).toBe(true);
   });
 });

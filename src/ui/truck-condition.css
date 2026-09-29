@@ -62,3 +62,8 @@
     bottom: calc(100% + 110px);
   }
 }
+#ui .info .truck-condition {
+  position: static;
+  width: fit-content;
+  margin: 8px auto 0;
+}
