@@ -363,6 +363,17 @@
     "stock": [
      {
       "defId": "string",
+      "gun": {
+       "ammo": "number",
+       "cooldown": "number",
+       "reloadWork": "number"
+      },
+      "hp": "number",
+      "id": "string",
+      "wear": "number"
+     },
+     {
+      "defId": "string",
       "hp": "number",
       "id": "string",
       "wear": "number"
@@ -476,6 +487,17 @@
     },
     "restockAt": "number",
     "stock": [
+     {
+      "defId": "string",
+      "gun": {
+       "ammo": "number",
+       "cooldown": "number",
+       "reloadWork": "number"
+      },
+      "hp": "number",
+      "id": "string",
+      "wear": "number"
+     },
      {
       "defId": "string",
       "hp": "number",
