@@ -5,6 +5,7 @@ Run after provision.py. Re-run to roll out changes.
 
 # pyright: reportMissingImports=false
 import shlex
+from pathlib import Path
 from io import StringIO
 
 from pyinfra.operations import files, server, systemd
@@ -37,9 +38,11 @@ files.sync(
     _sudo=True,
 )
 
+# The GitHub token joins the factory env as GH_TOKEN. gh and git read it from there, so the server needs no gh login.
+factory_env_text = Path(settings.factory_env_file).read_text().rstrip("\n") + f"\nGH_TOKEN={settings.factory_gh_token}\n"
 files.put(
-    name="Push the factory .env",
-    src=settings.factory_env_file,
+    name="Push the factory .env with the GitHub token",
+    src=StringIO(factory_env_text),
     dest=env_path,
     user=FACTORY_USER,
     group=FACTORY_USER,
@@ -54,23 +57,11 @@ server.shell(
     **as_factory,
 )
 
-# The token goes through a 600 file and stdin, never onto a command line.
-files.put(
-    name="gh token file",
-    src=StringIO(settings.factory_gh_token + "\n"),
-    dest=f"{HOME_DIR}/.gh-token",
-    user=FACTORY_USER,
-    group=FACTORY_USER,
-    mode="600",
-    _sudo=True,
-)
+# git asks gh for credentials, and gh answers with GH_TOKEN. The token stays in the env, never on a command line.
 server.shell(
-    name="gh login and git credential helper",
-    commands=[
-        f"timeout 60 gh auth login --with-token < {HOME_DIR}/.gh-token",
-        "timeout 60 gh auth setup-git",
-        f"rm -f {HOME_DIR}/.gh-token",
-    ],
+    name="git credential helper through gh",
+    commands=["timeout 60 gh auth setup-git"],
+    _env={"GH_TOKEN": settings.factory_gh_token},
     **as_factory,
 )
 

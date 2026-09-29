@@ -51,7 +51,7 @@ It follows `Steelman/infra`. Run every command from `factory/infra`.
 
 1. Point the DNS name of the domain at the server.
 2. Copy `prod.env.example` to `prod.env` and fill it in.
-3. Make a GitHub token with repo and project scopes. Put it in `FACTORY_GH_TOKEN`.
+3. Make a classic GitHub token for the bot account with `repo` and `project`. Put it in `FACTORY_GH_TOKEN`. Deploy adds it to the server's factory env as `GH_TOKEN`, so `gh` and git pushes use it with no `gh` login.
 4. Run `claude setup-token` on any machine you are logged in to. Put the result in `CLAUDE_CODE_OAUTH_TOKEN` in the factory `.env`.
 5. Make a Telegram bot with BotFather. Put its token in `TELEGRAM_BOT_TOKEN`. Set `FACTORY_COMMITTEE_BOOTSTRAP` to your Telegram user id, `FACTORY_COMMITTEE_BOOTSTRAP_GITHUB` to your GitHub login and `FACTORY_COMMITTEE_CHAT` to the chat id in the factory `.env`. You are the first committee member. Add others with `/committee add` in the chat.
 6. In the factory `.env`, set `FACTORY_HOME=/opt/factory/home`, `FACTORY_WEB_ROOT=/opt/factory/www`, `FACTORY_TICK_MINUTES` and `FACTORY_PUBLIC_URL=https://<domain>`. Also set `ITCH_TARGET` and `BUTLER_API_KEY`.
