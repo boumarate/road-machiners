@@ -115,3 +115,12 @@ describe("shot log", () => {
     expect(line?.cls).toBe("bad");
   });
 });
+
+describe("empty gun log", () => {
+  it("logs the player's gun running dry", () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const gun = mountedParts(me, "weapon")[0];
+    expect(eventText(w, { t: "empty", vehicle: me.id, weapon: gun.id })?.text).toContain("is empty and reloading");
+  });
+});

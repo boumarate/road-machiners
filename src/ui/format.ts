@@ -431,6 +431,15 @@ function infoText(world: World, e: Extract<GameEvent, { t: 'info' }>): LogLine |
 }
 
 // Events whose log line has its own function.
+// A gun of the player's truck, or of a truck the player sees, fires its last round and starts to reload.
+function emptyText(world: World, e: Extract<GameEvent, { t: 'empty' }>): LogLine | null {
+  const me = world.player.vehicleId;
+  const v = findAny(world, e.vehicle);
+  if (!v || (v.id !== me && !playerSees(world, v.pos))) return null;
+  const gun = partName(world, e.vehicle, e.weapon);
+  return v.id === me ? { text: `Your ${gun} is empty and reloading`, cls: 'dim' } : { text: `${vehicleName(world, v.id)}: ${gun} is empty and reloading`, cls: 'good' };
+}
+
 const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent, { t: K }>) => LogLine | null } = {
   activity: activityText,
   info: infoText,
@@ -438,6 +447,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   npcKnockout: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} knocked out`, cls: 'good' }),
   npcWake: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} comes to`, cls: 'dim' }),
   stateEnded: stateEndedText,
+  empty: emptyText,
   say: sayText,
   job: jobText,
   weather: weatherText,
