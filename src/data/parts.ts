@@ -668,10 +668,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   transmission: {
     id: "transmission", kind: "core", name: "Transmission", hp: 40, base: 110, tier: 1, w: 2, h: 2, mass: 60, armor: 3, tall: false, role: "transmission",
   },
-  // The buggy has two free columns between its wheels, too few for a full size transmission and tank.
-  transmissionMini: {
-    id: "transmissionMini", kind: "core", name: "Compact transmission", hp: 40, base: 110, tier: 1, w: 1, h: 1, mass: 60, armor: 3, tall: false, role: "transmission",
-  },
   // Van and hauler drive parts, and the heavy ones of the gunwagon, carrier, tractor and longbed.
   transmissionMid: {
     id: "transmissionMid", kind: "core", name: "Truck transmission", hp: 60, base: 110, tier: 1, w: 2, h: 2, mass: 60, armor: 4, tall: false, role: "transmission",
@@ -692,9 +688,6 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
   // The small tank fits the scout, the buggy, the courier and the jeep. The convertible carries the long tank. All tanks lie two cells along the truck.
   tank: {
     id: "tank", kind: "core", name: "Small fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 1, tall: false, role: "tank",
-  },
-  tankMini: {
-    id: "tankMini", kind: "core", name: "Compact fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 1, mass: 30, armor: 1, tall: false, role: "tank",
   },
   tankLong: {
     id: "tankLong", kind: "core", name: "Fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 1, tall: false, role: "tank",

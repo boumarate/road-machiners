@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { GEAR_LEVELS, MAX_GUN_SLOWDOWN, NPCS, type GearLevel, type NpcTemplate } from '../data/npcs';
 import { PARTS, partDef } from '../data/parts';
@@ -18,9 +18,23 @@ import { gunDrag } from './stats';
 import { emptyWorld } from './testkit';
 import type { Vehicle, World } from './types';
 import { TEST_MAP } from '../test/map';
+import TRUCK_SHAPES from '../data/truck-shapes.json';
+
+// A scout with one deck cell, where a cannon or a heavy frame cannot mount. It borrows the scout's collision boxes.
+const TINY = {
+  ...CHASSIS.scout,
+  id: 'tiny',
+  layout: CHASSIS.scout.layout.map((row, y) => (y === 0 || y === CHASSIS.scout.layout.length - 1 ? row : row.replace(/D/g, (_m, at: number) => (y === 1 && at === 4 ? 'D' : 'X')))),
+};
+const SHAPES = TRUCK_SHAPES as Record<string, unknown>;
 
 let fixture: World;
-beforeAll(() => { fixture = emptyWorld(); });
+beforeAll(() => {
+  fixture = emptyWorld();
+  CHASSIS.tiny = TINY;
+  SHAPES.base_tiny = TRUCK_SHAPES.base_scout;
+});
+afterAll(() => { delete CHASSIS.tiny; delete SHAPES.base_tiny; });
 
 function describeLoadout(v: Vehicle): string {
   return JSON.stringify({ chassis: v.chassisId, parts: mountedParts(v).map((p) => p.defId), goods: v.items.filter((i) => i.kind === 'good').map((i) => i.good) });
@@ -105,7 +119,7 @@ describe('NPC equipment generation', () => {
 
   it('filters an oversized weapon before rolling, even with a high weight', () => {
     const template = structuredClone(NPCS.buggy);
-    template.loadout.chassis = [{ value: 'buggy', weight: 1 }];
+    template.loadout.chassis = [{ value: 'tiny', weight: 1 }];
     template.loadout.engine = [{ value: 'stockEngine', weight: 1 }];
     template.loadout.weapon = [{ value: 'cannon', weight: 1000 }, { value: 'mg', weight: 1 }];
     const loadout = generateNpcLoadout({ ...fixture }, template);
@@ -125,7 +139,7 @@ describe('NPC equipment generation', () => {
 
   it('rejects impossible required equipment without consuming RNG or IDs', () => {
     const template = structuredClone(NPCS.buggy);
-    template.loadout.chassis = [{ value: 'buggy', weight: 1 }];
+    template.loadout.chassis = [{ value: 'tiny', weight: 1 }];
     template.loadout.weapon = [{ value: 'cannon', weight: 1 }];
     const world = { ...fixture };
     expect(() => generateNpcLoadout(world, template)).toThrow(/No valid required/);
@@ -142,7 +156,7 @@ describe('NPC equipment generation', () => {
     ['invalid optional weight', (t: NpcTemplate) => { t.loadout.armor = [{ value: 'plates', weight: 0 }]; }],
     ['an unknown gear level', (t: NpcTemplate) => { t.loadout.levels = [{ value: 'shiny' as GearLevel, weight: 1 }]; }],
     ['no guns required', (t: NpcTemplate) => { t.loadout.minGuns = 0; }],
-    ['impossible optional part', (t: NpcTemplate) => { t.loadout.chassis = [{ value: 'buggy', weight: 1 }]; t.loadout.cargoPart = [{ value: 'heavyFrame', weight: 1 }]; }],
+    ['impossible optional part', (t: NpcTemplate) => { t.loadout.chassis = [{ value: 'tiny', weight: 1 }]; t.loadout.cargoPart = [{ value: 'heavyFrame', weight: 1 }]; }],
     ['impossible cargo', (t: NpcTemplate) => { t.loadout.goods = [{ value: { good: 'scrap', count: 1000 }, weight: 1 }]; }],
     ['wear step past the last rebuildable step', (t: NpcTemplate) => { t.loadout.wear = [{ value: CONDITION.maxWear + 1, weight: 1 }]; }],
     ['negative wear step', (t: NpcTemplate) => { t.loadout.wear = [{ value: -1, weight: 1 }]; }],

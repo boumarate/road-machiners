@@ -204,7 +204,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
     wear: WEAR_RAIDER,
-    targets: { guns: [0.8, 1.4], armor: [0.3, 0.6] },
+    targets: { guns: [0.8, 1.8], armor: [0.3, 0.6] },
     spares: null,
   },
   // No tractor or scout: neither has a spot where a second gun covers behind the truck.
@@ -257,7 +257,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 2 }, weight: 1 },
     ],
     wear: WEAR_RAIDER,
-    targets: { guns: [2.7, 5.1], armor: [0.5, 0.8] },
+    targets: { guns: [3.0, 5.1], armor: [0.5, 0.8] },
     spares: null,
   },
   trader: {
@@ -448,7 +448,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "meds", count: 2 }, weight: 2 },
     ],
     wear: WEAR_TRADER,
-    targets: { guns: [0.9, 1.4], armor: [0.15, 0.45] },
+    targets: { guns: [0.9, 1.7], armor: [0.15, 0.45] },
     spares: null,
   },
   // A roamer's rig is a scavenger's, a bit better kept.

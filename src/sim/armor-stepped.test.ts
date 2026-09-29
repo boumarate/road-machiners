@@ -10,23 +10,21 @@ import type { GridItem, Vehicle, World } from './types';
 
 // A 5 by 8 chassis. The nose is one cell wide, then steps out. The armor cells at (1,1), (3,1), (1,6) and (3,6) face
 // two ways, so they carry the letter of the front or rear. The wheels are two cells long and stand at (1,2), (3,2),
-// (1,4) and (3,4), which leaves the middle column for the compact parts and the cab.
+// (1,4) and (3,4), which leaves the middle column for the two cell cab.
 //   row 0   '  F  '
 //   row 1   ' FDF '
-//   row 2   'LXXXR'   wheels, compact transmission
-//   row 3   'LXXXR'   wheels, the two cell cab
-//   row 4   'LXXXR'   wheels, the rest of the cab
-//   row 5   'LXXXR'   wheels, compact tank
+//   row 2   'LXXXR'   wheels, the cab
+//   row 3   'LXXXR'   wheels, the rest of the cab
+//   row 4   'LXDXR'   wheels
+//   row 5   'LXDXR'   wheels
 //   row 6   ' BDB '
 //   row 7   '  B  '
 const STEPPED = {
   ...CHASSIS.scout,
   id: 'stepped',
-  layout: ['  F  ', ' FDF ', 'LXXXR', 'LXXXR', 'LXXXR', 'LXXXR', ' BDB ', '  B  '],
+  layout: ['  F  ', ' FDF ', 'LXXXR', 'LXXXR', 'LXDXR', 'LXDXR', ' BDB ', '  B  '],
   core: [
-    { defId: 'transmissionMini', x: 2, y: 2 },
-    { defId: 'cabNarrow', x: 2, y: 3 },
-    { defId: 'tankMini', x: 2, y: 5 },
+    { defId: 'cabNarrow', x: 2, y: 2 },
     { defId: 'wheel', x: 1, y: 2 },
     { defId: 'wheel', x: 3, y: 2 },
     { defId: 'wheel', x: 1, y: 4 },

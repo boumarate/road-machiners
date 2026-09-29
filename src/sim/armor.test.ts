@@ -275,7 +275,7 @@ describe('open sides', () => {
 
   it('a gun beside the hood fires forward but not back across the cab', () => {
     const w = emptyWorld();
-    const v = truckWith(w, 'scout', [{ defId: 'mg', x: 4, y: 2 }]);
+    const v = truckWith(w, 'longbed', [{ defId: 'mg', x: 2, y: 1 }]);
     expect(openSides(v, itemOf(v, 'mg'))).toEqual(['front', 'left', 'right']);
   });
 
@@ -301,7 +301,7 @@ describe('open sides', () => {
 
   it('a gun behind the convertible hardtop cab cannot fire forward across it', () => {
     const w = emptyWorld();
-    const v = truckWith(w, 'convertible', [{ defId: 'mg', x: 2, y: 5 }]);
+    const v = truckWith(w, 'convertible', [{ defId: 'mg', x: 3, y: 5 }]);
     expect(openSides(v, itemOf(v, 'mg'))).toEqual(['rear', 'left', 'right']);
   });
 });

@@ -35,14 +35,12 @@ export const BODY_PARTS: ReadonlySet<string> = new Set(
 
 export const PART_MODELS: Record<string, ModelName> = {
   transmission: 'transmission',
-  transmissionMini: 'transmission_mini',
   transmissionMid: 'transmission',
   transmissionHeavy: 'transmission',
   wheel: 'wheel',
   wheelMid: 'wheel',
   wheelHeavy: 'wheel',
   tank: 'fuel_tank',
-  tankMini: 'fuel_tank_mini',
   tankLong: 'fuel_tank',
   tankMid: 'fuel_tank',
   tankHeavy: 'fuel_tank',

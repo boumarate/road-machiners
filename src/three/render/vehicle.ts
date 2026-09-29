@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { chassisDef } from '../../data/chassis';
 import { partDef, type PartDef, type PartKind } from '../../data/parts';
 import { PHYSICS } from '../../data/physics';
 import { wheelMounts } from '../../phys/body';
@@ -216,7 +217,8 @@ export class VehicleView {
     const onBody = v.items.filter((item) => onChassis(v, item));
     this.buildBase(v, body, baseModel(v.chassisId), still, paint, FACTION_COLORS[v.faction].cab, bumperlessCells(v, onBody));
     const wheelItems: PartItem[] = [];
-    for (const item of onBody) {
+    // The transmission and the tank of a truck that does not show its cores sit inside the body.
+    for (const item of onBody.filter((it) => !hidesInside(v, it))) {
       if (item.kind === 'good') {
         still.add(this.placeItem(v, item, paint, standingY(v, item)));
         continue;
@@ -537,6 +539,13 @@ function onChassis(v: Vehicle, item: GridItem): boolean {
 
 // Looks of mounted armor that takes the bumper's place.
 const BUMPER_LOOKS: readonly string[] = ['ram', 'cage'];
+
+// True for a transmission or a fuel tank on a chassis whose body covers them.
+function hidesInside(v: Pick<Vehicle, 'chassisId'>, item: GridItem): boolean {
+  if (item.kind !== 'part') return false;
+  const def = partDef(item.part.defId);
+  return def.kind === 'core' && (def.role === 'transmission' || def.role === 'tank') && !chassisDef(v.chassisId).showsCores;
+}
 
 // True for a mounted ram or cage.
 function replacesBumper(v: Vehicle, item: GridItem): boolean {
