@@ -25,6 +25,17 @@ daemon_json = files.put(
     _sudo=True,
 )
 
+# The testing gate peaks near 2.6 GB. On a 4 GB server, swap turns a spike into slowness instead of a killed run.
+server.shell(
+    name="4 GB swap file (skipped if present)",
+    commands=[
+        "swapon --show=NAME --noheadings | grep -q /swapfile || ("
+        "timeout 120 fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile)",
+        "grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab",
+    ],
+    _sudo=True,
+)
+
 server.shell(
     name="Install Docker (convenience script, skipped if present)",
     commands=["command -v docker >/dev/null || (timeout 600 sh -c 'curl -fsSL https://get.docker.com | sh')"],

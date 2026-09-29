@@ -41,7 +41,8 @@ services:
       - NET_RAW
       - NET_ADMIN
     cpus: 2
-    mem_limit: 4g
+    # Hermes idles near 300 MB. The cap leaves room for the testing gate on a 4 GB server.
+    mem_limit: 1536m
     pids_limit: 256
     healthcheck:
       test:
