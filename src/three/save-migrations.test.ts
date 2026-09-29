@@ -276,12 +276,17 @@ describe('1.4 to 1.5 bigger transmission, tank and flat-four', () => {
     expect(cellOf(world, 'v1', 'i3')).toEqual([4, 5]);
   });
 
-  it('gives the buggy the compact transmission and tank, and the courier the one-cell cab', () => {
-    const world = migrated();
-    expect(itemOf(world, 'v3', 'i21')!.part!.defId).toBe('transmissionMini');
-    expect(itemOf(world, 'v3', 'i22')!.part!.defId).toBe('tankMini');
-    const courier = MIGRATIONS[4](truck('courier')) as unknown as Saved;
-    expect(itemsOf(courier, 'v1').find((it) => it.part!.defId === 'cab')).toMatchObject({ x: 1, y: 3 });
+  it('moves the rear armor row, the right armor column and the stored rows to the edges of a grid that grew', () => {
+    const buggy = MIGRATIONS[4](truck('buggy', [part('a1', 'scrapSheet', 2, 5), part('a2', 'scrapSheet', 5, 2), part('a3', 'scrapSheet', 0, 2)])) as unknown as Saved;
+    expect(cellOf(buggy, 'v1', 'a1')).toEqual([2, 9]);
+    expect(cellOf(buggy, 'v1', 'a2')).toEqual([5, 2]);
+    expect(cellOf(buggy, 'v1', 'a3')).toEqual([0, 2]);
+    // A jeep with panniers on a deck cell that stays a deck cell keeps one stored row, which moves down with the rear edge.
+    const jeep = MIGRATIONS[4](truck('jeep', [part('p1', 'panniers', 1, 3), { id: 'g1', x: 1, y: 7, rot: 0, kind: 'good', good: 'salt' }])) as unknown as Saved;
+    expect(cellOf(jeep, 'v1', 'p1')).toEqual([1, 3]);
+    expect(cellOf(jeep, 'v1', 'g1')).toEqual([1, 10]);
+    const wagon = MIGRATIONS[4](truck('wagon', [part('a1', 'scrapSheet', 6, 3)])) as unknown as Saved;
+    expect(cellOf(wagon, 'v1', 'a1')).toEqual([7, 3]);
   });
 
   it('moves a gun that worked in the scout bed to a free deck cell where it still works', () => {
@@ -291,8 +296,13 @@ describe('1.4 to 1.5 bigger transmission, tank and flat-four', () => {
   });
 
   it('keeps a flat-four on its engine cells, where it now covers both rows', () => {
-    const world = MIGRATIONS[4](truck('courier', [part('e1', 'flatFour', 2, 1)])) as unknown as Saved;
+    const world = MIGRATIONS[4](truck('scout', [part('e1', 'flatFour', 2, 1)])) as unknown as Saved;
     expect(cellOf(world, 'v1', 'e1')).toEqual([2, 1]);
+  });
+
+  it('moves a flat-four whose engine cells moved to the new engine cells, where it still works', () => {
+    const courier = MIGRATIONS[4](truck('courier', [part('e1', 'flatFour', 2, 1)])) as unknown as Saved;
+    expect(cellOf(courier, 'v1', 'e1')).toEqual([2, 3]);
   });
 
   it('moves a flat-four that stood on the second engine row to the engine cells, where it still works', () => {

@@ -1,6 +1,6 @@
 // The 1.4 to 1.5 step: the transmission takes 2 by 2 cells, the fuel tank 1 by 2 and the light flat-four 2 by 2, and the
-// built-in parts move to the cells where the base models carry them. The scout transmission and tank move into the bed.
-// The buggy has too little room, so it gets compact ones, and the courier gets the one-cell cab.
+// built-in parts move to new cells. The buggy, courier, jeep and wagon grids grow, and the courier gets the one-cell cab. A
+// grown grid moves the rear armor row, the right armor column and the stored rows after it to the new edges.
 // The tables below are the chassis grids and part shapes before and after the change, as they stood when it was written.
 import type { SavedJson } from './save-migrations';
 
@@ -15,9 +15,9 @@ const MOUNTS_1_5: Record<string, string> = { weapon: 'D', engine: 'E', armor: 'F
 export const CHASSIS_1_5: Record<string, ChassisGrid> = {
   scout: {
     oldLayout: [' FFFFF ', 'LXEEDXR', 'LXEEDXR', 'LXXXXXR', 'LDXXXDR', 'LXDDDXR', 'LXDDDXR', ' BBBBB '],
-    newLayout: [' FFFFF ', 'LXEEDXR', 'LXEEDXR', 'LDXXXDR', 'LDXXXDR', 'LXXXXXR', 'LXXXXXR', ' BBBBB '],
+    newLayout: [' FFFFF ', 'LXEEDXR', 'LXEEDXR', 'LXXXDDR', 'LXXXDDR', 'LXXXXXR', 'LXXXXXR', ' BBBBB '],
     oldCore: [['cabPickup', 2, 3], ['transmission', 5, 3], ['tank', 1, 3], ['wheel', 1, 1], ['wheel', 5, 1], ['wheel', 1, 5], ['wheel', 5, 5]],
-    newCore: [['cabPickup', 2, 3], ['transmission', 2, 5], ['tank', 4, 5], ['wheel', 1, 1], ['wheel', 5, 1], ['wheel', 1, 5], ['wheel', 5, 5]],
+    newCore: [['cabPickup', 1, 3], ['transmission', 2, 5], ['tank', 4, 5], ['wheel', 1, 1], ['wheel', 5, 1], ['wheel', 1, 5], ['wheel', 5, 5]],
   },
   hauler: {
     oldLayout: [' FFFFFFF ', 'LXDEEXXXR', 'LXDEEXXXR', 'LDDDDDDDR', 'LDDDXDDDR', 'LDDDDDDDR', 'LXDDDDDXR', 'LXDDXXDXR', ' BBBBBBB '],
@@ -27,22 +27,21 @@ export const CHASSIS_1_5: Record<string, ChassisGrid> = {
   },
   buggy: {
     oldLayout: [' FFFF ', 'LXEEXR', 'LXEEXR', 'LXXDXR', 'LXXXXR', ' BBBB '],
-    newLayout: [' FFFF ', 'LXEEXR', 'LXEEXR', 'LXXDXR', 'LXXXXR', ' BBBB '],
+    newLayout: [' FFFF ', 'LXEEXR', 'LXEEXR', 'LDXXXR', 'LDXXXR', 'LDXDDR', 'LDDDDR', 'LXDDXR', 'LXDDXR', ' BBBB '],
     oldCore: [['cab', 2, 3], ['transmission', 2, 4], ['tank', 3, 4], ['wheel', 1, 1], ['wheel', 4, 1], ['wheel', 1, 3], ['wheel', 4, 3]],
-    newCore: [['cab', 2, 3], ['transmissionMini', 2, 4], ['tankMini', 3, 4], ['wheel', 1, 1], ['wheel', 4, 1], ['wheel', 1, 3], ['wheel', 4, 3]],
-    renamed: { transmission: 'transmissionMini', tank: 'tankMini' },
+    newCore: [['cab', 2, 5], ['transmission', 2, 3], ['tank', 4, 3], ['wheel', 1, 1], ['wheel', 4, 1], ['wheel', 1, 7], ['wheel', 4, 7]],
   },
   wagon: {
     oldLayout: [' FFFFF ', 'LXDDDXR', 'LXEEXXR', 'LDEEDDR', 'LXDXDXR', 'LXDXXXR', ' BBBBB '],
-    newLayout: [' FFFFF ', 'LXDDDXR', 'LXEEXXR', 'LDEEDDR', 'LXXXXXR', 'LXXXXXR', ' BBBBB '],
+    newLayout: [' FFFFFF ', 'LXXDDDXR', 'LXEEDDXR', 'LDEEDDDR', 'LXXXXDXR', 'LXXXXDXR', ' BBBBBB '],
     oldCore: [['cab', 4, 2], ['transmissionHeavy', 3, 4], ['tankHeavy', 3, 5], ['wheelHeavy', 1, 1], ['wheelHeavy', 5, 1], ['wheelHeavy', 1, 4], ['wheelHeavy', 5, 4]],
-    newCore: [['cab', 4, 2], ['transmissionHeavy', 2, 4], ['tankHeavy', 4, 4], ['wheelHeavy', 1, 1], ['wheelHeavy', 5, 1], ['wheelHeavy', 1, 4], ['wheelHeavy', 5, 4]],
+    newCore: [['cab', 2, 1], ['transmissionHeavy', 2, 4], ['tankHeavy', 4, 4], ['wheelHeavy', 1, 1], ['wheelHeavy', 6, 1], ['wheelHeavy', 1, 4], ['wheelHeavy', 6, 4]],
   },
   courier: {
     oldLayout: [' FFFF ', 'LXEEXR', 'LXEEXR', 'LDXDDR', 'LXXXXR', 'LXXDXR', ' BBBB '],
-    newLayout: [' FFFF ', 'LXEEXR', 'LXEEXR', 'LXXXDR', 'LXXXXR', 'LXXXXR', ' BBBB '],
+    newLayout: [' FFFF ', 'LXXXXR', 'LXXXXR', 'LDEEXR', 'LDEEXR', 'LDXDDR', 'LXDDXR', 'LXDDXR', ' BBBB '],
     oldCore: [['cabNarrow', 2, 3], ['transmission', 3, 4], ['tank', 2, 5], ['wheel', 1, 1], ['wheel', 4, 1], ['wheel', 1, 4], ['wheel', 4, 4]],
-    newCore: [['cab', 1, 3], ['transmission', 2, 3], ['tank', 2, 5, 1], ['wheel', 1, 1], ['wheel', 4, 1], ['wheel', 1, 4], ['wheel', 4, 4]],
+    newCore: [['cab', 2, 5], ['transmission', 2, 1], ['tank', 4, 3], ['wheel', 1, 1], ['wheel', 4, 1], ['wheel', 1, 6], ['wheel', 4, 6]],
     renamed: { cabNarrow: 'cab' },
   },
   van: {
@@ -71,15 +70,15 @@ export const CHASSIS_1_5: Record<string, ChassisGrid> = {
   },
   jeep: {
     oldLayout: [' FFFF ', 'LXXDXR', 'LXXDXR', 'LDDXDR', 'LXEEXR', 'LXEEXR', ' BBBB '],
-    newLayout: [' FFFF ', 'LXXXXR', 'LXXXXR', 'LXXXDR', 'LXEEXR', 'LXEEXR', ' BBBB '],
+    newLayout: [' FFFF ', 'LXXXXR', 'LXXXXR', 'LDDDDR', 'LDXDDR', 'LDDDDR', 'LDEEDR', 'LXEEXR', 'LXXXXR', ' BBBB '],
     oldCore: [['cab', 2, 2], ['transmission', 3, 3], ['tank', 2, 1], ['wheel', 1, 1], ['wheel', 4, 1], ['wheel', 1, 4], ['wheel', 4, 4]],
-    newCore: [['cab', 1, 3], ['transmission', 2, 2], ['tank', 2, 1, 1], ['wheel', 1, 1], ['wheel', 4, 1], ['wheel', 1, 4], ['wheel', 4, 4]],
+    newCore: [['cab', 2, 4], ['transmission', 2, 1], ['tank', 2, 8, 1], ['wheel', 1, 1], ['wheel', 4, 1], ['wheel', 1, 7], ['wheel', 4, 7]],
   },
   convertible: {
     oldLayout: [' FFFFF ', 'LXDDDXR', 'LXXXDXR', 'LDXXXDR', 'LDXXXDR', 'LDDXDDR', 'LXEEDXR', 'LXEEDXR', ' BBBBB '],
-    newLayout: [' FFFFF ', 'LXXXXXR', 'LXXXXXR', 'LDXXXDR', 'LDXXXDR', 'LDDDDDR', 'LXEEDXR', 'LXEEDXR', ' BBBBB '],
+    newLayout: [' FFFFF ', 'LXXXXXR', 'LXXXXXR', 'LDDXXXR', 'LDDXXXR', 'LDDDDDR', 'LXEEDXR', 'LXEEDXR', ' BBBBB '],
     oldCore: [['cabHardtop', 2, 3], ['transmission', 3, 5], ['tankLong', 2, 2], ['wheel', 1, 1], ['wheel', 5, 1], ['wheel', 1, 6], ['wheel', 5, 6]],
-    newCore: [['cabHardtop', 2, 3], ['transmission', 2, 1], ['tankLong', 4, 1], ['wheel', 1, 1], ['wheel', 5, 1], ['wheel', 1, 6], ['wheel', 5, 6]],
+    newCore: [['cabHardtop', 3, 3], ['transmission', 2, 1], ['tankLong', 4, 1], ['wheel', 1, 1], ['wheel', 5, 1], ['wheel', 1, 6], ['wheel', 5, 6]],
   },
   bus: {
     oldLayout: [' FFFFFF ', 'LXXDDDXR', 'LXXDDDXR', 'LDDDDDDR', 'LDDDDDDR', 'LDDDDDDR', 'LDDDDDDR', 'LDDXXDDR', 'LDDEEDDR', 'LXDEEDXR', 'LXDXDDXR', ' BBBBBB '],
@@ -216,14 +215,12 @@ const PART_SHAPES_1_5: Record<string, PartShape> = {
   cabOver: ['core', 2, 2, 200, 0],
   cabWide: ['core', 5, 2, 200, 0],
   transmission: ['core', 2, 2, 150, 0],
-  transmissionMini: ['core', 1, 1, 150, 0],
   transmissionMid: ['core', 2, 2, 170, 0],
   transmissionHeavy: ['core', 2, 2, 200, 0],
   wheel: ['core', 1, 2, 40, 0],
   wheelMid: ['core', 1, 2, 60, 0],
   wheelHeavy: ['core', 1, 2, 90, 0],
   tank: ['core', 1, 2, 60, 0],
-  tankMini: ['core', 1, 1, 60, 0],
   tankLong: ['core', 1, 2, 60, 0],
   tankMid: ['core', 1, 2, 80, 0],
   tankHeavy: ['core', 1, 2, 110, 0],
@@ -262,6 +259,7 @@ function relocate(vehicle: SavedJson): number {
   // What worked is decided on the old grid, with the old sizes, before any part moves.
   const worked = new Set(others.filter((it) => worksOn(chassis.oldLayout, it, PART_SHAPES_1_4)));
   moveCores(chassis, cores);
+  growOnto(chassis, others, worked);
   const blocked = new Set(cores.flatMap((it) => cellsOf(it, PART_SHAPES_1_5)).map(keyOf));
   const { movers, room } = splitItems(chassis, others, worked, blocked);
   let removedValue = 0;
@@ -309,6 +307,26 @@ function newSpot(room: Room, it: Item, worked: boolean): { x: number; y: number;
     if (mount) return mount;
   }
   return freeSpot(room, it, null);
+}
+
+// A grid that grew keeps its front row and left column. The rear armor row, the right armor column and the stored rows
+// after the chassis rows move to the new edges.
+function growOnto(chassis: ChassisGrid, others: Item[], worked: Set<Item>): void {
+  const rows = chassis.newLayout.length - chassis.oldLayout.length;
+  const cols = widthOf(chassis.newLayout) - widthOf(chassis.oldLayout);
+  for (const it of others) {
+    const letter = worked.has(it) ? edgeLetter(chassis.oldLayout, it) : null;
+    if (it.y >= chassis.oldLayout.length || letter === 'B') it.y += rows;
+    if (letter === 'R') it.x += cols;
+  }
+}
+
+const widthOf = (layout: string[]) => Math.max(...layout.map((r) => r.length));
+
+// The one letter an item's old cells carry, or null when they carry several.
+function edgeLetter(layout: string[], it: Item): string | null {
+  const letters = new Set(cellsOf(it, PART_SHAPES_1_4).map((c) => layout[c.y]?.[c.x]));
+  return letters.size === 1 ? [...letters][0] : null;
 }
 
 // Pairs the saved built-in parts with the old cells by defId and reading order, then moves each to the new cell.
