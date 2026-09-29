@@ -1,9 +1,11 @@
 import { EMPTY_STATE, writeState } from '../state';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import type { AgentRun, Ctx, FactoryConfig } from '../types';
 
-export const ROOT = resolve('tmp/factory-periodic-test');
+// Each test file loads its own copy of this module, so each file gets its own folder and parallel files never collide.
+export const ROOT = resolve(`tmp/factory-periodic-test/${randomUUID()}`);
 export const cfg = { home: ROOT, buildModel: 'sonnet', publicChannel: 'public', committeeChat: 'committee', repo: 'o/r' } as FactoryConfig;
 
 export type Fake = { ctx: Ctx; calls: string[]; agentWrites: Record<string, string>; changelog: string[]; diff: string };
