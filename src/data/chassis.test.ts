@@ -54,11 +54,11 @@ describe('chassis grids', () => {
     }
   });
 
-  it('puts the wheels on the model edge columns, one column in from the side armor', () => {
+  it('puts the wheels, two cells long each, one column in from the side armor', () => {
     for (const [id, c] of Object.entries(CHASSIS)) {
       const w = c.layout[0].length;
       const wheels = coreCells(c, 'wheel');
-      expect(wheels.map((cell) => cell.x).sort(), id).toEqual([1, 1, w - 2, w - 2].sort());
+      expect(wheels.map((cell) => cell.x).sort(), id).toEqual([1, 1, 1, 1, w - 2, w - 2, w - 2, w - 2].sort());
     }
   });
 

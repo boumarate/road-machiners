@@ -3,6 +3,8 @@ import { MIGRATIONS } from './save-migrations';
 import PARTS_1_0 from './save-fixtures/1.0-parts.json';
 import WHEELS_1_1 from './save-fixtures/1.1-wheels.json';
 import SKIN_1_2 from './save-fixtures/1.2-skin.json';
+import WHEELS_1_3 from './save-fixtures/1.3-wheels.json';
+import { CHASSIS_1_4 } from './save-migration-long-wheels';
 import { CHASSIS_1_3 } from './save-migration-skin';
 
 describe('save migrations', () => {
@@ -182,5 +184,59 @@ describe('1.2 to 1.3 armor columns outside the model', () => {
     const bad = structuredClone(SKIN_1_2);
     bad.vehicles[0].chassisId = 'ghost';
     expect(() => MIGRATIONS[2](bad)).toThrow(/unknown chassis/);
+  });
+});
+
+describe('1.3 to 1.4 wheels two cells long', () => {
+  type Saved = typeof WHEELS_1_3;
+  type SavedItem = { id: string; x: number; y: number; rot: number; kind: string; good?: string; part?: { defId: string } };
+  const itemsOf = (world: Saved, vehicleId: string) => world.vehicles.find((v) => v.id === vehicleId)!.items as SavedItem[];
+  const cellOf = (world: Saved, vehicleId: string, itemId: string) => {
+    const it = itemsOf(world, vehicleId).find((entry) => entry.id === itemId);
+    return it && [it.x, it.y];
+  };
+  const migrated = () => MIGRATIONS[3](structuredClone(WHEELS_1_3)) as unknown as Saved;
+
+  it('moves every built-in part of every chassis to the new cells, once each', () => {
+    for (const [chassisId, grid] of Object.entries(CHASSIS_1_4)) {
+      const world = structuredClone(WHEELS_1_3);
+      world.vehicles = [{
+        id: 'v1',
+        chassisId,
+        items: grid.oldCore.map(([defId, x, y, rot], i) => ({ id: `c${i}`, x, y, rot: rot ?? 0, kind: 'part', part: { id: `pc${i}`, defId, hp: 40, wear: 0 } })),
+      }] as never;
+      const cores = itemsOf(MIGRATIONS[3](world) as unknown as Saved, 'v1');
+      expect(cores.map((it) => `${it.part!.defId}@${it.x},${it.y}`).sort(), chassisId).toEqual(grid.newCore.map(([defId, x, y]) => `${defId}@${x},${y}`).sort());
+    }
+  });
+
+  it('moves the rear wheels a row forward and the scout tank and transmission behind the front wheels', () => {
+    const world = migrated();
+    expect(cellOf(world, 'v1', 'i6')).toEqual([1, 5]);
+    expect(cellOf(world, 'v1', 'i3')).toEqual([1, 3]);
+    expect(cellOf(world, 'v1', 'i2')).toEqual([5, 3]);
+  });
+
+  it('moves a good off a cell that a built-in part now takes to the first free cargo cell', () => {
+    const world = migrated();
+    const [x, y] = cellOf(world, 'v1', 'i50')!;
+    expect([x, y]).not.toEqual([1, 3]);
+    expect(CHASSIS_1_4.scout.newLayout[y][x]).toBe('D');
+  });
+
+  it('moves a gun that stood on a new wheel cell to a free deck cell where it still works', () => {
+    const world = structuredClone(WHEELS_1_3);
+    world.vehicles = [{ id: 'v1', chassisId: 'hauler', items: [
+      ...CHASSIS_1_4.hauler.oldCore.map(([defId, x, y], i) => ({ id: `c${i}`, x, y, rot: 0, kind: 'part', part: { id: `pc${i}`, defId, hp: 40, wear: 0 } })),
+      { id: 'g1', x: 1, y: 2, rot: 0, kind: 'part', part: { id: 'pg1', defId: 'mg', hp: 40, wear: 0 } },
+    ] }] as never;
+    const [x, y] = cellOf(MIGRATIONS[3](world) as unknown as Saved, 'v1', 'g1')!;
+    expect(CHASSIS_1_4.hauler.newLayout[y][x]).toBe('D');
+  });
+
+  it('fails loudly on a chassis it does not know', () => {
+    const world = structuredClone(WHEELS_1_3);
+    world.vehicles = [{ id: 'v1', chassisId: 'tank', items: [] }] as never;
+    expect(() => MIGRATIONS[3](world)).toThrow('unknown chassis');
   });
 });

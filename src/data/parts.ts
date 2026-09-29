@@ -676,14 +676,14 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     id: "transmissionHeavy", kind: "core", name: "Heavy transmission", hp: 90, base: 110, tier: 1, w: 1, h: 1, mass: 60, armor: 6, tall: false, role: "transmission",
   },
   wheel: {
-    id: "wheel", kind: "core", name: "Wheel", hp: 30, base: 10, tier: 1, w: 1, h: 1, mass: 25, armor: 2, tall: false, role: "wheel",
+    id: "wheel", kind: "core", name: "Wheel", hp: 30, base: 10, tier: 1, w: 1, h: 2, mass: 25, armor: 2, tall: false, role: "wheel",
   },
   // Van and hauler drive parts, and the heavy ones of the gunwagon, carrier, tractor and longbed.
   wheelMid: {
-    id: "wheelMid", kind: "core", name: "Truck wheel", hp: 50, base: 10, tier: 1, w: 1, h: 1, mass: 25, armor: 3, tall: false, role: "wheel",
+    id: "wheelMid", kind: "core", name: "Truck wheel", hp: 50, base: 10, tier: 1, w: 1, h: 2, mass: 25, armor: 3, tall: false, role: "wheel",
   },
   wheelHeavy: {
-    id: "wheelHeavy", kind: "core", name: "Heavy wheel", hp: 80, base: 10, tier: 1, w: 1, h: 1, mass: 25, armor: 5, tall: false, role: "wheel",
+    id: "wheelHeavy", kind: "core", name: "Heavy wheel", hp: 80, base: 10, tier: 1, w: 1, h: 2, mass: 25, armor: 5, tall: false, role: "wheel",
   },
   // The small tank fits the scout, the buggy, the courier and the jeep. The convertible carries the long tank.
   tank: {
