@@ -102,10 +102,10 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
     spread: 1,
     rounds: 1,
     recoil: 0.8,
-    shake: 4,
+    shake: 1,
     stray: 0.05,
     round: {
-      damage: 23,
+      damage: 21,
       pen: 7,
       blast: false,
       speed: 900,
@@ -174,7 +174,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
     spread: 1.6,
     rounds: 1,
     recoil: 1.5,
-    shake: 4,
+    shake: 1.5,
     stray: 0.1,
     round: {
       damage: 54,
@@ -210,7 +210,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
     spread: 2,
     rounds: 2,
     recoil: 3,
-    shake: 4,
+    shake: 1.5,
     stray: 0.1,
     round: {
       damage: 12,
@@ -318,10 +318,10 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
     spread: 0.8,
     rounds: 1,
     recoil: 2,
-    shake: 4.5,
+    shake: 1.2,
     stray: 0.05,
     round: {
-      damage: 39,
+      damage: 35,
       pen: 15,
       blast: false,
       speed: 950,
@@ -390,7 +390,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
     spread: 1.4,
     rounds: 1,
     recoil: 1,
-    shake: 5,
+    shake: 2,
     stray: 0.1,
     round: {
       damage: 72,
@@ -426,7 +426,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
     spread: 1.6,
     rounds: 3,
     recoil: 2,
-    shake: 4.5,
+    shake: 1.4,
     stray: 0.1,
     round: {
       damage: 10,
@@ -534,10 +534,10 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
     spread: 0.6,
     rounds: 1,
     recoil: 2,
-    shake: 5,
+    shake: 1.4,
     stray: 0.05,
     round: {
-      damage: 86,
+      damage: 77,
       pen: 17,
       blast: false,
       speed: 950,
@@ -606,7 +606,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
     spread: 2,
     rounds: 1,
     recoil: 8,
-    shake: 5,
+    shake: 2,
     stray: 0.1,
     round: {
       damage: 114,
@@ -642,7 +642,7 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
     spread: 1.2,
     rounds: 4,
     recoil: 1.5,
-    shake: 5,
+    shake: 1.5,
     stray: 0.1,
     round: {
       damage: 15,
