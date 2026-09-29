@@ -20,13 +20,29 @@ import { playerCommand } from './world';
 // spot with the best gun layout, so a gun covers sides the others miss and a box blinds no gun. Armor takes the
 // spot that shields the most cab lanes. `mount` narrows the cells a part may use, like one side's edge for armor.
 export function mountPart(world: World, v: Vehicle, part: PartInstance, mount: Cell[] = MOUNT_CELLS[partDef(part.defId).kind]): boolean {
-  const item: GridItem = { id: newId(world, 'i'), x: 0, y: 0, rot: 0, kind: 'part', part };
-  const def = partDef(part.defId);
-  const spot = def.kind === 'weapon' || def.tall ? bestArcSpot(v, item, mount)
-    : def.kind === 'armor' ? bestShieldSpot(v, item, mount) : findSpot(gridOf(v), v.items, item, mount, null);
+  const item: PartItem = { id: newId(world, 'i'), x: 0, y: 0, rot: 0, kind: 'part', part };
+  const spot = installSpot(v, item, mount);
   if (!spot) return false;
   v.items.push({ ...item, ...spot });
   return true;
+}
+
+type PartItem = Extract<GridItem, { kind: 'part' }>;
+
+// The spot mountPart would pick for this part item, or null when no mount has room. The item may already stand
+// on the grid, as a spare: its own cells count as free.
+export function installSpot(v: Vehicle, item: PartItem, mount: Cell[] = MOUNT_CELLS[partDef(item.part.defId).kind]): Spot | null {
+  const others = { ...v, items: v.items.filter((it) => it.id !== item.id) };
+  const def = partDef(item.part.defId);
+  if (def.kind === 'weapon' || def.tall) return bestArcSpot(others, item, mount);
+  if (def.kind === 'armor') return bestShieldSpot(others, item, mount);
+  return findSpot(gridOf(others), others.items, item, mount, null);
+}
+
+// The spot for an item in the truck's storage, off every mount, or null when only mounts or nothing is free.
+export function stowSpot(v: Vehicle, item: GridItem): Spot | null {
+  const avoid = item.kind === 'part' ? MOUNT_CELLS[partDef(item.part.defId).kind] : null;
+  return findSpot(gridOf(v), v.items, item, null, avoid);
 }
 
 function bestArcSpot(v: Vehicle, item: GridItem, mount: Cell[]): Spot | null {
@@ -53,7 +69,7 @@ function bestShieldSpot(v: Vehicle, item: GridItem, mount: Cell[]): Spot | null 
 // Put a spare part anywhere it fits without mounting it. Returns false when there is no room.
 export function stowPart(world: World, v: Vehicle, part: PartInstance): boolean {
   const item: GridItem = { id: newId(world, 'i'), x: 0, y: 0, rot: 0, kind: 'part', part };
-  const spot = findSpot(gridOf(v), v.items, item, null, MOUNT_CELLS[partDef(part.defId).kind]);
+  const spot = stowSpot(v, item);
   if (!spot) return false;
   v.items.push({ ...item, ...spot });
   return true;

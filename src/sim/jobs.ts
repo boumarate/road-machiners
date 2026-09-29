@@ -257,6 +257,16 @@ export function cancelJob(world: World, v: Vehicle): void {
   if (v.job) endJob(world, v, v.job, "cancelled");
 }
 
+// The player command that aborts a running refit. A refit changes the grid and takes its pickup only when it
+// finishes, so ending the job leaves every item where it stood before the refit began.
+export function cancelRefit(world: World): World {
+  return playerCommand(world, (w) => {
+    const v = playerVehicle(w);
+    if (v.job?.kind !== "refit") throw new Error("No refit to cancel");
+    cancelJob(w, v);
+  });
+}
+
 function endJob(
   world: World,
   v: Vehicle,

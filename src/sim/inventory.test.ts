@@ -6,8 +6,8 @@ import { REGION } from '../data/region';
 import { makePart } from './factory';
 import { update } from './world';
 import { openSides } from './armor';
-import { freeCells, goodsCount, gridOf, mountedItems, mountedParts } from './grid';
-import { dumpItem, mountPart, moveItem, removeAllGoods, spareParts, storePart, stowPart, takeFromStorage } from './inventory';
+import { freeCells, goodsCount, gridOf, isMounted, mountedItems, mountedParts } from './grid';
+import { dumpItem, installSpot, mountPart, moveItem, removeAllGoods, spareParts, storePart, stowPart, stowSpot, takeFromStorage } from './inventory';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import { addVehicle, emptyWorld } from './testkit';
 import type { GridItem, Vehicle, World } from './types';
@@ -192,5 +192,48 @@ describe('stores', () => {
     const off = storePart(w, item(w, 'jerrycans').id);
     expect(off.player.fuel).toBe(CHASSIS.scout.fuelCap - 1);
     expect(off.events.some((e) => e.t === 'supply')).toBe(false);
+  });
+});
+
+describe('spots for double click moves', () => {
+  const partItem = (w: World, defId: string): Extract<GridItem, { kind: 'part' }> => ({ id: 'probe', x: 0, y: 0, rot: 0, kind: 'part', part: makePart(w, defId, 0) });
+
+  it('installSpot finds a free mount that holds the part', () => {
+    const w = emptyWorld();
+    const probe = partItem(w, 'cage');
+    const spot = installSpot(w.vehicles[0], probe);
+    expect(spot).not.toBeNull();
+    expect(isMounted('scout', { ...probe, ...spot! })).toBe(true);
+  });
+
+  it('installSpot is null when every fitting mount is taken', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    while (mountPart(w, me, makePart(w, 'cage', 0)));
+    expect(installSpot(me, partItem(w, 'cage'))).toBeNull();
+  });
+
+  it('installSpot ignores the spare own cells', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    const spare = { ...partItem(w, 'cage'), id: 'spare' };
+    const spot = installSpot(me, spare)!;
+    me.items.push({ ...spare, ...spot });
+    expect(installSpot(me, { ...spare, ...spot })).toEqual(spot);
+  });
+
+  it('stowSpot keeps a part off the mounts', () => {
+    const w = emptyWorld();
+    const probe = partItem(w, 'cage');
+    const spot = stowSpot(w.vehicles[0], probe);
+    expect(spot).not.toBeNull();
+    expect(isMounted('scout', { ...probe, ...spot! })).toBe(false);
+  });
+
+  it('stowSpot is null when the grid has no free plain cell', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    while (stowPart(w, me, makePart(w, 'cage', 0)));
+    expect(stowSpot(me, partItem(w, 'cage'))).toBeNull();
   });
 });
