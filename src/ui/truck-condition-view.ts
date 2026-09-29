@@ -1,11 +1,13 @@
 import { baseGrid } from "../sim/grid";
 import type { Vehicle } from "../sim/types";
 import { createIcon } from "./cards";
+import { cellPx } from "./cell-shape";
 import { el } from "./dom";
 import { conditionLabel, openArmorSlots, TruckConditionReadout } from "./hud-readout";
 import "./truck-condition.css";
 
-const CELL = 30;
+// The cell is narrower than it was square, so the taller grid keeps its old height above the HUD.
+const CELL = cellPx(22);
 
 type ConditionPart = ReturnType<TruckConditionReadout["update"]>[number];
 // Gun numbers aiming at each part id, and the click that aims the chosen guns at a part.
@@ -33,8 +35,8 @@ export class TruckConditionView {
 
   render(vehicle: Vehicle, aim?: ConditionAim): void {
     const grid = baseGrid(vehicle.chassisId);
-    this.body.style.width = `${grid.w * 30}px`;
-    this.body.style.height = `${grid.h * 30}px`;
+    this.body.style.width = `${grid.w * CELL.w}px`;
+    this.body.style.height = `${grid.h * CELL.h}px`;
     const parts = this.readout.update(vehicle);
     const ids = new Set(parts.map((part) => part.id));
     for (const [id, node] of this.nodes) {
@@ -43,7 +45,7 @@ export class TruckConditionView {
       this.nodes.delete(id);
     }
     this.slots.replaceChildren(...openArmorSlots(vehicle).map(({ x, y }) =>
-      el("div", { class: "condition-slot", style: `left:${x * CELL}px;top:${y * CELL}px;width:${CELL}px;height:${CELL}px` })));
+      el("div", { class: "condition-slot", style: `left:${x * CELL.w}px;top:${y * CELL.h}px;width:${CELL.w}px;height:${CELL.h}px` })));
     for (const part of parts) this.renderPart(part, aim);
     this.tiles = parts;
     this.showTip();
@@ -54,8 +56,8 @@ export class TruckConditionView {
     this.tip.style.display = part ? "" : "none";
     if (!part) return;
     this.tip.textContent = conditionLabel(part);
-    this.tip.style.left = `${part.x * CELL}px`;
-    this.tip.style.top = `${part.y === 0 ? (part.y + part.h) * CELL + 2 : part.y * CELL - 22}px`;
+    this.tip.style.left = `${part.x * CELL.w}px`;
+    this.tip.style.top = `${part.y === 0 ? (part.y + part.h) * CELL.h + 2 : part.y * CELL.h - 22}px`;
   }
 
   private renderPart(part: ConditionPart, aim?: ConditionAim): void {
@@ -82,7 +84,7 @@ export class TruckConditionView {
       if (this.hoverId === part.id) this.hoverId = null;
       this.showTip();
     };
-    node.style.cssText = `left:${part.x * 30}px;top:${part.y * 30}px;width:${part.w * 30}px;height:${part.h * 30}px`;
+    node.style.cssText = `left:${part.x * CELL.w}px;top:${part.y * CELL.h}px;width:${part.w * CELL.w}px;height:${part.h * CELL.h}px`;
     fillOf(node).style.height = `${part.percent}%`;
     if (part.hit) this.flashDamage(node);
   }

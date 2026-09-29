@@ -64,6 +64,7 @@ import {
   storageItem,
   footprint,
 } from "./inventory-draw";
+import { cellPx } from "./cell-shape";
 import { fuelLiters, kg } from "./units";
 import { moneyLabel } from "./hud-readout";
 import {
@@ -77,9 +78,9 @@ import {
   type LastClick,
 } from "./inventory-moves";
 
-const CELL_PX = 42;
+const CELL_PX = 32;
 // Below this the part icons and condition bars stop being readable, so a taller grid scrolls instead.
-const MIN_CELL_PX = 28;
+const MIN_CELL_PX = 21;
 
 type Drag = {
   source: ItemSource;
@@ -106,7 +107,7 @@ export class InventoryView {
   private selectedItem: string | null = null;
   private loot: string | null = null; // salvage stock shown beside the grid, after a finished search
   private truck: string | null = null; // knocked-out truck whose grid shows on the right, for looting
-  private cell = CELL_PX; // grid cell size in pixels, shrunk by fitTo()
+  private cell = cellPx(CELL_PX); // grid cell size in pixels, shrunk by fitTo()
 
   constructor(
     private host: UiHost,
@@ -134,14 +135,14 @@ export class InventoryView {
   // Renders the mounted view again with grid cells shrunk until the truck fits the height of box, the scrolling
   // column that holds the view. Stops at MIN_CELL_PX.
   fitTo(box: HTMLElement): void {
-    this.cell = CELL_PX;
+    this.cell = cellPx(CELL_PX);
     this.render();
     const truck = this.root.querySelector(".inv-truck");
     if (!truck) throw new Error("Inventory view is not rendered");
     const over = truck.getBoundingClientRect().bottom - box.getBoundingClientRect().bottom;
     if (over <= 0) return;
     const rows = gridOf(playerVehicle(this.host.world())).h;
-    this.cell = Math.max(MIN_CELL_PX, Math.floor(this.cell - over / rows));
+    this.cell = cellPx(Math.max(MIN_CELL_PX, Math.floor(this.cell.w - over / rows / (this.cell.h / this.cell.w))));
     this.render();
   }
 
@@ -257,8 +258,8 @@ export class InventoryView {
         if (!this.gridEl) throw new Error("Grid item pressed without a grid");
         const r = this.gridEl.getBoundingClientRect();
         const grab = {
-          x: Math.floor((e.clientX - r.left) / this.cell) - it.x,
-          y: Math.floor((e.clientY - r.top) / this.cell) - it.y,
+          x: Math.floor((e.clientX - r.left) / this.cell.w) - it.x,
+          y: Math.floor((e.clientY - r.top) / this.cell.h) - it.y,
         };
         if (needsHold(me.chassisId, it)) this.startPress(e, "grid", it.id, it, grab);
         else this.startDrag(e, "grid", it.id, it, grab);
@@ -676,7 +677,7 @@ export class InventoryView {
     node.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
       const r = grid.getBoundingClientRect();
-      this.startDrag(e, "truck", it.id, it, { x: Math.floor((e.clientX - r.left) / this.cell) - it.x, y: Math.floor((e.clientY - r.top) / this.cell) - it.y });
+      this.startDrag(e, "truck", it.id, it, { x: Math.floor((e.clientX - r.left) / this.cell.w) - it.x, y: Math.floor((e.clientY - r.top) / this.cell.h) - it.y });
     });
     return node;
   }
@@ -776,7 +777,7 @@ export class InventoryView {
         e.clientX - this.drag.start.x,
         e.clientY - this.drag.start.y,
       ) >=
-      this.cell / 4
+      this.cell.w / 4
     )
       this.drag.moved = true;
     const spot = this.spotAt(e.clientX, e.clientY);
@@ -792,14 +793,14 @@ export class InventoryView {
     const ok = onGrid && this.placementProblem(d) === null;
     d.ghost.className = `inv-ghost ${onGrid ? (ok ? "ok" : "no") : ""}`;
     d.ghost.textContent = itemLabel(d.item).short;
-    d.ghost.style.width = `${size.w * this.cell}px`;
-    d.ghost.style.height = `${size.h * this.cell}px`;
+    d.ghost.style.width = `${size.w * this.cell.w}px`;
+    d.ghost.style.height = `${size.h * this.cell.h}px`;
     if (onGrid && g) {
-      d.ghost.style.left = `${g.left + d.item.x * this.cell}px`;
-      d.ghost.style.top = `${g.top + d.item.y * this.cell}px`;
+      d.ghost.style.left = `${g.left + d.item.x * this.cell.w}px`;
+      d.ghost.style.top = `${g.top + d.item.y * this.cell.h}px`;
     } else {
-      d.ghost.style.left = `${e.clientX - this.cell / 2}px`;
-      d.ghost.style.top = `${e.clientY - this.cell / 2}px`;
+      d.ghost.style.left = `${e.clientX - this.cell.w / 2}px`;
+      d.ghost.style.top = `${e.clientY - this.cell.h / 2}px`;
     }
   }
 
@@ -825,8 +826,8 @@ export class InventoryView {
     const r = this.gridEl.getBoundingClientRect();
     if (cx < r.left || cy < r.top || cx >= r.right || cy >= r.bottom)
       return null;
-    const x = Math.floor((cx - r.left) / this.cell) - this.drag.grab.x;
-    const y = Math.floor((cy - r.top) / this.cell) - this.drag.grab.y;
+    const x = Math.floor((cx - r.left) / this.cell.w) - this.drag.grab.x;
+    const y = Math.floor((cy - r.top) / this.cell.h) - this.drag.grab.y;
     return { x, y, rot: this.drag.item.rot };
   }
 

@@ -7,6 +7,7 @@ import { maxHp } from "../sim/wear";
 import { itemCells, itemSize, type Cell, type Grid } from "../sim/grid";
 import type { GridItem, PartInstance, RefitJob, RefitMove, Vehicle, World } from "../sim/types";
 import { playerVehicle } from "../sim/damage";
+import { type CellPx } from "./cell-shape";
 import { el } from "./dom";
 import { wearLabel } from "./format";
 import { createIcon, goodIcon, partIcon, type IconName } from "./cards";
@@ -46,8 +47,8 @@ export function lootGoodItem(good: string): GridItem {
 }
 
 // An empty inventory grid of mount cells. Items go on top.
-export function gridEl(g: Grid, cell: number): HTMLElement {
-  const grid = el("div", { class: "inv-grid", style: `width:${g.w * cell}px;height:${g.h * cell}px` });
+export function gridEl(g: Grid, cell: CellPx): HTMLElement {
+  const grid = el("div", { class: "inv-grid", style: `width:${g.w * cell.w}px;height:${g.h * cell.h}px` });
   grid.addEventListener("contextmenu", (e) => e.preventDefault());
   for (let y = 0; y < g.h; y++)
     for (let x = 0; x < g.w; x++) {
@@ -57,12 +58,12 @@ export function gridEl(g: Grid, cell: number): HTMLElement {
   return grid;
 }
 
-export function cellEl(c: Cell, x: number, y: number, cell: number): HTMLElement {
+export function cellEl(c: Cell, x: number, y: number, cell: CellPx): HTMLElement {
   return el("div", { class: `inv-cell c-${c === "." ? "plain" : c}`, style: pos(x, y, 1, 1, cell), title: CELL_TITLE[c] }, c === "." || c === "X" ? "" : c);
 }
 
 // The box an item draws on a grid: its kind color, icon, name and condition bar.
-export function itemBox(it: GridItem, mounted: boolean, cell: number): HTMLElement {
+export function itemBox(it: GridItem, mounted: boolean, cell: CellPx): HTMLElement {
   const cells = itemCells(it);
   const x = Math.min(...cells.map((c) => c.x));
   const y = Math.min(...cells.map((c) => c.y));
@@ -88,8 +89,8 @@ export function removalIds(w: World, target: Vehicle): Set<string> {
   return new Set(target.items.filter((it) => it.kind === "part" && it.part.id === partId).map((it) => it.id));
 }
 
-function pos(x: number, y: number, w: number, h: number, cell: number): string {
-  return `left:${x * cell}px;top:${y * cell}px;width:${w * cell}px;height:${h * cell}px`;
+function pos(x: number, y: number, w: number, h: number, cell: CellPx): string {
+  return `left:${x * cell.w}px;top:${y * cell.h}px;width:${w * cell.w}px;height:${h * cell.h}px`;
 }
 
 // The parts a running refit moves, at the spots they go to.
@@ -184,15 +185,15 @@ export function blockerIds(v: Vehicle, it: GridItem, def: WeaponDef): string[] {
 }
 
 // The fan over the grid, nose up. radius is in pixels, cell is the grid cell size in pixels.
-export function fanSvg(v: Vehicle, it: GridItem, def: WeaponDef, size: { w: number; h: number }, cell: number): SVGSVGElement {
+export function fanSvg(v: Vehicle, it: GridItem, def: WeaponDef, size: { w: number; h: number }, cell: CellPx): SVGSVGElement {
   const { w, h } = itemSize(it);
-  const cx = (it.x + w / 2) * cell;
-  const cy = (it.y + h / 2) * cell;
-  const radius = Math.max(size.w, size.h) * cell;
+  const cx = (it.x + w / 2) * cell.w;
+  const cy = (it.y + h / 2) * cell.h;
+  const radius = Math.max(size.w * cell.w, size.h * cell.h);
   const svg = document.createElementNS(SVG, "svg");
   svg.setAttribute("class", "inv-fan");
-  svg.setAttribute("width", String(size.w * cell));
-  svg.setAttribute("height", String(size.h * cell));
+  svg.setAttribute("width", String(size.w * cell.w));
+  svg.setAttribute("height", String(size.h * cell.h));
   const open = SIDES.filter((side) => !sideBlockers(v, it)[side]);
   for (const span of fireSpans(def.arc, open)) {
     const path = document.createElementNS(SVG, "path");
