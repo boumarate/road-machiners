@@ -44,6 +44,18 @@ describe('fight driving', () => {
     expect(Math.abs(angleDiff(gun.heading, bearing(gun.pos, next.pos)))).toBeGreaterThan(Math.PI / 6);
   });
 
+  it('a light fighter leaves the ram path of a much heavier target', () => {
+    const w = emptyWorld({ x: 40, y: 30 });
+    const heavy = addVehicle(w, 'player', 'hauler', ['stockEngine', 'mg', 'plowRam'], { x: 40, y: 30 }, 0);
+    heavy.id = w.vehicles[0].id;
+    heavy.speed = 3; // charging, so its ram reaches the fighter's spots this turn
+    w.vehicles = [heavy, ...w.vehicles.slice(1, -1)];
+    const v = fighter(w, 'gunwagon', ['stockEngine', 'mg'], { x: 46, y: 30 }, 'buggy');
+    v.speed = 4;
+    const next = afterTurn(w, v, fightPoint(w, v, heavy, 4));
+    expect(Math.abs(angleDiff(heavy.heading, bearing(heavy.pos, next.pos)))).toBeGreaterThan(Math.PI / 4);
+  });
+
   it('a circling fighter picks a point ahead around the target in its direction', () => {
     for (const turn of [1, -1] as const) {
       const w = emptyWorld({ x: 40, y: 30 });

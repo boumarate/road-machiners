@@ -1080,8 +1080,10 @@ export const NPC_BEHAVIOR = {
   // target's gun damage that bears on it, minus rangeWeight × how far off its range the point is as a share of it,
   // minus travelWeight × the drive past one turn at top speed as a share of that speed. A circling fighter adds
   // circleWeight × how far ahead around the target the point lies, as a share of a quarter turn, and never drives
-  // slower than circlePace tiles a turn. A fighter rolls fightWhim every whimTurns turns.
-  fight: { angles: 16, arcWeight: 2, threatWeight: 2, rangeWeight: 1, travelWeight: 1, circleWeight: 1, circlePace: 3, whimTurns: 4 },
+  // slower than circlePace tiles a turn. Every fighter subtracts rammedWeight × the danger of standing in the target's
+  // ram path, which grows with how much heavier the target is and with a ram bar on its nose. A fighter rolls
+  // fightWhim every whimTurns turns.
+  fight: { angles: 16, arcWeight: 2, threatWeight: 2, rangeWeight: 1, travelWeight: 1, circleWeight: 1, rammedWeight: 2, circlePace: 3, whimTurns: 4 },
   // One driver in three the player knocks out holds a grudge. See the revenge state.
   revengeChance: 0.33,
   recoverCondition: 0.5,
@@ -1118,6 +1120,11 @@ export const NPC_BEHAVIOR = {
   // Ram weight times this when the forecast says the ram costs the driver more than the target, or breaks one of
   // its working parts. A ram weight of 9 drops to 0.009, about 1%.
   riskyRam: 0.001,
+  // A ram's weight scales by the rammer's mass over the target's, to this power: twice the mass rams four times as
+  // readily, half the mass a quarter as readily.
+  ramMassPower: 2,
+  // Ram weight share against a truck whose working ram bar faces the rammer.
+  ramBarRam: 0.2,
   // Salvage in sight weighs 10 times a known site out of sight.
   visibleSalvage: 10,
   // A robber mostly picks targets weaker than itself, away from town guards. Rob weight times this when the

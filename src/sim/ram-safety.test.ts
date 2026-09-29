@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import { corePart, mountedParts } from './grid';
 import { planNpcOrders } from './ai';
+import { addGoods, mountPart } from './inventory';
+import { makePart } from './factory';
+import { vehicleMass } from './mass';
+import { partDef } from '../data/parts';
 import { DECISIONS, NPC_BEHAVIOR, NPCS, TRAITS } from '../data/npcs';
 import { dist } from './vec';
 import { thinkNpc } from './npc-activities';
@@ -26,6 +30,28 @@ function createFight() {
 describe('ram chances', () => {
   const BASE_RAM = DECISIONS.ramChance.ram;
   const ramWeight = (world: World, v: Vehicle) => optionWeights(world, v, 'ramChance', world.player.vehicleId, null).ram;
+  // The share the mass ratio gives the ram weight, against the player's truck.
+  const massFactor = (world: World, v: Vehicle) => (vehicleMass(v) / vehicleMass(world.vehicles[0])) ** NPC_BEHAVIOR.ramMassPower;
+
+  it('rams a heavier target less readily', () => {
+    const { world, raider } = createFight();
+    raider.speed = 5;
+    const light = ramWeight(world, raider)!;
+    addGoods(world, world.vehicles[0], 'scrap', 6); // 600 kg of scrap makes the player's truck heavier
+    const heavy = ramWeight(world, raider)!;
+    expect(heavy).toBeLessThan(light);
+  });
+
+  it('rams a ram bar facing it less readily', () => {
+    const { world, raider } = createFight();
+    raider.speed = 5;
+    const me = world.vehicles[0];
+    me.heading = Math.PI; // the player's nose faces the raider
+    me.items = me.items.filter((it) => it.kind !== 'part' || partDef(it.part.defId).kind !== 'armor');
+    const bare = ramWeight(world, raider)! / massFactor(world, raider);
+    expect(mountPart(world, me, makePart(world, 'ram', 0), ['F'])).toBe(true);
+    expect(ramWeight(world, raider)! / massFactor(world, raider)).toBeCloseTo(bare * NPC_BEHAVIOR.ramBarRam);
+  });
 
   it('offers a ram only on the fight target ahead within reach', () => {
     const { world, raider } = createFight();
@@ -41,21 +67,22 @@ describe('ram chances', () => {
   it('weighs a gainful ram at its full weight against a lighter target', () => {
     const { world, raider } = createFight();
     raider.speed = 5;
-    expect(ramWeight(world, raider)).toBe(BASE_RAM);
+    expect(ramWeight(world, raider)).toBeCloseTo(BASE_RAM * massFactor(world, raider));
+    expect(massFactor(world, raider)).toBeGreaterThan(1);
   });
 
   it('makes a costly ram rare against a heavier armored target', () => {
     const world = emptyWorld({ x: 35, y: 30 });
     const raider = fighting(world, addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 }));
     raider.speed = 5;
-    expect(ramWeight(world, raider)).toBeCloseTo(BASE_RAM * NPC_BEHAVIOR.riskyRam);
+    expect(ramWeight(world, raider)).toBeCloseTo(BASE_RAM * NPC_BEHAVIOR.riskyRam * massFactor(world, raider));
   });
 
   it('makes a ram rare with a nearly broken engine', () => {
     const { world, raider } = createFight();
     raider.speed = 5;
     mountedParts(raider, 'engine')[0].hp = 1;
-    expect(ramWeight(world, raider)).toBeCloseTo(BASE_RAM * NPC_BEHAVIOR.riskyRam);
+    expect(ramWeight(world, raider)).toBeCloseTo(BASE_RAM * NPC_BEHAVIOR.riskyRam * massFactor(world, raider));
     expect(corePart(raider, 'cab').hp).toBeGreaterThan(0);
   });
 
@@ -63,7 +90,7 @@ describe('ram chances', () => {
     const { world, raider } = createFight();
     raider.speed = 5;
     raider.brain!.traits = ['trader'];
-    expect(ramWeight(world, raider)).toBeCloseTo(BASE_RAM * TRAITS.trader.weights.ramChance!.ram!.mul!);
+    expect(ramWeight(world, raider)).toBeCloseTo(BASE_RAM * TRAITS.trader.weights.ramChance!.ram!.mul! * massFactor(world, raider));
   });
 
   it('rolls once per ram chance and drives through while it chose to ram', () => {
