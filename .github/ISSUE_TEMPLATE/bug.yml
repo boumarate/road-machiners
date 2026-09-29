@@ -1,0 +1,26 @@
+name: Bug report
+description: Report something in the game that works wrong.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can we see it again?
+      description: The steps before the bug. Add a screenshot if you can.
+  - type: input
+    id: version
+    attributes:
+      label: Game version
+      description: The ? menu shows it.
