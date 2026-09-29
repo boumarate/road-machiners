@@ -4,7 +4,6 @@
 import { GOODS } from "../data/goods";
 import { chassisDef } from "../data/chassis";
 import { partDef, type PartKind, type WeaponDef } from "../data/parts";
-import { RULES } from "../data/rules";
 import { STRIP } from "../data/salvage";
 import { isJunk, maxHp } from "../sim/wear";
 import { playerVehicle } from "../sim/damage";
@@ -27,7 +26,7 @@ import {
   storePart,
   takeFromStorage,
 } from "../sim/inventory";
-import { startRepair, startStrip, startWeld, stripYield } from "../sim/jobs";
+import { isParkedForWork, startRepair, startStrip, startWeld, stripYield } from "../sim/jobs";
 import { vehicleHasPerk } from "../sim/progress";
 import { PERK_NUMBERS } from "../data/skills";
 import { repairPlan, type RepairPlan } from "../sim/repair";
@@ -340,7 +339,7 @@ export class InventoryView {
       mounted ? this.patchButton(w, playerVehicle(w), item.part) : null,
       townAt(w) ? this.repairButton(w, item.part) : null,
       !mounted && partDef(item.part.defId).kind !== "core"
-        ? this.stripButton(playerVehicle(w), item.part)
+        ? this.stripButton(w, playerVehicle(w), item.part)
         : null,
     ];
     return buttons.filter((b): b is HTMLElement => b !== null);
@@ -356,7 +355,7 @@ export class InventoryView {
     if (!fieldPatchable(part)) return townOnlyPatch(part);
     const plan = repairPlan(w, me, part.id);
     if (plan.needed === 0) return null;
-    const reason = patchBlocker(me, plan);
+    const reason = patchBlocker(w, me, plan);
     return el(
       "button",
       {
@@ -403,10 +402,11 @@ export class InventoryView {
   // Strips a spare part for units of the parts good. Works on broken and junk spares too, which is
   // the point: a part too far gone to sell whole still yields parts.
   private stripButton(
+    w: World,
     me: Vehicle,
     part: PartInstance,
   ): HTMLElement {
-    const reason = stripBlocker(me);
+    const reason = stripBlocker(w, me);
     return el(
       "button",
       {
@@ -426,13 +426,13 @@ export class InventoryView {
   // Scrap metal offers a weld with the Welder perk. Other goods offer nothing.
   private goodActions(w: World, good: string): HTMLElement[] {
     const me = playerVehicle(w);
-    return good === "scrap" && vehicleHasPerk(w, me, "welder") ? [this.weldButton(me)] : [];
+    return good === "scrap" && vehicleHasPerk(w, me, "welder") ? [this.weldButton(w, me)] : [];
   }
 
   // Welds scrap metal into a scrap armor part.
-  private weldButton(me: Vehicle): HTMLElement {
+  private weldButton(w: World, me: Vehicle): HTMLElement {
     const { scrap, turns } = PERK_NUMBERS.welder;
-    const reason = weldBlocker(me);
+    const reason = weldBlocker(w, me);
     return el(
       "button",
       {
@@ -975,21 +975,21 @@ function itemTitle(it: GridItem, mounted: boolean): string {
 }
 
 // Why a Patch button is disabled, or null when the patch can start.
-function patchBlocker(me: Vehicle, plan: RepairPlan): string | null {
-  if (me.speed > RULES.parkedSpeed) return "Stop to patch";
+function patchBlocker(w: World, me: Vehicle, plan: RepairPlan): string | null {
+  if (!isParkedForWork(w, me)) return "Stop to patch";
   return plan.parts === 0 ? "No parts" : null;
 }
 
 // Why a Strip button is disabled, or null when stripping can start.
-function stripBlocker(me: Vehicle): string | null {
-  if (me.speed > RULES.parkedSpeed) return "Stop to strip";
+function stripBlocker(w: World, me: Vehicle): string | null {
+  if (!isParkedForWork(w, me)) return "Stop to strip";
   if (me.job) return "Busy";
   return null;
 }
 
 // Why a Weld button is disabled, or null when welding can start.
-function weldBlocker(me: Vehicle): string | null {
-  if (me.speed > RULES.parkedSpeed) return "Stop to weld";
+function weldBlocker(w: World, me: Vehicle): string | null {
+  if (!isParkedForWork(w, me)) return "Stop to weld";
   if (me.job) return "Busy";
   const scrap = PERK_NUMBERS.welder.scrap;
   return (goodsCount(me).scrap ?? 0) < scrap ? `Needs ${scrap} scrap` : null;

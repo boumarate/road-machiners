@@ -1,5 +1,6 @@
 // Parked jobs: work that needs the truck to stay parked for several turns. One rule for every driver.
 // A job is cancelled on any turn its truck ends above parked speed, and its finished turns are lost.
+// A player truck with a drive order counts as moving too, since it still rolls slowly as it starts.
 // No driver works with a hostile in sight: no job starts then, and a running job is cancelled.
 // A repair is also cancelled once the grid holds no parts for it.
 
@@ -35,6 +36,13 @@ export function isBusy(v: Vehicle): boolean {
   return v.job !== null && !isAutoPatch(v.job);
 }
 
+// The truck stands still for work. A player drive order means the player is leaving. NPC orders are replanned
+// every turn and can hold at a point the NPC cannot reach, so only the player's order counts.
+export function isParkedForWork(world: World, v: Vehicle): boolean {
+  if (v.speed > RULES.parkedSpeed) return false;
+  return v.id !== world.player.vehicleId || v.order === null || v.order.kind === "brake";
+}
+
 // A hostile the driver sees.
 export function inCombat(world: World, v: Vehicle): boolean {
   return world.vehicles.some((other) => isHostile(world, v, other) && canVehicleSee(world, v, other.pos));
@@ -45,7 +53,7 @@ export function startJob(world: World, v: Vehicle, job: Job): void {
   if (isAutoPatch(v.job)) cancelJob(world, v);
   if (v.job)
     throw new Error(`${v.name} is already busy with a ${v.job.kind} job`);
-  if (v.speed > RULES.parkedSpeed) throw new Error("Stop the truck first");
+  if (!isParkedForWork(world, v)) throw new Error("Stop the truck first");
   v.job = job;
   world.events.push({
     t: "job",
@@ -96,7 +104,7 @@ export function startAutoRepair(world: World): void {
 
 // Idle, parked, out of combat, with parts to patch with.
 function canAutoPatch(world: World, v: Vehicle): boolean {
-  return !v.job && v.speed <= RULES.parkedSpeed && (goodsCount(v).parts ?? 0) > 0 && !inCombat(world, v);
+  return !v.job && isParkedForWork(world, v) && (goodsCount(v).parts ?? 0) > 0 && !inCombat(world, v);
 }
 
 // The player command that starts stripping a spare, non-core part for units of the parts good.
@@ -183,7 +191,7 @@ export function advanceJobs(world: World): void {
 
 // A turn handler does one turn of work and returns true once the job is finished.
 function advanceJob(world: World, v: Vehicle, job: Job): void {
-  if (v.speed > RULES.parkedSpeed || inCombat(world, v)) return endJob(world, v, job, "cancelled");
+  if (!isParkedForWork(world, v) || inCombat(world, v)) return endJob(world, v, job, "cancelled");
   if (job.kind === "refit") return advanceRefit(world, v, job);
   if (isStalled(world, v, job)) return endJob(world, v, job, "cancelled");
   if (jobTurn(world, v, job)) endJob(world, v, job, "done");

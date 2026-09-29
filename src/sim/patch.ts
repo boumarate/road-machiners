@@ -6,13 +6,13 @@
 import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { PERK_NUMBERS } from '../data/skills';
 import { REGION } from '../data/region';
-import { RULES } from '../data/rules';
 import { PATCH } from '../data/wear';
 import { isJunk, maxHp, restorePart } from './wear';
 import { playerVehicle, vehicleById } from './damage';
 import { getTradePrice } from './economy';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { removeGoods } from './inventory';
+import { isParkedForWork } from './jobs';
 import { decide, optionWeights } from './npc-decisions';
 import { machiningMult, planPartRepair } from './repair';
 import { getResources } from './resources';
@@ -115,15 +115,11 @@ export function patchData(s: NpcState): Extract<StateData, { kind: 'patch' }> {
   return s.data;
 }
 
-function isParked(v: Vehicle): boolean {
-  return v.speed <= RULES.parkedSpeed;
-}
-
 // Work happens this turn: both trucks are parked within reach of each other.
 export function isPatching(world: World, s: NpcState): boolean {
   const patcher = vehicleById(world, s.holder);
   const client = vehicleById(world, s.other);
-  return isParked(patcher) && isParked(client) && inTowReach(patcher, client);
+  return isParkedForWork(world, patcher) && isParkedForWork(world, client) && inTowReach(patcher, client);
 }
 
 // The turn step: each patch with work under way loses a turn of work left. It runs before advanceStates, which
