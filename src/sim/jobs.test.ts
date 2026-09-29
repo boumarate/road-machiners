@@ -130,6 +130,20 @@ describe('field repair job', () => {
     addGoods(w, me, 'parts', 20);
     expect(() => startRepair(w, cage.id)).toThrow('Stop the truck first');
   });
+
+  it('a standing player truck drops its leftover drive order to start a job', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    me.speed = 0;
+    me.order = { kind: 'through', dest: { x: me.pos.x + 20, y: me.pos.y } };
+    const cage = armorPart(me);
+    cage.hp = 1;
+    addGoods(w, me, 'parts', 20);
+    const next = startRepair(w, cage.id);
+    const after = next.vehicles.find((v) => v.id === me.id)!;
+    expect(after.job?.kind).toBe('repair');
+    expect(after.order).toBeNull();
+  });
 });
 
 describe('junk parts', () => {
