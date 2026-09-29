@@ -173,7 +173,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     mass: 110,
     armor: 3,
     tall: false,
-    range: 18,
+    range: 13.5, // a short-reach starter gun
     reload: 1,
     arc: 360,
     look: "mg",

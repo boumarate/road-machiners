@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { chassisDef, PLAYER_CHASSIS } from '../data/chassis';
+import { NPCS } from '../data/npcs';
 import { openSides, reachedSides } from './armor';
 import { mountedItems } from './grid';
 import { generateNpcLoadout } from './npc-loadout';
@@ -434,5 +435,17 @@ describe('randomkit', () => {
     const w = emptyWorld();
     w.player.state = 'knockedOut';
     expect(() => randomKit(w)).toThrow(CheatError);
+  });
+
+  it('narrows the roll to a template and a gear level', () => {
+    const loaded = playerVehicle(randomKit(emptyWorld(), 'merc', 'loaded'));
+    const poor = playerVehicle(randomKit(emptyWorld(), 'merc', 'poor'));
+    expect(NPCS.merc.loadout.chassis.map((c) => c.value)).toContain(loaded.chassisId);
+    expect(mountedItems(loaded, 'weapon').length).toBeGreaterThan(mountedItems(poor, 'weapon').length);
+  });
+
+  it('rejects an unknown template or gear level', () => {
+    expect(() => randomKit(emptyWorld(), 'nobody')).toThrow(CheatError);
+    expect(() => randomKit(emptyWorld(), 'merc', 'shiny')).toThrow(CheatError);
   });
 });

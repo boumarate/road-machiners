@@ -157,8 +157,8 @@ export const COMMANDS: readonly Command[] = [
     const hostile = flag === "hostile";
     return changed(spawnNear(world, templateId, hostile), `spawned ${hostile ? "hostile " : ""}${templateId}`);
   }),
-  command("randomkit", "Swap the truck for a random chassis and loadout with working guns.", { min: 0, max: 0 }, (world) => {
-    const next = randomKit(world);
+  command("randomkit [template] [level]", "Swap the truck for a random NPC chassis and loadout.", { min: 0, max: 2 }, (world, [template, level]) => {
+    const next = randomKit(world, template ?? null, level ?? null);
     const me = next.vehicles.find((v) => v.id === next.player.vehicleId)!;
     return changed(next, `randomkit: ${me.chassisId} with ${mountedParts(me).filter((p) => partDef(p.defId).kind !== 'core').map((p) => partDef(p.defId).name).join(', ')}`);
   }),

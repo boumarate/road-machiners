@@ -4,7 +4,7 @@ import { partDef } from '../data/parts';
 import { skillEffect, vehicleHasPerk } from './progress';
 import { playerVehicle } from './damage';
 import { newId } from './factory';
-import { openSideCount } from './armor';
+import { cabShield, gunLayoutScore } from './armor';
 import { findSpot, gridOf, isMounted, itemCells, MOUNT_CELLS, mountSpots, placementError, type Cell, type Spot } from './grid';
 import { requireTown, townAt } from './sites';
 import { startJob } from './jobs';
@@ -17,12 +17,13 @@ import type { GridItem, PartInstance, RefitJob, RefitMove, RefitPickup, Vehicle,
 import { playerCommand } from './world';
 
 // Mount a part on a free fitting mount. Returns false when no mount has room. A gun or a tall part takes the first
-// spot that leaves the mounted guns the most open sides, so a gun is not placed behind the cab and a box blinds no gun.
-export function mountPart(world: World, v: Vehicle, part: PartInstance): boolean {
+// spot with the best gun layout, so a gun covers sides the others miss and a box blinds no gun. Armor takes the
+// spot that shields the most cab lanes. `mount` narrows the cells a part may use, like one side's edge for armor.
+export function mountPart(world: World, v: Vehicle, part: PartInstance, mount: Cell[] = MOUNT_CELLS[partDef(part.defId).kind]): boolean {
   const item: GridItem = { id: newId(world, 'i'), x: 0, y: 0, rot: 0, kind: 'part', part };
   const def = partDef(part.defId);
-  const mount = MOUNT_CELLS[def.kind];
-  const spot = def.kind === 'weapon' || def.tall ? bestArcSpot(v, item, mount) : findSpot(gridOf(v), v.items, item, mount, null);
+  const spot = def.kind === 'weapon' || def.tall ? bestArcSpot(v, item, mount)
+    : def.kind === 'armor' ? bestShieldSpot(v, item, mount) : findSpot(gridOf(v), v.items, item, mount, null);
   if (!spot) return false;
   v.items.push({ ...item, ...spot });
   return true;
@@ -32,7 +33,18 @@ function bestArcSpot(v: Vehicle, item: GridItem, mount: Cell[]): Spot | null {
   let best: Spot | null = null;
   let bestScore = -1;
   for (const spot of mountSpots(gridOf(v), v.items, item, mount)) {
-    const score = openSideCount({ ...v, items: [...v.items, { ...item, ...spot }] });
+    const score = gunLayoutScore({ ...v, items: [...v.items, { ...item, ...spot }] });
+    if (score > bestScore) [best, bestScore] = [spot, score];
+  }
+  return best;
+}
+
+// Armor goes where it shields the most cab lanes, the first such spot on a tie.
+function bestShieldSpot(v: Vehicle, item: GridItem, mount: Cell[]): Spot | null {
+  let best: Spot | null = null;
+  let bestScore = -1;
+  for (const spot of mountSpots(gridOf(v), v.items, item, mount)) {
+    const score = cabShield({ ...v, items: [...v.items, { ...item, ...spot }] });
     if (score > bestScore) [best, bestScore] = [spot, score];
   }
   return best;

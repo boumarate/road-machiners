@@ -1,11 +1,10 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
-import { NPCS, type NpcTemplate } from '../data/npcs';
+import { GEAR_LEVELS, NPCS, type GearLevel, type NpcTemplate } from '../data/npcs';
 import { PARTS, partDef } from '../data/parts';
 import { START_KITS } from '../data/start';
 import { newWorld } from './world';
 import { CONDITION } from '../data/wear';
-import { partValue } from './wear';
 import { makeVehicle } from './factory';
 import { freeCells, goodsCount, gridOf, isMounted, mountedParts, placementError } from './grid';
 import { vehicleMass } from './mass';
@@ -47,14 +46,14 @@ describe('NPC equipment generation', () => {
       expect(world.nextId).toBe(beforeId);
       const v = makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
       expect(mountedParts(v, 'engine')).toHaveLength(1);
-      expect(mountedParts(v, 'weapon')).toHaveLength(1);
+      expect(mountedParts(v, 'weapon').length).toBeGreaterThanOrEqual(template.loadout.minGuns);
       for (const item of v.items) expect(placementError(gridOf(v), v.items, item, item.id)).toBeNull();
       const loose = v.items.filter((item) => item.kind === 'part' && !isMounted(v.chassisId, item));
       expect(loose).toHaveLength(loadout.spares.length);
       expect(goodsCount(v)).toEqual(loadout.cargo);
       expect(vehicleMass(v)).toBeLessThanOrEqual(CHASSIS[v.chassisId].ratedMass);
       const cost = CHASSIS[v.chassisId].value + loadout.parts.reduce((sum, p) => sum + PARTS[p.defId].value, 0);
-      expect(cost).toBeLessThanOrEqual(template.loadout.budget);
+      expect(cost).toBeLessThanOrEqual(template.loadout.budget * Math.max(1, GEAR_LEVELS[loadout.level].budget)); // the required build may pass a poor level's budget
       expect(v.resources?.money).toBe(fixture.player.money);
     }
   });
@@ -75,7 +74,7 @@ describe('NPC equipment generation', () => {
     template.loadout.chassis = [{ value: 'hauler', weight: 1 }];
     template.loadout.engine = [{ value: 'turbine', weight: 1000 }, { value: 'stockEngine', weight: 1 }];
     template.loadout.weapon = [{ value: 'mg', weight: 1 }];
-    const loadout = generateNpcLoadout({ ...fixture }, template);
+    const loadout = generateNpcLoadout({ ...fixture }, template, null, 'poor'); // a poor roll adds nothing past the required build
     expect(loadout.parts.map((p) => p.defId)).toEqual(['stockEngine', 'mg']);
   });
 
@@ -95,7 +94,9 @@ describe('NPC equipment generation', () => {
     ['invalid budget', (t: NpcTemplate) => { t.loadout.budget = Infinity; }],
     ['empty chassis pool', (t: NpcTemplate) => { t.loadout.chassis = []; }],
     ['unknown chassis', (t: NpcTemplate) => { t.loadout.chassis = [{ value: 'missing', weight: 1 }]; }],
-    ['invalid optional weight', (t: NpcTemplate) => { t.loadout.armor = [{ value: null, weight: 0 }]; }],
+    ['invalid optional weight', (t: NpcTemplate) => { t.loadout.armor = [{ value: 'plates', weight: 0 }]; }],
+    ['an unknown gear level', (t: NpcTemplate) => { t.loadout.levels = [{ value: 'shiny' as GearLevel, weight: 1 }]; }],
+    ['no guns required', (t: NpcTemplate) => { t.loadout.minGuns = 0; }],
     ['impossible optional part', (t: NpcTemplate) => { t.loadout.chassis = [{ value: 'buggy', weight: 1 }]; t.loadout.cargoPart = [{ value: 'heavyFrame', weight: 1 }]; }],
     ['impossible cargo', (t: NpcTemplate) => { t.loadout.goods = [{ value: { good: 'scrap', count: 1000 }, weight: 1 }]; }],
     ['wear step past the last rebuildable step', (t: NpcTemplate) => { t.loadout.wear = [{ value: CONDITION.maxWear + 1, weight: 1 }]; }],
@@ -138,9 +139,10 @@ describe('NPC equipment generation', () => {
 describe('part wear', () => {
   it.each(Object.values(NPCS))('rolls a wear step within $id\'s table for every mounted, non-core part', (template) => {
     const rolled = new Set<number>();
-    const allowed = new Set(template.loadout.wear.map((entry) => entry.value));
     for (let seed = 1; seed <= 40; seed++) {
       const loadout = generateNpcLoadout({ ...fixture, rngState: seed, marketRng: { rngState: seed * 7919 } }, template);
+      const shift = GEAR_LEVELS[loadout.level].wearShift;
+      const allowed = new Set(template.loadout.wear.map((entry) => Math.min(CONDITION.maxWear, Math.max(0, entry.value + shift))));
       for (const { defId: id, wear } of loadout.parts) {
         expect(wear, id).toBeGreaterThanOrEqual(0);
         expect(wear, id).toBeLessThanOrEqual(CONDITION.maxWear);
@@ -158,22 +160,15 @@ describe('part wear', () => {
     expect(loadoutA.spares).toEqual(loadoutB.spares);
   });
 
-  it('a wear roll frees enough budget to fit an optional part that would not fit pristine', () => {
-    const world = { ...fixture, rngState: 1 };
-    const template = structuredClone(NPCS.buggy);
-    const wornWear = CONDITION.maxWear - 1;
-    template.loadout.chassis = [{ value: 'van', weight: 1 }];
-    template.loadout.engine = [{ value: 'stockEngine', weight: 1 }];
-    template.loadout.weapon = [{ value: 'mg', weight: 1 }];
-    template.loadout.cargoPart = [{ value: null, weight: 1 }];
-    template.loadout.armor = [{ value: 'scrapPanels', weight: 1 }];
-    template.loadout.wear = [{ value: wornWear, weight: 1 }];
-    const armorValue = partValue({ id: 'p', defId: 'scrapPanels', hp: 0, reload: 0, wear: wornWear });
-    const requiredCost = CHASSIS.van.value + PARTS.stockEngine.value + PARTS.mg.value;
-    template.loadout.budget = requiredCost + armorValue;
-    expect(requiredCost + PARTS.scrapPanels.value).toBeGreaterThan(template.loadout.budget);
-    const loadout = generateNpcLoadout(world, template);
-    expect(loadout.parts).toContainEqual({ defId: 'scrapPanels', wear: wornWear });
+  it('a poor level wears parts more than a loaded one', () => {
+    const mean = (level: GearLevel) => {
+      let sum = 0, n = 0;
+      for (let seed = 1; seed <= 20; seed++) {
+        for (const p of generateNpcLoadout({ ...fixture, rngState: seed, marketRng: { rngState: seed * 7919 } }, NPCS.merc, null, level).parts) [sum, n] = [sum + p.wear, n + 1];
+      }
+      return sum / n;
+    };
+    expect(mean('poor')).toBeGreaterThan(mean('loaded'));
   });
 });
 
@@ -260,6 +255,16 @@ describe('NPC gun placement', () => {
           const reach = reachedSides(partDef(item.part.defId) as WeaponDef);
           expect(openSides(v, item).some((side) => reach.includes(side)), `${id} seed ${seed} ${item.part.defId}`).toBe(true);
         }
+      }
+    }
+  });
+});
+
+describe('NPC loadout tables', () => {
+  it('every chassis in every table rolls a loadout', () => {
+    for (const tpl of Object.values(NPCS)) {
+      for (const { value } of tpl.loadout.chassis) {
+        expect(() => generateNpcLoadout(emptyWorld(), tpl, value), `${tpl.id} on ${value}`).not.toThrow();
       }
     }
   });
