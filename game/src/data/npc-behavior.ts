@@ -158,8 +158,9 @@ export const AID = {
   giftShare: 0.25,
   // A driver offers aid unprompted only to a player whose truck is below this share of its body condition...
   poorCondition: 0.5,
-  // ...and worth at most this much. That covers the start scout and worn tier 1 trucks, not geared tier 2 and 3.
-  poorValue: 3500,
+  // ...and worth at most this much. That covers the start scout, worth about 3600 new, and worn tier 1 trucks, not
+  // geared tier 2 and 3 trucks like the combat start kit's hauler, worth about 6000.
+  poorValue: 4000,
 };
 
 // Raiders look for prey on lonely road stretches and at the pads of salvage sites, where scavengers stop.

@@ -8,6 +8,7 @@
 // can rob, mostly a weaker one away from guards.
 
 import { dealAvailable } from './patch';
+import { canSpareFor } from './aid';
 import { ECONOMY } from '../data/goods';
 import { GOOD_SOURCES, SHOPS, type ShopDef } from '../data/market';
 import {
@@ -354,8 +355,13 @@ function isRobbable(w: World, target: Vehicle): boolean {
 type Availability = (world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null) => boolean;
 
 const always = (): boolean => true;
-// No driver can give fuel or supply aid until the aid deal can carry it out.
-const noAidDeal = (): boolean => false;
+
+// A driver gives the player fuel or supplies only from stock above its trade reserve, and only while no aid deal with
+// the player is open.
+function canSpareSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
+  if (subjectOf(world, decision, subject).id !== world.player.vehicleId) throw new Error(`${decision} gives aid only to the player`);
+  return canSpareFor(world, vehicle);
+}
 
 // A client hires a free merc it sees while on a trip, with the fee above its upkeep reserve.
 function canHireSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
@@ -502,8 +508,8 @@ const AVAILABLE: Record<OptionName, Availability> = {
   hire: canHireSubject,
   take: canTakeSubject,
   decline: always,
-  give: noAidDeal,
-  aid: noAidDeal,
+  give: canSpareSubject,
+  aid: canSpareSubject,
 };
 
 // ---- Situation factors, one per option. Each returns a number above 0.

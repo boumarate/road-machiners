@@ -3,6 +3,7 @@
 // of each kind toward each other party.
 
 import { STATE_TURNS } from '../data/npcs';
+import { checkAid, settleAid } from './aid';
 import { vehicleById } from './damage';
 import { newId } from './factory';
 import { lootRobbed } from './npc-activities';
@@ -101,9 +102,10 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   // The holder took unintended damage from the other party's fire. src/sim/combat.ts sums it and turns it into an
   // attack past a threshold.
   strayFire: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
-  // The holder and the player agreed on fuel and supply aid. Nothing starts one yet: the check and the fulfilled hook
-  // that move the units come with the aid deal.
-  aid: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: true },
+  // The holder and the player deal in fuel and supply aid. See src/sim/aid.ts. An agreed deal is fulfilled once both
+  // trucks are parked in reach, and the fulfilled hook moves everything once. A feud between the two breaks it.
+  // Nothing refreshes it: parked in reach, an agreed deal is fulfilled, and a pending offer still lapses unanswered.
+  aid: { refresh: never, check: checkAid, hooks: { fulfilled: settleAid }, work: noWork, binds: true },
 };
 
 // A missing holder is left to the missing-party rule.
