@@ -425,8 +425,8 @@ describe('pile claims', () => {
   }
 
   it('an NPC winner claims the handed-over pile', () => {
-    const { w, robber, pile } = handover('npc');
-    expect(pile.pile!.claim).toEqual({ by: robber.id, until: w.turn + SALVAGE.claimTurns, warned: [] });
+    const { w, robber, victim, pile } = handover('npc');
+    expect(pile.pile!.claim).toEqual({ by: robber.id, until: w.turn + SALVAGE.claimTurns, warned: [victim.id] });
   });
 
   it('a player winner makes no claim', () => {
@@ -524,6 +524,19 @@ describe('the player at a claimed pile', () => {
     const next = takeAllLoot(w, pile.id);
     expect(feuding(next, claimant)).toBe(true);
     expect(topGoal(next.vehicles.find((v) => v.id === claimant.id)!)?.kind).toBe('fight');
+  });
+
+  it('the player who handed the pile over gets no warning call, but taking it back is a refusal', () => {
+    const w = quietWorld();
+    const claimant = npcAt(w, 'scavengers', ['raider'], 30, 38);
+    addGoods(w, me(w), 'scrap', 2);
+    yieldTo(w, me(w), claimant);
+    const pile = w.salvage.find((s) => s.pile)!;
+    w.player.scavenged.push(pile.id);
+    refreshVision(w);
+    raiseCalls(w);
+    expect(w.player.call).toBeNull();
+    expect(feuding(takeAllLoot(w, pile.id), claimant)).toBe(true);
   });
 
   it('a take the claimant cannot see starts nothing', () => {

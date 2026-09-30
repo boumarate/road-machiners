@@ -60,7 +60,7 @@ export function yieldTo(world: World, loser: Vehicle, winner: Vehicle, dumped: S
   if (grudge) endState(world, grudge, 'fulfilled');
   if (stock && winner.brain) {
     pushGoal(world, winner, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'take the handed-over cargo' });
-    claimPile(world, stock, winner);
+    claimPile(world, stock, winner, [loser.id]);
   }
   creditYield(world, loser, winner);
 }

@@ -286,9 +286,10 @@ function dropGood(world: World, { stock, pile }: { stock: SalvageStock; pile: Pi
   pile.basis[good] = ((pile.basis[good] ?? 0) * count + paid) / (count + 1);
 }
 
-export function claimPile(world: World, stock: SalvageStock, claimant: Vehicle): void {
+// The drivers in `warned` already know the pile is claimed, like the one who handed it over.
+export function claimPile(world: World, stock: SalvageStock, claimant: Vehicle, warned: string[] = []): void {
   if (!stock.pile) throw new Error(`Cannot claim ${stock.id}, it is no pile`);
-  stock.pile.claim = { by: claimant.id, until: world.turn + SALVAGE.claimTurns, warned: [] };
+  stock.pile.claim = { by: claimant.id, until: world.turn + SALVAGE.claimTurns, warned };
 }
 
 function claimHolds(world: World, stock: SalvageStock, claimant: Vehicle | undefined): claimant is Vehicle {
