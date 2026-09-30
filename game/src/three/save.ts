@@ -3,6 +3,8 @@ import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
 import type { BrokenProp, Obstacle, World } from '../sim/types';
 import { clearTips } from '../ui/tips';
+import { clockOf } from '../sim/sun';
+import { allSlots, listSaves, manualSlots, slotKey, type SlotId } from './save-slots';
 import { MIGRATIONS, SAVE_FORMAT, SAVE_MAJOR, type SavedJson } from './save-migrations';
 
 declare const __SAVE_SCOPE__: string;
@@ -12,24 +14,26 @@ export function saveKey(scope: string): string {
   return scope === '' ? 'roam.save' : `roam.save.${scope}`;
 }
 
-const SAVE_KEY = saveKey(__SAVE_SCOPE__);
+// The Autosave's key, and the base of every other slot's key.
+export const SAVE_KEY = saveKey(__SAVE_SCOPE__);
 
 // A stored save the game cannot load. Boot offers to migrate it to a new world or to start over.
 export class SaveError extends Error {}
 
-export function clearSave(storage: Storage): void {
-  storage.removeItem(SAVE_KEY);
+export function clearSlot(storage: Storage, slot: SlotId): void {
+  storage.removeItem(slotKey(SAVE_KEY, slot));
 }
 
-// Clears everything a run keeps in storage: the save and the seen tips. Sound settings stay, since they are the
-// player's, not the run's.
+// Clears what the run keeps in storage: the autosaves and the seen tips. The manual slots stay, since the player chose
+// to keep them, and so do the sound settings, which are the player's, not the run's.
 export function clearGame(storage: Storage): void {
-  clearSave(storage);
+  clearSlot(storage, 'auto');
+  clearSlot(storage, 'day');
   clearTips(storage);
 }
 
-export function hasSave(storage: Storage): boolean {
-  return storage.getItem(SAVE_KEY) !== null;
+export function hasSave(storage: Storage, slots: readonly SlotId[]): boolean {
+  return slots.some((slot) => storage.getItem(slotKey(SAVE_KEY, slot)) !== null);
 }
 
 function parsedSave(raw: string): unknown {
@@ -41,8 +45,8 @@ function parsedSave(raw: string): unknown {
 }
 
 // The stored save as parsed JSON, or undefined when there is none or it does not parse. For the rescue.
-export function storedSave(storage: Storage): unknown {
-  const raw = storage.getItem(SAVE_KEY);
+export function storedSave(storage: Storage, slot: SlotId): unknown {
+  const raw = storage.getItem(slotKey(SAVE_KEY, slot));
   return raw === null ? undefined : parsedOrUndefined(raw);
 }
 
@@ -58,8 +62,8 @@ function parsedOrUndefined(raw: string): unknown {
 // about 10 MB of JSON, past the browser's local storage quota. Old saves migrate to the current format on load.
 
 // The saved world on the given map. A save made on another map fails, since its terrain is gone.
-export function loadWorld(storage: Storage, map: BakedMap): World | null {
-  const raw = storage.getItem(SAVE_KEY);
+export function loadWorld(storage: Storage, slot: SlotId, map: BakedMap): World | null {
+  const raw = storage.getItem(slotKey(SAVE_KEY, slot));
   if (raw === null) return null;
   const world = savedWorld(parsedSave(raw));
   if (world.mapHash !== map.hash) throw new SaveError(`Game save was made on map ${world.mapHash}, not on the current map ${map.hash}`);
@@ -131,22 +135,27 @@ function isWorld(value: unknown): value is Omit<World, 'terrain'> {
     && typeof world.player.vehicleId === 'string' && Array.isArray(world.player.contacts) && Array.isArray(world.player.clouds);
 }
 
-export function saveWorld(storage: Storage, world: World, interval: number): void {
+// The first turn of a game day, which the Day start autosave keeps.
+export function isDayStart(turn: number): boolean {
+  return clockOf(turn).day !== clockOf(turn - 1).day;
+}
+
+export function saveWorld(storage: Storage, world: World, interval: number, savedAt: number): void {
   if (!Number.isInteger(interval) || interval <= 0) throw new Error('Invalid save interval');
-  if ((world.turn - 1) % interval !== 0) return;
-  // A dead run keeps its last save, so the player can load it.
+  // A dead run keeps its last saves, so the player can load them.
   if (world.player.state === 'dead') return;
-  writeSave(storage, world);
+  if ((world.turn - 1) % interval === 0) writeSave(storage, 'auto', world, savedAt);
+  if (isDayStart(world.turn)) writeSave(storage, 'day', world, savedAt);
 }
 
 // A UI command in town, like a purchase, saves at once, so a reload does not undo it.
-export function saveInTown(storage: Storage, world: World): void {
-  if (world.player.state === 'active' && townAt(world)) writeSave(storage, world);
+export function saveInTown(storage: Storage, world: World, savedAt: number): void {
+  if (world.player.state === 'active' && townAt(world)) writeSave(storage, 'auto', world, savedAt);
 }
 
-export function writeSave(storage: Storage, world: World): void {
+export function writeSave(storage: Storage, slot: SlotId, world: World, savedAt: number): void {
   if (world.player.state === 'dead') throw new Error('Cannot save a world whose player is dead');
-  storage.setItem(SAVE_KEY, JSON.stringify(saveOf(world)));
+  storage.setItem(slotKey(SAVE_KEY, slot), JSON.stringify({ ...saveOf(world), savedAt }));
 }
 
 // The save of a world as it goes into JSON.
@@ -183,4 +192,15 @@ export function unpackExplored(packed: unknown, tiles: number): Uint8Array {
   const explored = new Uint8Array(tiles);
   for (let i = 0; i < tiles; i++) explored[i] = (binary.charCodeAt(i >> 3) >> (i & 7)) & 1;
   return explored;
+}
+
+// What the menus do with the saves: the game's world in, the slots of local storage out.
+export function saveStore(storage: Storage, world: () => World, slotCount: number) {
+  return {
+    list: () => listSaves(storage, SAVE_KEY, slotCount),
+    manualSlots: () => manualSlots(slotCount),
+    hasSave: () => hasSave(storage, allSlots(slotCount)),
+    save: (slot: SlotId) => writeSave(storage, slot, world(), Date.now()),
+    clearGame: () => clearGame(storage),
+  };
 }

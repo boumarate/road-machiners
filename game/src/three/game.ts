@@ -71,7 +71,7 @@ import { ContactsView } from "./render/contacts";
 import { DustCloudsView } from "./render/dust";
 import { ShadeView } from "./render/shade";
 import { SoundRingView } from "./render/soundRing";
-import { clearGame, hasSave, saveInTown, saveWorld, writeSave } from "./save";
+import { saveInTown, saveStore, saveWorld } from "./save";
 import { GameMenu } from "../ui/game-menu";
 import { roundLabel } from "../ui/format";
 import { DeathScreen } from "../ui/death";
@@ -277,16 +277,9 @@ export class Game {
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.hoverHold.watch(this.hud.getInspectionRoot());
-    this.menu = new GameMenu({
-      save: () => writeSave(window.localStorage, this.world),
-      hasSave: () => hasSave(window.localStorage),
-      clearGame: () => clearGame(window.localStorage),
-      isBusy: () => this.anim !== null,
-    });
-    this.death = new DeathScreen({
-      hasSave: () => hasSave(window.localStorage),
-      clearGame: () => clearGame(window.localStorage),
-    });
+    const saves = saveStore(window.localStorage, () => this.world, CONFIG.saveSlots);
+    this.menu = new GameMenu({ save: () => saves.save("auto"), hasSave: saves.hasSave, clearGame: saves.clearGame, isBusy: () => this.anim !== null });
+    this.death = new DeathScreen(saves);
 
     this.bindInput();
     window.addEventListener("resize", () => this.resize());
@@ -298,7 +291,7 @@ export class Game {
   private uiHost(): UiHost {
     return {
       world: () => this.displayWorld(),
-      apply: (next) => { this.apply(next); saveInTown(window.localStorage, next); },
+      apply: (next) => { this.apply(next); saveInTown(window.localStorage, next, Date.now()); },
       selectedWeapon: () => this.selected,
       selectWeapon: (id) => { if (this.anim) return; this.selected = id; this.refreshUi(); },
       endTurn: () => this.travel.stopAuto(this.world) || this.endTurn(),
@@ -668,7 +661,7 @@ export class Game {
     this.anim = null;
     this.phase = null;
     this.idleSince = performance.now();
-    saveWorld(window.localStorage, this.world, CONFIG.saveTurns);
+    saveWorld(window.localStorage, this.world, CONFIG.saveTurns, Date.now());
     const pending = this.pending;
     this.pending = null;
     if (pending) this.runRescue(pending);
