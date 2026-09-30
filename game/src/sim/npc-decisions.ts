@@ -32,7 +32,7 @@ import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
 import { skillEffect } from './progress';
 import { randRange } from './rng';
-import { canReachSalvage, canTakeAny, canTakeFromTruck, siteLootTable } from './salvage';
+import { canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, jobTarget, lootBlocker, siteLootTable } from './salvage';
 import { canUseSite, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { boundTo, givesWord, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
@@ -242,13 +242,43 @@ export function visibleDowned(world: World, vehicle: Vehicle): Vehicle[] {
   return visible.sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
 }
 
+// Loot another truck is looting is not the driver's to take. The claim is checked after sight, since it scans every truck.
 function seesDowned(world: World, vehicle: Vehicle, target: Vehicle): boolean {
   if (target.id === vehicle.id || !isKnockedOut(target) || !canVehicleSee(world, vehicle, target.pos)) return false;
-  return !inTowReach(vehicle, target) || canTakeFromTruck(vehicle, target);
+  return (!inTowReach(vehicle, target) || canTakeFromTruck(vehicle, target)) && lootTaken(world, vehicle, target.id) === null;
 }
 
 function seesSalvage(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
-  return canVehicleSee(world, vehicle, stock.pos) && (!canReachSalvage(vehicle, stock) || canTakeAny(world, vehicle, stock));
+  if (!canVehicleSee(world, vehicle, stock.pos)) return false;
+  return (!canReachSalvage(vehicle, stock) || canTakeAny(world, vehicle, stock)) && lootTaken(world, vehicle, stock.id) === null;
+}
+
+// Why the driver may not start on the loot target: another truck is looting it. The rule blocks starts only, so a
+// job the driver already runs there keeps going. Null for no target, which nobody can claim.
+export function lootTaken(world: World, vehicle: Vehicle, targetId: string | null): string | null {
+  if (targetId === null || worksOnLoot(vehicle, targetId)) return null;
+  return lootBlocker(world, vehicle, targetId) ? 'someone else is looting it' : null;
+}
+
+// The driver's job works the target.
+export function worksOnLoot(vehicle: Vehicle, targetId: string): boolean {
+  return jobTarget(vehicle) === targetId;
+}
+
+// Why a loot goal on a stock ends. A driver learns a stock is empty only once it can reach it.
+export function stockLootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
+  const stock = world.salvage.find((s) => s.id === goal.targetId);
+  if (!stock) return 'the loot is gone';
+  if (!canReachSalvage(vehicle, stock)) return freeCells(vehicle) === 0 ? 'cargo cannot hold the loot' : null;
+  if (!hasSalvage(stock)) return 'nothing left to loot';
+  return canTakeAny(world, vehicle, stock) ? null : 'cargo cannot hold the loot';
+}
+
+// Why a loot goal on a truck ends. A knocked-out truck is loot until it wakes. A refit on it keeps going until it ends.
+export function truckLootInvalid(vehicle: Vehicle, truck: Vehicle): string | null {
+  if (!isKnockedOut(truck)) return 'the truck got away';
+  if (vehicle.job?.kind === 'refit' || !inTowReach(vehicle, truck)) return null;
+  return canTakeFromTruck(vehicle, truck) ? null : 'cargo cannot hold the loot';
 }
 
 // Known salvage sites other than the one the NPC stands at.
@@ -817,6 +847,7 @@ const DECISION_KINDS: Record<DecisionId, 'venture' | 'response'> = {
   truceOffered: 'response',
   mercyBegged: 'response',
   threatened: 'response',
+  warnedOff: 'response',
   mugging: 'response',
   strandedFoe: 'response',
   surrenderOffered: 'response',

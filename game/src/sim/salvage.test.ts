@@ -3,7 +3,7 @@ import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
 import { GOODS } from '../data/goods';
 import { TIME } from '../data/time';
-import { addVehicle, emptyWorld, testDrive } from './testkit';
+import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import { resolveDestroyed, wreckVehicle } from './combat';
 import { addGoods, dumpItem, removeGoods } from './inventory';
 import { corePart, findSpot, goodsCount, gridOf, mountedParts } from './grid';
@@ -11,9 +11,13 @@ import { partDef } from '../data/parts';
 import { chassisDef } from '../data/chassis';
 import { BREAKABLE, RULES } from '../data/rules';
 import { takeAllLoot, takeLoot, takeStores, canScavenge, scavenge } from './locations';
-import { breakProp, canTakeAny, clearPiles, collectSalvage, createCargoSalvage, hasSalvage, initializeSalvage, isRoadWreck, renewSalvage, salvageInRange, salvageUnits, siteLootTable } from './salvage';
+import {
+  breakProp, canTakeAny, clearPiles, collectSalvage, createCargoSalvage, hasSalvage, initializeSalvage, isLootTarget, isRoadWreck, lootBlockedError, lootBlocker,
+  lootClaimedBy, looterOf, renewSalvage, salvageInRange, salvageUnits, siteLootTable,
+} from './salvage';
+import { knockOutNpc } from './defeat';
 import { SHOPS } from '../data/market';
-import type { Obstacle, SalvageStock, World } from './types';
+import type { NpcActivity, Obstacle, RefitPickup, SalvageStock, Vehicle, World } from './types';
 import { propReach } from './mapgen';
 import { dist, type Vec } from './vec';
 import { maxHp } from './wear';
@@ -527,5 +531,132 @@ describe('breakable props', () => {
     runDays(w, BREAKABLE.regrowDays + 2);
 
     expect(w.obstacles).toEqual([]);
+  });
+});
+
+describe('who loots a target', () => {
+  const at = { x: 30, y: 30 };
+  const beside = { x: 30.5, y: 30 };
+
+  // The player parked at 30,30 on top of a wreck stock that nobody works yet.
+  function wreckWorld(): { w: World; me: Vehicle; stock: SalvageStock } {
+    const w = emptyWorld(at);
+    const stock: SalvageStock = { id: 'wreck-test', pos: { ...at }, radius: 0.6, goods: { scrap: 3 }, parts: [] };
+    w.salvage.push(stock);
+    return { w, me: w.vehicles[0], stock };
+  }
+
+  // A scavenger parked beside the player, with a brain and no goals.
+  function scavenger(w: World, pos: Vec = beside): Vehicle {
+    const npc = addVehicle(w, 'scavengers', 'scout', [], pos);
+    npc.brain = npcBrain('scav', pos, []);
+    return npc;
+  }
+
+  // The player parked beside a knocked-out raider buggy.
+  function downedWorld(): { w: World; me: Vehicle; buggy: Vehicle } {
+    const w = emptyWorld(at);
+    const gap = chassisDef('scout').radius + chassisDef('buggy').radius + 0.2;
+    const buggy = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 30 + gap, y: 30 });
+    buggy.brain = npcBrain('buggy', buggy.pos, ['raider']);
+    corePart(buggy, 'cab').hp = 0;
+    knockOutNpc(w, buggy);
+    return { w, me: w.vehicles[0], buggy };
+  }
+
+  const pickupJob = (pickup: RefitPickup): Vehicle['job'] => ({ kind: 'refit', moves: [], pickup, turnsLeft: 2, total: 2 });
+  const lootGoal = (targetId: string, phase: NpcActivity['phase']): NpcActivity => ({ kind: 'loot', targetId, destination: null, phase, reason: 'test' });
+
+  it('counts wrecks, piles and knocked-out trucks as loot targets, and never a site or a running truck', () => {
+    const { w, stock } = wreckWorld();
+    const running = scavenger(w);
+    expect(isLootTarget(w, stock.id)).toBe(true);
+    expect(isLootTarget(w, convoy.id)).toBe(false);
+    expect(isLootTarget(w, running.id)).toBe(false);
+    const { w: dw, buggy } = downedWorld();
+    expect(isLootTarget(dw, buggy.id)).toBe(true);
+  });
+
+  it('gives a stock to the truck searching it, over a parked player', () => {
+    const { w, me, stock } = wreckWorld();
+    const npc = scavenger(w);
+    npc.job = { kind: 'search', stockId: stock.id, turnsLeft: 3, total: 3 };
+    expect(looterOf(w, stock.id)).toBe(npc);
+    expect(lootBlocker(w, me, stock.id)).toBe(npc);
+    expect(lootBlocker(w, npc, stock.id)).toBeNull();
+  });
+
+  it('gives a stock to the truck refitting a part out of it', () => {
+    const { w, stock } = wreckWorld();
+    const npc = scavenger(w);
+    npc.job = pickupJob({ from: 'stock', stockId: stock.id, partId: 'p', itemId: 'i', to: { x: 0, y: 0, rot: 0 } });
+    expect(looterOf(w, stock.id)).toBe(npc);
+  });
+
+  it('gives a knocked-out truck to the truck refitting a part off it, over a parked player', () => {
+    const { w, me, buggy } = downedWorld();
+    const npc = scavenger(w, { x: 40, y: 40 });
+    npc.job = pickupJob({ from: 'truck', vehicleId: buggy.id, partId: 'p', itemId: 'i', to: { x: 0, y: 0, rot: 0 } });
+    expect(looterOf(w, buggy.id)).toBe(npc);
+    expect(lootBlocker(w, me, buggy.id)).toBe(npc);
+  });
+
+  it('gives a knocked-out truck to an NPC between two refits, parked beside it in the act phase', () => {
+    const { w, me, buggy } = downedWorld();
+    const npc = scavenger(w, { x: buggy.pos.x + (buggy.pos.x - 30), y: 30 });
+    npc.brain!.goals.push(lootGoal(buggy.id, 'act'));
+    expect(looterOf(w, buggy.id)).toBe(npc);
+    npc.brain!.goals[0].phase = 'travel';
+    expect(looterOf(w, buggy.id)).toBe(me);
+  });
+
+  it('does not count an act-phase goal of a driver out of reach', () => {
+    const { w, stock } = wreckWorld();
+    w.vehicles[0].speed = 5;
+    const npc = scavenger(w, { x: 50, y: 50 });
+    npc.brain!.goals.push({ ...lootGoal(stock.id, 'act'), kind: 'scavenge' });
+    expect(looterOf(w, stock.id)).toBeNull();
+    npc.pos = { ...beside };
+    expect(looterOf(w, stock.id)).toBe(npc);
+  });
+
+  it('gives an unworked target to the parked player, and never to a moving one', () => {
+    const { w, me, stock } = wreckWorld();
+    const npc = scavenger(w, { x: 50, y: 50 });
+    expect(looterOf(w, stock.id)).toBe(me);
+    expect(lootBlocker(w, npc, stock.id)).toBe(me);
+    expect(lootBlocker(w, me, stock.id)).toBeNull();
+    me.speed = 5;
+    expect(looterOf(w, stock.id)).toBeNull();
+    expect(lootBlocker(w, npc, stock.id)).toBeNull();
+  });
+
+  it('never gives a site stock a looter', () => {
+    const w = emptyWorld({ ...sitePads(convoy)[0] });
+    const npc = scavenger(w, { ...sitePads(convoy)[0] });
+    npc.job = { kind: 'search', stockId: convoy.id, turnsLeft: 3, total: 3 };
+    expect(looterOf(w, convoy.id)).toBeNull();
+    expect(lootBlocker(w, w.vehicles[0], convoy.id)).toBeNull();
+  });
+
+  it('names the looter and what it loots in the error', () => {
+    const { w, stock } = wreckWorld();
+    const npc = scavenger(w);
+    expect(lootBlockedError(w, npc, stock.id)).toBe(`${npc.name} is looting this wreck`);
+    const { w: dw, buggy } = downedWorld();
+    expect(lootBlockedError(dw, npc, buggy.id)).toBe(`${npc.name} is looting this truck`);
+    expect(() => lootBlockedError(w, npc, 'nothing')).toThrow(/nothing/);
+  });
+
+  it('finds the target an NPC loots, only while it holds the claim', () => {
+    const { w, stock } = wreckWorld();
+    const first = scavenger(w);
+    const second = scavenger(w, { x: 29.5, y: 30 });
+    expect(lootClaimedBy(w, first)).toBeNull();
+    second.brain!.goals.push(lootGoal(stock.id, 'act'));
+    expect(lootClaimedBy(w, second)).toBe(stock.id);
+    first.job = { kind: 'search', stockId: stock.id, turnsLeft: 3, total: 3 };
+    expect(lootClaimedBy(w, first)).toBe(stock.id);
+    expect(lootClaimedBy(w, second)).toBeNull();
   });
 });

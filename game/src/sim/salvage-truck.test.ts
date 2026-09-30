@@ -11,6 +11,7 @@ import { optionWeights } from './npc-decisions';
 import { thinkNpc, topGoal } from './npc-activities';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import { lootTruckTurn, takeFromTruck } from './salvage';
+import { lootBlockerHere } from './locations';
 import type { GridItem, Vehicle, World } from './types';
 import { refreshVision } from './vision';
 
@@ -105,14 +106,37 @@ describe('the player looting a knocked-out truck', () => {
   });
 });
 
-describe('an NPC looting a knocked-out truck', () => {
-  function looterBeside(w: World, buggy: Vehicle): Vehicle {
-    const gap = chassisDef('hauler').radius + chassisDef('buggy').radius + 0.2;
-    const looter = addVehicle(w, 'scavengers', 'hauler', ['stockEngine'], { x: buggy.pos.x, y: buggy.pos.y + gap });
-    looter.brain = npcBrain('scavenger', looter.pos, ['scavenger']);
-    return looter;
-  }
+function looterBeside(w: World, buggy: Vehicle): Vehicle {
+  const gap = chassisDef('hauler').radius + chassisDef('buggy').radius + 0.2;
+  const looter = addVehicle(w, 'scavengers', 'hauler', ['stockEngine'], { x: buggy.pos.x, y: buggy.pos.y + gap });
+  looter.brain = npcBrain('scavenger', looter.pos, ['scavenger']);
+  return looter;
+}
 
+describe('the player and another looter at one knocked-out truck', () => {
+  it('refuses to take from a truck another driver strips, and names the driver', () => {
+    const { w, me, buggy } = downed();
+    const looter = looterBeside(w, buggy);
+    lootTruckTurn(w, looter, buggy);
+    const gun = gunOn(buggy);
+    const items = buggy.items.length;
+    expect(() => takeFromTruck(w, buggy.id, gun.id, spareSpot(me, gun))).toThrow(`${looter.name} is looting this truck`);
+    expect(buggy.items).toHaveLength(items);
+    expect(lootBlockerHere(w)).toBe(looter);
+  });
+
+  it('takes from the truck once the other driver is gone', () => {
+    const { w, me, buggy } = downed();
+    const looter = looterBeside(w, buggy);
+    lootTruckTurn(w, looter, buggy);
+    w.vehicles = w.vehicles.filter((v) => v.id !== looter.id);
+    const gun = gunOn(buggy);
+    const next = takeFromTruck(w, buggy.id, gun.id, spareSpot(me, gun));
+    expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', pickup: { from: 'truck', vehicleId: buggy.id } });
+  });
+});
+
+describe('an NPC looting a knocked-out truck', () => {
   it('takes loose items at once, then one installed part per refit', () => {
     const { w, me, buggy } = downed();
     me.pos = { x: 200, y: 200 };

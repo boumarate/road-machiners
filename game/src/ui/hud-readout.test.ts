@@ -18,6 +18,7 @@ import { startKit } from "../data/start";
 import { newWorld } from "../sim/world";
 import { playerVehicle } from "../sim/damage";
 import { stowPart } from "../sim/inventory";
+import { beginSearch } from "../sim/search";
 import { TEST_MAP } from "../test/map";
 
 describe('knocked-out truck interaction', () => {
@@ -60,6 +61,19 @@ describe('salvage interaction', () => {
     expect(getContextAction(w, false)).toEqual({ label: `Search ${site.name}`, ready: true, combat: undefined });
     w.salvage[0].goods.scrap = 0;
     expect(getContextAction(w, false)).toEqual({ label: `${site.name} is picked clean`, ready: false, hint: 'No loot left' });
+  });
+});
+
+describe('shared wreck', () => {
+  it('dims the search while another driver searches the wreck, and names the driver', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.salvage.push({ id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [] });
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 31.5, y: 30 });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    npc.speed = 0;
+    expect(getContextAction(w, false)).toEqual({ label: 'Search the wreck', ready: true, combat: undefined });
+    beginSearch(w, npc, 'wreck901');
+    expect(getContextAction(w, false)).toEqual({ label: 'Search the wreck', ready: false, hint: `${npc.name} is looting it` });
   });
 });
 
