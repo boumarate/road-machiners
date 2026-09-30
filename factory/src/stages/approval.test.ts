@@ -40,14 +40,14 @@ function fakeCtx(): Ctx {
 }
 
 describe('approve', () => {
-  it('merges, pushes, closes, moves to Done and clears state', async () => {
+  it('merges, pushes, labels a release candidate without closing, moves to Done and clears state', async () => {
     await approve(fakeCtx(), 7, 'bob');
     expect(calls).toEqual([
       'sync ',
       'merge factory/issue-7 dev Merge issue #7: Big horn',
       'push dev',
-      'comment 7 Approved by bob in the committee chat and merged into dev.',
-      'close 7 completed',
+      'comment 7 Approved by bob in the committee chat and merged into dev. It closes when its release ships.',
+      'addLabel 7 release-candidate',
       'move 7 Done',
       'message chat Issue #7 Big horn is merged into dev.\nPlay it: https://play.test/dev',
     ]);
@@ -65,8 +65,8 @@ describe('approve', () => {
       'sync release/2026-09-29',
       'merge factory/issue-7 release/2026-09-29 Merge issue #7: Big horn',
       'push release/2026-09-29',
-      'comment 7 Approved by bob and merged into the release branch release/2026-09-29.',
-      'close 7 completed',
+      'comment 7 Approved by bob and merged into the release branch release/2026-09-29. It closes when the release ships.',
+      'addLabel 7 release-candidate',
       'move 7 Done',
       'message chat Issue #7 Big horn is merged into the release release/2026-09-29.',
     ]);

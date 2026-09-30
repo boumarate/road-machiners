@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { deployDev } from '../deploy';
 import { must } from '../exec';
 import { updateState } from '../state';
-import { GAME_DIR, OUT_DIR, RELEASE_TASK_LABEL, type Ctx, type ReleaseState } from '../types';
+import { GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, RELEASE_TASK_LABEL, type Ctx, type ReleaseState } from '../types';
 import { agentLog } from './common';
 import { candidateDir, featureLine, releaseFeatures, releaseLog, requireRelease } from './release-common';
 
@@ -60,6 +60,12 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   await ctx.telegram.sendPhoto(channel, screenshot, `ROAM release ${release.day}`);
   await ctx.telegram.sendMessage(channel, `${readFileSync(notesPath, 'utf8').trim()}\n\nChanges:\n${features.map((feature) => `- ${featureLine(feature)}`).join('\n')}`);
   await deployDev(ctx, agentLog(ctx, issue, 'ship'));
+  // Each shipped issue stayed open as a release candidate since its approval. It is on main and itch.io now, so it closes.
+  for (const feature of features) {
+    await ctx.github.comment(feature.issue, `Shipped in release ${release.day}. It is on main and itch.io.`);
+    await ctx.github.removeLabel(feature.issue, RELEASE_CANDIDATE_LABEL);
+    await ctx.github.close(feature.issue, 'completed');
+  }
   await ctx.github.comment(issue, `Shipped by ${by} in the committee chat. Release ${release.day} is on main and itch.io.`);
   await ctx.github.close(issue, 'completed');
   await ctx.github.move(issue, 'Done');
