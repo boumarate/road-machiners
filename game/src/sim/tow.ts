@@ -89,6 +89,11 @@ export function isTowing(world: World, id: string): boolean {
   return hitchedTows(world).some((s) => s.holder === id);
 }
 
+// The tower has taken the client's tow: it is on its way, offers, or has hitched.
+export function towsClient(world: World, tower: Vehicle, client: Vehicle): boolean {
+  return stateOf(world, 'tow', tower.id, client.id) !== null || stateOf(world, 'answering', tower.id, client.id) !== null;
+}
+
 function isPlayer(world: World, v: Vehicle): boolean {
   return v.id === world.player.vehicleId;
 }
@@ -269,11 +274,17 @@ export function runTow(world: World, vehicle: Vehicle, activity: NpcActivity): s
     endState(world, held, 'fulfilled');
     return held.other === world.player.vehicleId ? 'towed the player to town' : 'towed a stranded truck';
   }
-  const client = vehicleById(world, activity.targetId!);
-  if (!readyToTow(world, vehicle, client)) return null;
+  return reachClient(world, vehicle, activity, vehicleById(world, activity.targetId!));
+}
+
+// The tower offers or hitches once in reach. The client may have got going or reached its home while the tower drove
+// over, and then the job ends.
+function reachClient(world: World, tower: Vehicle, activity: NpcActivity, client: Vehicle): string | null {
+  if (!isStranded(world, client) || !towDestination(world, tower, client)) return 'the truck needs no tow anymore';
+  if (!readyToTow(world, tower, client)) return null;
   activity.phase = 'act';
-  if (isPlayer(world, client)) offer(world, vehicle, client);
-  else hitch(world, vehicle, client);
+  if (isPlayer(world, client)) offer(world, tower, client);
+  else hitch(world, tower, client);
   return null;
 }
 

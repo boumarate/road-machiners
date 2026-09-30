@@ -181,7 +181,7 @@ describe('rams as attacks', () => {
     me.pos = { x: 38.4, y: 40 };
     addState(w, 'tow', trader.id, me.id, { kind: 'tow', site: 'bowl', fee: 50, waived: 0, hitched: true });
     applyCrash(w, me, trader, trader.id, trader.pos, FULL_SPEED);
-    expect(total(crashOf(w).hitsB)).toBeGreaterThan(0);
+    expect(crashOf(w).hitsB).toEqual([]);
     expect(stateOf(w, 'feud', trader.id, me.id)).toBeNull();
     expect(trader.brain!.attackers).toEqual({});
   });

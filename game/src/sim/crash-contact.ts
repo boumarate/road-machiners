@@ -14,6 +14,7 @@ import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { PERK_NUMBERS } from '../data/skills';
 import { vehicleMass } from './mass';
 import { bodyOf } from './body';
+import { towsClient } from './tow';
 import type { Vehicle, World } from './types';
 
 export type CrashContact = { side: Side; lanes: number[] };
@@ -88,8 +89,9 @@ function damageVehicleCrash(world: World, a: Vehicle, b: Vehicle, impact: number
   const share = vehicleMass(b) / (vehicleMass(a) + vehicleMass(b));
   const multA = ramMult(a, contact.a.side);
   const multB = ramMult(b, contact.b.side);
-  const hitsA = applyContactDamage(world, a, contact.a, impact, share, multB);
-  const hitsB = applyContactDamage(world, b, contact.b, impact, 1 - share, multA);
+  // A truck that is being towed deals no damage to its tower, whoever drove into whom.
+  const hitsA = towsClient(world, a, b) ? [] : applyContactDamage(world, a, contact.a, impact, share, multB);
+  const hitsB = towsClient(world, b, a) ? [] : applyContactDamage(world, b, contact.b, impact, 1 - share, multA);
   return { hitsA, hitsB };
 }
 
