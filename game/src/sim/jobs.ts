@@ -20,7 +20,7 @@ import { isJunk, maxHp } from "./wear";
 import { repairPlan, repairTurn } from "./repair";
 import { practice, vehicleHasPerk } from "./progress";
 import { finishTruckPickup } from "./salvage";
-import { searchTurn } from "./search";
+import { isSearchStalled, searchTurn } from "./search";
 import type { GridItem, Job, PartInstance, RefitJob, RefitPickup, Vehicle, World } from "./types";
 import { playerCommand } from "./world";
 
@@ -214,6 +214,7 @@ function advanceJob(world: World, v: Vehicle, job: Job): void {
 function isStalled(world: World, v: Vehicle, job: Job): boolean {
   if (job.kind === "repair") return isRepairStalled(world, v, job.partId, job.parts);
   if (job.kind === "weld") return !hasWeldScrap(v) || !weldFits(v);
+  if (job.kind === "search") return isSearchStalled(world, v, job);
   return job.kind === "strip" && isStripStalled(v, job.partId);
 }
 

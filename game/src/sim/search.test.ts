@@ -30,6 +30,18 @@ describe('timed scavenging search', () => {
     expect(next.events).toContainEqual(expect.objectContaining({ t: 'job', outcome: 'cancelled', job: expect.objectContaining({ auto: true }) }));
   });
 
+  it('an NPC nudged out of reach of its stock cancels the search instead of failing', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.salvage.push({ id: 'rich', pos: { x: 50, y: 50 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn }, parts: [] });
+    const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 50, y: 51 });
+    npc.brain = npcBrain('trader', npc.pos, ['raider']);
+    beginSearch(w, npc, 'rich');
+    npc.pos = { x: 50, y: 70 };
+    advanceJobs(w);
+    expect(npc.job).toBeNull();
+    expect(w.events).toContainEqual(expect.objectContaining({ t: 'job', outcome: 'cancelled' }));
+  });
+
   it('takes turns in proportion to the stock, then opens it for looting', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.salvage.push({ id: 'rich', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn * 3 }, parts: [] });

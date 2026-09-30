@@ -5,7 +5,7 @@ import { SALVAGE } from '../data/salvage';
 import { playerVehicle } from './damage';
 import { startJob } from './jobs';
 import { practice, skillEffect } from './progress';
-import { collectSalvage, salvageUnits } from './salvage';
+import { canReachSalvage, collectSalvage, salvageUnits } from './salvage';
 import type { Job, Vehicle, World } from './types';
 import { playerCommand } from './world';
 
@@ -26,6 +26,12 @@ export function beginSearch(world: World, v: Vehicle, stockId: string): void {
 
 export function startSearch(world: World, stockId: string): World {
   return playerCommand(world, (w) => beginSearch(w, playerVehicle(w), stockId));
+}
+
+// A truck nudged out of reach while it searches, like a blocked one creeping on toward its order, stops the search.
+export function isSearchStalled(world: World, v: Vehicle, job: Extract<Job, { kind: 'search' }>): boolean {
+  const stock = world.salvage.find((entry) => entry.id === job.stockId);
+  return !!stock && !canReachSalvage(v, stock);
 }
 
 export function searchTurn(world: World, v: Vehicle, job: Extract<Job, { kind: 'search' }>): boolean {
