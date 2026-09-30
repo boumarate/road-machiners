@@ -9,6 +9,9 @@ export const SAVE_MAJOR = 2;
 
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
-export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [];
+export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
+  // 0 to 1: the player gets townPatched, as a new game does.
+  (world) => ({ ...world, player: { ...(world.player as SavedJson), townPatched: false } }),
+];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

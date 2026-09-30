@@ -1,0 +1,4 @@
+{
+  "player": { "money": 120, "autoRepair": true, "vehicleId": "player" },
+  "turn": 7
+}

@@ -1,5 +1,5 @@
 {
- "format": "2.0",
+ "format": "2.1",
  "shape": {
   "broken": [],
   "dustClouds": [],
@@ -64,6 +64,7 @@
    "storage": [],
    "supplies": "number",
    "talked": {},
+   "townPatched": "boolean",
    "vehicleId": "string",
    "visible": [
     "number"

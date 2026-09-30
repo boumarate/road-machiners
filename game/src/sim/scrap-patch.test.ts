@@ -4,7 +4,7 @@ import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { CONDITION } from '../data/wear';
-import { scrapPatch } from './economy';
+import { getLotTradePrice, partRepairCost, enterTown, scrapPatch } from './economy';
 import { corePart, coreParts, mountedParts } from './grid';
 import { makePart } from './factory';
 import { addGoods, stowPart } from './inventory';
@@ -12,6 +12,7 @@ import { sitePads } from './sites';
 import { fuelCap, isStranded } from './stats';
 import { emptyWorld } from './testkit';
 import { maxHp } from './wear';
+import { endTurn } from './world';
 import type { PartInstance, Vehicle, World } from './types';
 
 const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
@@ -113,13 +114,25 @@ describe('scrap patch', () => {
     expect(corePart(w.vehicles[0], 'transmission').hp).toBe(0);
   });
 
-  it('leaves a player with goods the town buys to sell them first', () => {
+  it('patches a player whose goods to sell are worth less than the repair', () => {
     const w = strandedBroke();
     expect(addGoods(w, w.vehicles[0], 'scrap', 1)).toBe(1);
 
     scrapPatch(w);
 
-    expect(corePart(w.vehicles[0], 'transmission').hp).toBe(0);
+    expect(isStranded(w, w.vehicles[0])).toBe(false);
+  });
+
+  it('leaves a player whose goods to sell pay for the repair to sell them first', () => {
+    const w = strandedBroke();
+    const me = w.vehicles[0];
+    const trans = corePart(me, 'transmission');
+    expect(addGoods(w, me, 'scrap', 1)).toBe(1);
+    w.player.money = partRepairCost(w, trans) - getLotTradePrice(w, me, 'bowl', 'scrap', 1, 'sell');
+
+    scrapPatch(w);
+
+    expect(trans.hp).toBe(0);
   });
 
   it('leaves a player with a spare part to sell it first', () => {
@@ -150,5 +163,56 @@ describe('scrap patch', () => {
     scrapPatch(w);
 
     expect(corePart(w.vehicles[0], 'transmission').hp).toBe(0);
+  });
+});
+
+describe('enter town', () => {
+  const critical = (me: Vehicle) => [engineOf(me), corePart(me, 'transmission'), corePart(me, 'cab'), corePart(me, 'tank'), ...coreParts(me, 'wheel')];
+
+  function wornCritical(pos: { x: number; y: number }): World {
+    const w = emptyWorld(pos);
+    for (const part of critical(w.vehicles[0])) part.hp = 1;
+    w.events = [];
+    return w;
+  }
+
+  it('raises every worn critical part to the town patch share', () => {
+    const next = enterTown(wornCritical(sitePads(bowl)[0]));
+
+    for (const part of critical(next.vehicles[0])) expect(share(part)).toBeGreaterThanOrEqual(RULES.townPatch);
+  });
+
+  it('repairs only the first time on a visit and again after the truck leaves the town', () => {
+    const first = enterTown(wornCritical(sitePads(bowl)[0]));
+    const hurt = first.vehicles[0];
+    corePart(hurt, 'transmission').hp = 1;
+
+    const second = enterTown(first);
+    expect(corePart(second.vehicles[0], 'transmission').hp).toBe(1);
+
+    const away = emptyWorld({ x: 30, y: 30 });
+    away.player.townPatched = true;
+    expect(endTurn(away, () => undefined).player.townPatched).toBe(false);
+  });
+
+  it('throws away from a shop and repairs nothing', () => {
+    const w = wornCritical({ x: 30, y: 30 });
+
+    expect(() => enterTown(w)).toThrow();
+    expect(corePart(w.vehicles[0], 'transmission').hp).toBe(1);
+  });
+
+  it('leaves parts above the share and junk parts alone', () => {
+    const w = wornCritical(sitePads(bowl)[0]);
+    const me = w.vehicles[0];
+    for (const part of critical(me)) part.hp = maxHp(part);
+    const engine = engineOf(me);
+    engine.hp = 0;
+    engine.wear = CONDITION.maxWear + 2;
+
+    const next = enterTown(w);
+
+    expect(engineOf(next.vehicles[0]).hp).toBe(0);
+    expect(corePart(next.vehicles[0], 'cab').hp).toBe(maxHp(corePart(next.vehicles[0], 'cab')));
   });
 });

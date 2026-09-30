@@ -17,6 +17,7 @@ import { fireGuards } from './guards';
 import { discoverSites } from './locations';
 import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
 import { chargeUpkeep, scrapPatch } from './economy';
+import { townNear } from './sites';
 import { nameStream, spawnInitial, spawnNpcs } from './spawn';
 import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
 import { timed } from '../perf';
@@ -83,6 +84,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
       autoFire: false,
       autoRepair: true,
       engineHeat: 0,
+      townPatched: false,
       overdrive: false,
       discovered: [],
       scavenged: [],
@@ -245,6 +247,7 @@ export function endTurn(
     planNpcOrders(w);
     move(w);
     followTower(w);
+    if (!townNear(w)) w.player.townPatched = false;
     applyWear(w);
     advanceEngineHeat(w);
     advanceDust(w);
