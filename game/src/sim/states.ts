@@ -11,6 +11,7 @@ import { checkPatch, isPatching, lapsePatch, patchWork, settlePatch } from './pa
 import { practice } from './progress';
 import { checkEscort, checkPlayerTow, payEscort } from './tow';
 import { checkTrade, isMeeting } from './economy';
+import { isHostile } from './combat';
 import { getResources } from './resources';
 import type { Job, NpcState, StateData, StateEnding, StateKindId, Vehicle, World } from './types';
 import { canVehicleSee } from './vision';
@@ -106,7 +107,19 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   // trucks are parked in reach, and the fulfilled hook moves everything once. A feud between the two breaks it.
   // Nothing refreshes it: parked in reach, an agreed deal is fulfilled, and a pending offer still lapses unanswered.
   aid: { refresh: never, check: checkAid, hooks: { fulfilled: settleAid }, work: noWork, binds: true },
+  // The holder is the aggressor and the other party its target. It starts with a hostile act, like a shot or a ram, or
+  // with the holder hunting the other on a fight goal in sight. src/sim/combat.ts refreshes it. Both trucks count as in
+  // combat while it lasts. It breaks once the two are no longer hostile to each other.
+  combat: { refresh: never, check: checkCombat, hooks: {}, work: noWork, binds: false },
 };
+
+// A missing party is left to the missing-party rule.
+function checkCombat(w: World, s: NpcState): StateEnding | null {
+  const holder = w.vehicles.find((v) => v.id === s.holder);
+  const other = w.vehicles.find((v) => v.id === s.other);
+  if (!holder || !other) return null;
+  return isHostile(w, holder, other) || isHostile(w, other, holder) ? null : 'broken';
+}
 
 // A missing holder is left to the missing-party rule.
 function answerDropped(w: World, s: NpcState): boolean {
@@ -125,7 +138,7 @@ function turnsOf(kind: StateKindId): number | null {
 }
 
 // The data kind each state kind carries.
-const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none', grievance: 'none', plea: 'plea', trade: 'none', revenge: 'none', escort: 'escort', strayFire: 'strayFire', aid: 'aid' };
+const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none', grievance: 'none', plea: 'plea', trade: 'none', revenge: 'none', escort: 'escort', strayFire: 'strayFire', aid: 'aid', combat: 'none' };
 
 export function addState(w: World, kind: StateKindId, holder: string, other: string, data: StateData): NpcState {
   kindOf(kind);

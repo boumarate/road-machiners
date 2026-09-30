@@ -150,6 +150,7 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   revenge: () => 'Wants revenge on you',
   escort: () => 'Escorting you',
   aid: (s) => (aidData(s).giver === 'npc' ? 'Bringing you fuel' : 'Waiting for your fuel'),
+  combat: () => 'Attacking you',
   strayFire: (s) => `Hit by your stray fire, ${Math.round(strayData(s).damage)} of ${RULES.stray.feudDamage} damage forgiven`,
 };
 

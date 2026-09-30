@@ -15,6 +15,7 @@ import { corePart, hasLoot, itemSize, mountedItems, mountedParts } from './grid'
 import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { canVehicleSee, hasLineOfFire } from './vision';
 import { createWreckSalvage, removeStocks } from './salvage';
+import { STATE_TURNS } from '../data/npcs';
 import { addState, boundTo, endState, stateOf, strayData } from './states';
 import { isOnRope, towHeldBy } from './tow';
 import { isTownGuarded } from './guards';
@@ -722,10 +723,57 @@ function escortSees(world: World, v: Vehicle, shooter: Vehicle, target: Vehicle)
   return stateOf(world, "escort", v.id, target.id) !== null && canVehicleSee(world, v, shooter.pos);
 }
 
+// Starts the combat state from aggressor to target, or sets its timer back to full. A refresh keeps the state's id and
+// born, so its end check still runs every turn.
+function engage(world: World, aggressor: Vehicle, target: Vehicle): void {
+  const held = stateOf(world, "combat", aggressor.id, target.id);
+  if (held) held.turnsLeft = STATE_TURNS.combat;
+  else addState(world, "combat", aggressor.id, target.id, { kind: "none" });
+}
+
+// True while v is on either side of a combat state. The one combat test: a hostile in sight is only a warning.
+export function inCombat(world: World, v: Vehicle): boolean {
+  return world.states.some((s) => s.kind === "combat" && (s.holder === v.id || s.other === v.id));
+}
+
+// True when v is in combat with some truck other than otherId.
+export function inCombatWithOther(world: World, v: Vehicle, otherId: string): boolean {
+  return world.states.some((s) => s.kind === "combat" && ((s.holder === v.id && s.other !== otherId) || (s.other === v.id && s.holder !== otherId)));
+}
+
+// The most turns any of v's combat states has left, or null when v is not in combat.
+export function combatTurnsLeft(world: World, v: Vehicle): number | null {
+  const left = world.states.filter((s) => s.kind === "combat" && (s.holder === v.id || s.other === v.id)).map((s) => s.turnsLeft ?? 0);
+  return left.length > 0 ? Math.max(...left) : null;
+}
+
+// An NPC on a top fight goal that sees a hostile target is hunting it, even before its first shot. It runs after the
+// goals resolve, so the calls at the end of the turn see it.
+export function noteEngagements(world: World): void {
+  for (const v of world.vehicles) {
+    const target = huntedTarget(world, v);
+    if (target) engage(world, v, target);
+  }
+}
+
+// The target of v's top fight goal, if v is a live NPC on one.
+function fightTargetId(v: Vehicle): string | null {
+  const top = v.brain?.goals.at(-1);
+  return top?.kind === "fight" && !isKnockedOut(v) ? top.targetId ?? null : null;
+}
+
+// The hostile truck v hunts on a top fight goal and sees, if any.
+function huntedTarget(world: World, v: Vehicle): Vehicle | null {
+  const id = fightTargetId(v);
+  const target = id ? world.vehicles.find((t) => t.id === id) : undefined;
+  return target && isHostile(world, v, target) && canVehicleSee(world, v, target.pos) ? target : null;
+}
+
 // A shot, hit or miss, marks its shooter as an attacker of the target, of faction mates nearby that see both, and of
 // escorts of the target that see the shooter. Each NPC decides once on the latest shots. Hidden targets are not
 // broadcast.
 function recordAttack(world: World, shooter: Vehicle, target: Vehicle): void {
+  engage(world, shooter, target);
   for (const observer of world.vehicles) {
     if (!observer.brain || observer.id === shooter.id) continue;
     if (learnsAttack(world, observer, shooter, target)) observer.brain.attackers[shooter.id] = false;
