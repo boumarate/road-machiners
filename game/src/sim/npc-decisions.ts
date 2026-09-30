@@ -32,12 +32,12 @@ import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
 import { skillEffect } from './progress';
 import { randRange } from './rng';
-import { canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, lootBlocker, siteLootTable } from './salvage';
+import { canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, jobTarget, lootBlocker, siteLootTable } from './salvage';
 import { canUseSite, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { boundTo, givesWord, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
 import { canHire, canTakeEscort, declineFactor, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
-import type { Contact, NpcActivity, RefitPickup, SalvageStock, Vehicle, World } from './types';
+import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 
@@ -260,15 +260,9 @@ export function lootTaken(world: World, vehicle: Vehicle, targetId: string | nul
   return lootBlocker(world, vehicle, targetId) ? 'someone else is looting it' : null;
 }
 
-// The driver's job works the target: a search of the stock, or a refit whose pickup comes from the stock or truck.
+// The driver's job works the target.
 export function worksOnLoot(vehicle: Vehicle, targetId: string): boolean {
-  const job = vehicle.job;
-  if (job?.kind === 'search') return job.stockId === targetId;
-  return job?.kind === 'refit' && job.pickup !== null && pickupSource(job.pickup) === targetId;
-}
-
-function pickupSource(pickup: RefitPickup): string {
-  return pickup.from === 'stock' ? pickup.stockId : pickup.vehicleId;
+  return jobTarget(vehicle) === targetId;
 }
 
 // Why a loot goal on a stock ends. A driver learns a stock is empty only once it can reach it.

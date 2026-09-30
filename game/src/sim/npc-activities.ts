@@ -26,7 +26,7 @@ import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } fro
 import { getResources } from './resources';
 import { hashRandom, randInt, randRange } from './rng';
 import { sampleWeighted } from './npc-loadout';
-import { canLootTruck, canReachSalvage, canTakeAny, hasSalvage, isSiteStock, lootTruckTurn, wreckStockId } from './salvage';
+import { canLootTruck, canReachSalvage, canTakeAny, hasSalvage, isSiteStock, lootClaimedBy, lootTruckTurn, wreckStockId } from './salvage';
 import { beginSearch } from './search';
 import { onNeedySeen } from './aid';
 import { vehicleById } from './damage';
@@ -696,12 +696,12 @@ export function defyThreat(world: World, vehicle: Vehicle, threatener: Vehicle, 
 // A driver warned off its loot gives it up: its job on the target ends, its loot goal pops, and it notices the target
 // as salvage seen, so no roll on the way picks it again while it stays in sight.
 export function backOffLoot(world: World, vehicle: Vehicle): void {
-  const goal = topGoal(vehicle);
-  const target = goal && ['loot', 'scavenge'].includes(goal.kind) ? goal.targetId : null;
-  if (target === null) throw new Error(`${vehicle.id} has no loot goal to back off from`);
+  const target = lootClaimedBy(world, vehicle);
+  if (target === null) throw new Error(`${vehicle.id} holds no loot claim to back off from`);
   if (worksOnLoot(vehicle, target)) cancelJob(world, vehicle);
   vehicle.brain!.noticed[`salvageSeen:${target}`] = world.turn;
-  finishGoal(world, vehicle, 'warned off the loot');
+  const goal = topGoal(vehicle);
+  if (goal && ['loot', 'scavenge'].includes(goal.kind) && goal.targetId === target) finishGoal(world, vehicle, 'warned off the loot');
 }
 
 // One roll per new truck in sight the NPC can rob, nearest first. The sighting's perceived danger weighs the roll.

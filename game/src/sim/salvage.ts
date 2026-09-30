@@ -521,7 +521,8 @@ export function lootClaimedBy(world: World, npc: Vehicle): string | null {
   return ids.find((id) => id !== null && looterOf(world, id)?.id === npc.id) ?? null;
 }
 
-function jobTarget(v: Vehicle): string | null {
+// The loot target the truck's job works: a search of the stock, or a refit whose pickup comes from a stock or truck.
+export function jobTarget(v: Vehicle): string | null {
   const job = v.job;
   if (job?.kind === 'search') return job.stockId;
   const pickup = job?.kind === 'refit' ? job.pickup : null;

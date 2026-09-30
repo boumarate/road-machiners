@@ -817,10 +817,10 @@ describe('one looter per target', () => {
       expect(first.brain!.goals.some((g) => g.targetId === buggy.id)).toBe(false);
     });
 
-    it('throws for a driver with no loot goal on top', () => {
+    it('throws for a driver with no loot claim', () => {
       const { w, second } = contestedWreck();
       second.brain!.goals = [{ kind: 'travel', targetId: 'bowl', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'test goal' }];
-      expect(() => backOffLoot(w, second)).toThrow('no loot goal');
+      expect(() => backOffLoot(w, second)).toThrow('no loot claim');
     });
   });
 });
