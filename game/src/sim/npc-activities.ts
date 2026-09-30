@@ -30,7 +30,7 @@ import { canLootTruck, canReachSalvage, canTakeAny, hasSalvage, isSiteStock, loo
 import { beginSearch } from './search';
 import { onNeedySeen } from './aid';
 import { vehicleById } from './damage';
-import { judgeStrandedFoe, plead } from './parley';
+import { judgeStrandedFoe, plead, warnedOff } from './parley';
 import { addState, endState, stateOf, statesHeld } from './states';
 import { isStranded, suppliesCap, vehicleStats } from './stats';
 import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Vehicle, World } from './types';
@@ -686,11 +686,11 @@ function hurtingFoe(world: World, vehicle: Vehicle): Vehicle | null {
 }
 
 // A driver that refuses a threat starts a feud with the one who made it, then fights it or runs from it.
-export function defyThreat(world: World, vehicle: Vehicle, threatener: Vehicle, answer: Exclude<DecisionOptions['threatened'], 'comply'>): void {
+export function defyThreat(world: World, vehicle: Vehicle, threatener: Vehicle, answer: Exclude<DecisionOptions['threatened'], 'comply'>, reason = answer === 'fightBack' ? 'refuse a threat' : 'escape a threat'): void {
   startFeuds(world, threatener, vehicle);
   vehicle.brain!.noticed[`hostileSeen:${threatener.id}`] = world.turn;
-  if (answer === 'fightBack') interrupt(world, vehicle, fightGoal(world, vehicle, threatener, 'refuse a threat'));
-  else interrupt(world, vehicle, fleeFrom(world, vehicle, npcProfile(vehicle), threatener.id, threatener.pos, 'escape a threat'));
+  if (answer === 'fightBack') interrupt(world, vehicle, fightGoal(world, vehicle, threatener, reason));
+  else interrupt(world, vehicle, fleeFrom(world, vehicle, npcProfile(vehicle), threatener.id, threatener.pos, reason));
 }
 
 // A driver warned off its loot gives it up: its job on the target ends, its loot goal pops, and it notices the target
@@ -1167,7 +1167,7 @@ function searchStock(world: World, vehicle: Vehicle, stock: SalvageStock): void 
   if (vehicle.job) return;
   // No search starts in combat, so the driver gives the salvage up rather than park beside it for good.
   if (inCombat(world, vehicle)) finishGoal(world, vehicle, 'combat stops the search');
-  else beginSearch(world, vehicle, stock.id);
+  else if (!warnedOff(world, vehicle, stock)) beginSearch(world, vehicle, stock.id);
 }
 
 // The goal reach rule: within twice the stop radius of the destination.

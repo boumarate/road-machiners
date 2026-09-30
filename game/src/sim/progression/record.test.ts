@@ -23,12 +23,14 @@ describe('record', () => {
     expect(second).toEqual(first);
   }, RUN_TIMEOUT);
 
-  it('replays to the XP the world gave through practice', () => {
+  it('replays to the XP the world gave through practice', async () => {
     const lines: TraceLine[] = [];
     let last: World | null = null;
     for (const step of recordTurns(1337, 'scavenger', SHORT_RUN)) {
       lines.push(...step.lines);
       last = step.world;
+      // A minute of turns without a yield would starve the worker's status messages to the runner.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
     if (!last) throw new Error('The recording ran no turns');
     const world = last;

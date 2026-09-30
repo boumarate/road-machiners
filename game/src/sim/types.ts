@@ -81,7 +81,10 @@ export type SalvageStock = {
 // A pile is gone at turn `until`. The player's items and other trucks' items never share a pile. A player pile counts
 // as searched, and `basis` keeps the average paid per unit of each good on it, so taking them back restores their
 // cost. Goods on any other pile cost nothing.
-export type Pile = { until: number; fromPlayer: boolean; basis: Record<string, number> };
+// An NPC that was handed the pile claims it. The claim lapses at turn `until` or when the claimant drops its loot goal
+// on the pile, is knocked out or leaves the world. `warned` lists the drivers who agreed to back off.
+export type PileClaim = { by: string; until: number; warned: string[] };
+export type Pile = { until: number; fromPlayer: boolean; basis: Record<string, number>; claim?: PileClaim };
 
 export type RefitMove = {
   itemId: string;
