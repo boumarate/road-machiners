@@ -5,7 +5,7 @@ import { partDef } from "../data/parts";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import type { GameEvent, Job, PartInstance } from "../sim/types";
 import { maxHp } from "../sim/wear";
-import { contractDue, contractSummary, eventText, jobLabel, roundLabel, wearLabel } from "./format";
+import { contractDue, contractSummary, contractWindow, eventText, jobLabel, roundLabel, wearLabel } from "./format";
 import { mountedParts } from "../sim/grid";
 
 function part(wear: number): PartInstance {
@@ -41,6 +41,17 @@ describe("contract text", () => {
 
   it("says the hand-in part must still work and be rebuilt at most once", () => {
     expect(contractSummary(fetch)).toBe("Bring MG turret to Bowl: working, rebuilt at most once");
+  });
+
+  it("starts a rush haul's summary with Rush and leaves a standard haul plain", () => {
+    const haul: Contract = { id: "c3", shop: "bowl", kind: "haul", good: "salt", units: 3, to: "nose", reward: 100, deadline: 100, window: 100, rush: false, tier: 1 };
+    expect(contractSummary(haul).startsWith("Haul 3")).toBe(true);
+    expect(contractSummary({ ...haul, rush: true }).startsWith("Rush: Haul 3")).toBe(true);
+  });
+
+  it("shows the window in whole game hours, at least one", () => {
+    expect(contractWindow({ ...bounty, window: 525 })).toBe("28 h");
+    expect(contractWindow({ ...bounty, window: 1 })).toBe("1 h");
   });
 });
 

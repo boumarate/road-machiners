@@ -6,6 +6,7 @@ import { partDef } from '../data/parts';
 import type { Contract } from '../sim/market';
 import { PERK_LEVELS, SKILL_INFO } from '../data/skills';
 import { TERRAIN } from '../data/terrain';
+import { TIME } from '../data/time';
 import { playerVehicle, vehicleById } from '../sim/damage';
 import { isKnockedOut } from '../sim/defeat';
 import type { Work, WorkLeft } from '../sim/states';
@@ -430,12 +431,17 @@ function contractText(c: Contract, outcome: keyof typeof CONTRACT_OUTCOME): { te
 
 // One line naming what a contract asks for.
 export function contractSummary(c: Contract): string {
-  if (c.kind === 'haul') return `Haul ${c.units} ${GOODS[c.good].name} to ${siteName(c.to)}`;
+  if (c.kind === 'haul') return `${c.rush ? 'Rush: ' : ''}Haul ${c.units} ${GOODS[c.good].name} to ${siteName(c.to)}`;
   if (c.kind === 'fetch') {
     const rebuilt = CONTRACTS.fetch.maxWear === 1 ? 'rebuilt at most once' : `rebuilt at most ${CONTRACTS.fetch.maxWear} times`;
     return `Bring ${partDef(c.defId).name} to ${siteName(c.shop)}: working, ${rebuilt}`;
   }
   return `Defeat any ${c.targetName}`;
+}
+
+// How long a contract allows from acceptance, in whole game hours.
+export function contractWindow(c: Contract): string {
+  return `${Math.max(1, Math.round(c.window / (TIME.turnsPerDay / 24)))} h`;
 }
 
 // The game time a contract is due. It fails at the end of its deadline turn.
