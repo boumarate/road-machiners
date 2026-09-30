@@ -1,11 +1,20 @@
 // World creation and the turn pipeline. No rendering or physics imports: this runs in Node tests.
 // Public functions take a world and return a new one. Inside, a cloned draft is mutated.
 
+import { CHASSIS } from '../data/chassis';
+import { GOODS } from '../data/goods';
+import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
+import { PERKS, SKILL_IDS, XP_SOURCES } from '../data/skills';
+import { CONDITION } from '../data/wear';
 import { RULES } from '../data/rules';
 import type { StartKit } from '../data/start';
 import { findPart, playerVehicle } from './damage';
-import { makePart, makeVehicle } from './factory';
+import { makePart, makeVehicle, newId } from './factory';
+import { gridOf, placementError } from './grid';
+import { addGoods } from './inventory';
+import { isPerkId, pickedFromPair, skillLevel } from './progress';
+import { fitStores } from './resources';
 import { generateObstacles, obstacleReach } from './mapgen';
 import type { BakedMap } from './terrain';
 import { planNpcOrders } from './ai';
@@ -25,13 +34,13 @@ import { advanceStates } from './states';
 import { checkBeacon, dropStrandedTowers, followTower, isTowed, playerTow } from './tow';
 import { endCallIfOut, raiseCalls } from './dialogue';
 import { advancePatches } from './patch';
-import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
+import type { GridItem, MoveOrder, PartInstance, Vehicle, WeaponOrder, World, XpSource } from './types';
 import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
 import { noteEscape } from './escape';
 import { advanceWeather } from './weather';
 import { advanceContracts, advanceShops, initializeShops, marketStream, shopNear } from './market';
-import { applyWear } from './wear';
+import { applyWear, carryHp } from './wear';
 import { advanceDust } from './detect';
 import { advanceJobs, startAutoRepair } from './jobs';
 import { advanceEngineHeat } from './engine-heat';
@@ -356,4 +365,179 @@ export function setAutoFire(world: World, on: boolean): World {
 
 export function hostileToPlayer(world: World, v: Vehicle): boolean {
   return isHostile(world, playerVehicle(world), v);
+}
+
+// ---- Carry-over: a new world on the current map around what a player cannot get back from an old save.
+// The reader in src/three/save-rescue.ts hands in plain values. This section knows what the ids mean.
+
+export type CarriedPart = { defId: string; wear: number; hp: number; rebuilt: boolean };
+export type CarriedItem = ({ kind: 'part'; part: CarriedPart } | { kind: 'good'; good: string }) & { x: number; y: number; rot: 0 | 1 };
+
+export type Carried = {
+  seed: number | null;
+  money: number | null;
+  skills: Partial<Record<string, number>>; // XP per skill id
+  xpBySource: Partial<Record<string, number>>;
+  perks: string[];
+  discovered: string[];
+  knockouts: number | null;
+  autoFire: boolean | null;
+  autoRepair: boolean | null;
+  fuel: number | null;
+  supplies: number | null;
+  costBasis: Record<string, number>;
+  truck: { chassisId: string; name: string | null; items: CarriedItem[] } | null;
+  storage: CarriedPart[];
+};
+
+// Part and good ids. The UI names them.
+export type CarryReport = {
+  toGarage: string[]; // known parts that lost their spot and went to garage storage
+  sold: { good: string; units: number; money: number }[]; // goods with no room, sold at base value
+  lost: string[]; // ids the current data does not know
+};
+
+const KNOWN_SITES = new Set([...REGION.towns, ...REGION.locations].map((s) => s.id));
+
+export function carriedWorld(carried: Carried, kit: StartKit, map: BakedMap, freshSeed: () => number): { world: World; report: CarryReport } {
+  const report: CarryReport = { toGarage: [], sold: [], lost: [] };
+  const truckKit = carriedKit(carried, kit, report);
+  const world = newWorld(pick(carried.seed, freshSeed()), truckKit, map, true, townStart());
+  carryPlayer(world, carried);
+  carryTruck(world, carried, carried.truck !== null && truckKit !== kit, report);
+  world.player.costBasis = heldBasis(playerVehicle(world), carried.costBasis);
+  fitStores(world, playerVehicle(world));
+  refreshVision(world);
+  world.events = [];
+  return { world, report };
+}
+
+// The start kit, with the carried chassis and no parts when the chassis is known. An unknown one keeps the kit.
+function carriedKit(carried: Carried, kit: StartKit, report: CarryReport): StartKit {
+  const saved = carried.truck;
+  if (!saved) return kit;
+  if (!(saved.chassisId in CHASSIS)) {
+    report.lost.push(saved.chassisId);
+    return kit;
+  }
+  return { ...kit, chassis: saved.chassisId, name: pick(saved.name, kit.name), parts: [], storage: [], cargo: {}, costBasis: {} };
+}
+
+// A carried value, or the fallback when the save held none.
+function pick<T>(value: T | null | undefined, fallback: T): T {
+  return value === null || value === undefined ? fallback : value;
+}
+
+// Progression and settings. Time-bound fields keep the new-game values.
+function carryPlayer(world: World, c: Carried): void {
+  const p = world.player;
+  Object.assign(p, {
+    money: pick(c.money, p.money),
+    knockouts: pick(c.knockouts, p.knockouts),
+    autoFire: pick(c.autoFire, p.autoFire),
+    autoRepair: pick(c.autoRepair, p.autoRepair),
+    fuel: pick(c.fuel, p.fuel),
+    supplies: pick(c.supplies, p.supplies),
+    discovered: c.discovered.filter((id) => KNOWN_SITES.has(id)),
+  });
+  for (const skill of SKILL_IDS) p.skills[skill] = pick(c.skills[skill], 0);
+  for (const source of Object.keys(XP_SOURCES) as XpSource[]) p.xpBySource[source] = pick(c.xpBySource[source], 0);
+  carryPerks(world, c.perks);
+}
+
+// A perk stays when its skill reached its level and no perk of its pair is picked yet.
+function carryPerks(world: World, perks: string[]): void {
+  for (const perk of perks.filter(isPerkId)) {
+    const { skill, level } = PERKS[perk];
+    if (skillLevel(world, skill) >= level && !pickedFromPair(world, perk)) world.player.perks.push(perk);
+  }
+}
+
+// Cost basis for the goods the truck still holds.
+function heldBasis(truck: Vehicle, basis: Record<string, number>): Record<string, number> {
+  return Object.fromEntries(Object.entries(basis).filter(([good]) => truck.items.some((it) => it.kind === 'good' && it.good === good)));
+}
+
+// Fills the truck and the garage. `stay` is false when the chassis is gone: then every part goes to the garage.
+function carryTruck(world: World, c: Carried, stay: boolean, report: CarryReport): void {
+  const truck = playerVehicle(world);
+  const goods: Record<string, number> = {};
+  const garage: CarriedPart[] = [...c.storage];
+  for (const item of c.truck?.items ?? []) {
+    if (item.kind === 'good') goods[item.good] = pick(goods[item.good], 0) + 1;
+    else if (!carryPartItem(world, truck, item, stay, report)) garage.push(item.part);
+  }
+  storeParts(world, garage, report);
+  carryGoods(world, truck, goods, stay, report);
+}
+
+// Puts a carried part item on the truck. False when it belongs in the garage, which the report then names.
+function carryPartItem(world: World, truck: Vehicle, item: CarriedItem & { kind: 'part' }, stay: boolean, report: CarryReport): boolean {
+  const { defId } = item.part;
+  if (!isKnownPart(defId)) report.lost.push(defId);
+  else if (isCore(defId)) carryCore(world, truck, item.part, stay);
+  else if (stay && placePart(world, truck, item)) return true;
+  else report.toGarage.push(defId);
+  return !isKnownPart(defId) || isCore(defId);
+}
+
+function storeParts(world: World, parts: CarriedPart[], report: CarryReport): void {
+  const [known, unknown] = [parts.filter((p) => isKnownPart(p.defId)), parts.filter((p) => !isKnownPart(p.defId))];
+  report.lost.push(...unknown.map((p) => p.defId));
+  world.player.storage.push(...known.filter((p) => !isCore(p.defId)).map((p) => carryPart(world, p)));
+}
+
+function isKnownPart(defId: string): boolean {
+  try {
+    partDef(defId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isCore(defId: string): boolean {
+  return partDef(defId).kind === 'core';
+}
+
+// A carried part as a new instance at its clamped wear and HP. A junk part keeps the junk step.
+function carryPart(world: World, c: CarriedPart): PartInstance {
+  const wear = Math.min(CONDITION.maxWear + 1, Math.max(0, Math.round(c.wear)));
+  const part = makePart(world, c.defId, Math.min(wear, CONDITION.maxWear));
+  part.wear = wear;
+  if (c.rebuilt) part.rebuilt = true;
+  carryHp(part, c.hp);
+  return part;
+}
+
+// A built-in part takes the wear and HP of the carried one with the same id. A chassis without it has nothing to take.
+function carryCore(world: World, truck: Vehicle, c: CarriedPart, stay: boolean): void {
+  const core = truck.items.find((it) => it.kind === 'part' && it.part.defId === c.defId);
+  if (!stay || core?.kind !== 'part') return;
+  const carried = carryPart(world, c);
+  core.part.wear = Math.min(carried.wear, CONDITION.maxWear);
+  carryHp(core.part, carried.hp);
+}
+
+// Puts a carried part on its spot. False when the spot is off the grid or taken.
+function placePart(world: World, truck: Vehicle, item: CarriedItem & { kind: 'part' }): boolean {
+  const placed: GridItem = { id: newId(world, 'i'), kind: 'part', part: carryPart(world, item.part), x: item.x, y: item.y, rot: item.rot };
+  if (placementError(gridOf(truck), truck.items, placed, placed.id)) return false;
+  truck.items.push(placed);
+  return true;
+}
+
+// Goods go back in the grid. Units with no room, or all of them when the chassis is gone, sell at base value.
+function carryGoods(world: World, truck: Vehicle, goods: Record<string, number>, stay: boolean, report: CarryReport): void {
+  for (const [good, units] of Object.entries(goods)) {
+    if (!(good in GOODS)) report.lost.push(good);
+    else sellGoods(world, good, units - (stay ? addGoods(world, truck, good, units) : 0), report);
+  }
+}
+
+function sellGoods(world: World, good: string, units: number, report: CarryReport): void {
+  if (units <= 0) return;
+  const money = units * GOODS[good].value;
+  world.player.money += money;
+  report.sold.push({ good, units, money });
 }
