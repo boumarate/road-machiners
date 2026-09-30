@@ -6,14 +6,14 @@
 import { ECONOMY } from '../data/goods';
 import { AID } from '../data/npc-behavior';
 import { RULES } from '../data/rules';
-import { inFeud, isHostile } from './combat';
+import { inCombat, inFeud, isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
 import { talkOf } from './dialogue';
 import { isMeeting, supplyRoom, transfer, truckSupplyForSale, type Supply } from './economy';
-import { inCombat } from './jobs';
 import { vehicleValue } from './market';
-import { inDanger, meetGoal, react, underAttack } from './npc-activities';
+import { fuelReserveFor, inDanger, meetGoal, react } from './npc-activities';
 import { bodyCondition } from './npc-decisions';
+import { corePart } from './grid';
 import { practice } from './progress';
 import { getResources } from './resources';
 import { addState, aidData, endState, stateOf } from './states';
@@ -53,10 +53,16 @@ function amountsBy(pick: (kind: Supply) => number): AidAmounts {
 }
 
 // What a low driver asks the player for: whole units of each low supply up to AID.fillShare of its cap, capped by
-// what the player holds.
+// what the player holds. Fuel is also capped by the driver's reserve for the way to a pump, and a driver with a holed
+// tank asks for none, since it would leak away.
 export function wantedAid(world: World, npc: Vehicle): AidAmounts {
   const held = getResources(world, npc);
-  const want = (kind: Supply) => Math.max(0, Math.floor(capOf(npc, kind) * AID.fillShare - held[kind]));
+  const target = (kind: Supply) => {
+    const share = capOf(npc, kind) * AID.fillShare;
+    if (kind !== 'fuel') return share;
+    return corePart(npc, 'tank')?.hp === 0 ? 0 : Math.min(share, Math.max(1, Math.ceil(fuelReserveFor(world, npc))));
+  };
+  const want = (kind: Supply) => Math.max(0, Math.floor(target(kind) - held[kind]));
   return amountsBy((kind) => (isLowOn(world, npc, kind) ? Math.min(want(kind), Math.floor(world.player[kind])) : 0));
 }
 
@@ -148,9 +154,9 @@ function moveSupply(world: World, giver: Vehicle, receiver: Vehicle, kind: Suppl
 
 // ---- The unprompted offer.
 
-// A driver that takes up the unprompted offer, out of danger and not under attack, may help.
-function mayHelp(npc: Vehicle): boolean {
-  return !inDanger(npc) && !underAttack(npc) && talkOf(npc).topics.includes('aidOffer');
+// A driver that takes up the unprompted offer, out of danger and not in combat, may help.
+function mayHelp(world: World, npc: Vehicle): boolean {
+  return !inDanger(npc) && !inCombat(world, npc) && talkOf(npc).topics.includes('aidOffer');
 }
 
 // A poor player low on fuel or supplies, out of combat.
@@ -160,7 +166,7 @@ function looksNeedy(world: World, me: Vehicle): boolean {
 
 function mayOfferAid(world: World, npc: Vehicle): boolean {
   const me = playerVehicle(world);
-  if (playerAid(world) !== null || !mayHelp(npc)) return false;
+  if (playerAid(world) !== null || !mayHelp(world, npc)) return false;
   return canVehicleSee(world, npc, me.pos) && !isHostile(world, npc, me) && looksNeedy(world, me);
 }
 

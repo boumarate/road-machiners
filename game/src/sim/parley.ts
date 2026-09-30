@@ -1,29 +1,31 @@
 // Ending or dodging a fight by talk. A truce ends the feuds between two sides for a while. Mercy is a truce the
-// loser buys with its cargo. A threat asks a driver at peace for its cargo. An NPC answers each with a weighted
-// decision. Radio talk with the player lives in src/sim/dialogue.ts, and this module owns what the answers do.
+// loser buys with its cargo. A threat asks a driver at peace for its cargo, and a warning asks a looter at the player's
+// wreck to back off. An NPC answers each with a weighted decision. Radio talk with the player lives in src/sim/dialogue.ts, and this module owns what the answers do.
 
 import { SPAWN } from '../data/npcs';
 import { isHostile } from './combat';
 import { isKnockedOut } from './defeat';
 import { RULES } from '../data/rules';
-import { playerVehicle } from './damage';
+import { playerVehicle, vehicleById } from './damage';
 import { partSellPrice } from './economy';
 import { corePart, isMounted } from './grid';
 import { applyRefitLayout } from './inventory';
 import { creditBounty } from './market';
-import { defyThreat, finishGoal, pushGoal, topGoal } from './npc-activities';
+import { backOffLoot, defyThreat, finishGoal, pushGoal, topGoal } from './npc-activities';
 import { decide, firepower, perceiveDanger, visibleHostiles, wantsLoot } from './npc-decisions';
 import { SPARE_LINE } from '../data/dialogue';
 import { vehicleHasPerk } from './progress';
-import { backedOff, canReachSalvage, claimantOf, claimPile, createCargoSalvage, dumpOnPile, hasCargo, takeError } from './salvage';
+import { backedOff, canReachSalvage, claimantOf, claimPile, createCargoSalvage, dumpOnPile, hasCargo, lootClaimedBy, salvageInRange, takeError } from './salvage';
 import { isStranded } from './stats';
 import { addState, endState, pleaData, stateOf } from './states';
+import { inTowReach } from './tow';
 import type { DecisionOptions } from '../data/npcs';
 import type { Aim, GridItem, Plea, SalvageStock, Vehicle, World } from './types';
 import { canVehicleSee } from './vision';
 import { dist } from './vec';
 
 export type ThreatAnswer = DecisionOptions['threatened'];
+export type WarnAnswer = DecisionOptions['warnedOff'];
 
 // A vehicle and its NPC faction mates within SPAWN.neighborHelp. The player stands alone.
 function sideOf(world: World, v: Vehicle): Vehicle[] {
@@ -209,6 +211,29 @@ export function defyClaims(world: World, npc: Vehicle): void {
   const me = playerVehicle(world);
   backOffClaims(world, npc);
   defendClaim(world, npc, me);
+}
+
+// The driver loots a target the player truck is in reach of too, so the player can warn it off. A call from afar has
+// nothing to claim.
+export function lootsBesidePlayer(world: World, npc: Vehicle): boolean {
+  const target = lootClaimedBy(world, npc);
+  const me = playerVehicle(world);
+  if (target === null || target === me.id) return false;
+  const stock = world.salvage.find((s) => s.id === target);
+  return stock ? salvageInRange(me, stock) : inTowReach(me, vehicleById(world, target));
+}
+
+// A looter's answer to the player's warning off its wreck, rolled once.
+export function answersWarning(world: World, npc: Vehicle): WarnAnswer {
+  const me = playerVehicle(world);
+  return decide(world, npc, 'warnedOff', me.id, perceiveDanger(world, npc, me));
+}
+
+// A driver that complies leaves the wreck to the player, and one that fights back fights the player like a defied
+// robbery. A refusal changes nothing: the driver keeps looting.
+export function settleWarning(world: World, npc: Vehicle, answer: WarnAnswer): void {
+  if (answer === 'comply') backOffLoot(world, npc);
+  else if (answer === 'fightBack') defyThreat(world, npc, playerVehicle(world), 'fightBack');
 }
 
 // ---- Stripping a stranded player. A robber alone with a stranded player offers to strip the truck instead of wrecking

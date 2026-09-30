@@ -26,6 +26,7 @@ import {
   fetchReward,
   contractXp,
   haulPenalty,
+  haulWindow,
   initializeShops,
   isExpired,
   partPristineBuyPrice,
@@ -51,21 +52,56 @@ describe('estimateTurns', () => {
 
 describe('contractReward', () => {
   it('scales with turns', () => {
-    const short = contractReward(50, 1, 0);
-    const long = contractReward(200, 1, 0);
+    const short = contractReward(50, 1, 0, false);
+    const long = contractReward(200, 1, 0, false);
     expect(long).toBeGreaterThan(short);
   });
 
   it('scales with tier at the same turns', () => {
-    const tier1 = contractReward(100, 1, 0);
-    const tier3 = contractReward(100, 3, 0);
+    const tier1 = contractReward(100, 1, 0, false);
+    const tier3 = contractReward(100, 3, 0, false);
     expect(tier3).toBeGreaterThan(tier1);
   });
 
   it('adds a cut of cargo value to the reward', () => {
-    const plain = contractReward(100, 2, 0);
-    const withCargo = contractReward(100, 2, 1000);
+    const plain = contractReward(100, 2, 0, false);
+    const withCargo = contractReward(100, 2, 1000, false);
     expect(withCargo).toBeGreaterThan(plain);
+  });
+});
+
+describe('haul pay and rush', () => {
+  it('pays a standard haul at least double salvage over the estimated round trip', () => {
+    const towns = [...REGION.towns, ...REGION.locations];
+    for (const a of towns) {
+      for (const b of towns) {
+        if (a === b) continue;
+        const turns = estimateTurns(a.pos, b.pos);
+        for (const tier of [1, 2, 3] as const) {
+          expect(contractReward(turns, tier, 0, false)).toBeGreaterThanOrEqual(Math.floor(4 * EFFORT.wage[tier] * turns));
+        }
+      }
+    }
+  });
+
+  it('gives a rush haul a shorter window and a higher reward than a standard one', () => {
+    expect(haulWindow(100, true)).toBeLessThan(haulWindow(100, false));
+    expect(contractReward(100, 1, 50, true)).toBeGreaterThan(contractReward(100, 1, 50, false));
+  });
+
+  it('rolls both rush and standard hauls, and leaves the main rng alone', () => {
+    const w = emptyWorld();
+    const before = w.rngState;
+    const rolled = new Set<boolean>();
+    for (let i = 0; i < 100; i++) {
+      const c = rollContract(w, { id: 'bowl', pos: { x: 0, y: 0 } }, [{ id: 'nose', pos: { x: 100, y: 0 } }], ['salt'], [], []);
+      if (c?.kind === 'haul') {
+        rolled.add(c.rush);
+        expect(c.window).toBe(haulWindow(estimateTurns({ x: 0, y: 0 }, { x: 100, y: 0 }), c.rush));
+      }
+    }
+    expect(rolled.size).toBe(2);
+    expect(w.rngState).toBe(before);
   });
 });
 
@@ -98,7 +134,7 @@ describe('bountyReward', () => {
 
 describe('contractXp', () => {
   it('pays fetch XP for the search fee only, not the part price', () => {
-    const cheap: Contract = { id: 'a', shop: 'bowl', kind: 'fetch', defId: 'panniers', reward: fetchReward('panniers', 1), deadline: 500, tier: 1 };
+    const cheap: Contract = { id: 'a', shop: 'bowl', kind: 'fetch', defId: 'panniers', reward: fetchReward('panniers', 1), deadline: 500, window: 500, tier: 1 };
     const dear: Contract = { ...cheap, defId: 'cage', reward: fetchReward('cage', 1) };
     expect(contractXp(cheap)).toBe(contractXp(dear));
     expect(contractXp(cheap)).toBe(Math.round(CONTRACTS.fetch.searchFeeTurns * EFFORT.wage[1] * CONTRACTS.fetch.xpPerEffort));
@@ -171,7 +207,7 @@ describe('rollContract', () => {
     }
   });
 
-  it('sets a haul deadline past the current turn by the estimated travel', () => {
+  it('sets a haul deadline at the current turn plus its window', () => {
     const w = emptyWorld();
     w.turn = 10;
     let haul: Contract | null = null;
@@ -180,7 +216,7 @@ describe('rollContract', () => {
       if (c?.kind === 'haul') haul = c;
     }
     expect(haul).not.toBeNull();
-    expect(haul!.deadline).toBeGreaterThan(w.turn);
+    expect(haul!.deadline).toBe(w.turn + haul!.window);
   });
 
   it('takes a haul\'s tier from the hauled good, not a random roll', () => {
@@ -299,8 +335,8 @@ describe('haulPenalty', () => {
 describe('contract boards and delivery', () => {
   const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
   const nose = REGION.towns.find((t) => t.id === 'nose')!;
-  const haul = (to: string, units: number): Contract => ({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'salt', units, to, reward: 300, deadline: 500, tier: 1 });
-  const fetch = (): Contract => ({ id: 'ct-fetch', shop: 'bowl', kind: 'fetch', defId: 'mg', reward: fetchReward('mg', 1), deadline: 500, tier: 1 });
+  const haul = (to: string, units: number): Contract => ({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'salt', units, to, reward: 300, deadline: 500, window: 500, rush: false, tier: 1 });
+  const fetch = (): Contract => ({ id: 'ct-fetch', shop: 'bowl', kind: 'fetch', defId: 'mg', reward: fetchReward('mg', 1), deadline: 500, window: 500, tier: 1 });
 
   function atBowlWithOffer(c: Contract): World {
     const w = emptyWorld(sitePads(bowl)[0]);
@@ -415,7 +451,7 @@ describe('contract boards and delivery', () => {
   it('charges the goods value when a haul expires', () => {
     let w = acceptContract(atBowlWithOffer(haul('nose', 3)), 'ct-haul');
     const money = w.player.money;
-    w = update(w, (d) => { d.turn = 501; advanceContracts(d); });
+    w = update(w, (d) => { d.turn += 501; advanceContracts(d); });
     expect(w.player.contracts).toHaveLength(0);
     expect(w.player.money).toBe(money - haulPenalty(haul('nose', 3) as Extract<Contract, { kind: 'haul' }>, goodValue('salt')));
   });
@@ -433,7 +469,7 @@ describe('contract boards and delivery', () => {
   it('pays a bounty on the player kill and lapses when the target leaves', () => {
     const base = emptyWorld();
     const raider = addRaider(base, 'buggy', { x: 50, y: 50 });
-    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: raider.name, reward: 400, deadline: 900, tier: 2 };
+    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: raider.name, reward: 400, deadline: 900, window: 900, tier: 2 };
     const paid = update(base, (d) => {
       d.player.contracts = [bounty];
       d.removed = [raider];
@@ -453,7 +489,7 @@ describe('contract boards and delivery', () => {
   it('pays out at most one held bounty per kill of the same template', () => {
     const base = emptyWorld();
     const raider = addRaider(base, 'buggy', { x: 50, y: 50 });
-    const held = (id: string, reward: number): Contract => ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: raider.name, reward, deadline: 900, tier: 2 });
+    const held = (id: string, reward: number): Contract => ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: raider.name, reward, deadline: 900, window: 900, tier: 2 });
     const bounties = [held('ct-b1', 400), held('ct-b2', 400), held('ct-b3', 400)];
     const result = update(base, (d) => {
       d.player.contracts = bounties;
@@ -486,6 +522,25 @@ describe('contract boards and delivery', () => {
     w.shops.bowl.restockAt = 10000; // far off, so only the expiry filter runs
     w = update(w, (d) => { d.turn = 501; advanceShops(d); });
     expect(w.shops.bowl.contracts.find((c) => c.id === 'ct-haul')).toBeUndefined();
+  });
+
+  it('starts the clock at acceptance for every kind', () => {
+    const offers: Contract[] = [{ ...haul('nose', 3), deadline: 400, window: 300 }, { ...fetch(), deadline: 400, window: 300 }];
+    for (const offer of offers) {
+      let w = atBowlWithOffer(offer);
+      w = update(w, (d) => { d.turn = 350; });
+      w = acceptContract(w, offer.id);
+      expect(w.player.contracts[0].deadline).toBe(650);
+    }
+  });
+
+  it('delivers a rush haul like a standard one', () => {
+    let w = acceptContract(atBowlWithOffer({ ...(haul('nose', 3) as Extract<Contract, { kind: 'haul' }>), rush: true }), 'ct-haul');
+    w.vehicles[0].pos = { ...sitePads(nose)[0] };
+    const money = w.player.money;
+    w = deliverContract(w, 'ct-haul');
+    expect(w.player.money).toBe(money + 300);
+    expect(goodsCount(playerVehicle(w)).salt ?? 0).toBe(0);
   });
 
   it('refuses to accept an offer past its deadline', () => {

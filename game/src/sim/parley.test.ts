@@ -10,9 +10,10 @@ import { takeAllLoot } from './locations';
 import { pushGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { visibleSalvage } from './npc-decisions';
 import { makePeace, plead, yieldTo } from './parley';
-import { hasCargo } from './salvage';
+import { hasCargo, looterOf } from './salvage';
+import { beginSearch } from './search';
 import { addState, endState, stateOf } from './states';
-import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf } from './testkit';
 import type { Contract } from './market';
 import type { Faction, Vehicle, World } from './types';
 import { refreshVision } from './vision';
@@ -371,8 +372,71 @@ describe('player robbery', () => {
   });
 });
 
+describe('warning a looter off', () => {
+  const WARN = 'This wreck is mine. Back off.';
+  const INSIST = 'You heard me. Leave it.';
+
+  // The parked player at 30,30 beside a road wreck that a scavenger parked on its other side searches.
+  function contested(): { w: World; npc: Vehicle; wreckId: string } {
+    const w = quietWorld();
+    const wreck = { id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 6 }, parts: [] };
+    w.salvage.push(wreck);
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine', 'mg'], { x: 31.5, y: 30 });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    npc.speed = 0;
+    npc.brain.goals = [{ kind: 'scavenge', targetId: wreck.id, destination: { ...wreck.pos }, phase: 'act', reason: 'test loot' }];
+    beginSearch(w, npc, wreck.id);
+    refreshVision(w);
+    return { w, npc, wreckId: wreck.id };
+  }
+
+  function warn(start: World, npc: Vehicle): { w: World; after: Vehicle } {
+    const w = pick(pick(callVehicle(start, npc.id), WARN), INSIST);
+    return { w, after: w.vehicles.find((v) => v.id === npc.id)! };
+  }
+
+  it('a complying driver leaves the wreck to the player', () => {
+    forceOption('warnedOff', 'comply');
+    const { w: start, npc, wreckId } = contested();
+    const { w, after } = warn(start, npc);
+    expect(after.job).toBeNull();
+    expect(after.brain!.goals.some((g) => g.targetId === wreckId)).toBe(false);
+    expect(looterOf(w, wreckId)?.id).toBe(w.player.vehicleId);
+    expect(w.player.talked[npc.id]).toEqual({ warnOff: 'agreed' });
+    expect(practiceOf(w, 'deal')).toEqual([]);
+  });
+
+  it('a defiant driver starts a feud and fights', () => {
+    forceOption('warnedOff', 'fightBack');
+    const { w: start, npc } = contested();
+    const { w, after } = warn(start, npc);
+    expect(stateOf(w, 'feud', npc.id, w.player.vehicleId)).not.toBeNull();
+    expect(topGoal(after)).toMatchObject({ kind: 'fight', targetId: w.player.vehicleId });
+    expect(w.player.talked[npc.id]).toEqual({ warnOff: 'refused' });
+  });
+
+  it('a refusing driver keeps looting, and nothing else changes', () => {
+    forceOption('warnedOff', 'refuse');
+    const { w: start, npc, wreckId } = contested();
+    const { w, after } = warn(start, npc);
+    expect(after.job).toEqual(npc.job);
+    expect(after.brain!.goals).toEqual(npc.brain!.goals);
+    expect(w.states).toEqual(start.states);
+    expect(looterOf(w, wreckId)?.id).toBe(npc.id);
+    expect(w.player.talked[npc.id]).toEqual({ warnOff: 'refused' });
+  });
+
+  it('a hang-up counts as refused and leaves the driver looting', () => {
+    forceOption('warnedOff', 'comply');
+    const { w: start, npc, wreckId } = contested();
+    const w = hangUp(pick(callVehicle(start, npc.id), WARN));
+    expect(w.player.talked[npc.id]).toEqual({ warnOff: 'refused' });
+    expect(looterOf(w, wreckId)?.id).toBe(npc.id);
+  });
+});
+
 describe('bounty talk', () => {
-  const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'trader', targetName: 'Test Driver', reward: 400, deadline: 900, tier: 2 };
+  const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'trader', targetName: 'Test Driver', reward: 400, deadline: 900, window: 900, tier: 2 };
 
   function beggar(perks: World['player']['perks']): { w: World; npc: Vehicle } {
     const w = quietWorld();

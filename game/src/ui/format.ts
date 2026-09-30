@@ -6,6 +6,7 @@ import { partDef } from '../data/parts';
 import type { Contract } from '../sim/market';
 import { PERK_LEVELS, SKILL_INFO } from '../data/skills';
 import { TERRAIN } from '../data/terrain';
+import { TIME } from '../data/time';
 import { playerVehicle, vehicleById } from '../sim/damage';
 import { isKnockedOut } from '../sim/defeat';
 import type { Work, WorkLeft } from '../sim/states';
@@ -135,6 +136,8 @@ export function formatNpcMark(world: World, vehicle: Vehicle): string | null {
   return mark ? `Marked: ${mark.until - world.turn} turns left` : '[N] Mark';
 }
 
+const COMBAT_LABEL = 'In combat';
+
 // How a state the NPC holds reads from the player's side. A null label keeps the driver's intent hidden.
 const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   feud: () => 'Feud with you',
@@ -151,14 +154,35 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   revenge: () => 'Wants revenge on you',
   escort: () => 'Escorting you',
   aid: (s) => (aidData(s).giver === 'npc' ? 'Bringing you fuel' : 'Waiting for your fuel'),
+  combat: () => COMBAT_LABEL,
   strayFire: (s) => `Hit by your stray fire, ${Math.round(strayData(s).damage)} of ${RULES.stray.feudDamage} damage forgiven`,
 };
 
 // One line per state the NPC holds toward the player, with turns left when the state has a timer.
+// Combat is the one two-sided line: a combat state in either direction between the NPC and the player
+// shows once, with the most turns left, where the NPC's own combat state sits (last if only the player holds one).
 export function formatNpcStates(world: World, vehicle: Vehicle): string[] {
-  return statesHeld(world, vehicle.id)
-    .filter((s) => s.other === world.player.vehicleId)
-    .map((s) => (s.turnsLeft === null ? STATE_LABELS[s.kind](s) : `${STATE_LABELS[s.kind](s)}, ${s.turnsLeft} turn${s.turnsLeft === 1 ? '' : 's'}`));
+  const held = statesHeld(world, vehicle.id).filter((s) => s.other === world.player.vehicleId);
+  const lines = held.map((s) => (s.kind === 'combat' ? COMBAT_LABEL : turnsText(STATE_LABELS[s.kind](s), s.turnsLeft)));
+  const combat = combatLine(world, vehicle);
+  const own = held.findIndex((s) => s.kind === 'combat');
+  const out = lines.filter((_, i) => held[i].kind !== 'combat');
+  if (combat === null) return out;
+  out.splice(own < 0 ? out.length : held.slice(0, own).filter((s) => s.kind !== 'combat').length, 0, combat);
+  return out;
+}
+
+function turnsText(label: string, turnsLeft: number | null): string {
+  return turnsLeft === null ? label : `${label}, ${turnsLeft} turn${turnsLeft === 1 ? '' : 's'}`;
+}
+
+// The one combat line for the pair, from a combat state in either direction.
+function combatLine(world: World, vehicle: Vehicle): string | null {
+  const playerId = world.player.vehicleId;
+  const turns = world.states
+    .filter((s) => s.kind === 'combat' && ((s.holder === vehicle.id && s.other === playerId) || (s.holder === playerId && s.other === vehicle.id)))
+    .map((s) => s.turnsLeft ?? 0);
+  return turns.length > 0 ? turnsText(COMBAT_LABEL, Math.max(...turns)) : null;
 }
 
 // Log lines for the end of a state an NPC holds toward the player. Tow states log through the tow events.
@@ -431,12 +455,17 @@ function contractText(c: Contract, outcome: keyof typeof CONTRACT_OUTCOME): { te
 
 // One line naming what a contract asks for.
 export function contractSummary(c: Contract): string {
-  if (c.kind === 'haul') return `Haul ${c.units} ${GOODS[c.good].name} to ${siteName(c.to)}`;
+  if (c.kind === 'haul') return `${c.rush ? 'Rush: ' : ''}Haul ${c.units} ${GOODS[c.good].name} to ${siteName(c.to)}`;
   if (c.kind === 'fetch') {
     const rebuilt = CONTRACTS.fetch.maxWear === 1 ? 'rebuilt at most once' : `rebuilt at most ${CONTRACTS.fetch.maxWear} times`;
     return `Bring ${partDef(c.defId).name} to ${siteName(c.shop)}: working, ${rebuilt}`;
   }
   return `Defeat any ${c.targetName}`;
+}
+
+// How long a contract allows from acceptance, in whole game hours.
+export function contractWindow(c: Contract): string {
+  return `${Math.max(1, Math.round(c.window / (TIME.turnsPerDay / 24)))} h`;
 }
 
 // The game time a contract is due. It fails at the end of its deadline turn.

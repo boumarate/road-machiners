@@ -5,7 +5,7 @@ import { SALVAGE } from '../data/salvage';
 import { playerVehicle } from './damage';
 import { startJob } from './jobs';
 import { practice, skillEffect } from './progress';
-import { canReachSalvage, collectSalvage, salvageUnits } from './salvage';
+import { canReachSalvage, collectSalvage, requireLootFree, salvageUnits } from './salvage';
 import type { Job, Vehicle, World } from './types';
 import { playerCommand } from './world';
 
@@ -25,7 +25,11 @@ export function beginSearch(world: World, v: Vehicle, stockId: string): void {
 }
 
 export function startSearch(world: World, stockId: string): World {
-  return playerCommand(world, (w) => beginSearch(w, playerVehicle(w), stockId));
+  return playerCommand(world, (w) => {
+    const me = playerVehicle(w);
+    requireLootFree(w, me, stockId);
+    beginSearch(w, me, stockId);
+  });
 }
 
 // A truck nudged out of reach while it searches, like a blocked one creeping on toward its order, stops the search.
