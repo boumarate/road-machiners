@@ -15,7 +15,7 @@ import { defyThreat, finishGoal, pushGoal, topGoal } from './npc-activities';
 import { decide, firepower, perceiveDanger, visibleHostiles, wantsLoot } from './npc-decisions';
 import { SPARE_LINE } from '../data/dialogue';
 import { vehicleHasPerk } from './progress';
-import { backedOff, claimantOf, claimPile, createCargoSalvage, dumpOnPile, hasCargo, takeError } from './salvage';
+import { backedOff, canReachSalvage, claimantOf, claimPile, createCargoSalvage, dumpOnPile, hasCargo, takeError } from './salvage';
 import { isStranded } from './stats';
 import { addState, endState, pleaData, stateOf } from './states';
 import type { DecisionOptions } from '../data/npcs';
@@ -176,6 +176,39 @@ export function warnedOff(world: World, vehicle: Vehicle, stock: SalvageStock): 
   }
   finishGoal(world, vehicle, 'the loot is claimed');
   return true;
+}
+
+// The piles the NPC claims.
+function claimedBy(world: World, npc: Vehicle): SalvageStock[] {
+  return world.salvage.filter((stock) => claimantOf(world, stock) === npc);
+}
+
+// The player takes from a claimed pile. A claimant that sees it fights for the pile, or runs without a gun.
+export function takeClaimed(world: World, stock: SalvageStock): void {
+  const claimant = claimantOf(world, stock);
+  const me = playerVehicle(world);
+  if (!claimant || !canVehicleSee(world, claimant, me.pos)) return;
+  stock.pile!.claim!.warned.push(me.id);
+  defendClaim(world, claimant, me);
+}
+
+// The NPC claims a pile in the parked player's reach, sees the player, and has not warned it yet.
+export function guardsClaim(world: World, npc: Vehicle): boolean {
+  const me = playerVehicle(world);
+  if (!canVehicleSee(world, npc, me.pos)) return false;
+  return claimedBy(world, npc).some((stock) => canReachSalvage(me, stock) && !backedOff(stock, me.id));
+}
+
+// The player agrees to roll on from every pile the NPC claims.
+export function backOffClaims(world: World, npc: Vehicle): void {
+  for (const stock of claimedBy(world, npc)) if (!backedOff(stock, world.player.vehicleId)) stock.pile!.claim!.warned.push(world.player.vehicleId);
+}
+
+// The player refuses to roll on. The claimant fights for every pile it claims in the player's reach.
+export function defyClaims(world: World, npc: Vehicle): void {
+  const me = playerVehicle(world);
+  backOffClaims(world, npc);
+  defendClaim(world, npc, me);
 }
 
 // ---- Stripping a stranded player. A robber alone with a stranded player offers to strip the truck instead of wrecking

@@ -11,7 +11,7 @@ import { isHostile } from './combat';
 import { patchGoal, startTow, topGoal, underAttack } from './npc-activities';
 import { vehicleValue } from './market';
 import { hasPerk, practice } from './progress';
-import { answerPlea, answersPlea, answersThreat, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, surrenderTo, yieldTo, type ThreatAnswer } from './parley';
+import { answerPlea, backOffClaims, defyClaims, guardsClaim, answersPlea, answersThreat, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, surrenderTo, yieldTo, type ThreatAnswer } from './parley';
 import { hasCargo, hasSalvage } from './salvage';
 import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
 import { decide, npcProfile, wantsLoot } from './npc-decisions';
@@ -160,6 +160,7 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   demandsSurrender: (world, npc) => hasStrandedPrey(world, npc) && wantsLoot(world, npc, playerVehicle(world)) && hasStrippable(playerVehicle(world)),
   // The stranded player is alone with a driver that takes nothing: not a robber, or a robber with nothing to take.
   demandsGiveUp: (world, npc) => offersGiveUp(world, npc) && judgedWorthOffer(world, npc),
+  guardsClaim: (world, npc) => guardsClaim(world, npc),
   atOdds: (world, npc) => isHostile(world, npc, playerVehicle(world)),
   atPeace: (world, npc) => !isHostile(world, npc, playerVehicle(world)),
   noPlayerPlea: (world, npc) => !playerPleaded(world, npc),
@@ -220,6 +221,11 @@ export const EFFECTS: Record<EffectId, Effect> = {
     giveUpTo(world, playerVehicle(world), npc);
     settle(world, npc, call, 'agreed');
     practice(world, 'deal', 1, null, npc.id);
+  },
+  backOffClaim: (world, npc) => backOffClaims(world, npc),
+  defyClaim: (world, npc, call) => {
+    defyClaims(world, npc);
+    settle(world, npc, call, 'refused');
   },
   acceptPlea: (world, npc) => answerPlea(world, npc, true),
   refusePlea: (world, npc) => answerPlea(world, npc, false),

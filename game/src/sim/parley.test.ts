@@ -6,6 +6,7 @@ import { isHostile, noteCollision } from './combat';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, raiseCalls } from './dialogue';
 import { addGoods } from './inventory';
+import { takeAllLoot } from './locations';
 import { pushGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { visibleSalvage } from './npc-decisions';
 import { makePeace, plead, yieldTo } from './parley';
@@ -499,5 +500,60 @@ describe('warning off a trespasser', () => {
     forceOption('threatened', 'fightBack');
     resolveNpcActivities(w);
     expect(topGoal(claimant)).toMatchObject({ kind: 'flee', reason: 'defend its claimed loot' });
+  });
+});
+
+describe('the player at a claimed pile', () => {
+  function claimedNearPlayer() {
+    const w = quietWorld();
+    const claimant = npcAt(w, 'scavengers', ['raider'], 30, 38);
+    const victim = addVehicle(w, 'scavengers', 'scout', ['mg'], { x: 31, y: 31 });
+    victim.brain = npcBrain('trader', victim.pos, ['raider']);
+    addGoods(w, victim, 'scrap', 2);
+    yieldTo(w, victim, claimant);
+    const pile = w.salvage.find((s) => s.pile)!;
+    w.player.scavenged.push(pile.id);
+    refreshVision(w);
+    return { w, claimant, pile };
+  }
+  const me = (w: World) => playerVehicle(w);
+  const feuding = (w: World, claimant: Vehicle) => stateOf(w, 'feud', claimant.id, me(w).id) !== null;
+
+  it('a take in the claimant sight starts a feud and a fight', () => {
+    const { w, claimant, pile } = claimedNearPlayer();
+    const next = takeAllLoot(w, pile.id);
+    expect(feuding(next, claimant)).toBe(true);
+    expect(topGoal(next.vehicles.find((v) => v.id === claimant.id)!)?.kind).toBe('fight');
+  });
+
+  it('a take the claimant cannot see starts nothing', () => {
+    const { w, claimant, pile } = claimedNearPlayer();
+    claimant.pos = { x: 5, y: 5 };
+    refreshVision(w);
+    expect(feuding(takeAllLoot(w, pile.id), claimant)).toBe(false);
+  });
+
+  it('the claimant calls once, and rolling on leaves no feud and no second call', () => {
+    const { w, claimant } = claimedNearPlayer();
+    raiseCalls(w);
+    expect(w.player.call).toMatchObject({ with: claimant.id, topic: 'claim' });
+    const done = pick(w, 'Rolling on.');
+    expect(feuding(done, claimant)).toBe(false);
+    raiseCalls(done);
+    expect(done.player.call).toBeNull();
+  });
+
+  it('refusing starts the feud', () => {
+    const { w, claimant } = claimedNearPlayer();
+    raiseCalls(w);
+    expect(feuding(pick(w, 'Finders keepers.'), claimant)).toBe(true);
+  });
+
+  it('hanging up backs off', () => {
+    const { w, claimant, pile } = claimedNearPlayer();
+    raiseCalls(w);
+    const done = hangUp(w);
+    expect(feuding(done, claimant)).toBe(false);
+    expect(done.salvage.find((s) => s.id === pile.id)!.pile!.claim!.warned).toContain(me(done).id);
   });
 });
