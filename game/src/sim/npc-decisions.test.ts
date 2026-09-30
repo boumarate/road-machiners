@@ -1,4 +1,4 @@
-import { HUNT, MIN_CHANCE, NPC_BEHAVIOR } from '../data/npcs';
+import { HUNT, MIN_CHANCE, NPC_BEHAVIOR, TRAITS } from '../data/npcs';
 import { partDef, type PartDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { describe, expect, it, onTestFinished } from 'vitest';
@@ -11,6 +11,7 @@ import { siteLootTable } from './salvage';
 import { sitePads } from './sites';
 import { noteHurt, thinkNpc, topGoal } from './npc-activities';
 import { addState, endState, stateOf } from './states';
+import { playerVehicle } from './damage';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls } from './testkit';
 import type { TraitId } from '../data/npcs';
 import type { Faction, Vehicle, World } from './types';
@@ -532,5 +533,50 @@ describe('a driver that gave its word', () => {
     forceOption('hostileSeen', 'fight');
     thinkNpc(w, npc);
     expect(topGoal(npc)).toMatchObject({ kind: 'fight', targetId: raider.id });
+  });
+});
+
+describe('warn-off decisions', () => {
+  // The chances of a driver with the given traits answering the player's warning off its wreck. The player's danger
+  // is its real value, so only the traits differ between calls.
+  function warnChances(traits: TraitId[], parts = ['mg', 'stockEngine']): Record<string, number> {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const npc = addNpc(w, 'scavengers', 'scavenger', traits, { x: 36, y: 30 }, parts);
+    return optionChances(optionWeights(w, npc, 'warnedOff', w.player.vehicleId, vehicleDanger(w, playerVehicle(w)))) as Record<string, number>;
+  }
+
+  const plain = () => warnChances(['scavenger']);
+
+  it('a raider or lawman fights back more and backs off less than a plain driver', () => {
+    for (const traits of [['raider'], ['lawman']] as TraitId[][]) {
+      expect(warnChances(traits).fightBack).toBeGreaterThan(plain().fightBack);
+      expect(warnChances(traits).comply).toBeLessThan(plain().comply);
+    }
+  });
+
+  it('a coward or trader backs off more and a trader fights back less than a plain driver', () => {
+    for (const traits of [['coward'], ['trader']] as TraitId[][]) expect(warnChances(traits).comply).toBeGreaterThan(plain().comply);
+    expect(warnChances(['trader']).fightBack).toBeLessThan(plain().fightBack);
+  });
+
+  it('a driver with revenge on the player fights back more', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 36, y: 30 });
+    const danger = vehicleDanger(w, playerVehicle(w));
+    const calm = optionWeights(w, npc, 'warnedOff', w.player.vehicleId, danger).fightBack!;
+    addState(w, 'revenge', npc.id, w.player.vehicleId, { kind: 'none' });
+    expect(optionWeights(w, npc, 'warnedOff', w.player.vehicleId, danger).fightBack).toBeGreaterThan(calm);
+  });
+
+  it('keeps every option at MIN_CHANCE or more for every trait', () => {
+    for (const trait of Object.keys(TRAITS) as TraitId[]) {
+      const chances = warnChances([trait]);
+      expect(Object.keys(chances).sort(), trait).toEqual(['comply', 'fightBack', 'refuse']);
+      for (const chance of Object.values(chances)) expect(chance, trait).toBeGreaterThanOrEqual(MIN_CHANCE);
+    }
+  });
+
+  it('never fights back without a working gun, and can always back off or refuse', () => {
+    expect(Object.keys(warnChances(['raider'], ['stockEngine'])).sort()).toEqual(['comply', 'refuse']);
   });
 });

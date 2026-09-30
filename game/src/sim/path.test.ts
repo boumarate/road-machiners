@@ -130,6 +130,36 @@ describe("route", () => {
       for (const building of buildings) expect(dist(building.pos, town.pos) + building.r).toBeLessThanOrEqual(town.radius);
     }
   });
+
+  it('player routes on the real map stay direct', () => {
+    const w = w1337;
+    const size = w.terrain.size;
+    let seed = 1337;
+    const next = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32;
+    const clamp = (v: number) => Math.min(size - 20, Math.max(20, v));
+    let waypoints = 0;
+    let length = 0;
+    let straight = 0;
+    for (let k = 0; k < 150; k++) {
+      const from = { x: 20 + next() * (size - 40), y: 20 + next() * (size - 40) };
+      const heading = next() * Math.PI * 2;
+      const span = 15 + next() * 120;
+      const to = { x: clamp(from.x + Math.cos(heading) * span), y: clamp(from.y + Math.sin(heading) * span) };
+      let pts: Vec[];
+      try {
+        pts = route(w, from, to, 0.6, []);
+      } catch {
+        continue;
+      }
+      waypoints += pts.length;
+      length += routeLength(from, pts);
+      straight += dist(from, to);
+    }
+    // Issue 36, measured on this seed: slopeCost 3 gave 4003 waypoints and 1.32 times straight, the current
+    // rules 1277 and 1.14 on TEST_MAP.
+    expect(waypoints).toBeLessThanOrEqual(2000);
+    expect(length).toBeLessThanOrEqual(1.28 * straight);
+  });
 });
 
 describe('driver taste', () => {
@@ -276,10 +306,22 @@ describe('routes prefer roads', () => {
     const w = emptyWorld();
     const t = editableTerrain(w);
     const n = t.size + 1;
-    // A cone of slope 0.45 between the ends, gentler than a cliff.
-    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) t.heights[j * n + i] = Math.max(0, 4 - Math.hypot(i - 35, j - 30)) * 0.45;
+    // A cone of slope 0.58 between the ends, gentler than a cliff.
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) t.heights[j * n + i] = Math.max(0, 4 - Math.hypot(i - 35, j - 30)) * 0.58;
     const pts = route(w, { x: 30, y: 30 }, { x: 40, y: 30 }, 0.6, []);
     expect(polylineDist({ x: 35, y: 30 }, [{ x: 30, y: 30 }, ...pts])).toBeGreaterThan(3);
+  });
+
+  it('crosses gentle rolling ground in one straight line', () => {
+    const w = emptyWorld();
+    const t = editableTerrain(w);
+    t.types.fill('hardpan');
+    const n = t.size + 1;
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) t.heights[j * n + i] = Math.sin(i / 3) * Math.cos(j / 4) * 0.6;
+    const from = { x: 30, y: 30 };
+    const pts = route(w, from, { x: 70, y: 30 }, 0.6, []);
+    expect(pts.length).toBeLessThanOrEqual(2);
+    expect(routeLength(from, pts)).toBeLessThan(1.03 * 40);
   });
 
   it('crosses open ground when the road detour is three times longer', () => {
@@ -306,13 +348,13 @@ namespace Ref {
 
   // Route cost per tile: 1 / terrain speed, times offRoadCost off the road and away from sites, times
   // the slope multiplier.
-  function tileCost(t: Terrain, p: Vec): number {
+  function tileCost(t: Terrain, p: Vec, flat = false): number {
     const tile = tileAt(t, p);
     const type = t.types[tile];
     const c = { x: Math.floor(p.x) + 0.5, y: Math.floor(p.y) + 0.5 };
     const bySite = [...REGION.towns, ...REGION.locations].some((s) => dist(c, s.pos) < s.radius + REGION.roadWidth);
     const s = tileSlope(t, tile);
-    const slope = 1 + REGION.navigation.slopeCost * (Math.hypot(s.x, s.y) / TERRAIN.drive.maxSlope) ** 2;
+    const slope = flat ? 1 : 1 + REGION.navigation.slopeCost * (Math.hypot(s.x, s.y) / TERRAIN.drive.maxSlope) ** 2;
     return ((type === 'road' || bySite ? 1 : REGION.navigation.offRoadCost) / TERRAIN_TYPES[type].speed) * slope;
   }
 
@@ -475,25 +517,26 @@ namespace Ref {
   }
 
   // Route cost of the straight line: length times the mean tile cost of its samples. Infinity when it
-  // touches an obstacle or, with a reach, a cliff, or crosses a tile costlier than maxCost.
-  export function lineCost(t: Terrain, obstacles: Blocker[], a: Vec, b: Vec, reach: number | null, maxCost: number): number {
+  // touches an obstacle or, with a reach, a cliff, or crosses a tile costlier than maxCost, measured
+  // without the slope multiplier unless capFull is set.
+  export function lineCost(t: Terrain, obstacles: Blocker[], a: Vec, b: Vec, reach: number | null, maxCost: number, capFull = false): number {
     if (reach !== null && obstacles.some((o) => touches(o, a, b, reach))) return Infinity;
     const n = Math.ceil(dist(a, b) * 4);
     let sum = 0;
     for (let k = 0; k <= n; k++) {
       const p = { x: a.x + ((b.x - a.x) * k) / Math.max(1, n), y: a.y + ((b.y - a.y) * k) / Math.max(1, n) };
-      if ((reach !== null && nearCliff(t, p, reach)) || tileCost(t, p) > maxCost) return Infinity;
+      if ((reach !== null && nearCliff(t, p, reach)) || tileCost(t, p, !capFull) > maxCost) return Infinity;
       sum += tileCost(t, p);
     }
     return (dist(a, b) * sum) / (n + 1);
   }
 
-  export function clearLine(t: Terrain, obstacles: Blocker[], a: Vec, b: Vec, reach: number, maxCost: number): boolean {
-    return lineCost(t, obstacles, a, b, reach, maxCost) < Infinity;
+  export function clearLine(t: Terrain, obstacles: Blocker[], a: Vec, b: Vec, reach: number, maxCost: number, capFull = false): boolean {
+    return lineCost(t, obstacles, a, b, reach, maxCost, capFull) < Infinity;
   }
 
   function costliestTile(t: Terrain, pts: Vec[]): number {
-    return Math.max(...pts.map((p) => tileCost(t, p)));
+    return Math.max(...pts.map((p) => tileCost(t, p, true)));
   }
 
   // A shortcut must be clear, cross no tile costlier than the path it replaces, and cost no more than that path.
@@ -504,7 +547,7 @@ namespace Ref {
       pathCost += lineCost(t, [], prev, p, null, Infinity);
       prev = p;
     }
-    return lineCost(t, obstacles, cur, replaced[replaced.length - 1], reach, costliestTile(t, [cur, ...replaced])) <= pathCost * (1 + 1e-9);
+    return lineCost(t, obstacles, cur, replaced[replaced.length - 1], reach, costliestTile(t, [cur, ...replaced])) <= pathCost * (1 + REGION.navigation.straighten + 1e-9);
   }
 
   function shortcut(t: Terrain, obstacles: Blocker[], from: Vec, points: Vec[], reach: number): Vec[] {
@@ -538,7 +581,7 @@ namespace Ref {
 
   export function route(w: World, layer: ReturnType<typeof terrainLayer>, from: Vec, to: Vec, radius: number, extra: Blocker[]): Vec[] {
     const all = blockers(w, extra);
-    if (clearLine(w.terrain, all, from, to, radius + CLEARANCE, 1)) return [to];
+    if (clearLine(w.terrain, all, from, to, radius + CLEARANCE, 1, true)) return [to];
     const g = grid(layer, all, radius);
     const start = cellOf(g, from);
     const statics = grid(layer, blockers(w, []), radius);

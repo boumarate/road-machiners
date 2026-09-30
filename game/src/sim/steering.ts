@@ -13,7 +13,7 @@ import { clamp, DEG, dist, type Vec } from "./vec";
 // Whether a slow truck backs up to its destination instead of turning around nose first.
 // rearAngle is the angle between straight behind and the destination, in radians.
 // The player backs only to a click inside a tight cone behind and within throttle reach.
-// NPCs back up only to recover from a blockage.
+// NPCs back up only while they recover. Any truck blocked in front backs out a short way, see backs() in src/phys/drive.ts.
 export function backsToDestination(
   vehicle: Pick<Vehicle, "faction" | "brain">,
   distance: number,
