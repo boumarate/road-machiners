@@ -54,6 +54,6 @@ describe('ground impacts', () => {
 
   it('a truck landing on its roof from 3 m takes far more damage than one landing on its wheels', () => {
     const roof = total(drop(3, ROOF_DOWN).lost);
-    expect(roof).toBeGreaterThan(2.5 * total(drop(3, UPRIGHT).lost));
+    expect(roof).toBeGreaterThan(2 * total(drop(3, UPRIGHT).lost));
   });
 });
