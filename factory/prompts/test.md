@@ -25,9 +25,9 @@ They play the branch build from a link in the post, so start the steps from the 
 The factory checks your branch after you finish.
 It runs `npm test`, `npm run typecheck` and `npm run playtest -- --cpu` against the dev server.
 Every test must pass, not only the tests for this issue.
-Run all three once, as your last step, after every fix.
-Start the dev server first with `npm run dev`.
-Never run the playtest without `--cpu`.
+Do not run the full suite or the playtest yourself.
+Run the tests near your changes with `npx vitest run <files>`, and `npm run typecheck`.
+If the factory's checks fail, you get one round to fix them, with the failure log in `.factory/check-failure.md`.
 
 A failure blocks the task even when your change did not cause it.
 Fix every failure you find, also ones already broken on `dev`.

@@ -1,16 +1,26 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { buildAndDeploy, recordBuild } from '../deploy';
+import { checkScope, publishBuild, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
 import { updateState } from '../state';
 import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx } from '../types';
 import { approve } from './approval';
 import { agentHome, agentLog, baseBranchFor, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, throwIfNeedsCommittee, workDir } from './common';
 
+// Each step logs its start time, so the log shows where the time goes.
+// The typecheck runs beside the tests. The build ends the script, so a passing check leaves dist/ ready to publish.
+// Only the build gets SAVE_SCOPE, since the tests expect the default save key.
 const CHECK_SCRIPT = `set -e
-npm ci
-npm test
-npm run typecheck
+step() { echo "[checks] $(date -u +%T) $1"; }
 mkdir -p tmp
+step "npm ci"
+npm ci
+step "tests and typecheck"
+npm run typecheck > tmp/typecheck.log 2>&1 &
+typecheck=$!
+npm test
+step "tests done"
+if ! wait "$typecheck"; then cat tmp/typecheck.log; exit 1; fi
+step "dev server"
 npm run dev -- --port 5173 --strictPort > tmp/dev-server.log 2>&1 &
 server=$!
 ready=0
@@ -19,11 +29,16 @@ for i in $(seq 1 60); do
   sleep 1
 done
 if [ "$ready" -ne 1 ]; then kill "$server"; exit 1; fi
+step "playtest"
 set +e
 npm run playtest -- --cpu
 code=$?
 kill "$server"
-exit $code
+if [ "$code" -ne 0 ]; then exit "$code"; fi
+set -e
+step "build"
+SAVE_SCOPE="$BUILD_SCOPE" npm run build
+step "done"
 `;
 
 export type Approval = { description: string; howToTry: string };
@@ -35,17 +50,18 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, workDir(ctx, issue));
   resetOutputs(home);
   await agentRound(ctx, issue, 'test', base);
-  const failure = await runChecks(ctx, issue, base);
+  let build = await ctx.repo.headHash(BRANCH(issue));
+  const failure = await runChecks(ctx, issue, base, build);
   // The agent gets one round to fix what the factory's own checks found. A second failure stops the card.
   if (failure !== null) {
     writeFileSync(`${home}/${OUT_DIR}/check-failure.md`, failure);
     await agentRound(ctx, issue, 'test-fix', base);
-    const again = await runChecks(ctx, issue, base);
+    build = await ctx.repo.headHash(BRANCH(issue));
+    const again = await runChecks(ctx, issue, base, build);
     if (again !== null) throw new Error(`The factory checks failed twice.\n${again}`);
   }
   const approval = readApproval(home);
-  const build = await ctx.repo.headHash(BRANCH(issue));
-  const url = await buildAndDeploy(ctx, checkDir(ctx, issue), build, agentLog(ctx, issue, 'checks'));
+  const url = publishBuild(ctx, checkDir(ctx, issue), build);
   recordBuild(ctx.statePath, issue, build);
   // Cleanup tasks on the release branch skip the committee post. The committee plays them in the candidate.
   const cleanup = item.labels.includes(RELEASE_TASK_LABEL) && item.labels.includes(MAINTENANCE_LABEL);
@@ -90,15 +106,16 @@ function checkDir(ctx: Ctx, issue: number): string {
 }
 
 // The host runs its own checks in a fresh clone of the pushed branch. Agent claims do not count.
-// Returns null when they pass, or the tail of the check log when they fail.
-async function runChecks(ctx: Ctx, issue: number, base: string): Promise<string | null> {
+// Passing checks leave the build of scope `build` in the clone. Returns null when they pass, or the tail of the check log when they fail.
+async function runChecks(ctx: Ctx, issue: number, base: string, build: string): Promise<string | null> {
+  checkScope(build);
   const dir = checkDir(ctx, issue);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(`${ctx.cfg.home}/work`, { recursive: true });
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, dir);
   const log = agentLog(ctx, issue, 'checks');
   try {
-    await ctx.container.shell(dir, CHECK_SCRIPT, log);
+    await ctx.container.shell(dir, CHECK_SCRIPT, log, { BUILD_SCOPE: build });
     return null;
   } catch (error) {
     return checkFailure(log, error);

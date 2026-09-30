@@ -3,13 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EMPTY_STATE, readState, writeState } from '../state';
 import type { AgentRun, Ctx } from '../types';
 
-vi.mock('../deploy', () => ({ buildAndDeploy: async () => 'https://play.test/abc123/', recordBuild: () => undefined }));
+vi.mock('../deploy', () => ({ checkScope: () => undefined, publishBuild: (_ctx: unknown, _clone: string, scope: string) => `https://play.test/${scope}/`, recordBuild: () => undefined }));
 vi.mock('./approval', () => ({ approve: async (_ctx: unknown, issue: number, by: string) => { if (approveError) throw new Error(approveError); approved.push(`approve ${issue} ${by}`); } }));
 const { runStage, approvalCaption } = await import('./testing');
 
 let home = '';
 let calls: string[] = [];
 let shellScript = '';
+let shellEnv: Record<string, string> | undefined;
 let photoButtons: unknown;
 let openPr: string | null = null;
 let labels: string[] = [];
@@ -49,8 +50,9 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
     },
     container: {
       agent: async (run: AgentRun) => agent(run),
-      shell: async (_dir: string, script: string) => {
+      shell: async (_dir: string, script: string, _log: string, env?: Record<string, string>) => {
         shellScript = script;
+        shellEnv = env;
         calls.push('checks');
         if (failuresLeft-- > 0) throw new Error('npm test failed: 1 failed');
       },
@@ -95,6 +97,8 @@ describe('testing stage', () => {
     await runStage(ctx, 7);
     expect(shellScript).toContain('npm run playtest -- --cpu');
     expect(shellScript).toContain('seq 1 60');
+    expect(shellScript).toContain('SAVE_SCOPE="$BUILD_SCOPE" npm run build');
+    expect(shellEnv).toEqual({ BUILD_SCOPE: 'abc123' });
     const photo = calls.find((call) => call.startsWith('photo')) ?? '';
     expect(photo).toContain('#7 Big horn\n\nPlay: https://play.test/abc123/');
     expect(photo).toContain('How to try: Press H.');
