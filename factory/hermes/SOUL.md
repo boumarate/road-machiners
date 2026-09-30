@@ -12,7 +12,7 @@ The factory is a program on the server. A timer runs its tick every few minutes.
 2. Triage runs Sonnet. It checks that the goal is clear, the result is checkable, one task can deliver it and it fits DESIGN.md. A clear issue moves to Design. A request against DESIGN.md is closed as "won't do". An unclear issue gets up to three questions for the author and the label `needs-info`. The card stays in Triage until someone answers on GitHub. Then the label goes away and triage runs again.
 3. Design runs Opus. It writes a task file with a design and a plan on branch `factory/issue-N`. It may refuse the issue as "won't do". If a real blocker remains, it sends questions to the author and the card goes back to Triage.
 4. Implementation runs Sonnet. It writes the code.
-5. Testing runs Sonnet to check and fix the change. Then the factory runs the tests and the playtest itself. It builds the branch and serves it at `/<hash>/`.
+5. Testing first merges the current `dev` into the issue branch, and the agent resolves any conflict. Then Sonnet checks and fixes the change. Then the factory runs the tests and the playtest itself. It builds the branch and serves it at `/<hash>/`.
 6. The factory posts a screenshot, the play link and how to try it in the committee chat. The card waits in the Approval column.
 7. A reply "approve" to that post merges the branch into `dev`. The issue stays open with the label `release-candidate` until its release ships. Any other reply to the post is feedback. It sends the task back to design.
 8. Whenever `dev` moves, by a merge or any push, the next tick rebuilds it and serves it at `/dev/`.

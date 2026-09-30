@@ -137,6 +137,9 @@ export interface HostRepo {
   deleteBranch(branch: string): Promise<void>; // locally if present, and on origin if it is there
   prepareWorkClone(branch: string, base: string, dir: string): Promise<void>;
   fetchFromWork(dir: string, branch: string): Promise<void>;
+  // Merges the host's `base` into the checked-out branch of a work clone. Returns the conflicted files and leaves that merge open for an agent. Empty means it merged.
+  mergeBaseIntoWork(dir: string, base: string): Promise<string[]>;
+  isMerged(base: string, branch: string): Promise<boolean>; // whether `branch` holds every commit of `base`
   push(branch: string): Promise<void>;
   headHash(branch: string): Promise<string>; // short hash
   diff(base: string, branch: string): Promise<string>;

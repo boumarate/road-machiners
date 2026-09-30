@@ -5,6 +5,13 @@ Issue {{issue}} is built. Its plan is in {{taskFile}}.
 Read CLAUDE.md first.
 Follow it.
 
+The factory merged the current base branch into your branch before you started.
+If `.factory/merge-conflicts.md` exists, that merge stopped on conflicts in the files it lists.
+Resolve them first.
+Keep what both sides meant, not just one side.
+Then commit the merge with `git commit --no-edit`.
+The factory fails the stage if the merge is left unfinished.
+
 Run up:uverify and then up:ureview on {{taskFile}}.
 Fix what they find.
 Commit the fixes on the current branch.

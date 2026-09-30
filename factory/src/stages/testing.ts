@@ -4,7 +4,7 @@ import { stripAnsi } from '../fail';
 import { updateState } from '../state';
 import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx } from '../types';
 import { approve } from './approval';
-import { agentHome, agentLog, baseBranchFor, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, throwIfNeedsCommittee, workDir } from './common';
+import { agentHome, agentLog, baseBranchFor, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, syncBase, throwIfNeedsCommittee, workDir } from './common';
 
 // Each step logs its start time, so the log shows where the time goes.
 // The typecheck runs beside the tests. The build ends the script, so a passing check leaves dist/ ready to publish.
@@ -49,7 +49,9 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const base = baseBranchFor(ctx, item.labels);
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, workDir(ctx, issue));
   resetOutputs(home);
+  await mergeBase(ctx, issue, base, home);
   await agentRound(ctx, issue, 'test', base);
+  await requireBaseMerged(ctx, issue, base);
   let build = await ctx.repo.headHash(BRANCH(issue));
   const failure = await runChecks(ctx, issue, base, build);
   // The agent gets one round to fix what the factory's own checks found. A second failure stops the card.
@@ -68,6 +70,18 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   if (!cleanup) await post(ctx, issue, approval, `${home}/${OUT_DIR}/screenshot.png`, url, base);
   await ctx.github.move(issue, 'Approval');
   if (cleanup) await mergeCleanup(ctx, issue);
+}
+
+// The base moved on since design cut the branch. Testing runs on the branch with the current base merged in,
+// so the committee plays what approve will merge, and conflicts reach the agent here instead of failing approve.
+async function mergeBase(ctx: Ctx, issue: number, base: string, home: string): Promise<void> {
+  await syncBase(ctx, base);
+  const conflicts = await ctx.repo.mergeBaseIntoWork(workDir(ctx, issue), base);
+  if (conflicts.length > 0) writeFileSync(`${home}/${OUT_DIR}/merge-conflicts.md`, `${conflicts.map((file) => `- ${file}`).join('\n')}\n`);
+}
+
+async function requireBaseMerged(ctx: Ctx, issue: number, base: string): Promise<void> {
+  if (!(await ctx.repo.isMerged(base, BRANCH(issue)))) throw new Error(`The testing agent left the merge of ${base} into ${BRANCH(issue)} unfinished.`);
 }
 
 // approve() requires the Approval column. A failed merge puts the card back in Testing, so the stuck label the caller adds can be removed to retry.

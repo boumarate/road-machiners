@@ -17,8 +17,12 @@ let labels: string[] = [];
 let bases: string[] = [];
 const approved: string[] = [];
 let approveError = '';
+let conflicts: string[] = [];
+let merged = true;
 
 beforeEach(() => {
+  conflicts = [];
+  merged = true;
   mkdirSync('tmp', { recursive: true });
   home = mkdtempSync('tmp/factory-testing-');
   calls = [];
@@ -63,6 +67,9 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
       push: async (branch: string) => { calls.push(`push ${branch}`); },
       diff: async (base: string) => { bases.push(`diff ${base}`); return ''; },
       headHash: async () => 'abc123',
+      sync: async (...extra: string[]) => { bases.push(`sync ${extra.join(' ')}`.trim()); },
+      mergeBaseIntoWork: async (_dir: string, base: string) => { bases.push(`merge ${base}`); return conflicts; },
+      isMerged: async () => merged,
     },
   };
   return fake as unknown as Ctx;
@@ -148,7 +155,7 @@ describe('testing stage', () => {
     labels = ['release-task'];
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
     await runStage(ctx, 7);
-    expect(new Set(bases)).toEqual(new Set(['prepare release/2026-09-29', 'diff release/2026-09-29']));
+    expect(new Set(bases)).toEqual(new Set(['prepare release/2026-09-29', 'sync release/2026-09-29', 'merge release/2026-09-29', 'diff release/2026-09-29']));
     expect(calls.find((call) => call.startsWith('openPullRequest'))).toContain('openPullRequest factory/issue-7 release/2026-09-29 #7 Big horn');
     expect(calls.find((call) => call.startsWith('photo'))).toContain('Approve merges into release/2026-09-29.');
     expect(approved).toEqual([]);
@@ -157,7 +164,26 @@ describe('testing stage', () => {
   it('works on dev for an ordinary card even while a release is open', async () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
     await runStage(ctx, 7);
-    expect(new Set(bases)).toEqual(new Set(['prepare dev', 'diff dev']));
+    expect(new Set(bases)).toEqual(new Set(['prepare dev', 'sync', 'merge dev', 'diff dev']));
+  });
+
+  it('merges dev into the branch before the agent runs, and lists conflicts for it', async () => {
+    conflicts = ['game/src/a.ts', 'game/src/b.ts'];
+    let seen = '';
+    const ctx = fakeCtx((run) => {
+      seen = readFileSync(`${run.clone}/${run.dir}/.factory/merge-conflicts.md`, 'utf8');
+      writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' }));
+    });
+    await runStage(ctx, 7);
+    expect(bases.indexOf('merge dev')).toBeLessThan(bases.indexOf('diff dev'));
+    expect(seen).toBe('- game/src/a.ts\n- game/src/b.ts\n');
+  });
+
+  it('fails the stage when the agent leaves the merge of dev unfinished', async () => {
+    merged = false;
+    const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
+    await expect(runStage(ctx, 7)).rejects.toThrow('left the merge of dev into factory/issue-7 unfinished');
+    expect(calls).not.toContain('checks');
   });
 
   it('merges a cleanup task into the release itself, with no committee post', async () => {

@@ -95,6 +95,19 @@ export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
     async fetchFromWork(dir, branch) {
       await git(['fetch', dir, `+${branch}:${branch}`]);
     },
+    async mergeBaseIntoWork(dir, base) {
+      await gitIn(dir, ['fetch', 'origin']);
+      const result = await run('git', [...NO_HOOKS, 'merge', '--no-edit', `origin/${base}`], { cwd: dir });
+      if (result.code === 0) return [];
+      const files = (await gitIn(dir, ['diff', '--name-only', '--diff-filter=U'])).split('\n').filter(Boolean);
+      if (files.length === 0) throw new Error(`merge of ${base} into ${dir} failed without a conflict: ${(result.stderr || result.stdout).trim()}`);
+      return files;
+    },
+    async isMerged(base, branch) {
+      const result = await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', base, branch], { cwd: path });
+      if (result.code === 0 || result.code === 1) return result.code === 0;
+      throw new Error(`git merge-base --is-ancestor ${base} ${branch} failed: ${result.stderr.trim()}`);
+    },
     async push(branch) {
       await git(['push', 'origin', branch]);
     },
