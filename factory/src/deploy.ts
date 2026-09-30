@@ -1,6 +1,6 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { updateState } from './state';
+import { readState, updateState } from './state';
 import { GAME_DIR, type Ctx } from './types';
 
 const SCOPE = /^[a-z0-9-]+$/;
@@ -43,6 +43,13 @@ export async function deployDev(ctx: Ctx, log: string): Promise<string> {
     updateState(ctx.statePath, (state) => ({ ...state, devFailed: head }));
     throw error;
   }
+}
+
+// The dev job: dev moved outside an approval, so the committee hears of the new build here.
+export async function rebuildDev(ctx: Ctx, log: string): Promise<void> {
+  const url = await deployDev(ctx, log);
+  const head = readState(ctx.statePath).devBuild;
+  await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `Dev is rebuilt at ${head}.\nPlay it: ${url}`);
 }
 
 // The testing stage calls this after it deploys a build, so cleanup keeps the folder while the card waits in Approval.

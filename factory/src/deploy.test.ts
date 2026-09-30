@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { buildAndDeploy, deployDev, recordBuild, removeStaleBuilds } from './deploy';
+import { buildAndDeploy, deployDev, rebuildDev, recordBuild, removeStaleBuilds } from './deploy';
 import { EMPTY_STATE, readState, writeState } from './state';
 import type { Ctx } from './types';
 
@@ -76,6 +76,14 @@ describe('deployDev', () => {
     const { ctx, statePath } = devSetup(false);
     expect(await deployDev(ctx, '/l')).toBe('http://x/play/dev/');
     expect(readState(statePath)).toMatchObject({ devBuild: 'abc1234', devFailed: null });
+  });
+
+  it('posts the dev link to the committee after a rebuild', async () => {
+    const { ctx } = devSetup(false);
+    const sent: string[] = [];
+    const telegram = { sendMessage: async (chat: string, text: string) => { sent.push(`${chat}: ${text}`); return 1; } };
+    await rebuildDev({ ...ctx, cfg: { ...ctx.cfg, committeeChat: 'c' }, telegram } as Ctx, '/l');
+    expect(sent).toEqual(['c: Dev is rebuilt at abc1234.\nPlay it: http://x/play/dev/']);
   });
 
   it('records a failed dev commit and throws', async () => {

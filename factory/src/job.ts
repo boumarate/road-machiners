@@ -1,4 +1,4 @@
-import { deployDev } from './deploy';
+import { rebuildDev } from './deploy';
 import { failureIssue, reportFailure } from './fail';
 import { adhoc } from './stages/adhoc';
 import { approve } from './stages/approval';
@@ -39,7 +39,7 @@ export async function runJob(ctx: Ctx, stage: JobStage, issue: number | null): P
 async function dispatch(ctx: Ctx, stage: JobStage, issue: number | null): Promise<void> {
   if (stage === 'release') return release(ctx);
   // A dev job run by hand has no job in the state, so its build output goes to a fixed log.
-  if (stage === 'dev') return void (await deployDev(ctx, readState(ctx.statePath).job?.log ?? `${ctx.cfg.home}/logs/dev-build.log`));
+  if (stage === 'dev') return rebuildDev(ctx, readState(ctx.statePath).job?.log ?? `${ctx.cfg.home}/logs/dev-build.log`);
   if (issue === null) throw new Error(`Job ${stage} needs an issue or change id`);
   return HANDLERS[stage](ctx, issue);
 }
