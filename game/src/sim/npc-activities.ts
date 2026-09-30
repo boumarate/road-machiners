@@ -17,7 +17,7 @@ import { addGoods, cargoRoom } from './inventory';
 import { cancelJob, inCombat } from './jobs';
 import { isFree } from './spawn';
 import {
-  tradeOffers, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolTown, travelSitesAway,
+  tradeOffers, canRob, decide, getCombatCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolTown, travelSitesAway,
   huntingGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, repairsHere, resolveNpcRepair } from './npc-repair';
@@ -29,7 +29,7 @@ import { beginSearch } from './search';
 import { vehicleById } from './damage';
 import { judgeStrandedFoe, plead } from './parley';
 import { addState, endState, stateOf, statesHeld } from './states';
-import { suppliesCap, vehicleStats } from './stats';
+import { isStranded, suppliesCap, vehicleStats } from './stats';
 import type { Contact, GameEvent, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Vehicle, World } from './types';
 import { canUseSite, nearestPad, type Site } from './sites';
 import { clamp, dist, type Vec } from './vec';
@@ -159,9 +159,18 @@ function pointsAway(from: Vec, to: Vec, threat: Vec): boolean {
 // Why an NPC needs service, whether low supplies are its only need, and whether it needs repairs.
 type ServiceNeed = { reason: string; suppliesOnly: boolean; damaged: boolean };
 
-// Junk parts do not count, since no service rebuilds them.
-function isDamaged(vehicle: Vehicle): boolean {
-  return mountedParts(vehicle).some((part) => !isJunk(part) && part.hp / maxHp(part) <= NPC_BEHAVIOR.fleeCondition);
+// A truck with no engine or a junk one stays stranded for good. No patch fixes it, only a refit. See serveStranded.
+function isStrandedForGood(vehicle: Vehicle): boolean {
+  const engine = mountedParts(vehicle, 'engine')[0];
+  return !engine || isJunk(engine);
+}
+
+// A part that keeps the truck driving, or a truck broken up all around, needs service. Worn armor, guns and cargo do
+// not. Junk parts do not count, since no service rebuilds them.
+function isDamaged(world: World, vehicle: Vehicle): boolean {
+  const drivingPartWorn = [...mountedParts(vehicle, 'core'), ...mountedParts(vehicle, 'engine')]
+    .some((part) => !isJunk(part) && part.hp / maxHp(part) <= NPC_BEHAVIOR.fleeCondition);
+  return isStrandedForGood(vehicle) || drivingPartWorn || getCombatCondition(world, vehicle) <= NPC_BEHAVIOR.fleeCondition;
 }
 
 function serviceReason(lowFuel: boolean, lowSupplies: boolean): string {
@@ -199,7 +208,7 @@ function serviceNeed(world: World, vehicle: Vehicle, profile: NpcProfile): Servi
   const resources = getResources(world, vehicle);
   const lowFuel = isLowOnFuel(world, vehicle, profile);
   const lowSupplies = resources.supplies <= suppliesCap(vehicle) * NPC_UPKEEP.lowSupplies;
-  const damaged = isDamaged(vehicle);
+  const damaged = isDamaged(world, vehicle);
   if (!lowFuel && !lowSupplies && !damaged) return null;
   return { reason: serviceReason(lowFuel, lowSupplies), suppliesOnly: lowSupplies && !lowFuel && !damaged, damaged };
 }
@@ -208,34 +217,32 @@ function isBroke(world: World, vehicle: Vehicle): boolean {
   return getResources(world, vehicle).money < Math.min(ECONOMY.supplyPrice.fuel, ECONOMY.supplyPrice.supplies);
 }
 
-// The fixed survival rule. Null when no service is needed. A wait means the NPC needs service but cannot get it.
+// The fixed survival rule. Null when no service is needed. An oasis refills supplies for free. A broke driver sells
+// its cargo first. With nothing to sell, it works on while it can drive, and once stranded it heads for service
+// anyway, where serveStranded gives it a fresh loadout.
 function serviceGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity | null {
   const need = serviceNeed(world, vehicle, profile);
   if (!need) return null;
-  const broke = isBroke(world, vehicle);
-  if (profile.bases.length > 0) return campServiceGoal(world, vehicle, profile, need, broke);
-  return townServiceGoal(vehicle, profile, need, broke);
+  const oasis = need.suppliesOnly ? chooseNearestSite(vehicle, profile.supplySites) : undefined;
+  if (oasis) return createSiteActivity('resupply', oasis.id, 'low supplies');
+  if (isBroke(world, vehicle)) return brokeServiceGoal(world, vehicle, profile, need);
+  return serviceTrip(vehicle, profile, need);
 }
 
-function campServiceGoal(world: World, vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed, broke: boolean): NpcActivity {
-  if (!broke) return createSiteActivity('resupply', chooseNearestSite(vehicle, profile.bases).id, need.reason);
-  // A camp buys no cargo, so a broke raider sells in town first.
-  return hasSaleCargo(vehicle) ? saleGoal(world, vehicle, profile) : createActivity('wait', null, null, 'cannot afford upkeep');
+function brokeServiceGoal(world: World, vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed): NpcActivity | null {
+  if (hasSaleCargo(vehicle)) return saleGoal(world, vehicle, profile);
+  return isStranded(world, vehicle) ? serviceTrip(vehicle, profile, need) : null;
 }
 
-function townServiceGoal(vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed, broke: boolean): NpcActivity {
-  if (need.suppliesOnly) {
-    const oasis = chooseNearestSite(vehicle, profile.supplySites);
-    if (oasis) return createSiteActivity('resupply', oasis.id, 'low supplies');
-  }
-  if (broke && !hasSaleCargo(vehicle)) return createActivity('wait', null, null, 'cannot afford upkeep');
+function serviceTrip(vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed): NpcActivity {
   const stop = chooseNearestSite(vehicle, serviceStops(vehicle, profile, need));
-  if (!stop) return createActivity('wait', null, null, 'no known service town');
+  if (!stop) throw new Error(`${vehicle.id} knows no service stop`);
   return createSiteActivity('resupply', stop.id, need.reason);
 }
 
-// Only a town repairs. Fuel alone also comes from a fuel stall.
+// A raider is served at its camps. For anyone else only a town repairs, and fuel alone also comes from a fuel stall.
 function serviceStops(vehicle: Vehicle, profile: NpcProfile, need: ServiceNeed): string[] {
+  if (profile.bases.length > 0) return profile.bases;
   return need.damaged ? profile.towns : pumpsOf(vehicle, profile);
 }
 
@@ -245,7 +252,8 @@ function saleGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActiv
   const shops = [...new Set([...profile.towns, ...STALLS])].map(getKnownSite);
   const getValue = (id: string) => goods.reduce((sum, [good, count]) => sum + (shopDef(id).goods.includes(good) ? count * getTradePrice(world, vehicle, id, good, 'sell') : 0), 0);
   shops.sort((a, b) => getValue(b.id) - getValue(a.id) || dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
-  return shops[0] ? createSiteActivity('sell', shops[0].id, 'sell carried cargo') : createActivity('wait', null, null, 'no known buyer');
+  if (!shops[0]) throw new Error(`${vehicle.id} knows no buyer`);
+  return createSiteActivity('sell', shops[0].id, 'sell carried cargo');
 }
 
 const STALLS: readonly string[] = Object.values(SHOPS).filter((s) => s.kind === 'stall').map((s) => s.id);
@@ -837,8 +845,9 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   pruneAttackers(world, vehicle);
   breakOffDeals(world, vehicle);
   dropInvalidGoals(world, vehicle, contacts);
+  serveStranded(world, vehicle, profile);
   if (isDefeated(vehicle)) return retreatHome(world, vehicle);
-  const hold = applyFixedRules(world, vehicle, profile);
+  applyFixedRules(world, vehicle, profile);
   onGrievances(world, vehicle);
   onParley(world, vehicle);
   // A truce ends hostility, so goals that held only against the truce partner end here.
@@ -854,7 +863,17 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   onFightWhim(world, vehicle);
   judgeStrandedFoe(world, vehicle);
   steer(world, vehicle, profile, contacts);
-  return currentActivity(world, vehicle, profile, hold);
+  return currentActivity(world, vehicle, profile);
+}
+
+// A stranded truck parked on the pad of any town or one of its own camps, however it got there, buys the service it
+// can pay for. If that leaves it stranded, it gets a fresh loadout from its pool.
+function serveStranded(world: World, vehicle: Vehicle, profile: NpcProfile): void {
+  if (!isStranded(world, vehicle) || isOnRope(world, vehicle.id) || vehicle.speed > RULES.parkedSpeed) return;
+  const site = [...REGION.towns.map((t) => t.id), ...profile.bases].map(getKnownSite).find((s) => canUseSite(vehicle.pos, s));
+  if (!site) return;
+  serviceAt(world, vehicle, site);
+  if (isStranded(world, vehicle)) refitAtHome(world, vehicle);
 }
 
 // A defeated driver makes no decisions. It heads home, or waits for a tower on its way.
@@ -877,15 +896,15 @@ function dropInvalidGoals(world: World, vehicle: Vehicle, contacts: Contact[]): 
 }
 
 // A held tow keeps its goal on top. Otherwise, unless a tow goal is on top, the survival rule pushes a repair or
-// service. A service wait is returned to hold for this turn.
-function applyFixedRules(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity | null {
+// service.
+function applyFixedRules(world: World, vehicle: Vehicle, profile: NpcProfile): void {
   if (heldTow(world, vehicle)) {
     keepTowGoal(world, vehicle);
-    return null;
+    return;
   }
   const top = topGoal(vehicle)?.kind;
-  if (top === 'tow' || top === 'patch' || top === 'meet') return null;
-  return pushService(world, vehicle, profile);
+  if (top === 'tow' || top === 'patch' || top === 'meet') return;
+  pushService(world, vehicle, profile);
 }
 
 function keepTowGoal(world: World, vehicle: Vehicle): void {
@@ -895,18 +914,12 @@ function keepTowGoal(world: World, vehicle: Vehicle): void {
 }
 
 // Urgent supplies come first. Otherwise a field repair with carried parts comes before a service trip.
-function pushService(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity | null {
+// A service goal goes on the stack unless one of its kind is there.
+function pushService(world: World, vehicle: Vehicle, profile: NpcProfile): void {
   const service = serviceGoal(world, vehicle, profile);
   const urgent = service !== null && needsUrgentSupplies(world, vehicle, profile);
-  if (!urgent && keepRepairing(world, vehicle)) return null;
-  return holdOrPush(world, vehicle, service);
-}
-
-// A service wait holds for this turn. Any other service goal goes on the stack unless one of its kind is there.
-function holdOrPush(world: World, vehicle: Vehicle, service: NpcActivity | null): NpcActivity | null {
-  if (service?.kind === 'wait') return service;
+  if (!urgent && keepRepairing(world, vehicle)) return;
   if (service && !vehicle.brain!.goals.some((g) => g.kind === service.kind)) pushGoal(world, vehicle, service);
-  return null;
 }
 
 // Low supplies, or a low tank that still has fuel to reach service.
@@ -930,14 +943,11 @@ function keepRepairing(world: World, vehicle: Vehicle): boolean {
   return repair !== null;
 }
 
-// A held wait wins unless an interruption is on top. Then the top goal runs, or the empty stack sells or rolls idle.
-// A stranded driver with a tower on its way waits for it outside danger, since crawling off would leave the tower
-// chasing it.
-function currentActivity(world: World, vehicle: Vehicle, profile: NpcProfile, hold: NpcActivity | null): NpcActivity {
-  const top = topGoal(vehicle);
+// The top goal runs, or the empty stack sells or rolls idle. A stranded driver with a tower on its way waits for it
+// outside danger, since crawling off would leave the tower chasing it.
+function currentActivity(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity {
   if (awaitsTower(world, vehicle)) return createActivity('wait', null, null, 'wait for a tow');
-  if (hold && (!top || !INTERRUPTIONS.includes(top.kind))) return hold;
-  return top ?? nextGoal(world, vehicle, profile);
+  return topGoal(vehicle) ?? nextGoal(world, vehicle, profile);
 }
 
 function awaitsTower(world: World, vehicle: Vehicle): boolean {

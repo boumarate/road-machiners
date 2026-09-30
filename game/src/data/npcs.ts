@@ -850,7 +850,7 @@ export const MIN_CHANCE = 0.01;
 // available option at MIN_CHANCE unless a trait adds weight.
 export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> } = {
   // Without traits a driver ignores, fights or avoids a new hostile about equally, fighting a bit more.
-  hostileSeen: { keep: 1, fight: 2, flee: 1 },
+  hostileSeen: { keep: 1, fight: 1.8, flee: 1 },
   // Most drivers steer away from a hostile they only hear. Investigating more than rarely needs a trait.
   contactHeard: { keep: 1, investigate: 0, flee: 3 },
   // A shot mostly prompts defense or retreat. Shooting back is twice as likely as running from a miss, and keeping
@@ -1034,7 +1034,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   raider: {
     towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: {
-      idle: { raid: { add: 10 } }, contactHeard: { investigate: { add: 12 } }, hostileSeen: { fight: { add: 8 } }, strandedSeen: { tow: { add: 9 } },
+      idle: { raid: { add: 9 } }, contactHeard: { investigate: { add: 10.8 } }, hostileSeen: { fight: { add: 7.2 } }, strandedSeen: { tow: { add: 9 } },
       crashed: { retaliate: { add: 3 } }, parley: { truce: { mul: 0.3 }, beg: { mul: 0.3 } }, truceOffered: { refuse: { add: 2 } },
       mercyBegged: { finish: { add: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
     },
@@ -1042,7 +1042,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // A scumbag robs about one target in three it comes across: rob 0.5 against keep 1. Boldness 1.3 lets it rob a
   // truck that looks as dangerous as its own, and stand against one up to 30% stronger. It answers a crash with a
   // fight twice as often as most drivers.
-  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 1.3, fuelMargin: 1, robs: 'offDuty', weights: { preySeen: { rob: { add: 0.5 } }, crashed: { retaliate: { add: 1 } } } },
+  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 1.3, fuelMargin: 1, robs: 'offDuty', weights: { preySeen: { rob: { add: 0.45 } }, crashed: { retaliate: { add: 1 } } } },
   // A coward veers off three times as often in a fight. It runs three times as often from a new hostile or a shot, picks a fight half as often, and shoots back
   // at a third of the weight. Boldness 0.6 makes a truck that looks as dangerous as its own a threat, even at the
   // lowest misjudgment. It asks for a truce twice as often and begs three times as often. Threatened, it runs or

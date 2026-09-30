@@ -269,6 +269,14 @@ describe('NPC field repairs', () => {
     expect(thinkNpc(world, npc).kind).toBe('resupply');
   });
 
+  it('does not seek service for a broken gun', () => {
+    const { world, npc } = createNpc();
+    const gun = npc.items.find((item) => item.kind === 'part' && item.part.defId === 'mg');
+    if (!gun || gun.kind !== 'part') throw new Error('Missing test gun');
+    gun.part.hp = 1;
+    expect(thinkNpc(world, npc).kind).not.toBe('resupply');
+  });
+
   it('preserves repair supplies during a town service visit', () => {
     const { world, npc } = createNpc();
     addGoods(world, npc, 'parts', 2);
