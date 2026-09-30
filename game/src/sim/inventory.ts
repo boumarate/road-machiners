@@ -112,10 +112,6 @@ export function removeAllGoods(v: Vehicle): void {
   v.items = v.items.filter((it) => it.kind !== 'good');
 }
 
-export function removeSpareParts(v: Vehicle): void {
-  v.items = v.items.filter((it) => it.kind !== 'part' || isMounted(v.chassisId, it));
-}
-
 export function spareParts(v: Vehicle): PartInstance[] {
   return v.items.flatMap((it) => (it.kind === 'part' && !isMounted(v.chassisId, it) ? [it.part] : []));
 }
