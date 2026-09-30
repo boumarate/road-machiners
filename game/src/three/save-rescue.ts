@@ -5,6 +5,7 @@ import type { StartKit } from '../data/start';
 import type { BakedMap } from '../sim/terrain';
 import { carriedWorld, type Carried, type CarriedItem, type CarriedPart, type CarryReport } from '../sim/world';
 import type { World } from '../sim/types';
+import type { SlotId } from './save-slots';
 import { storedSave, writeSave } from './save';
 
 type Json = Record<string, unknown>;
@@ -105,10 +106,10 @@ export function readCarried(raw: unknown): Carried {
 
 // Builds a new world from the stored save and stores it, so the next boot loads it. Null when the stored
 // save is not a JSON object, which leaves nothing to carry.
-export function rescueSave(storage: Storage, map: BakedMap, kit: StartKit, freshSeed: () => number): { world: World; report: CarryReport } | null {
-  const parsed = storedSave(storage);
+export function rescueSave(storage: Storage, slot: SlotId, map: BakedMap, kit: StartKit, freshSeed: () => number, savedAt: number): { world: World; report: CarryReport } | null {
+  const parsed = storedSave(storage, slot);
   if (objectOf(parsed) === null) return null;
   const rescued = carriedWorld(readCarried(parsed), kit, map, freshSeed);
-  writeSave(storage, rescued.world);
+  writeSave(storage, slot, rescued.world, savedAt);
   return rescued;
 }

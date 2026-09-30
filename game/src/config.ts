@@ -11,6 +11,7 @@ export const CONFIG = {
   combatShotMs: 450,
   combatReadMs: 1100,
   saveTurns: 20,
+  saveSlots: 3, // manual save slots
   autoTurnMs: 250,
   travelHoldMs: 250,
   travelFastSpeed: 4,

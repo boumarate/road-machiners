@@ -78,21 +78,30 @@ describe('rescueSave', () => {
     const save = currentSave();
     save.world.mapHash = 'other';
     storage.setItem('roam.save', JSON.stringify(save));
-    expect(() => loadWorld(storage, TEST_MAP)).toThrow();
-    const rescued = rescueSave(storage, TEST_MAP, KIT, fresh)!;
+    expect(() => loadWorld(storage, 'auto', TEST_MAP)).toThrow();
+    const rescued = rescueSave(storage, 'auto', TEST_MAP, KIT, fresh, 1000)!;
     expect(townAt(rescued.world)).not.toBeNull();
     expect(rescued.world.player.money).toBe(4321);
-    const loaded = loadWorld(storage, TEST_MAP)!;
+    const loaded = loadWorld(storage, 'auto', TEST_MAP)!;
     expect(loaded.player.skills.driving).toBe(800);
     expect(playerVehicle(loaded).chassisId).toBe(KIT.chassis);
   });
 
+  it('reads and writes the slot it is given', () => {
+    const storage = makeStorage();
+    storage.setItem('roam.save:slot2', JSON.stringify(currentSave()));
+    const rescued = rescueSave(storage, 'slot2', TEST_MAP, KIT, fresh, 1234)!;
+    expect(JSON.parse(storage.getItem('roam.save:slot2')!).savedAt).toBe(1234);
+    expect(loadWorld(storage, 'slot2', TEST_MAP)!.player.money).toBe(rescued.world.player.money);
+    expect(storage.getItem('roam.save')).toBeNull();
+  });
+
   it('gives nothing for an unparsable or non-object save', () => {
     const storage = makeStorage();
-    expect(rescueSave(storage, TEST_MAP, KIT, fresh)).toBeNull();
+    expect(rescueSave(storage, 'auto', TEST_MAP, KIT, fresh, 1000)).toBeNull();
     storage.setItem('roam.save', '{"nope');
-    expect(rescueSave(storage, TEST_MAP, KIT, fresh)).toBeNull();
+    expect(rescueSave(storage, 'auto', TEST_MAP, KIT, fresh, 1000)).toBeNull();
     storage.setItem('roam.save', '[1]');
-    expect(rescueSave(storage, TEST_MAP, KIT, fresh)).toBeNull();
+    expect(rescueSave(storage, 'auto', TEST_MAP, KIT, fresh, 1000)).toBeNull();
   });
 });

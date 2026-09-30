@@ -15,13 +15,13 @@ describe("stingOf", () => {
     ];
     expect(stingOf(events, "p")).toBe("level-up");
   });
-  it("ignores spending and other drivers' arrivals", () => {
+  it("ignores spending and arrivals", () => {
     const events: GameEvent[] = [
       { t: "money", amount: -5, reason: "fuel" },
       { t: "arrived", vehicle: "npc1" },
     ];
     expect(stingOf(events, "p")).toBeNull();
-    expect(stingOf([{ t: "arrived", vehicle: "p" }], "p")).toBe("air-brake");
+    expect(stingOf([{ t: "arrived", vehicle: "p" }], "p")).toBeNull();
   });
   it("plays the defeat cue on a knockout", () => {
     expect(stingOf([{ t: "skillUp", skill: "driving", level: 2 }, { t: "knockout" }], "p")).toBe("defeat");
