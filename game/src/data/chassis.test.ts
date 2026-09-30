@@ -39,10 +39,21 @@ function armorTouched(c: ChassisDef, cells: Cell[]): Set<string> {
 // The hood hole of these engines lies on the row behind the front armor row, so the front gap cannot exist.
 const FRONT_ENGINE: readonly string[] = ['longbed', 'tractor'];
 
-// Chassis whose cab shares a column with a wheel, with the reason. A stale entry fails the test.
-const CAB_BESIDE_WHEELS: Record<string, string> = {
-  buggy: 'A small raider runabout. Its open 1x1 seat is not tall, and the grid has only 4 inner columns.',
-  convertible: 'A small car. Clearing its wheels on 5 columns costs the free 2x2 and 2x3 deck blocks that tier 2 needs, and a wider grid was refused.',
+// Chassis whose tank shares a column with a wheel, with the reason. A stale entry fails the test.
+const TANK_BESIDE_WHEELS: Record<string, string> = {
+  buggy: 'With the cab and transmission off the wheel columns and the 2x2 deck block kept, a wheel column is the only place left for the tank.',
+  courier: 'With the cab and transmission off the wheel columns and the 2x2 deck block kept, a wheel column is the only place left for the tank.',
+};
+
+// Chassis with an open 1x2 seat that are not four columns wide, with the reason. A stale entry fails the test.
+const SEAT_CAB: Record<string, string> = {
+  wagon: 'An open gun platform. On its 6x5 grid a six-cell cab leaves no deck block, which tier 2 requires, and cuts the deck from 11 cells to 6.',
+};
+
+// Chassis values before the layout rules. The rules move deck cells, and base makes up the price.
+const VALUES = {
+  scout: 2444, hauler: 3676, buggy: 1928, wagon: 3022, courier: 2320, van: 3080, longbed: 5384,
+  carrier: 4876, tractor: 4382, jeep: 2186, convertible: 2992, bus: 3800, loader: 5088,
 };
 
 // Chassis with no free 2 by 2 block of deck cells, with the reason. A stale entry fails the test.
@@ -55,21 +66,42 @@ const RATED_MASS = 3840; // the scout's rated mass before its cab moved
 const columns = (cells: Cell[]) => new Set(cells.map((cell) => cell.x));
 
 describe('chassis grids', () => {
-  it('keeps every cab out of the wheel columns', () => {
+  it('keeps cabs, transmissions and engine bays out of the wheel columns', () => {
     for (const [id, c] of Object.entries(CHASSIS)) {
       const wheels = columns(coreCells(c, 'wheel'));
-      const shared = [...columns(coreCells(c, 'cab'))].some((x) => wheels.has(x));
-      expect(shared, id).toBe(id in CAB_BESIDE_WHEELS);
+      const parts = [...coreCells(c, 'cab'), ...coreCells(c, 'transmission'), ...engineCells(c)];
+      expect(parts.filter((cell) => wheels.has(cell.x)), id).toEqual([]);
     }
   });
 
-  it('puts every transmission in or next to a middle column', () => {
+  it('covers the middle column or columns with the transmission', () => {
     for (const [id, c] of Object.entries(CHASSIS)) {
       const inner = c.layout[0].length - 2;
       const middle = inner % 2 ? [1 + (inner - 1) / 2] : [inner / 2, inner / 2 + 1];
-      const near = coreCells(c, 'transmission').some((cell) => middle.some((m) => Math.abs(cell.x - m) <= 1));
-      expect(near, id).toBe(true);
+      const covered = columns(coreCells(c, 'transmission'));
+      expect(middle.every((m) => covered.has(m)), id).toBe(true);
     }
+  });
+
+  it('keeps tanks out of the wheel columns but on the chassis listed', () => {
+    for (const [id, c] of Object.entries(CHASSIS)) {
+      const wheels = columns(coreCells(c, 'wheel'));
+      const shared = coreCells(c, 'tank').some((cell) => wheels.has(cell.x));
+      expect(shared, id).toBe(id in TANK_BESIDE_WHEELS);
+    }
+  });
+
+  it('gives four-column chassis and the listed ones the open seat and every other chassis a 3x2 cab', () => {
+    for (const [id, c] of Object.entries(CHASSIS)) {
+      const seat = c.layout[0].length === 6 || id in SEAT_CAB;
+      const cabs = c.core.filter((part) => { const def = partDef(part.defId); return def.kind === 'core' && def.role === 'cab'; });
+      expect(cabs.map((part) => part.defId === 'cab'), id).toEqual([seat]);
+    }
+    for (const id of Object.keys(SEAT_CAB)) expect(CHASSIS[id].layout[0].length, id).not.toBe(6);
+  });
+
+  it('keeps every chassis value at its value before the layout rules', () => {
+    expect(Object.fromEntries(Object.entries(CHASSIS).map(([id, c]) => [id, c.value]))).toEqual(VALUES);
   });
 
   it('keeps the scout worth what it was before its cab moved', () => {
@@ -149,6 +181,10 @@ function hasDeckBlock(c: ChassisDef, w: number, h: number): boolean {
 
 describe('core part sizes', () => {
   const parts = Object.values(PARTS);
+
+  it('sizes every cab 1x2 or 3x2', () => {
+    for (const p of parts.filter((d) => d.kind === 'core' && d.role === 'cab')) expect([p.w, p.h].join('x'), p.id).toMatch(/^(1x2|3x2)$/);
+  });
 
   it('gives every transmission 2 by 2 cells', () => {
     for (const p of parts.filter((d) => d.kind === 'core' && d.role === 'transmission')) expect([p.w, p.h], p.id).toEqual([2, 2]);

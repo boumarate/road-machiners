@@ -18,8 +18,10 @@
 // 2 by 2. Every chassis but the scout keeps a free 2 by 2 block of D cells for the bigger guns, and tier 2 and 3
 // chassis a free 2 across by 3 along block. The scout's cab, clear of its wheels on five columns, leaves only single
 // deck columns.
-// A cab keeps clear of the wheel columns, except on the small vehicles named in chassis.test.ts. The transmission
-// lies in or next to a middle column.
+// The cab, the transmission and the engine bay keep clear of the wheel columns, which are the first and last inner
+// columns. The transmission covers the middle column, or both middle columns on an even width. A tank keeps clear of
+// them too, except on the chassis in TANK_BESIDE_WHEELS in chassis.test.ts. An open seat is 1 by 2 and a closed cab
+// 3 by 2, either way round with rot 1. Chassis with four inner columns and those in SEAT_CAB use the seat.
 // A grid may have more rows or columns than its model has rows and columns of its own, since the
 // projection stretches whatever grid it gets over the model.
 //
@@ -136,10 +138,10 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     mass: 2730,
     handlingMass: 5800,
     radius: 0.8,
-    // The cab-over sits beside the engine hatch. The transmission and the tank lie in the cargo area, out of sight under the canvas.
-    layout: [' FFFFFFF ', 'LXDEEXXXR', 'LXDEEXXXR', 'LDDXXDDDR', 'LDDXXDDDR', 'LDDDDDDDR', 'LXDDDXDXR', 'LXDDDXDXR', ' BBBBBBB '],
+    // The cab stands beside the engine hatch, with the transmission behind the hatch and the tank in the cargo area, out of sight under the canvas.
+    layout: [' FFFFFFF ', 'LXDEEXXXR', 'LXDEEXXXR', 'LDDXXXXDR', 'LDDXXDDDR', 'LDDDDDDDR', 'LXDDDXDXR', 'LXDDDXDXR', ' BBBBBBB '],
     core: [
-      { defId: 'cabOver', x: 5, y: 1 },
+      { defId: 'cabPickup', x: 5, y: 1, rot: 1 },
       { defId: 'transmissionMid', x: 3, y: 3 },
       { defId: 'tankMid', x: 5, y: 6 },
       { defId: 'wheelMid', x: 1, y: 1 },
@@ -149,7 +151,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     ],
     fuelCap: 80,
     fuelPerTile: 0.4,
-    base: 800, showsCores: false, tier: 2,
+    base: 920, showsCores: false, tier: 2,
     look: 'hauler',
   },
   buggy: {
@@ -164,10 +166,10 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     mass: 230,
     handlingMass: 900,
     radius: 0.5,
-    // A light runabout: five deck cells, one free 2 by 2 block for a missile launcher. The model has room for the engine alone in its low nose, so the transmission and the tank sit inside the body.
-    layout: [' FFFF ', 'LXEEXR', 'LXEEXR', 'LXDDXR', 'LDDDXR', 'LXXXXR', 'LXXXXR', ' BBBB '],
+    // A light runabout: four deck cells, one free 2 by 2 block for a missile launcher. The model has room for the engine alone in its low nose, so the seat, the transmission and the tank sit inside the body, the tank in a wheel column.
+    layout: [' FFFF ', 'LXEEXR', 'LXEEXR', 'LDDXXR', 'LDDXXR', 'LXXXXR', 'LXXXXR', ' BBBB '],
     core: [
-      { defId: 'cab', x: 1, y: 3 },
+      { defId: 'cab', x: 3, y: 3 },
       { defId: 'transmission', x: 2, y: 5 },
       { defId: 'tank', x: 4, y: 3 },
       { defId: 'wheel', x: 1, y: 1 },
@@ -177,7 +179,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     ],
     fuelCap: 30,
     fuelPerTile: 0.2,
-    base: 300, showsCores: false, tier: 1,
+    base: 360, showsCores: false, tier: 1,
     look: 'buggy',
   },
   wagon: {
@@ -192,12 +194,12 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     mass: 2130,
     handlingMass: 3700,
     radius: 0.8,
-    // The grid has eight columns. The transmission and the tank stand in the open seats behind the windshield and the guns on the hood side.
-    layout: [' FFFFFF ', 'LXXDDDXR', 'LXEEDDXR', 'LDEEDDDR', 'LXXXXDXR', 'LXXXXDXR', ' BBBBBB '],
+    // The grid has eight columns. The open seat stands behind the hood and the transmission and the tank in the open seats behind the windshield, with the guns on the hood side.
+    layout: [' FFFFFF ', 'LXXXDDXR', 'LXEEDDXR', 'LDEEDDDR', 'LXXXXDXR', 'LXXXXDXR', ' BBBBBB '],
     core: [
-      { defId: 'cab', x: 2, y: 1 },
-      { defId: 'transmissionHeavy', x: 2, y: 4 },
-      { defId: 'tankHeavy', x: 4, y: 4 },
+      { defId: 'cab', x: 2, y: 1, rot: 1 },
+      { defId: 'transmissionHeavy', x: 3, y: 4 },
+      { defId: 'tankHeavy', x: 2, y: 4 },
       { defId: 'wheelHeavy', x: 1, y: 1 },
       { defId: 'wheelHeavy', x: 6, y: 1 },
       { defId: 'wheelHeavy', x: 1, y: 4 },
@@ -205,16 +207,16 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     ],
     fuelCap: 60,
     fuelPerTile: 0.4,
-    base: 1390, showsCores: true, tier: 2,
+    base: 1450, showsCores: true, tier: 2,
     look: 'wagon',
   },
   courier: {
     id: 'courier', name: 'Courier', maxSpeed: 9.75, accel: 3, brake: 3, turnSlow: 125, turnFast: 42, reverseTurn: 80,
     mass: 280, handlingMass: 1100, radius: 0.5,
-    // The grid has nine rows. The transmission and the tank stand in the low nose, the engine cells lie under the cab front and the cab and its roof deck fill the rear.
-    layout: [' FFFF ', 'LXXXXR', 'LXXXXR', 'LDEEXR', 'LDEEXR', 'LDXDDR', 'LXDDXR', 'LXDDXR', ' BBBB '],
+    // The grid has nine rows. The transmission stands in the low nose, the seat fills the rear and the tank sits in a wheel column, since the 2 by 2 deck block takes the rest.
+    layout: [' FFFF ', 'LXXXXR', 'LXXXXR', 'LDEEXR', 'LDEEXR', 'LDXXDR', 'LXDDXR', 'LXDDXR', ' BBBB '],
     core: [
-      { defId: 'cab', x: 2, y: 5 },
+      { defId: 'cab', x: 2, y: 5, rot: 1 },
       { defId: 'transmission', x: 2, y: 1 },
       { defId: 'tank', x: 4, y: 3 },
       { defId: 'wheel', x: 1, y: 1 },
@@ -222,31 +224,31 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
       { defId: 'wheel', x: 1, y: 6 },
       { defId: 'wheel', x: 4, y: 6 },
     ],
-    fuelCap: 24, fuelPerTile: 0.18, base: 340, showsCores: true, tier: 1, look: 'courier',
+    fuelCap: 24, fuelPerTile: 0.18, base: 400, showsCores: true, tier: 1, look: 'courier',
   },
   van: {
     id: 'van', name: 'Utility van', maxSpeed: 6.5, accel: 1.5, brake: 3, turnSlow: 100, turnFast: 35, reverseTurn: 65,
     mass: 1100, handlingMass: 3000, radius: 0.7,
-    // The cab is one row across, behind the engine bay. The transmission and the tank lie in the box, out of sight.
-    layout: [' FFFFF ', 'LXEEDXR', 'LXEEDXR', 'LDXXXDR', 'LDDDXXR', 'LDDDXXR', 'LXDDXXR', 'LXDDXXR', ' BBBBB '],
+    // The closed cab lies behind the engine bay, two across and three along. The transmission and the tank lie in the box, out of sight.
+    layout: [' FFFFF ', 'LXEEDXR', 'LXEEDXR', 'LDXXDDR', 'LDXXDDR', 'LDXXDDR', 'LXXXXXR', 'LXXXXXR', ' BBBBB '],
     core: [
-      { defId: 'cabRow', x: 2, y: 3 },
-      { defId: 'transmissionMid', x: 4, y: 4 },
+      { defId: 'cabPickup', x: 2, y: 3, rot: 1 },
+      { defId: 'transmissionMid', x: 2, y: 6 },
       { defId: 'tankMid', x: 4, y: 6 },
       { defId: 'wheelMid', x: 1, y: 1 },
       { defId: 'wheelMid', x: 5, y: 1 },
       { defId: 'wheelMid', x: 1, y: 6 },
       { defId: 'wheelMid', x: 5, y: 6 },
     ],
-    fuelCap: 55, fuelPerTile: 0.24, base: 1000, showsCores: false, tier: 2, look: 'van',
+    fuelCap: 55, fuelPerTile: 0.24, base: 1180, showsCores: false, tier: 2, look: 'van',
   },
   longbed: {
     id: 'longbed', name: 'Longbed truck', maxSpeed: 4.55, accel: 0.8, brake: 1.8, turnSlow: 70, turnFast: 20, reverseTurn: 40,
     mass: 2900, handlingMass: 7200, radius: 0.95,
-    // The transmission and the tank lie on the flat deck behind the cab, out of sight in the frame.
-    layout: [' FFFFFFF ', 'LXDEEDDXR', 'LXDEEDDXR', 'LDXXXXXDR', 'LDXXXXXDR', 'LDDDDDDDR', 'LDDXXXDDR', 'LDDXXXDDR', 'LXDDDDDXR', 'LXDDDDDXR', ' BBBBBBB '],
+    // The cab stands behind the engine bay. The transmission and the tank lie on the flat deck behind it, out of sight in the frame.
+    layout: [' FFFFFFF ', 'LXDEEDDXR', 'LXDEEDDXR', 'LDDXXXDDR', 'LDDXXXDDR', 'LDDDDDDDR', 'LDDXXXDDR', 'LDDXXXDDR', 'LXDDDDDXR', 'LXDDDDDXR', ' BBBBBBB '],
     core: [
-      { defId: 'cabWide', x: 2, y: 3 },
+      { defId: 'cabPickup', x: 3, y: 3 },
       { defId: 'transmissionHeavy', x: 3, y: 6 },
       { defId: 'tankHeavy', x: 5, y: 6 },
       { defId: 'wheelHeavy', x: 1, y: 1 },
@@ -254,46 +256,46 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
       { defId: 'wheelHeavy', x: 1, y: 8 },
       { defId: 'wheelHeavy', x: 7, y: 8 },
     ],
-    fuelCap: 100, fuelPerTile: 0.48, base: 1960, showsCores: false, tier: 3, look: 'longbed',
+    fuelCap: 100, fuelPerTile: 0.48, base: 1720, showsCores: false, tier: 3, look: 'longbed',
   },
   carrier: {
     id: 'carrier', name: 'Armored carrier', maxSpeed: 5.2, accel: 1, brake: 2.5, turnSlow: 75, turnFast: 28, reverseTurn: 50,
     mass: 3200, handlingMass: 5200, radius: 0.85,
-    // The transmission lies beside the engine bay and the tank in the rear hull, out of sight.
-    layout: [' FFFFFF ', 'LXDDDDXR', 'LXDDDXXR', 'LDEEXXDR', 'LDEEXXDR', 'LDDDXDDR', 'LXDDXDXR', 'LXDDDDXR', ' BBBBBB '],
+    // The closed cab lies beside the engine bay, the transmission in the front hull and the tank in the rear hull, out of sight.
+    layout: [' FFFFFF ', 'LXDXXDXR', 'LXDXXDXR', 'LDEEXXDR', 'LDEEXXDR', 'LDDDXXDR', 'LXDDXXXR', 'LXDDDDXR', ' BBBBBB '],
     core: [
-      { defId: 'cab', x: 5, y: 2 },
-      { defId: 'transmissionHeavy', x: 4, y: 3 },
-      { defId: 'tankHeavy', x: 4, y: 5 },
+      { defId: 'cabPickup', x: 4, y: 3, rot: 1 },
+      { defId: 'transmissionHeavy', x: 3, y: 1 },
+      { defId: 'tankHeavy', x: 4, y: 6, rot: 1 },
       { defId: 'wheelHeavy', x: 1, y: 1 },
       { defId: 'wheelHeavy', x: 6, y: 1 },
       { defId: 'wheelHeavy', x: 1, y: 6 },
       { defId: 'wheelHeavy', x: 6, y: 6 },
     ],
-    fuelCap: 70, fuelPerTile: 0.5, base: 2300, showsCores: false, tier: 3, look: 'carrier',
+    fuelCap: 70, fuelPerTile: 0.5, base: 2600, showsCores: false, tier: 3, look: 'carrier',
   },
   tractor: {
     id: 'tractor', name: 'Heavy tractor', maxSpeed: 3.9, accel: 1.8, brake: 2, turnSlow: 65, turnFast: 22, reverseTurn: 55,
     mass: 3600, handlingMass: 6500, radius: 0.9,
-    // The transmission and the tank lie behind the cab, out of sight.
-    layout: [' FFFFFFF ', 'LXDEEDDXR', 'LXDEEDDXR', 'LDXXXXXDR', 'LDXXXXXDR', 'LDDDXDDDR', 'LXXXXDDXR', 'LXXXDDDXR', ' BBBBBBB '],
+    // The cab stands behind the engine bay. The transmission and the tank lie behind it, out of sight.
+    layout: [' FFFFFFF ', 'LXDEEDDXR', 'LXDEEDDXR', 'LDDXXXDDR', 'LDDXXXDDR', 'LDDDDXDDR', 'LXDXXXDXR', 'LXDXXDDXR', ' BBBBBBB '],
     core: [
-      { defId: 'cabWide', x: 2, y: 3 },
-      { defId: 'transmissionHeavy', x: 2, y: 6 },
-      { defId: 'tankHeavy', x: 4, y: 5 },
+      { defId: 'cabPickup', x: 3, y: 3 },
+      { defId: 'transmissionHeavy', x: 3, y: 6 },
+      { defId: 'tankHeavy', x: 5, y: 5 },
       { defId: 'wheelHeavy', x: 1, y: 1 },
       { defId: 'wheelHeavy', x: 7, y: 1 },
       { defId: 'wheelHeavy', x: 1, y: 6 },
       { defId: 'wheelHeavy', x: 7, y: 6 },
     ],
-    fuelCap: 120, fuelPerTile: 0.6, base: 1970, showsCores: false, tier: 3, look: 'tractor',
+    fuelCap: 120, fuelPerTile: 0.6, base: 1730, showsCores: false, tier: 3, look: 'tractor',
   },
   // A VW Kübelwagen: open seats, a flat hood over the tank and the air-cooled engine under a rear lid.
   jeep: {
     id: 'jeep', name: 'Jeep', maxSpeed: 8.2, accel: 2.5, brake: 3, turnSlow: 115, turnFast: 42, reverseTurn: 80,
     mass: 450, handlingMass: 1400, radius: 0.55,
     // The engine bay is on the rear deck and the cabin roof is a gun deck. The model has no low place for the transmission and the tank, so they sit inside the body.
-    layout: [' FFFF ', 'LXXXXR', 'LXXXXR', 'LDXDDR', 'LDDDDR', 'LXEEXR', 'LXEEXR', 'LDXXDR', ' BBBB '],
+    layout: [' FFFF ', 'LXXXXR', 'LXXXXR', 'LDXDDR', 'LDXDDR', 'LXEEXR', 'LXEEXR', 'LDXXDR', ' BBBB '],
     core: [
       { defId: 'cab', x: 2, y: 3 },
       { defId: 'transmission', x: 2, y: 1 },
@@ -303,16 +305,16 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
       { defId: 'wheel', x: 1, y: 5 },
       { defId: 'wheel', x: 4, y: 5 },
     ],
-    fuelCap: 35, fuelPerTile: 0.2, base: 330, showsCores: false, tier: 1, look: 'jeep',
+    fuelCap: 35, fuelPerTile: 0.2, base: 390, showsCores: false, tier: 1, look: 'jeep',
   },
   // A 1964 Corvair Monza convertible: a front trunk, open seats and a flat-six under the rear deck lid.
   convertible: {
     id: 'convertible', name: 'Convertible', maxSpeed: 9.4, accel: 2.5, brake: 3, turnSlow: 110, turnFast: 40, reverseTurn: 70,
     mass: 750, handlingMass: 2000, radius: 0.6,
-    // The engine bay lies under the rear deck lid. The transmission and the tank lie in the front trunk, out of sight, and the cab takes the right columns.
-    layout: [' FFFFF ', 'LXXXXXR', 'LXXXXXR', 'LDDXXXR', 'LDDXXXR', 'LDDDDDR', 'LXEEDXR', 'LXEEDXR', ' BBBBB '],
+    // The engine bay lies under the rear deck lid. The transmission and the tank lie in the front trunk, out of sight, and the hardtop cab stands two across between the seats.
+    layout: [' FFFFF ', 'LXXXXXR', 'LXXXXXR', 'LDXXDDR', 'LDXXDDR', 'LDXXDDR', 'LXEEDXR', 'LXEEDXR', ' BBBBB '],
     core: [
-      { defId: 'cabHardtop', x: 3, y: 3 },
+      { defId: 'cabHardtop', x: 2, y: 3, rot: 1 },
       { defId: 'transmission', x: 2, y: 1 },
       { defId: 'tankLong', x: 4, y: 1 },
       { defId: 'wheel', x: 1, y: 1 },
@@ -326,10 +328,10 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
   bus: {
     id: 'bus', name: 'Bus', maxSpeed: 5.5, accel: 0.9, brake: 2, turnSlow: 65, turnFast: 22, reverseTurn: 40,
     mass: 3000, handlingMass: 6800, radius: 0.9,
-    // The engine hatch is on the roof. The transmission and the tank lie inside the body, out of sight.
-    layout: [' FFFFFF ', 'LXXDDDXR', 'LXXDDDXR', 'LDDDDDDR', 'LDDDDDDR', 'LDDDDDDR', 'LDDXXXDR', 'LDDXXXDR', 'LDDEEDDR', 'LXDEEDXR', 'LXDDDDXR', ' BBBBBB '],
+    // The engine hatch is on the roof. The cab is at the front, and the transmission and the tank lie inside the body, out of sight.
+    layout: [' FFFFFF ', 'LXXXXDXR', 'LXXXXDXR', 'LDDDDDDR', 'LDDDDDDR', 'LDDDDDDR', 'LDDXXXDR', 'LDDXXXDR', 'LDDEEDDR', 'LXDEEDXR', 'LXDDDDXR', ' BBBBBB '],
     core: [
-      { defId: 'cabNarrow', x: 2, y: 1 },
+      { defId: 'cabPickup', x: 2, y: 1 },
       { defId: 'transmissionMid', x: 3, y: 6 },
       { defId: 'tankMid', x: 5, y: 6 },
       { defId: 'wheelMid', x: 1, y: 1 },
@@ -337,17 +339,17 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
       { defId: 'wheelMid', x: 1, y: 9 },
       { defId: 'wheelMid', x: 6, y: 9 },
     ],
-    fuelCap: 110, fuelPerTile: 0.45, base: 0, showsCores: false, tier: 2, look: 'bus',
+    fuelCap: 110, fuelPerTile: 0.45, base: 240, showsCores: false, tier: 2, look: 'bus',
   },
   // A Caterpillar 950 wheel loader: the bucket on the front row, the cab in the middle and the engine over the counterweight.
   loader: {
     id: 'loader', name: 'Wheel loader', maxSpeed: 3.6, accel: 1.6, brake: 2.5, turnSlow: 85, turnFast: 30, reverseTurn: 60,
     mass: 4200, handlingMass: 7000, radius: 0.9,
-    // The transmission and the tank lie under the hood, out of sight.
-    layout: [' FFFFFFF ', 'LXDDDDDXR', 'LXDXXXDXR', 'LDDXXXDDR', 'LDDDDDDDR', 'LDXEEDDDR', 'LXXEEXXXR', 'LXDDDXXXR', ' BBBBBBB '],
+    // The cab stands two across on the left, over the hood, and the transmission and the tank lie under it, out of sight.
+    layout: [' FFFFFFF ', 'LXDDDDDXR', 'LXXXDDDXR', 'LDXXXXDDR', 'LDXXXXDDR', 'LDXEEDDDR', 'LXXEEDDXR', 'LXDDDDDXR', ' BBBBBBB '],
     core: [
-      { defId: 'cabPickup', x: 3, y: 2 },
-      { defId: 'transmissionHeavy', x: 5, y: 6 },
+      { defId: 'cabPickup', x: 2, y: 2, rot: 1 },
+      { defId: 'transmissionHeavy', x: 4, y: 3 },
       { defId: 'tankHeavy', x: 2, y: 5 },
       { defId: 'wheelHeavy', x: 1, y: 1 },
       { defId: 'wheelHeavy', x: 7, y: 1 },
