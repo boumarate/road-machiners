@@ -7,6 +7,7 @@ import { playerVehicle } from './damage';
 import { isKnockedOut } from './defeat';
 import { inTowReach } from './tow';
 import { canLootTruck, canReachSalvage, collectSalvage, hasSalvage, lootBlocker, pourStores, requireLootFree, salvageInRange, takeBasis } from './salvage';
+import { takeClaimed } from './parley';
 import { newId } from './factory';
 import { goodsCount, isMounted, type Spot } from './grid';
 import { getLayoutError, lootRefitTurns, requireIdleRefit } from './inventory';
@@ -193,6 +194,7 @@ function requireLootable(world: World, stockId: string): SalvageStock {
   if (!world.player.scavenged.includes(stockId)) throw new Error('Search this site first');
   if (!canReachSalvage(playerVehicle(world), stock)) throw new Error('Stop within reach of the salvage');
   requireLootFree(world, playerVehicle(world), stockId);
+  takeClaimed(world, stock);
   return stock;
 }
 
