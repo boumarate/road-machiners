@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import type { FactoryState } from './types';
 
-export const EMPTY_STATE: FactoryState = { job: null, approvalPosts: {}, lastRelease: null, release: null, pendingShip: null, pendingRemovals: [], pendingApprovals: {}, pendingChanges: [], adhocReplies: {}, lastTickError: null, builds: {}, jobStarts: [], capNoticed: false };
+export const EMPTY_STATE: FactoryState = { job: null, approvalPosts: {}, lastRelease: null, release: null, pendingShip: null, pendingRemovals: [], pendingApprovals: {}, pendingChanges: [], adhocReplies: {}, lastTickError: null, builds: {}, jobStarts: [], capNoticed: false, devBuild: null, devFailed: null };
 
 export function readState(path: string): FactoryState {
   if (!existsSync(path)) return structuredClone(EMPTY_STATE);

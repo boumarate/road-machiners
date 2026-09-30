@@ -1,7 +1,7 @@
 import { rmSync } from 'node:fs';
 import { deployDev } from '../deploy';
 import { readState, updateState } from '../state';
-import { BRANCH, FEEDBACK_HEADING, WONT_DO_LABEL, type Ctx } from '../types';
+import { BRANCH, FEEDBACK_HEADING, RELEASE_CANDIDATE_LABEL, WONT_DO_LABEL, type Ctx } from '../types';
 import { BASE_BRANCH, agentLog, baseBranchFor, syncBase, workDir } from './common';
 
 async function requireApproval(ctx: Ctx, issue: number): Promise<void> {
@@ -28,7 +28,8 @@ export async function approve(ctx: Ctx, issue: number, by: string): Promise<void
   await ctx.repo.merge(BRANCH(issue), base, `Merge issue #${issue}: ${item.title}`);
   await ctx.repo.push(base);
   const message = base === BASE_BRANCH ? await mergedIntoDev(ctx, issue, item.title, by) : await mergedIntoRelease(ctx, issue, item.title, by, base);
-  await ctx.github.close(issue, 'completed');
+  // The issue stays open until its release ships to main. Ship closes it and drops the label.
+  await ctx.github.addLabel(issue, RELEASE_CANDIDATE_LABEL);
   await ctx.github.move(issue, 'Done');
   forgetPosts(ctx, issue, true);
   rmSync(workDir(ctx, issue), { recursive: true, force: true });
@@ -39,14 +40,14 @@ export async function approve(ctx: Ctx, issue: number, by: string): Promise<void
 // The pushed dev holds the branch head, so GitHub marks the pull request merged by itself.
 async function mergedIntoDev(ctx: Ctx, issue: number, title: string, by: string): Promise<string> {
   await deployDev(ctx, agentLog(ctx, issue, 'approve'));
-  await ctx.github.comment(issue, `Approved by ${by} in the committee chat and merged into dev.`);
+  await ctx.github.comment(issue, `Approved by ${by} in the committee chat and merged into dev. It closes when its release ships.`);
   return `Issue #${issue} ${title} is merged into dev.\nPlay it: ${ctx.cfg.publicUrl}/dev`;
 }
 
 // Release work never reaches dev by itself, so dev stays as it is until Ship. A feature back after a removal is in the release again.
 async function mergedIntoRelease(ctx: Ctx, issue: number, title: string, by: string, branch: string): Promise<string> {
   updateState(ctx.statePath, (state) => (state.release ? { ...state, release: { ...state.release, removed: state.release.removed.filter((n) => n !== issue) } } : state));
-  await ctx.github.comment(issue, `Approved by ${by} and merged into the release branch ${branch}.`);
+  await ctx.github.comment(issue, `Approved by ${by} and merged into the release branch ${branch}. It closes when the release ships.`);
   return `Issue #${issue} ${title} is merged into the release ${branch}.`;
 }
 

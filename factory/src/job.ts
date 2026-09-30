@@ -1,3 +1,4 @@
+import { rebuildDev } from './deploy';
 import { failureIssue, reportFailure } from './fail';
 import { adhoc } from './stages/adhoc';
 import { approve } from './stages/approval';
@@ -11,25 +12,42 @@ import { ship } from './stages/ship';
 import { runStage as testing } from './stages/testing';
 import { runStage as triage } from './stages/triage';
 import { readState, updateState } from './state';
-import type { Ctx, JobStage } from './types';
+import type { Ctx, Job, JobStage } from './types';
 
 type Handler = (ctx: Ctx, issue: number) => Promise<void>;
 
 // Ship reads who pressed it from the state, so the job cannot run without a queued Ship.
-const HANDLERS: Record<Exclude<JobStage, 'release'>, Handler> = {
+const HANDLERS: Record<Exclude<JobStage, 'release' | 'dev'>, Handler> = {
   triage, design, implement, testing, change, adhoc, candidate, remove,
   ship: (ctx, issue) => ship(ctx, issue, readState(ctx.statePath).pendingShip),
   approve: (ctx, issue) => approve(ctx, issue, readState(ctx.statePath).pendingApprovals[String(issue)] ?? 'the committee'),
 };
 
+// Card stages leave a progress comment on their issue, so the issue shows where its work stands.
+const CARD_STAGE_NAMES: Partial<Record<JobStage, string>> = { triage: 'Triage', design: 'Design', implement: 'Implementation', testing: 'Testing' };
+
+export function progressNote(ctx: Ctx, stage: JobStage, startedAt: string | null, outcome: 'finished' | 'failed'): string {
+  const minutes = startedAt ? Math.round((ctx.now().getTime() - new Date(startedAt).getTime()) / 60_000) : null;
+  const took = minutes === null ? '' : ` after ${minutes} min`;
+  const next = outcome === 'failed' ? ' Hermes is looking into it.' : '';
+  return `${CARD_STAGE_NAMES[stage]} ${outcome}${took}.${next}`;
+}
+
+async function noteProgress(ctx: Ctx, stage: JobStage, issue: number | null, job: Job | null, outcome: 'finished' | 'failed'): Promise<void> {
+  if (issue === null || !(stage in CARD_STAGE_NAMES)) return;
+  await ctx.github.comment(issue, progressNote(ctx, stage, job?.startedAt ?? null, outcome));
+}
+
 // Runs one job to its end. Success or failure, the job slot and its queued command are cleared, so nothing retries.
 export async function runJob(ctx: Ctx, stage: JobStage, issue: number | null): Promise<void> {
-  const log = readState(ctx.statePath).job?.log ?? null;
+  const job = readState(ctx.statePath).job;
   try {
     await dispatch(ctx, stage, issue);
     ctx.log(stage, issue, 'done');
+    await noteProgress(ctx, stage, issue, job, 'finished');
   } catch (error) {
-    await reportFailure(ctx, stage, failureIssue(stage, issue, readState(ctx.statePath)), error, log);
+    await reportFailure(ctx, stage, failureIssue(stage, issue, readState(ctx.statePath)), error, job?.log ?? null);
+    await noteProgress(ctx, stage, issue, job, 'failed');
   } finally {
     clearJob(ctx, stage, issue);
   }
@@ -37,6 +55,8 @@ export async function runJob(ctx: Ctx, stage: JobStage, issue: number | null): P
 
 async function dispatch(ctx: Ctx, stage: JobStage, issue: number | null): Promise<void> {
   if (stage === 'release') return release(ctx);
+  // A dev job run by hand has no job in the state, so its build output goes to a fixed log.
+  if (stage === 'dev') return rebuildDev(ctx, readState(ctx.statePath).job?.log ?? `${ctx.cfg.home}/logs/dev-build.log`);
   if (issue === null) throw new Error(`Job ${stage} needs an issue or change id`);
   return HANDLERS[stage](ctx, issue);
 }

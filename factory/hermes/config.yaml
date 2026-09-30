@@ -13,6 +13,8 @@ compression:
   codex_gpt55_autoraise_notice: false
 
 display:
+  # A message sent while Hermes works waits for the next turn, instead of cutting the running task off. /stop still interrupts.
+  busy_input_mode: queue
   platforms:
     telegram:
       tool_progress: "off"
@@ -26,6 +28,10 @@ terminal:
     - FACTORY_REPO
     # Hermes runs tools with its own HOME, so gh needs the folder of its login.
     - GH_CONFIG_DIR
+
+# Hermes acts on the factory without waiting on approval cards. Its prompt waited 5 minutes for an answer nobody saw, then dropped the step. SOUL.md says what to ask the committee first.
+approvals:
+  mode: "off"
 
 plugins:
   enabled:

@@ -31,6 +31,7 @@ export function fake(): Fake {
       comment: async (_n: number, body: string) => note(`comment ${body}`),
       move: async (_n: number, column: string) => note(`move ${column}`),
       close: async (_n: number, reason: string) => note(`close ${reason}`),
+      removeLabel: async (n: number, label: string) => note(`removeLabel ${n} ${label}`),
       addCard: async (_n: number, column: string) => note(`addCard ${column}`),
       openPullRequest: async (branch: string, base: string, title: string) => { note(`pr ${branch} ${base} ${title}`); return 'http://pr'; },
     },

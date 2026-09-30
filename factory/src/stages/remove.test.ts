@@ -25,6 +25,7 @@ describe('remove', () => {
       'push dev',
       'delete factory/issue-5',
       'reopen 5',
+      'removeLabel 5 release-candidate',
       expect.stringContaining('comment ## Committee feedback\n\nRemoved from release 2026-09-29 by Ann:\n\nremove #5 too loud'),
       'move Design',
       expect.stringContaining('message committee - Issue #5 is out of release'),

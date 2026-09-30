@@ -68,13 +68,10 @@ server.shell(
     **as_factory,
 )
 
-# The next agent run starts a fresh proxy from the new image and its allowlist.
+# The running proxy stays, so a running agent keeps its way out. The next agent run replaces a proxy from an older image.
 server.shell(
-    name="Build the egress proxy image and drop the old proxy container",
-    commands=[
-        f"cd {CODE_DIR} && timeout 600 docker build -t {image}-proxy factory/docker/proxy",
-        "timeout 60 docker rm -f roam-factory-proxy >/dev/null 2>&1 || true",
-    ],
+    name="Build the egress proxy image",
+    commands=[f"cd {CODE_DIR} && timeout 600 docker build -t {image}-proxy factory/docker/proxy"],
     **as_factory,
 )
 
@@ -103,6 +100,28 @@ systemd.service(
     enabled=True,
     daemon_reload=True,
     _sudo=True,
+)
+
+# Hermes runs factory steps on the server through ssh as the factory user, with the same rights as the tick.
+# Its key lives in the Hermes home, which only the factory user reads.
+hermes_key = f"{HERMES_DIR}/.ssh/id_ed25519"
+authorized = f"/home/{FACTORY_USER}/.ssh/authorized_keys"
+server.shell(
+    name="Hermes ssh key, authorized for the factory user",
+    commands=[
+        f"mkdir -p -m 700 {HERMES_DIR}/.ssh /home/{FACTORY_USER}/.ssh",
+        f"test -f {hermes_key} || ssh-keygen -q -t ed25519 -N '' -C factory-hermes -f {hermes_key}",
+        f"grep -qxF \"$(cat {hermes_key}.pub)\" {authorized} 2>/dev/null || cat {hermes_key}.pub >> {authorized}",
+        f"chmod 600 {authorized}",
+    ],
+    **as_factory,
+)
+
+# Hermes runs one-off Claude Code jobs on the server with factory/hermes/claude-run, for work no factory step covers.
+server.shell(
+    name="Claude Code for the factory user",
+    commands=[f"test -x /home/{FACTORY_USER}/.local/bin/claude || (curl -fsSL https://claude.ai/install.sh | timeout 300 bash)"],
+    **as_factory,
 )
 
 # Hermes takes its paths from env. The server layout differs from the Mac default.

@@ -488,6 +488,14 @@ describe('hunting a lost fight target', () => {
     expect(raider.order).toEqual({ kind: 'stopAt', dest: { x: 30, y: 30 } });
   });
 
+  it('drops the fight once the driver has no gun left', () => {
+    const { w, raider } = raiderLosesPlayer();
+    raider.items = raider.items.filter((it) => it.kind !== 'part' || it.part.defId !== 'mg');
+    w.turn++;
+    planNpcOrders(w);
+    expect(topGoal(raider)?.kind).not.toBe('fight');
+  });
+
   it('re-aims at the heard engine of the target and restarts the search', () => {
     const { w, player, raider } = raiderLosesPlayer();
     player.speed = 4;

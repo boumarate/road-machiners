@@ -76,10 +76,11 @@ export function hasSalvage(stock: SalvageStock): boolean {
   return stock.parts.length > 0 || Object.values(stock.goods).some((count) => count > 0) || hasStores(stock);
 }
 
-// Whether a collect would move anything from the stock into the vehicle.
+// Whether a collect would move anything from the stock into the vehicle. Stores count only when a unit of them fits
+// (or what is left of the stock), so a nearly full tank does not keep a collector searching a stock for good.
 export function canTakeAny(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
   const room = storesRoom(world, vehicle);
-  if ((['fuel', 'supplies'] as const).some((kind) => (stock[kind] ?? 0) > 0 && room[kind] > 0)) return true;
+  if ((['fuel', 'supplies'] as const).some((kind) => (stock[kind] ?? 0) > 0 && room[kind] >= Math.min(stock[kind] ?? 0, 1))) return true;
   const grid = gridOf(vehicle);
   const good: GridItem = { id: 'fit-check', x: 0, y: 0, rot: 0, kind: 'good', good: 'scrap' };
   const massRoom = cargoMassRoom(vehicle);

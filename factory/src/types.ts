@@ -4,7 +4,7 @@ export type Column = 'Triage' | 'Design' | 'Implementation' | 'Testing' | 'Appro
 
 export type CardStage = 'triage' | 'design' | 'implement' | 'testing';
 export type ReleaseStage = 'release' | 'candidate' | 'ship' | 'remove';
-export type Stage = CardStage | ReleaseStage | 'approve' | 'feedback' | 'change' | 'adhoc' | 'intake' | 'tick';
+export type Stage = CardStage | ReleaseStage | 'approve' | 'feedback' | 'change' | 'adhoc' | 'dev' | 'intake' | 'tick';
 
 export type FactoryConfig = {
   repo: string; // "owner/name" on GitHub
@@ -55,8 +55,8 @@ export type Issue = {
 export type Card = { itemId: string; issue: number; column: Column; labels: string[] };
 
 // A job is one detached `factory run` process. `issue` is null for the release cut and a change id for change.
-// Candidate and ship carry the tracking issue, remove the issue of the feature to take out.
-export type JobStage = CardStage | ReleaseStage | 'approve' | 'change' | 'adhoc';
+// Candidate and ship carry the tracking issue, remove the issue of the feature to take out. Dev rebuilds /dev/ and has no issue.
+export type JobStage = CardStage | ReleaseStage | 'approve' | 'change' | 'adhoc' | 'dev';
 export type Job = { stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string };
 export type ChangeRequest = { id: number; text: string; by: string };
 export type Removal = { issue: number; by: string; text: string };
@@ -84,6 +84,8 @@ export type FactoryState = {
   builds: Record<string, string>; // issue number -> folder name of its deployed build under the web root
   jobStarts: string[]; // ISO start times of public-driven jobs in the last 24 hours
   capNoticed: boolean; // the committee heard that the daily job cap blocks work, until the cap frees
+  devBuild: string | null; // short hash of dev that /dev/ serves
+  devFailed: string | null; // short hash of dev whose build failed. The tick skips it until dev moves or Hermes clears it.
 };
 
 export interface GitHub {
@@ -169,6 +171,7 @@ export const WONT_DO_LABEL = 'wont-do';
 export const MAINTENANCE_LABEL = 'maintenance';
 export const RELEASE_LABEL = 'release'; // the tracking issue of the open release
 export const RELEASE_TASK_LABEL = 'release-task'; // work that runs on the release branch
+export const RELEASE_CANDIDATE_LABEL = 'release-candidate'; // approved and merged, waiting for a ship to main. The issue closes on ship.
 export const ADHOC_LABEL = 'adhoc';
 export const CANDIDATE_LABELS = ['feature-request', 'bug'];
 export const NEEDS_INFO_LABEL = 'needs-info';

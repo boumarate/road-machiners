@@ -1,7 +1,7 @@
 import { rmSync } from 'node:fs';
 import { deployDev } from '../deploy';
 import { readState, updateState } from '../state';
-import { BRANCH, FEEDBACK_HEADING, type Ctx } from '../types';
+import { BRANCH, FEEDBACK_HEADING, RELEASE_CANDIDATE_LABEL, type Ctx } from '../types';
 import { BASE_BRANCH, agentLog, workDir } from './common';
 import { requireRelease } from './release-common';
 
@@ -22,7 +22,9 @@ export async function remove(ctx: Ctx, issue: number): Promise<void> {
   await ctx.repo.deleteBranch(BRANCH(issue));
   rmSync(workDir(ctx, issue), { recursive: true, force: true });
   rmSync(`${ctx.cfg.home}/work/check-issue-${issue}`, { recursive: true, force: true });
+  // An issue approved before the release-candidate label was closed on approval, so it may need a reopen.
   await ctx.github.reopen(issue);
+  await ctx.github.removeLabel(issue, RELEASE_CANDIDATE_LABEL);
   await ctx.github.comment(issue, `${FEEDBACK_HEADING}\n\nRemoved from release ${release.day} by ${removal.by}:\n\n${removal.text}`);
   await ctx.github.move(issue, 'Design');
   // Ship reads postId, so the old candidate post can no longer ship this release.

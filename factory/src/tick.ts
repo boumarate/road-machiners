@@ -14,7 +14,7 @@ type Due = Pick<FactoryConfig, 'releaseDays' | 'maxJobsPerDay'>;
 const DAY_MS = 24 * 3_600_000;
 const MINUTE_MS = 60_000;
 // Committee-driven jobs never count against the daily cap.
-const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc'];
+const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc', 'dev'];
 const CARD_ORDER: [Card['column'], JobStage][] = [['Testing', 'testing'], ['Implementation', 'implement'], ['Design', 'design'], ['Triage', 'triage']];
 
 function isDue(last: string | null, now: Date, everyMs: number): boolean {
@@ -77,10 +77,18 @@ export function atCap(state: FactoryState, now: Date, cfg: Pick<FactoryConfig, '
   return recentStarts(state, now).length >= cfg.maxJobsPerDay;
 }
 
-function pickJob(state: FactoryState, cards: Card[], now: Date, cfg: Due, allowCounted: boolean): JobPick | null {
+// /dev/ is stale when dev moved past its build, by a factory merge or any other push. A failed commit waits for the next push or for Hermes.
+function devJob(state: FactoryState, devHead: string | null): JobPick | null {
+  if (devHead === null || devHead === state.devBuild || devHead === state.devFailed) return null;
+  return { stage: 'dev', issue: null };
+}
+
+function pickJob(state: FactoryState, cards: Card[], now: Date, cfg: Due, allowCounted: boolean, devHead: string | null): JobPick | null {
   if (state.job) return null;
   const first = queued(state);
   if (first) return first;
+  const dev = devJob(state, devHead);
+  if (dev) return dev;
   const adhoc = adhocJob(cards);
   if (adhoc) return adhoc;
   return allowCounted ? countedJob(state, cards, now, cfg) : null;
@@ -91,10 +99,10 @@ function countedJob(state: FactoryState, cards: Card[], now: Date, cfg: Due): Jo
   return candidateJob(state, cards) ?? cardJob(cards);
 }
 
-// Picks the next job. Queued approvals, removals, ships and changes first, then ad hoc tasks, then a due release cut or candidate, then the card furthest along.
-// At the daily cap only the committee-driven jobs are left.
-export function chooseJob(state: FactoryState, cards: Card[], now: Date, cfg: Due): JobPick | null {
-  return pickJob(state, cards, now, cfg, !atCap(state, now, cfg));
+// Picks the next job. Queued approvals, removals, ships and changes first, then a stale /dev/, then ad hoc tasks, then a due release cut or candidate, then the card furthest along.
+// At the daily cap only the uncapped jobs are left. `devHead` is the short hash of dev on origin, or null to skip the /dev/ check.
+export function chooseJob(state: FactoryState, cards: Card[], now: Date, cfg: Due, devHead: string | null = null): JobPick | null {
+  return pickJob(state, cards, now, cfg, !atCap(state, now, cfg), devHead);
 }
 
 // Process control the tick uses. The CLI uses the real ones, and tests pass fakes.
@@ -167,7 +175,7 @@ async function noteCap(ctx: Ctx, cards: Card[]): Promise<void> {
     if (state.capNoticed) updateState(ctx.statePath, (s) => ({ ...s, capNoticed: false }));
     return;
   }
-  const waiting = pickJob(state, cards, now, ctx.cfg, true);
+  const waiting = pickJob(state, cards, now, ctx.cfg, true, null);
   if (state.capNoticed || waiting === null || !countsAgainstCap(waiting.stage)) return;
   const starts = recentStarts(state, now);
   const free = new Date(new Date(starts[0]).getTime() + DAY_MS).toISOString();
@@ -183,7 +191,8 @@ export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS
   const cards = await releaseAnswered(ctx, await ctx.github.cards());
   cleanBuilds(ctx, cards);
   await noteCap(ctx, cards);
-  const pick = chooseJob(readState(ctx.statePath), cards, ctx.now(), ctx.cfg);
+  await ctx.repo.sync();
+  const pick = chooseJob(readState(ctx.statePath), cards, ctx.now(), ctx.cfg, await ctx.repo.headHash('dev'));
   if (!pick) return ctx.log('tick', null, 'nothing to do');
   startJob(ctx, codeDir, pick, deps);
 }

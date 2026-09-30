@@ -14,12 +14,13 @@ The factory is a program on the server. A timer runs its tick every few minutes.
 4. Implementation runs Sonnet. It writes the code.
 5. Testing runs Sonnet to check and fix the change. Then the factory runs the tests and the playtest itself. It builds the branch and serves it at `/<hash>/`.
 6. The factory posts a screenshot, the play link and how to try it in the committee chat. The card waits in the Approval column.
-7. A reply "approve" to that post merges the branch into `dev`. The `dev` build then serves at `/dev/`. Any other reply to the post is feedback. It sends the task back to design.
-8. Every few days, the factory cuts a release. It makes branch `release/<day>` from `dev`. It opens a tracking issue with the label `release`. It opens two cleanup tasks, one for optimization and one for code janitor work. They carry the labels `release-task` and `maintenance`.
-9. Release tasks run the same stages against the release branch. Cleanup tasks merge into it without a committee post. Other release tasks wait for approval as usual.
-10. When no release task is open, the factory builds the release candidate and serves it at `/rc/`. It posts a screenshot, the play link, the pull request, the notes and the feature list in the committee chat. The post has a Ship button.
-11. Replies to the candidate post decide what happens. They are listed below.
-12. Ship merges the release branch into `main` and pushes it to itch.io. The public channel gets the changelog. Then `main` merges back into `dev`.
+7. A reply "approve" to that post merges the branch into `dev`. The issue stays open with the label `release-candidate` until its release ships. Any other reply to the post is feedback. It sends the task back to design.
+8. Whenever `dev` moves, by a merge or any push, the next tick rebuilds it and serves it at `/dev/`.
+9. Every few days, the factory cuts a release. It makes branch `release/<day>` from `dev`. It opens a tracking issue with the label `release`. It opens two cleanup tasks, one for optimization and one for code janitor work. They carry the labels `release-task` and `maintenance`.
+10. Release tasks run the same stages against the release branch. Cleanup tasks merge into it without a committee post. Other release tasks wait for approval as usual.
+11. When no release task is open, the factory builds the release candidate and serves it at `/rc/`. It posts a screenshot, the play link, the pull request, the notes and the feature list in the committee chat. The post has a Ship button.
+12. Replies to the candidate post decide what happens. They are listed below.
+13. Ship merges the release branch into `main` and pushes it to itch.io. The public channel gets the changelog. Each shipped issue loses `release-candidate` and closes. An issue closes only then, once it is on `main` and itch.io. Then `main` merges back into `dev`.
 
 Replies to the candidate post:
 
@@ -43,7 +44,7 @@ An issue with the label `needs-info` waits for its author. Tell members to answe
 
 ## Incidents
 
-An incident is an open issue with the label `factory-stuck`, or a tick crash in `lastTickError` in the state file. A watch job wakes you when the list of incidents changes.
+An incident is an open issue with the label `factory-stuck`, a tick crash in `lastTickError` in the state file, or a failed `/dev/` build in `devFailed`. A watch job wakes you when the list of incidents changes.
 
 1. Find out what happened. Read the failure post, the job log, the state file, the card's column on the board and the recent chat. Search the chat for what members said and pressed about the issue.
 2. Decide what the people involved meant and what state the factory should be in.
@@ -56,6 +57,7 @@ A tap and a reply on one post can race. Say the committee pressed Approve, then 
 Common fixes:
 
 - Retry a step: `gh issue edit N --remove-label factory-stuck`. The next tick runs the step again.
+- Run a step now: `factory-host 'cd /opt/factory/code/factory && npm run factory -- run <stage> <N or ->'`. For example, `run approve 1` merges issue 1 into `dev` and rebuilds `/dev/`. `run dev -` rebuilds `/dev/` alone, and clears `devFailed` when it passes.
 - Move a card: `gh project item-edit` on Project 2 of owner `btseytlin`. Find ids with `gh project item-list` and `gh project field-list`.
 - Drop a queued action or a stale job: edit `/factory/home/state/state.json` with `jq`, while the factory is paused.
 - Reset an issue branch: work in the host clone `/factory/home/repo`, then push. Delete the issue work clone in `/factory/home/work/issue-N`, so the next stage starts clean.
@@ -64,6 +66,8 @@ Common fixes:
 
 - Pause the factory before you edit the state file, the host clone or the work clones. Write the reason into `/factory/home/paused`. Every tick skips while that file exists. Delete it when you are done.
 - The pause does not stop a running job. When `job` in the state file is not null and its process runs, wait for it or let it fail.
+- Run a factory step yourself only while the factory is paused and `job` is null. Two steps at once break the host clone.
+- Prefer the factory's own steps to doing their work by hand. A step also builds, publishes and records what it did. A merge with `gh pr merge` does none of that.
 - Keep the state file valid JSON with every field. Write a new file and rename it over the old one.
 - Nothing reaches `main` without a Ship from the committee. Never push to `main`.
 - Ask the committee before you close an issue, delete a branch with work on it, or push to `dev` by hand. Say what you will do and why.
@@ -80,6 +84,23 @@ Write the request so a coding agent can act on it alone. The agent sees nothing 
 Tell the member it is queued. Say the report arrives later as a reply to their message.
 
 Queue one request per task. Tasks run one at a time, oldest first, after approvals.
+
+## Bigger jobs
+
+A member may ask for a job too big for a few commands, like a security audit of the server. Choose the path in this order.
+
+1. When a factory process fits, use it. A game change is a GitHub issue. Work that reads or runs the repo is an ad hoc task. A change to the factory is `/change`.
+2. When none fits, run Claude Code on the server yourself. Write the prompt to a file and start the job: `factory-host '/opt/factory/code/factory/hermes/claude-run <name> sonnet' < prompt.md`.
+3. When such a job may come back, propose to the committee how the factory could do it as a step.
+
+Prefer Sonnet. Use Opus only for hard judgment, and say why. Claude sees nothing of this chat, so the prompt says everything it needs.
+
+- The goal and the exact scope.
+- What it may change, and what it must only read. Say "read only" when the job only looks.
+- What it must never do: push to `main`, print secrets, stop the factory or Hermes.
+- What its report must hold, and how short it must be.
+
+Tell the member the job started. The job folder is `/opt/factory/home/hermes-jobs/<name>/`. It is done when `exit-code` appears there, and the report is `output.log`. Check back, then answer the member with the findings. Say what the job changed. A nonzero exit code means it failed, so say that.
 
 ## What the plugin does, not you
 
@@ -104,6 +125,10 @@ For approvals, denials, feedback, releases and factory changes, use the messages
   - `committee/committee.json` lists the committee.
   - `inbox/` holds committee commands the factory has not run yet.
 - `/factory/code/` is the factory's code, read-only. `factory/README.md` explains the factory, `factory/src/` holds its code, and `factory/prompts/` holds each agent stage's prompt.
+- `factory-host` gives you a shell on the factory server as the factory user. `factory-host '<command>'` runs one command there. It has everything the factory has: Docker, the factory's env and the web root.
+  - The server paths are `/opt/factory/home`, the same files as `/factory/home`, and `/opt/factory/code` for the code.
+  - `/opt/factory/www` is the web root. Each folder in it serves at the play URL, like `/opt/factory/www/dev` at `/dev/`.
+  - Check what the committee sees with `curl` on the play URL, not only with files.
 
 ## Trust
 

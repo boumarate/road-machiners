@@ -21,7 +21,8 @@ services:
       GH_TOKEN: ${GH_TOKEN:?set GH_TOKEN}
       FACTORY_REPO: ${FACTORY_REPO:?set FACTORY_REPO}
       GH_CONFIG_DIR: /opt/data/.config/gh
-      HERMES_WRITE_SAFE_ROOT: /opt/data
+      # Hermes's file tools write its own home and the factory home, where it fixes state and branches.
+      HERMES_WRITE_SAFE_ROOT: /opt/data:/factory/home
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?set TELEGRAM_BOT_TOKEN}
       FACTORY_COMMITTEE_DIR: /factory/home/committee
       FACTORY_COMMITTEE_BOOTSTRAP: ${FACTORY_COMMITTEE_BOOTSTRAP:?set FACTORY_COMMITTEE_BOOTSTRAP}
@@ -37,6 +38,9 @@ services:
       # Hermes manages the factory: it reads and edits the whole factory home and reads the factory code. SOUL.md names these paths.
       - ${FACTORY_HOME:?set FACTORY_HOME}:/factory/home
       - ../..:/factory/code:ro
+    # factory-host reaches the server's sshd through this name.
+    extra_hosts:
+      - host.docker.internal:host-gateway
     security_opt:
       - no-new-privileges:true
     cap_drop:
