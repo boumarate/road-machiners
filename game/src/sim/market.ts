@@ -186,6 +186,13 @@ export function vehicleValue(v: Vehicle): number {
   return chassisDef(v.chassisId).value + parts.reduce((a, p) => a + partValue(p), 0);
 }
 
+// What a robber gets without a refit: the goods at their price plus the spare parts at their worth.
+// Mounted parts are the truck, not the load.
+export function cargoValue(v: Vehicle): number {
+  const goods = Object.entries(goodsCount(v)).reduce((a, [good, n]) => a + n * goodValue(good), 0);
+  return goods + spareParts(v).reduce((a, p) => a + partValue(p), 0);
+}
+
 // A bounty's reward: a share of the target's own total worth, so a tougher, better-equipped truck
 // pays more to put down. The deadline window is random and does not change the pay.
 export function bountyReward(target: Vehicle): number {

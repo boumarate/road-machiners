@@ -122,7 +122,7 @@ A knocked-out NPC is nobody's foe. No gun aims at it on its own, and knockout cl
 A knocked-out NPC comes to once the trucks that attacked it no longer see it, or after 30 turns. Broken built-in parts that are not junk are patched to a quarter of their HP. It then retreats to its nearest own camp, else its nearest known town. It drives or crawls there, and towers can tow it. After a quarter of a day beyond the player's gray vision it appears at a free home pad instead. At home it gets fresh gear for its type on the same chassis and returns to its work.
 One in three NPCs the player knocks out holds a grudge for 10 days. Every hostile choice about the player gets more likely: fighting, robbing, ramming, closing in, refusing a truce and finishing a beggar. The grudge ends when that driver knocks the player out or the player hands it cargo.
 
-Raiders ignore a truck with nothing to take. A truck has loot when it holds goods, spare parts or mounted parts beyond the built-in ones. A feud still makes a raider fight a stripped truck.
+Raiders ignore a truck with nothing to take. A truck has loot when it holds goods, spare parts or mounted parts beyond the built-in ones. A raider attacks a truck with little cargo only rarely, and more often as its goods and spare parts are worth more. A feud or a grudge ignores cargo, and a feud still makes a raider fight a stripped truck.
 
 A truck with no working engine, a broken transmission or an empty tank still moves at a crawl. The driver pushes it. Pushing burns no fuel, and a truck without a working engine makes no sound. A player truck that can only crawl is stranded. It can still travel automatically to an order point.
 
@@ -218,7 +218,7 @@ Every NPC carries a set of traits instead of one class. Each trait adds activiti
 - Scavenger collects salvage and helps stranded trucks.
 - Trader buys and sells between towns, rarely starts a fight, and sometimes fights back.
 - Raider hunts at hunting grounds, investigates distant engines and knows the raider camps.
-- Scumbag robs trucks that carry loot and look weaker than it.
+- Scumbag robs trucks that carry a valuable load and look weaker than it.
 - Coward flees more often and fights back less.
 - Brave almost never runs, pleads or gives up its cargo.
 - Lawman patrols the roads out to about a sixth of the way to the other town and fights raiders on sight. It attacks whoever fires the first shot at a neutral NPC or starts robbing one, the player included.
@@ -229,7 +229,7 @@ Every NPC carries a set of traits instead of one class. Each trait adds activiti
 - Guard follows a supply convoy and protects it.
 - Merc waits at a town for hire, then escorts its client.
 
-A chance is 0 only when an option is physically impossible or a trait forbids it. A driver with no working gun cannot fight, and a truck with no loot cannot be robbed. Supply convoys, convoy guards and lawmen never rob. A driver following a leader never robs, but its leader can. Anything a driver can do keeps at least a 1% chance. So an ordinary scavenger robs about once in a hundred chances, and a trader sometimes starts a fight.
+A chance is 0 only when an option is physically impossible or a trait forbids it. A driver with no working gun cannot fight, and a truck with no loot cannot be robbed. Supply convoys, convoy guards and lawmen never rob. A driver following a leader never robs, but its leader can. A cheap load is robbed only rarely: cargo value counts goods and spare parts, not mounted gear. Anything a driver can do keeps at least a 1% chance. So an ordinary scavenger robs about once in a hundred chances, and a trader sometimes starts a fight.
 
 Drivers judge each other by danger: the firepower of working guns times the current toughness of the cab, chassis and armor. A tank looks more dangerous than a scout, and a half-beaten tank looks about half as dangerous. Danger counts nearby visible faction mates on each side. A driver misjudges another truck's danger by up to a quarter each time it first sees it. A scumbag robs a truck whose danger looks below its own times its boldness. Scumbags and brave drivers are bold, and cowards are timid. A stronger target, or one near a town gate, is robbed only rarely.
 
