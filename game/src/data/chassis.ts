@@ -15,8 +15,8 @@
 // core places the built-in parts at fixed cells, unrotated unless it lists rot 1. The four wheels sit one column in from
 // the side armor, one in each corner of the truck. The physics wheels come from PHYSICS.bodies, not these cells.
 // The transmission takes 2 by 2 cells and a fuel tank 1 by 2, and every engine takes at least 2 by 2, so an E bay is
-// 2 by 2. Every chassis keeps a free 2 by 2 block of D cells for the bigger guns, and tier 2 and 3 chassis a free 2
-// across by 3 along block. A cab keeps clear of the wheel columns, except on small vehicles named in
+// 2 by 2. Every chassis but the scout keeps a free 2 by 2 block of D cells for the bigger guns, and tier 2 and 3 chassis a free 2
+// across by 3 along block. The scout's cab, clear of its wheels on five columns, leaves only single deck columns. A cab keeps clear of the wheel columns, except on small vehicles named in
 // chassis.test.ts, and the transmission lies in or next to a middle column. A grid may have more rows or columns than its model has rows and columns of its own, since the
 // projection stretches whatever grid it gets over the model.
 //
@@ -105,20 +105,20 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     mass: 680,
     handlingMass: 2100,
     radius: 0.6,
-    // The cab sits between the wheel columns. The right roof edge and the front deck beside the engine are gun decks. The transmission and the tank lie in the bed.
-    layout: [' FFFFFF ', 'LXEEDDXR', 'LXEEDDXR', 'LDXXXDDR', 'LDXXXDDR', 'LXDXXXXR', 'LXDXXXXR', ' BBBBBB '],
+    // The cab sits between the wheel columns, which leaves gun decks beside the engine and on both sides of the cab. The transmission and the tank lie in the bed.
+    layout: [' FFFFF ', 'LXEEDXR', 'LXEEDXR', 'LDXXXDR', 'LDXXXDR', 'LXXXXXR', 'LXXXXXR', ' BBBBB '],
     core: [
       { defId: 'cabPickup', x: 2, y: 3 },
-      { defId: 'transmission', x: 3, y: 5 },
-      { defId: 'tank', x: 5, y: 5 },
+      { defId: 'transmission', x: 2, y: 5 },
+      { defId: 'tank', x: 4, y: 5 },
       { defId: 'wheel', x: 1, y: 1 },
-      { defId: 'wheel', x: 6, y: 1 },
+      { defId: 'wheel', x: 5, y: 1 },
       { defId: 'wheel', x: 1, y: 5 },
-      { defId: 'wheel', x: 6, y: 5 },
+      { defId: 'wheel', x: 5, y: 5 },
     ],
     fuelCap: 40,
     fuelPerTile: 0.25,
-    base: 380, showsCores: true, tier: 1,
+    base: 800, showsCores: true, tier: 1,
     look: 'pickup',
   },
   hauler: {

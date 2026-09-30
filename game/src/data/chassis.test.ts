@@ -42,8 +42,15 @@ const FRONT_ENGINE: readonly string[] = ['longbed', 'tractor'];
 // Chassis whose cab shares a column with a wheel, with the reason. A stale entry fails the test.
 const CAB_BESIDE_WHEELS: Record<string, string> = {
   buggy: 'A small raider runabout. Its open 1x1 seat is not tall, and the grid has only 4 inner columns.',
-  convertible: 'A small car with 5 inner columns. Clearing the wheels needs a wider grid with 7 more deck cells.',
+  convertible: 'A small car. Clearing its wheels on 5 columns costs the free 2x2 and 2x3 deck blocks that tier 2 needs, and a wider grid was refused.',
 };
+
+// Chassis with no free 2 by 2 block of deck cells, with the reason. A stale entry fails the test.
+const NO_DECK_BLOCK: Record<string, string> = {
+  scout: 'A cab clear of the wheels on 5 columns leaves only single deck columns.',
+};
+
+const RATED_MASS = 3840; // the scout's rated mass on dev
 
 const columns = (cells: Cell[]) => new Set(cells.map((cell) => cell.x));
 
@@ -65,9 +72,22 @@ describe('chassis grids', () => {
     }
   });
 
-  it('keeps the scout worth what it was before its grid gained a column', () => {
-    // 800 base plus the old modifier of 6 deck cells and 10 armor cells; the value of the old grid.
+  it('keeps the scout worth what it was before its cab moved', () => {
+    // 800 base plus the modifier of 6 deck cells and 10 armor cells.
     expect(CHASSIS.scout.value).toBe(2444);
+    expect(CHASSIS.scout.ratedMass).toBe(RATED_MASS);
+  });
+
+  it('keeps the scout grid the same size with the same cells', () => {
+    const before = [' FFFFF ', 'LXEEDXR', 'LXEEDXR', 'LXXXDDR', 'LXXXDDR', 'LXXXXXR', 'LXXXXXR', ' BBBBB '];
+    const count = (rows: readonly string[]) => {
+      const n: Record<string, number> = {};
+      for (const ch of rows.join('')) n[ch] = (n[ch] ?? 0) + 1;
+      return n;
+    };
+    expect(CHASSIS.scout.layout.length).toBe(before.length);
+    expect(CHASSIS.scout.layout.every((row) => row.length === before[0].length)).toBe(true);
+    expect(count(CHASSIS.scout.layout)).toEqual(count(before));
   });
 
   it('keeps every armor column outside the model and every armor row full width', () => {
@@ -161,8 +181,8 @@ describe('core part sizes', () => {
 });
 
 describe('deck blocks for the bigger guns', () => {
-  it('keeps a free 2 by 2 block of deck cells on every chassis', () => {
-    for (const [id, c] of Object.entries(CHASSIS)) expect(hasDeckBlock(c, 2, 2), id).toBe(true);
+  it('keeps a free 2 by 2 block of deck cells on every chassis but those listed', () => {
+    for (const [id, c] of Object.entries(CHASSIS)) expect(hasDeckBlock(c, 2, 2), id).toBe(!(id in NO_DECK_BLOCK));
   });
 
   it('keeps a free 2 across by 3 along block of deck cells on every tier 2 and 3 chassis', () => {
