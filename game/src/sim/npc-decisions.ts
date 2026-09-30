@@ -17,7 +17,7 @@ import {
 } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
-import { huntsForLoot, isHostile } from './combat';
+import { huntsForLoot, inCombatWithOther, isHostile } from './combat';
 import { ramFactor, ramImpact } from './crash-contact';
 import { isKnockedOut } from './defeat';
 import { vehicleById } from './damage';
@@ -362,19 +362,12 @@ export function haulGoods(siteId: string): string[] {
   return goods;
 }
 
-// True while an NPC driver fights or flees a truck other than `otherId`. Such a driver takes no calls or offers
-// from that truck, and nobody but its foe starts a robbery, tow or hire with it.
-export function busyWithFight(vehicle: Vehicle, otherId: string): boolean {
-  const top = vehicle.brain ? topGoal(vehicle) : null;
-  return (top?.kind === 'fight' || top?.kind === 'flee') && top.targetId !== otherId;
-}
-
 // ---- Robbery.
 
-// A robber can rob a truck it sees, that is fair game, that is not busy fighting another, and that is robbable.
+// A robber can rob a truck it sees, that is fair game, that is not in combat with another, and that is robbable.
 // Cheap checks run before the sight line.
 export function canRob(w: World, robber: Vehicle, target: Vehicle): boolean {
-  if (robber.id === target.id || !isRobbable(w, target) || busyWithFight(target, robber.id)) return false;
+  if (robber.id === target.id || !isRobbable(w, target) || inCombatWithOther(w, target, robber.id)) return false;
   return isFairGame(w, robber, target) && canVehicleSee(w, robber, target.pos);
 }
 

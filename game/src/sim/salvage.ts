@@ -18,7 +18,8 @@ import { sampleWeighted } from './npc-loadout';
 import { itemMass } from './mass';
 import { getResources } from './resources';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
-import { cancelJob, inCombat, startJob } from './jobs';
+import { inCombat } from './combat';
+import { cancelJob, startJob } from './jobs';
 import type { GridItem, NpcActivity, Obstacle, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
 import { estimateCrashGeometry } from './crash-contact';
 import { walkLane } from './armor';
@@ -558,7 +559,7 @@ function inLootReach(world: World, v: Vehicle, targetId: string): boolean {
 export function lootTruckTurn(world: World, looter: Vehicle, target: Vehicle): string | null {
   if (looter.job?.kind === 'refit') return null;
   takeLooseItems(world, looter, target);
-  if (inCombat(world, looter)) return 'a foe in sight stops the looting';
+  if (inCombat(world, looter)) return 'combat stops the looting';
   const next = nextInstalled(looter, target);
   if (!next) return target.items.some((it) => takeError(target, it) === null) ? 'cargo cannot hold the loot' : 'nothing left to loot';
   takeItem(world, looter, target, next.item, next.spot);

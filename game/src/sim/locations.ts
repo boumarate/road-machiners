@@ -10,7 +10,8 @@ import { canLootTruck, canReachSalvage, collectSalvage, hasSalvage, lootBlocker,
 import { newId } from './factory';
 import { goodsCount, isMounted, type Spot } from './grid';
 import { getLayoutError, lootRefitTurns, requireIdleRefit } from './inventory';
-import { inCombat, startJob } from './jobs';
+import { inCombat } from './combat';
+import { startJob } from './jobs';
 import { beginSearch } from './search';
 import { practice } from './progress';
 import { locationAt, townAt } from './sites';

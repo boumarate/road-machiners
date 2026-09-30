@@ -1,4 +1,4 @@
-// Roadside patches between two trucks. A patch lifts the broken engine and transmission that strand a truck to
+// Roadside patches between two trucks. A patch lifts the broken engine, transmission and tank that strand a truck to
 // PATCH.share of their max HP, with the repair math of src/sim/repair.ts and the patcher's Machining. The terms are
 // the NPC's `patchDeal` decision, so traits and states shape them. A deal is a `patch` state held by the patcher
 // toward the client. Work runs while both trucks stay parked in reach, and the fulfilled hook pays for it once.
@@ -17,6 +17,7 @@ import { decide, optionWeights } from './npc-decisions';
 import { machiningMult, planPartRepair } from './repair';
 import { getResources } from './resources';
 import { addState, type WorkLeft } from './states';
+import { isStranded } from './stats';
 import { inTowReach } from './tow';
 import type { CallVar, NpcState, PartInstance, PatchDeal, StateData, Vehicle, World } from './types';
 import { dist } from './vec';
@@ -24,14 +25,15 @@ import { dist } from './vec';
 export type PatchPlan = { parts: number; turns: number };
 type Roles = { patcher: Vehicle; client: Vehicle };
 
-// The broken parts that strand a truck and a patch can fix: the first engine and the transmission, unless junk.
-function brokenDriveParts(v: Vehicle): PartInstance[] {
+// The broken parts that strand a truck and a patch can fix: the first engine, the transmission and the tank, unless junk.
+function brokenParts(v: Vehicle): PartInstance[] {
   const engine = mountedParts(v, 'engine')[0];
-  return [engine, corePart(v, 'transmission')].filter((p): p is PartInstance => p !== undefined && p.hp === 0 && !isJunk(p));
+  return [engine, corePart(v, 'transmission'), corePart(v, 'tank')].filter((p): p is PartInstance => p !== undefined && p.hp === 0 && !isJunk(p));
 }
 
-export function needsPatch(v: Vehicle): boolean {
-  return brokenDriveParts(v).length > 0;
+// A holed tank counts once the leak has emptied it, since a truck with fuel left still drives.
+export function needsPatch(world: World, v: Vehicle): boolean {
+  return isStranded(world, v) && brokenParts(v).length > 0;
 }
 
 // A driver carrying enough parts fixes its own truck with a field repair and needs no one's help.
@@ -41,14 +43,14 @@ export function canFixItself(world: World, v: Vehicle): boolean {
 
 export function patchPlan(world: World, { patcher, client }: Roles): PatchPlan {
   const mult = machiningMult(world, patcher);
-  const plans = brokenDriveParts(client).map((p) => planPartRepair(p, PATCH.share, mult, Infinity, Infinity));
+  const plans = brokenParts(client).map((p) => planPartRepair(p, PATCH.share, mult, Infinity, Infinity));
   return { parts: plans.reduce((sum, p) => sum + p.parts, 0), turns: plans.reduce((sum, p) => sum + p.turns, 0) };
 }
 
 // Talk is between the player and one NPC. The one with the broken truck is the client.
 function rolesWith(world: World, npc: Vehicle): Roles {
   const me = playerVehicle(world);
-  return needsPatch(npc) ? { patcher: me, client: npc } : { patcher: npc, client: me };
+  return needsPatch(world, npc) ? { patcher: me, client: npc } : { patcher: npc, client: me };
 }
 
 function partsHeld(v: Vehicle): number {
@@ -169,7 +171,7 @@ export function settlePatch(world: World, s: NpcState): void {
   removeGoods(partsPayer(data.deal, roles), 'parts', data.parts);
   getResources(world, roles.client).money -= data.price;
   getResources(world, roles.patcher).money += data.price;
-  for (const part of brokenDriveParts(roles.client)) restorePart(part, Math.max(1, Math.round(maxHp(part) * PATCH.share)));
+  for (const part of brokenParts(roles.client)) restorePart(part, Math.max(1, Math.round(maxHp(part) * PATCH.share)));
   world.events.push({ t: 'patch', patcher: s.holder, client: s.other, outcome: 'done' });
   if (s.holder === world.player.vehicleId) practice(world, 'patch', 1, null, s.other);
   if (s.holder === world.player.vehicleId) practice(world, 'deal', 1, null, s.other);

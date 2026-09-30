@@ -1,7 +1,7 @@
 import { TERRAIN } from '../data/terrain';
 import { describe, expect, it } from 'vitest';
 import { contactsOf } from './detect';
-import { emptyWorld, addVehicle, editableTerrain, forceOption, npcBrain, testDrive } from './testkit';
+import { emptyWorld, addVehicle, editableTerrain, forceOption, npcBrain, testDrive , startCombat } from './testkit';
 import { planNpcOrders } from './ai';
 import { getResources } from './resources';
 import { REGION } from '../data/region';
@@ -25,7 +25,7 @@ import { dist } from './vec';
 import { advanceFar } from './far';
 import type { NpcActivity, Vehicle, World } from './types';
 import { addState } from './states';
-import { inCombat } from './jobs';
+import { inCombat } from './combat';
 import { refreshVision } from './vision';
 
 function createScavenger() {
@@ -618,12 +618,13 @@ describe('a trader too poor to trade', () => {
   });
 });
 
-describe('repair goal with a foe in sight', () => {
+describe('repair goal in combat', () => {
   it('is given up when no repair is under way, since none can start', () => {
     const { w, npc } = createScavenger();
     npc.brain!.goals = [{ kind: 'repair', targetId: null, destination: null, phase: 'act', reason: 'patch damaged parts' }];
     const foe = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 16, y: 10 });
     addState(w, 'feud', foe.id, npc.id, { kind: 'feud', robbery: false });
+    startCombat(w, foe, npc);
     refreshVision(w);
     expect(inCombat(w, npc)).toBe(true);
     thinkNpc(w, npc);
@@ -631,13 +632,14 @@ describe('repair goal with a foe in sight', () => {
   });
 });
 
-describe('salvage with a foe in sight', () => {
+describe('salvage in combat', () => {
   it('is given up at the stock when no search runs, since none can start', () => {
     const { w, npc } = createScavenger();
     w.salvage.push({ id: 'test-stock', pos: { ...npc.pos }, radius: 1, goods: { scrap: 3 }, parts: [] });
     npc.brain!.goals = [{ kind: 'scavenge', targetId: 'test-stock', destination: { ...npc.pos }, phase: 'act', reason: 'collect visible salvage' }];
     const foe = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 16, y: 10 });
     addState(w, 'feud', foe.id, npc.id, { kind: 'feud', robbery: false });
+    startCombat(w, foe, npc);
     refreshVision(w);
     resolveNpcActivities(w);
     expect(npc.brain!.goals.some((g) => g.kind === 'scavenge')).toBe(false);

@@ -11,7 +11,7 @@ import { REGION, type TownDef } from '../../data/region';
 import { RULES } from '../../data/rules';
 import { CONDITION, ENGINE_HEAT } from '../../data/wear';
 import { maxHp } from '../wear';
-import { inCombat } from '../jobs';
+import { inCombat } from '../combat';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder } from '../world';
 import { playerVehicle, vehicleById } from '../damage';
 import { chooseOption, currentOptions } from '../dialogue';

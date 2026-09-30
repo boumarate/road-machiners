@@ -9,7 +9,7 @@ type PatchDeal = DecisionOptions['patchDeal'];
 
 export type TopicId = 'directions' | 'tow' | 'askTow' | 'patch' | 'patchRequest' | 'demand' | 'surrender' | 'giveUp' | 'trade' | 'truce' | 'mercy' | 'rob' | 'warnOff' | 'truceOffer' | 'mercyPlea' | 'offerTow' | 'releaseTow' | 'offerPatch' | 'marketNews' | 'rumor' | 'buyTruce' | 'offerAid' | 'askAid' | 'aidOffer';
 export type ConditionId =
-  | 'knowsTown' | 'offersTow' | 'canTowPlayer' | 'playerNeedsPatch' | 'npcNeedsPatch' | 'hasDeal' | 'noDeal' | 'demandsCargo' | 'demandsSurrender' | 'demandsGiveUp'
+  | 'knowsTown' | 'offersTow' | 'canTowPlayer' | 'playerNeedsPatch' | 'npcNeedsPatch' | 'npcOffRope' | 'hasDeal' | 'noDeal' | 'demandsCargo' | 'demandsSurrender' | 'demandsGiveUp'
   | 'atOdds' | 'atPeace' | 'noPlayerPlea' | 'npcHasCargo' | 'offersTruce' | 'begsMercy'
   | 'accepts' | 'refuses' | 'complies' | 'resists' | 'runs' | 'claimsPlayerLoot' | 'holdsOn' | 'canTowNpc' | 'towedByPlayer' | 'noTrade' | 'npcCalm'
   | 'knowsLastTown' | 'hearsRumor' | 'rumorOfSite' | 'rumorOfWreck' | 'canPayTruce'
@@ -115,8 +115,8 @@ export const TOPICS: Record<TopicId, Topic> = {
       look: {
         line: 'Let me hear what broke.',
         options: [
-          { text: 'Engine or gearbox. What would it take?', when: ['hasDeal'], effects: [], go: 'terms' },
-          { text: 'Engine or gearbox. Can you do anything?', when: ['noDeal'], effects: [], go: 'cannot' },
+          { text: 'Engine, gearbox or tank. What would it take?', when: ['hasDeal'], effects: [], go: 'terms' },
+          { text: 'Engine, gearbox or tank. Can you do anything?', when: ['noDeal'], effects: [], go: 'cannot' },
         ],
       },
       terms: {
@@ -132,18 +132,18 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // A driver stranded by a broken engine or gearbox asks the player once for a patch.
+  // A driver stranded by a broken engine, gearbox or tank asks the player once for a patch.
   patchRequest: {
     id: 'patchRequest',
     once: true,
     ask: null,
-    raise: { when: ['npcNeedsPatch', 'npcCalm', 'atPeace'], priority: 1, duringFeud: false, duringCombat: false },
+    raise: { when: ['npcNeedsPatch', 'npcOffRope', 'npcCalm', 'atPeace'], priority: 1, duringFeud: false, duringCombat: false },
     prepare: 'patchTerms',
     hangUp: ['settleRefused'],
     start: 'ask',
     nodes: {
       ask: {
-        line: 'My engine is dead out here. Can you patch me up?',
+        line: 'My truck is dead out here. Can you patch me up?',
         options: [
           { text: 'What are you offering?', when: ['hasDeal'], effects: [], go: 'terms' },
           { text: 'I cannot help, sorry.', when: ['noDeal'], effects: ['settleRefused'], go: END },
@@ -398,11 +398,11 @@ export const TOPICS: Record<TopicId, Topic> = {
       released: { line: 'Fine. Thanks for the pull.', options: [{ text: 'Over and out.', when: [], effects: ['releaseNpc'], go: END }] },
     },
   },
-  // The player offers to patch a driver stranded by a broken engine or gearbox.
+  // The player offers to patch a driver stranded by a broken engine, gearbox or tank.
   offerPatch: {
     id: 'offerPatch',
     once: false,
-    ask: { text: 'Your truck looks dead. Want me to patch it?', when: ['npcNeedsPatch', 'atPeace'], duringFeud: false },
+    ask: { text: 'Your truck looks dead. Want me to patch it?', when: ['npcNeedsPatch', 'npcOffRope', 'atPeace'], duringFeud: false },
     raise: null,
     prepare: 'patchTerms',
     hangUp: [],
@@ -501,7 +501,7 @@ export const TOPICS: Record<TopicId, Topic> = {
   offerAid: {
     id: 'offerAid',
     once: false,
-    ask: { text: 'Running low? I can spare some.', when: ['noAid', 'atPeace', 'npcCalm', 'npcLow'], duringFeud: false },
+    ask: { text: 'Running low? I can spare some.', when: ['noAid', 'atPeace', 'npcCalm', 'npcLow', 'npcOffRope'], duringFeud: false },
     raise: null,
     prepare: 'aidWanted',
     hangUp: [],
