@@ -100,6 +100,13 @@ export function popGoal(w: World, v: Vehicle, reason: string): NpcActivity {
   return popped;
 }
 
+// Takes one goal out of the stack, wherever it sits.
+function dropGoal(w: World, v: Vehicle, goal: NpcActivity, reason: string): void {
+  const previous = topGoal(v);
+  v.brain!.goals = goalsOf(v).filter((g) => g !== goal);
+  logChange(w, v, previous, reason);
+}
+
 // Swaps the long-term goal at the bottom, keeping any interruptions above it.
 export function replaceBase(w: World, v: Vehicle, goal: NpcActivity): void {
   const goals = goalsOf(v);
@@ -929,18 +936,27 @@ function needsUrgentSupplies(world: World, vehicle: Vehicle, profile: NpcProfile
   return resources.fuel > 0 && isLowOnFuel(world, vehicle, profile);
 }
 
-// A repair goal in the stack holds, in place once the tank is empty. A new one starts at the recover condition,
-// but not under attack or while a danger goal is on top. True while the driver repairs.
+// A repair goal in the stack holds, in place once the tank is empty. A foe in sight keeps a repair from starting, so
+// a driver not already patching gives the goal up then. A new one starts at the recover condition, but not with a foe
+// in sight, under attack or while a danger goal is on top. True while the driver repairs.
 function keepRepairing(world: World, vehicle: Vehicle): boolean {
-  const current = goalsOf(vehicle).find((g) => g.kind === 'repair');
-  if (current) {
-    continueNpcRepair(world, vehicle, current);
-    return true;
-  }
-  if (inDanger(vehicle) || underAttack(vehicle)) return false;
+  if (holdRepair(world, vehicle)) return true;
+  if (inCombat(world, vehicle) || inDanger(vehicle) || underAttack(vehicle)) return false;
   const repair = chooseNpcRepair(world, vehicle, NPC_BEHAVIOR.recoverCondition);
   if (repair) pushGoal(world, vehicle, repair);
   return repair !== null;
+}
+
+// True while a repair goal holds.
+function holdRepair(world: World, vehicle: Vehicle): boolean {
+  const current = goalsOf(vehicle).find((g) => g.kind === 'repair');
+  if (!current) return false;
+  if (inCombat(world, vehicle) && vehicle.job?.kind !== 'repair') {
+    dropGoal(world, vehicle, current, 'a foe in sight stops the repair');
+    return false;
+  }
+  continueNpcRepair(world, vehicle, current);
+  return true;
 }
 
 // The top goal runs, or the empty stack sells or rolls idle. A stranded driver with a tower on its way waits for it
@@ -979,6 +995,45 @@ function addEventHurt(hurt: Map<string, number>, e: GameEvent): void {
 
 function addHurt(hurt: Map<string, number>, id: string, hits: PartHit[]): void {
   hurt.set(id, (hurt.get(id) ?? 0) + hits.reduce((sum, hit) => sum + hit.damage, 0));
+}
+
+// ---- Watchdog: no driver stays stuck for good, whatever bug stranded it.
+
+// Runs each turn. A driver with no progress for NPC_BEHAVIOR.stallTurns turns gives up its top goal, or with no goal
+// drives off to explore. Each give-up logs a stall event, and the stuck soak test fails on any.
+export function watchStalls(world: World): void {
+  for (const v of world.vehicles) {
+    if (!v.brain) continue;
+    if (madeProgress(world, v)) v.brain.progress = { key: progressKey(v), since: world.turn };
+    else if (world.turn - v.brain.progress!.since >= NPC_BEHAVIOR.stallTurns) giveUp(world, v);
+  }
+}
+
+// A driver waiting on a timed state, knocked out, towed or with a tower on its way, counts as making progress:
+// the state ends the wait.
+function madeProgress(world: World, v: Vehicle): boolean {
+  if (isKnockedOut(v) || isOnRope(world, v.id) || awaitsTower(world, v)) return true;
+  return v.brain!.progress?.key !== progressKey(v);
+}
+
+// The driver's tile, top goal and job turn. Any change is progress.
+function progressKey(v: Vehicle): string {
+  const top = topGoal(v);
+  const goal = top ? `${top.kind}:${top.targetId}:${top.reason}` : 'idle';
+  return `${Math.round(v.pos.x)},${Math.round(v.pos.y)} ${goal} ${v.job ? `${v.job.kind}:${v.job.turnsLeft}` : '-'}`;
+}
+
+function giveUp(world: World, v: Vehicle): void {
+  const top = topGoal(v);
+  world.events.push({ t: 'stall', vehicle: v.id, goal: top?.kind ?? null, reason: top?.reason ?? 'idle' });
+  if (top) popGoal(world, v, 'no progress for too long');
+  else exploreFromIdle(world, v);
+  v.brain!.progress = { key: progressKey(v), since: world.turn };
+}
+
+function exploreFromIdle(world: World, v: Vehicle): void {
+  const explore = exploreGoal(world, v);
+  if (explore.kind === 'explore') pushGoal(world, v, explore);
 }
 
 // A repair spot is driven to directly. Once there, the driver brakes.
@@ -1071,7 +1126,10 @@ function searchStock(world: World, vehicle: Vehicle, stock: SalvageStock): void 
     finishGoal(world, vehicle, !hasSalvage(stock) ? 'salvage exhausted' : 'cargo cannot hold salvage');
     return;
   }
-  if (!vehicle.job && !inCombat(world, vehicle)) beginSearch(world, vehicle, stock.id);
+  if (vehicle.job) return;
+  // No search starts with a foe in sight, so the driver gives the salvage up rather than park beside it for good.
+  if (inCombat(world, vehicle)) finishGoal(world, vehicle, 'a foe in sight stops the search');
+  else beginSearch(world, vehicle, stock.id);
 }
 
 // The goal reach rule: within twice the stop radius of the destination.

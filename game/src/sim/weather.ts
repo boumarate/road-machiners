@@ -74,12 +74,13 @@ export function weatherAt(world: World, pos: Vec): WeatherEffects {
   let heat = 1;
   for (const e of world.weather) {
     if (e.kind === 'storm') {
-      if (dist(pos, e.pos) > e.radius) continue;
+      const depth = Math.min(1, (e.radius - dist(pos, e.pos)) / SIM.stormEdge);
+      if (depth <= 0) continue;
       const fx = SIM.effects.storm;
-      sight *= fx.sight;
-      spread += fx.spread;
-      speed *= fx.speed;
-      wear *= fx.wear;
+      sight *= 1 + (fx.sight - 1) * depth;
+      spread += fx.spread * depth;
+      speed *= 1 + (fx.speed - 1) * depth;
+      wear *= 1 + (fx.wear - 1) * depth;
     } else if (e.kind === 'heatwave') {
       heat *= SIM.effects.heatwave;
     } else if (e.kind === 'overcast') {

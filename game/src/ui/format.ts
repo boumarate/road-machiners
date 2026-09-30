@@ -461,6 +461,11 @@ function activityText(world: World, e: Extract<GameEvent, { t: 'activity' }>): L
   return world.player.fullLog && vehicle ? { text: `${vehicle.name}: ${e.activity ?? 'idle'} — ${e.reason}`, cls: 'dim' } : null;
 }
 
+// A stall is a bug, so the full log shows it loudly.
+function stallText(world: World, e: Extract<GameEvent, { t: 'stall' }>): LogLine | null {
+  return world.player.fullLog ? { text: `Bug: ${vehicleName(world, e.vehicle)} stuck on ${e.goal ?? 'idle'} (${e.reason}), gave it up`, cls: 'bad' } : null;
+}
+
 function infoText(world: World, e: Extract<GameEvent, { t: 'info' }>): LogLine | null {
   return e.debug && !world.player.fullLog ? null : { text: e.text, cls: 'dim' };
 }
@@ -468,6 +473,7 @@ function infoText(world: World, e: Extract<GameEvent, { t: 'info' }>): LogLine |
 // Events whose log line has its own function.
 const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent, { t: K }>) => LogLine | null } = {
   activity: activityText,
+  stall: stallText,
   info: infoText,
   townPatch: () => ({ text: 'You patch your truck with scrap.', cls: 'good' }),
   scrapPatch: (_, e) => ({ text: `You patch up your car with scrap until it starts moving again.${e.fuel > 0 ? ` Townsfolk spare you ${fuelLiters(e.fuel)} L of fuel.` : ''}`, cls: 'good' }),

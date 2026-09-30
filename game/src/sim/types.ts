@@ -189,6 +189,7 @@ export type NpcBrain = {
     lastPos?: Vec; // position before the last drive attempt
     stalled?: number; // consecutive turns without forward progress
     stuck?: number; // consecutive turns standing still with the goal point out of reach
+    progress?: { key: string; since: number }; // what the driver last did and the turn it began; see watchStalls()
     recovery?: number; // turns left backing away from a blockage or driving to a spot that unsticks the driver
     recoveryGoal?: Vec;
     ramChoice?: string; // the fight target this driver chose to ram while its ram chance lasts
@@ -307,8 +308,8 @@ export type Player = {
   supplies: number;
   autoFire: boolean;
   autoRepair: boolean; // patch the most damaged part whenever the truck is parked
-  engineHeat: number; // 0 cold to 1 overheated; see src/sim/engine-heat.ts
   townPatched: boolean; // this visit to a town already got its free critical repair; leaving the town clears it
+  engineHeat: number; // 0 cold to 1 overheated; see src/sim/engine-heat.ts
   overdrive: boolean; // engine overdrive: faster and quicker, but heats the engine; see src/sim/engine-heat.ts
   discovered: string[];
   scavenged: string[]; // stocks the player finished searching; their loot can be taken
@@ -348,6 +349,8 @@ export type VehicleHits = { vehicle: string; hits: PartHit[] };
 
 export type GameEvent =
   | { t: 'activity'; vehicle: string; previous: NpcActivity['kind'] | null; activity: NpcActivity['kind'] | null; reason: string }
+  // A driver made no progress for NPC_BEHAVIOR.stallTurns turns and gave up its goal, null when it had none. Always a bug.
+  | { t: 'stall'; vehicle: string; goal: NpcActivity['kind'] | null; reason: string }
   | { t: 'collision'; a: string; b: string; hitsA: PartHit[]; hitsB: PartHit[] } // parts damaged on a and on b; hitsB is empty when b is not a vehicle
   | { t: 'empty'; vehicle: string; weapon: string }
   | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; chance: number; damageChance: number; side: Side; rounds: ShotRound[] }

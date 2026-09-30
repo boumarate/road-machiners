@@ -7,7 +7,7 @@ import { SHOPS } from "../data/market";
 import { goodBasePrice, lotPrice, shopState } from "./market";
 import { PARTS, partDef } from "../data/parts";
 import { REGION } from "../data/region";
-import { RULES, UPKEEP } from "../data/rules";
+import { RULES } from "../data/rules";
 import { CONDITION } from "../data/wear";
 import {
   buyChassis,
@@ -41,7 +41,6 @@ import { heatAt } from "./sun";
 import { sitePads, townAt, townNear } from "./sites";
 import { addVehicle, emptyWorld, testDrive } from "./testkit";
 import { endTurn, newWorld } from "./world";
-import { clockOf } from "./sun";
 import { TEST_MAP } from "../test/map";
 
 const bowl = REGION.towns.find((t) => t.id === "bowl")!;
@@ -117,53 +116,6 @@ describe("trade", () => {
     const spreadAtZero = buyPrice(w0, "bowl", "salt") - sellPrice(w0, "bowl", "salt");
     expect(Math.abs(spreadAtMax - spreadAtZero / 2)).toBeLessThanOrEqual(1);
   });
-
-// The first turn whose day differs from the turn before it, the boundary charged upkeep applies to.
-const nextDayBoundary = () => {
-  let t = 2;
-  while (clockOf(t).day === clockOf(t - 1).day) t++;
-  return t;
-};
-
-describe("upkeep", () => {
-  it("charges no upkeep before a day boundary", () => {
-    const w = startAtBowl();
-    w.turn = nextDayBoundary() - 2;
-    const before = w.player.money;
-    const next = endTurn(w, testDrive);
-    expect(next.player.money).toBe(before);
-    expect(next.events.some((e) => e.t === "money" && e.reason === "upkeep")).toBe(false);
-  });
-
-  it("charges upkeep once when crossing a day boundary, as a share of the truck's value", () => {
-    const w = startAtBowl();
-    w.turn = nextDayBoundary() - 1;
-    const before = w.player.money;
-    const next = endTurn(w, testDrive);
-    const chassisValue = CHASSIS[w.vehicles[0].chassisId].value;
-    const partsValue = mountedParts(w.vehicles[0])
-      .filter((p) => partDef(p.defId).kind !== "core")
-      .reduce((sum, p) => sum + partValue(p), 0);
-    const expected = Math.round((chassisValue + partsValue) * UPKEEP.dailyShare);
-    expect(before - next.player.money).toBe(expected);
-    expect(next.events).toContainEqual({ t: "money", amount: -expected, reason: "upkeep" });
-  });
-
-  it("charges more upkeep for a more valuable truck", () => {
-    const start = startAtBowl();
-    start.player.money = 5000;
-    start.turn = nextDayBoundary() - 1;
-    const startCost = start.player.money - endTurn(start, testDrive).player.money;
-
-    const base = startAtBowl();
-    base.player.money = 5000;
-    const upgraded = buyChassis(base, "carrier");
-    upgraded.turn = nextDayBoundary() - 1;
-    const upgradedCost = upgraded.player.money - endTurn(upgraded, testDrive).player.money;
-
-    expect(upgradedCost).toBeGreaterThan(startCost);
-  });
-});
 
   it("trade needs a shop", () => {
     expect(() => buyGood(emptyWorld({ x: 30, y: 30 }), "scrap", 1)).toThrow(

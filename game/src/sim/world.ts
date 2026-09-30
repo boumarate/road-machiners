@@ -16,11 +16,11 @@ import { healPlayer } from './health';
 import { fireGuards } from './guards';
 import { discoverSites } from './locations';
 import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
-import { chargeUpkeep, scrapPatch } from './economy';
+import { scrapPatch } from './economy';
 import { nameStream, spawnInitial, spawnNpcs } from './spawn';
 import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
 import { timed } from '../perf';
-import { noteHurt, resolveNpcActivities } from './npc-activities';
+import { noteHurt, resolveNpcActivities, watchStalls } from './npc-activities';
 import { advanceStates } from './states';
 import { checkBeacon, dropStrandedTowers, followTower, isTowed, playerTow } from './tow';
 import { endCallIfOut, raiseCalls } from './dialogue';
@@ -82,8 +82,8 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
       supplies: kit.supplies,
       autoFire: false,
       autoRepair: true,
-      engineHeat: 0,
       townPatched: false,
+      engineHeat: 0,
       overdrive: false,
       discovered: [],
       scavenged: [],
@@ -245,8 +245,8 @@ export function endTurn(
     advanceWeather(w);
     planNpcOrders(w);
     move(w);
-    followTower(w);
     if (!shopNear(w)) w.player.townPatched = false;
+    followTower(w);
     applyWear(w);
     advanceEngineHeat(w);
     advanceDust(w);
@@ -260,14 +260,13 @@ export function endTurn(
     fireWeapons(w);
     fireGuards(w);
     consumeSupplies(w);
-    chargeUpkeep(w);
     scrapPatch(w);
     healPlayer(w);
     leakFuel(w);
     fitAllStores(w);
     applyGodMode(w);
-    dropStrandedTowers(w);
     resolveDestroyed(w);
+    dropStrandedTowers(w);
     advanceContracts(w);
     advancePatches(w);
     advanceStates(w);
@@ -283,6 +282,7 @@ export function endTurn(
     refreshVision(w);
     noteEscape(w);
     noteHurt(w);
+    watchStalls(w);
     endCallIfOut(w);
     raiseCalls(w);
   }));

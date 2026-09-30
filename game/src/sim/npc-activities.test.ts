@@ -13,7 +13,7 @@ import { endTurn } from './world';
 import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
 import { addGoods } from './inventory';
-import { getActivityDestination, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
+import { getActivityDestination, resolveNpcActivities, thinkNpc, topGoal, watchStalls } from './npc-activities';
 import { cloneWorld } from './world';
 import { canUseSite, siteGates, sitePads } from './sites';
 import { fuelCap, vehicleStats } from './stats';
@@ -21,6 +21,9 @@ import { heatAt } from './sun';
 import { dist } from './vec';
 import { advanceFar } from './far';
 import type { World } from './types';
+import { addState } from './states';
+import { inCombat } from './jobs';
+import { refreshVision } from './vision';
 
 function createScavenger() {
   const w = emptyWorld({ x: 50, y: 50 });
@@ -591,5 +594,88 @@ describe('point goals', () => {
     const after = w.vehicles.find((v) => v.id === npc.id)!;
     expect(topGoal(after)?.kind).not.toBe('explore');
     expect(dist(after.pos, { x: 170, y: 150 })).toBeGreaterThan(RULES.arriveRadius * 2);
+  });
+});
+
+describe('a trader too poor to trade', () => {
+  it('hauls free cargo far more often than it waits', () => {
+    const { w, npc } = createTrader();
+    getResources(w, npc).money = 0;
+    const chances = optionChances(optionWeights(w, npc, 'idle', null, null));
+    expect(chances.trade).toBeUndefined();
+    expect(chances.haul!).toBeGreaterThan(chances.wait! * 5);
+  });
+});
+
+describe('repair goal with a foe in sight', () => {
+  it('is given up when no repair is under way, since none can start', () => {
+    const { w, npc } = createScavenger();
+    npc.brain!.goals = [{ kind: 'repair', targetId: null, destination: null, phase: 'act', reason: 'patch damaged parts' }];
+    const foe = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 16, y: 10 });
+    addState(w, 'feud', foe.id, npc.id, { kind: 'feud', robbery: false });
+    refreshVision(w);
+    expect(inCombat(w, npc)).toBe(true);
+    thinkNpc(w, npc);
+    expect(npc.brain!.goals.some((g) => g.kind === 'repair')).toBe(false);
+  });
+});
+
+describe('salvage with a foe in sight', () => {
+  it('is given up at the stock when no search runs, since none can start', () => {
+    const { w, npc } = createScavenger();
+    w.salvage.push({ id: 'test-stock', pos: { ...npc.pos }, radius: 1, goods: { scrap: 3 }, parts: [] });
+    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'test-stock', destination: { ...npc.pos }, phase: 'act', reason: 'collect visible salvage' }];
+    const foe = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 16, y: 10 });
+    addState(w, 'feud', foe.id, npc.id, { kind: 'feud', robbery: false });
+    refreshVision(w);
+    resolveNpcActivities(w);
+    expect(npc.brain!.goals.some((g) => g.kind === 'scavenge')).toBe(false);
+    expect(npc.job).toBeNull();
+  });
+});
+
+describe('stall watchdog', () => {
+  // A scavenger pinned to one tile with a goal it never works on.
+  function frozen() {
+    const { w, npc } = createScavenger();
+    npc.brain!.goals = [{ kind: 'travel', targetId: 'bowl', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'test goal' }];
+    return { w, npc };
+  }
+
+  function run(w: World, turns: number): void {
+    for (let i = 0; i < turns; i++) {
+      w.turn++;
+      watchStalls(w);
+    }
+  }
+
+  it('drops a goal with no progress for stallTurns turns and logs a stall', () => {
+    const { w, npc } = frozen();
+    run(w, NPC_BEHAVIOR.stallTurns);
+    expect(topGoal(npc)?.kind).toBe('travel');
+    run(w, 1);
+    expect(topGoal(npc)).toBeNull();
+    expect(w.events).toContainEqual({ t: 'stall', vehicle: npc.id, goal: 'travel', reason: 'test goal' });
+  });
+
+  it('sends a driver idle for stallTurns turns to explore', () => {
+    const { w, npc } = createScavenger();
+    run(w, NPC_BEHAVIOR.stallTurns + 1);
+    expect(topGoal(npc)?.kind).toBe('explore');
+    expect(w.events.some((e) => e.t === 'stall' && e.goal === null)).toBe(true);
+  });
+
+  it('counts a new tile or a job turn as progress', () => {
+    const { w, npc } = frozen();
+    for (let i = 0; i <= NPC_BEHAVIOR.stallTurns * 2; i++) {
+      npc.pos = { x: npc.pos.x + (i % 2 === 0 ? 1 : -1), y: npc.pos.y };
+      run(w, 1);
+    }
+    npc.job = { kind: 'weld', turnsLeft: 1000, total: 1000 };
+    for (let i = 0; i <= NPC_BEHAVIOR.stallTurns * 2; i++) {
+      npc.job.turnsLeft--;
+      run(w, 1);
+    }
+    expect(w.events.some((e) => e.t === 'stall')).toBe(false);
   });
 });

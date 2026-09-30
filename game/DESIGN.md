@@ -119,13 +119,14 @@ A broken cab knocks an NPC out too. One in twenty dies at once instead, and its 
 
 A knocked-out NPC is nobody's foe. No gun aims at it on its own, and knockout clears every order aimed at it. The player can still target it by hand, and any damaging shot finishes it into a wreck. Feuds against it end.
 
-A knocked-out NPC comes to once the trucks that attacked it no longer see it, or after 30 turns. Broken built-in parts that are not junk are patched to a quarter of their HP. It then retreats to its nearest own camp, else its nearest known town. It drives or crawls there, and towers can tow it. After a quarter of a day beyond the player's gray vision it appears at a free home pad instead. At home it gets fresh gear for its type on the same chassis and returns to its work. A truck with no engine, robbed of it for example, heads for a town or camp of its own to be repaired. On reaching one, by any means, including a tow, it gets the same fresh gear.
-
+A knocked-out NPC comes to once the trucks that attacked it no longer see it, or after 30 turns. Broken built-in parts that are not junk are patched to a quarter of their HP. It then retreats to its nearest own camp, else its nearest known town. It drives or crawls there, and towers can tow it. After a quarter of a day beyond the player's gray vision it appears at a free home pad instead. At home it gets fresh gear for its type on the same chassis and returns to its work.
 One in three NPCs the player knocks out holds a grudge for 10 days. Every hostile choice about the player gets more likely: fighting, robbing, ramming, closing in, refusing a truce and finishing a beggar. The grudge ends when that driver knocks the player out or the player hands it cargo.
 
 Raiders ignore a truck with nothing to take. A truck has loot when it holds goods, spare parts or mounted parts beyond the built-in ones. A feud still makes a raider fight a stripped truck.
 
 A truck with no working engine, a broken transmission or an empty tank still moves at a crawl. The driver pushes it. Pushing burns no fuel, and a truck without a working engine makes no sound. A player truck that can only crawl is stranded. It can still travel automatically to an order point.
+
+A stranded NPC never gives up. It heads for a town, or a camp of its own for a raider, even with no money. A broke driver sells its cargo first. A broke driver that can still drive keeps working. A stranded NPC parked at any town or a camp of its own, however it got there, buys the service it can pay for. If it is still stranded, it gets fresh gear for its type on the same chassis, as after a knockout. It keeps its money.
 
 Traders and scavengers help a stranded player. Raiders never do. One that sees the truck may drive over, if it is not hostile and not in danger. No driver sets out while the player is in combat. It parks beside the truck and radios a tow offer to the nearest town it knows. A driver that arrives during a fight waits beside the truck and makes its offer once the fight ends. The fee is a base price plus a price per tile of the route. The player accepts, refuses or hangs up. A stranded player can also radio a passing trader or scavenger and ask for a tow.
 
@@ -281,8 +282,6 @@ Shops post contracts, and each shows the game time it is due. The log warns once
 
 The unit of effort is one turn of play. The wage is the net money per turn a player earns at a tier. The tier 1 wage is what salvage earns, about 110 a day. An item's effort is its value divided by its tier's wage, and data keeps each item inside a target band. Contract rewards are estimated turns of work times a few wages, so contracts pay better than salvage. `npm run econ` plays the sim economy with bot policies and reports wages and the day each upgrade is reached.
 
-Once a day the player pays upkeep, a small share of the truck's value, so a bigger truck costs more to keep. Upkeep can push money into debt.
-
 Fuel and supplies limit range. Fuel burns per tile by chassis, times heat. Below 20% of tank capacity, the truck's top speed is halved. The truck crawls when fuel runs out. Supplies burn per turn, times heat. A full load lasts about 550 daytime turns. Without supplies the character loses health down to 30. Oases refill supplies.
 
 ## Prototype v0.001 content
@@ -301,7 +300,7 @@ One truck can follow another as its escort. The follower rides beside its leader
 
 A trader, courier or roamer on its way to a site may hire a free merc it sees. The fee grows with the distance to the destination, and the client must afford it above its upkeep reserve. The merc accepts or refuses, and a hurt merc refuses more often. The client pays once, when it reaches the destination. An escort ends unpaid when either truck is gone, knocked out or turns hostile.
 
-Each supply convoy spawns with a guard that escorts it for free. A guard whose convoy is gone joins another unguarded convoy, or waits in town.
+Each supply convoy spawns with a guard that escorts it for free. A guard whose convoy is gone joins another unguarded convoy, or drives between the towns until it finds one.
 
 ## Out of scope for now
 

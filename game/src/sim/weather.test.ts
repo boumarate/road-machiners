@@ -76,6 +76,19 @@ describe('weatherAt', () => {
     expect(outside).toEqual({ sight: 1, spread: 0, speed: 1, wear: 1, heat: 1 });
   });
 
+  it('fades the storm effects in from its edge to full strength over stormEdge tiles', () => {
+    const w = emptyWorld();
+    const radius = 60;
+    w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 100, y: 100 }, radius, vel: { x: 0, y: 0 }, turnsLeft: 10 }];
+    const full = WEATHER.sim.effects.storm;
+    const at = (d: number) => weatherAt(w, { x: 100 + d, y: 100 });
+    expect(at(radius + 1).speed).toBe(1);
+    expect(at(radius).speed).toBe(1);
+    expect(at(radius - WEATHER.sim.stormEdge / 2).speed).toBeCloseTo((1 + full.speed) / 2);
+    expect(at(radius - WEATHER.sim.stormEdge).speed).toBeCloseTo(full.speed);
+    expect(at(0).speed).toBeCloseTo(full.speed);
+  });
+
   it('a truck in a storm sees less and scatters more', () => {
     const w = emptyWorld();
     const before = sightRadius(w, w.vehicles[0]);

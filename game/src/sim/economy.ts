@@ -6,7 +6,7 @@ import { chassisDef, PLAYER_CHASSIS } from "../data/chassis";
 import { ECONOMY, GOODS } from "../data/goods";
 import { shopDef } from "../data/market";
 import { partDef } from "../data/parts";
-import { RULES, UPKEEP } from "../data/rules";
+import { RULES } from "../data/rules";
 import { NPC_UPKEEP } from "../data/npcs";
 import { REGION, type TownDef } from "../data/region";
 import { CONDITION } from "../data/wear";
@@ -23,7 +23,6 @@ import { addStockPart, goodPrice, lotPrice, recordTrade, shopAt, shopState, site
 import { canUseSite, requireTown, townNear } from "./sites";
 import { corePart, coreParts, freeCells, goodsCount, mountedParts } from "./grid";
 import { addGoods, cargoRoom, mountPart, removeGoods, spareParts, stowPart } from "./inventory";
-import { clockOf } from "./sun";
 import type { NpcState, PartInstance, Vehicle, World } from "./types";
 import { playerCommand } from "./world";
 import { fuelCap, isStranded, isWorking, suppliesCap } from "./stats";
@@ -260,6 +259,7 @@ export function scrapPatch(world: World): void {
   for (const part of driveParts(me)) scrapPatchPart(part, RULES.scrapPatch);
   world.events.push({ t: 'scrapPatch', fuel });
 }
+
 // The player command for opening a shop, a town or a stall, at its gate. The first time on a visit, each worn critical
 // part rises to RULES.townPatch of max HP for free, and the log says so. Junk parts stay junk. Leaving the shop ends the
 // visit, in endTurn.
@@ -278,7 +278,6 @@ export function enterTown(world: World): World {
 function criticalParts(v: Vehicle): PartInstance[] {
   return [...driveParts(v), corePart(v, 'cab')];
 }
-
 
 function strandedInTown(world: World): TownDef | null {
   const me = playerVehicle(world);
@@ -589,21 +588,6 @@ export function buyChassis(world: World, chassisId: string): World {
     me.weaponOrders = {};
     fitStores(w, me);
   });
-}
-
-// The truck's value: the chassis plus every mounted part but the built-in core ones.
-function truckValue(vehicle: Vehicle): number {
-  const parts = mountedParts(vehicle).filter((p) => partDef(p.defId).kind !== "core");
-  return chassisDef(vehicle.chassisId).value + parts.reduce((sum, p) => sum + partValue(p), 0);
-}
-
-// Once per game day, the player pays upkeep: a share of their truck's current value. It can push
-// money into debt, like any other cost. Called once from the turn pipeline at the day boundary.
-export function chargeUpkeep(world: World): void {
-  if (clockOf(world.turn).day === clockOf(world.turn - 1).day) return;
-  const amount = Math.round(truckValue(playerVehicle(world)) * UPKEEP.dailyShare);
-  world.player.money -= amount;
-  world.events.push({ t: "money", amount: -amount, reason: "upkeep" });
 }
 
 // Trade with an NPC truck. A radio call starts a `trade` state held by the NPC toward the player, and the NPC's

@@ -7,14 +7,14 @@ import { newWorld } from './world';
 import { CONDITION } from '../data/wear';
 import { everyGunFires } from './armor';
 import { makeVehicle } from './factory';
-import { freeCells, goodsCount, gridOf, isMounted, mountedParts, placementError } from './grid';
+import { coreParts, freeCells, goodsCount, gridOf, isMounted, mountedParts, placementError } from './grid';
 import { loadFactor, vehicleMass } from './mass';
 import { generateNpcLoadout, sampleWeighted } from './npc-loadout';
 import { spawnAt, spawnInitial, spawnNpcs } from './spawn';
 import { openSides, reachedSides } from './armor';
 import { mountedItems } from './grid';
 import type { EngineDef, WeaponDef } from '../data/parts';
-import { gunDrag, npcMassRoom } from './stats';
+import { gunDrag, isStranded, npcMassRoom } from './stats';
 import { addGoods } from './inventory';
 import { GOODS } from '../data/goods';
 import { emptyWorld } from './testkit';
@@ -353,6 +353,25 @@ describe('NPC loadout tables', () => {
     for (const tpl of Object.values(NPCS)) {
       for (const { value } of tpl.loadout.chassis) {
         expect(() => generateNpcLoadout(emptyWorld(), tpl, value), `${tpl.id} on ${value}`).not.toThrow();
+      }
+    }
+  });
+
+  it('every rolled truck can drive: one working engine, one transmission, a cab, a tank and wheels', () => {
+    for (const tpl of Object.values(NPCS)) {
+      for (const { value } of tpl.loadout.chassis) {
+        for (let seed = 1; seed <= 8; seed++) {
+          const world = emptyWorld();
+          world.rngState = seed;
+          const v = spawnAt(world, tpl, generateNpcLoadout(world, tpl, value), { x: 40, y: 30 });
+          const label = `${tpl.id} on ${value} seed ${seed}: ${describeLoadout(v)}`;
+          expect(coreParts(v, 'transmission'), label).toHaveLength(1);
+          expect(coreParts(v, 'cab'), label).toHaveLength(1);
+          expect(coreParts(v, 'tank'), label).toHaveLength(1);
+          expect(coreParts(v, 'wheel').length, label).toBeGreaterThanOrEqual(4);
+          expect(mountedParts(v, 'engine'), label).toHaveLength(1);
+          expect(isStranded(world, v), label).toBe(false);
+        }
       }
     }
   });

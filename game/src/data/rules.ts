@@ -38,9 +38,9 @@ export const RULES = {
   limpSpeed: 1.04, // 15 km/h, top speed with an empty tank or a dead engine or transmission; a truck this slow raises no dust
   // Working guns slow the truck: top speed and acceleration scale by 1 - gunDragMax * min(1, draw / capacity) ** gunDragCurve.
   // Draw sums the guns' `draw`, capacity is the engine's. The curve is convex, so the first guns cost little and a
-  // deck packed with guns reaches the full 60%. With a stock engine (7), one or two light guns cost 3 to 10%, two
-  // long rifles 15%, and seven 1-cell guns on a big deck 60%.
-  gunDragMax: 0.6,
+  // deck packed with guns reaches the full 48%. With a stock engine (7), one or two light guns cost 2 to 8%, two
+  // long rifles 12%, and seven 1-cell guns on a big deck 48%.
+  gunDragMax: 0.48,
   gunDragCurve: 1.5,
   minSpeedCap: 1, // a heavy load never pushes max speed below this
   collisionMinImpact: 1.5, // slower bumps deal no damage
@@ -142,12 +142,6 @@ export const RULES = {
   // A defeated NPC that spent this many turns in a row beyond the player's gray vision appears at its home pad, so
   // crawlers do not pile up on the map. 50 turns is a quarter of a day: a player who turns back still meets it.
   retreatTeleportTurns: 50,
-};
-
-// Daily upkeep: a share of the truck's value, paid once per game day. A start truck (a scout plus
-// four cheap parts, about 3200 value) pays about 29 a day. A salvage run earns about 110 a day.
-export const UPKEEP = {
-  dailyShare: 0.009,
 };
 
 // Debug console numbers. Distances are in tiles.
