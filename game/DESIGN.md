@@ -85,7 +85,7 @@ A click sets a point to drive through. A click on that point switches it to a st
 
 The zones around a moving truck split its reach: a near click brakes, a middle click holds speed, and a far click accelerates. From rest, a nearby click starts the truck slowly. A click almost straight behind within reach backs toward that point. A farther click is a course: the truck turns around and follows a route around obstacles over as many turns as it takes, so Space alone carries it there. A point it cannot reach sends it to the closest point it can reach. After the order point, or with no order, the truck coasts on.
 
-The truck plans a route around rocks, wrecks, parked vehicles and cliffs, preferring roads. Every route planner weighs a road above its speed, since a road puts a driver where others can help. A far longer road detour still loses to open ground. The screen shows the planned path for the next turns.
+The truck plans a route around rocks, wrecks, parked vehicles and cliffs, preferring roads. Routes cross gentle hills rather than winding far around them, and take a straight line over bends when it costs little more. Every route planner weighs a road above its speed, since a road puts a driver where others can help. A far longer road detour still loses to open ground. The screen shows the planned path for the next turns.
 
 Crash damage grows with the square of impact speed, and a slow bump does no damage. The lighter truck takes the bigger share, so heavy trucks win rams. A ram part on the striking side takes the blow and hits harder. R toggles manual driving, which skips the route planner so the truck can ram. NPC drivers use the same steering and obstacle routing as the player. A stuck driver backs away before trying the route again.
 
