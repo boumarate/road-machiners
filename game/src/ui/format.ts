@@ -17,7 +17,7 @@ import { playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
 import { npcTraits } from '../sim/npc-decisions';
 import { hasPerk } from '../sim/progress';
-import { pleaData, statesHeld, strayData, towData } from '../sim/states';
+import { aidData, pleaData, statesHeld, strayData, towData } from '../sim/states';
 import { RULES } from '../data/rules';
 import { isJunk } from '../sim/wear';
 import { clockOf } from '../sim/sun';
@@ -149,6 +149,7 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   trade: () => 'Pulling over to trade with you',
   revenge: () => 'Wants revenge on you',
   escort: () => 'Escorting you',
+  aid: (s) => (aidData(s).giver === 'npc' ? 'Bringing you fuel' : 'Waiting for your fuel'),
   strayFire: (s) => `Hit by your stray fire, ${Math.round(strayData(s).damage)} of ${RULES.stray.feudDamage} damage forgiven`,
 };
 

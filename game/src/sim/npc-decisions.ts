@@ -354,6 +354,8 @@ function isRobbable(w: World, target: Vehicle): boolean {
 type Availability = (world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null) => boolean;
 
 const always = (): boolean => true;
+// No driver can give fuel or supply aid until the aid deal can carry it out.
+const noAidDeal = (): boolean => false;
 
 // A client hires a free merc it sees while on a trip, with the fee above its upkeep reserve.
 function canHireSubject(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
@@ -500,6 +502,8 @@ const AVAILABLE: Record<OptionName, Availability> = {
   hire: canHireSubject,
   take: canTakeSubject,
   decline: always,
+  give: noAidDeal,
+  aid: noAidDeal,
 };
 
 // ---- Situation factors, one per option. Each returns a number above 0.
@@ -707,6 +711,8 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   hire: neutral,
   take: neutral,
   decline: (world, vehicle) => declineFactor(world, vehicle),
+  give: neutral,
+  aid: neutral,
 };
 
 // ---- Weights and the roll.
@@ -800,6 +806,8 @@ const DECISION_KINDS: Record<DecisionId, 'venture' | 'response'> = {
   idle: 'venture',
   escortSeen: 'venture',
   hireOffered: 'response',
+  aidAsked: 'response',
+  needySeen: 'venture',
 };
 
 // A driver that gave its word starts no venture until the deal ends, except about the truck it gave it to.

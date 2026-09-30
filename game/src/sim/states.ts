@@ -101,6 +101,9 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   // The holder took unintended damage from the other party's fire. src/sim/combat.ts sums it and turns it into an
   // attack past a threshold.
   strayFire: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
+  // The holder and the player agreed on fuel and supply aid. Nothing starts one yet: the check and the fulfilled hook
+  // that move the units come with the aid deal.
+  aid: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: true },
 };
 
 // A missing holder is left to the missing-party rule.
@@ -120,7 +123,7 @@ function turnsOf(kind: StateKindId): number | null {
 }
 
 // The data kind each state kind carries.
-const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none', grievance: 'none', plea: 'plea', trade: 'none', revenge: 'none', escort: 'escort', strayFire: 'strayFire' };
+const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none', grievance: 'none', plea: 'plea', trade: 'none', revenge: 'none', escort: 'escort', strayFire: 'strayFire', aid: 'aid' };
 
 export function addState(w: World, kind: StateKindId, holder: string, other: string, data: StateData): NpcState {
   kindOf(kind);
@@ -223,6 +226,11 @@ export function towPromiseData(s: NpcState): Extract<StateData, { kind: 'towProm
 
 export function towData(s: NpcState): Extract<StateData, { kind: 'tow' }> {
   if (s.data.kind !== 'tow') throw new Error(`State ${s.id} holds no tow`);
+  return s.data;
+}
+
+export function aidData(s: NpcState): Extract<StateData, { kind: 'aid' }> {
+  if (s.data.kind !== 'aid') throw new Error(`State ${s.id} holds no aid`);
   return s.data;
 }
 

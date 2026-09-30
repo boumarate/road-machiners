@@ -148,6 +148,20 @@ export const NPC_UPKEEP = {
   tradeReserve: 0.5,
 };
 
+// Fuel and supply aid between the player and NPCs, see src/sim/aid.ts. A truck is low on a supply at or below
+// RULES.lowFuelThreshold of its cap, where its speed halves.
+export const AID = {
+  // A low driver asks the player for enough of each low supply to reach this share of its cap.
+  fillShare: 0.4,
+  // A giving driver hands over this share of the player's cap per low supply, only from stock above
+  // NPC_UPKEEP.tradeReserve. A small gift, enough to reach a pump.
+  giftShare: 0.25,
+  // A driver offers aid unprompted only to a player whose truck is below this share of its body condition...
+  poorCondition: 0.5,
+  // ...and worth at most this much. That covers the start scout and worn tier 1 trucks, not geared tier 2 and 3.
+  poorValue: 3500,
+};
+
 // Raiders look for prey on lonely road stretches and at the pads of salvage sites, where scavengers stop.
 export const HUNT = {
   roadSpacing: 60, // tiles along a road between two hunting points: three sight radii, so views do not overlap

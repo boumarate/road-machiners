@@ -909,6 +909,8 @@ export type DecisionOptions = {
   idle: 'trade' | 'scavenge' | 'raid' | 'prowl' | 'wait' | 'patrol' | 'travel' | 'explore' | 'haul' | 'escort';
   escortSeen: 'keep' | 'hire'; // a free merc comes in sight while the driver travels to a site
   hireOffered: 'take' | 'decline'; // a driver asks this merc to escort it for a fee
+  aidAsked: 'give' | 'refuse'; // the player asks the driver for fuel or supplies; see src/sim/aid.ts
+  needySeen: 'keep' | 'aid'; // a poor player low on fuel or supplies comes in sight
 };
 export type DecisionId = keyof DecisionOptions;
 
@@ -964,6 +966,10 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   escortSeen: { keep: 1, hire: 0 },
   // Three mercs in four take a job they are offered. A weak merc mostly declines.
   hireOffered: { take: 3, decline: 1 },
+  // About one driver in ten gives a little fuel or supplies to a player who asks. With MIN_CHANCE give is about 11%.
+  aidAsked: { give: 1, refuse: 9 },
+  // Offering aid unprompted to a poor, low player more than rarely needs a trait.
+  needySeen: { keep: 1, aid: 0 },
 };
 
 // A weight change: `add` raises an option with zero base weight above MIN_CHANCE, and `mul` tunes an option.
@@ -980,6 +986,7 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   tow: {},
   patch: {},
   trade: {},
+  aid: {},
   // A driver rarely robs a truck it holds a truce with. A scumbag's rob weight of 0.5 drops to 0.0025, about 1%.
   truce: { preySeen: { rob: { mul: 0.005 } } },
   grievance: {},
@@ -1027,6 +1034,8 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   // Being parked in reach keeps a trade meeting going. Without that it lapses after 20 turns, so a driver stops
   // chasing a player who drove off, and the player stops waiting for a driver who cannot get through.
   trade: 20,
+  // An aid deal is a trade meeting: the same 20 turns to get parked side by side, or it lapses with nothing moved.
+  aid: 20,
   // A truck that handed over its cargo is left alone for 60 turns: time for the raiders to search the stock and the
   // truck to drive well away. Shots start a feud, which ends the truce's effect at once.
   truce: 60,
@@ -1075,10 +1084,11 @@ export type Trait = {
 export const TRAITS: Record<TraitId, Trait> = {
   // Scavenging a known site beats waiting a hundredfold. Three in four scavengers stop for a wreck they pass. Nine
   // in ten scavengers help a stranded truck. An idle scavenger takes on a manageable hostile about nine times in
-  // ten: fight 4, times NPC_BEHAVIOR.manageableFight.
+  // ten: fight 4, times NPC_BEHAVIOR.manageableFight. Scavengers are helpers who give aid: about one in five gives fuel
+  // or supplies when asked, and about one in 35 offers it unprompted to a poor, low player.
   scavenger: {
     towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
-    weights: { idle: { scavenge: { add: 10 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 9 } }, hostileSeen: { fight: { add: 2 } } },
+    weights: { idle: { scavenge: { add: 10 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 9 } }, hostileSeen: { fight: { add: 2 } }, aidAsked: { give: { mul: 2 } }, needySeen: { aid: { add: 0.02 } } },
   },
   // Traders rarely pick a fight: a fight weight of 2 drops to 0.004, about 1%, and to 0.02, about 2%, against a
   // manageable hostile. A shot trader returns fire at a tenth of the usual weight, and mostly runs. A trader in a
@@ -1087,7 +1097,8 @@ export const TRAITS: Record<TraitId, Trait> = {
   // crashes in 20, ask for truces, take nearly every truce and spare a beaten foe. Threatened, they mostly pay.
   // A trader on its way hires about one free merc in two it sees. Traders push on for one more deal, so they keep
   // a quarter less fuel for the way to a pump. A trader too poor for any trade hauls free cargo to earn a stake: a
-  // haul weight of 1 loses to trade 30 whenever a trade is affordable.
+  // haul weight of 1 loses to trade 30 whenever a trade is affordable. About one trader in five gives fuel or supplies
+  // when asked, and about one in 35 offers it unprompted to a poor, low player.
   trader: {
     towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: ['pump-station', 'dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1, fuelMargin: 0.75, robs: 'offDuty',
     weights: {
@@ -1095,7 +1106,7 @@ export const TRAITS: Record<TraitId, Trait> = {
       hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } }, ramChance: { ram: { mul: 0.001 } },
       crashed: { retaliate: { mul: 0.2 } }, parley: { truce: { add: 2 } }, truceOffered: { accept: { add: 4 } },
       mercyBegged: { spare: { add: 3 } }, threatened: { comply: { add: 1 }, fightBack: { mul: 0.1 } },
-      escortSeen: { hire: { add: 1 } },
+      escortSeen: { hire: { add: 1 } }, aidAsked: { give: { mul: 2 } }, needySeen: { aid: { add: 0.02 } },
     },
   },
   // Raiders fight most hostiles they see and close in on most useful contacts. A raid ties with salvage in sight.
@@ -1153,10 +1164,11 @@ export const TRAITS: Record<TraitId, Trait> = {
   },
   // Roamers go where nobody goes. An idle roamer explores about three times in five, and trades or scavenges about
   // one time in five each. Three in four roamers stop for salvage they pass, like scavengers. A roamer hires about
-  // one free merc in six it sees.
+  // one free merc in six it sees. About one roamer in five gives fuel or supplies when asked, and about one in 35
+  // offers it unprompted to a poor, low player.
   roamer: {
     towns: ['bowl', 'nose'], bases: [], salvageSites: ['burnt-convoy', 'podfield', 'ridge-wrecks'], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
-    weights: { idle: { explore: { add: 10 }, trade: { add: 3 }, scavenge: { add: 2 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 3 } }, escortSeen: { hire: { add: 0.2 } } },
+    weights: { idle: { explore: { add: 10 }, trade: { add: 3 }, scavenge: { add: 2 } }, salvageSeen: { loot: { add: 3 } }, strandedSeen: { tow: { add: 3 } }, escortSeen: { hire: { add: 0.2 } }, aidAsked: { give: { mul: 2 } }, needySeen: { aid: { add: 0.02 } } },
   },
   // Vultures prowl lonely roads and hunting grounds: an idle vulture prowls four times in five and scavenges a site
   // about one time in six. Prowl 10 and scavenge 2 against a base of 1 keep other options at the minimum. A vulture
