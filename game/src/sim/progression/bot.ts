@@ -20,7 +20,7 @@ import { findSpot, freeCells, goodsCount, gridOf, isMounted, MOUNT_CELLS, mounte
 import { moveItem, storePart, takeFromStorage } from '../inventory';
 import { shopAt, shopState } from '../market';
 import { canLoot, salvageHere, takeAllLoot } from '../locations';
-import { getUpkeepReserve, huntingGrounds } from '../npc-decisions';
+import { getUpkeepReserve, raiderGrounds } from '../npc-decisions';
 import { canReachSalvage, hasSalvage, lootBlocker } from '../salvage';
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, townAt, type Site } from '../sites';
@@ -345,12 +345,17 @@ function collectOrHunt(o: Orders): void {
   hunt(o);
 }
 
+// Where raiders hunt: the grounds of every camp, in data order.
+export function raiderHuntGrounds(): Vec[] {
+  return REGION.locations.filter((site) => site.kind === 'camp').flatMap((camp) => raiderGrounds(camp));
+}
+
 // The fighter keeps driving to the hunting ground it is bound for. Without one, it goes to the ground after the one
 // nearest it, in data order. A ground the truck cannot quite reach, like one a parked truck stands on, counts as
 // visited once its stop order ends.
 function hunt(o: Orders): void {
   const order = o.me.order;
-  const grounds = huntingGrounds();
+  const grounds = raiderHuntGrounds();
   if (order?.kind === 'stopAt' && grounds.some((g) => g.x === order.dest.x && g.y === order.dest.y)) return;
   const here = grounds.indexOf(nearest(o.me.pos, grounds) ?? grounds[0]);
   driveTo(o, grounds[(here + 1) % grounds.length]);
