@@ -39,7 +39,6 @@ import {
 import { corePart, freeCells, goodsCount, MOUNT_CELLS, mountedParts } from "../sim/grid";
 import { moneyLabel } from "./hud-readout";
 import { spareParts } from "../sim/inventory";
-import { townAt } from "../sim/sites";
 import { acceptContract, deliverContract, fitsFetch, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
 import { REGION } from "../data/region";
 import type { PartInstance, Vehicle, World } from "../sim/types";
@@ -86,7 +85,7 @@ export class TownScreen {
   }
 
   open(): void {
-    if (townAt(this.host.world())) this.host.apply(enterTown(this.host.world()));
+    if (shopAt(this.host.world())) this.host.apply(enterTown(this.host.world()));
     this.root.style.display = "";
     this.error = "";
     this.render();

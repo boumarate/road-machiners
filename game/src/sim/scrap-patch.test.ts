@@ -137,7 +137,7 @@ describe('scrap patch', () => {
 
   it('leaves a player with a spare part to sell it first', () => {
     const w = strandedBroke();
-    expect(stowPart(w, w.vehicles[0], makePart(w, 'mg', 0))).toBe(true);
+    expect(stowPart(w, w.vehicles[0], makePart(w, 'heavyMg', 0))).toBe(true);
 
     scrapPatch(w);
 
@@ -180,6 +180,24 @@ describe('enter town', () => {
     const next = enterTown(wornCritical(sitePads(bowl)[0]));
 
     for (const part of critical(next.vehicles[0])) expect(share(part)).toBeGreaterThanOrEqual(RULES.townPatch);
+  });
+
+  it('logs one line when it patches and none when nothing is worn', () => {
+    const worn = enterTown(wornCritical(sitePads(bowl)[0]));
+    expect(worn.events.filter((e) => e.t === 'townPatch')).toHaveLength(1);
+
+    const sound = wornCritical(sitePads(bowl)[0]);
+    for (const part of critical(sound.vehicles[0])) part.hp = maxHp(part);
+    expect(enterTown(sound).events.filter((e) => e.t === 'townPatch')).toHaveLength(0);
+  });
+
+  it('patches at a stall as at a town, and clears the visit when the truck leaves it', () => {
+    const stall = REGION.locations.find((l) => l.id === 'salvage-yard')!;
+    const next = enterTown(wornCritical(sitePads(stall)[0]));
+    for (const part of critical(next.vehicles[0])) expect(share(part)).toBeGreaterThanOrEqual(RULES.townPatch);
+    expect(next.events.filter((e) => e.t === 'townPatch')).toHaveLength(1);
+    expect(next.player.townPatched).toBe(true);
+    expect(endTurn(next, () => undefined).player.townPatched).toBe(true);
   });
 
   it('repairs only the first time on a visit and again after the truck leaves the town', () => {

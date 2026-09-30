@@ -260,14 +260,17 @@ export function scrapPatch(world: World): void {
   for (const part of driveParts(me)) scrapPatchPart(part, RULES.scrapPatch);
   world.events.push({ t: 'scrapPatch', fuel });
 }
-// The player command for opening a town, at its gate. The first time on a visit, each worn critical part rises to
-// RULES.townPatch of max HP for free. Junk parts stay junk. Leaving the town ends the visit, in endTurn.
+// The player command for opening a shop, a town or a stall, at its gate. The first time on a visit, each worn critical
+// part rises to RULES.townPatch of max HP for free, and the log says so. Junk parts stay junk. Leaving the shop ends the
+// visit, in endTurn.
 export function enterTown(world: World): World {
   return playerCommand(world, (w) => {
-    requireTown(w);
+    if (!shopAt(w)) throw new Error('Not at a shop gate');
     if (w.player.townPatched) return;
     w.player.townPatched = true;
-    for (const part of criticalParts(playerVehicle(w))) if (!isJunk(part)) scrapPatchPart(part, RULES.townPatch);
+    const worn = criticalParts(playerVehicle(w)).filter((part) => !isJunk(part) && part.hp < Math.ceil(maxHp(part) * RULES.townPatch));
+    for (const part of worn) scrapPatchPart(part, RULES.townPatch);
+    if (worn.length > 0) w.events.push({ t: 'townPatch' });
   });
 }
 
