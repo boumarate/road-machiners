@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { NPCS } from '../data/npcs';
 import { partDef } from '../data/parts';
 import { CONDITION, PATCH } from '../data/wear';
+import { RULES } from '../data/rules';
 import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
 import { playerVehicle } from './damage';
 import { callVehicle, chooseOption, currentOptions } from './dialogue';
@@ -137,6 +138,19 @@ describe('asking a driver for a patch', () => {
     expect(isStranded(w, playerVehicle(w))).toBe(false);
   });
 
+  it('auto patch leaves the parts of an own-parts deal alone', () => {
+    const { w: start, trader } = brokenPlayer(0);
+    start.player.autoRepair = true;
+    setParts(start, playerVehicle(start), 3);
+    let w = agreedTerms(start, trader.id, 'ownParts');
+    const needed = patchData(stateOf(w, 'patch', trader.id, w.player.vehicleId)!).parts;
+    setParts(w, playerVehicle(w), needed);
+    const r = runUntil(w, 40, (x) => stateOf(x, 'patch', trader.id, x.player.vehicleId) === null);
+    expect(r.events.filter((e) => e.t === 'patch').map((e) => e.t === 'patch' && e.outcome)).toEqual(['started', 'done']);
+    expect(parts(playerVehicle(r.w))).toBe(0);
+    expect(isStranded(r.w, playerVehicle(r.w))).toBe(false);
+  });
+
   it('a driver under attack takes no patch and calls off an agreed one', () => {
     const { w: start, trader } = brokenPlayer(4);
     let w = agreedTerms(start, trader.id, 'free');
@@ -188,6 +202,26 @@ describe('a stranded driver asking the player', () => {
     expect(w.player.money).toBe(playerMoney + deal.price);
     expect(parts(playerVehicle(w))).toBe(4 - deal.parts);
     expect(w.player.talked[npc.id]).toEqual({ patchRequest: 'agreed' });
+  });
+
+  it('holds the client parked when auto patch is on and the player holds only the promised parts', () => {
+    const { w: start, npc } = brokenNpc();
+    start.player.autoRepair = true;
+    for (const p of mountedParts(playerVehicle(start))) p.hp = Math.round(p.hp / 2);
+    forceOption('patchDeal', 'paid');
+    let w = endTurn(start, testDrive);
+    w = answer(answer(w, 'What are you offering?'), 'Deal. Stay where you are.');
+    const deal = patchData(stateOf(w, 'patch', w.player.vehicleId, npc.id)!);
+    setParts(w, playerVehicle(w), deal.parts);
+    const money = w.player.money;
+    const agreedAt = { ...find(w, npc.id).pos };
+    w = setMoveOrder(w, { kind: 'stopAt', dest: { x: 38, y: 30 } });
+    const r = runUntil(w, 60, (x) => stateOf(x, 'patch', x.player.vehicleId, npc.id) === null);
+    w = r.w;
+    expect(r.events.some((e) => e.t === 'patch' && e.outcome === 'done')).toBe(true);
+    expect(isStranded(w, find(w, npc.id))).toBe(false);
+    expect(Math.hypot(find(w, npc.id).pos.x - agreedAt.x, find(w, npc.id).pos.y - agreedAt.y)).toBeLessThan(RULES.arriveRadius);
+    expect(w.player.money).toBe(money + deal.price);
   });
 
   it('the player can offer the patch over the radio before the driver asks', () => {

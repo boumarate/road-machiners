@@ -2,7 +2,8 @@
 // A job is cancelled on any turn its truck ends above parked speed, and its finished turns are lost.
 // A player truck with a drive order counts as moving too, since it still rolls slowly as it starts.
 // No driver works with a hostile in sight: no job starts then, and a running job is cancelled.
-// A repair is also cancelled once the grid holds no parts for it.
+// A repair is also cancelled once the grid holds no parts for it, and an auto repair once its parts are promised
+// to a roadside patch.
 
 import { GOODS } from "../data/goods";
 import { partDef } from "../data/parts";
@@ -16,6 +17,7 @@ import { partValue } from "./wear";
 import { corePart, coreParts, freeCells, goodsCount, isMounted, itemSize, mountedParts } from "./grid";
 import { addGoods, applyRefitLayout, getRefitLayout, removeGoods, stowPart } from "./inventory";
 import { makePart } from "./factory";
+import { promisedParts } from "./patch";
 import { isJunk, maxHp } from "./wear";
 import { repairPlan, repairTurn } from "./repair";
 import { practice, vehicleHasPerk } from "./progress";
@@ -89,7 +91,7 @@ export function startRepair(world: World, partId: string): World {
 }
 
 // Auto patch: a parked, idle player truck patches with one unit of parts at a time, so driving off loses at
-// most one short job. Parts that strand the truck come first, then broken wheels, then the most damaged part.
+// most one short job. It spends only parts not promised to a roadside patch. Parts that strand the truck come first, then broken wheels, then the most damaged part.
 export function startAutoRepair(world: World): void {
   if (!world.player.autoRepair || world.player.state !== "active") return;
   const v = playerVehicle(world);
@@ -116,9 +118,14 @@ function patchRank(v: Vehicle, part: PartInstance): number {
   return coreParts(v, "wheel").includes(part) ? 1 : 2;
 }
 
+// Parts held above what open patch deals promised.
+function freeParts(world: World, v: Vehicle): number {
+  return (goodsCount(v).parts ?? 0) - promisedParts(world, v);
+}
+
 // Idle, parked, out of combat, with parts to patch with.
 function canAutoPatch(world: World, v: Vehicle): boolean {
-  return !v.job && isParkedForWork(world, v) && (goodsCount(v).parts ?? 0) > 0 && !inCombat(world, v);
+  return !v.job && isParkedForWork(world, v) && freeParts(world, v) > 0 && !inCombat(world, v);
 }
 
 // The player command that starts stripping a spare, non-core part for units of the parts good.
@@ -212,7 +219,7 @@ function advanceJob(world: World, v: Vehicle, job: Job): void {
 }
 
 function isStalled(world: World, v: Vehicle, job: Job): boolean {
-  if (job.kind === "repair") return isRepairStalled(world, v, job.partId, job.parts);
+  if (job.kind === "repair") return isRepairStalled(world, v, job);
   if (job.kind === "weld") return !hasWeldScrap(v) || !weldFits(v);
   return job.kind === "strip" && isStripStalled(v, job.partId);
 }
@@ -243,9 +250,11 @@ function finishStrip(world: World, v: Vehicle, partId: string): void {
 
 // Parts can leave the mounts mid-job, by a sale, a move to cargo or storage, a new chassis or a knockout.
 // The part can also break into junk while the truck stands.
-function isRepairStalled(world: World, v: Vehicle, partId: string, parts: number): boolean {
-  const part = mountedParts(v).find((p) => p.id === partId);
-  return !part || isJunk(part) || repairPlan(world, v, partId, parts).parts === 0;
+// An auto repair also stalls once the parts it needs are promised to a roadside patch.
+function isRepairStalled(world: World, v: Vehicle, job: Extract<Job, { kind: "repair" }>): boolean {
+  const part = mountedParts(v).find((p) => p.id === job.partId);
+  if (!part || isJunk(part) || repairPlan(world, v, job.partId, job.parts).parts === 0) return true;
+  return job.auto === true && freeParts(world, v) < job.parts;
 }
 
 function advanceRefit(world: World, v: Vehicle, job: RefitJob): void {

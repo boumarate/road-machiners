@@ -188,6 +188,62 @@ describe('repair without parts', () => {
   });
 });
 
+describe('auto patch and promised parts', () => {
+  // A damaged, parked player holding exactly `held` parts, and an NPC client a patch deal can name.
+  function setup(held: number, deal: 'paid' | 'ownParts', playerIsPatcher: boolean) {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    me.speed = 0;
+    mountedParts(me).find((p) => partDef(p.defId).kind === 'engine')!.hp = 1;
+    removeGoods(me, 'parts', goodsCount(me).parts ?? 0);
+    addGoods(w, me, 'parts', held);
+    const other = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 5, y: 0 }, 0);
+    const [holder, client] = playerIsPatcher ? [me, other] : [other, me];
+    const data = { kind: 'patch' as const, deal, parts: 2, price: 10, work: 4, workLeft: 4 };
+    return { w, me, add: () => addState(w, 'patch', holder.id, client.id, data) };
+  }
+
+  it('starts no job when every part is promised to a deal', () => {
+    const { w, me, add } = setup(2, 'paid', true);
+    add();
+    startAutoRepair(w);
+    expect(me.job).toBeNull();
+  });
+
+  it('spends only the parts above the promise', () => {
+    const { w, me, add } = setup(3, 'paid', true);
+    add();
+    startAutoRepair(w);
+    expect(me.job).not.toBeNull();
+    for (let i = 0; i < 100 && me.job; i++) advanceJobs(w);
+    expect(goodsCount(me).parts).toBe(2);
+  });
+
+  it('cancels a running job when a deal promises its parts', () => {
+    const { w, me, add } = setup(2, 'paid', true);
+    startAutoRepair(w);
+    expect(me.job).not.toBeNull();
+    add();
+    advanceJobs(w);
+    expect(me.job).toBeNull();
+    expect(goodsCount(me).parts).toBe(2);
+  });
+
+  it('keeps the parts a stranded player promises as the client of an own-parts deal', () => {
+    const { w, me, add } = setup(2, 'ownParts', false);
+    add();
+    startAutoRepair(w);
+    expect(me.job).toBeNull();
+  });
+
+  it('ignores a deal whose payer is the other truck', () => {
+    const { w, me, add } = setup(2, 'ownParts', true);
+    add();
+    startAutoRepair(w);
+    expect(me.job).not.toBeNull();
+  });
+});
+
 describe('auto patch', () => {
   it('patches the most damaged part with one unit of parts while parked', () => {
     const w = emptyWorld();
