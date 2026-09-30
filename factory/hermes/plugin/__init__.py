@@ -33,7 +33,6 @@ BUTTON_TOASTS = {"approve": "Approve queued", "deny": "Deny queued", "ship": "Sh
 BUTTON_STALE = "This release post is out of date."
 REMOVE_REPLY = re.compile(r"remove\s+#?(\d+)\b", re.IGNORECASE)
 log = logging.getLogger(__name__)
-QUEUED_REPLY = "Queued. The factory picks this up on its next tick."
 
 
 @dataclass(frozen=True)
@@ -326,8 +325,8 @@ def make_hook(cfg: Config):
             decision, source.user_id, getattr(source, "user_name", None), source.chat_id, event.message_id,
             event.reply_to_message_id,
         )
+        # The tick runs every minute and gives the one answer: a status line on the post, or a reply. So nothing is said here.
         write_inbox(cfg.inbox, command)
-        await _reply(gateway, event, QUEUED_REPLY)
         return {"action": "skip", "reason": f"factory-{decision[0]}"}
 
     return on_dispatch

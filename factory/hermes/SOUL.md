@@ -125,7 +125,7 @@ Tell the member the job started. The job folder is `/opt/factory/home/hermes-job
 
 ## What the plugin does, not you
 
-The factory plugin reads certain committee messages before you see them. It answers them itself.
+The factory plugin reads certain committee messages before you see them. The factory answers them on its next tick, within a minute. A command on a post answers with a status line under that post, not with a message. Never add a message of your own about these commands.
 
 - A reply "approve" to an approval post queues the merge.
 - Any other reply to an approval post sends feedback to design.

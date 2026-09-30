@@ -49,7 +49,7 @@ describe('drainInbox', () => {
     await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], sent, []));
     expect(readState(statePath).pendingApprovals).toEqual({ '4': 'Ann' });
     expect(readdirSync(join(ROOT, 'inbox'))).toEqual([]);
-    expect(sent[0]).toContain('queued');
+    expect(sent).toEqual([]);
   });
 
   it('queues an ad hoc task as an issue, a card and a reply entry', async () => {
@@ -60,7 +60,8 @@ describe('drainInbox', () => {
     expect(calls[0]).toBe(`create ${'x'.repeat(80)}|${'x'.repeat(100)}\nmore\n\nRequested by Ann in the committee chat.|adhoc`);
     expect(calls[1]).toBe('addCard 9 Implementation');
     expect(readState(statePath).adhocReplies).toEqual({ '9': { chat: '-5', messageId: 3 } });
-    expect(sent[0]).toBe('Queued as #9. The report comes as a reply here.');
+    // Hermes answers the member itself.
+    expect(sent).toEqual([]);
   });
 
   it('refuses an ad hoc task without text', async () => {
@@ -95,13 +96,20 @@ describe('drainInbox', () => {
     expect(calls).toEqual([expect.stringContaining('too loud'), 'move 4 Design', 'edit -5 42 Post\n\n💬 Feedback from Ann. Back to design.']);
   });
 
-  it('drops an approval queued before the feedback and says so', async () => {
+  it('drops an approval queued before the feedback, with the status line as the only answer', async () => {
     const sent: string[] = [];
     writeState(statePath, withPost({ ...structuredClone(EMPTY_STATE), pendingApprovals: { 4: 'Ann' } }));
     put('1.json', { kind: 'feedback', issue: 4, text: 'too loud' });
     await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], sent, []));
     expect(readState(statePath).pendingApprovals).toEqual({});
-    expect(sent.join('\n')).toContain('The queued approval is dropped.');
+    expect(sent).toEqual([]);
+  });
+
+  it('answers a /change with one reply, since it acts on no post', async () => {
+    const sent: string[] = [];
+    put('1.json', { kind: 'change', text: 'faster ticks', postId: null });
+    await drainInbox(fakeCtx([], sent, []));
+    expect(sent).toEqual([expect.stringContaining('is queued. The factory answers with a pull request.')]);
   });
 
   it('denies a card in Approval: closes, labels, moves to Done and clears state', async () => {
@@ -113,7 +121,7 @@ describe('drainInbox', () => {
     expect(calls).toEqual(['comment 4 Denied by Ann in the committee chat.', 'addLabel 4 wont-do', 'close 4 not planned', 'move 4 Done', 'edit -5 42 Post\n\n❌ Denied by Ann']);
     expect(readState(statePath).approvalPosts).toEqual({ 200: 5 });
     expect(readState(statePath).pendingApprovals).toEqual({});
-    expect(sent[0]).toBe('Issue #4 is denied and closed.');
+    expect(sent).toEqual([]);
   });
 
   it('adds the approver under the post caption and remembers the new caption', async () => {
@@ -124,13 +132,13 @@ describe('drainInbox', () => {
     expect(readState(statePath).postCaptions).toEqual({ [POST]: 'Post\n\n✅ Approved by Ann' });
   });
 
-  it('says so when the post has no recorded caption, after the command worked', async () => {
+  it('replies with the answer only when the post cannot show its status', async () => {
     const sent: string[] = [];
     writeState(statePath, structuredClone(EMPTY_STATE));
     put('1.json', { kind: 'approve', issue: 4 });
     await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], sent, []));
     expect(readState(statePath).pendingApprovals).toEqual({ '4': 'Ann' });
-    expect(sent).toEqual([expect.stringContaining('Approval of #4 is queued'), 'Done, but the post could not show its status: No caption is recorded for post 42']);
+    expect(sent).toEqual([expect.stringMatching(/^Approval of #4 is queued.*\nThe post could not show its status: No caption is recorded for post 42$/)]);
   });
 
   it('answers with an error when a denied card is not in Approval', async () => {
@@ -166,7 +174,7 @@ describe('release commands', () => {
     put('1.json', { kind: 'ship', issue: 20 });
     await drainInbox(fakeCtx([], sent, []));
     expect(readState(statePath).pendingShip).toBe('Ann');
-    expect(sent[0]).toContain('Ship of release 2026-09-29 is queued');
+    expect(sent).toEqual([]);
   });
 
   it('refuses a ship without an open release, without a post, or for another issue', async () => {
@@ -200,7 +208,7 @@ describe('release commands', () => {
     put('1.json', { kind: 'remove', issue: 5, text: 'remove #5 too loud' });
     await drainInbox(fakeCtx([], sent, []));
     expect(readState(statePath).pendingRemovals).toEqual([{ issue: 5, by: 'Ann', text: 'remove #5 too loud' }]);
-    expect(sent[0]).toContain('Removal of #5');
+    expect(sent).toEqual([]);
   });
 
   it('refuses a removal without an open release or of a feature already removed', async () => {
@@ -225,7 +233,7 @@ describe('release commands', () => {
     expect(calls[1]).toBe('addCard 9 Design');
     expect(readState(statePath).release?.postId).toBeNull();
     expect(readState(statePath).pendingShip).toBeNull();
-    expect(sent[0]).toContain('Opened #9');
+    expect(sent).toEqual([]);
   });
 
   it('refuses a release task without an open release or without text', async () => {

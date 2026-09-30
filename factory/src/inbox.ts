@@ -52,8 +52,7 @@ async function handleFile(ctx: Ctx, path: string): Promise<void> {
   try {
     command = parseCommand(raw);
     const answer = await handle(ctx, command);
-    await ctx.telegram.sendMessage(command.chat, answer, command.messageId);
-    await markPostOrSay(ctx, command);
+    await deliver(ctx, command, answer);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     ctx.log('tick', command?.issue ?? null, `inbox command failed: ${message}`);
@@ -61,14 +60,19 @@ async function handleFile(ctx: Ctx, path: string): Promise<void> {
   }
 }
 
-// The command already worked, so a failed status edit is its own message, not "That did not work".
-async function markPostOrSay(ctx: Ctx, command: InboxCommand): Promise<void> {
+// Each command gets one answer in the chat, never two.
+// A command on a post answers with a status line on that post. A reply comes only when that edit fails.
+// An ad hoc task has Hermes's own reply already, so the factory adds nothing. Other commands get the answer as a reply.
+async function deliver(ctx: Ctx, command: InboxCommand, answer: string): Promise<void> {
+  if (command.kind === 'adhoc') return;
+  if (command.postId === null) return void (await ctx.telegram.sendMessage(command.chat, answer, command.messageId));
   try {
     await markPost(ctx, command, command.byName ?? command.by);
   } catch (error) {
+    // The command already worked, so a failed status edit is not "That did not work".
     const message = error instanceof Error ? error.message : String(error);
     ctx.log('tick', command.issue, `post status failed: ${message}`);
-    await ctx.telegram.sendMessage(command.chat, `Done, but the post could not show its status: ${message}`, command.messageId);
+    await ctx.telegram.sendMessage(command.chat, `${answer}\nThe post could not show its status: ${message}`, command.messageId);
   }
 }
 

@@ -243,10 +243,10 @@ def test_hook_routes_release_reply(tmp_path):
     assert json.loads(file.read_text())["issue"] == 40
 
 
-def test_hook_queues_and_replies(tmp_path):
+def test_hook_queues_without_a_reply_of_its_own(tmp_path):
     result, adapter, inbox = dispatch(tmp_path, "1")
     assert result == {"action": "skip", "reason": "factory-change"}
-    assert adapter.sent == [plugin.QUEUED_REPLY]
+    assert adapter.sent == []
     (file,) = inbox.iterdir()
     assert json.loads(file.read_text())["by"] == "1"
 
