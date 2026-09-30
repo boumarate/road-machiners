@@ -3,13 +3,14 @@ import { STATE_TURNS } from '../data/npcs';
 import type { TraitId } from '../data/npcs';
 import { addGoods } from './inventory';
 import { thinkNpc } from './npc-activities';
-import { canRob, npcProfile, optionWeights, ownDanger, vehicleDanger } from './npc-decisions';
+import { canRob, decide, lootAppeal, npcProfile, optionWeights, ownDanger, vehicleDanger } from './npc-decisions';
 import { NPC_BEHAVIOR, TRAITS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
-import { resolveDestroyed } from './combat';
+import { isHostile, resolveDestroyed } from './combat';
+import { cargoValue, goodValue } from './market';
 import { checkKnockout } from './defeat';
-import { corePart, mountedParts } from './grid';
+import { corePart, hasLoot, mountedParts } from './grid';
 import { addState, advanceStates, endState, stateOf } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateWhere } from './testkit';
 import type { NpcActivity, Vehicle, World } from './types';
@@ -44,6 +45,8 @@ const lowest = (w: World, v: Vehicle) => vehicleDanger(w, v) * (1 - NPC_BEHAVIOR
 function addPrey(w: World, pos: Vec, parts: string[] = [], goods = 2): Vehicle {
   const v = addVehicle(w, 'traders', 'scout', parts, pos);
   if (goods > 0 && addGoods(w, v, 'scrap', goods) < goods) throw new Error('No room for prey goods');
+  // A load worth at least the rob appeal's rich mark, so the rob weight is unscaled.
+  if (goods > 0 && addGoods(w, v, 'electronics', 4) < 4) throw new Error('No room for prey cargo');
   return v;
 }
 
@@ -189,6 +192,7 @@ describe('robbery checks', () => {
   it('a player truck with loot gets the full rob weight only when its guns are weaker', () => {
     const w = emptyWorld({ x: 15, y: 10 });
     const me = w.vehicles[0];
+    addGoods(w, me, 'electronics', 4);
     const robber = addScumbag(w, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
     expect(robWeight(w, robber, me, vehicleDanger(w, me))).toBe(FULL_ROB);
     // Out of the armed scumbag's group, so the bare one judges by its own guns alone. With none, it cannot rob.
@@ -477,6 +481,7 @@ describe('looting', () => {
   it('a scumbag that knocks out the player loots the player truck', () => {
     const w = emptyWorld({ x: 15, y: 10 });
     const me = w.vehicles[0];
+    addGoods(w, me, 'electronics', 4);
     const robber = addScumbag(w, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
     robber.brain!.goals = [{ ...SCAVENGE }];
     addState(w, 'feud', robber.id, me.id, { kind: 'feud', robbery: true });
@@ -514,6 +519,7 @@ describe('social on robbery danger', () => {
   it('a scumbag sees a level 5 player truck as stronger', () => {
     const w = emptyWorld({ x: 15, y: 10 });
     const me = w.vehicles[0];
+    addGoods(w, me, 'electronics', 4);
     const robber = addScumbag(w, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
     const danger = nearThreshold(w, robber);
     expect(robWeight(w, robber, me, danger)).toBe(FULL_ROB);
@@ -529,3 +535,87 @@ describe('social on robbery danger', () => {
   });
 });
 
+
+describe('cargo value', () => {
+  const chance = (w: World, robber: Vehicle, decision: 'preySeen' | 'hostileSeen', target: Vehicle, option: string): number => {
+    const danger = vehicleDanger(w, target);
+    const draws = 4000;
+    let picked = 0;
+    for (let seed = 0; seed < draws; seed++) {
+      const x = cloneWorld(w);
+      x.rngState = seed;
+      if (decide(x, find(x, robber.id), decision, target.id, danger) === option) picked++;
+    }
+    return picked / draws;
+  };
+
+  it('counts goods and spare parts but not mounted parts', () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const bare = addPrey(w, { x: 15, y: 10 }, ['stockEngine'], 0);
+    expect(cargoValue(bare)).toBe(0);
+    addGoods(w, bare, 'scrap', 2);
+    expect(cargoValue(bare)).toBe(2 * goodValue('scrap'));
+  });
+
+  it('appeal is poorMul at poor, 1 at rich and rising between', () => {
+    const curve = NPC_BEHAVIOR.lootAppeal.rob;
+    expect(lootAppeal(curve.poor, curve)).toBe(curve.poorMul);
+    expect(lootAppeal(0, curve)).toBe(curve.poorMul);
+    expect(lootAppeal(curve.rich, curve)).toBe(1);
+    expect(lootAppeal(curve.rich * 3, curve)).toBe(1);
+    let last = curve.poorMul;
+    for (let v = curve.poor + 10; v < curve.rich; v += 10) {
+      expect(lootAppeal(v, curve)).toBeGreaterThan(last);
+      last = lootAppeal(v, curve);
+    }
+  });
+
+  it('a scumbag robs start cargo at the floor and a rich load at the full weight', () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const robber = addScumbag(w, { x: 10, y: 10 });
+    const poor = addPrey(w, { x: 15, y: 10 }, [], 0);
+    addGoods(w, poor, 'scrap', 2);
+    addGoods(w, poor, 'parts', 2);
+    expect(chance(w, robber, 'preySeen', poor, 'rob')).toBeLessThan(0.025);
+    const rich = addPrey(w, { x: 15, y: 12 });
+    expect(robWeight(w, robber, rich, vehicleDanger(w, rich))).toBe(FULL_ROB);
+    // A grudge ignores cargo.
+    addState(w, 'revenge', robber.id, poor.id, { kind: 'none' });
+    expect(robWeight(w, robber, poor, vehicleDanger(w, poor))).toBeGreaterThanOrEqual(FULL_ROB);
+  });
+
+  describe('raiders', () => {
+    const fightChance = (goods: [string, number][], setup?: (w: World, raider: Vehicle, target: Vehicle) => void): number => {
+      const w = emptyWorld({ x: 200, y: 200 });
+      const raider = addVehicle(w, 'raiders', 'wagon', ['mg', 'stockEngine'], { x: 10, y: 10 });
+      raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+      const target = addPrey(w, { x: 15, y: 10 }, [], 0);
+      for (const [good, n] of goods) addGoods(w, target, good, n);
+      setup?.(w, raider, target);
+      return chance(w, raider, 'hostileSeen', target, 'fight');
+    };
+
+    it('fights an empty truck rarely, start cargo sometimes and a rich load nearly always', () => {
+      expect(fightChance([])).toBeLessThan(0.08);
+      const start = fightChance([['scrap', 2], ['parts', 2]]);
+      expect(start).toBeGreaterThan(0.06);
+      expect(start).toBeLessThan(0.22);
+      expect(fightChance([['electronics', 4]])).toBeGreaterThan(0.9);
+    });
+
+    it('a feud or revenge ignores cargo', () => {
+      expect(fightChance([], (w, r, t) => addState(w, 'feud', r.id, t.id, { kind: 'feud', robbery: false }))).toBeGreaterThan(0.9);
+      expect(fightChance([], (w, r, t) => addState(w, 'revenge', r.id, t.id, { kind: 'none' }))).toBeGreaterThan(0.9);
+    });
+  });
+
+  it('leaves hasLoot, canRob and isHostile as they were for an engine-only truck', () => {
+    const w = emptyWorld({ x: 200, y: 200 });
+    const robber = addScumbag(w, { x: 10, y: 10 });
+    const raider = addVehicle(w, 'raiders', 'wagon', ['mg', 'stockEngine'], { x: 12, y: 10 });
+    const bare = addPrey(w, { x: 15, y: 10 }, ['stockEngine'], 0);
+    expect(hasLoot(bare)).toBe(true);
+    expect(isHostile(w, raider, bare)).toBe(true);
+    expect(canRob(w, robber, bare)).toBe(true);
+  });
+});

@@ -103,6 +103,16 @@ export const NPC_BEHAVIOR = {
   robStronger: 0.015,
   // Rob weight times this when the robber or target is within guard range of a town gate. Same drop as above.
   robNearGuards: 0.015,
+  // What the target's cargo is worth to a robber or raider: goods and spare parts, not mounted gear. At or below
+  // `poor` the weight is times `poorMul`, at or above `rich` it is unchanged, and between them it rises
+  // geometrically so the chance climbs evenly. Rob: a scumbag's 0.45 falls to the 1% floor up to 150 in cargo,
+  // robs about 5% at 300, 13% at 400 and 31% from 500. Raid: a raider's fight of 45 against manageable prey is
+  // about 4% against an empty truck, 13% against the start cargo (78), 50% at 200 and 96% from 400. A revenge
+  // grudge skips it.
+  lootAppeal: {
+    rob: { poor: 150, rich: 500, poorMul: 0.02 },
+    raid: { poor: 0, rich: 400, poorMul: 0.002 },
+  },
   // Fight weight at a new hostile times this near town guards. A raider's fight weight of 50 against manageable
   // prey drops to 0.05, about 3%. Guards never lower fight back.
   fightNearGuards: 0.001,

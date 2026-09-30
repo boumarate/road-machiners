@@ -74,6 +74,11 @@ export function isHostile(world: World, a: Vehicle, b: Vehicle): boolean {
   return hasLoot(a.faction === "raiders" ? b : a);
 }
 
+// A raider sees a non-raider only for its loot: no feud and no lawman pair makes them foes.
+export function huntsForLoot(world: World, raider: Vehicle, target: Vehicle): boolean {
+  return raider.faction === "raiders" && target.faction !== "raiders" && !inFeud(world, raider, target) && !isLawPair(raider, target);
+}
+
 // A lawman and a raider, either way round.
 function isLawPair(a: Vehicle, b: Vehicle): boolean {
   return (isLawman(a) && b.faction === "raiders") || (isLawman(b) && a.faction === "raiders");
