@@ -207,10 +207,12 @@ function fuelSense(world: World, vehicle: Vehicle): number {
   return 1 + NPC_UPKEEP.fuelSense * (2 * roll - 1);
 }
 
-function isLowOnFuel(world: World, vehicle: Vehicle, profile: NpcProfile): boolean {
-  const reserve = NPC_UPKEEP.fuelReserve * profile.fuelMargin * fuelSense(world, vehicle);
-  return getResources(world, vehicle).fuel <= fuelToPump(world, vehicle, profile) * reserve;
+// The fuel the driver wants in hand for the way to its nearest pump.
+export function fuelReserveFor(world: World, vehicle: Vehicle, profile: NpcProfile = npcProfile(vehicle)): number {
+  return fuelToPump(world, vehicle, profile) * NPC_UPKEEP.fuelReserve * profile.fuelMargin * fuelSense(world, vehicle);
 }
+
+const isLowOnFuel = (world: World, vehicle: Vehicle, profile: NpcProfile): boolean => getResources(world, vehicle).fuel <= fuelReserveFor(world, vehicle, profile);
 
 // Low fuel, low supplies or a damaged cab or part needs service. Null when none is needed.
 function serviceNeed(world: World, vehicle: Vehicle, profile: NpcProfile): ServiceNeed | null {
