@@ -348,11 +348,11 @@ describe("turns on a tow rope", () => {
   function travelWithPrepared() {
     const prepare = vi.fn();
     const travel = new Travel(250);
-    Object.assign(travel, { turns: { prepare, take: () => null } });
+    Object.assign(travel, { turns: { prepareFrom: prepare, take: () => null } });
     return { travel, prepare };
   }
 
-  const playback = { result: { next: {} } } as unknown as Parameters<Travel["prepareNext"]>[1];
+  const playback = { result: { next: {} }, nextSnapshot: {} } as unknown as Parameters<Travel["prepareNext"]>[1];
 
   it("prepare the next turn during playback with no key held", () => {
     const { travel, prepare } = travelWithPrepared();

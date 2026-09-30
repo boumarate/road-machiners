@@ -1,6 +1,7 @@
 import {
   captureDrive,
   restoreDrive,
+  type DriveSnapshot,
   restFrames,
   trailFrames,
   type Drive,
@@ -24,6 +25,8 @@ export type LiveVision = {
 
 export type Playback = {
   result: TurnResult;
+  // The worker's snapshot that `result.next` was restored from, which the next turn starts from.
+  nextSnapshot: DriveSnapshot;
   before: World;
   lastTick: number | null;
   elapsed: number;
@@ -230,7 +233,7 @@ export class Travel {
 
   prepareNext(world: World, playback: Playback | null, now: number): void {
     if (playback && (this.shouldAdvance(now) || this.onRope(world)))
-      this.turns.prepare(world, playback.result.next);
+      this.turns.prepareFrom(world, playback.nextSnapshot);
   }
 
   beginPlayback(
@@ -242,14 +245,13 @@ export class Travel {
     const world = { ...prepared.world, terrain: before.terrain };
     // Frames first: a throw here must not leave a restored Rapier world behind.
     addRopeFrames(before, world, prepared.result.frames);
-    const result: TurnResult = {
-      ...prepared.result,
-      next: restoreDrive(prepared.result.next),
-    };
+    const nextSnapshot = prepared.result.next;
+    const result: TurnResult = { ...prepared.result, next: restoreDrive(nextSnapshot) };
     if (!playerCanAct(world)) this.pause();
     const towed = isTowed(before) || isTowed(world);
     const playback: Playback = {
       result,
+      nextSnapshot,
       before,
       lastTick: now,
       elapsed,
@@ -318,17 +320,23 @@ export class TurnPreparation {
   // and the routes of that turn cached before the player's first turn. No turn runs during a radio call or after death.
   warm(world: World, drive: Drive): void {
     if (world.player.call || world.player.state === "dead") return;
-    this.warmId = this.post(world, drive);
+    this.warmId = this.post(world, captureDrive(drive));
   }
 
   prepare(world: World, drive: Drive): void {
-    if (this.pending?.before === world) return;
-    this.pending = { id: this.post(world, drive), before: world, ready: null, failure: null };
+    if (this.pending?.before !== world) this.prepareFrom(world, captureDrive(drive));
   }
 
-  private post(world: World, drive: Drive): number {
+  // Prepares the turn after `world` from a snapshot already in hand. It posts a copy, since a post transfers its
+  // buffer and the caller keeps the snapshot for a retry.
+  prepareFrom(world: World, saved: DriveSnapshot): void {
+    if (this.pending?.before === world) return;
+    const copy = { ...saved, snapshot: saved.snapshot.slice() };
+    this.pending = { id: this.post(world, copy), before: world, ready: null, failure: null };
+  }
+
+  private post(world: World, saved: DriveSnapshot): number {
     const { terrain, ...state } = world;
-    const saved = captureDrive(drive);
     const id = ++this.serial;
     // Terrain identity owns route caches, so keep one terrain instance in the worker.
     this.worker ??= this.createWorker();
