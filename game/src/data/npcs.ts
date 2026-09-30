@@ -217,7 +217,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     targets: { guns: [0.8, 1.8], armor: [0.3, 0.6] },
     spares: null,
   },
-  // No tractor or scout: neither has a spot where a second gun covers behind the truck.
+  // No tractor: it has no spot where a second gun covers behind the truck. The scout has one beside its cab, but no room for the heavy guns.
   gunwagon: {
     budget: 6900,
     levels: [{ value: "light", weight: 2 }, { value: "standard", weight: 4 }, { value: "heavy", weight: 2 }, { value: "loaded", weight: 0.5 }],

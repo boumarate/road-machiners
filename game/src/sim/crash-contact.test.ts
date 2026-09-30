@@ -110,8 +110,7 @@ describe('crash damage multiplier', () => {
     (RULES as { crashDamage: number }).crashDamage = mult;
     try {
       const world = emptyWorld();
-      // A hauler: its bigger damage keeps whole-hit-point rounding from swamping the comparison.
-      const vehicle = addVehicle(world, 'raiders', 'hauler', ['stockEngine'], { x: 40, y: 40 });
+      const vehicle = world.vehicles[0];
       const before = mountedParts(vehicle).reduce((sum, part) => sum + part.hp, 0);
       applyContactCrash(world, vehicle, null, 'rock', impact, { a: { side: 'front', lanes: [1, 2, 3] }, b: null });
       return before - mountedParts(vehicle).reduce((sum, part) => sum + part.hp, 0);

@@ -9,7 +9,7 @@ Parts are defined in `src/data/parts.ts`, chassis in `src/data/chassis.ts` and g
 <!-- wiki:chassis -->
 | id | name | tier | value | max speed (tiles/turn) | accel | brake | mass (kg) | rated mass (kg) | radius (tiles) | fuel cap | fuel per tile | grid (w x h) | core parts |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| scout | Scout pickup | 1 | 2444 | 7.8 | 2 | 3 | 680 | 4370 | 0.6 | 40 | 0.25 | 8 x 8 | cabPickup, transmission, tank, wheel, wheel, wheel, wheel |
+| scout | Scout pickup | 1 | 2444 | 7.8 | 2 | 3 | 680 | 3840 | 0.6 | 40 | 0.25 | 7 x 8 | cabPickup, transmission, tank, wheel, wheel, wheel, wheel |
 | hauler | Hauler | 2 | 3676 | 5.2 | 1 | 2 | 2730 | 7700 | 0.8 | 80 | 0.4 | 9 x 9 | cabOver, transmissionMid, tankMid, wheelMid, wheelMid, wheelMid, wheelMid |
 | buggy | Buggy | 1 | 1928 | 9.1 | 3 | 3 | 230 | 3190 | 0.5 | 30 | 0.2 | 6 x 8 | cab, transmission, tank, wheel, wheel, wheel, wheel |
 | wagon | Gunwagon | 2 | 3022 | 3.9 | 1 | 2 | 2130 | 5620 | 0.8 | 60 | 0.4 | 8 x 7 | cab, transmissionHeavy, tankHeavy, wheelHeavy, wheelHeavy, wheelHeavy, wheelHeavy |

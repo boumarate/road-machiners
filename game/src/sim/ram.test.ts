@@ -89,8 +89,7 @@ describe('rams', () => {
   it('an obstacle hit lands on the side facing it at full share', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'scout', ['stockEngine'], { x: 40, y: 40 }, 0);
-    // The rock is left of centre, on the engine lane; the middle of the scout's eight columns falls between lanes 3 and 4.
-    applyCrash(w, v, null, 'rock', { x: 41.5, y: 39.8 }, FULL_SPEED);
+    applyCrash(w, v, null, 'rock', { x: 41.5, y: 40 }, FULL_SPEED);
     const e = crashOf(w);
     expect(e.hitsB).toEqual([]);
     expect(e.hitsA.some((h) => h.part === partOf(v, 'stockEngine').id)).toBe(true);

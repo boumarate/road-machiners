@@ -53,7 +53,7 @@ describe('walkLane', () => {
     const round = { damage: 1, pen: 2, blast: false, armorShare: 1 }; // the scout's edge cells are empty, so a round needs to pass one cell
     expect(walkLane(w, v, 'front', 2, round)[0].part).toBe(partAt(v, 2, 0).id);
     expect(walkLane(w, v, 'left', 1, round)[0].part).toBe(partAt(v, 1, 1).id);
-    expect(walkLane(w, v, 'right', 1, round)[0].part).toBe(partAt(v, 6, 1).id);
+    expect(walkLane(w, v, 'right', 1, round)[0].part).toBe(partAt(v, 5, 1).id);
     expect(walkLane(w, v, 'rear', 1, round)[0].part).toBe(partAt(v, 1, last - 1).id);
   });
 
