@@ -7,7 +7,7 @@ import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import { maxHealthOf } from "../sim/health";
 import { XP_TO_REACH } from "../data/skills";
 import { addState, towData } from "../sim/states";
-import { bugReportUrl, getContextAction, getHudReadout, getRescueReadout, versionLabel } from "./hud-readout";
+import { bugReportUrl, featureRequestUrl, getContextAction, getHudReadout, getRescueReadout, versionLabel } from "./hud-readout";
 import { GAME_VERSION } from "../config";
 import { REGION } from '../data/region';
 import { sitePads } from '../sim/sites';
@@ -209,7 +209,7 @@ describe('trade interaction', () => {
   });
 });
 
-describe('bug report link', () => {
+describe('issue form links', () => {
   it('points at the bug form with the version filled', () => {
     const url = new URL(bugReportUrl('v1.2.3'));
     expect(url.origin).toBe('https://github.com');
@@ -222,6 +222,17 @@ describe('bug report link', () => {
     const url = new URL(bugReportUrl('v1 & 2+3'));
     expect(url.searchParams.get('version')).toBe('v1 & 2+3');
     expect([...url.searchParams.keys()].sort()).toEqual(['template', 'version']);
+  });
+
+  it('points at the feature form', () => {
+    const url = new URL(featureRequestUrl());
+    expect(url.origin).toBe('https://github.com');
+    expect(url.pathname).toBe('/btseytlin/road-machiners/issues/new');
+    expect(url.searchParams.get('template')).toBe('feature-request.yml');
+  });
+
+  it('gives the feature form no other fields', () => {
+    expect([...new URL(featureRequestUrl()).searchParams.keys()]).toEqual(['template']);
   });
 
   it('labels the version as the ? menu shows it', () => {
