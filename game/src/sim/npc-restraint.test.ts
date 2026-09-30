@@ -280,7 +280,9 @@ describe('NPC field repairs', () => {
   it('preserves repair supplies during a town service visit', () => {
     const { world, npc } = createNpc();
     addGoods(world, npc, 'parts', 2);
-    npc.resources!.fuel = 0;
+    // A dry tank strands the truck, and a stranded driver at a town gets a fresh loadout. A low tank only needs a visit.
+    npc.resources!.fuel = 0.5;
+    npc.resources!.money = 500;
     npc.pos = { ...sitePads(REGION.towns[0])[0] };
     planNpcOrders(world);
     expect(topGoal(npc)!.kind).toBe('resupply');
