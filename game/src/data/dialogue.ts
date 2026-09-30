@@ -115,8 +115,8 @@ export const TOPICS: Record<TopicId, Topic> = {
       look: {
         line: 'Let me hear what broke.',
         options: [
-          { text: 'Engine or gearbox. What would it take?', when: ['hasDeal'], effects: [], go: 'terms' },
-          { text: 'Engine or gearbox. Can you do anything?', when: ['noDeal'], effects: [], go: 'cannot' },
+          { text: 'Engine, gearbox or tank. What would it take?', when: ['hasDeal'], effects: [], go: 'terms' },
+          { text: 'Engine, gearbox or tank. Can you do anything?', when: ['noDeal'], effects: [], go: 'cannot' },
         ],
       },
       terms: {
@@ -132,7 +132,7 @@ export const TOPICS: Record<TopicId, Topic> = {
       },
     },
   },
-  // A driver stranded by a broken engine or gearbox asks the player once for a patch.
+  // A driver stranded by a broken engine, gearbox or tank asks the player once for a patch.
   patchRequest: {
     id: 'patchRequest',
     once: true,
@@ -143,7 +143,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     start: 'ask',
     nodes: {
       ask: {
-        line: 'My engine is dead out here. Can you patch me up?',
+        line: 'My truck is dead out here. Can you patch me up?',
         options: [
           { text: 'What are you offering?', when: ['hasDeal'], effects: [], go: 'terms' },
           { text: 'I cannot help, sorry.', when: ['noDeal'], effects: ['settleRefused'], go: END },
@@ -374,7 +374,7 @@ export const TOPICS: Record<TopicId, Topic> = {
       released: { line: 'Fine. Thanks for the pull.', options: [{ text: 'Over and out.', when: [], effects: ['releaseNpc'], go: END }] },
     },
   },
-  // The player offers to patch a driver stranded by a broken engine or gearbox.
+  // The player offers to patch a driver stranded by a broken engine, gearbox or tank.
   offerPatch: {
     id: 'offerPatch',
     once: false,
