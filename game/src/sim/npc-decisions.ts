@@ -860,6 +860,7 @@ const DECISION_KINDS: Record<DecisionId, 'venture' | 'response'> = {
   truceOffered: 'response',
   mercyBegged: 'response',
   threatened: 'response',
+  warnedOff: 'response',
   mugging: 'response',
   strandedFoe: 'response',
   surrenderOffered: 'response',

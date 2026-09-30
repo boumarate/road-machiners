@@ -4,7 +4,7 @@ import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
 import { RULES } from '../data/rules';
 import { PERK_NUMBERS, SKILL_EFFECTS, XP_TO_REACH } from '../data/skills';
-import { beginSearch } from './search';
+import { beginSearch, startSearch } from './search';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import { goodsCount } from './grid';
 import { canLoot, canScavenge, lootBlockerHere, scavenge, takeAllLoot, takeLoot, takeStores } from './locations';
@@ -225,6 +225,7 @@ describe('one looter per wreck, for the player', () => {
     expect(canScavenge(w)).toBe(false);
     expect(lootBlockerHere(w)).toBe(npc);
     expect(() => scavenge(w)).toThrow(`${npc.name} is looting this wreck`);
+    expect(() => startSearch(w, wreck.id)).toThrow(`${npc.name} is looting this wreck`);
   });
 
   it('refuses to take from a searched wreck while another driver searches it', () => {
