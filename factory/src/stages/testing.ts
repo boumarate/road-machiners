@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { checkScope, publishBuild, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
 import { updateState } from '../state';
-import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx } from '../types';
+import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx, type InlineButton } from '../types';
 import { approve } from './approval';
 import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, syncBase, throwIfNeedsCommittee, workDir } from './common';
 
@@ -155,8 +155,7 @@ export async function post(ctx: Ctx, issue: number, approval: Approval, screensh
   const pr = await pullRequestUrl(ctx, issue, item.title, approval, base);
   await ctx.github.comment(issue, `Ready for approval: ${url}\n\n${approval.description}\n\nHow to try: ${approval.howToTry}`);
   const caption = approvalCaption(`#${issue} ${item.title}`, url, link, pr, approval, base);
-  const buttons = [[{ text: 'Approve', data: `factory:approve:${issue}` }, { text: 'Deny', data: `factory:deny:${issue}` }]];
-  const photoId = await ctx.telegram.sendPhoto(ctx.cfg.committeeChat, screenshot, caption, buttons);
+  const photoId = await ctx.telegram.sendPhoto(ctx.cfg.committeeChat, screenshot, caption, approvalButtons(issue, base));
   updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: { ...state.approvalPosts, [photoId]: issue }, postCaptions: { ...state.postCaptions, [photoId]: caption } }));
 }
 
@@ -168,8 +167,15 @@ async function pullRequestUrl(ctx: Ctx, issue: number, title: string, approval: 
   return ctx.github.openPullRequest(BRANCH(issue), base, `#${issue} ${title}`, body);
 }
 
+export function approvalButtons(issue: number, base: string): InlineButton[][] {
+  const approveText = base === HOTFIX_BASE ? 'Approve and ship to players' : 'Approve';
+  return [[{ text: approveText, data: `factory:approve:${issue}` }, { text: 'Deny', data: `factory:deny:${issue}` }]];
+}
+
 export function approvalCaption(title: string, url: string, link: string, pr: string, approval: Approval, base: string): string {
-  const head = `${title}\n\nPlay: ${url}\nIssue: ${link}\nPR: ${pr}`;
+  // A hotfix skips dev and the release, so its post opens with a warning the committee cannot miss.
+  const warning = base === HOTFIX_BASE ? '⚠️ HOTFIX. Approve merges into main and ships to players at once. Play it with care.\n\n' : '';
+  const head = `${warning}${title}\n\nPlay: ${url}\nIssue: ${link}\nPR: ${pr}`;
   const action = base === HOTFIX_BASE ? 'Approve ships this hotfix to main and itch.io at once.' : `Approve merges into ${base}.`;
   const tail = `${action} Deny closes the issue. A reply to this post sends feedback to design.`;
   const room = CAPTION_LIMIT - head.length - tail.length - '\n\n'.repeat(3).length - 'How to try: '.length;

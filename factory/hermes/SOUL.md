@@ -33,8 +33,8 @@ After a removal or a new release task, the factory builds a new candidate post. 
 A hotfix fixes a bug in the shipped game, like broken saves. It is a release of its own and skips `dev`.
 
 1. The issue carries the labels `bug` and `hotfix`. Intake takes it into Design at once, with no votes.
-2. Its jobs run before every other card. Its branch starts from `main`.
-3. Testing posts it for approval like any task. The post says that Approve ships it.
+2. Triage can also mark a voted bug as a hotfix, when it loses saves, crashes the game or blocks play. Then it warns the committee chat. A member who disagrees removes the label on GitHub.
+3. Its jobs run before every other card. Its branch starts from `main`. Testing posts it for approval like any task. The post opens with a hotfix warning, and its button reads "Approve and ship to players".
 4. Approve merges it into `main`, ships to itch.io and posts a GitHub release. The issue closes.
 5. Then `main` merges into `dev` and into the open release branch. That release gets a new candidate.
 

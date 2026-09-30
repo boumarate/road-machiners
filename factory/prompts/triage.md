@@ -39,7 +39,22 @@ Each question is one line the author can answer in one line.
 Use the author's words, not code terms.
 Ask about the game, not the implementation.
 
+For `ready`, also decide whether it is a hotfix.
+A hotfix skips `dev` and the next release.
+Its approval ships it to players at once.
+Mark a hotfix only when a bug in the released game hurts players now.
+
+- Saves are lost, corrupted or fail to load.
+- The game does not start, or it crashes.
+- A player cannot go on with the game.
+
+Everything else waits for a release, also most bugs.
+A new feature is never a hotfix.
+When in doubt, it is not a hotfix.
+
 Write `.factory/triage.json` with this shape.
-`{"verdict": "ready" | "unclear" | "wont-do", "reason": "...", "questions": ["..."]}`
+`{"verdict": "ready" | "unclear" | "wont-do", "reason": "...", "questions": ["..."], "hotfix": true | false}`
 The reason is one or two plain sentences.
+For a hotfix, the reason says what breaks for players.
 The questions list is empty unless the verdict is `unclear`.
+The field `hotfix` is required for `ready`.

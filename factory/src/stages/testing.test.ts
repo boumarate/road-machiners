@@ -5,7 +5,7 @@ import type { AgentRun, Ctx } from '../types';
 
 vi.mock('../deploy', () => ({ checkScope: () => undefined, publishBuild: (_ctx: unknown, _clone: string, scope: string) => `https://play.test/${scope}/`, recordBuild: () => undefined }));
 vi.mock('./approval', () => ({ approve: async (_ctx: unknown, issue: number, by: string) => { if (approveError) throw new Error(approveError); approved.push(`approve ${issue} ${by}`); } }));
-const { runStage, approvalCaption } = await import('./testing');
+const { runStage, approvalCaption, approvalButtons } = await import('./testing');
 
 let home = '';
 let calls: string[] = [];
@@ -126,7 +126,10 @@ describe('testing stage', () => {
 
   it('says a hotfix approval ships to main and itch.io', () => {
     const caption = approvalCaption('#7 Big horn', 'u', 'l', 'p', { description: 'd', howToTry: 'h' }, 'main');
+    expect(caption.startsWith('⚠️ HOTFIX. Approve merges into main and ships to players at once.')).toBe(true);
     expect(caption).toContain('Approve ships this hotfix to main and itch.io at once.');
+    expect(approvalCaption('#7 Big horn', 'u', 'l', 'p', { description: 'd', howToTry: 'h' }, 'dev')).not.toContain('HOTFIX');
+    expect(approvalButtons(7, 'main')[0][0]).toEqual({ text: 'Approve and ship to players', data: 'factory:approve:7' });
   });
 
   it('throws when approval.json lacks howToTry', async () => {
