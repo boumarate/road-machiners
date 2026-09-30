@@ -67,6 +67,8 @@ Common fixes:
 - Pause the factory before you edit the state file, the host clone or the work clones. Write the reason into `/factory/home/paused`. Every tick skips while that file exists. Delete it when you are done.
 - The pause does not stop a running job. When `job` in the state file is not null and its process runs, wait for it or let it fail.
 - Run a factory step yourself only while the factory is paused and `job` is null. Two steps at once break the host clone.
+- Every change to the game repo goes through an issue, so the factory tracks it to its release. Open the issue and let the stages run. Never open a pull request of your own.
+- When the committee asks to skip the stages, open the issue anyway. Merge into `dev` with the title `Merge issue #N: <issue title>`, and add the label `release-candidate` to the issue. The release lists only merges with that title, and it closes their issues when it ships.
 - Prefer the factory's own steps to doing their work by hand. A step also builds, publishes and records what it did. A merge with `gh pr merge` does none of that.
 - Keep the state file valid JSON with every field. Write a new file and rename it over the old one.
 - Nothing reaches `main` without a Ship from the committee. Never push to `main`.
