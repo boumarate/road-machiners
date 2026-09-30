@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { writeState, readState, EMPTY_STATE } from '../state';
-import type { Column, Ctx } from '../types';
+import { MergeConflictError, type Column, type Ctx } from '../types';
 
 vi.mock('../deploy', () => ({ deployDev: async () => 'https://play.test/dev/' }));
 const { approve, deny, feedback } = await import('./approval');
@@ -29,6 +29,7 @@ function fakeCtx(): Ctx {
     cfg: { home, committeeChat: 'chat', publicChannel: 'public', publicUrl: 'https://play.test', itchTarget: 'u/g', butlerKey: 'key' },
     statePath: `${home}/state.json`,
     now: () => new Date('2026-09-30T10:00:00Z'),
+    log: () => undefined,
     run: async (cmd: string, args: string[]) => { calls.push(`run ${cmd} ${args[0]}`); return { code: 0, stdout: '', stderr: '' }; },
     github: {
       cards: async () => [{ itemId: 'x', issue: 7, column, labels: [] }],
@@ -102,6 +103,35 @@ describe('approve', () => {
     expect(state.release?.postId).toBeNull();
     expect(state.pendingShip).toBeNull();
     expect(state.pendingApprovals).toEqual({});
+  });
+
+  it('sends the card back to Testing on a conflict with dev, keeping the approver, with no chat post', async () => {
+    const ctx = fakeCtx();
+    ctx.repo.merge = async (branch: string, into: string) => { throw new MergeConflictError(branch, into, ['game/src/a.ts'], 'boom'); };
+    await approve(ctx, 7, 'bob');
+    expect(calls).toEqual([
+      'sync ',
+      'comment 7 dev moved on since testing, and the branch conflicts with it in game/src/a.ts. Testing merges dev again and resolves the conflict. Then the approval by bob merges it, with no new post.',
+      'move 7 Testing',
+    ]);
+    const state = readState(`${home}/state.json`);
+    expect(state.approvedResolving).toEqual({ 7: 'bob' });
+    expect(state.approvalPosts).toEqual({ 200: 8 });
+    expect(state.pendingApprovals).toEqual({});
+  });
+
+  it('fails loud on a conflict of main into dev after a hotfix, which the agent cannot resolve', async () => {
+    labels = ['hotfix'];
+    const ctx = fakeCtx();
+    ctx.repo.merge = async (branch: string, into: string) => { if (branch === 'main') throw new MergeConflictError(branch, into, ['x'], 'boom'); };
+    await expect(approve(ctx, 7, 'bob')).rejects.toThrow('merge of main into dev failed');
+    expect(readState(`${home}/state.json`).approvedResolving).toEqual({});
+  });
+
+  it('clears a kept approver once the merge lands', async () => {
+    writeState(`${home}/state.json`, { ...EMPTY_STATE, approvedResolving: { 7: 'bob', 8: 'ann' } });
+    await approve(fakeCtx(), 7, 'bob');
+    expect(readState(`${home}/state.json`).approvedResolving).toEqual({ 8: 'ann' });
   });
 
   it('refuses a hotfix without itch.io keys before any git call', async () => {

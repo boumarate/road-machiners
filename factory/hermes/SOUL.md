@@ -14,7 +14,7 @@ The factory is a program on the server. A timer runs its tick every few minutes.
 4. Implementation runs Sonnet. It writes the code.
 5. Testing first merges the current `dev` into the issue branch, and the agent resolves any conflict. Then Sonnet checks and fixes the change. Then the factory runs the tests and the playtest itself. It builds the branch and serves it at `/<hash>/`.
 6. The factory posts a screenshot, the play link and how to try it in the committee chat. The card waits in the Approval column.
-7. A reply "approve" to that post merges the branch into `dev`. The issue stays open with the label `release-candidate` until its release ships. Any other reply to the post is feedback. It sends the task back to design.
+7. A reply "approve" to that post merges the branch into `dev`. When the branch conflicts with a newer `dev`, the card goes back to Testing with the approval kept. Testing resolves the conflict, then the merge runs with no new post. This is routine, not an incident. The issue stays open with the label `release-candidate` until its release ships. Any other reply to the post is feedback. It sends the task back to design.
 8. Whenever `dev` moves, by a merge or any push, the next tick rebuilds it and serves it at `/dev/`.
 9. Every few days, the factory cuts a release. It makes branch `release/<day>` from `dev`. It opens a tracking issue with the label `release`. It opens two cleanup tasks, one for optimization and one for code janitor work. They carry the labels `release-task` and `maintenance`.
 10. Release tasks run the same stages against the release branch. Cleanup tasks merge into it without a committee post. Other release tasks wait for approval as usual.

@@ -91,6 +91,7 @@ export type FactoryState = {
   pendingShip: string | null; // Telegram user who pressed Ship, run by the next tick
   pendingRemovals: Removal[]; // features to take out of the release, run by the next ticks in order
   pendingApprovals: Record<string, string>; // issue number -> approving Telegram user, run by the next tick
+  approvedResolving: Record<string, string>; // issue number -> approver, for an approved card back in Testing to resolve a conflict with its base. Testing then queues its merge with no new post.
   pendingChanges: ChangeRequest[]; // factory change requests, run by the next ticks in order
   lastTickError: string | null; // the last tick crash posted to the committee, so a lasting outage posts once
   adhocReplies: Record<string, { chat: string; messageId: number }>; // ad hoc issue number -> the chat message its report answers
@@ -160,8 +161,15 @@ export interface HostRepo {
   headHash(branch: string): Promise<string>; // short hash
   diff(base: string, branch: string): Promise<string>;
   hasNewCommits(base: string, branch: string): Promise<boolean>;
-  merge(branch: string, into: string, message: string): Promise<void>; // throws on conflict
+  merge(branch: string, into: string, message: string): Promise<void>; // throws MergeConflictError on a conflict, after it aborts the merge
   mergeLog(from: string, to: string): Promise<string[]>; // first-parent merge subjects on `from` missing in `to`
+}
+
+// A merge that stopped on conflicting files. The host clone is clean again when this is thrown.
+export class MergeConflictError extends Error {
+  constructor(readonly branch: string, readonly into: string, readonly files: string[], reason: string) {
+    super(`merge of ${branch} into ${into} failed. Conflicting files: ${files.join(', ')}. ${reason}`);
+  }
 }
 
 export type Ctx = {

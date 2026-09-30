@@ -1,9 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { checkScope, publishBuild, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
-import { updateState } from '../state';
+import { readState, updateState } from '../state';
 import { BRANCH, GAME_DIR, MAINTENANCE_LABEL, OUT_DIR, RELEASE_TASK_LABEL, TASK_FILE, type Ctx, type InlineButton } from '../types';
-import { approve } from './approval';
 import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, fillPrompt, guardAndPush, readOutput, resetOutputs, runAgent, syncBase, throwIfNeedsCommittee, workDir } from './common';
 
 // Each step logs its start time, so the log shows where the time goes.
@@ -65,11 +64,24 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const approval = readApproval(home);
   const url = publishBuild(ctx, checkDir(ctx, issue), build);
   recordBuild(ctx.statePath, issue, build);
-  // Cleanup tasks on the release branch skip the committee post. The committee plays them in the candidate.
-  const cleanup = item.labels.includes(RELEASE_TASK_LABEL) && item.labels.includes(MAINTENANCE_LABEL);
-  if (!cleanup) await post(ctx, issue, approval, `${home}/${OUT_DIR}/screenshot.png`, url, base);
+  const approver = approvedAlready(ctx, issue, item.labels);
+  if (approver === null) await post(ctx, issue, approval, `${home}/${OUT_DIR}/screenshot.png`, url, base);
   await ctx.github.move(issue, 'Approval');
-  if (cleanup) await mergeCleanup(ctx, issue);
+  if (approver !== null) queueMerge(ctx, issue, approver);
+}
+
+// Who approved the card before this round, or null when it needs a committee post.
+// Cleanup tasks on the release branch skip the post, since the committee plays them in the candidate.
+// A card approved before a conflict sent it back here keeps its approval.
+function approvedAlready(ctx: Ctx, issue: number, labels: string[]): string | null {
+  if (labels.includes(RELEASE_TASK_LABEL) && labels.includes(MAINTENANCE_LABEL)) return 'the factory';
+  return readState(ctx.statePath).approvedResolving[String(issue)] ?? null;
+}
+
+// The merge runs as an approve job in the branch queue, like a member's approval, so it never races another branch job.
+function queueMerge(ctx: Ctx, issue: number, by: string): void {
+  updateState(ctx.statePath, (state) => ({ ...state, pendingApprovals: { ...state.pendingApprovals, [String(issue)]: by } }));
+  ctx.log('testing', issue, `approved by ${by} already, merge queued`);
 }
 
 // The base moved on since design cut the branch. Testing runs on the branch with the current base merged in,
@@ -85,16 +97,6 @@ async function mergeBase(ctx: Ctx, issue: number, base: string, home: string): P
 // Checks the commit merged above, not the base branch. A parallel approval may move the base on meanwhile, and approve merges that newer base anyway.
 async function requireBaseMerged(ctx: Ctx, issue: number, base: string, commit: string): Promise<void> {
   if (!(await ctx.repo.isMerged(commit, BRANCH(issue)))) throw new Error(`The testing agent left the merge of ${base} at ${commit.slice(0, 7)} into ${BRANCH(issue)} unfinished.`);
-}
-
-// approve() requires the Approval column. A failed merge puts the card back in Testing, so the stuck label the caller adds can be removed to retry.
-async function mergeCleanup(ctx: Ctx, issue: number): Promise<void> {
-  try {
-    await approve(ctx, issue, 'the factory');
-  } catch (error) {
-    await ctx.github.move(issue, 'Testing');
-    throw error;
-  }
 }
 
 async function agentRound(ctx: Ctx, issue: number, prompt: 'test' | 'test-fix', base: string): Promise<void> {

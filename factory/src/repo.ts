@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { must } from './exec';
 import { withLock } from './lock';
-import { OUT_DIR, TASK_DIR, type FactoryConfig, type HostRepo, type Run } from './types';
+import { MergeConflictError, OUT_DIR, TASK_DIR, type FactoryConfig, type HostRepo, type Run } from './types';
 
 // Hooks are switched off on every call, so no git command here runs code from a repository.
 // The identity names the factory on its merge commits, the same one the agent image uses.
@@ -128,7 +128,7 @@ export function hostRepo(run: Run, cfg: FactoryConfig): HostRepo {
       const reason = (result.stderr || result.stdout).trim();
       if (files.length === 0) throw new Error(`merge of ${branch} into ${into} failed without a conflict: ${reason}`);
       await git(['merge', '--abort']);
-      throw new Error(`merge of ${branch} into ${into} failed. Conflicting files: ${files.join(', ')}. ${reason}`);
+      throw new MergeConflictError(branch, into, files, reason);
     },
     async mergeLog(from, to) {
       return (await git(['log', '--first-parent', '--merges', '--format=%s', `${to}..${from}`])).split('\n').filter(Boolean);
