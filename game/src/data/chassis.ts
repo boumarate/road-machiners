@@ -15,9 +15,12 @@
 // core places the built-in parts at fixed cells, unrotated unless it lists rot 1. The four wheels sit one column in from
 // the side armor, one in each corner of the truck. The physics wheels come from PHYSICS.bodies, not these cells.
 // The transmission takes 2 by 2 cells and a fuel tank 1 by 2, and every engine takes at least 2 by 2, so an E bay is
-// 2 by 2. Every chassis but the scout keeps a free 2 by 2 block of D cells for the bigger guns, and tier 2 and 3 chassis a free 2
-// across by 3 along block. The scout's cab, clear of its wheels on five columns, leaves only single deck columns. A cab keeps clear of the wheel columns, except on small vehicles named in
-// chassis.test.ts, and the transmission lies in or next to a middle column. A grid may have more rows or columns than its model has rows and columns of its own, since the
+// 2 by 2. Every chassis but the scout keeps a free 2 by 2 block of D cells for the bigger guns, and tier 2 and 3
+// chassis a free 2 across by 3 along block. The scout's cab, clear of its wheels on five columns, leaves only single
+// deck columns.
+// A cab keeps clear of the wheel columns, except on the small vehicles named in chassis.test.ts. The transmission
+// lies in or next to a middle column.
+// A grid may have more rows or columns than its model has rows and columns of its own, since the
 // projection stretches whatever grid it gets over the model.
 //
 // showsCores says whether the view draws the transmission and the tank. It is true for the junk-built trucks whose

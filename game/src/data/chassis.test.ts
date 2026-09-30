@@ -50,7 +50,7 @@ const NO_DECK_BLOCK: Record<string, string> = {
   scout: 'A cab clear of the wheels on 5 columns leaves only single deck columns.',
 };
 
-const RATED_MASS = 3840; // the scout's rated mass on dev
+const RATED_MASS = 3840; // the scout's rated mass before its cab moved
 
 const columns = (cells: Cell[]) => new Set(cells.map((cell) => cell.x));
 

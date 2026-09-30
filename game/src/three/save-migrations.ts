@@ -87,7 +87,12 @@ function refitScout(vehicle: SavedJson, displaced: SavedJson[]): SavedJson {
     if (!moved.displaced) items.push(moved.item);
     else if (item.part) displaced.push(item.part);
   }
-  return { ...vehicle, items, job: null };
+  return { ...vehicle, items, job: withoutRefit(vehicle.job) };
+}
+
+// Only a refit is tied to the old cells; other jobs do not touch the grid.
+function withoutRefit(job: unknown): unknown {
+  return (job as SavedJson | null)?.kind === 'refit' ? null : job;
 }
 
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
