@@ -27,6 +27,7 @@ import { canUseOasis, downedHere, downedNear, emptySalvageNear, salvageHere, sal
 import { playerCanAct } from '../sim/world';
 import { combatTurnsLeft } from '../sim/combat';
 import { isBusy } from '../sim/jobs';
+import { npcName } from '../sim/spawn';
 
 // The shop in reach of the player truck at any speed, or null. Moving trucks must stop to use it.
 function shopNear(world: World): { id: string; name: string } | null {
@@ -45,7 +46,7 @@ export function getContextAction(world: World, playing: boolean): ContextAction 
 
 function getTradeAction(world: World): ContextAction | null {
   const partner = tradePartner(world);
-  return partner && { label: `Trade with ${partner.name}`, ready: tradeReady(world) !== null };
+  return partner && { label: `Trade with ${npcName(partner)}`, ready: tradeReady(world) !== null };
 }
 
 function getPlaceAction(world: World): ContextAction | null {
@@ -53,7 +54,7 @@ function getPlaceAction(world: World): ContextAction | null {
   if (shop) return { label: `Enter ${shop.name}`, ready: shopAt(world) === shop.id };
   // A knocked-out truck stays open to looting while a removal from it runs.
   const downed = downedNear(world);
-  if (downed) return { label: `Loot ${downed.name}`, ready: downedHere(world) !== null };
+  if (downed) return { label: `Loot ${npcName(downed)}`, ready: downedHere(world) !== null };
   if (isBusy(playerVehicle(world))) return null;
   return getSiteAction(world);
 }

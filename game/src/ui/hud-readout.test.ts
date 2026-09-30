@@ -4,7 +4,8 @@ import { RULES } from "../data/rules";
 import { corePart } from "../sim/grid";
 import { knockOutNpc } from "../sim/defeat";
 import { STATE_TURNS } from "../data/npcs";
-import { addVehicle, emptyWorld, npcBrain , startCombat } from "../sim/testkit";
+import { addVehicle, emptyWorld, npcBrain, startCombat } from "../sim/testkit";
+import { npcName } from "../sim/spawn";
 import { maxHealthOf } from "../sim/health";
 import { XP_TO_REACH } from "../data/skills";
 import { addState, towData } from "../sim/states";
@@ -28,9 +29,9 @@ describe('knocked-out truck interaction', () => {
     expect(getContextAction(w, false)).toBeNull();
     corePart(buggy, 'cab').hp = 0;
     knockOutNpc(w, buggy);
-    expect(getContextAction(w, false)).toEqual({ label: `Loot ${buggy.name}`, ready: true });
+    expect(getContextAction(w, false)).toEqual({ label: `Loot ${npcName(buggy)}`, ready: true });
     w.vehicles[0].speed = RULES.parkedSpeed + 1;
-    expect(getContextAction(w, false)).toEqual({ label: `Loot ${buggy.name}`, ready: false });
+    expect(getContextAction(w, false)).toEqual({ label: `Loot ${npcName(buggy)}`, ready: false });
   });
 });
 
@@ -212,7 +213,7 @@ describe('trade interaction', () => {
 
   it('offers the trade over the town once both trucks are parked side by side', () => {
     const { w, npc } = atTownWithTrader(0);
-    expect(getContextAction(w, false)).toEqual({ label: `Trade with ${npc.name}`, ready: true });
+    expect(getContextAction(w, false)).toEqual({ label: `Trade with ${npcName(npc)}`, ready: true });
   });
 
   it('offers the town while the trader still drives', () => {
