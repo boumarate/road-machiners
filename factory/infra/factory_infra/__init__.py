@@ -14,14 +14,13 @@ REPO_ROOT = INFRA_DIR.parent.parent
 
 FACTORY_USER = "factory"
 # Agent containers run as pwuser, uid 1001 in the Playwright image. They write into work clones the factory user owns, so both share the uid.
+# Hermes runs as this uid too, since it edits the factory home.
 FACTORY_UID = 1001
 FACTORY_ROOT = "/opt/factory"
 CODE_DIR = f"{FACTORY_ROOT}/code"
 HOME_DIR = f"{FACTORY_ROOT}/home"
 WWW_DIR = f"{FACTORY_ROOT}/www"
 HERMES_DIR = f"{FACTORY_ROOT}/hermes"
-# The Hermes image runs its agent as this uid. It writes the inbox and the committee file.
-HERMES_UID = 10000
 
 
 class Settings(BaseSettings):

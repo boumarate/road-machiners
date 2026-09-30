@@ -44,7 +44,7 @@ It follows `Steelman/infra`. Run every command from `factory/infra`.
 - `/opt/factory/home` is `FACTORY_HOME`. Set it in the factory `.env`.
 - `/opt/factory/www` is `FACTORY_WEB_ROOT`. Set it in the factory `.env`.
 - `/opt/factory/hermes` holds the Hermes state and login.
-- The inbox is owned by uid 10000, the Hermes user. Its group is `factory` with mode 2770. Hermes writes files there. The tick reads and deletes them.
+- Hermes runs as the factory user, uid 1001. It writes the inbox and the committee file, and the tick reads and deletes inbox files.
 - The `committee` folder has the same owner, group and mode. Hermes writes `committee.json` there. The tick only reads it.
 
 ## First-time steps

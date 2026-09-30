@@ -6,7 +6,7 @@ Packages, Docker, Node 24, gh, butler, the firewall, the factory user and the /o
 # pyright: reportMissingImports=false
 from pyinfra.operations import apt, files, server, systemd
 
-from factory_infra import CODE_DIR, FACTORY_ROOT, FACTORY_UID, FACTORY_USER, HERMES_DIR, HERMES_UID, HOME_DIR, INFRA_DIR, WWW_DIR
+from factory_infra import CODE_DIR, FACTORY_ROOT, FACTORY_UID, FACTORY_USER, HERMES_DIR, HOME_DIR, INFRA_DIR, WWW_DIR
 
 FILES = INFRA_DIR / "files"
 
@@ -124,20 +124,10 @@ files.directory(name=f"dir {FACTORY_ROOT}", path=FACTORY_ROOT, mode="755", prese
 for path in [CODE_DIR, HOME_DIR, WWW_DIR, f"{HOME_DIR}/logs", f"{HOME_DIR}/state"]:
     files.directory(name=f"dir {path}", path=path, user=FACTORY_USER, group=FACTORY_USER, mode="755", present=True, _sudo=True)
 
-# The Hermes plugin (uid 10000) writes inbox files and the committee file. The tick (factory user) reads them and deletes inbox files.
-# Owner 10000 gives the plugin write access. Group factory plus setgid puts every new file in the factory group.
-# Mode 2770 then lets the tick read files and delete them from the directory. Other users get nothing.
+# Hermes runs as the factory user, so the factory user owns its state and every folder it writes.
 for name in ("inbox", "committee"):
-    files.directory(
-        name=f"dir {HOME_DIR}/{name}",
-        path=f"{HOME_DIR}/{name}",
-        user=str(HERMES_UID),
-        group=FACTORY_USER,
-        mode="2770",
-        present=True,
-        _sudo=True,
-    )
-files.directory(name=f"dir {HERMES_DIR}", path=HERMES_DIR, user=str(HERMES_UID), group=str(HERMES_UID), mode="700", present=True, _sudo=True)
+    files.directory(name=f"dir {HOME_DIR}/{name}", path=f"{HOME_DIR}/{name}", user=FACTORY_USER, group=FACTORY_USER, mode="750", present=True, _sudo=True)
+files.directory(name=f"dir {HERMES_DIR}", path=HERMES_DIR, user=FACTORY_USER, group=FACTORY_USER, mode="700", present=True, _sudo=True)
 for path in [f"{FACTORY_ROOT}/caddy/data", f"{FACTORY_ROOT}/caddy/config"]:
     files.directory(name=f"dir {path}", path=path, present=True, _sudo=True)
 
