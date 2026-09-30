@@ -10,7 +10,7 @@ import { takeAllLoot } from './locations';
 import { pushGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { visibleSalvage } from './npc-decisions';
 import { makePeace, plead, yieldTo } from './parley';
-import { hasCargo, looterOf } from './salvage';
+import { hasCargo, lootBlocker, looterOf } from './salvage';
 import { beginSearch } from './search';
 import { addState, endState, stateOf } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf } from './testkit';
@@ -503,6 +503,13 @@ describe('pile claims', () => {
     thinkNpc(w, robber);
     expect(robber.brain!.goals.some((g) => g.kind === 'tow' && g.targetId === victim.id)).toBe(false);
     expect(topGoal(robber)?.kind).toBe('loot');
+  });
+
+  it('a player parked at the pile does not keep its claimant from starting there', () => {
+    const { w, robber, pile } = handover('npc');
+    const me = playerVehicle(w);
+    me.pos = { x: pile.pos.x + 1, y: pile.pos.y };
+    expect(lootBlocker(w, robber, pile.id)).toBeNull();
   });
 
   it('a backed-off driver does not see the pile', () => {

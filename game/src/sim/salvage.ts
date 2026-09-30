@@ -524,6 +524,8 @@ export function looterOf(world: World, targetId: string): Vehicle | null {
   if (!isLootTarget(world, targetId)) return null;
   const working = world.vehicles.find((v) => worksOn(v, targetId)) ?? world.vehicles.find((v) => actsOn(world, v, targetId));
   if (working) return working;
+  // A parked player does not out-wait a claimant on its way. Taking from the pile is what answers the claim.
+  if (world.salvage.some((s) => s.id === targetId && claimantOf(world, s))) return null;
   const me = playerVehicle(world);
   return inLootReach(world, me, targetId) ? me : null;
 }
@@ -546,7 +548,9 @@ export function lootBlockedError(world: World, blocker: Vehicle, targetId: strin
   throw new Error(`No loot target ${targetId}`);
 }
 
-// The target the NPC holds the claim on, or null. Only its job and its top goal can name one.
+// The target the NPC holds the one-looter claim on, or null. A pile's own claim, `claimantOf()`, is a different thing:
+// it reserves a handed-over pile for its robber, and a warn-off call that makes the robber back
+// off ends it. Only its job and its top goal can name one.
 export function lootClaimedBy(world: World, npc: Vehicle): string | null {
   const ids = [jobTarget(npc), npc.brain?.goals.at(-1)?.targetId ?? null];
   return ids.find((id) => id !== null && looterOf(world, id)?.id === npc.id) ?? null;
