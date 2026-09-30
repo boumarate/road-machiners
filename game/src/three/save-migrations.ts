@@ -166,6 +166,19 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     const player = world.player as SavedJson;
     return { ...world, player: { ...player, xpBySource: { ...(player.xpBySource as SavedJson), aid: 0 } } };
   },
+  // 3 to 4: a contract gets the turns it has left as its window, so no deadline or reward changes. A haul is no rush.
+  (world) => {
+    const turn = world.turn as number;
+    const windowed = (c: SavedJson): SavedJson => {
+      const window = Math.max(1, (c.deadline as number) - turn);
+      return c.kind === 'haul' ? { ...c, window, rush: false } : { ...c, window };
+    };
+    const player = world.player as SavedJson;
+    const shops = Object.fromEntries(
+      Object.entries(world.shops as Record<string, SavedJson>).map(([id, shop]) => [id, { ...shop, contracts: (shop.contracts as SavedJson[]).map(windowed) }]),
+    );
+    return { ...world, player: { ...player, contracts: (player.contracts as SavedJson[]).map(windowed) }, shops };
+  },
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

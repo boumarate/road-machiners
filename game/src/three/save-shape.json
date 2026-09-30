@@ -1,5 +1,5 @@
 {
- "format": "2.3",
+ "format": "2.4",
  "shape": {
   "broken": [],
   "dustClouds": [],
@@ -265,7 +265,8 @@
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -273,10 +274,12 @@
       "id": "string",
       "kind": "string",
       "reward": "number",
+      "rush": "boolean",
       "shop": "string",
       "tier": "number",
       "to": "string",
-      "units": "number"
+      "units": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -286,7 +289,8 @@
       "shop": "string",
       "targetName": "string",
       "template": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      }
     ],
     "pressure": {
@@ -332,7 +336,8 @@
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -340,10 +345,12 @@
       "id": "string",
       "kind": "string",
       "reward": "number",
+      "rush": "boolean",
       "shop": "string",
       "tier": "number",
       "to": "string",
-      "units": "number"
+      "units": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -353,7 +360,8 @@
       "shop": "string",
       "targetName": "string",
       "template": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      }
     ],
     "pressure": {
@@ -391,7 +399,8 @@
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -399,10 +408,12 @@
       "id": "string",
       "kind": "string",
       "reward": "number",
+      "rush": "boolean",
       "shop": "string",
       "tier": "number",
       "to": "string",
-      "units": "number"
+      "units": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -412,7 +423,8 @@
       "shop": "string",
       "targetName": "string",
       "template": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      }
     ],
     "pressure": {
@@ -458,7 +470,8 @@
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -466,10 +479,12 @@
       "id": "string",
       "kind": "string",
       "reward": "number",
+      "rush": "boolean",
       "shop": "string",
       "tier": "number",
       "to": "string",
-      "units": "number"
+      "units": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -479,7 +494,8 @@
       "shop": "string",
       "targetName": "string",
       "template": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      }
     ],
     "pressure": {
@@ -517,7 +533,8 @@
       "kind": "string",
       "reward": "number",
       "shop": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -525,10 +542,12 @@
       "id": "string",
       "kind": "string",
       "reward": "number",
+      "rush": "boolean",
       "shop": "string",
       "tier": "number",
       "to": "string",
-      "units": "number"
+      "units": "number",
+      "window": "number"
      },
      {
       "deadline": "number",
@@ -538,7 +557,8 @@
       "shop": "string",
       "targetName": "string",
       "template": "string",
-      "tier": "number"
+      "tier": "number",
+      "window": "number"
      }
     ],
     "pressure": {
