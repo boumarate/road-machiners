@@ -32,7 +32,7 @@ import { sampleWeighted } from './npc-loadout';
 import { getResources } from './resources';
 import { skillEffect } from './progress';
 import { randRange } from './rng';
-import { canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, jobTarget, lootBlocker, siteLootTable } from './salvage';
+import { backedOff, canReachSalvage, canTakeAny, canTakeFromTruck, hasSalvage, holdsClaim, jobTarget, lootBlocker, siteLootTable } from './salvage';
 import { canUseSite, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { boundTo, givesWord, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
@@ -118,7 +118,7 @@ export function bodyCondition(vehicle: Vehicle): number {
 }
 
 // Damage times rounds summed over working guns.
-function firepower(world: World, vehicle: Vehicle): number {
+export function firepower(world: World, vehicle: Vehicle): number {
   return vehicleStats(world, vehicle).weapons.filter((weapon) => weapon.part.hp > 0).reduce((sum, weapon) => sum + weapon.def.round.damage * weapon.def.rounds, 0);
 }
 
@@ -249,7 +249,7 @@ function seesDowned(world: World, vehicle: Vehicle, target: Vehicle): boolean {
 }
 
 function seesSalvage(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
-  if (!canVehicleSee(world, vehicle, stock.pos)) return false;
+  if (backedOff(stock, vehicle.id) || !canVehicleSee(world, vehicle, stock.pos)) return false;
   return (!canReachSalvage(vehicle, stock) || canTakeAny(world, vehicle, stock)) && lootTaken(world, vehicle, stock.id) === null;
 }
 
@@ -897,9 +897,12 @@ const DECISION_KINDS: Record<DecisionId, 'venture' | 'response'> = {
   needySeen: 'venture',
 };
 
-// A driver that gave its word starts no venture until the deal ends, except about the truck it gave it to.
+// A driver holding a pile claim starts no venture until the claim ends. A driver that gave its word starts none
+// until the deal ends, except about the truck it gave it to.
 export function keepsWord(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): boolean {
-  if (DECISION_KINDS[decision] !== 'venture' || !givesWord(world, vehicle.id)) return false;
+  if (DECISION_KINDS[decision] !== 'venture') return false;
+  if (holdsClaim(world, vehicle.id)) return true;
+  if (!givesWord(world, vehicle.id)) return false;
   return subject === null || !boundTo(world, vehicle.id, subject);
 }
 
