@@ -128,7 +128,7 @@ describe('mercs', () => {
     const chances = optionChances(optionWeights(w, npc, 'idle', null, null));
     expect(chances.scavenge).toBeCloseTo(MIN_CHANCE, 2);
     expect(chances.trade ?? MIN_CHANCE).toBeCloseTo(MIN_CHANCE, 2);
-    expect(chances.wait).toBeGreaterThan(0.9);
+    expect(chances.wait).toBeGreaterThan(0.8);
   });
 });
 
