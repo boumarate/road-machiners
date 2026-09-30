@@ -68,8 +68,8 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0): Ctx {
       diff: async (base: string) => { bases.push(`diff ${base}`); return ''; },
       headHash: async () => 'abc123',
       sync: async (...extra: string[]) => { bases.push(`sync ${extra.join(' ')}`.trim()); },
-      mergeBaseIntoWork: async (_dir: string, base: string) => { bases.push(`merge ${base}`); return conflicts; },
-      isMerged: async () => merged,
+      mergeBaseIntoWork: async (_dir: string, base: string) => { bases.push(`merge ${base}`); return { commit: 'base0001', conflicts }; },
+      isMerged: async (base: string) => { bases.push(`isMerged ${base}`); return merged; },
     },
   };
   return fake as unknown as Ctx;
@@ -163,7 +163,7 @@ describe('testing stage', () => {
     labels = ['release-task'];
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
     await runStage(ctx, 7);
-    expect(new Set(bases)).toEqual(new Set(['prepare release/2026-09-29', 'sync release/2026-09-29', 'merge release/2026-09-29', 'diff release/2026-09-29']));
+    expect(new Set(bases)).toEqual(new Set(['prepare release/2026-09-29', 'sync release/2026-09-29', 'merge release/2026-09-29', 'isMerged base0001', 'diff release/2026-09-29']));
     expect(calls.find((call) => call.startsWith('openPullRequest'))).toContain('openPullRequest factory/issue-7 release/2026-09-29 #7 Big horn');
     expect(calls.find((call) => call.startsWith('photo'))).toContain('Approve merges into release/2026-09-29.');
     expect(approved).toEqual([]);
@@ -172,7 +172,7 @@ describe('testing stage', () => {
   it('works on dev for an ordinary card even while a release is open', async () => {
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
     await runStage(ctx, 7);
-    expect(new Set(bases)).toEqual(new Set(['prepare dev', 'sync', 'merge dev', 'diff dev']));
+    expect(new Set(bases)).toEqual(new Set(['prepare dev', 'sync', 'merge dev', 'isMerged base0001', 'diff dev']));
   });
 
   it('merges dev into the branch before the agent runs, and lists conflicts for it', async () => {
@@ -190,7 +190,7 @@ describe('testing stage', () => {
   it('fails the stage when the agent leaves the merge of dev unfinished', async () => {
     merged = false;
     const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'd', howToTry: 'h' })));
-    await expect(runStage(ctx, 7)).rejects.toThrow('left the merge of dev into factory/issue-7 unfinished');
+    await expect(runStage(ctx, 7)).rejects.toThrow('left the merge of dev at base000 into factory/issue-7 unfinished');
     expect(calls).not.toContain('checks');
   });
 

@@ -228,16 +228,30 @@ describe('merging the base into a work clone', () => {
   it('merges a moved dev into the branch, and the host sees it as merged after the fetch', async () => {
     const { repo, work } = await behindDev('g.txt');
     expect(await repo.isMerged('dev', 'factory/issue-5')).toBe(false);
-    expect(await repo.mergeBaseIntoWork(work, 'dev')).toEqual([]);
+    const devHead = (await realRun('git', ['rev-parse', 'dev'], { cwd: repo.path })).stdout.trim();
+    expect(await repo.mergeBaseIntoWork(work, 'dev')).toEqual({ commit: devHead, conflicts: [] });
     expect(readFileSync(join(work, 'g.txt'), 'utf8')).toBe('dev moved\n');
     expect(readFileSync(join(work, 'f.txt'), 'utf8')).toBe('five\n');
     await repo.fetchFromWork(work, 'factory/issue-5');
     expect(await repo.isMerged('dev', 'factory/issue-5')).toBe(true);
   });
 
+  it('still sees the merged commit inside the branch after dev moves on', async () => {
+    const { repo, work } = await behindDev('g.txt');
+    const { commit } = await repo.mergeBaseIntoWork(work, 'dev');
+    await repo.fetchFromWork(work, 'factory/issue-5');
+    const git = (...a: string[]) => realRun('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { cwd: repo.path });
+    await git('checkout', 'dev');
+    writeFileSync(join(repo.path, 'h.txt'), 'another approval\n');
+    await git('add', 'h.txt');
+    await git('commit', '-m', 'dev moves again');
+    expect(await repo.isMerged('dev', 'factory/issue-5')).toBe(false);
+    expect(await repo.isMerged(commit, 'factory/issue-5')).toBe(true);
+  });
+
   it('names the conflicted files and leaves the merge open for the agent', async () => {
     const { repo, work } = await behindDev('f.txt');
-    expect(await repo.mergeBaseIntoWork(work, 'dev')).toEqual(['f.txt']);
+    expect((await repo.mergeBaseIntoWork(work, 'dev')).conflicts).toEqual(['f.txt']);
     expect(readFileSync(join(work, 'f.txt'), 'utf8')).toContain('<<<<<<<');
     await repo.fetchFromWork(work, 'factory/issue-5');
     expect(await repo.isMerged('dev', 'factory/issue-5')).toBe(false);

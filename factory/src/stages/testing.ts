@@ -49,9 +49,9 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const base = baseBranchFor(ctx, item.labels);
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, workDir(ctx, issue));
   resetOutputs(home);
-  await mergeBase(ctx, issue, base, home);
+  const merged = await mergeBase(ctx, issue, base, home);
   await agentRound(ctx, issue, 'test', base);
-  await requireBaseMerged(ctx, issue, base);
+  await requireBaseMerged(ctx, issue, base, merged);
   let build = await ctx.repo.headHash(BRANCH(issue));
   const failure = await runChecks(ctx, issue, base, build);
   // The agent gets one round to fix what the factory's own checks found. A second failure stops the card.
@@ -74,14 +74,17 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
 
 // The base moved on since design cut the branch. Testing runs on the branch with the current base merged in,
 // so the committee plays what approve will merge, and conflicts reach the agent here instead of failing approve.
-async function mergeBase(ctx: Ctx, issue: number, base: string, home: string): Promise<void> {
+// Returns the base commit it merged.
+async function mergeBase(ctx: Ctx, issue: number, base: string, home: string): Promise<string> {
   await syncBase(ctx, base);
-  const conflicts = await ctx.repo.mergeBaseIntoWork(workDir(ctx, issue), base);
+  const { commit, conflicts } = await ctx.repo.mergeBaseIntoWork(workDir(ctx, issue), base);
   if (conflicts.length > 0) writeFileSync(`${home}/${OUT_DIR}/merge-conflicts.md`, `${conflicts.map((file) => `- ${file}`).join('\n')}\n`);
+  return commit;
 }
 
-async function requireBaseMerged(ctx: Ctx, issue: number, base: string): Promise<void> {
-  if (!(await ctx.repo.isMerged(base, BRANCH(issue)))) throw new Error(`The testing agent left the merge of ${base} into ${BRANCH(issue)} unfinished.`);
+// Checks the commit merged above, not the base branch. A parallel approval may move the base on meanwhile, and approve merges that newer base anyway.
+async function requireBaseMerged(ctx: Ctx, issue: number, base: string, commit: string): Promise<void> {
+  if (!(await ctx.repo.isMerged(commit, BRANCH(issue)))) throw new Error(`The testing agent left the merge of ${base} at ${commit.slice(0, 7)} into ${BRANCH(issue)} unfinished.`);
 }
 
 // approve() requires the Approval column. A failed merge puts the card back in Testing, so the stuck label the caller adds can be removed to retry.
