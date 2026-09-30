@@ -19,7 +19,7 @@ import { itemMass } from './mass';
 import { getResources } from './resources';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import { cancelJob, inCombat, startJob } from './jobs';
-import type { GridItem, Obstacle, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
+import type { GridItem, NpcActivity, Obstacle, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
 import { estimateCrashGeometry } from './crash-contact';
 import { walkLane } from './armor';
 import { canUseSite, townAt } from './sites';
@@ -472,6 +472,75 @@ export function finishTruckPickup(world: World, looter: Vehicle, pickup: TruckPi
   const item = target.items.find((it) => it.kind === 'part' && it.part.id === pickup.partId);
   if (item?.kind !== 'part') throw new Error('Truck part disappeared after validation');
   target.items = target.items.filter((it) => it.id !== item.id);
+}
+
+// ---- Who loots a target. One truck at a time loots a wreck, a pile or a knocked-out truck. Site stock stays shared.
+// Active work claims first: a job on the target, then an NPC parked at it in its loot goal's act phase. Only when
+// nobody works it, the player parked in reach holds it. The rule blocks starts, never work already running.
+
+// A non-site stock or a knocked-out truck.
+export function isLootTarget(world: World, targetId: string): boolean {
+  const stock = world.salvage.find((s) => s.id === targetId);
+  if (stock) return !isSiteStock(stock);
+  const truck = world.vehicles.find((v) => v.id === targetId);
+  return truck !== undefined && isKnockedOut(truck);
+}
+
+// The truck looting the target, or null. Never one for a site or a non-target.
+export function looterOf(world: World, targetId: string): Vehicle | null {
+  if (!isLootTarget(world, targetId)) return null;
+  const working = world.vehicles.find((v) => worksOn(v, targetId)) ?? world.vehicles.find((v) => actsOn(world, v, targetId));
+  if (working) return working;
+  const me = playerVehicle(world);
+  return inLootReach(world, me, targetId) ? me : null;
+}
+
+// The other truck looting the target, which keeps `looter` from starting there, or null.
+export function lootBlocker(world: World, looter: Vehicle, targetId: string): Vehicle | null {
+  const holder = looterOf(world, targetId);
+  return holder && holder.id !== looter.id ? holder : null;
+}
+
+export function lootBlockedError(world: World, blocker: Vehicle, targetId: string): string {
+  if (world.salvage.some((s) => s.id === targetId)) return `${blocker.name} is looting this wreck`;
+  if (world.vehicles.some((v) => v.id === targetId)) return `${blocker.name} is looting this truck`;
+  throw new Error(`No loot target ${targetId}`);
+}
+
+// The target the NPC holds the claim on, or null. Only its job and its top goal can name one.
+export function lootClaimedBy(world: World, npc: Vehicle): string | null {
+  const ids = [jobTarget(npc), npc.brain?.goals.at(-1)?.targetId ?? null];
+  return ids.find((id) => id !== null && looterOf(world, id)?.id === npc.id) ?? null;
+}
+
+function jobTarget(v: Vehicle): string | null {
+  const job = v.job;
+  if (job?.kind === 'search') return job.stockId;
+  const pickup = job?.kind === 'refit' ? job.pickup : null;
+  return pickup ? pickupSource(pickup) : null;
+}
+
+function pickupSource(pickup: RefitPickup): string {
+  return pickup.from === 'stock' ? pickup.stockId : pickup.vehicleId;
+}
+
+function worksOn(v: Vehicle, targetId: string): boolean {
+  return jobTarget(v) === targetId;
+}
+
+// Parked at the target in the act phase of a loot goal, like a looter between two refits.
+function actsOn(world: World, v: Vehicle, targetId: string): boolean {
+  const goal = v.brain?.goals.at(-1);
+  return goal !== undefined && isLootActOn(goal, targetId) && inLootReach(world, v, targetId);
+}
+
+function isLootActOn(goal: NpcActivity, targetId: string): boolean {
+  return (goal.kind === 'loot' || goal.kind === 'scavenge') && goal.targetId === targetId && goal.phase === 'act';
+}
+
+function inLootReach(world: World, v: Vehicle, targetId: string): boolean {
+  const stock = world.salvage.find((s) => s.id === targetId);
+  return stock ? canReachSalvage(v, stock) : canLootTruck(v, vehicleById(world, targetId));
 }
 
 // ---- NPC looters
