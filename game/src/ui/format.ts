@@ -99,22 +99,14 @@ function partName(world: World, vehicleId: string, partId: string): string {
   return p ? partDef(p.defId).name : 'part';
 }
 
-// A seen NPC's top goal and its reason, shown under its driver's name. A knocked-out driver pursues no goal.
+// A seen NPC's top goal as the player reads it, its reason as a sentence, shown under its driver's name. A knocked-out
+// driver pursues no goal.
 export function formatNpcActivity(world: World, vehicle: Vehicle): string | null {
   if (!vehicle.brain || !playerSees(world, vehicle.pos)) return null;
   if (isKnockedOut(vehicle)) return 'Knocked out';
   const activity = topGoal(vehicle);
   if (!activity) return null;
-  const label = targetLabel(world, activity.targetId);
-  return `${activity.kind}${label ? `: ${label}` : ''} — ${activity.reason}`;
-}
-
-// A goal target's name once the player sees the truck or has discovered the site.
-function targetLabel(world: World, targetId: string | null): string | null {
-  const target = world.vehicles.find((v) => v.id === targetId);
-  if (target) return playerSees(world, target.pos) ? target.name : null;
-  const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === targetId);
-  return site && world.player.discovered.includes(site.id) ? site.name : null;
+  return activity.reason.charAt(0).toUpperCase() + activity.reason.slice(1);
 }
 
 // "Traits: scavenger, scumbag" for an NPC. The hover panel shows it as one line. Traits stay hidden, so null,

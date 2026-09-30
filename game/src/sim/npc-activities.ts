@@ -16,6 +16,7 @@ import { corePart, freeCells, goodsCount, mountedParts } from './grid';
 import { addGoods, cargoRoom } from './inventory';
 import { cancelJob, inCombat } from './jobs';
 import { isFree } from './spawn';
+import { route } from './path';
 import {
   tradeOffers, canRob, decide, getCombatCondition, keepsWord, offersChoice, perceiveDanger, getKnownSite, getUpkeepReserve, haulGoods, patrolPoints, patrolTown, travelSitesAway,
   huntingGroundsAway, isHostileContact, isWeak, npcProfile, salvageSitesAway, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
@@ -308,7 +309,7 @@ function exploreGoal(world: World, vehicle: Vehicle): NpcActivity {
   const radius = vehicleStats(world, vehicle).radius;
   for (let i = 0; i < SPAWN.tries; i++) {
     const point = { x: randRange(world, radius, world.size - radius), y: randRange(world, radius, world.size - radius) };
-    if (isFree(world, point, radius, vehicle.id)) return createActivity('explore', null, point, 'explore the open map');
+    if (isFree(world, point, radius, vehicle.id)) return createActivity('explore', null, point, 'Explore');
   }
   return createActivity('wait', null, null, 'no free point to explore');
 }
@@ -1023,17 +1024,50 @@ function progressKey(v: Vehicle): string {
   return `${Math.round(v.pos.x)},${Math.round(v.pos.y)} ${goal} ${v.job ? `${v.job.kind}:${v.job.turnsLeft}` : '-'}`;
 }
 
+// The driver drops every goal, jumps clear and starts over with a fresh goal.
 function giveUp(world: World, v: Vehicle): void {
   const top = topGoal(v);
   world.events.push({ t: 'stall', vehicle: v.id, goal: top?.kind ?? null, reason: top?.reason ?? 'idle' });
-  if (top) popGoal(world, v, 'no progress for too long');
-  else exploreFromIdle(world, v);
+  v.brain!.goals = [];
+  logChange(world, v, top, 'no progress for too long');
+  jumpClear(world, v);
+  freshGoal(world, v);
   v.brain!.progress = { key: progressKey(v), since: world.turn };
 }
 
-function exploreFromIdle(world: World, v: Vehicle): void {
-  const explore = exploreGoal(world, v);
-  if (explore.kind === 'explore') pushGoal(world, v, explore);
+// What an empty stack would pick, but never a wait: a wait rolls explore instead.
+function freshGoal(world: World, v: Vehicle): void {
+  const next = hasSaleCargo(v) ? saleGoal(world, v, npcProfile(v)) : idleGoal(world, v);
+  const goal = next.kind === 'wait' ? exploreGoal(world, v) : next;
+  if (goal.kind !== 'wait') pushGoal(world, v, goal);
+}
+
+// A stuck driver out of the player's sight jumps to a free spot within NPC_BEHAVIOR.stallJump tiles that has a route
+// to its home, so a jam it cannot drive out of cannot hold it. The player never sees a truck vanish or appear.
+function jumpClear(world: World, v: Vehicle): void {
+  const player = vehicleById(world, world.player.vehicleId);
+  const home = npcHomeSite(v);
+  if (!home || canVehicleSee(world, player, v.pos)) return;
+  const spot = jumpSpot(world, v, player, nearestPad(home, v.pos));
+  if (!spot) return;
+  v.pos = spot;
+  v.speed = 0;
+  v.order = null;
+  v.trail = [];
+  delete v.brain!.farRoute;
+}
+
+function jumpSpot(world: World, v: Vehicle, player: Vehicle, pad: Vec): Vec | null {
+  const radius = vehicleStats(world, v).radius;
+  for (let i = 0; i < SPAWN.tries; i++) {
+    const angle = randRange(world, 0, Math.PI * 2);
+    const d = randRange(world, radius * 2, NPC_BEHAVIOR.stallJump);
+    const spot = { x: v.pos.x + Math.cos(angle) * d, y: v.pos.y + Math.sin(angle) * d };
+    if (!isFree(world, spot, radius, v.id) || canVehicleSee(world, player, spot)) continue;
+    const end = route(world, spot, pad, radius, [], v).at(-1) ?? spot;
+    if (dist(end, pad) <= RULES.arriveRadius * 2) return spot;
+  }
+  return null;
 }
 
 // A repair spot is driven to directly. Once there, the driver brakes.

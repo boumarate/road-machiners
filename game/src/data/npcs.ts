@@ -1134,6 +1134,10 @@ export const NPC_BEHAVIOR = {
   // new top goal. A crawling truck changes tile every turn, and every timed deal lapses in 60 turns or less, so 100
   // turns without progress is always a bug. See watchStalls() in src/sim/npc-activities.ts.
   stallTurns: 100,
+  // Tiles a stalled driver out of the player's sight may jump to get clear of whatever holds it. 20 tiles is about
+  // six turns of driving, enough to leave a pad, a pocket between props or a jam of trucks, and well inside the
+  // 80 tiles of gray vision, so the driver stays in the same area.
+  stallJump: 20,
   // Escort fee per tile of straight distance from the client to its destination. Bowl and Nose lie about 520 tiles
   // apart. A trader load of about 8 units earns about 50 a unit there, so about 400. 0.15 a tile makes that escort
   // cost about 78, a fifth of the load's profit.

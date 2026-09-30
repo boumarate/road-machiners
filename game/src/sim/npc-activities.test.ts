@@ -649,20 +649,35 @@ describe('stall watchdog', () => {
     }
   }
 
-  it('drops a goal with no progress for stallTurns turns and logs a stall', () => {
+  it('after stallTurns turns without progress clears the goals, jumps the truck nearby and gives it a fresh goal', () => {
     const { w, npc } = frozen();
+    const start = { ...npc.pos };
     run(w, NPC_BEHAVIOR.stallTurns);
-    expect(topGoal(npc)?.kind).toBe('travel');
+    expect(topGoal(npc)?.reason).toBe('test goal');
     run(w, 1);
-    expect(topGoal(npc)).toBeNull();
     expect(w.events).toContainEqual({ t: 'stall', vehicle: npc.id, goal: 'travel', reason: 'test goal' });
+    expect(npc.brain!.goals.some((g) => g.reason === 'test goal')).toBe(false);
+    expect(topGoal(npc)).not.toBeNull();
+    expect(topGoal(npc)!.kind).not.toBe('wait');
+    expect(dist(npc.pos, start)).toBeGreaterThan(0);
+    expect(dist(npc.pos, start)).toBeLessThanOrEqual(NPC_BEHAVIOR.stallJump);
   });
 
-  it('sends a driver idle for stallTurns turns to explore', () => {
+  it('gives a driver idle for stallTurns turns a goal', () => {
     const { w, npc } = createScavenger();
     run(w, NPC_BEHAVIOR.stallTurns + 1);
-    expect(topGoal(npc)?.kind).toBe('explore');
+    expect(topGoal(npc)).not.toBeNull();
     expect(w.events.some((e) => e.t === 'stall' && e.goal === null)).toBe(true);
+  });
+
+  it('never jumps a truck the player sees', () => {
+    const { w, npc } = frozen();
+    w.vehicles[0].pos = { x: npc.pos.x + 5, y: npc.pos.y };
+    refreshVision(w);
+    const start = { ...npc.pos };
+    run(w, NPC_BEHAVIOR.stallTurns + 1);
+    expect(w.events.some((e) => e.t === 'stall')).toBe(true);
+    expect(npc.pos).toEqual(start);
   });
 
   it('counts a new tile or a job turn as progress', () => {

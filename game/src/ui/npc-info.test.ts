@@ -11,14 +11,14 @@ import { PERK_NUMBERS } from '../data/skills';
 import { makePart } from '../sim/factory';
 import { addGoods, stowPart } from '../sim/inventory';
 
-it('shows a visible NPC reason without naming its unseen target', () => {
+it('shows a visible NPC goal as its reason in a sentence, without naming its target', () => {
   const w = emptyWorld();
   const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 32, y: 30 });
   const target = addVehicle(w, 'raiders', 'buggy', [], { x: 58, y: 58 });
   target.name = 'Hidden target';
   npc.brain = { ...npcBrain('scavenger', npc.pos, ['scavenger']), goals: [{ kind: 'flee', targetId: target.id, destination: target.pos, phase: 'travel', reason: 'avoid a costly fight' }] };
   refreshVision(w);
-  expect(formatNpcActivity(w, npc)).toBe('flee — avoid a costly fight');
+  expect(formatNpcActivity(w, npc)).toBe('Avoid a costly fight');
   npc.pos = { x: 58, y: 55 };
   expect(formatNpcActivity(w, npc)).toBeNull();
 });
@@ -38,7 +38,7 @@ it('shows a seen NPC goal and its reason, and logs goal changes only with the fu
   npc.brain = { ...npcBrain('scavenger', npc.pos, ['scavenger']), goals: [{ kind: 'flee', targetId: null, destination: null, phase: 'act', reason: 'avoid a costly fight' }] };
   refreshVision(w);
   const event: GameEvent = { t: 'activity', vehicle: npc.id, previous: null, activity: 'flee', reason: 'avoid a costly fight' };
-  expect(formatNpcActivity(w, npc)).toBe('flee — avoid a costly fight');
+  expect(formatNpcActivity(w, npc)).toBe('Avoid a costly fight');
   expect(eventText(w, event)).toBeNull();
   w.player.fullLog = true;
   expect(eventText(w, event)?.text).toContain('flee — avoid a costly fight');
