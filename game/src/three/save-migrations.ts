@@ -148,8 +148,8 @@ function withoutRefit(job: unknown): unknown {
   return (job as SavedJson | null)?.kind === 'refit' ? null : job;
 }
 
-// Step 2 to 3: a frozen copy of the explored packer, a base64 bitset with the least significant bit first.
-function packExplored_2_3(list: unknown[]): string {
+// Step 3 to 4: a frozen copy of the explored packer, a base64 bitset with the least significant bit first.
+function packExplored_3_4(list: unknown[]): string {
   const bytes = new Uint8Array(Math.ceil(list.length / 8));
   list.forEach((value, i) => {
     if (value !== 0 && value !== 1) throw new Error(`Explored tile ${i} is ${String(value)}, not 0 or 1`);
@@ -181,7 +181,7 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   // 3 to 4: player.explored becomes a base64 bitset.
   (world) => {
     const player = world.player as SavedJson;
-    return { ...world, player: { ...player, explored: packExplored_2_3(player.explored as unknown[]) } };
+    return { ...world, player: { ...player, explored: packExplored_3_4(player.explored as unknown[]) } };
   },
 ];
 
