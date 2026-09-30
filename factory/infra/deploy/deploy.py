@@ -68,13 +68,10 @@ server.shell(
     **as_factory,
 )
 
-# The next agent run starts a fresh proxy from the new image and its allowlist.
+# The running proxy stays, so a running agent keeps its way out. The next agent run replaces a proxy from an older image.
 server.shell(
-    name="Build the egress proxy image and drop the old proxy container",
-    commands=[
-        f"cd {CODE_DIR} && timeout 600 docker build -t {image}-proxy factory/docker/proxy",
-        "timeout 60 docker rm -f roam-factory-proxy >/dev/null 2>&1 || true",
-    ],
+    name="Build the egress proxy image",
+    commands=[f"cd {CODE_DIR} && timeout 600 docker build -t {image}-proxy factory/docker/proxy"],
     **as_factory,
 )
 

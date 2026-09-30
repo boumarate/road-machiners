@@ -14,7 +14,8 @@ function fakeRun(code = 0, setup: Record<string, { code: number; stdout?: string
   const run: Run = async (cmd, args, opts) => {
     calls.push({ cmd, args, opts });
     if (args[0] === 'run' && args[1] === '--rm') return { code, stdout: '', stderr: 'boom' };
-    const answer = setup[args.slice(0, 2).join(' ')] ?? { code: 0, stdout: args[0] === 'inspect' ? 'true' : '' };
+    const stdout = args[0] === 'inspect' ? 'true sha:1' : args[0] === 'image' ? 'sha:1\n' : '';
+    const answer = setup[args.slice(0, 2).join(' ')] ?? { code: 0, stdout };
     return { code: answer.code, stdout: answer.stdout ?? '', stderr: 'setup failed' };
   };
   return { run, calls };
@@ -62,7 +63,22 @@ describe('dockerContainer', () => {
   it('keeps a running proxy and an existing network as they are', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
-    expect(setupCalls(calls)).toEqual(['network inspect roam-factory-agents', 'inspect -f {{.State.Running}} roam-factory-proxy']);
+    expect(setupCalls(calls)).toEqual(['network inspect roam-factory-agents', 'image inspect -f {{.Id}} img:1-proxy', 'inspect -f {{.State.Running}} {{.Image}} roam-factory-proxy']);
+  });
+
+  it('replaces a running proxy from an older image before the agent starts', async () => {
+    const { run, calls } = fakeRun(0, { 'inspect -f': { code: 0, stdout: 'true sha:0' } });
+    await dockerContainer(run, cfg).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
+    const setup = setupCalls(calls);
+    expect(setup).toContain('rm -f roam-factory-proxy');
+    expect(setup).toContain('run -d --restart unless-stopped --name roam-factory-proxy --network roam-factory-agents img:1-proxy');
+    expect(calls.indexOf(runCall(calls))).toBe(calls.length - 1);
+  });
+
+  it('fails loud when the proxy image is missing', async () => {
+    const { run, calls } = fakeRun(0, { 'image inspect': { code: 1 } });
+    await expect(dockerContainer(run, cfg).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' })).rejects.toThrow('inspect image img:1-proxy');
+    expect(calls.some((call) => call.args[1] === '--rm')).toBe(false);
   });
 
   it('creates the internal network and starts the proxy when missing', async () => {

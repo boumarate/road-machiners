@@ -29,13 +29,15 @@ function networkArgs(open: boolean): string[] {
 }
 
 // Creates the internal network and the proxy container when they are missing. Throws when either cannot start.
+// A proxy from an older image is replaced here, before an agent starts, so a deploy never cuts off a running agent.
 async function ensureProxy(run: Run, cfg: FactoryConfig): Promise<void> {
   const docker = async (what: string, args: string[]) => must(await run('docker', args), what);
   if ((await run('docker', ['network', 'inspect', AGENT_NETWORK])).code !== 0) {
     await docker(`create network ${AGENT_NETWORK}`, ['network', 'create', '--internal', AGENT_NETWORK]);
   }
-  const state = await run('docker', ['inspect', '-f', '{{.State.Running}}', PROXY_NAME]);
-  if (state.code === 0 && state.stdout.trim() === 'true') return;
+  const image = (await docker(`inspect image ${cfg.image}-proxy`, ['image', 'inspect', '-f', '{{.Id}}', `${cfg.image}-proxy`])).trim();
+  const state = await run('docker', ['inspect', '-f', '{{.State.Running}} {{.Image}}', PROXY_NAME]);
+  if (state.code === 0 && state.stdout.trim() === `true ${image}`) return;
   await run('docker', ['rm', '-f', PROXY_NAME]);
   await docker(`start ${PROXY_NAME}`, ['run', '-d', '--restart', 'unless-stopped', '--name', PROXY_NAME, '--network', AGENT_NETWORK, `${cfg.image}-proxy`]);
   await docker(`connect ${PROXY_NAME} to the default bridge`, ['network', 'connect', 'bridge', PROXY_NAME]);
