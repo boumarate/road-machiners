@@ -39,7 +39,37 @@ function armorTouched(c: ChassisDef, cells: Cell[]): Set<string> {
 // The hood hole of these engines lies on the row behind the front armor row, so the front gap cannot exist.
 const FRONT_ENGINE: readonly string[] = ['longbed', 'tractor'];
 
+// Chassis whose cab shares a column with a wheel, with the reason. A stale entry fails the test.
+const CAB_BESIDE_WHEELS: Record<string, string> = {
+  buggy: 'A small raider runabout. Its open 1x1 seat is not tall, and the grid has only 4 inner columns.',
+  convertible: 'A small car with 5 inner columns. Clearing the wheels needs a wider grid with 7 more deck cells.',
+};
+
+const columns = (cells: Cell[]) => new Set(cells.map((cell) => cell.x));
+
 describe('chassis grids', () => {
+  it('keeps every cab out of the wheel columns', () => {
+    for (const [id, c] of Object.entries(CHASSIS)) {
+      const wheels = columns(coreCells(c, 'wheel'));
+      const shared = [...columns(coreCells(c, 'cab'))].some((x) => wheels.has(x));
+      expect(shared, id).toBe(id in CAB_BESIDE_WHEELS);
+    }
+  });
+
+  it('puts every transmission in or next to a middle column', () => {
+    for (const [id, c] of Object.entries(CHASSIS)) {
+      const inner = c.layout[0].length - 2;
+      const middle = inner % 2 ? [1 + (inner - 1) / 2] : [inner / 2, inner / 2 + 1];
+      const near = coreCells(c, 'transmission').some((cell) => middle.some((m) => Math.abs(cell.x - m) <= 1));
+      expect(near, id).toBe(true);
+    }
+  });
+
+  it('keeps the scout worth what it was before its grid gained a column', () => {
+    // 800 base plus the old modifier of 6 deck cells and 10 armor cells; the value of the old grid.
+    expect(CHASSIS.scout.value).toBe(2444);
+  });
+
   it('keeps every armor column outside the model and every armor row full width', () => {
     for (const [id, c] of Object.entries(CHASSIS)) {
       const w = c.layout[0].length;

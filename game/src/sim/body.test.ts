@@ -107,13 +107,13 @@ describe('grid projection', () => {
   });
 
   it('rejects a cell outside the grid', () => {
-    expect(() => cellCenter('scout', 7, 0)).toThrow(/outside/);
+    expect(() => cellCenter('scout', 8, 0)).toThrow(/outside/);
   });
 
   it('finds the lanes a stretch of the edge crosses, clamped to the grid', () => {
     const { half } = bodyOf('scout');
-    expect(lanesAt('scout', 'column', -0.1, 0.1)).toEqual([3]);
-    expect(lanesAt('scout', 'column', -half.z - 1, half.z + 1)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(lanesAt('scout', 'column', -0.1, 0.1)).toEqual([3, 4]);
+    expect(lanesAt('scout', 'column', -half.z - 1, half.z + 1)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
     expect(lanesAt('scout', 'row', half.x - 0.01, half.x - 0.02)).toEqual([0]);
     expect(lanesAt('scout', 'row', 100, -100)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
   });
