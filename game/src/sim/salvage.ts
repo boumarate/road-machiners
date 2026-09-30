@@ -271,7 +271,7 @@ function dropOnPile(world: World, vehicle: Vehicle, items: GridItem[], id: strin
 // Each drop restarts the pile timer. A player pile holds the player's own items, so it counts as searched and pays
 // no search XP.
 function stampPile(world: World, byPlayer: boolean, stock: SalvageStock): { stock: SalvageStock; pile: Pile } {
-  const pile: Pile = { until: world.turn + SALVAGE.pileTurns, fromPlayer: byPlayer, basis: stock.pile?.basis ?? {} };
+  const pile: Pile = { until: world.turn + SALVAGE.pileTurns, fromPlayer: byPlayer, basis: stock.pile?.basis ?? {}, claim: stock.pile?.claim };
   stock.pile = pile;
   if (byPlayer && !world.player.scavenged.includes(stock.id)) world.player.scavenged.push(stock.id);
   return { stock, pile };
@@ -286,8 +286,38 @@ function dropGood(world: World, { stock, pile }: { stock: SalvageStock; pile: Pi
   pile.basis[good] = ((pile.basis[good] ?? 0) * count + paid) / (count + 1);
 }
 
-// Piles that ran out of time or loot leave the ground.
+export function claimPile(world: World, stock: SalvageStock, claimant: Vehicle): void {
+  if (!stock.pile) throw new Error(`Cannot claim ${stock.id}, it is no pile`);
+  stock.pile.claim = { by: claimant.id, until: world.turn + SALVAGE.claimTurns, warned: [] };
+}
+
+function claimHolds(world: World, stock: SalvageStock, claimant: Vehicle | undefined): claimant is Vehicle {
+  const claim = stock.pile?.claim;
+  if (!claim || !claimant || world.turn >= claim.until) return false;
+  return !isKnockedOut(claimant) && wantsLoot(claimant, stock.id);
+}
+
+function wantsLoot(vehicle: Vehicle, stockId: string): boolean {
+  return !!vehicle.brain && vehicle.brain.goals.some((goal) => goal.kind === 'loot' && goal.targetId === stockId);
+}
+
+// The claimant of a pile while its claim holds.
+export function claimantOf(world: World, stock: SalvageStock): Vehicle | null {
+  const claimant = world.vehicles.find((v) => v.id === stock.pile?.claim?.by);
+  return claimHolds(world, stock, claimant) ? claimant : null;
+}
+
+export function holdsClaim(world: World, vehicleId: string): boolean {
+  return world.salvage.some((stock) => stock.pile?.claim?.by === vehicleId && claimantOf(world, stock));
+}
+
+export function backedOff(stock: SalvageStock, vehicleId: string): boolean {
+  return !!stock.pile?.claim?.warned.includes(vehicleId);
+}
+
+// Piles that ran out of time or loot leave the ground, and claims that no longer hold end.
 export function clearPiles(world: World): void {
+  for (const stock of world.salvage) if (stock.pile?.claim && !claimantOf(world, stock)) delete stock.pile.claim;
   removeStocks(world, new Set(world.salvage.filter((stock) => stock.pile && (world.turn >= stock.pile.until || !hasSalvage(stock))).map((stock) => stock.id)));
 }
 

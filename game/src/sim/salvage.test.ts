@@ -3,7 +3,7 @@ import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
 import { GOODS } from '../data/goods';
 import { TIME } from '../data/time';
-import { addVehicle, emptyWorld, testDrive } from './testkit';
+import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import { resolveDestroyed, wreckVehicle } from './combat';
 import { addGoods, dumpItem, removeGoods } from './inventory';
 import { corePart, findSpot, goodsCount, gridOf, mountedParts } from './grid';
@@ -11,7 +11,7 @@ import { partDef } from '../data/parts';
 import { chassisDef } from '../data/chassis';
 import { BREAKABLE, RULES } from '../data/rules';
 import { takeAllLoot, takeLoot, takeStores, canScavenge, scavenge } from './locations';
-import { breakProp, canTakeAny, clearPiles, collectSalvage, createCargoSalvage, hasSalvage, initializeSalvage, isRoadWreck, renewSalvage, salvageInRange, salvageUnits, siteLootTable } from './salvage';
+import { breakProp, canTakeAny, claimPile, claimantOf, clearPiles, collectSalvage, createCargoSalvage, hasSalvage, initializeSalvage, isRoadWreck, renewSalvage, salvageInRange, salvageUnits, siteLootTable } from './salvage';
 import { SHOPS } from '../data/market';
 import type { Obstacle, SalvageStock, World } from './types';
 import { propReach } from './mapgen';
@@ -171,7 +171,59 @@ describe('finite salvage', () => {
   });
 
   it('cannot recreate convoy loot by clearing player discovery state', () => {
-    const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
+    describe('pile claims', () => {
+  function claimed() {
+    const w = emptyWorld({ x: 30, y: 30 });
+    w.salvage = [];
+    const victim = addVehicle(w, 'scavengers', 'scout', [], { x: 30, y: 32 });
+    addGoods(w, victim, 'scrap', 2);
+    const claimant = addVehicle(w, 'raiders', 'scout', [], { x: 34, y: 30 });
+    claimant.brain = npcBrain('raider', claimant.pos, []);
+    const pile = createCargoSalvage(w, victim, 1);
+    claimant.brain.goals.push({ kind: 'loot', targetId: pile.id, destination: { ...pile.pos }, phase: 'travel', reason: 'test' });
+    claimPile(w, pile, claimant);
+    return { w, pile, claimant };
+  }
+
+  it('holds while the claimant keeps its loot goal', () => {
+    const { w, pile, claimant } = claimed();
+    clearPiles(w);
+    expect(claimantOf(w, pile)).toBe(claimant);
+  });
+
+  it('lapses when the loot goal goes', () => {
+    const { w, pile, claimant } = claimed();
+    claimant.brain!.goals = [];
+    clearPiles(w);
+    expect(pile.pile!.claim).toBeUndefined();
+  });
+
+  it('lapses when the claimant is knocked out', () => {
+    const { w, pile, claimant } = claimed();
+    claimant.defeat = { phase: 'out' } as typeof claimant.defeat;
+    clearPiles(w);
+    expect(pile.pile!.claim).toBeUndefined();
+  });
+
+  it('lapses when the claimant leaves the world', () => {
+    const { w, pile, claimant } = claimed();
+    w.vehicles = w.vehicles.filter((v) => v !== claimant);
+    clearPiles(w);
+    expect(pile.pile!.claim).toBeUndefined();
+  });
+
+  it('lapses at its time limit', () => {
+    const { w, pile } = claimed();
+    w.turn += SALVAGE.claimTurns - 1;
+    clearPiles(w);
+    expect(pile.pile!.claim).toBeDefined();
+    w.turn += 1;
+    clearPiles(w);
+    expect(pile.pile!.claim).toBeUndefined();
+  });
+});
+
+const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
     const w = emptyWorld({ ...sitePads(convoy)[0] });
     // Keep the built-ins so the truck still runs, but clear cargo so the search has room to fill.
     w.vehicles[0].items = w.vehicles[0].items.filter((item) => item.kind === 'part' && partDef(item.part.defId).kind === 'core');
