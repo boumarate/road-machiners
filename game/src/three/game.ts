@@ -120,6 +120,8 @@ export class Game {
   private readonly fog: FogView;
   private readonly lastSeen = new Map<string, number>(); // vehicle id to the turn the player last saw it
   private readonly shade: ShadeView;
+  // A turn step changed what the UI shows. advanceTurn refreshes it once at its end.
+  private uiStale = false;
   private readonly weather: WeatherView;
   private readonly labels: Labels;
   private readonly zones = new ZonesView();
@@ -345,6 +347,7 @@ export class Game {
   }
 
   private refreshUi(): void {
+    this.uiStale = false;
     this.menu.refresh();
     const me = playerVehicle(this.world);
     if (
@@ -657,7 +660,7 @@ export class Game {
     if (!towed) this.playDriveSound(playback.result);
     this.phase = "Moving";
     this.path.clear();
-    this.refreshUi();
+    this.uiStale = true;
   }
 
   // Movement is over: adopt the physics state, fire the volley.
@@ -690,7 +693,7 @@ export class Game {
     // A finished search opens the loot beside the truck's grid.
     const searched = this.world.events.find((e) => e.t === "searched");
     if (searched) this.inventory.openLoot(searched.stock);
-    this.refreshUi();
+    this.uiStale = true;
   }
 
   private finishPlayback(): void {
@@ -703,7 +706,9 @@ export class Game {
     this.pending = null;
     if (pending) this.runRescue(pending);
     this.hud.flushHorn();
-    this.refreshUi();
+    // Queued here, since refreshUi skips the shade once the next turn has begun.
+    this.shade.update(this.world);
+    this.uiStale = true;
   }
 
   // Tow and beacon buttons stay live while turns run on their own. A press during playback waits for its end.
@@ -895,6 +900,11 @@ export class Game {
     this.path.set(turns, first, course, !v.direct);
   }
 
+  // One refresh for everything this frame changed, so a frame that ends a turn and begins the next refreshes once.
+  private flushUi(): void {
+    if (this.uiStale) this.refreshUi();
+  }
+
   private advanceTurn(now: number): { step: number | null; speed: number } {
     if (this.modalOpen() || this.isEditingControl() || document.hidden)
       this.travel.pause();
@@ -910,6 +920,7 @@ export class Game {
       this.updateTravel();
     }
     this.travel.prepareNext(this.world, this.anim, now);
+    this.flushUi();
     return { step, speed };
   }
 
@@ -948,11 +959,8 @@ export class Game {
     // At dawn lamps switch off one by one, so the night lights stay until the last one is off.
     this.nightLights.update(!sunAt(this.world.turn) || lit.some((v) => v.on), truck, lit);
     const at = playerVehicle(this.world).pos;
-    this.stormTint.style.display = this.world.weather.some(
-      (e) => e.kind === "storm" && dist(at, e.pos) <= e.radius,
-    )
-      ? ""
-      : "none";
+    const stormy = this.world.weather.some((e) => e.kind === "storm" && dist(at, e.pos) <= e.radius);
+    this.stormTint.style.display = stormy ? "" : "none";
     this.fx.tick(dt * speed);
     this.playPanelSounds();
     this.updateLoops();
@@ -976,11 +984,7 @@ export class Game {
     live.from = at;
     live.visible = visibleTiles(this.world, at);
     for (const t of live.visible) live.explored[t] = 1;
-    const player = {
-      ...this.world.player,
-      visible: [...live.visible].sort((a, b) => a - b),
-      explored: live.explored,
-    };
+    const player = { ...this.world.player, visible: [...live.visible].sort((a, b) => a - b), explored: live.explored };
     timed("fog", () => this.fog.update({ ...this.world, player }));
   }
 
