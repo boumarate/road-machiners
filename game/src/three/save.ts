@@ -182,3 +182,9 @@ export class SaveHold {
     if (!this.tainted) this.errors = false;
   }
 }
+
+export const SAVE_HELD_NOTE = 'Not saved: an error happened since the last good turn.';
+
+export function turnFailedNote(err: unknown): string {
+  return `The turn failed and did not play: ${err instanceof Error ? err.message : String(err)}. The game was not saved.`;
+}

@@ -156,6 +156,12 @@ export class Travel {
     return true;
   }
 
+  // A failed turn stops every automatic turn, so the same turn is not retried each frame.
+  abandon(world: World): void {
+    this.stopAuto(world);
+    this.pause();
+  }
+
   release(): void {
     this.pressedAt = null;
   }
