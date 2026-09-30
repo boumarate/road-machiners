@@ -27,7 +27,7 @@ import { contactsOf, hearsBeacon } from './detect';
 import { inCombat } from './jobs';
 import { route, routeLength } from './path';
 import { busyWithFight, decide, getKnownSite, getUpkeepReserve, isWeak, npcProfile } from './npc-decisions';
-import { placeBase } from './npc-activities';
+import { placeBase, popGoal } from './npc-activities';
 import { skillEffect } from './progress';
 import { canUseSite, nearestPad, type Site } from './sites';
 import { addState, endState, stateOf, towData, towPromiseData } from './states';
@@ -362,7 +362,9 @@ export function dropTow(world: World, tow: NpcState, reason: DropReason): void {
 export function dropStrandedTowers(world: World): void {
   for (const tow of hitchedTows(world)) {
     const tower = world.vehicles.find((v) => v.id === tow.holder);
-    if (tower && isStranded(world, tower)) dropTow(world, tow, 'stranded');
+    if (!tower || !isStranded(world, tower)) continue;
+    dropTow(world, tow, 'stranded');
+    if (tower.brain && popGoal(world, tower, 'cannot drive').kind !== 'tow') throw new Error(`${tower.id} held a tow without a tow goal on top`);
   }
 }
 
