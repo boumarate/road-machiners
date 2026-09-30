@@ -160,6 +160,8 @@ function packExplored_3_4(list: unknown[]): string {
   return btoa(binary);
 }
 
+const HANDOVER_TURNS_5_6 = 1;
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -195,6 +197,14 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
       Object.entries(world.shops as Record<string, SavedJson>).map(([id, shop]) => [id, { ...shop, contracts: (shop.contracts as SavedJson[]).map(windowed) }]),
     );
     return { ...world, player: { ...player, contracts: (player.contracts as SavedJson[]).map(windowed) }, shops };
+  },
+  // 5 to 6: an aid deal waits for the player's [E] handover, one turn of work.
+  (world) => {
+    const handover = (s: SavedJson): SavedJson => {
+      const data = s.data as SavedJson;
+      return data.kind === 'aid' ? { ...s, data: { ...data, started: false, work: HANDOVER_TURNS_5_6, workLeft: HANDOVER_TURNS_5_6 } } : s;
+    };
+    return { ...world, states: (world.states as SavedJson[]).map(handover) };
   },
 ];
 

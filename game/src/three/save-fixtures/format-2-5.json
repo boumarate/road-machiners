@@ -1,0 +1,34 @@
+{
+  "turn": 1000,
+  "states": [
+    {
+      "id": "s1",
+      "kind": "aid",
+      "holder": "npc1",
+      "other": "player",
+      "turnsLeft": 12,
+      "born": 990,
+      "data": {
+        "kind": "aid",
+        "giver": "player",
+        "fuel": 5,
+        "supplies": 0,
+        "price": 10,
+        "free": false,
+        "agreed": true
+      }
+    },
+    {
+      "id": "s2",
+      "kind": "feud",
+      "holder": "npc2",
+      "other": "player",
+      "turnsLeft": 30,
+      "born": 980,
+      "data": {
+        "kind": "feud",
+        "robbery": false
+      }
+    }
+  ]
+}

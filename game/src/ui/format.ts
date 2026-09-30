@@ -66,8 +66,23 @@ function itemName(it: GridItem): string {
 export function workLabel(world: World, v: Vehicle, work: Work): string {
   if (work.from === 'job') return jobLabel(world, v, work.job);
   const s = work.state;
+  if (s.kind === 'aid') return aidWorkLabel(world, v, s);
   if (s.kind !== 'patch') throw new Error(`No work label for a ${s.kind} state`);
   return s.holder === v.id ? `Patch ${npcName(vehicleById(world, s.other))}` : `Patched by ${npcName(vehicleById(world, s.holder))}`;
+}
+
+// The goods of an aid deal in words, like "12 L of fuel and 3 supplies".
+export function aidGoods(s: NpcState): string {
+  const data = aidData(s);
+  return fillLine('{aid}', { aid: { kind: 'aid', fuel: data.fuel, supplies: data.supplies } });
+}
+
+// The handover as the truck `v` sees it: who gives what to whom.
+function aidWorkLabel(world: World, v: Vehicle, s: NpcState): string {
+  const npc = npcName(vehicleById(world, s.holder));
+  const playerGives = aidData(s).giver === 'player';
+  if (v.id === s.holder) return playerGives ? `Taking ${aidGoods(s)} from you` : `Giving you ${aidGoods(s)}`;
+  return playerGives ? `Giving ${aidGoods(s)} to ${npc}` : `Taking ${aidGoods(s)} from ${npc}`;
 }
 
 // The share of the work's turns already done, from 0 to 1.
@@ -199,7 +214,7 @@ const STATE_ENDED_TEXT: Partial<Record<StateKindId, Record<StateEnding, ((holder
   },
   // A fulfilled deal logs through its aid event.
   aid: {
-    expired: (holder) => ({ text: `The fuel deal with ${holder} ran out: you never met.`, cls: 'dim' }),
+    expired: (holder) => ({ text: `The fuel deal with ${holder} ran out.`, cls: 'dim' }),
     fulfilled: null,
     broken: (holder) => ({ text: `The fuel deal with ${holder} is off.`, cls: 'dim' }),
   },
@@ -347,6 +362,12 @@ function aidText(world: World, e: Extract<GameEvent, { t: 'aid' }>): LogLine {
   return { text: `${vehicleName(world, e.giver)} gives you ${moved}.`, cls: 'good' };
 }
 
+function aidStartedText(world: World, e: Extract<GameEvent, { t: 'aidStarted' }>): LogLine {
+  const me = world.player.vehicleId;
+  if (e.giver === me) return { text: `You start handing ${vehicleName(world, e.receiver)} the goods.`, cls: '' };
+  return { text: `${vehicleName(world, e.giver)} starts handing you the goods.`, cls: '' };
+}
+
 function sayText(world: World, e: Extract<GameEvent, { t: 'say' }>): LogLine {
   const cls = e.speaker === world.player.vehicleId ? 'dim' : '';
   return { text: `${vehicleName(world, e.speaker)}: “${fillLine(e.text, e.vars)}”`, cls };
@@ -431,6 +452,7 @@ const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => st
   towDropped: (e) => [e.by, e.client],
   plea: (e) => [e.from, e.to],
   escortPaid: (e) => [e.by, e.client],
+  aidStarted: (e) => [e.giver, e.receiver],
   escortHired: (e) => [e.by, e.client],
   escortRefused: (e) => [e.by, e.client],
 };
@@ -525,6 +547,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   honk: honkText,
   patch: patchText,
   aid: aidText,
+  aidStarted: aidStartedText,
   towOffer: towOfferText,
   towHitched: towHitchedText,
   towDone: towDoneText,

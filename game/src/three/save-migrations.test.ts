@@ -7,6 +7,7 @@ import FORMAT_2_1 from './save-fixtures/format-2-1.json';
 import FORMAT_2_2 from './save-fixtures/format-2-2.json';
 import FORMAT_2_3 from './save-fixtures/format-2-3.json';
 import FORMAT_2_4 from './save-fixtures/format-2-4.json';
+import FORMAT_2_5 from './save-fixtures/format-2-5.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { packExplored } from './save';
 import { MIGRATIONS } from './save-migrations';
@@ -145,5 +146,14 @@ describe('save migration 4 to 5', () => {
     expect(strip(next.shops.nose.contracts)).toEqual(FORMAT_2_4.shops.nose.contracts);
     expect(next.turn).toBe(FORMAT_2_4.turn);
     expect(next.player.money).toBe(FORMAT_2_4.player.money);
+  });
+});
+
+describe('save migration 5 to 6', () => {
+  it('gives every aid state an unstarted one-turn handover and leaves other states alone', () => {
+    const next = MIGRATIONS[5](FORMAT_2_5) as { states: { data: object }[] };
+
+    expect(next.states[0].data).toEqual({ ...FORMAT_2_5.states[0].data, started: false, work: 1, workLeft: 1 });
+    expect(next.states[1]).toEqual(FORMAT_2_5.states[1]);
   });
 });

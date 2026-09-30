@@ -3,7 +3,7 @@ import { ECONOMY } from '../data/goods';
 import { AID } from '../data/npc-behavior';
 import { NPC_UPKEEP, NPCS, STATE_TURNS } from '../data/npcs';
 import { RULES } from '../data/rules';
-import { agreeAid, aidPrice, onNeedySeen, playerAid, spareAid, wantedAid } from './aid';
+import { agreeAid, aidPrice, aidWork, onNeedySeen, playerAid, readyAid, spareAid, startAid, wantedAid } from './aid';
 import { playerVehicle } from './damage';
 import { truckSupplyForSale } from './economy';
 import { makePart } from './factory';
@@ -12,15 +12,17 @@ import { stowPart } from './inventory';
 import { vehicleValue } from './market';
 import { fuelReserveFor, thinkNpc, topGoal } from './npc-activities';
 import { bodyCondition, optionWeights } from './npc-decisions';
-import { addState, aidData, stateOf } from './states';
+import { addState, aidData, stateOf, workOf } from './states';
 import { fuelCap, suppliesCap } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls, testDrive , startCombat } from './testkit';
 import type { TraitId } from '../data/npcs';
 import type { GameEvent, Vehicle, World } from './types';
 import { maxHp } from './wear';
-import { endTurn, update } from './world';
+import { autoRuns, endTurn, update } from './world';
 
 type Terms = Parameters<typeof agreeAid>[2];
+
+const HANDOVER = { started: false, work: 1, workLeft: 1 };
 
 // A driver with full tanks and 500 money, the given distance east of a parked player. No other trucks spawn.
 function withDriver(x: number, traits: TraitId[] = ['trader']): { w: World; npc: Vehicle } {
@@ -36,9 +38,16 @@ function withDriver(x: number, traits: TraitId[] = ['trader']): { w: World; npc:
 
 const find = (w: World, id: string) => w.vehicles.find((v) => v.id === id)!;
 
-function runUntil(w: World, max: number, done: (w: World) => boolean): { w: World; events: GameEvent[] } {
+// Plays turns like a player who presses [E] the moment a handover is ready, unless `press` is false.
+function runUntil(w: World, max: number, done: (w: World) => boolean, press = true): { w: World; events: GameEvent[] } {
   const events: GameEvent[] = [];
   for (let i = 0; i < max && !done(w); i++) {
+    if (w.player.call) w = update(w, (d) => { d.player.call = null; }); // a hail on arrival is dismissed
+    const ready = press ? readyAid(w) : null;
+    if (ready) {
+      w = startAid(w, ready.holder);
+      events.push(...w.events);
+    }
     w = endTurn(w, testDrive);
     events.push(...w.events);
   }
@@ -61,15 +70,22 @@ function poorLowPlayer(w: World): void {
 }
 
 describe('aid deal', () => {
-  it('moves a player gift only once both trucks are parked in reach, and only once', () => {
+  it('moves a player gift only after the player starts the handover, and only once', () => {
     const { w: start, npc } = withDriver(60);
     start.vehicles.find((v) => v.id === npc.id)!.resources!.fuel = fuelCap(npc) * 0.1;
     const fuel0 = start.player.fuel;
     let w = agreed(start, npc.id, playerGift(5));
     w = endTurn(w, testDrive);
     expect(w.player.fuel).toBe(fuel0);
-    expect(aidOpen(w, npc.id)).toBe(true);
-    const run = runUntil(w, 40, (x) => !aidOpen(x, npc.id));
+    const parked = runUntil(w, 40, (x) => readyAid(x) !== null, false);
+    expect(readyAid(parked.w)).not.toBeNull();
+    const idle = runUntil(parked.w, 3, () => false, false);
+    expect(idle.w.player.fuel).toBe(fuel0);
+    expect(aidOpen(idle.w, npc.id)).toBe(true);
+    const started = startAid(idle.w, npc.id);
+    expect(started.events).toContainEqual({ t: 'aidStarted', giver: started.player.vehicleId, receiver: npc.id });
+    expect(started.player.fuel).toBe(fuel0);
+    const run = runUntil(started, 3, (x) => !aidOpen(x, npc.id));
     expect(run.events).toContainEqual(expect.objectContaining({ t: 'stateEnded', ending: 'fulfilled' }));
     expect(aidEvents(run.events)).toEqual([{ t: 'aid', giver: run.w.player.vehicleId, receiver: npc.id, fuel: 5, supplies: 0, paid: 0 }]);
     expect(run.w.player.fuel).toBe(fuel0 - 5);
@@ -132,7 +148,7 @@ describe('aid deal', () => {
     const other = addVehicle(w, 'traders', 'scout', [], { x: 60, y: 60 });
     other.brain = npcBrain('trader', other.pos, ['trader']);
     expect(optionWeights(w, npc, 'aidAsked', w.player.vehicleId, null)).toHaveProperty('give');
-    addState(w, 'aid', other.id, w.player.vehicleId, { kind: 'aid', giver: 'npc', fuel: 1, supplies: 0, price: 0, free: true, agreed: false });
+    addState(w, 'aid', other.id, w.player.vehicleId, { kind: 'aid', giver: 'npc', fuel: 1, supplies: 0, price: 0, free: true, agreed: false, ...HANDOVER });
     expect(optionWeights(w, npc, 'aidAsked', w.player.vehicleId, null)).not.toHaveProperty('give');
   });
 
@@ -192,7 +208,7 @@ describe('aid deal', () => {
     const { w: start, npc } = withDriver(80);
     const fuel0 = start.player.fuel;
     // The state alone, with no meet goal, so the driver never comes.
-    const w0 = update(start, (w) => { addState(w, 'aid', npc.id, w.player.vehicleId, { kind: 'aid', ...playerGift(5), agreed: true }); });
+    const w0 = update(start, (w) => { addState(w, 'aid', npc.id, w.player.vehicleId, { kind: 'aid', ...playerGift(5), agreed: true, ...HANDOVER }); });
     const run = runUntil(w0, STATE_TURNS.aid! + 2, (x) => !aidOpen(x, npc.id));
     expect(run.events).toContainEqual(expect.objectContaining({ t: 'stateEnded', ending: 'expired' }));
     expect(aidEvents(run.events)).toEqual([]);
@@ -299,7 +315,7 @@ describe('unprompted aid offer', () => {
     const { w, npc } = needyScene();
     const other = addVehicle(w, 'traders', 'scout', [], { x: 60, y: 60 });
     other.brain = npcBrain('trader', other.pos, ['trader']);
-    addState(w, 'aid', other.id, w.player.vehicleId, { kind: 'aid', giver: 'npc', fuel: 1, supplies: 0, price: 0, free: true, agreed: false });
+    addState(w, 'aid', other.id, w.player.vehicleId, { kind: 'aid', giver: 'npc', fuel: 1, supplies: 0, price: 0, free: true, agreed: false, ...HANDOVER });
     onNeedySeen(w, npc);
     expect(stateOf(w, 'aid', npc.id, w.player.vehicleId)).toBeNull();
     expect(npc.brain!.noticed).not.toHaveProperty(`needySeen:${w.player.vehicleId}`);
@@ -332,5 +348,95 @@ describe('what a low driver asks for', () => {
     expect(wanted.supplies).toBeGreaterThan(0);
     npc.resources!.supplies = suppliesCap(npc);
     expect(wantedAid(w, npc)).toEqual({ fuel: 0, supplies: 0 });
+  });
+});
+
+describe('aid handover', () => {
+  // An agreed player gift with both trucks parked side by side.
+  function parkedDeal(): { w: World; npc: Vehicle } {
+    const { w: start, npc } = withDriver(34);
+    find(start, npc.id).resources!.fuel = 1;
+    return { w: agreed(start, npc.id, playerGift(5)), npc };
+  }
+
+  it('startAid throws without a deal, for a pending offer, apart, twice, or in combat', () => {
+    const { w: start, npc } = withDriver(34);
+    expect(() => startAid(start, npc.id)).toThrow();
+    const pending = update(start, (d) => { addState(d, 'aid', npc.id, d.player.vehicleId, { kind: 'aid', giver: 'npc', fuel: 1, supplies: 0, price: 0, free: true, agreed: false, ...HANDOVER }); });
+    expect(() => startAid(pending, npc.id)).toThrow();
+    const far = withDriver(80);
+    expect(() => startAid(agreed(far.w, far.npc.id, playerGift(5)), far.npc.id)).toThrow();
+    const { w } = parkedDeal();
+    const started = startAid(w, npc.id);
+    expect(() => startAid(started, npc.id)).toThrow();
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 24, y: 30 });
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    startCombat(w, raider, w.vehicles[0]);
+    expect(() => startAid(w, npc.id)).toThrow();
+  });
+
+  it('shows work for both trucks only while started and parked together', () => {
+    const { w, npc } = parkedDeal();
+    expect(workOf(w, playerVehicle(w))).toBeNull();
+    const started = startAid(w, npc.id);
+    const s = playerAid(started)!;
+    expect(aidWork(started, s)).toEqual({ turnsLeft: 1, total: 1 });
+    expect(workOf(started, playerVehicle(started))).toMatchObject({ from: 'state', turnsLeft: 1 });
+    expect(workOf(started, find(started, npc.id))).toMatchObject({ from: 'state', turnsLeft: 1 });
+    const apart = update(started, (d) => { playerVehicle(d).pos = { x: 10, y: 30 }; });
+    expect(aidWork(apart, playerAid(apart)!)).toBeNull();
+  });
+
+  it('a move pauses the handover, and parking again resumes it', () => {
+    const { w, npc } = parkedDeal();
+    const fuel0 = w.player.fuel;
+    let d = startAid(w, npc.id);
+    d = update(d, (x) => { playerVehicle(x).pos = { x: 10, y: 30 }; });
+    d = endTurn(d, testDrive);
+    expect(aidData(playerAid(d)!).workLeft).toBe(1);
+    expect(d.player.fuel).toBe(fuel0);
+    d = update(d, (x) => { playerVehicle(x).speed = 0; playerVehicle(x).pos = { x: 30, y: 30 }; });
+    const run = runUntil(d, 3, (x) => !aidOpen(x, npc.id));
+    expect(run.w.player.fuel).toBe(fuel0 - 5);
+  });
+
+  it('combat breaks the deal, started or not, and moves nothing', () => {
+    const { w, npc } = parkedDeal();
+    const fuel0 = w.player.fuel;
+    const started = startAid(w, npc.id);
+    const raider = addVehicle(started, 'raiders', 'buggy', ['mg'], { x: 24, y: 30 });
+    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
+    startCombat(started, raider, started.vehicles[0]);
+    const run = runUntil(started, 3, (x) => !aidOpen(x, npc.id));
+    expect(run.events).toContainEqual(expect.objectContaining({ t: 'stateEnded', ending: 'broken' }));
+    expect(aidEvents(run.events)).toEqual([]);
+    expect(run.w.player.fuel).toBe(fuel0);
+  });
+
+  it('an agreed deal waits past its timer while parked, and a pending offer still lapses', () => {
+    const { w, npc } = parkedDeal();
+    const run = runUntil(w, STATE_TURNS.aid! + 5, () => false, false);
+    expect(aidOpen(run.w, npc.id)).toBe(true);
+    expect(aidData(playerAid(run.w)!).started).toBe(false);
+    const { w: start, npc: other } = withDriver(200);
+    const offer = update(start, (d) => { addState(d, 'aid', other.id, d.player.vehicleId, { kind: 'aid', giver: 'npc', fuel: 1, supplies: 0, price: 0, free: true, agreed: false, ...HANDOVER }); });
+    expect(aidOpen(runUntil(offer, STATE_TURNS.aid! + 2, () => false, false).w, other.id)).toBe(false);
+  });
+
+  it('an NPC giver goes through the same handover', () => {
+    const { w: start, npc } = withDriver(34);
+    start.player.fuel = 2;
+    const w = agreed(start, npc.id, { giver: 'npc', fuel: 4, supplies: 0, price: 0, free: true });
+    const held = runUntil(w, 3, () => false, false);
+    expect(held.w.player.fuel).toBe(2);
+    const run = runUntil(held.w, 3, (x) => !aidOpen(x, npc.id));
+    expect(run.w.player.fuel).toBe(6);
+  });
+
+  it('automatic turns stop while a handover waits for the player', () => {
+    const { w } = parkedDeal();
+    w.player.beacon = true;
+    expect(readyAid(w)).not.toBeNull();
+    expect(autoRuns(w)).toBe(false);
   });
 });

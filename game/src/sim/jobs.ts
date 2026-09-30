@@ -44,7 +44,7 @@ export function isParkedForWork(world: World, v: Vehicle): boolean {
 
 // A player truck standing still that starts work has chosen to stay, so a drive order left from before is dropped.
 // Otherwise the order would stop the work at once.
-function dropLeftoverOrder(world: World, v: Vehicle): void {
+export function dropLeftoverOrder(world: World, v: Vehicle): void {
   if (v.id === world.player.vehicleId && v.speed <= RULES.parkedSpeed) v.order = null;
 }
 
