@@ -26,6 +26,8 @@ When `dev` on GitHub moves past the commit `/dev/` serves, the next free tick re
 
 The factory starts at most `FACTORY_MAX_JOBS_PER_DAY` public-driven jobs in any 24 hours. Triage, design, implementation, testing and the release cut count. Approve, change and ad hoc jobs do not. The first time the cap blocks work, the committee chat gets one notice with the count and the time the next slot frees.
 
+When a member acts on an approval or candidate post, by button or reply, the factory adds a status line under its caption, like "✅ Approved by Ann", and drops its buttons. The state keeps each open post's caption for this, since Telegram cannot read one back.
+
 Triage, design, implementation and testing each comment on their issue when they finish or fail, with the time they took.
 
 A failed or timed-out stage labels its issue `factory-stuck` and posts once to the committee chat. A stuck release step labels the tracking issue. Removing the label lets the factory try again.

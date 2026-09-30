@@ -100,26 +100,26 @@ def test_ids_compare_as_strings():
 
 
 def test_inbox_command_shapes():
-    assert plugin.inbox_command(("approve", 12), 1, "Ann", -100, "77") == {
-        "kind": "approve", "issue": 12, "text": None, "by": "1", "byName": "Ann", "chat": "-100", "messageId": 77,
+    assert plugin.inbox_command(("approve", 12), 1, "Ann", -100, "77", "60") == {
+        "kind": "approve", "issue": 12, "text": None, "by": "1", "byName": "Ann", "chat": "-100", "messageId": 77, "postId": 60,
     }
-    assert plugin.inbox_command(("feedback", 12, "x y"), 1, None, -100, 78) == {
-        "kind": "feedback", "issue": 12, "text": "x y", "by": "1", "byName": None, "chat": "-100", "messageId": 78,
+    assert plugin.inbox_command(("feedback", 12, "x y"), 1, None, -100, 78, 60) == {
+        "kind": "feedback", "issue": 12, "text": "x y", "by": "1", "byName": None, "chat": "-100", "messageId": 78, "postId": 60,
     }
-    assert plugin.inbox_command(("change", "z"), 1, "", -100, 79) == {
-        "kind": "change", "issue": None, "text": "z", "by": "1", "byName": None, "chat": "-100", "messageId": 79,
+    assert plugin.inbox_command(("change", "z"), 1, "", -100, 79, None) == {
+        "kind": "change", "issue": None, "text": "z", "by": "1", "byName": None, "chat": "-100", "messageId": 79, "postId": None,
     }
 
 
 def test_inbox_command_release_shapes():
-    assert plugin.inbox_command(("ship", 40), 1, "Ann", -100, 80) == {
-        "kind": "ship", "issue": 40, "text": None, "by": "1", "byName": "Ann", "chat": "-100", "messageId": 80,
+    assert plugin.inbox_command(("ship", 40), 1, "Ann", -100, 80, 70) == {
+        "kind": "ship", "issue": 40, "text": None, "by": "1", "byName": "Ann", "chat": "-100", "messageId": 80, "postId": 70,
     }
-    assert plugin.inbox_command(("remove", 7, "remove #7"), 1, "Ann", -100, 81) == {
-        "kind": "remove", "issue": 7, "text": "remove #7", "by": "1", "byName": "Ann", "chat": "-100", "messageId": 81,
+    assert plugin.inbox_command(("remove", 7, "remove #7"), 1, "Ann", -100, 81, 70) == {
+        "kind": "remove", "issue": 7, "text": "remove #7", "by": "1", "byName": "Ann", "chat": "-100", "messageId": 81, "postId": 70,
     }
-    assert plugin.inbox_command(("release-task", "add rain"), 1, "Ann", -100, 82) == {
-        "kind": "release-task", "issue": None, "text": "add rain", "by": "1", "byName": "Ann", "chat": "-100", "messageId": 82,
+    assert plugin.inbox_command(("release-task", "add rain"), 1, "Ann", -100, 82, 70) == {
+        "kind": "release-task", "issue": None, "text": "add rain", "by": "1", "byName": "Ann", "chat": "-100", "messageId": 82, "postId": 70,
     }
 
 
@@ -132,7 +132,7 @@ def test_write_inbox_is_atomic(tmp_path, monkeypatch):
         real(src, dst)
 
     monkeypatch.setattr(plugin.os, "replace", spy)
-    command = plugin.inbox_command(("change", "z"), 1, "Ann", -100, 79)
+    command = plugin.inbox_command(("change", "z"), 1, "Ann", -100, 79, None)
     path = plugin.write_inbox(str(tmp_path), command, now_ms=1700000000000)
     assert path.name == "1700000000000-79.json"
     assert json.loads(path.read_text()) == command
@@ -322,7 +322,7 @@ def test_queue_tool_writes_adhoc_command(tmp_path):
     assert len(files) == 1
     assert json.loads(files[0].read_text()) == {
         "kind": "adhoc", "issue": None, "text": "Run npm run combat and report hit rates.",
-        "by": "1", "byName": "Ann", "chat": "-100", "messageId": 77,
+        "by": "1", "byName": "Ann", "chat": "-100", "messageId": 77, "postId": None,
     }
 
 

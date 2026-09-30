@@ -3,10 +3,13 @@ import { join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { drainInbox, parseCommand } from './inbox';
 import { EMPTY_STATE, readState, writeState } from './state';
-import type { Card, Ctx, FactoryConfig, ReleaseState } from './types';
+import type { Card, Ctx, FactoryConfig, FactoryState, ReleaseState } from './types';
 
 const ROOT = resolve('tmp/factory-inbox-test');
 const statePath = join(ROOT, 'state.json');
+// The post every test command acts on. Its caption is in the state, so the status edit works.
+const POST = 42;
+const withPost = (state: FactoryState): FactoryState => ({ ...state, postCaptions: { [POST]: 'Post' } });
 
 function fakeCtx(cards: Card[], sent: string[], calls: string[]): Ctx {
   const cfg = { home: ROOT, committeeBootstrapTelegram: '11', committeeBootstrapGithub: 'boss', committeeChat: '-5' } as FactoryConfig;
@@ -22,19 +25,22 @@ function fakeCtx(cards: Card[], sent: string[], calls: string[]): Ctx {
       addLabel: async (n: number, label: string) => { calls.push(`addLabel ${n} ${label}`); },
       close: async (n: number, reason: string) => { calls.push(`close ${n} ${reason}`); },
     },
-    telegram: { sendMessage: async (_chat: string, text: string) => { sent.push(text); return 1; } },
+    telegram: {
+      sendMessage: async (_chat: string, text: string) => { sent.push(text); return 1; },
+      editCaption: async (chat: string, id: number, caption: string) => { calls.push(`edit ${chat} ${id} ${caption}`); },
+    },
   } as unknown as Ctx;
 }
 
 function put(name: string, command: object): void {
-  writeFileSync(join(ROOT, 'inbox', name), JSON.stringify({ issue: null, text: null, byName: 'Ann', chat: '-5', messageId: 3, by: '11', ...command }));
+  writeFileSync(join(ROOT, 'inbox', name), JSON.stringify({ issue: null, text: null, byName: 'Ann', chat: '-5', messageId: 3, postId: POST, by: '11', ...command }));
 }
 
 describe('drainInbox', () => {
   beforeEach(() => {
     rmSync(ROOT, { recursive: true, force: true });
     mkdirSync(join(ROOT, 'inbox'), { recursive: true });
-    writeState(statePath, structuredClone(EMPTY_STATE));
+    writeState(statePath, withPost(structuredClone(EMPTY_STATE)));
   });
 
   it('queues an approval for a card in Approval and empties the inbox', async () => {
@@ -86,12 +92,12 @@ describe('drainInbox', () => {
     const calls: string[] = [];
     put('1.json', { kind: 'feedback', issue: 4, text: 'too loud' });
     await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], [], calls));
-    expect(calls).toEqual([expect.stringContaining('too loud'), 'move 4 Design']);
+    expect(calls).toEqual([expect.stringContaining('too loud'), 'move 4 Design', 'edit -5 42 Post\n\n💬 Feedback from Ann. Back to design.']);
   });
 
   it('drops an approval queued before the feedback and says so', async () => {
     const sent: string[] = [];
-    writeState(statePath, { ...structuredClone(EMPTY_STATE), pendingApprovals: { 4: 'Ann' } });
+    writeState(statePath, withPost({ ...structuredClone(EMPTY_STATE), pendingApprovals: { 4: 'Ann' } }));
     put('1.json', { kind: 'feedback', issue: 4, text: 'too loud' });
     await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], sent, []));
     expect(readState(statePath).pendingApprovals).toEqual({});
@@ -101,13 +107,30 @@ describe('drainInbox', () => {
   it('denies a card in Approval: closes, labels, moves to Done and clears state', async () => {
     const sent: string[] = [];
     const calls: string[] = [];
-    writeState(statePath, { ...structuredClone(EMPTY_STATE), approvalPosts: { 100: 4, 200: 5 }, pendingApprovals: { 4: 'Ann' } });
+    writeState(statePath, withPost({ ...structuredClone(EMPTY_STATE), approvalPosts: { 100: 4, 200: 5 }, pendingApprovals: { 4: 'Ann' } }));
     put('1.json', { kind: 'deny', issue: 4 });
     await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], sent, calls));
-    expect(calls).toEqual(['comment 4 Denied by Ann in the committee chat.', 'addLabel 4 wont-do', 'close 4 not planned', 'move 4 Done']);
+    expect(calls).toEqual(['comment 4 Denied by Ann in the committee chat.', 'addLabel 4 wont-do', 'close 4 not planned', 'move 4 Done', 'edit -5 42 Post\n\n❌ Denied by Ann']);
     expect(readState(statePath).approvalPosts).toEqual({ 200: 5 });
     expect(readState(statePath).pendingApprovals).toEqual({});
     expect(sent[0]).toBe('Issue #4 is denied and closed.');
+  });
+
+  it('adds the approver under the post caption and remembers the new caption', async () => {
+    const calls: string[] = [];
+    put('1.json', { kind: 'approve', issue: 4 });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], [], calls));
+    expect(calls).toEqual(['edit -5 42 Post\n\n✅ Approved by Ann']);
+    expect(readState(statePath).postCaptions).toEqual({ [POST]: 'Post\n\n✅ Approved by Ann' });
+  });
+
+  it('says so when the post has no recorded caption, after the command worked', async () => {
+    const sent: string[] = [];
+    writeState(statePath, structuredClone(EMPTY_STATE));
+    put('1.json', { kind: 'approve', issue: 4 });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], sent, []));
+    expect(readState(statePath).pendingApprovals).toEqual({ '4': 'Ann' });
+    expect(sent).toEqual([expect.stringContaining('Approval of #4 is queued'), 'Done, but the post could not show its status: No caption is recorded for post 42']);
   });
 
   it('answers with an error when a denied card is not in Approval', async () => {
@@ -128,13 +151,13 @@ describe('drainInbox', () => {
 });
 
 const RELEASE: ReleaseState = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [] };
-const openRelease = (over: Partial<ReleaseState> = {}) => writeState(statePath, { ...structuredClone(EMPTY_STATE), release: { ...RELEASE, ...over } });
+const openRelease = (over: Partial<ReleaseState> = {}) => writeState(statePath, withPost({ ...structuredClone(EMPTY_STATE), release: { ...RELEASE, ...over } }));
 
 describe('release commands', () => {
   beforeEach(() => {
     rmSync(ROOT, { recursive: true, force: true });
     mkdirSync(join(ROOT, 'inbox'), { recursive: true });
-    writeState(statePath, structuredClone(EMPTY_STATE));
+    writeState(statePath, withPost(structuredClone(EMPTY_STATE)));
   });
 
   it('queues a ship for the current candidate post', async () => {
@@ -195,7 +218,7 @@ describe('release commands', () => {
   it('opens a release task as an issue and a Design card, and drops the current post', async () => {
     const sent: string[] = [];
     const calls: string[] = [];
-    writeState(statePath, { ...structuredClone(EMPTY_STATE), release: RELEASE, pendingShip: 'Bob' });
+    writeState(statePath, withPost({ ...structuredClone(EMPTY_STATE), release: RELEASE, pendingShip: 'Bob' }));
     put('1.json', { kind: 'release-task', text: 'The horn is too quiet\nMake it louder' });
     await drainInbox(fakeCtx([], sent, calls));
     expect(calls[0]).toBe('create The horn is too quiet|The horn is too quiet\nMake it louder\n\nRequested by Ann in the committee chat as a task of release 2026-09-29.|release-task');
@@ -222,7 +245,10 @@ describe('release commands', () => {
 
 describe('parseCommand', () => {
   it('accepts the release kinds', () => {
-    for (const kind of ['ship', 'remove', 'release-task']) expect(parseCommand(`{"kind":"${kind}","by":"1","chat":"c","messageId":1}`).kind).toBe(kind);
+    for (const kind of ['ship', 'remove', 'release-task']) expect(parseCommand(`{"kind":"${kind}","by":"1","chat":"c","messageId":1,"postId":2}`).kind).toBe(kind);
+  });
+  it('rejects a command without postId', () => {
+    expect(() => parseCommand('{"kind":"approve","by":"1","chat":"c","messageId":1}')).toThrow('lacks postId');
   });
   it('rejects an unknown kind', () => {
     expect(() => parseCommand('{"kind":"merge","by":"1","chat":"c","messageId":1}')).toThrow('Unknown inbox command kind');

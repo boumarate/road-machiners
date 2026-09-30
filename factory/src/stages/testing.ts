@@ -157,7 +157,7 @@ export async function post(ctx: Ctx, issue: number, approval: Approval, screensh
   const caption = approvalCaption(`#${issue} ${item.title}`, url, link, pr, approval, base);
   const buttons = [[{ text: 'Approve', data: `factory:approve:${issue}` }, { text: 'Deny', data: `factory:deny:${issue}` }]];
   const photoId = await ctx.telegram.sendPhoto(ctx.cfg.committeeChat, screenshot, caption, buttons);
-  updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: { ...state.approvalPosts, [photoId]: issue } }));
+  updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: { ...state.approvalPosts, [photoId]: issue }, postCaptions: { ...state.postCaptions, [photoId]: caption } }));
 }
 
 // A feedback round reuses the pull request of the first round.

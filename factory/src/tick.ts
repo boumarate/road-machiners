@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { removeStaleBuilds } from './deploy';
 import { failureIssue, reportFailure } from './fail';
 import { intake } from './intake';
+import { pruneCaptions } from './post-status';
 import { isAlive, killJob, spawnJob } from './jobs';
 import { readState, updateState } from './state';
 import { isAnswered } from './questions';
@@ -190,6 +191,7 @@ export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS
   await intake(ctx);
   const cards = await releaseAnswered(ctx, await ctx.github.cards());
   cleanBuilds(ctx, cards);
+  updateState(ctx.statePath, pruneCaptions);
   await noteCap(ctx, cards);
   await ctx.repo.sync();
   const pick = chooseJob(readState(ctx.statePath), cards, ctx.now(), ctx.cfg, await ctx.repo.headHash('dev'));

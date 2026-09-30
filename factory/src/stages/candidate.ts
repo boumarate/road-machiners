@@ -62,7 +62,7 @@ export async function candidate(ctx: Ctx, issue: number): Promise<void> {
   const caption = candidateCaption(release.day, url, link, pr, notes.trim(), features);
   const buttons = [[{ text: 'Ship', data: `factory:ship:${issue}` }]];
   const photoId = await ctx.telegram.sendPhoto(ctx.cfg.committeeChat, join(home, OUT_DIR, 'screenshot.png'), caption, buttons);
-  updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: photoId } }));
+  updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: photoId }, postCaptions: { ...state.postCaptions, [photoId]: caption } }));
 }
 
 const SEPARATOR = '\n\n';

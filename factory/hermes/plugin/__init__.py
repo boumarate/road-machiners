@@ -140,7 +140,8 @@ def _request(text, reply_to_message_id, approval_posts, release=None) -> Optiona
     return None
 
 
-def inbox_command(decision: tuple, user_id, user_name, chat_id, message_id) -> dict:
+def inbox_command(decision: tuple, user_id, user_name, chat_id, message_id, reply_to_message_id) -> dict:
+    """`postId` is the post a reply answers, so the factory can add a status line to it. /change answers no post."""
     kind = decision[0]
     return {
         "kind": kind,
@@ -150,6 +151,7 @@ def inbox_command(decision: tuple, user_id, user_name, chat_id, message_id) -> d
         "byName": user_name or None,
         "chat": str(chat_id),
         "messageId": int(message_id),
+        "postId": None if kind == "change" else int(reply_to_message_id),
     }
 
 
@@ -181,10 +183,11 @@ def parse_button(data) -> Optional[tuple]:
 
 
 def button_command(kind: str, issue: int, user_id, user_name, chat_id, message_id) -> dict:
+    """A button sits on the post it acts on, so the pressed message is also the post."""
     return {
         "kind": kind, "issue": issue, "text": None,
         "by": str(user_id), "byName": user_name or None,
-        "chat": str(chat_id), "messageId": int(message_id),
+        "chat": str(chat_id), "messageId": int(message_id), "postId": int(message_id),
     }
 
 
@@ -280,7 +283,7 @@ def make_queue_handler(cfg: Config, session_env=_session_env):
             return _tool_error("The session message id is not a number. Nothing was queued.")
         command = {
             "kind": "adhoc", "issue": None, "text": request,
-            "by": user, "byName": name, "chat": chat, "messageId": int(message),
+            "by": user, "byName": name, "chat": chat, "messageId": int(message), "postId": None,
         }
         write_inbox(cfg.inbox, command)
         return json.dumps({"success": True, "message": QUEUE_DONE})
@@ -321,6 +324,7 @@ def make_hook(cfg: Config):
             return None
         command = inbox_command(
             decision, source.user_id, getattr(source, "user_name", None), source.chat_id, event.message_id,
+            event.reply_to_message_id,
         )
         write_inbox(cfg.inbox, command)
         await _reply(gateway, event, QUEUED_REPLY)

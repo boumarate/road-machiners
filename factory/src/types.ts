@@ -84,6 +84,7 @@ export type FactoryState = {
   builds: Record<string, string>; // issue number -> folder name of its deployed build under the web root
   jobStarts: string[]; // ISO start times of public-driven jobs in the last 24 hours
   capNoticed: boolean; // the committee heard that the daily job cap blocks work, until the cap frees
+  postCaptions: Record<string, string>; // Telegram message id -> caption of an open approval or candidate post. Telegram cannot read a caption back, and a status line edits it.
   devBuild: string | null; // short hash of dev that /dev/ serves
   devFailed: string | null; // short hash of dev whose build failed. The tick skips it until dev moves or Hermes clears it.
 };
@@ -114,6 +115,7 @@ export type InlineButton = { text: string; data: string };
 export interface Telegram {
   sendMessage(chat: string, text: string, replyTo?: number): Promise<number>;
   sendPhoto(chat: string, pngPath: string, caption: string, buttons?: InlineButton[][]): Promise<number>;
+  editCaption(chat: string, messageId: number, caption: string): Promise<void>; // replaces a photo's caption and drops its buttons
 }
 
 // `dir` is the repo folder the agent works in, `game` or `factory`. The container starts it there.
