@@ -1,7 +1,7 @@
 // Darkens shaded, explored ground near the player, and makes sun-baked ground shimmer in heat haze. Uses
 // the same inShade and sun heat the sim reads, so the look never disagrees with the drain or the engine
-// heat. The sun moves every turn, so the layer recomputes every turn. It is a small patch of REACH tiles
-// around the player that moves with the truck, so its cost does not grow with the map.
+// heat. The sun moves every turn, so the layer recomputes every turn, a few rows per frame after the turn ends. It is a
+// small patch of REACH tiles around the player that moves with the truck, so its cost does not grow with the map.
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
 import { TIME } from '../../data/time';
@@ -19,6 +19,7 @@ const TAU = 2 * Math.PI;
 const LIFT = 0.04; // meters above the terrain surface, avoids z-fighting
 const REACH = 20; // tiles from the player to the patch edge, the base sight radius
 const SIDE = REACH * 2 + 1; // corners along one side of the patch
+const SHADE_ROWS_PER_FRAME = 4; // patch rows computed per frame, so a patch takes ceil(SIDE / 4) frames
 // Heat at which the haze is at full strength: noon sun in a heat wave, the hottest ground there is.
 const HAZE_FULL = 1 + (TIME.sunHeat - 1) * WEATHER.sim.effects.heatwave;
 // The ground shifts up to HAZE.shift meters, about 7 pixels at default zoom on the hottest ground, so edges waver
@@ -41,6 +42,8 @@ const HAZE = {
 export class ShadeView {
   readonly mesh: THREE.Mesh;
   private lastTurn = -1;
+  private job: ShadeJob | null = null;
+  private queued: World | null = null;
   private hazeCells = new Uint8Array(SIDE * SIDE);
   private hazeMask = new THREE.DataTexture(this.hazeCells, SIDE, SIDE, THREE.RedFormat);
   private haze = {
@@ -89,7 +92,9 @@ export class ShadeView {
     this.hazeMask.unpackAlignment = 1; // rows of SIDE bytes are not 4-byte aligned
     this.hazeMask.magFilter = THREE.LinearFilter;
     this.hazeMask.minFilter = THREE.LinearFilter;
+    // The first patch is complete at boot.
     this.update(world);
+    while (this.job) this.advance();
   }
 
   // Makes the ground material waver where the haze mask is on. uvPerMeter: the ground map's uv per meter.
@@ -114,30 +119,65 @@ export class ShadeView {
   }
 
 
+  // Queues the patch for this world. advance() computes it a few rows per frame, so a turn's end stays cheap.
   update(world: World): void {
     if (world.turn === this.lastTurn) return;
     this.lastTurn = world.turn;
-    const me = playerVehicle(world).pos;
-    const sun = sunAt(world.turn);
-    const x0 = Math.floor(me.x) - REACH;
-    const y0 = Math.floor(me.y) - REACH;
+    if (this.job) this.queued = world;
+    else this.job = newJob(world);
+  }
+
+  // Computes the next rows of the running patch, and swaps it in when complete. A queued world starts after.
+  advance(): void {
+    const job = this.job;
+    if (!job) return;
+    const end = Math.min(SIDE, job.row + SHADE_ROWS_PER_FRAME);
+    for (; job.row < end; job.row++) computeRow(job, job.row);
+    if (job.row < SIDE) return;
     const pos = this.mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
     const alpha = this.mesh.geometry.getAttribute('alpha') as THREE.BufferAttribute;
-    for (let j = 0; j < SIDE; j++) {
-      for (let i = 0; i < SIDE; i++) {
-        const k = j * SIDE + i;
-        const x = Math.min(world.size, Math.max(0, x0 + i));
-        const y = Math.min(world.size, Math.max(0, y0 + j));
-        pos.setXYZ(k, x * S, heightAt(world.terrain, x, y) * S + LIFT, y * S);
-        const look = Math.hypot(x - me.x, y - me.y) <= REACH && sun ? cornerLook(world, x, y, sun) : { shade: 0, haze: 0 };
-        alpha.setX(k, look.shade);
-        this.hazeCells[k] = look.haze;
-      }
-    }
+    (pos.array as Float32Array).set(job.pos);
+    (alpha.array as Float32Array).set(job.alpha);
+    this.hazeCells.set(job.haze);
     pos.needsUpdate = true;
     alpha.needsUpdate = true;
-    this.haze.hazeOrigin.value.set(x0 * S, y0 * S);
+    this.haze.hazeOrigin.value.set(job.x0 * S, job.y0 * S);
     this.hazeMask.needsUpdate = true;
+    this.job = this.queued ? newJob(this.queued) : null;
+    this.queued = null;
+  }
+}
+
+// A patch being computed: scratch buffers that swap into the mesh when every row is done.
+type ShadeJob = { world: World; sun: Sun | null; x0: number; y0: number; row: number; pos: Float32Array; alpha: Float32Array; haze: Uint8Array };
+
+function newJob(world: World): ShadeJob {
+  const me = playerVehicle(world).pos;
+  return {
+    world,
+    sun: sunAt(world.turn),
+    x0: Math.floor(me.x) - REACH,
+    y0: Math.floor(me.y) - REACH,
+    row: 0,
+    pos: new Float32Array(SIDE * SIDE * 3),
+    alpha: new Float32Array(SIDE * SIDE),
+    haze: new Uint8Array(SIDE * SIDE),
+  };
+}
+
+function computeRow(job: ShadeJob, j: number): void {
+  const { world, sun } = job;
+  const me = playerVehicle(world).pos;
+  for (let i = 0; i < SIDE; i++) {
+    const k = j * SIDE + i;
+    const x = Math.min(world.size, Math.max(0, job.x0 + i));
+    const y = Math.min(world.size, Math.max(0, job.y0 + j));
+    job.pos[k * 3] = x * S;
+    job.pos[k * 3 + 1] = heightAt(world.terrain, x, y) * S + LIFT;
+    job.pos[k * 3 + 2] = y * S;
+    const look = Math.hypot(x - me.x, y - me.y) <= REACH && sun ? cornerLook(world, x, y, sun) : { shade: 0, haze: 0 };
+    job.alpha[k] = look.shade;
+    job.haze[k] = look.haze;
   }
 }
 

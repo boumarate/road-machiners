@@ -923,7 +923,11 @@ export class Game {
   private frame(now: number): void {
     const dt = now - this.last;
     this.last = now;
-    const { step, speed } = timed("turn-frame", () => this.advanceTurn(now));
+    const { step, speed } = timed("turn-frame", () => {
+      const turn = this.advanceTurn(now);
+      this.shade.advance();
+      return turn;
+    });
     // The first frame's rAF time can come before the performance.now() the clock started from.
     this.syncVehicles(step, Math.max(0, dt) / 1000);
     this.obstacles.play(this.anim, step, this.world, this.frames, Math.max(0, dt) / 1000);
