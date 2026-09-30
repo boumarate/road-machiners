@@ -73,7 +73,8 @@ import { DustCloudsView } from "./render/dust";
 import { ShadeView } from "./render/shade";
 import { SoundRingView } from "./render/soundRing";
 import { reportError } from "./crash";
-import { clearGame, hasSave, SAVE_HELD_NOTE, SaveHold, saveInTown, saveWorld, turnFailedNote, writeSave } from "./save";
+import type { SlotId } from "./save-slots";
+import { SAVE_HELD_NOTE, SaveHold, saveInTown, saveStore, saveWorld, turnFailedNote } from "./save";
 import { GameMenu } from "../ui/game-menu";
 import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
@@ -278,16 +279,10 @@ export class Game {
     });
     this.hitCard = new HitCard(this.hud.getInspectionRoot());
     this.hoverHold.watch(this.hud.getInspectionRoot());
-    this.menu = new GameMenu({
-      save: () => this.saveNow(),
-      hasSave: () => hasSave(window.localStorage),
-      clearGame: () => clearGame(window.localStorage),
-      isBusy: () => this.anim !== null,
-    });
-    this.death = new DeathScreen({
-      hasSave: () => hasSave(window.localStorage),
-      clearGame: () => clearGame(window.localStorage),
-    });
+    const saves = saveStore(window.localStorage, window.sessionStorage, () => this.world, CONFIG.saveSlots);
+    const guarded = { ...saves, save: (slot: SlotId) => this.saveNow(() => saves.save(slot)) };
+    this.menu = new GameMenu(guarded, () => this.anim !== null);
+    this.death = new DeathScreen(saves);
 
     this.bindInput();
     window.addEventListener("resize", () => this.resize());
@@ -299,7 +294,7 @@ export class Game {
   private uiHost(): UiHost {
     return {
       world: () => this.displayWorld(),
-      apply: (next) => { this.apply(next); if (!this.saves.held) saveInTown(window.localStorage, next); },
+      apply: (next) => { this.apply(next); if (!this.saves.held) saveInTown(window.localStorage, next, Date.now()); },
       selectedWeapon: () => this.selected,
       selectWeapon: (id) => { if (this.anim) return; this.selected = id; this.refreshUi(); },
       endTurn: () => this.travel.stopAuto(this.world) || this.endTurn(),
@@ -341,7 +336,7 @@ export class Game {
   }
 
   private modalOpen(): boolean {
-    return this.town.isOpen() || this.trade.isOpen() || this.character.isOpen() || this.inventory.isOpen() || this.world.player.call !== null;
+    return this.town.isOpen() || this.trade.isOpen() || this.character.isOpen() || this.inventory.isOpen() || this.world.player.call !== null || this.menu.isPanelOpen();
   }
 
   // Until a turn's shots land, the panels show the world as it was when the turn began.
@@ -613,9 +608,9 @@ export class Game {
     this.saves.noteError();
   }
 
-  private saveNow(): void {
+  private saveNow(write: () => void): void {
     if (this.saves.held) return this.hud.note(this.world, SAVE_HELD_NOTE, "bad");
-    writeSave(window.localStorage, this.world);
+    write();
   }
 
   // A turn that throws does not play. The world stays as it was and the next Space or turn press tries again.
@@ -703,7 +698,7 @@ export class Game {
     this.phase = null;
     this.idleSince = performance.now();
     this.saves.finishTurn();
-    if (!this.saves.held) saveWorld(window.localStorage, this.world, CONFIG.saveTurns);
+    if (!this.saves.held) saveWorld(window.localStorage, this.world, CONFIG.saveTurns, Date.now());
     const pending = this.pending;
     this.pending = null;
     if (pending) this.runRescue(pending);
