@@ -125,6 +125,7 @@ export type SpawnPlace = { kind: 'camp' } | { kind: 'town' } | { kind: 'sites'; 
 export type NpcTemplate = {
   id: string;
   name: string;
+  profession: string; // the noun texts put before the driver's name
   faction: Faction;
   traits: TraitId[]; // every NPC of the template has these
   extraTraits: { trait: TraitId; chance: number }[]; // each rolled once at spawn
@@ -708,7 +709,7 @@ export const OPPOSED_TRAITS: readonly [TraitId, TraitId][] = [['coward', 'brave'
 
 export const NPCS: Record<string, NpcTemplate> = {
   buggy: {
-    id: 'buggy', name: 'Raider outrider', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
+    id: 'buggy', name: 'Raider outrider', profession: 'Raider', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
     loadout: LOADOUTS.outrider,
     aggroRange: 11,
     preferredRange: 3,
@@ -720,7 +721,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "camp" },
   },
   gunwagon: {
-    id: 'gunwagon', name: 'Gunwagon', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
+    id: 'gunwagon', name: 'Gunwagon', profession: 'Raider', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
     loadout: LOADOUTS.gunwagon,
     aggroRange: 12,
     preferredRange: 6,
@@ -731,7 +732,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "camp" },
   },
   trader: {
-    id: 'trader', name: 'Trader caravan', faction: 'traders', traits: ['trader'],
+    id: 'trader', name: 'Trader caravan', profession: 'Trader', faction: 'traders', traits: ['trader'],
     // One trader in four is a scumbag, and one in four a coward, as with every neutral driver.
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.trader,
@@ -743,7 +744,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "town" },
   },
   scavenger: {
-    id: 'scavenger', name: 'Scavenger', faction: 'scavengers', traits: ['scavenger'],
+    id: 'scavenger', name: 'Scavenger', profession: 'Scavenger', faction: 'scavengers', traits: ['scavenger'],
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.scavenger,
     aggroRange: 0,
@@ -754,7 +755,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "town" },
   },
   bowlFarmer: {
-    id: 'bowlFarmer', name: 'Bowl Farmers patrol', faction: 'bowl', traits: ['lawman', 'brave'], extraTraits: [],
+    id: 'bowlFarmer', name: 'Bowl Farmers patrol', profession: 'Bowl Farmer', faction: 'bowl', traits: ['lawman', 'brave'], extraTraits: [],
     loadout: LOADOUTS.bowlPatrol,
     aggroRange: 0,
     preferredRange: 0,
@@ -766,7 +767,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "sites", ids: ["bowl"] },
   },
   noseArmy: {
-    id: 'noseArmy', name: 'Nose Army patrol', faction: 'nose', traits: ['lawman', 'brave'], extraTraits: [],
+    id: 'noseArmy', name: 'Nose Army patrol', profession: 'Nose soldier', faction: 'nose', traits: ['lawman', 'brave'], extraTraits: [],
     loadout: LOADOUTS.nosePatrol,
     aggroRange: 0,
     preferredRange: 0,
@@ -777,7 +778,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "sites", ids: ["nose"] },
   },
   courier: {
-    id: 'courier', name: 'Courier', faction: 'couriers', traits: ['courier'],
+    id: 'courier', name: 'Courier', profession: 'Courier', faction: 'couriers', traits: ['courier'],
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.courier,
     aggroRange: 0,
@@ -789,7 +790,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "town" },
   },
   roamer: {
-    id: 'roamer', name: 'Roamer', faction: 'roamers', traits: ['roamer'],
+    id: 'roamer', name: 'Roamer', profession: 'Roamer', faction: 'roamers', traits: ['roamer'],
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.roamer,
     aggroRange: 0,
@@ -801,7 +802,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "town" },
   },
   vulture: {
-    id: 'vulture', name: 'Vulture', faction: 'vultures', traits: ['vulture'],
+    id: 'vulture', name: 'Vulture', profession: 'Vulture', faction: 'vultures', traits: ['vulture'],
     extraTraits: VULTURE_EXTRAS,
     loadout: LOADOUTS.vulture,
     aggroRange: 0,
@@ -813,7 +814,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "town" },
   },
   convoy: {
-    id: 'convoy', name: 'Supply convoy', faction: 'convoys', traits: ['supplier'], extraTraits: NEUTRAL_EXTRAS,
+    id: 'convoy', name: 'Supply convoy', profession: 'Convoy driver', faction: 'convoys', traits: ['supplier'], extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.convoy,
     aggroRange: 0,
     preferredRange: 0,
@@ -824,7 +825,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "sites", ids: ["bowl", "nose"] },
   },
   convoyGuard: {
-    id: 'convoyGuard', name: 'Convoy guard', faction: 'convoys', traits: ['guard', 'brave'], extraTraits: GUARD_EXTRAS,
+    id: 'convoyGuard', name: 'Convoy guard', profession: 'Convoy guard', faction: 'convoys', traits: ['guard', 'brave'], extraTraits: GUARD_EXTRAS,
     loadout: LOADOUTS.convoyGuard,
     aggroRange: 0,
     preferredRange: 0,
@@ -835,7 +836,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "escort", of: "convoy" },
   },
   merc: {
-    id: 'merc', name: 'Merc', faction: 'mercs', traits: ['merc'], extraTraits: NEUTRAL_EXTRAS,
+    id: 'merc', name: 'Merc', profession: 'Merc', faction: 'mercs', traits: ['merc'], extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.merc,
     aggroRange: 0,
     preferredRange: 0,
@@ -903,6 +904,7 @@ export type DecisionOptions = {
   strandedFoe: 'offer' | 'spare';
   surrenderOffered: 'accept' | 'refuse'; // a stranded NPC is offered a way out by the foe that beat it
   threatened: 'comply' | 'fightBack' | 'flee'; // the player demands the driver's cargo
+  warnedOff: 'comply' | 'refuse' | 'fightBack'; // the player tells a looting driver to back off its wreck
   mugging: 'demand' | 'attack'; // the driver sets out to fight the player: radio for the cargo first, or just open fire
   resume: 'resume' | 'new'; // an interruption popped and uncovered the long-term goal
   // The goal stack is empty. Escort joins a leader that no escort guards yet.
@@ -953,8 +955,9 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   strandedFoe: { offer: 9, spare: 1 },
   // A stranded driver mostly takes the way out. The accept factor for weak drivers raises it further.
   surrenderOffered: { accept: 3, refuse: 1 },
-  // A threatened driver gives up its cargo, fights or runs about equally. The two sides' strength decides most.
-  threatened: { comply: 1, fightBack: 1, flee: 1 },
+  // A threatened driver gives up its cargo, fights or runs about equally, and one warned off its wreck backs off,
+  // keeps looting or fights about equally. The two sides' strength decides most.
+  threatened: { comply: 1, fightBack: 1, flee: 1 }, warnedOff: { comply: 1, refuse: 1, fightBack: 1 },
   // A driver about to attack the player radios for the cargo first a bit more often than it opens fire unwarned.
   mugging: { demand: 3, attack: 2 },
   // After an interruption a driver goes back to its work 9 times in 10.
@@ -983,10 +986,7 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   feud: { hostileSeen: { fight: { add: 4 } } },
   // A failed robber mostly leaves the same target alone. A scumbag's rob weight of 0.5 drops to 0.0025, about 1%.
   backedOff: { preySeen: { rob: { mul: 0.005 } } },
-  tow: {},
-  patch: {},
-  trade: {},
-  aid: {},
+  tow: {}, patch: {}, trade: {}, aid: {}, combat: {},
   // A driver rarely robs a truck it holds a truce with. A scumbag's rob weight of 0.5 drops to 0.0025, about 1%.
   truce: { preySeen: { rob: { mul: 0.005 } } },
   grievance: {},
@@ -1014,7 +1014,7 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
     parley: { keep: { mul: 2 } },
     truceOffered: { refuse: { mul: 3 } },
     mercyBegged: { finish: { mul: 3 } },
-    threatened: { fightBack: { mul: 2 } },
+    threatened: { fightBack: { mul: 2 } }, warnedOff: { fightBack: { mul: 2 } },
   },
 };
 
@@ -1056,6 +1056,9 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   answering: null,
   // An escort lasts until the leader reaches its destination, or either party is gone, beaten or hostile.
   escort: null,
+  // Hostile acts between two trucks reset it. 10 turns, like a feud, covers reloads and a chase out of sight behind a
+  // ridge, and is short enough that a raider that drove off stops blocking work soon.
+  combat: 10,
 };
 
 export type Trait = {
@@ -1094,7 +1097,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // manageable hostile. A shot trader returns fire at a tenth of the usual weight, and mostly runs. A trader in a
   // fight rams about 1 time in 100: a ram weight of 9 drops to 0.009. Trading beats
   // salvage in sight 3 to 1. Nine in ten traders help a stranded truck. Traders want peace: they shrug off 19
-  // crashes in 20, ask for truces, take nearly every truce and spare a beaten foe. Threatened, they mostly pay.
+  // crashes in 20, ask for truces, take nearly every truce and spare a beaten foe. Threatened or warned off a wreck, they mostly give way.
   // A trader on its way hires about one free merc in two it sees. Traders push on for one more deal, so they keep
   // a quarter less fuel for the way to a pump. A trader too poor for any trade hauls free cargo to earn a stake: a
   // haul weight of 1 loses to trade 30 whenever a trade is affordable. About one trader in five gives fuel or supplies
@@ -1105,20 +1108,20 @@ export const TRAITS: Record<TraitId, Trait> = {
       idle: { trade: { add: 30 }, haul: { add: 1 } }, strandedSeen: { tow: { add: 9 } },
       hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } }, ramChance: { ram: { mul: 0.001 } },
       crashed: { retaliate: { mul: 0.2 } }, parley: { truce: { add: 2 } }, truceOffered: { accept: { add: 4 } },
-      mercyBegged: { spare: { add: 3 } }, threatened: { comply: { add: 1 }, fightBack: { mul: 0.1 } },
+      mercyBegged: { spare: { add: 3 } }, threatened: { comply: { add: 1 }, fightBack: { mul: 0.1 } }, warnedOff: { comply: { add: 1 }, fightBack: { mul: 0.1 } },
       escortSeen: { hire: { add: 1 } }, aidAsked: { give: { mul: 2 } }, needySeen: { aid: { add: 0.02 } },
     },
   },
   // Raiders fight most hostiles they see and close in on most useful contacts. A raid ties with salvage in sight.
   // A raider answers half the crashes with a fight, seldom asks for peace and refuses a truce more often than not,
-  // and nearly always from prey it expects to beat. Threatened, it mostly fights. Nine in ten raiders help a stranded
+  // and nearly always from prey it expects to beat. Threatened or warned off a wreck, it mostly fights. Nine in ten raiders help a stranded
   // raider, the only truck they tow.
   raider: {
     towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: {
       idle: { raid: { add: 9 } }, contactHeard: { investigate: { add: 10.8 } }, hostileSeen: { fight: { add: 7.2 } }, strandedSeen: { tow: { add: 9 } },
       crashed: { retaliate: { add: 3 } }, parley: { truce: { mul: 0.3 }, beg: { mul: 0.3 } }, truceOffered: { refuse: { add: 2 } },
-      mercyBegged: { finish: { add: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
+      mercyBegged: { finish: { add: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } }, warnedOff: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
     },
   },
   // A scumbag robs about one target in three it comes across: rob 0.5 against keep 1. Boldness 1.3 lets it rob a
@@ -1128,18 +1131,18 @@ export const TRAITS: Record<TraitId, Trait> = {
   // A coward veers off three times as often in a fight. It runs three times as often from a new hostile or a shot, picks a fight half as often, and shoots back
   // at a third of the weight. Boldness 0.6 makes a truck that looks as dangerous as its own a threat, even at the
   // lowest misjudgment. It asks for a truce twice as often and begs three times as often. Threatened, it runs or
-  // pays. It hires a merc three times as readily. It keeps 40% more fuel for the way home.
+  // pays, and warned off a wreck, it backs off more often. It hires a merc three times as readily. It keeps 40% more fuel for the way home.
   coward: {
     towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 0.6, fuelMargin: 1.4, robs: 'offDuty',
     weights: {
       hostileSeen: { flee: { mul: 3 }, fight: { mul: 0.5 } }, attacked: { flee: { mul: 3 }, fightBack: { mul: 0.3 } },
-      parley: { truce: { mul: 2 }, beg: { mul: 3 } }, threatened: { flee: { mul: 3 }, comply: { add: 1 } },
+      parley: { truce: { mul: 2 }, beg: { mul: 3 } }, threatened: { flee: { mul: 3 }, comply: { add: 1 } }, warnedOff: { comply: { add: 1 } },
       escortSeen: { hire: { mul: 3 } }, fightWhim: { veer: { mul: 3 } },
     },
   },
   // Lawmen patrol their town and hunt raiders and first shooters at neutral NPCs. They fight most hostiles they
   // see, as eager as raiders, and shoot back twice as often as most drivers. They seldom ask for a truce or beg.
-  // Threatened, they mostly fight. Nine in ten lawmen help a stranded truck, like traders. An idle lawman patrols
+  // Threatened or warned off a wreck, they mostly fight. Nine in ten lawmen help a stranded truck, like traders. An idle lawman patrols
   // about nine times in ten and waits a turn otherwise. Salvage in sight tempts it about one time in fifty. A lawman
   // never robs.
   lawman: {
@@ -1147,7 +1150,7 @@ export const TRAITS: Record<TraitId, Trait> = {
     weights: {
       idle: { patrol: { add: 20 }, wait: { add: 2 }, scavenge: { mul: 0.05 } },
       hostileSeen: { fight: { add: 8 } }, attacked: { fightBack: { mul: 2 } }, strandedSeen: { tow: { add: 9 } },
-      parley: { truce: { mul: 0.3 }, beg: { mul: 0.3 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
+      parley: { truce: { mul: 0.3 }, beg: { mul: 0.3 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } }, warnedOff: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
     },
   },
   // Couriers carry small loads between every town and location. An idle courier sets out on a trip nearly always.
@@ -1159,7 +1162,7 @@ export const TRAITS: Record<TraitId, Trait> = {
     haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: {
       idle: { travel: { add: 20 }, scavenge: { mul: 0.001 } }, strandedSeen: { tow: { add: 2 } },
-      hostileSeen: { fight: { mul: 0.1 } }, threatened: { comply: { add: 1 } }, escortSeen: { hire: { add: 0.5 } },
+      hostileSeen: { fight: { mul: 0.1 } }, threatened: { comply: { add: 1 } }, warnedOff: { comply: { add: 1 } }, escortSeen: { hire: { add: 0.5 } },
     },
   },
   // Roamers go where nobody goes. An idle roamer explores about three times in five, and trades or scavenges about
@@ -1180,12 +1183,12 @@ export const TRAITS: Record<TraitId, Trait> = {
   },
   // Supply convoys haul fuel drums from the Pump Station and water from the oases to the towns. An idle convoy
   // hauls nearly always, and stops for salvage only at about the minimum chance. Like traders, convoys avoid
-  // fights and leave them to their guard, and mostly pay when threatened. A convoy never robs.
+  // fights and leave them to their guard, and mostly give way when threatened or warned off a wreck. A convoy never robs.
   supplier: {
     towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: ['pump-station', 'dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'never',
     weights: {
       idle: { haul: { add: 30 }, scavenge: { mul: 0.001 } }, strandedSeen: { tow: { add: 9 } },
-      hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } }, threatened: { comply: { add: 1 }, fightBack: { mul: 0.1 } },
+      hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } }, threatened: { comply: { add: 1 }, fightBack: { mul: 0.1 } }, warnedOff: { comply: { add: 1 }, fightBack: { mul: 0.1 } },
     },
   },
   // A convoy guard takes up an escort nearly always when it can. Otherwise it waits about 5 turns, then drives to the
@@ -1194,7 +1197,7 @@ export const TRAITS: Record<TraitId, Trait> = {
     towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: ['bowl', 'nose'], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'never',
     weights: {
       idle: { escort: { add: 30 }, wait: { add: 5 }, travel: { add: 1 }, scavenge: { mul: 0.001 } },
-      hostileSeen: { fight: { add: 8 } }, attacked: { fightBack: { mul: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
+      hostileSeen: { fight: { add: 8 } }, attacked: { fightBack: { mul: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } }, warnedOff: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
     },
   },
   // A merc waits at a town pad for hire. A wait weight of 10 against a trip weight of 1 keeps it parked about 10
@@ -1204,7 +1207,7 @@ export const TRAITS: Record<TraitId, Trait> = {
     towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: ['bowl', 'nose'], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: {
       idle: { wait: { add: 10 }, travel: { add: 1 }, scavenge: { mul: 0.001 } },
-      hostileSeen: { fight: { add: 4 } }, attacked: { fightBack: { mul: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
+      hostileSeen: { fight: { add: 4 } }, attacked: { fightBack: { mul: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } }, warnedOff: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
     },
   },
   // A brave driver almost never runs or gives up: flee, truce, beg and paying up drop to a twentieth of their
@@ -1213,7 +1216,7 @@ export const TRAITS: Record<TraitId, Trait> = {
     towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 1.5, fuelMargin: 1, robs: 'offDuty',
     weights: {
       hostileSeen: { flee: { mul: 0.05 } }, contactHeard: { flee: { mul: 0.05 } }, attacked: { flee: { mul: 0.05 } },
-      parley: { truce: { mul: 0.05 }, beg: { mul: 0.05 } }, threatened: { flee: { mul: 0.05 }, comply: { mul: 0.05 } },
+      parley: { truce: { mul: 0.05 }, beg: { mul: 0.05 } }, threatened: { flee: { mul: 0.05 }, comply: { mul: 0.05 } }, warnedOff: { comply: { mul: 0.05 } },
       fightWhim: { rush: { mul: 3 } },
     },
   },

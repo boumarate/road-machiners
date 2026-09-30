@@ -14,6 +14,7 @@ import { playerSees } from '../sim/vision';
 import { playerCanAct } from '../sim/world';
 import { el, panel } from './dom';
 import { fuelLiters, meters } from './units';
+import { npcName } from '../sim/spawn';
 
 const COMPASS = ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'];
 const METERS_PER_KM = 1000;
@@ -172,7 +173,7 @@ export class DialoguePanel {
       el('button', { class: 'dialogue-option', onclick: () => this.choose(i) }, `${i + 1}. ${o.text}`),
     );
     this.root.replaceChildren(
-      el('div', { class: 'dialogue-speaker' }, `Radio: ${npc.name}`),
+      el('div', { class: 'dialogue-speaker' }, `Radio: ${npcName(npc)}`),
       el('div', { class: 'dialogue-line' }, `“${fillLine(call.line.text, call.line.vars)}”`),
       el('div', { class: 'dialogue-options' }, ...options),
     );

@@ -19,7 +19,7 @@ import { generateObstacles, obstacleReach } from './mapgen';
 import type { BakedMap } from './terrain';
 import { planNpcOrders } from './ai';
 import { applyGodMode } from './cheats';
-import { assignAutoOrders, dropMagazine, fireWeapons, isHostile, resolveDestroyed } from './combat';
+import { assignAutoOrders, dropMagazine, fireWeapons, isHostile, noteEngagements, resolveDestroyed } from './combat';
 import { advanceKnockout, advanceNpcKnockouts, checkDeath, checkKnockout } from './defeat';
 import { healPlayer } from './health';
 import { fireGuards } from './guards';
@@ -289,6 +289,7 @@ export function endTurn(
     advanceStates(w);
     checkBeacon(w);
     resolveNpcActivities(w);
+    noteEngagements(w);
     discoverSites(w);
     checkDeath(w);
     advanceKnockout(w);

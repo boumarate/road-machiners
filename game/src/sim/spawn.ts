@@ -177,6 +177,14 @@ function driverName(names: Rng): string {
   return `${first} ${last}`;
 }
 
+// The name texts give an NPC truck: its template's profession and its driver's name, like "Roamer Silas Kane".
+export function npcName(v: Vehicle): string {
+  if (!v.brain) return v.name;
+  const template = NPCS[v.brain.templateId];
+  if (!template) throw new Error(`Unknown NPC template ${v.brain.templateId}`);
+  return `${template.profession} ${v.brain.driver}`;
+}
+
 const NEUTRAL_SITES: readonly Site[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== "camp")];
 
 // A random site among the template's spawn sites.

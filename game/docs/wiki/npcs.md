@@ -5,20 +5,20 @@ NPC behavior has three layers. Traits in `brain.traits` are permanent. A goal st
 ## Templates
 
 <!-- wiki:npc-templates -->
-| id | name | faction | traits | extra traits (chance) | fight style | aggro range (tiles) | preferred range (tiles) | cap | spawn interval (turns) | spawn place |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| buggy | Raider outrider | raiders | raider | brave (0.15) | circle | 11 | 3 | 6 | 50 | {"kind":"camp"} |
-| gunwagon | Gunwagon | raiders | raider | brave (0.15) | hold | 12 | 6 | 2 | 150 | {"kind":"camp"} |
-| trader | Trader caravan | traders | trader | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 5 | 12 | {"kind":"town"} |
-| scavenger | Scavenger | scavengers | scavenger | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 4 | 12 | {"kind":"town"} |
-| bowlFarmer | Bowl Farmers patrol | bowl | lawman, brave |  | hold | 0 | 0 | 3 | 70 | {"kind":"sites","ids":["bowl"]} |
-| noseArmy | Nose Army patrol | nose | lawman, brave |  | hold | 0 | 0 | 3 | 70 | {"kind":"sites","ids":["nose"]} |
-| courier | Courier | couriers | courier | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 3 | 30 | {"kind":"town"} |
-| roamer | Roamer | roamers | roamer | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 3 | 30 | {"kind":"town"} |
-| vulture | Vulture | vultures | vulture | coward (0.6), scumbag (0.35), brave (0.1) | hold | 0 | 0 | 3 | 30 | {"kind":"town"} |
-| convoy | Supply convoy | convoys | supplier | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 2 | 100 | {"kind":"sites","ids":["bowl","nose"]} |
-| convoyGuard | Convoy guard | convoys | guard, brave | scumbag (0.25) | hold | 0 | 0 | 2 | 100 | {"kind":"escort","of":"convoy"} |
-| merc | Merc | mercs | merc | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 3 | 70 | {"kind":"sites","ids":["bowl","nose"]} |
+| id | name | profession | faction | traits | extra traits (chance) | fight style | aggro range (tiles) | preferred range (tiles) | cap | spawn interval (turns) | spawn place |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| buggy | Raider outrider | Raider | raiders | raider | brave (0.15) | circle | 11 | 3 | 6 | 50 | {"kind":"camp"} |
+| gunwagon | Gunwagon | Raider | raiders | raider | brave (0.15) | hold | 12 | 6 | 2 | 150 | {"kind":"camp"} |
+| trader | Trader caravan | Trader | traders | trader | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 5 | 12 | {"kind":"town"} |
+| scavenger | Scavenger | Scavenger | scavengers | scavenger | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 4 | 12 | {"kind":"town"} |
+| bowlFarmer | Bowl Farmers patrol | Bowl Farmer | bowl | lawman, brave |  | hold | 0 | 0 | 3 | 70 | {"kind":"sites","ids":["bowl"]} |
+| noseArmy | Nose Army patrol | Nose soldier | nose | lawman, brave |  | hold | 0 | 0 | 3 | 70 | {"kind":"sites","ids":["nose"]} |
+| courier | Courier | Courier | couriers | courier | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 3 | 30 | {"kind":"town"} |
+| roamer | Roamer | Roamer | roamers | roamer | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 3 | 30 | {"kind":"town"} |
+| vulture | Vulture | Vulture | vultures | vulture | coward (0.6), scumbag (0.35), brave (0.1) | hold | 0 | 0 | 3 | 30 | {"kind":"town"} |
+| convoy | Supply convoy | Convoy driver | convoys | supplier | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 2 | 100 | {"kind":"sites","ids":["bowl","nose"]} |
+| convoyGuard | Convoy guard | Convoy guard | convoys | guard, brave | scumbag (0.25) | hold | 0 | 0 | 2 | 100 | {"kind":"escort","of":"convoy"} |
+| merc | Merc | Merc | mercs | merc | scumbag (0.25), coward (0.25), brave (0.15) | hold | 0 | 0 | 3 | 70 | {"kind":"sites","ids":["bowl","nose"]} |
 <!-- /wiki:npc-templates -->
 
 ## Traits
@@ -29,18 +29,18 @@ NPC behavior has three layers. Traits in `brain.traits` are permanent. A goal st
 | id | robs | boldness | fuel margin | weight changes |
 | --- | --- | --- | --- | --- |
 | scavenger | offDuty | 1 | 1 | idle.scavenge +10, salvageSeen.loot +3, strandedSeen.tow +9, hostileSeen.fight +2, aidAsked.give  x2, needySeen.aid +0.02 |
-| trader | offDuty | 1 | 0.75 | idle.trade +30, idle.haul +1, strandedSeen.tow +9, hostileSeen.fight  x0.002, attacked.fightBack  x0.1, ramChance.ram  x0.001, crashed.retaliate  x0.2, parley.truce +2, truceOffered.accept +4, mercyBegged.spare +3, threatened.comply +1, threatened.fightBack  x0.1, escortSeen.hire +1, aidAsked.give  x2, needySeen.aid +0.02 |
-| raider | offDuty | 1 | 1 | idle.raid +9, contactHeard.investigate +10.8, hostileSeen.fight +7.2, strandedSeen.tow +9, crashed.retaliate +3, parley.truce  x0.3, parley.beg  x0.3, truceOffered.refuse +2, mercyBegged.finish +2, threatened.comply  x0.2, threatened.fightBack +2 |
+| trader | offDuty | 1 | 0.75 | idle.trade +30, idle.haul +1, strandedSeen.tow +9, hostileSeen.fight  x0.002, attacked.fightBack  x0.1, ramChance.ram  x0.001, crashed.retaliate  x0.2, parley.truce +2, truceOffered.accept +4, mercyBegged.spare +3, threatened.comply +1, threatened.fightBack  x0.1, warnedOff.comply +1, warnedOff.fightBack  x0.1, escortSeen.hire +1, aidAsked.give  x2, needySeen.aid +0.02 |
+| raider | offDuty | 1 | 1 | idle.raid +9, contactHeard.investigate +10.8, hostileSeen.fight +7.2, strandedSeen.tow +9, crashed.retaliate +3, parley.truce  x0.3, parley.beg  x0.3, truceOffered.refuse +2, mercyBegged.finish +2, threatened.comply  x0.2, threatened.fightBack +2, warnedOff.comply  x0.2, warnedOff.fightBack +2 |
 | scumbag | offDuty | 1.3 | 1 | preySeen.rob +0.45, crashed.retaliate +1 |
-| coward | offDuty | 0.6 | 1.4 | hostileSeen.flee  x3, hostileSeen.fight  x0.5, attacked.flee  x3, attacked.fightBack  x0.3, parley.truce  x2, parley.beg  x3, threatened.flee  x3, threatened.comply +1, escortSeen.hire  x3, fightWhim.veer  x3 |
-| lawman | never | 1 | 1 | idle.patrol +20, idle.wait +2, idle.scavenge  x0.05, hostileSeen.fight +8, attacked.fightBack  x2, strandedSeen.tow +9, parley.truce  x0.3, parley.beg  x0.3, threatened.comply  x0.2, threatened.fightBack +2 |
-| courier | offDuty | 1 | 1 | idle.travel +20, idle.scavenge  x0.001, strandedSeen.tow +2, hostileSeen.fight  x0.1, threatened.comply +1, escortSeen.hire +0.5 |
+| coward | offDuty | 0.6 | 1.4 | hostileSeen.flee  x3, hostileSeen.fight  x0.5, attacked.flee  x3, attacked.fightBack  x0.3, parley.truce  x2, parley.beg  x3, threatened.flee  x3, threatened.comply +1, warnedOff.comply +1, escortSeen.hire  x3, fightWhim.veer  x3 |
+| lawman | never | 1 | 1 | idle.patrol +20, idle.wait +2, idle.scavenge  x0.05, hostileSeen.fight +8, attacked.fightBack  x2, strandedSeen.tow +9, parley.truce  x0.3, parley.beg  x0.3, threatened.comply  x0.2, threatened.fightBack +2, warnedOff.comply  x0.2, warnedOff.fightBack +2 |
+| courier | offDuty | 1 | 1 | idle.travel +20, idle.scavenge  x0.001, strandedSeen.tow +2, hostileSeen.fight  x0.1, threatened.comply +1, warnedOff.comply +1, escortSeen.hire +0.5 |
 | roamer | offDuty | 1 | 1 | idle.explore +10, idle.trade +3, idle.scavenge +2, salvageSeen.loot +3, strandedSeen.tow +3, escortSeen.hire +0.2, aidAsked.give  x2, needySeen.aid +0.02 |
 | vulture | offDuty | 1 | 1 | idle.prowl +10, idle.scavenge +2, salvageSeen.loot +20, crashed.retaliate +0.5 |
-| supplier | never | 1 | 1 | idle.haul +30, idle.scavenge  x0.001, strandedSeen.tow +9, hostileSeen.fight  x0.002, attacked.fightBack  x0.1, threatened.comply +1, threatened.fightBack  x0.1 |
-| guard | never | 1 | 1 | idle.escort +30, idle.wait +5, idle.travel +1, idle.scavenge  x0.001, hostileSeen.fight +8, attacked.fightBack  x2, threatened.comply  x0.2, threatened.fightBack +2 |
-| merc | offDuty | 1 | 1 | idle.wait +10, idle.travel +1, idle.scavenge  x0.001, hostileSeen.fight +4, attacked.fightBack  x2, threatened.comply  x0.2, threatened.fightBack +2 |
-| brave | offDuty | 1.5 | 1 | hostileSeen.flee  x0.05, contactHeard.flee  x0.05, attacked.flee  x0.05, parley.truce  x0.05, parley.beg  x0.05, threatened.flee  x0.05, threatened.comply  x0.05, fightWhim.rush  x3 |
+| supplier | never | 1 | 1 | idle.haul +30, idle.scavenge  x0.001, strandedSeen.tow +9, hostileSeen.fight  x0.002, attacked.fightBack  x0.1, threatened.comply +1, threatened.fightBack  x0.1, warnedOff.comply +1, warnedOff.fightBack  x0.1 |
+| guard | never | 1 | 1 | idle.escort +30, idle.wait +5, idle.travel +1, idle.scavenge  x0.001, hostileSeen.fight +8, attacked.fightBack  x2, threatened.comply  x0.2, threatened.fightBack +2, warnedOff.comply  x0.2, warnedOff.fightBack +2 |
+| merc | offDuty | 1 | 1 | idle.wait +10, idle.travel +1, idle.scavenge  x0.001, hostileSeen.fight +4, attacked.fightBack  x2, threatened.comply  x0.2, threatened.fightBack +2, warnedOff.comply  x0.2, warnedOff.fightBack +2 |
+| brave | offDuty | 1.5 | 1 | hostileSeen.flee  x0.05, contactHeard.flee  x0.05, attacked.flee  x0.05, parley.truce  x0.05, parley.beg  x0.05, threatened.flee  x0.05, threatened.comply  x0.05, warnedOff.comply  x0.05, fightWhim.rush  x3 |
 <!-- /wiki:traits -->
 
 ## Decisions
@@ -90,6 +90,9 @@ Base weights of every option at each decision point. Traits and states add or mu
 | threatened | comply | 1 |
 | threatened | fightBack | 1 |
 | threatened | flee | 1 |
+| warnedOff | comply | 1 |
+| warnedOff | refuse | 1 |
+| warnedOff | fightBack | 1 |
 | mugging | demand | 3 |
 | mugging | attack | 2 |
 | resume | resume | 9 |
@@ -136,6 +139,7 @@ A timed state between two vehicles, like a feud or a tow, is owned by `src/sim/s
 | escort |  | true |
 | strayFire | 60 | false |
 | aid | 20 | true |
+| combat | 10 | false |
 <!-- /wiki:state-kinds -->
 
 ## Gear levels

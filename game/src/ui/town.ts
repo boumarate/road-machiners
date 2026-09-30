@@ -45,11 +45,12 @@ import type { PartInstance, Vehicle, World } from "../sim/types";
 import { maxHp } from "../sim/wear";
 import { chassisMap, chassisStats, compareBase, createIcon, diffStats, goodIcon, partCard, statGrid, type IconName } from "./cards";
 import { el, panel } from "./dom";
-import { contractDue, contractSummary } from "./format";
+import { contractDue, contractSummary, contractWindow } from "./format";
 import { InventoryView, truckChips } from "./inventory";
 import type { UiHost } from "./host";
 import { fuelLiters, hp } from "./units";
 import { fuelCap, suppliesCap } from "../sim/stats";
+import { npcName } from "../sim/spawn";
 
 type Tab = "market" | "parts" | "garage" | "trucks" | "contracts";
 
@@ -367,7 +368,7 @@ export class TownScreen {
       {},
       el("h3", {}, "Contract board"),
       board.length
-        ? el("div", { class: "jobs" }, ...board.map((c) => contractRow(w, c, accept(c))))
+        ? el("div", { class: "jobs" }, ...board.map((c) => contractRow(w, c, accept(c), true)))
         : el("div", { class: "dim" }, "No offers."),
       el("h3", {}, `Your contracts ${w.player.contracts.length} / ${CONTRACTS.maxActive}`),
       w.player.contracts.length
@@ -446,14 +447,18 @@ function bar(share: number): HTMLElement {
   return el("div", { class: "meter" }, el("div", { style: `width:${Math.max(0, Math.min(1, share)) * 100}%` }));
 }
 
-function contractRow(w: World, c: Contract, action: HTMLElement): HTMLElement {
+// An offer on the board shows how long it gives from acceptance. A held contract shows when it is due.
+function contractRow(w: World, c: Contract, action: HTMLElement, posted = false): HTMLElement {
+  const clock = posted
+    ? el("span", { class: "price", title: `${c.window} turns from acceptance` }, createIcon("clock"), contractWindow(c))
+    : el("span", { class: "price", title: `${c.deadline - w.turn} turns left` }, createIcon("clock"), contractDue(c));
   return el(
     "div",
     { class: "job" },
     createIcon(CONTRACT_ICON[c.kind]),
     el("span", {}, contractSummary(c)),
     el("span", { class: "price" }, createIcon("money"), `${c.reward}`),
-    el("span", { class: "price", title: `${c.deadline - w.turn} turns left` }, createIcon("clock"), contractDue(c)),
+    clock,
     action,
   );
 }
@@ -546,7 +551,7 @@ export class TruckTradeScreen {
     const truck = el("div", { class: "town-truck" }, this.inventory.render());
     this.root.replaceChildren(
       el("button", { class: "close", onclick: () => this.close() }, "Leave [Esc]"),
-      el("h3", {}, npc.name, truckChips(w), partnerChips(npc)),
+      el("h3", {}, npcName(npc), truckChips(w), partnerChips(npc)),
       el("div", { class: "town-split" }, truck, el("div", { class: "town-shop" }, ...side)),
     );
     this.inventory.fitTo(truck);

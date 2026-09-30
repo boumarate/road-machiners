@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { REGION } from "../data/region";
 import { CONDITION } from "../data/wear";
 import type { Contract } from "../sim/market";
 import { partDef } from "../data/parts";
 import { addVehicle, emptyWorld, npcBrain } from "../sim/testkit";
 import type { GameEvent, Job, PartInstance } from "../sim/types";
 import { maxHp } from "../sim/wear";
-import { contractDue, contractSummary, eventText, jobLabel, roundLabel, wearLabel } from "./format";
+import { contractDue, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel } from "./format";
 import { mountedParts } from "../sim/grid";
 
 function part(wear: number): PartInstance {
@@ -28,8 +29,8 @@ describe("wearLabel", () => {
 });
 
 describe("contract text", () => {
-  const bounty: Contract = { id: "c1", shop: "bowl", kind: "bounty", template: "buggy", targetName: "Raider outrider", reward: 100, deadline: 100, tier: 1 };
-  const fetch: Contract = { id: "c2", shop: "bowl", kind: "fetch", defId: "mg", reward: 100, deadline: 100, tier: 1 };
+  const bounty: Contract = { id: "c1", shop: "bowl", kind: "bounty", template: "buggy", targetName: "Raider outrider", reward: 100, deadline: 100, window: 100, tier: 1 };
+  const fetch: Contract = { id: "c2", shop: "bowl", kind: "fetch", defId: "mg", reward: 100, deadline: 100, window: 100, tier: 1 };
 
   it("shows the deadline as the game time the contract fails", () => {
     expect(contractDue(bounty)).toBe("by Day 1 12:19");
@@ -41,6 +42,17 @@ describe("contract text", () => {
 
   it("says the hand-in part must still work and be rebuilt at most once", () => {
     expect(contractSummary(fetch)).toBe("Bring MG turret to Bowl: working, rebuilt at most once");
+  });
+
+  it("starts a rush haul's summary with Rush and leaves a standard haul plain", () => {
+    const haul: Contract = { id: "c3", shop: "bowl", kind: "haul", good: "salt", units: 3, to: "nose", reward: 100, deadline: 100, window: 100, rush: false, tier: 1 };
+    expect(contractSummary(haul).startsWith("Haul 3")).toBe(true);
+    expect(contractSummary({ ...haul, rush: true }).startsWith("Rush: Haul 3")).toBe(true);
+  });
+
+  it("shows the window in whole game hours, at least one", () => {
+    expect(contractWindow({ ...bounty, window: 525 })).toBe("28 h");
+    expect(contractWindow({ ...bounty, window: 1 })).toBe("1 h");
   });
 });
 
@@ -168,5 +180,19 @@ describe("empty gun log", () => {
     const me = w.vehicles[0];
     const gun = mountedParts(me, "weapon")[0];
     expect(eventText(w, { t: "empty", vehicle: me.id, weapon: gun.id })).toBeNull();
+  });
+});
+
+describe("NPC names in the log", () => {
+  it("names an NPC by profession and driver, also after it was removed, and the player as You", () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, "roamers", "buggy", ["mg", "stockEngine"], { x: 20, y: 20 });
+    npc.brain = { ...npcBrain("roamer", npc.pos, ["roamer"]), driver: "Silas Kane" };
+    const offer: GameEvent = { t: "towOffer", by: npc.id, town: REGION.towns[0].id, fee: 40 };
+    expect(eventText(w, offer)?.text).toMatch(/^Roamer Silas Kane offers to tow you to /);
+    w.vehicles = w.vehicles.filter((v) => v !== npc);
+    w.removed.push(npc);
+    expect(eventText(w, offer)?.text).toMatch(/^Roamer Silas Kane offers/);
+    expect(vehicleName(w, w.player.vehicleId)).toBe("You");
   });
 });

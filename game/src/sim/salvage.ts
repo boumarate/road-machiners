@@ -18,8 +18,9 @@ import { sampleWeighted } from './npc-loadout';
 import { itemMass } from './mass';
 import { getResources } from './resources';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
-import { cancelJob, inCombat, startJob } from './jobs';
-import type { GridItem, Obstacle, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
+import { inCombat } from './combat';
+import { cancelJob, startJob } from './jobs';
+import type { GridItem, NpcActivity, Obstacle, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
 import { estimateCrashGeometry } from './crash-contact';
 import { walkLane } from './armor';
 import { canUseSite, townAt } from './sites';
@@ -451,6 +452,7 @@ export function takeFromTruck(world: World, targetId: string, itemId: string, to
     const target = vehicleById(w, targetId);
     requireIdleRefit(me);
     if (!canLootTruck(me, target)) throw new Error('Park beside a knocked-out truck to loot it');
+    requireLootFree(w, me, targetId);
     const item = target.items.find((it) => it.id === itemId);
     if (!item) throw new Error(`No item ${itemId} on ${target.name}`);
     takeItem(w, me, target, item, to);
@@ -474,6 +476,82 @@ export function finishTruckPickup(world: World, looter: Vehicle, pickup: TruckPi
   target.items = target.items.filter((it) => it.id !== item.id);
 }
 
+// ---- Who loots a target. One truck at a time loots a wreck, a pile or a knocked-out truck. Site stock stays shared.
+// Active work claims first: a job on the target, then an NPC parked at it in its loot goal's act phase. Only when
+// nobody works it, the player parked in reach holds it. The rule blocks starts, never work already running.
+
+// A non-site stock or a knocked-out truck.
+export function isLootTarget(world: World, targetId: string): boolean {
+  const stock = world.salvage.find((s) => s.id === targetId);
+  if (stock) return !isSiteStock(stock);
+  const truck = world.vehicles.find((v) => v.id === targetId);
+  return truck !== undefined && isKnockedOut(truck);
+}
+
+// The truck looting the target, or null. Never one for a site or a non-target.
+export function looterOf(world: World, targetId: string): Vehicle | null {
+  if (!isLootTarget(world, targetId)) return null;
+  const working = world.vehicles.find((v) => worksOn(v, targetId)) ?? world.vehicles.find((v) => actsOn(world, v, targetId));
+  if (working) return working;
+  const me = playerVehicle(world);
+  return inLootReach(world, me, targetId) ? me : null;
+}
+
+// The other truck looting the target, which keeps `looter` from starting there, or null.
+export function lootBlocker(world: World, looter: Vehicle, targetId: string): Vehicle | null {
+  const holder = looterOf(world, targetId);
+  return holder && holder.id !== looter.id ? holder : null;
+}
+
+// Throws when another truck is looting the target, so `looter` cannot start there.
+export function requireLootFree(world: World, looter: Vehicle, targetId: string): void {
+  const blocker = lootBlocker(world, looter, targetId);
+  if (blocker) throw new Error(lootBlockedError(world, blocker, targetId));
+}
+
+export function lootBlockedError(world: World, blocker: Vehicle, targetId: string): string {
+  if (world.salvage.some((s) => s.id === targetId)) return `${blocker.name} is looting this wreck`;
+  if (world.vehicles.some((v) => v.id === targetId)) return `${blocker.name} is looting this truck`;
+  throw new Error(`No loot target ${targetId}`);
+}
+
+// The target the NPC holds the claim on, or null. Only its job and its top goal can name one.
+export function lootClaimedBy(world: World, npc: Vehicle): string | null {
+  const ids = [jobTarget(npc), npc.brain?.goals.at(-1)?.targetId ?? null];
+  return ids.find((id) => id !== null && looterOf(world, id)?.id === npc.id) ?? null;
+}
+
+// The loot target the truck's job works: a search of the stock, or a refit whose pickup comes from a stock or truck.
+export function jobTarget(v: Vehicle): string | null {
+  const job = v.job;
+  if (job?.kind === 'search') return job.stockId;
+  const pickup = job?.kind === 'refit' ? job.pickup : null;
+  return pickup ? pickupSource(pickup) : null;
+}
+
+function pickupSource(pickup: RefitPickup): string {
+  return pickup.from === 'stock' ? pickup.stockId : pickup.vehicleId;
+}
+
+function worksOn(v: Vehicle, targetId: string): boolean {
+  return jobTarget(v) === targetId;
+}
+
+// Parked at the target in the act phase of a loot goal, like a looter between two refits.
+function actsOn(world: World, v: Vehicle, targetId: string): boolean {
+  const goal = v.brain?.goals.at(-1);
+  return goal !== undefined && isLootActOn(goal, targetId) && inLootReach(world, v, targetId);
+}
+
+function isLootActOn(goal: NpcActivity, targetId: string): boolean {
+  return (goal.kind === 'loot' || goal.kind === 'scavenge') && goal.targetId === targetId && goal.phase === 'act';
+}
+
+function inLootReach(world: World, v: Vehicle, targetId: string): boolean {
+  const stock = world.salvage.find((s) => s.id === targetId);
+  return stock ? canReachSalvage(v, stock) : canLootTruck(v, vehicleById(world, targetId));
+}
+
 // ---- NPC looters
 
 // One turn of an NPC looting a parked-beside truck. Every loose item that fits comes over at once, then one
@@ -482,7 +560,7 @@ export function finishTruckPickup(world: World, looter: Vehicle, pickup: TruckPi
 export function lootTruckTurn(world: World, looter: Vehicle, target: Vehicle): string | null {
   if (looter.job?.kind === 'refit') return null;
   takeLooseItems(world, looter, target);
-  if (inCombat(world, looter)) return 'a foe in sight stops the looting';
+  if (inCombat(world, looter)) return 'combat stops the looting';
   const next = nextInstalled(looter, target);
   if (!next) return target.items.some((it) => takeError(target, it) === null) ? 'cargo cannot hold the loot' : 'nothing left to loot';
   takeItem(world, looter, target, next.item, next.spot);
