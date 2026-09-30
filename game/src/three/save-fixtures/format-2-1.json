@@ -1,0 +1,386 @@
+{
+  "vehicles": [
+    {
+      "id": "player",
+      "chassisId": "scout",
+      "items": [
+        {
+          "id": "cab",
+          "kind": "part",
+          "x": 1,
+          "y": 3,
+          "rot": 0,
+          "part": {
+            "id": "pcab",
+            "defId": "cabPickup",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "tr",
+          "kind": "part",
+          "x": 2,
+          "y": 5,
+          "rot": 0,
+          "part": {
+            "id": "ptr",
+            "defId": "transmission",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "tk",
+          "kind": "part",
+          "x": 4,
+          "y": 5,
+          "rot": 0,
+          "part": {
+            "id": "ptk",
+            "defId": "tank",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "w1",
+          "kind": "part",
+          "x": 1,
+          "y": 1,
+          "rot": 0,
+          "part": {
+            "id": "pw1",
+            "defId": "wheel",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "w2",
+          "kind": "part",
+          "x": 5,
+          "y": 1,
+          "rot": 0,
+          "part": {
+            "id": "pw2",
+            "defId": "wheel",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "w3",
+          "kind": "part",
+          "x": 1,
+          "y": 5,
+          "rot": 0,
+          "part": {
+            "id": "pw3",
+            "defId": "wheel",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "w4",
+          "kind": "part",
+          "x": 5,
+          "y": 5,
+          "rot": 0,
+          "part": {
+            "id": "pw4",
+            "defId": "wheel",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "mg",
+          "kind": "part",
+          "x": 4,
+          "y": 1,
+          "rot": 0,
+          "part": {
+            "id": "pmg",
+            "defId": "mg",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "big",
+          "kind": "part",
+          "x": 4,
+          "y": 3,
+          "rot": 0,
+          "part": {
+            "id": "pbig",
+            "defId": "rocketRack",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "plate",
+          "kind": "part",
+          "x": 6,
+          "y": 2,
+          "rot": 0,
+          "part": {
+            "id": "pplate",
+            "defId": "plates",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "front",
+          "kind": "part",
+          "x": 3,
+          "y": 0,
+          "rot": 1,
+          "part": {
+            "id": "pfront",
+            "defId": "plates",
+            "hp": 10,
+            "wear": 0
+          }
+        }
+      ],
+      "job": {
+        "kind": "refit",
+        "moves": [
+          {
+            "itemId": "mg",
+            "from": {
+              "x": 4,
+              "y": 1,
+              "rot": 0
+            },
+            "to": {
+              "x": 5,
+              "y": 3,
+              "rot": 0
+            }
+          }
+        ],
+        "pickup": {
+          "from": "stock",
+          "stockId": "s",
+          "partId": "mg",
+          "itemId": "n",
+          "to": {
+            "x": 4,
+            "y": 2,
+            "rot": 0
+          }
+        },
+        "turnsLeft": 2,
+        "total": 3
+      }
+    },
+    {
+      "id": "npc",
+      "chassisId": "hauler",
+      "items": [
+        {
+          "id": "h",
+          "kind": "part",
+          "x": 4,
+          "y": 1,
+          "rot": 0,
+          "part": {
+            "id": "ph",
+            "defId": "mg",
+            "hp": 10,
+            "wear": 0
+          }
+        }
+      ],
+      "job": null
+    }
+  ],
+  "removed": [
+    {
+      "id": "gone",
+      "chassisId": "scout",
+      "items": [
+        {
+          "id": "cab",
+          "kind": "part",
+          "x": 1,
+          "y": 3,
+          "rot": 0,
+          "part": {
+            "id": "pcab",
+            "defId": "cabPickup",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "tr",
+          "kind": "part",
+          "x": 2,
+          "y": 5,
+          "rot": 0,
+          "part": {
+            "id": "ptr",
+            "defId": "transmission",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "tk",
+          "kind": "part",
+          "x": 4,
+          "y": 5,
+          "rot": 0,
+          "part": {
+            "id": "ptk",
+            "defId": "tank",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "w1",
+          "kind": "part",
+          "x": 1,
+          "y": 1,
+          "rot": 0,
+          "part": {
+            "id": "pw1",
+            "defId": "wheel",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "w2",
+          "kind": "part",
+          "x": 5,
+          "y": 1,
+          "rot": 0,
+          "part": {
+            "id": "pw2",
+            "defId": "wheel",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "w3",
+          "kind": "part",
+          "x": 1,
+          "y": 5,
+          "rot": 0,
+          "part": {
+            "id": "pw3",
+            "defId": "wheel",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "w4",
+          "kind": "part",
+          "x": 5,
+          "y": 5,
+          "rot": 0,
+          "part": {
+            "id": "pw4",
+            "defId": "wheel",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "mg",
+          "kind": "part",
+          "x": 4,
+          "y": 1,
+          "rot": 0,
+          "part": {
+            "id": "pmg",
+            "defId": "mg",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "big",
+          "kind": "part",
+          "x": 4,
+          "y": 3,
+          "rot": 0,
+          "part": {
+            "id": "pbig",
+            "defId": "rocketRack",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "plate",
+          "kind": "part",
+          "x": 6,
+          "y": 2,
+          "rot": 0,
+          "part": {
+            "id": "pplate",
+            "defId": "plates",
+            "hp": 10,
+            "wear": 0
+          }
+        },
+        {
+          "id": "front",
+          "kind": "part",
+          "x": 3,
+          "y": 0,
+          "rot": 1,
+          "part": {
+            "id": "pfront",
+            "defId": "plates",
+            "hp": 10,
+            "wear": 0
+          }
+        }
+      ],
+      "job": {
+        "kind": "refit",
+        "moves": [
+          {
+            "itemId": "mg",
+            "from": {
+              "x": 4,
+              "y": 1,
+              "rot": 0
+            },
+            "to": {
+              "x": 5,
+              "y": 3,
+              "rot": 0
+            }
+          }
+        ],
+        "pickup": {
+          "from": "stock",
+          "stockId": "s",
+          "partId": "mg",
+          "itemId": "n",
+          "to": {
+            "x": 4,
+            "y": 2,
+            "rot": 0
+          }
+        },
+        "turnsLeft": 2,
+        "total": 3
+      }
+    }
+  ]
+}
