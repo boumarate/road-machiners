@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { startKit } from '../data/start';
 import { newWorld } from '../sim/world';
-import { emptyWorld } from '../sim/testkit';
+import { addVehicle, emptyWorld } from '../sim/testkit';
 import { moveItem } from '../sim/inventory';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
@@ -58,6 +58,16 @@ describe('local game save', () => {
     const inTown = emptyWorld(sitePads(REGION.towns[0])[0]);
     saveInTown(storage, inTown, 1000);
     expect(hasSave(storage, SLOTS)).toBe(true);
+  });
+
+  it('loads a save that holds an aim at a missing part as a body shot', () => {
+    const storage = makeStorage();
+    const world = emptyWorld();
+    const foe = world.vehicles[1] ?? addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 30 }, Math.PI);
+    world.vehicles[0].weaponOrders = { w1: { targetId: foe.id, aim: 'gone-part' } };
+    writeSave(storage, 'auto', world, 1000);
+    const loaded = loadWorld(storage, 'auto', TEST_MAP);
+    expect(loaded?.vehicles[0].weaponOrders.w1).toEqual({ targetId: foe.id, aim: 'body' });
   });
 
   it('resumes a pending refit after loading without losing progress', () => {
