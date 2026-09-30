@@ -10,7 +10,7 @@ import { siteGates, sitePads, type Site } from './sites';
 import { spawnNpcs } from './spawn';
 import { addState, advanceStates, endState, settleStates, stateOf } from './states';
 import { vehicleStats } from './stats';
-import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive, rngStateForForcedRolls } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive, rngStateForForcedRolls , startCombat } from './testkit';
 import { escortsOf, isOnRope, startEscort, towOf } from './tow';
 import type { GameEvent, NpcState, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
@@ -368,9 +368,9 @@ describe('hiring a merc', () => {
     expect(optionWeights(w, trader, 'escortSeen', merc.id, null)).not.toHaveProperty('hire');
   });
 
-  it('a merc busy fighting another truck cannot be hired', () => {
+  it('a merc in combat with another truck cannot be hired', () => {
     const { w, trader, merc } = onTrip(5000);
-    merc.brain!.goals.push({ kind: 'fight', targetId: 'someone-else', destination: { ...merc.pos }, reason: 'fight back', phase: 'travel' });
+    startCombat(w, addVehicle(w, 'scavengers', 'scout', [], { x: 90, y: 90 }), merc);
     expect(optionWeights(w, trader, 'escortSeen', merc.id, null)).not.toHaveProperty('hire');
   });
 

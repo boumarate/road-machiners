@@ -30,7 +30,7 @@ export function route(world: World, from: Vec, dest: Vec, radius: number, extra:
     const dynamic = dynamicBlockers(world.obstacles, extra);
     const reach = radius + CLEARANCE;
     // An unobstructed line all on road is already the shortest, cheapest route.
-    if (lineCost(nav, statics, dynamic, from, to, reach, 1, null) < Infinity) return [to];
+    if (lineCost(nav, statics, dynamic, from, to, reach, 1, nav.tileCost, null) < Infinity) return [to];
     const layer = navLayer(world.terrain, world.obstacles, radius);
     const start = cellOf(layer, from);
     const target = cellOf(layer, to);
@@ -98,7 +98,8 @@ function exitCell(layer: NavLayer, overlay: Overlay, start: number, target: numb
 // Whether a vehicle can drive straight from a to b without touching an obstacle or a cliff.
 export function straightClear(world: World, a: Vec, b: Vec, radius: number, extra: Blocker[]): boolean {
   const statics = staticSet(world.obstacles, world.terrain.size);
-  return lineCost(terrainNav(world.terrain), statics, dynamicBlockers(world.obstacles, extra), a, b, radius + CLEARANCE, Infinity, null) < Infinity;
+  const nav = terrainNav(world.terrain);
+  return lineCost(nav, statics, dynamicBlockers(world.obstacles, extra), a, b, radius + CLEARANCE, Infinity, nav.tileCost, null) < Infinity;
 }
 
 // A route kept from an earlier turn: its point, its waypoints, and the keys of the blockers that
@@ -160,7 +161,7 @@ function endMoved(kept: KeptRoute, to: Vec): boolean {
 // Index into `rest` of the end point of the last leg that no longer holds, or -1 when all hold. Leg i
 // runs from the previous point, or from the vehicle for i = 0, to rest[i].
 function lastBrokenLeg(c: LegCheck, from: Vec, rest: Vec[], moved: boolean): number {
-  const touches = (a: Vec, b: Vec) => lineCost(c.nav, c.statics, c.dynamic, a, b, c.radius, costliestTile(c.nav, a, [b], 0, 0), null) === Infinity;
+  const touches = (a: Vec, b: Vec) => lineCost(c.nav, c.statics, c.dynamic, a, b, c.radius, costliestFlat(c.nav, a, [b], 0, 0), c.nav.flatCost, null) === Infinity;
   let broken = lastFreshHit(c, from, rest);
   if (moved && rest.length > 1 && touches(rest[rest.length - 2], rest[rest.length - 1])) broken = rest.length - 1;
   if (broken < 0 && touches(from, rest[0])) broken = 0;
@@ -210,17 +211,18 @@ function centerOf(l: NavLayer, c: number): Vec {
 }
 
 // Probe progressively longer shortcuts instead of rescanning the entire remaining route at every bend.
-// Each accepted segment still avoids obstacles, cliffs and costlier ground than its original path, and
-// costs no more than the path it replaces, so a shortcut never trades the road for open ground. Costs
-// include the taste, so a shortcut keeps the way the driver chose.
+// Each accepted segment still avoids obstacles, cliffs and costlier flat ground than its original path,
+// and costs at most `straighten` more than the path it replaces, slope counted, so a shortcut never
+// trades the road for open ground or goes over a hill the path avoided. Costs include the taste, so a
+// shortcut keeps the way the driver chose.
 function shortcut(nav: TerrainNav, statics: StaticSet, dynamic: Blocker[], from: Vec, points: Vec[], reach: number, taste: Taste | null): Vec[] {
   // along[j] is the route cost from `from` to points[j - 1]; along[0] is `from` itself.
   const along = new Float64Array(points.length + 1);
-  for (let j = 0; j < points.length; j++) along[j + 1] = along[j] + groundCost(nav, j === 0 ? from : points[j - 1], points[j], null, Infinity, taste);
+  for (let j = 0; j < points.length; j++) along[j + 1] = along[j] + groundCost(nav, j === 0 ? from : points[j - 1], points[j], null, Infinity, nav.tileCost, taste);
   const out: Vec[] = [];
   let cur = from;
   let i = 0;
-  const fits = (candidate: number) => lineCost(nav, statics, dynamic, cur, points[candidate], reach, costliestTile(nav, cur, points, i, candidate), taste) <= (along[candidate + 1] - along[i]) * (1 + COST_ROUNDING);
+  const fits = (candidate: number) => lineCost(nav, statics, dynamic, cur, points[candidate], reach, costliestFlat(nav, cur, points, i, candidate), nav.flatCost, taste) <= (along[candidate + 1] - along[i]) * (1 + REGION.navigation.straighten + COST_ROUNDING);
   while (i < points.length) {
     let best = i;
     let step = 1;
@@ -251,25 +253,25 @@ const LINE_SAMPLES_PER_TILE = 4;
 // segments in another order differs in the last bits, and a straight run must still count as equal.
 const COST_ROUNDING = 1e-9;
 
-// Costliest tile under cur and points[i..last].
-function costliestTile(nav: TerrainNav, cur: Vec, points: Vec[], i: number, last: number): number {
-  let max = nav.tileCost[tileIndex(nav.size, cur.x, cur.y)];
-  for (let k = i; k <= last; k++) max = Math.max(max, nav.tileCost[tileIndex(nav.size, points[k].x, points[k].y)]);
+// Costliest flat tile cost under cur and points[i..last].
+function costliestFlat(nav: TerrainNav, cur: Vec, points: Vec[], i: number, last: number): number {
+  let max = nav.flatCost[tileIndex(nav.size, cur.x, cur.y)];
+  for (let k = i; k <= last; k++) max = Math.max(max, nav.flatCost[tileIndex(nav.size, points[k].x, points[k].y)]);
   return max;
 }
 
 // Route cost of the straight line from a to b, or Infinity when it touches an obstacle or a cliff or
-// crosses a tile costlier than maxCost.
-function lineCost(nav: TerrainNav, statics: StaticSet, dynamic: Blocker[], a: Vec, b: Vec, reach: number, maxCost: number, taste: Taste | null): number {
+// crosses a tile whose `capCost` is above maxCost.
+function lineCost(nav: TerrainNav, statics: StaticSet, dynamic: Blocker[], a: Vec, b: Vec, reach: number, maxCost: number, capCost: Float64Array, taste: Taste | null): number {
   for (const o of dynamic) if (segmentDist(o.pos, a, b) < o.r + reach) return Infinity;
   if (crossesRail(a, b, reach)) return Infinity;
   for (const o of statics.buckets.alongSegment(a, b, reach)) if (segmentDist(o.pos, a, b) < o.r + reach) return Infinity;
-  return groundCost(nav, a, b, reach, maxCost, taste);
+  return groundCost(nav, a, b, reach, maxCost, capCost, taste);
 }
 
 // Length of the line times the mean tile cost of its samples. With a reach, a sample near a cliff
-// makes it Infinity; so does a tile costlier than maxCost. maxCost limits the tile cost before taste.
-function groundCost(nav: TerrainNav, a: Vec, b: Vec, reach: number | null, maxCost: number, taste: Taste | null): number {
+// makes it Infinity; so does a tile whose capCost entry is above maxCost. The sum always reads the full tile cost, with taste.
+function groundCost(nav: TerrainNav, a: Vec, b: Vec, reach: number | null, maxCost: number, capCost: Float64Array, taste: Taste | null): number {
   const length = dist(a, b);
   const n = Math.ceil(length * LINE_SAMPLES_PER_TILE);
   const steps = Math.max(1, n);
@@ -278,8 +280,9 @@ function groundCost(nav: TerrainNav, a: Vec, b: Vec, reach: number | null, maxCo
     const x = a.x + ((b.x - a.x) * k) / steps;
     const y = a.y + ((b.y - a.y) * k) / steps;
     if (reach !== null && nearCliff(nav, x, y, reach)) return Infinity;
-    const cost = nav.tileCost[tileIndex(nav.size, x, y)];
-    if (cost > maxCost) return Infinity;
+    const tile = tileIndex(nav.size, x, y);
+    if (capCost[tile] > maxCost) return Infinity;
+    const cost = nav.tileCost[tile];
     sum += tasted(taste, cost, x, y);
   }
   return (length * sum) / (n + 1);

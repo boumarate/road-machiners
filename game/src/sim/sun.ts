@@ -2,7 +2,7 @@
 
 import { TIME } from "../data/time";
 import { weatherAt } from "./weather";
-import type { World } from "./types";
+import type { Obstacle, World } from "./types";
 import { heightAt } from "./terrain";
 import { clamp, dist, type Vec } from "./vec";
 
@@ -28,31 +28,31 @@ export function sunAt(turn: number): Sun | null {
   };
 }
 
+// The obstacles that can shade a point within `radius` of center. Obstacles farther than the shade reach can
+// never block. A caller that checks many points near one spot filters once and passes the result to inShade,
+// since filtering the whole map per point stalled every turn.
+export function shadeCasters(world: World, center: Vec, radius: number): Obstacle[] {
+  return world.obstacles.filter((o) => TIME.obstacleShade[o.kind] !== undefined && dist(center, o.pos) <= radius + TIME.shadeReach + o.r);
+}
+
 // Whether pos sits in shade: steps toward the sun and checks the terrain and blocking obstacles
-// against the ray. Obstacles farther than the shade reach can never block, so they are filtered
-// once up front rather than on every sample.
-export function inShade(world: World, pos: Vec, sun: Sun): boolean {
+// against the ray. `near` must hold every obstacle that can shade pos, and may hold more.
+export function inShade(world: World, pos: Vec, sun: Sun, near: Obstacle[] = shadeCasters(world, pos, 0)): boolean {
   const base = heightAt(world.terrain, pos.x, pos.y);
   const rise = Math.tan(sun.elevation);
-  const near = world.obstacles.filter((o) => {
-    const h = TIME.obstacleShade[o.kind];
-    return h !== undefined && dist(pos, o.pos) <= TIME.shadeReach + o.r;
-  });
   for (let i = 1; i <= TIME.shadeSamples; i++) {
     const d = (TIME.shadeReach * i) / TIME.shadeSamples;
     const p = { x: pos.x + sun.dir.x * d, y: pos.y + sun.dir.y * d };
     const rayHeight = base + rise * d;
     if (heightAt(world.terrain, p.x, p.y) > rayHeight) return true;
-    for (const o of near) {
-      if (dist(p, o.pos) > o.r) continue;
-      if (
-        heightAt(world.terrain, o.pos.x, o.pos.y) + TIME.obstacleShade[o.kind] >
-        rayHeight
-      )
-        return true;
-    }
+    if (near.some((o) => obstacleBlocks(world, o, p, rayHeight))) return true;
   }
   return false;
+}
+
+// Whether obstacle o covers ray point p and stands above the ray there.
+function obstacleBlocks(world: World, o: Obstacle, p: Vec, rayHeight: number): boolean {
+  return dist(p, o.pos) <= o.r && heightAt(world.terrain, o.pos.x, o.pos.y) + TIME.obstacleShade[o.kind] > rayHeight;
 }
 
 // 1 in shade and at night, above 1 in full sun. Weather multiplies the sun-driven share above 1:

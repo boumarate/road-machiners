@@ -5,7 +5,7 @@ import { STRIP } from '../data/salvage';
 import { CONDITION, REPAIR } from '../data/wear';
 import { damagePart, partValue } from './wear';
 import { makePart } from './factory';
-import { addVehicle, emptyWorld, practiceOf } from './testkit';
+import { addVehicle, emptyWorld, practiceOf , startCombat } from './testkit';
 import { corePart, goodsCount, gridOf, mountedParts } from './grid';
 import { addGoods, moveItem, removeGoods, stowPart } from './inventory';
 import { advanceJobs, cancelRefit, startAutoRepair, startJob, startRepair, startStrip, startWeld } from './jobs';
@@ -460,8 +460,8 @@ describe('field job practice', () => {
 });
 
 describe('jobs in combat', () => {
-  // A player with a damaged part, spare parts, and a feuding raider parked in sight.
-  function underFire() {
+  // A player with a damaged part, spare parts, and a raider parked in sight that shoots at it unless told not to.
+  function underFire(attacking = true) {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = w.vehicles[0];
     me.speed = 0;
@@ -470,21 +470,29 @@ describe('jobs in combat', () => {
     addGoods(w, me, 'parts', 20);
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 35, y: 30 });
     addState(w, 'feud', raider.id, me.id, { kind: 'feud', robbery: false });
+    if (attacking) startCombat(w, raider, me);
     return { w, me, cage, raider };
   }
 
-  it('starts no job with a hostile in sight', () => {
+  it('starts no job in combat', () => {
     const { w, me, cage } = underFire();
-    expect(() => startRepair(w, cage.id)).toThrow(/hostile in sight/);
+    expect(() => startRepair(w, cage.id)).toThrow(/in combat/);
     startAutoRepair(w);
     expect(me.job).toBeNull();
   });
 
-  it('cancels a running job once a hostile comes in sight', () => {
-    const { w, me, cage, raider } = underFire();
+  it('starts a job beside a hostile in sight that has not attacked', () => {
+    const { w, me, cage } = underFire(false);
+    expect(startRepair(w, cage.id).vehicles[0].job).not.toBeNull();
+    expect(me.job).toBeNull();
+  });
+
+  it('cancels a running job once combat starts', () => {
+    const { w, me, cage, raider } = underFire(false);
     w.vehicles = w.vehicles.filter((v) => v.id !== raider.id);
     const next = startRepair(w, cage.id);
     next.vehicles.push(raider);
+    startCombat(next, raider, next.vehicles[0]);
     next.events = [];
     advanceJobs(next);
     expect(next.vehicles[0].job).toBeNull();

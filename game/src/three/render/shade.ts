@@ -9,10 +9,10 @@ import { WEATHER } from '../../data/weather';
 import { HAZE_FROM } from '../../data/wear';
 import { PAL } from '../../render/palette';
 import { playerVehicle } from '../../sim/damage';
-import { inShade, sunAt, sunHeatAt, type Sun } from '../../sim/sun';
+import { inShade, shadeCasters, sunAt, sunHeatAt, type Sun } from '../../sim/sun';
 import { groundUvPerMeter, type TerrainChunk } from './terrain';
 import { heightAt } from '../../sim/terrain';
-import type { World } from '../../sim/types';
+import type { Obstacle, World } from '../../sim/types';
 
 const S = PHYSICS.metersPerTile;
 const TAU = 2 * Math.PI;
@@ -119,6 +119,7 @@ export class ShadeView {
     this.lastTurn = world.turn;
     const me = playerVehicle(world).pos;
     const sun = sunAt(world.turn);
+    const casters = shadeCasters(world, me, REACH);
     const x0 = Math.floor(me.x) - REACH;
     const y0 = Math.floor(me.y) - REACH;
     const pos = this.mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
@@ -129,7 +130,7 @@ export class ShadeView {
         const x = Math.min(world.size, Math.max(0, x0 + i));
         const y = Math.min(world.size, Math.max(0, y0 + j));
         pos.setXYZ(k, x * S, heightAt(world.terrain, x, y) * S + LIFT, y * S);
-        const look = Math.hypot(x - me.x, y - me.y) <= REACH && sun ? cornerLook(world, x, y, sun) : { shade: 0, haze: 0 };
+        const look = Math.hypot(x - me.x, y - me.y) <= REACH && sun ? cornerLook(world, x, y, sun, casters) : { shade: 0, haze: 0 };
         alpha.setX(k, look.shade);
         this.hazeCells[k] = look.haze;
       }
@@ -141,9 +142,9 @@ export class ShadeView {
   }
 }
 
-// Shade alpha and haze byte at a patch corner in reach, by day.
-export function cornerLook(world: World, x: number, y: number, sun: Sun): { shade: number; haze: number } {
-  if (inShade(world, { x, y }, sun)) {
+// Shade alpha and haze byte at a patch corner in reach, by day. casters: shadeCasters() around the patch.
+export function cornerLook(world: World, x: number, y: number, sun: Sun, casters: Obstacle[]): { shade: number; haze: number } {
+  if (inShade(world, { x, y }, sun, casters)) {
     const fade = Math.min(1, sun.elevation / (TIME.shadeFadeElevation * (Math.PI / 180)));
     return { shade: cornerExplored(world, x, y) ? TIME.shadeAlpha * fade : 0, haze: 0 };
   }

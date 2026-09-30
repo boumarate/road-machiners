@@ -12,7 +12,7 @@ import { cargoValue, goodValue } from './market';
 import { checkKnockout } from './defeat';
 import { corePart, hasLoot, mountedParts } from './grid';
 import { addState, advanceStates, endState, stateOf } from './states';
-import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateWhere } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateWhere , startCombat } from './testkit';
 import type { NpcActivity, Vehicle, World } from './types';
 import type { Vec } from './vec';
 import { cloneWorld } from './world';
@@ -121,12 +121,12 @@ const UNAVAILABLE: Record<string, Setup> = {
     addState(w, 'tow', tower.id, target.id, { kind: 'tow', site: 'bowl', fee: 10, waived: 0, hitched: true });
     return { w, robber, target };
   },
-  busyFighting: () => {
+  combatElsewhere: () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const robber = addScumbag(w, { x: 10, y: 10 });
     const target = addPrey(w, { x: 15, y: 10 });
     target.brain = npcBrain('trader', target.pos, ['trader']);
-    target.brain.goals.push({ kind: 'fight', targetId: 'someone-else', destination: { x: 20, y: 10 }, reason: 'fight back', phase: 'travel' });
+    startCombat(w, addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 60, y: 10 }), target);
     return { w, robber, target };
   },
 };
