@@ -298,4 +298,11 @@ describe('vultures', () => {
     resolveNpcActivities(w);
     expect(topGoal(npc)).toBeNull();
   });
+
+  it('cannot prowl without fuel', () => {
+    const w = emptyWorld({ x: 300, y: 300 });
+    const npc = createNpc(w, 'vulture', ['vulture'], 'scout', ['longRifle', 'stockEngine'], { ...huntingGrounds()[0] });
+    npc.resources!.fuel = 0;
+    expect(optionChances(optionWeights(w, npc, 'idle', null, null)).prowl).toBeUndefined();
+  });
 });
