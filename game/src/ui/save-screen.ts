@@ -8,7 +8,7 @@ import { el, panel } from './dom';
 
 export type SaveFate = 'migrate' | 'new';
 
-const CONFIRM_NEW_GAME = 'Start a new game? Your save will be erased.';
+export const CONFIRM_NEW_GAME = 'Start a new game? The autosaves are deleted. Your save slots stay.';
 
 // Shows the choice and resolves with the player's pick. New game asks first, and a no leaves the screen up.
 export function chooseSaveFate(reason: string, canMigrate: boolean): Promise<SaveFate> {

@@ -67,7 +67,7 @@ export function workLabel(world: World, v: Vehicle, work: Work): string {
   if (work.from === 'job') return jobLabel(world, v, work.job);
   const s = work.state;
   if (s.kind !== 'patch') throw new Error(`No work label for a ${s.kind} state`);
-  return s.holder === v.id ? `Patch ${vehicleById(world, s.other).name}` : `Patched by ${vehicleById(world, s.holder).name}`;
+  return s.holder === v.id ? `Patch ${npcName(vehicleById(world, s.other))}` : `Patched by ${npcName(vehicleById(world, s.holder))}`;
 }
 
 // The share of the work's turns already done, from 0 to 1.
@@ -75,6 +75,7 @@ export function workProgress(work: WorkLeft): number {
   return 1 - work.turnsLeft / work.total;
 }
 import { damage, fuelLiters } from './units';
+import { npcName } from '../sim/spawn';
 
 // A part's condition in one word: junk, pristine, or a rebuild count for a part that has broken and
 // been rebuilt before (one wear step per break).
@@ -87,7 +88,7 @@ export function wearLabel(part: PartInstance): string {
 export function vehicleName(world: World, id: string): string {
   if (id === world.player.vehicleId) return 'You';
   const v = findAny(world, id);
-  return v ? v.name : id.startsWith('wreck') || id.startsWith('rock') || id.startsWith('bld') ? 'an obstacle' : 'something';
+  return v ? npcName(v) : id.startsWith('wreck') || id.startsWith('rock') || id.startsWith('bld') ? 'an obstacle' : 'something';
 }
 
 function findAny(world: World, id: string): Vehicle | undefined {
@@ -299,7 +300,7 @@ function weatherText(world: World, e: Extract<GameEvent, { t: 'weather' }>): Log
 function honkText(world: World, e: Extract<GameEvent, { t: 'honk' }>): LogLine {
   if (e.vehicle === world.player.vehicleId) return { text: 'You honk.', cls: 'dim' };
   const v = findAny(world, e.vehicle);
-  return { text: v && playerSees(world, v.pos) ? `${v.name} honks back.` : 'A horn answers out of sight.', cls: '' };
+  return { text: v && playerSees(world, v.pos) ? `${npcName(v)} honks back.` : 'A horn answers out of sight.', cls: '' };
 }
 
 // Patch work between the player and an NPC, from the player's side.
@@ -472,7 +473,7 @@ function skillUpText(skill: SkillId, level: number): string {
 // NPC goals are debug lines. Players read intent from what a driver does.
 function activityText(world: World, e: Extract<GameEvent, { t: 'activity' }>): LogLine | null {
   const vehicle = world.vehicles.find((v) => v.id === e.vehicle);
-  return world.player.fullLog && vehicle ? { text: `${vehicle.name}: ${e.activity ?? 'idle'} — ${e.reason}`, cls: 'dim' } : null;
+  return world.player.fullLog && vehicle ? { text: `${npcName(vehicle)}: ${e.activity ?? 'idle'} — ${e.reason}`, cls: 'dim' } : null;
 }
 
 // A stall is a bug, so the full log shows it loudly.

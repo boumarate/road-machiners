@@ -6,7 +6,9 @@ import FORMAT_2_0 from './save-fixtures/format-2-0.json';
 import FORMAT_2_1 from './save-fixtures/format-2-1.json';
 import FORMAT_2_2 from './save-fixtures/format-2-2.json';
 import FORMAT_2_3 from './save-fixtures/format-2-3.json';
+import FORMAT_2_4 from './save-fixtures/format-2-4.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
+import { packExplored } from './save';
 import { MIGRATIONS } from './save-migrations';
 
 describe('save migrations', () => {
@@ -106,8 +108,21 @@ describe('save migration 2 to 3', () => {
 });
 
 describe('save migration 3 to 4', () => {
+  it('packs explored into the same bitset a new save writes and keeps other fields', () => {
+    const next = MIGRATIONS[3](FORMAT_2_3) as { player: Record<string, unknown>; turn: number };
+
+    expect(next.player.explored).toBe(packExplored(Uint8Array.from(FORMAT_2_3.player.explored)));
+    expect(next).toEqual({ ...FORMAT_2_3, player: { ...FORMAT_2_3.player, explored: next.player.explored } });
+  });
+
+  it('throws on a value other than 0 or 1', () => {
+    expect(() => MIGRATIONS[3]({ player: { explored: [0, 2] } })).toThrow();
+  });
+});
+
+describe('save migration 4 to 5', () => {
   type Saved = { kind: string; window?: number; rush?: boolean };
-  const next = MIGRATIONS[3](FORMAT_2_3) as unknown as {
+  const next = MIGRATIONS[4](FORMAT_2_4) as unknown as {
     turn: number;
     player: { money: number; contracts: Saved[] };
     shops: { nose: { contracts: Saved[] } };
@@ -126,9 +141,9 @@ describe('save migration 3 to 4', () => {
 
   it('changes nothing else', () => {
     const strip = (cs: Saved[]) => cs.map(({ window: _w, rush: _r, ...rest }) => rest);
-    expect(strip(next.player.contracts)).toEqual(FORMAT_2_3.player.contracts);
-    expect(strip(next.shops.nose.contracts)).toEqual(FORMAT_2_3.shops.nose.contracts);
-    expect(next.turn).toBe(FORMAT_2_3.turn);
-    expect(next.player.money).toBe(FORMAT_2_3.player.money);
+    expect(strip(next.player.contracts)).toEqual(FORMAT_2_4.player.contracts);
+    expect(strip(next.shops.nose.contracts)).toEqual(FORMAT_2_4.shops.nose.contracts);
+    expect(next.turn).toBe(FORMAT_2_4.turn);
+    expect(next.player.money).toBe(FORMAT_2_4.player.money);
   });
 });

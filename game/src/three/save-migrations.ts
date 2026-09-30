@@ -148,6 +148,18 @@ function withoutRefit(job: unknown): unknown {
   return (job as SavedJson | null)?.kind === 'refit' ? null : job;
 }
 
+// Step 3 to 4: a frozen copy of the explored packer, a base64 bitset with the least significant bit first.
+function packExplored_3_4(list: unknown[]): string {
+  const bytes = new Uint8Array(Math.ceil(list.length / 8));
+  list.forEach((value, i) => {
+    if (value !== 0 && value !== 1) throw new Error(`Explored tile ${i} is ${String(value)}, not 0 or 1`);
+    bytes[i >> 3] |= (value as number) << (i & 7);
+  });
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -166,7 +178,12 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     const player = world.player as SavedJson;
     return { ...world, player: { ...player, xpBySource: { ...(player.xpBySource as SavedJson), aid: 0 } } };
   },
-  // 3 to 4: a contract gets the turns it has left as its window, so no deadline or reward changes. A haul is no rush.
+  // 3 to 4: player.explored becomes a base64 bitset.
+  (world) => {
+    const player = world.player as SavedJson;
+    return { ...world, player: { ...player, explored: packExplored_3_4(player.explored as unknown[]) } };
+  },
+  // 4 to 5: a contract gets the turns it has left as its window, so no deadline or reward changes. A haul is no rush.
   (world) => {
     const turn = world.turn as number;
     const windowed = (c: SavedJson): SavedJson => {

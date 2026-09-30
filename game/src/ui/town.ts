@@ -50,6 +50,7 @@ import { InventoryView, truckChips } from "./inventory";
 import type { UiHost } from "./host";
 import { fuelLiters, hp } from "./units";
 import { fuelCap, suppliesCap } from "../sim/stats";
+import { npcName } from "../sim/spawn";
 
 type Tab = "market" | "parts" | "garage" | "trucks" | "contracts";
 
@@ -550,7 +551,7 @@ export class TruckTradeScreen {
     const truck = el("div", { class: "town-truck" }, this.inventory.render());
     this.root.replaceChildren(
       el("button", { class: "close", onclick: () => this.close() }, "Leave [Esc]"),
-      el("h3", {}, npc.name, truckChips(w), partnerChips(npc)),
+      el("h3", {}, npcName(npc), truckChips(w), partnerChips(npc)),
       el("div", { class: "town-split" }, truck, el("div", { class: "town-shop" }, ...side)),
     );
     this.inventory.fitTo(truck);

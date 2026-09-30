@@ -24,7 +24,8 @@ import { mountPerfPanel } from '../ui/perf-panel';
 import { SoundSettings } from '../ui/sound';
 import { installCrashScreen, keepRunningOnErrors, onEveryError } from './crash';
 import { Game } from './game';
-import { clearGame, loadWorld, SaveError, storedSave } from './save';
+import { clearGame, loadWorld, SAVE_KEY, SaveError, storedSave, writeSave } from './save';
+import { newestSlot, takeBootRequest, type SlotId } from './save-slots';
 import { rescueSave } from './save-rescue';
 import { loadModels } from './render/models';
 import { groundTexture } from './render/terrain';
@@ -42,24 +43,42 @@ async function fetchMap(): Promise<BakedMap> {
   return decodeMap(new Uint8Array(await response.arrayBuffer()));
 }
 
-// The saved world, or a new one. A save that cannot load goes to the player: migrate it or start over.
+// The world the boot request names, else the newest save, else a new one. A save that cannot load goes to the player:
+// migrate it or start over.
 async function bootWorld(): Promise<World> {
+  const request = takeBootRequest(window.sessionStorage, SAVE_KEY);
+  if (request === 'new') return freshRun();
+  const slot = request ?? newestSlot(window.localStorage, SAVE_KEY, CONFIG.saveSlots);
+  return slot === null ? newGameSaved() : bootSlot(slot);
+}
+
+async function bootSlot(slot: SlotId): Promise<World> {
   try {
-    return loadWorld(window.localStorage, map) ?? newGame();
+    return loadWorld(window.localStorage, slot, map) ?? newGameSaved();
   } catch (err) {
     if (!(err instanceof SaveError)) throw err;
-    return rescuedOrNew(err);
+    return rescuedOrNew(err, slot);
   }
 }
 
-async function rescuedOrNew(error: SaveError): Promise<World> {
-  const stored = storedSave(window.localStorage);
+// A new run clears the old one's autosaves and tips. Its first save comes at once, so a reload before the next
+// autosave does not load an older run's save.
+function freshRun(): World {
+  clearGame(window.localStorage);
+  return newGameSaved();
+}
+
+function newGameSaved(): World {
+  const world = newGame();
+  writeSave(window.localStorage, 'auto', world, Date.now());
+  return world;
+}
+
+async function rescuedOrNew(error: SaveError, slot: SlotId): Promise<World> {
+  const stored = storedSave(window.localStorage, slot);
   const canMigrate = typeof stored === 'object' && stored !== null && !Array.isArray(stored);
-  if ((await chooseSaveFate(error.message, canMigrate)) === 'new') {
-    clearGame(window.localStorage);
-    return newGame();
-  }
-  const rescued = rescueSave(window.localStorage, map, startKit(CONFIG.startKit), freshSeed);
+  if ((await chooseSaveFate(error.message, canMigrate)) === 'new') return freshRun();
+  const rescued = rescueSave(window.localStorage, slot, map, startKit(CONFIG.startKit), freshSeed, Date.now());
   if (!rescued) throw new Error('The save became unreadable while migrating');
   await showCarryReport(rescued.report);
   return rescued.world;
