@@ -41,13 +41,14 @@ export const GROUND = 'ground'; // the crash target name for the terrain and the
 export const toMps = (tilesPerTurn: number) => (tilesPerTurn * S) / PHYSICS.turnSeconds;
 export const toTilesPerTurn = (mps: number) => (mps * PHYSICS.turnSeconds) / S;
 
-// The driver's memory between turns: current wheel angle, and whether it is backing toward its point.
+// The driver's memory between turns: current wheel angle, and whether it backed at the last step.
 // route is the rest of the route driven last turn, so a driver keeps following it instead of planning
 // the whole way again every turn.
 // ahead holds the drive-through point that was ahead of the nose on the last leg at the last step.
 // stall holds the seconds the truck has pushed forward at a point behind it without moving.
+// backFrom is the point, in tiles, where the current back-out from a blockage began, or null.
 // airborne is true when no wheel touched the ground at the last step, so a jump that spans two turns still lands.
-type Memory = { steer: number; reverse: boolean; route: (KeptRoute & { radius: number }) | null; ahead: Vec | null; stall: number; airborne: boolean };
+type Memory = { steer: number; reverse: boolean; route: (KeptRoute & { radius: number }) | null; ahead: Vec | null; stall: number; backFrom: Vec | null; airborne: boolean };
 
 // Everything a turn needs to start: the physics world, which body and collider belongs to which
 // vehicle or obstacle, and each driver's memory.
@@ -157,7 +158,7 @@ function syncVehicle(d: Drive, w: World, v: Vehicle): void {
   const handle = d.bodies[v.id];
   if (handle === undefined) {
     d.bodies[v.id] = addVehicle(d.world, w, v);
-    d.memory[v.id] = { steer: 0, reverse: false, route: null, ahead: null, stall: 0, airborne: false };
+    d.memory[v.id] = { steer: 0, reverse: false, route: null, ahead: null, stall: 0, backFrom: null, airborne: false };
     return;
   }
   const body = d.world.getRigidBody(handle);
@@ -499,7 +500,10 @@ function driveStep(c: Car, terrain: Terrain): void {
   const speed = forwardSpeed(c.body);
   const command = c.plan.dest && !reached(c) ? commandToward(c, c.plan.dest, speed) : { target: c.plan.target, steerTo: 0 };
   if (c.result.arrived) command.target = 0;
-  if (!c.plan.dest) c.mem.reverse = false;
+  if (!c.plan.dest) {
+    c.mem.reverse = false;
+    c.mem.backFrom = null;
+  }
   turnWheels(c, command.steerTo);
   applyPedals(c, command.target, speed);
 }
@@ -520,11 +524,13 @@ function commandToward(c: Car, dest: Vec, speed: number): Command {
   if (reached(c)) return { target, steerTo: 0 };
   const aim = plan.route ? routeAim(plan.route, at) : dest;
   const ang = angleDiff(heading, bearing(at, aim));
-  c.mem.reverse = backs(c, ang, angleDiff(heading + Math.PI, bearing(at, dest)), dist(at, dest), target, speed);
+  c.mem.reverse = backs(c, at, ang, angleDiff(heading + Math.PI, bearing(at, dest)), dist(at, dest), target, speed);
   if (c.mem.reverse) {
     // Backing up turns the truck the opposite way from the wheels.
     const rearAng = angleDiff(heading + Math.PI, bearing(at, aim));
-    return { target: -Math.min(D.reverseSpeed, plan.target), steerTo: clamp(-rearAng * D.steerGain, -plan.maxSteer, plan.maxSteer) };
+    // Backing out of a blockage swings the nose toward the aim instead.
+    const gain = c.mem.backFrom ? D.steerGain : -D.steerGain;
+    return { target: -Math.min(D.reverseSpeed, plan.target), steerTo: clamp(rearAng * gain, -plan.maxSteer, plan.maxSteer) };
   }
   const corner = Math.min(cornerSpeed(dist(at, aim) * S, ang), routeCornerSpeed(plan.route, at, Math.abs(speed), plan.stopDecel));
   return { target: Math.min(target, corner), steerTo: clamp(ang * D.steerGain, -plan.maxSteer, plan.maxSteer) };
@@ -541,17 +547,33 @@ function arrivalTarget(c: Car, dest: Vec, at: Vec, heading: number, speed: numbe
   return Math.min(c.plan.target, Math.sqrt(2 * c.plan.stopDecel * Math.max(0, far - RULES.arriveRadius * S)));
 }
 
-// Whether the truck backs up this step. A slow truck starts backing only when backsToDestination allows it,
-// or when something in front stops it from turning around nose first. It stops once its aim is ahead.
-// Any other point behind turns the truck around nose first.
-// ang: aim off the nose. rearAng: destination off straight behind. Both in radians; far in tiles.
-function backs(c: Car, ang: number, rearAng: number, far: number, target: number, speed: number): boolean {
+// Whether the truck backs up this step. It backs only while its aim is behind the nose and a reason holds.
+// Reason one: backsToDestination allows it. It starts below reverseBelow and holds while the rule holds.
+// Reason two: something in front stopped it. It backs RULES.reverse.distance tiles from where the back-out
+// began, then tries nose first again. Any other point behind turns the truck around nose first.
+// at: truck position in tiles. ang: aim off the nose. rearAng: destination off straight behind. Both in radians; far in tiles.
+function backs(c: Car, at: Vec, ang: number, rearAng: number, far: number, target: number, speed: number): boolean {
   if (Math.abs(ang) <= Math.PI / 2) {
     c.mem.stall = 0;
+    c.mem.backFrom = null;
     return false;
   }
-  if (c.mem.reverse || blockedInFront(c, target, speed)) return true;
-  return target > 0 && Math.abs(speed) < D.reverseBelow && backsToDestination(c.v, far, rearAng);
+  if (backsToPoint(c, rearAng, far, target, speed)) {
+    c.mem.backFrom = null;
+    return true;
+  }
+  if (c.mem.backFrom && dist(at, c.mem.backFrom) < RULES.reverse.distance) return true;
+  c.mem.backFrom = null;
+  if (!blockedInFront(c, target, speed)) return false;
+  c.mem.backFrom = { ...at };
+  c.mem.stall = 0;
+  return true;
+}
+
+// Reason one: backing to the destination. It starts on a slow truck and holds while backsToDestination does.
+function backsToPoint(c: Car, rearAng: number, far: number, target: number, speed: number): boolean {
+  const starts = target > 0 && Math.abs(speed) < D.reverseBelow;
+  return backsToDestination(c.v, far, rearAng) && (c.mem.reverse || starts);
 }
 
 // Counts the seconds a truck pushes forward without moving, and says whether that lasted long enough to back up.
