@@ -67,8 +67,9 @@ async function handleIssueCommand(ctx: Ctx, command: InboxCommand, issue: number
   if (command.kind === 'ship') return queueShip(ctx, issue, by);
   if (command.kind === 'remove') return queueRemoval(ctx, issue, by, requireText(command));
   if (command.kind === 'feedback') {
-    await feedback(ctx, issue, by, requireText(command));
-    return `Feedback on #${issue} is on the issue. The task goes back to design.`;
+    const dropped = await feedback(ctx, issue, by, requireText(command));
+    const note = dropped ? ' The queued approval is dropped.' : '';
+    return `Feedback on #${issue} is on the issue. The task goes back to design.${note}`;
   }
   if (command.kind === 'deny') {
     await deny(ctx, issue, by);

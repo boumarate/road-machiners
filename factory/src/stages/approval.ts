@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs';
 import { deployDev } from '../deploy';
-import { updateState } from '../state';
+import { readState, updateState } from '../state';
 import { BRANCH, FEEDBACK_HEADING, WONT_DO_LABEL, type Ctx } from '../types';
 import { BASE_BRANCH, agentLog, baseBranchFor, syncBase, workDir } from './common';
 
@@ -50,11 +50,14 @@ async function mergedIntoRelease(ctx: Ctx, issue: number, title: string, by: str
   return `Issue #${issue} ${title} is merged into the release ${branch}.`;
 }
 
-export async function feedback(ctx: Ctx, issue: number, by: string, text: string): Promise<void> {
+// Feedback wins over an approval queued for the same issue, since the card leaves Approval. Returns whether it dropped one.
+export async function feedback(ctx: Ctx, issue: number, by: string, text: string): Promise<boolean> {
   await requireApproval(ctx, issue);
   await ctx.github.comment(issue, `${FEEDBACK_HEADING}\n\nFrom ${by}:\n\n${text}`);
   await ctx.github.move(issue, 'Design');
-  forgetPosts(ctx, issue, false);
+  const dropped = String(issue) in readState(ctx.statePath).pendingApprovals;
+  forgetPosts(ctx, issue, true);
+  return dropped;
 }
 
 export async function deny(ctx: Ctx, issue: number, by: string): Promise<void> {

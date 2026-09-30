@@ -89,6 +89,15 @@ describe('drainInbox', () => {
     expect(calls).toEqual([expect.stringContaining('too loud'), 'move 4 Design']);
   });
 
+  it('drops an approval queued before the feedback and says so', async () => {
+    const sent: string[] = [];
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), pendingApprovals: { 4: 'Ann' } });
+    put('1.json', { kind: 'feedback', issue: 4, text: 'too loud' });
+    await drainInbox(fakeCtx([{ itemId: 'i', issue: 4, column: 'Approval', labels: [] }], sent, []));
+    expect(readState(statePath).pendingApprovals).toEqual({});
+    expect(sent.join('\n')).toContain('The queued approval is dropped.');
+  });
+
   it('denies a card in Approval: closes, labels, moves to Done and clears state', async () => {
     const sent: string[] = [];
     const calls: string[] = [];
