@@ -13,6 +13,7 @@ const url = arg('url');
 const budgets = JSON.parse(readFileSync(new URL('./perf-budgets.json', import.meta.url), 'utf8'));
 
 const TURNS = 5;
+const TRAVEL_TURNS = 6;
 const TURN_WAIT_MS = 2600; // movement plus combat playback, with margin
 const ORDER_OFFSETS = [[12, 4], [40, 25], [-30, 60], [150, 150]]; // short to long routes, in tiles
 const VIEW_ZOOM = 0.35; // widest zoom
@@ -74,6 +75,39 @@ for (const offset of ORDER_OFFSETS) {
 }
 results.previewMs = Math.max(...previewMs);
 
+const travel = await page.evaluate(async () => {
+  // A far drive-through order, then a Space press starts automatic travel through several turns.
+  const g = window.__ROAM__;
+  const w = { ...g.state, vehicles: g.state.vehicles.map((v) => ({ ...v })) };
+  const me = w.vehicles.find((v) => v.id === w.player.vehicleId);
+  if (!me) throw new Error(`Player vehicle ${w.player.vehicleId} missing`);
+  const clamp = (x) => Math.max(1, Math.min(w.size - 1, x));
+  me.order = { kind: 'through', dest: { x: clamp(me.pos.x + 150), y: clamp(me.pos.y) } };
+  g.apply(w);
+  return { turn: g.state.turn };
+});
+await page.evaluate(() => window.__ROAM_PERF__.reset());
+await page.keyboard.down('Space');
+await page.keyboard.up('Space');
+const gaps = await page.evaluate(async ({ turn, turns }) => {
+  const out = [];
+  const deadline = performance.now() + 30000;
+  await new Promise((done, fail) => {
+    const f = (t) => {
+      out.push(t);
+      if (window.__ROAM__.state.turn >= turn + turns) done();
+      else if (performance.now() > deadline) fail(new Error('Automatic travel did not play the turns in 30 s'));
+      else requestAnimationFrame(f);
+    };
+    requestAnimationFrame(f);
+  });
+  return out.slice(1).map((t, i) => t - out[i]);
+}, { turn: travel.turn, turns: TRAVEL_TURNS });
+const turnFrame = await page.evaluate(() => window.__ROAM_PERF__.snapshot()['turn-frame']);
+if (!turnFrame) throw new Error('No turn-frame timer recorded during travel');
+results.travelFrameMs = turnFrame.max;
+const sortedGaps = [...gaps].sort((a, b) => a - b);
+
 const towns = await page.evaluate(async () => {
   if (typeof window.__ROAM__.debugView !== 'function') throw new Error('Game.debugView is missing, so frame time cannot be measured over the towns');
   const { REGION } = await import('/src/data/region.ts');
@@ -110,6 +144,7 @@ await browser.close();
 console.log(`turn ms per call: ${turnMs.map((x) => x.toFixed(1)).join(', ')}`);
 console.log(`preview ms per order: ${previewMs.map((x) => x.toFixed(1)).join(', ')}`);
 console.log(`frame p95 ms per town: ${towns.map((t, i) => `${t.name} ${frameP95[i].toFixed(1)}`).join(', ')}`);
+console.log(`travel frame gap ms: longest ${sortedGaps[sortedGaps.length - 1].toFixed(1)}, p99 ${sortedGaps[Math.floor(sortedGaps.length * 0.99)].toFixed(1)}`);
 console.log('');
 console.log(`${'metric'.padEnd(12)}${'value'.padStart(10)}${'budget'.padStart(10)}  ok`);
 const problems = [...errors];
