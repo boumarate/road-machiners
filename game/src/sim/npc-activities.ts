@@ -284,10 +284,15 @@ function scavengeGoal(world: World, vehicle: Vehicle): NpcActivity {
   return createSiteActivity('scavenge', sites[randInt(world, 0, sites.length - 1)].id, 'search a known salvage site');
 }
 
-function raidGoal(world: World, vehicle: Vehicle): NpcActivity {
-  const places = huntingGroundsAway(vehicle);
-  if (places.length === 0) throw new Error(`${vehicle.id} chose to raid with no hunting ground away`);
-  return createActivity('raid', null, { ...places[randInt(world, 0, places.length - 1)] }, 'look for prey at known hunting grounds');
+type IdleGoal = (world: World, vehicle: Vehicle) => NpcActivity;
+
+// A raid or a prowl drives to a hunting ground. A prowl looks for wrecks, and passed salvage is looted through salvageSeen.
+function huntingGoal(kind: 'raid' | 'prowl', reason: string): IdleGoal {
+  return (world, vehicle) => {
+    const places = huntingGroundsAway(vehicle);
+    if (places.length === 0) throw new Error(`${vehicle.id} chose to ${kind} with no hunting ground away`);
+    return createActivity(kind, null, { ...places[randInt(world, 0, places.length - 1)] }, reason);
+  };
 }
 
 // A patrol drives to a road point near the town it guards.
@@ -323,12 +328,11 @@ function haulGoal(world: World, vehicle: Vehicle): NpcActivity {
   return { ...createSiteActivity('haul', site, 'load cargo at its source'), load: { good: goods[randInt(world, 0, goods.length - 1)] } };
 }
 
-type IdleGoal = (world: World, vehicle: Vehicle) => NpcActivity;
-
 const IDLE_GOALS: Record<Exclude<DecisionOptions['idle'], 'wait'>, IdleGoal> = {
   trade: tradeGoal,
   scavenge: scavengeGoal,
-  raid: raidGoal,
+  raid: huntingGoal('raid', 'look for prey at known hunting grounds'),
+  prowl: huntingGoal('prowl', 'prowl the roads for wrecks'),
   patrol: patrolGoal,
   travel: travelGoal,
   explore: exploreGoal,
@@ -1079,7 +1083,7 @@ function jumpSpot(world: World, v: Vehicle, player: Vehicle, pad: Vec): Vec | nu
 export function getActivityDestination(world: World, vehicle: Vehicle, activity: NpcActivity): Vec | null {
   if (!activity.destination) return null;
   if (activity.kind === 'repair') return repairsHere(vehicle, activity) ? null : activity.destination;
-  if (['fight', 'flee', 'raid', 'investigate', 'patrol', 'explore', 'follow'].includes(activity.kind)) return activity.destination;
+  if (['fight', 'flee', 'raid', 'prowl', 'investigate', 'patrol', 'explore', 'follow'].includes(activity.kind)) return activity.destination;
   return siteStop(world, vehicle, activity, activity.destination);
 }
 
@@ -1299,6 +1303,7 @@ const RESOLVERS: Partial<Record<NpcActivity['kind'], Resolver>> = {
   trade: resolveTrade,
   haul: resolveHaul,
   travel: resolveTravel,
+  prowl: arrivalResolver('prowled the road'),
   patrol: arrivalResolver('patrolled the road'),
   explore: arrivalResolver('explored the spot'),
 };

@@ -256,8 +256,8 @@ export function salvageSitesAway(vehicle: Vehicle) {
 
 let grounds: readonly Vec[] | null = null;
 
-// Where raiders look for prey: points every HUNT.roadSpacing tiles along the roads, kept only far from every
-// site, and the pads of every location with salvage. Built once from the region.
+// Where raiders look for prey and vultures prowl for wrecks: points every HUNT.roadSpacing tiles along the roads, kept
+// only far from every site, and the pads of every location with salvage. Built once from the region.
 export function huntingGrounds(): readonly Vec[] {
   if (grounds) return grounds;
   const sites = [...REGION.towns, ...REGION.locations];
@@ -432,6 +432,11 @@ function canRaid(_world: World, vehicle: Vehicle): boolean {
   return vehicle.faction === 'raiders' && huntingGroundsAway(vehicle).length > 0;
 }
 
+// Any driver that can drive can prowl to a hunting ground. Only vultures weigh it above the minimum.
+function canProwl(world: World, vehicle: Vehicle): boolean {
+  return canDrive(world, vehicle) && huntingGroundsAway(vehicle).length > 0;
+}
+
 function canPatrol(_world: World, vehicle: Vehicle): boolean {
   return hasTrait(vehicle, 'lawman') && patrolPoints(patrolTown(vehicle)).length > 0;
 }
@@ -466,6 +471,7 @@ const AVAILABLE: Record<OptionName, Availability> = {
   trade: canTrade,
   scavenge: canScavenge,
   raid: canRaid,
+  prowl: canProwl,
   loot: canLootSubject,
   wait: always,
   patrol: canPatrol,
@@ -674,6 +680,7 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   trade: neutral,
   scavenge: scavengeFactor,
   raid: neutral,
+  prowl: neutral,
   loot: neutral,
   wait: neutral,
   patrol: neutral,
