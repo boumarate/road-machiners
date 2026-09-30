@@ -31,10 +31,10 @@ import { ENGINE_HEAT } from "../data/wear";
 import { type ConditionAim, TruckConditionView } from "./truck-condition-view";
 
 // The E key action. ready is false while the truck must stop first.
-// A hint marks an action that can never run here, and says why. combat marks an action a hostile in sight blocks.
-export type ContextAction = { label: string; ready: boolean; hint?: string; combat?: boolean };
+// A hint marks an action that can never run here, and says why. combat is the turns of combat left when it blocks the action.
+export type ContextAction = { label: string; ready: boolean; hint?: string; combat?: number };
 
-export const COMBAT_BLOCKED = "Can't do this while in combat";
+export const combatBlocked = (turns: number): string => `Can't do this while in combat, ${turns} turns left`;
 
 type HudActions = {
   openInventory: () => void;
@@ -243,8 +243,8 @@ export class Hud {
         {
           onclick: onUse,
           disabled: !action.ready,
-          class: action.combat ? "combat" : "",
-          title: action.hint ?? (action.combat ? COMBAT_BLOCKED : action.ready ? "" : "Stop to use"),
+          class: action.combat !== undefined ? "combat" : "",
+          title: action.hint ?? (action.combat !== undefined ? combatBlocked(action.combat) : action.ready ? "" : "Stop to use"),
         },
         action.hint ? action.label : `[E] ${action.label}`,
       ),

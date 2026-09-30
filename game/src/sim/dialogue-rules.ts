@@ -7,11 +7,11 @@ import { PERK_NUMBERS } from '../data/skills';
 import { REGION, type TownDef } from '../data/region';
 import { playerVehicle } from './damage';
 import { discoverSite } from './locations';
-import { isHostile } from './combat';
-import { patchGoal, startTow, topGoal, underAttack } from './npc-activities';
+import { inCombat, isHostile } from './combat';
+import { patchGoal, startTow, topGoal } from './npc-activities';
 import { vehicleValue } from './market';
 import { hasPerk, practice } from './progress';
-import { answerPlea, answersPlea, answersThreat, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, surrenderTo, yieldTo, type ThreatAnswer } from './parley';
+import { answerPlea, answersPlea, answersThreat, answersWarning, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, lootsBesidePlayer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, settleWarning, surrenderTo, yieldTo, type ThreatAnswer, type WarnAnswer } from './parley';
 import { hasCargo, hasSalvage } from './salvage';
 import { agreePatch, canFixItself, needsPatch, patchTerms } from './patch';
 import { decide, npcProfile, wantsLoot } from './npc-decisions';
@@ -66,6 +66,12 @@ function playerPlea(call: Call): Plea {
 function threatAnswer(call: Call): ThreatAnswer {
   const option = answerOf(call.vars);
   if (option !== 'comply' && option !== 'fightBack' && option !== 'flee') throw new Error(`Bad threat answer ${option}`);
+  return option;
+}
+
+function warnAnswer(call: Call): WarnAnswer {
+  const option = answerOf(call.vars);
+  if (option !== 'comply' && option !== 'refuse' && option !== 'fightBack') throw new Error(`Bad warning answer ${option}`);
   return option;
 }
 
@@ -149,7 +155,7 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   npcOffRope: (world, npc) => !isOnRope(world, npc.id),
   noTrade: (world, npc) => tradeWith(world, npc) === null,
   // A driver under attack takes on no tow, patch or trade.
-  npcCalm: (_world, npc) => !underAttack(npc),
+  npcCalm: (world, npc) => !inCombat(world, npc),
   hasDeal: (_world, _npc, vars) => vars.deal !== undefined,
   noDeal: (_world, _npc, vars) => vars.deal === undefined,
   // About to attack the player, who carries something worth taking, and chose to call first.
@@ -173,6 +179,9 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   complies: (_world, _npc, vars) => answerOf(vars) === 'comply',
   resists: (_world, _npc, vars) => answerOf(vars) === 'fightBack',
   runs: (_world, _npc, vars) => answerOf(vars) === 'flee',
+  // Loots a wreck or knocked-out truck the player truck is in reach of too.
+  claimsPlayerLoot: (world, npc) => lootsBesidePlayer(world, npc),
+  holdsOn: (_world, _npc, vars) => answerOf(vars) === 'refuse',
   canTowNpc: (world, npc) => canTowNpc(world, npc),
   towedByPlayer: (world, npc) => playerTowing(world)?.other === npc.id,
   knowsLastTown: (world, npc) => hasPerk(world, 'marketEars') && npc.brain?.lastTown !== undefined,
@@ -236,6 +245,12 @@ export const EFFECTS: Record<EffectId, Effect> = {
     settle(world, npc, call, answer === 'comply' ? 'agreed' : 'refused');
     if (answer === 'comply') practice(world, 'deal', 1, null, npc.id);
   },
+  // A warning pays no XP: the wreck it wins is its own reward.
+  settleWarning: (world, npc, call) => {
+    const answer = warnAnswer(call);
+    settleWarning(world, npc, answer);
+    settle(world, npc, call, answer === 'comply' ? 'agreed' : 'refused');
+  },
   // The call holds no turn, so the rumor is the one the prepare step told.
   revealRumor: (world, npc, call) => {
     const rumor = heardRumor(world, npc);
@@ -266,6 +281,7 @@ export const PREPARES: Record<PrepareId, Prepare> = {
   truceAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'truce') ? 'yes' : 'no' } }),
   mercyAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'mercy') ? 'yes' : 'no' } }),
   threatAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersThreat(world, npc) } }),
+  warnAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersWarning(world, npc) } }),
   npcTowTerms: (world, npc) => {
     const { site, fee } = npcTowTerms(world, npc);
     return { site: { kind: 'site', id: site.id }, fee: { kind: 'money', amount: fee } };

@@ -9,10 +9,10 @@ import { WEATHER } from '../../data/weather';
 import { HAZE_FROM } from '../../data/wear';
 import { PAL } from '../../render/palette';
 import { playerVehicle } from '../../sim/damage';
-import { inShade, sunAt, sunHeatAt, type Sun } from '../../sim/sun';
+import { inShade, shadeCasters, sunAt, sunHeatAt, type Sun } from '../../sim/sun';
 import { groundUvPerMeter, type TerrainChunk } from './terrain';
 import { heightAt } from '../../sim/terrain';
-import type { World } from '../../sim/types';
+import type { Obstacle, World } from '../../sim/types';
 
 const S = PHYSICS.metersPerTile;
 const TAU = 2 * Math.PI;
@@ -149,13 +149,14 @@ export class ShadeView {
 }
 
 // A patch being computed: scratch buffers that swap into the mesh when every row is done.
-type ShadeJob = { world: World; sun: Sun | null; x0: number; y0: number; row: number; pos: Float32Array; alpha: Float32Array; haze: Uint8Array };
+type ShadeJob = { world: World; sun: Sun | null; casters: Obstacle[]; x0: number; y0: number; row: number; pos: Float32Array; alpha: Float32Array; haze: Uint8Array };
 
 function newJob(world: World): ShadeJob {
   const me = playerVehicle(world).pos;
   return {
     world,
     sun: sunAt(world.turn),
+    casters: shadeCasters(world, me, REACH),
     x0: Math.floor(me.x) - REACH,
     y0: Math.floor(me.y) - REACH,
     row: 0,
@@ -166,7 +167,7 @@ function newJob(world: World): ShadeJob {
 }
 
 function computeRow(job: ShadeJob, j: number): void {
-  const { world, sun } = job;
+  const { world, sun, casters } = job;
   const me = playerVehicle(world).pos;
   for (let i = 0; i < SIDE; i++) {
     const k = j * SIDE + i;
@@ -175,15 +176,15 @@ function computeRow(job: ShadeJob, j: number): void {
     job.pos[k * 3] = x * S;
     job.pos[k * 3 + 1] = heightAt(world.terrain, x, y) * S + LIFT;
     job.pos[k * 3 + 2] = y * S;
-    const look = Math.hypot(x - me.x, y - me.y) <= REACH && sun ? cornerLook(world, x, y, sun) : { shade: 0, haze: 0 };
+    const look = Math.hypot(x - me.x, y - me.y) <= REACH && sun ? cornerLook(world, x, y, sun, casters) : { shade: 0, haze: 0 };
     job.alpha[k] = look.shade;
     job.haze[k] = look.haze;
   }
 }
 
-// Shade alpha and haze byte at a patch corner in reach, by day.
-export function cornerLook(world: World, x: number, y: number, sun: Sun): { shade: number; haze: number } {
-  if (inShade(world, { x, y }, sun)) {
+// Shade alpha and haze byte at a patch corner in reach, by day. casters: shadeCasters() around the patch.
+export function cornerLook(world: World, x: number, y: number, sun: Sun, casters: Obstacle[]): { shade: number; haze: number } {
+  if (inShade(world, { x, y }, sun, casters)) {
     const fade = Math.min(1, sun.elevation / (TIME.shadeFadeElevation * (Math.PI / 180)));
     return { shade: cornerExplored(world, x, y) ? TIME.shadeAlpha * fade : 0, haze: 0 };
   }
