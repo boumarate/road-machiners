@@ -189,6 +189,7 @@ export type NpcBrain = {
     lastPos?: Vec; // position before the last drive attempt
     stalled?: number; // consecutive turns without forward progress
     stuck?: number; // consecutive turns standing still with the goal point out of reach
+    progress?: { key: string; since: number }; // what the driver last did and the turn it began; see watchStalls()
     recovery?: number; // turns left backing away from a blockage or driving to a spot that unsticks the driver
     recoveryGoal?: Vec;
     ramChoice?: string; // the fight target this driver chose to ram while its ram chance lasts
@@ -307,6 +308,7 @@ export type Player = {
   supplies: number;
   autoFire: boolean;
   autoRepair: boolean; // patch the most damaged part whenever the truck is parked
+  townPatched: boolean; // this visit to a town already got its free critical repair; leaving the town clears it
   engineHeat: number; // 0 cold to 1 overheated; see src/sim/engine-heat.ts
   overdrive: boolean; // engine overdrive: faster and quicker, but heats the engine; see src/sim/engine-heat.ts
   discovered: string[];
@@ -347,9 +349,11 @@ export type VehicleHits = { vehicle: string; hits: PartHit[] };
 
 export type GameEvent =
   | { t: 'activity'; vehicle: string; previous: NpcActivity['kind'] | null; activity: NpcActivity['kind'] | null; reason: string }
+  // A driver made no progress for NPC_BEHAVIOR.stallTurns turns and gave up its goal, null when it had none. Always a bug.
+  | { t: 'stall'; vehicle: string; goal: NpcActivity['kind'] | null; reason: string }
   | { t: 'collision'; a: string; b: string; hitsA: PartHit[]; hitsB: PartHit[] } // parts damaged on a and on b; hitsB is empty when b is not a vehicle
   | { t: 'empty'; vehicle: string; weapon: string }
-  | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; chance: number; side: Side; rounds: ShotRound[] }
+  | { t: 'shot'; shooter: string; weapon: string; target: string; aim: Aim; chance: number; damageChance: number; side: Side; rounds: ShotRound[] }
   | { t: 'guardShot'; site: string; from: Vec; target: string; rounds: ShotRound[] }
   | { t: 'partDisabled'; vehicle: string; part: string }
   | { t: 'destroyed'; vehicle: string; by: string }
@@ -362,20 +366,21 @@ export type GameEvent =
   | { t: 'practice'; source: XpSource; amount: number; difficulty: number | null; target: string; xp: number }
   | { t: 'skillUp'; skill: SkillId; level: number }
   | { t: 'money'; amount: number; reason: string }
-  | { t: 'contract'; contract: Contract; outcome: 'accepted' | 'done' | 'failed' | 'lapsed' }
+  | { t: 'contract'; contract: Contract; outcome: 'accepted' | 'expiring' | 'done' | 'failed' | 'lapsed' }
   | { t: 'discover'; location: string }
   | { t: 'supply'; what: string; text: string }
   | { t: 'death' }
   | { t: 'knockout' }
   | { t: 'wake' }
   | { t: 'scrapPatch'; fuel: number } // fuel: units put into an empty tank
+  | { t: 'townPatch' } // entering a shop patched worn critical parts for free
   | { t: 'towOffer'; by: string; town: string; fee: number }
   | { t: 'towHitched'; by: string; client: string; site: string }
   | { t: 'towDone'; by: string; client: string; fee: number }
   | { t: 'escortPaid'; by: string; client: string; fee: number }
   | { t: 'escortHired'; by: string; client: string; site: string; fee: number }
   | { t: 'escortRefused'; by: string; client: string }
-  | { t: 'towDropped'; by: string; client: string; reason: 'refused' | 'unhitched' | 'danger' | 'gone' }
+  | { t: 'towDropped'; by: string; client: string; reason: 'refused' | 'unhitched' | 'danger' | 'stranded' | 'gone' }
   | { t: 'stateEnded'; state: NpcState; ending: StateEnding }
   | { t: 'job'; vehicle: string; job: Job; outcome: 'started' | 'done' | 'cancelled' }
   | { t: 'breakdown'; vehicle: string; part: string }

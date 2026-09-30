@@ -128,7 +128,7 @@ export type Unpriced<T> = T extends unknown ? Omit<T, 'value'> : never;
 
 // Money per unit of each priced stat.
 export const PART_PRICE_MODIFIERS = {
-  weapon: { perDamagePerTurn: 4, perRange: 2 },
+  weapon: { perDamagePerTurn: 2, perRange: 2 },
   engine: { perSpeedBonus: 60, perAccelBonus: 40 },
   armor: { perArmorCell: 2 }, // per point of armor plus blast armor, per cell
   cargo: { perExtraRow: 50 },

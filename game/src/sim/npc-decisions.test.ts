@@ -211,7 +211,7 @@ describe('fight back', () => {
     const trader = addNpc(w, 'traders', 'trader', traits, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
     trader.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'test base goal' }];
     const raider = addNpc(w, 'raiders', 'buggy', ['raider'], { x: 14, y: 10 });
-    w.events = [{ t: 'shot', shooter: raider.id, weapon: 'w', target: trader.id, aim: 'body', chance: 1, side: 'front', rounds: [round(trader.id, damage)] }];
+    w.events = [{ t: 'shot', shooter: raider.id, weapon: 'w', target: trader.id, aim: 'body', chance: 1, damageChance: 1, side: 'front', rounds: [round(trader.id, damage)] }];
     noteHurt(w);
     w.events = [];
     // The shot's attack record, as combat leaves it.

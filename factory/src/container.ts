@@ -46,17 +46,18 @@ export function outputsNote(dir: string): string {
   return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory.`;
 }
 
-// Agents get the work clone, the npm cache and the OAuth token, nothing else. The token travels in the docker process env, never in argv.
+// Agents get the work clone, the npm cache, the OAuth token and the ElevenLabs key with its cap, nothing else. Secrets travel in the docker process env, never in argv.
 // Unless the run is open, containers sit on the internal network and reach only the proxy's allowlist.
 export function dockerContainer(run: Run, cfg: FactoryConfig): Container {
   return {
     async agent({ clone, dir, model, prompt, log, openNetwork }) {
       if (!openNetwork) await ensureProxy(run, cfg);
+      const env = { CLAUDE_CODE_OAUTH_TOKEN: cfg.oauthToken, ELEVENLABS_API_KEY: cfg.elevenlabsKey, SFX_MAX_GENERATIONS: String(cfg.sfxMaxGenerations) };
       const args = [
-        ...BASE_ARGS, '-i', ...mountArgs(cfg, clone, dir), ...networkArgs(openNetwork === true), '-e', 'CLAUDE_CODE_OAUTH_TOKEN', cfg.image,
+        ...BASE_ARGS, '-i', ...mountArgs(cfg, clone, dir), ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
         'factory-agent', '-p', '--model', model, '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose',
       ];
-      const result = await run('docker', args, { env: { CLAUDE_CODE_OAUTH_TOKEN: cfg.oauthToken }, input: `${outputsNote(dir)}\n\n${prompt}`, logPath: log });
+      const result = await run('docker', args, { env, input: `${outputsNote(dir)}\n\n${prompt}`, logPath: log });
       must(result, `agent in ${clone}`);
     },
     async shell(clone, script, log, env = {}) {

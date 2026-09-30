@@ -11,7 +11,7 @@ export async function guardTick(ctx: Ctx, tickOnce: () => Promise<void>): Promis
     const summary = summarizeError(error instanceof Error ? error.message : String(error));
     if (readState(ctx.statePath).lastTickError !== summary) {
       updateState(ctx.statePath, (state) => ({ ...state, lastTickError: summary }));
-      await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `The factory tick crashed. Nothing moves until it runs again.\n\n${summary}\n\nThe factory posts again only when the error changes.`);
+      await ctx.telegram.sendMessage(ctx.cfg.committeeChat, `The factory tick crashed. Nothing moves until it runs again.\n\n${summary}\n\nThe factory posts again only when the error changes. Hermes is looking into it.`);
     }
     throw error;
   }

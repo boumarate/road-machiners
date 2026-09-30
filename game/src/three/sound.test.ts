@@ -52,7 +52,7 @@ describe("loopLevels", () => {
 describe("accentOf", () => {
   const round = (hit: boolean, crit = false): ShotRound => ({ hit, crit, offset: 0, struck: hit ? "n" : null, hits: [], blast: [] });
   const shot = (shooter: string, target: string, rounds: ShotRound[]): GameEvent => ({
-    t: "shot", shooter, weapon: "w", target, aim: "body", chance: 0.5, side: "front", rounds,
+    t: "shot", shooter, weapon: "w", target, aim: "body", chance: 0.5, damageChance: 0.5, side: "front", rounds,
   });
   it("answers the player's volleys with hit, miss or crit", () => {
     expect(accentOf(shot("p", "n", [round(false), round(true)]), "p")).toBe("accent-hit");

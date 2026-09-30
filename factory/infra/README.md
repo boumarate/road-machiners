@@ -2,7 +2,7 @@
 
 pyinfra project for one Ubuntu server, 24.04 or 26.04, that runs the game factory.
 
-A Hetzner CX23 with 2 vCPUs and 4 GB is enough. The testing gate peaks near 2.6 GB, Hermes idles near 300 MB, and provision adds 4 GB of swap for spikes. The server needs IPv4, since GitHub has no IPv6. `uv run python firewall.py <server IPv4>` creates a Hetzner cloud firewall that allows inbound TCP 22, 80 and 443 only, and attaches it. It sits outside the machine, so Docker cannot bypass it. It needs `HCLOUD_TOKEN` in `prod.env`.
+Use a Hetzner CPX32 with 4 vCPUs and 8 GB. On a CX23 with 2 vCPUs, the full game test suite takes over 9 minutes and its long tests time out. The testing gate peaks near 2.6 GB, Hermes idles near 300 MB, and provision adds 4 GB of swap for spikes. The server needs IPv4, since GitHub has no IPv6. `uv run python firewall.py <server IPv4>` creates a Hetzner cloud firewall that allows inbound TCP 22, 80 and 443 only, and attaches it. It sits outside the machine, so Docker cannot bypass it. It needs `HCLOUD_TOKEN` in `prod.env`.
 It follows `Steelman/infra`. Run every command from `factory/infra`.
 
 ## Layout
@@ -44,7 +44,7 @@ It follows `Steelman/infra`. Run every command from `factory/infra`.
 - `/opt/factory/home` is `FACTORY_HOME`. Set it in the factory `.env`.
 - `/opt/factory/www` is `FACTORY_WEB_ROOT`. Set it in the factory `.env`.
 - `/opt/factory/hermes` holds the Hermes state and login.
-- The inbox is owned by uid 10000, the Hermes user. Its group is `factory` with mode 2770. Hermes writes files there. The tick reads and deletes them.
+- Hermes runs as the factory user, uid 1001. It writes the inbox and the committee file, and the tick reads and deletes inbox files.
 - The `committee` folder has the same owner, group and mode. Hermes writes `committee.json` there. The tick only reads it.
 
 ## First-time steps

@@ -17,6 +17,7 @@ import {
   buyTruckSupply,
   chassisTradeIn,
   endTrade,
+  enterTown,
   getLotTradePrice,
   partTradePrice,
   repairAll,
@@ -84,6 +85,7 @@ export class TownScreen {
   }
 
   open(): void {
+    if (shopAt(this.host.world())) this.host.apply(enterTown(this.host.world()));
     this.root.style.display = "";
     this.error = "";
     this.render();

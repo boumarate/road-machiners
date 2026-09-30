@@ -11,6 +11,8 @@ const KEYS = {
   publicUrl: 'FACTORY_PUBLIC_URL',
   image: 'FACTORY_IMAGE',
   oauthToken: 'CLAUDE_CODE_OAUTH_TOKEN',
+  elevenlabsKey: 'ELEVENLABS_API_KEY',
+  sfxMaxGenerations: 'SFX_MAX_GENERATIONS',
   designModel: 'FACTORY_DESIGN_MODEL',
   buildModel: 'FACTORY_BUILD_MODEL',
   minVotes: 'FACTORY_MIN_VOTES',
@@ -29,7 +31,7 @@ const KEYS = {
 
 const RELEASE_ONLY = new Set<keyof FactoryConfig>(['itchTarget', 'butlerKey']);
 
-const NUMBERS = new Set<keyof FactoryConfig>(['projectNumber', 'minVotes', 'minAgeHours', 'stageTimeoutMinutes', 'releaseDays', 'maxJobsPerDay']);
+const NUMBERS = new Set<keyof FactoryConfig>(['projectNumber', 'sfxMaxGenerations', 'minVotes', 'minAgeHours', 'stageTimeoutMinutes', 'releaseDays', 'maxJobsPerDay']);
 
 export function loadConfig(env: Record<string, string | undefined>): FactoryConfig {
   const missing = Object.entries(KEYS).filter(([field, key]) => !RELEASE_ONLY.has(field as keyof FactoryConfig) && !env[key]?.trim()).map(([, key]) => key);

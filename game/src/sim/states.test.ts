@@ -156,7 +156,7 @@ describe('states', () => {
     addState(w, 'feud', a, b, FEUD);
     for (let i = 0; i < feudTurns() * 2; i++) {
       w.turn++;
-      w.events = [{ t: 'shot', shooter: b, weapon: 'x', target: a, aim: 'body', chance: 0.5, side: 'front', rounds: [] }];
+      w.events = [{ t: 'shot', shooter: b, weapon: 'x', target: a, aim: 'body', chance: 0.5, damageChance: 0.5, side: 'front', rounds: [] }];
       advanceStates(w);
     }
     expect(stateOf(w, 'feud', a, b)?.turnsLeft).toBe(STATE_TURNS.feud);

@@ -207,6 +207,19 @@ describe('auto patch', () => {
     expect(engine.hp).toBe(1 + plan.hp);
   });
 
+  it('patches the part that strands the truck before a more damaged one', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    me.speed = 0;
+    const cage = armorPart(me);
+    const transmission = corePart(me, 'transmission');
+    cage.hp = 1;
+    transmission.hp = 0;
+    addGoods(w, me, 'parts', 5);
+    startAutoRepair(w);
+    expect(me.job).toMatchObject({ kind: 'repair', partId: transmission.id });
+  });
+
   it('cancels when its part leaves the mounts, as when stored at a garage', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];

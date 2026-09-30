@@ -14,7 +14,9 @@ export type FactoryConfig = {
   webRoot: string;
   publicUrl: string; // base of play links, no trailing slash
   image: string; // Docker image of the agent container
-  oauthToken: string; // CLAUDE_CODE_OAUTH_TOKEN, the one secret agents get
+  oauthToken: string; // CLAUDE_CODE_OAUTH_TOKEN
+  elevenlabsKey: string; // ELEVENLABS_API_KEY, for the game's sfx:gen in agent runs
+  sfxMaxGenerations: number; // most ElevenLabs generations one sfx:gen run may make
   designModel: string;
   buildModel: string;
   minVotes: number;

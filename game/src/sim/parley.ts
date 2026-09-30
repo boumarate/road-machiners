@@ -85,7 +85,12 @@ export function answersPlea(world: World, answerer: Vehicle, pleader: Vehicle, p
   return decide(world, answerer, 'mercyBegged', pleader.id, danger) === 'spare';
 }
 
+// Only a refused plea holds the pleader back from pleading again. A granted one ends, so a driver whose truce
+// breaks can plead again at once.
 function grantPlea(world: World, pleader: Vehicle, answerer: Vehicle, plea: Plea): void {
+  const held = stateOf(world, 'plea', pleader.id, answerer.id);
+  if (!held) throw new Error(`${pleader.id} holds no plea to ${answerer.id}`);
+  endState(world, held, 'fulfilled');
   if (plea === 'truce') makePeace(world, pleader, answerer);
   else yieldTo(world, pleader, answerer);
 }

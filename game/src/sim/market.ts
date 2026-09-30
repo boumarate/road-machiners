@@ -381,9 +381,13 @@ function offerStillValid(world: World, c: Contract): boolean {
 
 // The shop the parked player truck can use, or null.
 export function shopAt(world: World): string | null {
-  const v = playerVehicle(world);
-  if (v.speed > RULES.parkedSpeed) return null;
-  return Object.keys(SHOPS).find((id) => canUseSite(v.pos, siteOf(id))) ?? null;
+  return playerVehicle(world).speed > RULES.parkedSpeed ? null : shopNear(world);
+}
+
+// The shop in reach of the player truck at any speed, or null.
+export function shopNear(world: World): string | null {
+  const pos = playerVehicle(world).pos;
+  return Object.keys(SHOPS).find((id) => canUseSite(pos, siteOf(id))) ?? null;
 }
 
 export function siteOf(siteId: string): Site {
@@ -495,6 +499,7 @@ export function advanceContracts(world: World): void {
   for (const c of [...world.player.contracts]) {
     const outcome = contractOutcome(world, c, paidTemplates);
     if (outcome) finishContract(world, c, outcome);
+    else if (c.deadline - world.turn === CONTRACTS.warnTurns) world.events.push({ t: 'contract', contract: { ...c }, outcome: 'expiring' });
   }
 }
 

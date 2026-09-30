@@ -27,7 +27,7 @@ import { contactsOf, hearsBeacon } from './detect';
 import { inCombat } from './jobs';
 import { route, routeLength } from './path';
 import { busyWithFight, decide, getKnownSite, getUpkeepReserve, isWeak, npcProfile } from './npc-decisions';
-import { placeBase } from './npc-activities';
+import { placeBase, popGoal } from './npc-activities';
 import { skillEffect } from './progress';
 import { canUseSite, nearestPad, type Site } from './sites';
 import { addState, endState, stateOf, towData, towPromiseData } from './states';
@@ -87,6 +87,11 @@ export function isOnRope(world: World, id: string): boolean {
 // The vehicle pulls a truck on its tow rope.
 export function isTowing(world: World, id: string): boolean {
   return hitchedTows(world).some((s) => s.holder === id);
+}
+
+// The tower has taken the client's tow: it is on its way, offers, or has hitched.
+export function towsClient(world: World, tower: Vehicle, client: Vehicle): boolean {
+  return stateOf(world, 'tow', tower.id, client.id) !== null || stateOf(world, 'answering', tower.id, client.id) !== null;
 }
 
 function isPlayer(world: World, v: Vehicle): boolean {
@@ -269,11 +274,17 @@ export function runTow(world: World, vehicle: Vehicle, activity: NpcActivity): s
     endState(world, held, 'fulfilled');
     return held.other === world.player.vehicleId ? 'towed the player to town' : 'towed a stranded truck';
   }
-  const client = vehicleById(world, activity.targetId!);
-  if (!readyToTow(world, vehicle, client)) return null;
+  return reachClient(world, vehicle, activity, vehicleById(world, activity.targetId!));
+}
+
+// The tower offers or hitches once in reach. The client may have got going or reached its home while the tower drove
+// over, and then the job ends.
+function reachClient(world: World, tower: Vehicle, activity: NpcActivity, client: Vehicle): string | null {
+  if (!isStranded(world, client) || !towDestination(world, tower, client)) return 'the truck needs no tow anymore';
+  if (!readyToTow(world, tower, client)) return null;
   activity.phase = 'act';
-  if (isPlayer(world, client)) offer(world, vehicle, client);
-  else hitch(world, vehicle, client);
+  if (isPlayer(world, client)) offer(world, tower, client);
+  else hitch(world, tower, client);
   return null;
 }
 
@@ -344,6 +355,17 @@ export function dropTow(world: World, tow: NpcState, reason: DropReason): void {
   endState(world, tow, 'broken');
   if (data.hitched && reason === 'danger') addState(world, 'towPromise', tow.holder, tow.other, { kind: 'towPromise', site: data.site, fee: data.fee });
   world.events.push({ t: 'towDropped', by: tow.holder, client: tow.other, reason });
+}
+
+// A tower that cannot drive any more, with a wrecked wheel or an empty tank, lets its hitched truck go. A tower that
+// left the world is not here: ending its state logs that.
+export function dropStrandedTowers(world: World): void {
+  for (const tow of hitchedTows(world)) {
+    const tower = world.vehicles.find((v) => v.id === tow.holder);
+    if (!tower || !isStranded(world, tower)) continue;
+    dropTow(world, tow, 'stranded');
+    if (tower.brain && popGoal(world, tower, 'cannot drive').kind !== 'tow') throw new Error(`${tower.id} held a tow without a tow goal on top`);
+  }
 }
 
 // Places each hitched truck TOW.gap tiles behind its tower along the path both trucks drive: the towed truck's own

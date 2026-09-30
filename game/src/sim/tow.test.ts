@@ -8,9 +8,10 @@ import { playerVehicle } from './damage';
 import { route, routeLength } from './path';
 import { canUseSite, nearestPad, siteGates, sitePads, type Site } from './sites';
 import { getResources } from './resources';
-import { vehicleStats } from './stats';
+import { isStranded, vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateWhere, testDrive } from './testkit';
-import { hasLoot } from './grid';
+import { hasLoot, mountedParts } from './grid';
+import { CONDITION } from '../data/wear';
 import { thinkNpc, topGoal } from './npc-activities';
 import { optionChances, optionWeights } from './npc-decisions';
 import { addState, endState, stateOf, towData } from './states';
@@ -292,6 +293,25 @@ describe('towing', () => {
     expect(w.player.money).toBe(money);
     expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, client: w.player.vehicleId, reason: 'danger' });
     expect(topGoal(find(w, s.trader.id))?.kind).toBe('flee');
+  });
+
+  it('a tower that can no longer drive drops the tow', () => {
+    const s = stranded();
+    let w = acceptTow(offered(s));
+    w = endTurn(w, testDrive);
+    expect(isOnRope(w, w.player.vehicleId)).toBe(true);
+    const money = w.player.money;
+    const traderMoney = getResources(w, find(w, s.trader.id)).money;
+    find(w, s.trader.id).resources!.fuel = 0;
+    w = endTurn(w, testDrive);
+    expect(playerTow(w)).toBeNull();
+    expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, client: w.player.vehicleId, reason: 'stranded' });
+    expect(isOnRope(w, w.player.vehicleId)).toBe(false);
+    // The deal is off: no fee changes hands, and no state of the deal outlives it.
+    expect(w.player.money).toBe(money);
+    expect(getResources(w, find(w, s.trader.id)).money).toBe(traderMoney);
+    expect(w.states.filter((x) => ['tow', 'towPromise', 'answering'].includes(x.kind))).toEqual([]);
+    expect(find(w, s.trader.id).brain!.goals.some((g) => g.kind === 'tow')).toBe(false);
   });
 
   it('a tower that is destroyed drops the tow', () => {
@@ -614,6 +634,22 @@ describe('the player towing an NPC', () => {
     return { w: pick(pick(callVehicle(w, npc.id), OFFER), HITCH), npc };
   }
 
+  it('a player tower that can no longer drive drops the tow and earns no fee', () => {
+    let { w, npc } = hitched();
+    w = runUntil(setMoveOrder(w, { kind: 'stopAt', dest: gate }), 2, () => false).w;
+    expect(isOnRope(w, npc.id)).toBe(true);
+    const money = w.player.money;
+    const npcMoney = getResources(w, find(w, npc.id)).money;
+    w.player.fuel = 0;
+    w = endTurn(w, testDrive);
+    expect(playerTowing(w)).toBeNull();
+    expect(w.events).toContainEqual({ t: 'towDropped', by: w.player.vehicleId, client: npc.id, reason: 'stranded' });
+    expect(isOnRope(w, npc.id)).toBe(false);
+    expect(w.player.money).toBe(money);
+    expect(getResources(w, find(w, npc.id)).money).toBe(npcMoney);
+    expect(w.states.filter((x) => x.kind === 'tow')).toEqual([]);
+  });
+
   it('the driver names its nearest town and a fee it can pay', () => {
     const { w: start, npc } = strandedNpc();
     npc.resources!.money = 30;
@@ -685,6 +721,16 @@ describe('the player towing an NPC', () => {
     const practice = r.events.filter((e) => e.t === 'practice' && e.source === 'freeTow');
     expect(practice).toMatchObject([{ amount: data.waived, target: npc.id }]);
     expect(r.w.player.xpBySource.freeTow).toBeCloseTo(data.waived * XP_SOURCES.freeTow.weight);
+  });
+
+  it('a driver towed in with no engine drives on with a fresh one', () => {
+    const { w: start, npc } = strandedNpc();
+    for (const part of mountedParts(npc, 'engine')) npc.items = npc.items.filter((i) => i.kind !== 'part' || i.part.id !== part.id);
+    const w = pick(pick(callVehicle(start, npc.id), OFFER), HITCH);
+    const r = runUntil(setMoveOrder(w, { kind: 'stopAt', dest: gate }), 60, (x) => playerTowing(x) === null);
+    const after = runUntil(r.w, 3, () => false).w;
+    expect(mountedParts(find(after, npc.id), 'engine')).toHaveLength(1);
+    expect(isStranded(after, find(after, npc.id))).toBe(false);
   });
 
   it('a paid tow pays no free tow XP', () => {
@@ -853,5 +899,101 @@ describe('NPCs towing each other', () => {
     expect(find(w, s.client.id).resources!.money).toBe(money);
     expect(r.events).toContainEqual({ t: 'towDropped', by: s.tower.id, client: s.client.id, reason: 'danger' });
     expect(stateOf(w, 'towPromise', s.tower.id, s.client.id)).not.toBeNull();
+  });
+});
+
+describe('a truck stranded for good', () => {
+  const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
+  const far = { x: bowl.pos.x + bowl.radius + 25, y: bowl.pos.y };
+
+  function engineless(pos: Vec): { w: World; npc: Vehicle } {
+    const w = emptyWorld(pos);
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    const npc = addVehicle(w, 'scavengers', 'scout', [], { x: pos.x + 3, y: pos.y }, Math.PI);
+    npc.brain = npcBrain('scavenger', pos, NPCS.scavenger.traits);
+    expect(mountedParts(npc, 'engine')).toHaveLength(0);
+    return { w, npc };
+  }
+
+  it('heads for a town to be repaired', () => {
+    const { w, npc } = engineless(far);
+    expect(thinkNpc(w, npc)).toMatchObject({ kind: 'resupply' });
+  });
+
+  it('heads for a town even when broke and on his way to loot salvage', () => {
+    const { w, npc } = engineless(far);
+    getResources(w, npc).money = 0;
+    npc.brain!.goals.push({ kind: 'loot', targetId: 'wreck', destination: { x: far.x + 40, y: far.y }, phase: 'travel', reason: 'loot salvage on the way' });
+    expect(thinkNpc(w, npc)).toMatchObject({ kind: 'resupply' });
+    expect(topGoal(npc)?.kind).toBe('resupply');
+  });
+
+  it('a junk engine counts too', () => {
+    const pad = nearestPad(bowl, far);
+    const w = emptyWorld(pad);
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { ...pad }, Math.PI);
+    npc.brain = npcBrain('scavenger', pad, NPCS.scavenger.traits);
+    const engine = mountedParts(npc, 'engine')[0];
+    engine.wear = CONDITION.maxWear + 1;
+    engine.hp = 0;
+    thinkNpc(w, npc);
+    const fresh = mountedParts(npc, 'engine')[0];
+    expect(fresh.wear).toBeLessThanOrEqual(CONDITION.maxWear);
+    expect(fresh.hp).toBeGreaterThan(0);
+  });
+
+  it('gets a fresh engine from its loadout pool on reaching a town, however it got there', () => {
+    const pad = nearestPad(bowl, far);
+    const { w, npc } = engineless(pad);
+    npc.pos = { ...pad };
+    thinkNpc(w, npc);
+    expect(mountedParts(npc, 'engine')).toHaveLength(1);
+    expect(isStranded(w, npc)).toBe(false);
+  });
+});
+
+describe('a broke driver', () => {
+  const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
+  const far = { x: bowl.pos.x + bowl.radius + 25, y: bowl.pos.y };
+
+  function broke(pos: Vec): { w: World; npc: Vehicle } {
+    const w = emptyWorld(far);
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { ...pos }, Math.PI);
+    npc.brain = npcBrain('scavenger', pos, NPCS.scavenger.traits);
+    getResources(w, npc).money = 0;
+    return { w, npc };
+  }
+
+  it('with an empty tank heads for a town instead of waiting', () => {
+    const { w, npc } = broke({ x: far.x + 3, y: far.y });
+    getResources(w, npc).fuel = 0;
+    expect(thinkNpc(w, npc)).toMatchObject({ kind: 'resupply' });
+  });
+
+  it('that can still drive works on instead of waiting', () => {
+    const { w, npc } = broke({ x: far.x + 3, y: far.y });
+    getResources(w, npc).fuel = 1;
+    expect(thinkNpc(w, npc).kind).not.toBe('wait');
+  });
+
+  it('stranded on a town pad gets a fresh loadout and can drive', () => {
+    const { w, npc } = broke(nearestPad(bowl, far));
+    mountedParts(npc, 'engine')[0].hp = 0;
+    getResources(w, npc).fuel = 0;
+    thinkNpc(w, npc);
+    expect(isStranded(w, npc)).toBe(false);
+  });
+
+  it('with money on a town pad pays for its repair and keeps its loadout', () => {
+    const { w, npc } = broke(nearestPad(bowl, far));
+    getResources(w, npc).money = 5000;
+    const engine = mountedParts(npc, 'engine')[0];
+    engine.hp = 0;
+    thinkNpc(w, npc);
+    expect(mountedParts(npc, 'engine')[0].id).toBe(engine.id);
+    expect(getResources(w, npc).money).toBeLessThan(5000);
+    expect(isStranded(w, npc)).toBe(false);
   });
 });

@@ -108,7 +108,7 @@ describe("shot log", () => {
     const trader = addVehicle(w, "traders", "hauler", ["stockEngine"], { x: 44, y: 40 });
     const cab = mountedParts(me).find((p) => (partDef(p.defId) as { role?: string }).role === "cab")!;
     const e: GameEvent = {
-      t: "shot", shooter: raider.id, weapon: mountedParts(raider, "weapon")[0].id, target: trader.id, aim: "body", chance: 0.5, side: "front",
+      t: "shot", shooter: raider.id, weapon: mountedParts(raider, "weapon")[0].id, target: trader.id, aim: "body", chance: 0.5, damageChance: 0.5, side: "front",
       rounds: [{ hit: false, crit: false, offset: 3, struck: me.id, hits: [{ part: cab.id, damage: 4 }], blast: [] }],
     };
     const line = eventText(w, e);
@@ -124,7 +124,7 @@ describe("shot log", () => {
     const cab = parts.find((p) => (partDef(p.defId) as { role?: string }).role === "cab")!;
     const armor = parts.find((p) => partDef(p.defId).kind === "armor");
     const shot = (hits: { part: string; damage: number }[], rounds = 2): GameEvent => ({
-      t: "shot", shooter: me.id, weapon: mountedParts(me, "weapon")[0].id, target: raider.id, aim: "body", chance: 0.4, side: "front",
+      t: "shot", shooter: me.id, weapon: mountedParts(me, "weapon")[0].id, target: raider.id, aim: "body", chance: 0.4, damageChance: 0.4, side: "front",
       rounds: Array.from({ length: rounds }, (_, i) => ({ hit: i === 0, crit: false, offset: 0, struck: raider.id, hits: i === 0 ? hits : [], blast: [] })),
     });
     return { w, raider, cab, armor, shot };

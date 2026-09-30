@@ -8,7 +8,8 @@ import { isDefeated, isKnockedOut, knockOutNpc } from './defeat';
 import { RULES } from '../data/rules';
 import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
-import { blastLanes, laneCount, lanePoint, partLane, sideToward, walkLane, type PartHit, type Side } from './armor';
+import { blastLanes, laneCount, lanePoint, partLane, planLane, sideToward, walkLane, type PartHit, type Round, type Side } from './armor';
+import { wholeDamage } from './damage';
 import { bodyOf } from './body';
 import { corePart, hasLoot, itemSize, mountedItems, mountedParts } from './grid';
 import { practice, skillEffect, vehicleHasPerk } from './progress';
@@ -169,6 +170,7 @@ function arcBlock(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): FireBlo
 export type HitOdds = {
   chance: number; // per round, to hit the aimed part or, for a body shot, the truck; clamped to RULES.minHit and RULES.maxHit
   bodyChance: number; // per round, to hit the truck anywhere; an aimed miss that lands on the truck hits where it lands
+  damageChance: number; // per round, to damage the aimed part, or for a body shot any part; the chance the player sees
   distance: number; // meters
   width: number; // meters the target, or the aimed part, shows across the line of fire
   halfAngle: number; // radians
@@ -339,7 +341,133 @@ export function hitOdds(
     RULES.maxHit,
   );
   const bodyChance = bodyChanceOf(a, { chance, halfAngle, spread, distance });
-  return { chance, bodyChance, distance, width, halfAngle, spread, causes };
+  const odds = { chance, bodyChance, distance, width, halfAngle, spread, causes };
+  const damageChance = damageChanceOf({ world, shooter, target, round: mw.def.round, stray: mw.def.stray, aim, a }, odds);
+  return { ...odds, damageChance };
+}
+
+// F3. The chance one round damages what it aims at: the aimed part, or for a body shot any part of the target.
+// It follows the fire phase exactly. Rounds enter lanes as rollAim() and landRound() send them, each lane walks as
+// walkLane() does, and splash lands as explode() does. So parts in the way and lost pen lower the chance.
+type Reach = {
+  world: World;
+  shooter: Vehicle;
+  target: Vehicle;
+  round: WeaponDef["round"];
+  stray: number;
+  aim: Aim;
+  a: Aiming;
+};
+type Spread = Omit<HitOdds, "damageChance">;
+
+function damageChanceOf(c: Reach, o: Spread): number {
+  const onTruck = laneEntries(o, c.a).reduce((sum, p, lane) => sum + p * laneReach(c, lane), 0);
+  return onTruck + offTruckReach(c, o);
+}
+
+function reachesAim(c: Reach, hits: { part: PartInstance; amount: number }[]): boolean {
+  return hits.some((h) => wholeDamage(h.amount) > 0 && (c.aim === "body" || h.part.id === c.aim));
+}
+
+// Gaussian odds and the clamp's two corrections: promoted misses become hits, and kept hits stay hits.
+function clampShares(o: Spread): { raw: number; promoted: number; keep: number } {
+  const raw = rawChance(o);
+  return {
+    raw,
+    promoted: raw < o.chance ? (o.chance - raw) / (1 - raw) : 0,
+    keep: raw > o.chance ? o.chance / raw : 1,
+  };
+}
+
+// Offsets across the line of fire, in meters, that fall in a lane.
+function laneSpan(a: Aiming, lane: number): [number, number] {
+  const c = laneCenter(a.side, a.body, a.lanes, lane);
+  const half = a.body / a.lanes / 2;
+  return [c - half, c + half];
+}
+
+// The chance a round enters each lane of the target. An aimed hit enters the aimed lane, and an aimed miss that
+// lands on the truck enters the lane under it. A body hit enters the lane under it, and a promoted body hit lands
+// anywhere on the truck with even odds.
+function laneEntries(o: Spread, a: Aiming): number[] {
+  const sd = o.spread * o.distance;
+  const half = o.halfAngle * o.distance;
+  const { raw, promoted, keep } = clampShares(o);
+  const entries = Array.from({ length: a.lanes }, (_, lane) => {
+    const [lo, hi] = laneSpan(a, lane);
+    const inAim = landChance(a.center, sd, Math.max(lo, a.center - half), Math.min(hi, a.center + half));
+    if (a.lane !== null) return (1 - promoted) * (landChance(a.center, sd, lo, hi) - inAim);
+    return inAim * keep + Math.max(0, o.chance - raw) / a.lanes;
+  });
+  if (a.lane !== null) entries[a.lane] += o.chance;
+  return entries;
+}
+
+// A round that enters a lane walks it, as a crit or not, and its splash lands on the lane's face.
+function laneReach(c: Reach, lane: number): number {
+  if (splashReaches(c, lanePoint(c.target, c.a.side, lane), lane)) return 1;
+  const walks = (crit: boolean) => Number(reachesAim(c, planLane(c.target, c.a.side, lane, directRound(c.round, crit))));
+  return (1 - RULES.critChance) * walks(false) + RULES.critChance * walks(true);
+}
+
+// Whether a round exploding at this point splashes the aim. skip is the lane the round itself entered.
+function splashReaches(c: Reach, point: Vec, skip: number | null): boolean {
+  if (c.round.splashRadius <= 0) return false;
+  const { side, lanes } = blastLanes(c.target, point, c.round.splashRadius);
+  return lanes.some((lane) => lane !== skip && reachesAim(c, planLane(c.target, side, lane, splashRound(c.round))));
+}
+
+// Splash reach changes only where a lane face enters the blast radius. This many steps per side keeps each step a
+// few centimeters wide, far under a lane, so the sum is exact to well under a percent.
+const OFF_TRUCK_STEPS = 64;
+
+// A round that misses the truck can still splash it. Beyond the truck's corners plus the blast radius it cannot.
+function offTruckReach(c: Reach, o: Spread): number {
+  if (c.round.splashRadius <= 0) return 0;
+  const half = bodyOf(c.target.chassisId).half;
+  const edge = c.a.body / 2;
+  const step = (Math.hypot(half.x, half.z) + c.round.splashRadius - edge) / OFF_TRUCK_STEPS;
+  let sum = 0;
+  for (const sign of [-1, 1])
+    for (let i = 0; i < OFF_TRUCK_STEPS; i++) {
+      const x0 = edge + i * step;
+      sum += offTruckChance(o, c.a, sign, x0, x0 + step) * missReach(c, sign * (x0 + step / 2));
+    }
+  return sum;
+}
+
+// The chance a round lands off the truck at an offset between x0 and x1 on one side. Misses land where they strayed.
+// A clamped-away hit lands past the edge by its distance from the aim point, as rollAim() pushes it.
+function offTruckChance(o: Spread, a: Aiming, sign: number, x0: number, x1: number): number {
+  const sd = o.spread * o.distance;
+  const half = o.halfAngle * o.distance;
+  const { promoted, keep } = clampShares(o);
+  const [lo, hi] = sign > 0 ? [x0, x1] : [-x1, -x0];
+  const inAim = landChance(a.center, sd, Math.max(lo, a.center - half), Math.min(hi, a.center + half));
+  const missed = (1 - promoted) * (landChance(a.center, sd, lo, hi) - inAim);
+  const edge = a.body / 2;
+  const [dLo, dHi] = sign > 0 ? [a.center + x0 - edge, a.center + x1 - edge] : [a.center - (x1 - edge), a.center - (x0 - edge)];
+  const pushed = (1 - keep) * landChance(a.center, sd, Math.max(dLo, a.center - half), Math.min(dHi, a.center + half));
+  return missed + pushed;
+}
+
+// A miss off the truck explodes where it lands, or strays into another truck and explodes on one of its lanes.
+function missReach(c: Reach, offset: number): number {
+  const miss = missPoint(c.shooter, c.target, offset);
+  const own = Number(splashReaches(c, miss, null));
+  const candidates = strayCandidates(c.world, c.shooter, c.target, miss);
+  if (candidates.length === 0) return own;
+  return (1 - c.stray) * own + c.stray * strayReach(c, candidates);
+}
+
+function strayReach(c: Reach, candidates: { value: Vehicle; weight: number }[]): number {
+  const total = candidates.reduce((sum, x) => sum + x.weight, 0);
+  return candidates.reduce((sum, { value: victim, weight }) => {
+    const side = sideToward(victim, c.shooter.pos);
+    const n = laneCount(victim, side);
+    const lanes = Array.from({ length: n }, (_, lane) => Number(splashReaches(c, lanePoint(victim, side, lane), null)));
+    return sum + (weight / total) * (lanes.reduce((a, b) => a + b, 0) / n);
+  }, 0);
 }
 
 // Each cause of a shot's spread. The steady aim perk takes the shake of the player's own speed away. A target that
@@ -452,7 +580,7 @@ function applyShot(world: World, s: Shot): void {
   spendShot(world, s);
   noteAttack(world, s.shooter, s.target, !isHostile(world, s.target, s.shooter));
   const rounds = s.rolls.map((roll) => resolveRound(world, s, roll));
-  const event = { t: "shot" as const, shooter: s.shooter.id, weapon: s.mw.part.id, target: s.target.id, aim: s.aim, chance: s.odds.chance, side: s.aiming.side, rounds };
+  const event = { t: "shot" as const, shooter: s.shooter.id, weapon: s.mw.part.id, target: s.target.id, aim: s.aim, chance: s.odds.chance, damageChance: s.odds.damageChance, side: s.aiming.side, rounds };
   for (const id of shotDamage(event).keys()) vehicleById(world, id).lastHitBy = s.shooter.id;
   noteStray(world, s, event);
   practiceHits(world, s);
@@ -493,10 +621,18 @@ function landRound(world: World, s: Shot, roll: Roll, offset: number): Landing {
   const { side, lanes, body } = s.aiming;
   if (!roll.hit && Math.abs(offset) >= body / 2) return strayRound(world, s, missPoint(s.shooter, s.target, offset));
   const lane = roll.hit && s.aiming.lane !== null ? s.aiming.lane : laneOfOffset(side, body, lanes, offset);
-  const k = roll.crit ? { damage: RULES.critDamage, pen: RULES.critPen } : { damage: 1, pen: 1 };
-  const r = s.mw.def.round;
-  const hits = walkLane(world, s.target, side, lane, { damage: r.damage * k.damage * RULES.weaponDamage, pen: r.pen * k.pen, blast: r.blast, armorShare: r.armorShare });
+  const hits = walkLane(world, s.target, side, lane, directRound(s.mw.def.round, roll.crit));
   return { struck: s.target, lane, hits, point: lanePoint(s.target, side, lane) };
+}
+
+// The round that walks the lane it landed in. A crit multiplies its damage and pen.
+function directRound(r: WeaponDef["round"], crit: boolean): Round {
+  const k = crit ? { damage: RULES.critDamage, pen: RULES.critPen } : { damage: 1, pen: 1 };
+  return { damage: r.damage * k.damage * RULES.weaponDamage, pen: r.pen * k.pen, blast: r.blast, armorShare: r.armorShare };
+}
+
+function splashRound(r: WeaponDef["round"]): Round {
+  return { damage: r.splashDamage * RULES.weaponDamage, pen: r.splashPen, blast: true, armorShare: r.armorShare };
 }
 
 // A stray round enters a random lane of the side facing the shooter, with its full damage and pen.
@@ -506,7 +642,7 @@ function strayRound(world: World, s: Shot, miss: Vec): Landing {
   const side = sideToward(victim, s.shooter.pos);
   const lane = randInt(world, 0, laneCount(victim, side) - 1);
   const r = s.mw.def.round;
-  const hits = walkLane(world, victim, side, lane, { damage: r.damage * RULES.weaponDamage, pen: r.pen, blast: r.blast, armorShare: r.armorShare });
+  const hits = walkLane(world, victim, side, lane, directRound(r, false));
   return { struck: victim, lane, hits, point: lanePoint(victim, side, lane) };
 }
 
@@ -553,7 +689,7 @@ function explode(world: World, r: WeaponDef["round"], landing: Landing): Vehicle
     const skip = v.id === landing.struck?.id ? landing.lane : null;
     const hits = lanes
       .filter((lane) => lane !== skip)
-      .flatMap((lane) => walkLane(world, v, side, lane, { damage: r.splashDamage * RULES.weaponDamage, pen: r.splashPen, blast: true, armorShare: r.armorShare }));
+      .flatMap((lane) => walkLane(world, v, side, lane, splashRound(r)));
     if (hits.length > 0) out.push({ vehicle: v.id, hits });
   }
   return out;

@@ -10,7 +10,7 @@ from io import StringIO
 
 from pyinfra.operations import files, server, systemd
 
-from factory_infra import CODE_DIR, FACTORY_ROOT, FACTORY_USER, HERMES_DIR, HOME_DIR, INFRA_DIR, REPO_ROOT, WWW_DIR, read_factory_env, settings
+from factory_infra import CODE_DIR, FACTORY_ROOT, FACTORY_UID, FACTORY_USER, HERMES_DIR, HOME_DIR, INFRA_DIR, REPO_ROOT, WWW_DIR, read_factory_env, settings
 
 FILES = INFRA_DIR / "files"
 factory_env = read_factory_env(settings.factory_env_file)
@@ -106,7 +106,7 @@ systemd.service(
 )
 
 # Hermes takes its paths from env. The server layout differs from the Mac default.
-hermes_env = f"FACTORY_HERMES_DIR={HERMES_DIR}"
+hermes_env = f"FACTORY_HERMES_DIR={HERMES_DIR} FACTORY_UID={FACTORY_UID}"
 server.shell(
     name="compose up: hermes",
     commands=[

@@ -20,6 +20,13 @@ display:
       long_running_notifications: false
       streaming: false
 
+# Hermes's shell and scripts get only the env keys named here. allowlist.py copies them into the Hermes .env.
+terminal:
+  env_passthrough:
+    - FACTORY_REPO
+    # Hermes runs tools with its own HOME, so gh needs the folder of its login.
+    - GH_CONFIG_DIR
+
 plugins:
   enabled:
     - factory
@@ -27,8 +34,16 @@ plugins:
 # The file toolset also holds write and patch. Hermes has no read-only file toolset.
 platform_toolsets:
   telegram:
+    - terminal
     - file
     - skills
     - memory
+    - session_search
+    - factory
+  # The incident watch job runs with no chat. It resolves incidents with the same tools.
+  cron:
+    - terminal
+    - file
+    - skills
     - session_search
     - factory

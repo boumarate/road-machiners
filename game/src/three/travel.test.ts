@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { RULES } from "../data/rules";
 import { buildDrive, freeDrive, initPhysics, type Drive } from "../phys/drive";
 import { physicsMove } from "../phys/turn";
@@ -250,6 +250,7 @@ describe("automatic travel safety", () => {
         weapon: "gun",
         aim: "body",
         chance: 1,
+        damageChance: 1,
         side: "front",
         rounds: [],
       },
@@ -286,5 +287,44 @@ describe("rope frames", () => {
 
     expect(frames[me.id]?.length).toBeGreaterThan(0);
     expect(frames[tower.id]).toBeUndefined();
+  });
+});
+
+describe("turns on a tow rope", () => {
+  function towedWorld() {
+    const world = makeSafeWorld();
+    const me = playerVehicle(world);
+    world.vehicles.push({ ...me, id: "tower", pos: { x: me.pos.x + 3, y: me.pos.y } });
+    addState(world, "tow", "tower", me.id, { kind: "tow", site: "bowl", fee: 0, waived: 0, hitched: true });
+    return world;
+  }
+
+  function travelWithPrepared() {
+    const prepare = vi.fn();
+    const travel = new Travel(250);
+    Object.assign(travel, { turns: { prepare, take: () => null } });
+    return { travel, prepare };
+  }
+
+  const playback = { result: { next: {} } } as unknown as Parameters<Travel["prepareNext"]>[1];
+
+  it("prepare the next turn during playback with no key held", () => {
+    const { travel, prepare } = travelWithPrepared();
+    travel.prepareNext(towedWorld(), playback, 0);
+    expect(prepare).toHaveBeenCalledTimes(1);
+  });
+
+  it("wait for the player once Space stops them", () => {
+    const { travel, prepare } = travelWithPrepared();
+    const world = towedWorld();
+    travel.stopAuto(world);
+    travel.prepareNext(world, playback, 0);
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it("do not prepare ahead for a truck that is not towed", () => {
+    const { travel, prepare } = travelWithPrepared();
+    travel.prepareNext(makeSafeWorld(), playback, 0);
+    expect(prepare).not.toHaveBeenCalled();
   });
 });

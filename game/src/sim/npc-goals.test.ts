@@ -101,7 +101,7 @@ describe('damage taken', () => {
     const round = (damage: number[]) => ({ hit: true, crit: false, offset: 0, struck: npc.id, hits: damage.map((d) => ({ part: 'x', damage: d })), blast: [] });
     npc.brain!.hurt = 7;
     w.events = [
-      { t: 'shot', shooter: other.id, weapon: 'w', target: npc.id, aim: 'body', chance: 1, side: 'front', rounds: [round([3, 2]), round([])] },
+      { t: 'shot', shooter: other.id, weapon: 'w', target: npc.id, aim: 'body', chance: 1, damageChance: 1, side: 'front', rounds: [round([3, 2]), round([])] },
       { t: 'guardShot', site: 'bowl', from: { x: 0, y: 0 }, target: npc.id, rounds: [round([4])] },
       { t: 'collision', a: npc.id, b: 'rock-1', hitsA: [{ part: 'x', damage: 1 }], hitsB: [] },
       { t: 'collision', a: other.id, b: npc.id, hitsA: [{ part: 'y', damage: 9 }], hitsB: [{ part: 'x', damage: 5 }] },

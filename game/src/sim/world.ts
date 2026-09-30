@@ -16,13 +16,13 @@ import { healPlayer } from './health';
 import { fireGuards } from './guards';
 import { discoverSites } from './locations';
 import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
-import { chargeUpkeep, scrapPatch } from './economy';
+import { scrapPatch } from './economy';
 import { nameStream, spawnInitial, spawnNpcs } from './spawn';
 import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
 import { timed } from '../perf';
-import { noteHurt, resolveNpcActivities } from './npc-activities';
+import { noteHurt, resolveNpcActivities, watchStalls } from './npc-activities';
 import { advanceStates } from './states';
-import { checkBeacon, followTower, isTowed, playerTow } from './tow';
+import { checkBeacon, dropStrandedTowers, followTower, isTowed, playerTow } from './tow';
 import { endCallIfOut, raiseCalls } from './dialogue';
 import { advancePatches } from './patch';
 import type { MoveOrder, Vehicle, WeaponOrder, World } from './types';
@@ -30,7 +30,7 @@ import { vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
 import { noteEscape } from './escape';
 import { advanceWeather } from './weather';
-import { advanceContracts, advanceShops, initializeShops, marketStream } from './market';
+import { advanceContracts, advanceShops, initializeShops, marketStream, shopNear } from './market';
 import { applyWear } from './wear';
 import { advanceDust } from './detect';
 import { advanceJobs, startAutoRepair } from './jobs';
@@ -82,6 +82,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, populate = 
       supplies: kit.supplies,
       autoFire: false,
       autoRepair: true,
+      townPatched: false,
       engineHeat: 0,
       overdrive: false,
       discovered: [],
@@ -244,6 +245,7 @@ export function endTurn(
     advanceWeather(w);
     planNpcOrders(w);
     move(w);
+    if (!shopNear(w)) w.player.townPatched = false;
     followTower(w);
     applyWear(w);
     advanceEngineHeat(w);
@@ -258,13 +260,13 @@ export function endTurn(
     fireWeapons(w);
     fireGuards(w);
     consumeSupplies(w);
-    chargeUpkeep(w);
     scrapPatch(w);
     healPlayer(w);
     leakFuel(w);
     fitAllStores(w);
     applyGodMode(w);
     resolveDestroyed(w);
+    dropStrandedTowers(w);
     advanceContracts(w);
     advancePatches(w);
     advanceStates(w);
@@ -280,6 +282,7 @@ export function endTurn(
     refreshVision(w);
     noteEscape(w);
     noteHurt(w);
+    watchStalls(w);
     endCallIfOut(w);
     raiseCalls(w);
   }));

@@ -8,7 +8,7 @@ import { getResources } from './resources';
 import { siteGates } from './sites';
 import { autoOrders, fireWeapons, hitOdds, isHostile, laneOfOffset, noteAttack, resolveDestroyed } from './combat';
 import { thinkNpc, topGoal } from './npc-activities';
-import { mountedItems, mountedParts } from './grid';
+import { corePart, mountedItems, mountedParts } from './grid';
 import { addState, stateOf } from './states';
 import { refreshVision } from './vision';
 import { vehicleStats } from './stats';
@@ -203,6 +203,38 @@ function range(d: number, heading: number, speed = 0) {
   return { w, me, buggy, mg };
 }
 
+// The player on a scout with one gun, and a whole target truck d tiles ahead that never loses HP.
+function aimTest(gunId: string, chassisId: string, heading: number, d = 1.2) {
+  const w = emptyWorld();
+  const old = w.vehicles[0];
+  const me = addVehicle(w, 'player', 'scout', [gunId, 'stockEngine'], old.pos, 0);
+  me.id = old.id;
+  const target = addVehicle(w, 'scavengers', chassisId, ['stockEngine'], { x: old.pos.x + d, y: old.pos.y }, heading);
+  w.vehicles = [me, target];
+  for (const p of mountedParts(target)) p.hp = 1e9;
+  return { w, me, target, gun: vehicleStats(w, me).weapons[0] };
+}
+
+// Fires many shots and checks the share of rounds that damage the aim, directly or by splash, against damageChance.
+function expectShownChance(t: ReturnType<typeof aimTest> & { aim: string }) {
+  const { w, me, target, gun, aim } = t;
+  const shown = hitOdds(w, me, gun, target, aim).damageChance;
+  let reached = 0;
+  let rounds = 0;
+  for (let i = 0; i < 400; i++) {
+    w.events = [];
+    Object.assign(gun.part, gunFor(gun.part.defId));
+    order(me, gun.part.id, target.id, aim);
+    fireWeapons(w);
+    for (const r of shotsBy(w.events, me.id)[0].rounds) {
+      rounds++;
+      const hits = [...(r.struck === target.id ? r.hits : []), ...r.blast.filter((b) => b.vehicle === target.id).flatMap((b) => b.hits)];
+      if (hits.some((h) => h.damage > 0 && (aim === 'body' || h.part === aim))) reached++;
+    }
+  }
+  expect(Math.abs(reached / rounds - shown)).toBeLessThan(0.03);
+}
+
 describe('towed trucks', () => {
   it('a truck on a tow rope is nobody\'s foe, but its tower stays one', () => {
     const w = emptyWorld();
@@ -382,6 +414,27 @@ describe('rounds', () => {
     }
     expect([...struck].some((id) => id !== wheel.id)).toBe(true);
     expect(Math.abs(hits / rounds - odds.bodyChance)).toBeLessThan(0.05);
+  });
+
+  it('the shown chance counts parts in the way of an aimed shot', () => {
+    const cab = (heading: number) => {
+      const t = aimTest('shotgun', 'courier', heading);
+      return { ...t, aim: corePart(t.target, 'cab').id };
+    };
+    const front = cab(Math.PI);
+    const odds = hitOdds(front.w, front.me, front.gun, front.target, front.aim);
+    expect(odds.damageChance).toBeLessThan(odds.chance / 10);
+    expectShownChance(front);
+    expectShownChance(cab(Math.PI / 2));
+  });
+
+  it('the shown chance of a body shot is how often it damages the truck', () => {
+    expectShownChance({ ...aimTest('mg', 'buggy', Math.PI / 2), aim: 'body' });
+  });
+
+  it('the shown chance of a blast gun counts its splash', () => {
+    const t = aimTest('grenadeLauncher', 'jeep', Math.PI, 3);
+    expectShownChance({ ...t, aim: corePart(t.target, 'transmission').id });
   });
 
   it('a body shot hits the truck as often as it hits anything', () => {

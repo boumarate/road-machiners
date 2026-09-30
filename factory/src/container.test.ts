@@ -6,7 +6,7 @@ import type { FactoryConfig, Run, RunOptions } from './types';
 type Call = { cmd: string; args: string[]; opts?: RunOptions };
 
 const HOME = resolve('tmp/factory-container-test');
-const cfg = { image: 'img:1', oauthToken: 'secret-token', home: HOME } as FactoryConfig;
+const cfg = { image: 'img:1', oauthToken: 'secret-token', elevenlabsKey: 'sound-key', sfxMaxGenerations: 6, home: HOME } as FactoryConfig;
 
 // Setup calls (network, proxy) answer per `setup`. Only the `docker run --rm` call answers with `code`.
 function fakeRun(code = 0, setup: Record<string, { code: number; stdout?: string }> = {}): { run: Run; calls: Call[] } {
@@ -24,19 +24,20 @@ const runCall = (calls: Call[]): Call => calls.find((call) => call.args[0] === '
 const setupCalls = (calls: Call[]): string[] => calls.filter((call) => call !== runCall(calls)).map((call) => call.args.join(' '));
 
 describe('dockerContainer', () => {
-  it('passes the token by env only and mounts only the clone and the npm cache', async () => {
+  it('passes the secrets by env only and mounts only the clone and the npm cache', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg).agent({ clone: '/w/c', dir: 'game', model: 'opus', prompt: 'do it', log: '/l.log' });
     const call = runCall(calls);
     expect(call.args.join(' ')).not.toContain('secret-token');
-    expect(call.opts?.env).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'secret-token' });
+    expect(call.args.join(' ')).not.toContain('sound-key');
+    expect(call.opts?.env).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'secret-token', ELEVENLABS_API_KEY: 'sound-key', SFX_MAX_GENERATIONS: '6' });
     expect(call.opts?.input).toBe('Your folder is /work/game. Write every .factory/ and .factory-tasks/ file under /work/game, even after you change directory.\n\ndo it');
     expect(call.opts?.logPath).toBe('/l.log');
     expect(call.args.filter((a) => a === '-v')).toHaveLength(2);
     expect(call.args).toContain('/w/c:/work');
     expect(call.args).toContain(`${HOME}/npm-cache:/home/pwuser/.npm`);
     expect(call.args.slice(call.args.indexOf('-w'), call.args.indexOf('-w') + 2)).toEqual(['-w', '/work/game']);
-    expect(call.args.filter((a) => a === '-e')).toHaveLength(7);
+    expect(call.args.filter((a) => a === '-e')).toHaveLength(9);
     expect(call.args.slice(call.args.indexOf('img:1'))).toEqual(['img:1', 'factory-agent', '-p', '--model', 'opus', '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose']);
   });
 

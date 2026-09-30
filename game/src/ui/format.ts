@@ -23,7 +23,7 @@ import { isJunk } from '../sim/wear';
 import { clockOf } from '../sim/sun';
 import type { PartHit } from '../sim/armor';
 import { shotDamage } from '../sim/combat';
-import type { GameEvent, GridItem, Job, NpcState, PartInstance, RefitJob, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
+import type { GameEvent, GridItem, Job, NpcState, PartInstance, RefitJob, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
 
 // What a job works on, in words: "Repair Autocannon", "Remove Autocannon from Raider outrider".
@@ -99,22 +99,14 @@ function partName(world: World, vehicleId: string, partId: string): string {
   return p ? partDef(p.defId).name : 'part';
 }
 
-// A seen NPC's top goal and its reason, shown under its driver's name. A knocked-out driver pursues no goal.
+// A seen NPC's top goal as the player reads it, its reason as a sentence, shown under its driver's name. A knocked-out
+// driver pursues no goal.
 export function formatNpcActivity(world: World, vehicle: Vehicle): string | null {
   if (!vehicle.brain || !playerSees(world, vehicle.pos)) return null;
   if (isKnockedOut(vehicle)) return 'Knocked out';
   const activity = topGoal(vehicle);
   if (!activity) return null;
-  const label = targetLabel(world, activity.targetId);
-  return `${activity.kind}${label ? `: ${label}` : ''} — ${activity.reason}`;
-}
-
-// A goal target's name once the player sees the truck or has discovered the site.
-function targetLabel(world: World, targetId: string | null): string | null {
-  const target = world.vehicles.find((v) => v.id === targetId);
-  if (target) return playerSees(world, target.pos) ? target.name : null;
-  const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === targetId);
-  return site && world.player.discovered.includes(site.id) ? site.name : null;
+  return activity.reason.charAt(0).toUpperCase() + activity.reason.slice(1);
 }
 
 // "Traits: scavenger, scumbag" for an NPC. The hover panel shows it as one line. Traits stay hidden, so null,
@@ -241,14 +233,20 @@ function hurts(hits: PartHit[] | undefined): boolean {
   return hits !== undefined && hits.some((h) => h.damage > 0);
 }
 
+// A round hits when it damages the aimed part, or for a body shot any part of the target, directly or by splash.
+function hitsAim(e: Extract<GameEvent, { t: 'shot' }>, r: ShotRound): boolean {
+  const onTarget = [...(r.struck === e.target ? r.hits : []), ...r.blast.filter((b) => b.vehicle === e.target).flatMap((b) => b.hits)];
+  return onTarget.some((h) => h.damage > 0 && (e.aim === 'body' || h.part === e.aim));
+}
+
 // "MG → Buggy at Cab · 3/6 hit (40%) · 1 crit", then the damage per part.
 function aimedSpans(world: World, e: Extract<GameEvent, { t: 'shot' }>, onTarget: PartHit[]): LogSpan[] {
   const aim = e.aim === 'body' ? '' : ` at ${partName(world, e.target, e.aim)}`;
-  const hits = e.rounds.filter((r) => r.hit).length;
+  const hits = e.rounds.filter((r) => hitsAim(e, r)).length;
   const crits = e.rounds.filter((r) => r.crit).length;
   return [
     { text: `${partName(world, e.shooter, e.weapon)} → ${vehicleName(world, e.target)}${aim} · ${hits}/${e.rounds.length} hit`, cls: '' },
-    { text: ` (${Math.round(e.chance * 100)}%)`, cls: 'dim' },
+    { text: ` (${Math.round(e.damageChance * 100)}%)`, cls: 'dim' },
     ...(crits ? [{ text: ` · ${crits} crit`, cls: '' }] : []),
     ...damageSpans(world, e.target, onTarget),
   ];
@@ -355,12 +353,16 @@ function towDroppedText(world: World, e: Extract<GameEvent, { t: 'towDropped' }>
   return { text: e.reason === 'gone' ? `${by} is gone. ${client} is off the rope.` : `${by} drops the tow of ${client}.`, cls: 'dim' };
 }
 
+const PLAYER_TOW_DROPPED: Record<Extract<GameEvent, { t: 'towDropped' }>['reason'], (by: string) => string> = {
+  refused: (by) => `You turn down the tow from ${by}.`,
+  unhitched: (by) => `You unhitch from ${by}.`,
+  danger: (by) => `${by} drops the tow. There is danger.`,
+  stranded: (by) => `${by} can no longer drive. The tow is off.`,
+  gone: (by) => `${by} is gone. The tow is off.`,
+};
+
 function playerTowDroppedText(by: string, reason: Extract<GameEvent, { t: 'towDropped' }>['reason']): LogLine {
-  const text = reason === 'refused' ? `You turn down the tow from ${by}.`
-    : reason === 'unhitched' ? `You unhitch from ${by}.`
-    : reason === 'danger' ? `${by} drops the tow. There is danger.`
-    : `${by} is gone. The tow is off.`;
-  return { text, cls: reason === 'refused' || reason === 'unhitched' ? 'dim' : 'bad' };
+  return { text: PLAYER_TOW_DROPPED[reason](by), cls: reason === 'refused' || reason === 'unhitched' ? 'dim' : 'bad' };
 }
 
 // Whether the player's truck is one of the vehicles, or the player sees or detects one of them.
@@ -402,11 +404,12 @@ function searchedText(stock: string): { text: string; cls: string } {
   return { text: `Search done${site ? ` at ${site.name}` : ''}.`, cls: 'good' };
 }
 
-const CONTRACT_OUTCOME = { accepted: ['Contract taken', ''], done: ['Contract done', 'good'], failed: ['Contract failed', 'bad'], lapsed: ['Contract lapsed', 'dim'] } as const;
+const CONTRACT_OUTCOME = { accepted: ['Contract taken', ''], expiring: ['Contract due soon', 'bad'], done: ['Contract done', 'good'], failed: ['Contract failed', 'bad'], lapsed: ['Contract lapsed', 'dim'] } as const;
 
 function contractText(c: Contract, outcome: keyof typeof CONTRACT_OUTCOME): { text: string; cls: string } {
   const [label, cls] = CONTRACT_OUTCOME[outcome];
-  return { text: `${label}: ${contractSummary(c)}, pays ${c.reward}`, cls };
+  const tail = outcome === 'expiring' ? `, ${contractDue(c)}` : `, pays ${c.reward}`;
+  return { text: `${label}: ${contractSummary(c)}${tail}`, cls };
 }
 
 // One line naming what a contract asks for.
@@ -450,6 +453,11 @@ function activityText(world: World, e: Extract<GameEvent, { t: 'activity' }>): L
   return world.player.fullLog && vehicle ? { text: `${vehicle.name}: ${e.activity ?? 'idle'} — ${e.reason}`, cls: 'dim' } : null;
 }
 
+// A stall is a bug, so the full log shows it loudly.
+function stallText(world: World, e: Extract<GameEvent, { t: 'stall' }>): LogLine | null {
+  return world.player.fullLog ? { text: `Bug: ${vehicleName(world, e.vehicle)} stuck on ${e.goal ?? 'idle'} (${e.reason}), gave it up`, cls: 'bad' } : null;
+}
+
 function infoText(world: World, e: Extract<GameEvent, { t: 'info' }>): LogLine | null {
   return e.debug && !world.player.fullLog ? null : { text: e.text, cls: 'dim' };
 }
@@ -457,7 +465,9 @@ function infoText(world: World, e: Extract<GameEvent, { t: 'info' }>): LogLine |
 // Events whose log line has its own function.
 const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent, { t: K }>) => LogLine | null } = {
   activity: activityText,
+  stall: stallText,
   info: infoText,
+  townPatch: () => ({ text: 'You patch your truck with scrap.', cls: 'good' }),
   scrapPatch: (_, e) => ({ text: `You patch up your car with scrap until it starts moving again.${e.fuel > 0 ? ` Townsfolk spare you ${fuelLiters(e.fuel)} L of fuel.` : ''}`, cls: 'good' }),
   npcKnockout: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} knocked out`, cls: 'good' }),
   npcWake: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} comes to`, cls: 'dim' }),

@@ -476,11 +476,12 @@ export function finishTruckPickup(world: World, looter: Vehicle, pickup: TruckPi
 // ---- NPC looters
 
 // One turn of an NPC looting a parked-beside truck. Every loose item that fits comes over at once, then one
-// installed part per refit, stowed as a spare. Returns why the loot ends, or null while work remains.
+// installed part per refit, stowed as a spare. No refit starts with a foe in sight, so the looting ends then.
+// Returns why the loot ends, or null while work remains.
 export function lootTruckTurn(world: World, looter: Vehicle, target: Vehicle): string | null {
   if (looter.job?.kind === 'refit') return null;
   takeLooseItems(world, looter, target);
-  if (inCombat(world, looter)) return null;
+  if (inCombat(world, looter)) return 'a foe in sight stops the looting';
   const next = nextInstalled(looter, target);
   if (!next) return target.items.some((it) => takeError(target, it) === null) ? 'cargo cannot hold the loot' : 'nothing left to loot';
   takeItem(world, looter, target, next.item, next.spot);

@@ -28,7 +28,7 @@ describe("weapon readout at current positions", () => {
     expect(getWeaponReadout(world, gun)).toEqual({
       target,
       status: "ready",
-      chance: hitOdds(world, me, gun, target, "body").chance,
+      chance: hitOdds(world, me, gun, target, "body").damageChance,
       canFire: true,
     });
   });

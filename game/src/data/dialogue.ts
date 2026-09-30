@@ -474,19 +474,19 @@ export const TOPICS: Record<TopicId, Topic> = {
 };
 
 // Patch terms in the NPC's words. `npcPatches` when the NPC does the work, `playerPatches` when it asks the player
-// to. Filled with {price}, and with {parts} and {turns} as counts with their unit, like "2 parts".
+// to. Filled with {price}, and with {parts} as a count with its unit, like "2 parts". Lines never name turns.
 export const DEAL_LINES: Record<PatchDeal, { npcPatches: string; playerPatches: string }> = {
   paid: {
-    npcPatches: 'I have the parts. {parts} and about {turns} of work, {price} all in.',
-    playerPatches: 'I pay {price} if you use {parts} of yours. About {turns} of work.',
+    npcPatches: 'I have the parts. {parts} and the work, {price} all in.',
+    playerPatches: 'I pay {price} if you use {parts} of yours.',
   },
   ownParts: {
-    npcPatches: 'It takes {parts} of yours. I charge {price} for about {turns} of work.',
-    playerPatches: 'I have {parts} here. {price} for your work, about {turns}.',
+    npcPatches: 'It takes {parts} of yours. I charge {price} for the work.',
+    playerPatches: 'I have {parts} here. {price} for your work.',
   },
   free: {
-    npcPatches: 'I will do it for nothing. {parts} of mine, about {turns}.',
-    playerPatches: 'I cannot pay. Could you spare {parts}? About {turns}.',
+    npcPatches: 'I will do it for nothing. {parts} of mine.',
+    playerPatches: 'I cannot pay. Could you spare {parts}?',
   },
 };
 

@@ -850,7 +850,7 @@ export const MIN_CHANCE = 0.01;
 // available option at MIN_CHANCE unless a trait adds weight.
 export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> } = {
   // Without traits a driver ignores, fights or avoids a new hostile about equally, fighting a bit more.
-  hostileSeen: { keep: 1, fight: 2, flee: 1 },
+  hostileSeen: { keep: 1, fight: 1.8, flee: 1 },
   // Most drivers steer away from a hostile they only hear. Investigating more than rarely needs a trait.
   contactHeard: { keep: 1, investigate: 0, flee: 3 },
   // A shot mostly prompts defense or retreat. Shooting back is twice as likely as running from a miss, and keeping
@@ -1016,11 +1016,12 @@ export const TRAITS: Record<TraitId, Trait> = {
   // salvage in sight 3 to 1. Nine in ten traders help a stranded truck. Traders want peace: they shrug off 19
   // crashes in 20, ask for truces, take nearly every truce and spare a beaten foe. Threatened, they mostly pay.
   // A trader on its way hires about one free merc in two it sees. Traders push on for one more deal, so they keep
-  // a quarter less fuel for the way to a pump.
+  // a quarter less fuel for the way to a pump. A trader too poor for any trade hauls free cargo to earn a stake: a
+  // haul weight of 1 loses to trade 30 whenever a trade is affordable.
   trader: {
-    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 0.75, robs: 'offDuty',
+    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: ['pump-station', 'dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1, fuelMargin: 0.75, robs: 'offDuty',
     weights: {
-      idle: { trade: { add: 30 } }, strandedSeen: { tow: { add: 9 } },
+      idle: { trade: { add: 30 }, haul: { add: 1 } }, strandedSeen: { tow: { add: 9 } },
       hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } }, ramChance: { ram: { mul: 0.001 } },
       crashed: { retaliate: { mul: 0.2 } }, parley: { truce: { add: 2 } }, truceOffered: { accept: { add: 4 } },
       mercyBegged: { spare: { add: 3 } }, threatened: { comply: { add: 1 }, fightBack: { mul: 0.1 } },
@@ -1034,7 +1035,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   raider: {
     towns: ['bowl', 'nose'], bases: ['scrapjaw', 'kiln'], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: {
-      idle: { raid: { add: 10 } }, contactHeard: { investigate: { add: 12 } }, hostileSeen: { fight: { add: 8 } }, strandedSeen: { tow: { add: 9 } },
+      idle: { raid: { add: 9 } }, contactHeard: { investigate: { add: 10.8 } }, hostileSeen: { fight: { add: 7.2 } }, strandedSeen: { tow: { add: 9 } },
       crashed: { retaliate: { add: 3 } }, parley: { truce: { mul: 0.3 }, beg: { mul: 0.3 } }, truceOffered: { refuse: { add: 2 } },
       mercyBegged: { finish: { add: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
     },
@@ -1042,7 +1043,7 @@ export const TRAITS: Record<TraitId, Trait> = {
   // A scumbag robs about one target in three it comes across: rob 0.5 against keep 1. Boldness 1.3 lets it rob a
   // truck that looks as dangerous as its own, and stand against one up to 30% stronger. It answers a crash with a
   // fight twice as often as most drivers.
-  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 1.3, fuelMargin: 1, robs: 'offDuty', weights: { preySeen: { rob: { add: 0.5 } }, crashed: { retaliate: { add: 1 } } } },
+  scumbag: { towns: [], bases: [], salvageSites: [], supplySites: [], travelSites: [], haulSites: [], contactReactRadius: 0, boldness: 1.3, fuelMargin: 1, robs: 'offDuty', weights: { preySeen: { rob: { add: 0.45 } }, crashed: { retaliate: { add: 1 } } } },
   // A coward veers off three times as often in a fight. It runs three times as often from a new hostile or a shot, picks a fight half as often, and shoots back
   // at a third of the weight. Boldness 0.6 makes a truck that looks as dangerous as its own a threat, even at the
   // lowest misjudgment. It asks for a truce twice as often and begs three times as often. Threatened, it runs or
@@ -1097,22 +1098,22 @@ export const TRAITS: Record<TraitId, Trait> = {
       hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } }, threatened: { comply: { add: 1 }, fightBack: { mul: 0.1 } },
     },
   },
-  // A convoy guard takes up an escort nearly always when it can. Otherwise it mostly waits. It fights like a lawman
-  // and never robs.
+  // A convoy guard takes up an escort nearly always when it can. Otherwise it waits about 5 turns, then drives to the
+  // other town, where convoys pass: wait 5 against a trip weight of 1. It fights like a lawman and never robs.
   guard: {
-    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'never',
+    towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: ['bowl', 'nose'], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'never',
     weights: {
-      idle: { escort: { add: 30 }, wait: { add: 5 }, scavenge: { mul: 0.001 } },
+      idle: { escort: { add: 30 }, wait: { add: 5 }, travel: { add: 1 }, scavenge: { mul: 0.001 } },
       hostileSeen: { fight: { add: 8 } }, attacked: { fightBack: { mul: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
     },
   },
-  // A merc waits at a town pad for hire. A wait weight of 50 against a trip weight of 1 keeps it parked about 50
-  // turns, a quarter of a day, before it tries the other town. It trades and scavenges only at about the minimum
+  // A merc waits at a town pad for hire. A wait weight of 10 against a trip weight of 1 keeps it parked about 10
+  // turns before it tries the other town. Waits stay far below NPC_BEHAVIOR.stallTurns. It trades and scavenges only at about the minimum
   // chance. It fights most hostiles it sees and shoots back twice as often as most drivers.
   merc: {
     towns: ['bowl', 'nose'], bases: [], salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: ['bowl', 'nose'], haulSites: [], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'offDuty',
     weights: {
-      idle: { wait: { add: 50 }, travel: { add: 1 }, scavenge: { mul: 0.001 } },
+      idle: { wait: { add: 10 }, travel: { add: 1 }, scavenge: { mul: 0.001 } },
       hostileSeen: { fight: { add: 4 } }, attacked: { fightBack: { mul: 2 } }, threatened: { comply: { mul: 0.2 }, fightBack: { add: 2 } },
     },
   },
@@ -1129,6 +1130,14 @@ export const TRAITS: Record<TraitId, Trait> = {
 };
 
 export const NPC_BEHAVIOR = {
+  // Turns a driver may go without progress before it gives up its top goal. Progress is a new tile, a job turn or a
+  // new top goal. A crawling truck changes tile every turn, and every timed deal lapses in 60 turns or less, so 100
+  // turns without progress is always a bug. See watchStalls() in src/sim/npc-activities.ts.
+  stallTurns: 100,
+  // Tiles a stalled driver out of the player's sight may jump to get clear of whatever holds it. 20 tiles is about
+  // six turns of driving, enough to leave a pad, a pocket between props or a jam of trucks, and well inside the
+  // 80 tiles of gray vision, so the driver stays in the same area.
+  stallJump: 20,
   // Escort fee per tile of straight distance from the client to its destination. Bowl and Nose lie about 520 tiles
   // apart. A trader load of about 8 units earns about 50 a unit there, so about 400. 0.15 a tile makes that escort
   // cost about 78, a fifth of the load's profit.

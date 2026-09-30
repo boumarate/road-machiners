@@ -14,6 +14,7 @@ export const WEATHER = {
     duration: { storm: [150, 400] as [number, number], heatwave: [25, 50] as [number, number], overcast: [25, 50] as [number, number] },
     stormRadius: [60, 120] as [number, number], // tiles
     stormSpeed: [0.4, 1.0] as [number, number], // tiles per turn
+    stormEdge: 25, // tiles; a storm's effects fade in linearly over this depth inside its radius
     effects: {
       // Multipliers on sight, top speed and wear, and extra scatter in radians, inside a storm.
       storm: { sight: 0.4, spread: 0.15, speed: 0.6, wear: 1.5 },

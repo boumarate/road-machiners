@@ -186,3 +186,41 @@ describe('the rammer perk', () => {
     expect(foe.stalledUntil).toBeUndefined();
   });
 });
+
+describe('crash with a tow client', () => {
+  const geometry = { a: { side: 'front' as const, lanes: [1, 2] }, b: { side: 'left' as const, lanes: [1, 2] } };
+  const damages = (world: ReturnType<typeof emptyWorld>) => {
+    const collision = world.events.find((e) => e.t === 'collision');
+    if (collision?.t !== 'collision') throw new Error('No collision');
+    const sum = (hits: { damage: number }[]) => hits.reduce((total, hit) => total + hit.damage, 0);
+    return { onA: sum(collision.hitsA), onB: sum(collision.hitsB) };
+  };
+
+  function pair() {
+    const world = emptyWorld();
+    const client = world.vehicles[0];
+    const tower = addVehicle(world, 'traders', 'hauler', ['stockEngine'], { x: 32, y: 30 });
+    return { world, client, tower };
+  }
+
+  it('hurts neither truck once the tower answers', () => {
+    const { world, client, tower } = pair();
+    addState(world, 'answering', tower.id, client.id, { kind: 'none' });
+    applyContactCrash(world, client, tower, tower.id, 6, geometry);
+    expect(damages(world)).toEqual({ onA: 0, onB: 0 });
+  });
+
+  it('hurts neither truck when the tower is the first body', () => {
+    const { world, client, tower } = pair();
+    addState(world, 'tow', tower.id, client.id, { kind: 'tow', site: 'bowl', fee: 10, waived: 0, hitched: false });
+    applyContactCrash(world, tower, client, client.id, 6, geometry);
+    expect(damages(world)).toEqual({ onA: 0, onB: 0 });
+  });
+
+  it('still hurts both trucks with no tow between them', () => {
+    const { world, client, tower } = pair();
+    applyContactCrash(world, client, tower, tower.id, 6, geometry);
+    expect(damages(world).onA).toBeGreaterThan(0);
+    expect(damages(world).onB).toBeGreaterThan(0);
+  });
+});

@@ -5,10 +5,20 @@ import { GAME_DIR, type Ctx } from './types';
 
 const SCOPE = /^[a-z0-9-]+$/;
 
-// Builds in the container, then swaps the built files into the web root with one rename.
-export async function buildAndDeploy(ctx: Ctx, clone: string, scope: string, log: string): Promise<string> {
+export function checkScope(scope: string): void {
   if (!SCOPE.test(scope)) throw new Error(`bad deploy scope "${scope}"`);
+}
+
+// Builds in the container, then publishes the build.
+export async function buildAndDeploy(ctx: Ctx, clone: string, scope: string, log: string): Promise<string> {
+  checkScope(scope);
   await ctx.container.shell(clone, 'npm ci && npm run build', log, { SAVE_SCOPE: scope });
+  return publishBuild(ctx, clone, scope);
+}
+
+// Swaps the clone's built files into the web root with one rename.
+export function publishBuild(ctx: Ctx, clone: string, scope: string): string {
+  checkScope(scope);
   const target = `${ctx.cfg.webRoot}/${scope}`;
   const staging = `${ctx.cfg.webRoot}/.${scope}.new`;
   mkdirSync(ctx.cfg.webRoot, { recursive: true });
