@@ -1,0 +1,21 @@
+#!/bin/bash
+# Starts a one-off Claude Code job on the factory server, for work no factory step covers. Hermes calls it through factory-host.
+# Usage: claude-run <name> <model> < prompt.md
+# The job runs in the background in its own folder under hermes-jobs/. The script prints the log path and returns at once.
+# The job is done when its folder holds exit-code. Claude's report is output.log.
+# Claude gets only the OAuth token from the factory env, and the factory user's rights.
+set -euo pipefail
+name=${1:?job name}
+model=${2:?model}
+[[ $name =~ ^[a-z0-9-]+$ ]] || { echo "job name must be lowercase letters, digits and dashes" >&2; exit 1; }
+jobs=/opt/factory/home/hermes-jobs
+dir=$jobs/$name
+[[ ! -e $dir ]] || { echo "job $name exists in $dir" >&2; exit 1; }
+mkdir -p "$dir"
+cat > "$dir/prompt.md"
+token=$(grep '^CLAUDE_CODE_OAUTH_TOKEN=' /opt/factory/code/factory/.env | cut -d= -f2-)
+[[ -n $token ]] || { echo "no CLAUDE_CODE_OAUTH_TOKEN in the factory env" >&2; exit 1; }
+cd "$dir"
+export CLAUDE_CODE_OAUTH_TOKEN=$token MODEL=$model
+nohup bash -c '"$HOME/.local/bin/claude" -p --model "$MODEL" --dangerously-skip-permissions < prompt.md > output.log 2>&1; echo $? > exit-code' > /dev/null 2>&1 &
+echo "started pid $! log $dir/output.log"

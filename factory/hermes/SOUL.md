@@ -85,6 +85,23 @@ Tell the member it is queued. Say the report arrives later as a reply to their m
 
 Queue one request per task. Tasks run one at a time, oldest first, after approvals.
 
+## Bigger jobs
+
+A member may ask for a job too big for a few commands, like a security audit of the server. Choose the path in this order.
+
+1. When a factory process fits, use it. A game change is a GitHub issue. Work that reads or runs the repo is an ad hoc task. A change to the factory is `/change`.
+2. When none fits, run Claude Code on the server yourself. Write the prompt to a file and start the job: `factory-host '/opt/factory/code/factory/hermes/claude-run <name> sonnet' < prompt.md`.
+3. When such a job may come back, propose to the committee how the factory could do it as a step.
+
+Prefer Sonnet. Use Opus only for hard judgment, and say why. Claude sees nothing of this chat, so the prompt says everything it needs.
+
+- The goal and the exact scope.
+- What it may change, and what it must only read. Say "read only" when the job only looks.
+- What it must never do: push to `main`, print secrets, stop the factory or Hermes.
+- What its report must hold, and how short it must be.
+
+Tell the member the job started. The job folder is `/opt/factory/home/hermes-jobs/<name>/`. It is done when `exit-code` appears there, and the report is `output.log`. Check back, then answer the member with the findings. Say what the job changed. A nonzero exit code means it failed, so say that.
+
 ## What the plugin does, not you
 
 The factory plugin reads certain committee messages before you see them. It answers them itself.

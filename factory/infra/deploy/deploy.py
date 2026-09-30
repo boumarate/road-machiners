@@ -120,6 +120,13 @@ server.shell(
     **as_factory,
 )
 
+# Hermes runs one-off Claude Code jobs on the server with factory/hermes/claude-run, for work no factory step covers.
+server.shell(
+    name="Claude Code for the factory user",
+    commands=[f"test -x /home/{FACTORY_USER}/.local/bin/claude || (curl -fsSL https://claude.ai/install.sh | timeout 300 bash)"],
+    **as_factory,
+)
+
 # Hermes takes its paths from env. The server layout differs from the Mac default.
 hermes_env = f"FACTORY_HERMES_DIR={HERMES_DIR} FACTORY_UID={FACTORY_UID}"
 server.shell(
