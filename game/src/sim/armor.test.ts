@@ -1,7 +1,7 @@
 import { partDef } from '../data/parts';
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
-import { fireSpans, laneCount, openSides, partLane, sideBlockers, sideToward, walkLane } from './armor';
+import { everyGunFires, fireSpans, gunLayoutScore, laneCount, openSides, partLane, sideBlockers, sideToward, walkLane } from './armor';
 import { fireBlock, inArc, resolveDestroyed } from './combat';
 import { makePart } from './factory';
 import { advanceKnockout, checkKnockout } from './defeat';
@@ -358,5 +358,31 @@ describe('side blockers', () => {
     const blockers = sideBlockers(v, itemOf(v, 'mg'));
     expect(Object.keys(blockers)).toEqual(['front']);
     expect(blockers.front?.kind === 'part' && blockers.front.part.defId).toBe('cabRow');
+  });
+});
+
+describe('gun layout', () => {
+  // A machine gun's 360 degree arc reaches every side. Score = covered sides * (4 * guns + 1) + open reached sides summed.
+  it('scores one bed gun behind the cab by its three open sides', () => {
+    const v = truckWith(emptyWorld(), 'van', [{ defId: 'mg', x: 2, y: 5 }]);
+    expect(gunLayoutScore(v)).toBe(3 * 5 + 3);
+  });
+
+  it('scores two guns with the rear blocked by three covered sides and six open sides', () => {
+    const parts = [{ defId: 'mg', x: 2, y: 5 }, { defId: 'mg', x: 2, y: 3 }, { defId: 'trailerBox', x: 2, y: 7 }];
+    const v = truckWith(emptyWorld(), 'hauler', parts);
+    expect(gunLayoutScore(v)).toBe(3 * 9 + 6);
+  });
+
+  it('a front-arc gun in the bed behind a tall cab cannot fire, and one clear of it can', () => {
+    const w = emptyWorld();
+    expect(everyGunFires(truckWith(w, 'van', [{ defId: 'shotgun', x: 2, y: 5 }]))).toBe(false);
+    expect(everyGunFires(truckWith(w, 'longbed', [{ defId: 'shotgun', x: 2, y: 1 }]))).toBe(true);
+  });
+
+  it('a tall part never blocks itself', () => {
+    const v = truckWith(emptyWorld(), 'hauler', [{ defId: 'trailerBox', x: 2, y: 5 }]);
+    const box = mountedItems(v).find((it) => it.part.defId === 'trailerBox')!;
+    expect(sideBlockers(v, box)).toEqual({});
   });
 });

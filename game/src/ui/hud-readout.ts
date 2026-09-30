@@ -1,3 +1,4 @@
+import { GAME_VERSION } from "../config";
 import { tradePartner, tradeReady } from "../sim/economy";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
@@ -267,4 +268,29 @@ export function getHudReadout(w: World) {
       },
     ],
   };
+}
+
+// The issue forms in .github/ISSUE_TEMPLATE/.
+const NEW_ISSUE_URL = "https://github.com/btseytlin/road-machiners/issues/new";
+
+function issueFormUrl(template: string, fields: Record<string, string>): string {
+  const url = new URL(NEW_ISSUE_URL);
+  url.searchParams.set("template", template);
+  for (const [id, value] of Object.entries(fields)) url.searchParams.set(id, value);
+  return url.href;
+}
+
+// The text the ? menu shows.
+export function versionLabel(): string {
+  return `v${GAME_VERSION}`;
+}
+
+// The form field id is `version`, so GitHub prefills that field.
+export function bugReportUrl(version: string): string {
+  return issueFormUrl("bug.yml", { version });
+}
+
+// The feature form has no version field.
+export function featureRequestUrl(): string {
+  return issueFormUrl("feature-request.yml", {});
 }
